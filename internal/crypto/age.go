@@ -10,6 +10,7 @@ import (
 	"io"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"unsafe"
 
 	"filippo.io/age"
@@ -30,7 +31,10 @@ var (
 // optimizing away the memory clearing in Wipe(). By storing a pointer to
 // the buffer in a variable the compiler cannot prove is unused, we force
 // the compiler to emit the zeroing stores.
-var wipeSink uintptr
+//
+// Use atomic.Uintptr to avoid data-race reports when Wipe is called from
+// multiple goroutines (e.g. concurrent vault search).
+var wipeSink atomic.Uintptr
 
 // Encrypt encrypts plaintext for a single recipient.
 // Returns the encrypted ciphertext or an error if encryption fails.
@@ -126,7 +130,7 @@ func Wipe(buf []byte) {
 	}
 	// Store pointer in sink to prevent dead-store elimination.
 	// The compiler cannot prove wipeSink is never read.
-	wipeSink = uintptr(ptr)
+	wipeSink.Store(uintptr(ptr))
 	// Ensure buf is not optimized away before the loop completes.
 	runtime.KeepAlive(buf)
 }

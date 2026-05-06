@@ -452,8 +452,8 @@ func TestTokenRegistry_Get_LazyExpiry(t *testing.T) {
 
 	reg := NewTokenRegistry(path)
 
-	// Create token that expires in 10ms.
-	st, raw, err := reg.Create("short-lived", []string{"*"}, "", 10*time.Millisecond)
+	// Create token that expires in 100ms.
+	st, raw, err := reg.Create("short-lived", []string{"*"}, "", 100*time.Millisecond)
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
@@ -466,7 +466,7 @@ func TestTokenRegistry_Get_LazyExpiry(t *testing.T) {
 	}
 
 	// Wait for expiry.
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
 
 	// Should NOT be found after expiry — lazy check.
 	if _, ok := reg.Get(hash); ok {
@@ -489,7 +489,7 @@ func TestTokenRegistry_BackgroundCleanup(t *testing.T) {
 	reg := NewTokenRegistry(path)
 
 	// Create two tokens: one short-lived, one persistent.
-	_, _, err := reg.Create("short-lived", []string{"*"}, "", 20*time.Millisecond)
+	_, _, err := reg.Create("short-lived", []string{"*"}, "", 100*time.Millisecond)
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
@@ -501,11 +501,11 @@ func TestTokenRegistry_BackgroundCleanup(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	stop := reg.StartCleanup(ctx, 10*time.Millisecond)
+	stop := reg.StartCleanup(ctx, 50*time.Millisecond)
 	defer stop()
 
 	// Wait for cleanup to run at least once.
-	time.Sleep(80 * time.Millisecond)
+	time.Sleep(300 * time.Millisecond)
 
 	reg.mu.RLock()
 	count := len(reg.entries)

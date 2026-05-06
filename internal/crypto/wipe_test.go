@@ -24,9 +24,9 @@ func TestWipeUsesUnsafePointer(t *testing.T) {
 	// Verify that wipeSink is updated after Wipe() call.
 	// This test ensures the compiler cannot optimize away the zeroing.
 	buf := []byte("test data")
-	before := wipeSink
+	before := wipeSink.Load()
 	Wipe(buf)
-	after := wipeSink
+	after := wipeSink.Load()
 	if before == after {
 		t.Error("wipeSink was not updated; compiler may have optimized away Wipe()")
 	}
