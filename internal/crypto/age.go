@@ -8,7 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"runtime"
 	"strings"
+	"unsafe"
 
 	"filippo.io/age"
 )
@@ -23,6 +25,12 @@ var (
 	ErrEmptyPlaintext   = errors.New("plaintext is empty")
 	ErrEmptyCiphertext  = errors.New("ciphertext is empty")
 )
+
+// wipeSink is a package-level variable used to prevent the compiler from
+// optimizing away the memory clearing in Wipe(). By storing a pointer to
+// the buffer in a variable the compiler cannot prove is unused, we force
+// the compiler to emit the zeroing stores.
+var wipeSink uintptr
 
 // Encrypt encrypts plaintext for a single recipient.
 // Returns the encrypted ciphertext or an error if encryption fails.
@@ -99,13 +107,28 @@ func Decrypt(ciphertext []byte, identity *age.X25519Identity) ([]byte, error) {
 // from remaining in memory after use. Call with defer after allocating buffers
 // that hold passphrases, identity bytes, or decrypted entry fields.
 //
+// Wipe uses unsafe.Pointer to force the compiler to emit the zeroing stores.
+// The pointer is stored in a package-level sink variable that the compiler
+// cannot prove is unused, preventing dead-store elimination.
+//
 // Note: This is a best-effort measure. Go's garbage collector may have
 // copied the data, and the OS may have swapped it to disk. For stronger
 // guarantees, consider github.com/awnumar/memguard.
 func Wipe(buf []byte) {
-	for i := range buf {
-		buf[i] = 0
+	if len(buf) == 0 {
+		return
 	}
+	// Force compiler to keep the buffer alive and emit stores.
+	// unsafe.Pointer prevents the compiler from optimizing away the zeroing.
+	ptr := unsafe.Pointer(&buf[0])
+	for i := range buf {
+		*(*byte)(unsafe.Add(ptr, i)) = 0
+	}
+	// Store pointer in sink to prevent dead-store elimination.
+	// The compiler cannot prove wipeSink is never read.
+	wipeSink = uintptr(ptr)
+	// Ensure buf is not optimized away before the loop completes.
+	runtime.KeepAlive(buf)
 }
 
 // EncryptWithPassphrase encrypts plaintext using a passphrase.

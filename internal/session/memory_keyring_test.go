@@ -1,6 +1,7 @@
 package session
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"testing"
 	"time"
@@ -10,7 +11,11 @@ func TestMemoryKeyring_SetAndGet_RoundTrip(t *testing.T) {
 	mk := &memoryKeyring{}
 	vaultDir := "/tmp/vault-mem"
 
-	enc, nonce, err := encryptPassphrase([]byte("secret"), deriveKey(vaultDir))
+	// Store wrap key so encryption/decryption works
+	wrapKey := base64.StdEncoding.EncodeToString(testKey())
+	mk.Set("openpass:"+vaultDir, wrapKeyAccount, wrapKey)
+
+	enc, nonce, err := encryptPassphrase([]byte("secret"), testKey())
 	if err != nil {
 		t.Fatalf("setup encrypt failed: %v", err)
 	}
@@ -42,6 +47,10 @@ func TestMemoryKeyring_Set_EncryptsPlaintextPassphrase(t *testing.T) {
 	mk := &memoryKeyring{}
 	vaultDir := "/tmp/vault-mem-encrypt"
 	passphrase := "plain-secret"
+
+	// Store wrap key so Set() can encrypt plaintext passphrase
+	wrapKey := base64.StdEncoding.EncodeToString(testKey())
+	mk.Set("openpass:"+vaultDir, wrapKeyAccount, wrapKey)
 
 	now := time.Now().UTC()
 	sess := storedSession{
@@ -194,6 +203,10 @@ func TestMemoryKeyring_Get_UpdatesLastAccess(t *testing.T) {
 	mk := &memoryKeyring{}
 	vaultDir := "/tmp/vault-mem-la"
 
+	// Store wrap key so Set() can encrypt plaintext passphrase
+	wrapKey := base64.StdEncoding.EncodeToString(testKey())
+	mk.Set("openpass:"+vaultDir, wrapKeyAccount, wrapKey)
+
 	now := time.Now().UTC()
 	sess := storedSession{
 		Passphrase: "secret",
@@ -277,6 +290,10 @@ func TestZeroBytes(t *testing.T) {
 func TestMemoryKeyring_Set_ZeroesOldData(t *testing.T) {
 	mk := &memoryKeyring{}
 	vaultDir := "/tmp/vault-mem-zero"
+
+	// Store wrap key so Set() can encrypt plaintext passphrase
+	wrapKey := base64.StdEncoding.EncodeToString(testKey())
+	mk.Set("openpass:"+vaultDir, wrapKeyAccount, wrapKey)
 
 	sess1 := storedSession{
 		Passphrase: "first-secret",

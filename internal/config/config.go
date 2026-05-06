@@ -335,6 +335,7 @@ func (c *Config) SaveTo(path string) error {
 	if c.Vault != nil {
 		confirmRemove := c.Vault.ConfirmRemove
 		vaultAuthMethod := c.Vault.AuthMethod
+		searchWorkers := c.Vault.SearchWorkers
 		if vaultAuthMethod == "" && authMethod != "" {
 			vaultAuthMethod = authMethod
 		}
@@ -344,6 +345,7 @@ func (c *Config) SaveTo(path string) error {
 			ConfirmRemove:     &confirmRemove,
 			AuthMethod:        &vaultAuthMethod,
 			LegacyMode:        c.Vault.LegacyMode,
+			SearchWorkers:     &searchWorkers,
 		}
 	}
 

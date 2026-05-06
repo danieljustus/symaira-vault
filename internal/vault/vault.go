@@ -286,7 +286,7 @@ func normalizeConfig(cfg *vaultconfig.Config) {
 
 // detectLegacyMode checks if the vault directory contains legacy top-level .age files
 // (outside entries/) and persists the result in the vault config. This one-time
-// detection allows ListFast to skip the legacy directory walk for legacy-free vaults.
+// detection allows List to skip the legacy directory walk for legacy-free vaults.
 func detectLegacyMode(cfg *vaultconfig.Config, vaultDir string) error {
 	if cfg == nil {
 		return nil

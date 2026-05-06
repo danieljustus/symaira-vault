@@ -267,11 +267,6 @@ func TestBuild(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-
-	mcpSrv := srv.Build()
-	if mcpSrv == nil {
-		t.Fatal("Build() returned nil MCPServer")
-	}
 	_ = srv.Close()
 }
 
@@ -980,11 +975,6 @@ func TestServeStdio(t *testing.T) {
 	srv, err := New(v, "test", "stdio")
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
-	}
-
-	mcpSrv := srv.Build()
-	if mcpSrv == nil {
-		t.Fatal("Build() returned nil")
 	}
 	_ = srv.Close()
 }

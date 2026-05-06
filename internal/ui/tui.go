@@ -72,6 +72,11 @@ type clipboardClearedMsg struct {
 	err error
 }
 
+type logMsg struct {
+	message string
+	isError bool
+}
+
 // TUIModel is the Bubble Tea model for the OpenPass two-pane terminal UI.
 type TUIModel struct {
 	svc vaultsvc.Service
@@ -136,7 +141,15 @@ func Run(svc vaultsvc.Service) error {
 	if svc == nil {
 		return fmt.Errorf("nil vault service")
 	}
-	_, err := tea.NewProgram(NewTUIModel(svc), tea.WithAltScreen()).Run()
+	opts := []tea.ProgramOption{tea.WithAltScreen()}
+	if logPath := os.Getenv("OPENPASS_TUI_LOG"); logPath != "" {
+		f, err := tea.LogToFile(logPath, "")
+		if err != nil {
+			return fmt.Errorf("open TUI log: %w", err)
+		}
+		defer f.Close()
+	}
+	_, err := tea.NewProgram(NewTUIModel(svc), opts...).Run()
 	return err
 }
 
@@ -220,6 +233,14 @@ func (m TUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.status = "Clipboard cleared"
+		return m, nil
+	case logMsg:
+		if msg.isError {
+			m.err = fmt.Errorf("%s", msg.message)
+			m.status = msg.message
+		} else {
+			m.status = msg.message
+		}
 		return m, nil
 	}
 
@@ -493,28 +514,26 @@ func (m TUIModel) confirmView() string {
 }
 
 func loadEntriesCmd(svc vaultsvc.Service) tea.Cmd {
-	return func() tea.Msg {
+	return func() (msg tea.Msg) {
 		defer func() {
 			if r := recover(); r != nil {
-				fmt.Fprintf(os.Stderr, "panic loading entries: %v\n", r)
+				msg = entriesLoadedMsg{err: fmt.Errorf("panic loading entries: %v", r)}
 			}
 		}()
 		entries, err := svc.List("")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error loading entries: %v\n", err)
 			return entriesLoadedMsg{err: err}
 		}
-		fmt.Fprintf(os.Stderr, "loaded %d entries\n", len(entries))
 		sort.Strings(entries)
 		return entriesLoadedMsg{entries: entries}
 	}
 }
 
 func loadEntryCmd(svc vaultsvc.Service, path string) tea.Cmd {
-	return func() tea.Msg {
+	return func() (msg tea.Msg) {
 		defer func() {
 			if r := recover(); r != nil {
-				fmt.Fprintf(os.Stderr, "panic loading entry %s: %v\n", path, r)
+				msg = entryLoadedMsg{path: path, err: fmt.Errorf("panic loading entry %s: %v", path, r)}
 			}
 		}()
 		entry, err := svc.GetEntry(path)

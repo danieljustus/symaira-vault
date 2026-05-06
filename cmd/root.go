@@ -20,6 +20,7 @@ import (
 	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
 	"github.com/danieljustus/OpenPass/internal/metrics"
 	"github.com/danieljustus/OpenPass/internal/session"
+	"github.com/danieljustus/OpenPass/internal/ui/cliout"
 	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
 	vaultsvc "github.com/danieljustus/OpenPass/internal/vaultsvc"
 )
@@ -114,9 +115,11 @@ var rootCmd = &cobra.Command{
 }
 
 func Execute() {
+	cliout.SetQuiet(quietMode)
 	if err := rootCmd.Execute(); err != nil {
-		if !quietMode {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		cliout.Errorf("Error: %v", err)
+		if errorspkg.ExitCodeFromError(err) == errorspkg.ExitNotFound {
+			cliout.Hintf("Try: openpass find <search-term>")
 		}
 		osExit(int(errorspkg.ExitCodeFromError(err)))
 	}

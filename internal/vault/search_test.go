@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 
 	"filippo.io/age"
 
@@ -218,9 +219,7 @@ func TestCurrentSearchIdentity(t *testing.T) {
 }
 
 func TestCurrentSearchIdentityNil(t *testing.T) {
-	searchIdentityMu.Lock()
-	searchIdentity = nil
-	searchIdentityMu.Unlock()
+	searchIdentity.Store(nil)
 
 	got := currentSearchIdentity()
 	if got != nil {
@@ -234,9 +233,7 @@ func TestFindWithNoIdentity(t *testing.T) {
 
 	mustWriteEntry(t, vaultDir, id, "github.com/user", map[string]interface{}{"username": "alice"})
 
-	searchIdentityMu.Lock()
-	searchIdentity = nil
-	searchIdentityMu.Unlock()
+	searchIdentity.Store(nil)
 
 	_, err := FindWithOptions(vaultDir, "github", FindOptions{MaxWorkers: 0})
 	if err == nil {
@@ -332,9 +329,7 @@ func TestFindConcurrentNoIdentity(t *testing.T) {
 
 	mustWriteEntry(t, vaultDir, id, "github.com/user", map[string]interface{}{"username": "alice"})
 
-	searchIdentityMu.Lock()
-	searchIdentity = nil
-	searchIdentityMu.Unlock()
+	searchIdentity.Store(nil)
 	t.Cleanup(func() {
 		rememberSearchIdentity(id)
 	})
@@ -379,5 +374,121 @@ func TestFindConcurrentDefaultsMaxWorkers(t *testing.T) {
 	}
 	if len(got2) != 1 {
 		t.Fatalf("FindWithOptions() with MaxWorkers=-1 returned %d results, want 1", len(got2))
+	}
+}
+
+func TestListCacheHit(t *testing.T) {
+	vaultDir := t.TempDir()
+	id := testutil.TempIdentity(t)
+
+	mustWriteEntry(t, vaultDir, id, "github.com/user", map[string]interface{}{"username": "alice"})
+	mustWriteEntry(t, vaultDir, id, "example.com/admin", map[string]interface{}{"username": "admin"})
+
+	// First call populates cache
+	paths1, err := List(vaultDir, "")
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(paths1) != 2 {
+		t.Fatalf("List() returned %d paths, want 2", len(paths1))
+	}
+
+	// Second call should hit cache
+	paths2, err := List(vaultDir, "")
+	if err != nil {
+		t.Fatalf("List() cached error = %v", err)
+	}
+	if len(paths2) != 2 {
+		t.Fatalf("List() cached returned %d paths, want 2", len(paths2))
+	}
+}
+
+func TestListCacheInvalidation(t *testing.T) {
+	vaultDir := t.TempDir()
+	id := testutil.TempIdentity(t)
+
+	mustWriteEntry(t, vaultDir, id, "github.com/user", map[string]interface{}{"username": "alice"})
+
+	// First call populates cache
+	paths1, err := List(vaultDir, "")
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(paths1) != 1 {
+		t.Fatalf("List() returned %d paths, want 1", len(paths1))
+	}
+
+	// Invalidate cache
+	InvalidateListCache(vaultDir)
+
+	// Add another entry
+	mustWriteEntry(t, vaultDir, id, "example.com/admin", map[string]interface{}{"username": "admin"})
+
+	// Next call should re-walk and find both entries
+	paths2, err := List(vaultDir, "")
+	if err != nil {
+		t.Fatalf("List() after invalidate error = %v", err)
+	}
+	if len(paths2) != 2 {
+		t.Fatalf("List() after invalidate returned %d paths, want 2", len(paths2))
+	}
+}
+
+func TestListCachePrefixBypass(t *testing.T) {
+	vaultDir := t.TempDir()
+	id := testutil.TempIdentity(t)
+
+	mustWriteEntry(t, vaultDir, id, "github.com/user", map[string]interface{}{"username": "alice"})
+	mustWriteEntry(t, vaultDir, id, "example.com/admin", map[string]interface{}{"username": "admin"})
+
+	// Prefix queries bypass cache
+	paths, err := List(vaultDir, "github")
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(paths) != 1 {
+		t.Fatalf("List() returned %d paths, want 1", len(paths))
+	}
+
+	// Full listing still uses cache
+	allPaths, err := List(vaultDir, "")
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(allPaths) != 2 {
+		t.Fatalf("List() returned %d paths, want 2", len(allPaths))
+	}
+}
+
+func TestListCacheTTLExpiration(t *testing.T) {
+	vaultDir := t.TempDir()
+	id := testutil.TempIdentity(t)
+
+	mustWriteEntry(t, vaultDir, id, "github.com/user", map[string]interface{}{"username": "alice"})
+
+	// Set a very short TTL
+	originalTTL := listCache.ttl
+	listCache.ttl = 1 * time.Millisecond
+	defer func() { listCache.ttl = originalTTL }()
+
+	// First call populates cache
+	_, err := List(vaultDir, "")
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+
+	// Wait for TTL to expire
+	time.Sleep(5 * time.Millisecond)
+
+	// Add another entry
+	mustWriteEntry(t, vaultDir, id, "example.com/admin", map[string]interface{}{"username": "admin"})
+
+	// Cache should have expired, so we should see both entries
+	paths, err := List(vaultDir, "")
+	if err != nil {
+		t.Fatalf("List() after TTL expiry error = %v", err)
+	}
+	if len(paths) != 2 {
+		t.Fatalf("List() after TTL expiry returned %d paths, want 2", len(paths))
 	}
 }

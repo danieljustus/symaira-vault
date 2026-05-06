@@ -121,10 +121,42 @@ func ExitCodeFromError(err error) ExitCode {
 	return ExitGeneralError
 }
 
-// Wrap wraps an existing error with a message and exit code.
-func Wrap(code ExitCode, msg string, err error) error {
-	if err == nil {
-		return nil
+// Wrap creates a new CLIError with the given code, kind, cause, and formatted message.
+func Wrap(code ExitCode, kind ErrorKind, cause error, format string, args ...any) *CLIError {
+	return &CLIError{
+		Code:    code,
+		Kind:    kind,
+		Message: fmt.Sprintf(format, args...),
+		Cause:   cause,
 	}
-	return NewCLIError(code, msg, err)
+}
+
+// NotFound creates a new CLIError with Code=ExitNotFound, Kind=ErrNotFound, and Cause=ErrEntryNotFound.
+func NotFound(format string, args ...any) *CLIError {
+	return &CLIError{
+		Code:    ExitNotFound,
+		Kind:    ErrNotFound,
+		Message: fmt.Sprintf(format, args...),
+		Cause:   ErrEntryNotFound,
+	}
+}
+
+// ReadFailed creates a new CLIError with Code=ExitGeneralError, Kind=ErrReadFailed, and the given cause.
+func ReadFailed(cause error, format string, args ...any) *CLIError {
+	return &CLIError{
+		Code:    ExitGeneralError,
+		Kind:    ErrReadFailed,
+		Message: fmt.Sprintf(format, args...),
+		Cause:   cause,
+	}
+}
+
+// WriteFailed creates a new CLIError with Code=ExitGeneralError, Kind=ErrWriteFailed, and the given cause.
+func WriteFailed(cause error, format string, args ...any) *CLIError {
+	return &CLIError{
+		Code:    ExitGeneralError,
+		Kind:    ErrWriteFailed,
+		Message: fmt.Sprintf(format, args...),
+		Cause:   cause,
+	}
 }

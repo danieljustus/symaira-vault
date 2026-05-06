@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
+	"github.com/danieljustus/OpenPass/internal/ui/cliout"
 	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
 )
 
@@ -114,7 +115,7 @@ The editor is determined by the --editor flag or EDITOR environment variable (de
 		}
 
 		if err := v.AutoCommit(fmt.Sprintf("Edit %s", name)); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: auto-commit failed: %v\n", err)
+			cliout.Warnf("Warning: auto-commit failed: %v", err)
 		}
 		printQuietAware("Entry updated: %s\n", name)
 		return nil

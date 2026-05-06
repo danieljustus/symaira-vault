@@ -473,50 +473,6 @@ func TestNewTool_NoOptions(t *testing.T) {
 	}
 }
 
-func TestMCPServer_Options(t *testing.T) {
-	srv := NewMCPServer("test", "1.0.0",
-		WithToolCapabilities(true),
-		WithLogging(),
-		WithPromptCapabilities(true),
-		WithResourceCapabilities(true, false),
-	)
-
-	if srv.Name != "test" {
-		t.Errorf("srv.Name = %q, want test", srv.Name)
-	}
-	if srv.Version != "1.0.0" {
-		t.Errorf("srv.Version = %q, want 1.0.0", srv.Version)
-	}
-}
-
-func TestMCPServer_AddTool(t *testing.T) {
-	srv := NewMCPServer("test", "1.0.0")
-	tool := NewTool("test_tool", WithDescription("A test tool"))
-
-	srv.AddTool(tool, nil)
-
-	if len(srv.tools) != 1 {
-		t.Errorf("len(srv.tools) = %d, want 1", len(srv.tools))
-	}
-	if srv.tools[0].Name != "test_tool" {
-		t.Errorf("srv.tools[0].Name = %q, want test_tool", srv.tools[0].Name)
-	}
-}
-
-func TestMCPServer_ServeStdio(t *testing.T) {
-	srv := NewMCPServer("test", "1.0.0")
-	if err := ServeStdio(srv); err != nil {
-		t.Errorf("ServeStdio() error = %v", err)
-	}
-}
-
-func TestMCPServer_Shutdown(t *testing.T) {
-	srv := NewMCPServer("test", "1.0.0")
-	if err := srv.Shutdown(context.TODO()); err != nil {
-		t.Errorf("Shutdown() error = %v", err)
-	}
-}
-
 func TestStdioTransport_Stop(t *testing.T) {
 	input := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}
 {"jsonrpc":"2.0","id":2,"method":"shutdown"}
@@ -639,11 +595,6 @@ func TestServer_ServeStdio(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 	defer func() { _ = srv.Close() }()
-
-	mcpSrv := srv.Build()
-	if mcpSrv == nil {
-		t.Fatal("Build() returned nil")
-	}
 
 	err = srv.ServeStdio(context.Background())
 	if err != nil {

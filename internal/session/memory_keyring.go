@@ -48,7 +48,10 @@ func (m *memoryKeyring) Set(service, account, value string) error {
 	}
 
 	if sess.Passphrase != "" {
-		key := m.encryptionKeyForStore(service)
+		key, err := m.encryptionKeyForStore(service)
+		if err != nil {
+			return fmt.Errorf("encryption key: %w", err)
+		}
 		enc, nonce, err := encryptPassphrase([]byte(sess.Passphrase), key)
 		if err != nil {
 			return fmt.Errorf("encrypt passphrase: %w", err)
@@ -76,16 +79,15 @@ func (m *memoryKeyring) Set(service, account, value string) error {
 
 // encryptionKeyForStore returns the encryption key for the given service,
 // looking up the wrap key from the store directly (must be called while holding m.mu).
-func (m *memoryKeyring) encryptionKeyForStore(service string) []byte {
-	vaultDir := vaultDirFromService(service)
+func (m *memoryKeyring) encryptionKeyForStore(service string) ([]byte, error) {
 	// Try to find wrap key in our store
 	wrapKeyKey := service + "|" + wrapKeyAccount
 	if w, ok := m.store[wrapKeyKey]; ok {
 		if k, err := base64.StdEncoding.DecodeString(string(w)); err == nil && len(k) == wrapKeyLen {
-			return k
+			return k, nil
 		}
 	}
-	return deriveKey(vaultDir)
+	return nil, fmt.Errorf("no wrap key available")
 }
 
 func (m *memoryKeyring) Get(service, account string) (string, error) {
@@ -129,7 +131,12 @@ func (m *memoryKeyring) Get(service, account string) (string, error) {
 	}
 
 	if sess.EncryptedPassphrase != "" && sess.Nonce != "" {
-		k := m.encryptionKeyForStore(service)
+		k, err := m.encryptionKeyForStore(service)
+		if err != nil {
+			zeroBytes(payload)
+			delete(m.store, key)
+			return "", fmt.Errorf("not found")
+		}
 		plain, err := decryptPassphrase(sess.EncryptedPassphrase, sess.Nonce, k)
 		if err != nil {
 			zeroBytes(payload)

@@ -19,8 +19,12 @@ type VaultConfig struct {
 	// LegacyMode indicates whether the vault may contain legacy top-level .age files
 	// outside the entries/ directory. nil means "not yet detected" (assume legacy).
 	// false means the vault has been confirmed to have no legacy entries, allowing
-	// ListFast to skip the legacy directory walk.
+	// List to skip the legacy directory walk.
 	LegacyMode *bool `yaml:"legacy_mode,omitempty"`
+	// SearchWorkers controls the number of concurrent decryption workers for find
+	// operations. 0 (default) enables auto-scaling based on vault size and CPU count.
+	// Positive values set a fixed worker count.
+	SearchWorkers int `yaml:"search_workers,omitempty"`
 }
 
 // GitConfig holds git-related configuration for automatic commits and pushes.
@@ -153,6 +157,7 @@ type fileVaultConfig struct {
 	LegacyMode        *bool    `yaml:"legacy_mode,omitempty"`
 	Path              string   `yaml:"path,omitempty"`
 	DefaultRecipients []string `yaml:"default_recipients,omitempty"`
+	SearchWorkers     *int     `yaml:"search_workers,omitempty"`
 }
 
 // fileGitConfig is the file-based git configuration with pointer fields
@@ -225,6 +230,9 @@ func MergeFileVaultConfig(fileCfg *fileVaultConfig, defaults VaultConfig) VaultC
 	}
 	if fileCfg.LegacyMode != nil {
 		result.LegacyMode = fileCfg.LegacyMode
+	}
+	if fileCfg.SearchWorkers != nil {
+		result.SearchWorkers = *fileCfg.SearchWorkers
 	}
 	return result
 }

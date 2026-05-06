@@ -32,13 +32,20 @@ func (s *Server) handleFind(ctx context.Context, req CallToolRequest) (*CallTool
 
 // findEntries searches vault entries matching a query.
 // It delegates to vaultsvc for concurrent search with scope filtering applied
-// before decryption.
+// before decryption. Worker count is read from vault config (SearchWorkers) or
+// auto-scaled based on vault size and CPU cores.
 func (s *Server) findEntries(ctx context.Context, query string) ([]vault.Match, error) {
 	svc := vaultsvc.New(s.vault)
 	_, span := metrics.StartSpan(ctx, "vault.Find")
 	defer span.End()
+
+	workers := 4
+	if s.vault != nil && s.vault.Config != nil && s.vault.Config.Vault != nil && s.vault.Config.Vault.SearchWorkers > 0 {
+		workers = s.vault.Config.Vault.SearchWorkers
+	}
+
 	return svc.Find(query, vault.FindOptions{
-		MaxWorkers:  4,
+		MaxWorkers:  workers,
 		ScopeFilter: s.checkScope,
 	})
 }

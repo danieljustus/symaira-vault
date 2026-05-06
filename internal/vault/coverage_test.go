@@ -392,9 +392,7 @@ func TestInitWriteFileError(t *testing.T) {
 
 // TestFindWithOptionsListError covers List error path in FindWithOptions.
 func TestFindWithOptionsListError(t *testing.T) {
-	searchIdentityMu.Lock()
-	searchIdentity = nil
-	searchIdentityMu.Unlock()
+	searchIdentity.Store(nil)
 
 	_, err := FindWithOptions("/nonexistent/path", "query", FindOptions{MaxWorkers: 4})
 	if err == nil {
@@ -402,19 +400,19 @@ func TestFindWithOptionsListError(t *testing.T) {
 	}
 }
 
-// TestListFastNonExistentVault covers ListFast with nonexistent vault.
-func TestListFastNonExistentVault(t *testing.T) {
-	_, err := ListFast("/nonexistent/vault", "")
+// TestListNonExistentVault covers List with nonexistent vault.
+func TestListNonExistentVault(t *testing.T) {
+	_, err := List("/nonexistent/vault", "")
 	if err == nil {
-		t.Fatal("ListFast() error = nil, want error for nonexistent vault")
+		t.Fatal("List() error = nil, want error for nonexistent vault")
 	}
 }
 
-// TestListFastWithPrefixNonExistentVault covers ListFast with nonexistent vault and prefix.
-func TestListFastWithPrefixNonExistentVault(t *testing.T) {
-	_, err := ListFast("/nonexistent/vault", "prefix")
+// TestListWithPrefixNonExistentVault covers List with nonexistent vault and prefix.
+func TestListWithPrefixNonExistentVault(t *testing.T) {
+	_, err := List("/nonexistent/vault", "prefix")
 	if err == nil {
-		t.Fatal("ListFast() error = nil, want error for nonexistent vault")
+		t.Fatal("List() error = nil, want error for nonexistent vault")
 	}
 }
 

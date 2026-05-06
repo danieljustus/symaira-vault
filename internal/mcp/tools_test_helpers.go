@@ -75,22 +75,6 @@ func TestToolError(t *testing.T) {
 	}
 }
 
-func TestRegisterTools(t *testing.T) {
-	srv := newTestServerWithVault(t, config.AgentProfile{
-		Name:         "test",
-		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
-	}, "stdio", "")
-
-	mcpSrv := NewMCPServer("test", "1.0.0")
-	srv.RegisterTools(mcpSrv)
-
-	if len(mcpSrv.tools) == 0 {
-		t.Error("RegisterTools() should register tools")
-	}
-}
-
 func TestExecuteToolUnknownTool(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",

@@ -77,18 +77,6 @@ func New(v *vault.Vault, agentName string, transport string) (*Server, error) {
 	}, nil
 }
 
-// Build creates and configures an MCP server instance with tool capabilities.
-//
-//nolint:revive
-func (s *Server) Build() *mcpServer {
-	return NewMCPServer(
-		defaultServerName,
-		defaultServerVersion,
-		WithToolCapabilities(true),
-		WithLogging(),
-	)
-}
-
 // ServeStdio runs the MCP server using stdio transport.
 func (s *Server) ServeStdio(ctx context.Context) error {
 	transport := NewStdioTransport()

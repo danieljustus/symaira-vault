@@ -15,7 +15,7 @@ func TestMemoryKeyring_SetGetDelete(t *testing.T) {
 	account := sessionAccount
 
 	passphrase := "secret-passphrase"
-	enc, nonce, err := encryptPassphrase([]byte(passphrase), deriveKey("/tmp/vault"))
+	enc, nonce, err := encryptPassphrase([]byte(passphrase), testKey())
 	if err != nil {
 		t.Fatalf("encryptPassphrase() error = %v", err)
 	}
@@ -109,7 +109,7 @@ func TestMemoryKeyring_TTLExpiration(t *testing.T) {
 	account := sessionAccount
 
 	passphrase := "ttl-secret"
-	enc, nonce, err := encryptPassphrase([]byte(passphrase), deriveKey("/tmp/vault-ttl"))
+	enc, nonce, err := encryptPassphrase([]byte(passphrase), testKey())
 	if err != nil {
 		t.Fatalf("encryptPassphrase() error = %v", err)
 	}
@@ -142,7 +142,7 @@ func TestMemoryKeyring_ZeroTTL(t *testing.T) {
 	account := sessionAccount
 
 	passphrase := "zero-ttl-secret"
-	enc, nonce, err := encryptPassphrase([]byte(passphrase), deriveKey("/tmp/vault-zerottl"))
+	enc, nonce, err := encryptPassphrase([]byte(passphrase), testKey())
 	if err != nil {
 		t.Fatalf("encryptPassphrase() error = %v", err)
 	}
@@ -221,7 +221,7 @@ func TestMemoryKeyring_ThreadSafety(t *testing.T) {
 	account := sessionAccount
 
 	passphrase := "concurrent-secret"
-	enc, nonce, err := encryptPassphrase([]byte(passphrase), deriveKey("/tmp/vault-concurrent"))
+	enc, nonce, err := encryptPassphrase([]byte(passphrase), testKey())
 	if err != nil {
 		t.Fatalf("encryptPassphrase() error = %v", err)
 	}
@@ -273,7 +273,7 @@ func TestMemoryKeyring_DeleteZeroesData(t *testing.T) {
 	account := sessionAccount
 
 	passphrase := "zero-secret"
-	enc, nonce, err := encryptPassphrase([]byte(passphrase), deriveKey("/tmp/vault-zero"))
+	enc, nonce, err := encryptPassphrase([]byte(passphrase), testKey())
 	if err != nil {
 		t.Fatalf("encryptPassphrase() error = %v", err)
 	}

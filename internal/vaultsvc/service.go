@@ -10,6 +10,7 @@ import (
 	"filippo.io/age"
 
 	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
+	"github.com/danieljustus/OpenPass/internal/ui/cliout"
 	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
 )
 
@@ -51,19 +52,9 @@ func (s *vaultService) GetField(path, field string) (any, error) {
 	entry, err := vaultpkg.ReadEntry(s.vault.Dir, path, s.vault.Identity)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil, &errorspkg.CLIError{
-				Code:    errorspkg.ExitNotFound,
-				Kind:    errorspkg.ErrNotFound,
-				Message: fmt.Sprintf("entry not found: %s", path),
-				Cause:   errorspkg.ErrEntryNotFound,
-			}
+			return nil, errorspkg.NotFound("entry not found: %s", path)
 		}
-		return nil, &errorspkg.CLIError{
-			Code:    errorspkg.ExitGeneralError,
-			Kind:    errorspkg.ErrReadFailed,
-			Message: fmt.Sprintf("cannot read entry %s: %v", path, err),
-			Cause:   err,
-		}
+		return nil, errorspkg.ReadFailed(err, "cannot read entry %s: %v", path, err)
 	}
 
 	if field == "" {
@@ -72,12 +63,7 @@ func (s *vaultService) GetField(path, field string) (any, error) {
 
 	value, ok := entry.Data[field]
 	if !ok {
-		return nil, &errorspkg.CLIError{
-			Code:    errorspkg.ExitNotFound,
-			Kind:    errorspkg.ErrFieldNotFound,
-			Message: fmt.Sprintf("field not found: %s.%s", path, field),
-			Cause:   errorspkg.ErrEntryNotFound,
-		}
+		return nil, errorspkg.Wrap(errorspkg.ExitNotFound, errorspkg.ErrFieldNotFound, errorspkg.ErrEntryNotFound, "field not found: %s.%s", path, field)
 	}
 
 	return value, nil
@@ -102,12 +88,7 @@ func (s *vaultService) setEntry(path string, data map[string]any) error {
 	case readErr == nil && existing != nil:
 		// Entry exists — merge new data into it
 		if _, err := vaultpkg.MergeEntryWithRecipients(s.vault.Dir, path, data, s.vault.Identity); err != nil {
-			return &errorspkg.CLIError{
-				Code:    errorspkg.ExitGeneralError,
-				Kind:    errorspkg.ErrWriteFailed,
-				Message: fmt.Sprintf("cannot update entry %s: %v", path, err),
-				Cause:   err,
-			}
+			return errorspkg.WriteFailed(err, "cannot update entry %s: %v", path, err)
 		}
 	case errors.Is(readErr, os.ErrNotExist):
 		// New entry
@@ -120,26 +101,17 @@ func (s *vaultService) setEntry(path string, data map[string]any) error {
 			},
 		}
 		if err := vaultpkg.WriteEntryWithRecipients(s.vault.Dir, path, entry, s.vault.Identity); err != nil {
-			return &errorspkg.CLIError{
-				Code:    errorspkg.ExitGeneralError,
-				Kind:    errorspkg.ErrWriteFailed,
-				Message: fmt.Sprintf("cannot create entry %s: %v", path, err),
-				Cause:   err,
-			}
+			return errorspkg.WriteFailed(err, "cannot create entry %s: %v", path, err)
 		}
 	default:
-		return &errorspkg.CLIError{
-			Code:    errorspkg.ExitGeneralError,
-			Kind:    errorspkg.ErrReadFailed,
-			Message: fmt.Sprintf("cannot read entry %s: %v", path, readErr),
-			Cause:   readErr,
-		}
+		return errorspkg.ReadFailed(readErr, "cannot read entry %s: %v", path, readErr)
 	}
 
 	// Auto-commit failure is a warning, not an error.
 	if err := s.vault.AutoCommit(fmt.Sprintf("Update %s", path)); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: auto-commit failed: %v\n", err)
+		s.warnAutoCommit(err)
 	}
+	vaultpkg.InvalidateListCache(s.vault.Dir)
 	return nil
 }
 
@@ -147,25 +119,16 @@ func (s *vaultService) setEntry(path string, data map[string]any) error {
 func (s *vaultService) Delete(path string) error {
 	if err := vaultpkg.DeleteEntry(s.vault.Dir, path); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return &errorspkg.CLIError{
-				Code:    errorspkg.ExitNotFound,
-				Kind:    errorspkg.ErrNotFound,
-				Message: fmt.Sprintf("entry not found: %s", path),
-				Cause:   errorspkg.ErrEntryNotFound,
-			}
+			return errorspkg.NotFound("entry not found: %s", path)
 		}
-		return &errorspkg.CLIError{
-			Code:    errorspkg.ExitGeneralError,
-			Kind:    errorspkg.ErrWriteFailed,
-			Message: fmt.Sprintf("cannot delete entry %s: %v", path, err),
-			Cause:   err,
-		}
+		return errorspkg.WriteFailed(err, "cannot delete entry %s: %v", path, err)
 	}
 
 	// Auto-commit failure is a warning, not an error.
 	if err := s.vault.AutoCommit(fmt.Sprintf("Delete %s", path)); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: auto-commit failed: %v\n", err)
+		s.warnAutoCommit(err)
 	}
+	vaultpkg.InvalidateListCache(s.vault.Dir)
 	return nil
 }
 
@@ -173,12 +136,7 @@ func (s *vaultService) Delete(path string) error {
 func (s *vaultService) List(prefix string) ([]string, error) {
 	entries, err := vaultpkg.List(s.vault.Dir, prefix)
 	if err != nil {
-		return nil, &errorspkg.CLIError{
-			Code:    errorspkg.ExitGeneralError,
-			Kind:    errorspkg.ErrReadFailed,
-			Message: fmt.Sprintf("cannot list entries: %v", err),
-			Cause:   err,
-		}
+		return nil, errorspkg.ReadFailed(err, "cannot list entries: %v", err)
 	}
 	return entries, nil
 }
@@ -187,12 +145,7 @@ func (s *vaultService) List(prefix string) ([]string, error) {
 func (s *vaultService) Find(query string, opts vaultpkg.FindOptions) ([]vaultpkg.Match, error) {
 	matches, err := vaultpkg.FindWithOptions(s.vault.Dir, query, opts)
 	if err != nil {
-		return nil, &errorspkg.CLIError{
-			Code:    errorspkg.ExitGeneralError,
-			Kind:    errorspkg.ErrReadFailed,
-			Message: fmt.Sprintf("search failed: %v", err),
-			Cause:   err,
-		}
+		return nil, errorspkg.ReadFailed(err, "search failed: %v", err)
 	}
 
 	return matches, nil
@@ -203,19 +156,9 @@ func (s *vaultService) GetEntry(path string) (*vaultpkg.Entry, error) {
 	entry, err := vaultpkg.ReadEntry(s.vault.Dir, path, s.vault.Identity)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil, &errorspkg.CLIError{
-				Code:    errorspkg.ExitNotFound,
-				Kind:    errorspkg.ErrNotFound,
-				Message: fmt.Sprintf("entry not found: %s", path),
-				Cause:   errorspkg.ErrEntryNotFound,
-			}
+			return nil, errorspkg.NotFound("entry not found: %s", path)
 		}
-		return nil, &errorspkg.CLIError{
-			Code:    errorspkg.ExitGeneralError,
-			Kind:    errorspkg.ErrReadFailed,
-			Message: fmt.Sprintf("cannot read entry %s: %v", path, err),
-			Cause:   err,
-		}
+		return nil, errorspkg.ReadFailed(err, "cannot read entry %s: %v", path, err)
 	}
 	return entry, nil
 }
@@ -223,19 +166,20 @@ func (s *vaultService) GetEntry(path string) (*vaultpkg.Entry, error) {
 // WriteEntry writes a complete entry to the vault.
 func (s *vaultService) WriteEntry(path string, entry *vaultpkg.Entry) error {
 	if err := vaultpkg.WriteEntryWithRecipients(s.vault.Dir, path, entry, s.vault.Identity); err != nil {
-		return &errorspkg.CLIError{
-			Code:    errorspkg.ExitGeneralError,
-			Kind:    errorspkg.ErrWriteFailed,
-			Message: fmt.Sprintf("cannot write entry %s: %v", path, err),
-			Cause:   err,
-		}
+		return errorspkg.WriteFailed(err, "cannot write entry %s: %v", path, err)
 	}
 
 	// Auto-commit failure is a warning, not an error.
 	if err := s.vault.AutoCommit(fmt.Sprintf("Update %s", path)); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: auto-commit failed: %v\n", err)
+		s.warnAutoCommit(err)
 	}
+	vaultpkg.InvalidateListCache(s.vault.Dir)
 	return nil
+}
+
+// warnAutoCommit logs an auto-commit warning.
+func (s *vaultService) warnAutoCommit(err error) {
+	cliout.Warnf("Warning: auto-commit failed: %v", err)
 }
 
 // GetIdentity returns the vault's identity for encryption/decryption operations.

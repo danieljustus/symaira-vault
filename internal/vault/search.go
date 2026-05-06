@@ -115,6 +115,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"filippo.io/age"
@@ -128,6 +129,78 @@ type Match struct {
 	Fields []string
 }
 
+// listCacheEntry holds cached List results with invalidation metadata.
+type listCacheEntry struct {
+	paths        []string
+	createdAt    time.Time
+	entriesMtime time.Time
+	vaultMtime   time.Time
+}
+
+// listCache provides TTL-cached path listings to avoid repetitive directory walks.
+// It invalidates entries when the underlying directories' modification times change.
+var listCache struct {
+	mu    sync.RWMutex
+	items map[string]listCacheEntry
+	// TTL is the cache duration. It is a variable (not const) so tests can override it.
+	ttl time.Duration
+}
+
+func init() {
+	listCache.items = make(map[string]listCacheEntry)
+	listCache.ttl = 30 * time.Second
+}
+
+// getDirMtime returns the modification time of a directory, or zero if unavailable.
+func getDirMtime(dir string) time.Time {
+	info, err := os.Stat(dir)
+	if err != nil {
+		return time.Time{}
+	}
+	return info.ModTime()
+}
+
+// cachedList returns cached paths if valid, or nil if cache miss / expired / invalidated.
+func cachedList(vaultDir string) []string {
+	listCache.mu.RLock()
+	entry, ok := listCache.items[vaultDir]
+	listCache.mu.RUnlock()
+	if !ok {
+		return nil
+	}
+	if time.Since(entry.createdAt) > listCache.ttl {
+		return nil
+	}
+	// Validate mtimes: if either directory changed since caching, invalidate
+	if !getDirMtime(entriesDir(vaultDir)).Equal(entry.entriesMtime) {
+		return nil
+	}
+	if !getDirMtime(vaultDir).Equal(entry.vaultMtime) {
+		return nil
+	}
+	return entry.paths
+}
+
+// storeListCache stores the result of a List call for the given vaultDir.
+func storeListCache(vaultDir string, paths []string) {
+	listCache.mu.Lock()
+	listCache.items[vaultDir] = listCacheEntry{
+		paths:        append([]string(nil), paths...),
+		createdAt:    time.Now(),
+		entriesMtime: getDirMtime(entriesDir(vaultDir)),
+		vaultMtime:   getDirMtime(vaultDir),
+	}
+	listCache.mu.Unlock()
+}
+
+// InvalidateListCache removes cached listings for a vault directory.
+// Callers should invoke this after write operations that affect vault contents.
+func InvalidateListCache(vaultDir string) {
+	listCache.mu.Lock()
+	delete(listCache.items, vaultDir)
+	listCache.mu.Unlock()
+}
+
 // searchIdentity holds the cached decryption identity for search operations.
 //
 // DESIGN DECISION: Global State vs Per-Vault Context
@@ -135,7 +208,7 @@ type Match struct {
 // This is intentionally global state because:
 //  1. OpenPass operates with a single active vault per process
 //  2. The identity is session-scoped (tied to unlock duration), not vault-scoped
-//  3. RWMutex provides thread-safe access verified by `go test -race`
+//  3. atomic.Pointer provides lock-free thread-safe access verified by `go test -race`
 //  4. Per-vault caching would add complexity without clear benefit for single-vault usage
 //
 // Tradeoffs accepted:
@@ -143,33 +216,32 @@ type Match struct {
 //   - Multiple vaults in same process share cache (invalid for OpenPass use case)
 //
 // Future: If multi-vault support is needed, add vaultDir key to a map[VaultDir]*Identity.
-var (
-	searchIdentityMu sync.RWMutex
-	searchIdentity   *age.X25519Identity
-)
+var searchIdentity atomic.Pointer[age.X25519Identity]
 
 func rememberSearchIdentity(identity *age.X25519Identity) {
 	if identity == nil {
 		return
 	}
-	searchIdentityMu.Lock()
-	searchIdentity = identity
-	searchIdentityMu.Unlock()
+	searchIdentity.Store(identity)
 }
 
 func currentSearchIdentity() *age.X25519Identity {
-	searchIdentityMu.RLock()
-	defer searchIdentityMu.RUnlock()
-	return searchIdentity
+	return searchIdentity.Load()
 }
 
-func List(vaultDir string, prefix string) ([]string, error) {
-	return ListFast(vaultDir, prefix)
-}
-
-// ListFast returns all entry paths in the vault, optionally filtered by prefix.
+// List returns all entry paths in the vault, optionally filtered by prefix.
 // It uses os.ReadDir for efficient directory traversal without stat calls.
-func ListFast(vaultDir string, prefix string) ([]string, error) {
+// Results are cached with a 30-second TTL to avoid repetitive walks during
+// MCP sessions. The cache invalidates automatically when directory mtimes change.
+func List(vaultDir string, prefix string) ([]string, error) {
+	// Check cache when listing the entire vault (prefix == "").
+	if prefix == "" {
+		if cached := cachedList(vaultDir); cached != nil {
+			metrics.RecordVaultOperationDuration("list_cached", 0)
+			return cached, nil
+		}
+	}
+
 	start := time.Now()
 	seen := map[string]struct{}{}
 
@@ -187,6 +259,11 @@ func ListFast(vaultDir string, prefix string) ([]string, error) {
 	sort.Strings(paths)
 	metrics.RecordVaultOperationDuration("list", time.Since(start))
 	metrics.RecordVaultEntryCount(vaultDir, len(paths))
+
+	if prefix == "" {
+		storeListCache(vaultDir, paths)
+	}
+
 	return paths, nil
 }
 

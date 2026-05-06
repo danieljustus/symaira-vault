@@ -35,10 +35,10 @@
 // Application-Level Encryption:
 //
 // In addition to OS keyring encryption, passphrases are encrypted with
-// AES-256-GCM before keyring storage. The encryption key is derived from
-// the vault directory path using PBKDF2-SHA256 (600,000 iterations).
+// AES-256-GCM before keyring storage. The encryption key is a randomly
+// generated 32-byte wrap key stored separately in the OS keyring.
 // This provides defense-in-depth: even if the keyring blob is extracted,
-// the passphrase remains encrypted without knowledge of the vault path.
+// the passphrase remains encrypted without the wrap key.
 //
 // Backward Compatibility:
 //
@@ -60,10 +60,6 @@ import (
 	"io"
 	"time"
 
-	"golang.org/x/crypto/pbkdf2"
-
-	"crypto/sha256"
-
 	"github.com/danieljustus/OpenPass/internal/crypto"
 	"github.com/danieljustus/OpenPass/internal/metrics"
 )
@@ -73,8 +69,6 @@ const (
 	identityAccount = "identity"
 	wrapKeyAccount  = "wrap-key"
 	wrapKeyLen      = 32
-	pbkdf2Iter      = 600_000
-	pbkdf2KeyLen    = 32
 	aesGCMNonceLen  = 12
 )
 
@@ -123,10 +117,6 @@ type storedIdentity struct {
 	EncryptedIdentity string    `json:"encrypted_identity"`
 	Nonce             string    `json:"nonce"`
 	TTL               int64     `json:"ttl_ns"`
-}
-
-func deriveKey(vaultIdentity string) []byte {
-	return pbkdf2.Key([]byte(vaultIdentity), []byte("openpass-session"), pbkdf2Iter, pbkdf2KeyLen, sha256.New)
 }
 
 func generateWrapKey() ([]byte, error) {
@@ -306,17 +296,20 @@ func LoadPassphrase(vaultDir string) ([]byte, error) {
 	return passphrase, nil
 }
 
-func encryptionKey(vaultDir string) []byte {
+func encryptionKey(vaultDir string) ([]byte, error) {
 	wrapKey, err := loadWrapKey(vaultDir)
-	if err == nil {
-		return wrapKey
+	if err != nil {
+		return nil, fmt.Errorf("no wrap key available for vault %s: please run 'openpass unlock' to re-establish the session", vaultDir)
 	}
-	return deriveKey(vaultDir)
+	return wrapKey, nil
 }
 
 func resolvePassphrase(sess *storedSession, vaultDir string) ([]byte, error) {
 	if sess.EncryptedPassphrase != "" && sess.Nonce != "" {
-		key := encryptionKey(vaultDir)
+		key, err := encryptionKey(vaultDir)
+		if err != nil {
+			return nil, err
+		}
 		plain, err := decryptPassphrase(sess.EncryptedPassphrase, sess.Nonce, key)
 		if err != nil {
 			return nil, fmt.Errorf("decrypt session: %w", err)
@@ -326,7 +319,10 @@ func resolvePassphrase(sess *storedSession, vaultDir string) ([]byte, error) {
 
 	if sess.Passphrase != "" {
 		plain := []byte(sess.Passphrase)
-		key := encryptionKey(vaultDir)
+		key, err := encryptionKey(vaultDir)
+		if err != nil {
+			return nil, err
+		}
 		enc, nonce, encErr := encryptPassphrase(plain, key)
 		if encErr == nil {
 			sess.EncryptedPassphrase = enc

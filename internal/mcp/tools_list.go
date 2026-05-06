@@ -9,12 +9,6 @@ import (
 	"github.com/danieljustus/OpenPass/internal/vaultsvc"
 )
 
-func (s *Server) RegisterTools(srv *mcpServer) {
-	for _, def := range availableToolDefinitions(s) {
-		srv.AddTool(Tool{Name: def.Name, Description: def.Description}, def.Handler)
-	}
-}
-
 func (s *Server) handleList(ctx context.Context, req CallToolRequest) (*CallToolResult, error) {
 	prefix, err := req.RequireString("prefix")
 	if err != nil {

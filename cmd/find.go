@@ -8,9 +8,33 @@ import (
 
 	"github.com/spf13/cobra"
 
+	configpkg "github.com/danieljustus/OpenPass/internal/config"
 	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
 	vaultsvc "github.com/danieljustus/OpenPass/internal/vaultsvc"
 )
+
+// searchWorkers returns the number of concurrent decryption workers for find
+// operations. It uses the vault.searchWorkers config if set (> 0), otherwise
+// auto-scales based on vault entry count and CPU cores.
+func searchWorkers(vaultDir string, cfg *configpkg.Config) int {
+	if cfg != nil && cfg.Vault != nil && cfg.Vault.SearchWorkers > 0 {
+		return cfg.Vault.SearchWorkers
+	}
+
+	entries, _ := vaultpkg.List(vaultDir, "")
+	entryCount := len(entries)
+	cpuCount := runtime.GOMAXPROCS(0)
+
+	// Scale workers with vault size: base 2, +1 per 1000 entries, capped at CPU count
+	workers := entryCount/1000 + 2
+	if workers > cpuCount {
+		workers = cpuCount
+	}
+	if workers < 2 {
+		workers = 2
+	}
+	return workers
+}
 
 var findCmd = &cobra.Command{
 	Use:     "find <query>",
@@ -25,10 +49,12 @@ var findCmd = &cobra.Command{
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return withVault(func(svc vaultsvc.Service) error {
-			workers := runtime.GOMAXPROCS(0)
-			if workers > 4 {
-				workers = 4
+			vaultDir, err := vaultPath()
+			if err != nil {
+				return err
 			}
+			cfg := loadVaultConfigForUnlock(vaultDir)
+			workers := searchWorkers(vaultDir, cfg)
 
 			matches, err := svc.Find(args[0], vaultpkg.FindOptions{MaxWorkers: workers})
 			if err != nil {
