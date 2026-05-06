@@ -191,7 +191,7 @@ func (r *TokenRegistry) Load() error {
 // Save persists the current in-memory entries to the JSON registry file with
 // 0o600 permissions.
 func (r *TokenRegistry) Save() error {
-	r.mu.RLock()
+	r.mu.Lock()
 	file := TokenRegistryFile{
 		Version: 1,
 		Tokens:  make(map[string]TokenRegistryEntry, len(r.entries)),
@@ -199,7 +199,7 @@ func (r *TokenRegistry) Save() error {
 	for _, t := range r.entries {
 		file.Tokens[t.ID] = t.toEntry()
 	}
-	r.mu.RUnlock()
+	r.mu.Unlock()
 
 	data, err := json.MarshalIndent(file, "", "  ")
 	if err != nil {
