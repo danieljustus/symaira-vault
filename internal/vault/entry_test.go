@@ -687,7 +687,7 @@ func TestDerivePseudonymizationKeyDeterminism(t *testing.T) {
 func TestWriteAndReadEntryWithPseudonymization(t *testing.T) {
 	vaultDir := t.TempDir()
 
-	writePseudonymizeConfig(t, vaultDir, true)
+	writePseudonymizeConfig(t, vaultDir)
 
 	id := testutil.TempIdentity(t)
 	rememberSearchIdentity(id)
@@ -734,7 +734,7 @@ func TestWriteAndReadEntryWithPseudonymization(t *testing.T) {
 func TestDeleteEntryWithPseudonymization(t *testing.T) {
 	vaultDir := t.TempDir()
 
-	writePseudonymizeConfig(t, vaultDir, true)
+	writePseudonymizeConfig(t, vaultDir)
 
 	id := testutil.TempIdentity(t)
 	rememberSearchIdentity(id)
@@ -763,7 +763,7 @@ func TestDeleteEntryWithPseudonymization(t *testing.T) {
 func TestListWithPseudonymizedEntries(t *testing.T) {
 	vaultDir := t.TempDir()
 
-	writePseudonymizeConfig(t, vaultDir, true)
+	writePseudonymizeConfig(t, vaultDir)
 
 	id := testutil.TempIdentity(t)
 	rememberSearchIdentity(id)
@@ -786,7 +786,7 @@ func TestListWithPseudonymizedEntries(t *testing.T) {
 func TestListWithPseudonymizedEntriesAndPrefix(t *testing.T) {
 	vaultDir := t.TempDir()
 
-	writePseudonymizeConfig(t, vaultDir, true)
+	writePseudonymizeConfig(t, vaultDir)
 
 	id := testutil.TempIdentity(t)
 	rememberSearchIdentity(id)
@@ -830,7 +830,7 @@ func TestEntryStoragePathWithNilIdentity(t *testing.T) {
 func TestGetEntryMetadataWithPseudonymization(t *testing.T) {
 	vaultDir := t.TempDir()
 
-	writePseudonymizeConfig(t, vaultDir, true)
+	writePseudonymizeConfig(t, vaultDir)
 
 	id := testutil.TempIdentity(t)
 	rememberSearchIdentity(id)
@@ -877,11 +877,11 @@ func TestIsPseudonymizeEnabledDefault(t *testing.T) {
 	}
 }
 
-func writePseudonymizeConfig(t *testing.T, vaultDir string, enabled bool) {
+func writePseudonymizeConfig(t *testing.T, vaultDir string) {
 	t.Helper()
 	cfg := vaultconfig.Default()
 	cfg.VaultDir = vaultDir
-	cfg.Vault = &vaultconfig.VaultConfig{PseudonymizePaths: enabled}
+	cfg.Vault = &vaultconfig.VaultConfig{PseudonymizePaths: true}
 	if err := cfg.SaveTo(filepath.Join(vaultDir, "config.yaml")); err != nil {
 		t.Fatalf("save config: %v", err)
 	}

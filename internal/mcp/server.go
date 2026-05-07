@@ -7,14 +7,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
-	"sync"
-	"time"
 
 	"github.com/danieljustus/OpenPass/internal/audit"
 	"github.com/danieljustus/OpenPass/internal/config"
-	"github.com/danieljustus/OpenPass/internal/git"
 	"github.com/danieljustus/OpenPass/internal/vault"
 )
 
@@ -30,9 +26,6 @@ type Server struct {
 	agent     *config.AgentProfile
 	auditLog  *audit.Logger
 	transport string
-
-	lastPull time.Time
-	pullMu   sync.Mutex
 }
 
 // New creates a new MCP server instance with the specified vault and agent configuration.
@@ -97,44 +90,4 @@ func (s *Server) Close() error {
 		return nil
 	}
 	return s.auditLog.Close()
-}
-
-func (s *Server) autoPull() {
-	if s == nil || s.vault == nil {
-		return
-	}
-
-	cfg := s.vault.Config
-	if cfg == nil || cfg.Git == nil || !cfg.Git.AutoPull {
-		return
-	}
-
-	hasRemote, _ := git.HasRemote(s.vault.Dir, "origin")
-	if !hasRemote {
-		return
-	}
-
-	interval := cfg.Git.AutoPullInterval
-	if interval <= 0 {
-		interval = 10 * time.Second
-	}
-
-	s.pullMu.Lock()
-	if time.Since(s.lastPull) < interval {
-		s.pullMu.Unlock()
-		return
-	}
-	s.lastPull = time.Now()
-	s.pullMu.Unlock()
-
-	result := git.PullWithResult(s.vault.Dir)
-	if result.Error != nil {
-		return
-	}
-
-	if result.Success {
-		_ = git.SetLastSyncTime(s.vault.Dir)
-	}
-	hostname, _ := os.Hostname()
-	_ = git.ResolveConflicts(s.vault.Dir, hostname)
 }

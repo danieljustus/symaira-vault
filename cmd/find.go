@@ -49,7 +49,7 @@ var findCmd = &cobra.Command{
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return withVault(func(svc vaultsvc.Service) error {
-			_ = maybeAutoPull(svc.GetDir(), svc.Vault().Config)
+			maybeAutoPull(svc.GetDir(), svc.Vault().Config)
 			cfg := svc.Vault().Config
 			workers := searchWorkers(svc.GetDir(), cfg)
 

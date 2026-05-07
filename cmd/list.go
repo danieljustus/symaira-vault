@@ -23,7 +23,7 @@ var listCmd = &cobra.Command{
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return withVault(func(svc vaultsvc.Service) error {
-			_ = maybeAutoPull(svc.GetDir(), svc.Vault().Config)
+			maybeAutoPull(svc.GetDir(), svc.Vault().Config)
 			prefix := ""
 			if len(args) > 0 {
 				prefix = args[0]

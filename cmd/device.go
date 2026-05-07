@@ -123,7 +123,7 @@ to re-encrypt all entries for this new device.`,
 		}
 
 		fmt.Fprintf(os.Stderr, "Cloning vault from %s ...\n", remoteURL)
-		if _, err := gogit.PlainClone(vaultDir, false, &gogit.CloneOptions{
+		if _, err = gogit.PlainClone(vaultDir, false, &gogit.CloneOptions{
 			URL:      remoteURL,
 			Progress: os.Stderr,
 		}); err != nil {
@@ -136,7 +136,7 @@ to re-encrypt all entries for this new device.`,
 		if err != nil {
 			return fmt.Errorf("invalid or expired pairing token: could not read pairing file. Ensure the token is correct and the pairing device has pushed the token file: %w", err)
 		}
-		if err := json.Unmarshal(pfData, &pf); err != nil {
+		if err = json.Unmarshal(pfData, &pf); err != nil {
 			return fmt.Errorf("invalid pairing file: %w", err)
 		}
 
@@ -257,14 +257,14 @@ can decrypt them.`,
 		if err != nil {
 			return fmt.Errorf("no join request found for token %s. Ensure the joining device has completed 'openpass device join' and pushed: %w", token, err)
 		}
-		if err := json.Unmarshal(jfData, &jf); err != nil {
+		if err = json.Unmarshal(jfData, &jf); err != nil {
 			return fmt.Errorf("parse joined file: %w", err)
 		}
 
 		fmt.Fprintf(os.Stderr, "Accepting join from device: %s (public key: %s)\n", jf.Name, truncatePubkey(jf.PublicKey))
 
 		rm := vaultpkg.NewRecipientsManager(vaultDir)
-		if err := rm.AddRecipient(jf.PublicKey); err != nil {
+		if err = rm.AddRecipient(jf.PublicKey); err != nil {
 			return fmt.Errorf("add recipient: %w", err)
 		}
 
@@ -458,13 +458,13 @@ access to all vault entries.`,
 		}
 
 		// Remove device from registry
-		if err := dm.RemoveDevice(deviceName); err != nil {
+		if err = dm.RemoveDevice(deviceName); err != nil {
 			return fmt.Errorf("remove device from registry: %w", err)
 		}
 
 		// Remove device's public key from recipients
 		rm := vaultpkg.NewRecipientsManager(vaultDir)
-		if err := rm.RemoveRecipient(device.PublicKey); err != nil {
+		if err = rm.RemoveRecipient(device.PublicKey); err != nil {
 			// Not found in recipients is acceptable — may have been manually removed
 			if !errors.Is(err, vaultpkg.ErrRecipientNotFound) {
 				return fmt.Errorf("remove recipient: %w", err)

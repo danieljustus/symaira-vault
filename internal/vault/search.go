@@ -296,7 +296,7 @@ func listPseudonymized(vaultDir, prefix string) ([]string, error) {
 		if d.IsDir() {
 			return nil
 		}
-		if filepath.Ext(filePath) != ".age" {
+		if filepath.Ext(filePath) != ".age" { //nolint:goconst // file extension literal
 			return nil
 		}
 

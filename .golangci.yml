@@ -104,6 +104,13 @@ linters:
       - path: 'internal/mcp/.+\.go'
         linters:
           - goconst
+      # Output format literals and OS names — constants would not improve readability
+      - path: 'cmd/.+\.go'
+        linters:
+          - goconst
+      - path: 'internal/daemon/.+\.go'
+        linters:
+          - goconst
       # Loop variables are fine as short names in tight loops
       - path: '(.+)_test\.go'
         linters:

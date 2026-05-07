@@ -57,7 +57,7 @@ var getCmd = &cobra.Command{
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return withVault(func(svc vaultsvc.Service) error {
-			_ = maybeAutoPull(svc.GetDir(), svc.Vault().Config)
+			maybeAutoPull(svc.GetDir(), svc.Vault().Config)
 			query := args[0]
 			path := query
 			field := ""

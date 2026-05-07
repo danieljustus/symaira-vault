@@ -1,3 +1,4 @@
+// Package pairing provides device pairing token generation and management.
 package pairing
 
 import (

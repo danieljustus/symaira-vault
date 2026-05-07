@@ -254,9 +254,7 @@ func parseSSHTarget(target, customPath string) (user, host, path string, err err
 func buildSSHURL(user, host, path string) string {
 	cleanPath := path
 	cleanPath = strings.TrimPrefix(cleanPath, "~")
-	if strings.HasPrefix(cleanPath, "/") {
-		cleanPath = cleanPath[1:]
-	}
+	cleanPath = strings.TrimPrefix(cleanPath, "/")
 
 	if user != "" {
 		return fmt.Sprintf("ssh://%s@%s/~%s", user, host, cleanPath)

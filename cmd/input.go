@@ -34,8 +34,24 @@ type entryFlags struct {
 func collectEntryData(reader *bufio.Reader, flags entryFlags) (map[string]any, error) {
 	data := map[string]any{}
 
-	// Username — always prompt if reader is set (matches existing add.go behavior),
-	// even when flags.username is already provided.
+	if err := collectUsername(data, reader, flags); err != nil {
+		return nil, err
+	}
+	if err := collectPassword(data, reader, flags); err != nil {
+		return nil, err
+	}
+	if err := collectURL(data, reader, flags); err != nil {
+		return nil, err
+	}
+	collectNotes(data, reader, flags)
+	if err := collectTOTP(data, reader, flags); err != nil {
+		return nil, err
+	}
+
+	return data, nil
+}
+
+func collectUsername(data map[string]any, reader *bufio.Reader, flags entryFlags) error {
 	if flags.username != "" {
 		data["username"] = flags.username
 	}
@@ -43,60 +59,67 @@ func collectEntryData(reader *bufio.Reader, flags entryFlags) (map[string]any, e
 		fmt.Fprint(os.Stderr, "Username (optional): ")
 		username, err := reader.ReadString('\n')
 		if err != nil && username == "" {
-			return nil, fmt.Errorf("read username: %w", err)
+			return fmt.Errorf("read username: %w", err)
 		}
 		username = strings.TrimSpace(username)
 		if username != "" {
 			data["username"] = username
 		}
 	}
+	return nil
+}
 
-	// Password — guaranteed Wipe in ALL branches.
-	if flags.password != "" {
+func collectPassword(data map[string]any, reader *bufio.Reader, flags entryFlags) error {
+	switch {
+	case flags.password != "":
 		data["password"] = flags.password
 		if !flags.force {
 			if err := cryptopkg.ValidatePasswordStrength(flags.password); err != nil {
-				return nil, err
+				return err
 			}
 		}
-	} else if flags.generate {
+	case flags.generate:
 		password, err := generatePassword(flags.length, true)
 		if err != nil {
-			return nil, fmt.Errorf("generate password: %w", err)
+			return fmt.Errorf("generate password: %w", err)
 		}
 		data["password"] = password
-	} else if reader != nil {
+	case reader != nil:
 		password, err := readHiddenInput("Password: ", reader)
 		if err != nil && len(password) == 0 {
-			return nil, fmt.Errorf("read password: %w", err)
+			return fmt.Errorf("read password: %w", err)
 		}
 		defer cryptopkg.Wipe(password)
 		if len(password) > 0 {
 			data["password"] = string(password)
 			if !flags.force {
 				if err := cryptopkg.ValidatePasswordStrength(string(password)); err != nil {
-					return nil, err
+					return err
 				}
 			}
 		}
 	}
+	return nil
+}
 
-	// URL
+func collectURL(data map[string]any, reader *bufio.Reader, flags entryFlags) error {
 	if flags.url != "" {
 		data["url"] = flags.url
 	} else if reader != nil {
 		fmt.Fprint(os.Stderr, "URL (optional): ")
 		url, err := reader.ReadString('\n')
 		if err != nil && url == "" {
-			return nil, fmt.Errorf("read url: %w", err)
+			return fmt.Errorf("read url: %w", err)
 		}
 		url = strings.TrimSpace(url)
 		if url != "" {
 			data["url"] = url
 		}
 	}
+	return nil
+}
 
-	// Notes
+func collectNotes(data map[string]any, reader *bufio.Reader, flags entryFlags) {
 	if flags.notes != "" {
 		data["notes"] = flags.notes
 	} else if reader != nil && !flags.skipNotes {
@@ -117,8 +140,9 @@ func collectEntryData(reader *bufio.Reader, flags entryFlags) (map[string]any, e
 			data["notes"] = strings.Join(notes, "\n")
 		}
 	}
+}
 
-	// TOTP — guaranteed Wipe in ALL branches.
+func collectTOTP(data map[string]any, reader *bufio.Reader, flags entryFlags) error {
 	if flags.totpSecret != "" {
 		totpData := map[string]any{
 			"secret": flags.totpSecret,
@@ -130,47 +154,52 @@ func collectEntryData(reader *bufio.Reader, flags entryFlags) (map[string]any, e
 			totpData["account_name"] = flags.totpAccount
 		}
 		data["totp"] = totpData
-	} else if reader != nil {
-		fmt.Fprint(os.Stderr, "TOTP Secret (optional): ")
-		totpLine, err := reader.ReadString('\n')
+		return nil
+	}
+
+	if reader == nil {
+		return nil
+	}
+
+	fmt.Fprint(os.Stderr, "TOTP Secret (optional): ")
+	totpLine, err := reader.ReadString('\n')
+	if err != nil {
+		return fmt.Errorf("read TOTP secret: %w", err)
+	}
+	totpLine = strings.TrimSpace(totpLine)
+	if totpLine == "" {
+		return nil
+	}
+
+	totpSecret := []byte(totpLine)
+	defer cryptopkg.Wipe(totpSecret)
+
+	totpData := map[string]any{
+		"secret": totpLine,
+	}
+
+	if !flags.skipTOTPDetails {
+		fmt.Fprint(os.Stderr, "TOTP Issuer (optional): ")
+		totpIssuer, err := reader.ReadString('\n')
 		if err != nil {
-			return nil, fmt.Errorf("read TOTP secret: %w", err)
+			return fmt.Errorf("read TOTP issuer: %w", err)
 		}
-		totpLine = strings.TrimSpace(totpLine)
-		if totpLine != "" {
-			// Convert to []byte so we can Wipe the secret from memory.
-			totpSecret := []byte(totpLine)
-			defer cryptopkg.Wipe(totpSecret)
+		totpIssuer = strings.TrimSpace(totpIssuer)
+		if totpIssuer != "" {
+			totpData["issuer"] = totpIssuer
+		}
 
-			totpData := map[string]any{
-				"secret": totpLine,
-			}
-
-			if !flags.skipTOTPDetails {
-				fmt.Fprint(os.Stderr, "TOTP Issuer (optional): ")
-				totpIssuer, err := reader.ReadString('\n')
-				if err != nil {
-					return nil, fmt.Errorf("read TOTP issuer: %w", err)
-				}
-				totpIssuer = strings.TrimSpace(totpIssuer)
-				if totpIssuer != "" {
-					totpData["issuer"] = totpIssuer
-				}
-
-				fmt.Fprint(os.Stderr, "TOTP Account (optional): ")
-				totpAccount, err := reader.ReadString('\n')
-				if err != nil {
-					return nil, fmt.Errorf("read TOTP account: %w", err)
-				}
-				totpAccount = strings.TrimSpace(totpAccount)
-				if totpAccount != "" {
-					totpData["account_name"] = totpAccount
-				}
-			}
-
-			data["totp"] = totpData
+		fmt.Fprint(os.Stderr, "TOTP Account (optional): ")
+		totpAccount, err := reader.ReadString('\n')
+		if err != nil {
+			return fmt.Errorf("read TOTP account: %w", err)
+		}
+		totpAccount = strings.TrimSpace(totpAccount)
+		if totpAccount != "" {
+			totpData["account_name"] = totpAccount
 		}
 	}
 
-	return data, nil
+	data["totp"] = totpData
+	return nil
 }

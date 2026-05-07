@@ -504,7 +504,7 @@ func Sync(vaultDir string, pushAfter bool) SyncResult {
 		PushSuccess: false,
 	}
 
-	if pushAfter && result.PullResult.Success && result.PullResult.HasRemote {
+	if pushAfter && result.Success && result.HasRemote {
 		pushResult := PushWithResult(vaultDir)
 		result.PushDone = true
 		result.PushSuccess = pushResult.Success

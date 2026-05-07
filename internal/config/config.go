@@ -418,7 +418,23 @@ func (c *Config) SaveTo(path string) error {
 			Format: &format,
 		}
 	}
-	for name, profile := range c.Agents {
+	raw.Agents = buildFileAgents(c.Agents)
+	for name, profile := range c.Profiles {
+		if profile != nil {
+			raw.Profiles[name] = fileProfile{VaultPath: profile.VaultPath}
+		}
+	}
+
+	data, err := yaml.Marshal(&raw)
+	if err != nil {
+		return err
+	}
+	return fileutil.AtomicWriteFile(path, data, 0o600)
+}
+
+func buildFileAgents(agents map[string]AgentProfile) map[string]fileAgentProfile {
+	result := make(map[string]fileAgentProfile, len(agents))
+	for name, profile := range agents {
 		allowed := append([]string(nil), profile.AllowedPaths...)
 		canWrite := profile.CanWrite
 		canRunCommands := profile.CanRunCommands
@@ -446,19 +462,9 @@ func (c *Config) SaveTo(path string) error {
 		if profile.RedactFields != nil {
 			fap.RedactFields = append([]string(nil), profile.RedactFields...)
 		}
-		raw.Agents[name] = fap
+		result[name] = fap
 	}
-	for name, profile := range c.Profiles {
-		if profile != nil {
-			raw.Profiles[name] = fileProfile{VaultPath: profile.VaultPath}
-		}
-	}
-
-	data, err := yaml.Marshal(&raw)
-	if err != nil {
-		return err
-	}
-	return fileutil.AtomicWriteFile(path, data, 0o600)
+	return result
 }
 
 func defaultConfigPath() (string, error) {

@@ -137,18 +137,18 @@ func containsConflict(name string) bool {
 		(len(name) > 14 && name[0:14] == "config.conflict")
 }
 
-func maybeAutoPull(vaultDir string, cfg *configpkg.Config) error {
+func maybeAutoPull(vaultDir string, cfg *configpkg.Config) {
 	if cfg == nil || cfg.Git == nil {
-		return nil
+		return
 	}
 
 	if !cfg.Git.AutoPull {
-		return nil
+		return
 	}
 
 	hasRemote, _ := git.HasRemote(vaultDir, "origin")
 	if !hasRemote {
-		return nil
+		return
 	}
 
 	interval := cfg.Git.AutoPullInterval
@@ -157,19 +157,19 @@ func maybeAutoPull(vaultDir string, cfg *configpkg.Config) error {
 	}
 
 	if !git.ShouldAutoPull(vaultDir, interval) {
-		return nil
+		return
 	}
 
 	result := git.PullWithResult(vaultDir)
 	if result.Error != nil {
 		if isOfflineErr(result.Error) {
-			return nil
+			return
 		}
-		return nil
+		return
 	}
 
 	if result.Skipped && !result.HasRemote {
-		return nil
+		return
 	}
 
 	if err := git.SetLastSyncTime(vaultDir); err != nil {
@@ -188,6 +188,4 @@ func maybeAutoPull(vaultDir string, cfg *configpkg.Config) error {
 			fmt.Fprintf(os.Stderr, "  %s\n", f)
 		}
 	}
-
-	return nil
 }
