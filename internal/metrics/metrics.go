@@ -132,6 +132,17 @@ var (
 		},
 		[]string{"result"},
 	)
+
+	policyEvalDurationSeconds = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "openpass",
+			Subsystem: "policy",
+			Name:      "eval_duration_seconds",
+			Help:      "Duration of policy evaluations in seconds.",
+			Buckets:   prometheus.DefBuckets,
+		},
+		[]string{},
+	)
 )
 
 func init() {
@@ -146,6 +157,7 @@ func init() {
 		sessionCacheEventsTotal,
 		identityCacheEventsTotal,
 		updateCheckTotal,
+		policyEvalDurationSeconds,
 	)
 }
 
@@ -202,6 +214,11 @@ func RecordIdentityCacheEvent(event string) {
 // result should be one of: "up_to_date", "update_available", "error", "cache_hit".
 func RecordUpdateCheck(result string) {
 	updateCheckTotal.WithLabelValues(result).Inc()
+}
+
+// RecordPolicyEvalDuration records the duration of a policy evaluation.
+func RecordPolicyEvalDuration(duration time.Duration) {
+	policyEvalDurationSeconds.WithLabelValues().Observe(duration.Seconds())
 }
 
 // Registry returns the Prometheus registry used by OpenPass.

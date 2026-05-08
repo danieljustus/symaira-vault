@@ -11,6 +11,7 @@ import (
 
 	"github.com/danieljustus/OpenPass/internal/audit"
 	"github.com/danieljustus/OpenPass/internal/config"
+	"github.com/danieljustus/OpenPass/internal/policy"
 	"github.com/danieljustus/OpenPass/internal/vault"
 )
 
@@ -22,10 +23,11 @@ const (
 // Server provides the MCP server functionality for OpenPass.
 // It handles agent authentication, vault access, and tool execution.
 type Server struct {
-	vault     *vault.Vault
-	agent     *config.AgentProfile
-	auditLog  *audit.Logger
-	transport string
+	vault        *vault.Vault
+	agent        *config.AgentProfile
+	auditLog     *audit.Logger
+	transport    string
+	policyEngine *policy.Engine
 }
 
 // New creates a new MCP server instance with the specified vault and agent configuration.
@@ -69,11 +71,22 @@ func New(v *vault.Vault, agentName string, transport string) (*Server, error) {
 		return nil, err
 	}
 
+	// Load policy engine
+	policyDir := policy.DefaultPolicyDir()
+	var policyEngine *policy.Engine
+	if policyDir != "" {
+		policies, loadErr := policy.LoadPoliciesFromDir(policyDir)
+		if loadErr == nil && len(policies) > 0 {
+			policyEngine = policy.NewEngine(policies)
+		}
+	}
+
 	return &Server{
-		vault:     v,
-		agent:     &agent,
-		auditLog:  auditLog,
-		transport: transport,
+		vault:        v,
+		agent:        &agent,
+		auditLog:     auditLog,
+		transport:    transport,
+		policyEngine: policyEngine,
 	}, nil
 }
 

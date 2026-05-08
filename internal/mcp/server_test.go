@@ -12,6 +12,7 @@ import (
 	"filippo.io/age"
 
 	"github.com/danieljustus/OpenPass/internal/config"
+	"github.com/danieljustus/OpenPass/internal/policy"
 	"github.com/danieljustus/OpenPass/internal/vault"
 )
 
@@ -1285,5 +1286,136 @@ func TestRedactValue_NestedMapWildcard(t *testing.T) {
 	}
 	if resultMap["public"] != "[REDACTED]" {
 		t.Errorf("data.public = %v, want [REDACTED]", resultMap["public"])
+	}
+}
+
+func TestCheckPolicy_AllowsWhenNoEngine(t *testing.T) {
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:         "test",
+		AllowedPaths: []string{"*"},
+		CanWrite:     false,
+		ApprovalMode: "none",
+	}, "stdio", "")
+
+	err := srv.checkPolicy(context.Background(), "test/path", "read", nil)
+	if err != nil {
+		t.Errorf("checkPolicy() unexpected error: %v", err)
+	}
+}
+
+func TestCheckPolicy_DeniesByRule(t *testing.T) {
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:         "test",
+		AllowedPaths: []string{"*"},
+		CanWrite:     false,
+		ApprovalMode: "none",
+	}, "stdio", "")
+
+	p := &policy.Policy{
+		Version: "1.0",
+		Rules: []policy.Rule{
+			{
+				Name:       "deny all",
+				Priority:   100,
+				Conditions: policy.Conditions{AgentID: "test"},
+				Action:     policy.ActionDeny,
+			},
+		},
+	}
+	srv.policyEngine = policy.NewEngine([]*policy.Policy{p})
+
+	err := srv.checkPolicy(context.Background(), "test/path", "read", nil)
+	if err == nil {
+		t.Fatal("checkPolicy() expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "policy denied") {
+		t.Errorf("checkPolicy() error = %v, want 'policy denied'", err)
+	}
+}
+
+func TestCheckPolicy_AllowsByRule(t *testing.T) {
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:         "test",
+		AllowedPaths: []string{"*"},
+		CanWrite:     false,
+		ApprovalMode: "none",
+	}, "stdio", "")
+
+	p := &policy.Policy{
+		Version: "1.0",
+		Rules: []policy.Rule{
+			{
+				Name:       "allow test",
+				Priority:   100,
+				Conditions: policy.Conditions{AgentID: "test"},
+				Action:     policy.ActionAllow,
+			},
+		},
+	}
+	srv.policyEngine = policy.NewEngine([]*policy.Policy{p})
+
+	err := srv.checkPolicy(context.Background(), "test/path", "read", nil)
+	if err != nil {
+		t.Errorf("checkPolicy() unexpected error: %v", err)
+	}
+}
+
+func TestCheckPolicy_RequiresBiometry(t *testing.T) {
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:         "test",
+		AllowedPaths: []string{"*"},
+		CanWrite:     false,
+		ApprovalMode: "none",
+	}, "stdio", "")
+
+	p := &policy.Policy{
+		Version: "1.0",
+		Rules: []policy.Rule{
+			{
+				Name:       "require biometry",
+				Priority:   100,
+				Conditions: policy.Conditions{AgentID: "test"},
+				Action:     policy.ActionRequireBiometry,
+			},
+		},
+	}
+	srv.policyEngine = policy.NewEngine([]*policy.Policy{p})
+
+	err := srv.checkPolicy(context.Background(), "test/path", "read", nil)
+	if err == nil {
+		t.Fatal("checkPolicy() expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "biometry") {
+		t.Errorf("checkPolicy() error = %v, want 'biometry'", err)
+	}
+}
+
+func TestCheckPolicy_Prompt(t *testing.T) {
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:         "test",
+		AllowedPaths: []string{"*"},
+		CanWrite:     false,
+		ApprovalMode: "none",
+	}, "stdio", "")
+
+	p := &policy.Policy{
+		Version: "1.0",
+		Rules: []policy.Rule{
+			{
+				Name:       "prompt",
+				Priority:   100,
+				Conditions: policy.Conditions{AgentID: "test"},
+				Action:     policy.ActionPrompt,
+			},
+		},
+	}
+	srv.policyEngine = policy.NewEngine([]*policy.Policy{p})
+
+	err := srv.checkPolicy(context.Background(), "test/path", "read", nil)
+	if err == nil {
+		t.Fatal("checkPolicy() expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "approval") {
+		t.Errorf("checkPolicy() error = %v, want 'approval'", err)
 	}
 }

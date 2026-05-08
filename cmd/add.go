@@ -26,6 +26,10 @@ var (
 	addTOTPIssuer  string
 	addTOTPAccount string
 	addForce       bool
+	addType        string
+	addUsageHint   string
+	addAutoRotate  bool
+	addExpiresAt   string
 )
 
 var addCmd = &cobra.Command{
@@ -39,7 +43,9 @@ Interactive mode prompts for username, password, and URL.`,
   openpass add work/aws
   openpass add personal/bank
   openpass add github-token --value "my-secret-token"
-  openpass add secure-pass --generate --length 20`,
+  openpass add secure-pass --generate --length 20
+  openpass add aws-key --type api_key --value "AKIA..."
+  openpass add ssh-key --type ssh_key --usage-hint "Production server key"`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return withVaultRaw(func(v *vaultpkg.Vault) error {
@@ -50,10 +56,10 @@ Interactive mode prompts for username, password, and URL.`,
 			}
 
 			data := map[string]any{}
+			var secretMeta vaultpkg.SecretMetadata
 			var reader *bufio.Reader
 			var readerUsed bool
 
-			// Non-interactive mode: use flags if provided
 			if addUsername != "" {
 				data["username"] = addUsername
 			}
@@ -65,14 +71,19 @@ Interactive mode prompts for username, password, and URL.`,
 						return err
 					}
 				}
+				if addType == "" {
+					addType = string(vaultpkg.DetectSecretType(addValue))
+				}
 			} else if addGenerate {
 				password, err := generatePassword(addLength, true)
 				if err != nil {
 					return fmt.Errorf("generate password: %w", err)
 				}
 				data["password"] = password
+				if addType == "" {
+					addType = string(vaultpkg.SecretTypePassword)
+				}
 			} else {
-				// Interactive mode
 				fdRaw := os.Stdin.Fd()
 				if fdRaw > uintptr(^uint(0)>>1) {
 					return fmt.Errorf("file descriptor %d exceeds int range", fdRaw)
@@ -90,6 +101,15 @@ Interactive mode prompts for username, password, and URL.`,
 					if addNotes != "" {
 						defaults["notes"] = addNotes
 					}
+					if addType != "" {
+						defaults["_secret_type"] = addType
+					}
+					if addUsageHint != "" {
+						defaults["_usage_hint"] = addUsageHint
+					}
+					if addAutoRotate {
+						defaults["_auto_rotate"] = true
+					}
 					if addTOTPSecret != "" {
 						totpDefaults := map[string]any{
 							"secret": addTOTPSecret,
@@ -103,13 +123,14 @@ Interactive mode prompts for username, password, and URL.`,
 						defaults["totp"] = totpDefaults
 					}
 
-					formData, err := forms.RunAddEntryForm(addForce, defaults)
+					formData, formMeta, err := forms.RunAddEntryForm(addForce, defaults)
 					if err != nil {
 						return err
 					}
 					for k, v := range formData {
 						data[k] = v
 					}
+					secretMeta = formMeta
 				} else {
 					reader = bufio.NewReader(os.Stdin)
 					collected, err := collectEntryData(reader, entryFlags{
@@ -158,12 +179,34 @@ Interactive mode prompts for username, password, and URL.`,
 				}
 			}
 
+			if secretMeta.Type == "" && addType != "" {
+				secretMeta.Type = vaultpkg.SecretTypeFromString(addType)
+			}
+			if secretMeta.UsageHint == "" {
+				if addUsageHint != "" {
+					secretMeta.UsageHint = addUsageHint
+				} else if secretMeta.Type != "" {
+					secretMeta.UsageHint = vaultpkg.UsageHintForType(secretMeta.Type)
+				}
+			}
+			if !secretMeta.AutoRotate && addAutoRotate {
+				secretMeta.AutoRotate = true
+			}
+			if addExpiresAt != "" {
+				if t, err := time.Parse(time.RFC3339, addExpiresAt); err == nil {
+					secretMeta.ExpiresAt = &t
+				} else {
+					return fmt.Errorf("invalid expires_at format, use RFC3339: %w", err)
+				}
+			}
+
 			if err := cryptopkg.ValidateTOTPData(data); err != nil {
 				return err
 			}
 
 			entry := &vaultpkg.Entry{
-				Data: data,
+				Data:           data,
+				SecretMetadata: secretMeta,
 				Metadata: vaultpkg.EntryMetadata{
 					Created: time.Now().UTC(),
 					Updated: time.Now().UTC(),
@@ -195,5 +238,9 @@ func init() {
 	addCmd.Flags().StringVar(&addTOTPIssuer, "totp-issuer", "", "TOTP issuer/service name")
 	addCmd.Flags().StringVar(&addTOTPAccount, "totp-account", "", "TOTP account name/username")
 	addCmd.Flags().BoolVar(&addForce, "force", false, "Skip password strength validation")
+	addCmd.Flags().StringVar(&addType, "type", "", "Secret type (api_key, bearer_token, basic_auth, ssh_key, password, certificate, database_url, totp_seed, custom). Auto-detected if not specified.")
+	addCmd.Flags().StringVar(&addUsageHint, "usage-hint", "", "Usage hint for AI agents")
+	addCmd.Flags().BoolVar(&addAutoRotate, "auto-rotate", false, "Enable automatic rotation reminder")
+	addCmd.Flags().StringVar(&addExpiresAt, "expires-at", "", "Expiration date (RFC3339 format)")
 	rootCmd.AddCommand(addCmd)
 }

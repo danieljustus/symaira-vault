@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	cryptopkg "github.com/danieljustus/OpenPass/internal/crypto"
+	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
 )
 
 const placeholderOptional = "optional"
@@ -18,6 +19,9 @@ const placeholderOptional = "optional"
 const (
 	fieldUsername = iota
 	fieldPassword
+	fieldType
+	fieldUsageHint
+	fieldAutoRotate
 	fieldURL
 	fieldNotes
 	fieldTOTPSecret
@@ -33,12 +37,16 @@ var (
 	errorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("203"))
 	successStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("82"))
 	helpStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	typeStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Bold(true)
 )
 
 // AddEntryForm is a Bubble Tea model for interactively adding a password entry.
 type AddEntryForm struct {
 	username    textinput.Model
 	password    textinput.Model
+	secretType  textinput.Model
+	usageHint   textarea.Model
+	autoRotate  textinput.Model
 	url         textinput.Model
 	notes       textarea.Model
 	totpSecret  textinput.Model
@@ -67,6 +75,22 @@ func NewAddEntryForm(force bool) *AddEntryForm {
 	f.password.Placeholder = "required"
 	f.password.EchoMode = textinput.EchoPassword
 	f.password.CharLimit = 1024
+
+	f.secretType = textinput.New()
+	f.secretType.Placeholder = "auto-detect"
+	f.secretType.CharLimit = 32
+
+	f.usageHint = textarea.New()
+	f.usageHint.Placeholder = "auto-generated from type"
+	f.usageHint.ShowLineNumbers = false
+	f.usageHint.SetHeight(2)
+	f.usageHint.SetWidth(40)
+	f.usageHint.CharLimit = 512
+
+	f.autoRotate = textinput.New()
+	f.autoRotate.Placeholder = "no"
+	f.autoRotate.CharLimit = 3
+	f.autoRotate.SetValue("no")
 
 	f.url = textinput.New()
 	f.url.Placeholder = placeholderOptional
@@ -104,6 +128,17 @@ func (f *AddEntryForm) SetDefaults(data map[string]any) {
 	if v, ok := data["password"].(string); ok && v != "" {
 		f.password.SetValue(v)
 		f.validatePassword()
+		f.autoDetectType(v)
+	}
+	if v, ok := data["_secret_type"].(string); ok && v != "" {
+		f.secretType.SetValue(v)
+		f.updateUsageHintFromType()
+	}
+	if v, ok := data["_usage_hint"].(string); ok && v != "" {
+		f.usageHint.SetValue(v)
+	}
+	if v, ok := data["_auto_rotate"].(bool); ok && v {
+		f.autoRotate.SetValue("yes")
 	}
 	if v, ok := data["url"].(string); ok && v != "" {
 		f.url.SetValue(v)
@@ -124,11 +159,34 @@ func (f *AddEntryForm) SetDefaults(data map[string]any) {
 	}
 }
 
+func (f *AddEntryForm) autoDetectType(password string) {
+	if f.secretType.Value() != "" {
+		return
+	}
+	detected := vaultpkg.DetectSecretType(password)
+	f.secretType.SetValue(string(detected))
+	f.updateUsageHintFromType()
+}
+
+func (f *AddEntryForm) updateUsageHintFromType() {
+	if f.usageHint.Value() != "" {
+		return
+	}
+	t := vaultpkg.SecretTypeFromString(f.secretType.Value())
+	hint := vaultpkg.UsageHintForType(t)
+	if hint != "" {
+		f.usageHint.SetValue(hint)
+	}
+}
+
 func (f *AddEntryForm) focusField(idx int) {
 	f.focused = idx
 
 	f.username.Blur()
 	f.password.Blur()
+	f.secretType.Blur()
+	f.usageHint.Blur()
+	f.autoRotate.Blur()
 	f.url.Blur()
 	f.notes.Blur()
 	f.totpSecret.Blur()
@@ -140,6 +198,12 @@ func (f *AddEntryForm) focusField(idx int) {
 		f.username.Focus()
 	case fieldPassword:
 		f.password.Focus()
+	case fieldType:
+		f.secretType.Focus()
+	case fieldUsageHint:
+		f.usageHint.Focus()
+	case fieldAutoRotate:
+		f.autoRotate.Focus()
 	case fieldURL:
 		f.url.Focus()
 	case fieldNotes:
@@ -198,6 +262,7 @@ func (f *AddEntryForm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		f.width = msg.Width
+		f.usageHint.SetWidth(min(60, msg.Width-20))
 		f.notes.SetWidth(min(60, msg.Width-20))
 		return f, nil
 	case tea.KeyMsg:
@@ -212,9 +277,13 @@ func (f *AddEntryForm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			f.prevField()
 			return f, nil
 		case "enter":
-			if f.focused == fieldNotes {
+			if f.focused == fieldUsageHint || f.focused == fieldNotes {
 				var cmd tea.Cmd
-				f.notes, cmd = f.notes.Update(msg)
+				if f.focused == fieldUsageHint {
+					f.usageHint, cmd = f.usageHint.Update(msg)
+				} else {
+					f.notes, cmd = f.notes.Update(msg)
+				}
 				return f, cmd
 			}
 			f.handleEnter()
@@ -234,6 +303,16 @@ func (f *AddEntryForm) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case fieldPassword:
 		f.password, cmd = f.password.Update(msg)
 		f.validatePassword()
+		if f.password.Value() != "" {
+			f.autoDetectType(f.password.Value())
+		}
+	case fieldType:
+		f.secretType, cmd = f.secretType.Update(msg)
+		f.updateUsageHintFromType()
+	case fieldUsageHint:
+		f.usageHint, cmd = f.usageHint.Update(msg)
+	case fieldAutoRotate:
+		f.autoRotate, cmd = f.autoRotate.Update(msg)
 	case fieldURL:
 		f.url, cmd = f.url.Update(msg)
 	case fieldNotes:
@@ -259,6 +338,12 @@ func (f *AddEntryForm) isFieldEmpty() bool {
 		return f.username.Value() == "" && f.username.Position() == 0
 	case fieldPassword:
 		return f.password.Value() == "" && f.password.Position() == 0
+	case fieldType:
+		return f.secretType.Value() == "" && f.secretType.Position() == 0
+	case fieldUsageHint:
+		return f.usageHint.Value() == ""
+	case fieldAutoRotate:
+		return f.autoRotate.Value() == "" && f.autoRotate.Position() == 0
 	case fieldURL:
 		return f.url.Value() == "" && f.url.Position() == 0
 	case fieldNotes:
@@ -271,6 +356,12 @@ func (f *AddEntryForm) isFieldEmpty() bool {
 		return f.totpAccount.Value() == "" && f.totpAccount.Position() == 0
 	}
 	return false
+}
+
+func (f *AddEntryForm) typeDisplay() string {
+	t := vaultpkg.SecretTypeFromString(f.secretType.Value())
+	icon := vaultpkg.SecretTypeIcon(t)
+	return fmt.Sprintf("%s %s", icon, t)
 }
 
 func (f *AddEntryForm) View() string {
@@ -289,6 +380,9 @@ func (f *AddEntryForm) View() string {
 	}{
 		{"Username", f.username.View()},
 		{"Password", f.password.View()},
+		{"Type", f.secretType.View() + " " + typeStyle.Render(f.typeDisplay())},
+		{"Usage Hint", f.usageHint.View()},
+		{"Auto Rotate", f.autoRotate.View()},
 		{"URL", f.url.View()},
 		{"Notes", f.notes.View()},
 		{"TOTP Secret", f.totpSecret.View()},
@@ -319,8 +413,8 @@ func (f *AddEntryForm) View() string {
 
 	b.WriteString("\n")
 	b.WriteString(helpStyle.Render("Tab/Shift+Tab: navigate · Enter: next/submit · Ctrl+C: cancel"))
-	if f.focused == fieldNotes {
-		b.WriteString(helpStyle.Render(" · Enter: new line in notes"))
+	if f.focused == fieldUsageHint || f.focused == fieldNotes {
+		b.WriteString(helpStyle.Render(" · Enter: new line"))
 	}
 	b.WriteString("\n")
 
@@ -368,10 +462,29 @@ func (f *AddEntryForm) Data() map[string]any {
 	return data
 }
 
-// RunAddEntryForm runs the interactive add entry form and returns the collected data.
+// SecretMetadata returns the collected secret metadata from the form.
+func (f *AddEntryForm) SecretMetadata() vaultpkg.SecretMetadata {
+	meta := vaultpkg.SecretMetadata{}
+
+	if t := f.secretType.Value(); t != "" {
+		meta.Type = vaultpkg.SecretTypeFromString(t)
+	}
+
+	if hint := f.usageHint.Value(); hint != "" {
+		meta.UsageHint = hint
+	}
+
+	if f.autoRotate.Value() == "yes" {
+		meta.AutoRotate = true
+	}
+
+	return meta
+}
+
+// RunAddEntryForm runs the interactive add entry form and returns the collected data and metadata.
 // When force is true, password strength validation is skipped.
 // Defaults can be used to pre-fill form fields.
-func RunAddEntryForm(force bool, defaults map[string]any) (map[string]any, error) {
+func RunAddEntryForm(force bool, defaults map[string]any) (map[string]any, vaultpkg.SecretMetadata, error) {
 	form := NewAddEntryForm(force)
 	if defaults != nil {
 		form.SetDefaults(defaults)
@@ -380,26 +493,26 @@ func RunAddEntryForm(force bool, defaults map[string]any) (map[string]any, error
 	p := tea.NewProgram(form)
 	m, err := p.Run()
 	if err != nil {
-		return nil, fmt.Errorf("form error: %w", err)
+		return nil, vaultpkg.SecretMetadata{}, fmt.Errorf("form error: %w", err)
 	}
 
 	f, ok := m.(*AddEntryForm)
 	if !ok {
-		return nil, fmt.Errorf("unexpected model type")
+		return nil, vaultpkg.SecretMetadata{}, fmt.Errorf("unexpected model type")
 	}
 
 	if f.canceled {
-		return nil, fmt.Errorf("canceled")
+		return nil, vaultpkg.SecretMetadata{}, fmt.Errorf("canceled")
 	}
 
 	password := f.password.Value()
 	if password != "" && !f.force {
 		if err := cryptopkg.ValidatePasswordStrength(password); err != nil {
-			return nil, err
+			return nil, vaultpkg.SecretMetadata{}, err
 		}
 	}
 
-	return f.Data(), nil
+	return f.Data(), f.SecretMetadata(), nil
 }
 
 func min(a, b int) int {

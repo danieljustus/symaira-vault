@@ -7,9 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/danieljustus/OpenPass/internal/audit"
 	"github.com/danieljustus/OpenPass/internal/metrics"
+	"github.com/danieljustus/OpenPass/internal/policy"
 	"github.com/danieljustus/OpenPass/internal/vault"
 )
 
@@ -19,6 +21,15 @@ func (s *Server) authorize(ctx context.Context, path string, write bool, approve
 	}
 	if path == "" {
 		return errors.New("empty path")
+	}
+
+	actionType := "read"
+	if write {
+		actionType = "write"
+	}
+
+	if err := s.checkPolicy(ctx, path, actionType, nil); err != nil {
+		return err
 	}
 
 	if !s.checkScope(path) {
@@ -39,15 +50,53 @@ func (s *Server) authorize(ctx context.Context, path string, write bool, approve
 		return fmt.Errorf("write to %q requires approval", path)
 	}
 
-	action := "read"
-	if write {
-		action = "write"
-	}
-	s.logAudit(ctx, action, path, approved)
+	s.logAudit(ctx, actionType, path, approved)
 	if write && approved {
 		metrics.RecordApproval(s.agent.Name, "granted")
 	}
 	return nil
+}
+
+func (s *Server) checkPolicy(ctx context.Context, path, actionType string, tags []string) error {
+	if s == nil || s.policyEngine == nil || s.agent == nil {
+		return nil
+	}
+
+	cp := policy.NewContextProvider()
+	evalCtx := cp.BuildContext(s.agent.Name, path, actionType, tags)
+
+	start := time.Now()
+	result := s.policyEngine.Evaluate(evalCtx)
+	elapsed := time.Since(start)
+
+	if elapsed > time.Millisecond {
+		metrics.RecordPolicyEvalDuration(elapsed)
+	}
+
+	if !result.Matched {
+		s.logAudit(ctx, "policy_denied", path, false)
+		metrics.RecordAuthDenial("policy_denied", s.agent.Name)
+		return fmt.Errorf("policy: no matching rule (default deny)")
+	}
+
+	switch result.Action {
+	case policy.ActionAllow:
+		return nil
+	case policy.ActionDeny:
+		s.logAudit(ctx, "policy_denied", path, false)
+		metrics.RecordAuthDenial("policy_denied", s.agent.Name)
+		return fmt.Errorf("policy denied by rule %q", result.RuleName)
+	case policy.ActionPrompt:
+		s.logAudit(ctx, "policy_prompt", path, false)
+		metrics.RecordAuthDenial("policy_prompt", s.agent.Name)
+		return fmt.Errorf("policy requires approval by rule %q", result.RuleName)
+	case policy.ActionRequireBiometry:
+		s.logAudit(ctx, "policy_biometry", path, false)
+		metrics.RecordAuthDenial("policy_biometry", s.agent.Name)
+		return fmt.Errorf("policy requires biometry by rule %q", result.RuleName)
+	default:
+		return nil
+	}
 }
 
 func (s *Server) logAudit(ctx context.Context, action, path string, ok bool) {

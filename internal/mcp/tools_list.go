@@ -10,6 +10,15 @@ import (
 	"github.com/danieljustus/OpenPass/internal/vaultsvc"
 )
 
+type listEntrySummary struct {
+	Path        string `json:"path"`
+	Type        string `json:"type,omitempty"`
+	UsageHint   string `json:"usage_hint,omitempty"`
+	AutoRotate  bool   `json:"auto_rotate,omitempty"`
+	HasValue    bool   `json:"has_value,omitempty"`
+	FieldCount  int    `json:"field_count,omitempty"`
+}
+
 func (s *Server) handleList(ctx context.Context, req CallToolRequest) (*CallToolResult, error) {
 	prefix, err := req.RequireString("prefix")
 	if err != nil {
@@ -24,7 +33,7 @@ func (s *Server) handleList(ctx context.Context, req CallToolRequest) (*CallTool
 
 	svc := vaultsvc.New(slog.Default(), s.vault)
 	_, span := metrics.StartSpan(ctx, "vault.List")
-	entries, err := svc.List(prefix)
+	paths, err := svc.List(prefix)
 	span.End()
 	if err != nil {
 		s.logAudit(ctx, "list", prefix, false)
@@ -34,7 +43,36 @@ func (s *Server) handleList(ctx context.Context, req CallToolRequest) (*CallTool
 
 	s.logAudit(ctx, "list", prefix, true)
 	metrics.RecordVaultOperation("list", "success")
-	result, err := json.Marshal(entries)
+
+	includeDetails := req.GetBool("include_details", true)
+
+	if !includeDetails {
+		result, err := json.Marshal(paths)
+		if err != nil {
+			return nil, err
+		}
+		return NewToolResultText(string(result)), nil
+	}
+
+	summaries := make([]listEntrySummary, 0, len(paths))
+	for _, path := range paths {
+		entry, err := svc.GetEntry(path)
+		if err != nil {
+			continue
+		}
+
+		summary := listEntrySummary{
+			Path:       path,
+			Type:       string(entry.SecretMetadata.Type),
+			UsageHint:  entry.SecretMetadata.UsageHint,
+			AutoRotate: entry.SecretMetadata.AutoRotate,
+			HasValue:   len(entry.Data) > 0,
+			FieldCount: len(entry.Data),
+		}
+		summaries = append(summaries, summary)
+	}
+
+	result, err := json.Marshal(summaries)
 	if err != nil {
 		return nil, err
 	}

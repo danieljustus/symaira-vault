@@ -16,6 +16,29 @@ func toolError(msg string) *CallToolResult {
 	return NewToolResultError(msg)
 }
 
+func toolActionType(toolName string) string {
+	switch toolName {
+	case "set_entry_field", "secure_input":
+		return "set"
+	case "delete_entry", "openpass_delete":
+		return "delete"
+	case "run_command", "execute_with_secret":
+		return "run"
+	case "list_entries":
+		return "list"
+	case "get_entry", "get_entry_value", "get_entry_metadata":
+		return "get"
+	case "find_entries":
+		return "find"
+	case "generate_password", "generate_totp":
+		return "generate"
+	case "copy_to_clipboard", "autotype":
+		return "read"
+	default:
+		return "read"
+	}
+}
+
 func (s *Server) executeTool(ctx context.Context, name string, args json.RawMessage) (map[string]any, error) {
 	start := time.Now()
 	agentName := ""
@@ -62,6 +85,15 @@ func (s *Server) executeTool(ctx context.Context, name string, args json.RawMess
 			return nil, fmt.Errorf("tool %q not allowed by token scope", name)
 		}
 		token.UpdateLastUsed()
+	}
+
+	// Evaluate declarative policies before tool execution
+	if path, _ := req.RequireString("path"); path != "" {
+		if err := s.checkPolicy(ctx, path, toolActionType(name), nil); err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			metrics.RecordMCPRequest(name, agentName, "error", time.Since(start))
+			return nil, err
+		}
 	}
 
 	result, err := def.Handler(s, ctx, req)

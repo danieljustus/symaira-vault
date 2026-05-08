@@ -46,20 +46,29 @@ func toolDefinitions() []toolDefinition {
 	return []toolDefinition{
 		{
 			Name:        "list_entries",
-			Description: "List vault entries matching a prefix",
+			Description: "List vault entries matching a prefix with metadata",
 			InputSchema: objectSchema(nil, map[string]schemaProperty{
-				"prefix": {Type: "string", Description: "Path prefix to filter"},
+				"prefix":          {Type: "string", Description: "Path prefix to filter"},
+				"include_details": {Type: "boolean", Description: "When true, returns metadata for each entry. Default: true."},
 			}),
 			Handler: (*Server).handleList,
 		},
 		{
 			Name:        "get_entry",
-			Description: "Get a vault entry by path",
+			Description: "Get metadata for a vault entry. Returns type, usage hints, and field names without secret values. Use get_entry_value to retrieve actual values.",
 			InputSchema: objectSchema([]string{"path"}, map[string]schemaProperty{
-				"path":             {Type: "string", Description: "Entry path"},
-				"include_metadata": {Type: "boolean", Description: "When true, returns {data: {...}, meta: {...}}. Default: false."},
+				"path":           {Type: "string", Description: "Entry path"},
+				"include_value":  {Type: "boolean", Description: "When true, returns the full entry with secret values. Default: false."},
 			}),
 			Handler: (*Server).handleGet,
+		},
+		{
+			Name:        "get_entry_value",
+			Description: "Get the actual secret values for a vault entry. Use with caution - only request values when absolutely needed.",
+			InputSchema: objectSchema([]string{"path"}, map[string]schemaProperty{
+				"path": {Type: "string", Description: "Entry path"},
+			}),
+			Handler: (*Server).handleGetValue,
 		},
 		{
 			Name:        "get_entry_metadata",
@@ -97,6 +106,18 @@ func toolDefinitions() []toolDefinition {
 				"timeout":     {Type: "number", Description: "Timeout in seconds (default: 30)"},
 			}),
 			Handler: (*Server).handleRunCommand,
+		},
+		{
+			Name:        "execute_with_secret",
+			Description: "Execute a command with vault secrets injected as environment variables. The agent never sees the secret values. Requires command execution permission.",
+			InputSchema: objectSchema([]string{"command", "secret_refs"}, map[string]schemaProperty{
+				"command":     {Type: "array", Description: "Command and arguments as an array (e.g. [\"terraform\", \"apply\"])"},
+				"secret_refs": {Type: "array", Description: "Array of op:// vault references (e.g. [\"op://vault/aws/access_key\"])"},
+				"working_dir": {Type: "string", Description: "Working directory for the command"},
+				"env_vars":    {Type: "object", Description: "Additional non-secret environment variables"},
+				"timeout":     {Type: "number", Description: "Timeout in seconds (default: 30)"},
+			}),
+			Handler: (*Server).handleExecuteWithSecret,
 		},
 		{
 			Name:        "sanitize_output",

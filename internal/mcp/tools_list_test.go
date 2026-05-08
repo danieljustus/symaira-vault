@@ -34,6 +34,51 @@ func TestHandleList_WithPrefix(t *testing.T) {
 		t.Fatalf("handleList() returned error: %s", result.Text)
 	}
 
+	var entries []map[string]any
+	if err := json.Unmarshal([]byte(result.Text), &entries); err != nil {
+		t.Fatalf("parse result: %v", err)
+	}
+	if len(entries) == 0 {
+		t.Fatal("expected entries, got empty list")
+	}
+
+	found := false
+	for _, entry := range entries {
+		if entry["path"] == "github" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected 'github' in entries, got %v", entries)
+	}
+}
+
+func TestHandleList_WithDetailsDisabled(t *testing.T) {
+	vaultDir, identity := mockVault(t)
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:         "test",
+		AllowedPaths: []string{"*"},
+		CanWrite:     false,
+		ApprovalMode: "none",
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	req := CallToolRequest{
+		Arguments: map[string]any{"prefix": "", "include_details": "false"},
+	}
+
+	result, err := srv.handleList(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleList() error = %v", err)
+	}
+	if result == nil {
+		t.Fatal("handleList() returned nil result")
+	}
+	if result.IsError {
+		t.Fatalf("handleList() returned error: %s", result.Text)
+	}
+
 	var entries []string
 	if err := json.Unmarshal([]byte(result.Text), &entries); err != nil {
 		t.Fatalf("parse result: %v", err)

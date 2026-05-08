@@ -25,9 +25,10 @@ import (
 
 // Entry represents a vault entry with flexible data storage using map[string]any.
 type Entry struct {
-	Path     string         `json:"path,omitempty"`
-	Data     map[string]any `json:"data"`
-	Metadata EntryMetadata  `json:"meta"`
+	Path           string         `json:"path,omitempty"`
+	Data           map[string]any `json:"data"`
+	Metadata       EntryMetadata  `json:"meta"`
+	SecretMetadata SecretMetadata `json:"secret_meta,omitempty"`
 }
 
 // EntryMetadata contains metadata about an entry
@@ -35,6 +36,15 @@ type EntryMetadata struct {
 	Created time.Time `json:"created"`
 	Updated time.Time `json:"updated"`
 	Version int       `json:"version"`
+	Tags    []string  `json:"tags,omitempty"`
+}
+
+// SecretMetadata contains semantic metadata about a secret for AI agent usage.
+type SecretMetadata struct {
+	Type       SecretType `json:"type,omitempty"`
+	UsageHint  string     `json:"usage_hint,omitempty"`
+	AutoRotate bool       `json:"auto_rotate,omitempty"`
+	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
 }
 
 // MarshalJSON implements custom JSON marshaling for Entry
@@ -401,7 +411,14 @@ func cloneEntry(entry *Entry) *Entry {
 	if entry == nil {
 		return nil
 	}
-	clone := &Entry{Metadata: entry.Metadata}
+	clone := &Entry{
+		Metadata:       entry.Metadata,
+		SecretMetadata: entry.SecretMetadata,
+	}
+	if entry.SecretMetadata.ExpiresAt != nil {
+		expiresAt := *entry.SecretMetadata.ExpiresAt
+		clone.SecretMetadata.ExpiresAt = &expiresAt
+	}
 	if entry.Data != nil {
 		if cloned, ok := deepCloneMap(entry.Data).(map[string]any); ok {
 			clone.Data = cloned

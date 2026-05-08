@@ -5,8 +5,16 @@ import (
 
 	"github.com/spf13/cobra"
 
+	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
 	vaultsvc "github.com/danieljustus/OpenPass/internal/vaultsvc"
 )
+
+type listEntryOutput struct {
+	Path       string `json:"path"`
+	Type       string `json:"type,omitempty"`
+	UsageHint  string `json:"usage_hint,omitempty"`
+	AutoRotate bool   `json:"auto_rotate,omitempty"`
+}
 
 var listCmd = &cobra.Command{
 	Use:     "list [prefix]",
@@ -34,8 +42,19 @@ var listCmd = &cobra.Command{
 				return fmt.Errorf("cannot list entries: %w", err)
 			}
 
-			if outputFormat != "text" { //nolint:goconst // output format literal
-				if err := PrintResult(entries); err != nil {
+			if outputFormat != "text" {
+				outputs := make([]listEntryOutput, 0, len(entries))
+				for _, path := range entries {
+					output := listEntryOutput{Path: path}
+					entry, err := vaultpkg.ReadEntry(svc.GetDir(), path, svc.GetIdentity())
+					if err == nil {
+						output.Type = string(entry.SecretMetadata.Type)
+						output.UsageHint = entry.SecretMetadata.UsageHint
+						output.AutoRotate = entry.SecretMetadata.AutoRotate
+					}
+					outputs = append(outputs, output)
+				}
+				if err := PrintResult(outputs); err != nil {
 					return err
 				}
 				return nil

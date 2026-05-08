@@ -115,7 +115,7 @@ func TestToolsListPayloadMatchesAvailableRegistry(t *testing.T) {
 		}
 	}
 
-	for _, name := range []string{"list_entries", "get_entry", "get_entry_metadata", "generate_password", "health", "delete_entry", "openpass_delete"} {
+	for _, name := range []string{"list_entries", "get_entry", "get_entry_value", "get_entry_metadata", "generate_password", "health", "delete_entry", "openpass_delete"} {
 		if _, ok := names[name]; !ok {
 			t.Fatalf("tools/list missing expected tool %q", name)
 		}
@@ -132,7 +132,7 @@ func TestToolsListPayloadMatchesAvailableRegistry(t *testing.T) {
 	if !ok {
 		t.Fatal("get_entry properties have unexpected type")
 	}
-	if _, ok := properties["include_metadata"]; !ok {
-		t.Fatal("get_entry schema missing include_metadata")
+	if _, ok := properties["include_value"]; !ok {
+		t.Fatal("get_entry schema missing include_value")
 	}
 }

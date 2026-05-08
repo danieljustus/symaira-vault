@@ -37,6 +37,54 @@ func TestHandleGet_Success(t *testing.T) {
 		t.Fatalf("handleGet() returned error: %s", result.Text)
 	}
 
+	var response map[string]any
+	if err := json.Unmarshal([]byte(result.Text), &response); err != nil {
+		t.Fatalf("parse result: %v", err)
+	}
+	if response["path"] != "github" {
+		t.Errorf("path = %v, want github", response["path"])
+	}
+	if response["has_value"] != true {
+		t.Errorf("has_value = %v, want true", response["has_value"])
+	}
+
+	meta, ok := response["meta"].(map[string]any)
+	if !ok {
+		t.Fatal("expected 'meta' field in response")
+	}
+	if meta["version"] != float64(1) {
+		t.Errorf("version = %v, want 1", meta["version"])
+	}
+}
+
+func TestHandleGet_WithValue(t *testing.T) {
+	vaultDir, identity := mockVault(t)
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:         "test",
+		AllowedPaths: []string{"*"},
+		CanWrite:     false,
+		ApprovalMode: "none",
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	req := CallToolRequest{
+		Arguments: map[string]any{
+			"path":           "github",
+			"include_value": "true",
+		},
+	}
+
+	result, err := srv.handleGet(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleGet() error = %v", err)
+	}
+	if result == nil {
+		t.Fatal("handleGet() returned nil result")
+	}
+	if result.IsError {
+		t.Fatalf("handleGet() returned error: %s", result.Text)
+	}
+
 	var entry vault.Entry
 	if err := json.Unmarshal([]byte(result.Text), &entry); err != nil {
 		t.Fatalf("parse result: %v", err)
@@ -130,8 +178,8 @@ func TestHandleGet_WithMetadata(t *testing.T) {
 
 	req := CallToolRequest{
 		Arguments: map[string]any{
-			"path":             "github",
-			"include_metadata": "true",
+			"path":           "github",
+			"include_value": "true",
 		},
 	}
 
@@ -146,31 +194,17 @@ func TestHandleGet_WithMetadata(t *testing.T) {
 		t.Fatalf("handleGet() returned error: %s", result.Text)
 	}
 
-	var response map[string]any
-	if err := json.Unmarshal([]byte(result.Text), &response); err != nil {
+	var entry vault.Entry
+	if err := json.Unmarshal([]byte(result.Text), &entry); err != nil {
 		t.Fatalf("parse result: %v", err)
 	}
 
-	data, ok := response["data"].(map[string]any)
-	if !ok {
-		t.Fatal("expected 'data' field in response")
-	}
-	if data["password"] != "testpass123" {
-		t.Errorf("password = %v, want testpass123", data["password"])
+	if entry.Data["password"] != "testpass123" {
+		t.Errorf("password = %v, want testpass123", entry.Data["password"])
 	}
 
-	meta, ok := response["meta"].(map[string]any)
-	if !ok {
-		t.Fatal("expected 'meta' field in response")
-	}
-	if meta["version"] != float64(1) {
-		t.Errorf("version = %v, want 1", meta["version"])
-	}
-	if meta["created"] == nil || meta["created"] == "" {
-		t.Error("created timestamp should be set")
-	}
-	if meta["updated"] == nil || meta["updated"] == "" {
-		t.Error("updated timestamp should be set")
+	if entry.Metadata.Version != 1 {
+		t.Errorf("version = %d, want 1", entry.Metadata.Version)
 	}
 }
 
@@ -201,20 +235,24 @@ func TestHandleGet_WithoutMetadata(t *testing.T) {
 		t.Fatalf("handleGet() returned error: %s", result.Text)
 	}
 
-	// Standard format: Entry struct with Data and Metadata fields
-	var entry vault.Entry
-	if err := json.Unmarshal([]byte(result.Text), &entry); err != nil {
+	var response map[string]any
+	if err := json.Unmarshal([]byte(result.Text), &response); err != nil {
 		t.Fatalf("parse result: %v", err)
 	}
 
-	// Verify the entry data is accessible
-	if entry.Data["password"] != "testpass123" {
-		t.Errorf("password = %v, want testpass123", entry.Data["password"])
+	if response["path"] != "github" {
+		t.Errorf("path = %v, want github", response["path"])
+	}
+	if response["has_value"] != true {
+		t.Errorf("has_value = %v, want true", response["has_value"])
 	}
 
-	// Standard format includes metadata
-	if entry.Metadata.Version != 1 {
-		t.Errorf("version = %d, want 1", entry.Metadata.Version)
+	meta, ok := response["meta"].(map[string]any)
+	if !ok {
+		t.Fatal("expected 'meta' field in response")
+	}
+	if meta["version"] != float64(1) {
+		t.Errorf("version = %v, want 1", meta["version"])
 	}
 }
 
@@ -280,21 +318,13 @@ func TestHandleGet_RedactedTOTPStillGeneratesCode(t *testing.T) {
 		t.Fatalf("handleGet() error = %v", err)
 	}
 
-	var gotEntry map[string]any
-	if parseErr := json.Unmarshal([]byte(getResult.Text), &gotEntry); parseErr != nil {
+	var response map[string]any
+	if parseErr := json.Unmarshal([]byte(getResult.Text), &response); parseErr != nil {
 		t.Fatalf("parse get result: %v", parseErr)
 	}
 
-	data, ok := gotEntry["data"].(map[string]any)
-	if !ok {
-		t.Fatal("data field missing or wrong type")
-	}
-	totp, ok := data["totp"].(map[string]any)
-	if !ok {
-		t.Fatal("totp field missing or wrong type")
-	}
-	if totp["secret"] != "[REDACTED]" {
-		t.Errorf("totp.secret = %v, want [REDACTED]", totp["secret"])
+	if response["path"] != "github" {
+		t.Errorf("path = %v, want github", response["path"])
 	}
 
 	totpReq := CallToolRequest{
@@ -313,6 +343,40 @@ func TestHandleGet_RedactedTOTPStillGeneratesCode(t *testing.T) {
 	}
 	if codeResult["code"] == nil || codeResult["code"] == "" {
 		t.Error("generate_totp returned empty code")
+	}
+}
+
+func TestHandleGetValue_Success(t *testing.T) {
+	vaultDir, identity := mockVault(t)
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:         "test",
+		AllowedPaths: []string{"*"},
+		CanWrite:     false,
+		ApprovalMode: "none",
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	req := CallToolRequest{
+		Arguments: map[string]any{"path": "github"},
+	}
+
+	result, err := srv.handleGetValue(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleGetValue() error = %v", err)
+	}
+	if result == nil {
+		t.Fatal("handleGetValue() returned nil result")
+	}
+	if result.IsError {
+		t.Fatalf("handleGetValue() returned error: %s", result.Text)
+	}
+
+	var entry vault.Entry
+	if err := json.Unmarshal([]byte(result.Text), &entry); err != nil {
+		t.Fatalf("parse result: %v", err)
+	}
+	if entry.Data["password"] != "testpass123" {
+		t.Errorf("password = %v, want testpass123", entry.Data["password"])
 	}
 }
 
@@ -366,15 +430,17 @@ func TestHandleGetMetadata_Success(t *testing.T) {
 		t.Fatalf("handleGetMetadata() returned error: %s", result.Text)
 	}
 
-	var meta map[string]any
-	if err := json.Unmarshal([]byte(result.Text), &meta); err != nil {
+	var response map[string]any
+	if err := json.Unmarshal([]byte(result.Text), &response); err != nil {
 		t.Fatalf("parse result: %v", err)
 	}
-	if meta["path"] != "github" {
-		t.Errorf("path = %v, want github", meta["path"])
+	if response["path"] != "github" {
+		t.Errorf("path = %v, want github", response["path"])
 	}
-	if meta["exists"] != true {
-		t.Errorf("exists = %v, want true", meta["exists"])
+
+	meta, ok := response["meta"].(map[string]any)
+	if !ok {
+		t.Fatal("expected 'meta' field in response")
 	}
 	if meta["version"] != float64(1) {
 		t.Errorf("version = %v, want 1", meta["version"])
@@ -469,7 +535,6 @@ func TestHandleGetMetadata_VersionIncrementedAfterUpdate(t *testing.T) {
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
-	// Get initial metadata
 	req := CallToolRequest{
 		Arguments: map[string]any{"path": "github"},
 	}
@@ -478,13 +543,13 @@ func TestHandleGetMetadata_VersionIncrementedAfterUpdate(t *testing.T) {
 		t.Fatalf("handleGetMetadata() initial error = %v", err)
 	}
 
-	var initialMeta map[string]any
-	if unmarshalErr := json.Unmarshal([]byte(result.Text), &initialMeta); unmarshalErr != nil {
+	var initialResponse map[string]any
+	if unmarshalErr := json.Unmarshal([]byte(result.Text), &initialResponse); unmarshalErr != nil {
 		t.Fatalf("parse initial result: %v", unmarshalErr)
 	}
+	initialMeta, _ := initialResponse["meta"].(map[string]any)
 	initialVersion, _ := initialMeta["version"].(float64)
 
-	// Update the entry
 	setReq := CallToolRequest{
 		Arguments: map[string]any{
 			"path":  "github",
@@ -497,16 +562,16 @@ func TestHandleGetMetadata_VersionIncrementedAfterUpdate(t *testing.T) {
 		t.Fatalf("handleSet() error = %v", err)
 	}
 
-	// Get metadata again
 	result, err = srv.handleGetMetadata(context.Background(), req)
 	if err != nil {
 		t.Fatalf("handleGetMetadata() after update error = %v", err)
 	}
 
-	var updatedMeta map[string]any
-	if err := json.Unmarshal([]byte(result.Text), &updatedMeta); err != nil {
+	var updatedResponse map[string]any
+	if err := json.Unmarshal([]byte(result.Text), &updatedResponse); err != nil {
 		t.Fatalf("parse updated result: %v", err)
 	}
+	updatedMeta, _ := updatedResponse["meta"].(map[string]any)
 	updatedVersion, _ := updatedMeta["version"].(float64)
 
 	if updatedVersion <= initialVersion {
