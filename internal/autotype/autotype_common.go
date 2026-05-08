@@ -4,7 +4,7 @@ import "strings"
 
 // escapeAppleScriptString escapes a string for safe use inside an AppleScript
 // keystroke command. It handles backslash, double quote, and control characters
-// that could alter script behaviour or produce unwanted keystrokes.
+// that could alter script behavior or produce unwanted keystrokes.
 func escapeAppleScriptString(text string) string {
 	var b strings.Builder
 	for _, r := range text {

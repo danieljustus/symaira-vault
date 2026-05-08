@@ -214,9 +214,9 @@ func New(agentName string, vaultDir string) (*Logger, error) {
 		hmacKeyPath: hmacKeyPath,
 	}
 
-	if err := l.rotateIfNeeded(); err != nil {
+	if rotErr := l.rotateIfNeeded(); rotErr != nil {
 		_ = l.Close()
-		return nil, fmt.Errorf("check rotation: %w", err)
+		return nil, fmt.Errorf("check rotation: %w", rotErr)
 	}
 
 	prevHMAC, err := l.readLastHMAC()
