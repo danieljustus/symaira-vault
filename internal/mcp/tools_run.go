@@ -103,10 +103,12 @@ func (s *Server) handleRunCommand(ctx context.Context, req CallToolRequest) (*Ca
 	if err != nil {
 		s.logAudit(ctx, "run_command", auditPath, false)
 		if result != nil {
-			return NewToolResultError(fmt.Sprintf("%v\nExit code: %d\nStdout: %s\nStderr: %s",
-				err, result.ExitCode, result.Stdout, result.Stderr)), nil
+			sanitizedStdout, sanitizedStderr := s.sanitizeRunOutput(result.Stdout, result.Stderr, resolvedEnv)
+			sanitizedErr := s.sanitizeKnownSecretValues(err.Error(), resolvedEnv)
+			return NewToolResultError(fmt.Sprintf("%s\nExit code: %d\nStdout: %s\nStderr: %s",
+				sanitizedErr, result.ExitCode, sanitizedStdout, sanitizedStderr)), nil
 		}
-		return NewToolResultError(err.Error()), nil
+		return NewToolResultError(s.sanitizeKnownSecretValues(err.Error(), resolvedEnv)), nil
 	}
 
 	s.logAudit(ctx, "run_command", auditPath, true)

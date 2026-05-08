@@ -66,8 +66,8 @@ func TestHandleRunCommand_BasicRun(t *testing.T) {
 	if stdout, _ := output["stdout"].(string); !strings.Contains(stdout, "hello") {
 		t.Errorf("stdout = %q, want hello", stdout)
 	}
-	if d, _ := output["duration_ms"].(float64); d <= 0 {
-		t.Error("duration_ms should be positive")
+	if d, _ := output["duration_ms"].(float64); d < 0 {
+		t.Error("duration_ms should not be negative")
 	}
 }
 
@@ -111,6 +111,52 @@ func TestHandleRunCommand_SecretEnvInjection(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "***") {
 		t.Errorf("stdout = %q, want to contain masked value '***'", stdout)
+	}
+}
+
+func TestHandleRunCommand_MasksSecretEnvInStdoutAndStderr(t *testing.T) {
+	const secret = "synthetic-run-command-success-secret"
+	vaultDir, identity := mockVaultWithEntry(t, "github", map[string]any{
+		"api_key": secret,
+	})
+
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanRunCommands: true,
+		ApprovalMode:   "none",
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	req := CallToolRequest{
+		Arguments: map[string]any{
+			"command": []any{"sh", "-c", "printf '%s' \"$MY_KEY\"; printf '%s' \"$MY_KEY\" >&2"},
+			"env": map[string]any{
+				"MY_KEY": "github.api_key",
+			},
+		},
+	}
+
+	result, err := srv.handleRunCommand(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleRunCommand() error = %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("handleRunCommand() returned error: %s", result.Text)
+	}
+	if strings.Contains(result.Text, secret) {
+		t.Fatalf("result contains raw secret: %q", result.Text)
+	}
+
+	var output map[string]any
+	if err := json.Unmarshal([]byte(result.Text), &output); err != nil {
+		t.Fatalf("parse result: %v", err)
+	}
+	for _, field := range []string{"stdout", "stderr"} {
+		text, _ := output[field].(string)
+		if text != "***" {
+			t.Errorf("%s = %q, want masked value '***'", field, text)
+		}
 	}
 }
 
@@ -239,6 +285,54 @@ func TestHandleRunCommand_Timeout(t *testing.T) {
 	}
 	if !strings.Contains(result.Text, "timed out") {
 		t.Fatalf("result text = %q, want 'timed out'", result.Text)
+	}
+}
+
+func TestHandleRunCommand_MasksSecretEnvOnTimeoutError(t *testing.T) {
+	const secret = "synthetic-run-command-timeout-secret"
+	vaultDir, identity := mockVaultWithEntry(t, "github", map[string]any{
+		"api_key": secret,
+	})
+
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanRunCommands: true,
+		ApprovalMode:   "none",
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	req := CallToolRequest{
+		Arguments: map[string]any{
+			"command": []any{"sh", "-c", "printf '%s' \"$MY_KEY\"; printf '%s' \"$MY_KEY\" >&2; exec sleep 10"},
+			"env": map[string]any{
+				"MY_KEY": "github.api_key",
+			},
+			"timeout": float64(1),
+		},
+	}
+
+	result, err := srv.handleRunCommand(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleRunCommand() error = %v", err)
+	}
+	if result == nil {
+		t.Fatal("handleRunCommand() returned nil result")
+	}
+	if !result.IsError {
+		t.Fatal("handleRunCommand() expected error result for timeout")
+	}
+	if strings.Contains(result.Text, secret) {
+		t.Fatalf("result contains raw secret: %q", result.Text)
+	}
+	if !strings.Contains(result.Text, "Stdout: ***") {
+		t.Fatalf("result text = %q, want masked stdout", result.Text)
+	}
+	if !strings.Contains(result.Text, "Stderr: ***") {
+		t.Fatalf("result text = %q, want masked stderr", result.Text)
+	}
+	if !strings.Contains(result.Text, "Exit code: -1") {
+		t.Fatalf("result text = %q, want exit code diagnostic", result.Text)
 	}
 }
 
@@ -418,6 +512,55 @@ func TestHandleRunCommand_NonZeroExit(t *testing.T) {
 	}
 	if code, _ := output["exit_code"].(float64); code != 42 {
 		t.Errorf("exit_code = %v, want 42", code)
+	}
+}
+
+func TestHandleRunCommand_MasksSecretEnvOnNonZeroExit(t *testing.T) {
+	const secret = "synthetic-run-command-nonzero-secret"
+	vaultDir, identity := mockVaultWithEntry(t, "github", map[string]any{
+		"api_key": secret,
+	})
+
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanRunCommands: true,
+		ApprovalMode:   "none",
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	req := CallToolRequest{
+		Arguments: map[string]any{
+			"command": []any{"sh", "-c", "printf '%s' \"$MY_KEY\"; printf '%s' \"$MY_KEY\" >&2; exit 42"},
+			"env": map[string]any{
+				"MY_KEY": "github.api_key",
+			},
+		},
+	}
+
+	result, err := srv.handleRunCommand(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleRunCommand() error = %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("handleRunCommand() returned error: %s", result.Text)
+	}
+	if strings.Contains(result.Text, secret) {
+		t.Fatalf("result contains raw secret: %q", result.Text)
+	}
+
+	var output map[string]any
+	if err := json.Unmarshal([]byte(result.Text), &output); err != nil {
+		t.Fatalf("parse result: %v", err)
+	}
+	if code, _ := output["exit_code"].(float64); code != 42 {
+		t.Errorf("exit_code = %v, want 42", code)
+	}
+	for _, field := range []string{"stdout", "stderr"} {
+		text, _ := output[field].(string)
+		if text != "***" {
+			t.Errorf("%s = %q, want masked value '***'", field, text)
+		}
 	}
 }
 

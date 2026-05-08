@@ -59,6 +59,7 @@ func (s *Server) handleExecuteWithSecret(ctx context.Context, req CallToolReques
 
 	secretRefs := make([]string, 0)
 	resolvedEnv := make(map[string]string)
+	secretEnv := make(map[string]string)
 	if refsRaw != nil {
 		refsSlice, ok := refsRaw.([]any)
 		if !ok {
@@ -107,6 +108,7 @@ func (s *Server) handleExecuteWithSecret(ctx context.Context, req CallToolReques
 			seenEnvVars[envVarName] = true
 
 			resolvedEnv[envVarName] = value
+			secretEnv[envVarName] = value
 			secretRefs = append(secretRefs, ref)
 		}
 	}
@@ -158,16 +160,19 @@ func (s *Server) handleExecuteWithSecret(ctx context.Context, req CallToolReques
 
 	if runErr != nil {
 		if result != nil {
-			return NewToolResultError(fmt.Sprintf("%v\nExit code: %d\nStdout: %s\nStderr: %s",
-				runErr, result.ExitCode, result.Stdout, result.Stderr)), nil
+			sanitizedStdout, sanitizedStderr := s.sanitizeRunOutput(result.Stdout, result.Stderr, secretEnv)
+			sanitizedErr := s.sanitizeKnownSecretValues(runErr.Error(), secretEnv)
+			return NewToolResultError(fmt.Sprintf("%s\nExit code: %d\nStdout: %s\nStderr: %s",
+				sanitizedErr, result.ExitCode, sanitizedStdout, sanitizedStderr)), nil
 		}
-		return NewToolResultError(runErr.Error()), nil
+		return NewToolResultError(s.sanitizeKnownSecretValues(runErr.Error(), secretEnv)), nil
 	}
 
+	sanitizedStdout, sanitizedStderr := s.sanitizeRunOutput(result.Stdout, result.Stderr, secretEnv)
 	resultJSON, err := json.Marshal(map[string]any{
 		"exit_code":   result.ExitCode,
-		"stdout":      result.Stdout,
-		"stderr":      result.Stderr,
+		"stdout":      sanitizedStdout,
+		"stderr":      sanitizedStderr,
 		"duration_ms": result.Duration.Milliseconds(),
 	})
 	if err != nil {

@@ -79,12 +79,13 @@ func (s *Server) buildVaultResolver() func(string) (string, bool) {
 }
 
 func (s *Server) sanitizeRunOutput(stdout, stderr string, resolvedEnv map[string]string) (string, string) {
+	return s.sanitizeKnownSecretValues(stdout, resolvedEnv), s.sanitizeKnownSecretValues(stderr, resolvedEnv)
+}
+
+func (s *Server) sanitizeKnownSecretValues(text string, resolvedEnv map[string]string) string {
 	if len(resolvedEnv) == 0 {
-		return stdout, stderr
+		return text
 	}
 
-	mask := "***"
-	sanitizedStdout := masking.SanitizeWithKnownSecrets(stdout, resolvedEnv, mask)
-	sanitizedStderr := masking.SanitizeWithKnownSecrets(stderr, resolvedEnv, mask)
-	return sanitizedStdout, sanitizedStderr
+	return masking.SanitizeWithKnownSecrets(text, resolvedEnv, "***")
 }

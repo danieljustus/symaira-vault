@@ -90,8 +90,11 @@ func TestHandleExecuteWithSecret_SecretInjection(t *testing.T) {
 		t.Errorf("exit_code = %v, want 0", code)
 	}
 	stdout, _ := output["stdout"].(string)
-	if !strings.Contains(stdout, "AKIAIOSFODNN7EXAMPLE") {
-		t.Errorf("stdout = %q, want to contain injected secret value", stdout)
+	if strings.Contains(stdout, "AKIAIO...MPLE") {
+		t.Errorf("stdout = %q, should not contain plaintext secret", stdout)
+	}
+	if !strings.Contains(stdout, "***") {
+		t.Errorf("stdout = %q, want to contain masked value '***'", stdout)
 	}
 }
 
@@ -128,6 +131,52 @@ func TestHandleExecuteWithSecret_NeverExposesSecretValue(t *testing.T) {
 	resultStr := result.Text
 	if strings.Contains(resultStr, "super-secret-value-12345") {
 		t.Errorf("result contains secret value: %q", resultStr)
+	}
+}
+
+func TestHandleExecuteWithSecret_MasksSecretInStdoutAndStderr(t *testing.T) {
+	const secret = "synthetic-execute-success-secret"
+	vaultDir, identity := mockVaultWithEntry(t, "aws", map[string]any{
+		"secret_key": secret,
+	})
+
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanRunCommands: true,
+		ApprovalMode:   "none",
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	req := CallToolRequest{
+		Arguments: map[string]any{
+			"command": []any{"sh", "-c", "printf '%s' \"$AWS_SECRET_KEY\"; printf '%s' \"$AWS_SECRET_KEY\" >&2"},
+			"secret_refs": []any{
+				"op://vault/aws/secret_key",
+			},
+		},
+	}
+
+	result, err := srv.handleExecuteWithSecret(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleExecuteWithSecret() error = %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("handleExecuteWithSecret() returned error: %s", result.Text)
+	}
+	if strings.Contains(result.Text, secret) {
+		t.Fatalf("result contains raw secret: %q", result.Text)
+	}
+
+	var output map[string]any
+	if err := json.Unmarshal([]byte(result.Text), &output); err != nil {
+		t.Fatalf("parse result: %v", err)
+	}
+	for _, field := range []string{"stdout", "stderr"} {
+		text, _ := output[field].(string)
+		if text != "***" {
+			t.Errorf("%s = %q, want masked value '***'", field, text)
+		}
 	}
 }
 
@@ -391,6 +440,54 @@ func TestHandleExecuteWithSecret_Timeout(t *testing.T) {
 	}
 }
 
+func TestHandleExecuteWithSecret_MasksSecretOnTimeoutError(t *testing.T) {
+	const secret = "synthetic-execute-timeout-secret"
+	vaultDir, identity := mockVaultWithEntry(t, "aws", map[string]any{
+		"secret_key": secret,
+	})
+
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanRunCommands: true,
+		ApprovalMode:   "none",
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	req := CallToolRequest{
+		Arguments: map[string]any{
+			"command": []any{"sh", "-c", "printf '%s' \"$AWS_SECRET_KEY\"; printf '%s' \"$AWS_SECRET_KEY\" >&2; exec sleep 10"},
+			"secret_refs": []any{
+				"op://vault/aws/secret_key",
+			},
+			"timeout": float64(1),
+		},
+	}
+
+	result, err := srv.handleExecuteWithSecret(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleExecuteWithSecret() error = %v", err)
+	}
+	if result == nil {
+		t.Fatal("handleExecuteWithSecret() returned nil result")
+	}
+	if !result.IsError {
+		t.Fatal("handleExecuteWithSecret() expected error result for timeout")
+	}
+	if strings.Contains(result.Text, secret) {
+		t.Fatalf("result contains raw secret: %q", result.Text)
+	}
+	if !strings.Contains(result.Text, "Stdout: ***") {
+		t.Fatalf("result text = %q, want masked stdout", result.Text)
+	}
+	if !strings.Contains(result.Text, "Stderr: ***") {
+		t.Fatalf("result text = %q, want masked stderr", result.Text)
+	}
+	if !strings.Contains(result.Text, "Exit code: -1") {
+		t.Fatalf("result text = %q, want exit code diagnostic", result.Text)
+	}
+}
+
 func TestHandleExecuteWithSecret_InvalidParams(t *testing.T) {
 	srv := newTestServer(t, config.AgentProfile{
 		Name:           "test",
@@ -622,6 +719,55 @@ func TestHandleExecuteWithSecret_NonZeroExit(t *testing.T) {
 	}
 	if code, _ := output["exit_code"].(float64); code != 42 {
 		t.Errorf("exit_code = %v, want 42", code)
+	}
+}
+
+func TestHandleExecuteWithSecret_MasksSecretOnNonZeroExit(t *testing.T) {
+	const secret = "synthetic-execute-nonzero-secret"
+	vaultDir, identity := mockVaultWithEntry(t, "aws", map[string]any{
+		"secret_key": secret,
+	})
+
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanRunCommands: true,
+		ApprovalMode:   "none",
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	req := CallToolRequest{
+		Arguments: map[string]any{
+			"command": []any{"sh", "-c", "printf '%s' \"$AWS_SECRET_KEY\"; printf '%s' \"$AWS_SECRET_KEY\" >&2; exit 42"},
+			"secret_refs": []any{
+				"op://vault/aws/secret_key",
+			},
+		},
+	}
+
+	result, err := srv.handleExecuteWithSecret(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleExecuteWithSecret() error = %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("handleExecuteWithSecret() returned error: %s", result.Text)
+	}
+	if strings.Contains(result.Text, secret) {
+		t.Fatalf("result contains raw secret: %q", result.Text)
+	}
+
+	var output map[string]any
+	if err := json.Unmarshal([]byte(result.Text), &output); err != nil {
+		t.Fatalf("parse result: %v", err)
+	}
+	if code, _ := output["exit_code"].(float64); code != 42 {
+		t.Errorf("exit_code = %v, want 42", code)
+	}
+	for _, field := range []string{"stdout", "stderr"} {
+		text, _ := output[field].(string)
+		if text != "***" {
+			t.Errorf("%s = %q, want masked value '***'", field, text)
+		}
 	}
 }
 
