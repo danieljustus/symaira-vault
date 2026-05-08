@@ -6,36 +6,56 @@ per-agent access control, bearer auth for HTTP, and audit logs.
 
 ## Recommended Setup
 
-Use a dedicated agent profile instead of sharing a human CLI profile:
+Use a dedicated agent profile instead of sharing a human CLI profile. Start with
+metadata/read-only access, narrow `allowedPaths`, and an explicit tool allowlist;
+do not give broad/default profiles wildcard paths, write access, or command
+execution by default.
+
+For Hermes and OpenClaw, see the conservative adoption packet in
+[`docs/hermes-safe-adoption.md`](hermes-safe-adoption.md). It covers a
+metadata-first profile, separate runner profiles, stdio-vs-HTTP defaults, and the
+human approval gates required before live config changes or secret migration.
+
+Example first profile:
 
 ```yaml
 agents:
-  hermes:
-    allowedPaths: ["*"]
-    canWrite: true
-    canRunCommands: true
-    approvalMode: none
-
-  openclaw:
-    allowedPaths: ["*"]
-    canWrite: true
-    canRunCommands: true
-    approvalMode: none
+  hermes-metadata:
+    allowedPaths:
+      - hermes/providers/
+      - openclaw/local-dev/
+    canWrite: false
+    canRunCommands: false
+    canManageConfig: false
+    canUseClipboard: false
+    canUseAutotype: false
+    approvalMode: deny
+    allowed_tools:
+      - health
+      - get_auth_status
+      - list_entries
+      - find_entries
+      - get_entry_metadata
 ```
 
 Use narrower `allowedPaths` for agents that should only access one area of the
-vault, for example `["paperless-ngx/", "homeassistant/"]`.
+vault, for example `["paperless-ngx/", "homeassistant/"]`. Add `get_entry`, write
+tools, clipboard/autotype, or command execution only in separate profiles with an
+explicit reason and review trail.
 
 ## Hermes
 
-Hermes has a native MCP client. Generate a ready-to-paste config snippet:
+Hermes has a native MCP client. For a local first trial, prefer stdio over HTTP
+so OpenPass does not expose a listening socket and Hermes does not need a bearer
+token in config:
 
 ```bash
-openpass --vault ~/.openpass-vault mcp-config hermes --http --format hermes
+openpass --vault ~/.openpass-vault mcp-config hermes --format hermes
 ```
 
-Add the output under `mcp_servers` in `~/.hermes/config.yaml`, then restart
-Hermes or reload MCP tools from Hermes. Verify the connection:
+Add the output under `mcp_servers` in `~/.hermes/config.yaml` only after the
+human adoption gate approves a live Hermes config change, then restart Hermes or
+reload MCP tools from Hermes. Verify the connection:
 
 ```bash
 hermes mcp test openpass
@@ -43,7 +63,12 @@ hermes mcp test openpass
 
 When connected, Hermes registers the tools with the `mcp_openpass_` prefix, for
 example `mcp_openpass_list_entries`, `mcp_openpass_get_entry`, and
-`mcp_openpass_set_entry_field`.
+`mcp_openpass_set_entry_field`. Early Hermes profiles should expose only the
+metadata-first tool subset from `hermes-safe-adoption.md`.
+
+If HTTP transport is needed later, bind OpenPass to loopback only
+(`127.0.0.1`), use scoped short-lived tokens, and keep token values out of
+committed config and chat transcripts.
 
 ### Available MCP Tools
 
