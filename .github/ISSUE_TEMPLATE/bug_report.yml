@@ -28,7 +28,7 @@ body:
     attributes:
       label: Go version
       description: Required when building from source.
-      placeholder: "go1.26.2"
+      placeholder: "go1.26.3"
   - type: textarea
     id: steps
     attributes:

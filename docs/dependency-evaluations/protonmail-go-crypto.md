@@ -84,7 +84,7 @@ The following CVE-class issues were fixed between v1.1.6 and v1.4.1:
 All Git remotes are **user-configured** (typically the user's own private repository). OpenPass does not clone from untrusted sources.
 
 ### Go Version Compatibility
-- OpenPass requires **Go 1.26.0**
+- OpenPass requires **Go 1.26.3**
 - `ProtonMail/go-crypto v1.4.0+` requires **Go 1.23.0+**
 - **No Go version blocker** — OpenPass's Go version exceeds all minimum requirements
 

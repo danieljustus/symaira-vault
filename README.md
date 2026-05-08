@@ -251,7 +251,7 @@ For the full configuration reference, see [docs/configuration.md](docs/configura
 
 ## Dependencies
 
-- Go 1.26 or later
+- Go 1.26.3 or later
 - [filippo.io/age](https://pkg.go.dev/filippo.io/age) — encryption
 - [spf13/cobra](https://github.com/spf13/cobra) — CLI framework
 - [zalando/go-keyring](https://github.com/zalando/go-keyring) — OS keyring

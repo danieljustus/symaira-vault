@@ -20,7 +20,7 @@ The script is idempotent and safe to run multiple times. Use `./scripts/setup-de
 
 If you prefer manual setup, ensure you have:
 
-- **Go 1.26 or later** (CI and release workflows currently validate with Go 1.26)
+- **Go 1.26.3 or later** (CI and release workflows currently validate with Go 1.26.3)
 - **git**
 - **make**
 - **golangci-lint** v2.11.4: `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4`

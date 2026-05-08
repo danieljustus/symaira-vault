@@ -155,7 +155,7 @@ Platform expansion, transport hardening, and developer experience release.
 
 ### Changed
 
-- Go version bumped to 1.26.2
+- Go version bumped to 1.26.3
 - Comprehensive CI documentation with lint gates and FreeBSD guidance
 
 ### Fixed

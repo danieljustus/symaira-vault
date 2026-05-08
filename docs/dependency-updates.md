@@ -155,7 +155,7 @@ trusted; for major updates, every step is mandatory.
   ```bash
   go build ./...
   ```
-  Confirm no compilation errors on the target Go version (currently Go 1.26).
+  Confirm no compilation errors on the target Go version (currently Go 1.26.3).
 
 - [ ] **7. Cross-compilation smoke test**  
   Because OpenPass ships for multiple platforms:
