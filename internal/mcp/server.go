@@ -28,6 +28,7 @@ type Server struct {
 	auditLog     *audit.Logger
 	transport    string
 	policyEngine *policy.Engine
+	shareStore   *ShareStore
 }
 
 // New creates a new MCP server instance with the specified vault and agent configuration.

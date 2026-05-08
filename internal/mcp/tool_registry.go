@@ -139,6 +139,29 @@ func toolDefinitions() []toolDefinition {
 			Handler: (*Server).handleGenerate,
 		},
 		{
+			Name:        "generate_dynamic_secret",
+			Description: "Generate a dynamic secret with time-limited lease",
+			InputSchema: objectSchema([]string{"provider", "role"}, map[string]schemaProperty{
+				"provider":    {Type: "string", Description: "Secret provider (postgres, aws-sts)"},
+				"role":        {Type: "string", Description: "Role or permission level"},
+				"ttl":         {Type: "string", Description: "Time-to-live duration (e.g., 1h, 30m). Default: 1h"},
+				"permissions": {Type: "string", Description: "Additional permissions (optional)"},
+			}),
+			Handler: (*Server).handleGenerateDynamicSecret,
+		},
+		{
+			Name:        "generate_template",
+			Description: "Generate a configuration file from a template",
+			InputSchema: objectSchema([]string{"template_type"}, map[string]schemaProperty{
+				"template_type": {Type: "string", Description: "Template type (env, docker-compose, k8s-secret, github-actions, terraform)"},
+				"name":          {Type: "string", Description: "Name of the resource being generated. Default: app"},
+				"output_path":   {Type: "string", Description: "Output file path (optional)"},
+				"secret_refs":   {Type: "object", Description: "Map of template variable names to vault references"},
+				"dry_run":       {Type: "boolean", Description: "Show template with masked values. Default: false"},
+			}),
+			Handler: (*Server).handleGenerateTemplate,
+		},
+		{
 			Name:        "delete_entry",
 			Description: "Delete a password entry by path",
 			InputSchema: objectSchema([]string{"path"}, map[string]schemaProperty{
@@ -211,6 +234,44 @@ func toolDefinitions() []toolDefinition {
 			}),
 			Handler:   (*Server).handleSecureInput,
 			Available: secureInputToolAvailable,
+		},
+		{
+			Name:        "request_share",
+			Description: "Request to share a secret with another agent. Creates a pending share grant that requires human approval.",
+			InputSchema: objectSchema([]string{"to_agent", "secret_path"}, map[string]schemaProperty{
+				"to_agent":     {Type: "string", Description: "Name of the agent to share the secret with"},
+				"secret_path":  {Type: "string", Description: "Path to the secret entry (e.g., 'api-keys/stripe')"},
+				"secret_field": {Type: "string", Description: "Specific field to share (optional, shares entire entry if omitted)"},
+				"ttl":          {Type: "string", Description: "Time-to-live duration (e.g., '1h', '30m'). Share expires after this duration."},
+			}),
+			Handler: (*Server).handleRequestShare,
+		},
+		{
+			Name:        "approve_share",
+			Description: "Approve a pending share request. Requires human confirmation.",
+			InputSchema: objectSchema([]string{"grant_id"}, map[string]schemaProperty{
+				"grant_id": {Type: "string", Description: "ID of the share grant to approve"},
+			}),
+			Handler: (*Server).handleApproveShare,
+		},
+		{
+			Name:        "revoke_share",
+			Description: "Revoke an active share grant, immediately removing access.",
+			InputSchema: objectSchema([]string{"grant_id"}, map[string]schemaProperty{
+				"grant_id": {Type: "string", Description: "ID of the share grant to revoke"},
+			}),
+			Handler: (*Server).handleRevokeShare,
+		},
+		{
+			Name:        "list_shares",
+			Description: "List share grants. Can filter by status, agent, or secret path.",
+			InputSchema: objectSchema([]string{}, map[string]schemaProperty{
+				"status":      {Type: "string", Description: "Filter by status: pending, approved, revoked, expired, rejected"},
+				"from_agent":  {Type: "string", Description: "Filter by source agent name"},
+				"to_agent":    {Type: "string", Description: "Filter by target agent name"},
+				"secret_path": {Type: "string", Description: "Filter by secret path"},
+			}),
+			Handler: (*Server).handleListShares,
 		},
 	}
 }
@@ -317,3 +378,5 @@ func isToolAllowed(token *ScopedToken, toolName string) bool {
 	}
 	return false
 }
+
+

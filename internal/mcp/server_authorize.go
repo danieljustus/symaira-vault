@@ -143,6 +143,22 @@ func (s *Server) logAuditWithToken(ctx context.Context, action, path string, ok 
 	s.auditLog.LogEntry(entry)
 }
 
+// checkShareAccess checks if the current agent has an approved, non-expired share for the given path.
+// Returns the ShareGrant and true if access is granted, or nil and false otherwise.
+func (s *Server) checkShareAccess(ctx context.Context, path string) (*ShareGrant, bool) {
+	if s.shareStore == nil {
+		return nil, false
+	}
+	grant, ok := s.shareStore.CheckAccess(s.agent.Name, path)
+	if !ok {
+		return nil, false
+	}
+	if grant.ExpiresAt != nil && time.Now().After(*grant.ExpiresAt) {
+		return nil, false
+	}
+	return grant, true
+}
+
 func (s *Server) checkScope(path string) bool {
 	if s == nil || s.agent == nil {
 		return false
@@ -165,7 +181,34 @@ func (s *Server) checkScope(path string) bool {
 		}
 	}
 
+	// Share access override: allow access if there's an active share grant
+	if grant, ok := s.checkShareAccess(context.Background(), path); ok {
+		s.logAuditShare(context.Background(), "share_grant", path, grant, true)
+		return true
+	}
+
 	return false
+}
+
+func (s *Server) logAuditShare(ctx context.Context, action, path string, grant *ShareGrant, ok bool) {
+	if s == nil || s.auditLog == nil {
+		return
+	}
+	entry := audit.LogEntry{
+		Agent:       s.agent.Name,
+		Action:      action,
+		Path:        path,
+		Transport:   s.transport,
+		OK:          ok,
+		ShareID:     grant.ID,
+		FromAgent:   grant.FromAgent,
+		ToAgent:     grant.ToAgent,
+		ShareAction: action,
+	}
+	if token, ok := TokenFromContext(ctx); ok {
+		entry.TokenID = token.ID
+	}
+	s.auditLog.LogEntry(entry)
 }
 
 func (s *Server) canWrite() bool {

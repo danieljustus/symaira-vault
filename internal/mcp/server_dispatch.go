@@ -32,8 +32,20 @@ func toolActionType(toolName string) string {
 		return "find"
 	case "generate_password", "generate_totp":
 		return "generate"
+	case "generate_dynamic_secret":
+		return "generate"
+	case "generate_template":
+		return "generate"
 	case "copy_to_clipboard", "autotype":
 		return "read"
+	case "request_share":
+		return "share_request"
+	case "approve_share":
+		return "share_approve"
+	case "revoke_share":
+		return "share_revoke"
+	case "list_shares":
+		return "share_list"
 	default:
 		return "read"
 	}
