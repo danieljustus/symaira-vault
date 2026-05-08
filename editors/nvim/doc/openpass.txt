@@ -1,0 +1,165 @@
+*openpass.txt*	OpenPass Neovim plugin
+
+Author:  OpenPass contributors <https://github.com/danieljustus/OpenPass>
+License: MIT
+
+==============================================================================
+CONTENTS                                                *openpass-contents*
+
+  1. Introduction ................... |openpass-intro|
+  2. Requirements ................... |openpass-requirements|
+  3. Installation ................... |openpass-install|
+  4. Configuration .................. |openpass-config|
+  5. Commands ....................... |openpass-commands|
+  6. Health Check ................... |openpass-health|
+  7. Security ....................... |openpass-security|
+  8. Lua API ........................ |openpass-api|
+
+==============================================================================
+1. INTRODUCTION                                          *openpass-intro*
+
+OpenPass for Neovim integrates OpenPass secret management into your editor.
+Browse, search, copy, and insert secrets without leaving Neovim.
+
+All secret values are masked as `***` in every UI element. Secrets are never
+stored in Neovim state, registers, or logs.
+
+==============================================================================
+2. REQUIREMENTS                                      *openpass-requirements*
+
+- OpenPass CLI installed and configured >
+    brew install openpass
+<
+- Neovim >= 0.7
+- plenary.nvim (https://github.com/nvim-lua/plenary.nvim)
+- OpenPass MCP server running >
+    openpass serve --port 8080
+<
+
+==============================================================================
+3. INSTALLATION                                        *openpass-install*
+
+lazy.nvim ~
+>
+  {
+    dir = "/path/to/openpass/editors/nvim",
+    dependencies = { "nvim-lua/plenary.nvim" },
+    cmd = { "OpenPassList", "OpenPassGet", "OpenPassCopy", "OpenPassGenerate", "OpenPassFind", "OpenPassGenerateTOTP" },
+    opts = {},
+  }
+<
+
+packer.nvim ~
+>
+  use {
+    "/path/to/openpass/editors/nvim",
+    requires = { "nvim-lua/plenary.nvim" },
+    config = function()
+      require("openpass").setup()
+    end,
+  }
+<
+
+Manual ~
+>
+  vim.opt.runtimepath:append("/path/to/openpass/editors/nvim")
+  require("openpass").setup()
+<
+
+==============================================================================
+4. CONFIGURATION                                        *openpass-config*
+
+Default configuration:
+>
+  require("openpass").setup({
+    base_url = "http://127.0.0.1:8080",
+    agent_name = "nvim",
+    timeout_ms = 30000,
+    masking_char = "*",
+    preserve_keys = { "path", "meta", "type", "name", "version", "created", "updated" },
+  })
+<
+
+base_url        URL of the running OpenPass MCP server.
+agent_name      Agent identifier sent via X-OpenPass-Agent header.
+timeout_ms      HTTP request timeout in milliseconds.
+masking_char    Character used for masking secret values.
+preserve_keys   Table of field names whose values are never masked.
+
+==============================================================================
+5. COMMANDS                                              *openpass-commands*
+
+:OpenPassList                                           *:OpenPassList*
+    Open interactive vault entry picker. Selecting an entry shows its
+    masked details in a floating window. Press `q` to close.
+
+:OpenPassGet [path]                                     *:OpenPassGet*
+    Retrieve an entry's password and insert it at cursor position. If no
+    path is given, opens the vault picker.
+
+:OpenPassCopy [path]                                    *:OpenPassCopy*
+    Copy an entry's password to the system clipboard via the MCP
+    copy_to_clipboard tool (server-side auto-clear). If no path is
+    given, opens the vault picker.
+
+:OpenPassGenerate [length]                              *:OpenPassGenerate*
+    Generate a secure random password and insert it at cursor position.
+    Default length: 24.
+
+:OpenPassFind [query]                                   *:OpenPassFind*
+    Search vault entries by free-text query. If no query is given,
+    prompts for input.
+
+:OpenPassGenerateTOTP [path]                            *:OpenPassGenerateTOTP*
+    Generate a TOTP code for the specified entry and insert it at
+    cursor position. If no path is given, opens the vault picker.
+
+==============================================================================
+6. HEALTH CHECK                                          *openpass-health*
+
+Run |:checkhealth| openpass to verify:
+- MCP token present at ~/.openpass/mcp-token
+- plenary.nvim is installed
+- OpenPass CLI is available in PATH
+- MCP server is reachable
+
+==============================================================================
+7. SECURITY                                            *openpass-security*
+
+- All secret values display as `***` in the UI (openpass-masking)
+- Secrets never persist in Neovim state, registers, or :messages log
+- Clipboard operations use server-side copy_to_clipboard with auto-clear
+- MCP bearer token is read from ~/.openpass/mcp-token at session start
+- No telemetry, no cloud dependency
+
+==============================================================================
+8. LUA API                                                *openpass-api*
+
+openpass.client.call_tool({name}, {args}, {callback})   *openpass.client.call_tool()*
+    Call an MCP tool on the server. {callback} receives (err, result).
+
+openpass.masking.mask_value({value})                *openpass.masking.mask_value()*
+    Mask a single string value, returning "***".
+
+openpass.masking.mask_object({obj})                 *openpass.masking.mask_object()*
+    Recursively mask all string values in a table.
+
+openpass.masking.mask_entry({entry})                *openpass.masking.mask_entry()*
+    Mask an entry's data fields while preserving path and metadata.
+
+openpass.picker.pick_vault_entry({opts})          *openpass.picker.pick_vault_entry()*
+    Open interactive vault entry picker. {opts} can include:
+    - prompt: string (picker title)
+    - on_select: function(path) (called on selection)
+
+openpass.picker.show_entry_detail({path})       *openpass.picker.show_entry_detail()*
+    Show masked entry details in a floating window.
+
+openpass.auth.read_token()                            *openpass.auth.read_token()*
+    Read the MCP bearer token from ~/.openpass/mcp-token.
+
+openpass.auth.build_headers()                       *openpass.auth.build_headers()*
+    Build HTTP headers map for MCP requests.
+
+==============================================================================
+ vim:tw=78:ts=8:noet:ft=help:norl:

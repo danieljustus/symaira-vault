@@ -1,0 +1,9 @@
+node_modules/
+out/
+dist/
+*.vsix
+*.tar.gz
+*.log
+.DS_Store
+coverage/
+.vscode-test/

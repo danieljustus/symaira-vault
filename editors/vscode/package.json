@@ -1,0 +1,163 @@
+{
+  "name": "openpass-vscode",
+  "displayName": "OpenPass",
+  "description": "VS Code extension for OpenPass secret manager",
+  "version": "1.0.0",
+  "publisher": "openpass",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "password",
+    "secrets",
+    "vault",
+    "mcp",
+    "openpass"
+  ],
+  "activationEvents": [
+    "onView:openpass.vault",
+    "onCommand:openpass.insertSecret",
+    "onCommand:openpass.copyToClipboard",
+    "onCommand:openpass.generatePassword",
+    "onCommand:openpass.quickPickVault",
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "openpass-explorer",
+          "title": "OpenPass",
+          "icon": "$(shield)"
+        }
+      ]
+    },
+    "views": {
+      "openpass-explorer": [
+        {
+          "id": "openpass.vault",
+          "name": "Vault",
+          "when": "openpass.enabled"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "openpass.insertSecret",
+        "title": "Insert Secret",
+        "category": "OpenPass",
+        "icon": "$(insert)"
+      },
+      {
+        "command": "openpass.copyToClipboard",
+        "title": "Copy to Clipboard",
+        "category": "OpenPass",
+        "icon": "$(clippy)"
+      },
+      {
+        "command": "openpass.generatePassword",
+        "title": "Generate Password",
+        "category": "OpenPass",
+        "icon": "$(symbol-key)"
+      },
+      {
+        "command": "openpass.quickPickVault",
+        "title": "Quick Pick Vault Entry",
+        "category": "OpenPass",
+        "icon": "$(list-unordered)"
+      },
+      {
+        "command": "openpass.refreshVault",
+        "title": "Refresh Vault",
+        "category": "OpenPass",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "openpass.openSettings",
+        "title": "Open Settings",
+        "category": "OpenPass",
+        "icon": "$(gear)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "openpass.refreshVault",
+          "when": "view == openpass.vault",
+          "group": "navigation"
+        },
+        {
+          "command": "openpass.openSettings",
+          "when": "view == openpass.vault",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "openpass.insertSecret",
+          "when": "view == openpass.vault && viewItem == entry",
+          "group": "openpass@1"
+        },
+        {
+          "command": "openpass.copyToClipboard",
+          "when": "view == openpass.vault && viewItem == entry",
+          "group": "openpass@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "openpass.insertSecret",
+          "when": "false"
+        },
+        {
+          "command": "openpass.copyToClipboard",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "OpenPass",
+      "properties": {
+        "openpass.baseUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8080",
+          "description": "Base URL of the OpenPass MCP server"
+        },
+        "openpass.vaultPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the OpenPass vault directory. Leave empty to use $OPENPASS_VAULT or ~/.openpass"
+        },
+        "openpass.agentName": {
+          "type": "string",
+          "default": "vscode",
+          "description": "Agent name for MCP authentication"
+        },
+        "openpass.timeoutMs": {
+          "type": "number",
+          "default": 30000,
+          "description": "Request timeout in milliseconds"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "lint": "eslint src/",
+    "clean": "rm -rf out/"
+  },
+  "dependencies": {
+    "@openpass/mcp-client": "file:../mcp-client"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.4.0"
+  }
+}

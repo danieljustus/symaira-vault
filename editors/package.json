@@ -1,0 +1,21 @@
+{
+  "name": "@openpass/editors",
+  "version": "1.0.0",
+  "private": true,
+  "description": "OpenPass editor plugin ecosystem",
+  "workspaces": [
+    "mcp-client",
+    "vscode",
+    "cursor"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "lint": "npm run lint --workspaces",
+    "clean": "npm run clean --workspaces"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0"
+  }
+}

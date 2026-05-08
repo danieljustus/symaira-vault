@@ -1,0 +1,26 @@
+{
+  "name": "@openpass/mcp-client",
+  "version": "1.0.0",
+  "description": "Shared TypeScript MCP client for OpenPass editor plugins",
+  "main": "out/index.js",
+  "types": "out/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest",
+    "lint": "eslint src/ tests/",
+    "clean": "rm -rf out/"
+  },
+  "dependencies": {
+    "yaml": "^2.4.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0",
+    "jest": "^29.0.0",
+    "@types/jest": "^29.0.0",
+    "ts-jest": "^29.0.0",
+    "nock": "^13.5.0",
+    "@types/nock": "^11.1.0",
+    "eslint": "^8.0.0"
+  }
+}

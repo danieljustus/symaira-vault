@@ -1,0 +1,53 @@
+{
+  "name": "openpass-cursor",
+  "displayName": "OpenPass for Cursor",
+  "description": "OpenPass secret manager integration for Cursor IDE",
+  "version": "1.0.0",
+  "publisher": "danieljustus",
+  "engines": {
+    "vscode": "^>=1.85.0",
+    "cursor": "^>=0.40.0"
+  },
+  "categories": ["Other"],
+  "keywords": ["openpass", "password", "secret", "mcp"],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "openpass.cursor.refreshContext",
+        "title": "Refresh OpenPass Context",
+        "category": "OpenPass"
+      }
+    ],
+    "configuration": {
+      "title": "OpenPass Cursor",
+      "properties": {
+        "openpass.cursor.injectCursorrules": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically inject OpenPass context into .cursorrules"
+        },
+        "openpass.cursor.contextFile": {
+          "type": "string",
+          "default": ".cursorrules",
+          "description": "Path to Cursor context file (relative to workspace root)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch"
+  },
+  "dependencies": {
+    "@openpass/mcp-client": "^1.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0"
+  }
+}
