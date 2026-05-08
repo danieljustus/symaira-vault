@@ -4,6 +4,10 @@ package audit
 import (
 	"bufio"
 	"bytes"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,6 +23,9 @@ import (
 const (
 	defaultDirName         = ".openpass"
 	defaultFileNamePattern = "audit-%s.log"
+	hmacKeyFileName        = "audit-hmac-key"
+	hmacKeySize            = 32
+	hexHMACSize            = sha256.Size * 2 // 64 hex chars
 )
 
 // Environment variable names for audit configuration
@@ -123,14 +130,28 @@ type LogEntry struct {
 	Reason    string `json:"reason,omitempty"`
 	DurMs     int64  `json:"dur_ms,omitempty"`
 	TokenID   string `json:"token_id,omitempty"`
+	HMAC      string `json:"hmac,omitempty"`
 	OK        bool   `json:"ok"`
 }
 
+// VerifyResult reports the outcome of audit log integrity verification.
+type VerifyResult struct {
+	Valid       bool
+	Total       int
+	Verified    int
+	Legacy      int
+	Tampered    int
+	FirstBadIdx int
+}
+
 type Logger struct {
-	agentName string
-	path      string
-	file      *os.File
-	mu        sync.Mutex
+	agentName   string
+	path        string
+	file        *os.File
+	mu          sync.Mutex
+	hmacKey     []byte
+	hmacKeyPath string
+	prevHMAC    []byte
 }
 
 func New(agentName string, vaultDir string) (*Logger, error) {
@@ -178,16 +199,32 @@ func New(agentName string, vaultDir string) (*Logger, error) {
 		return nil, fmt.Errorf("open audit log: %w", err)
 	}
 
+	hmacKeyPath := filepath.Join(cleanAuditDir, hmacKeyFileName)
+	hmacKey, err := loadOrCreateHMACKey(hmacKeyPath)
+	if err != nil {
+		_ = file.Close()
+		return nil, fmt.Errorf("load hmac key: %w", err)
+	}
+
 	l := &Logger{
-		file:      file,
-		agentName: agentName,
-		path:      cleanPath,
+		file:        file,
+		agentName:   agentName,
+		path:        cleanPath,
+		hmacKey:     hmacKey,
+		hmacKeyPath: hmacKeyPath,
 	}
 
 	if err := l.rotateIfNeeded(); err != nil {
 		_ = l.Close()
 		return nil, fmt.Errorf("check rotation: %w", err)
 	}
+
+	prevHMAC, err := l.readLastHMAC()
+	if err != nil {
+		_ = l.Close()
+		return nil, fmt.Errorf("read last hmac: %w", err)
+	}
+	l.prevHMAC = prevHMAC
 
 	return l, nil
 }
@@ -204,6 +241,10 @@ func (l *Logger) LogEntry(entry LogEntry) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	if len(l.hmacKey) > 0 {
+		entry.HMAC = computeHMAC(l.hmacKey, l.prevHMAC, entry)
+	}
+
 	data, err := json.Marshal(entry)
 	if err != nil {
 		return
@@ -211,9 +252,18 @@ func (l *Logger) LogEntry(entry LogEntry) {
 	data = append(data, '\n')
 	if _, err := l.file.Write(data); err != nil {
 		fmt.Fprintf(os.Stderr, "audit log write failed: %v\n", err)
+		return
 	}
 	if err := l.file.Sync(); err != nil {
 		fmt.Fprintf(os.Stderr, "audit log sync failed: %v\n", err)
+		return
+	}
+
+	if entry.HMAC != "" {
+		prevBytes, _ := hex.DecodeString(entry.HMAC)
+		if prevBytes != nil {
+			l.prevHMAC = prevBytes
+		}
 	}
 }
 
@@ -478,4 +528,151 @@ func (l *Logger) Close() error {
 		return nil
 	}
 	return l.file.Close()
+}
+
+func loadOrCreateHMACKey(keyPath string) ([]byte, error) {
+	existing, err := os.ReadFile(keyPath)
+	if err == nil && len(existing) == hmacKeySize {
+		return existing, nil
+	}
+
+	if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("read existing hmac key: %w", err)
+	}
+
+	key := make([]byte, hmacKeySize)
+	if _, err := io.ReadFull(rand.Reader, key); err != nil {
+		return nil, fmt.Errorf("generate hmac key: %w", err)
+	}
+
+	if err := os.WriteFile(keyPath, key, 0o600); err != nil {
+		return nil, fmt.Errorf("write hmac key: %w", err)
+	}
+
+	return key, nil
+}
+
+func (l *Logger) readLastHMAC() ([]byte, error) {
+	if l == nil || l.file == nil {
+		return nil, nil
+	}
+
+	info, err := l.file.Stat()
+	if err != nil {
+		return nil, nil
+	}
+	if info.Size() == 0 {
+		return nil, nil
+	}
+
+	data, err := os.ReadFile(l.path)
+	if err != nil {
+		return nil, nil
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	lastLine := lines[len(lines)-1]
+	if lastLine == "" && len(lines) > 1 {
+		lastLine = lines[len(lines)-2]
+	}
+
+	var lastEntry LogEntry
+	if err := json.Unmarshal([]byte(lastLine), &lastEntry); err != nil {
+		return nil, nil
+	}
+
+	if lastEntry.HMAC != "" {
+		return hex.DecodeString(lastEntry.HMAC)
+	}
+	return nil, nil
+}
+
+func computeHMAC(key, prevHMAC []byte, entry LogEntry) string {
+	canonical := canonicalJSON(entry)
+	mac := hmac.New(sha256.New, key)
+	if len(prevHMAC) > 0 {
+		mac.Write(prevHMAC)
+	}
+	mac.Write(canonical)
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+func canonicalJSON(entry LogEntry) []byte {
+	entry.HMAC = ""
+	data, err := json.Marshal(entry)
+	if err != nil {
+		return nil
+	}
+	return data
+}
+
+func VerifyLog(logFilePath, hmacKeyPath string) (*VerifyResult, error) {
+	key, err := os.ReadFile(hmacKeyPath)
+	if err != nil {
+		return nil, fmt.Errorf("read hmac key: %w", err)
+	}
+	if len(key) == 0 {
+		return nil, errors.New("hmac key is empty")
+	}
+
+	data, err := os.ReadFile(logFilePath)
+	if err != nil {
+		return nil, fmt.Errorf("read log file: %w", err)
+	}
+
+	var entries []LogEntry
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		var entry LogEntry
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			continue
+		}
+		entries = append(entries, entry)
+	}
+
+	result := &VerifyResult{
+		Total:       len(entries),
+		Valid:       true,
+		FirstBadIdx: -1,
+	}
+
+	var prevHMAC []byte
+	for i, entry := range entries {
+		if entry.HMAC == "" {
+			result.Legacy++
+			prevHMAC = nil
+			continue
+		}
+
+		expectedHMAC := computeHMAC(key, prevHMAC, entry)
+		entryHMACBytes, decodeErr := hex.DecodeString(entry.HMAC)
+		expectedHMACBytes, decodeExpectedErr := hex.DecodeString(expectedHMAC)
+		if decodeErr != nil || decodeExpectedErr != nil || !hmac.Equal(expectedHMACBytes, entryHMACBytes) {
+			result.Tampered++
+			result.Valid = false
+			if result.FirstBadIdx < 0 {
+				result.FirstBadIdx = i
+			}
+		} else {
+			result.Verified++
+			prevHMAC = entryHMACBytes
+		}
+	}
+
+	if result.Total == 0 {
+		result.Valid = true
+	}
+
+	return result, nil
+}
+
+func (l *Logger) Verify() (*VerifyResult, error) {
+	if l == nil {
+		return nil, errors.New("logger is nil")
+	}
+	return VerifyLog(l.path, l.hmacKeyPath)
 }
