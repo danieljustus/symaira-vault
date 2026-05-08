@@ -3,10 +3,13 @@ package policy
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
 )
+
+var pathMatch = path.Match
 
 // Engine evaluates policies against evaluation contexts.
 type Engine struct {
@@ -166,7 +169,7 @@ func matchPath(pattern, path string) bool {
 		return true
 	}
 
-	matched, err := filepath.Match(pattern, cleanPath)
+	matched, err := pathMatch(pattern, cleanPath)
 	if err == nil && matched {
 		return true
 	}

@@ -1037,7 +1037,7 @@ func TestShareStore_CheckAccess_ApprovedThenExpired(t *testing.T) {
 	path := filepath.Join(dir, "mcp-shares.json")
 	store := NewShareStore(path)
 
-	g, err := store.Create("alice", "bob", "vault/secret/ephemeral", "", 10*time.Millisecond)
+	g, err := store.Create("alice", "bob", "vault/secret/ephemeral", "", 100*time.Millisecond)
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
@@ -1051,7 +1051,7 @@ func TestShareStore_CheckAccess_ApprovedThenExpired(t *testing.T) {
 	}
 
 	// Wait for expiry.
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
 
 	// Should NOT be accessible after expiry.
 	if _, ok := store.CheckAccess("bob", "vault/secret/ephemeral"); ok {
