@@ -28,9 +28,9 @@ func escapeAppleScriptString(text string) string {
 
 // escapeSendKeysString escapes a string for safe use with WScript.Shell SendKeys.
 // SendKeys interprets the following characters as modifiers or special commands:
-//   +  Shift      ^  Ctrl      %  Alt
-//   ~  Enter      {  Begin special key   }  End special key
-//   [  (reserved) ]  (reserved)
+//   - Shift      ^  Ctrl      %  Alt
+//     ~  Enter      {  Begin special key   }  End special key
+//     [  (reserved) ]  (reserved)
 //
 // To send a literal modifier character it must be wrapped in braces, e.g. {+}.
 func escapeSendKeysString(text string) string {

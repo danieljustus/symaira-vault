@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	onePUXLoginCategory       = "001"
-	defaultMaxZipEntrySize    = 100 * 1024 * 1024 // 100 MB per entry
+	onePUXLoginCategory    = "001"
+	defaultMaxZipEntrySize = 100 * 1024 * 1024 // 100 MB per entry
 )
 
 // maxZipEntrySize is the maximum size allowed for a single ZIP entry.
