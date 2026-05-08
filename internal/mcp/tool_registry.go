@@ -99,6 +99,16 @@ func toolDefinitions() []toolDefinition {
 			Handler: (*Server).handleRunCommand,
 		},
 		{
+			Name:        "sanitize_output",
+			Description: "Scan text for secrets and replace them with masked values. Use before sending output to LLM chat.",
+			InputSchema: objectSchema([]string{"text"}, map[string]schemaProperty{
+				"text":              {Type: "string", Description: "Text to scan for secrets"},
+				"mask_with_op_refs": {Type: "boolean", Description: "Replace vault-known secrets with op:// references"},
+				"mask":              {Type: "string", Description: "Custom mask string (default: ***)"},
+			}),
+			Handler: (*Server).handleSanitizeOutput,
+		},
+		{
 			Name:        "generate_password",
 			Description: "Generate a secure password",
 			InputSchema: objectSchema(nil, map[string]schemaProperty{

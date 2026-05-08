@@ -111,10 +111,12 @@ func (s *Server) handleRunCommand(ctx context.Context, req CallToolRequest) (*Ca
 
 	s.logAudit(ctx, "run_command", auditPath, true)
 
+	sanitizedStdout, sanitizedStderr := s.sanitizeRunOutput(result.Stdout, result.Stderr, resolvedEnv)
+
 	resultJSON, err := json.Marshal(map[string]any{
 		"exit_code":   result.ExitCode,
-		"stdout":      result.Stdout,
-		"stderr":      result.Stderr,
+		"stdout":      sanitizedStdout,
+		"stderr":      sanitizedStderr,
 		"duration_ms": result.Duration.Milliseconds(),
 	})
 	if err != nil {

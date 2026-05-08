@@ -106,8 +106,11 @@ func TestHandleRunCommand_SecretEnvInjection(t *testing.T) {
 		t.Fatalf("parse result: %v", err)
 	}
 	stdout, _ := output["stdout"].(string)
-	if !strings.Contains(stdout, "test-token-42") {
-		t.Errorf("stdout = %q, want to contain 'test-token-42'", stdout)
+	if strings.Contains(stdout, "test-token-42") {
+		t.Errorf("stdout = %q, should not contain plaintext secret 'test-token-42'", stdout)
+	}
+	if !strings.Contains(stdout, "***") {
+		t.Errorf("stdout = %q, want to contain masked value '***'", stdout)
 	}
 }
 
@@ -147,8 +150,11 @@ func TestHandleRunCommand_SecretEnvFullEntry(t *testing.T) {
 		t.Fatalf("parse result: %v", err)
 	}
 	stdout, _ := output["stdout"].(string)
-	if !strings.Contains(stdout, "secret123") || !strings.Contains(stdout, "alice") {
-		t.Errorf("stdout = %q, want to contain entry data", stdout)
+	if strings.Contains(stdout, "secret123") {
+		t.Errorf("stdout = %q, should not contain plaintext secret 'secret123'", stdout)
+	}
+	if !strings.Contains(stdout, "***") {
+		t.Errorf("stdout = %q, want to contain masked value '***'", stdout)
 	}
 }
 

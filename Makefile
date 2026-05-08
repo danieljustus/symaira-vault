@@ -168,7 +168,34 @@ help:
 	@echo "  completions        - Generate shell completions"
 	@echo "  manpages           - Generate manual pages"
 	@echo "  docs-check         - Check documentation for deprecated terms and incorrect syntax"
+	@echo "  editors-build      - Build all editor plugins (VS Code, Cursor, Neovim)"
+	@echo "  editors-test       - Test all editor plugins"
+	@echo "  editors-package    - Package editor plugins (.vsix, .tar.gz)"
+	@echo "  editors-clean      - Clean editor build artifacts"
 	@echo "  help               - Show this help message"
+
+# Editor plugin targets
+editors-build:
+	@echo "Building editor plugins..."
+	@bash scripts/build-editors.sh
+
+editors-test:
+	@echo "Testing editor plugins..."
+	@cd editors/mcp-client && npm test
+	@cd editors/vscode && npm test
+
+editors-package:
+	@echo "Packaging editor plugins..."
+	@bash scripts/package-vscode.sh
+	@bash scripts/package-cursor.sh
+	@bash scripts/package-nvim.sh
+
+editors-clean:
+	@echo "Cleaning editor build artifacts..."
+	@rm -rf editors/mcp-client/out editors/mcp-client/node_modules
+	@rm -rf editors/vscode/out editors/vscode/node_modules
+	@rm -rf editors/cursor/out editors/cursor/node_modules
+	@rm -f editors/**/*.vsix editors/**/*.tar.gz
 
 # Check documentation for deprecated terms and incorrect syntax
 docs-check:
