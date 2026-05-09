@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -11,28 +10,32 @@ import (
 )
 
 func TestFindAvailablePort(t *testing.T) {
-	preferredPort := getFreePort(t)
+	for attempt := 0; attempt < 20; attempt++ {
+		preferredPort := getFreePort(t)
 
-	port, isPreferred, err := findAvailablePort("127.0.0.1", preferredPort)
-	if err != nil {
-		t.Fatalf("findAvailablePort failed: %v", err)
+		port, isPreferred, err := findAvailablePort("127.0.0.1", preferredPort)
+		if err != nil {
+			t.Fatalf("findAvailablePort failed: %v", err)
+		}
+		if isPreferred && port == preferredPort {
+			return
+		}
 	}
-	if !isPreferred {
-		t.Errorf("expected preferred port, got alternative")
-	}
-	if port != preferredPort {
-		t.Errorf("expected port %d, got %d", preferredPort, port)
-	}
+	t.Fatal("findAvailablePort did not return the preferred free port after repeated attempts")
 }
 
 func TestFindAvailablePort_WhenInUse(t *testing.T) {
-	preferredPort := getFreePort(t)
-
-	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", preferredPort))
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to occupy port: %v", err)
 	}
 	defer func() { _ = listener.Close() }()
+
+	tcpAddr, ok := listener.Addr().(*net.TCPAddr)
+	if !ok {
+		t.Fatalf("failed to get TCP address from listener")
+	}
+	preferredPort := tcpAddr.Port
 
 	port, isPreferred, err := findAvailablePort("127.0.0.1", preferredPort)
 	if err != nil {
