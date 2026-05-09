@@ -2126,3 +2126,26 @@ func TestScanLinesEmptyLine(t *testing.T) {
 		t.Fatalf("token = %q, want empty string", string(token))
 	}
 }
+
+func TestSetConfig_OverridesDefaults(t *testing.T) {
+	original := GetConfig()
+	defer SetConfig(&original)
+
+	custom := Config{
+		MaxFileSize: 10 * 1024 * 1024,
+		MaxBackups:  2,
+		MaxAgeDays:  7,
+	}
+	SetConfig(&custom)
+
+	got := GetConfig()
+	if got.MaxFileSize != custom.MaxFileSize {
+		t.Errorf("MaxFileSize = %d, want %d", got.MaxFileSize, custom.MaxFileSize)
+	}
+	if got.MaxBackups != custom.MaxBackups {
+		t.Errorf("MaxBackups = %d, want %d", got.MaxBackups, custom.MaxBackups)
+	}
+	if got.MaxAgeDays != custom.MaxAgeDays {
+		t.Errorf("MaxAgeDays = %d, want %d", got.MaxAgeDays, custom.MaxAgeDays)
+	}
+}

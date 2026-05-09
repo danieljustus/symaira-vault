@@ -1008,3 +1008,43 @@ func TestResolvePassphrase_EncryptFailsDuringMigration(t *testing.T) {
 		t.Errorf("LoadPassphrase = %q, want %q", got, plain)
 	}
 }
+
+func TestGetCacheStatus_Default(t *testing.T) {
+	status := GetCacheStatus()
+	if status.Backend == "" {
+		t.Error("expected non-empty backend")
+	}
+}
+
+func TestSaveAndLoadIdentity(t *testing.T) {
+	fake := newFakeKeyring()
+	stubKeyring(t, fake)
+
+	vaultDir := "/tmp/vault-identity-test"
+	setupTestWrapKey(t, fake, vaultDir)
+
+	identity := "AGE-SECRET-KEY-1FAKE0000000000000000000000000000000000000000000000000000"
+	ttl := time.Hour
+
+	if err := SaveIdentity(vaultDir, identity, ttl); err != nil {
+		t.Fatalf("SaveIdentity error: %v", err)
+	}
+
+	got, err := LoadIdentity(vaultDir)
+	if err != nil {
+		t.Fatalf("LoadIdentity error: %v", err)
+	}
+	if got != identity {
+		t.Errorf("LoadIdentity = %q, want %q", got, identity)
+	}
+}
+
+func TestLoadIdentity_NotFound(t *testing.T) {
+	fake := newFakeKeyring()
+	stubKeyring(t, fake)
+
+	_, err := LoadIdentity("/tmp/vault-no-identity")
+	if err == nil {
+		t.Error("expected error when identity not cached")
+	}
+}

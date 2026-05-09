@@ -325,3 +325,83 @@ func TestAddEntryToVault(t *testing.T) {
 func TestExecute(t *testing.T) {
 	Execute()
 }
+
+func TestTruncatePubkey_Long(t *testing.T) {
+	pubkey := "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	got := truncatePubkey(pubkey)
+	want := "ABCDEFGHIJKLMNOP..."
+	if got != want {
+		t.Errorf("truncatePubkey(%q) = %q, want %q", pubkey, got, want)
+	}
+}
+
+func TestTruncatePubkey_Short(t *testing.T) {
+	pubkey := "ABCDE"
+	got := truncatePubkey(pubkey)
+	if got != pubkey {
+		t.Errorf("truncatePubkey(%q) = %q, want %q", pubkey, got, pubkey)
+	}
+}
+
+func TestParseSSHTarget_WithUserAndPath(t *testing.T) {
+	user, host, path, err := parseSSHTarget("alice@example.com:~/repos/vault", "")
+	if err != nil {
+		t.Fatalf("parseSSHTarget error: %v", err)
+	}
+	if user != "alice" {
+		t.Errorf("user = %q, want %q", user, "alice")
+	}
+	if host != "example.com" {
+		t.Errorf("host = %q, want %q", host, "example.com")
+	}
+	if path != "~/repos/vault" {
+		t.Errorf("path = %q, want %q", path, "~/repos/vault")
+	}
+}
+
+func TestParseSSHTarget_HostOnly(t *testing.T) {
+	_, host, path, err := parseSSHTarget("example.com", "")
+	if err != nil {
+		t.Fatalf("parseSSHTarget error: %v", err)
+	}
+	if host != "example.com" {
+		t.Errorf("host = %q, want %q", host, "example.com")
+	}
+	if path != "~/openpass-remote.git" {
+		t.Errorf("path = %q, want %q", path, "~/openpass-remote.git")
+	}
+}
+
+func TestParseSSHTarget_Empty(t *testing.T) {
+	user, host, path, err := parseSSHTarget("", "")
+	_ = user
+	_ = host
+	_ = path
+	if err == nil {
+		t.Error("expected error for empty target")
+	}
+}
+
+func TestBuildSSHURL_WithUser(t *testing.T) {
+	url := buildSSHURL("alice", "example.com", "~/vault.git")
+	want := "ssh://alice@example.com/~vault.git"
+	if url != want {
+		t.Errorf("buildSSHURL = %q, want %q", url, want)
+	}
+}
+
+func TestBuildSSHURL_NoUser(t *testing.T) {
+	url := buildSSHURL("", "example.com", "~/vault.git")
+	want := "ssh://example.com/~vault.git"
+	if url != want {
+		t.Errorf("buildSSHURL = %q, want %q", url, want)
+	}
+}
+
+func TestGetAutoClearDuration_Default(t *testing.T) {
+	// No vault configured — should return default of 30.
+	dur := getAutoClearDuration()
+	if dur <= 0 {
+		t.Errorf("getAutoClearDuration() = %d, want positive value", dur)
+	}
+}

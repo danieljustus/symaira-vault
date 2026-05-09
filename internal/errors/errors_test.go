@@ -147,3 +147,45 @@ func TestWriteFailed(t *testing.T) {
 		t.Error("expected cause to be inner error")
 	}
 }
+
+func TestIsNotFound_True(t *testing.T) {
+	err := NotFound("entry %q not found", "github")
+	if !IsNotFound(err) {
+		t.Error("expected IsNotFound=true for NotFound error")
+	}
+}
+
+func TestIsNotFound_False(t *testing.T) {
+	err := fmt.Errorf("some other error")
+	if IsNotFound(err) {
+		t.Error("expected IsNotFound=false for non-NotFound error")
+	}
+}
+
+func TestIsNotFound_WriteError(t *testing.T) {
+	err := WriteFailed(nil, "write error occurred")
+	if IsNotFound(err) {
+		t.Error("expected IsNotFound=false for WriteFailed error")
+	}
+}
+
+func TestIsWriteError_True(t *testing.T) {
+	err := WriteFailed(nil, "cannot write")
+	if !IsWriteError(err) {
+		t.Error("expected IsWriteError=true for WriteFailed error")
+	}
+}
+
+func TestIsWriteError_False(t *testing.T) {
+	err := fmt.Errorf("not a write error")
+	if IsWriteError(err) {
+		t.Error("expected IsWriteError=false for non-write error")
+	}
+}
+
+func TestIsWriteError_NotFoundError(t *testing.T) {
+	err := NotFound("entry %q not found", "github")
+	if IsWriteError(err) {
+		t.Error("expected IsWriteError=false for NotFound error")
+	}
+}

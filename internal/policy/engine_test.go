@@ -1527,3 +1527,13 @@ func TestEngineEvaluateAuditLogAllowNoLog(t *testing.T) {
 		t.Error("AuditLogFunc should not be called for allow actions")
 	}
 }
+
+func TestDefaultPolicyDir(t *testing.T) {
+	dir := DefaultPolicyDir()
+	if dir == "" {
+		t.Skip("no home directory available")
+	}
+	if !filepath.IsAbs(dir) {
+		t.Errorf("DefaultPolicyDir() = %q, want absolute path", dir)
+	}
+}

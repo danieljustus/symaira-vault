@@ -373,6 +373,131 @@ func TestBackupConfig(t *testing.T) {
 	}
 }
 
+func TestIsSupportedAgent(t *testing.T) {
+	cases := []struct {
+		input string
+		want  bool
+	}{
+		{"openclaw", true},
+		{"claude-code", true},
+		{"hermes", true},
+		{"unknown", false},
+		{"", false},
+		{"CLAUDE-CODE", false},
+	}
+	for _, tc := range cases {
+		got := IsSupportedAgent(tc.input)
+		if got != tc.want {
+			t.Errorf("IsSupportedAgent(%q) = %v, want %v", tc.input, got, tc.want)
+		}
+	}
+}
+
+func TestSupportedAgents(t *testing.T) {
+	agents := SupportedAgents()
+	if len(agents) == 0 {
+		t.Fatal("expected at least one supported agent")
+	}
+	seen := map[AgentType]bool{}
+	for _, a := range agents {
+		if seen[a] {
+			t.Errorf("duplicate agent type: %s", a)
+		}
+		seen[a] = true
+	}
+	if !seen[AgentOpenClaw] {
+		t.Error("expected AgentOpenClaw in SupportedAgents")
+	}
+	if !seen[AgentClaudeCode] {
+		t.Error("expected AgentClaudeCode in SupportedAgents")
+	}
+	if !seen[AgentHermes] {
+		t.Error("expected AgentHermes in SupportedAgents")
+	}
+}
+
+func TestValuesEqual(t *testing.T) {
+	cases := []struct {
+		a, b any
+		want bool
+	}{
+		{"hello", "hello", true},
+		{"hello", "world", false},
+		{float64(1), float64(1), true},
+		{float64(1), float64(2), false},
+		{float64(42), int(42), true},
+		{float64(42), int64(42), true},
+		{int(5), float64(5), true},
+		{int64(5), float64(5), true},
+		{true, true, true},
+		{true, false, false},
+		{nil, nil, true},
+	}
+	for _, tc := range cases {
+		got := valuesEqual(tc.a, tc.b)
+		if got != tc.want {
+			t.Errorf("valuesEqual(%v, %v) = %v, want %v", tc.a, tc.b, got, tc.want)
+		}
+	}
+}
+
+func TestNumEqual(t *testing.T) {
+	cases := []struct {
+		a    float64
+		b    any
+		want bool
+	}{
+		{1.0, float64(1.0), true},
+		{1.0, float64(2.0), false},
+		{1.0, int(1), true},
+		{1.0, int(2), false},
+		{1.0, int64(1), true},
+		{1.0, int64(2), false},
+		{1.0, "1", false},
+	}
+	for _, tc := range cases {
+		got := numEqual(tc.a, tc.b)
+		if got != tc.want {
+			t.Errorf("numEqual(%v, %v) = %v, want %v", tc.a, tc.b, got, tc.want)
+		}
+	}
+}
+
+func TestDetectAllAgents(t *testing.T) {
+	tmp := t.TempDir()
+	oldHome := osUserHomeDir
+	osUserHomeDir = func() (string, error) { return tmp, nil }
+	defer func() { osUserHomeDir = oldHome }()
+
+	results := DetectAllAgents()
+	if results == nil {
+		t.Fatal("expected non-nil map")
+	}
+	// All supported agents should have an entry (even if not detected).
+	for _, at := range SupportedAgents() {
+		if _, ok := results[at]; !ok {
+			t.Errorf("missing result for agent %s", at)
+		}
+	}
+}
+
+func TestResolveConfigPath(t *testing.T) {
+	path, err := ResolveConfigPath(AgentOpenClaw)
+	if err != nil {
+		t.Fatalf("ResolveConfigPath error: %v", err)
+	}
+	if path == "" {
+		t.Error("expected non-empty path")
+	}
+}
+
+func TestResolveConfigPath_InvalidAgent(t *testing.T) {
+	_, err := ResolveConfigPath("nonexistent-agent")
+	if err == nil {
+		t.Error("expected error for unknown agent")
+	}
+}
+
 func TestPreviewConfig(t *testing.T) {
 	config := map[string]any{
 		"mcpServers": map[string]any{

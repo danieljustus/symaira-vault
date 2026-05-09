@@ -166,3 +166,58 @@ func TestSetBiometricAuthenticator_ReplacesPrevious(t *testing.T) {
 		t.Error("SetBiometricAuthenticator should replace previous authenticator")
 	}
 }
+
+func TestSetBiometricPassphraseStore(t *testing.T) {
+	mock := &mockBiometricPassphraseStore{available: true}
+	SetBiometricPassphraseStore(mock)
+	defer func() { biometricPassphraseStore = nil }()
+
+	if !BiometricAvailable() {
+		t.Error("BiometricAvailable should return true after SetBiometricPassphraseStore with available=true")
+	}
+}
+
+func TestBiometricAvailable_DefaultFalse(t *testing.T) {
+	biometricPassphraseStore = nil
+	if BiometricAvailable() {
+		t.Error("BiometricAvailable should return false when no store is set")
+	}
+}
+
+func TestSaveBiometricPassphrase(t *testing.T) {
+	mock := &mockBiometricPassphraseStore{available: true}
+	SetBiometricPassphraseStore(mock)
+	defer func() { biometricPassphraseStore = nil }()
+
+	if err := SaveBiometricPassphrase(context.Background(), "/vault", []byte("pass")); err != nil {
+		t.Errorf("SaveBiometricPassphrase error: %v", err)
+	}
+}
+
+func TestClearBiometricPassphrase(t *testing.T) {
+	mock := &mockBiometricPassphraseStore{available: true}
+	SetBiometricPassphraseStore(mock)
+	defer func() { biometricPassphraseStore = nil }()
+
+	if err := ClearBiometricPassphrase("/vault"); err != nil {
+		t.Errorf("ClearBiometricPassphrase error: %v", err)
+	}
+}
+
+func TestNoopBiometricPassphraseStore(t *testing.T) {
+	biometricPassphraseStore = nil
+	noop := noopBiometricPassphraseStore{}
+
+	if noop.IsAvailable() {
+		t.Error("noop store should not be available")
+	}
+	if err := noop.Save(context.Background(), "/vault", []byte("x")); !errors.Is(err, ErrBiometricNotAvailable) {
+		t.Errorf("noop Save expected ErrBiometricNotAvailable, got %v", err)
+	}
+	if _, err := noop.Load(context.Background(), "/vault"); !errors.Is(err, ErrBiometricNotAvailable) {
+		t.Errorf("noop Load expected ErrBiometricNotAvailable, got %v", err)
+	}
+	if err := noop.Delete("/vault"); err != nil {
+		t.Errorf("noop Delete expected nil, got %v", err)
+	}
+}

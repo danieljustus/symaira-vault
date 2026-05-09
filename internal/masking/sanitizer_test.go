@@ -194,3 +194,38 @@ func TestDeduplicateMatches(t *testing.T) {
 		t.Errorf("second match = %d-%d, want 20-30", result[1].Start, result[1].End)
 	}
 }
+
+func TestPatternRegistry_AddPattern(t *testing.T) {
+	r := NewPatternRegistry()
+	before := len(r.Patterns())
+
+	p := DefaultPatterns()[0]
+	r.AddPattern(p)
+
+	after := len(r.Patterns())
+	if after != before+1 {
+		t.Errorf("expected %d patterns after AddPattern, got %d", before+1, after)
+	}
+}
+
+func TestPatternRegistry_Patterns_ReturnsCopy(t *testing.T) {
+	r := NewPatternRegistry()
+	p1 := r.Patterns()
+	p2 := r.Patterns()
+	if len(p1) != len(p2) {
+		t.Errorf("Patterns() returned different lengths: %d vs %d", len(p1), len(p2))
+	}
+}
+
+func TestNewSanitizerWithRegistry(t *testing.T) {
+	r := NewPatternRegistry()
+	s := NewSanitizerWithRegistry(r)
+	if s == nil {
+		t.Fatal("NewSanitizerWithRegistry returned nil")
+	}
+	// Verify it uses the registry by sanitizing a known pattern.
+	result := s.Sanitize("AKIAIOSFODNN7EXAMPLE", MaskOptions{})
+	if result == "AKIAIOSFODNN7EXAMPLE" {
+		t.Error("expected sanitizer to mask AWS key")
+	}
+}

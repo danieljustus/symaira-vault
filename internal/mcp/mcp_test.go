@@ -172,3 +172,39 @@ func TestNewErrorsWhenNoDefaultProfile(t *testing.T) {
 		t.Fatal("New() error = nil, want error for unknown agent with no default profile")
 	}
 }
+
+func TestToolActionType(t *testing.T) {
+	cases := []struct {
+		tool string
+		want string
+	}{
+		{"set_entry_field", "set"},
+		{"secure_input", "set"},
+		{"delete_entry", "delete"},
+		{"openpass_delete", "delete"},
+		{"run_command", "run"},
+		{"execute_with_secret", "run"},
+		{"list_entries", "list"},
+		{"get_entry", "get"},
+		{"get_entry_value", "get"},
+		{"get_entry_metadata", "get"},
+		{"find_entries", "find"},
+		{"generate_password", "generate"},
+		{"generate_totp", "generate"},
+		{"generate_dynamic_secret", "generate"},
+		{"generate_template", "generate"},
+		{"copy_to_clipboard", "read"},
+		{"autotype", "read"},
+		{"request_share", "share_request"},
+		{"approve_share", "share_approve"},
+		{"revoke_share", "share_revoke"},
+		{"list_shares", "share_list"},
+		{"unknown_tool", "read"},
+	}
+	for _, tc := range cases {
+		got := toolActionType(tc.tool)
+		if got != tc.want {
+			t.Errorf("toolActionType(%q) = %q, want %q", tc.tool, got, tc.want)
+		}
+	}
+}

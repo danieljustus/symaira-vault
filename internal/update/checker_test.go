@@ -48,6 +48,7 @@ func TestCheckerReportsAvailableUpdate(t *testing.T) {
 
 	checker := NewChecker(server.Client())
 	checker.LatestReleaseURL = server.URL
+	checker.Cache = nil
 
 	result, err := checker.Check(context.Background(), "1.0.0")
 	if err != nil {
@@ -76,6 +77,7 @@ func TestCheckerReportsUpToDate(t *testing.T) {
 
 	checker := NewChecker(server.Client())
 	checker.LatestReleaseURL = server.URL
+	checker.Cache = nil
 
 	result, err := checker.Check(context.Background(), "v1.10.0")
 	if err != nil {

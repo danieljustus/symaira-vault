@@ -1742,3 +1742,207 @@ func TestProfileForName_NilProfiles(t *testing.T) {
 		t.Errorf("ProfileForName with nil Profiles = %v, want nil", got)
 	}
 }
+
+func TestSetAuthMethod_Passphrase(t *testing.T) {
+	t.Parallel()
+	cfg := Default()
+	if err := cfg.SetAuthMethod("passphrase"); err != nil {
+		t.Fatalf("SetAuthMethod(passphrase): %v", err)
+	}
+	if cfg.AuthMethod != AuthMethodPassphrase {
+		t.Errorf("AuthMethod = %q, want %q", cfg.AuthMethod, AuthMethodPassphrase)
+	}
+	if cfg.UseTouchID {
+		t.Error("expected UseTouchID=false for passphrase method")
+	}
+}
+
+func TestSetAuthMethod_TouchID(t *testing.T) {
+	t.Parallel()
+	cfg := Default()
+	if err := cfg.SetAuthMethod("touch-id"); err != nil {
+		t.Fatalf("SetAuthMethod(touch-id): %v", err)
+	}
+	if cfg.AuthMethod != AuthMethodTouchID {
+		t.Errorf("AuthMethod = %q, want %q", cfg.AuthMethod, AuthMethodTouchID)
+	}
+	if !cfg.UseTouchID {
+		t.Error("expected UseTouchID=true for touch-id method")
+	}
+}
+
+func TestSetAuthMethod_SetsVaultSection(t *testing.T) {
+	t.Parallel()
+	cfg := Default()
+	cfg.Vault = &VaultConfig{}
+	if err := cfg.SetAuthMethod("passphrase"); err != nil {
+		t.Fatalf("SetAuthMethod: %v", err)
+	}
+	if cfg.Vault.AuthMethod != AuthMethodPassphrase {
+		t.Errorf("Vault.AuthMethod = %q, want %q", cfg.Vault.AuthMethod, AuthMethodPassphrase)
+	}
+}
+
+func TestSetAuthMethod_InvalidMethod(t *testing.T) {
+	t.Parallel()
+	cfg := Default()
+	if err := cfg.SetAuthMethod("invalid-method"); err == nil {
+		t.Error("expected error for invalid auth method, got nil")
+	}
+}
+
+func TestIsLegacyMode_NilConfig(t *testing.T) {
+	t.Parallel()
+	var cfg *Config
+	if !cfg.IsLegacyMode() {
+		t.Error("expected IsLegacyMode=true for nil config")
+	}
+}
+
+func TestIsLegacyMode_NilVault(t *testing.T) {
+	t.Parallel()
+	cfg := Default()
+	cfg.Vault = nil
+	if !cfg.IsLegacyMode() {
+		t.Error("expected IsLegacyMode=true when vault config is nil")
+	}
+}
+
+func TestIsLegacyMode_ExplicitTrue(t *testing.T) {
+	t.Parallel()
+	cfg := Default()
+	legacy := true
+	cfg.Vault = &VaultConfig{LegacyMode: &legacy}
+	if !cfg.IsLegacyMode() {
+		t.Error("expected IsLegacyMode=true when explicitly set")
+	}
+}
+
+func TestIsLegacyMode_ExplicitFalse(t *testing.T) {
+	t.Parallel()
+	cfg := Default()
+	legacy := false
+	cfg.Vault = &VaultConfig{LegacyMode: &legacy}
+	if cfg.IsLegacyMode() {
+		t.Error("expected IsLegacyMode=false when explicitly disabled")
+	}
+}
+
+func TestDefaultAuditConfig(t *testing.T) {
+	t.Parallel()
+	ac := defaultAuditConfig()
+	if ac.MaxFileSize <= 0 {
+		t.Error("expected positive MaxFileSize")
+	}
+	if ac.MaxBackups <= 0 {
+		t.Error("expected positive MaxBackups")
+	}
+	if ac.MaxAgeDays <= 0 {
+		t.Error("expected positive MaxAgeDays")
+	}
+}
+
+func TestDefaultLoggingConfig(t *testing.T) {
+	t.Parallel()
+	lc := defaultLoggingConfig()
+	if lc.Level == "" {
+		t.Error("expected non-empty Level")
+	}
+	if lc.Format == "" {
+		t.Error("expected non-empty Format")
+	}
+}
+
+func TestMergeFileAuditConfig_Nil(t *testing.T) {
+	t.Parallel()
+	defaults := defaultAuditConfig()
+	result := MergeFileAuditConfig(nil, defaults)
+	if result.MaxFileSize != defaults.MaxFileSize {
+		t.Errorf("expected defaults preserved, got %d", result.MaxFileSize)
+	}
+}
+
+func TestMergeFileAuditConfig_Override(t *testing.T) {
+	t.Parallel()
+	maxSize := int64(50)
+	maxBackups := 3
+	maxAge := 7
+	fileCfg := &fileAuditConfig{
+		MaxFileSize: &maxSize,
+		MaxBackups:  &maxBackups,
+		MaxAgeDays:  &maxAge,
+	}
+	defaults := defaultAuditConfig()
+	result := MergeFileAuditConfig(fileCfg, defaults)
+	if result.MaxFileSize != 50*1024*1024 {
+		t.Errorf("MaxFileSize = %d, want %d", result.MaxFileSize, 50*1024*1024)
+	}
+	if result.MaxBackups != 3 {
+		t.Errorf("MaxBackups = %d, want 3", result.MaxBackups)
+	}
+	if result.MaxAgeDays != 7 {
+		t.Errorf("MaxAgeDays = %d, want 7", result.MaxAgeDays)
+	}
+}
+
+func TestMergeFileLoggingConfig_Nil(t *testing.T) {
+	t.Parallel()
+	defaults := defaultLoggingConfig()
+	result := MergeFileLoggingConfig(nil, defaults)
+	if result.Level != defaults.Level {
+		t.Errorf("expected defaults preserved, got %q", result.Level)
+	}
+}
+
+func TestMergeFileLoggingConfig_Override(t *testing.T) {
+	t.Parallel()
+	level := "debug"
+	format := "json"
+	fileCfg := &fileLoggingConfig{
+		Level:  &level,
+		Format: &format,
+	}
+	defaults := defaultLoggingConfig()
+	result := MergeFileLoggingConfig(fileCfg, defaults)
+	if result.Level != "debug" {
+		t.Errorf("Level = %q, want debug", result.Level)
+	}
+	if result.Format != "json" {
+		t.Errorf("Format = %q, want json", result.Format)
+	}
+}
+
+func TestEffectiveAuthMethod_Nil(t *testing.T) {
+	var c *Config
+	if got := c.EffectiveAuthMethod(); got != AuthMethodPassphrase {
+		t.Errorf("nil config EffectiveAuthMethod = %q, want %q", got, AuthMethodPassphrase)
+	}
+}
+
+func TestEffectiveAuthMethod_AuthMethod(t *testing.T) {
+	c := &Config{AuthMethod: "passphrase"}
+	if got := c.EffectiveAuthMethod(); got != AuthMethodPassphrase {
+		t.Errorf("EffectiveAuthMethod = %q, want %q", got, AuthMethodPassphrase)
+	}
+}
+
+func TestEffectiveAuthMethod_VaultAuthMethod(t *testing.T) {
+	c := &Config{Vault: &VaultConfig{AuthMethod: "passphrase"}}
+	if got := c.EffectiveAuthMethod(); got != AuthMethodPassphrase {
+		t.Errorf("EffectiveAuthMethod = %q, want %q", got, AuthMethodPassphrase)
+	}
+}
+
+func TestEffectiveAuthMethod_VaultUseTouchID(t *testing.T) {
+	c := &Config{Vault: &VaultConfig{UseTouchID: true}}
+	if got := c.EffectiveAuthMethod(); got != AuthMethodTouchID {
+		t.Errorf("EffectiveAuthMethod = %q, want %q", got, AuthMethodTouchID)
+	}
+}
+
+func TestEffectiveAuthMethod_Default(t *testing.T) {
+	c := &Config{}
+	if got := c.EffectiveAuthMethod(); got != AuthMethodPassphrase {
+		t.Errorf("EffectiveAuthMethod = %q, want %q", got, AuthMethodPassphrase)
+	}
+}

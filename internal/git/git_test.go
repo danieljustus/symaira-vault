@@ -1660,3 +1660,162 @@ func TestLogWithForEachError(t *testing.T) {
 		t.Errorf("expected 1 commit, got %d", len(commits))
 	}
 }
+
+func TestLastSyncTime_NoFile(t *testing.T) {
+	dir := t.TempDir()
+	if err := Init(dir); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	got, err := LastSyncTime(dir)
+	if err != nil {
+		t.Fatalf("LastSyncTime error: %v", err)
+	}
+	if !got.IsZero() {
+		t.Errorf("expected zero time, got %v", got)
+	}
+}
+
+func TestSetLastSyncTime_And_LastSyncTime(t *testing.T) {
+	dir := t.TempDir()
+	if err := Init(dir); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	if err := SetLastSyncTime(dir); err != nil {
+		t.Fatalf("SetLastSyncTime error: %v", err)
+	}
+	got, err := LastSyncTime(dir)
+	if err != nil {
+		t.Fatalf("LastSyncTime error: %v", err)
+	}
+	if got.IsZero() {
+		t.Error("expected non-zero time after SetLastSyncTime")
+	}
+}
+
+func TestShouldAutoPull_NoMarker(t *testing.T) {
+	dir := t.TempDir()
+	if err := Init(dir); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	// No marker — should return true.
+	if !ShouldAutoPull(dir, 24*60*60*1000000000) {
+		t.Error("expected ShouldAutoPull=true when no marker")
+	}
+}
+
+func TestHasRemote_EmptyDir(t *testing.T) {
+	ok, err := HasRemote("", "origin")
+	if err != nil {
+		t.Fatalf("HasRemote error: %v", err)
+	}
+	if ok {
+		t.Error("expected false for empty vault dir")
+	}
+}
+
+func TestHasRemote_NoGitRepo(t *testing.T) {
+	dir := t.TempDir()
+	ok, err := HasRemote(dir, "origin")
+	if err != nil {
+		t.Fatalf("HasRemote error: %v", err)
+	}
+	if ok {
+		t.Error("expected false for non-git directory")
+	}
+}
+
+func TestGetRemoteURL_EmptyDir(t *testing.T) {
+	url, err := GetRemoteURL("", "origin")
+	if err != nil {
+		t.Fatalf("GetRemoteURL error: %v", err)
+	}
+	if url != "" {
+		t.Errorf("expected empty URL, got %q", url)
+	}
+}
+
+func TestAddRemote_EmptyDir(t *testing.T) {
+	err := AddRemote("", "origin", "https://example.com/repo.git")
+	if err == nil {
+		t.Error("expected error for empty vault dir")
+	}
+}
+
+func TestHasRemote_WithRemote(t *testing.T) {
+	dir := t.TempDir()
+	if err := Init(dir); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	// HasRemote should return false for non-existent remote.
+	ok, err := HasRemote(dir, "origin")
+	if err != nil {
+		t.Fatalf("HasRemote error: %v", err)
+	}
+	if ok {
+		t.Error("expected false for missing remote")
+	}
+}
+
+func TestGetRemoteURL_NoGitRepo(t *testing.T) {
+	dir := t.TempDir()
+	url, err := GetRemoteURL(dir, "origin")
+	if err != nil {
+		t.Fatalf("GetRemoteURL error: %v", err)
+	}
+	if url != "" {
+		t.Errorf("expected empty URL for non-git dir, got %q", url)
+	}
+}
+
+func TestAddRemote_NoGitRepo(t *testing.T) {
+	dir := t.TempDir()
+	err := AddRemote(dir, "origin", "https://example.com/repo.git")
+	if err == nil {
+		t.Error("expected error for non-git dir")
+	}
+}
+
+func TestShouldAutoPull_RecentSync(t *testing.T) {
+	dir := t.TempDir()
+	if err := Init(dir); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	if err := SetLastSyncTime(dir); err != nil {
+		t.Fatalf("SetLastSyncTime: %v", err)
+	}
+	// Very long interval — should not pull.
+	if ShouldAutoPull(dir, 24*60*60*1000000000) {
+		t.Error("expected ShouldAutoPull=false for recent sync")
+	}
+}
+
+func TestGetRemoteURL_WithRemote(t *testing.T) {
+	dir := t.TempDir()
+	if err := Init(dir); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	if err := AddRemote(dir, "origin", "https://example.com/repo.git"); err != nil {
+		t.Fatalf("AddRemote: %v", err)
+	}
+	url, err := GetRemoteURL(dir, "origin")
+	if err != nil {
+		t.Fatalf("GetRemoteURL error: %v", err)
+	}
+	if url != "https://example.com/repo.git" {
+		t.Errorf("GetRemoteURL = %q, want https://example.com/repo.git", url)
+	}
+}
+
+func TestGetRemoteURL_MissingRemote(t *testing.T) {
+	dir := t.TempDir()
+	if err := Init(dir); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	url, err := GetRemoteURL(dir, "origin")
+	if err != nil {
+		t.Fatalf("GetRemoteURL error: %v", err)
+	}
+	if url != "" {
+		t.Errorf("expected empty URL for missing remote, got %q", url)
+	}
+}

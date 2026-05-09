@@ -303,3 +303,61 @@ func TestValidateTOTPSecret_ValidStrong(t *testing.T) {
 		t.Errorf("ValidateTOTPSecret(%q) = %v; want nil", secret, err)
 	}
 }
+
+func TestValidateTOTPData_NoTOTPKey(t *testing.T) {
+	data := map[string]any{"password": "secret"}
+	if err := ValidateTOTPData(data); err != nil {
+		t.Errorf("ValidateTOTPData without totp key = %v; want nil", err)
+	}
+}
+
+func TestValidateTOTPData_ValidTOTP(t *testing.T) {
+	data := map[string]any{
+		"totp": map[string]any{
+			"secret":    "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+			"algorithm": "SHA1",
+			"digits":    float64(6),
+			"period":    float64(30),
+		},
+	}
+	if err := ValidateTOTPData(data); err != nil {
+		t.Errorf("ValidateTOTPData valid = %v; want nil", err)
+	}
+}
+
+func TestValidateTOTPData_InvalidSecret(t *testing.T) {
+	data := map[string]any{
+		"totp": map[string]any{
+			"secret": "!!!invalid!!!",
+		},
+	}
+	if err := ValidateTOTPData(data); err == nil {
+		t.Error("expected error for invalid TOTP secret, got nil")
+	}
+}
+
+func TestValidateTOTPData_InvalidParams(t *testing.T) {
+	data := map[string]any{
+		"totp": map[string]any{
+			"digits": float64(99),
+		},
+	}
+	if err := ValidateTOTPData(data); err == nil {
+		t.Error("expected error for invalid TOTP digits, got nil")
+	}
+}
+
+func TestValidateTOTPData_EmptySecret_ValidParams(t *testing.T) {
+	data := map[string]any{
+		"totp": map[string]any{
+			"secret":    "",
+			"algorithm": "SHA1",
+			"digits":    float64(6),
+			"period":    float64(30),
+		},
+	}
+	// Empty secret skips secret validation but still validates params.
+	if err := ValidateTOTPData(data); err != nil {
+		t.Errorf("ValidateTOTPData with empty secret = %v; want nil", err)
+	}
+}
