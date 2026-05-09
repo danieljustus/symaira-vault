@@ -21,6 +21,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	_ = os.Unsetenv("OPENPASS_MCP_TOKEN")
 	restoreScryptWorkFactor := vaultcrypto.SetScryptWorkFactorForTests(12)
 	code := m.Run()
 	restoreScryptWorkFactor()
