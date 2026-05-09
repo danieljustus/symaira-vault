@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -126,7 +127,7 @@ func runHTTPServerAsyncWithFactory(ctx context.Context, t *testing.T, bind strin
 			t.Errorf("runHTTPServer error: %v", err)
 		}
 	}()
-	addr := fmt.Sprintf("%s:%d", bind, port)
+	addr := net.JoinHostPort(bind, strconv.Itoa(port))
 	client := newTestHTTPClient()
 	for i := 0; i < 50; i++ {
 		conn, err := net.DialTimeout("tcp", addr, 100*time.Millisecond)
