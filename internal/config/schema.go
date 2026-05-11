@@ -55,6 +55,9 @@ type MCPConfig struct {
 	RateLimit           int           `yaml:"rate_limit,omitempty"` // requests per minute, 0 = disabled
 	TrustedProxyIPs     []string      `yaml:"trusted_proxy_ips,omitempty"`
 	MetricsAuthRequired bool          `yaml:"metrics_auth_required,omitempty"`
+	TLSCertFile         string        `yaml:"tls_cert_file,omitempty"`
+	TLSKeyFile          string        `yaml:"tls_key_file,omitempty"`
+	AllowInsecureBind   bool          `yaml:"allow_insecure_bind,omitempty"`
 }
 
 // UpdateConfig holds update check-related configuration.
@@ -196,6 +199,9 @@ type fileMCPConfig struct {
 	RateLimit           *int           `yaml:"rate_limit,omitempty"`
 	TrustedProxyIPs     []string       `yaml:"trusted_proxy_ips,omitempty"`
 	MetricsAuthRequired *bool          `yaml:"metrics_auth_required,omitempty"`
+	TLSCertFile         *string        `yaml:"tls_cert_file,omitempty"`
+	TLSKeyFile          *string        `yaml:"tls_key_file,omitempty"`
+	AllowInsecureBind   *bool          `yaml:"allow_insecure_bind,omitempty"`
 }
 
 // fileUpdateConfig is the file-based update configuration with pointer fields
@@ -323,6 +329,15 @@ func MergeFileMCPConfig(fileCfg *fileMCPConfig, defaults MCPConfig) MCPConfig {
 	}
 	if fileCfg.MetricsAuthRequired != nil {
 		result.MetricsAuthRequired = *fileCfg.MetricsAuthRequired
+	}
+	if fileCfg.TLSCertFile != nil {
+		result.TLSCertFile = *fileCfg.TLSCertFile
+	}
+	if fileCfg.TLSKeyFile != nil {
+		result.TLSKeyFile = *fileCfg.TLSKeyFile
+	}
+	if fileCfg.AllowInsecureBind != nil {
+		result.AllowInsecureBind = *fileCfg.AllowInsecureBind
 	}
 	return result
 }

@@ -632,6 +632,13 @@ func TestRunHTTPServer_CustomConfig(t *testing.T) {
 
 func TestRunHTTPServer_NonLoopbackMetricsRequiresAuth(t *testing.T) {
 	v := newTestVault(t)
+	// Non-loopback bind without TLS now requires explicit opt-in.
+	if v.Config.MCP == nil {
+		v.Config.MCP = &config.MCPConfig{MetricsAuthRequired: true}
+	} else {
+		v.Config.MCP.MetricsAuthRequired = true
+	}
+	v.Config.MCP.AllowInsecureBind = true
 	port := reserveFreePortForBind(t, "0.0.0.0")
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -662,6 +669,22 @@ func TestRunHTTPServer_NonLoopbackMetricsRequiresAuth(t *testing.T) {
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("metrics with auth status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+}
+
+func TestRunHTTPServer_NonLoopbackWithoutTLSRefused(t *testing.T) {
+	v := newTestVault(t)
+	// Default config: AllowInsecureBind = false, no TLS cert. Non-loopback
+	// bind must be refused outright so bearer tokens cannot leak in cleartext.
+	listener, err := net.Listen("tcp", "0.0.0.0:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer listener.Close()
+
+	err = RunHTTPServerOnListener(context.Background(), listener, v, v.Dir, "test", mcp.New)
+	if err == nil || !strings.Contains(err.Error(), "refusing to serve MCP without TLS") {
+		t.Fatalf("expected non-loopback-without-TLS refusal, got %v", err)
 	}
 }
 

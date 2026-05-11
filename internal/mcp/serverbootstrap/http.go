@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -254,6 +255,26 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 		MaxHeaderBytes:    1 << 20,
 	}
 
+	tlsCert := ""
+	tlsKey := ""
+	allowInsecure := false
+	if v != nil && v.Config != nil && v.Config.MCP != nil {
+		tlsCert = strings.TrimSpace(v.Config.MCP.TLSCertFile)
+		tlsKey = strings.TrimSpace(v.Config.MCP.TLSKeyFile)
+		allowInsecure = v.Config.MCP.AllowInsecureBind
+	}
+	tlsEnabled := tlsCert != "" && tlsKey != ""
+
+	if !mcp.IsLoopbackBind(bind) && !tlsEnabled && !allowInsecure {
+		return fmt.Errorf("refusing to serve MCP without TLS on non-loopback bind %q: "+
+			"set MCP.tls_cert_file + MCP.tls_key_file, or explicitly opt-in with MCP.allow_insecure_bind=true "+
+			"(bearer tokens would otherwise be sent in cleartext)", bind)
+	}
+	if !mcp.IsLoopbackBind(bind) && !tlsEnabled && allowInsecure {
+		fmt.Fprintf(os.Stderr,
+			"WARNING: MCP server is binding %q without TLS; bearer tokens travel in cleartext (MCP.allow_insecure_bind=true).\n", bind)
+	}
+
 	go func() {
 		<-ctx.Done()
 		if stopCleanup != nil {
@@ -275,8 +296,14 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 		_ = server.Shutdown(shutdownCtx)
 	}()
 
-	if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
-		return err
+	var serveErr error
+	if tlsEnabled {
+		serveErr = server.ServeTLS(listener, tlsCert, tlsKey)
+	} else {
+		serveErr = server.Serve(listener)
+	}
+	if serveErr != nil && serveErr != http.ErrServerClosed {
+		return serveErr
 	}
 	return nil
 }

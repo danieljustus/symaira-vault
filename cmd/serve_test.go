@@ -989,6 +989,11 @@ func TestRunStdioServer_WithNilVault(t *testing.T) {
 
 func TestRunHTTPServer_MetricsEndpoint_NonLoopback_RequiresAuth(t *testing.T) {
 	v := newTestVault(t)
+	// Non-loopback bind without TLS now requires explicit opt-in.
+	v.Config.MCP = &config.MCPConfig{
+		MetricsAuthRequired: true,
+		AllowInsecureBind:   true,
+	}
 	port := reserveFreePortForBind(t, "0.0.0.0")
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1028,6 +1033,7 @@ func TestRunHTTPServer_MetricsEndpoint_NonLoopback_AllowsWhenDisabled(t *testing
 	v := newTestVault(t)
 	v.Config.MCP = &config.MCPConfig{
 		MetricsAuthRequired: false,
+		AllowInsecureBind:   true,
 	}
 	port := reserveFreePortForBind(t, "0.0.0.0")
 
@@ -1052,6 +1058,7 @@ func TestRunHTTPServer_MetricsEndpoint_NonLoopback_AllowsWhenDisabled(t *testing
 
 func TestRunHTTPServer_HealthEndpoint_NonLoopback(t *testing.T) {
 	v := newTestVault(t)
+	v.Config.MCP = &config.MCPConfig{AllowInsecureBind: true}
 	port := reserveFreePortForBind(t, "0.0.0.0")
 
 	ctx, cancel := context.WithCancel(context.Background())
