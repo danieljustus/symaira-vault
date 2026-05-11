@@ -257,8 +257,14 @@ func List(vaultDir string, prefix string) ([]string, error) {
 	if err := listEntriesFast(entriesDir(vaultDir), entriesDir(vaultDir), prefix, seen, false); err != nil && !os.IsNotExist(err) {
 		return nil, err
 	}
-	if err := listEntriesFast(vaultDir, vaultDir, prefix, seen, true); err != nil {
-		return nil, err
+	// Skip the legacy top-level walk when detectLegacyMode confirmed no legacy
+	// entries exist. Saves a filepath.WalkDir over the whole vault dir for the
+	// common (non-legacy) case.
+	skipLegacyWalk := cfg != nil && cfg.Vault != nil && cfg.Vault.LegacyMode != nil && !*cfg.Vault.LegacyMode
+	if !skipLegacyWalk {
+		if err := listEntriesFast(vaultDir, vaultDir, prefix, seen, true); err != nil {
+			return nil, err
+		}
 	}
 
 	paths := make([]string, 0, len(seen))
