@@ -29,6 +29,7 @@ const (
 	generatedPasswordLength = 20
 	keyQuit                 = "ctrl+c"
 	keyEnter                = "enter"
+	keyEsc                  = "esc"
 )
 
 type mode int
@@ -307,7 +308,7 @@ func (m TUIModel) View() string {
 func (m TUIModel) handleKey(msg tea.KeyMsg) (TUIModel, tea.Cmd) {
 	if m.mode == modeFilter {
 		switch msg.String() {
-		case "esc", keyEnter:
+		case keyEsc, keyEnter:
 			m.mode = modeNormal
 			m.filterInput.Blur()
 			return m, m.loadSelectedEntry()
@@ -329,7 +330,7 @@ func (m TUIModel) handleKey(msg tea.KeyMsg) (TUIModel, tea.Cmd) {
 			m.filterTag = strings.TrimSpace(m.tagFilterInput.Value())
 			m.applyFilter()
 			return m, m.loadSelectedEntry()
-		case "esc":
+		case keyEsc:
 			m.mode = modeNormal
 			m.tagFilterInput.Blur()
 			m.tagFilterInput.SetValue("")
