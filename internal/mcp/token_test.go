@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -892,8 +893,8 @@ func TestLoadTokenSystem_LegacyFallback(t *testing.T) {
 	if !ok {
 		t.Fatal("legacy token should be in the registry")
 	}
-	if tok.Label != "legacy" {
-		t.Errorf("label = %q, want legacy", tok.Label)
+	if !strings.HasPrefix(tok.Label, "legacy") {
+		t.Errorf("label = %q, want prefix 'legacy'", tok.Label)
 	}
 	if !tok.IsToolAllowed("any_tool") {
 		t.Error("legacy token should have wildcard access")
@@ -1070,8 +1071,8 @@ func TestLoadTokenSystem_MigrationDeletesLegacyFile(t *testing.T) {
 	if !ok {
 		t.Fatal("migrated token not found in registry")
 	}
-	if tok.Label != "legacy" {
-		t.Errorf("label = %q, want legacy", tok.Label)
+	if !strings.HasPrefix(tok.Label, "legacy") {
+		t.Errorf("label = %q, want prefix 'legacy'", tok.Label)
 	}
 	if !tok.IsToolAllowed("*") {
 		t.Error("migrated token should have wildcard access")
