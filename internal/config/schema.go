@@ -175,15 +175,15 @@ func defaultLoggingConfig() LoggingConfig {
 // fileVaultConfig is the file-based vault configuration with pointer fields
 // for optional YAML unmarshaling.
 type fileVaultConfig struct {
-	ConfirmRemove     *bool    `yaml:"confirm_remove,omitempty"`
-	AuthMethod        *string  `yaml:"authMethod,omitempty"`
-	UseTouchID        *bool    `yaml:"useTouchID,omitempty"`
-	LegacyMode        *bool    `yaml:"legacy_mode,omitempty"`
-	Path              string   `yaml:"path,omitempty"`
-	DefaultRecipients []string `yaml:"default_recipients,omitempty"`
-	SearchWorkers     *int     `yaml:"search_workers,omitempty"`
-	PseudonymizePaths *bool    `yaml:"pseudonymize_paths,omitempty"`
-	ScryptWorkFactor  *int     `yaml:"scrypt_work_factor,omitempty"`
+	ConfirmRemove     *bool      `yaml:"confirm_remove,omitempty"`
+	AuthMethod        *string    `yaml:"authMethod,omitempty"`
+	UseTouchID        *bool      `yaml:"useTouchID,omitempty"`
+	LegacyMode        *bool      `yaml:"legacy_mode,omitempty"`
+	Path              string     `yaml:"path,omitempty"`
+	DefaultRecipients []string   `yaml:"default_recipients,omitempty"`
+	SearchWorkers     *int       `yaml:"search_workers,omitempty"`
+	PseudonymizePaths *bool      `yaml:"pseudonymize_paths,omitempty"`
+	ScryptWorkFactor  *int       `yaml:"scrypt_work_factor,omitempty"`
 	LastRotated       *time.Time `yaml:"last_rotated,omitempty"`
 	FormatVersion     *int       `yaml:"format_version,omitempty"`
 }

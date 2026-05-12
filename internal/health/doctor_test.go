@@ -259,6 +259,9 @@ func TestRunChecks_VaultSize_WithEntries(t *testing.T) {
 }
 
 func TestRunChecks_VaultPermissions_InsecureIdentity(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file permissions not enforced on Windows")
+	}
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte("vaultDir: "+dir+"\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -505,6 +508,9 @@ func TestFix_GitRepo(t *testing.T) {
 }
 
 func TestFix_NonFixableChecks(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("vault.permissions not fixable on Windows (chmod not enforced)")
+	}
 	vaultDir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(vaultDir, "entries"), 0o700); err != nil {
 		t.Fatal(err)

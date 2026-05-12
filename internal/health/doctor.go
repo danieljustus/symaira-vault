@@ -36,14 +36,14 @@ const (
 
 // Result is the outcome of one health check.
 type Result struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Status  Status `json:"status"`
-	Message string `json:"message"`
-	Hint    string `json:"hint,omitempty"`
-	Fixable bool   `json:"fixable"`          // set to true by checks with a fix
-	Fix     func() error `json:"-"`          // closure, nil for non-fixable checks
-	Fixed   bool   `json:"fixed,omitempty"`  // set to true after successful fix
+	ID      string       `json:"id"`
+	Name    string       `json:"name"`
+	Status  Status       `json:"status"`
+	Message string       `json:"message"`
+	Hint    string       `json:"hint,omitempty"`
+	Fixable bool         `json:"fixable"`         // set to true by checks with a fix
+	Fix     func() error `json:"-"`               // closure, nil for non-fixable checks
+	Fixed   bool         `json:"fixed,omitempty"` // set to true after successful fix
 }
 
 // Options controls which checks are run.

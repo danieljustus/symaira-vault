@@ -25,9 +25,9 @@ type ManifestEntry struct {
 
 // Manifest tracks integrity of all .age entry files in the vault.
 type Manifest struct {
-	Version int                     `json:"version"`
-	Created time.Time               `json:"created"`
-	Updated time.Time               `json:"updated"`
+	Version int                      `json:"version"`
+	Created time.Time                `json:"created"`
+	Updated time.Time                `json:"updated"`
 	Entries map[string]ManifestEntry `json:"entries"`
 }
 

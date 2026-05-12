@@ -73,11 +73,11 @@ func TestStatePersist_SaveAndLoadRoundTrip(t *testing.T) {
 func TestStatePersist_SaveExcludesPassphrase(t *testing.T) {
 	vaultDir := t.TempDir()
 	state := &WizardState{
-		VaultDir:      vaultDir,
-		Passphrase:    []byte("secret"),
-		AuthMethod:    "passphrase",
-		SyncMode:      "local",
-		ProfileName:   "test",
+		VaultDir:    vaultDir,
+		Passphrase:  []byte("secret"),
+		AuthMethod:  "passphrase",
+		SyncMode:    "local",
+		ProfileName: "test",
 	}
 
 	if err := SaveResumeState(vaultDir, state, "test"); err != nil {
@@ -97,10 +97,10 @@ func TestStatePersist_SaveExcludesPassphrase(t *testing.T) {
 func TestStatePersist_LoadReturnsNilPassphrase(t *testing.T) {
 	vaultDir := t.TempDir()
 	state := &WizardState{
-		VaultDir:      vaultDir,
-		Passphrase:    []byte("secret"),
-		AuthMethod:    "passphrase",
-		ProfileName:   "test",
+		VaultDir:    vaultDir,
+		Passphrase:  []byte("secret"),
+		AuthMethod:  "passphrase",
+		ProfileName: "test",
 	}
 
 	if err := SaveResumeState(vaultDir, state, "test"); err != nil {
