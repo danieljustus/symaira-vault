@@ -22,7 +22,7 @@ func (t Token) String() string { return string(t) }
 // Display formats the token as human-readable blocks (e.g., "ABCD-EFGH-IJKL-MNOP-QRST").
 func (t Token) Display() string {
 	s := string(t)
-	var parts []string
+	parts := make([]string, 0, len(s)/4+1)
 	for i := 0; i < len(s); i += 4 {
 		end := i + 4
 		if end > len(s) {

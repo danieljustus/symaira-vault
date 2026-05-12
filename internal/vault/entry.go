@@ -306,7 +306,7 @@ func WriteEntry(vaultDir, path string, entry *Entry, identity *age.X25519Identit
 		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
-	defer ReleaseLock(lockFile)
+	defer func() { _ = ReleaseLock(lockFile) }()
 
 	if err := writeEntryLocked(vaultDir, path, entry, identity, cfg); err != nil {
 		span.SetStatus(codes.Error, err.Error())
@@ -340,7 +340,7 @@ func DeleteEntry(vaultDir, path string, identity *age.X25519Identity) error {
 		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
-	defer ReleaseLock(lockFile)
+	defer func() { _ = ReleaseLock(lockFile) }()
 
 	filePath := entryStoragePath(vaultDir, path, identity, cfg)
 	// Symlink-hardened remove: O_NOFOLLOW + fstat verification prevents removing through symlinks
@@ -458,7 +458,7 @@ func MergeEntry(vaultDir, path string, partialData map[string]any, identity *age
 		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
-	defer ReleaseLock(lockFile)
+	defer func() { _ = ReleaseLock(lockFile) }()
 
 	entry, err := ReadEntry(vaultDir, path, identity)
 	if err != nil {

@@ -298,7 +298,7 @@ func (l *Logger) rotateIfNeeded() error {
 	if renameErr := os.Rename(l.path, rotatePath); renameErr != nil {
 		reopenedFile, reopenErr := os.OpenFile(l.path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 		if reopenErr != nil {
-			return fmt.Errorf("rename and reopen: rename=%w reopen=%v", renameErr, reopenErr)
+			return fmt.Errorf("rename and reopen: rename=%w reopen=%w", renameErr, reopenErr)
 		}
 		l.file = reopenedFile
 		return fmt.Errorf("rotate log: %w", renameErr)
