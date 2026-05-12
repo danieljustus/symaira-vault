@@ -386,7 +386,10 @@ func WriteEntryWithRecipients(vaultDir, path string, entry *Entry, identity *age
 		return fmt.Errorf("get recipients: %w", err)
 	}
 
-	cfg := loadVaultConfig(vaultDir)
+	cfg, err := loadVaultConfig(vaultDir)
+	if err != nil {
+		return err
+	}
 	now := time.Now().UTC()
 	copyEntry := cloneEntry(entry)
 	if copyEntry.Metadata.Created.IsZero() {

@@ -21,7 +21,7 @@ func TestHMACChainValidPasses(t *testing.T) {
 	defer func() { _ = logger.Close() }()
 
 	for i := 0; i < 5; i++ {
-		logger.LogEntry(LogEntry{
+		_ = logger.LogEntry(LogEntry{
 			Agent:  "test-agent",
 			Action: fmt.Sprintf("get-%d", i),
 			Path:   "test/path",
@@ -65,7 +65,7 @@ func TestHMACTamperedEntryDetected(t *testing.T) {
 	}
 
 	for i := 0; i < 3; i++ {
-		logger.LogEntry(LogEntry{
+		_ = logger.LogEntry(LogEntry{
 			Agent:  "test-agent",
 			Action: fmt.Sprintf("get-%d", i),
 			Path:   "test/path",
@@ -153,16 +153,15 @@ func TestHMACLegacyLogAccepted(t *testing.T) {
 	}
 	defer func() { _ = logger.Close() }()
 
-	logger.LogEntry(LogEntry{
+	_ = logger.LogEntry(LogEntry{
 		Agent:  "test-agent",
 		Action: "new-entry",
 		Path:   "test/path",
 		OK:     true,
 	})
 
-	_ = logger.Close()
-
 	result, err := logger.Verify()
+	_ = logger.Close()
 	if err != nil {
 		t.Fatalf("Verify() error = %v", err)
 	}
@@ -213,7 +212,7 @@ func TestHMACChainContinuity(t *testing.T) {
 	}
 	defer func() { _ = logger.Close() }()
 
-	logger.LogEntry(LogEntry{
+	_ = logger.LogEntry(LogEntry{
 		Agent:  "test-agent",
 		Action: "first",
 		Path:   "test/path",
@@ -225,7 +224,7 @@ func TestHMACChainContinuity(t *testing.T) {
 		t.Fatalf("prevHMAC length = %d, want 32", len(hmac1))
 	}
 
-	logger.LogEntry(LogEntry{
+	_ = logger.LogEntry(LogEntry{
 		Agent:  "test-agent",
 		Action: "second",
 		Path:   "test/path",
@@ -251,7 +250,7 @@ func TestHMACChainContinuity(t *testing.T) {
 
 func TestHMACLoggerNilSafety(t *testing.T) {
 	var l *Logger
-	l.LogEntry(LogEntry{
+	_ = l.LogEntry(LogEntry{
 		Agent:  "test",
 		Action: "get",
 		OK:     true,
@@ -277,7 +276,7 @@ func TestHMACMultipleWrites(t *testing.T) {
 	defer func() { _ = logger.Close() }()
 
 	for i := 0; i < 10; i++ {
-		logger.LogEntry(LogEntry{
+		_ = logger.LogEntry(LogEntry{
 			Agent:  "test-agent",
 			Action: fmt.Sprintf("action-%d", i),
 			Path:   "test/path",
@@ -355,13 +354,13 @@ func TestHMACReopenRetainsChain(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	logger.LogEntry(LogEntry{
+	_ = logger.LogEntry(LogEntry{
 		Agent:  "test-agent",
 		Action: "first",
 		Path:   "test/path",
 		OK:     true,
 	})
-	logger.LogEntry(LogEntry{
+	_ = logger.LogEntry(LogEntry{
 		Agent:  "test-agent",
 		Action: "second",
 		Path:   "test/path",
@@ -416,7 +415,7 @@ func TestHMACMixedLegacyAndNew(t *testing.T) {
 	}
 	defer func() { _ = logger.Close() }()
 
-	logger.LogEntry(LogEntry{
+	_ = logger.LogEntry(LogEntry{
 		Agent:  "test-agent",
 		Action: "new-get",
 		Path:   "test/path",

@@ -13,7 +13,7 @@ type MockCrypto struct {
 	EncryptFunc               func([]byte, *age.X25519Recipient) ([]byte, error)
 	EncryptWithRecipientsFunc func([]byte, ...*age.X25519Recipient) ([]byte, error)
 	DecryptFunc               func([]byte, *age.X25519Identity) ([]byte, error)
-	EncryptWithPassphraseFunc func([]byte, []byte) ([]byte, error)
+	EncryptWithPassphraseFunc func([]byte, []byte, int) ([]byte, error)
 	DecryptWithPassphraseFunc func([]byte, []byte) ([]byte, error)
 }
 
@@ -32,7 +32,7 @@ func NewMockCrypto() *MockCrypto {
 			}
 			return nil, ErrDecryptionFailed
 		},
-		EncryptWithPassphraseFunc: func(plaintext []byte, passphrase []byte) ([]byte, error) {
+		EncryptWithPassphraseFunc: func(plaintext []byte, passphrase []byte, _ int) ([]byte, error) {
 			return []byte("passphrase_encrypted:" + string(plaintext)), nil
 		},
 		DecryptWithPassphraseFunc: func(ciphertext []byte, passphrase []byte) ([]byte, error) {
@@ -56,8 +56,8 @@ func (m *MockCrypto) Decrypt(ciphertext []byte, identity *age.X25519Identity) ([
 	return m.DecryptFunc(ciphertext, identity)
 }
 
-func (m *MockCrypto) EncryptWithPassphrase(plaintext []byte, passphrase []byte) ([]byte, error) {
-	return m.EncryptWithPassphraseFunc(plaintext, passphrase)
+func (m *MockCrypto) EncryptWithPassphrase(plaintext []byte, passphrase []byte, workFactor int) ([]byte, error) {
+	return m.EncryptWithPassphraseFunc(plaintext, passphrase, workFactor)
 }
 
 func (m *MockCrypto) DecryptWithPassphrase(ciphertext []byte, passphrase []byte) ([]byte, error) {
@@ -137,7 +137,7 @@ func TestMockCryptoEncryptWithPassphrase(t *testing.T) {
 	plaintext := []byte("secret data")
 	passphrase := []byte("my passphrase")
 
-	ciphertext, err := mock.EncryptWithPassphrase(plaintext, passphrase)
+	ciphertext, err := mock.EncryptWithPassphrase(plaintext, passphrase, 0)
 	if err != nil {
 		t.Fatalf("encrypt: %v", err)
 	}

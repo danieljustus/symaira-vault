@@ -142,7 +142,7 @@ func InvalidateConfigCache(vaultDir string) {
 	configCache.mu.Unlock()
 }
 
-func loadVaultConfig(vaultDir string) *vaultconfig.Config {
+func loadVaultConfig(vaultDir string) (*vaultconfig.Config, error) {
 	configPath := filepath.Join(vaultDir, "config.yaml")
 	mtime := time.Time{}
 	if info, err := os.Stat(configPath); err == nil {
@@ -153,18 +153,21 @@ func loadVaultConfig(vaultDir string) *vaultconfig.Config {
 	entry, ok := configCache.items[vaultDir]
 	configCache.mu.RUnlock()
 	if ok && entry.mtime.Equal(mtime) && entry.cfg != nil {
-		return entry.cfg
+		return entry.cfg, nil
 	}
 
 	cfg, err := vaultconfig.Load(configPath)
 	if err != nil {
-		return vaultconfig.Default()
+		if os.IsNotExist(err) {
+			return vaultconfig.Default(), nil
+		}
+		return nil, fmt.Errorf("load vault config: %w", err)
 	}
 
 	configCache.mu.Lock()
 	configCache.items[vaultDir] = configCacheEntry{cfg: cfg, mtime: mtime}
 	configCache.mu.Unlock()
-	return cfg
+	return cfg, nil
 }
 
 // ReadEntry reads and decrypts an entry from the vault
@@ -182,9 +185,14 @@ func ReadEntry(vaultDir, path string, identity *age.X25519Identity) (*Entry, err
 
 	if err := validateEntryPath(vaultDir, path); err != nil {
 		span.SetStatus(codes.Error, err.Error())
+		return nil, err
 	}
 
-	cfg := loadVaultConfig(vaultDir)
+	cfg, err := loadVaultConfig(vaultDir)
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
 	filePath := entryStoragePath(vaultDir, path, identity, cfg)
 	// #nosec G304 -- filePath is constructed by entryStoragePath from validated vaultDir and path
 	raw, err := os.ReadFile(filePath)
@@ -220,7 +228,52 @@ func ReadEntry(vaultDir, path string, identity *age.X25519Identity) (*Entry, err
 	return &entry, nil
 }
 
-// WriteEntry encrypts and writes an entry to the vault
+// writeEntryLocked performs the full entry write (prep, encrypt, file ops, manifest
+// update) assuming the caller already holds the per-vaultDir exclusive lock.
+func writeEntryLocked(vaultDir, path string, entry *Entry, identity *age.X25519Identity, cfg *vaultconfig.Config) error {
+	now := time.Now().UTC()
+	copyEntry := cloneEntry(entry)
+	if copyEntry.Metadata.Created.IsZero() {
+		copyEntry.Metadata.Created = now
+	}
+	copyEntry.Metadata.Updated = now
+	copyEntry.Metadata.Version++
+	if copyEntry.Data == nil {
+		copyEntry.Data = map[string]any{}
+	}
+
+	if isPseudonymizeEnabled(cfg) {
+		copyEntry.Path = path
+	}
+
+	plaintext, err := json.Marshal(copyEntry)
+	if err != nil {
+		return err
+	}
+
+	start := time.Now()
+	ciphertext, err := vaultcrypto.Encrypt(plaintext, identity.Recipient())
+	metrics.RecordVaultOperationDuration("encrypt", time.Since(start))
+	if err != nil {
+		return err
+	}
+
+	filePath := entryStoragePath(vaultDir, path, identity, cfg)
+	if err := SafeMkdirAll(filepath.Dir(filePath), 0o700); err != nil {
+		return err
+	}
+	// Symlink-hardened write: O_NOFOLLOW + fstat verification prevents writing through symlinks
+	if err := SafeWriteFile(filePath, ciphertext, 0o600); err != nil {
+		return err
+	}
+	if err := UpdateManifestEntry(vaultDir, path, ciphertext, identity); err != nil {
+		return fmt.Errorf("update manifest: %w", err)
+	}
+	return nil
+}
+
+// WriteEntry encrypts and writes an entry to the vault.
+// It acquires a per-vaultDir exclusive lock before writing.
 func WriteEntry(vaultDir, path string, entry *Entry, identity *age.X25519Identity) error {
 	if entry == nil {
 		return errors.New("nil entry")
@@ -241,49 +294,23 @@ func WriteEntry(vaultDir, path string, entry *Entry, identity *age.X25519Identit
 		return err
 	}
 
-	cfg := loadVaultConfig(vaultDir)
-	now := time.Now().UTC()
-	copyEntry := cloneEntry(entry)
-	if copyEntry.Metadata.Created.IsZero() {
-		copyEntry.Metadata.Created = now
-	}
-	copyEntry.Metadata.Updated = now
-	copyEntry.Metadata.Version++
-	if copyEntry.Data == nil {
-		copyEntry.Data = map[string]any{}
-	}
-
-	if isPseudonymizeEnabled(cfg) {
-		copyEntry.Path = path
-	}
-
-	plaintext, err := json.Marshal(copyEntry)
+	cfg, err := loadVaultConfig(vaultDir)
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 
-	start := time.Now()
-	ciphertext, err := vaultcrypto.Encrypt(plaintext, identity.Recipient())
-	metrics.RecordVaultOperationDuration("encrypt", time.Since(start))
+	// Acquire per-vaultDir exclusive lock before writing entry and updating manifest
+	lockFile, err := AcquireWriteLock(vaultDir, 0)
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
+	defer func() { _ = ReleaseLock(lockFile) }()
 
-	filePath := entryStoragePath(vaultDir, path, identity, cfg)
-	if err := SafeMkdirAll(filepath.Dir(filePath), 0o700); err != nil {
+	if err := writeEntryLocked(vaultDir, path, entry, identity, cfg); err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		return err
-	}
-	// Symlink-hardened write: O_NOFOLLOW + fstat verification prevents writing through symlinks
-	if err := SafeWriteFile(filePath, ciphertext, 0o600); err != nil {
-		span.SetStatus(codes.Error, err.Error())
-		return err
-	}
-	if err := UpdateManifestEntry(vaultDir, path, ciphertext, identity); err != nil {
-		span.SetStatus(codes.Error, err.Error())
-		return fmt.Errorf("update manifest: %w", err)
 	}
 	return nil
 }
@@ -301,7 +328,20 @@ func DeleteEntry(vaultDir, path string, identity *age.X25519Identity) error {
 		return err
 	}
 
-	cfg := loadVaultConfig(vaultDir)
+	cfg, err := loadVaultConfig(vaultDir)
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+
+	// Acquire per-vaultDir exclusive lock before deleting entry and updating manifest
+	lockFile, err := AcquireWriteLock(vaultDir, 0)
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+	defer func() { _ = ReleaseLock(lockFile) }()
+
 	filePath := entryStoragePath(vaultDir, path, identity, cfg)
 	// Symlink-hardened remove: O_NOFOLLOW + fstat verification prevents removing through symlinks
 	if err := SafeRemove(filePath); err != nil {
@@ -403,13 +443,22 @@ func migrateLegacyEntries(vaultDir string) error {
 	})
 }
 
-// MergeEntry merges partial data into an existing entry
+// MergeEntry merges partial data into an existing entry.
+// It acquires a per-vaultDir exclusive lock so the read-merge-write is atomic.
 func MergeEntry(vaultDir, path string, partialData map[string]any, identity *age.X25519Identity) (*Entry, error) {
 	_, span := metrics.StartSpan(context.Background(), "vault.MergeEntry",
 		attribute.String("operation", "merge"),
 		attribute.String("vault.entry.path", metrics.HashEntryPath(path)),
 	)
 	defer span.End()
+
+	// Acquire per-vaultDir exclusive lock so the entire read-merge-write is atomic
+	lockFile, err := AcquireWriteLock(vaultDir, 0)
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+	defer func() { _ = ReleaseLock(lockFile) }()
 
 	entry, err := ReadEntry(vaultDir, path, identity)
 	if err != nil {
@@ -420,7 +469,14 @@ func MergeEntry(vaultDir, path string, partialData map[string]any, identity *age
 		entry.Data = map[string]any{}
 	}
 	mergeMaps(entry.Data, partialData)
-	if err := WriteEntry(vaultDir, path, entry, identity); err != nil {
+
+	cfg, err := loadVaultConfig(vaultDir)
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+
+	if err := writeEntryLocked(vaultDir, path, entry, identity, cfg); err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
@@ -580,7 +636,10 @@ func GetEntryMetadata(vaultDir, path string, identity *age.X25519Identity) (*Ent
 		return nil, err
 	}
 
-	cfg := loadVaultConfig(vaultDir)
+	cfg, err := loadVaultConfig(vaultDir)
+	if err != nil {
+		return nil, err
+	}
 	raw, err := os.ReadFile(entryStoragePath(vaultDir, path, identity, cfg))
 	if os.IsNotExist(err) && canUseLegacyEntryPath(path) {
 		if legacyErr := validateLegacyEntryPath(vaultDir, path); legacyErr != nil {

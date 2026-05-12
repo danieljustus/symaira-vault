@@ -23,13 +23,14 @@ func TestSecureStringCleansUp(t *testing.T) {
 }
 
 func TestSecureStringScrypt(t *testing.T) {
-	restore := SetScryptWorkFactorForTests(4)
-	defer restore()
+	if testing.Short() {
+		t.Skip("skipping scrypt test in short mode")
+	}
 
 	passphrase := []byte("test-passphrase-for-scrypt-roundtrip")
 	plaintext := []byte("hello, secure string world!")
 
-	ct, err := EncryptWithPassphrase(plaintext, passphrase)
+	ct, err := EncryptWithPassphrase(plaintext, passphrase, 4)
 	if err != nil {
 		t.Fatalf("EncryptWithPassphrase failed: %v", err)
 	}

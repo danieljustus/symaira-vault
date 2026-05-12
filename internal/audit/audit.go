@@ -17,6 +17,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	vaultcrypto "github.com/danieljustus/OpenPass/internal/crypto"
 )
 
 const (
@@ -230,9 +232,9 @@ func New(agentName string, vaultDir string) (*Logger, error) {
 	return l, nil
 }
 
-func (l *Logger) LogEntry(entry LogEntry) {
+func (l *Logger) LogEntry(entry LogEntry) error {
 	if l == nil || l.file == nil {
-		return
+		return nil
 	}
 
 	if entry.Timestamp == "" {
@@ -248,24 +250,24 @@ func (l *Logger) LogEntry(entry LogEntry) {
 
 	data, err := json.Marshal(entry)
 	if err != nil {
-		return
+		return err
 	}
 	data = append(data, '\n')
 	if _, err := l.file.Write(data); err != nil {
-		fmt.Fprintf(os.Stderr, "audit log write failed: %v\n", err)
-		return
-	}
-	if err := l.file.Sync(); err != nil {
-		fmt.Fprintf(os.Stderr, "audit log sync failed: %v\n", err)
-		return
+		return err
 	}
 
 	if entry.HMAC != "" {
-		prevBytes, _ := hex.DecodeString(entry.HMAC)
-		if prevBytes != nil {
+		if prevBytes, derr := hex.DecodeString(entry.HMAC); derr == nil {
 			l.prevHMAC = prevBytes
 		}
 	}
+
+	if err := l.file.Sync(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (l *Logger) rotateIfNeeded() error {
@@ -293,13 +295,13 @@ func (l *Logger) rotateIfNeeded() error {
 	_ = l.file.Close()
 
 	rotatePath := l.path + ".rotated." + time.Now().UTC().Format("20060102-150405")
-	if err = os.Rename(l.path, rotatePath); err != nil {
-		// Try to reopen original file
-		l.file, err = os.OpenFile(l.path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
-		if err != nil {
-			return fmt.Errorf("rename and reopen: %w", err)
+	if renameErr := os.Rename(l.path, rotatePath); renameErr != nil {
+		reopenedFile, reopenErr := os.OpenFile(l.path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+		if reopenErr != nil {
+			return fmt.Errorf("rename and reopen: rename=%w reopen=%w", renameErr, reopenErr)
 		}
-		return fmt.Errorf("rotate log: %w", err)
+		l.file = reopenedFile
+		return fmt.Errorf("rotate log: %w", renameErr)
 	}
 
 	l.file, err = os.OpenFile(l.path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
@@ -528,7 +530,14 @@ func (l *Logger) Close() error {
 	if l == nil || l.file == nil {
 		return nil
 	}
-	return l.file.Close()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	err := l.file.Close()
+	vaultcrypto.Wipe(l.hmacKey)
+	vaultcrypto.Wipe(l.prevHMAC)
+	l.hmacKey = nil
+	l.prevHMAC = nil
+	return err
 }
 
 func (l *Logger) readLastHMAC() ([]byte, error) {

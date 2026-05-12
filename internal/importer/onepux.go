@@ -12,11 +12,16 @@ import (
 const (
 	onePUXLoginCategory    = "001"
 	defaultMaxZipEntrySize = 100 * 1024 * 1024 // 100 MB per entry
+	maxImportSize          = 100 * 1024 * 1024 // 100 MB total import
 )
 
 // maxZipEntrySize is the maximum size allowed for a single ZIP entry.
 // It is a variable so tests can override it with a smaller value.
 var maxZipEntrySize = defaultMaxZipEntrySize
+
+// MaxImportSize is the maximum allowed size for import sources.
+// It is a variable so callers (e.g., cmd/import.go) can reference it.
+var MaxImportSize int64 = maxImportSize
 
 type onePUXImporter struct{}
 
@@ -72,9 +77,13 @@ type onePUXURL struct {
 }
 
 func (i *onePUXImporter) Parse(r io.Reader) ([]ImportedEntry, error) {
-	data, err := io.ReadAll(r)
+	limited := io.LimitReader(r, maxImportSize)
+	data, err := io.ReadAll(limited)
 	if err != nil {
-		return nil, fmt.Errorf("read 1pux export: %w", err)
+		return nil, fmt.Errorf("read import source: %w", err)
+	}
+	if len(data) >= int(maxImportSize) {
+		return nil, fmt.Errorf("import source exceeds maximum size of %d bytes", maxImportSize)
 	}
 
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))

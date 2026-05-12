@@ -231,6 +231,14 @@ func currentSearchIdentity() *age.X25519Identity {
 	return searchIdentity.Load()
 }
 
+// CurrentSearchIdentity returns the cached decryption identity, or nil if
+// no identity has been cached yet (e.g., vault not unlocked in this session).
+// This is used by health checks to verify manifest integrity without requiring
+// the user to re-enter their passphrase.
+func CurrentSearchIdentity() *age.X25519Identity {
+	return currentSearchIdentity()
+}
+
 // List returns all entry paths in the vault, optionally filtered by prefix.
 // It uses os.ReadDir for efficient directory traversal without stat calls.
 // Results are cached with a 30-second TTL to avoid repetitive walks during
@@ -238,7 +246,10 @@ func currentSearchIdentity() *age.X25519Identity {
 // When pseudonymization is enabled, entries are decrypted to extract the plaintext
 // path from the entry data.
 func List(vaultDir string, prefix string) ([]string, error) {
-	cfg := loadVaultConfig(vaultDir)
+	cfg, err := loadVaultConfig(vaultDir)
+	if err != nil {
+		return nil, err
+	}
 	if isPseudonymizeEnabled(cfg) {
 		return listPseudonymized(vaultDir, prefix)
 	}
@@ -387,6 +398,28 @@ type FindOptions struct {
 	// ScopeFilter, if non-nil, restricts search to paths that pass the filter.
 	// Applied before decryption to avoid decrypting out-of-scope entries.
 	ScopeFilter func(path string) bool
+	// RedactFieldPatterns, if non-nil, prevents searching and reporting field
+	// names that match redaction patterns, closing the side-channel where an
+	// agent could probe the existence of a value in a redacted field via
+	// substring search (SEC-002).
+	RedactFieldPatterns []string
+}
+
+// isRedactedField checks if a field name matches any redaction pattern.
+// Supports exact match, "*" (wildcard), and "prefix.*" (prefix wildcard).
+func isRedactedField(field string, patterns []string) bool {
+	for _, pattern := range patterns {
+		if pattern == field || pattern == "*" {
+			return true
+		}
+		if strings.HasSuffix(pattern, ".*") {
+			prefix := strings.TrimSuffix(pattern, ".*")
+			if strings.HasPrefix(field, prefix+".") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // FindWithOptions searches vault entries with configurable options.
@@ -438,7 +471,7 @@ func FindWithOptions(vaultDir string, query string, opts FindOptions) ([]Match, 
 			}
 
 			fields := make(map[string]struct{})
-			CollectFieldMatches(fields, "", entry.Data, needle)
+			CollectFieldMatches(fields, "", entry.Data, needle, opts.RedactFieldPatterns)
 
 			if len(fields) == 0 {
 				continue
@@ -482,7 +515,7 @@ func FindWithOptions(vaultDir string, query string, opts FindOptions) ([]Match, 
 					}
 
 					fields := make(map[string]struct{})
-					CollectFieldMatches(fields, "", entry.Data, needle)
+					CollectFieldMatches(fields, "", entry.Data, needle, opts.RedactFieldPatterns)
 
 					if len(fields) == 0 {
 						resultChan <- decryptResult{path: path, fields: nil}
@@ -540,7 +573,7 @@ func hasField(fields []string, want string) bool {
 	return slices.Contains(fields, want)
 }
 
-func CollectFieldMatches(matches map[string]struct{}, prefix string, value any, needle string) {
+func CollectFieldMatches(matches map[string]struct{}, prefix string, value any, needle string, redactPatterns []string) {
 	switch typed := value.(type) {
 	case map[string]any:
 		keys := make([]string, 0, len(typed))
@@ -553,7 +586,12 @@ func CollectFieldMatches(matches map[string]struct{}, prefix string, value any, 
 			if prefix != "" {
 				field = prefix + "." + key
 			}
-			CollectFieldMatches(matches, field, typed[key], needle)
+			// Skip redacted fields entirely — prevents probing existence of a
+			// value in a redacted field via substring search (SEC-002).
+			if isRedactedField(field, redactPatterns) {
+				continue
+			}
+			CollectFieldMatches(matches, field, typed[key], needle, redactPatterns)
 		}
 	case []any:
 		for i, item := range typed {
@@ -561,10 +599,13 @@ func CollectFieldMatches(matches map[string]struct{}, prefix string, value any, 
 			if prefix == "" {
 				field = fmt.Sprintf("[%d]", i)
 			}
-			CollectFieldMatches(matches, field, item, needle)
+			CollectFieldMatches(matches, field, item, needle, redactPatterns)
 		}
 	default:
 		if prefix == "" {
+			return
+		}
+		if isRedactedField(prefix, redactPatterns) {
 			return
 		}
 		if needle == "" || strings.Contains(strings.ToLower(fmt.Sprint(typed)), needle) {

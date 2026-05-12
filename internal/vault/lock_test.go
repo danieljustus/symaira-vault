@@ -23,17 +23,7 @@ func TestConcurrentWriteEntry(t *testing.T) {
 
 	writeWithLock := func(value string) {
 		defer wg.Done()
-		lockFile, err := AcquireWriteLock(vaultDir, 5*time.Second)
-		if err != nil {
-			t.Errorf("acquire lock for %s: %v", value, err)
-			return
-		}
-		defer func() {
-			if err := ReleaseLock(lockFile); err != nil {
-				t.Errorf("release lock for %s: %v", value, err)
-			}
-		}()
-		err = WriteEntry(vaultDir, "test/entry", &Entry{
+		err := WriteEntry(vaultDir, "test/entry", &Entry{
 			Data: map[string]any{"value": value},
 		}, id)
 		if err != nil {
@@ -70,22 +60,13 @@ func TestConcurrentMergeEntry(t *testing.T) {
 	vaultDir := t.TempDir()
 	id := testutil.TempIdentity(t)
 
-	// Write initial entry (with lock for consistency)
-	lockFile, err := AcquireWriteLock(vaultDir, 5*time.Second)
-	if err != nil {
-		t.Fatalf("acquire initial lock: %v", err)
-	}
 	entry := &Entry{
 		Data: map[string]any{
 			"base": "initial",
 		},
 	}
 	if err := WriteEntry(vaultDir, "test/merge", entry, id); err != nil {
-		ReleaseLock(lockFile)
 		t.Fatalf("write initial entry: %v", err)
-	}
-	if err := ReleaseLock(lockFile); err != nil {
-		t.Fatalf("release initial lock: %v", err)
 	}
 
 	var wg sync.WaitGroup
@@ -102,19 +83,7 @@ func TestConcurrentMergeEntry(t *testing.T) {
 		go func() {
 			defer wg.Done()
 
-			// Acquire lock for the merge (protects read-modify-write)
-			lockFile, err := AcquireWriteLock(vaultDir, 5*time.Second)
-			if err != nil {
-				t.Errorf("acquire merge lock: %v", err)
-				return
-			}
-			defer func() {
-				if err := ReleaseLock(lockFile); err != nil {
-					t.Errorf("release merge lock: %v", err)
-				}
-			}()
-
-			_, err = MergeEntry(vaultDir, "test/merge", f, id)
+			_, err := MergeEntry(vaultDir, "test/merge", f, id)
 			if err != nil {
 				t.Errorf("concurrent merge: %v", err)
 			}

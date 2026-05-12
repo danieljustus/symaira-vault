@@ -55,6 +55,15 @@ var importCmd = &cobra.Command{
 		}
 		defer func() { _ = source.Close() }()
 
+		fi, err := source.Stat()
+		if err != nil {
+			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "stat import source", err)
+		}
+		if fi.Size() > importer.MaxImportSize {
+			return errorspkg.NewCLIError(errorspkg.ExitGeneralError,
+				fmt.Sprintf("import source exceeds maximum size of %d bytes", importer.MaxImportSize), nil)
+		}
+
 		imp, err := newImporter(format, options)
 		if err != nil {
 			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "create importer", err)

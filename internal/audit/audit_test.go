@@ -22,7 +22,7 @@ func TestLogEntryWritesJSONL(t *testing.T) {
 	}
 	defer func() { _ = logger.Close() }()
 
-	logger.LogEntry(LogEntry{
+	_ = logger.LogEntry(LogEntry{
 		Agent:     "test-agent",
 		Action:    "get",
 		Path:      "dev/api-key",
@@ -69,7 +69,7 @@ func TestLogEntryDenialIncludesReason(t *testing.T) {
 	}
 	defer func() { _ = logger.Close() }()
 
-	logger.LogEntry(LogEntry{
+	_ = logger.LogEntry(LogEntry{
 		Agent:     "test-agent",
 		Action:    "set",
 		Path:      "secret/key",
@@ -110,7 +110,7 @@ func TestLoggerCloseNilSafety(t *testing.T) {
 func TestLogEntryNilLoggerSafety(t *testing.T) {
 	var l *Logger
 	// Should not panic
-	l.LogEntry(LogEntry{
+	_ = l.LogEntry(LogEntry{
 		Agent:  "test",
 		Action: "get",
 		OK:     true,
@@ -120,7 +120,7 @@ func TestLogEntryNilLoggerSafety(t *testing.T) {
 func TestLogEntryNilFileSafety(t *testing.T) {
 	l := &Logger{file: nil}
 	// Should not panic
-	l.LogEntry(LogEntry{
+	_ = l.LogEntry(LogEntry{
 		Agent:  "test",
 		Action: "get",
 		OK:     true,
@@ -138,7 +138,7 @@ func TestLogEntryMultipleWrites(t *testing.T) {
 	defer func() { _ = logger.Close() }()
 
 	for i := 0; i < 3; i++ {
-		logger.LogEntry(LogEntry{
+		_ = logger.LogEntry(LogEntry{
 			Agent:  "test-agent",
 			Action: "get",
 			Path:   "test/path",
@@ -176,7 +176,7 @@ func TestLogEntryAutoTimestamp(t *testing.T) {
 	defer func() { _ = logger.Close() }()
 
 	// Entry without timestamp - should get auto-filled
-	logger.LogEntry(LogEntry{
+	_ = logger.LogEntry(LogEntry{
 		Agent:  "test-agent",
 		Action: "list",
 		OK:     true,
@@ -208,7 +208,7 @@ func TestLogEntryPreservesProvidedTimestamp(t *testing.T) {
 	defer func() { _ = logger.Close() }()
 
 	customTS := "2024-01-15T10:30:00Z"
-	logger.LogEntry(LogEntry{
+	_ = logger.LogEntry(LogEntry{
 		Timestamp: customTS,
 		Agent:     "test-agent",
 		Action:    "get",
@@ -505,7 +505,7 @@ func TestRotateIfNeededSizeLimit(t *testing.T) {
 	// Write until we exceed 1MB
 	data := strings.Repeat("x", 1024*1024) // 1MB of data
 	for i := 0; i < 2; i++ {
-		logger.LogEntry(LogEntry{
+		_ = logger.LogEntry(LogEntry{
 			Agent:  "test",
 			Action: "test",
 			Path:   data,
@@ -709,7 +709,7 @@ func TestNoLogLossDuringRotation(t *testing.T) {
 	// Write enough data to exceed 1MB (need > 1MB to trigger rotation)
 	largeData := strings.Repeat("x", 100*1024) // 100KB per entry
 	for i := 0; i < 15; i++ {
-		logger.LogEntry(LogEntry{
+		_ = logger.LogEntry(LogEntry{
 			Agent:  "test",
 			Action: "test",
 			Path:   largeData,
@@ -735,7 +735,7 @@ func TestNoLogLossDuringRotation(t *testing.T) {
 
 	// Write more entries after rotation
 	for i := 0; i < 5; i++ {
-		logger.LogEntry(LogEntry{
+		_ = logger.LogEntry(LogEntry{
 			Agent:  "test",
 			Action: "test2",
 			Path:   "test2",
@@ -806,8 +806,8 @@ func TestHealthCheckHealthy(t *testing.T) {
 	defer func() { _ = logger.Close() }()
 
 	// Write some entries
-	logger.LogEntry(LogEntry{Agent: "health-test", Action: "get", OK: true})
-	logger.LogEntry(LogEntry{Agent: "health-test", Action: "set", OK: false, Reason: "denied"})
+	_ = logger.LogEntry(LogEntry{Agent: "health-test", Action: "get", OK: true})
+	_ = logger.LogEntry(LogEntry{Agent: "health-test", Action: "set", OK: false, Reason: "denied"})
 
 	status, err := logger.HealthCheck()
 	if err != nil {
@@ -875,7 +875,7 @@ func TestHealthCheckNeedsRotationBySize(t *testing.T) {
 	}
 	defer func() { _ = logger.Close() }()
 
-	logger.LogEntry(LogEntry{Agent: "test", Action: "test", OK: true})
+	_ = logger.LogEntry(LogEntry{Agent: "test", Action: "test", OK: true})
 
 	status, err := logger.HealthCheck()
 	if err != nil {
@@ -897,10 +897,10 @@ func TestGetErrorsFiltersErrors(t *testing.T) {
 	defer func() { _ = logger.Close() }()
 
 	// Write mix of ok and error entries
-	logger.LogEntry(LogEntry{Agent: "test", Action: "get", OK: true})
-	logger.LogEntry(LogEntry{Agent: "test", Action: "set", OK: false, Reason: "denied"})
-	logger.LogEntry(LogEntry{Agent: "test", Action: "list", OK: true})
-	logger.LogEntry(LogEntry{Agent: "test", Action: "delete", OK: false, Reason: "not_found"})
+	_ = logger.LogEntry(LogEntry{Agent: "test", Action: "get", OK: true})
+	_ = logger.LogEntry(LogEntry{Agent: "test", Action: "set", OK: false, Reason: "denied"})
+	_ = logger.LogEntry(LogEntry{Agent: "test", Action: "list", OK: true})
+	_ = logger.LogEntry(LogEntry{Agent: "test", Action: "delete", OK: false, Reason: "not_found"})
 
 	errors, err := logger.GetErrors(100)
 	if err != nil {
@@ -930,7 +930,7 @@ func TestGetErrorsNoErrors(t *testing.T) {
 	}
 	defer func() { _ = logger.Close() }()
 
-	logger.LogEntry(LogEntry{Agent: "test", Action: "get", OK: true})
+	_ = logger.LogEntry(LogEntry{Agent: "test", Action: "get", OK: true})
 
 	errors, err := logger.GetErrors(100)
 	if err != nil {
@@ -953,7 +953,7 @@ func TestGetErrorsLimit(t *testing.T) {
 
 	// Write 10 error entries
 	for i := 0; i < 10; i++ {
-		logger.LogEntry(LogEntry{Agent: "test", Action: fmt.Sprintf("action%d", i), OK: false, Reason: "error"})
+		_ = logger.LogEntry(LogEntry{Agent: "test", Action: fmt.Sprintf("action%d", i), OK: false, Reason: "error"})
 	}
 
 	errors, err := logger.GetErrors(5)
@@ -1047,7 +1047,7 @@ func TestLastNEntriesReturnsCorrectCount(t *testing.T) {
 			defer func() { _ = logger.Close() }()
 
 			for i := 0; i < tt.numEntries; i++ {
-				logger.LogEntry(LogEntry{Agent: "test", Action: fmt.Sprintf("action%d", i), OK: true})
+				_ = logger.LogEntry(LogEntry{Agent: "test", Action: fmt.Sprintf("action%d", i), OK: true})
 			}
 
 			entries, err := logger.lastNEntries(tt.requestN)
@@ -1080,7 +1080,7 @@ func TestLastNEntriesMoreThanAvailable(t *testing.T) {
 
 	// Write 3 entries
 	for i := 0; i < 3; i++ {
-		logger.LogEntry(LogEntry{Agent: "test", Action: fmt.Sprintf("action%d", i), OK: true})
+		_ = logger.LogEntry(LogEntry{Agent: "test", Action: fmt.Sprintf("action%d", i), OK: true})
 	}
 
 	entries, err := logger.lastNEntries(100)
@@ -1103,7 +1103,7 @@ func TestLastNEntriesSkipsMalformedLines(t *testing.T) {
 	defer func() { _ = logger.Close() }()
 
 	// Write valid entry
-	logger.LogEntry(LogEntry{Agent: "test", Action: "valid", OK: true})
+	_ = logger.LogEntry(LogEntry{Agent: "test", Action: "valid", OK: true})
 
 	// Manually append malformed line
 	auditDir := filepath.Join(home, ".openpass")
@@ -1117,7 +1117,7 @@ func TestLastNEntriesSkipsMalformedLines(t *testing.T) {
 	f.Close()
 
 	// Write another valid entry
-	logger.LogEntry(LogEntry{Agent: "test", Action: "valid2", OK: true})
+	_ = logger.LogEntry(LogEntry{Agent: "test", Action: "valid2", OK: true})
 
 	entries, err := logger.lastNEntries(100)
 	if err != nil {
@@ -1219,7 +1219,7 @@ func TestLogEntryAutoFillsEmptyTimestamp(t *testing.T) {
 	defer func() { _ = logger.Close() }()
 
 	before := time.Now().UTC().Truncate(time.Second)
-	logger.LogEntry(LogEntry{
+	_ = logger.LogEntry(LogEntry{
 		Agent:  "test",
 		Action: "get",
 		OK:     true,
@@ -1267,10 +1267,10 @@ func TestHealthCheckMultipleErrors(t *testing.T) {
 
 	// Write 5 error entries and 3 ok entries
 	for i := 0; i < 5; i++ {
-		logger.LogEntry(LogEntry{Agent: "test", Action: fmt.Sprintf("err%d", i), OK: false, Reason: "fail"})
+		_ = logger.LogEntry(LogEntry{Agent: "test", Action: fmt.Sprintf("err%d", i), OK: false, Reason: "fail"})
 	}
 	for i := 0; i < 3; i++ {
-		logger.LogEntry(LogEntry{Agent: "test", Action: fmt.Sprintf("ok%d", i), OK: true})
+		_ = logger.LogEntry(LogEntry{Agent: "test", Action: fmt.Sprintf("ok%d", i), OK: true})
 	}
 
 	status, err := logger.HealthCheck()
@@ -1293,7 +1293,7 @@ func TestGetErrorsAllOk(t *testing.T) {
 	defer func() { _ = logger.Close() }()
 
 	for i := 0; i < 5; i++ {
-		logger.LogEntry(LogEntry{Agent: "test", Action: "get", OK: true})
+		_ = logger.LogEntry(LogEntry{Agent: "test", Action: "get", OK: true})
 	}
 
 	errors, err := logger.GetErrors(100)
@@ -1316,7 +1316,7 @@ func TestGetErrorsAllErrors(t *testing.T) {
 	defer func() { _ = logger.Close() }()
 
 	for i := 0; i < 5; i++ {
-		logger.LogEntry(LogEntry{Agent: "test", Action: fmt.Sprintf("action%d", i), OK: false, Reason: "fail"})
+		_ = logger.LogEntry(LogEntry{Agent: "test", Action: fmt.Sprintf("action%d", i), OK: false, Reason: "fail"})
 	}
 
 	errors, err := logger.GetErrors(100)
@@ -1385,7 +1385,7 @@ func TestLogEntryAllFields(t *testing.T) {
 	}
 	defer func() { _ = logger.Close() }()
 
-	logger.LogEntry(LogEntry{
+	_ = logger.LogEntry(LogEntry{
 		Timestamp: "2024-06-15T12:00:00Z",
 		Agent:     "test-agent",
 		Action:    "get",
@@ -1468,7 +1468,7 @@ func TestHealthCheckIncludesRotatedSize(t *testing.T) {
 	defer func() { _ = logger.Close() }()
 
 	// Write some data
-	logger.LogEntry(LogEntry{Agent: "test", Action: "get", OK: true})
+	_ = logger.LogEntry(LogEntry{Agent: "test", Action: "get", OK: true})
 
 	// Create a rotated file manually
 	auditDir := filepath.Join(home, ".openpass")
@@ -1499,7 +1499,7 @@ func TestLastNEntriesCorruptedJSON(t *testing.T) {
 	defer func() { _ = logger.Close() }()
 
 	for i := 0; i < 3; i++ {
-		logger.LogEntry(LogEntry{Agent: "test", Action: fmt.Sprintf("valid%d", i), OK: true})
+		_ = logger.LogEntry(LogEntry{Agent: "test", Action: fmt.Sprintf("valid%d", i), OK: true})
 	}
 
 	logFile := filepath.Join(home, ".openpass", "audit-corrupt-json-test.log")
@@ -1600,7 +1600,7 @@ func TestConcurrentWrites(t *testing.T) {
 	for i := 0; i < goroutines; i++ {
 		go func(idx int) {
 			for j := 0; j < entriesPerGoroutine; j++ {
-				logger.LogEntry(LogEntry{
+				_ = logger.LogEntry(LogEntry{
 					Agent:  "test",
 					Action: fmt.Sprintf("action-%d-%d", idx, j),
 					OK:     true,
@@ -1613,7 +1613,7 @@ func TestConcurrentWrites(t *testing.T) {
 	for i := 0; i < goroutines; i++ {
 		go func(idx int) {
 			for j := 0; j < entriesPerGoroutine; j++ {
-				logger.LogEntry(LogEntry{
+				_ = logger.LogEntry(LogEntry{
 					Agent:  "test",
 					Action: fmt.Sprintf("action-%d-%d", idx, j),
 					OK:     true,
@@ -1660,7 +1660,7 @@ func TestConcurrentWritesWithClose(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			for j := 0; j < entriesPerGoroutine; j++ {
-				logger.LogEntry(LogEntry{
+				_ = logger.LogEntry(LogEntry{
 					Agent:  "test",
 					Action: fmt.Sprintf("action-%d-%d", idx, j),
 					OK:     true,
@@ -1695,7 +1695,7 @@ func TestRotateIfNeededRenameFailure(t *testing.T) {
 
 	// Fill file to exceed max size
 	data := strings.Repeat("x", 1024*1024) // 1MB
-	logger.LogEntry(LogEntry{
+	_ = logger.LogEntry(LogEntry{
 		Agent:  "test",
 		Action: "test",
 		Path:   data,
@@ -1723,7 +1723,7 @@ func TestMaxLogSizeTrigger(t *testing.T) {
 
 	// Write exactly 1MB - should NOT trigger rotation yet
 	data := strings.Repeat("x", 1024*1024)
-	logger.LogEntry(LogEntry{
+	_ = logger.LogEntry(LogEntry{
 		Agent:  "test",
 		Action: "test",
 		Path:   data,
@@ -1733,7 +1733,7 @@ func TestMaxLogSizeTrigger(t *testing.T) {
 	// Check if rotation is needed - with 1MB data + overhead, it should be close but file exists
 	// The file content (JSON) will be larger than 1MB due to field overhead
 	// Force trigger by writing more
-	logger.LogEntry(LogEntry{
+	_ = logger.LogEntry(LogEntry{
 		Agent:  "test",
 		Action: "test2",
 		Path:   data,
@@ -1750,8 +1750,8 @@ func TestMaxLogSizeTrigger(t *testing.T) {
 	}
 }
 
-// TestLogEntryWriteErrorToStderr tests that write errors are logged to stderr
-func TestLogEntryWriteErrorToStderr(t *testing.T) {
+// TestLogEntryWriteErrorReturned tests that LogEntry returns write errors
+func TestLogEntryWriteErrorReturned(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
@@ -1765,13 +1765,13 @@ func TestLogEntryWriteErrorToStderr(t *testing.T) {
 		t.Fatalf("Close() error = %v", err)
 	}
 
-	// Now LogEntry should write to stderr but not panic
-	// We cannot easily capture stderr, but this should not panic
-	logger.LogEntry(LogEntry{
+	if err := logger.LogEntry(LogEntry{
 		Agent:  "test",
 		Action: "test",
 		OK:     true,
-	})
+	}); err == nil {
+		t.Fatal("expected error after closing file")
+	}
 }
 
 // TestEnforceRetentionStatError tests handling when stat fails on a rotated file
@@ -1860,7 +1860,7 @@ func TestHealthCheckSeekError(t *testing.T) {
 	defer func() { _ = logger.Close() }()
 
 	// Write some data
-	logger.LogEntry(LogEntry{Agent: "test", Action: "get", OK: true})
+	_ = logger.LogEntry(LogEntry{Agent: "test", Action: "get", OK: true})
 
 	// Force an invalid file descriptor by closing and nullifying
 	oldFile := logger.file
@@ -1886,7 +1886,7 @@ func TestLastNEntriesReadFileError(t *testing.T) {
 	defer func() { _ = logger.Close() }()
 
 	// Write some data
-	logger.LogEntry(LogEntry{Agent: "test", Action: "get", OK: true})
+	_ = logger.LogEntry(LogEntry{Agent: "test", Action: "get", OK: true})
 
 	// Close the file to simulate a read error
 	if err := logger.Close(); err != nil {
@@ -1937,7 +1937,7 @@ func TestHealthCheckZeroMaxAge(t *testing.T) {
 	}
 	defer func() { _ = logger.Close() }()
 
-	logger.LogEntry(LogEntry{Agent: "test", Action: "get", OK: true})
+	_ = logger.LogEntry(LogEntry{Agent: "test", Action: "get", OK: true})
 
 	status, err := logger.HealthCheck()
 	if err != nil {
@@ -1959,7 +1959,7 @@ func TestRotateIfNeededFileStatError(t *testing.T) {
 	}
 	defer func() { _ = logger.Close() }()
 
-	logger.LogEntry(LogEntry{Agent: "test", Action: "get", OK: true})
+	_ = logger.LogEntry(LogEntry{Agent: "test", Action: "get", OK: true})
 
 	file := logger.file
 	logger.file = nil

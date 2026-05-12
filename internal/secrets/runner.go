@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 )
 
@@ -55,9 +56,11 @@ func RunCommand(opts RunOptions) (*RunResult, error) {
 		cmd.Dir = opts.WorkingDir
 	}
 
-	// Start with os.Environ() as base, overlay opts.Env.
+	// Start with a safe env subset as base, then overlay opts.Env.
+	// This prevents leaking sensitive process env vars (API keys, OPENPASS_*, AWS_*,
+	// SSH_AUTH_SOCK, etc.) to child processes. Only common safe vars are passed through.
 	// Later entries override earlier ones for the same key.
-	cmd.Env = os.Environ()
+	cmd.Env = safeEnv()
 	for k, v := range opts.Env {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
@@ -92,6 +95,31 @@ func RunCommand(opts RunOptions) (*RunResult, error) {
 	}
 
 	return result, nil
+}
+
+// safeEnv returns a safe subset of the current process environment.
+// Only universally safe variables are passed through to prevent leaking
+// sensitive env vars (API keys, tokens, secrets, etc.) to child processes.
+// Callers can add additional vars via RunOptions.Env.
+func safeEnv() []string {
+	var safe []string
+	allowlist := map[string]bool{
+		"PATH":   true,
+		"HOME":   true,
+		"TMPDIR": true,
+		"TEMP":   true,
+		"TMP":    true,
+		"USER":   true,
+		"LANG":   true,
+		"LC_ALL": true,
+	}
+	for _, e := range os.Environ() {
+		parts := strings.SplitN(e, "=", 2)
+		if len(parts) > 0 && allowlist[parts[0]] {
+			safe = append(safe, e)
+		}
+	}
+	return safe
 }
 
 // truncateBytes returns a copy of data truncated to maxLen bytes.

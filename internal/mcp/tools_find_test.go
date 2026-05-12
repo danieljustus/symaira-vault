@@ -271,7 +271,7 @@ func TestCollectFieldMatches(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := make(map[string]struct{})
-			vault.CollectFieldMatches(result, "", tt.data, tt.needle)
+			vault.CollectFieldMatches(result, "", tt.data, tt.needle, nil)
 			if len(result) != len(tt.expected) {
 				t.Errorf("collectFieldMatches() got %v, want %v", result, tt.expected)
 			}
@@ -309,7 +309,7 @@ func TestCollectFieldMatches_EdgeCases(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := make(map[string]struct{})
-			vault.CollectFieldMatches(result, "", tt.data, tt.needle)
+			vault.CollectFieldMatches(result, "", tt.data, tt.needle, nil)
 			if len(result) != len(tt.expected) {
 				t.Errorf("collectFieldMatches() got %v, want %v", result, tt.expected)
 			}
@@ -323,7 +323,7 @@ func TestCollectFieldMatches_EdgeCases(t *testing.T) {
 
 	t.Run("scalar with empty prefix", func(t *testing.T) {
 		result := make(map[string]struct{})
-		vault.CollectFieldMatches(result, "", "testvalue", "test")
+		vault.CollectFieldMatches(result, "", "testvalue", "test", nil)
 		if len(result) != 0 {
 			t.Errorf("collectFieldMatches() with scalar and empty prefix should return empty, got %v", result)
 		}

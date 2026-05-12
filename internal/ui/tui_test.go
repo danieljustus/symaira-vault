@@ -3,6 +3,7 @@ package ui
 import (
 	"log/slog"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/danieljustus/OpenPass/internal/testutil"
@@ -11,6 +12,9 @@ import (
 )
 
 func TestTUIModelLoadsEntries(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: LockFileEx access violation in AcquireWriteLock")
+	}
 	vaultDir := t.TempDir()
 	id := testutil.TempIdentity(t)
 

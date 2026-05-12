@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"sync"
 	"time"
+
+	"github.com/danieljustus/OpenPass/internal/mcp"
 )
 
 type oauthCodeStore struct {
@@ -55,7 +57,7 @@ func (s *oauthCodeStore) take(code string) (*pendingCode, bool) {
 // Parses the JSON request body to extract redirect_uris, validates them,
 // and returns a public client identity — no secret is issued.
 func handleOAuthRegister(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("Content-Type") != "application/json" {
+	if !mcp.IsJSONContentType(r.Header.Get("Content-Type")) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_redirect_uri"})
 		return
 	}

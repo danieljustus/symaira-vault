@@ -492,3 +492,117 @@ func TestListCacheTTLExpiration(t *testing.T) {
 		t.Fatalf("List() after TTL expiry returned %d paths, want 2", len(paths))
 	}
 }
+
+func TestFindWithRedactFieldPatterns(t *testing.T) {
+	vaultDir := t.TempDir()
+	id := testutil.TempIdentity(t)
+
+	mustWriteEntry(t, vaultDir, id, "acc", map[string]interface{}{
+		"totp.secret": "JBSWY3DPEHPK3PXP",
+		"email":       "alice@example.com",
+	})
+
+	// With redact patterns: field 'totp.secret' must NOT match via value search
+	got, err := FindWithOptions(vaultDir, "JBSW", FindOptions{
+		MaxWorkers:          0,
+		RedactFieldPatterns: []string{"totp.secret"},
+	})
+	if err != nil {
+		t.Fatalf("FindWithOptions() error = %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("FindWithOptions(redacted) = %v matches, want 0 (redacted field should be excluded)", len(got))
+	}
+
+	// Without redact patterns: field 'totp.secret' SHOULD match
+	gotNoRedact, err := FindWithOptions(vaultDir, "JBSW", FindOptions{
+		MaxWorkers:          0,
+		RedactFieldPatterns: nil,
+	})
+	if err != nil {
+		t.Fatalf("FindWithOptions(no redact) error = %v", err)
+	}
+	if len(gotNoRedact) == 0 {
+		t.Error("FindWithOptions(no_redact) = 0 matches, expected 1 (field should be searchable)")
+	}
+
+	// Same behavior for wrong query: both should return empty
+	gotWrong, err := FindWithOptions(vaultDir, "WRONG", FindOptions{
+		MaxWorkers:          0,
+		RedactFieldPatterns: []string{"totp.secret"},
+	})
+	if err != nil {
+		t.Fatalf("FindWithOptions(wrong query) error = %v", err)
+	}
+	if len(gotWrong) != 0 {
+		t.Errorf("FindWithOptions(wrong query) = %v matches, want 0", len(gotWrong))
+	}
+}
+
+func TestFindWithRedactFieldPatternsConcurrent(t *testing.T) {
+	vaultDir := t.TempDir()
+	id := testutil.TempIdentity(t)
+
+	mustWriteEntry(t, vaultDir, id, "acc", map[string]interface{}{
+		"password":    "s3cr3t",
+		"api.key":     "sk-12345",
+		"description": "my account",
+	})
+
+	// With concurrent search and wildcard redact pattern
+	got, err := FindWithOptions(vaultDir, "sk-", FindOptions{
+		MaxWorkers:          4,
+		RedactFieldPatterns: []string{"api.*"},
+	})
+	if err != nil {
+		t.Fatalf("FindWithOptions(concurrent) error = %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("FindWithOptions(concurrent, redacted) = %v matches, want 0", len(got))
+	}
+
+	// Verify non-redacted field is still searchable
+	gotDesc, err := FindWithOptions(vaultDir, "account", FindOptions{
+		MaxWorkers:          4,
+		RedactFieldPatterns: []string{"api.*"},
+	})
+	if err != nil {
+		t.Fatalf("FindWithOptions(description) error = %v", err)
+	}
+	if len(gotDesc) != 1 {
+		t.Errorf("FindWithOptions(description) = %v matches, want 1", len(gotDesc))
+	}
+	// The matched field should only be "description", not "api.key"
+	if len(gotDesc[0].Fields) != 1 || gotDesc[0].Fields[0] != "description" {
+		t.Errorf("FindWithOptions(description) fields = %v, want [description]", gotDesc[0].Fields)
+	}
+}
+
+func TestIsRedactedField(t *testing.T) {
+	tests := []struct {
+		field    string
+		patterns []string
+		want     bool
+	}{
+		{field: "totp.secret", patterns: []string{"totp.secret"}, want: true},
+		{field: "totp.secret", patterns: []string{"password"}, want: false},
+		{field: "totp.secret", patterns: []string{"*"}, want: true},
+		{field: "password", patterns: []string{"*"}, want: true},
+		{field: "api.key", patterns: []string{"api.*"}, want: true},
+		{field: "api_key", patterns: []string{"api.*"}, want: false},
+		{field: "nested.totp.secret", patterns: []string{"totp.*"}, want: false},
+		{field: "nested.totp.secret", patterns: []string{"nested.totp.secret"}, want: true},
+		{field: "email", patterns: []string{"password", "totp.secret"}, want: false},
+		{field: "", patterns: []string{"*"}, want: true},
+		{field: "password", patterns: nil, want: false},
+		{field: "password", patterns: []string{}, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.field, func(t *testing.T) {
+			got := isRedactedField(tt.field, tt.patterns)
+			if got != tt.want {
+				t.Errorf("isRedactedField(%q, %v) = %v, want %v", tt.field, tt.patterns, got, tt.want)
+			}
+		})
+	}
+}

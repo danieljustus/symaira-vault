@@ -139,7 +139,8 @@ func Wipe(buf []byte) {
 // EncryptWithPassphrase encrypts plaintext using a passphrase.
 // The passphrase is used to derive a scrypt-based recipient.
 // This is useful for encrypting data that should be decryptable with a password.
-func EncryptWithPassphrase(plaintext []byte, passphrase []byte) ([]byte, error) {
+// workFactor controls the scrypt KDF cost (N = 1<<workFactor). Pass 0 to use DefaultScryptWorkFactor.
+func EncryptWithPassphrase(plaintext []byte, passphrase []byte, workFactor int) ([]byte, error) {
 	if len(plaintext) == 0 {
 		return nil, ErrEmptyPlaintext
 	}
@@ -153,7 +154,7 @@ func EncryptWithPassphrase(plaintext []byte, passphrase []byte) ([]byte, error) 
 	if err != nil {
 		return nil, fmt.Errorf("create scrypt recipient: %w", err)
 	}
-	recipient.SetWorkFactor(scryptWorkFactor)
+	recipient.SetWorkFactor(resolveWorkFactor(workFactor))
 
 	var buf bytes.Buffer
 	w, err := age.Encrypt(&buf, recipient)

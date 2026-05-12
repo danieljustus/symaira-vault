@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -118,7 +119,9 @@ func (s *Server) logAudit(ctx context.Context, action, path string, ok bool) {
 	if token, ok := TokenFromContext(ctx); ok {
 		entry.TokenID = token.ID
 	}
-	s.auditLog.LogEntry(entry)
+	if err := s.auditLog.LogEntry(entry); err != nil {
+		slog.Default().Warn("audit log write failed", "err", err)
+	}
 }
 
 func (s *Server) logAuditWithToken(ctx context.Context, action, path string, ok bool) {
@@ -140,7 +143,9 @@ func (s *Server) logAuditWithToken(ctx context.Context, action, path string, ok 
 	if token, ok := TokenFromContext(ctx); ok {
 		entry.TokenID = token.ID
 	}
-	s.auditLog.LogEntry(entry)
+	if err := s.auditLog.LogEntry(entry); err != nil {
+		slog.Default().Warn("audit log write failed", "err", err)
+	}
 }
 
 // checkShareAccess checks if the current agent has an approved, non-expired share for the given path.
@@ -208,7 +213,9 @@ func (s *Server) logAuditShare(ctx context.Context, action, path string, grant *
 	if token, ok := TokenFromContext(ctx); ok {
 		entry.TokenID = token.ID
 	}
-	s.auditLog.LogEntry(entry)
+	if err := s.auditLog.LogEntry(entry); err != nil {
+		slog.Default().Warn("audit log write failed", "err", err)
+	}
 }
 
 func (s *Server) canWrite() bool {

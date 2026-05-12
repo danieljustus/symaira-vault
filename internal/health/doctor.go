@@ -223,10 +223,10 @@ func checkVaultPermissions(vaultDir string, _ Options) Result {
 	}
 	r.Fixable = true
 	r.Fix = func() error {
-		if err := os.Chmod(filepath.Join(vaultDir, "entries"), 0o700); err != nil {
+		if err := os.Chmod(filepath.Join(vaultDir, "entries"), 0o700); err != nil { //#nosec G302 -- directory needs execute bit
 			return fmt.Errorf("chmod entries: %w", err)
 		}
-		if err := os.Chmod(filepath.Join(vaultDir, "identity.age"), 0o600); err != nil {
+		if err := os.Chmod(filepath.Join(vaultDir, "identity.age"), 0o600); err != nil { //#nosec G302 -- identity file intentionally restricted
 			return fmt.Errorf("chmod identity.age: %w", err)
 		}
 		return nil
@@ -347,7 +347,7 @@ func checkGitignoreProtects(vaultDir string, _ Options) Result {
 	r.Fix = func() error {
 		gitignorePath := filepath.Join(vaultDir, ".gitignore")
 		var existing []string
-		if data, err := os.ReadFile(gitignorePath); err == nil {
+		if data, err := os.ReadFile(gitignorePath); err == nil { //#nosec G304 -- vaultDir is controlled
 			existing = strings.Split(strings.TrimSpace(string(data)), "\n")
 		}
 		required := []string{"identity.age", "mcp-token", "mcp-tokens.json"}
@@ -368,7 +368,8 @@ func checkGitignoreProtects(vaultDir string, _ Options) Result {
 			return nil
 		}
 		existing = append(existing, toAdd...)
-		return os.WriteFile(gitignorePath, []byte(strings.Join(existing, "\n")+"\n"), 0o644)
+		//#nosec G703 -- gitignorePath is derived from trusted vaultDir
+		return os.WriteFile(gitignorePath, []byte(strings.Join(existing, "\n")+"\n"), 0o600)
 	}
 	gitignorePath := filepath.Join(vaultDir, ".gitignore")
 	data, err := os.ReadFile(gitignorePath) //#nosec G304 -- vaultDir is controlled
@@ -724,7 +725,7 @@ func checkVaultSize(vaultDir string, _ Options) Result {
 	return r
 }
 
-func checkScryptBenchmark(_ string, _ Options) Result {
+func checkScryptBenchmark(vaultDir string, _ Options) Result {
 	r := Result{ID: "crypto.scrypt.benchmark", Name: "Scrypt KDF performance"}
 	wf, elapsed, err := vaultcrypto.BenchmarkScryptWorkFactor(250 * time.Millisecond)
 	if err != nil {
@@ -733,7 +734,10 @@ func checkScryptBenchmark(_ string, _ Options) Result {
 		return r
 	}
 
-	current := vaultcrypto.ScryptWorkFactor()
+	current := vaultcrypto.DefaultScryptWorkFactor
+	if cfg, err := configpkg.Load(filepath.Join(vaultDir, "config.yaml")); err == nil && cfg.Vault != nil && cfg.Vault.ScryptWorkFactor > 0 {
+		current = cfg.Vault.ScryptWorkFactor
+	}
 	switch {
 	case wf == current:
 		r.Status = StatusOK
@@ -786,8 +790,46 @@ func checkManifestIntegrity(vaultDir string, _ Options) Result {
 		return r
 	}
 
+	identity := vault.CurrentSearchIdentity()
+	if identity == nil {
+		r.Status = StatusWarn
+		r.Message = "no active session — run `openpass unlock` first"
+		r.Hint = "run `openpass unlock` to decrypt your identity for manifest verification"
+		return r
+	}
+
+	result, err := vault.VerifyManifestIntegrity(vaultDir, identity)
+	if err != nil {
+		r.Status = StatusWarn
+		r.Message = "cannot verify manifest: " + err.Error()
+		r.Hint = "run `openpass verify` to regenerate manifest"
+		return r
+	}
+
+	var issues []string
+	if len(result.Tampered) > 0 {
+		issues = append(issues, fmt.Sprintf("%d tampered: %s", len(result.Tampered), strings.Join(result.Tampered, ", ")))
+	}
+	if len(result.Missing) > 0 {
+		issues = append(issues, fmt.Sprintf("%d missing: %s", len(result.Missing), strings.Join(result.Missing, ", ")))
+	}
+	if len(result.Unknown) > 0 {
+		issues = append(issues, fmt.Sprintf("%d unknown: %s", len(result.Unknown), strings.Join(result.Unknown, ", ")))
+	}
+
+	if len(issues) > 0 {
+		if len(result.Tampered) > 0 {
+			r.Status = StatusFail
+		} else {
+			r.Status = StatusWarn
+		}
+		r.Message = strings.Join(issues, "; ")
+		r.Hint = "run `openpass verify` to regenerate manifest"
+		return r
+	}
+
 	r.Status = StatusOK
-	r.Message = "manifest.age present"
+	r.Message = fmt.Sprintf("all %d entries verified", result.OK)
 	return r
 }
 

@@ -230,6 +230,30 @@ func TestReadEntryFileNotFound(t *testing.T) {
 	}
 }
 
+func TestReadEntry_RejectsTraversal(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+	}{
+		{"parent directory traversal", "../identity"},
+		{"deep traversal", "../../etc/passwd"},
+		{"alternating traversal", "a/../../b"},
+		{"dot segment start", "./.."},
+		{"encoded traversal", "..%2Fidentity"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			vaultDir := t.TempDir()
+			id := testutil.TempIdentity(t)
+
+			_, err := ReadEntry(vaultDir, tt.path, id)
+			if err == nil {
+				t.Fatal("expected error for path traversal")
+			}
+		})
+	}
+}
+
 func TestReadEntryFallsBackToLegacyRootPath(t *testing.T) {
 	vaultDir := t.TempDir()
 	id := testutil.TempIdentity(t)

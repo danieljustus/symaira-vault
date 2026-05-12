@@ -59,7 +59,7 @@ func (cp *ContextProvider) getGitBranch(workingDir string) string {
 	}
 
 	cmd := exec.Command("git", "-C", workingDir, "rev-parse", "--abbrev-ref", "HEAD")
-	cmd.Env = os.Environ()
+	cmd.Env = os.Environ() // TODO: filter to safe subset — git may need GIT_CONFIG_PARAMETERS, GIT_SSH_COMMAND, etc.
 	out, err := cmd.Output()
 	if err != nil {
 		return ""

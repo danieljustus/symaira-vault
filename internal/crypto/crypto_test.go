@@ -222,7 +222,7 @@ func TestSaveLoadIdentityWithPassphrase(t *testing.T) {
 	path := dir + string(os.PathSeparator) + "identity.age"
 	passphrase := []byte("correct horse battery staple")
 
-	if err = SaveIdentity(identity, path, passphrase); err != nil {
+	if err = SaveIdentity(identity, path, passphrase, 0); err != nil {
 		t.Fatalf("save identity: %v", err)
 	}
 
@@ -251,7 +251,7 @@ func TestSaveIdentityNilIdentity(t *testing.T) {
 	dir := t.TempDir()
 	path := dir + string(os.PathSeparator) + "identity.age"
 
-	err := SaveIdentity(nil, path, []byte("passphrase"))
+	err := SaveIdentity(nil, path, []byte("passphrase"), 0)
 	if !errors.Is(err, ErrNilIdentity) {
 		t.Fatalf("expected ErrNilIdentity, got: %v", err)
 	}
@@ -265,7 +265,7 @@ func TestSaveIdentityEmptyPassphrase(t *testing.T) {
 	dir := t.TempDir()
 	path := dir + string(os.PathSeparator) + "identity.age"
 
-	err = SaveIdentity(identity, path, []byte(""))
+	err = SaveIdentity(identity, path, []byte(""), 0)
 	if err == nil {
 		t.Fatal("expected error for empty passphrase")
 	}
@@ -279,7 +279,7 @@ func TestLoadIdentityWrongPassphrase(t *testing.T) {
 	dir := t.TempDir()
 	path := dir + string(os.PathSeparator) + "identity.age"
 
-	if err = SaveIdentity(identity, path, []byte("correct passphrase")); err != nil {
+	if err = SaveIdentity(identity, path, []byte("correct passphrase"), 0); err != nil {
 		t.Fatalf("SaveIdentity failed: %v", err)
 	}
 
@@ -313,7 +313,7 @@ func TestEncryptDecryptWithPassphrase(t *testing.T) {
 	plaintext := []byte("secret message encrypted with passphrase")
 	passphrase := []byte("my super secret passphrase")
 
-	ciphertext, err := EncryptWithPassphrase(plaintext, passphrase)
+	ciphertext, err := EncryptWithPassphrase(plaintext, passphrase, 0)
 	if err != nil {
 		t.Fatalf("encrypt with passphrase: %v", err)
 	}
@@ -338,7 +338,7 @@ func TestDecryptWithPassphraseWrongPassword(t *testing.T) {
 	passphrase := []byte("correct passphrase")
 	wrongPassphrase := []byte("wrong passphrase")
 
-	ciphertext, err := EncryptWithPassphrase(plaintext, passphrase)
+	ciphertext, err := EncryptWithPassphrase(plaintext, passphrase, 0)
 	if err != nil {
 		t.Fatalf("encrypt with passphrase: %v", err)
 	}
@@ -353,14 +353,14 @@ func TestDecryptWithPassphraseWrongPassword(t *testing.T) {
 }
 
 func TestEncryptWithPassphraseEmptyPlaintext(t *testing.T) {
-	_, err := EncryptWithPassphrase([]byte{}, []byte("passphrase"))
+	_, err := EncryptWithPassphrase([]byte{}, []byte("passphrase"), 0)
 	if !errors.Is(err, ErrEmptyPlaintext) {
 		t.Fatalf("expected ErrEmptyPlaintext, got: %v", err)
 	}
 }
 
 func TestEncryptWithPassphraseEmptyPassphrase(t *testing.T) {
-	_, err := EncryptWithPassphrase([]byte("test"), []byte(""))
+	_, err := EncryptWithPassphrase([]byte("test"), []byte(""), 0)
 	if err == nil {
 		t.Fatal("expected error for empty passphrase")
 	}

@@ -85,7 +85,7 @@ Optionally re-encrypts all entries with the new passphrase.`,
 		copy(newPassphraseForEnc, newPassphrase)
 		defer cryptopkg.Wipe(newPassphraseForEnc)
 
-		if err := cryptopkg.SaveIdentity(v.Identity, filepath.Join(vaultDir, "identity.age"), newPassphraseForEnc); err != nil {
+		if err := cryptopkg.SaveIdentity(v.Identity, filepath.Join(vaultDir, "identity.age"), newPassphraseForEnc, 0); err != nil {
 			return fmt.Errorf("save identity with new passphrase: %w", err)
 		}
 
@@ -122,7 +122,9 @@ Optionally re-encrypts all entries with the new passphrase.`,
 
 		auditLog, auditErr := audit.New("openpass", vaultDir)
 		if auditErr == nil {
-			auditLog.LogEntry(audit.LogEntry{Action: "rotate-passphrase", OK: true, Timestamp: time.Now().UTC().Format(time.RFC3339)})
+			if err := auditLog.LogEntry(audit.LogEntry{Action: "rotate-passphrase", OK: true, Timestamp: time.Now().UTC().Format(time.RFC3339)}); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: audit log write failed: %v\n", err)
+			}
 			_ = auditLog.Close()
 		}
 

@@ -17,7 +17,7 @@ import (
 // when multi-device + git sync is enabled.
 type PairingQRStep struct {
 	state  *WizardState
-	token  string
+	token  pairing.Token
 	done   bool
 	saved  bool
 	errMsg string
@@ -58,7 +58,7 @@ func (s *PairingQRStep) Init() tea.Cmd {
 		CreatedAt time.Time `json:"created_at"`
 	}
 	enc, err := json.MarshalIndent(pairingFile{
-		Token:     s.token,
+		Token:     string(s.token),
 		PublicKey: publicKey,
 		CreatedAt: time.Now().UTC(),
 	}, "", "  ")
@@ -72,7 +72,7 @@ func (s *PairingQRStep) Init() tea.Cmd {
 		s.errMsg = fmt.Sprintf("create pairing dir: %v", err)
 		return nil
 	}
-	if err := os.WriteFile(pairingDir+"/"+s.token+".json", enc, 0o600); err != nil {
+	if err := os.WriteFile(pairingDir+"/"+string(s.token)+".json", enc, 0o600); err != nil {
 		s.errMsg = fmt.Sprintf("write pairing file: %v", err)
 		return nil
 	}
@@ -101,7 +101,7 @@ func (s *PairingQRStep) View() string {
 	}
 
 	publicKey := s.state.VaultPublicKey
-	qrData := s.token + ":" + publicKey
+	qrData := string(s.token) + ":" + publicKey
 	qrArt := ui.RenderQRCode(qrData)
 
 	truncated := publicKey
@@ -124,7 +124,7 @@ func (s *PairingQRStep) View() string {
 		fmt.Sprintf("  %s", focusedStyle.Render("openpass device add --pair \""+qrData+"\"")),
 		"",
 		dimStyle.Render("After the second device has joined, run on this device:"),
-		fmt.Sprintf("  %s", focusedStyle.Render("openpass device accept "+s.token)),
+		fmt.Sprintf("  %s", focusedStyle.Render("openpass device accept "+string(s.token))),
 		"",
 		helpStyle.Render("Enter or Q to continue"),
 	}

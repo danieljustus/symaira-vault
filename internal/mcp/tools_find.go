@@ -45,8 +45,14 @@ func (s *Server) findEntries(ctx context.Context, query string) ([]vault.Match, 
 		workers = s.vault.Config.Vault.SearchWorkers
 	}
 
+	redactPatterns := []string{}
+	if s.agent != nil && s.agent.RedactFields != nil {
+		redactPatterns = s.agent.RedactFields
+	}
+
 	return svc.Find(query, vault.FindOptions{
-		MaxWorkers:  workers,
-		ScopeFilter: s.checkScope,
+		MaxWorkers:          workers,
+		ScopeFilter:         s.checkScope,
+		RedactFieldPatterns: redactPatterns,
 	})
 }

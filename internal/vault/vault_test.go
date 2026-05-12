@@ -285,7 +285,7 @@ func TestCollectFieldMatches(t *testing.T) {
 	CollectFieldMatches(matches, "", map[string]any{
 		"username": "alice",
 		"password": "secret123",
-	}, "alice")
+	}, "alice", nil)
 	if _, ok := matches["username"]; !ok {
 		t.Error("expected username field to match 'alice'")
 	}
@@ -298,7 +298,7 @@ func TestCollectFieldMatches(t *testing.T) {
 		"nested": map[string]any{
 			"email": "alice@example.com",
 		},
-	}, "alice")
+	}, "alice", nil)
 	if _, ok := matches2["nested.email"]; !ok {
 		t.Error("expected nested.email field to match 'alice'")
 	}
@@ -306,7 +306,7 @@ func TestCollectFieldMatches(t *testing.T) {
 	matches3 := make(map[string]struct{})
 	CollectFieldMatches(matches3, "", map[string]any{
 		"items": []any{"alice", "bob", "alice"},
-	}, "alice")
+	}, "alice", nil)
 	if _, ok := matches3["items[0]"]; !ok {
 		t.Error("expected items[0] to match 'alice'")
 	}

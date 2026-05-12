@@ -212,7 +212,7 @@ func logAuthFailure(logger *audit.Logger, r *http.Request, reason, detail string
 	if logger == nil {
 		return
 	}
-	logger.LogEntry(audit.LogEntry{
+	if err := logger.LogEntry(audit.LogEntry{
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 		Agent:     r.Header.Get("X-OpenPass-Agent"),
 		Action:    "auth_failure",
@@ -220,7 +220,9 @@ func logAuthFailure(logger *audit.Logger, r *http.Request, reason, detail string
 		Reason:    reason + ": " + detail,
 		Path:      r.URL.Path,
 		OK:        false,
-	})
+	}); err != nil {
+		slog.Default().Warn("audit log write failed", "err", err)
+	}
 }
 
 func clientIP(r *http.Request, trustedProxies []string) string {

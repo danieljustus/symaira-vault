@@ -71,12 +71,12 @@ for the new device.`,
 		publicKey := v.Identity.Recipient().String()
 
 		pairingData := pairingFile{
-			Token:     token,
+			Token:     string(token),
 			PublicKey: publicKey,
 			CreatedAt: time.Now().UTC(),
 		}
 
-		if err := savePairingFile(vaultDir, token+".json", pairingData); err != nil {
+		if err := savePairingFile(vaultDir, string(token)+".json", pairingData); err != nil {
 			return fmt.Errorf("save pairing file: %w", err)
 		}
 
@@ -177,7 +177,7 @@ to re-encrypt all entries for this new device.`,
 		}
 
 		identityPath := filepath.Join(vaultDir, "identity.age")
-		if err := cryptopkg.SaveIdentity(identity, identityPath, passphrase); err != nil {
+		if err := cryptopkg.SaveIdentity(identity, identityPath, passphrase, 0); err != nil {
 			return fmt.Errorf("save identity: %w", err)
 		}
 
@@ -487,7 +487,7 @@ request so the first device can accept it.`,
 
 		// Save identity encrypted with passphrase
 		identityPath := filepath.Join(vaultDir, "identity.age")
-		if err := cryptopkg.SaveIdentity(identity, identityPath, passphrase); err != nil {
+		if err := cryptopkg.SaveIdentity(identity, identityPath, passphrase, 0); err != nil {
 			return fmt.Errorf("save identity: %w", err)
 		}
 

@@ -12,27 +12,6 @@ import (
 	"filippo.io/age"
 )
 
-func TestSetScryptWorkFactorForTests(t *testing.T) {
-	restore := SetScryptWorkFactorForTests(16)
-	if scryptWorkFactor != 16 {
-		t.Errorf("scryptWorkFactor = %d, want 16", scryptWorkFactor)
-	}
-
-	restore()
-	if scryptWorkFactor != 18 {
-		t.Errorf("after restore, scryptWorkFactor = %d, want 18", scryptWorkFactor)
-	}
-
-	restore2 := SetScryptWorkFactorForTests(10)
-	if scryptWorkFactor != 10 {
-		t.Errorf("scryptWorkFactor = %d, want 10", scryptWorkFactor)
-	}
-	restore2()
-	if scryptWorkFactor != 18 {
-		t.Errorf("after nested restore, scryptWorkFactor = %d, want 18", scryptWorkFactor)
-	}
-}
-
 func TestGenerateIdentityString_Success(t *testing.T) {
 	identityStr, err := GenerateIdentityString()
 	if err != nil {
@@ -52,7 +31,7 @@ func TestSaveIdentity_PathTraversal(t *testing.T) {
 		t.Fatalf("GenerateIdentity() error = %v", err)
 	}
 
-	err = SaveIdentity(identity, "../../../etc/passwd", []byte("passphrase"))
+	err = SaveIdentity(identity, "../../../etc/passwd", []byte("passphrase"), 0)
 	if err == nil {
 		t.Fatal("expected error for path traversal, got nil")
 	}
@@ -98,7 +77,7 @@ func TestLoadIdentity_WrongPassphrase(t *testing.T) {
 	path := filepath.Join(dir, "identity.age")
 	passphrase := []byte("correct passphrase")
 
-	if err := SaveIdentity(identity, path, passphrase); err != nil {
+	if err := SaveIdentity(identity, path, passphrase, 0); err != nil {
 		t.Fatalf("SaveIdentity failed: %v", err)
 	}
 
@@ -125,7 +104,7 @@ func TestEncryptWithPassphrase_Success(t *testing.T) {
 	plaintext := []byte("test passphrase encryption")
 	passphrase := []byte("my secret passphrase")
 
-	ciphertext, err := EncryptWithPassphrase(plaintext, passphrase)
+	ciphertext, err := EncryptWithPassphrase(plaintext, passphrase, 0)
 	if err != nil {
 		t.Fatalf("EncryptWithPassphrase() error = %v", err)
 	}
@@ -144,14 +123,14 @@ func TestEncryptWithPassphrase_Success(t *testing.T) {
 }
 
 func TestEncryptWithPassphrase_EmptyPlaintext(t *testing.T) {
-	_, err := EncryptWithPassphrase([]byte{}, []byte("passphrase"))
+	_, err := EncryptWithPassphrase([]byte{}, []byte("passphrase"), 0)
 	if !errors.Is(err, ErrEmptyPlaintext) {
 		t.Errorf("expected ErrEmptyPlaintext, got: %v", err)
 	}
 }
 
 func TestEncryptWithPassphrase_EmptyPassphrase(t *testing.T) {
-	_, err := EncryptWithPassphrase([]byte("test"), []byte(""))
+	_, err := EncryptWithPassphrase([]byte("test"), []byte(""), 0)
 	if err == nil {
 		t.Fatal("expected error for empty passphrase")
 	}
@@ -173,7 +152,7 @@ func TestDecryptWithPassphrase_EmptyPassphrase(t *testing.T) {
 
 func TestDecryptWithPassphrase_CorruptedCiphertext(t *testing.T) {
 	plaintext := []byte("test")
-	ciphertext, err := EncryptWithPassphrase(plaintext, []byte("correct"))
+	ciphertext, err := EncryptWithPassphrase(plaintext, []byte("correct"), 0)
 	if err != nil {
 		t.Fatalf("EncryptWithPassphrase() error = %v", err)
 	}

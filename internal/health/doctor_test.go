@@ -9,7 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"filippo.io/age"
+
 	"github.com/danieljustus/OpenPass/internal/health"
+	"github.com/danieljustus/OpenPass/internal/vault"
 )
 
 func TestRunChecks_EmptyDir(t *testing.T) {
@@ -539,5 +542,88 @@ func TestFix_NonFixableChecks(t *testing.T) {
 				t.Errorf("%s should have Fix=nil", r.ID)
 			}
 		}
+	}
+}
+
+func TestRunChecks_ManifestIntegrity_Missing(t *testing.T) {
+	dir := t.TempDir()
+	results := health.RunChecks(dir, health.Options{Only: []string{"vault.manifest.intact"}, NoNetwork: true})
+	if len(results) == 0 {
+		t.Fatal("expected at least one result")
+	}
+	r := results[0]
+	if r.Status != health.StatusWarn {
+		t.Errorf("expected warn for missing manifest, got %s: %s", r.Status, r.Message)
+	}
+}
+
+func TestRunChecks_ManifestIntegrity_NoIdentity(t *testing.T) {
+	dir := t.TempDir()
+	// Write a minimal manifest.age (identity is nil, so we won't try to decrypt)
+	if err := os.WriteFile(filepath.Join(dir, "manifest.age"), []byte("fake"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	results := health.RunChecks(dir, health.Options{Only: []string{"vault.manifest.intact"}, NoNetwork: true})
+	if len(results) == 0 {
+		t.Fatal("expected at least one result")
+	}
+	r := results[0]
+	if r.Status != health.StatusWarn {
+		t.Errorf("expected warn for no identity, got %s: %s", r.Status, r.Message)
+	}
+	if !strings.Contains(r.Message, "no active session") {
+		t.Errorf("expected message about active session, got: %s", r.Message)
+	}
+}
+
+func TestRunChecks_ManifestIntegrity_AllOK(t *testing.T) {
+	dir := t.TempDir()
+
+	// Create minimal config.yaml (needed by vault.OpenWithCachedIdentity).
+	cfgPath := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(cfgPath, []byte("vaultDir: "+dir+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Generate a real age identity.
+	identity, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create entries directory.
+	entriesDir := filepath.Join(dir, "entries")
+	if err := os.MkdirAll(entriesDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write an entry file (simulating an encrypted vault entry).
+	entryContent := []byte("fake-ciphertext-data-for-testing")
+	entryFile := filepath.Join(entriesDir, "test-entry.age")
+	if err := os.WriteFile(entryFile, entryContent, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Cache identity by opening vault (this calls rememberSearchIdentity).
+	if _, err := vault.OpenWithCachedIdentity(dir, identity); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create encrypted manifest with matching entry hash.
+	if err := vault.UpdateManifestEntry(dir, "test-entry", entryContent, identity); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run the manifest integrity check only.
+	results := health.RunChecks(dir, health.Options{Only: []string{"vault.manifest.intact"}, NoNetwork: true})
+	if len(results) == 0 {
+		t.Fatal("expected at least one result")
+	}
+	r := results[0]
+	if r.Status != health.StatusOK {
+		t.Errorf("expected ok, got %s: %s", r.Status, r.Message)
+	}
+	if !strings.Contains(r.Message, "verified") {
+		t.Errorf("expected 'verified' in message, got: %s", r.Message)
 	}
 }

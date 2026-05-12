@@ -5,6 +5,7 @@ package daemon
 
 import (
 	"bytes"
+	"encoding/xml"
 	"fmt"
 	"os"
 	"os/exec"
@@ -32,60 +33,166 @@ const (
 	systemdUnitName = "openpass-mcp.service"
 )
 
-// macOS launchd plist template
-const plistTmpl = `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.openpass.mcp</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>{{.BinaryPath}}</string>
-        <string>serve</string>
-        <string>--port</string>
-        <string>{{.PortStr}}</string>
-        <string>--bind</string>
-        <string>{{.Bind}}</string>
-    </array>
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>OPENPASS_VAULT</key>
-        <string>{{.VaultDir}}</string>
-    </dict>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-    <key>StandardOutPath</key>
-    <string>{{.LogPath}}</string>
-    <key>StandardErrorPath</key>
-    <string>{{.ErrorLogPath}}</string>
-</dict>
-</plist>`
-
-// Linux systemd service template
+// Linux systemd service template — values are pre-escaped before rendering
 const systemdTmpl = `[Unit]
 Description=OpenPass MCP Server
 
 [Service]
 Type=simple
-ExecStart={{.BinaryPath}} serve --port {{.PortStr}} --bind {{.Bind}}
-Environment=OPENPASS_VAULT={{.VaultDir}}
+ExecStart="{{.BinaryPath}}" serve --port {{.PortStr}} --bind "{{.Bind}}"
+Environment="OPENPASS_VAULT={{.VaultDir}}"
 Restart=on-failure
 
 [Install]
 WantedBy=default.target
 `
 
-// tmplData holds the values substituted into service file templates.
+// tmplData holds the values substituted into the systemd service file template.
 type tmplData struct {
-	BinaryPath   string
-	VaultDir     string
-	PortStr      string
-	Bind         string
-	LogPath      string
-	ErrorLogPath string
+	BinaryPath string
+	VaultDir   string
+	PortStr    string
+	Bind       string
+}
+
+// InstallOpts contains the user-supplied installation values to validate.
+type InstallOpts struct {
+	BinaryPath string
+	VaultDir   string
+	Bind       string
+	Port       int
+}
+
+// hasDisallowedChars returns true if s contains characters that would allow
+// template injection in plist XML or systemd unit files.
+func hasDisallowedChars(s string) bool {
+	return strings.ContainsAny(s, "\n\r<>\"'")
+}
+
+// validateInstallOptions validates that all user-supplied options are safe
+// for template rendering. It must be called before any template execution.
+func validateInstallOptions(opts InstallOpts) error {
+	var errs []string
+
+	if !filepath.IsAbs(opts.BinaryPath) {
+		errs = append(errs, "binary path must be an absolute path")
+	} else if hasDisallowedChars(opts.BinaryPath) {
+		errs = append(errs, "binary path contains disallowed characters (newlines or <>\"')")
+	}
+
+	if !filepath.IsAbs(opts.VaultDir) {
+		errs = append(errs, "vault directory must be an absolute path")
+	} else if hasDisallowedChars(opts.VaultDir) {
+		errs = append(errs, "vault directory contains disallowed characters (newlines or <>\"')")
+	}
+
+	if opts.Bind == "" {
+		errs = append(errs, "bind address must not be empty")
+	} else if hasDisallowedChars(opts.Bind) {
+		errs = append(errs, "bind address contains disallowed characters (newlines or <>\"')")
+	}
+
+	if opts.Port < 1 || opts.Port > 65535 {
+		errs = append(errs, "port must be between 1 and 65535")
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("invalid installation options: %s", strings.Join(errs, "; "))
+	}
+	return nil
+}
+
+// systemdEscape escapes a value for safe inclusion in a systemd unit file.
+// Backslashes and double-quotes are escaped per systemd.syntax rules.
+func systemdEscape(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	return s
+}
+
+// ---------------------------------------------------------------------------
+// Plist XML types — constructed via encoding/xml for automatic XML escaping
+// ---------------------------------------------------------------------------
+
+// plistKey is an XML <key> element.
+type plistKey struct {
+	XMLName xml.Name `xml:"key"`
+	Value   string   `xml:",chardata"`
+}
+
+// plistString is an XML <string> element.
+type plistString struct {
+	XMLName xml.Name `xml:"string"`
+	Value   string   `xml:",chardata"`
+}
+
+// plistArray is an <array> containing <string> elements.
+type plistArray struct {
+	XMLName xml.Name      `xml:"array"`
+	Items   []plistString `xml:"string"`
+}
+
+// plistTrue is a self-closing <true/> element.
+type plistTrue struct {
+	XMLName xml.Name `xml:"true"`
+}
+
+// plistEntry is a single <key><value> pair within a <dict>.
+// Exactly one of Str, Arr, Tru, or Dict must be set.
+type plistEntry struct {
+	Key  string
+	Str  *plistString
+	Arr  *plistArray
+	Tru  *plistTrue
+	Dict *plistDict
+}
+
+// plistDict is an XML <dict> with alternating <key> / <value> entries.
+type plistDict struct {
+	XMLName xml.Name `xml:"dict"`
+	Entries []plistEntry
+}
+
+// MarshalXML implements xml.Marshaler for plistDict, emitting alternating
+// <key>K</key><V>V</V> pairs to match the plist DTD requirements.
+func (d plistDict) MarshalXML(e *xml.Encoder, start xml.StartElement) error {
+	if err := e.EncodeToken(start); err != nil {
+		return err
+	}
+	for _, entry := range d.Entries {
+		if err := e.EncodeElement(plistKey{Value: entry.Key},
+			xml.StartElement{Name: xml.Name{Local: "key"}}); err != nil {
+			return err
+		}
+		var err error
+		switch {
+		case entry.Str != nil:
+			err = e.EncodeElement(entry.Str,
+				xml.StartElement{Name: xml.Name{Local: "string"}})
+		case entry.Arr != nil:
+			err = e.EncodeElement(entry.Arr,
+				xml.StartElement{Name: xml.Name{Local: "array"}})
+		case entry.Tru != nil:
+			err = e.EncodeElement(entry.Tru,
+				xml.StartElement{Name: xml.Name{Local: "true"}})
+		case entry.Dict != nil:
+			err = e.EncodeElement(entry.Dict,
+				xml.StartElement{Name: xml.Name{Local: "dict"}})
+		default:
+			return fmt.Errorf("plist entry %q has no value", entry.Key)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return e.EncodeToken(start.End())
+}
+
+// plistRoot is the top-level <plist> element wrapping a single <dict>.
+type plistRoot struct {
+	XMLName xml.Name  `xml:"plist"`
+	Version string    `xml:"version,attr"`
+	Dict    plistDict `xml:"dict"`
 }
 
 // Installer manages the OpenPass MCP background service on the current platform.
@@ -134,6 +241,16 @@ func NewInstaller(cfg *config.Config, vaultDir string) (*Installer, error) {
 
 // Install installs the MCP server as a background service on the current platform.
 func (i *Installer) Install() error {
+	opts := InstallOpts{
+		BinaryPath: i.binaryPath,
+		VaultDir:   i.vaultDir,
+		Bind:       i.bind,
+		Port:       i.port,
+	}
+	if err := validateInstallOptions(opts); err != nil {
+		return err
+	}
+
 	switch runtime.GOOS {
 	case "darwin":
 		return i.installDarwin()
@@ -289,6 +406,16 @@ func (i *Installer) statusDarwin() (string, error) {
 }
 
 func (i *Installer) writePlist(path string) error {
+	opts := InstallOpts{
+		BinaryPath: i.binaryPath,
+		VaultDir:   i.vaultDir,
+		Bind:       i.bind,
+		Port:       i.port,
+	}
+	if err := validateInstallOptions(opts); err != nil {
+		return err
+	}
+
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create directory: %w", err)
 	}
@@ -297,23 +424,42 @@ func (i *Installer) writePlist(path string) error {
 		return fmt.Errorf("create log directory: %w", err)
 	}
 
-	data := tmplData{
-		BinaryPath:   i.binaryPath,
-		VaultDir:     i.vaultDir,
-		PortStr:      strconv.Itoa(i.port),
-		Bind:         i.bind,
-		LogPath:      i.logPath,
-		ErrorLogPath: i.errLogPath,
-	}
-
-	tmpl, err := template.New("plist").Parse(plistTmpl)
-	if err != nil {
-		return fmt.Errorf("parse plist template: %w", err)
-	}
-
 	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, data); err != nil {
-		return fmt.Errorf("render plist template: %w", err)
+	buf.WriteString(xml.Header)
+	buf.WriteString("<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n")
+
+	root := plistRoot{
+		Version: "1.0",
+		Dict: plistDict{
+			Entries: []plistEntry{
+				{Key: "Label", Str: &plistString{Value: "com.openpass.mcp"}},
+				{Key: "ProgramArguments", Arr: &plistArray{
+					Items: []plistString{
+						{Value: i.binaryPath},
+						{Value: "serve"},
+						{Value: "--port"},
+						{Value: strconv.Itoa(i.port)},
+						{Value: "--bind"},
+						{Value: i.bind},
+					},
+				}},
+				{Key: "EnvironmentVariables", Dict: &plistDict{
+					Entries: []plistEntry{
+						{Key: "OPENPASS_VAULT", Str: &plistString{Value: i.vaultDir}},
+					},
+				}},
+				{Key: "RunAtLoad", Tru: &plistTrue{}},
+				{Key: "KeepAlive", Tru: &plistTrue{}},
+				{Key: "StandardOutPath", Str: &plistString{Value: i.logPath}},
+				{Key: "StandardErrorPath", Str: &plistString{Value: i.errLogPath}},
+			},
+		},
+	}
+
+	encoder := xml.NewEncoder(&buf)
+	encoder.Indent("", "    ")
+	if err := encoder.Encode(root); err != nil {
+		return fmt.Errorf("encode plist XML: %w", err)
 	}
 
 	if err := os.WriteFile(path, buf.Bytes(), 0o600); err != nil {
@@ -416,15 +562,25 @@ func (i *Installer) statusLinux() (string, error) {
 }
 
 func (i *Installer) writeService(path string) error {
+	opts := InstallOpts{
+		BinaryPath: i.binaryPath,
+		VaultDir:   i.vaultDir,
+		Bind:       i.bind,
+		Port:       i.port,
+	}
+	if err := validateInstallOptions(opts); err != nil {
+		return err
+	}
+
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create directory: %w", err)
 	}
 
 	data := tmplData{
-		BinaryPath: i.binaryPath,
-		VaultDir:   i.vaultDir,
+		BinaryPath: systemdEscape(i.binaryPath),
+		VaultDir:   systemdEscape(i.vaultDir),
 		PortStr:    strconv.Itoa(i.port),
-		Bind:       i.bind,
+		Bind:       systemdEscape(i.bind),
 	}
 
 	tmpl, err := template.New("service").Parse(systemdTmpl)

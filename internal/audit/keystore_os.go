@@ -157,7 +157,7 @@ func (k *osKeystore) LoadHMACKey() ([]byte, error) {
 	}
 
 	keyPath := filepath.Join(k.auditDir, hmacKeyFileName)
-	data, fileErr := os.ReadFile(keyPath)
+	data, fileErr := os.ReadFile(keyPath) //#nosec G304 -- auditDir is controlled
 	if fileErr != nil {
 		if os.IsNotExist(fileErr) {
 			return nil, err

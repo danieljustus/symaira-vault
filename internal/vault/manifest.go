@@ -46,7 +46,7 @@ const manifestFileName = "manifest.age"
 // error if the file does not exist.
 func LoadManifest(vaultDir string, identity *age.X25519Identity) (*Manifest, error) {
 	manifestPath := filepath.Join(vaultDir, manifestFileName)
-	raw, err := os.ReadFile(manifestPath)
+	raw, err := os.ReadFile(manifestPath) //#nosec G304 -- vaultDir is controlled
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +151,10 @@ func VerifyManifestIntegrity(vaultDir string, identity *age.X25519Identity) (*Ma
 		return nil, err
 	}
 
-	cfg := loadVaultConfig(vaultDir)
+	cfg, err := loadVaultConfig(vaultDir)
+	if err != nil {
+		return nil, err
+	}
 	result := &ManifestVerifyResult{}
 	storagePaths := make(map[string]bool)
 
@@ -159,7 +162,7 @@ func VerifyManifestIntegrity(vaultDir string, identity *age.X25519Identity) (*Ma
 		filePath := entryStoragePath(vaultDir, logicalPath, identity, cfg)
 		storagePaths[filePath] = true
 
-		data, err := os.ReadFile(filePath)
+		data, err := os.ReadFile(filePath) //#nosec G304 -- path derived from manifest entries
 		if os.IsNotExist(err) {
 			result.Missing = append(result.Missing, logicalPath)
 			continue
