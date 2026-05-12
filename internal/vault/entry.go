@@ -277,7 +277,15 @@ func WriteEntry(vaultDir, path string, entry *Entry, identity *age.X25519Identit
 		return err
 	}
 	// Symlink-hardened write: O_NOFOLLOW + fstat verification prevents writing through symlinks
-	return SafeWriteFile(filePath, ciphertext, 0o600)
+	if err := SafeWriteFile(filePath, ciphertext, 0o600); err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+	if err := UpdateManifestEntry(vaultDir, path, ciphertext, identity); err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return fmt.Errorf("update manifest: %w", err)
+	}
+	return nil
 }
 
 // DeleteEntry removes an entry from the vault
@@ -309,6 +317,10 @@ func DeleteEntry(vaultDir, path string, identity *age.X25519Identity) error {
 			span.SetStatus(codes.Error, err.Error())
 			return err
 		}
+		if err := RemoveManifestEntry(vaultDir, path, identity); err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			return fmt.Errorf("remove from manifest: %w", err)
+		}
 		return nil
 	}
 
@@ -321,6 +333,10 @@ func DeleteEntry(vaultDir, path string, identity *age.X25519Identity) error {
 			span.SetStatus(codes.Error, err.Error())
 			return err
 		}
+	}
+	if err := RemoveManifestEntry(vaultDir, path, identity); err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return fmt.Errorf("remove from manifest: %w", err)
 	}
 	return nil
 }

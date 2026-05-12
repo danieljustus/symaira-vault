@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -784,11 +785,16 @@ func TestRunHTTPServer_OAuthAuthorizationServer(t *testing.T) {
 	}
 
 	requiredFields := []string{"issuer", "authorization_endpoint", "token_endpoint",
-		"response_types_supported", "code_challenge_methods_supported",
+		"registration_endpoint", "response_types_supported", "code_challenge_methods_supported",
 		"token_endpoint_auth_methods_supported", "grant_types_supported"}
 	for _, field := range requiredFields {
 		if body[field] == nil {
 			t.Errorf("%s field is missing", field)
+		}
+	}
+	if regEP, ok := body["registration_endpoint"].(string); ok {
+		if !strings.HasSuffix(regEP, "/oauth/register") {
+			t.Errorf("registration_endpoint = %q, want suffix /oauth/register", regEP)
 		}
 	}
 
@@ -804,65 +810,153 @@ func TestRunHTTPServer_OAuthAuthorizationServer(t *testing.T) {
 	}
 }
 
-func TestRunHTTPServer_OAuthStubEndpoints(t *testing.T) {
-	cases := []struct {
-		name string
-		path string
-	}{
-		{
-			name: "authorize endpoint",
-			path: "/mcp/oauth/authorize",
-		},
-		{
-			name: "token endpoint",
-			path: "/mcp/oauth/token",
-		},
-	}
+func TestRunHTTPServer_OAuthEndpoints(t *testing.T) {
+	v := newTestVault(t)
+	port := reserveFreePort(t)
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			v := newTestVault(t)
-			port := reserveFreePort(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	waitForServer := runHTTPServerAsync(ctx, t, "127.0.0.1", port, v, mcp.New)
+	defer func() {
+		cancel()
+		waitForServer()
+	}()
 
-			ctx, cancel := context.WithCancel(context.Background())
-			waitForServer := runHTTPServerAsync(ctx, t, "127.0.0.1", port, v, mcp.New)
-			defer func() {
-				cancel()
-				waitForServer()
-			}()
+	client := newTestHTTPClient()
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 
-			client := newTestHTTPClient()
-			baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+	t.Run("register endpoint success", func(t *testing.T) {
+		reqBody := `{"redirect_uris": ["http://127.0.0.1:1234/callback"]}`
+		req, _ := http.NewRequest(http.MethodPost, baseURL+"/oauth/register", strings.NewReader(reqBody))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("register request failed: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
 
-			req, _ := http.NewRequest(http.MethodPost, baseURL+tc.path, nil)
-			resp, err := client.Do(req)
-			if err != nil {
-				t.Fatalf("request to %s failed: %v", tc.path, err)
-			}
-			defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusCreated {
+			t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if body["client_id"] == nil {
+			t.Error("client_id missing from registration response")
+		}
+		redirectURIs, ok := body["redirect_uris"].([]interface{})
+		if !ok {
+			t.Fatal("redirect_uris missing from registration response")
+		}
+		if len(redirectURIs) != 1 || redirectURIs[0] != "http://127.0.0.1:1234/callback" {
+			t.Errorf("redirect_uris = %v, want [http://127.0.0.1:1234/callback]", redirectURIs)
+		}
+	})
 
-			if resp.StatusCode != http.StatusNotImplemented {
-				t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusNotImplemented)
-			}
+	t.Run("register endpoint missing redirect_uris", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodPost, baseURL+"/oauth/register", strings.NewReader(`{}`))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("register request failed: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
 
-			contentType := resp.Header.Get("Content-Type")
-			if !strings.Contains(contentType, "application/json") {
-				t.Errorf("Content-Type = %q, want application/json", contentType)
-			}
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if body["error"] != "invalid_redirect_uri" {
+			t.Errorf("error = %v, want invalid_redirect_uri", body["error"])
+		}
+	})
 
-			var body map[string]any
-			if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-				t.Fatalf("decode response: %v", err)
-			}
+	t.Run("register endpoint empty redirect_uris", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodPost, baseURL+"/oauth/register", strings.NewReader(`{"redirect_uris": []}`))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("register request failed: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
 
-			if body["error"] != "not_implemented" {
-				t.Errorf("error = %v, want not_implemented", body["error"])
-			}
-			if body["error_description"] == nil {
-				t.Error("error_description field is missing")
-			}
-		})
-	}
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if body["error"] != "invalid_redirect_uri" {
+			t.Errorf("error = %v, want invalid_redirect_uri", body["error"])
+		}
+	})
+
+	t.Run("register endpoint invalid JSON", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodPost, baseURL+"/oauth/register", strings.NewReader(`not json`))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("register request failed: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+		}
+	})
+
+	t.Run("register endpoint wrong content type", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodPost, baseURL+"/oauth/register", strings.NewReader(`{"redirect_uris": ["http://127.0.0.1:1234/callback"]}`))
+		req.Header.Set("Content-Type", "text/plain")
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("register request failed: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+		}
+	})
+
+	t.Run("authorize rejects missing params", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, baseURL+"/mcp/oauth/authorize", nil)
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("authorize request failed: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+		}
+	})
+
+	t.Run("token rejects missing code", func(t *testing.T) {
+		form := url.Values{"grant_type": {"authorization_code"}, "code": {"invalid"}, "code_verifier": {"v"}}
+		req, _ := http.NewRequest(http.MethodPost, baseURL+"/mcp/oauth/token", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("token request failed: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if body["error"] != "invalid_grant" {
+			t.Errorf("error = %v, want invalid_grant", body["error"])
+		}
+	})
 }
 
 func TestRunHTTPServer_InitializeAndToolsList(t *testing.T) {

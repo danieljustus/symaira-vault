@@ -85,7 +85,8 @@ OpenPass exposes the following MCP tools for agent integration:
 **Write Operations**:
 - `set_entry_field` — Store or update a field in an entry
 - `delete_entry` — Delete an entry
-- `secure_input` — Prompt user for sensitive data via TTY
+- `secure_input` — Prompt user for sensitive data via TTY or native GUI dialog
+- `request_credential` — Agent-initiated: pop a native dialog when an expected vault entry is missing, store the user's input, never see the value
 
 **Automation** (v2.2.0+):
 - `run_command` — Execute commands with vault secrets injected as environment variables
@@ -293,6 +294,59 @@ the underlying secret.
 
 For the full syntax of `redactFields` (including wildcard patterns and nested field paths),
 see the [Field Redaction section in mcp-api.md](mcp-api.md#field-redaction-with-redactfields).
+
+## Slash Commands & Auto-Credential-Capture
+
+OpenPass advertises the MCP **prompts** capability. In Claude Code, OpenCode,
+Hermes and any other MCP client that surfaces prompts as slash commands, four
+guided workflows become available once the server is connected:
+
+| Command | What it does |
+|---------|--------------|
+| `add-credential` | Walks the agent through adding a new vault entry. Sensitive fields are collected via `request_credential` (native dialog) so the value never enters the chat. |
+| `rotate-credential` | Generates a new password, stores it at the existing path, and reminds you to update the value on the remote service. |
+| `find-and-use` | Searches the vault for a query, then picks the right consumption tool (`copy_to_clipboard`, `autotype`, or `execute_with_secret`) based on the stated task. |
+| `share-credential` | Creates a share grant for another agent and explains the human-approval flow. |
+
+In Claude Code these appear as `/mcp__openpass__add-credential` etc. Pass
+prompt arguments via the slash-command UI (e.g. `service_name: GitHub`).
+
+### Auto-Credential-Capture flow
+
+When an agent is mid-task and discovers a credential is missing, the
+recommended pattern is:
+
+1. Agent runs `find_entries` / `get_entry` for an expected path.
+2. Tool returns nothing.
+3. Agent calls `request_credential` with `path`, `field`, and a `reason`
+   (shown verbatim to the user).
+4. OpenPass opens a native OS dialog:
+   - macOS: `osascript display dialog` with hidden answer field
+   - Linux: `zenity --entry --hide-text` (or `kdialog --password`)
+   - Windows: `Get-Credential` window
+   - Terminal-attached run: TTY box (existing behavior)
+5. User types the value into the dialog. The agent only sees a success
+   confirmation; the value is encrypted and stored at the requested path.
+6. Agent continues the task using `execute_with_secret`, `copy_to_clipboard`,
+   etc.
+
+### Choosing the secure-input backend
+
+`secure_input` and `request_credential` are advertised in `tools/list` whenever
+**any** backend is reachable — TTY (if attached) or a native GUI dialog.
+Override with:
+
+| `OPENPASS_SECUREUI` | Behavior |
+|---------------------|----------|
+| (unset) | TTY if attached, else native GUI |
+| `tty` | Force TTY; if unavailable, tools disappear from the list |
+| `gui` | Force GUI; if unavailable, tools disappear from the list |
+| `none` | Disable both |
+
+This matters for daemonized setups (LaunchAgent, systemd unit). The
+LaunchAgent example above has no TTY — set `OPENPASS_SECUREUI=gui` to make the
+secure-input tools available there and they will pop a native dialog on the
+logged-in user's screen.
 
 ## Agent Skill
 

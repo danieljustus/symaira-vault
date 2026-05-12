@@ -286,6 +286,44 @@ Each vault entry is encrypted individually as a standalone `.age` file, ensuring
 - Efficient partial access patterns
 - Git history contains only ciphertext
 
+### KDF Migration Path (scrypt → argon2id)
+
+OpenPass currently uses **scrypt** (N=262144, r=8, p=1 — work factor 18) for
+passphrase-based key derivation. While scrypt provides reasonable protection,
+**argon2id** is the industry-standard memory-hard KDF (RFC 9106) and provides
+stronger resistance against GPU/ASIC-based attacks.
+
+#### Current Status (v1.x)
+
+| Vault Format | KDF    | Work Factor | Doctor Check         |
+|-------------|--------|-------------|---------------------|
+| v1 (current) | scrypt | 18          | `crypto.kdf.modern` warns |
+| v2 (planned) | argon2id | TBD       | `crypto.kdf.modern` OK    |
+
+#### Migration Plan
+
+A future release will provide:
+- `openpass migrate kdf` command to re-encrypt vault entries with argon2id
+- Automatic detection of vault format version
+- Doctor check `crypto.kdf.modern` to track migration status
+
+#### Preparing for Migration
+
+1. **Back up your vault** before any migration:
+   ```bash
+   cp -r ~/.openpass ~/.openpass.backup
+   ```
+2. Run `openpass doctor` to check current KDF status
+3. Wait for the migration command to be available in a future release
+
+#### Why argon2id?
+
+- **Memory-hard**: Resistant to GPU, FPGA, and ASIC acceleration
+- **Side-channel resistant**: argon2id mode resists both timing and cache-timing attacks
+- **Industry standard**: Winner of the 2015 Password Hashing Competition (PHC)
+- **RFC 9106**: Standardized by the IETF
+- **Broader ecosystem**: Used by major password managers and security tools
+
 ## Privacy & Telemetry
 
 OpenPass does **NOT** collect any product analytics, error reports, or usage telemetry.

@@ -1,11 +1,18 @@
 package mcp
 
 import (
-	"os"
 	"testing"
 
 	"github.com/danieljustus/OpenPass/internal/config"
+	"github.com/danieljustus/OpenPass/internal/secureui"
 )
+
+func mockSecureInputCapability(t *testing.T, c secureui.Capability) {
+	t.Helper()
+	original := secureInputCapabilityFn
+	secureInputCapabilityFn = func() secureui.Capability { return c }
+	t.Cleanup(func() { secureInputCapabilityFn = original })
+}
 
 func TestSecureInputToolAvailabilityInRegistry(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
@@ -15,24 +22,28 @@ func TestSecureInputToolAvailabilityInRegistry(t *testing.T) {
 		ApprovalMode: "none",
 	}, "stdio", "")
 
-	originalOpenSecureTTY := openSecureTTY
-	defer func() { openSecureTTY = originalOpenSecureTTY }()
-
-	openSecureTTY = func() (secureInputDevice, error) {
-		return nil, os.ErrNotExist
-	}
+	mockSecureInputCapability(t, secureui.CapNone)
 	tools := toolsListPayload(srv)
 	if toolNamesContain(tools, "secure_input") {
-		t.Fatal("secure_input should be hidden when no TTY is available")
+		t.Error("secure_input should be hidden when no backend is available")
+	}
+	if toolNamesContain(tools, "request_credential") {
+		t.Error("request_credential should be hidden when no backend is available")
 	}
 
-	openSecureTTY = func() (secureInputDevice, error) {
-		return &mockSecureInputDevice{}, nil
-	}
-
+	mockSecureInputCapability(t, secureui.CapTTY)
 	tools = toolsListPayload(srv)
 	if !toolNamesContain(tools, "secure_input") {
-		t.Fatal("secure_input should be listed when stdio and TTY are available")
+		t.Error("secure_input should be listed when TTY is available")
+	}
+	if !toolNamesContain(tools, "request_credential") {
+		t.Error("request_credential should be listed when TTY is available")
+	}
+
+	mockSecureInputCapability(t, secureui.CapGUI)
+	tools = toolsListPayload(srv)
+	if !toolNamesContain(tools, "secure_input") {
+		t.Error("secure_input should be listed when GUI is available (HTTP-mode case)")
 	}
 }
 

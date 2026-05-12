@@ -11,15 +11,44 @@ import (
 
 // WelcomeStep greets the user and detects whether a vault already exists.
 type WelcomeStep struct {
-	vaultDir string
-	existing bool
-	done     bool
+	vaultDir     string
+	existing     bool
+	done         bool
+	noResume     bool
+	resumeFound  bool
+	resumeStep   string
+	resumeTarget string
+	resumeState  *WizardState
 }
 
-func NewWelcomeStep(vaultDir string) *WelcomeStep {
-	return &WelcomeStep{
+func NewWelcomeStep(vaultDir string, noResume bool) *WelcomeStep {
+	s := &WelcomeStep{
 		vaultDir: vaultDir,
 		existing: vault.IsInitialized(vaultDir),
+		noResume: noResume,
+	}
+	if !noResume {
+		s.checkResume()
+	}
+	return s
+}
+
+func (s *WelcomeStep) checkResume() {
+	age, err := ResumeFileAge(s.vaultDir)
+	if err != nil || age >= resumeMaxAge {
+		return
+	}
+	state, lastStep, err := LoadResumeState(s.vaultDir)
+	if err != nil {
+		return
+	}
+	s.resumeFound = true
+	s.resumeStep = lastStep
+	s.resumeState = state
+	if state.ExistingVault {
+		s.resumeTarget = lastStep
+	} else {
+		s.resumeTarget = "Passphrase"
 	}
 }
 
@@ -30,6 +59,22 @@ func (s *WelcomeStep) Init() tea.Cmd { return nil }
 
 func (s *WelcomeStep) Update(msg tea.Msg) (Step, tea.Cmd) {
 	if km, ok := msg.(tea.KeyMsg); ok {
+		if s.resumeFound {
+			switch km.String() {
+			case "y", "Y":
+				s.done = true
+				return s, func() tea.Msg {
+					return resumeMsg{
+						state:     *s.resumeState,
+						stepTitle: s.resumeTarget,
+					}
+				}
+			case "n", "N", keyEnter, " ":
+				s.resumeFound = false
+				s.done = true
+				return s, stepDoneCmd()
+			}
+		}
 		if key.Matches(km, key.NewBinding(key.WithKeys(keyEnter, " "))) {
 			s.done = true
 			return s, stepDoneCmd()
@@ -39,6 +84,23 @@ func (s *WelcomeStep) Update(msg tea.Msg) (Step, tea.Cmd) {
 }
 
 func (s *WelcomeStep) View() string {
+	if s.resumeFound {
+		body := fmt.Sprintf(
+			"%s\n\n%s\n\n%s",
+			titleStyle.Render("Resume Previous Setup"),
+			fmt.Sprintf("A partially completed setup was found (step: %s).", focusedStyle.Render(s.resumeStep)),
+			fmt.Sprintf("Resume from %s?  %s  %s",
+				focusedStyle.Render(s.resumeStep),
+				focusedStyle.Render("[y]es"),
+				helpStyle.Render("[N]o — start fresh"),
+			),
+		)
+		if !s.resumeState.ExistingVault {
+			body += "\n\n" + warnStyle.Render("You will need to re-enter your passphrase.")
+		}
+		return body
+	}
+
 	var body string
 	if s.existing {
 		body = fmt.Sprintf(

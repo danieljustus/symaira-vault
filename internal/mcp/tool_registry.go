@@ -226,13 +226,28 @@ func toolDefinitions() []toolDefinition {
 		},
 		{
 			Name:        "secure_input",
-			Description: "Prompt the user for sensitive data via an interactive TTY and store it without exposing the value to the agent",
+			Description: "Prompt the user for sensitive data via TTY or native GUI dialog and store it without exposing the value to the agent",
 			InputSchema: objectSchema([]string{"path", "field"}, map[string]schemaProperty{
 				"path":        {Type: "string", Description: "Entry path to store the value"},
 				"field":       {Type: "string", Description: "Field name to store the value under"},
 				"description": {Type: "string", Description: "Optional description shown to the user in the prompt"},
 			}),
 			Handler:   (*Server).handleSecureInput,
+			Available: secureInputToolAvailable,
+		},
+		{
+			Name: "request_credential",
+			Description: "Request the user to securely enter a credential the agent needs " +
+				"but cannot find in the vault. Opens a native input dialog (TTY box or " +
+				"OS-native popup). The value is stored in the vault and never exposed to " +
+				"the agent. Use this after find_entries / get_entry returns nothing for an " +
+				"expected path, instead of asking the user for the secret in chat.",
+			InputSchema: objectSchema([]string{"path", "field", "reason"}, map[string]schemaProperty{
+				"path":   {Type: "string", Description: "Vault path to store the new credential, e.g. 'github/api-token'"},
+				"field":  {Type: "string", Description: "Field name, e.g. 'token', 'password', 'api_key'"},
+				"reason": {Type: "string", Description: "Short human-readable reason shown in the dialog (why does the agent need this?)"},
+			}),
+			Handler:   (*Server).handleRequestCredential,
 			Available: secureInputToolAvailable,
 		},
 		{

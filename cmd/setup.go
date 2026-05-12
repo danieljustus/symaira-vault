@@ -10,6 +10,9 @@ import (
 	"github.com/danieljustus/OpenPass/internal/ui/wizard"
 )
 
+var setupKeepOnError bool
+var setupNoResume bool
+
 var setupCmd = &cobra.Command{
 	Use:   "setup",
 	Short: "Interactive setup wizard for OpenPass",
@@ -36,10 +39,12 @@ For non-interactive environments (CI, scripts), use 'openpass init' instead.`,
 		}
 
 		vaultDir := getVaultDir()
-		return wizard.Run(vaultDir)
+		return wizard.Run(vaultDir, setupKeepOnError, setupNoResume)
 	},
 }
 
 func init() {
+	setupCmd.Flags().BoolVar(&setupKeepOnError, "keep-on-error", false, "do not rollback vault init artifacts when subsequent steps fail")
+	setupCmd.Flags().BoolVar(&setupNoResume, "no-resume", false, "disable setup resume after abort")
 	rootCmd.AddCommand(setupCmd)
 }

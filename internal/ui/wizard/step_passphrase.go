@@ -6,6 +6,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/danieljustus/OpenPass/internal/crypto"
 )
 
 const minPassphraseLen = 12
@@ -41,6 +43,18 @@ func (s *PassphraseStep) Init() tea.Cmd                  { return textinput.Blin
 func (s *PassphraseStep) Update(msg tea.Msg) (Step, tea.Cmd) {
 	if km, ok := msg.(tea.KeyMsg); ok {
 		switch km.String() {
+		case "g":
+			phrase, err := crypto.GenerateDicewarePassphrase(6)
+			if err != nil {
+				s.err = err.Error()
+				return s, nil
+			}
+			s.pass.SetValue(phrase)
+			s.confirm.SetValue(phrase)
+			s.pass.Focus()
+			s.focused = 0
+			s.err = ""
+			return s, nil
 		case "tab", "down":
 			s.focused = (s.focused + 1) % 2
 			s.focusActive()
@@ -91,7 +105,7 @@ func (s *PassphraseStep) View() string {
 	if s.err != "" {
 		lines = append(lines, "", errorStyle.Render("✗ "+s.err))
 	} else {
-		lines = append(lines, "", helpStyle.Render("Tab to switch fields · Enter to confirm"))
+		lines = append(lines, "", helpStyle.Render("Tab to switch fields · Enter to confirm · G to generate"))
 	}
 	return strings.Join(lines, "\n")
 }

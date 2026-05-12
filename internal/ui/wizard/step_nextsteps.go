@@ -45,9 +45,9 @@ func (s *NextStepsStep) View() string {
 
 	if st.SyncMode == syncGit && st.MultiDevice {
 		lines = append(lines, "",
-			dimStyle.Render("To add another device:"),
-			"  "+focusedStyle.Render("openpass device pair")+" on this device",
-			"  "+focusedStyle.Render("openpass device join <url> <token>")+" on the other device",
+			dimStyle.Render("Pair another device:"),
+			"  "+focusedStyle.Render("openpass device add --pair \"<data>\"")+" on the other device",
+			"  "+focusedStyle.Render("openpass device accept <token>")+"   to complete pairing",
 		)
 	}
 

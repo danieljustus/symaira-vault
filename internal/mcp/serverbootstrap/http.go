@@ -176,9 +176,11 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 	mux.HandleFunc("GET /.well-known/oauth-protected-resource", handleOAuthProtectedResource(bind, port))
 	mux.HandleFunc("GET /.well-known/oauth-authorization-server", handleOAuthAuthorizationServer(bind, port))
 
-	// OAuth stub endpoints
-	mux.HandleFunc("POST /mcp/oauth/authorize", handleOAuthAuthorizeStub)
-	mux.HandleFunc("POST /mcp/oauth/token", handleOAuthTokenStub)
+	// OAuth 2.1 + PKCE endpoints (RFC 7591, RFC 6749, RFC 7636)
+	oauthStore := newOAuthCodeStore()
+	mux.HandleFunc("POST /oauth/register", handleOAuthRegister)
+	mux.HandleFunc("GET /mcp/oauth/authorize", handleOAuthAuthorize(oauthStore))
+	mux.HandleFunc("POST /mcp/oauth/token", handleOAuthToken(oauthStore, legacyToken))
 
 	const maxRequestBodySize = 1 * 1024 * 1024
 	mcpHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

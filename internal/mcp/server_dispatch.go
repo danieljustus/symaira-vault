@@ -18,7 +18,7 @@ func toolError(msg string) *CallToolResult {
 
 func toolActionType(toolName string) string {
 	switch toolName {
-	case "set_entry_field", "secure_input":
+	case "set_entry_field", "secure_input", "request_credential":
 		return "set"
 	case "delete_entry", "openpass_delete":
 		return "delete"

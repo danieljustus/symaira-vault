@@ -107,13 +107,13 @@ func TestHMACTamperedEntryDetected(t *testing.T) {
 	}
 
 	auditDir := filepath.Join(home, ".openpass")
-	hmacKeyPath := filepath.Join(auditDir, hmacKeyFileName)
-	key, err := os.ReadFile(hmacKeyPath)
+	ks := NewKeystore(auditDir)
+	key, err := ks.LoadHMACKey()
 	if err != nil {
-		t.Fatalf("ReadFile(hmacKey) error = %v", err)
+		t.Fatalf("LoadHMACKey() error = %v", err)
 	}
 
-	result, err := VerifyLog(logFile, hmacKeyPath)
+	result, err := VerifyLog(logFile, key)
 	if err != nil {
 		t.Fatalf("VerifyLog() error = %v", err)
 	}
@@ -127,7 +127,6 @@ func TestHMACTamperedEntryDetected(t *testing.T) {
 		t.Fatalf("FirstBadIdx = %d, want 1", result.FirstBadIdx)
 	}
 
-	_ = key
 }
 
 func TestHMACLegacyLogAccepted(t *testing.T) {
@@ -321,7 +320,7 @@ func TestHMACMultipleWrites(t *testing.T) {
 }
 
 func TestHMACVerifyFileNotFound(t *testing.T) {
-	result, err := VerifyLog("/nonexistent/path/audit.log", "/nonexistent/path/audit-hmac-key")
+	result, err := VerifyLog("/nonexistent/path/audit.log", nil)
 	if err == nil {
 		t.Fatal("expected error for nonexistent files")
 	}

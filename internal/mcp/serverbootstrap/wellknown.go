@@ -42,24 +42,11 @@ func handleOAuthAuthorizationServer(bind string, port int) http.HandlerFunc {
 			"issuer":                                addr,
 			"authorization_endpoint":                addr + "/mcp/oauth/authorize",
 			"token_endpoint":                        addr + "/mcp/oauth/token",
+			"registration_endpoint":                 addr + "/oauth/register",
 			"response_types_supported":              []string{"code"},
 			"code_challenge_methods_supported":      []string{"S256"},
 			"token_endpoint_auth_methods_supported": []string{"none"},
-			"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
+			"grant_types_supported":                 []string{"authorization_code"},
 		})
 	}
-}
-
-func handleOAuthAuthorizeStub(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusNotImplemented, map[string]string{
-		"error":             "not_implemented",
-		"error_description": "OAuth authorization is not yet implemented. Use bearer token authentication.",
-	})
-}
-
-func handleOAuthTokenStub(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusNotImplemented, map[string]string{
-		"error":             "not_implemented",
-		"error_description": "OAuth token exchange is not yet implemented. Use bearer token authentication.",
-	})
 }

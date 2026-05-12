@@ -25,6 +25,8 @@ A modern, secure command-line password manager written in Go. Uses [age](https:/
 - **Git Integration**: Automatic commits and sync
 - **Multi-User Vaults**: age recipients for shared access
 - **MCP Server**: stdio and HTTP for AI agent integration with scoped token management
+- **MCP Slash Commands**: `add-credential`, `rotate-credential`, `find-and-use`, `share-credential` — guided workflows surfaced as slash commands in Claude Code, OpenCode, Hermes
+- **Native Secure-Input Dialog**: cross-platform popups (macOS osascript, Linux zenity/kdialog, Windows Get-Credential) for collecting credentials from agents without exposing them in chat
 - **Cross-Platform**: macOS, Linux, Windows, FreeBSD
 
 ## Installation

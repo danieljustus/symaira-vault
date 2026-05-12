@@ -9,12 +9,17 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
+	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
 	"github.com/danieljustus/OpenPass/internal/health"
 )
 
 var (
 	doctorJSON      bool
 	doctorNoNetwork bool
+	doctorStrict    bool
+	doctorOnly      []string
+	doctorExclude   []string
+	doctorFix       bool
 )
 
 var doctorCmd = &cobra.Command{
@@ -32,13 +37,49 @@ Use --no-network to skip checks that require network access (git remote reachabi
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		vaultDir := getVaultDir()
-		opts := health.Options{NoNetwork: doctorNoNetwork}
+		opts := health.Options{
+			NoNetwork: doctorNoNetwork,
+			Version:   appVersion,
+			Only:      doctorOnly,
+			Exclude:   doctorExclude,
+		}
 		results := health.RunChecks(vaultDir, opts)
 
-		if wantJSONOutput(doctorJSON) {
-			return outputDoctorJSON(cmd, vaultDir, results)
+		if doctorFix {
+			for i := range results {
+				r := &results[i]
+				if r.Fixable && r.Status != health.StatusOK && r.Fix != nil {
+					if err := r.Fix(); err != nil {
+						r.Message = "fix failed: " + err.Error()
+					} else {
+						r.Fixed = true
+						r.Status = health.StatusOK
+						r.Message = "fixed — " + r.Message
+					}
+				}
+			}
 		}
-		return outputDoctorText(cmd, vaultDir, results)
+
+		if wantJSONOutput(doctorJSON) {
+			if err := outputDoctorJSON(cmd, vaultDir, results); err != nil {
+				return err
+			}
+		} else {
+			if err := outputDoctorText(cmd, vaultDir, results); err != nil {
+				return err
+			}
+		}
+
+		if doctorStrict {
+			_, warn, fail := health.Score(results)
+			if fail > 0 {
+				return errorspkg.NewCLIError(errorspkg.ExitDoctorFail, fmt.Sprintf("%d check(s) failed", fail), nil)
+			}
+			if warn > 0 {
+				return errorspkg.NewCLIError(errorspkg.ExitDoctorWarn, fmt.Sprintf("%d warning(s)", warn), nil)
+			}
+		}
+		return nil
 	},
 }
 
@@ -70,7 +111,11 @@ func outputDoctorText(cmd *cobra.Command, vaultDir string, results []health.Resu
 			colorCode = "\033[31m" // red
 		}
 
-		line := fmt.Sprintf("%-3s %-40s %s", symbol, r.Name, r.Message)
+		fixedTag := ""
+		if r.Fixed {
+			fixedTag = " (fixed)"
+		}
+		line := fmt.Sprintf("%-3s %-40s %s%s", symbol, r.Name, r.Message, fixedTag)
 		cmd.Println(colorize(colorCode, line))
 		if r.Hint != "" {
 			indent := strings.Repeat(" ", 4)
@@ -131,4 +176,8 @@ func init() {
 	rootCmd.AddCommand(doctorCmd)
 	doctorCmd.Flags().BoolVar(&doctorJSON, "json", false, "Output in JSON format (deprecated: use --output=json)")
 	doctorCmd.Flags().BoolVar(&doctorNoNetwork, "no-network", false, "Skip network-dependent checks")
+	doctorCmd.Flags().BoolVar(&doctorStrict, "strict", false, "Return non-zero exit code for warnings (7) or failures (8)")
+	doctorCmd.Flags().StringSliceVar(&doctorOnly, "only", nil, "Only run checks matching these glob patterns (comma-separated, e.g. vault.*)")
+	doctorCmd.Flags().StringSliceVar(&doctorExclude, "exclude", nil, "Skip checks matching these glob patterns (comma-separated)")
+	doctorCmd.Flags().BoolVar(&doctorFix, "fix", false, "auto-repair safe issues (permissions, gitignore, git init)")
 }

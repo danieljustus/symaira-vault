@@ -55,7 +55,7 @@ func ReencryptAll(vaultDir string, identity *age.X25519Identity, recipients []*a
 	for i, f := range files {
 		fmt.Fprintf(os.Stderr, "Re-encrypting %d/%d...\r", i+1, len(files))
 
-		if err := reencryptFile(f.fullPath, identity, recipients); err != nil {
+		if err := reencryptFile(vaultDir, f.fullPath, identity, recipients); err != nil {
 			return fmt.Errorf("re-encrypt %s: %w", f.fullPath, err)
 		}
 	}
@@ -69,7 +69,7 @@ func ReencryptAll(vaultDir string, identity *age.X25519Identity, recipients []*a
 
 // reencryptFile decrypts a single .age file with the identity and re-encrypts
 // it with all recipients using an atomic write.
-func reencryptFile(path string, identity *age.X25519Identity, recipients []*age.X25519Recipient) error {
+func reencryptFile(vaultDir string, path string, identity *age.X25519Identity, recipients []*age.X25519Recipient) error {
 	// #nosec G304 -- path is a .age file within the vault directory passed to the function
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -89,6 +89,11 @@ func reencryptFile(path string, identity *age.X25519Identity, recipients []*age.
 
 	if err := fileutil.AtomicWriteFile(path, ciphertext, 0o600); err != nil {
 		return fmt.Errorf("atomic write: %w", err)
+	}
+
+	relPath := strings.TrimSuffix(strings.TrimPrefix(path, filepath.Join(vaultDir, "entries")+string(filepath.Separator)), ".age")
+	if err := UpdateManifestEntry(vaultDir, filepath.ToSlash(relPath), ciphertext, identity); err != nil {
+		return fmt.Errorf("update manifest: %w", err)
 	}
 
 	return nil

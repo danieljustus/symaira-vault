@@ -84,6 +84,39 @@ func TestCmdDoctor_NoNetworkFlag(t *testing.T) {
 	}
 }
 
+func TestCmdDoctor_FixFlag_Registered(t *testing.T) {
+	flag := doctorCmd.Flags().Lookup("fix")
+	if flag == nil {
+		t.Fatal("--fix flag not registered on doctorCmd")
+	}
+	if flag.Value.Type() != "bool" {
+		t.Errorf("--fix flag expected type bool, got %s", flag.Value.Type())
+	}
+}
+
+func TestCmdDoctor_FixFlag_TextOutput(t *testing.T) {
+	vaultDir, passphrase := initVault(t)
+	setPassEnv(t, string(passphrase))
+	defer setupVaultFlag(t, vaultDir)()
+
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	t.Cleanup(func() { rootCmd.SetOut(nil) })
+
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "doctor", "--fix", "--no-network"})
+	defer rootCmd.SetArgs(nil)
+
+	err := rootCmd.Execute()
+	if err != nil {
+		t.Errorf("doctor --fix --no-network failed: %v", err)
+	}
+
+	out := buf.String()
+	if out == "" {
+		t.Error("expected non-empty output from doctor --fix --no-network")
+	}
+}
+
 func TestGetVaultDir_WithVaultFlag(t *testing.T) {
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))

@@ -361,6 +361,7 @@ func (c *Config) SaveTo(path string) error {
 			vaultAuthMethod = authMethod
 		}
 		scryptWF := c.Vault.ScryptWorkFactor
+		lastRotated := c.Vault.LastRotated
 		raw.Vault = &fileVaultConfig{
 			Path:              c.Vault.Path,
 			DefaultRecipients: append([]string(nil), c.Vault.DefaultRecipients...),
@@ -370,6 +371,7 @@ func (c *Config) SaveTo(path string) error {
 			SearchWorkers:     &searchWorkers,
 			PseudonymizePaths: &pseudonymizePaths,
 			ScryptWorkFactor:  &scryptWF,
+			LastRotated:       &lastRotated,
 		}
 	}
 

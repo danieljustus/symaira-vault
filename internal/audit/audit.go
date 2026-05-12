@@ -5,7 +5,6 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -149,13 +148,12 @@ type VerifyResult struct {
 }
 
 type Logger struct {
-	agentName   string
-	path        string
-	file        *os.File
-	mu          sync.Mutex
-	hmacKey     []byte
-	hmacKeyPath string
-	prevHMAC    []byte
+	agentName string
+	path      string
+	file      *os.File
+	mu        sync.Mutex
+	hmacKey   []byte
+	prevHMAC  []byte
 }
 
 func New(agentName string, vaultDir string) (*Logger, error) {
@@ -203,19 +201,18 @@ func New(agentName string, vaultDir string) (*Logger, error) {
 		return nil, fmt.Errorf("open audit log: %w", err)
 	}
 
-	hmacKeyPath := filepath.Join(cleanAuditDir, hmacKeyFileName)
-	hmacKey, err := loadOrCreateHMACKey(hmacKeyPath)
+	ks := NewKeystore(cleanAuditDir)
+	hmacKey, err := ks.LoadOrCreateHMACKey()
 	if err != nil {
 		_ = file.Close()
 		return nil, fmt.Errorf("load hmac key: %w", err)
 	}
 
 	l := &Logger{
-		file:        file,
-		agentName:   agentName,
-		path:        cleanPath,
-		hmacKey:     hmacKey,
-		hmacKeyPath: hmacKeyPath,
+		file:      file,
+		agentName: agentName,
+		path:      cleanPath,
+		hmacKey:   hmacKey,
 	}
 
 	if rotErr := l.rotateIfNeeded(); rotErr != nil {
@@ -534,28 +531,6 @@ func (l *Logger) Close() error {
 	return l.file.Close()
 }
 
-func loadOrCreateHMACKey(keyPath string) ([]byte, error) {
-	existing, err := os.ReadFile(keyPath) //#nosec G304 -- keyPath is constructed internally from the audit directory
-	if err == nil && len(existing) == hmacKeySize {
-		return existing, nil
-	}
-
-	if err != nil && !os.IsNotExist(err) {
-		return nil, fmt.Errorf("read existing hmac key: %w", err)
-	}
-
-	key := make([]byte, hmacKeySize)
-	if _, err := io.ReadFull(rand.Reader, key); err != nil {
-		return nil, fmt.Errorf("generate hmac key: %w", err)
-	}
-
-	if err := os.WriteFile(keyPath, key, 0o600); err != nil {
-		return nil, fmt.Errorf("write hmac key: %w", err)
-	}
-
-	return key, nil
-}
-
 func (l *Logger) readLastHMAC() ([]byte, error) {
 	if l == nil || l.file == nil {
 		return nil, nil
@@ -610,11 +585,7 @@ func canonicalJSON(entry LogEntry) []byte {
 	return data
 }
 
-func VerifyLog(logFilePath, hmacKeyPath string) (*VerifyResult, error) {
-	key, err := os.ReadFile(hmacKeyPath) //#nosec G304 -- hmacKeyPath is constructed internally from the audit directory
-	if err != nil {
-		return nil, fmt.Errorf("read hmac key: %w", err)
-	}
+func VerifyLog(logFilePath string, key []byte) (*VerifyResult, error) {
 	if len(key) == 0 {
 		return nil, errors.New("hmac key is empty")
 	}
@@ -678,5 +649,5 @@ func (l *Logger) Verify() (*VerifyResult, error) {
 	if l == nil {
 		return nil, errors.New("logger is nil")
 	}
-	return VerifyLog(l.path, l.hmacKeyPath)
+	return VerifyLog(l.path, l.hmacKey)
 }

@@ -47,7 +47,8 @@ OpenPass exposes a Model Context Protocol (MCP) server that allows AI agents to 
 | `run_command` | Execute command with secret env injection | **Yes** |
 | `delete_entry` | Delete an entry | **Yes** |
 | `openpass_delete` | Deprecated alias for delete_entry | **Yes** |
-| `secure_input` | Prompt user for sensitive data via TTY | **Yes** |
+| `secure_input` | Prompt user for sensitive data via TTY or native GUI dialog | **Yes** |
+| `request_credential` | Agent-initiated: native dialog for a missing credential, stored without exposure | **Yes** |
 
 ---
 
@@ -679,10 +680,61 @@ Prompt the user for sensitive data via an interactive TTY and store it without e
 ```
 
 **Notes**:
-- Only available in stdio mode when a TTY is present
+- Available whenever any secure-input backend is reachable: an interactive TTY
+  (stdio mode), or a native GUI dialog (macOS `osascript`, Linux
+  `zenity`/`kdialog`, Windows `Get-Credential`). Set `OPENPASS_SECUREUI=tty|gui|none`
+  to override the auto-detected backend.
 - The agent never sees the value being stored
 - Requires `canWrite: true` in agent profile
 - Triggers automatic git commit (if enabled)
+
+---
+
+### request_credential
+
+Agent-initiated counterpart to `secure_input`. Use this when, during a task, the
+agent discovers an expected vault entry is missing. The user gets a native
+input dialog with the agent's stated reason; the value is stored at the
+requested path and never returned to the agent.
+
+**Request**:
+
+```json
+{
+  "tool": "request_credential",
+  "arguments": {
+    "path": "github/api-token",
+    "field": "token",
+    "reason": "Needed to push to main on the openpass repo"
+  }
+}
+```
+
+**Parameters**:
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | string | Yes | Vault path to store the new credential |
+| `field` | string | Yes | Field name (e.g. `token`, `password`, `api_key`) |
+| `reason` | string | Yes | Short reason shown verbatim in the dialog |
+
+**Response**:
+
+```json
+{
+  "success": true,
+  "path": "github/api-token",
+  "field": "token"
+}
+```
+
+**Notes**:
+- Same backend rules as `secure_input` (TTY or native GUI; `OPENPASS_SECUREUI`
+  override applies)
+- `reason` is shown to the user — agents should write it as a clear,
+  human-readable sentence
+- Recommended call site: after `find_entries` / `get_entry` returns nothing
+  for an expected path, instead of asking the user for the secret in chat
 
 ---
 
@@ -829,6 +881,85 @@ Delete a password entry. Requires write permission.
 ### openpass_delete
 
 **Deprecated**: Use `delete_entry` instead. This is a legacy alias maintained for backward compatibility.
+
+---
+
+## MCP Prompts
+
+OpenPass advertises the MCP `prompts` capability. In MCP clients that surface
+prompts as slash commands (Claude Code, OpenCode, Hermes, …) four guided
+credential workflows become available once the server is connected. The server
+implements the standard `prompts/list` and `prompts/get` JSON-RPC methods.
+
+### prompts/list
+
+Returns all available prompts with their argument schemas.
+
+**Request**:
+
+```json
+{"jsonrpc": "2.0", "id": 1, "method": "prompts/list"}
+```
+
+**Response**:
+
+```json
+{
+  "prompts": [
+    {
+      "name": "add-credential",
+      "description": "Guided workflow to add a new credential …",
+      "arguments": [
+        {"name": "service_name", "description": "…", "required": false},
+        {"name": "path", "description": "…", "required": false}
+      ]
+    },
+    ...
+  ]
+}
+```
+
+### prompts/get
+
+Renders the prompt body for a given prompt and argument map. The MCP client
+injects the returned messages into the conversation.
+
+**Request**:
+
+```json
+{
+  "jsonrpc": "2.0", "id": 2,
+  "method": "prompts/get",
+  "params": {
+    "name": "add-credential",
+    "arguments": {"service_name": "GitHub"}
+  }
+}
+```
+
+**Response**:
+
+```json
+{
+  "description": "Guided workflow to add a new credential …",
+  "messages": [
+    {"role": "user", "content": {"type": "text", "text": "Add a new credential …"}}
+  ]
+}
+```
+
+### Available Prompts
+
+| Name | Required args | Description |
+|------|---------------|-------------|
+| `add-credential` | – | Walks the agent through adding a vault entry. Sensitive fields routed through `request_credential`. Optional args: `service_name`, `path`. |
+| `rotate-credential` | `path` | Generates a new password, stores it, reminds the user to update the remote service. Optional: `length` (default 32). |
+| `find-and-use` | `query` | Searches the vault and suggests the right consumption tool (`copy_to_clipboard`, `autotype`, `execute_with_secret`). Optional: `task`. |
+| `share-credential` | `path`, `to_agent` | Creates a share grant and explains the human-approval flow. Optional: `ttl` (default `1h`), `secret_field`. |
+
+In Claude Code the prompts appear as `/mcp__openpass__add-credential` (and
+similar). The displayed argument form is generated automatically from each
+prompt's argument schema.
 
 ---
 

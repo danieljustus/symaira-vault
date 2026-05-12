@@ -12,6 +12,12 @@ import (
 // stepDone is a message sent when a step has completed its input.
 type stepDone struct{}
 
+// resumeMsg is sent when the WelcomeStep decides to resume a previous setup.
+type resumeMsg struct {
+	state     WizardState
+	stepTitle string
+}
+
 func stepDoneCmd() tea.Cmd {
 	return func() tea.Msg { return stepDone{} }
 }
@@ -26,16 +32,19 @@ type WizardModel struct {
 	quitting bool
 	canceled bool
 	applyErr error
+	noResume bool
 }
 
 // NewWizardModel constructs the model with all steps for a given vault dir.
-func NewWizardModel(vaultDir string) *WizardModel {
+func NewWizardModel(vaultDir string, keepOnError bool, noResume bool) *WizardModel {
 	state := WizardState{
 		VaultDir:    vaultDir,
 		ProfileName: defaultProfile,
+		KeepOnError: keepOnError,
+		NoResume:    noResume,
 	}
 
-	welcome := NewWelcomeStep(vaultDir)
+	welcome := NewWelcomeStep(vaultDir, noResume)
 	state.ExistingVault = welcome.IsExistingVault()
 
 	steps := []Step{
@@ -54,14 +63,15 @@ func NewWizardModel(vaultDir string) *WizardModel {
 	}
 
 	return &WizardModel{
-		steps: steps,
-		state: state,
+		steps:    steps,
+		state:    state,
+		noResume: noResume,
 	}
 }
 
 // Run starts the wizard program and blocks until done.
-func Run(vaultDir string) error {
-	m := NewWizardModel(vaultDir)
+func Run(vaultDir string, keepOnError bool, noResume bool) error {
+	m := NewWizardModel(vaultDir, keepOnError, noResume)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	result, err := p.Run()
 	if err != nil {
@@ -100,6 +110,17 @@ func (m WizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case stepDone:
+		return m.handleStepDone()
+
+	case resumeMsg:
+		m.state = msg.state
+		m.state.Passphrase = nil
+		for i, s := range m.steps {
+			if s.Title() == msg.stepTitle && s.ShouldShow(m.state) {
+				m.current = i
+				return m, s.Init()
+			}
+		}
 		return m.handleStepDone()
 	}
 
@@ -143,6 +164,10 @@ func (m WizardModel) handleStepDone() (tea.Model, tea.Cmd) {
 			// Update the summary step's state pointer (already set, but refresh).
 			err := Apply(&m.state)
 			m.applyErr = err
+			// If multi-device with git sync, insert the pairing QR step.
+			if m.state.MultiDevice && m.state.SyncMode == syncGit {
+				m.steps = append(m.steps, NewPairingQRStep(&m.state))
+			}
 			// Append the next-steps screen.
 			m.steps = append(m.steps, NewNextStepsStep(&m.state))
 		case 1: // Back
@@ -158,6 +183,13 @@ func (m WizardModel) handleStepDone() (tea.Model, tea.Cmd) {
 		}
 	case *NextStepsStep:
 		return m, tea.Quit
+	}
+
+	// Save resume state after each completed step (except SummaryStep).
+	if _, isSummary := step.(*SummaryStep); !isSummary {
+		if !m.noResume && m.state.VaultDir != "" {
+			_ = SaveResumeState(m.state.VaultDir, &m.state, step.Title())
+		}
 	}
 
 	return m.advanceToNextVisible()

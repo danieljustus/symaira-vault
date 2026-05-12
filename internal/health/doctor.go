@@ -2,12 +2,17 @@
 package health
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"filippo.io/age"
 
 	"github.com/danieljustus/OpenPass/internal/audit"
 	configpkg "github.com/danieljustus/OpenPass/internal/config"
@@ -35,11 +40,27 @@ type Result struct {
 	Status  Status `json:"status"`
 	Message string `json:"message"`
 	Hint    string `json:"hint,omitempty"`
+	Fixable bool   `json:"fixable"`          // set to true by checks with a fix
+	Fix     func() error `json:"-"`          // closure, nil for non-fixable checks
+	Fixed   bool   `json:"fixed,omitempty"`  // set to true after successful fix
 }
 
 // Options controls which checks are run.
 type Options struct {
 	NoNetwork bool
+	Version   string
+	Only      []string
+	Exclude   []string
+}
+
+// matchesAny returns true if name matches any pattern via path.Match.
+func matchesAny(patterns []string, name string) bool {
+	for _, p := range patterns {
+		if ok, _ := path.Match(p, name); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // RunChecks runs all doctor checks against vaultDir and returns the results.
@@ -56,11 +77,15 @@ func RunChecks(vaultDir string, opts Options) []Result {
 		checkGitignoreProtects,
 		checkGitLastSync,
 		checkRecipients,
+		checkRecipientsRecovery,
 		checkMCPTokens,
 		checkAuditLog,
 		checkUpdateAvailable,
 		checkVaultSize,
 		checkScryptBenchmark,
+		checkKDFModern,
+		checkManifestIntegrity,
+		checkPassphraseRotation,
 	}
 
 	if opts.NoNetwork {
@@ -75,10 +100,14 @@ func RunChecks(vaultDir string, opts Options) []Result {
 			checkGitRemote,
 			checkGitignoreProtects,
 			checkRecipients,
+			checkRecipientsRecovery,
 			checkMCPTokens,
 			checkAuditLog,
 			checkVaultSize,
 			checkScryptBenchmark,
+			checkKDFModern,
+			checkManifestIntegrity,
+			checkPassphraseRotation,
 		}
 	}
 
@@ -86,6 +115,27 @@ func RunChecks(vaultDir string, opts Options) []Result {
 	for _, fn := range checks {
 		results = append(results, fn(vaultDir, opts))
 	}
+
+	if len(opts.Only) > 0 {
+		filtered := make([]Result, 0, len(results))
+		for _, r := range results {
+			if matchesAny(opts.Only, r.ID) {
+				filtered = append(filtered, r)
+			}
+		}
+		results = filtered
+	}
+
+	if len(opts.Exclude) > 0 {
+		filtered := make([]Result, 0, len(results))
+		for _, r := range results {
+			if !matchesAny(opts.Exclude, r.ID) {
+				filtered = append(filtered, r)
+			}
+		}
+		results = filtered
+	}
+
 	return results
 }
 
@@ -163,6 +213,16 @@ func checkVaultIdentityEncrypted(vaultDir string, _ Options) Result {
 
 func checkVaultPermissions(vaultDir string, _ Options) Result {
 	r := Result{ID: "vault.permissions", Name: "File permissions"}
+	r.Fixable = true
+	r.Fix = func() error {
+		if err := os.Chmod(filepath.Join(vaultDir, "entries"), 0o700); err != nil {
+			return fmt.Errorf("chmod entries: %w", err)
+		}
+		if err := os.Chmod(filepath.Join(vaultDir, "identity.age"), 0o600); err != nil {
+			return fmt.Errorf("chmod identity.age: %w", err)
+		}
+		return nil
+	}
 	var issues []string
 
 	entriesDir := filepath.Join(vaultDir, "entries")
@@ -238,6 +298,10 @@ func checkSessionCache(vaultDir string, _ Options) Result {
 
 func checkGitRepo(vaultDir string, _ Options) Result {
 	r := Result{ID: "git.repo", Name: "Git repository"}
+	r.Fixable = true
+	r.Fix = func() error {
+		return git.Init(vaultDir)
+	}
 	gitDir := filepath.Join(vaultDir, ".git")
 	if _, err := os.Stat(gitDir); err == nil {
 		r.Status = StatusOK
@@ -271,6 +335,33 @@ func checkGitRemote(vaultDir string, _ Options) Result {
 
 func checkGitignoreProtects(vaultDir string, _ Options) Result {
 	r := Result{ID: "git.gitignore.protects", Name: ".gitignore protects sensitive files"}
+	r.Fixable = true
+	r.Fix = func() error {
+		gitignorePath := filepath.Join(vaultDir, ".gitignore")
+		var existing []string
+		if data, err := os.ReadFile(gitignorePath); err == nil {
+			existing = strings.Split(strings.TrimSpace(string(data)), "\n")
+		}
+		required := []string{"identity.age", "mcp-token", "mcp-tokens.json"}
+		var toAdd []string
+		for _, entry := range required {
+			found := false
+			for _, e := range existing {
+				if strings.TrimSpace(e) == entry {
+					found = true
+					break
+				}
+			}
+			if !found {
+				toAdd = append(toAdd, entry)
+			}
+		}
+		if len(toAdd) == 0 {
+			return nil
+		}
+		existing = append(existing, toAdd...)
+		return os.WriteFile(gitignorePath, []byte(strings.Join(existing, "\n")+"\n"), 0o644)
+	}
 	gitignorePath := filepath.Join(vaultDir, ".gitignore")
 	data, err := os.ReadFile(gitignorePath) //#nosec G304 -- vaultDir is controlled
 	if err != nil {
@@ -360,6 +451,110 @@ func checkRecipients(vaultDir string, _ Options) Result {
 	return r
 }
 
+func checkRecipientsRecovery(vaultDir string, _ Options) Result {
+	r := Result{ID: "recipients.recovery", Name: "Recipient decrypt test"}
+
+	rm := vault.NewRecipientsManager(vaultDir)
+
+	if !rm.RecipientsFileExists() {
+		r.Status = StatusOK
+		r.Message = "no external recipients to test"
+		return r
+	}
+
+	rawStrings, err := rm.LoadRecipientStrings()
+	if err != nil {
+		r.Status = StatusFail
+		r.Message = "cannot read recipients: " + err.Error()
+		r.Hint = "run `openpass recipients list`"
+		return r
+	}
+
+	if len(rawStrings) == 0 {
+		r.Status = StatusOK
+		r.Message = "no external recipients to test"
+		return r
+	}
+
+	var recipients []*age.X25519Recipient
+	for _, rs := range rawStrings {
+		rec, err := vaultcrypto.ValidateRecipient(rs)
+		if err != nil {
+			r.Status = StatusFail
+			r.Message = fmt.Sprintf("invalid recipient: %s (%s)", rs, err.Error())
+			r.Hint = "run `openpass recipients list`"
+			return r
+		}
+		recipients = append(recipients, rec)
+	}
+
+	testIdentity, err := vaultcrypto.GenerateIdentity()
+	if err != nil {
+		r.Status = StatusFail
+		r.Message = "generate test identity: " + err.Error()
+		r.Hint = "run `openpass recipients list`"
+		return r
+	}
+
+	allRecipients := []*age.X25519Recipient{testIdentity.Recipient()}
+	allRecipients = append(allRecipients, recipients...)
+
+	testBlob := make([]byte, 32)
+	if _, err := rand.Read(testBlob); err != nil {
+		r.Status = StatusFail
+		r.Message = "generate test data: " + err.Error()
+		r.Hint = "run `openpass recipients list`"
+		return r
+	}
+
+	ciphertext, err := vaultcrypto.EncryptWithRecipients(testBlob, allRecipients...)
+	if err != nil {
+		r.Status = StatusFail
+		r.Message = "encryption failed: " + err.Error()
+		r.Hint = "run `openpass recipients list`"
+		return r
+	}
+
+	decrypted, err := vaultcrypto.Decrypt(ciphertext, testIdentity)
+	if err != nil {
+		r.Status = StatusFail
+		r.Message = "decryption failed: " + err.Error()
+		r.Hint = "run `openpass recipients list`"
+		return r
+	}
+
+	if !bytes.Equal(decrypted, testBlob) {
+		r.Status = StatusFail
+		r.Message = "decrypted data does not match original"
+		r.Hint = "run `openpass recipients list`"
+		return r
+	}
+
+	// Count stanzas (lines starting with "-> X25519" before "---")
+	lines := strings.Split(string(ciphertext), "\n")
+	stanzaCount := 0
+	for _, line := range lines {
+		if strings.HasPrefix(line, "---") {
+			break
+		}
+		if strings.HasPrefix(line, "-> X25519") {
+			stanzaCount++
+		}
+	}
+
+	expectedCount := len(allRecipients)
+	if stanzaCount != expectedCount {
+		r.Status = StatusFail
+		r.Message = fmt.Sprintf("expected %d stanzas, got %d", expectedCount, stanzaCount)
+		r.Hint = "run `openpass recipients list`"
+		return r
+	}
+
+	r.Status = StatusOK
+	r.Message = fmt.Sprintf("all %d recipients can participate in encryption", len(recipients))
+	return r
+}
+
 // --- DOC-7: MCP token checks ---
 
 func checkMCPTokens(vaultDir string, _ Options) Result {
@@ -420,7 +615,14 @@ func checkAuditLog(vaultDir string, _ Options) Result {
 	}
 
 	// HMAC key is shared across all audit logs in the vault directory.
-	hmacKeyPath := filepath.Join(vaultDir, "audit-hmac-key")
+	ks := audit.NewKeystore(vaultDir)
+	key, keyErr := ks.LoadHMACKey()
+	if keyErr != nil {
+		r.Status = StatusWarn
+		r.Message = fmt.Sprintf("cannot read hmac key: %v", keyErr)
+		return r
+	}
+
 	var issues []string
 	var totalSize int64
 	for _, logPath := range matches {
@@ -428,7 +630,7 @@ func checkAuditLog(vaultDir string, _ Options) Result {
 		if statErr == nil {
 			totalSize += info.Size()
 		}
-		result, verErr := audit.VerifyLog(logPath, hmacKeyPath)
+		result, verErr := audit.VerifyLog(logPath, key)
 		if verErr != nil {
 			issues = append(issues, fmt.Sprintf("%s: verify error: %v", filepath.Base(logPath), verErr))
 			continue
@@ -455,15 +657,14 @@ func checkAuditLog(vaultDir string, _ Options) Result {
 
 // --- DOC-9: Update check ---
 
-func checkUpdateAvailable(vaultDir string, _ Options) Result {
+func checkUpdateAvailable(vaultDir string, opts Options) Result {
 	r := Result{ID: "update.available", Name: "Update check"}
 	checker := update.NewChecker(nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	// Get current version from build info.
-	const currentVersion = "0.0.0" // replaced by build-time injection
-	result, err := checker.Check(ctx, currentVersion)
+	result, err := checker.Check(ctx, opts.Version)
 	if err != nil {
 		r.Status = StatusWarn
 		r.Message = "cannot check for updates: " + err.Error()
@@ -533,6 +734,80 @@ func checkScryptBenchmark(_ string, _ Options) Result {
 	default:
 		r.Status = StatusOK
 		r.Message = fmt.Sprintf("config work factor %d exceeds recommendation (benchmark: %d, %.0fms)", current, wf, elapsed.Seconds()*1000)
+	}
+	return r
+}
+
+// checkKDFModern checks whether the vault uses a modern KDF (argon2id, format v2+)
+// versus legacy scrypt (format v1).
+func checkKDFModern(vaultDir string, _ Options) Result {
+	r := Result{ID: "crypto.kdf.modern", Name: "KDF modernity"}
+
+	cfgPath := filepath.Join(vaultDir, "config.yaml")
+	cfg, err := configpkg.Load(cfgPath)
+	if err != nil {
+		r.Status = StatusWarn
+		r.Message = "cannot check KDF version"
+		return r
+	}
+
+	if cfg.Vault == nil || cfg.Vault.FormatVersion < 2 {
+		r.Status = StatusWarn
+		r.Message = "using scrypt KDF (format v1) — argon2id is recommended for 2025+"
+		r.Hint = "run `openpass migrate kdf` after backing up your vault"
+	} else {
+		r.Status = StatusOK
+		r.Message = "using argon2id KDF (format v2)"
+	}
+	return r
+}
+
+// --- DOC-11: Manifest integrity check ---
+
+func checkManifestIntegrity(vaultDir string, _ Options) Result {
+	r := Result{ID: "vault.manifest.intact", Name: "Entry manifest integrity"}
+
+	manifestPath := filepath.Join(vaultDir, "manifest.age")
+	if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
+		r.Status = StatusWarn
+		r.Message = "no manifest.age — entry integrity not tracked"
+		r.Hint = "run `openpass verify` to create and verify a manifest"
+		return r
+	}
+
+	r.Status = StatusOK
+	r.Message = "manifest.age present"
+	return r
+}
+
+// --- DOC-12: Passphrase rotation check ---
+
+func checkPassphraseRotation(vaultDir string, _ Options) Result {
+	r := Result{ID: "auth.passphrase.rotation", Name: "Passphrase rotation"}
+
+	cfgPath := filepath.Join(vaultDir, "config.yaml")
+	cfg, err := configpkg.Load(cfgPath)
+	if err != nil {
+		r.Status = StatusWarn
+		r.Message = "cannot load config: " + err.Error()
+		return r
+	}
+
+	if cfg.Vault == nil || cfg.Vault.LastRotated.IsZero() {
+		r.Status = StatusWarn
+		r.Message = "passphrase never rotated — rotation is recommended for security hygiene"
+		r.Hint = "run `openpass auth rotate-passphrase` to rotate"
+		return r
+	}
+
+	age := time.Since(cfg.Vault.LastRotated)
+	if age > 365*24*time.Hour {
+		r.Status = StatusWarn
+		r.Message = fmt.Sprintf("last rotated %s ago (recommended: every 365 days)", age.Round(24*time.Hour))
+		r.Hint = "run `openpass auth rotate-passphrase` to rotate"
+	} else {
+		r.Status = StatusOK
+		r.Message = fmt.Sprintf("last rotated %s ago", age.Round(24*time.Hour))
 	}
 	return r
 }

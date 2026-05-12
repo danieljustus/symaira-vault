@@ -3,7 +3,6 @@ package vault
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -61,10 +60,6 @@ func TestConcurrentWriteEntry(t *testing.T) {
 }
 
 func TestConcurrentMergeEntry(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("write lock not implemented for Windows (lock_windows.go is a no-op stub)")
-	}
-
 	vaultDir := t.TempDir()
 	id := testutil.TempIdentity(t)
 

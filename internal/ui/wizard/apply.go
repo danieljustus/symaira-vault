@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	configpkg "github.com/danieljustus/OpenPass/internal/config"
 	"github.com/danieljustus/OpenPass/internal/git"
@@ -14,16 +15,36 @@ import (
 	"github.com/danieljustus/OpenPass/internal/vault"
 )
 
+// preFlightCheck validates wizard state before vault init to catch errors
+// early — before files are created.
+func preFlightCheck(state *WizardState) error {
+	// Validate recipients before vault init so we don't create a vault only
+	// to discover invalid recipient keys.
+	for _, r := range state.Recipients {
+		if !strings.HasPrefix(r, "age1") || len(r) < 50 {
+			return fmt.Errorf("invalid recipient key: %s", r)
+		}
+	}
+	return nil
+}
+
 // Apply executes all side-effects collected in WizardState in the prescribed
 // order. Errors are accumulated in state.ApplyErrors; apply continues best-effort
 // so the user can run `openpass doctor` afterwards.
 func Apply(state *WizardState) error {
-	var errs []string
-
-	if err := applyVaultInit(state, &errs); err != nil {
-		// vault init failure is fatal — nothing else can proceed.
+	// Pre-flight: validate recipients before creating vault files.
+	if err := preFlightCheck(state); err != nil {
 		return err
 	}
+
+	var errs []string
+	vaultInitSucceeded := false
+
+	if err := applyVaultInit(state, &errs); err != nil {
+		// vault init failure is fatal — nothing else can proceed, no cleanup needed.
+		return err
+	}
+	vaultInitSucceeded = true
 
 	// Wipe passphrase from memory immediately after vault init.
 	for i := range state.Passphrase {
@@ -38,9 +59,29 @@ func Apply(state *WizardState) error {
 
 	state.ApplyErrors = errs
 	if len(errs) > 0 {
+		if !state.KeepOnError && vaultInitSucceeded && !state.ExistingVault {
+			rollbackInit(state)
+		}
 		return fmt.Errorf("apply completed with errors — run `openpass doctor` for details")
 	}
+	_ = DeleteResumeFile(state.VaultDir)
 	return nil
+}
+
+// rollbackInit removes vault artifacts created by vault.InitWithPassphrase
+// and optionally git.Init. It must only be called when state.ExistingVault
+// is false — never clean up a pre-existing vault.
+func rollbackInit(state *WizardState) {
+	if state.ExistingVault {
+		return
+	}
+	_ = os.Remove(filepath.Join(state.VaultDir, "config.yaml"))
+	_ = os.Remove(filepath.Join(state.VaultDir, "identity.age"))
+	_ = os.RemoveAll(filepath.Join(state.VaultDir, "entries"))
+	if state.SyncMode == syncGit {
+		_ = os.RemoveAll(filepath.Join(state.VaultDir, ".git"))
+		_ = os.Remove(filepath.Join(state.VaultDir, ".gitignore"))
+	}
 }
 
 func applyVaultInit(state *WizardState, errs *[]string) error {
@@ -51,9 +92,11 @@ func applyVaultInit(state *WizardState, errs *[]string) error {
 	cfg.VaultDir = state.VaultDir
 	cfg.AuthMethod = state.AuthMethod
 
-	if _, err := vault.InitWithPassphrase(state.VaultDir, state.Passphrase, cfg); err != nil {
+	identity, err := vault.InitWithPassphrase(state.VaultDir, state.Passphrase, cfg)
+	if err != nil {
 		return fmt.Errorf("vault init: %w", err)
 	}
+	state.VaultPublicKey = identity.Recipient().String()
 
 	if state.AuthMethod == configpkg.AuthMethodTouchID && session.BiometricAvailable() {
 		if err := session.SaveBiometricPassphrase(context.Background(), state.VaultDir, state.Passphrase); err != nil {

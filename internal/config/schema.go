@@ -33,6 +33,12 @@ type VaultConfig struct {
 	// Higher values are more secure but slower. Default: 18 (N=262144).
 	// Set to 0 to use the default.
 	ScryptWorkFactor int `yaml:"scrypt_work_factor,omitempty"`
+	// LastRotated records when the vault passphrase was last rotated.
+	// Zero value means never rotated.
+	LastRotated time.Time `yaml:"last_rotated,omitempty"`
+	// FormatVersion indicates the vault format version.
+	// 1 = scrypt KDF (pre-argon2id), 2+ = argon2id.
+	FormatVersion int `yaml:"format_version,omitempty"`
 }
 
 // GitConfig holds git-related configuration for automatic commits and pushes.
@@ -103,6 +109,7 @@ func defaultVaultConfig() VaultConfig {
 		DefaultRecipients: []string{},
 		AuthMethod:        AuthMethodPassphrase,
 		ScryptWorkFactor:  18,
+		FormatVersion:     1,
 	}
 }
 
@@ -177,6 +184,8 @@ type fileVaultConfig struct {
 	SearchWorkers     *int     `yaml:"search_workers,omitempty"`
 	PseudonymizePaths *bool    `yaml:"pseudonymize_paths,omitempty"`
 	ScryptWorkFactor  *int     `yaml:"scrypt_work_factor,omitempty"`
+	LastRotated       *time.Time `yaml:"last_rotated,omitempty"`
+	FormatVersion     *int       `yaml:"format_version,omitempty"`
 }
 
 // fileGitConfig is the file-based git configuration with pointer fields
@@ -264,6 +273,12 @@ func MergeFileVaultConfig(fileCfg *fileVaultConfig, defaults VaultConfig) VaultC
 	}
 	if fileCfg.ScryptWorkFactor != nil {
 		result.ScryptWorkFactor = *fileCfg.ScryptWorkFactor
+	}
+	if fileCfg.LastRotated != nil {
+		result.LastRotated = *fileCfg.LastRotated
+	}
+	if fileCfg.FormatVersion != nil {
+		result.FormatVersion = *fileCfg.FormatVersion
 	}
 	return result
 }

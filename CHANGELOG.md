@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- MCP **Prompts** capability with four slash commands surfaced in Claude Code, OpenCode, Hermes and other MCP clients: `add-credential`, `rotate-credential`, `find-and-use`, `share-credential`. Each prompt renders a guided workflow that the agent follows step-by-step (e.g. `/mcp__openpass__add-credential` walks the agent through collecting a new secret without ever exposing the value)
+- `request_credential` MCP tool — the agent calls this when it discovers a credential is missing from the vault during a task; the user gets a native input dialog, types the value, and it lands in the vault without ever transiting the chat
+- New `internal/secureui` package providing cross-platform secure input: native macOS dialogs via `osascript`, Linux dialogs via `zenity` or `kdialog`, Windows credential prompts via PowerShell `Get-Credential`, with the existing TTY backend as a fallback. Backend selection honors a new `OPENPASS_SECUREUI=tty|gui|none` environment override
+
+### Changed
+
+- `secure_input` MCP tool is now available in HTTP mode as well, provided the host has a native dialog backend (previously stdio + TTY only)
+- Server initialize response now advertises the `prompts` capability so clients enable the slash-command surface
+
 ## [v1.0.0] - 2026-04-22
 
 Initial stable OpenPass release.

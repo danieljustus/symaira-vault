@@ -129,6 +129,34 @@ func runPseudonymizeMigration(v *vaultpkg.Vault) error {
 	return nil
 }
 
+var migrateKDFCmd = &cobra.Command{
+	Use:   "kdf",
+	Short: "Migrate vault KDF from scrypt to argon2id",
+	Long: `Migrate the vault's key derivation function from scrypt to argon2id.
+
+⚠️  This command is a STUB and not yet implemented.
+A future release will provide the full migration workflow.
+
+Argon2id is the industry standard for password hashing (2025+) and provides
+stronger resistance against GPU-based attacks compared to scrypt.
+
+In the meantime:
+  1. Back up your vault: cp -r ~/.openpass ~/.openpass.backup
+  2. Wait for a future release with full migration support
+  3. Run 'openpass doctor' to track the migration recommendation`,
+	Example: `  openpass migrate kdf`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		fmt.Println("⚠️  Migration from scrypt to argon2id is not yet implemented.")
+		fmt.Println()
+		fmt.Println("Argon2id will provide stronger GPU resistance for your master passphrase.")
+		fmt.Println("This feature is planned for a future release.")
+		fmt.Println()
+		fmt.Println("In the meantime, your vault is secure with scrypt (work factor 18).")
+		fmt.Println("To track the recommendation, run: openpass doctor")
+		return nil
+	},
+}
+
 func enablePseudonymizeConfig(vaultDir string) error {
 	cfg, err := configpkg.Load(filepath.Join(vaultDir, "config.yaml"))
 	if err != nil {
@@ -149,5 +177,6 @@ func enablePseudonymizeConfig(vaultDir string) error {
 func init() {
 	migrateCmd.AddCommand(migratePseudonymizeCmd)
 	migratePseudonymizeCmd.Flags().BoolVarP(&migrateYes, "yes", "y", false, "Skip confirmation prompt")
+	migrateCmd.AddCommand(migrateKDFCmd)
 	rootCmd.AddCommand(migrateCmd)
 }

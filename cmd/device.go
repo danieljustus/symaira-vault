@@ -399,6 +399,138 @@ any registered device (unmanaged recipients).`,
 	},
 }
 
+var (
+	deviceAddPair bool
+	deviceAddName string
+)
+
+var deviceAddCmd = &cobra.Command{
+	Use:   "add",
+	Short: "Add this device to an existing multi-device vault",
+	Long: `Add this device to an existing multi-device vault using a pairing
+token and public key obtained via QR code from the original device.
+
+This command is used on the second device after the initial setup wizard
+shows a QR code. It creates a new local vault with its own identity,
+adds the first device's public key as a recipient, and saves a pairing
+request so the first device can accept it.`,
+	Example: `  openpass device add --pair "123456:age1..."`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if !deviceAddPair {
+			return fmt.Errorf("use 'openpass device add --pair <token:publickey>' to pair a device")
+		}
+		if len(args) < 1 {
+			return fmt.Errorf("missing pairing data. Usage: openpass device add --pair <token> or <token:publickey>")
+		}
+
+		raw := strings.TrimSpace(args[0])
+
+		vaultDir, err := vaultPath()
+		if err != nil {
+			return err
+		}
+
+		if vaultpkg.IsInitialized(vaultDir) {
+			return fmt.Errorf("vault already initialized at %s. Use a different --vault or remove the existing vault first", vaultDir)
+		}
+
+		// Parse QR data: token or token:publicKey
+		var token, existingPubkey string
+		if idx := strings.Index(raw, ":"); idx > 0 {
+			token = raw[:idx]
+			existingPubkey = raw[idx+1:]
+		} else {
+			token = raw
+		}
+
+		if !strings.HasPrefix(existingPubkey, "age1") || len(existingPubkey) < 50 {
+			return fmt.Errorf("invalid public key in pairing data: expected age1... format")
+		}
+
+		passphrase, err := readHiddenInput("Enter passphrase for this device: ", nil)
+		if err != nil {
+			return fmt.Errorf("read passphrase: %w", err)
+		}
+		defer cryptopkg.Wipe(passphrase)
+		if len(passphrase) < 12 {
+			return fmt.Errorf("passphrase must be at least 12 characters")
+		}
+
+		// Generate identity for this device
+		identity, err := cryptopkg.GenerateIdentity()
+		if err != nil {
+			return fmt.Errorf("generate identity: %w", err)
+		}
+
+		// Create vault directory structure
+		if err := os.MkdirAll(filepath.Join(vaultDir, "entries"), 0o700); err != nil {
+			return fmt.Errorf("create entries dir: %w", err)
+		}
+
+		// Write config
+		cfg := configpkg.Default()
+		cfg.VaultDir = vaultDir
+		cfg.Git = &configpkg.GitConfig{
+			AutoPush:         true,
+			AutoPull:         true,
+			AutoPullInterval: 10 * time.Second,
+			CommitTemplate:   "Update from OpenPass",
+		}
+		cfgPath := filepath.Join(vaultDir, "config.yaml")
+		cfgData, err := yaml.Marshal(cfg)
+		if err != nil {
+			return fmt.Errorf("marshal config: %w", err)
+		}
+		if err := os.WriteFile(cfgPath, cfgData, 0o600); err != nil {
+			return fmt.Errorf("write config: %w", err)
+		}
+
+		// Save identity encrypted with passphrase
+		identityPath := filepath.Join(vaultDir, "identity.age")
+		if err := cryptopkg.SaveIdentity(identity, identityPath, passphrase); err != nil {
+			return fmt.Errorf("save identity: %w", err)
+		}
+
+		// Write recipients.txt with existing device's public key
+		recipientsPath := filepath.Join(vaultDir, "recipients.txt")
+		recipientsContent := fmt.Sprintf("# OpenPass vault recipients\n# Added by device add --pair\n%s\n", existingPubkey)
+		if err := os.WriteFile(recipientsPath, []byte(recipientsContent), 0o600); err != nil {
+			return fmt.Errorf("write recipients: %w", err)
+		}
+
+		// Save joined file
+		joinedData := joinedFile{
+			Token:     token,
+			Name:      deviceAddName,
+			PublicKey: identity.Recipient().String(),
+			CreatedAt: time.Now().UTC(),
+		}
+		if deviceAddName == "" {
+			hostname, _ := os.Hostname()
+			if hostname != "" {
+				joinedData.Name = hostname
+			} else {
+				joinedData.Name = "device-" + token
+			}
+		}
+
+		if err := savePairingFile(vaultDir, token+"-joined.json", joinedData); err != nil {
+			return fmt.Errorf("save joined file: %w", err)
+		}
+
+		fmt.Fprintf(os.Stderr, "\n=== Pairing Setup Complete ===\n")
+		fmt.Fprintf(os.Stderr, "Your public key: %s\n", identity.Recipient().String())
+		fmt.Fprintf(os.Stderr, "Device name: %s\n\n", joinedData.Name)
+		fmt.Fprintf(os.Stderr, "IMPORTANT: Entries cannot be decrypted yet.\n")
+		fmt.Fprintf(os.Stderr, "On the original device, run:\n")
+		fmt.Fprintf(os.Stderr, "  openpass device accept %s\n\n", token)
+		fmt.Fprintf(os.Stderr, "After accepting, pull the re-encrypted entries:\n")
+		fmt.Fprintf(os.Stderr, "  openpass git pull\n")
+
+		return nil
+	},
+}
+
 var deviceRevokeCmd = &cobra.Command{
 	Use:   "revoke <name>",
 	Short: "Revoke a device and re-encrypt all entries",
@@ -502,6 +634,9 @@ func init() {
 	deviceCmd.AddCommand(deviceAcceptCmd)
 	deviceCmd.AddCommand(deviceListCmd)
 	deviceCmd.AddCommand(deviceRevokeCmd)
+	deviceCmd.AddCommand(deviceAddCmd)
+	deviceAddCmd.Flags().BoolVar(&deviceAddPair, "pair", false, "Pair with an existing device using QR data")
+	deviceAddCmd.Flags().StringVar(&deviceAddName, "name", "", "Name for this device (defaults to hostname)")
 	deviceJoinCmd.Flags().StringVar(&defaultDeviceName, "name", "", "Name for this device (defaults to hostname)")
 	deviceRevokeCmd.Flags().BoolVarP(&deviceRevokeYes, "yes", "y", false, "Skip confirmation prompt")
 }

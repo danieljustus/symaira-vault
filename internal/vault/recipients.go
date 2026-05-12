@@ -419,7 +419,13 @@ func WriteEntryWithRecipients(vaultDir, path string, entry *Entry, identity *age
 		return err
 	}
 	// Symlink-hardened write: O_NOFOLLOW + fstat verification prevents writing through symlinks
-	return SafeWriteFile(filePath, ciphertext, 0o600)
+	if err := SafeWriteFile(filePath, ciphertext, 0o600); err != nil {
+		return err
+	}
+	if err := UpdateManifestEntry(vaultDir, path, ciphertext, identity); err != nil {
+		return fmt.Errorf("update manifest: %w", err)
+	}
+	return nil
 }
 
 // MergeEntryWithRecipients merges partial data into an existing entry, encrypting for all recipients

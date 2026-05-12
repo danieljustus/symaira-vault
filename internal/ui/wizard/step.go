@@ -39,6 +39,10 @@ type WizardState struct {
 	// Multi-device (hint only, no side-effect)
 	MultiDevice bool
 
+	// VaultPublicKey is the age public key of the freshly initialized vault,
+	// captured during Apply and used by PairingQRStep.
+	VaultPublicKey string
+
 	// Recipients (age1… strings)
 	Recipients []string
 
@@ -53,6 +57,13 @@ type WizardState struct {
 
 	// Apply outcome
 	ApplyErrors []string
+
+	// KeepOnError prevents rollback of vault init artifacts when apply
+	// encounters errors after successful vault initialization.
+	KeepOnError bool
+
+	// NoResume suppresses resume-from-abort behavior (for tests).
+	NoResume bool
 }
 
 // AgentSelection captures choices for a single MCP agent.

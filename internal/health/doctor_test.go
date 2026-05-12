@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -372,5 +373,161 @@ func TestRunChecks_Recipients_NoRecipients(t *testing.T) {
 	}
 	if _, found := byID["recipients.count"]; !found {
 		t.Fatal("expected recipients.count check")
+	}
+}
+
+func TestFix_VaultPermissions(t *testing.T) {
+	vaultDir := t.TempDir()
+	entriesDir := filepath.Join(vaultDir, "entries")
+	identityPath := filepath.Join(vaultDir, "identity.age")
+
+	// Setup: create entries/ with 0755 and identity.age with 0644
+	if err := os.MkdirAll(entriesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(identityPath, []byte("fake identity"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run check — should get StatusWarn because perms are wrong
+	results := health.RunChecks(vaultDir, health.Options{Only: []string{"vault.permissions"}, NoNetwork: true})
+	if len(results) == 0 {
+		t.Fatal("no results from RunChecks")
+	}
+	r := results[0]
+	if r.Status != health.StatusWarn {
+		t.Fatalf("expected StatusWarn, got %s", r.Status)
+	}
+	if !r.Fixable {
+		t.Fatal("expected Fixable=true for vault.permissions")
+	}
+	if r.Fix == nil {
+		t.Fatal("expected Fix!=nil for vault.permissions")
+	}
+
+	// Apply fix
+	if err := r.Fix(); err != nil {
+		t.Fatalf("Fix() error = %v", err)
+	}
+
+	// Verify permissions were fixed
+	if info, err := os.Stat(entriesDir); err != nil {
+		t.Fatal(err)
+	} else if info.Mode().Perm() != 0o700 {
+		t.Errorf("entries/ mode = %o, want 0700", info.Mode().Perm())
+	}
+	if info, err := os.Stat(identityPath); err != nil {
+		t.Fatal(err)
+	} else if info.Mode().Perm() != 0o600 {
+		t.Errorf("identity.age mode = %o, want 0600", info.Mode().Perm())
+	}
+}
+
+func TestFix_GitignoreProtects(t *testing.T) {
+	vaultDir := t.TempDir()
+
+	// Setup: create all required dirs/files for RunChecks NOT to skip this check
+	if err := os.MkdirAll(filepath.Join(vaultDir, "entries"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run check — should get StatusWarn because .gitignore is missing
+	results := health.RunChecks(vaultDir, health.Options{Only: []string{"git.gitignore.protects"}, NoNetwork: true})
+	if len(results) == 0 {
+		t.Fatal("no results from RunChecks")
+	}
+	r := results[0]
+	if r.Status != health.StatusWarn {
+		t.Fatalf("expected StatusWarn, got %s: %s", r.Status, r.Message)
+	}
+	if !r.Fixable {
+		t.Fatal("expected Fixable=true for git.gitignore.protects")
+	}
+	if r.Fix == nil {
+		t.Fatal("expected Fix!=nil for git.gitignore.protects")
+	}
+
+	// Apply fix
+	if err := r.Fix(); err != nil {
+		t.Fatalf("Fix() error = %v", err)
+	}
+
+	// Verify .gitignore was created with required entries
+	gitignorePath := filepath.Join(vaultDir, ".gitignore")
+	data, err := os.ReadFile(gitignorePath)
+	if err != nil {
+		t.Fatalf("ReadFile(.gitignore) error = %v", err)
+	}
+	content := string(data)
+	for _, entry := range []string{"identity.age", "mcp-token", "mcp-tokens.json"} {
+		if !strings.Contains(content, entry) {
+			t.Errorf(".gitignore should contain %q", entry)
+		}
+	}
+}
+
+func TestFix_GitRepo(t *testing.T) {
+	vaultDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(vaultDir, "entries"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run check — no .git dir, should be StatusWarn
+	results := health.RunChecks(vaultDir, health.Options{Only: []string{"git.repo"}, NoNetwork: true})
+	if len(results) == 0 {
+		t.Fatal("no results from RunChecks")
+	}
+	r := results[0]
+	if r.Status != health.StatusWarn {
+		t.Fatalf("expected StatusWarn, got %s", r.Status)
+	}
+	if !r.Fixable {
+		t.Fatal("expected Fixable=true for git.repo")
+	}
+	if r.Fix == nil {
+		t.Fatal("expected Fix!=nil for git.repo")
+	}
+
+	// Apply fix
+	if err := r.Fix(); err != nil {
+		t.Fatalf("Fix() error = %v", err)
+	}
+
+	// Verify .git dir exists
+	gitDir := filepath.Join(vaultDir, ".git")
+	if _, err := os.Stat(gitDir); os.IsNotExist(err) {
+		t.Error("expected .git directory to exist after fix")
+	}
+}
+
+func TestFix_NonFixableChecks(t *testing.T) {
+	vaultDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(vaultDir, "entries"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run ALL checks (no Only filter)
+	results := health.RunChecks(vaultDir, health.Options{NoNetwork: true})
+
+	// All checks that ARE fixable should have Fixable=true and Fix!=nil
+	nonFixable := map[string]bool{
+		"vault.permissions":      true, // IT IS fixable
+		"git.repo":               true, // IT IS fixable
+		"git.gitignore.protects": true, // IT IS fixable
+	}
+	// Everything else should NOT be fixable
+	for _, r := range results {
+		if nonFixable[r.ID] {
+			if !r.Fixable {
+				t.Errorf("%s should be Fixable=true", r.ID)
+			}
+		} else {
+			if r.Fixable {
+				t.Errorf("%s should have Fixable=false", r.ID)
+			}
+			if r.Fix != nil {
+				t.Errorf("%s should have Fix=nil", r.ID)
+			}
+		}
 	}
 }

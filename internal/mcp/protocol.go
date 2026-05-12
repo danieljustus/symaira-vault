@@ -107,6 +107,10 @@ func (h *ProtocolHandler) HandleMessage(ctx context.Context, msg *Message) (*Mes
 		return h.handleToolsList(ctx, msg)
 	case "tools/call":
 		return h.handleToolsCall(ctx, msg)
+	case "prompts/list":
+		return h.handlePromptsList(ctx, msg)
+	case "prompts/get":
+		return h.handlePromptsGet(ctx, msg)
 	default:
 		if msg.IsNotification() {
 			return nil, nil
@@ -127,6 +131,9 @@ func (h *ProtocolHandler) handleInitialize(_ context.Context, msg *Message) (*Me
 		ProtocolVersion: supportedVersion,
 		Capabilities: &ServerCapabilities{
 			Tools: &ToolsCapability{
+				ListChanged: false,
+			},
+			Prompts: &PromptsCapability{
 				ListChanged: false,
 			},
 		},
@@ -215,4 +222,58 @@ func (h *ProtocolHandler) handleToolsCall(ctx context.Context, msg *Message) (*M
 	}
 
 	return NewResponse(msg.ID, result)
+}
+
+func (h *ProtocolHandler) handlePromptsList(_ context.Context, msg *Message) (*Message, error) {
+	h.mu.RLock()
+	initialized := h.initialized
+	h.mu.RUnlock()
+
+	if !initialized {
+		return NewErrorResponse(msg.ID, ErrCodeServerError, "Server not initialized", nil), nil
+	}
+
+	return NewResponse(msg.ID, map[string]any{
+		"prompts": promptsListPayload(),
+	})
+}
+
+func (h *ProtocolHandler) handlePromptsGet(_ context.Context, msg *Message) (*Message, error) {
+	h.mu.RLock()
+	initialized := h.initialized
+	h.mu.RUnlock()
+
+	if !initialized {
+		return NewErrorResponse(msg.ID, ErrCodeServerError, "Server not initialized", nil), nil
+	}
+
+	var params struct {
+		Name      string            `json:"name"`
+		Arguments map[string]string `json:"arguments"`
+	}
+	if err := msg.ParseParams(&params); err != nil {
+		return NewErrorResponse(msg.ID, ErrCodeInvalidParams, "Invalid params", err.Error()), nil
+	}
+	if params.Name == "" {
+		return NewErrorResponse(msg.ID, ErrCodeInvalidParams, "Missing prompt name", nil), nil
+	}
+
+	def, ok := findPromptDefinition(params.Name)
+	if !ok {
+		return NewErrorResponse(msg.ID, ErrCodeInvalidParams, fmt.Sprintf("Unknown prompt: %s", params.Name), nil), nil
+	}
+
+	if params.Arguments == nil {
+		params.Arguments = map[string]string{}
+	}
+	for _, arg := range def.Arguments {
+		if arg.Required {
+			if v, ok := params.Arguments[arg.Name]; !ok || v == "" {
+				return NewErrorResponse(msg.ID, ErrCodeInvalidParams,
+					fmt.Sprintf("Missing required argument: %s", arg.Name), nil), nil
+			}
+		}
+	}
+
+	return NewResponse(msg.ID, promptGetPayload(def, params.Arguments))
 }

@@ -61,6 +61,22 @@ Example workflow for API key management:
 - Prefer dedicated agent profiles such as `hermes` or `openclaw` over a shared
   human CLI profile.
 
+## Missing Credentials
+
+If a task requires a credential that is not in the vault (e.g. `find_entries` or
+`get_entry` returns nothing for an expected path), do NOT ask the user to type
+the secret in chat. Call the `request_credential` MCP tool instead:
+
+- `path`: where the credential should live (e.g. `github/api-token`)
+- `field`: which field (`token`, `password`, `api_key`, …)
+- `reason`: a one-sentence human-readable reason — this is shown verbatim in
+  the dialog the user sees
+
+OpenPass opens a native dialog (TTY box on terminal-attached runs, OS-native
+popup otherwise). The user types the value; you receive only a confirmation,
+never the value itself. Continue the task afterwards using `execute_with_secret`,
+`copy_to_clipboard`, or `autotype` — never re-derive or re-print the secret.
+
 ## Expected Entry Shape
 
 Entries are JSON-like objects. Common fields:
