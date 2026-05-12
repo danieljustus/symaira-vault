@@ -530,6 +530,8 @@ func (l *Logger) Close() error {
 	if l == nil || l.file == nil {
 		return nil
 	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	err := l.file.Close()
 	vaultcrypto.Wipe(l.hmacKey)
 	vaultcrypto.Wipe(l.prevHMAC)
