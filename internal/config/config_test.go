@@ -517,6 +517,10 @@ func TestSaveLoadRoundTrip_PreservesAllFields(t *testing.T) {
 				ApprovalMode:    "prompt",
 				ApprovalTimeout: 2 * time.Minute,
 				RequireApproval: true,
+				DynamicProviders: map[string][]string{
+					"postgres": {"readonly", "admin"},
+					"aws-sts":  {"*"},
+				},
 			},
 		},
 		Vault: &VaultConfig{
@@ -623,6 +627,22 @@ func TestSaveLoadRoundTrip_PreservesAllFields(t *testing.T) {
 	}
 	if len(agent.AllowedPaths) != len(cfg.Agents["test-agent"].AllowedPaths) {
 		t.Errorf("agent.AllowedPaths len = %d, want %d", len(agent.AllowedPaths), len(cfg.Agents["test-agent"].AllowedPaths))
+	}
+	if agent.DynamicProviders == nil {
+		t.Fatal("agent.DynamicProviders should not be nil after round-trip")
+	}
+	if len(agent.DynamicProviders) != 2 {
+		t.Errorf("agent.DynamicProviders len = %d, want 2", len(agent.DynamicProviders))
+	}
+	if roles, ok := agent.DynamicProviders["postgres"]; !ok {
+		t.Error("agent.DynamicProviders missing postgres provider")
+	} else if len(roles) != 2 || roles[0] != "readonly" || roles[1] != "admin" {
+		t.Errorf("agent.DynamicProviders['postgres'] = %v, want [readonly admin]", roles)
+	}
+	if roles, ok := agent.DynamicProviders["aws-sts"]; !ok {
+		t.Error("agent.DynamicProviders missing aws-sts provider")
+	} else if len(roles) != 1 || roles[0] != "*" {
+		t.Errorf("agent.DynamicProviders['aws-sts'] = %v, want [*]", roles)
 	}
 }
 
