@@ -124,30 +124,6 @@ func (s *Server) logAudit(ctx context.Context, action, path string, ok bool) {
 	}
 }
 
-func (s *Server) logAuditWithToken(ctx context.Context, action, path string, ok bool) {
-	if s == nil || s.auditLog == nil {
-		return
-	}
-	reason := ""
-	if !ok {
-		reason = action
-	}
-	entry := audit.LogEntry{
-		Agent:     s.agent.Name,
-		Action:    action,
-		Path:      path,
-		Transport: s.transport,
-		OK:        ok,
-		Reason:    reason,
-	}
-	if token, ok := TokenFromContext(ctx); ok {
-		entry.TokenID = token.ID
-	}
-	if err := s.auditLog.LogEntry(entry); err != nil {
-		slog.Default().Warn("audit log write failed", "err", err)
-	}
-}
-
 // checkShareAccess checks if the current agent has an approved, non-expired share for the given path.
 // Returns the ShareGrant and true if access is granted, or nil and false otherwise.
 func (s *Server) checkShareAccess(_ context.Context, path string) (*ShareGrant, bool) {
