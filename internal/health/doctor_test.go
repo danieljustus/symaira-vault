@@ -576,24 +576,21 @@ func TestRunChecks_ManifestIntegrity_NoIdentity(t *testing.T) {
 	}
 }
 
-func TestRunChecks_AutoTypeBackend_Runs(t *testing.T) {
+func testPlatformCheck(t *testing.T, checkID, name string) {
+	t.Helper()
 	dir := t.TempDir()
-	results := health.RunChecks(dir, health.Options{Only: []string{"tooling.autotype.backend"}, NoNetwork: true})
+	results := health.RunChecks(dir, health.Options{Only: []string{checkID}, NoNetwork: true})
 	if len(results) == 0 {
-		t.Fatal("expected auto-type backend check result")
+		t.Fatalf("expected %s check result", name)
 	}
 	r := results[0]
-	if r.ID != "tooling.autotype.backend" {
-		t.Errorf("expected tooling.autotype.backend, got %s", r.ID)
+	if r.ID != checkID {
+		t.Errorf("expected %s, got %s", checkID, r.ID)
 	}
 	switch runtime.GOOS {
-	case "darwin":
+	case "darwin", "linux":
 		if r.Status != health.StatusOK && r.Status != health.StatusWarn {
-			t.Errorf("expected ok or warn on darwin, got %s", r.Status)
-		}
-	case "linux":
-		if r.Status != health.StatusOK && r.Status != health.StatusWarn {
-			t.Errorf("expected ok or warn on linux, got %s", r.Status)
+			t.Errorf("expected ok or warn on %s, got %s", runtime.GOOS, r.Status)
 		}
 	default:
 		if r.Status != health.StatusOK {
@@ -602,31 +599,8 @@ func TestRunChecks_AutoTypeBackend_Runs(t *testing.T) {
 	}
 }
 
-func TestRunChecks_ClipboardBackend_Runs(t *testing.T) {
-	dir := t.TempDir()
-	results := health.RunChecks(dir, health.Options{Only: []string{"tooling.clipboard.backend"}, NoNetwork: true})
-	if len(results) == 0 {
-		t.Fatal("expected clipboard backend check result")
-	}
-	r := results[0]
-	if r.ID != "tooling.clipboard.backend" {
-		t.Errorf("expected tooling.clipboard.backend, got %s", r.ID)
-	}
-	switch runtime.GOOS {
-	case "darwin":
-		if r.Status != health.StatusOK && r.Status != health.StatusWarn {
-			t.Errorf("expected ok or warn on darwin, got %s", r.Status)
-		}
-	case "linux":
-		if r.Status != health.StatusOK && r.Status != health.StatusWarn {
-			t.Errorf("expected ok or warn on linux, got %s", r.Status)
-		}
-	default:
-		if r.Status != health.StatusOK {
-			t.Errorf("expected ok on %s, got %s: %s", runtime.GOOS, r.Status, r.Message)
-		}
-	}
-}
+func TestRunChecks_AutoTypeBackend_Runs(t *testing.T) { testPlatformCheck(t, "tooling.autotype.backend", "auto-type backend") }
+func TestRunChecks_ClipboardBackend_Runs(t *testing.T) { testPlatformCheck(t, "tooling.clipboard.backend", "clipboard backend") }
 
 func TestRunChecks_DaemonStatus_Runs(t *testing.T) {
 	dir := t.TempDir()
