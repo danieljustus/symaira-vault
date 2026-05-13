@@ -22,6 +22,7 @@ import (
 	vaultcrypto "github.com/danieljustus/OpenPass/internal/crypto"
 	"github.com/danieljustus/OpenPass/internal/metrics"
 	"github.com/danieljustus/OpenPass/internal/pathutil"
+	"github.com/danieljustus/OpenPass/internal/vault/taint"
 )
 
 // Entry represents a vault entry with flexible data storage using map[string]any.
@@ -652,6 +653,77 @@ func (e *Entry) GetField(name string) (any, bool) {
 	}
 	val, ok := e.Data[name]
 	return val, ok
+}
+
+// fieldString converts a Data field value to a string representation.
+func fieldString(v any) string {
+	if v == nil {
+		return ""
+	}
+	switch s := v.(type) {
+	case string:
+		return s
+	default:
+		return fmt.Sprint(v)
+	}
+}
+
+// FieldUntrusted returns a field value wrapped as taint.Untrusted with
+// provenance tracking. Returns (Untrusted{}, false) if the field does
+// not exist.
+func (e *Entry) FieldUntrusted(name string) (taint.Untrusted, bool) {
+	val, ok := e.GetField(name)
+	if !ok {
+		return taint.Untrusted{}, false
+	}
+	return taint.Wrap(fieldString(val), taint.Provenance{
+		Source:    "vault.field",
+		EntryPath: e.Path,
+		FieldName: name,
+	}), true
+}
+
+// TagsUntrusted returns all entry tags as Untrusted values with
+// provenance tracking. Returns an empty slice (not nil) for entries
+// with no tags.
+func (e *Entry) TagsUntrusted() []taint.Untrusted {
+	if len(e.Metadata.Tags) == 0 {
+		return []taint.Untrusted{}
+	}
+	result := make([]taint.Untrusted, len(e.Metadata.Tags))
+	for i, tag := range e.Metadata.Tags {
+		result[i] = taint.Wrap(tag, taint.Provenance{
+			Source:    "vault.tag",
+			EntryPath: e.Path,
+		})
+	}
+	return result
+}
+
+// UsageHintUntrusted returns the entry's UsageHint as an Untrusted value
+// with provenance tracking. Returns an empty Untrusted if no UsageHint
+// is set.
+func (e *Entry) UsageHintUntrusted() taint.Untrusted {
+	return taint.Wrap(e.SecretMetadata.UsageHint, taint.Provenance{
+		Source:    "vault.usage_hint",
+		EntryPath: e.Path,
+	})
+}
+
+// Handles returns a SecretHandle for each field in the entry's Data map.
+// The path parameter is used as the handle path (typically e.Path).
+func (e *Entry) Handles(path string) []taint.SecretHandle {
+	if len(e.Data) == 0 {
+		return nil
+	}
+	result := make([]taint.SecretHandle, 0, len(e.Data))
+	for field := range e.Data {
+		result = append(result, taint.SecretHandle{
+			Path:  path,
+			Field: field,
+		})
+	}
+	return result
 }
 
 // GetEntryMetadata reads only the metadata from an entry without decrypting the full entry.

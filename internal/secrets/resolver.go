@@ -8,8 +8,17 @@ import (
 	"strings"
 
 	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
+	"github.com/danieljustus/OpenPass/internal/vault/taint"
 	vaultsvc "github.com/danieljustus/OpenPass/internal/vaultsvc"
 )
+
+// HandleResolver resolves a SecretHandle to its actual secret value.
+// Implementations wrap vault service Lookup/GetField to resolve op://
+// references in MCP tool handlers.
+type HandleResolver interface {
+	// Resolve returns the secret value for the given handle.
+	Resolve(h taint.SecretHandle) (string, error)
+}
 
 // ResolveSecretRef resolves a secret reference against the vault service.
 // The ref can be a bare entry path (e.g. "work/aws") which returns the full

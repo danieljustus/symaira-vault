@@ -221,3 +221,78 @@ func TestUntrustedReflectNoStringMethod(t *testing.T) {
 		t.Fatal("Untrusted must not have a String method")
 	}
 }
+
+func TestSecretHandleString(t *testing.T) {
+	h := SecretHandle{Path: "work/aws", Field: "password"}
+	got := h.String()
+	want := "op://work/aws/password"
+	if got != want {
+		t.Fatalf("String() = %q, want %q", got, want)
+	}
+}
+
+func TestSecretHandleString_PathOnly(t *testing.T) {
+	h := SecretHandle{Path: "personal/notes"}
+	got := h.String()
+	want := "op://personal/notes/"
+	if got != want {
+		t.Fatalf("String() with empty field = %q, want %q", got, want)
+	}
+}
+
+func TestParseSecretHandle_Valid(t *testing.T) {
+	h, ok := ParseSecretHandle("op://work/aws/password")
+	if !ok {
+		t.Fatal("ParseSecretHandle should succeed")
+	}
+	if h.Path != "work/aws" {
+		t.Fatalf("Path = %q, want %q", h.Path, "work/aws")
+	}
+	if h.Field != "password" {
+		t.Fatalf("Field = %q, want %q", h.Field, "password")
+	}
+}
+
+func TestParseSecretHandle_Roundtrip(t *testing.T) {
+	original := SecretHandle{Path: "foo/bar", Field: "secret"}
+	s := original.String()
+	parsed, ok := ParseSecretHandle(s)
+	if !ok {
+		t.Fatal("ParseSecretHandle should succeed on roundtrip")
+	}
+	if parsed != original {
+		t.Fatalf("roundtrip: %+v != %+v", parsed, original)
+	}
+}
+
+func TestParseSecretHandle_Invalid(t *testing.T) {
+	tests := []string{
+		"",
+		"op://",
+		"op:///",
+		"not-a-handle",
+		"://path/field",
+	}
+	for _, input := range tests {
+		t.Run(input, func(t *testing.T) {
+			_, ok := ParseSecretHandle(input)
+			if ok {
+				t.Fatalf("ParseSecretHandle(%q) should return false", input)
+			}
+		})
+	}
+}
+
+func TestParseSecretHandle_ValidPathOnly(t *testing.T) {
+	// No / means no field — whole string is the path
+	h, ok := ParseSecretHandle("op://work/aws")
+	if !ok {
+		t.Fatal("ParseSecretHandle should succeed")
+	}
+	if h.Path != "work" {
+		t.Fatalf("Path = %q, want %q", h.Path, "work")
+	}
+	if h.Field != "aws" {
+		t.Fatalf("Field = %q, want %q", h.Field, "aws")
+	}
+}

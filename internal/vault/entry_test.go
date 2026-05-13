@@ -910,3 +910,182 @@ func writePseudonymizeConfig(t *testing.T, vaultDir string) {
 		t.Fatalf("save config: %v", err)
 	}
 }
+
+func TestFieldUntrusted_ReturnsUntrusted(t *testing.T) {
+	e := &Entry{
+		Path: "test/entry",
+		Data: map[string]any{
+			"password": "my-secret",
+			"username": "alice",
+		},
+	}
+
+	u, ok := e.FieldUntrusted("password")
+	if !ok {
+		t.Fatal("FieldUntrusted should return true for existing field")
+	}
+	prov := u.Provenance()
+	if prov.Source != "vault.field" {
+		t.Fatalf("Source = %q, want %q", prov.Source, "vault.field")
+	}
+	if prov.EntryPath != "test/entry" {
+		t.Fatalf("EntryPath = %q, want %q", prov.EntryPath, "test/entry")
+	}
+	if prov.FieldName != "password" {
+		t.Fatalf("FieldName = %q, want %q", prov.FieldName, "password")
+	}
+	raw := u.UnsafeRawForStorage()
+	if raw != "my-secret" {
+		t.Fatalf("raw value = %q, want %q", raw, "my-secret")
+	}
+}
+
+func TestFieldUntrusted_NotFound(t *testing.T) {
+	e := &Entry{
+		Path: "test",
+		Data: map[string]any{"existing": "value"},
+	}
+	_, ok := e.FieldUntrusted("nonexistent")
+	if ok {
+		t.Fatal("FieldUntrusted should return false for missing field")
+	}
+}
+
+func TestFieldUntrusted_NilData(t *testing.T) {
+	e := &Entry{Path: "test"}
+	_, ok := e.FieldUntrusted("anything")
+	if ok {
+		t.Fatal("FieldUntrusted should return false for nil Data")
+	}
+}
+
+func TestFieldUntrusted_NonStringValue(t *testing.T) {
+	e := &Entry{
+		Path: "test",
+		Data: map[string]any{
+			"count": 42,
+			"ratio": 3.14,
+			"tags":  []string{"a", "b"},
+		},
+	}
+	u, ok := e.FieldUntrusted("count")
+	if !ok {
+		t.Fatal("should find 'count'")
+	}
+	if u.UnsafeRawForStorage() != "42" {
+		t.Fatalf("expected '42', got %q", u.UnsafeRawForStorage())
+	}
+}
+
+func TestTagsUntrusted_ReturnsUntrusted(t *testing.T) {
+	e := &Entry{
+		Path: "test/entry",
+		Metadata: EntryMetadata{
+			Tags: []string{"database", "production"},
+		},
+	}
+	tags := e.TagsUntrusted()
+	if len(tags) != 2 {
+		t.Fatalf("expected 2 tags, got %d", len(tags))
+	}
+	for i, tag := range tags {
+		prov := tag.Provenance()
+		if prov.Source != "vault.tag" {
+			t.Fatalf("tag[%d] Source = %q, want %q", i, prov.Source, "vault.tag")
+		}
+		if prov.EntryPath != "test/entry" {
+			t.Fatalf("tag[%d] EntryPath = %q, want %q", i, prov.EntryPath, "test/entry")
+		}
+		if tag.UnsafeRawForStorage() != e.Metadata.Tags[i] {
+			t.Fatalf("tag[%d] value mismatch", i)
+		}
+	}
+}
+
+func TestTagsUntrusted_Empty(t *testing.T) {
+	e := &Entry{Path: "test"}
+	tags := e.TagsUntrusted()
+	if tags == nil {
+		t.Fatal("TagsUntrusted should return empty slice, not nil")
+	}
+	if len(tags) != 0 {
+		t.Fatalf("expected 0 tags, got %d", len(tags))
+	}
+}
+
+func TestUsageHintUntrusted_ReturnsUntrusted(t *testing.T) {
+	e := &Entry{
+		Path: "test/entry",
+		SecretMetadata: SecretMetadata{
+			UsageHint: "use this for AWS CLI authentication",
+		},
+	}
+	u := e.UsageHintUntrusted()
+	prov := u.Provenance()
+	if prov.Source != "vault.usage_hint" {
+		t.Fatalf("Source = %q, want %q", prov.Source, "vault.usage_hint")
+	}
+	if prov.EntryPath != "test/entry" {
+		t.Fatalf("EntryPath = %q, want %q", prov.EntryPath, "test/entry")
+	}
+	if u.UnsafeRawForStorage() != "use this for AWS CLI authentication" {
+		t.Fatalf("raw = %q", u.UnsafeRawForStorage())
+	}
+}
+
+func TestUsageHintUntrusted_Empty(t *testing.T) {
+	e := &Entry{Path: "test"}
+	u := e.UsageHintUntrusted()
+	if u.UnsafeRawForStorage() != "" {
+		t.Fatal("empty UsageHint should produce empty Untrusted")
+	}
+}
+
+func TestHandles_ReturnsHandles(t *testing.T) {
+	e := &Entry{
+		Path: "work/aws",
+		Data: map[string]any{
+			"password": "secret",
+			"username": "alice",
+		},
+	}
+	handles := e.Handles(e.Path)
+	if len(handles) != 2 {
+		t.Fatalf("expected 2 handles, got %d", len(handles))
+	}
+	found := map[string]bool{}
+	for _, h := range handles {
+		if h.Path != "work/aws" {
+			t.Fatalf("Path = %q, want %q", h.Path, "work/aws")
+		}
+		found[h.Field] = true
+	}
+	if !found["password"] {
+		t.Fatal("missing handle for 'password'")
+	}
+	if !found["username"] {
+		t.Fatal("missing handle for 'username'")
+	}
+}
+
+func TestHandles_EmptyData(t *testing.T) {
+	e := &Entry{Path: "test"}
+	handles := e.Handles(e.Path)
+	if handles != nil {
+		t.Fatal("Handles should return nil for empty Data")
+	}
+}
+
+func TestHandles_ExplicitPath(t *testing.T) {
+	e := &Entry{
+		Path: "actual/path",
+		Data: map[string]any{"key": "val"},
+	}
+	handles := e.Handles("custom/path")
+	if len(handles) != 1 {
+		t.Fatalf("expected 1 handle, got %d", len(handles))
+	}
+	if handles[0].Path != "custom/path" {
+		t.Fatalf("Path = %q, want %q", handles[0].Path, "custom/path")
+	}
+}

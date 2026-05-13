@@ -8,11 +8,44 @@ package taint
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // ErrUntrustedFormat is returned when an Untrusted value is used in an
 // unsafe context. Call .Render() or .UnsafeRawForStorage() explicitly.
 var ErrUntrustedFormat = errors.New("taint: use of Untrusted in format argument")
+
+// SecretHandle is a reference to a specific field in the vault using the
+// op:// scheme. It is the safe alternative to embedding raw secret values
+// in MCP responses.
+type SecretHandle struct {
+	Path  string
+	Field string
+}
+
+// String returns the op:// representation of the handle.
+func (h SecretHandle) String() string {
+	return "op://" + h.Path + "/" + h.Field
+}
+
+// ParseSecretHandle parses an op:// handle string into its components.
+// Expected format: op://path/field
+// Returns (SecretHandle{}, false) for invalid formats.
+func ParseSecretHandle(s string) (SecretHandle, bool) {
+	if !strings.HasPrefix(s, "op://") {
+		return SecretHandle{}, false
+	}
+	rest := s[5:]
+	if rest == "" || rest[0] == '/' {
+		return SecretHandle{}, false
+	}
+
+	if idx := strings.LastIndex(rest, "/"); idx > 0 && idx < len(rest)-1 {
+		return SecretHandle{Path: rest[:idx], Field: rest[idx+1:]}, true
+	}
+
+	return SecretHandle{Path: rest}, true
+}
 
 // Provenance describes the origin of an untrusted value.
 type Provenance struct {
