@@ -72,7 +72,7 @@ func (s *Server) handleSet(ctx context.Context, req CallToolRequest) (*CallToolR
 
 	if field == "password" && !req.GetBool("force", false) {
 		if err := crypto.ValidatePasswordStrength(value); err != nil {
-			return NewToolResultError(err.Error()), nil
+			return NewToolResultError(fmt.Sprintf("%s — re-call with force:true if you want to store this password (the entry will be tagged as weak)", err.Error())), nil
 		}
 	}
 

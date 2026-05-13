@@ -253,7 +253,7 @@ func (f *AddEntryForm) validatePassword() {
 	}
 	s := cryptopkg.AssessPasswordStrength(password)
 	if s.Weak {
-		f.passwordErr = fmt.Errorf("%s (use Enter to confirm)", s.Message)
+		f.passwordErr = fmt.Errorf("%s (weak — press Enter to continue)", s.Message)
 	} else {
 		f.passwordErr = nil
 	}

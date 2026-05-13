@@ -458,13 +458,18 @@ func tagEntryForWeakPassword(entry *Entry, partialData map[string]any) {
 		return
 	}
 	pwdStr, ok := pwd.(string)
-	if !ok || pwdStr == "" {
+	if !ok {
+		return
+	}
+	if pwdStr == "" {
+		// Password was cleared — remove stale tag if present.
+		entry.RemoveTag(TagWeakPassword)
 		return
 	}
 	s := vaultcrypto.AssessPasswordStrength(pwdStr)
 	if s.Weak {
-		entry.AddTag("weak-password")
+		entry.AddTag(TagWeakPassword)
 	} else {
-		entry.RemoveTag("weak-password")
+		entry.RemoveTag(TagWeakPassword)
 	}
 }

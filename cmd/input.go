@@ -244,6 +244,6 @@ func confirmWeakPassword(password string) error {
 		}
 		return nil
 	}
-	// Non-TTY: return blocking error (use --force to skip)
-	return fmt.Errorf("%s", s.Message)
+	// Non-TTY: return blocking error with hint about --force
+	return fmt.Errorf("%s — use --force to bypass this check (the entry will be tagged as weak)", s.Message)
 }

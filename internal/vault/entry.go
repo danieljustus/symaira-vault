@@ -68,6 +68,9 @@ func (e *Entry) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// TagWeakPassword is the tag applied to entries whose password is assessed as weak.
+const TagWeakPassword = "weak-password"
+
 // HasTag returns true if the entry has the given tag.
 func (e *Entry) HasTag(tag string) bool {
 	for _, t := range e.Metadata.Tags {

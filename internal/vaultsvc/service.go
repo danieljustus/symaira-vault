@@ -104,9 +104,9 @@ func (s *vaultService) setEntry(path string, data map[string]any) error {
 		}
 		if pwd, ok := data["password"]; ok {
 			if pwdStr, ok := pwd.(string); ok && pwdStr != "" {
-				s := cryptopkg.AssessPasswordStrength(pwdStr)
-				if s.Weak {
-					entry.AddTag("weak-password")
+				strength := cryptopkg.AssessPasswordStrength(pwdStr)
+				if strength.Weak {
+					entry.AddTag(vaultpkg.TagWeakPassword)
 				}
 			}
 		}

@@ -1377,7 +1377,6 @@ func checkPasswordReuse(vaultDir string, _ Options) Result {
 		h := sha256.Sum256([]byte(pwdStr))
 		hashHex := hex.EncodeToString(h[:])
 		hashToPaths[hashHex] = append(hashToPaths[hashHex], path)
-		vaultcrypto.Wipe([]byte(pwdStr))
 	}
 
 	var reusedGroups [][]string
@@ -1393,6 +1392,7 @@ func checkPasswordReuse(vaultDir string, _ Options) Result {
 		})
 		r.Status = StatusWarn
 		if len(reusedGroups) == 1 {
+			sort.Strings(reusedGroups[0])
 			r.Message = fmt.Sprintf("%d entries share the same password", len(reusedGroups[0]))
 			r.Hint = fmt.Sprintf("entries: %s", strings.Join(reusedGroups[0], ", "))
 		} else {
@@ -1413,7 +1413,12 @@ func checkPasswordReuse(vaultDir string, _ Options) Result {
 func formatReuseGroups(groups [][]string) string {
 	var parts []string
 	for _, g := range groups {
-		parts = append(parts, fmt.Sprintf("%d entries", len(g)))
+		sort.Strings(g)
+		entries := strings.Join(g, ", ")
+		if len(g) > 5 {
+			entries = strings.Join(g[:5], ", ") + fmt.Sprintf(", ... (%d total)", len(g))
+		}
+		parts = append(parts, fmt.Sprintf("%d entries: %s", len(g), entries))
 	}
-	return strings.Join(parts, ", ")
+	return strings.Join(parts, "; ")
 }
