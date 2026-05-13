@@ -10,6 +10,7 @@ import (
 
 	"filippo.io/age"
 
+	cryptopkg "github.com/danieljustus/OpenPass/internal/crypto"
 	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
 	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
 )
@@ -100,6 +101,14 @@ func (s *vaultService) setEntry(path string, data map[string]any) error {
 				Updated: time.Now().UTC(),
 				Version: 0,
 			},
+		}
+		if pwd, ok := data["password"]; ok {
+			if pwdStr, ok := pwd.(string); ok && pwdStr != "" {
+				s := cryptopkg.AssessPasswordStrength(pwdStr)
+				if s.Weak {
+					entry.AddTag("weak-password")
+				}
+			}
 		}
 		if err := vaultpkg.WriteEntryWithRecipients(s.vault.Dir, path, entry, s.vault.Identity); err != nil {
 			return errorspkg.WriteFailed(err, "cannot create entry %s: %v", path, err)

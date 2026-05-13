@@ -441,8 +441,30 @@ func MergeEntryWithRecipients(vaultDir, path string, partialData map[string]any,
 		entry.Data = map[string]any{}
 	}
 	mergeMaps(entry.Data, partialData)
+	// Tag injection: assess password strength when password is updated
+	tagEntryForWeakPassword(entry, partialData)
 	if err := WriteEntryWithRecipients(vaultDir, path, entry, identity); err != nil {
 		return nil, err
 	}
 	return ReadEntry(vaultDir, path, identity)
+}
+
+// tagEntryForWeakPassword checks if the password in partialData is weak and
+// adds/removes the "weak-password" tag accordingly. Only acts when partialData
+// contains a "password" key, since other field changes don't affect password strength.
+func tagEntryForWeakPassword(entry *Entry, partialData map[string]any) {
+	pwd, ok := partialData["password"]
+	if !ok {
+		return
+	}
+	pwdStr, ok := pwd.(string)
+	if !ok || pwdStr == "" {
+		return
+	}
+	s := vaultcrypto.AssessPasswordStrength(pwdStr)
+	if s.Weak {
+		entry.AddTag("weak-password")
+	} else {
+		entry.RemoveTag("weak-password")
+	}
 }

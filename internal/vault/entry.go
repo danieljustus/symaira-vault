@@ -68,6 +68,33 @@ func (e *Entry) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// HasTag returns true if the entry has the given tag.
+func (e *Entry) HasTag(tag string) bool {
+	for _, t := range e.Metadata.Tags {
+		if t == tag {
+			return true
+		}
+	}
+	return false
+}
+
+// AddTag adds a tag to the entry if not already present.
+func (e *Entry) AddTag(tag string) {
+	if !e.HasTag(tag) {
+		e.Metadata.Tags = append(e.Metadata.Tags, tag)
+	}
+}
+
+// RemoveTag removes a tag from the entry if present.
+func (e *Entry) RemoveTag(tag string) {
+	for i, t := range e.Metadata.Tags {
+		if t == tag {
+			e.Metadata.Tags = append(e.Metadata.Tags[:i], e.Metadata.Tags[i+1:]...)
+			return
+		}
+	}
+}
+
 // validateEntryPath ensures the entry path stays within the vault directory.
 // Returns an error if path traversal is detected.
 func validateEntryPath(vaultDir, path string) error {

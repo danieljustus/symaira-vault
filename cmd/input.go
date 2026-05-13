@@ -93,7 +93,7 @@ func collectPassword(data map[string]any, reader *bufio.Reader, flags entryFlags
 		if len(password) > 0 {
 			data["password"] = string(password)
 			if !flags.force {
-				if err := cryptopkg.ValidatePasswordStrength(string(password)); err != nil {
+				if err := confirmWeakPassword(string(password)); err != nil {
 					return err
 				}
 			}
@@ -222,4 +222,28 @@ func confirmInteractive(prompt string, force bool) (bool, error) {
 		return false, nil
 	}
 	return true, nil
+}
+
+// confirmWeakPassword checks if a password meets strength requirements.
+// In TTY mode, it warns and asks for confirmation if weak.
+// In non-TTY mode, it returns an error (callers should use --force to skip).
+func confirmWeakPassword(password string) error {
+	s := cryptopkg.AssessPasswordStrength(password)
+	if !s.Weak {
+		return nil
+	}
+
+	fmt.Fprintf(os.Stderr, "Warning: %s\n", s.Message)
+	if isTerminalFunc(int(os.Stdin.Fd())) {
+		ok, err := confirmInteractive("Use this password anyway?", false)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return fmt.Errorf("password rejected by user")
+		}
+		return nil
+	}
+	// Non-TTY: return blocking error (use --force to skip)
+	return fmt.Errorf("%s", s.Message)
 }

@@ -70,7 +70,7 @@ func (s *Server) handleSet(ctx context.Context, req CallToolRequest) (*CallToolR
 		partialData[field] = value
 	}
 
-	if field == "password" {
+	if field == "password" && !req.GetBool("force", false) {
 		if err := crypto.ValidatePasswordStrength(value); err != nil {
 			return NewToolResultError(err.Error()), nil
 		}

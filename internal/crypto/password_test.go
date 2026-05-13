@@ -169,3 +169,64 @@ func TestValidatePasswordStrength_Unicode(t *testing.T) {
 		t.Errorf("expected unicode password with sufficient entropy to be valid, got %v", err)
 	}
 }
+
+func TestAssessPasswordStrength_WeakShort(t *testing.T) {
+	s := AssessPasswordStrength("123")
+	if !s.Weak {
+		t.Error("expected Weak=true for short password")
+	}
+	if !strings.Contains(s.Message, "too short") {
+		t.Errorf("expected 'too short' message, got %q", s.Message)
+	}
+	if s.Entropy != 0 {
+		t.Errorf("expected Entropy=0 for short password, got %f", s.Entropy)
+	}
+}
+
+func TestAssessPasswordStrength_WeakLowEntropy(t *testing.T) {
+	s := AssessPasswordStrength("abcdefghij")
+	if !s.Weak {
+		t.Error("expected Weak=true for low entropy password")
+	}
+	if !strings.Contains(s.Message, "too weak") {
+		t.Errorf("expected 'too weak' message, got %q", s.Message)
+	}
+	if s.Entropy <= 0 {
+		t.Errorf("expected positive entropy value, got %f", s.Entropy)
+	}
+}
+
+func TestAssessPasswordStrength_Strong(t *testing.T) {
+	s := AssessPasswordStrength("StrongP@ssw0rd123")
+	if s.Weak {
+		t.Errorf("expected Weak=false for strong password, got message: %s", s.Message)
+	}
+	if s.Entropy <= 60 {
+		t.Errorf("expected entropy > 60 for strong password, got %f", s.Entropy)
+	}
+}
+
+func TestAssessPasswordStrength_Empty(t *testing.T) {
+	s := AssessPasswordStrength("")
+	if !s.Weak {
+		t.Error("expected Weak=true for empty password")
+	}
+	if !strings.Contains(s.Message, "too short") {
+		t.Errorf("expected 'too short' message, got %q", s.Message)
+	}
+}
+
+func TestAssessPasswordStrength_Unicode(t *testing.T) {
+	s := AssessPasswordStrength("HelloW0rld!日本語テスト")
+	if s.Weak {
+		t.Errorf("expected Weak=false for unicode password with sufficient entropy, got %q", s.Message)
+	}
+}
+
+func TestAssessPasswordStrength_ExactBoundary(t *testing.T) {
+	// 10 chars, all lowercase = 10 * log2(26) ≈ 47 bits → weak
+	s := AssessPasswordStrength("abcdefghij")
+	if !s.Weak {
+		t.Error("expected Weak=true for 10 lowercase chars (≈47 bits < 60)")
+	}
+}

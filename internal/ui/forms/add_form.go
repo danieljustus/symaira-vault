@@ -251,7 +251,12 @@ func (f *AddEntryForm) validatePassword() {
 		f.passwordErr = nil
 		return
 	}
-	f.passwordErr = cryptopkg.ValidatePasswordStrength(password)
+	s := cryptopkg.AssessPasswordStrength(password)
+	if s.Weak {
+		f.passwordErr = fmt.Errorf("%s (use Enter to confirm)", s.Message)
+	} else {
+		f.passwordErr = nil
+	}
 }
 
 func (f *AddEntryForm) Init() tea.Cmd {
@@ -504,13 +509,6 @@ func RunAddEntryForm(force bool, defaults map[string]any) (map[string]any, vault
 
 	if f.canceled {
 		return nil, vaultpkg.SecretMetadata{}, fmt.Errorf("canceled")
-	}
-
-	password := f.password.Value()
-	if password != "" && !f.force {
-		if err := cryptopkg.ValidatePasswordStrength(password); err != nil {
-			return nil, vaultpkg.SecretMetadata{}, err
-		}
 	}
 
 	return f.Data(), f.SecretMetadata(), nil

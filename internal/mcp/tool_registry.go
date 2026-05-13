@@ -93,6 +93,7 @@ func toolDefinitions() []toolDefinition {
 				"path":  {Type: "string", Description: "Entry path"},
 				"field": {Type: "string", Description: "Field name"},
 				"value": {Type: "string", Description: "Field value"},
+				"force": {Type: "boolean", Description: "Skip password strength validation. Default: false."},
 			}),
 			Handler: (*Server).handleSet,
 		},
