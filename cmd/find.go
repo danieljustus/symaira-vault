@@ -9,7 +9,9 @@ import (
 	"github.com/spf13/cobra"
 
 	configpkg "github.com/danieljustus/OpenPass/internal/config"
+	"github.com/danieljustus/OpenPass/internal/ui/render"
 	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	"github.com/danieljustus/OpenPass/internal/vault/taint"
 	vaultsvc "github.com/danieljustus/OpenPass/internal/vaultsvc"
 )
 
@@ -79,7 +81,7 @@ var findCmd = &cobra.Command{
 			}
 
 			for _, m := range matches {
-				printQuietAware("%s", m.Path)
+				printQuietAware("%s", render.ForTerminal(taint.Wrap(m.Path, taint.Provenance{Source: "cli.path"})))
 				if len(m.Fields) > 0 {
 					printQuietAware(" (matches: %s)", strings.Join(m.Fields, ", "))
 				}
