@@ -125,6 +125,8 @@ func SaveIdentity(id *age.X25519Identity, path string, passphrase []byte, workFa
 		return err
 	}
 
+	// #nosec G103 — intentional: unsafe.String avoids heap-copying the passphrase
+	// so that the subsequent Wipe() clears the only copy in memory.
 	recipient, err := age.NewScryptRecipient(unsafe.String(unsafe.SliceData(passphrase), len(passphrase)))
 	Wipe(passphrase)
 	if err != nil {
@@ -169,6 +171,8 @@ func LoadIdentity(path string, passphrase []byte) (*age.X25519Identity, error) {
 		return nil, fmt.Errorf("read file: %w", err)
 	}
 
+	// #nosec G103 — intentional: unsafe.String avoids heap-copying the passphrase
+	// so that the subsequent Wipe() clears the only copy in memory.
 	identity, err := age.NewScryptIdentity(unsafe.String(unsafe.SliceData(passphrase), len(passphrase)))
 	Wipe(passphrase)
 	if err != nil {

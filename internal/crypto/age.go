@@ -151,6 +151,8 @@ func EncryptWithPassphrase(plaintext []byte, passphrase []byte, workFactor int) 
 
 	// Use unsafe.String to alias the byte slice without a heap copy.
 	// This way Wipe(passphrase) actually clears the only copy of the secret.
+	// #nosec G103 — intentional: unsafe.String avoids heap-copying the passphrase
+	// so that the subsequent Wipe() clears the only copy in memory.
 	recipient, err := age.NewScryptRecipient(unsafe.String(unsafe.SliceData(passphrase), len(passphrase)))
 	Wipe(passphrase)
 	if err != nil {
@@ -186,6 +188,8 @@ func DecryptWithPassphrase(ciphertext []byte, passphrase []byte) ([]byte, error)
 		return nil, errors.New("passphrase is empty")
 	}
 
+	// #nosec G103 — intentional: unsafe.String avoids heap-copying the passphrase
+	// so that the subsequent Wipe() clears the only copy in memory.
 	identity, err := age.NewScryptIdentity(unsafe.String(unsafe.SliceData(passphrase), len(passphrase)))
 	Wipe(passphrase)
 	if err != nil {

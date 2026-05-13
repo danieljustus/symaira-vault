@@ -76,7 +76,7 @@ func SaveResumeState(vaultDir string, state *WizardState, lastStep string) error
 
 func LoadResumeState(vaultDir string) (*WizardState, string, error) {
 	path := resumeFilePath(vaultDir)
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 — path is a SHA-256 hash of vaultDir under cache dir, not user-controlled traversal
 	if err != nil {
 		return nil, "", fmt.Errorf("read resume state: %w", err)
 	}
@@ -146,7 +146,7 @@ func MigrateLegacyResumeFile(vaultDir string) {
 	if err := ensureResumeDir(current); err != nil {
 		return
 	}
-	data, err := os.ReadFile(legacy)
+	data, err := os.ReadFile(legacy) // #nosec G304 — legacy path is vaultDir + ".wizard-resume.yaml" inside the vault, same security domain
 	if err != nil {
 		return
 	}
