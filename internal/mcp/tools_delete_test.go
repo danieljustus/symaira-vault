@@ -105,12 +105,12 @@ func TestHandleDelete_ApprovalRequired(t *testing.T) {
 		Arguments: map[string]any{"path": "github"},
 	}
 
-	_, err := srv.handleDelete(context.Background(), req)
-	if err == nil {
-		t.Fatal("handleDelete() expected error for approval-required path, got nil")
+	result, err := srv.handleDelete(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleDelete() error = %v", err)
 	}
-	if !strings.Contains(err.Error(), "approval required") {
-		t.Fatalf("handleDelete() error = %v, want 'approval required'", err)
+	if result == nil || !result.IsError {
+		t.Fatal("handleDelete() expected IsError for approval-required path")
 	}
 }
 

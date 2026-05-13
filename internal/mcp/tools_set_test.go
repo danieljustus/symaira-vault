@@ -172,12 +172,12 @@ func TestHandleSet_ApprovalRequired(t *testing.T) {
 		},
 	}
 
-	_, err := srv.handleSet(context.Background(), req)
-	if err == nil {
-		t.Fatal("handleSet() expected error for approval-required path, got nil")
+	result, err := srv.handleSet(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleSet() error = %v", err)
 	}
-	if !strings.Contains(err.Error(), "approval required") {
-		t.Fatalf("handleSet() error = %v, want 'approval required'", err)
+	if result == nil || !result.IsError {
+		t.Fatal("handleSet() expected IsError for approval-required path")
 	}
 }
 

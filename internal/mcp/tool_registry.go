@@ -322,8 +322,6 @@ func toolsListPayload(s *Server) []map[string]any {
 	return tools
 }
 
-var globalChokepoint = NewRenderChokepoint()
-
 func callToolResultPayload(result *CallToolResult) map[string]any {
 	if result == nil {
 		result = NewToolResultText("")

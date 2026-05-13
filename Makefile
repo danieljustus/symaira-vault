@@ -1,4 +1,4 @@
-.PHONY: all build install test test-fast test-coverage test-verbose test-race test-ci clean lint lint-fix fmt fmt-check vet completions manpages help docs-check
+.PHONY: all build install test test-fast test-coverage test-verbose test-race test-ci clean lint lint-fix fmt fmt-check vet passlint completions manpages help docs-check
 
 # Variables
 BINARY_NAME := openpass
@@ -93,9 +93,14 @@ lint:
 fmt:
 	$(GO) fmt ./...
 
-# Run go vet
+# Run go vet (includes passlint analyzer in self-test mode)
 vet:
 	$(GO) vet ./...
+	$(GO) vet ./cmd/passlint/...
+
+# Run passlint analyzer tests
+passlint:
+	$(GO) vet ./cmd/passlint/...
 
 # Check formatting (fails if gofmt would change files)
 fmt-check:
@@ -163,7 +168,8 @@ help:
 	@echo "  lint-fix           - Run linter with auto-fix"
 	@echo "  fmt                - Format code"
 	@echo "  fmt-check          - Check formatting (fails if gofmt would change files)"
-	@echo "  vet                - Run go vet"
+	@echo "  vet                - Run go vet (includes passlint)"
+	@echo "  passlint           - Run passlint analyzer tests"
 	@echo "  deps               - Download and tidy dependencies"
 	@echo "  completions        - Generate shell completions"
 	@echo "  manpages           - Generate manual pages"

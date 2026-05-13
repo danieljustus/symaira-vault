@@ -40,10 +40,13 @@ func (s *Server) handleSet(ctx context.Context, req CallToolRequest) (*CallToolR
 		return nil, fmt.Errorf("access denied: path %q outside allowed scope", path)
 	}
 
-	if s.requiresApproval() {
-		s.logAudit(ctx, "approval_denied", path, false)
-		metrics.RecordApproval(s.agent.Name, "denied")
-		return nil, fmt.Errorf("write to %q denied: approval required but cannot be granted", path)
+	if err := s.requireApproval(ctx, Intent{
+		Action:    "set_entry_field",
+		EntryPath: path,
+		FieldName: field,
+		Summary:   RenderSummary("set field", path, field),
+	}); err != nil {
+		return NewToolResultError(err.Error()), nil
 	}
 
 	// Prepare the partial data to merge

@@ -18,23 +18,10 @@ func (s *Server) handleSanitizeOutput(ctx context.Context, req CallToolRequest) 
 		return NewToolResultError(err.Error()), nil
 	}
 
-	maskWithOPRefs := req.GetBool("mask_with_op_refs", false)
-	customMask := req.GetString("mask", "")
-
 	s.logAudit(ctx, "sanitize_output", "<scan>", true)
 	metrics.RecordVaultOperation("sanitize", "success")
 
-	opts := masking.MaskOptions{
-		MaskWithOPRefs: maskWithOPRefs,
-		CustomMask:     customMask,
-	}
-
-	if maskWithOPRefs {
-		opts.VaultResolver = s.buildVaultResolver()
-	}
-
-	sanitizer := masking.NewSanitizer()
-	sanitized := sanitizer.Sanitize(text, opts)
+	sanitized := globalChokepoint.SanitizeForMCP(text)
 
 	result := map[string]any{
 		"original_length":  len(text),

@@ -11,6 +11,7 @@ import (
 	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
 	"github.com/danieljustus/OpenPass/internal/metrics"
 	"github.com/danieljustus/OpenPass/internal/vault"
+	"github.com/danieljustus/OpenPass/internal/vault/taint"
 	"github.com/danieljustus/OpenPass/internal/vaultsvc"
 )
 
@@ -26,15 +27,19 @@ func vaultServiceErrorResult(err error) (*CallToolResult, error) {
 }
 
 func buildSecretMetadataResponse(entry *vault.Entry, path string) map[string]any {
-	fields := make([]string, 0, len(entry.Data))
-	for k := range entry.Data {
-		fields = append(fields, k)
+	fields := make([]map[string]any, 0, len(entry.Data))
+	for k, v := range entry.Data {
+		fields = append(fields, map[string]any{
+			"name":   k,
+			"handle": (taint.SecretHandle{Path: path, Field: k}).String(),
+			"kind":   inferFieldKind(v),
+		})
 	}
 
 	response := map[string]any{
 		"path":        path,
 		"type":        entry.SecretMetadata.Type,
-		"usage_hint":  entry.SecretMetadata.UsageHint,
+		"usage_hint":  globalChokepoint.SanitizeForMCP(entry.SecretMetadata.UsageHint),
 		"auto_rotate": entry.SecretMetadata.AutoRotate,
 		"fields":      fields,
 		"has_value":   len(entry.Data) > 0,
@@ -78,19 +83,6 @@ func (s *Server) handleGet(ctx context.Context, req CallToolRequest) (*CallToolR
 	s.logAudit(ctx, "get", path, true)
 	metrics.RecordVaultOperation("read", "success")
 
-	includeValue := req.GetBool("include_value", false)
-
-	if includeValue {
-		if s.agent != nil && s.agent.RedactFields != nil && len(s.agent.RedactFields) > 0 {
-			entry = redactEntry(entry, s.agent.RedactFields)
-		}
-		result, marshalErr := json.Marshal(entry)
-		if marshalErr != nil {
-			return nil, marshalErr
-		}
-		return NewToolResultText(string(result)), nil
-	}
-
 	response := buildSecretMetadataResponse(entry, path)
 	result, marshalErr := json.Marshal(response)
 	if marshalErr != nil {
@@ -110,6 +102,16 @@ func (s *Server) handleGetValue(ctx context.Context, req CallToolRequest) (*Call
 		s.logAudit(ctx, "get_value", path, false)
 		metrics.RecordAuthDenial("scope_denied", s.agent.Name)
 		return nil, fmt.Errorf("access denied: path %q outside allowed scope", path)
+	}
+
+	if !s.canReadValues() {
+		if err := s.requireApproval(ctx, Intent{
+			Action:    "get_entry_value",
+			EntryPath: path,
+			Summary:   RenderSummary("read secret values", path, ""),
+		}); err != nil {
+			return NewToolResultError(err.Error()), nil
+		}
 	}
 
 	svc := vaultsvc.New(slog.Default(), s.vault)
@@ -163,4 +165,27 @@ func (s *Server) handleGetMetadata(ctx context.Context, req CallToolRequest) (*C
 		return nil, err
 	}
 	return NewToolResultText(string(resultJSON)), nil
+}
+
+// inferFieldKind returns a type label for a field value based on its Go type.
+func inferFieldKind(v any) string {
+	switch val := v.(type) {
+	case string:
+		return "string"
+	case float64:
+		return "number"
+	case bool:
+		return "boolean"
+	case map[string]any:
+		if secret, ok := val["secret"].(string); ok && secret != "" {
+			if typ, ok := val["type"].(string); ok && typ == "totp" {
+				return "totp"
+			}
+		}
+		return "object"
+	case nil:
+		return "null"
+	default:
+		return fmt.Sprintf("%T", val)
+	}
 }

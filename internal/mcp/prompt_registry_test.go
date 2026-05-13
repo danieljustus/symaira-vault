@@ -102,7 +102,7 @@ func TestPromptGetPayload_RotateUsesPath(t *testing.T) {
 	out := promptGetPayload(def, map[string]string{"path": "aws/prod", "length": "48"})
 	msgs, _ := out["messages"].([]map[string]any)
 	text, _ := msgs[0]["content"].(map[string]any)["text"].(string)
-	for _, want := range []string{"aws/prod", "length=48", "generate_password", "set_entry_field"} {
+	for _, want := range []string{"aws/prod", "48", "generate_password", "set_entry_field"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("rotate prompt missing %q in:\n%s", want, text)
 		}

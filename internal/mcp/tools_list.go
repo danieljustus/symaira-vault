@@ -62,9 +62,9 @@ func (s *Server) handleList(ctx context.Context, req CallToolRequest) (*CallTool
 		}
 
 		summary := listEntrySummary{
-			Path:       path,
+			Path:       globalChokepoint.SanitizeForMCP(path),
 			Type:       string(entry.SecretMetadata.Type),
-			UsageHint:  entry.SecretMetadata.UsageHint,
+			UsageHint:  globalChokepoint.SanitizeForMCP(entry.SecretMetadata.UsageHint),
 			AutoRotate: entry.SecretMetadata.AutoRotate,
 			HasValue:   len(entry.Data) > 0,
 			FieldCount: len(entry.Data),

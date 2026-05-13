@@ -11,13 +11,10 @@ import (
 	"strings"
 )
 
-// ErrUntrustedFormat is returned when an Untrusted value is used in an
-// unsafe context. Call .Render() or .UnsafeRawForStorage() explicitly.
-var ErrUntrustedFormat = errors.New("taint: use of Untrusted in format argument")
-
-// SecretHandle is a reference to a specific field in the vault using the
-// op:// scheme. It is the safe alternative to embedding raw secret values
-// in MCP responses.
+// SecretHandle is a handle that can be displayed to the user containing the
+// path to a secret in the vault in the "op://path/field" format.
+// It implements fmt.Stringer and is safe for display because it only contains
+// the path, not the secret value.
 type SecretHandle struct {
 	Path  string
 	Field string
@@ -25,7 +22,7 @@ type SecretHandle struct {
 
 // String returns the op:// representation of the handle.
 func (h SecretHandle) String() string {
-	return "op://" + h.Path + "/" + h.Field
+	return fmt.Sprintf("op://%s/%s", h.Path, h.Field)
 }
 
 // ParseSecretHandle parses an op:// handle string into its components.
@@ -46,6 +43,10 @@ func ParseSecretHandle(s string) (SecretHandle, bool) {
 
 	return SecretHandle{Path: rest}, true
 }
+
+// ErrUntrustedFormat is returned when an Untrusted value is used in an
+// unsafe context. Call .Render() or .UnsafeRawForStorage() explicitly.
+var ErrUntrustedFormat = errors.New("taint: use of Untrusted in format argument")
 
 // Provenance describes the origin of an untrusted value.
 type Provenance struct {

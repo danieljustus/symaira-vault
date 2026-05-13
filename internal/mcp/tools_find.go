@@ -24,6 +24,11 @@ func (s *Server) handleFind(ctx context.Context, req CallToolRequest) (*CallTool
 	}
 
 	s.logAudit(ctx, "find", query, true)
+
+	for i := range matches {
+		matches[i].Path = globalChokepoint.SanitizeForMCP(matches[i].Path)
+	}
+
 	result, err := json.Marshal(matches)
 	if err != nil {
 		return nil, err

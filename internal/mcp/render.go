@@ -5,6 +5,10 @@ import (
 	"strings"
 )
 
+// globalChokepoint is the shared MCP output sanitizer instance.
+// It is used by callToolResultPayload and handleSanitizeOutput.
+var globalChokepoint = &RenderChokepoint{}
+
 // RenderChokepoint is the central output sanitization point for MCP responses.
 // All tool responses should pass through this chokepoint before being sent
 // to the MCP client to prevent prompt injection via vault content.
