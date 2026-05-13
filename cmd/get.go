@@ -14,7 +14,9 @@ import (
 	configpkg "github.com/danieljustus/OpenPass/internal/config"
 	vaultcrypto "github.com/danieljustus/OpenPass/internal/crypto"
 	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
+	"github.com/danieljustus/OpenPass/internal/ui/render"
 	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	"github.com/danieljustus/OpenPass/internal/vault/taint"
 	vaultsvc "github.com/danieljustus/OpenPass/internal/vaultsvc"
 )
 
@@ -112,7 +114,7 @@ var getCmd = &cobra.Command{
 				default:
 					fmt.Fprintln(os.Stderr, "Multiple matches:")
 					for _, m := range matches {
-						fmt.Fprintf(os.Stderr, "  %s\n", m.Path)
+						fmt.Fprintf(os.Stderr, "  %s\n", render.ForTerminal(taint.Wrap(m.Path, taint.Provenance{Source: "cli.path"})))
 					}
 					return errorspkg.NewCLIError(errorspkg.ExitNotFound, fmt.Sprintf("ambiguous path: %s", path), errorspkg.ErrEntryNotFound)
 				}
@@ -216,7 +218,7 @@ var getCmd = &cobra.Command{
 				return nil
 			}
 
-			printQuietAware("Path: %s\n", path)
+			printQuietAware("Path: %s\n", render.ForTerminal(taint.Wrap(path, taint.Provenance{Source: "cli.path"})))
 			printQuietAware("Modified: %s\n", entry.Metadata.Updated.Format("2006-01-02 15:04"))
 			printlnQuietAware()
 
@@ -227,7 +229,7 @@ var getCmd = &cobra.Command{
 			sort.Strings(keys)
 
 			for _, k := range keys {
-				printQuietAware("%s: %v\n", k, entry.Data[k])
+				printQuietAware("%s: %v\n", k, render.ForTerminal(taint.Wrap(fmt.Sprintf("%v", entry.Data[k]), taint.Provenance{Source: "cli.value"})))
 			}
 
 			if secret, algorithm, digits, period, hasTOTP := vaultpkg.ExtractTOTP(entry.Data); hasTOTP {

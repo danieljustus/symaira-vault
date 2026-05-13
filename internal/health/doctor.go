@@ -27,8 +27,10 @@ import (
 	"github.com/danieljustus/OpenPass/internal/git"
 	"github.com/danieljustus/OpenPass/internal/mcp"
 	"github.com/danieljustus/OpenPass/internal/session"
+	"github.com/danieljustus/OpenPass/internal/ui/render"
 	"github.com/danieljustus/OpenPass/internal/update"
 	"github.com/danieljustus/OpenPass/internal/vault"
+	"github.com/danieljustus/OpenPass/internal/vault/taint"
 )
 
 const (
@@ -1323,7 +1325,11 @@ func checkPasswordStrength(vaultDir string, _ Options) Result {
 		if s.Weak {
 			weakCount++
 			if len(examplePaths) < 5 {
-				examplePaths = append(examplePaths, path)
+				safePath := render.ForTerminalLine(
+					taint.Wrap(path, taint.Provenance{Source: "doctor.path"}),
+					80,
+				)
+				examplePaths = append(examplePaths, safePath)
 			}
 		}
 	}
@@ -1376,7 +1382,11 @@ func checkPasswordReuse(vaultDir string, _ Options) Result {
 		}
 		h := sha256.Sum256([]byte(pwdStr))
 		hashHex := hex.EncodeToString(h[:])
-		hashToPaths[hashHex] = append(hashToPaths[hashHex], path)
+		safePath := render.ForTerminalLine(
+			taint.Wrap(path, taint.Provenance{Source: "doctor.path"}),
+			80,
+		)
+		hashToPaths[hashHex] = append(hashToPaths[hashHex], safePath)
 	}
 
 	var reusedGroups [][]string

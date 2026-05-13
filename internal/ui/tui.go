@@ -19,8 +19,10 @@ import (
 
 	clipboardapp "github.com/danieljustus/OpenPass/internal/clipboard"
 	vaultcrypto "github.com/danieljustus/OpenPass/internal/crypto"
+	render "github.com/danieljustus/OpenPass/internal/ui/render"
 	theme "github.com/danieljustus/OpenPass/internal/ui/theme"
 	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	taint "github.com/danieljustus/OpenPass/internal/vault/taint"
 	vaultsvc "github.com/danieljustus/OpenPass/internal/vaultsvc"
 )
 
@@ -568,7 +570,12 @@ func (m TUIModel) leftView(width, height int) string {
 		tags := m.availableTags()
 		if len(tags) > 0 {
 			b.WriteString("\n")
-			b.WriteString(theme.MutedStyle.Render("tags: " + strings.Join(tags, " ")))
+			escapedTags := make([]string, len(tags))
+			for i, tag := range tags {
+				u := taint.Wrap(tag, taint.Provenance{Source: "ui.tag"})
+				escapedTags[i] = render.QuoteForTerminal(u)
+			}
+			b.WriteString(theme.MutedStyle.Render("tags: " + strings.Join(escapedTags, " ")))
 		}
 	} else if q := strings.TrimSpace(m.filterInput.Value()); q != "" {
 		b.WriteString(theme.MutedStyle.Render("Filter: " + q))
@@ -600,7 +607,8 @@ func (m TUIModel) leftView(width, height int) string {
 	end := min(len(m.filtered), start+listHeight)
 
 	for i := start; i < end; i++ {
-		line := truncate(m.filtered[i], width-4)
+		safePath := render.ForTerminal(taint.Wrap(m.filtered[i], taint.Provenance{Source: "ui.path"}))
+		line := truncate(safePath, width-4)
 		if i == m.selected {
 			line = theme.SelectedStyle.Width(width - 4).Render(line)
 		}
@@ -616,11 +624,13 @@ func (m TUIModel) rightView(width, height int) string {
 		return theme.TitleStyle.Render("Details") + "\n\n" + theme.MutedStyle.Render("Select an entry")
 	}
 	if m.entry == nil || m.entryFor != path {
-		return theme.TitleStyle.Render(path) + "\n\n" + theme.MutedStyle.Render("Loading details...")
+		safePath := render.ForTerminal(taint.Wrap(path, taint.Provenance{Source: "ui.path"}))
+		return theme.TitleStyle.Render(safePath) + "\n\n" + theme.MutedStyle.Render("Loading details...")
 	}
 
 	var b strings.Builder
-	b.WriteString(theme.TitleStyle.Render(path))
+	safePath := render.ForTerminal(taint.Wrap(path, taint.Provenance{Source: "ui.path"}))
+	b.WriteString(theme.TitleStyle.Render(safePath))
 	b.WriteString("\n")
 	b.WriteString(theme.MutedStyle.Render("Updated: " + m.entry.Metadata.Updated.Format("2006-01-02 15:04")))
 	b.WriteString("\n\n")
@@ -637,9 +647,13 @@ func (m TUIModel) rightView(width, height int) string {
 			b.WriteString(theme.MutedStyle.Render("..."))
 			break
 		}
-		value := fmt.Sprint(m.entry.Data[key])
+		rawValue := fmt.Sprint(m.entry.Data[key])
+		var value string
 		if !m.revealed && isSensitiveField(key) {
 			value = redactedValue
+		} else {
+			u := taint.Wrap(rawValue, taint.Provenance{Source: "ui.entry", EntryPath: m.entry.Path, FieldName: key})
+			value = render.ForTerminal(u)
 		}
 		line := fmt.Sprintf("%s: %s", theme.KeyStyle.Render(key), value)
 		b.WriteString(truncate(line, width-4))
@@ -679,7 +693,8 @@ func (m TUIModel) confirmView() string {
 	if m.mode == modeConfirmEdit {
 		verb = "edit"
 	}
-	return theme.ErrorStyle.Render(fmt.Sprintf("Confirm %s %s?", verb, m.selectedPath())) + "  " + theme.MutedStyle.Render("y/N")
+	safePath := render.ForTerminal(taint.Wrap(m.selectedPath(), taint.Provenance{Source: "ui.path"}))
+	return theme.ErrorStyle.Render(fmt.Sprintf("Confirm %s %s?", verb, safePath)) + "  " + theme.MutedStyle.Render("y/N")
 }
 
 func loadEntriesCmd(svc vaultsvc.Service) tea.Cmd {

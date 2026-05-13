@@ -6,6 +6,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/danieljustus/OpenPass/internal/mcp"
+	"github.com/danieljustus/OpenPass/internal/ui/render"
+	"github.com/danieljustus/OpenPass/internal/vault/taint"
 )
 
 var shareCmd = &cobra.Command{
@@ -92,7 +94,7 @@ Examples:
 			}
 
 			printQuietAware("%-22s %-18s %-18s %-28s %-8s %-10s %-16s %s\n",
-				g.ID, g.FromAgent, g.ToAgent, g.SecretPath, field, status,
+				g.ID, g.FromAgent, g.ToAgent, render.ForTerminal(taint.Wrap(g.SecretPath, taint.Provenance{Source: "cli.path"})), field, status,
 				g.CreatedAt.Format("2006-01-02 15:04"), expires)
 		}
 
