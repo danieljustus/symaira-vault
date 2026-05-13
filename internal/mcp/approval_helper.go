@@ -92,12 +92,12 @@ func sanitizeForSummary(s string) string {
 	}
 	// Use the terminal render's ANSI stripping logic
 	u := taint.Wrap(s, taint.Provenance{Source: "summary"})
-	return string(stripTerminalControl(u.UnsafeRawForStorage()))
+	return stripTerminalControl(u.UnsafeRawForStorage())
 }
 
 // stripTerminalControl removes ANSI escape sequences and control characters.
 func stripTerminalControl(s string) string {
-	var out []byte
+	out := make([]byte, 0, len(s))
 	inEscape := false
 	inOSC := false
 	for i := 0; i < len(s); i++ {

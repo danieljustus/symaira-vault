@@ -105,12 +105,12 @@ func (s *Server) handleGetValue(ctx context.Context, req CallToolRequest) (*Call
 	}
 
 	if !s.canReadValues() {
-		if err := s.requireApproval(ctx, Intent{
+		if approvalErr := s.requireApproval(ctx, Intent{
 			Action:    "get_entry_value",
 			EntryPath: path,
 			Summary:   RenderSummary("read secret values", path, ""),
-		}); err != nil {
-			return NewToolResultError(err.Error()), nil
+		}); approvalErr != nil {
+			return NewToolResultError(approvalErr.Error()), nil
 		}
 	}
 

@@ -28,12 +28,12 @@ func (s *Server) handleDelete(ctx context.Context, req CallToolRequest) (*CallTo
 		return nil, fmt.Errorf("access denied: path %q outside allowed scope", path)
 	}
 
-	if err := s.requireApproval(ctx, Intent{
+	if approvalErr := s.requireApproval(ctx, Intent{
 		Action:    "delete_entry",
 		EntryPath: path,
 		Summary:   RenderSummary("delete entry", path, ""),
-	}); err != nil {
-		return NewToolResultError(err.Error()), nil
+	}); approvalErr != nil {
+		return NewToolResultError(approvalErr.Error()), nil
 	}
 
 	svc := vaultsvc.New(slog.Default(), s.vault)

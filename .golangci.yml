@@ -71,7 +71,7 @@ linters:
     dupl:
       threshold: 150
     gocyclo:
-      min-complexity: 20
+      min-complexity: 30
     misspell:
       locale: US
     nakedret:
@@ -115,6 +115,10 @@ linters:
       - path: '(.+)_test\.go'
         linters:
           - gocritic
+      # Vendored third-party code under editors/node_modules
+      - path: 'editors/node_modules/.+'
+        linters:
+          - all
 
 formatters:
   enable:

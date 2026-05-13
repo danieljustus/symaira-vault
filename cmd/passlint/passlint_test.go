@@ -4,8 +4,9 @@ package passlint_test
 import (
 	"testing"
 
-	"github.com/danieljustus/OpenPass/cmd/passlint"
 	"golang.org/x/tools/go/analysis/analysistest"
+
+	"github.com/danieljustus/OpenPass/cmd/passlint"
 )
 
 func TestAnalyzer(t *testing.T) {

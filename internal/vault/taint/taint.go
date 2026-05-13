@@ -147,11 +147,11 @@ func (u Untrusted) Format(f fmt.State, verb rune) {
 	switch verb {
 	case 'v':
 		if f.Flag('#') {
-			fmt.Fprintf(f, "<untrusted source=%s len=%d>", u.prov.Source, len(u.raw))
+			_, _ = fmt.Fprintf(f, "<untrusted source=%s len=%d>", u.prov.Source, len(u.raw))
 			return
 		}
 		fallthrough
 	default:
-		fmt.Fprintf(f, "<untrusted:%s>", u.prov.Source)
+		_, _ = fmt.Fprintf(f, "<untrusted:%s>", u.prov.Source)
 	}
 }

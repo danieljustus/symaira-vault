@@ -46,7 +46,7 @@ func SecretTypeFromString(s string) SecretType {
 		return SecretTypeBasicAuth
 	case "ssh_key":
 		return SecretTypeSSHKey
-	case "password":
+	case string(SecretTypePassword):
 		return SecretTypePassword
 	case "certificate":
 		return SecretTypeCertificate
