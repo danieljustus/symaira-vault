@@ -142,6 +142,71 @@ func TestInjectServerConfig(t *testing.T) {
 	})
 }
 
+func TestOpenCodeInstallConfig(t *testing.T) {
+	def, err := GetAgentDefinition(AgentOpenCode)
+	if err != nil {
+		t.Fatalf("GetAgentDefinition(AgentOpenCode) error: %v", err)
+	}
+	if def.RootKey != "mcp" {
+		t.Fatalf("AgentOpenCode RootKey = %q, want %q", def.RootKey, "mcp")
+	}
+
+	// Simulate an HTTP server config as produced by buildHTTPServerConfig.
+	serverConfig := map[string]any{
+		"url":             "http://127.0.0.1:42487/mcp",
+		"timeout":         120,
+		"connect_timeout": 30,
+		"type":            "remote",
+		"enabled":         true,
+		"headers": map[string]any{
+			"Authorization":        "Bearer op_test_token_abc123",
+			"Accept":               "application/json",
+			"MCP-Protocol-Version": "2025-03-26",
+			"X-OpenPass-Agent":     "opencode",
+		},
+	}
+
+	// Inject into a fresh config using the opencode agent definition.
+	config := make(map[string]any)
+	updated, changed := InjectServerConfig(config, def.RootKey, def.ServerKey, serverConfig)
+	if !changed {
+		t.Fatal("expected changed=true for new config")
+	}
+
+	// Verify root key is "mcp".
+	mcpSection, ok := updated["mcp"].(map[string]any)
+	if !ok {
+		t.Fatal("expected 'mcp' root key in config")
+	}
+
+	// Verify server key is "openpass".
+	openpassSection, ok := mcpSection["openpass"].(map[string]any)
+	if !ok {
+		t.Fatal("expected 'mcp.openpass' in config")
+	}
+
+	// Verify type and enabled fields.
+	if typ, ok := openpassSection["type"].(string); !ok || typ != "remote" {
+		t.Fatalf("expected type=%q, got %v", "remote", openpassSection["type"])
+	}
+	if enabled, ok := openpassSection["enabled"].(bool); !ok || !enabled {
+		t.Fatalf("expected enabled=%v, got %v", true, openpassSection["enabled"])
+	}
+
+	// Verify bearer header is present.
+	headers, ok := openpassSection["headers"].(map[string]any)
+	if !ok {
+		t.Fatal("expected headers map in config")
+	}
+	auth, ok := headers["Authorization"].(string)
+	if !ok {
+		t.Fatal("expected Authorization header")
+	}
+	if !strings.HasPrefix(auth, "Bearer ") {
+		t.Fatalf("expected Authorization to start with 'Bearer ', got %q", auth)
+	}
+}
+
 //nolint:dupl // similar structure for JSON and YAML config tests
 func TestJSONConfigRW(t *testing.T) {
 	tmp := t.TempDir()

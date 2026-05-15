@@ -43,6 +43,9 @@ type AgentDefinition struct {
 	RootKey string
 	// ServerKey is the key used for the OpenPass server entry inside RootKey.
 	ServerKey string
+	// ServerConfigExtras are extra fields merged into the server config entry.
+	// Used to add agent-specific fields like "type", "enabled", etc.
+	ServerConfigExtras map[string]any
 }
 
 var (
@@ -106,8 +109,12 @@ var (
 			},
 			BinaryNames: []string{"opencode"},
 			Format:      FormatJSON,
-			RootKey:     "mcpServers",
+			RootKey:     "mcp",
 			ServerKey:   "openpass",
+			ServerConfigExtras: map[string]any{
+				"type":    "remote",
+				"enabled": true,
+			},
 		},
 	}
 

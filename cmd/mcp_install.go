@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 
@@ -222,6 +223,10 @@ func buildHTTPServerConfig(vDir, agentName string) (map[string]any, string, erro
 			"MCP-Protocol-Version": httpCfg.Header["MCP-Protocol-Version"],
 			"X-OpenPass-Agent":     httpCfg.Header["X-OpenPass-Agent"],
 		},
+	}
+
+	if def, err := install.GetAgentDefinition(install.AgentType(agentName)); err == nil {
+		maps.Copy(config, def.ServerConfigExtras)
 	}
 
 	return config, token.ID, nil
