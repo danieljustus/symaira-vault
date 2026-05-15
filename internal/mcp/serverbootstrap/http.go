@@ -190,7 +190,17 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 	mux.HandleFunc("GET /mcp/oauth/authorize", oauthAuthorizeHandler.ServeHTTP)
 
 	// Token endpoint uses the scoped token registry instead of the legacy bearer token.
-	oauthTokenHandler := mcp.OriginValidationMiddleware(addr, handleOAuthToken(oauthStore, registry))
+	accessTokenTTL := 24 * time.Hour
+	refreshTokenTTL := 720 * time.Hour
+	if v != nil && v.Config != nil && v.Config.MCP != nil && v.Config.MCP.OAuth != nil {
+		if v.Config.MCP.OAuth.AccessTokenTTL > 0 {
+			accessTokenTTL = v.Config.MCP.OAuth.AccessTokenTTL
+		}
+		if v.Config.MCP.OAuth.RefreshTokenTTL > 0 {
+			refreshTokenTTL = v.Config.MCP.OAuth.RefreshTokenTTL
+		}
+	}
+	oauthTokenHandler := mcp.OriginValidationMiddleware(addr, handleOAuthToken(oauthStore, registry, accessTokenTTL, refreshTokenTTL))
 	mux.HandleFunc("POST /mcp/oauth/token", oauthTokenHandler.ServeHTTP)
 
 	const maxRequestBodySize = 1 * 1024 * 1024

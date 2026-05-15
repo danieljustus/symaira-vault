@@ -27,33 +27,37 @@ type TokenRegistryFile struct {
 
 // TokenRegistryEntry is a single entry in the on-disk token registry.
 type TokenRegistryEntry struct {
-	ID           string     `json:"id"`
-	Label        string     `json:"label,omitempty"`
-	Hash         string     `json:"hash"`
-	Prefix       string     `json:"prefix"`
-	AllowedTools []string   `json:"allowed_tools"`
-	AgentName    string     `json:"agent_name,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
-	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
-	LastUsedAt   *time.Time `json:"last_used_at,omitempty"`
-	Revoked      bool       `json:"revoked"`
-	RevokedAt    *time.Time `json:"revoked_at,omitempty"`
+	ID                string     `json:"id"`
+	Label             string     `json:"label,omitempty"`
+	Hash              string     `json:"hash"`
+	Prefix            string     `json:"prefix"`
+	AllowedTools      []string   `json:"allowed_tools"`
+	AgentName         string     `json:"agent_name,omitempty"`
+	CreatedAt         time.Time  `json:"created_at"`
+	ExpiresAt         *time.Time `json:"expires_at,omitempty"`
+	LastUsedAt        *time.Time `json:"last_used_at,omitempty"`
+	Revoked           bool       `json:"revoked"`
+	RevokedAt         *time.Time `json:"revoked_at,omitempty"`
+	RefreshTokenHash  string     `json:"refresh_token_hash,omitempty"`
+	RefreshExpiresAt  *time.Time `json:"refresh_expires_at,omitempty"`
 }
 
 // ScopedToken is the in-memory representation of a scoped token with its
 // associated metadata. It is safe for concurrent access.
 type ScopedToken struct {
-	ID           string     `json:"id"`
-	Label        string     `json:"label,omitempty"`
-	Hash         string     `json:"hash"`
-	Prefix       string     `json:"prefix"`
-	AllowedTools []string   `json:"allowed_tools"`
-	AgentName    string     `json:"agent_name,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
-	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
-	LastUsedAt   *time.Time `json:"last_used_at,omitempty"`
-	Revoked      bool       `json:"revoked"`
-	RevokedAt    *time.Time `json:"revoked_at,omitempty"`
+	ID                string     `json:"id"`
+	Label             string     `json:"label,omitempty"`
+	Hash              string     `json:"hash"`
+	Prefix            string     `json:"prefix"`
+	AllowedTools      []string   `json:"allowed_tools"`
+	AgentName         string     `json:"agent_name,omitempty"`
+	CreatedAt         time.Time  `json:"created_at"`
+	ExpiresAt         *time.Time `json:"expires_at,omitempty"`
+	LastUsedAt        *time.Time `json:"last_used_at,omitempty"`
+	Revoked           bool       `json:"revoked"`
+	RevokedAt         *time.Time `json:"revoked_at,omitempty"`
+	RefreshTokenHash  string     `json:"refresh_token_hash,omitempty"`
+	RefreshExpiresAt  *time.Time `json:"refresh_expires_at,omitempty"`
 
 	mu sync.Mutex
 }
@@ -69,6 +73,18 @@ func (t *ScopedToken) IsExpired() bool {
 		return false
 	}
 	return time.Now().After(*t.ExpiresAt)
+}
+
+// IsRefreshExpired returns true if the refresh token has a defined expiration
+// that has already passed. A nil RefreshExpiresAt means no expiration.
+func (t *ScopedToken) IsRefreshExpired() bool {
+	if t == nil {
+		return true
+	}
+	if t.RefreshExpiresAt == nil {
+		return false
+	}
+	return time.Now().After(*t.RefreshExpiresAt)
 }
 
 // IsToolAllowed returns true when the given tool name is permitted by this
@@ -106,17 +122,19 @@ func (t *ScopedToken) toEntry() TokenRegistryEntry {
 		return TokenRegistryEntry{}
 	}
 	return TokenRegistryEntry{
-		ID:           t.ID,
-		Label:        t.Label,
-		Hash:         t.Hash,
-		Prefix:       t.Prefix,
-		AllowedTools: t.AllowedTools,
-		AgentName:    t.AgentName,
-		CreatedAt:    t.CreatedAt,
-		ExpiresAt:    t.ExpiresAt,
-		LastUsedAt:   t.LastUsedAt,
-		Revoked:      t.Revoked,
-		RevokedAt:    t.RevokedAt,
+		ID:               t.ID,
+		Label:            t.Label,
+		Hash:             t.Hash,
+		Prefix:           t.Prefix,
+		AllowedTools:     t.AllowedTools,
+		AgentName:        t.AgentName,
+		CreatedAt:        t.CreatedAt,
+		ExpiresAt:        t.ExpiresAt,
+		LastUsedAt:       t.LastUsedAt,
+		Revoked:          t.Revoked,
+		RevokedAt:        t.RevokedAt,
+		RefreshTokenHash: t.RefreshTokenHash,
+		RefreshExpiresAt: t.RefreshExpiresAt,
 	}
 }
 
@@ -127,17 +145,19 @@ func entryToScopedToken(e TokenRegistryEntry) *ScopedToken {
 		allowed = []string{}
 	}
 	return &ScopedToken{
-		ID:           e.ID,
-		Label:        e.Label,
-		Hash:         e.Hash,
-		Prefix:       e.Prefix,
-		AllowedTools: allowed,
-		AgentName:    e.AgentName,
-		CreatedAt:    e.CreatedAt,
-		ExpiresAt:    e.ExpiresAt,
-		LastUsedAt:   e.LastUsedAt,
-		Revoked:      e.Revoked,
-		RevokedAt:    e.RevokedAt,
+		ID:               e.ID,
+		Label:            e.Label,
+		Hash:             e.Hash,
+		Prefix:           e.Prefix,
+		AllowedTools:     allowed,
+		AgentName:        e.AgentName,
+		CreatedAt:        e.CreatedAt,
+		ExpiresAt:        e.ExpiresAt,
+		LastUsedAt:       e.LastUsedAt,
+		Revoked:          e.Revoked,
+		RevokedAt:        e.RevokedAt,
+		RefreshTokenHash: e.RefreshTokenHash,
+		RefreshExpiresAt: e.RefreshExpiresAt,
 	}
 }
 
@@ -193,7 +213,7 @@ func (r *TokenRegistry) Load() error {
 func (r *TokenRegistry) Save() error {
 	r.mu.Lock()
 	file := TokenRegistryFile{
-		Version: 1,
+		Version: 2,
 		Tokens:  make(map[string]TokenRegistryEntry, len(r.entries)),
 	}
 	for _, t := range r.entries {
@@ -300,6 +320,135 @@ func (r *TokenRegistry) Revoke(id string) bool {
 		}
 	}
 	return false
+}
+
+// getByRefreshTokenHash looks up a token by its refresh token hash. Returns
+// nil if not found, revoked, or expired.
+func (r *TokenRegistry) getByRefreshTokenHash(refreshHash string) *ScopedToken {
+	for _, t := range r.entries {
+		if t.RefreshTokenHash == refreshHash && !t.Revoked && !t.IsExpired() {
+			return t
+		}
+	}
+	return nil
+}
+
+// CreateWithRefresh generates a new access+refresh token pair, stores both
+// hashes in the registry, and persists to disk. It returns the token metadata,
+// the cleartext access token, and the cleartext refresh token.
+func (r *TokenRegistry) CreateWithRefresh(label string, allowedTools []string, agentName string, accessTTL, refreshTTL time.Duration) (*ScopedToken, string, string, error) {
+	accessBuf := make([]byte, 32)
+	if _, err := randReader.Read(accessBuf); err != nil {
+		return nil, "", "", fmt.Errorf("generate access token: %w", err)
+	}
+	rawAccess := hex.EncodeToString(accessBuf)
+
+	refreshBuf := make([]byte, 32)
+	if _, err := randReader.Read(refreshBuf); err != nil {
+		return nil, "", "", fmt.Errorf("generate refresh token: %w", err)
+	}
+	rawRefresh := hex.EncodeToString(refreshBuf)
+
+	id := generateTokenID()
+	accessHash := sha256Hex(rawAccess)
+	refreshHash := sha256Hex(rawRefresh)
+	prefix := rawAccess[:4]
+
+	var expiresAt *time.Time
+	if accessTTL > 0 {
+		t := time.Now().UTC().Add(accessTTL)
+		expiresAt = &t
+	}
+	var refreshExpiresAt *time.Time
+	if refreshTTL > 0 {
+		t := time.Now().UTC().Add(refreshTTL)
+		refreshExpiresAt = &t
+	}
+
+	if allowedTools == nil {
+		allowedTools = []string{}
+	}
+
+	createdAt := time.Now().UTC()
+	t := &ScopedToken{
+		ID:               id,
+		Label:            label,
+		Hash:             accessHash,
+		Prefix:           prefix,
+		AllowedTools:     allowedTools,
+		AgentName:        agentName,
+		CreatedAt:        createdAt,
+		ExpiresAt:        expiresAt,
+		RefreshTokenHash: refreshHash,
+		RefreshExpiresAt: refreshExpiresAt,
+	}
+
+	r.mu.Lock()
+	r.entries[accessHash] = t
+	r.mu.Unlock()
+
+	if err := r.Save(); err != nil {
+		r.mu.Lock()
+		delete(r.entries, accessHash)
+		r.mu.Unlock()
+		return nil, "", "", err
+	}
+
+	return t, rawAccess, rawRefresh, nil
+}
+
+// RotateViaRefreshToken revokes the old access token associated with the given
+// refresh token and creates a new access+refresh token pair. The old refresh
+// token is also invalidated (single-use pattern). Returns the new token
+// metadata, raw access token, and raw refresh token.
+func (r *TokenRegistry) RotateViaRefreshToken(rawRefreshToken string) (*ScopedToken, string, string, error) {
+	refreshHash := sha256Hex(rawRefreshToken)
+
+	r.mu.Lock()
+
+	oldEntry := r.getByRefreshTokenHash(refreshHash)
+	if oldEntry == nil {
+		r.mu.Unlock()
+		return nil, "", "", fmt.Errorf("invalid refresh token")
+	}
+
+	if oldEntry.IsRefreshExpired() {
+		r.mu.Unlock()
+		return nil, "", "", fmt.Errorf("invalid refresh token: expired")
+	}
+
+	oldEntry.Revoked = true
+	now := time.Now().UTC()
+	oldEntry.RevokedAt = &now
+
+	r.mu.Unlock()
+
+	var accessTTL, refreshTTL time.Duration
+	if oldEntry.ExpiresAt != nil {
+		accessTTL = time.Until(*oldEntry.ExpiresAt)
+		if accessTTL < 0 {
+			accessTTL = 0
+		}
+	}
+	if oldEntry.RefreshExpiresAt != nil {
+		refreshTTL = time.Until(*oldEntry.RefreshExpiresAt)
+		if refreshTTL < 0 {
+			refreshTTL = 0
+		}
+	}
+
+	newTok, rawAccess, rawRefresh, err := r.CreateWithRefresh(
+		oldEntry.Label,
+		oldEntry.AllowedTools,
+		oldEntry.AgentName,
+		accessTTL,
+		refreshTTL,
+	)
+	if err != nil {
+		return nil, "", "", fmt.Errorf("rotate via refresh: %w", err)
+	}
+
+	return newTok, rawAccess, rawRefresh, nil
 }
 
 // List returns a snapshot of all tokens currently in the registry. Expired

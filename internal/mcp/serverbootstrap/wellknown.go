@@ -46,7 +46,7 @@ func handleOAuthAuthorizationServer(bind string, port int) http.HandlerFunc {
 			"response_types_supported":              []string{"code"},
 			"code_challenge_methods_supported":      []string{"S256"},
 			"token_endpoint_auth_methods_supported": []string{"none"},
-			"grant_types_supported":                 []string{"authorization_code"},
+			"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
 		})
 	}
 }

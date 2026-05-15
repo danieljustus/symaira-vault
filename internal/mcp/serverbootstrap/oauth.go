@@ -125,7 +125,7 @@ func handleOAuthRegister(clientStore *oauthClientStore) http.HandlerFunc {
 			"client_id_issued_at":        time.Now().Unix(),
 			"client_secret_expires_at":   0,
 			"token_endpoint_auth_method": "none",
-			"grant_types":                []string{"authorization_code"},
+			"grant_types":                []string{"authorization_code", "refresh_token"},
 			"response_types":             []string{"code"},
 			"redirect_uris":              req.RedirectURIs,
 		})
@@ -222,17 +222,13 @@ func handleOAuthAuthorize(store *oauthCodeStore, clientStore *oauthClientStore) 
 }
 
 // handleOAuthToken implements the authorization code grant (RFC 6749 §4.1.3)
-// with PKCE verification (RFC 7636). On success it mints a fresh scoped MCP
-// token via the TokenRegistry instead of returning the global legacy bearer
-// token. The scoped token has a 24-hour TTL.
-func handleOAuthToken(store *oauthCodeStore, registry *mcp.TokenRegistry) http.HandlerFunc {
+// with PKCE verification (RFC 7636) and refresh token support (RFC 6749 §6).
+// On success it mints a fresh scoped MCP token via the TokenRegistry instead
+// of returning the global legacy bearer token.
+func handleOAuthToken(store *oauthCodeStore, registry *mcp.TokenRegistry, accessTokenTTL, refreshTokenTTL time.Duration) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_request"})
-			return
-		}
-		if r.FormValue("grant_type") != "authorization_code" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unsupported_grant_type"})
 			return
 		}
 
@@ -241,36 +237,69 @@ func handleOAuthToken(store *oauthCodeStore, registry *mcp.TokenRegistry) http.H
 			return
 		}
 
-		pending, ok := store.take(r.FormValue("code"))
-		if !ok || time.Now().After(pending.expiresAt) {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_grant"})
-			return
-		}
-		if !verifyS256(r.FormValue("code_verifier"), pending.codeChallenge) {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_grant"})
-			return
-		}
+		grantType := r.FormValue("grant_type")
 
-		// Mint a fresh scoped token instead of returning the legacy bearer token.
-		// This ensures every OAuth-issued token is independently revocable and
-		// auditable — the global legacy token is never exposed to OAuth clients.
-		label := fmt.Sprintf("oauth-%s", pending.clientID[:8])
-		tok, rawToken, err := registry.Create(label, []string{"*"}, "oauth", 24*time.Hour)
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server_error"})
-			return
-		}
+		switch grantType {
+		case "authorization_code":
+			pending, ok := store.take(r.FormValue("code"))
+			if !ok || time.Now().After(pending.expiresAt) {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_grant"})
+				return
+			}
+			if !verifyS256(r.FormValue("code_verifier"), pending.codeChallenge) {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_grant"})
+				return
+			}
 
-		expiresIn := 0
-		if tok.ExpiresAt != nil {
-			expiresIn = int(time.Until(*tok.ExpiresAt).Seconds())
-		}
+			label := fmt.Sprintf("oauth-%s", pending.clientID[:8])
+			tok, rawToken, rawRefresh, err := registry.CreateWithRefresh(
+				label, []string{"*"}, "oauth", accessTokenTTL, refreshTokenTTL,
+			)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "server_error"})
+				return
+			}
 
-		writeJSON(w, http.StatusOK, map[string]any{
-			"access_token": rawToken,
-			"token_type":   "Bearer",
-			"expires_in":   expiresIn,
-		})
+			expiresIn := 0
+			if tok.ExpiresAt != nil {
+				expiresIn = int(time.Until(*tok.ExpiresAt).Seconds())
+			}
+
+			writeJSON(w, http.StatusOK, map[string]any{
+				"access_token":  rawToken,
+				"token_type":    "Bearer",
+				"expires_in":    expiresIn,
+				"refresh_token": rawRefresh,
+			})
+
+		case "refresh_token":
+			rawRefresh := r.FormValue("refresh_token")
+			if rawRefresh == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_request", "error_description": "refresh_token is required"})
+				return
+			}
+
+			newTok, rawAccess, rawRefresh, err := registry.RotateViaRefreshToken(rawRefresh)
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_grant", "error_description": "invalid or expired refresh token"})
+				return
+			}
+
+			expiresIn := 0
+			if newTok.ExpiresAt != nil {
+				expiresIn = int(time.Until(*newTok.ExpiresAt).Seconds())
+			}
+
+			writeJSON(w, http.StatusOK, map[string]any{
+				"access_token":  rawAccess,
+				"token_type":    "Bearer",
+				"expires_in":    expiresIn,
+				"refresh_token": rawRefresh,
+			})
+
+		default:
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unsupported_grant_type"})
+		}
 	}
 }
 

@@ -49,6 +49,12 @@ type GitConfig struct {
 	AutoPullInterval time.Duration `yaml:"auto_pull_interval,omitempty"`
 }
 
+// OAuthConfig holds OAuth server configuration.
+type OAuthConfig struct {
+	AccessTokenTTL  time.Duration `yaml:"access_token_ttl,omitempty"`
+	RefreshTokenTTL time.Duration `yaml:"refresh_token_ttl,omitempty"`
+}
+
 // MCPConfig holds MCP server-related configuration for AI agent integration.
 type MCPConfig struct {
 	Bind                string        `yaml:"bind,omitempty"`
@@ -68,6 +74,7 @@ type MCPConfig struct {
 	TLSCertFile         string        `yaml:"tls_cert_file,omitempty"`
 	TLSKeyFile          string        `yaml:"tls_key_file,omitempty"`
 	AllowInsecureBind   bool          `yaml:"allow_insecure_bind,omitempty"`
+	OAuth               *OAuthConfig  `yaml:"oauth,omitempty"`
 }
 
 // UpdateConfig holds update check-related configuration.
@@ -137,6 +144,10 @@ func defaultMCPConfig() MCPConfig {
 		ApprovalTimeout:     30 * time.Second,
 		RateLimit:           60,
 		MetricsAuthRequired: true,
+		OAuth: &OAuthConfig{
+			AccessTokenTTL:  24 * time.Hour,
+			RefreshTokenTTL: 720 * time.Hour,
+		},
 	}
 }
 
@@ -197,6 +208,13 @@ type fileGitConfig struct {
 	CommitTemplate   *string        `yaml:"commit_template,omitempty"`
 }
 
+// fileOAuthConfig is the file-based OAuth configuration with pointer fields
+// for optional YAML unmarshaling.
+type fileOAuthConfig struct {
+	AccessTokenTTL  *time.Duration `yaml:"access_token_ttl,omitempty"`
+	RefreshTokenTTL *time.Duration `yaml:"refresh_token_ttl,omitempty"`
+}
+
 // fileMCPConfig is the file-based MCP configuration with pointer fields
 // for optional YAML unmarshaling.
 type fileMCPConfig struct {
@@ -217,6 +235,7 @@ type fileMCPConfig struct {
 	TLSCertFile         *string        `yaml:"tls_cert_file,omitempty"`
 	TLSKeyFile          *string        `yaml:"tls_key_file,omitempty"`
 	AllowInsecureBind   *bool          `yaml:"allow_insecure_bind,omitempty"`
+	OAuth               *fileOAuthConfig `yaml:"oauth,omitempty"`
 }
 
 // fileUpdateConfig is the file-based update configuration with pointer fields
@@ -362,6 +381,17 @@ func MergeFileMCPConfig(fileCfg *fileMCPConfig, defaults MCPConfig) MCPConfig {
 	}
 	if fileCfg.AllowInsecureBind != nil {
 		result.AllowInsecureBind = *fileCfg.AllowInsecureBind
+	}
+	if fileCfg.OAuth != nil {
+		if result.OAuth == nil {
+			result.OAuth = &OAuthConfig{}
+		}
+		if fileCfg.OAuth.AccessTokenTTL != nil {
+			result.OAuth.AccessTokenTTL = *fileCfg.OAuth.AccessTokenTTL
+		}
+		if fileCfg.OAuth.RefreshTokenTTL != nil {
+			result.OAuth.RefreshTokenTTL = *fileCfg.OAuth.RefreshTokenTTL
+		}
 	}
 	return result
 }

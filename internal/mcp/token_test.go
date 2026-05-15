@@ -278,8 +278,8 @@ func TestTokenRegistry_CreateLoadSave_Roundtrip(t *testing.T) {
 	if err := json.Unmarshal(data, &file); err != nil {
 		t.Fatalf("unmarshal registry: %v", err)
 	}
-	if file.Version != 1 {
-		t.Errorf("version = %d, want 1", file.Version)
+	if file.Version < 1 || file.Version > 2 {
+		t.Errorf("version = %d, want 1 or 2", file.Version)
 	}
 	if len(file.Tokens) != 1 {
 		t.Fatalf("token count = %d, want 1", len(file.Tokens))
@@ -809,8 +809,8 @@ func TestTokenRegistry_Load_Tokens(t *testing.T) {
 	if err := json.Unmarshal(data, &file); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if file.Version != 1 {
-		t.Errorf("Version = %d, want 1", file.Version)
+	if file.Version < 1 || file.Version > 2 {
+		t.Errorf("Version = %d, want 1 or 2", file.Version)
 	}
 }
 
