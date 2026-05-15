@@ -55,6 +55,17 @@ scoop bucket add openpass https://github.com/danieljustus/scoop-bucket
 scoop install openpass
 ```
 
+**Nix (Flake):**
+```bash
+# Run directly (no install needed)
+nix run github:danieljustus/OpenPass
+
+# Or add as a flake input
+# flake.nix:
+#   inputs.openpass.url = "github:danieljustus/OpenPass";
+```
+> **Note:** The flake is new. Go module dependencies are pinned via `vendorHash` in `flake.nix`. If updating dependencies, run `go mod vendor && nix hash path --sri vendor/` and update the hash.
+
 **Go:**
 ```bash
 go install github.com/danieljustus/OpenPass@latest
@@ -68,6 +79,7 @@ For manual downloads, Linux packages, release verification, and build-from-sourc
 | Linux | ✓ | ✓ | Quick install, Homebrew, Go, Manual, deb/rpm/apk |
 | Windows | ✓ | ✓ | Quick install, Scoop, Go, Manual |
 | FreeBSD | ✓ | ✓ | Go, Manual |
+| NixOS / Nix | ✓ | ✓ | Nix flake (`nix run github:danieljustus/OpenPass`) |
 
 ## Quick Start
 
