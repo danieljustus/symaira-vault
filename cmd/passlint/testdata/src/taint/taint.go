@@ -43,5 +43,5 @@ func (u Untrusted) Tags() map[string]string {
 }
 
 func (u Untrusted) Format(f fmt.State, verb rune) {
-	io.WriteString(f, "<untrusted:source>")
+	_, _ = io.WriteString(f, "<untrusted:source>")
 }
