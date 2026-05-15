@@ -181,7 +181,11 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 	// BearerAuthMiddleware — clients don't have a token yet at this point.
 	// User consent is required at the authorize step (see handleOAuthAuthorize).
 	oauthStore := newOAuthCodeStore()
-	clientStore := newOAuthClientStore()
+	clientStore, err := loadOAuthClientStore(vaultDir)
+	if err != nil {
+		return fmt.Errorf("load oauth client store: %w", err)
+	}
+	clientStore.StartCleanup(ctx, 5*time.Minute)
 
 	oauthRegisterHandler := mcp.OriginValidationMiddleware(addr, handleOAuthRegister(clientStore))
 	mux.HandleFunc("POST /oauth/register", oauthRegisterHandler.ServeHTTP)

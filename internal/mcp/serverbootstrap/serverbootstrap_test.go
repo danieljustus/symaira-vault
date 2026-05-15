@@ -1017,3 +1017,88 @@ func TestRunHTTPServer_InitializeAndToolsList(t *testing.T) {
 		t.Errorf("tools/list status = %d, want %d", resp2.StatusCode, http.StatusOK)
 	}
 }
+
+func TestRunHTTPServer_OAuthClientPersistenceAcrossRestart(t *testing.T) {
+	v := newTestVault(t)
+	port := reserveFreePort(t)
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+
+	ctx1, cancel1 := context.WithCancel(context.Background())
+	wait1 := runHTTPServerAsync(ctx1, t, "127.0.0.1", port, v, mcp.New)
+
+	client := newTestHTTPClient()
+	reqBody := `{"redirect_uris": ["http://127.0.0.1:9999/callback"]}`
+	req, _ := http.NewRequest(http.MethodPost, baseURL+"/oauth/register", strings.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("register request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("register status = %d, want %d", resp.StatusCode, http.StatusCreated)
+	}
+	var regResp map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&regResp); err != nil {
+		t.Fatalf("decode register response: %v", err)
+	}
+	clientID, ok := regResp["client_id"].(string)
+	if !ok || clientID == "" {
+		t.Fatal("client_id missing from registration response")
+	}
+
+	clientFilePath := filepath.Join(v.Dir, oauthClientsFileName)
+	if _, err := os.Stat(clientFilePath); err != nil {
+		t.Fatalf("client store file missing: %v", err)
+	}
+
+	cancel1()
+	wait1()
+
+	v2 := &vaultpkg.Vault{
+		Dir:    v.Dir,
+		Config: config.Default(),
+	}
+
+	listener, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
+	if err != nil {
+		t.Fatalf("re-listen: %v", err)
+	}
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	defer cancel2()
+	go func() {
+		_ = RunHTTPServerOnListener(ctx2, listener, v2, v2.Dir, "dev", mcp.New)
+	}()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/health", port))
+		if err == nil {
+			_ = resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				break
+			}
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+
+	authURL := fmt.Sprintf("http://127.0.0.1:%d/mcp/oauth/authorize?response_type=code&client_id=%s&redirect_uri=%s&code_challenge=abc123&code_challenge_method=S256&state=test",
+		port, clientID, url.QueryEscape("http://127.0.0.1:9999/callback"))
+	authReq, _ := http.NewRequest(http.MethodGet, authURL, nil)
+	authReq.Header.Set("Origin", fmt.Sprintf("http://127.0.0.1:%d", port))
+	resp2, err := client.Do(authReq)
+	if err != nil {
+		t.Fatalf("authorize request after restart: %v", err)
+	}
+	defer func() { _ = resp2.Body.Close() }()
+	// After restart the registered client should still be known. If the client
+	// were not persisted, the response would be 400 with "invalid_client".
+	// A 403 (user consent denied) or 302 (redirect with auth code) both confirm
+	// the client was found.
+	if resp2.StatusCode == http.StatusBadRequest {
+		var errBody map[string]any
+		_ = json.NewDecoder(resp2.Body).Decode(&errBody)
+		if errBody["error"] == "invalid_client" {
+			t.Fatalf("client was not persisted across restart: %v", errBody)
+		}
+	}
+}

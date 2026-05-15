@@ -1,6 +1,7 @@
 package serverbootstrap
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -10,40 +11,193 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/danieljustus/OpenPass/internal/fileutil"
 	"github.com/danieljustus/OpenPass/internal/mcp"
 )
 
-// oauthClientStore persists registered OAuth client applications in memory.
+const (
+	oauthClientsFileVersion = 1
+	oauthClientsFileName    = "mcp-oauth-clients.json"
+)
+
+// oauthClientStoreFile is the on-disk JSON representation of the client store.
+type oauthClientStoreFile struct {
+	Version int                          `json:"version"`
+	Clients map[string]*registeredClient `json:"clients"`
+}
+
+// oauthClientStore persists registered OAuth client applications. It is backed
+// by an on-disk JSON file when a vaultDir is provided; otherwise it operates
+// purely in memory.
 type oauthClientStore struct {
 	mu      sync.Mutex
 	clients map[string]*registeredClient
+	path    string // path to the JSON persistence file, empty = in-memory only
 }
 
 type registeredClient struct {
-	ClientID     string    `json:"client_id"`
-	RedirectURIs []string  `json:"redirect_uris"`
-	CreatedAt    time.Time `json:"created_at"`
+	ClientID     string     `json:"client_id"`
+	RedirectURIs []string   `json:"redirect_uris"`
+	CreatedAt    time.Time  `json:"created_at"`
+	TTL          *int64     `json:"ttl_seconds,omitempty"`   // optional TTL in seconds
+	ExpiresAt    *time.Time `json:"expires_at,omitempty"`    // computed expiration time
 }
 
+// newOAuthClientStore creates an in-memory-only client store.
 func newOAuthClientStore() *oauthClientStore {
 	return &oauthClientStore{clients: make(map[string]*registeredClient)}
 }
 
-func (s *oauthClientStore) put(c *registeredClient) {
+// loadOAuthClientStore creates a client store backed by a persistent JSON file
+// at <vaultDir>/<oauthClientsFileName>. If vaultDir is empty, the store is
+// purely in-memory. The file is loaded on creation; a missing file is not an
+// error (empty store).
+func loadOAuthClientStore(vaultDir string) (*oauthClientStore, error) {
+	s := &oauthClientStore{clients: make(map[string]*registeredClient)}
+	if vaultDir == "" {
+		return s, nil
+	}
+	s.path = filepath.Join(vaultDir, oauthClientsFileName)
+	if err := s.Load(); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+// Load reads the JSON client registry file from disk and populates the
+// in-memory entries. If the file does not exist it is a no-op (empty store).
+func (s *oauthClientStore) Load() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	if s.path == "" {
+		return nil
+	}
+
+	data, err := os.ReadFile(s.path) //#nosec G304 -- path is set from vaultDir in loadOAuthClientStore
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read oauth client store: %w", err)
+	}
+
+	var file oauthClientStoreFile
+	if err := json.Unmarshal(data, &file); err != nil {
+		return fmt.Errorf("parse oauth client store: %w", err)
+	}
+
+	s.clients = make(map[string]*registeredClient, len(file.Clients))
+	for id, c := range file.Clients {
+		if c != nil {
+			s.clients[id] = c
+		}
+	}
+	return nil
+}
+
+// Save persists the current in-memory client entries to the JSON file with
+// 0o600 permissions. A no-op if the store has no associated file path.
+func (s *oauthClientStore) Save() error {
+	s.mu.Lock()
+	file := oauthClientStoreFile{
+		Version: oauthClientsFileVersion,
+		Clients: make(map[string]*registeredClient, len(s.clients)),
+	}
+	for id, c := range s.clients {
+		file.Clients[id] = c
+	}
+	s.mu.Unlock()
+
+	if s.path == "" {
+		return nil
+	}
+
+	data, err := json.MarshalIndent(file, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal oauth client store: %w", err)
+	}
+
+	if err := fileutil.AtomicWriteFile(s.path, append(data, '\n'), 0o600); err != nil {
+		return fmt.Errorf("write oauth client store: %w", err)
+	}
+	return nil
+}
+
+func (s *oauthClientStore) put(c *registeredClient) {
+	s.mu.Lock()
 	s.clients[c.ClientID] = c
+	s.mu.Unlock()
+
+	// Best-effort persistence: log error but never fail the registration.
+	if s.path != "" {
+		if err := s.Save(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to persist OAuth client store: %v\n", err)
+		}
+	}
 }
 
 func (s *oauthClientStore) get(clientID string) (*registeredClient, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	c, ok := s.clients[clientID]
-	return c, ok
+	if !ok {
+		return nil, false
+	}
+	// Lazy expiry check: if the client has an expiration and it's passed,
+	// treat it as not found.
+	if c.ExpiresAt != nil && time.Now().After(*c.ExpiresAt) {
+		delete(s.clients, clientID)
+		return nil, false
+	}
+	return c, true
+}
+
+// cleanupExpired removes all clients whose TTL has expired. Returns the
+// count of removed entries.
+func (s *oauthClientStore) cleanupExpired() int {
+	s.mu.Lock()
+	now := time.Now()
+	var removed int
+	for id, c := range s.clients {
+		if c.ExpiresAt != nil && now.After(*c.ExpiresAt) {
+			delete(s.clients, id)
+			removed++
+		}
+	}
+	needsSave := removed > 0 && s.path != ""
+	s.mu.Unlock()
+
+	if needsSave {
+		if err := s.Save(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to persist OAuth client store after cleanup: %v\n", err)
+		}
+	}
+	return removed
+}
+
+// StartCleanup launches a background goroutine that periodically sweeps
+// expired client entries at the given interval. It returns a stop function.
+func (s *oauthClientStore) StartCleanup(ctx context.Context, interval time.Duration) {
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				s.cleanupExpired()
+			case <-ctx.Done():
+				s.cleanupExpired()
+				return
+			}
+		}
+	}()
 }
 
 type oauthCodeStore struct {
@@ -163,8 +317,9 @@ func handleOAuthAuthorize(store *oauthCodeStore, clientStore *oauthClientStore) 
 		// Validate client_id against registered clients.
 		client, ok := clientStore.get(clientID)
 		if !ok {
+			w.Header().Set("WWW-Authenticate", `Bearer realm="openpass",error="invalid_client",error_description="unknown client_id; register via POST /oauth/register first"`)
 			writeJSON(w, http.StatusBadRequest, map[string]string{
-				"error":             "unauthorized_client",
+				"error":             "invalid_client",
 				"error_description": "unknown client_id; register via POST /oauth/register first",
 			})
 			return
