@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"bufio"
+	"strings"
 	"testing"
 )
 
@@ -14,6 +16,28 @@ func TestBuildProfile(t *testing.T) {
 	}
 	if !profile.RequireApproval {
 		t.Error("RequireApproval should be true")
+	}
+}
+
+func TestPromptApprovalMode(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{name: "default (empty)", input: "\n", expected: "prompt"},
+		{name: "choice 1", input: "1\n", expected: "prompt"},
+		{name: "choice 2", input: "2\n", expected: "deny"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			reader := bufio.NewReader(strings.NewReader(tc.input))
+			result := promptApprovalMode(reader)
+			if result != tc.expected {
+				t.Errorf("promptApprovalMode() = %q, want %q", result, tc.expected)
+			}
+		})
 	}
 }
 
