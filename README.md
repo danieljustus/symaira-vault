@@ -64,7 +64,7 @@ nix run github:danieljustus/OpenPass
 # flake.nix:
 #   inputs.openpass.url = "github:danieljustus/OpenPass";
 ```
-> **Note:** The flake is new. Run `nix build` once to resolve the Go module dependency hash (`vendorHash` in `flake.nix`), then submit a PR with the pinned hash.
+> **Note:** The flake is new. Go module dependencies are pinned via `vendorHash` in `flake.nix`. If updating dependencies, run `go mod vendor && nix hash path --sri vendor/` and update the hash.
 
 **Go:**
 ```bash

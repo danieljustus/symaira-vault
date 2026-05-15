@@ -20,13 +20,8 @@
 
           src = ./.;
 
-          # Placeholder hash — update after first `nix build`.
-          # Run `nix build` once; the build will fail with:
-          #   hash mismatch in fixed-output derivation
-          #     wanted: …AAAAA…
-          #     got:    …<real-hash>…
-          # Copy the real SRI hash here to pin Go module dependencies.
-          vendorHash = "";
+          # Resolved via `go mod vendor; nix hash path --sri vendor/`
+          vendorHash = "sha256-mFck88bFcrdG4eO+IDdGsG6gQLx8SlOGLyit6A68uL4=";
 
           # Disable CGO for Linux — reduces distributability and is not needed
           # (keyring integration requires CGO only on darwin).
