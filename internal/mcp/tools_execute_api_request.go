@@ -135,7 +135,7 @@ func (s *Server) handleExecuteAPIRequest(ctx context.Context, req CallToolReques
 			tmpl.Name, endpoint, method), false)
 		return NewToolResultError(fmt.Sprintf("request failed: %v", respErr)), nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, readErr := io.ReadAll(resp.Body)
 	if readErr != nil {
