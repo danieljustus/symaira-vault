@@ -378,7 +378,9 @@ func TestHandleGet_RedactedTOTPStillGeneratesCode(t *testing.T) {
 
 	totpReq := CallToolRequest{
 		Arguments: map[string]any{
-			"path": "github",
+			"path":        "github",
+			"destination": "return",
+			"return_code": true,
 		},
 	}
 	totpResult, err := srv.handleGenerateTOTP(context.Background(), totpReq)
