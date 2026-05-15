@@ -104,12 +104,19 @@ func (s *Server) handleExecuteAPIRequest(ctx context.Context, req CallToolReques
 
 	// Apply additional headers from agent request (before auth, so auth can't be overridden)
 	if headersRaw, ok := req.Arguments["headers"]; ok {
-		if headersMap, ok := headersRaw.(map[string]any); ok {
-			for k, v := range headersMap {
-				if vStr, ok := v.(string); ok {
-					httpReq.Header.Set(k, vStr)
-				}
+		headersMap, ok := headersRaw.(map[string]any)
+		if !ok {
+			s.logAudit(ctx, "execute_api_request", fmt.Sprintf("<invalid-headers:%s>", tmpl.Name), false)
+			return NewToolResultError("invalid headers: must be an object with string values"), nil
+		}
+
+		for k, v := range headersMap {
+			vStr, ok := v.(string)
+			if !ok {
+				s.logAudit(ctx, "execute_api_request", fmt.Sprintf("<invalid-headers:%s>", tmpl.Name), false)
+				return NewToolResultError(fmt.Sprintf("invalid headers: value for %q must be a string", k)), nil
 			}
+			httpReq.Header.Set(k, vStr)
 		}
 	}
 
