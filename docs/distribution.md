@@ -10,6 +10,7 @@ OpenPass is distributed through multiple channels to support different platforms
 | macOS | amd64, arm64 | tar.gz, Homebrew |
 | Windows | amd64, arm64 | zip |
 | FreeBSD | amd64, arm64 | tar.gz |
+| NixOS / Nix | amd64, arm64 | Nix flake |
 
 **Notes:**
 - **FreeBSD**: Prebuilt binaries are built with `CGO_ENABLED=0`, which disables OS keyring integration. Instead, OpenPass uses an in-memory encrypted session cache (AES-256-GCM) with a 15-minute TTL. See [docs/troubleshooting.md](troubleshooting.md#freebsd) for details.
@@ -92,6 +93,20 @@ sudo mv OpenPass_<version>_<os>_<arch>/openpass /usr/local/bin/
 Expand-Archive OpenPass_<version>_windows_<arch>.zip
 Move-Item OpenPass_<version>_windows_<arch>\openpass.exe C:\Windows\System32\
 ```
+
+### Nix Flake
+
+OpenPass provides a Nix flake for NixOS and Nix users:
+
+```bash
+# Run directly (no install needed)
+nix run github:danieljustus/OpenPass
+
+# Or add as a flake input in your flake.nix:
+#   inputs.openpass.url = "github:danieljustus/OpenPass";
+```
+
+> **Note:** The flake is new. Run `nix build` once to resolve the Go module dependency hash (`vendorHash` in `flake.nix`), then submit a PR with the pinned hash.
 
 ### Go Install
 
