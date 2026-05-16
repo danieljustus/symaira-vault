@@ -163,8 +163,8 @@ func detectProjectContext(workingDir string) string {
 	}
 
 	markers := []struct {
-		file   string
-		label  string
+		file  string
+		label string
 	}{
 		{"go.mod", "Go"},
 		{"package.json", "Node.js"},

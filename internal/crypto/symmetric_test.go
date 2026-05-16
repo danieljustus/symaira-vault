@@ -1,4 +1,3 @@
-
 package crypto
 
 import (
@@ -360,10 +359,10 @@ func TestDetectEncryptedIdentityFormat(t *testing.T) {
 
 func TestParseArgon2idParams(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
-		want     Argon2idParams
-		wantErr  bool
+		name    string
+		input   string
+		want    Argon2idParams
+		wantErr bool
 	}{
 		{"full params", "t=3,m=65536,p=4", Argon2idParams{Time: 3, Memory: 65536, Threads: 4}, false},
 		{"minimal", "t=1,m=64,p=1", Argon2idParams{Time: 1, Memory: 64, Threads: 1}, false},

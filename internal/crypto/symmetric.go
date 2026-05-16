@@ -1,4 +1,3 @@
-
 package crypto
 
 import (
@@ -47,8 +46,8 @@ func (r *argon2idRecipient) Wrap(fileKey []byte) ([]*age.Stanza, error) {
 
 	kdf := hkdf.New(sha256.New, l, salt, []byte(ageArgon2idLabel))
 	wrapKey := make([]byte, Argon2idKeyLen)
-	if _, err := io.ReadFull(kdf, wrapKey); err != nil {
-		return nil, fmt.Errorf("hkdf expand: %w", err)
+	if _, readErr := io.ReadFull(kdf, wrapKey); readErr != nil {
+		return nil, fmt.Errorf("hkdf expand: %w", readErr)
 	}
 
 	aead, err := chacha20poly1305.New(wrapKey)
@@ -108,7 +107,7 @@ func (id *argon2idIdentity) Unwrap(stanzas []*age.Stanza) ([]byte, error) {
 
 		kdf := hkdf.New(sha256.New, l, salt, []byte(ageArgon2idLabel))
 		wrapKey := make([]byte, Argon2idKeyLen)
-		if _, err := io.ReadFull(kdf, wrapKey); err != nil {
+		if _, readErr := io.ReadFull(kdf, wrapKey); readErr != nil {
 			continue
 		}
 

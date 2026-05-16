@@ -322,10 +322,10 @@ func hasLegacyTopLevelAgeFiles(vaultDir string) (bool, error) {
 		if entry.IsDir() {
 			continue
 		}
-		if filepath.Ext(entry.Name()) != ".age" {
+		if filepath.Ext(entry.Name()) != ".age" { //nolint:goconst // file extension literal
 			continue
 		}
-		if entry.Name() == "identity.age" {
+		if entry.Name() == "identity.age" { //nolint:goconst // filename literal
 			continue
 		}
 		absPath := filepath.Join(vaultDir, entry.Name())

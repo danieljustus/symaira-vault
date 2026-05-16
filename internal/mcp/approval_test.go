@@ -785,7 +785,7 @@ func TestParseRememberResponse(t *testing.T) {
 		{"no is not remember", "no", false},
 		{"empty", "", false},
 		{"r with whitespace", "  r  ", true},
-		{"typo remmeber", "remmeber", false},
+		{"typo remmeber", "remmeber", false}, //nolint:misspell // intentional typo test
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

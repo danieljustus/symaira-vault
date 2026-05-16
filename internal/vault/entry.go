@@ -27,12 +27,12 @@ import (
 
 // Entry represents a vault entry with flexible data storage using map[string]any.
 type Entry struct {
-	Path           string              `json:"path,omitempty"`
-	Data           map[string]any      `json:"data"`
-	Metadata       EntryMetadata       `json:"meta"`
-	SecretMetadata SecretMetadata      `json:"secret_meta,omitempty"`
+	Path           string               `json:"path,omitempty"`
+	Data           map[string]any       `json:"data"`
+	Metadata       EntryMetadata        `json:"meta"`
+	SecretMetadata SecretMetadata       `json:"secret_meta,omitempty"`
 	Classification taint.Classification `json:"classification,omitempty"`
-	Canary         bool                `json:"canary,omitempty"`
+	Canary         bool                 `json:"canary,omitempty"`
 }
 
 // EntryMetadata contains metadata about an entry

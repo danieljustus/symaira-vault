@@ -178,7 +178,7 @@ func (s *Server) executeTool(ctx context.Context, name string, args json.RawMess
 // detectAnomalyAsync runs anomaly detection in a separate goroutine so it
 // NEVER blocks tool execution. It checks all detection patterns and handles
 // any alerts that are generated (logging, notifications, cache invalidation).
-func (s *Server) detectAnomalyAsync(ctx context.Context, toolName, entryPath, reqID, agentName string, duration time.Duration, ok bool) {
+func (s *Server) detectAnomalyAsync(_ context.Context, toolName, entryPath, reqID, agentName string, duration time.Duration, ok bool) {
 	if s == nil || s.anomalyDetector == nil {
 		return
 	}

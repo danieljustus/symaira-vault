@@ -64,12 +64,12 @@ type Server struct {
 	policyEngine *policy.Engine
 	shareStore   *ShareStore
 
-	approvalCache         *approvalCache
-	approvalKeyCounter    atomic.Int64
-	secretsAccessed       atomic.Int64
+	approvalCache      *approvalCache
+	approvalKeyCounter atomic.Int64
+	secretsAccessed    atomic.Int64
 
-	hookRegistry     *HookRegistry
-	sessionID        string
+	hookRegistry    *HookRegistry
+	sessionID       string
 	anomalyDetector *anomaly.AnomalyDetector
 }
 

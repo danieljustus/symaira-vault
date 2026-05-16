@@ -142,19 +142,16 @@ func WithAlertHook(hook func(AnomalyAlert)) Option {
 	}
 }
 
-// Now is overridable in tests.
-var now = time.Now
-
 // Default configuration values.
 const (
-	defaultMaxEvents    = 1000
-	defaultSweepWindow  = 60 * time.Second
-	defaultSweepThresh  = 10
-	defaultRateWindow   = 60 * time.Second
-	defaultRateLimit    = 30
+	defaultMaxEvents     = 1000
+	defaultSweepWindow   = 60 * time.Second
+	defaultSweepThresh   = 10
+	defaultRateWindow    = 60 * time.Second
+	defaultRateLimit     = 30
 	defaultOffHoursStart = 22 // 10 PM
-	defaultOffHoursEnd  = 6  // 6 AM
-	defaultStaleDays    = 90
+	defaultOffHoursEnd   = 6  // 6 AM
+	defaultStaleDays     = 90
 )
 
 // AnomalyDetector maintains a sliding window of tool call events and applies

@@ -754,11 +754,11 @@ func TestRegisterConfigHooks_RateLimit_FromConfig(t *testing.T) {
 
 func TestAgentProfile_HooksConfig(t *testing.T) {
 	profile := config.AgentProfile{
-		Name:         "test",
-		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
-		PreCallHooks: []string{"audit", "rate_limit"},
+		Name:          "test",
+		AllowedPaths:  []string{"*"},
+		CanWrite:      false,
+		ApprovalMode:  "none",
+		PreCallHooks:  []string{"audit", "rate_limit"},
 		PostCallHooks: []string{"notification"},
 	}
 

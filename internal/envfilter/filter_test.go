@@ -286,5 +286,3 @@ func envSliceToMap(env []string) map[string]string {
 	}
 	return m
 }
-
-

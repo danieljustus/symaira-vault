@@ -68,7 +68,7 @@ func NewRateLimitPreHook(maxPerMinute int) PreCallHook {
 
 // NewScopeCheckPreHook returns a PreCallHook that validates the tool is in the
 // agent's allowed tools list. If the agent's AllowedTools slice is empty, all
-// tools are permitted. This is an additional defence-in-depth layer beyond the
+// tools are permitted. This is an additional defense-in-depth layer beyond the
 // existing checks in executeTool.
 func NewScopeCheckPreHook() PreCallHook {
 	return func(ctx context.Context, toolName string, args CallToolRequest, server *Server) (context.Context, error) {
@@ -83,9 +83,7 @@ func NewScopeCheckPreHook() PreCallHook {
 				return ctx, nil
 			}
 		}
-		if server != nil {
-			server.logAudit(ctx, "tool_scope_denied", toolName, false)
-		}
+		server.logAudit(ctx, "tool_scope_denied", toolName, false)
 		return ctx, fmt.Errorf("tool %q is not in the agent's allowed tools", toolName)
 	}
 }

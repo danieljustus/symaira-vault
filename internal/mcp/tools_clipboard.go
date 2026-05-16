@@ -30,12 +30,12 @@ func (s *Server) handleCopyToClipboard(ctx context.Context, req CallToolRequest)
 	}
 
 	if s.requiresApproval() {
-		if err := s.requireApproval(ctx, Intent{
+		if reqErr := s.requireApproval(ctx, Intent{
 			Action:    "copy_to_clipboard",
 			EntryPath: path,
 			Summary:   fmt.Sprintf("copy password from %s to clipboard", path),
-		}); err != nil {
-			return nil, err
+		}); reqErr != nil {
+			return nil, reqErr
 		}
 	}
 

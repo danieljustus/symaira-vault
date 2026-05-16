@@ -61,10 +61,10 @@ func TestGenerateGrantID_ProducesValidFormat(t *testing.T) {
 
 func TestGenerateGrantID_EmptyKey(t *testing.T) {
 	fields := GrantIDFields{
-		FromAgent: "alice",
-		ToAgent:   "bob",
+		FromAgent:  "alice",
+		ToAgent:    "bob",
 		SecretPath: "vault/secret/key",
-		CreatedAt: time.Now().UTC(),
+		CreatedAt:  time.Now().UTC(),
 	}
 
 	_, err := GenerateGrantID(fields, nil)

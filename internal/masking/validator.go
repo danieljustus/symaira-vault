@@ -75,8 +75,8 @@ func ValidateIBAN(value string) bool {
 	numBuilder.Grow(len(rearranged) * 2)
 	for _, r := range rearranged {
 		if r >= 'A' && r <= 'Z' {
-			numBuilder.WriteString(string(rune('0' + (r-'A'+10)/10)))
-			numBuilder.WriteString(string(rune('0' + (r-'A'+10)%10)))
+			numBuilder.WriteString(string('0' + (r-'A'+10)/10))
+			numBuilder.WriteString(string('0' + (r-'A'+10)%10))
 		} else {
 			numBuilder.WriteRune(r)
 		}

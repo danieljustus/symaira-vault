@@ -198,7 +198,7 @@ func toolDefinitions() []toolDefinition {
 			Handler:    (*Server).handleDelete,
 			Deprecated: true,
 			AliasFor:   "delete_entry",
-			RiskLevel: RiskLevelCritical,
+			RiskLevel:  RiskLevelCritical,
 		},
 		{
 			Name:        "generate_totp",
@@ -223,8 +223,8 @@ func toolDefinitions() []toolDefinition {
 			Name:        "get_auth_status",
 			Description: "Return OpenPass unlock authentication status",
 			InputSchema: objectSchema(nil, map[string]schemaProperty{}),
-			Handler:   (*Server).handleGetAuthStatus,
-			RiskLevel: RiskLevelLow,
+			Handler:     (*Server).handleGetAuthStatus,
+			RiskLevel:   RiskLevelLow,
 		},
 		{
 			Name:        "set_auth_method",

@@ -1,4 +1,3 @@
-
 package crypto
 
 import (
@@ -78,7 +77,10 @@ func (p Argon2idParams) Parallelism() uint8 {
 func resolveArgon2idParams(params Argon2idParams) Argon2idParams {
 	if params.Time == 0 && params.Memory == 0 && params.Threads == 0 {
 		if tp := testArgon2idParams.Load(); tp != nil {
-			return *tp.(*Argon2idParams)
+			p, ok := tp.(*Argon2idParams)
+			if ok {
+				return *p
+			}
 		}
 	}
 	return params

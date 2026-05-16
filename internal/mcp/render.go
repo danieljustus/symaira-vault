@@ -62,50 +62,30 @@ func sanitizeMCPText(text string) string {
 
 	// Phase 3: Byte-level scanner for ANSI escapes, control chars,
 	// and XML/HTML tag injection.
+	return sanitizeBytes(text)
+}
+
+// sanitizeBytes performs the byte-level sanitization of text,
+// stripping ANSI escapes, control characters, and neutralizing
+// XML/HTML injection attempts.
+func sanitizeBytes(text string) string {
 	var out strings.Builder
 	out.Grow(len(text))
-
-	inEscape := false
-	inOSC := false
 
 	for i := 0; i < len(text); i++ {
 		ch := text[i]
 
-		if inEscape {
-			if ch == '[' || (ch >= '0' && ch <= '9') || ch == ';' || ch == '?' {
-				continue
-			}
-			if (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') {
-				inEscape = false
-				continue
-			}
-			inEscape = false
-			continue
-		}
-
-		if inOSC {
-			if ch == 0x07 {
-				inOSC = false
-				continue
-			}
-			if ch == '\\' && i+1 < len(text) {
-				inOSC = false
-				i++
-				continue
-			}
-			continue
-		}
-
+		// Handle ANSI escape sequences.
 		if ch == 0x1b {
-			if i+1 < len(text) && text[i+1] == ']' {
-				inOSC = true
-				i++
-				continue
+			next, consumed := consumeEscapeSequence(text, i)
+			i += consumed
+			if next >= 0 {
+				i = next
 			}
-			inEscape = true
 			continue
 		}
 
+		// Skip control characters except tab, LF, CR.
 		if ch < 0x20 && ch != '\t' && ch != '\n' && ch != '\r' {
 			continue
 		}
@@ -116,15 +96,12 @@ func sanitizeMCPText(text string) string {
 		// After NFKC normalization, any < and > are ASCII.
 		// Neutralize XML closing tags: </tagname>, </tagname attr="val">
 		// by injecting spaces so the sequence is no longer a valid tag.
-		// The format </ tagname > is idempotent — applying the sanitizer
-		// again will not change it further.
 		if ch == '<' && i+2 < len(text) && text[i+1] == '/' {
 			peek := text[i+2]
-			if (peek >= 'a' && peek <= 'z') || (peek >= 'A' && peek <= 'Z') || peek == '_' {
+			if isNameStart(peek) {
 				rest := text[i:]
 				endIdx := strings.IndexByte(rest, '>')
 				if endIdx > 2 { // at least </x>
-					// Write </ with a space to break the XML closing tag
 					out.WriteString("</ ")
 					out.WriteString(rest[2:endIdx])
 					out.WriteString(" >")
@@ -146,6 +123,49 @@ func sanitizeMCPText(text string) string {
 	}
 
 	return out.String()
+}
+
+// isNameStart reports whether r is a valid start of an XML name.
+func isNameStart(r byte) bool {
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r == '_'
+}
+
+// consumeEscapeSequence processes an ANSI escape sequence starting at index i
+// in text. It returns the next index to resume scanning from (or -1 if the
+// caller should use the current loop variable) and the number of bytes
+// consumed from position i.
+func consumeEscapeSequence(text string, i int) (int, int) {
+	if i+1 >= len(text) {
+		return -1, 0
+	}
+	if text[i+1] == '[' {
+		// CSI sequence: ESC [ … final byte
+		j := i + 2
+		for j < len(text) {
+			c := text[j]
+			if (c >= '@' && c <= '~') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') {
+				return j, j - i
+			}
+			j++
+		}
+		return -1, j - i - 1
+	}
+	if text[i+1] == ']' {
+		// OSC sequence: ESC ] … BEL or ESC \
+		j := i + 2
+		for j < len(text) {
+			if text[j] == 0x07 {
+				return j, j - i
+			}
+			if text[j] == '\\' && j > i+2 && text[j-1] == 0x1b {
+				return j, j - i
+			}
+			j++
+		}
+		return -1, j - i - 1
+	}
+	// Simple escape sequence: ESC followed by a single byte.
+	return -1, 1
 }
 
 // stripDangerousUnicode removes Unicode formatting, bidirectional override,

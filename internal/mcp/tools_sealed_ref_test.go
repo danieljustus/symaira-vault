@@ -88,13 +88,14 @@ func TestHandleGetValue_SealsRestrictedClassification(t *testing.T) {
 	}
 }
 
-func TestHandleGetValue_DoesNotSealWhenAutoUnsealTrue(t *testing.T) {
+func testHandleGetValueUnsealed(t *testing.T, autoUnseal bool, classification taint.Classification, data map[string]any, entryName, wantKey, wantValue string) {
+	t.Helper()
 	vaultDir, identity := mockVault(t)
-	secretEntry := &vault.Entry{
-		Data:           map[string]any{"password": "visible"},
-		Classification: taint.Secret,
+	entry := &vault.Entry{
+		Data:           data,
+		Classification: classification,
 	}
-	if err := vault.WriteEntry(vaultDir, "secret-entry", secretEntry, identity); err != nil {
+	if err := vault.WriteEntry(vaultDir, entryName, entry, identity); err != nil {
 		t.Fatalf("write entry: %v", err)
 	}
 
@@ -103,12 +104,12 @@ func TestHandleGetValue_DoesNotSealWhenAutoUnsealTrue(t *testing.T) {
 		AllowedPaths: []string{"*"},
 		CanWrite:     false,
 		ApprovalMode: "none",
-		AutoUnseal:   true,
+		AutoUnseal:   autoUnseal,
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
 	req := CallToolRequest{
-		Arguments: map[string]any{"path": "secret-entry"},
+		Arguments: map[string]any{"path": entryName},
 	}
 
 	result, err := srv.handleGetValue(context.Background(), req)
@@ -116,50 +117,21 @@ func TestHandleGetValue_DoesNotSealWhenAutoUnsealTrue(t *testing.T) {
 		t.Fatalf("handleGetValue() error = %v", err)
 	}
 
-	var entry vault.Entry
-	if err := json.Unmarshal([]byte(result.Text), &entry); err != nil {
+	var got vault.Entry
+	if err := json.Unmarshal([]byte(result.Text), &got); err != nil {
 		t.Fatalf("parse result: %v", err)
 	}
-	if entry.Data["password"] != "visible" {
-		t.Errorf("password = %v, want 'visible'", entry.Data["password"])
+	if got.Data[wantKey] != wantValue {
+		t.Errorf("%s = %v, want %q", wantKey, got.Data[wantKey], wantValue)
 	}
 }
 
+func TestHandleGetValue_DoesNotSealWhenAutoUnsealTrue(t *testing.T) {
+	testHandleGetValueUnsealed(t, true, taint.Secret, map[string]any{"password": "visible"}, "secret-entry", "password", "visible")
+}
+
 func TestHandleGetValue_DoesNotSealInternalClassification(t *testing.T) {
-	vaultDir, identity := mockVault(t)
-	internalEntry := &vault.Entry{
-		Data:           map[string]any{"key": "internal-value"},
-		Classification: taint.Internal,
-	}
-	if err := vault.WriteEntry(vaultDir, "internal-entry", internalEntry, identity); err != nil {
-		t.Fatalf("write entry: %v", err)
-	}
-
-	srv := newTestServerWithVault(t, config.AgentProfile{
-		Name:         "test",
-		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
-		AutoUnseal:   false,
-	}, "stdio", vaultDir)
-	srv.vault.Identity = identity
-
-	req := CallToolRequest{
-		Arguments: map[string]any{"path": "internal-entry"},
-	}
-
-	result, err := srv.handleGetValue(context.Background(), req)
-	if err != nil {
-		t.Fatalf("handleGetValue() error = %v", err)
-	}
-
-	var entry vault.Entry
-	if err := json.Unmarshal([]byte(result.Text), &entry); err != nil {
-		t.Fatalf("parse result: %v", err)
-	}
-	if entry.Data["key"] != "internal-value" {
-		t.Errorf("key = %v, want 'internal-value'", entry.Data["key"])
-	}
+	testHandleGetValueUnsealed(t, false, taint.Internal, map[string]any{"key": "internal-value"}, "internal-entry", "key", "internal-value")
 }
 
 func TestSecretUnseal_ResolvesHandle(t *testing.T) {
