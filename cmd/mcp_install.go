@@ -105,7 +105,7 @@ func runInstall(vDir string, agentType install.AgentType, dryRun, httpMode bool)
 	}
 
 	// Generate server config.
-	serverConfig, tokenID, err := buildServerConfig(vDir, string(agentType), httpMode)
+	serverConfig, tokenID, err := buildServerConfig(vDir, string(agentType), httpMode, dryRun)
 	if err != nil {
 		return err
 	}
@@ -170,9 +170,9 @@ func runAutoDetect(vDir string, dryRun, httpMode bool) error {
 	return nil
 }
 
-func buildServerConfig(vDir, agentName string, httpMode bool) (map[string]any, string, error) {
+func buildServerConfig(vDir, agentName string, httpMode, dryRun bool) (map[string]any, string, error) {
 	if httpMode {
-		return buildHTTPServerConfig(vDir, agentName)
+		return buildHTTPServerConfig(vDir, agentName, dryRun)
 	}
 	return buildStdioServerConfig(agentName), "", nil
 }
@@ -185,30 +185,41 @@ func buildStdioServerConfig(agentName string) map[string]any {
 	}
 }
 
-func buildHTTPServerConfig(vDir, agentName string) (map[string]any, string, error) {
+func buildHTTPServerConfig(vDir, agentName string, dryRun bool) (map[string]any, string, error) {
 	httpCfg, err := resolveHTTPConfig(agentName, "")
 	if err != nil {
 		return nil, "", err
 	}
 
-	// Create a scoped token for this agent.
-	regPath := mcp.TokenRegistryFilePath(vDir)
-	reg := mcp.NewTokenRegistry(regPath)
-	if loadErr := reg.Load(); loadErr != nil {
-		return nil, "", fmt.Errorf("load token registry: %w", loadErr)
-	}
+	var rawToken string
+	var tokenID string
 
-	token, rawToken, err := reg.Create(
-		fmt.Sprintf("mcp-install-%s", agentName),
-		[]string{"*"},
-		agentName,
-		30*24*time.Hour, // 30 days default
-	)
-	if err != nil {
-		return nil, "", fmt.Errorf("create scoped token: %w", err)
-	}
-	if err := reg.Save(); err != nil {
-		return nil, "", fmt.Errorf("save token registry: %w", err)
+	if !dryRun {
+		// Create a scoped token for this agent.
+		regPath := mcp.TokenRegistryFilePath(vDir)
+		reg := mcp.NewTokenRegistry(regPath)
+		if loadErr := reg.Load(); loadErr != nil {
+			return nil, "", fmt.Errorf("load token registry: %w", loadErr)
+		}
+
+		token, rt, err := reg.Create(
+			fmt.Sprintf("mcp-install-%s", agentName),
+			[]string{"*"},
+			agentName,
+			30*24*time.Hour, // 30 days default
+		)
+		if err != nil {
+			return nil, "", fmt.Errorf("create scoped token: %w", err)
+		}
+		if err := reg.Save(); err != nil {
+			return nil, "", fmt.Errorf("save token registry: %w", err)
+		}
+		rawToken = rt
+		tokenID = token.ID
+	} else {
+		// Use a deterministic preview token so dry-run output is stable.
+		rawToken = "<dry-run-preview-token>"
+		tokenID = "<not-generated-dry-run>"
 	}
 
 	// Use the raw token directly in the config instead of env reference
@@ -229,7 +240,7 @@ func buildHTTPServerConfig(vDir, agentName string) (map[string]any, string, erro
 		maps.Copy(config, def.ServerConfigExtras)
 	}
 
-	return config, token.ID, nil
+	return config, tokenID, nil
 }
 
 func printInstallResult(result *install.Result, dryRun bool, backupPath string) {
@@ -256,7 +267,11 @@ func printInstallResult(result *install.Result, dryRun bool, backupPath string) 
 		printQuietAware("  Backup:      %s\n", backupPath)
 	}
 	if result.TokenID != "" {
-		printQuietAware("  Token ID:    %s\n", result.TokenID)
+		if result.TokenID == "<not-generated-dry-run>" {
+			printQuietAware("  Token ID:    <not generated (dry-run)>\n")
+		} else {
+			printQuietAware("  Token ID:    %s\n", result.TokenID)
+		}
 	}
 }
 
