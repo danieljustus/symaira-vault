@@ -62,6 +62,7 @@ type fileConfig struct {
 
 type AgentProfile struct {
 	Name                string              `yaml:"-"`
+	Tier                string              `yaml:"tier,omitempty"`
 	ApprovalMode        string              `yaml:"approvalMode"`
 	AllowedPaths        []string            `yaml:"allowedPaths"`
 	RedactFields        []string            `yaml:"redactFields,omitempty"`
@@ -71,6 +72,7 @@ type AgentProfile struct {
 	CanUseClipboard     bool                `yaml:"canUseClipboard,omitempty"`
 	CanUseAutotype      bool                `yaml:"canUseAutotype,omitempty"`
 	CanReadValues       bool                `yaml:"canReadValues,omitempty"`
+	ExposeValueTools    bool                `yaml:"exposeValueTools,omitempty"`
 	RequireApproval     bool                `yaml:"requireApproval"`
 	ApprovalTimeout     time.Duration       `yaml:"approvalTimeout,omitempty"`
 	AllowedTools        []string            `yaml:"allowed_tools,omitempty"`
@@ -81,6 +83,8 @@ type AgentProfile struct {
 }
 
 type fileAgentProfile struct {
+	Tier                *string             `yaml:"tier,omitempty"`
+	ExposeValueTools    *bool               `yaml:"exposeValueTools,omitempty"`
 	ApprovalTimeout     *time.Duration      `yaml:"approvalTimeout,omitempty"`
 	CanWrite            *bool               `yaml:"canWrite,omitempty"`
 	CanRunCommands      *bool               `yaml:"canRunCommands,omitempty"`
@@ -188,6 +192,18 @@ func Load(path string) (*Config, error) {
 				current = newDefaultAgentProfile(name)
 			}
 			current.Name = name
+
+			// Apply tier preset before explicit YAML overrides
+			if profile.Tier != nil && *profile.Tier != "" {
+				ApplyTierPreset(&current, *profile.Tier)
+				current.Tier = *profile.Tier
+			}
+
+			// Backward compat: default ExposeValueTools to true when neither tier nor explicit value
+			if (profile.Tier == nil || *profile.Tier == "") && profile.ExposeValueTools == nil {
+				current.ExposeValueTools = true
+			}
+
 			if profile.AllowedPaths != nil {
 				current.AllowedPaths = append([]string(nil), profile.AllowedPaths...)
 			} else if current.AllowedPaths == nil {
@@ -240,6 +256,9 @@ func Load(path string) (*Config, error) {
 			}
 			if profile.MaxSecretsInSession != nil {
 				current.MaxSecretsInSession = *profile.MaxSecretsInSession
+			}
+			if profile.ExposeValueTools != nil {
+				current.ExposeValueTools = *profile.ExposeValueTools
 			}
 			if profile.DynamicProviders != nil {
 				current.DynamicProviders = make(map[string][]string, len(profile.DynamicProviders))
@@ -480,16 +499,22 @@ func buildFileAgents(agents map[string]AgentProfile) map[string]fileAgentProfile
 		canUseClipboard := profile.CanUseClipboard
 		canUseAutotype := profile.CanUseAutotype
 		canReadValues := profile.CanReadValues
+		exposeValueTools := profile.ExposeValueTools
 		requireApproval := profile.RequireApproval
 		fap := fileAgentProfile{
-			AllowedPaths:    allowed,
-			CanWrite:        &canWrite,
-			CanRunCommands:  &canRunCommands,
-			CanManageConfig: &canManageConfig,
-			CanUseClipboard: &canUseClipboard,
-			CanUseAutotype:  &canUseAutotype,
-			CanReadValues:   &canReadValues,
-			RequireApproval: &requireApproval,
+			AllowedPaths:     allowed,
+			CanWrite:         &canWrite,
+			CanRunCommands:   &canRunCommands,
+			CanManageConfig:  &canManageConfig,
+			CanUseClipboard:  &canUseClipboard,
+			CanUseAutotype:   &canUseAutotype,
+			CanReadValues:    &canReadValues,
+			ExposeValueTools: &exposeValueTools,
+			RequireApproval:  &requireApproval,
+		}
+		if profile.Tier != "" {
+			t := profile.Tier
+			fap.Tier = &t
 		}
 		if profile.ApprovalMode != "" {
 			am := profile.ApprovalMode
@@ -591,22 +616,23 @@ func (c *Config) SetAuthMethod(method string) error {
 
 func newDefaultAgentProfile(name string) AgentProfile {
 	return AgentProfile{
-		Name:           name,
-		AllowedPaths:   []string{},
-		CanWrite:       false,
-		CanRunCommands: false,
-		ApprovalMode:   "none",
+		Name:             name,
+		AllowedPaths:     []string{},
+		CanWrite:         false,
+		CanRunCommands:   false,
+		ApprovalMode:     "none",
+		ExposeValueTools: true,
 	}
 }
 
 func builtinAgentProfiles() map[string]AgentProfile {
 	return map[string]AgentProfile{
-		"default":     {Name: "default", AllowedPaths: []string{"*"}, CanWrite: false, CanRunCommands: false, ApprovalMode: "none"},
-		"claude-code": {Name: "claude-code", AllowedPaths: []string{"*"}, CanWrite: true, CanRunCommands: false, ApprovalMode: "none"},
-		"codex":       {Name: "codex", AllowedPaths: []string{"*"}, CanWrite: false, CanRunCommands: false, ApprovalMode: "none"},
-		"hermes":      {Name: "hermes", AllowedPaths: []string{"*"}, CanWrite: true, CanRunCommands: false, ApprovalMode: "none"},
-		"openclaw":    {Name: "openclaw", AllowedPaths: []string{"*"}, CanWrite: true, CanRunCommands: false, ApprovalMode: "none"},
-		"opencode":    {Name: "opencode", AllowedPaths: []string{"*"}, CanWrite: false, CanRunCommands: false, ApprovalMode: "none"},
+		"default":     {Name: "default", AllowedPaths: []string{"*"}, CanWrite: false, CanRunCommands: false, ApprovalMode: "none", ExposeValueTools: true},
+		"claude-code": {Name: "claude-code", AllowedPaths: []string{"*"}, CanWrite: true, CanRunCommands: false, ApprovalMode: "none", ExposeValueTools: true},
+		"codex":       {Name: "codex", AllowedPaths: []string{"*"}, CanWrite: false, CanRunCommands: false, ApprovalMode: "none", ExposeValueTools: true},
+		"hermes":      {Name: "hermes", AllowedPaths: []string{"*"}, CanWrite: true, CanRunCommands: false, ApprovalMode: "none", ExposeValueTools: true},
+		"openclaw":    {Name: "openclaw", AllowedPaths: []string{"*"}, CanWrite: true, CanRunCommands: false, ApprovalMode: "none", ExposeValueTools: true},
+		"opencode":    {Name: "opencode", AllowedPaths: []string{"*"}, CanWrite: false, CanRunCommands: false, ApprovalMode: "none", ExposeValueTools: true},
 	}
 }
 

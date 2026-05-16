@@ -22,7 +22,7 @@ func toolActionType(toolName string) string {
 		return "set"
 	case "delete_entry", "openpass_delete":
 		return "delete"
-	case "run_command", "execute_with_secret":
+	case "run_command", "execute_with_secret", "execute_api_request":
 		return "run"
 	case "list_entries":
 		return "list"
@@ -82,6 +82,12 @@ func (s *Server) executeTool(ctx context.Context, name string, args json.RawMess
 		span.SetStatus(codes.Error, "tool not available")
 		metrics.RecordMCPRequest(name, agentName, "error", time.Since(start))
 		return nil, fmt.Errorf("tool %q is not available in the current environment", name)
+	}
+	if isToolBlockedByAgent(s.agent, name) {
+		span.SetStatus(codes.Error, "tool not found")
+		metrics.RecordMCPRequest(name, agentName, "error", time.Since(start))
+		s.logAudit(ctx, "agent_tool_denied", name, false)
+		return nil, fmt.Errorf("unknown tool: %s", name)
 	}
 
 	// Check token tool scope

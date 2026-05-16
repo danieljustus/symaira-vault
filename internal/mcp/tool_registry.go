@@ -3,6 +3,8 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+
+	"github.com/danieljustus/OpenPass/internal/config"
 )
 
 type toolHandler func(*Server, context.Context, CallToolRequest) (*CallToolResult, error)
@@ -121,6 +123,20 @@ func toolDefinitions() []toolDefinition {
 			Handler: (*Server).handleExecuteWithSecret,
 		},
 		{
+			Name:        "execute_api_request",
+			Description: "Execute an HTTP API request using a named template with vault-injected credentials. The agent never sees the credential values. Requires command execution permission.",
+			InputSchema: objectSchema([]string{"template", "endpoint"}, map[string]schemaProperty{
+				"template": {Type: "string", Description: "API template name (e.g. github, openai, anthropic, slack)"},
+				"endpoint": {Type: "string", Description: "API endpoint path (e.g. /repos/owner/repo)"},
+				"method":   {Type: "string", Description: "HTTP method (default: GET)"},
+				"body":     {Type: "string", Description: "Request body (optional)"},
+				"headers":  {Type: "object", Description: "Additional request headers (optional)"},
+				"timeout":  {Type: "number", Description: "Timeout in seconds (default: 30)"},
+			}),
+			Handler:   (*Server).handleExecuteAPIRequest,
+			Available: executeAPIAvailable,
+		},
+		{
 			Name:        "sanitize_output",
 			Description: "Scan text for secrets and replace them with masked values. Use before sending output to LLM chat.",
 			InputSchema: objectSchema([]string{"text"}, map[string]schemaProperty{
@@ -171,11 +187,14 @@ func toolDefinitions() []toolDefinition {
 		},
 		{
 			Name:        "generate_totp",
-			Description: "Generate a TOTP code for an entry with TOTP configuration",
+			Description: "Generate a TOTP code for an entry with TOTP configuration. By default the code is copied to the clipboard without being returned in the response. Use destination=\"autotype\" to type the code directly, or destination=\"return\" with return_code=true to return the code in the response (requires approval).",
 			InputSchema: objectSchema([]string{"path"}, map[string]schemaProperty{
-				"path": {Type: "string", Description: "Entry path with TOTP configuration"},
+				"path":        {Type: "string", Description: "Entry path with TOTP configuration"},
+				"destination": {Type: "string", Description: "Where to send the code: \"clipboard\" (default, not returned), \"autotype\" (type directly), \"return\" (return in response, requires approval)"},
+				"return_code": {Type: "boolean", Description: "Must be true when destination=\"return\""},
 			}),
-			Handler: (*Server).handleGenerateTOTP,
+			Handler:   (*Server).handleGenerateTOTP,
+			Available: generateTOTPAvailable,
 		},
 		{
 			Name:        "health",
@@ -288,9 +307,25 @@ func availableToolDefinitions(s *Server) []toolDefinition {
 		if def.Available != nil && !def.Available(s) {
 			continue
 		}
+		if s != nil && isToolBlockedByAgent(s.agent, def.Name) {
+			continue
+		}
 		available = append(available, def)
 	}
 	return available
+}
+
+// isToolBlockedByAgent returns true when the tool should be hidden/unavailable
+// based on the agent's profile capabilities. This is used both at list-time
+// (availableToolDefinitions) and at call-time (executeTool) for defense-in-depth.
+func isToolBlockedByAgent(agent *config.AgentProfile, toolName string) bool {
+	if agent == nil {
+		return false
+	}
+	if !agent.ExposeValueTools && toolName == "get_entry_value" {
+		return true
+	}
+	return false
 }
 
 func findToolDefinition(name string) (toolDefinition, bool) {
@@ -306,10 +341,15 @@ func toolsListPayload(s *Server) []map[string]any {
 	definitions := availableToolDefinitions(s)
 	tools := make([]map[string]any, 0, len(definitions))
 	for _, def := range definitions {
+		inputSchema := def.InputSchema
+		if def.Name == "get_entry" && s != nil && s.agent != nil && !s.agent.ExposeValueTools {
+			inputSchema = withoutSchemaProperty(def.InputSchema, "include_value")
+		}
+
 		payload := map[string]any{
 			"name":        def.Name,
 			"description": def.Description,
-			"inputSchema": def.InputSchema,
+			"inputSchema": inputSchema,
 		}
 		if def.Deprecated {
 			payload["deprecated"] = true
@@ -320,6 +360,33 @@ func toolsListPayload(s *Server) []map[string]any {
 		tools = append(tools, payload)
 	}
 	return tools
+}
+
+func withoutSchemaProperty(schema map[string]any, property string) map[string]any {
+	if schema == nil {
+		return nil
+	}
+
+	cloned := make(map[string]any, len(schema))
+	for key, value := range schema {
+		cloned[key] = value
+	}
+
+	properties, ok := schema["properties"].(map[string]any)
+	if !ok {
+		return cloned
+	}
+
+	clonedProperties := make(map[string]any, len(properties))
+	for key, value := range properties {
+		if key == property {
+			continue
+		}
+		clonedProperties[key] = value
+	}
+	cloned["properties"] = clonedProperties
+
+	return cloned
 }
 
 func callToolResultPayload(result *CallToolResult) map[string]any {

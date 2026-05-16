@@ -10,41 +10,44 @@ const (
 )
 
 // TierPresets maps tier names to their default agent profile values.
-// These presets are applied explicitly by callers such as the agent setup
-// wizard when constructing a new AgentProfile.
+// These are applied as a base when an AgentProfile specifies a Tier.
+// Explicit YAML fields for the same agent override the preset values.
 var TierPresets = map[TierPreset]AgentProfile{
 	TierReadOnly: {
-		CanWrite:        false,
-		CanRunCommands:  false,
-		CanManageConfig: false,
-		CanUseClipboard: false,
-		CanUseAutotype:  false,
-		CanReadValues:   false,
-		ApprovalMode:    "none",
-		RequireApproval: false,
-		AllowedPaths:    []string{},
+		CanWrite:         false,
+		CanRunCommands:   false,
+		CanManageConfig:  false,
+		CanUseClipboard:  false,
+		CanUseAutotype:   false,
+		CanReadValues:    false,
+		ExposeValueTools: false,
+		ApprovalMode:     "none",
+		RequireApproval:  false,
+		AllowedPaths:     []string{},
 	},
 	TierStandard: {
-		CanWrite:        false,
-		CanRunCommands:  false,
-		CanManageConfig: false,
-		CanUseClipboard: true,
-		CanUseAutotype:  true,
-		CanReadValues:   true,
-		ApprovalMode:    "prompt",
-		RequireApproval: true,
-		AllowedPaths:    []string{},
+		CanWrite:         false,
+		CanRunCommands:   false,
+		CanManageConfig:  false,
+		CanUseClipboard:  true,
+		CanUseAutotype:   true,
+		CanReadValues:    true,
+		ExposeValueTools: false,
+		ApprovalMode:     "prompt",
+		RequireApproval:  true,
+		AllowedPaths:     []string{},
 	},
 	TierAdmin: {
-		CanWrite:        true,
-		CanRunCommands:  true,
-		CanManageConfig: true,
-		CanUseClipboard: true,
-		CanUseAutotype:  true,
-		CanReadValues:   true,
-		ApprovalMode:    "prompt",
-		RequireApproval: true,
-		AllowedPaths:    []string{},
+		CanWrite:         true,
+		CanRunCommands:   true,
+		CanManageConfig:  true,
+		CanUseClipboard:  true,
+		CanUseAutotype:   true,
+		CanReadValues:    true,
+		ExposeValueTools: true,
+		ApprovalMode:     "prompt",
+		RequireApproval:  true,
+		AllowedPaths:     []string{},
 	},
 }
 
@@ -57,6 +60,7 @@ func GetPreset(tier string) *AgentProfile {
 	}
 	return &p
 }
+
 
 // ApplyTierPreset applies the preset values for the given tier to target.
 // Only capability/approval fields are overwritten; Name and AllowedPaths are preserved.
@@ -72,6 +76,7 @@ func ApplyTierPreset(target *AgentProfile, tier string) bool {
 	target.CanUseClipboard = preset.CanUseClipboard
 	target.CanUseAutotype = preset.CanUseAutotype
 	target.CanReadValues = preset.CanReadValues
+	target.ExposeValueTools = preset.ExposeValueTools
 	target.ApprovalMode = preset.ApprovalMode
 	target.RequireApproval = preset.RequireApproval
 	return true

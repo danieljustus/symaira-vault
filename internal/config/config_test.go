@@ -628,6 +628,9 @@ func TestSaveLoadRoundTrip_PreservesAllFields(t *testing.T) {
 	if len(agent.AllowedPaths) != len(cfg.Agents["test-agent"].AllowedPaths) {
 		t.Errorf("agent.AllowedPaths len = %d, want %d", len(agent.AllowedPaths), len(cfg.Agents["test-agent"].AllowedPaths))
 	}
+	if agent.ExposeValueTools != cfg.Agents["test-agent"].ExposeValueTools {
+		t.Errorf("agent.ExposeValueTools = %v, want %v", agent.ExposeValueTools, cfg.Agents["test-agent"].ExposeValueTools)
+	}
 	if agent.DynamicProviders == nil {
 		t.Fatal("agent.DynamicProviders should not be nil after round-trip")
 	}
@@ -1964,5 +1967,315 @@ func TestEffectiveAuthMethod_Default(t *testing.T) {
 	c := &Config{}
 	if got := c.EffectiveAuthMethod(); got != AuthMethodPassphrase {
 		t.Errorf("EffectiveAuthMethod = %q, want %q", got, AuthMethodPassphrase)
+	}
+}
+
+// --- Tier Preset Tests ---
+
+func TestPresets_ApplyTierPreset_ReadOnly(t *testing.T) {
+	t.Parallel()
+	p := &AgentProfile{Name: "test", AllowedPaths: []string{"*"}}
+	ok := ApplyTierPreset(p, "read-only")
+	if !ok {
+		t.Fatal("ApplyTierPreset returned false for known tier")
+	}
+	if p.CanWrite {
+		t.Error("CanWrite should be false for read-only")
+	}
+	if p.CanReadValues {
+		t.Error("CanReadValues should be false for read-only")
+	}
+	if p.ExposeValueTools {
+		t.Error("ExposeValueTools should be false for read-only")
+	}
+	if p.ApprovalMode != "none" {
+		t.Errorf("ApprovalMode = %q, want none", p.ApprovalMode)
+	}
+	// AllowedPaths should be preserved
+	if len(p.AllowedPaths) != 1 || p.AllowedPaths[0] != "*" {
+		t.Error("AllowedPaths should be preserved from original profile")
+	}
+}
+
+func TestPresets_ApplyTierPreset_Standard(t *testing.T) {
+	t.Parallel()
+	p := &AgentProfile{Name: "test", AllowedPaths: []string{"*"}}
+	ok := ApplyTierPreset(p, "standard")
+	if !ok {
+		t.Fatal("ApplyTierPreset returned false for known tier")
+	}
+	if p.CanWrite {
+		t.Error("CanWrite should be false for standard")
+	}
+	if !p.CanReadValues {
+		t.Error("CanReadValues should be true for standard")
+	}
+	if p.ExposeValueTools {
+		t.Error("ExposeValueTools should be false for standard")
+	}
+	if p.ApprovalMode != "prompt" {
+		t.Errorf("ApprovalMode = %q, want prompt", p.ApprovalMode)
+	}
+}
+
+func TestPresets_ApplyTierPreset_Admin(t *testing.T) {
+	t.Parallel()
+	p := &AgentProfile{Name: "test", AllowedPaths: []string{"*"}}
+	ok := ApplyTierPreset(p, "admin")
+	if !ok {
+		t.Fatal("ApplyTierPreset returned false for known tier")
+	}
+	if !p.CanWrite {
+		t.Error("CanWrite should be true for admin")
+	}
+	if !p.CanReadValues {
+		t.Error("CanReadValues should be true for admin")
+	}
+	if !p.ExposeValueTools {
+		t.Error("ExposeValueTools should be true for admin")
+	}
+	if !p.CanRunCommands {
+		t.Error("CanRunCommands should be true for admin")
+	}
+	if !p.CanManageConfig {
+		t.Error("CanManageConfig should be true for admin")
+	}
+	if !p.CanUseClipboard {
+		t.Error("CanUseClipboard should be true for admin")
+	}
+}
+
+func TestPresets_UnknownTier_Ignored(t *testing.T) {
+	t.Parallel()
+	p := &AgentProfile{Name: "test", AllowedPaths: []string{"*"}}
+	p.CanWrite = true
+	ok := ApplyTierPreset(p, "nonexistent")
+	if ok {
+		t.Fatal("ApplyTierPreset should return false for unknown tier")
+	}
+	if !p.CanWrite {
+		t.Error("CanWrite should not be changed by unknown tier")
+	}
+}
+
+// --- Tier Preset Load Tests ---
+
+func TestLoad_TierStandardPreset(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	yamlContent := `agents:
+  my-agent:
+    tier: standard
+`
+	path := writeTempFile(t, []byte(yamlContent))
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	agent, ok := cfg.Agents["my-agent"]
+	if !ok {
+		t.Fatal("my-agent should exist")
+	}
+	// Verify preset was applied
+	if agent.CanWrite {
+		t.Error("CanWrite should be false (standard preset)")
+	}
+	if !agent.CanReadValues {
+		t.Error("CanReadValues should be true (standard preset)")
+	}
+	if agent.ExposeValueTools {
+		t.Error("ExposeValueTools should be false (standard preset)")
+	}
+	if agent.Tier != "standard" {
+		t.Errorf("Tier = %q, want standard", agent.Tier)
+	}
+}
+
+func TestLoad_TierStandardWithExplicitOverride(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	yamlContent := `agents:
+  my-agent:
+    tier: standard
+    canWrite: true
+`
+	path := writeTempFile(t, []byte(yamlContent))
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	agent, ok := cfg.Agents["my-agent"]
+	if !ok {
+		t.Fatal("my-agent should exist")
+	}
+	// Preset sets CanWrite=false, but explicit YAML override should win
+	if !agent.CanWrite {
+		t.Error("CanWrite should be true (explicit YAML overrides preset)")
+	}
+	// Preset should still apply for non-overridden fields
+	if agent.ExposeValueTools {
+		t.Error("ExposeValueTools should be false (from preset, not overridden)")
+	}
+}
+
+func TestLoad_TierReadOnlyPreset(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	yamlContent := `agents:
+  my-agent:
+    tier: read-only
+`
+	path := writeTempFile(t, []byte(yamlContent))
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	agent, ok := cfg.Agents["my-agent"]
+	if !ok {
+		t.Fatal("my-agent should exist")
+	}
+	if agent.CanWrite {
+		t.Error("CanWrite should be false (read-only preset)")
+	}
+	if agent.CanReadValues {
+		t.Error("CanReadValues should be false (read-only preset)")
+	}
+	if agent.ExposeValueTools {
+		t.Error("ExposeValueTools should be false (read-only preset)")
+	}
+}
+
+func TestLoad_TierAdminPreset(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	yamlContent := `agents:
+  my-agent:
+    tier: admin
+`
+	path := writeTempFile(t, []byte(yamlContent))
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	agent, ok := cfg.Agents["my-agent"]
+	if !ok {
+		t.Fatal("my-agent should exist")
+	}
+	if !agent.CanWrite {
+		t.Error("CanWrite should be true (admin preset)")
+	}
+	if !agent.CanReadValues {
+		t.Error("CanReadValues should be true (admin preset)")
+	}
+	if !agent.ExposeValueTools {
+		t.Error("ExposeValueTools should be true (admin preset)")
+	}
+	if !agent.CanRunCommands {
+		t.Error("CanRunCommands should be true (admin preset)")
+	}
+}
+
+// --- ExposeValueTools Tests ---
+
+func TestLoad_ExposeValueToolsExplicitTrue(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	yamlContent := `agents:
+  my-agent:
+    exposeValueTools: true
+`
+	path := writeTempFile(t, []byte(yamlContent))
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	agent := cfg.Agents["my-agent"]
+	if !agent.ExposeValueTools {
+		t.Error("ExposeValueTools should be true (explicitly set)")
+	}
+}
+
+func TestLoad_ExposeValueToolsExplicitFalse(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	yamlContent := `agents:
+  my-agent:
+    exposeValueTools: false
+`
+	path := writeTempFile(t, []byte(yamlContent))
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	agent := cfg.Agents["my-agent"]
+	if agent.ExposeValueTools {
+		t.Error("ExposeValueTools should be false (explicitly set)")
+	}
+}
+
+func TestLoad_ExposeValueToolsBackwardCompat(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	// Config without tier and without exposeValueTools should default to true
+	yamlContent := `agents:
+  my-agent:
+    canWrite: true
+`
+	path := writeTempFile(t, []byte(yamlContent))
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	agent := cfg.Agents["my-agent"]
+	if !agent.ExposeValueTools {
+		t.Error("ExposeValueTools should default to true for backward compat")
+	}
+}
+
+func TestLoad_ExposeValueToolsTierOverridesDefault(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	// Config with tier=standard but no exposeValueTools - should be false from preset
+	yamlContent := `agents:
+  my-agent:
+    tier: standard
+`
+	path := writeTempFile(t, []byte(yamlContent))
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	agent := cfg.Agents["my-agent"]
+	if agent.ExposeValueTools {
+		t.Error("ExposeValueTools should be false (from standard preset)")
+	}
+}
+
+func TestLoad_ExposeValueToolsExplicitOverridesTier(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	// Config with tier=standard but explicit exposeValueTools: true - value should be true
+	yamlContent := `agents:
+  my-agent:
+    tier: standard
+    exposeValueTools: true
+`
+	path := writeTempFile(t, []byte(yamlContent))
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	agent := cfg.Agents["my-agent"]
+	if !agent.ExposeValueTools {
+		t.Error("ExposeValueTools should be true (explicit override of standard preset)")
 	}
 }
