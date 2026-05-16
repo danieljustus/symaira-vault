@@ -77,6 +77,8 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 	if registry != nil {
 		cleanupInterval := 5 * time.Minute
 		_ = registry.StartCleanup(ctx, cleanupInterval)
+		// Start file watcher to reload token registry when CLI creates new tokens
+		_ = registry.StartFileWatcher(ctx, 2*time.Second)
 	}
 
 	authAuditLog, err := audit.New("auth-failures", vaultDir)

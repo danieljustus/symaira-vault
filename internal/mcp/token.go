@@ -164,10 +164,11 @@ func entryToScopedToken(e TokenRegistryEntry) *ScopedToken {
 // TokenRegistry provides thread-safe management of scoped MCP tokens backed
 // by an on-disk JSON file.
 type TokenRegistry struct {
-	path    string
-	mu      sync.RWMutex
-	entries map[string]*ScopedToken // keyed by token hash
-	stopFn  func()
+	path        string
+	mu          sync.RWMutex
+	entries     map[string]*ScopedToken // keyed by token hash
+	stopFn      func()                  // stops the background cleanup goroutine
+	watchStopFn func()                  // stops the file watcher goroutine
 }
 
 // NewTokenRegistry creates a TokenRegistry that loads/saves from the given
@@ -509,13 +510,63 @@ func (r *TokenRegistry) cleanupOnce() {
 	}
 }
 
-// Close shuts down the background cleanup goroutine if one is running.
+// StartFileWatcher begins polling the registry file's modification time at the
+// given interval and reloads the registry whenever the file changes. It returns
+// a stop function. The goroutine terminates when ctx is canceled or the stop
+// function is called.
+func (r *TokenRegistry) StartFileWatcher(ctx context.Context, interval time.Duration) func() {
+	stopCh := make(chan struct{})
+
+	var lastModTime time.Time
+	fi, err := os.Stat(r.path)
+	if err == nil {
+		lastModTime = fi.ModTime()
+	}
+
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				fi, err := os.Stat(r.path)
+				if err != nil {
+					continue
+				}
+				mt := fi.ModTime()
+				if mt.After(lastModTime) {
+					lastModTime = mt
+					if err := r.Load(); err != nil {
+						fmt.Fprintf(os.Stderr, "error reloading token registry from %s: %v\n", r.path, err)
+					}
+				}
+			case <-stopCh:
+				return
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	stopFn := func() { close(stopCh) }
+	r.mu.Lock()
+	r.watchStopFn = stopFn
+	r.mu.Unlock()
+	return stopFn
+}
+
+// Close shuts down the background cleanup and file watcher goroutines if they
+// are running.
 func (r *TokenRegistry) Close() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.stopFn != nil {
 		r.stopFn()
 		r.stopFn = nil
+	}
+	if r.watchStopFn != nil {
+		r.watchStopFn()
+		r.watchStopFn = nil
 	}
 	return nil
 }

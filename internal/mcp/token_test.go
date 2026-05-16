@@ -1151,3 +1151,99 @@ func TestLoadTokenSystem_LegacyAuthStillWorks(t *testing.T) {
 		t.Error("revoked token should not be found via Get()")
 	}
 }
+
+func TestTokenRegistry_FileWatcherReloadsOnChange(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mcp-tokens.json")
+
+	// Create initial registry with one token.
+	reg := NewTokenRegistry(path)
+	_, raw, err := reg.Create("initial", []string{"*"}, "", 1*time.Hour)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	hash := sha256Hex(raw)
+
+	// Start the file watcher with a short interval.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stop := reg.StartFileWatcher(ctx, 100*time.Millisecond)
+	defer stop()
+
+	// Simulate CLI: load existing entries, add a new token, save.
+	reg2 := NewTokenRegistry(path)
+	if err := reg2.Load(); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	_, raw2, err := reg2.Create("cli-created", []string{"get_entry"}, "cli", 0)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	hash2 := sha256Hex(raw2)
+
+	// Wait for the watcher to pick up the change.
+	var found bool
+	for i := 0; i < 30; i++ {
+		time.Sleep(100 * time.Millisecond)
+		_, found = reg.Get(hash2)
+		if found {
+			break
+		}
+	}
+	if !found {
+		t.Fatal("file watcher should have reloaded new token within 3s")
+	}
+
+	// Original token should still be there.
+	_, ok := reg.Get(hash)
+	if !ok {
+		t.Error("original token should still be present after reload")
+	}
+}
+
+func TestTokenRegistry_FileWatcherStopsOnContextCancel(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mcp-tokens.json")
+	reg := NewTokenRegistry(path)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	stop := reg.StartFileWatcher(ctx, time.Hour) // long interval, should not fire
+
+	cancel() // cancel context first
+	time.Sleep(50 * time.Millisecond)
+
+	// Calling stop after ctx cancellation should not panic.
+	stop()
+}
+
+func TestTokenRegistry_FileWatcherHandlesMissingFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mcp-tokens.json")
+
+	reg := NewTokenRegistry(path)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stop := reg.StartFileWatcher(ctx, 100*time.Millisecond)
+	defer stop()
+
+	// Create the file after watcher has started - should not panic.
+	reg2 := NewTokenRegistry(path)
+	if _, _, err := reg2.Create("new", []string{"*"}, "", 1*time.Hour); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	// Verify the watcher didn't panic and the registry eventually loads.
+	var found bool
+	for i := 0; i < 20; i++ {
+		time.Sleep(100 * time.Millisecond)
+		tokens := reg.List()
+		if len(tokens) == 1 {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("file watcher should have loaded tokens after file creation")
+	}
+}
