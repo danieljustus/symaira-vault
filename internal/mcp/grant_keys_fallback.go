@@ -12,7 +12,10 @@ import (
 	"github.com/danieljustus/OpenPass/internal/logging"
 )
 
-const grantKeyFileName = "grant-signing-key"
+const (
+	grantKeyFileName = "grant-signing-key"
+	grantKeySize     = 32
+)
 
 // LoadOrCreateGrantSigningKey loads the grant signing key from a file at
 // vaultDir/grant-signing-key, creating a new 32-byte key if none exists.
