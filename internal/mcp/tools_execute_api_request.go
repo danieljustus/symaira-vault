@@ -457,48 +457,14 @@ func (s *Server) checkExecuteAPIRequestApproval(ctx context.Context) error {
 		"agent %q requests to execute an API request")
 }
 
-// checkApproval is a shared helper that checks the agent's approval mode and either
-// allows execution, denies it, or prompts the user for confirmation.
-func (s *Server) checkApproval(_ context.Context, operation, detailFmt string) error {
-	if s == nil || s.agent == nil {
-		return fmt.Errorf("server not initialized")
-	}
-
-	mode := s.agent.ApprovalMode
-	if mode == "" {
-		if s.agent.RequireApproval {
-			mode = "prompt"
-		} else {
-			mode = "none"
-		}
-	}
-
-	switch mode {
-	case "none", "auto":
-		return nil
-	case "deny":
-		return fmt.Errorf("%s denied: approval mode is 'deny'", operation)
-	case "prompt":
-		timeout := s.agent.ApprovalTimeout
-		if timeout <= 0 {
-			timeout = 30 * time.Second
-		}
-		result := RequestApproval(ApprovalRequest{
-			Operation: operation,
-			Details:   fmt.Sprintf(detailFmt, s.agent.Name),
-			Timeout:   timeout,
-		})
-		if result.Error != nil {
-			return fmt.Errorf("%s approval failed: %w", operation, result.Error)
-		}
-		if !result.Approved {
-			return fmt.Errorf("%s denied: user did not approve", operation)
-		}
-		metrics.RecordApproval(s.agent.Name, "granted")
-		return nil
-	default:
-		return nil
-	}
+// checkApproval is a thin wrapper around requireApproval that takes a format
+// string for the summary. It preserves backward compatibility for callers
+// that use this helper.
+func (s *Server) checkApproval(ctx context.Context, operation, detailFmt string) error {
+	return s.requireApproval(ctx, Intent{
+		Action:  operation,
+		Summary: fmt.Sprintf(detailFmt, s.agent.Name),
+	})
 }
 
 // executeAPIAvailable returns true when the agent has command execution permission.

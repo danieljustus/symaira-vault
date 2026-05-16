@@ -171,7 +171,7 @@ func TestHandleSecureInput_ApprovalRequired(t *testing.T) {
 	if err == nil {
 		t.Fatal("handleSecureInput() expected error for approval-required path, got nil")
 	}
-	if err.Error() != `secure input for "github" denied: approval required but cannot be granted` {
+	if !strings.Contains(err.Error(), "denied") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }

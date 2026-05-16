@@ -18,6 +18,7 @@ type toolDefinition struct {
 	Available   toolAvailable
 	Deprecated  bool
 	AliasFor    string
+	RiskLevel   RiskLevel
 }
 
 type schemaProperty struct {
@@ -53,7 +54,8 @@ func toolDefinitions() []toolDefinition {
 				"prefix":          {Type: "string", Description: "Path prefix to filter"},
 				"include_details": {Type: "boolean", Description: "When true, returns metadata for each entry. Default: true."},
 			}),
-			Handler: (*Server).handleList,
+			Handler:   (*Server).handleList,
+			RiskLevel: RiskLevelLow,
 		},
 		{
 			Name:        "get_entry",
@@ -62,7 +64,8 @@ func toolDefinitions() []toolDefinition {
 				"path":          {Type: "string", Description: "Entry path"},
 				"include_value": {Type: "boolean", Description: "When true, returns the full entry with secret values. Default: false."},
 			}),
-			Handler: (*Server).handleGet,
+			Handler:   (*Server).handleGet,
+			RiskLevel: RiskLevelMedium,
 		},
 		{
 			Name:        "get_entry_value",
@@ -70,7 +73,8 @@ func toolDefinitions() []toolDefinition {
 			InputSchema: objectSchema([]string{"path"}, map[string]schemaProperty{
 				"path": {Type: "string", Description: "Entry path"},
 			}),
-			Handler: (*Server).handleGetValue,
+			Handler:   (*Server).handleGetValue,
+			RiskLevel: RiskLevelHigh,
 		},
 		{
 			Name:        "get_entry_metadata",
@@ -78,7 +82,8 @@ func toolDefinitions() []toolDefinition {
 			InputSchema: objectSchema([]string{"path"}, map[string]schemaProperty{
 				"path": {Type: "string", Description: "Entry path"},
 			}),
-			Handler: (*Server).handleGetMetadata,
+			Handler:   (*Server).handleGetMetadata,
+			RiskLevel: RiskLevelMedium,
 		},
 		{
 			Name:        "find_entries",
@@ -86,7 +91,8 @@ func toolDefinitions() []toolDefinition {
 			InputSchema: objectSchema([]string{"query"}, map[string]schemaProperty{
 				"query": {Type: "string", Description: "Search query"},
 			}),
-			Handler: (*Server).handleFind,
+			Handler:   (*Server).handleFind,
+			RiskLevel: RiskLevelLow,
 		},
 		{
 			Name:        "set_entry_field",
@@ -97,7 +103,8 @@ func toolDefinitions() []toolDefinition {
 				"value": {Type: "string", Description: "Field value"},
 				"force": {Type: "boolean", Description: "Skip password strength validation. Default: false."},
 			}),
-			Handler: (*Server).handleSet,
+			Handler:   (*Server).handleSet,
+			RiskLevel: RiskLevelCritical,
 		},
 		{
 			Name:        "run_command",
@@ -108,7 +115,8 @@ func toolDefinitions() []toolDefinition {
 				"working_dir": {Type: "string", Description: "Working directory for the command"},
 				"timeout":     {Type: "number", Description: "Timeout in seconds (default: 30)"},
 			}),
-			Handler: (*Server).handleRunCommand,
+			Handler:   (*Server).handleRunCommand,
+			RiskLevel: RiskLevelHigh,
 		},
 		{
 			Name:        "execute_with_secret",
@@ -120,7 +128,8 @@ func toolDefinitions() []toolDefinition {
 				"env_vars":    {Type: "object", Description: "Additional non-secret environment variables"},
 				"timeout":     {Type: "number", Description: "Timeout in seconds (default: 30)"},
 			}),
-			Handler: (*Server).handleExecuteWithSecret,
+			Handler:   (*Server).handleExecuteWithSecret,
+			RiskLevel: RiskLevelHigh,
 		},
 		{
 			Name:        "execute_api_request",
@@ -135,6 +144,7 @@ func toolDefinitions() []toolDefinition {
 			}),
 			Handler:   (*Server).handleExecuteAPIRequest,
 			Available: executeAPIAvailable,
+			RiskLevel: RiskLevelCritical,
 		},
 		{
 			Name:        "sanitize_output",
@@ -144,7 +154,8 @@ func toolDefinitions() []toolDefinition {
 				"mask_with_op_refs": {Type: "boolean", Description: "Replace vault-known secrets with op:// references"},
 				"mask":              {Type: "string", Description: "Custom mask string (default: ***)"},
 			}),
-			Handler: (*Server).handleSanitizeOutput,
+			Handler:   (*Server).handleSanitizeOutput,
+			RiskLevel: RiskLevelLow,
 		},
 		{
 			Name:        "generate_password",
@@ -153,7 +164,8 @@ func toolDefinitions() []toolDefinition {
 				"length":  {Type: "number", Description: "Password length"},
 				"symbols": {Type: "boolean", Description: "Include symbols. Default: true."},
 			}),
-			Handler: (*Server).handleGenerate,
+			Handler:   (*Server).handleGenerate,
+			RiskLevel: RiskLevelLow,
 		},
 		{
 			Name:        "generate_template",
@@ -165,7 +177,8 @@ func toolDefinitions() []toolDefinition {
 				"secret_refs":   {Type: "object", Description: "Map of template variable names to vault references"},
 				"dry_run":       {Type: "boolean", Description: "Show template with masked values. Default: false"},
 			}),
-			Handler: (*Server).handleGenerateTemplate,
+			Handler:   (*Server).handleGenerateTemplate,
+			RiskLevel: RiskLevelMedium,
 		},
 		{
 			Name:        "delete_entry",
@@ -173,7 +186,8 @@ func toolDefinitions() []toolDefinition {
 			InputSchema: objectSchema([]string{"path"}, map[string]schemaProperty{
 				"path": {Type: "string", Description: "Entry path to delete"},
 			}),
-			Handler: (*Server).handleDelete,
+			Handler:   (*Server).handleDelete,
+			RiskLevel: RiskLevelCritical,
 		},
 		{
 			Name:        "openpass_delete",
@@ -184,6 +198,7 @@ func toolDefinitions() []toolDefinition {
 			Handler:    (*Server).handleDelete,
 			Deprecated: true,
 			AliasFor:   "delete_entry",
+			RiskLevel: RiskLevelCritical,
 		},
 		{
 			Name:        "generate_totp",
@@ -195,18 +210,21 @@ func toolDefinitions() []toolDefinition {
 			}),
 			Handler:   (*Server).handleGenerateTOTP,
 			Available: generateTOTPAvailable,
+			RiskLevel: RiskLevelHigh,
 		},
 		{
 			Name:        "health",
 			Description: "Return OpenPass MCP server health information",
 			InputSchema: objectSchema(nil, map[string]schemaProperty{}),
 			Handler:     (*Server).handleHealth,
+			RiskLevel:   RiskLevelLow,
 		},
 		{
 			Name:        "get_auth_status",
 			Description: "Return OpenPass unlock authentication status",
 			InputSchema: objectSchema(nil, map[string]schemaProperty{}),
-			Handler:     (*Server).handleGetAuthStatus,
+			Handler:   (*Server).handleGetAuthStatus,
+			RiskLevel: RiskLevelLow,
 		},
 		{
 			Name:        "set_auth_method",
@@ -214,7 +232,8 @@ func toolDefinitions() []toolDefinition {
 			InputSchema: objectSchema([]string{"method"}, map[string]schemaProperty{
 				"method": {Type: "string", Description: "Authentication method: passphrase or touchid"},
 			}),
-			Handler: (*Server).handleSetAuthMethod,
+			Handler:   (*Server).handleSetAuthMethod,
+			RiskLevel: RiskLevelHigh,
 		},
 		{
 			Name:        "copy_to_clipboard",
@@ -222,7 +241,8 @@ func toolDefinitions() []toolDefinition {
 			InputSchema: objectSchema([]string{"path"}, map[string]schemaProperty{
 				"path": {Type: "string", Description: "Entry path"},
 			}),
-			Handler: (*Server).handleCopyToClipboard,
+			Handler:   (*Server).handleCopyToClipboard,
+			RiskLevel: RiskLevelHigh,
 		},
 		{
 			Name:        "autotype",
@@ -231,7 +251,8 @@ func toolDefinitions() []toolDefinition {
 				"path":  {Type: "string", Description: "Entry path"},
 				"field": {Type: "string", Description: "Field name to type (default: password)"},
 			}),
-			Handler: (*Server).handleAutotype,
+			Handler:   (*Server).handleAutotype,
+			RiskLevel: RiskLevelHigh,
 		},
 		{
 			Name:        "secure_input",
@@ -243,6 +264,7 @@ func toolDefinitions() []toolDefinition {
 			}),
 			Handler:   (*Server).handleSecureInput,
 			Available: secureInputToolAvailable,
+			RiskLevel: RiskLevelCritical,
 		},
 		{
 			Name: "request_credential",
@@ -258,6 +280,7 @@ func toolDefinitions() []toolDefinition {
 			}),
 			Handler:   (*Server).handleRequestCredential,
 			Available: secureInputToolAvailable,
+			RiskLevel: RiskLevelCritical,
 		},
 		{
 			Name:        "request_share",
@@ -268,7 +291,8 @@ func toolDefinitions() []toolDefinition {
 				"secret_field": {Type: "string", Description: "Specific field to share (optional, shares entire entry if omitted)"},
 				"ttl":          {Type: "string", Description: "Time-to-live duration (e.g., '1h', '30m'). Share expires after this duration."},
 			}),
-			Handler: (*Server).handleRequestShare,
+			Handler:   (*Server).handleRequestShare,
+			RiskLevel: RiskLevelMedium,
 		},
 		{
 			Name:        "approve_share",
@@ -276,7 +300,8 @@ func toolDefinitions() []toolDefinition {
 			InputSchema: objectSchema([]string{"grant_id"}, map[string]schemaProperty{
 				"grant_id": {Type: "string", Description: "ID of the share grant to approve"},
 			}),
-			Handler: (*Server).handleApproveShare,
+			Handler:   (*Server).handleApproveShare,
+			RiskLevel: RiskLevelHigh,
 		},
 		{
 			Name:        "revoke_share",
@@ -284,7 +309,8 @@ func toolDefinitions() []toolDefinition {
 			InputSchema: objectSchema([]string{"grant_id"}, map[string]schemaProperty{
 				"grant_id": {Type: "string", Description: "ID of the share grant to revoke"},
 			}),
-			Handler: (*Server).handleRevokeShare,
+			Handler:   (*Server).handleRevokeShare,
+			RiskLevel: RiskLevelHigh,
 		},
 		{
 			Name:        "list_shares",
@@ -295,7 +321,8 @@ func toolDefinitions() []toolDefinition {
 				"to_agent":    {Type: "string", Description: "Filter by target agent name"},
 				"secret_path": {Type: "string", Description: "Filter by secret path"},
 			}),
-			Handler: (*Server).handleListShares,
+			Handler:   (*Server).handleListShares,
+			RiskLevel: RiskLevelLow,
 		},
 	}
 }

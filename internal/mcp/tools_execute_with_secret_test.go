@@ -1027,8 +1027,8 @@ func TestHandleExecuteWithSecret_ApprovalPromptNoTTY(t *testing.T) {
 	if err == nil {
 		t.Fatal("handleExecuteWithSecret() expected error for no TTY, got nil")
 	}
-	if !strings.Contains(err.Error(), "approval failed") {
-		t.Fatalf("error = %v, want 'approval failed'", err)
+	if !strings.Contains(err.Error(), "no TTY available") {
+		t.Fatalf("error = %v, want 'no TTY available'", err)
 	}
 }
 

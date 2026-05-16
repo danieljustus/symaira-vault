@@ -707,3 +707,486 @@ type timeoutError struct{}
 func (e *timeoutError) Error() string   { return "timeout" }
 func (e *timeoutError) Timeout() bool   { return true }
 func (e *timeoutError) Temporary() bool { return true }
+
+// --- New tests for approval UX hardening ---
+
+func TestRiskLevel_String(t *testing.T) {
+	tests := []struct {
+		level RiskLevel
+		want  string
+	}{
+		{RiskLevelLow, "LOW"},
+		{RiskLevelMedium, "MEDIUM"},
+		{RiskLevelHigh, "HIGH"},
+		{RiskLevelCritical, "CRITICAL"},
+		{RiskLevel(99), "UNKNOWN"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			if got := tt.level.String(); got != tt.want {
+				t.Errorf("RiskLevel(%d).String() = %q, want %q", int(tt.level), got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRiskLevel_Indicator(t *testing.T) {
+	tests := []struct {
+		level RiskLevel
+		want  string
+	}{
+		{RiskLevelLow, "🟢"},
+		{RiskLevelMedium, "🟡"},
+		{RiskLevelHigh, "🟠"},
+		{RiskLevelCritical, "🔴"},
+		{RiskLevel(99), "⚪"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.level.String(), func(t *testing.T) {
+			if got := tt.level.Indicator(); got != tt.want {
+				t.Errorf("RiskLevel(%d).Indicator() = %q, want %q", int(tt.level), got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRiskLevel_CanRemember(t *testing.T) {
+	tests := []struct {
+		level RiskLevel
+		want  bool
+	}{
+		{RiskLevelLow, true},
+		{RiskLevelMedium, true},
+		{RiskLevelHigh, true},
+		{RiskLevelCritical, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.level.String(), func(t *testing.T) {
+			if got := tt.level.CanRemember(); got != tt.want {
+				t.Errorf("RiskLevel(%d).CanRemember() = %v, want %v", int(tt.level), got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseRememberResponse(t *testing.T) {
+	tests := []struct {
+		name     string
+		response string
+		expected bool
+	}{
+		{"lowercase r", "r", true},
+		{"uppercase R", "R", true},
+		{"lowercase remember", "remember", true},
+		{"uppercase REMEMBER", "REMEMBER", true},
+		{"mixed case Remember", "Remember", true},
+		{"y is not remember", "y", false},
+		{"yes is not remember", "yes", false},
+		{"no is not remember", "no", false},
+		{"empty", "", false},
+		{"r with whitespace", "  r  ", true},
+		{"typo remmeber", "remmeber", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseRememberResponse(tt.response)
+			if result != tt.expected {
+				t.Errorf("parseRememberResponse(%q) = %v, want %v", tt.response, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestBuildPrompt_ContextDisplay(t *testing.T) {
+	req := ApprovalRequest{
+		Operation:       "set_entry_field",
+		Details:         "set_entry_field on test/entry field token",
+		Timeout:         30 * time.Second,
+		AgentName:       "test-agent",
+		WorkingDir:      "/home/user/project",
+		GitBranch:       "main",
+		ProjectType:     "MyApp (Go)",
+		RiskLevel:       RiskLevelHigh,
+		SecretsAccessed: 3,
+		CanRemember:     true,
+	}
+
+	result := buildPrompt(req)
+
+	checks := []string{
+		"test-agent",
+		"/home/user/project",
+		"main",
+		"MyApp (Go)",
+		"3 accessed this session",
+		"set_entry_field",
+		"test/entry",
+		"remember for session",
+		"🟠",
+	}
+	for _, c := range checks {
+		if !strings.Contains(result, c) {
+			t.Errorf("buildPrompt() missing expected content %q in:\n%s", c, result)
+		}
+	}
+}
+
+func TestBuildPrompt_CriticalNoRemember(t *testing.T) {
+	req := ApprovalRequest{
+		Operation:   "delete_entry",
+		Details:     "delete_entry on secret/entry",
+		Timeout:     30 * time.Second,
+		AgentName:   "test-agent",
+		RiskLevel:   RiskLevelCritical,
+		CanRemember: false,
+	}
+
+	result := buildPrompt(req)
+
+	if strings.Contains(result, "remember for session") {
+		t.Errorf("buildPrompt() should not offer 'remember' for critical risk:\n%s", result)
+	}
+
+	if !strings.Contains(result, "(y/n)") {
+		t.Errorf("buildPrompt() should show '(y/n)' for critical risk:\n%s", result)
+	}
+
+	if !strings.Contains(result, "🔴") {
+		t.Errorf("buildPrompt() should show CRITICAL risk indicator:\n%s", result)
+	}
+}
+
+func TestBuildPrompt_SecretsAccessedZero(t *testing.T) {
+	req := ApprovalRequest{
+		Operation:       "get_entry_value",
+		Timeout:         30 * time.Second,
+		RiskLevel:       RiskLevelHigh,
+		SecretsAccessed: 0,
+		CanRemember:     true,
+	}
+
+	result := buildPrompt(req)
+	if !strings.Contains(result, "0 accessed this session") {
+		t.Errorf("buildPrompt() should show secrets count zero:\n%s", result)
+	}
+}
+
+func TestBuildPrompt_BoxSizing(t *testing.T) {
+	req := ApprovalRequest{
+		Operation: "test",
+		RiskLevel: RiskLevelLow,
+	}
+
+	result := buildPrompt(req)
+
+	if !strings.HasPrefix(result, "\n╔") {
+		t.Errorf("buildPrompt() should start with newline and top-left corner")
+	}
+
+	if !strings.HasSuffix(strings.TrimSpace(result), "(y/n):") {
+		t.Errorf("buildPrompt() should end with prompt suffix")
+	}
+}
+
+func TestCenterText(t *testing.T) {
+	tests := []struct {
+		text  string
+		width int
+		want  string
+	}{
+		{"hello", 11, "   hello   "},
+		{"hi", 4, " hi "},
+		{"abc", 5, " abc "},
+		{"", 5, "     "},
+		{"x", 1, "x"},
+	}
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("%s_w%d", tt.text, tt.width), func(t *testing.T) {
+			got := centerText(tt.text, tt.width)
+			if len(got) != tt.width {
+				t.Errorf("centerText(%q, %d) returned len %d, want %d", tt.text, tt.width, len(got), tt.width)
+			}
+			if got != tt.want {
+				t.Errorf("centerText(%q, %d) = %q, want %q", tt.text, tt.width, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRequestApproval_Remembered(t *testing.T) {
+	original := openTTYDevice
+	defer func() { openTTYDevice = original }()
+
+	openTTYDevice = func() (ttyDevice, error) {
+		return &mockTTYDevice{
+			readString: func() (string, error) { return "r", nil },
+			output:     newMockOutputFile(t),
+			raw:        func() (func(), error) { return func() {}, nil },
+		}, nil
+	}
+
+	req := ApprovalRequest{
+		Operation:   "get_entry_value",
+		Details:     "test entry",
+		Timeout:     1 * time.Second,
+		CanRemember: true,
+	}
+	result := RequestApproval(req)
+	if !result.Approved {
+		t.Error("RequestApproval() approved = false, want true for 'r'")
+	}
+	if !result.Remembered {
+		t.Error("RequestApproval() remembered = false, want true for 'r'")
+	}
+	if result.Error != nil {
+		t.Errorf("RequestApproval() error = %v, want nil", result.Error)
+	}
+}
+
+func TestRequestApproval_RememberIgnoredWhenNotAllowed(t *testing.T) {
+	original := openTTYDevice
+	defer func() { openTTYDevice = original }()
+
+	openTTYDevice = func() (ttyDevice, error) {
+		return &mockTTYDevice{
+			readString: func() (string, error) { return "r", nil },
+			output:     newMockOutputFile(t),
+			raw:        func() (func(), error) { return func() {}, nil },
+		}, nil
+	}
+
+	req := ApprovalRequest{
+		Operation:   "delete_entry",
+		Details:     "test entry",
+		Timeout:     1 * time.Second,
+		CanRemember: false, // critical tool
+	}
+	result := RequestApproval(req)
+	if !result.Approved {
+		t.Error("RequestApproval() approved = false, want true")
+	}
+	if result.Remembered {
+		t.Error("RequestApproval() remembered = true, want false when CanRemember=false")
+	}
+}
+
+func TestApprovalCache(t *testing.T) {
+	cache := newApprovalCache()
+
+	key1 := approvalCacheKey("agent1", "tool_a", "path/x")
+	key2 := approvalCacheKey("agent1", "tool_b", "path/x")
+	key3 := approvalCacheKey("agent2", "tool_a", "path/x")
+
+	if cache.isRemembered(key1) {
+		t.Error("cache should start empty for key1")
+	}
+
+	cache.setRemembered(key1)
+	if !cache.isRemembered(key1) {
+		t.Error("cache should return true after setRemembered for key1")
+	}
+
+	if cache.isRemembered(key2) {
+		t.Error("cache should not remember key2")
+	}
+	if cache.isRemembered(key3) {
+		t.Error("cache should not remember key3 (different agent)")
+	}
+
+	cache.setRemembered(key2)
+	if !cache.isRemembered(key2) {
+		t.Error("cache should return true after setRemembered for key2")
+	}
+}
+
+func TestApprovalCacheKey(t *testing.T) {
+	key := approvalCacheKey("myagent", "get_entry_value", "github/token")
+	expected := "myagent:get_entry_value:github/token"
+	if key != expected {
+		t.Errorf("approvalCacheKey() = %q, want %q", key, expected)
+	}
+}
+
+func TestToolRiskLevel(t *testing.T) {
+	tests := []struct {
+		toolName string
+		want     RiskLevel
+	}{
+		{"list_entries", RiskLevelLow},
+		{"find_entries", RiskLevelLow},
+		{"get_entry", RiskLevelMedium},
+		{"get_entry_metadata", RiskLevelMedium},
+		{"get_entry_value", RiskLevelHigh},
+		{"generate_totp", RiskLevelHigh},
+		{"copy_to_clipboard", RiskLevelHigh},
+		{"execute_with_secret", RiskLevelHigh},
+		{"set_entry_field", RiskLevelCritical},
+		{"delete_entry", RiskLevelCritical},
+		{"execute_api_request", RiskLevelCritical},
+		{"secure_input", RiskLevelCritical},
+		{"request_credential", RiskLevelCritical},
+		{"unknown_tool", RiskLevelMedium},
+	}
+	for _, tt := range tests {
+		t.Run(tt.toolName, func(t *testing.T) {
+			if got := toolRiskLevel(tt.toolName); got != tt.want {
+				t.Errorf("toolRiskLevel(%q) = %v, want %v", tt.toolName, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestToolRiskLevel_CanRemember(t *testing.T) {
+	criticalTools := []string{"set_entry_field", "delete_entry", "execute_api_request", "secure_input", "request_credential"}
+	for _, name := range criticalTools {
+		t.Run(name, func(t *testing.T) {
+			rl := toolRiskLevel(name)
+			if rl.CanRemember() {
+				t.Errorf("toolRiskLevel(%q) = %v, CanRemember() = true, want false", name, rl)
+			}
+		})
+	}
+
+	nonCriticalTools := []string{"list_entries", "get_entry", "get_entry_value", "copy_to_clipboard"}
+	for _, name := range nonCriticalTools {
+		t.Run(name, func(t *testing.T) {
+			rl := toolRiskLevel(name)
+			if !rl.CanRemember() {
+				t.Errorf("toolRiskLevel(%q) = %v, CanRemember() = false, want true", name, rl)
+			}
+		})
+	}
+}
+
+func TestRequestApproval_RememberResponseParsing(t *testing.T) {
+	if !parseApprovalResponse("r") {
+		t.Error("parseApprovalResponse('r') should return true")
+	}
+	if !parseApprovalResponse("remember") {
+		t.Error("parseApprovalResponse('remember') should return true")
+	}
+	if !parseApprovalResponse("R") {
+		t.Error("parseApprovalResponse('R') should return true")
+	}
+	if !parseApprovalResponse("REMEMBER") {
+		t.Error("parseApprovalResponse('REMEMBER') should return true")
+	}
+}
+
+func TestBuildPrompt_LowRiskShowsRemember(t *testing.T) {
+	req := ApprovalRequest{
+		Operation:   "list_entries",
+		Timeout:     30 * time.Second,
+		RiskLevel:   RiskLevelLow,
+		CanRemember: true,
+	}
+	result := buildPrompt(req)
+	if !strings.Contains(result, "remember for session") {
+		t.Errorf("buildPrompt() should offer 'remember for session' for low risk:\n%s", result)
+	}
+	if !strings.Contains(result, "(y/n/r") {
+		t.Errorf("buildPrompt() should show (y/n/r) for low risk:\n%s", result)
+	}
+}
+
+func TestBuildPrompt_MediumRiskShowsRemember(t *testing.T) {
+	req := ApprovalRequest{
+		Operation:   "get_entry",
+		Timeout:     30 * time.Second,
+		RiskLevel:   RiskLevelMedium,
+		CanRemember: true,
+	}
+	result := buildPrompt(req)
+	if !strings.Contains(result, "remember for session") {
+		t.Errorf("buildPrompt() should offer 'remember for session' for medium risk:\n%s", result)
+	}
+}
+
+func TestBuildPrompt_HighRiskShowsRemember(t *testing.T) {
+	req := ApprovalRequest{
+		Operation:   "get_entry_value",
+		Timeout:     30 * time.Second,
+		RiskLevel:   RiskLevelHigh,
+		CanRemember: true,
+	}
+	result := buildPrompt(req)
+	if !strings.Contains(result, "remember for session") {
+		t.Errorf("buildPrompt() should offer 'remember for session' for high risk:\n%s", result)
+	}
+}
+
+func TestBuildPrompt_EmptyAgentName(t *testing.T) {
+	req := ApprovalRequest{
+		Operation: "test",
+		RiskLevel: RiskLevelLow,
+	}
+	result := buildPrompt(req)
+	if result == "" {
+		t.Fatal("buildPrompt() returned empty string")
+	}
+	if !strings.Contains(result, "LOW") {
+		t.Errorf("buildPrompt() should show risk level")
+	}
+	if !strings.Contains(result, "0 accessed") {
+		t.Errorf("buildPrompt() should show secrets count")
+	}
+}
+
+func TestBuildPrompt_AgentNameDisplay(t *testing.T) {
+	req := ApprovalRequest{
+		Operation: "test",
+		AgentName: "my-custom-agent",
+		RiskLevel: RiskLevelLow,
+	}
+	result := buildPrompt(req)
+	if !strings.Contains(result, "my-custom-agent") {
+		t.Errorf("buildPrompt() should display agent name 'my-custom-agent', got:\n%s", result)
+	}
+}
+
+func TestBuildPrompt_ProjectTypeDisplay(t *testing.T) {
+	req := ApprovalRequest{
+		Operation:   "test",
+		RiskLevel:   RiskLevelLow,
+		ProjectType: "myapp (Go)",
+	}
+	result := buildPrompt(req)
+	if !strings.Contains(result, "myapp (Go)") {
+		t.Errorf("buildPrompt() should display project type:\n%s", result)
+	}
+}
+
+func TestSanitizeForSummary(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"plain text", "hello/world", "hello/world"},
+		{"with ANSI", "\x1b[31mred\x1b[0m", "red"},
+		{"with control chars", "hello\x00world", "helloworld"},
+		{"empty", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := sanitizeForSummary(tt.input)
+			if got != tt.want {
+				t.Errorf("sanitizeForSummary(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRenderSummary(t *testing.T) {
+	result := RenderSummary("get_entry_value", "github/token", "password")
+	expected := "get_entry_value on github/token field password"
+	if result != expected {
+		t.Errorf("RenderSummary() = %q, want %q", result, expected)
+	}
+
+	resultNoField := RenderSummary("list_entries", "/", "")
+	expectedNoField := "list_entries on /"
+	if resultNoField != expectedNoField {
+		t.Errorf("RenderSummary() = %q, want %q", resultNoField, expectedNoField)
+	}
+}

@@ -115,7 +115,7 @@ func TestHandleRequestCredential_ApprovalDeny(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when approvalMode=deny")
 	}
-	if !strings.Contains(err.Error(), "credential request") {
-		t.Errorf("expected credential-request error message, got %v", err)
+	if !strings.Contains(err.Error(), "denied") {
+		t.Errorf("expected denial error message, got %v", err)
 	}
 }

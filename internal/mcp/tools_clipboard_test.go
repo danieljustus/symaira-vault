@@ -143,8 +143,8 @@ func TestHandleCopyToClipboard(t *testing.T) {
 		if err == nil {
 			t.Fatal("handleCopyToClipboard() expected error for approval required, got nil")
 		}
-		if !strings.Contains(err.Error(), "approval required") {
-			t.Fatalf("handleCopyToClipboard() error = %v, want 'approval required'", err)
+		if !strings.Contains(err.Error(), "denied") {
+			t.Fatalf("handleCopyToClipboard() error = %v, want 'denied'", err)
 		}
 	})
 

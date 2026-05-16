@@ -3,6 +3,9 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 
 	"github.com/danieljustus/OpenPass/internal/vault/taint"
 )
@@ -49,15 +52,38 @@ func (s *Server) requireApproval(ctx context.Context, intent Intent) error {
 			return fmt.Errorf("%s requires approval but no TTY available", intent.Action)
 		}
 
+		riskLevel := toolRiskLevel(intent.Action)
+
+		if riskLevel.CanRemember() && s.approvalCache != nil {
+			cacheKey := approvalCacheKey(s.agent.Name, intent.Action, intent.EntryPath)
+			if s.approvalCache.isRemembered(cacheKey) {
+				s.logAudit(ctx, "approval."+intent.Action+".remembered", intent.EntryPath, true)
+				return nil
+			}
+		}
+
 		s.logAudit(ctx, "approval."+intent.Action+".requested", intent.EntryPath, true)
+
 		timeout := s.agent.ApprovalTimeout
 		if timeout <= 0 {
 			timeout = defaultTimeout
 		}
+
+		workingDir := getWorkingDir()
+		gitBranch := getGitBranch(workingDir)
+		projectType := detectProjectContext(workingDir)
+
 		result := RequestApproval(ApprovalRequest{
-			Operation: intent.Action,
-			Details:   intent.Summary,
-			Timeout:   timeout,
+			Operation:       intent.Action,
+			Details:         intent.Summary,
+			Timeout:         timeout,
+			AgentName:       s.agent.Name,
+			WorkingDir:      workingDir,
+			GitBranch:       gitBranch,
+			ProjectType:     projectType,
+			RiskLevel:       riskLevel,
+			SecretsAccessed: int(s.approvalKeyCounter.Load()),
+			CanRemember:     riskLevel.CanRemember(),
 		})
 		if result.Error != nil {
 			return fmt.Errorf("%s approval failed: %w", intent.Action, result.Error)
@@ -66,11 +92,106 @@ func (s *Server) requireApproval(ctx context.Context, intent Intent) error {
 			s.logAudit(ctx, "approval."+intent.Action+".denied", intent.EntryPath, false)
 			return fmt.Errorf("%s denied: user did not approve", intent.Action)
 		}
+
+		if result.Remembered && riskLevel.CanRemember() && s.approvalCache != nil {
+			cacheKey := approvalCacheKey(s.agent.Name, intent.Action, intent.EntryPath)
+			s.approvalCache.setRemembered(cacheKey)
+			s.logAudit(ctx, "approval."+intent.Action+".remembered", intent.EntryPath, true)
+		}
+
+		s.approvalKeyCounter.Add(1)
+
 		s.logAudit(ctx, "approval."+intent.Action+".granted", intent.EntryPath, true)
 		return nil
 	default:
 		return nil
 	}
+}
+
+// toolRiskLevel returns the risk classification for a tool by name.
+func toolRiskLevel(name string) RiskLevel {
+	if def, ok := findToolDefinition(name); ok {
+		return def.RiskLevel
+	}
+	return RiskLevelMedium
+}
+
+// getWorkingDir returns the current working directory.
+func getWorkingDir() string {
+	dir, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	return dir
+}
+
+// getGitBranch returns the current git branch name.
+func getGitBranch(workingDir string) string {
+	if workingDir == "" {
+		return ""
+	}
+	cmd := exec.Command("git", "-C", workingDir, "rev-parse", "--abbrev-ref", "HEAD")
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	branch := string(out)
+	if len(branch) > 0 {
+		branch = branch[:len(branch)-1] // trim newline
+	}
+	branch = trimNewline(branch)
+	if branch == "HEAD" {
+		return ""
+	}
+	return branch
+}
+
+func trimNewline(s string) string {
+	if len(s) > 0 && s[len(s)-1] == '\n' {
+		return s[:len(s)-1]
+	}
+	return s
+}
+
+// detectProjectContext attempts to detect the project type from the working
+// directory by looking for common project marker files.
+func detectProjectContext(workingDir string) string {
+	if workingDir == "" {
+		return ""
+	}
+
+	markers := []struct {
+		file   string
+		label  string
+	}{
+		{"go.mod", "Go"},
+		{"package.json", "Node.js"},
+		{"Cargo.toml", "Rust"},
+		{"pyproject.toml", "Python"},
+		{"setup.py", "Python"},
+		{"pom.xml", "Java (Maven)"},
+		{"build.gradle", "Java (Gradle)"},
+		{"CMakeLists.txt", "C/C++ (CMake)"},
+		{"Makefile", "Make"},
+	}
+
+	dir := workingDir
+	for {
+		for _, m := range markers {
+			path := filepath.Join(dir, m.file)
+			if _, err := os.Stat(path); err == nil {
+				return filepath.Base(dir) + " (" + m.label + ")"
+			}
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+
+	return ""
 }
 
 // RenderSummary produces a safe terminal summary for an approval prompt.
@@ -90,7 +211,6 @@ func sanitizeForSummary(s string) string {
 	if s == "" {
 		return s
 	}
-	// Use the terminal render's ANSI stripping logic
 	u := taint.Wrap(s, taint.Provenance{Source: "summary"})
 	return stripTerminalControl(u.UnsafeRawForStorage())
 }

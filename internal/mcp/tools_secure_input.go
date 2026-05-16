@@ -56,13 +56,17 @@ func (s *Server) preflightSecureInput(
 	}
 
 	if s.requiresApproval() {
-		s.logAudit(ctx, "approval_denied", path, false)
-		metrics.RecordApproval(s.agent.Name, "denied")
-		verb := "secure input"
+		verb := "secure_input"
 		if auditTag == "request_credential" {
-			verb = "credential request"
+			verb = "request_credential"
 		}
-		return "", "", "", nil, fmt.Errorf("%s for %q denied: approval required but cannot be granted", verb, path)
+		if err := s.requireApproval(ctx, Intent{
+			Action:    verb,
+			EntryPath: path,
+			Summary:   fmt.Sprintf("%s for %s", verb, path),
+		}); err != nil {
+			return "", "", "", nil, err
+		}
 	}
 
 	return path, field, description, nil, nil

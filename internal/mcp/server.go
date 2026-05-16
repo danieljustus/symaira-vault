@@ -8,12 +8,41 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"sync"
+	"sync/atomic"
 
 	"github.com/danieljustus/OpenPass/internal/audit"
 	"github.com/danieljustus/OpenPass/internal/config"
 	"github.com/danieljustus/OpenPass/internal/policy"
 	"github.com/danieljustus/OpenPass/internal/vault"
 )
+
+// approvalCache provides a session-level cache for remembered approvals.
+type approvalCache struct {
+	mu    sync.Mutex
+	cache map[string]bool
+}
+
+func newApprovalCache() *approvalCache {
+	return &approvalCache{cache: make(map[string]bool)}
+}
+
+func (c *approvalCache) isRemembered(key string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.cache[key]
+}
+
+func (c *approvalCache) setRemembered(key string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cache[key] = true
+}
+
+// cacheKey builds a unique key for the approval cache.
+func approvalCacheKey(agentID, toolName, entryPath string) string {
+	return agentID + ":" + toolName + ":" + entryPath
+}
 
 const (
 	defaultServerName    = "OpenPass MCP"
@@ -29,6 +58,9 @@ type Server struct {
 	transport    string
 	policyEngine *policy.Engine
 	shareStore   *ShareStore
+
+	approvalCache      *approvalCache
+	approvalKeyCounter atomic.Int64
 }
 
 // New creates a new MCP server instance with the specified vault and agent configuration.
@@ -83,11 +115,12 @@ func New(v *vault.Vault, agentName string, transport string) (*Server, error) {
 	}
 
 	return &Server{
-		vault:        v,
-		agent:        &agent,
-		auditLog:     auditLog,
-		transport:    transport,
-		policyEngine: policyEngine,
+		vault:         v,
+		agent:         &agent,
+		auditLog:      auditLog,
+		transport:     transport,
+		policyEngine:  policyEngine,
+		approvalCache: newApprovalCache(),
 	}, nil
 }
 
