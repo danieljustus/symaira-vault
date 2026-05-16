@@ -61,7 +61,6 @@ func GetPreset(tier string) *AgentProfile {
 	return &p
 }
 
-
 // ApplyTierPreset applies the preset values for the given tier to target.
 // Only capability/approval fields are overwritten; Name and AllowedPaths are preserved.
 // Returns true if the tier was found and applied, false otherwise.
