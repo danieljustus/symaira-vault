@@ -164,11 +164,11 @@ func entryToScopedToken(e TokenRegistryEntry) *ScopedToken {
 // TokenRegistry provides thread-safe management of scoped MCP tokens backed
 // by an on-disk JSON file.
 type TokenRegistry struct {
-	path         string
-	mu           sync.RWMutex
-	entries      map[string]*ScopedToken // keyed by token hash
-	stopFn       func()                  // stops the background cleanup goroutine
-	watchStopFn  func()                  // stops the file watcher goroutine
+	path        string
+	mu          sync.RWMutex
+	entries     map[string]*ScopedToken // keyed by token hash
+	stopFn      func()                  // stops the background cleanup goroutine
+	watchStopFn func()                  // stops the file watcher goroutine
 }
 
 // NewTokenRegistry creates a TokenRegistry that loads/saves from the given
