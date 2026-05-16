@@ -211,3 +211,75 @@ func GetRecipientFromIdentity(identity *age.X25519Identity) (*age.X25519Recipien
 	}
 	return identity.Recipient(), nil
 }
+
+// SaveIdentityWithArgon2id encrypts and saves an identity to a file using
+// Argon2id key derivation. The file is written with 0o600 permissions.
+func SaveIdentityWithArgon2id(id *age.X25519Identity, path string, passphrase []byte, params Argon2idParams) error {
+	if id == nil {
+		return ErrNilIdentity
+	}
+	if len(passphrase) == 0 {
+		return errors.New("passphrase is empty")
+	}
+	if err := validateIdentityPath(path); err != nil {
+		return err
+	}
+	recipient := NewArgon2idRecipient(unsafe.String(unsafe.SliceData(passphrase), len(passphrase)), params)
+	Wipe(passphrase)
+	var buf bytes.Buffer
+	w, err := age.Encrypt(&buf, recipient)
+	if err != nil {
+		return fmt.Errorf("create encryptor: %w", err)
+	}
+	if _, err := w.Write([]byte(id.String())); err != nil {
+		return fmt.Errorf("write identity: %w", err)
+	}
+	if err := w.Close(); err != nil {
+		return fmt.Errorf("close encryptor: %w", err)
+	}
+	if err := fileutil.AtomicWriteFile(path, buf.Bytes(), 0o600); err != nil {
+		return fmt.Errorf("write file: %w", err)
+	}
+	return nil
+}
+
+// LoadIdentityWithArgon2id loads and decrypts an identity using Argon2id KDF.
+func LoadIdentityWithArgon2id(path string, passphrase []byte) (*age.X25519Identity, error) {
+	if len(passphrase) == 0 {
+		return nil, errors.New("passphrase is empty")
+	}
+	if err := validateIdentityPath(path); err != nil {
+		return nil, err
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read file: %w", err)
+	}
+	identity := NewArgon2idIdentity(unsafe.String(unsafe.SliceData(passphrase), len(passphrase)))
+	Wipe(passphrase)
+	r, err := age.Decrypt(bytes.NewReader(raw), identity)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrDecryptionFailed, err)
+	}
+	plaintext, err := io.ReadAll(r)
+	if err != nil {
+		return nil, fmt.Errorf("read decrypted data: %w", err)
+	}
+	defer Wipe(plaintext)
+	parsed, err := age.ParseX25519Identity(strings.TrimSpace(string(plaintext)))
+	if err != nil {
+		return nil, fmt.Errorf("parse identity: %w", err)
+	}
+	return parsed, nil
+}
+
+// DetectEncryptedIdentityFormat checks the age stanza type. Returns "scrypt", "argon2id", or "".
+func DetectEncryptedIdentityFormat(raw []byte) string {
+	if bytes.Contains(raw, []byte("-> argon2id")) {
+		return "argon2id"
+	}
+	if bytes.Contains(raw, []byte("-> scrypt")) {
+		return "scrypt"
+	}
+	return ""
+}

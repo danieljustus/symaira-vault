@@ -39,6 +39,18 @@ type VaultConfig struct {
 	// FormatVersion indicates the vault format version.
 	// 1 = scrypt KDF (pre-argon2id), 2+ = argon2id.
 	FormatVersion int `yaml:"format_version,omitempty"`
+	// Argon2idTime sets the Argon2id time (iterations) parameter.
+	// Higher values are more secure but slower. Default: 3.
+	// Set to 0 to use the default.
+	Argon2idTime int `yaml:"argon2id_time,omitempty"`
+	// Argon2idMemory sets the Argon2id memory parameter in KiB.
+	// Higher values are more secure but use more RAM. Default: 65536 (64 MB).
+	// Set to 0 to use the default.
+	Argon2idMemory int `yaml:"argon2id_memory,omitempty"`
+	// Argon2idThreads sets the Argon2id parallelism parameter.
+	// Increases CPU usage. Default: 4.
+	// Set to 0 to use the default.
+	Argon2idThreads int `yaml:"argon2id_threads,omitempty"`
 }
 
 // GitConfig holds git-related configuration for automatic commits and pushes.
@@ -197,6 +209,9 @@ type fileVaultConfig struct {
 	ScryptWorkFactor  *int       `yaml:"scrypt_work_factor,omitempty"`
 	LastRotated       *time.Time `yaml:"last_rotated,omitempty"`
 	FormatVersion     *int       `yaml:"format_version,omitempty"`
+	Argon2idTime      *int       `yaml:"argon2id_time,omitempty"`
+	Argon2idMemory    *int       `yaml:"argon2id_memory,omitempty"`
+	Argon2idThreads   *int       `yaml:"argon2id_threads,omitempty"`
 }
 
 // fileGitConfig is the file-based git configuration with pointer fields
@@ -298,6 +313,15 @@ func MergeFileVaultConfig(fileCfg *fileVaultConfig, defaults VaultConfig) VaultC
 	}
 	if fileCfg.FormatVersion != nil {
 		result.FormatVersion = *fileCfg.FormatVersion
+	}
+	if fileCfg.Argon2idTime != nil {
+		result.Argon2idTime = *fileCfg.Argon2idTime
+	}
+	if fileCfg.Argon2idMemory != nil {
+		result.Argon2idMemory = *fileCfg.Argon2idMemory
+	}
+	if fileCfg.Argon2idThreads != nil {
+		result.Argon2idThreads = *fileCfg.Argon2idThreads
 	}
 	return result
 }
