@@ -22,7 +22,7 @@ func toolActionType(toolName string) string {
 		return "set"
 	case "delete_entry", "openpass_delete":
 		return "delete"
-	case "run_command", "execute_with_secret":
+	case "run_command", "execute_with_secret", "execute_api_request":
 		return "run"
 	case "list_entries":
 		return "list"

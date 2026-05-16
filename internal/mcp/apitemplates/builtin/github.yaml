@@ -1,0 +1,12 @@
+base_url: https://api.github.com
+auth_type: bearer
+entry_ref: op:///github
+allowed_endpoints:
+  - /*
+allowed_methods:
+  - GET
+  - POST
+  - PUT
+  - PATCH
+  - DELETE
+default_headers: {}
