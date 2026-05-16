@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/danieljustus/OpenPass/internal/masking"
 	"github.com/danieljustus/OpenPass/internal/mcp/apitemplates"
 	"github.com/danieljustus/OpenPass/internal/metrics"
 	"github.com/danieljustus/OpenPass/internal/vaultsvc"
@@ -181,14 +182,27 @@ func (s *Server) handleExecuteAPIRequest(ctx context.Context, req CallToolReques
 		return NewToolResultError(fmt.Sprintf("cannot read response: %v", readErr)), nil
 	}
 
-	// Sanitize response body to mask any credential values
+	// Sanitize response body: pattern-based detection + known-value masking
+	respText := string(respBody)
+
+	// Step 1: Pattern-based sanitization (detects ghp_xxx, sk-xxx, AKIAxxx, etc.)
+	sanitizer := masking.NewSanitizer()
+	patternSanitized := sanitizer.Sanitize(respText, masking.MaskOptions{CustomMask: "***"})
+
+	// Step 2: Known-value sanitization (vault entry data as known secrets)
 	resolvedSecrets := make(map[string]string)
 	for k, v := range entry.Data {
 		if vStr, ok := v.(string); ok {
 			resolvedSecrets[k] = vStr
 		}
 	}
-	sanitizedBody := s.sanitizeKnownSecretValues(string(respBody), resolvedSecrets)
+	sanitizedBody := s.sanitizeKnownSecretValues(patternSanitized, resolvedSecrets)
+
+	// Audit log if any secrets were stripped
+	if sanitizedBody != respText {
+		s.logAudit(ctx, "execute_api_request", fmt.Sprintf("template=%s, endpoint=%s, method=%s, status=%d, sanitized=true",
+			tmpl.Name, normalizedEndpoint, method, resp.StatusCode), true)
+	}
 
 	// Collect response headers (safe subset)
 	safeHeaders := make(map[string]string)

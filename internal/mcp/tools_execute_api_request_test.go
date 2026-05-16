@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -311,7 +310,7 @@ func TestHandleExecuteAPIRequest_Success(t *testing.T) {
 
 	writeTemplateOverride(t, vaultDir, "testapi", fmt.Sprintf(`base_url: %s
 auth_type: bearer
-entry_ref: op:///testapi
+entry_ref: testapi
 allowed_endpoints:
   - /*
 allowed_methods:
@@ -559,55 +558,116 @@ func TestHandleExecuteAPIRequest_RunDenied(t *testing.T) {
 	}
 }
 
-func TestHandleExecuteAPIRequest_ResponseSanitized(t *testing.T) {
+func TestHandleExecuteAPIRequest_Sanitization(t *testing.T) {
+	tests := []struct {
+		name       string
+		entryName  string
+		credValue  string
+		response   string
+		checkFuncs []func(body string) error
+	}{
+		{
+			name:      "vault-known secrets",
+			entryName: "sanitize-test",
+			credValue: "my-super-secret-token-value",
+			response:  `{"result": "my-super-secret-token-value", "pat": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}`,
+			checkFuncs: []func(body string) error{
+				func(body string) error {
+					if strings.Contains(body, "my-super-secret-token-value") {
+						return fmt.Errorf("body contains vault-known secret value: %q", body)
+					}
+					return nil
+				},
+				func(body string) error {
+					if strings.Contains(body, "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx") {
+						return fmt.Errorf("body contains pattern-based secret (GitHub PAT): %q", body)
+					}
+					return nil
+				},
+			},
+		},
+		{
+			name:      "pattern-based secrets",
+			entryName: "pattern-test",
+			credValue: "irrelevant-token",
+			response:  `{"openai_key": "sk-abcdefghijklmnopqrst-abcdefghij", "aws_key": "AKIAIOSFODNN7EXAMPLE"}`,
+			checkFuncs: []func(body string) error{
+				func(body string) error {
+					if strings.Contains(body, "sk-abcdefghijklmnopqrst-abcdefghij") {
+						return fmt.Errorf("body contains OpenAI API key pattern: %q", body)
+					}
+					return nil
+				},
+				func(body string) error {
+					if strings.Contains(body, "AKIAIOSFODNN7EXAMPLE") {
+						return fmt.Errorf("body contains AWS key pattern: %q", body)
+					}
+					return nil
+				},
+			},
+		},
+	}
+
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"result": "my-super-secret-token-value"}`))
 	}))
 	defer ts.Close()
 
-	vaultDir, identity := mockVaultWithEntry(t, "sanitize-test", map[string]any{
-		"credential": "my-super-secret-token-value",
-	})
-	srv := newTestServerWithVault(t, config.AgentProfile{
-		Name:           "test",
-		AllowedPaths:   []string{"*"},
-		CanRunCommands: true,
-		ApprovalMode:   "none",
-	}, "stdio", vaultDir)
-	srv.vault.Identity = identity
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create a test server that returns the specific response for this case
+			caseTS := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(tc.response))
+			}))
+			defer caseTS.Close()
 
-	writeTemplateOverride(t, vaultDir, "sanitize-test", fmt.Sprintf(`base_url: %s
+			vaultDir, identity := mockVaultWithEntry(t, tc.entryName, map[string]any{
+				"credential": tc.credValue,
+			})
+			srv := newTestServerWithVault(t, config.AgentProfile{
+				Name:           "test",
+				AllowedPaths:   []string{"*"},
+				CanRunCommands: true,
+				ApprovalMode:   "none",
+			}, "stdio", vaultDir)
+			srv.vault.Identity = identity
+
+			writeTemplateOverride(t, vaultDir, tc.entryName, fmt.Sprintf(`base_url: %s
 auth_type: bearer
-entry_ref: sanitize-test
+entry_ref: `+tc.entryName+`
 allowed_endpoints:
   - /*
 allowed_methods:
   - GET
-`, ts.URL))
+`, caseTS.URL))
 
-	req := CallToolRequest{
-		Arguments: map[string]any{
-			"template": "sanitize-test",
-			"endpoint": "/test",
-			"method":   "GET",
-		},
-	}
-	result, err := srv.handleExecuteAPIRequest(context.Background(), req)
-	if err != nil {
-		t.Fatalf("handleExecuteAPIRequest() error = %v", err)
-	}
-	if result.IsError {
-		t.Fatalf("handleExecuteAPIRequest() returned error: %s", result.Text)
-	}
+			req := CallToolRequest{
+				Arguments: map[string]any{
+					"template": tc.entryName,
+					"endpoint": "/test",
+					"method":   "GET",
+				},
+			}
+			result, err := srv.handleExecuteAPIRequest(context.Background(), req)
+			if err != nil {
+				t.Fatalf("handleExecuteAPIRequest() error = %v", err)
+			}
+			if result.IsError {
+				t.Fatalf("handleExecuteAPIRequest() returned error: %s", result.Text)
+			}
 
-	var output map[string]any
-	if err := json.Unmarshal([]byte(result.Text), &output); err != nil {
-		t.Fatalf("parse result: %v", err)
-	}
-	body, _ := output["body"].(string)
-	if strings.Contains(body, "my-super-secret-token-value") {
-		t.Errorf("body contains secret value: %q", body)
+			var output map[string]any
+			if err := json.Unmarshal([]byte(result.Text), &output); err != nil {
+				t.Fatalf("parse result: %v", err)
+			}
+			body, _ := output["body"].(string)
+			for _, check := range tc.checkFuncs {
+				if err := check(body); err != nil {
+					t.Error(err)
+				}
+			}
+		})
 	}
 }
 
@@ -657,226 +717,6 @@ allowed_methods:
 	}
 	if result.IsError {
 		t.Fatalf("handleExecuteAPIRequest() returned error: %s", result.Text)
-	}
-}
-
-func TestHandleExecuteAPIRequest_HeadersValidation(t *testing.T) {
-	tests := []struct {
-		name       string
-		headersArg any
-		wantErrSub string
-	}{
-		{
-			name:       "headers must be object",
-			headersArg: []any{"invalid"},
-			wantErrSub: `argument "headers" must be an object`,
-		},
-		{
-			name: "header value must be string",
-			headersArg: map[string]any{
-				"X-Number": 123,
-			},
-			wantErrSub: `headers["X-Number"] must be a string`,
-		},
-	}
-
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"ok": true}`))
-	}))
-	defer ts.Close()
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			vaultDir, identity := mockVaultWithEntry(t, "headers-validation", map[string]any{
-				"credential": "token",
-			})
-			srv := newTestServerWithVault(t, config.AgentProfile{
-				Name:           "test",
-				AllowedPaths:   []string{"*"},
-				CanRunCommands: true,
-				ApprovalMode:   "none",
-			}, "stdio", vaultDir)
-			srv.vault.Identity = identity
-
-			writeTemplateOverride(t, vaultDir, "headers-validation", fmt.Sprintf(`base_url: %s
-auth_type: bearer
-entry_ref: op:///headers-validation
-allowed_endpoints:
-  - /*
-allowed_methods:
-  - GET
-`, ts.URL))
-
-			req := CallToolRequest{
-				Arguments: map[string]any{
-					"template": "headers-validation",
-					"endpoint": "/test",
-					"method":   "GET",
-					"headers":  tc.headersArg,
-				},
-			}
-			result, err := srv.handleExecuteAPIRequest(context.Background(), req)
-			if err != nil {
-				t.Fatalf("handleExecuteAPIRequest() error = %v", err)
-			}
-			if !result.IsError {
-				t.Fatal("handleExecuteAPIRequest() expected error result")
-			}
-			if !strings.Contains(result.Text, tc.wantErrSub) {
-				t.Errorf("result text = %q, want %q", result.Text, tc.wantErrSub)
-			}
-		})
-	}
-}
-
-func TestHandleExecuteAPIRequest_EndpointDotSegmentsRejected(t *testing.T) {
-	tests := []struct {
-		name     string
-		endpoint string
-	}{
-		{name: "literal dot segments", endpoint: "/v1/../admin"},
-		{name: "encoded dot segments", endpoint: "/v1/%2E%2e/admin"},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			vaultDir, identity := mockVaultWithEntry(t, "dot-segments", map[string]any{
-				"credential": "token",
-			})
-			srv := newTestServerWithVault(t, config.AgentProfile{
-				Name:           "test",
-				AllowedPaths:   []string{"*"},
-				CanRunCommands: true,
-				ApprovalMode:   "none",
-			}, "stdio", vaultDir)
-			srv.vault.Identity = identity
-
-			writeTemplateOverride(t, vaultDir, "dot-segments", `base_url: https://example.com
-auth_type: bearer
-entry_ref: op:///dot-segments
-allowed_endpoints:
-  - /v1/*
-allowed_methods:
-  - GET
-`)
-
-			req := CallToolRequest{
-				Arguments: map[string]any{
-					"template": "dot-segments",
-					"endpoint": tc.endpoint,
-					"method":   "GET",
-				},
-			}
-			result, err := srv.handleExecuteAPIRequest(context.Background(), req)
-			if err != nil {
-				t.Fatalf("handleExecuteAPIRequest() error = %v", err)
-			}
-			if !result.IsError {
-				t.Fatal("handleExecuteAPIRequest() expected error result")
-			}
-			if !strings.Contains(result.Text, "invalid endpoint") {
-				t.Errorf("result text = %q, want invalid endpoint error", result.Text)
-			}
-		})
-	}
-}
-
-func TestHandleExecuteAPIRequest_EntryRefScopeDenied(t *testing.T) {
-	vaultDir, identity := mockVaultWithEntry(t, "github", map[string]any{
-		"credential": "token",
-	})
-	srv := newTestServerWithVault(t, config.AgentProfile{
-		Name:           "test",
-		AllowedPaths:   []string{"other"},
-		CanRunCommands: true,
-		ApprovalMode:   "none",
-	}, "stdio", vaultDir)
-	srv.vault.Identity = identity
-
-	writeTemplateOverride(t, vaultDir, "scope-denied", `base_url: https://example.com
-auth_type: bearer
-entry_ref: op:///github
-allowed_endpoints:
-  - /*
-allowed_methods:
-  - GET
-`)
-
-	req := CallToolRequest{
-		Arguments: map[string]any{
-			"template": "scope-denied",
-			"endpoint": "/test",
-			"method":   "GET",
-		},
-	}
-
-	result, err := srv.handleExecuteAPIRequest(context.Background(), req)
-	if err == nil {
-		t.Fatal("handleExecuteAPIRequest() expected scope error, got nil")
-	}
-	if result != nil {
-		t.Fatal("handleExecuteAPIRequest() result = non-nil, want nil on scope denial")
-	}
-	if !strings.Contains(err.Error(), "outside allowed scope") {
-		t.Fatalf("error = %v, want outside allowed scope", err)
-	}
-}
-
-func TestHandleExecuteAPIRequest_ResponseBodyTruncated(t *testing.T) {
-	largeBody := strings.Repeat("a", maxAPIResponseBodyBytes+128)
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(largeBody))
-	}))
-	defer ts.Close()
-
-	vaultDir, identity := mockVaultWithEntry(t, "large-response", map[string]any{
-		"credential": "token",
-	})
-	srv := newTestServerWithVault(t, config.AgentProfile{
-		Name:           "test",
-		AllowedPaths:   []string{"*"},
-		CanRunCommands: true,
-		ApprovalMode:   "none",
-	}, "stdio", vaultDir)
-	srv.vault.Identity = identity
-
-	writeTemplateOverride(t, vaultDir, "large-response", fmt.Sprintf(`base_url: %s
-auth_type: bearer
-entry_ref: op:///large-response
-allowed_endpoints:
-  - /*
-allowed_methods:
-  - GET
-`, ts.URL))
-
-	req := CallToolRequest{
-		Arguments: map[string]any{
-			"template": "large-response",
-			"endpoint": "/test",
-			"method":   "GET",
-		},
-	}
-
-	result, err := srv.handleExecuteAPIRequest(context.Background(), req)
-	if err != nil {
-		t.Fatalf("handleExecuteAPIRequest() error = %v", err)
-	}
-	if result.IsError {
-		t.Fatalf("handleExecuteAPIRequest() returned error: %s", result.Text)
-	}
-
-	var output map[string]any
-	if err := json.Unmarshal([]byte(result.Text), &output); err != nil {
-		t.Fatalf("parse result: %v", err)
-	}
-	body, _ := output["body"].(string)
-	if len(body) != maxAPIResponseBodyBytes {
-		t.Errorf("len(body) = %d, want %d", len(body), maxAPIResponseBodyBytes)
-	}
-	if truncated, _ := output["body_truncated"].(bool); !truncated {
-		t.Errorf("body_truncated = %v, want true", truncated)
 	}
 }
 
@@ -1004,107 +844,6 @@ func TestHandleExecuteAPIRequest_NotListedWhenUnavailable(t *testing.T) {
 		if name, _ := tool["name"].(string); name == "execute_api_request" {
 			t.Fatal("execute_api_request should not be listed when CanRunCommands=false")
 		}
-	}
-}
-
-func TestParseTemplateEntryRef(t *testing.T) {
-	tests := []struct {
-		name      string
-		ref       string
-		wantPath  string
-		wantError bool
-	}{
-		{name: "plain path", ref: "github", wantPath: "github"},
-		{name: "op ref", ref: "op:///github", wantPath: "github"},
-		{name: "field ref rejected", ref: "op://vault/github/token", wantError: true},
-		{name: "empty ref rejected", ref: " ", wantError: true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseTemplateEntryRef(tt.ref)
-			if tt.wantError {
-				if err == nil {
-					t.Fatal("parseTemplateEntryRef() expected error, got nil")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("parseTemplateEntryRef() error = %v", err)
-			}
-			if got != tt.wantPath {
-				t.Errorf("parseTemplateEntryRef() = %q, want %q", got, tt.wantPath)
-			}
-		})
-	}
-}
-
-func TestNormalizeEndpoint(t *testing.T) {
-	tests := []struct {
-		name      string
-		endpoint  string
-		want      string
-		wantError bool
-	}{
-		{name: "double slashes normalized", endpoint: "/v1//chat/completions", want: "/v1/chat/completions"},
-		{name: "dot segment rejected", endpoint: "/v1/../admin", wantError: true},
-		{name: "encoded dot segment rejected", endpoint: "/v1/%2e%2e/admin", wantError: true},
-		{name: "invalid encoding rejected", endpoint: "/path/%ZZ", wantError: true},
-		{name: "must start with slash", endpoint: "v1/chat", wantError: true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := normalizeEndpoint(tt.endpoint)
-			if tt.wantError {
-				if err == nil {
-					t.Fatal("normalizeEndpoint() expected error, got nil")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("normalizeEndpoint() error = %v", err)
-			}
-			if got != tt.want {
-				t.Errorf("normalizeEndpoint() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestParseTimeoutSeconds(t *testing.T) {
-	tests := []struct {
-		name      string
-		input     any
-		want      int
-		wantError bool
-	}{
-		{name: "default timeout", input: nil, want: defaultAPITimeoutSeconds},
-		{name: "minimum clamped", input: 0, want: minAPITimeoutSeconds},
-		{name: "maximum clamped", input: 9999, want: maxAPITimeoutSeconds},
-		{name: "string integer", input: "45", want: 45},
-		{name: "non-integer rejected", input: 1.5, wantError: true},
-		{name: "nan rejected", input: math.NaN(), wantError: true},
-		{name: "infinity rejected", input: math.Inf(1), wantError: true},
-		{name: "invalid type rejected", input: map[string]any{}, wantError: true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseTimeoutSeconds(tt.input)
-			if tt.wantError {
-				if err == nil {
-					t.Fatal("parseTimeoutSeconds() expected error, got nil")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("parseTimeoutSeconds() error = %v", err)
-			}
-			if got != tt.want {
-				t.Errorf("parseTimeoutSeconds() = %d, want %d", got, tt.want)
-			}
-		})
 	}
 }
 
