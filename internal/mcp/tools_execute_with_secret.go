@@ -241,46 +241,8 @@ func sanitizeEnvVarName(name string) string {
 	return sb.String()
 }
 
-// checkExecuteWithSecretApproval checks the agent's approval mode and either
-// allows execution, denies it, or prompts the user for confirmation.
-func (s *Server) checkExecuteWithSecretApproval(_ context.Context) error {
-	if s == nil || s.agent == nil {
-		return fmt.Errorf("server not initialized")
-	}
-
-	mode := s.agent.ApprovalMode
-	if mode == "" {
-		if s.agent.RequireApproval {
-			mode = "prompt"
-		} else {
-			mode = "none"
-		}
-	}
-
-	switch mode {
-	case "none", "auto":
-		return nil
-	case "deny":
-		return fmt.Errorf("execute_with_secret denied: approval mode is 'deny'")
-	case "prompt":
-		timeout := s.agent.ApprovalTimeout
-		if timeout <= 0 {
-			timeout = 30 * time.Second
-		}
-		result := RequestApproval(ApprovalRequest{
-			Operation: "execute_with_secret",
-			Details:   fmt.Sprintf("agent %q requests to execute a command with secret injection", s.agent.Name),
-			Timeout:   timeout,
-		})
-		if result.Error != nil {
-			return fmt.Errorf("execute_with_secret approval failed: %w", result.Error)
-		}
-		if !result.Approved {
-			return fmt.Errorf("execute_with_secret denied: user did not approve")
-		}
-		metrics.RecordApproval(s.agent.Name, "granted")
-		return nil
-	default:
-		return nil
-	}
+// checkExecuteWithSecretApproval checks the agent's approval mode for secret-injected execution.
+func (s *Server) checkExecuteWithSecretApproval(ctx context.Context) error {
+	return s.checkApproval(ctx, "execute_with_secret",
+		"agent %q requests to execute a command with secret injection")
 }
