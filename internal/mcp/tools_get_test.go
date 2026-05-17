@@ -727,9 +727,10 @@ func hasField(slice []any, targetName string) bool {
 	return false
 }
 
-// F-1: buildSecretMetadataResponse must expose tags and route each tag through
-// the MCP sanitizer. Tags are user-controlled vault metadata that become part
-// of the JSON returned to the LLM by get_entry and get_entry_metadata.
+// F-1: buildSecretMetadataResponse must expose tags and route each tag
+// through the MCP sanitizer. Tags are user-controlled vault metadata
+// that become part of the JSON returned to the LLM by get_entry and
+// get_entry_metadata.
 func TestBuildSecretMetadataResponse_TagsAreExposedAndSanitized(t *testing.T) {
 	entry := &vault.Entry{
 		Data: map[string]any{"password": "secret"},
