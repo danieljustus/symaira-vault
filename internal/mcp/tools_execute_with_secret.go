@@ -160,10 +160,10 @@ func (s *Server) handleExecuteWithSecret(ctx context.Context, req CallToolReques
 
 	if runErr != nil {
 		if result != nil {
-			sanitizedStdout, sanitizedStderr := s.sanitizeRunOutput(result.Stdout, result.Stderr, secretEnv)
-			sanitizedErr := s.sanitizeKnownSecretValues(runErr.Error(), secretEnv)
-			return NewToolResultError(fmt.Sprintf("%s\nExit code: %d\nStdout: %s\nStderr: %s",
-				sanitizedErr, result.ExitCode, sanitizedStdout, sanitizedStderr)), nil
+		sanitizedStdout, sanitizedStderr := s.sanitizeRunOutput(result.Stdout, result.Stderr, secretEnv)
+		sanitizedErr := s.sanitizeKnownSecretValues(runErr.Error(), secretEnv)
+		return NewToolResultError(fmt.Sprintf("%s\nExit code: %d\nStdout: %s\nStderr: %s",
+			sanitizedErr, result.ExitCode, EmbedAsData("command_output", sanitizedStdout), EmbedAsData("command_output", sanitizedStderr))), nil
 		}
 		return NewToolResultError(s.sanitizeKnownSecretValues(runErr.Error(), secretEnv)), nil
 	}
@@ -171,8 +171,8 @@ func (s *Server) handleExecuteWithSecret(ctx context.Context, req CallToolReques
 	sanitizedStdout, sanitizedStderr := s.sanitizeRunOutput(result.Stdout, result.Stderr, secretEnv)
 	resultJSON, err := json.Marshal(map[string]any{
 		"exit_code":   result.ExitCode,
-		"stdout":      sanitizedStdout,
-		"stderr":      sanitizedStderr,
+		"stdout":      EmbedAsData("command_output", sanitizedStdout),
+		"stderr":      EmbedAsData("command_output", sanitizedStderr),
 		"duration_ms": result.Duration.Milliseconds(),
 	})
 	if err != nil {

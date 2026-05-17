@@ -210,6 +210,77 @@ func TestE2E_PromptInjection_SealedHandle(t *testing.T) {
 	}
 }
 
+// TestE2E_PromptInjection_EmbedAsData_GetEntryValue routes every payload
+// through the get_entry_value Data-field wrapping path.
+func TestE2E_PromptInjection_EmbedAsData_GetEntryValue(t *testing.T) {
+	for _, p := range promptInjectionCorpus() {
+		t.Run(p.name, func(t *testing.T) {
+			entry := &vault.Entry{
+				Data: map[string]any{
+					"password":    "safe",
+					"notes":       p.value,
+					"description": "prefix " + p.value + " suffix",
+				},
+				SecretMetadata: vault.SecretMetadata{
+					UsageHint: p.value,
+				},
+				Metadata: vault.EntryMetadata{
+					Tags: []string{p.value},
+				},
+			}
+			wrapped := wrapDataFields(entry.Data)
+			response := buildSecretMetadataResponse(entry, "test/path")
+			response["data"] = wrapped
+			raw, err := json.Marshal(response)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			visible := runE2EThroughChokepoint(t, string(raw))
+			assertCleanForPayload(t, visible, p)
+			// Verify EmbedAsData markers are present.
+			// JSON-marshaled output escapes < and > to \u003c and \u003e.
+			if !strings.Contains(visible, "<!-- DATA_") && !strings.Contains(visible, `\u003c!-- DATA_`) {
+				t.Errorf("payload %q: expected EmbedAsData markers in response", p.name)
+			}
+		})
+	}
+}
+
+// TestE2E_PromptInjection_EmbedAsData_RunCommand routes every payload
+// through the run_command stdout/stderr wrapping path.
+func TestE2E_PromptInjection_EmbedAsData_RunCommand(t *testing.T) {
+	for _, p := range promptInjectionCorpus() {
+		t.Run(p.name, func(t *testing.T) {
+			envelope, _ := json.Marshal(map[string]any{
+				"exit_code":   0,
+				"stdout":      EmbedAsData("command_output", p.value),
+				"stderr":      EmbedAsData("command_output", "prefix "+p.value+" suffix"),
+				"duration_ms": 1,
+			})
+			visible := runE2EThroughChokepoint(t, string(envelope))
+			assertCleanForPayload(t, visible, p)
+			if !strings.Contains(visible, "<!-- DATA_") && !strings.Contains(visible, `\u003c!-- DATA_`) {
+				t.Errorf("payload %q: expected EmbedAsData markers in response", p.name)
+			}
+		})
+	}
+}
+
+// TestE2E_PromptInjection_EmbedAsData_GenerateTemplate routes every payload
+// through the generate_template output wrapping path.
+func TestE2E_PromptInjection_EmbedAsData_GenerateTemplate(t *testing.T) {
+	for _, p := range promptInjectionCorpus() {
+		t.Run(p.name, func(t *testing.T) {
+			wrapped := EmbedAsData("rendered_template", p.value)
+			visible := runE2EThroughChokepoint(t, wrapped)
+			assertCleanForPayload(t, visible, p)
+			if !strings.Contains(visible, "<!-- DATA_") {
+				t.Errorf("payload %q: expected EmbedAsData markers in response", p.name)
+			}
+		})
+	}
+}
+
 func assertCleanForPayload(t *testing.T, visible string, p piPayload) {
 	t.Helper()
 	for _, r := range p.mustNotContainRune {

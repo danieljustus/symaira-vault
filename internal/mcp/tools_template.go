@@ -66,5 +66,5 @@ func (s *Server) handleGenerateTemplate(ctx context.Context, req CallToolRequest
 	}
 
 	s.logAudit(ctx, "template_generated", templateType, true)
-	return NewToolResultText(output), nil
+	return NewToolResultText(EmbedAsData("rendered_template", output)), nil
 }

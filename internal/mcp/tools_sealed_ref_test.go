@@ -38,11 +38,13 @@ func TestHandleGetValue_ReturnsValuesForPublicEntry(t *testing.T) {
 	if err := json.Unmarshal([]byte(result.Text), &entry); err != nil {
 		t.Fatalf("parse result: %v", err)
 	}
-	if entry.Data["password"] != "testpass123" {
-		t.Errorf("password = %v, want testpass123", entry.Data["password"])
+	passwordVal, _ := entry.Data["password"].(string)
+	if !strings.Contains(passwordVal, "testpass123") {
+		t.Errorf("password = %v, want to contain testpass123", entry.Data["password"])
 	}
-	if entry.Data["username"] != "testuser" {
-		t.Errorf("username = %v, want testuser", entry.Data["username"])
+	usernameVal, _ := entry.Data["username"].(string)
+	if !strings.Contains(usernameVal, "testuser") {
+		t.Errorf("username = %v, want to contain testuser", entry.Data["username"])
 	}
 }
 
@@ -121,8 +123,9 @@ func testHandleGetValueUnsealed(t *testing.T, autoUnseal bool, classification ta
 	if err := json.Unmarshal([]byte(result.Text), &got); err != nil {
 		t.Fatalf("parse result: %v", err)
 	}
-	if got.Data[wantKey] != wantValue {
-		t.Errorf("%s = %v, want %q", wantKey, got.Data[wantKey], wantValue)
+	gotVal, _ := got.Data[wantKey].(string)
+	if !strings.Contains(gotVal, wantValue) {
+		t.Errorf("%s = %v, want to contain %q", wantKey, got.Data[wantKey], wantValue)
 	}
 }
 
@@ -572,8 +575,9 @@ func TestHandleGetValue_SealedScalesWithApprovalModeNone(t *testing.T) {
 	if err := json.Unmarshal([]byte(result.Text), &entry2); err != nil {
 		t.Fatalf("parse result: %v", err)
 	}
-	if entry2.Data["key"] != "secret-val" {
-		t.Errorf("key = %v, want secret-val", entry2.Data["key"])
+	keyVal, _ := entry2.Data["key"].(string)
+	if !strings.Contains(keyVal, "secret-val") {
+		t.Errorf("key = %v, want to contain secret-val", entry2.Data["key"])
 	}
 }
 

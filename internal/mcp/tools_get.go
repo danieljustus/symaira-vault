@@ -36,19 +36,19 @@ func buildSecretMetadataResponse(entry *vault.Entry, path string) map[string]any
 		})
 	}
 
-	sanitizedTags := make([]string, len(entry.Metadata.Tags))
+	wrappedTags := make([]string, len(entry.Metadata.Tags))
 	for i, tag := range entry.Metadata.Tags {
-		sanitizedTags[i] = globalChokepoint.SanitizeForMCP(tag)
+		wrappedTags[i] = EmbedAsData("tag", globalChokepoint.SanitizeForMCP(tag))
 	}
 
 	response := map[string]any{
 		"path":        path,
 		"type":        entry.SecretMetadata.Type,
-		"usage_hint":  globalChokepoint.SanitizeForMCP(entry.SecretMetadata.UsageHint),
+		"usage_hint":  EmbedAsData("usage_hint", globalChokepoint.SanitizeForMCP(entry.SecretMetadata.UsageHint)),
 		"auto_rotate": entry.SecretMetadata.AutoRotate,
 		"fields":      fields,
 		"has_value":   len(entry.Data) > 0,
-		"tags":        sanitizedTags,
+		"tags":        wrappedTags,
 		"meta": map[string]any{
 			"created": entry.Metadata.Created.Format(time.RFC3339),
 			"updated": entry.Metadata.Updated.Format(time.RFC3339),
@@ -161,6 +161,10 @@ func (s *Server) handleGetValue(ctx context.Context, req CallToolRequest) (*Call
 		s.secretsAccessed.Add(1)
 	}
 
+	// Wrap string Data values with EmbedAsData to prevent prompt injection
+	// via high-risk untrusted fields (notes, description, custom fields).
+	entry.Data = wrapDataFields(entry.Data)
+
 	result, err := json.Marshal(entry)
 	if err != nil {
 		return nil, err
@@ -215,6 +219,24 @@ func (s *Server) handleGetMetadata(ctx context.Context, req CallToolRequest) (*C
 		return nil, err
 	}
 	return NewToolResultText(string(resultJSON)), nil
+}
+
+// wrapDataFields recursively wraps string values in a map with EmbedAsData.
+// This prevents prompt injection via high-risk untrusted fields (notes,
+// description, usage_hint, tags, and all custom string fields).
+func wrapDataFields(data map[string]any) map[string]any {
+	wrapped := make(map[string]any, len(data))
+	for k, v := range data {
+		switch val := v.(type) {
+		case string:
+			wrapped[k] = EmbedAsData(k, val)
+		case map[string]any:
+			wrapped[k] = wrapDataFields(val)
+		default:
+			wrapped[k] = v
+		}
+	}
+	return wrapped
 }
 
 // inferFieldKind returns a type label for a field value based on its Go type.

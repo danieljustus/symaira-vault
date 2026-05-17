@@ -509,11 +509,13 @@ func TestHandleGetValue_ReturnsValuesWhenAutoUnsealTrue(t *testing.T) {
 	if err := json.Unmarshal([]byte(result.Text), &entry); err != nil {
 		t.Fatalf("parse result: %v", err)
 	}
-	if entry.Data["password"] != "testpass123" {
-		t.Errorf("password = %v, want testpass123", entry.Data["password"])
+	passwordVal, _ := entry.Data["password"].(string)
+	if !strings.Contains(passwordVal, "testpass123") {
+		t.Errorf("password = %v, want to contain testpass123", entry.Data["password"])
 	}
-	if entry.Data["username"] != "testuser" {
-		t.Errorf("username = %v, want testuser", entry.Data["username"])
+	usernameVal, _ := entry.Data["username"].(string)
+	if !strings.Contains(usernameVal, "testuser") {
+		t.Errorf("username = %v, want to contain testuser", entry.Data["username"])
 	}
 }
 
@@ -758,7 +760,7 @@ func TestBuildSecretMetadataResponse_TagsAreExposedAndSanitized(t *testing.T) {
 	if len(tags) != 4 {
 		t.Fatalf("expected 4 tags, got %d: %v", len(tags), tags)
 	}
-	if tags[0] != "clean-tag" {
+	if !strings.Contains(tags[0], "clean-tag") {
 		t.Errorf("clean tag mutated: %q", tags[0])
 	}
 	if strings.Contains(tags[1], "</data>") {
