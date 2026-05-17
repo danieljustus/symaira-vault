@@ -1007,6 +1007,27 @@ func TestApprovalCacheKey(t *testing.T) {
 	}
 }
 
+// F-9: equivalent path representations must collapse to the same cache key
+// so that a user who already approved "work/foo" is not re-prompted for
+// "work/foo/", " work/foo ", or "work/./foo". This also removes a small
+// side-channel where an adversarial agent could force repeated approval
+// prompts by varying the path form.
+func TestApprovalCacheKey_NormalizesPath(t *testing.T) {
+	base := approvalCacheKey("agent", "get_entry_value", "work/foo")
+	variants := map[string]string{
+		"trailing-slash": "work/foo/",
+		"double-slash":   "work//foo",
+		"whitespace":     " work/foo ",
+		"dot-segment":    "work/./foo",
+	}
+	for name, p := range variants {
+		got := approvalCacheKey("agent", "get_entry_value", p)
+		if got != base {
+			t.Errorf("variant %q: cache key %q != base %q", name, got, base)
+		}
+	}
+}
+
 func TestToolRiskLevel(t *testing.T) {
 	tests := []struct {
 		toolName string

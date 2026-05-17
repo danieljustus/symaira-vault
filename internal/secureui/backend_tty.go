@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/mattn/go-tty"
+
+	"github.com/danieljustus/OpenPass/internal/ui/theme"
 )
 
 // signalNotify is the indirection point so tests can drive cancellation
@@ -138,6 +140,9 @@ func isTimeout(err error) bool {
 }
 
 func buildTTYPrompt(req PromptRequest) string {
+	if theme.ScreenReaderMode() {
+		return buildPlainTTYPrompt(req)
+	}
 	var sb strings.Builder
 	sb.WriteString("\n")
 	sb.WriteString("╔══════════════════════════════════════════════════════════════╗\n")
@@ -154,6 +159,25 @@ func buildTTYPrompt(req PromptRequest) string {
 	}
 	sb.WriteString("╚══════════════════════════════════════════════════════════════╝\n")
 	sb.WriteString("Enter value (input hidden): ")
+	return sb.String()
+}
+
+// buildPlainTTYPrompt skips the box-drawing characters that screen readers
+// announce as long runs of garbage. NVDA, VoiceOver, and Orca all speak
+// the "Label: value" form intelligibly.
+func buildPlainTTYPrompt(req PromptRequest) string {
+	var sb strings.Builder
+	sb.WriteString("\nSecure input required. The connected agent cannot see this value.\n")
+	if req.Path != "" {
+		fmt.Fprintf(&sb, "Entry: %s\n", req.Path)
+	}
+	if req.Field != "" {
+		fmt.Fprintf(&sb, "Field: %s\n", req.Field)
+	}
+	if req.Description != "" {
+		fmt.Fprintf(&sb, "Details: %s\n", req.Description)
+	}
+	sb.WriteString("Enter value, input hidden: ")
 	return sb.String()
 }
 
