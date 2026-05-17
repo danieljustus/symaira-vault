@@ -36,6 +36,11 @@ func buildSecretMetadataResponse(entry *vault.Entry, path string) map[string]any
 		})
 	}
 
+	sanitizedTags := make([]string, len(entry.Metadata.Tags))
+	for i, tag := range entry.Metadata.Tags {
+		sanitizedTags[i] = globalChokepoint.SanitizeForMCP(tag)
+	}
+
 	response := map[string]any{
 		"path":        path,
 		"type":        entry.SecretMetadata.Type,
@@ -43,6 +48,7 @@ func buildSecretMetadataResponse(entry *vault.Entry, path string) map[string]any
 		"auto_rotate": entry.SecretMetadata.AutoRotate,
 		"fields":      fields,
 		"has_value":   len(entry.Data) > 0,
+		"tags":        sanitizedTags,
 		"meta": map[string]any{
 			"created": entry.Metadata.Created.Format(time.RFC3339),
 			"updated": entry.Metadata.Updated.Format(time.RFC3339),
