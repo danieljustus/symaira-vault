@@ -112,6 +112,39 @@ func (d *AnomalyDetector) detectRateAnomaly(event ToolCallEvent) *AnomalyAlert {
 	return nil
 }
 
+// detectToolChain flags a tool-call chain where an agent reads a large field
+// (likely notes containing injected content) then immediately invokes a
+// command execution tool. This is the canonical prompt-injection exfiltration chain.
+func (d *AnomalyDetector) detectToolChain(event ToolCallEvent) *AnomalyAlert {
+	if event.Tool != "run_command" && event.Tool != "execute_with_secret" {
+		return nil
+	}
+	cutoff := event.Timestamp.Add(-d.toolChainWindow)
+	for i := len(d.events) - 1; i >= 0; i-- {
+		e := d.events[i]
+		if e.Timestamp.Before(cutoff) {
+			break
+		}
+		if e.Agent != event.Agent {
+			continue
+		}
+		if (e.Tool == "get_entry" || e.Tool == "get_entry_value") && e.FieldLength >= d.toolChainThreshold {
+			return &AnomalyAlert{
+				Type:     AlertToolChain,
+				Severity: SeverityHigh,
+				Description: "Tool-chain: agent " + event.Agent +
+					" read a large field (" + itoa(e.FieldLength) + " bytes) then invoked " + event.Tool,
+				Timestamp: event.Timestamp,
+				Agent:     event.Agent,
+				Path:      event.Path,
+				Tool:      event.Tool,
+				RequestID: event.RequestID,
+			}
+		}
+	}
+	return nil
+}
+
 // itoa is a fast integer to string conversion without importing strconv
 // in the hot path.
 func itoa(n int) string {
