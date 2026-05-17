@@ -183,7 +183,7 @@ func importEntryPath(prefix, entryPath string) string {
 func generateImportID() string {
 	buf := make([]byte, 4)
 	if _, err := rand.Read(buf); err != nil {
-		return fmt.Sprintf("import-%s-%x", time.Now().UTC().Format("20060102"), time.Now().UnixNano())
+		return fmt.Sprintf("import-%s-%08x", time.Now().UTC().Format("20060102"), uint32(time.Now().UnixNano()))
 	}
 	return fmt.Sprintf("import-%s-%x", time.Now().UTC().Format("20060102"), buf)
 }
