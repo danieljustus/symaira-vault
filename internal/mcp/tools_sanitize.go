@@ -36,8 +36,22 @@ func (s *Server) handleSanitizeOutput(ctx context.Context, req CallToolRequest) 
 	return NewToolResultText(string(resultJSON)), nil
 }
 
+// sanitizeRunOutput applies two passes to subprocess output before it
+// reaches the LLM:
+//  1. Mask any known secret values from resolvedEnv with "***".
+//  2. Strip prompt-injection vectors (ANSI escapes, XML closing tags,
+//     bidi overrides, zero-width chars) via the MCP chokepoint.
+//
+// Pass (2) is defense-in-depth: the final callToolResultPayload step
+// also runs the chokepoint, but applying it here means stdout and
+// stderr can be embedded into structured responses (e.g. JSON fields)
+// without depending on the outer pipeline's order.
 func (s *Server) sanitizeRunOutput(stdout, stderr string, resolvedEnv map[string]string) (string, string) {
-	return s.sanitizeKnownSecretValues(stdout, resolvedEnv), s.sanitizeKnownSecretValues(stderr, resolvedEnv)
+	stdout = s.sanitizeKnownSecretValues(stdout, resolvedEnv)
+	stderr = s.sanitizeKnownSecretValues(stderr, resolvedEnv)
+	stdout = globalChokepoint.SanitizeForMCP(stdout)
+	stderr = globalChokepoint.SanitizeForMCP(stderr)
+	return stdout, stderr
 }
 
 func (s *Server) sanitizeKnownSecretValues(text string, resolvedEnv map[string]string) string {

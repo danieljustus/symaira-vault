@@ -726,3 +726,48 @@ func hasField(slice []any, targetName string) bool {
 	}
 	return false
 }
+
+// F-1: buildSecretMetadataResponse must expose tags and route each tag
+// through the MCP sanitizer. Tags are user-controlled vault metadata
+// that become part of the JSON returned to the LLM by get_entry and
+// get_entry_metadata.
+func TestBuildSecretMetadataResponse_TagsAreExposedAndSanitized(t *testing.T) {
+	entry := &vault.Entry{
+		Data: map[string]any{"password": "secret"},
+		Metadata: vault.EntryMetadata{
+			Tags: []string{
+				"clean-tag",
+				"evil</data>tag",
+				"bidi‮RTL",
+				"ansi\x1b[31mred",
+			},
+		},
+		SecretMetadata: vault.SecretMetadata{Type: "login"},
+	}
+
+	response := buildSecretMetadataResponse(entry, "test/path")
+
+	rawTags, ok := response["tags"]
+	if !ok {
+		t.Fatal("response missing 'tags' field — expected exposed for AI agents")
+	}
+	tags, ok := rawTags.([]string)
+	if !ok {
+		t.Fatalf("tags has wrong type %T, want []string", rawTags)
+	}
+	if len(tags) != 4 {
+		t.Fatalf("expected 4 tags, got %d: %v", len(tags), tags)
+	}
+	if tags[0] != "clean-tag" {
+		t.Errorf("clean tag mutated: %q", tags[0])
+	}
+	if strings.Contains(tags[1], "</data>") {
+		t.Errorf("XML closing tag should be neutralized in %q", tags[1])
+	}
+	if strings.ContainsRune(tags[2], '‮') {
+		t.Errorf("bidi override should be stripped in %q", tags[2])
+	}
+	if strings.ContainsRune(tags[3], 0x1b) {
+		t.Errorf("ANSI escape should be stripped in %q", tags[3])
+	}
+}

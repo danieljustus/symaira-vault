@@ -707,3 +707,82 @@ func TestHandleGetValue_SealedEntryDoesNotCountSecrets(t *testing.T) {
 		t.Errorf("secretsAccessed changed from %d to %d (should not increment when sealed)", before, after)
 	}
 }
+
+// F-5: secret_unseal previously used fmt.Sprintf("%v", val) which leaks
+// Go's map/slice representation when a field is unexpectedly nested.
+// For non-scalar fields the handler should return a clean error instead
+// of dumping a Go-formatted map literal to the LLM.
+func TestSecretUnseal_RejectsNonScalarField(t *testing.T) {
+	vaultDir, identity := mockVault(t)
+	entry := &vault.Entry{
+		Data: map[string]any{
+			"nested": map[string]any{
+				"secret": "JBSWY3DPEHPK3PXP",
+				"issuer": "GitHub",
+			},
+		},
+	}
+	if err := vault.WriteEntry(vaultDir, "totp-entry", entry, identity); err != nil {
+		t.Fatalf("write entry: %v", err)
+	}
+
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:         "test",
+		AllowedPaths: []string{"*"},
+		CanWrite:     false,
+		ApprovalMode: "none",
+		AutoUnseal:   true,
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	handle := (taint.SecretHandle{Path: "totp-entry", Field: "nested"}).String()
+	req := CallToolRequest{Arguments: map[string]any{"handle": handle}}
+
+	result, err := srv.handleSecretUnseal(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleSecretUnseal() error = %v", err)
+	}
+	if !result.IsError {
+		t.Fatalf("expected error for non-scalar field, got value: %q", result.Text)
+	}
+	if strings.Contains(result.Text, "map[") {
+		t.Errorf("response leaked Go map repr: %q", result.Text)
+	}
+	if !strings.Contains(result.Text, "scalar") && !strings.Contains(result.Text, "string") {
+		t.Errorf("error should mention scalar/string type, got: %q", result.Text)
+	}
+}
+
+// F-5: scalar string fields must continue to unseal unchanged.
+func TestSecretUnseal_ScalarStringUnchanged(t *testing.T) {
+	vaultDir, identity := mockVault(t)
+	entry := &vault.Entry{
+		Data: map[string]any{"password": "plain-secret-123"},
+	}
+	if err := vault.WriteEntry(vaultDir, "scalar-entry", entry, identity); err != nil {
+		t.Fatalf("write entry: %v", err)
+	}
+
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:         "test",
+		AllowedPaths: []string{"*"},
+		CanWrite:     false,
+		ApprovalMode: "none",
+		AutoUnseal:   true,
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	handle := (taint.SecretHandle{Path: "scalar-entry", Field: "password"}).String()
+	req := CallToolRequest{Arguments: map[string]any{"handle": handle}}
+
+	result, err := srv.handleSecretUnseal(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleSecretUnseal() error = %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("scalar unseal returned error: %s", result.Text)
+	}
+	if result.Text != "plain-secret-123" {
+		t.Errorf("scalar unseal corrupted: %q", result.Text)
+	}
+}

@@ -14,19 +14,19 @@ func F() {
 	u := taint.Wrap("secret", taint.Provenance{Source: "test"})
 
 	// Flagged: Untrusted directly in fmt.Sprintf
-	_ = fmt.Sprintf("%s", u)         // want "use of taint.Untrusted"
-	_ = fmt.Sprintf("%v", u)         // want "use of taint.Untrusted"
-	_ = fmt.Sprintf("%d", u)         // want "use of taint.Untrusted"
+	_ = fmt.Sprintf("%s", u) // want "use of taint.Untrusted"
+	_ = fmt.Sprintf("%v", u) // want "use of taint.Untrusted"
+	_ = fmt.Sprintf("%d", u) // want "use of taint.Untrusted"
 
 	// Flagged: Untrusted in other fmt print functions
-	fmt.Print(u)                     // want "use of taint.Untrusted"
-	fmt.Printf("%s", u)              // want "use of taint.Untrusted"
-	fmt.Println(u)                   // want "use of taint.Untrusted"
-	_ = fmt.Sprint(u)                // want "use of taint.Untrusted"
-	_ = fmt.Sprintln(u)              // want "use of taint.Untrusted"
-	fmt.Fprint(os.Stdout, u)         // want "use of taint.Untrusted"
-	fmt.Fprintf(os.Stdout, "%s", u)  // want "use of taint.Untrusted"
-	fmt.Fprintln(os.Stdout, u)       // want "use of taint.Untrusted"
+	fmt.Print(u)                    // want "use of taint.Untrusted"
+	fmt.Printf("%s", u)             // want "use of taint.Untrusted"
+	fmt.Println(u)                  // want "use of taint.Untrusted"
+	_ = fmt.Sprint(u)               // want "use of taint.Untrusted"
+	_ = fmt.Sprintln(u)             // want "use of taint.Untrusted"
+	fmt.Fprint(os.Stdout, u)        // want "use of taint.Untrusted"
+	fmt.Fprintf(os.Stdout, "%s", u) // want "use of taint.Untrusted"
+	fmt.Fprintln(os.Stdout, u)      // want "use of taint.Untrusted"
 
 	// NOT flagged: safe extraction methods
 	_ = u.Render(taint.Terminal)

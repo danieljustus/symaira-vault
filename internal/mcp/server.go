@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -44,9 +45,21 @@ func (c *approvalCache) setRemembered(key string) {
 	c.cache[key] = true
 }
 
-// cacheKey builds a unique key for the approval cache.
+// cacheKey builds a unique key for the approval cache. Vault paths are
+// normalized so that equivalent representations (trailing slash, dot
+// segments, surrounding whitespace) collapse to the same key. Without
+// this, an adversarial agent could vary the path form to bypass a
+// remembered approval and force repeated prompts.
+//
+// Secret handles (e.g. "op://path/field") are kept verbatim — they use
+// a URI-like scheme that filepath.Clean would corrupt by collapsing the
+// double slash.
 func approvalCacheKey(agentID, toolName, entryPath string) string {
-	return agentID + ":" + toolName + ":" + entryPath
+	key := entryPath
+	if !strings.Contains(entryPath, "://") {
+		key = normalizeScopePath(entryPath)
+	}
+	return agentID + ":" + toolName + ":" + key
 }
 
 const (

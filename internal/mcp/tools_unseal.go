@@ -11,6 +11,33 @@ import (
 	"github.com/danieljustus/OpenPass/internal/vaultsvc"
 )
 
+// scalarFieldString converts a scalar vault-field value to its string
+// representation. It refuses non-scalar types (maps, slices, structs) so
+// that secret_unseal never accidentally dumps a Go-formatted map literal
+// to the LLM — those leak nested-secret structure and are nearly always
+// a sign the caller meant a deeper field handle.
+func scalarFieldString(v any) (string, bool) {
+	switch val := v.(type) {
+	case string:
+		return val, true
+	case bool:
+		if val {
+			return "true", true
+		}
+		return "false", true
+	case float64:
+		return fmt.Sprintf("%g", val), true
+	case int:
+		return fmt.Sprintf("%d", val), true
+	case int64:
+		return fmt.Sprintf("%d", val), true
+	case nil:
+		return "", true
+	default:
+		return "", false
+	}
+}
+
 func (s *Server) handleSecretUnseal(ctx context.Context, req CallToolRequest) (*CallToolResult, error) {
 	handleStr, err := req.RequireString("handle")
 	if err != nil {
@@ -74,7 +101,14 @@ func (s *Server) handleSecretUnseal(ctx context.Context, req CallToolRequest) (*
 			s.logAudit(ctx, "secret_unseal", entryPath, false)
 			return NewToolResultError(fmt.Sprintf("field %q not found in entry %s", handle.Field, handle.Path)), nil
 		}
-		value = fmt.Sprintf("%v", val)
+		scalar, ok := scalarFieldString(val)
+		if !ok {
+			s.logAudit(ctx, "secret_unseal", entryPath, false)
+			return NewToolResultError(fmt.Sprintf(
+				"field %q in entry %s is not a scalar string — use a leaf field handle (e.g. %s/<subfield>)",
+				handle.Field, handle.Path, entryPath)), nil
+		}
+		value = scalar
 	}
 
 	s.secretsAccessed.Add(1)
