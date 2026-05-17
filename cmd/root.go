@@ -22,6 +22,7 @@ import (
 	"github.com/danieljustus/OpenPass/internal/metrics"
 	"github.com/danieljustus/OpenPass/internal/session"
 	"github.com/danieljustus/OpenPass/internal/ui/cliout"
+	"github.com/danieljustus/OpenPass/internal/ui/theme"
 	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
 	vaultsvc "github.com/danieljustus/OpenPass/internal/vaultsvc"
 )
@@ -123,6 +124,7 @@ var profileFlag *pflag.Flag
 var outputFormat string
 var noPipeWarning bool
 var colorMode string
+var themePreset string
 
 var rootCmd = &cobra.Command{
 	Use:   "openpass",
@@ -154,6 +156,11 @@ Daily use:
 func Execute() {
 	cliout.SetQuiet(quietMode)
 	cliout.SetColorMode(cliout.ParseColorMode(colorMode))
+	if themePreset != "" {
+		theme.ApplyPreset(theme.ParsePreset(themePreset))
+	} else {
+		theme.ApplyPresetFromEnv()
+	}
 	if err := rootCmd.Execute(); err != nil {
 		cliout.Errorf("Error: %v", err)
 		exitCode := errorspkg.ExitCodeFromError(err)
@@ -193,6 +200,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&outputFormat, "output", "text", "Output format (text, json, yaml)")
 	rootCmd.PersistentFlags().BoolVar(&noPipeWarning, "no-pipe-warning", false, "suppress 'reading from non-TTY' warning when piping secrets")
 	rootCmd.PersistentFlags().StringVar(&colorMode, "color", "auto", "When to emit ANSI color: auto, always, never")
+	rootCmd.PersistentFlags().StringVar(&themePreset, "theme", "", "Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)")
 }
 
 func vaultPath() (string, error) {
