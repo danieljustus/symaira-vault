@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -43,6 +44,23 @@ func (s *Server) handleRunCommand(ctx context.Context, req CallToolRequest) (*Ca
 			return NewToolResultError(fmt.Sprintf("command[%d] must be a string", i)), nil
 		}
 		command[i] = str
+	}
+
+	// Enforce per-agent executable allowlist.
+	if len(s.agent.AllowedExecutables) > 0 {
+		exe := filepath.Base(command[0])
+		allowed := false
+		for _, a := range s.agent.AllowedExecutables {
+			if exe == a {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			s.logAudit(ctx, "run_command", command[0], false)
+			metrics.RecordAuthDenial("executable_denied", s.agent.Name)
+			return nil, fmt.Errorf("command execution denied: executable %q not in agent allowlist", exe)
+		}
 	}
 
 	resolvedEnv := make(map[string]string)

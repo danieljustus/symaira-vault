@@ -27,17 +27,18 @@ var TierPresets = map[TierPreset]AgentProfile{
 		AllowedPaths:     []string{},
 	},
 	TierStandard: {
-		CanWrite:         false,
-		CanRunCommands:   false,
-		CanManageConfig:  false,
-		CanUseClipboard:  true,
-		CanUseAutotype:   true,
-		CanReadValues:    true,
-		ExposeValueTools: false,
-		AutoUnseal:       false,
-		ApprovalMode:     "prompt",
-		RequireApproval:  true,
-		AllowedPaths:     []string{},
+		CanWrite:           false,
+		CanRunCommands:     false,
+		CanManageConfig:    false,
+		CanUseClipboard:    true,
+		CanUseAutotype:     true,
+		CanReadValues:      true,
+		ExposeValueTools:   false,
+		AutoUnseal:         false,
+		ApprovalMode:       "prompt",
+		RequireApproval:    true,
+		AllowedPaths:       []string{},
+		AllowedExecutables: []string{"curl", "git", "terraform", "npm", "node", "python", "python3", "docker", "kubectl"},
 	},
 	TierAdmin: {
 		CanWrite:         true,
@@ -82,5 +83,8 @@ func ApplyTierPreset(target *AgentProfile, tier string) bool {
 	target.AutoUnseal = preset.AutoUnseal
 	target.ApprovalMode = preset.ApprovalMode
 	target.RequireApproval = preset.RequireApproval
+	if preset.AllowedExecutables != nil {
+		target.AllowedExecutables = append([]string(nil), preset.AllowedExecutables...)
+	}
 	return true
 }

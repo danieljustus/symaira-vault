@@ -575,3 +575,81 @@ func TestHandleRunCommand_ApprovalRequired(t *testing.T) {
 		t.Fatalf("error = %v, want 'approval required'", err)
 	}
 }
+
+func TestHandleRunCommand_ExecutableAllowlist_Allowed(t *testing.T) {
+	srv := newTestServer(t, config.AgentProfile{
+		Name:               "test",
+		AllowedPaths:       []string{"*"},
+		CanRunCommands:     true,
+		ApprovalMode:       "none",
+		AllowedExecutables: []string{"echo", "cat"},
+	}, "stdio")
+
+	req := CallToolRequest{
+		Arguments: map[string]any{
+			"command": []any{"echo", "hello"},
+		},
+	}
+
+	result, err := srv.handleRunCommand(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleRunCommand() error = %v", err)
+	}
+	if result == nil {
+		t.Fatal("handleRunCommand() returned nil result")
+	}
+	if result.IsError {
+		t.Fatalf("handleRunCommand() returned error: %s", result.Text)
+	}
+}
+
+func TestHandleRunCommand_ExecutableAllowlist_Denied(t *testing.T) {
+	srv := newTestServer(t, config.AgentProfile{
+		Name:               "test",
+		AllowedPaths:       []string{"*"},
+		CanRunCommands:     true,
+		ApprovalMode:       "none",
+		AllowedExecutables: []string{"echo", "cat"},
+	}, "stdio")
+
+	req := CallToolRequest{
+		Arguments: map[string]any{
+			"command": []any{"sh", "-c", "echo hello"},
+		},
+	}
+
+	_, err := srv.handleRunCommand(context.Background(), req)
+	if err == nil {
+		t.Fatal("handleRunCommand() expected error for disallowed executable, got nil")
+	}
+	if !strings.Contains(err.Error(), "not in agent allowlist") {
+		t.Fatalf("error = %v, want 'not in agent allowlist'", err)
+	}
+}
+
+func TestHandleRunCommand_ExecutableAllowlist_EmptyAllowsAll(t *testing.T) {
+	srv := newTestServer(t, config.AgentProfile{
+		Name:               "test",
+		AllowedPaths:       []string{"*"},
+		CanRunCommands:     true,
+		ApprovalMode:       "none",
+		AllowedExecutables: []string{},
+	}, "stdio")
+
+	req := CallToolRequest{
+		Arguments: map[string]any{
+			"command": []any{"echo", "hello"},
+		},
+	}
+
+	result, err := srv.handleRunCommand(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleRunCommand() error = %v", err)
+	}
+	if result == nil {
+		t.Fatal("handleRunCommand() returned nil result")
+	}
+	if result.IsError {
+		t.Fatalf("handleRunCommand() returned error: %s", result.Text)
+	}
+}
