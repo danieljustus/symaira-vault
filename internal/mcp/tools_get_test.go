@@ -729,6 +729,141 @@ func hasField(slice []any, targetName string) bool {
 	return false
 }
 
+// TestEffectiveRedactFieldsIntegration verifies that EffectiveRedactFields
+// integrates correctly with the config layer — per-tool patterns are returned
+// for the named tool and nil is returned when no patterns are configured.
+func TestEffectiveRedactFieldsIntegration(t *testing.T) {
+	profile := &config.AgentProfile{
+		PerToolRedactFields: map[string][]string{
+			"get_entry_value": {"password"},
+		},
+	}
+	got := profile.EffectiveRedactFields("get_entry_value")
+	if len(got) != 1 || got[0] != "password" {
+		t.Errorf("want [password], got %v", got)
+	}
+	// For list_entries (no per-tool), should return nil
+	if profile.EffectiveRedactFields("list_entries") != nil {
+		t.Error("expected nil for tool with no patterns")
+	}
+}
+
+// TestGetValuePerToolRedact verifies that PerToolRedactFields["get_entry_value"]
+// is applied when handleGetValue is called, redacting the configured field.
+func TestGetValuePerToolRedact(t *testing.T) {
+	vaultDir, identity := mockVault(t)
+
+	// Write a vault entry with password + username
+	entry := &vault.Entry{
+		Data: map[string]any{
+			"password": "s3cr3t",
+			"username": "alice",
+		},
+	}
+	if err := vault.WriteEntry(vaultDir, "github", entry, identity); err != nil {
+		t.Fatalf("WriteEntry: %v", err)
+	}
+
+	srv := &Server{
+		vault: &vault.Vault{
+			Dir:      vaultDir,
+			Identity: identity,
+		},
+		agent: &config.AgentProfile{
+			Name:          "restricted",
+			AllowedPaths:  []string{"*"},
+			CanReadValues: true,
+			ApprovalMode:  "none",
+			AutoUnseal:    true,
+			PerToolRedactFields: map[string][]string{
+				"get_entry_value": {"password"},
+			},
+		},
+		hookRegistry: NewHookRegistry(),
+	}
+
+	req := CallToolRequest{
+		Arguments: map[string]any{"path": "github"},
+	}
+
+	result, err := srv.handleGetValue(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleGetValue() error = %v", err)
+	}
+	if result == nil {
+		t.Fatal("handleGetValue() returned nil result")
+	}
+	if result.IsError {
+		t.Fatalf("handleGetValue() returned error: %s", result.Text)
+	}
+
+	var resp vault.Entry
+	if parseErr := json.Unmarshal([]byte(result.Text), &resp); parseErr != nil {
+		t.Fatalf("parse result: %v", parseErr)
+	}
+
+	pwVal, _ := resp.Data["password"].(string)
+	if !strings.Contains(pwVal, "[REDACTED]") {
+		t.Errorf("password should be redacted, got %q", pwVal)
+	}
+	usernameVal, _ := resp.Data["username"].(string)
+	if strings.Contains(usernameVal, "[REDACTED]") {
+		t.Errorf("username should NOT be redacted, got %q", usernameVal)
+	}
+}
+
+// TestGetValueBlocksQuarantinedPath verifies that handleGetValue returns an
+// error for any path inside the "quarantine/" namespace, preventing agents
+// from reading raw secret values of imported-but-unreviewed entries.
+func TestGetValueBlocksQuarantinedPath(t *testing.T) {
+	vaultDir, identity := mockVault(t)
+
+	// Write an entry under quarantine/ so the vault lookup would succeed
+	// if the quarantine check were not in place.
+	qEntry := &vault.Entry{
+		Data: map[string]any{
+			"password": "s3cr3t",
+		},
+	}
+	quarantinePath := "quarantine/import-20260517-ab12cd34/github.com"
+	if err := vault.WriteEntry(vaultDir, quarantinePath, qEntry, identity); err != nil {
+		t.Fatalf("WriteEntry quarantine: %v", err)
+	}
+
+	srv := &Server{
+		vault: &vault.Vault{
+			Dir:      vaultDir,
+			Identity: identity,
+		},
+		agent: &config.AgentProfile{
+			Name:          "test",
+			AllowedPaths:  []string{"*"},
+			CanReadValues: true,
+			ApprovalMode:  "none",
+			AutoUnseal:    true,
+		},
+		hookRegistry: NewHookRegistry(),
+	}
+
+	req := CallToolRequest{
+		Arguments: map[string]any{"path": quarantinePath},
+	}
+
+	result, err := srv.handleGetValue(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleGetValue() unexpected hard error = %v", err)
+	}
+	if result == nil {
+		t.Fatal("handleGetValue() returned nil result")
+	}
+	if !result.IsError {
+		t.Fatalf("handleGetValue() expected error result for quarantined path, got success: %s", result.Text)
+	}
+	if !strings.Contains(result.Text, "quarantine") {
+		t.Errorf("error text should mention 'quarantine', got: %q", result.Text)
+	}
+}
+
 // F-1: buildSecretMetadataResponse must expose tags and route each tag
 // through the MCP sanitizer. Tags are user-controlled vault metadata
 // that become part of the JSON returned to the LLM by get_entry and

@@ -32,6 +32,7 @@ type TokenRegistryEntry struct {
 	Hash             string     `json:"hash"`
 	Prefix           string     `json:"prefix"`
 	AllowedTools     []string   `json:"allowed_tools"`
+	ToolRegistryHash string     `json:"tool_registry_hash,omitempty"`
 	AgentName        string     `json:"agent_name,omitempty"`
 	CreatedAt        time.Time  `json:"created_at"`
 	ExpiresAt        *time.Time `json:"expires_at,omitempty"`
@@ -50,6 +51,7 @@ type ScopedToken struct {
 	Hash             string     `json:"hash"`
 	Prefix           string     `json:"prefix"`
 	AllowedTools     []string   `json:"allowed_tools"`
+	ToolRegistryHash string     `json:"tool_registry_hash,omitempty"`
 	AgentName        string     `json:"agent_name,omitempty"`
 	CreatedAt        time.Time  `json:"created_at"`
 	ExpiresAt        *time.Time `json:"expires_at,omitempty"`
@@ -104,6 +106,16 @@ func (t *ScopedToken) IsToolAllowed(toolName string) bool {
 	return false
 }
 
+// IsToolRegistryDriftDetected returns true if the token was issued against a
+// tool registry that no longer matches the current binary. Returns false for
+// legacy tokens (empty hash) to preserve backward compatibility.
+func (t *ScopedToken) IsToolRegistryDriftDetected() bool {
+	if t == nil || t.ToolRegistryHash == "" {
+		return false
+	}
+	return t.ToolRegistryHash != ComputeToolRegistryHash()
+}
+
 // UpdateLastUsed sets the LastUsedAt timestamp to the current time.
 func (t *ScopedToken) UpdateLastUsed() {
 	if t == nil {
@@ -127,6 +139,7 @@ func (t *ScopedToken) toEntry() TokenRegistryEntry {
 		Hash:             t.Hash,
 		Prefix:           t.Prefix,
 		AllowedTools:     t.AllowedTools,
+		ToolRegistryHash: t.ToolRegistryHash,
 		AgentName:        t.AgentName,
 		CreatedAt:        t.CreatedAt,
 		ExpiresAt:        t.ExpiresAt,
@@ -150,6 +163,7 @@ func entryToScopedToken(e TokenRegistryEntry) *ScopedToken {
 		Hash:             e.Hash,
 		Prefix:           e.Prefix,
 		AllowedTools:     allowed,
+		ToolRegistryHash: e.ToolRegistryHash,
 		AgentName:        e.AgentName,
 		CreatedAt:        e.CreatedAt,
 		ExpiresAt:        e.ExpiresAt,
@@ -260,14 +274,15 @@ func (r *TokenRegistry) Create(label string, allowedTools []string, agentName st
 
 	createdAt := time.Now().UTC()
 	t := &ScopedToken{
-		ID:           id,
-		Label:        label,
-		Hash:         hash,
-		Prefix:       prefix,
-		AllowedTools: allowedTools,
-		AgentName:    agentName,
-		CreatedAt:    createdAt,
-		ExpiresAt:    expiresAt,
+		ID:               id,
+		Label:            label,
+		Hash:             hash,
+		Prefix:           prefix,
+		AllowedTools:     allowedTools,
+		ToolRegistryHash: ComputeToolRegistryHash(),
+		AgentName:        agentName,
+		CreatedAt:        createdAt,
+		ExpiresAt:        expiresAt,
 	}
 
 	r.mu.Lock()
@@ -377,6 +392,7 @@ func (r *TokenRegistry) CreateWithRefresh(label string, allowedTools []string, a
 		Hash:             accessHash,
 		Prefix:           prefix,
 		AllowedTools:     allowedTools,
+		ToolRegistryHash: ComputeToolRegistryHash(),
 		AgentName:        agentName,
 		CreatedAt:        createdAt,
 		ExpiresAt:        expiresAt,

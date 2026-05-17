@@ -447,6 +447,86 @@ func TestConcurrentAccess(t *testing.T) {
 	}
 }
 
+func TestDetectToolChain_FiresOnNotesRunCommand(t *testing.T) {
+	d := New(WithToolChainWindow(30*time.Second), WithToolChainFieldThreshold(500))
+	now := time.Now()
+	agentName := "claude"
+
+	e1 := ToolCallEvent{
+		Timestamp:   now,
+		Agent:       agentName,
+		Tool:        "get_entry_value",
+		Path:        "prod/db",
+		FieldLength: 600,
+		OK:          true,
+	}
+	if alert := d.Check(context.Background(), e1); alert != nil {
+		t.Errorf("unexpected alert on read event: %v", alert)
+	}
+
+	e2 := ToolCallEvent{
+		Timestamp: now.Add(5 * time.Second),
+		Agent:     agentName,
+		Tool:      "run_command",
+		OK:        true,
+	}
+	alert := d.Check(context.Background(), e2)
+	if alert == nil {
+		t.Fatal("expected tool-chain alert, got nil")
+	}
+	if alert.Type != AlertToolChain {
+		t.Errorf("alert type = %q, want %q", alert.Type, AlertToolChain)
+	}
+	if alert.Severity != SeverityHigh {
+		t.Errorf("severity = %v, want High", alert.Severity)
+	}
+}
+
+func TestDetectToolChain_NoFireBelowThreshold(t *testing.T) {
+	d := New(WithToolChainWindow(30*time.Second), WithToolChainFieldThreshold(500))
+	now := time.Now()
+
+	d.Check(context.Background(), ToolCallEvent{
+		Timestamp: now, Agent: "agent", Tool: "get_entry_value", FieldLength: 200, OK: true,
+	})
+	alert := d.Check(context.Background(), ToolCallEvent{
+		Timestamp: now.Add(2 * time.Second), Agent: "agent", Tool: "run_command", OK: true,
+	})
+	if alert != nil && alert.Type == AlertToolChain {
+		t.Error("should not alert when FieldLength < threshold")
+	}
+}
+
+func TestDetectToolChain_NoFireOutsideWindow(t *testing.T) {
+	d := New(WithToolChainWindow(30*time.Second), WithToolChainFieldThreshold(500))
+	now := time.Now()
+
+	d.Check(context.Background(), ToolCallEvent{
+		Timestamp: now, Agent: "agent", Tool: "get_entry_value", FieldLength: 800, OK: true,
+	})
+	alert := d.Check(context.Background(), ToolCallEvent{
+		Timestamp: now.Add(60 * time.Second), Agent: "agent", Tool: "run_command", OK: true,
+	})
+	if alert != nil && alert.Type == AlertToolChain {
+		t.Error("should not alert when read is outside tool-chain window")
+	}
+}
+
+func TestDetectToolChain_DifferentAgents(t *testing.T) {
+	d := New(WithToolChainWindow(30*time.Second), WithToolChainFieldThreshold(500))
+	now := time.Now()
+
+	d.Check(context.Background(), ToolCallEvent{
+		Timestamp: now, Agent: "agentA", Tool: "get_entry_value", FieldLength: 800, OK: true,
+	})
+	alert := d.Check(context.Background(), ToolCallEvent{
+		Timestamp: now.Add(2 * time.Second), Agent: "agentB", Tool: "run_command", OK: true,
+	})
+	if alert != nil && alert.Type == AlertToolChain {
+		t.Error("should not alert for different agents")
+	}
+}
+
 func TestStaleAccessRuleNotYetImplemented(t *testing.T) {
 	// Stale access detection requires entry metadata (created/updated timestamps).
 	// The detector currently uses ToolCallEvent which doesn't carry this info.

@@ -1,11 +1,14 @@
 package cmd
 
 import (
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"os"
 	"path"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -21,6 +24,7 @@ var (
 	importSkipExisting bool
 	importOverwrite    bool
 	importMapping      string
+	importQuarantine   bool
 )
 
 var importCmd = &cobra.Command{
@@ -46,12 +50,22 @@ var importCmd = &cobra.Command{
 			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "--skip-existing and --overwrite cannot be used together", nil)
 		}
 
+		if importQuarantine && importPrefix != "" {
+			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "--quarantine and --prefix cannot be used together", nil)
+		}
+
 		options := importer.ImportOptions{
 			DryRun:       importDryRun,
 			Prefix:       strings.Trim(importPrefix, "/"),
 			SkipExisting: importSkipExisting,
 			Overwrite:    importOverwrite,
 			Mapping:      importMapping,
+		}
+
+		if importQuarantine {
+			importID := generateImportID()
+			options.Prefix = "quarantine/" + importID
+			printQuietAware("Quarantine import ID: %s\n", importID)
 		}
 
 		if _, err := importer.ParseMapping(options.Mapping); err != nil {
@@ -136,6 +150,7 @@ func init() {
 	importCmd.Flags().BoolVar(&importSkipExisting, "skip-existing", false, "Skip entries that already exist")
 	importCmd.Flags().BoolVar(&importOverwrite, "overwrite", false, "Delete existing entries before writing")
 	importCmd.Flags().StringVar(&importMapping, "mapping", "", "CSV column mapping (format: title=col1,username=col2,...)")
+	importCmd.Flags().BoolVar(&importQuarantine, "quarantine", false, "Import entries into quarantine/<import-id>/ for human review before agent access")
 	rootCmd.AddCommand(importCmd)
 }
 
@@ -166,6 +181,14 @@ func importEntryPath(prefix, entryPath string) string {
 	return path.Join(prefix, entryPath)
 }
 
+func generateImportID() string {
+	buf := make([]byte, 4)
+	if _, err := rand.Read(buf); err != nil {
+		return fmt.Sprintf("import-%s-%08x", time.Now().UTC().Format("20060102"), uint32(time.Now().UnixNano()))
+	}
+	return fmt.Sprintf("import-%s-%x", time.Now().UTC().Format("20060102"), buf)
+}
+
 func importEntryExists(svc vaultsvc.Service, entryPath string) (bool, error) {
 	_, err := svc.GetEntry(entryPath)
 	if err == nil {
@@ -177,4 +200,113 @@ func importEntryExists(svc vaultsvc.Service, entryPath string) (bool, error) {
 		return false, nil
 	}
 	return false, err
+}
+
+var reviewPromoteOverwrite bool
+
+var importReviewCmd = &cobra.Command{
+	Use:   "review",
+	Short: "Review and manage quarantined imports",
+}
+
+var importReviewListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List quarantined import batches",
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return withVault(func(svc vaultsvc.Service) error {
+			entries, err := svc.List("quarantine/")
+			if err != nil {
+				return fmt.Errorf("list quarantine: %w", err)
+			}
+			// Group by import-id (path format: quarantine/<import-id>/<rest>)
+			batches := make(map[string]int)
+			for _, e := range entries {
+				parts := strings.SplitN(strings.TrimPrefix(e, "quarantine/"), "/", 2)
+				if len(parts) > 0 && parts[0] != "" {
+					batches[parts[0]]++
+				}
+			}
+			if len(batches) == 0 {
+				printQuietAware("No quarantined imports found.\n")
+				return nil
+			}
+			ids := make([]string, 0, len(batches))
+			for id := range batches {
+				ids = append(ids, id)
+			}
+			sort.Strings(ids)
+			for _, id := range ids {
+				printQuietAware("%s  (%d entries)\n", id, batches[id])
+			}
+			return nil
+		})
+	},
+}
+
+var importReviewPromoteCmd = &cobra.Command{
+	Use:   "promote <import-id>",
+	Short: "Promote quarantined entries to their final vault paths",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		importID := args[0]
+		quarantinePrefix := "quarantine/" + importID + "/"
+		return withVault(func(svc vaultsvc.Service) error {
+			entries, err := svc.List(quarantinePrefix)
+			if err != nil {
+				return fmt.Errorf("list quarantine batch: %w", err)
+			}
+			if len(entries) == 0 {
+				return fmt.Errorf("no quarantined entries found for import-id %q", importID)
+			}
+			hadError := false
+			for _, entryPath := range entries {
+				destPath := strings.TrimPrefix(entryPath, quarantinePrefix)
+				if destPath == "" {
+					continue
+				}
+				// Check if destination already exists
+				exists, existsErr := importEntryExists(svc, destPath)
+				if existsErr != nil {
+					printQuietAware("Warning: cannot check destination %s: %v\n", destPath, existsErr)
+					hadError = true
+					continue
+				}
+				if exists && !reviewPromoteOverwrite {
+					printQuietAware("Warning: skipping %s — destination already exists (use --overwrite)\n", destPath)
+					hadError = true
+					continue
+				}
+				// Read source entry
+				entry, readErr := svc.GetEntry(entryPath)
+				if readErr != nil {
+					printQuietAware("Warning: failed to read %s: %v\n", entryPath, readErr)
+					hadError = true
+					continue
+				}
+				// Write to destination
+				if writeErr := svc.WriteEntry(destPath, entry); writeErr != nil {
+					printQuietAware("Warning: failed to write %s: %v\n", destPath, writeErr)
+					hadError = true
+					continue
+				}
+				if deleteErr := svc.Delete(entryPath); deleteErr != nil {
+					printQuietAware("Warning: failed to delete quarantine entry %s: %v\n", entryPath, deleteErr)
+					// Don't set hadError — promote succeeded
+				}
+				printQuietAware("Promoted: %s\n", destPath)
+			}
+			if hadError {
+				return fmt.Errorf("some entries could not be promoted")
+			}
+			return nil
+		})
+	},
+}
+
+func init() {
+	importReviewPromoteCmd.Flags().BoolVar(&reviewPromoteOverwrite, "overwrite", false, "Overwrite existing entries at destination")
+	importReviewCmd.AddCommand(importReviewListCmd)
+	importReviewCmd.AddCommand(importReviewPromoteCmd)
+	importCmd.AddCommand(importReviewCmd)
 }

@@ -1247,3 +1247,69 @@ func TestTokenRegistry_FileWatcherHandlesMissingFile(t *testing.T) {
 		t.Error("file watcher should have loaded tokens after file creation")
 	}
 }
+
+func TestComputeToolRegistryHashStable(t *testing.T) {
+	h1 := ComputeToolRegistryHash()
+	h2 := ComputeToolRegistryHash()
+	if h1 != h2 {
+		t.Errorf("hash not stable: %q vs %q", h1, h2)
+	}
+	if len(h1) != 64 { // SHA-256 hex = 64 chars
+		t.Errorf("unexpected hash length: %d", len(h1))
+	}
+}
+
+func TestTokenRegistryHashStoredOnCreate(t *testing.T) {
+	dir := t.TempDir()
+	reg := NewTokenRegistry(filepath.Join(dir, "tokens.json"))
+	tok, _, err := reg.Create("test", []string{"*"}, "agent", 0)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if tok.ToolRegistryHash == "" {
+		t.Error("ToolRegistryHash should be set on created token")
+	}
+	if tok.ToolRegistryHash != ComputeToolRegistryHash() {
+		t.Errorf("hash mismatch: token=%q, current=%q", tok.ToolRegistryHash, ComputeToolRegistryHash())
+	}
+}
+
+func TestTokenRegistryHashStoredOnCreateWithRefresh(t *testing.T) {
+	dir := t.TempDir()
+	reg := NewTokenRegistry(filepath.Join(dir, "tokens.json"))
+	tok, _, _, err := reg.CreateWithRefresh("test", []string{"*"}, "agent", time.Hour, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateWithRefresh: %v", err)
+	}
+	if tok.ToolRegistryHash != ComputeToolRegistryHash() {
+		t.Errorf("hash not set on CreateWithRefresh token")
+	}
+}
+
+func TestTokenLegacyNoHashSkipsCheck(t *testing.T) {
+	tok := &ScopedToken{
+		ID:               "tok-test",
+		Hash:             "abc",
+		AllowedTools:     []string{"*"},
+		ToolRegistryHash: "", // legacy token
+	}
+	if tok.IsToolRegistryDriftDetected() {
+		t.Error("legacy token (no hash) should not report drift")
+	}
+}
+
+func TestTokenDriftDetected(t *testing.T) {
+	tok := &ScopedToken{
+		ToolRegistryHash: "stale-hash-does-not-match",
+	}
+	if !tok.IsToolRegistryDriftDetected() {
+		t.Error("stale hash should report drift")
+	}
+}
+
+func TestIsToolRegistryDriftDetectedNilSafe(t *testing.T) {
+	var tok *ScopedToken
+	if tok.IsToolRegistryDriftDetected() {
+		t.Error("nil token should not report drift")
+	}
+}

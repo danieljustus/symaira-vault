@@ -80,6 +80,7 @@ type AgentProfile struct {
 	ApprovalMode        string              `yaml:"approvalMode"`
 	AllowedPaths        []string            `yaml:"allowedPaths"`
 	RedactFields        []string            `yaml:"redactFields,omitempty"`
+	PerToolRedactFields map[string][]string `yaml:"perToolRedactFields,omitempty"`
 	CanWrite            bool                `yaml:"canWrite"`
 	CanRunCommands      bool                `yaml:"canRunCommands,omitempty"`
 	CanManageConfig     bool                `yaml:"canManageConfig,omitempty"`
@@ -117,6 +118,7 @@ type fileAgentProfile struct {
 	ApprovalMode        *string             `yaml:"approvalMode,omitempty"`
 	AllowedPaths        []string            `yaml:"allowedPaths,omitempty"`
 	RedactFields        []string            `yaml:"redactFields,omitempty"`
+	PerToolRedactFields map[string][]string `yaml:"perToolRedactFields,omitempty"`
 	AllowedTools        []string            `yaml:"allowed_tools,omitempty"`
 	MaxReadsPerHour     *int                `yaml:"max_reads_per_hour,omitempty"`
 	MaxReadsPerDay      *int                `yaml:"max_reads_per_day,omitempty"`
@@ -131,6 +133,36 @@ type fileAgentProfile struct {
 
 type fileProfile struct {
 	VaultPath string `yaml:"vault,omitempty"`
+}
+
+// EffectiveRedactFields returns the merged, deduplicated list of redact field
+// patterns for toolName: global RedactFields always included, followed by any
+// per-tool additions from PerToolRedactFields[toolName].
+func (p *AgentProfile) EffectiveRedactFields(toolName string) []string {
+	if p == nil {
+		return nil
+	}
+	if len(p.RedactFields) == 0 && len(p.PerToolRedactFields[toolName]) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(p.RedactFields)+len(p.PerToolRedactFields[toolName]))
+	result := make([]string, 0, len(p.RedactFields)+len(p.PerToolRedactFields[toolName]))
+	for _, f := range p.RedactFields {
+		if _, ok := seen[f]; !ok {
+			seen[f] = struct{}{}
+			result = append(result, f)
+		}
+	}
+	for _, f := range p.PerToolRedactFields[toolName] {
+		if _, ok := seen[f]; !ok {
+			seen[f] = struct{}{}
+			result = append(result, f)
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }
 
 func Default() *Config {
@@ -278,6 +310,16 @@ func Load(path string) (*Config, error) {
 			}
 			if profile.RedactFields != nil {
 				current.RedactFields = append([]string(nil), profile.RedactFields...)
+			}
+			// PerToolRedactFields uses append semantics (unlike the scalar RedactFields replace)
+			// so that stacked profile overrides can each add per-tool patterns additively.
+			if profile.PerToolRedactFields != nil {
+				if current.PerToolRedactFields == nil {
+					current.PerToolRedactFields = make(map[string][]string, len(profile.PerToolRedactFields))
+				}
+				for tool, fields := range profile.PerToolRedactFields {
+					current.PerToolRedactFields[tool] = append(current.PerToolRedactFields[tool], fields...)
+				}
 			}
 			if profile.AllowedTools != nil {
 				current.AllowedTools = append([]string(nil), profile.AllowedTools...)
@@ -587,6 +629,12 @@ func buildFileAgents(agents map[string]AgentProfile) map[string]fileAgentProfile
 		}
 		if profile.RedactFields != nil {
 			fap.RedactFields = append([]string(nil), profile.RedactFields...)
+		}
+		if profile.PerToolRedactFields != nil {
+			fap.PerToolRedactFields = make(map[string][]string, len(profile.PerToolRedactFields))
+			for tool, fields := range profile.PerToolRedactFields {
+				fap.PerToolRedactFields[tool] = append([]string(nil), fields...)
+			}
 		}
 		if profile.AllowedTools != nil {
 			fap.AllowedTools = append([]string(nil), profile.AllowedTools...)

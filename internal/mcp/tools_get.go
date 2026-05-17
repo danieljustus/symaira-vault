@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	gopath "path"
+	"strings"
 	"time"
 
 	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
@@ -110,6 +112,17 @@ func (s *Server) handleGetValue(ctx context.Context, req CallToolRequest) (*Call
 		return nil, fmt.Errorf("access denied: path %q outside allowed scope", path)
 	}
 
+	// Block value access for quarantined entries. Normalize path first to prevent
+	// traversal bypasses (e.g., "quarantine/../secrets/foo" normalizes to
+	// "secrets/foo", correctly bypassing the check — that path is not quarantined).
+	{
+		cleanedPath := gopath.Clean(path)
+		if cleanedPath == "quarantine" || strings.HasPrefix(cleanedPath, "quarantine/") {
+			s.logAudit(ctx, "quarantine_block", path, false)
+			return NewToolResultError("entry is in quarantine — run 'openpass import review promote' to make it accessible"), nil
+		}
+	}
+
 	if !s.canReadValues() {
 		if approvalErr := s.requireApproval(ctx, Intent{
 			Action:    "get_entry_value",
@@ -130,8 +143,10 @@ func (s *Server) handleGetValue(ctx context.Context, req CallToolRequest) (*Call
 		return vaultServiceErrorResult(err)
 	}
 
-	if s.agent != nil && s.agent.RedactFields != nil && len(s.agent.RedactFields) > 0 {
-		entry = redactEntry(entry, s.agent.RedactFields)
+	if s.agent != nil {
+		if patterns := s.agent.EffectiveRedactFields("get_entry_value"); len(patterns) > 0 {
+			entry = redactEntry(entry, patterns)
+		}
 	}
 
 	// Sanitize tags to prevent prompt injection via tag metadata.

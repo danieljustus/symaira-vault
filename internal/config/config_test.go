@@ -2279,3 +2279,148 @@ func TestLoad_ExposeValueToolsExplicitOverridesTier(t *testing.T) {
 		t.Error("ExposeValueTools should be true (explicit override of standard preset)")
 	}
 }
+
+func TestEffectiveRedactFields(t *testing.T) {
+	p := AgentProfile{
+		RedactFields: []string{"totp.*"},
+		PerToolRedactFields: map[string][]string{
+			"get_entry_value": {"password"},
+		},
+	}
+
+	// Global patterns always included
+	got := p.EffectiveRedactFields("get_entry_value")
+	if len(got) != 2 {
+		t.Fatalf("len = %d, want 2; got %v", len(got), got)
+	}
+
+	// Tool with no per-tool config — only global
+	got = p.EffectiveRedactFields("list_entries")
+	if len(got) != 1 || got[0] != "totp.*" {
+		t.Errorf("list_entries = %v, want [totp.*]", got)
+	}
+
+	// Dedup: same pattern in both global and per-tool
+	p2 := AgentProfile{
+		RedactFields: []string{"password"},
+		PerToolRedactFields: map[string][]string{
+			"get_entry_value": {"password", "api_key"},
+		},
+	}
+	got = p2.EffectiveRedactFields("get_entry_value")
+	// Should be ["password", "api_key"] — no duplicate password
+	if len(got) != 2 {
+		t.Errorf("dedup: len = %d, want 2; got %v", len(got), got)
+	}
+
+	// Nil profile — nil result
+	var nilProfile *AgentProfile
+	if nilProfile.EffectiveRedactFields("x") != nil {
+		t.Error("nil profile should return nil")
+	}
+
+	// Empty profile — nil result
+	empty := AgentProfile{}
+	if empty.EffectiveRedactFields("x") != nil {
+		t.Error("empty profile should return nil")
+	}
+}
+
+func TestLoadParsesPerToolRedactFields(t *testing.T) {
+	dir := t.TempDir()
+	content := `agents:
+  restricted:
+    allowedPaths: ["*"]
+    canWrite: false
+    redactFields:
+      - totp.*
+    perToolRedactFields:
+      get_entry_value:
+        - password
+      get_entry:
+        - password
+        - api_key
+`
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	agent := cfg.Agents["restricted"]
+	if len(agent.PerToolRedactFields) != 2 {
+		t.Fatalf("PerToolRedactFields len = %d, want 2", len(agent.PerToolRedactFields))
+	}
+	if len(agent.PerToolRedactFields["get_entry_value"]) != 1 || agent.PerToolRedactFields["get_entry_value"][0] != "password" {
+		t.Errorf("get_entry_value = %v", agent.PerToolRedactFields["get_entry_value"])
+	}
+	if len(agent.PerToolRedactFields["get_entry"]) != 2 {
+		t.Errorf("get_entry = %v", agent.PerToolRedactFields["get_entry"])
+	}
+}
+
+func TestPerToolRedactFieldsDeepMerge(t *testing.T) {
+	// Verify that loading a YAML with per-tool patterns actually works end-to-end,
+	// and that EffectiveRedactFields returns the combined union correctly after Load.
+	dir := t.TempDir()
+	content := `agents:
+  test:
+    allowedPaths: ["*"]
+    redactFields:
+      - totp.*
+    perToolRedactFields:
+      get_entry_value:
+        - password
+        - api_key
+`
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	agent := cfg.Agents["test"]
+
+	// EffectiveRedactFields("get_entry_value") should return totp.*, password, api_key
+	got := agent.EffectiveRedactFields("get_entry_value")
+	if len(got) != 3 {
+		t.Fatalf("want 3 patterns, got %v", got)
+	}
+
+	// EffectiveRedactFields("list_entries") should return only the global pattern
+	global := agent.EffectiveRedactFields("list_entries")
+	if len(global) != 1 || global[0] != "totp.*" {
+		t.Errorf("list_entries: want [totp.*], got %v", global)
+	}
+}
+
+func TestSaveRoundTripsPerToolRedactFields(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	cfg := &Config{
+		VaultDir: dir,
+		Agents: map[string]AgentProfile{
+			"test": {
+				AllowedPaths: []string{"*"},
+				PerToolRedactFields: map[string][]string{
+					"get_entry_value": {"password"},
+				},
+			},
+		},
+	}
+	if err := cfg.SaveTo(path); err != nil {
+		t.Fatalf("SaveTo: %v", err)
+	}
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	got := loaded.Agents["test"].PerToolRedactFields["get_entry_value"]
+	if len(got) != 1 || got[0] != "password" {
+		t.Errorf("round-trip: got %v", got)
+	}
+}

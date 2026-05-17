@@ -270,6 +270,8 @@ func (s *Server) requiresApproval() bool {
 	}
 }
 
+// shouldRedactField checks global redactFields only. Per-tool redaction is
+// applied post-dispatch in the tool handlers via EffectiveRedactFields.
 func (s *Server) shouldRedactField(field string) bool {
 	if s == nil || s.agent == nil || s.agent.RedactFields == nil {
 		return false

@@ -47,6 +47,7 @@ const (
 	AlertRateAnomaly  AlertType = "rate_anomaly"
 	AlertOffHours     AlertType = "off_hours"
 	AlertCanaryAccess AlertType = "canary_access"
+	AlertToolChain    AlertType = "tool_chain"
 )
 
 // AnomalyAlert represents a single anomaly detection event.
@@ -63,14 +64,15 @@ type AnomalyAlert struct {
 
 // ToolCallEvent represents a single tool call to be analyzed by the detector.
 type ToolCallEvent struct {
-	Timestamp time.Time
-	Agent     string
-	Tool      string
-	Path      string
-	Duration  time.Duration
-	OK        bool
-	IsCanary  bool
-	RequestID string
+	Timestamp   time.Time
+	Agent       string
+	Tool        string
+	Path        string
+	Duration    time.Duration
+	OK          bool
+	IsCanary    bool
+	RequestID   string
+	FieldLength int // byte length of raw value before redaction; 0 for non-read tools
 }
 
 // Option configures an AnomalyDetector.
@@ -133,6 +135,17 @@ func WithStaleThreshold(days int) Option {
 	}
 }
 
+// WithToolChainWindow sets the time window for tool-chain detection.
+func WithToolChainWindow(dur time.Duration) Option {
+	return func(d *AnomalyDetector) { d.toolChainWindow = dur }
+}
+
+// WithToolChainFieldThreshold sets the minimum field length (in bytes) that
+// triggers tool-chain detection when followed by a command execution tool.
+func WithToolChainFieldThreshold(n int) Option {
+	return func(d *AnomalyDetector) { d.toolChainThreshold = n }
+}
+
 // WithAlertHook registers a callback invoked for every detected anomaly.
 // The hook receives a copy of the alert and runs in the same goroutine as Check.
 // Hooks must not block; they are called synchronously during Check.
@@ -152,6 +165,12 @@ const (
 	defaultOffHoursStart = 22 // 10 PM
 	defaultOffHoursEnd   = 6  // 6 AM
 	defaultStaleDays     = 90
+
+	defaultToolChainWindow = 30 * time.Second
+	// 500 bytes: passwords/tokens are typically <200 bytes; notes fields used
+	// for prompt-injection attacks are typically multi-paragraph (500-5000 bytes).
+	// Tunable via WithToolChainFieldThreshold for vaults with legitimately long fields.
+	defaultToolChainThreshold = 500
 )
 
 // AnomalyDetector maintains a sliding window of tool call events and applies
@@ -169,19 +188,24 @@ type AnomalyDetector struct {
 	offHoursEnd    int
 	staleDays      int
 	alertHooks     []func(AnomalyAlert)
+
+	toolChainWindow    time.Duration
+	toolChainThreshold int
 }
 
 // New creates a new AnomalyDetector with the given options.
 func New(opts ...Option) *AnomalyDetector {
 	d := &AnomalyDetector{
-		maxEvents:      defaultMaxEvents,
-		sweepWindow:    defaultSweepWindow,
-		sweepThreshold: defaultSweepThresh,
-		rateWindow:     defaultRateWindow,
-		rateLimit:      defaultRateLimit,
-		offHoursStart:  defaultOffHoursStart,
-		offHoursEnd:    defaultOffHoursEnd,
-		staleDays:      defaultStaleDays,
+		maxEvents:          defaultMaxEvents,
+		sweepWindow:        defaultSweepWindow,
+		sweepThreshold:     defaultSweepThresh,
+		rateWindow:         defaultRateWindow,
+		rateLimit:          defaultRateLimit,
+		offHoursStart:      defaultOffHoursStart,
+		offHoursEnd:        defaultOffHoursEnd,
+		staleDays:          defaultStaleDays,
+		toolChainWindow:    defaultToolChainWindow,
+		toolChainThreshold: defaultToolChainThreshold,
 	}
 	for _, opt := range opts {
 		opt(d)
@@ -241,6 +265,9 @@ func (d *AnomalyDetector) evaluate(event ToolCallEvent) []AnomalyAlert {
 		alerts = append(alerts, *alert)
 	}
 	if alert := d.detectRateAnomaly(event); alert != nil {
+		alerts = append(alerts, *alert)
+	}
+	if alert := d.detectToolChain(event); alert != nil {
 		alerts = append(alerts, *alert)
 	}
 

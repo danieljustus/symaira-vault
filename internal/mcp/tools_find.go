@@ -50,9 +50,9 @@ func (s *Server) findEntries(ctx context.Context, query string) ([]vault.Match, 
 		workers = s.vault.Config.Vault.SearchWorkers
 	}
 
-	redactPatterns := []string{}
-	if s.agent != nil && s.agent.RedactFields != nil {
-		redactPatterns = s.agent.RedactFields
+	var redactPatterns []string
+	if s.agent != nil {
+		redactPatterns = s.agent.EffectiveRedactFields("find_entries")
 	}
 
 	return svc.Find(query, vault.FindOptions{

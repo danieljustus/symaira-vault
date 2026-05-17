@@ -219,6 +219,110 @@ func TestFindEntries_ListFails(t *testing.T) {
 	}
 }
 
+// TestFindPerToolRedact verifies that PerToolRedactFields["find_entries"]
+// is applied when handleFind is called. A query matching a redacted field
+// must not surface that field in Match.Fields, while non-redacted fields
+// that match continue to appear normally.
+func TestFindPerToolRedact(t *testing.T) {
+	vaultDir, identity := mockVault(t)
+
+	// Override the github entry with a password value we can search for
+	entry := &vault.Entry{
+		Data: map[string]any{
+			"password": "s3cr3tpass",
+			"username": "alice",
+		},
+	}
+	if err := vault.WriteEntry(vaultDir, "github", entry, identity); err != nil {
+		t.Fatalf("WriteEntry: %v", err)
+	}
+
+	srv := &Server{
+		vault: &vault.Vault{
+			Dir:      vaultDir,
+			Identity: identity,
+		},
+		agent: &config.AgentProfile{
+			Name:         "restricted",
+			AllowedPaths: []string{"*"},
+			CanWrite:     false,
+			ApprovalMode: "none",
+			PerToolRedactFields: map[string][]string{
+				"find_entries": {"password"},
+			},
+		},
+		hookRegistry: NewHookRegistry(),
+	}
+
+	// Query that matches the password value — should not appear in Fields
+	req := CallToolRequest{
+		Arguments: map[string]any{"query": "s3cr3tpass"},
+	}
+
+	result, err := srv.handleFind(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleFind() error = %v", err)
+	}
+	if result == nil {
+		t.Fatal("handleFind() returned nil result")
+	}
+	if result.IsError {
+		t.Fatalf("handleFind() returned error: %s", result.Text)
+	}
+
+	var matches []vault.Match
+	if parseErr := json.Unmarshal([]byte(result.Text), &matches); parseErr != nil {
+		t.Fatalf("parse result: %v", parseErr)
+	}
+
+	// The password value matches the query but password is redacted — no match
+	// should be returned for the github entry via that field.
+	for _, m := range matches {
+		if m.Path == "github" {
+			for _, f := range m.Fields {
+				if f == "password" {
+					t.Errorf("password field should be redacted from find_entries results, but got field %q", f)
+				}
+			}
+		}
+	}
+
+	// Now query for a value in the non-redacted username field — must appear
+	req2 := CallToolRequest{
+		Arguments: map[string]any{"query": "alice"},
+	}
+
+	result2, err := srv.handleFind(context.Background(), req2)
+	if err != nil {
+		t.Fatalf("handleFind() second call error = %v", err)
+	}
+	if result2 == nil {
+		t.Fatal("handleFind() second call returned nil result")
+	}
+	if result2.IsError {
+		t.Fatalf("handleFind() second call returned error: %s", result2.Text)
+	}
+
+	var matches2 []vault.Match
+	if parseErr := json.Unmarshal([]byte(result2.Text), &matches2); parseErr != nil {
+		t.Fatalf("parse second result: %v", parseErr)
+	}
+
+	found := false
+	for _, m := range matches2 {
+		if m.Path == "github" {
+			for _, f := range m.Fields {
+				if f == "username" {
+					found = true
+				}
+			}
+		}
+	}
+	if !found {
+		t.Error("username field should NOT be redacted and should appear in find_entries results")
+	}
+}
+
 func TestCollectFieldMatches(t *testing.T) {
 	tests := []struct {
 		data     map[string]any

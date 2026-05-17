@@ -2,7 +2,11 @@ package mcp
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"sort"
 
 	"github.com/danieljustus/OpenPass/internal/config"
 )
@@ -453,6 +457,24 @@ func decodeToolRequest(args json.RawMessage) (CallToolRequest, error) {
 		req.Arguments = map[string]any{}
 	}
 	return req, nil
+}
+
+// ComputeToolRegistryHash returns a SHA-256 hex digest of the full static tool
+// registry (all entries from toolDefinitions(), sorted by name). Covers name,
+// description, and input schema so any injection-relevant change is detected.
+func ComputeToolRegistryHash() string {
+	defs := toolDefinitions()
+	sort.Slice(defs, func(i, j int) bool { return defs[i].Name < defs[j].Name })
+	h := sha256.New()
+	for _, def := range defs {
+		schemaJSON, err := json.Marshal(def.InputSchema) // stable: encoding/json sorts map keys
+		if err != nil {
+			// unreachable: InputSchema is always a plain map[string]any from static definitions
+			schemaJSON = []byte("{}")
+		}
+		_, _ = fmt.Fprintf(h, "%s|%s|%s\n", def.Name, def.Description, schemaJSON)
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // resolveToolAlias looks up a tool by name and returns its canonical name if
