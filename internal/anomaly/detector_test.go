@@ -36,7 +36,7 @@ func TestCanaryAccessDetection(t *testing.T) {
 }
 
 func TestNonCanaryAccessNoAlert(t *testing.T) {
-	d := New()
+	d := New(WithOffHoursStart(0), WithOffHoursEnd(0))
 	event := ToolCallEvent{
 		Timestamp: time.Now(),
 		Agent:     "test-agent",
@@ -140,6 +140,8 @@ func TestSweepDetection(t *testing.T) {
 	d := New(
 		WithSweepThreshold(3),
 		WithSweepWindow(time.Minute),
+		WithOffHoursStart(0),
+		WithOffHoursEnd(0),
 	)
 
 	now := time.Now()
@@ -177,6 +179,8 @@ func TestSweepSamePathDoesNotTrigger(t *testing.T) {
 	d := New(
 		WithSweepThreshold(3),
 		WithSweepWindow(time.Minute),
+		WithOffHoursStart(0),
+		WithOffHoursEnd(0),
 	)
 
 	now := time.Now()
@@ -197,6 +201,8 @@ func TestSweepOldEventsIgnored(t *testing.T) {
 	d := New(
 		WithSweepThreshold(2),
 		WithSweepWindow(10*time.Millisecond), // very short window
+		WithOffHoursStart(0),
+		WithOffHoursEnd(0),
 	)
 
 	now := time.Now()
@@ -229,6 +235,8 @@ func TestRateAnomalyDetection(t *testing.T) {
 	d := New(
 		WithRateLimit(5),
 		WithRateWindow(time.Minute),
+		WithOffHoursStart(0),
+		WithOffHoursEnd(0),
 	)
 
 	now := time.Now()
@@ -268,6 +276,8 @@ func TestRateAnomalyPerAgent(t *testing.T) {
 	d := New(
 		WithRateLimit(3),
 		WithRateWindow(time.Minute),
+		WithOffHoursStart(0),
+		WithOffHoursEnd(0),
 	)
 
 	now := time.Now()
@@ -301,7 +311,7 @@ func TestRateAnomalyPerAgent(t *testing.T) {
 }
 
 func TestWindowSizeLimit(t *testing.T) {
-	d := New(WithWindowSize(10))
+	d := New(WithWindowSize(10), WithOffHoursStart(0), WithOffHoursEnd(0))
 
 	// Add 20 events
 	for i := 0; i < 20; i++ {
@@ -322,6 +332,8 @@ func TestAlertHook(t *testing.T) {
 		WithAlertHook(func(a AnomalyAlert) {
 			called.Add(1)
 		}),
+		WithOffHoursStart(0),
+		WithOffHoursEnd(0),
 	)
 
 	// Trigger a canary alert
@@ -341,6 +353,8 @@ func TestMultipleAlertHooks(t *testing.T) {
 	d := New(
 		WithAlertHook(func(a AnomalyAlert) { c1.Add(1) }),
 		WithAlertHook(func(a AnomalyAlert) { c2.Add(1) }),
+		WithOffHoursStart(0),
+		WithOffHoursEnd(0),
 	)
 
 	d.Check(context.Background(), ToolCallEvent{
@@ -414,7 +428,7 @@ func TestEmptyPathNoDetection(t *testing.T) {
 }
 
 func TestConcurrentAccess(t *testing.T) {
-	d := New(WithWindowSize(100))
+	d := New(WithWindowSize(100), WithOffHoursStart(0), WithOffHoursEnd(0))
 
 	done := make(chan struct{})
 	go func() {
@@ -448,7 +462,7 @@ func TestConcurrentAccess(t *testing.T) {
 }
 
 func TestDetectToolChain_FiresOnNotesRunCommand(t *testing.T) {
-	d := New(WithToolChainWindow(30*time.Second), WithToolChainFieldThreshold(500))
+	d := New(WithToolChainWindow(30*time.Second), WithToolChainFieldThreshold(500), WithOffHoursStart(0), WithOffHoursEnd(0))
 	now := time.Now()
 	agentName := "claude"
 
