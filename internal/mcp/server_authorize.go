@@ -288,6 +288,29 @@ func (s *Server) shouldRedactField(field string) bool {
 	return false
 }
 
+func (s *Server) applySemanticInjectionCheck(text string) (string, error) {
+	mode := s.agent.PromptInjectionMode
+	if mode == "" || mode == "off" {
+		return text, nil
+	}
+	pattern, found := detectSemanticInjection(text)
+	if !found {
+		return text, nil
+	}
+	switch mode {
+	case "log-only":
+		slog.Warn("semantic prompt injection detected", "pattern", pattern, "agent", s.agent.Name)
+		return text, nil
+	case "wrap":
+		warning := fmt.Sprintf("[SECURITY WARNING: potential prompt injection detected (pattern: %q)]\n", pattern)
+		return warning + text, nil
+	case "deny":
+		return "", fmt.Errorf("access denied: vault content contains potential prompt injection pattern %q", pattern)
+	default:
+		return text, nil
+	}
+}
+
 func redactEntry(entry *vault.Entry, redactFields []string) *vault.Entry {
 	if entry == nil || redactFields == nil || len(redactFields) == 0 {
 		return entry

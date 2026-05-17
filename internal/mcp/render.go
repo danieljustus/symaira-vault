@@ -17,8 +17,19 @@ func init() {
 	taint.SetMCPSanitizer(sanitizeMCPText)
 }
 
-// globalChokepoint is the shared MCP output sanitizer instance.
-// It is used by callToolResultPayload and handleSanitizeOutput.
+var defaultSemanticPatterns = []string{
+	"<|im_start|>",
+	"<|endoftext|>",
+	"system:",
+	"ignore previous instructions",
+	"ignore all instructions",
+	"ignore the above",
+	"disregard earlier",
+	"forget your previous",
+	"override your instructions",
+	"you are now",
+}
+
 var globalChokepoint = &RenderChokepoint{}
 
 // RenderChokepoint is the central output sanitization point for MCP responses.
@@ -37,6 +48,18 @@ func NewRenderChokepoint() *RenderChokepoint {
 // XML structure injection (e.g. </data>).
 func (rc *RenderChokepoint) SanitizeForMCP(text string) string {
 	return sanitizeMCPText(text)
+}
+
+// detectSemanticInjection scans text for known prompt-injection signal
+// patterns. It returns the first matched pattern and true if found.
+func detectSemanticInjection(text string) (string, bool) {
+	lower := strings.ToLower(text)
+	for _, p := range defaultSemanticPatterns {
+		if strings.Contains(lower, p) {
+			return p, true
+		}
+	}
+	return "", false
 }
 
 // sanitizeMCPText is the core MCP text sanitizer.

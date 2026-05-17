@@ -165,6 +165,18 @@ func (s *Server) handleGetValue(ctx context.Context, req CallToolRequest) (*Call
 	// via high-risk untrusted fields (notes, description, custom fields).
 	entry.Data = wrapDataFields(entry.Data)
 
+	if s.agent != nil && s.agent.PromptInjectionMode != "" && s.agent.PromptInjectionMode != "off" {
+		for k, v := range entry.Data {
+			if str, ok := v.(string); ok {
+				checked, err := s.applySemanticInjectionCheck(str)
+				if err != nil {
+					return NewToolResultError(err.Error()), nil
+				}
+				entry.Data[k] = checked
+			}
+		}
+	}
+
 	result, err := json.Marshal(entry)
 	if err != nil {
 		return nil, err
