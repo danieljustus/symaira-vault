@@ -1,3 +1,6 @@
+# Worktrees
+.worktrees/
+
 # Binaries
 openpass
 OpenPass
