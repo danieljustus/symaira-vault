@@ -20,6 +20,14 @@ var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Manage OpenPass configuration",
 	Long:  `Manage OpenPass configuration including validation and profiles.`,
+	Example: `  # Validate the default config file
+  openpass config validate
+
+  # Validate a specific file
+  openpass config validate ~/custom-config.yaml
+
+  # JSON output
+  openpass config validate --output json`,
 	Annotations: map[string]string{
 		requiresVaultAnnotation: "false",
 	},

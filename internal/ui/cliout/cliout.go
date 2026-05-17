@@ -13,9 +13,37 @@ import (
 	"github.com/danieljustus/OpenPass/internal/ui/theme"
 )
 
+// ColorMode controls when ANSI color is emitted, regardless of TTY/NO_COLOR.
+type ColorMode int
+
+const (
+	// ColorAuto is the default: emit color when stderr is a TTY and NO_COLOR
+	// is unset.
+	ColorAuto ColorMode = iota
+	// ColorAlways forces color on, even when piped (e.g. `openpass list
+	// --color=always | less -R`).
+	ColorAlways
+	// ColorNever suppresses all color, ignoring TTY/FORCE_COLOR/env hints.
+	ColorNever
+)
+
+// ParseColorMode normalizes the --color flag value. Unknown values fall back
+// to ColorAuto with no error so callers can decide whether to warn.
+func ParseColorMode(s string) ColorMode {
+	switch s {
+	case "always", "force", "yes", "on":
+		return ColorAlways
+	case "never", "no", "off":
+		return ColorNever
+	default:
+		return ColorAuto
+	}
+}
+
 var (
-	quiet bool
-	mu    sync.RWMutex
+	quiet     bool
+	colorMode ColorMode
+	mu        sync.RWMutex
 )
 
 // SetQuiet enables or disables quiet mode.
@@ -25,13 +53,35 @@ func SetQuiet(v bool) {
 	mu.Unlock()
 }
 
+// SetColorMode overrides the color decision. Called from cmd/root.go after
+// parsing the --color flag.
+func SetColorMode(m ColorMode) {
+	mu.Lock()
+	colorMode = m
+	mu.Unlock()
+}
+
 func isQuiet() bool {
 	mu.RLock()
 	defer mu.RUnlock()
 	return quiet
 }
 
+func currentColorMode() ColorMode {
+	mu.RLock()
+	defer mu.RUnlock()
+	return colorMode
+}
+
 func noColor() bool {
+	switch currentColorMode() {
+	case ColorAuto:
+		// fall through to environment/terminal detection below
+	case ColorAlways:
+		return false
+	case ColorNever:
+		return true
+	}
 	if os.Getenv("NO_COLOR") != "" {
 		return true
 	}

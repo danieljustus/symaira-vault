@@ -1,6 +1,7 @@
 package clipboard
 
 import (
+	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -132,4 +133,37 @@ func TestCountdown_NilUpdateFn(t *testing.T) {
 	// This should not panic and return immediately
 	Countdown(1, nil, nil)
 	time.Sleep(10 * time.Millisecond)
+}
+
+func TestVerifyCleared_StillContainsSecret(t *testing.T) {
+	err := VerifyCleared("topsecret", func() (string, error) { return "topsecret", nil })
+	if err == nil {
+		t.Fatal("expected ErrClipboardNotCleared, got nil")
+	}
+}
+
+func TestVerifyCleared_Cleared(t *testing.T) {
+	err := VerifyCleared("topsecret", func() (string, error) { return "", nil })
+	if err != nil {
+		t.Errorf("expected nil, got %v", err)
+	}
+}
+
+func TestVerifyCleared_NilReadFn(t *testing.T) {
+	if err := VerifyCleared("x", nil); err != nil {
+		t.Errorf("expected nil with nil readFn, got %v", err)
+	}
+}
+
+func TestVerifyCleared_EmptyExpected(t *testing.T) {
+	if err := VerifyCleared("", func() (string, error) { return "anything", nil }); err != nil {
+		t.Errorf("expected nil with empty expectedAbsent, got %v", err)
+	}
+}
+
+func TestVerifyCleared_ReadError(t *testing.T) {
+	readErr := errors.New("read failed")
+	if err := VerifyCleared("x", func() (string, error) { return "", readErr }); err != readErr {
+		t.Errorf("got %v, want %v", err, readErr)
+	}
 }

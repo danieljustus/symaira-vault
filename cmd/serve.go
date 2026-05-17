@@ -18,6 +18,14 @@ Each agent must be configured in ~/.openpass/config.yaml with specific
 permissions and scope restrictions.
 
 The server can run in HTTP mode or stdio mode.`,
+	Example: `  # HTTP mode bound to localhost:8080
+  openpass serve --bind 127.0.0.1 --port 8080
+
+  # stdio mode for a single agent (called by MCP clients directly)
+  openpass serve --stdio --agent claude-code
+
+  # Install as a system service (macOS launchd or systemd)
+  openpass serve install`,
 	RunE: runServe,
 }
 

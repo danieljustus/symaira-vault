@@ -138,8 +138,8 @@ func TestLinuxAutotype_Wayland_NoToolAvailable(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when no Wayland tool is available, got nil")
 	}
-	if !strings.Contains(err.Error(), "no Wayland typing tool found") {
-		t.Errorf("expected 'no Wayland typing tool found' in error, got: %v", err)
+	if !strings.Contains(err.Error(), "neither `wtype` nor `ydotool` is installed") {
+		t.Errorf("expected 'neither `wtype` nor `ydotool` is installed' in error, got: %v", err)
 	}
 }
 

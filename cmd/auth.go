@@ -19,6 +19,14 @@ var authStatusJSON bool
 var authCmd = &cobra.Command{
 	Use:   "auth",
 	Short: "Manage vault unlock authentication",
+	Example: `  # Check current auth status (passphrase vs Touch ID)
+  openpass auth status
+
+  # Enable Touch ID (macOS)
+  openpass auth set touchid
+
+  # Switch back to passphrase-only
+  openpass auth set passphrase`,
 }
 
 var authStatusCmd = &cobra.Command{

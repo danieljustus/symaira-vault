@@ -19,9 +19,10 @@ type listEntryOutput struct {
 }
 
 var listCmd = &cobra.Command{
-	Use:     "list [prefix]",
-	Aliases: []string{"ls"},
-	Short:   "List password entries",
+	Use:               "list [prefix]",
+	Aliases:           []string{"ls"},
+	ValidArgsFunction: entryCompletionFunc,
+	Short:             "List password entries",
 	Example: `  # List all entries
   openpass list
 

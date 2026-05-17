@@ -36,6 +36,21 @@ const (
 	keyEsc                  = "esc"
 )
 
+// autoClearSeconds returns the clipboard auto-clear TTL for this TUI session,
+// pulled from vault config.Clipboard.AutoClearDuration when available, else
+// the compiled-in default. Returning <=0 disables auto-clear, mirroring the
+// semantics in internal/clipboard.
+func (m *TUIModel) autoClearSeconds() int {
+	if m.svc != nil {
+		if v := m.svc.Vault(); v != nil && v.Config != nil && v.Config.Clipboard != nil {
+			if v.Config.Clipboard.AutoClearDuration >= 0 {
+				return v.Config.Clipboard.AutoClearDuration
+			}
+		}
+	}
+	return defaultAutoClearSeconds
+}
+
 type mode int
 
 const (
@@ -214,8 +229,9 @@ func (m TUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = nil
 		m.status = msg.message
 		m.clipboardMessage = msg.message
-		m.clipboardSeconds = defaultAutoClearSeconds
-		return m, tea.Batch(clearClipboardCmd(defaultAutoClearSeconds), clipboardTickCmd())
+		ttl := m.autoClearSeconds()
+		m.clipboardSeconds = ttl
+		return m, tea.Batch(clearClipboardCmd(ttl), clipboardTickCmd())
 	case passwordGeneratedMsg:
 		if msg.err != nil {
 			m.err = msg.err
@@ -232,6 +248,8 @@ func (m TUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = "Delete failed"
 			return m, nil
 		}
+		// Drop the stale cache entry so re-renders see fresh metadata.
+		delete(m.metaCache, msg.path)
 		m.err = nil
 		m.status = fmt.Sprintf("Deleted %s", msg.path)
 		return m, loadEntriesCmd(m.svc)
@@ -242,6 +260,9 @@ func (m TUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = "Edit failed"
 			return m, nil
 		}
+		// Drop the cached metadata for this path so the next sort/filter
+		// reflects the edit (tags, updated timestamp).
+		delete(m.metaCache, msg.path)
 		m.err = nil
 		m.status = fmt.Sprintf("Updated %s", msg.path)
 		return m, m.loadSelectedEntry()
@@ -447,11 +468,16 @@ func (m *TUIModel) applyFilter() {
 }
 
 func (m *TUIModel) ensureMetaCache() {
-	if m.metaCache != nil {
-		return
+	if m.metaCache == nil {
+		m.metaCache = make(map[string]vaultpkg.EntryMetadata)
 	}
-	m.metaCache = make(map[string]vaultpkg.EntryMetadata)
+	// Fill in any entries that are missing from the cache. After a delete or
+	// edit we drop the affected path; this loop re-populates it lazily on the
+	// next sort/filter pass.
 	for _, path := range m.entries {
+		if _, ok := m.metaCache[path]; ok {
+			continue
+		}
 		meta, err := vaultpkg.GetEntryMetadata(m.svc.GetDir(), path, m.svc.GetIdentity())
 		if err != nil {
 			continue

@@ -27,6 +27,11 @@ var rotatePassphraseCmd = &cobra.Command{
 	Long: `Change the vault's master passphrase without re-initializing the vault.
 The X25519 key pair stays the same — only the passphrase protecting it is changed.
 Optionally re-encrypts all entries with the new passphrase.`,
+	Example: `  # Change the passphrase only
+  openpass rotate-passphrase
+
+  # Change passphrase AND re-encrypt all entries (slow but clean)
+  openpass rotate-passphrase --reencrypt`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		_, _ = cmd, args
 		vaultDir, cfg, err := loadAuthConfig()

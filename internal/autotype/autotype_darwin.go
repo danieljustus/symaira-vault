@@ -19,6 +19,9 @@ func init() {
 type darwinAutotype struct{}
 
 func (a *darwinAutotype) Type(text string) error {
+	if err := guardActiveWindow(); err != nil {
+		return err
+	}
 	escaped := escapeAppleScriptString(text)
 	script := fmt.Sprintf(`tell application "System Events" to keystroke "%s"`, escaped)
 

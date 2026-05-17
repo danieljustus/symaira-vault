@@ -16,8 +16,9 @@ var (
 )
 
 var deleteCmd = &cobra.Command{
-	Use:   "delete <path>",
-	Short: "Delete a password entry",
+	Use:     "delete <path>",
+	Aliases: []string{"rm", "remove"},
+	Short:   "Delete a password entry",
 	Example: `  # Delete an entry (with confirmation)
   openpass delete github
 

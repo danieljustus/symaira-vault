@@ -19,9 +19,11 @@ import (
 	configpkg "github.com/danieljustus/OpenPass/internal/config"
 	cryptopkg "github.com/danieljustus/OpenPass/internal/crypto"
 	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
+	"github.com/danieljustus/OpenPass/internal/i18n"
 	"github.com/danieljustus/OpenPass/internal/metrics"
 	"github.com/danieljustus/OpenPass/internal/session"
 	"github.com/danieljustus/OpenPass/internal/ui/cliout"
+	"github.com/danieljustus/OpenPass/internal/ui/theme"
 	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
 	vaultsvc "github.com/danieljustus/OpenPass/internal/vaultsvc"
 )
@@ -32,6 +34,25 @@ const requiresVaultAnnotation = "openpass/requires-vault"
 
 var readPasswordFunc func(int) ([]byte, error) = term.ReadPassword
 var isTerminalFunc func(int) bool = term.IsTerminal
+
+// pipeWarningEmitted tracks whether the pipe-input warning has already been
+// printed in this process so we only nag once per invocation.
+var pipeWarningEmitted bool
+
+// warnPipeRead prints a one-shot warning that hidden input is being read from
+// a non-TTY (pipe/redirect). Callers like `echo secret | openpass unlock`
+// expose the value in /proc/<pid>/cmdline and `ps`, so the user should know.
+// Suppressed by --no-pipe-warning, OPENPASS_NO_PIPE_WARNING=1, or quiet mode.
+func warnPipeRead(label string) {
+	if pipeWarningEmitted || quietMode || noPipeWarning {
+		return
+	}
+	if v := os.Getenv("OPENPASS_NO_PIPE_WARNING"); v != "" && v != "0" {
+		return
+	}
+	pipeWarningEmitted = true
+	cliout.Warnf("Reading %s from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer OPENPASS_PASSPHRASE or 'openpass auth set touchid'.", label)
+}
 
 func readHiddenInput(prompt string, reader *bufio.Reader) ([]byte, error) {
 	fmt.Fprint(os.Stderr, prompt)
@@ -49,16 +70,18 @@ func readHiddenInput(prompt string, reader *bufio.Reader) ([]byte, error) {
 		}
 		return bytes.TrimSpace(passphrase), nil
 	}
+	label := strings.TrimSuffix(strings.TrimSuffix(prompt, ": "), ":")
+	warnPipeRead(label)
 	if reader != nil {
 		line, err := reader.ReadString('\n')
 		if err != nil && line == "" {
-			return nil, fmt.Errorf("read %s: %w", strings.TrimSuffix(strings.TrimSuffix(prompt, ": "), ":"), err)
+			return nil, fmt.Errorf("read %s: %w", label, err)
 		}
 		return bytes.TrimSpace([]byte(line)), nil
 	}
 	line, err := readLineFromStdin()
 	if err != nil && line == nil {
-		return nil, fmt.Errorf("read %s: %w", strings.TrimSuffix(strings.TrimSuffix(prompt, ": "), ":"), err)
+		return nil, fmt.Errorf("read %s: %w", label, err)
 	}
 	return bytes.TrimSpace(line), nil
 }
@@ -100,10 +123,26 @@ var quietMode bool
 var profile string
 var profileFlag *pflag.Flag
 var outputFormat string
+var noPipeWarning bool
+var colorMode string
+var themePreset string
 
 var rootCmd = &cobra.Command{
-	Use:           "openpass",
-	Short:         "OpenPass is a Go CLI password manager",
+	Use:   "openpass",
+	Short: "OpenPass is a Go CLI password manager",
+	Long: `OpenPass is a Go CLI password manager with an interactive TUI, multi-device
+sync via Git, and an MCP server for AI-agent integration.
+
+First-time setup:
+  1. openpass init         create a vault and identity (non-interactive)
+  2. openpass setup        same, plus guided wizard for sync/agents (TTY only)
+  3. openpass doctor       health-check and self-heal
+
+Daily use:
+  openpass add <name>      add a credential (interactive form)
+  openpass ui              browse and edit the vault in a TUI
+  openpass get <name>      print a credential
+  openpass --help          full command list`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
@@ -117,12 +156,27 @@ var rootCmd = &cobra.Command{
 
 func Execute() {
 	cliout.SetQuiet(quietMode)
+	cliout.SetColorMode(cliout.ParseColorMode(colorMode))
+	i18n.ApplyFromEnv()
+	if themePreset != "" {
+		theme.ApplyPreset(theme.ParsePreset(themePreset))
+	} else {
+		theme.ApplyPresetFromEnv()
+	}
 	if err := rootCmd.Execute(); err != nil {
 		cliout.Errorf("Error: %v", err)
-		if errorspkg.ExitCodeFromError(err) == errorspkg.ExitNotFound {
+		exitCode := errorspkg.ExitCodeFromError(err)
+		switch exitCode {
+		case errorspkg.ExitNotFound:
 			cliout.Hintf("Try: openpass find <search-term>")
+		case errorspkg.ExitNotInitialized:
+			cliout.Hintf("Run 'openpass init' for a quick start, or 'openpass setup' for the guided wizard.")
+		case errorspkg.ExitLocked:
+			cliout.Hintf("Unlock with 'openpass unlock', or set OPENPASS_PASSPHRASE for non-interactive use.")
+		case errorspkg.ExitSuccess, errorspkg.ExitGeneralError, errorspkg.ExitPermissionDenied, errorspkg.ExitDoctorWarn, errorspkg.ExitDoctorFail:
+			// no specific hint for these exit codes
 		}
-		osExit(int(errorspkg.ExitCodeFromError(err)))
+		osExit(int(exitCode))
 	}
 }
 
@@ -146,7 +200,11 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&quietMode, "quiet", false, "suppress non-error output")
 	rootCmd.PersistentFlags().StringVar(&profile, "profile", "", "use a named vault profile")
 	profileFlag = rootCmd.PersistentFlags().Lookup("profile")
+	_ = rootCmd.RegisterFlagCompletionFunc("profile", profileCompletionFunc)
 	rootCmd.PersistentFlags().StringVar(&outputFormat, "output", "text", "Output format (text, json, yaml)")
+	rootCmd.PersistentFlags().BoolVar(&noPipeWarning, "no-pipe-warning", false, "suppress 'reading from non-TTY' warning when piping secrets")
+	rootCmd.PersistentFlags().StringVar(&colorMode, "color", "auto", "When to emit ANSI color: auto, always, never")
+	rootCmd.PersistentFlags().StringVar(&themePreset, "theme", "", "Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)")
 }
 
 func vaultPath() (string, error) {

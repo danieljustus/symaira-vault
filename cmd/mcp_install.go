@@ -15,6 +15,14 @@ import (
 var mcpInstallCmd = &cobra.Command{
 	Use:   "install [agent]",
 	Short: "Auto-configure an AI agent to use the OpenPass MCP server",
+	Example: `  # Install MCP integration for Claude Code (auto-detected)
+  openpass mcp install claude-code
+
+  # HTTP mode with a fresh scoped token
+  openpass mcp install claude-code --http
+
+  # List installed agent integrations
+  openpass mcp install --list`,
 	Long: `Automatically detect and configure a supported AI agent to use the OpenPass MCP server.
 
 Supported agents:

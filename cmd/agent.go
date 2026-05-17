@@ -24,6 +24,14 @@ var agentCmd = &cobra.Command{
 
 Use 'openpass agent setup <name>' to create a new agent with an interactive wizard
 that guides you through security tier selection, vault path scoping, and approval mode.`,
+	Example: `  # Interactive new-agent wizard
+  openpass agent setup claude-code
+
+  # List configured agents
+  openpass agent list
+
+  # Issue a token for an agent
+  openpass agent token new claude-code`,
 }
 
 var agentSetupCmd = &cobra.Command{

@@ -34,6 +34,18 @@ Output modes:
   --json:           machine-readable JSON (suitable for CI/monitoring)
 
 Use --no-network to skip checks that require network access (git remote reachability, update check).`,
+	Example: `  # Full health check
+  openpass doctor
+
+  # JSON output, no network
+  openpass doctor --output json --no-network
+
+  # Run only config checks
+  openpass doctor --only 'config.*'
+
+  # Auto-fix what's safe to fix (with dry-run first)
+  openpass doctor --fix-dry-run
+  openpass doctor --fix`,
 	Annotations: map[string]string{
 		requiresVaultAnnotation: "false",
 	},

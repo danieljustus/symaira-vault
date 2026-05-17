@@ -39,10 +39,11 @@ func searchWorkers(vaultDir string, cfg *configpkg.Config) int {
 }
 
 var findCmd = &cobra.Command{
-	Use:     "find <query>",
-	Aliases: []string{"search"},
-	Short:   "Search for entries",
-	Long:    `Searches entry paths and contents for the given query.`,
+	Use:               "find <query>",
+	Aliases:           []string{"search"},
+	ValidArgsFunction: entryCompletionFunc,
+	Short:             "Search for entries",
+	Long:              `Searches entry paths and contents for the given query.`,
 	Example: `  # Search for entries containing "bank"
   openpass find bank
 

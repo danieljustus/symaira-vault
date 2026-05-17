@@ -33,8 +33,10 @@ var (
 )
 
 var addCmd = &cobra.Command{
-	Use:   "add <name>",
-	Short: "Add a new password entry",
+	Use:               "add <name>",
+	Aliases:           []string{"new", "create"},
+	ValidArgsFunction: entryCompletionFunc,
+	Short:             "Add a new password entry",
 	Long: `Creates a new password entry in the vault.
 
 The entry name can use slash notation for organization (e.g., work/aws).

@@ -14,6 +14,14 @@ var shareCmd = &cobra.Command{
 	Use:   "share",
 	Short: "Manage secret sharing between agents",
 	Long:  "List and revoke secret share grants between MCP agents.",
+	Example: `  # List all pending share requests
+  openpass share list --status pending
+
+  # Revoke a grant by ID
+  openpass share revoke <grant-id>
+
+  # JSON output for tooling
+  openpass share list --output json`,
 }
 
 var shareListCmd = &cobra.Command{

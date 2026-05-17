@@ -14,6 +14,11 @@ var mcpCmd = &cobra.Command{
 	Use:   "mcp",
 	Short: "MCP server commands",
 	Long:  `Commands for managing the Model Context Protocol (MCP) server integration.`,
+	Example: `  # Generate a per-tool token
+  openpass mcp token create --name "ide-tools" --tools list,get
+
+  # List configured tokens
+  openpass mcp token list`,
 }
 
 var mcpTokenCmd = &cobra.Command{
@@ -23,6 +28,14 @@ var mcpTokenCmd = &cobra.Command{
 
 Scoped tokens allow fine-grained access control for MCP clients. Each token can
 be restricted to specific tools and has an optional expiration time.`,
+	Example: `  # Create a read-only token expiring in 24h
+  openpass mcp token create --name "ci-readonly" --tools list,get --ttl 24h
+
+  # List all tokens
+  openpass mcp token list
+
+  # Revoke by ID
+  openpass mcp token revoke <token-id>`,
 }
 
 var tokenCreateCmd = &cobra.Command{

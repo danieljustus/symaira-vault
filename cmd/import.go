@@ -26,7 +26,15 @@ var importCmd = &cobra.Command{
 	Use:   "import <format> <source>",
 	Short: "Import entries from another password manager",
 	Long:  "Imports password entries from 1Password, Bitwarden, pass, or CSV exports.",
-	Args:  cobra.ExactArgs(2),
+	Example: `  # Dry-run a Bitwarden export to see what would be imported
+  openpass import bitwarden bw-export.json --dry-run
+
+  # Import 1Password CSV under a prefix, skipping entries that already exist
+  openpass import 1password export.csv --prefix work/ --skip-existing
+
+  # Overwrite collisions
+  openpass import csv data.csv --overwrite`,
+	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		format := importer.Format(strings.ToLower(strings.TrimSpace(args[0])))
 		if !isSupportedImportFormat(format) {

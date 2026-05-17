@@ -13,7 +13,13 @@ import (
 var gitCmd = &cobra.Command{
 	Use:   "git <push|pull|log> [path]",
 	Short: "Git operations on vault",
-	Args:  cobra.RangeArgs(1, 2),
+	Example: `  # Sync with the configured remote
+  openpass git pull
+  openpass git push
+
+  # Show commit history for an entry
+  openpass git log work/aws`,
+	Args: cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		action := args[0]
 

@@ -29,6 +29,11 @@ Supported template types:
   k8s-secret      - Kubernetes Secret manifest
   github-actions  - GitHub Actions workflow secrets
   terraform       - Terraform variable definitions`,
+	Example: `  # Generate a .env file from the work/* entries
+  openpass template generate env --prefix work/ > .env
+
+  # K8s Secret manifest
+  openpass template generate k8s-secret --name prod-secrets prod/*`,
 }
 
 var templateGenerateCmd = &cobra.Command{

@@ -648,3 +648,51 @@ func TestReadHiddenInput_StdinEOF(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
+
+func TestWarnPipeRead_OnceAndSilenced(t *testing.T) {
+	oldEmitted := pipeWarningEmitted
+	oldNoPipe := noPipeWarning
+	oldQuiet := quietMode
+	defer func() {
+		pipeWarningEmitted = oldEmitted
+		noPipeWarning = oldNoPipe
+		quietMode = oldQuiet
+	}()
+
+	// Suppressed when --no-pipe-warning is set.
+	pipeWarningEmitted = false
+	noPipeWarning = true
+	warnPipeRead("Passphrase")
+	if pipeWarningEmitted {
+		t.Errorf("warning fired despite --no-pipe-warning")
+	}
+
+	// Suppressed when OPENPASS_NO_PIPE_WARNING is set.
+	pipeWarningEmitted = false
+	noPipeWarning = false
+	t.Setenv("OPENPASS_NO_PIPE_WARNING", "1")
+	warnPipeRead("Passphrase")
+	if pipeWarningEmitted {
+		t.Errorf("warning fired despite OPENPASS_NO_PIPE_WARNING")
+	}
+	t.Setenv("OPENPASS_NO_PIPE_WARNING", "0")
+
+	// Suppressed in quiet mode.
+	pipeWarningEmitted = false
+	quietMode = true
+	warnPipeRead("Passphrase")
+	if pipeWarningEmitted {
+		t.Errorf("warning fired despite --quiet")
+	}
+	quietMode = false
+
+	// Fires once when not suppressed.
+	pipeWarningEmitted = false
+	warnPipeRead("Passphrase")
+	if !pipeWarningEmitted {
+		t.Errorf("warning did not fire when expected")
+	}
+
+	// Already emitted → second call is silent (idempotent).
+	warnPipeRead("Passphrase")
+}

@@ -23,7 +23,15 @@ var runCmd = &cobra.Command{
 	Use:   "run [flags] -- <command> [args...]",
 	Short: "Run a command with secrets injected as environment variables",
 	Long:  "Executes a command with vault secrets injected as environment variables. Use --env NAME=path.field to map secrets.",
-	Args:  cobra.MinimumNArgs(1),
+	Example: `  # Inject AWS_SECRET_ACCESS_KEY from vault entry "work/aws.secret"
+  openpass run --env AWS_SECRET_ACCESS_KEY=work/aws.secret -- aws s3 ls
+
+  # Multiple secrets, custom working dir
+  openpass run \
+    --env DB_PASS=prod/db.password \
+    --env API_TOKEN=stripe.token \
+    --workdir /tmp/job -- ./deploy.sh`,
+	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return withVault(func(svc vaultsvc.Service) error {
 			// Parse --env flags: each is "ENV_NAME=path.field"

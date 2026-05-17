@@ -13,8 +13,9 @@ import (
 )
 
 var diagCmd = &cobra.Command{
-	Use:   "diag",
-	Short: "Diagnostic commands for OpenPass",
+	Use:     "diag",
+	Short:   "Diagnostic commands for OpenPass",
+	Example: `  openpass diag metrics`,
 	Annotations: map[string]string{
 		requiresVaultAnnotation: "false",
 	},

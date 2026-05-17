@@ -29,6 +29,14 @@ The wizard guides you through:
   • Profile name
 
 For non-interactive environments (CI, scripts), use 'openpass init' instead.`,
+	Example: `  # Run the wizard (resumes from saved state if available)
+  openpass setup
+
+  # Restart from scratch
+  openpass setup --no-resume
+
+  # Keep partial vault artifacts on error for debugging
+  openpass setup --keep-on-error`,
 	Annotations: map[string]string{
 		requiresVaultAnnotation: "false",
 	},

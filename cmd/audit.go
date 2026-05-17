@@ -30,6 +30,14 @@ var auditCmd = &cobra.Command{
 By default shows the last 20 entries. Use --tail to change the number of entries.
 Use --json for machine-readable output. Use --agent to filter by agent name.
 Use --since to filter by time (e.g. "1h", "24h", "7d").`,
+	Example: `  # Last 20 audit entries
+  openpass audit
+
+  # Last 100 entries, JSON format
+  openpass audit --tail 100 --output json
+
+  # Failed invocations in the last day from a specific agent
+  openpass audit --agent claude-code --since 24h --failed`,
 	Annotations: map[string]string{
 		requiresVaultAnnotation: "false",
 	},

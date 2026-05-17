@@ -28,6 +28,9 @@ $wshell = New-Object -ComObject WScript.Shell;
 $wshell.SendKeys($text);`
 
 func (a *windowsAutotype) Type(text string) error {
+	if err := guardActiveWindow(); err != nil {
+		return err
+	}
 	escaped := escapeSendKeysString(text)
 
 	cmd := exec.Command("powershell.exe",

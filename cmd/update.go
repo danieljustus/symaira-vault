@@ -50,9 +50,10 @@ var (
 var errUpdateAvailable = errorspkg.NewCLIError(1, "update available", nil)
 
 var updateCmd = &cobra.Command{
-	Use:   "update",
-	Short: "Check for OpenPass updates",
-	Args:  cobra.NoArgs,
+	Use:     "update",
+	Short:   "Check for OpenPass updates",
+	Example: `  openpass update check`,
+	Args:    cobra.NoArgs,
 	Annotations: map[string]string{
 		requiresVaultAnnotation: "false",
 	},

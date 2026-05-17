@@ -14,6 +14,11 @@ var verifyCmd = &cobra.Command{
 	Short: "Verify vault entry integrity against manifest",
 	Long: `Verify that all vault entries match their recorded manifest hashes.
 This detects tampered or corrupted entry files.`,
+	Example: `  # Verify manifest matches on-disk entries
+  openpass verify
+
+  # As part of a scripted health check
+  openpass verify || echo "Manifest mismatch — investigate"`,
 	Annotations: map[string]string{
 		requiresVaultAnnotation: "true",
 	},

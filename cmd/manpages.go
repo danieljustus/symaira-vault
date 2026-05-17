@@ -13,7 +13,12 @@ import (
 var manpagesCmd = &cobra.Command{
 	Use:   "manpages <directory>",
 	Short: "Generate manual pages",
-	Args:  cobra.ExactArgs(1),
+	Example: `  # Generate man pages into ./man
+  openpass manpages ./man
+
+  # System-wide install (requires sudo)
+  sudo openpass manpages /usr/local/share/man/man1`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		dir, err := filepath.Abs(args[0])
 		if err != nil {

@@ -18,8 +18,9 @@ import (
 var editorFlag string
 
 var editCmd = &cobra.Command{
-	Use:   "edit <name>",
-	Short: "Edit an existing password entry",
+	Use:     "edit <name>",
+	Aliases: []string{"modify"},
+	Short:   "Edit an existing password entry",
 	Long: `Opens an existing password entry in your default editor for modification.
 
 The entry is opened in JSON format. Save and exit the editor to update the entry.

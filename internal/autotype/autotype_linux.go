@@ -25,6 +25,9 @@ var (
 type linuxAutotype struct{}
 
 func (a *linuxAutotype) Type(text string) error {
+	if err := guardActiveWindow(); err != nil {
+		return err
+	}
 	if os.Getenv("WAYLAND_DISPLAY") != "" {
 		return a.typeWayland(text)
 	}
@@ -75,7 +78,12 @@ func (a *linuxAutotype) typeWayland(text string) error {
 		return nil
 	}
 
-	return fmt.Errorf("autotype failed: no Wayland typing tool found (install wtype or ydotool)")
+	return fmt.Errorf("autotype: Wayland session detected but neither `wtype` nor `ydotool` is installed.\n" +
+		"Install one of them:\n" +
+		"  Debian/Ubuntu: sudo apt install wtype  (or sudo apt install ydotool)\n" +
+		"  Arch:          sudo pacman -S wtype     (or ydotool)\n" +
+		"  Fedora:        sudo dnf install wtype   (or ydotool)\n" +
+		"`openpass doctor` will warn about this on every run until one is available")
 }
 
 func NewLinuxAutotype() Autotype {

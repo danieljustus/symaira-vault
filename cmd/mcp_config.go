@@ -36,6 +36,14 @@ HTTP config output uses a token reference (env:OPENPASS_MCP_TOKEN) by default.
 Use --include-token only when you explicitly want to print the raw bearer token.
 
 Use --token-only to output just the raw token (for use in scripts).`,
+	Example: `  # Generic JSON snippet for any MCP client
+  openpass mcp-config claude-code
+
+  # YAML for Claude Code, HTTP transport with a token reference
+  openpass mcp-config claude-code --format claude-code --http
+
+  # Just the token (for use in scripts)
+  openpass mcp-config claude-code --token-only`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		agentName := args[0]
@@ -93,6 +101,11 @@ mcp-token file in your vault directory. Any MCP clients using the old token
 will need to be updated with the new token.
 
 After rotating, run 'openpass mcp-config [agent] --http' to see the new token.`,
+	Example: `  # Rotate the bearer token and show the new value
+  openpass mcp-token-rotate
+
+  # Followed by re-issuing config snippets to all agents
+  openpass mcp-config claude-code --http`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		vDir, err := vaultPath()

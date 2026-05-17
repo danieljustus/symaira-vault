@@ -24,6 +24,14 @@ and stays running.
 
 On Linux, this creates a systemd user service in ~/.config/systemd/user/
 and enables it to start automatically.`,
+	Example: `  # Install as autostart service
+  openpass serve install
+
+  # Check status
+  openpass serve status
+
+  # Remove again
+  openpass serve uninstall`,
 	RunE: runServeInstall,
 }
 

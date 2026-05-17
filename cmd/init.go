@@ -111,8 +111,23 @@ var initCmd = &cobra.Command{
 
 		printQuietAware("Vault initialized at %s\n", vaultDir)
 		printQuietAware("Public key: %s\n", identity.Recipient().String())
+		printPostInitHints()
 		return nil
 	},
+}
+
+func printPostInitHints() {
+	if quietMode {
+		return
+	}
+	printlnQuietAware("")
+	printlnQuietAware("Next steps:")
+	printlnQuietAware("  1. Add your first entry:    openpass add my-first-entry")
+	printlnQuietAware("  2. Create a backup:         openpass backup")
+	printlnQuietAware("  3. Verify the setup:        openpass doctor")
+	printlnQuietAware("  4. (Optional) full wizard:  openpass setup   # adds sync, recipients, agents")
+	printlnQuietAware("")
+	printlnQuietAware("Tip: 'openpass --help' lists all commands. Use 'openpass <cmd> --help' for details.")
 }
 
 func init() {

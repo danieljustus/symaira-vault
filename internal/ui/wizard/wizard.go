@@ -109,6 +109,17 @@ func Run(vaultDir string, keepOnError bool, noResume bool) error {
 		return fmt.Errorf("wizard: unexpected result type")
 	}
 	if final.canceled {
+		// On cancel, the resume state has already been persisted by
+		// handleStepDone after each completed step. Tell the user how to
+		// pick up where they left off — without this, the user assumes
+		// they have to restart from scratch.
+		if !final.noResume && final.state.VaultDir != "" {
+			if _, _, lerr := LoadResumeState(final.state.VaultDir); lerr == nil {
+				fmt.Println()
+				fmt.Println("Setup paused. Resume anytime with `openpass setup`.")
+				fmt.Println("Start fresh instead: `openpass setup --no-resume`.")
+			}
+		}
 		return fmt.Errorf("setup canceled")
 	}
 	return final.applyErr

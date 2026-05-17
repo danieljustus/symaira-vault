@@ -180,9 +180,104 @@ func guiAvailableMap() map[string]string {
 }
 
 // fakeTTY is a no-side-effect TTY for unit tests.
-type fakeTTY struct{ value string }
+type fakeTTY struct {
+	value string
+	// block, if non-nil, makes ReadString wait on this channel so tests can
+	// exercise the SIGINT-cancel path. Sending on closeCh closes the device,
+	// unblocking the read.
+	block   chan struct{}
+	closeCh chan struct{}
+}
 
-func (f *fakeTTY) ReadString() (string, error) { return f.value, nil }
-func (*fakeTTY) Input() *os.File               { return nil }
-func (*fakeTTY) Output() *os.File              { return nil }
-func (*fakeTTY) Close() error                  { return nil }
+func (f *fakeTTY) ReadString() (string, error) {
+	if f.block != nil {
+		select {
+		case <-f.block:
+		case <-f.closeCh:
+			return "", errors.New("device closed")
+		}
+	}
+	return f.value, nil
+}
+func (*fakeTTY) Input() *os.File  { return nil }
+func (*fakeTTY) Output() *os.File { return nil }
+func (f *fakeTTY) Close() error {
+	if f.closeCh != nil {
+		select {
+		case <-f.closeCh:
+		default:
+			close(f.closeCh)
+		}
+	}
+	return nil
+}
+
+func TestPrompt_TTYBackend_SIGINTCancel(t *testing.T) {
+	t.Setenv("OPENPASS_SECUREUI", "tty")
+
+	oldOpen := openTTYDevice
+	defer func() { openTTYDevice = oldOpen }()
+
+	// newTTYBackend probes the device on construction, then ttyBackend.prompt
+	// opens it again for the actual read. Only the second open should be the
+	// blocking device that the test will cancel.
+	var dev *fakeTTY
+	openCalls := 0
+	openTTYDevice = func() (ttyDevice, error) {
+		openCalls++
+		if openCalls == 1 {
+			return &fakeTTY{value: ""}, nil
+		}
+		dev = &fakeTTY{
+			value:   "should-not-be-read",
+			block:   make(chan struct{}),
+			closeCh: make(chan struct{}),
+		}
+		return dev, nil
+	}
+
+	// Capture the signal channel that readTTY registers so the test can
+	// inject a fake signal without delivering a real one to the process.
+	registered := make(chan chan<- os.Signal, 1)
+	oldNotify := signalNotify
+	oldStop := signalStop
+	defer func() {
+		signalNotify = oldNotify
+		signalStop = oldStop
+	}()
+	signalNotify = func(ch chan<- os.Signal, _ ...os.Signal) {
+		registered <- ch
+	}
+	signalStop = func(_ chan<- os.Signal) {}
+
+	done := make(chan struct {
+		val string
+		err error
+	}, 1)
+	go func() {
+		v, e := Prompt(PromptRequest{Path: "p", Field: "f"})
+		done <- struct {
+			val string
+			err error
+		}{v, e}
+	}()
+
+	// Wait until readTTY has registered the signal handler.
+	var sigCh chan<- os.Signal
+	select {
+	case sigCh = <-registered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("signal handler never registered")
+	}
+
+	sigCh <- os.Interrupt
+
+	select {
+	case res := <-done:
+		if !errors.Is(res.err, ErrCanceled) {
+			t.Fatalf("Prompt() err = %v, want ErrCanceled", res.err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Prompt() did not return after SIGINT")
+	}
+}
