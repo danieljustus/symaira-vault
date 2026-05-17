@@ -100,6 +100,41 @@ chmod 700 ~/.openpass
 chmod 600 ~/.openpass/identity.age
 ```
 
+### Prompt Injection & Agent Safety
+
+OpenPass exposes vault credentials to LLM agents via the MCP server. That
+makes prompt injection (OWASP LLM01, MITRE ATLAS AML.T0051) the primary
+threat class for this surface. The full threat model — covering direct and
+indirect prompt injection, tool poisoning, sensitive-information disclosure,
+path traversal, and excessive agency — lives in
+[`docs/threat-model.md`](docs/threat-model.md).
+
+Headline defenses:
+
+- **Central output chokepoint** — every MCP tool response passes through
+  a three-phase sanitizer (Unicode NFKC, dangerous-Unicode strip, byte-level
+  ANSI/XML/HTML scrubber) in `internal/mcp/render.go` before reaching the
+  LLM. Implemented as a single chokepoint so no handler can opt out.
+- **Out-of-band TTY approval** for all Critical-tier tools (`set_entry_field`,
+  `delete_entry`, `execute_api_request`, `secure_input`,
+  `request_credential`). The TTY is a separate channel from the MCP
+  transport so a jailbroken agent cannot self-approve.
+- **Sealing** for high-classification secrets — agents receive an opaque
+  `op://path/field` handle by default and must explicitly call
+  `secret_unseal` (with its own approval) to reveal a value.
+- **Compile-time taint system** (`internal/vault/taint/`, enforced by the
+  custom `passlint` linter) — `Untrusted` values cannot be stringified by
+  accident; the type's `Format()` emits `<untrusted:Source>` instead of
+  content for any `%s/%v/%q`.
+- **Token-scoped tool & path allowlists**, constant-time token comparison,
+  rate-limiting, and audit logging on every call.
+- **Anomaly detection** — desktop notifications for canary access, sweep
+  patterns, request-rate spikes, and off-hours activity.
+
+If you are integrating an agent profile, start from
+[`docs/agent-integration.md`](docs/agent-integration.md) (metadata-first
+adoption pattern) and review the [`hermes-safe-adoption.md`](docs/hermes-safe-adoption.md) gates.
+
 ### MCP Server Security
 
 #### Stdio Mode (Recommended for Local Agents)
