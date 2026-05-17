@@ -101,6 +101,8 @@ type AgentProfile struct {
 	PromptInjectionMode string              `yaml:"promptInjectionMode,omitempty"`
 	PreCallHooks        []string            `yaml:"pre_call_hooks,omitempty"`
 	PostCallHooks       []string            `yaml:"post_call_hooks,omitempty"`
+	SkillPath           string              `yaml:"skillPath,omitempty"`
+	SkillVersion        string              `yaml:"skillVersion,omitempty"`
 }
 
 type fileAgentProfile struct {
@@ -129,6 +131,8 @@ type fileAgentProfile struct {
 	PromptInjectionMode *string             `yaml:"promptInjectionMode,omitempty"`
 	PreCallHooks        []string            `yaml:"pre_call_hooks,omitempty"`
 	PostCallHooks       []string            `yaml:"post_call_hooks,omitempty"`
+	SkillPath           *string             `yaml:"skillPath,omitempty"`
+	SkillVersion        *string             `yaml:"skillVersion,omitempty"`
 }
 
 type fileProfile struct {
@@ -354,6 +358,12 @@ func Load(path string) (*Config, error) {
 			}
 			if profile.PromptInjectionMode != nil {
 				current.PromptInjectionMode = *profile.PromptInjectionMode
+			}
+			if profile.SkillPath != nil {
+				current.SkillPath = *profile.SkillPath
+			}
+			if profile.SkillVersion != nil {
+				current.SkillVersion = *profile.SkillVersion
 			}
 			cfg.Agents[name] = current
 		}
@@ -668,6 +678,14 @@ func buildFileAgents(agents map[string]AgentProfile) map[string]fileAgentProfile
 			pim := profile.PromptInjectionMode
 			fap.PromptInjectionMode = &pim
 		}
+		if profile.SkillPath != "" {
+			sp := profile.SkillPath
+			fap.SkillPath = &sp
+		}
+		if profile.SkillVersion != "" {
+			sv := profile.SkillVersion
+			fap.SkillVersion = &sv
+		}
 		result[name] = fap
 	}
 	return result
@@ -748,11 +766,11 @@ func newDefaultAgentProfile(name string) AgentProfile {
 func builtinAgentProfiles() map[string]AgentProfile {
 	return map[string]AgentProfile{
 		"default":     {Name: "default", AllowedPaths: []string{"*"}, CanWrite: false, CanRunCommands: false, ApprovalMode: "none", ExposeValueTools: true, AutoUnseal: true},
-		"claude-code": {Name: "claude-code", AllowedPaths: []string{"*"}, CanWrite: true, CanRunCommands: false, ApprovalMode: "none", ExposeValueTools: true, AutoUnseal: true},
-		"codex":       {Name: "codex", AllowedPaths: []string{"*"}, CanWrite: false, CanRunCommands: false, ApprovalMode: "none", ExposeValueTools: true, AutoUnseal: true},
-		"hermes":      {Name: "hermes", AllowedPaths: []string{"*"}, CanWrite: true, CanRunCommands: false, ApprovalMode: "none", ExposeValueTools: true, AutoUnseal: true},
-		"openclaw":    {Name: "openclaw", AllowedPaths: []string{"*"}, CanWrite: true, CanRunCommands: false, ApprovalMode: "none", ExposeValueTools: true, AutoUnseal: true},
-		"opencode":    {Name: "opencode", AllowedPaths: []string{"*"}, CanWrite: false, CanRunCommands: false, ApprovalMode: "none", ExposeValueTools: true, AutoUnseal: true},
+		"claude-code": {Name: "claude-code", AllowedPaths: []string{"*"}, CanWrite: true, CanRunCommands: false, ApprovalMode: "none", ExposeValueTools: true, AutoUnseal: true, SkillPath: "~/.claude/skills/openpass/SKILL.md"},
+		"codex":       {Name: "codex", AllowedPaths: []string{"*"}, CanWrite: false, CanRunCommands: false, ApprovalMode: "none", ExposeValueTools: true, AutoUnseal: true, SkillPath: "~/.codex/skills/openpass/AGENTS.md"},
+		"hermes":      {Name: "hermes", AllowedPaths: []string{"*"}, CanWrite: true, CanRunCommands: false, ApprovalMode: "none", ExposeValueTools: true, AutoUnseal: true, SkillPath: "~/.hermes/skills/openpass/SKILL.md"},
+		"openclaw":    {Name: "openclaw", AllowedPaths: []string{"*"}, CanWrite: true, CanRunCommands: false, ApprovalMode: "none", ExposeValueTools: true, AutoUnseal: true, SkillPath: "~/.openclaw/skills/openpass/SKILL.md"},
+		"opencode":    {Name: "opencode", AllowedPaths: []string{"*"}, CanWrite: false, CanRunCommands: false, ApprovalMode: "none", ExposeValueTools: true, AutoUnseal: true, SkillPath: "~/.opencode/skills/openpass/SKILL.md"},
 	}
 }
 

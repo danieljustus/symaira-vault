@@ -32,6 +32,9 @@ func SetVersionInfo(version, commit, date string) {
 	rootCmd.Version = version
 }
 
+// AppVersion returns the current application version string.
+func AppVersion() string { return appVersion }
+
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print the version of OpenPass",

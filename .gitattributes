@@ -1,3 +1,8 @@
 AGENTS.md export-ignore
 CLAUDE.md export-ignore
 .opencode/ export-ignore
+
+# Keep LF line endings for templates and golden files to avoid
+# cross-platform test failures (Windows CRLF conversion).
+*.tmpl text eol=lf
+*.golden text eol=lf

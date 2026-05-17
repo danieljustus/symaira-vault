@@ -1,0 +1,152 @@
+---
+name: openpass
+description: Use OpenPass as the credential manager via native MCP tools and CLI.
+managed_by: openpass
+managed_version: 4.0.0-test
+managed_hash: sha256:3d553a7e8f8841c8844533245feaa84ee00a1cd0acb3d7d0630f860c011ed41a
+managed_installed_at: "2026-05-17T12:00:00Z"
+managed_profile_tier: safe
+---
+
+# OpenPass (hermes)
+
+OpenPass is the credential store. Use native MCP tools when they are available.
+Do not use terminal commands for credential reads or writes unless the user
+explicitly asks for CLI debugging.
+
+## Bootstrap
+
+First, call `mcp_openpass_openpass_whoami` to learn your permissions and which
+vault you are connected to.
+
+Vault path: `~/.openpass`
+Agent profile: **hermes** (tier: safe)
+
+## Preferred Tools
+
+Canonical OpenPass MCP tool names (hermes prefix: `mcp_openpass_`):
+
+- `mcp_openpass_list_entries`
+- `mcp_openpass_find_entries`
+- `mcp_openpass_get_entry`
+- `mcp_openpass_get_entry_metadata` — metadata only, no secrets
+- `mcp_openpass_set_entry_field`
+- `mcp_openpass_generate_password`
+- `mcp_openpass_generate_totp`
+- `mcp_openpass_delete_entry`
+- `mcp_openpass_copy_to_clipboard`
+- `mcp_openpass_execute_with_secret`
+- `mcp_openpass_request_credential`
+
+Some MCP clients prepend an additional namespace. If canonical names are
+unavailable, inspect the client's MCP tool list and map to these equivalents.
+
+## Permissions
+
+Your current profile tier is **safe**.
+
+
+⚠️ **Limited access**: You only have metadata tools (list, find, metadata).
+For `get_entry` and write access, ask the user to run:
+  openpass agent upgrade hermes --tier standard
+
+
+## Cache Validation
+
+For agents that cache credentials locally, use `get_entry_metadata` to validate
+cache freshness before fetching full entries:
+
+1. Cache the entry version when first retrieving a credential.
+2. Before using a cached credential, call `get_entry_metadata` to get the
+   current version.
+3. If versions differ, the credential was updated — fetch fresh data with
+   `get_entry`.
+4. This prevents using stale credentials that may cause HTTP 401 errors.
+
+Example:
+```
+1. get_entry_metadata("api/kimi-key")
+   → {version: 5, updated: "2026-05-17T10:00:00Z"}
+
+2. cached version was 3 → fetch: get_entry("api/kimi-key")
+
+3. Use fresh credential. If 401 persists, credential is truly invalid.
+```
+
+## Decision Matrix: CLI vs MCP
+
+| Situation | Recommended | Why |
+|---|---|---|
+| Read a credential | `get_entry` MCP tool | Token-scoped, audited, no terminal policy needed |
+| Write a credential | `set_entry_field` MCP tool | Same as above |
+| Generate a password | `generate_password` MCP tool | Built-in generation with configurable rules |
+| Bulk import / export | Terminal `openpass add/get` | MCP tools are single-entry |
+| Debug / diagnose | Terminal `openpass doctor` | Detailed diagnostic output |
+| Full vault search | `find_entries` / `list_entries` MCP | Token-scoped, paginated |
+
+## Error Code Map
+
+| Error | Meaning | Agent action |
+|---|---|---|
+| `ERR_AUTH_FAILED` | Token expired or invalid | Call `mcp_openpass_openpass_whoami` |
+| `ERR_NOT_FOUND` | Entry path not found | Use `find_entries` to locate |
+| `ERR_PERMISSION` | Tier forbids the operation | Ask user to upgrade tier |
+| `ERR_INVALID_INPUT` | Bad field name or path | Check entry shape with `get_entry` |
+
+## Usage Rules
+
+- Search or list before reading if the exact path is unknown.
+- Read only the entry needed for the task.
+- Write credentials with `set_entry_field`; keep paths stable and descriptive.
+- Generate passwords with `generate_password` instead of inventing them.
+- Generate TOTP codes with `generate_totp`; do not expose the stored secret.
+- Do not echo secrets, tokens, or passphrases in chat unless the user
+  explicitly asks to reveal them.
+
+## Missing Credentials
+
+If a task requires a credential that is not in the vault, do NOT ask the user
+to type the secret in chat. Call `mcp_openpass_request_credential` instead:
+
+- Provide the target path, field name, and a one-sentence human-readable reason.
+- OpenPass opens a native dialog. You receive only a confirmation, never the
+  value itself.
+- Continue the task using `mcp_openpass_execute_with_secret`,
+  `mcp_openpass_copy_to_clipboard`, or `mcp_openpass_autotype` — never
+  re-derive or re-print the secret.
+
+## Expected Entry Shape
+
+Entries are JSON-like objects. Common fields:
+
+- `username`
+- `password`
+- `url`
+- `notes`
+- `totp`
+
+For TOTP, call `generate_totp` instead of reading the `totp` secret directly.
+
+## Anti-Patterns
+
+- Never echo a secret value in chat — not even to confirm.
+- Never `cat` vault files.
+- Never `git log` the vault directory.
+- Never share credentials via chat.
+- Never ask the user to type a secret in chat — use `request_credential`.
+
+## Slash Commands
+
+This agent supports slash commands via `/openpass:` prefix. Available
+commands can be discovered through the agent's native command discovery.
+
+## Agent-Specific: Hermes
+
+Hermes uses the `mcp_openpass_` tool prefix and `/openpass:` slash prefix.
+
+To verify MCP connectivity:
+```
+hermes mcp test openpass
+```
+
+Hermes supports scoped tokens via `openpass mcp token create --agent hermes`.

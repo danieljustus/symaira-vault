@@ -1,0 +1,11 @@
+{{template "openpass-skill" .}}
+## Agent-Specific: Hermes
+
+Hermes uses the `mcp_openpass_` tool prefix and `/openpass:` slash prefix.
+
+To verify MCP connectivity:
+```
+hermes mcp test openpass
+```
+
+Hermes supports scoped tokens via `openpass mcp token create --agent hermes`.
