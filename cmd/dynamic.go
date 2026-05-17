@@ -25,6 +25,11 @@ var dynamicCmd = &cobra.Command{
 Supported engines:
   postgres  - Create temporary PostgreSQL users with GRANT role
   aws-sts   - Generate temporary AWS STS credentials via AssumeRole`,
+	Example: `  # Generate temporary PostgreSQL credentials valid for 1h
+  openpass dynamic generate postgres --role analyst --ttl 1h
+
+  # Short-lived AWS STS session
+  openpass dynamic generate aws-sts --role arn:aws:iam::123:role/dev --ttl 15m`,
 }
 
 var dynamicGenerateCmd = &cobra.Command{

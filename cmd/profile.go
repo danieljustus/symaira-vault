@@ -18,10 +18,8 @@ var profileVaultPath string
 var profileCmd = &cobra.Command{
 	Use:   "profile",
 	Short: "Manage vault profiles",
-	Long: `Manage named vault profiles for switching between multiple vaults.
-
-Examples:
-  openpass profile list
+	Long:  `Manage named vault profiles for switching between multiple vaults.`,
+	Example: `  openpass profile list
   openpass profile add work --vault ~/.openpass-work
   openpass profile use work`,
 	Annotations: map[string]string{

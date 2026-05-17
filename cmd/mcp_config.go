@@ -101,6 +101,11 @@ mcp-token file in your vault directory. Any MCP clients using the old token
 will need to be updated with the new token.
 
 After rotating, run 'openpass mcp-config [agent] --http' to see the new token.`,
+	Example: `  # Rotate the bearer token and show the new value
+  openpass mcp-token-rotate
+
+  # Followed by re-issuing config snippets to all agents
+  openpass mcp-config claude-code --http`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		vDir, err := vaultPath()

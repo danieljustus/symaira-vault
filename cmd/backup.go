@@ -125,6 +125,11 @@ var restoreCmd = &cobra.Command{
 The archive is extracted into the current vault directory. If the vault directory
 does not exist, it will be created. After extraction, the vault is verified
 to ensure all expected files are present.`,
+	Example: `  # Restore into the default vault directory
+  openpass restore ~/openpass-2026-05-17.tar.gz
+
+  # Restore into a custom location
+  openpass --vault ~/restored restore archive.tar.gz`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		vaultDir, err := vaultPath()

@@ -20,6 +20,9 @@ var (
 var migrateCmd = &cobra.Command{
 	Use:   "migrate",
 	Short: "Vault migration commands",
+	Example: `  # Pseudonymise on-disk paths (one-way)
+  openpass migrate pseudonymize --dry-run
+  openpass migrate pseudonymize`,
 }
 
 var migratePseudonymizeCmd = &cobra.Command{

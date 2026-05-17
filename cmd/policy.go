@@ -62,6 +62,17 @@ var policyCmd = &cobra.Command{
 Policies are YAML files stored in ~/.config/openpass/policies/.
 They define rules for when tool calls should be allowed, denied,
 prompted, or require biometric authentication.`,
+	Example: `  # Validate a policy file before activating it
+  openpass policy validate ./my-policy.yaml
+
+  # Apply a policy
+  openpass policy apply ./my-policy.yaml
+
+  # List active policies
+  openpass policy list
+
+  # Remove a named policy
+  openpass policy remove dev-readonly`,
 	Annotations: map[string]string{
 		requiresVaultAnnotation: "false",
 	},

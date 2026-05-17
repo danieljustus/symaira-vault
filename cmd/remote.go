@@ -28,12 +28,11 @@ var remoteCmd = &cobra.Command{
 	Long: `Manage the git remote used for synchronizing the vault.
 
 Use 'openpass remote init <ssh-target>' to configure a remote git repository
-for vault synchronization. The vault must be initialized first.
-
-Examples:
-  openpass remote init hermes@macmini
+for vault synchronization. The vault must be initialized first.`,
+	Example: `  openpass remote init hermes@macmini
   openpass remote init user@host:/custom/path.git
-  openpass remote init hermes@macmini --push`,
+  openpass remote init hermes@macmini --push
+  openpass remote status`,
 	Annotations: map[string]string{
 		requiresVaultAnnotation: "false",
 	},
