@@ -112,6 +112,9 @@ func (s *PairingQRStep) View() string {
 		truncated = truncated[:16] + "..."
 	}
 
+	ttlLine := dimStyle.Render(fmt.Sprintf("Token expires in %s — five wrong tries trigger a 30-second lockout.",
+		formatTTL(pairing.TokenTTL)))
+
 	lines := []string{
 		titleStyle.Render("Device Pairing QR"),
 		"",
@@ -121,6 +124,7 @@ func (s *PairingQRStep) View() string {
 		"",
 		fmt.Sprintf("  %-18s %s", focusedStyle.Render("Token:"), s.token),
 		fmt.Sprintf("  %-18s %s", dimStyle.Render("Public Key:"), truncated),
+		ttlLine,
 		"",
 		"On the second device, run:",
 		"",
@@ -133,4 +137,21 @@ func (s *PairingQRStep) View() string {
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+// formatTTL renders a duration as "5m", "30s", or "2m 15s" — short enough
+// to fit on a single status line in the wizard.
+func formatTTL(d time.Duration) string {
+	if d <= 0 {
+		return "expired"
+	}
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
+	m := int(d / time.Minute)
+	s := int(d%time.Minute) / int(time.Second)
+	if s == 0 {
+		return fmt.Sprintf("%dm", m)
+	}
+	return fmt.Sprintf("%dm %ds", m, s)
 }
