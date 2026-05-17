@@ -634,10 +634,10 @@ func TestSanitizeForMCP_MixedInjection(t *testing.T) {
 
 func TestDetectSemanticInjection(t *testing.T) {
 	tests := []struct {
-		name    string
-		input   string
-		want    string
-		wantOk  bool
+		name   string
+		input  string
+		want   string
+		wantOk bool
 	}{
 		{
 			name:   "ignore previous instructions",

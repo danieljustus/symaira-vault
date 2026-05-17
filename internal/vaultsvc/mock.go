@@ -9,18 +9,18 @@ import (
 // MockService provides a mock implementation of the Service interface for testing.
 // Follows the function-field mock pattern; set any Func field to customize behavior.
 type MockService struct {
-	VaultFunc       func() *vaultpkg.Vault
-	GetFieldFunc    func(path, field string) (any, error)
-	SetFieldFunc    func(path, field string, value any) error
-	SetFieldsFunc             func(path string, data map[string]any) error
+	VaultFunc                   func() *vaultpkg.Vault
+	GetFieldFunc                func(path, field string) (any, error)
+	SetFieldFunc                func(path, field string, value any) error
+	SetFieldsFunc               func(path string, data map[string]any) error
 	SetFieldsWithProvenanceFunc func(path string, data map[string]any, record vaultpkg.WriteRecord) error
-	DeleteFunc                func(path string) error
-	ListFunc        func(prefix string) ([]string, error)
-	FindFunc        func(query string, opts vaultpkg.FindOptions) ([]vaultpkg.Match, error)
-	GetEntryFunc    func(path string) (*vaultpkg.Entry, error)
-	WriteEntryFunc  func(path string, entry *vaultpkg.Entry) error
-	GetIdentityFunc func() *age.X25519Identity
-	GetDirFunc      func() string
+	DeleteFunc                  func(path string) error
+	ListFunc                    func(prefix string) ([]string, error)
+	FindFunc                    func(query string, opts vaultpkg.FindOptions) ([]vaultpkg.Match, error)
+	GetEntryFunc                func(path string) (*vaultpkg.Entry, error)
+	WriteEntryFunc              func(path string, entry *vaultpkg.Entry) error
+	GetIdentityFunc             func() *age.X25519Identity
+	GetDirFunc                  func() string
 }
 
 // NewMockService creates a MockService with sensible no-op defaults.

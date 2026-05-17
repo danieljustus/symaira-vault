@@ -160,10 +160,10 @@ func (s *Server) handleExecuteWithSecret(ctx context.Context, req CallToolReques
 
 	if runErr != nil {
 		if result != nil {
-		sanitizedStdout, sanitizedStderr := s.sanitizeRunOutput(result.Stdout, result.Stderr, secretEnv)
-		sanitizedErr := s.sanitizeKnownSecretValues(runErr.Error(), secretEnv)
-		return NewToolResultError(fmt.Sprintf("%s\nExit code: %d\nStdout: %s\nStderr: %s",
-			sanitizedErr, result.ExitCode, EmbedAsData("command_output", sanitizedStdout), EmbedAsData("command_output", sanitizedStderr))), nil
+			sanitizedStdout, sanitizedStderr := s.sanitizeRunOutput(result.Stdout, result.Stderr, secretEnv)
+			sanitizedErr := s.sanitizeKnownSecretValues(runErr.Error(), secretEnv)
+			return NewToolResultError(fmt.Sprintf("%s\nExit code: %d\nStdout: %s\nStderr: %s",
+				sanitizedErr, result.ExitCode, EmbedAsData("command_output", sanitizedStdout), EmbedAsData("command_output", sanitizedStderr))), nil
 		}
 		return NewToolResultError(s.sanitizeKnownSecretValues(runErr.Error(), secretEnv)), nil
 	}

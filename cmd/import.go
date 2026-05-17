@@ -116,10 +116,10 @@ var importCmd = &cobra.Command{
 					}
 				}
 
-			record := vaultpkg.WriteRecord{Action: "import"}
-			if err := svc.SetFieldsWithProvenance(entryPath, entry.Data, record); err != nil {
-				return fmt.Errorf("cannot write entry: %w", err)
-			}
+				record := vaultpkg.WriteRecord{Action: "import"}
+				if err := svc.SetFieldsWithProvenance(entryPath, entry.Data, record); err != nil {
+					return fmt.Errorf("cannot write entry: %w", err)
+				}
 				printQuietAware("Imported: %s\n", entryPath)
 				imported++
 			}

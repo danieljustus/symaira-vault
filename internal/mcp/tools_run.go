@@ -123,8 +123,8 @@ func (s *Server) handleRunCommand(ctx context.Context, req CallToolRequest) (*Ca
 		if result != nil {
 			sanitizedStdout, sanitizedStderr := s.sanitizeRunOutput(result.Stdout, result.Stderr, resolvedEnv)
 			sanitizedErr := s.sanitizeKnownSecretValues(err.Error(), resolvedEnv)
-		return NewToolResultError(fmt.Sprintf("%s\nExit code: %d\nStdout: %s\nStderr: %s",
-			sanitizedErr, result.ExitCode, EmbedAsData("command_output", sanitizedStdout), EmbedAsData("command_output", sanitizedStderr))), nil
+			return NewToolResultError(fmt.Sprintf("%s\nExit code: %d\nStdout: %s\nStderr: %s",
+				sanitizedErr, result.ExitCode, EmbedAsData("command_output", sanitizedStdout), EmbedAsData("command_output", sanitizedStderr))), nil
 		}
 		return NewToolResultError(s.sanitizeKnownSecretValues(err.Error(), resolvedEnv)), nil
 	}

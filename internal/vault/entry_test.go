@@ -81,7 +81,7 @@ func TestWriteEntryRecordsWriteHistory(t *testing.T) {
 	id := testutil.TempIdentity(t)
 
 	entry := &Entry{
-		Data: map[string]any{"password": "s3cr3t"},
+		Data:         map[string]any{"password": "s3cr3t"},
 		PendingWrite: &WriteRecord{Field: "password", Action: "create"},
 	}
 
