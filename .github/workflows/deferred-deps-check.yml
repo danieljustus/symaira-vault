@@ -14,10 +14,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: '1.26.3'
           cache: true
@@ -46,7 +46,7 @@ jobs:
 
       - name: Create issue if ProtonMail/go-crypto updated
         if: steps.check.outputs.proton_version != '' && !contains(steps.check.outputs.proton_version, 'v1.1.')
-        uses: actions/github-script@v9
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799c7f6 # v9
         with:
           script: |
             const version = '${{ steps.check.outputs.proton_version }}';
@@ -73,7 +73,7 @@ jobs:
 
       - name: Create issue if golang/protobuf still present
         if: steps.check.outputs.has_golang_protobuf != ''
-        uses: actions/github-script@v9
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799c7f6 # v9
         with:
           script: |
             const version = '${{ steps.check.outputs.has_golang_protobuf }}';
