@@ -168,7 +168,7 @@ Output is in YAML format by default.`,
 
 		var out *os.File
 		if outputPath != "" {
-			f, err := os.Create(outputPath) //nolint:gosec G304 — outputPath is user-provided export destination
+			f, err := os.Create(filepath.Clean(outputPath))
 			if err != nil {
 				return fmt.Errorf("create output file: %w", err)
 			}
