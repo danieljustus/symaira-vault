@@ -89,6 +89,8 @@ func Uninstall(targetPath string) error {
 		return fmt.Errorf("target path contains traversal: %s", targetPath)
 	}
 
+	targetPath = filepath.Clean(targetPath)
+
 	existing, err := os.ReadFile(targetPath)
 	if err != nil {
 		if os.IsNotExist(err) {
