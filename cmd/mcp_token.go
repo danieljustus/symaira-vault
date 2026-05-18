@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/danieljustus/OpenPass/internal/mcp"
+	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
 )
 
 var mcpCmd = &cobra.Command{
@@ -29,13 +29,17 @@ var mcpTokenCmd = &cobra.Command{
 Scoped tokens allow fine-grained access control for MCP clients. Each token can
 be restricted to specific tools and has an optional expiration time.`,
 	Example: `  # Create a read-only token expiring in 24h
-  openpass mcp token create --name "ci-readonly" --tools list,get --ttl 24h
+   openpass mcp token create --name "ci-readonly" --tools list,get --ttl 24h
 
-  # List all tokens
-  openpass mcp token list
+   # List all tokens
+   openpass mcp token list
 
-  # Revoke by ID
-  openpass mcp token revoke <token-id>`,
+   # Revoke by ID
+   openpass mcp token revoke <token-id>`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
+			"This command is deprecated in v4.0. Use: openpass agent token <name> new/list/revoke", nil)
+	},
 }
 
 var tokenCreateCmd = &cobra.Command{
@@ -46,59 +50,8 @@ var tokenCreateCmd = &cobra.Command{
 The raw token is printed exactly once — copy it immediately. It cannot be
 retrieved later.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		tools, _ := cmd.Flags().GetStringSlice("tools")
-		ttlStr, _ := cmd.Flags().GetString("ttl")
-		agent, _ := cmd.Flags().GetString("agent")
-		label, _ := cmd.Flags().GetString("label")
-
-		if len(tools) == 0 {
-			return fmt.Errorf("at least one tool must be specified (use --tools '*')")
-		}
-
-		vDir, err := vaultPath()
-		if err != nil {
-			return err
-		}
-
-		ttl, err := resolveTokenTTL(vDir, ttlStr)
-		if err != nil {
-			return err
-		}
-
-		regPath := mcp.TokenRegistryFilePath(vDir)
-		reg := mcp.NewTokenRegistry(regPath)
-		if loadErr := reg.Load(); loadErr != nil {
-			return fmt.Errorf("load token registry: %w", loadErr)
-		}
-
-		token, rawToken, err := reg.Create(label, tools, agent, ttl)
-		if err != nil {
-			return fmt.Errorf("create token: %w", err)
-		}
-
-		if err := reg.Save(); err != nil {
-			return fmt.Errorf("save token registry: %w", err)
-		}
-
-		printlnQuietAware("Token created successfully.")
-		printQuietAware("  ID:    %s\n", token.ID)
-		printQuietAware("  Label: %s\n", token.Label)
-		if token.AgentName != "" {
-			printQuietAware("  Agent: %s\n", token.AgentName)
-		}
-		printQuietAware("  Tools: %s\n", strings.Join(token.AllowedTools, ", "))
-		if token.ExpiresAt != nil {
-			printQuietAware("  Expires: %s\n", token.ExpiresAt.Format(time.RFC3339))
-		} else {
-			printQuietAware("  Expires: never\n")
-		}
-		printlnQuietAware()
-		printQuietAware("Raw token (copy now — shown once): %s\n", rawToken)
-		printlnQuietAware()
-		printlnQuietAware("Warning: This is the only time the raw token is displayed.")
-		printlnQuietAware("         Store it securely — it cannot be retrieved later.")
-
-		return nil
+		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
+			"This command is deprecated in v4.0. Use: openpass agent token <name> new", nil)
 	},
 }
 
@@ -107,53 +60,8 @@ var tokenListCmd = &cobra.Command{
 	Short: "List all scoped tokens",
 	Long:  `List all scoped tokens in the registry, including their status and expiration.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		vDir, err := vaultPath()
-		if err != nil {
-			return err
-		}
-
-		regPath := mcp.TokenRegistryFilePath(vDir)
-		reg := mcp.NewTokenRegistry(regPath)
-		if err := reg.Load(); err != nil {
-			return fmt.Errorf("load token registry: %w", err)
-		}
-
-		tokens := reg.List()
-		if len(tokens) == 0 {
-			printlnQuietAware("No tokens found.")
-			return nil
-		}
-
-		printQuietAware("%-22s %-16s %-14s %-28s %-20s %s\n", "ID", "LABEL", "AGENT", "TOOLS", "EXPIRES AT", "STATUS")
-		for i := range tokens {
-			status := "active"
-			if tokens[i].Revoked {
-				status = "revoked"
-			} else if tokens[i].IsExpired() {
-				status = "expired"
-			}
-
-			label := tokens[i].Label
-			if label == "" {
-				label = "-"
-			}
-			agent := tokens[i].AgentName
-			if agent == "" {
-				agent = "-"
-			}
-			tools := strings.Join(tokens[i].AllowedTools, ", ")
-			if len(tools) > 26 {
-				tools = tools[:23] + "..."
-			}
-			expires := "never"
-			if tokens[i].ExpiresAt != nil {
-				expires = tokens[i].ExpiresAt.Format("2006-01-02 15:04")
-			}
-
-			printQuietAware("%-22s %-16s %-14s %-28s %-20s %s\n", tokens[i].ID, label, agent, tools, expires, status)
-		}
-
-		return nil
+		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
+			"This command is deprecated in v4.0. Use: openpass agent token <name> list", nil)
 	},
 }
 
@@ -163,29 +71,8 @@ var tokenRevokeCmd = &cobra.Command{
 	Long:  `Revoke a scoped token by its ID. Revoked tokens are immediately invalidated.`,
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		tokenID := args[0]
-
-		vDir, err := vaultPath()
-		if err != nil {
-			return err
-		}
-
-		regPath := mcp.TokenRegistryFilePath(vDir)
-		reg := mcp.NewTokenRegistry(regPath)
-		if err := reg.Load(); err != nil {
-			return fmt.Errorf("load token registry: %w", err)
-		}
-
-		if !reg.Revoke(tokenID) {
-			return fmt.Errorf("token %q not found or already revoked", tokenID)
-		}
-
-		if err := reg.Save(); err != nil {
-			return fmt.Errorf("save token registry: %w", err)
-		}
-
-		printQuietAware("Token %s revoked successfully.\n", tokenID)
-		return nil
+		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
+			"This command is deprecated in v4.0. Use: openpass agent token <name> revoke", nil)
 	},
 }
 

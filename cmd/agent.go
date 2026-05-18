@@ -9,9 +9,9 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 
 	configpkg "github.com/danieljustus/OpenPass/internal/config"
+	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
 	"github.com/danieljustus/OpenPass/internal/mcp"
 )
 
@@ -49,50 +49,8 @@ a token file, and outputs a ready-to-paste stdio MCP client configuration snippe
 		requiresVaultAnnotation: "false",
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if !term.IsTerminal(int(os.Stdin.Fd())) {
-			return fmt.Errorf("agent setup needs a TTY; use 'openpass mcp token create' for non-interactive token creation")
-		}
-
-		name := args[0]
-		if err := validateAgentName(name); err != nil {
-			return err
-		}
-
-		reader := bufio.NewReader(os.Stdin)
-
-		tier := promptSecurityTier(reader)
-		glob := promptVaultPathGlob(reader)
-		approvalMode := promptApprovalMode(reader)
-
-		profile := buildProfile(name, tier, glob, approvalMode, true)
-		vaultDir := getVaultDir()
-
-		if err := saveAgentConfig(vaultDir, name, profile); err != nil {
-			return fmt.Errorf("save agent config: %w", err)
-		}
-
-		// Create token
-		tokenID, rawToken, err := createAgentToken(vaultDir, name)
-		if err != nil {
-			return fmt.Errorf("create agent token: %w", err)
-		}
-
-		// Write token file
-		tokenFilePath, err := writeAgentTokenFile(vaultDir, name, rawToken)
-		if err != nil {
-			return fmt.Errorf("write token file: %w", err)
-		}
-
-		configPath := filepath.Join(vaultDir, "config.yaml")
-
-		fmt.Fprintf(os.Stderr, "\n✓ Agent %q created\n\n", name)
-		fmt.Fprintf(os.Stderr, "Profile:  %s\n", configPath)
-		fmt.Fprintf(os.Stderr, "Token:    %s\n", tokenFilePath)
-		fmt.Fprintf(os.Stderr, "Token ID: %s\n\n", tokenID)
-
-		outputAgentMCPSnippet(name, rawToken)
-
-		return nil
+		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
+			"This command is deprecated in v4.0. Use: openpass agent install <name>", nil)
 	},
 }
 

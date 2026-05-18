@@ -13,6 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	configpkg "github.com/danieljustus/OpenPass/internal/config"
+	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
 	"github.com/danieljustus/OpenPass/internal/mcp"
 )
 
@@ -46,48 +47,8 @@ Use --token-only to output just the raw token (for use in scripts).`,
   openpass mcp-config claude-code --token-only`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		agentName := args[0]
-		httpMode, _ := cmd.Flags().GetBool("http")
-		format, _ := cmd.Flags().GetString("format")
-		serverName, _ := cmd.Flags().GetString("server-name")
-		redact, _ := cmd.Flags().GetBool("redact")
-		includeToken, _ := cmd.Flags().GetBool("include-token")
-		tokenOnly, _ := cmd.Flags().GetBool("token-only")
-		tokenID, _ := cmd.Flags().GetString("token-id")
-
-		if tokenOnly {
-			return outputTokenOnly()
-		}
-		if redact && includeToken {
-			return fmt.Errorf("--redact and --include-token cannot be used together")
-		}
-		redactToken := !includeToken
-
-		switch format {
-		case "", "generic":
-			if httpMode {
-				return outputHTTPConfig(agentName, serverName, redactToken, tokenID)
-			}
-			return outputStdioConfig(agentName, serverName)
-		case "hermes":
-			if httpMode {
-				return outputHermesHTTPConfig(agentName, serverName, redactToken, tokenID)
-			}
-			return outputHermesStdioConfig(agentName, serverName)
-		case "claude-code":
-			if httpMode {
-				return outputAgentHTTPConfig(agentName, serverName, "claude_desktop_config", redactToken, tokenID)
-			}
-			return outputAgentStdioConfig(agentName, serverName)
-		case "codex":
-			return outputAgentStdioConfig(agentName, serverName)
-		case "opencode":
-			return outputAgentStdioConfig(agentName, serverName)
-		case "openclaw":
-			return outputAgentStdioConfig(agentName, serverName)
-		default:
-			return fmt.Errorf("unsupported mcp config format %q (valid: generic, hermes, claude-code, codex, opencode, openclaw)", format)
-		}
+		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
+			"This command is deprecated in v4.0. Use: openpass agent install <agent> --config-only", nil)
 	},
 }
 

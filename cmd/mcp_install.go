@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
 	"github.com/danieljustus/OpenPass/internal/mcp"
 	"github.com/danieljustus/OpenPass/internal/mcp/install"
 )
@@ -58,41 +59,8 @@ Examples:
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		dryRun, _ := cmd.Flags().GetBool("dry-run")
-		autoDetect, _ := cmd.Flags().GetBool("auto-detect")
-		httpMode, _ := cmd.Flags().GetBool("http")
-		stdioMode, _ := cmd.Flags().GetBool("stdio")
-		httpFlag := cmd.Flags().Lookup("http")
-		stdioFlag := cmd.Flags().Lookup("stdio")
-
-		// Determine transport mode: default to stdio unless --http is explicitly set.
-		useHTTP := false
-		if httpFlag != nil && httpFlag.Changed {
-			useHTTP = httpMode
-		} else if stdioFlag != nil && stdioFlag.Changed && !stdioMode {
-			useHTTP = true
-		}
-
-		if httpFlag != nil && httpFlag.Changed && stdioFlag != nil && stdioFlag.Changed {
-			return fmt.Errorf("--http and --stdio cannot be used together")
-		}
-
-		vDir, err := vaultPath()
-		if err != nil {
-			return err
-		}
-
-		if autoDetect {
-			return runAutoDetect(vDir, dryRun, useHTTP)
-		}
-
-		agentName := args[0]
-		agentType, err := install.ParseAgentType(agentName)
-		if err != nil {
-			return err
-		}
-
-		return runInstall(vDir, agentType, dryRun, useHTTP)
+		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
+			"This command is deprecated in v4.0. Use: openpass agent install [agent]", nil)
 	},
 }
 
