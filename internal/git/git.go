@@ -13,7 +13,6 @@ import (
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
-	gossh "golang.org/x/crypto/ssh"
 )
 
 var errStopIter = errors.New("stop iteration")
@@ -311,21 +310,23 @@ func isSSHURL(url string) bool {
 }
 
 // getSSHAuth creates an SSH agent auth method with known_hosts verification.
+// It checks SSH_KNOWN_HOSTS first, then falls back to ~/.ssh/known_hosts.
+// Returns an error if neither is available — callers handle this gracefully.
 func getSSHAuth() (*ssh.PublicKeysCallback, error) {
 	auth, err := ssh.NewSSHAgentAuth("git")
 	if err != nil {
 		return nil, err
 	}
-	khFile := filepath.Join(os.Getenv("HOME"), ".ssh", "known_hosts")
-	cb, err := ssh.NewKnownHostsCallback(khFile)
-	if err == nil {
-		auth.HostKeyCallback = cb
-	} else {
-		//nolint:gosec G106 — intentional fallback when known_hosts is unavailable.
-		// SSH agent auth without host key verification is acceptable for git
-		// operations when no known_hosts file exists (e.g., fresh install).
-		auth.HostKeyCallback = gossh.InsecureIgnoreHostKey()
+	khFile := os.Getenv("SSH_KNOWN_HOSTS")
+	if khFile == "" {
+		khFile = filepath.Join(os.Getenv("HOME"), ".ssh", "known_hosts")
 	}
+	cb, err := ssh.NewKnownHostsCallback(khFile)
+	if err != nil {
+		return nil, fmt.Errorf("cannot load known_hosts file %q: %w. "+
+			"Set SSH_KNOWN_HOSTS or add host keys with: ssh-keyscan <host> >> %s", khFile, err, khFile)
+	}
+	auth.HostKeyCallback = cb
 	return auth, nil
 }
 

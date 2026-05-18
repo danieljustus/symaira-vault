@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 
 	"github.com/danieljustus/OpenPass/internal/update/installmethod"
@@ -173,7 +174,7 @@ func extractBinaryFromArchive(archiveData []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	data, err := os.ReadFile(extractedPath) //nolint:gosec G304 — extractedPath comes from ExtractTarGz/ExtractZip which validates via safeArchivePath
+	data, err := os.ReadFile(filepath.Clean(extractedPath))
 	if err != nil {
 		return nil, fmt.Errorf("read extracted binary: %w", err)
 	}

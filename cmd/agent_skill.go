@@ -32,10 +32,11 @@ INSTALL.md with manual install instructions.`,
 		if outputPath == "" {
 			outputPath = fmt.Sprintf("openpass-%s-skill.tar.gz", agentName)
 		}
+		outputPath = filepath.Clean(outputPath)
 
 		vars := buildTemplateVars(agentName)
 
-		f, err := os.Create(outputPath) //nolint:gosec G304 — outputPath is user-provided export destination
+		f, err := os.Create(outputPath)
 		if err != nil {
 			return fmt.Errorf("create output file: %w", err)
 		}

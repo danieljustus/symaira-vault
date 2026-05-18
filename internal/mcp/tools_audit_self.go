@@ -37,7 +37,7 @@ func (s *Server) handleAuditSelf(ctx context.Context, req CallToolRequest) (*Cal
 
 	auditPath := filepath.Join(s.vault.Dir, fmt.Sprintf("audit-%s.log", sanitizeAgentName(s.agent.Name)))
 
-	f, err := os.Open(auditPath) //nolint:gosec G304 — path is filepath.Join(vaultDir, "audit-"+agentName+".log")
+	f, err := os.Open(filepath.Clean(auditPath))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return NewToolResultText("[]"), nil

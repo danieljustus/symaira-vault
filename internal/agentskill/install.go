@@ -23,7 +23,9 @@ func Install(agentName string, targetPath string, vars TemplateVars, force bool)
 		return fmt.Errorf("render skill: %w", err)
 	}
 
-	existing, err := os.ReadFile(targetPath) //nolint:gosec G304 — validated via HasTraversal at start of Install
+	targetPath = filepath.Clean(targetPath)
+
+	existing, err := os.ReadFile(targetPath)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return fmt.Errorf("read existing skill: %w", err)
@@ -65,7 +67,9 @@ func Refresh(agentName string, targetPath string, vars TemplateVars) error {
 		return fmt.Errorf("target path contains traversal: %s", targetPath)
 	}
 
-	existing, err := os.ReadFile(targetPath) //nolint:gosec G304 — validated via HasTraversal above
+	targetPath = filepath.Clean(targetPath)
+
+	existing, err := os.ReadFile(targetPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("skill not installed: %w", err)
@@ -84,6 +88,8 @@ func Uninstall(targetPath string) error {
 	if pathutil.HasTraversal(targetPath) {
 		return fmt.Errorf("target path contains traversal: %s", targetPath)
 	}
+
+	targetPath = filepath.Clean(targetPath)
 
 	existing, err := os.ReadFile(targetPath)
 	if err != nil {
@@ -134,7 +140,9 @@ func Export(agentName string, vars TemplateVars, w io.Writer) error {
 }
 
 func ExportToFile(agentName string, vars TemplateVars, outputPath string) error {
-	f, err := os.Create(outputPath) //nolint:gosec G304 — outputPath is user-provided export destination
+	outputPath = filepath.Clean(outputPath)
+
+	f, err := os.Create(outputPath)
 	if err != nil {
 		return fmt.Errorf("create export file: %w", err)
 	}
@@ -156,6 +164,8 @@ func writeSkill(targetPath string, data []byte) error {
 }
 
 func backupFile(path string) error {
+	path = filepath.Clean(path)
+
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return err

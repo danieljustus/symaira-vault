@@ -5,13 +5,14 @@ package quotas
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"syscall"
 )
 
 // openQuotaFile opens (or creates) the quota file for read/write with
 // permissions 0600. On Unix this uses the default OS open.
 func openQuotaFile(path string) (*os.File, error) {
-	return os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o600) //nolint:gosec G304 — path is controlled internally by the quotas package
+	return os.OpenFile(filepath.Clean(path), os.O_RDWR|os.O_CREATE, 0o600)
 }
 
 // lock acquires an exclusive file lock (flock LOCK_EX) on the quota file.

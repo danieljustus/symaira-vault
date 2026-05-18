@@ -34,13 +34,13 @@ func backupPath(binaryPath string) string {
 func createBackup(binaryPath string) (string, error) {
 	bp := backupPath(binaryPath)
 
-	src, err := os.Open(binaryPath) //nolint:gosec G304 — binaryPath comes from os.Executable()
+	src, err := os.Open(filepath.Clean(binaryPath))
 	if err != nil {
 		return "", fmt.Errorf("open source for backup: %w", err)
 	}
 	defer func() { _ = src.Close() }()
 
-	dst, err := os.OpenFile(bp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600) //nolint:gosec G304 — bp is derived from os.Executable() + fixed suffix
+	dst, err := os.OpenFile(filepath.Clean(bp), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return "", fmt.Errorf("create backup file %q: %w", bp, err)
 	}
@@ -57,7 +57,7 @@ func createBackup(binaryPath string) (string, error) {
 // The backup file is preserved after the operation. If the binary file still
 // exists at the time of rollback, its existing permissions are preserved.
 func rollback(backupPath, binaryPath string) error {
-	src, err := os.Open(backupPath) //nolint:gosec G304 — backupPath is derived from os.Executable() + fixed suffix
+	src, err := os.Open(filepath.Clean(backupPath))
 	if err != nil {
 		return fmt.Errorf("rollback: open backup %q: %w", backupPath, err)
 	}
@@ -68,7 +68,7 @@ func rollback(backupPath, binaryPath string) error {
 		perm = fi.Mode().Perm()
 	}
 
-	dst, err := os.OpenFile(binaryPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm) //nolint:gosec G304 — binaryPath comes from os.Executable()
+	dst, err := os.OpenFile(filepath.Clean(binaryPath), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
 	if err != nil {
 		return fmt.Errorf("rollback: create %q: %w", binaryPath, err)
 	}

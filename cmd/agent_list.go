@@ -135,7 +135,8 @@ Output columns:
 			skillPath := profile.SkillPath
 			if skillPath != "" {
 				expanded := expandTilde(skillPath)
-				data, readErr := os.ReadFile(expanded) //nolint:gosec G304 — skillPath is user-configured, validated by expandTilde
+				expanded = filepath.Clean(expanded)
+				data, readErr := os.ReadFile(expanded)
 				if readErr == nil {
 					item.SkillInstalled = true
 					if manifest, parseErr := agentskill.ParseManifest(data); parseErr == nil && manifest.ManagedBy == agentskill.SentinelValue {

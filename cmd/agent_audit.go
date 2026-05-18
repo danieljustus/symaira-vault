@@ -79,7 +79,7 @@ and displays entries in table or JSON format.`,
 }
 
 func readAuditLog(path string, limit int) ([]audit.LogEntry, error) {
-	f, err := os.Open(path) //nolint:gosec G304 — path is constructed from vaultDir + sanitized agent name
+	f, err := os.Open(filepath.Clean(path))
 	if err != nil {
 		return nil, err
 	}

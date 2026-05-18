@@ -308,7 +308,7 @@ func (ctx *AgentContext) writeFallbackAudit(action, path, reason string, ok bool
 	}
 	data = append(data, '\n')
 
-	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600) //nolint:gosec G304 — path is filepath.Join(auditDir, agentName+".log")
+	f, err := os.OpenFile(filepath.Clean(logPath), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("open audit file: %w", err)
 	}

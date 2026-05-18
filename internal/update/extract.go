@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -88,12 +89,14 @@ func ExtractTarGz(data []byte, destDir, expectedBinaryName string) (string, erro
 				return "", fmt.Errorf("create parent dir for %q: %w", safePath, err)
 			}
 
-			mode := os.FileMode(header.Mode)
-			if header.Mode < 0 || header.Mode > 0o7777 {
+			var mode os.FileMode
+			if header.Mode < 0 || header.Mode > math.MaxUint32 {
 				mode = 0o600
+			} else {
+				mode = os.FileMode(header.Mode)
 			}
 
-			f, err := os.OpenFile(safePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode) //nolint:gosec G304 — safePath is validated by safeArchivePath
+			f, err := os.OpenFile(filepath.Clean(safePath), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
 			if err != nil {
 				return "", fmt.Errorf("create file %q: %w", safePath, err)
 			}
@@ -159,7 +162,7 @@ func ExtractZip(data []byte, destDir, expectedBinaryName string) (string, error)
 			return "", fmt.Errorf("open zip entry %q: %w", f.Name, err)
 		}
 
-		out, err := os.OpenFile(safePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, f.Mode()) //nolint:gosec G304 — safePath is validated by safeArchivePath
+		out, err := os.OpenFile(filepath.Clean(safePath), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, f.Mode())
 		if err != nil {
 			_ = rc.Close()
 			return "", fmt.Errorf("create file %q: %w", safePath, err)

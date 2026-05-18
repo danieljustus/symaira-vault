@@ -118,7 +118,8 @@ agent's profile in config.yaml. Use --yes to skip the confirmation prompt.`,
 			skillPath := profile.SkillPath
 			if skillPath != "" {
 				expanded := expandTilde(skillPath)
-				if data, readErr := os.ReadFile(expanded); readErr == nil { //nolint:gosec G304 — skillPath is user-configured, validated by expandTilde
+				expanded = filepath.Clean(expanded)
+				if data, readErr := os.ReadFile(expanded); readErr == nil {
 					manifest, parseErr := agentskill.ParseManifest(data)
 					if parseErr == nil && manifest.ManagedBy == agentskill.SentinelValue {
 						if rmErr := os.Remove(expanded); rmErr != nil {
