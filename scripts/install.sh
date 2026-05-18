@@ -39,6 +39,15 @@ fatal() { error "$*"; exit 1; }
 # Detect whether a command exists.
 has_cmd() { command -v "$1" >/dev/null 2>&1; }
 
+# Require cosign to be installed for signature verification.
+require_cosign() {
+    if ! has_cmd cosign; then
+        fatal "cosign not found — required for checksums.txt signature verification.
+  Install cosign from https://docs.sigstore.dev/cosign/installation/
+  or use: brew install cosign (macOS) / apt install cosign (Linux)."
+    fi
+}
+
 # Download a URL to stdout.  Prefers curl, falls back to wget.
 download() {
     if has_cmd curl; then
@@ -138,6 +147,39 @@ verify_checksum() {
     info "Checksum verified for $archive_basename."
 }
 
+# ── Cosign signature verification ────────────────────────────────────────────
+
+# Cosign-verify the checksums file before trusting its SHA-256 hashes.
+# Downloads .sig and .pem sidecar files from the same release URL.
+verify_checksums_signature() {
+    checksums_path="$1"
+    sig_url="$2"
+    pem_url="$3"
+
+    require_cosign
+
+    sig_path="${checksums_path}.sig"
+    pem_path="${checksums_path}.pem"
+
+    info "Downloading checksums signature..."
+    download_to "$sig_path" "$sig_url"
+
+    info "Downloading checksums certificate..."
+    download_to "$pem_path" "$pem_url"
+
+    info "Verifying cosign signature on checksums.txt..."
+    cosign verify-blob \
+        --certificate "$pem_path" \
+        --signature "$sig_path" \
+        --certificate-identity-regexp 'https://github.com/danieljustus/OpenPass/.github/workflows/release.yml@refs/tags/v.*' \
+        --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+        "$checksums_path" >/dev/null 2>&1 || fatal "Cosign signature verification failed for checksums.txt.
+  The checksums file may have been tampered with.
+  See: https://docs.sigstore.dev/cosign/overview/"
+
+    info "Cosign signature verified on checksums.txt."
+}
+
 # ── Archive extraction ───────────────────────────────────────────────────────
 
 extract_archive() {
@@ -232,6 +274,8 @@ USAGE
 
     archive_url="${GITHUB_DOWNLOAD}/${version}/${archive_file}"
     checksums_url="${GITHUB_DOWNLOAD}/${version}/${checksums_file}"
+    checksums_sig_url="${checksums_url}.sig"
+    checksums_pem_url="${checksums_url}.pem"
 
     # Create temp workspace.
     tmpdir=$(mktemp -d)
@@ -241,6 +285,9 @@ USAGE
     info "Downloading checksums..."
     checksums_path="${tmpdir}/${checksums_file}"
     download_to "$checksums_path" "$checksums_url"
+
+    # Verify cosign signature on checksums before trusting its hashes.
+    verify_checksums_signature "$checksums_path" "$checksums_sig_url" "$checksums_pem_url"
 
     # Download archive.
     info "Downloading ${archive_file}..."
