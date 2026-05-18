@@ -40,7 +40,7 @@ func createBackup(binaryPath string) (string, error) {
 	}
 	defer func() { _ = src.Close() }()
 
-	dst, err := os.OpenFile(bp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600) //nolint:gosec G304 — bp is derived from os.Executable() + fixed suffix
+	dst, err := os.OpenFile(filepath.Clean(bp), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return "", fmt.Errorf("create backup file %q: %w", bp, err)
 	}
