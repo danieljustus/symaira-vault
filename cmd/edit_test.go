@@ -144,6 +144,51 @@ func TestCmdEdit_Uninitialized(t *testing.T) {
 	}
 }
 
+func TestCmdEdit_TempFilePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: permission model differs")
+	}
+	vaultDir, passphrase := initVault(t)
+	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
+	entry := &vaultpkg.Entry{Data: map[string]any{"password": "original"}}
+	_ = vaultpkg.WriteEntry(vaultDir, "perm-test", entry, identity.Identity)
+	setPassEnv(t, string(passphrase))
+	defer setupVaultFlag(t, vaultDir)()
+
+	editor := fakeEditorWithContent(t,
+		`{"data":{"password":"edited"},"meta":{"created":"0001-01-01T00:00:00Z","updated":"0001-01-01T00:00:00Z","version":0}}`)
+	origEditor := os.Getenv("EDITOR")
+	_ = os.Setenv("EDITOR", editor)
+	defer func() { _ = os.Setenv("EDITOR", origEditor) }()
+
+	// Track temp file before editor runs
+	var tmpPath string
+	origCreateTemp := osCreateTemp
+	osCreateTemp = func(dir, pattern string) (*os.File, error) {
+		f, err := origCreateTemp(dir, pattern)
+		if err == nil {
+			tmpPath = f.Name()
+		}
+		return f, err
+	}
+	defer func() { osCreateTemp = origCreateTemp }()
+
+	out := execWithStdout("--vault", vaultDir, "edit", "perm-test")
+	if !strings.Contains(out, "Entry updated") {
+		t.Errorf("expected Entry updated, got: %s", out)
+	}
+
+	if tmpPath != "" {
+		info, err := os.Stat(tmpPath)
+		if err == nil {
+			perm := info.Mode().Perm()
+			if perm != 0o600 {
+				t.Errorf("expected temp file permissions 0600, got %#o", perm)
+			}
+		}
+	}
+}
+
 func TestCmdEdit_AutoCommitError(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: stderr capture not reliable")

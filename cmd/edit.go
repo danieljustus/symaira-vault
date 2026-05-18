@@ -17,6 +17,9 @@ import (
 
 var editorFlag string
 
+// Overridable in tests for permission verification
+var osCreateTemp = os.CreateTemp
+
 var editCmd = &cobra.Command{
 	Use:     "edit <name>",
 	Aliases: []string{"modify"},
@@ -55,9 +58,14 @@ The editor is determined by the --editor flag or EDITOR environment variable (de
 				return fmt.Errorf("editor %q not found in PATH: %w", editor, lookErr)
 			}
 
-			tmpFile, err := os.CreateTemp("", "openpass-edit-*.json")
+			tmpFile, err := osCreateTemp("", "openpass-edit-*.json")
 			if err != nil {
 				return fmt.Errorf("cannot create temp file: %w", err)
+			}
+			if err := os.Chmod(tmpFile.Name(), 0o600); err != nil {
+				_ = tmpFile.Close()
+				_ = os.Remove(tmpFile.Name())
+				return fmt.Errorf("cannot set temp file permissions: %w", err)
 			}
 			defer func() { _ = os.Remove(tmpFile.Name()) }()
 
