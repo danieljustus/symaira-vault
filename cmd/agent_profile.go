@@ -78,7 +78,7 @@ After saving, the profile is validated and you are prompted to apply changes.`,
 		vaultDir := getVaultDir()
 		configPath := filepath.Join(vaultDir, "config.yaml")
 
-		data, err := os.ReadFile(configPath) //nolint:gosec G304 — path is filepath.Join(vaultDir, "config.yaml")
+		data, err := os.ReadFile(filepath.Clean(configPath))
 		if err != nil {
 			return fmt.Errorf("read config: %w", err)
 		}
