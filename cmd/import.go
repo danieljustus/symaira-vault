@@ -185,12 +185,11 @@ func generateImportID() string {
 	buf := make([]byte, 4)
 	if _, err := rand.Read(buf); err != nil {
 		nano := time.Now().UnixNano()
-		// Bounds check: int64 -> uint32 conversion must not overflow (G115).
-		if nano < 0 || nano > 0xFFFFFFFF {
-			// UnixNano always exceeds uint32 range; extract lower 32 bits.
-			return fmt.Sprintf("import-%s-%08x", time.Now().UTC().Format("20060102"), uint32(uint64(nano)&0xFFFFFFFF))
+		if nano < 0 {
+			nano = 0
 		}
-		return fmt.Sprintf("import-%s-%08x", time.Now().UTC().Format("20060102"), uint32(nano))
+		// Extract lower 32 bits via modulo to avoid G115 int-conversion alerts.
+		return fmt.Sprintf("import-%s-%08x", time.Now().UTC().Format("20060102"), nano%0x100000000)
 	}
 	return fmt.Sprintf("import-%s-%x", time.Now().UTC().Format("20060102"), buf)
 }

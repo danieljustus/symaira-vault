@@ -102,6 +102,7 @@ After saving, the profile is validated and you are prompted to apply changes.`,
 		}
 		_ = tmpFile.Close()
 
+		//nolint:gosec G204 — editor is from user's $EDITOR/$VISUAL env var; tmpPath is a controlled temp file.
 		editorCmd := exec.Command(filepath.Clean(editor), filepath.Clean(tmpPath))
 		editorCmd.Stdin = os.Stdin
 		editorCmd.Stdout = os.Stdout

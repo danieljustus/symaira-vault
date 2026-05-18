@@ -96,6 +96,7 @@ func ExtractTarGz(data []byte, destDir, expectedBinaryName string) (string, erro
 				mode = os.FileMode(header.Mode)
 			}
 
+			//nolint:gosec G304 — safePath is validated by safeArchivePath() against path traversal.
 			f, err := os.OpenFile(filepath.Clean(safePath), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
 			if err != nil {
 				return "", fmt.Errorf("create file %q: %w", safePath, err)
