@@ -33,92 +33,63 @@ func cosignCertificateFileName(version string) string {
 	return fmt.Sprintf("OpenPass_%s_checksums.txt.pem", v)
 }
 
-// FetchCosignSignature downloads the cosign signature file for the release
-// checksums. The signature is produced by GoReleaser using cosign keyless
-// signing and is published alongside the checksums file.
-func FetchCosignSignature(ctx context.Context, version string) ([]byte, error) {
+// fetchCosignArtifact downloads a cosign artifact (signature or certificate)
+// for the given release version. The artifactName function produces the
+// filename (e.g., cosignSignatureFileName or cosignCertificateFileName).
+func fetchCosignArtifact(ctx context.Context, version string, artifactName func(string) string, artifactLabel string) ([]byte, error) {
 	v := strings.TrimPrefix(version, "v")
 	if v == "" {
 		return nil, fmt.Errorf("version must not be empty")
 	}
 
-	name := cosignSignatureFileName(version)
+	name := artifactName(version)
 	u := fmt.Sprintf("%s/v%s/%s", DefaultDownloadBaseURL, v, name)
 
 	parsed, err := url.Parse(u)
 	if err != nil {
-		return nil, fmt.Errorf("invalid cosign signature URL: %w", err)
+		return nil, fmt.Errorf("invalid cosign %s URL: %w", artifactLabel, err)
 	}
-	if parsed.Scheme != "https" {
-		return nil, fmt.Errorf("cosign signature URL must use HTTPS, got %q", parsed.Scheme)
+	const httpsScheme = "https"
+	if parsed.Scheme != httpsScheme {
+		return nil, fmt.Errorf("cosign %s URL must use HTTPS, got %q", artifactLabel, parsed.Scheme)
 	}
 
 	client := checksumsClient()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
-		return nil, fmt.Errorf("create cosign signature request: %w", err)
+		return nil, fmt.Errorf("create cosign %s request: %w", artifactLabel, err)
 	}
 
 	resp, err := client.Do(req) // #nosec G107 — URL is constructed from controlled inputs
 	if err != nil {
-		return nil, fmt.Errorf("fetch cosign signature: %w", err)
+		return nil, fmt.Errorf("fetch cosign %s: %w", artifactLabel, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetch cosign signature: HTTP %d", resp.StatusCode)
+		return nil, fmt.Errorf("fetch cosign %s: HTTP %d", artifactLabel, resp.StatusCode)
 	}
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("read cosign signature response: %w", err)
+		return nil, fmt.Errorf("read cosign %s response: %w", artifactLabel, err)
 	}
 
 	return data, nil
+}
+
+// FetchCosignSignature downloads the cosign signature file for the release
+// checksums. The signature is produced by GoReleaser using cosign keyless
+// signing and is published alongside the checksums file.
+func FetchCosignSignature(ctx context.Context, version string) ([]byte, error) {
+	return fetchCosignArtifact(ctx, version, cosignSignatureFileName, "signature")
 }
 
 // FetchCosignCertificate downloads the cosign certificate file for the release
 // checksums. The certificate is produced by GoReleaser using cosign keyless
 // signing and contains the OIDC identity from the GitHub Actions workflow run.
 func FetchCosignCertificate(ctx context.Context, version string) ([]byte, error) {
-	v := strings.TrimPrefix(version, "v")
-	if v == "" {
-		return nil, fmt.Errorf("version must not be empty")
-	}
-
-	name := cosignCertificateFileName(version)
-	u := fmt.Sprintf("%s/v%s/%s", DefaultDownloadBaseURL, v, name)
-
-	parsed, err := url.Parse(u)
-	if err != nil {
-		return nil, fmt.Errorf("invalid cosign certificate URL: %w", err)
-	}
-	if parsed.Scheme != "https" {
-		return nil, fmt.Errorf("cosign certificate URL must use HTTPS, got %q", parsed.Scheme)
-	}
-
-	client := checksumsClient()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	if err != nil {
-		return nil, fmt.Errorf("create cosign certificate request: %w", err)
-	}
-
-	resp, err := client.Do(req) // #nosec G107 — URL is constructed from controlled inputs
-	if err != nil {
-		return nil, fmt.Errorf("fetch cosign certificate: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetch cosign certificate: HTTP %d", resp.StatusCode)
-	}
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read cosign certificate response: %w", err)
-	}
-
-	return data, nil
+	return fetchCosignArtifact(ctx, version, cosignCertificateFileName, "certificate")
 }
 
 // VerifyCosignSignature verifies a cosign keyless signature on the given content

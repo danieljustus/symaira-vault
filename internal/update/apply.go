@@ -109,8 +109,8 @@ func Apply(ctx context.Context, currentVersion string, force, dryRun bool) (*App
 		return nil, fmt.Errorf("fetch cosign certificate: %w", err)
 	}
 
-	if err := VerifyCosignSignature([]byte(checksums), sig, cert); err != nil {
-		return nil, fmt.Errorf("cosign verification failed: %w", err)
+	if cosignErr := VerifyCosignSignature([]byte(checksums), sig, cert); cosignErr != nil {
+		return nil, fmt.Errorf("cosign verification failed: %w", cosignErr)
 	}
 
 	an := archiveName(result.LatestVersion, runtime.GOOS, runtime.GOARCH)
