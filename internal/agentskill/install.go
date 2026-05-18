@@ -140,7 +140,9 @@ func Export(agentName string, vars TemplateVars, w io.Writer) error {
 }
 
 func ExportToFile(agentName string, vars TemplateVars, outputPath string) error {
-	f, err := os.Create(outputPath) //nolint:gosec G304 — outputPath is user-provided export destination
+	outputPath = filepath.Clean(outputPath)
+
+	f, err := os.Create(outputPath)
 	if err != nil {
 		return fmt.Errorf("create export file: %w", err)
 	}
