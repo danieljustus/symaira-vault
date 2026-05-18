@@ -96,6 +96,23 @@ func Apply(ctx context.Context, currentVersion string, force, dryRun bool) (*App
 		return nil, fmt.Errorf("fetch checksums: %w", err)
 	}
 
+	// Verify the cosign signature on the checksums file before trusting its
+	// SHA256 hashes. This ensures the checksums were published by the
+	// OpenPass release workflow and haven't been tampered with.
+	sig, err := FetchCosignSignature(ctx, result.LatestVersion)
+	if err != nil {
+		return nil, fmt.Errorf("fetch cosign signature: %w", err)
+	}
+
+	cert, err := FetchCosignCertificate(ctx, result.LatestVersion)
+	if err != nil {
+		return nil, fmt.Errorf("fetch cosign certificate: %w", err)
+	}
+
+	if err := VerifyCosignSignature([]byte(checksums), sig, cert); err != nil {
+		return nil, fmt.Errorf("cosign verification failed: %w", err)
+	}
+
 	an := archiveName(result.LatestVersion, runtime.GOOS, runtime.GOARCH)
 	if verifyErr := VerifyChecksum(archiveData, checksums, an); verifyErr != nil {
 		return nil, fmt.Errorf("verify checksum: %w", verifyErr)
