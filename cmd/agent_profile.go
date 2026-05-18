@@ -78,7 +78,7 @@ After saving, the profile is validated and you are prompted to apply changes.`,
 		vaultDir := getVaultDir()
 		configPath := filepath.Join(vaultDir, "config.yaml")
 
-		data, err := os.ReadFile(configPath)
+		data, err := os.ReadFile(configPath) //nolint:gosec G304 — path is filepath.Join(vaultDir, "config.yaml")
 		if err != nil {
 			return fmt.Errorf("read config: %w", err)
 		}
@@ -102,7 +102,7 @@ After saving, the profile is validated and you are prompted to apply changes.`,
 		}
 		_ = tmpFile.Close()
 
-		editorCmd := exec.Command(editor, tmpPath)
+		editorCmd := exec.Command(editor, tmpPath) //nolint:gosec G204 — editor is user-configured via $EDITOR, tmpPath is from os.CreateTemp
 		editorCmd.Stdin = os.Stdin
 		editorCmd.Stdout = os.Stdout
 		editorCmd.Stderr = os.Stderr
@@ -110,7 +110,7 @@ After saving, the profile is validated and you are prompted to apply changes.`,
 			return fmt.Errorf("editor exited with error: %w", runErr)
 		}
 
-		editedData, err := os.ReadFile(tmpPath)
+		editedData, err := os.ReadFile(tmpPath) //nolint:gosec G304 — tmpPath is from os.CreateTemp, safe
 		if err != nil {
 			return fmt.Errorf("read edited file: %w", err)
 		}
@@ -168,7 +168,7 @@ Output is in YAML format by default.`,
 
 		var out *os.File
 		if outputPath != "" {
-			f, err := os.Create(outputPath)
+			f, err := os.Create(outputPath) //nolint:gosec G304 — outputPath is user-provided export destination
 			if err != nil {
 				return fmt.Errorf("create output file: %w", err)
 			}

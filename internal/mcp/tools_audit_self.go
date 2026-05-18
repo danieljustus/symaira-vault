@@ -21,6 +21,12 @@ type auditEvent struct {
 	Code      string `json:"code,omitempty"`
 }
 
+// sanitizeAgentName replaces path separators in agent names to prevent
+// directory traversal when constructing audit log file paths.
+func sanitizeAgentName(name string) string {
+	return strings.NewReplacer("/", "_", "\\", "_", "..", "_").Replace(name)
+}
+
 func (s *Server) handleAuditSelf(ctx context.Context, req CallToolRequest) (*CallToolResult, error) {
 	_ = ctx
 
@@ -29,9 +35,9 @@ func (s *Server) handleAuditSelf(ctx context.Context, req CallToolRequest) (*Cal
 		limit = int(math.Min(v, 100))
 	}
 
-	auditPath := filepath.Join(s.vault.Dir, fmt.Sprintf("audit-%s.log", s.agent.Name))
+	auditPath := filepath.Join(s.vault.Dir, fmt.Sprintf("audit-%s.log", sanitizeAgentName(s.agent.Name)))
 
-	f, err := os.Open(auditPath)
+	f, err := os.Open(auditPath) //nolint:gosec G304 — path is filepath.Join(vaultDir, "audit-"+agentName+".log")
 	if err != nil {
 		if os.IsNotExist(err) {
 			return NewToolResultText("[]"), nil

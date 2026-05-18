@@ -173,7 +173,7 @@ func extractBinaryFromArchive(archiveData []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	data, err := os.ReadFile(extractedPath)
+	data, err := os.ReadFile(extractedPath) //nolint:gosec G304 — extractedPath comes from ExtractTarGz/ExtractZip which validates via safeArchivePath
 	if err != nil {
 		return nil, fmt.Errorf("read extracted binary: %w", err)
 	}

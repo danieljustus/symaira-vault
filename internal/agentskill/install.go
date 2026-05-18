@@ -23,7 +23,7 @@ func Install(agentName string, targetPath string, vars TemplateVars, force bool)
 		return fmt.Errorf("render skill: %w", err)
 	}
 
-	existing, err := os.ReadFile(targetPath) // #nosec G304 — validated via ValidatePath
+	existing, err := os.ReadFile(targetPath) //nolint:gosec G304 — validated via HasTraversal at start of Install
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return fmt.Errorf("read existing skill: %w", err)
@@ -61,7 +61,11 @@ func Install(agentName string, targetPath string, vars TemplateVars, force bool)
 }
 
 func Refresh(agentName string, targetPath string, vars TemplateVars) error {
-	existing, err := os.ReadFile(targetPath)
+	if pathutil.HasTraversal(targetPath) {
+		return fmt.Errorf("target path contains traversal: %s", targetPath)
+	}
+
+	existing, err := os.ReadFile(targetPath) //nolint:gosec G304 — validated via HasTraversal above
 	if err != nil {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("skill not installed: %w", err)
@@ -130,7 +134,7 @@ func Export(agentName string, vars TemplateVars, w io.Writer) error {
 }
 
 func ExportToFile(agentName string, vars TemplateVars, outputPath string) error {
-	f, err := os.Create(outputPath)
+	f, err := os.Create(outputPath) //nolint:gosec G304 — outputPath is user-provided export destination
 	if err != nil {
 		return fmt.Errorf("create export file: %w", err)
 	}
@@ -141,11 +145,11 @@ func ExportToFile(agentName string, vars TemplateVars, outputPath string) error 
 
 func writeSkill(targetPath string, data []byte) error {
 	dir := filepath.Dir(targetPath)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return fmt.Errorf("create skill directory: %w", err)
 	}
 
-	if err := os.WriteFile(targetPath, data, 0o644); err != nil {
+	if err := os.WriteFile(targetPath, data, 0o600); err != nil {
 		return fmt.Errorf("write skill file: %w", err)
 	}
 	return nil
@@ -156,7 +160,7 @@ func backupFile(path string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path+backupSuffix, src, 0o644)
+	return os.WriteFile(path+backupSuffix, src, 0o600)
 }
 
 func computeBodyHashRaw(data []byte) (string, error) {

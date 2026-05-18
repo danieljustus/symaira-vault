@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/danieljustus/OpenPass/internal/audit"
@@ -272,6 +273,12 @@ func upgradeCommand(tier string) string {
 	return fmt.Sprintf("openpass config agent %s --tier %s", name, tier)
 }
 
+// sanitizeAgentName replaces path separators in agent names to prevent
+// directory traversal when constructing audit log file paths.
+func sanitizeAgentName(name string) string {
+	return strings.NewReplacer("/", "_", "\\", "_", "..", "_").Replace(name)
+}
+
 // writeFallbackAudit writes a minimal JSONL audit entry to
 // <vaultDir>/audit/<agent>.log when the audit.Logger is unavailable.
 func (ctx *AgentContext) writeFallbackAudit(action, path, reason string, ok bool) error {
@@ -280,7 +287,7 @@ func (ctx *AgentContext) writeFallbackAudit(action, path, reason string, ok bool
 		return fmt.Errorf("create audit dir: %w", err)
 	}
 
-	logPath := filepath.Join(auditDir, ctx.agentName+".log")
+	logPath := filepath.Join(auditDir, sanitizeAgentName(ctx.agentName)+".log")
 
 	entry := map[string]any{
 		"ts":     time.Now().UTC().Format(time.RFC3339),
@@ -301,7 +308,7 @@ func (ctx *AgentContext) writeFallbackAudit(action, path, reason string, ok bool
 	}
 	data = append(data, '\n')
 
-	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600) //nolint:gosec G304 — path is filepath.Join(auditDir, agentName+".log")
 	if err != nil {
 		return fmt.Errorf("open audit file: %w", err)
 	}

@@ -321,6 +321,9 @@ func getSSHAuth() (*ssh.PublicKeysCallback, error) {
 	if err == nil {
 		auth.HostKeyCallback = cb
 	} else {
+		//nolint:gosec G106 — intentional fallback when known_hosts is unavailable.
+		// SSH agent auth without host key verification is acceptable for git
+		// operations when no known_hosts file exists (e.g., fresh install).
 		auth.HostKeyCallback = gossh.InsecureIgnoreHostKey()
 	}
 	return auth, nil

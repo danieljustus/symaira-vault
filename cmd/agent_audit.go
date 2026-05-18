@@ -45,7 +45,7 @@ and displays entries in table or JSON format.`,
 		agentName := args[0]
 
 		vaultDir := getVaultDir()
-		logPath := filepath.Join(vaultDir, fmt.Sprintf("audit-%s.log", agentName))
+		logPath := filepath.Join(vaultDir, fmt.Sprintf("audit-%s.log", sanitizeAgentName(agentName)))
 
 		entries, err := readAuditLog(logPath, agentAuditFlags.limit)
 		if err != nil {
@@ -79,7 +79,7 @@ and displays entries in table or JSON format.`,
 }
 
 func readAuditLog(path string, limit int) ([]audit.LogEntry, error) {
-	f, err := os.Open(path)
+	f, err := os.Open(path) //nolint:gosec G304 — path is constructed from vaultDir + sanitized agent name
 	if err != nil {
 		return nil, err
 	}
@@ -108,6 +108,12 @@ func readAuditLog(path string, limit int) ([]audit.LogEntry, error) {
 	}
 
 	return entries, nil
+}
+
+// sanitizeAgentName replaces path separators in agent names to prevent
+// directory traversal when constructing audit log file paths.
+func sanitizeAgentName(name string) string {
+	return strings.NewReplacer("/", "_", "\\", "_", "..", "_").Replace(name)
 }
 
 func sinceFilter(entries []audit.LogEntry, since string) []audit.LogEntry {

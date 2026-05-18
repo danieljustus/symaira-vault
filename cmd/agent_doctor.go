@@ -47,7 +47,7 @@ Reports structured results; exits 0 if all checks pass.`,
 		}
 
 		targetPath = expandTilde(targetPath)
-		data, err := os.ReadFile(targetPath)
+		data, err := os.ReadFile(targetPath) //nolint:gosec G304 — skillPath is user-configured, validated by expandTilde
 		if err != nil {
 			if os.IsNotExist(err) {
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\u274c Skill file not found: %s\n", targetPath)

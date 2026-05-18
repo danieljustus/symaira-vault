@@ -72,7 +72,7 @@ var importCmd = &cobra.Command{
 			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "invalid CSV mapping", err)
 		}
 
-		source, err := os.Open(args[1])
+		source, err := os.Open(args[1]) //nolint:gosec G304 — import source path is user-provided CLI argument
 		if err != nil {
 			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "open import source", err)
 		}
@@ -184,7 +184,7 @@ func importEntryPath(prefix, entryPath string) string {
 func generateImportID() string {
 	buf := make([]byte, 4)
 	if _, err := rand.Read(buf); err != nil {
-		return fmt.Sprintf("import-%s-%08x", time.Now().UTC().Format("20060102"), uint32(time.Now().UnixNano()))
+		return fmt.Sprintf("import-%s-%08x", time.Now().UTC().Format("20060102"), uint32(time.Now().UnixNano())) //nolint:gosec G115 — truncation of UnixNano to uint32 is acceptable for entropy in import ID
 	}
 	return fmt.Sprintf("import-%s-%x", time.Now().UTC().Format("20060102"), buf)
 }

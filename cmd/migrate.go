@@ -217,7 +217,7 @@ profiles that already have a tier field.`,
 		// Backup original config
 		configPath := filepath.Join(vaultDir, "config.yaml")
 		backupPath := filepath.Join(vaultDir, fmt.Sprintf("config.yaml.v3-backup-%d", time.Now().Unix()))
-		input, err := os.ReadFile(configPath)
+		input, err := os.ReadFile(configPath) //nolint:gosec G304 — path is filepath.Join(vaultDir, "config.yaml")
 		if err != nil {
 			return fmt.Errorf("read config for backup: %w", err)
 		}

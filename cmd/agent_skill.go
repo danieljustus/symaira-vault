@@ -35,7 +35,7 @@ INSTALL.md with manual install instructions.`,
 
 		vars := buildTemplateVars(agentName)
 
-		f, err := os.Create(outputPath)
+		f, err := os.Create(outputPath) //nolint:gosec G304 — outputPath is user-provided export destination
 		if err != nil {
 			return fmt.Errorf("create output file: %w", err)
 		}
