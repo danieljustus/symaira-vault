@@ -552,6 +552,25 @@ func PullWithResult(vaultDir string) PullResult {
 		return result
 	}
 
+	// Auto-resolve conflicts: save local changes as .conflict-<hostname> variants
+	hostname, _ := os.Hostname()
+	if hostname == "" {
+		hostname = "unknown"
+	}
+	resolveErr := ResolveConflicts(vaultDir, hostname)
+	if resolveErr == nil {
+		w2, wtErr := repo.Worktree()
+		if wtErr == nil {
+			if s, _ := w2.Status(); s != nil {
+				for path := range s {
+					if strings.Contains(path, ".conflict-") {
+						result.Conflicts = append(result.Conflicts, path)
+					}
+				}
+			}
+		}
+	}
+
 	result.Error = &PushError{
 		Message: "pull failed",
 		Cause:   pullErr,
