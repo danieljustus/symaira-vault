@@ -1265,32 +1265,34 @@ func TestCmdServe_NonLoopbackWarning(t *testing.T) {
 	vaultFlagReset(t)
 
 	const port = 18181
+	httpDone := make(chan struct{}, 1)
 
 	origFindAvailablePort := findAvailablePortFunc
 	findAvailablePortFunc = func(bind string, preferredPort int) (int, bool, error) {
 		return preferredPort, true, nil
 	}
-	t.Cleanup(func() { findAvailablePortFunc = origFindAvailablePort })
+	defer func() { findAvailablePortFunc = origFindAvailablePort }()
 
 	serveSignals := make(chan chan<- os.Signal, 1)
 	origNotify := serveSignalNotify
 	serveSignalNotify = func(c chan<- os.Signal, sigs ...os.Signal) {
 		serveSignals <- c
 	}
-	t.Cleanup(func() { serveSignalNotify = origNotify })
+	defer func() { serveSignalNotify = origNotify }()
 
 	origUnlock := serveUnlockVault
 	serveUnlockVault = func(vaultDir string, interactive bool) (*vaultpkg.Vault, error) {
 		return &vaultpkg.Vault{Dir: vaultDir, Identity: identity, Config: cfg}, nil
 	}
-	t.Cleanup(func() { serveUnlockVault = origUnlock })
+	defer func() { serveUnlockVault = origUnlock }()
 
 	origHTTP := runHTTPServerFunc
 	runHTTPServerFunc = func(ctx context.Context, bind string, gotPort int, v *vaultpkg.Vault) error {
 		<-ctx.Done()
+		httpDone <- struct{}{}
 		return nil
 	}
-	t.Cleanup(func() { runHTTPServerFunc = origHTTP })
+	defer func() { runHTTPServerFunc = origHTTP }()
 
 	_ = serveCmd.Flags().Set("stdio", "false")
 	_ = serveCmd.Flags().Set("agent", "")
@@ -1303,12 +1305,16 @@ func TestCmdServe_NonLoopbackWarning(t *testing.T) {
 		_ = serveCmd.Flags().Set("bind", "127.0.0.1")
 	})
 
+	done := make(chan struct{})
 	stderr := captureStderr(func() {
 		go func() {
 			_ = rootCmd.Execute()
+			close(done)
 		}()
 		sigCh := <-serveSignals
 		sigCh <- syscall.SIGINT
+		<-httpDone
+		<-done
 	})
 
 	if !strings.Contains(stderr, "Warning:") || !strings.Contains(stderr, "unencrypted") {

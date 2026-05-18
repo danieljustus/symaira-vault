@@ -37,6 +37,7 @@ func isLocalhostBind(bind string) bool {
 	ip := net.ParseIP(bind)
 	return ip != nil && ip.IsLoopback()
 }
+
 var serveUnlockVault = unlockVault
 
 //nolint:gocyclo // Complex CLI orchestration: vault unlock + server bootstrap + signal handling

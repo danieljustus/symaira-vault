@@ -17,22 +17,22 @@ import (
 )
 
 var (
-	addValue         string
-	addStdinValue    bool
-	addStdinTOTP     bool
-	addGenerate      bool
-	addLength        int
-	addUsername      string
-	addURL           string
-	addNotes         string
-	addTOTPSecret    string
-	addTOTPIssuer    string
-	addTOTPAccount   string
-	addForce         bool
-	addType          string
-	addUsageHint     string
-	addAutoRotate    bool
-	addExpiresAt     string
+	addValue       string
+	addStdinValue  bool
+	addStdinTOTP   bool
+	addGenerate    bool
+	addLength      int
+	addUsername    string
+	addURL         string
+	addNotes       string
+	addTOTPSecret  string
+	addTOTPIssuer  string
+	addTOTPAccount string
+	addForce       bool
+	addType        string
+	addUsageHint   string
+	addAutoRotate  bool
+	addExpiresAt   string
 )
 
 var addCmd = &cobra.Command{
