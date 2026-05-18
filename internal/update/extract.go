@@ -25,6 +25,10 @@ var (
 	ErrPathTraversal = errors.New("archive entry attempts path traversal")
 )
 
+// maxExtractSize limits the total bytes extracted from an archive to prevent
+// decompression bomb attacks (G110).
+const maxExtractSize = 100 * 1024 * 1024 // 100 MB
+
 // safeArchivePath validates that entryPath does not escape destDir. It checks
 // for parent-directory traversal segments and verifies that the cleaned,
 // resolved path is a child of destDir.
@@ -57,6 +61,7 @@ func ExtractTarGz(data []byte, destDir, expectedBinaryName string) (string, erro
 
 	tr := tar.NewReader(gr)
 	var binaryPath string
+	var totalSize int64
 
 	for {
 		header, err := tr.Next()
@@ -74,25 +79,34 @@ func ExtractTarGz(data []byte, destDir, expectedBinaryName string) (string, erro
 
 		switch header.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(safePath, 0o755); err != nil {
+			if err := os.MkdirAll(safePath, 0o750); err != nil {
 				return "", fmt.Errorf("create directory %q: %w", safePath, err)
 			}
 
 		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(safePath), 0o755); err != nil {
+			if err := os.MkdirAll(filepath.Dir(safePath), 0o750); err != nil {
 				return "", fmt.Errorf("create parent dir for %q: %w", safePath, err)
 			}
 
-			f, err := os.OpenFile(safePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
+			mode := os.FileMode(header.Mode)
+			if header.Mode < 0 || header.Mode > 0o7777 {
+				mode = 0o600
+			}
+
+			f, err := os.OpenFile(safePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode) //nolint:gosec G304 — safePath is validated by safeArchivePath
 			if err != nil {
 				return "", fmt.Errorf("create file %q: %w", safePath, err)
 			}
 
-			if _, err := io.Copy(f, tr); err != nil {
-				_ = f.Close()
+			n, err := io.Copy(f, io.LimitReader(tr, maxExtractSize-totalSize))
+			totalSize += n
+			_ = f.Close()
+			if err != nil {
 				return "", fmt.Errorf("write file %q: %w", safePath, err)
 			}
-			_ = f.Close()
+			if totalSize >= maxExtractSize {
+				return "", fmt.Errorf("archive exceeds maximum extraction size of %d bytes", maxExtractSize)
+			}
 
 			if filepath.Base(header.Name) == expectedBinaryName {
 				binaryPath = safePath
@@ -121,6 +135,7 @@ func ExtractZip(data []byte, destDir, expectedBinaryName string) (string, error)
 	}
 
 	var binaryPath string
+	var totalSize int64
 
 	for _, f := range zr.File {
 		safePath, err := safeArchivePath(destDir, f.Name)
@@ -129,13 +144,13 @@ func ExtractZip(data []byte, destDir, expectedBinaryName string) (string, error)
 		}
 
 		if f.FileInfo().IsDir() {
-			if mkdirErr := os.MkdirAll(safePath, 0o755); mkdirErr != nil {
+			if mkdirErr := os.MkdirAll(safePath, 0o750); mkdirErr != nil {
 				return "", fmt.Errorf("create directory %q: %w", safePath, mkdirErr)
 			}
 			continue
 		}
 
-		if mkdirErr := os.MkdirAll(filepath.Dir(safePath), 0o755); mkdirErr != nil {
+		if mkdirErr := os.MkdirAll(filepath.Dir(safePath), 0o750); mkdirErr != nil {
 			return "", fmt.Errorf("create parent dir for %q: %w", safePath, mkdirErr)
 		}
 
@@ -144,20 +159,22 @@ func ExtractZip(data []byte, destDir, expectedBinaryName string) (string, error)
 			return "", fmt.Errorf("open zip entry %q: %w", f.Name, err)
 		}
 
-		out, err := os.OpenFile(safePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, f.Mode())
+		out, err := os.OpenFile(safePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, f.Mode()) //nolint:gosec G304 — safePath is validated by safeArchivePath
 		if err != nil {
 			_ = rc.Close()
 			return "", fmt.Errorf("create file %q: %w", safePath, err)
 		}
 
-		if _, err := io.Copy(out, rc); err != nil {
-			_ = out.Close()
-			_ = rc.Close()
-			return "", fmt.Errorf("write file %q: %w", safePath, err)
-		}
-
+		n, err := io.Copy(out, io.LimitReader(rc, maxExtractSize-totalSize))
+		totalSize += n
 		_ = out.Close()
 		_ = rc.Close()
+		if err != nil {
+			return "", fmt.Errorf("write file %q: %w", safePath, err)
+		}
+		if totalSize >= maxExtractSize {
+			return "", fmt.Errorf("archive exceeds maximum extraction size of %d bytes", maxExtractSize)
+		}
 
 		if filepath.Base(f.Name) == expectedBinaryName {
 			binaryPath = safePath
