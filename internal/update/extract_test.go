@@ -63,9 +63,9 @@ func TestExtractTarGz_Success(t *testing.T) {
 	dir := t.TempDir()
 	archive := buildTestTarGz(map[string]string{
 		"OpenPass_0.5.0_darwin_arm64/":          "",
-		"OpenPass_0.5.0_darwin_arm64/openpass":   "binary-content",
-		"OpenPass_0.5.0_darwin_arm64/LICENSE":    "MIT",
-		"OpenPass_0.5.0_darwin_arm64/README.md":  "# OpenPass",
+		"OpenPass_0.5.0_darwin_arm64/openpass":  "binary-content",
+		"OpenPass_0.5.0_darwin_arm64/LICENSE":   "MIT",
+		"OpenPass_0.5.0_darwin_arm64/README.md": "# OpenPass",
 	}, true)
 
 	binaryPath, err := ExtractTarGz(archive, dir, "openpass")
@@ -90,8 +90,8 @@ func TestExtractTarGz_Success(t *testing.T) {
 func TestExtractTarGz_BinaryNotFound(t *testing.T) {
 	dir := t.TempDir()
 	archive := buildTestTarGz(map[string]string{
-		"OpenPass_0.5.0_darwin_arm64/":         "",
-		"OpenPass_0.5.0_darwin_arm64/LICENSE":  "MIT",
+		"OpenPass_0.5.0_darwin_arm64/":        "",
+		"OpenPass_0.5.0_darwin_arm64/LICENSE": "MIT",
 	}, true)
 
 	_, err := ExtractTarGz(archive, dir, "openpass")
@@ -143,9 +143,9 @@ func TestExtractTarGz_GzipError(t *testing.T) {
 func TestExtractZip_Success(t *testing.T) {
 	dir := t.TempDir()
 	archive := buildTestZip(map[string]string{
-		"OpenPass_0.5.0_windows_amd64/":              "",
-		"OpenPass_0.5.0_windows_amd64/openpass.exe":  "binary-content-win",
-		"OpenPass_0.5.0_windows_amd64/LICENSE":       "MIT",
+		"OpenPass_0.5.0_windows_amd64/":             "",
+		"OpenPass_0.5.0_windows_amd64/openpass.exe": "binary-content-win",
+		"OpenPass_0.5.0_windows_amd64/LICENSE":      "MIT",
 	})
 
 	binaryPath, err := ExtractZip(archive, dir, "openpass.exe")
@@ -367,5 +367,3 @@ func TestExtractZip_ReadsLargeBinary(t *testing.T) {
 		t.Fatalf("content mismatch")
 	}
 }
-
-

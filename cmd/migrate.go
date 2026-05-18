@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	migrateYes     bool
+	migrateYes      bool
 	migrateV4DryRun bool
 )
 

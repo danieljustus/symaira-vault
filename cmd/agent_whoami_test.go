@@ -42,22 +42,22 @@ func TestBuildWhoamiInfo(t *testing.T) {
 func TestBuildWhoamiInfo_FullProfile(t *testing.T) {
 	vaultDir := t.TempDir()
 	profile := configpkg.AgentProfile{
-		Name:             "power-agent",
-		Tier:             "standard",
-		AllowedPaths:     []string{"prod/*", "dev/*"},
-		AllowedTools:     []string{"list_entries", "get_entry"},
-		CanWrite:         true,
-		CanReadValues:    true,
-		CanUseClipboard:  true,
-		CanUseAutotype:   false,
-		CanRunCommands:   true,
-		CanManageConfig:  false,
-		ApprovalMode:     "prompt",
-		RequireApproval:  true,
-		MaxReadsPerHour:  100,
-		MaxReadsPerDay:   500,
+		Name:                "power-agent",
+		Tier:                "standard",
+		AllowedPaths:        []string{"prod/*", "dev/*"},
+		AllowedTools:        []string{"list_entries", "get_entry"},
+		CanWrite:            true,
+		CanReadValues:       true,
+		CanUseClipboard:     true,
+		CanUseAutotype:      false,
+		CanRunCommands:      true,
+		CanManageConfig:     false,
+		ApprovalMode:        "prompt",
+		RequireApproval:     true,
+		MaxReadsPerHour:     100,
+		MaxReadsPerDay:      500,
 		MaxSecretsInSession: 10,
-		SkillPath:        "/path/to/skill",
+		SkillPath:           "/path/to/skill",
 	}
 
 	info := buildWhoamiInfo("power-agent", vaultDir, &profile)

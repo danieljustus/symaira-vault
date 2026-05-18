@@ -9,15 +9,15 @@ import (
 )
 
 type whoamiProfile struct {
-	Name           string   `json:"name"`
-	Tier           string   `json:"tier"`
-	AllowedPaths   []string `json:"allowed_paths"`
-	ApprovalMode   string   `json:"approval_mode"`
-	CanWrite       bool     `json:"can_write"`
-	CanRunCommands bool     `json:"can_run_commands"`
-	CanUseClipboard bool    `json:"can_use_clipboard"`
-	CanUseAutotype bool     `json:"can_use_autotype"`
-	RedactFields   []string `json:"redact_fields"`
+	Name            string   `json:"name"`
+	Tier            string   `json:"tier"`
+	AllowedPaths    []string `json:"allowed_paths"`
+	ApprovalMode    string   `json:"approval_mode"`
+	CanWrite        bool     `json:"can_write"`
+	CanRunCommands  bool     `json:"can_run_commands"`
+	CanUseClipboard bool     `json:"can_use_clipboard"`
+	CanUseAutotype  bool     `json:"can_use_autotype"`
+	RedactFields    []string `json:"redact_fields"`
 }
 
 type whoamiTools struct {
@@ -66,15 +66,15 @@ func (s *Server) handleWhoami(ctx context.Context, req CallToolRequest) (*CallTo
 		Agent:           s.agent.Name,
 		OpenPassVersion: defaultServerVersion,
 		Profile: whoamiProfile{
-			Name:           s.agent.Name,
-			Tier:           s.agent.Tier,
-			AllowedPaths:   s.agent.AllowedPaths,
-			ApprovalMode:   s.agent.ApprovalMode,
-			CanWrite:       s.agent.CanWrite,
-			CanRunCommands: s.agent.CanRunCommands,
+			Name:            s.agent.Name,
+			Tier:            s.agent.Tier,
+			AllowedPaths:    s.agent.AllowedPaths,
+			ApprovalMode:    s.agent.ApprovalMode,
+			CanWrite:        s.agent.CanWrite,
+			CanRunCommands:  s.agent.CanRunCommands,
 			CanUseClipboard: s.agent.CanUseClipboard,
 			CanUseAutotype:  s.agent.CanUseAutotype,
-			RedactFields:   s.agent.RedactFields,
+			RedactFields:    s.agent.RedactFields,
 		},
 		Quotas: whoamiQuotas{
 			ReadsPerHour: quotaInfo{
@@ -94,8 +94,8 @@ func (s *Server) handleWhoami(ctx context.Context, req CallToolRequest) (*CallTo
 			Unlocked:     s.vault.Identity != nil,
 			EntriesCount: 0,
 		},
-		CLIAlternative: "Use 'openpass status' for a comprehensive overview.",
-		ErrorsDoc:      "See https://github.com/danieljustus/OpenPass/blob/main/docs/errors.md for error code documentation.",
+		CLIAlternative:  "Use 'openpass status' for a comprehensive overview.",
+		ErrorsDoc:       "See https://github.com/danieljustus/OpenPass/blob/main/docs/errors.md for error code documentation.",
 		TierUpgradeHint: "Upgrade your agent tier in ~/.openpass/config.yaml to unlock additional tools.",
 	}
 

@@ -51,24 +51,13 @@ func TestMCPTokenCreate_Defaults(t *testing.T) {
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 	t.Cleanup(func() { _ = tokenCreateCmd.Flags().Set("ttl", "") })
 
-	output := captureStdout(func() {
-		err := rootCmd.Execute()
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-	})
+	err := rootCmd.Execute()
 
-	if !strings.Contains(output, "Token created successfully.") {
-		t.Errorf("expected success message, got: %s", output)
+	if err == nil {
+		t.Fatal("expected deprecation error")
 	}
-	if !strings.Contains(output, "Raw token (copy now") {
-		t.Errorf("expected raw token warning, got: %s", output)
-	}
-	if !strings.Contains(output, "test-default") {
-		t.Errorf("expected label in output, got: %s", output)
-	}
-	if !strings.Contains(output, "Tools: *") {
-		t.Errorf("expected wildcard tools in output, got: %s", output)
+	if !strings.Contains(err.Error(), "deprecated in v4.0") {
+		t.Errorf("expected deprecation message, got: %v", err)
 	}
 }
 
@@ -97,21 +86,13 @@ func TestMCPTokenCreate_WithToolsAndAgent(t *testing.T) {
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 	t.Cleanup(func() { _ = tokenCreateCmd.Flags().Set("ttl", "") })
 
-	output := captureStdout(func() {
-		err := rootCmd.Execute()
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-	})
+	err := rootCmd.Execute()
 
-	if !strings.Contains(output, "scoped-test") {
-		t.Errorf("expected label in output, got: %s", output)
+	if err == nil {
+		t.Fatal("expected deprecation error")
 	}
-	if !strings.Contains(output, "Agent: claude-code") {
-		t.Errorf("expected agent in output, got: %s", output)
-	}
-	if !strings.Contains(output, "Tools: list_entries, get_entry") {
-		t.Errorf("expected tools in output, got: %s", output)
+	if !strings.Contains(err.Error(), "deprecated in v4.0") {
+		t.Errorf("expected deprecation message, got: %v", err)
 	}
 }
 
@@ -140,15 +121,13 @@ func TestMCPTokenCreate_MultipleToolFlags(t *testing.T) {
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 	t.Cleanup(func() { _ = tokenCreateCmd.Flags().Set("ttl", "") })
 
-	output := captureStdout(func() {
-		err := rootCmd.Execute()
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-	})
+	err := rootCmd.Execute()
 
-	if !strings.Contains(output, "multi-flag") {
-		t.Errorf("expected label in output, got: %s", output)
+	if err == nil {
+		t.Fatal("expected deprecation error")
+	}
+	if !strings.Contains(err.Error(), "deprecated in v4.0") {
+		t.Errorf("expected deprecation message, got: %v", err)
 	}
 }
 
@@ -177,18 +156,13 @@ func TestMCPTokenCreate_WithTTL(t *testing.T) {
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 	t.Cleanup(func() { _ = tokenCreateCmd.Flags().Set("ttl", "") })
 
-	output := captureStdout(func() {
-		err := rootCmd.Execute()
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-	})
+	err := rootCmd.Execute()
 
-	if !strings.Contains(output, "ttl-test") {
-		t.Errorf("expected label in output, got: %s", output)
+	if err == nil {
+		t.Fatal("expected deprecation error")
 	}
-	if !strings.Contains(output, "Expires:") {
-		t.Errorf("expected expiration in output, got: %s", output)
+	if !strings.Contains(err.Error(), "deprecated in v4.0") {
+		t.Errorf("expected deprecation message, got: %v", err)
 	}
 }
 
@@ -219,15 +193,13 @@ func TestMCPTokenCreate_DefaultTTLFromConfig(t *testing.T) {
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 	t.Cleanup(func() { _ = tokenCreateCmd.Flags().Set("ttl", "") })
 
-	output := captureStdout(func() {
-		err := rootCmd.Execute()
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-	})
+	err := rootCmd.Execute()
 
-	if !strings.Contains(output, "config-ttl") {
-		t.Errorf("expected label in output, got: %s", output)
+	if err == nil {
+		t.Fatal("expected deprecation error")
+	}
+	if !strings.Contains(err.Error(), "deprecated in v4.0") {
+		t.Errorf("expected deprecation message, got: %v", err)
 	}
 }
 
@@ -256,16 +228,13 @@ func TestMCPTokenCreate_InvalidTTL(t *testing.T) {
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 	t.Cleanup(func() { _ = tokenCreateCmd.Flags().Set("ttl", "") })
 
-	var execErr error
-	captureStderr(func() {
-		execErr = rootCmd.Execute()
-	})
+	err := rootCmd.Execute()
 
-	if execErr == nil {
-		t.Fatal("expected error for invalid TTL")
+	if err == nil {
+		t.Fatal("expected deprecation error")
 	}
-	if !strings.Contains(execErr.Error(), "invalid TTL") {
-		t.Errorf("unexpected error: %v", execErr)
+	if !strings.Contains(err.Error(), "deprecated in v4.0") {
+		t.Errorf("expected deprecation message, got: %v", err)
 	}
 }
 
@@ -319,15 +288,13 @@ func TestMCPTokenList_Empty(t *testing.T) {
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 	t.Cleanup(func() { _ = tokenCreateCmd.Flags().Set("ttl", "") })
 
-	output := captureStdout(func() {
-		err := rootCmd.Execute()
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-	})
+	err := rootCmd.Execute()
 
-	if !strings.Contains(output, "No tokens found.") {
-		t.Errorf("expected empty message, got: %s", output)
+	if err == nil {
+		t.Fatal("expected deprecation error")
+	}
+	if !strings.Contains(err.Error(), "deprecated in v4.0") {
+		t.Errorf("expected deprecation message, got: %v", err)
 	}
 }
 
@@ -363,21 +330,13 @@ func TestMCPTokenList_WithTokens(t *testing.T) {
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 	t.Cleanup(func() { _ = tokenCreateCmd.Flags().Set("ttl", "") })
 
-	output := captureStdout(func() {
-		err := rootCmd.Execute()
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-	})
+	err = rootCmd.Execute()
 
-	if !strings.Contains(output, "list-test") {
-		t.Errorf("expected token label in output, got: %s", output)
+	if err == nil {
+		t.Fatal("expected deprecation error")
 	}
-	if !strings.Contains(output, "claude-code") {
-		t.Errorf("expected agent in output, got: %s", output)
-	}
-	if !strings.Contains(output, "active") {
-		t.Errorf("expected status in output, got: %s", output)
+	if !strings.Contains(err.Error(), "deprecated in v4.0") {
+		t.Errorf("expected deprecation message, got: %v", err)
 	}
 }
 
@@ -413,33 +372,13 @@ func TestMCPTokenRevoke_Success(t *testing.T) {
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 	t.Cleanup(func() { _ = tokenCreateCmd.Flags().Set("ttl", "") })
 
-	output := captureStdout(func() {
-		err := rootCmd.Execute()
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-	})
+	err = rootCmd.Execute()
 
-	if !strings.Contains(output, "revoked successfully") {
-		t.Errorf("expected revoke confirmation, got: %s", output)
+	if err == nil {
+		t.Fatal("expected deprecation error")
 	}
-
-	reg2 := mcp.NewTokenRegistry(regPath)
-	if err := reg2.Load(); err != nil {
-		t.Fatalf("reload registry: %v", err)
-	}
-	tokens := reg2.List()
-	var found bool
-	for i := range tokens {
-		if tokens[i].ID == token.ID {
-			found = true
-			if !tokens[i].Revoked {
-				t.Error("token should be revoked")
-			}
-		}
-	}
-	if !found {
-		t.Error("revoked token should still be in list for audit")
+	if !strings.Contains(err.Error(), "deprecated in v4.0") {
+		t.Errorf("expected deprecation message, got: %v", err)
 	}
 }
 
@@ -462,16 +401,13 @@ func TestMCPTokenRevoke_NotFound(t *testing.T) {
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 	t.Cleanup(func() { _ = tokenCreateCmd.Flags().Set("ttl", "") })
 
-	var execErr error
-	captureStderr(func() {
-		execErr = rootCmd.Execute()
-	})
+	err := rootCmd.Execute()
 
-	if execErr == nil {
-		t.Fatal("expected error for nonexistent token")
+	if err == nil {
+		t.Fatal("expected deprecation error")
 	}
-	if !strings.Contains(execErr.Error(), "not found") {
-		t.Errorf("unexpected error: %v", execErr)
+	if !strings.Contains(err.Error(), "deprecated in v4.0") {
+		t.Errorf("expected deprecation message, got: %v", err)
 	}
 }
 
@@ -504,23 +440,23 @@ func TestMCPTokenRevoke_DoubleRevoke(t *testing.T) {
 	t.Cleanup(func() { resetCobraCommand(rootCmd) })
 
 	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "revoke", token.ID})
-	var execErr error
-	captureStdout(func() {
-		execErr = rootCmd.Execute()
-	})
-	if execErr != nil {
-		t.Fatalf("first revoke unexpected error: %v", execErr)
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+
+	err = rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected deprecation error on first revoke")
+	}
+	if !strings.Contains(err.Error(), "deprecated in v4.0") {
+		t.Errorf("expected deprecation message on first revoke, got: %v", err)
 	}
 
 	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "revoke", token.ID})
-	captureStderr(func() {
-		execErr = rootCmd.Execute()
-	})
-	if execErr == nil {
-		t.Fatal("expected error for double revoke")
+	err = rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected deprecation error on second revoke")
 	}
-	if !strings.Contains(execErr.Error(), "not found") {
-		t.Errorf("unexpected error: %v", execErr)
+	if !strings.Contains(err.Error(), "deprecated in v4.0") {
+		t.Errorf("expected deprecation message on second revoke, got: %v", err)
 	}
 }
 
@@ -557,15 +493,13 @@ func TestMCPTokenList_RevokedToken(t *testing.T) {
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 	t.Cleanup(func() { _ = tokenCreateCmd.Flags().Set("ttl", "") })
 
-	output := captureStdout(func() {
-		err := rootCmd.Execute()
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-	})
+	err = rootCmd.Execute()
 
-	if !strings.Contains(output, "revoked") {
-		t.Errorf("expected revoked status in output, got: %s", output)
+	if err == nil {
+		t.Fatal("expected deprecation error")
+	}
+	if !strings.Contains(err.Error(), "deprecated in v4.0") {
+		t.Errorf("expected deprecation message, got: %v", err)
 	}
 }
 
@@ -655,15 +589,13 @@ func TestMCPTokenCreate_ZeroTTL(t *testing.T) {
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 	t.Cleanup(func() { _ = tokenCreateCmd.Flags().Set("ttl", "") })
 
-	output := captureStdout(func() {
-		err := rootCmd.Execute()
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-	})
+	err := rootCmd.Execute()
 
-	if !strings.Contains(output, "Expires: never") {
-		t.Errorf("expected 'never' expiration for zero TTL, got: %s", output)
+	if err == nil {
+		t.Fatal("expected deprecation error")
+	}
+	if !strings.Contains(err.Error(), "deprecated in v4.0") {
+		t.Errorf("expected deprecation message, got: %v", err)
 	}
 }
 
@@ -705,18 +637,13 @@ func TestMCPTokenList_ExpiredTokenExcluded(t *testing.T) {
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 	t.Cleanup(func() { _ = tokenCreateCmd.Flags().Set("ttl", "") })
 
-	output := captureStdout(func() {
-		err := rootCmd.Execute()
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-	})
+	err = rootCmd.Execute()
 
-	if strings.Contains(output, "expired") {
-		t.Errorf("expired token should not appear in list, got: %s", output)
+	if err == nil {
+		t.Fatal("expected deprecation error")
 	}
-	if !strings.Contains(output, "valid") {
-		t.Errorf("valid token should appear in list, got: %s", output)
+	if !strings.Contains(err.Error(), "deprecated in v4.0") {
+		t.Errorf("expected deprecation message, got: %v", err)
 	}
 }
 
@@ -744,23 +671,13 @@ func TestMCPTokenCreate_PreservesInRegistry(t *testing.T) {
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 	t.Cleanup(func() { _ = tokenCreateCmd.Flags().Set("ttl", "") })
 
-	captureStdout(func() {
-		err := rootCmd.Execute()
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-	})
+	err := rootCmd.Execute()
 
-	regPath := mcp.TokenRegistryFilePath(vaultDir)
-	data, err := os.ReadFile(regPath)
-	if err != nil {
-		t.Fatalf("read registry: %v", err)
+	if err == nil {
+		t.Fatal("expected deprecation error")
 	}
-	if !strings.Contains(string(data), "persist-test") {
-		t.Errorf("registry should contain token label, got: %s", string(data))
-	}
-	if strings.Contains(string(data), "Raw token") {
-		t.Error("registry should not contain raw token")
+	if !strings.Contains(err.Error(), "deprecated in v4.0") {
+		t.Errorf("expected deprecation message, got: %v", err)
 	}
 }
 
@@ -830,15 +747,13 @@ func TestMCPTokenCreate_ToolsLongOutput(t *testing.T) {
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 	t.Cleanup(func() { _ = tokenCreateCmd.Flags().Set("ttl", "") })
 
-	output := captureStdout(func() {
-		err := rootCmd.Execute()
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-	})
+	err = rootCmd.Execute()
 
-	if !strings.Contains(output, "many-tools") {
-		t.Errorf("expected token in output, got: %s", output)
+	if err == nil {
+		t.Fatal("expected deprecation error")
+	}
+	if !strings.Contains(err.Error(), "deprecated in v4.0") {
+		t.Errorf("expected deprecation message, got: %v", err)
 	}
 }
 
@@ -874,18 +789,13 @@ func TestMCPTokenList_HeaderFormat(t *testing.T) {
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 	t.Cleanup(func() { _ = tokenCreateCmd.Flags().Set("ttl", "") })
 
-	output := captureStdout(func() {
-		err := rootCmd.Execute()
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-	})
+	err = rootCmd.Execute()
 
-	headers := []string{"ID", "LABEL", "AGENT", "TOOLS", "EXPIRES AT", "STATUS"}
-	for _, h := range headers {
-		if !strings.Contains(output, h) {
-			t.Errorf("expected header %q in output, got: %s", h, output)
-		}
+	if err == nil {
+		t.Fatal("expected deprecation error")
+	}
+	if !strings.Contains(err.Error(), "deprecated in v4.0") {
+		t.Errorf("expected deprecation message, got: %v", err)
 	}
 }
 
@@ -927,16 +837,13 @@ func TestMCPTokenCreate_NegativeDayTTL(t *testing.T) {
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 	t.Cleanup(func() { _ = tokenCreateCmd.Flags().Set("ttl", "") })
 
-	var execErr error
-	captureStderr(func() {
-		execErr = rootCmd.Execute()
-	})
+	err := rootCmd.Execute()
 
-	if execErr == nil {
-		t.Fatal("expected error for negative TTL")
+	if err == nil {
+		t.Fatal("expected deprecation error")
 	}
-	if !strings.Contains(execErr.Error(), "invalid TTL") {
-		t.Errorf("unexpected error: %v", execErr)
+	if !strings.Contains(err.Error(), "deprecated in v4.0") {
+		t.Errorf("expected deprecation message, got: %v", err)
 	}
 }
 
@@ -966,20 +873,13 @@ func TestMCPTokenCreate_RegistryFilePermissions(t *testing.T) {
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 	t.Cleanup(func() { _ = tokenCreateCmd.Flags().Set("ttl", "") })
 
-	captureStdout(func() {
-		err := rootCmd.Execute()
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-	})
+	err := rootCmd.Execute()
 
-	regPath := mcp.TokenRegistryFilePath(vaultDir)
-	info, err := os.Stat(regPath)
-	if err != nil {
-		t.Fatalf("stat registry: %v", err)
+	if err == nil {
+		t.Fatal("expected deprecation error")
 	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
-		t.Errorf("registry file permissions = %o, want 600", perm)
+	if !strings.Contains(err.Error(), "deprecated in v4.0") {
+		t.Errorf("expected deprecation message, got: %v", err)
 	}
 }
 
@@ -1006,15 +906,13 @@ func TestMCPTokenCreate_EmptyLabelOK(t *testing.T) {
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 	t.Cleanup(func() { _ = tokenCreateCmd.Flags().Set("ttl", "") })
 
-	output := captureStdout(func() {
-		err := rootCmd.Execute()
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-	})
+	err := rootCmd.Execute()
 
-	if !strings.Contains(output, "Token created successfully.") {
-		t.Errorf("expected success message, got: %s", output)
+	if err == nil {
+		t.Fatal("expected deprecation error")
+	}
+	if !strings.Contains(err.Error(), "deprecated in v4.0") {
+		t.Errorf("expected deprecation message, got: %v", err)
 	}
 }
 
@@ -1103,18 +1001,13 @@ func TestMCPTokenCreate_WithDaySuffixTTL(t *testing.T) {
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 	t.Cleanup(func() { _ = tokenCreateCmd.Flags().Set("ttl", "") })
 
-	output := captureStdout(func() {
-		err := rootCmd.Execute()
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-	})
+	err := rootCmd.Execute()
 
-	if !strings.Contains(output, "week-token") {
-		t.Errorf("expected label in output, got: %s", output)
+	if err == nil {
+		t.Fatal("expected deprecation error")
 	}
-	if !strings.Contains(output, "Expires:") {
-		t.Errorf("expected expiration in output, got: %s", output)
+	if !strings.Contains(err.Error(), "deprecated in v4.0") {
+		t.Errorf("expected deprecation message, got: %v", err)
 	}
 }
 
@@ -1150,15 +1043,13 @@ func TestMCPTokenList_EmptyAgentAndLabel(t *testing.T) {
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 	t.Cleanup(func() { _ = tokenCreateCmd.Flags().Set("ttl", "") })
 
-	output := captureStdout(func() {
-		err := rootCmd.Execute()
-		if err != nil {
-			t.Errorf("unexpected error: %v", err)
-		}
-	})
+	err = rootCmd.Execute()
 
-	if !strings.Contains(output, "-") {
-		t.Errorf("expected dash for empty label/agent, got: %s", output)
+	if err == nil {
+		t.Fatal("expected deprecation error")
+	}
+	if !strings.Contains(err.Error(), "deprecated in v4.0") {
+		t.Errorf("expected deprecation message, got: %v", err)
 	}
 }
 
@@ -1174,7 +1065,6 @@ func TestMCPTokenCreate_RawTokenUnique(t *testing.T) {
 		t.Fatalf("failed to init vault: %v", err)
 	}
 
-	var tokens []string
 	for i := 0; i < 3; i++ {
 		vaultFlagReset(t)
 		t.Cleanup(func() { resetCobraCommand(rootCmd) })
@@ -1184,33 +1074,15 @@ func TestMCPTokenCreate_RawTokenUnique(t *testing.T) {
 			"mcp", "token", "create",
 			"--label", fmt.Sprintf("token-%d", i),
 		})
+		t.Cleanup(func() { rootCmd.SetArgs(nil) })
+		t.Cleanup(func() { _ = tokenCreateCmd.Flags().Set("ttl", "") })
 
-		output := captureStdout(func() {
-			err := rootCmd.Execute()
-			if err != nil {
-				t.Errorf("unexpected error: %v", err)
-			}
-		})
-		rootCmd.SetArgs(nil)
-
-		for _, line := range strings.Split(output, "\n") {
-			if strings.Contains(line, "Raw token (copy now") {
-				parts := strings.Split(line, ": ")
-				if len(parts) == 2 {
-					tokens = append(tokens, strings.TrimSpace(parts[1]))
-				}
-			}
+		err := rootCmd.Execute()
+		if err == nil {
+			t.Fatal("expected deprecation error")
 		}
-	}
-
-	if len(tokens) != 3 {
-		t.Fatalf("expected 3 tokens, got %d", len(tokens))
-	}
-	for i := 0; i < len(tokens); i++ {
-		for j := i + 1; j < len(tokens); j++ {
-			if tokens[i] == tokens[j] {
-				t.Errorf("tokens %d and %d are identical: %s", i, j, tokens[i])
-			}
+		if !strings.Contains(err.Error(), "deprecated in v4.0") {
+			t.Errorf("expected deprecation message, got: %v", err)
 		}
 	}
 }

@@ -1,10 +1,10 @@
 package cmd
 
 import (
-	"bytes"
 	"context"
 	"os"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/danieljustus/OpenPass/internal/config"
@@ -574,16 +574,15 @@ func TestOutputHTTPConfigMCP(t *testing.T) {
 		vaultFlag.Changed = false
 	}
 
-	buf := &bytes.Buffer{}
-	mcpConfigCmd.SetOut(buf)
-	mcpConfigCmd.SetErr(buf)
-	mcpConfigCmd.SetArgs([]string{"claude-code"})
-	//nolint:errcheck // flag.Set is only used in tests
-	mcpConfigCmd.Flags().Set("http", "true")
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "claude-code", "--http"})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	err := mcpConfigCmd.Execute()
-	if err != nil {
-		t.Errorf("mcp-config http failed: %v", err)
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("expected deprecation error")
+	}
+	if !strings.Contains(err.Error(), "deprecated in v4.0") {
+		t.Errorf("expected deprecation message, got: %v", err)
 	}
 }
 

@@ -8,60 +8,60 @@ func TestTierPresets_ApplyPresetValues(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name                string
-		tier                string
-		wantCanWrite        bool
-		wantCanRunCommands  bool
-		wantCanManageConfig bool
-		wantCanUseClipboard bool
-		wantCanUseAutotype  bool
-		wantCanReadValues   bool
+		name                 string
+		tier                 string
+		wantCanWrite         bool
+		wantCanRunCommands   bool
+		wantCanManageConfig  bool
+		wantCanUseClipboard  bool
+		wantCanUseAutotype   bool
+		wantCanReadValues    bool
 		wantExposeValueTools bool
-		wantAutoUnseal      bool
-		wantApprovalMode    string
-		wantRequireApproval bool
+		wantAutoUnseal       bool
+		wantApprovalMode     string
+		wantRequireApproval  bool
 	}{
 		{
-			name:                "read-only",
-			tier:                "read-only",
-			wantCanWrite:        false,
-			wantCanRunCommands:  false,
-			wantCanManageConfig: false,
-			wantCanUseClipboard: false,
-			wantCanUseAutotype:  false,
-			wantCanReadValues:   false,
+			name:                 "read-only",
+			tier:                 "read-only",
+			wantCanWrite:         false,
+			wantCanRunCommands:   false,
+			wantCanManageConfig:  false,
+			wantCanUseClipboard:  false,
+			wantCanUseAutotype:   false,
+			wantCanReadValues:    false,
 			wantExposeValueTools: false,
-			wantAutoUnseal:      false,
-			wantApprovalMode:    "none",
-			wantRequireApproval: false,
+			wantAutoUnseal:       false,
+			wantApprovalMode:     "none",
+			wantRequireApproval:  false,
 		},
 		{
-			name:                "standard",
-			tier:                "standard",
-			wantCanWrite:        false,
-			wantCanRunCommands:  false,
-			wantCanManageConfig: false,
-			wantCanUseClipboard: true,
-			wantCanUseAutotype:  true,
-			wantCanReadValues:   true,
+			name:                 "standard",
+			tier:                 "standard",
+			wantCanWrite:         false,
+			wantCanRunCommands:   false,
+			wantCanManageConfig:  false,
+			wantCanUseClipboard:  true,
+			wantCanUseAutotype:   true,
+			wantCanReadValues:    true,
 			wantExposeValueTools: false,
-			wantAutoUnseal:      false,
-			wantApprovalMode:    "prompt",
-			wantRequireApproval: true,
+			wantAutoUnseal:       false,
+			wantApprovalMode:     "prompt",
+			wantRequireApproval:  true,
 		},
 		{
-			name:                "admin",
-			tier:                "admin",
-			wantCanWrite:        true,
-			wantCanRunCommands:  true,
-			wantCanManageConfig: true,
-			wantCanUseClipboard: true,
-			wantCanUseAutotype:  true,
-			wantCanReadValues:   true,
+			name:                 "admin",
+			tier:                 "admin",
+			wantCanWrite:         true,
+			wantCanRunCommands:   true,
+			wantCanManageConfig:  true,
+			wantCanUseClipboard:  true,
+			wantCanUseAutotype:   true,
+			wantCanReadValues:    true,
 			wantExposeValueTools: true,
-			wantAutoUnseal:      true,
-			wantApprovalMode:    "prompt",
-			wantRequireApproval: true,
+			wantAutoUnseal:       true,
+			wantApprovalMode:     "prompt",
+			wantRequireApproval:  true,
 		},
 	}
 

@@ -248,15 +248,13 @@ func TestCmdMCPConfig_Stdio(t *testing.T) {
 	rootCmd.SetArgs([]string{"mcp-config", "myagent"})
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	output := captureStdout(func() {
-		_ = rootCmd.Execute()
-	})
+	err := rootCmd.Execute()
 
-	if !strings.Contains(output, "openpass") {
-		t.Errorf("mcp-config stdio output missing 'openpass': %q", output)
+	if err == nil {
+		t.Fatal("expected deprecation error")
 	}
-	if !strings.Contains(output, "myagent") {
-		t.Errorf("mcp-config stdio output missing agent name: %q", output)
+	if !strings.Contains(err.Error(), "deprecated in v4.0") {
+		t.Errorf("expected deprecation message, got: %v", err)
 	}
 }
 
@@ -270,12 +268,13 @@ func TestCmdMCPConfig_StdioCustomVaultIncludesVaultArg(t *testing.T) {
 	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent"})
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	output := captureStdout(func() {
-		_ = rootCmd.Execute()
-	})
+	err := rootCmd.Execute()
 
-	if !strings.Contains(output, "--vault") || !strings.Contains(output, vaultDir) {
-		t.Errorf("mcp-config stdio output for custom vault missing --vault arg: %q", output)
+	if err == nil {
+		t.Fatal("expected deprecation error")
+	}
+	if !strings.Contains(err.Error(), "deprecated in v4.0") {
+		t.Errorf("expected deprecation message, got: %v", err)
 	}
 }
 
@@ -293,15 +292,13 @@ func TestCmdMCPConfig_HTTP(t *testing.T) {
 	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent", "--http"})
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	output := captureStdout(func() {
-		_ = rootCmd.Execute()
-	})
+	err := rootCmd.Execute()
 
-	if !strings.Contains(output, "url") {
-		t.Errorf("mcp-config http output missing 'url': %q", output)
+	if err == nil {
+		t.Fatal("expected deprecation error")
 	}
-	if !strings.Contains(output, "Authorization") {
-		t.Errorf("mcp-config http output missing 'Authorization': %q", output)
+	if !strings.Contains(err.Error(), "deprecated in v4.0") {
+		t.Errorf("expected deprecation message, got: %v", err)
 	}
 }
 
@@ -323,22 +320,13 @@ func TestCmdMCPConfig_HermesHTTP(t *testing.T) {
 	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "hermes", "--http", "--format", "hermes"})
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	output := captureStdout(func() {
-		_ = rootCmd.Execute()
-	})
+	err := rootCmd.Execute()
 
-	for _, want := range []string{
-		"mcp_servers:",
-		"openpass:",
-		"url: http://127.0.0.1:8090/mcp",
-		"Authorization: env:OPENPASS_MCP_TOKEN",
-		`MCP-Protocol-Version: "2025-11-25"`,
-		"X-OpenPass-Agent: hermes",
-		"connect_timeout: 30",
-	} {
-		if !strings.Contains(output, want) {
-			t.Errorf("mcp-config hermes http output missing %q: %q", want, output)
-		}
+	if err == nil {
+		t.Fatal("expected deprecation error")
+	}
+	if !strings.Contains(err.Error(), "deprecated in v4.0") {
+		t.Errorf("expected deprecation message, got: %v", err)
 	}
 }
 
@@ -389,30 +377,23 @@ func TestOutputHTTPConfig_CustomTokenFile(t *testing.T) {
 	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent", "--http"})
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	output := captureStdout(func() {
-		_ = rootCmd.Execute()
-	})
+	err := rootCmd.Execute()
 
-	if !strings.Contains(output, "127.0.0.1:9999") {
-		t.Errorf("mcp-config http output missing custom bind/port: %q", output)
+	if err == nil {
+		t.Fatal("expected deprecation error")
 	}
-	if strings.Contains(output, customTokenValue) {
-		t.Errorf("mcp-config http output leaked custom token without --include-token: %q", output)
-	}
-	if !strings.Contains(output, "env:OPENPASS_MCP_TOKEN") {
-		t.Errorf("mcp-config http output missing redacted token reference: %q", output)
-	}
-	if !strings.Contains(output, "Authorization") {
-		t.Errorf("mcp-config http output missing 'Authorization': %q", output)
+	if !strings.Contains(err.Error(), "deprecated in v4.0") {
+		t.Errorf("expected deprecation message, got: %v", err)
 	}
 
 	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent", "--http", "--include-token"})
-	output = captureStdout(func() {
-		_ = rootCmd.Execute()
-	})
+	err = rootCmd.Execute()
 
-	if !strings.Contains(output, customTokenValue) {
-		t.Errorf("mcp-config http --include-token output missing custom token: %q", output)
+	if err == nil {
+		t.Fatal("expected deprecation error")
+	}
+	if !strings.Contains(err.Error(), "deprecated in v4.0") {
+		t.Errorf("expected deprecation message, got: %v", err)
 	}
 }
 
@@ -428,16 +409,13 @@ func TestOutputHTTPConfig_TokenLoadError(t *testing.T) {
 	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent", "--http"})
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	var execErr error
-	captureStderr(func() {
-		execErr = rootCmd.Execute()
-	})
+	err := rootCmd.Execute()
 
-	if execErr == nil {
-		t.Error("expected error for non-existent token path")
+	if err == nil {
+		t.Fatal("expected deprecation error")
 	}
-	if !strings.Contains(execErr.Error(), "load token") {
-		t.Errorf("unexpected error: %v", execErr)
+	if !strings.Contains(err.Error(), "deprecated in v4.0") {
+		t.Errorf("expected deprecation message, got: %v", err)
 	}
 }
 
@@ -452,15 +430,12 @@ func TestOutputHTTPConfig_StaleRuntimePort(t *testing.T) {
 	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent", "--http"})
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	var execErr error
-	captureStderr(func() {
-		execErr = rootCmd.Execute()
-	})
+	err := rootCmd.Execute()
 
-	if execErr == nil {
-		t.Fatal("expected stale runtime port error")
+	if err == nil {
+		t.Fatal("expected deprecation error")
 	}
-	if !strings.Contains(execErr.Error(), "stale runtime port") {
-		t.Fatalf("unexpected error: %v", execErr)
+	if !strings.Contains(err.Error(), "deprecated in v4.0") {
+		t.Errorf("expected deprecation message, got: %v", err)
 	}
 }

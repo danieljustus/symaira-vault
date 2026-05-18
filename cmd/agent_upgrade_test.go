@@ -87,8 +87,8 @@ func TestApplyTierUpgrade(t *testing.T) {
 	cfg := configpkg.Default()
 	cfg.VaultDir = vaultDir
 	cfg.Agents["test-agent"] = configpkg.AgentProfile{
-		Name:        "test-agent",
-		Tier:        "safe",
+		Name:         "test-agent",
+		Tier:         "safe",
 		AllowedPaths: []string{"*"},
 	}
 	if err := cfg.SaveTo(filepath.Join(vaultDir, "config.yaml")); err != nil {

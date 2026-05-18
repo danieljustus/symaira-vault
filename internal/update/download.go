@@ -5,8 +5,8 @@ package update
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
 	"crypto/tls"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"

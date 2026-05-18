@@ -78,7 +78,7 @@ func AuthRequired(msg string) *MCPError {
 // PathForbidden creates a path-forbidden error with the path and allowed paths.
 func PathForbidden(path string, allowed []string) *MCPError {
 	return WithDetails(ErrPathForbidden, fmt.Sprintf("Path %q is not allowed", path), map[string]any{
-		"path":            path,
+		"path":             path,
 		"allowed_for_path": allowed,
 	})
 }

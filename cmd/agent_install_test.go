@@ -133,8 +133,8 @@ func TestCreateAgentProfileConfig_ExistsWithForce(t *testing.T) {
 
 func TestValidTiers(t *testing.T) {
 	tests := []struct {
-		tier    string
-		wantOK  bool
+		tier   string
+		wantOK bool
 	}{
 		{"safe", true},
 		{"standard", true},
@@ -156,8 +156,8 @@ func TestValidTiers(t *testing.T) {
 
 func TestTierPresetMapping(t *testing.T) {
 	tests := []struct {
-		tier   string
-		want   string
+		tier string
+		want string
 	}{
 		{"safe", "read-only"},
 		{"standard", "standard"},
@@ -184,9 +184,9 @@ func TestCreateAgentProfileConfig_PreservesSkillPath(t *testing.T) {
 	cfg := configpkg.Default()
 	cfg.VaultDir = vaultDir
 	cfg.Agents["custom-agent"] = configpkg.AgentProfile{
-		Name:       "custom-agent",
-		Tier:       "safe",
-		SkillPath:  "/custom/path/custom-agent.skill.md",
+		Name:      "custom-agent",
+		Tier:      "safe",
+		SkillPath: "/custom/path/custom-agent.skill.md",
 	}
 	if err := cfg.SaveTo(configPath); err != nil {
 		t.Fatalf("save initial config: %v", err)

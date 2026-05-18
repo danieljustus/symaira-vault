@@ -45,10 +45,10 @@ var blockedToolsByTier = map[string]map[string]bool{
 		"autotype":            true,
 	},
 	tierStandard: {
-		"delete_entry":          true,
-		"run_command":           true,
-		"execute_with_secret":   true,
-		"execute_api_request":   true,
+		"delete_entry":        true,
+		"run_command":         true,
+		"execute_with_secret": true,
+		"execute_api_request": true,
 	},
 	tierAdmin: {},
 }
@@ -147,7 +147,7 @@ func (ctx *AgentContext) EnforcePath(path, action string) error {
 		if action == "delete" {
 			return mcpErr.PathForbidden(path, ctx.profile.AllowedPaths)
 		}
-	// tierAdmin — all actions allowed
+		// tierAdmin — all actions allowed
 	}
 	return nil
 }

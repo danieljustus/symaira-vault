@@ -119,4 +119,3 @@ vaultDir: /tmp/test
 		t.Fatal("expected error when no agents section")
 	}
 }
-
