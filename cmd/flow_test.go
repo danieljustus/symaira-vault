@@ -79,7 +79,11 @@ func TestCmdGet(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping slow CLI flow test in short mode")
 	}
-	vaultDir := t.TempDir()
+	vaultDir, err := os.MkdirTemp("", "openpass-flow-test")
+	if err != nil {
+		t.Fatalf("create temp dir: %v", err)
+	}
+	defer os.RemoveAll(vaultDir)
 	passphrase := []byte("correct horse battery staple")
 	identity, _ := vaultpkg.InitWithPassphrase(vaultDir, passphrase, config.Default())
 	entry := &vaultpkg.Entry{Data: map[string]any{"password": "secret123"}}
