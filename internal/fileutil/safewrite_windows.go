@@ -99,8 +99,41 @@ func SafeRemove(path string) error {
 	return os.Remove(path)
 }
 
+// SafeMkdirAll creates a directory at path and all necessary parent directories.
+// Unlike os.MkdirAll, it walks the path component-by-component so that a
+// parent-directory symlink replacement is caught at the next component check.
 func SafeMkdirAll(path string, perm os.FileMode) error {
-	return os.MkdirAll(path, perm)
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+
+	vol := filepath.VolumeName(abs)
+	var parts []string
+	for p := filepath.Clean(abs); len(p) > len(vol); p = filepath.Dir(p) {
+		parts = append(parts, filepath.Base(p))
+	}
+
+	cur := vol + string(filepath.Separator)
+	for i := len(parts) - 1; i >= 0; i-- {
+		cur = filepath.Join(cur, parts[i])
+
+		fi, err := os.Stat(cur)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				return err
+			}
+			if err := os.Mkdir(cur, perm); err != nil {
+				return err
+			}
+			continue
+		}
+
+		if !fi.IsDir() {
+			return &os.PathError{Op: "mkdir", Path: cur, Err: errUnsafePath}
+		}
+	}
+	return nil
 }
 
 func rejectSymlink(path string) error {
