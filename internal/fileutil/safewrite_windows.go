@@ -110,8 +110,13 @@ func SafeMkdirAll(path string, perm os.FileMode) error {
 
 	vol := filepath.VolumeName(abs)
 	var parts []string
-	for p := filepath.Clean(abs); len(p) > len(vol); p = filepath.Dir(p) {
+	for p := filepath.Clean(abs); len(p) > len(vol); {
 		parts = append(parts, filepath.Base(p))
+		next := filepath.Dir(p)
+		if next == p {
+			break
+		}
+		p = next
 	}
 
 	cur := vol + string(filepath.Separator)
