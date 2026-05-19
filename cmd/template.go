@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 
+	cli "github.com/danieljustus/OpenPass/internal/cli"
+
 	"github.com/spf13/cobra"
 
 	"github.com/danieljustus/OpenPass/internal/template"
@@ -65,7 +67,7 @@ var templateGenerateCmd = &cobra.Command{
 				if err := os.WriteFile(templateOutput, []byte(output), 0600); err != nil {
 					return fmt.Errorf("write output file: %w", err)
 				}
-				if outputFormat == "text" {
+				if cli.OutputFormat == "text" {
 					fmt.Printf("Template written to: %s\n", templateOutput)
 				} else {
 					return PrintResult(map[string]interface{}{

@@ -18,7 +18,7 @@ func assertTOTPSet(t *testing.T, vaultDir string, identity *age.X25519Identity, 
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     true,
+		CanWrite:     config.BoolPtr(true),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -66,8 +66,8 @@ func TestHandleSet_WriteDenied(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false, // Cannot write
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false), // Cannot write
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -93,8 +93,8 @@ func TestHandleSet_Success(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     true,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(true),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -132,8 +132,8 @@ func TestHandleSet_OutsideScope(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"work/"},
-		CanWrite:     true,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(true),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -159,8 +159,8 @@ func TestHandleSet_ApprovalRequired(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     true,
-		ApprovalMode: "deny", // Requires approval
+		CanWrite:     config.BoolPtr(true),
+		ApprovalMode: config.StrPtr("deny"), // Requires approval
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -186,8 +186,8 @@ func TestHandleSet_MissingParams(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     true,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(true),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -215,8 +215,8 @@ func TestHandleSet_NewEntry(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     true,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(true),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -261,7 +261,7 @@ func TestHandleSet_InvalidTOTPJSON(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     true,
+		CanWrite:     config.BoolPtr(true),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -290,7 +290,7 @@ func TestHandleSet_TOTPInvalidAlgorithm(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     true,
+		CanWrite:     config.BoolPtr(true),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -323,7 +323,7 @@ func TestHandleSet_TOTPInvalidDigits(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     true,
+		CanWrite:     config.BoolPtr(true),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -356,7 +356,7 @@ func TestHandleSet_TOTPInvalidPeriod(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     true,
+		CanWrite:     config.BoolPtr(true),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -389,7 +389,7 @@ func TestHandleSet_TOTPValidParams(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     true,
+		CanWrite:     config.BoolPtr(true),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -440,8 +440,8 @@ func TestHandleSet_WriteEntryFails(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     true,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(true),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -474,8 +474,8 @@ func TestHandleSet_PreservesMultiRecipientAccess(t *testing.T) {
 			"test": {
 				Name:         "test",
 				AllowedPaths: []string{"*"},
-				CanWrite:     true,
-				ApprovalMode: "none",
+				CanWrite:     config.BoolPtr(true),
+				ApprovalMode: config.StrPtr("none"),
 			},
 		},
 	}
@@ -501,8 +501,8 @@ func TestHandleSet_PreservesMultiRecipientAccess(t *testing.T) {
 		agent: &config.AgentProfile{
 			Name:         "test",
 			AllowedPaths: []string{"*"},
-			CanWrite:     true,
-			ApprovalMode: "none",
+			CanWrite:     config.BoolPtr(true),
+			ApprovalMode: config.StrPtr("none"),
 		},
 	}
 
@@ -540,8 +540,8 @@ func TestHandleSet_MergePreservesMultiRecipientAccess(t *testing.T) {
 			"test": {
 				Name:         "test",
 				AllowedPaths: []string{"*"},
-				CanWrite:     true,
-				ApprovalMode: "none",
+				CanWrite:     config.BoolPtr(true),
+				ApprovalMode: config.StrPtr("none"),
 			},
 		},
 	}
@@ -576,8 +576,8 @@ func TestHandleSet_MergePreservesMultiRecipientAccess(t *testing.T) {
 		agent: &config.AgentProfile{
 			Name:         "test",
 			AllowedPaths: []string{"*"},
-			CanWrite:     true,
-			ApprovalMode: "none",
+			CanWrite:     config.BoolPtr(true),
+			ApprovalMode: config.StrPtr("none"),
 		},
 	}
 

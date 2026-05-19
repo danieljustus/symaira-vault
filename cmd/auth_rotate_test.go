@@ -4,6 +4,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	cli "github.com/danieljustus/OpenPass/internal/cli"
 )
 
 func TestAuthRotate_ValidatesLengthBeforeConfirmation(t *testing.T) {
@@ -24,8 +26,8 @@ func TestAuthRotate_ValidatesLengthBeforeConfirmation(t *testing.T) {
 		w.Write([]byte("short\n"))
 	}()
 
-	rootCmd.SetArgs([]string{"auth", "rotate-passphrase"})
-	err = rootCmd.Execute()
+	cli.RootCmd.SetArgs([]string{"auth", "rotate-passphrase"})
+	err = cli.RootCmd.Execute()
 	os.Stdin = oldStdin
 
 	if err == nil {

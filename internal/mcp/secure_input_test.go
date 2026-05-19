@@ -24,8 +24,8 @@ func TestHandleSecureInput_Success(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     true,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(true),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -67,8 +67,8 @@ func TestHandleSecureInput_NewEntry(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     true,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(true),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -103,8 +103,8 @@ func TestHandleSecureInput_WriteDenied(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -129,8 +129,8 @@ func TestHandleSecureInput_OutsideScope(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"work/"},
-		CanWrite:     true,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(true),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -155,8 +155,8 @@ func TestHandleSecureInput_ApprovalRequired(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     true,
-		ApprovalMode: "deny",
+		CanWrite:     config.BoolPtr(true),
+		ApprovalMode: config.StrPtr("deny"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -181,8 +181,8 @@ func TestHandleSecureInput_MissingParams(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     true,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(true),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -202,8 +202,8 @@ func TestHandleSecureInput_Canceled(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     true,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(true),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -227,8 +227,8 @@ func TestHandleSecureInput_Timeout(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     true,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(true),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -249,8 +249,8 @@ func TestHandleSecureInput_Unavailable(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     true,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(true),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -271,8 +271,8 @@ func TestHandleSecureInput_EmptyValue(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     true,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(true),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 

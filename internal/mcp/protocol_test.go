@@ -371,8 +371,8 @@ func TestProtocolHandler_Close_Error(t *testing.T) {
 	srv := newTestServer(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio")
 	handler := NewProtocolHandler("OpenPass", "1.0.0", srv)
 
@@ -388,8 +388,8 @@ func TestProtocolHandler_ToolsCall_Success(t *testing.T) {
 	srv := newTestServer(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio")
 	handler := NewProtocolHandler("OpenPass", "1.0.0", srv)
 
@@ -448,8 +448,8 @@ func TestProtocolHandler_ToolsCall_ExecuteError(t *testing.T) {
 	srv := newTestServer(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio")
 	handler := NewProtocolHandler("OpenPass", "1.0.0", srv)
 

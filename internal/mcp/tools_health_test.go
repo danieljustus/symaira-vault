@@ -11,8 +11,8 @@ func TestHandleHealth(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", "")
 
 	req := CallToolRequest{

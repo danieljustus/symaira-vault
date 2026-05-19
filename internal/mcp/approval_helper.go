@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 
 	"github.com/danieljustus/OpenPass/internal/envfilter"
 	"github.com/danieljustus/OpenPass/internal/vault/taint"
@@ -32,9 +33,12 @@ func (s *Server) requireApproval(ctx context.Context, intent Intent) error {
 		return fmt.Errorf("server not initialized")
 	}
 
-	mode := s.agent.ApprovalMode
+	var mode string
+	if s.agent.ApprovalMode != nil {
+		mode = *s.agent.ApprovalMode
+	}
 	if mode == "" {
-		if s.agent.RequireApproval {
+		if s.agent.RequireApproval != nil && *s.agent.RequireApproval {
 			mode = "prompt"
 		} else {
 			mode = "none"
@@ -65,7 +69,10 @@ func (s *Server) requireApproval(ctx context.Context, intent Intent) error {
 
 		s.logAudit(ctx, "approval."+intent.Action+".requested", intent.EntryPath, true)
 
-		timeout := s.agent.ApprovalTimeout
+		var timeout time.Duration
+		if s.agent.ApprovalTimeout != nil {
+			timeout = *s.agent.ApprovalTimeout
+		}
 		if timeout <= 0 {
 			timeout = defaultTimeout
 		}

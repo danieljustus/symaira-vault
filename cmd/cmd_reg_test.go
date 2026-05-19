@@ -7,6 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	admin "github.com/danieljustus/OpenPass/cmd/admin"
+	mcpcmd "github.com/danieljustus/OpenPass/cmd/mcp"
+	cli "github.com/danieljustus/OpenPass/internal/cli"
 	"github.com/danieljustus/OpenPass/internal/config"
 	"github.com/danieljustus/OpenPass/internal/mcp"
 	"github.com/danieljustus/OpenPass/internal/mcp/serverbootstrap"
@@ -74,7 +77,7 @@ func TestSubcommandRegistration(t *testing.T) {
 	updateSubcommands := []string{"check"}
 	for _, sub := range updateSubcommands {
 		found := false
-		for _, c := range updateCmd.Commands() {
+		for _, c := range admin.UpdateCmd.Commands() {
 			if c.Name() == sub {
 				found = true
 				break
@@ -127,7 +130,7 @@ func TestSubcommandRegistration(t *testing.T) {
 	serveSubcommands := []string{"install", "uninstall", "status"}
 	for _, sub := range serveSubcommands {
 		found := false
-		for _, c := range serveCmd.Commands() {
+		for _, c := range mcpcmd.ServeCmd.Commands() {
 			if c.Name() == sub {
 				found = true
 				break
@@ -141,7 +144,7 @@ func TestSubcommandRegistration(t *testing.T) {
 	migrateSubcommands := []string{"pseudonymize"}
 	for _, sub := range migrateSubcommands {
 		found := false
-		for _, c := range migrateCmd.Commands() {
+		for _, c := range admin.MigrateCmd.Commands() {
 			if c.Name() == sub {
 				found = true
 				break
@@ -607,10 +610,8 @@ func TestRunHTTPServer(t *testing.T) {
 	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
 	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
 
-	vault = vaultDir
-	if vaultFlag != nil {
-		vaultFlag.Changed = false
-	}
+	cli.Vault = vaultDir
+	cli.VaultFlag.Changed = true
 
 	v2, err := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
 	if err != nil {
@@ -621,7 +622,7 @@ func TestRunHTTPServer(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	vaultDir, _ = vaultPath()
+	vaultDir, _ = cli.VaultPath()
 	err = serverbootstrap.RunHTTPServer(ctx, "127.0.0.1", 0, v2, vaultDir, "dev", mcp.New)
 	_ = err
 	if err != nil {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	cli "github.com/danieljustus/OpenPass/internal/cli"
 	configpkg "github.com/danieljustus/OpenPass/internal/config"
 	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
 	"github.com/danieljustus/OpenPass/internal/git"
@@ -173,7 +174,7 @@ func runRemoteStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	if url == "" {
-		if outputFormat == "text" {
+		if cli.OutputFormat == "text" {
 			printlnQuietAware("No remote configured.")
 			cliout.Hintf("Use 'openpass remote init <ssh-target>' to configure a remote.")
 		} else {
@@ -187,7 +188,7 @@ func runRemoteStatus(cmd *cobra.Command, args []string) error {
 
 	autoPush := loadAutoPushConfig()
 
-	if outputFormat == "text" {
+	if cli.OutputFormat == "text" {
 		printQuietAware("Remote configuration for %q:\n", remoteName)
 		printlnQuietAware("  URL:      " + url)
 		printQuietAware("  AutoPush: ")

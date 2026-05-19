@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	cli "github.com/danieljustus/OpenPass/internal/cli"
+
 	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
 	vaultsvc "github.com/danieljustus/OpenPass/internal/vaultsvc"
 )
@@ -129,12 +131,12 @@ func runImportCommand(t *testing.T, passphrase string, args ...string) string {
 	if err := os.Setenv("OPENPASS_PASSPHRASE", passphrase); err != nil {
 		t.Fatalf("set passphrase env: %v", err)
 	}
-	rootCmd.SetArgs(args)
-	defer rootCmd.SetArgs(nil)
+	cli.RootCmd.SetArgs(args)
+	defer cli.RootCmd.SetArgs(nil)
 
 	var execErr error
 	output := captureStdout(func() {
-		execErr = rootCmd.Execute()
+		execErr = cli.RootCmd.Execute()
 	})
 	if execErr != nil {
 		t.Fatalf("import command failed: %v", execErr)
@@ -204,12 +206,12 @@ func TestImportQuarantineMutualExclusion(t *testing.T) {
 	if err := os.Setenv("OPENPASS_PASSPHRASE", string(passphrase)); err != nil {
 		t.Fatalf("set passphrase env: %v", err)
 	}
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "import", "csv", csvImportFixture(t), "--quarantine", "--prefix", "myprefix/"})
-	defer rootCmd.SetArgs(nil)
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "import", "csv", csvImportFixture(t), "--quarantine", "--prefix", "myprefix/"})
+	defer cli.RootCmd.SetArgs(nil)
 
 	var execErr error
 	captureStdout(func() {
-		execErr = rootCmd.Execute()
+		execErr = cli.RootCmd.Execute()
 	})
 	if execErr == nil {
 		t.Fatal("expected error combining --quarantine and --prefix, got nil")
@@ -227,12 +229,12 @@ func TestImportQuarantinePath(t *testing.T) {
 	if err := os.Setenv("OPENPASS_PASSPHRASE", string(passphrase)); err != nil {
 		t.Fatalf("set passphrase env: %v", err)
 	}
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "import", "csv", csvImportFixture(t), "--quarantine"})
-	defer rootCmd.SetArgs(nil)
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "import", "csv", csvImportFixture(t), "--quarantine"})
+	defer cli.RootCmd.SetArgs(nil)
 
 	var execErr error
 	output := captureStdout(func() {
-		execErr = rootCmd.Execute()
+		execErr = cli.RootCmd.Execute()
 	})
 	if execErr != nil {
 		t.Fatalf("import --quarantine failed: %v", execErr)
@@ -272,12 +274,12 @@ func TestImportReviewListEmpty(t *testing.T) {
 	if err := os.Setenv("OPENPASS_PASSPHRASE", string(passphrase)); err != nil {
 		t.Fatalf("set passphrase env: %v", err)
 	}
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "import", "review", "list"})
-	defer rootCmd.SetArgs(nil)
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "import", "review", "list"})
+	defer cli.RootCmd.SetArgs(nil)
 
 	var execErr error
 	output := captureStdout(func() {
-		execErr = rootCmd.Execute()
+		execErr = cli.RootCmd.Execute()
 	})
 	if execErr != nil {
 		t.Fatalf("import review list failed: %v", execErr)
@@ -296,13 +298,13 @@ func TestImportReviewList(t *testing.T) {
 	if err := os.Setenv("OPENPASS_PASSPHRASE", string(passphrase)); err != nil {
 		t.Fatalf("set passphrase env: %v", err)
 	}
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "import", "csv", csvImportFixture(t), "--quarantine"})
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "import", "csv", csvImportFixture(t), "--quarantine"})
 	var importOutput string
 	var importErr error
 	importOutput = captureStdout(func() {
-		importErr = rootCmd.Execute()
+		importErr = cli.RootCmd.Execute()
 	})
-	rootCmd.SetArgs(nil)
+	cli.RootCmd.SetArgs(nil)
 	if importErr != nil {
 		t.Fatalf("quarantine import failed: %v", importErr)
 	}
@@ -318,18 +320,18 @@ func TestImportReviewList(t *testing.T) {
 		t.Fatalf("could not extract import-id from output: %s", importOutput)
 	}
 
-	// Re-set passphrase (unlockVault unsets it after each use)
+	// Re-set passphrase (cli.UnlockVault unsets it after each use)
 	if err := os.Setenv("OPENPASS_PASSPHRASE", string(passphrase)); err != nil {
 		t.Fatalf("set passphrase env: %v", err)
 	}
 
 	// Now run review list
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "import", "review", "list"})
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "import", "review", "list"})
 	var listErr error
 	listOutput := captureStdout(func() {
-		listErr = rootCmd.Execute()
+		listErr = cli.RootCmd.Execute()
 	})
-	rootCmd.SetArgs(nil)
+	cli.RootCmd.SetArgs(nil)
 	if listErr != nil {
 		t.Fatalf("import review list failed: %v", listErr)
 	}
@@ -350,13 +352,13 @@ func TestImportReviewPromote(t *testing.T) {
 	if err := os.Setenv("OPENPASS_PASSPHRASE", string(passphrase)); err != nil {
 		t.Fatalf("set passphrase env: %v", err)
 	}
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "import", "csv", csvImportFixture(t), "--quarantine"})
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "import", "csv", csvImportFixture(t), "--quarantine"})
 	var importOutput string
 	var importErr error
 	importOutput = captureStdout(func() {
-		importErr = rootCmd.Execute()
+		importErr = cli.RootCmd.Execute()
 	})
-	rootCmd.SetArgs(nil)
+	cli.RootCmd.SetArgs(nil)
 	if importErr != nil {
 		t.Fatalf("quarantine import failed: %v", importErr)
 	}
@@ -372,18 +374,18 @@ func TestImportReviewPromote(t *testing.T) {
 		t.Fatalf("could not extract import-id from output: %s", importOutput)
 	}
 
-	// Re-set passphrase (unlockVault unsets it after each use)
+	// Re-set passphrase (cli.UnlockVault unsets it after each use)
 	if err := os.Setenv("OPENPASS_PASSPHRASE", string(passphrase)); err != nil {
 		t.Fatalf("set passphrase env: %v", err)
 	}
 
 	// Promote
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "import", "review", "promote", importID})
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "import", "review", "promote", importID})
 	var promoteErr error
 	promoteOutput := captureStdout(func() {
-		promoteErr = rootCmd.Execute()
+		promoteErr = cli.RootCmd.Execute()
 	})
-	rootCmd.SetArgs(nil)
+	cli.RootCmd.SetArgs(nil)
 	if promoteErr != nil {
 		t.Fatalf("import review promote failed: %v", promoteErr)
 	}
@@ -418,13 +420,13 @@ func TestImportReviewPromoteSkipsExisting(t *testing.T) {
 	if err := os.Setenv("OPENPASS_PASSPHRASE", string(passphrase)); err != nil {
 		t.Fatalf("set passphrase env: %v", err)
 	}
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "import", "csv", csvImportFixture(t), "--quarantine"})
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "import", "csv", csvImportFixture(t), "--quarantine"})
 	var importOutput string
 	var importErr error
 	importOutput = captureStdout(func() {
-		importErr = rootCmd.Execute()
+		importErr = cli.RootCmd.Execute()
 	})
-	rootCmd.SetArgs(nil)
+	cli.RootCmd.SetArgs(nil)
 	if importErr != nil {
 		t.Fatalf("quarantine import failed: %v", importErr)
 	}
@@ -454,12 +456,12 @@ func TestImportReviewPromoteSkipsExisting(t *testing.T) {
 	}
 
 	// Promote WITHOUT --overwrite — should fail
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "import", "review", "promote", importID})
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "import", "review", "promote", importID})
 	var promoteErr error
 	promoteOutput := captureStdout(func() {
-		promoteErr = rootCmd.Execute()
+		promoteErr = cli.RootCmd.Execute()
 	})
-	rootCmd.SetArgs(nil)
+	cli.RootCmd.SetArgs(nil)
 	if promoteErr == nil {
 		t.Fatal("expected error when destination already exists without --overwrite, got nil")
 	}
@@ -488,13 +490,13 @@ func TestImportReviewPromoteOverwrite(t *testing.T) {
 	if err := os.Setenv("OPENPASS_PASSPHRASE", string(passphrase)); err != nil {
 		t.Fatalf("set passphrase env: %v", err)
 	}
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "import", "csv", csvImportFixture(t), "--quarantine"})
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "import", "csv", csvImportFixture(t), "--quarantine"})
 	var importOutput string
 	var importErr error
 	importOutput = captureStdout(func() {
-		importErr = rootCmd.Execute()
+		importErr = cli.RootCmd.Execute()
 	})
-	rootCmd.SetArgs(nil)
+	cli.RootCmd.SetArgs(nil)
 	if importErr != nil {
 		t.Fatalf("quarantine import failed: %v", importErr)
 	}
@@ -525,12 +527,12 @@ func TestImportReviewPromoteOverwrite(t *testing.T) {
 	}
 
 	// Promote WITH --overwrite — should succeed
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "import", "review", "promote", importID, "--overwrite"})
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "import", "review", "promote", importID, "--overwrite"})
 	var promoteErr error
 	captureStdout(func() {
-		promoteErr = rootCmd.Execute()
+		promoteErr = cli.RootCmd.Execute()
 	})
-	rootCmd.SetArgs(nil)
+	cli.RootCmd.SetArgs(nil)
 	if promoteErr != nil {
 		t.Fatalf("import review promote --overwrite failed: %v", promoteErr)
 	}
@@ -563,12 +565,12 @@ func TestImportReviewPromoteNotFound(t *testing.T) {
 		t.Fatalf("set passphrase env: %v", err)
 	}
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "import", "review", "promote", "import-00000000-deadbeef"})
-	defer rootCmd.SetArgs(nil)
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "import", "review", "promote", "import-00000000-deadbeef"})
+	defer cli.RootCmd.SetArgs(nil)
 
 	var execErr error
 	captureStdout(func() {
-		execErr = rootCmd.Execute()
+		execErr = cli.RootCmd.Execute()
 	})
 	if execErr == nil {
 		t.Fatal("expected error for unknown import-id, got nil")

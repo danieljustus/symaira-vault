@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	crud "github.com/danieljustus/OpenPass/cmd/crud"
 	"github.com/danieljustus/OpenPass/internal/config"
 	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
 )
@@ -304,10 +305,10 @@ func TestSet_InteractiveMode(t *testing.T) {
 	cfg := config.Default()
 	_, _ = vaultpkg.InitWithPassphrase(tmpDir, []byte("test"), cfg)
 
-	setValue = ""
-	setTOTPSecret = ""
-	setTOTPIssuer = ""
-	setTOTPAccount = ""
+	crud.SetValue = ""
+	crud.SetTOTPSecret = ""
+	crud.SetTOTPIssuer = ""
+	crud.SetTOTPAccount = ""
 
 	oldStdin := os.Stdin
 	r, w, _ := os.Pipe()
@@ -351,7 +352,7 @@ func TestSet_InteractiveMode_Field(t *testing.T) {
 	identity, _ := vaultpkg.InitWithPassphrase(tmpDir, []byte("test"), cfg)
 	_ = vaultpkg.WriteEntry(tmpDir, "test", &vaultpkg.Entry{Data: map[string]any{"password": "secret"}}, identity)
 
-	setValue = ""
+	crud.SetValue = ""
 
 	oldStdin := os.Stdin
 	r, w, _ := os.Pipe()
@@ -402,8 +403,8 @@ func TestSet_InteractiveReadErrors(t *testing.T) {
 			cfg := config.Default()
 			_, _ = vaultpkg.InitWithPassphrase(tmpDir, []byte("test"), cfg)
 
-			setValue = ""
-			setTOTPSecret = ""
+			crud.SetValue = ""
+			crud.SetTOTPSecret = ""
 
 			oldStdin := os.Stdin
 			r, w, _ := os.Pipe()

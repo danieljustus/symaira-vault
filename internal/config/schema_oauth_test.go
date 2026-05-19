@@ -18,40 +18,37 @@ func TestDefaultOAuthConfig(t *testing.T) {
 	}
 }
 
-func TestMergeFileOAuthConfig(t *testing.T) {
-	accessTTL := 10 * time.Second
-	refreshTTL := 30 * time.Second
-
-	fileCfg := &fileMCPConfig{
-		OAuth: &fileOAuthConfig{
-			AccessTokenTTL:  &accessTTL,
-			RefreshTokenTTL: &refreshTTL,
+func TestMergeFromMCP_OAuthConfig(t *testing.T) {
+	fileCfg := MCPConfig{
+		OAuth: &OAuthConfig{
+			AccessTokenTTL:  10 * time.Second,
+			RefreshTokenTTL: 30 * time.Second,
 		},
 	}
 
-	result := MergeFileMCPConfig(fileCfg, defaultMCPConfig())
+	result := defaultMCPConfig()
+	MergeFromMCP(&result, fileCfg)
 
 	if result.OAuth == nil {
 		t.Fatal("OAuth config is nil after merge")
 	}
-	if result.OAuth.AccessTokenTTL != accessTTL {
-		t.Errorf("AccessTokenTTL = %v, want %v", result.OAuth.AccessTokenTTL, accessTTL)
+	if result.OAuth.AccessTokenTTL != 10*time.Second {
+		t.Errorf("AccessTokenTTL = %v, want 10s", result.OAuth.AccessTokenTTL)
 	}
-	if result.OAuth.RefreshTokenTTL != refreshTTL {
-		t.Errorf("RefreshTokenTTL = %v, want %v", result.OAuth.RefreshTokenTTL, refreshTTL)
+	if result.OAuth.RefreshTokenTTL != 30*time.Second {
+		t.Errorf("RefreshTokenTTL = %v, want 30s", result.OAuth.RefreshTokenTTL)
 	}
 }
 
-func TestMergeFileOAuthConfig_PartialOverride(t *testing.T) {
-	refreshTTL := 100 * time.Hour
-
-	fileCfg := &fileMCPConfig{
-		OAuth: &fileOAuthConfig{
-			RefreshTokenTTL: &refreshTTL,
+func TestMergeFromMCP_OAuthPartialOverride(t *testing.T) {
+	fileCfg := MCPConfig{
+		OAuth: &OAuthConfig{
+			RefreshTokenTTL: 100 * time.Hour,
 		},
 	}
 
-	result := MergeFileMCPConfig(fileCfg, defaultMCPConfig())
+	result := defaultMCPConfig()
+	MergeFromMCP(&result, fileCfg)
 
 	if result.OAuth.AccessTokenTTL != 24*time.Hour {
 		t.Errorf("AccessTokenTTL = %v, want default 24h", result.OAuth.AccessTokenTTL)
@@ -61,9 +58,10 @@ func TestMergeFileOAuthConfig_PartialOverride(t *testing.T) {
 	}
 }
 
-func TestMergeFileOAuthConfig_NilOAuth(t *testing.T) {
-	fileCfg := &fileMCPConfig{}
-	result := MergeFileMCPConfig(fileCfg, defaultMCPConfig())
+func TestMergeFromMCP_NilOAuth(t *testing.T) {
+	fileCfg := MCPConfig{}
+	result := defaultMCPConfig()
+	MergeFromMCP(&result, fileCfg)
 
 	if result.OAuth == nil {
 		t.Fatal("OAuth config should not be nil after merge with nil file cfg")

@@ -9,6 +9,9 @@ import (
 	"testing"
 	"time"
 
+	cli "github.com/danieljustus/OpenPass/internal/cli"
+
+	admin "github.com/danieljustus/OpenPass/cmd/admin"
 	"github.com/danieljustus/OpenPass/internal/audit"
 )
 
@@ -20,19 +23,19 @@ func TestAuditLogPath(t *testing.T) {
 		_ = os.Setenv("HOME", h)
 	}()
 
-	path, err := auditLogPath("default")
+	path, err := admin.AuditLogPath("default")
 	if err != nil {
-		t.Fatalf("auditLogPath() error = %v", err)
+		t.Fatalf("admin.AuditLogPath() error = %v", err)
 	}
 
 	expected := filepath.Join(home, ".openpass", "audit-default.log")
 	if path != expected {
-		t.Fatalf("auditLogPath() = %q, want %q", path, expected)
+		t.Fatalf("admin.AuditLogPath() = %q, want %q", path, expected)
 	}
 }
 
 func TestAuditLogPath_InvalidAgent(t *testing.T) {
-	_, err := auditLogPath("../etc/passwd")
+	_, err := admin.AuditLogPath("../etc/passwd")
 	if err == nil {
 		t.Fatal("expected error for invalid agent name")
 	}
@@ -48,7 +51,7 @@ func TestAuditLogPath_NoHomeDir(t *testing.T) {
 		_ = os.Setenv("USERPROFILE", origUserProfile)
 	}()
 
-	_, err := auditLogPath("default")
+	_, err := admin.AuditLogPath("default")
 	if err == nil {
 		t.Fatal("expected error when home directory is unavailable")
 	}
@@ -83,12 +86,12 @@ func TestLoadAuditEntries(t *testing.T) {
 	}
 	f.Close()
 
-	loaded, err := loadAuditEntries("default", 10)
+	loaded, err := admin.LoadAuditEntries("default", 10)
 	if err != nil {
-		t.Fatalf("loadAuditEntries() error = %v", err)
+		t.Fatalf("admin.LoadAuditEntries() error = %v", err)
 	}
 	if len(loaded) != 2 {
-		t.Fatalf("loadAuditEntries() = %d entries, want 2", len(loaded))
+		t.Fatalf("admin.LoadAuditEntries() = %d entries, want 2", len(loaded))
 	}
 }
 
@@ -100,9 +103,9 @@ func TestLoadAuditEntries_MissingFile(t *testing.T) {
 		_ = os.Setenv("HOME", h)
 	}()
 
-	entries, err := loadAuditEntries("nonexistent", 10)
+	entries, err := admin.LoadAuditEntries("nonexistent", 10)
 	if err != nil {
-		t.Fatalf("loadAuditEntries() error = %v", err)
+		t.Fatalf("admin.LoadAuditEntries() error = %v", err)
 	}
 	if entries != nil {
 		t.Fatalf("expected nil entries for missing file, got %d", len(entries))
@@ -134,12 +137,12 @@ func TestLoadAuditEntries_Limit(t *testing.T) {
 	}
 	f.Close()
 
-	loaded, err := loadAuditEntries("default", 3)
+	loaded, err := admin.LoadAuditEntries("default", 3)
 	if err != nil {
-		t.Fatalf("loadAuditEntries() error = %v", err)
+		t.Fatalf("admin.LoadAuditEntries() error = %v", err)
 	}
 	if len(loaded) != 3 {
-		t.Fatalf("loadAuditEntries() = %d entries, want 3", len(loaded))
+		t.Fatalf("admin.LoadAuditEntries() = %d entries, want 3", len(loaded))
 	}
 	if loaded[0].Action != "action2" {
 		t.Fatalf("first entry = %s, want action2", loaded[0].Action)
@@ -154,9 +157,9 @@ func TestFilterAuditEntries_Since(t *testing.T) {
 		{Timestamp: now.Add(-2 * time.Hour).Format(time.RFC3339), Agent: "default", Action: "veryold", OK: true},
 	}
 
-	filtered := filterAuditEntries(entries, "1h", false)
+	filtered := admin.FilterAuditEntries(entries, "1h", false)
 	if len(filtered) != 2 {
-		t.Fatalf("filterAuditEntries() = %d entries, want 2", len(filtered))
+		t.Fatalf("admin.FilterAuditEntries() = %d entries, want 2", len(filtered))
 	}
 	if filtered[0].Action != "old" {
 		t.Fatalf("first entry = %s, want old", filtered[0].Action)
@@ -173,9 +176,9 @@ func TestFilterAuditEntries_SinceDays(t *testing.T) {
 		{Timestamp: now.Add(-5 * time.Hour).Format(time.RFC3339), Agent: "default", Action: "recent", OK: true},
 	}
 
-	filtered := filterAuditEntries(entries, "1d", false)
+	filtered := admin.FilterAuditEntries(entries, "1d", false)
 	if len(filtered) != 1 {
-		t.Fatalf("filterAuditEntries() = %d entries, want 1", len(filtered))
+		t.Fatalf("admin.FilterAuditEntries() = %d entries, want 1", len(filtered))
 	}
 	if filtered[0].Action != "recent" {
 		t.Fatalf("entry = %s, want recent", filtered[0].Action)
@@ -190,9 +193,9 @@ func TestFilterAuditEntries_FailedOnly(t *testing.T) {
 		{Timestamp: now.Format(time.RFC3339), Agent: "default", Action: "list", OK: true},
 	}
 
-	filtered := filterAuditEntries(entries, "", true)
+	filtered := admin.FilterAuditEntries(entries, "", true)
 	if len(filtered) != 1 {
-		t.Fatalf("filterAuditEntries() = %d entries, want 1", len(filtered))
+		t.Fatalf("admin.FilterAuditEntries() = %d entries, want 1", len(filtered))
 	}
 	if filtered[0].Action != "set" {
 		t.Fatalf("entry = %s, want set", filtered[0].Action)
@@ -205,9 +208,9 @@ func TestFilterAuditEntries_NoFilter(t *testing.T) {
 		{Timestamp: time.Now().UTC().Format(time.RFC3339), Agent: "default", Action: "set", OK: false},
 	}
 
-	filtered := filterAuditEntries(entries, "", false)
+	filtered := admin.FilterAuditEntries(entries, "", false)
 	if len(filtered) != 2 {
-		t.Fatalf("filterAuditEntries() = %d entries, want 2", len(filtered))
+		t.Fatalf("admin.FilterAuditEntries() = %d entries, want 2", len(filtered))
 	}
 }
 
@@ -226,12 +229,12 @@ func TestParseSinceDuration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			dur, err := parseSinceDuration(tt.input)
+			dur, err := admin.ParseSinceDuration(tt.input)
 			if (err != nil) != tt.wantErr {
-				t.Fatalf("parseSinceDuration(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+				t.Fatalf("admin.ParseSinceDuration(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
 			}
 			if dur != tt.expected {
-				t.Fatalf("parseSinceDuration(%q) = %v, want %v", tt.input, dur, tt.expected)
+				t.Fatalf("admin.ParseSinceDuration(%q) = %v, want %v", tt.input, dur, tt.expected)
 			}
 		})
 	}
@@ -243,11 +246,11 @@ func TestOutputAuditJSON(t *testing.T) {
 	}
 
 	var buf strings.Builder
-	cmd := auditCmd
+	cmd := admin.AuditCmd
 	cmd.SetOut(&buf)
 
-	if err := outputAuditJSON(cmd, entries); err != nil {
-		t.Fatalf("outputAuditJSON() error = %v", err)
+	if err := admin.OutputAuditJSON(cmd, entries); err != nil {
+		t.Fatalf("admin.OutputAuditJSON() error = %v", err)
 	}
 
 	var result []audit.LogEntry
@@ -265,11 +268,11 @@ func TestOutputAuditTable(t *testing.T) {
 	}
 
 	var buf strings.Builder
-	cmd := auditCmd
+	cmd := admin.AuditCmd
 	cmd.SetOut(&buf)
 
-	if err := outputAuditTable(cmd, entries); err != nil {
-		t.Fatalf("outputAuditTable() error = %v", err)
+	if err := admin.OutputAuditTable(cmd, entries); err != nil {
+		t.Fatalf("admin.OutputAuditTable() error = %v", err)
 	}
 
 	output := buf.String()
@@ -283,11 +286,11 @@ func TestOutputAuditTable(t *testing.T) {
 
 func TestOutputAuditTable_Empty(t *testing.T) {
 	var buf strings.Builder
-	cmd := auditCmd
+	cmd := admin.AuditCmd
 	cmd.SetOut(&buf)
 
-	if err := outputAuditTable(cmd, nil); err != nil {
-		t.Fatalf("outputAuditTable() error = %v", err)
+	if err := admin.OutputAuditTable(cmd, nil); err != nil {
+		t.Fatalf("admin.OutputAuditTable() error = %v", err)
 	}
 
 	if !strings.Contains(buf.String(), "No audit entries found") {
@@ -319,10 +322,10 @@ func TestAuditCommand_JSON(t *testing.T) {
 	}
 
 	buf := prepareRootCommandOutput(t)
-	rootCmd.SetArgs([]string{"audit", "--json"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	cli.RootCmd.SetArgs([]string{"audit", "--json"})
+	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
 
-	if err := rootCmd.Execute(); err != nil {
+	if err := cli.RootCmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 
@@ -359,10 +362,10 @@ func TestAuditCommand_Table(t *testing.T) {
 	}
 
 	buf := prepareRootCommandOutput(t)
-	rootCmd.SetArgs([]string{"audit"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	cli.RootCmd.SetArgs([]string{"audit"})
+	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
 
-	if err := rootCmd.Execute(); err != nil {
+	if err := cli.RootCmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 
@@ -402,10 +405,10 @@ func TestAuditCommand_SinceFilter(t *testing.T) {
 	f.Close()
 
 	buf := prepareRootCommandOutput(t)
-	rootCmd.SetArgs([]string{"audit", "--since", "10m"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	cli.RootCmd.SetArgs([]string{"audit", "--since", "10m"})
+	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
 
-	if err := rootCmd.Execute(); err != nil {
+	if err := cli.RootCmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 
@@ -447,10 +450,10 @@ func TestAuditCommand_FailedFilter(t *testing.T) {
 	f.Close()
 
 	buf := prepareRootCommandOutput(t)
-	rootCmd.SetArgs([]string{"audit", "--failed"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	cli.RootCmd.SetArgs([]string{"audit", "--failed"})
+	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
 
-	if err := rootCmd.Execute(); err != nil {
+	if err := cli.RootCmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 

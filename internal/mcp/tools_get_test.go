@@ -19,8 +19,8 @@ func TestHandleGet_Success(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -64,8 +64,8 @@ func TestHandleGet_WithValue(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -125,8 +125,8 @@ func TestHandleGet_OutsideScope(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"work/"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -148,8 +148,8 @@ func TestHandleGet_MissingPath(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -174,8 +174,8 @@ func TestHandleGet_NotFound(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -197,8 +197,8 @@ func TestHandleGet_WithMetadata(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -263,8 +263,8 @@ func TestHandleGet_WithoutMetadata(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -319,8 +319,8 @@ func TestHandleGet_RedactedTOTPStillGeneratesCode(t *testing.T) {
 			"restricted": {
 				Name:         "restricted",
 				AllowedPaths: []string{"*"},
-				CanWrite:     false,
-				ApprovalMode: "none",
+				CanWrite:     config.BoolPtr(false),
+				ApprovalMode: config.StrPtr("none"),
 				RedactFields: []string{"totp.secret"},
 			},
 		},
@@ -352,8 +352,8 @@ func TestHandleGet_RedactedTOTPStillGeneratesCode(t *testing.T) {
 		agent: &config.AgentProfile{
 			Name:         "restricted",
 			AllowedPaths: []string{"*"},
-			CanWrite:     false,
-			ApprovalMode: "none",
+			CanWrite:     config.BoolPtr(false),
+			ApprovalMode: config.StrPtr("none"),
 			RedactFields: []string{"totp.secret"},
 		},
 	}
@@ -414,9 +414,9 @@ func TestHandleGetValue_SealsSecretClassification(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
-		AutoUnseal:   false,
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
+		AutoUnseal:   config.BoolPtr(false),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -484,9 +484,9 @@ func TestHandleGetValue_ReturnsValuesWhenAutoUnsealTrue(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
-		AutoUnseal:   true,
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
+		AutoUnseal:   config.BoolPtr(true),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -524,8 +524,8 @@ func TestExecuteTool_GetEntry(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -549,8 +549,8 @@ func TestHandleGetMetadata_Success(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -597,8 +597,8 @@ func TestHandleGetMetadata_OutsideScope(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"work/"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -620,8 +620,8 @@ func TestHandleGetMetadata_MissingPath(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -646,8 +646,8 @@ func TestHandleGetMetadata_NotFound(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -669,8 +669,8 @@ func TestHandleGetMetadata_VersionIncrementedAfterUpdate(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     true,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(true),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -772,9 +772,9 @@ func TestGetValuePerToolRedact(t *testing.T) {
 		agent: &config.AgentProfile{
 			Name:          "restricted",
 			AllowedPaths:  []string{"*"},
-			CanReadValues: true,
-			ApprovalMode:  "none",
-			AutoUnseal:    true,
+			CanReadValues: config.BoolPtr(true),
+			ApprovalMode:  config.StrPtr("none"),
+			AutoUnseal:    config.BoolPtr(true),
 			PerToolRedactFields: map[string][]string{
 				"get_entry_value": {"password"},
 			},
@@ -838,9 +838,9 @@ func TestGetValueBlocksQuarantinedPath(t *testing.T) {
 		agent: &config.AgentProfile{
 			Name:          "test",
 			AllowedPaths:  []string{"*"},
-			CanReadValues: true,
-			ApprovalMode:  "none",
-			AutoUnseal:    true,
+			CanReadValues: config.BoolPtr(true),
+			ApprovalMode:  config.StrPtr("none"),
+			AutoUnseal:    config.BoolPtr(true),
 		},
 		hookRegistry: NewHookRegistry(),
 	}

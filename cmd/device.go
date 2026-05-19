@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
+	cli "github.com/danieljustus/OpenPass/internal/cli"
 	configpkg "github.com/danieljustus/OpenPass/internal/config"
 	cryptopkg "github.com/danieljustus/OpenPass/internal/crypto"
 	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
@@ -334,7 +335,7 @@ any registered device (unmanaged recipients).`,
 			}
 		}
 
-		if outputFormat == "json" || outputFormat == "yaml" {
+		if cli.OutputFormat == "json" || cli.OutputFormat == "yaml" {
 			type deviceOutput struct {
 				Name      string `json:"name" yaml:"name"`
 				PublicKey string `json:"public_key" yaml:"public_key"`

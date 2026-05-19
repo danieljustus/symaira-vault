@@ -13,7 +13,7 @@ func TestHandleGetAuthStatus(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		ApprovalMode: "none",
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", t.TempDir())
 	cfg := config.Default()
 	if err := cfg.SetAuthMethod(config.AuthMethodPassphrase); err != nil {
@@ -38,7 +38,7 @@ func TestHandleSetAuthMethodRequiresConfigPermission(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		ApprovalMode: "none",
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", t.TempDir())
 	srv.vault.Config = config.Default()
 
@@ -61,8 +61,8 @@ func TestHandleSetAuthMethodPassphrase(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:            "test",
 		AllowedPaths:    []string{"*"},
-		CanManageConfig: true,
-		ApprovalMode:    "none",
+		CanManageConfig: config.BoolPtr(true),
+		ApprovalMode:    config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Config = cfg
 

@@ -578,8 +578,8 @@ func TestServer_ServeStdio(t *testing.T) {
 			"test": {
 				Name:         "test",
 				AllowedPaths: []string{"*"},
-				CanWrite:     true,
-				ApprovalMode: "none",
+				CanWrite:     config.BoolPtr(true),
+				ApprovalMode: config.StrPtr("none"),
 			},
 		},
 	}
@@ -607,8 +607,8 @@ func TestHandleList_NoPrefix(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -632,8 +632,8 @@ func TestHandleList_ListError(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", "/nonexistent/path")
 
 	req := CallToolRequest{

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	crud "github.com/danieljustus/OpenPass/cmd/crud"
 	"github.com/danieljustus/OpenPass/internal/config"
 	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
 )
@@ -163,15 +164,15 @@ func TestCmdEdit_TempFilePermissions(t *testing.T) {
 
 	// Track temp file before editor runs
 	var tmpPath string
-	origCreateTemp := osCreateTemp
-	osCreateTemp = func(dir, pattern string) (*os.File, error) {
+	origCreateTemp := crud.OSCreateTemp
+	crud.OSCreateTemp = func(dir, pattern string) (*os.File, error) {
 		f, err := origCreateTemp(dir, pattern)
 		if err == nil {
 			tmpPath = f.Name()
 		}
 		return f, err
 	}
-	defer func() { osCreateTemp = origCreateTemp }()
+	defer func() { crud.OSCreateTemp = origCreateTemp }()
 
 	out := execWithStdout("--vault", vaultDir, "edit", "perm-test")
 	if !strings.Contains(out, "Entry updated") {

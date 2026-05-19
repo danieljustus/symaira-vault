@@ -14,6 +14,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	crud "github.com/danieljustus/OpenPass/cmd/crud"
+	mcpcmd "github.com/danieljustus/OpenPass/cmd/mcp"
+	cli "github.com/danieljustus/OpenPass/internal/cli"
 	clipboardapp "github.com/danieljustus/OpenPass/internal/clipboard"
 	vaultcrypto "github.com/danieljustus/OpenPass/internal/crypto"
 	"github.com/danieljustus/OpenPass/internal/mcp"
@@ -36,41 +39,41 @@ func resetCommandTestState() {
 	resetCommandFlagGlobals()
 	resetCobraCommand(rootCmd)
 	resetCommandEnv()
-	osExit = os.Exit
-	serveSignalNotify = signal.Notify
-	runStdioServerFunc = func(ctx context.Context, vault *vaultpkg.Vault, agentName string) error {
+	cli.OsExit = os.Exit
+	mcpcmd.ServeSignalNotify = signal.Notify
+	mcpcmd.RunStdioServerFunc = func(ctx context.Context, vault *vaultpkg.Vault, agentName string) error {
 		return serverbootstrap.RunStdioServer(ctx, vault, agentName, mcp.New)
 	}
-	runHTTPServerFunc = func(ctx context.Context, bind string, port int, vault *vaultpkg.Vault) error {
+	mcpcmd.RunHTTPServerFunc = func(ctx context.Context, bind string, port int, vault *vaultpkg.Vault) error {
 		vaultDir, _ := vaultPath()
 		return serverbootstrap.RunHTTPServer(ctx, bind, port, vault, vaultDir, Version, mcp.New)
 	}
-	serveUnlockVault = unlockVault
+	mcpcmd.ServeUnlockVault = unlockVault
 }
 
 func resetCommandFlagGlobals() {
-	vault = "~/.openpass"
-	setValue = ""
-	setTOTPSecret = ""
-	setTOTPIssuer = ""
-	setTOTPAccount = ""
-	addValue = ""
-	addGenerate = false
-	addLength = 20
-	addUsername = ""
-	addURL = ""
-	addNotes = ""
-	addTOTPSecret = ""
-	addTOTPIssuer = ""
-	addTOTPAccount = ""
-	editorFlag = ""
+	cli.Vault = "~/.openpass"
+	crud.SetValue = ""
+	crud.SetTOTPSecret = ""
+	crud.SetTOTPIssuer = ""
+	crud.SetTOTPAccount = ""
+	crud.AddValue = ""
+	crud.AddGenerate = false
+	crud.AddLength = 20
+	crud.AddUsername = ""
+	crud.AddURL = ""
+	crud.AddNotes = ""
+	crud.AddTOTPSecret = ""
+	crud.AddTOTPIssuer = ""
+	crud.AddTOTPAccount = ""
+	crud.EditorFlag = ""
 	confirmRemove = false
-	getPrint = false
+	crud.GetPrint = false
 	genLength = 20
 	genSymbols = false
 	genStore = ""
-	getClipboard = clipboardapp.DefaultClipboard
-	outputFormat = "text"
+	crud.GetClipboard = clipboardapp.DefaultClipboard
+	cli.OutputFormat = "text"
 }
 
 func resetCobraCommand(cmd *cobra.Command) {

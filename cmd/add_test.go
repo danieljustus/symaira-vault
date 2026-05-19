@@ -8,6 +8,8 @@ import (
 
 	"github.com/danieljustus/OpenPass/internal/config"
 	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+
+	crud "github.com/danieljustus/OpenPass/cmd/crud"
 )
 
 func TestAddCommand_HiddenPassword(t *testing.T) {
@@ -398,14 +400,14 @@ func TestAdd_InteractiveMode(t *testing.T) {
 	_, _ = vaultpkg.InitWithPassphrase(tmpDir, []byte("test"), cfg)
 
 	// Reset all add flags to ensure we're in interactive mode
-	addValue = ""
-	addGenerate = false
-	addUsername = ""
-	addURL = ""
-	addNotes = ""
-	addTOTPSecret = ""
-	addTOTPIssuer = ""
-	addTOTPAccount = ""
+	crud.AddValue = ""
+	crud.AddGenerate = false
+	crud.AddUsername = ""
+	crud.AddURL = ""
+	crud.AddNotes = ""
+	crud.AddTOTPSecret = ""
+	crud.AddTOTPIssuer = ""
+	crud.AddTOTPAccount = ""
 
 	// Create pipe for stdin with interactive input
 	oldStdin := os.Stdin
@@ -462,8 +464,8 @@ func TestAdd_InteractiveReadErrors(t *testing.T) {
 	cfg := config.Default()
 	_, _ = vaultpkg.InitWithPassphrase(tmpDir, []byte("test"), cfg)
 
-	addValue = ""
-	addGenerate = false
+	crud.AddValue = ""
+	crud.AddGenerate = false
 
 	oldStdin := os.Stdin
 	r, w, _ := os.Pipe()

@@ -1,56 +1,25 @@
-// Package config provides configuration management for OpenPass.
-// It handles vault, git, and MCP server configuration with support for
-// YAML serialization and default value merging.
 package config
 
 import (
-	"fmt"
-	"os"
 	"time"
 )
 
 // VaultConfig holds vault-related configuration.
 type VaultConfig struct {
-	Path              string   `yaml:"path,omitempty"`
-	DefaultRecipients []string `yaml:"default_recipients,omitempty"`
-	ConfirmRemove     bool     `yaml:"confirm_remove,omitempty"`
-	AuthMethod        string   `yaml:"authMethod,omitempty"`
-	UseTouchID        bool     `yaml:"useTouchID,omitempty"`
-	// LegacyMode indicates whether the vault may contain legacy top-level .age files
-	// outside the entries/ directory. nil means "not yet detected" (assume legacy).
-	// false means the vault has been confirmed to have no legacy entries, allowing
-	// List to skip the legacy directory walk.
-	LegacyMode *bool `yaml:"legacy_mode,omitempty"`
-	// SearchWorkers controls the number of concurrent decryption workers for find
-	// operations. 0 (default) enables auto-scaling based on vault size and CPU count.
-	// Positive values set a fixed worker count.
-	SearchWorkers int `yaml:"search_workers,omitempty"`
-	// PseudonymizePaths, when true, stores entries at HMAC-SHA256-derived paths
-	// instead of plaintext paths. This prevents leaking entry names via git filenames.
-	// Default: false (opt-in). Requires migration via 'openpass migrate pseudonymize'.
-	PseudonymizePaths bool `yaml:"pseudonymize_paths,omitempty"`
-	// ScryptWorkFactor sets the scrypt KDF work factor for passphrase-based encryption.
-	// Higher values are more secure but slower. Default: 18 (N=262144).
-	// Set to 0 to use the default.
-	ScryptWorkFactor int `yaml:"scrypt_work_factor,omitempty"`
-	// LastRotated records when the vault passphrase was last rotated.
-	// Zero value means never rotated.
-	LastRotated time.Time `yaml:"last_rotated,omitempty"`
-	// FormatVersion indicates the vault format version.
-	// 1 = scrypt KDF (pre-argon2id), 2+ = argon2id.
-	FormatVersion int `yaml:"format_version,omitempty"`
-	// Argon2idTime sets the Argon2id time (iterations) parameter.
-	// Higher values are more secure but slower. Default: 3.
-	// Set to 0 to use the default.
-	Argon2idTime int `yaml:"argon2id_time,omitempty"`
-	// Argon2idMemory sets the Argon2id memory parameter in KiB.
-	// Higher values are more secure but use more RAM. Default: 65536 (64 MB).
-	// Set to 0 to use the default.
-	Argon2idMemory int `yaml:"argon2id_memory,omitempty"`
-	// Argon2idThreads sets the Argon2id parallelism parameter.
-	// Increases CPU usage. Default: 4.
-	// Set to 0 to use the default.
-	Argon2idThreads int `yaml:"argon2id_threads,omitempty"`
+	Path              string    `yaml:"path,omitempty"`
+	DefaultRecipients []string  `yaml:"default_recipients,omitempty"`
+	ConfirmRemove     bool      `yaml:"confirm_remove,omitempty"`
+	AuthMethod        string    `yaml:"authMethod,omitempty"`
+	UseTouchID        bool      `yaml:"useTouchID,omitempty"`
+	LegacyMode        *bool     `yaml:"legacy_mode,omitempty"`
+	SearchWorkers     int       `yaml:"search_workers,omitempty"`
+	PseudonymizePaths bool      `yaml:"pseudonymize_paths,omitempty"`
+	ScryptWorkFactor  int       `yaml:"scrypt_work_factor,omitempty"`
+	LastRotated       time.Time `yaml:"last_rotated,omitempty"`
+	FormatVersion     int       `yaml:"format_version,omitempty"`
+	Argon2idTime      int       `yaml:"argon2id_time,omitempty"`
+	Argon2idMemory    int       `yaml:"argon2id_memory,omitempty"`
+	Argon2idThreads   int       `yaml:"argon2id_threads,omitempty"`
 }
 
 // GitConfig holds git-related configuration for automatic commits and pushes.
@@ -69,10 +38,10 @@ type OAuthConfig struct {
 
 // MCPConfig holds MCP server-related configuration for AI agent integration.
 type MCPConfig struct {
+	Port                int           `yaml:"port,omitempty"`
 	Bind                string        `yaml:"bind,omitempty"`
 	HTTPTokenFile       string        `yaml:"httpTokenFile,omitempty"`
 	OTLPEndpoint        string        `yaml:"otlp_endpoint,omitempty"`
-	Port                int           `yaml:"port,omitempty"`
 	Stdio               bool          `yaml:"stdio,omitempty"`
 	ApprovalRequired    bool          `yaml:"approval_required,omitempty"`
 	ReadHeaderTimeout   time.Duration `yaml:"read_header_timeout,omitempty"`
@@ -80,7 +49,7 @@ type MCPConfig struct {
 	WriteTimeout        time.Duration `yaml:"write_timeout,omitempty"`
 	ShutdownTimeout     time.Duration `yaml:"shutdown_timeout,omitempty"`
 	ApprovalTimeout     time.Duration `yaml:"approval_timeout,omitempty"`
-	RateLimit           int           `yaml:"rate_limit,omitempty"` // requests per minute, 0 = disabled
+	RateLimit           int           `yaml:"rate_limit,omitempty"`
 	TrustedProxyIPs     []string      `yaml:"trusted_proxy_ips,omitempty"`
 	MetricsAuthRequired bool          `yaml:"metrics_auth_required,omitempty"`
 	TLSCertFile         string        `yaml:"tls_cert_file,omitempty"`
@@ -96,21 +65,18 @@ type UpdateConfig struct {
 
 // ClipboardConfig holds clipboard-related configuration.
 type ClipboardConfig struct {
-	AutoClearDuration int  `yaml:"auto_clear_duration,omitempty"` // seconds, 0 = disabled
+	AutoClearDuration int  `yaml:"auto_clear_duration,omitempty"`
 	PrintByDefault    bool `yaml:"printByDefault,omitempty"`
 }
 
 // AuditConfig holds audit log rotation configuration.
 type AuditConfig struct {
-	MaxFileSize int64 `yaml:"maxSizeMb,omitempty"` // bytes (stored as MB in YAML)
+	MaxFileSize int64 `yaml:"maxSizeMb,omitempty"`
 	MaxBackups  int   `yaml:"maxBackups,omitempty"`
 	MaxAgeDays  int   `yaml:"maxAgeDays,omitempty"`
 }
 
 // LoggingConfig holds logging configuration.
-// Level and Format are primarily driven by environment variables
-// (OPENPASS_LOG_LEVEL, OPENPASS_LOG_FORMAT) and are included here
-// for documentation and future file-based configuration.
 type LoggingConfig struct {
 	Level  string `yaml:"level,omitempty"`
 	Format string `yaml:"format,omitempty"`
@@ -195,300 +161,20 @@ func defaultLoggingConfig() LoggingConfig {
 	}
 }
 
-// fileVaultConfig is the file-based vault configuration with pointer fields
-// for optional YAML unmarshaling.
-type fileVaultConfig struct {
-	ConfirmRemove     *bool      `yaml:"confirm_remove,omitempty"`
-	AuthMethod        *string    `yaml:"authMethod,omitempty"`
-	UseTouchID        *bool      `yaml:"useTouchID,omitempty"`
-	LegacyMode        *bool      `yaml:"legacy_mode,omitempty"`
-	Path              string     `yaml:"path,omitempty"`
-	DefaultRecipients []string   `yaml:"default_recipients,omitempty"`
-	SearchWorkers     *int       `yaml:"search_workers,omitempty"`
-	PseudonymizePaths *bool      `yaml:"pseudonymize_paths,omitempty"`
-	ScryptWorkFactor  *int       `yaml:"scrypt_work_factor,omitempty"`
-	LastRotated       *time.Time `yaml:"last_rotated,omitempty"`
-	FormatVersion     *int       `yaml:"format_version,omitempty"`
-	Argon2idTime      *int       `yaml:"argon2id_time,omitempty"`
-	Argon2idMemory    *int       `yaml:"argon2id_memory,omitempty"`
-	Argon2idThreads   *int       `yaml:"argon2id_threads,omitempty"`
-}
+// BoolPtr returns a pointer to v.
+func BoolPtr(v bool) *bool { return &v }
 
-// fileGitConfig is the file-based git configuration with pointer fields
-// for optional YAML unmarshaling.
-type fileGitConfig struct {
-	AutoPush         *bool          `yaml:"auto_push,omitempty"`
-	AutoPull         *bool          `yaml:"auto_pull,omitempty"`
-	AutoPullInterval *time.Duration `yaml:"auto_pull_interval,omitempty"`
-	CommitTemplate   *string        `yaml:"commit_template,omitempty"`
-}
+// StrPtr returns a pointer to v.
+func StrPtr(v string) *string { return &v }
 
-// fileOAuthConfig is the file-based OAuth configuration with pointer fields
-// for optional YAML unmarshaling.
-type fileOAuthConfig struct {
-	AccessTokenTTL  *time.Duration `yaml:"access_token_ttl,omitempty"`
-	RefreshTokenTTL *time.Duration `yaml:"refresh_token_ttl,omitempty"`
-}
+// IntPtr returns a pointer to v.
+func IntPtr(v int) *int { return &v }
 
-// fileMCPConfig is the file-based MCP configuration with pointer fields
-// for optional YAML unmarshaling.
-type fileMCPConfig struct {
-	Port                *int             `yaml:"port,omitempty"`
-	Bind                *string          `yaml:"bind,omitempty"`
-	Stdio               *bool            `yaml:"stdio,omitempty"`
-	ApprovalRequired    *bool            `yaml:"approval_required,omitempty"` // deprecated, parsed but ignored
-	HTTPTokenFile       *string          `yaml:"httpTokenFile,omitempty"`
-	OTLPEndpoint        *string          `yaml:"otlp_endpoint,omitempty"`
-	ReadHeaderTimeout   *time.Duration   `yaml:"read_header_timeout,omitempty"`
-	ReadTimeout         *time.Duration   `yaml:"read_timeout,omitempty"`
-	WriteTimeout        *time.Duration   `yaml:"write_timeout,omitempty"`
-	ShutdownTimeout     *time.Duration   `yaml:"shutdown_timeout,omitempty"`
-	ApprovalTimeout     *time.Duration   `yaml:"approval_timeout,omitempty"`
-	RateLimit           *int             `yaml:"rate_limit,omitempty"`
-	TrustedProxyIPs     []string         `yaml:"trusted_proxy_ips,omitempty"`
-	MetricsAuthRequired *bool            `yaml:"metrics_auth_required,omitempty"`
-	TLSCertFile         *string          `yaml:"tls_cert_file,omitempty"`
-	TLSKeyFile          *string          `yaml:"tls_key_file,omitempty"`
-	AllowInsecureBind   *bool            `yaml:"allow_insecure_bind,omitempty"`
-	OAuth               *fileOAuthConfig `yaml:"oauth,omitempty"`
-}
+// Int64Ptr returns a pointer to v.
+func Int64Ptr(v int64) *int64 { return &v }
 
-// fileUpdateConfig is the file-based update configuration with pointer fields
-// for optional YAML unmarshaling.
-type fileUpdateConfig struct {
-	CacheTTL *time.Duration `yaml:"cache_ttl,omitempty"`
-}
-
-// fileClipboardConfig is the file-based clipboard configuration with pointer fields
-// for optional YAML unmarshaling.
-type fileClipboardConfig struct {
-	AutoClearDuration *int  `yaml:"auto_clear_duration,omitempty"`
-	PrintByDefault    *bool `yaml:"printByDefault,omitempty"`
-}
-
-// fileAuditConfig is the file-based audit configuration with pointer fields
-// for optional YAML unmarshaling.
-type fileAuditConfig struct {
-	MaxFileSize *int64 `yaml:"maxSizeMb,omitempty"`
-	MaxBackups  *int   `yaml:"maxBackups,omitempty"`
-	MaxAgeDays  *int   `yaml:"maxAgeDays,omitempty"`
-}
-
-// MergeFileVaultConfig merges file config with defaults, returning the final
-// VaultConfig. If fileCfg is nil, defaults are returned unchanged.
-func MergeFileVaultConfig(fileCfg *fileVaultConfig, defaults VaultConfig) VaultConfig {
-	if fileCfg == nil {
-		return defaults
-	}
-	result := defaults
-	if fileCfg.Path != "" {
-		result.Path = fileCfg.Path
-	}
-	if fileCfg.DefaultRecipients != nil {
-		result.DefaultRecipients = append([]string(nil), fileCfg.DefaultRecipients...)
-	}
-	if fileCfg.ConfirmRemove != nil {
-		result.ConfirmRemove = *fileCfg.ConfirmRemove
-	}
-	if fileCfg.AuthMethod != nil {
-		result.AuthMethod = *fileCfg.AuthMethod
-	}
-	if fileCfg.UseTouchID != nil {
-		result.UseTouchID = *fileCfg.UseTouchID
-	}
-	if fileCfg.LegacyMode != nil {
-		result.LegacyMode = fileCfg.LegacyMode
-	}
-	if fileCfg.SearchWorkers != nil {
-		result.SearchWorkers = *fileCfg.SearchWorkers
-	}
-	if fileCfg.PseudonymizePaths != nil {
-		result.PseudonymizePaths = *fileCfg.PseudonymizePaths
-	}
-	if fileCfg.ScryptWorkFactor != nil {
-		result.ScryptWorkFactor = *fileCfg.ScryptWorkFactor
-	}
-	if fileCfg.LastRotated != nil {
-		result.LastRotated = *fileCfg.LastRotated
-	}
-	if fileCfg.FormatVersion != nil {
-		result.FormatVersion = *fileCfg.FormatVersion
-	}
-	if fileCfg.Argon2idTime != nil {
-		result.Argon2idTime = *fileCfg.Argon2idTime
-	}
-	if fileCfg.Argon2idMemory != nil {
-		result.Argon2idMemory = *fileCfg.Argon2idMemory
-	}
-	if fileCfg.Argon2idThreads != nil {
-		result.Argon2idThreads = *fileCfg.Argon2idThreads
-	}
-	return result
-}
-
-// MergeFileGitConfig merges file config with defaults, returning the final
-// GitConfig. If fileCfg is nil, defaults are returned unchanged.
-func MergeFileGitConfig(fileCfg *fileGitConfig, defaults GitConfig) GitConfig {
-	if fileCfg == nil {
-		return defaults
-	}
-	result := defaults
-	if fileCfg.AutoPush != nil {
-		result.AutoPush = *fileCfg.AutoPush
-	}
-	if fileCfg.AutoPull != nil {
-		result.AutoPull = *fileCfg.AutoPull
-	}
-	if fileCfg.AutoPullInterval != nil {
-		result.AutoPullInterval = *fileCfg.AutoPullInterval
-	}
-	if fileCfg.CommitTemplate != nil {
-		result.CommitTemplate = *fileCfg.CommitTemplate
-	}
-	return result
-}
-
-// MergeFileMCPConfig merges file config with defaults, returning the final
-// MCPConfig. If fileCfg is nil, defaults are returned unchanged.
-func MergeFileMCPConfig(fileCfg *fileMCPConfig, defaults MCPConfig) MCPConfig {
-	if fileCfg == nil {
-		return defaults
-	}
-	result := defaults
-	if fileCfg.ApprovalRequired != nil {
-		fmt.Fprintln(os.Stderr, "Warning: approval_required is deprecated and will be removed in a future version")
-	}
-	if fileCfg.Port != nil {
-		result.Port = *fileCfg.Port
-	}
-	if fileCfg.Bind != nil {
-		result.Bind = *fileCfg.Bind
-	}
-	if fileCfg.Stdio != nil {
-		result.Stdio = *fileCfg.Stdio
-	}
-	if fileCfg.HTTPTokenFile != nil {
-		result.HTTPTokenFile = *fileCfg.HTTPTokenFile
-	}
-	if fileCfg.ReadHeaderTimeout != nil {
-		result.ReadHeaderTimeout = *fileCfg.ReadHeaderTimeout
-	}
-	if fileCfg.ReadTimeout != nil {
-		result.ReadTimeout = *fileCfg.ReadTimeout
-	}
-	if fileCfg.WriteTimeout != nil {
-		result.WriteTimeout = *fileCfg.WriteTimeout
-	}
-	if fileCfg.ShutdownTimeout != nil {
-		result.ShutdownTimeout = *fileCfg.ShutdownTimeout
-	}
-	if fileCfg.ApprovalTimeout != nil {
-		result.ApprovalTimeout = *fileCfg.ApprovalTimeout
-	}
-	if fileCfg.RateLimit != nil {
-		result.RateLimit = *fileCfg.RateLimit
-	}
-	if fileCfg.TrustedProxyIPs != nil {
-		result.TrustedProxyIPs = append([]string(nil), fileCfg.TrustedProxyIPs...)
-	}
-	if fileCfg.OTLPEndpoint != nil {
-		result.OTLPEndpoint = *fileCfg.OTLPEndpoint
-	}
-	if fileCfg.MetricsAuthRequired != nil {
-		result.MetricsAuthRequired = *fileCfg.MetricsAuthRequired
-	}
-	if fileCfg.TLSCertFile != nil {
-		result.TLSCertFile = *fileCfg.TLSCertFile
-	}
-	if fileCfg.TLSKeyFile != nil {
-		result.TLSKeyFile = *fileCfg.TLSKeyFile
-	}
-	if fileCfg.AllowInsecureBind != nil {
-		result.AllowInsecureBind = *fileCfg.AllowInsecureBind
-	}
-	if fileCfg.OAuth != nil {
-		if result.OAuth == nil {
-			result.OAuth = &OAuthConfig{}
-		}
-		if fileCfg.OAuth.AccessTokenTTL != nil {
-			result.OAuth.AccessTokenTTL = *fileCfg.OAuth.AccessTokenTTL
-		}
-		if fileCfg.OAuth.RefreshTokenTTL != nil {
-			result.OAuth.RefreshTokenTTL = *fileCfg.OAuth.RefreshTokenTTL
-		}
-	}
-	return result
-}
-
-// MergeFileUpdateConfig merges file config with defaults, returning the final
-// UpdateConfig. If fileCfg is nil, defaults are returned unchanged.
-func MergeFileUpdateConfig(fileCfg *fileUpdateConfig, defaults UpdateConfig) UpdateConfig {
-	if fileCfg == nil {
-		return defaults
-	}
-	result := defaults
-	if fileCfg.CacheTTL != nil {
-		result.CacheTTL = *fileCfg.CacheTTL
-	}
-	return result
-}
-
-// MergeFileClipboardConfig merges file config with defaults, returning the final
-// ClipboardConfig. If fileCfg is nil, defaults are returned unchanged.
-func MergeFileClipboardConfig(fileCfg *fileClipboardConfig, defaults ClipboardConfig) ClipboardConfig {
-	if fileCfg == nil {
-		return defaults
-	}
-	result := defaults
-	if fileCfg.AutoClearDuration != nil {
-		result.AutoClearDuration = *fileCfg.AutoClearDuration
-	}
-	if fileCfg.PrintByDefault != nil {
-		result.PrintByDefault = *fileCfg.PrintByDefault
-	}
-	return result
-}
-
-// MergeFileAuditConfig merges file config with defaults, returning the final
-// AuditConfig. If fileCfg is nil, defaults are returned unchanged.
-func MergeFileAuditConfig(fileCfg *fileAuditConfig, defaults AuditConfig) AuditConfig {
-	if fileCfg == nil {
-		return defaults
-	}
-	result := defaults
-	if fileCfg.MaxFileSize != nil {
-		result.MaxFileSize = *fileCfg.MaxFileSize * 1024 * 1024
-	}
-	if fileCfg.MaxBackups != nil {
-		result.MaxBackups = *fileCfg.MaxBackups
-	}
-	if fileCfg.MaxAgeDays != nil {
-		result.MaxAgeDays = *fileCfg.MaxAgeDays
-	}
-	return result
-}
-
-// fileLoggingConfig is the file-based logging configuration.
-type fileLoggingConfig struct {
-	Level  *string `yaml:"level,omitempty"`
-	Format *string `yaml:"format,omitempty"`
-}
-
-// MergeFileLoggingConfig merges file config with defaults, returning the final
-// LoggingConfig. If fileCfg is nil, defaults are returned unchanged.
-func MergeFileLoggingConfig(fileCfg *fileLoggingConfig, defaults LoggingConfig) LoggingConfig {
-	if fileCfg == nil {
-		return defaults
-	}
-	result := defaults
-	if fileCfg.Level != nil {
-		result.Level = *fileCfg.Level
-	}
-	if fileCfg.Format != nil {
-		result.Format = *fileCfg.Format
-	}
-	return result
-}
+// DurationPtr returns a pointer to v.
+func DurationPtr(v time.Duration) *time.Duration { return &v }
 
 // ProfileForName returns the profile with the given name, or nil if not found.
 func (c *Config) ProfileForName(name string) *Profile {
@@ -515,4 +201,170 @@ func (c *Config) IsLegacyMode() bool {
 		return true
 	}
 	return *c.Vault.LegacyMode
+}
+
+// MergeFromVault overwrites dst's zero-value fields with src's non-zero values.
+func MergeFromVault(dst *VaultConfig, src VaultConfig) {
+	if src.Path != "" {
+		dst.Path = src.Path
+	}
+	if src.DefaultRecipients != nil {
+		dst.DefaultRecipients = append([]string(nil), src.DefaultRecipients...)
+	}
+	if src.ConfirmRemove {
+		dst.ConfirmRemove = true
+	}
+	if src.AuthMethod != "" {
+		dst.AuthMethod = src.AuthMethod
+	}
+	if src.UseTouchID {
+		dst.UseTouchID = true
+	}
+	if src.LegacyMode != nil {
+		dst.LegacyMode = src.LegacyMode
+	}
+	if src.SearchWorkers > 0 {
+		dst.SearchWorkers = src.SearchWorkers
+	}
+	if src.PseudonymizePaths {
+		dst.PseudonymizePaths = true
+	}
+	if src.ScryptWorkFactor > 0 {
+		dst.ScryptWorkFactor = src.ScryptWorkFactor
+	}
+	if !src.LastRotated.IsZero() {
+		dst.LastRotated = src.LastRotated
+	}
+	if src.FormatVersion > 0 {
+		dst.FormatVersion = src.FormatVersion
+	}
+	if src.Argon2idTime > 0 {
+		dst.Argon2idTime = src.Argon2idTime
+	}
+	if src.Argon2idMemory > 0 {
+		dst.Argon2idMemory = src.Argon2idMemory
+	}
+	if src.Argon2idThreads > 0 {
+		dst.Argon2idThreads = src.Argon2idThreads
+	}
+}
+
+// MergeFromGit overwrites dst's zero-value fields with src's non-zero values.
+func MergeFromGit(dst *GitConfig, src GitConfig) {
+	if src.AutoPush {
+		dst.AutoPush = true
+	}
+	if src.AutoPull {
+		dst.AutoPull = true
+	}
+	if src.AutoPullInterval > 0 {
+		dst.AutoPullInterval = src.AutoPullInterval
+	}
+	if src.CommitTemplate != "" {
+		dst.CommitTemplate = src.CommitTemplate
+	}
+}
+
+// MergeFromMCP overwrites dst's zero-value fields with src's non-zero values.
+func MergeFromMCP(dst *MCPConfig, src MCPConfig) {
+	if src.Port > 0 {
+		dst.Port = src.Port
+	}
+	if src.Bind != "" {
+		dst.Bind = src.Bind
+	}
+	if src.Stdio {
+		dst.Stdio = true
+	}
+	if src.HTTPTokenFile != "" {
+		dst.HTTPTokenFile = src.HTTPTokenFile
+	}
+	if src.OTLPEndpoint != "" {
+		dst.OTLPEndpoint = src.OTLPEndpoint
+	}
+	if src.ReadHeaderTimeout > 0 {
+		dst.ReadHeaderTimeout = src.ReadHeaderTimeout
+	}
+	if src.ReadTimeout > 0 {
+		dst.ReadTimeout = src.ReadTimeout
+	}
+	if src.WriteTimeout > 0 {
+		dst.WriteTimeout = src.WriteTimeout
+	}
+	if src.ShutdownTimeout > 0 {
+		dst.ShutdownTimeout = src.ShutdownTimeout
+	}
+	if src.ApprovalTimeout > 0 {
+		dst.ApprovalTimeout = src.ApprovalTimeout
+	}
+	if src.RateLimit > 0 {
+		dst.RateLimit = src.RateLimit
+	}
+	if src.TrustedProxyIPs != nil {
+		dst.TrustedProxyIPs = append([]string(nil), src.TrustedProxyIPs...)
+	}
+	if src.MetricsAuthRequired {
+		dst.MetricsAuthRequired = true
+	}
+	if src.TLSCertFile != "" {
+		dst.TLSCertFile = src.TLSCertFile
+	}
+	if src.TLSKeyFile != "" {
+		dst.TLSKeyFile = src.TLSKeyFile
+	}
+	if src.AllowInsecureBind {
+		dst.AllowInsecureBind = true
+	}
+	if src.OAuth != nil {
+		if dst.OAuth == nil {
+			dst.OAuth = &OAuthConfig{}
+		}
+		if src.OAuth.AccessTokenTTL > 0 {
+			dst.OAuth.AccessTokenTTL = src.OAuth.AccessTokenTTL
+		}
+		if src.OAuth.RefreshTokenTTL > 0 {
+			dst.OAuth.RefreshTokenTTL = src.OAuth.RefreshTokenTTL
+		}
+	}
+}
+
+// MergeFromUpdate overwrites dst's zero-value fields with src's non-zero values.
+func MergeFromUpdate(dst *UpdateConfig, src UpdateConfig) {
+	if src.CacheTTL > 0 {
+		dst.CacheTTL = src.CacheTTL
+	}
+}
+
+// MergeFromClipboard overwrites dst's zero-value fields with src's non-zero values.
+func MergeFromClipboard(dst *ClipboardConfig, src ClipboardConfig) {
+	if src.AutoClearDuration > 0 {
+		dst.AutoClearDuration = src.AutoClearDuration
+	}
+	if src.PrintByDefault {
+		dst.PrintByDefault = true
+	}
+}
+
+// MergeFromAudit overwrites dst's zero-value fields with src's non-zero values.
+// src.MaxFileSize is expected in bytes (already converted from YAML MB).
+func MergeFromAudit(dst *AuditConfig, src AuditConfig) {
+	if src.MaxFileSize > 0 {
+		dst.MaxFileSize = src.MaxFileSize
+	}
+	if src.MaxBackups > 0 {
+		dst.MaxBackups = src.MaxBackups
+	}
+	if src.MaxAgeDays > 0 {
+		dst.MaxAgeDays = src.MaxAgeDays
+	}
+}
+
+// MergeFromLogging overwrites dst's zero-value fields with src's non-zero values.
+func MergeFromLogging(dst *LoggingConfig, src LoggingConfig) {
+	if src.Level != "" {
+		dst.Level = src.Level
+	}
+	if src.Format != "" {
+		dst.Format = src.Format
+	}
 }

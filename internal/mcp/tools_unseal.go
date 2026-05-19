@@ -72,11 +72,15 @@ func (s *Server) handleSecretUnseal(ctx context.Context, req CallToolRequest) (*
 		}
 	}
 
-	if s.agent.MaxSecretsInSession > 0 {
+	maxSecrets := 0
+	if s.agent.MaxSecretsInSession != nil {
+		maxSecrets = *s.agent.MaxSecretsInSession
+	}
+	if maxSecrets > 0 {
 		accessed := s.secretsAccessed.Load()
-		if accessed >= int64(s.agent.MaxSecretsInSession) {
+		if accessed >= int64(maxSecrets) {
 			return NewToolResultError(
-				fmt.Sprintf("max secrets per session exceeded (%d/%d)", accessed, s.agent.MaxSecretsInSession)), nil
+				fmt.Sprintf("max secrets per session exceeded (%d/%d)", accessed, maxSecrets)), nil
 		}
 	}
 

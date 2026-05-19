@@ -89,7 +89,10 @@ func Load(agentName, vaultDir string) (*AgentContext, error) {
 	profile.Name = agentName
 
 	// Normalise legacy tier name for internal use.
-	profile.Tier = normalizeTier(profile.Tier)
+	if profile.Tier != nil {
+		tier := normalizeTier(*profile.Tier)
+		profile.Tier = &tier
+	}
 
 	// Attempt to create the audit logger; silently continue without it on
 	// failure so agentctx can still function even if audit logging is down.
@@ -246,10 +249,10 @@ func normalizeTier(tier string) string {
 // effectiveTier returns the tier to use for enforcement. Defaults to standard
 // when the profile has no tier set (should not happen in practice).
 func (ctx *AgentContext) effectiveTier() string {
-	if ctx.profile == nil || ctx.profile.Tier == "" {
+	if ctx.profile == nil || ctx.profile.Tier == nil || *ctx.profile.Tier == "" {
 		return tierStandard
 	}
-	return normalizeTier(ctx.profile.Tier)
+	return normalizeTier(*ctx.profile.Tier)
 }
 
 // nextTier returns the tier above the current one for upgrade hints.

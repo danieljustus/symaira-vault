@@ -132,8 +132,8 @@ func TestPreCallHook_Executed(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", "")
 
 	var called bool
@@ -158,8 +158,8 @@ func TestPreCallHook_Error_AbortsExecution(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", "")
 
 	hookErr := "pre-call hook rejected"
@@ -180,8 +180,8 @@ func TestPreCallHook_Error_StopsSubsequentHooks(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", "")
 
 	var secondCalled bool
@@ -206,8 +206,8 @@ func TestPreCallHook_ContextPropagation(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", "")
 
 	type ctxKey struct{}
@@ -239,8 +239,8 @@ func TestMultiplePreCallHooks_Order(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", "")
 
 	var order []string
@@ -281,8 +281,8 @@ func TestPostCallHook_Executed(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", "")
 
 	var called bool
@@ -310,8 +310,8 @@ func TestPostCallHook_ModifiesResult(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", "")
 
 	srv.RegisterPostCallHook(func(ctx context.Context, name string, args CallToolRequest, result *CallToolResult, err error) (*CallToolResult, error) {
@@ -335,8 +335,8 @@ func TestPostCallHook_Error_DoesNotAbort(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", "")
 
 	srv.RegisterPostCallHook(func(ctx context.Context, name string, args CallToolRequest, result *CallToolResult, err error) (*CallToolResult, error) {
@@ -358,8 +358,8 @@ func TestMultiplePostCallHooks_Order(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", "")
 
 	var order []string
@@ -397,8 +397,8 @@ func TestPostCallHook_ReceivesHandlerError(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -436,8 +436,8 @@ func TestPreAndPostHooks_Combined(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", "")
 
 	var execOrder []string
@@ -468,8 +468,8 @@ func TestAuditPreHook_Runs(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", "")
 
 	srv.RegisterPreCallHook(NewAuditPreHook())
@@ -484,8 +484,8 @@ func TestAuditPostHook_Runs(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", "")
 
 	srv.RegisterPostCallHook(NewAuditPostHook())
@@ -500,8 +500,8 @@ func TestRateLimitHook_AllowsWithinLimit(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", "")
 
 	srv.RegisterPreCallHook(NewRateLimitPreHook(100))
@@ -519,8 +519,8 @@ func TestRateLimitHook_BlocksWhenExceeded(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", "")
 
 	srv.RegisterPreCallHook(NewRateLimitPreHook(2))
@@ -544,8 +544,8 @@ func TestScopeCheckHook_AllowsAllowedTool(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 		AllowedTools: []string{"health", "list_entries"},
 	}, "stdio", "")
 
@@ -561,8 +561,8 @@ func TestScopeCheckHook_DeniesDisallowedTool(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 		AllowedTools: []string{"list_entries"},
 	}, "stdio", "")
 
@@ -578,8 +578,8 @@ func TestScopeCheckHook_EmptyListAllowsAll(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 		AllowedTools: []string{}, // empty = no restriction
 	}, "stdio", "")
 
@@ -595,8 +595,8 @@ func TestNotificationHook_DoesNotError(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", "")
 
 	srv.RegisterPostCallHook(NewNotificationPostHook())
@@ -629,8 +629,8 @@ func TestMetricsPostHook_Runs(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", "")
 
 	srv.RegisterPreCallHook(NewMetricsPreHook())
@@ -676,8 +676,8 @@ func TestRegisterConfigHooks_PreCallHooks(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:          "test",
 		AllowedPaths:  []string{"*"},
-		CanWrite:      false,
-		ApprovalMode:  "none",
+		CanWrite:      config.BoolPtr(false),
+		ApprovalMode:  config.StrPtr("none"),
 		PreCallHooks:  []string{"audit", "metrics"},
 		PostCallHooks: []string{"notification"},
 	}, "stdio", "")
@@ -705,8 +705,8 @@ func TestRegisterConfigHooks_Empty(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 		// No hooks configured
 	}, "stdio", "")
 
@@ -721,8 +721,8 @@ func TestRegisterConfigHooks_RateLimit_FromConfig(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 		PreCallHooks: []string{"rate_limit"},
 	}, "stdio", "")
 
@@ -756,8 +756,8 @@ func TestAgentProfile_HooksConfig(t *testing.T) {
 	profile := config.AgentProfile{
 		Name:          "test",
 		AllowedPaths:  []string{"*"},
-		CanWrite:      false,
-		ApprovalMode:  "none",
+		CanWrite:      config.BoolPtr(false),
+		ApprovalMode:  config.StrPtr("none"),
 		PreCallHooks:  []string{"audit", "rate_limit"},
 		PostCallHooks: []string{"notification"},
 	}

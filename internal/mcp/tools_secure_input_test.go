@@ -18,8 +18,8 @@ func TestSecureInputToolAvailabilityInRegistry(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     true,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(true),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", "")
 
 	mockSecureInputCapability(t, secureui.CapNone)

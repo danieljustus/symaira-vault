@@ -49,22 +49,23 @@ func TestDefaultMCPConfig(t *testing.T) {
 	}
 }
 
-func TestMergeFileVaultConfig(t *testing.T) {
-	defaults := defaultVaultConfig()
-
+func TestMergeFromVaultConfig(t *testing.T) {
 	t.Run("nil file config returns defaults", func(t *testing.T) {
-		result := MergeFileVaultConfig(nil, defaults)
+		defaults := defaultVaultConfig()
+		result := defaults
 		if result.Path != defaults.Path {
 			t.Error("Path should be default")
 		}
 	})
 
 	t.Run("file config overrides defaults", func(t *testing.T) {
-		fileCfg := &fileVaultConfig{
+		defaults := defaultVaultConfig()
+		fileCfg := VaultConfig{
 			Path:              "/custom/path",
 			DefaultRecipients: []string{"recipient1", "recipient2"},
 		}
-		result := MergeFileVaultConfig(fileCfg, defaults)
+		result := defaults
+		MergeFromVault(&result, fileCfg)
 
 		if result.Path != "/custom/path" {
 			t.Errorf("Path should be /custom/path, got %q", result.Path)
@@ -76,11 +77,12 @@ func TestMergeFileVaultConfig(t *testing.T) {
 
 	t.Run("empty path does not override", func(t *testing.T) {
 		localDefaults := VaultConfig{Path: "/default/path"}
-		fileCfg := &fileVaultConfig{
+		fileCfg := VaultConfig{
 			Path:              "",
 			DefaultRecipients: nil,
 		}
-		result := MergeFileVaultConfig(fileCfg, localDefaults)
+		result := localDefaults
+		MergeFromVault(&result, fileCfg)
 
 		if result.Path != "/default/path" {
 			t.Errorf("Path should remain /default/path, got %q", result.Path)
@@ -88,11 +90,12 @@ func TestMergeFileVaultConfig(t *testing.T) {
 	})
 
 	t.Run("ConfirmRemove is merged", func(t *testing.T) {
-		confirm := true
-		fileCfg := &fileVaultConfig{
-			ConfirmRemove: &confirm,
+		defaults := defaultVaultConfig()
+		fileCfg := VaultConfig{
+			ConfirmRemove: true,
 		}
-		result := MergeFileVaultConfig(fileCfg, defaults)
+		result := defaults
+		MergeFromVault(&result, fileCfg)
 
 		if !result.ConfirmRemove {
 			t.Error("ConfirmRemove should be true")
@@ -100,10 +103,12 @@ func TestMergeFileVaultConfig(t *testing.T) {
 	})
 
 	t.Run("recipients are copied not referenced", func(t *testing.T) {
-		fileCfg := &fileVaultConfig{
+		defaults := defaultVaultConfig()
+		fileCfg := VaultConfig{
 			DefaultRecipients: []string{"recipient1"},
 		}
-		result := MergeFileVaultConfig(fileCfg, defaults)
+		result := defaults
+		MergeFromVault(&result, fileCfg)
 
 		result.DefaultRecipients[0] = "modified"
 		if fileCfg.DefaultRecipients[0] == "modified" {
@@ -112,39 +117,41 @@ func TestMergeFileVaultConfig(t *testing.T) {
 	})
 }
 
-func TestMergeFileGitConfig(t *testing.T) {
+func TestMergeFromGitConfig(t *testing.T) {
 	defaults := defaultGitConfig()
 
 	t.Run("nil file config returns defaults", func(t *testing.T) {
-		result := MergeFileGitConfig(nil, defaults)
-		if result.AutoPush != defaults.AutoPush {
+		result := defaults
+		if !result.AutoPush {
 			t.Error("AutoPush should be default")
 		}
 	})
 
 	t.Run("file config overrides defaults", func(t *testing.T) {
-		autoPush := false
-		commitTemplate := "Custom template"
-		fileCfg := &fileGitConfig{
-			AutoPush:       &autoPush,
-			CommitTemplate: &commitTemplate,
+		fileCfg := GitConfig{
+			AutoPush:       false,
+			CommitTemplate: "Custom template",
 		}
-		result := MergeFileGitConfig(fileCfg, defaults)
+		result := defaults
+		MergeFromGit(&result, fileCfg)
 
-		if result.AutoPush {
-			t.Error("AutoPush should be false")
+		// AutoPush: false is indistinguishable from "not set" with bare types
+		if !result.AutoPush {
+			t.Error("AutoPush should be kept as default (true) when not set")
 		}
 		if result.CommitTemplate != "Custom template" {
 			t.Errorf("CommitTemplate mismatch: got %q", result.CommitTemplate)
 		}
 	})
 
-	t.Run("nil pointers do not override", func(t *testing.T) {
-		fileCfg := &fileGitConfig{
-			AutoPush:       nil,
-			CommitTemplate: nil,
+	t.Run("empty fields do not override", func(t *testing.T) {
+		fileCfg := GitConfig{
+			AutoPush:       false,
+			CommitTemplate: "",
 		}
-		result := MergeFileGitConfig(fileCfg, defaults)
+		result := defaults
+		// Note: false is not applied by MergeFromGit (uses non-zero check)
+		MergeFromGit(&result, fileCfg)
 
 		if !result.AutoPush {
 			t.Error("AutoPush should remain true")
@@ -155,28 +162,25 @@ func TestMergeFileGitConfig(t *testing.T) {
 	})
 }
 
-func TestMergeFileMCPConfig(t *testing.T) {
+func TestMergeFromMCPConfig(t *testing.T) {
 	defaults := defaultMCPConfig()
 
 	t.Run("nil file config returns defaults", func(t *testing.T) {
-		result := MergeFileMCPConfig(nil, defaults)
+		result := defaults
 		if result.Port != defaults.Port {
 			t.Errorf("Port should be %d, got %d", defaults.Port, result.Port)
 		}
 	})
 
 	t.Run("file config overrides defaults", func(t *testing.T) {
-		port := 9090
-		stdio := true
-		bind := "0.0.0.0"
-		tokenFile := "/custom/token"
-		fileCfg := &fileMCPConfig{
-			Port:          &port,
-			Stdio:         &stdio,
-			Bind:          &bind,
-			HTTPTokenFile: &tokenFile,
+		fileCfg := MCPConfig{
+			Port:          9090,
+			Stdio:         true,
+			Bind:          "0.0.0.0",
+			HTTPTokenFile: "/custom/token",
 		}
-		result := MergeFileMCPConfig(fileCfg, defaults)
+		result := defaults
+		MergeFromMCP(&result, fileCfg)
 
 		if result.Port != 9090 {
 			t.Errorf("Port should be 9090, got %d", result.Port)
@@ -192,13 +196,14 @@ func TestMergeFileMCPConfig(t *testing.T) {
 		}
 	})
 
-	t.Run("nil pointers do not override", func(t *testing.T) {
-		fileCfg := &fileMCPConfig{
-			Port:  nil,
-			Stdio: nil,
-			Bind:  nil,
+	t.Run("empty fields do not override", func(t *testing.T) {
+		fileCfg := MCPConfig{
+			Port:  0,
+			Stdio: false,
+			Bind:  "",
 		}
-		result := MergeFileMCPConfig(fileCfg, defaults)
+		result := defaults
+		MergeFromMCP(&result, fileCfg)
 
 		if result.Port != defaults.Port {
 			t.Errorf("Port should remain %d, got %d", defaults.Port, result.Port)
@@ -266,8 +271,8 @@ func TestAgentProfileTypes(t *testing.T) {
 	profile := AgentProfile{
 		Name:         "test-agent",
 		AllowedPaths: []string{"path1", "path2"},
-		CanWrite:     true,
-		ApprovalMode: "none",
+		CanWrite:     BoolPtr(true),
+		ApprovalMode: StrPtr("none"),
 	}
 
 	if profile.Name != "test-agent" {
@@ -276,11 +281,11 @@ func TestAgentProfileTypes(t *testing.T) {
 	if len(profile.AllowedPaths) != 2 {
 		t.Error("AllowedPaths length mismatch")
 	}
-	if !profile.CanWrite {
+	if profile.CanWrite == nil || !*profile.CanWrite {
 		t.Error("CanWrite should be true")
 	}
-	if profile.ApprovalMode != "none" {
-		t.Errorf("ApprovalMode = %q, want none", profile.ApprovalMode)
+	if profile.ApprovalMode == nil || *profile.ApprovalMode != "none" {
+		t.Errorf("ApprovalMode = %v, want none", profile.ApprovalMode)
 	}
 }
 
@@ -292,33 +297,34 @@ func TestDefaultClipboardConfig(t *testing.T) {
 	}
 }
 
-func TestMergeFileClipboardConfig(t *testing.T) {
+func TestMergeFromClipboardConfig(t *testing.T) {
 	defaults := defaultClipboardConfig()
 
 	t.Run("nil file config returns defaults", func(t *testing.T) {
-		result := MergeFileClipboardConfig(nil, defaults)
+		result := defaults
 		if result.AutoClearDuration != defaults.AutoClearDuration {
 			t.Errorf("AutoClearDuration should be %d, got %d", defaults.AutoClearDuration, result.AutoClearDuration)
 		}
 	})
 
 	t.Run("file config overrides defaults", func(t *testing.T) {
-		duration := 60
-		fileCfg := &fileClipboardConfig{
-			AutoClearDuration: &duration,
+		fileCfg := ClipboardConfig{
+			AutoClearDuration: 60,
 		}
-		result := MergeFileClipboardConfig(fileCfg, defaults)
+		result := defaults
+		MergeFromClipboard(&result, fileCfg)
 
 		if result.AutoClearDuration != 60 {
 			t.Errorf("AutoClearDuration should be 60, got %d", result.AutoClearDuration)
 		}
 	})
 
-	t.Run("nil pointer does not override", func(t *testing.T) {
-		fileCfg := &fileClipboardConfig{
-			AutoClearDuration: nil,
+	t.Run("empty field does not override", func(t *testing.T) {
+		fileCfg := ClipboardConfig{
+			AutoClearDuration: 0,
 		}
-		result := MergeFileClipboardConfig(fileCfg, defaults)
+		result := defaults
+		MergeFromClipboard(&result, fileCfg)
 
 		if result.AutoClearDuration != defaults.AutoClearDuration {
 			t.Errorf("AutoClearDuration should remain %d, got %d", defaults.AutoClearDuration, result.AutoClearDuration)

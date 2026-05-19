@@ -15,8 +15,8 @@ func TestHandleRequestCredential_StoresValueWithoutLeaking(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     true,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(true),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -74,8 +74,8 @@ func TestHandleRequestCredential_RequiresReason(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     true,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(true),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -101,8 +101,8 @@ func TestHandleRequestCredential_ApprovalDeny(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     true,
-		ApprovalMode: "deny",
+		CanWrite:     config.BoolPtr(true),
+		ApprovalMode: config.StrPtr("deny"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 

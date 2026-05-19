@@ -16,9 +16,9 @@ func TestHandleGetValue_ReturnsValuesForPublicEntry(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
-		AutoUnseal:   false,
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
+		AutoUnseal:   config.BoolPtr(false),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -61,9 +61,9 @@ func TestHandleGetValue_SealsRestrictedClassification(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
-		AutoUnseal:   false,
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
+		AutoUnseal:   config.BoolPtr(false),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -104,9 +104,9 @@ func testHandleGetValueUnsealed(t *testing.T, autoUnseal bool, classification ta
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
-		AutoUnseal:   autoUnseal,
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
+		AutoUnseal:   config.BoolPtr(autoUnseal),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -150,9 +150,9 @@ func TestSecretUnseal_ResolvesHandle(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
-		AutoUnseal:   false,
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
+		AutoUnseal:   config.BoolPtr(false),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -178,8 +178,8 @@ func TestSecretUnseal_InvalidHandle(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", "")
 
 	req := CallToolRequest{
@@ -202,8 +202,8 @@ func TestSecretUnseal_MissingHandle(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", "")
 
 	req := CallToolRequest{
@@ -224,8 +224,8 @@ func TestSecretUnseal_UnknownEntry(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -256,8 +256,8 @@ func TestSecretUnseal_MissingField(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -290,8 +290,8 @@ func TestSecretUnseal_SpecificField(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -333,9 +333,9 @@ func TestSecretUnseal_CachesApprovalInMemory(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
-		AutoUnseal:   false,
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
+		AutoUnseal:   config.BoolPtr(false),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 	srv.approvalCache = newApprovalCache()
@@ -382,9 +382,9 @@ func TestSecretsAccessed_IncrementedOnUnseal(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
-		AutoUnseal:   false,
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
+		AutoUnseal:   config.BoolPtr(false),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -411,9 +411,9 @@ func TestSecretsAccessed_IncrementedOnGetValueUnsealed(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
-		AutoUnseal:   true,
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
+		AutoUnseal:   config.BoolPtr(true),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -455,10 +455,10 @@ func TestMaxSecretsInSession_BlocksUnseal(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:                "test",
 		AllowedPaths:        []string{"*"},
-		CanWrite:            false,
-		ApprovalMode:        "none",
-		AutoUnseal:          true,
-		MaxSecretsInSession: 1,
+		CanWrite:            config.BoolPtr(false),
+		ApprovalMode:        config.StrPtr("none"),
+		AutoUnseal:          config.BoolPtr(true),
+		MaxSecretsInSession: config.IntPtr(1),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -486,10 +486,10 @@ func TestMaxSecretsInSession_ZeroMeansNoLimit(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:                "test",
 		AllowedPaths:        []string{"*"},
-		CanWrite:            false,
-		ApprovalMode:        "none",
-		AutoUnseal:          true,
-		MaxSecretsInSession: 0,
+		CanWrite:            config.BoolPtr(false),
+		ApprovalMode:        config.StrPtr("none"),
+		AutoUnseal:          config.BoolPtr(true),
+		MaxSecretsInSession: config.IntPtr(0),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -536,7 +536,7 @@ func TestSecretUnseal_NotBlockedByExposeValueTools(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:             "test",
 		AllowedPaths:     []string{"*"},
-		ExposeValueTools: false,
+		ExposeValueTools: config.BoolPtr(false),
 	}, "stdio", "")
 
 	if isToolBlockedByAgent(srv.agent, "secret_unseal") != nil {
@@ -557,8 +557,8 @@ func TestHandleGetValue_SealedScalesWithApprovalModeNone(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -628,9 +628,9 @@ func TestSealResponse_ContainsExpectedFields(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
-		AutoUnseal:   false,
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
+		AutoUnseal:   config.BoolPtr(false),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -685,10 +685,10 @@ func TestHandleGetValue_SealedEntryDoesNotCountSecrets(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:                "test",
 		AllowedPaths:        []string{"*"},
-		CanWrite:            false,
-		ApprovalMode:        "none",
-		AutoUnseal:          false,
-		MaxSecretsInSession: 1,
+		CanWrite:            config.BoolPtr(false),
+		ApprovalMode:        config.StrPtr("none"),
+		AutoUnseal:          config.BoolPtr(false),
+		MaxSecretsInSession: config.IntPtr(1),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -733,9 +733,9 @@ func TestSecretUnseal_RejectsNonScalarField(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
-		AutoUnseal:   true,
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
+		AutoUnseal:   config.BoolPtr(true),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -770,9 +770,9 @@ func TestSecretUnseal_ScalarStringUnchanged(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
-		AutoUnseal:   true,
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
+		AutoUnseal:   config.BoolPtr(true),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 

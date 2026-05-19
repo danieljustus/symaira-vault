@@ -38,9 +38,9 @@ func TestHandleGenerateTOTP_ReturnSuccess(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:          "test",
 		AllowedPaths:  []string{"*"},
-		CanWrite:      false,
-		CanReadValues: true,
-		ApprovalMode:  "none",
+		CanWrite:      config.BoolPtr(false),
+		CanReadValues: config.BoolPtr(true),
+		ApprovalMode:  config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 	writeTOTPEntry(t, vaultDir, identity)
@@ -81,8 +81,8 @@ func TestHandleGenerateTOTP_ReturnWithoutReturnCode(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 	writeTOTPEntry(t, vaultDir, identity)
@@ -111,9 +111,9 @@ func TestHandleGenerateTOTP_ClipboardDefault(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:            "test",
 		AllowedPaths:    []string{"*"},
-		CanWrite:        false,
-		CanUseClipboard: true,
-		ApprovalMode:    "none",
+		CanWrite:        config.BoolPtr(false),
+		CanUseClipboard: config.BoolPtr(true),
+		ApprovalMode:    config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 	writeTOTPEntry(t, vaultDir, identity)
@@ -172,9 +172,9 @@ func TestHandleGenerateTOTP_DefaultsToReturnForCanReadValues(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:          "test",
 		AllowedPaths:  []string{"*"},
-		CanWrite:      false,
-		CanReadValues: true,
-		ApprovalMode:  "none",
+		CanWrite:      config.BoolPtr(false),
+		CanReadValues: config.BoolPtr(true),
+		ApprovalMode:  config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 	writeTOTPEntry(t, vaultDir, identity)
@@ -202,9 +202,9 @@ func TestHandleGenerateTOTP_ClipboardExplicit(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:            "test",
 		AllowedPaths:    []string{"*"},
-		CanWrite:        false,
-		CanUseClipboard: true,
-		ApprovalMode:    "none",
+		CanWrite:        config.BoolPtr(false),
+		CanUseClipboard: config.BoolPtr(true),
+		ApprovalMode:    config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 	writeTOTPEntry(t, vaultDir, identity)
@@ -239,9 +239,9 @@ func TestHandleGenerateTOTP_ClipboardDenied(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:            "test",
 		AllowedPaths:    []string{"*"},
-		CanWrite:        false,
-		CanUseClipboard: false,
-		ApprovalMode:    "none",
+		CanWrite:        config.BoolPtr(false),
+		CanUseClipboard: config.BoolPtr(false),
+		ApprovalMode:    config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 	writeTOTPEntry(t, vaultDir, identity)
@@ -267,9 +267,9 @@ func TestHandleGenerateTOTP_AutotypeSuccess(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
-		CanWrite:       false,
-		CanUseAutotype: true,
-		ApprovalMode:   "none",
+		CanWrite:       config.BoolPtr(false),
+		CanUseAutotype: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 	writeTOTPEntry(t, vaultDir, identity)
@@ -315,9 +315,9 @@ func TestHandleGenerateTOTP_AutotypeDenied(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
-		CanWrite:       false,
-		CanUseAutotype: false,
-		ApprovalMode:   "none",
+		CanWrite:       config.BoolPtr(false),
+		CanUseAutotype: config.BoolPtr(false),
+		ApprovalMode:   config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 	writeTOTPEntry(t, vaultDir, identity)
@@ -343,8 +343,8 @@ func TestHandleGenerateTOTP_InvalidDestination(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 	writeTOTPEntry(t, vaultDir, identity)
@@ -373,8 +373,8 @@ func TestHandleGenerateTOTP_OutsideScope(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"work/"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -408,8 +408,8 @@ func TestHandleGenerateTOTP_MissingPath(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -434,8 +434,8 @@ func TestHandleGenerateTOTP_EntryNotFound(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -457,8 +457,8 @@ func TestHandleGenerateTOTP_NoTOTPConfig(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -489,8 +489,8 @@ func TestHandleGenerateTOTP_EmptySecret(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -521,9 +521,9 @@ func TestExecuteTool_GenerateTOTP_Return(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:          "test",
 		AllowedPaths:  []string{"*"},
-		CanWrite:      false,
-		CanReadValues: true,
-		ApprovalMode:  "none",
+		CanWrite:      config.BoolPtr(false),
+		CanReadValues: config.BoolPtr(true),
+		ApprovalMode:  config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 	writeTOTPEntry(t, vaultDir, identity)
@@ -559,9 +559,9 @@ func TestExecuteTool_GenerateTOTP_Clipboard(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:            "test",
 		AllowedPaths:    []string{"*"},
-		CanWrite:        false,
-		CanUseClipboard: true,
-		ApprovalMode:    "none",
+		CanWrite:        config.BoolPtr(false),
+		CanUseClipboard: config.BoolPtr(true),
+		ApprovalMode:    config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 	writeTOTPEntry(t, vaultDir, identity)
@@ -595,28 +595,28 @@ func TestExecuteTool_GenerateTOTP_Clipboard(t *testing.T) {
 }
 
 func TestGenerateTOTPAvailable_ClipboardOnly(t *testing.T) {
-	srv := &Server{agent: &config.AgentProfile{CanUseClipboard: true, CanUseAutotype: false, CanReadValues: false}}
+	srv := &Server{agent: &config.AgentProfile{CanUseClipboard: config.BoolPtr(true), CanUseAutotype: config.BoolPtr(false), CanReadValues: config.BoolPtr(false)}}
 	if !generateTOTPAvailable(srv) {
 		t.Error("expected TOTP available when clipboard is allowed")
 	}
 }
 
 func TestGenerateTOTPAvailable_AutotypeOnly(t *testing.T) {
-	srv := &Server{agent: &config.AgentProfile{CanUseClipboard: false, CanUseAutotype: true, CanReadValues: false}}
+	srv := &Server{agent: &config.AgentProfile{CanUseClipboard: config.BoolPtr(false), CanUseAutotype: config.BoolPtr(true), CanReadValues: config.BoolPtr(false)}}
 	if !generateTOTPAvailable(srv) {
 		t.Error("expected TOTP available when autotype is allowed")
 	}
 }
 
 func TestGenerateTOTPAvailable_CanReadValuesOnly(t *testing.T) {
-	srv := &Server{agent: &config.AgentProfile{CanUseClipboard: false, CanUseAutotype: false, CanReadValues: true}}
+	srv := &Server{agent: &config.AgentProfile{CanUseClipboard: config.BoolPtr(false), CanUseAutotype: config.BoolPtr(false), CanReadValues: config.BoolPtr(true)}}
 	if !generateTOTPAvailable(srv) {
 		t.Error("expected TOTP available when canReadValues")
 	}
 }
 
 func TestGenerateTOTPAvailable_AllDenied(t *testing.T) {
-	srv := &Server{agent: &config.AgentProfile{CanUseClipboard: false, CanUseAutotype: false, CanReadValues: false}}
+	srv := &Server{agent: &config.AgentProfile{CanUseClipboard: config.BoolPtr(false), CanUseAutotype: config.BoolPtr(false), CanReadValues: config.BoolPtr(false)}}
 	if generateTOTPAvailable(srv) {
 		t.Error("expected TOTP not available when all denied")
 	}
@@ -640,10 +640,10 @@ func TestToolsList_GenerateTOTP_Filtered(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:            "test",
 		AllowedPaths:    []string{"*"},
-		CanUseClipboard: false,
-		CanUseAutotype:  false,
-		CanReadValues:   false,
-		CanWrite:        false,
+		CanUseClipboard: config.BoolPtr(false),
+		CanUseAutotype:  config.BoolPtr(false),
+		CanReadValues:   config.BoolPtr(false),
+		CanWrite:        config.BoolPtr(false),
 	}, "stdio", "")
 
 	tools := toolsListPayload(srv)
@@ -659,8 +659,8 @@ func TestToolsList_GenerateTOTP_Visible(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:            "test",
 		AllowedPaths:    []string{"*"},
-		CanUseClipboard: true,
-		CanWrite:        false,
+		CanUseClipboard: config.BoolPtr(true),
+		CanWrite:        config.BoolPtr(false),
 	}, "stdio", "")
 
 	tools := toolsListPayload(srv)

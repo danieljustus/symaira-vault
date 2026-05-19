@@ -469,5 +469,5 @@ func (s *Server) checkApproval(ctx context.Context, operation, detailFmt string)
 
 // executeAPIAvailable returns true when the agent has command execution permission.
 func executeAPIAvailable(s *Server) bool {
-	return s != nil && s.agent != nil && s.agent.CanRunCommands
+	return s != nil && s.agent != nil && s.agent.CanRunCommands != nil && *s.agent.CanRunCommands
 }

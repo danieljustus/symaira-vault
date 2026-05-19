@@ -14,43 +14,43 @@ const (
 // Explicit YAML fields for the same agent override the preset values.
 var TierPresets = map[TierPreset]AgentProfile{
 	TierReadOnly: {
-		CanWrite:         false,
-		CanRunCommands:   false,
-		CanManageConfig:  false,
-		CanUseClipboard:  false,
-		CanUseAutotype:   false,
-		CanReadValues:    false,
-		ExposeValueTools: false,
-		AutoUnseal:       false,
-		ApprovalMode:     "deny",
-		RequireApproval:  false,
+		CanWrite:         BoolPtr(false),
+		CanRunCommands:   BoolPtr(false),
+		CanManageConfig:  BoolPtr(false),
+		CanUseClipboard:  BoolPtr(false),
+		CanUseAutotype:   BoolPtr(false),
+		CanReadValues:    BoolPtr(false),
+		ExposeValueTools: BoolPtr(false),
+		AutoUnseal:       BoolPtr(false),
+		ApprovalMode:     StrPtr("deny"),
+		RequireApproval:  BoolPtr(false),
 		AllowedPaths:     []string{},
 	},
 	TierStandard: {
-		CanWrite:           false,
-		CanRunCommands:     false,
-		CanManageConfig:    false,
-		CanUseClipboard:    true,
-		CanUseAutotype:     true,
-		CanReadValues:      true,
-		ExposeValueTools:   false,
-		AutoUnseal:         false,
-		ApprovalMode:       "prompt",
-		RequireApproval:    true,
+		CanWrite:           BoolPtr(false),
+		CanRunCommands:     BoolPtr(false),
+		CanManageConfig:    BoolPtr(false),
+		CanUseClipboard:    BoolPtr(true),
+		CanUseAutotype:     BoolPtr(true),
+		CanReadValues:      BoolPtr(true),
+		ExposeValueTools:   BoolPtr(false),
+		AutoUnseal:         BoolPtr(false),
+		ApprovalMode:       StrPtr("prompt"),
+		RequireApproval:    BoolPtr(true),
 		AllowedPaths:       []string{},
 		AllowedExecutables: []string{"curl", "git", "terraform", "npm", "node", "python", "python3", "docker", "kubectl"},
 	},
 	TierAdmin: {
-		CanWrite:         true,
-		CanRunCommands:   true,
-		CanManageConfig:  true,
-		CanUseClipboard:  true,
-		CanUseAutotype:   true,
-		CanReadValues:    true,
-		ExposeValueTools: true,
-		AutoUnseal:       true,
-		ApprovalMode:     "prompt",
-		RequireApproval:  true,
+		CanWrite:         BoolPtr(true),
+		CanRunCommands:   BoolPtr(true),
+		CanManageConfig:  BoolPtr(true),
+		CanUseClipboard:  BoolPtr(true),
+		CanUseAutotype:   BoolPtr(true),
+		CanReadValues:    BoolPtr(true),
+		ExposeValueTools: BoolPtr(true),
+		AutoUnseal:       BoolPtr(true),
+		ApprovalMode:     StrPtr("prompt"),
+		RequireApproval:  BoolPtr(true),
 		AllowedPaths:     []string{},
 	},
 }
@@ -73,16 +73,18 @@ func ApplyTierPreset(target *AgentProfile, tier string) bool {
 	if !ok {
 		return false
 	}
-	target.CanWrite = preset.CanWrite
-	target.CanRunCommands = preset.CanRunCommands
-	target.CanManageConfig = preset.CanManageConfig
-	target.CanUseClipboard = preset.CanUseClipboard
-	target.CanUseAutotype = preset.CanUseAutotype
-	target.CanReadValues = preset.CanReadValues
-	target.ExposeValueTools = preset.ExposeValueTools
-	target.AutoUnseal = preset.AutoUnseal
-	target.ApprovalMode = preset.ApprovalMode
-	target.RequireApproval = preset.RequireApproval
+	target.CanWrite = BoolPtr(preset.CanWrite != nil && *preset.CanWrite)
+	target.CanRunCommands = BoolPtr(preset.CanRunCommands != nil && *preset.CanRunCommands)
+	target.CanManageConfig = BoolPtr(preset.CanManageConfig != nil && *preset.CanManageConfig)
+	target.CanUseClipboard = BoolPtr(preset.CanUseClipboard != nil && *preset.CanUseClipboard)
+	target.CanUseAutotype = BoolPtr(preset.CanUseAutotype != nil && *preset.CanUseAutotype)
+	target.CanReadValues = BoolPtr(preset.CanReadValues != nil && *preset.CanReadValues)
+	target.ExposeValueTools = BoolPtr(preset.ExposeValueTools != nil && *preset.ExposeValueTools)
+	target.AutoUnseal = BoolPtr(preset.AutoUnseal != nil && *preset.AutoUnseal)
+	if preset.ApprovalMode != nil {
+		target.ApprovalMode = StrPtr(*preset.ApprovalMode)
+	}
+	target.RequireApproval = BoolPtr(preset.RequireApproval != nil && *preset.RequireApproval)
 	if preset.AllowedExecutables != nil {
 		target.AllowedExecutables = append([]string(nil), preset.AllowedExecutables...)
 	}

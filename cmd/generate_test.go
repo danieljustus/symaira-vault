@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	cli "github.com/danieljustus/OpenPass/internal/cli"
 	"github.com/danieljustus/OpenPass/internal/config"
 	"github.com/danieljustus/OpenPass/internal/crypto"
 	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
@@ -112,7 +113,7 @@ func TestCmdGenerate_StoreJSONDoesNotRevealByDefault(t *testing.T) {
 		genStore = ""
 		genReveal = false
 		genQuiet = false
-		outputFormat = "text"
+		cli.OutputFormat = "text"
 	})
 
 	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))

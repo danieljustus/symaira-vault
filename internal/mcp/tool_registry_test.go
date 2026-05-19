@@ -166,8 +166,8 @@ func TestExecuteToolUnknownTool(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", "")
 
 	args := json.RawMessage(`{}`)
@@ -184,9 +184,9 @@ func TestToolsListPayloadMatchesAvailableRegistry(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:             "test",
 		AllowedPaths:     []string{"*"},
-		CanWrite:         true,
-		ApprovalMode:     "none",
-		ExposeValueTools: true,
+		CanWrite:         config.BoolPtr(true),
+		ApprovalMode:     config.StrPtr("none"),
+		ExposeValueTools: config.BoolPtr(true),
 	}, "http", "")
 
 	tools := toolsListPayload(srv)

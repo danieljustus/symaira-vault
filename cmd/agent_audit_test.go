@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	mcp "github.com/danieljustus/OpenPass/cmd/mcp"
 	"github.com/danieljustus/OpenPass/internal/audit"
 )
 
@@ -37,9 +38,9 @@ func TestReadAuditLog(t *testing.T) {
 	}
 	writeAuditLogFile(t, logPath, entries)
 
-	result, err := readAuditLog(logPath, 0)
+	result, err := mcp.ReadAuditLog(logPath, 0)
 	if err != nil {
-		t.Fatalf("readAuditLog() error: %v", err)
+		t.Fatalf("mcp.ReadAuditLog() error: %v", err)
 	}
 
 	if len(result) != 3 {
@@ -70,9 +71,9 @@ func TestReadAuditLog_WithLimit(t *testing.T) {
 	}
 	writeAuditLogFile(t, logPath, entries)
 
-	result, err := readAuditLog(logPath, 3)
+	result, err := mcp.ReadAuditLog(logPath, 3)
 	if err != nil {
-		t.Fatalf("readAuditLog() error: %v", err)
+		t.Fatalf("mcp.ReadAuditLog() error: %v", err)
 	}
 
 	if len(result) != 3 {
@@ -88,9 +89,9 @@ func TestReadAuditLog_EmptyFile(t *testing.T) {
 		t.Fatalf("write empty file: %v", err)
 	}
 
-	result, err := readAuditLog(logPath, 0)
+	result, err := mcp.ReadAuditLog(logPath, 0)
 	if err != nil {
-		t.Fatalf("readAuditLog() error: %v", err)
+		t.Fatalf("mcp.ReadAuditLog() error: %v", err)
 	}
 
 	if len(result) != 0 {
@@ -111,9 +112,9 @@ not valid json
 		t.Fatalf("write log file: %v", err)
 	}
 
-	result, err := readAuditLog(logPath, 0)
+	result, err := mcp.ReadAuditLog(logPath, 0)
 	if err != nil {
-		t.Fatalf("readAuditLog() error: %v", err)
+		t.Fatalf("mcp.ReadAuditLog() error: %v", err)
 	}
 
 	if len(result) != 2 {
@@ -124,7 +125,7 @@ not valid json
 func TestReadAuditLog_NotFound(t *testing.T) {
 	vaultDir := t.TempDir()
 
-	_, err := readAuditLog(filepath.Join(vaultDir, "audit-nonexistent.log"), 0)
+	_, err := mcp.ReadAuditLog(filepath.Join(vaultDir, "audit-nonexistent.log"), 0)
 	if err == nil {
 		t.Fatal("expected error for non-existent audit log")
 	}
@@ -142,7 +143,7 @@ func TestSinceFilter(t *testing.T) {
 		{Timestamp: mediumTS, Action: "medium"},
 	}
 
-	filtered := sinceFilter(entries, "24h")
+	filtered := mcp.SinceFilter(entries, "24h")
 
 	if len(filtered) != 2 {
 		t.Fatalf("filtered count = %d, want 2", len(filtered))
@@ -162,7 +163,7 @@ func TestSinceFilter_AllSinceFilter(t *testing.T) {
 		{Timestamp: now.Add(-2 * time.Hour).Format(time.RFC3339), Action: "still-recent"},
 	}
 
-	filtered := sinceFilter(entries, "24h")
+	filtered := mcp.SinceFilter(entries, "24h")
 
 	if len(filtered) != 2 {
 		t.Fatalf("filtered count = %d, want 2 (all entries within 24h)", len(filtered))
@@ -174,7 +175,7 @@ func TestSinceFilter_NoSince(t *testing.T) {
 		{Timestamp: "2024-01-01T00:00:00Z", Action: "old"},
 	}
 
-	filtered := sinceFilter(entries, "")
+	filtered := mcp.SinceFilter(entries, "")
 
 	if len(filtered) != 1 {
 		t.Fatalf("filtered count = %d, want 1 (no filter)", len(filtered))
@@ -188,7 +189,7 @@ func TestSinceFilter_InvalidDuration(t *testing.T) {
 		{Timestamp: now.Add(-24 * time.Hour).Format(time.RFC3339), Action: "old"},
 	}
 
-	filtered := sinceFilter(entries, "not-a-duration")
+	filtered := mcp.SinceFilter(entries, "not-a-duration")
 
 	if len(filtered) != 2 {
 		t.Fatalf("filtered count = %d, want 2 (invalid duration fallback)", len(filtered))
@@ -203,7 +204,7 @@ func TestSinceFilter_MalformedTimestamp(t *testing.T) {
 		{Timestamp: "not-a-timestamp", Action: "bad-ts"},
 	}
 
-	filtered := sinceFilter(entries, "2h")
+	filtered := mcp.SinceFilter(entries, "2h")
 
 	if len(filtered) != 1 {
 		t.Fatalf("filtered count = %d, want 1 (bad timestamp skipped)", len(filtered))

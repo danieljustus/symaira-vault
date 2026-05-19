@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	cli "github.com/danieljustus/OpenPass/internal/cli"
+
 	"github.com/danieljustus/OpenPass/internal/config"
 	gitpkg "github.com/danieljustus/OpenPass/internal/git"
 	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
@@ -18,11 +20,11 @@ func TestInitCommand_HiddenPassphrase(t *testing.T) {
 	restore := pipeStdin(t, string(passphrase)+"\n")
 	defer restore()
 
-	rootCmd.SetArgs([]string{"init", vaultDir})
-	defer rootCmd.SetArgs(nil)
+	cli.RootCmd.SetArgs([]string{"init", vaultDir})
+	defer cli.RootCmd.SetArgs(nil)
 
 	output := captureStdout(func() {
-		if err := rootCmd.Execute(); err != nil {
+		if err := cli.RootCmd.Execute(); err != nil {
 			t.Fatalf("init command failed: %v", err)
 		}
 	})
@@ -66,11 +68,11 @@ func TestCmdInit_Success(t *testing.T) {
 		_ = r.Close()
 	})
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "init"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "init"})
+	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
 
 	output := captureStdout(func() {
-		_ = rootCmd.Execute()
+		_ = cli.RootCmd.Execute()
 	})
 
 	if !strings.Contains(output, "Vault initialized") {
@@ -86,12 +88,12 @@ func TestCmdInit_AlreadyInitialized(t *testing.T) {
 		t.Fatalf("pre-init vault: %v", err)
 	}
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "init"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "init"})
+	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
 
 	var execErr error
 	captureStderr(func() {
-		execErr = rootCmd.Execute()
+		execErr = cli.RootCmd.Execute()
 	})
 
 	if execErr == nil {
@@ -116,12 +118,12 @@ func TestCmdInit_ShortPassphrase(t *testing.T) {
 		_ = r.Close()
 	})
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "init"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "init"})
+	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
 
 	var execErr error
 	captureStderr(func() {
-		execErr = rootCmd.Execute()
+		execErr = cli.RootCmd.Execute()
 	})
 
 	if execErr == nil {
@@ -139,10 +141,10 @@ func TestInit_ErrorPaths(t *testing.T) {
 		_ = os.Setenv("OPENPASS_VAULT", tmpDir)
 		defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
 
-		rootCmd.SetArgs([]string{"--vault", tmpDir, "init"})
-		defer rootCmd.SetArgs(nil)
+		cli.RootCmd.SetArgs([]string{"--vault", tmpDir, "init"})
+		defer cli.RootCmd.SetArgs(nil)
 
-		err := rootCmd.Execute()
+		err := cli.RootCmd.Execute()
 		if err == nil || !strings.Contains(err.Error(), "already initialized") {
 			t.Errorf("expected 'already initialized' error, got: %v", err)
 		}

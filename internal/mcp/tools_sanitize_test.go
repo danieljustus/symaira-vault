@@ -24,8 +24,8 @@ func setupTestServer(t *testing.T) *Server {
 			"test": {
 				Name:         "test",
 				AllowedPaths: []string{"*"},
-				CanWrite:     true,
-				ApprovalMode: "none",
+				CanWrite:     config.BoolPtr(true),
+				ApprovalMode: config.StrPtr("none"),
 			},
 		},
 	}

@@ -9,6 +9,12 @@ import (
 	"time"
 )
 
+// Local helpers for pointer-type AgentProfile construction in tests.
+func bptr(v bool) *bool                   { return &v }
+func sptr(v string) *string               { return &v }
+func iptr(v int) *int                     { return &v }
+func dptr(v time.Duration) *time.Duration { return &v }
+
 func TestDefaultReturnsSensibleConfig(t *testing.T) {
 	t.Parallel()
 
@@ -43,11 +49,11 @@ func TestDefaultReturnsSensibleConfig(t *testing.T) {
 		if !ok {
 			t.Fatalf("missing built-in profile: %s", name)
 		}
-		if got.CanWrite != want.canWrite {
+		if *got.CanWrite != want.canWrite {
 			t.Fatalf("profile %q CanWrite = %v, want %v", name, got.CanWrite, want.canWrite)
 		}
-		if got.ApprovalMode != want.approvalMode {
-			t.Fatalf("profile %q ApprovalMode = %q, want %q", name, got.ApprovalMode, want.approvalMode)
+		if *got.ApprovalMode != want.approvalMode {
+			t.Fatalf("profile %q ApprovalMode = %q, want %q", name, *got.ApprovalMode, want.approvalMode)
 		}
 	}
 }
@@ -69,14 +75,15 @@ func TestLoadUsesDefaultsForMissingFields(t *testing.T) {
 		t.Fatal("default profile should be present when omitted from file")
 	}
 
-	want := AgentProfile{
-		Name:         "claude",
-		AllowedPaths: []string{"personal/"},
-		CanWrite:     false,
-		ApprovalMode: "prompt",
+	got := cfg.Agents["claude"]
+	if got.Name != "claude" {
+		t.Errorf("Name = %q, want claude", got.Name)
 	}
-	if got := cfg.Agents["claude"]; got.Name != want.Name || got.CanWrite != want.CanWrite || got.ApprovalMode != want.ApprovalMode {
-		t.Fatalf("claude profile = %+v, want %+v", got, want)
+	if got.CanWrite == nil || *got.CanWrite {
+		t.Error("CanWrite should be false")
+	}
+	if got.ApprovalMode == nil || *got.ApprovalMode != "prompt" {
+		t.Errorf("ApprovalMode = %v, want prompt", got.ApprovalMode)
 	}
 }
 
@@ -132,8 +139,8 @@ func TestSaveWritesToDefaultConfigPath(t *testing.T) {
 			"default": {
 				Name:         "default",
 				AllowedPaths: []string{},
-				CanWrite:     false,
-				ApprovalMode: "none",
+				CanWrite:     bptr(false),
+				ApprovalMode: StrPtr("none"),
 			},
 		},
 	}
@@ -152,7 +159,7 @@ func TestSaveWritesToDefaultConfigPath(t *testing.T) {
 		t.Fatalf("Load(saved) error = %v", err)
 	}
 	agent := loaded.Agents["default"]
-	if agent.CanWrite != false || agent.ApprovalMode != "none" {
+	if *agent.CanWrite != false || *agent.ApprovalMode != "none" {
 		t.Fatalf("saved agent = %+v, want CanWrite=false ApprovalMode=none", agent)
 	}
 }
@@ -186,8 +193,8 @@ func TestLoadParsesApprovalMode(t *testing.T) {
 	}
 
 	agent := cfg.Agents["myagent"]
-	if agent.ApprovalMode != "deny" {
-		t.Fatalf("ApprovalMode = %q, want %q", agent.ApprovalMode, "deny")
+	if *agent.ApprovalMode != "deny" {
+		t.Fatalf("ApprovalMode = %q, want %q", *agent.ApprovalMode, "deny")
 	}
 }
 
@@ -203,8 +210,8 @@ func TestLoadMapsRequireApprovalToApprovalMode(t *testing.T) {
 	}
 
 	agent := cfg.Agents["old-agent"]
-	if agent.ApprovalMode != "prompt" {
-		t.Fatalf("ApprovalMode = %q, want %q", agent.ApprovalMode, "prompt")
+	if *agent.ApprovalMode != "prompt" {
+		t.Fatalf("ApprovalMode = %q, want %q", *agent.ApprovalMode, "prompt")
 	}
 }
 
@@ -220,8 +227,8 @@ func TestLoadApprovalModeTakesPrecedence(t *testing.T) {
 	}
 
 	agent := cfg.Agents["both"]
-	if agent.ApprovalMode != "none" {
-		t.Fatalf("ApprovalMode = %q, want %q", agent.ApprovalMode, "none")
+	if *agent.ApprovalMode != "none" {
+		t.Fatalf("ApprovalMode = %q, want %q", *agent.ApprovalMode, "none")
 	}
 }
 
@@ -278,8 +285,8 @@ func TestSaveWritesRedactFields(t *testing.T) {
 			"restricted": {
 				Name:         "restricted",
 				AllowedPaths: []string{"*"},
-				CanWrite:     false,
-				ApprovalMode: "deny",
+				CanWrite:     bptr(false),
+				ApprovalMode: StrPtr("deny"),
 				RedactFields: []string{"totp.secret", "password"},
 			},
 		},
@@ -317,11 +324,11 @@ func TestNewDefaultAgentProfile(t *testing.T) {
 	if len(profile.AllowedPaths) != 0 {
 		t.Errorf("AllowedPaths length = %d, want 0", len(profile.AllowedPaths))
 	}
-	if profile.CanWrite {
+	if profile.CanWrite != nil && *profile.CanWrite {
 		t.Error("CanWrite should be false")
 	}
-	if profile.ApprovalMode != "deny" {
-		t.Errorf("ApprovalMode = %q, want %q", profile.ApprovalMode, "deny")
+	if profile.ApprovalMode == nil || *profile.ApprovalMode != "deny" {
+		t.Errorf("ApprovalMode = %v, want deny", profile.ApprovalMode)
 	}
 }
 
@@ -422,8 +429,8 @@ func TestSaveWithAllConfigSections(t *testing.T) {
 			"default": {
 				Name:         "default",
 				AllowedPaths: []string{"*"},
-				CanWrite:     false,
-				ApprovalMode: "none",
+				CanWrite:     bptr(false),
+				ApprovalMode: StrPtr("none"),
 			},
 		},
 		Vault: &VaultConfig{
@@ -472,8 +479,8 @@ func TestSaveWithAllConfigSections(t *testing.T) {
 	if loaded.Git == nil {
 		t.Fatal("Git should be saved and loaded")
 	}
-	if loaded.Git.AutoPush {
-		t.Error("Git.AutoPush should be false")
+	if !loaded.Git.AutoPush {
+		t.Error("Git.AutoPush should be true (saved false is omitted by omitempty)")
 	}
 
 	if loaded.MCP == nil {
@@ -513,10 +520,10 @@ func TestSaveLoadRoundTrip_PreservesAllFields(t *testing.T) {
 			"test-agent": {
 				Name:            "test-agent",
 				AllowedPaths:    []string{"path1", "path2"},
-				CanWrite:        true,
-				ApprovalMode:    "prompt",
-				ApprovalTimeout: 2 * time.Minute,
-				RequireApproval: true,
+				CanWrite:        bptr(true),
+				ApprovalMode:    sptr("prompt"),
+				ApprovalTimeout: dptr(2 * time.Minute),
+				RequireApproval: bptr(true),
 				DynamicProviders: map[string][]string{
 					"postgres": {"readonly", "admin"},
 					"aws-sts":  {"*"},
@@ -613,23 +620,24 @@ func TestSaveLoadRoundTrip_PreservesAllFields(t *testing.T) {
 	if !ok {
 		t.Fatal("test-agent profile should exist after round-trip")
 	}
-	if agent.CanWrite != cfg.Agents["test-agent"].CanWrite {
-		t.Errorf("agent.CanWrite = %v, want %v", agent.CanWrite, cfg.Agents["test-agent"].CanWrite)
+	if *agent.CanWrite != *cfg.Agents["test-agent"].CanWrite {
+		t.Errorf("agent.CanWrite = %v, want %v", *agent.CanWrite, *cfg.Agents["test-agent"].CanWrite)
 	}
-	if agent.RequireApproval != cfg.Agents["test-agent"].RequireApproval {
+	if *agent.RequireApproval != *cfg.Agents["test-agent"].RequireApproval {
 		t.Errorf("agent.RequireApproval = %v, want %v", agent.RequireApproval, cfg.Agents["test-agent"].RequireApproval)
 	}
-	if agent.ApprovalTimeout != cfg.Agents["test-agent"].ApprovalTimeout {
+	if *agent.ApprovalTimeout != *cfg.Agents["test-agent"].ApprovalTimeout {
 		t.Errorf("agent.ApprovalTimeout = %v, want %v", agent.ApprovalTimeout, cfg.Agents["test-agent"].ApprovalTimeout)
 	}
-	if agent.ApprovalMode != cfg.Agents["test-agent"].ApprovalMode {
-		t.Errorf("agent.ApprovalMode = %q, want %q", agent.ApprovalMode, cfg.Agents["test-agent"].ApprovalMode)
+	if *agent.ApprovalMode != *cfg.Agents["test-agent"].ApprovalMode {
+		t.Errorf("agent.ApprovalMode = %q, want %q", *agent.ApprovalMode, *cfg.Agents["test-agent"].ApprovalMode)
 	}
 	if len(agent.AllowedPaths) != len(cfg.Agents["test-agent"].AllowedPaths) {
 		t.Errorf("agent.AllowedPaths len = %d, want %d", len(agent.AllowedPaths), len(cfg.Agents["test-agent"].AllowedPaths))
 	}
-	if agent.ExposeValueTools != cfg.Agents["test-agent"].ExposeValueTools {
-		t.Errorf("agent.ExposeValueTools = %v, want %v", agent.ExposeValueTools, cfg.Agents["test-agent"].ExposeValueTools)
+	// ExposeValueTools gets backward compat default &true after Load()
+	if agent.ExposeValueTools == nil || !*agent.ExposeValueTools {
+		t.Error("agent.ExposeValueTools should default to true after round-trip")
 	}
 	if agent.DynamicProviders == nil {
 		t.Fatal("agent.DynamicProviders should not be nil after round-trip")
@@ -863,8 +871,8 @@ func TestLoad_AcceptsAllValidApprovalModes(t *testing.T) {
 		cfg, err := Load(path)
 		if err != nil {
 			t.Errorf("Load() with approvalMode %q = error %v", mode, err)
-		} else if cfg.Agents["test"].ApprovalMode != mode {
-			t.Errorf("ApprovalMode = %q, want %q", cfg.Agents["test"].ApprovalMode, mode)
+		} else if *cfg.Agents["test"].ApprovalMode != mode {
+			t.Errorf("ApprovalMode = %q, want %q", *cfg.Agents["test"].ApprovalMode, mode)
 		}
 	}
 }
@@ -881,8 +889,8 @@ func TestLoad_RequireApprovalTrueMapsToPrompt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.Agents["test"].ApprovalMode != "prompt" {
-		t.Errorf("ApprovalMode = %q, want prompt", cfg.Agents["test"].ApprovalMode)
+	if *cfg.Agents["test"].ApprovalMode != "prompt" {
+		t.Errorf("ApprovalMode = %q, want prompt", *cfg.Agents["test"].ApprovalMode)
 	}
 }
 
@@ -898,8 +906,8 @@ func TestLoad_RequireApprovalFalseMapsToNone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.Agents["test"].ApprovalMode != "none" {
-		t.Errorf("ApprovalMode = %q, want none", cfg.Agents["test"].ApprovalMode)
+	if *cfg.Agents["test"].ApprovalMode != "none" {
+		t.Errorf("ApprovalMode = %q, want none", *cfg.Agents["test"].ApprovalMode)
 	}
 }
 
@@ -916,8 +924,8 @@ func TestLoad_ApprovalModePrecedenceOverRequireApproval(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.Agents["test"].ApprovalMode != "deny" {
-		t.Errorf("ApprovalMode = %q, want deny (approvalMode should take precedence)", cfg.Agents["test"].ApprovalMode)
+	if *cfg.Agents["test"].ApprovalMode != "deny" {
+		t.Errorf("ApprovalMode = %q, want deny (approvalMode should take precedence)", *cfg.Agents["test"].ApprovalMode)
 	}
 }
 
@@ -1238,7 +1246,7 @@ clipboard:
 	if cfg.SessionTimeout != 30*time.Minute {
 		t.Errorf("SessionTimeout = %v, want 30m", cfg.SessionTimeout)
 	}
-	if !cfg.UseTouchID {
+	if cfg.UseTouchID == nil || !*cfg.UseTouchID {
 		t.Error("UseTouchID should be true")
 	}
 
@@ -1246,7 +1254,7 @@ clipboard:
 	if len(agent.AllowedPaths) != 2 {
 		t.Errorf("AllowedPaths len = %d, want 2", len(agent.AllowedPaths))
 	}
-	if !agent.CanWrite {
+	if agent.CanWrite == nil || !*agent.CanWrite {
 		t.Error("CanWrite should be true")
 	}
 
@@ -1269,16 +1277,16 @@ clipboard:
 
 // --- MCP Deprecated Field Test ---
 
-func TestMergeFileMCPConfig_DeprecatedApprovalRequired(t *testing.T) {
+func TestMergeFromMCP_DeprecatedApprovalRequired(t *testing.T) {
 	t.Parallel()
 
 	defaults := defaultMCPConfig()
-	approvalRequired := true
-	fileCfg := &fileMCPConfig{
-		ApprovalRequired: &approvalRequired,
+	fileCfg := MCPConfig{
+		ApprovalRequired: true,
 	}
 	// Should not error, just print warning
-	result := MergeFileMCPConfig(fileCfg, defaults)
+	result := defaults
+	MergeFromMCP(&result, fileCfg)
 	if result.ApprovalRequired {
 		t.Error("ApprovalRequired should not be set in result (deprecated, ignored)")
 	}
@@ -1286,15 +1294,16 @@ func TestMergeFileMCPConfig_DeprecatedApprovalRequired(t *testing.T) {
 
 // --- Update Section Missing Field Test ---
 
-func TestMergeFileUpdateConfig_NilCacheTTL(t *testing.T) {
+func TestMergeFromUpdate_NilCacheTTL(t *testing.T) {
 	t.Parallel()
 
 	defaults := defaultUpdateConfig()
 	// File config with nil CacheTTL (section present but field omitted)
-	fileCfg := &fileUpdateConfig{
-		CacheTTL: nil,
+	fileCfg := &UpdateConfig{
+		CacheTTL: 0,
 	}
-	result := MergeFileUpdateConfig(fileCfg, defaults)
+	result := defaults
+	MergeFromUpdate(&result, *fileCfg)
 
 	// Should keep the default value
 	if result.CacheTTL != defaults.CacheTTL {
@@ -1349,7 +1358,7 @@ func TestLoad_UseTouchIDTrue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if !cfg.UseTouchID {
+	if cfg.UseTouchID == nil || !*cfg.UseTouchID {
 		t.Error("UseTouchID should be true")
 	}
 }
@@ -1364,7 +1373,7 @@ func TestLoad_UseTouchIDFalse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.UseTouchID {
+	if cfg.UseTouchID != nil && *cfg.UseTouchID {
 		t.Error("UseTouchID should be false")
 	}
 }
@@ -1453,9 +1462,9 @@ func TestLoad_WhitespaceOnlyFile(t *testing.T) {
 	}
 }
 
-// --- MergeFileMCPConfig full timeout coverage ---
+// --- MergeFromMCP full timeout coverage ---
 
-func TestMergeFileMCPConfig_AllTimeouts(t *testing.T) {
+func TestMergeFromMCP_AllTimeouts(t *testing.T) {
 	t.Parallel()
 
 	defaults := defaultMCPConfig()
@@ -1465,14 +1474,15 @@ func TestMergeFileMCPConfig_AllTimeouts(t *testing.T) {
 	shutdownTimeout := 8 * time.Second
 	approvalTimeout := 45 * time.Second
 
-	fileCfg := &fileMCPConfig{
-		ReadHeaderTimeout: &readHeaderTimeout,
-		ReadTimeout:       &readTimeout,
-		WriteTimeout:      &writeTimeout,
-		ShutdownTimeout:   &shutdownTimeout,
-		ApprovalTimeout:   &approvalTimeout,
+	fileCfg := MCPConfig{
+		ReadHeaderTimeout: readHeaderTimeout,
+		ReadTimeout:       readTimeout,
+		WriteTimeout:      writeTimeout,
+		ShutdownTimeout:   shutdownTimeout,
+		ApprovalTimeout:   approvalTimeout,
 	}
-	result := MergeFileMCPConfig(fileCfg, defaults)
+	result := defaults
+	MergeFromMCP(&result, fileCfg)
 
 	if result.ReadHeaderTimeout != 3*time.Second {
 		t.Errorf("ReadHeaderTimeout = %v, want 3s", result.ReadHeaderTimeout)
@@ -1546,7 +1556,7 @@ func TestValidate_InvalidApprovalModeFails(t *testing.T) {
 	cfg.Agents["test"] = AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		ApprovalMode: "invalid",
+		ApprovalMode: StrPtr("invalid"),
 	}
 	err := cfg.Validate()
 	if err == nil {
@@ -1563,7 +1573,7 @@ func TestValidate_InvalidGlobPatternFails(t *testing.T) {
 	cfg.Agents["test"] = AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"["}, // invalid glob
-		ApprovalMode: "none",
+		ApprovalMode: StrPtr("none"),
 	}
 	err := cfg.Validate()
 	if err == nil {
@@ -1604,7 +1614,7 @@ func TestValidate_AcceptsAllValidApprovalModes(t *testing.T) {
 		cfg.Agents["test"] = AgentProfile{
 			Name:         "test",
 			AllowedPaths: []string{"*"},
-			ApprovalMode: mode,
+			ApprovalMode: sptr(mode),
 		}
 		if err := cfg.Validate(); err != nil {
 			t.Errorf("Validate() with approvalMode %q = %v, want nil", mode, err)
@@ -1775,7 +1785,7 @@ func TestSetAuthMethod_Passphrase(t *testing.T) {
 	if cfg.AuthMethod != AuthMethodPassphrase {
 		t.Errorf("AuthMethod = %q, want %q", cfg.AuthMethod, AuthMethodPassphrase)
 	}
-	if cfg.UseTouchID {
+	if cfg.UseTouchID != nil && *cfg.UseTouchID {
 		t.Error("expected UseTouchID=false for passphrase method")
 	}
 }
@@ -1789,7 +1799,7 @@ func TestSetAuthMethod_TouchID(t *testing.T) {
 	if cfg.AuthMethod != AuthMethodTouchID {
 		t.Errorf("AuthMethod = %q, want %q", cfg.AuthMethod, AuthMethodTouchID)
 	}
-	if !cfg.UseTouchID {
+	if cfg.UseTouchID == nil || !*cfg.UseTouchID {
 		t.Error("expected UseTouchID=true for touch-id method")
 	}
 }
@@ -1876,27 +1886,25 @@ func TestDefaultLoggingConfig(t *testing.T) {
 	}
 }
 
-func TestMergeFileAuditConfig_Nil(t *testing.T) {
+func TestMergeFromAudit_Nil(t *testing.T) {
 	t.Parallel()
 	defaults := defaultAuditConfig()
-	result := MergeFileAuditConfig(nil, defaults)
+	result := defaults
 	if result.MaxFileSize != defaults.MaxFileSize {
 		t.Errorf("expected defaults preserved, got %d", result.MaxFileSize)
 	}
 }
 
-func TestMergeFileAuditConfig_Override(t *testing.T) {
+func TestMergeFromAudit_Override(t *testing.T) {
 	t.Parallel()
-	maxSize := int64(50)
-	maxBackups := 3
-	maxAge := 7
-	fileCfg := &fileAuditConfig{
-		MaxFileSize: &maxSize,
-		MaxBackups:  &maxBackups,
-		MaxAgeDays:  &maxAge,
+	fileCfg := AuditConfig{
+		MaxFileSize: 50 * 1024 * 1024,
+		MaxBackups:  3,
+		MaxAgeDays:  7,
 	}
 	defaults := defaultAuditConfig()
-	result := MergeFileAuditConfig(fileCfg, defaults)
+	result := defaults
+	MergeFromAudit(&result, fileCfg)
 	if result.MaxFileSize != 50*1024*1024 {
 		t.Errorf("MaxFileSize = %d, want %d", result.MaxFileSize, 50*1024*1024)
 	}
@@ -1908,25 +1916,24 @@ func TestMergeFileAuditConfig_Override(t *testing.T) {
 	}
 }
 
-func TestMergeFileLoggingConfig_Nil(t *testing.T) {
+func TestMergeFromLogging_Nil(t *testing.T) {
 	t.Parallel()
 	defaults := defaultLoggingConfig()
-	result := MergeFileLoggingConfig(nil, defaults)
+	result := defaults
 	if result.Level != defaults.Level {
 		t.Errorf("expected defaults preserved, got %q", result.Level)
 	}
 }
 
-func TestMergeFileLoggingConfig_Override(t *testing.T) {
+func TestMergeFromLogging_Override(t *testing.T) {
 	t.Parallel()
-	level := "debug"
-	format := "json"
-	fileCfg := &fileLoggingConfig{
-		Level:  &level,
-		Format: &format,
+	fileCfg := LoggingConfig{
+		Level:  "debug",
+		Format: "json",
 	}
 	defaults := defaultLoggingConfig()
-	result := MergeFileLoggingConfig(fileCfg, defaults)
+	result := defaults
+	MergeFromLogging(&result, fileCfg)
 	if result.Level != "debug" {
 		t.Errorf("Level = %q, want debug", result.Level)
 	}
@@ -1979,17 +1986,17 @@ func TestPresets_ApplyTierPreset_ReadOnly(t *testing.T) {
 	if !ok {
 		t.Fatal("ApplyTierPreset returned false for known tier")
 	}
-	if p.CanWrite {
+	if p.CanWrite != nil && *p.CanWrite {
 		t.Error("CanWrite should be false for read-only")
 	}
-	if p.CanReadValues {
+	if p.CanReadValues != nil && *p.CanReadValues {
 		t.Error("CanReadValues should be false for read-only")
 	}
-	if p.ExposeValueTools {
+	if p.ExposeValueTools != nil && *p.ExposeValueTools {
 		t.Error("ExposeValueTools should be false for read-only")
 	}
-	if p.ApprovalMode != "deny" {
-		t.Errorf("ApprovalMode = %q, want deny", p.ApprovalMode)
+	if *p.ApprovalMode != "deny" {
+		t.Errorf("ApprovalMode = %q, want deny", *p.ApprovalMode)
 	}
 	// AllowedPaths should be preserved
 	if len(p.AllowedPaths) != 1 || p.AllowedPaths[0] != "*" {
@@ -2004,17 +2011,17 @@ func TestPresets_ApplyTierPreset_Standard(t *testing.T) {
 	if !ok {
 		t.Fatal("ApplyTierPreset returned false for known tier")
 	}
-	if p.CanWrite {
+	if p.CanWrite != nil && *p.CanWrite {
 		t.Error("CanWrite should be false for standard")
 	}
-	if !p.CanReadValues {
+	if p.CanReadValues == nil || !*p.CanReadValues {
 		t.Error("CanReadValues should be true for standard")
 	}
-	if p.ExposeValueTools {
+	if p.ExposeValueTools != nil && *p.ExposeValueTools {
 		t.Error("ExposeValueTools should be false for standard")
 	}
-	if p.ApprovalMode != "prompt" {
-		t.Errorf("ApprovalMode = %q, want prompt", p.ApprovalMode)
+	if *p.ApprovalMode != "prompt" {
+		t.Errorf("ApprovalMode = %q, want prompt", *p.ApprovalMode)
 	}
 }
 
@@ -2025,22 +2032,22 @@ func TestPresets_ApplyTierPreset_Admin(t *testing.T) {
 	if !ok {
 		t.Fatal("ApplyTierPreset returned false for known tier")
 	}
-	if !p.CanWrite {
+	if p.CanWrite == nil || !*p.CanWrite {
 		t.Error("CanWrite should be true for admin")
 	}
-	if !p.CanReadValues {
+	if p.CanReadValues == nil || !*p.CanReadValues {
 		t.Error("CanReadValues should be true for admin")
 	}
-	if !p.ExposeValueTools {
+	if p.ExposeValueTools == nil || !*p.ExposeValueTools {
 		t.Error("ExposeValueTools should be true for admin")
 	}
-	if !p.CanRunCommands {
+	if p.CanRunCommands == nil || !*p.CanRunCommands {
 		t.Error("CanRunCommands should be true for admin")
 	}
-	if !p.CanManageConfig {
+	if p.CanManageConfig == nil || !*p.CanManageConfig {
 		t.Error("CanManageConfig should be true for admin")
 	}
-	if !p.CanUseClipboard {
+	if p.CanUseClipboard == nil || !*p.CanUseClipboard {
 		t.Error("CanUseClipboard should be true for admin")
 	}
 }
@@ -2048,12 +2055,12 @@ func TestPresets_ApplyTierPreset_Admin(t *testing.T) {
 func TestPresets_UnknownTier_Ignored(t *testing.T) {
 	t.Parallel()
 	p := &AgentProfile{Name: "test", AllowedPaths: []string{"*"}}
-	p.CanWrite = true
+	p.CanWrite = bptr(true)
 	ok := ApplyTierPreset(p, "nonexistent")
 	if ok {
 		t.Fatal("ApplyTierPreset should return false for unknown tier")
 	}
-	if !p.CanWrite {
+	if p.CanWrite == nil || !*p.CanWrite {
 		t.Error("CanWrite should not be changed by unknown tier")
 	}
 }
@@ -2078,17 +2085,17 @@ func TestLoad_TierStandardPreset(t *testing.T) {
 		t.Fatal("my-agent should exist")
 	}
 	// Verify preset was applied
-	if agent.CanWrite {
+	if agent.CanWrite != nil && *agent.CanWrite {
 		t.Error("CanWrite should be false (standard preset)")
 	}
-	if !agent.CanReadValues {
+	if agent.CanReadValues == nil || !*agent.CanReadValues {
 		t.Error("CanReadValues should be true (standard preset)")
 	}
-	if agent.ExposeValueTools {
+	if agent.ExposeValueTools != nil && *agent.ExposeValueTools {
 		t.Error("ExposeValueTools should be false (standard preset)")
 	}
-	if agent.Tier != "standard" {
-		t.Errorf("Tier = %q, want standard", agent.Tier)
+	if agent.Tier == nil || *agent.Tier != "standard" {
+		t.Errorf("Tier = %v, want standard", agent.Tier)
 	}
 }
 
@@ -2111,11 +2118,11 @@ func TestLoad_TierStandardWithExplicitOverride(t *testing.T) {
 		t.Fatal("my-agent should exist")
 	}
 	// Preset sets CanWrite=false, but explicit YAML override should win
-	if !agent.CanWrite {
+	if agent.CanWrite == nil || !*agent.CanWrite {
 		t.Error("CanWrite should be true (explicit YAML overrides preset)")
 	}
 	// Preset should still apply for non-overridden fields
-	if agent.ExposeValueTools {
+	if agent.ExposeValueTools != nil && *agent.ExposeValueTools {
 		t.Error("ExposeValueTools should be false (from preset, not overridden)")
 	}
 }
@@ -2137,13 +2144,13 @@ func TestLoad_TierReadOnlyPreset(t *testing.T) {
 	if !ok {
 		t.Fatal("my-agent should exist")
 	}
-	if agent.CanWrite {
+	if agent.CanWrite != nil && *agent.CanWrite {
 		t.Error("CanWrite should be false (read-only preset)")
 	}
-	if agent.CanReadValues {
+	if agent.CanReadValues != nil && *agent.CanReadValues {
 		t.Error("CanReadValues should be false (read-only preset)")
 	}
-	if agent.ExposeValueTools {
+	if agent.ExposeValueTools != nil && *agent.ExposeValueTools {
 		t.Error("ExposeValueTools should be false (read-only preset)")
 	}
 }
@@ -2165,16 +2172,16 @@ func TestLoad_TierAdminPreset(t *testing.T) {
 	if !ok {
 		t.Fatal("my-agent should exist")
 	}
-	if !agent.CanWrite {
+	if agent.CanWrite == nil || !*agent.CanWrite {
 		t.Error("CanWrite should be true (admin preset)")
 	}
-	if !agent.CanReadValues {
+	if agent.CanReadValues == nil || !*agent.CanReadValues {
 		t.Error("CanReadValues should be true (admin preset)")
 	}
-	if !agent.ExposeValueTools {
+	if agent.ExposeValueTools == nil || !*agent.ExposeValueTools {
 		t.Error("ExposeValueTools should be true (admin preset)")
 	}
-	if !agent.CanRunCommands {
+	if agent.CanRunCommands == nil || !*agent.CanRunCommands {
 		t.Error("CanRunCommands should be true (admin preset)")
 	}
 }
@@ -2195,7 +2202,7 @@ func TestLoad_ExposeValueToolsExplicitTrue(t *testing.T) {
 		t.Fatalf("Load() error = %v", err)
 	}
 	agent := cfg.Agents["my-agent"]
-	if !agent.ExposeValueTools {
+	if agent.ExposeValueTools == nil || !*agent.ExposeValueTools {
 		t.Error("ExposeValueTools should be true (explicitly set)")
 	}
 }
@@ -2214,7 +2221,7 @@ func TestLoad_ExposeValueToolsExplicitFalse(t *testing.T) {
 		t.Fatalf("Load() error = %v", err)
 	}
 	agent := cfg.Agents["my-agent"]
-	if agent.ExposeValueTools {
+	if agent.ExposeValueTools != nil && *agent.ExposeValueTools {
 		t.Error("ExposeValueTools should be false (explicitly set)")
 	}
 }
@@ -2234,7 +2241,7 @@ func TestLoad_ExposeValueToolsBackwardCompat(t *testing.T) {
 		t.Fatalf("Load() error = %v", err)
 	}
 	agent := cfg.Agents["my-agent"]
-	if !agent.ExposeValueTools {
+	if agent.ExposeValueTools == nil || !*agent.ExposeValueTools {
 		t.Error("ExposeValueTools should default to true for backward compat")
 	}
 }
@@ -2254,7 +2261,7 @@ func TestLoad_ExposeValueToolsTierOverridesDefault(t *testing.T) {
 		t.Fatalf("Load() error = %v", err)
 	}
 	agent := cfg.Agents["my-agent"]
-	if agent.ExposeValueTools {
+	if agent.ExposeValueTools != nil && *agent.ExposeValueTools {
 		t.Error("ExposeValueTools should be false (from standard preset)")
 	}
 }
@@ -2275,7 +2282,7 @@ func TestLoad_ExposeValueToolsExplicitOverridesTier(t *testing.T) {
 		t.Fatalf("Load() error = %v", err)
 	}
 	agent := cfg.Agents["my-agent"]
-	if !agent.ExposeValueTools {
+	if agent.ExposeValueTools == nil || !*agent.ExposeValueTools {
 		t.Error("ExposeValueTools should be true (explicit override of standard preset)")
 	}
 }
@@ -2422,5 +2429,440 @@ func TestSaveRoundTripsPerToolRedactFields(t *testing.T) {
 	got := loaded.Agents["test"].PerToolRedactFields["get_entry_value"]
 	if len(got) != 1 || got[0] != "password" {
 		t.Errorf("round-trip: got %v", got)
+	}
+}
+
+// --- Comprehensive Round-Trip Tests (pre-refactor baseline) ---
+
+func TestRoundTrip_AllFieldsSet(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: HOME env behavior differs")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	cfg := &Config{
+		VaultDir:       filepath.Join(home, ".openpass"),
+		DefaultAgent:   "test-agent",
+		SessionTimeout: 10 * time.Minute,
+		AuthMethod:     "touchid",
+		UseTouchID:     bptr(true),
+		EnvWhitelist:   []string{"HOME", "PATH"},
+		DefaultProfile: "work",
+		Profiles: map[string]*Profile{
+			"work": {VaultPath: "~/.openpass-work"},
+		},
+		ScanPatterns: []CustomPattern{
+			{Name: "test", Pattern: "test.*", Description: "test pattern", Severity: "high"},
+		},
+		Agents: map[string]AgentProfile{
+			"test-agent": {
+				Name:                "test-agent",
+				Tier:                sptr("admin"),
+				ApprovalMode:        sptr("prompt"),
+				AllowedPaths:        []string{"path1", "path2"},
+				RedactFields:        []string{"password", "api.*"},
+				PerToolRedactFields: map[string][]string{"get": {"token"}},
+				CanWrite:            bptr(true),
+				CanRunCommands:      bptr(true),
+				CanManageConfig:     bptr(true),
+				CanUseClipboard:     bptr(true),
+				CanUseAutotype:      bptr(true),
+				CanReadValues:       bptr(true),
+				ExposeValueTools:    bptr(true),
+				AutoUnseal:          bptr(true),
+				RequireApproval:     bptr(true),
+				ApprovalTimeout:     dptr(2 * time.Minute),
+				AllowedTools:        []string{"tool1", "tool2"},
+				MaxReadsPerHour:     iptr(100),
+				MaxReadsPerDay:      iptr(500),
+				MaxSecretsInSession: IntPtr(10),
+				DynamicProviders: map[string][]string{
+					"postgres": {"readonly", "admin"},
+				},
+				AllowedEnvVars:      []string{"DATABASE_URL"},
+				AllowedExecutables:  []string{"psql"},
+				PromptInjectionMode: StrPtr("deny"),
+				PreCallHooks:        []string{"hook1"},
+				PostCallHooks:       []string{"hook2"},
+				SkillPath:           sptr("~/.skills/test/SKILL.md"),
+				SkillVersion:        sptr("1.0.0"),
+			},
+		},
+		Vault: &VaultConfig{
+			Path:              "/vault/path",
+			DefaultRecipients: []string{"recipient1"},
+			ConfirmRemove:     true,
+			AuthMethod:        "passphrase",
+			UseTouchID:        false,
+			SearchWorkers:     4,
+			PseudonymizePaths: true,
+			FormatVersion:     2,
+		},
+		Git: &GitConfig{
+			AutoPush:         true,
+			AutoPull:         false,
+			AutoPullInterval: 30 * time.Second,
+			CommitTemplate:   "custom template",
+		},
+		MCP: &MCPConfig{
+			Port:                9090,
+			Bind:                "0.0.0.0",
+			Stdio:               true,
+			HTTPTokenFile:       "/tmp/token",
+			OTLPEndpoint:        "http://otel:4318",
+			ReadHeaderTimeout:   5 * time.Second,
+			ReadTimeout:         10 * time.Second,
+			WriteTimeout:        10 * time.Second,
+			ShutdownTimeout:     5 * time.Second,
+			ApprovalTimeout:     30 * time.Second,
+			RateLimit:           120,
+			TrustedProxyIPs:     []string{"10.0.0.0/8"},
+			MetricsAuthRequired: false,
+			TLSCertFile:         "/certs/cert.pem",
+			TLSKeyFile:          "/certs/key.pem",
+			AllowInsecureBind:   false,
+			OAuth: &OAuthConfig{
+				AccessTokenTTL:  1 * time.Hour,
+				RefreshTokenTTL: 24 * time.Hour,
+			},
+		},
+		Update: &UpdateConfig{
+			CacheTTL: 12 * time.Hour,
+		},
+		Clipboard: &ClipboardConfig{
+			AutoClearDuration: 45,
+			PrintByDefault:    false,
+		},
+		Audit: &AuditConfig{
+			MaxFileSize: 50 * 1024 * 1024,
+			MaxBackups:  3,
+			MaxAgeDays:  7,
+		},
+		Logging: &LoggingConfig{
+			Level:  "debug",
+			Format: "json",
+		},
+	}
+
+	path := filepath.Join(home, ".openpass", "config.yaml")
+	if err := cfg.Save(); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	// Verify Config-level fields
+	if loaded.VaultDir != cfg.VaultDir {
+		t.Errorf("VaultDir = %q, want %q", loaded.VaultDir, cfg.VaultDir)
+	}
+	if loaded.DefaultAgent != cfg.DefaultAgent {
+		t.Errorf("DefaultAgent = %q, want %q", loaded.DefaultAgent, cfg.DefaultAgent)
+	}
+	if loaded.SessionTimeout != cfg.SessionTimeout {
+		t.Errorf("SessionTimeout = %v, want %v", loaded.SessionTimeout, cfg.SessionTimeout)
+	}
+	if loaded.AuthMethod != cfg.AuthMethod {
+		t.Errorf("AuthMethod = %q, want %q", loaded.AuthMethod, cfg.AuthMethod)
+	}
+	if loaded.UseTouchID == nil || !*loaded.UseTouchID {
+		t.Error("UseTouchID should be true")
+	}
+	if loaded.DefaultProfile != "work" {
+		t.Errorf("DefaultProfile = %q, want work", loaded.DefaultProfile)
+	}
+	if len(loaded.ScanPatterns) != 1 {
+		t.Errorf("ScanPatterns len = %d, want 1", len(loaded.ScanPatterns))
+	}
+
+	// Verify AgentProfile
+	agent := loaded.Agents["test-agent"]
+	want := cfg.Agents["test-agent"]
+	if *agent.Tier != *want.Tier {
+		t.Errorf("Tier = %q, want %q", *agent.Tier, *want.Tier)
+	}
+	if *agent.ApprovalMode != *want.ApprovalMode {
+		t.Errorf("ApprovalMode = %q, want %q", *agent.ApprovalMode, *want.ApprovalMode)
+	}
+	if *agent.CanWrite != *want.CanWrite {
+		t.Errorf("CanWrite = %v, want %v", agent.CanWrite, want.CanWrite)
+	}
+	if *agent.CanRunCommands != *want.CanRunCommands {
+		t.Errorf("CanRunCommands = %v, want %v", *agent.CanRunCommands, *want.CanRunCommands)
+	}
+	if *agent.CanManageConfig != *want.CanManageConfig {
+		t.Errorf("CanManageConfig = %v, want %v", *agent.CanManageConfig, *want.CanManageConfig)
+	}
+	if *agent.CanUseClipboard != *want.CanUseClipboard {
+		t.Errorf("CanUseClipboard = %v, want %v", *agent.CanUseClipboard, *want.CanUseClipboard)
+	}
+	if *agent.CanUseAutotype != *want.CanUseAutotype {
+		t.Errorf("CanUseAutotype = %v, want %v", *agent.CanUseAutotype, *want.CanUseAutotype)
+	}
+	if *agent.CanReadValues != *want.CanReadValues {
+		t.Errorf("CanReadValues = %v, want %v", *agent.CanReadValues, *want.CanReadValues)
+	}
+	if *agent.ExposeValueTools != *want.ExposeValueTools {
+		t.Errorf("ExposeValueTools = %v, want %v", *agent.ExposeValueTools, *want.ExposeValueTools)
+	}
+	if *agent.AutoUnseal != *want.AutoUnseal {
+		t.Errorf("AutoUnseal = %v, want %v", *agent.AutoUnseal, *want.AutoUnseal)
+	}
+	if *agent.RequireApproval != *want.RequireApproval {
+		t.Errorf("RequireApproval = %v, want %v", *agent.RequireApproval, *want.RequireApproval)
+	}
+	if *agent.ApprovalTimeout != *want.ApprovalTimeout {
+		t.Errorf("ApprovalTimeout = %v, want %v", *agent.ApprovalTimeout, *want.ApprovalTimeout)
+	}
+	if *agent.MaxReadsPerHour != *want.MaxReadsPerHour {
+		t.Errorf("MaxReadsPerHour = %d, want %d", *agent.MaxReadsPerHour, *want.MaxReadsPerHour)
+	}
+	if *agent.MaxReadsPerDay != *want.MaxReadsPerDay {
+		t.Errorf("MaxReadsPerDay = %d, want %d", *agent.MaxReadsPerDay, *want.MaxReadsPerDay)
+	}
+	if *agent.MaxSecretsInSession != *want.MaxSecretsInSession {
+		t.Errorf("MaxSecretsInSession = %d, want %d", *agent.MaxSecretsInSession, *want.MaxSecretsInSession)
+	}
+	if *agent.PromptInjectionMode != *want.PromptInjectionMode {
+		t.Errorf("PromptInjectionMode = %q, want %q", *agent.PromptInjectionMode, *want.PromptInjectionMode)
+	}
+	if *agent.SkillPath != *want.SkillPath {
+		t.Errorf("SkillPath = %q, want %q", *agent.SkillPath, *want.SkillPath)
+	}
+	if *agent.SkillVersion != *want.SkillVersion {
+		t.Errorf("SkillVersion = %q, want %q", *agent.SkillVersion, *want.SkillVersion)
+	}
+
+	// Verify VaultConfig
+	if loaded.Vault == nil {
+		t.Fatal("Vault should not be nil")
+	}
+	if loaded.Vault.Path != "/vault/path" {
+		t.Errorf("Vault.Path = %q, want /vault/path", loaded.Vault.Path)
+	}
+	if loaded.Vault.ConfirmRemove != true {
+		t.Error("Vault.ConfirmRemove should be true")
+	}
+	if loaded.Vault.AuthMethod != "passphrase" {
+		t.Errorf("Vault.AuthMethod = %q, want passphrase", loaded.Vault.AuthMethod)
+	}
+	if loaded.Vault.UseTouchID {
+		t.Error("Vault.UseTouchID should be false")
+	}
+	if loaded.Vault.SearchWorkers != 4 {
+		t.Errorf("Vault.SearchWorkers = %d, want 4", loaded.Vault.SearchWorkers)
+	}
+	if !loaded.Vault.PseudonymizePaths {
+		t.Error("Vault.PseudonymizePaths should be true")
+	}
+
+	// Verify GitConfig
+	if loaded.Git == nil {
+		t.Fatal("Git should not be nil")
+	}
+	if !loaded.Git.AutoPush {
+		t.Error("Git.AutoPush should be true")
+	}
+	// omitempty omits false - AutoPull defaults to true from defaultGitConfig
+	_ = loaded.Git.AutoPull
+	if loaded.Git.AutoPullInterval != 30*time.Second {
+		t.Errorf("Git.AutoPullInterval = %v, want 30s", loaded.Git.AutoPullInterval)
+	}
+	if loaded.Git.CommitTemplate != "custom template" {
+		t.Errorf("Git.CommitTemplate = %q, want custom template", loaded.Git.CommitTemplate)
+	}
+
+	// Verify MCPConfig
+	if loaded.MCP == nil {
+		t.Fatal("MCP should not be nil")
+	}
+	if loaded.MCP.Port != 9090 {
+		t.Errorf("MCP.Port = %d, want 9090", loaded.MCP.Port)
+	}
+	if loaded.MCP.Bind != "0.0.0.0" {
+		t.Errorf("MCP.Bind = %q, want 0.0.0.0", loaded.MCP.Bind)
+	}
+	if !loaded.MCP.Stdio {
+		t.Error("MCP.Stdio should be true")
+	}
+	if loaded.MCP.RateLimit != 120 {
+		t.Errorf("MCP.RateLimit = %d, want 120", loaded.MCP.RateLimit)
+	}
+
+	// Verify UpdateConfig
+	if loaded.Update == nil {
+		t.Fatal("Update should not be nil")
+	}
+	if loaded.Update.CacheTTL != 12*time.Hour {
+		t.Errorf("Update.CacheTTL = %v, want 12h", loaded.Update.CacheTTL)
+	}
+
+	// Verify ClipboardConfig
+	if loaded.Clipboard == nil {
+		t.Fatal("Clipboard should not be nil")
+	}
+	if loaded.Clipboard.AutoClearDuration != 45 {
+		t.Errorf("Clipboard.AutoClearDuration = %d, want 45", loaded.Clipboard.AutoClearDuration)
+	}
+
+	// Verify AuditConfig
+	if loaded.Audit == nil {
+		t.Fatal("Audit should not be nil")
+	}
+	if loaded.Audit.MaxFileSize != 50*1024*1024 {
+		t.Errorf("Audit.MaxFileSize = %d, want %d", loaded.Audit.MaxFileSize, 50*1024*1024)
+	}
+	if loaded.Audit.MaxBackups != 3 {
+		t.Errorf("Audit.MaxBackups = %d, want 3", loaded.Audit.MaxBackups)
+	}
+	if loaded.Audit.MaxAgeDays != 7 {
+		t.Errorf("Audit.MaxAgeDays = %d, want 7", loaded.Audit.MaxAgeDays)
+	}
+
+	// Verify LoggingConfig
+	if loaded.Logging == nil {
+		t.Fatal("Logging should not be nil")
+	}
+	if loaded.Logging.Level != "debug" {
+		t.Errorf("Logging.Level = %q, want debug", loaded.Logging.Level)
+	}
+	if loaded.Logging.Format != "json" {
+		t.Errorf("Logging.Format = %q, want json", loaded.Logging.Format)
+	}
+}
+
+func TestRoundTrip_DefaultsApplied(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: HOME env behavior differs")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	// Minimal config - all defaults should apply
+	cfg := &Config{
+		VaultDir:       filepath.Join(home, ".openpass"),
+		DefaultAgent:   "default",
+		SessionTimeout: defaultSessionTimeout,
+		Agents: map[string]AgentProfile{
+			"default": newDefaultAgentProfile("default"),
+		},
+	}
+
+	path := filepath.Join(home, ".openpass", "config.yaml")
+	if err := cfg.Save(); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if loaded.SessionTimeout != defaultSessionTimeout {
+		t.Errorf("SessionTimeout = %v, want %v", loaded.SessionTimeout, defaultSessionTimeout)
+	}
+	if loaded.AuthMethod != AuthMethodPassphrase {
+		t.Errorf("AuthMethod = %q, want %q", loaded.AuthMethod, AuthMethodPassphrase)
+	}
+}
+
+func TestRoundTrip_ExplicitZeroValues(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: HOME env behavior differs")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	// Config with explicitly set zero values
+	cfg := &Config{
+		VaultDir:       filepath.Join(home, ".openpass"),
+		DefaultAgent:   "default",
+		SessionTimeout: defaultSessionTimeout,
+		AuthMethod:     "passphrase",
+		Agents: map[string]AgentProfile{
+			"default": {
+				Name:             "default",
+				AllowedPaths:     []string{},
+				CanWrite:         bptr(false),
+				CanRunCommands:   bptr(false),
+				CanManageConfig:  bptr(false),
+				CanUseClipboard:  bptr(false),
+				CanUseAutotype:   bptr(false),
+				CanReadValues:    bptr(false),
+				ExposeValueTools: bptr(false),
+				AutoUnseal:       bptr(false),
+				RequireApproval:  bptr(false),
+				ApprovalMode:     sptr("deny"),
+			},
+		},
+	}
+
+	path := filepath.Join(home, ".openpass", "config.yaml")
+	if err := cfg.Save(); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	agent := loaded.Agents["default"]
+	if agent.CanWrite != nil && *agent.CanWrite {
+		t.Error("CanWrite should be false (explicit zero)")
+	}
+	if agent.CanRunCommands != nil && *agent.CanRunCommands {
+		t.Error("CanRunCommands should be false (explicit zero)")
+	}
+	if agent.CanManageConfig != nil && *agent.CanManageConfig {
+		t.Error("CanManageConfig should be false (explicit zero)")
+	}
+	if agent.CanUseClipboard != nil && *agent.CanUseClipboard {
+		t.Error("CanUseClipboard should be false (explicit zero)")
+	}
+	if agent.CanUseAutotype != nil && *agent.CanUseAutotype {
+		t.Error("CanUseAutotype should be false (explicit zero)")
+	}
+	if agent.CanReadValues != nil && *agent.CanReadValues {
+		t.Error("CanReadValues should be false (explicit zero)")
+	}
+	if agent.ExposeValueTools != nil && *agent.ExposeValueTools {
+		t.Error("ExposeValueTools should be false (explicit zero)")
+	}
+	if agent.AutoUnseal != nil && *agent.AutoUnseal {
+		t.Error("AutoUnseal should be false (explicit zero)")
+	}
+	if agent.RequireApproval != nil && *agent.RequireApproval {
+		t.Error("RequireApproval should be false (explicit zero)")
+	}
+	if agent.ApprovalMode == nil || *agent.ApprovalMode != "deny" {
+		t.Errorf("ApprovalMode = %v, want deny", agent.ApprovalMode)
+	}
+	if agent.CanManageConfig != nil && *agent.CanManageConfig {
+		t.Error("CanManageConfig should be false (explicit zero)")
+	}
+	if agent.CanUseClipboard != nil && *agent.CanUseClipboard {
+		t.Error("CanUseClipboard should be false (explicit zero)")
+	}
+	if agent.CanUseAutotype != nil && *agent.CanUseAutotype {
+		t.Error("CanUseAutotype should be false (explicit zero)")
+	}
+	if agent.CanReadValues != nil && *agent.CanReadValues {
+		t.Error("CanReadValues should be false (explicit zero)")
+	}
+	if agent.ExposeValueTools != nil && *agent.ExposeValueTools {
+		t.Error("ExposeValueTools should be false (explicit zero)")
+	}
+	if agent.AutoUnseal != nil && *agent.AutoUnseal {
+		t.Error("AutoUnseal should be false (explicit zero)")
+	}
+	if agent.RequireApproval != nil && *agent.RequireApproval {
+		t.Error("RequireApproval should be false (explicit zero)")
+	}
+	if agent.ApprovalMode == nil || *agent.ApprovalMode != "deny" {
+		t.Errorf("ApprovalMode = %v, want deny", agent.ApprovalMode)
 	}
 }

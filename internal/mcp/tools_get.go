@@ -157,18 +157,22 @@ func (s *Server) handleGetValue(ctx context.Context, req CallToolRequest) (*Call
 	s.logAudit(ctx, "get_value", path, true)
 	metrics.RecordVaultOperation("read", "success")
 
-	shouldSeal := entry.Classification >= taint.Secret && (s.agent == nil || !s.agent.AutoUnseal)
+	shouldSeal := entry.Classification >= taint.Secret && (s.agent == nil || s.agent.AutoUnseal == nil || !*s.agent.AutoUnseal)
 
 	if shouldSeal {
 		return s.sealEntryResponse(ctx, entry, path), nil
 	}
 
-	if s.agent.MaxSecretsInSession > 0 {
+	maxSecrets := 0
+	if s.agent.MaxSecretsInSession != nil {
+		maxSecrets = *s.agent.MaxSecretsInSession
+	}
+	if maxSecrets > 0 {
 		accessed := s.secretsAccessed.Load()
 		fieldCount := int64(len(entry.Data))
-		if accessed+fieldCount > int64(s.agent.MaxSecretsInSession) {
+		if accessed+fieldCount > int64(maxSecrets) {
 			return NewToolResultError(
-				fmt.Sprintf("max secrets per session exceeded (%d/%d)", accessed+fieldCount, s.agent.MaxSecretsInSession)), nil
+				fmt.Sprintf("max secrets per session exceeded (%d/%d)", accessed+fieldCount, maxSecrets)), nil
 		}
 	}
 
@@ -180,7 +184,11 @@ func (s *Server) handleGetValue(ctx context.Context, req CallToolRequest) (*Call
 	// via high-risk untrusted fields (notes, description, custom fields).
 	entry.Data = wrapDataFields(entry.Data)
 
-	if s.agent != nil && s.agent.PromptInjectionMode != "" && s.agent.PromptInjectionMode != "off" {
+	piMode := ""
+	if s.agent != nil && s.agent.PromptInjectionMode != nil {
+		piMode = *s.agent.PromptInjectionMode
+	}
+	if piMode != "" && piMode != "off" {
 		for k, v := range entry.Data {
 			if str, ok := v.(string); ok {
 				checked, checkErr := s.applySemanticInjectionCheck(str)

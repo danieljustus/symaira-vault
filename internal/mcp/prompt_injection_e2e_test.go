@@ -177,7 +177,7 @@ func TestE2E_PromptInjection_SubprocessOutput(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
-		ApprovalMode: "none",
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio", "")
 
 	for _, p := range promptInjectionCorpus() {

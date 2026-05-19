@@ -10,9 +10,13 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	cli "github.com/danieljustus/OpenPass/internal/cli"
 	"github.com/danieljustus/OpenPass/internal/config"
 	"github.com/danieljustus/OpenPass/internal/testutil"
 	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+
+	crudcmd "github.com/danieljustus/OpenPass/cmd/crud"
+	mcpcmd "github.com/danieljustus/OpenPass/cmd/mcp"
 )
 
 func TestExpandVaultDir(t *testing.T) {
@@ -106,25 +110,25 @@ func TestGeneratePasswordContainsExpectedChars(t *testing.T) {
 }
 
 func TestSetVersionInfo(t *testing.T) {
-	origVersion := appVersion
-	origCommit := appCommit
-	origDate := appDate
+	origVersion := cli.AppVersion
+	origCommit := cli.AppCommit
+	origDate := cli.AppDate
 
 	SetVersionInfo("1.0.0", "abc123", "2024-01-01")
 
-	if appVersion != "1.0.0" {
-		t.Errorf("appVersion = %q, want %q", appVersion, "1.0.0")
+	if cli.AppVersion != "1.0.0" {
+		t.Errorf("cli.AppVersion = %q, want %q", cli.AppVersion, "1.0.0")
 	}
-	if appCommit != "abc123" {
-		t.Errorf("appCommit = %q, want %q", appCommit, "abc123")
+	if cli.AppCommit != "abc123" {
+		t.Errorf("cli.AppCommit = %q, want %q", cli.AppCommit, "abc123")
 	}
-	if appDate != "2024-01-01" {
-		t.Errorf("appDate = %q, want %q", appDate, "2024-01-01")
+	if cli.AppDate != "2024-01-01" {
+		t.Errorf("cli.AppDate = %q, want %q", cli.AppDate, "2024-01-01")
 	}
 
-	appVersion = origVersion
-	appCommit = origCommit
-	appDate = origDate
+	cli.AppVersion = origVersion
+	cli.AppCommit = origCommit
+	cli.AppDate = origDate
 }
 
 func TestVaultPathWithTilde(t *testing.T) {
@@ -133,7 +137,7 @@ func TestVaultPathWithTilde(t *testing.T) {
 
 	_ = os.Setenv("HOME", "/custom/home")
 
-	vault = "~/my-vault"
+	cli.Vault = "~/my-vault"
 	got, _ := vaultPath()
 
 	home, _ := os.UserHomeDir()
@@ -147,7 +151,7 @@ func TestVaultPathWithAbsolute(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: path format differs")
 	}
-	vault = "/absolute/path"
+	cli.Vault = "/absolute/path"
 	got, _ := vaultPath()
 
 	if got != "/absolute/path" {
@@ -157,7 +161,7 @@ func TestVaultPathWithAbsolute(t *testing.T) {
 
 func TestVaultPathWithTildeOnly(t *testing.T) {
 	home, _ := os.UserHomeDir()
-	vault = "~"
+	cli.Vault = "~"
 	got, _ := vaultPath()
 
 	expected := home
@@ -167,7 +171,7 @@ func TestVaultPathWithTildeOnly(t *testing.T) {
 }
 
 func TestLoadConfigSilent(t *testing.T) {
-	_, err := loadConfigSilent("/tmp/nonexistent/config.yaml")
+	_, err := mcpcmd.LoadConfigSilent("/tmp/nonexistent/config.yaml")
 	if err == nil {
 		t.Error("expected error for nonexistent config")
 	}
@@ -178,7 +182,7 @@ func TestLoadConfigSilent(t *testing.T) {
 	data, _ := yaml.Marshal(cfg)
 	_ = os.WriteFile(filepath.Join(vaultDir, "config.yaml"), data, 0o600)
 
-	loaded, err := loadConfigSilent(filepath.Join(vaultDir, "config.yaml"))
+	loaded, err := mcpcmd.LoadConfigSilent(filepath.Join(vaultDir, "config.yaml"))
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -201,7 +205,7 @@ func TestUnlockVaultLocked(t *testing.T) {
 }
 
 func TestOutputStdioConfig(t *testing.T) {
-	err := outputStdioConfig("claude-code", "openpass")
+	err := mcpcmd.OutputStdioConfig("claude-code", "openpass")
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -219,7 +223,7 @@ func TestOutputHTTPConfig(t *testing.T) {
 		t.Fatalf("failed to init vault: %v", err)
 	}
 
-	err := outputHTTPConfig("claude-code", "openpass", true, "")
+	err := mcpcmd.OutputHTTPConfig("claude-code", "openpass", true, "")
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -400,8 +404,8 @@ func TestBuildSSHURL_NoUser(t *testing.T) {
 
 func TestGetAutoClearDuration_Default(t *testing.T) {
 	// No vault configured — should return default of 30.
-	dur := getAutoClearDuration()
+	dur := crudcmd.GetAutoClearDuration()
 	if dur <= 0 {
-		t.Errorf("getAutoClearDuration() = %d, want positive value", dur)
+		t.Errorf("crudcmd.GetAutoClearDuration() = %d, want positive value", dur)
 	}
 }

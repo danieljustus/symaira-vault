@@ -303,8 +303,8 @@ func TestHandleExecuteAPIRequest_Success(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: true,
-		ApprovalMode:   "none",
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -368,8 +368,8 @@ func TestHandleExecuteAPIRequest_PostWithBody(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: true,
-		ApprovalMode:   "none",
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -410,8 +410,8 @@ func TestHandleExecuteAPIRequest_MissingTemplate(t *testing.T) {
 	srv := newTestServer(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: true,
-		ApprovalMode:   "none",
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
 	}, "stdio")
 	req := CallToolRequest{
 		Arguments: map[string]any{
@@ -434,8 +434,8 @@ func TestHandleExecuteAPIRequest_MissingEndpoint(t *testing.T) {
 	srv := newTestServer(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: true,
-		ApprovalMode:   "none",
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
 	}, "stdio")
 	req := CallToolRequest{
 		Arguments: map[string]any{
@@ -508,8 +508,8 @@ allowed_methods:
 			srv := newTestServerWithVault(t, config.AgentProfile{
 				Name:           "test",
 				AllowedPaths:   []string{"*"},
-				CanRunCommands: true,
-				ApprovalMode:   "none",
+				CanRunCommands: config.BoolPtr(true),
+				ApprovalMode:   config.StrPtr("none"),
 			}, "stdio", vaultDir)
 			srv.vault.Identity = identity
 
@@ -540,8 +540,8 @@ func TestHandleExecuteAPIRequest_RunDenied(t *testing.T) {
 	srv := newTestServer(t, config.AgentProfile{
 		Name:           "readonly",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: false,
-		ApprovalMode:   "none",
+		CanRunCommands: config.BoolPtr(false),
+		ApprovalMode:   config.StrPtr("none"),
 	}, "stdio")
 	req := CallToolRequest{
 		Arguments: map[string]any{
@@ -628,8 +628,8 @@ func TestHandleExecuteAPIRequest_Sanitization(t *testing.T) {
 			srv := newTestServerWithVault(t, config.AgentProfile{
 				Name:           "test",
 				AllowedPaths:   []string{"*"},
-				CanRunCommands: true,
-				ApprovalMode:   "none",
+				CanRunCommands: config.BoolPtr(true),
+				ApprovalMode:   config.StrPtr("none"),
 			}, "stdio", vaultDir)
 			srv.vault.Identity = identity
 
@@ -687,8 +687,8 @@ func TestHandleExecuteAPIRequest_CustomHeaders(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: true,
-		ApprovalMode:   "none",
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -724,8 +724,8 @@ func TestHandleExecuteAPIRequest_UnknownTemplate(t *testing.T) {
 	srv := newTestServer(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: true,
-		ApprovalMode:   "none",
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
 	}, "stdio")
 	req := CallToolRequest{
 		Arguments: map[string]any{
@@ -749,8 +749,8 @@ func TestHandleExecuteAPIRequest_ApprovalDeny(t *testing.T) {
 	srv := newTestServer(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: true,
-		ApprovalMode:   "deny",
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("deny"),
 	}, "stdio")
 	req := CallToolRequest{
 		Arguments: map[string]any{
@@ -781,8 +781,8 @@ func TestExecuteAPIAvailable(t *testing.T) {
 			srv := newTestServer(t, config.AgentProfile{
 				Name:           "test",
 				AllowedPaths:   []string{"*"},
-				CanRunCommands: tt.canRunCommands,
-				ApprovalMode:   "none",
+				CanRunCommands: config.BoolPtr(tt.canRunCommands),
+				ApprovalMode:   config.StrPtr("none"),
 			}, "stdio")
 			got := executeAPIAvailable(srv)
 			if got != tt.want {
@@ -816,8 +816,8 @@ func TestHandleExecuteAPIRequest_ToolListed(t *testing.T) {
 	srv := newTestServer(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: true,
-		ApprovalMode:   "none",
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
 	}, "stdio")
 	tools := toolsListPayload(srv)
 	found := false
@@ -836,8 +836,8 @@ func TestHandleExecuteAPIRequest_NotListedWhenUnavailable(t *testing.T) {
 	srv := newTestServer(t, config.AgentProfile{
 		Name:           "readonly",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: false,
-		ApprovalMode:   "none",
+		CanRunCommands: config.BoolPtr(false),
+		ApprovalMode:   config.StrPtr("none"),
 	}, "stdio")
 	tools := toolsListPayload(srv)
 	for _, tool := range tools {

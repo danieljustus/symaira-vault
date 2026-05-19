@@ -370,10 +370,7 @@ func WriteEntry(vaultDir, path string, entry *Entry, identity *age.X25519Identit
 		return err
 	}
 	lockFile = nil
-	if err := queueManifestUpdate(vaultDir, path, ciphertext, identity); err != nil {
-		span.SetStatus(codes.Error, err.Error())
-		return err
-	}
+	queueManifestUpdate(vaultDir, path, ciphertext, identity)
 	return nil
 }
 
@@ -428,10 +425,7 @@ func DeleteEntry(vaultDir, path string, identity *age.X25519Identity) error {
 			return err
 		}
 		lockFile = nil
-		if err := queueManifestRemove(vaultDir, path, identity); err != nil {
-			span.SetStatus(codes.Error, err.Error())
-			return err
-		}
+		queueManifestRemove(vaultDir, path, identity)
 		return nil
 	}
 
@@ -450,10 +444,7 @@ func DeleteEntry(vaultDir, path string, identity *age.X25519Identity) error {
 		return err
 	}
 	lockFile = nil
-	if err := queueManifestRemove(vaultDir, path, identity); err != nil {
-		span.SetStatus(codes.Error, err.Error())
-		return err
-	}
+	queueManifestRemove(vaultDir, path, identity)
 	return nil
 }
 
@@ -567,10 +558,7 @@ func MergeEntry(vaultDir, path string, partialData map[string]any, identity *age
 		return nil, err
 	}
 	lockFile = nil
-	if err := queueManifestUpdate(vaultDir, path, ciphertext, identity); err != nil {
-		span.SetStatus(codes.Error, err.Error())
-		return nil, err
-	}
+	queueManifestUpdate(vaultDir, path, ciphertext, identity)
 	return ReadEntry(vaultDir, path, identity)
 }
 

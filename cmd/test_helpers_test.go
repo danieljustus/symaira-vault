@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	cli "github.com/danieljustus/OpenPass/internal/cli"
 	"github.com/danieljustus/OpenPass/internal/config"
 	gitpkg "github.com/danieljustus/OpenPass/internal/git"
 	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
@@ -29,7 +30,7 @@ func vaultFlagReset(t *testing.T) {
 		origChanged = vaultFlag.Changed
 	}
 	t.Cleanup(func() {
-		vault = origVault
+		cli.Vault = origVault
 		if vaultFlag != nil {
 			_ = vaultFlag.Value.Set(origVault)
 			vaultFlag.Changed = origChanged
@@ -43,9 +44,9 @@ func setupVaultFlag(t *testing.T, vaultDir string) func() {
 	origChanged := vaultFlag.Changed
 	_ = vaultFlag.Value.Set(vaultDir)
 	vaultFlag.Changed = true
-	vault = vaultDir
+	cli.Vault = vaultDir
 	return func() {
-		vault = origVault
+		cli.Vault = origVault
 		_ = vaultFlag.Value.Set(origVault)
 		vaultFlag.Changed = origChanged
 	}

@@ -5,6 +5,10 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	cli "github.com/danieljustus/OpenPass/internal/cli"
+
+	admin "github.com/danieljustus/OpenPass/cmd/admin"
 )
 
 func TestCmdDoctor_TextOutput(t *testing.T) {
@@ -13,12 +17,12 @@ func TestCmdDoctor_TextOutput(t *testing.T) {
 	defer setupVaultFlag(t, vaultDir)()
 
 	var buf bytes.Buffer
-	rootCmd.SetOut(&buf)
-	t.Cleanup(func() { rootCmd.SetOut(nil) })
+	cli.RootCmd.SetOut(&buf)
+	t.Cleanup(func() { cli.RootCmd.SetOut(nil) })
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "doctor", "--no-network"})
-	defer rootCmd.SetArgs(nil)
-	_ = rootCmd.Execute()
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "doctor", "--no-network"})
+	defer cli.RootCmd.SetArgs(nil)
+	_ = cli.RootCmd.Execute()
 
 	out := buf.String()
 	if !strings.Contains(out, "OpenPass Doctor") {
@@ -35,12 +39,12 @@ func TestCmdDoctor_JSONOutput(t *testing.T) {
 	defer setupVaultFlag(t, vaultDir)()
 
 	var buf bytes.Buffer
-	rootCmd.SetOut(&buf)
-	t.Cleanup(func() { rootCmd.SetOut(nil) })
+	cli.RootCmd.SetOut(&buf)
+	t.Cleanup(func() { cli.RootCmd.SetOut(nil) })
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "doctor", "--no-network", "--json"})
-	defer rootCmd.SetArgs(nil)
-	_ = rootCmd.Execute()
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "doctor", "--no-network", "--json"})
+	defer cli.RootCmd.SetArgs(nil)
+	_ = cli.RootCmd.Execute()
 
 	var result struct {
 		VaultDir string `json:"vault_dir"`
@@ -72,12 +76,12 @@ func TestCmdDoctor_NoNetworkFlag(t *testing.T) {
 	defer setupVaultFlag(t, vaultDir)()
 
 	var buf bytes.Buffer
-	rootCmd.SetOut(&buf)
-	t.Cleanup(func() { rootCmd.SetOut(nil) })
+	cli.RootCmd.SetOut(&buf)
+	t.Cleanup(func() { cli.RootCmd.SetOut(nil) })
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "doctor", "--no-network"})
-	defer rootCmd.SetArgs(nil)
-	_ = rootCmd.Execute()
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "doctor", "--no-network"})
+	defer cli.RootCmd.SetArgs(nil)
+	_ = cli.RootCmd.Execute()
 
 	if buf.Len() == 0 {
 		t.Error("expected non-empty output with --no-network flag")
@@ -85,9 +89,9 @@ func TestCmdDoctor_NoNetworkFlag(t *testing.T) {
 }
 
 func TestCmdDoctor_FixFlag_Registered(t *testing.T) {
-	flag := doctorCmd.Flags().Lookup("fix")
+	flag := admin.DoctorCmd.Flags().Lookup("fix")
 	if flag == nil {
-		t.Fatal("--fix flag not registered on doctorCmd")
+		t.Fatal("--fix flag not registered on admin.DoctorCmd")
 	}
 	if flag.Value.Type() != "bool" {
 		t.Errorf("--fix flag expected type bool, got %s", flag.Value.Type())
@@ -100,13 +104,13 @@ func TestCmdDoctor_FixFlag_TextOutput(t *testing.T) {
 	defer setupVaultFlag(t, vaultDir)()
 
 	var buf bytes.Buffer
-	rootCmd.SetOut(&buf)
-	t.Cleanup(func() { rootCmd.SetOut(nil) })
+	cli.RootCmd.SetOut(&buf)
+	t.Cleanup(func() { cli.RootCmd.SetOut(nil) })
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "doctor", "--fix", "--no-network"})
-	defer rootCmd.SetArgs(nil)
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "doctor", "--fix", "--no-network"})
+	defer cli.RootCmd.SetArgs(nil)
 
-	err := rootCmd.Execute()
+	err := cli.RootCmd.Execute()
 	if err != nil {
 		t.Errorf("doctor --fix --no-network failed: %v", err)
 	}
@@ -122,7 +126,7 @@ func TestGetVaultDir_WithVaultFlag(t *testing.T) {
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
-	dir := getVaultDir()
+	dir := cli.GetVaultDir()
 	if dir == "" {
 		t.Error("expected non-empty vault dir")
 	}

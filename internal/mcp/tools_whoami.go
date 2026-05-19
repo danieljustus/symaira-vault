@@ -62,32 +62,71 @@ type whoamiInfo struct {
 func (s *Server) handleWhoami(ctx context.Context, req CallToolRequest) (*CallToolResult, error) {
 	_, _ = ctx, req
 
+	var (
+		tier            string
+		approvalMode    string
+		canWrite        bool
+		canRunCmds      bool
+		canUseClip      bool
+		canUseAuto      bool
+		maxReadsPerHour int
+		maxReadsPerDay  int
+		maxSecrets      int
+	)
+	if s.agent.Tier != nil {
+		tier = *s.agent.Tier
+	}
+	if s.agent.ApprovalMode != nil {
+		approvalMode = *s.agent.ApprovalMode
+	}
+	if s.agent.CanWrite != nil {
+		canWrite = *s.agent.CanWrite
+	}
+	if s.agent.CanRunCommands != nil {
+		canRunCmds = *s.agent.CanRunCommands
+	}
+	if s.agent.CanUseClipboard != nil {
+		canUseClip = *s.agent.CanUseClipboard
+	}
+	if s.agent.CanUseAutotype != nil {
+		canUseAuto = *s.agent.CanUseAutotype
+	}
+	if s.agent.MaxReadsPerHour != nil {
+		maxReadsPerHour = *s.agent.MaxReadsPerHour
+	}
+	if s.agent.MaxReadsPerDay != nil {
+		maxReadsPerDay = *s.agent.MaxReadsPerDay
+	}
+	if s.agent.MaxSecretsInSession != nil {
+		maxSecrets = *s.agent.MaxSecretsInSession
+	}
+
 	info := whoamiInfo{
 		Agent:           s.agent.Name,
 		OpenPassVersion: defaultServerVersion,
 		Profile: whoamiProfile{
 			Name:            s.agent.Name,
-			Tier:            s.agent.Tier,
+			Tier:            tier,
 			AllowedPaths:    s.agent.AllowedPaths,
-			ApprovalMode:    s.agent.ApprovalMode,
-			CanWrite:        s.agent.CanWrite,
-			CanRunCommands:  s.agent.CanRunCommands,
-			CanUseClipboard: s.agent.CanUseClipboard,
-			CanUseAutotype:  s.agent.CanUseAutotype,
+			ApprovalMode:    approvalMode,
+			CanWrite:        canWrite,
+			CanRunCommands:  canRunCmds,
+			CanUseClipboard: canUseClip,
+			CanUseAutotype:  canUseAuto,
 			RedactFields:    s.agent.RedactFields,
 		},
 		Quotas: whoamiQuotas{
 			ReadsPerHour: quotaInfo{
 				Used:  0,
-				Limit: s.agent.MaxReadsPerHour,
+				Limit: maxReadsPerHour,
 			},
 			ReadsPerDay: quotaInfo{
 				Used:  0,
-				Limit: s.agent.MaxReadsPerDay,
+				Limit: maxReadsPerDay,
 			},
 			SecretsPerSession: quotaInfo{
 				Used:  int(s.secretsAccessed.Load()),
-				Limit: s.agent.MaxSecretsInSession,
+				Limit: maxSecrets,
 			},
 		},
 		Vault: whoamiVault{

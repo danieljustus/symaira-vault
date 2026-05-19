@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	mcpcmd "github.com/danieljustus/OpenPass/cmd/mcp"
 )
 
 func TestFindAvailablePort(t *testing.T) {
@@ -169,7 +171,7 @@ func startTestHealthServer(t *testing.T, statusCode int) int {
 
 func TestCheckRuntimePortHealth_Success(t *testing.T) {
 	port := startTestHealthServer(t, http.StatusOK)
-	err := checkRuntimePortHealth("127.0.0.1", port)
+	err := mcpcmd.CheckRuntimePortHealth("127.0.0.1", port)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -177,7 +179,7 @@ func TestCheckRuntimePortHealth_Success(t *testing.T) {
 
 func TestCheckRuntimePortHealth_NonOKStatus(t *testing.T) {
 	port := startTestHealthServer(t, http.StatusInternalServerError)
-	err := checkRuntimePortHealth("127.0.0.1", port)
+	err := mcpcmd.CheckRuntimePortHealth("127.0.0.1", port)
 	if err == nil {
 		t.Fatal("expected error for non-OK status")
 	}
@@ -190,7 +192,7 @@ func TestCheckRuntimePortHealth_ConnectionRefused(t *testing.T) {
 	l, _ := net.Listen("tcp", "127.0.0.1:0")
 	port := l.Addr().(*net.TCPAddr).Port
 	_ = l.Close()
-	err := checkRuntimePortHealth("127.0.0.1", port)
+	err := mcpcmd.CheckRuntimePortHealth("127.0.0.1", port)
 	if err == nil {
 		t.Fatal("expected error for connection refused")
 	}
@@ -198,7 +200,7 @@ func TestCheckRuntimePortHealth_ConnectionRefused(t *testing.T) {
 
 func TestCheckRuntimePortHealth_BindAll(t *testing.T) {
 	port := startTestHealthServer(t, http.StatusOK)
-	err := checkRuntimePortHealth("0.0.0.0", port)
+	err := mcpcmd.CheckRuntimePortHealth("0.0.0.0", port)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -206,7 +208,7 @@ func TestCheckRuntimePortHealth_BindAll(t *testing.T) {
 
 func TestCheckRuntimePortHealth_IPv6Bind(t *testing.T) {
 	port := startTestHealthServer(t, http.StatusOK)
-	err := checkRuntimePortHealth("::", port)
+	err := mcpcmd.CheckRuntimePortHealth("::", port)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -218,7 +220,7 @@ func TestResolveHTTPPort_RuntimePortHealthy(t *testing.T) {
 	if err := saveRuntimePort(tmpDir, port); err != nil {
 		t.Fatalf("saveRuntimePort failed: %v", err)
 	}
-	resolved, err := resolveHTTPPort(tmpDir, "127.0.0.1", 8080)
+	resolved, err := mcpcmd.ResolveHTTPPort(tmpDir, "127.0.0.1", 8080)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -235,7 +237,7 @@ func TestResolveHTTPPort_RuntimePortStale(t *testing.T) {
 	if err := saveRuntimePort(tmpDir, port); err != nil {
 		t.Fatalf("saveRuntimePort failed: %v", err)
 	}
-	_, err := resolveHTTPPort(tmpDir, "127.0.0.1", 8080)
+	_, err := mcpcmd.ResolveHTTPPort(tmpDir, "127.0.0.1", 8080)
 	if err == nil {
 		t.Fatal("expected error for stale runtime port")
 	}
@@ -246,7 +248,7 @@ func TestResolveHTTPPort_RuntimePortStale(t *testing.T) {
 
 func TestResolveHTTPPort_ConfiguredPort(t *testing.T) {
 	tmpDir := t.TempDir()
-	resolved, err := resolveHTTPPort(tmpDir, "127.0.0.1", 9090)
+	resolved, err := mcpcmd.ResolveHTTPPort(tmpDir, "127.0.0.1", 9090)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -257,7 +259,7 @@ func TestResolveHTTPPort_ConfiguredPort(t *testing.T) {
 
 func TestResolveHTTPPort_DefaultPort(t *testing.T) {
 	tmpDir := t.TempDir()
-	resolved, err := resolveHTTPPort(tmpDir, "127.0.0.1", 0)
+	resolved, err := mcpcmd.ResolveHTTPPort(tmpDir, "127.0.0.1", 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

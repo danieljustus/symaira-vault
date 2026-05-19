@@ -1,3 +1,4 @@
+// Package config provides configuration loading, validation, and defaults for OpenPass.
 package config
 
 import (
@@ -24,9 +25,6 @@ const (
 	AuthMethodTouchID     = "touchid"
 )
 
-// CustomPattern defines a user-provided PII/secret scan pattern for the
-// masking/sanitizer. Patterns are compiled at runtime and merged with the
-// built-in defaults.
 type CustomPattern struct {
 	Name        string `yaml:"name"`
 	Pattern     string `yaml:"pattern"`
@@ -35,7 +33,7 @@ type CustomPattern struct {
 }
 
 type Config struct {
-	Agents         map[string]AgentProfile `yaml:"agents"`
+	Agents         map[string]AgentProfile `yaml:"agents,omitempty"`
 	Vault          *VaultConfig            `yaml:"vault,omitempty"`
 	Git            *GitConfig              `yaml:"git,omitempty"`
 	MCP            *MCPConfig              `yaml:"mcp,omitempty"`
@@ -43,84 +41,34 @@ type Config struct {
 	Clipboard      *ClipboardConfig        `yaml:"clipboard,omitempty"`
 	Audit          *AuditConfig            `yaml:"audit,omitempty"`
 	Logging        *LoggingConfig          `yaml:"logging,omitempty"`
-	VaultDir       string                  `yaml:"vaultDir"`
-	DefaultAgent   string                  `yaml:"defaultAgent"`
-	SessionTimeout time.Duration           `yaml:"sessionTimeout"`
+	VaultDir       string                  `yaml:"vaultDir,omitempty"`
+	DefaultAgent   string                  `yaml:"defaultAgent,omitempty"`
+	SessionTimeout time.Duration           `yaml:"sessionTimeout,omitempty"`
 	AuthMethod     string                  `yaml:"authMethod,omitempty"`
-	UseTouchID     bool                    `yaml:"useTouchID,omitempty"`
+	UseTouchID     *bool                   `yaml:"useTouchID,omitempty"`
 	Profiles       map[string]*Profile     `yaml:"profiles,omitempty"`
 	DefaultProfile string                  `yaml:"defaultProfile,omitempty"`
 	EnvWhitelist   []string                `yaml:"envWhitelist,omitempty"`
 	ScanPatterns   []CustomPattern         `yaml:"scan_patterns,omitempty"`
 }
 
-type fileConfig struct {
-	Agents         map[string]fileAgentProfile `yaml:"agents,omitempty"`
-	Vault          *fileVaultConfig            `yaml:"vault,omitempty"`
-	Git            *fileGitConfig              `yaml:"git,omitempty"`
-	MCP            *fileMCPConfig              `yaml:"mcp,omitempty"`
-	Update         *fileUpdateConfig           `yaml:"update,omitempty"`
-	Clipboard      *fileClipboardConfig        `yaml:"clipboard,omitempty"`
-	Audit          *fileAuditConfig            `yaml:"audit,omitempty"`
-	Logging        *fileLoggingConfig          `yaml:"logging,omitempty"`
-	VaultDir       string                      `yaml:"vaultDir,omitempty"`
-	DefaultAgent   string                      `yaml:"defaultAgent,omitempty"`
-	SessionTimeout time.Duration               `yaml:"sessionTimeout,omitempty"`
-	AuthMethod     string                      `yaml:"authMethod,omitempty"`
-	UseTouchID     *bool                       `yaml:"useTouchID,omitempty"`
-	Profiles       map[string]fileProfile      `yaml:"profiles,omitempty"`
-	DefaultProfile string                      `yaml:"defaultProfile,omitempty"`
-	EnvWhitelist   []string                    `yaml:"envWhitelist,omitempty"`
-	ScanPatterns   []CustomPattern             `yaml:"scan_patterns,omitempty"`
-}
-
 type AgentProfile struct {
 	Name                string              `yaml:"-"`
-	Tier                string              `yaml:"tier,omitempty"`
-	ApprovalMode        string              `yaml:"approvalMode"`
-	AllowedPaths        []string            `yaml:"allowedPaths"`
+	Tier                *string             `yaml:"tier,omitempty"`
+	ApprovalMode        *string             `yaml:"approvalMode,omitempty"`
+	AllowedPaths        []string            `yaml:"allowedPaths,omitempty"`
 	RedactFields        []string            `yaml:"redactFields,omitempty"`
 	PerToolRedactFields map[string][]string `yaml:"perToolRedactFields,omitempty"`
-	CanWrite            bool                `yaml:"canWrite"`
-	CanRunCommands      bool                `yaml:"canRunCommands,omitempty"`
-	CanManageConfig     bool                `yaml:"canManageConfig,omitempty"`
-	CanUseClipboard     bool                `yaml:"canUseClipboard,omitempty"`
-	CanUseAutotype      bool                `yaml:"canUseAutotype,omitempty"`
-	CanReadValues       bool                `yaml:"canReadValues,omitempty"`
-	ExposeValueTools    bool                `yaml:"exposeValueTools,omitempty"`
-	AutoUnseal          bool                `yaml:"autoUnseal,omitempty"`
-	RequireApproval     bool                `yaml:"requireApproval"`
-	ApprovalTimeout     time.Duration       `yaml:"approvalTimeout,omitempty"`
-	AllowedTools        []string            `yaml:"allowed_tools,omitempty"`
-	MaxReadsPerHour     int                 `yaml:"max_reads_per_hour,omitempty"`
-	MaxReadsPerDay      int                 `yaml:"max_reads_per_day,omitempty"`
-	MaxSecretsInSession int                 `yaml:"max_secrets_in_session,omitempty"`
-	DynamicProviders    map[string][]string `yaml:"dynamicProviders,omitempty"` // provider → allowed roles; nil denies all
-	AllowedEnvVars      []string            `yaml:"allowedEnvVars,omitempty"`
-	AllowedExecutables  []string            `yaml:"allowedExecutables,omitempty"`
-	PromptInjectionMode string              `yaml:"promptInjectionMode,omitempty"`
-	PreCallHooks        []string            `yaml:"pre_call_hooks,omitempty"`
-	PostCallHooks       []string            `yaml:"post_call_hooks,omitempty"`
-	SkillPath           string              `yaml:"skillPath,omitempty"`
-	SkillVersion        string              `yaml:"skillVersion,omitempty"`
-}
-
-type fileAgentProfile struct {
-	Tier                *string             `yaml:"tier,omitempty"`
-	ExposeValueTools    *bool               `yaml:"exposeValueTools,omitempty"`
-	AutoUnseal          *bool               `yaml:"autoUnseal,omitempty"`
-	ApprovalTimeout     *time.Duration      `yaml:"approvalTimeout,omitempty"`
 	CanWrite            *bool               `yaml:"canWrite,omitempty"`
 	CanRunCommands      *bool               `yaml:"canRunCommands,omitempty"`
 	CanManageConfig     *bool               `yaml:"canManageConfig,omitempty"`
 	CanUseClipboard     *bool               `yaml:"canUseClipboard,omitempty"`
 	CanUseAutotype      *bool               `yaml:"canUseAutotype,omitempty"`
 	CanReadValues       *bool               `yaml:"canReadValues,omitempty"`
+	ExposeValueTools    *bool               `yaml:"exposeValueTools,omitempty"`
+	AutoUnseal          *bool               `yaml:"autoUnseal,omitempty"`
 	RequireApproval     *bool               `yaml:"requireApproval,omitempty"`
-	ApprovalMode        *string             `yaml:"approvalMode,omitempty"`
-	AllowedPaths        []string            `yaml:"allowedPaths,omitempty"`
-	RedactFields        []string            `yaml:"redactFields,omitempty"`
-	PerToolRedactFields map[string][]string `yaml:"perToolRedactFields,omitempty"`
+	ApprovalTimeout     *time.Duration      `yaml:"approvalTimeout,omitempty"`
 	AllowedTools        []string            `yaml:"allowed_tools,omitempty"`
 	MaxReadsPerHour     *int                `yaml:"max_reads_per_hour,omitempty"`
 	MaxReadsPerDay      *int                `yaml:"max_reads_per_day,omitempty"`
@@ -135,13 +83,6 @@ type fileAgentProfile struct {
 	SkillVersion        *string             `yaml:"skillVersion,omitempty"`
 }
 
-type fileProfile struct {
-	VaultPath string `yaml:"vault,omitempty"`
-}
-
-// EffectiveRedactFields returns the merged, deduplicated list of redact field
-// patterns for toolName: global RedactFields always included, followed by any
-// per-tool additions from PerToolRedactFields[toolName].
 func (p *AgentProfile) EffectiveRedactFields(toolName string) []string {
 	if p == nil {
 		return nil
@@ -191,13 +132,13 @@ func validateConfigPath(path string) error {
 	return nil
 }
 
-//nolint:gocyclo // Complex config loading with backwards compatibility and environment fallbacks
+//nolint:gocyclo // Complex config loading with backward compatibility
 func Load(path string) (*Config, error) {
 	if err := validateConfigPath(path); err != nil {
 		return nil, err
 	}
 
-	data, err := os.ReadFile(path) //#nosec G304 -- path validated by validateConfigPath()
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
@@ -207,8 +148,16 @@ func Load(path string) (*Config, error) {
 		return cfg, nil
 	}
 
-	var raw fileConfig
-	if err := yaml.Unmarshal(data, &raw); err != nil {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return nil, err
+	}
+
+	agentFields := loadAgentFields(&doc)
+	sectionFields := loadSectionFields(&doc)
+
+	var raw Config
+	if err := doc.Decode(&raw); err != nil {
 		return nil, err
 	}
 
@@ -228,9 +177,9 @@ func Load(path string) (*Config, error) {
 		}
 		cfg.AuthMethod = authMethod
 	}
-	if raw.UseTouchID != nil {
-		cfg.UseTouchID = *raw.UseTouchID
-		if raw.AuthMethod == "" && *raw.UseTouchID {
+	if raw.UseTouchID != nil && *raw.UseTouchID {
+		cfg.UseTouchID = raw.UseTouchID
+		if raw.AuthMethod == "" {
 			cfg.AuthMethod = AuthMethodTouchID
 		}
 	}
@@ -256,136 +205,159 @@ func Load(path string) (*Config, error) {
 	}
 
 	if raw.Agents != nil {
-		for name, profile := range raw.Agents {
+		for name, yamlProfile := range raw.Agents {
 			current, ok := cfg.Agents[name]
 			if !ok {
 				current = newDefaultAgentProfile(name)
 			}
 			current.Name = name
 
-			// Apply tier preset before explicit YAML overrides
-			if profile.Tier != nil && *profile.Tier != "" {
-				ApplyTierPreset(&current, *profile.Tier)
-				current.Tier = *profile.Tier
+			fields := agentFields[name]
+
+			if fields["tier"] && yamlProfile.Tier != nil {
+				ApplyTierPreset(&current, *yamlProfile.Tier)
+				current.Tier = yamlProfile.Tier
 			}
 
-			// Backward compat: default ExposeValueTools to true when neither tier nor explicit value
-			if (profile.Tier == nil || *profile.Tier == "") && profile.ExposeValueTools == nil {
-				current.ExposeValueTools = true
+			if !fields["tier"] && !fields["exposeValueTools"] {
+				v := true
+				current.ExposeValueTools = &v
 			}
 
-			if profile.AllowedPaths != nil {
-				current.AllowedPaths = append([]string(nil), profile.AllowedPaths...)
+			if fields["allowedPaths"] {
+				if yamlProfile.AllowedPaths != nil {
+					current.AllowedPaths = append([]string(nil), yamlProfile.AllowedPaths...)
+				} else {
+					current.AllowedPaths = []string{}
+				}
 			} else if current.AllowedPaths == nil {
 				current.AllowedPaths = []string{}
 			}
-			if profile.CanWrite != nil {
-				current.CanWrite = *profile.CanWrite
+			if fields["canWrite"] {
+				current.CanWrite = yamlProfile.CanWrite
 			}
-			if profile.CanRunCommands != nil {
-				current.CanRunCommands = *profile.CanRunCommands
+			if fields["canRunCommands"] {
+				current.CanRunCommands = yamlProfile.CanRunCommands
 			}
-			if profile.CanManageConfig != nil {
-				current.CanManageConfig = *profile.CanManageConfig
+			if fields["canManageConfig"] {
+				current.CanManageConfig = yamlProfile.CanManageConfig
 			}
-			if profile.CanUseClipboard != nil {
-				current.CanUseClipboard = *profile.CanUseClipboard
+			if fields["canUseClipboard"] {
+				current.CanUseClipboard = yamlProfile.CanUseClipboard
 			}
-			if profile.CanUseAutotype != nil {
-				current.CanUseAutotype = *profile.CanUseAutotype
+			if fields["canUseAutotype"] {
+				current.CanUseAutotype = yamlProfile.CanUseAutotype
 			}
-			if profile.CanReadValues != nil {
-				current.CanReadValues = *profile.CanReadValues
+			if fields["canReadValues"] {
+				current.CanReadValues = yamlProfile.CanReadValues
 			}
-			if profile.RequireApproval != nil {
-				current.RequireApproval = *profile.RequireApproval
+			if fields["requireApproval"] {
+				current.RequireApproval = yamlProfile.RequireApproval
 			}
-			if profile.ApprovalTimeout != nil {
-				current.ApprovalTimeout = *profile.ApprovalTimeout
+			if fields["approvalTimeout"] {
+				current.ApprovalTimeout = yamlProfile.ApprovalTimeout
 			}
-			if profile.ApprovalMode != nil {
-				current.ApprovalMode = *profile.ApprovalMode
-			} else if profile.RequireApproval != nil {
-				if *profile.RequireApproval {
-					current.ApprovalMode = "prompt"
+			if fields["approvalMode"] {
+				current.ApprovalMode = yamlProfile.ApprovalMode
+			} else if fields["requireApproval"] && yamlProfile.RequireApproval != nil {
+				if *yamlProfile.RequireApproval {
+					v := "prompt"
+					current.ApprovalMode = &v
 				} else {
-					current.ApprovalMode = "none"
+					v := "none"
+					current.ApprovalMode = &v
 				}
 			}
-			if profile.RedactFields != nil {
-				current.RedactFields = append([]string(nil), profile.RedactFields...)
-			}
-			// PerToolRedactFields uses append semantics (unlike the scalar RedactFields replace)
-			// so that stacked profile overrides can each add per-tool patterns additively.
-			if profile.PerToolRedactFields != nil {
-				if current.PerToolRedactFields == nil {
-					current.PerToolRedactFields = make(map[string][]string, len(profile.PerToolRedactFields))
-				}
-				for tool, fields := range profile.PerToolRedactFields {
-					current.PerToolRedactFields[tool] = append(current.PerToolRedactFields[tool], fields...)
+			if fields["redactFields"] {
+				if yamlProfile.RedactFields != nil {
+					current.RedactFields = append([]string(nil), yamlProfile.RedactFields...)
+				} else {
+					current.RedactFields = nil
 				}
 			}
-			if profile.AllowedTools != nil {
-				current.AllowedTools = append([]string(nil), profile.AllowedTools...)
-			}
-			if profile.MaxReadsPerHour != nil {
-				current.MaxReadsPerHour = *profile.MaxReadsPerHour
-			}
-			if profile.MaxReadsPerDay != nil {
-				current.MaxReadsPerDay = *profile.MaxReadsPerDay
-			}
-			if profile.MaxSecretsInSession != nil {
-				current.MaxSecretsInSession = *profile.MaxSecretsInSession
-			}
-			if profile.ExposeValueTools != nil {
-				current.ExposeValueTools = *profile.ExposeValueTools
-			}
-			if profile.AutoUnseal != nil {
-				current.AutoUnseal = *profile.AutoUnseal
-			}
-			if profile.DynamicProviders != nil {
-				current.DynamicProviders = make(map[string][]string, len(profile.DynamicProviders))
-				for p, roles := range profile.DynamicProviders {
-					rolesCopy := append([]string(nil), roles...)
-					current.DynamicProviders[p] = rolesCopy
+			if fields["perToolRedactFields"] {
+				if yamlProfile.PerToolRedactFields != nil {
+					if current.PerToolRedactFields == nil {
+						current.PerToolRedactFields = make(map[string][]string, len(yamlProfile.PerToolRedactFields))
+					}
+					for tool, fieldsList := range yamlProfile.PerToolRedactFields {
+						current.PerToolRedactFields[tool] = append(current.PerToolRedactFields[tool], fieldsList...)
+					}
 				}
 			}
-			if profile.AllowedEnvVars != nil {
-				current.AllowedEnvVars = append([]string(nil), profile.AllowedEnvVars...)
+			if fields["allowed_tools"] {
+				if yamlProfile.AllowedTools != nil {
+					current.AllowedTools = append([]string(nil), yamlProfile.AllowedTools...)
+				}
 			}
-			if profile.AllowedExecutables != nil {
-				current.AllowedExecutables = append([]string(nil), profile.AllowedExecutables...)
+			if fields["max_reads_per_hour"] {
+				current.MaxReadsPerHour = yamlProfile.MaxReadsPerHour
 			}
-			if profile.PromptInjectionMode != nil {
-				current.PromptInjectionMode = *profile.PromptInjectionMode
+			if fields["max_reads_per_day"] {
+				current.MaxReadsPerDay = yamlProfile.MaxReadsPerDay
 			}
-			if profile.SkillPath != nil {
-				current.SkillPath = *profile.SkillPath
+			if fields["max_secrets_in_session"] {
+				current.MaxSecretsInSession = yamlProfile.MaxSecretsInSession
 			}
-			if profile.SkillVersion != nil {
-				current.SkillVersion = *profile.SkillVersion
+			if fields["exposeValueTools"] {
+				current.ExposeValueTools = yamlProfile.ExposeValueTools
+			}
+			if fields["autoUnseal"] {
+				current.AutoUnseal = yamlProfile.AutoUnseal
+			}
+			if fields["dynamicProviders"] {
+				if yamlProfile.DynamicProviders != nil {
+					current.DynamicProviders = make(map[string][]string, len(yamlProfile.DynamicProviders))
+					for p, roles := range yamlProfile.DynamicProviders {
+						rolesCopy := append([]string(nil), roles...)
+						current.DynamicProviders[p] = rolesCopy
+					}
+				}
+			}
+			if fields["allowedEnvVars"] {
+				if yamlProfile.AllowedEnvVars != nil {
+					current.AllowedEnvVars = append([]string(nil), yamlProfile.AllowedEnvVars...)
+				}
+			}
+			if fields["allowedExecutables"] {
+				if yamlProfile.AllowedExecutables != nil {
+					current.AllowedExecutables = append([]string(nil), yamlProfile.AllowedExecutables...)
+				}
+			}
+			if fields["promptInjectionMode"] {
+				current.PromptInjectionMode = yamlProfile.PromptInjectionMode
+			}
+			if fields["skillPath"] {
+				current.SkillPath = yamlProfile.SkillPath
+			}
+			if fields["skillVersion"] {
+				current.SkillVersion = yamlProfile.SkillVersion
 			}
 			cfg.Agents[name] = current
 		}
 	}
 
-	// Validate ApprovalMode values
 	for name, profile := range cfg.Agents {
-		switch profile.ApprovalMode {
+		mode := ""
+		if profile.ApprovalMode != nil {
+			mode = *profile.ApprovalMode
+		}
+		switch mode {
 		case "", "none", "deny", "prompt":
-			// valid
 		default:
-			return nil, fmt.Errorf("agent %q: invalid approvalMode %q (valid: none, deny, prompt)", name, profile.ApprovalMode)
+			return nil, fmt.Errorf("agent %q: invalid approvalMode %q (valid: none, deny, prompt)", name, mode)
 		}
 	}
 
-	// Validate PromptInjectionMode values
 	for name, profile := range cfg.Agents {
-		switch profile.PromptInjectionMode {
+		mode := ""
+		if profile.PromptInjectionMode != nil {
+			mode = *profile.PromptInjectionMode
+		}
+		switch mode {
 		case "", "off", "log-only", "wrap", "deny":
-			// valid
 		default:
-			return nil, fmt.Errorf("agent %q: invalid promptInjectionMode %q (valid: off, log-only, wrap, deny)", name, profile.PromptInjectionMode)
+			return nil, fmt.Errorf("agent %q: invalid promptInjectionMode %q (valid: off, log-only, wrap, deny)", name, mode)
 		}
 	}
 
@@ -402,60 +374,280 @@ func Load(path string) (*Config, error) {
 
 	if raw.Vault != nil {
 		defaults := defaultVaultConfig()
-		merged := MergeFileVaultConfig(raw.Vault, defaults)
-		if raw.Vault.AuthMethod != nil {
-			authMethod, err := NormalizeAuthMethod(*raw.Vault.AuthMethod)
+		sf := sectionFields["vault"]
+		if sf["path"] {
+			defaults.Path = raw.Vault.Path
+		}
+		if sf["default_recipients"] && raw.Vault.DefaultRecipients != nil {
+			defaults.DefaultRecipients = append([]string(nil), raw.Vault.DefaultRecipients...)
+		}
+		if sf["confirm_remove"] {
+			defaults.ConfirmRemove = raw.Vault.ConfirmRemove
+		}
+		if sf["authMethod"] {
+			defaults.AuthMethod = raw.Vault.AuthMethod
+		}
+		if sf["useTouchID"] {
+			defaults.UseTouchID = raw.Vault.UseTouchID
+		}
+		if sf["legacy_mode"] && raw.Vault.LegacyMode != nil {
+			defaults.LegacyMode = raw.Vault.LegacyMode
+		}
+		if sf["search_workers"] {
+			defaults.SearchWorkers = raw.Vault.SearchWorkers
+		}
+		if sf["pseudonymize_paths"] {
+			defaults.PseudonymizePaths = raw.Vault.PseudonymizePaths
+		}
+		if sf["scrypt_work_factor"] {
+			defaults.ScryptWorkFactor = raw.Vault.ScryptWorkFactor
+		}
+		if sf["last_rotated"] {
+			defaults.LastRotated = raw.Vault.LastRotated
+		}
+		if sf["format_version"] {
+			defaults.FormatVersion = raw.Vault.FormatVersion
+		}
+		if sf["argon2id_time"] {
+			defaults.Argon2idTime = raw.Vault.Argon2idTime
+		}
+		if sf["argon2id_memory"] {
+			defaults.Argon2idMemory = raw.Vault.Argon2idMemory
+		}
+		if sf["argon2id_threads"] {
+			defaults.Argon2idThreads = raw.Vault.Argon2idThreads
+		}
+		if sf["authMethod"] && defaults.AuthMethod != "" {
+			authMethod, err := NormalizeAuthMethod(defaults.AuthMethod)
 			if err != nil {
 				return nil, err
 			}
-			merged.AuthMethod = authMethod
+			defaults.AuthMethod = authMethod
 			if raw.AuthMethod == "" {
 				cfg.AuthMethod = authMethod
 			}
 		}
-		if raw.AuthMethod == "" && raw.Vault.AuthMethod == nil && raw.Vault.UseTouchID != nil && *raw.Vault.UseTouchID {
+		if raw.AuthMethod == "" && !sf["authMethod"] && raw.Vault.UseTouchID {
 			cfg.AuthMethod = AuthMethodTouchID
 		}
-		cfg.Vault = &merged
+		cfg.Vault = &defaults
 	}
 	if raw.Git != nil {
 		defaults := defaultGitConfig()
-		merged := MergeFileGitConfig(raw.Git, defaults)
-		cfg.Git = &merged
+		sf := sectionFields["git"]
+		if sf["auto_push"] {
+			defaults.AutoPush = raw.Git.AutoPush
+		}
+		if sf["auto_pull"] {
+			defaults.AutoPull = raw.Git.AutoPull
+		}
+		if sf["auto_pull_interval"] {
+			defaults.AutoPullInterval = raw.Git.AutoPullInterval
+		}
+		if sf["commit_template"] {
+			defaults.CommitTemplate = raw.Git.CommitTemplate
+		}
+		cfg.Git = &defaults
 	}
 	if raw.MCP != nil {
 		defaults := defaultMCPConfig()
-		merged := MergeFileMCPConfig(raw.MCP, defaults)
-		cfg.MCP = &merged
+		sf := sectionFields["mcp"]
+		if raw.MCP.ApprovalRequired {
+			fmt.Fprintln(os.Stderr, "Warning: approval_required is deprecated and will be removed in a future version")
+		}
+		if sf["port"] {
+			defaults.Port = raw.MCP.Port
+		}
+		if sf["bind"] {
+			defaults.Bind = raw.MCP.Bind
+		}
+		if sf["stdio"] {
+			defaults.Stdio = raw.MCP.Stdio
+		}
+		if sf["httpTokenFile"] {
+			defaults.HTTPTokenFile = raw.MCP.HTTPTokenFile
+		}
+		if sf["otlp_endpoint"] {
+			defaults.OTLPEndpoint = raw.MCP.OTLPEndpoint
+		}
+		if sf["read_header_timeout"] {
+			defaults.ReadHeaderTimeout = raw.MCP.ReadHeaderTimeout
+		}
+		if sf["read_timeout"] {
+			defaults.ReadTimeout = raw.MCP.ReadTimeout
+		}
+		if sf["write_timeout"] {
+			defaults.WriteTimeout = raw.MCP.WriteTimeout
+		}
+		if sf["shutdown_timeout"] {
+			defaults.ShutdownTimeout = raw.MCP.ShutdownTimeout
+		}
+		if sf["approval_timeout"] {
+			defaults.ApprovalTimeout = raw.MCP.ApprovalTimeout
+		}
+		if sf["rate_limit"] {
+			defaults.RateLimit = raw.MCP.RateLimit
+		}
+		if sf["trusted_proxy_ips"] && raw.MCP.TrustedProxyIPs != nil {
+			defaults.TrustedProxyIPs = append([]string(nil), raw.MCP.TrustedProxyIPs...)
+		}
+		if sf["metrics_auth_required"] {
+			defaults.MetricsAuthRequired = raw.MCP.MetricsAuthRequired
+		}
+		if sf["tls_cert_file"] {
+			defaults.TLSCertFile = raw.MCP.TLSCertFile
+		}
+		if sf["tls_key_file"] {
+			defaults.TLSKeyFile = raw.MCP.TLSKeyFile
+		}
+		if sf["allow_insecure_bind"] {
+			defaults.AllowInsecureBind = raw.MCP.AllowInsecureBind
+		}
+		if sf["oauth"] && raw.MCP.OAuth != nil {
+			oAuthFields := raw.MCP.OAuth
+			if defaults.OAuth == nil {
+				defaults.OAuth = &OAuthConfig{}
+			}
+			oaf := sectionFields["mcp_oauth"]
+			if oaf["access_token_ttl"] && oAuthFields.AccessTokenTTL > 0 {
+				defaults.OAuth.AccessTokenTTL = oAuthFields.AccessTokenTTL
+			}
+			if oaf["refresh_token_ttl"] && oAuthFields.RefreshTokenTTL > 0 {
+				defaults.OAuth.RefreshTokenTTL = oAuthFields.RefreshTokenTTL
+			}
+		}
+		cfg.MCP = &defaults
 	}
 	if raw.Update != nil {
 		defaults := defaultUpdateConfig()
-		merged := MergeFileUpdateConfig(raw.Update, defaults)
-		cfg.Update = &merged
+		sf := sectionFields["update"]
+		if sf["cache_ttl"] {
+			defaults.CacheTTL = raw.Update.CacheTTL
+		}
+		cfg.Update = &defaults
 	}
 	if raw.Clipboard != nil {
 		defaults := defaultClipboardConfig()
-		merged := MergeFileClipboardConfig(raw.Clipboard, defaults)
-		cfg.Clipboard = &merged
+		sf := sectionFields["clipboard"]
+		if sf["auto_clear_duration"] {
+			defaults.AutoClearDuration = raw.Clipboard.AutoClearDuration
+		}
+		if sf["printByDefault"] {
+			defaults.PrintByDefault = raw.Clipboard.PrintByDefault
+		}
+		cfg.Clipboard = &defaults
 	}
 	if raw.Audit != nil {
 		defaults := defaultAuditConfig()
-		merged := MergeFileAuditConfig(raw.Audit, defaults)
-		cfg.Audit = &merged
+		sf := sectionFields["audit"]
+		if sf["maxSizeMb"] {
+			defaults.MaxFileSize = raw.Audit.MaxFileSize * 1024 * 1024
+		}
+		if sf["maxBackups"] {
+			defaults.MaxBackups = raw.Audit.MaxBackups
+		}
+		if sf["maxAgeDays"] {
+			defaults.MaxAgeDays = raw.Audit.MaxAgeDays
+		}
+		cfg.Audit = &defaults
 	}
 	if raw.Logging != nil {
 		defaults := defaultLoggingConfig()
-		merged := MergeFileLoggingConfig(raw.Logging, defaults)
-		cfg.Logging = &merged
+		sf := sectionFields["logging"]
+		if sf["level"] {
+			defaults.Level = raw.Logging.Level
+		}
+		if sf["format"] {
+			defaults.Format = raw.Logging.Format
+		}
+		cfg.Logging = &defaults
 	}
 
 	if cfg.MCP != nil && cfg.MCP.Bind == "" {
 		return nil, fmt.Errorf("mcp.bind must not be empty")
 	}
 
-	cfg.UseTouchID = cfg.EffectiveAuthMethod() == AuthMethodTouchID
+	useTouchID := cfg.EffectiveAuthMethod() == AuthMethodTouchID
+	cfg.UseTouchID = &useTouchID
 
 	return cfg, nil
+}
+
+func loadAgentFields(doc *yaml.Node) map[string]map[string]bool {
+	if doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 {
+		return nil
+	}
+	root := doc.Content[0]
+	if root.Kind != yaml.MappingNode {
+		return nil
+	}
+	var agentsNode *yaml.Node
+	for i := 0; i < len(root.Content)-1; i += 2 {
+		if root.Content[i].Value == "agents" {
+			agentsNode = root.Content[i+1]
+			break
+		}
+	}
+	if agentsNode == nil || agentsNode.Kind != yaml.MappingNode {
+		return nil
+	}
+	result := make(map[string]map[string]bool)
+	for i := 0; i < len(agentsNode.Content)-1; i += 2 {
+		name := agentsNode.Content[i].Value
+		profileNode := agentsNode.Content[i+1]
+		if profileNode.Kind != yaml.MappingNode {
+			continue
+		}
+		fields := make(map[string]bool)
+		for j := 0; j < len(profileNode.Content)-1; j += 2 {
+			fields[profileNode.Content[j].Value] = true
+		}
+		result[name] = fields
+	}
+	return result
+}
+
+// loadSectionFields walks the parsed YAML node tree to discover which fields
+// were explicitly set under each sub-config section. Returns a map of section
+// name → set of YAML field names present.
+func loadSectionFields(doc *yaml.Node) map[string]map[string]bool {
+	if doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 {
+		return nil
+	}
+	root := doc.Content[0]
+	if root.Kind != yaml.MappingNode {
+		return nil
+	}
+	sections := []string{"vault", "git", "mcp", "update", "clipboard", "audit", "logging"}
+	result := make(map[string]map[string]bool)
+	for i := 0; i < len(root.Content)-1; i += 2 {
+		key := root.Content[i].Value
+		for _, sec := range sections {
+			if key == sec {
+				secNode := root.Content[i+1]
+				if secNode.Kind == yaml.MappingNode {
+					fields := make(map[string]bool)
+					for j := 0; j < len(secNode.Content)-1; j += 2 {
+						fieldKey := secNode.Content[j].Value
+						fields[fieldKey] = true
+						if fieldKey == "oauth" && sec == "mcp" {
+							oAuthNode := secNode.Content[j+1]
+							if oAuthNode.Kind == yaml.MappingNode {
+								oAuthFields := make(map[string]bool)
+								for k := 0; k < len(oAuthNode.Content)-1; k += 2 {
+									oAuthFields[oAuthNode.Content[k].Value] = true
+								}
+								result["mcp_oauth"] = oAuthFields
+							}
+						}
+					}
+					result[sec] = fields
+				}
+				break
+			}
+		}
+	}
+	return result
 }
 
 func (c *Config) Save() error {
@@ -483,113 +675,120 @@ func (c *Config) SaveTo(path string) error {
 	}
 
 	authMethod := c.EffectiveAuthMethod()
-	raw := fileConfig{
+
+	raw := Config{
 		VaultDir:       c.VaultDir,
 		DefaultAgent:   c.DefaultAgent,
 		SessionTimeout: c.SessionTimeout,
 		AuthMethod:     authMethod,
-		Profiles:       make(map[string]fileProfile, len(c.Profiles)),
 		DefaultProfile: c.DefaultProfile,
-		Agents:         make(map[string]fileAgentProfile, len(c.Agents)),
+		Agents:         make(map[string]AgentProfile, len(c.Agents)),
+	}
+
+	if c.UseTouchID != nil && *c.UseTouchID {
+		useTouchID := true
+		raw.UseTouchID = &useTouchID
+	} else if c.UseTouchID != nil {
+		useTouchID := false
+		raw.UseTouchID = &useTouchID
 	}
 
 	if c.Vault != nil {
-		confirmRemove := c.Vault.ConfirmRemove
 		vaultAuthMethod := c.Vault.AuthMethod
-		searchWorkers := c.Vault.SearchWorkers
-		pseudonymizePaths := c.Vault.PseudonymizePaths
 		if vaultAuthMethod == "" && authMethod != "" {
 			vaultAuthMethod = authMethod
 		}
-		scryptWF := c.Vault.ScryptWorkFactor
-		lastRotated := c.Vault.LastRotated
-		raw.Vault = &fileVaultConfig{
+		raw.Vault = &VaultConfig{
 			Path:              c.Vault.Path,
 			DefaultRecipients: append([]string(nil), c.Vault.DefaultRecipients...),
-			ConfirmRemove:     &confirmRemove,
-			AuthMethod:        &vaultAuthMethod,
+			ConfirmRemove:     c.Vault.ConfirmRemove,
+			AuthMethod:        vaultAuthMethod,
+			UseTouchID:        c.Vault.UseTouchID,
 			LegacyMode:        c.Vault.LegacyMode,
-			SearchWorkers:     &searchWorkers,
-			PseudonymizePaths: &pseudonymizePaths,
-			ScryptWorkFactor:  &scryptWF,
-			LastRotated:       &lastRotated,
+			SearchWorkers:     c.Vault.SearchWorkers,
+			PseudonymizePaths: c.Vault.PseudonymizePaths,
+			ScryptWorkFactor:  c.Vault.ScryptWorkFactor,
+			LastRotated:       c.Vault.LastRotated,
+			FormatVersion:     c.Vault.FormatVersion,
+			Argon2idTime:      c.Vault.Argon2idTime,
+			Argon2idMemory:    c.Vault.Argon2idMemory,
+			Argon2idThreads:   c.Vault.Argon2idThreads,
 		}
 	}
 
 	if c.Git != nil {
-		autoPush := c.Git.AutoPush
-		autoPull := c.Git.AutoPull
-		autoPullInterval := c.Git.AutoPullInterval
-		commitTemplate := c.Git.CommitTemplate
-		raw.Git = &fileGitConfig{
-			AutoPush:         &autoPush,
-			AutoPull:         &autoPull,
-			AutoPullInterval: &autoPullInterval,
-			CommitTemplate:   &commitTemplate,
+		raw.Git = &GitConfig{
+			AutoPush:         c.Git.AutoPush,
+			AutoPull:         c.Git.AutoPull,
+			AutoPullInterval: c.Git.AutoPullInterval,
+			CommitTemplate:   c.Git.CommitTemplate,
 		}
 	}
 
 	if c.MCP != nil {
-		mcpPort := c.MCP.Port
-		mcpBind := c.MCP.Bind
-		mcpStdio := c.MCP.Stdio
-		mcpTokenFile := c.MCP.HTTPTokenFile
-		mcpRateLimit := c.MCP.RateLimit
-		raw.MCP = &fileMCPConfig{
-			Port:              &mcpPort,
-			Bind:              &mcpBind,
-			Stdio:             &mcpStdio,
-			HTTPTokenFile:     &mcpTokenFile,
-			ReadHeaderTimeout: &c.MCP.ReadHeaderTimeout,
-			ReadTimeout:       &c.MCP.ReadTimeout,
-			WriteTimeout:      &c.MCP.WriteTimeout,
-			ShutdownTimeout:   &c.MCP.ShutdownTimeout,
-			ApprovalTimeout:   &c.MCP.ApprovalTimeout,
-			RateLimit:         &mcpRateLimit,
+		raw.MCP = &MCPConfig{
+			Port:                c.MCP.Port,
+			Bind:                c.MCP.Bind,
+			Stdio:               c.MCP.Stdio,
+			HTTPTokenFile:       c.MCP.HTTPTokenFile,
+			ReadHeaderTimeout:   c.MCP.ReadHeaderTimeout,
+			ReadTimeout:         c.MCP.ReadTimeout,
+			WriteTimeout:        c.MCP.WriteTimeout,
+			ShutdownTimeout:     c.MCP.ShutdownTimeout,
+			ApprovalTimeout:     c.MCP.ApprovalTimeout,
+			RateLimit:           c.MCP.RateLimit,
+			MetricsAuthRequired: c.MCP.MetricsAuthRequired,
+			AllowInsecureBind:   c.MCP.AllowInsecureBind,
 		}
 		if c.MCP.OTLPEndpoint != "" {
-			endpoint := c.MCP.OTLPEndpoint
-			raw.MCP.OTLPEndpoint = &endpoint
+			raw.MCP.OTLPEndpoint = c.MCP.OTLPEndpoint
+		}
+		if c.MCP.TrustedProxyIPs != nil {
+			raw.MCP.TrustedProxyIPs = append([]string(nil), c.MCP.TrustedProxyIPs...)
+		}
+		if c.MCP.TLSCertFile != "" {
+			raw.MCP.TLSCertFile = c.MCP.TLSCertFile
+		}
+		if c.MCP.TLSKeyFile != "" {
+			raw.MCP.TLSKeyFile = c.MCP.TLSKeyFile
 		}
 	}
 
 	if c.Update != nil {
-		raw.Update = &fileUpdateConfig{
-			CacheTTL: &c.Update.CacheTTL,
+		raw.Update = &UpdateConfig{
+			CacheTTL: c.Update.CacheTTL,
 		}
 	}
 
 	if c.Clipboard != nil {
-		autoClear := c.Clipboard.AutoClearDuration
-		raw.Clipboard = &fileClipboardConfig{
-			AutoClearDuration: &autoClear,
+		raw.Clipboard = &ClipboardConfig{
+			AutoClearDuration: c.Clipboard.AutoClearDuration,
+			PrintByDefault:    c.Clipboard.PrintByDefault,
 		}
 	}
 	if c.Audit != nil {
-		maxFileSize := c.Audit.MaxFileSize / (1024 * 1024)
-		maxBackups := c.Audit.MaxBackups
-		maxAgeDays := c.Audit.MaxAgeDays
-		raw.Audit = &fileAuditConfig{
-			MaxFileSize: &maxFileSize,
-			MaxBackups:  &maxBackups,
-			MaxAgeDays:  &maxAgeDays,
+		raw.Audit = &AuditConfig{
+			MaxFileSize: c.Audit.MaxFileSize / (1024 * 1024),
+			MaxBackups:  c.Audit.MaxBackups,
+			MaxAgeDays:  c.Audit.MaxAgeDays,
 		}
 	}
 	if c.Logging != nil {
-		level := c.Logging.Level
-		format := c.Logging.Format
-		raw.Logging = &fileLoggingConfig{
-			Level:  &level,
-			Format: &format,
+		raw.Logging = &LoggingConfig{
+			Level:  c.Logging.Level,
+			Format: c.Logging.Format,
 		}
 	}
 	if len(c.ScanPatterns) > 0 {
 		raw.ScanPatterns = append([]CustomPattern(nil), c.ScanPatterns...)
 	}
-	raw.Agents = buildFileAgents(c.Agents)
+	raw.Agents = copyAgentProfiles(c.Agents)
 	for name, profile := range c.Profiles {
 		if profile != nil {
-			raw.Profiles[name] = fileProfile{VaultPath: profile.VaultPath}
+			if raw.Profiles == nil {
+				raw.Profiles = make(map[string]*Profile)
+			}
+			raw.Profiles[name] = profile
 		}
 	}
 
@@ -600,93 +799,69 @@ func (c *Config) SaveTo(path string) error {
 	return fileutil.AtomicWriteFile(path, data, 0o600)
 }
 
-func buildFileAgents(agents map[string]AgentProfile) map[string]fileAgentProfile {
-	result := make(map[string]fileAgentProfile, len(agents))
+func copyAgentProfiles(agents map[string]AgentProfile) map[string]AgentProfile {
+	result := make(map[string]AgentProfile, len(agents))
 	for name, profile := range agents {
-		allowed := append([]string(nil), profile.AllowedPaths...)
-		canWrite := profile.CanWrite
-		canRunCommands := profile.CanRunCommands
-		canManageConfig := profile.CanManageConfig
-		canUseClipboard := profile.CanUseClipboard
-		canUseAutotype := profile.CanUseAutotype
-		canReadValues := profile.CanReadValues
-		exposeValueTools := profile.ExposeValueTools
-		autoUnseal := profile.AutoUnseal
-		requireApproval := profile.RequireApproval
-		fap := fileAgentProfile{
-			AllowedPaths:     allowed,
-			CanWrite:         &canWrite,
-			CanRunCommands:   &canRunCommands,
-			CanManageConfig:  &canManageConfig,
-			CanUseClipboard:  &canUseClipboard,
-			CanUseAutotype:   &canUseAutotype,
-			CanReadValues:    &canReadValues,
-			ExposeValueTools: &exposeValueTools,
-			AutoUnseal:       &autoUnseal,
-			RequireApproval:  &requireApproval,
+		cp := AgentProfile{
+			Name:                profile.Name,
+			Tier:                profile.Tier,
+			ApprovalMode:        profile.ApprovalMode,
+			CanWrite:            profile.CanWrite,
+			CanRunCommands:      profile.CanRunCommands,
+			CanManageConfig:     profile.CanManageConfig,
+			CanUseClipboard:     profile.CanUseClipboard,
+			CanUseAutotype:      profile.CanUseAutotype,
+			CanReadValues:       profile.CanReadValues,
+			ExposeValueTools:    profile.ExposeValueTools,
+			AutoUnseal:          profile.AutoUnseal,
+			RequireApproval:     profile.RequireApproval,
+			ApprovalTimeout:     profile.ApprovalTimeout,
+			MaxReadsPerHour:     profile.MaxReadsPerHour,
+			MaxReadsPerDay:      profile.MaxReadsPerDay,
+			MaxSecretsInSession: profile.MaxSecretsInSession,
+			PromptInjectionMode: profile.PromptInjectionMode,
+			SkillPath:           profile.SkillPath,
+			SkillVersion:        profile.SkillVersion,
+			DynamicProviders:    profile.DynamicProviders,
+			AllowedEnvVars:      profile.AllowedEnvVars,
+			AllowedExecutables:  profile.AllowedExecutables,
+			PreCallHooks:        profile.PreCallHooks,
+			PostCallHooks:       profile.PostCallHooks,
 		}
-		if profile.Tier != "" {
-			t := profile.Tier
-			fap.Tier = &t
-		}
-		if profile.ApprovalMode != "" {
-			am := profile.ApprovalMode
-			fap.ApprovalMode = &am
-		}
-		if profile.ApprovalTimeout > 0 {
-			t := profile.ApprovalTimeout
-			fap.ApprovalTimeout = &t
+		if profile.AllowedPaths != nil {
+			cp.AllowedPaths = append([]string(nil), profile.AllowedPaths...)
 		}
 		if profile.RedactFields != nil {
-			fap.RedactFields = append([]string(nil), profile.RedactFields...)
+			cp.RedactFields = append([]string(nil), profile.RedactFields...)
 		}
 		if profile.PerToolRedactFields != nil {
-			fap.PerToolRedactFields = make(map[string][]string, len(profile.PerToolRedactFields))
-			for tool, fields := range profile.PerToolRedactFields {
-				fap.PerToolRedactFields[tool] = append([]string(nil), fields...)
+			cp.PerToolRedactFields = make(map[string][]string, len(profile.PerToolRedactFields))
+			for tool, flds := range profile.PerToolRedactFields {
+				cp.PerToolRedactFields[tool] = append([]string(nil), flds...)
 			}
 		}
 		if profile.AllowedTools != nil {
-			fap.AllowedTools = append([]string(nil), profile.AllowedTools...)
-		}
-		if profile.MaxReadsPerHour != 0 {
-			mrph := profile.MaxReadsPerHour
-			fap.MaxReadsPerHour = &mrph
-		}
-		if profile.MaxReadsPerDay != 0 {
-			mrpd := profile.MaxReadsPerDay
-			fap.MaxReadsPerDay = &mrpd
-		}
-		if profile.MaxSecretsInSession != 0 {
-			msis := profile.MaxSecretsInSession
-			fap.MaxSecretsInSession = &msis
+			cp.AllowedTools = append([]string(nil), profile.AllowedTools...)
 		}
 		if profile.DynamicProviders != nil {
-			fap.DynamicProviders = make(map[string][]string, len(profile.DynamicProviders))
+			cp.DynamicProviders = make(map[string][]string, len(profile.DynamicProviders))
 			for p, roles := range profile.DynamicProviders {
-				rolesCopy := append([]string(nil), roles...)
-				fap.DynamicProviders[p] = rolesCopy
+				cp.DynamicProviders[p] = append([]string(nil), roles...)
 			}
 		}
 		if profile.AllowedEnvVars != nil {
-			fap.AllowedEnvVars = append([]string(nil), profile.AllowedEnvVars...)
+			cp.AllowedEnvVars = append([]string(nil), profile.AllowedEnvVars...)
 		}
 		if profile.AllowedExecutables != nil {
-			fap.AllowedExecutables = append([]string(nil), profile.AllowedExecutables...)
+			cp.AllowedExecutables = append([]string(nil), profile.AllowedExecutables...)
 		}
-		if profile.PromptInjectionMode != "" {
-			pim := profile.PromptInjectionMode
-			fap.PromptInjectionMode = &pim
+		if profile.PreCallHooks != nil {
+			cp.PreCallHooks = append([]string(nil), profile.PreCallHooks...)
 		}
-		if profile.SkillPath != "" {
-			sp := profile.SkillPath
-			fap.SkillPath = &sp
+		if profile.PostCallHooks != nil {
+			cp.PostCallHooks = append([]string(nil), profile.PostCallHooks...)
 		}
-		if profile.SkillVersion != "" {
-			sv := profile.SkillVersion
-			fap.SkillVersion = &sv
-		}
-		result[name] = fap
+		result[name] = cp
 	}
 	return result
 }
@@ -720,7 +895,7 @@ func (c *Config) EffectiveAuthMethod() string {
 			return method
 		}
 	}
-	if c.UseTouchID {
+	if c.UseTouchID != nil && *c.UseTouchID {
 		return AuthMethodTouchID
 	}
 	if c.Vault != nil {
@@ -743,38 +918,49 @@ func (c *Config) SetAuthMethod(method string) error {
 		return err
 	}
 	c.AuthMethod = normalized
-	c.UseTouchID = normalized == AuthMethodTouchID
+	useTouchID := normalized == AuthMethodTouchID
+	c.UseTouchID = &useTouchID
 	if c.Vault != nil {
 		c.Vault.AuthMethod = normalized
-		c.Vault.UseTouchID = c.UseTouchID
+		c.Vault.UseTouchID = useTouchID
 	}
 	return nil
 }
 
 func newDefaultAgentProfile(name string) AgentProfile {
+	canWrite := false
+	canRunCommands := false
+	exposeValueTools := true
+	autoUnseal := true
+	deny := "deny"
 	return AgentProfile{
 		Name:             name,
 		AllowedPaths:     []string{},
-		CanWrite:         false,
-		CanRunCommands:   false,
-		ApprovalMode:     "deny",
-		ExposeValueTools: true,
-		AutoUnseal:       true,
+		CanWrite:         &canWrite,
+		CanRunCommands:   &canRunCommands,
+		ApprovalMode:     &deny,
+		ExposeValueTools: &exposeValueTools,
+		AutoUnseal:       &autoUnseal,
 	}
 }
 
 func builtinAgentProfiles() map[string]AgentProfile {
+	canWriteTrue := true
+	canWriteFalse := false
+	canRunFalse := false
+	exposeTrue := true
+	autoUnsealTrue := true
+	deny := "deny"
 	return map[string]AgentProfile{
-		"default":     {Name: "default", AllowedPaths: []string{}, CanWrite: false, CanRunCommands: false, ApprovalMode: "deny", ExposeValueTools: true, AutoUnseal: true},
-		"claude-code": {Name: "claude-code", AllowedPaths: []string{}, CanWrite: true, CanRunCommands: false, ApprovalMode: "deny", ExposeValueTools: true, AutoUnseal: true, SkillPath: "~/.claude/skills/openpass/SKILL.md"},
-		"codex":       {Name: "codex", AllowedPaths: []string{}, CanWrite: false, CanRunCommands: false, ApprovalMode: "deny", ExposeValueTools: true, AutoUnseal: true, SkillPath: "~/.codex/skills/openpass/AGENTS.md"},
-		"hermes":      {Name: "hermes", AllowedPaths: []string{}, CanWrite: true, CanRunCommands: false, ApprovalMode: "deny", ExposeValueTools: true, AutoUnseal: true, SkillPath: "~/.hermes/skills/openpass/SKILL.md"},
-		"openclaw":    {Name: "openclaw", AllowedPaths: []string{}, CanWrite: true, CanRunCommands: false, ApprovalMode: "deny", ExposeValueTools: true, AutoUnseal: true, SkillPath: "~/.openclaw/skills/openpass/SKILL.md"},
-		"opencode":    {Name: "opencode", AllowedPaths: []string{}, CanWrite: false, CanRunCommands: false, ApprovalMode: "deny", ExposeValueTools: true, AutoUnseal: true, SkillPath: "~/.opencode/skills/openpass/SKILL.md"},
+		"default":     {Name: "default", AllowedPaths: []string{}, CanWrite: &canWriteFalse, CanRunCommands: &canRunFalse, ApprovalMode: &deny, ExposeValueTools: &exposeTrue, AutoUnseal: &autoUnsealTrue},
+		"claude-code": {Name: "claude-code", AllowedPaths: []string{}, CanWrite: &canWriteTrue, CanRunCommands: &canRunFalse, ApprovalMode: &deny, ExposeValueTools: &exposeTrue, AutoUnseal: &autoUnsealTrue, SkillPath: StrPtr("~/.claude/skills/openpass/SKILL.md")},
+		"codex":       {Name: "codex", AllowedPaths: []string{}, CanWrite: &canWriteFalse, CanRunCommands: &canRunFalse, ApprovalMode: &deny, ExposeValueTools: &exposeTrue, AutoUnseal: &autoUnsealTrue, SkillPath: StrPtr("~/.codex/skills/openpass/AGENTS.md")},
+		"hermes":      {Name: "hermes", AllowedPaths: []string{}, CanWrite: &canWriteTrue, CanRunCommands: &canRunFalse, ApprovalMode: &deny, ExposeValueTools: &exposeTrue, AutoUnseal: &autoUnsealTrue, SkillPath: StrPtr("~/.hermes/skills/openpass/SKILL.md")},
+		"openclaw":    {Name: "openclaw", AllowedPaths: []string{}, CanWrite: &canWriteTrue, CanRunCommands: &canRunFalse, ApprovalMode: &deny, ExposeValueTools: &exposeTrue, AutoUnseal: &autoUnsealTrue, SkillPath: StrPtr("~/.openclaw/skills/openpass/SKILL.md")},
+		"opencode":    {Name: "opencode", AllowedPaths: []string{}, CanWrite: &canWriteFalse, CanRunCommands: &canRunFalse, ApprovalMode: &deny, ExposeValueTools: &exposeTrue, AutoUnseal: &autoUnsealTrue, SkillPath: StrPtr("~/.opencode/skills/openpass/SKILL.md")},
 	}
 }
 
-//nolint:gocyclo // Validation logic must check every config field; splitting would obscure the full contract.
 func (c *Config) Validate() error {
 	var errs error
 
@@ -809,10 +995,14 @@ func (c *Config) Validate() error {
 	}
 
 	for name, agent := range c.Agents {
-		switch agent.ApprovalMode {
+		mode := ""
+		if agent.ApprovalMode != nil {
+			mode = *agent.ApprovalMode
+		}
+		switch mode {
 		case "", "none", "deny", "prompt", "auto":
 		default:
-			errs = errors.Join(errs, fmt.Errorf("agents.%s.approvalMode: invalid value %q (valid: none, deny, prompt, auto)", name, agent.ApprovalMode))
+			errs = errors.Join(errs, fmt.Errorf("agents.%s.approvalMode: invalid value %q (valid: none, deny, prompt, auto)", name, mode))
 		}
 	}
 

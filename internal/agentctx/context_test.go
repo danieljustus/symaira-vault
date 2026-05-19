@@ -440,8 +440,8 @@ func TestProfile(t *testing.T) {
 	if p.Name != "prof-agent" {
 		t.Fatalf("Profile().Name = %q, want %q", p.Name, "prof-agent")
 	}
-	if p.Tier != "admin" {
-		t.Fatalf("Profile().Tier = %q, want %q", p.Tier, "admin")
+	if *p.Tier != "admin" {
+		t.Fatalf("Profile().Tier = %q, want %q", *p.Tier, "admin")
 	}
 }
 

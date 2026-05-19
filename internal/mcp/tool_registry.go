@@ -394,7 +394,7 @@ func isToolBlockedByAgent(agent *config.AgentProfile, toolName string) *errors.M
 	}
 
 	// Tier-based blocking (primary defense)
-	if agent.Tier != "" {
+	if agent.Tier != nil && *agent.Tier != "" {
 		if err := checkToolBlockedByTier(agent, toolName); err != nil {
 			return err
 		}
@@ -403,7 +403,7 @@ func isToolBlockedByAgent(agent *config.AgentProfile, toolName string) *errors.M
 	// Additional safeguard: ExposeValueTools specifically controls get_entry_value
 	// regardless of tier. This preserves backward compatibility and provides
 	// an extra layer of defense if tier-based rules are bypassed.
-	if !agent.ExposeValueTools && toolName == "get_entry_value" {
+	if (agent.ExposeValueTools == nil || !*agent.ExposeValueTools) && toolName == "get_entry_value" {
 		return errors.ToolNotAllowed(toolName, "standard", upgradeCmdForAgent(agent))
 	}
 
@@ -413,7 +413,11 @@ func isToolBlockedByAgent(agent *config.AgentProfile, toolName string) *errors.M
 // checkToolBlockedByTier applies tier-based tool blocking rules.
 // Returns an *errors.MCPError describing the block, or nil if allowed.
 func checkToolBlockedByTier(agent *config.AgentProfile, toolName string) *errors.MCPError {
-	switch agent.Tier {
+	tier := ""
+	if agent.Tier != nil {
+		tier = *agent.Tier
+	}
+	switch tier {
 	case "read-only":
 		blocked := map[string]bool{
 			"set_entry_field":     true,
@@ -472,7 +476,7 @@ func toolsListPayload(s *Server) []map[string]any {
 	tools := make([]map[string]any, 0, len(definitions))
 	for _, def := range definitions {
 		inputSchema := def.InputSchema
-		if def.Name == "get_entry" && s != nil && s.agent != nil && !s.agent.ExposeValueTools {
+		if def.Name == "get_entry" && s != nil && s.agent != nil && s.agent.ExposeValueTools != nil && !*s.agent.ExposeValueTools {
 			inputSchema = withoutSchemaProperty(def.InputSchema, "include_value")
 		}
 

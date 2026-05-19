@@ -31,8 +31,8 @@ func TestAuthorizeDeniesWritesWhenAgentCannotWrite(t *testing.T) {
 	srv := newTestServer(t, config.AgentProfile{
 		Name:         "claude",
 		AllowedPaths: []string{"work/"},
-		CanWrite:     false,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio")
 
 	err := srv.authorize(context.Background(), "work/entry", true, true)
@@ -48,8 +48,8 @@ func TestAuthorizeDeniesPathsOutsideAllowedScope(t *testing.T) {
 	srv := newTestServer(t, config.AgentProfile{
 		Name:         "claude",
 		AllowedPaths: []string{"work/"},
-		CanWrite:     true,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(true),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio")
 
 	err := srv.authorize(context.Background(), "personal/entry", false, false)
@@ -65,8 +65,8 @@ func TestAuthorizeRequiresApprovalForWrites(t *testing.T) {
 	srv := newTestServer(t, config.AgentProfile{
 		Name:         "claude",
 		AllowedPaths: []string{"work/"},
-		CanWrite:     true,
-		ApprovalMode: "deny",
+		CanWrite:     config.BoolPtr(true),
+		ApprovalMode: config.StrPtr("deny"),
 	}, "stdio")
 
 	err := srv.authorize(context.Background(), "work/entry", true, false)
@@ -82,8 +82,8 @@ func TestAuthorizeApprovalModeDenyRejectsWrites(t *testing.T) {
 	srv := newTestServer(t, config.AgentProfile{
 		Name:         "untrusted",
 		AllowedPaths: []string{"*"},
-		CanWrite:     true,
-		ApprovalMode: "deny",
+		CanWrite:     config.BoolPtr(true),
+		ApprovalMode: config.StrPtr("deny"),
 	}, "stdio")
 
 	err := srv.authorize(context.Background(), "work/entry", true, false)
@@ -99,8 +99,8 @@ func TestAuthorizeApprovalModeNoneAllowsWrites(t *testing.T) {
 	srv := newTestServer(t, config.AgentProfile{
 		Name:         "trusted",
 		AllowedPaths: []string{"*"},
-		CanWrite:     true,
-		ApprovalMode: "none",
+		CanWrite:     config.BoolPtr(true),
+		ApprovalMode: config.StrPtr("none"),
 	}, "stdio")
 
 	err := srv.authorize(context.Background(), "work/entry", true, false)
@@ -113,8 +113,8 @@ func TestAuthorizeApprovalModePromptDegradesToDenyInStdio(t *testing.T) {
 	srv := newTestServer(t, config.AgentProfile{
 		Name:         "semi-trusted",
 		AllowedPaths: []string{"*"},
-		CanWrite:     true,
-		ApprovalMode: "prompt",
+		CanWrite:     config.BoolPtr(true),
+		ApprovalMode: config.StrPtr("prompt"),
 	}, "stdio")
 
 	err := srv.authorize(context.Background(), "work/entry", true, false)
@@ -135,8 +135,8 @@ func TestNewFallsBackToDefaultProfileForUnknownAgent(t *testing.T) {
 				"default": {
 					Name:         "default",
 					AllowedPaths: []string{"*"},
-					CanWrite:     false,
-					ApprovalMode: "none",
+					CanWrite:     config.BoolPtr(false),
+					ApprovalMode: config.StrPtr("none"),
 				},
 			},
 		},
@@ -160,8 +160,8 @@ func TestNewErrorsWhenNoDefaultProfile(t *testing.T) {
 				"specific-agent": {
 					Name:         "specific-agent",
 					AllowedPaths: []string{"*"},
-					CanWrite:     true,
-					ApprovalMode: "none",
+					CanWrite:     config.BoolPtr(true),
+					ApprovalMode: config.StrPtr("none"),
 				},
 			},
 		},

@@ -72,34 +72,34 @@ func TestTierPresets_ApplyPresetValues(t *testing.T) {
 				t.Fatalf("TierPresets[%q] not found", tt.tier)
 			}
 
-			if preset.CanWrite != tt.wantCanWrite {
+			if *preset.CanWrite != tt.wantCanWrite {
 				t.Errorf("CanWrite = %v, want %v", preset.CanWrite, tt.wantCanWrite)
 			}
-			if preset.CanRunCommands != tt.wantCanRunCommands {
+			if *preset.CanRunCommands != tt.wantCanRunCommands {
 				t.Errorf("CanRunCommands = %v, want %v", preset.CanRunCommands, tt.wantCanRunCommands)
 			}
-			if preset.CanManageConfig != tt.wantCanManageConfig {
+			if *preset.CanManageConfig != tt.wantCanManageConfig {
 				t.Errorf("CanManageConfig = %v, want %v", preset.CanManageConfig, tt.wantCanManageConfig)
 			}
-			if preset.CanUseClipboard != tt.wantCanUseClipboard {
+			if *preset.CanUseClipboard != tt.wantCanUseClipboard {
 				t.Errorf("CanUseClipboard = %v, want %v", preset.CanUseClipboard, tt.wantCanUseClipboard)
 			}
-			if preset.CanUseAutotype != tt.wantCanUseAutotype {
+			if *preset.CanUseAutotype != tt.wantCanUseAutotype {
 				t.Errorf("CanUseAutotype = %v, want %v", preset.CanUseAutotype, tt.wantCanUseAutotype)
 			}
-			if preset.CanReadValues != tt.wantCanReadValues {
+			if *preset.CanReadValues != tt.wantCanReadValues {
 				t.Errorf("CanReadValues = %v, want %v", preset.CanReadValues, tt.wantCanReadValues)
 			}
-			if preset.ExposeValueTools != tt.wantExposeValueTools {
+			if *preset.ExposeValueTools != tt.wantExposeValueTools {
 				t.Errorf("ExposeValueTools = %v, want %v", preset.ExposeValueTools, tt.wantExposeValueTools)
 			}
-			if preset.AutoUnseal != tt.wantAutoUnseal {
+			if *preset.AutoUnseal != tt.wantAutoUnseal {
 				t.Errorf("AutoUnseal = %v, want %v", preset.AutoUnseal, tt.wantAutoUnseal)
 			}
-			if preset.ApprovalMode != tt.wantApprovalMode {
-				t.Errorf("ApprovalMode = %q, want %q", preset.ApprovalMode, tt.wantApprovalMode)
+			if *preset.ApprovalMode != tt.wantApprovalMode {
+				t.Errorf("ApprovalMode = %q, want %q", *preset.ApprovalMode, tt.wantApprovalMode)
 			}
-			if preset.RequireApproval != tt.wantRequireApproval {
+			if *preset.RequireApproval != tt.wantRequireApproval {
 				t.Errorf("RequireApproval = %v, want %v", preset.RequireApproval, tt.wantRequireApproval)
 			}
 		})
@@ -122,13 +122,13 @@ func TestGetPreset_ReturnsCopy(t *testing.T) {
 		t.Fatal("GetPreset(admin) returned nil")
 	}
 
-	p1.CanWrite = false
+	p1.CanWrite = BoolPtr(false)
 
 	p2 := GetPreset("admin")
 	if p2 == nil {
 		t.Fatal("GetPreset(admin) returned nil on second call")
 	}
-	if !p2.CanWrite {
+	if p2.CanWrite == nil || !*p2.CanWrite {
 		t.Error("GetPreset should return a copy; original preset should retain CanWrite=true")
 	}
 }
@@ -213,12 +213,12 @@ func TestApplyTierPreset_ReadOnlyHasNoAllowedExecutables(t *testing.T) {
 func TestApplyTierPreset_UnknownTierReturnsFalse(t *testing.T) {
 	t.Parallel()
 
-	target := &AgentProfile{Name: "test", CanWrite: true}
+	target := &AgentProfile{Name: "test", CanWrite: BoolPtr(true)}
 	ok := ApplyTierPreset(target, "bogus")
 	if ok {
 		t.Fatal("ApplyTierPreset should return false for unknown tier")
 	}
-	if !target.CanWrite {
+	if target.CanWrite == nil || !*target.CanWrite {
 		t.Error("CanWrite should not be changed by unknown tier")
 	}
 }
@@ -255,23 +255,23 @@ func TestApplyTierPreset_TableDriven(t *testing.T) {
 				return
 			}
 
-			if target.CanWrite != tt.wantCanWrite {
+			if *target.CanWrite != tt.wantCanWrite {
 				t.Errorf("CanWrite = %v, want %v", target.CanWrite, tt.wantCanWrite)
 			}
-			if target.CanRunCommands != tt.wantCanRunCmds {
+			if *target.CanRunCommands != tt.wantCanRunCmds {
 				t.Errorf("CanRunCommands = %v, want %v", target.CanRunCommands, tt.wantCanRunCmds)
 			}
-			if target.CanUseClipboard != tt.wantCanClip {
+			if *target.CanUseClipboard != tt.wantCanClip {
 				t.Errorf("CanUseClipboard = %v, want %v", target.CanUseClipboard, tt.wantCanClip)
 			}
-			if target.CanUseAutotype != tt.wantCanAuto {
+			if *target.CanUseAutotype != tt.wantCanAuto {
 				t.Errorf("CanUseAutotype = %v, want %v", target.CanUseAutotype, tt.wantCanAuto)
 			}
-			if target.CanReadValues != tt.wantCanReadValues {
+			if *target.CanReadValues != tt.wantCanReadValues {
 				t.Errorf("CanReadValues = %v, want %v", target.CanReadValues, tt.wantCanReadValues)
 			}
-			if target.ApprovalMode != tt.wantApprovalMode {
-				t.Errorf("ApprovalMode = %q, want %q", target.ApprovalMode, tt.wantApprovalMode)
+			if *target.ApprovalMode != tt.wantApprovalMode {
+				t.Errorf("ApprovalMode = %q, want %q", *target.ApprovalMode, tt.wantApprovalMode)
 			}
 		})
 	}

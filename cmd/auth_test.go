@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	auth "github.com/danieljustus/OpenPass/cmd/auth"
 	configpkg "github.com/danieljustus/OpenPass/internal/config"
 	"github.com/danieljustus/OpenPass/internal/session"
 )
@@ -43,7 +44,7 @@ func TestAuthSetPassphraseUpdatesConfig(t *testing.T) {
 	}
 
 	output := captureStdout(func() {
-		if err := authSetCmd.RunE(authSetCmd, []string{"passphrase"}); err != nil {
+		if err := auth.AuthSetCmd.RunE(auth.AuthSetCmd, []string{"passphrase"}); err != nil {
 			t.Fatalf("auth set passphrase error = %v", err)
 		}
 	})
@@ -64,12 +65,12 @@ func TestAuthStatusJSON(t *testing.T) {
 	vaultDir, _ := initVault(t)
 	defer setupVaultFlag(t, vaultDir)()
 
-	oldJSON := authStatusJSON
-	authStatusJSON = true
-	t.Cleanup(func() { authStatusJSON = oldJSON })
+	oldJSON := auth.AuthStatusJSON
+	auth.AuthStatusJSON = true
+	t.Cleanup(func() { auth.AuthStatusJSON = oldJSON })
 
 	output := captureStdout(func() {
-		if err := authStatusCmd.RunE(authStatusCmd, nil); err != nil {
+		if err := auth.AuthStatusCmd.RunE(auth.AuthStatusCmd, nil); err != nil {
 			t.Fatalf("auth status error = %v", err)
 		}
 	})

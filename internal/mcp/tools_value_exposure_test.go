@@ -13,9 +13,9 @@ func TestToolsList_FiltersGetEntryValue_WhenExposeValueToolsFalse(t *testing.T) 
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:             "test",
 		AllowedPaths:     []string{"*"},
-		CanReadValues:    true,
-		ExposeValueTools: false,
-		ApprovalMode:     "prompt",
+		CanReadValues:    config.BoolPtr(true),
+		ExposeValueTools: config.BoolPtr(false),
+		ApprovalMode:     config.StrPtr("prompt"),
 	}, "http", "")
 
 	tools := toolsListPayload(srv)
@@ -52,9 +52,9 @@ func TestToolsList_ShowsGetEntryValue_WhenExposeValueToolsTrue(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:             "test",
 		AllowedPaths:     []string{"*"},
-		CanReadValues:    true,
-		ExposeValueTools: true,
-		ApprovalMode:     "prompt",
+		CanReadValues:    config.BoolPtr(true),
+		ExposeValueTools: config.BoolPtr(true),
+		ApprovalMode:     config.StrPtr("prompt"),
 	}, "http", "")
 
 	tools := toolsListPayload(srv)
@@ -85,8 +85,8 @@ func TestExecuteTool_BlocksGetEntryValue_WhenExposeValueToolsFalse(t *testing.T)
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:             "test",
 		AllowedPaths:     []string{"*"},
-		ExposeValueTools: false,
-		ApprovalMode:     "none",
+		ExposeValueTools: config.BoolPtr(false),
+		ApprovalMode:     config.StrPtr("none"),
 	}, "stdio", "")
 
 	args := json.RawMessage(`{"path": "test"}`)
@@ -114,8 +114,8 @@ func TestAvailableToolDefinitions_FiltersGetEntryValue_WhenExposeValueToolsFalse
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:             "test",
 		AllowedPaths:     []string{"*"},
-		ExposeValueTools: false,
-		ApprovalMode:     "none",
+		ExposeValueTools: config.BoolPtr(false),
+		ApprovalMode:     config.StrPtr("none"),
 	}, "http", "")
 
 	defs := availableToolDefinitions(srv)

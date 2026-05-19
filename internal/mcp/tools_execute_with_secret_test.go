@@ -16,8 +16,8 @@ func TestHandleExecuteWithSecret_BasicRun(t *testing.T) {
 	srv := newTestServer(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: true,
-		ApprovalMode:   "none",
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
 	}, "stdio")
 
 	req := CallToolRequest{
@@ -59,8 +59,8 @@ func TestHandleExecuteWithSecret_SecretInjection(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: true,
-		ApprovalMode:   "none",
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -105,8 +105,8 @@ func TestHandleExecuteWithSecret_NeverExposesSecretValue(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: true,
-		ApprovalMode:   "none",
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -142,8 +142,8 @@ func TestHandleExecuteWithSecret_MasksSecretInStdoutAndStderr(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: true,
-		ApprovalMode:   "none",
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -188,8 +188,8 @@ func TestHandleExecuteWithSecret_NestedPath(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: true,
-		ApprovalMode:   "none",
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -227,8 +227,8 @@ func TestHandleExecuteWithSecret_ScopeCheck(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"personal/"},
-		CanRunCommands: true,
-		ApprovalMode:   "none",
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -254,8 +254,8 @@ func TestHandleExecuteWithSecret_RunDenied(t *testing.T) {
 	srv := newTestServer(t, config.AgentProfile{
 		Name:           "readonly",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: false,
-		ApprovalMode:   "none",
+		CanRunCommands: config.BoolPtr(false),
+		ApprovalMode:   config.StrPtr("none"),
 	}, "stdio")
 
 	req := CallToolRequest{
@@ -278,8 +278,8 @@ func TestHandleExecuteWithSecret_ApprovalDeny(t *testing.T) {
 	srv := newTestServer(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: true,
-		ApprovalMode:   "deny",
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("deny"),
 	}, "stdio")
 
 	req := CallToolRequest{
@@ -313,8 +313,8 @@ func TestHandleExecuteWithSecret_ApprovalPromptApproved(t *testing.T) {
 	srv := newTestServer(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: true,
-		ApprovalMode:   "prompt",
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("prompt"),
 	}, "stdio")
 
 	req := CallToolRequest{
@@ -356,8 +356,8 @@ func TestHandleExecuteWithSecret_ApprovalPromptDenied(t *testing.T) {
 	srv := newTestServer(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: true,
-		ApprovalMode:   "prompt",
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("prompt"),
 	}, "stdio")
 
 	req := CallToolRequest{
@@ -380,8 +380,8 @@ func TestHandleExecuteWithSecret_ApprovalAuto(t *testing.T) {
 	srv := newTestServer(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: true,
-		ApprovalMode:   "auto",
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("auto"),
 	}, "stdio")
 
 	req := CallToolRequest{
@@ -412,8 +412,8 @@ func TestHandleExecuteWithSecret_Timeout(t *testing.T) {
 	srv := newTestServer(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: true,
-		ApprovalMode:   "none",
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
 	}, "stdio")
 
 	req := CallToolRequest{
@@ -448,8 +448,8 @@ func TestHandleExecuteWithSecret_MasksSecretOnTimeoutError(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: true,
-		ApprovalMode:   "none",
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -488,8 +488,8 @@ func TestHandleExecuteWithSecret_InvalidParams(t *testing.T) {
 	srv := newTestServer(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: true,
-		ApprovalMode:   "none",
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
 	}, "stdio")
 
 	tests := []struct {
@@ -572,8 +572,8 @@ func TestHandleExecuteWithSecret_DuplicateEnvVar(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: true,
-		ApprovalMode:   "none",
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -610,8 +610,8 @@ func TestHandleExecuteWithSecret_WorkingDir(t *testing.T) {
 	srv := newTestServer(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: true,
-		ApprovalMode:   "none",
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
 	}, "stdio")
 
 	req := CallToolRequest{
@@ -645,8 +645,8 @@ func TestHandleExecuteWithSecret_EnvVars(t *testing.T) {
 	srv := newTestServer(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: true,
-		ApprovalMode:   "none",
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
 	}, "stdio")
 
 	req := CallToolRequest{
@@ -680,8 +680,8 @@ func TestHandleExecuteWithSecret_NonZeroExit(t *testing.T) {
 	srv := newTestServer(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: true,
-		ApprovalMode:   "none",
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
 	}, "stdio")
 
 	req := CallToolRequest{
@@ -720,8 +720,8 @@ func TestHandleExecuteWithSecret_MasksSecretOnNonZeroExit(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: true,
-		ApprovalMode:   "none",
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -768,8 +768,8 @@ func TestHandleExecuteWithSecret_MissingSecretRef(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: true,
-		ApprovalMode:   "none",
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -806,8 +806,8 @@ func TestHandleExecuteWithSecret_FullEntryRef(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: true,
-		ApprovalMode:   "none",
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -963,8 +963,8 @@ func TestHandleExecuteWithSecret_AuditLog(t *testing.T) {
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:           "test-agent",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: true,
-		ApprovalMode:   "none",
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -1001,8 +1001,8 @@ func TestHandleExecuteWithSecret_ApprovalPromptNoTTY(t *testing.T) {
 	srv := newTestServer(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: true,
-		ApprovalMode:   "prompt",
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("prompt"),
 	}, "stdio")
 
 	req := CallToolRequest{
@@ -1032,8 +1032,8 @@ func TestHandleExecuteWithSecret_ToolListed(t *testing.T) {
 	srv := newTestServer(t, config.AgentProfile{
 		Name:           "test",
 		AllowedPaths:   []string{"*"},
-		CanRunCommands: true,
-		ApprovalMode:   "none",
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
 	}, "stdio")
 
 	tools := toolsListPayload(srv)

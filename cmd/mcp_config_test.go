@@ -8,6 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	cli "github.com/danieljustus/OpenPass/internal/cli"
+
+	mcpcmd "github.com/danieljustus/OpenPass/cmd/mcp"
 	"github.com/danieljustus/OpenPass/internal/config"
 	"github.com/danieljustus/OpenPass/internal/testutil"
 	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
@@ -15,7 +18,7 @@ import (
 
 func TestOutputHermesStdioConfig_Success(t *testing.T) {
 	output := captureStdout(func() {
-		err := outputHermesStdioConfig("claude-code", "openpass")
+		err := mcpcmd.OutputHermesStdioConfig("claude-code", "openpass")
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -39,7 +42,7 @@ func TestOutputHermesStdioConfig_StdoutError(t *testing.T) {
 	_ = r.Close()
 	defer func() { os.Stdout = oldStdout }()
 
-	err := outputHermesStdioConfig("claude-code", "openpass")
+	err := mcpcmd.OutputHermesStdioConfig("claude-code", "openpass")
 	if err == nil {
 		t.Fatal("expected error when stdout is closed")
 	}
@@ -47,7 +50,7 @@ func TestOutputHermesStdioConfig_StdoutError(t *testing.T) {
 
 func TestOutputAgentStdioConfig_Success(t *testing.T) {
 	output := captureStdout(func() {
-		err := outputAgentStdioConfig("claude-code", "claude_code")
+		err := mcpcmd.OutputAgentStdioConfig("claude-code", "claude_code")
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -68,7 +71,7 @@ func TestOutputAgentStdioConfig_StdoutError(t *testing.T) {
 	_ = r.Close()
 	defer func() { os.Stdout = oldStdout }()
 
-	err := outputAgentStdioConfig("claude-code", "claude_code")
+	err := mcpcmd.OutputAgentStdioConfig("claude-code", "claude_code")
 	if err == nil {
 		t.Fatal("expected error when stdout is closed")
 	}
@@ -87,7 +90,7 @@ func TestOutputAgentHTTPConfig_Success(t *testing.T) {
 	}
 
 	output := captureStdout(func() {
-		err := outputAgentHTTPConfig("claude-code", "claude_code", "claude-code", true, "")
+		err := mcpcmd.OutputAgentHTTPConfig("claude-code", "claude_code", "claude-code", true, "")
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -113,7 +116,7 @@ func TestOutputAgentHTTPConfig_ResolveError(t *testing.T) {
 	vault = "~/.openpass"
 	defer func() { vault = origVault }()
 
-	err := outputAgentHTTPConfig("claude-code", "claude_code", "claude-code", true, "")
+	err := mcpcmd.OutputAgentHTTPConfig("claude-code", "claude_code", "claude-code", true, "")
 	if err == nil {
 		t.Fatal("expected error when vault path cannot be resolved")
 	}
@@ -132,7 +135,7 @@ func TestOutputTokenOnly_Success(t *testing.T) {
 	}
 
 	output := captureStdout(func() {
-		err := outputTokenOnly()
+		err := mcpcmd.OutputTokenOnly()
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -155,7 +158,7 @@ func TestOutputTokenOnly_VaultPathError(t *testing.T) {
 	vault = "~/.openpass"
 	defer func() { vault = origVault }()
 
-	err := outputTokenOnly()
+	err := mcpcmd.OutputTokenOnly()
 	if err == nil {
 		t.Fatal("expected error when vault path cannot be resolved")
 	}
@@ -186,7 +189,7 @@ func TestOutputTokenOnly_CustomTokenPath(t *testing.T) {
 	}
 
 	output := captureStdout(func() {
-		err := outputTokenOnly()
+		err := mcpcmd.OutputTokenOnly()
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -209,7 +212,7 @@ func TestOutputHermesHTTPConfig_Success(t *testing.T) {
 	}
 
 	output := captureStdout(func() {
-		err := outputHermesHTTPConfig("claude-code", "openpass", true, "")
+		err := mcpcmd.OutputHermesHTTPConfig("claude-code", "openpass", true, "")
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -221,7 +224,7 @@ func TestOutputHermesHTTPConfig_Success(t *testing.T) {
 
 func TestOutputStdioConfig_Success(t *testing.T) {
 	output := captureStdout(func() {
-		err := outputStdioConfig("claude-code", "openpass")
+		err := mcpcmd.OutputStdioConfig("claude-code", "openpass")
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -242,13 +245,13 @@ func TestCmdMCPConfig_HTTPMode(t *testing.T) {
 
 func TestCmdMCPConfig_Stdio(t *testing.T) {
 	vaultFlagReset(t)
-	_ = mcpConfigCmd.Flags().Set("http", "false")
-	t.Cleanup(func() { _ = mcpConfigCmd.Flags().Set("http", "false") })
+	_ = mcpcmd.McpConfigCmd.Flags().Set("http", "false")
+	t.Cleanup(func() { _ = mcpcmd.McpConfigCmd.Flags().Set("http", "false") })
 
-	rootCmd.SetArgs([]string{"mcp-config", "myagent"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	cli.RootCmd.SetArgs([]string{"mcp-config", "myagent"})
+	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
 
-	err := rootCmd.Execute()
+	err := cli.RootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -265,10 +268,10 @@ func TestCmdMCPConfig_StdioCustomVaultIncludesVaultArg(t *testing.T) {
 	vaultDir := t.TempDir()
 	vaultFlagReset(t)
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent"})
+	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
 
-	err := rootCmd.Execute()
+	err := cli.RootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -289,10 +292,10 @@ func TestCmdMCPConfig_HTTP(t *testing.T) {
 		t.Fatalf("init vault: %v", err)
 	}
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent", "--http"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent", "--http"})
+	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
 
-	err := rootCmd.Execute()
+	err := cli.RootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -305,11 +308,11 @@ func TestCmdMCPConfig_HTTP(t *testing.T) {
 func TestCmdMCPConfig_HermesHTTP(t *testing.T) {
 	vaultDir, _ := initVault(t)
 	vaultFlagReset(t)
-	_ = mcpConfigCmd.Flags().Set("format", "generic")
-	_ = mcpConfigCmd.Flags().Set("server-name", "openpass")
+	_ = mcpcmd.McpConfigCmd.Flags().Set("format", "generic")
+	_ = mcpcmd.McpConfigCmd.Flags().Set("server-name", "openpass")
 	t.Cleanup(func() {
-		_ = mcpConfigCmd.Flags().Set("format", "generic")
-		_ = mcpConfigCmd.Flags().Set("server-name", "openpass")
+		_ = mcpcmd.McpConfigCmd.Flags().Set("format", "generic")
+		_ = mcpcmd.McpConfigCmd.Flags().Set("server-name", "openpass")
 	})
 
 	cfgContent := "mcp:\n  bind: 127.0.0.1\n  port: 8090\n"
@@ -317,10 +320,10 @@ func TestCmdMCPConfig_HermesHTTP(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "hermes", "--http", "--format", "hermes"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "hermes", "--http", "--format", "hermes"})
+	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
 
-	err := rootCmd.Execute()
+	err := cli.RootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -334,8 +337,8 @@ func TestOutputHTTPConfig_VaultPathError(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	// Test outputHTTPConfig directly (bypassing rootCmd which has PersistentPreRun
-	// that also calls vaultPath, causing a panic before our function is reached).
+	// Test mcpcmd.OutputHTTPConfig directly (bypassing cli.RootCmd which has PersistentPreRun
+	// that also calls cli.VaultPath, causing a panic before our function is reached).
 	origHome := os.Getenv("HOME")
 	origVaultEnv := os.Getenv("OPENPASS_VAULT")
 	origVault := vault
@@ -352,7 +355,7 @@ func TestOutputHTTPConfig_VaultPathError(t *testing.T) {
 		vaultFlag.Changed = origChanged
 	})
 
-	err := outputHTTPConfig("test-agent", "openpass", true, "")
+	err := mcpcmd.OutputHTTPConfig("test-agent", "openpass", true, "")
 	if err == nil {
 		t.Error("expected error when HOME is unset for tilde expansion")
 	}
@@ -361,7 +364,7 @@ func TestOutputHTTPConfig_VaultPathError(t *testing.T) {
 func TestOutputHTTPConfig_CustomTokenFile(t *testing.T) {
 	vaultDir, _ := initVault(t)
 	vaultFlagReset(t)
-	t.Cleanup(func() { _ = mcpConfigCmd.Flags().Set("include-token", "false") })
+	t.Cleanup(func() { _ = mcpcmd.McpConfigCmd.Flags().Set("include-token", "false") })
 
 	customTokenPath := filepath.Join(t.TempDir(), "custom-token")
 	customTokenValue := "my-custom-token-value-12345"
@@ -374,10 +377,10 @@ func TestOutputHTTPConfig_CustomTokenFile(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent", "--http"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent", "--http"})
+	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
 
-	err := rootCmd.Execute()
+	err := cli.RootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -386,8 +389,8 @@ func TestOutputHTTPConfig_CustomTokenFile(t *testing.T) {
 		t.Errorf("expected deprecation message, got: %v", err)
 	}
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent", "--http", "--include-token"})
-	err = rootCmd.Execute()
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent", "--http", "--include-token"})
+	err = cli.RootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -406,10 +409,10 @@ func TestOutputHTTPConfig_TokenLoadError(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent", "--http"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent", "--http"})
+	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
 
-	err := rootCmd.Execute()
+	err := cli.RootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -423,14 +426,14 @@ func TestOutputHTTPConfig_StaleRuntimePort(t *testing.T) {
 	vaultDir, _ := initVault(t)
 	vaultFlagReset(t)
 
-	if err := saveRuntimePort(vaultDir, 1); err != nil {
+	if err := cli.SaveRuntimePort(vaultDir, 1); err != nil {
 		t.Fatalf("save runtime port: %v", err)
 	}
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent", "--http"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent", "--http"})
+	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
 
-	err := rootCmd.Execute()
+	err := cli.RootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")

@@ -10,6 +10,9 @@ import (
 	"strings"
 	"testing"
 
+	cli "github.com/danieljustus/OpenPass/internal/cli"
+
+	admin "github.com/danieljustus/OpenPass/cmd/admin"
 	"github.com/danieljustus/OpenPass/internal/config"
 	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
 )
@@ -23,8 +26,8 @@ func TestCreateBackup(t *testing.T) {
 	}
 
 	archivePath := filepath.Join(t.TempDir(), "backup.tar.gz")
-	if err := createBackup(vaultDir, archivePath, false); err != nil {
-		t.Fatalf("createBackup() error = %v", err)
+	if err := admin.CreateBackup(vaultDir, archivePath, false); err != nil {
+		t.Fatalf("admin.CreateBackup() error = %v", err)
 	}
 
 	if _, err := os.Stat(archivePath); err != nil {
@@ -49,8 +52,8 @@ func TestCreateBackup_ExcludeGit(t *testing.T) {
 	}
 
 	archivePath := filepath.Join(t.TempDir(), "backup.tar.gz")
-	if err := createBackup(vaultDir, archivePath, true); err != nil {
-		t.Fatalf("createBackup() error = %v", err)
+	if err := admin.CreateBackup(vaultDir, archivePath, true); err != nil {
+		t.Fatalf("admin.CreateBackup() error = %v", err)
 	}
 
 	f, err := os.Open(archivePath)
@@ -89,13 +92,13 @@ func TestRestoreBackup(t *testing.T) {
 	}
 
 	archivePath := filepath.Join(t.TempDir(), "backup.tar.gz")
-	if err := createBackup(vaultDir, archivePath, false); err != nil {
-		t.Fatalf("createBackup() error = %v", err)
+	if err := admin.CreateBackup(vaultDir, archivePath, false); err != nil {
+		t.Fatalf("admin.CreateBackup() error = %v", err)
 	}
 
 	restoreDir := t.TempDir()
-	if err := restoreBackup(archivePath, restoreDir); err != nil {
-		t.Fatalf("restoreBackup() error = %v", err)
+	if err := admin.RestoreBackup(archivePath, restoreDir); err != nil {
+		t.Fatalf("admin.RestoreBackup() error = %v", err)
 	}
 
 	if _, err := os.Stat(filepath.Join(restoreDir, "identity.age")); err != nil {
@@ -132,7 +135,7 @@ func TestRestoreBackup_PathTraversal(t *testing.T) {
 	f.Close()
 
 	restoreDir := t.TempDir()
-	if err := restoreBackup(archivePath, restoreDir); err == nil {
+	if err := admin.RestoreBackup(archivePath, restoreDir); err == nil {
 		t.Fatal("expected error for path traversal in archive")
 	}
 }
@@ -146,7 +149,7 @@ func TestVerifyBackup_MissingIdentity(t *testing.T) {
 		t.Fatalf("mkdir entries: %v", err)
 	}
 
-	if err := verifyBackup(vaultDir); err == nil {
+	if err := admin.VerifyBackup(vaultDir); err == nil {
 		t.Fatal("expected error for missing identity.age")
 	}
 }
@@ -160,7 +163,7 @@ func TestVerifyBackup_MissingConfig(t *testing.T) {
 		t.Fatalf("mkdir entries: %v", err)
 	}
 
-	if err := verifyBackup(vaultDir); err == nil {
+	if err := admin.VerifyBackup(vaultDir); err == nil {
 		t.Fatal("expected error for missing config.yaml")
 	}
 }
@@ -174,7 +177,7 @@ func TestVerifyBackup_MissingEntries(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 
-	if err := verifyBackup(vaultDir); err == nil {
+	if err := admin.VerifyBackup(vaultDir); err == nil {
 		t.Fatal("expected error for missing entries directory")
 	}
 }
@@ -191,8 +194,8 @@ func TestVerifyBackup_Valid(t *testing.T) {
 		t.Fatalf("mkdir entries: %v", err)
 	}
 
-	if err := verifyBackup(vaultDir); err != nil {
-		t.Fatalf("verifyBackup() error = %v", err)
+	if err := admin.VerifyBackup(vaultDir); err != nil {
+		t.Fatalf("admin.VerifyBackup() error = %v", err)
 	}
 }
 
@@ -203,9 +206,9 @@ func TestComputeSHA256(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	hash, err := computeSHA256(tmpFile)
+	hash, err := admin.ComputeSHA256(tmpFile)
 	if err != nil {
-		t.Fatalf("computeSHA256() error = %v", err)
+		t.Fatalf("admin.ComputeSHA256() error = %v", err)
 	}
 	if len(hash) != 64 {
 		t.Fatalf("hash length = %d, want 64", len(hash))
@@ -213,7 +216,7 @@ func TestComputeSHA256(t *testing.T) {
 }
 
 func TestComputeSHA256_MissingFile(t *testing.T) {
-	_, err := computeSHA256("/nonexistent/file.txt")
+	_, err := admin.ComputeSHA256("/nonexistent/file.txt")
 	if err == nil {
 		t.Fatal("expected error for missing file")
 	}
@@ -233,10 +236,10 @@ func TestBackupCommand(t *testing.T) {
 	archivePath := filepath.Join(t.TempDir(), "backup")
 
 	prepareRootCommandOutput(t)
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "backup", archivePath})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "backup", archivePath})
+	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
 
-	if err := rootCmd.Execute(); err != nil {
+	if err := cli.RootCmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 
@@ -257,17 +260,17 @@ func TestRestoreCommand(t *testing.T) {
 	}
 
 	archivePath := filepath.Join(t.TempDir(), "backup.tar.gz")
-	if err := createBackup(srcVault, archivePath, false); err != nil {
-		t.Fatalf("createBackup() error = %v", err)
+	if err := admin.CreateBackup(srcVault, archivePath, false); err != nil {
+		t.Fatalf("admin.CreateBackup() error = %v", err)
 	}
 
 	restoreDir := t.TempDir()
 
 	prepareRootCommandOutput(t)
-	rootCmd.SetArgs([]string{"--vault", restoreDir, "restore", archivePath})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	cli.RootCmd.SetArgs([]string{"--vault", restoreDir, "restore", archivePath})
+	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
 
-	if err := rootCmd.Execute(); err != nil {
+	if err := cli.RootCmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 
@@ -283,10 +286,10 @@ func TestBackupCommand_UninitializedVault(t *testing.T) {
 	vaultDir := t.TempDir()
 
 	prepareRootCommandOutput(t)
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "backup", "/tmp/backup.tar.gz"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "backup", "/tmp/backup.tar.gz"})
+	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
 
-	if err := rootCmd.Execute(); err == nil {
+	if err := cli.RootCmd.Execute(); err == nil {
 		t.Fatal("expected error for uninitialized vault")
 	}
 }
@@ -298,10 +301,10 @@ func TestRestoreCommand_MissingArchive(t *testing.T) {
 	vaultDir := t.TempDir()
 
 	prepareRootCommandOutput(t)
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "restore", "/nonexistent/backup.tar.gz"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "restore", "/nonexistent/backup.tar.gz"})
+	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
 
-	if err := rootCmd.Execute(); err == nil {
+	if err := cli.RootCmd.Execute(); err == nil {
 		t.Fatal("expected error for missing archive")
 	}
 }
@@ -318,10 +321,10 @@ func TestRestoreCommand_CorruptArchive(t *testing.T) {
 	vaultDir := t.TempDir()
 
 	prepareRootCommandOutput(t)
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "restore", archivePath})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "restore", archivePath})
+	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
 
-	if err := rootCmd.Execute(); err == nil {
+	if err := cli.RootCmd.Execute(); err == nil {
 		t.Fatal("expected error for corrupt archive")
 	}
 }
@@ -344,8 +347,8 @@ func TestCreateBackup_SymlinkSkipped(t *testing.T) {
 	}
 
 	archivePath := filepath.Join(t.TempDir(), "backup.tar.gz")
-	if err := createBackup(vaultDir, archivePath, false); err != nil {
-		t.Fatalf("createBackup() error = %v", err)
+	if err := admin.CreateBackup(vaultDir, archivePath, false); err != nil {
+		t.Fatalf("admin.CreateBackup() error = %v", err)
 	}
 
 	f, err := os.Open(archivePath)
@@ -384,8 +387,8 @@ func TestRestoreBackup_ExistingSymlinkRejected(t *testing.T) {
 	}
 
 	archivePath := filepath.Join(t.TempDir(), "backup.tar.gz")
-	if err := createBackup(vaultDir, archivePath, false); err != nil {
-		t.Fatalf("createBackup() error = %v", err)
+	if err := admin.CreateBackup(vaultDir, archivePath, false); err != nil {
+		t.Fatalf("admin.CreateBackup() error = %v", err)
 	}
 
 	restoreDir := t.TempDir()
@@ -394,7 +397,7 @@ func TestRestoreBackup_ExistingSymlinkRejected(t *testing.T) {
 		t.Fatalf("create symlink: %v", err)
 	}
 
-	if err := restoreBackup(archivePath, restoreDir); err == nil {
+	if err := admin.RestoreBackup(archivePath, restoreDir); err == nil {
 		t.Fatal("expected error when restoring over existing symlink")
 	}
 }
@@ -446,8 +449,8 @@ func TestRestoreBackup_ModeClamping(t *testing.T) {
 	f.Close()
 
 	restoreDir := t.TempDir()
-	if err := restoreBackup(archivePath, restoreDir); err != nil {
-		t.Fatalf("restoreBackup() error = %v", err)
+	if err := admin.RestoreBackup(archivePath, restoreDir); err != nil {
+		t.Fatalf("admin.RestoreBackup() error = %v", err)
 	}
 
 	fileInfo, err := os.Lstat(filepath.Join(restoreDir, "worldreadable.txt"))
@@ -497,10 +500,10 @@ func TestBackupCommand_ExcludeGit(t *testing.T) {
 	archivePath := filepath.Join(t.TempDir(), "backup")
 
 	prepareRootCommandOutput(t)
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "backup", archivePath, "--exclude-git"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "backup", archivePath, "--exclude-git"})
+	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
 
-	if err := rootCmd.Execute(); err != nil {
+	if err := cli.RootCmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 
@@ -534,7 +537,7 @@ func TestCreateBackup_UnreadableFile(t *testing.T) {
 	defer os.Chmod(unreadableFile, 0o600)
 
 	archivePath := filepath.Join(t.TempDir(), "backup.tar.gz")
-	if err := createBackup(vaultDir, archivePath, false); err == nil {
+	if err := admin.CreateBackup(vaultDir, archivePath, false); err == nil {
 		t.Fatal("expected error for unreadable file")
 	}
 }

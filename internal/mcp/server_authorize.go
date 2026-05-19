@@ -223,36 +223,39 @@ func (s *Server) logAuditShare(ctx context.Context, action, path string, grant *
 }
 
 func (s *Server) canWrite() bool {
-	return s != nil && s.agent != nil && s.agent.CanWrite
+	return s != nil && s.agent != nil && s.agent.CanWrite != nil && *s.agent.CanWrite
 }
 
 func (s *Server) canRunCommands() bool {
-	return s != nil && s.agent != nil && s.agent.CanRunCommands
+	return s != nil && s.agent != nil && s.agent.CanRunCommands != nil && *s.agent.CanRunCommands
 }
 
 func (s *Server) canManageConfig() bool {
-	return s != nil && s.agent != nil && s.agent.CanManageConfig
+	return s != nil && s.agent != nil && s.agent.CanManageConfig != nil && *s.agent.CanManageConfig
 }
 
 func (s *Server) canUseClipboard() bool {
-	return s != nil && s.agent != nil && s.agent.CanUseClipboard
+	return s != nil && s.agent != nil && s.agent.CanUseClipboard != nil && *s.agent.CanUseClipboard
 }
 
 func (s *Server) canUseAutotype() bool {
-	return s != nil && s.agent != nil && s.agent.CanUseAutotype
+	return s != nil && s.agent != nil && s.agent.CanUseAutotype != nil && *s.agent.CanUseAutotype
 }
 
 func (s *Server) canReadValues() bool {
-	return s != nil && s.agent != nil && s.agent.CanReadValues
+	return s != nil && s.agent != nil && s.agent.CanReadValues != nil && *s.agent.CanReadValues
 }
 
 func (s *Server) requiresApproval() bool {
 	if s == nil || s.agent == nil {
 		return false
 	}
-	mode := s.agent.ApprovalMode
+	var mode string
+	if s.agent.ApprovalMode != nil {
+		mode = *s.agent.ApprovalMode
+	}
 	if mode == "" {
-		if s.agent.RequireApproval {
+		if s.agent.RequireApproval != nil && *s.agent.RequireApproval {
 			mode = "prompt"
 		} else {
 			return false
@@ -291,7 +294,10 @@ func (s *Server) shouldRedactField(field string) bool {
 }
 
 func (s *Server) applySemanticInjectionCheck(text string) (string, error) {
-	mode := s.agent.PromptInjectionMode
+	mode := ""
+	if s.agent.PromptInjectionMode != nil {
+		mode = *s.agent.PromptInjectionMode
+	}
 	if mode == "" || mode == "off" {
 		return text, nil
 	}

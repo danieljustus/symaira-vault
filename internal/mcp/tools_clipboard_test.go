@@ -49,8 +49,8 @@ func TestHandleCopyToClipboard(t *testing.T) {
 		srv := newTestServerWithVault(t, config.AgentProfile{
 			Name:            "test",
 			AllowedPaths:    []string{"*"},
-			CanUseClipboard: true,
-			ApprovalMode:    "none",
+			CanUseClipboard: config.BoolPtr(true),
+			ApprovalMode:    config.StrPtr("none"),
 		}, "stdio", vaultDir)
 		srv.vault.Identity = identity
 
@@ -84,8 +84,8 @@ func TestHandleCopyToClipboard(t *testing.T) {
 		srv := newTestServerWithVault(t, config.AgentProfile{
 			Name:            "test",
 			AllowedPaths:    []string{"*"},
-			CanUseClipboard: false,
-			ApprovalMode:    "none",
+			CanUseClipboard: config.BoolPtr(false),
+			ApprovalMode:    config.StrPtr("none"),
 		}, "stdio", vaultDir)
 		srv.vault.Identity = identity
 
@@ -107,8 +107,8 @@ func TestHandleCopyToClipboard(t *testing.T) {
 		srv := newTestServerWithVault(t, config.AgentProfile{
 			Name:            "test",
 			AllowedPaths:    []string{"work/"},
-			CanUseClipboard: true,
-			ApprovalMode:    "none",
+			CanUseClipboard: config.BoolPtr(true),
+			ApprovalMode:    config.StrPtr("none"),
 		}, "stdio", vaultDir)
 		srv.vault.Identity = identity
 
@@ -130,8 +130,8 @@ func TestHandleCopyToClipboard(t *testing.T) {
 		srv := newTestServerWithVault(t, config.AgentProfile{
 			Name:            "test",
 			AllowedPaths:    []string{"*"},
-			CanUseClipboard: true,
-			ApprovalMode:    "deny",
+			CanUseClipboard: config.BoolPtr(true),
+			ApprovalMode:    config.StrPtr("deny"),
 		}, "stdio", vaultDir)
 		srv.vault.Identity = identity
 
@@ -157,8 +157,8 @@ func TestHandleCopyToClipboard(t *testing.T) {
 		srv := newTestServerWithVault(t, config.AgentProfile{
 			Name:            "test",
 			AllowedPaths:    []string{"*"},
-			CanUseClipboard: true,
-			ApprovalMode:    "none",
+			CanUseClipboard: config.BoolPtr(true),
+			ApprovalMode:    config.StrPtr("none"),
 		}, "stdio", dir)
 		srv.vault.Identity = identity
 
@@ -182,8 +182,8 @@ func TestHandleCopyToClipboard(t *testing.T) {
 		srv := newTestServerWithVault(t, config.AgentProfile{
 			Name:            "test",
 			AllowedPaths:    []string{"*"},
-			CanUseClipboard: true,
-			ApprovalMode:    "none",
+			CanUseClipboard: config.BoolPtr(true),
+			ApprovalMode:    config.StrPtr("none"),
 		}, "stdio", "")
 
 		req := CallToolRequest{
@@ -209,8 +209,8 @@ func TestHandleAutotype(t *testing.T) {
 		srv := newTestServerWithVault(t, config.AgentProfile{
 			Name:           "test",
 			AllowedPaths:   []string{"*"},
-			CanUseAutotype: true,
-			ApprovalMode:   "none",
+			CanUseAutotype: config.BoolPtr(true),
+			ApprovalMode:   config.StrPtr("none"),
 		}, "stdio", vaultDir)
 		srv.vault.Identity = identity
 
@@ -239,8 +239,8 @@ func TestHandleAutotype(t *testing.T) {
 		srv := newTestServerWithVault(t, config.AgentProfile{
 			Name:           "test",
 			AllowedPaths:   []string{"*"},
-			CanUseAutotype: true,
-			ApprovalMode:   "none",
+			CanUseAutotype: config.BoolPtr(true),
+			ApprovalMode:   config.StrPtr("none"),
 		}, "stdio", vaultDir)
 		srv.vault.Identity = identity
 
@@ -272,8 +272,8 @@ func TestHandleAutotype(t *testing.T) {
 		srv := newTestServerWithVault(t, config.AgentProfile{
 			Name:           "test",
 			AllowedPaths:   []string{"*"},
-			CanUseAutotype: false,
-			ApprovalMode:   "none",
+			CanUseAutotype: config.BoolPtr(false),
+			ApprovalMode:   config.StrPtr("none"),
 		}, "stdio", vaultDir)
 		srv.vault.Identity = identity
 
@@ -295,8 +295,8 @@ func TestHandleAutotype(t *testing.T) {
 		srv := newTestServerWithVault(t, config.AgentProfile{
 			Name:           "test",
 			AllowedPaths:   []string{"work/"},
-			CanUseAutotype: true,
-			ApprovalMode:   "none",
+			CanUseAutotype: config.BoolPtr(true),
+			ApprovalMode:   config.StrPtr("none"),
 		}, "stdio", vaultDir)
 		srv.vault.Identity = identity
 
@@ -318,8 +318,8 @@ func TestHandleAutotype(t *testing.T) {
 		srv := newTestServerWithVault(t, config.AgentProfile{
 			Name:           "test",
 			AllowedPaths:   []string{"*"},
-			CanUseAutotype: true,
-			ApprovalMode:   "deny",
+			CanUseAutotype: config.BoolPtr(true),
+			ApprovalMode:   config.StrPtr("deny"),
 		}, "stdio", vaultDir)
 		srv.vault.Identity = identity
 
@@ -340,8 +340,8 @@ func TestHandleAutotype(t *testing.T) {
 		srv := newTestServerWithVault(t, config.AgentProfile{
 			Name:           "test",
 			AllowedPaths:   []string{"*"},
-			CanUseAutotype: true,
-			ApprovalMode:   "none",
+			CanUseAutotype: config.BoolPtr(true),
+			ApprovalMode:   config.StrPtr("none"),
 		}, "stdio", "")
 
 		req := CallToolRequest{
