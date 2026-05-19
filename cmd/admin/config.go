@@ -240,7 +240,7 @@ This shows the raw config file contents as-is.`,
 			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "cannot determine config file path", nil)
 		}
 
-		raw, err := os.ReadFile(path)
+		raw, err := os.ReadFile(filepath.Clean(path))
 		if err != nil {
 			return errorspkg.NewCLIError(exitConfigError, fmt.Sprintf("cannot load config: %v", err), err)
 		}
