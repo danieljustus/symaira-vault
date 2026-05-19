@@ -1568,7 +1568,7 @@ func TestShareStore_InitSigningKey(t *testing.T) {
 	store := NewShareStore(path)
 
 	// InitSigningKey should work (uses memory fallback in CI).
-	key, err := store.InitSigningKey(dir)
+	key, err := store.InitSigningKey(dir, nil)
 	if err != nil {
 		t.Fatalf("InitSigningKey() error = %v", err)
 	}

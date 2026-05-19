@@ -10,6 +10,7 @@ import (
 	"os"
 	"sync"
 
+	"filippo.io/age"
 	"github.com/zalando/go-keyring"
 
 	"github.com/danieljustus/OpenPass/internal/logging"
@@ -103,8 +104,10 @@ func grantGetWithFallback(service, account string) (string, error) {
 
 // LoadOrCreateGrantSigningKey loads the grant HMAC signing key from the OS
 // keyring (with memory fallback), creating a new 32-byte key if none exists.
-func LoadOrCreateGrantSigningKey(vaultDir string) ([]byte, error) {
-	key, err := LoadGrantSigningKey(vaultDir)
+// The identity parameter is used by the fallback keystore for encrypting
+// keys at rest and is ignored on OS keyring platforms.
+func LoadOrCreateGrantSigningKey(vaultDir string, identity *age.X25519Identity) ([]byte, error) {
+	key, err := LoadGrantSigningKey(vaultDir, identity)
 	if err == nil {
 		return key, nil
 	}
@@ -124,7 +127,9 @@ func LoadOrCreateGrantSigningKey(vaultDir string) ([]byte, error) {
 
 // LoadGrantSigningKey loads the grant HMAC signing key from the OS keyring
 // (with memory fallback). Returns an error if no key exists.
-func LoadGrantSigningKey(vaultDir string) ([]byte, error) {
+// The identity parameter is used by the fallback keystore for encrypting
+// keys at rest and is ignored on OS keyring platforms.
+func LoadGrantSigningKey(vaultDir string, identity *age.X25519Identity) ([]byte, error) {
 	account := grantKeyringAccount(vaultDir)
 	hexKey, err := grantGetWithFallback(grantKeyringService, account)
 	if err != nil {

@@ -143,7 +143,7 @@ to re-encrypt all entries for this new device.`,
 
 		fmt.Fprintf(os.Stderr, "Pairing with device (public key: %s)\n", truncatePubkey(pf.PublicKey))
 
-		passphrase, err := readHiddenInput("Enter passphrase for this device: ", nil)
+		passphrase, err := readHiddenInput("Enter passphrase for this device (minimum 12 characters): ", nil)
 		if err != nil {
 			return fmt.Errorf("read passphrase: %w", err)
 		}
@@ -447,7 +447,7 @@ request so the first device can accept it.`,
 			return fmt.Errorf("invalid public key in pairing data: expected age1... format")
 		}
 
-		passphrase, err := readHiddenInput("Enter passphrase for this device: ", nil)
+		passphrase, err := readHiddenInput("Enter passphrase for this device (minimum 12 characters): ", nil)
 		if err != nil {
 			return fmt.Errorf("read passphrase: %w", err)
 		}

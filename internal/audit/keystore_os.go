@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"filippo.io/age"
 	"github.com/zalando/go-keyring"
 
 	"github.com/danieljustus/OpenPass/internal/logging"
@@ -174,9 +175,10 @@ func (k *osKeystore) LoadHMACKey() ([]byte, error) {
 }
 
 // NewKeystore is the package-level factory for creating a Keystore backed
-// by the OS keyring. It is set by init() on platforms that support it and
-// returns nil on unsupported platforms.
-var NewKeystore func(auditDir string) Keystore
+// by the OS keyring. It is set by init() on platforms that support it.
+// The identity parameter is used by the fallback keystore for encrypting
+// keys at rest and is ignored on OS keyring platforms.
+var NewKeystore func(auditDir string, identity *age.X25519Identity) Keystore
 
 func init() {
 	// In CI environments, keychain prompts can hang indefinitely.
@@ -186,7 +188,7 @@ func init() {
 		fallback = &memoryKeyring{}
 	}
 
-	NewKeystore = func(auditDir string) Keystore {
+	NewKeystore = func(auditDir string, identity *age.X25519Identity) Keystore {
 		return &osKeystore{auditDir: auditDir}
 	}
 }

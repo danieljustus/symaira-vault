@@ -274,8 +274,8 @@ func ReadEntry(vaultDir, path string, identity *age.X25519Identity) (*Entry, err
 }
 
 // writeEntryLocked performs the full entry write (prep, encrypt, file ops, manifest
-// update) assuming the caller already holds the per-vaultDir exclusive lock.
-func writeEntryLocked(vaultDir, path string, entry *Entry, identity *age.X25519Identity, cfg *vaultconfig.Config) error {
+// update preparation) assuming the caller already holds the per-vaultDir exclusive lock.
+func writeEntryLocked(vaultDir, path string, entry *Entry, identity *age.X25519Identity, cfg *vaultconfig.Config) ([]byte, error) {
 	now := time.Now().UTC()
 	copyEntry := cloneEntry(entry)
 	if copyEntry.Metadata.Created.IsZero() {
@@ -299,28 +299,25 @@ func writeEntryLocked(vaultDir, path string, entry *Entry, identity *age.X25519I
 
 	plaintext, err := json.Marshal(copyEntry)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	start := time.Now()
 	ciphertext, err := vaultcrypto.Encrypt(plaintext, identity.Recipient())
 	metrics.RecordVaultOperationDuration("encrypt", time.Since(start))
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	filePath := entryStoragePath(vaultDir, path, identity, cfg)
 	if err := SafeMkdirAll(filepath.Dir(filePath), 0o700); err != nil {
-		return err
+		return nil, err
 	}
 	// Symlink-hardened write: O_NOFOLLOW + fstat verification prevents writing through symlinks
 	if err := SafeWriteFile(filePath, ciphertext, 0o600); err != nil {
-		return err
+		return nil, err
 	}
-	if err := UpdateManifestEntry(vaultDir, path, ciphertext, identity); err != nil {
-		return fmt.Errorf("update manifest: %w", err)
-	}
-	return nil
+	return ciphertext, nil
 }
 
 // WriteEntry encrypts and writes an entry to the vault.
@@ -357,9 +354,23 @@ func WriteEntry(vaultDir, path string, entry *Entry, identity *age.X25519Identit
 		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
-	defer func() { _ = ReleaseLock(lockFile) }()
+	defer func() {
+		if lockFile != nil {
+			_ = ReleaseLock(lockFile)
+		}
+	}()
 
-	if err := writeEntryLocked(vaultDir, path, entry, identity, cfg); err != nil {
+	ciphertext, err := writeEntryLocked(vaultDir, path, entry, identity, cfg)
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+	if err := ReleaseLock(lockFile); err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+	lockFile = nil
+	if err := queueManifestUpdate(vaultDir, path, ciphertext, identity); err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
@@ -391,7 +402,11 @@ func DeleteEntry(vaultDir, path string, identity *age.X25519Identity) error {
 		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
-	defer func() { _ = ReleaseLock(lockFile) }()
+	defer func() {
+		if lockFile != nil {
+			_ = ReleaseLock(lockFile)
+		}
+	}()
 
 	filePath := entryStoragePath(vaultDir, path, identity, cfg)
 	// Symlink-hardened remove: O_NOFOLLOW + fstat verification prevents removing through symlinks
@@ -408,9 +423,14 @@ func DeleteEntry(vaultDir, path string, identity *age.X25519Identity) error {
 			span.SetStatus(codes.Error, err.Error())
 			return err
 		}
-		if err := RemoveManifestEntry(vaultDir, path, identity); err != nil {
+		if err := ReleaseLock(lockFile); err != nil {
 			span.SetStatus(codes.Error, err.Error())
-			return fmt.Errorf("remove from manifest: %w", err)
+			return err
+		}
+		lockFile = nil
+		if err := queueManifestRemove(vaultDir, path, identity); err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			return err
 		}
 		return nil
 	}
@@ -425,9 +445,14 @@ func DeleteEntry(vaultDir, path string, identity *age.X25519Identity) error {
 			return err
 		}
 	}
-	if err := RemoveManifestEntry(vaultDir, path, identity); err != nil {
+	if err := ReleaseLock(lockFile); err != nil {
 		span.SetStatus(codes.Error, err.Error())
-		return fmt.Errorf("remove from manifest: %w", err)
+		return err
+	}
+	lockFile = nil
+	if err := queueManifestRemove(vaultDir, path, identity); err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 	return nil
 }
@@ -477,7 +502,8 @@ func migrateLegacyEntries(vaultDir string) error {
 		if err != nil {
 			return err
 		}
-		if filepath.ToSlash(rel) == "identity.age" { //nolint:goconst // filename literal
+		relSlash := filepath.ToSlash(rel)
+		if relSlash == "identity.age" || relSlash == "manifest.age" { //nolint:goconst // filename literal
 			return nil
 		}
 
@@ -509,7 +535,11 @@ func MergeEntry(vaultDir, path string, partialData map[string]any, identity *age
 		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
-	defer func() { _ = ReleaseLock(lockFile) }()
+	defer func() {
+		if lockFile != nil {
+			_ = ReleaseLock(lockFile)
+		}
+	}()
 
 	entry, err := ReadEntry(vaultDir, path, identity)
 	if err != nil {
@@ -527,7 +557,17 @@ func MergeEntry(vaultDir, path string, partialData map[string]any, identity *age
 		return nil, err
 	}
 
-	if err := writeEntryLocked(vaultDir, path, entry, identity, cfg); err != nil {
+	ciphertext, err := writeEntryLocked(vaultDir, path, entry, identity, cfg)
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+	if err := ReleaseLock(lockFile); err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+	lockFile = nil
+	if err := queueManifestUpdate(vaultDir, path, ciphertext, identity); err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}

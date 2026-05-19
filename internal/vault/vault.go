@@ -97,6 +97,10 @@ func Open(vaultDir string, identity *age.X25519Identity) (*Vault, error) {
 	if err := migrateLegacyEntries(vaultDir); err != nil {
 		return nil, fmt.Errorf("migrate legacy entries: %w", err)
 	}
+	// Rebuild manifest only when missing (fresh vaults or missing manifest file).
+	if _, err := os.Stat(filepath.Join(vaultDir, manifestFileName)); os.IsNotExist(err) {
+		_ = RebuildManifest(vaultDir, identity) // best-effort
+	}
 	if _, err := os.Stat(filepath.Join(vaultDir, ".git")); err == nil {
 		if err := git.CreateGitignore(vaultDir); err != nil {
 			return nil, fmt.Errorf("update gitignore: %w", err)

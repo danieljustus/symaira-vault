@@ -49,6 +49,19 @@ func TestLoadOrCreateTokenRespectsEnvVar(t *testing.T) {
 	}
 }
 
+func TestLoadOrCreateTokenUnsetsEnvVar(t *testing.T) {
+	t.Setenv("OPENPASS_MCP_TOKEN", "my-custom-token")
+
+	_, err := LoadOrCreateToken("/nonexistent/path")
+	if err != nil {
+		t.Fatalf("LoadOrCreateToken() error = %v", err)
+	}
+
+	if os.Getenv("OPENPASS_MCP_TOKEN") != "" {
+		t.Fatalf("OPENPASS_MCP_TOKEN was not unset after reading")
+	}
+}
+
 func TestLoadOrCreateTokenFilePermissions(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: file permissions differ")

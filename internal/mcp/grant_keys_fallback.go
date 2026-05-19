@@ -4,11 +4,15 @@ package mcp
 
 import (
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 
+	"filippo.io/age"
+
+	vaultcrypto "github.com/danieljustus/OpenPass/internal/crypto"
 	"github.com/danieljustus/OpenPass/internal/logging"
 )
 
@@ -17,18 +21,25 @@ const (
 	grantKeySize     = 32
 )
 
-// LoadOrCreateGrantSigningKey loads the grant signing key from a file at
-// vaultDir/grant-signing-key, creating a new 32-byte key if none exists.
-func LoadOrCreateGrantSigningKey(vaultDir string) ([]byte, error) {
+// LoadOrCreateGrantSigningKey loads the grant signing key from an encrypted
+// file at vaultDir/grant-signing-key, creating a new 32-byte key if none
+// exists. When identity is provided the key is encrypted at rest.
+func LoadOrCreateGrantSigningKey(vaultDir string, identity *age.X25519Identity) ([]byte, error) {
 	keyPath := filepath.Join(vaultDir, grantKeyFileName)
 
-	existing, err := os.ReadFile(keyPath) //#nosec G304 -- keyPath is constructed from vaultDir
-	if err == nil && len(existing) == grantKeySize {
+	existing, err := vaultcrypto.LoadEncryptedKey(keyPath, identity)
+	if err != nil {
+		if !errors.Is(err, vaultcrypto.ErrKeyFileNotFound) {
+			return nil, fmt.Errorf("read existing grant signing key: %w", err)
+		}
+		// Key file does not exist — create a new one below.
+	} else if len(existing) == grantKeySize {
+		// Auto-migrate legacy plaintext key if identity is available.
+		encrypted, _ := vaultcrypto.IsEncryptedKeyFile(keyPath)
+		if !encrypted && identity != nil {
+			_ = vaultcrypto.SaveEncryptedKey(keyPath, existing, identity)
+		}
 		return existing, nil
-	}
-
-	if err != nil && !os.IsNotExist(err) {
-		return nil, fmt.Errorf("read existing grant signing key: %w", err)
 	}
 
 	key := make([]byte, grantKeySize)
@@ -36,24 +47,40 @@ func LoadOrCreateGrantSigningKey(vaultDir string) ([]byte, error) {
 		return nil, fmt.Errorf("generate grant signing key: %w", err)
 	}
 
-	if err := os.WriteFile(keyPath, key, 0o600); err != nil {
-		return nil, fmt.Errorf("write grant signing key: %w", err)
+	if identity != nil {
+		if err := vaultcrypto.SaveEncryptedKey(keyPath, key, identity); err != nil {
+			return nil, fmt.Errorf("write encrypted grant signing key: %w", err)
+		}
+	} else {
+		if err := os.WriteFile(keyPath, key, 0o600); err != nil {
+			return nil, fmt.Errorf("write grant signing key: %w", err)
+		}
 	}
 
 	return key, nil
 }
 
-// LoadGrantSigningKey loads the grant signing key from the file at
+// LoadGrantSigningKey loads the grant signing key from the encrypted file at
 // vaultDir/grant-signing-key. Returns an error if the file does not exist.
-func LoadGrantSigningKey(vaultDir string) ([]byte, error) {
+// When identity is provided, legacy plaintext keys are auto-migrated.
+func LoadGrantSigningKey(vaultDir string, identity *age.X25519Identity) ([]byte, error) {
 	keyPath := filepath.Join(vaultDir, grantKeyFileName)
-	data, err := os.ReadFile(keyPath) //#nosec G304 -- keyPath is constructed from vaultDir
+
+	data, err := vaultcrypto.LoadEncryptedKey(keyPath, identity)
 	if err != nil {
 		return nil, fmt.Errorf("read grant signing key: %w", err)
 	}
+
 	if len(data) != grantKeySize {
 		return nil, fmt.Errorf("invalid grant signing key size: got %d, want %d", len(data), grantKeySize)
 	}
+
+	// Auto-migrate legacy plaintext key if identity is available.
+	encrypted, _ := vaultcrypto.IsEncryptedKeyFile(keyPath)
+	if !encrypted && identity != nil {
+		_ = vaultcrypto.SaveEncryptedKey(keyPath, data, identity)
+	}
+
 	return data, nil
 }
 

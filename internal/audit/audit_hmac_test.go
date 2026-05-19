@@ -107,7 +107,7 @@ func TestHMACTamperedEntryDetected(t *testing.T) {
 	}
 
 	auditDir := filepath.Join(home, ".openpass")
-	ks := NewKeystore(auditDir)
+	ks := NewKeystore(auditDir, nil)
 	key, err := ks.LoadHMACKey()
 	if err != nil {
 		t.Fatalf("LoadHMACKey() error = %v", err)

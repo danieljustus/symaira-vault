@@ -431,8 +431,8 @@ func WriteEntryWithRecipients(vaultDir, path string, entry *Entry, identity *age
 	if err := SafeWriteFile(filePath, ciphertext, 0o600); err != nil {
 		return err
 	}
-	if err := UpdateManifestEntry(vaultDir, path, ciphertext, identity); err != nil {
-		return fmt.Errorf("update manifest: %w", err)
+	if err := queueManifestUpdate(vaultDir, path, ciphertext, identity); err != nil {
+		return err
 	}
 	return nil
 }

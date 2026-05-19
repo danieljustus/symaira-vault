@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -170,5 +171,131 @@ func TestAcquireWriteLockCustomTimeout(t *testing.T) {
 	}
 	if err := ReleaseLock(lockFile); err != nil {
 		t.Fatalf("release lock: %v", err)
+	}
+}
+
+func TestDeferredManifestUpdate(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: LockFileEx access violation")
+	}
+	vaultDir := t.TempDir()
+	id := testutil.TempIdentity(t)
+
+	if err := WriteEntry(vaultDir, "test/entry", &Entry{
+		Data: map[string]any{"key": "value"},
+	}, id); err != nil {
+		t.Fatalf("write entry: %v", err)
+	}
+	FlushManifestUpdates()
+
+	m, err := LoadManifest(vaultDir, id)
+	if err != nil {
+		t.Fatalf("load manifest: %v", err)
+	}
+	if _, ok := m.Entries["test/entry"]; !ok {
+		t.Fatal("manifest missing test/entry after flush")
+	}
+
+	if err := DeleteEntry(vaultDir, "test/entry", id); err != nil {
+		t.Fatalf("delete entry: %v", err)
+	}
+	FlushManifestUpdates()
+
+	m, err = LoadManifest(vaultDir, id)
+	if err != nil {
+		t.Fatalf("load manifest after delete: %v", err)
+	}
+	if _, ok := m.Entries["test/entry"]; ok {
+		t.Fatal("manifest still has test/entry after delete and flush")
+	}
+}
+
+func TestConcurrentWriteDifferentEntries(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: concurrent cgo calls can trigger access violations in age crypto")
+	}
+	vaultDir := t.TempDir()
+	id := testutil.TempIdentity(t)
+
+	const numEntries = 10
+	var wg sync.WaitGroup
+	wg.Add(numEntries)
+
+	for i := 0; i < numEntries; i++ {
+		name := fmt.Sprintf("entry-%d", i)
+		go func() {
+			defer wg.Done()
+			err := WriteEntry(vaultDir, name, &Entry{
+				Data: map[string]any{"idx": name},
+			}, id)
+			if err != nil {
+				t.Errorf("write %s: %v", name, err)
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	for i := 0; i < numEntries; i++ {
+		name := fmt.Sprintf("entry-%d", i)
+		got, err := ReadEntry(vaultDir, name, id)
+		if err != nil {
+			t.Fatalf("read %s after concurrent writes: %v", name, err)
+		}
+		if got.Data["idx"] != name {
+			t.Errorf("%s: got idx=%v, want %s", name, got.Data["idx"], name)
+		}
+	}
+
+	FlushManifestUpdates()
+	m, err := LoadManifest(vaultDir, id)
+	if err != nil {
+		t.Fatalf("load manifest: %v", err)
+	}
+	for i := 0; i < numEntries; i++ {
+		name := fmt.Sprintf("entry-%d", i)
+		if _, ok := m.Entries[name]; !ok {
+			t.Errorf("manifest missing %s after concurrent writes", name)
+		}
+	}
+}
+
+func TestRebuildManifest(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: LockFileEx access violation")
+	}
+	vaultDir := t.TempDir()
+	id := testutil.TempIdentity(t)
+
+	entries := []string{"alpha", "beta", "gamma"}
+	for _, name := range entries {
+		if err := WriteEntry(vaultDir, name, &Entry{
+			Data: map[string]any{"name": name},
+		}, id); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	FlushManifestUpdates()
+
+	manifestPath := filepath.Join(vaultDir, manifestFileName)
+	if err := os.Remove(manifestPath); err != nil {
+		t.Fatalf("remove manifest: %v", err)
+	}
+
+	if err := RebuildManifest(vaultDir, id); err != nil {
+		t.Fatalf("rebuild manifest: %v", err)
+	}
+
+	m, err := LoadManifest(vaultDir, id)
+	if err != nil {
+		t.Fatalf("load rebuilt manifest: %v", err)
+	}
+	for _, name := range entries {
+		if _, ok := m.Entries[name]; !ok {
+			t.Errorf("rebuilt manifest missing %s", name)
+		}
+	}
+	if len(m.Entries) != len(entries) {
+		t.Errorf("rebuilt manifest has %d entries, want %d", len(m.Entries), len(entries))
 	}
 }

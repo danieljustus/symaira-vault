@@ -19,6 +19,7 @@ import (
 	"time"
 
 	vaultcrypto "github.com/danieljustus/OpenPass/internal/crypto"
+	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
 )
 
 const (
@@ -205,7 +206,7 @@ func New(agentName string, vaultDir string) (*Logger, error) {
 		return nil, fmt.Errorf("open audit log: %w", err)
 	}
 
-	ks := NewKeystore(cleanAuditDir)
+	ks := NewKeystore(cleanAuditDir, vaultpkg.CurrentSearchIdentity())
 	hmacKey, err := ks.LoadOrCreateHMACKey()
 	if err != nil {
 		_ = file.Close()

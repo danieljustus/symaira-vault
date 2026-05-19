@@ -50,7 +50,7 @@ Optionally re-encrypts all entries with the new passphrase.`,
 			return fmt.Errorf("current passphrase is incorrect: %w", err)
 		}
 
-		newPassphrase, err := readHiddenInput("New passphrase: ", nil)
+		newPassphrase, err := readHiddenInput("New passphrase (minimum 12 characters): ", nil)
 		if err != nil {
 			return fmt.Errorf("cannot read new passphrase: %w", err)
 		}

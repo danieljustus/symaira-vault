@@ -295,6 +295,8 @@ openpass auth set passphrase
 | Variable                    | Purpose                                      | Security Note                      |
 | --------------------------- | -------------------------------------------- | ---------------------------------- |
 | `OPENPASS_VAULT`            | Override vault location                      | Ensure path has proper permissions |
+| `OPENPASS_PASSPHRASE`       | Non-interactive vault unlock                 | **Unset after reading** to prevent leakage to child processes |
+| `OPENPASS_MCP_TOKEN`        | Override MCP bearer token (HTTP mode)        | **Unset after reading** to prevent leakage to child processes |
 | `OPENPASS_AUDIT_MAX_SIZE_MB` | Max audit log file size in MB                | Higher values increase disk usage  |
 | `OPENPASS_AUDIT_MAX_BACKUPS` | Number of audit backups to retain           | More backups use more disk space   |
 | `OPENPASS_AUDIT_MAX_AGE_DAYS` | Days before audit backups are deleted       | Longer retention uses more space   |

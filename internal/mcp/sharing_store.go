@@ -13,6 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"filippo.io/age"
+
 	openpasscrypto "github.com/danieljustus/OpenPass/internal/crypto"
 	"github.com/danieljustus/OpenPass/internal/fileutil"
 )
@@ -59,8 +61,10 @@ func (s *ShareStore) SetSigningKey(key []byte) {
 // (with memory fallback). This should be called once after creating the store.
 // Returns the loaded key, or nil if the keyring is unavailable (the store will
 // fall back to non-HMAC IDs without error).
-func (s *ShareStore) InitSigningKey(vaultDir string) ([]byte, error) {
-	key, err := LoadOrCreateGrantSigningKey(vaultDir)
+// The identity parameter is used by the fallback keystore for encrypting
+// keys at rest and is ignored on OS keyring platforms.
+func (s *ShareStore) InitSigningKey(vaultDir string, identity *age.X25519Identity) ([]byte, error) {
+	key, err := LoadOrCreateGrantSigningKey(vaultDir, identity)
 	if err != nil {
 		return nil, err
 	}

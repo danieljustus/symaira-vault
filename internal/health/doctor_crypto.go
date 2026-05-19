@@ -1,0 +1,348 @@
+package health
+
+import (
+	"bytes"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
+
+	"filippo.io/age"
+
+	configpkg "github.com/danieljustus/OpenPass/internal/config"
+	vaultcrypto "github.com/danieljustus/OpenPass/internal/crypto"
+	"github.com/danieljustus/OpenPass/internal/ui/render"
+	"github.com/danieljustus/OpenPass/internal/vault"
+	"github.com/danieljustus/OpenPass/internal/vault/taint"
+)
+
+const recipientsListHint = "run `openpass recipients list`"
+
+func checkRecipients(vaultDir string, _ Options) Result {
+	r := Result{ID: "recipients.count", Name: "Recipients"}
+	rm := vault.NewRecipientsManager(vaultDir)
+	recipients, err := rm.ListRecipients()
+	if err != nil {
+		if !rm.RecipientsFileExists() {
+			r.Status = StatusWarn
+			r.Message = "no recipients file — single-device risk"
+			r.Hint = "add a backup recipient: `openpass recipients add <age1...>`"
+			return r
+		}
+		r.Status = StatusWarn
+		r.Message = "cannot read recipients: " + err.Error()
+		return r
+	}
+	count := len(recipients)
+	if count <= 1 {
+		r.Status = StatusWarn
+		r.Message = fmt.Sprintf("%d recipient (self only) — if identity is lost, vault is unrecoverable", count)
+		r.Hint = "add a backup recipient: `openpass recipients add <age1...>`"
+	} else {
+		r.Status = StatusOK
+		r.Message = fmt.Sprintf("%d recipients configured", count)
+	}
+	return r
+}
+
+func checkRecipientsRecovery(vaultDir string, _ Options) Result {
+	r := Result{ID: "recipients.recovery", Name: "Recipient decrypt test"}
+
+	rm := vault.NewRecipientsManager(vaultDir)
+
+	if !rm.RecipientsFileExists() {
+		r.Status = StatusOK
+		r.Message = "no external recipients to test"
+		return r
+	}
+
+	rawStrings, err := rm.LoadRecipientStrings()
+	if err != nil {
+		r.Status = StatusFail
+		r.Message = "cannot read recipients: " + err.Error()
+		r.Hint = recipientsListHint
+		return r
+	}
+
+	if len(rawStrings) == 0 {
+		r.Status = StatusOK
+		r.Message = "no external recipients to test"
+		return r
+	}
+
+	recipients := make([]*age.X25519Recipient, 0, len(rawStrings))
+	for _, rs := range rawStrings {
+		rec, recErr := vaultcrypto.ValidateRecipient(rs)
+		if recErr != nil {
+			r.Status = StatusFail
+			r.Message = fmt.Sprintf("invalid recipient: %s (%s)", rs, recErr.Error())
+			r.Hint = recipientsListHint
+			return r
+		}
+		recipients = append(recipients, rec)
+	}
+
+	testIdentity, err := vaultcrypto.GenerateIdentity()
+	if err != nil {
+		r.Status = StatusFail
+		r.Message = "generate test identity: " + err.Error()
+		r.Hint = recipientsListHint
+		return r
+	}
+
+	allRecipients := make([]*age.X25519Recipient, 0, 1+len(recipients))
+	allRecipients = append(allRecipients, testIdentity.Recipient())
+	allRecipients = append(allRecipients, recipients...)
+
+	testBlob := make([]byte, 32)
+	if _, randErr := rand.Read(testBlob); randErr != nil {
+		r.Status = StatusFail
+		r.Message = "generate test data: " + randErr.Error()
+		r.Hint = recipientsListHint
+		return r
+	}
+
+	ciphertext, err := vaultcrypto.EncryptWithRecipients(testBlob, allRecipients...)
+	if err != nil {
+		r.Status = StatusFail
+		r.Message = "encryption failed: " + err.Error()
+		r.Hint = recipientsListHint
+		return r
+	}
+
+	decrypted, err := vaultcrypto.Decrypt(ciphertext, testIdentity)
+	if err != nil {
+		r.Status = StatusFail
+		r.Message = "decryption failed: " + err.Error()
+		r.Hint = recipientsListHint
+		return r
+	}
+
+	if !bytes.Equal(decrypted, testBlob) {
+		r.Status = StatusFail
+		r.Message = "decrypted data does not match original"
+		r.Hint = recipientsListHint
+		return r
+	}
+
+	// Count stanzas (lines starting with "-> X25519" before "---")
+	lines := strings.Split(string(ciphertext), "\n")
+	stanzaCount := 0
+	for _, line := range lines {
+		if strings.HasPrefix(line, "---") {
+			break
+		}
+		if strings.HasPrefix(line, "-> X25519") {
+			stanzaCount++
+		}
+	}
+
+	expectedCount := len(allRecipients)
+	if stanzaCount != expectedCount {
+		r.Status = StatusFail
+		r.Message = fmt.Sprintf("expected %d stanzas, got %d", expectedCount, stanzaCount)
+		r.Hint = recipientsListHint
+		return r
+	}
+
+	r.Status = StatusOK
+	r.Message = fmt.Sprintf("all %d recipients can participate in encryption", len(recipients))
+	return r
+}
+
+func checkScryptBenchmark(vaultDir string, _ Options) Result {
+	r := Result{ID: "crypto.scrypt.benchmark", Name: "Scrypt KDF performance"}
+	wf, elapsed, err := vaultcrypto.BenchmarkScryptWorkFactor(250 * time.Millisecond)
+	if err != nil {
+		r.Status = StatusWarn
+		r.Message = "scrypt benchmark failed: " + err.Error()
+		return r
+	}
+
+	current := vaultcrypto.DefaultScryptWorkFactor
+	if cfg, err := configpkg.Load(filepath.Join(vaultDir, "config.yaml")); err == nil && cfg.Vault != nil && cfg.Vault.ScryptWorkFactor > 0 {
+		current = cfg.Vault.ScryptWorkFactor
+	}
+	switch {
+	case wf == current:
+		r.Status = StatusOK
+		r.Message = fmt.Sprintf("config work factor %d matches recommendation (%d, %.0fms)", current, wf, elapsed.Seconds()*1000)
+	case wf > current:
+		r.Status = StatusWarn
+		r.Message = fmt.Sprintf("config work factor %d is below recommended %d (%.0fms)", current, wf, elapsed.Seconds()*1000)
+		r.Hint = fmt.Sprintf("set vault.scrypt_work_factor: %d in config.yaml for better security", wf)
+	default:
+		r.Status = StatusOK
+		r.Message = fmt.Sprintf("config work factor %d exceeds recommendation (benchmark: %d, %.0fms)", current, wf, elapsed.Seconds()*1000)
+	}
+	return r
+}
+
+func checkKDFModern(vaultDir string, _ Options) Result {
+	r := Result{ID: "crypto.kdf.modern", Name: "KDF modernity"}
+
+	cfgPath := filepath.Join(vaultDir, "config.yaml")
+	cfg, err := configpkg.Load(cfgPath)
+	if err != nil {
+		r.Status = StatusWarn
+		r.Message = "cannot check KDF version"
+		return r
+	}
+
+	if cfg.Vault == nil || cfg.Vault.FormatVersion < 2 {
+		r.Status = StatusWarn
+		r.Message = "using scrypt KDF (format v1) — argon2id is recommended for 2025+"
+		r.Hint = "run `openpass migrate kdf` after backing up your vault"
+	} else {
+		r.Status = StatusOK
+		r.Message = "using argon2id KDF (format v2)"
+	}
+	return r
+}
+
+func checkPasswordStrength(vaultDir string, _ Options) Result {
+	r := Result{ID: "password.strength", Name: "Weak password detection"}
+
+	identity := vault.CurrentSearchIdentity()
+	if identity == nil {
+		r.Status = StatusWarn
+		r.Message = msgSessionNeeded
+		r.Hint = hintSessionNeeded
+		return r
+	}
+
+	paths, err := vault.List(vaultDir, "")
+	if err != nil {
+		r.Status = StatusWarn
+		r.Message = "cannot list entries: " + err.Error()
+		return r
+	}
+
+	var weakCount int
+	var examplePaths []string
+	for _, path := range paths {
+		entry, err := vault.ReadEntry(vaultDir, path, identity)
+		if err != nil {
+			continue
+		}
+		pwd, ok := entry.GetField("password")
+		if !ok {
+			continue
+		}
+		pwdStr, ok := pwd.(string)
+		if !ok || pwdStr == "" {
+			continue
+		}
+		s := vaultcrypto.AssessPasswordStrength(pwdStr)
+		if s.Weak {
+			weakCount++
+			if len(examplePaths) < 5 {
+				safePath := render.ForTerminalLine(
+					taint.Wrap(path, taint.Provenance{Source: "doctor.path"}),
+					80,
+				)
+				examplePaths = append(examplePaths, safePath)
+			}
+		}
+	}
+
+	if weakCount > 0 {
+		examples := strings.Join(examplePaths, ", ")
+		r.Status = StatusWarn
+		r.Message = fmt.Sprintf("%d entries with weak passwords", weakCount)
+		r.Hint = fmt.Sprintf("review and strengthen: %s", examples)
+	} else {
+		r.Status = StatusOK
+		r.Message = "all entries meet password strength requirements"
+	}
+	return r
+}
+
+func checkPasswordReuse(vaultDir string, _ Options) Result {
+	r := Result{ID: "password.reuse", Name: "Password reuse detection"}
+
+	identity := vault.CurrentSearchIdentity()
+	if identity == nil {
+		r.Status = StatusWarn
+		r.Message = msgSessionNeeded
+		r.Hint = "run `openpass unlock` to decrypt entries for password reuse analysis"
+		return r
+	}
+
+	paths, err := vault.List(vaultDir, "")
+	if err != nil {
+		r.Status = StatusWarn
+		r.Message = "cannot list entries: " + err.Error()
+		return r
+	}
+
+	hashToPaths := make(map[string][]string)
+	for _, path := range paths {
+		entry, err := vault.ReadEntry(vaultDir, path, identity)
+		if err != nil {
+			continue
+		}
+		pwd, ok := entry.GetField("password")
+		if !ok {
+			continue
+		}
+		pwdStr, ok := pwd.(string)
+		if !ok || pwdStr == "" {
+			continue
+		}
+		h := sha256.Sum256([]byte(pwdStr))
+		hashHex := hex.EncodeToString(h[:])
+		safePath := render.ForTerminalLine(
+			taint.Wrap(path, taint.Provenance{Source: "doctor.path"}),
+			80,
+		)
+		hashToPaths[hashHex] = append(hashToPaths[hashHex], safePath)
+	}
+
+	var reusedGroups [][]string
+	for _, ec := range hashToPaths {
+		if len(ec) > 1 {
+			reusedGroups = append(reusedGroups, ec)
+		}
+	}
+
+	if len(reusedGroups) > 0 {
+		sort.Slice(reusedGroups, func(i, j int) bool {
+			return len(reusedGroups[i]) > len(reusedGroups[j])
+		})
+		r.Status = StatusWarn
+		if len(reusedGroups) == 1 {
+			sort.Strings(reusedGroups[0])
+			r.Message = fmt.Sprintf("%d entries share the same password", len(reusedGroups[0]))
+			r.Hint = fmt.Sprintf("entries: %s", strings.Join(reusedGroups[0], ", "))
+		} else {
+			r.Message = fmt.Sprintf("%d sets of entries with shared passwords", len(reusedGroups))
+			if len(reusedGroups) > 3 {
+				r.Hint = fmt.Sprintf("top groups: %s", formatReuseGroups(reusedGroups[:3]))
+			} else {
+				r.Hint = formatReuseGroups(reusedGroups)
+			}
+		}
+	} else {
+		r.Status = StatusOK
+		r.Message = "no reused passwords detected"
+	}
+	return r
+}
+
+func formatReuseGroups(groups [][]string) string {
+	var parts []string
+	for _, g := range groups {
+		sort.Strings(g)
+		entries := strings.Join(g, ", ")
+		if len(g) > 5 {
+			entries = strings.Join(g[:5], ", ") + fmt.Sprintf(", ... (%d total)", len(g))
+		}
+		parts = append(parts, fmt.Sprintf("%d entries: %s", len(g), entries))
+	}
+	return strings.Join(parts, "; ")
+}

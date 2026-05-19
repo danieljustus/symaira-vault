@@ -198,3 +198,49 @@ func VerifyManifestIntegrity(vaultDir string, identity *age.X25519Identity) (*Ma
 
 	return result, nil
 }
+
+// RebuildManifest walks all .age entry files in the vault and regenerates the
+// manifest from scratch. It is used for crash recovery when the manifest may be
+// stale due to deferred updates that did not complete before an unclean shutdown.
+func RebuildManifest(vaultDir string, identity *age.X25519Identity) error {
+	m := &Manifest{
+		Version: 1,
+		Created: time.Now().UTC(),
+		Entries: make(map[string]ManifestEntry),
+	}
+
+	entriesPath := entriesDir(vaultDir)
+	err := filepath.Walk(entriesPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil // skip inaccessible files
+		}
+		if info.IsDir() || !strings.HasSuffix(info.Name(), ".age") {
+			return nil
+		}
+
+		data, err := os.ReadFile(path) // #nosec G304 — path is within entriesDir
+		if err != nil {
+			return nil // skip unreadable files
+		}
+
+		// Derive logical path from file path
+		rel, err := filepath.Rel(entriesPath, path)
+		if err != nil {
+			return nil
+		}
+		logicalPath := strings.TrimSuffix(filepath.ToSlash(rel), ".age")
+
+		hash := sha256.Sum256(data)
+		m.Entries[logicalPath] = ManifestEntry{
+			SHA256: hex.EncodeToString(hash[:]),
+			Size:   int64(len(data)),
+			MTime:  info.ModTime(),
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("walk entries for manifest rebuild: %w", err)
+	}
+
+	return writeManifest(vaultDir, m, identity)
+}
