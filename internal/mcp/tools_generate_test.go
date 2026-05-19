@@ -156,7 +156,10 @@ func TestHandleGenerate_NonNumericLength(t *testing.T) {
 }
 
 func TestGeneratePassword(t *testing.T) {
-	password, err := generatePassword(16, true)
+	password, cleanup, err := generatePassword(16, true)
+	if cleanup != nil {
+		defer cleanup()
+	}
 	if err != nil {
 		t.Fatalf("generatePassword() error = %v", err)
 	}
@@ -165,7 +168,10 @@ func TestGeneratePassword(t *testing.T) {
 	}
 
 	// Generate again to ensure randomness
-	password2, err := generatePassword(16, true)
+	password2, cleanup2, err := generatePassword(16, true)
+	if cleanup2 != nil {
+		defer cleanup2()
+	}
 	if err != nil {
 		t.Fatalf("generatePassword() second call error = %v", err)
 	}
@@ -175,7 +181,10 @@ func TestGeneratePassword(t *testing.T) {
 }
 
 func TestGeneratePassword_ZeroLength(t *testing.T) {
-	password, err := generatePassword(0, true)
+	password, cleanup, err := generatePassword(0, true)
+	if cleanup != nil {
+		defer cleanup()
+	}
 	if err != nil {
 		t.Fatalf("generatePassword() error = %v", err)
 	}
@@ -186,7 +195,10 @@ func TestGeneratePassword_ZeroLength(t *testing.T) {
 }
 
 func TestGeneratePassword_NoSymbols(t *testing.T) {
-	password, err := generatePassword(50, false)
+	password, cleanup, err := generatePassword(50, false)
+	if cleanup != nil {
+		defer cleanup()
+	}
 	if err != nil {
 		t.Fatalf("generatePassword() error = %v", err)
 	}

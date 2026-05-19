@@ -12,11 +12,15 @@ import (
 // MaxPasswordLength is the upper bound for generated password length.
 const MaxPasswordLength = 1024
 
-func GeneratePassword(length int, useSymbols bool) (string, error) {
+// GeneratePassword generates a cryptographically secure password of the given
+// length using the provided character set. The returned cleanup function MUST
+// be called to zero and release the underlying mlock'd memory when the password
+// is no longer needed.
+func GeneratePassword(length int, useSymbols bool) (string, func(), error) {
 	return generatePasswordWithReader(length, useSymbols, rand.Reader)
 }
 
-func generatePasswordWithReader(length int, useSymbols bool, reader io.Reader) (string, error) {
+func generatePasswordWithReader(length int, useSymbols bool, reader io.Reader) (string, func(), error) {
 	const (
 		letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 		symbols = "!@#$%^&*()_+-=[]{}|;:,.<>?"
@@ -26,7 +30,7 @@ func generatePasswordWithReader(length int, useSymbols bool, reader io.Reader) (
 		length = 16
 	}
 	if length > MaxPasswordLength {
-		return "", fmt.Errorf("password length must be at most %d", MaxPasswordLength)
+		return "", func() {}, fmt.Errorf("password length must be at most %d", MaxPasswordLength)
 	}
 
 	charset := letters
@@ -38,12 +42,14 @@ func generatePasswordWithReader(length int, useSymbols bool, reader io.Reader) (
 	for i := range result {
 		n, err := rand.Int(reader, big.NewInt(int64(len(charset))))
 		if err != nil {
-			return "", fmt.Errorf("generate password: %w", err)
+			return "", func() {}, fmt.Errorf("generate password: %w", err)
 		}
 		result[i] = charset[n.Int64()]
 	}
 
-	return string(result), nil
+	s, cleanup := SecureString(result)
+	Wipe(result)
+	return s, cleanup, nil
 }
 
 // PasswordStrength represents the result of a password strength assessment.

@@ -130,9 +130,12 @@ Interactive mode prompts for username, password, and URL.`,
 					AddType = string(vaultpkg.DetectSecretType(AddValue))
 				}
 			} else if AddGenerate {
-				password, err := cli.GeneratePassword(AddLength, true)
+				password, cleanup, err := cli.GeneratePassword(AddLength, true)
 				if err != nil {
 					return fmt.Errorf("generate password: %w", err)
+				}
+				if cleanup != nil {
+					defer cleanup()
 				}
 				data["password"] = password
 				if AddType == "" {

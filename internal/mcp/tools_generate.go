@@ -15,16 +15,21 @@ func (s *Server) handleGenerate(ctx context.Context, req CallToolRequest) (*Call
 
 	_ = s.checkScope("")
 
-	password, err := generatePassword(length, symbols)
+	password, cleanup, err := generatePassword(length, symbols)
 	if err != nil {
 		s.logAudit(ctx, "generate", "password", false)
 		return nil, err
 	}
 
+	// Copy password to GC heap before clearing SecureString backing so the
+	// returned result stays valid after cleanup.
+	result := NewToolResultText(string(append([]byte(nil), password...)))
+	cleanup()
+
 	s.logAudit(ctx, "generate", "password", true)
-	return NewToolResultText(password), nil
+	return result, nil
 }
 
-func generatePassword(length int, symbols bool) (string, error) {
+func generatePassword(length int, symbols bool) (string, func(), error) {
 	return crypto.GeneratePassword(length, symbols)
 }

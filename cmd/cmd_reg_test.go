@@ -214,7 +214,10 @@ func TestGeneratePasswordCoverage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := generatePassword(tt.length, tt.useSymbols)
+			got, cleanup, err := generatePassword(tt.length, tt.useSymbols)
+			if cleanup != nil {
+				defer cleanup()
+			}
 			if (err != nil) != tt.wantErr {
 				t.Errorf("generatePassword() error = %v, wantErr %v", err, tt.wantErr)
 				return
