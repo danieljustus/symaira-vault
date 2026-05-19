@@ -3,6 +3,7 @@
 package fileutil
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -166,6 +167,94 @@ func TestSafeMkdirAll_Existing(t *testing.T) {
 	err := SafeMkdirAll(tmpDir, 0o700)
 	if err != nil {
 		t.Fatalf("SafeMkdirAll() error = %v", err)
+	}
+}
+
+func TestSafeMkdirAll_SymlinkAttack_ExistingParent(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	workDir := filepath.Join(tmpDir, "work")
+	if err := os.MkdirAll(workDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	targetDir := filepath.Join(t.TempDir(), "sensitive")
+	if err := os.MkdirAll(targetDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.RemoveAll(workDir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(targetDir, workDir); err != nil {
+		t.Fatal(err)
+	}
+
+	err := SafeMkdirAll(filepath.Join(workDir, "sub"), 0o700)
+	if err == nil {
+		t.Fatal("SafeMkdirAll should reject symlink attack")
+	}
+	var pathErr *os.PathError
+	if !errors.As(err, &pathErr) {
+		t.Fatalf("expected PathError, got %T", err)
+	}
+	if pathErr.Err != syscall.ELOOP {
+		t.Errorf("expected ELOOP, got %v", pathErr.Err)
+	}
+
+	if _, err := os.Stat(filepath.Join(targetDir, "sub")); !os.IsNotExist(err) {
+		t.Error("attacker target should not have been created")
+	}
+}
+
+func TestSafeMkdirAll_SymlinkAttack_MidPath(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	fake := filepath.Join(tmpDir, "a", "b")
+	if err := os.MkdirAll(fake, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	targetDir := filepath.Join(t.TempDir(), "target")
+	if err := os.MkdirAll(targetDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.RemoveAll(fake); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(targetDir, fake); err != nil {
+		t.Fatal(err)
+	}
+
+	err := SafeMkdirAll(filepath.Join(fake, "c", "d"), 0o700)
+	if err == nil {
+		t.Fatal("SafeMkdirAll should reject mid-path symlink")
+	}
+	var pathErr *os.PathError
+	if !errors.As(err, &pathErr) {
+		t.Fatalf("expected PathError, got %T", err)
+	}
+	if pathErr.Err != syscall.ELOOP {
+		t.Errorf("expected ELOOP, got %v", pathErr.Err)
+	}
+
+	if _, err := os.Stat(filepath.Join(targetDir, "c")); !os.IsNotExist(err) {
+		t.Error("attacker target should not have been created")
+	}
+}
+
+func TestSafeMkdirAll_DeepExistingPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "a", "b", "c")
+
+	if err := os.MkdirAll(path, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	err := SafeMkdirAll(path, 0o700)
+	if err != nil {
+		t.Fatalf("SafeMkdirAll() on existing path error = %v", err)
 	}
 }
 
