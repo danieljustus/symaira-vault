@@ -138,7 +138,7 @@ func DefaultConfigFilePath() (string, error) {
 
 // LoadConfigNode loads a YAML config file and returns its root *yaml.Node.
 func LoadConfigNode(path string) (*yaml.Node, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return nil, fmt.Errorf("cannot read config file: %w", err)
 	}
