@@ -12,6 +12,16 @@ import (
 	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
 )
 
+func testTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "openpass-flow-test")
+	if err != nil {
+		t.Fatalf("create temp dir: %v", err)
+	}
+	defer os.RemoveAll(dir)
+	return dir
+}
+
 func captureStdout(fn func()) string {
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
@@ -50,7 +60,7 @@ func TestCmdSet(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping slow CLI flow test in short mode")
 	}
-	vaultDir := t.TempDir()
+	vaultDir := testTempDir(t)
 	passphrase := []byte("correct horse battery staple")
 
 	if _, err := vaultpkg.InitWithPassphrase(vaultDir, passphrase, config.Default()); err != nil {
@@ -111,7 +121,7 @@ func TestCmdList(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping slow CLI flow test in short mode")
 	}
-	vaultDir := t.TempDir()
+	vaultDir := testTempDir(t)
 	passphrase := []byte("correct horse battery staple")
 	identity, _ := vaultpkg.InitWithPassphrase(vaultDir, passphrase, config.Default())
 	entry := &vaultpkg.Entry{Data: map[string]any{"password": "secret123"}}
@@ -139,7 +149,7 @@ func TestCmdFind(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping slow CLI flow test in short mode")
 	}
-	vaultDir := t.TempDir()
+	vaultDir := testTempDir(t)
 	passphrase := []byte("correct horse battery staple")
 	identity, _ := vaultpkg.InitWithPassphrase(vaultDir, passphrase, config.Default())
 	entry := &vaultpkg.Entry{Data: map[string]any{"password": "secret123"}}
@@ -167,7 +177,7 @@ func TestCmdGenerate(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping slow CLI flow test in short mode")
 	}
-	vaultDir := t.TempDir()
+	vaultDir := testTempDir(t)
 	passphrase := []byte("test-passphrase")
 
 	if _, err := vaultpkg.InitWithPassphrase(vaultDir, passphrase, config.Default()); err != nil {
@@ -196,7 +206,7 @@ func TestCmdDelete(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping slow CLI flow test in short mode")
 	}
-	vaultDir := t.TempDir()
+	vaultDir := testTempDir(t)
 	passphrase := []byte("test-passphrase")
 	identity, _ := vaultpkg.InitWithPassphrase(vaultDir, passphrase, config.Default())
 	entry := &vaultpkg.Entry{Data: map[string]any{"password": "secret"}}
@@ -237,7 +247,7 @@ func TestCmdAdd(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping slow CLI flow test in short mode")
 	}
-	vaultDir := t.TempDir()
+	vaultDir := testTempDir(t)
 	passphrase := []byte("correct horse battery staple")
 
 	if _, err := vaultpkg.InitWithPassphrase(vaultDir, passphrase, config.Default()); err != nil {
@@ -273,7 +283,7 @@ func TestCmdUnlock(t *testing.T) {
 	cli.SessionSavePassphrase = func(string, []byte, time.Duration) error { return nil }
 	cli.SessionSaveIdentity = func(string, string, time.Duration) error { return nil }
 
-	vaultDir := t.TempDir()
+	vaultDir := testTempDir(t)
 	passphrase := []byte("correct horse battery staple")
 
 	if _, err := vaultpkg.InitWithPassphrase(vaultDir, passphrase, config.Default()); err != nil {
@@ -306,7 +316,7 @@ func TestCmdRecipientsAddAndRemove(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping slow CLI flow test in short mode")
 	}
-	vaultDir := t.TempDir()
+	vaultDir := testTempDir(t)
 	passphrase := []byte("correct horse battery staple")
 	identity, _ := vaultpkg.InitWithPassphrase(vaultDir, passphrase, config.Default())
 	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
