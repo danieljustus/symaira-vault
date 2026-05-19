@@ -370,7 +370,7 @@ func WriteEntry(vaultDir, path string, entry *Entry, identity *age.X25519Identit
 		return err
 	}
 	lockFile = nil
-		queueManifestUpdate(vaultDir, path, ciphertext, identity)
+	queueManifestUpdate(vaultDir, path, ciphertext, identity)
 	return nil
 }
 
@@ -558,7 +558,7 @@ func MergeEntry(vaultDir, path string, partialData map[string]any, identity *age
 		return nil, err
 	}
 	lockFile = nil
-		queueManifestUpdate(vaultDir, path, ciphertext, identity)
+	queueManifestUpdate(vaultDir, path, ciphertext, identity)
 	return ReadEntry(vaultDir, path, identity)
 }
 

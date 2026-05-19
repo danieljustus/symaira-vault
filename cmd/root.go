@@ -4,6 +4,7 @@
 package cmd
 
 import (
+	// Register sub-package commands via init() side effects.
 	_ "github.com/danieljustus/OpenPass/cmd/admin"
 	_ "github.com/danieljustus/OpenPass/cmd/auth"
 	_ "github.com/danieljustus/OpenPass/cmd/crud"
@@ -14,8 +15,6 @@ import (
 // These are set via ldflags by goreleaser in main.go's var block.
 // We re-export them from cli for the main entry point.
 
-var osExit = cli.OsExit
-
 const requiresVaultAnnotation = cli.RequiresVaultAnnotation
 
 var (
@@ -24,43 +23,23 @@ var (
 )
 
 var (
-	vault         = cli.Vault
-	vaultFlag     = cli.VaultFlag
-	quietMode     = cli.QuietMode
-	profile       = cli.Profile
-	profileFlag   = cli.ProfileFlag
-	outputFormat  = cli.OutputFormat
-	noPipeWarning = cli.NoPipeWarning
-	colorMode     = cli.ColorMode
-	themePreset   = cli.ThemePreset
+	vault     = cli.Vault
+	vaultFlag = cli.VaultFlag
+	quietMode = cli.QuietMode
 )
 
 var rootCmd = cli.RootCmd
 
 // Aliases for functions that moved to internal/cli/ but are still used by staying cmd/ files
 var (
-	vaultPath             = cli.VaultPath
-	unlockVault           = cli.UnlockVault
-	unlockVaultWithTTL    = cli.UnlockVaultWithTTL
-	sessionLoadIdentity   = cli.SessionLoadIdentity
-	sessionLoadPassphrase = cli.SessionLoadPassphrase
-	readHiddenInput       = cli.ReadHiddenInput
-	readLineFromStdin     = cli.ReadLineFromStdin
-	expandVaultDir        = cli.ExpandVaultDir
-	defaultSessionTTL     = cli.DefaultSessionTTL
-	sessionIsExpired      = cli.SessionIsExpired
-	sessionGetCacheStatus = cli.SessionGetCacheStatus
-	sessionSavePassphrase = cli.SessionSavePassphrase
-	sessionSaveBiometric  = cli.SessionSaveBiometric
-	sessionLoadBiometric  = cli.SessionLoadBiometric
-	sessionSaveIdentity   = cli.SessionSaveIdentity
-	getVaultDir           = cli.GetVaultDir
-	readVisibleInput      = cli.ReadVisibleInput
-	stdinIsTerminal       = cli.StdinIsTerminal
-	withVault             = cli.WithVault
-	withVaultRaw          = cli.WithVaultRaw
-	appVersionVar         = cli.AppVersion
-	Version               = cli.AppVersion
+	vaultPath         = cli.VaultPath
+	unlockVault       = cli.UnlockVault
+	readHiddenInput   = cli.ReadHiddenInput
+	expandVaultDir    = cli.ExpandVaultDir
+	defaultSessionTTL = cli.DefaultSessionTTL
+	withVault         = cli.WithVault
+	withVaultRaw      = cli.WithVaultRaw
+	Version           = cli.AppVersion
 )
 
 func Execute() {

@@ -19,7 +19,7 @@ import (
 
 var EditorFlag string
 
-// Overridable in tests for permission verification
+// OSCreateTemp is overridable in tests for permission verification.
 var OSCreateTemp = os.CreateTemp
 
 var editCmd = &cobra.Command{

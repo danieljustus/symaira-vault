@@ -78,7 +78,7 @@ func ReencryptAll(vaultDir string, identity *age.X25519Identity, recipients []*a
 		go func() {
 			defer wg.Done()
 			for task := range taskCh {
-				err := reencryptFile(vaultDir, task.path, identity, recipients)
+				err := reencryptFile(task.path, identity, recipients)
 				resultCh <- reencryptResult{path: task.path, err: err}
 			}
 		}()
@@ -115,7 +115,7 @@ func ReencryptAll(vaultDir string, identity *age.X25519Identity, recipients []*a
 
 // reencryptFile decrypts a single .age file with the identity and re-encrypts
 // it with all recipients using an atomic write.
-func reencryptFile(vaultDir string, path string, identity *age.X25519Identity, recipients []*age.X25519Recipient) error {
+func reencryptFile(path string, identity *age.X25519Identity, recipients []*age.X25519Recipient) error {
 	// #nosec G304 -- path is a .age file within the vault directory passed to the function
 	raw, err := os.ReadFile(path)
 	if err != nil {

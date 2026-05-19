@@ -1,4 +1,4 @@
-// Package cmd implements the OpenPass CLI commands using Cobra.
+// Package crud provides CRUD operations for OpenPass vault entries.
 package crud
 
 import (

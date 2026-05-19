@@ -1,3 +1,4 @@
+// Package admin provides administrative commands for OpenPass vault management.
 package admin
 
 import (

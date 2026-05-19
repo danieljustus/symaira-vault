@@ -1,3 +1,4 @@
+// Package mcp provides MCP server and agent management commands.
 package mcp
 
 import (

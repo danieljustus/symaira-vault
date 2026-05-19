@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/danieljustus/OpenPass/internal/cli"
 	"github.com/danieljustus/OpenPass/internal/config"
 	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
 )
@@ -264,9 +265,9 @@ func TestCmdUnlock(t *testing.T) {
 
 	restoreSession := stubSessionFuncs(t)
 	t.Cleanup(restoreSession)
-	sessionLoadPassphrase = func(string) ([]byte, error) { return nil, nil }
-	sessionSavePassphrase = func(string, []byte, time.Duration) error { return nil }
-	sessionSaveIdentity = func(string, string, time.Duration) error { return nil }
+	cli.SessionLoadPassphrase = func(string) ([]byte, error) { return nil, nil }
+	cli.SessionSavePassphrase = func(string, []byte, time.Duration) error { return nil }
+	cli.SessionSaveIdentity = func(string, string, time.Duration) error { return nil }
 
 	vaultDir := t.TempDir()
 	passphrase := []byte("correct horse battery staple")

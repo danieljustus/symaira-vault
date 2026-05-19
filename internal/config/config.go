@@ -1,3 +1,4 @@
+// Package config provides configuration loading, validation, and defaults for OpenPass.
 package config
 
 import (

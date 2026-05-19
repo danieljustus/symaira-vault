@@ -274,8 +274,8 @@ func TestUnlockVault_InteractivePrompt(t *testing.T) {
 	defer setupVaultFlag(t, vaultDir)()
 
 	restoreSessionFuncs := stubSessionFuncs(t)
-	sessionLoadPassphrase = func(string) ([]byte, error) { return nil, errors.New("not found") }
-	sessionSavePassphrase = func(string, []byte, time.Duration) error { return nil }
+	cli.SessionLoadPassphrase = func(string) ([]byte, error) { return nil, errors.New("not found") }
+	cli.SessionSavePassphrase = func(string, []byte, time.Duration) error { return nil }
 	defer restoreSessionFuncs()
 
 	// Ensure no env var is set
@@ -287,7 +287,6 @@ func TestUnlockVault_InteractivePrompt(t *testing.T) {
 		}
 	}()
 
-	// Pipe passphrase via stdin
 	restore := pipeStdin(t, string(passphrase)+"\n")
 	defer restore()
 
@@ -297,6 +296,45 @@ func TestUnlockVault_InteractivePrompt(t *testing.T) {
 	}
 	if v == nil {
 		t.Fatal("unlockVault returned nil vault")
+	}
+}
+
+func TestUnlockVault_SavesPassphrase(t *testing.T) {
+	vaultDir := t.TempDir()
+	passphrase := []byte("test-passphrase")
+	cfg := config.Default()
+	if _, err := vaultpkg.InitWithPassphrase(vaultDir, passphrase, cfg); err != nil {
+		t.Fatalf("init vault: %v", err)
+	}
+
+	restoreSessionFuncs := stubSessionFuncs(t)
+	var savedPassphrase string
+	var savedTTL time.Duration
+	cli.SessionLoadPassphrase = func(string) ([]byte, error) {
+		return nil, errors.New("not found")
+	}
+	cli.SessionSavePassphrase = func(_ string, passphrase []byte, ttl time.Duration) error {
+		savedPassphrase = string(passphrase)
+		savedTTL = ttl
+		return nil
+	}
+	defer restoreSessionFuncs()
+
+	restore := pipeStdin(t, string(passphrase)+"\n")
+	defer restore()
+
+	v, err := unlockVault(vaultDir, true)
+	if err != nil {
+		t.Fatalf("unlockVault interactive: %v", err)
+	}
+	if v == nil {
+		t.Fatal("unlockVault returned nil vault")
+	}
+	if savedPassphrase != string(passphrase) {
+		t.Fatalf("saved passphrase = %q, want %q", savedPassphrase, passphrase)
+	}
+	if savedTTL != cfg.SessionTimeout {
+		t.Fatalf("saved TTL = %s, want configured sessionTimeout %s", savedTTL, cfg.SessionTimeout)
 	}
 }
 
@@ -503,8 +541,8 @@ func TestUnlockVault_HiddenInput(t *testing.T) {
 	defer setupVaultFlag(t, vaultDir)()
 
 	restoreSessionFuncs := stubSessionFuncs(t)
-	sessionLoadPassphrase = func(string) ([]byte, error) { return nil, errors.New("not found") }
-	sessionSavePassphrase = func(string, []byte, time.Duration) error { return nil }
+	cli.SessionLoadPassphrase = func(string) ([]byte, error) { return nil, errors.New("not found") }
+	cli.SessionSavePassphrase = func(string, []byte, time.Duration) error { return nil }
 	defer restoreSessionFuncs()
 
 	origPass := os.Getenv("OPENPASS_PASSPHRASE")
@@ -515,12 +553,16 @@ func TestUnlockVault_HiddenInput(t *testing.T) {
 		}
 	}()
 
+	// Pipe passphrase via stdin
 	restore := pipeStdin(t, string(passphrase)+"\n")
 	defer restore()
 
 	v, err := unlockVault(vaultDir, true)
 	if err != nil {
-		t.Fatalf("unlockVault with hidden input: %v", err)
+		t.Fatalf("unlockVault interactive: %v", err)
+	}
+	if v == nil {
+		t.Fatal("unlockVault returned nil vault")
 	}
 	if v == nil {
 		t.Fatal("unlockVault returned nil vault")

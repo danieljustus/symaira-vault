@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
-
 	"gopkg.in/yaml.v3"
+
+	cli "github.com/danieljustus/OpenPass/internal/cli"
 )
 
 // Printer defines the interface for output formatting.
@@ -89,27 +89,4 @@ func PrintJSON(v interface{}) {
 	if err := enc.Encode(v); err != nil {
 		fmt.Fprintf(os.Stderr, "JSON encoding error: %v\n", err)
 	}
-}
-
-// jsonDeprecationWarned tracks per-process whether the deprecation warning
-// for the legacy --json flag has been emitted, so each invocation only nags
-// once even if multiple subcommands chain.
-var jsonDeprecationWarned = false
-
-// wantJSONOutput returns true when the caller has requested JSON output —
-// either via the per-command legacy --json bool or the persistent --output=json
-// flag. When the legacy bool is true and the persistent flag is not "json", a
-// one-time deprecation warning is written to stderr.
-func wantJSONOutput(legacyJSON bool) bool {
-	if cli.OutputFormat == "json" {
-		return true
-	}
-	if legacyJSON {
-		if !jsonDeprecationWarned {
-			jsonDeprecationWarned = true
-			fmt.Fprintln(os.Stderr, "Note: --json is deprecated; prefer --output=json (works on all commands).")
-		}
-		return true
-	}
-	return false
 }
