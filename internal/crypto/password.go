@@ -48,7 +48,6 @@ func generatePasswordWithReader(length int, useSymbols bool, reader io.Reader) (
 	}
 
 	s, cleanup := SecureString(result)
-	Wipe(result)
 	return s, cleanup, nil
 }
 
