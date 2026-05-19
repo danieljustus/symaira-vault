@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unsafe"
 
 	"filippo.io/age"
 	"github.com/spf13/cobra"
@@ -375,7 +376,13 @@ func resolveUnlockPassphrase(vaultDir string, interactive bool, cfg *configpkg.C
 		}
 		if len(passphrase) == 0 {
 			if envPass := os.Getenv("OPENPASS_PASSPHRASE"); envPass != "" {
-				passphrase = []byte(envPass)
+				// Use unsafe.Slice to alias the string backing array without a heap copy.
+				// This way the deferred Wipe(passphrase) at the call site clears the only
+				// copy of the passphrase in memory, and the os.Unsetenv does not leave a
+				// lingering string on the heap.
+				// #nosec G103 — intentional: unsafe.Slice avoids heap-copying the passphrase
+				// so that the subsequent Wipe clears the only copy in memory.
+				passphrase = unsafe.Slice(unsafe.StringData(envPass), len(envPass))
 				passphraseFromEnv = true
 			}
 			_ = os.Unsetenv("OPENPASS_PASSPHRASE")
