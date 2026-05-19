@@ -32,17 +32,15 @@ func DefaultArgon2idParams() Argon2idParams {
 	}
 }
 
-var testArgon2idParams atomic.Value
-
-// init populates testArgon2idParams with default params so that
-// atomic.Value.Store is never called with nil (which would panic).
-func init() {
-	testArgon2idParams.Store(&Argon2idParams{
+var testArgon2idParams = func() atomic.Value {
+	var v atomic.Value
+	v.Store(&Argon2idParams{
 		Time:    DefaultArgon2idTime,
 		Memory:  DefaultArgon2idMemory,
 		Threads: DefaultArgon2idThreads,
 	})
-}
+	return v
+}()
 
 func SetTestArgon2idParams(p Argon2idParams) (restore func()) {
 	prev := testArgon2idParams.Load()

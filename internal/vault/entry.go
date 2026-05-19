@@ -165,18 +165,16 @@ func validateLegacyEntryPath(vaultDir, path string) error {
 // configCache memoizes parsed vault configs per vaultDir, keyed by the
 // config file's mtime. It avoids re-parsing config.yaml on every entry
 // read during a search — the hot path for large vaults.
-var configCache struct {
+var configCache = struct {
 	mu    sync.RWMutex
 	items map[string]configCacheEntry
+}{
+	items: make(map[string]configCacheEntry),
 }
 
 type configCacheEntry struct {
 	cfg   *vaultconfig.Config
 	mtime time.Time
-}
-
-func init() {
-	configCache.items = make(map[string]configCacheEntry)
 }
 
 // InvalidateConfigCache drops the cached config for vaultDir. Callers should
@@ -867,13 +865,11 @@ func (e *Entry) IsCanary() bool {
 // canaryPaths is an in-memory set of known canary entry paths.
 // Maintained separately from encrypted entries to enable O(1) canary checks
 // without requiring decryption.
-var canaryPaths struct {
+var canaryPaths = struct {
 	mu    sync.RWMutex
 	paths map[string]bool
-}
-
-func init() {
-	canaryPaths.paths = make(map[string]bool)
+}{
+	paths: make(map[string]bool),
 }
 
 // MarkCanaryPath adds a path to the in-memory canary set.
