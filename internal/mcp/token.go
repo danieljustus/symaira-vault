@@ -12,7 +12,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unsafe"
 
+	"github.com/danieljustus/OpenPass/internal/crypto"
 	"github.com/danieljustus/OpenPass/internal/fileutil"
 )
 
@@ -700,6 +702,9 @@ func LoadOrCreateToken(path string) (string, error) {
 			if envToken := os.Getenv("OPENPASS_MCP_TOKEN"); envToken != "" {
 				fmt.Fprintf(os.Stderr, "Warning: OPENPASS_MCP_TOKEN is set but file token exists at %s; using file token\n", path)
 				_ = os.Unsetenv("OPENPASS_MCP_TOKEN")
+				// #nosec G103 — intentional: unsafe.StringData aliases the Getenv
+				// backing array so Wipe can zero the only copy in memory.
+				crypto.Wipe(unsafe.Slice(unsafe.StringData(envToken), len(envToken)))
 			}
 			return token, nil
 		}
@@ -707,7 +712,12 @@ func LoadOrCreateToken(path string) (string, error) {
 
 	if envToken := os.Getenv("OPENPASS_MCP_TOKEN"); envToken != "" {
 		_ = os.Unsetenv("OPENPASS_MCP_TOKEN")
-		return envToken, nil
+		// Clone the string so we can safely wipe Getenv's backing array.
+		token := string([]byte(envToken))
+		// #nosec G103 — intentional: unsafe.StringData aliases the Getenv
+		// backing array so Wipe can zero the only copy in memory.
+		crypto.Wipe(unsafe.Slice(unsafe.StringData(envToken), len(envToken)))
+		return token, nil
 	}
 
 	buf := make([]byte, 32)
