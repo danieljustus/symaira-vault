@@ -9,7 +9,10 @@ import (
 func TestGeneratePassword_Length(t *testing.T) {
 	for _, length := range []int{1, 8, 16, 32, 64} {
 		t.Run(fmt.Sprintf("length_%d", length), func(t *testing.T) {
-			password, err := GeneratePassword(length, true)
+			password, cleanup, err := GeneratePassword(length, true)
+			if cleanup != nil {
+				defer cleanup()
+			}
 			if err != nil {
 				t.Fatalf("GeneratePassword() error = %v", err)
 			}
@@ -21,7 +24,10 @@ func TestGeneratePassword_Length(t *testing.T) {
 }
 
 func TestGeneratePassword_ZeroLengthDefaultsTo16(t *testing.T) {
-	password, err := GeneratePassword(0, true)
+	password, cleanup, err := GeneratePassword(0, true)
+	if cleanup != nil {
+		defer cleanup()
+	}
 	if err != nil {
 		t.Fatalf("GeneratePassword() error = %v", err)
 	}
@@ -31,7 +37,10 @@ func TestGeneratePassword_ZeroLengthDefaultsTo16(t *testing.T) {
 }
 
 func TestGeneratePassword_NegativeLengthDefaultsTo16(t *testing.T) {
-	password, err := GeneratePassword(-5, true)
+	password, cleanup, err := GeneratePassword(-5, true)
+	if cleanup != nil {
+		defer cleanup()
+	}
 	if err != nil {
 		t.Fatalf("GeneratePassword() error = %v", err)
 	}
@@ -41,7 +50,10 @@ func TestGeneratePassword_NegativeLengthDefaultsTo16(t *testing.T) {
 }
 
 func TestGeneratePassword_WithSymbols(t *testing.T) {
-	password, err := GeneratePassword(50, true)
+	password, cleanup, err := GeneratePassword(50, true)
+	if cleanup != nil {
+		defer cleanup()
+	}
 	if err != nil {
 		t.Fatalf("GeneratePassword() error = %v", err)
 	}
@@ -59,7 +71,10 @@ func TestGeneratePassword_WithSymbols(t *testing.T) {
 }
 
 func TestGeneratePassword_WithoutSymbols(t *testing.T) {
-	password, err := GeneratePassword(50, false)
+	password, cleanup, err := GeneratePassword(50, false)
+	if cleanup != nil {
+		defer cleanup()
+	}
 	if err != nil {
 		t.Fatalf("GeneratePassword() error = %v", err)
 	}
@@ -73,11 +88,17 @@ func TestGeneratePassword_WithoutSymbols(t *testing.T) {
 }
 
 func TestGeneratePassword_Randomness(t *testing.T) {
-	password1, err := GeneratePassword(16, true)
+	password1, cleanup1, err := GeneratePassword(16, true)
+	if cleanup1 != nil {
+		defer cleanup1()
+	}
 	if err != nil {
 		t.Fatalf("GeneratePassword() first call error = %v", err)
 	}
-	password2, err := GeneratePassword(16, true)
+	password2, cleanup2, err := GeneratePassword(16, true)
+	if cleanup2 != nil {
+		defer cleanup2()
+	}
 	if err != nil {
 		t.Fatalf("GeneratePassword() second call error = %v", err)
 	}
@@ -93,7 +114,10 @@ func TestMaxPasswordLength(t *testing.T) {
 }
 
 func TestGeneratePassword_AtMaxLength(t *testing.T) {
-	password, err := GeneratePassword(MaxPasswordLength, false)
+	password, cleanup, err := GeneratePassword(MaxPasswordLength, false)
+	if cleanup != nil {
+		defer cleanup()
+	}
 	if err != nil {
 		t.Fatalf("GeneratePassword(MaxPasswordLength) unexpected error: %v", err)
 	}
@@ -103,7 +127,7 @@ func TestGeneratePassword_AtMaxLength(t *testing.T) {
 }
 
 func TestGeneratePassword_OverMaxLength(t *testing.T) {
-	_, err := GeneratePassword(MaxPasswordLength+1, false)
+	_, _, err := GeneratePassword(MaxPasswordLength+1, false)
 	if err == nil {
 		t.Fatal("GeneratePassword() error = nil, want error for length over maximum")
 	}
@@ -111,7 +135,10 @@ func TestGeneratePassword_OverMaxLength(t *testing.T) {
 
 func TestGeneratePassword_ErrorPath(t *testing.T) {
 	failingReader := &errorReader{}
-	_, err := generatePasswordWithReader(16, true, failingReader)
+	_, cleanup, err := generatePasswordWithReader(16, true, failingReader)
+	if cleanup != nil {
+		defer cleanup()
+	}
 	if err == nil {
 		t.Fatal("expected error from failing reader, got nil")
 	}

@@ -73,9 +73,12 @@ func collectPassword(data map[string]any, reader *bufio.Reader, flags EntryFlags
 			}
 		}
 	case flags.Generate:
-		password, err := GeneratePassword(flags.Length, true)
+		password, cleanup, err := GeneratePassword(flags.Length, true)
 		if err != nil {
 			return fmt.Errorf("generate password: %w", err)
+		}
+		if cleanup != nil {
+			defer cleanup()
 		}
 		data["password"] = password
 	case reader != nil:

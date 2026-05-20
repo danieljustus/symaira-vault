@@ -66,7 +66,10 @@ func TestGeneratePassword(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := generatePassword(tt.length, tt.useSymbols)
+			got, cleanup, err := generatePassword(tt.length, tt.useSymbols)
+			if cleanup != nil {
+				defer cleanup()
+			}
 			if (err != nil) != tt.wantErr {
 				t.Errorf("generatePassword() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -79,7 +82,10 @@ func TestGeneratePassword(t *testing.T) {
 }
 
 func TestGeneratePasswordContainsExpectedChars(t *testing.T) {
-	password, err := generatePassword(100, false)
+	password, cleanup, err := generatePassword(100, false)
+	if cleanup != nil {
+		defer cleanup()
+	}
 	if err != nil {
 		t.Fatalf("generatePassword() error = %v", err)
 	}
@@ -95,7 +101,10 @@ func TestGeneratePasswordContainsExpectedChars(t *testing.T) {
 		t.Error("password without symbols contains non-alphanumeric characters")
 	}
 
-	passwordWithSymbols, _ := generatePassword(100, true)
+	passwordWithSymbols, cleanupSym, _ := generatePassword(100, true)
+	if cleanupSym != nil {
+		defer cleanupSym()
+	}
 	hasSymbols := false
 	symbols := "!@#$%^&*()_+-=[]{}|;:,.<>?"
 	for _, c := range passwordWithSymbols {

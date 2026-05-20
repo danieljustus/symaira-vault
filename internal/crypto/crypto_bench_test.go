@@ -108,7 +108,10 @@ func benchmarkGeneratePassword(b *testing.B, length int, useSymbols bool) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		_, err := GeneratePassword(length, useSymbols)
+		_, cleanup, err := GeneratePassword(length, useSymbols)
+		if cleanup != nil {
+			cleanup()
+		}
 		if err != nil {
 			b.Fatalf("GeneratePassword failed: %v", err)
 		}

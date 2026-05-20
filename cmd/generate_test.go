@@ -15,7 +15,10 @@ import (
 func TestGeneratePassword_ValidLengths(t *testing.T) {
 	for _, length := range []int{1, 20, 100, 1024, crypto.MaxPasswordLength} {
 		t.Run("", func(t *testing.T) {
-			password, err := generatePassword(length, false)
+			password, cleanup, err := generatePassword(length, false)
+			if cleanup != nil {
+				defer cleanup()
+			}
 			if err != nil {
 				t.Fatalf("generatePassword(%d) unexpected error: %v", length, err)
 			}
@@ -27,7 +30,7 @@ func TestGeneratePassword_ValidLengths(t *testing.T) {
 }
 
 func TestGeneratePassword_ZeroLength(t *testing.T) {
-	_, err := generatePassword(0, false)
+	_, _, err := generatePassword(0, false)
 	if err == nil {
 		t.Fatal("expected error for length=0, got nil")
 	}
@@ -37,7 +40,7 @@ func TestGeneratePassword_ZeroLength(t *testing.T) {
 }
 
 func TestGeneratePassword_NegativeLength(t *testing.T) {
-	_, err := generatePassword(-1, false)
+	_, _, err := generatePassword(-1, false)
 	if err == nil {
 		t.Fatal("expected error for length=-1, got nil")
 	}
@@ -47,7 +50,7 @@ func TestGeneratePassword_NegativeLength(t *testing.T) {
 }
 
 func TestGeneratePassword_ExceedsMaxLength(t *testing.T) {
-	_, err := generatePassword(crypto.MaxPasswordLength+1, false)
+	_, _, err := generatePassword(crypto.MaxPasswordLength+1, false)
 	if err == nil {
 		t.Fatalf("expected error for length=%d, got nil", crypto.MaxPasswordLength+1)
 	}
@@ -57,7 +60,10 @@ func TestGeneratePassword_ExceedsMaxLength(t *testing.T) {
 }
 
 func TestGeneratePassword_WithSymbols(t *testing.T) {
-	password, err := generatePassword(50, true)
+	password, cleanup, err := generatePassword(50, true)
+	if cleanup != nil {
+		defer cleanup()
+	}
 	if err != nil {
 		t.Fatalf("generatePassword(50, true) error: %v", err)
 	}

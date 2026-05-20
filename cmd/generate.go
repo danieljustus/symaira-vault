@@ -32,9 +32,12 @@ var generateCmd = &cobra.Command{
   # Generate and store
   openpass generate --store newaccount.password`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		password, err := generatePassword(genLength, genSymbols)
+		password, cleanup, err := generatePassword(genLength, genSymbols)
 		if err != nil {
 			return err
+		}
+		if cleanup != nil {
+			defer cleanup()
 		}
 
 		if genStore != "" {
@@ -88,12 +91,12 @@ var generateCmd = &cobra.Command{
 	},
 }
 
-func generatePassword(length int, useSymbols bool) (string, error) {
+func generatePassword(length int, useSymbols bool) (string, func(), error) {
 	if length <= 0 {
-		return "", fmt.Errorf("length must be greater than zero")
+		return "", func() {}, fmt.Errorf("length must be greater than zero")
 	}
 	if length > crypto.MaxPasswordLength {
-		return "", fmt.Errorf("length must be at most %d", crypto.MaxPasswordLength)
+		return "", func() {}, fmt.Errorf("length must be at most %d", crypto.MaxPasswordLength)
 	}
 	return crypto.GeneratePassword(length, useSymbols)
 }

@@ -79,6 +79,7 @@ type copiedMsg struct {
 
 type passwordGeneratedMsg struct {
 	password string
+	cleanup  func()
 	err      error
 }
 
@@ -240,7 +241,7 @@ func (m TUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.err = nil
 		m.status = "Generated password copied to clipboard"
-		return m, copyTextCmd(msg.password, "Generated password copied to clipboard")
+		return m, copyTextCmd(msg.password, "Generated password copied to clipboard", msg.cleanup)
 	case entryDeletedMsg:
 		m.mode = modeNormal
 		if msg.err != nil {
@@ -752,9 +753,13 @@ func loadEntryCmd(svc vaultsvc.Service, path string) tea.Cmd {
 	}
 }
 
-func copyTextCmd(text, message string) tea.Cmd {
+func copyTextCmd(text, message string, cleanup func()) tea.Cmd {
 	return func() tea.Msg {
-		return copyTextMsg(text, message)
+		result := copyTextMsg(text, message)
+		if cleanup != nil {
+			cleanup()
+		}
+		return result
 	}
 }
 
@@ -786,8 +791,8 @@ func clipboardTickCmd() tea.Cmd {
 
 func generatePasswordCmd() tea.Cmd {
 	return func() tea.Msg {
-		password, err := vaultcrypto.GeneratePassword(generatedPasswordLength, true)
-		return passwordGeneratedMsg{password: password, err: err}
+		password, cleanup, err := vaultcrypto.GeneratePassword(generatedPasswordLength, true)
+		return passwordGeneratedMsg{password: password, cleanup: cleanup, err: err}
 	}
 }
 
