@@ -751,3 +751,40 @@ func TestWarnPipeRead_OnceAndSilenced(t *testing.T) {
 	// Already emitted → second call is silent (idempotent).
 	cli.WarnPipeRead("Passphrase")
 }
+
+func TestWarnEnvPassphrase_OnceAndSilenced(t *testing.T) {
+	oldEmitted := cli.EnvPassphraseWarningEmitted
+	oldQuiet := cli.QuietMode
+	defer func() {
+		cli.EnvPassphraseWarningEmitted = oldEmitted
+		cli.QuietMode = oldQuiet
+	}()
+
+	// Suppressed in quiet mode.
+	cli.EnvPassphraseWarningEmitted = false
+	cli.QuietMode = true
+	cli.WarnEnvPassphrase()
+	if cli.EnvPassphraseWarningEmitted {
+		t.Errorf("warning fired despite --quiet")
+	}
+	cli.QuietMode = false
+
+	// Suppressed when OPENPASS_NO_ENV_WARNING is set.
+	cli.EnvPassphraseWarningEmitted = false
+	t.Setenv("OPENPASS_NO_ENV_WARNING", "1")
+	cli.WarnEnvPassphrase()
+	if cli.EnvPassphraseWarningEmitted {
+		t.Errorf("warning fired despite OPENPASS_NO_ENV_WARNING")
+	}
+	t.Setenv("OPENPASS_NO_ENV_WARNING", "0")
+
+	// Fires once when not suppressed.
+	cli.EnvPassphraseWarningEmitted = false
+	cli.WarnEnvPassphrase()
+	if !cli.EnvPassphraseWarningEmitted {
+		t.Errorf("warning did not fire when expected")
+	}
+
+	// Already emitted → second call is silent (idempotent).
+	cli.WarnEnvPassphrase()
+}

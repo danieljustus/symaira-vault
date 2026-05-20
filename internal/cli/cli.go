@@ -44,6 +44,23 @@ var IsTerminalFunc func(int) bool = term.IsTerminal
 // printed in this process so we only nag once per invocation.
 var PipeWarningEmitted bool
 
+// EnvPassphraseWarningEmitted tracks whether the OPENPASS_PASSPHRASE env-var
+// warning has already been printed in this process.
+var EnvPassphraseWarningEmitted bool
+
+// WarnEnvPassphrase prints a one-shot warning that OPENPASS_PASSPHRASE is set,
+// which makes the passphrase visible in /proc/PID/environ and process listings.
+func WarnEnvPassphrase() {
+	if EnvPassphraseWarningEmitted || QuietMode {
+		return
+	}
+	if v := os.Getenv("OPENPASS_NO_ENV_WARNING"); v != "" && v != "0" {
+		return
+	}
+	EnvPassphraseWarningEmitted = true
+	cliout.Warnf("OPENPASS_PASSPHRASE is set — the passphrase is visible in /proc/PID/environ and may be exposed in process listings and crash dumps.")
+}
+
 // WarnPipeRead prints a one-shot warning that hidden input is being read from
 // a non-TTY (pipe/redirect).
 func WarnPipeRead(label string) {
@@ -384,6 +401,7 @@ func resolveUnlockPassphrase(vaultDir string, interactive bool, cfg *configpkg.C
 				// so that the subsequent Wipe clears the only copy in memory.
 				passphrase = unsafe.Slice(unsafe.StringData(envPass), len(envPass))
 				passphraseFromEnv = true
+				WarnEnvPassphrase()
 			}
 			_ = os.Unsetenv("OPENPASS_PASSPHRASE")
 		}
