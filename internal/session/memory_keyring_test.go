@@ -54,7 +54,7 @@ func TestMemoryKeyring_Set_EncryptsPlaintextPassphrase(t *testing.T) {
 
 	now := time.Now().UTC()
 	sess := storedSession{
-		Passphrase: passphrase,
+		Passphrase: passphraseBytes([]byte(passphrase)),
 		SavedAt:    now,
 		LastAccess: now,
 		TTL:        int64(time.Hour),
@@ -75,7 +75,7 @@ func TestMemoryKeyring_Set_EncryptsPlaintextPassphrase(t *testing.T) {
 		t.Fatalf("Unmarshal() error = %v", err)
 	}
 
-	if retrieved.Passphrase != "" {
+	if len(retrieved.Passphrase) > 0 {
 		t.Error("plaintext passphrase should be encrypted after Set")
 	}
 	if retrieved.EncryptedPassphrase == "" {
@@ -209,7 +209,7 @@ func TestMemoryKeyring_Get_UpdatesLastAccess(t *testing.T) {
 
 	now := time.Now().UTC()
 	sess := storedSession{
-		Passphrase: "secret",
+		Passphrase: passphraseBytes([]byte("secret")),
 		SavedAt:    now,
 		LastAccess: now,
 		TTL:        int64(time.Hour),
@@ -296,7 +296,7 @@ func TestMemoryKeyring_Set_ZeroesOldData(t *testing.T) {
 	mk.Set("openpass:"+vaultDir, wrapKeyAccount, wrapKey)
 
 	sess1 := storedSession{
-		Passphrase: "first-secret",
+		Passphrase: passphraseBytes([]byte("first-secret")),
 		SavedAt:    time.Now().UTC(),
 		LastAccess: time.Now().UTC(),
 		TTL:        int64(time.Hour),
@@ -305,7 +305,7 @@ func TestMemoryKeyring_Set_ZeroesOldData(t *testing.T) {
 	mk.Set("openpass:"+vaultDir, sessionAccount, string(payload1))
 
 	sess2 := storedSession{
-		Passphrase: "second-secret",
+		Passphrase: passphraseBytes([]byte("second-secret")),
 		SavedAt:    time.Now().UTC(),
 		LastAccess: time.Now().UTC(),
 		TTL:        int64(time.Hour),
@@ -321,7 +321,7 @@ func TestMemoryKeyring_Set_ZeroesOldData(t *testing.T) {
 	var retrieved storedSession
 	json.Unmarshal([]byte(got), &retrieved)
 	// After Set encrypts plaintext, the passphrase should be empty
-	if retrieved.Passphrase != "" {
+	if len(retrieved.Passphrase) > 0 {
 		t.Error("Passphrase should be encrypted/empty after Set")
 	}
 }
