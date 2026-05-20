@@ -132,13 +132,6 @@ func validateConfigPath(path string) error {
 	return nil
 }
 
-func mergeString(dst, src string) string {
-	if src != "" {
-		return src
-	}
-	return dst
-}
-
 func mergeStringPtr(dst, src *string) *string {
 	if src != nil {
 		return src
