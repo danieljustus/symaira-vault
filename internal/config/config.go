@@ -3,6 +3,7 @@ package config
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -838,64 +839,15 @@ func (c *Config) SaveTo(path string) error {
 func copyAgentProfiles(agents map[string]AgentProfile) map[string]AgentProfile {
 	result := make(map[string]AgentProfile, len(agents))
 	for name, profile := range agents {
-		cp := AgentProfile{
-			Name:                profile.Name,
-			Tier:                profile.Tier,
-			ApprovalMode:        profile.ApprovalMode,
-			CanWrite:            profile.CanWrite,
-			CanRunCommands:      profile.CanRunCommands,
-			CanManageConfig:     profile.CanManageConfig,
-			CanUseClipboard:     profile.CanUseClipboard,
-			CanUseAutotype:      profile.CanUseAutotype,
-			CanReadValues:       profile.CanReadValues,
-			ExposeValueTools:    profile.ExposeValueTools,
-			AutoUnseal:          profile.AutoUnseal,
-			RequireApproval:     profile.RequireApproval,
-			ApprovalTimeout:     profile.ApprovalTimeout,
-			MaxReadsPerHour:     profile.MaxReadsPerHour,
-			MaxReadsPerDay:      profile.MaxReadsPerDay,
-			MaxSecretsInSession: profile.MaxSecretsInSession,
-			PromptInjectionMode: profile.PromptInjectionMode,
-			SkillPath:           profile.SkillPath,
-			SkillVersion:        profile.SkillVersion,
-			DynamicProviders:    profile.DynamicProviders,
-			AllowedEnvVars:      profile.AllowedEnvVars,
-			AllowedExecutables:  profile.AllowedExecutables,
-			PreCallHooks:        profile.PreCallHooks,
-			PostCallHooks:       profile.PostCallHooks,
+		data, err := json.Marshal(profile)
+		if err != nil {
+			// Marshal cannot fail for AgentProfile - all fields are JSON-safe types.
+			panic("copyAgentProfiles: json.Marshal failed: " + err.Error())
 		}
-		if profile.AllowedPaths != nil {
-			cp.AllowedPaths = append([]string(nil), profile.AllowedPaths...)
-		}
-		if profile.RedactFields != nil {
-			cp.RedactFields = append([]string(nil), profile.RedactFields...)
-		}
-		if profile.PerToolRedactFields != nil {
-			cp.PerToolRedactFields = make(map[string][]string, len(profile.PerToolRedactFields))
-			for tool, flds := range profile.PerToolRedactFields {
-				cp.PerToolRedactFields[tool] = append([]string(nil), flds...)
-			}
-		}
-		if profile.AllowedTools != nil {
-			cp.AllowedTools = append([]string(nil), profile.AllowedTools...)
-		}
-		if profile.DynamicProviders != nil {
-			cp.DynamicProviders = make(map[string][]string, len(profile.DynamicProviders))
-			for p, roles := range profile.DynamicProviders {
-				cp.DynamicProviders[p] = append([]string(nil), roles...)
-			}
-		}
-		if profile.AllowedEnvVars != nil {
-			cp.AllowedEnvVars = append([]string(nil), profile.AllowedEnvVars...)
-		}
-		if profile.AllowedExecutables != nil {
-			cp.AllowedExecutables = append([]string(nil), profile.AllowedExecutables...)
-		}
-		if profile.PreCallHooks != nil {
-			cp.PreCallHooks = append([]string(nil), profile.PreCallHooks...)
-		}
-		if profile.PostCallHooks != nil {
-			cp.PostCallHooks = append([]string(nil), profile.PostCallHooks...)
+		var cp AgentProfile
+		if err := json.Unmarshal(data, &cp); err != nil {
+			// Unmarshal cannot fail for AgentProfile - round-trip through JSON is safe.
+			panic("copyAgentProfiles: json.Unmarshal failed: " + err.Error())
 		}
 		result[name] = cp
 	}
