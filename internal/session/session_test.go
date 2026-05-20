@@ -456,7 +456,7 @@ func TestMigration_OldFormatAutoMigratesToEncrypted(t *testing.T) {
 	if jsonErr := json.Unmarshal([]byte(raw), &sess); jsonErr != nil {
 		t.Fatalf("json.Unmarshal() error = %v", jsonErr)
 	}
-	if sess.Passphrase != "" {
+	if len(sess.Passphrase) > 0 {
 		t.Error("after migration, plaintext passphrase field should be empty")
 	}
 	if sess.EncryptedPassphrase == "" || sess.Nonce == "" {
@@ -494,7 +494,7 @@ func TestNewFormatStoredEncrypted(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &sess); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
-	if sess.Passphrase != "" {
+	if len(sess.Passphrase) > 0 {
 		t.Error("new format should not contain plaintext passphrase")
 	}
 	if sess.EncryptedPassphrase == "" {
@@ -821,7 +821,7 @@ func TestResolvePassphrase_BothEncryptedAndPlaintext(t *testing.T) {
 	sess := storedSession{
 		EncryptedPassphrase: enc,
 		Nonce:               nonce,
-		Passphrase:          "legacy-secret",
+		Passphrase:          passphraseBytes([]byte("legacy-secret")),
 		SavedAt:             time.Now().UTC(),
 		LastAccess:          time.Now().UTC(),
 		TTL:                 int64(time.Hour),
@@ -851,7 +851,7 @@ func TestResolvePassphrase_LegacyFormatMigrates(t *testing.T) {
 	setupTestWrapKey(t, fake, vaultDir)
 	passphrase := "legacy-value"
 	sess := storedSession{
-		Passphrase: passphrase,
+		Passphrase: passphraseBytes([]byte(passphrase)),
 		SavedAt:    time.Now().UTC(),
 		LastAccess: time.Now().UTC(),
 		TTL:        int64(time.Hour),
@@ -877,7 +877,7 @@ func TestResolvePassphrase_LegacyFormatMigrates(t *testing.T) {
 	if jsonErr := json.Unmarshal([]byte(raw), &updated); jsonErr != nil {
 		t.Fatalf("json.Unmarshal() error = %v", jsonErr)
 	}
-	if updated.Passphrase != "" {
+	if len(updated.Passphrase) > 0 {
 		t.Error("legacy plaintext should be cleared after migration")
 	}
 }
@@ -891,7 +891,7 @@ func TestResolvePassphrase_WipesPlaintextAfterMigration(t *testing.T) {
 	passphrase := "legacy-wipe-test-secret"
 
 	sess := &storedSession{
-		Passphrase: passphrase,
+		Passphrase: passphraseBytes([]byte(passphrase)),
 		SavedAt:    time.Now().UTC(),
 		LastAccess: time.Now().UTC(),
 		TTL:        int64(time.Hour),
@@ -913,13 +913,13 @@ func TestResolvePassphrase_WipesPlaintextAfterMigration(t *testing.T) {
 	if jsonErr := json.Unmarshal([]byte(raw), &loaded); jsonErr != nil {
 		t.Fatalf("json.Unmarshal() error = %v", jsonErr)
 	}
-	if loaded.Passphrase == "" {
+	if len(loaded.Passphrase) == 0 {
 		t.Fatal("expected legacy passphrase to be present before migration")
 	}
 
 	// Capture the backing data pointer before migration.
 	// #nosec G103 — intentional: confirming wipe side-effect in test.
-	origData := unsafe.StringData(loaded.Passphrase)
+	origData := unsafe.SliceData(loaded.Passphrase)
 	origLen := len(loaded.Passphrase)
 
 	got, err := resolvePassphrase(&loaded, vaultDir)
@@ -931,7 +931,7 @@ func TestResolvePassphrase_WipesPlaintextAfterMigration(t *testing.T) {
 	}
 
 	// After migration the original backing data should be zeroed
-	// (the string was explicitly wiped before being set to "").
+	// (the slice was explicitly wiped before being set to nil).
 	buf := unsafe.Slice(origData, origLen)
 	for i, b := range buf {
 		if b != 0 {
@@ -939,9 +939,9 @@ func TestResolvePassphrase_WipesPlaintextAfterMigration(t *testing.T) {
 		}
 	}
 
-	// The struct field must be empty string now
-	if loaded.Passphrase != "" {
-		t.Error("sess.Passphrase should be empty after migration")
+	// The struct field must be nil now
+	if len(loaded.Passphrase) > 0 {
+		t.Error("sess.Passphrase should be nil after migration")
 	}
 }
 
@@ -1056,7 +1056,7 @@ func TestResolvePassphrase_EncryptFailsDuringMigration(t *testing.T) {
 	plain := "legacy-passphrase"
 
 	sess := storedSession{
-		Passphrase: plain,
+		Passphrase: passphraseBytes([]byte(plain)),
 		SavedAt:    time.Now().UTC(),
 		LastAccess: time.Now().UTC(),
 		TTL:        int64(time.Hour),

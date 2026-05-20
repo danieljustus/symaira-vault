@@ -70,7 +70,7 @@ func TestMemoryKeyring_EncryptsPlaintextPassphrase(t *testing.T) {
 	account := sessionAccount
 
 	sess := storedSession{
-		Passphrase: "plaintext-secret",
+		Passphrase: passphraseBytes([]byte("plaintext-secret")),
 		SavedAt:    time.Now().UTC(),
 		LastAccess: time.Now().UTC(),
 		TTL:        int64(time.Hour),
@@ -94,7 +94,7 @@ func TestMemoryKeyring_EncryptsPlaintextPassphrase(t *testing.T) {
 		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
 
-	if gotSess.Passphrase != "" {
+	if len(gotSess.Passphrase) > 0 {
 		t.Error("Set() should encrypt plaintext passphrase")
 	}
 	if gotSess.EncryptedPassphrase == "" || gotSess.Nonce == "" {
