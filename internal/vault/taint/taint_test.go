@@ -296,3 +296,74 @@ func TestParseSecretHandle_ValidPathOnly(t *testing.T) {
 		t.Fatalf("Field = %q, want %q", h.Field, "aws")
 	}
 }
+
+func TestNewValue(t *testing.T) {
+	v := NewValue("raw-secret", Secret, "tag1", "tag2")
+	if v.Raw != "raw-secret" {
+		t.Errorf("Raw = %q, want %q", v.Raw, "raw-secret")
+	}
+	if v.Classification != Secret {
+		t.Errorf("Classification = %v, want Secret", v.Classification)
+	}
+	if len(v.Tags) != 2 {
+		t.Errorf("got %d tags, want 2", len(v.Tags))
+	}
+}
+
+func TestNewValue_NoTags(t *testing.T) {
+	v := NewValue("raw", Public)
+	if v.Classification != Public {
+		t.Errorf("Classification = %v, want Public", v.Classification)
+	}
+}
+
+func TestSetMCPSanitizer(t *testing.T) {
+	old := mcpSanitizer
+	t.Cleanup(func() { mcpSanitizer = old })
+
+	called := false
+	fn := func(s string) string {
+		called = true
+		return "sanitized:" + s
+	}
+	SetMCPSanitizer(fn)
+
+	if mcpSanitizer == nil {
+		t.Fatal("sanitizer should be set")
+	}
+
+	u := Wrap("raw", Provenance{Source: "test"})
+	r := u.Render(MCP)
+	if !called {
+		t.Error("MCP sanitizer was not called during Render(MCP)")
+	}
+	if r.String() != "sanitized:raw" {
+		t.Errorf("Render(MCP) = %q, want %q", r.String(), "sanitized:raw")
+	}
+
+	SetMCPSanitizer(nil)
+	if mcpSanitizer != nil {
+		t.Fatal("sanitizer should be nil after clearing")
+	}
+}
+
+func TestClassificationString(t *testing.T) {
+	if Public.String() != "public" {
+		t.Errorf("Public.String() = %q", Public.String())
+	}
+	if Internal.String() != "internal" {
+		t.Errorf("Internal.String() = %q", Internal.String())
+	}
+	if Confidential.String() != "confidential" {
+		t.Errorf("Confidential.String() = %q", Confidential.String())
+	}
+	if Secret.String() != "secret" {
+		t.Errorf("Secret.String() = %q", Secret.String())
+	}
+	if Restricted.String() != "restricted" {
+		t.Errorf("Restricted.String() = %q", Restricted.String())
+	}
+	if Classification(99).String() != "unknown" {
+		t.Errorf("Classification(99).String() = %q, want 'unknown'", Classification(99).String())
+	}
+}

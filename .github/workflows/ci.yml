@@ -149,17 +149,42 @@ jobs:
       - name: Check coverage threshold
         if: matrix.os == 'ubuntu-latest'
         run: |
-          COVERAGE_THRESHOLD=63.5
-          echo "Checking coverage threshold: ${COVERAGE_THRESHOLD}%"
+          echo "=== Total coverage check ==="
+          COVERAGE_THRESHOLD=65.0
+          echo "Threshold: ${COVERAGE_THRESHOLD}%"
           TOTAL_LINE=$(go tool cover -func=coverage.out | grep "total:")
           echo "Coverage line: $TOTAL_LINE"
           COVERAGE=$(echo "$TOTAL_LINE" | grep -oE '[0-9]+\.[0-9]+' | tail -1)
           echo "Total coverage: ${COVERAGE}%"
           if awk "BEGIN {exit !($COVERAGE < $COVERAGE_THRESHOLD)}"; then
-            echo "FAIL: Coverage ${COVERAGE}% is below threshold of ${COVERAGE_THRESHOLD}%"
+            echo "FAIL: Total coverage ${COVERAGE}% is below threshold of ${COVERAGE_THRESHOLD}%"
             exit 1
           fi
-          echo "PASS: Coverage ${COVERAGE}% meets threshold of ${COVERAGE_THRESHOLD}%"
+          echo "PASS: Total coverage ${COVERAGE}% meets threshold of ${COVERAGE_THRESHOLD}%"
+
+          echo ""
+          echo "=== Per-package coverage checks for security-critical packages ==="
+          for PACKAGE in "./internal/crypto/..." \
+                         "./internal/session/..." \
+                         "./internal/vault/..."; do
+            PKG_OUT=$(go test -coverprofile=/dev/null -covermode=atomic -count=1 -timeout=2m \
+                      -skip 'TestFlow|TestBinaryE2E|Integration' "$PACKAGE" 2>&1 | grep "coverage:" | tail -1)
+            PKG_COV=$(echo "$PKG_OUT" | grep -oE '[0-9]+\.[0-9]+' | tail -1 || echo "0")
+            PKG_NAME=$(basename "$PACKAGE")
+            # Phased target: raise to 85.0 in follow-up PRs
+            case "$PKG_NAME" in
+              crypto)  PKG_THRESHOLD=85.0 ;;
+              session) PKG_THRESHOLD=75.0 ;;
+              vault)   PKG_THRESHOLD=75.0 ;;
+              *)       PKG_THRESHOLD=65.0 ;;
+            esac
+            echo "${PKG_NAME}: ${PKG_COV}% (threshold: ${PKG_THRESHOLD}%)"
+            if awk "BEGIN {exit !($PKG_COV < $PKG_THRESHOLD)}"; then
+              echo "FAIL: ${PKG_NAME} coverage ${PKG_COV}% is below threshold of ${PKG_THRESHOLD}%"
+              exit 1
+            fi
+            echo "PASS: ${PKG_NAME} coverage ${PKG_COV}% meets threshold of ${PKG_THRESHOLD}%"
+          done
 
       - name: Run smoke tests
         shell: bash
