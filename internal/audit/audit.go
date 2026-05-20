@@ -470,7 +470,7 @@ func (l *Logger) lastNEntries(n int) ([]LogEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	readSize := int64(4096)
 	var entries []LogEntry
@@ -530,6 +530,7 @@ func parseTailEntries(data []byte, atStart bool) []LogEntry {
 	return entries
 }
 
+//nolint:unparam // signature required by bufio.SplitFunc
 func scanLines(data []byte, atEOF bool) (advance int, token []byte, err error) {
 	if atEOF && len(data) == 0 {
 		return 0, nil, nil
@@ -597,7 +598,7 @@ func (l *Logger) readLastHMAC() ([]byte, error) {
 	if err != nil {
 		return nil, nil
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	readSize := int64(4096)
 	var lastLine string
