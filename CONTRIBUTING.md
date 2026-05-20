@@ -114,7 +114,51 @@ Most editors support EditorConfig natively or via plugin. See [editorconfig.org]
 
 - Return errors rather than logging them in library code
 - Prefix error messages with lowercase context: `"vault: failed to open"`
-- Use `fmt.Errorf` with `%w` for error wrapping
+
+#### Error Wrapping Conventions
+
+Use `fmt.Errorf` with `%w` when wrapping an underlying error that the caller may need to programmatically inspect with `errors.Is` or `errors.As`:
+
+```go
+// Good: preserves the error chain for errors.Is/errors.As
+if err := os.MkdirAll(path, 0o755); err != nil {
+    return fmt.Errorf("create vault directory: %w", err)
+}
+```
+
+Use `fmt.Errorf` with `%v` or use `errors.New` when the message is purely informational and the underlying error is a well-known sentinel or needs no programmatic inspection:
+
+```go
+// Good: validation error — no underlying error to wrap
+if passphrase == "" {
+    return errors.New("passphrase is empty")
+}
+
+// Good: informational message with a known sentinel
+return 0, fmt.Errorf("invalid HMAC key size: got %d, want %d", len(data), hmacKeySize)
+```
+
+**Decision guide:**
+| Scenario | Pattern |
+|---|---|
+| Propagating an unknown/third-party error that the caller may need to inspect | `fmt.Errorf("context: %w", err)` |
+| Propagating a sentinel error (defined in the package) | `fmt.Errorf("context: %w", err)` |
+| Validation failure, no error to wrap | `errors.New("...")` or `fmt.Errorf("...: %v", val)` |
+| Creating a dynamic error message from a string | `fmt.Errorf("...")` |
+| Recovering from a panic — `r` is not an error type | `fmt.Errorf("panic: %v", r)` |
+
+**What NOT to do:**
+
+```go
+// Bad: swallows the error chain — caller cannot errors.Is/errors.As
+return fmt.Errorf("read config: %v", err)
+
+// Bad: discards the error entirely
+log.Printf("read config failed: %v", err)
+return fmt.Errorf("read config failed")
+```
+
+**Enforcement:** The project uses `errorlint` via golangci-lint to catch `fmt.Errorf` calls that pass an `error` argument without `%w`. Run `make lint` to verify.
 
 ### File Handle Management
 
