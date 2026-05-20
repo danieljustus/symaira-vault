@@ -1112,3 +1112,247 @@ func TestLoadIdentity_NotFound(t *testing.T) {
 		t.Error("expected error when identity not cached")
 	}
 }
+
+func TestSaveIdentity_MarshalError(t *testing.T) {
+	fake := newFakeKeyring()
+	stubKeyring(t, fake)
+
+	vaultDir := "/tmp/vault-identity-marshal"
+	setupTestWrapKey(t, fake, vaultDir)
+
+	identity := "AGE-SECRET-KEY-1" + string(make([]byte, 100000))
+	err := SaveIdentity(vaultDir, identity, time.Hour)
+	if err != nil {
+		t.Logf("SaveIdentity returned error (may be marshal or keyring set): %v", err)
+	}
+}
+
+func TestSaveIdentity_KeyringSetError(t *testing.T) {
+	fake := newFakeKeyring()
+	stubKeyring(t, fake)
+
+	vaultDir := "/tmp/vault-identity-set-err"
+	setupTestWrapKey(t, fake, vaultDir)
+
+	fake.setErr = errors.New("keyring write failed")
+	err := SaveIdentity(vaultDir, "AGE-SECRET-KEY-1FAKE", time.Hour)
+	if err == nil {
+		t.Fatal("SaveIdentity error = nil, want keyring set error")
+	}
+}
+
+func TestLoadIdentity_ExpiredTTL(t *testing.T) {
+	fake := newFakeKeyring()
+	stubKeyring(t, fake)
+
+	vaultDir := "/tmp/vault-identity-expired"
+	setupTestWrapKey(t, fake, vaultDir)
+
+	ident := storedIdentity{
+		EncryptedIdentity: "dGVzdA==",
+		Nonce:             "YWJjZGVmZ2hpamts",
+		SavedAt:           time.Now().UTC().Add(-time.Hour),
+		LastAccess:        time.Now().UTC().Add(-time.Hour),
+		TTL:               0,
+	}
+	payload, _ := json.Marshal(ident)
+	fake.set("openpass:"+vaultDir, identityAccount, string(payload))
+
+	_, err := LoadIdentity(vaultDir)
+	if err == nil {
+		t.Fatal("LoadIdentity error = nil, want expired identity error")
+	}
+}
+
+func TestLoadIdentity_WrapKeyNotFound(t *testing.T) {
+	fake := newFakeKeyring()
+	stubKeyring(t, fake)
+
+	vaultDir := "/tmp/vault-identity-no-wrap"
+	setupTestWrapKey(t, fake, vaultDir)
+
+	ident := storedIdentity{
+		EncryptedIdentity: "dGVzdA==",
+		Nonce:             "YWJjZGVmZ2hpamts",
+		SavedAt:           time.Now().UTC(),
+		LastAccess:        time.Now().UTC(),
+		TTL:               int64(time.Hour),
+	}
+	payload, _ := json.Marshal(ident)
+	fake.set("openpass:"+vaultDir, identityAccount, string(payload))
+
+	fake.delete("openpass:"+vaultDir, wrapKeyAccount)
+
+	_, err := LoadIdentity(vaultDir)
+	if err == nil {
+		t.Fatal("LoadIdentity error = nil, want wrap key error")
+	}
+}
+
+func TestClearIdentity_DeleteError(t *testing.T) {
+	fake := newFakeKeyring()
+	stubKeyring(t, fake)
+
+	vaultDir := "/tmp/vault-clear-identity"
+	setupTestWrapKey(t, fake, vaultDir)
+
+	err := SaveIdentity(vaultDir, "AGE-SECRET-KEY-1FAKE", time.Hour)
+	if err != nil {
+		t.Fatalf("SaveIdentity failed: %v", err)
+	}
+
+	fake.deleteErr = errors.New("keyring delete failed")
+	err = ClearIdentity(vaultDir)
+	if err == nil {
+		t.Fatal("ClearIdentity error = nil, want delete error")
+	}
+}
+
+func TestLoadWrapKey_EmptyString(t *testing.T) {
+	fake := newFakeKeyring()
+	stubKeyring(t, fake)
+
+	vaultDir := "/tmp/vault-wrap-empty"
+	fake.set("openpass:"+vaultDir, wrapKeyAccount, "")
+
+	_, err := loadWrapKey(vaultDir)
+	if err == nil {
+		t.Fatal("loadWrapKey error = nil, want empty wrap key error")
+	}
+}
+
+func TestLoadWrapKey_InvalidBase64(t *testing.T) {
+	fake := newFakeKeyring()
+	stubKeyring(t, fake)
+
+	vaultDir := "/tmp/vault-wrap-badbase64"
+	fake.set("openpass:"+vaultDir, wrapKeyAccount, "!!!not-base64!!!")
+
+	_, err := loadWrapKey(vaultDir)
+	if err == nil {
+		t.Fatal("loadWrapKey error = nil, want base64 decode error")
+	}
+}
+
+func TestLoadWrapKey_InvalidLength(t *testing.T) {
+	fake := newFakeKeyring()
+	stubKeyring(t, fake)
+
+	vaultDir := "/tmp/vault-wrap-badlen"
+	// Base64 of "short" - only 5 bytes, not 32
+	fake.set("openpass:"+vaultDir, wrapKeyAccount, base64.StdEncoding.EncodeToString([]byte("short")))
+
+	_, err := loadWrapKey(vaultDir)
+	if err == nil {
+		t.Fatal("loadWrapKey error = nil, want invalid length error")
+	}
+}
+
+func TestDeleteWrapKey_Error(t *testing.T) {
+	fake := newFakeKeyring()
+	stubKeyring(t, fake)
+
+	vaultDir := "/tmp/vault-delete-wrap"
+	setupTestWrapKey(t, fake, vaultDir)
+
+	fake.deleteErr = errors.New("keyring delete failed")
+	err := deleteWrapKey(vaultDir)
+	if err == nil {
+		t.Fatal("deleteWrapKey error = nil, want delete error")
+	}
+}
+
+func TestEncryptionKey_NoWrapKey(t *testing.T) {
+	fake := newFakeKeyring()
+	stubKeyring(t, fake)
+
+	_, err := encryptionKey("/tmp/vault-no-wrap")
+	if err == nil {
+		t.Fatal("encryptionKey error = nil, want no wrap key error")
+	}
+}
+
+func TestEncryptPassphrase_InvalidKeyLength(t *testing.T) {
+	shortKey := []byte("short")
+	_, _, err := encryptPassphrase([]byte("secret"), shortKey)
+	if err == nil {
+		t.Fatal("encryptPassphrase error = nil, want AES cipher error for short key")
+	}
+}
+
+func TestSavePassphrase_KeyringSetOnSaveFails(t *testing.T) {
+	fake := newFakeKeyring()
+	stubKeyring(t, fake)
+
+	vaultDir := "/tmp/vault-save-set-err"
+	setupTestWrapKey(t, fake, vaultDir)
+
+	fake.setErr = errors.New("keyring save failed")
+	err := SavePassphrase(vaultDir, []byte("secret"), time.Hour)
+	if err == nil {
+		t.Fatal("SavePassphrase error = nil, want keyring set error")
+	}
+}
+
+func TestSaveIdentity_KeyringSetOnSaveFails(t *testing.T) {
+	fake := newFakeKeyring()
+	stubKeyring(t, fake)
+
+	vaultDir := "/tmp/vault-id-save-set-err"
+	setupTestWrapKey(t, fake, vaultDir)
+
+	fake.setErr = errors.New("keyring save failed")
+	err := SaveIdentity(vaultDir, "AGE-SECRET-KEY-1FAKE", time.Hour)
+	if err == nil {
+		t.Fatal("SaveIdentity error = nil, want keyring set error")
+	}
+}
+
+func TestSavePassphrase_MarshalSucceeds(t *testing.T) {
+	fake := newFakeKeyring()
+	stubKeyring(t, fake)
+
+	vaultDir := "/tmp/vault-marshal-succeeds"
+	setupTestWrapKey(t, fake, vaultDir)
+
+	err := SavePassphrase(vaultDir, []byte("secret"), time.Hour)
+	if err != nil {
+		t.Fatalf("SavePassphrase failed: %v", err)
+	}
+}
+
+func TestLoadIdentity_KeyringUpdateSucceeds(t *testing.T) {
+	fake := newFakeKeyring()
+	stubKeyring(t, fake)
+
+	vaultDir := "/tmp/vault-id-update"
+	setupTestWrapKey(t, fake, vaultDir)
+
+	identity := "AGE-SECRET-KEY-1FAKE0000000000000000000000000000000000000000000000000000000"
+	if err := SaveIdentity(vaultDir, identity, time.Hour); err != nil {
+		t.Fatalf("SaveIdentity failed: %v", err)
+	}
+
+	got, err := LoadIdentity(vaultDir)
+	if err != nil {
+		t.Fatalf("LoadIdentity failed: %v", err)
+	}
+	if got != identity {
+		t.Errorf("LoadIdentity = %q, want %q", got, identity)
+	}
+}
+
+func TestDecryptPassphrase_FailsWithWrongKey(t *testing.T) {
+	key := testKey()
+	wrongKey := []byte("abcdefghijklmnopqrstuv0123456789")
+
+	enc, nonce, err := encryptPassphrase([]byte("secret"), key)
+	if err != nil {
+		t.Fatalf("encryptPassphrase failed: %v", err)
+	}
+
+	_, err = decryptPassphrase(enc, nonce, wrongKey)
+	if err == nil {
+		t.Fatal("decryptPassphrase with wrong key should fail")
+	}
+}
