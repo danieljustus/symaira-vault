@@ -324,19 +324,21 @@ func (l *Logger) EnforceRetention() error {
 	}
 
 	auditDir := filepath.Dir(l.path)
-	pattern := filepath.Join(auditDir, fmt.Sprintf(defaultFileNamePattern, l.agentName)+".rotated.*")
-
-	matches, err := filepath.Glob(pattern)
-	if err != nil {
-		return fmt.Errorf("glob rotated files: %w", err)
-	}
-
-	var rotatedFiles []os.FileInfo
+	prefix := fmt.Sprintf(defaultFileNamePattern, l.agentName) + ".rotated."
 	now := time.Now()
 	maxAge := time.Duration(config.MaxAgeDays) * 24 * time.Hour
 
-	for _, path := range matches {
-		info, err := os.Stat(path)
+	entries, err := os.ReadDir(auditDir)
+	if err != nil {
+		return fmt.Errorf("read audit directory: %w", err)
+	}
+
+	var rotatedFiles []os.FileInfo
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasPrefix(entry.Name(), prefix) {
+			continue
+		}
+		info, err := entry.Info()
 		if err != nil {
 			continue
 		}
