@@ -59,6 +59,7 @@ import (
 	"fmt"
 	"io"
 	"time"
+	"unsafe"
 
 	"github.com/danieljustus/OpenPass/internal/crypto"
 	"github.com/danieljustus/OpenPass/internal/metrics"
@@ -327,6 +328,12 @@ func resolvePassphrase(sess *storedSession, vaultDir string) ([]byte, error) {
 		if encErr == nil {
 			sess.EncryptedPassphrase = enc
 			sess.Nonce = nonce
+			// Wipe the legacy plaintext from the struct string's backing memory
+			// before clearing the field, so the passphrase does not remain on
+			// the heap until the next GC cycle.
+			// #nosec G103 — intentional: unsafe.StringData aliases the backing
+			// array so Wipe can zero the only copy in memory.
+			crypto.Wipe(unsafe.Slice(unsafe.StringData(sess.Passphrase), len(sess.Passphrase)))
 			sess.Passphrase = ""
 		}
 		return plain, nil

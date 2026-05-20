@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unsafe"
 )
 
 type fakeKeyring struct {
@@ -878,6 +879,69 @@ func TestResolvePassphrase_LegacyFormatMigrates(t *testing.T) {
 	}
 	if updated.Passphrase != "" {
 		t.Error("legacy plaintext should be cleared after migration")
+	}
+}
+
+func TestResolvePassphrase_WipesPlaintextAfterMigration(t *testing.T) {
+	fake := newFakeKeyring()
+	stubKeyring(t, fake)
+
+	vaultDir := "/tmp/vault-wipe-legacy-pass"
+	setupTestWrapKey(t, fake, vaultDir)
+	passphrase := "legacy-wipe-test-secret"
+
+	sess := &storedSession{
+		Passphrase: passphrase,
+		SavedAt:    time.Now().UTC(),
+		LastAccess: time.Now().UTC(),
+		TTL:        int64(time.Hour),
+	}
+	payload, err := json.Marshal(sess)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	if err := fake.set("openpass:"+vaultDir, sessionAccount, string(payload)); err != nil {
+		t.Fatalf("fake.set() error = %v", err)
+	}
+
+	// Re-read from the fake keyring to get a fresh sess with a known backing array
+	raw, err := fake.get("openpass:"+vaultDir, sessionAccount)
+	if err != nil {
+		t.Fatalf("fake.get() error = %v", err)
+	}
+	var loaded storedSession
+	if jsonErr := json.Unmarshal([]byte(raw), &loaded); jsonErr != nil {
+		t.Fatalf("json.Unmarshal() error = %v", jsonErr)
+	}
+	if loaded.Passphrase == "" {
+		t.Fatal("expected legacy passphrase to be present before migration")
+	}
+
+	// Capture the backing data pointer before migration.
+	// #nosec G103 — intentional: confirming wipe side-effect in test.
+	origData := unsafe.StringData(loaded.Passphrase)
+	origLen := len(loaded.Passphrase)
+
+	got, err := resolvePassphrase(&loaded, vaultDir)
+	if err != nil {
+		t.Fatalf("resolvePassphrase() error = %v", err)
+	}
+	if string(got) != passphrase {
+		t.Errorf("resolvePassphrase() = %q, want %q", got, passphrase)
+	}
+
+	// After migration the original backing data should be zeroed
+	// (the string was explicitly wiped before being set to "").
+	buf := unsafe.Slice(origData, origLen)
+	for i, b := range buf {
+		if b != 0 {
+			t.Errorf("backing data at offset %d = %d, want 0", i, b)
+		}
+	}
+
+	// The struct field must be empty string now
+	if loaded.Passphrase != "" {
+		t.Error("sess.Passphrase should be empty after migration")
 	}
 }
 
