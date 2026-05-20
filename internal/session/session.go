@@ -59,7 +59,6 @@ import (
 	"fmt"
 	"io"
 	"time"
-	"unsafe"
 
 	"github.com/danieljustus/OpenPass/internal/crypto"
 	"github.com/danieljustus/OpenPass/internal/metrics"
@@ -103,13 +102,35 @@ func GetCacheStatus() CacheStatus {
 	return cacheStatusProvider()
 }
 
+// passphraseBytes is a byte slice that marshals to/from a plain JSON string
+// (not base64). This preserves backward compatibility with sessions stored
+// before the migration from string to []byte.
+type passphraseBytes []byte
+
+func (p passphraseBytes) MarshalJSON() ([]byte, error) {
+	return json.Marshal(string(p))
+}
+
+func (p *passphraseBytes) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" {
+		*p = nil
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	*p = []byte(s)
+	return nil
+}
+
 type storedSession struct {
-	SavedAt             time.Time `json:"saved_at"`
-	LastAccess          time.Time `json:"last_access"`
-	Passphrase          string    `json:"passphrase,omitempty"`
-	EncryptedPassphrase string    `json:"encrypted_passphrase,omitempty"`
-	Nonce               string    `json:"nonce,omitempty"`
-	TTL                 int64     `json:"ttl_ns"`
+	SavedAt             time.Time       `json:"saved_at"`
+	LastAccess          time.Time       `json:"last_access"`
+	Passphrase          passphraseBytes `json:"passphrase,omitempty"`
+	EncryptedPassphrase string          `json:"encrypted_passphrase,omitempty"`
+	Nonce               string          `json:"nonce,omitempty"`
+	TTL                 int64           `json:"ttl_ns"`
 }
 
 type storedIdentity struct {
@@ -318,8 +339,11 @@ func resolvePassphrase(sess *storedSession, vaultDir string) ([]byte, error) {
 		return plain, nil
 	}
 
-	if sess.Passphrase != "" {
-		plain := []byte(sess.Passphrase)
+	if len(sess.Passphrase) > 0 {
+		// Copy before encrypting so the original backing array can be zeroed
+		// without affecting the returned plaintext.
+		plain := make([]byte, len(sess.Passphrase))
+		copy(plain, sess.Passphrase)
 		key, err := encryptionKey(vaultDir)
 		if err != nil {
 			return nil, err
@@ -328,13 +352,8 @@ func resolvePassphrase(sess *storedSession, vaultDir string) ([]byte, error) {
 		if encErr == nil {
 			sess.EncryptedPassphrase = enc
 			sess.Nonce = nonce
-			// Wipe the legacy plaintext from the struct string's backing memory
-			// before clearing the field, so the passphrase does not remain on
-			// the heap until the next GC cycle.
-			// #nosec G103 — intentional: unsafe.StringData aliases the backing
-			// array so Wipe can zero the only copy in memory.
-			crypto.Wipe(unsafe.Slice(unsafe.StringData(sess.Passphrase), len(sess.Passphrase)))
-			sess.Passphrase = ""
+			crypto.Wipe(sess.Passphrase)
+			sess.Passphrase = nil
 		}
 		return plain, nil
 	}

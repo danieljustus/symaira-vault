@@ -14,6 +14,15 @@ go 1.26.3
 // Recommendation: Keep deferrals until upstream breaks the cycle or provides migration path.
 // NOTE: google.golang.org/protobuf v1.36.7 is already present as transitive dep of golang/protobuf.
 // The golang/protobuf deferral may become irrelevant as groupcache migrates off it.
+//
+// CVE MONITORING (added 2026-05-20):
+// Deferred dependencies are monitored for CVEs via a monthly scheduled CI workflow
+// (.github/workflows/deferred-deps-check.yml). The workflow runs govulncheck against
+// all dependencies and creates a GitHub issue if new CVEs affect ProtonMail/go-crypto.
+// No automated patches are applied — alerts are triaged manually per the security policy
+// in SECURITY.md.
+// Dependabot ignores these deps (see .github/dependabot.yml) — CVE detection is handled
+// by the deferred-deps-check.yml workflow instead.
 
 require (
 	filippo.io/age v1.3.1

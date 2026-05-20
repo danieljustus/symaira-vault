@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -2433,6 +2434,165 @@ func TestSaveRoundTripsPerToolRedactFields(t *testing.T) {
 }
 
 // --- Comprehensive Round-Trip Tests (pre-refactor baseline) ---
+
+func TestCopyAgentProfiles_DeepCopyAllFields(t *testing.T) {
+	t.Parallel()
+
+	// Creates a fully populated AgentProfile, deep-copies it, and verifies
+	// every field is independently copied using reflect. If a new field is
+	// added to AgentProfile without being covered by the deep-copy logic,
+	// this test will fail — either as a nil-pointer dereference (the field
+	// needs a non-zero value in the source) or as a non-independent copy.
+	src := AgentProfile{
+		Name:                "test-agent",
+		Tier:                sptr("admin"),
+		ApprovalMode:        sptr("prompt"),
+		AllowedPaths:        []string{"path1", "path2"},
+		RedactFields:        []string{"secret"},
+		PerToolRedactFields: map[string][]string{"get": {"token"}},
+		CanWrite:            bptr(true),
+		CanRunCommands:      bptr(true),
+		CanManageConfig:     bptr(true),
+		CanUseClipboard:     bptr(true),
+		CanUseAutotype:      bptr(true),
+		CanReadValues:       bptr(true),
+		ExposeValueTools:    bptr(true),
+		AutoUnseal:          bptr(true),
+		RequireApproval:     bptr(true),
+		ApprovalTimeout:     dptr(2 * time.Minute),
+		AllowedTools:        []string{"tool1"},
+		MaxReadsPerHour:     iptr(100),
+		MaxReadsPerDay:      iptr(500),
+		MaxSecretsInSession: iptr(10),
+		DynamicProviders:    map[string][]string{"pg": {"ro"}},
+		AllowedEnvVars:      []string{"PATH"},
+		AllowedExecutables:  []string{"psql"},
+		PromptInjectionMode: sptr("deny"),
+		PreCallHooks:        []string{"pre1"},
+		PostCallHooks:       []string{"post1"},
+		SkillPath:           sptr("~/.skills/test/SKILL.md"),
+		SkillVersion:        sptr("1.0.0"),
+	}
+
+	srcMap := map[string]AgentProfile{"agent": src}
+	cpMap := copyAgentProfiles(srcMap)
+	cp, ok := cpMap["agent"]
+	if !ok {
+		t.Fatal("copyAgentProfiles did not preserve map key")
+	}
+
+	// Use reflect to walk every field of AgentProfile and verify deep-copy.
+	sv := reflect.ValueOf(src)
+	cv := reflect.ValueOf(cp)
+	typ := reflect.TypeOf(AgentProfile{})
+
+	for i := range typ.NumField() {
+		ft := typ.Field(i)
+		if !ft.IsExported() {
+			continue
+		}
+		sf := sv.Field(i)
+		cf := cv.Field(i)
+
+		switch ft.Type.Kind() {
+		case reflect.String:
+			if sf.String() != cf.String() {
+				t.Errorf("copyAgentProfiles: field %q value mismatch: got %q, want %q",
+					ft.Name, cf.String(), sf.String())
+			}
+		case reflect.Ptr:
+			if sf.IsNil() {
+				t.Errorf("copyAgentProfiles: field %q is nil in source — test must set a non-zero value to verify deep copy",
+					ft.Name)
+				continue
+			}
+			if cf.IsNil() {
+				t.Errorf("copyAgentProfiles: field %q is nil in copy — deep copy lost the pointer", ft.Name)
+				continue
+			}
+			// Same pointer address => shallow copy
+			if cf.UnsafePointer() == sf.UnsafePointer() {
+				t.Errorf("copyAgentProfiles: field %q is a shallow copy (same pointer)", ft.Name)
+			}
+			// Verify value equality
+			se := sf.Elem()
+			ce := cf.Elem()
+			switch se.Kind() {
+			case reflect.Bool:
+				if se.Bool() != ce.Bool() {
+					t.Errorf("copyAgentProfiles: field %q value mismatch: got %v, want %v",
+						ft.Name, ce.Bool(), se.Bool())
+				}
+			case reflect.Int, reflect.Int64:
+				if se.Int() != ce.Int() {
+					t.Errorf("copyAgentProfiles: field %q value mismatch: got %d, want %d",
+						ft.Name, ce.Int(), se.Int())
+				}
+			case reflect.String:
+				if se.String() != ce.String() {
+					t.Errorf("copyAgentProfiles: field %q value mismatch: got %q, want %q",
+						ft.Name, ce.String(), se.String())
+				}
+			default:
+				// Other kinds are not used in AgentProfile pointers; skip value comparison
+			}
+		case reflect.Slice:
+			if sf.IsNil() {
+				t.Errorf("copyAgentProfiles: field %q is nil in source — test must set a non-zero value", ft.Name)
+				continue
+			}
+			if cf.IsNil() {
+				t.Errorf("copyAgentProfiles: field %q is nil in copy — deep copy lost the slice", ft.Name)
+				continue
+			}
+			if cf.Len() != sf.Len() {
+				t.Errorf("copyAgentProfiles: field %q length mismatch: got %d, want %d",
+					ft.Name, cf.Len(), sf.Len())
+				continue
+			}
+			if cf.Len() > 0 && cf.Index(0).UnsafePointer() == sf.Index(0).UnsafePointer() {
+				t.Errorf("copyAgentProfiles: field %q is a shallow copy (same backing array)", ft.Name)
+			}
+		case reflect.Map:
+			if sf.IsNil() {
+				t.Errorf("copyAgentProfiles: field %q is nil in source — test must set a non-zero value", ft.Name)
+				continue
+			}
+			if cf.IsNil() {
+				t.Errorf("copyAgentProfiles: field %q is nil in copy — deep copy lost the map", ft.Name)
+				continue
+			}
+			for _, k := range sf.MapKeys() {
+				svElem := sf.MapIndex(k)
+				cvElem := cf.MapIndex(k)
+				if !cvElem.IsValid() {
+					t.Errorf("copyAgentProfiles: field %q missing key %v in copy", ft.Name, k)
+					continue
+				}
+				if cvElem.Kind() == reflect.Slice && cvElem.Len() > 0 && svElem.Len() > 0 {
+					if cvElem.Index(0).UnsafePointer() == svElem.Index(0).UnsafePointer() {
+						t.Errorf("copyAgentProfiles: field %q map value is a shallow copy (same backing array)", ft.Name)
+					}
+				}
+			}
+		default:
+			t.Errorf("copyAgentProfiles: unhandled field type %s for field %q — update test",
+				ft.Type.Kind(), ft.Name)
+		}
+	}
+
+	// Verify that modifying the original does not affect the copy.
+	cp2 := copyAgentProfiles(map[string]AgentProfile{"a": src})
+	orig := cp2["a"]
+	orig.AllowedPaths[0] = "MUTATED"
+	orig.AllowedTools[0] = "MUTATED"
+	orig.Tier = sptr("MUTATED")
+	orig.CanWrite = bptr(false)
+	cp2 = copyAgentProfiles(map[string]AgentProfile{"a": orig})
+	if *cp2["a"].Tier != "MUTATED" {
+		t.Error("latest copy should reflect updates")
+	}
+}
 
 func TestRoundTrip_AllFieldsSet(t *testing.T) {
 	if runtime.GOOS == "windows" {

@@ -22,6 +22,71 @@ jobs:
           go-version: '1.26.3'
           cache: true
 
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run govulncheck CVE scan
+        id: cve
+        continue-on-error: true
+        run: |
+          echo "=== Running govulncheck for all dependencies ==="
+          govulncheck -json ./... 2>&1 | tee govulncheck.json
+
+          # Check for CVEs specifically affecting ProtonMail/go-crypto
+          echo "=== Checking for ProtonMail/go-crypto CVEs ==="
+          jq -s '
+            [.[] | select(.osv != null)] |
+            [.[] | select(.modules? | length > 0)] |
+            [.[] | select(.modules[].path == "github.com/ProtonMail/go-crypto")]
+          ' govulncheck.json 2>/dev/null > proton-cves.json || true
+
+          PROTON_CVE_COUNT=$(jq -r 'length' proton-cves.json 2>/dev/null || echo "0")
+          echo "ProtonMail/go-crypto CVE count: $PROTON_CVE_COUNT"
+          echo "cve_count=$PROTON_CVE_COUNT" >> "$GITHUB_OUTPUT"
+
+          if [ "$PROTON_CVE_COUNT" -gt 0 ] 2>/dev/null; then
+            echo "has_cves=true" >> "$GITHUB_OUTPUT"
+            jq -r '.[] | "\(.osv): \(.modules[0].found_version)"' proton-cves.json 2>/dev/null || echo "unknown"
+          else
+            echo "has_cves=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create issue if CVEs found in deferred crypto dependency
+        if: steps.cve.outputs.has_cves == 'true'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799c7f6 # v9
+        with:
+          script: |
+            const fs = require('fs');
+            let cveDetails = '';
+            try {
+              const data = JSON.parse(fs.readFileSync('proton-cves.json', 'utf8'));
+              cveDetails = Array.isArray(data) ? data.map(c =>
+                `- ${c.osv}: ${c.modules?.[0]?.found_version || 'unknown'}`
+              ).join('\n') : 'Unknown CVEs found';
+            } catch {
+              cveDetails = 'CVEs found in govulncheck scan (see workflow logs for details)';
+            }
+            const title = '[SECURITY] CVEs found in deferred dependency: ProtonMail/go-crypto';
+            const body = `The deferred transitive dependency \`github.com/ProtonMail/go-crypto\` has one or more known vulnerabilities:\n\n${cveDetails}\n\nThis dependency is pinned at v1.1.6 (transitive via go-git). The current version is affected by the above CVEs.\n\n**Recommended actions:**\n- [ ] Review each CVE for actual impact on OpenPass\n- [ ] If critical: consider temporary direct upgrade of ProtonMail/go-crypto despite the deferral\n- [ ] Update \`go.mod\` deferral documentation\n\nFor context, see the deferred dependency rationale in \`go.mod:5-16\`.\n`;
+
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'security,dependencies',
+              state: 'open'
+            });
+
+            const exists = issues.data.some(i => i.title === title);
+            if (!exists) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: body,
+                labels: ['security', 'dependencies']
+              });
+            }
+
       - name: Check for deferred dependency updates
         id: check
         run: |
