@@ -2533,6 +2533,8 @@ func TestCopyAgentProfiles_DeepCopyAllFields(t *testing.T) {
 					t.Errorf("copyAgentProfiles: field %q value mismatch: got %q, want %q",
 						ft.Name, ce.String(), se.String())
 				}
+			default:
+				// Other kinds are not used in AgentProfile pointers; skip value comparison
 			}
 		case reflect.Slice:
 			if sf.IsNil() {
