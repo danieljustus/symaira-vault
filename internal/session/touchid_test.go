@@ -1,3 +1,5 @@
+//go:build darwin
+
 package session
 
 import (
@@ -20,7 +22,7 @@ func TestTouchIDAuthenticate_CancelledContext(t *testing.T) {
 	cancel()
 	err := touchIDAuthenticate(ctx, "test")
 	if err == nil {
-		t.Fatal("touchIDAuthenticate with cancelled context should return error")
+		t.Fatal("touchIDAuthenticate with canceled context should return error")
 	}
 }
 
