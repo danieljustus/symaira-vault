@@ -47,18 +47,18 @@ func (m *memoryKeyring) Set(service, account, value string) error {
 		return fmt.Errorf("unmarshal session: %w", err)
 	}
 
-	if sess.Passphrase != "" {
+	if len(sess.Passphrase) > 0 {
 		key, err := m.encryptionKeyForStore(service)
 		if err != nil {
 			return fmt.Errorf("encryption key: %w", err)
 		}
-		enc, nonce, err := encryptPassphrase([]byte(sess.Passphrase), key)
+		enc, nonce, err := encryptPassphrase(sess.Passphrase, key)
 		if err != nil {
 			return fmt.Errorf("encrypt passphrase: %w", err)
 		}
 		sess.EncryptedPassphrase = enc
 		sess.Nonce = nonce
-		sess.Passphrase = ""
+		sess.Passphrase = nil
 	}
 
 	payload, err := json.Marshal(sess)
@@ -144,7 +144,7 @@ func (m *memoryKeyring) Get(service, account string) (string, error) {
 			return "", fmt.Errorf("not found")
 		}
 		zeroBytes(plain)
-	} else if sess.Passphrase == "" {
+	} else if len(sess.Passphrase) == 0 {
 		delete(m.store, key)
 		return "", fmt.Errorf("not found")
 	}
