@@ -50,8 +50,11 @@ var AuthStatusCmd = &cobra.Command{
 			"cache":            cache,
 		}
 		if cli.WantJSONOutput(AuthStatusJSON) {
-			cli.PrintJSON(payload)
-			return nil
+			printer, err := cli.NewPrinter("json")
+			if err != nil {
+				return err
+			}
+			return printer.Print(payload)
 		}
 		cli.PrintlnQuietAware("Vault: " + vaultDir)
 		cli.PrintlnQuietAware("Auth method: " + method)

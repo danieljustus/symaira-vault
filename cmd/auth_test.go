@@ -2,11 +2,13 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	auth "github.com/danieljustus/OpenPass/cmd/auth"
+	cli "github.com/danieljustus/OpenPass/internal/cli"
 	configpkg "github.com/danieljustus/OpenPass/internal/config"
 	"github.com/danieljustus/OpenPass/internal/session"
 )
@@ -65,16 +67,49 @@ func TestAuthStatusJSON(t *testing.T) {
 	vaultDir, _ := initVault(t)
 	defer setupVaultFlag(t, vaultDir)()
 
-	oldJSON := auth.AuthStatusJSON
-	auth.AuthStatusJSON = true
-	t.Cleanup(func() { auth.AuthStatusJSON = oldJSON })
+	t.Run("deprecated --json flag", func(t *testing.T) {
+		oldJSON := auth.AuthStatusJSON
+		auth.AuthStatusJSON = true
+		t.Cleanup(func() { auth.AuthStatusJSON = oldJSON })
 
-	output := captureStdout(func() {
-		if err := auth.AuthStatusCmd.RunE(auth.AuthStatusCmd, nil); err != nil {
-			t.Fatalf("auth status error = %v", err)
+		output := captureStdout(func() {
+			if err := auth.AuthStatusCmd.RunE(auth.AuthStatusCmd, nil); err != nil {
+				t.Fatalf("auth status error = %v", err)
+			}
+		})
+		if !strings.Contains(output, `"method"`) {
+			t.Fatalf("output = %q, want JSON status", output)
 		}
 	})
-	if !strings.Contains(output, `"method"`) {
-		t.Fatalf("output = %q, want JSON status", output)
-	}
+
+	t.Run("--output json (global flag)", func(t *testing.T) {
+		oldFmt := cli.OutputFormat
+		cli.OutputFormat = "json"
+		t.Cleanup(func() { cli.OutputFormat = oldFmt })
+
+		// Ensure the deprecated --json flag is off so only --output json drives it
+		oldJSON := auth.AuthStatusJSON
+		auth.AuthStatusJSON = false
+		t.Cleanup(func() { auth.AuthStatusJSON = oldJSON })
+
+		output := captureStdout(func() {
+			if err := auth.AuthStatusCmd.RunE(auth.AuthStatusCmd, nil); err != nil {
+				t.Fatalf("auth status error = %v", err)
+			}
+		})
+		if !strings.Contains(output, `"method"`) {
+			t.Fatalf("output = %q, want JSON status", output)
+		}
+		// Verify it's valid JSON
+		var parsed map[string]interface{}
+		if err := json.Unmarshal([]byte(strings.TrimSpace(output)), &parsed); err != nil {
+			t.Fatalf("invalid JSON output: %v\noutput: %s", err, output)
+		}
+		if _, ok := parsed["method"]; !ok {
+			t.Fatalf("JSON missing 'method' key: %v", parsed)
+		}
+		if _, ok := parsed["vault"]; !ok {
+			t.Fatalf("JSON missing 'vault' key: %v", parsed)
+		}
+	})
 }
