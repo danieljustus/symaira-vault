@@ -6,13 +6,13 @@ import (
 	"strings"
 	"testing"
 
+	"filippo.io/age"
+
 	"github.com/danieljustus/OpenPass/internal/autotype"
 	"github.com/danieljustus/OpenPass/internal/clipboard"
 	"github.com/danieljustus/OpenPass/internal/config"
-	"github.com/danieljustus/OpenPass/internal/vault"
-
-	"filippo.io/age"
 	mcp "github.com/danieljustus/OpenPass/internal/mcp"
+	"github.com/danieljustus/OpenPass/internal/vault"
 )
 
 func writeTOTPEntry(t *testing.T, vaultDir string, identity *age.X25519Identity) {

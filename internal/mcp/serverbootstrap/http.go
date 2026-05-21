@@ -15,9 +15,9 @@ import (
 	"time"
 
 	"github.com/danieljustus/OpenPass/internal/audit"
+	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
 	mcpserver "github.com/danieljustus/OpenPass/internal/mcp/server"
 	transport "github.com/danieljustus/OpenPass/internal/mcp/transport"
-	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
 	"github.com/danieljustus/OpenPass/internal/metrics"
 	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
 )

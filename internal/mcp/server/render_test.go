@@ -554,7 +554,7 @@ func TestTaintBridge_SanitizeMCPTextWorks(t *testing.T) {
 func TestRegression_EmbedAsDataInPrompts(t *testing.T) {
 	// Test that the prompt builders still produce valid output
 	// with the new EmbedAsData format.
-	defs := 	promptDefinitions()
+	defs := promptDefinitions()
 	for _, def := range defs {
 		t.Run(def.Name, func(t *testing.T) {
 			msgs := def.Builder(map[string]string{})

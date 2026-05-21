@@ -17,9 +17,9 @@ import (
 	transport "github.com/danieljustus/OpenPass/internal/mcp/transport"
 )
 
-func pollWithTimeout(t *testing.T, condition func() bool, timeout time.Duration, msg string) {
+func pollWithTimeout(t *testing.T, condition func() bool, msg string) {
 	t.Helper()
-	deadline := time.Now().Add(timeout)
+	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		if condition() {
 			return
@@ -62,7 +62,7 @@ func TestE2E_Stdio_Initialize(t *testing.T) {
 	defer cancel()
 
 	go func() {
-			_ = st.Start(ctx, handler.HandleMessage)
+		_ = st.Start(ctx, handler.HandleMessage)
 	}()
 
 	initReq := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}` + "\n"
@@ -81,7 +81,7 @@ func TestE2E_Stdio_Initialize(t *testing.T) {
 			}
 		}
 		return false
-	}, 2*time.Second, "expected initialize response")
+	}, "expected initialize response")
 
 	if response.Error != nil {
 		t.Fatalf("initialize returned error: %v", response.Error)
@@ -110,7 +110,7 @@ func TestE2E_Stdio_Initialize(t *testing.T) {
 			}
 		}
 		return false
-	}, 2*time.Second, "expected tools/list response")
+	}, "expected tools/list response")
 
 	if response.Error != nil {
 		t.Fatalf("tools/list returned error: %v", response.Error)
@@ -178,7 +178,7 @@ func TestE2E_Stdio_Ping(t *testing.T) {
 	defer cancel()
 
 	go func() {
-			_ = st.Start(ctx, handler.HandleMessage)
+		_ = st.Start(ctx, handler.HandleMessage)
 	}()
 
 	initReq := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}` + "\n"
@@ -197,7 +197,7 @@ func TestE2E_Stdio_Ping(t *testing.T) {
 			}
 		}
 		return false
-	}, 2*time.Second, "expected initialize response")
+	}, "expected initialize response")
 
 	out.Reset()
 	mustPipeWrite(t, pw, `{"jsonrpc":"2.0","method":"initialized"}`+"\n")
@@ -219,7 +219,7 @@ func TestE2E_Stdio_Ping(t *testing.T) {
 			}
 		}
 		return false
-	}, 2*time.Second, "expected ping response")
+	}, "expected ping response")
 
 	if response.Error != nil {
 		t.Fatalf("ping returned error: %v", response.Error)
@@ -274,7 +274,7 @@ func TestE2E_Stdio_InvalidJSON(t *testing.T) {
 	defer cancel()
 
 	go func() {
-			_ = st.Start(ctx, handler.HandleMessage)
+		_ = st.Start(ctx, handler.HandleMessage)
 	}()
 
 	mustPipeWrite(t, pw, `{invalid json}`+"\n")
@@ -292,7 +292,7 @@ func TestE2E_Stdio_InvalidJSON(t *testing.T) {
 			}
 		}
 		return false
-	}, 2*time.Second, "expected error response for invalid JSON")
+	}, "expected error response for invalid JSON")
 
 	if response.Error == nil {
 		t.Fatal("expected error response")
@@ -351,7 +351,7 @@ func TestE2E_Stdio_UnknownMethod(t *testing.T) {
 	defer cancel()
 
 	go func() {
-			_ = st.Start(ctx, handler.HandleMessage)
+		_ = st.Start(ctx, handler.HandleMessage)
 	}()
 
 	initReq := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}` + "\n"
@@ -370,7 +370,7 @@ func TestE2E_Stdio_UnknownMethod(t *testing.T) {
 			}
 		}
 		return false
-	}, 2*time.Second, "expected initialize response")
+	}, "expected initialize response")
 
 	out.Reset()
 	mustPipeWrite(t, pw, `{"jsonrpc":"2.0","method":"initialized"}`+"\n")
@@ -391,7 +391,7 @@ func TestE2E_Stdio_UnknownMethod(t *testing.T) {
 			}
 		}
 		return false
-	}, 2*time.Second, "expected error response for unknown method")
+	}, "expected error response for unknown method")
 
 	if response.Error == nil {
 		t.Fatal("expected error response")

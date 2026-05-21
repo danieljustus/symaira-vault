@@ -1,4 +1,4 @@
-// Package mcp implements the Model Context Protocol (MCP) server for OpenPass.
+// Package server implements the Model Context Protocol (MCP) server for OpenPass.
 // It provides AI agent integration via stdio and HTTP transports with
 // configurable access control, audit logging, and vault operations.
 package server

@@ -55,30 +55,3 @@ func AcceptsMCPHTTPResponse(values []string) bool {
 	}
 	return acceptsJSON && acceptsSSE
 }
-
-// stripPort strips the port from a host:port string.
-func stripPort(hostport string) string {
-	hostport = strings.TrimSpace(hostport)
-	if hostport == "" {
-		return ""
-	}
-	if host, _, err := net.SplitHostPort(hostport); err == nil {
-		return host
-	}
-	if strings.Count(hostport, ":") == 1 {
-		if host, _, ok := strings.Cut(hostport, ":"); ok {
-			return host
-		}
-	}
-	return strings.Trim(hostport, "[]")
-}
-
-// isLoopbackHost reports whether host is a loopback host.
-func isLoopbackHost(host string) bool {
-	host = strings.Trim(strings.ToLower(host), "[]")
-	if host == "localhost" {
-		return true
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
-}

@@ -1,3 +1,4 @@
+// Package auth provides authentication and token handling for the MCP server.
 package auth
 
 import (

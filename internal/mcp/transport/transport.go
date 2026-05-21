@@ -1,4 +1,4 @@
-// Package mcp implements the Model Context Protocol (MCP) for OpenPass.
+// Package transport implements the Model Context Protocol (MCP) transport layer for OpenPass.
 package transport
 
 import (

@@ -30,9 +30,9 @@ import (
 //   - Encrypted with a key derived from the vault identity
 type EncryptedIndex struct {
 	mu         sync.RWMutex
-	ciphertext []byte             // encrypted serialized index
-	vaultDir   string             // vault directory the index covers
-	idHash     [sha256.Size]byte  // sha256 of identity for change detection
+	ciphertext []byte            // encrypted serialized index
+	vaultDir   string            // vault directory the index covers
+	idHash     [sha256.Size]byte // sha256 of identity for change detection
 }
 
 // indexDoc stores raw string values per entry path for substring matching.
