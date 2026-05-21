@@ -141,16 +141,14 @@ type listCacheEntry struct {
 
 // listCache provides TTL-cached path listings to avoid repetitive directory walks.
 // It invalidates entries when the underlying directories' modification times change.
-var listCache struct {
+var listCache = struct {
 	mu    sync.RWMutex
 	items map[string]listCacheEntry
 	// TTL is the cache duration. It is a variable (not const) so tests can override it.
 	ttl time.Duration
-}
-
-func init() {
-	listCache.items = make(map[string]listCacheEntry)
-	listCache.ttl = 30 * time.Second
+}{
+	items: make(map[string]listCacheEntry),
+	ttl:   30 * time.Second,
 }
 
 // getDirMtime returns the modification time of a directory, or zero if unavailable.
