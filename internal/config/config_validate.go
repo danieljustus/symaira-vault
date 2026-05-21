@@ -7,6 +7,14 @@ import (
 	"strings"
 )
 
+// Approval mode constants
+const (
+	approvalModeDeny   = "deny"
+	approvalModeAuto   = "auto"
+	approvalModeNone   = "none"
+	approvalModePrompt = "prompt"
+)
+
 func validateAgents(agents map[string]AgentProfile) error {
 	for name, profile := range agents {
 		mode := ""
@@ -14,7 +22,7 @@ func validateAgents(agents map[string]AgentProfile) error {
 			mode = *profile.ApprovalMode
 		}
 		switch mode {
-		case "", "none", "deny", "prompt":
+		case "", approvalModeNone, approvalModeDeny, approvalModePrompt:
 		default:
 			return fmt.Errorf("agent %q: invalid approvalMode %q (valid: none, deny, prompt)", name, mode)
 		}
@@ -25,7 +33,7 @@ func validateAgents(agents map[string]AgentProfile) error {
 			mode = *profile.PromptInjectionMode
 		}
 		switch mode {
-		case "", "off", "log-only", "wrap", "deny":
+		case "", "off", "log-only", "wrap", approvalModeDeny:
 		default:
 			return fmt.Errorf("agent %q: invalid promptInjectionMode %q (valid: off, log-only, wrap, deny)", name, mode)
 		}
@@ -75,7 +83,7 @@ func (c *Config) Validate() error {
 			mode = *agent.ApprovalMode
 		}
 		switch mode {
-		case "", "none", "deny", "prompt", "auto":
+		case "", approvalModeNone, approvalModeDeny, approvalModePrompt, approvalModeAuto:
 		default:
 			errs = errors.Join(errs, fmt.Errorf("agents.%s.approvalMode: invalid value %q (valid: none, deny, prompt, auto; configure in config.yaml)", name, mode))
 		}
