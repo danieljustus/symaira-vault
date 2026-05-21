@@ -19,7 +19,7 @@ import (
 	cli "github.com/danieljustus/OpenPass/internal/cli"
 	clipboardapp "github.com/danieljustus/OpenPass/internal/clipboard"
 	vaultcrypto "github.com/danieljustus/OpenPass/internal/crypto"
-	"github.com/danieljustus/OpenPass/internal/mcp"
+	"github.com/danieljustus/OpenPass/internal/mcp/server"
 	"github.com/danieljustus/OpenPass/internal/mcp/serverbootstrap"
 	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
 )
@@ -42,11 +42,11 @@ func resetCommandTestState() {
 	cli.OsExit = os.Exit
 	mcpcmd.ServeSignalNotify = signal.Notify
 	mcpcmd.RunStdioServerFunc = func(ctx context.Context, vault *vaultpkg.Vault, agentName string) error {
-		return serverbootstrap.RunStdioServer(ctx, vault, agentName, mcp.New)
+		return serverbootstrap.RunStdioServer(ctx, vault, agentName, server.New)
 	}
 	mcpcmd.RunHTTPServerFunc = func(ctx context.Context, bind string, port int, vault *vaultpkg.Vault) error {
 		vaultDir, _ := vaultPath()
-		return serverbootstrap.RunHTTPServer(ctx, bind, port, vault, vaultDir, Version, mcp.New)
+		return serverbootstrap.RunHTTPServer(ctx, bind, port, vault, vaultDir, Version, server.New)
 	}
 	mcpcmd.ServeUnlockVault = unlockVault
 }
