@@ -65,8 +65,8 @@ func (idx *EncryptedIndex) Build(vaultDir string, identity *age.X25519Identity) 
 	}
 
 	for _, entryPath := range paths {
-		entry, err := ReadEntry(vaultDir, entryPath, identity)
-		if err != nil {
+		entry, readErr := ReadEntry(vaultDir, entryPath, identity)
+		if readErr != nil {
 			continue
 		}
 

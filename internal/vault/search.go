@@ -470,9 +470,7 @@ func FindWithOptions(vaultDir string, query string, opts FindOptions) ([]Match, 
 	// The index maps search tokens to entry paths. Entries whose field values
 	// don't contain any query token can be safely skipped.
 	if len(pathsNeedingDecrypt) > 0 && needle != "" {
-		if filtered, err := filterPathsUsingIndex(vaultDir, pathsNeedingDecrypt, needle); err == nil {
-			pathsNeedingDecrypt = filtered
-		}
+		pathsNeedingDecrypt = filterPathsUsingIndex(vaultDir, pathsNeedingDecrypt, needle)
 	}
 
 	maxWorkers := opts.MaxWorkers
@@ -590,16 +588,16 @@ func hasField(fields []string, want string) bool {
 // entry paths that need field-level decryption. It returns only paths whose
 // stored string values contain the query as a substring. On any error the
 // original slice is returned unchanged, preserving correct behavior.
-func filterPathsUsingIndex(vaultDir string, candidates []string, needle string) ([]string, error) {
+func filterPathsUsingIndex(vaultDir string, candidates []string, needle string) []string {
 	identity := currentSearchIdentity()
 	if identity == nil {
-		return candidates, nil
+		return candidates
 	}
 
 	// Build index lazily on first use
 	if !globalIndex.IsBuilt() {
 		if err := globalIndex.Build(vaultDir, identity); err != nil {
-			return candidates, nil
+			return candidates
 		}
 	}
 
@@ -608,26 +606,25 @@ func filterPathsUsingIndex(vaultDir string, candidates []string, needle string) 
 		// Index stale, rebuild and retry once
 		globalIndex.Invalidate()
 		if buildErr := globalIndex.Build(vaultDir, identity); buildErr != nil {
-			return candidates, nil
+			return candidates
 		}
 		matching, err = globalIndex.MatchEntries(vaultDir, identity, candidates, needle)
 		if err != nil {
-			return candidates, nil
+			return candidates
 		}
 	}
 
 	if len(matching) == 0 {
-		return nil, nil
+		return nil
 	}
-
-	filtered := make([]string, 0, len(matching))
-	for _, path := range candidates {
-		if _, ok := matching[path]; ok {
-			filtered = append(filtered, path)
-		}
+	result := make([]string, 0, len(matching))
+	for path := range matching {
+		result = append(result, path)
 	}
-	return filtered, nil
+	return result
 }
+
+// collectStringValues recursively collects string values from a map.
 
 func CollectFieldMatches(matches map[string]struct{}, prefix string, value any, needle string, redactPatterns []string) {
 	switch typed := value.(type) {

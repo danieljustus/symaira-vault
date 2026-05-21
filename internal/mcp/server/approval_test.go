@@ -1,4 +1,4 @@
-package server
+package mcp
 
 import (
 	"errors"
@@ -1007,13 +1007,13 @@ func TestApprovalCacheKey(t *testing.T) {
 	}
 }
 
-// F-9: equivalent path representations must collapse to the same cache key
-// so that a user who already approved "work/foo" is not re-prompted for
-// "work/foo/", " work/foo ", or "work/./foo". This also removes a small
-// side-channel where an adversarial agent could force repeated approval
-// prompts by varying the path form.
+// F-9: the cache key must collapse equivalent path representations to the same
+// key. Otherwise a user who approves "work/foo" gets prompted again for
+// "work/foo/" or " work/foo ", which is both annoying and a soft side-channel
+// for an adversarial agent to force repeated approval prompts.
 func TestApprovalCacheKey_NormalizesPath(t *testing.T) {
 	base := approvalCacheKey("agent", "get_entry_value", "work/foo")
+
 	variants := map[string]string{
 		"trailing-slash": "work/foo/",
 		"double-slash":   "work//foo",
