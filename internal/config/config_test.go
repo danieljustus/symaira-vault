@@ -1520,8 +1520,15 @@ func TestValidate_EmptyVaultDirFails(t *testing.T) {
 	if err == nil {
 		t.Fatal("Validate() with empty VaultDir = nil, want error")
 	}
-	if !strings.Contains(err.Error(), "vaultDir") {
-		t.Errorf("error = %q, should mention vaultDir", err.Error())
+	errStr := err.Error()
+	if !strings.Contains(errStr, "vaultDir") {
+		t.Errorf("error = %q, should mention vaultDir", errStr)
+	}
+	if !strings.Contains(errStr, "OPENPASS_VAULT") {
+		t.Errorf("error = %q, should mention OPENPASS_VAULT environment variable", errStr)
+	}
+	if !strings.Contains(errStr, "config.yaml") {
+		t.Errorf("error = %q, should mention config.yaml", errStr)
 	}
 }
 
@@ -1533,8 +1540,12 @@ func TestValidate_ZeroSessionTimeoutFails(t *testing.T) {
 	if err == nil {
 		t.Fatal("Validate() with zero SessionTimeout = nil, want error")
 	}
-	if !strings.Contains(err.Error(), "sessionTimeout") {
-		t.Errorf("error = %q, should mention sessionTimeout", err.Error())
+	errStr := err.Error()
+	if !strings.Contains(errStr, "sessionTimeout") {
+		t.Errorf("error = %q, should mention sessionTimeout", errStr)
+	}
+	if !strings.Contains(errStr, "default") {
+		t.Errorf("error = %q, should mention default", errStr)
 	}
 }
 
@@ -1546,8 +1557,12 @@ func TestValidate_MissingDefaultAgentFails(t *testing.T) {
 	if err == nil {
 		t.Fatal("Validate() with missing defaultAgent = nil, want error")
 	}
-	if !strings.Contains(err.Error(), "defaultAgent") {
-		t.Errorf("error = %q, should mention defaultAgent", err.Error())
+	errStr := err.Error()
+	if !strings.Contains(errStr, "defaultAgent") {
+		t.Errorf("error = %q, should mention defaultAgent", errStr)
+	}
+	if !strings.Contains(errStr, "agent profile") && !strings.Contains(errStr, "agents") {
+		t.Errorf("error = %q, should hint about defining an agent profile", errStr)
 	}
 }
 
@@ -1563,8 +1578,12 @@ func TestValidate_InvalidApprovalModeFails(t *testing.T) {
 	if err == nil {
 		t.Fatal("Validate() with invalid approvalMode = nil, want error")
 	}
-	if !strings.Contains(err.Error(), "approvalMode") {
-		t.Errorf("error = %q, should mention approvalMode", err.Error())
+	errStr := err.Error()
+	if !strings.Contains(errStr, "approvalMode") {
+		t.Errorf("error = %q, should mention approvalMode", errStr)
+	}
+	if !strings.Contains(errStr, "none, deny, prompt, auto") {
+		t.Errorf("error = %q, should list valid approval modes", errStr)
 	}
 }
 
@@ -1580,8 +1599,12 @@ func TestValidate_InvalidGlobPatternFails(t *testing.T) {
 	if err == nil {
 		t.Fatal("Validate() with invalid glob = nil, want error")
 	}
-	if !strings.Contains(err.Error(), "allowedPaths") {
-		t.Errorf("error = %q, should mention allowedPaths", err.Error())
+	errStr := err.Error()
+	if !strings.Contains(errStr, "allowedPaths") {
+		t.Errorf("error = %q, should mention allowedPaths", errStr)
+	}
+	if !strings.Contains(errStr, "glob") {
+		t.Errorf("error = %q, should mention glob pattern syntax", errStr)
 	}
 }
 
@@ -1604,6 +1627,9 @@ func TestValidate_MultipleErrorsAggregated(t *testing.T) {
 	}
 	if !strings.Contains(errStr, "defaultAgent") {
 		t.Error("missing defaultAgent error")
+	}
+	if !strings.Contains(errStr, "OPENPASS_VAULT") {
+		t.Error("hint for vaultDir should mention OPENPASS_VAULT")
 	}
 }
 
@@ -1631,8 +1657,12 @@ func TestValidate_NegativeAuditMaxFileSizeFails(t *testing.T) {
 	if err == nil {
 		t.Fatal("Validate() with negative MaxFileSize = nil, want error")
 	}
-	if !strings.Contains(err.Error(), "audit.maxFileSize") {
-		t.Errorf("error = %q, should mention audit.maxFileSize", err.Error())
+	errStr := err.Error()
+	if !strings.Contains(errStr, "audit.maxFileSize") {
+		t.Errorf("error = %q, should mention audit.maxFileSize", errStr)
+	}
+	if !strings.Contains(errStr, "greater than 0") {
+		t.Errorf("error = %q, should mention required value", errStr)
 	}
 }
 
@@ -1644,8 +1674,12 @@ func TestValidate_NegativeClipboardAutoClearFails(t *testing.T) {
 	if err == nil {
 		t.Fatal("Validate() with negative AutoClearDuration = nil, want error")
 	}
-	if !strings.Contains(err.Error(), "clipboard.autoClearDuration") {
-		t.Errorf("error = %q, should mention clipboard.autoClearDuration", err.Error())
+	errStr := err.Error()
+	if !strings.Contains(errStr, "clipboard.autoClearDuration") {
+		t.Errorf("error = %q, should mention clipboard.autoClearDuration", errStr)
+	}
+	if !strings.Contains(errStr, "non-negative") {
+		t.Errorf("error = %q, should mention required value", errStr)
 	}
 }
 
