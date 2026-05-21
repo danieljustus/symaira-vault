@@ -5,6 +5,190 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v4.0.0] - 2026-05-21
+
+v4.0 reshapes OpenPass around AI-agent integration. The CLI becomes a
+first-class surface for agents (dual to MCP), agent profiles gain an explicit
+tier system, skill packages ship inside the binary, and the MCP server defaults
+to a lean 7-tool surface to reduce context-window pollution.
+
+See [docs/migration-v3-to-v4.md](docs/migration-v3-to-v4.md) for the upgrade
+guide and [docs/skills/openpass-agent/UPGRADE-TO-V4.md](docs/skills/openpass-agent/UPGRADE-TO-V4.md)
+for an AI-agent-ready upgrade prompt. Run `openpass migrate v4 --dry-run` to
+preview, then `openpass migrate v4` to apply.
+
+### Breaking changes
+
+- **CLI consolidation.** All AI-integration commands moved under
+  `openpass agent`. Replaced: `openpass mcp install`, `openpass mcp-config`,
+  `openpass mcp token …`, `openpass mcp-token-rotate`, `openpass agent setup`.
+  Deprecation stubs remain in v4.0 (print replacement, exit 2) and will be
+  removed in v4.1.
+- **MCP tool `openpass_delete` removed** (was an alias for `delete_entry` since
+  v2.x). Callers receive `ERR_TOOL_NOT_FOUND`. Use `delete_entry`.
+- **Default tier for `openpass agent install` is `safe`** (metadata-only).
+  Upgrade explicitly with `openpass agent upgrade <name> --tier standard`.
+- **Token `tools: ["*"]` now means "inherit from profile"** instead of "all
+  tools the server knows." Profile changes take effect on the next call.
+- **MCP `tools/list` lean mode by default** — returns 7 essential tools at
+  connect time. Pass `include_all_tools: true` in init or call `openpass_search`
+  for the full surface.
+
+### Added — agent integration
+
+- **`openpass agent install <name>`** — single command for agent setup:
+  generates scoped token + writes MCP config + drops embedded skill package +
+  runs smoke test. Flags: `--auto-detect`, `--tier`, `--http`, `--dry-run`,
+  `--skill-only`, `--config-only`, `--force`, `--output json|yaml|text`.
+- **`openpass agent upgrade <name> --tier <tier>`** — explicit, audited tier
+  change with interactive diff. Non-interactive `--yes --reason "…"` requires a
+  reason for the audit trail. Optional `--rotate-token`.
+- **`openpass agent uninstall <name>`** — removes profile, token, skill, and
+  MCP config entry; skill files without the OpenPass sentinel are preserved.
+- **`openpass agent doctor <name>` / `--all`** — end-to-end diagnostic for one
+  or all agent integrations; detects skill drift via hash comparison.
+- **`openpass agent list`** — installed agents with tier, token status, last-seen.
+- **`openpass agent token <name> new|list|revoke|rotate`** — token management
+  per agent.
+- **`openpass agent audit <name>` / `audit self`** — per-agent audit log with
+  `--since` and `--format table|json`.
+- **`openpass agent profile show|edit|export <name>`** — agent profile
+  inspection and editing in `$EDITOR` with schema validation + confirmation.
+- **`openpass agent skill export|refresh <agent>`** — pack skill for org
+  distribution or re-render in place.
+- **`openpass agent whoami --output json`** — CLI form of the `openpass_whoami`
+  MCP tool.
+- **`openpass agent prompt <path>.<field>`** — CLI form of `secure_input`.
+- **`openpass agent request <path>.<field> --reason "…"`** — CLI form of
+  `request_credential`.
+
+### Added — MCP tools
+
+- **`openpass_whoami`** — agent self-introspection: tier, allowed paths,
+  quotas, available tools, vault status, CLI-alternative hint. Available in
+  every tier; agents should call once per session.
+- **`openpass_audit_self`** — agents read their own recent audit events
+  (success, denied, redacted). Other agents' trails are not exposed.
+- **`openpass_search`** — discover and on-demand-load tools by intent string.
+  Returns matching tool spec inline plus `cli_alternative` for each match.
+- **Lean-mode `tools/list`** — 7-tool default surface (`openpass_whoami`,
+  `openpass_search`, `health`, `find_entries`, `get_entry_metadata`,
+  `request_credential`, `openpass_audit_self`); ~83% less initial context.
+- **Structured error responses** — every MCP error now returns
+  `{ code, message, hint, details, doc }` with codes from
+  `internal/mcp/errors/codes.go` (`ERR_PATH_FORBIDDEN`, `ERR_TOOL_NOT_ALLOWED`,
+  `ERR_APPROVAL_DENIED`, `ERR_QUOTA_EXCEEDED`, …).
+- **Tool descriptions for LLMs** — every tool documented in
+  `internal/mcp/tooldocs/<tool>.md` with `USE WHEN`, `DON'T USE WHEN`, `INPUT`,
+  `OUTPUT`, `COMBINES WELL WITH`, `EXAMPLE` sections.
+- **`find_entries` returns mini-metadata inline** — `path`, `name`, `updated`,
+  `version`, `score` per hit; saves repeat `get_entry_metadata` round-trips.
+
+### Added — tier system
+
+- **Three tier presets** in `internal/config/presets.go`: `safe` (alias for
+  `read-only`), `standard`, `admin`. Each is snapshot-tested to prevent silent
+  drift.
+- **`safe` (default)** — metadata-only tools, no writes, no clipboard/autotype,
+  no commands, deny-mode approvals, strict redaction.
+- **`standard`** — adds value-read, write, clipboard, autotype, prompts; uses
+  `prompt`-mode approvals for destructive ops.
+- **`admin`** — adds command execution, profile management, exposes
+  value-returning tools; prompts only on destructive ops.
+- **Audit events** for tier lifecycle: `AGENT_INSTALLED`, `AGENT_TIER_CHANGED`,
+  `AGENT_TIER_CHANGE_DENIED`, `AGENT_TOKEN_ROTATED`, `AGENT_UNINSTALLED`,
+  `AGENT_QUOTA_HIT`.
+
+### Added — skill packages
+
+- **Per-agent skills embedded in the binary** via `internal/agentskill/assets/`
+  with templates for `hermes`, `claude-code`, `codex`, `opencode`, `openclaw`,
+  plus a `common/` base.
+- **Sentinel-based lifecycle** — frontmatter `managed_by: openpass` +
+  SHA-256 hash. Install/refresh/uninstall only touch files with the sentinel;
+  user-edited skills are preserved unless `--force` is passed.
+- **Deterministic rendering** — golden-file tests in
+  `internal/agentskill/testdata/` enforce byte-identical re-renders.
+- **Per-agent paths** resolved automatically (`~/.claude/`, `~/.codex/`,
+  `~/.config/opencode/`, `~/.hermes/`, `~/.openclaw/`).
+
+### Added — CLI as agent surface
+
+- **`OPENPASS_AGENT=<name>` environment variable** applies the agent profile
+  (allowed paths, redaction, quotas, audit) to every CLI call. Same enforcement
+  logic as MCP.
+- **`internal/agentctx/`** — shared profile-context loader used by both CLI
+  and MCP dispatch paths; eliminates duplicate enforcement code.
+- **`internal/quotas/`** — file-lock-based shared quota counter between CLI
+  and MCP; both paths increment the same `~/.openpass/state/quotas/<agent>.json`.
+- **Standardized exit codes** on every command:
+  0/1/2/10/11/12/13/14/15.
+- **`--output text|json|yaml`** on every command; JSON output is the contract
+  for agent-driven CLI calls.
+
+### Added — migration
+
+- **`openpass migrate v4 [--dry-run] [--yes]`** — classifies existing v3
+  profiles into tiers, computes skill drift, backs up `config.yaml` to
+  `config.yaml.bak.v3-<timestamp>`, renders skill packages, re-validates token
+  registry, prints summary. Idempotent.
+- **Profile classification:** `canRunCommands=true → admin`; `canWrite=true`
+  and `canUseClipboard=true → standard`; metadata-only → `safe`; profiles
+  with redact-field overrides that don't match a preset → `custom`.
+- **`docs/migration-v3-to-v4.md`** — full user-facing upgrade guide.
+- **`docs/skills/openpass-agent/UPGRADE-TO-V4.md`** — AI-agent-ready prompt
+  to drive the upgrade end-to-end.
+
+### Security
+
+- Memory hygiene: TOTP secret, OPENPASS_PASSPHRASE, OPENPASS_MCP_TOKEN string
+  backing arrays wiped after read; passphrase wiping via `[]byte` instead of
+  `unsafe.StringData`; legacy passphrase wiped after migration (#154, #155,
+  #158, #159, #177).
+- Generated passwords protected with `SecureString` (mlock'd mmap) (#156).
+- `SafeMkdirAll` hardened against symlink-traversal attacks (#157).
+- `unsafe.StringData`/`unsafe.Slice` removed from TOTP input handling.
+- Prompt-injection hardening: 4 fixes + threat model + e2e tests; per-tool
+  `redactFields`, registry hash, tool-chain anomaly detection, import
+  quarantine (#91-95, #97).
+- API response sanitization for `execute_api_request` (#57, #62).
+- `generate_totp` hardened: default clipboard, return-value gated on approval
+  (#59).
+- 32 + 27 + 15 + 6 + 5 gosec/code-scanning alerts resolved across
+  the v3→v4 cycle (#121, #122, #123, #137 et al).
+
+### Fixed
+
+- `--dry-run` no longer creates real tokens in `mcp install` (#68).
+- Token registry reloads when the file changes on disk (#67).
+- Opencode install uses the correct root key and adds required fields (#66).
+- `openpass auth status --output json` uses `PrintResult` instead of the
+  deprecated `PrintJSON` (#180).
+- `migrateLegacyEntries` walks skip `IsNotExist` errors instead of bailing
+  out.
+- 2 `goconst` lint findings in `internal/config/config_load.go` and
+  `config_merge.go` resolved by reusing existing constants.
+
+### Performance
+
+- `EnforceRetention` uses `os.ReadDir` instead of `filepath.Glob`
+  (orders-of-magnitude faster on large vaults) (#161).
+
+### Refactored
+
+- `init()` functions replaced with explicit package-level initialization
+  (#162).
+- `copyAgentProfiles` replaced with JSON deep-copy (#178).
+- Session passphrase wiping uses `[]byte` instead of `unsafe.StringData`
+  (#177).
+
+### Documentation
+
+- Expanded error-wrapping conventions in `CONTRIBUTING.md` (#163).
+- Added CVE monitoring guidance for the deferred ProtonMail/go-crypto
+  transitive dependency (#179).
+- Added v4 release checklist (`docs/release-checklist-v4.md`).
+
 ## [v3.0.0] - 2026-05-15
 
 ### Added

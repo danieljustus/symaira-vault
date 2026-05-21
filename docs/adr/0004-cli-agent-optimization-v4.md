@@ -1,7 +1,8 @@
 # OpenPass v4.0 — CLI & AI-Agent Optimization Design
 
-- **Status:** Draft
+- **Status:** Accepted
 - **Date:** 2026-05-17
+- **Accepted:** 2026-05-21
 - **Target release:** v4.0.0
 - **Author:** Daniel + Claude
 - **Scope:** CLI restructuring, MCP server runtime, agent skills, security defaults, dual-surface (CLI + MCP) integration

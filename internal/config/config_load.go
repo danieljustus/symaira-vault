@@ -111,7 +111,7 @@ func newDefaultAgentProfile(name string) AgentProfile {
 	canRunCommands := false
 	exposeValueTools := true
 	autoUnseal := true
-	deny := "deny"
+	deny := approvalModeDeny
 	return AgentProfile{
 		Name:             name,
 		AllowedPaths:     []string{},
@@ -130,7 +130,7 @@ func builtinAgentProfiles() map[string]AgentProfile {
 	canRunFalse := false
 	exposeTrue := true
 	autoUnsealTrue := true
-	deny := "deny"
+	deny := approvalModeDeny
 	return map[string]AgentProfile{
 		"default":     {Name: "default", AllowedPaths: []string{}, CanWrite: &canWriteFalse, CanRunCommands: &canRunFalse, ApprovalMode: &deny, ExposeValueTools: &exposeTrue, AutoUnseal: &autoUnsealTrue},
 		"claude-code": {Name: "claude-code", AllowedPaths: []string{}, CanWrite: &canWriteTrue, CanRunCommands: &canRunFalse, ApprovalMode: &deny, ExposeValueTools: &exposeTrue, AutoUnseal: &autoUnsealTrue, SkillPath: StrPtr("~/.claude/skills/openpass/SKILL.md")},
