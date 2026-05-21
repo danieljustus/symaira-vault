@@ -47,8 +47,9 @@ Confirm your v3.x version:
 openpass version
 ```
 
-You need v3.9.0 or later to run the migration. If you are on an earlier v3
-version, upgrade first:
+v3.0.0 or later is supported as a migration source. If you are on an earlier
+v3 release, upgrade to the latest v3 first (or jump straight to v4 — the
+migration helper handles any v3.x profile):
 
 ```bash
 # macOS (Homebrew)
@@ -388,7 +389,7 @@ If you need to go back to v3.x:
 brew install openpass@3
 
 # Manual install from GitHub releases
-# Download v3.9.0 from https://github.com/danieljustus/OpenPass/releases
+# Download v3.0.0 from https://github.com/danieljustus/OpenPass/releases/tag/v3.0.0
 ```
 
 The v3.x binary reads the old config format. If you already ran the migration,

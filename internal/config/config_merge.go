@@ -161,10 +161,10 @@ func mergeAgentProfile(current AgentProfile, name string, yamlProfile AgentProfi
 		current.ApprovalMode = yamlProfile.ApprovalMode
 	} else if fields["requireApproval"] && yamlProfile.RequireApproval != nil {
 		if *yamlProfile.RequireApproval {
-			v := "prompt"
+			v := approvalModePrompt
 			current.ApprovalMode = &v
 		} else {
-			v := "none"
+			v := approvalModeNone
 			current.ApprovalMode = &v
 		}
 	}

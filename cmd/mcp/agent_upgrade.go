@@ -23,7 +23,8 @@ var (
 	agentUpgradeYes        bool
 	agentUpgradeReason     string
 	agentUpgradeRotate     bool
-	agentUpgradeValidTiers = map[string]bool{"read-only": true, "standard": true, "admin": true}
+	agentUpgradeValidTiers = map[string]bool{"safe": true, "read-only": true, "standard": true, "admin": true}
+	agentUpgradeTierAlias  = map[string]string{"safe": "read-only", "read-only": "read-only", "standard": "standard", "admin": "admin"}
 )
 
 type tierDiff struct {
@@ -170,9 +171,10 @@ var agentUpgradeCmd = &cobra.Command{
 	Short: "Upgrade an agent's security tier",
 	Long: `Show tier diff and upgrade an agent's security tier with interactive confirmation.
 
-The upgrade applies the named tier preset (read-only, standard, or admin) to the
-agent profile, updating all capability fields. Use --dry-run to preview changes
-without writing. Use --rotate-token to also rotate the agent's MCP token.
+The upgrade applies the named tier preset (safe, standard, or admin) to the
+agent profile, updating all capability fields. The legacy alias "read-only"
+is accepted as a synonym for "safe". Use --dry-run to preview changes without
+writing. Use --rotate-token to also rotate the agent's MCP token.
 
 The --reason flag is required when using --yes for non-interactive mode to ensure
 an audit trail.`,
@@ -192,15 +194,16 @@ an audit trail.`,
 		agentName := args[0]
 
 		if agentUpgradeTier == "" {
-			return fmt.Errorf("--tier is required (valid: read-only, standard, admin)")
+			return fmt.Errorf("--tier is required (valid: safe, standard, admin)")
 		}
 		if agentUpgradeYes && agentUpgradeReason == "" {
 			return fmt.Errorf("--reason is required when using --yes")
 		}
 
 		if !agentUpgradeValidTiers[agentUpgradeTier] {
-			return fmt.Errorf("invalid tier %q: valid values are read-only, standard, admin", agentUpgradeTier)
+			return fmt.Errorf("invalid tier %q: valid values are safe, standard, admin", agentUpgradeTier)
 		}
+		agentUpgradeTier = agentUpgradeTierAlias[agentUpgradeTier]
 
 		vaultDir := cli.GetVaultDir()
 		configPath := filepath.Join(vaultDir, "config.yaml")
@@ -310,7 +313,7 @@ an audit trail.`,
 }
 
 func init() {
-	agentUpgradeCmd.Flags().StringVar(&agentUpgradeTier, "tier", "", "Target security tier (read-only, standard, admin)")
+	agentUpgradeCmd.Flags().StringVar(&agentUpgradeTier, "tier", "", "Target security tier (safe, standard, admin; 'read-only' accepted as alias for 'safe')")
 	agentUpgradeCmd.Flags().BoolVar(&agentUpgradeDryRun, "dry-run", false, "Show diff without applying changes")
 	agentUpgradeCmd.Flags().BoolVar(&agentUpgradeYes, "yes", false, "Non-interactive mode (requires --reason)")
 	agentUpgradeCmd.Flags().StringVar(&agentUpgradeReason, "reason", "", "Audit reason for the upgrade (required with --yes)")
