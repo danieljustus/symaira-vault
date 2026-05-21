@@ -471,6 +471,9 @@ func migrateLegacyEntries(vaultDir string) error {
 
 	return filepath.Walk(vaultDirClean, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
+			if os.IsNotExist(err) {
+				return nil // file disappeared between directory scan and lstat (e.g. atomic rename on macOS)
+			}
 			return err
 		}
 		if path == vaultDirClean {
