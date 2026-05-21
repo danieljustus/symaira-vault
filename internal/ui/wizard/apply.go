@@ -9,7 +9,7 @@ import (
 
 	configpkg "github.com/danieljustus/OpenPass/internal/config"
 	"github.com/danieljustus/OpenPass/internal/git"
-	"github.com/danieljustus/OpenPass/internal/mcp"
+	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
 	"github.com/danieljustus/OpenPass/internal/mcp/install"
 	"github.com/danieljustus/OpenPass/internal/session"
 	"github.com/danieljustus/OpenPass/internal/vault"
@@ -178,7 +178,7 @@ func applyAgents(state *WizardState, errs *[]string) {
 }
 
 func installAgent(vaultDir string, sel AgentSelection) error {
-	reg, _, err := mcp.LoadTokenSystem(vaultDir)
+	reg, _, err := auth.LoadTokenSystem(vaultDir)
 	if err != nil {
 		return fmt.Errorf("load token system: %w", err)
 	}

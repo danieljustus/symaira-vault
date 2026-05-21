@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/danieljustus/OpenPass/internal/mcp"
+	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
 )
 
 type mockResponseWriter struct {
@@ -33,7 +33,7 @@ func challengeForVerifier(verifier string) string {
 func TestOAuthRefreshToken_FullFlow(t *testing.T) {
 	dir := t.TempDir()
 	regPath := dir + "/tokens.json"
-	reg := mcp.NewTokenRegistry(regPath)
+	reg := auth.NewTokenRegistry(regPath)
 
 	accessTTL := 10 * time.Minute
 	refreshTTL := 30 * time.Minute
@@ -155,7 +155,7 @@ func TestOAuthRefreshToken_FullFlow(t *testing.T) {
 func TestOAuthRefreshToken_ExpiredRefreshDenied(t *testing.T) {
 	dir := t.TempDir()
 	regPath := dir + "/tokens.json"
-	reg := mcp.NewTokenRegistry(regPath)
+	reg := auth.NewTokenRegistry(regPath)
 
 	accessTTL := 1 * time.Hour
 	refreshTTL := 1 * time.Millisecond
@@ -290,7 +290,7 @@ func TestOAuthRefreshToken_WellKnownIncludesRefresh(t *testing.T) {
 }
 
 func TestOAuthRefreshToken_UnsupportedGrantType(t *testing.T) {
-	reg := mcp.NewTokenRegistry("")
+	reg := auth.NewTokenRegistry("")
 	handler := handleOAuthToken(nil, reg, 24*time.Hour, 720*time.Hour)
 
 	form := url.Values{"grant_type": {"unsupported"}}
@@ -314,7 +314,7 @@ func TestOAuthRefreshToken_UnsupportedGrantType(t *testing.T) {
 }
 
 func TestOAuthRefreshToken_MissingRefreshToken(t *testing.T) {
-	reg := mcp.NewTokenRegistry("")
+	reg := auth.NewTokenRegistry("")
 	handler := handleOAuthToken(nil, reg, 24*time.Hour, 720*time.Hour)
 
 	form := url.Values{"grant_type": {"refresh_token"}}

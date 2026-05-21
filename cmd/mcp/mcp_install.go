@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
-	"github.com/danieljustus/OpenPass/internal/mcp"
+	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
 	"github.com/danieljustus/OpenPass/internal/mcp/install"
 )
 
@@ -89,8 +89,8 @@ func buildHTTPServerConfig(vDir, agentName string, dryRun bool) (map[string]any,
 
 	if !dryRun {
 		// Create a scoped token for this agent.
-		regPath := mcp.TokenRegistryFilePath(vDir)
-		reg := mcp.NewTokenRegistry(regPath)
+		regPath := auth.TokenRegistryFilePath(vDir)
+		reg := auth.NewTokenRegistry(regPath)
 		if loadErr := reg.Load(); loadErr != nil {
 			return nil, "", fmt.Errorf("load token registry: %w", loadErr)
 		}

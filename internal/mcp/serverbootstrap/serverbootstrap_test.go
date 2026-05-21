@@ -18,7 +18,8 @@ import (
 	"time"
 
 	"github.com/danieljustus/OpenPass/internal/config"
-	"github.com/danieljustus/OpenPass/internal/mcp"
+	server "github.com/danieljustus/OpenPass/internal/mcp/server"
+	transport "github.com/danieljustus/OpenPass/internal/mcp/transport"
 	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
 )
 
@@ -84,7 +85,7 @@ func newTestHTTPClient() *http.Client {
 }
 
 //nolint:unparam // bind varies across build tags (metrics build uses "0.0.0.0")
-func runHTTPServerAsync(ctx context.Context, t *testing.T, bind string, port int, v *vaultpkg.Vault, factory func(*vaultpkg.Vault, string, string) (*mcp.Server, error)) func() {
+func runHTTPServerAsync(ctx context.Context, t *testing.T, bind string, port int, v *vaultpkg.Vault, factory func(*vaultpkg.Vault, string, string) (*server.Server, error)) func() {
 	t.Helper()
 	var listener net.Listener
 	if value, ok := reservedTestListeners.LoadAndDelete(port); ok {
@@ -169,7 +170,7 @@ func TestRunStdioServer_NilVault(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		cancel()
-		_ = RunStdioServer(ctx, nil, "", mcp.New)
+		_ = RunStdioServer(ctx, nil, "", server.New)
 	}()
 
 	done := make(chan struct{})
@@ -195,7 +196,7 @@ func TestRunStdioServer_FactoryError(t *testing.T) {
 	v := newTestVault(t)
 	ctx := context.Background()
 
-	factory := func(_ *vaultpkg.Vault, _ string, _ string) (*mcp.Server, error) {
+	factory := func(_ *vaultpkg.Vault, _ string, _ string) (*server.Server, error) {
 		return nil, errors.New("agent not found")
 	}
 
@@ -223,7 +224,7 @@ func TestRunStdioServer_Success(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		_ = RunStdioServer(ctx, v, "default", mcp.New)
+		_ = RunStdioServer(ctx, v, "default", server.New)
 	}()
 
 	time.Sleep(50 * time.Millisecond)
@@ -254,7 +255,7 @@ func TestRunHTTPServer_ContextCancelled(t *testing.T) {
 	port := reserveFreePort(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	waitForServer := runHTTPServerAsync(ctx, t, "127.0.0.1", port, v, mcp.New)
+	waitForServer := runHTTPServerAsync(ctx, t, "127.0.0.1", port, v, server.New)
 
 	cancel()
 	waitForServer()
@@ -265,7 +266,7 @@ func TestRunHTTPServer_HealthEndpoint(t *testing.T) {
 	port := reserveFreePort(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	waitForServer := runHTTPServerAsync(ctx, t, "127.0.0.1", port, v, mcp.New)
+	waitForServer := runHTTPServerAsync(ctx, t, "127.0.0.1", port, v, server.New)
 	defer func() {
 		cancel()
 		waitForServer()
@@ -311,7 +312,7 @@ func TestRunHTTPServer_MCPMethodNotAllowed(t *testing.T) {
 	port := reserveFreePort(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	waitForServer := runHTTPServerAsync(ctx, t, "127.0.0.1", port, v, mcp.New)
+	waitForServer := runHTTPServerAsync(ctx, t, "127.0.0.1", port, v, server.New)
 	defer func() {
 		cancel()
 		waitForServer()
@@ -365,7 +366,7 @@ func TestRunHTTPServer_MCPMediaTypeAndAccept(t *testing.T) {
 			port := reserveFreePort(t)
 
 			ctx, cancel := context.WithCancel(context.Background())
-			waitForServer := runHTTPServerAsync(ctx, t, "127.0.0.1", port, v, mcp.New)
+			waitForServer := runHTTPServerAsync(ctx, t, "127.0.0.1", port, v, server.New)
 			defer func() {
 				cancel()
 				waitForServer()
@@ -402,7 +403,7 @@ func TestRunHTTPServer_MCPInvalidJSON(t *testing.T) {
 	port := reserveFreePort(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	waitForServer := runHTTPServerAsync(ctx, t, "127.0.0.1", port, v, mcp.New)
+	waitForServer := runHTTPServerAsync(ctx, t, "127.0.0.1", port, v, server.New)
 	defer func() {
 		cancel()
 		waitForServer()
@@ -424,7 +425,7 @@ func TestRunHTTPServer_MCPInvalidJSON(t *testing.T) {
 		t.Errorf("invalid JSON status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
 
-	var errResp mcp.Message
+	var errResp transport.Message
 	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
 		t.Fatalf("decode error response: %v", err)
 	}
@@ -432,8 +433,8 @@ func TestRunHTTPServer_MCPInvalidJSON(t *testing.T) {
 	if errResp.Error == nil {
 		t.Fatal("expected error in response")
 	}
-	if errResp.Error.Code != mcp.ErrCodeParseError {
-		t.Errorf("error code = %d, want %d", errResp.Error.Code, mcp.ErrCodeParseError)
+	if errResp.Error.Code != transport.ErrCodeParseError {
+		t.Errorf("error code = %d, want %d", errResp.Error.Code, transport.ErrCodeParseError)
 	}
 }
 
@@ -441,7 +442,7 @@ func TestRunHTTPServer_MCPFactoryError(t *testing.T) {
 	v := newTestVault(t)
 	port := reserveFreePort(t)
 
-	factory := func(_ *vaultpkg.Vault, _ string, _ string) (*mcp.Server, error) {
+	factory := func(_ *vaultpkg.Vault, _ string, _ string) (*server.Server, error) {
 		return nil, errors.New("agent not found")
 	}
 
@@ -474,7 +475,7 @@ func TestRunHTTPServer_MCPFactoryError(t *testing.T) {
 		t.Errorf("handler creation error status = %d, want %d", resp.StatusCode, http.StatusForbidden)
 	}
 
-	var errResp mcp.Message
+	var errResp transport.Message
 	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
 		t.Fatalf("decode error response: %v", err)
 	}
@@ -482,8 +483,8 @@ func TestRunHTTPServer_MCPFactoryError(t *testing.T) {
 	if errResp.Error == nil {
 		t.Fatal("expected error in response")
 	}
-	if errResp.Error.Code != mcp.ErrCodeInternalError {
-		t.Errorf("error code = %d, want %d", errResp.Error.Code, mcp.ErrCodeInternalError)
+	if errResp.Error.Code != transport.ErrCodeInternalError {
+		t.Errorf("error code = %d, want %d", errResp.Error.Code, transport.ErrCodeInternalError)
 	}
 	if !strings.Contains(errResp.Error.Message, "agent not found") {
 		t.Errorf("error message = %q, want contains 'agent not found'", errResp.Error.Message)
@@ -495,9 +496,9 @@ func TestRunHTTPServer_HandlerCache(t *testing.T) {
 	port := reserveFreePort(t)
 
 	var callCount int
-	factory := func(vault *vaultpkg.Vault, agentName string, transport string) (*mcp.Server, error) {
+	factory := func(vault *vaultpkg.Vault, agentName string, transport string) (*server.Server, error) {
 		callCount++
-		return mcp.New(vault, agentName, transport)
+		return server.New(vault, agentName, transport)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -565,7 +566,7 @@ func TestRunHTTPServer_CustomConfig(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	waitForServer := runHTTPServerAsync(ctx, t, "127.0.0.1", port, v, mcp.New)
+	waitForServer := runHTTPServerAsync(ctx, t, "127.0.0.1", port, v, server.New)
 	defer func() {
 		cancel()
 		waitForServer()
@@ -600,7 +601,7 @@ func TestRunHTTPServer_NonLoopbackWithoutTLSRefused(t *testing.T) {
 	}
 	defer listener.Close()
 
-	err = RunHTTPServerOnListener(context.Background(), listener, v, v.Dir, "test", mcp.New)
+	err = RunHTTPServerOnListener(context.Background(), listener, v, v.Dir, "test", server.New)
 	if err == nil || !strings.Contains(err.Error(), "refusing to serve MCP without TLS") {
 		t.Fatalf("expected non-loopback-without-TLS refusal, got %v", err)
 	}
@@ -636,7 +637,7 @@ func TestRunHTTPServer_SecurityHeaders(t *testing.T) {
 			port := reserveFreePort(t)
 
 			ctx, cancel := context.WithCancel(context.Background())
-			waitForServer := runHTTPServerAsync(ctx, t, "127.0.0.1", port, v, mcp.New)
+			waitForServer := runHTTPServerAsync(ctx, t, "127.0.0.1", port, v, server.New)
 			defer func() {
 				cancel()
 				waitForServer()
@@ -667,7 +668,7 @@ func TestRunHTTPServer_NotificationReturnsAccepted(t *testing.T) {
 	port := reserveFreePort(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	waitForServer := runHTTPServerAsync(ctx, t, "127.0.0.1", port, v, mcp.New)
+	waitForServer := runHTTPServerAsync(ctx, t, "127.0.0.1", port, v, server.New)
 	defer func() {
 		cancel()
 		waitForServer()
@@ -700,7 +701,7 @@ func TestRunHTTPServer_OAuthProtectedResource(t *testing.T) {
 	port := reserveFreePort(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	waitForServer := runHTTPServerAsync(ctx, t, "127.0.0.1", port, v, mcp.New)
+	waitForServer := runHTTPServerAsync(ctx, t, "127.0.0.1", port, v, server.New)
 	defer func() {
 		cancel()
 		waitForServer()
@@ -754,7 +755,7 @@ func TestRunHTTPServer_OAuthAuthorizationServer(t *testing.T) {
 	port := reserveFreePort(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	waitForServer := runHTTPServerAsync(ctx, t, "127.0.0.1", port, v, mcp.New)
+	waitForServer := runHTTPServerAsync(ctx, t, "127.0.0.1", port, v, server.New)
 	defer func() {
 		cancel()
 		waitForServer()
@@ -815,7 +816,7 @@ func TestRunHTTPServer_OAuthEndpoints(t *testing.T) {
 	port := reserveFreePort(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	waitForServer := runHTTPServerAsync(ctx, t, "127.0.0.1", port, v, mcp.New)
+	waitForServer := runHTTPServerAsync(ctx, t, "127.0.0.1", port, v, server.New)
 	defer func() {
 		cancel()
 		waitForServer()
@@ -966,7 +967,7 @@ func TestRunHTTPServer_InitializeAndToolsList(t *testing.T) {
 	port := reserveFreePort(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	waitForServer := runHTTPServerAsync(ctx, t, "127.0.0.1", port, v, mcp.New)
+	waitForServer := runHTTPServerAsync(ctx, t, "127.0.0.1", port, v, server.New)
 	defer func() {
 		cancel()
 		waitForServer()
@@ -1024,7 +1025,7 @@ func TestRunHTTPServer_OAuthClientPersistenceAcrossRestart(t *testing.T) {
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 
 	ctx1, cancel1 := context.WithCancel(context.Background())
-	wait1 := runHTTPServerAsync(ctx1, t, "127.0.0.1", port, v, mcp.New)
+	wait1 := runHTTPServerAsync(ctx1, t, "127.0.0.1", port, v, server.New)
 
 	client := newTestHTTPClient()
 	reqBody := `{"redirect_uris": ["http://127.0.0.1:9999/callback"]}`
@@ -1067,7 +1068,7 @@ func TestRunHTTPServer_OAuthClientPersistenceAcrossRestart(t *testing.T) {
 	ctx2, cancel2 := context.WithCancel(context.Background())
 	defer cancel2()
 	go func() {
-		_ = RunHTTPServerOnListener(ctx2, listener, v2, v2.Dir, "dev", mcp.New)
+		_ = RunHTTPServerOnListener(ctx2, listener, v2, v2.Dir, "dev", server.New)
 	}()
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {

@@ -11,7 +11,7 @@ import (
 	mcpcmd "github.com/danieljustus/OpenPass/cmd/mcp"
 	cli "github.com/danieljustus/OpenPass/internal/cli"
 	"github.com/danieljustus/OpenPass/internal/config"
-	"github.com/danieljustus/OpenPass/internal/mcp"
+	server "github.com/danieljustus/OpenPass/internal/mcp/server"
 	"github.com/danieljustus/OpenPass/internal/mcp/serverbootstrap"
 	"github.com/danieljustus/OpenPass/internal/testutil"
 	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
@@ -626,7 +626,7 @@ func TestRunHTTPServer(t *testing.T) {
 	cancel()
 
 	vaultDir, _ = cli.VaultPath()
-	err = serverbootstrap.RunHTTPServer(ctx, "127.0.0.1", 0, v2, vaultDir, "dev", mcp.New)
+	err = serverbootstrap.RunHTTPServer(ctx, "127.0.0.1", 0, v2, vaultDir, "dev", server.New)
 	_ = err
 	if err != nil {
 		t.Errorf("RunHTTPServer unexpected error: %v", err)
@@ -667,7 +667,7 @@ func TestRunStdioServer(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	err = serverbootstrap.RunStdioServer(ctx, v2, "default", mcp.New)
+	err = serverbootstrap.RunStdioServer(ctx, v2, "default", server.New)
 	if err != nil {
 		t.Errorf("RunStdioServer unexpected error: %v", err)
 	}

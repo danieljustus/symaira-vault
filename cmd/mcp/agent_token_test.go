@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	configpkg "github.com/danieljustus/OpenPass/internal/config"
-	"github.com/danieljustus/OpenPass/internal/mcp"
+	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
 )
 
 func TestAgentTokenNew(t *testing.T) {
@@ -29,7 +29,7 @@ func TestAgentTokenNew(t *testing.T) {
 		t.Error("should not be dry-run token")
 	}
 
-	reg := mcp.NewTokenRegistry(mcp.TokenRegistryFilePath(vaultDir))
+	reg := auth.NewTokenRegistry(auth.TokenRegistryFilePath(vaultDir))
 	if err := reg.Load(); err != nil {
 		t.Fatalf("load registry error: %v", err)
 	}

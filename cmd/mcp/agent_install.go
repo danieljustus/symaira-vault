@@ -14,7 +14,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	configpkg "github.com/danieljustus/OpenPass/internal/config"
-	"github.com/danieljustus/OpenPass/internal/mcp"
+	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
 	"github.com/danieljustus/OpenPass/internal/mcp/install"
 
 	"github.com/danieljustus/OpenPass/internal/agentskill"
@@ -327,8 +327,8 @@ func createAgentTokenInRegistry(vDir, name string, dryRun bool) (string, error) 
 		return "", err
 	}
 
-	regPath := mcp.TokenRegistryFilePath(vDir)
-	reg := mcp.NewTokenRegistry(regPath)
+	regPath := auth.TokenRegistryFilePath(vDir)
+	reg := auth.NewTokenRegistry(regPath)
 	if err := reg.Load(); err != nil {
 		return "", fmt.Errorf("load token registry: %w", err)
 	}

@@ -1,3 +1,4 @@
+// Package mcp provides core types and shared utilities for the Model Context Protocol implementation.
 package mcp
 
 import (

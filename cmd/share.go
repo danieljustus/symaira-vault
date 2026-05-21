@@ -7,6 +7,7 @@ import (
 
 	cli "github.com/danieljustus/OpenPass/internal/cli"
 	"github.com/danieljustus/OpenPass/internal/mcp"
+	server "github.com/danieljustus/OpenPass/internal/mcp/server"
 	"github.com/danieljustus/OpenPass/internal/ui/render"
 	"github.com/danieljustus/OpenPass/internal/vault/taint"
 )
@@ -43,7 +44,7 @@ Examples:
 			return err
 		}
 
-		store := mcp.NewShareStore(mcp.ShareStoreFilePath(vDir))
+		store := server.NewShareStore(server.ShareStoreFilePath(vDir))
 		if err := store.Load(); err != nil {
 			return fmt.Errorf("load share store: %w", err)
 		}
@@ -130,7 +131,7 @@ var shareRevokeCmd = &cobra.Command{
 			return err
 		}
 
-		store := mcp.NewShareStore(mcp.ShareStoreFilePath(vDir))
+		store := server.NewShareStore(server.ShareStoreFilePath(vDir))
 		if err := store.Load(); err != nil {
 			return fmt.Errorf("load share store: %w", err)
 		}

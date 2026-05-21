@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/danieljustus/OpenPass/internal/mcp"
+	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
 )
 
 var agentTokenCmd = &cobra.Command{
@@ -57,8 +57,8 @@ retrieved later.`,
 			return err
 		}
 
-		regPath := mcp.TokenRegistryFilePath(vDir)
-		reg := mcp.NewTokenRegistry(regPath)
+		regPath := auth.TokenRegistryFilePath(vDir)
+		reg := auth.NewTokenRegistry(regPath)
 		if loadErr := reg.Load(); loadErr != nil {
 			return fmt.Errorf("load token registry: %w", loadErr)
 		}
@@ -106,14 +106,14 @@ var agentTokenListCmd = &cobra.Command{
 			return err
 		}
 
-		regPath := mcp.TokenRegistryFilePath(vDir)
-		reg := mcp.NewTokenRegistry(regPath)
+		regPath := auth.TokenRegistryFilePath(vDir)
+		reg := auth.NewTokenRegistry(regPath)
 		if err := reg.Load(); err != nil {
 			return fmt.Errorf("load token registry: %w", err)
 		}
 
 		allTokens := reg.List()
-		var tokens []*mcp.ScopedToken
+		var tokens []*auth.ScopedToken
 		for i := range allTokens {
 			if allTokens[i].AgentName == agentName {
 				tokens = append(tokens, allTokens[i])
@@ -171,8 +171,8 @@ var agentTokenRevokeCmd = &cobra.Command{
 			return err
 		}
 
-		regPath := mcp.TokenRegistryFilePath(vDir)
-		reg := mcp.NewTokenRegistry(regPath)
+		regPath := auth.TokenRegistryFilePath(vDir)
+		reg := auth.NewTokenRegistry(regPath)
 		if err := reg.Load(); err != nil {
 			return fmt.Errorf("load token registry: %w", err)
 		}
@@ -210,8 +210,8 @@ The new raw token is printed exactly once.`,
 			return err
 		}
 
-		regPath := mcp.TokenRegistryFilePath(vDir)
-		reg := mcp.NewTokenRegistry(regPath)
+		regPath := auth.TokenRegistryFilePath(vDir)
+		reg := auth.NewTokenRegistry(regPath)
 		if loadErr := reg.Load(); loadErr != nil {
 			return fmt.Errorf("load token registry: %w", loadErr)
 		}

@@ -141,16 +141,14 @@ type listCacheEntry struct {
 
 // listCache provides TTL-cached path listings to avoid repetitive directory walks.
 // It invalidates entries when the underlying directories' modification times change.
-var listCache struct {
+var listCache = struct {
 	mu    sync.RWMutex
 	items map[string]listCacheEntry
 	// TTL is the cache duration. It is a variable (not const) so tests can override it.
 	ttl time.Duration
-}
-
-func init() {
-	listCache.items = make(map[string]listCacheEntry)
-	listCache.ttl = 30 * time.Second
+}{
+	items: make(map[string]listCacheEntry),
+	ttl:   30 * time.Second,
 }
 
 // getDirMtime returns the modification time of a directory, or zero if unavailable.
@@ -197,9 +195,14 @@ func storeListCache(vaultDir string, paths []string) {
 
 // InvalidateListCache removes cached listings for a vault directory.
 // Callers should invoke this after write operations that affect vault contents.
+// When vaultDir is empty, the entire list cache is cleared.
 func InvalidateListCache(vaultDir string) {
 	listCache.mu.Lock()
-	delete(listCache.items, vaultDir)
+	if vaultDir == "" {
+		listCache.items = make(map[string]listCacheEntry)
+	} else {
+		delete(listCache.items, vaultDir)
+	}
 	listCache.mu.Unlock()
 }
 
@@ -463,6 +466,13 @@ func FindWithOptions(vaultDir string, query string, opts FindOptions) ([]Match, 
 		}
 	}
 
+	// Use encrypted search index to pre-filter paths needing field decryption.
+	// The index maps search tokens to entry paths. Entries whose field values
+	// don't contain any query token can be safely skipped.
+	if len(pathsNeedingDecrypt) > 0 && needle != "" {
+		pathsNeedingDecrypt = filterPathsUsingIndex(vaultDir, pathsNeedingDecrypt, needle)
+	}
+
 	maxWorkers := opts.MaxWorkers
 	if maxWorkers <= 0 {
 		for _, path := range pathsNeedingDecrypt {
@@ -573,6 +583,48 @@ func FindWithOptions(vaultDir string, query string, opts FindOptions) ([]Match, 
 func hasField(fields []string, want string) bool {
 	return slices.Contains(fields, want)
 }
+
+// filterPathsUsingIndex uses the encrypted search index to reduce the set of
+// entry paths that need field-level decryption. It returns only paths whose
+// stored string values contain the query as a substring. On any error the
+// original slice is returned unchanged, preserving correct behavior.
+func filterPathsUsingIndex(vaultDir string, candidates []string, needle string) []string {
+	identity := currentSearchIdentity()
+	if identity == nil {
+		return candidates
+	}
+
+	// Build index lazily on first use
+	if !globalIndex.IsBuilt() {
+		if err := globalIndex.Build(vaultDir, identity); err != nil {
+			return candidates
+		}
+	}
+
+	matching, err := globalIndex.MatchEntries(vaultDir, identity, candidates, needle)
+	if err != nil {
+		// Index stale, rebuild and retry once
+		globalIndex.Invalidate()
+		if buildErr := globalIndex.Build(vaultDir, identity); buildErr != nil {
+			return candidates
+		}
+		matching, err = globalIndex.MatchEntries(vaultDir, identity, candidates, needle)
+		if err != nil {
+			return candidates
+		}
+	}
+
+	if len(matching) == 0 {
+		return nil
+	}
+	result := make([]string, 0, len(matching))
+	for path := range matching {
+		result = append(result, path)
+	}
+	return result
+}
+
+// collectStringValues recursively collects string values from a map.
 
 func CollectFieldMatches(matches map[string]struct{}, prefix string, value any, needle string, redactPatterns []string) {
 	switch typed := value.(type) {
