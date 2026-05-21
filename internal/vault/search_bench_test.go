@@ -192,6 +192,93 @@ func benchmarkFindWithOptions(b *testing.B, numEntries int, maxWorkers int) {
 	}
 }
 
+// BenchmarkEncryptedIndexBuild_100Entries measures index build time for 100 entries.
+func BenchmarkEncryptedIndexBuild_100Entries(b *testing.B) {
+	benchmarkIndexBuild(b, 100)
+}
+
+// BenchmarkEncryptedIndexBuild_1kEntries measures index build time for 1k entries.
+func BenchmarkEncryptedIndexBuild_1kEntries(b *testing.B) {
+	benchmarkIndexBuild(b, 1000)
+}
+
+// BenchmarkFind_1kEntries_FieldSearch_IndexHot measures field search with a
+// pre-built index on a 1k entry vault.
+func BenchmarkFind_1kEntries_FieldSearch_IndexHot(b *testing.B) {
+	benchmarkFindFieldSearchIndexHot(b, 1000)
+}
+
+// BenchmarkFind_10kEntries_FieldSearch_IndexHot measures field search with a
+// pre-built index on a 10k entry vault.
+func BenchmarkFind_10kEntries_FieldSearch_IndexHot(b *testing.B) {
+	benchmarkFindFieldSearchIndexHot(b, 10000)
+}
+
+// benchmarkIndexBuild builds the encrypted search index for the given number
+// of entries and reports the time taken.
+func benchmarkIndexBuild(b *testing.B, numEntries int) {
+	vaultDir := b.TempDir()
+	identity := generateTestIdentity(b)
+	createTestEntries(b, vaultDir, identity, numEntries)
+	rememberSearchIdentity(identity)
+	b.Cleanup(func() { searchIdentity.Store(nil) })
+
+	// Pre-warm list cache by listing once
+	_, err := List(vaultDir, "")
+	if err != nil {
+		b.Fatalf("List failed: %v", err)
+	}
+
+	idx := &EncryptedIndex{}
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		if err := idx.Build(vaultDir, identity); err != nil {
+			b.Fatalf("Build failed: %v", err)
+		}
+	}
+}
+
+// benchmarkFindFieldSearchIndexHot measures the time for FindWithOptions on a
+// vault with a pre-built hot index. The first search builds the index; we
+// measure only subsequent searches where the index is already hot.
+func benchmarkFindFieldSearchIndexHot(b *testing.B, numEntries int) {
+	vaultDir := b.TempDir()
+	identity := generateTestIdentity(b)
+	createTestEntries(b, vaultDir, identity, numEntries)
+	rememberSearchIdentity(identity)
+	b.Cleanup(func() { searchIdentity.Store(nil) })
+
+	fieldQuery := fmt.Sprintf("secret-password-%05d", min(50, numEntries-1))
+
+	// First search warms the index (build + search)
+	_, err := FindWithOptions(vaultDir, fieldQuery, FindOptions{MaxWorkers: 0})
+	if err != nil {
+		b.Fatalf("Warmup FindWithOptions failed: %v", err)
+	}
+
+	globalIndex.Invalidate()
+
+	// Rebuild index explicitly (so we measure hot-index search, not build)
+	if err := globalIndex.Build(vaultDir, identity); err != nil {
+		b.Fatalf("Build failed: %v", err)
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		matches, err := FindWithOptions(vaultDir, fieldQuery, FindOptions{MaxWorkers: 0})
+		if err != nil {
+			b.Fatalf("FindWithOptions failed: %v", err)
+		}
+		if len(matches) != 1 {
+			b.Fatalf("expected 1 match, got %d", len(matches))
+		}
+	}
+}
+
 func createTestEntries(b *testing.B, vaultDir string, identity *age.X25519Identity, count int) {
 	b.Helper()
 	for i := 0; i < count; i++ {

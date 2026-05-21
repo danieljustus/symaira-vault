@@ -369,6 +369,7 @@ func WriteEntry(vaultDir, path string, entry *Entry, identity *age.X25519Identit
 	}
 	lockFile = nil
 	queueManifestUpdate(vaultDir, path, ciphertext, identity)
+	InvalidateSearchIndex()
 	return nil
 }
 
@@ -424,6 +425,7 @@ func DeleteEntry(vaultDir, path string, identity *age.X25519Identity) error {
 		}
 		lockFile = nil
 		queueManifestRemove(vaultDir, path, identity)
+		InvalidateSearchIndex()
 		return nil
 	}
 
@@ -443,6 +445,7 @@ func DeleteEntry(vaultDir, path string, identity *age.X25519Identity) error {
 	}
 	lockFile = nil
 	queueManifestRemove(vaultDir, path, identity)
+	InvalidateSearchIndex()
 	return nil
 }
 
@@ -560,6 +563,7 @@ func MergeEntry(vaultDir, path string, partialData map[string]any, identity *age
 	}
 	lockFile = nil
 	queueManifestUpdate(vaultDir, path, ciphertext, identity)
+	InvalidateSearchIndex()
 	return ReadEntry(vaultDir, path, identity)
 }
 

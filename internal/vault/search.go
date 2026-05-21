@@ -197,9 +197,14 @@ func storeListCache(vaultDir string, paths []string) {
 
 // InvalidateListCache removes cached listings for a vault directory.
 // Callers should invoke this after write operations that affect vault contents.
+// When vaultDir is empty, the entire list cache is cleared.
 func InvalidateListCache(vaultDir string) {
 	listCache.mu.Lock()
-	delete(listCache.items, vaultDir)
+	if vaultDir == "" {
+		listCache.items = make(map[string]listCacheEntry)
+	} else {
+		delete(listCache.items, vaultDir)
+	}
 	listCache.mu.Unlock()
 }
 
@@ -463,6 +468,15 @@ func FindWithOptions(vaultDir string, query string, opts FindOptions) ([]Match, 
 		}
 	}
 
+	// Use encrypted search index to pre-filter paths needing field decryption.
+	// The index maps search tokens to entry paths. Entries whose field values
+	// don't contain any query token can be safely skipped.
+	if len(pathsNeedingDecrypt) > 0 && needle != "" {
+		if filtered, err := filterPathsUsingIndex(vaultDir, pathsNeedingDecrypt, needle); err == nil {
+			pathsNeedingDecrypt = filtered
+		}
+	}
+
 	maxWorkers := opts.MaxWorkers
 	if maxWorkers <= 0 {
 		for _, path := range pathsNeedingDecrypt {
@@ -572,6 +586,49 @@ func FindWithOptions(vaultDir string, query string, opts FindOptions) ([]Match, 
 
 func hasField(fields []string, want string) bool {
 	return slices.Contains(fields, want)
+}
+
+// filterPathsUsingIndex uses the encrypted search index to reduce the set of
+// entry paths that need field-level decryption. It returns only paths whose
+// stored string values contain the query as a substring. On any error the
+// original slice is returned unchanged, preserving correct behavior.
+func filterPathsUsingIndex(vaultDir string, candidates []string, needle string) ([]string, error) {
+	identity := currentSearchIdentity()
+	if identity == nil {
+		return candidates, nil
+	}
+
+	// Build index lazily on first use
+	if !globalIndex.IsBuilt() {
+		if err := globalIndex.Build(vaultDir, identity); err != nil {
+			return candidates, nil
+		}
+	}
+
+	matching, err := globalIndex.MatchEntries(vaultDir, identity, candidates, needle)
+	if err != nil {
+		// Index stale, rebuild and retry once
+		globalIndex.Invalidate()
+		if buildErr := globalIndex.Build(vaultDir, identity); buildErr != nil {
+			return candidates, nil
+		}
+		matching, err = globalIndex.MatchEntries(vaultDir, identity, candidates, needle)
+		if err != nil {
+			return candidates, nil
+		}
+	}
+
+	if len(matching) == 0 {
+		return nil, nil
+	}
+
+	filtered := make([]string, 0, len(matching))
+	for _, path := range candidates {
+		if _, ok := matching[path]; ok {
+			filtered = append(filtered, path)
+		}
+	}
+	return filtered, nil
 }
 
 func CollectFieldMatches(matches map[string]struct{}, prefix string, value any, needle string, redactPatterns []string) {
