@@ -16,7 +16,8 @@ import (
 
 	configpkg "github.com/danieljustus/OpenPass/internal/config"
 	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
-	"github.com/danieljustus/OpenPass/internal/mcp"
+	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
+	server "github.com/danieljustus/OpenPass/internal/mcp/server"
 )
 
 var McpConfigCmd = &cobra.Command{
@@ -77,7 +78,7 @@ After rotating, run 'openpass mcp-config [agent] --http' to see the new token.`,
 		}
 
 		tokenPath := filepath.Join(vDir, "mcp-token")
-		newToken, err := mcp.RotateToken(tokenPath)
+		newToken, err := auth.RotateToken(tokenPath)
 		if err != nil {
 			return fmt.Errorf("rotate token: %w", err)
 		}
@@ -121,7 +122,7 @@ func resolveHTTPConfig(agentName string, tokenID string) (*httpConfig, error) {
 
 	var token string
 	if tokenID != "" {
-		registry, _, loadErr := mcp.LoadTokenSystem(vDir)
+		registry, _, loadErr := auth.LoadTokenSystem(vDir)
 		if loadErr != nil {
 			return nil, fmt.Errorf("load token registry: %w", loadErr)
 		}
@@ -144,7 +145,7 @@ func resolveHTTPConfig(agentName string, tokenID string) (*httpConfig, error) {
 				tokenPath = cfg.MCP.HTTPTokenFile
 			}
 		}
-		token, err = mcp.LoadOrCreateToken(tokenPath)
+		token, err = auth.LoadOrCreateToken(tokenPath)
 		if err != nil {
 			return nil, fmt.Errorf("load token: %w", err)
 		}
@@ -155,7 +156,7 @@ func resolveHTTPConfig(agentName string, tokenID string) (*httpConfig, error) {
 		Header: map[string]string{
 			"Accept":               "application/json, text/event-stream",
 			"Authorization":        "Bearer " + token,
-			"MCP-Protocol-Version": mcp.LatestSupportedProtocolVersion,
+			"MCP-Protocol-Version": server.LatestSupportedProtocolVersion,
 			"X-OpenPass-Agent":     agentName,
 		},
 	}, nil
@@ -391,7 +392,7 @@ func OutputTokenOnly() error {
 		}
 	}
 
-	token, err := mcp.LoadOrCreateToken(tokenPath)
+	token, err := auth.LoadOrCreateToken(tokenPath)
 	if err != nil {
 		return fmt.Errorf("load token: %w", err)
 	}

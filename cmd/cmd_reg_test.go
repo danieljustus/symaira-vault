@@ -11,7 +11,7 @@ import (
 	mcpcmd "github.com/danieljustus/OpenPass/cmd/mcp"
 	cli "github.com/danieljustus/OpenPass/internal/cli"
 	"github.com/danieljustus/OpenPass/internal/config"
-	"github.com/danieljustus/OpenPass/internal/mcp"
+	server "github.com/danieljustus/OpenPass/internal/mcp/server"
 	"github.com/danieljustus/OpenPass/internal/mcp/serverbootstrap"
 	"github.com/danieljustus/OpenPass/internal/testutil"
 	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"

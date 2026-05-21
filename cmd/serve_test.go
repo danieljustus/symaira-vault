@@ -21,7 +21,8 @@ import (
 
 	mcpcmd "github.com/danieljustus/OpenPass/cmd/mcp"
 	cli "github.com/danieljustus/OpenPass/internal/cli"
-	mcpint "github.com/danieljustus/OpenPass/internal/mcp"
+	mcpint "github.com/danieljustus/OpenPass/internal/mcp/server"
+	transport "github.com/danieljustus/OpenPass/internal/mcp/transport"
 	"github.com/danieljustus/OpenPass/internal/mcp/serverbootstrap"
 	"github.com/danieljustus/OpenPass/internal/session"
 	"github.com/danieljustus/OpenPass/internal/testutil"
@@ -371,7 +372,7 @@ func TestRunHTTPServer_InvalidJSON(t *testing.T) {
 		t.Errorf("invalid JSON status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
 
-	var errResp mcpint.Message
+	var errResp transport.Message
 	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
 		t.Fatalf("decode error response: %v", err)
 	}
@@ -379,8 +380,8 @@ func TestRunHTTPServer_InvalidJSON(t *testing.T) {
 	if errResp.Error == nil {
 		t.Fatal("expected error in response")
 	}
-	if errResp.Error.Code != mcpint.ErrCodeParseError {
-		t.Errorf("error code = %d, want %d", errResp.Error.Code, mcpint.ErrCodeParseError)
+	if errResp.Error.Code != transport.ErrCodeParseError {
+		t.Errorf("error code = %d, want %d", errResp.Error.Code, transport.ErrCodeParseError)
 	}
 	if !strings.Contains(errResp.Error.Message, "invalid JSON") {
 		t.Errorf("error message = %q, want contains 'invalid JSON'", errResp.Error.Message)
@@ -557,7 +558,7 @@ func TestRunHTTPServer_HandlerCreationError(t *testing.T) {
 		t.Errorf("handler creation error status = %d, want %d", resp.StatusCode, http.StatusForbidden)
 	}
 
-	var errResp mcpint.Message
+	var errResp transport.Message
 	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
 		t.Fatalf("decode error response: %v", err)
 	}
@@ -565,8 +566,8 @@ func TestRunHTTPServer_HandlerCreationError(t *testing.T) {
 	if errResp.Error == nil {
 		t.Fatal("expected error in response")
 	}
-	if errResp.Error.Code != mcpint.ErrCodeInternalError {
-		t.Errorf("error code = %d, want %d", errResp.Error.Code, mcpint.ErrCodeInternalError)
+	if errResp.Error.Code != transport.ErrCodeInternalError {
+		t.Errorf("error code = %d, want %d", errResp.Error.Code, transport.ErrCodeInternalError)
 	}
 	if !strings.Contains(errResp.Error.Message, "agent not found") {
 		t.Errorf("error message = %q, want contains 'agent not found'", errResp.Error.Message)
@@ -733,7 +734,7 @@ func TestRunHTTPServer_HandleMessageError(t *testing.T) {
 		t.Errorf("tools/call status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 
-	var errResp mcpint.Message
+	var errResp transport.Message
 	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
@@ -741,8 +742,8 @@ func TestRunHTTPServer_HandleMessageError(t *testing.T) {
 	if errResp.Error == nil {
 		t.Fatal("expected error in response for uninitialized tools/call")
 	}
-	if errResp.Error.Code != mcpint.ErrCodeServerError {
-		t.Errorf("error code = %d, want %d", errResp.Error.Code, mcpint.ErrCodeServerError)
+	if errResp.Error.Code != transport.ErrCodeServerError {
+		t.Errorf("error code = %d, want %d", errResp.Error.Code, transport.ErrCodeServerError)
 	}
 }
 

@@ -18,7 +18,8 @@ import (
 	"time"
 
 	"github.com/danieljustus/OpenPass/internal/fileutil"
-	"github.com/danieljustus/OpenPass/internal/mcp"
+	"github.com/danieljustus/OpenPass/internal/mcp/auth"
+	"github.com/danieljustus/OpenPass/internal/mcp/server"
 )
 
 const (
@@ -243,7 +244,7 @@ type oauthRegisterRequest struct {
 // a public client identity — no secret is issued.
 func handleOAuthRegister(clientStore *oauthClientStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !mcp.IsJSONContentType(r.Header.Get("Content-Type")) {
+		if !server.IsJSONContentType(r.Header.Get("Content-Type")) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_client_metadata"})
 			return
 		}
@@ -336,7 +337,7 @@ func handleOAuthAuthorize(store *oauthCodeStore, clientStore *oauthClientStore) 
 
 		// Require explicit user consent via TTY prompt.
 		// Without this, any local process can silently mint tokens (see #21).
-		result := mcp.RequestApproval(mcp.ApprovalRequest{
+		result := server.RequestApproval(server.ApprovalRequest{
 			Operation: "OAuth Authorization Request",
 			Details:   fmt.Sprintf("Client %q requests vault access\n  Redirect URI: %s", clientID, redirectURI),
 			Timeout:   60 * time.Second,
@@ -380,7 +381,7 @@ func handleOAuthAuthorize(store *oauthCodeStore, clientStore *oauthClientStore) 
 // with PKCE verification (RFC 7636) and refresh token support (RFC 6749 §6).
 // On success it mints a fresh scoped MCP token via the TokenRegistry instead
 // of returning the global legacy bearer token.
-func handleOAuthToken(store *oauthCodeStore, registry *mcp.TokenRegistry, accessTokenTTL, refreshTokenTTL time.Duration) http.HandlerFunc {
+func handleOAuthToken(store *oauthCodeStore, registry *auth.TokenRegistry, accessTokenTTL, refreshTokenTTL time.Duration) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseForm(); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_request"})

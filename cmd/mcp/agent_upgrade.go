@@ -14,7 +14,7 @@ import (
 
 	"github.com/danieljustus/OpenPass/internal/agentskill"
 	configpkg "github.com/danieljustus/OpenPass/internal/config"
-	"github.com/danieljustus/OpenPass/internal/mcp"
+	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
 )
 
 var (
@@ -258,8 +258,8 @@ an audit trail.`,
 		fmt.Fprintf(os.Stderr, "\u2713 Profile for %q upgraded to %q\n", agentName, agentUpgradeTier)
 
 		if agentUpgradeRotate {
-			regPath := mcp.TokenRegistryFilePath(vaultDir)
-			reg := mcp.NewTokenRegistry(regPath)
+			regPath := auth.TokenRegistryFilePath(vaultDir)
+			reg := auth.NewTokenRegistry(regPath)
 			if loadErr := reg.Load(); loadErr != nil {
 				return fmt.Errorf("load token registry: %w", loadErr)
 			}

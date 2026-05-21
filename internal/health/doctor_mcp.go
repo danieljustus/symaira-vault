@@ -12,14 +12,14 @@ import (
 
 	"github.com/danieljustus/OpenPass/internal/audit"
 	configpkg "github.com/danieljustus/OpenPass/internal/config"
-	"github.com/danieljustus/OpenPass/internal/mcp"
+	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
 	"github.com/danieljustus/OpenPass/internal/update"
 	"github.com/danieljustus/OpenPass/internal/vault"
 )
 
 func checkMCPTokens(vaultDir string, _ Options) Result {
 	r := Result{ID: "mcp.tokens", Name: "MCP tokens"}
-	reg, _, err := mcp.LoadTokenSystem(vaultDir)
+	reg, _, err := auth.LoadTokenSystem(vaultDir)
 	if err != nil {
 		r.Status = StatusWarn
 		r.Message = "cannot load MCP token registry: " + err.Error()

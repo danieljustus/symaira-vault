@@ -12,7 +12,7 @@ import (
 
 	mcpcmd "github.com/danieljustus/OpenPass/cmd/mcp"
 	"github.com/danieljustus/OpenPass/internal/config"
-	"github.com/danieljustus/OpenPass/internal/mcp"
+	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
 	"github.com/danieljustus/OpenPass/internal/testutil"
 	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
 )
@@ -315,8 +315,8 @@ func TestMCPTokenList_WithTokens(t *testing.T) {
 		t.Fatalf("failed to init vault: %v", err)
 	}
 
-	regPath := mcp.TokenRegistryFilePath(vaultDir)
-	reg := mcp.NewTokenRegistry(regPath)
+	regPath := auth.TokenRegistryFilePath(vaultDir)
+	reg := auth.NewTokenRegistry(regPath)
 	if err := reg.Load(); err != nil {
 		t.Fatalf("load registry: %v", err)
 	}
@@ -357,8 +357,8 @@ func TestMCPTokenRevoke_Success(t *testing.T) {
 		t.Fatalf("failed to init vault: %v", err)
 	}
 
-	regPath := mcp.TokenRegistryFilePath(vaultDir)
-	reg := mcp.NewTokenRegistry(regPath)
+	regPath := auth.TokenRegistryFilePath(vaultDir)
+	reg := auth.NewTokenRegistry(regPath)
 	if err := reg.Load(); err != nil {
 		t.Fatalf("load registry: %v", err)
 	}
@@ -428,8 +428,8 @@ func TestMCPTokenRevoke_DoubleRevoke(t *testing.T) {
 		t.Fatalf("failed to init vault: %v", err)
 	}
 
-	regPath := mcp.TokenRegistryFilePath(vaultDir)
-	reg := mcp.NewTokenRegistry(regPath)
+	regPath := auth.TokenRegistryFilePath(vaultDir)
+	reg := auth.NewTokenRegistry(regPath)
 	if err := reg.Load(); err != nil {
 		t.Fatalf("load registry: %v", err)
 	}
@@ -477,8 +477,8 @@ func TestMCPTokenList_RevokedToken(t *testing.T) {
 		t.Fatalf("failed to init vault: %v", err)
 	}
 
-	regPath := mcp.TokenRegistryFilePath(vaultDir)
-	reg := mcp.NewTokenRegistry(regPath)
+	regPath := auth.TokenRegistryFilePath(vaultDir)
+	reg := auth.NewTokenRegistry(regPath)
 	if err := reg.Load(); err != nil {
 		t.Fatalf("load registry: %v", err)
 	}
@@ -617,8 +617,8 @@ func TestMCPTokenList_ExpiredTokenExcluded(t *testing.T) {
 		t.Fatalf("failed to init vault: %v", err)
 	}
 
-	regPath := mcp.TokenRegistryFilePath(vaultDir)
-	reg := mcp.NewTokenRegistry(regPath)
+	regPath := auth.TokenRegistryFilePath(vaultDir)
+	reg := auth.NewTokenRegistry(regPath)
 	if err := reg.Load(); err != nil {
 		t.Fatalf("load registry: %v", err)
 	}
@@ -734,8 +734,8 @@ func TestMCPTokenCreate_ToolsLongOutput(t *testing.T) {
 		"tool_f", "tool_g", "tool_h", "tool_i", "tool_j",
 	}
 
-	regPath := mcp.TokenRegistryFilePath(vaultDir)
-	reg := mcp.NewTokenRegistry(regPath)
+	regPath := auth.TokenRegistryFilePath(vaultDir)
+	reg := auth.NewTokenRegistry(regPath)
 	if err := reg.Load(); err != nil {
 		t.Fatalf("load registry: %v", err)
 	}
@@ -777,8 +777,8 @@ func TestMCPTokenList_HeaderFormat(t *testing.T) {
 		t.Fatalf("failed to init vault: %v", err)
 	}
 
-	regPath := mcp.TokenRegistryFilePath(vaultDir)
-	reg := mcp.NewTokenRegistry(regPath)
+	regPath := auth.TokenRegistryFilePath(vaultDir)
+	reg := auth.NewTokenRegistry(regPath)
 	if err := reg.Load(); err != nil {
 		t.Fatalf("load registry: %v", err)
 	}
@@ -1033,8 +1033,8 @@ func TestMCPTokenList_EmptyAgentAndLabel(t *testing.T) {
 		t.Fatalf("failed to init vault: %v", err)
 	}
 
-	regPath := mcp.TokenRegistryFilePath(vaultDir)
-	reg := mcp.NewTokenRegistry(regPath)
+	regPath := auth.TokenRegistryFilePath(vaultDir)
+	reg := auth.NewTokenRegistry(regPath)
 	if err := reg.Load(); err != nil {
 		t.Fatalf("load registry: %v", err)
 	}

@@ -16,17 +16,17 @@ import (
 
 	"github.com/danieljustus/OpenPass/internal/config"
 	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
-	"github.com/danieljustus/OpenPass/internal/mcp"
+	server "github.com/danieljustus/OpenPass/internal/mcp/server"
 	"github.com/danieljustus/OpenPass/internal/mcp/serverbootstrap"
 	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
 )
 
 var RunStdioServerFunc = func(ctx context.Context, vault *vaultpkg.Vault, agentName string) error {
-	return serverbootstrap.RunStdioServer(ctx, vault, agentName, mcp.New)
+	return serverbootstrap.RunStdioServer(ctx, vault, agentName, server.New)
 }
 var RunHTTPServerFunc = func(ctx context.Context, bind string, port int, vault *vaultpkg.Vault) error {
 	vaultDir, _ := cli.VaultPath()
-	return serverbootstrap.RunHTTPServer(ctx, bind, port, vault, vaultDir, Version, mcp.New)
+	return serverbootstrap.RunHTTPServer(ctx, bind, port, vault, vaultDir, Version, server.New)
 }
 var FindAvailablePortFunc = cli.FindAvailablePort
 

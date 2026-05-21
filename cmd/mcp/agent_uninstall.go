@@ -14,7 +14,7 @@ import (
 
 	"github.com/danieljustus/OpenPass/internal/agentskill"
 	configpkg "github.com/danieljustus/OpenPass/internal/config"
-	"github.com/danieljustus/OpenPass/internal/mcp"
+	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
 )
 
 var (
@@ -87,8 +87,8 @@ agent's profile in config.yaml. Use --yes to skip the confirmation prompt.`,
 			fmt.Fprintf(os.Stderr, "\u26a0 Keeping profile for %q in config (--keep-config)\n", agentName)
 		}
 
-		regPath := mcp.TokenRegistryFilePath(vaultDir)
-		reg := mcp.NewTokenRegistry(regPath)
+		regPath := auth.TokenRegistryFilePath(vaultDir)
+		reg := auth.NewTokenRegistry(regPath)
 		revokedCount := 0
 		if loadErr := reg.Load(); loadErr == nil {
 			for _, tok := range reg.List() {

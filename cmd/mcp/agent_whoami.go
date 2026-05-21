@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	configpkg "github.com/danieljustus/OpenPass/internal/config"
-	"github.com/danieljustus/OpenPass/internal/mcp"
+	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
 )
 
 var agentWhoamiCmd = &cobra.Command{
@@ -134,8 +134,8 @@ func buildWhoamiInfo(agentName, vaultDir string, profile *configpkg.AgentProfile
 }
 
 func countAgentTokens(vaultDir, agentName string) int {
-	regPath := mcp.TokenRegistryFilePath(vaultDir)
-	reg := mcp.NewTokenRegistry(regPath)
+	regPath := auth.TokenRegistryFilePath(vaultDir)
+	reg := auth.NewTokenRegistry(regPath)
 	if err := reg.Load(); err != nil {
 		return 0
 	}

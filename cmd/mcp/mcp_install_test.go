@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/danieljustus/OpenPass/internal/mcp"
+	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
 )
 
 func TestBuildHTTPServerConfig_DryRun(t *testing.T) {
@@ -14,7 +14,7 @@ func TestBuildHTTPServerConfig_DryRun(t *testing.T) {
 	regPath := filepath.Join(tmp, "mcp-tokens.json")
 
 	// Seed an existing token so the registry file exists.
-	reg := mcp.NewTokenRegistry(regPath)
+	reg := auth.NewTokenRegistry(regPath)
 	if err := reg.Load(); err != nil {
 		t.Fatalf("load error: %v", err)
 	}
@@ -49,7 +49,7 @@ func TestBuildHTTPServerConfig_DryRun(t *testing.T) {
 	}
 
 	// Verify no new token was created.
-	regAfter := mcp.NewTokenRegistry(regPath)
+	regAfter := auth.NewTokenRegistry(regPath)
 	if err := regAfter.Load(); err != nil {
 		t.Fatalf("load after error: %v", err)
 	}

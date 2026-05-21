@@ -5,14 +5,15 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/danieljustus/OpenPass/internal/mcp"
+	server "github.com/danieljustus/OpenPass/internal/mcp/server"
+	trans "github.com/danieljustus/OpenPass/internal/mcp/transport"
 	"github.com/danieljustus/OpenPass/internal/metrics"
 	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
 )
 
 // RunStdioServer starts the stdio MCP server.
-func RunStdioServer(ctx context.Context, vault *vaultpkg.Vault, agentName string, factory func(*vaultpkg.Vault, string, string) (*mcp.Server, error)) error {
-	var mcpServer *mcp.Server
+func RunStdioServer(ctx context.Context, vault *vaultpkg.Vault, agentName string, factory func(*vaultpkg.Vault, string, string) (*server.Server, error)) error {
+	var mcpServer *server.Server
 	if vault != nil && agentName != "" {
 		var err error
 		mcpServer, err = factory(vault, agentName, "stdio")
@@ -36,12 +37,12 @@ func RunStdioServer(ctx context.Context, vault *vaultpkg.Vault, agentName string
 		cancel()
 	}()
 
-	transport := mcp.NewStdioTransport()
-	handler := mcp.NewProtocolHandler("openpass", "1.0.0", mcpServer)
+	st := trans.NewStdioTransport()
+	handler := server.NewProtocolHandler("openpass", "1.0.0", mcpServer)
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- transport.Start(ctx, handler.HandleMessage)
+		errCh <- st.Start(ctx, handler.HandleMessage)
 	}()
 
 	select {
