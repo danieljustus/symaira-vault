@@ -117,13 +117,13 @@ jobs:
           cache: true
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@d7d6bc7722e3daa8354c50b52f5411669fdd27b3 # v3
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
 
       - name: Install Syft
-        uses: anchore/sbom-action/download-syft@f325610c9f50a54015d68455d9b029324854468f # v0
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@90a068edfddc332c5d60a30e63e9b949c422cafc # v7
+        uses: goreleaser/goreleaser-action@5daf1e915a5f0af01ddbcd89a43b8061ff4f1a89 # v7
         with:
           distribution: goreleaser
           version: '~> v2'
