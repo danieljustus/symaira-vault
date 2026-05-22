@@ -272,7 +272,7 @@ jobs:
         run: |
           $tag = "${{ steps.tag.outputs.tag }}"
           $version = $tag -replace '^v',''
-          $expectedHash = (Get-Content "OpenPass_${version}_checksums.txt" | Where-Object { $_ -match "windows_amd64\.zip" } | ForEach-Object { ($_ -split '\s+')[0] })
+          $expectedHash = (Get-Content "OpenPass_${version}_checksums.txt" | Where-Object { $_ -match "windows_amd64\.zip$" } | ForEach-Object { ($_ -split '\s+')[0] })
           $actualHash = (Get-FileHash -Path "OpenPass_${version}_windows_amd64.zip" -Algorithm SHA256).Hash.ToLower()
           if ($expectedHash.ToLower() -ne $actualHash) {
             Write-Error "Checksum mismatch: expected $expectedHash, got $actualHash"
