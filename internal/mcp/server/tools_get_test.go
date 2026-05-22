@@ -909,3 +909,66 @@ func TestBuildSecretMetadataResponse_TagsAreExposedAndSanitized(t *testing.T) {
 		t.Errorf("ANSI escape should be stripped in %q", tags[3])
 	}
 }
+
+func TestHandleGetValue_SealsAutoDetectedGitHubPAT(t *testing.T) {
+	vaultDir, identity := mockVault(t)
+
+	entry := &vault.Entry{
+		Data: map[string]any{
+			"token": "ghp_abcdefghijklmnopqrstuvwxyz0123456789",
+		},
+	}
+	if err := vault.WriteEntry(vaultDir, "auto-secret", entry, identity); err != nil {
+		t.Fatalf("write entry: %v", err)
+	}
+
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:         "test",
+		AllowedPaths: []string{"*"},
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
+		AutoUnseal:   config.BoolPtr(false),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{"path": "auto-secret"},
+	}
+
+	result, err := srv.handleGetValue(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleGetValue() error = %v", err)
+	}
+	if result == nil {
+		t.Fatal("handleGetValue() returned nil result")
+	}
+	if result.IsError {
+		t.Fatalf("handleGetValue() returned error: %s", result.Text)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal([]byte(result.Text), &resp); err != nil {
+		t.Fatalf("parse result: %v", err)
+	}
+
+	handle, hasHandle := resp["handle"]
+	classification, hasClass := resp["classification"]
+
+	if !hasHandle {
+		t.Error("expected 'handle' field in sealed response for auto-detected secret")
+	}
+	if !hasClass {
+		t.Error("expected 'classification' field in sealed response")
+	}
+	handleStr, ok := handle.(string)
+	if !ok || !strings.HasPrefix(handleStr, "op://") {
+		t.Errorf("handle = %v, want op:// prefix", handle)
+	}
+	classStr, _ := classification.(string)
+	if classStr != "secret" {
+		t.Errorf("classification = %q, want 'secret'", classStr)
+	}
+	if _, hasData := resp["data"]; hasData {
+		t.Error("sealed response should not contain raw data field")
+	}
+}
