@@ -37,8 +37,8 @@ type Config struct {
 	DefaultProfile string                  `yaml:"defaultProfile,omitempty"`
 	EnvAllowlist   []string                `yaml:"envAllowlist,omitempty"`
 	// EnvWhitelist is the deprecated name for EnvAllowlist; kept for backward compatibility.
-	EnvWhitelist   []string                `yaml:"envWhitelist,omitempty"`
-	ScanPatterns   []CustomPattern         `yaml:"scan_patterns,omitempty"`
+	EnvWhitelist []string        `yaml:"envWhitelist,omitempty"`
+	ScanPatterns []CustomPattern `yaml:"scan_patterns,omitempty"`
 }
 
 type AgentProfile struct {
