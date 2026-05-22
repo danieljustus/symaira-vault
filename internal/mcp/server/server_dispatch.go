@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 
 	"github.com/danieljustus/OpenPass/internal/anomaly"
+	"github.com/danieljustus/OpenPass/internal/authguard"
 	mcp "github.com/danieljustus/OpenPass/internal/mcp"
 	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
 	"github.com/danieljustus/OpenPass/internal/metrics"
@@ -135,9 +137,18 @@ func (s *Server) executeTool(ctx context.Context, name string, args json.RawMess
 	// Evaluate declarative policies before tool execution
 	if entryPath != "" {
 		if policyErr := s.checkPolicy(ctx, entryPath, toolActionType(name)); policyErr != nil {
-			span.SetStatus(codes.Error, policyErr.Error())
-			metrics.RecordMCPRequest(name, agentName, "error", time.Since(start))
-			return nil, policyErr
+			if errors.Is(policyErr, authguard.ErrBiometryRequired) {
+				if bioErr := s.challengeBiometric(ctx, name); bioErr != nil {
+					span.SetStatus(codes.Error, bioErr.Error())
+					metrics.RecordMCPRequest(name, agentName, "error", time.Since(start))
+					return nil, bioErr
+				}
+				s.logAudit(ctx, "policy_biometry_passed", entryPath, true)
+			} else {
+				span.SetStatus(codes.Error, policyErr.Error())
+				metrics.RecordMCPRequest(name, agentName, "error", time.Since(start))
+				return nil, policyErr
+			}
 		}
 	}
 
@@ -251,4 +262,30 @@ func (s *Server) detectAnomalyAsync(_ context.Context, toolName, entryPath, reqI
 		// Invalidate approval cache for any anomaly to force re-approval
 		s.invalidateApprovalCache()
 	}()
+}
+
+// challengeBiometric performs a biometric identity verification challenge in
+// response to a policy rule that requires biometry. On success it returns nil;
+// on failure it returns an error suitable for surfacing to the MCP client.
+func (s *Server) challengeBiometric(ctx context.Context, toolName string) error {
+	agentName := ""
+	if s.agent != nil {
+		agentName = s.agent.Name
+	}
+
+	challenger := s.getBiometricChallenger()
+	if !challenger.Available() {
+		s.logAudit(ctx, "policy_biometry_unavailable", toolName, false)
+		return fmt.Errorf(
+			"policy requires biometric verification for tool %q, but biometric authentication is not available on this platform. "+
+				"Agent %q cannot execute this tool", toolName, agentName,
+		)
+	}
+
+	reason := fmt.Sprintf("OpenPass agent %q is requesting tool %q", agentName, toolName)
+	if err := challenger.Challenge(ctx, authguard.OperationType(toolName), reason); err != nil {
+		s.logAudit(ctx, "policy_biometry_failed", toolName, false)
+		return fmt.Errorf("biometric verification failed for tool %q: %w", toolName, err)
+	}
+	return nil
 }

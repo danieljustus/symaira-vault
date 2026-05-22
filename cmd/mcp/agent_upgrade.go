@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,18 +14,20 @@ import (
 	"golang.org/x/term"
 
 	"github.com/danieljustus/OpenPass/internal/agentskill"
+	"github.com/danieljustus/OpenPass/internal/authguard"
 	configpkg "github.com/danieljustus/OpenPass/internal/config"
 	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
 )
 
 var (
-	agentUpgradeTier       string
-	agentUpgradeDryRun     bool
-	agentUpgradeYes        bool
-	agentUpgradeReason     string
-	agentUpgradeRotate     bool
-	agentUpgradeValidTiers = map[string]bool{"safe": true, "read-only": true, "standard": true, "admin": true}
-	agentUpgradeTierAlias  = map[string]string{"safe": "read-only", "read-only": "read-only", "standard": "standard", "admin": "admin"}
+	agentUpgradeTier        string
+	agentUpgradeDryRun      bool
+	agentUpgradeYes         bool
+	agentUpgradeReason      string
+	agentUpgradeRotate      bool
+	agentUpgradeNoBiometric bool
+	agentUpgradeValidTiers  = map[string]bool{"safe": true, "read-only": true, "standard": true, "admin": true}
+	agentUpgradeTierAlias   = map[string]string{"safe": "read-only", "read-only": "read-only", "standard": "standard", "admin": "admin"}
 )
 
 type tierDiff struct {
@@ -155,6 +158,27 @@ func printTierDiff(diffs []tierDiff) {
 	}
 }
 
+func requireBiometricForUpgrade(ctx context.Context, agentName, targetTier string) error {
+	challenger := authguard.DefaultChallenger()
+	if !challenger.Available() {
+		if agentUpgradeYes {
+			return fmt.Errorf(
+				"biometric verification is required for non-interactive tier upgrades on this platform.\n" +
+					"Re-run with --no-biometric to bypass (not recommended)",
+			)
+		}
+		fmt.Fprintf(os.Stderr, "\u26a0  Biometric verification is not available on this platform.\n")
+		fmt.Fprintf(os.Stderr, "   The upgrade will proceed after interactive confirmation.\n\n")
+		return nil
+	}
+
+	reason := fmt.Sprintf("Upgrade OpenPass agent %q to %q tier", agentName, targetTier)
+	if err := challenger.Challenge(ctx, authguard.OpTierUpgrade, reason); err != nil {
+		return fmt.Errorf("biometric verification required for tier upgrade: %w", err)
+	}
+	return nil
+}
+
 func confirmUpgrade(agentName, targetTier string) bool {
 	if !term.IsTerminal(int(os.Stdin.Fd())) {
 		return false
@@ -249,6 +273,12 @@ an audit trail.`,
 			return nil
 		}
 
+		if !agentUpgradeNoBiometric {
+			if err := requireBiometricForUpgrade(cmd.Context(), agentName, agentUpgradeTier); err != nil {
+				return err
+			}
+		}
+
 		if !agentUpgradeYes && !confirmUpgrade(agentName, agentUpgradeTier) {
 			fmt.Fprintln(os.Stderr, "Upgrade canceled.")
 			return nil
@@ -318,6 +348,7 @@ func init() {
 	agentUpgradeCmd.Flags().BoolVar(&agentUpgradeYes, "yes", false, "Non-interactive mode (requires --reason)")
 	agentUpgradeCmd.Flags().StringVar(&agentUpgradeReason, "reason", "", "Audit reason for the upgrade (required with --yes)")
 	agentUpgradeCmd.Flags().BoolVar(&agentUpgradeRotate, "rotate-token", false, "Rotate the agent's MCP token on upgrade")
+	agentUpgradeCmd.Flags().BoolVar(&agentUpgradeNoBiometric, "no-biometric", false, "Skip biometric verification (not recommended)")
 
 	agentCmd.AddCommand(agentUpgradeCmd)
 }

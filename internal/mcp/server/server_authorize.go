@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/danieljustus/OpenPass/internal/audit"
+	"github.com/danieljustus/OpenPass/internal/authguard"
 	mcp "github.com/danieljustus/OpenPass/internal/mcp"
 	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
 	"github.com/danieljustus/OpenPass/internal/metrics"
@@ -117,7 +118,7 @@ func (s *Server) checkPolicy(ctx context.Context, path, actionType string) error
 	case policy.ActionRequireBiometry:
 		s.logAudit(ctx, "policy_biometry", path, false)
 		metrics.RecordAuthDenial("policy_biometry", s.agent.Name)
-		return fmt.Errorf("policy requires biometry by rule %q", result.RuleName)
+		return fmt.Errorf("%w by rule %q", authguard.ErrBiometryRequired, result.RuleName)
 	default:
 		return nil
 	}
