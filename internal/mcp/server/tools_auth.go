@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/danieljustus/OpenPass/internal/authguard"
 	"github.com/danieljustus/OpenPass/internal/config"
 	"github.com/danieljustus/OpenPass/internal/crypto"
 	mcp "github.com/danieljustus/OpenPass/internal/mcp"
@@ -62,8 +63,21 @@ func (s *Server) handleSetAuthMethod(ctx context.Context, req mcp.CallToolReques
 		if err := session.SaveBiometricPassphrase(ctx, s.vault.Dir, passphrase); err != nil {
 			return nil, fmt.Errorf("save Touch ID unlock item: %w", err)
 		}
-	} else if err := session.ClearBiometricPassphrase(s.vault.Dir); err != nil {
-		return nil, fmt.Errorf("clear Touch ID unlock item: %w", err)
+	}
+
+	challenger := s.getBiometricChallenger()
+	if challenger.Available() {
+		reason := fmt.Sprintf("Change OpenPass auth method to %s", method)
+		if err := challenger.Challenge(ctx, authguard.OpAuthMethodSet, reason); err != nil {
+			s.logAudit(ctx, "auth_method_biometric_failed", "<config>", false)
+			return mcp.NewToolResultError(fmt.Sprintf("biometric verification required: %v", err)), nil
+		}
+	}
+
+	if method != config.AuthMethodTouchID {
+		if err := session.ClearBiometricPassphrase(s.vault.Dir); err != nil {
+			return nil, fmt.Errorf("clear Touch ID unlock item: %w", err)
+		}
 	}
 
 	if err := s.vault.Config.SetAuthMethod(method); err != nil {

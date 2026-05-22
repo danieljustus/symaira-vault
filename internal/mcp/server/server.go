@@ -17,6 +17,7 @@ import (
 
 	"github.com/danieljustus/OpenPass/internal/anomaly"
 	"github.com/danieljustus/OpenPass/internal/audit"
+	"github.com/danieljustus/OpenPass/internal/authguard"
 	"github.com/danieljustus/OpenPass/internal/config"
 	transport "github.com/danieljustus/OpenPass/internal/mcp/transport"
 	"github.com/danieljustus/OpenPass/internal/notify"
@@ -85,6 +86,8 @@ type Server struct {
 	hookRegistry    *HookRegistry
 	sessionID       string
 	anomalyDetector *anomaly.AnomalyDetector
+
+	biometricChallenger *authguard.Challenger
 }
 
 // SessionID returns the server's unique session identifier.
@@ -164,15 +167,16 @@ func New(v *vault.Vault, agentName string, transport string) (*Server, error) {
 	)
 
 	srv := &Server{
-		vault:           v,
-		agent:           &agent,
-		auditLog:        auditLog,
-		transport:       transport,
-		policyEngine:    policyEngine,
-		approvalCache:   newApprovalCache(),
-		hookRegistry:    NewHookRegistry(),
-		sessionID:       sessionID,
-		anomalyDetector: detector,
+		vault:               v,
+		agent:               &agent,
+		auditLog:            auditLog,
+		transport:           transport,
+		policyEngine:        policyEngine,
+		approvalCache:       newApprovalCache(),
+		hookRegistry:        NewHookRegistry(),
+		sessionID:           sessionID,
+		anomalyDetector:     detector,
+		biometricChallenger: authguard.DefaultChallenger(),
 	}
 
 	// Register hooks specified in the agent's config profile
@@ -276,4 +280,14 @@ func (s *Server) Close() error {
 		return nil
 	}
 	return s.auditLog.Close()
+}
+
+// getBiometricChallenger returns the server's biometric challenger, falling
+// back to the default if none is configured. Tests may set biometryChallenger
+// to a mock to avoid real system prompts.
+func (s *Server) getBiometricChallenger() *authguard.Challenger {
+	if s != nil && s.biometricChallenger != nil {
+		return s.biometricChallenger
+	}
+	return authguard.DefaultChallenger()
 }

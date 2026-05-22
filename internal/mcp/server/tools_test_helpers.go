@@ -1,12 +1,15 @@
 package server
 
 import (
+	"context"
 	"testing"
 
 	"filippo.io/age"
 
 	"github.com/danieljustus/OpenPass/internal/audit"
+	"github.com/danieljustus/OpenPass/internal/authguard"
 	"github.com/danieljustus/OpenPass/internal/config"
+	"github.com/danieljustus/OpenPass/internal/session"
 	"github.com/danieljustus/OpenPass/internal/vault"
 )
 
@@ -36,8 +39,18 @@ func newTestServerWithVault(t *testing.T, profile config.AgentProfile, transport
 		auditLog:     auditLog,
 		transport:    transport,
 		hookRegistry: NewHookRegistry(),
+		biometricChallenger: &authguard.Challenger{
+			Authenticator: func() session.BiometricAuthenticator {
+				return &noopTestBiometricAuth{}
+			},
+		},
 	}
 }
+
+type noopTestBiometricAuth struct{}
+
+func (n *noopTestBiometricAuth) Authenticate(_ context.Context, _ string) error { return nil }
+func (n *noopTestBiometricAuth) IsAvailable() bool                               { return false }
 
 // mockVault creates a temp vault directory with entries for testing
 func mockVault(t *testing.T) (string, *age.X25519Identity) {
