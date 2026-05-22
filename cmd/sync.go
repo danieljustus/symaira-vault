@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	cli "github.com/danieljustus/OpenPass/internal/cli"
 	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
 	"github.com/danieljustus/OpenPass/internal/git"
 	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
@@ -29,7 +30,7 @@ var syncCmd = &cobra.Command{
   openpass sync --force`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		vaultDir, err := vaultPath()
+		vaultDir, err := cli.VaultPath()
 		if err != nil {
 			return err
 		}

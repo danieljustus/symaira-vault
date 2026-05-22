@@ -50,7 +50,7 @@ var templateGenerateCmd = &cobra.Command{
   # Dry-run to preview without real values
   openpass template generate --type env --name myapp --dry-run`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return withVault(func(svc vaultsvc.Service) error {
+		return cli.WithVault(func(svc vaultsvc.Service) error {
 			ctx := context.Background()
 			engine := template.NewEngine(svc)
 

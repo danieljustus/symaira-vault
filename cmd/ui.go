@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	cli "github.com/danieljustus/OpenPass/internal/cli"
 	"github.com/danieljustus/OpenPass/internal/ui"
 	"github.com/danieljustus/OpenPass/internal/ui/cliout"
 	vaultsvc "github.com/danieljustus/OpenPass/internal/vaultsvc"
@@ -42,7 +43,7 @@ Inside the TUI:
 			fmt.Print(tbl.Render())
 			return nil
 		}
-		return withVault(func(svc vaultsvc.Service) error {
+		return cli.WithVault(func(svc vaultsvc.Service) error {
 			if err := ui.Run(svc); err != nil {
 				return fmt.Errorf("ui failed: %w", err)
 			}

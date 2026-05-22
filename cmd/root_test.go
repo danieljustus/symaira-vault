@@ -93,9 +93,9 @@ func TestVaultPathErrorWhenHomeDirNotAvailable(t *testing.T) {
 	cli.Vault = "~/.openpass"
 
 	// Call vaultPath and verify it returns an error
-	path, err := vaultPath()
+	path, err := cli.VaultPath()
 	if err == nil {
-		t.Errorf("vaultPath() should return error when home directory is unavailable, got path: %s", path)
+		t.Errorf("cli.VaultPath() should return error when home directory is unavailable, got path: %s", path)
 	}
 }
 
@@ -130,12 +130,12 @@ func TestVaultPathSuccessWithTildeExpansion(t *testing.T) {
 	cli.Vault = "~/.openpass"
 
 	// Call vaultPath and verify it returns the expanded path
-	path, err := vaultPath()
+	path, err := cli.VaultPath()
 	if err != nil {
-		t.Errorf("vaultPath() should not return error, got: %v", err)
+		t.Errorf("cli.VaultPath() should not return error, got: %v", err)
 	}
 	if path != "/Users/testuser/.openpass" {
-		t.Errorf("vaultPath() = %s, want /Users/testuser/.openpass", path)
+		t.Errorf("cli.VaultPath() = %s, want /Users/testuser/.openpass", path)
 	}
 }
 
@@ -170,12 +170,12 @@ func TestVaultPathSuccessWithoutTilde(t *testing.T) {
 	cli.Vault = "/custom/vault/path"
 
 	// Call vaultPath and verify it returns the path as-is
-	path, err := vaultPath()
+	path, err := cli.VaultPath()
 	if err != nil {
-		t.Errorf("vaultPath() should not return error, got: %v", err)
+		t.Errorf("cli.VaultPath() should not return error, got: %v", err)
 	}
 	if path != "/custom/vault/path" {
-		t.Errorf("vaultPath() = %s, want /custom/vault/path", path)
+		t.Errorf("cli.VaultPath() = %s, want /custom/vault/path", path)
 	}
 }
 
@@ -191,12 +191,12 @@ func TestVaultPathUsesEnvWhenFlagUnchanged(t *testing.T) {
 	cli.Vault = "~/.openpass"
 	_ = os.Setenv("OPENPASS_VAULT", "/env/vault")
 
-	path, err := vaultPath()
+	path, err := cli.VaultPath()
 	if err != nil {
-		t.Fatalf("vaultPath() unexpected error = %v", err)
+		t.Fatalf("cli.VaultPath() unexpected error = %v", err)
 	}
 	if path != "/env/vault" {
-		t.Fatalf("vaultPath() = %s, want /env/vault", path)
+		t.Fatalf("cli.VaultPath() = %s, want /env/vault", path)
 	}
 }
 
@@ -216,12 +216,12 @@ func TestVaultPathPrefersExplicitFlagOverEnv(t *testing.T) {
 	vaultFlag.Changed = true
 	cli.Vault = "/flag/vault"
 
-	path, err := vaultPath()
+	path, err := cli.VaultPath()
 	if err != nil {
-		t.Fatalf("vaultPath() unexpected error = %v", err)
+		t.Fatalf("cli.VaultPath() unexpected error = %v", err)
 	}
 	if path != "/flag/vault" {
-		t.Fatalf("vaultPath() = %s, want /flag/vault", path)
+		t.Fatalf("cli.VaultPath() = %s, want /flag/vault", path)
 	}
 }
 
@@ -290,7 +290,7 @@ func TestUnlockVault_InteractivePrompt(t *testing.T) {
 	restore := pipeStdin(t, string(passphrase)+"\n")
 	defer restore()
 
-	v, err := unlockVault(vaultDir, true)
+	v, err := cli.UnlockVault(vaultDir, true)
 	if err != nil {
 		t.Fatalf("unlockVault interactive: %v", err)
 	}
@@ -323,7 +323,7 @@ func TestUnlockVault_SavesPassphrase(t *testing.T) {
 	restore := pipeStdin(t, string(passphrase)+"\n")
 	defer restore()
 
-	v, err := unlockVault(vaultDir, true)
+	v, err := cli.UnlockVault(vaultDir, true)
 	if err != nil {
 		t.Fatalf("unlockVault interactive: %v", err)
 	}
@@ -364,7 +364,7 @@ func TestUnlockVault_UsesConfiguredSessionTimeout(t *testing.T) {
 	restoreStdin := pipeStdin(t, string(passphrase)+"\n")
 	defer restoreStdin()
 
-	v, err := unlockVault(vaultDir, true)
+	v, err := cli.UnlockVault(vaultDir, true)
 	if err != nil {
 		t.Fatalf("unlockVault interactive: %v", err)
 	}
@@ -411,7 +411,7 @@ func TestUnlockCommand_UsesConfiguredSessionTimeoutByDefault(t *testing.T) {
 	checkFlag := auth.AuthUnlockCmd.Flags().Lookup("check")
 	origCheckChanged := checkFlag.Changed
 	origCheckValue := checkFlag.Value.String()
-	_ = ttlFlag.Value.Set(defaultSessionTTL().String())
+	_ = ttlFlag.Value.Set(cli.DefaultSessionTTL().String())
 	ttlFlag.Changed = false
 	_ = checkFlag.Value.Set("false")
 	checkFlag.Changed = false
@@ -465,7 +465,7 @@ func TestUnlockVault_InteractivePrompt_ReadError(t *testing.T) {
 		_ = r.Close()
 	}()
 
-	_, err := unlockVault(vaultDir, true)
+	_, err := cli.UnlockVault(vaultDir, true)
 	if err == nil {
 		t.Fatal("unlockVault should fail with empty stdin")
 	}
@@ -489,7 +489,7 @@ func TestUnlockVault_NonInteractive_NoSession(t *testing.T) {
 		}
 	}()
 
-	_, err := unlockVault(vaultDir, false)
+	_, err := cli.UnlockVault(vaultDir, false)
 	if err == nil {
 		t.Fatal("unlockVault should fail when interactive=false and no passphrase available")
 	}
@@ -506,7 +506,7 @@ func TestUnlockVault_EnvVar(t *testing.T) {
 	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
 	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
 
-	v, err := unlockVault(vaultDir, false)
+	v, err := cli.UnlockVault(vaultDir, false)
 	if err != nil {
 		t.Fatalf("unlockVault with env var: %v", err)
 	}
@@ -524,7 +524,7 @@ func TestUnlockVault_WrongPassphrase(t *testing.T) {
 	_ = os.Setenv("OPENPASS_PASSPHRASE", "wrong-passphrase")
 	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
 
-	_, err := unlockVault(vaultDir, false)
+	_, err := cli.UnlockVault(vaultDir, false)
 	if err == nil {
 		t.Fatal("unlockVault should fail with wrong passphrase")
 	}
@@ -557,7 +557,7 @@ func TestUnlockVault_HiddenInput(t *testing.T) {
 	restore := pipeStdin(t, string(passphrase)+"\n")
 	defer restore()
 
-	v, err := unlockVault(vaultDir, true)
+	v, err := cli.UnlockVault(vaultDir, true)
 	if err != nil {
 		t.Fatalf("unlockVault interactive: %v", err)
 	}
@@ -599,16 +599,16 @@ func TestConfiguredSessionTTL_WithVaultConfig(t *testing.T) {
 
 func TestConfiguredSessionTTL_NilVault(t *testing.T) {
 	ttl := cli.ConfiguredSessionTTL(nil, 0)
-	if ttl != defaultSessionTTL() {
-		t.Fatalf("cli.ConfiguredSessionTTL() = %v, want %v", ttl, defaultSessionTTL())
+	if ttl != cli.DefaultSessionTTL() {
+		t.Fatalf("cli.ConfiguredSessionTTL() = %v, want %v", ttl, cli.DefaultSessionTTL())
 	}
 }
 
 func TestConfiguredSessionTTL_VaultWithNilConfig(t *testing.T) {
 	v := &vaultpkg.Vault{}
 	ttl := cli.ConfiguredSessionTTL(v, 0)
-	if ttl != defaultSessionTTL() {
-		t.Fatalf("cli.ConfiguredSessionTTL() = %v, want %v", ttl, defaultSessionTTL())
+	if ttl != cli.DefaultSessionTTL() {
+		t.Fatalf("cli.ConfiguredSessionTTL() = %v, want %v", ttl, cli.DefaultSessionTTL())
 	}
 }
 
@@ -627,8 +627,8 @@ func TestConfiguredSessionTTL_ZeroSessionTimeout(t *testing.T) {
 	}
 
 	ttl := cli.ConfiguredSessionTTL(v, 0)
-	if ttl != defaultSessionTTL() {
-		t.Fatalf("cli.ConfiguredSessionTTL() = %v, want %v", ttl, defaultSessionTTL())
+	if ttl != cli.DefaultSessionTTL() {
+		t.Fatalf("cli.ConfiguredSessionTTL() = %v, want %v", ttl, cli.DefaultSessionTTL())
 	}
 }
 
@@ -644,7 +644,7 @@ func TestReadHiddenInput_TerminalEOF(t *testing.T) {
 		isTerminalFunc = oldIsTerminal
 	}()
 
-	_, err := readHiddenInput("Password: ", nil)
+	_, err := cli.ReadHiddenInput("Password: ", nil)
 	if err == nil {
 		t.Fatal("expected error for terminal EOF")
 	}
@@ -665,7 +665,7 @@ func TestReadHiddenInput_TerminalInterrupt(t *testing.T) {
 		isTerminalFunc = oldIsTerminal
 	}()
 
-	_, err := readHiddenInput("Password: ", nil)
+	_, err := cli.ReadHiddenInput("Password: ", nil)
 	if err == nil {
 		t.Fatal("expected error for terminal interrupt")
 	}
@@ -676,7 +676,7 @@ func TestReadHiddenInput_TerminalInterrupt(t *testing.T) {
 
 func TestReadHiddenInput_ReaderEOF(t *testing.T) {
 	reader := bufio.NewReader(strings.NewReader(""))
-	_, err := readHiddenInput("Password: ", reader)
+	_, err := cli.ReadHiddenInput("Password: ", reader)
 	if err == nil {
 		t.Fatal("expected error for reader EOF")
 	}
@@ -695,7 +695,7 @@ func TestReadHiddenInput_StdinEOF(t *testing.T) {
 		_ = r.Close()
 	}()
 
-	_, err := readHiddenInput("Password: ", nil)
+	_, err := cli.ReadHiddenInput("Password: ", nil)
 	if err == nil {
 		t.Fatal("expected error for stdin EOF")
 	}

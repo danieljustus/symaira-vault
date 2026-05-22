@@ -45,10 +45,10 @@ func resetCommandTestState() {
 		return serverbootstrap.RunStdioServer(ctx, vault, agentName, server.New)
 	}
 	mcpcmd.RunHTTPServerFunc = func(ctx context.Context, bind string, port int, vault *vaultpkg.Vault) error {
-		vaultDir, _ := vaultPath()
-		return serverbootstrap.RunHTTPServer(ctx, bind, port, vault, vaultDir, Version, server.New)
+		vaultDir, _ := cli.VaultPath()
+		return serverbootstrap.RunHTTPServer(ctx, bind, port, vault, vaultDir, cli.AppVersion, server.New)
 	}
-	mcpcmd.ServeUnlockVault = unlockVault
+	mcpcmd.ServeUnlockVault = cli.UnlockVault
 }
 
 func resetCommandFlagGlobals() {

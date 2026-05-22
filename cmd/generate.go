@@ -41,7 +41,7 @@ var generateCmd = &cobra.Command{
 		}
 
 		if genStore != "" {
-			return withVaultRaw(func(v *vaultpkg.Vault) error {
+			return cli.WithVaultRaw(func(v *vaultpkg.Vault) error {
 				entryPath := vaultpkg.EntryPath(v, genStore)
 				if _, err := vaultpkg.ReadEntry(v.Dir, genStore, v.Identity); err == nil {
 					if _, err := vaultpkg.MergeEntryWithRecipients(v.Dir, genStore, map[string]any{"password": password}, v.Identity); err != nil {
