@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"net/http"
 	"net/url"
 	"os"
@@ -20,12 +21,195 @@ import (
 	"github.com/danieljustus/OpenPass/internal/fileutil"
 	"github.com/danieljustus/OpenPass/internal/mcp/auth"
 	"github.com/danieljustus/OpenPass/internal/mcp/server"
+	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
 )
 
 const (
 	oauthClientsFileVersion = 1
 	oauthClientsFileName    = "mcp-oauth-clients.json"
 )
+
+// consentPageHTML is the browser-based consent page shown when the server
+// runs without a TTY (e.g. as a daemon). The user proves human presence by
+// entering the vault passphrase — the same secret that gates the vault root.
+var consentPageHTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenPass OAuth Authorization</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: #f5f5f7;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        .card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+            padding: 40px;
+            max-width: 480px;
+            width: 100%;
+        }
+        .logo {
+            font-size: 24px;
+            font-weight: 700;
+            color: #1d1d1f;
+            margin-bottom: 8px;
+        }
+        .subtitle {
+            color: #86868b;
+            font-size: 14px;
+            margin-bottom: 32px;
+        }
+        .client-info {
+            background: #f5f5f7;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+        .client-info h3 {
+            margin: 0 0 12px 0;
+            font-size: 16px;
+            color: #1d1d1f;
+        }
+        .client-info .detail {
+            font-size: 13px;
+            color: #86868b;
+            margin-bottom: 4px;
+            word-break: break-all;
+        }
+        .client-info .detail strong {
+            color: #1d1d1f;
+        }
+        .warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-size: 13px;
+            color: #856404;
+            margin-bottom: 24px;
+        }
+        .warning strong {
+            color: #856404;
+        }
+        label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            color: #1d1d1f;
+            margin-bottom: 8px;
+        }
+        input[type="password"] {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid #d2d2d7;
+            border-radius: 8px;
+            font-size: 15px;
+            margin-bottom: 8px;
+            transition: border-color 0.2s;
+        }
+        input[type="password"]:focus {
+            outline: none;
+            border-color: #0071e3;
+        }
+        .hint {
+            font-size: 12px;
+            color: #86868b;
+            margin-bottom: 24px;
+        }
+        .actions {
+            display: flex;
+            gap: 12px;
+        }
+        button {
+            flex: 1;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button[type="submit"] {
+            background: #0071e3;
+            color: white;
+        }
+        button[type="submit"]:hover {
+            background: #0077ed;
+        }
+        button[type="submit"]:disabled {
+            background: #d2d2d7;
+            cursor: not-allowed;
+        }
+        .btn-secondary {
+            background: #f5f5f7;
+            color: #1d1d1f;
+        }
+        .btn-secondary:hover {
+            background: #e8e8ed;
+        }
+        .error {
+            background: #fff2f2;
+            border: 1px solid #ffcdd2;
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-size: 13px;
+            color: #c62828;
+            margin-bottom: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="logo">🔐 OpenPass</div>
+        <div class="subtitle">OAuth Authorization Request</div>
+        {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+        <div class="client-info">
+            <h3>{{.ClientID}}</h3>
+            <div class="detail"><strong>Redirect URI:</strong> {{.RedirectURI}}</div>
+            <div class="detail"><strong>Scopes:</strong> vault access</div>
+        </div>
+        <div class="warning">
+            <strong>⚠️ Daemon Mode Detected</strong><br>
+            The server is running without an interactive terminal. To authorize this client, enter your vault passphrase below.
+        </div>
+        <form method="POST" action="/mcp/oauth/authorize/confirm">
+            <input type="hidden" name="client_id" value="{{.ClientID}}">
+            <input type="hidden" name="redirect_uri" value="{{.RedirectURI}}">
+            <input type="hidden" name="state" value="{{.State}}">
+            <input type="hidden" name="code_challenge" value="{{.CodeChallenge}}">
+            <input type="hidden" name="code_challenge_method" value="{{.CodeChallengeMethod}}">
+            <label for="passphrase">Vault Passphrase</label>
+            <input type="password" id="passphrase" name="passphrase" placeholder="Enter your vault passphrase" required autofocus>
+            <div class="hint">Your passphrase is the same secret used to unlock the vault. It is never stored.</div>
+            <div class="actions">
+                <button type="submit">Authorize</button>
+                <button type="button" class="btn-secondary" onclick="window.location.href='{{.RedirectURI}}?error=access_denied'">Deny</button>
+            </div>
+        </form>
+    </div>
+</body>
+</html>`
+
+// consentPageData holds the template variables for the consent page.
+type consentPageData struct {
+	ClientID            string
+	RedirectURI         string
+	State               string
+	CodeChallenge       string
+	CodeChallengeMethod string
+	Error               string
+}
 
 // oauthClientStoreFile is the on-disk JSON representation of the client store.
 type oauthClientStoreFile struct {
@@ -291,6 +475,8 @@ func handleOAuthRegister(clientStore *oauthClientStore) http.HandlerFunc {
 // It validates the client_id and redirect_uri against the registered client,
 // requires explicit user consent via TTY, and only then issues a short-lived
 // authorization code bound to the client_id.
+// When no TTY is available (daemon mode), it renders a browser-based consent
+// page where the user proves human presence by entering the vault passphrase.
 func handleOAuthAuthorize(store *oauthCodeStore, clientStore *oauthClientStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
@@ -344,9 +530,13 @@ func handleOAuthAuthorize(store *oauthCodeStore, clientStore *oauthClientStore) 
 		})
 		if !result.Approved {
 			if result.Error != nil && strings.Contains(result.Error.Error(), "no TTY available") {
-				writeJSON(w, http.StatusForbidden, map[string]string{
-					"error":             "interaction_required",
-					"error_description": "server is running non-interactively; OAuth DCR requires an interactive consent surface",
+				// Daemon mode: render browser-based consent page with passphrase challenge.
+				renderConsentPage(w, consentPageData{
+					ClientID:            clientID,
+					RedirectURI:         redirectURI,
+					State:               state,
+					CodeChallenge:       codeChallenge,
+					CodeChallengeMethod: challengeMethod,
 				})
 				return
 			}
@@ -357,30 +547,130 @@ func handleOAuthAuthorize(store *oauthCodeStore, clientStore *oauthClientStore) 
 			return
 		}
 
-		b := make([]byte, 16)
-		_, _ = rand.Read(b)
-		code := hex.EncodeToString(b)
+		issueAuthCode(w, r, store, clientID, redirectURI, state, codeChallenge, challengeMethod)
+	}
+}
 
-		store.put(code, &pendingCode{
-			clientID:        clientID,
-			redirectURI:     redirectURI,
-			codeChallenge:   codeChallenge,
-			challengeMethod: challengeMethod,
-			expiresAt:       time.Now().Add(5 * time.Minute),
+// renderConsentPage renders the HTML consent page for daemon-mode OAuth approval.
+func renderConsentPage(w http.ResponseWriter, data consentPageData) {
+	tmpl, err := template.New("consent").Parse(consentPageHTML)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error":             "server_error",
+			"error_description": "failed to render consent page",
 		})
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_ = tmpl.Execute(w, data)
+}
 
-		u, err := url.Parse(redirectURI)
-		if err != nil {
+// issueAuthCode generates an authorization code, stores it, and redirects.
+func issueAuthCode(w http.ResponseWriter, r *http.Request, store *oauthCodeStore, clientID, redirectURI, state, codeChallenge, challengeMethod string) {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	code := hex.EncodeToString(b)
+
+	store.put(code, &pendingCode{
+		clientID:        clientID,
+		redirectURI:     redirectURI,
+		codeChallenge:   codeChallenge,
+		challengeMethod: challengeMethod,
+		expiresAt:       time.Now().Add(5 * time.Minute),
+	})
+
+	u, err := url.Parse(redirectURI)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_request"})
+		return
+	}
+	params := u.Query()
+	params.Set("code", code)
+	if state != "" {
+		params.Set("state", state)
+	}
+	u.RawQuery = params.Encode()
+	http.Redirect(w, r, u.String(), http.StatusFound)
+}
+
+// handleOAuthConfirm handles the POST from the browser-based consent page.
+// It verifies the vault passphrase and, on success, issues an authorization code.
+func handleOAuthConfirm(store *oauthCodeStore, clientStore *oauthClientStore, vaultDir string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "invalid_request"})
+			return
+		}
+
+		if err := r.ParseForm(); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_request"})
 			return
 		}
-		params := u.Query()
-		params.Set("code", code)
-		if state != "" {
-			params.Set("state", state)
+
+		clientID := r.FormValue("client_id")
+		redirectURI := r.FormValue("redirect_uri")
+		state := r.FormValue("state")
+		codeChallenge := r.FormValue("code_challenge")
+		challengeMethod := r.FormValue("code_challenge_method")
+		passphrase := r.FormValue("passphrase")
+
+		// Re-validate client_id.
+		client, ok := clientStore.get(clientID)
+		if !ok {
+			renderConsentPage(w, consentPageData{
+				ClientID:            clientID,
+				RedirectURI:         redirectURI,
+				State:               state,
+				CodeChallenge:       codeChallenge,
+				CodeChallengeMethod: challengeMethod,
+				Error:               "Invalid client ID. Please register the client first.",
+			})
+			return
 		}
-		u.RawQuery = params.Encode()
-		http.Redirect(w, r, u.String(), http.StatusFound)
+
+		// Re-validate redirect_uri.
+		if !isAllowedRedirectURI(redirectURI, client.RedirectURIs) {
+			renderConsentPage(w, consentPageData{
+				ClientID:            clientID,
+				RedirectURI:         redirectURI,
+				State:               state,
+				CodeChallenge:       codeChallenge,
+				CodeChallengeMethod: challengeMethod,
+				Error:               "Invalid redirect URI.",
+			})
+			return
+		}
+
+		// Verify passphrase by attempting to open the vault.
+		if vaultDir == "" || passphrase == "" {
+			renderConsentPage(w, consentPageData{
+				ClientID:            clientID,
+				RedirectURI:         redirectURI,
+				State:               state,
+				CodeChallenge:       codeChallenge,
+				CodeChallengeMethod: challengeMethod,
+				Error:               "Passphrase is required.",
+			})
+			return
+		}
+
+		_, err := vaultpkg.OpenWithPassphrase(vaultDir, []byte(passphrase))
+		if err != nil {
+			renderConsentPage(w, consentPageData{
+				ClientID:            clientID,
+				RedirectURI:         redirectURI,
+				State:               state,
+				CodeChallenge:       codeChallenge,
+				CodeChallengeMethod: challengeMethod,
+				Error:               "Incorrect passphrase. Please try again.",
+			})
+			return
+		}
+
+		// Passphrase verified — issue the authorization code.
+		issueAuthCode(w, r, store, clientID, redirectURI, state, codeChallenge, challengeMethod)
 	}
 }
 

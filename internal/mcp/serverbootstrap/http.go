@@ -197,6 +197,9 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 	oauthAuthorizeHandler := auth.OriginValidationMiddleware(addr, handleOAuthAuthorize(oauthStore, clientStore))
 	mux.HandleFunc("GET /mcp/oauth/authorize", oauthAuthorizeHandler.ServeHTTP)
 
+	oauthConfirmHandler := auth.OriginValidationMiddleware(addr, handleOAuthConfirm(oauthStore, clientStore, vaultDir))
+	mux.HandleFunc("POST /mcp/oauth/authorize/confirm", oauthConfirmHandler.ServeHTTP)
+
 	// Token endpoint uses the scoped token registry instead of the legacy bearer token.
 	accessTokenTTL := 24 * time.Hour
 	refreshTokenTTL := 720 * time.Hour
