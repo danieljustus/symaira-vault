@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	cli "github.com/danieljustus/OpenPass/internal/cli"
 	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
 	"github.com/danieljustus/OpenPass/internal/secrets"
 	vaultsvc "github.com/danieljustus/OpenPass/internal/vaultsvc"
@@ -33,7 +34,7 @@ var runCmd = &cobra.Command{
     --workdir /tmp/job -- ./deploy.sh`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return withVault(func(svc vaultsvc.Service) error {
+		return cli.WithVault(func(svc vaultsvc.Service) error {
 			// Parse --env flags: each is "ENV_NAME=path.field"
 			envMap := make(map[string]string)
 			for _, envFlag := range runEnvFlags {

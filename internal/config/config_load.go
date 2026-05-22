@@ -172,6 +172,10 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 
+	if raw.EnvWhitelist != nil {
+		fmt.Fprintln(os.Stderr, "Warning: envWhitelist is deprecated and will be removed in a future version; use envAllowlist instead")
+	}
+
 	mergeTopLevel(cfg, raw)
 	mergeAgentProfiles(cfg, raw, agentFields)
 	if err := validateAgents(cfg.Agents); err != nil {

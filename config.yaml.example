@@ -93,15 +93,15 @@ mcp:
   # Rate limit for MCP HTTP requests (requests per minute). Set to 0 to disable.
   # rate_limit: 60
 
-# Environment variable whitelist for subprocess execution.
+# Environment variable allowlist for subprocess execution.
 # Only these vars are passed to child processes (git, gpg, editors, etc.),
 # preventing leakage of sensitive env vars (API keys, tokens, etc.).
-# The default whitelist includes PATH, HOME, TMPDIR, TEMP, TMP, USER,
+# The default allowlist includes PATH, HOME, TMPDIR, TEMP, TMP, USER,
 # LOGNAME, LANG, LC_ALL, SHELL, TERM, COLORTERM, DISPLAY, XAUTHORITY,
 # GIT_ASKPASS, GIT_SSH, GIT_SSH_COMMAND, SSH_AUTH_SOCK,
 # SSH_AGENT_LAUNCHER, and GNUPGHOME.
 # Use this list to add additional vars your workflow requires.
-# envWhitelist:
+# envAllowlist:
 #   - MY_CUSTOM_VAR
 #   - ANOTHER_VAR
 

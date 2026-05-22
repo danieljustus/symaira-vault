@@ -92,7 +92,7 @@ func runRemoteInit(cmd *cobra.Command, args []string) error {
 		return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "ssh-target must not be empty", nil)
 	}
 
-	vaultDir, err := vaultPath()
+	vaultDir, err := cli.VaultPath()
 	if err != nil {
 		return err
 	}
@@ -157,7 +157,7 @@ func runRemoteInit(cmd *cobra.Command, args []string) error {
 }
 
 func runRemoteStatus(cmd *cobra.Command, args []string) error {
-	vaultDir, err := vaultPath()
+	vaultDir, err := cli.VaultPath()
 	if err != nil {
 		return err
 	}

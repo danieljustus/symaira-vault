@@ -39,7 +39,7 @@ Examples:
   openpass share list --path github.password
   openpass share list --output json`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		vDir, err := vaultPath()
+		vDir, err := cli.VaultPath()
 		if err != nil {
 			return err
 		}
@@ -126,7 +126,7 @@ var shareRevokeCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		grantID := args[0]
 
-		vDir, err := vaultPath()
+		vDir, err := cli.VaultPath()
 		if err != nil {
 			return err
 		}

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"strings"
 
 	mcp "github.com/danieljustus/OpenPass/internal/mcp"
 	"github.com/danieljustus/OpenPass/internal/template"
@@ -51,6 +53,10 @@ func (s *Server) handleGenerateTemplate(ctx context.Context, req mcp.CallToolReq
 			s.logAudit(ctx, "write_denied", outputPath, false)
 			return toolError("agent does not have write permission"), nil
 		}
+		if err := s.validateOutputPath(outputPath); err != nil {
+			s.logAudit(ctx, "write_denied", outputPath, false)
+			return toolError(fmt.Sprintf("invalid output_path: %v", err)), nil
+		}
 		if err := os.WriteFile(outputPath, []byte(output), 0600); err != nil {
 			return toolError(fmt.Sprintf("write file: %v", err)), nil
 		}
@@ -68,4 +74,52 @@ func (s *Server) handleGenerateTemplate(ctx context.Context, req mcp.CallToolReq
 
 	s.logAudit(ctx, "template_generated", templateType, true)
 	return mcp.NewToolResultText(EmbedAsData("rendered_template", output)), nil
+}
+
+// validateOutputPath ensures the requested output path is confined to the
+// vault directory. It resolves both paths to absolute form and rejects any
+// path that escapes the vault root via .. segments or absolute paths outside
+// the vault.
+func (s *Server) validateOutputPath(outputPath string) error {
+	if s.vault == nil || s.vault.Dir == "" {
+		return fmt.Errorf("no vault directory configured")
+	}
+
+	vaultDir, err := filepath.Abs(s.vault.Dir)
+	if err != nil {
+		return fmt.Errorf("resolve vault directory: %w", err)
+	}
+
+	absPath, err := filepath.Abs(outputPath)
+	if err != nil {
+		return fmt.Errorf("resolve output path: %w", err)
+	}
+
+	rel, err := filepath.Rel(vaultDir, absPath)
+	if err != nil {
+		return fmt.Errorf("compute relative path: %w", err)
+	}
+
+	if rel == ".." || rel == "." {
+		return fmt.Errorf("output path must be inside the vault directory")
+	}
+
+	if filepath.IsAbs(rel) {
+		return fmt.Errorf("output path must be inside the vault directory")
+	}
+
+	// Check for traversal: if any component is "..", the path escapes.
+	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+		if part == ".." {
+			return fmt.Errorf("output path escapes vault directory")
+		}
+	}
+
+	// Also verify the cleaned path doesn't start with ".."
+	cleaned := filepath.Clean(rel)
+	if cleaned == ".." || (len(cleaned) >= 3 && cleaned[:3] == "../") || (len(cleaned) >= 3 && cleaned[:3] == "..\\") {
+		return fmt.Errorf("output path escapes vault directory")
+	}
+
+	return nil
 }

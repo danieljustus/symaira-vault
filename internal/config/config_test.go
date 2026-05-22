@@ -129,6 +129,34 @@ func TestLoadRejectsInvalidYAML(t *testing.T) {
 	}
 }
 
+func TestLoad_EnvAllowlist(t *testing.T) {
+	t.Parallel()
+
+	path := writeTempFile(t, []byte("envAllowlist:\n  - HOME\n  - PATH\n"))
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	want := []string{"HOME", "PATH"}
+	if !reflect.DeepEqual(cfg.EnvAllowlist, want) {
+		t.Errorf("EnvAllowlist = %v, want %v", cfg.EnvAllowlist, want)
+	}
+}
+
+func TestLoad_EnvWhitelistBackwardCompat(t *testing.T) {
+	t.Parallel()
+
+	path := writeTempFile(t, []byte("envWhitelist:\n  - HOME\n  - PATH\n"))
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	want := []string{"HOME", "PATH"}
+	if !reflect.DeepEqual(cfg.EnvAllowlist, want) {
+		t.Errorf("EnvAllowlist = %v, want %v (from deprecated envWhitelist)", cfg.EnvAllowlist, want)
+	}
+}
+
 func TestSaveWritesToDefaultConfigPath(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
@@ -2665,7 +2693,7 @@ func TestRoundTrip_AllFieldsSet(t *testing.T) {
 		SessionTimeout: 10 * time.Minute,
 		AuthMethod:     "touchid",
 		UseTouchID:     bptr(true),
-		EnvWhitelist:   []string{"HOME", "PATH"},
+		EnvAllowlist:   []string{"HOME", "PATH"},
 		DefaultProfile: "work",
 		Profiles: map[string]*Profile{
 			"work": {VaultPath: "~/.openpass-work"},

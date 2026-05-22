@@ -255,7 +255,7 @@ func TestUnlockVaultWithEnvVar(t *testing.T) {
 		vaultFlag.Changed = false
 	}
 
-	_, err := unlockVault(vaultDir, false)
+	_, err := cli.UnlockVault(vaultDir, false)
 	if err != nil {
 		t.Errorf("unlockVault with env var failed: %v", err)
 	}
@@ -285,7 +285,7 @@ func TestUnlockVaultNoPassphrase(t *testing.T) {
 		vaultFlag.Changed = false
 	}
 
-	_, err := unlockVault(vaultDir, false)
+	_, err := cli.UnlockVault(vaultDir, false)
 	if err == nil {
 		t.Error("expected error when no passphrase available")
 	}
@@ -317,7 +317,7 @@ func TestUnlockVaultWrongPassphrase(t *testing.T) {
 		vaultFlag.Changed = false
 	}
 
-	_, err := unlockVault(vaultDir, false)
+	_, err := cli.UnlockVault(vaultDir, false)
 	if err == nil {
 		t.Error("expected error for wrong passphrase")
 	}
@@ -336,12 +336,12 @@ func TestVaultPathWithEnvVarOpenPassVault(t *testing.T) {
 	defer func() { vault = origVault }()
 	vault = "~/should-not-be-used"
 
-	path, err := vaultPath()
+	path, err := cli.VaultPath()
 	if err != nil {
-		t.Fatalf("vaultPath() error = %v", err)
+		t.Fatalf("cli.VaultPath() error = %v", err)
 	}
 	if path != "/test/vault" {
-		t.Errorf("vaultPath() = %q, want %q", path, "/test/vault")
+		t.Errorf("cli.VaultPath() = %q, want %q", path, "/test/vault")
 	}
 }
 
@@ -371,7 +371,7 @@ func TestUnlockVaultSavesToKeyring(t *testing.T) {
 		vaultFlag.Changed = false
 	}
 
-	v, err := unlockVault(vaultDir, false)
+	v, err := cli.UnlockVault(vaultDir, false)
 	if err != nil {
 		t.Fatalf("unlockVault failed: %v", err)
 	}

@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	cli "github.com/danieljustus/OpenPass/internal/cli"
 	"github.com/danieljustus/OpenPass/internal/policy"
 )
 
@@ -105,7 +106,7 @@ Example:
 			return err
 		}
 
-		vaultDir, _ := vaultPath()
+		vaultDir, _ := cli.VaultPath()
 		policiesDir := filepath.Join(vaultDir, "policies")
 		_ = os.MkdirAll(policiesDir, 0750)
 
@@ -133,7 +134,7 @@ var policyListCmd = &cobra.Command{
 		requiresVaultAnnotation: "false",
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		vaultDir, _ := vaultPath()
+		vaultDir, _ := cli.VaultPath()
 		policiesDir := filepath.Join(vaultDir, "policies")
 
 		entries, err := os.ReadDir(policiesDir)
@@ -169,7 +170,7 @@ var policyRemoveCmd = &cobra.Command{
 		requiresVaultAnnotation: "false",
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		vaultDir, _ := vaultPath()
+		vaultDir, _ := cli.VaultPath()
 		policiesDir := filepath.Join(vaultDir, "policies")
 		policyPath := filepath.Join(policiesDir, args[0])
 

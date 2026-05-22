@@ -54,12 +54,12 @@ you must run 'openpass device accept <token>' to re-encrypt all entries
 for the new device.`,
 	Example: `  openpass device pair`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		vaultDir, err := vaultPath()
+		vaultDir, err := cli.VaultPath()
 		if err != nil {
 			return err
 		}
 
-		v, err := unlockVault(vaultDir, true)
+		v, err := cli.UnlockVault(vaultDir, true)
 		if err != nil {
 			return err
 		}
@@ -114,7 +114,7 @@ to re-encrypt all entries for this new device.`,
 		remoteURL := args[0]
 		token := strings.TrimSpace(args[1])
 
-		vaultDir, err := vaultPath()
+		vaultDir, err := cli.VaultPath()
 		if err != nil {
 			return err
 		}
@@ -144,7 +144,7 @@ to re-encrypt all entries for this new device.`,
 
 		fmt.Fprintf(os.Stderr, "Pairing with device (public key: %s)\n", truncatePubkey(pf.PublicKey))
 
-		passphrase, err := readHiddenInput("Enter passphrase for this device (minimum 12 characters): ", nil)
+		passphrase, err := cli.ReadHiddenInput("Enter passphrase for this device (minimum 12 characters): ", nil)
 		if err != nil {
 			return fmt.Errorf("read passphrase: %w", err)
 		}
@@ -243,12 +243,12 @@ can decrypt them.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		token := strings.TrimSpace(args[0])
 
-		vaultDir, err := vaultPath()
+		vaultDir, err := cli.VaultPath()
 		if err != nil {
 			return err
 		}
 
-		v, err := unlockVault(vaultDir, true)
+		v, err := cli.UnlockVault(vaultDir, true)
 		if err != nil {
 			return err
 		}
@@ -306,7 +306,7 @@ any registered device (unmanaged recipients).`,
 	Example: `  openpass device list
   openpass device list --output json`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		vaultDir, err := vaultPath()
+		vaultDir, err := cli.VaultPath()
 		if err != nil {
 			return err
 		}
@@ -426,7 +426,7 @@ request so the first device can accept it.`,
 
 		raw := strings.TrimSpace(args[0])
 
-		vaultDir, err := vaultPath()
+		vaultDir, err := cli.VaultPath()
 		if err != nil {
 			return err
 		}
@@ -448,7 +448,7 @@ request so the first device can accept it.`,
 			return fmt.Errorf("invalid public key in pairing data: expected age1... format")
 		}
 
-		passphrase, err := readHiddenInput("Enter passphrase for this device (minimum 12 characters): ", nil)
+		passphrase, err := cli.ReadHiddenInput("Enter passphrase for this device (minimum 12 characters): ", nil)
 		if err != nil {
 			return fmt.Errorf("read passphrase: %w", err)
 		}
@@ -547,7 +547,7 @@ access to all vault entries.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		deviceName := args[0]
 
-		vaultDir, err := vaultPath()
+		vaultDir, err := cli.VaultPath()
 		if err != nil {
 			return err
 		}
@@ -558,7 +558,7 @@ access to all vault entries.`,
 				errorspkg.ErrVaultNotInitialized)
 		}
 
-		v, err := unlockVault(vaultDir, true)
+		v, err := cli.UnlockVault(vaultDir, true)
 		if err != nil {
 			return err
 		}
