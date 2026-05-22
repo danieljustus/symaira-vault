@@ -30,18 +30,6 @@ var (
 
 var rootCmd = cli.RootCmd
 
-// Aliases for functions that moved to internal/cli/ but are still used by staying cmd/ files
-var (
-	vaultPath         = cli.VaultPath
-	unlockVault       = cli.UnlockVault
-	readHiddenInput   = cli.ReadHiddenInput
-	expandVaultDir    = cli.ExpandVaultDir
-	defaultSessionTTL = cli.DefaultSessionTTL
-	withVault         = cli.WithVault
-	withVaultRaw      = cli.WithVaultRaw
-	Version           = cli.AppVersion
-)
-
 func Execute() {
 	cli.Execute()
 }

@@ -35,7 +35,7 @@ var recipientsListCmd = &cobra.Command{
 	Long:    `List all recipients from the recipients.txt file.`,
 	Example: `  openpass recipients list`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		vaultDir, err := vaultPath()
+		vaultDir, err := cli.VaultPath()
 		if err != nil {
 			return err
 		}
@@ -98,7 +98,7 @@ Once added, all new entries will be encrypted for this recipient.`,
 	Example: `  openpass recipients add age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p`,
 	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return withVaultRaw(func(v *vaultpkg.Vault) error {
+		return cli.WithVaultRaw(func(v *vaultpkg.Vault) error {
 			recipient := args[0]
 
 			rm := vaultpkg.NewRecipientsManager(v.Dir)
@@ -130,7 +130,7 @@ Use --yes to skip confirmation (useful for scripts).`,
 	Example: `  openpass recipients remove age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p`,
 	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return withVaultRaw(func(v *vaultpkg.Vault) error {
+		return cli.WithVaultRaw(func(v *vaultpkg.Vault) error {
 			recipient := args[0]
 
 			confirmed, err := confirmInteractive(fmt.Sprintf("Remove recipient %s", recipient), confirmRemove)

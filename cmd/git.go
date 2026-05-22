@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	cli "github.com/danieljustus/OpenPass/internal/cli"
 	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
 	"github.com/danieljustus/OpenPass/internal/git"
 	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
@@ -24,7 +25,7 @@ var gitCmd = &cobra.Command{
 		action := args[0]
 
 		if action == "log" {
-			return withVaultRaw(func(v *vaultpkg.Vault) error {
+			return cli.WithVaultRaw(func(v *vaultpkg.Vault) error {
 				path := ""
 				if len(args) > 1 {
 					path = args[1]
@@ -41,7 +42,7 @@ var gitCmd = &cobra.Command{
 			})
 		}
 
-		vaultDir, err := vaultPath()
+		vaultDir, err := cli.VaultPath()
 		if err != nil {
 			return err
 		}

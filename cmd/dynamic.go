@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	cli "github.com/danieljustus/OpenPass/internal/cli"
 	"github.com/danieljustus/OpenPass/internal/dynamicsecret"
 	vaultsvc "github.com/danieljustus/OpenPass/internal/vaultsvc"
 )
@@ -41,7 +42,7 @@ var dynamicGenerateCmd = &cobra.Command{
   # Generate AWS STS credentials for a specific role
   openpass dynamic generate --engine aws-sts --role arn:aws:iam::123456789012:role/MyRole --ttl 30m`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return withVault(func(svc vaultsvc.Service) error {
+		return cli.WithVault(func(svc vaultsvc.Service) error {
 			ctx := context.Background()
 			mgr := dynamicsecret.NewManager(svc)
 

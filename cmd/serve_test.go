@@ -119,7 +119,7 @@ func runHTTPServerAsyncWithFactory(ctx context.Context, t *testing.T, bind strin
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		vaultDir, _ := vaultPath()
+		vaultDir, _ := cli.VaultPath()
 		var err error
 		if listener != nil {
 			err = serverbootstrap.RunHTTPServerOnListener(ctx, listener, v, vaultDir, "dev", factory)
@@ -163,7 +163,7 @@ func runHTTPServerAsync(ctx context.Context, t *testing.T, port int, v *vaultpkg
 
 func testMCPToken(t *testing.T) string {
 	t.Helper()
-	vaultDir, _ := vaultPath()
+	vaultDir, _ := cli.VaultPath()
 	// Try the legacy token file first; if it was migrated and deleted,
 	// fall back to the token stored in testTokens.
 	tokenBytes, err := os.ReadFile(filepath.Join(vaultDir, "mcp-token"))

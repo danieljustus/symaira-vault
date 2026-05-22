@@ -37,13 +37,13 @@ func TestExpandVaultDir(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			got, err := expandVaultDir(tt.input)
+			got, err := cli.ExpandVaultDir(tt.input)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("expandVaultDir() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("cli.ExpandVaultDir() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if got != tt.expected {
-				t.Errorf("expandVaultDir() = %q, want %q", got, tt.expected)
+				t.Errorf("cli.ExpandVaultDir() = %q, want %q", got, tt.expected)
 			}
 		})
 	}
@@ -147,12 +147,12 @@ func TestVaultPathWithTilde(t *testing.T) {
 	_ = os.Setenv("HOME", "/custom/home")
 
 	cli.Vault = "~/my-vault"
-	got, _ := vaultPath()
+	got, _ := cli.VaultPath()
 
 	home, _ := os.UserHomeDir()
 	expected := filepath.Join(home, "my-vault")
 	if got != expected {
-		t.Errorf("vaultPath() = %q, want %q", got, expected)
+		t.Errorf("cli.VaultPath() = %q, want %q", got, expected)
 	}
 }
 
@@ -161,21 +161,21 @@ func TestVaultPathWithAbsolute(t *testing.T) {
 		t.Skip("skipping on windows: path format differs")
 	}
 	cli.Vault = "/absolute/path"
-	got, _ := vaultPath()
+	got, _ := cli.VaultPath()
 
 	if got != "/absolute/path" {
-		t.Errorf("vaultPath() = %q, want %q", got, "/absolute/path")
+		t.Errorf("cli.VaultPath() = %q, want %q", got, "/absolute/path")
 	}
 }
 
 func TestVaultPathWithTildeOnly(t *testing.T) {
 	home, _ := os.UserHomeDir()
 	cli.Vault = "~"
-	got, _ := vaultPath()
+	got, _ := cli.VaultPath()
 
 	expected := home
 	if got != expected {
-		t.Errorf("vaultPath() = %q, want %q", got, expected)
+		t.Errorf("cli.VaultPath() = %q, want %q", got, expected)
 	}
 }
 
@@ -207,7 +207,7 @@ func TestUnlockVaultLocked(t *testing.T) {
 	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
 	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
 
-	_, err := unlockVault(vaultDir, false)
+	_, err := cli.UnlockVault(vaultDir, false)
 	if err == nil {
 		t.Error("expected error for locked vault")
 	}
