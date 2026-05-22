@@ -85,7 +85,7 @@ func (c *Challenger) Challenge(ctx context.Context, op OperationType, reason str
 	return nil
 }
 
-// OperationDescription returns a short, user-visible label for an operation type.
+// String returns a short, user-visible label for an operation type.
 func (op OperationType) String() string {
 	switch op {
 	case OpTierUpgrade:
@@ -107,7 +107,7 @@ func VerifyIdentity(ctx context.Context, op OperationType, reason string) error 
 		return fmt.Errorf(
 			"biometric verification is not available on this platform for %s.\n"+
 				"Re-run with --no-biometric to bypass (not recommended for automated use).\n"+
-				"For interactive use, re-enter your vault passphrase when prompted.",
+				"For interactive use, re-enter your vault passphrase when prompted",
 			op,
 		)
 	}

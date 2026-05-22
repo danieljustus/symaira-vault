@@ -138,7 +138,7 @@ func (s *Server) executeTool(ctx context.Context, name string, args json.RawMess
 	if entryPath != "" {
 		if policyErr := s.checkPolicy(ctx, entryPath, toolActionType(name)); policyErr != nil {
 			if errors.Is(policyErr, authguard.ErrBiometryRequired) {
-				if bioErr := s.challengeBiometric(ctx, name, policyErr); bioErr != nil {
+				if bioErr := s.challengeBiometric(ctx, name); bioErr != nil {
 					span.SetStatus(codes.Error, bioErr.Error())
 					metrics.RecordMCPRequest(name, agentName, "error", time.Since(start))
 					return nil, bioErr
@@ -267,7 +267,7 @@ func (s *Server) detectAnomalyAsync(_ context.Context, toolName, entryPath, reqI
 // challengeBiometric performs a biometric identity verification challenge in
 // response to a policy rule that requires biometry. On success it returns nil;
 // on failure it returns an error suitable for surfacing to the MCP client.
-func (s *Server) challengeBiometric(ctx context.Context, toolName string, policyErr error) error {
+func (s *Server) challengeBiometric(ctx context.Context, toolName string) error {
 	agentName := ""
 	if s.agent != nil {
 		agentName = s.agent.Name
@@ -278,7 +278,7 @@ func (s *Server) challengeBiometric(ctx context.Context, toolName string, policy
 		s.logAudit(ctx, "policy_biometry_unavailable", toolName, false)
 		return fmt.Errorf(
 			"policy requires biometric verification for tool %q, but biometric authentication is not available on this platform. "+
-				"Agent %q cannot execute this tool.", toolName, agentName,
+				"Agent %q cannot execute this tool", toolName, agentName,
 		)
 	}
 

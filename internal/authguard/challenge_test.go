@@ -80,7 +80,7 @@ func TestChallenger_Challenge_NotAvailable(t *testing.T) {
 func TestChallenger_Challenge_AuthFails(t *testing.T) {
 	c := &Challenger{
 		Authenticator: func() session.BiometricAuthenticator {
-			return &mockBioAuth{available: true, authErr: errors.New("user cancelled")}
+			return &mockBioAuth{available: true, authErr: errors.New("user canceled")}
 		},
 	}
 	err := c.Challenge(context.Background(), OpAuthMethodSet, "change auth method")

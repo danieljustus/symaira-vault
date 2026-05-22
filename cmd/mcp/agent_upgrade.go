@@ -164,7 +164,7 @@ func requireBiometricForUpgrade(ctx context.Context, agentName, targetTier strin
 		if agentUpgradeYes {
 			return fmt.Errorf(
 				"biometric verification is required for non-interactive tier upgrades on this platform.\n" +
-					"Re-run with --no-biometric to bypass (not recommended).",
+					"Re-run with --no-biometric to bypass (not recommended)",
 			)
 		}
 		fmt.Fprintf(os.Stderr, "\u26a0  Biometric verification is not available on this platform.\n")
