@@ -17,8 +17,6 @@ import (
 	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
 )
 
-var agentWriteConfig bool
-
 var agentCmd = &cobra.Command{
 	Use:   "agent",
 	Short: "Manage agent profiles",
@@ -38,19 +36,15 @@ that guides you through security tier selection, vault path scoping, and approva
 
 var agentSetupCmd = &cobra.Command{
 	Use:   "setup <name>",
-	Short: "Create an agent profile interactively",
-	Long: `Run an interactive wizard to create a new agent profile with:
-  • Security tier (read-only, standard, admin)
-  • Vault path glob restriction
-  • Approval mode (prompt or deny)
+	Short: "[Deprecated v4.0, removed in v4.1] Use 'openpass agent install <name>'",
+	Long: `This command was deprecated in OpenPass v4.0 and will be removed in v4.1.
 
-The wizard creates a profile in config.yaml, a scoped token in the registry,
-a token file, and outputs a ready-to-paste stdio MCP client configuration snippet.`,
-	Args: cobra.ExactArgs(1),
-	Annotations: map[string]string{
-		cli.RequiresVaultAnnotation: "false",
-	},
+Use 'openpass agent install <name>' instead to create and configure
+agent profiles interactively.`,
+	Hidden: true,
+	Args:   cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: openpass agent install <name>\n")
 		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
 			"This command is deprecated in v4.0. Use: openpass agent install <name>", nil)
 	},
@@ -175,6 +169,5 @@ func outputAgentMCPSnippet(name, rawToken string) {
 
 func init() {
 	agentCmd.AddCommand(agentSetupCmd)
-	agentSetupCmd.Flags().BoolVar(&agentWriteConfig, "write-config", false, "write agent profile to config.yaml (always true in interactive mode)")
 	cli.RootCmd.AddCommand(agentCmd)
 }

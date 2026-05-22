@@ -271,6 +271,49 @@ func ReadEntry(vaultDir, path string, identity *age.X25519Identity) (*Entry, err
 	return &entry, nil
 }
 
+// InferClassification scans all string values in entry.Data and maps detected
+// secret types to taint.Classification levels. It returns the maximum
+// classification found across all fields. The returned value is never lower
+// than entry.Classification, preserving any manually-set classification.
+func InferClassification(entry *Entry) taint.Classification {
+	if entry == nil || entry.Data == nil {
+		if entry != nil {
+			return entry.Classification
+		}
+		return taint.Public
+	}
+	maxClass := entry.Classification
+
+	for _, v := range entry.Data {
+		str, ok := v.(string)
+		if !ok {
+			continue
+		}
+		secretType := DetectSecretType(str)
+		if class := classifySecretType(secretType); class > maxClass {
+			maxClass = class
+		}
+	}
+
+	return maxClass
+}
+
+// classifySecretType maps a detected SecretType to a taint.Classification level.
+// High-risk secrets (SSH keys, certificates, TOTP seeds) map to Restricted.
+// Tokens and API keys map to Secret. Passwords and custom types map to Confidential.
+func classifySecretType(t SecretType) taint.Classification {
+	switch t {
+	case SecretTypeSSHKey, SecretTypeCertificate, SecretTypeTOTPSeed:
+		return taint.Restricted
+	case SecretTypeBearerToken, SecretTypeAPIKey, SecretTypeBasicAuth, SecretTypeDatabaseURL:
+		return taint.Secret
+	case SecretTypePassword, SecretTypeCustom:
+		return taint.Confidential
+	default:
+		return taint.Confidential
+	}
+}
+
 // writeEntryLocked performs the full entry write (prep, encrypt, file ops, manifest
 // update preparation) assuming the caller already holds the per-vaultDir exclusive lock.
 func writeEntryLocked(vaultDir, path string, entry *Entry, identity *age.X25519Identity, cfg *vaultconfig.Config) ([]byte, error) {
@@ -290,6 +333,8 @@ func writeEntryLocked(vaultDir, path string, entry *Entry, identity *age.X25519I
 		copyEntry.Metadata.WriteHistory = append(copyEntry.Metadata.WriteHistory, record)
 		copyEntry.PendingWrite = nil
 	}
+
+	copyEntry.Classification = InferClassification(copyEntry)
 
 	if isPseudonymizeEnabled(cfg) {
 		copyEntry.Path = path

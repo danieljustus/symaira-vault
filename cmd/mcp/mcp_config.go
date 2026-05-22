@@ -22,34 +22,15 @@ import (
 
 var McpConfigCmd = &cobra.Command{
 	Use:   "mcp-config <agent>",
-	Short: "Output MCP config snippet for an AI tool",
-	Long: `Generate the MCP server configuration snippet for a specific AI tool.
+	Short: "[Deprecated v4.0, removed in v4.1] Use 'openpass agent install <agent> --config-only'",
+	Long: `This command was deprecated in OpenPass v4.0 and will be removed in v4.1.
 
-The default output is generic JSON that can be pasted into an MCP client
-configuration. Use --format for agent-specific formats:
-  - generic:  JSON stdio/HTTP (default)
-  - hermes:    YAML hermes-specific (write-capable)
-  - claude-code: YAML for Claude Code (write-capable)
-  - codex:     YAML for Codex (read-only)
-  - opencode:  YAML for OpenCode (read-only)
-  - openclaw:  YAML for OpenClaw (write-capable)
-
-By default, output uses stdio transport; use --http for HTTP transport.
-
-HTTP config output uses a token reference (env:OPENPASS_MCP_TOKEN) by default.
-Use --include-token only when you explicitly want to print the raw bearer token.
-
-Use --token-only to output just the raw token (for use in scripts).`,
-	Example: `  # Generic JSON snippet for any MCP client
-  openpass mcp-config claude-code
-
-  # YAML for Claude Code, HTTP transport with a token reference
-  openpass mcp-config claude-code --format claude-code --http
-
-  # Just the token (for use in scripts)
-  openpass mcp-config claude-code --token-only`,
-	Args: cobra.ExactArgs(1),
+Use 'openpass agent install <agent> --config-only' to output MCP config snippets.`,
+	Example: `  openpass agent install claude-code --config-only`,
+	Hidden:  true,
+	Args:    cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: openpass agent install <agent> --config-only\n")
 		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
 			"This command is deprecated in v4.0. Use: openpass agent install <agent> --config-only", nil)
 	},
@@ -57,37 +38,17 @@ Use --token-only to output just the raw token (for use in scripts).`,
 
 var mcpTokenRotateCmd = &cobra.Command{
 	Use:   "mcp-token-rotate",
-	Short: "Rotate the MCP HTTP bearer token",
-	Long: `Generate a new MCP HTTP bearer token, invalidating the previous one.
+	Short: "[Deprecated v4.0, removed in v4.1] Use 'openpass agent token <name> rotate'",
+	Long: `This command was deprecated in OpenPass v4.0 and will be removed in v4.1.
 
-This command generates a new 32-byte random token and writes it to the
-mcp-token file in your vault directory. Any MCP clients using the old token
-will need to be updated with the new token.
-
-After rotating, run 'openpass mcp-config [agent] --http' to see the new token.`,
-	Example: `  # Rotate the bearer token and show the new value
-  openpass mcp-token-rotate
-
-  # Followed by re-issuing config snippets to all agents
-  openpass mcp-config claude-code --http`,
-	Args: cobra.NoArgs,
+Token rotation is now managed per-agent via 'openpass agent token <name> rotate'.`,
+	Example: `  openpass agent token my-agent rotate`,
+	Hidden:  true,
+	Args:    cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		vDir, err := cli.VaultPath()
-		if err != nil {
-			return err
-		}
-
-		tokenPath := filepath.Join(vDir, "mcp-token")
-		newToken, err := auth.RotateToken(tokenPath)
-		if err != nil {
-			return fmt.Errorf("rotate token: %w", err)
-		}
-
-		cli.PrintQuietAware("Token rotated successfully. New token: %s\n", newToken)
-		cli.PrintQuietAware("Token stored at: %s\n", tokenPath)
-		cli.PrintlnQuietAware("\nWarning: Any MCP clients using the old token will no longer work.")
-		cli.PrintlnQuietAware("Update their configuration with the new token.")
-		return nil
+		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: openpass agent token <name> rotate\n")
+		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
+			"This command is deprecated in v4.0. Use: openpass agent token <name> rotate", nil)
 	},
 }
 
@@ -369,13 +330,6 @@ func OutputAgentHTTPConfig(agentName, serverKey, displayName string, redact bool
 func init() {
 	cli.RootCmd.AddCommand(McpConfigCmd)
 	cli.RootCmd.AddCommand(mcpTokenRotateCmd)
-	McpConfigCmd.Flags().Bool("http", false, "Output HTTP-based config instead of stdio")
-	McpConfigCmd.Flags().String("format", "generic", "Output format: generic, hermes, claude-code, codex, opencode, openclaw")
-	McpConfigCmd.Flags().String("server-name", "openpass", "MCP server name for formats that wrap server config")
-	McpConfigCmd.Flags().Bool("redact", false, "Output token reference (env:OPENPASS_MCP_TOKEN); kept for explicitness because this is the default")
-	McpConfigCmd.Flags().Bool("include-token", false, "Include the raw HTTP bearer token in config output")
-	McpConfigCmd.Flags().Bool("token-only", false, "Output just the raw token (for scripts)")
-	McpConfigCmd.Flags().String("token-id", "", "Use a specific scoped token for HTTP auth")
 }
 
 func OutputTokenOnly() error {

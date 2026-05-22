@@ -9,6 +9,7 @@ import (
 
 	vaultconfig "github.com/danieljustus/OpenPass/internal/config"
 	"github.com/danieljustus/OpenPass/internal/testutil"
+	"github.com/danieljustus/OpenPass/internal/vault/taint"
 )
 
 func TestEntryJSONSerialization(t *testing.T) {
@@ -1143,5 +1144,200 @@ func TestHandles_ExplicitPath(t *testing.T) {
 	}
 	if handles[0].Path != "custom/path" {
 		t.Fatalf("Path = %q, want %q", handles[0].Path, "custom/path")
+	}
+}
+
+func TestInferClassification_GitHubPAT(t *testing.T) {
+	entry := &Entry{
+		Data: map[string]any{
+			"token": "ghp_abcdefghijklmnopqrstuvwxyz0123456789",
+		},
+	}
+	if got := InferClassification(entry); got != taint.Secret {
+		t.Errorf("expected Secret, got %s (%d)", got, got)
+	}
+}
+
+func TestInferClassification_SSHKey(t *testing.T) {
+	entry := &Entry{
+		Data: map[string]any{
+			"key": "-----BEGIN OPENSSH PRIVATE KEY-----\nabcdef\n-----END OPENSSH PRIVATE KEY-----",
+		},
+	}
+	if got := InferClassification(entry); got != taint.Restricted {
+		t.Errorf("expected Restricted, got %s (%d)", got, got)
+	}
+}
+
+func TestInferClassification_PlainPassword(t *testing.T) {
+	entry := &Entry{
+		Data: map[string]any{
+			"password": "weak-password",
+		},
+	}
+	if got := InferClassification(entry); got < taint.Confidential {
+		t.Errorf("expected at least Confidential, got %s (%d)", got, got)
+	}
+}
+
+func TestInferClassification_PreservesManualRestricted(t *testing.T) {
+	entry := &Entry{
+		Data: map[string]any{
+			"note": "hello world",
+		},
+		Classification: taint.Restricted,
+	}
+	got := InferClassification(entry)
+	if got != taint.Restricted {
+		t.Errorf("InferClassification should preserve manual Restricted for benign data, got %s", got)
+	}
+}
+
+func TestInferClassification_MixedFieldsReturnsMax(t *testing.T) {
+	entry := &Entry{
+		Data: map[string]any{
+			"password": "weak-password",
+			"token":    "ghp_abcdefghijklmnopqrstuvwxyz0123456789",
+		},
+	}
+	if got := InferClassification(entry); got != taint.Secret {
+		t.Errorf("expected Secret (max of Confidential+Secret), got %s (%d)", got, got)
+	}
+}
+
+func TestInferClassification_DatabaseURL(t *testing.T) {
+	entry := &Entry{
+		Data: map[string]any{
+			"conn": "postgres://user:pass@localhost/db",
+		},
+	}
+	if got := InferClassification(entry); got != taint.Secret {
+		t.Errorf("expected Secret, got %s (%d)", got, got)
+	}
+}
+
+func TestInferClassification_BearerToken(t *testing.T) {
+	entry := &Entry{
+		Data: map[string]any{
+			"jwt": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U",
+		},
+	}
+	if got := InferClassification(entry); got != taint.Secret {
+		t.Errorf("expected Secret, got %s (%d)", got, got)
+	}
+}
+
+func TestInferClassification_Certificate(t *testing.T) {
+	entry := &Entry{
+		Data: map[string]any{
+			"cert": "-----BEGIN CERTIFICATE-----\nMIIDXTCCAkWgAwIBAgIJAKl\n-----END CERTIFICATE-----",
+		},
+	}
+	if got := InferClassification(entry); got != taint.Restricted {
+		t.Errorf("expected Restricted, got %s (%d)", got, got)
+	}
+}
+
+func TestInferClassification_TOTPSeed(t *testing.T) {
+	entry := &Entry{
+		Data: map[string]any{
+			"secret": "JBSWY3DPEHPK3PXP",
+		},
+	}
+	if got := InferClassification(entry); got != taint.Restricted {
+		t.Errorf("expected Restricted, got %s (%d)", got, got)
+	}
+}
+
+func TestWriteEntryLocked_AutoElevatesClassification(t *testing.T) {
+	vaultDir := t.TempDir()
+	id := testutil.TempIdentity(t)
+
+	entry := &Entry{
+		Data: map[string]any{
+			"token": "ghp_abcdefghijklmnopqrstuvwxyz0123456789",
+		},
+	}
+	if err := WriteEntry(vaultDir, "github-token", entry, id); err != nil {
+		t.Fatalf("write entry: %v", err)
+	}
+
+	got, err := ReadEntry(vaultDir, "github-token", id)
+	if err != nil {
+		t.Fatalf("read entry: %v", err)
+	}
+	if got.Classification != taint.Secret {
+		t.Errorf("Classification = %s (%d), want Secret", got.Classification, got.Classification)
+	}
+}
+
+func TestWriteEntryLocked_NeverLowersManualClassification(t *testing.T) {
+	vaultDir := t.TempDir()
+	id := testutil.TempIdentity(t)
+
+	entry := &Entry{
+		Data: map[string]any{
+			"note": "hello world",
+		},
+		Classification: taint.Restricted,
+	}
+	if err := WriteEntry(vaultDir, "restricted-note", entry, id); err != nil {
+		t.Fatalf("write entry: %v", err)
+	}
+
+	got, err := ReadEntry(vaultDir, "restricted-note", id)
+	if err != nil {
+		t.Fatalf("read entry: %v", err)
+	}
+	if got.Classification != taint.Restricted {
+		t.Errorf("Classification = %s (%d), want Restricted (should preserve manual setting)", got.Classification, got.Classification)
+	}
+}
+
+func TestInferClassification_NonStringValuesIgnored(t *testing.T) {
+	entry := &Entry{
+		Data: map[string]any{
+			"count": 42,
+			"ratio": 3.14,
+			"tags":  []string{"a", "b"},
+		},
+	}
+	if got := InferClassification(entry); got != taint.Public {
+		t.Errorf("expected Public for non-string values, got %s (%d)", got, got)
+	}
+}
+
+func TestInferClassification_NilEntry(t *testing.T) {
+	if got := InferClassification(nil); got != taint.Public {
+		t.Errorf("expected Public for nil entry, got %s (%d)", got, got)
+	}
+}
+
+func TestInferClassification_EmptyData(t *testing.T) {
+	entry := &Entry{Data: map[string]any{}}
+	if got := InferClassification(entry); got != taint.Public {
+		t.Errorf("expected Public for empty data, got %s (%d)", got, got)
+	}
+}
+
+func TestInferClassification_AWSKey(t *testing.T) {
+	entry := &Entry{
+		Data: map[string]any{
+			"access_key": "AKIA1234567890ABCDEF",
+		},
+	}
+	if got := InferClassification(entry); got != taint.Secret {
+		t.Errorf("expected Secret, got %s (%d)", got, got)
+	}
+}
+
+func TestInferClassification_BasicAuth(t *testing.T) {
+	entry := &Entry{
+		Data: map[string]any{
+			"auth": "admin:supersecretpassword",
+		},
+	}
+	if got := InferClassification(entry); got != taint.Secret {
+		t.Errorf("expected Secret, got %s (%d)", got, got)
 	}
 }

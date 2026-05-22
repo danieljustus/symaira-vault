@@ -580,7 +580,7 @@ func TestOutputHTTPConfigMCP(t *testing.T) {
 		vaultFlag.Changed = false
 	}
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "claude-code", "--http"})
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "claude-code"})
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
 	err := rootCmd.Execute()

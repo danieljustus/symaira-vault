@@ -97,6 +97,7 @@ linters:
           - goconst
           - gocritic
           - gocyclo
+          - dupl
       # Config value strings — constants would not improve readability
       - path: 'internal/config/config\.go'
         linters:

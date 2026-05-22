@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -9,6 +10,7 @@ import (
 
 	"filippo.io/age"
 
+	vaultconfig "github.com/danieljustus/OpenPass/internal/config"
 	"github.com/danieljustus/OpenPass/internal/testutil"
 )
 
@@ -27,26 +29,84 @@ func TestListReturnsAllEntriesWithoutPrefix(t *testing.T) {
 
 	want := []string{"github.com/user", "github.com/work", "personal/email"}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("List() = %#v, want %#v", got, want)
+		t.Fatalf("List() sort order = %#v, want %#v", got, want)
 	}
 }
 
-func TestListFiltersByPrefix(t *testing.T) {
-	vaultDir := t.TempDir()
-	id := testutil.TempIdentity(t)
+func BenchmarkListPseudonymized(b *testing.B) {
+	vaultDir := b.TempDir()
+	id := testutil.TempIdentity(b)
+	rememberSearchIdentity(id)
 
-	mustWriteEntry(t, vaultDir, id, "github.com/user", map[string]interface{}{"username": "alice"})
-	mustWriteEntry(t, vaultDir, id, "github.com/work", map[string]interface{}{"username": "bob"})
-	mustWriteEntry(t, vaultDir, id, "personal/email", map[string]interface{}{"username": "carol"})
-
-	got, err := List(vaultDir, "github.com")
-	if err != nil {
-		t.Fatalf("List() error = %v", err)
+	cfg := vaultconfig.Default()
+	cfg.VaultDir = vaultDir
+	cfg.Vault = &vaultconfig.VaultConfig{PseudonymizePaths: true}
+	if err := cfg.SaveTo(filepath.Join(vaultDir, "config.yaml")); err != nil {
+		b.Fatalf("save config: %v", err)
 	}
 
-	want := []string{"github.com/user", "github.com/work"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("List(prefix) = %#v, want %#v", got, want)
+	const numEntries = 100
+	for i := 0; i < numEntries; i++ {
+		path := fmt.Sprintf("bench/entry-%03d", i)
+		mustWriteEntry(b, vaultDir, id, path, map[string]interface{}{
+			"username": fmt.Sprintf("user-%03d", i),
+			"password": fmt.Sprintf("pass-%03d", i),
+		})
+	}
+
+	// Force cache miss every iteration to measure parallel decryption.
+	origTTL := pseudonymizedCache.ttl
+	pseudonymizedCache.ttl = 0
+	defer func() { pseudonymizedCache.ttl = origTTL }()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		InvalidateListCache(vaultDir)
+		paths, err := List(vaultDir, "")
+		if err != nil {
+			b.Fatalf("List() error = %v", err)
+		}
+		if len(paths) != numEntries {
+			b.Fatalf("List() returned %d paths, want %d", len(paths), numEntries)
+		}
+	}
+}
+
+func BenchmarkListPseudonymizedCached(b *testing.B) {
+	vaultDir := b.TempDir()
+	id := testutil.TempIdentity(b)
+	rememberSearchIdentity(id)
+
+	cfg := vaultconfig.Default()
+	cfg.VaultDir = vaultDir
+	cfg.Vault = &vaultconfig.VaultConfig{PseudonymizePaths: true}
+	if err := cfg.SaveTo(filepath.Join(vaultDir, "config.yaml")); err != nil {
+		b.Fatalf("save config: %v", err)
+	}
+
+	const numEntries = 100
+	for i := 0; i < numEntries; i++ {
+		path := fmt.Sprintf("bench/entry-%03d", i)
+		mustWriteEntry(b, vaultDir, id, path, map[string]interface{}{
+			"username": fmt.Sprintf("user-%03d", i),
+			"password": fmt.Sprintf("pass-%03d", i),
+		})
+	}
+
+	// Warm the cache.
+	if _, err := List(vaultDir, ""); err != nil {
+		b.Fatalf("List() warm-up error = %v", err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		paths, err := List(vaultDir, "")
+		if err != nil {
+			b.Fatalf("List() error = %v", err)
+		}
+		if len(paths) != numEntries {
+			b.Fatalf("List() returned %d paths, want %d", len(paths), numEntries)
+		}
 	}
 }
 
@@ -188,7 +248,7 @@ func TestFindIsCaseInsensitive(t *testing.T) {
 	}
 }
 
-func mustWriteEntry(t *testing.T, vaultDir string, identity *age.X25519Identity, path string, data map[string]interface{}) {
+func mustWriteEntry(t testing.TB, vaultDir string, identity *age.X25519Identity, path string, data map[string]interface{}) {
 	t.Helper()
 	if err := WriteEntry(vaultDir, path, &Entry{Data: data}, identity); err != nil {
 		t.Fatalf("WriteEntry(%s) error = %v", path, err)

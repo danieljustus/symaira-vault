@@ -7,6 +7,7 @@ package envfilter
 import (
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 )
 
@@ -102,4 +103,32 @@ func PrepareCmd(cmd *exec.Cmd, additional ...string) {
 		whitelist = MergeWhitelist(DefaultWhitelist(), additional)
 	}
 	cmd.Env = FilterEnv(whitelist)
+}
+
+// DeniedEnvVars returns the list of environment variable names that are
+// denied from agent-supplied env_vars to prevent interpreter/loader injection.
+func DeniedEnvVars() []string {
+	return []string{
+		"LD_PRELOAD", "LD_LIBRARY_PATH", "LD_AUDIT",
+		"DYLD_INSERT_LIBRARIES", "DYLD_LIBRARY_PATH", "DYLD_FALLBACK_LIBRARY_PATH",
+		"NODE_OPTIONS", "PYTHONSTARTUP", "PYTHONPATH",
+		"BASH_ENV", "ENV", "RUBYOPT", "PERL5OPT", "PERL5LIB",
+	}
+}
+
+// RejectDenied returns a sorted slice of denied env var keys found in the input map.
+func RejectDenied(env map[string]string) []string {
+	denied := DeniedEnvVars()
+	deniedSet := make(map[string]bool, len(denied))
+	for _, v := range denied {
+		deniedSet[v] = true
+	}
+	var rejected []string
+	for k := range env {
+		if deniedSet[k] {
+			rejected = append(rejected, k)
+		}
+	}
+	sort.Strings(rejected)
+	return rejected
 }

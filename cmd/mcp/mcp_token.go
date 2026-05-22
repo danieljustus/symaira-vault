@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -14,31 +15,26 @@ import (
 
 var mcpCmd = &cobra.Command{
 	Use:   "mcp",
-	Short: "MCP server commands",
-	Long:  `Commands for managing the Model Context Protocol (MCP) server integration.`,
-	Example: `  # Generate a per-tool token
-  openpass mcp token create --name "ide-tools" --tools list,get
+	Short: "[Deprecated v4.0] MCP server commands — use 'openpass agent' instead",
+	Long: `MCP management commands have been replaced by the agent command group.
 
-  # List configured tokens
-  openpass mcp token list`,
+All MCP server functionality (install, configure, token management) is
+now available via the 'openpass agent' command family.`,
+	Example: `  openpass agent install claude-code`,
+	Hidden:  true,
 }
 
 var McpTokenCmd = &cobra.Command{
 	Use:   "token",
-	Short: "Manage MCP scoped tokens",
-	Long: `Create, list, and revoke per-tool scoped tokens for MCP HTTP authentication.
+	Short: "[Deprecated v4.0, removed in v4.1] Use 'openpass agent token <name>'",
+	Long: `This command was deprecated in OpenPass v4.0 and will be removed in v4.1.
 
-Scoped tokens allow fine-grained access control for MCP clients. Each token can
-be restricted to specific tools and has an optional expiration time.`,
-	Example: `  # Create a read-only token expiring in 24h
-   openpass mcp token create --name "ci-readonly" --tools list,get --ttl 24h
-
-   # List all tokens
-   openpass mcp token list
-
-   # Revoke by ID
-   openpass mcp token revoke <token-id>`,
+Scoped token management is now available via 'openpass agent token <name>'
+with subcommands new, list, revoke, and rotate.`,
+	Example: `  openpass agent token my-agent new`,
+	Hidden:  true,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: openpass agent token <name> new/list/revoke\n")
 		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
 			"This command is deprecated in v4.0. Use: openpass agent token <name> new/list/revoke", nil)
 	},
@@ -46,12 +42,13 @@ be restricted to specific tools and has an optional expiration time.`,
 
 var TokenCreateCmd = &cobra.Command{
 	Use:   "create",
-	Short: "Create a new scoped token",
-	Long: `Create a new scoped MCP token with restricted tool access.
+	Short: "[Deprecated v4.0, removed in v4.1] Use 'openpass agent token <name> new'",
+	Long: `This command was deprecated in OpenPass v4.0 and will be removed in v4.1.
 
-The raw token is printed exactly once — copy it immediately. It cannot be
-retrieved later.`,
+Create scoped tokens via 'openpass agent token <name> new'.`,
+	Hidden: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: openpass agent token <name> new\n")
 		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
 			"This command is deprecated in v4.0. Use: openpass agent token <name> new", nil)
 	},
@@ -59,9 +56,13 @@ retrieved later.`,
 
 var tokenListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List all scoped tokens",
-	Long:  `List all scoped tokens in the registry, including their status and expiration.`,
+	Short: "[Deprecated v4.0, removed in v4.1] Use 'openpass agent token <name> list'",
+	Long: `This command was deprecated in OpenPass v4.0 and will be removed in v4.1.
+
+List tokens via 'openpass agent token <name> list'.`,
+	Hidden: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: openpass agent token <name> list\n")
 		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
 			"This command is deprecated in v4.0. Use: openpass agent token <name> list", nil)
 	},
@@ -69,10 +70,14 @@ var tokenListCmd = &cobra.Command{
 
 var tokenRevokeCmd = &cobra.Command{
 	Use:   "revoke <token-id>",
-	Short: "Revoke a scoped token",
-	Long:  `Revoke a scoped token by its ID. Revoked tokens are immediately invalidated.`,
-	Args:  cobra.ExactArgs(1),
+	Short: "[Deprecated v4.0, removed in v4.1] Use 'openpass agent token <name> revoke'",
+	Long: `This command was deprecated in OpenPass v4.0 and will be removed in v4.1.
+
+Revoke tokens via 'openpass agent token <name> revoke'.`,
+	Hidden: true,
+	Args:   cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: openpass agent token <name> revoke\n")
 		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
 			"This command is deprecated in v4.0. Use: openpass agent token <name> revoke", nil)
 	},
@@ -135,9 +140,4 @@ func init() {
 	McpTokenCmd.AddCommand(TokenCreateCmd)
 	McpTokenCmd.AddCommand(tokenListCmd)
 	McpTokenCmd.AddCommand(tokenRevokeCmd)
-
-	TokenCreateCmd.Flags().StringSlice("tools", []string{"*"}, "Comma-separated allowed tools, or '*' for all")
-	TokenCreateCmd.Flags().String("ttl", "", "Token TTL (e.g. 24h, 7d); defaults to mcp.scoped_token_ttl from config")
-	TokenCreateCmd.Flags().String("agent", "", "Agent profile to associate")
-	TokenCreateCmd.Flags().String("label", "", "Human-readable label")
 }

@@ -204,6 +204,112 @@ func InvalidateListCache(vaultDir string) {
 		delete(listCache.items, vaultDir)
 	}
 	listCache.mu.Unlock()
+
+	pseudonymizedCache.mu.Lock()
+	if vaultDir == "" {
+		pseudonymizedCache.items = make(map[string]pseudonymizedCacheEntry)
+	} else {
+		prefix := vaultDir + "\x00"
+		for k := range pseudonymizedCache.items {
+			if strings.HasPrefix(k, prefix) {
+				delete(pseudonymizedCache.items, k)
+			}
+		}
+	}
+	pseudonymizedCache.mu.Unlock()
+}
+
+// pseudonymizedCacheEntry holds cached pseudonymized list results.
+// Unlike listCacheEntry, it also stores decrypted entry data so that
+// FindWithOptions can reuse entries already decrypted during listing.
+type pseudonymizedCacheEntry struct {
+	paths        []string
+	entries      map[string]map[string]any // path -> decrypted entry data
+	createdAt    time.Time
+	entriesMtime time.Time
+	vaultMtime   time.Time
+}
+
+// pseudonymizedCache provides TTL-cached pseudonymized listings keyed by
+// vaultDir + identity recipient (different identities see different pseudonyms).
+var pseudonymizedCache = struct {
+	mu    sync.RWMutex
+	items map[string]pseudonymizedCacheEntry
+	ttl   time.Duration
+}{
+	items: make(map[string]pseudonymizedCacheEntry),
+	ttl:   30 * time.Second,
+}
+
+// pseudonymizedCacheKey builds a cache key unique to (vaultDir, identity).
+// The recipient (public key) string is used rather than the full identity
+// to avoid caching the secret key material in the in-memory map keys.
+func pseudonymizedCacheKey(vaultDir string, identity *age.X25519Identity) string {
+	return vaultDir + "\x00" + identity.Recipient().String()
+}
+
+// cachedPseudonymizedList returns cached pseudonymized paths if valid,
+// or nil if cache miss / expired / invalidated.
+func cachedPseudonymizedList(vaultDir string, identity *age.X25519Identity) []string {
+	key := pseudonymizedCacheKey(vaultDir, identity)
+	pseudonymizedCache.mu.RLock()
+	entry, ok := pseudonymizedCache.items[key]
+	pseudonymizedCache.mu.RUnlock()
+	if !ok {
+		return nil
+	}
+	if time.Since(entry.createdAt) > pseudonymizedCache.ttl {
+		return nil
+	}
+	if !getDirMtime(entriesDir(vaultDir)).Equal(entry.entriesMtime) {
+		return nil
+	}
+	if !getDirMtime(vaultDir).Equal(entry.vaultMtime) {
+		return nil
+	}
+	return entry.paths
+}
+
+// cachedPseudonymizedEntry returns the decrypted entry data for a single
+// path from the pseudonymized cache, or nil if not found or invalid.
+func cachedPseudonymizedEntry(vaultDir string, identity *age.X25519Identity, path string) map[string]any {
+	key := pseudonymizedCacheKey(vaultDir, identity)
+	pseudonymizedCache.mu.RLock()
+	entry, ok := pseudonymizedCache.items[key]
+	pseudonymizedCache.mu.RUnlock()
+	if !ok {
+		return nil
+	}
+	if time.Since(entry.createdAt) > pseudonymizedCache.ttl {
+		return nil
+	}
+	if !getDirMtime(entriesDir(vaultDir)).Equal(entry.entriesMtime) {
+		return nil
+	}
+	if !getDirMtime(vaultDir).Equal(entry.vaultMtime) {
+		return nil
+	}
+	return entry.entries[path]
+}
+
+// maybeCachedEntryData returns entry data from the pseudonymized cache
+// (populated by a preceding listPseudonymized call), or nil on miss.
+func maybeCachedEntryData(vaultDir string, identity *age.X25519Identity, path string) map[string]any {
+	return cachedPseudonymizedEntry(vaultDir, identity, path)
+}
+
+// storePseudonymizedListCache stores the result of a pseudonymized List call.
+func storePseudonymizedListCache(vaultDir string, identity *age.X25519Identity, paths []string, entries map[string]map[string]any) {
+	key := pseudonymizedCacheKey(vaultDir, identity)
+	pseudonymizedCache.mu.Lock()
+	pseudonymizedCache.items[key] = pseudonymizedCacheEntry{
+		paths:        append([]string(nil), paths...),
+		entries:      entries,
+		createdAt:    time.Now(),
+		entriesMtime: getDirMtime(entriesDir(vaultDir)),
+		vaultMtime:   getDirMtime(vaultDir),
+	}
+	pseudonymizedCache.mu.Unlock()
 }
 
 // searchIdentity holds the cached decryption identity for search operations.
@@ -300,15 +406,28 @@ func List(vaultDir string, prefix string) ([]string, error) {
 // the plaintext entry path from entry.Path. Falls back to the relative filepath
 // if entry.Path is empty (backward compatibility with non-pseudonymized entries
 // stored alongside pseudonymized ones).
+//
+// Uses a bounded worker pool for parallel decryption and caches results
+// (including decrypted entry data) for reuse by FindWithOptions.
 func listPseudonymized(vaultDir, prefix string) ([]string, error) {
 	identity := currentSearchIdentity()
 	if identity == nil {
 		return nil, fmt.Errorf("no search identity available for pseudonymized listing")
 	}
 
-	start := time.Now()
-	var paths []string
+	// Check cache for full-vault listings (prefix == "").
+	if prefix == "" {
+		if paths := cachedPseudonymizedList(vaultDir, identity); paths != nil {
+			metrics.RecordVaultOperationDuration("list_pseudonymized_cached", 0)
+			return paths, nil
+		}
+	}
 
+	start := time.Now()
+
+	// First pass: walk filesystem to collect all .age file paths.
+	// This is fast O(n) and does not involve decryption.
+	var filePaths []string
 	err := filepath.WalkDir(entriesDir(vaultDir), func(filePath string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -319,45 +438,108 @@ func listPseudonymized(vaultDir, prefix string) ([]string, error) {
 		if filepath.Ext(filePath) != ".age" { //nolint:goconst // file extension literal
 			return nil
 		}
-
-		// #nosec G304 -- filePath comes from filepath.WalkDir of the vault entries directory
-		raw, readErr := os.ReadFile(filePath)
-		if readErr != nil {
-			return nil
-		}
-
-		plaintext, decryptErr := vaultcrypto.Decrypt(raw, identity)
-		if decryptErr != nil {
-			return nil
-		}
-
-		var entry Entry
-		if jsonErr := json.Unmarshal(plaintext, &entry); jsonErr != nil {
-			vaultcrypto.Wipe(plaintext)
-			return nil
-		}
-		vaultcrypto.Wipe(plaintext)
-
-		entryPath := entry.Path
-		if entryPath == "" {
-			rel, relErr := filepath.Rel(entriesDir(vaultDir), filePath)
-			if relErr != nil {
-				return nil
-			}
-			entryPath = strings.TrimSuffix(filepath.ToSlash(rel), ".age")
-		}
-
-		if prefix != "" && !strings.HasPrefix(entryPath, prefix) {
-			return nil
-		}
-		paths = append(paths, entryPath)
+		filePaths = append(filePaths, filePath)
 		return nil
 	})
 	if err != nil && !os.IsNotExist(err) {
 		return nil, err
 	}
 
+	if len(filePaths) == 0 {
+		metrics.RecordVaultOperationDuration("list_pseudonymized", time.Since(start))
+		metrics.RecordVaultEntryCount(vaultDir, 0)
+		if prefix == "" {
+			storePseudonymizedListCache(vaultDir, identity, nil, nil)
+		}
+		return nil, nil
+	}
+
+	// Second pass: decrypt entries in parallel using a bounded worker pool.
+	// Default 4 workers balances throughput vs memory pressure, matching
+	// the rationale documented for FindWithOptions concurrent decryption.
+	const maxWorkers = 4
+
+	type decryptResult struct {
+		entryPath string
+		data      map[string]any
+	}
+
+	fileChan := make(chan string, len(filePaths))
+	resultChan := make(chan decryptResult, len(filePaths))
+
+	var wg sync.WaitGroup
+	for i := 0; i < maxWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for fp := range fileChan {
+				// #nosec G304 -- fp comes from filepath.WalkDir of the vault entries directory
+				raw, readErr := os.ReadFile(fp)
+				if readErr != nil {
+					continue
+				}
+
+				plaintext, decryptErr := vaultcrypto.Decrypt(raw, identity)
+				if decryptErr != nil {
+					continue
+				}
+
+				var entry Entry
+				if jsonErr := json.Unmarshal(plaintext, &entry); jsonErr != nil {
+					vaultcrypto.Wipe(plaintext)
+					continue
+				}
+				vaultcrypto.Wipe(plaintext)
+
+				entryPath := entry.Path
+				if entryPath == "" {
+					rel, relErr := filepath.Rel(entriesDir(vaultDir), fp)
+					if relErr != nil {
+						continue
+					}
+					entryPath = strings.TrimSuffix(filepath.ToSlash(rel), ".age")
+				}
+
+				if prefix != "" && !strings.HasPrefix(entryPath, prefix) {
+					continue
+				}
+
+				resultChan <- decryptResult{entryPath: entryPath, data: entry.Data}
+			}
+		}()
+	}
+
+	go func() {
+		for _, fp := range filePaths {
+			fileChan <- fp
+		}
+		close(fileChan)
+	}()
+
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+
+	paths := make([]string, 0, len(filePaths))
+	cachedEntries := make(map[string]map[string]any, len(filePaths))
+
+	for result := range resultChan {
+		if result.entryPath == "" {
+			continue
+		}
+		paths = append(paths, result.entryPath)
+		if result.data != nil {
+			cachedEntries[result.entryPath] = result.data
+		}
+	}
+
 	sort.Strings(paths)
+
+	if prefix == "" {
+		storePseudonymizedListCache(vaultDir, identity, paths, cachedEntries)
+	}
+
 	metrics.RecordVaultOperationDuration("list_pseudonymized", time.Since(start))
 	metrics.RecordVaultEntryCount(vaultDir, len(paths))
 	return paths, nil
@@ -476,13 +658,17 @@ func FindWithOptions(vaultDir string, query string, opts FindOptions) ([]Match, 
 	maxWorkers := opts.MaxWorkers
 	if maxWorkers <= 0 {
 		for _, path := range pathsNeedingDecrypt {
-			entry, err := ReadEntry(vaultDir, path, identity)
-			if err != nil {
-				return nil, err
+			data := maybeCachedEntryData(vaultDir, identity, path)
+			if data == nil {
+				entry, err := ReadEntry(vaultDir, path, identity)
+				if err != nil {
+					return nil, err
+				}
+				data = entry.Data
 			}
 
 			fields := make(map[string]struct{})
-			CollectFieldMatches(fields, "", entry.Data, needle, opts.RedactFieldPatterns)
+			CollectFieldMatches(fields, "", data, needle, opts.RedactFieldPatterns)
 
 			if len(fields) == 0 {
 				continue
@@ -519,14 +705,18 @@ func FindWithOptions(vaultDir string, query string, opts FindOptions) ([]Match, 
 			go func() {
 				defer wg.Done()
 				for path := range pathChan {
-					entry, err := ReadEntry(vaultDir, path, identity)
-					if err != nil {
-						resultChan <- decryptResult{err: err, path: path}
-						continue
+					data := maybeCachedEntryData(vaultDir, identity, path)
+					if data == nil {
+						entry, err := ReadEntry(vaultDir, path, identity)
+						if err != nil {
+							resultChan <- decryptResult{err: err, path: path}
+							continue
+						}
+						data = entry.Data
 					}
 
 					fields := make(map[string]struct{})
-					CollectFieldMatches(fields, "", entry.Data, needle, opts.RedactFieldPatterns)
+					CollectFieldMatches(fields, "", data, needle, opts.RedactFieldPatterns)
 
 					if len(fields) == 0 {
 						resultChan <- decryptResult{path: path, fields: nil}

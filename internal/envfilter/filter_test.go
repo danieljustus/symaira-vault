@@ -263,6 +263,59 @@ func TestFilterEnv_SubstringKeyMatch(t *testing.T) {
 	}
 }
 
+func TestRejectDenied_LDPreload(t *testing.T) {
+	result := RejectDenied(map[string]string{"LD_PRELOAD": "/tmp/evil.so"})
+	if len(result) != 1 || result[0] != "LD_PRELOAD" {
+		t.Errorf("RejectDenied(LD_PRELOAD) = %v, want [LD_PRELOAD]", result)
+	}
+}
+
+func TestRejectDenied_NodeOptions(t *testing.T) {
+	result := RejectDenied(map[string]string{"NODE_OPTIONS": "--inspect"})
+	if len(result) != 1 || result[0] != "NODE_OPTIONS" {
+		t.Errorf("RejectDenied(NODE_OPTIONS) = %v, want [NODE_OPTIONS]", result)
+	}
+}
+
+func TestRejectDenied_BashEnv(t *testing.T) {
+	result := RejectDenied(map[string]string{"BASH_ENV": "/tmp/malicious.sh"})
+	if len(result) != 1 || result[0] != "BASH_ENV" {
+		t.Errorf("RejectDenied(BASH_ENV) = %v, want [BASH_ENV]", result)
+	}
+}
+
+func TestRejectDenied_BenignVar(t *testing.T) {
+	result := RejectDenied(map[string]string{"MY_API_BASE": "https://api.example.com"})
+	if len(result) != 0 {
+		t.Errorf("RejectDenied(MY_API_BASE) = %v, want []", result)
+	}
+}
+
+func TestRejectDenied_MixedDeniedAndBenign(t *testing.T) {
+	result := RejectDenied(map[string]string{
+		"LD_PRELOAD":   "/tmp/evil.so",
+		"MY_API_BASE":  "https://api.example.com",
+		"BASH_ENV":     "/tmp/malicious.sh",
+		"NODE_OPTIONS": "--inspect",
+	})
+	expected := []string{"BASH_ENV", "LD_PRELOAD", "NODE_OPTIONS"}
+	if len(result) != len(expected) {
+		t.Fatalf("RejectDenied(mixed) length = %d, want %d", len(result), len(expected))
+	}
+	for i, v := range expected {
+		if result[i] != v {
+			t.Errorf("RejectDenied(mixed)[%d] = %s, want %s", i, result[i], v)
+		}
+	}
+}
+
+func TestRejectDenied_EmptyMap(t *testing.T) {
+	result := RejectDenied(map[string]string{})
+	if len(result) != 0 {
+		t.Errorf("RejectDenied({}) = %v, want []", result)
+	}
+}
+
 // Test helpers
 
 func contains(slice []string, item string) bool {

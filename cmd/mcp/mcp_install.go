@@ -3,6 +3,7 @@ package mcp
 import (
 	"fmt"
 	"maps"
+	"os"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -14,50 +15,15 @@ import (
 
 var mcpInstallCmd = &cobra.Command{
 	Use:   "install [agent]",
-	Short: "Auto-configure an AI agent to use the OpenPass MCP server",
-	Example: `  # Install MCP integration for Claude Code (auto-detected)
-  openpass mcp install claude-code
+	Short: "[Deprecated v4.0, removed in v4.1] Use 'openpass agent install [agent]'",
+	Long: `This command was deprecated in OpenPass v4.0 and will be removed in v4.1.
 
-  # HTTP mode with a fresh scoped token
-  openpass mcp install claude-code --http
-
-  # List installed agent integrations
-  openpass mcp install --list`,
-	Long: `Automatically detect and configure a supported AI agent to use the OpenPass MCP server.
-
-Supported agents:
-  - openclaw    (OpenClaw)
-  - claude-code (Claude Code)
-  - hermes      (Hermes)
-  - codex       (OpenAI Codex CLI)
-  - opencode    (OpenCode)
-
-The command detects if the agent is installed, finds its MCP config file,
-and injects the OpenPass server configuration. When using HTTP mode, a
-scoped token is automatically generated for the agent.
-
-The operation is idempotent: running it multiple times will not create
-duplicate entries.
-
-Examples:
-  openpass mcp install openclaw
-  openpass mcp install claude-code --http
-  openpass mcp install --auto-detect
-  openpass mcp install hermes --dry-run`,
-	Args: func(cmd *cobra.Command, args []string) error {
-		autoDetect, _ := cmd.Flags().GetBool("auto-detect")
-		if autoDetect {
-			if len(args) > 0 {
-				return fmt.Errorf("cannot specify an agent with --auto-detect")
-			}
-			return nil
-		}
-		if len(args) != 1 {
-			return fmt.Errorf("requires exactly 1 arg (agent name), or use --auto-detect")
-		}
-		return nil
-	},
+Use 'openpass agent install [agent]' instead to install and configure
+AI agents with proper security profiles.`,
+	Example: `  openpass agent install [agent]`,
+	Hidden:  true,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: openpass agent install [agent]\n")
 		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
 			"This command is deprecated in v4.0. Use: openpass agent install [agent]", nil)
 	},
@@ -138,8 +104,4 @@ func buildHTTPServerConfig(vDir, agentName string, dryRun bool) (map[string]any,
 
 func init() {
 	mcpCmd.AddCommand(mcpInstallCmd)
-	mcpInstallCmd.Flags().Bool("dry-run", false, "Preview changes without applying them")
-	mcpInstallCmd.Flags().Bool("auto-detect", false, "Detect all installed agents and configure them")
-	mcpInstallCmd.Flags().Bool("http", false, "Use HTTP transport with auto-generated bearer token")
-	mcpInstallCmd.Flags().Bool("stdio", true, "Use stdio transport (default)")
 }
