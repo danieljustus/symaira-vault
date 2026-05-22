@@ -27,8 +27,8 @@ var McpConfigCmd = &cobra.Command{
 
 Use 'openpass agent install <agent> --config-only' to output MCP config snippets.`,
 	Example: `  openpass agent install claude-code --config-only`,
-	Hidden: true,
-	Args:   cobra.ArbitraryArgs,
+	Hidden:  true,
+	Args:    cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: openpass agent install <agent> --config-only\n")
 		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
@@ -43,8 +43,8 @@ var mcpTokenRotateCmd = &cobra.Command{
 
 Token rotation is now managed per-agent via 'openpass agent token <name> rotate'.`,
 	Example: `  openpass agent token my-agent rotate`,
-	Hidden: true,
-	Args:   cobra.ArbitraryArgs,
+	Hidden:  true,
+	Args:    cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: openpass agent token <name> rotate\n")
 		return errorspkg.NewCLIError(errorspkg.ExitNotFound,

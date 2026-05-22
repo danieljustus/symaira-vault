@@ -255,7 +255,7 @@ func sanitizeEnvVarName(name string) string {
 // checkExecuteWithSecretApproval checks the agent's approval mode for secret-injected execution.
 func (s *Server) checkExecuteWithSecretApproval(ctx context.Context, command []string, resolvedEnv map[string]string) error {
 	return s.requireApproval(ctx, Intent{
-		Action:  "execute_with_secret",
+		Action: "execute_with_secret",
 		Summary: fmt.Sprintf("agent %q requests to execute command [%s] with secret injection (env vars: %v)",
 			s.agent.Name, strings.Join(command, " "), mapKeys(resolvedEnv)),
 	})

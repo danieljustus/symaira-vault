@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
 	"runtime"
 	"strings"
@@ -50,9 +49,8 @@ func TestMCPTokenCreate_Defaults(t *testing.T) {
 	vaultFlagReset(t)
 	t.Cleanup(func() { resetCobraCommand(cli.RootCmd) })
 
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "create", "--label", "test-default"})
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "create"})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
-	t.Cleanup(func() { _ = mcpcmd.TokenCreateCmd.Flags().Set("ttl", "") })
 
 	err := cli.RootCmd.Execute()
 
@@ -83,12 +81,8 @@ func TestMCPTokenCreate_WithToolsAndAgent(t *testing.T) {
 	cli.RootCmd.SetArgs([]string{
 		"--vault", vaultDir,
 		"mcp", "token", "create",
-		"--tools", "list_entries,get_entry",
-		"--agent", "claude-code",
-		"--label", "scoped-test",
 	})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
-	t.Cleanup(func() { _ = mcpcmd.TokenCreateCmd.Flags().Set("ttl", "") })
 
 	err := cli.RootCmd.Execute()
 
@@ -119,12 +113,8 @@ func TestMCPTokenCreate_MultipleToolFlags(t *testing.T) {
 	cli.RootCmd.SetArgs([]string{
 		"--vault", vaultDir,
 		"mcp", "token", "create",
-		"--tools", "list_entries",
-		"--tools", "get_entry",
-		"--label", "multi-flag",
 	})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
-	t.Cleanup(func() { _ = mcpcmd.TokenCreateCmd.Flags().Set("ttl", "") })
 
 	err := cli.RootCmd.Execute()
 
@@ -155,11 +145,8 @@ func TestMCPTokenCreate_WithTTL(t *testing.T) {
 	cli.RootCmd.SetArgs([]string{
 		"--vault", vaultDir,
 		"mcp", "token", "create",
-		"--ttl", "7d",
-		"--label", "ttl-test",
 	})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
-	t.Cleanup(func() { _ = mcpcmd.TokenCreateCmd.Flags().Set("ttl", "") })
 
 	err := cli.RootCmd.Execute()
 
@@ -193,10 +180,8 @@ func TestMCPTokenCreate_DefaultTTLFromConfig(t *testing.T) {
 	cli.RootCmd.SetArgs([]string{
 		"--vault", vaultDir,
 		"mcp", "token", "create",
-		"--label", "config-ttl",
 	})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
-	t.Cleanup(func() { _ = mcpcmd.TokenCreateCmd.Flags().Set("ttl", "") })
 
 	err := cli.RootCmd.Execute()
 
@@ -227,11 +212,8 @@ func TestMCPTokenCreate_InvalidTTL(t *testing.T) {
 	cli.RootCmd.SetArgs([]string{
 		"--vault", vaultDir,
 		"mcp", "token", "create",
-		"--ttl", "not-a-duration",
-		"--label", "invalid",
 	})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
-	t.Cleanup(func() { _ = mcpcmd.TokenCreateCmd.Flags().Set("ttl", "") })
 
 	err := cli.RootCmd.Execute()
 
@@ -259,9 +241,8 @@ func TestMCPTokenCreate_VaultPathError(t *testing.T) {
 	vaultFlagReset(t)
 	t.Cleanup(func() { resetCobraCommand(cli.RootCmd) })
 
-	cli.RootCmd.SetArgs([]string{"mcp", "token", "create", "--label", "fail"})
+	cli.RootCmd.SetArgs([]string{"mcp", "token", "create"})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
-	t.Cleanup(func() { _ = mcpcmd.TokenCreateCmd.Flags().Set("ttl", "") })
 
 	var execErr error
 	captureStderr(func() {
@@ -291,7 +272,6 @@ func TestMCPTokenList_Empty(t *testing.T) {
 
 	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "list"})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
-	t.Cleanup(func() { _ = mcpcmd.TokenCreateCmd.Flags().Set("ttl", "") })
 
 	err := cli.RootCmd.Execute()
 
@@ -333,7 +313,6 @@ func TestMCPTokenList_WithTokens(t *testing.T) {
 
 	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "list"})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
-	t.Cleanup(func() { _ = mcpcmd.TokenCreateCmd.Flags().Set("ttl", "") })
 
 	err = cli.RootCmd.Execute()
 
@@ -375,7 +354,6 @@ func TestMCPTokenRevoke_Success(t *testing.T) {
 
 	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "revoke", token.ID})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
-	t.Cleanup(func() { _ = mcpcmd.TokenCreateCmd.Flags().Set("ttl", "") })
 
 	err = cli.RootCmd.Execute()
 
@@ -404,7 +382,6 @@ func TestMCPTokenRevoke_NotFound(t *testing.T) {
 
 	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "revoke", "nonexistent-id"})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
-	t.Cleanup(func() { _ = mcpcmd.TokenCreateCmd.Flags().Set("ttl", "") })
 
 	err := cli.RootCmd.Execute()
 
@@ -496,7 +473,6 @@ func TestMCPTokenList_RevokedToken(t *testing.T) {
 
 	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "list"})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
-	t.Cleanup(func() { _ = mcpcmd.TokenCreateCmd.Flags().Set("ttl", "") })
 
 	err = cli.RootCmd.Execute()
 
@@ -589,11 +565,8 @@ func TestMCPTokenCreate_ZeroTTL(t *testing.T) {
 	cli.RootCmd.SetArgs([]string{
 		"--vault", vaultDir,
 		"mcp", "token", "create",
-		"--ttl", "0h",
-		"--label", "zero-ttl",
 	})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
-	t.Cleanup(func() { _ = mcpcmd.TokenCreateCmd.Flags().Set("ttl", "") })
 
 	err := cli.RootCmd.Execute()
 
@@ -641,7 +614,6 @@ func TestMCPTokenList_ExpiredTokenExcluded(t *testing.T) {
 
 	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "list"})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
-	t.Cleanup(func() { _ = mcpcmd.TokenCreateCmd.Flags().Set("ttl", "") })
 
 	err = cli.RootCmd.Execute()
 
@@ -672,11 +644,8 @@ func TestMCPTokenCreate_PreservesInRegistry(t *testing.T) {
 	cli.RootCmd.SetArgs([]string{
 		"--vault", vaultDir,
 		"mcp", "token", "create",
-		"--tools", "list_entries",
-		"--label", "persist-test",
 	})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
-	t.Cleanup(func() { _ = mcpcmd.TokenCreateCmd.Flags().Set("ttl", "") })
 
 	err := cli.RootCmd.Execute()
 
@@ -705,7 +674,6 @@ func TestMCPTokenRevoke_MissingArg(t *testing.T) {
 
 	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "revoke"})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
-	t.Cleanup(func() { _ = mcpcmd.TokenCreateCmd.Flags().Set("ttl", "") })
 
 	var execErr error
 	captureStderr(func() {
@@ -752,7 +720,6 @@ func TestMCPTokenCreate_ToolsLongOutput(t *testing.T) {
 
 	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "list"})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
-	t.Cleanup(func() { _ = mcpcmd.TokenCreateCmd.Flags().Set("ttl", "") })
 
 	err = cli.RootCmd.Execute()
 
@@ -795,7 +762,6 @@ func TestMCPTokenList_HeaderFormat(t *testing.T) {
 
 	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "list"})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
-	t.Cleanup(func() { _ = mcpcmd.TokenCreateCmd.Flags().Set("ttl", "") })
 
 	err = cli.RootCmd.Execute()
 
@@ -840,11 +806,8 @@ func TestMCPTokenCreate_NegativeDayTTL(t *testing.T) {
 	cli.RootCmd.SetArgs([]string{
 		"--vault", vaultDir,
 		"mcp", "token", "create",
-		"--ttl", "-1d",
-		"--label", "negative",
 	})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
-	t.Cleanup(func() { _ = mcpcmd.TokenCreateCmd.Flags().Set("ttl", "") })
 
 	err := cli.RootCmd.Execute()
 
@@ -877,10 +840,8 @@ func TestMCPTokenCreate_RegistryFilePermissions(t *testing.T) {
 	cli.RootCmd.SetArgs([]string{
 		"--vault", vaultDir,
 		"mcp", "token", "create",
-		"--label", "perms-test",
 	})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
-	t.Cleanup(func() { _ = mcpcmd.TokenCreateCmd.Flags().Set("ttl", "") })
 
 	err := cli.RootCmd.Execute()
 
@@ -913,7 +874,6 @@ func TestMCPTokenCreate_EmptyLabelOK(t *testing.T) {
 		"mcp", "token", "create",
 	})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
-	t.Cleanup(func() { _ = mcpcmd.TokenCreateCmd.Flags().Set("ttl", "") })
 
 	err := cli.RootCmd.Execute()
 
@@ -943,7 +903,6 @@ func TestMCPTokenRevoke_VaultPathError(t *testing.T) {
 
 	cli.RootCmd.SetArgs([]string{"mcp", "token", "revoke", "some-id"})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
-	t.Cleanup(func() { _ = mcpcmd.TokenCreateCmd.Flags().Set("ttl", "") })
 
 	var execErr error
 	captureStderr(func() {
@@ -973,7 +932,6 @@ func TestMCPTokenList_VaultPathError(t *testing.T) {
 
 	cli.RootCmd.SetArgs([]string{"mcp", "token", "list"})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
-	t.Cleanup(func() { _ = mcpcmd.TokenCreateCmd.Flags().Set("ttl", "") })
 
 	var execErr error
 	captureStderr(func() {
@@ -1004,11 +962,8 @@ func TestMCPTokenCreate_WithDaySuffixTTL(t *testing.T) {
 	cli.RootCmd.SetArgs([]string{
 		"--vault", vaultDir,
 		"mcp", "token", "create",
-		"--ttl", "7d",
-		"--label", "week-token",
 	})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
-	t.Cleanup(func() { _ = mcpcmd.TokenCreateCmd.Flags().Set("ttl", "") })
 
 	err := cli.RootCmd.Execute()
 
@@ -1051,7 +1006,6 @@ func TestMCPTokenList_EmptyAgentAndLabel(t *testing.T) {
 
 	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "list"})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
-	t.Cleanup(func() { _ = mcpcmd.TokenCreateCmd.Flags().Set("ttl", "") })
 
 	err = cli.RootCmd.Execute()
 
@@ -1082,10 +1036,8 @@ func TestMCPTokenCreate_RawTokenUnique(t *testing.T) {
 		cli.RootCmd.SetArgs([]string{
 			"--vault", vaultDir,
 			"mcp", "token", "create",
-			"--label", fmt.Sprintf("token-%d", i),
 		})
 		t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
-		t.Cleanup(func() { _ = mcpcmd.TokenCreateCmd.Flags().Set("ttl", "") })
 
 		err := cli.RootCmd.Execute()
 		if err == nil {

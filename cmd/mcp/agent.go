@@ -17,8 +17,6 @@ import (
 	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
 )
 
-var agentWriteConfig bool
-
 var agentCmd = &cobra.Command{
 	Use:   "agent",
 	Short: "Manage agent profiles",

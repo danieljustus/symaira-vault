@@ -240,13 +240,11 @@ func TestCmdMCPConfig_HTTPMode(t *testing.T) {
 	cfgPath := filepath.Join(vaultDir, "config.yaml")
 	cfg := "mcp:\n  bind: 127.0.0.1\n  port: 9999\n  http_token_file: \"\"\n"
 	_ = os.WriteFile(cfgPath, []byte(cfg), 0o600)
-	_ = execWithStdout("--vault", vaultDir, "mcp-config", "default", "--http")
+	_ = execWithStdout("--vault", vaultDir, "mcp-config", "default")
 }
 
 func TestCmdMCPConfig_Stdio(t *testing.T) {
 	vaultFlagReset(t)
-	_ = mcpcmd.McpConfigCmd.Flags().Set("http", "false")
-	t.Cleanup(func() { _ = mcpcmd.McpConfigCmd.Flags().Set("http", "false") })
 
 	cli.RootCmd.SetArgs([]string{"mcp-config", "myagent"})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
@@ -292,7 +290,7 @@ func TestCmdMCPConfig_HTTP(t *testing.T) {
 		t.Fatalf("init vault: %v", err)
 	}
 
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent", "--http"})
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent"})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
 
 	err := cli.RootCmd.Execute()
@@ -308,11 +306,7 @@ func TestCmdMCPConfig_HTTP(t *testing.T) {
 func TestCmdMCPConfig_HermesHTTP(t *testing.T) {
 	vaultDir, _ := initVault(t)
 	vaultFlagReset(t)
-	_ = mcpcmd.McpConfigCmd.Flags().Set("format", "generic")
-	_ = mcpcmd.McpConfigCmd.Flags().Set("server-name", "openpass")
 	t.Cleanup(func() {
-		_ = mcpcmd.McpConfigCmd.Flags().Set("format", "generic")
-		_ = mcpcmd.McpConfigCmd.Flags().Set("server-name", "openpass")
 	})
 
 	cfgContent := "mcp:\n  bind: 127.0.0.1\n  port: 8090\n"
@@ -320,7 +314,7 @@ func TestCmdMCPConfig_HermesHTTP(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "hermes", "--http", "--format", "hermes"})
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "hermes"})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
 
 	err := cli.RootCmd.Execute()
@@ -364,7 +358,6 @@ func TestOutputHTTPConfig_VaultPathError(t *testing.T) {
 func TestOutputHTTPConfig_CustomTokenFile(t *testing.T) {
 	vaultDir, _ := initVault(t)
 	vaultFlagReset(t)
-	t.Cleanup(func() { _ = mcpcmd.McpConfigCmd.Flags().Set("include-token", "false") })
 
 	customTokenPath := filepath.Join(t.TempDir(), "custom-token")
 	customTokenValue := "my-custom-token-value-12345"
@@ -377,7 +370,7 @@ func TestOutputHTTPConfig_CustomTokenFile(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent", "--http"})
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent"})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
 
 	err := cli.RootCmd.Execute()
@@ -389,7 +382,7 @@ func TestOutputHTTPConfig_CustomTokenFile(t *testing.T) {
 		t.Errorf("expected deprecation message, got: %v", err)
 	}
 
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent", "--http", "--include-token"})
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent"})
 	err = cli.RootCmd.Execute()
 
 	if err == nil {
@@ -409,7 +402,7 @@ func TestOutputHTTPConfig_TokenLoadError(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent", "--http"})
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent"})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
 
 	err := cli.RootCmd.Execute()
@@ -430,7 +423,7 @@ func TestOutputHTTPConfig_StaleRuntimePort(t *testing.T) {
 		t.Fatalf("save runtime port: %v", err)
 	}
 
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent", "--http"})
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent"})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
 
 	err := cli.RootCmd.Execute()

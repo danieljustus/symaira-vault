@@ -20,7 +20,8 @@ var mcpCmd = &cobra.Command{
 
 All MCP server functionality (install, configure, token management) is
 now available via the 'openpass agent' command family.`,
-	Hidden: true,
+	Example: `  openpass agent install claude-code`,
+	Hidden:  true,
 }
 
 var McpTokenCmd = &cobra.Command{
@@ -31,7 +32,7 @@ var McpTokenCmd = &cobra.Command{
 Scoped token management is now available via 'openpass agent token <name>'
 with subcommands new, list, revoke, and rotate.`,
 	Example: `  openpass agent token my-agent new`,
-	Hidden: true,
+	Hidden:  true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: openpass agent token <name> new/list/revoke\n")
 		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
