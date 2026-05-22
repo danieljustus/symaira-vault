@@ -10,6 +10,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/danieljustus/OpenPass/internal/envfilter"
 	mcp "github.com/danieljustus/OpenPass/internal/mcp"
 	"github.com/danieljustus/OpenPass/internal/metrics"
 	"github.com/danieljustus/OpenPass/internal/secrets"
@@ -131,7 +132,16 @@ func (s *Server) handleExecuteWithSecret(ctx context.Context, req mcp.CallToolRe
 		}
 	}
 
-	approvalErr := s.checkExecuteWithSecretApproval(ctx)
+	// Check for denied env vars
+	if len(resolvedEnv) > 0 {
+		denied := envfilter.RejectDenied(resolvedEnv)
+		if len(denied) > 0 {
+			s.logAudit(ctx, "execute_with_secret", "<validation-denied-env>", false)
+			return mcp.NewToolResultError(fmt.Sprintf("env_vars contains denied keys: %s", strings.Join(denied, ", "))), nil
+		}
+	}
+
+	approvalErr := s.checkExecuteWithSecretApproval(ctx, command, resolvedEnv)
 	if approvalErr != nil {
 		s.logAudit(ctx, "execute_with_secret", "<approval-denied>", false)
 		metrics.RecordApproval(s.agent.Name, "denied")
@@ -243,9 +253,20 @@ func sanitizeEnvVarName(name string) string {
 }
 
 // checkExecuteWithSecretApproval checks the agent's approval mode for secret-injected execution.
-func (s *Server) checkExecuteWithSecretApproval(ctx context.Context) error {
+func (s *Server) checkExecuteWithSecretApproval(ctx context.Context, command []string, resolvedEnv map[string]string) error {
 	return s.requireApproval(ctx, Intent{
 		Action:  "execute_with_secret",
-		Summary: fmt.Sprintf("agent %q requests to execute a command with secret injection", s.agent.Name),
+		Summary: fmt.Sprintf("agent %q requests to execute command [%s] with secret injection (env vars: %v)",
+			s.agent.Name, strings.Join(command, " "), mapKeys(resolvedEnv)),
 	})
+}
+
+// mapKeys returns a sorted slice of keys from the given map.
+func mapKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }

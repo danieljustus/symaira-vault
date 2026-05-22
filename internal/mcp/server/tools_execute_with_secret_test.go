@@ -1022,6 +1022,42 @@ func TestHandleExecuteWithSecret_ApprovalPromptNoTTY(t *testing.T) {
 	}
 }
 
+func TestHandleExecuteWithSecret_DeniedEnvVarLDPreload(t *testing.T) {
+	srv := newTestServer(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
+	}, "stdio")
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{
+			"command":     []any{"echo", "test"},
+			"secret_refs": []any{},
+			"env_vars": map[string]any{
+				"LD_PRELOAD": "/tmp/evil.so",
+			},
+		},
+	}
+
+	result, err := srv.handleExecuteWithSecret(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleExecuteWithSecret() error = %v", err)
+	}
+	if result == nil {
+		t.Fatal("handleExecuteWithSecret() returned nil result")
+	}
+	if !result.IsError {
+		t.Fatal("handleExecuteWithSecret() expected error result for denied env var")
+	}
+	if !strings.Contains(result.Text, "env_vars contains denied keys") {
+		t.Fatalf("result text = %q, want 'env_vars contains denied keys'", result.Text)
+	}
+	if !strings.Contains(result.Text, "LD_PRELOAD") {
+		t.Fatalf("result text = %q, want to contain 'LD_PRELOAD'", result.Text)
+	}
+}
+
 func TestHandleExecuteWithSecret_ToolRegistered(t *testing.T) {
 	_, ok := findToolDefinition("execute_with_secret")
 	if !ok {
