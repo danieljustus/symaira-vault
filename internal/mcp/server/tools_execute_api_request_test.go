@@ -316,6 +316,7 @@ allowed_endpoints:
   - /*
 allowed_methods:
   - GET
+allow_private: true
 `, ts.URL))
 
 	req := mcp.CallToolRequest{
@@ -381,6 +382,7 @@ allowed_endpoints:
   - /*
 allowed_methods:
   - POST
+allow_private: true
 `, ts.URL))
 
 	req := mcp.CallToolRequest{
@@ -474,6 +476,7 @@ allowed_endpoints:
   - /v1/*
 allowed_methods:
   - GET
+allow_private: true
 `,
 			endpoint:   "/admin/delete",
 			method:     "GET",
@@ -489,6 +492,7 @@ allowed_endpoints:
   - /*
 allowed_methods:
   - GET
+allow_private: true
 `,
 			endpoint:   "/test",
 			method:     "DELETE",
@@ -641,6 +645,7 @@ allowed_endpoints:
   - /*
 allowed_methods:
   - GET
+allow_private: true
 `, caseTS.URL))
 
 			req := mcp.CallToolRequest{
@@ -700,6 +705,7 @@ allowed_endpoints:
   - /*
 allowed_methods:
   - GET
+allow_private: true
 `, ts.URL))
 
 	req := mcp.CallToolRequest{

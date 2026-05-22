@@ -6,6 +6,8 @@ package apitemplates
 import (
 	"embed"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -56,6 +58,7 @@ type templateFile struct {
 	AllowedEndpoints []string          `yaml:"allowed_endpoints"`
 	AllowedMethods   []string          `yaml:"allowed_methods"`
 	DefaultHeaders   map[string]string `yaml:"default_headers"`
+	AllowPrivate     bool              `yaml:"allow_private"`
 }
 
 // Load loads a template by name. It checks the user's template directory
@@ -127,6 +130,52 @@ func loadFromFile(name, path string) (*APITemplate, error) {
 	return parseTemplate(name, data)
 }
 
+var blockedPrivateRanges = func() []*net.IPNet {
+	ranges := []string{
+		"127.0.0.0/8",    // Loopback IPv4
+		"::1/128",        // Loopback IPv6
+		"169.254.0.0/16", // Link-local IPv4
+		"fe80::/10",      // Link-local IPv6
+		"10.0.0.0/8",     // RFC 1918 private
+		"172.16.0.0/12",  // RFC 1918 private
+		"192.168.0.0/16", // RFC 1918 private
+	}
+	var nets []*net.IPNet
+	for _, cidr := range ranges {
+		_, ipnet, err := net.ParseCIDR(cidr)
+		if err != nil {
+			panic(fmt.Sprintf("invalid CIDR %q: %v", cidr, err))
+		}
+		nets = append(nets, ipnet)
+	}
+	return nets
+}()
+
+// isPrivateHost reports whether the given host resolves to a loopback,
+// link-local, or RFC 1918 private address. It accepts IP literals and
+// hostnames; hostnames are checked against known loopback names.
+func isPrivateHost(host string) bool {
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+
+	if host == "localhost" || host == "localhost.localdomain" {
+		return true
+	}
+
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+
+	for _, blocked := range blockedPrivateRanges {
+		if blocked.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
 // parseTemplate parses YAML data into an APITemplate.
 func parseTemplate(name string, data []byte) (*APITemplate, error) {
 	var tf templateFile
@@ -136,6 +185,13 @@ func parseTemplate(name string, data []byte) (*APITemplate, error) {
 
 	if tf.BaseURL == "" {
 		return nil, fmt.Errorf("template %q: base_url is required", name)
+	}
+	parsedURL, err := url.Parse(tf.BaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("template %q: invalid base_url: %w", name, err)
+	}
+	if isPrivateHost(parsedURL.Host) && !tf.AllowPrivate {
+		return nil, fmt.Errorf("template %q: base_url host %q resolves to a private/internal address; set allow_private: true to override", name, parsedURL.Host)
 	}
 	if tf.AuthType == "" {
 		return nil, fmt.Errorf("template %q: auth_type is required", name)
