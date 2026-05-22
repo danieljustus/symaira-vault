@@ -129,15 +129,15 @@ func builtinAgentProfiles() map[string]AgentProfile {
 	canWriteFalse := false
 	canRunFalse := false
 	exposeTrue := true
-	autoUnsealTrue := true
+	autoUnsealFalse := false
 	deny := approvalModeDeny
 	return map[string]AgentProfile{
-		"default":     {Name: "default", AllowedPaths: []string{}, CanWrite: &canWriteFalse, CanRunCommands: &canRunFalse, ApprovalMode: &deny, ExposeValueTools: &exposeTrue, AutoUnseal: &autoUnsealTrue},
-		"claude-code": {Name: "claude-code", AllowedPaths: []string{}, CanWrite: &canWriteTrue, CanRunCommands: &canRunFalse, ApprovalMode: &deny, ExposeValueTools: &exposeTrue, AutoUnseal: &autoUnsealTrue, SkillPath: StrPtr("~/.claude/skills/openpass/SKILL.md")},
-		"codex":       {Name: "codex", AllowedPaths: []string{}, CanWrite: &canWriteFalse, CanRunCommands: &canRunFalse, ApprovalMode: &deny, ExposeValueTools: &exposeTrue, AutoUnseal: &autoUnsealTrue, SkillPath: StrPtr("~/.codex/skills/openpass/AGENTS.md")},
-		"hermes":      {Name: "hermes", AllowedPaths: []string{}, CanWrite: &canWriteTrue, CanRunCommands: &canRunFalse, ApprovalMode: &deny, ExposeValueTools: &exposeTrue, AutoUnseal: &autoUnsealTrue, SkillPath: StrPtr("~/.hermes/skills/openpass/SKILL.md")},
-		"openclaw":    {Name: "openclaw", AllowedPaths: []string{}, CanWrite: &canWriteTrue, CanRunCommands: &canRunFalse, ApprovalMode: &deny, ExposeValueTools: &exposeTrue, AutoUnseal: &autoUnsealTrue, SkillPath: StrPtr("~/.openclaw/skills/openpass/SKILL.md")},
-		"opencode":    {Name: "opencode", AllowedPaths: []string{}, CanWrite: &canWriteFalse, CanRunCommands: &canRunFalse, ApprovalMode: &deny, ExposeValueTools: &exposeTrue, AutoUnseal: &autoUnsealTrue, SkillPath: StrPtr("~/.opencode/skills/openpass/SKILL.md")},
+		"default":     {Name: "default", AllowedPaths: []string{}, CanWrite: &canWriteFalse, CanRunCommands: &canRunFalse, ApprovalMode: &deny, ExposeValueTools: &exposeTrue, AutoUnseal: &autoUnsealFalse},
+		"claude-code": {Name: "claude-code", AllowedPaths: []string{}, CanWrite: &canWriteTrue, CanRunCommands: &canRunFalse, ApprovalMode: &deny, ExposeValueTools: &exposeTrue, AutoUnseal: &autoUnsealFalse, SkillPath: StrPtr("~/.claude/skills/openpass/SKILL.md")},
+		"codex":       {Name: "codex", AllowedPaths: []string{}, CanWrite: &canWriteFalse, CanRunCommands: &canRunFalse, ApprovalMode: &deny, ExposeValueTools: &exposeTrue, AutoUnseal: &autoUnsealFalse, SkillPath: StrPtr("~/.codex/skills/openpass/AGENTS.md")},
+		"hermes":      {Name: "hermes", AllowedPaths: []string{}, CanWrite: &canWriteTrue, CanRunCommands: &canRunFalse, ApprovalMode: &deny, ExposeValueTools: &exposeTrue, AutoUnseal: &autoUnsealFalse, SkillPath: StrPtr("~/.hermes/skills/openpass/SKILL.md")},
+		"openclaw":    {Name: "openclaw", AllowedPaths: []string{}, CanWrite: &canWriteTrue, CanRunCommands: &canRunFalse, ApprovalMode: &deny, ExposeValueTools: &exposeTrue, AutoUnseal: &autoUnsealFalse, SkillPath: StrPtr("~/.openclaw/skills/openpass/SKILL.md")},
+		"opencode":    {Name: "opencode", AllowedPaths: []string{}, CanWrite: &canWriteFalse, CanRunCommands: &canRunFalse, ApprovalMode: &deny, ExposeValueTools: &exposeTrue, AutoUnseal: &autoUnsealFalse, SkillPath: StrPtr("~/.opencode/skills/openpass/SKILL.md")},
 	}
 }
 

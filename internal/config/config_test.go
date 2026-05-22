@@ -945,6 +945,26 @@ func TestDefault_ReturnsBuiltInAgentProfiles(t *testing.T) {
 	}
 }
 
+func TestBuiltinAgentProfilesAutoUnsealIsFalse(t *testing.T) {
+	t.Parallel()
+
+	profiles := builtinAgentProfiles()
+	for _, name := range []string{"default", "claude-code", "codex", "hermes", "openclaw", "opencode"} {
+		t.Run(name, func(t *testing.T) {
+			profile, ok := profiles[name]
+			if !ok {
+				t.Fatalf("missing built-in profile: %s", name)
+			}
+			if profile.AutoUnseal == nil {
+				t.Fatal("AutoUnseal should not be nil")
+			}
+			if *profile.AutoUnseal {
+				t.Fatalf("AutoUnseal = true for profile %q, want false (secrets should be sealed by default)", name)
+			}
+		})
+	}
+}
+
 func TestDefault_SessionTimeoutHasDefault(t *testing.T) {
 	t.Parallel()
 
