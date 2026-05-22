@@ -24,6 +24,7 @@ func KnownConfigKeys() []string {
 		"authMethod",
 		"useTouchID",
 		"defaultProfile",
+		"envAllowlist",
 		"envWhitelist",
 		"scan_patterns",
 

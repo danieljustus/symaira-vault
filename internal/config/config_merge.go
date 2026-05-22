@@ -78,8 +78,11 @@ func mergeTopLevel(cfg *Config, raw Config) {
 	if raw.DefaultProfile != "" {
 		cfg.DefaultProfile = raw.DefaultProfile
 	}
+	if raw.EnvAllowlist != nil {
+		cfg.EnvAllowlist = append([]string(nil), raw.EnvAllowlist...)
+	}
 	if raw.EnvWhitelist != nil {
-		cfg.EnvWhitelist = append([]string(nil), raw.EnvWhitelist...)
+		cfg.EnvAllowlist = append([]string(nil), raw.EnvWhitelist...)
 	}
 	if raw.ScanPatterns != nil {
 		cfg.ScanPatterns = append([]CustomPattern(nil), raw.ScanPatterns...)
