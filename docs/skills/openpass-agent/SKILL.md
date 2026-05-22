@@ -22,10 +22,37 @@ Canonical OpenPass MCP tool names:
 - `generate_totp`
 - `delete_entry`
 - `openpass_delete` (deprecated alias for `delete_entry`)
+- `execute_with_secret` — Run a shell command with a vault secret injected as an
+  environment variable. The secret value never appears in the command string,
+  argv, or chat transcript.
+- `execute_api_request` — Make an authenticated HTTP request using a stored
+  secret (API key, PAT, bearer token). The secret is attached by the server and
+  never revealed to the agent.
 
 Some MCP clients prepend a namespace (for example `mcp_openpass_list_entries`).
 If canonical names are unavailable, inspect the client's MCP tool list and map
 to these equivalents.
+
+### Safe API Request Example
+
+To call the GitHub API with a stored PAT, use `execute_api_request`:
+
+```json
+{
+  "template": "github",
+  "endpoint": "/repos/owner/repo/issues",
+  "method": "GET"
+}
+```
+
+Do NOT call `get_entry_value` followed by curl — this exposes the token
+in the chat transcript.
+
+### Anti-pattern: Manual secret exposure
+
+Never pass a secret as an argv argument or echo it in a shell command.
+Use the secret-injecting tools so the value lives only in env vars of
+the spawned subprocess.
 
 ## Cache Validation for Credential Sync
 

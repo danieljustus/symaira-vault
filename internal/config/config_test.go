@@ -34,16 +34,17 @@ func TestDefaultReturnsSensibleConfig(t *testing.T) {
 
 	// Built-in profile assertions
 	type wantProfile struct {
-		approvalMode string
-		canWrite     bool
+		approvalMode   string
+		canWrite       bool
+		canRunCommands bool
 	}
 	wantProfiles := map[string]wantProfile{
-		"default":     {canWrite: false, approvalMode: "deny"},
-		"claude-code": {canWrite: true, approvalMode: "deny"},
-		"codex":       {canWrite: false, approvalMode: "deny"},
-		"hermes":      {canWrite: true, approvalMode: "deny"},
-		"openclaw":    {canWrite: true, approvalMode: "deny"},
-		"opencode":    {canWrite: false, approvalMode: "deny"},
+		"default":     {canWrite: false, canRunCommands: false, approvalMode: "deny"},
+		"claude-code": {canWrite: true, canRunCommands: true, approvalMode: "deny"},
+		"codex":       {canWrite: false, canRunCommands: true, approvalMode: "deny"},
+		"hermes":      {canWrite: true, canRunCommands: true, approvalMode: "deny"},
+		"openclaw":    {canWrite: true, canRunCommands: true, approvalMode: "deny"},
+		"opencode":    {canWrite: false, canRunCommands: true, approvalMode: "deny"},
 	}
 	for name, want := range wantProfiles {
 		got, ok := cfg.Agents[name]
@@ -52,6 +53,9 @@ func TestDefaultReturnsSensibleConfig(t *testing.T) {
 		}
 		if *got.CanWrite != want.canWrite {
 			t.Fatalf("profile %q CanWrite = %v, want %v", name, got.CanWrite, want.canWrite)
+		}
+		if *got.CanRunCommands != want.canRunCommands {
+			t.Fatalf("profile %q CanRunCommands = %v, want %v", name, *got.CanRunCommands, want.canRunCommands)
 		}
 		if *got.ApprovalMode != want.approvalMode {
 			t.Fatalf("profile %q ApprovalMode = %q, want %q", name, *got.ApprovalMode, want.approvalMode)
