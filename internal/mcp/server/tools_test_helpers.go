@@ -50,7 +50,7 @@ func newTestServerWithVault(t *testing.T, profile config.AgentProfile, transport
 type noopTestBiometricAuth struct{}
 
 func (n *noopTestBiometricAuth) Authenticate(_ context.Context, _ string) error { return nil }
-func (n *noopTestBiometricAuth) IsAvailable() bool                               { return false }
+func (n *noopTestBiometricAuth) IsAvailable() bool                              { return false }
 
 // mockVault creates a temp vault directory with entries for testing
 func mockVault(t *testing.T) (string, *age.X25519Identity) {

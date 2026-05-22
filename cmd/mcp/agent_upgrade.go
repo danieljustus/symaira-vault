@@ -20,14 +20,14 @@ import (
 )
 
 var (
-	agentUpgradeTier         string
-	agentUpgradeDryRun       bool
-	agentUpgradeYes          bool
-	agentUpgradeReason       string
-	agentUpgradeRotate       bool
-	agentUpgradeNoBiometric  bool
-	agentUpgradeValidTiers   = map[string]bool{"safe": true, "read-only": true, "standard": true, "admin": true}
-	agentUpgradeTierAlias    = map[string]string{"safe": "read-only", "read-only": "read-only", "standard": "standard", "admin": "admin"}
+	agentUpgradeTier        string
+	agentUpgradeDryRun      bool
+	agentUpgradeYes         bool
+	agentUpgradeReason      string
+	agentUpgradeRotate      bool
+	agentUpgradeNoBiometric bool
+	agentUpgradeValidTiers  = map[string]bool{"safe": true, "read-only": true, "standard": true, "admin": true}
+	agentUpgradeTierAlias   = map[string]string{"safe": "read-only", "read-only": "read-only", "standard": "standard", "admin": "admin"}
 )
 
 type tierDiff struct {
@@ -163,7 +163,7 @@ func requireBiometricForUpgrade(ctx context.Context, agentName, targetTier strin
 	if !challenger.Available() {
 		if agentUpgradeYes {
 			return fmt.Errorf(
-				"biometric verification is required for non-interactive tier upgrades on this platform.\n"+
+				"biometric verification is required for non-interactive tier upgrades on this platform.\n" +
 					"Re-run with --no-biometric to bypass (not recommended).",
 			)
 		}
