@@ -343,6 +343,13 @@ func handleOAuthAuthorize(store *oauthCodeStore, clientStore *oauthClientStore) 
 			Timeout:   60 * time.Second,
 		})
 		if !result.Approved {
+			if result.Error != nil && strings.Contains(result.Error.Error(), "no TTY available") {
+				writeJSON(w, http.StatusForbidden, map[string]string{
+					"error":             "interaction_required",
+					"error_description": "server is running non-interactively; OAuth DCR requires an interactive consent surface",
+				})
+				return
+			}
 			writeJSON(w, http.StatusForbidden, map[string]string{
 				"error":             "access_denied",
 				"error_description": "Authorization denied by user",
