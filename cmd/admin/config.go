@@ -19,8 +19,6 @@ var (
 	ConfigFile         string
 )
 
-const exitConfigError errorspkg.ExitCode = 6
-
 var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Manage Symaira Vault configuration",
@@ -77,9 +75,9 @@ If no path is given, validates the default config at ~/.symvault/config.yaml.`,
 					"valid": false,
 					"error": err.Error(),
 				})
-				return errorspkg.NewCLIError(exitConfigError, "config load failed", err)
+				return errorspkg.NewCLIError(errorspkg.ExitConfigError, "config load failed", err)
 			}
-			return errorspkg.NewCLIError(exitConfigError, fmt.Sprintf("cannot load config from %s: %v", path, err), err)
+			return errorspkg.NewCLIError(errorspkg.ExitConfigError, fmt.Sprintf("cannot load config from %s: %v", path, err), err)
 		}
 
 		if err := cfg.Validate(); err != nil {
@@ -88,7 +86,7 @@ If no path is given, validates the default config at ~/.symvault/config.yaml.`,
 					"valid":  false,
 					"errors": strings.Split(err.Error(), "\n"),
 				})
-				return errorspkg.NewCLIError(exitConfigError, "config validation failed", err)
+				return errorspkg.NewCLIError(errorspkg.ExitConfigError, "config validation failed", err)
 			}
 			cli.PrintlnQuietAware(fmt.Sprintf("Configuration is invalid (%s):", path))
 			for _, line := range strings.Split(err.Error(), "\n") {
@@ -96,7 +94,7 @@ If no path is given, validates the default config at ~/.symvault/config.yaml.`,
 					cli.PrintlnQuietAware("  ✗ " + line)
 				}
 			}
-			return errorspkg.NewCLIError(exitConfigError, "config validation failed", err)
+			return errorspkg.NewCLIError(errorspkg.ExitConfigError, "config validation failed", err)
 		}
 
 		if jsonOut {
@@ -160,12 +158,12 @@ Examples:
 
 		root, err := configpkg.LoadConfigNode(path)
 		if err != nil {
-			return errorspkg.NewCLIError(exitConfigError, fmt.Sprintf("cannot load config: %v", err), err)
+			return errorspkg.NewCLIError(errorspkg.ExitConfigError, fmt.Sprintf("cannot load config: %v", err), err)
 		}
 
 		node, err := configpkg.GetConfigValue(root, key)
 		if err != nil {
-			return errorspkg.NewCLIError(exitConfigError, fmt.Sprintf("key %q not found", key), err)
+			return errorspkg.NewCLIError(errorspkg.ExitConfigError, fmt.Sprintf("key %q not found", key), err)
 		}
 
 		val := configpkg.NodeToString(node)
@@ -204,19 +202,19 @@ Examples:
 
 		root, err := configpkg.LoadConfigNode(path)
 		if err != nil {
-			return errorspkg.NewCLIError(exitConfigError, fmt.Sprintf("cannot load config: %v", err), err)
+			return errorspkg.NewCLIError(errorspkg.ExitConfigError, fmt.Sprintf("cannot load config: %v", err), err)
 		}
 
 		if err := configpkg.SetConfigValue(root, key, value); err != nil {
-			return errorspkg.NewCLIError(exitConfigError, fmt.Sprintf("cannot set %q: %v", key, err), err)
+			return errorspkg.NewCLIError(errorspkg.ExitConfigError, fmt.Sprintf("cannot set %q: %v", key, err), err)
 		}
 
 		if err := configpkg.SaveConfigNode(path, root); err != nil {
-			return errorspkg.NewCLIError(exitConfigError, fmt.Sprintf("cannot write config: %v", err), err)
+			return errorspkg.NewCLIError(errorspkg.ExitConfigError, fmt.Sprintf("cannot write config: %v", err), err)
 		}
 
 		if _, loadErr := configpkg.Load(path); loadErr != nil {
-			return errorspkg.NewCLIError(exitConfigError, fmt.Sprintf("config is invalid after update: %v", loadErr), loadErr)
+			return errorspkg.NewCLIError(errorspkg.ExitConfigError, fmt.Sprintf("config is invalid after update: %v", loadErr), loadErr)
 		}
 
 		cli.PrintlnQuietAware(fmt.Sprintf("Set %s = %s", key, value))
@@ -242,7 +240,7 @@ This shows the raw config file contents as-is.`,
 
 		raw, err := os.ReadFile(filepath.Clean(path))
 		if err != nil {
-			return errorspkg.NewCLIError(exitConfigError, fmt.Sprintf("cannot load config: %v", err), err)
+			return errorspkg.NewCLIError(errorspkg.ExitConfigError, fmt.Sprintf("cannot load config: %v", err), err)
 		}
 		cli.PrintQuietAware("%s", string(raw))
 		return nil

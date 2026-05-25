@@ -23,10 +23,14 @@ const (
 	ExitLocked ExitCode = 4
 	// ExitPermissionDenied indicates a permission denied error.
 	ExitPermissionDenied ExitCode = 5
+	// ExitConfigError indicates a configuration validation or loading error.
+	ExitConfigError ExitCode = 6
 	// ExitDoctorWarn indicates doctor found warnings.
 	ExitDoctorWarn ExitCode = 7
 	// ExitDoctorFail indicates doctor found failures.
 	ExitDoctorFail ExitCode = 8
+	// ExitUpdateAvailable indicates a new version is available for download.
+	ExitUpdateAvailable ExitCode = 10
 )
 
 // ErrorKind categorizes vault service errors for consistent mapping to CLI errors.
