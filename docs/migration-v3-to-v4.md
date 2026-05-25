@@ -14,7 +14,7 @@ this guide.
 v4.0 makes three major changes:
 
 1. **CLI consolidation.** All AI-integration commands move under
-   `openpass agent`. The old `openpass mcp` and `openpass agent setup` commands
+   `symvault agent`. The old `symvault mcp` and `symvault agent setup` commands
    are replaced. Deprecation stubs remain in v4.0 and will be removed in v4.1.
 2. **Tier system.** Agent profiles now have a `tier` field
    (`safe` / `standard` / `admin`) that governs which MCP tools and capabilities
@@ -24,7 +24,7 @@ v4.0 makes three major changes:
    file with its own tool prefix and tier hints.
 
 The changes are additive for most users. Existing agent profiles still work
-after migration. The `openpass serve` MCP server and vault operations (`get`,
+after migration. The `symvault serve` MCP server and vault operations (`get`,
 `set`, `list`, `find`, etc.) are unchanged.
 
 ---
@@ -38,13 +38,13 @@ Back up your vault and configuration before migrating.
 cp -a ~/.openpass ~/.openpass.backup.$(date +%Y%m%d)
 
 # Or use the built-in backup command
-openpass backup ~/backups/openpass-pre-v4-$(date +%Y%m%d).tar.gz
+symvault backup ~/backups/symvault-pre-v4-$(date +%Y%m%d).tar.gz
 ```
 
 Confirm your v3.x version:
 
 ```bash
-openpass version
+symvault version
 ```
 
 v3.0.0 or later is supported as a migration source. If you are on an earlier
@@ -53,13 +53,13 @@ migration helper handles any v3.x profile):
 
 ```bash
 # macOS (Homebrew)
-brew upgrade openpass
+brew upgrade symvault
 
 # macOS / Linux (install script)
 curl -sSfL https://raw.githubusercontent.com/danieljustus/symaira-vault/main/scripts/install.sh | sh
 
 # Windows (Scoop)
-scoop update openpass
+scoop update symvault
 ```
 
 ---
@@ -73,7 +73,7 @@ the migrated config.
 ### Preview (recommended first step)
 
 ```bash
-openpass migrate v4 --dry-run
+symvault migrate v4 --dry-run
 ```
 
 This prints a summary of what will change without writing anything:
@@ -92,15 +92,15 @@ It also shows per-agent skill drift:
 ```
 Agent      Skill Path                          Action
 ─────────  ──────────────────────────────────  ───────────
-hermes     ~/.hermes/skills/openpass/SKILL.md  create
-claude     ~/.claude/skills/openpass/SKILL.md  refresh (drift)
+hermes     ~/.hermes/skills/symvault/SKILL.md  create
+claude     ~/.claude/skills/symvault/SKILL.md  refresh (drift)
 openclaw   (none)                              create
 ```
 
 ### Apply
 
 ```bash
-openpass migrate v4
+symvault migrate v4
 ```
 
 Review the summary, then confirm. The tool will:
@@ -116,14 +116,14 @@ Review the summary, then confirm. The tool will:
 For automated setups or CI:
 
 ```bash
-openpass migrate v4 --yes
+symvault migrate v4 --yes
 ```
 
 ### Idempotency
 
 The migration is idempotent. Running it again on an already-migrated config is a
 no-op. The tool detects existing `tier` fields and skips re-classification. You
-can safely re-run `openpass migrate v4 --dry-run` to verify.
+can safely re-run `symvault migrate v4 --dry-run` to verify.
 
 ---
 
@@ -150,7 +150,7 @@ agents:
 agents:
   hermes:
     tier: safe                    # NEW: one of safe|standard|admin|custom
-    skill_path: ~/.hermes/skills/openpass/SKILL.md  # NEW: installed skill location
+    skill_path: ~/.hermes/skills/symvault/SKILL.md  # NEW: installed skill location
     skill_version: "4.0.0"        # NEW: version that rendered the skill
     allowedPaths: ["agents/providers/"]
     canWrite: false
@@ -183,14 +183,14 @@ Replace these old commands in your scripts and documentation:
 
 | Old command | New command |
 |---|---|
-| `openpass agent setup <name>` | `openpass agent install <name>` |
-| `openpass mcp install <name>` | `openpass agent install <name>` |
-| `openpass mcp install --auto-detect` | `openpass agent install --auto-detect` |
-| `openpass mcp-config <agent>` | `openpass agent install <agent> --config-only` |
-| `openpass mcp token create` | `openpass agent token <name> new` |
-| `openpass mcp token list` | `openpass agent token list` |
-| `openpass mcp token revoke` | `openpass agent token revoke` |
-| `openpass mcp-token-rotate` | `openpass agent token <name> rotate` |
+| `symvault agent setup <name>` | `symvault agent install <name>` |
+| `symvault mcp install <name>` | `symvault agent install <name>` |
+| `symvault mcp install --auto-detect` | `symvault agent install --auto-detect` |
+| `symvault mcp-config <agent>` | `symvault agent install <agent> --config-only` |
+| `symvault mcp token create` | `symvault agent token <name> new` |
+| `symvault mcp token list` | `symvault agent token list` |
+| `symvault mcp token revoke` | `symvault agent token revoke` |
+| `symvault mcp-token-rotate` | `symvault agent token <name> rotate` |
 
 Deprecation stubs are in place for v4.0. Calling any of the old commands prints
 the replacement and exits with code 2. The stubs will be removed in v4.1.
@@ -203,15 +203,15 @@ The full mapping of deprecated commands to their v4.0 replacements:
 
 | v3.x command | v4.0 replacement | Notes |
 |---|---|---|
-| `openpass agent setup <name>` | `openpass agent install <name>` | Adds `--tier` flag (default: safe) |
-| `openpass mcp install <name>` | `openpass agent install <name>` | Same flags: `--tier`, `--http`, `--force` |
-| `openpass mcp install --auto-detect` | `openpass agent install --auto-detect` | Detects all installed agents |
-| `openpass mcp-config <agent>` | `openpass agent install <agent> --config-only` | MCP config only, no skill |
-| `openpass mcp token create` | `openpass agent token <name> new` | Scope and expiry flags unchanged |
-| `openpass mcp token list` | `openpass agent token list` | Output unchanged |
-| `openpass mcp token revoke <id>` | `openpass agent token revoke <id>` | Output unchanged |
-| `openpass mcp-token-rotate` | `openpass agent token <name> rotate` | Output unchanged |
-| `openpass mcp` (any subcommand) | Folded into `openpass agent` | See rows above |
+| `symvault agent setup <name>` | `symvault agent install <name>` | Adds `--tier` flag (default: safe) |
+| `symvault mcp install <name>` | `symvault agent install <name>` | Same flags: `--tier`, `--http`, `--force` |
+| `symvault mcp install --auto-detect` | `symvault agent install --auto-detect` | Detects all installed agents |
+| `symvault mcp-config <agent>` | `symvault agent install <agent> --config-only` | MCP config only, no skill |
+| `symvault mcp token create` | `symvault agent token <name> new` | Scope and expiry flags unchanged |
+| `symvault mcp token list` | `symvault agent token list` | Output unchanged |
+| `symvault mcp token revoke <id>` | `symvault agent token revoke <id>` | Output unchanged |
+| `symvault mcp-token-rotate` | `symvault agent token <name> rotate` | Output unchanged |
+| `symvault mcp` (any subcommand) | Folded into `symvault agent` | See rows above |
 
 ### New commands in v4.0
 
@@ -219,13 +219,13 @@ These have no v3 equivalent:
 
 | Command | Purpose |
 |---|---|
-| `openpass agent upgrade <name> --tier <new-tier>` | Change an agent's tier with interactive diff and audit trail |
-| `openpass agent uninstall <name>` | Remove profile, token, skill, and MCP entry |
-| `openpass agent doctor <name>` | End-to-end debug for one integration |
-| `openpass agent audit <name>` | Per-agent audit log |
-| `openpass agent profile edit <name>` | Edit profile in `$EDITOR` |
-| `openpass agent skill export <agent>` | Pack skill for drop-in distribution |
-| `openpass agent whoami` | CLI form of the `openpass_whoami` MCP tool |
+| `symvault agent upgrade <name> --tier <new-tier>` | Change an agent's tier with interactive diff and audit trail |
+| `symvault agent uninstall <name>` | Remove profile, token, skill, and MCP entry |
+| `symvault agent doctor <name>` | End-to-end debug for one integration |
+| `symvault agent audit <name>` | Per-agent audit log |
+| `symvault agent profile edit <name>` | Edit profile in `$EDITOR` |
+| `symvault agent skill export <agent>` | Pack skill for drop-in distribution |
+| `symvault agent whoami` | CLI form of the `openpass_whoami` MCP tool |
 
 ---
 
@@ -278,8 +278,8 @@ explicit default:
 To grant more access, run:
 
 ```bash
-openpass agent upgrade <name> --tier standard
-openpass agent upgrade <name> --tier admin
+symvault agent upgrade <name> --tier standard
+symvault agent upgrade <name> --tier admin
 ```
 
 Tier upgrades require interactive confirmation (or `--yes --reason "..."` for
@@ -316,25 +316,25 @@ is removed. Callers receive `ERR_TOOL_NOT_FOUND`. Use `delete_entry` instead.
 
 ### Script updates
 
-If your scripts use the old `openpass mcp` commands, replace them:
+If your scripts use the old `symvault mcp` commands, replace them:
 
 ```bash
 # Before
-openpass mcp install hermes
-openpass mcp token create --agent hermes --tools list_entries --expires 24h
+symvault mcp install hermes
+symvault mcp token create --agent hermes --tools list_entries --expires 24h
 
 # After
-openpass agent install hermes
-openpass agent token hermes new --tools list_entries --expires 24h
+symvault agent install hermes
+symvault agent token hermes new --tools list_entries --expires 24h
 ```
 
 ### Configuration management (GitOps)
 
 If you version-control `config.yaml`, the migration adds three fields per agent
-profile. Commit the migrated config after running `openpass migrate v4`:
+profile. Commit the migrated config after running `symvault migrate v4`:
 
 ```bash
-openpass migrate v4 --yes
+symvault migrate v4 --yes
 git add ~/.openpass/config.yaml
 git commit -m "migrate to v4 agent profile schema"
 ```
@@ -344,7 +344,7 @@ git commit -m "migrate to v4 agent profile schema"
 Automation scripts that need to upgrade an agent tier must pass `--reason`:
 
 ```bash
-openpass agent upgrade hermes --tier standard --yes --reason "ticket OPS-1234"
+symvault agent upgrade hermes --tier standard --yes --reason "ticket OPS-1234"
 ```
 
 The reason is stored in the audit event. `--yes` without `--reason` is rejected.
@@ -373,7 +373,7 @@ If you backed up the full vault directory before migrating:
 
 ```bash
 # Stop any running Symaira Vault processes first
-pkill openpass 2>/dev/null || true
+pkill symvault 2>/dev/null || true
 
 # Restore
 rm -rf ~/.openpass
@@ -386,7 +386,7 @@ If you need to go back to v3.x:
 
 ```bash
 # macOS (Homebrew)
-brew install symaira@3
+brew install symvault@3
 
 # Manual install from GitHub releases
 # Download v3.0.0 from https://github.com/danieljustus/symaira-vault/releases/tag/v3.0.0
@@ -397,9 +397,9 @@ restore the backup first.
 
 ### What is NOT rolled back
 
-- Per-agent skill files (`.skills/openpass/SKILL.md`) that were written during
+- Per-agent skill files (`.skills/symvault/SKILL.md`) that were written during
   migration are not automatically removed. You can delete them manually or run
-  `openpass agent uninstall <name>` after reinstalling v3.x to clean them up.
+  `symvault agent uninstall <name>` after reinstalling v3.x to clean them up.
 - Audit events written during the migration remain in the audit log.
 - Tokens issued by the v4.0 binary remain valid if you downgrade, but v3.x
   ignores the new token metadata fields.
@@ -410,15 +410,15 @@ restore the backup first.
 
 After migration:
 
-1. **Verify your agents still work.** Run `openpass agent doctor <name>` for
+1. **Verify your agents still work.** Run `symvault agent doctor <name>` for
    each agent.
-2. **Review tier assignments.** Run `openpass agent list` to see each agent's
+2. **Review tier assignments.** Run `symvault agent list` to see each agent's
    tier. Upgrade if needed:
    ```bash
-   openpass agent upgrade hermes --tier standard
+   symvault agent upgrade hermes --tier standard
    ```
-3. **Explore new commands.** Try `openpass agent audit hermes`, `openpass agent
-   whoami`, or `openpass agent skill export hermes`.
+3. **Explore new commands.** Try `symvault agent audit hermes`, `symvault agent
+   whoami`, or `symvault agent skill export hermes`.
 4. **Update your documentation.** Replace any v3 command references with the v4
    equivalents from the mapping table above.
 

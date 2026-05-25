@@ -32,7 +32,7 @@ func TestGetAutoClearDuration(t *testing.T) {
 		_ = os.Unsetenv("HOME")
 		_ = os.Unsetenv("OPENPASS_VAULT")
 
-		vault = "~/.symaira"
+		vault = "~/.symvault"
 
 		duration := getAutoClearDuration()
 		if duration != 30 {

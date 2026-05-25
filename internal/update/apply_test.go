@@ -15,8 +15,8 @@ func TestApplyResult_Fields(t *testing.T) {
 		Method:     installmethod.DirectDownload,
 		OldVersion: "1.0.0",
 		NewVersion: "2.0.0",
-		BackupPath: "/usr/local/bin/symaira.backup",
-		BinaryPath: "/usr/local/bin/symaira",
+		BackupPath: "/usr/local/bin/symvault.backup",
+		BinaryPath: "/usr/local/bin/symvault",
 		DryRun:     false,
 	}
 
@@ -29,11 +29,11 @@ func TestApplyResult_Fields(t *testing.T) {
 	if r.NewVersion != "2.0.0" {
 		t.Errorf("NewVersion = %q, want %q", r.NewVersion, "2.0.0")
 	}
-	if r.BackupPath != "/usr/local/bin/symaira.backup" {
-		t.Errorf("BackupPath = %q, want %q", r.BackupPath, "/usr/local/bin/symaira.backup")
+	if r.BackupPath != "/usr/local/bin/symvault.backup" {
+		t.Errorf("BackupPath = %q, want %q", r.BackupPath, "/usr/local/bin/symvault.backup")
 	}
-	if r.BinaryPath != "/usr/local/bin/symaira" {
-		t.Errorf("BinaryPath = %q, want %q", r.BinaryPath, "/usr/local/bin/symaira")
+	if r.BinaryPath != "/usr/local/bin/symvault" {
+		t.Errorf("BinaryPath = %q, want %q", r.BinaryPath, "/usr/local/bin/symvault")
 	}
 	if r.DryRun {
 		t.Error("DryRun = true, want false")
@@ -45,7 +45,7 @@ func TestApplyResult_DryRun(t *testing.T) {
 		Method:     installmethod.GoInstall,
 		OldVersion: "1.0.0",
 		NewVersion: "1.5.0",
-		BinaryPath: "/home/user/go/bin/symaira",
+		BinaryPath: "/home/user/go/bin/symvault",
 		DryRun:     true,
 	}
 	if !r.DryRun {
@@ -55,9 +55,9 @@ func TestApplyResult_DryRun(t *testing.T) {
 
 func TestApplyResult_BackupPath(t *testing.T) {
 	r := &ApplyResult{
-		BackupPath: "/custom/path/symaira.backup",
+		BackupPath: "/custom/path/symvault.backup",
 	}
-	if r.BackupPath != "/custom/path/symaira.backup" {
+	if r.BackupPath != "/custom/path/symvault.backup" {
 		t.Errorf("BackupPath = %q", r.BackupPath)
 	}
 }
@@ -65,7 +65,7 @@ func TestApplyResult_BackupPath(t *testing.T) {
 func TestErrUnsupportedMethod_Error(t *testing.T) {
 	e := &ErrUnsupportedMethod{
 		Method:   installmethod.Homebrew,
-		Guidance: "brew upgrade symaira",
+		Guidance: "brew upgrade symvault",
 	}
 	msg := e.Error()
 	if !strings.Contains(msg, "homebrew") {
@@ -101,15 +101,15 @@ func TestErrUnsupportedMethod_AllMethods(t *testing.T) {
 func TestInfoResult_Fields(t *testing.T) {
 	r := &InfoResult{
 		Method:              installmethod.DirectDownload,
-		BinaryPath:          "/usr/local/bin/symaira",
+		BinaryPath:          "/usr/local/bin/symvault",
 		SelfUpdateSupported: true,
 		Guidance:            "curl ...",
 	}
 	if r.Method != installmethod.DirectDownload {
 		t.Errorf("Method = %q, want %q", r.Method, installmethod.DirectDownload)
 	}
-	if r.BinaryPath != "/usr/local/bin/symaira" {
-		t.Errorf("BinaryPath = %q, want %q", r.BinaryPath, "/usr/local/bin/symaira")
+	if r.BinaryPath != "/usr/local/bin/symvault" {
+		t.Errorf("BinaryPath = %q, want %q", r.BinaryPath, "/usr/local/bin/symvault")
 	}
 	if !r.SelfUpdateSupported {
 		t.Error("SelfUpdateSupported = false, want true")
@@ -205,7 +205,7 @@ func TestExtractBinaryFromArchive_TarGz(t *testing.T) {
 	}
 
 	archive := buildTestTarGz(map[string]string{
-		"symaira": "binary-content-here",
+		"symvault": "binary-content-here",
 	}, false)
 
 	data, err := extractBinaryFromArchive(archive)
@@ -223,10 +223,10 @@ func TestExtractBinaryFromArchive_TarGz_Nested(t *testing.T) {
 	}
 
 	// Archive with the binary nested in a subdirectory, mimicking the
-	// GoReleaser layout: symaira_<version>_<os>_<arch>/symaira
+	// GoReleaser layout: symvault_<version>_<os>_<arch>/symvault
 	archive := buildTestTarGz(map[string]string{
-		"symaira_1.0.0_darwin_arm64/symaira": "nested-binary",
-		"symaira_1.0.0_darwin_arm64/LICENSE":  "MIT",
+		"symvault_1.0.0_darwin_arm64/symvault": "nested-binary",
+		"symvault_1.0.0_darwin_arm64/LICENSE":  "MIT",
 	}, true)
 
 	data, err := extractBinaryFromArchive(archive)

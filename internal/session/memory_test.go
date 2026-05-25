@@ -11,7 +11,7 @@ import (
 func TestMemoryKeyring_SetGetDelete(t *testing.T) {
 	mk := &memoryKeyring{}
 
-	service := "symaira:/tmp/vault"
+	service := "symvault:/tmp/vault"
 	account := sessionAccount
 
 	passphrase := "secret-passphrase"
@@ -66,7 +66,7 @@ func TestMemoryKeyring_SetGetDelete(t *testing.T) {
 func TestMemoryKeyring_EncryptsPlaintextPassphrase(t *testing.T) {
 	mk := &memoryKeyring{}
 
-	service := "symaira:/tmp/vault-plain"
+	service := "symvault:/tmp/vault-plain"
 	account := sessionAccount
 
 	sess := storedSession{
@@ -105,7 +105,7 @@ func TestMemoryKeyring_EncryptsPlaintextPassphrase(t *testing.T) {
 func TestMemoryKeyring_TTLExpiration(t *testing.T) {
 	mk := &memoryKeyring{}
 
-	service := "symaira:/tmp/vault-ttl"
+	service := "symvault:/tmp/vault-ttl"
 	account := sessionAccount
 
 	passphrase := "ttl-secret"
@@ -138,7 +138,7 @@ func TestMemoryKeyring_TTLExpiration(t *testing.T) {
 func TestMemoryKeyring_ZeroTTL(t *testing.T) {
 	mk := &memoryKeyring{}
 
-	service := "symaira:/tmp/vault-zerottl"
+	service := "symvault:/tmp/vault-zerottl"
 	account := sessionAccount
 
 	passphrase := "zero-ttl-secret"
@@ -171,7 +171,7 @@ func TestMemoryKeyring_ZeroTTL(t *testing.T) {
 func TestMemoryKeyring_GetNotFound(t *testing.T) {
 	mk := &memoryKeyring{}
 
-	if _, err := mk.Get("symaira:/nonexistent", sessionAccount); err == nil {
+	if _, err := mk.Get("symvault:/nonexistent", sessionAccount); err == nil {
 		t.Fatal("Get() error = nil, want not found")
 	}
 }
@@ -179,7 +179,7 @@ func TestMemoryKeyring_GetNotFound(t *testing.T) {
 func TestMemoryKeyring_MalformedJSON(t *testing.T) {
 	mk := &memoryKeyring{}
 
-	service := "symaira:/tmp/vault-badjson"
+	service := "symvault:/tmp/vault-badjson"
 	account := sessionAccount
 
 	if err := mk.Set(service, account, "not valid json"); err == nil {
@@ -190,7 +190,7 @@ func TestMemoryKeyring_MalformedJSON(t *testing.T) {
 func TestMemoryKeyring_DecryptIntegrityCheck(t *testing.T) {
 	mk := &memoryKeyring{}
 
-	service := "symaira:/tmp/vault-corrupt"
+	service := "symvault:/tmp/vault-corrupt"
 	account := sessionAccount
 
 	sess := storedSession{
@@ -217,7 +217,7 @@ func TestMemoryKeyring_DecryptIntegrityCheck(t *testing.T) {
 func TestMemoryKeyring_ThreadSafety(t *testing.T) {
 	mk := &memoryKeyring{}
 
-	service := "symaira:/tmp/vault-concurrent"
+	service := "symvault:/tmp/vault-concurrent"
 	account := sessionAccount
 
 	passphrase := "concurrent-secret"
@@ -269,7 +269,7 @@ func TestMemoryKeyring_ThreadSafety(t *testing.T) {
 func TestMemoryKeyring_DeleteZeroesData(t *testing.T) {
 	mk := &memoryKeyring{}
 
-	service := "symaira:/tmp/vault-zero"
+	service := "symvault:/tmp/vault-zero"
 	account := sessionAccount
 
 	passphrase := "zero-secret"

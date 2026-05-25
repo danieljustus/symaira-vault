@@ -36,17 +36,17 @@ Output modes:
 
 Use --no-network to skip checks that require network access (git remote reachability, update check).`,
 	Example: `  # Full health check
-  symaira doctor
+  symvault doctor
 
   # JSON output, no network
-  symaira doctor --output json --no-network
+  symvault doctor --output json --no-network
 
   # Run only config checks
-  symaira doctor --only 'config.*'
+  symvault doctor --only 'config.*'
 
   # Auto-fix what's safe to fix (with dry-run first)
-  symaira doctor --fix-dry-run
-  symaira doctor --fix`,
+  symvault doctor --fix-dry-run
+  symvault doctor --fix`,
 	Annotations: map[string]string{
 		cli.RequiresVaultAnnotation: "false",
 	},

@@ -28,10 +28,10 @@ var backupCmd = &cobra.Command{
 The backup includes all vault files: identity.age, config.yaml, entries/, and mcp-token.
 Use --exclude-git to omit the .git/ directory from the backup.`,
 	Example: `  # Full backup to a tarball
-  symaira backup ~/symaira-2026-05-17.tar.gz
+  symvault backup ~/symvault-2026-05-17.tar.gz
 
   # Skip the Git history (smaller archive)
-  symaira backup --exclude-git ~/symaira.tar.gz`,
+  symvault backup --exclude-git ~/symvault.tar.gz`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		vaultDir, err := cli.VaultPath()
@@ -40,7 +40,7 @@ Use --exclude-git to omit the .git/ directory from the backup.`,
 		}
 
 		if !vaultpkg.IsInitialized(vaultDir) {
-			return errorspkg.NewCLIError(errorspkg.ExitNotInitialized, "vault not initialized. Run 'symaira init' first", errorspkg.ErrVaultNotInitialized)
+			return errorspkg.NewCLIError(errorspkg.ExitNotInitialized, "vault not initialized. Run 'symvault init' first", errorspkg.ErrVaultNotInitialized)
 		}
 
 		archivePath := args[0]
@@ -128,10 +128,10 @@ The archive is extracted into the current vault directory. If the vault director
 does not exist, it will be created. After extraction, the vault is verified
 to ensure all expected files are present.`,
 	Example: `  # Restore into the default vault directory
-  symaira restore ~/symaira-2026-05-17.tar.gz
+  symvault restore ~/symvault-2026-05-17.tar.gz
 
   # Restore into a custom location
-  symaira --vault ~/restored restore archive.tar.gz`,
+  symvault --vault ~/restored restore archive.tar.gz`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		vaultDir, err := cli.VaultPath()
@@ -149,7 +149,7 @@ to ensure all expected files are present.`,
 		}
 
 		if !vaultpkg.IsInitialized(vaultDir) {
-			return errorspkg.NewCLIError(errorspkg.ExitNotInitialized, "vault not initialized. Run 'symaira init' first", errorspkg.ErrVaultNotInitialized)
+			return errorspkg.NewCLIError(errorspkg.ExitNotInitialized, "vault not initialized. Run 'symvault init' first", errorspkg.ErrVaultNotInitialized)
 		}
 
 		cli.PrintQuietAware("Vault restored to: %s\n", vaultDir)

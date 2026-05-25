@@ -16,7 +16,7 @@ func TestRecordMCPRequest(t *testing.T) {
 	RecordMCPRequest("list", "default", "success", 200*time.Millisecond)
 	RecordMCPRequest("get", "claude", "error", 50*time.Millisecond)
 
-	count, err := testutil.GatherAndCount(Registry(), "symaira_mcp_requests_total")
+	count, err := testutil.GatherAndCount(Registry(), "symvault_mcp_requests_total")
 	if err != nil {
 		t.Fatalf("gather metrics: %v", err)
 	}
@@ -25,12 +25,12 @@ func TestRecordMCPRequest(t *testing.T) {
 	}
 
 	expected := `
-		# HELP symaira_mcp_requests_total Total number of MCP tool requests.
-		# TYPE symaira_mcp_requests_total counter
-		symaira_mcp_requests_total{agent="default",status="success",tool="list"} 2
-		symaira_mcp_requests_total{agent="claude",status="error",tool="get"} 1
+		# HELP symvault_mcp_requests_total Total number of MCP tool requests.
+		# TYPE symvault_mcp_requests_total counter
+		symvault_mcp_requests_total{agent="default",status="success",tool="list"} 2
+		symvault_mcp_requests_total{agent="claude",status="error",tool="get"} 1
 	`
-	if err := testutil.GatherAndCompare(Registry(), strings.NewReader(expected), "symaira_mcp_requests_total"); err != nil {
+	if err := testutil.GatherAndCompare(Registry(), strings.NewReader(expected), "symvault_mcp_requests_total"); err != nil {
 		t.Errorf("counter mismatch: %v", err)
 	}
 }
@@ -40,12 +40,12 @@ func TestRecordAuthDenial(t *testing.T) {
 	RecordAuthDenial("write_denied", "claude")
 
 	expected := `
-		# HELP symaira_mcp_auth_denials_total Total number of MCP authentication/authorization denials.
-		# TYPE symaira_mcp_auth_denials_total counter
-		symaira_mcp_auth_denials_total{agent="default",reason="scope_denied"} 1
-		symaira_mcp_auth_denials_total{agent="claude",reason="write_denied"} 1
+		# HELP symvault_mcp_auth_denials_total Total number of MCP authentication/authorization denials.
+		# TYPE symvault_mcp_auth_denials_total counter
+		symvault_mcp_auth_denials_total{agent="default",reason="scope_denied"} 1
+		symvault_mcp_auth_denials_total{agent="claude",reason="write_denied"} 1
 	`
-	if err := testutil.GatherAndCompare(Registry(), strings.NewReader(expected), "symaira_mcp_auth_denials_total"); err != nil {
+	if err := testutil.GatherAndCompare(Registry(), strings.NewReader(expected), "symvault_mcp_auth_denials_total"); err != nil {
 		t.Errorf("auth denial counter mismatch: %v", err)
 	}
 }
@@ -55,12 +55,12 @@ func TestRecordApproval(t *testing.T) {
 	RecordApproval("claude", "denied")
 
 	expected := `
-		# HELP symaira_mcp_approvals_total Total number of MCP approval outcomes.
-		# TYPE symaira_mcp_approvals_total counter
-		symaira_mcp_approvals_total{agent="default",outcome="granted"} 1
-		symaira_mcp_approvals_total{agent="claude",outcome="denied"} 1
+		# HELP symvault_mcp_approvals_total Total number of MCP approval outcomes.
+		# TYPE symvault_mcp_approvals_total counter
+		symvault_mcp_approvals_total{agent="default",outcome="granted"} 1
+		symvault_mcp_approvals_total{agent="claude",outcome="denied"} 1
 	`
-	if err := testutil.GatherAndCompare(Registry(), strings.NewReader(expected), "symaira_mcp_approvals_total"); err != nil {
+	if err := testutil.GatherAndCompare(Registry(), strings.NewReader(expected), "symvault_mcp_approvals_total"); err != nil {
 		t.Errorf("approval counter mismatch: %v", err)
 	}
 }
@@ -94,10 +94,10 @@ func TestRegistry(t *testing.T) {
 	}
 
 	expectedMetrics := map[string]bool{
-		"symaira_mcp_requests_total":           false,
-		"symaira_mcp_request_duration_seconds": false,
-		"symaira_mcp_auth_denials_total":       false,
-		"symaira_mcp_approvals_total":          false,
+		"symvault_mcp_requests_total":           false,
+		"symvault_mcp_request_duration_seconds": false,
+		"symvault_mcp_auth_denials_total":       false,
+		"symvault_mcp_approvals_total":          false,
 		"symaira_vault_operations_total":       false,
 		"go_goroutines":                         false,
 		"process_cpu_seconds_total":             false,
@@ -119,7 +119,7 @@ func TestRegistry(t *testing.T) {
 func TestMCPRequestDuration(t *testing.T) {
 	RecordMCPRequest("get", "default", "success", 150*time.Millisecond)
 
-	count, err := testutil.GatherAndCount(Registry(), "symaira_mcp_request_duration_seconds")
+	count, err := testutil.GatherAndCount(Registry(), "symvault_mcp_request_duration_seconds")
 	if err != nil {
 		t.Fatalf("gather duration metric: %v", err)
 	}

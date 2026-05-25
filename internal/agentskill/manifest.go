@@ -98,7 +98,7 @@ func findFrontmatterClose(data []byte) int {
 	return -1
 }
 
-// FindSentinel reports whether the data contains a managed_by: symaira sentinel.
+// FindSentinel reports whether the data contains a managed_by: symvault sentinel.
 func FindSentinel(data []byte) bool {
 	manifest, err := ParseManifest(data)
 	if err != nil {

@@ -4,7 +4,7 @@ import * as os from "os";
 import * as yaml from "yaml";
 import { ServerConfig, AgentProfile } from "./types";
 
-const DEFAULT_VAULT_PATH = path.join(os.homedir(), ".symaira");
+const DEFAULT_VAULT_PATH = path.join(os.homedir(), ".symvault");
 
 export interface AuthHeaders {
   Authorization: string;
@@ -13,7 +13,7 @@ export interface AuthHeaders {
 }
 
 export function getVaultPath(): string {
-  return process.env.SYMAIRA_VAULT || DEFAULT_VAULT_PATH;
+  return process.env.SYMVAULT_VAULT || DEFAULT_VAULT_PATH;
 }
 
 export function readToken(vaultPath?: string): string {
@@ -22,7 +22,7 @@ export function readToken(vaultPath?: string): string {
 
   if (!fs.existsSync(tokenPath)) {
     throw new SymairaAuthError(
-      `MCP token not found at ${tokenPath}. Run .symaira serve. to generate one.`
+      `MCP token not found at ${tokenPath}. Run 'symvault serve' to generate one.`
     );
   }
 

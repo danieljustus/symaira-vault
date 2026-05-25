@@ -17,7 +17,7 @@ func loadGlobalConfig() (*configpkg.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	return configpkg.Load(filepath.Join(home, ".symaira", "config.yaml"))
+	return configpkg.Load(filepath.Join(home, ".symvault", "config.yaml"))
 }
 
 func EntryCompletionFunc(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {

@@ -83,7 +83,7 @@ func (a *linuxAutotype) typeWayland(text string) error {
 		"  Debian/Ubuntu: sudo apt install wtype  (or sudo apt install ydotool)\n" +
 		"  Arch:          sudo pacman -S wtype     (or ydotool)\n" +
 		"  Fedora:        sudo dnf install wtype   (or ydotool)\n" +
-		"`symaira doctor` will warn about this on every run until one is available")
+		"`symvault doctor` will warn about this on every run until one is available")
 }
 
 func NewLinuxAutotype() Autotype {

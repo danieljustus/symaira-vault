@@ -10,7 +10,7 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/fileutil"
 )
 
-// Save persists the config to the default config file path (~/.symaira/config.yaml).
+// Save persists the config to the default config file path (~/.symvault/config.yaml).
 func (c *Config) Save() error {
 	if c == nil {
 		return errors.New("config is nil")

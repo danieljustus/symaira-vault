@@ -53,7 +53,7 @@ func checkMCPTokens(vaultDir string, _ Options) Result {
 			parts = append(parts, fmt.Sprintf("%d expired/revoked", expired))
 		}
 		r.Message = strings.Join(parts, ", ")
-		r.Hint = "rotate old tokens with `symaira mcp-token-rotate`"
+		r.Hint = "rotate old tokens with `symvault mcp-token-rotate`"
 	} else {
 		r.Status = StatusOK
 		r.Message = fmt.Sprintf("%d active token(s), all within rotation policy", active)
@@ -63,7 +63,7 @@ func checkMCPTokens(vaultDir string, _ Options) Result {
 
 func checkAuditLog(vaultDir string, _ Options) Result {
 	r := Result{ID: "audit.log", Name: "Audit log"}
-	// Find audit log files: ~/.symaira/audit-*.log
+	// Find audit log files: ~/.symvault/audit-*.log
 	pattern := filepath.Join(vaultDir, "audit-*.log")
 	matches, err := filepath.Glob(pattern)
 	if err != nil || len(matches) == 0 {
@@ -168,7 +168,7 @@ func checkMCPServer(vaultDir string, _ Options) Result {
 	if err != nil {
 		r.Status = StatusWarn
 		r.Message = "MCP server not reachable at " + url
-		r.Hint = "start the server with `symaira serve --port " + strconv.Itoa(port) + "`"
+		r.Hint = "start the server with `symvault serve --port " + strconv.Itoa(port) + "`"
 		return r
 	}
 	_ = resp.Body.Close()
@@ -185,7 +185,7 @@ func checkMCPServer(vaultDir string, _ Options) Result {
 		r.Message += ", token present"
 	} else {
 		r.Message += ", no token file"
-		r.Hint = "generate an MCP token with `symaira mcp token create`"
+		r.Hint = "generate an MCP token with `symvault mcp token create`"
 	}
 	return r
 }
@@ -239,7 +239,7 @@ func checkMCPAgents(vaultDir string, _ Options) Result {
 	} else {
 		r.Status = StatusOK
 		r.Message = "no AI agent MCP configs found"
-		r.Hint = "run `symaira mcp-config <agent>` to generate config"
+		r.Hint = "run `symvault mcp-config <agent>` to generate config"
 	}
 	return r
 }

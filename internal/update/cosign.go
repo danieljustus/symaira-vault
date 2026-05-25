@@ -22,7 +22,7 @@ var execCommand = exec.Command
 // cosign signing convention where "<artifact>.sig" is the signature.
 func cosignSignatureFileName(version string) string {
 	v := strings.TrimPrefix(version, "v")
-	return fmt.Sprintf("symaira_%s_checksums.txt.sig", v)
+	return fmt.Sprintf("symvault_%s_checksums.txt.sig", v)
 }
 
 // cosignCertificateFileName returns the cosign certificate filename for the
@@ -30,7 +30,7 @@ func cosignSignatureFileName(version string) string {
 // cosign signing convention where "<artifact>.pem" is the certificate.
 func cosignCertificateFileName(version string) string {
 	v := strings.TrimPrefix(version, "v")
-	return fmt.Sprintf("symaira_%s_checksums.txt.pem", v)
+	return fmt.Sprintf("symvault_%s_checksums.txt.pem", v)
 }
 
 // fetchCosignArtifact downloads a cosign artifact (signature or certificate)
@@ -113,7 +113,7 @@ func VerifyCosignSignature(content, signature, certificate []byte) error {
 		)
 	}
 
-	tmpDir, err := os.MkdirTemp("", "symaira-cosign-*")
+	tmpDir, err := os.MkdirTemp("", "symvault-cosign-*")
 	if err != nil {
 		return fmt.Errorf("create temp directory: %w", err)
 	}

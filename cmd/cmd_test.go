@@ -214,7 +214,7 @@ func TestUnlockVaultLocked(t *testing.T) {
 }
 
 func TestOutputStdioConfig(t *testing.T) {
-	err := mcpcmd.OutputStdioConfig("claude-code", "symaira")
+	err := mcpcmd.OutputStdioConfig("claude-code", "symvault")
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -232,7 +232,7 @@ func TestOutputHTTPConfig(t *testing.T) {
 		t.Fatalf("failed to init vault: %v", err)
 	}
 
-	err := mcpcmd.OutputHTTPConfig("claude-code", "symaira", true, "")
+	err := mcpcmd.OutputHTTPConfig("claude-code", "symvault", true, "")
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -380,8 +380,8 @@ func TestParseSSHTarget_HostOnly(t *testing.T) {
 	if host != "example.com" {
 		t.Errorf("host = %q, want %q", host, "example.com")
 	}
-	if path != "~/symaira-remote.git" {
-		t.Errorf("path = %q, want %q", path, "~/symaira-remote.git")
+	if path != "~/symvault-remote.git" {
+		t.Errorf("path = %q, want %q", path, "~/symvault-remote.git")
 	}
 }
 

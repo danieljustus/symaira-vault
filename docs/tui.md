@@ -7,7 +7,7 @@ Symaira Vault includes an interactive terminal UI for browsing, filtering, and m
 Start the TUI with:
 
 ```bash
-openpass ui
+symvault ui
 ```
 
 The TUI uses your configured vault, the same session cache as other Symaira Vault commands, and the same clipboard auto-clear behavior.

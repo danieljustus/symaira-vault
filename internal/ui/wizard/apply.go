@@ -30,7 +30,7 @@ func preFlightCheck(state *WizardState) error {
 
 // Apply executes all side-effects collected in WizardState in the prescribed
 // order. Errors are accumulated in state.ApplyErrors; apply continues best-effort
-// so the user can run `symaira doctor` afterwards.
+// so the user can run `symvault doctor` afterwards.
 func Apply(state *WizardState) error {
 	// Pre-flight: validate recipients before creating vault files.
 	if err := preFlightCheck(state); err != nil {
@@ -62,7 +62,7 @@ func Apply(state *WizardState) error {
 		if !state.KeepOnError && vaultInitSucceeded && !state.ExistingVault {
 			rollbackInit(state)
 		}
-		return fmt.Errorf("apply completed with errors — run `symaira doctor` for details")
+		return fmt.Errorf("apply completed with errors — run `symvault doctor` for details")
 	}
 	_ = DeleteResumeFile(state.VaultDir)
 	return nil
@@ -153,7 +153,7 @@ func applyProfile(state *WizardState, errs *[]string) {
 		return
 	}
 	home, _ := os.UserHomeDir()
-	globalCfgPath := filepath.Join(home, ".symaira", "config.yaml")
+	globalCfgPath := filepath.Join(home, ".symvault", "config.yaml")
 	cfg, err := configpkg.Load(globalCfgPath)
 	if err != nil {
 		cfg = configpkg.Default()

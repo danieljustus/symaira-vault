@@ -192,7 +192,7 @@ func TestUpdateCheckCommandDoesNotRequireVault(t *testing.T) {
 	originalChanged := vaultFlag.Changed
 	_ = os.Unsetenv("HOME")
 	_ = os.Unsetenv("OPENPASS_VAULT")
-	vault = "~/.symaira"
+	vault = "~/.symvault"
 	if vaultFlag != nil {
 		_ = vaultFlag.Value.Set(vault)
 		vaultFlag.Changed = false
@@ -396,8 +396,8 @@ func TestUpdateCacheTTL_ConfigLoadError(t *testing.T) {
 		_ = os.Setenv("HOME", home)
 	}()
 
-	// Ensure .symaira directory doesn't exist so config load fails
-	_ = os.RemoveAll(filepath.Join(tmpDir, ".symaira"))
+	// Ensure .symvault directory doesn't exist so config load fails
+	_ = os.RemoveAll(filepath.Join(tmpDir, ".symvault"))
 
 	ttl := admin.UpdateCacheTTL()
 	if ttl != updatepkg.DefaultCacheTTL {
@@ -416,8 +416,8 @@ func TestUpdateCacheTTL_CustomCacheTTL(t *testing.T) {
 		_ = os.Setenv("HOME", home)
 	}()
 
-	symairaDir := filepath.Join(tmpDir, ".symaira")
-	if err := os.MkdirAll(symairaDir, 0o700); err != nil {
+	symvaultDir := filepath.Join(tmpDir, ".symvault")
+	if err := os.MkdirAll(symvaultDir, 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 
@@ -428,7 +428,7 @@ func TestUpdateCacheTTL_CustomCacheTTL(t *testing.T) {
 		},
 	}
 	data, _ := yaml.Marshal(cfg)
-	if err := os.WriteFile(filepath.Join(symairaDir, "config.yaml"), data, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(symvaultDir, "config.yaml"), data, 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
@@ -446,8 +446,8 @@ func TestUpdateCacheTTL_DefaultWhenNoUpdateConfig(t *testing.T) {
 		_ = os.Setenv("HOME", home)
 	}()
 
-	symairaDir := filepath.Join(tmpDir, ".symaira")
-	if err := os.MkdirAll(symairaDir, 0o700); err != nil {
+	symvaultDir := filepath.Join(tmpDir, ".symvault")
+	if err := os.MkdirAll(symvaultDir, 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 
@@ -455,7 +455,7 @@ func TestUpdateCacheTTL_DefaultWhenNoUpdateConfig(t *testing.T) {
 		"vault_dir": "/tmp/vault",
 	}
 	data, _ := yaml.Marshal(cfg)
-	if err := os.WriteFile(filepath.Join(symairaDir, "config.yaml"), data, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(symvaultDir, "config.yaml"), data, 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 

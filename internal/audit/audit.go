@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	defaultDirName         = ".symaira"
+	defaultDirName         = ".symvault"
 	defaultFileNamePattern = "audit-%s.log"
 	hmacKeyFileName        = "audit-hmac-key"
 	hmacKeySize            = 32

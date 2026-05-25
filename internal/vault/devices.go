@@ -16,7 +16,7 @@ type Device struct {
 	LastSeen  *time.Time `json:"last_seen,omitempty"`
 }
 
-// DeviceManager manages the local device registry stored in .symaira/devices.json.
+// DeviceManager manages the local device registry stored in .symvault/devices.json.
 type DeviceManager struct {
 	vaultDir string
 }
@@ -27,7 +27,7 @@ func NewDeviceManager(vaultDir string) *DeviceManager {
 }
 
 func (dm *DeviceManager) devicesPath() string {
-	return filepath.Join(dm.vaultDir, ".symaira", "devices.json")
+	return filepath.Join(dm.vaultDir, ".symvault", "devices.json")
 }
 
 func (dm *DeviceManager) ensureDir() error {

@@ -31,7 +31,7 @@ export function buildInitializeRequest(): MCPMessage {
     protocolVersion: "2025-11-25",
     capabilities: {},
     clientInfo: {
-      name: "symaira-editor-plugin",
+      name: "symvault-editor-plugin",
       version: "1.0.0",
     },
   });

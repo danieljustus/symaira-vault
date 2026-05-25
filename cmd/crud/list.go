@@ -26,13 +26,13 @@ var listCmd = &cobra.Command{
 	ValidArgsFunction: cli.EntryCompletionFunc,
 	Short:             "List password entries",
 	Example: `  # List all entries
-  symaira list
+  symvault list
 
   # List entries under "work/" prefix
-  symaira list work/
+  symvault list work/
 
   # JSON output
-  symaira list --output json`,
+  symvault list --output json`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return cli.WithVault(func(svc vaultsvc.Service) error {

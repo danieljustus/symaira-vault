@@ -30,22 +30,22 @@ The wizard guides you through:
   • Backup recommendations
   • Profile name
 
-For non-interactive environments (CI, scripts), use 'symaira init' instead.`,
+For non-interactive environments (CI, scripts), use 'symvault init' instead.`,
 	Example: `  # Run the wizard (resumes from saved state if available)
-  symaira setup
+  symvault setup
 
   # Restart from scratch
-  symaira setup --no-resume
+  symvault setup --no-resume
 
   # Keep partial vault artifacts on error for debugging
-  symaira setup --keep-on-error`,
+  symvault setup --keep-on-error`,
 	Annotations: map[string]string{
 		cli.RequiresVaultAnnotation: "false",
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// WIZ-15: Non-TTY guard.
 		if !term.IsTerminal(int(os.Stdin.Fd())) {
-			return fmt.Errorf("setup needs a TTY; use `symaira init` for non-interactive vault initialization")
+			return fmt.Errorf("setup needs a TTY; use `symvault init` for non-interactive vault initialization")
 		}
 
 		vaultDir := cli.GetVaultDir()

@@ -33,7 +33,7 @@ func (b *powershellBackend) prompt(req PromptRequest) (string, error) {
 		// Title is bundled into the message because Get-Credential lacks a
 		// separate title parameter on some Windows versions.
 		script = fmt.Sprintf(
-			"$cred = Get-Credential -UserName 'symaira' -Message %s; if (-not $cred) { exit 1 }; $cred.GetNetworkCredential().Password",
+			"$cred = Get-Credential -UserName 'symvault' -Message %s; if (-not $cred) { exit 1 }; $cred.GetNetworkCredential().Password",
 			psQuote(title+"\n\n"+body),
 		)
 	} else {

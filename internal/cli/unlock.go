@@ -119,7 +119,7 @@ func WithVault(fn func(vaultsvc.Service) error) error {
 	}
 	if !vaultpkg.IsInitialized(vaultDir) {
 		return errorspkg.NewCLIError(errorspkg.ExitNotInitialized,
-			"vault not initialized. Run 'symaira init' first",
+			"vault not initialized. Run 'symvault init' first",
 			errorspkg.ErrVaultNotInitialized)
 	}
 	v, err := UnlockVault(vaultDir, true)
@@ -136,7 +136,7 @@ func WithVaultRaw(fn func(*vaultpkg.Vault) error) error {
 	}
 	if !vaultpkg.IsInitialized(vaultDir) {
 		return errorspkg.NewCLIError(errorspkg.ExitNotInitialized,
-			"vault not initialized. Run 'symaira init' first",
+			"vault not initialized. Run 'symvault init' first",
 			errorspkg.ErrVaultNotInitialized)
 	}
 	v, err := UnlockVault(vaultDir, true)
@@ -157,9 +157,9 @@ func loadVaultConfigForUnlock(vaultDir string) *configpkg.Config {
 func lockedMessageForCache() string {
 	status := SessionGetCacheStatus()
 	if !status.Persistent {
-		return "vault locked: this build cannot share 'symaira unlock' sessions across processes; set OPENPASS_PASSPHRASE or use a build with OS keyring support"
+		return "vault locked: this build cannot share 'symvault unlock' sessions across processes; set OPENPASS_PASSPHRASE or use a build with OS keyring support"
 	}
-	return "vault locked: run 'symaira unlock' first, enable Touch ID with 'symaira auth set touchid', or set OPENPASS_PASSPHRASE"
+	return "vault locked: run 'symvault unlock' first, enable Touch ID with 'symvault auth set touchid', or set OPENPASS_PASSPHRASE"
 }
 
 func DefaultSessionTTL() time.Duration {

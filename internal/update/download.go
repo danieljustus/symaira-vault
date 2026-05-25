@@ -39,13 +39,13 @@ func archiveName(version, os, arch string) string {
 	if os == windowsOS {
 		ext = "zip"
 	}
-	return fmt.Sprintf("symaira_%s_%s_%s.%s", v, os, arch, ext)
+	return fmt.Sprintf("symvault_%s_%s_%s.%s", v, os, arch, ext)
 }
 
 // checksumsFileName returns the checksums filename for the given version.
 func checksumsFileName(version string) string {
 	v := strings.TrimPrefix(version, "v")
-	return fmt.Sprintf("symaira_%s_checksums.txt", v)
+	return fmt.Sprintf("symvault_%s_checksums.txt", v)
 }
 
 // newDownloadClient returns an HTTP client with TLS 1.3 minimum and a longer

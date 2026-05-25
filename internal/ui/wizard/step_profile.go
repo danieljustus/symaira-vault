@@ -53,7 +53,7 @@ func (s *ProfileStep) View() string {
 	lines := []string{
 		titleStyle.Render("Vault profile name"),
 		"",
-		"Name this vault profile (used with " + dimStyle.Render("symaira --profile <name>") + ").",
+		"Name this vault profile (used with " + dimStyle.Render("symvault --profile <name>") + ").",
 		"",
 		s.input.View(),
 	}

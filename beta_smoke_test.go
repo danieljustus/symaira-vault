@@ -13,7 +13,7 @@ import (
 
 func TestBetaSmokeFlow(t *testing.T) {
 	binDir := t.TempDir()
-	binName := "symaira"
+	binName := "symvault"
 	if runtime.GOOS == "windows" {
 		binName += ".exe"
 	}
@@ -23,7 +23,7 @@ func TestBetaSmokeFlow(t *testing.T) {
 	build.Dir = repoRoot(t)
 	build.Env = append(os.Environ(), "GOWORK=off")
 	if output, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build symaira: %v\n%s", err, output)
+		t.Fatalf("build symvault: %v\n%s", err, output)
 	}
 
 	vaultDir := filepath.Join(t.TempDir(), "vault")

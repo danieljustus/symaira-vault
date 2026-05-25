@@ -19,19 +19,19 @@ type searchResultSpec struct {
 }
 
 var cliAlternatives = map[string]string{
-	"list_entries":       "symaira list [prefix]",
-	"get_entry":          "symaira get <path>",
-	"get_entry_value":    "symaira get <path>",
-	"get_entry_metadata": "symaira get <path>",
-	"find_entries":       "symaira find <query>",
-	"set_entry_field":    "symaira set <path>.<field> --value <value>",
-	"delete_entry":       "symaira delete <path>",
-	"generate_password":  "symaira generate --length N --symbols",
-	"generate_totp":      "symaira get <path> --totp",
-	"copy_to_clipboard":  "symaira get <path>.password --clip",
-	"autotype":           "symaira get <path>.password --autotype",
-	"health":             "symaira serve --stdio (health is automatic)",
-	"run_command":        "symaira run --env KEY=path.field -- <command>",
+	"list_entries":       "symvault list [prefix]",
+	"get_entry":          "symvault get <path>",
+	"get_entry_value":    "symvault get <path>",
+	"get_entry_metadata": "symvault get <path>",
+	"find_entries":       "symvault find <query>",
+	"set_entry_field":    "symvault set <path>.<field> --value <value>",
+	"delete_entry":       "symvault delete <path>",
+	"generate_password":  "symvault generate --length N --symbols",
+	"generate_totp":      "symvault get <path> --totp",
+	"copy_to_clipboard":  "symvault get <path>.password --clip",
+	"autotype":           "symvault get <path>.password --autotype",
+	"health":             "symvault serve --stdio (health is automatic)",
+	"run_command":        "symvault run --env KEY=path.field -- <command>",
 }
 
 func riskLevelTier(level RiskLevel) string {

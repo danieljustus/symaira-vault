@@ -21,13 +21,13 @@ var syncCmd = &cobra.Command{
 	Short: "Sync vault with remote (pull + optional push)",
 	Long:  "Pulls changes from the remote git repository and optionally pushes local changes.",
 	Example: `  # Pull only
-  symaira sync
+  symvault sync
 
   # Pull and push
-  symaira sync --push
+  symvault sync --push
 
   # Force pull (reset local changes)
-  symaira sync --force`,
+  symvault sync --force`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		vaultDir, err := cli.VaultPath()
@@ -37,7 +37,7 @@ var syncCmd = &cobra.Command{
 
 		if !vaultpkg.IsInitialized(vaultDir) {
 			return errorspkg.NewCLIError(errorspkg.ExitNotInitialized,
-				"vault not initialized. Run 'symaira init' first",
+				"vault not initialized. Run 'symvault init' first",
 				errorspkg.ErrVaultNotInitialized)
 		}
 

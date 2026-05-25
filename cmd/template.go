@@ -32,30 +32,30 @@ Supported template types:
   github-actions  - GitHub Actions workflow secrets
   terraform       - Terraform variable definitions`,
 	Example: `  # Generate a .env file from the work/* entries
-  symaira template generate env --prefix work/ > .env
+  symvault template generate env --prefix work/ > .env
 
   # K8s Secret manifest
-  symaira template generate k8s-secret --name prod-secrets prod/*`,
+  symvault template generate k8s-secret --name prod-secrets prod/*`,
 }
 
 var templateGenerateCmd = &cobra.Command{
 	Use:   "generate",
 	Short: "Generate a configuration file from a template",
 	Example: `  # Generate .env file from vault secrets
-  symaira template generate --type env --name myapp
+  symvault template generate --type env --name myapp
 
   # Generate Kubernetes secret manifest
-  symaira template generate --type k8s-secret --name myapp --output k8s/secret.yaml
+  symvault template generate --type k8s-secret --name myapp --output k8s/secret.yaml
 
   # Dry-run to preview without real values
-  symaira template generate --type env --name myapp --dry-run`,
+  symvault template generate --type env --name myapp --dry-run`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return cli.WithVault(func(svc vaultsvc.Service) error {
 			ctx := context.Background()
 			engine := template.NewEngine(svc)
 
 			refs := make(map[string]string)
-			customDir := os.ExpandEnv("$HOME/.config/symaira/templates")
+			customDir := os.ExpandEnv("$HOME/.config/symvault/templates")
 			_ = engine.LoadCustomTemplates(customDir)
 
 			output, err := engine.Render(ctx, templateType, templateName, refs, templateDryRun)

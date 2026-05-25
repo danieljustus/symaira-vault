@@ -1,6 +1,6 @@
 /**
  * Main Symaira Vault MCP HTTP client.
- * Communicates with symaira serve via JSON-RPC 2.0 over HTTP.
+ * Communicates with symvault serve via JSON-RPC 2.0 over HTTP.
  */
 
 import {

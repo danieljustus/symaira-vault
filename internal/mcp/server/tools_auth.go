@@ -57,7 +57,7 @@ func (s *Server) handleSetAuthMethod(ctx context.Context, req mcp.CallToolReques
 		}
 		passphrase, err := session.LoadPassphrase(s.vault.Dir)
 		if err != nil || len(passphrase) == 0 {
-			return mcp.NewToolResultError("Touch ID setup requires an active Symaira Vault session; run symaira unlock first"), nil
+			return mcp.NewToolResultError("Touch ID setup requires an active Symaira Vault session; run symvault unlock first"), nil
 		}
 		defer crypto.Wipe(passphrase)
 		if err := session.SaveBiometricPassphrase(ctx, s.vault.Dir, passphrase); err != nil {

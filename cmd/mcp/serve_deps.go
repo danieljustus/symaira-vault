@@ -83,7 +83,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if !vaultpkg.IsInitialized(vaultDir) {
-		return errorspkg.NewCLIError(errorspkg.ExitNotInitialized, "vault not initialized. Run 'symaira init' first", errorspkg.ErrVaultNotInitialized)
+		return errorspkg.NewCLIError(errorspkg.ExitNotInitialized, "vault not initialized. Run 'symvault init' first", errorspkg.ErrVaultNotInitialized)
 	}
 	var vault *vaultpkg.Vault
 	if agentName != "" || !stdioFlag {

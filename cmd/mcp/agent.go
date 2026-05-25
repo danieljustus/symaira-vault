@@ -22,31 +22,31 @@ var agentCmd = &cobra.Command{
 	Short: "Manage agent profiles",
 	Long: `Configure AI agent profiles with scoped permissions, tokens, and MCP integration.
 
-Use 'symaira agent setup <name>' to create a new agent with an interactive wizard
+Use 'symvault agent setup <name>' to create a new agent with an interactive wizard
 that guides you through security tier selection, vault path scoping, and approval mode.`,
 	Example: `  # Interactive new-agent wizard
-  symaira agent setup claude-code
+  symvault agent setup claude-code
 
   # List configured agents
-  symaira agent list
+  symvault agent list
 
   # Issue a token for an agent
-  symaira agent token new claude-code`,
+  symvault agent token new claude-code`,
 }
 
 var agentSetupCmd = &cobra.Command{
 	Use:   "setup <name>",
-	Short: "[Deprecated v4.0, removed in v4.1] Use 'symaira agent install <name>'",
+	Short: "[Deprecated v4.0, removed in v4.1] Use 'symvault agent install <name>'",
 	Long: `This command was deprecated in Symaira Vault v4.0 and will be removed in v4.1.
 
-Use 'symaira agent install <name>' instead to create and configure
+Use 'symvault agent install <name>' instead to create and configure
 agent profiles interactively.`,
 	Hidden: true,
 	Args:   cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: symaira agent install <name>\n")
+		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: symvault agent install <name>\n")
 		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
-			"This command is deprecated in v4.0. Use: symaira agent install <name>", nil)
+			"This command is deprecated in v4.0. Use: symvault agent install <name>", nil)
 	},
 }
 
@@ -149,8 +149,8 @@ func outputAgentMCPSnippet(name, rawToken string) {
 
 	config := map[string]any{
 		"mcpServers": map[string]any{
-			"symaira": map[string]any{
-				"command": "symaira",
+			"symvault": map[string]any{
+				"command": "symvault",
 				"args":    args,
 				"env": map[string]string{
 					"OPENPASS_MCP_TOKEN": rawToken,

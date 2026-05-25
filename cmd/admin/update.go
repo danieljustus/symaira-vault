@@ -28,7 +28,7 @@ func UpdateCacheTTL() time.Duration {
 	if err != nil {
 		return updatepkg.DefaultCacheTTL
 	}
-	cfg, err := configpkg.Load(filepath.Join(home, ".symaira", "config.yaml"))
+	cfg, err := configpkg.Load(filepath.Join(home, ".symvault", "config.yaml"))
 	if err != nil {
 		return updatepkg.DefaultCacheTTL
 	}
@@ -61,7 +61,7 @@ var errUpdateAvailable = errorspkg.NewCLIError(1, "update available", nil)
 var UpdateCmd = &cobra.Command{
 	Use:     "update",
 	Short:   "Check for Symaira Vault updates",
-	Example: `  symaira update check`,
+	Example: `  symvault update check`,
 	Args:    cobra.NoArgs,
 	Annotations: map[string]string{
 		cli.RequiresVaultAnnotation: "false",

@@ -22,10 +22,10 @@ var deleteCmd = &cobra.Command{
 	Aliases: []string{"rm", "remove"},
 	Short:   "Delete a password entry",
 	Example: `  # Delete an entry (with confirmation)
-  symaira delete github
+  symvault delete github
 
   # Skip confirmation
-  symaira delete github --yes`,
+  symvault delete github --yes`,
 	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: cli.EntryCompletionFunc,
 	RunE: func(cmd *cobra.Command, args []string) error {

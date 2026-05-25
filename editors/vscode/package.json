@@ -1,9 +1,9 @@
 {
-  "name": "symaira-vscode",
+  "name": "symvault-vscode",
   "displayName": "Symaira Vault",
   "description": "VS Code extension for Symaira Vault secret manager",
   "version": "1.0.0",
-  "publisher": "symaira",
+  "publisher": "symvault",
   "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
@@ -16,14 +16,14 @@
     "secrets",
     "vault",
     "mcp",
-    "symaira"
+    "symvault"
   ],
   "activationEvents": [
-    "onView:symaira.vault",
-    "onCommand:symaira.insertSecret",
-    "onCommand:symaira.copyToClipboard",
-    "onCommand:symaira.generatePassword",
-    "onCommand:symaira.quickPickVault",
+    "onView:symvault.vault",
+    "onCommand:symvault.insertSecret",
+    "onCommand:symvault.copyToClipboard",
+    "onCommand:symvault.generatePassword",
+    "onCommand:symvault.quickPickVault",
     "onStartupFinished"
   ],
   "main": "./out/extension.js",
@@ -31,54 +31,54 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "symaira-explorer",
+          "id": "symvault-explorer",
           "title": "Symaira Vault",
           "icon": "$(shield)"
         }
       ]
     },
     "views": {
-      "symaira-explorer": [
+      "symvault-explorer": [
         {
-          "id": "symaira.vault",
+          "id": "symvault.vault",
           "name": "Vault",
-          "when": "symaira.enabled"
+          "when": "symvault.enabled"
         }
       ]
     },
     "commands": [
       {
-        "command": "symaira.insertSecret",
+        "command": "symvault.insertSecret",
         "title": "Insert Secret",
         "category": "Symaira Vault",
         "icon": "$(insert)"
       },
       {
-        "command": "symaira.copyToClipboard",
+        "command": "symvault.copyToClipboard",
         "title": "Copy to Clipboard",
         "category": "Symaira Vault",
         "icon": "$(clippy)"
       },
       {
-        "command": "symaira.generatePassword",
+        "command": "symvault.generatePassword",
         "title": "Generate Password",
         "category": "Symaira Vault",
         "icon": "$(symbol-key)"
       },
       {
-        "command": "symaira.quickPickVault",
+        "command": "symvault.quickPickVault",
         "title": "Quick Pick Vault Entry",
         "category": "Symaira Vault",
         "icon": "$(list-unordered)"
       },
       {
-        "command": "symaira.refreshVault",
+        "command": "symvault.refreshVault",
         "title": "Refresh Vault",
         "category": "Symaira Vault",
         "icon": "$(refresh)"
       },
       {
-        "command": "symaira.openSettings",
+        "command": "symvault.openSettings",
         "title": "Open Settings",
         "category": "Symaira Vault",
         "icon": "$(gear)"
@@ -87,35 +87,35 @@
     "menus": {
       "view/title": [
         {
-          "command": "symaira.refreshVault",
-          "when": "view == symaira.vault",
+          "command": "symvault.refreshVault",
+          "when": "view == symvault.vault",
           "group": "navigation"
         },
         {
-          "command": "symaira.openSettings",
-          "when": "view == symaira.vault",
+          "command": "symvault.openSettings",
+          "when": "view == symvault.vault",
           "group": "navigation"
         }
       ],
       "view/item/context": [
         {
-          "command": "symaira.insertSecret",
-          "when": "view == symaira.vault && viewItem == entry",
-          "group": "symaira@1"
+          "command": "symvault.insertSecret",
+          "when": "view == symvault.vault && viewItem == entry",
+          "group": "symvault@1"
         },
         {
-          "command": "symaira.copyToClipboard",
-          "when": "view == symaira.vault && viewItem == entry",
-          "group": "symaira@2"
+          "command": "symvault.copyToClipboard",
+          "when": "view == symvault.vault && viewItem == entry",
+          "group": "symvault@2"
         }
       ],
       "commandPalette": [
         {
-          "command": "symaira.insertSecret",
+          "command": "symvault.insertSecret",
           "when": "false"
         },
         {
-          "command": "symaira.copyToClipboard",
+          "command": "symvault.copyToClipboard",
           "when": "false"
         }
       ]
@@ -123,22 +123,22 @@
     "configuration": {
       "title": "Symaira Vault",
       "properties": {
-        "symaira.baseUrl": {
+        "symvault.baseUrl": {
           "type": "string",
           "default": "http://127.0.0.1:8080",
           "description": "Base URL of the Symaira Vault MCP server"
         },
-        "symaira.vaultPath": {
+        "symvault.vaultPath": {
           "type": "string",
           "default": "",
-          "description": "Path to the Symaira Vault vault directory. Leave empty to use $SYMAIRA_VAULT or ~/.symaira"
+          "description": "Path to the Symaira Vault vault directory. Leave empty to use $SYMVAULT_VAULT or ~/.symvault"
         },
-        "symaira.agentName": {
+        "symvault.agentName": {
           "type": "string",
           "default": "vscode",
           "description": "Agent name for MCP authentication"
         },
-        "symaira.timeoutMs": {
+        "symvault.timeoutMs": {
           "type": "number",
           "default": 30000,
           "description": "Request timeout in milliseconds"

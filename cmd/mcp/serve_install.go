@@ -27,13 +27,13 @@ and stays running.
 On Linux, this creates a systemd user service in ~/.config/systemd/user/
 and enables it to start automatically.`,
 	Example: `  # Install as autostart service
-  symaira serve install
+  symvault serve install
 
   # Check status
-  symaira serve status
+  symvault serve status
 
   # Remove again
-  symaira serve uninstall`,
+  symvault serve uninstall`,
 	RunE: runServeInstall,
 }
 
@@ -156,6 +156,6 @@ func loadServeConfig() (*configpkg.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	configPath := filepath.Join(home, ".symaira", "config.yaml")
+	configPath := filepath.Join(home, ".symvault", "config.yaml")
 	return configpkg.Load(configPath)
 }

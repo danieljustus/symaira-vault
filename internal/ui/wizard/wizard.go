@@ -1,4 +1,4 @@
-// Package wizard provides the symaira setup interactive wizard.
+// Package wizard provides the symvault setup interactive wizard.
 package wizard
 
 import (
@@ -116,8 +116,8 @@ func Run(vaultDir string, keepOnError bool, noResume bool) error {
 		if !final.noResume && final.state.VaultDir != "" {
 			if _, _, lerr := LoadResumeState(final.state.VaultDir); lerr == nil {
 				fmt.Println()
-				fmt.Println("Setup paused. Resume anytime with `symaira setup`.")
-				fmt.Println("Start fresh instead: `symaira setup --no-resume`.")
+				fmt.Println("Setup paused. Resume anytime with `symvault setup`.")
+				fmt.Println("Start fresh instead: `symvault setup --no-resume`.")
 			}
 		}
 		return fmt.Errorf("setup canceled")
@@ -355,7 +355,7 @@ func (m WizardModel) handleApplyFinalize() (tea.Model, tea.Cmd) {
 	}
 
 	if len(m.applyErrs) > 0 {
-		m.applyErr = fmt.Errorf("apply completed with errors — run `symaira doctor` for details")
+		m.applyErr = fmt.Errorf("apply completed with errors — run `symvault doctor` for details")
 	}
 
 	_ = DeleteResumeFile(m.state.VaultDir)

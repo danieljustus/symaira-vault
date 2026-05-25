@@ -30,10 +30,10 @@ var rotatePassphraseCmd = &cobra.Command{
 The X25519 key pair stays the same — only the passphrase protecting it is changed.
 Optionally re-encrypts all entries with the new passphrase.`,
 	Example: `  # Change the passphrase only
-  symaira rotate-passphrase
+  symvault rotate-passphrase
 
   # Change passphrase AND re-encrypt all entries (slow but clean)
-  symaira rotate-passphrase --reencrypt`,
+  symvault rotate-passphrase --reencrypt`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		_, _ = cmd, args
 		vaultDir, cfg, err := loadAuthConfig()
@@ -127,7 +127,7 @@ Optionally re-encrypts all entries with the new passphrase.`,
 			fmt.Fprintf(os.Stderr, "Warning: git auto-commit failed: %v\n", commitErr)
 		}
 
-		auditLog, auditErr := audit.New("symaira", vaultDir)
+		auditLog, auditErr := audit.New("symvault", vaultDir)
 		if auditErr == nil {
 			if err := auditLog.LogEntry(audit.LogEntry{Action: "rotate-passphrase", OK: true, Timestamp: time.Now().UTC().Format(time.RFC3339)}); err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: audit log write failed: %v\n", err)

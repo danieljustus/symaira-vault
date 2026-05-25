@@ -39,7 +39,7 @@ func (s *Server) handleGenerateTemplate(ctx context.Context, req mcp.CallToolReq
 
 	svc := vaultsvc.New(slog.Default(), s.vault)
 	engine := template.NewEngine(svc)
-	customDir := os.ExpandEnv("$HOME/.config/symaira/templates")
+	customDir := os.ExpandEnv("$HOME/.config/symvault/templates")
 	_ = engine.LoadCustomTemplates(customDir)
 
 	output, err := engine.Render(ctx, templateType, name, refs, dryRun)

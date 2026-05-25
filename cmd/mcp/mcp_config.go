@@ -22,33 +22,33 @@ import (
 
 var McpConfigCmd = &cobra.Command{
 	Use:   "mcp-config <agent>",
-	Short: "[Deprecated v4.0, removed in v4.1] Use 'symaira agent install <agent> --config-only'",
+	Short: "[Deprecated v4.0, removed in v4.1] Use 'symvault agent install <agent> --config-only'",
 	Long: `This command was deprecated in Symaira Vault v4.0 and will be removed in v4.1.
 
-Use 'symaira agent install <agent> --config-only' to output MCP config snippets.`,
-	Example: `  symaira agent install claude-code --config-only`,
+Use 'symvault agent install <agent> --config-only' to output MCP config snippets.`,
+	Example: `  symvault agent install claude-code --config-only`,
 	Hidden:  true,
 	Args:    cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: symaira agent install <agent> --config-only\n")
+		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: symvault agent install <agent> --config-only\n")
 		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
-			"This command is deprecated in v4.0. Use: symaira agent install <agent> --config-only", nil)
+			"This command is deprecated in v4.0. Use: symvault agent install <agent> --config-only", nil)
 	},
 }
 
 var mcpTokenRotateCmd = &cobra.Command{
 	Use:   "mcp-token-rotate",
-	Short: "[Deprecated v4.0, removed in v4.1] Use 'symaira agent token <name> rotate'",
+	Short: "[Deprecated v4.0, removed in v4.1] Use 'symvault agent token <name> rotate'",
 	Long: `This command was deprecated in Symaira Vault v4.0 and will be removed in v4.1.
 
-Token rotation is now managed per-agent via 'symaira agent token <name> rotate'.`,
-	Example: `  symaira agent token my-agent rotate`,
+Token rotation is now managed per-agent via 'symvault agent token <name> rotate'.`,
+	Example: `  symvault agent token my-agent rotate`,
 	Hidden:  true,
 	Args:    cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: symaira agent token <name> rotate\n")
+		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: symvault agent token <name> rotate\n")
 		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
-			"This command is deprecated in v4.0. Use: symaira agent token <name> rotate", nil)
+			"This command is deprecated in v4.0. Use: symvault agent token <name> rotate", nil)
 	},
 }
 
@@ -134,7 +134,7 @@ func stdioArgs(agentName string) []string {
 }
 
 func shouldIncludeVaultArg(vDir string) bool {
-	defaultVault, err := cli.ExpandVaultDir("~/.symaira")
+	defaultVault, err := cli.ExpandVaultDir("~/.symvault")
 	if err != nil {
 		return false
 	}
@@ -144,7 +144,7 @@ func shouldIncludeVaultArg(vDir string) bool {
 func ResolveHTTPPort(vaultDir string, bind string, configuredPort int) (int, error) {
 	if port, ok := cli.LoadRuntimePort(vaultDir); ok {
 		if err := CheckRuntimePortHealth(bind, port); err != nil {
-			return 0, fmt.Errorf("stale runtime port %d from %s: %w; remove %s or restart 'symaira serve'", port, filepath.Join(vaultDir, cli.RuntimePortFileName), err, filepath.Join(vaultDir, cli.RuntimePortFileName))
+			return 0, fmt.Errorf("stale runtime port %d from %s: %w; remove %s or restart 'symvault serve'", port, filepath.Join(vaultDir, cli.RuntimePortFileName), err, filepath.Join(vaultDir, cli.RuntimePortFileName))
 		}
 		return port, nil
 	}
@@ -176,7 +176,7 @@ func OutputStdioConfig(agentName, serverName string) error {
 	config := map[string]any{
 		"mcpServers": map[string]any{
 			serverName: map[string]any{
-				"command": "symaira",
+				"command": "symvault",
 				"args":    stdioArgs(agentName),
 			},
 		},
@@ -191,7 +191,7 @@ func OutputHermesStdioConfig(agentName, serverName string) error {
 	config := map[string]any{
 		"mcp_servers": map[string]any{
 			serverName: map[string]any{
-				"command": "symaira",
+				"command": "symvault",
 				"args":    stdioArgs(agentName),
 				"timeout": 120,
 			},
@@ -266,14 +266,14 @@ func OutputHermesHTTPConfig(agentName, serverName string, redact bool, tokenID s
 
 // OutputAgentStdioConfig outputs YAML stdio config for agent-specific formats.
 // serverKey is the key name in mcp_servers (e.g., "claude_code", "codex").
-// agentName is passed to symaira serve (e.g., "claude-code", "codex").
+// agentName is passed to symvault serve (e.g., "claude-code", "codex").
 //
-// Verification: symaira mcp-config claude-code --format claude-code | paste into Claude Desktop config
+// Verification: symvault mcp-config claude-code --format claude-code | paste into Claude Desktop config
 func OutputAgentStdioConfig(agentName, serverKey string) error {
 	config := map[string]any{
 		"mcp_servers": map[string]any{
 			serverKey: map[string]any{
-				"command": "symaira",
+				"command": "symvault",
 				"args":    stdioArgs(agentName),
 				"timeout": 120,
 			},
@@ -287,11 +287,11 @@ func OutputAgentStdioConfig(agentName, serverKey string) error {
 
 // OutputAgentHTTPConfig outputs YAML HTTP config for agent-specific formats.
 // serverKey is the key name in mcp_servers.
-// agentName is passed to symaira serve and X-Symaira-Agent header.
+// agentName is passed to symvault serve and X-Symaira-Agent header.
 // redact outputs env:OPENPASS_MCP_TOKEN instead of the actual token.
 //
-// Verification: symaira mcp-config claude-code --http --format claude-code | paste into Claude Desktop config
-// Then verify: curl -H "Authorization: Bearer $(cat ~/.symaira/mcp-token)" http://127.0.0.1:8080/mcp
+// Verification: symvault mcp-config claude-code --http --format claude-code | paste into Claude Desktop config
+// Then verify: curl -H "Authorization: Bearer $(cat ~/.symvault/mcp-token)" http://127.0.0.1:8080/mcp
 func OutputAgentHTTPConfig(agentName, serverKey, displayName string, redact bool, tokenID string) error {
 	httpCfg, err := resolveHTTPConfig(agentName, tokenID)
 	if err != nil {

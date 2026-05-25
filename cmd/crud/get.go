@@ -46,19 +46,19 @@ var getCmd = &cobra.Command{
 	Short:   "Get a password entry",
 	Long:    "Retrieves and displays a password entry. Use path.field syntax to get specific fields.",
 	Example: `  # Get a specific field (auto-copies to clipboard on TTY)
-  symaira get github.password
+  symvault get github.password
 
   # Substring search fallback (when exact path doesn't exist)
-  symaira get git
+  symvault get git
 
   # Explicitly print to stdout instead of clipboard
-  symaira get github.password --print
+  symvault get github.password --print
 
   # Output as JSON
-  symaira get github --output json
+  symvault get github --output json
 
   # Use a specific profile
-  symaira get github.password --profile work`,
+  symvault get github.password --profile work`,
 	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: cli.EntryCompletionFunc,
 	RunE: func(cmd *cobra.Command, args []string) error {

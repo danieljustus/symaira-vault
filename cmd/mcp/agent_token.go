@@ -18,16 +18,16 @@ var agentTokenCmd = &cobra.Command{
 	Long:  `Create, list, revoke, and rotate scoped tokens for a specific agent.`,
 	Args:  cobra.ExactArgs(1),
 	Example: `  # Create a scoped token for an agent
-  symaira agent token my-agent new
+  symvault agent token my-agent new
 
   # List tokens for an agent
-  symaira agent token my-agent list
+  symvault agent token my-agent list
 
   # Revoke a token by ID
-  symaira agent token my-agent revoke <token-id>
+  symvault agent token my-agent revoke <token-id>
 
   # Rotate an agent's token (revoke + create new)
-  symaira agent token my-agent rotate`,
+  symvault agent token my-agent rotate`,
 }
 
 var agentTokenNewCmd = &cobra.Command{

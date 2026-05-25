@@ -61,7 +61,7 @@ var (
 			BinaryNames: []string{"openclaw"},
 			Format:      FormatJSON,
 			RootKey:     "mcpServers",
-			ServerKey:   "symaira",
+			ServerKey:   "symvault",
 		},
 		AgentClaudeCode: {
 			Type:        AgentClaudeCode,
@@ -73,7 +73,7 @@ var (
 			BinaryNames: []string{"claude", "claude-code"},
 			Format:      FormatJSON,
 			RootKey:     "mcpServers",
-			ServerKey:   "symaira",
+			ServerKey:   "symvault",
 		},
 		AgentHermes: {
 			Type:        AgentHermes,
@@ -87,7 +87,7 @@ var (
 			BinaryNames: []string{"hermes"},
 			Format:      FormatYAML,
 			RootKey:     "mcp_servers",
-			ServerKey:   "symaira",
+			ServerKey:   "symvault",
 		},
 		AgentCodex: {
 			Type:        AgentCodex,
@@ -98,7 +98,7 @@ var (
 			BinaryNames: []string{"codex"},
 			Format:      FormatTOML,
 			RootKey:     "mcp_servers",
-			ServerKey:   "symaira",
+			ServerKey:   "symvault",
 		},
 		AgentOpenCode: {
 			Type:        AgentOpenCode,
@@ -110,7 +110,7 @@ var (
 			BinaryNames: []string{"opencode"},
 			Format:      FormatJSON,
 			RootKey:     "mcp",
-			ServerKey:   "symaira",
+			ServerKey:   "symvault",
 			ServerConfigExtras: map[string]any{
 				"type":    "remote",
 				"enabled": true,

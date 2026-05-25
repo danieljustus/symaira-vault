@@ -21,7 +21,7 @@ function getConfig(): {
   agentName: string;
   timeoutMs: number;
 } {
-  const config = vscode.workspace.getConfiguration("symaira");
+  const config = vscode.workspace.getConfiguration("symvault");
   return {
     baseUrl: config.get<string>("baseUrl", "http://127.0.0.1:8080"),
     vaultPath: config.get<string>("vaultPath", ""),
@@ -41,14 +41,14 @@ function createClient(): SymairaMCPClient {
 }
 
 export function activate(context: vscode.ExtensionContext): void {
-  void vscode.commands.executeCommand("setContext", "symaira.enabled", true);
+  void vscode.commands.executeCommand("setContext", "symvault.enabled", true);
 
   client = createClient();
   tools = new SymairaTools(client);
   treeProvider = new VaultTreeProvider(tools);
   statusBar = new MCPStatusBar(client);
 
-  const treeView = vscode.window.createTreeView("symaira.vault", {
+  const treeView = vscode.window.createTreeView("symvault.vault", {
     treeDataProvider: treeProvider,
     showCollapseAll: true,
   });
@@ -59,21 +59,21 @@ export function activate(context: vscode.ExtensionContext): void {
   completionDisposable = vscode.languages.registerCompletionItemProvider(
     [{ scheme: "file" }, { scheme: "untitled" }],
     completionProvider,
-    "${symaira:"
+    "${symvault:"
   );
 
   const commands: vscode.Disposable[] = [
-    vscode.commands.registerCommand("symaira.refreshVault", () => {
+    vscode.commands.registerCommand("symvault.refreshVault", () => {
       treeProvider?.refresh();
     }),
-    vscode.commands.registerCommand("symaira.openSettings", () => {
+    vscode.commands.registerCommand("symvault.openSettings", () => {
       void vscode.commands.executeCommand(
         "workbench.action.openSettings",
-        "symaira"
+        "symvault"
       );
     }),
     vscode.commands.registerCommand(
-      "symaira.insertSecret",
+      "symvault.insertSecret",
       (item?: VaultTreeItem) => {
         const path = item?.path;
         if (path) {
@@ -84,7 +84,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     ),
     vscode.commands.registerCommand(
-      "symaira.copyToClipboard",
+      "symvault.copyToClipboard",
       (item?: VaultTreeItem) => {
         const path = item?.path;
         if (path) {
@@ -94,17 +94,17 @@ export function activate(context: vscode.ExtensionContext): void {
         }
       }
     ),
-    vscode.commands.registerCommand("symaira.generatePassword", () => {
+    vscode.commands.registerCommand("symvault.generatePassword", () => {
       void generatePassword(tools!);
     }),
-    vscode.commands.registerCommand("symaira.quickPickVault", () => {
+    vscode.commands.registerCommand("symvault.quickPickVault", () => {
       void quickPickVault(tools!);
     }),
   ];
 
   const configChangeDisposable = vscode.workspace.onDidChangeConfiguration(
     (event) => {
-      if (event.affectsConfiguration("symaira")) {
+      if (event.affectsConfiguration("symvault")) {
         client?.close();
         client = createClient();
         tools = new SymairaTools(client);
@@ -113,7 +113,7 @@ export function activate(context: vscode.ExtensionContext): void {
         statusBar = new MCPStatusBar(client);
         statusBar.show();
         treeView.dispose();
-        void vscode.window.createTreeView("symaira.vault", {
+        void vscode.window.createTreeView("symvault.vault", {
           treeDataProvider: treeProvider,
           showCollapseAll: true,
         });

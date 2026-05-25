@@ -24,13 +24,13 @@ Use --check to verify if an active session exists without prompting.
 Environment variable OPENPASS_PASSPHRASE can be used in CI/CD environments
 but should NOT be used on shared machines (visible in process listings).`,
 	Example: `  # Unlock the vault
-  symaira unlock
+  symvault unlock
 
   # Check if session is active
-  symaira unlock --check
+  symvault unlock --check
 
   # Unlock with custom TTL
-  symaira unlock --ttl 30m`,
+  symvault unlock --ttl 30m`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		check, _ := cmd.Flags().GetBool("check")
 		ttl, _ := cmd.Flags().GetDuration("ttl")
@@ -46,7 +46,7 @@ but should NOT be used on shared machines (visible in process listings).`,
 		}
 
 		if !vaultpkg.IsInitialized(vaultDir) {
-			return errorspkg.NewCLIError(errorspkg.ExitNotInitialized, "vault not initialized. Run 'symaira init' first", errorspkg.ErrVaultNotInitialized)
+			return errorspkg.NewCLIError(errorspkg.ExitNotInitialized, "vault not initialized. Run 'symvault init' first", errorspkg.ErrVaultNotInitialized)
 		}
 
 		if check {
@@ -65,7 +65,7 @@ but should NOT be used on shared machines (visible in process listings).`,
 		_ = v
 
 		if status := cli.SessionGetCacheStatus(); !status.Persistent {
-			return errorspkg.NewCLIError(errorspkg.ExitLocked, "session cache is memory-only; 'symaira unlock' cannot unlock future serve processes. Start serve with OPENPASS_PASSPHRASE or use a build with OS keyring support", nil)
+			return errorspkg.NewCLIError(errorspkg.ExitLocked, "session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with OPENPASS_PASSPHRASE or use a build with OS keyring support", nil)
 		}
 
 		fmt.Fprintf(os.Stderr, "Vault unlocked (session TTL: %s)\n", effectiveTTL)

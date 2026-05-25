@@ -129,7 +129,7 @@ func (s *Server) executeTool(ctx context.Context, name string, args json.RawMess
 			s.logAudit(ctx, "tool_registry_drift", name, false)
 			return callToolResultPayload(toolError(
 				"tool registry has changed since this token was issued — " +
-					"re-issue the token with 'symaira mcp token create'",
+					"re-issue the token with 'symvault mcp token create'",
 			)), nil
 		}
 	}

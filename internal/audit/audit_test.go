@@ -31,7 +31,7 @@ func TestLogEntryWritesJSONL(t *testing.T) {
 		DurMs:     42,
 	})
 
-	content, err := os.ReadFile(filepath.Join(home, ".symaira", "audit-test-agent.log"))
+	content, err := os.ReadFile(filepath.Join(home, ".symvault", "audit-test-agent.log"))
 	if err != nil {
 		t.Fatalf("ReadFile error = %v", err)
 	}
@@ -79,7 +79,7 @@ func TestLogEntryDenialIncludesReason(t *testing.T) {
 		Reason:    "write_denied",
 	})
 
-	content, err := os.ReadFile(filepath.Join(home, ".symaira", "audit-test-agent.log"))
+	content, err := os.ReadFile(filepath.Join(home, ".symvault", "audit-test-agent.log"))
 	if err != nil {
 		t.Fatalf("ReadFile error = %v", err)
 	}
@@ -147,7 +147,7 @@ func TestLogEntryMultipleWrites(t *testing.T) {
 		})
 	}
 
-	content, err := os.ReadFile(filepath.Join(home, ".symaira", "audit-multi-write.log"))
+	content, err := os.ReadFile(filepath.Join(home, ".symvault", "audit-multi-write.log"))
 	if err != nil {
 		t.Fatalf("ReadFile error = %v", err)
 	}
@@ -182,7 +182,7 @@ func TestLogEntryAutoTimestamp(t *testing.T) {
 		OK:     true,
 	})
 
-	content, err := os.ReadFile(filepath.Join(home, ".symaira", "audit-timestamp-test.log"))
+	content, err := os.ReadFile(filepath.Join(home, ".symvault", "audit-timestamp-test.log"))
 	if err != nil {
 		t.Fatalf("ReadFile error = %v", err)
 	}
@@ -215,7 +215,7 @@ func TestLogEntryPreservesProvidedTimestamp(t *testing.T) {
 		OK:        true,
 	})
 
-	content, err := os.ReadFile(filepath.Join(home, ".symaira", "audit-preserved-ts.log"))
+	content, err := os.ReadFile(filepath.Join(home, ".symvault", "audit-preserved-ts.log"))
 	if err != nil {
 		t.Fatalf("ReadFile error = %v", err)
 	}
@@ -292,7 +292,7 @@ func TestNewCreatesAuditDirectory(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	expectedDir := filepath.Join(home, ".symaira")
+	expectedDir := filepath.Join(home, ".symvault")
 	if _, err := os.Stat(expectedDir); os.IsNotExist(err) {
 		t.Fatalf("audit directory was not created at %s", expectedDir)
 	}
@@ -308,7 +308,7 @@ func TestNewCreatesLogFile(t *testing.T) {
 	}
 	defer func() { _ = logger.Close() }()
 
-	expectedFile := filepath.Join(home, ".symaira", "audit-logfile-test.log")
+	expectedFile := filepath.Join(home, ".symvault", "audit-logfile-test.log")
 	if _, err := os.Stat(expectedFile); os.IsNotExist(err) {
 		t.Fatalf("audit log file was not created at %s", expectedFile)
 	}
@@ -327,7 +327,7 @@ func TestNewSetsCorrectPermissions(t *testing.T) {
 	}
 	defer func() { _ = logger.Close() }()
 
-	expectedFile := filepath.Join(home, ".symaira", "audit-perms-test.log")
+	expectedFile := filepath.Join(home, ".symvault", "audit-perms-test.log")
 	info, err := os.Stat(expectedFile)
 	if err != nil {
 		t.Fatalf("Stat() error = %v", err)
@@ -396,7 +396,7 @@ func TestNewErrorWhenLogFileNotWritable(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	auditDir := filepath.Join(home, ".symaira")
+	auditDir := filepath.Join(home, ".symvault")
 	if err := os.MkdirAll(auditDir, 0o700); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
@@ -519,7 +519,7 @@ func TestRotateIfNeededSizeLimit(t *testing.T) {
 	}
 
 	// Verify rotated file exists
-	auditDir := filepath.Join(home, ".symaira")
+	auditDir := filepath.Join(home, ".symvault")
 	pattern := filepath.Join(auditDir, "audit-size-rotate-test.log.rotated.*")
 	matches, _ := filepath.Glob(pattern)
 	if len(matches) == 0 {
@@ -551,7 +551,7 @@ func TestRotateIfNeededAgeLimit(t *testing.T) {
 	}
 
 	// Verify rotated file exists
-	auditDir := filepath.Join(home, ".symaira")
+	auditDir := filepath.Join(home, ".symvault")
 	pattern := filepath.Join(auditDir, "audit-age-rotate-test.log.rotated.*")
 	matches, _ := filepath.Glob(pattern)
 	if len(matches) == 0 {
@@ -575,7 +575,7 @@ func TestEnforceRetentionMaxBackups(t *testing.T) {
 	}
 	defer func() { _ = logger.Close() }()
 
-	auditDir := filepath.Join(home, ".symaira")
+	auditDir := filepath.Join(home, ".symvault")
 
 	// Create 5 rotated files manually
 	for i := 0; i < 5; i++ {
@@ -616,7 +616,7 @@ func TestEnforceRetentionMaxAge(t *testing.T) {
 	}
 	defer func() { _ = logger.Close() }()
 
-	auditDir := filepath.Join(home, ".symaira")
+	auditDir := filepath.Join(home, ".symvault")
 
 	// Create rotated files with old timestamps
 	for i := 0; i < 3; i++ {
@@ -669,7 +669,7 @@ func TestEnforceRetentionPreservesNewest(t *testing.T) {
 	}
 	defer func() { _ = logger.Close() }()
 
-	auditDir := filepath.Join(home, ".symaira")
+	auditDir := filepath.Join(home, ".symvault")
 
 	// Create 4 rotated files at different times
 	for i := 0; i < 4; i++ {
@@ -718,7 +718,7 @@ func TestNoLogLossDuringRotation(t *testing.T) {
 	}
 
 	// Verify file is large enough (should exceed 1MB)
-	auditDir := filepath.Join(home, ".symaira")
+	auditDir := filepath.Join(home, ".symvault")
 	logFile := filepath.Join(auditDir, "audit-no-loss-test.log")
 	info, err := os.Stat(logFile)
 	if err != nil {
@@ -1106,7 +1106,7 @@ func TestLastNEntriesSkipsMalformedLines(t *testing.T) {
 	_ = logger.LogEntry(LogEntry{Agent: "test", Action: "valid", OK: true})
 
 	// Manually append malformed line
-	auditDir := filepath.Join(home, ".symaira")
+	auditDir := filepath.Join(home, ".symvault")
 	logFile := filepath.Join(auditDir, "audit-malformed-test.log")
 	f, err := os.OpenFile(logFile, os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
@@ -1226,7 +1226,7 @@ func TestLogEntryAutoFillsEmptyTimestamp(t *testing.T) {
 	})
 	after := time.Now().UTC().Truncate(time.Second).Add(time.Second)
 
-	content, err := os.ReadFile(filepath.Join(home, ".symaira", "audit-autofill-ts-test.log"))
+	content, err := os.ReadFile(filepath.Join(home, ".symvault", "audit-autofill-ts-test.log"))
 	if err != nil {
 		t.Fatalf("ReadFile error = %v", err)
 	}
@@ -1397,7 +1397,7 @@ func TestLogEntryAllFields(t *testing.T) {
 		OK:        true,
 	})
 
-	content, err := os.ReadFile(filepath.Join(home, ".symaira", "audit-all-fields-test.log"))
+	content, err := os.ReadFile(filepath.Join(home, ".symvault", "audit-all-fields-test.log"))
 	if err != nil {
 		t.Fatalf("ReadFile error = %v", err)
 	}
@@ -1449,7 +1449,7 @@ func TestNewValidAgentNames(t *testing.T) {
 			}
 			defer func() { _ = logger.Close() }()
 
-			expectedFile := filepath.Join(home, ".symaira", fmt.Sprintf("audit-%s.log", name))
+			expectedFile := filepath.Join(home, ".symvault", fmt.Sprintf("audit-%s.log", name))
 			if _, err := os.Stat(expectedFile); os.IsNotExist(err) {
 				t.Fatalf("log file not created for agent %q", name)
 			}
@@ -1471,7 +1471,7 @@ func TestHealthCheckIncludesRotatedSize(t *testing.T) {
 	_ = logger.LogEntry(LogEntry{Agent: "test", Action: "get", OK: true})
 
 	// Create a rotated file manually
-	auditDir := filepath.Join(home, ".symaira")
+	auditDir := filepath.Join(home, ".symvault")
 	rotatedFile := filepath.Join(auditDir, "audit-rotated-size-test.log.rotated.20240101-000000")
 	if err := os.WriteFile(rotatedFile, []byte(strings.Repeat("x", 1000)), 0o600); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
@@ -1502,7 +1502,7 @@ func TestLastNEntriesCorruptedJSON(t *testing.T) {
 		_ = logger.LogEntry(LogEntry{Agent: "test", Action: fmt.Sprintf("valid%d", i), OK: true})
 	}
 
-	logFile := filepath.Join(home, ".symaira", "audit-corrupt-json-test.log")
+	logFile := filepath.Join(home, ".symvault", "audit-corrupt-json-test.log")
 	f, err := os.OpenFile(logFile, os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		t.Fatalf("OpenFile() error = %v", err)
@@ -1532,7 +1532,7 @@ func TestLastNEntriesMissingFields(t *testing.T) {
 	}
 	defer func() { _ = logger.Close() }()
 
-	logFile := filepath.Join(home, ".symaira", "audit-missing-fields-test.log")
+	logFile := filepath.Join(home, ".symvault", "audit-missing-fields-test.log")
 	f, err := os.OpenFile(logFile, os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		t.Fatalf("OpenFile() error = %v", err)
@@ -1564,7 +1564,7 @@ func TestLastNEntriesEmptyTimestamp(t *testing.T) {
 	defer func() { _ = logger.Close() }()
 
 	// Append entry with empty timestamp
-	logFile := filepath.Join(home, ".symaira", "audit-empty-ts-test.log")
+	logFile := filepath.Join(home, ".symvault", "audit-empty-ts-test.log")
 	f, err := os.OpenFile(logFile, os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		t.Fatalf("OpenFile() error = %v", err)
@@ -1789,7 +1789,7 @@ func TestEnforceRetentionStatError(t *testing.T) {
 	}
 	defer func() { _ = logger.Close() }()
 
-	auditDir := filepath.Join(home, ".symaira")
+	auditDir := filepath.Join(home, ".symvault")
 
 	// Create valid rotated files
 	for i := 0; i < 3; i++ {
@@ -1827,7 +1827,7 @@ func TestEnforceRetentionRemoveError(t *testing.T) {
 	}
 	defer func() { _ = logger.Close() }()
 
-	auditDir := filepath.Join(home, ".symaira")
+	auditDir := filepath.Join(home, ".symvault")
 
 	// Create a rotated file
 	rotatedName := filepath.Join(auditDir, fmt.Sprintf("audit-remove-error-test.log.rotated.%s", time.Now().UTC().Format("20060102-150405")))
@@ -2045,7 +2045,7 @@ func TestNewOpenFilePermissionDenied(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	auditDir := filepath.Join(home, ".symaira")
+	auditDir := filepath.Join(home, ".symvault")
 	if err := os.MkdirAll(auditDir, 0o700); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}

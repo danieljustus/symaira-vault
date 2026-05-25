@@ -17,7 +17,7 @@ export class EnvVarCompletionProvider implements vscode.CompletionItemProvider {
     const lineText = document.lineAt(position).text;
     const prefix = lineText.substring(0, position.character);
 
-    const match = prefix.match(/\$\{symaira:([^}]*)$/);
+    const match = prefix.match(/\$\{symvault:([^}]*)$/);
     if (!match) {
       return undefined;
     }
@@ -48,7 +48,7 @@ export class EnvVarCompletionProvider implements vscode.CompletionItemProvider {
           `Inserts a reference to the Symaira Vault vault entry \`${entry}\`.`
         );
         item.range = new vscode.Range(
-          position.translate(0, -searchTerm.length - "${symaira:".length),
+          position.translate(0, -searchTerm.length - "${symvault:".length),
           position
         );
         return item;

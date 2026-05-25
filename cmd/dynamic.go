@@ -27,20 +27,20 @@ Supported engines:
   postgres  - Create temporary PostgreSQL users with GRANT role
   aws-sts   - Generate temporary AWS STS credentials via AssumeRole`,
 	Example: `  # Generate temporary PostgreSQL credentials valid for 1h
-  symaira dynamic generate postgres --role analyst --ttl 1h
+  symvault dynamic generate postgres --role analyst --ttl 1h
 
   # Short-lived AWS STS session
-  symaira dynamic generate aws-sts --role arn:aws:iam::123:role/dev --ttl 15m`,
+  symvault dynamic generate aws-sts --role arn:aws:iam::123:role/dev --ttl 15m`,
 }
 
 var dynamicGenerateCmd = &cobra.Command{
 	Use:   "generate",
 	Short: "Generate a dynamic secret",
 	Example: `  # Generate a PostgreSQL secret with readonly role
-  symaira dynamic generate --engine postgres --role readonly --ttl 1h
+  symvault dynamic generate --engine postgres --role readonly --ttl 1h
 
   # Generate AWS STS credentials for a specific role
-  symaira dynamic generate --engine aws-sts --role arn:aws:iam::123456789012:role/MyRole --ttl 30m`,
+  symvault dynamic generate --engine aws-sts --role arn:aws:iam::123456789012:role/MyRole --ttl 30m`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return cli.WithVault(func(svc vaultsvc.Service) error {
 			ctx := context.Background()

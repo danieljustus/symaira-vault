@@ -547,8 +547,8 @@ func TestAutoCommitWithOptionsDefaultAuthor(t *testing.T) {
 	if commit.Author.Name != "Symaira Vault" {
 		t.Errorf("author name = %q, want %q", commit.Author.Name, "Symaira Vault")
 	}
-	if commit.Author.Email != "symaira@example.com" {
-		t.Errorf("author email = %q, want %q", commit.Author.Email, "symaira@example.com")
+	if commit.Author.Email != "symvault@example.com" {
+		t.Errorf("author email = %q, want %q", commit.Author.Email, "symvault@example.com")
 	}
 	if commit.Message != "default template commit" {
 		t.Errorf("message = %q, want %q", commit.Message, "default template commit")

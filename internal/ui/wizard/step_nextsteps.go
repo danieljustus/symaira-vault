@@ -37,26 +37,26 @@ func (s *NextStepsStep) View() string {
 		"",
 		"Quick-start commands:",
 		"",
-		"  " + focusedStyle.Render("symaira add <name>") + "           add your first entry",
-		"  " + focusedStyle.Render("symaira get <name>") + "           retrieve a password",
-		"  " + focusedStyle.Render("symaira tui") + "                  browse entries in terminal UI",
-		"  " + focusedStyle.Render("symaira autotype") + "             auto-type passwords into forms",
-		"  " + focusedStyle.Render("symaira doctor") + "               health check",
-		"  " + focusedStyle.Render("symaira mcp-config") + "           configure MCP agent integrations",
-		"  " + focusedStyle.Render("symaira auth set <method>") + "    change auth method",
-		"  " + focusedStyle.Render("symaira --help") + "               show all commands",
+		"  " + focusedStyle.Render("symvault add <name>") + "           add your first entry",
+		"  " + focusedStyle.Render("symvault get <name>") + "           retrieve a password",
+		"  " + focusedStyle.Render("symvault tui") + "                  browse entries in terminal UI",
+		"  " + focusedStyle.Render("symvault autotype") + "             auto-type passwords into forms",
+		"  " + focusedStyle.Render("symvault doctor") + "               health check",
+		"  " + focusedStyle.Render("symvault mcp-config") + "           configure MCP agent integrations",
+		"  " + focusedStyle.Render("symvault auth set <method>") + "    change auth method",
+		"  " + focusedStyle.Render("symvault --help") + "               show all commands",
 	}
 
 	if st.SyncMode == syncGit && st.MultiDevice {
 		lines = append(lines, "",
 			dimStyle.Render("Pair another device:"),
-			"  "+focusedStyle.Render("symaira device add --pair \"<data>\"")+" on the other device",
-			"  "+focusedStyle.Render("symaira device accept <token>")+"   to complete pairing",
+			"  "+focusedStyle.Render("symvault device add --pair \"<data>\"")+" on the other device",
+			"  "+focusedStyle.Render("symvault device accept <token>")+"   to complete pairing",
 		)
 	}
 
 	if len(st.ApplyErrors) > 0 {
-		lines = append(lines, "", warnStyle.Render("Some steps had issues — run symaira doctor to diagnose."))
+		lines = append(lines, "", warnStyle.Render("Some steps had issues — run symvault doctor to diagnose."))
 	}
 
 	lines = append(lines, "", helpStyle.Render("Enter or Q to exit"))

@@ -35,7 +35,7 @@ Request the user to securely enter a credential the agent needs but cannot find 
 {
   "path": "github/api-token",
   "field": "token",
-  "reason": "Needed to push to main on the symaira repo"
+  "reason": "Needed to push to main on the symvault repo"
 }
 ```
-→ User sees a dialog: "Symaira Vault needs a credential for 'github/api-token': Needed to push to main on the symaira repo"
+→ User sees a dialog: "Symaira Vault needs a credential for 'github/api-token': Needed to push to main on the symvault repo"

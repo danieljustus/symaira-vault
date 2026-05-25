@@ -53,7 +53,7 @@ Field-level redaction is implemented for MCP agent responses:
 | Redaction Feature | Implementation | Usage |
 |-------------------|----------------|-------|
 | Agent field redaction | `redactFields` config | `~/.openpass/config.yaml` |
-| Token redaction in config | `--redact` flag | `openpass mcp-config <agent> --redact` |
+| Token redaction in config | `--redact` flag | `symvault mcp-config <agent> --redact` |
 | Wildcard patterns | `*` and `prefix.*` | Redact all or nested fields |
 
 **Example Agent Configuration:**
@@ -81,7 +81,7 @@ Operational diagnostic capabilities exist:
 | Operational runbook | Incident response, token rotation | `docs/runbook.md` |
 | MCP API docs | Error handling, rate limiting | `docs/mcp-api.md` |
 | Security policy | Privacy, telemetry, audit info | `SECURITY.md` |
-| Basic diagnostics | Version, list, unlock | `openpass --version`, `openpass list`, `openpass unlock` |
+| Basic diagnostics | Version, list, unlock | `symvault --version`, `symvault list`, `symvault unlock` |
 
 ### Error Categories and Exit Codes
 
@@ -133,7 +133,7 @@ A CLI command to gather diagnostic information for issue reporting:
 
 ```bash
 # Hypothetical future command
-openpass diagnostics --bundle
+symvault diagnostics --bundle
 ```
 
 **Purpose:** Collect version info, config (sanitized), audit error summary, and environment details into a shareable bundle.
@@ -146,7 +146,7 @@ A utility to redact sensitive data from arbitrary error outputs:
 
 ```bash
 # Hypothetical future command
-openpass diagnostics --redact < raw-output.log
+symvault diagnostics --redact < raw-output.log
 ```
 
 **Purpose:** Apply redaction rules (field values, paths, tokens) to any text intended for sharing.
@@ -163,8 +163,8 @@ A command to export audit logs with filtering/redaction:
 
 ```bash
 # Hypothetical future commands
-openpass audit export --since 2026-04-01 --redact-paths
-openpass audit errors --limit 50
+symvault audit export --since 2026-04-01 --redact-paths
+symvault audit errors --limit 50
 ```
 
 **Purpose:** Export audit data for analysis while applying redaction rules.
@@ -177,8 +177,8 @@ Until the above features are implemented, users can gather diagnostics manually:
 
 ```bash
 # Basic diagnostics
-openpass --version
-openpass list
+symvault --version
+symvault list
 
 # Check vault permissions
 ls -la ~/.openpass/

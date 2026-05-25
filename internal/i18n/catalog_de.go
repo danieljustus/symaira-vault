@@ -12,10 +12,10 @@ func init() {
 		"error.read.input":            "konnte Eingabe nicht lesen: %v",
 		"error.passphrase.mismatch":   "Passphrasen stimmen nicht überein",
 		"error.vault.locked":          "Vault ist gesperrt",
-		"error.vault.not_initialized": "Vault nicht initialisiert — führe 'symaira init' aus",
-		"hint.unlock":                 "Mit 'symaira unlock' entsperren, oder OPENPASS_PASSPHRASE für nicht-interaktive Nutzung setzen.", //nolint:misspell
-		"hint.find":                   "Versuche: symaira find <Suchbegriff>",
-		"hint.first_run":              "Führe 'symaira init' für einen schnellen Start aus oder 'symaira setup' für den geführten Assistenten.",
+		"error.vault.not_initialized": "Vault nicht initialisiert — führe 'symvault init' aus",
+		"hint.unlock":                 "Mit 'symvault unlock' entsperren, oder OPENPASS_PASSPHRASE für nicht-interaktive Nutzung setzen.", //nolint:misspell
+		"hint.find":                   "Versuche: symvault find <Suchbegriff>",
+		"hint.first_run":              "Führe 'symvault init' für einen schnellen Start aus oder 'symvault setup' für den geführten Assistenten.",
 		"notify.security_alert":       "Symaira Vault Sicherheitswarnung",
 		"notify.clipboard_cleared":    "Zwischenablage geleert",
 		"pairing.token.expires":       "Token läuft ab in %s",

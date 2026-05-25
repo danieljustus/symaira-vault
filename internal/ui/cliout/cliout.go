@@ -20,7 +20,7 @@ const (
 	// ColorAuto is the default: emit color when stderr is a TTY and NO_COLOR
 	// is unset.
 	ColorAuto ColorMode = iota
-	// ColorAlways forces color on, even when piped (e.g. `symaira list
+	// ColorAlways forces color on, even when piped (e.g. `symvault list
 	// --color=always | less -R`).
 	ColorAlways
 	// ColorNever suppresses all color, ignoring TTY/FORCE_COLOR/env hints.

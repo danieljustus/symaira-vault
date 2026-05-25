@@ -73,7 +73,7 @@ func Load(agentName, vaultDir string) (*AgentContext, error) {
 		if err != nil {
 			return nil, fmt.Errorf("home dir: %w", err)
 		}
-		vaultDir = filepath.Join(home, ".symaira")
+		vaultDir = filepath.Join(home, ".symvault")
 	}
 
 	configPath := filepath.Join(vaultDir, "config.yaml")
@@ -273,7 +273,7 @@ func upgradeCommand(tier string) string {
 	if name == "" {
 		name = "<agent>"
 	}
-	return fmt.Sprintf("symaira config agent %s --tier %s", name, tier)
+	return fmt.Sprintf("symvault config agent %s --tier %s", name, tier)
 }
 
 // sanitizeAgentName replaces path separators in agent names to prevent

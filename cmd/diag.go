@@ -15,7 +15,7 @@ import (
 var diagCmd = &cobra.Command{
 	Use:     "diag",
 	Short:   "Diagnostic commands for Symaira Vault",
-	Example: `  symaira diag metrics`,
+	Example: `  symvault diag metrics`,
 	Annotations: map[string]string{
 		requiresVaultAnnotation: "false",
 	},

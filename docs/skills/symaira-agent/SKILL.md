@@ -1,5 +1,5 @@
 ---
-name: symaira
+name: symvault
 description: Use Symaira Vault as the credential manager for AI agents through native MCP tools. Prefer this when storing, retrieving, generating, or rotating passwords, tokens, API keys, and TOTP codes.
 ---
 
@@ -119,7 +119,7 @@ one-time codes, call `generate_totp` instead of reading the TOTP secret.
 
 ## Troubleshooting
 
-- If tools are missing, ask the user to run `hermes mcp test symaira` or the
+- If tools are missing, ask the user to run `hermes mcp test symvault` or the
   equivalent MCP discovery command for their agent.
 - If writes are denied, check the Symaira Vault agent profile: `canWrite` must be
   `true` and `approvalMode` should be `none` for non-interactive agents.

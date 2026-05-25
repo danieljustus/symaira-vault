@@ -98,11 +98,11 @@ resolve_latest_version() {
     # GitHub API requires User-Agent header.
     if has_cmd curl; then
         response=$(curl -fsSL -H "Accept: application/json" \
-                        -H "User-Agent: symaira-installer" \
+                        -H "User-Agent: symvault-installer" \
                         "$api_url")
     elif has_cmd wget; then
         response=$(wget -qO- --header="Accept: application/json" \
-                           --header="User-Agent: symaira-installer" \
+                           --header="User-Agent: symvault-installer" \
                            "$api_url")
     fi
 

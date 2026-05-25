@@ -213,11 +213,11 @@ func TestOutputAgentMCPSnippet(t *testing.T) {
 	if !ok {
 		t.Fatalf("mcpServers missing from payload: %#v", payload)
 	}
-	symaira, ok := mcpServers["symaira"].(map[string]any)
+	symvault, ok := mcpServers["symvault"].(map[string]any)
 	if !ok {
-		t.Fatalf("symaira server missing from payload: %#v", mcpServers)
+		t.Fatalf("symvault server missing from payload: %#v", mcpServers)
 	}
-	if symaira["command"] != "symaira" {
-		t.Fatalf("command = %#v, want symaira", symaira["command"])
+	if symvault["command"] != "symvault" {
+		t.Fatalf("command = %#v, want symvault", symvault["command"])
 	}
 }

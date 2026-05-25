@@ -10,7 +10,7 @@
     Specific version to install (default: latest).
 
 .PARAMETER InstallDir
-    Installation directory (default: $env:LOCALAPPDATA\Programs\symaira).
+    Installation directory (default: $env:LOCALAPPDATA\Programs\symvault).
 
 .PARAMETER DryRun
     Download and verify but do not install.
@@ -34,8 +34,8 @@ $ErrorActionPreference = 'Stop'
 # ── Constants ────────────────────────────────────────────────────────────────
 
 $Repo        = 'danieljustus/symaira-vault'
-$Binary      = 'symaira.exe'
-$Project     = 'symaira'
+$Binary      = 'symvault.exe'
+$Project     = 'symvault'
 $GitHubApi   = 'https://api.github.com'
 $GitHubDl    = "https://github.com/$Repo/releases/download"
 
@@ -63,7 +63,7 @@ function Get-LatestVersion {
     $url = "$GitHubApi/repos/$Repo/releases/latest"
     $headers = @{
         Accept        = 'application/json'
-        'User-Agent'  = 'symaira-installer'
+        'User-Agent'  = 'symvault-installer'
     }
     $response = Invoke-RestMethod -Uri $url -Headers $headers -UseBasicParsing
     if (-not $response.tag_name) {
@@ -119,7 +119,7 @@ function Install-SymairaVault {
     $checksumsUrl = "$GitHubDl/$resolvedVersion/$checksumsFile"
 
     # Create temp workspace.
-    $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) "symaira-install-$([guid]::NewGuid().ToString('N').Substring(0,8))"
+    $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) "symvault-install-$([guid]::NewGuid().ToString('N').Substring(0,8))"
     New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
     try {
         # Download checksums.
@@ -191,7 +191,7 @@ if (-not $InstallDir) {
     $InstallDir = if ($env:INSTALL_DIR) {
         $env:INSTALL_DIR
     } else {
-        Join-Path $env:LOCALAPPDATA 'Programs\symaira'
+        Join-Path $env:LOCALAPPDATA 'Programs\symvault'
     }
 }
 

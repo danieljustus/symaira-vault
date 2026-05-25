@@ -15,27 +15,27 @@ The checked-in formula builds from the `v1.0.0` source tag and is intended for l
 Homebrew 5 requires formula files to live in a tap. From the repository root, create a throwaway local tap and install from it:
 
 ```bash
-brew tap-new local/symaira || true
-cp homebrew/Formula/symaira.rb "$(brew --repository)/Library/Taps/local/homebrew-symaira/Formula/symaira.rb"
-brew install --build-from-source local/symaira/symaira
-brew test local/symaira/symaira
-symaira version
+brew tap-new local/symvault || true
+cp homebrew/Formula/symvault.rb "$(brew --repository)/Library/Taps/local/homebrew-symvault/Formula/symvault.rb"
+brew install --build-from-source local/symvault/symvault
+brew test local/symvault/symvault
+symvault version
 ```
 
 To reinstall after editing the formula:
 
 ```bash
-brew uninstall symaira
-cp homebrew/Formula/symaira.rb "$(brew --repository)/Library/Taps/local/homebrew-symaira/Formula/symaira.rb"
-brew install --build-from-source local/symaira/symaira
-brew test local/symaira/symaira
+brew uninstall symvault
+cp homebrew/Formula/symvault.rb "$(brew --repository)/Library/Taps/local/homebrew-symvault/Formula/symvault.rb"
+brew install --build-from-source local/symvault/symvault
+brew test local/symvault/symvault
 ```
 
 To remove the local test install:
 
 ```bash
-brew uninstall symaira
-brew untap local/symaira
+brew uninstall symvault
+brew untap local/symvault
 ```
 
 ## Features
@@ -52,19 +52,19 @@ brew untap local/symaira
 
 ```bash
 # Initialize a new vault
-symaira init
+symvault init
 
 # Add your first entry
-symaira set github.com/username
+symvault set github.com/username
 
 # Retrieve it
-symaira get github.com/username
+symvault get github.com/username
 
 # Generate a password
-symaira generate
+symvault generate
 
 # Set up MCP server for AI agents
-symaira mcp-config claude-code
+symvault mcp-config claude-code
 ```
 
 ## Documentation

@@ -22,7 +22,7 @@ type contextKey string
 
 const agentContextKey contextKey = "symaira-agent"
 
-const tokenContextKey contextKey = "symaira-scoped-token"
+const tokenContextKey contextKey = "symvault-scoped-token"
 
 func WithToken(ctx context.Context, token *ScopedToken) context.Context {
 	return context.WithValue(ctx, tokenContextKey, token)

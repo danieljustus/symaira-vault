@@ -170,7 +170,7 @@ Prefer stdio for a local agent integration:
 # Do not paste this into live config until the human adoption gate approves it.
 mcp_servers:
   openpass_metadata:
-    command: openpass
+    command: symvault
     args:
       - --vault
       - /path/to/openpass-agent-trial

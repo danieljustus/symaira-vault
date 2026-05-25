@@ -57,20 +57,20 @@ func TestRunHTTPServer_MetricsEndpoint(t *testing.T) {
 	if !strings.Contains(bodyStr, "process_cpu_seconds_total") {
 		t.Error("metrics response missing process_cpu_seconds_total")
 	}
-	if !strings.Contains(bodyStr, "symaira_mcp_requests_total") {
-		t.Error("metrics response missing symaira_mcp_requests_total")
+	if !strings.Contains(bodyStr, "symvault_mcp_requests_total") {
+		t.Error("metrics response missing symvault_mcp_requests_total")
 	}
-	if !strings.Contains(bodyStr, "symaira_mcp_request_duration_seconds") {
-		t.Error("metrics response missing symaira_mcp_request_duration_seconds")
+	if !strings.Contains(bodyStr, "symvault_mcp_request_duration_seconds") {
+		t.Error("metrics response missing symvault_mcp_request_duration_seconds")
 	}
-	if !strings.Contains(bodyStr, "symaira_mcp_auth_denials_total") {
-		t.Error("metrics response missing symaira_mcp_auth_denials_total")
+	if !strings.Contains(bodyStr, "symvault_mcp_auth_denials_total") {
+		t.Error("metrics response missing symvault_mcp_auth_denials_total")
 	}
-	if !strings.Contains(bodyStr, "symaira_mcp_approvals_total") {
-		t.Error("metrics response missing symaira_mcp_approvals_total")
+	if !strings.Contains(bodyStr, "symvault_mcp_approvals_total") {
+		t.Error("metrics response missing symvault_mcp_approvals_total")
 	}
-	if !strings.Contains(bodyStr, "symaira_vault_operations_total") {
-		t.Error("metrics response missing symaira_vault_operations_total")
+	if !strings.Contains(bodyStr, "symvault_vault_operations_total") {
+		t.Error("metrics response missing symvault_vault_operations_total")
 	}
 }
 

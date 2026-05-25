@@ -20,7 +20,7 @@ Checks that the policy file has valid YAML structure, correct version,
 valid rule names, known actions, and well-formed conditions.
 
 Example:
-  symaira policy validate ~/.config/symaira/policies/dev.yaml`,
+  symvault policy validate ~/.config/symvault/policies/dev.yaml`,
 	Args: cobra.ExactArgs(1),
 	Annotations: map[string]string{
 		requiresVaultAnnotation: "false",
@@ -60,20 +60,20 @@ var policyCmd = &cobra.Command{
 	Short: "Manage declarative policies",
 	Long: `Manage context-aware auto-approval policies for MCP tool calls.
 
-Policies are YAML files stored in ~/.config/symaira/policies/.
+Policies are YAML files stored in ~/.config/symvault/policies/.
 They define rules for when tool calls should be allowed, denied,
 prompted, or require biometric authentication.`,
 	Example: `  # Validate a policy file before activating it
-  symaira policy validate ./my-policy.yaml
+  symvault policy validate ./my-policy.yaml
 
   # Apply a policy
-  symaira policy apply ./my-policy.yaml
+  symvault policy apply ./my-policy.yaml
 
   # List active policies
-  symaira policy list
+  symvault policy list
 
   # Remove a named policy
-  symaira policy remove dev-readonly`,
+  symvault policy remove dev-readonly`,
 	Annotations: map[string]string{
 		requiresVaultAnnotation: "false",
 	},
@@ -85,7 +85,7 @@ var policyApplyCmd = &cobra.Command{
 	Long: `Load and validate a policy file, then copy it to the vault's policies directory.
 
 Example:
-  symaira policy apply ~/policies/dev.yaml`,
+  symvault policy apply ~/policies/dev.yaml`,
 	Args: cobra.ExactArgs(1),
 	Annotations: map[string]string{
 		requiresVaultAnnotation: "false",

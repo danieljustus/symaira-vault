@@ -19,16 +19,16 @@ Assume a user who:
 
 2. **Suggest the next action when one is obvious.**
    - Bad: `vault locked`
-   - Good: `Vault is locked. Run 'openpass unlock' or set OPENPASS_PASSPHRASE.`
+   - Good: `Vault is locked. Run 'symvault unlock' or set OPENPASS_PASSPHRASE.`
 
 3. **Quote commands so they're copyable.**
-   - Bad: `try openpass init first`
-   - Good: ``Run `openpass init` first.``
+   - Bad: `try symvault init first`
+   - Good: ``Run `symvault init` first.``
 
 4. **Don't shout. Don't apologize. Don't blame the user.**
    - Bad: `ERROR: INVALID PASSPHRASE!!!`
    - Bad: `Sorry, something went wrong on our end.`
-   - Good: `Passphrase did not match. Try again or use 'openpass auth status'.`
+   - Good: `Passphrase did not match. Try again or use 'symvault auth status'.`
 
 5. **One sentence per finding, lower-case verbs after the colon.**
    - Bad: `Cannot Open Vault: Permission Denied.`
@@ -50,7 +50,7 @@ Assume a user who:
 | Prompt          | stderr  | none            | `fmt.Fprint(os.Stderr, ...)` |
 
 Reasoning: stdout is for "the thing the user asked for" (parseable, pipeable);
-stderr is for everything else (status, errors, prompts), so `openpass get x.password | xclip`
+stderr is for everything else (status, errors, prompts), so `symvault get x.password | xclip`
 still works.
 
 ## Tone
@@ -58,7 +58,7 @@ still works.
 - Plain English. No marketing language ("magical experience", "seamless").
 - No emoji in prompts. Symbols come from `internal/ui/theme.Symbol*` and
   fall back to ASCII when the terminal/locale demands it.
-- It is OK to refer to a feature by its CLI name (`'openpass doctor'`,
+- It is OK to refer to a feature by its CLI name (`'symvault doctor'`,
   `--no-pipe-warning`) — those are the user's hooks back into the tool.
 
 ## Localization

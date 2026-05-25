@@ -24,10 +24,10 @@ func testVars(overrides TemplateVars) TemplateVars {
 	v := TemplateVars{
 		AgentName:          "hermes",
 		ToolPrefix:         "mcp_symaira_",
-		SlashPrefix:        "/symaira:",
+		SlashPrefix:        "/symvault:",
 		SymairaVaultVersion:    "4.0.0-test",
 		ProfileTier:        "safe",
-		VaultPath:          "~/.symaira",
+		VaultPath:          "~/.symvault",
 		InstalledAt:        fixedTime.Format(time.RFC3339),
 		SkillSchemaVersion: DefaultSkillSchemaVersion,
 	}
@@ -773,7 +773,7 @@ func TestPrefixConfig(t *testing.T) {
 			name:        "hermes",
 			agent:       "hermes",
 			toolPrefix:  "mcp_symaira_",
-			slashPrefix: "/symaira:",
+			slashPrefix: "/symvault:",
 		},
 		{
 			name:        "claude-code",

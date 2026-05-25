@@ -145,7 +145,7 @@ sequenceDiagram
     participant Session
     participant Keyring
 
-    User->>CLI: openpass unlock
+    User->>CLI: symvault unlock
     CLI->>Session: LoadPassphrase(vaultDir)
     Session->>Keyring: Get(vaultDir)
     alt passphrase cached

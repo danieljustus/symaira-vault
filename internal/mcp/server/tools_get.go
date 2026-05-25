@@ -120,7 +120,7 @@ func (s *Server) handleGetValue(ctx context.Context, req mcp.CallToolRequest) (*
 		cleanedPath := gopath.Clean(path)
 		if cleanedPath == "quarantine" || strings.HasPrefix(cleanedPath, "quarantine/") {
 			s.logAudit(ctx, "quarantine_block", path, false)
-			return mcp.NewToolResultError("entry is in quarantine — run 'symaira import review promote' to make it accessible"), nil
+			return mcp.NewToolResultError("entry is in quarantine — run 'symvault import review promote' to make it accessible"), nil
 		}
 	}
 

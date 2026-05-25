@@ -6,11 +6,11 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/danieljustus/symaira-vault.svg)](https://pkg.go.dev/github.com/danieljustus/symaira-vault)
 [![Go Report Card](https://goreportcard.com/badge/github.com/danieljustus/symaira-vault)](https://goreportcard.com/report/github.com/danieljustus/symaira-vault)
 
-![Symaira Vault hero](docs/assets/openpass-hero.png)
+![Symaira Vault hero](docs/assets/symvault-hero.png)
 
 A modern, secure command-line password manager written in Go. Uses [age](https://age-encryption.org/) for encryption with built-in MCP server support for AI agent integration.
 
-![Symaira Vault demo](docs/assets/openpass-demo.gif)
+![Symaira Vault demo](docs/assets/symvault-demo.gif)
 
 > **Safety Notice**: Symaira Vault manages sensitive secrets. Use at your own risk, keep tested backups of your vault, and verify recovery before relying on it for critical credentials.
 
@@ -46,13 +46,13 @@ irm https://raw.githubusercontent.com/danieljustus/symaira-vault/main/scripts/in
 **Homebrew:**
 ```bash
 brew tap danieljustus/tap
-brew install symaira
+brew install symvault
 ```
 
 **Scoop:**
 ```powershell
 scoop bucket add openpass https://github.com/danieljustus/scoop-bucket
-scoop install symaira
+scoop install symvault
 ```
 
 **Nix (Flake):**
@@ -85,54 +85,54 @@ For manual downloads, Linux packages, release verification, and build-from-sourc
 
 ```bash
 # Initialize vault
-openpass init
+symvault init
 
 # Add a password
-openpass add github
+symvault add github
 # or non-interactive:
-openpass set github.password --value "mysecretpassword"
+symvault set github.password --value "mysecretpassword"
 
 # Add TOTP metadata
-openpass add github --totp-secret JBSWY3DPEHPK3PXP --totp-issuer GitHub
+symvault add github --totp-secret JBSWY3DPEHPK3PXP --totp-issuer GitHub
 
 # Retrieve (auto-copies to clipboard with 45s timeout)
-openpass get github.password --clip
+symvault get github.password --clip
 
 # Autotype password into focused application (macOS/Linux/Windows)
-openpass get github.password --autotype
+symvault get github.password --autotype
 
 # Show entry details, including the current TOTP code when configured
-openpass get github
+symvault get github
 
 # List and search
-openpass list
-openpass find mybank
+symvault list
+symvault find mybank
 
 # Generate secure passwords
-openpass generate --length 32 --symbols
-openpass generate --store newaccount.password --length 20 --symbols
+symvault generate --length 32 --symbols
+symvault generate --store newaccount.password --length 20 --symbols
 
 # Session management
-openpass unlock   # cache passphrase
-openpass lock     # clear cache
-openpass auth status
-openpass auth set touchid      # macOS Touch ID unlock
-openpass auth set passphrase   # passphrase-only unlock
+symvault unlock   # cache passphrase
+symvault lock     # clear cache
+symvault auth status
+symvault auth set touchid      # macOS Touch ID unlock
+symvault auth set passphrase   # passphrase-only unlock
 
 # Recipients for multi-user vaults
-openpass recipients list
-openpass recipients add age1...
+symvault recipients list
+symvault recipients add age1...
 
 # Git sync
-openpass git pull
-openpass git push
+symvault git pull
+symvault git push
 
 # Secret execution (injects vault secrets as env vars)
-openpass run --env API_KEY=api.kimi-key -- curl -H "Authorization: Bearer $API_KEY" https://api.example.com
+symvault run --env API_KEY=api.kimi-key -- curl -H "Authorization: Bearer $API_KEY" https://api.example.com
 
 # Backup/Restore
-openpass backup ~/backups/openpass-$(date +%Y%m%d).tar.gz
-openpass restore ~/backups/openpass-20260427.tar.gz
+symvault backup ~/backups/symvault-$(date +%Y%m%d).tar.gz
+symvault restore ~/backups/symvault-20260427.tar.gz
 ```
 
 Backup archives contain encrypted vault files, identity material, config, and MCP tokens. Protect them like the vault itself and test restore before relying on backups.
@@ -142,9 +142,9 @@ Backup archives contain encrypted vault files, identity material, config, and MC
 Symaira Vault can import from 1Password, Bitwarden, pass, and CSV exports:
 
 ```bash
-openpass import <format> <source>
-openpass import bitwarden ~/exports/bitwarden.json
-openpass import pass ~/.password-store
+symvault import <format> <source>
+symvault import bitwarden ~/exports/bitwarden.json
+symvault import pass ~/.password-store
 ```
 
 See [docs/migration.md](docs/migration.md) for export steps, format details, and verification guidance.
@@ -153,31 +153,31 @@ See [docs/migration.md](docs/migration.md) for export steps, format details, and
 
 Symaira Vault exposes an MCP server for AI agent integration:
 
-![Symaira Vault architecture](docs/assets/openpass-architecture.png)
+![Symaira Vault architecture](docs/assets/symvault-architecture.png)
 
 ```bash
 # Stdio mode (recommended for local agents)
-openpass serve --stdio --agent claude-code
+symvault serve --stdio --agent claude-code
 
 # HTTP mode
-openpass serve --port 8080
+symvault serve --port 8080
 ```
 
-Use `openpass mcp-config` to generate ready-to-paste client config:
+Use `symvault mcp-config` to generate ready-to-paste client config:
 
 ```bash
-openpass mcp-config claude-code
-openpass mcp-config claude-code --http
-openpass mcp-config hermes --http --format hermes
+symvault mcp-config claude-code
+symvault mcp-config claude-code --http
+symvault mcp-config hermes --http --format hermes
 ```
 
 HTTP mode binds to `127.0.0.1` by default and uses bearer token authentication. Agents can use the MCP `generate_totp` tool to get current TOTP codes without receiving the stored TOTP secret.
 
 **Scoped Token Management** (v2.2.0+): Create fine-grained access tokens for agents:
 ```bash
-openpass mcp token create --agent hermes --tools list_entries,get_entry --expires 24h
-openpass mcp token list
-openpass mcp token revoke <token-id>
+symvault mcp token create --agent hermes --tools list_entries,get_entry --expires 24h
+symvault mcp token list
+symvault mcp token revoke <token-id>
 ```
 
 For detailed agent setup, profiles, token management, and observability, see [docs/agent-integration.md](docs/agent-integration.md).
@@ -243,7 +243,7 @@ For the full configuration reference, see [docs/configuration.md](docs/configura
 | **Open Source** | Yes (MIT) | Partial (SDKs open, core proprietary) | Mostly (core GPL/AGPL, Enterprise Bitwarden License) | Yes (GPLv2+) | N/A |
 | **TOTP** | Built-in | Built-in | Premium feature | Extension only | Manual entry |
 | **Autotype** | Built-in (cross-platform) | Built-in (Windows Auto-Type, macOS Universal Autofill) | Browser autofill only (desktop autotype in development) | No built-in | Manual entry |
-| **Secret Execution** | Built-in (`openpass run`) | Built-in (`op run`) | Built-in (`bws run`) | No built-in | Not applicable |
+| **Secret Execution** | Built-in (`symvault run`) | Built-in (`op run`) | Built-in (`bws run`) | No built-in | Not applicable |
 | **Session Caching** | OS keyring (15m TTL) | Biometric unlock, Magic Unlock, SSO | Biometric unlock, PIN, `BW_SESSION` token | gpg-agent | None |
 | **Git Integration** | Built-in | SSH agent, commit signing | SSH agent, GitHub Actions, GitLab CI | Built-in (automatic commits) | No |
 | **MCP Server** | Built-in (stdio + HTTP) | Community (official: no raw secrets via MCP) | Official (`bitwarden-mcp`) | No | No |

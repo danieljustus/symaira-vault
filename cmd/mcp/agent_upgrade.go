@@ -204,13 +204,13 @@ The --reason flag is required when using --yes for non-interactive mode to ensur
 an audit trail.`,
 	Args: cobra.ExactArgs(1),
 	Example: `  # Interactive upgrade to admin tier with token rotation
-  symaira agent upgrade hermes --tier admin --rotate-token
+  symvault agent upgrade hermes --tier admin --rotate-token
 
   # Dry-run: preview changes without writing
-  symaira agent upgrade claude-code --tier admin --dry-run
+  symvault agent upgrade claude-code --tier admin --dry-run
 
   # Non-interactive upgrade with audit reason
-  symaira agent upgrade opencode --tier standard --yes --reason "CI pipeline automation upgrade"`,
+  symvault agent upgrade opencode --tier standard --yes --reason "CI pipeline automation upgrade"`,
 	Annotations: map[string]string{
 		cli.RequiresVaultAnnotation: "false",
 	},

@@ -25,10 +25,10 @@ var runCmd = &cobra.Command{
 	Short: "Run a command with secrets injected as environment variables",
 	Long:  "Executes a command with vault secrets injected as environment variables. Use --env NAME=path.field to map secrets.",
 	Example: `  # Inject AWS_SECRET_ACCESS_KEY from vault entry "work/aws.secret"
-  symaira run --env AWS_SECRET_ACCESS_KEY=work/aws.secret -- aws s3 ls
+  symvault run --env AWS_SECRET_ACCESS_KEY=work/aws.secret -- aws s3 ls
 
   # Multiple secrets, custom working dir
-  symaira run \
+  symvault run \
     --env DB_PASS=prod/db.password \
     --env API_TOKEN=stripe.token \
     --workdir /tmp/job -- ./deploy.sh`,

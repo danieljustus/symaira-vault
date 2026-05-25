@@ -15,6 +15,6 @@ if ! command -v vsce > /dev/null 2>&1; then
 fi
 
 npm run build
-vsce package --out "symaira-vscode-${VERSION:-1.0.0}.vsix"
+vsce package --out "symvault-vscode-${VERSION:-1.0.0}.vsix"
 
-echo "✓ Created: ${VSCODE_DIR}/symaira-vscode-${VERSION:-1.0.0}.vsix"
+echo "✓ Created: ${VSCODE_DIR}/symvault-vscode-${VERSION:-1.0.0}.vsix"

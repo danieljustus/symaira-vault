@@ -60,31 +60,31 @@ security implications.
 
 Supported agents: openclaw, claude-code, hermes, codex, opencode`,
 	Example: `  # Install and configure Claude Code (auto-detect)
-  symaira agent install claude-code
+  symvault agent install claude-code
 
   # Detect all installed agents and configure each
-  symaira agent install --auto-detect
+  symvault agent install --auto-detect
 
   # HTTP transport with auto-generated bearer token
-  symaira agent install hermes --http
+  symvault agent install hermes --http
 
   # Standard tier with explicit confirmation
-  symaira agent install codex --tier standard
+  symvault agent install codex --tier standard
 
   # Preview what would happen without writing anything
-  symaira agent install openclaw --dry-run
+  symvault agent install openclaw --dry-run
 
   # Only install the skill package, skip MCP config
-  symaira agent install opencode --skill-only
+  symvault agent install opencode --skill-only
 
   # Only inject MCP config, skip the skill
-  symaira agent install claude-code --config-only
+  symvault agent install claude-code --config-only
 
   # Force overwrite existing profile and MCP config entries
-  symaira agent install hermes --force
+  symvault agent install hermes --force
 
   # Structured JSON output for scripting
-  symaira agent install opencode --output json`,
+  symvault agent install opencode --output json`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		autoDetect, _ := cmd.Flags().GetBool("auto-detect")
 		if autoDetect {

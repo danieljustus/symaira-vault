@@ -47,10 +47,10 @@ var findCmd = &cobra.Command{
 	Short:             "Search for entries",
 	Long:              `Searches entry paths and contents for the given query.`,
 	Example: `  # Search for entries containing "bank"
-  symaira find bank
+  symvault find bank
 
   # JSON output
-  symaira find bank --output json`,
+  symvault find bank --output json`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return cli.WithVault(func(svc vaultsvc.Service) error {

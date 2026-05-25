@@ -717,7 +717,7 @@ func TestShareStore_SaveFilePermissions(t *testing.T) {
 }
 
 func TestShareStore_Create_WriteError(t *testing.T) {
-	path := filepath.Join("/nonexistent-share-store-dir-symaira", "mcp-shares.json")
+	path := filepath.Join("/nonexistent-share-store-dir-symvault", "mcp-shares.json")
 	store := NewShareStore(path)
 
 	_, err := store.Create("a", "b", "path", "", 0)

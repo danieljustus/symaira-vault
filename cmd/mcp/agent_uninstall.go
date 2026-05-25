@@ -50,10 +50,10 @@ Use --keep-skill to preserve the skill file and --keep-config to keep the
 agent's profile in config.yaml. Use --yes to skip the confirmation prompt.`,
 	Args: cobra.ExactArgs(1),
 	Example: `  # Interactive uninstall with confirmation
-  symaira agent uninstall hermes
+  symvault agent uninstall hermes
 
   # Non-interactive uninstall keeping the skill file
-  symaira agent uninstall claude-code --yes --keep-skill`,
+  symvault agent uninstall claude-code --yes --keep-skill`,
 	Annotations: map[string]string{
 		cli.RequiresVaultAnnotation: "false",
 	},

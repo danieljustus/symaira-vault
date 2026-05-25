@@ -14,20 +14,20 @@ to a lean 7-tool surface to reduce context-window pollution.
 
 See [docs/migration-v3-to-v4.md](docs/migration-v3-to-v4.md) for the upgrade
 guide and [docs/skills/symaira-agent/UPGRADE-TO-V4.md](docs/skills/symaira-agent/UPGRADE-TO-V4.md)
-for an AI-agent-ready upgrade prompt. Run `openpass migrate v4 --dry-run` to
-preview, then `openpass migrate v4` to apply.
+for an AI-agent-ready upgrade prompt. Run `symvault migrate v4 --dry-run` to
+preview, then `symvault migrate v4` to apply.
 
 ### Breaking changes
 
 - **CLI consolidation.** All AI-integration commands moved under
-  `openpass agent`. Replaced: `openpass mcp install`, `openpass mcp-config`,
-  `openpass mcp token …`, `openpass mcp-token-rotate`, `openpass agent setup`.
+  `symvault agent`. Replaced: `symvault mcp install`, `symvault mcp-config`,
+  `symvault mcp token …`, `symvault mcp-token-rotate`, `symvault agent setup`.
   Deprecation stubs remain in v4.0 (print replacement, exit 2) and will be
   removed in v4.1.
 - **MCP tool `openpass_delete` removed** (was an alias for `delete_entry` since
   v2.x). Callers receive `ERR_TOOL_NOT_FOUND`. Use `delete_entry`.
-- **Default tier for `openpass agent install` is `safe`** (metadata-only).
-  Upgrade explicitly with `openpass agent upgrade <name> --tier standard`.
+- **Default tier for `symvault agent install` is `safe`** (metadata-only).
+  Upgrade explicitly with `symvault agent upgrade <name> --tier standard`.
 - **Token `tools: ["*"]` now means "inherit from profile"** instead of "all
   tools the server knows." Profile changes take effect on the next call.
 - **MCP `tools/list` lean mode by default** — returns 7 essential tools at
@@ -36,30 +36,30 @@ preview, then `openpass migrate v4` to apply.
 
 ### Added — agent integration
 
-- **`openpass agent install <name>`** — single command for agent setup:
+- **`symvault agent install <name>`** — single command for agent setup:
   generates scoped token + writes MCP config + drops embedded skill package +
   runs smoke test. Flags: `--auto-detect`, `--tier`, `--http`, `--dry-run`,
   `--skill-only`, `--config-only`, `--force`, `--output json|yaml|text`.
-- **`openpass agent upgrade <name> --tier <tier>`** — explicit, audited tier
+- **`symvault agent upgrade <name> --tier <tier>`** — explicit, audited tier
   change with interactive diff. Non-interactive `--yes --reason "…"` requires a
   reason for the audit trail. Optional `--rotate-token`.
-- **`openpass agent uninstall <name>`** — removes profile, token, skill, and
+- **`symvault agent uninstall <name>`** — removes profile, token, skill, and
   MCP config entry; skill files without the Symaira Vault sentinel are preserved.
-- **`openpass agent doctor <name>` / `--all`** — end-to-end diagnostic for one
+- **`symvault agent doctor <name>` / `--all`** — end-to-end diagnostic for one
   or all agent integrations; detects skill drift via hash comparison.
-- **`openpass agent list`** — installed agents with tier, token status, last-seen.
-- **`openpass agent token <name> new|list|revoke|rotate`** — token management
+- **`symvault agent list`** — installed agents with tier, token status, last-seen.
+- **`symvault agent token <name> new|list|revoke|rotate`** — token management
   per agent.
-- **`openpass agent audit <name>` / `audit self`** — per-agent audit log with
+- **`symvault agent audit <name>` / `audit self`** — per-agent audit log with
   `--since` and `--format table|json`.
-- **`openpass agent profile show|edit|export <name>`** — agent profile
+- **`symvault agent profile show|edit|export <name>`** — agent profile
   inspection and editing in `$EDITOR` with schema validation + confirmation.
-- **`openpass agent skill export|refresh <agent>`** — pack skill for org
+- **`symvault agent skill export|refresh <agent>`** — pack skill for org
   distribution or re-render in place.
-- **`openpass agent whoami --output json`** — CLI form of the `openpass_whoami`
+- **`symvault agent whoami --output json`** — CLI form of the `openpass_whoami`
   MCP tool.
-- **`openpass agent prompt <path>.<field>`** — CLI form of `secure_input`.
-- **`openpass agent request <path>.<field> --reason "…"`** — CLI form of
+- **`symvault agent prompt <path>.<field>`** — CLI form of `secure_input`.
+- **`symvault agent request <path>.<field> --reason "…"`** — CLI form of
   `request_credential`.
 
 ### Added — MCP tools
@@ -104,7 +104,7 @@ preview, then `openpass migrate v4` to apply.
 - **Per-agent skills embedded in the binary** via `internal/agentskill/assets/`
   with templates for `hermes`, `claude-code`, `codex`, `opencode`, `openclaw`,
   plus a `common/` base.
-- **Sentinel-based lifecycle** — frontmatter `managed_by: openpass` +
+- **Sentinel-based lifecycle** — frontmatter `managed_by: symvault` +
   SHA-256 hash. Install/refresh/uninstall only touch files with the sentinel;
   user-edited skills are preserved unless `--force` is passed.
 - **Deterministic rendering** — golden-file tests in
@@ -128,7 +128,7 @@ preview, then `openpass migrate v4` to apply.
 
 ### Added — migration
 
-- **`openpass migrate v4 [--dry-run] [--yes]`** — classifies existing v3
+- **`symvault migrate v4 [--dry-run] [--yes]`** — classifies existing v3
   profiles into tiers, computes skill drift, backs up `config.yaml` to
   `config.yaml.bak.v3-<timestamp>`, renders skill packages, re-validates token
   registry, prints summary. Idempotent.
@@ -162,7 +162,7 @@ preview, then `openpass migrate v4` to apply.
 - `--dry-run` no longer creates real tokens in `mcp install` (#68).
 - Token registry reloads when the file changes on disk (#67).
 - Opencode install uses the correct root key and adds required fields (#66).
-- `openpass auth status --output json` uses `PrintResult` instead of the
+- `symvault auth status --output json` uses `PrintResult` instead of the
   deprecated `PrintJSON` (#180).
 - `migrateLegacyEntries` walks skip `IsNotExist` errors instead of bailing
   out.
@@ -340,10 +340,10 @@ Major update with vault improvements, self-update mechanism, and enhanced MCP tr
 
 ### Added
 
-- Update check command (`openpass update check`) for detecting newer releases
+- Update check command (`symvault update check`) for detecting newer releases
 - Self-update mechanism for managing Symaira Vault installations
 - MCP server stdio transport support for local agent integration
-- Session management commands (`openpass unlock`, `openpass lock`) with configurable TTL
+- Session management commands (`symvault unlock`, `symvault lock`) with configurable TTL
 - Release smoke tests for validating published artifacts
 - Installer scripts for cross-platform installation (`install.sh`, `install.ps1`)
 
@@ -476,12 +476,12 @@ Autotype, secure secret execution, MCP token management, and session hardening r
 - Secure wrap key and encrypted identity storage in vault sessions
 - Vault legacy mode detection for migration optimization
 - Extended secure memory wipe to decrypted entries and additional paths
-- `openpass run` command for executing commands with vault secrets as environment variables
+- `symvault run` command for executing commands with vault secrets as environment variables
 - MCP tools for command execution with secret injection
 - `CanRunCommands` permission for agent profiles
 - MCP scoped token management with fine-grained access control
 - Token registry with SHA-256 hashed storage
-- `openpass mcp token` CLI commands (create, list, revoke)
+- `symvault mcp token` CLI commands (create, list, revoke)
 - Tool registry for introspecting available MCP tools
 - Scoped token authentication integrated into HTTP server authorization
 - Fuzz test coverage for importer path normalization
@@ -608,7 +608,7 @@ KDF configuration, vault file locking, MCP security hardening, and platform diag
 - Vault file locking using Unix flock and Windows LockFileEx with automatic cleanup on process exit
 - OAuth well-known endpoints for MCP server discovery and integration
 - Build tag infrastructure for platform-specific feature compilation
-- Dynamic shell completion for entry names in openpass get, openpass delete, and related commands
+- Dynamic shell completion for entry names in symvault get, symvault delete, and related commands
 - Hermes and OpenClaw safe adoption guidance documentation
 - Expanded test coverage across multiple packages to reach the 70% threshold
 

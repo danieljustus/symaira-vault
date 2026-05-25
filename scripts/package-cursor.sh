@@ -15,6 +15,6 @@ if ! command -v vsce > /dev/null 2>&1; then
 fi
 
 npm run build
-vsce package --out "symaira-cursor-${VERSION:-1.0.0}.vsix"
+vsce package --out "symvault-cursor-${VERSION:-1.0.0}.vsix"
 
-echo "✓ Created: ${CURSOR_DIR}/symaira-cursor-${VERSION:-1.0.0}.vsix"
+echo "✓ Created: ${CURSOR_DIR}/symvault-cursor-${VERSION:-1.0.0}.vsix"

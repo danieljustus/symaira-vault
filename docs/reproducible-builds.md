@@ -58,8 +58,8 @@ go build -trimpath -ldflags "\
   -X main.commit=${BUILD_COMMIT} \
   -X main.buildTime=${BUILD_TIME} \
   -buildid=" \
-  -o openpass \
-  ./cmd/openpass
+  -o symvault \
+  ./cmd/symvault
 ```
 
 #### Cross-Platform Builds
@@ -87,7 +87,7 @@ mkdir -p dist
 for platform in "${PLATFORMS[@]}"; do
   GOOS=${platform%/*}
   GOARCH=${platform#*/}
-  output="dist/openpass-${VERSION}-${GOOS}-${GOARCH}"
+  output="dist/symvault-${VERSION}-${GOOS}-${GOARCH}"
   
   if [ "$GOOS" = "windows" ]; then
     output="${output}.exe"
@@ -96,7 +96,7 @@ for platform in "${PLATFORMS[@]}"; do
   echo "Building for ${GOOS}/${GOARCH}..."
   GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=0 \
     go build -trimpath -ldflags "$LDFLAGS" \
-    -o "$output" ./cmd/openpass
+    -o "$output" ./cmd/symvault
 done
 ```
 
@@ -131,12 +131,12 @@ RUN go build -trimpath -ldflags "\
   -X main.commit=${COMMIT} \
   -X main.buildTime=${BUILD_TIME} \
   -buildid=" \
-  -o /dist/openpass \
-  ./cmd/openpass
+  -o /dist/symvault \
+  ./cmd/symvault
 
 FROM scratch
-COPY --from=builder /dist/openpass /openpass
-ENTRYPOINT ["/openpass"]
+COPY --from=builder /dist/symvault /symvault
+ENTRYPOINT ["/symvault"]
 ```
 
 ### Verifying Reproducibility
@@ -176,12 +176,12 @@ done
    # Generate a new dedicated release signing key
    gpg --full-generate-key
    # Select: RSA and RSA, 4096 bits, no expiration
-   # Use: Symaira Vault Release Signing Key <releases@openpass.dev>
+   # Use: Symaira Vault Release Signing Key <releases@symvault.dev>
    ```
 
 2. **Export public key**:
    ```bash
-   gpg --armor --export releases@openpass.dev > openpass-release-key.asc
+   gpg --armor --export releases@symvault.dev > openpass-release-key.asc
    ```
 
 3. **Publish public key**:
@@ -225,7 +225,7 @@ done
    
    # Generate checksums
    cd dist
-   sha256sum openpass-* > checksums.txt
+   sha256sum symvault-* > checksums.txt
    cd ..
    ```
 
@@ -234,7 +234,7 @@ done
    cd dist
    
    # Sign each binary
-   for f in openpass-*; do
+   for f in symvault-*; do
      gpg --detach-sign --armor "$f"
    done
    
@@ -252,7 +252,7 @@ done
    gpg --verify checksums.txt.asc checksums.txt
    
    # Verify all binaries
-   for f in openpass-*; do
+   for f in symvault-*; do
      if [ -f "${f}.asc" ]; then
        gpg --verify "${f}.asc" "$f"
      fi
@@ -342,7 +342,7 @@ jobs:
           COMMIT=$(git rev-parse HEAD)
           BUILD_TIME=$(git log -1 --format=%ct)
           
-          output="openpass-${VERSION}-${GOOS}-${GOARCH}"
+          output="symvault-${VERSION}-${GOOS}-${GOARCH}"
           if [ "$GOOS" = "windows" ]; then
             output="${output}.exe"
           fi
@@ -353,13 +353,13 @@ jobs:
             -X main.commit=${COMMIT} \
             -X main.buildTime=${BUILD_TIME} \
             -buildid=" \
-            -o "$output" ./cmd/openpass
+            -o "$output" ./cmd/symvault
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: openpass-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: openpass-*
+          name: symvault-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: symvault-*
 
   sign:
     needs: build
@@ -371,7 +371,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: dist
-          pattern: openpass-*
+          pattern: symvault-*
           merge-multiple: true
       
       - name: Import GPG key
@@ -383,12 +383,12 @@ jobs:
       - name: Generate checksums
         run: |
           cd dist
-          sha256sum openpass-* > checksums.txt
+          sha256sum symvault-* > checksums.txt
       
       - name: Sign artifacts
         run: |
           cd dist
-          for f in openpass-* checksums.txt; do
+          for f in symvault-* checksums.txt; do
             gpg --detach-sign --armor "$f"
           done
       
@@ -481,10 +481,10 @@ go build -trimpath -ldflags "\
   -X main.commit=${COMMIT} \
   -X main.buildTime=${BUILD_TIME} \
   -buildid=" \
-  -o openpass-reproduced ./cmd/openpass
+  -o symvault-reproduced ./cmd/symvault
 
 # Compare with downloaded binary
-sha256sum openpass-reproduced
+sha256sum symvault-reproduced
 sha256sum openpass-v1.2.3-linux-amd64
 ```
 

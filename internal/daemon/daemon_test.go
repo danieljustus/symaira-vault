@@ -9,7 +9,7 @@ import (
 
 func TestValidateInstallOptions_MaliciousVaultDir(t *testing.T) {
 	opts := InstallOpts{
-		BinaryPath: "/usr/local/bin/symaira",
+		BinaryPath: "/usr/local/bin/symvault",
 		VaultDir:   "/tmp/x</string><key>RunAtLoad</key><true/>",
 		Bind:       "127.0.0.1",
 		Port:       8080,
@@ -22,7 +22,7 @@ func TestValidateInstallOptions_MaliciousVaultDir(t *testing.T) {
 
 func TestValidateInstallOptions_NewlinesInVaultDir(t *testing.T) {
 	opts := InstallOpts{
-		BinaryPath: "/usr/local/bin/symaira",
+		BinaryPath: "/usr/local/bin/symvault",
 		VaultDir:   "/tmp/x\nvault",
 		Bind:       "127.0.0.1",
 		Port:       8080,
@@ -35,8 +35,8 @@ func TestValidateInstallOptions_NewlinesInVaultDir(t *testing.T) {
 
 func TestValidateInstallOptions_NewlinesInBinaryPath(t *testing.T) {
 	opts := InstallOpts{
-		BinaryPath: "/usr/local/bin\nsymaira",
-		VaultDir:   "/home/user/.symaira",
+		BinaryPath: "/usr/local/bin\nsymvault",
+		VaultDir:   "/home/user/.symvault",
 		Bind:       "127.0.0.1",
 		Port:       8080,
 	}
@@ -48,8 +48,8 @@ func TestValidateInstallOptions_NewlinesInBinaryPath(t *testing.T) {
 
 func TestValidateInstallOptions_MaliciousBind(t *testing.T) {
 	opts := InstallOpts{
-		BinaryPath: "/usr/local/bin/symaira",
-		VaultDir:   "/home/user/.symaira",
+		BinaryPath: "/usr/local/bin/symvault",
+		VaultDir:   "/home/user/.symvault",
 		Bind:       "127.0.0.1\nextra",
 		Port:       8080,
 	}
@@ -64,8 +64,8 @@ func TestValidateInstallOptions_ValidValues(t *testing.T) {
 		t.Skip("skipping on Windows: uses Unix-style absolute paths")
 	}
 	opts := InstallOpts{
-		BinaryPath: "/usr/local/bin/symaira",
-		VaultDir:   "/home/user/.symaira",
+		BinaryPath: "/usr/local/bin/symvault",
+		VaultDir:   "/home/user/.symvault",
 		Bind:       "127.0.0.1",
 		Port:       8080,
 	}
@@ -76,8 +76,8 @@ func TestValidateInstallOptions_ValidValues(t *testing.T) {
 
 func TestValidateInstallOptions_RelativeBinaryPath(t *testing.T) {
 	opts := InstallOpts{
-		BinaryPath: "symaira",
-		VaultDir:   "/home/user/.symaira",
+		BinaryPath: "symvault",
+		VaultDir:   "/home/user/.symvault",
 		Bind:       "127.0.0.1",
 		Port:       8080,
 	}
@@ -88,7 +88,7 @@ func TestValidateInstallOptions_RelativeBinaryPath(t *testing.T) {
 
 func TestValidateInstallOptions_RelativeVaultDir(t *testing.T) {
 	opts := InstallOpts{
-		BinaryPath: "/usr/local/bin/symaira",
+		BinaryPath: "/usr/local/bin/symvault",
 		VaultDir:   "relative/path",
 		Bind:       "127.0.0.1",
 		Port:       8080,
@@ -100,8 +100,8 @@ func TestValidateInstallOptions_RelativeVaultDir(t *testing.T) {
 
 func TestValidateInstallOptions_EmptyBind(t *testing.T) {
 	opts := InstallOpts{
-		BinaryPath: "/usr/local/bin/symaira",
-		VaultDir:   "/home/user/.symaira",
+		BinaryPath: "/usr/local/bin/symvault",
+		VaultDir:   "/home/user/.symvault",
 		Bind:       "",
 		Port:       8080,
 	}
@@ -120,8 +120,8 @@ func TestValidateInstallOptions_InvalidPort(t *testing.T) {
 	}
 	for _, tt := range tests {
 		opts := InstallOpts{
-			BinaryPath: "/usr/local/bin/symaira",
-			VaultDir:   "/home/user/.symaira",
+			BinaryPath: "/usr/local/bin/symvault",
+			VaultDir:   "/home/user/.symvault",
 			Bind:       "127.0.0.1",
 			Port:       tt.port,
 		}
@@ -136,10 +136,10 @@ func TestPlistXML_RoundTrip(t *testing.T) {
 		Version: "1.0",
 		Dict: plistDict{
 			Entries: []plistEntry{
-				{Key: "Label", Str: &plistString{Value: "com.symaira.mcp"}},
+				{Key: "Label", Str: &plistString{Value: "com.symvault.mcp"}},
 				{Key: "ProgramArguments", Arr: &plistArray{
 					Items: []plistString{
-						{Value: "/usr/local/bin/symaira"},
+						{Value: "/usr/local/bin/symvault"},
 						{Value: "serve"},
 						{Value: "--port"},
 						{Value: "8080"},
@@ -149,13 +149,13 @@ func TestPlistXML_RoundTrip(t *testing.T) {
 				}},
 				{Key: "EnvironmentVariables", Dict: &plistDict{
 					Entries: []plistEntry{
-						{Key: "OPENPASS_VAULT", Str: &plistString{Value: "/home/user/.symaira"}},
+						{Key: "OPENPASS_VAULT", Str: &plistString{Value: "/home/user/.symvault"}},
 					},
 				}},
 				{Key: "RunAtLoad", Tru: &plistTrue{}},
 				{Key: "KeepAlive", Tru: &plistTrue{}},
-				{Key: "StandardOutPath", Str: &plistString{Value: "/home/user/Logs/symaira-mcp.log"}},
-				{Key: "StandardErrorPath", Str: &plistString{Value: "/home/user/Logs/symaira-mcp.error.log"}},
+				{Key: "StandardOutPath", Str: &plistString{Value: "/home/user/Logs/symvault-mcp.log"}},
+				{Key: "StandardErrorPath", Str: &plistString{Value: "/home/user/Logs/symvault-mcp.error.log"}},
 			},
 		},
 	}
@@ -177,19 +177,19 @@ func TestPlistXML_RoundTrip(t *testing.T) {
 	if !strings.Contains(output, "<key>Label</key>") {
 		t.Error("missing Label key")
 	}
-	if !strings.Contains(output, "<string>com.symaira.mcp</string>") {
+	if !strings.Contains(output, "<string>com.symvault.mcp</string>") {
 		t.Error("missing Label value")
 	}
 	if !strings.Contains(output, "<key>ProgramArguments</key>") {
 		t.Error("missing ProgramArguments key")
 	}
-	if !strings.Contains(output, "<string>/usr/local/bin/symaira</string>") {
+	if !strings.Contains(output, "<string>/usr/local/bin/symvault</string>") {
 		t.Error("missing binary path in program arguments")
 	}
 	if !strings.Contains(output, "<key>EnvironmentVariables</key>") {
 		t.Error("missing EnvironmentVariables key")
 	}
-	if !strings.Contains(output, "<string>/home/user/.symaira</string>") {
+	if !strings.Contains(output, "<string>/home/user/.symvault</string>") {
 		t.Error("missing vault dir in environment")
 	}
 	if !strings.Contains(output, "<true>") {
@@ -332,16 +332,16 @@ func TestValidateInstallOptions_DisallowedCharsInBinaryPath(t *testing.T) {
 		name  string
 		value string
 	}{
-		{"angle bracket", "/usr/bin/<symaira"},
-		{"double quote", "/usr/bin/\"symaira"},
-		{"single quote", "/usr/bin/'symaira"},
-		{"carriage return", "/usr/bin/\rsymaira"},
+		{"angle bracket", "/usr/bin/<symvault"},
+		{"double quote", "/usr/bin/\"symvault"},
+		{"single quote", "/usr/bin/'symvault"},
+		{"carriage return", "/usr/bin/\rsymvault"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			opts := InstallOpts{
 				BinaryPath: tt.value,
-				VaultDir:   "/home/user/.symaira",
+				VaultDir:   "/home/user/.symvault",
 				Bind:       "127.0.0.1",
 				Port:       8080,
 			}
@@ -364,7 +364,7 @@ func TestValidateInstallOptions_DisallowedCharsInVaultDir(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			opts := InstallOpts{
-				BinaryPath: "/usr/local/bin/symaira",
+				BinaryPath: "/usr/local/bin/symvault",
 				VaultDir:   tt.value,
 				Bind:       "127.0.0.1",
 				Port:       8080,
@@ -381,17 +381,17 @@ func TestValidateInstallOptions_DisallowedShellMetacharacters(t *testing.T) {
 		name  string
 		value string
 	}{
-		{"dollar sign", "/usr/bin/$symaira"},
-		{"backtick", "/usr/bin/`symaira`"},
-		{"semicolon", "/usr/bin/symaira;rm"},
-		{"ampersand", "/usr/bin/symaira&"},
-		{"pipe", "/usr/bin/symaira|"},
+		{"dollar sign", "/usr/bin/$symvault"},
+		{"backtick", "/usr/bin/`symvault`"},
+		{"semicolon", "/usr/bin/symvault;rm"},
+		{"ampersand", "/usr/bin/symvault&"},
+		{"pipe", "/usr/bin/symvault|"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			opts := InstallOpts{
 				BinaryPath: tt.value,
-				VaultDir:   "/home/user/.symaira",
+				VaultDir:   "/home/user/.symvault",
 				Bind:       "127.0.0.1",
 				Port:       8080,
 			}
@@ -414,8 +414,8 @@ func TestValidateInstallOptions_DisallowedCharsInBind(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			opts := InstallOpts{
-				BinaryPath: "/usr/local/bin/symaira",
-				VaultDir:   "/home/user/.symaira",
+				BinaryPath: "/usr/local/bin/symvault",
+				VaultDir:   "/home/user/.symvault",
 				Bind:       tt.value,
 				Port:       8080,
 			}

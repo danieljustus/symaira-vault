@@ -36,18 +36,18 @@ class Symaira < Formula
       Symaira Vault has been installed!
 
       To get started:
-        symaira init                    # Initialize a new vault
-        symaira set github.com/username # Add your first entry
-        symaira get github.com/username # Retrieve it
+        symvault init                    # Initialize a new vault
+        symvault set github.com/username # Add your first entry
+        symvault get github.com/username # Retrieve it
 
       For MCP server setup:
-        symaira mcp-config <name>
+        symvault mcp-config <name>
 
       Documentation: https://github.com/danieljustus/symaira-vault#readme
     EOS
   end
 
   test do
-    system "#{bin}/symaira", "version"
+    system "#{bin}/symvault", "version"
   end
 end

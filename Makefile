@@ -1,7 +1,7 @@
 .PHONY: all build install test test-fast test-coverage test-verbose test-race test-ci clean lint lint-fix fmt fmt-check vet passlint completions manpages help docs-check
 
 # Variables
-BINARY_NAME := symaira
+BINARY_NAME := symvault
 GO := go
 GOFLAGS := -v
 GOLANGCI_LINT_VERSION := v2.11.4

@@ -9,9 +9,9 @@ import (
 )
 
 func TestBiometricServiceName(t *testing.T) {
-	vaultDir := "/home/user/.symaira"
+	vaultDir := "/home/user/.symvault"
 	got := biometricServiceName(vaultDir)
-	want := "symaira-biometric:/home/user/.symaira"
+	want := "symvault-biometric:/home/user/.symvault"
 	if got != want {
 		t.Errorf("biometricServiceName(%q) = %q, want %q", vaultDir, got, want)
 	}

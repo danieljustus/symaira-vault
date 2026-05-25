@@ -4,7 +4,7 @@ package config
 import "time"
 
 const (
-	defaultConfigDir      = ".symaira"
+	defaultConfigDir      = ".symvault"
 	defaultConfigFile     = "config.yaml"
 	defaultAgentName      = "default"
 	defaultSessionTimeout = 15 * time.Minute

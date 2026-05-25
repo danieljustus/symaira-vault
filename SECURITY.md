@@ -74,7 +74,7 @@ On macOS, use `shasum -a 256 --check OpenPass_VERSION_checksums.txt` if
 
 ### Update Checker TLS Configuration
 
-The `openpass update check` command queries the GitHub API for the latest release.
+The `symvault update check` command queries the GitHub API for the latest release.
 All outbound HTTPS connections from the update checker enforce **TLS 1.3** as the
 minimum protocol version. Connections to servers that do not support TLS 1.3
 will be rejected.
@@ -174,7 +174,7 @@ Setting `metrics_auth_required: false` allows anonymous access to `/metrics` whe
 Bearer tokens can be rotated using the `mcp-token-rotate` command:
 
 ```bash
-openpass mcp-token-rotate
+symvault mcp-token-rotate
 ```
 
 This invalidates the previous token and generates a new one. Any MCP clients using the old token will need to be updated with the new token.
@@ -184,7 +184,7 @@ This invalidates the previous token and generates a new one. Any MCP clients usi
 When generating MCP configurations that may be displayed in terminals or committed to version control, use the `--redact` flag:
 
 ```bash
-openpass mcp-config claude-code --http --redact
+symvault mcp-config claude-code --http --redact
 ```
 
 This outputs `env:OPENPASS_MCP_TOKEN` instead of the actual token value. Clients using redacted configs must set the `OPENPASS_MCP_TOKEN` environment variable.
@@ -192,7 +192,7 @@ This outputs `env:OPENPASS_MCP_TOKEN` instead of the actual token value. Clients
 For scripts that need the raw token:
 
 ```bash
-openpass mcp-config <agent> --token-only
+symvault mcp-config <agent> --token-only
 ```
 
 ### Multi-User Vaults and MCP
@@ -249,7 +249,7 @@ Symaira Vault supports optional Touch ID authentication for vault unlock on macO
 Set the auth method with the CLI:
 
 ```bash
-openpass auth set touchid
+symvault auth set touchid
 ```
 
 Or add to your config (`~/.openpass/config.yaml` or vault `config.yaml`):
@@ -264,7 +264,7 @@ backward compatibility. Prefer `authMethod: touchid` for new configs.
 You can switch back at any time:
 
 ```bash
-openpass auth set passphrase
+symvault auth set passphrase
 ```
 
 #### How It Works
@@ -304,8 +304,8 @@ openpass auth set passphrase
 ## Security Best Practices
 
 1. **Keep backups**: Regularly backup your vault directory
-2. **Use strong passphrases**: Use `openpass generate --length 32 --symbols`
-3. **Lock sessions**: Use `openpass lock` when leaving your terminal
+2. **Use strong passphrases**: Use `symvault generate --length 32 --symbols`
+3. **Lock sessions**: Use `symvault lock` when leaving your terminal
 4. **Review agent permissions**: Only grant `canWrite: true` to trusted agents
 5. **Rotate tokens**: Periodically rotate MCP bearer tokens in HTTP mode
 6. **Secure your Git repository**: If using Git sync, ensure your remote is secure
@@ -340,7 +340,7 @@ stronger resistance against GPU/ASIC-based attacks.
 #### Migration Plan
 
 A future release will provide:
-- `openpass migrate kdf` command to re-encrypt vault entries with argon2id
+- `symvault migrate kdf` command to re-encrypt vault entries with argon2id
 - Automatic detection of vault format version
 - Doctor check `crypto.kdf.modern` to track migration status
 
@@ -350,7 +350,7 @@ A future release will provide:
    ```bash
    cp -r ~/.openpass ~/.openpass.backup
    ```
-2. Run `openpass doctor` to check current KDF status
+2. Run `symvault doctor` to check current KDF status
 3. Wait for the migration command to be available in a future release
 
 #### Why argon2id?
@@ -380,7 +380,7 @@ As a password manager handling highly sensitive credentials, we believe telemetr
 All data remains on your device:
 - **Vault contents**: Your passwords, TOTP secrets, and notes are never transmitted
 - **Audit logs**: Stored locally in `~/.openpass/audit-*.log` with rotation and retention limits
-- **Error information**: Diagnostic commands like `openpass --version` and `openpass list` stay on your machine
+- **Error information**: Diagnostic commands like `symvault --version` and `symvault list` stay on your machine
 - **Session data**: Cached via OS keyring, never transmitted
 
 ### Audit Logs

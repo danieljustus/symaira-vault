@@ -160,7 +160,7 @@ func TestLoadOrCreateToken_RandError(t *testing.T) {
 
 func TestLoadOrCreateToken_WriteFileError(t *testing.T) {
 	t.Setenv("OPENPASS_MCP_TOKEN", "")
-	path := filepath.Join("/nonexistent-dir-symaira-test", "mcp-token")
+	path := filepath.Join("/nonexistent-dir-symvault-test", "mcp-token")
 	_, err := LoadOrCreateToken(path)
 	if err == nil {
 		t.Fatal("expected error from WriteFile failure")
@@ -772,7 +772,7 @@ func TestTokenRegistry_Create_RandError(t *testing.T) {
 }
 
 func TestTokenRegistry_Create_WriteError(t *testing.T) {
-	path := filepath.Join("/nonexistent-registry-dir-symaira", "mcp-tokens.json")
+	path := filepath.Join("/nonexistent-registry-dir-symvault", "mcp-tokens.json")
 	reg := NewTokenRegistry(path)
 
 	_, _, err := reg.Create("test", []string{"*"}, "", 0)

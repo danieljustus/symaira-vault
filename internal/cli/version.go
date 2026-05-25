@@ -17,7 +17,7 @@ type VersionResult struct {
 }
 
 func (v VersionResult) String() string {
-	return "symaira " + v.Version + " (commit: " + v.Commit + ", built: " + v.Built + ")"
+	return "symvault " + v.Version + " (commit: " + v.Commit + ", built: " + v.Built + ")"
 }
 
 func SetVersionInfo(version, commit, date string) {
@@ -32,8 +32,8 @@ func AppVersionStr() string { return AppVersion }
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print the version of Symaira Vault",
-	Example: `  symaira version
-  symaira version --output json`,
+	Example: `  symvault version
+  symvault version --output json`,
 	Annotations: map[string]string{
 		RequiresVaultAnnotation: "false",
 	},

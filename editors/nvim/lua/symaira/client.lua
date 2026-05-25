@@ -1,5 +1,5 @@
-local config = require("symaira.config")
-local auth = require("symaira.auth")
+local config = require("symvault.config")
+local auth = require("symvault.auth")
 
 local M = {}
 
@@ -62,7 +62,7 @@ function M.initialize(callback)
     protocolVersion = "2025-11-25",
     capabilities = {},
     clientInfo = {
-      name = "symaira-nvim",
+      name = "symvault-nvim",
       version = "1.0.0",
     },
   }

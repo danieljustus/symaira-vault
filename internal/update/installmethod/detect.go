@@ -101,13 +101,13 @@ func Guidance(method InstallMethod) string {
 	case DirectDownload:
 		return "Re-run the quick install script: curl -sSfL https://raw.githubusercontent.com/danieljustus/Symaira Vault/main/scripts/install.sh | sh"
 	case Homebrew:
-		return "Update via Homebrew: brew upgrade symaira"
+		return "Update via Homebrew: brew upgrade symvault"
 	case GoInstall:
 		return "Update via Go: go install github.com/danieljustus/symaira-vault@latest"
 	case PackageManager:
 		return "Update via your system package manager (e.g., apt upgrade, yum update, pacman -Syu)"
 	case BuildFromSource:
-		return "Rebuild from source: git pull && go build ./cmd/symaira"
+		return "Rebuild from source: git pull && go build ./cmd/symvault"
 	case Unknown:
 		return "Unable to determine installation method. Reinstall from https://github.com/danieljustus/symaira-vault/releases"
 	default:
@@ -209,7 +209,7 @@ func detectFromReceipts(absPath string) InstallMethod {
 		return Homebrew
 	}
 
-	if _, err := os.Stat("/var/lib/dpkg/info/symaira.list"); err == nil {
+	if _, err := os.Stat("/var/lib/dpkg/info/symvault.list"); err == nil {
 		return PackageManager
 	}
 

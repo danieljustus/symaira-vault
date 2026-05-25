@@ -90,7 +90,7 @@ func TestVaultPathErrorWhenHomeDirNotAvailable(t *testing.T) {
 	}()
 
 	// Set vault to a path starting with ~ which requires home directory expansion
-	cli.Vault = "~/.symaira"
+	cli.Vault = "~/.symvault"
 
 	// Call vaultPath and verify it returns an error
 	path, err := cli.VaultPath()
@@ -127,15 +127,15 @@ func TestVaultPathSuccessWithTildeExpansion(t *testing.T) {
 	}()
 
 	// Set vault to a path starting with ~
-	cli.Vault = "~/.symaira"
+	cli.Vault = "~/.symvault"
 
 	// Call vaultPath and verify it returns the expanded path
 	path, err := cli.VaultPath()
 	if err != nil {
 		t.Errorf("cli.VaultPath() should not return error, got: %v", err)
 	}
-	if path != "/Users/testuser/.symaira" {
-		t.Errorf("cli.VaultPath() = %s, want /Users/testuser/.symaira", path)
+	if path != "/Users/testuser/.symvault" {
+		t.Errorf("cli.VaultPath() = %s, want /Users/testuser/.symvault", path)
 	}
 }
 
@@ -188,7 +188,7 @@ func TestVaultPathUsesEnvWhenFlagUnchanged(t *testing.T) {
 	origEnv := os.Getenv("OPENPASS_VAULT")
 	defer func() { _ = os.Setenv("OPENPASS_VAULT", origEnv) }()
 
-	cli.Vault = "~/.symaira"
+	cli.Vault = "~/.symvault"
 	_ = os.Setenv("OPENPASS_VAULT", "/env/vault")
 
 	path, err := cli.VaultPath()

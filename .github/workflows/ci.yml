@@ -270,15 +270,15 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          output_name="symaira-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.extension }}"
+          output_name="symvault-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.extension }}"
           go build -ldflags="-s -w -X main.version=dev -X main.commit=${{ github.sha }}" -o "$output_name" .
           echo "Built: $output_name"
 
       - name: Upload artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: symaira-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: symaira-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.extension }}
+          name: symvault-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: symvault-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.extension }}
           retention-days: 7
 
   integration-test:
@@ -319,25 +319,25 @@ jobs:
       - name: Download linux-amd64 binary
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          name: symaira-linux-amd64
+          name: symvault-linux-amd64
           path: ./bin
 
       - name: Make binary executable
-        run: chmod +x ./bin/symaira-linux-amd64
+        run: chmod +x ./bin/symvault-linux-amd64
 
       - name: Smoke test - help flag
-        run: ./bin/symaira-linux-amd64 --help
+        run: ./bin/symvault-linux-amd64 --help
 
       - name: Smoke test - subcommand help pages
         run: |
-          ./bin/symaira-linux-amd64 get --help
-          ./bin/symaira-linux-amd64 set --help
-          ./bin/symaira-linux-amd64 list --help
-          ./bin/symaira-linux-amd64 serve --help
+          ./bin/symvault-linux-amd64 get --help
+          ./bin/symvault-linux-amd64 set --help
+          ./bin/symvault-linux-amd64 list --help
+          ./bin/symvault-linux-amd64 serve --help
 
       - name: Smoke test - vault operations
         run: |
-          BIN="./bin/symaira-linux-amd64"
+          BIN="./bin/symvault-linux-amd64"
           VAULT_DIR=$(mktemp -d)
           PASSPHRASE="test-passphrase-123"
           

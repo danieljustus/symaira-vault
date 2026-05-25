@@ -27,7 +27,7 @@ type AgentListItem struct {
 	LastSeen       string `json:"last_seen,omitempty"`
 }
 
-// AgentListResult is the structured output for `symaira agent list --output json`.
+// AgentListResult is the structured output for `symvault agent list --output json`.
 type AgentListResult struct {
 	Agents []AgentListItem `json:"agents"`
 	Count  int             `json:"count"`
@@ -79,10 +79,10 @@ Output columns:
   SKILL      Skill file status (missing, installed, managed)
   LAST SEEN  Most recent token use timestamp`,
 	Example: `  # List all agents in a table
-  symaira agent list
+  symvault agent list
 
   # JSON output for programmatic use
-  symaira agent list --output json`,
+  symvault agent list --output json`,
 	Annotations: map[string]string{
 		cli.RequiresVaultAnnotation: "false",
 	},

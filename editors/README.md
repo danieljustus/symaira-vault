@@ -12,13 +12,13 @@ IDE and editor integrations for Symaira Vault secret manager.
 
 ## Architecture
 
-All editor plugins communicate with `symaira serve` via HTTP JSON-RPC 2.0 MCP protocol:
+All editor plugins communicate with `symvault serve` via HTTP JSON-RPC 2.0 MCP protocol:
 
 ```
 Editor Plugin <-> HTTP POST 127.0.0.1:8080/mcp <-> Symaira Vault MCP Server
 ```
 
-Authentication uses the bearer token from `~/.symaira/mcp-token`.
+Authentication uses the bearer token from `~/.openpass/mcp-token`.
 
 ## Quick Start
 
@@ -26,25 +26,25 @@ Authentication uses the bearer token from `~/.symaira/mcp-token`.
 
 1. Install Symaira CLI:
    ```bash
-   brew install symaira
+   brew install symvault
    # or see main README for other methods
    ```
 
 2. Initialize vault:
    ```bash
-   symaira init
+   symvault init
    ```
 
 3. Start MCP server:
    ```bash
-   symaira serve --port 8080
+   symvault serve --port 8080
    ```
 
 ### VS Code
 
 1. Install the `.vsix`:
    ```bash
-   code --install-extension symaira-vscode-1.0.0.vsix
+   code --install-extension symvault-vscode-1.0.0.vsix
    ```
 
 2. Open sidebar: Explorer → "Symaira Vault"
@@ -65,7 +65,7 @@ Authentication uses the bearer token from `~/.symaira/mcp-token`.
 With lazy.nvim:
 ```lua
 {
-  dir = "/path/to/symaira/editors/nvim",
+  dir = "/path/to/symvault/editors/nvim",
   opts = {},
   cmd = { "SymairaList", "SymairaGet", "SymairaCopy", "SymairaGenerate" }
 }

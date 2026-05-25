@@ -32,15 +32,15 @@ func runFilteredCmd(name string, args ...string) *exec.Cmd {
 const (
 	// macOS launchd paths
 	launchAgentDir      = "LaunchAgents"
-	launchAgentLabel    = "com.symaira.mcp"
-	launchAgentFileName = "com.symaira.mcp.plist"
+	launchAgentLabel    = "com.symvault.mcp"
+	launchAgentFileName = "com.symvault.mcp.plist"
 	logDir              = "Logs"
-	logFileName         = "symaira-mcp.log"
-	errorLogFileName    = "symaira-mcp.error.log"
+	logFileName         = "symvault-mcp.log"
+	errorLogFileName    = "symvault-mcp.error.log"
 
 	// Linux systemd paths
 	systemdUserDir  = ".config/systemd/user"
-	systemdUnitName = "symaira-mcp.service"
+	systemdUnitName = "symvault-mcp.service"
 )
 
 // Linux systemd service template — values are pre-escaped before rendering
@@ -315,7 +315,7 @@ func (i *Installer) Bind() string {
 	return i.bind
 }
 
-// BinaryPath returns the path to the symaira binary.
+// BinaryPath returns the path to the symvault binary.
 func (i *Installer) BinaryPath() string {
 	return i.binaryPath
 }
@@ -441,7 +441,7 @@ func (i *Installer) writePlist(path string) error {
 		Version: "1.0",
 		Dict: plistDict{
 			Entries: []plistEntry{
-				{Key: "Label", Str: &plistString{Value: "com.symaira.mcp"}},
+				{Key: "Label", Str: &plistString{Value: "com.symvault.mcp"}},
 				{Key: "ProgramArguments", Arr: &plistArray{
 					Items: []plistString{
 						{Value: i.binaryPath},
@@ -507,13 +507,13 @@ func (i *Installer) installLinux() error {
 			err)
 	}
 
-	if out, err := runFilteredCmd("systemctl", "--user", "enable", "symaira-mcp").CombinedOutput(); err != nil {
+	if out, err := runFilteredCmd("systemctl", "--user", "enable", "symvault-mcp").CombinedOutput(); err != nil {
 		return errorspkg.NewCLIError(errorspkg.ExitGeneralError,
 			fmt.Sprintf("systemctl enable failed: %s", strings.TrimSpace(string(out))),
 			err)
 	}
 
-	if out, err := runFilteredCmd("systemctl", "--user", "start", "symaira-mcp").CombinedOutput(); err != nil {
+	if out, err := runFilteredCmd("systemctl", "--user", "start", "symvault-mcp").CombinedOutput(); err != nil {
 		return errorspkg.NewCLIError(errorspkg.ExitGeneralError,
 			fmt.Sprintf("systemctl start failed: %s", strings.TrimSpace(string(out))),
 			err)
@@ -524,8 +524,8 @@ func (i *Installer) installLinux() error {
 
 func (i *Installer) uninstallLinux() error {
 	// Best-effort stop and disable
-	_ = runFilteredCmd("systemctl", "--user", "stop", "symaira-mcp").Run()
-	_ = runFilteredCmd("systemctl", "--user", "disable", "symaira-mcp").Run()
+	_ = runFilteredCmd("systemctl", "--user", "stop", "symvault-mcp").Run()
+	_ = runFilteredCmd("systemctl", "--user", "disable", "symvault-mcp").Run()
 
 	svcPath, err := i.linuxServicePath()
 	if err != nil {
@@ -553,7 +553,7 @@ func (i *Installer) statusLinux() (string, error) {
 		return "not installed", nil
 	}
 
-	out, err := runFilteredCmd("systemctl", "--user", "is-active", "symaira-mcp").CombinedOutput()
+	out, err := runFilteredCmd("systemctl", "--user", "is-active", "symvault-mcp").CombinedOutput()
 	if err != nil {
 		output := strings.TrimSpace(string(out))
 		if output == "inactive" || output == "failed" {

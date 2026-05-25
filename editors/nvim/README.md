@@ -6,10 +6,10 @@ Browse, search, copy, and insert secrets from your (Symaira Vault) vault without
 
 ## Prerequisites
 
-- **Symaira Vault CLI** installed and configured (`brew install symaira` or see [installation docs](https://github.com/danieljustus/symaira-vault#installation))
+- **Symaira Vault CLI** installed and configured (`brew install symvault` or see [installation docs](https://github.com/danieljustus/symaira-vault#installation))
 - **Neovim** >= 0.7
 - **[plenary.nvim](https://github.com/nvim-lua/plenary.nvim)** — required for HTTP requests
-- **Symaira Vault MCP server** running: `symaira serve --port 8080`
+- **Symaira Vault MCP server** running: `symvault serve --port 8080`
 
 ## Installation
 
@@ -17,7 +17,7 @@ Browse, search, copy, and insert secrets from your (Symaira Vault) vault without
 
 ```lua
 {
-  dir = "/path/to/symaira/editors/nvim",
+  dir = "/path/to/symvault/editors/nvim",
   dependencies = { "nvim-lua/plenary.nvim" },
   cmd = { "SymairaList", "SymairaGet", "SymairaCopy", "SymairaGenerate", "SymairaFind", "SymairaGenerateTOTP" },
   opts = {},
@@ -28,10 +28,10 @@ Browse, search, copy, and insert secrets from your (Symaira Vault) vault without
 
 ```lua
 use {
-  "/path/to/symaira/editors/nvim",
+  "/path/to/symvault/editors/nvim",
   requires = { "nvim-lua/plenary.nvim" },
   config = function()
-    require("symaira").setup()
+    require("symvault").setup()
   end,
 }
 ```
@@ -40,14 +40,14 @@ use {
 
 ```lua
 -- Add to your init.lua
-vim.opt.runtimepath:append("/path/to/symaira/editors/nvim")
-require("symaira").setup()
+vim.opt.runtimepath:append("/path/to/symvault/editors/nvim")
+require("symvault").setup()
 ```
 
 ## Configuration
 
 ```lua
-require("symaira").setup({
+require("symvault").setup({
   base_url = "http://127.0.0.1:8080",  -- MCP server URL
   agent_name = "nvim",                  -- Agent identifier sent to server
   timeout_ms = 30000,                   -- HTTP request timeout
@@ -69,7 +69,7 @@ require("symaira").setup({
 
 ## Health Check
 
-Run `:checkhealth symaira` to verify:
+Run `:checkhealth symvault` to verify:
 - MCP token is present
 - plenary.nvim is installed
 - Symaira Vault CLI is in PATH
@@ -87,14 +87,14 @@ Run `:checkhealth symaira` to verify:
 - All secret values displayed as `***` in the UI
 - Secrets never stored in Neovim state, registers, or logs
 - Clipboard operations go through `copy_to_clipboard` MCP tool (server-side auto-clear)
-- Token read from `~/.symaira/mcp-token` each session; never cached in plugin state
+- Token read from `~/.openpass/mcp-token` each session; never cached in plugin state
 
 ## Development
 
 The plugin uses `plenary.curl` for HTTP and Lua's `vim.json` for JSON-RPC 2.0 encoding. Key modules:
 
 ```
-lua/symaira/
+lua/symvault/
   init.lua        -- Entry point, setup(), curl helper registration
   config.lua      -- Default configuration
   client.lua      -- JSON-RPC 2.0 client using plenary.curl

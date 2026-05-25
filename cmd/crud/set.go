@@ -27,10 +27,10 @@ var setCmd = &cobra.Command{
 	Short: "Set a password entry or field",
 	Long:  "Creates or updates a password entry. Use --value or interactive mode.",
 	Example: `  # Set a field non-interactively
-  symaira set github.password --value "mysecret"
+  symvault set github.password --value "mysecret"
 
   # Set TOTP data
-  symaira set github --totp-secret JBSWY3DPEHPK3PXP`,
+  symvault set github --totp-secret JBSWY3DPEHPK3PXP`,
 	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: cli.EntryCompletionFunc,
 	RunE: func(cmd *cobra.Command, args []string) error {

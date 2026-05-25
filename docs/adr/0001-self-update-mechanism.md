@@ -99,9 +99,9 @@ userPaths := []string{
 #### 2.3 Metadata Detection
 
 Check for package manager receipt files:
-- Homebrew: `/usr/local/Homebrew/Cellar/openpass/*/INSTALL_RECEIPT.json`
-- APT: `/var/lib/dpkg/info/openpass.list`
-- RPM: Query `rpm -ql openpass` (if available)
+- Homebrew: `/usr/local/Homebrew/Cellar/symvault/*/INSTALL_RECEIPT.json`
+- APT: `/var/lib/dpkg/info/symvault.list`
+- RPM: Query `rpm -ql symvault` (if available)
 
 #### 2.4 Go Install Detection
 
@@ -309,7 +309,7 @@ func rollback(backupPath, originalPath string) error {
 }
 ```
 
-**Post-update verification:** After successful update, run `openpass --version` to verify new binary executes correctly before removing backup.
+**Post-update verification:** After successful update, run `symvault --version` to verify new binary executes correctly before removing backup.
 
 #### 4.3 Windows-Specific Handling
 
@@ -365,16 +365,16 @@ func preservePermissions(source, dest string) error {
 When self-update is unavailable, provide actionable guidance:
 
 ```
-$ openpass update apply
+$ symvault update apply
 
 Self-update is not available for your installation method.
 
 Detected: Homebrew installation
-Location: /opt/homebrew/bin/openpass
+Location: /opt/homebrew/bin/symvault
 
 To update Symaira Vault, use your package manager:
 
-  brew upgrade openpass
+  brew upgrade symvault
 
 Alternatively, download the latest release manually:
 https://github.com/danieljustus/symaira-vault/releases/tag/v1.2.3
@@ -384,9 +384,9 @@ https://github.com/danieljustus/symaira-vault/releases/tag/v1.2.3
 
 | Installation Method | Message |
 |---------------------|---------|
-| Homebrew | `brew upgrade openpass` |
-| APT | `sudo apt update && sudo apt install openpass` |
-| RPM | `sudo dnf update openpass` or `sudo yum update openpass` |
+| Homebrew | `brew upgrade symvault` |
+| APT | `sudo apt update && sudo apt install symvault` |
+| RPM | `sudo dnf update symvault` or `sudo yum update symvault` |
 | Go install | `go install github.com/danieljustus/symaira-vault@latest` |
 | Package manager (unknown) | "Use your package manager to update Symaira Vault" |
 | Manual build | "Rebuild from source or download binary from GitHub Releases" |
@@ -420,13 +420,13 @@ https://github.com/danieljustus/symaira-vault/releases/tag/v1.2.3
 
 ```bash
 # Check for updates (already exists)
-openpass update check
+symvault update check
 
 # Apply update (new)
-openpass update apply
+symvault update apply
 
 # Show installation method (new, for debugging)
-openpass update info
+symvault update info
 ```
 
 #### 6.3 Risk Assessment
@@ -505,7 +505,7 @@ This design follows patterns from established Go CLIs:
 
 3. **Enterprise proxy support:** Add configuration for corporate proxy environments:
    ```bash
-   openpass update apply --proxy https://proxy.company.com
+   symvault update apply --proxy https://proxy.company.com
    ```
 
 ## Decision Record

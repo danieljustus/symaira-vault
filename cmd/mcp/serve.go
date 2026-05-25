@@ -16,18 +16,18 @@ var ServeCmd = &cobra.Command{
 	Short: "Start MCP server for agent access",
 	Long: `Start an MCP server that exposes vault operations to AI agents.
 
-Each agent must be configured in ~/.symaira/config.yaml with specific
+Each agent must be configured in ~/.symvault/config.yaml with specific
 permissions and scope restrictions.
 
 The server can run in HTTP mode or stdio mode.`,
 	Example: `  # HTTP mode bound to localhost:8080
-  symaira serve --bind 127.0.0.1 --port 8080
+  symvault serve --bind 127.0.0.1 --port 8080
 
   # stdio mode for a single agent (called by MCP clients directly)
-  symaira serve --stdio --agent claude-code
+  symvault serve --stdio --agent claude-code
 
   # Install as a system service (macOS launchd or systemd)
-  symaira serve install`,
+  symvault serve install`,
 	RunE: runServe,
 }
 

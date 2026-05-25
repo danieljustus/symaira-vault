@@ -456,9 +456,9 @@ func checkToolBlockedByTier(agent *config.AgentProfile, toolName string) *errors
 // returns a template with placeholders.
 func upgradeCmdForAgent(agent *config.AgentProfile) string {
 	if agent == nil || agent.Name == "" || agent.Name == "default" {
-		return "symaira config set agents.<name>.tier <tier>"
+		return "symvault config set agents.<name>.tier <tier>"
 	}
-	return fmt.Sprintf("symaira config set agents.%s.tier <tier>", agent.Name)
+	return fmt.Sprintf("symvault config set agents.%s.tier <tier>", agent.Name)
 }
 
 func findToolDefinition(name string) (toolDefinition, bool) {

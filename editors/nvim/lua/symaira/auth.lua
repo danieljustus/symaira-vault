@@ -1,7 +1,7 @@
 local M = {}
 
 local function vault_path()
-  return vim.env.SYMAIRA_VAULT or vim.fn.expand("~/.symaira")
+  return vim.env.SYMVAULT_VAULT or vim.fn.expand("~/.symvault")
 end
 
 --- Read the MCP bearer token from the token file.
@@ -18,7 +18,7 @@ end
 --- Build auth headers for MCP HTTP requests.
 ---@return table Headers map.
 function M.build_headers()
-  local config = require("symaira.config")
+  local config = require("symvault.config")
   local token = M.read_token()
   return {
     ["Content-Type"] = "application/json",

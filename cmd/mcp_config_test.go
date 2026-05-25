@@ -18,7 +18,7 @@ import (
 
 func TestOutputHermesStdioConfig_Success(t *testing.T) {
 	output := captureStdout(func() {
-		err := mcpcmd.OutputHermesStdioConfig("claude-code", "symaira")
+		err := mcpcmd.OutputHermesStdioConfig("claude-code", "symvault")
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -26,7 +26,7 @@ func TestOutputHermesStdioConfig_Success(t *testing.T) {
 	if !strings.Contains(output, "mcp_servers") {
 		t.Errorf("expected mcp_servers in output, got: %s", output)
 	}
-	if !strings.Contains(output, "symaira") {
+	if !strings.Contains(output, "symvault") {
 		t.Errorf("expected server name in output, got: %s", output)
 	}
 	if !strings.Contains(output, "timeout") {
@@ -42,7 +42,7 @@ func TestOutputHermesStdioConfig_StdoutError(t *testing.T) {
 	_ = r.Close()
 	defer func() { os.Stdout = oldStdout }()
 
-	err := mcpcmd.OutputHermesStdioConfig("claude-code", "symaira")
+	err := mcpcmd.OutputHermesStdioConfig("claude-code", "symvault")
 	if err == nil {
 		t.Fatal("expected error when stdout is closed")
 	}
@@ -113,7 +113,7 @@ func TestOutputAgentHTTPConfig_ResolveError(t *testing.T) {
 	defer func() { _ = os.Setenv("HOME", origHome) }()
 
 	origVault := vault
-	vault = "~/.symaira"
+	vault = "~/.symvault"
 	defer func() { vault = origVault }()
 
 	err := mcpcmd.OutputAgentHTTPConfig("claude-code", "claude_code", "claude-code", true, "")
@@ -155,7 +155,7 @@ func TestOutputTokenOnly_VaultPathError(t *testing.T) {
 	defer func() { _ = os.Setenv("HOME", origHome) }()
 
 	origVault := vault
-	vault = "~/.symaira"
+	vault = "~/.symvault"
 	defer func() { vault = origVault }()
 
 	err := mcpcmd.OutputTokenOnly()
@@ -212,7 +212,7 @@ func TestOutputHermesHTTPConfig_Success(t *testing.T) {
 	}
 
 	output := captureStdout(func() {
-		err := mcpcmd.OutputHermesHTTPConfig("claude-code", "symaira", true, "")
+		err := mcpcmd.OutputHermesHTTPConfig("claude-code", "symvault", true, "")
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -224,7 +224,7 @@ func TestOutputHermesHTTPConfig_Success(t *testing.T) {
 
 func TestOutputStdioConfig_Success(t *testing.T) {
 	output := captureStdout(func() {
-		err := mcpcmd.OutputStdioConfig("claude-code", "symaira")
+		err := mcpcmd.OutputStdioConfig("claude-code", "symvault")
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -339,7 +339,7 @@ func TestOutputHTTPConfig_VaultPathError(t *testing.T) {
 	origChanged := vaultFlag.Changed
 	_ = os.Unsetenv("HOME")
 	_ = os.Unsetenv("OPENPASS_VAULT")
-	vault = "~/.symaira"
+	vault = "~/.symvault"
 	vaultFlag.Changed = false
 	t.Cleanup(func() {
 		_ = os.Setenv("HOME", origHome)
@@ -349,7 +349,7 @@ func TestOutputHTTPConfig_VaultPathError(t *testing.T) {
 		vaultFlag.Changed = origChanged
 	})
 
-	err := mcpcmd.OutputHTTPConfig("test-agent", "symaira", true, "")
+	err := mcpcmd.OutputHTTPConfig("test-agent", "symvault", true, "")
 	if err == nil {
 		t.Error("expected error when HOME is unset for tilde expansion")
 	}

@@ -48,7 +48,7 @@ func VaultPath() (string, error) {
 
 	home, err := os.UserHomeDir()
 	if err == nil {
-		cfg, cfgErr := configpkg.Load(filepath.Join(home, ".symaira", "config.yaml"))
+		cfg, cfgErr := configpkg.Load(filepath.Join(home, ".symvault", "config.yaml"))
 		if cfgErr == nil && cfg.DefaultProfile != "" {
 			p, profErr := resolveProfileVaultDir(cfg.DefaultProfile)
 			if profErr == nil {
@@ -70,7 +70,7 @@ func resolveProfileVaultDir(profileName string) (string, error) {
 		return "", err
 	}
 
-	cfg, err := configpkg.Load(filepath.Join(home, ".symaira", "config.yaml"))
+	cfg, err := configpkg.Load(filepath.Join(home, ".symvault", "config.yaml"))
 	if err != nil {
 		return "", fmt.Errorf("cannot load config: %w", err)
 	}
@@ -105,7 +105,7 @@ func GetVaultDir() string {
 	dir, err := VaultPath()
 	if err != nil {
 		home, _ := os.UserHomeDir()
-		return home + "/.symaira"
+		return home + "/.symvault"
 	}
 	return dir
 }

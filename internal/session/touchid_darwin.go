@@ -257,7 +257,7 @@ func newTouchIDAuthenticator() BiometricAuthenticator {
 const biometricAccount = "passphrase"
 
 func biometricServiceName(vaultDir string) string {
-	return "symaira-biometric:" + vaultDir
+	return "symvault-biometric:" + vaultDir
 }
 
 type touchIDPassphraseStore struct{}

@@ -52,7 +52,7 @@ func resetCommandTestState() {
 }
 
 func resetCommandFlagGlobals() {
-	cli.Vault = "~/.symaira"
+	cli.Vault = "~/.symvault"
 	crud.SetValue = ""
 	crud.SetTOTPSecret = ""
 	crud.SetTOTPIssuer = ""

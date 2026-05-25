@@ -24,13 +24,13 @@ var generateCmd = &cobra.Command{
 	Aliases: []string{"gen"},
 	Short:   "Generate a secure password",
 	Example: `  # Generate a 20-character password
-  symaira generate --length 20
+  symvault generate --length 20
 
   # Include symbols
-  symaira generate --length 32 --symbols
+  symvault generate --length 32 --symbols
 
   # Generate and store
-  symaira generate --store newaccount.password`,
+  symvault generate --store newaccount.password`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		password, cleanup, err := generatePassword(genLength, genSymbols)
 		if err != nil {

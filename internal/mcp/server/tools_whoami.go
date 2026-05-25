@@ -134,9 +134,9 @@ func (s *Server) handleWhoami(ctx context.Context, req mcp.CallToolRequest) (*mc
 			Unlocked:     s.vault.Identity != nil,
 			EntriesCount: 0,
 		},
-		CLIAlternative:  "Use 'symaira status' for a comprehensive overview.",
+		CLIAlternative:  "Use 'symvault status' for a comprehensive overview.",
 		ErrorsDoc:       "See https://github.com/danieljustus/symaira-vault/blob/main/docs/errors.md for error code documentation.",
-		TierUpgradeHint: "Upgrade your agent tier in ~/.symaira/config.yaml to unlock additional tools.",
+		TierUpgradeHint: "Upgrade your agent tier in ~/.symvault/config.yaml to unlock additional tools.",
 	}
 
 	var available []string

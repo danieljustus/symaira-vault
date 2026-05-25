@@ -31,7 +31,7 @@ If you prefer manual setup, ensure you have:
 ```bash
 git clone https://github.com/danieljustus/symaira-vault
 cd Symaira Vault
-go build -o openpass .
+go build -o symvault .
 ```
 
 ### Pre-commit Hooks
@@ -211,8 +211,8 @@ fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 This allows users to pipe normal output to other commands while still seeing errors.
 
 ```bash
-openpass list | grep work        # Filter list output
-openpass get pass 2>/dev/null   # Hide errors
+symvault list | grep work        # Filter list output
+symvault get pass 2>/dev/null   # Hide errors
 ```
 
 ### Comments
@@ -375,7 +375,7 @@ Include in your PR description:
 ### Filing an Issue
 
 For **bugs**, include:
-- Symaira Vault version (`openpass --version` or git commit)
+- Symaira Vault version (`symvault --version` or git commit)
 - Go version (`go version`)
 - Operating system and version
 - Steps to reproduce

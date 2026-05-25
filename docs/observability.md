@@ -44,7 +44,7 @@ Result types: `up_to_date`, `update_available`, `error`, `cache_hit`
 View current metric values without running the HTTP server:
 
 ```bash
-openpass diag metrics
+symvault diag metrics
 ```
 
 ## Tracing
@@ -57,7 +57,7 @@ Set the OTLP endpoint via environment variable:
 
 ```bash
 export OPENPASS_OTLP_ENDPOINT=http://localhost:4318
-openpass serve --port 8080
+symvault serve --port 8080
 ```
 
 Or use a custom endpoint programmatically via `metrics.InitTracing(endpoint, serviceName)`.

@@ -101,7 +101,7 @@ func verifyBinary(binaryPath string) error {
 // error during write or close, the partially written temp file is removed.
 func writeTempBinary(binaryPath string, data []byte) (string, error) {
 	dir := filepath.Dir(binaryPath)
-	tmpFile, err := os.CreateTemp(dir, ".symaira-update-*")
+	tmpFile, err := os.CreateTemp(dir, ".symvault-update-*")
 	if err != nil {
 		return "", fmt.Errorf("create temp file in %q: %w", dir, err)
 	}

@@ -23,13 +23,13 @@ var AuthCmd = &cobra.Command{
 	Use:   "auth",
 	Short: "Manage vault unlock authentication",
 	Example: `  # Check current auth status (passphrase vs Touch ID)
-  symaira auth status
+  symvault auth status
 
   # Enable Touch ID (macOS)
-  symaira auth set touchid
+  symvault auth set touchid
 
   # Switch back to passphrase-only
-  symaira auth set passphrase`,
+  symvault auth set passphrase`,
 }
 
 var AuthStatusCmd = &cobra.Command{
@@ -137,7 +137,7 @@ func loadAuthConfig() (string, *configpkg.Config, error) {
 		return "", nil, err
 	}
 	if !vaultpkg.IsInitialized(vaultDir) {
-		return "", nil, fmt.Errorf("vault not initialized. Run 'symaira init' first")
+		return "", nil, fmt.Errorf("vault not initialized. Run 'symvault init' first")
 	}
 	cfg, err := configpkg.Load(filepath.Join(vaultDir, "config.yaml"))
 	if err != nil {

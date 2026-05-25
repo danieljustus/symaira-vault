@@ -67,7 +67,7 @@ func (s *PairingQRStep) Init() tea.Cmd {
 		return nil
 	}
 
-	pairingDir := s.state.VaultDir + "/.symaira/pairing"
+	pairingDir := s.state.VaultDir + "/.symvault/pairing"
 	if err := os.MkdirAll(pairingDir, 0o700); err != nil {
 		s.errMsg = fmt.Sprintf("create pairing dir: %v", err)
 		return nil
@@ -128,10 +128,10 @@ func (s *PairingQRStep) View() string {
 		"",
 		"On the second device, run:",
 		"",
-		fmt.Sprintf("  %s", focusedStyle.Render("symaira device add --pair \""+qrData+"\"")),
+		fmt.Sprintf("  %s", focusedStyle.Render("symvault device add --pair \""+qrData+"\"")),
 		"",
 		dimStyle.Render("After the second device has joined, run on this device:"),
-		fmt.Sprintf("  %s", focusedStyle.Render("symaira device accept "+string(s.token))),
+		fmt.Sprintf("  %s", focusedStyle.Render("symvault device accept "+string(s.token))),
 		"",
 		helpStyle.Render("Enter or Q to continue"),
 	}

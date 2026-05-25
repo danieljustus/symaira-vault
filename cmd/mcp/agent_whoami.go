@@ -26,10 +26,10 @@ and shows name, tier, allowed paths, tools, quotas, and vault status.
 The --output json flag returns structured data matching the MCP symaira_whoami
 response format.`,
 	Example: `  # Show agent context
-  OPENPASS_AGENT=my-agent symaira agent whoami
+  OPENPASS_AGENT=my-agent symvault agent whoami
 
   # Show as JSON
-  OPENPASS_AGENT=my-agent symaira agent whoami --output json`,
+  OPENPASS_AGENT=my-agent symvault agent whoami --output json`,
 	Annotations: map[string]string{
 		cli.RequiresVaultAnnotation: "false",
 	},

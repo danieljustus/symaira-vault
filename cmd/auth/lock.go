@@ -17,7 +17,7 @@ var lockCmd = &cobra.Command{
 	Use:   "lock",
 	Short: "Lock the vault (clear session)",
 	Example: `  # Lock the vault (clear session)
-  symaira lock`,
+  symvault lock`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		vaultDir, err := cli.VaultPath()
 		if err != nil {
@@ -25,7 +25,7 @@ var lockCmd = &cobra.Command{
 		}
 
 		if !vaultpkg.IsInitialized(vaultDir) {
-			return errorspkg.NewCLIError(errorspkg.ExitNotInitialized, "vault not initialized. Run 'symaira init' first", errorspkg.ErrVaultNotInitialized)
+			return errorspkg.NewCLIError(errorspkg.ExitNotInitialized, "vault not initialized. Run 'symvault init' first", errorspkg.ErrVaultNotInitialized)
 		}
 
 		if err := session.ClearSession(vaultDir); err != nil {

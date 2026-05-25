@@ -16,7 +16,7 @@ const (
 	// DefaultCacheTTL is the default time-to-live for cached update check results.
 	DefaultCacheTTL = 24 * time.Hour
 
-	cacheDirName  = ".symaira"
+	cacheDirName  = ".symvault"
 	cacheFileName = "update-cache.json"
 )
 
@@ -39,7 +39,7 @@ func NewCache() *Cache {
 }
 
 // NewCacheWithTTL creates a new Cache instance with a custom path and TTL.
-// If path is empty, the default location (~/.symaira/update-cache.json) is used.
+// If path is empty, the default location (~/.symvault/update-cache.json) is used.
 func NewCacheWithTTL(path string, ttl time.Duration) *Cache {
 	if path == "" {
 		path = defaultCachePath()

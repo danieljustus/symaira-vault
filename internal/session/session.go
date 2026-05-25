@@ -234,7 +234,7 @@ func decryptPassphrase(encB64, nonceB64 string, key []byte) ([]byte, error) {
 }
 
 func serviceName(vaultDir string) string {
-	return "symaira:" + vaultDir
+	return "symvault:" + vaultDir
 }
 
 func SavePassphrase(vaultDir string, passphrase []byte, ttl time.Duration) error {
@@ -321,7 +321,7 @@ func LoadPassphrase(vaultDir string) ([]byte, error) {
 func encryptionKey(vaultDir string) ([]byte, error) {
 	wrapKey, err := loadWrapKey(vaultDir)
 	if err != nil {
-		return nil, fmt.Errorf("no wrap key available for vault %s: please run 'symaira unlock' to re-establish the session", vaultDir)
+		return nil, fmt.Errorf("no wrap key available for vault %s: please run 'symvault unlock' to re-establish the session", vaultDir)
 	}
 	return wrapKey, nil
 }

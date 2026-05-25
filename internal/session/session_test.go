@@ -236,7 +236,7 @@ func TestLoadPassphrase_MalformedJSON(t *testing.T) {
 	setupTestWrapKey(t, fake, vaultDir)
 
 	//nolint:errcheck // fake.set is only used in tests
-	fake.set("symaira:"+vaultDir, sessionAccount, "not valid json{{{")
+	fake.set("symvault:"+vaultDir, sessionAccount, "not valid json{{{")
 	_, err := LoadPassphrase(vaultDir)
 	if err == nil {
 		t.Fatal("LoadPassphrase() error = nil, want unmarshal error")
@@ -280,7 +280,7 @@ func TestLoadPassphrase_ZeroTTL(t *testing.T) {
 	vaultDir := "/tmp/vault-zerott"
 	setupTestWrapKey(t, fake, vaultDir)
 	payload := `{"saved_at":"2024-01-01T00:00:00Z","last_access":"2024-01-01T00:00:00Z","passphrase":"secret","ttl_ns":0}`
-	if err := fake.set("symaira:"+vaultDir, sessionAccount, payload); err != nil {
+	if err := fake.set("symvault:"+vaultDir, sessionAccount, payload); err != nil {
 		t.Fatalf("fake.set() error = %v", err)
 	}
 
@@ -297,7 +297,7 @@ func TestIsSessionExpired_ZeroTTL(t *testing.T) {
 	vaultDir := "/tmp/vault-zerott2"
 	setupTestWrapKey(t, fake, vaultDir)
 	payload := `{"saved_at":"2024-01-01T00:00:00Z","last_access":"2024-01-01T00:00:00Z","passphrase":"secret","ttl_ns":0}`
-	if err := fake.set("symaira:"+vaultDir, sessionAccount, payload); err != nil {
+	if err := fake.set("symvault:"+vaultDir, sessionAccount, payload); err != nil {
 		t.Fatalf("fake.set() error = %v", err)
 	}
 
@@ -315,7 +315,7 @@ func TestIsSessionExpired_ZeroLastAccess_NotExpired(t *testing.T) {
 	savedAt := time.Now().UTC().Add(-1 * time.Second).Format(time.RFC3339Nano)
 	ttlNs := int64(time.Hour)
 	payload := fmt.Sprintf(`{"saved_at":%q,"last_access":"0001-01-01T00:00:00Z","passphrase":"secret","ttl_ns":%d}`, savedAt, ttlNs)
-	if err := fake.set("symaira:"+vaultDir, sessionAccount, payload); err != nil {
+	if err := fake.set("symvault:"+vaultDir, sessionAccount, payload); err != nil {
 		t.Fatalf("fake.set() error = %v", err)
 	}
 
@@ -333,7 +333,7 @@ func TestIsSessionExpired_ZeroLastAccess_Expired(t *testing.T) {
 	savedAt := time.Now().UTC().Add(-10 * time.Minute).Format(time.RFC3339Nano)
 	ttlNs := int64(time.Minute)
 	payload := fmt.Sprintf(`{"saved_at":%q,"last_access":"0001-01-01T00:00:00Z","passphrase":"secret","ttl_ns":%d}`, savedAt, ttlNs)
-	if err := fake.set("symaira:"+vaultDir, sessionAccount, payload); err != nil {
+	if err := fake.set("symvault:"+vaultDir, sessionAccount, payload); err != nil {
 		t.Fatalf("fake.set() error = %v", err)
 	}
 
@@ -409,7 +409,7 @@ func TestBackwardCompat_LoadOldPlaintextFormat(t *testing.T) {
 		time.Now().UTC().Format(time.RFC3339Nano),
 		passphrase,
 		int64(time.Hour))
-	if err := fake.set("symaira:"+vaultDir, sessionAccount, payload); err != nil {
+	if err := fake.set("symvault:"+vaultDir, sessionAccount, payload); err != nil {
 		t.Fatalf("fake.set() error = %v", err)
 	}
 
@@ -434,7 +434,7 @@ func TestMigration_OldFormatAutoMigratesToEncrypted(t *testing.T) {
 		time.Now().UTC().Format(time.RFC3339Nano),
 		passphrase,
 		int64(time.Hour))
-	if err := fake.set("symaira:"+vaultDir, sessionAccount, payload); err != nil {
+	if err := fake.set("symvault:"+vaultDir, sessionAccount, payload); err != nil {
 		t.Fatalf("fake.set() error = %v", err)
 	}
 
@@ -448,7 +448,7 @@ func TestMigration_OldFormatAutoMigratesToEncrypted(t *testing.T) {
 	}
 
 	// Verify the stored format is now encrypted (no plaintext passphrase field)
-	raw, err := fake.get("symaira:"+vaultDir, sessionAccount)
+	raw, err := fake.get("symvault:"+vaultDir, sessionAccount)
 	if err != nil {
 		t.Fatalf("fake.get() error = %v", err)
 	}
@@ -485,7 +485,7 @@ func TestNewFormatStoredEncrypted(t *testing.T) {
 		t.Fatalf("SavePassphrase() error = %v", err)
 	}
 
-	raw, err := fake.get("symaira:"+vaultDir, sessionAccount)
+	raw, err := fake.get("symvault:"+vaultDir, sessionAccount)
 	if err != nil {
 		t.Fatalf("fake.get() error = %v", err)
 	}
@@ -562,7 +562,7 @@ func TestLoadPassphrase_ResolveDecryptError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
-	if setErr := fake.set("symaira:"+vaultDir, sessionAccount, string(payload)); setErr != nil {
+	if setErr := fake.set("symvault:"+vaultDir, sessionAccount, string(payload)); setErr != nil {
 		t.Fatalf("fake.set() error = %v", setErr)
 	}
 
@@ -604,7 +604,7 @@ func TestIsSessionExpired_MalformedJSON(t *testing.T) {
 	vaultDir := "/tmp/vault-bad-json"
 	setupTestWrapKey(t, fake, vaultDir)
 	// Store malformed JSON directly
-	if err := fake.set("symaira:"+vaultDir, sessionAccount, "{invalid json!!!"); err != nil {
+	if err := fake.set("symvault:"+vaultDir, sessionAccount, "{invalid json!!!"); err != nil {
 		t.Fatalf("fake.set() error = %v", err)
 	}
 
@@ -640,7 +640,7 @@ func TestResolvePassphrase_NoData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
-	if setErr := fake.set("symaira:"+vaultDir, sessionAccount, string(payload)); setErr != nil {
+	if setErr := fake.set("symvault:"+vaultDir, sessionAccount, string(payload)); setErr != nil {
 		t.Fatalf("fake.set() error = %v", setErr)
 	}
 
@@ -657,7 +657,7 @@ func TestLoadPassphrase_NegativeTTL(t *testing.T) {
 	vaultDir := "/tmp/vault-neg-ttl"
 	setupTestWrapKey(t, fake, vaultDir)
 	payload := fmt.Sprintf(`{"saved_at":"2024-01-01T00:00:00Z","last_access":"2024-01-01T00:00:00Z","passphrase":"secret","ttl_ns":%d}`, int64(-1))
-	if err := fake.set("symaira:"+vaultDir, sessionAccount, payload); err != nil {
+	if err := fake.set("symvault:"+vaultDir, sessionAccount, payload); err != nil {
 		t.Fatalf("fake.set() error = %v", err)
 	}
 
@@ -674,7 +674,7 @@ func TestIsSessionExpired_NegativeTTL(t *testing.T) {
 	vaultDir := "/tmp/vault-neg-ttl2"
 	setupTestWrapKey(t, fake, vaultDir)
 	payload := fmt.Sprintf(`{"saved_at":"2024-01-01T00:00:00Z","last_access":"2024-01-01T00:00:00Z","passphrase":"secret","ttl_ns":%d}`, int64(-1))
-	if err := fake.set("symaira:"+vaultDir, sessionAccount, payload); err != nil {
+	if err := fake.set("symvault:"+vaultDir, sessionAccount, payload); err != nil {
 		t.Fatalf("fake.set() error = %v", err)
 	}
 
@@ -718,7 +718,7 @@ func TestSavePassphrase_MarshalError(t *testing.T) {
 		t.Fatalf("SavePassphrase failed: %v", err)
 	}
 
-	raw, err := fake.get("symaira:"+vaultDir, sessionAccount)
+	raw, err := fake.get("symvault:"+vaultDir, sessionAccount)
 	if err != nil {
 		t.Fatalf("fake.get() error = %v", err)
 	}
@@ -747,7 +747,7 @@ func TestLoadPassphrase_UpdateSessionOnAccess(t *testing.T) {
 		t.Errorf("LoadPassphrase = %q, want %q", got, passphrase)
 	}
 
-	raw, err := fake.get("symaira:"+vaultDir, sessionAccount)
+	raw, err := fake.get("symvault:"+vaultDir, sessionAccount)
 	if err != nil {
 		t.Fatalf("fake.get() error = %v", err)
 	}
@@ -772,7 +772,7 @@ func TestLoadPassphrase_LastAccessBeforeSavedAt(t *testing.T) {
 		now.Format(time.RFC3339Nano),
 		now.Add(-time.Second).Format(time.RFC3339Nano),
 		int64(time.Hour))
-	if err := fake.set("symaira:"+vaultDir, sessionAccount, payload); err != nil {
+	if err := fake.set("symvault:"+vaultDir, sessionAccount, payload); err != nil {
 		t.Fatalf("fake.set() error = %v", err)
 	}
 
@@ -794,7 +794,7 @@ func TestLoadPassphrase_ZeroLastAccessUsesSavedAt(t *testing.T) {
 	payload := fmt.Sprintf(`{"saved_at":%q,"last_access":"0001-01-01T00:00:00Z","passphrase":"secret","ttl_ns":%d}`,
 		time.Now().UTC().Format(time.RFC3339Nano),
 		int64(time.Hour))
-	if err := fake.set("symaira:"+vaultDir, sessionAccount, payload); err != nil {
+	if err := fake.set("symvault:"+vaultDir, sessionAccount, payload); err != nil {
 		t.Fatalf("fake.set() error = %v", err)
 	}
 
@@ -830,7 +830,7 @@ func TestResolvePassphrase_BothEncryptedAndPlaintext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
-	if err := fake.set("symaira:"+vaultDir, sessionAccount, string(payload)); err != nil {
+	if err := fake.set("symvault:"+vaultDir, sessionAccount, string(payload)); err != nil {
 		t.Fatalf("fake.set() error = %v", err)
 	}
 
@@ -860,7 +860,7 @@ func TestResolvePassphrase_LegacyFormatMigrates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
-	if err := fake.set("symaira:"+vaultDir, sessionAccount, string(payload)); err != nil {
+	if err := fake.set("symvault:"+vaultDir, sessionAccount, string(payload)); err != nil {
 		t.Fatalf("fake.set() error = %v", err)
 	}
 
@@ -872,7 +872,7 @@ func TestResolvePassphrase_LegacyFormatMigrates(t *testing.T) {
 		t.Errorf("LoadPassphrase() = %q, want %q", got, passphrase)
 	}
 
-	raw, _ := fake.get("symaira:"+vaultDir, sessionAccount)
+	raw, _ := fake.get("symvault:"+vaultDir, sessionAccount)
 	var updated storedSession
 	if jsonErr := json.Unmarshal([]byte(raw), &updated); jsonErr != nil {
 		t.Fatalf("json.Unmarshal() error = %v", jsonErr)
@@ -900,12 +900,12 @@ func TestResolvePassphrase_WipesPlaintextAfterMigration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
-	if err := fake.set("symaira:"+vaultDir, sessionAccount, string(payload)); err != nil {
+	if err := fake.set("symvault:"+vaultDir, sessionAccount, string(payload)); err != nil {
 		t.Fatalf("fake.set() error = %v", err)
 	}
 
 	// Re-read from the fake keyring to get a fresh sess with a known backing array
-	raw, err := fake.get("symaira:"+vaultDir, sessionAccount)
+	raw, err := fake.get("symvault:"+vaultDir, sessionAccount)
 	if err != nil {
 		t.Fatalf("fake.get() error = %v", err)
 	}
@@ -955,14 +955,14 @@ func TestSavePassphrase_UpdatesLastAccessOnLoad(t *testing.T) {
 		t.Fatalf("SavePassphrase error = %v", err)
 	}
 
-	raw1, _ := fake.get("symaira:"+vaultDir, sessionAccount)
+	raw1, _ := fake.get("symvault:"+vaultDir, sessionAccount)
 	var sess1 storedSession
 	json.Unmarshal([]byte(raw1), &sess1)
 	time.Sleep(time.Millisecond)
 
 	LoadPassphrase(vaultDir)
 
-	raw2, _ := fake.get("symaira:"+vaultDir, sessionAccount)
+	raw2, _ := fake.get("symvault:"+vaultDir, sessionAccount)
 	var sess2 storedSession
 	json.Unmarshal([]byte(raw2), &sess2)
 
@@ -1015,7 +1015,7 @@ func TestLoadPassphrase_ResolveError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("setup failed: %v", err)
 	}
-	fake.set("symaira:"+vaultDir, sessionAccount, string(payload))
+	fake.set("symvault:"+vaultDir, sessionAccount, string(payload))
 
 	_, err = LoadPassphrase(vaultDir)
 	if err != nil {
@@ -1038,7 +1038,7 @@ func TestLoadPassphrase_MarshalFailsOnUpdate(t *testing.T) {
 		TTL:                 int64(time.Hour),
 	}
 	payload, _ := json.Marshal(sess)
-	fake.set("symaira:"+vaultDir, sessionAccount, string(payload))
+	fake.set("symvault:"+vaultDir, sessionAccount, string(payload))
 
 	got, err := LoadPassphrase(vaultDir)
 	if err == nil {
@@ -1062,7 +1062,7 @@ func TestResolvePassphrase_EncryptFailsDuringMigration(t *testing.T) {
 		TTL:        int64(time.Hour),
 	}
 	payload, _ := json.Marshal(sess)
-	fake.set("symaira:"+vaultDir, sessionAccount, string(payload))
+	fake.set("symvault:"+vaultDir, sessionAccount, string(payload))
 
 	got, err := LoadPassphrase(vaultDir)
 	if err != nil {
@@ -1156,7 +1156,7 @@ func TestLoadIdentity_ExpiredTTL(t *testing.T) {
 		TTL:               0,
 	}
 	payload, _ := json.Marshal(ident)
-	fake.set("symaira:"+vaultDir, identityAccount, string(payload))
+	fake.set("symvault:"+vaultDir, identityAccount, string(payload))
 
 	_, err := LoadIdentity(vaultDir)
 	if err == nil {
@@ -1179,9 +1179,9 @@ func TestLoadIdentity_WrapKeyNotFound(t *testing.T) {
 		TTL:               int64(time.Hour),
 	}
 	payload, _ := json.Marshal(ident)
-	fake.set("symaira:"+vaultDir, identityAccount, string(payload))
+	fake.set("symvault:"+vaultDir, identityAccount, string(payload))
 
-	fake.delete("symaira:"+vaultDir, wrapKeyAccount)
+	fake.delete("symvault:"+vaultDir, wrapKeyAccount)
 
 	_, err := LoadIdentity(vaultDir)
 	if err == nil {
@@ -1213,7 +1213,7 @@ func TestLoadWrapKey_EmptyString(t *testing.T) {
 	stubKeyring(t, fake)
 
 	vaultDir := "/tmp/vault-wrap-empty"
-	fake.set("symaira:"+vaultDir, wrapKeyAccount, "")
+	fake.set("symvault:"+vaultDir, wrapKeyAccount, "")
 
 	_, err := loadWrapKey(vaultDir)
 	if err == nil {
@@ -1226,7 +1226,7 @@ func TestLoadWrapKey_InvalidBase64(t *testing.T) {
 	stubKeyring(t, fake)
 
 	vaultDir := "/tmp/vault-wrap-badbase64"
-	fake.set("symaira:"+vaultDir, wrapKeyAccount, "!!!not-base64!!!")
+	fake.set("symvault:"+vaultDir, wrapKeyAccount, "!!!not-base64!!!")
 
 	_, err := loadWrapKey(vaultDir)
 	if err == nil {
@@ -1240,7 +1240,7 @@ func TestLoadWrapKey_InvalidLength(t *testing.T) {
 
 	vaultDir := "/tmp/vault-wrap-badlen"
 	// Base64 of "short" - only 5 bytes, not 32
-	fake.set("symaira:"+vaultDir, wrapKeyAccount, base64.StdEncoding.EncodeToString([]byte("short")))
+	fake.set("symvault:"+vaultDir, wrapKeyAccount, base64.StdEncoding.EncodeToString([]byte("short")))
 
 	_, err := loadWrapKey(vaultDir)
 	if err == nil {

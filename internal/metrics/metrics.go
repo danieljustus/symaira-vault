@@ -27,7 +27,7 @@ func init() {
 var (
 	mcpRequestsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "symaira",
+			Namespace: "symvault",
 			Subsystem: "mcp",
 			Name:      "requests_total",
 			Help:      "Total number of MCP tool requests.",
@@ -37,7 +37,7 @@ var (
 
 	mcpRequestDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Namespace: "symaira",
+			Namespace: "symvault",
 			Subsystem: "mcp",
 			Name:      "request_duration_seconds",
 			Help:      "Duration of MCP tool requests in seconds.",
@@ -50,7 +50,7 @@ var (
 var (
 	mcpAuthDenialsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "symaira",
+			Namespace: "symvault",
 			Subsystem: "mcp",
 			Name:      "auth_denials_total",
 			Help:      "Total number of MCP authentication/authorization denials.",
@@ -62,7 +62,7 @@ var (
 var (
 	mcpApprovalsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "symaira",
+			Namespace: "symvault",
 			Subsystem: "mcp",
 			Name:      "approvals_total",
 			Help:      "Total number of MCP approval outcomes.",
@@ -74,7 +74,7 @@ var (
 var (
 	vaultOperationsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "symaira",
+			Namespace: "symvault",
 			Subsystem: "vault",
 			Name:      "operations_total",
 			Help:      "Total number of vault operations.",
@@ -86,7 +86,7 @@ var (
 var (
 	vaultEntriesTotal = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Namespace: "symaira",
+			Namespace: "symvault",
 			Subsystem: "vault",
 			Name:      "entries_total",
 			Help:      "Total number of entries in the vault.",
@@ -96,7 +96,7 @@ var (
 
 	vaultOperationDurationSeconds = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Namespace: "symaira",
+			Namespace: "symvault",
 			Subsystem: "vault",
 			Name:      "operation_duration_seconds",
 			Help:      "Duration of vault operations in seconds.",
@@ -107,7 +107,7 @@ var (
 
 	sessionCacheEventsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "symaira",
+			Namespace: "symvault",
 			Subsystem: "session",
 			Name:      "cache_events_total",
 			Help:      "Total number of session cache events.",
@@ -117,7 +117,7 @@ var (
 
 	identityCacheEventsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "symaira",
+			Namespace: "symvault",
 			Subsystem: "session",
 			Name:      "identity_cache_events_total",
 			Help:      "Total number of identity cache events.",
@@ -127,7 +127,7 @@ var (
 
 	updateCheckTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "symaira",
+			Namespace: "symvault",
 			Subsystem: "update",
 			Name:      "check_total",
 			Help:      "Total number of update check results.",
@@ -137,7 +137,7 @@ var (
 
 	policyEvalDurationSeconds = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Namespace: "symaira",
+			Namespace: "symvault",
 			Subsystem: "policy",
 			Name:      "eval_duration_seconds",
 			Help:      "Duration of policy evaluations in seconds.",

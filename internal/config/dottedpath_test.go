@@ -38,7 +38,7 @@ func TestLoadConfigNode_InvalidYAML(t *testing.T) {
 }
 
 func TestSaveConfigNode_RoundTrip(t *testing.T) {
-	original := []byte("vaultDir: ~/.symaira\nagents:\n  default:\n    canWrite: false\n")
+	original := []byte("vaultDir: ~/.symvault\nagents:\n  default:\n    canWrite: false\n")
 	srcPath := writeTempFile(t, original)
 	destPath := filepath.Join(t.TempDir(), "config.yaml")
 
@@ -60,8 +60,8 @@ func TestSaveConfigNode_RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetConfigValue(vaultDir) error = %v", err)
 	}
-	if v.Value != "~/.symaira" {
-		t.Errorf("vaultDir = %q, want ~/.symaira", v.Value)
+	if v.Value != "~/.symvault" {
+		t.Errorf("vaultDir = %q, want ~/.symvault", v.Value)
 	}
 }
 
@@ -327,8 +327,8 @@ func TestDefaultConfigFilePath(t *testing.T) {
 	if !strings.HasPrefix(path, home) {
 		t.Errorf("path = %q, should start with home %q", path, home)
 	}
-	if !strings.HasSuffix(path, "/.symaira/config.yaml") && !strings.HasSuffix(path, "\\.symaira\\config.yaml") {
-		t.Errorf("path = %q, should end with .symaira/config.yaml", path)
+	if !strings.HasSuffix(path, "/.symvault/config.yaml") && !strings.HasSuffix(path, "\\.symvault\\config.yaml") {
+		t.Errorf("path = %q, should end with .symvault/config.yaml", path)
 	}
 }
 

@@ -15,7 +15,7 @@ run on every minor.
 - [ ] `git pull --ff-only origin main` succeeds (no divergence).
 - [ ] Working tree is on `main`, not a feature branch.
 - [ ] `make clean` removes all build artifacts (no `*.test`, `*.out`,
-      `openpass` binary, `coverage/` dir in repo root). The goreleaser
+      `symvault` binary, `coverage/` dir in repo root). The goreleaser
       pre-hook would otherwise reject the build.
 - [ ] `go env GOWORK` is empty (or set via `env GOWORK=off`).
 
@@ -49,7 +49,7 @@ run on every minor.
 - [ ] `docs/skills/openpass-agent/UPGRADE-TO-V4.md` is up-to-date.
 - [ ] `docs/adr/0004-cli-agent-optimization-v4.md` status is `Accepted` (not
       `Draft`).
-- [ ] `README.md` v4 section (if any) reflects the new `openpass agent` CLI.
+- [ ] `README.md` v4 section (if any) reflects the new `symvault agent` CLI.
 - [ ] `docs/agent-integration.md` and `docs/mcp-api.md` reflect the v4 tool
       surface (7-tool lean mode, `openpass_whoami`, `openpass_audit_self`,
       `openpass_search`, structured errors).
@@ -61,31 +61,31 @@ justification in the release PR.
 
 ### macOS
 
-- [ ] `openpass agent install hermes --tier safe` succeeds end-to-end (config
+- [ ] `symvault agent install hermes --tier safe` succeeds end-to-end (config
       written, token issued, skill dropped, smoke test passes).
-- [ ] `openpass agent upgrade hermes --tier standard` shows the spec'd diff
+- [ ] `symvault agent upgrade hermes --tier standard` shows the spec'd diff
       and the upgrade applies after confirmation.
 - [ ] Real Hermes session can call `mcp_openpass_openpass_whoami` and
       `mcp_openpass_get_entry` against the upgraded profile.
-- [ ] `OPENPASS_AGENT=hermes openpass list --output json` respects the
+- [ ] `OPENPASS_AGENT=hermes symvault list --output json` respects the
       profile's `allowedPaths`.
-- [ ] `openpass migrate v4` on a real v3 vault is lossless (round-trip:
+- [ ] `symvault migrate v4` on a real v3 vault is lossless (round-trip:
       restore backup, re-run, no diff).
-- [ ] LaunchAgent HTTP setup: `openpass serve --port 8765` reachable; GUI
+- [ ] LaunchAgent HTTP setup: `symvault serve --port 8765` reachable; GUI
       approval prompt pops via `secureui`.
-- [ ] Skill drift detection: edit `~/.hermes/skills/openpass/SKILL.md`,
-      `openpass agent doctor hermes` reports drift.
+- [ ] Skill drift detection: edit `~/.hermes/skills/symvault/SKILL.md`,
+      `symvault agent doctor hermes` reports drift.
 
 ### Linux
 
-- [ ] `openpass agent install claude-code --tier safe` succeeds.
-- [ ] Basic vault ops (`openpass init` on a fresh dir, `openpass set`,
-      `openpass get`, `openpass list`) work.
-- [ ] systemd unit (if shipped) launches `openpass serve` cleanly.
+- [ ] `symvault agent install claude-code --tier safe` succeeds.
+- [ ] Basic vault ops (`symvault init` on a fresh dir, `symvault set`,
+      `symvault get`, `symvault list`) work.
+- [ ] systemd unit (if shipped) launches `symvault serve` cleanly.
 
 ### Windows
 
-- [ ] `openpass agent install codex --tier safe` succeeds; path handling for
+- [ ] `symvault agent install codex --tier safe` succeeds; path handling for
       `~/.codex/config.toml` correct.
 - [ ] Basic vault ops work.
 
@@ -94,12 +94,12 @@ justification in the release PR.
 - [ ] `goreleaser release --snapshot --clean` produces all expected artifacts
       under `dist/`.
 - [ ] `dist/openpass_*.tar.gz` and `dist/openpass_*_windows_*.zip` extract and
-      `./openpass version` prints the expected version string.
+      `./symvault version` prints the expected version string.
 - [ ] Checksums file is generated and includes every artifact.
 - [ ] SBOM (`*.sbom.json`) is generated.
 - [ ] Homebrew tap formula renders without unresolved templates.
 - [ ] Scoop manifest renders.
-- [ ] Nix flake builds: `nix build .#openpass` succeeds from a clean store.
+- [ ] Nix flake builds: `nix build .#symvault` succeeds from a clean store.
 - [ ] macOS notarization gate (separate workflow) passes on a signed snapshot
       build.
 
@@ -131,8 +131,8 @@ justification in the release PR.
 ## Post-release
 
 - [ ] Install the published binary on a fresh machine (or VM/container) via
-      the install script and confirm `openpass version` matches.
-- [ ] `brew install symaira && openpass version` works after the tap merges.
+      the install script and confirm `symvault version` matches.
+- [ ] `brew install symvault && symvault version` works after the tap merges.
 - [ ] Update project page on <https://github.com/users/danieljustus/projects/1>
       (issues/PRs moved to Done).
 - [ ] Announce in the README badge area and any external channels.

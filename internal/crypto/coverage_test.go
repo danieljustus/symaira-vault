@@ -18,7 +18,7 @@ func TestValidateIdentityPathTraversal(t *testing.T) {
 
 func TestValidateIdentityPathAbsolute(t *testing.T) {
 	// A path without ".." should pass validation
-	if err := validateIdentityPath("/home/user/.symaira/identity.age"); err != nil {
+	if err := validateIdentityPath("/home/user/.symvault/identity.age"); err != nil {
 		t.Fatalf("validateIdentityPath() error = %v, want nil for safe path", err)
 	}
 }

@@ -91,7 +91,7 @@ type TemplateVars struct {
 	// ToolPrefix is the MCP tool prefix (e.g., "mcp_symaira_", "mcp__symaira__").
 	ToolPrefix string
 
-	// SlashPrefix is the slash command prefix (e.g., "/symaira:", "/mcp__symaira__").
+	// SlashPrefix is the slash command prefix (e.g., "/symvault:", "/mcp__symaira__").
 	// May be empty for agents that do not support slash commands.
 	SlashPrefix string
 
@@ -101,7 +101,7 @@ type TemplateVars struct {
 	// ProfileTier is the agent profile tier (safe, standard, admin, custom).
 	ProfileTier string
 
-	// VaultPath is the path to the Symaira Vault vault directory (e.g., "~/.symaira").
+	// VaultPath is the path to the Symaira Vault vault directory (e.g., "~/.symvault").
 	VaultPath string
 
 	// InstalledAt is the installation timestamp in RFC3339 format.
@@ -221,7 +221,7 @@ This skill was exported by Symaira Vault v%s.
 
 1. Place %[3]s in your agent's skill directory.
 2. Create a scoped access token:
-   symaira mcp token create --agent %[1]s --tools list,get --expires 90d
+   symvault mcp token create --agent %[1]s --tools list,get --expires 90d
 3. Restart your agent.
 
 ## Verification

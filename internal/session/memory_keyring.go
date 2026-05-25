@@ -16,7 +16,7 @@ type memoryKeyring struct {
 }
 
 func vaultDirFromService(service string) string {
-	return strings.TrimPrefix(service, "symaira:")
+	return strings.TrimPrefix(service, "symvault:")
 }
 
 func zeroBytes(b []byte) {

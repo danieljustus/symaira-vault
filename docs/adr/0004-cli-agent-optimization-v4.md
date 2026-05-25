@@ -15,13 +15,13 @@ Symaira Vault v3 ships strong AI-agent support via MCP (stdio + HTTP, OAuth/DCR,
 
 v4.0 makes a clean break:
 
-1. **CLI consolidation** — `openpass agent <verb>` becomes the *only* surface for AI integration. `mcp-config`, `mcp install`, `mcp-token-rotate`, `agent setup` are removed (with deprecation stubs in 4.0, full removal in 4.1).
-2. **Single install command** — `openpass agent install <name>` produces profile + scoped token + MCP config injection + drop-in skill package + smoke test in one step. Default tier is `safe`.
+1. **CLI consolidation** — `symvault agent <verb>` becomes the *only* surface for AI integration. `mcp-config`, `mcp install`, `mcp-token-rotate`, `agent setup` are removed (with deprecation stubs in 4.0, full removal in 4.1).
+2. **Single install command** — `symvault agent install <name>` produces profile + scoped token + MCP config injection + drop-in skill package + smoke test in one step. Default tier is `safe`.
 3. **Embedded skill packages** — Per-agent skill files (Claude Code, Hermes, Codex, OpenCode, OpenClaw) ship inside the binary via `embed.FS`, render with templated context, install with managed-by sentinel headers.
 4. **Runtime UX** — New `openpass_whoami` and `openpass_audit_self` MCP tools, structured error codes (`ERR_*`), richer LLM-aimed tool descriptions, lean-mode `tools/list` default.
 5. **Tier system formalized** — Three named tiers (`safe`, `standard`, `admin`) with frozen snapshots. Tier upgrades require interactive confirmation + audit-logged diff.
 6. **Dual-surface** — CLI becomes a first-class agent interface via `OPENPASS_AGENT=<name>` env-var, applying the same profile/quota/audit logic as MCP. Skills tell agents to prefer CLI for read-heavy ops, MCP for OS-mediated ops (clipboard, dialogs, approval).
-7. **Migration helper** — `openpass migrate v4` classifies existing v3 profiles into tiers and renders skill packages.
+7. **Migration helper** — `symvault migrate v4` classifies existing v3 profiles into tiers and renders skill packages.
 
 The dual-surface direction (Section 8) is a deliberate response to documented MCP context-window pollution: a typical 3-server MCP install consumes ~143K of 200K tokens before user input, MCP costs 4–32× more tokens than CLI for identical reads, and OpenClaw's creator publicly called MCP "a mistake" in early 2026. Symaira Vault uniquely fits the MCP-wins case (per-agent auth + audit + approval), so we keep MCP — but stop fattening it and give agents a first-class shell path.
 
@@ -32,17 +32,17 @@ The dual-surface direction (Section 8) is a deliberate response to documented MC
 ### 1.1 Principles
 
 - **Verb-first.** Top-level verbs reflect user intent (`init`, `agent`, `serve`).
-- **Single owner per concern.** All AI-integration concerns live under `openpass agent`.
+- **Single owner per concern.** All AI-integration concerns live under `symvault agent`.
 - **JSON parity.** `--output text|json|yaml` works on every command. JSON output is the contract for agent-driven CLI calls.
 - **Structured exit codes.** Agents parse codes, not error strings.
 
 ### 1.2 Command tree
 
 ```
-openpass init                          # vault initialization (unchanged)
-openpass setup                         # interactive wizard (unchanged)
+symvault init                          # vault initialization (unchanged)
+symvault setup                         # interactive wizard (unchanged)
 
-openpass agent                         # umbrella for AI-integration
+symvault agent                         # umbrella for AI-integration
   install <name>                       # NEW: replaces mcp install + mcp-config + agent setup
     --auto-detect                      # detect all installed agents
     --tier <safe|standard|admin>       # default: safe
@@ -75,7 +75,7 @@ openpass agent                         # umbrella for AI-integration
     refresh <agent>                    # NEW: re-render in place
   whoami --output json                 # NEW: CLI form of openpass_whoami
 
-openpass serve                         # MCP server (unchanged)
+symvault serve                         # MCP server (unchanged)
   --stdio --agent <name>
   --port <n>
 ```
@@ -84,15 +84,15 @@ openpass serve                         # MCP server (unchanged)
 
 | v3 | v4.0 replacement | v4.0 stub | v4.1 |
 |---|---|---|---|
-| `openpass mcp-config <agent>` | `openpass agent install <agent> --config-only` | error stub printing replacement, exit 2 | removed |
-| `openpass mcp install <agent>` | `openpass agent install <agent>` | stub, exit 2 | removed |
-| `openpass mcp install --auto-detect` | `openpass agent install --auto-detect` | stub, exit 2 | removed |
-| `openpass mcp token create` | `openpass agent token new <name>` | stub, exit 2 | removed |
-| `openpass mcp token list` | `openpass agent token list` | stub, exit 2 | removed |
-| `openpass mcp token revoke` | `openpass agent token revoke` | stub, exit 2 | removed |
-| `openpass mcp-token-rotate` | `openpass agent token rotate <name>` | stub, exit 2 | removed |
-| `openpass agent setup <name>` | `openpass agent install <name>` (tier override) | stub, exit 2 | removed |
-| `openpass mcp` (subcommand tree) | folded into `openpass agent` | stub on each subcommand, exit 2 | removed |
+| `symvault mcp-config <agent>` | `symvault agent install <agent> --config-only` | error stub printing replacement, exit 2 | removed |
+| `symvault mcp install <agent>` | `symvault agent install <agent>` | stub, exit 2 | removed |
+| `symvault mcp install --auto-detect` | `symvault agent install --auto-detect` | stub, exit 2 | removed |
+| `symvault mcp token create` | `symvault agent token new <name>` | stub, exit 2 | removed |
+| `symvault mcp token list` | `symvault agent token list` | stub, exit 2 | removed |
+| `symvault mcp token revoke` | `symvault agent token revoke` | stub, exit 2 | removed |
+| `symvault mcp-token-rotate` | `symvault agent token rotate <name>` | stub, exit 2 | removed |
+| `symvault agent setup <name>` | `symvault agent install <name>` (tier override) | stub, exit 2 | removed |
+| `symvault mcp` (subcommand tree) | folded into `symvault agent` | stub on each subcommand, exit 2 | removed |
 
 ### 1.4 Global flags
 
@@ -124,7 +124,7 @@ Agent-driven callers can branch on exit code without parsing stderr.
 
 ### 2.1 End-to-end steps
 
-`openpass agent install <name>` executes:
+`symvault agent install <name>` executes:
 
 | Step | Action | Failure handling |
 |------|--------|------------------|
@@ -137,18 +137,18 @@ Agent-driven callers can branch on exit code without parsing stderr.
 | 7 | Inject MCP server entry into agent config | restore backup on error |
 | 8 | Copy embedded skill package to agent's skill dir | restore + delete token on error |
 | 9 | Persist token to OS keyring (fallback: file with 0600) | rollback profile if fails |
-| 10 | Smoke test: spawn `openpass serve --stdio --agent <name>`, call `tools/list`, expect `openpass_whoami` | warn-only, don't rollback (transport quirks happen) |
+| 10 | Smoke test: spawn `symvault serve --stdio --agent <name>`, call `tools/list`, expect `openpass_whoami` | warn-only, don't rollback (transport quirks happen) |
 | 11 | Print structured summary | — |
 
 ### 2.2 Per-agent paths
 
 | Agent | MCP config file | Skill target | Format |
 |---|---|---|---|
-| `hermes` | `~/.hermes/config.yaml` (`mcp_servers.openpass`) | `~/.hermes/skills/openpass/SKILL.md` + `manifest.yaml` | YAML |
-| `claude-code` | `~/.claude.json` (`mcpServers.openpass`) or project `.mcp.json` | `~/.claude/skills/openpass/SKILL.md` | JSON + Markdown |
-| `codex` | `~/.codex/config.toml` (`mcp.servers.openpass`) | `~/.codex/skills/openpass/SKILL.md` (or AGENTS.md if Codex prefers) | TOML |
-| `opencode` | `~/.config/opencode/opencode.json` (`mcp.openpass`) | `~/.opencode/skills/openpass/SKILL.md` | JSON |
-| `openclaw` | `~/.openclaw/mcp.yaml` | `~/.openclaw/skills/openpass/` | YAML |
+| `hermes` | `~/.hermes/config.yaml` (`mcp_servers.openpass`) | `~/.hermes/skills/symvault/SKILL.md` + `manifest.yaml` | YAML |
+| `claude-code` | `~/.claude.json` (`mcpServers.symvault`) or project `.mcp.json` | `~/.claude/skills/symvault/SKILL.md` | JSON + Markdown |
+| `codex` | `~/.codex/config.toml` (`mcp.servers.openpass`) | `~/.codex/skills/symvault/SKILL.md` (or AGENTS.md if Codex prefers) | TOML |
+| `opencode` | `~/.config/opencode/opencode.json` (`mcp.openpass`) | `~/.opencode/skills/symvault/SKILL.md` | JSON |
+| `openclaw` | `~/.openclaw/mcp.yaml` | `~/.openclaw/skills/symvault/` | YAML |
 
 The exact paths for Codex/OpenClaw will be verified during implementation against current upstream conventions; existing `internal/mcp/install/` has v3 paths to start from.
 
@@ -158,7 +158,7 @@ The exact paths for Codex/OpenClaw will be verified during implementation agains
 |---|---|
 | `--auto-detect` | Iterate over known agents, run flow for each `Detected=true` |
 | `--tier <safe\|standard\|admin>` | Override default safe-tier; `standard`/`admin` require TTY confirmation with diff (Section 5.3) |
-| `--http` | Generate HTTP URL + token entry; assumes `openpass serve --port` is running; warn with LaunchAgent/systemd hint if not |
+| `--http` | Generate HTTP URL + token entry; assumes `symvault serve --port` is running; warn with LaunchAgent/systemd hint if not |
 | `--dry-run` | Print every file operation as diff, write nothing |
 | `--skill-only` | Drop skill only — for setups where MCP config is manually managed |
 | `--config-only` | MCP config only — for setups where skills are distributed via org sync |
@@ -171,24 +171,24 @@ The exact paths for Codex/OpenClaw will be verified during implementation agains
   Profile:       hermes (tier=safe, paths=*)
   Token:         opt_tok_a1b2 (OS keyring)
   MCP config:    ~/.hermes/config.yaml
-  Skill:         ~/.hermes/skills/openpass/SKILL.md
+  Skill:         ~/.hermes/skills/symvault/SKILL.md
   Smoke test:    PASS (4 tools discovered)
   Backup:        ~/.hermes/config.yaml.bak.20260517-151203
 
 Next steps:
-  1. Restart Hermes (or run `hermes mcp reload openpass`)
+  1. Restart Hermes (or run `hermes mcp reload symvault`)
   2. Try in Hermes: "list my vault entries"
-  3. To enable get_entry/clipboard: openpass agent upgrade hermes --tier standard
-  4. CLI mode: export OPENPASS_AGENT=hermes  (see ~/.hermes/skills/openpass/SKILL.md)
+  3. To enable get_entry/clipboard: symvault agent upgrade hermes --tier standard
+  4. CLI mode: export OPENPASS_AGENT=hermes  (see ~/.hermes/skills/symvault/SKILL.md)
 ```
 
-`--output json` returns the same data as a structured map for agent-driven installs (e.g., Hermes itself shell-calling `openpass agent install hermes --output json` and parsing the result).
+`--output json` returns the same data as a structured map for agent-driven installs (e.g., Hermes itself shell-calling `symvault agent install hermes --output json` and parsing the result).
 
 ### 2.5 Three integration paths supported
 
-- **User-driven (push):** `openpass agent install hermes` from user's shell
-- **Agent-driven (pull):** Hermes invokes `openpass agent install hermes --output json` via its Bash tool
-- **Drop-in skill:** `openpass agent skill export hermes > openpass-hermes-skill.tar.gz` packs the rendered skill for org distribution; receiver runs `openpass agent token new hermes` separately for the token
+- **User-driven (push):** `symvault agent install hermes` from user's shell
+- **Agent-driven (pull):** Hermes invokes `symvault agent install hermes --output json` via its Bash tool
+- **Drop-in skill:** `symvault agent skill export hermes > symvault-hermes-skill.tar.gz` packs the rendered skill for org distribution; receiver runs `symvault agent token new hermes` separately for the token
 
 ---
 
@@ -225,7 +225,7 @@ Existing `docs/skills/openpass-agent/SKILL.md` content is migrated into `interna
 |---|---|
 | `.AgentName` | `hermes`, `claude-code`, `codex`, … |
 | `.ToolPrefix` | `mcp_openpass_` (Hermes), `mcp__openpass__` (Claude Code) |
-| `.SlashPrefix` | `/mcp__openpass__` (Claude Code), `/openpass:` (Hermes), empty (Codex) |
+| `.SlashPrefix` | `/mcp__openpass__` (Claude Code), `/symvault:` (Hermes), empty (Codex) |
 | `.OpenPassVersion` | `4.0.0` |
 | `.ProfileTier` | `safe`, `standard`, `admin`, `custom` |
 | `.VaultPath` | `~/.openpass` (or chosen vault path) |
@@ -238,20 +238,20 @@ Templates render deterministically (no `now()` outside `.InstalledAt`) so byte-d
 
 ```markdown
 ---
-name: openpass
+name: symvault
 description: Use Symaira Vault as the credential manager via native MCP tools and CLI.
-managed_by: openpass
+managed_by: symvault
 managed_version: 4.0.0
 managed_hash: sha256:abc123…
 managed_installed_at: 2026-05-17T15:12:03Z
 managed_profile_tier: safe
 ---
 
-<!-- DO NOT EDIT. Managed by Symaira Vault. Run `openpass agent install <agent> --skill-only` to refresh. -->
+<!-- DO NOT EDIT. Managed by Symaira Vault. Run `symvault agent install <agent> --skill-only` to refresh. -->
 ```
 
-- `managed_by: openpass` is the **sentinel**. Uninstall + refresh touch only files with the sentinel; user-edited skills never get destroyed.
-- `managed_hash` is SHA-256 of the rendered body without frontmatter. `openpass agent doctor` detects user modifications via hash mismatch.
+- `managed_by: symvault` is the **sentinel**. Uninstall + refresh touch only files with the sentinel; user-edited skills never get destroyed.
+- `managed_hash` is SHA-256 of the rendered body without frontmatter. `symvault agent doctor` detects user modifications via hash mismatch.
 - `managed_version` enables compatibility checks.
 
 ### 3.4 Lifecycle
@@ -265,7 +265,7 @@ managed_profile_tier: safe
 5. If exists + **no sentinel** → abort with `ERR_SKILL_EXISTS_UNMANAGED`; hint `--force`
 6. If absent → write 0644 (skill files must be readable; never contain secrets)
 
-**Refresh** (`openpass update` post-hook + manual `openpass agent install <name> --skill-only`):
+**Refresh** (`symvault update` post-hook + manual `symvault agent install <name> --skill-only`):
 
 - Iterate all agents with `installed_skill_path` field
 - Re-render with current binary
@@ -274,7 +274,7 @@ managed_profile_tier: safe
 **Uninstall:**
 
 - Read frontmatter
-- If `managed_by: openpass` → delete
+- If `managed_by: symvault` → delete
 - Otherwise → warn, leave file
 
 ### 3.5 Skill content (what's actually inside)
@@ -282,18 +282,18 @@ managed_profile_tier: safe
 Skills are short and imperative. v4.0 content includes:
 
 - **Bootstrap block:** "First call `{{.ToolPrefix}}openpass_whoami` to learn your permissions."
-- **Tier hint:** If `ProfileTier == safe`, explicit guidance: "You only have metadata tools. For `get_entry` access, ask the user to run `openpass agent upgrade {{.AgentName}} --tier standard`."
+- **Tier hint:** If `ProfileTier == safe`, explicit guidance: "You only have metadata tools. For `get_entry` access, ask the user to run `symvault agent upgrade {{.AgentName}} --tier standard`."
 - **Error code map:** Table of structured error codes with agent-side reactions.
 - **Decision matrix:** When to use CLI vs MCP (Section 8.4).
 - **Anti-patterns:** "Never echo a secret value in chat — not even to confirm. Never `cat` vault files. Never `git log` the vault."
 
 ### 3.6 Export for drop-in
 
-`openpass agent skill export <agent> [-o file.tar.gz]` packs rendered files as a TAR archive for org-wide distribution:
+`symvault agent skill export <agent> [-o file.tar.gz]` packs rendered files as a TAR archive for org-wide distribution:
 
 - Skill file(s) with rendered content
 - `INSTALL.md` with manual install steps
-- Note that the token must be created separately via `openpass agent token new <name>`
+- Note that the token must be created separately via `symvault agent token new <name>`
 
 ### 3.7 Signing (deferred)
 
@@ -301,16 +301,16 @@ For v4.0 skills are unsigned. Trust anchor is the signed Symaira Vault binary (g
 
 ### 3.8 Version drift handling
 
-`openpass agent doctor <name>` shows:
+`symvault agent doctor <name>` shows:
 
 ```
 ⚠ Skill version drift detected for hermes
     Installed: 3.9.0 (hash: …a3d2)
     Current:   4.0.0 (hash: …e711)
-  Run: openpass agent install hermes --skill-only --refresh
+  Run: symvault agent install hermes --skill-only --refresh
 ```
 
-`openpass update` post-hook prints: "Run `openpass agent install --refresh-all` to update skill packages for X installed agents."
+`symvault update` post-hook prints: "Run `symvault agent install --refresh-all` to update skill packages for X installed agents."
 
 ---
 
@@ -339,7 +339,7 @@ Available in **every** tier (including safe). Typical call pattern: agent calls 
     "available": ["openpass_whoami", "openpass_search", "health", "list_entries", "find_entries", "get_entry_metadata", "request_credential"],
     "unavailable": [
       { "name": "get_entry", "code": "ERR_TOOL_NOT_ALLOWED",
-        "reason": "tier=safe; ask user to run `openpass agent upgrade hermes --tier standard`" },
+        "reason": "tier=safe; ask user to run `symvault agent upgrade hermes --tier standard`" },
       { "name": "run_command", "code": "ERR_TOOL_NOT_ALLOWED",
         "reason": "canRunCommands=false; requires admin tier and per-task approval" }
     ]
@@ -350,9 +350,9 @@ Available in **every** tier (including safe). Typical call pattern: agent calls 
     "secrets_per_session": { "used": 0, "limit": 0 }
   },
   "vault": { "unlocked": true, "entries_count": 47 },
-  "cli_alternative_hint": "OPENPASS_AGENT=hermes openpass <command> --output json",
+  "cli_alternative_hint": "OPENPASS_AGENT=hermes symvault <command> --output json",
   "errors_doc": "https://openpass.dev/v4/errors",
-  "tier_upgrade_hint": "openpass agent upgrade hermes --tier standard"
+  "tier_upgrade_hint": "symvault agent upgrade hermes --tier standard"
 }
 ```
 
@@ -380,7 +380,7 @@ Every failed MCP response returns:
 
 | Code | Trigger | Agent reaction hint |
 |---|---|---|
-| `ERR_AUTH_REQUIRED` | Vault locked | Tell user to run `openpass unlock` |
+| `ERR_AUTH_REQUIRED` | Vault locked | Tell user to run `symvault unlock` |
 | `ERR_PATH_FORBIDDEN` | Path outside allowedPaths | Try alternative path or ask user to broaden profile |
 | `ERR_TOOL_NOT_ALLOWED` | Tool not in agent's tier | Surface `tier_upgrade_hint` to user |
 | `ERR_APPROVAL_DENIED` | User declined prompt | Abort task, politely re-ask |
@@ -390,7 +390,7 @@ Every failed MCP response returns:
 | `ERR_FIELD_NOT_FOUND` | Entry exists, field missing | Inspect entry layout, try another field name |
 | `ERR_FIELD_REDACTED` | Profile redacts this field | Use another tool (e.g. `generate_totp` instead of reading `totp.secret`) |
 | `ERR_QUOTA_EXCEEDED` | Rate limit reached | Pause or request quota increase |
-| `ERR_TOKEN_EXPIRED` | Scoped token TTL expired | Tell user to rotate via `openpass agent token rotate <name>` |
+| `ERR_TOKEN_EXPIRED` | Scoped token TTL expired | Tell user to rotate via `symvault agent token rotate <name>` |
 | `ERR_INVALID_INPUT` | Schema validation failed | Re-check tool schema |
 | `ERR_DRY_RUN` | Call was in dry-run mode | Confirmation that call would have succeeded |
 | `ERR_TIER_UPGRADE_NO_TTY` | Install attempted higher tier without TTY | Run interactively or use `--tier safe` and upgrade later |
@@ -525,7 +525,7 @@ Presets in `internal/config/tier_presets.go` (extending current `ApplyTierPreset
 
 ### 5.3 Upgrade flow
 
-`openpass agent upgrade hermes --tier standard`:
+`symvault agent upgrade hermes --tier standard`:
 
 ```
 Upgrading agent profile: hermes
@@ -570,7 +570,7 @@ This grants hermes the ability to:
   - prompt the user for sensitive input
 
 Recommended: review last 7d of hermes activity:
-  openpass agent audit hermes --since 7d --format table
+  symvault agent audit hermes --since 7d --format table
 
 Confirm upgrade to 'standard'? [y/N]: _
 ```
@@ -588,20 +588,20 @@ On `N` or timeout: no write; `AGENT_TIER_CHANGE_DENIED` event with `would_have_b
 ### 5.4 Non-interactive upgrade
 
 ```
-openpass agent upgrade hermes --tier standard --yes --reason "ticket OPS-1234"
+symvault agent upgrade hermes --tier standard --yes --reason "ticket OPS-1234"
 ```
 
 `--yes` requires `--reason` — automation scripts cannot silently elevate. Reason is stored in the audit event.
 
 ### 5.5 Dry-run preview
 
-`openpass agent upgrade hermes --tier standard --dry-run` prints the 5.3 diff without writing.
+`symvault agent upgrade hermes --tier standard --dry-run` prints the 5.3 diff without writing.
 
 ### 5.6 Custom profiles
 
-`openpass agent profile edit hermes` opens the profile in `$EDITOR`. On save: schema validation → diff → confirmation prompt (same as 5.3). Same audit trail.
+`symvault agent profile edit hermes` opens the profile in `$EDITOR`. On save: schema validation → diff → confirmation prompt (same as 5.3). Same audit trail.
 
-`openpass agent profile show hermes --output yaml` exports the rendered profile for GitOps workflows.
+`symvault agent profile show hermes --output yaml` exports the rendered profile for GitOps workflows.
 
 ### 5.7 Tier indicators in output
 
@@ -630,7 +630,7 @@ Not implemented in v4.0. Default tier is uniformly `safe` for all agents. Practi
 
 | Version | Content |
 |---|---|
-| **v3.9.0** | Last v3 minor: (a) deprecation warnings on removed-in-v4 commands; (b) ships `openpass migrate v4 --dry-run`; (c) doc reference to `docs/migration-v3-to-v4.md` |
+| **v3.9.0** | Last v3 minor: (a) deprecation warnings on removed-in-v4 commands; (b) ships `symvault migrate v4 --dry-run`; (c) doc reference to `docs/migration-v3-to-v4.md` |
 | **v4.0.0-beta.1** | Full v4 build. Deprecation stubs print replacements + exit 2 |
 | **v4.0.0-rc.1, rc.2** | Bug-fix iterations |
 | **v4.0.0** | GA. Deprecation stubs remain |
@@ -654,7 +654,7 @@ All other v3 tools persist. Section 4.4 expansions are additive.
 agents:
   hermes:
     tier: safe                  # NEW: tier name (safe|standard|admin|custom)
-    skill_path: ~/.hermes/skills/openpass/SKILL.md   # NEW: location of installed skill
+    skill_path: ~/.hermes/skills/symvault/SKILL.md   # NEW: location of installed skill
     skill_version: 4.0.0        # NEW: Symaira Vault version that rendered it
     # …existing fields preserved
 ```
@@ -666,7 +666,7 @@ On first v4 start, `internal/config/migrate.go`:
    - `canRunCommands=true` → `admin`
    - `canWrite=true` and `canUseClipboard=true` → `standard`
    - Otherwise → `safe`
-3. Writes `tier` back with `# auto-migrated from v3 by openpass v4.0.0`
+3. Writes `tier` back with `# auto-migrated from v3 by symvault v4.0.0`
 4. Backs up `config.yaml` → `config.yaml.bak.v3-<timestamp>`
 5. Audit event `CONFIG_MIGRATED_V3_V4` with diff
 
@@ -681,10 +681,10 @@ Tokens gain two fields (additive):
 
 **Critical behavior change:** `tools: ["*"]` is now interpreted as "inherit from profile" rather than "all tools ever". Non-empty concrete tool lists still further restrict. This binds tokens to the *current* profile permissions, so profile downgrades take effect immediately. Documented in `docs/mcp-api.md`.
 
-### 6.5 `openpass migrate v4` helper
+### 6.5 `symvault migrate v4` helper
 
 ```
-openpass migrate v4 [--dry-run] [--yes]
+symvault migrate v4 [--dry-run] [--yes]
 
 Steps:
   1. Read existing config.yaml
@@ -702,8 +702,8 @@ Steps:
 
        Agent      Skill Path                          Action
        ─────────  ──────────────────────────────────  ───────────
-       hermes     ~/.hermes/skills/openpass/SKILL.md  create
-       claude     ~/.claude/skills/openpass/SKILL.md  refresh (drift)
+       hermes     ~/.hermes/skills/symvault/SKILL.md  create
+       claude     ~/.claude/skills/symvault/SKILL.md  refresh (drift)
        openclaw   (none — manual pre-v4 install)      create
 
   5. Confirm? [y/N]
@@ -722,22 +722,22 @@ Steps:
 
 ### BREAKING CHANGES
 
-- `openpass mcp` subcommand tree replaced by `openpass agent`.
+- `symvault mcp` subcommand tree replaced by `symvault agent`.
   See docs/migration-v3-to-v4.md for the mapping table.
 - MCP tool `openpass_delete` removed (was alias for `delete_entry` since v2.x).
-- Default tier for `openpass agent install` is now `safe` (was implicit `standard`).
-  Upgrade explicitly with `openpass agent upgrade <name> --tier standard`.
+- Default tier for `symvault agent install` is now `safe` (was implicit `standard`).
+  Upgrade explicitly with `symvault agent upgrade <name> --tier standard`.
 - Token `tools: ["*"]` is now interpreted as "inherit from profile" — profile
   changes take effect on next call.
 
 ### MIGRATION
 
-Run `openpass migrate v4 --dry-run` to preview, then `openpass migrate v4`.
+Run `symvault migrate v4 --dry-run` to preview, then `symvault migrate v4`.
 
 ### NEW
 
-- `openpass agent install` — single command for all agent integrations.
-- `openpass agent upgrade --tier` — explicit, audited tier changes.
+- `symvault agent install` — single command for all agent integrations.
+- `symvault agent upgrade --tier` — explicit, audited tier changes.
 - Skill packages now ship inside the binary and install per-agent.
 - New MCP tools: `openpass_whoami`, `openpass_audit_self`, `openpass_search`.
 - Structured error codes (`ERR_*`) in all MCP responses.
@@ -770,10 +770,10 @@ command. Stubs will be removed in v4.1.
 
 ### 6.8 Pre-release tests
 
-- `openpass migrate v4` idempotent on a v3 test vault in `testdata/v3-snapshot/`
+- `symvault migrate v4` idempotent on a v3 test vault in `testdata/v3-snapshot/`
 - Roundtrip: v3 config → migrate → v4 config → re-migrate (no-op)
 - Profile classification matrix tests
-- Per-agent E2E: simulate v3 install, migrate, `openpass agent doctor <name>` PASSes
+- Per-agent E2E: simulate v3 install, migrate, `symvault agent doctor <name>` PASSes
 
 ---
 
@@ -806,7 +806,7 @@ func TestInstall_Hermes_Safe(t *testing.T) {
     require.NoError(t, err)
 
     assertConfigContains(t, tmpHome+"/.hermes/config.yaml", "mcp_servers.openpass")
-    assertSkillExists(t, tmpHome+"/.hermes/skills/openpass/SKILL.md")
+    assertSkillExists(t, tmpHome+"/.hermes/skills/symvault/SKILL.md")
     assertSkillFrontmatter(t, ..., "managed_by", "openpass")
     assertSkillFrontmatter(t, ..., "managed_profile_tier", "safe")
     assertTokenInRegistry(t, vault, "hermes")
@@ -869,7 +869,7 @@ CI matrix runs on macOS, Linux, Windows. Per agent: config-path resolution tests
 
 `cmd/binary_e2e_test.go`:
 
-- `TestE2E_AgentInstall_Hermes_Safe` — build binary, simulate Hermes setup, subprocess call to `./openpass agent install hermes`, verify files + JSON output
+- `TestE2E_AgentInstall_Hermes_Safe` — build binary, simulate Hermes setup, subprocess call to `./symvault agent install hermes`, verify files + JSON output
 - `TestE2E_AgentUpgrade`
 - `TestE2E_AgentDoctor`
 
@@ -898,7 +898,7 @@ Build-tagged with `e2e`, runs in `main` merge CI, not on every PR.
 - [ ] macOS: install hermes, upgrade to standard, run real Hermes session, verify get_entry works
 - [ ] Linux: install claude-code, basic vault ops
 - [ ] Windows: install codex, verify path handling
-- [ ] macOS: `openpass migrate v4` on a real v3 vault, verify roundtrip
+- [ ] macOS: `symvault migrate v4` on a real v3 vault, verify roundtrip
 - [ ] OAuth flow with opencode end-to-end
 - [ ] LaunchAgent HTTP setup on macOS, verify GUI approval prompt pops
 - [ ] Skill drift detection: edit a SKILL.md, run doctor, verify drift reported
@@ -912,7 +912,7 @@ Rationale: measured MCP context-window pollution is severe (a typical 3-server i
 ### 8.1 `OPENPASS_AGENT` env-var
 
 ```bash
-OPENPASS_AGENT=hermes openpass get github/personal --field password --output json
+OPENPASS_AGENT=hermes symvault get github/personal --field password --output json
 ```
 
 When `OPENPASS_AGENT` is set, the CLI:
@@ -923,31 +923,31 @@ When `OPENPASS_AGENT` is set, the CLI:
 4. Writes audit event with `actor=cli:agent:<name>` (plus PID, parent PID, TTY)
 5. Returns structured errors with codes (`ERR_PATH_FORBIDDEN`, `ERR_TOOL_NOT_ALLOWED`, …) on stderr in the same JSON shape as MCP
 
-A `openpass get` call without `get_entry` in the agent's tier (e.g., safe-tier) returns `ERR_TOOL_NOT_ALLOWED` and exit 11.
+A `symvault get` call without `get_entry` in the agent's tier (e.g., safe-tier) returns `ERR_TOOL_NOT_ALLOWED` and exit 11.
 
 ### 8.2 CLI ↔ MCP tool mapping
 
 | MCP tool | CLI equivalent |
 |---|---|
-| `list_entries` | `openpass list [--path-prefix X] [--since T] --output json` |
-| `find_entries` | `openpass find <query> [--limit N] [--mode fuzzy\|exact] --output json` |
-| `get_entry_metadata` | `openpass get <path> --metadata-only --output json` |
-| `get_entry` | `openpass get <path> --output json` |
-| `get_entry_value` | `openpass get <path> --field <field>` (raw stdout) |
-| `set_entry_field` | `openpass set <path>.<field> --value "..."` |
-| `delete_entry` | `openpass delete <path>` |
-| `generate_password` | `openpass generate --length N --symbols --output json` |
-| `generate_totp` | `openpass totp <path>` |
-| `copy_to_clipboard` | `openpass get <path>.<field> --clip` |
-| `autotype` | `openpass get <path>.<field> --autotype` |
-| `run_command` / `execute_with_secret` | `openpass run --env X=path.field -- cmd args` |
-| `secure_input` | `openpass agent prompt <path>.<field>` |
-| `request_credential` | `openpass agent request <path>.<field> --reason "..."` |
-| `openpass_whoami` | `openpass agent whoami --output json` |
-| `openpass_audit_self` | `openpass agent audit self --since 24h --output json` |
-| `health` | `openpass doctor --quick --output json` |
-| `get_auth_status` | `openpass auth status --output json` |
-| `share_*` | `openpass share request\|list\|approve\|revoke` |
+| `list_entries` | `symvault list [--path-prefix X] [--since T] --output json` |
+| `find_entries` | `symvault find <query> [--limit N] [--mode fuzzy\|exact] --output json` |
+| `get_entry_metadata` | `symvault get <path> --metadata-only --output json` |
+| `get_entry` | `symvault get <path> --output json` |
+| `get_entry_value` | `symvault get <path> --field <field>` (raw stdout) |
+| `set_entry_field` | `symvault set <path>.<field> --value "..."` |
+| `delete_entry` | `symvault delete <path>` |
+| `generate_password` | `symvault generate --length N --symbols --output json` |
+| `generate_totp` | `symvault totp <path>` |
+| `copy_to_clipboard` | `symvault get <path>.<field> --clip` |
+| `autotype` | `symvault get <path>.<field> --autotype` |
+| `run_command` / `execute_with_secret` | `symvault run --env X=path.field -- cmd args` |
+| `secure_input` | `symvault agent prompt <path>.<field>` |
+| `request_credential` | `symvault agent request <path>.<field> --reason "..."` |
+| `openpass_whoami` | `symvault agent whoami --output json` |
+| `openpass_audit_self` | `symvault agent audit self --since 24h --output json` |
+| `health` | `symvault doctor --quick --output json` |
+| `get_auth_status` | `symvault auth status --output json` |
+| `share_*` | `symvault share request\|list\|approve\|revoke` |
 
 Every entry must function under `OPENPASS_AGENT` with: profile enforcement, JSON output, structured errors.
 
@@ -986,7 +986,7 @@ Output:
 Example:
 
 1. Agent: `openpass_search({"intent": "put a password on the clipboard"})`
-2. Server: returns `copy_to_clipboard` spec inline + `cli_alternative: openpass get <path>.password --clip`
+2. Server: returns `copy_to_clipboard` spec inline + `cli_alternative: symvault get <path>.password --clip`
 
 Full tools list available via `tools/list?include=all` or `include_all_tools: true` in the init handshake.
 
@@ -998,15 +998,15 @@ Skill content includes:
 ## Choose your interface
 
 For read-heavy, deterministic operations: prefer the CLI via Bash.
-  - List entries:        openpass list --output json
-  - Search:              openpass find "github" --output json
-  - Read metadata:       openpass get path/to/entry --metadata-only --output json
-  - Read a value:        openpass get path/to/entry --field password
-  - Generate password:   openpass generate --length 32 --output json
-  - Generate TOTP code:  openpass totp path/to/entry
-  - Health check:        openpass doctor --quick --output json
-  - Vault unlocked?:     openpass auth status --output json
-  - Audit your own log:  openpass agent audit self --since 24h --output json
+  - List entries:        symvault list --output json
+  - Search:              symvault find "github" --output json
+  - Read metadata:       symvault get path/to/entry --metadata-only --output json
+  - Read a value:        symvault get path/to/entry --field password
+  - Generate password:   symvault generate --length 32 --output json
+  - Generate TOTP code:  symvault totp path/to/entry
+  - Health check:        symvault doctor --quick --output json
+  - Vault unlocked?:     symvault auth status --output json
+  - Audit your own log:  symvault agent audit self --since 24h --output json
 
 For operations that need server-mediated UX, use MCP:
   - request_credential   — needs native OS dialog
@@ -1052,7 +1052,7 @@ The CLI applies your profile (paths, redactions, quotas) just like MCP.
 
 ### 8.8 Tests (delta to Section 7)
 
-- `TestCLI_AgentMode_RespectsTierSafe` — `OPENPASS_AGENT=safe-agent openpass get foo --field password` → exit 11, `ERR_TOOL_NOT_ALLOWED`
+- `TestCLI_AgentMode_RespectsTierSafe` — `OPENPASS_AGENT=safe-agent symvault get foo --field password` → exit 11, `ERR_TOOL_NOT_ALLOWED`
 - `TestCLI_AgentMode_RespectsPathRestriction` — path-based variant
 - `TestCLI_AgentMode_BumpsQuotaSharedWithMCP` — CLI call bumps counter, subsequent MCP call sees higher count
 - `TestCLI_AgentMode_AuditEvent` — call writes event with `actor=cli:agent:X`, PID, parent PID
@@ -1086,8 +1086,8 @@ v4.0.0 is releasable when:
 - [ ] `openpass_whoami`, `openpass_audit_self`, `openpass_search` are functional MCP tools (Sections 4, 8)
 - [ ] All MCP error responses use codes from `internal/mcp/errors/codes.go` (Section 4.2)
 - [ ] Three tier presets are snapshot-tested (Section 5.1)
-- [ ] `openpass agent upgrade --tier` shows the spec'd diff and writes audit events (Section 5.3)
-- [ ] `openpass migrate v4` is idempotent and lossless on the v3-snapshot fixtures (Section 6.5)
+- [ ] `symvault agent upgrade --tier` shows the spec'd diff and writes audit events (Section 5.3)
+- [ ] `symvault migrate v4` is idempotent and lossless on the v3-snapshot fixtures (Section 6.5)
 - [ ] `OPENPASS_AGENT` env-var enforces profile on all CLI commands listed in Section 8.2
 - [ ] Lean-mode `tools/list` returns exactly the 7 tools in Section 8.3 by default
 - [ ] CLI and MCP share audit log + quota counter (Section 8.5)

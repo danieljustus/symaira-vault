@@ -22,7 +22,7 @@ import (
 
 var OsExit = os.Exit
 
-const RequiresVaultAnnotation = "symaira/requires-vault"
+const RequiresVaultAnnotation = "symvault/requires-vault"
 
 var (
 	SessionLoadPassphrase func(vaultDir string) ([]byte, error)                               = session.LoadPassphrase
@@ -46,26 +46,26 @@ var ColorMode string
 var ThemePreset string
 
 var RootCmd = &cobra.Command{
-	Use:   "symaira",
+	Use:   "symvault",
 	Short: "Symaira Vault is a Go CLI password manager",
 	Long: `Quick Start:
-  symaira init            create a vault and identity
-  symaira add <name>      add a credential
-  symaira get <name>      retrieve a credential
+  symvault init            create a vault and identity
+  symvault add <name>      add a credential
+  symvault get <name>      retrieve a credential
 
 Symaira Vault is a Go CLI password manager with an interactive TUI, multi-device
 sync via Git, and an MCP server for AI-agent integration.
 
 First-time setup:
-   1. symaira init         create a vault and identity (non-interactive)
-   2. symaira setup        same, plus guided wizard for sync/agents (TTY only)
-   3. symaira doctor       health-check and self-heal
+   1. symvault init         create a vault and identity (non-interactive)
+   2. symvault setup        same, plus guided wizard for sync/agents (TTY only)
+   3. symvault doctor       health-check and self-heal
 
 Daily use:
-  symaira add <name>      add a credential (interactive form)
-  symaira ui              browse and edit the vault in a TUI
-  symaira get <name>      print a credential
-  symaira --help          full command list`,
+  symvault add <name>      add a credential (interactive form)
+  symvault ui              browse and edit the vault in a TUI
+  symvault get <name>      print a credential
+  symvault --help          full command list`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
@@ -103,11 +103,11 @@ func Execute() {
 		exitCode := errorspkg.ExitCodeFromError(err)
 		switch exitCode {
 		case errorspkg.ExitNotFound:
-			cliout.Hintf("Try: symaira find <search-term>")
+			cliout.Hintf("Try: symvault find <search-term>")
 		case errorspkg.ExitNotInitialized:
-			cliout.Hintf("Run 'symaira init' for a quick start, or 'symaira setup' for the guided wizard.")
+			cliout.Hintf("Run 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.")
 		case errorspkg.ExitLocked:
-			cliout.Hintf("Unlock with 'symaira unlock', or set OPENPASS_PASSPHRASE for non-interactive use.")
+			cliout.Hintf("Unlock with 'symvault unlock', or set OPENPASS_PASSPHRASE for non-interactive use.")
 		case errorspkg.ExitSuccess, errorspkg.ExitGeneralError, errorspkg.ExitPermissionDenied, errorspkg.ExitDoctorWarn, errorspkg.ExitDoctorFail:
 		}
 		OsExit(int(exitCode))
@@ -127,7 +127,7 @@ func PrintlnQuietAware(args ...interface{}) {
 }
 
 func init() {
-	RootCmd.PersistentFlags().StringVar(&Vault, "vault", "~/.symaira", "path to the password vault")
+	RootCmd.PersistentFlags().StringVar(&Vault, "vault", "~/.symvault", "path to the password vault")
 	VaultFlag = RootCmd.PersistentFlags().Lookup("vault")
 	RootCmd.PersistentFlags().BoolVar(&QuietMode, "quiet", false, "suppress non-error output")
 	RootCmd.PersistentFlags().StringVar(&Profile, "profile", "", "use a named vault profile")

@@ -15,11 +15,11 @@ var gitCmd = &cobra.Command{
 	Use:   "git <push|pull|log> [path]",
 	Short: "Git operations on vault",
 	Example: `  # Sync with the configured remote
-  symaira git pull
-  symaira git push
+  symvault git pull
+  symvault git push
 
   # Show commit history for an entry
-  symaira git log work/aws`,
+  symvault git log work/aws`,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		action := args[0]
@@ -47,7 +47,7 @@ var gitCmd = &cobra.Command{
 			return err
 		}
 		if !vaultpkg.IsInitialized(vaultDir) {
-			return errorspkg.NewCLIError(errorspkg.ExitNotInitialized, "vault not initialized. Run 'symaira init' first", errorspkg.ErrVaultNotInitialized)
+			return errorspkg.NewCLIError(errorspkg.ExitNotInitialized, "vault not initialized. Run 'symvault init' first", errorspkg.ErrVaultNotInitialized)
 		}
 
 		switch action {

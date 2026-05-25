@@ -6,7 +6,7 @@ let client: SymairaMCPClient | undefined;
 let tools: SymairaTools | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
-  const config = vscode.workspace.getConfiguration("symaira.cursor");
+  const config = vscode.workspace.getConfiguration("symvault.cursor");
   const baseUrl = config.get<string>("baseUrl", "http://127.0.0.1:8080");
   const agentName = config.get<string>("agentName", "cursor");
 
@@ -14,7 +14,7 @@ export function activate(context: vscode.ExtensionContext): void {
   tools = new SymairaTools(client);
 
   const refreshCmd = vscode.commands.registerCommand(
-    "symaira.cursor.refreshContext",
+    "symvault.cursor.refreshContext",
     async () => {
       await injectCursorContext(tools!);
     }

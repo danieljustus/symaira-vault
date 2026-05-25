@@ -5,20 +5,20 @@
     "license": "MIT",
     "architecture": {
         "64bit": {
-            "url": "https://github.com/danieljustus/symaira-vault/releases/download/v1.3.0/symaira_1.3.0_windows_amd64.zip",
+            "url": "https://github.com/danieljustus/symaira-vault/releases/download/v1.3.0/symvault_1.3.0_windows_amd64.zip",
             "hash": "sha256:75bbb49fa9b11cdee437ce8633e758b4da0bfae680d287cfbe2437a4839f62a9",
-            "extract_dir": "symaira_1.3.0_windows_amd64"
+            "extract_dir": "symvault_1.3.0_windows_amd64"
         }
     },
-    "bin": "symaira.exe",
+    "bin": "symvault.exe",
     "checkver": {
         "github": "https://github.com/danieljustus/symaira-vault"
     },
     "autoupdate": {
         "architecture": {
             "64bit": {
-                "url": "https://github.com/danieljustus/symaira-vault/releases/download/v$version/symaira_$version_windows_amd64.zip",
-                "extract_dir": "symaira_$version_windows_amd64"
+                "url": "https://github.com/danieljustus/symaira-vault/releases/download/v$version/symvault_$version_windows_amd64.zip",
+                "extract_dir": "symvault_$version_windows_amd64"
             }
         }
     }

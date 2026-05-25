@@ -46,13 +46,13 @@ var addCmd = &cobra.Command{
 
 The entry name can use slash notation for organization (e.g., work/aws).
 Interactive mode prompts for username, password, and URL.`,
-	Example: `  symaira add github
-  symaira add work/aws
-  symaira add personal/bank
-  symaira add github-token --value "my-secret-token"
-  symaira add secure-pass --generate --length 20
-  symaira add aws-key --type api_key --value "AKIA..."
-  symaira add ssh-key --type ssh_key --usage-hint "Production server key"`,
+	Example: `  symvault add github
+  symvault add work/aws
+  symvault add personal/bank
+  symvault add github-token --value "my-secret-token"
+  symvault add secure-pass --generate --length 20
+  symvault add aws-key --type api_key --value "AKIA..."
+  symvault add ssh-key --type ssh_key --usage-hint "Production server key"`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return cli.WithVaultRaw(func(v *vaultpkg.Vault) error {

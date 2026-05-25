@@ -1,7 +1,7 @@
-local config = require("symaira.config")
-local commands = require("symaira.commands")
-local client = require("symaira.client")
-local health = require("symaira.health")
+local config = require("symvault.config")
+local commands = require("symvault.commands")
+local client = require("symvault.client")
+local health = require("symvault.health")
 
 local M = {}
 
@@ -21,7 +21,7 @@ local function setup_curl_helpers()
       if response.exit ~= 0 then
         callback(
           string.format(
-            "HTTP %d: %s (connection refused? Is 'symaira serve' running?)",
+            "HTTP %d: %s (connection refused? Is 'symvault serve' running?)",
             response.status,
             response.exit
           ),
@@ -58,7 +58,7 @@ local function setup_curl_helpers()
       if response.exit ~= 0 then
         callback(
           string.format(
-            "HTTP %d: Connection failed. Is 'symaira serve' running?",
+            "HTTP %d: Connection failed. Is 'symvault serve' running?",
             response.status
           ),
           nil
@@ -71,7 +71,7 @@ local function setup_curl_helpers()
 end
 
 --- Setup the plugin. Must be called by the user.
----@param opts table|nil Configuration overrides (see symaira.config.defaults).
+---@param opts table|nil Configuration overrides (see symvault.config.defaults).
 function M.setup(opts)
   config.setup(opts)
 
@@ -95,7 +95,7 @@ function M.setup(opts)
     end,
   })
 
-  vim.health._symaira = health.check
+  vim.health._symvault = health.check
 end
 
 return M

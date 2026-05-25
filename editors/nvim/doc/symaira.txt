@@ -1,22 +1,22 @@
-*symaira.txt*	Symaira Neovim plugin
+*symvault.txt*	Symaira Neovim plugin
 
 Author:  Symaira contributors <https://github.com/danieljustus/symaira-vault>
 License: MIT
 
 ==============================================================================
-CONTENTS                                                *symaira-contents*
+CONTENTS                                                *symvault-contents*
 
-  1. Introduction ................... |symaira-intro|
-  2. Requirements ................... |symaira-requirements|
-  3. Installation ................... |symaira-install|
-  4. Configuration .................. |symaira-config|
-  5. Commands ....................... |symaira-commands|
-  6. Health Check ................... |symaira-health|
-  7. Security ....................... |symaira-security|
-  8. Lua API ........................ |symaira-api|
+  1. Introduction ................... |symvault-intro|
+  2. Requirements ................... |symvault-requirements|
+  3. Installation ................... |symvault-install|
+  4. Configuration .................. |symvault-config|
+  5. Commands ....................... |symvault-commands|
+  6. Health Check ................... |symvault-health|
+  7. Security ....................... |symvault-security|
+  8. Lua API ........................ |symvault-api|
 
 ==============================================================================
-1. INTRODUCTION                                          *symaira-intro*
+1. INTRODUCTION                                          *symvault-intro*
 
 Symaira for Neovim integrates Symaira secret management into your editor.
 Browse, search, copy, and insert secrets without leaving Neovim.
@@ -25,24 +25,24 @@ All secret values are masked as `***` in every UI element. Secrets are never
 stored in Neovim state, registers, or logs.
 
 ==============================================================================
-2. REQUIREMENTS                                      *symaira-requirements*
+2. REQUIREMENTS                                      *symvault-requirements*
 
 - Symaira CLI installed and configured >
-    brew install symaira
+    brew install symvault
 <
 - Neovim >= 0.7
 - plenary.nvim (https://github.com/nvim-lua/plenary.nvim)
 - Symaira MCP server running >
-    symaira serve --port 8080
+    symvault serve --port 8080
 <
 
 ==============================================================================
-3. INSTALLATION                                        *symaira-install*
+3. INSTALLATION                                        *symvault-install*
 
 lazy.nvim ~
 >
   {
-    dir = "/path/to/symaira/editors/nvim",
+    dir = "/path/to/symvault/editors/nvim",
     dependencies = { "nvim-lua/plenary.nvim" },
     cmd = { "SymairaList", "SymairaGet", "SymairaCopy", "SymairaGenerate", "SymairaFind", "SymairaGenerateTOTP" },
     opts = {},
@@ -52,26 +52,26 @@ lazy.nvim ~
 packer.nvim ~
 >
   use {
-    "/path/to/symaira/editors/nvim",
+    "/path/to/symvault/editors/nvim",
     requires = { "nvim-lua/plenary.nvim" },
     config = function()
-      require("symaira").setup()
+      require("symvault").setup()
     end,
   }
 <
 
 Manual ~
 >
-  vim.opt.runtimepath:append("/path/to/symaira/editors/nvim")
-  require("symaira").setup()
+  vim.opt.runtimepath:append("/path/to/symvault/editors/nvim")
+  require("symvault").setup()
 <
 
 ==============================================================================
-4. CONFIGURATION                                        *symaira-config*
+4. CONFIGURATION                                        *symvault-config*
 
 Default configuration:
 >
-  require("symaira").setup({
+  require("symvault").setup({
     base_url = "http://127.0.0.1:8080",
     agent_name = "nvim",
     timeout_ms = 30000,
@@ -87,7 +87,7 @@ masking_char    Character used for masking secret values.
 preserve_keys   Table of field names whose values are never masked.
 
 ==============================================================================
-5. COMMANDS                                              *symaira-commands*
+5. COMMANDS                                              *symvault-commands*
 
 :SymairaList                                           *:SymairaList*
     Open interactive vault entry picker. Selecting an entry shows its
@@ -115,50 +115,50 @@ preserve_keys   Table of field names whose values are never masked.
     cursor position. If no path is given, opens the vault picker.
 
 ==============================================================================
-6. HEALTH CHECK                                          *symaira-health*
+6. HEALTH CHECK                                          *symvault-health*
 
-Run |:checkhealth| symaira to verify:
-- MCP token present at ~/.symaira/mcp-token
+Run |:checkhealth| symvault to verify:
+- MCP token present at ~/.symvault/mcp-token
 - plenary.nvim is installed
 - Symaira CLI is available in PATH
 - MCP server is reachable
 
 ==============================================================================
-7. SECURITY                                            *symaira-security*
+7. SECURITY                                            *symvault-security*
 
-- All secret values display as `***` in the UI (symaira-masking)
+- All secret values display as `***` in the UI (symvault-masking)
 - Secrets never persist in Neovim state, registers, or :messages log
 - Clipboard operations use server-side copy_to_clipboard with auto-clear
-- MCP bearer token is read from ~/.symaira/mcp-token at session start
+- MCP bearer token is read from ~/.symvault/mcp-token at session start
 - No telemetry, no cloud dependency
 
 ==============================================================================
-8. LUA API                                                *symaira-api*
+8. LUA API                                                *symvault-api*
 
-symaira.client.call_tool({name}, {args}, {callback})   *symaira.client.call_tool()*
+symvault.client.call_tool({name}, {args}, {callback})   *symvault.client.call_tool()*
     Call an MCP tool on the server. {callback} receives (err, result).
 
-symaira.masking.mask_value({value})                *symaira.masking.mask_value()*
+symvault.masking.mask_value({value})                *symvault.masking.mask_value()*
     Mask a single string value, returning "***".
 
-symaira.masking.mask_object({obj})                 *symaira.masking.mask_object()*
+symvault.masking.mask_object({obj})                 *symvault.masking.mask_object()*
     Recursively mask all string values in a table.
 
-symaira.masking.mask_entry({entry})                *symaira.masking.mask_entry()*
+symvault.masking.mask_entry({entry})                *symvault.masking.mask_entry()*
     Mask an entry's data fields while preserving path and metadata.
 
-symaira.picker.pick_vault_entry({opts})          *symaira.picker.pick_vault_entry()*
+symvault.picker.pick_vault_entry({opts})          *symvault.picker.pick_vault_entry()*
     Open interactive vault entry picker. {opts} can include:
     - prompt: string (picker title)
     - on_select: function(path) (called on selection)
 
-symaira.picker.show_entry_detail({path})       *symaira.picker.show_entry_detail()*
+symvault.picker.show_entry_detail({path})       *symvault.picker.show_entry_detail()*
     Show masked entry details in a floating window.
 
-symaira.auth.read_token()                            *symaira.auth.read_token()*
-    Read the MCP bearer token from ~/.symaira/mcp-token.
+symvault.auth.read_token()                            *symvault.auth.read_token()*
+    Read the MCP bearer token from ~/.symvault/mcp-token.
 
-symaira.auth.build_headers()                       *symaira.auth.build_headers()*
+symvault.auth.build_headers()                       *symvault.auth.build_headers()*
     Build HTTP headers map for MCP requests.
 
 ==============================================================================

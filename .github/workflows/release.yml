@@ -163,16 +163,16 @@ jobs:
       - name: Extract and install
         run: |
           tar xzf Symaira Vault_*.tar.gz
-          sudo mv ./*/symaira /usr/local/bin/symaira
-          symaira version
+          sudo mv ./*/symvault /usr/local/bin/symvault
+          symvault version
 
       - name: Smoke test - help output
-        run: symaira --help | head -5
+        run: symvault --help | head -5
 
       - name: Smoke test - init vault
         run: |
           TMPDIR=$(mktemp -d)
-          printf '%s\n' "test-passphrase-123" | OPENPASS_VAULT="$TMPDIR/test-vault" symaira init
+          printf '%s\n' "test-passphrase-123" | OPENPASS_VAULT="$TMPDIR/test-vault" symvault init
           rm -rf "$TMPDIR"
 
   smoke-test-deb:
@@ -201,15 +201,15 @@ jobs:
         run: sudo dpkg -i symaira_*.deb
 
       - name: Verify package installed
-        run: 'dpkg -s symaira | grep "Status: install ok installed"'
+        run: 'dpkg -s symvault | grep "Status: install ok installed"'
 
       - name: Smoke test - version
-        run: symaira version
+        run: symvault version
 
       - name: Smoke test - init vault
         run: |
           TMPDIR=$(mktemp -d)
-          printf '%s\n' "test-passphrase-123" | OPENPASS_VAULT="$TMPDIR/test-vault" symaira init
+          printf '%s\n' "test-passphrase-123" | OPENPASS_VAULT="$TMPDIR/test-vault" symvault init
           rm -rf "$TMPDIR"
 
   smoke-test-macos:
@@ -237,16 +237,16 @@ jobs:
       - name: Extract and install
         run: |
           tar xzf Symaira Vault_*.tar.gz
-          sudo mv ./*/symaira /usr/local/bin/symaira
-          symaira version
+          sudo mv ./*/symvault /usr/local/bin/symvault
+          symvault version
 
       - name: Smoke test - help output
-        run: symaira --help | head -5
+        run: symvault --help | head -5
 
       - name: Smoke test - init vault
         run: |
           TMPDIR=$(mktemp -d)
-          printf '%s\n' "test-passphrase-123" | OPENPASS_VAULT="$TMPDIR/test-vault" symaira init
+          printf '%s\n' "test-passphrase-123" | OPENPASS_VAULT="$TMPDIR/test-vault" symvault init
           rm -rf "$TMPDIR"
 
   smoke-test-windows:
@@ -284,8 +284,8 @@ jobs:
         run: |
           $tag = "${{ steps.tag.outputs.tag }}"
           $version = $tag -replace '^v',''
-          Expand-Archive -Path "Symaira Vault_${version}_windows_amd64.zip" -DestinationPath .\symaira-tmp -Force
-          .\symaira-tmp\symaira_${version}_windows_amd64\symaira.exe version
+          Expand-Archive -Path "Symaira Vault_${version}_windows_amd64.zip" -DestinationPath .\symvault-tmp -Force
+          .\symvault-tmp\symaira_${version}_windows_amd64\symvault.exe version
 
       - name: Smoke test - init vault
         shell: pwsh
@@ -294,7 +294,7 @@ jobs:
           $version = $tag -replace '^v',''
           $tmpdir = Join-Path $env:TEMP "test-vault-$(Get-Random)"
           New-Item -ItemType Directory -Path $tmpdir | Out-Null
-          $exe = ".\symaira-tmp\symaira_${version}_windows_amd64\symaira.exe"
+          $exe = ".\symvault-tmp\symaira_${version}_windows_amd64\symvault.exe"
           "test-passphrase-123" | & $exe init --vault "$tmpdir"
           Remove-Item -Path $tmpdir -Recurse -Force -ErrorAction SilentlyContinue
 
@@ -310,27 +310,27 @@ jobs:
       - name: Fetch Homebrew formula
         run: |
           TAG="${{ steps.tag.outputs.tag }}"
-          curl -fsSL "https://raw.githubusercontent.com/danieljustus/homebrew-tap/main/Formula/symaira.rb" -o symaira.rb
+          curl -fsSL "https://raw.githubusercontent.com/danieljustus/homebrew-tap/main/Formula/symvault.rb" -o symvault.rb
 
       - name: Verify formula exists and has correct version
         run: |
           TAG="${{ steps.tag.outputs.tag }}"
           VERSION="${TAG#v}"
-          if [ ! -s symaira.rb ]; then
+          if [ ! -s symvault.rb ]; then
             echo "Homebrew formula not found or empty"
             exit 1
           fi
-          if ! grep -q "version \"${VERSION}\"" symaira.rb; then
+          if ! grep -q "version \"${VERSION}\"" symvault.rb; then
             echo "Version mismatch: expected ${VERSION} in formula"
             exit 1
           fi
 
       - name: Validate formula syntax
         run: |
-          ruby -c symaira.rb
+          ruby -c symvault.rb
 
       - name: Smoke test - formula audit
         run: |
           brew tap danieljustus/tap
           # Audit the formula; allow failure if tap is not fully set up
-          brew audit --strict --formula symaira.rb || true
+          brew audit --strict --formula symvault.rb || true

@@ -10,7 +10,7 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/update/installmethod"
 )
 
-const binaryName = "symaira"
+const binaryName = "symvault"
 
 // ApplyResult contains details about a completed self-update.
 type ApplyResult struct {
@@ -153,7 +153,7 @@ func Apply(ctx context.Context, currentVersion string, force, dryRun bool) (*App
 }
 
 func extractBinaryFromArchive(archiveData []byte) ([]byte, error) {
-	tmpDir, err := os.MkdirTemp("", "symaira-update-*")
+	tmpDir, err := os.MkdirTemp("", "symvault-update-*")
 	if err != nil {
 		return nil, fmt.Errorf("create temp directory: %w", err)
 	}

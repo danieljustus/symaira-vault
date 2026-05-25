@@ -21,7 +21,7 @@ type VaultPathStep struct {
 
 func NewVaultPathStep(defaultDir string) *VaultPathStep {
 	ti := textinput.New()
-	ti.Placeholder = "~/.symaira"
+	ti.Placeholder = "~/.symvault"
 	ti.SetValue(defaultDir)
 	ti.Focus()
 	ti.CharLimit = 512
@@ -94,7 +94,7 @@ func ensureWritable(dir string) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	f, err := os.CreateTemp(dir, ".symaira-write-test-*")
+	f, err := os.CreateTemp(dir, ".symvault-write-test-*")
 	if err != nil {
 		return err
 	}

@@ -94,7 +94,7 @@ func (y YAMLConfigRW) Write(path string, data map[string]any) error {
 
 // TOMLConfigRW reads and writes TOML config files using a simple line-based
 // parser that handles the section structure needed for MCP server configuration
-// (e.g. [mcp_servers.symaira]).
+// (e.g. [mcp_servers.symvault]).
 type TOMLConfigRW struct{}
 
 // Read reads a TOML config file. Only top-level string key-value pairs and

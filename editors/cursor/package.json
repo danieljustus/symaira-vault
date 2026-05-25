@@ -1,5 +1,5 @@
 {
-  "name": "symaira-cursor",
+  "name": "symvault-cursor",
   "displayName": "Symaira Vault for Cursor",
   "description": "Symaira Vault secret manager integration for Cursor IDE",
   "version": "1.0.0",
@@ -9,7 +9,7 @@
     "cursor": "^>=0.40.0"
   },
   "categories": ["Other"],
-  "keywords": ["symaira", "password", "secret", "mcp"],
+  "keywords": ["symvault", "password", "secret", "mcp"],
   "activationEvents": [
     "onStartupFinished"
   ],
@@ -17,7 +17,7 @@
   "contributes": {
     "commands": [
       {
-        "command": "symaira.cursor.refreshContext",
+        "command": "symvault.cursor.refreshContext",
         "title": "Refresh Symaira Vault Context",
         "category": "Symaira Vault"
       }
@@ -25,12 +25,12 @@
     "configuration": {
       "title": "Symaira Vault Cursor",
       "properties": {
-        "symaira.cursor.injectCursorrules": {
+        "symvault.cursor.injectCursorrules": {
           "type": "boolean",
           "default": true,
           "description": "Automatically inject Symaira Vault context into .cursorrules"
         },
-        "symaira.cursor.contextFile": {
+        "symvault.cursor.contextFile": {
           "type": "string",
           "default": ".cursorrules",
           "description": "Path to Cursor context file (relative to workspace root)"

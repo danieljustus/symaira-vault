@@ -5,7 +5,7 @@ Symaira Vault can import entries from other password managers and common export 
 Use `--dry-run` first to preview what would be imported before writing to the vault.
 
 ```bash
-openpass import 1password export.1pux --dry-run
+symvault import 1password export.1pux --dry-run
 ```
 
 ## 1Password
@@ -21,7 +21,7 @@ Export from 1Password as a 1PUX file:
 Import the 1PUX file into Symaira Vault:
 
 ```bash
-openpass import 1password export.1pux
+symvault import 1password export.1pux
 ```
 
 ### Supported Fields
@@ -53,7 +53,7 @@ Export from Bitwarden as an unencrypted JSON file:
 Import the JSON file into Symaira Vault:
 
 ```bash
-openpass import bitwarden export.json
+symvault import bitwarden export.json
 ```
 
 ### Supported Fields
@@ -84,7 +84,7 @@ Symaira Vault can import from a local `pass` password store.
 Import a password store into Symaira Vault:
 
 ```bash
-openpass import pass ~/.password-store
+symvault import pass ~/.password-store
 ```
 
 ### Supported Fields
@@ -112,7 +112,7 @@ github,octocat,secret,https://github.com,Main GitHub account,otpauth://totp/...
 Import a CSV file into Symaira Vault:
 
 ```bash
-openpass import csv export.csv
+symvault import csv export.csv
 ```
 
 ### Default Columns
@@ -131,7 +131,7 @@ openpass import csv export.csv
 Use `--mapping` when your CSV headers use different names:
 
 ```bash
-openpass import csv export.csv --mapping "title=path,username=user,password=pass"
+symvault import csv export.csv --mapping "title=path,username=user,password=pass"
 ```
 
 The mapping format is a comma-separated list of `openpass_field=csv_column` pairs.
@@ -150,25 +150,25 @@ The mapping format is a comma-separated list of `openpass_field=csv_column` pair
 Preview a Bitwarden import:
 
 ```bash
-openpass import bitwarden export.json --dry-run
+symvault import bitwarden export.json --dry-run
 ```
 
 Import entries under a path prefix:
 
 ```bash
-openpass import 1password export.1pux --prefix imported/1password
+symvault import 1password export.1pux --prefix imported/1password
 ```
 
 Skip existing entries:
 
 ```bash
-openpass import csv export.csv --skip-existing
+symvault import csv export.csv --skip-existing
 ```
 
 Replace existing entries:
 
 ```bash
-openpass import pass ~/.password-store --overwrite
+symvault import pass ~/.password-store --overwrite
 ```
 
 ## Troubleshooting
@@ -184,7 +184,7 @@ gpg --version
 Then rerun the import:
 
 ```bash
-openpass import pass ~/.password-store
+symvault import pass ~/.password-store
 ```
 
 ### Invalid Mapping Format
@@ -192,7 +192,7 @@ openpass import pass ~/.password-store
 CSV mappings must use comma-separated `openpass_field=csv_column` pairs:
 
 ```bash
-openpass import csv export.csv --mapping "title=path,username=user,password=pass"
+symvault import csv export.csv --mapping "title=path,username=user,password=pass"
 ```
 
 Check for missing `=` separators, extra commas, or column names that do not exist in the CSV header row.
@@ -204,5 +204,5 @@ If imported entries are missing usernames, URLs, notes, or OTP values, verify th
 For CSV imports, confirm the header row uses the default column names or provide a custom mapping:
 
 ```bash
-openpass import csv export.csv --mapping "title=entry,username=login,password=secret,url=website,notes=comment,otp=totp"
+symvault import csv export.csv --mapping "title=entry,username=login,password=secret,url=website,notes=comment,otp=totp"
 ```

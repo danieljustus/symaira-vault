@@ -29,20 +29,20 @@ var agentAuditCmd = &cobra.Command{
 	Short: "Show audit log for an agent",
 	Long: `Display recent audit events for a specific agent.
 
-Reads from the agent's dedicated audit log at ~/.symaira/audit-<name>.log
+Reads from the agent's dedicated audit log at ~/.symvault/audit-<name>.log
 and displays entries in table or JSON format.`,
 	Args: cobra.ExactArgs(1),
 	Example: `  # Show last 50 audit entries for an agent
-  symaira agent audit my-agent
+  symvault agent audit my-agent
 
   # Show entries from the last 24 hours
-  symaira agent audit my-agent --since 24h
+  symvault agent audit my-agent --since 24h
 
   # Output as JSON
-  symaira agent audit my-agent --format json
+  symvault agent audit my-agent --format json
 
   # Show last 100 entries
-  symaira agent audit my-agent --limit 100`,
+  symvault agent audit my-agent --limit 100`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		agentName := args[0]
 

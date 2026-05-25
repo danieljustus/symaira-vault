@@ -29,12 +29,12 @@ func InitTracing(endpoint, serviceName string) (func(context.Context) error, err
 		endpoint = os.Getenv("OPENPASS_OTLP_ENDPOINT")
 	}
 	if endpoint == "" {
-		tracer = otel.GetTracerProvider().Tracer("symaira")
+		tracer = otel.GetTracerProvider().Tracer("symvault")
 		return func(_ context.Context) error { return nil }, nil
 	}
 
 	if serviceName == "" {
-		serviceName = "symaira"
+		serviceName = "symvault"
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -65,7 +65,7 @@ func InitTracing(endpoint, serviceName string) (func(context.Context) error, err
 	)
 
 	otel.SetTracerProvider(tp)
-	tracer = tp.Tracer("symaira")
+	tracer = tp.Tracer("symvault")
 
 	shutdown := func(ctx context.Context) error {
 		return tp.Shutdown(ctx)
@@ -77,7 +77,7 @@ func InitTracing(endpoint, serviceName string) (func(context.Context) error, err
 // Tracer returns the Symaira Vault tracer. If tracing is not initialized, returns a no-op tracer.
 func Tracer() trace.Tracer {
 	if tracer == nil {
-		return otel.GetTracerProvider().Tracer("symaira")
+		return otel.GetTracerProvider().Tracer("symvault")
 	}
 	return tracer
 }

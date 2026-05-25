@@ -17,7 +17,7 @@ import (
 	"golang.org/x/crypto/hkdf"
 )
 
-const ageArgon2idLabel = "symaira-argon2id-v1"
+const ageArgon2idLabel = "symvault-argon2id-v1"
 
 const argon2idStanzaType = "argon2id"
 

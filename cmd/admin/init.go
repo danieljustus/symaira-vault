@@ -26,13 +26,13 @@ var initCmd = &cobra.Command{
 	Short: "Initialize a new password vault",
 	Long:  "Creates a new vault directory with identity and configuration.",
 	Example: `  # Initialize default vault
-  symaira init
+  symvault init
 
   # Initialize with specific auth method
-  symaira init --auth touchid
+  symvault init --auth touchid
 
   # Initialize custom vault directory
-  symaira init ~/my-vault`,
+  symvault init ~/my-vault`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var (
@@ -124,12 +124,12 @@ func printPostInitHints() {
 	}
 	cli.PrintlnQuietAware("")
 	cli.PrintlnQuietAware("Next steps:")
-	cli.PrintlnQuietAware("  1. Add your first entry:    symaira add my-first-entry")
-	cli.PrintlnQuietAware("  2. Create a backup:         symaira backup")
-	cli.PrintlnQuietAware("  3. Verify the setup:        symaira doctor")
-	cli.PrintlnQuietAware("  4. (Optional) full wizard:  symaira setup   # adds sync, recipients, agents")
+	cli.PrintlnQuietAware("  1. Add your first entry:    symvault add my-first-entry")
+	cli.PrintlnQuietAware("  2. Create a backup:         symvault backup")
+	cli.PrintlnQuietAware("  3. Verify the setup:        symvault doctor")
+	cli.PrintlnQuietAware("  4. (Optional) full wizard:  symvault setup   # adds sync, recipients, agents")
 	cli.PrintlnQuietAware("")
-	cli.PrintlnQuietAware("Tip: 'symaira --help' lists all commands. Use 'symaira <cmd> --help' for details.")
+	cli.PrintlnQuietAware("Tip: 'symvault --help' lists all commands. Use 'symvault <cmd> --help' for details.")
 }
 
 func init() {

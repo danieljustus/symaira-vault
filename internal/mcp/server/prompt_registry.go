@@ -230,7 +230,7 @@ func buildFindAndUsePrompt(args map[string]string) []promptMessage {
 	sb.WriteString("1. Call `find_entries` with query=")
 	sb.WriteString(EmbedAsData("search_query", query))
 	sb.WriteString(" (data).\n")
-	sb.WriteString("2. If zero matches: suggest creating the entry with `/symaira:add-credential` or call `request_credential` directly.\n")
+	sb.WriteString("2. If zero matches: suggest creating the entry with `/symvault:add-credential` or call `request_credential` directly.\n")
 	sb.WriteString("3. If one match: pick the right consumption tool based on the task:\n")
 	sb.WriteString("   - Web login / GUI app → `autotype` or `copy_to_clipboard`.\n")
 	sb.WriteString("   - Shell/API call → `execute_with_secret` with the appropriate `secret_refs`.\n")

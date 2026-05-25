@@ -29,10 +29,10 @@ Inside the TUI:
   ?            toggle full keybinding help
   q or Ctrl+C  quit`,
 	Example: `  # Launch the TUI
-  symaira ui
+  symvault ui
 
   # Combined with a specific profile
-  symaira ui --profile work`,
+  symvault ui --profile work`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if uiPrintKeybindings {

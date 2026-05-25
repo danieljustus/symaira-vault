@@ -100,7 +100,7 @@ func Uninstall(targetPath string) error {
 	}
 
 	if !FindSentinel(existing) {
-		return fmt.Errorf("%w: refusing to delete %s (not managed by symaira)", ErrUnmanagedFile, targetPath)
+		return fmt.Errorf("%w: refusing to delete %s (not managed by symvault)", ErrUnmanagedFile, targetPath)
 	}
 
 	if err := os.Remove(targetPath); err != nil {

@@ -67,14 +67,14 @@ func TestExpandHome(t *testing.T) {
 
 func TestInjectServerConfig(t *testing.T) {
 	serverConfig := map[string]any{
-		"command": "symaira",
+		"command": "symvault",
 		"args":    []string{"serve", "--stdio"},
 		"timeout": 120,
 	}
 
 	t.Run("creates new config", func(t *testing.T) {
 		config := make(map[string]any)
-		updated, changed := InjectServerConfig(config, "mcpServers", "symaira", serverConfig)
+		updated, changed := InjectServerConfig(config, "mcpServers", "symvault", serverConfig)
 		if !changed {
 			t.Fatal("expected changed=true for new config")
 		}
@@ -82,42 +82,42 @@ func TestInjectServerConfig(t *testing.T) {
 		if !ok {
 			t.Fatal("expected mcpServers key")
 		}
-		if _, ok := servers["symaira"]; !ok {
-			t.Fatal("expected symaira server entry")
+		if _, ok := servers["symvault"]; !ok {
+			t.Fatal("expected symvault server entry")
 		}
 	})
 
 	t.Run("updates existing different config", func(t *testing.T) {
 		config := map[string]any{
 			"mcpServers": map[string]any{
-				"symaira": map[string]any{
+				"symvault": map[string]any{
 					"command": "oldpass",
 					"timeout": 60,
 				},
 			},
 		}
-		updated, changed := InjectServerConfig(config, "mcpServers", "symaira", serverConfig)
+		updated, changed := InjectServerConfig(config, "mcpServers", "symvault", serverConfig)
 		if !changed {
 			t.Fatal("expected changed=true when config differs")
 		}
 		servers := updated["mcpServers"].(map[string]any)
-		got := servers["symaira"].(map[string]any)
-		if got["command"] != "symaira" {
-			t.Fatalf("expected command updated to symaira, got %v", got["command"])
+		got := servers["symvault"].(map[string]any)
+		if got["command"] != "symvault" {
+			t.Fatalf("expected command updated to symvault, got %v", got["command"])
 		}
 	})
 
 	t.Run("idempotent same config", func(t *testing.T) {
 		config := map[string]any{
 			"mcpServers": map[string]any{
-				"symaira": map[string]any{
-					"command": "symaira",
+				"symvault": map[string]any{
+					"command": "symvault",
 					"args":    []any{"serve", "--stdio"},
 					"timeout": 120,
 				},
 			},
 		}
-		_, changed := InjectServerConfig(config, "mcpServers", "symaira", serverConfig)
+		_, changed := InjectServerConfig(config, "mcpServers", "symvault", serverConfig)
 		if changed {
 			t.Fatal("expected changed=false for identical config")
 		}
@@ -131,7 +131,7 @@ func TestInjectServerConfig(t *testing.T) {
 				},
 			},
 		}
-		updated, changed := InjectServerConfig(config, "mcpServers", "symaira", serverConfig)
+		updated, changed := InjectServerConfig(config, "mcpServers", "symvault", serverConfig)
 		if !changed {
 			t.Fatal("expected changed=true")
 		}
@@ -179,22 +179,22 @@ func TestOpenCodeInstallConfig(t *testing.T) {
 		t.Fatal("expected 'mcp' root key in config")
 	}
 
-	// Verify server key is "symaira".
-	symairaSection, ok := mcpSection["symaira"].(map[string]any)
+	// Verify server key is "symvault".
+	symvaultSection, ok := mcpSection["symvault"].(map[string]any)
 	if !ok {
-		t.Fatal("expected 'mcp.symaira' in config")
+		t.Fatal("expected 'mcp.symvault' in config")
 	}
 
 	// Verify type and enabled fields.
-	if typ, ok := symairaSection["type"].(string); !ok || typ != "remote" {
-		t.Fatalf("expected type=%q, got %v", "remote", symairaSection["type"])
+	if typ, ok := symvaultSection["type"].(string); !ok || typ != "remote" {
+		t.Fatalf("expected type=%q, got %v", "remote", symvaultSection["type"])
 	}
-	if enabled, ok := symairaSection["enabled"].(bool); !ok || !enabled {
-		t.Fatalf("expected enabled=%v, got %v", true, symairaSection["enabled"])
+	if enabled, ok := symvaultSection["enabled"].(bool); !ok || !enabled {
+		t.Fatalf("expected enabled=%v, got %v", true, symvaultSection["enabled"])
 	}
 
 	// Verify bearer header is present.
-	headers, ok := symairaSection["headers"].(map[string]any)
+	headers, ok := symvaultSection["headers"].(map[string]any)
 	if !ok {
 		t.Fatal("expected headers map in config")
 	}
@@ -226,8 +226,8 @@ func TestJSONConfigRW(t *testing.T) {
 	t.Run("write and read roundtrip", func(t *testing.T) {
 		config := map[string]any{
 			"mcpServers": map[string]any{
-				"symaira": map[string]any{
-					"command": "symaira",
+				"symvault": map[string]any{
+					"command": "symvault",
 				},
 			},
 		}
@@ -243,8 +243,8 @@ func TestJSONConfigRW(t *testing.T) {
 		if !ok {
 			t.Fatal("expected mcpServers")
 		}
-		if _, ok := servers["symaira"]; !ok {
-			t.Fatal("expected symaira server")
+		if _, ok := servers["symvault"]; !ok {
+			t.Fatal("expected symvault server")
 		}
 	})
 }
@@ -268,8 +268,8 @@ func TestYAMLConfigRW(t *testing.T) {
 	t.Run("write and read roundtrip", func(t *testing.T) {
 		config := map[string]any{
 			"mcp_servers": map[string]any{
-				"symaira": map[string]any{
-					"command": "symaira",
+				"symvault": map[string]any{
+					"command": "symvault",
 				},
 			},
 		}
@@ -285,8 +285,8 @@ func TestYAMLConfigRW(t *testing.T) {
 		if !ok {
 			t.Fatal("expected mcp_servers")
 		}
-		if _, ok := servers["symaira"]; !ok {
-			t.Fatal("expected symaira server")
+		if _, ok := servers["symvault"]; !ok {
+			t.Fatal("expected symvault server")
 		}
 	})
 }
@@ -296,7 +296,7 @@ func TestInstall(t *testing.T) {
 	configPath := filepath.Join(tmp, "mcp.json")
 
 	serverConfig := map[string]any{
-		"command": "symaira",
+		"command": "symvault",
 		"args":    []string{"serve", "--stdio"},
 		"timeout": 120,
 	}
@@ -566,8 +566,8 @@ func TestResolveConfigPath_InvalidAgent(t *testing.T) {
 func TestPreviewConfig(t *testing.T) {
 	config := map[string]any{
 		"mcpServers": map[string]any{
-			"symaira": map[string]any{
-				"command": "symaira",
+			"symvault": map[string]any{
+				"command": "symvault",
 			},
 		},
 	}

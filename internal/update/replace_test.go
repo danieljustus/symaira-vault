@@ -12,7 +12,7 @@ import (
 // writeScript creates an executable shell script at path that handles --version.
 func writeScript(t *testing.T, path string) {
 	t.Helper()
-	content := "#!/bin/sh\necho symaira-test\n"
+	content := "#!/bin/sh\necho symvault-test\n"
 	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
 		t.Fatalf("WriteFile(%q) error = %v", path, err)
 	}
@@ -24,10 +24,10 @@ func TestReplace_Success(t *testing.T) {
 	}
 
 	tmpDir := t.TempDir()
-	binaryPath := filepath.Join(tmpDir, "symaira")
+	binaryPath := filepath.Join(tmpDir, "symvault")
 	writeScript(t, binaryPath)
 
-	content := "#!/bin/sh\necho symaira-test\n"
+	content := "#!/bin/sh\necho symvault-test\n"
 	if err := Replace(binaryPath, []byte(content)); err != nil {
 		t.Fatalf("Replace() error = %v", err)
 	}
@@ -76,7 +76,7 @@ func TestReplace_VerifyFailureRollsBack(t *testing.T) {
 	}
 
 	tmpDir := t.TempDir()
-	binaryPath := filepath.Join(tmpDir, "symaira")
+	binaryPath := filepath.Join(tmpDir, "symvault")
 	writeScript(t, binaryPath)
 
 	cmd := exec.Command(binaryPath, "--version")
@@ -105,14 +105,14 @@ func TestReplace_PreservesPermissions(t *testing.T) {
 	}
 
 	tmpDir := t.TempDir()
-	binaryPath := filepath.Join(tmpDir, "symaira")
+	binaryPath := filepath.Join(tmpDir, "symvault")
 	writeScript(t, binaryPath)
 
 	if err := os.Chmod(binaryPath, 0o711); err != nil {
 		t.Fatalf("Chmod() error = %v", err)
 	}
 
-	content := "#!/bin/sh\necho symaira-test\n"
+	content := "#!/bin/sh\necho symvault-test\n"
 	if err := Replace(binaryPath, []byte(content)); err != nil {
 		t.Fatalf("Replace() error = %v", err)
 	}
@@ -255,10 +255,10 @@ func TestVerifyBinary_NotExecutable(t *testing.T) {
 }
 
 func TestBackupPath_Default(t *testing.T) {
-	bp := backupPath("/usr/local/bin/symaira")
-	expected := "/usr/local/bin/symaira.backup"
+	bp := backupPath("/usr/local/bin/symvault")
+	expected := "/usr/local/bin/symvault.backup"
 	if runtime.GOOS == "windows" {
-		expected = "/usr/local/bin/symaira.old"
+		expected = "/usr/local/bin/symvault.old"
 	}
 	if bp != expected {
 		t.Fatalf("backupPath() = %q, want %q", bp, expected)

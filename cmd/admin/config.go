@@ -26,22 +26,22 @@ var configCmd = &cobra.Command{
 	Short: "Manage Symaira Vault configuration",
 	Long:  `Manage Symaira Vault configuration including validation, profiles, and key-value editing.`,
 	Example: `  # Validate the default config file
-  symaira config validate
+  symvault config validate
 
   # Validate a specific file
-  symaira config validate ~/custom-config.yaml
+  symvault config validate ~/custom-config.yaml
 
   # Get a config value
-  symaira config get vaultDir
+  symvault config get vaultDir
 
   # Set a config value
-  symaira config set agents.claude-code.canWrite true
+  symvault config set agents.claude-code.canWrite true
 
   # List all config
-  symaira config list
+  symvault config list
 
   # JSON output
-  symaira config validate --output json`,
+  symvault config validate --output json`,
 	Annotations: map[string]string{
 		cli.RequiresVaultAnnotation: "false",
 	},
@@ -52,7 +52,7 @@ var configValidateCmd = &cobra.Command{
 	Short: "Validate the configuration file",
 	Long: `Validate the Symaira Vault configuration file for schema errors.
 
-If no path is given, validates the default config at ~/.symaira/config.yaml.`,
+If no path is given, validates the default config at ~/.symvault/config.yaml.`,
 	Args: cobra.MaximumNArgs(1),
 	Annotations: map[string]string{
 		cli.RequiresVaultAnnotation: "false",
@@ -66,7 +66,7 @@ If no path is given, validates the default config at ~/.symaira/config.yaml.`,
 			if err != nil {
 				return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "cannot determine home directory", err)
 			}
-			path = filepath.Join(home, ".symaira", "config.yaml")
+			path = filepath.Join(home, ".symvault", "config.yaml")
 		}
 
 		cfg, err := configpkg.Load(path)
@@ -120,7 +120,7 @@ func resolveConfigPath(_ []string) string {
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".symaira", "config.yaml")
+	return filepath.Join(home, ".symvault", "config.yaml")
 }
 
 func ConfigKeyCompletionFunc(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -143,9 +143,9 @@ var configGetCmd = &cobra.Command{
 	Long: `Get the value of a configuration key using dotted path notation.
 
 Examples:
-  symaira config get vaultDir
-  symaira config get agents.claude-code.canWrite
-  symaira config get mcp.port`,
+  symvault config get vaultDir
+  symvault config get agents.claude-code.canWrite
+  symvault config get mcp.port`,
 	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: ConfigKeyCompletionFunc,
 	Annotations: map[string]string{
@@ -185,10 +185,10 @@ The value is automatically parsed as YAML to infer types: true/false for boolean
 numbers for integers, and quoted strings for text.
 
 Examples:
-  symaira config set vaultDir ~/my-vault
-  symaira config set agents.claude-code.canWrite true
-  symaira config set mcp.port 9090
-  symaira config set clipboard.auto_clear_duration 60`,
+  symvault config set vaultDir ~/my-vault
+  symvault config set agents.claude-code.canWrite true
+  symvault config set mcp.port 9090
+  symvault config set clipboard.auto_clear_duration 60`,
 	Args:              cobra.ExactArgs(2),
 	ValidArgsFunction: ConfigKeyCompletionFunc,
 	Annotations: map[string]string{
@@ -252,9 +252,9 @@ This shows the raw config file contents as-is.`,
 func init() {
 	configValidateCmd.Flags().BoolVar(&ConfigValidateJSON, "json", false, "output validation result as JSON (deprecated: use --output=json)")
 
-	configGetCmd.Flags().StringVar(&ConfigFile, "file", "", "path to config file (default: ~/.symaira/config.yaml)")
-	configSetCmd.Flags().StringVar(&ConfigFile, "file", "", "path to config file (default: ~/.symaira/config.yaml)")
-	configListCmd.Flags().StringVar(&ConfigFile, "file", "", "path to config file (default: ~/.symaira/config.yaml)")
+	configGetCmd.Flags().StringVar(&ConfigFile, "file", "", "path to config file (default: ~/.symvault/config.yaml)")
+	configSetCmd.Flags().StringVar(&ConfigFile, "file", "", "path to config file (default: ~/.symvault/config.yaml)")
+	configListCmd.Flags().StringVar(&ConfigFile, "file", "", "path to config file (default: ~/.symvault/config.yaml)")
 
 	configCmd.AddCommand(configValidateCmd)
 	configCmd.AddCommand(configGetCmd)

@@ -9,7 +9,7 @@ Use [`config.yaml.example`](../config.yaml.example) as a commented starting poin
 
 Or use the `--vault` flag to override for any command:
 ```bash
-openpass --vault ~/work-vault get aws.secret
+symvault --vault ~/work-vault get aws.secret
 ```
 
 ## config.yaml
@@ -89,9 +89,9 @@ mcp:
 
 ## Authentication
 
-Use `openpass auth status` to inspect the current unlock method and session
-cache backend. Use `openpass auth set touchid` on macOS to enable Touch ID
-unlock, or `openpass auth set passphrase` to return to passphrase-only unlock.
+Use `symvault auth status` to inspect the current unlock method and session
+cache backend. Use `symvault auth set touchid` on macOS to enable Touch ID
+unlock, or `symvault auth set passphrase` to return to passphrase-only unlock.
 
 Touch ID is a convenience layer over the vault passphrase: the passphrase
 remains the cryptographic secret and is stored in a biometric-protected macOS
@@ -132,7 +132,7 @@ All log output is written to `os.Stderr` to keep `stdout` clean for stdio MCP tr
 
 **Example:**
 ```bash
-OPENPASS_LOG_LEVEL=debug OPENPASS_LOG_FORMAT=json openpass serve --stdio
+OPENPASS_LOG_LEVEL=debug OPENPASS_LOG_FORMAT=json symvault serve --stdio
 ```
 
 ## Profiles
@@ -167,13 +167,13 @@ Vault selection follows this priority, from highest to lowest:
 
 ```bash
 # List profiles
-openpass profile list
+symvault profile list
 
 # Add a profile
-openpass profile add work --vault ~/.openpass-work
+symvault profile add work --vault ~/.openpass-work
 
 # Set default profile
-openpass profile use work
+symvault profile use work
 ```
 
 ## Validation
@@ -181,13 +181,13 @@ openpass profile use work
 Symaira Vault validates your configuration file on load. You can also manually validate it:
 
 ```bash
-openpass config validate
+symvault config validate
 ```
 
 Use structured JSON output for scripts or CI checks:
 
 ```bash
-openpass config validate --json
+symvault config validate --json
 ```
 
 ### Validation Rules

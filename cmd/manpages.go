@@ -14,10 +14,10 @@ var manpagesCmd = &cobra.Command{
 	Use:   "manpages <directory>",
 	Short: "Generate manual pages",
 	Example: `  # Generate man pages into ./man
-  symaira manpages ./man
+  symvault manpages ./man
 
   # System-wide install (requires sudo)
-  sudo symaira manpages /usr/local/share/man/man1`,
+  sudo symvault manpages /usr/local/share/man/man1`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		dir, err := filepath.Abs(args[0])

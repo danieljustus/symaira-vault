@@ -198,7 +198,7 @@ The MCP token (`mcp-token`) is auto-generated on first server start and stored i
 
 set -euo pipefail
 
-VAULT_DIR="${OPENPASS_VAULT:-$HOME/.openpass}"
+VAULT_DIR="${OPENPASS_VAULT:-$HOME/.symvault}"
 SERVER_PORT="${MCP_PORT:-8080}"
 BACKUP_DIR="$VAULT_DIR/backups"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
@@ -217,7 +217,7 @@ echo "Token backed up to $BACKUP_DIR/mcp-token.$TIMESTAMP"
 
 # 3. Stop server
 echo "=== Stopping Server ==="
-pkill -f "openpass serve" || true
+pkill -f "symvault serve" || true
 sleep 2
 
 # 4. Remove old token
@@ -226,7 +226,7 @@ rm -f "$VAULT_DIR/mcp-token"
 
 # 5. Start server (generates new token)
 echo "=== Starting Server ==="
-nohup openpass serve --port $SERVER_PORT > "$VAULT_DIR/mcp-server.log" 2>&1 &
+nohup symvault serve --port $SERVER_PORT > "$VAULT_DIR/mcp-server.log" 2>&1 &
 sleep 3
 
 # 6. Verify health
@@ -265,13 +265,13 @@ echo "ACTION REQUIRED: Update all agent configurations with new token"
 3. If no backup, regenerate:
    ```bash
    # Stop server
-   pkill -f "openpass serve"
+   pkill -f "symvault serve"
    
    # Remove corrupted/missing token
    rm -f ~/.openpass/mcp-token
    
    # Restart (auto-generates new token)
-   openpass serve --port 8080
+   symvault serve --port 8080
    
    # Get new token
    cat ~/.openpass/mcp-token
@@ -285,14 +285,14 @@ Verify that all entries are accessible:
 
 ```bash
 # 1. List all entries
-ENTRY_COUNT=$(openpass list | wc -l)
+ENTRY_COUNT=$(symvault list | wc -l)
 
 # 2. Count entry files
 FILE_COUNT=$(find ~/.openpass/entries -name "*.age" | wc -l)
 
 # 3. Compare
 echo "Listed entries: $ENTRY_COUNT, Files: $FILE_COUNT"
-openpass serve --port 8080
+symvault serve --port 8080
 ```
 
 ### Prevention Checklist
@@ -327,17 +327,17 @@ Symaira Vault stores all data in a vault directory. The vault contains:
 
 ### CLI Backup and Restore (Recommended)
 
-The `openpass backup` and `openpass restore` commands are the primary method for vault backup and recovery:
+The `symvault backup` and `symvault restore` commands are the primary method for vault backup and recovery:
 
 ```bash
 # Create a backup archive
-openpass backup ~/backups/openpass-$(date +%Y%m%d_%H%M%S).tar.gz
+symvault backup ~/backups/symvault-$(date +%Y%m%d_%H%M%S).tar.gz
 
 # Exclude .git directory to reduce archive size
-openpass backup ~/backups/openpass-$(date +%Y%m%d_%H%M%S).tar.gz --exclude-git
+symvault backup ~/backups/symvault-$(date +%Y%m%d_%H%M%S).tar.gz --exclude-git
 
 # Restore from backup
-openpass restore ~/backups/openpass-20260427_120000.tar.gz
+symvault restore ~/backups/symvault-20260427_120000.tar.gz
 ```
 
 **Security notes**:
@@ -365,10 +365,10 @@ git remote -v
 # origin  git@github.com:user/private-vault.git (push)
 
 # Force a new backup commit (even if no changes)
-openpass git commit -m "Backup trigger"
+symvault git commit -m "Backup trigger"
 
 # Manual push if auto_push is disabled
-openpass git push
+symvault git push
 ```
 
 To enable a remote for an existing vault:
@@ -384,7 +384,7 @@ git push -u origin main
 ```bash
 # Create timestamped backup
 VAULT_DIR=~/.openpass
-BACKUP_DIR=~/backups/openpass
+BACKUP_DIR=~/backups/symvault
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
 mkdir -p "$BACKUP_DIR"
@@ -398,17 +398,17 @@ tar -tzf "$BACKUP_DIR/vault_$TIMESTAMP.tar.gz" | head -20
 
 ```bash
 # Extract backup to temporary location
-tar -xzf ~/backups/openpass/vault_20260420_120000.tar.gz -C /tmp/
+tar -xzf ~/backups/symvault/vault_20260420_120000.tar.gz -C /tmp/
 
 # Verify identity file
-ls -la /tmp/.openpass/identity.age
+ls -la /tmp/.symvault/identity.age
 
 # Move to vault location
 mv ~/.openpass ~/.openpass_old
-mv /tmp/.openpass ~/
+mv /tmp/.symvault ~/
 
 # Verify vault opens
-openpass list
+symvault list
 ```
 
 ### Recovery from Git
@@ -418,10 +418,10 @@ openpass list
 git clone git@github.com:user/backup-repo.git ~/.openpass
 
 # Unlock vault
-openpass unlock
+symvault unlock
 
 # Verify entries
-openpass list
+symvault list
 ```
 
 ### Emergency Recovery: Identity Loss
@@ -449,8 +449,8 @@ If `identity.age` is lost, **there is no recovery**. The identity is the private
 
 3. Verify functionality:
    ```bash
-   openpass list
-   openpass get test-entry.password
+   symvault list
+   symvault get test-entry.password
    ```
 
 ### Disaster Recovery Checklist
@@ -458,10 +458,10 @@ If `identity.age` is lost, **there is no recovery**. The identity is the private
 | Step | Action | Verification |
 |------|--------|--------------|
 | 1 | Restore vault directory | `ls -la ~/.openpass/` shows identity.age and entries/ |
-| 2 | Unlock vault | `openpass unlock` succeeds |
-| 3 | Verify entries | `openpass list` returns expected entries |
-| 4 | Test entry retrieval | `openpass get <entry>` returns password |
-| 5 | Verify MCP server | `openpass serve --stdio --agent default` starts |
+| 2 | Unlock vault | `symvault unlock` succeeds |
+| 3 | Verify entries | `symvault list` returns expected entries |
+| 4 | Test entry retrieval | `symvault get <entry>` returns password |
+| 5 | Verify MCP server | `symvault serve --stdio --agent default` starts |
 
 ### Backup Rotation
 
@@ -473,7 +473,7 @@ For critical vaults, use the 3-2-1 rule:
 Example:
 ```bash
 # Daily incremental backup to external drive
-rsync -av --delete ~/.openpass/ /Volumes/Backup/openpass/
+rsync -av --delete ~/.openpass/ /Volumes/Backup/symvault/
 
 # Weekly full backup to cloud storage
 rclone sync ~/.openpass/ backblaze:openpass-vaults/$(hostname)/
@@ -504,9 +504,9 @@ if ! curl -sf "$HEALTH_URL" > /dev/null 2>&1; then
     echo "Symaira Vault MCP server is down on $(hostname)" | mail -s "Symaira Vault Alert" "$ALERT_EMAIL"
     
     # Attempt automatic recovery
-    pkill -f "openpass serve"
+    pkill -f "symvault serve"
     sleep 2
-    nohup openpass serve --port 8080 > /dev/null 2>&1 &
+    nohup symvault serve --port 8080 > /dev/null 2>&1 &
 fi
 ```
 
@@ -564,7 +564,7 @@ curl -s -X POST http://127.0.0.1:8080/mcp \
        allowedPaths: ["*"]
    
    # MCP server must use same name
-   openpass serve --agent my-agent
+   symvault serve --agent my-agent
    ```
 
 3. Check profile permissions:
@@ -588,8 +588,8 @@ agents:
 EOF
 
 # Restart server
-pkill -f "openpass serve"
-openpass serve --port 8080
+pkill -f "symvault serve"
+symvault serve --port 8080
 ```
 
 **Scenario 2: Incorrect Permissions**
@@ -603,11 +603,11 @@ cp ~/.openpass/config.yaml ~/.openpass/config.yaml.bak
 # Update allowedPaths to include required paths
 
 # Validate config
-openpass --vault ~/.openpass list
+symvault --vault ~/.openpass list
 
 # Restart server
-pkill -f "openpass serve"
-openpass serve --port 8080
+pkill -f "symvault serve"
+symvault serve --port 8080
 ```
 
 **Scenario 3: Path Restriction Too Strict**
@@ -649,7 +649,7 @@ openpass serve --port 8080
 1. **Identify the source**:
    ```bash
    # Check logs for agent activity
-   grep "rate_limit" /var/log/openpass.log | tail -20
+   grep "rate_limit" /var/log/symvault.log | tail -20
    ```
 
 2. **Implement exponential backoff** (for automated clients):
@@ -684,7 +684,7 @@ openpass serve --port 8080
 3. **Monitor usage patterns**:
    ```bash
    # Track request rates
-   tail -f /var/log/openpass.log | grep "mcp_request" | wc -l
+   tail -f /var/log/symvault.log | grep "mcp_request" | wc -l
    ```
 
 ### Emergency Shutdown Procedures
@@ -695,18 +695,18 @@ openpass serve --port 8080
 
 ```bash
 # 1. Stop accepting new connections
-pkill -f "openpass serve"
+pkill -f "symvault serve"
 
 # 2. Verify shutdown
-if ! pgrep -f "openpass serve" > /dev/null; then
+if ! pgrep -f "symvault serve" > /dev/null; then
     echo "MCP server stopped successfully"
 else
     echo "Failed to stop server, forcing..."
-    pkill -9 -f "openpass serve"
+    pkill -9 -f "symvault serve"
 fi
 
 # 3. Verify no orphaned processes
-ps aux | grep openpass
+ps aux | grep symvault
 ```
 
 **For Stdio mode**:
@@ -714,7 +714,7 @@ ps aux | grep openpass
 ```bash
 # Stdio server stops when parent process disconnects
 # To force stop a background stdio server:
-pkill -f "openpass serve --stdio"
+pkill -f "symvault serve --stdio"
 ```
 
 #### Emergency Lockdown
@@ -728,11 +728,11 @@ If security incident suspected:
 echo "=== OPENPASS EMERGENCY LOCKDOWN ==="
 
 # 1. Stop MCP server
-pkill -f "openpass serve"
+pkill -f "symvault serve"
 echo "[1/4] MCP server stopped"
 
 # 2. Lock vault
-openpass lock
+symvault lock
 echo "[2/4] Vault locked"
 
 # 3. Invalidate current token (rotate)
@@ -759,17 +759,17 @@ After incident resolution:
 
 ```bash
 # 1. Verify vault integrity
-openpass unlock
-openpass list
+symvault unlock
+symvault list
 
 # 2. Generate new token (if rotated)
 rm -f ~/.openpass/mcp-token
-openpass serve --port 8080 &
+symvault serve --port 8080 &
 sleep 2
 NEW_TOKEN=$(cat ~/.openpass/mcp-token)
 
 # 3. Update all agent configurations
-openpass mcp-config claude-code --http --include-token
+symvault mcp-config claude-code --http --include-token
 
 # 4. Verify health
 curl -H "Authorization: Bearer $NEW_TOKEN" \
@@ -802,13 +802,13 @@ If token compromise suspected:
 # Immediate actions (within 5 minutes)
 
 # 1. Stop server
-pkill -f "openpass serve"
+pkill -f "symvault serve"
 
 # 2. Backup and remove compromised token
 mv ~/.openpass/mcp-token ~/.openpass/mcp-token.compromised.$(date +%Y%m%d_%H%M%S)
 
 # 3. Start server with new token
-openpass serve --port 8080 &
+symvault serve --port 8080 &
 
 # 4. Verify new token generated
 cat ~/.openpass/mcp-token
@@ -947,7 +947,7 @@ sha256sum -c OpenPass_X.Y.Z_checksums.txt --ignore-missing
 shasum -a 256 --check OpenPass_X.Y.Z_checksums.txt --ignore-missing
 
 # 3. Verify binary (Linux example)
-./OpenPass_X.Y.Z_linux_amd64/openpass version
+./OpenPass_X.Y.Z_linux_amd64/symvault version
 # Should match tag version
 ```
 
@@ -965,17 +965,17 @@ curl -fsSLO https://github.com/danieljustus/symaira-vault/releases/download/vX.Y
 curl -fsSLO https://github.com/danieljustus/symaira-vault/releases/download/vX.Y.Z/OpenPass_X.Y.Z_checksums.txt
 sha256sum -c OpenPass_X.Y.Z_checksums.txt --ignore-missing
 tar xzf OpenPass_X.Y.Z_linux_amd64.tar.gz
-cp OpenPass_X.Y.Z_linux_amd64/openpass ./openpass
+cp OpenPass_X.Y.Z_linux_amd64/symvault ./symvault
 
 # 4. Check binary works
-chmod +x openpass
-./openpass version
+chmod +x symvault
+./symvault version
 
 # 5. Initialize test vault
-./openpass init /tmp/test-vault
-./openpass add test --value "smoke-test"
-./openpass get test
-./openpass lock
+./symvault init /tmp/test-vault
+./symvault add test --value "smoke-test"
+./symvault get test
+./symvault lock
 
 # 6. Cleanup
 rm -rf /tmp/test-vault

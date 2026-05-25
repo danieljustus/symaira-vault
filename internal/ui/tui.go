@@ -810,7 +810,7 @@ func editEntryCmd(svc vaultsvc.Service, path string) tea.Cmd {
 			return entryEditedMsg{path: path, err: err}
 		}
 
-		tmp, err := os.CreateTemp("", "symaira-*.json")
+		tmp, err := os.CreateTemp("", "symvault-*.json")
 		if err != nil {
 			return entryEditedMsg{path: path, err: err}
 		}

@@ -30,7 +30,7 @@ export async function quickPickVault(tools: SymairaTools): Promise<void> {
 
     const action = await vscode.window.showQuickPick(
       [
-        { label: "Insert as ${symaira:...}", action: "insert" },
+        { label: "Insert as ${symvault:...}", action: "insert" },
         { label: "Copy to Clipboard", action: "copy" },
       ],
       { placeHolder: `What to do with "${selected}"?` }

@@ -50,7 +50,7 @@ so Symaira Vault does not expose a listening socket and Hermes does not need a b
 token in config:
 
 ```bash
-openpass --vault ~/.openpass-vault mcp-config hermes --format hermes
+symvault --vault ~/.openpass-vault mcp-config hermes --format hermes
 ```
 
 Add the output under `mcp_servers` in `~/.hermes/config.yaml` only after the
@@ -58,7 +58,7 @@ human adoption gate approves a live Hermes config change, then restart Hermes or
 reload MCP tools from Hermes. Verify the connection:
 
 ```bash
-hermes mcp test openpass
+hermes mcp test symvault
 ```
 
 When connected, Hermes registers the tools with the `mcp_openpass_` prefix, for
@@ -103,19 +103,19 @@ Symaira Vault exposes the following MCP tools for agent integration:
 For agents that support stdio MCP, use:
 
 ```bash
-openpass mcp-config openclaw
+symvault mcp-config openclaw
 ```
 
 For agents that support HTTP MCP with custom headers, use:
 
 ```bash
-openpass --vault ~/.openpass-vault mcp-config openclaw --http
+symvault --vault ~/.openpass-vault mcp-config openclaw --http
 ```
 
 HTTP mode requires a running Symaira Vault server:
 
 ```bash
-openpass --vault ~/.openpass-vault serve --port 8090
+symvault --vault ~/.openpass-vault serve --port 8090
 ```
 
 ## LaunchAgent
@@ -133,7 +133,7 @@ and port as needed:
   <string>com.example.openpass-mcp</string>
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/local/bin/openpass</string>
+    <string>/usr/local/bin/symvault</string>
     <string>--vault</string>
     <string>/Users/USER/.openpass-vault</string>
     <string>serve</string>
@@ -152,7 +152,7 @@ and port as needed:
 </plist>
 ```
 
-The vault must be unlockable non-interactively. Run `openpass unlock` once so
+The vault must be unlockable non-interactively. Run `symvault unlock` once so
 the passphrase is cached in the OS keyring, or provide a controlled environment
 for `OPENPASS_PASSPHRASE`.
 
@@ -164,13 +164,13 @@ Create fine-grained access tokens with restricted tool access and optional expir
 
 ```bash
 # Create a token limited to specific tools
-openpass mcp token create --agent hermes --tools list_entries,get_entry --expires 24h
+symvault mcp token create --agent hermes --tools list_entries,get_entry --expires 24h
 
 # List all active tokens
-openpass mcp token list
+symvault mcp token list
 
 # Revoke a token
-openpass mcp token revoke <token-id>
+symvault mcp token revoke <token-id>
 ```
 
 Scoped tokens are stored with SHA-256 hashing and can be restricted to specific MCP tools
@@ -181,7 +181,7 @@ and time windows. This is safer than the global bearer token for multi-agent set
 If you suspect your MCP token has been compromised, rotate it:
 
 ```bash
-openpass mcp-token-rotate
+symvault mcp-token-rotate
 ```
 
 This invalidates the old token and generates a new one. Update any agent configurations
@@ -193,7 +193,7 @@ When generating MCP configurations that might be displayed in terminals or commi
 to version control, use the `--redact` flag:
 
 ```bash
-openpass mcp-config claude-code --http --redact
+symvault mcp-config claude-code --http --redact
 ```
 
 This outputs `env:OPENPASS_MCP_TOKEN` instead of the actual token. Agents using
@@ -202,7 +202,7 @@ redacted configs must have `OPENPASS_MCP_TOKEN` set in their environment.
 For automated scripts that need the raw token:
 
 ```bash
-TOKEN=$(openpass mcp-config <agent> --token-only)
+TOKEN=$(symvault mcp-config <agent> --token-only)
 ```
 
 ## OAuth Dynamic Client Registration
@@ -238,7 +238,7 @@ OAuth enabled:
 }
 ```
 
-Run `opencode mcp auth openpass` to start the DCR flow. The client will:
+Run `opencode mcp auth symvault` to start the DCR flow. The client will:
 1. Discover the authorization server metadata from well-known endpoints
 2. Register a client via DCR
 3. Walk through the PKCE authorization flow (TTY user consent)
@@ -409,7 +409,7 @@ logged-in user's screen.
 
 ## Agent Skill
 
-The skill template in `docs/skills/openpass-agent/SKILL.md` can be copied into an
+The skill template in `docs/skills/symaira-agent/SKILL.md` can be copied into an
 agent skill directory. It tells the agent to prefer native MCP tools and to
 avoid terminal-based credential operations.
 
@@ -473,7 +473,7 @@ Add to your `prometheus.yml`:
 
 ```yaml
 scrape_configs:
-  - job_name: 'openpass'
+  - job_name: 'symvault'
     scrape_interval: 15s
     static_configs:
       - targets: ['127.0.0.1:8080']

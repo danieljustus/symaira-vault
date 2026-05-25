@@ -17,13 +17,13 @@ var shareCmd = &cobra.Command{
 	Short: "Manage secret sharing between agents",
 	Long:  "List and revoke secret share grants between MCP agents.",
 	Example: `  # List all pending share requests
-  symaira share list --status pending
+  symvault share list --status pending
 
   # Revoke a grant by ID
-  symaira share revoke <grant-id>
+  symvault share revoke <grant-id>
 
   # JSON output for tooling
-  symaira share list --output json`,
+  symvault share list --output json`,
 }
 
 var shareListCmd = &cobra.Command{
@@ -32,12 +32,12 @@ var shareListCmd = &cobra.Command{
 	Long: `List all share grants with optional filtering by status, agent, or path.
 
 Examples:
-  symaira share list
-  symaira share list --status approved
-  symaira share list --from agent-a
-  symaira share list --to agent-b
-  symaira share list --path github.password
-  symaira share list --output json`,
+  symvault share list
+  symvault share list --status approved
+  symvault share list --from agent-a
+  symvault share list --to agent-b
+  symvault share list --path github.password
+  symvault share list --output json`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		vDir, err := cli.VaultPath()
 		if err != nil {

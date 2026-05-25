@@ -56,8 +56,8 @@ func (s *MultiDeviceStep) View() string {
 	}
 	if s.selected == 0 {
 		lines = append(lines, "",
-			dimStyle.Render("After setup, run: symaira device pair"),
-			dimStyle.Render("On the other device:  symaira device join <url> <token>"),
+			dimStyle.Render("After setup, run: symvault device pair"),
+			dimStyle.Render("On the other device:  symvault device join <url> <token>"),
 		)
 	}
 	lines = append(lines, "", helpStyle.Render("↑/↓ select · Enter to confirm"))

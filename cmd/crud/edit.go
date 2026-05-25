@@ -32,10 +32,10 @@ The entry is opened in JSON format. Save and exit the editor to update the entry
 If the entry does not exist, an error is returned.
 
 The editor is determined by the --editor flag or EDITOR environment variable (defaults to vi).`,
-	Example: `  symaira edit github
-  symaira edit work/aws
-  symaira edit personal/bank --editor nano
-  EDITOR=nano symaira edit personal/bank`,
+	Example: `  symvault edit github
+  symvault edit work/aws
+  symvault edit personal/bank --editor nano
+  EDITOR=nano symvault edit personal/bank`,
 	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: cli.EntryCompletionFunc,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -61,7 +61,7 @@ The editor is determined by the --editor flag or EDITOR environment variable (de
 			}
 
 			var tmpFile *os.File
-			tmpFile, err = OSCreateTemp("", "symaira-edit-*.json")
+			tmpFile, err = OSCreateTemp("", "symvault-edit-*.json")
 			if err != nil {
 				return fmt.Errorf("cannot create temp file: %w", err)
 			}

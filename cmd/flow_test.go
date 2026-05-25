@@ -14,7 +14,7 @@ import (
 
 func testTempDir(t *testing.T) string {
 	t.Helper()
-	dir, err := os.MkdirTemp("", "symaira-flow-test")
+	dir, err := os.MkdirTemp("", "symvault-flow-test")
 	if err != nil {
 		t.Fatalf("create temp dir: %v", err)
 	}
@@ -89,7 +89,7 @@ func TestCmdGet(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping slow CLI flow test in short mode")
 	}
-	vaultDir, err := os.MkdirTemp("", "symaira-flow-test")
+	vaultDir, err := os.MkdirTemp("", "symvault-flow-test")
 	if err != nil {
 		t.Fatalf("create temp dir: %v", err)
 	}

@@ -19,9 +19,9 @@ var profileCmd = &cobra.Command{
 	Use:   "profile",
 	Short: "Manage vault profiles",
 	Long:  `Manage named vault profiles for switching between multiple vaults.`,
-	Example: `  symaira profile list
-  symaira profile add work --vault ~/.symaira-work
-  symaira profile use work`,
+	Example: `  symvault profile list
+  symvault profile add work --vault ~/.symvault-work
+  symvault profile use work`,
 	Annotations: map[string]string{
 		requiresVaultAnnotation: "false",
 	},
@@ -40,14 +40,14 @@ var profileListCmd = &cobra.Command{
 			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "cannot determine home directory", err)
 		}
 
-		cfg, err := configpkg.Load(filepath.Join(home, ".symaira", "config.yaml"))
+		cfg, err := configpkg.Load(filepath.Join(home, ".symvault", "config.yaml"))
 		if err != nil {
 			cfg = configpkg.Default()
 		}
 
 		if len(cfg.Profiles) == 0 {
 			printlnQuietAware("No profiles configured.")
-			printlnQuietAware("Use 'symaira profile add <name> --vault <path>' to create a profile.")
+			printlnQuietAware("Use 'symvault profile add <name> --vault <path>' to create a profile.")
 			return nil
 		}
 
@@ -76,7 +76,7 @@ var profileAddCmd = &cobra.Command{
 	Long: `Add a new vault profile with a name and vault path.
 
 Example:
-  symaira profile add work --vault ~/.symaira-work`,
+  symvault profile add work --vault ~/.symvault-work`,
 	Args: cobra.ExactArgs(1),
 	Annotations: map[string]string{
 		requiresVaultAnnotation: "false",
@@ -96,7 +96,7 @@ Example:
 			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "cannot determine home directory", err)
 		}
 
-		configPath := filepath.Join(home, ".symaira", "config.yaml")
+		configPath := filepath.Join(home, ".symvault", "config.yaml")
 		cfg, err := configpkg.Load(configPath)
 		if err != nil {
 			cfg = configpkg.Default()
@@ -127,7 +127,7 @@ var profileUseCmd = &cobra.Command{
 	Long: `Set the default profile to use when no --vault or OPENPASS_VAULT is specified.
 
 Example:
-  symaira profile use work`,
+  symvault profile use work`,
 	Args: cobra.ExactArgs(1),
 	Annotations: map[string]string{
 		requiresVaultAnnotation: "false",
@@ -140,7 +140,7 @@ Example:
 			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "cannot determine home directory", err)
 		}
 
-		configPath := filepath.Join(home, ".symaira", "config.yaml")
+		configPath := filepath.Join(home, ".symvault", "config.yaml")
 		cfg, err := configpkg.Load(configPath)
 		if err != nil {
 			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "cannot load config", err)

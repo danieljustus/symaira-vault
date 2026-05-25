@@ -22,16 +22,16 @@ var agentProfileCmd = &cobra.Command{
 	Long:  `Show, edit, and export agent profiles.`,
 	Args:  cobra.ExactArgs(1),
 	Example: `  # Show agent profile
-  symaira agent profile my-agent show
+  symvault agent profile my-agent show
 
   # Show profile as JSON
-  symaira agent profile my-agent show --output json
+  symvault agent profile my-agent show --output json
 
   # Edit agent profile in $EDITOR
-  symaira agent profile my-agent edit
+  symvault agent profile my-agent edit
 
   # Export profile as YAML to stdout
-  symaira agent profile my-agent export`,
+  symvault agent profile my-agent export`,
 }
 
 var agentProfileShowCmd = &cobra.Command{

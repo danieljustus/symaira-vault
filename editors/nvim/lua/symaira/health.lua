@@ -1,6 +1,6 @@
-local auth = require("symaira.auth")
-local config = require("symaira.config")
-local client = require("symaira.client")
+local auth = require("symvault.auth")
+local config = require("symvault.config")
+local client = require("symvault.client")
 
 local M = {}
 
@@ -26,9 +26,9 @@ function M.check()
   -- Check MCP token
   local token = auth.read_token()
   if token then
-    ok("MCP token found at ~/.symaira/mcp-token")
+    ok("MCP token found at ~/.symvault/mcp-token")
   else
-    error("MCP token not found. Run 'symaira serve' to generate one.")
+    error("MCP token not found. Run 'symvault serve' to generate one.")
   end
 
   -- Check config
@@ -44,11 +44,11 @@ function M.check()
   end
 
   -- Check if Symaira CLI is available
-  local has_symaira = vim.fn.executable("symaira") == 1
-  if has_symaira then
-    ok("symaira CLI is available")
+  local has_symvault = vim.fn.executable("symvault") == 1
+  if has_symvault then
+    ok("symvault CLI is available")
   else
-    warn("symaira CLI not found in PATH")
+    warn("symvault CLI not found in PATH")
   end
 
   -- Test server connectivity (async - reports after delay)

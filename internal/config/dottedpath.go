@@ -125,7 +125,7 @@ func KnownConfigKeys() []string {
 	}
 }
 
-// DefaultConfigFilePath returns the default config file path (~/.symaira/config.yaml).
+// DefaultConfigFilePath returns the default config file path (~/.symvault/config.yaml).
 func DefaultConfigFilePath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {

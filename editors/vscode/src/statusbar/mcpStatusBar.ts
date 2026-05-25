@@ -13,7 +13,7 @@ export class MCPStatusBar {
       vscode.StatusBarAlignment.Right,
       100
     );
-    this.statusBarItem.command = "symaira.quickPickVault";
+    this.statusBarItem.command = "symvault.quickPickVault";
     this.updateStatus(false);
   }
 
@@ -58,7 +58,7 @@ export class MCPStatusBar {
     } else {
       this.statusBarItem.text = "$(shield-x) Symaira Vault";
       this.statusBarItem.backgroundColor = new vscode.ThemeColor("statusBarItem.errorBackground");
-      this.statusBarItem.tooltip = "Symaira Vault MCP server is unreachable. Check that 'symaira serve' is running.";
+      this.statusBarItem.tooltip = "Symaira Vault MCP server is unreachable. Check that 'symvault serve' is running.";
     }
   }
 

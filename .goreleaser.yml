@@ -24,9 +24,9 @@ before:
       echo "Secret/artifact gate passed"'
 
 builds:
-  - id: symaira-static
+  - id: symvault-static
     main: .
-    binary: symaira
+    binary: symvault
     env:
       - CGO_ENABLED=0
       - GOWORK=off
@@ -48,9 +48,9 @@ builds:
       - -X main.date={{.Date}}
       - -X main.builtBy=goreleaser
     mod_timestamp: "{{ .CommitTimestamp }}"
-  - id: symaira-darwin
+  - id: symvault-darwin
     main: .
-    binary: symaira
+    binary: symvault
     env:
       - CGO_ENABLED=1
       - GOWORK=off
@@ -70,7 +70,7 @@ builds:
     mod_timestamp: "{{ .CommitTimestamp }}"
 
 archives:
-  - id: symaira
+  - id: symvault
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats: [tar.gz]
     format_overrides:
@@ -146,7 +146,7 @@ release:
     ```
 
 brews:
-  - name: symaira
+  - name: symvault
     repository:
       owner: danieljustus
       name: homebrew-tap
@@ -156,26 +156,26 @@ brews:
     description: "Modern CLI password manager with age encryption"
     license: "MIT"
     install: |
-      bin.install "symaira"
-      generate_completions_from_executable(bin/"symaira", "completion")
+      bin.install "symvault"
+      generate_completions_from_executable(bin/"symvault", "completion")
       man1.install Dir["docs/man/*.1"]
     caveats: |
       Symaira Vault has been installed!
 
       To get started:
-        openpass init                    # Initialize a new vault
-        openpass set github.com/username # Add your first entry
-        openpass get github.com/username # Retrieve it
+        symvault init                    # Initialize a new vault
+        symvault set github.com/username # Add your first entry
+        symvault get github.com/username # Retrieve it
 
       For MCP server setup:
-        openpass mcp-config <name>
+        symvault mcp-config <name>
 
       Documentation: https://github.com/danieljustus/symaira-vault#readme
     test: |
-      system "#{bin}/symaira", "version"
+      system "#{bin}/symvault", "version"
 
 scoops:
-  - name: symaira
+  - name: symvault
     repository:
       owner: danieljustus
       name: scoop-bucket
@@ -188,8 +188,8 @@ scoops:
       - config.yaml
 
 nfpms:
-  - id: symaira
-    package_name: symaira
+  - id: symvault
+    package_name: symvault
     file_name_template: "{{ .PackageName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     vendor: danieljustus
     homepage: "https://github.com/danieljustus/symaira-vault"

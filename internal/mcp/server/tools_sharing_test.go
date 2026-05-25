@@ -914,7 +914,7 @@ func TestHandleRequestShare_Concurrent(t *testing.T) {
 
 func TestHandleRequestShare_StoreWriteError(t *testing.T) {
 	// Use a path we can't write to.
-	store := NewShareStore("/nonexistent-dir-symaira/mcp-shares.json")
+	store := NewShareStore("/nonexistent-dir-symvault/mcp-shares.json")
 	srv := &Server{
 		agent: &config.AgentProfile{
 			Name:         "test-agent",

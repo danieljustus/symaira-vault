@@ -200,7 +200,7 @@ func AutoCommitWithOptions(vaultDir string, opts CommitOptions) error {
 	}
 	authorEmail := opts.Email
 	if authorEmail == "" {
-		authorEmail = "symaira@example.com"
+		authorEmail = "symvault@example.com"
 	}
 
 	_, err = w.Commit(message, &gogit.CommitOptions{
@@ -656,7 +656,7 @@ func ResolveConflicts(vaultDir string, hostname string) error {
 // LastSyncTime returns the time of the last sync operation.
 // It reads the timestamp from a marker file in the vault's .git directory.
 func LastSyncTime(vaultDir string) (time.Time, error) {
-	markerPath := filepath.Join(vaultDir, ".git", "symaira-last-sync")
+	markerPath := filepath.Join(vaultDir, ".git", "symvault-last-sync")
 	data, err := os.ReadFile(markerPath) //#nosec G304 -- vaultDir is not user input
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -674,7 +674,7 @@ func LastSyncTime(vaultDir string) (time.Time, error) {
 
 // SetLastSyncTime writes the current time as the last sync timestamp.
 func SetLastSyncTime(vaultDir string) error {
-	markerPath := filepath.Join(vaultDir, ".git", "symaira-last-sync")
+	markerPath := filepath.Join(vaultDir, ".git", "symvault-last-sync")
 	if err := os.MkdirAll(filepath.Dir(markerPath), 0o700); err != nil {
 		return err
 	}

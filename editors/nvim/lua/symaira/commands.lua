@@ -1,5 +1,5 @@
-local client = require("symaira.client")
-local picker = require("symaira.picker")
+local client = require("symvault.client")
+local picker = require("symvault.picker")
 
 local M = {}
 

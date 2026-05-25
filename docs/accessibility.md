@@ -49,8 +49,8 @@ primary surface; `NO_COLOR` is honoured as a standard env.
 - **Live TUI in screen-reader mode**: the Bubble Tea vault browser still uses
   block characters and live cursor positioning that screen readers cannot
   follow in real time. Users who rely on assistive tech should use the
-  non-interactive commands (`openpass get`, `openpass list --output json`,
-  `openpass find`) instead, which already produce clean text.
+  non-interactive commands (`symvault get`, `symvault list --output json`,
+  `symvault find`) instead, which already produce clean text.
 - **OS-native dialogs**: `osascript`, `zenity`, and PowerShell handle their
   own accessibility via the host platform; Symaira Vault does not set ARIA labels
   beyond what the dialog APIs expose.

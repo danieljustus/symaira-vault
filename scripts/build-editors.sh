@@ -31,7 +31,7 @@ npm run build
 echo "Verifying Neovim plugin..."
 cd "${EDITORS_DIR}/nvim"
 if command -v luac > /dev/null 2>&1; then
-  for f in lua/symaira/*.lua; do
+  for f in lua/symvault/*.lua; do
     luac -p "$f"
     echo "  ✓ $(basename "$f")"
   done

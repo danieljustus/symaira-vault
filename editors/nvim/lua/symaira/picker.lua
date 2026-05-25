@@ -1,5 +1,5 @@
-local client = require("symaira.client")
-local masking = require("symaira.masking")
+local client = require("symvault.client")
+local masking = require("symvault.masking")
 
 local M = {}
 

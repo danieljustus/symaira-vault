@@ -32,7 +32,7 @@ INSTALL.md with manual install instructions.`,
 		agentName := args[0]
 		outputPath, _ := cmd.Flags().GetString("output")
 		if outputPath == "" {
-			outputPath = fmt.Sprintf("symaira-%s-skill.tar.gz", agentName)
+			outputPath = fmt.Sprintf("symvault-%s-skill.tar.gz", agentName)
 		}
 		outputPath = filepath.Clean(outputPath)
 
@@ -124,7 +124,7 @@ func expandTilde(path string) string {
 }
 
 func init() {
-	agentSkillExportCmd.Flags().StringP("output", "o", "", "Output file path (default: symaira-<agent>-skill.tar.gz)")
+	agentSkillExportCmd.Flags().StringP("output", "o", "", "Output file path (default: symvault-<agent>-skill.tar.gz)")
 
 	agentSkillCmd.AddCommand(agentSkillExportCmd)
 	agentSkillCmd.AddCommand(agentSkillRefreshCmd)

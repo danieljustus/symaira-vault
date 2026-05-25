@@ -158,7 +158,7 @@ func (c *Checker) fetchLatestRelease(ctx context.Context, currentVersion string)
 	}
 
 	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", fmt.Sprintf("symaira/%s", strings.TrimSpace(currentVersion)))
+	req.Header.Set("User-Agent", fmt.Sprintf("symvault/%s", strings.TrimSpace(currentVersion)))
 
 	resp, err := client.Do(req) // #nosec G107 — URL is validated and points to GitHub API
 	if err != nil {

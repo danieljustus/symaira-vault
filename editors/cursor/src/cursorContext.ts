@@ -12,7 +12,7 @@ export async function injectCursorContext(tools: SymairaTools): Promise<void> {
     return;
   }
 
-  const config = vscode.workspace.getConfiguration("symaira.cursor");
+  const config = vscode.workspace.getConfiguration("symvault.cursor");
   const contextFile = config.get<string>("contextFile", ".cursorrules");
 
   for (const folder of workspaceFolders) {
@@ -77,7 +77,7 @@ function buildContextBlock(entries: string[]): string {
 
   lines.push("");
   lines.push(
-    "To use a secret, reference it with: ${symaira:<path>} or use the Symaira Vault commands."
+    "To use a secret, reference it with: ${symvault:<path>} or use the Symaira Vault commands."
   );
   lines.push("");
   lines.push(CONTEXT_MARKER_END);

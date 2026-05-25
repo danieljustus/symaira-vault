@@ -74,7 +74,7 @@ func TestHMACTamperedEntryDetected(t *testing.T) {
 	}
 	_ = logger.Close()
 
-	logFile := filepath.Join(home, ".symaira", "audit-hmac-tamper-test.log")
+	logFile := filepath.Join(home, ".symvault", "audit-hmac-tamper-test.log")
 	content, err := os.ReadFile(logFile)
 	if err != nil {
 		t.Fatalf("ReadFile error = %v", err)
@@ -106,7 +106,7 @@ func TestHMACTamperedEntryDetected(t *testing.T) {
 		t.Fatalf("WriteFile error = %v", err)
 	}
 
-	auditDir := filepath.Join(home, ".symaira")
+	auditDir := filepath.Join(home, ".symvault")
 	ks := NewKeystore(auditDir, nil)
 	key, err := ks.LoadHMACKey()
 	if err != nil {
@@ -132,7 +132,7 @@ func TestHMACLegacyLogAccepted(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	auditDir := filepath.Join(home, ".symaira")
+	auditDir := filepath.Join(home, ".symvault")
 	if err := os.MkdirAll(auditDir, 0o700); err != nil {
 		t.Fatalf("MkdirAll error = %v", err)
 	}
@@ -284,7 +284,7 @@ func TestHMACMultipleWrites(t *testing.T) {
 		})
 	}
 
-	content, err := os.ReadFile(filepath.Join(home, ".symaira", "audit-hmac-multi-test.log"))
+	content, err := os.ReadFile(filepath.Join(home, ".symvault", "audit-hmac-multi-test.log"))
 	if err != nil {
 		t.Fatalf("ReadFile error = %v", err)
 	}
@@ -398,7 +398,7 @@ func TestHMACMixedLegacyAndNew(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	auditDir := filepath.Join(home, ".symaira")
+	auditDir := filepath.Join(home, ".symvault")
 	if err := os.MkdirAll(auditDir, 0o700); err != nil {
 		t.Fatalf("MkdirAll error = %v", err)
 	}
