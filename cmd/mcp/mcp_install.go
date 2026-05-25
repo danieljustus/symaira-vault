@@ -91,7 +91,7 @@ func buildHTTPServerConfig(vDir, agentName string, dryRun bool) (map[string]any,
 			"Accept":               httpCfg.Header["Accept"],
 			"Authorization":        "Bearer " + rawToken,
 			"MCP-Protocol-Version": httpCfg.Header["MCP-Protocol-Version"],
-			"X-Symaira-Agent":     httpCfg.Header["X-Symaira-Agent"],
+			"X-Symaira-Agent":      httpCfg.Header["X-Symaira-Agent"],
 		},
 	}
 

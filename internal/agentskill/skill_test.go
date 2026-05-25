@@ -22,14 +22,14 @@ func normalizeEOL(data []byte) []byte {
 
 func testVars(overrides TemplateVars) TemplateVars {
 	v := TemplateVars{
-		AgentName:          "hermes",
-		ToolPrefix:         "mcp_symaira_",
-		SlashPrefix:        "/symvault:",
-		SymairaVaultVersion:    "4.0.0-test",
-		ProfileTier:        "safe",
-		VaultPath:          "~/.symvault",
-		InstalledAt:        fixedTime.Format(time.RFC3339),
-		SkillSchemaVersion: DefaultSkillSchemaVersion,
+		AgentName:           "hermes",
+		ToolPrefix:          "mcp_symaira_",
+		SlashPrefix:         "/symvault:",
+		SymairaVaultVersion: "4.0.0-test",
+		ProfileTier:         "safe",
+		VaultPath:           "~/.symvault",
+		InstalledAt:         fixedTime.Format(time.RFC3339),
+		SkillSchemaVersion:  DefaultSkillSchemaVersion,
 	}
 	if overrides.AgentName != "" {
 		v.AgentName = overrides.AgentName

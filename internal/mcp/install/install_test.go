@@ -162,7 +162,7 @@ func TestOpenCodeInstallConfig(t *testing.T) {
 			"Authorization":        "Bearer op_test_token_abc123",
 			"Accept":               "application/json",
 			"MCP-Protocol-Version": "2025-03-26",
-			"X-Symaira-Agent":     "opencode",
+			"X-Symaira-Agent":      "opencode",
 		},
 	}
 

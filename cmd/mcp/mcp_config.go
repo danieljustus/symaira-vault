@@ -118,7 +118,7 @@ func resolveHTTPConfig(agentName string, tokenID string) (*httpConfig, error) {
 			"Accept":               "application/json, text/event-stream",
 			"Authorization":        "Bearer " + token,
 			"MCP-Protocol-Version": server.LatestSupportedProtocolVersion,
-			"X-Symaira-Agent":     agentName,
+			"X-Symaira-Agent":      agentName,
 		},
 	}, nil
 }
@@ -221,7 +221,7 @@ func OutputHTTPConfig(agentName, serverName string, redact bool, tokenID string)
 			"Accept":               httpCfg.Header["Accept"],
 			"Authorization":        authValue,
 			"MCP-Protocol-Version": httpCfg.Header["MCP-Protocol-Version"],
-			"X-Symaira-Agent":     httpCfg.Header["X-Symaira-Agent"],
+			"X-Symaira-Agent":      httpCfg.Header["X-Symaira-Agent"],
 		},
 	}
 
@@ -245,7 +245,7 @@ func OutputHermesHTTPConfig(agentName, serverName string, redact bool, tokenID s
 		"Accept":               httpCfg.Header["Accept"],
 		"Authorization":        authValue,
 		"MCP-Protocol-Version": httpCfg.Header["MCP-Protocol-Version"],
-		"X-Symaira-Agent":     httpCfg.Header["X-Symaira-Agent"],
+		"X-Symaira-Agent":      httpCfg.Header["X-Symaira-Agent"],
 	}
 
 	config := map[string]any{
@@ -307,7 +307,7 @@ func OutputAgentHTTPConfig(agentName, serverKey, displayName string, redact bool
 		"Accept":               httpCfg.Header["Accept"],
 		"Authorization":        authValue,
 		"MCP-Protocol-Version": httpCfg.Header["MCP-Protocol-Version"],
-		"X-Symaira-Agent":     httpCfg.Header["X-Symaira-Agent"],
+		"X-Symaira-Agent":      httpCfg.Header["X-Symaira-Agent"],
 	}
 
 	config := map[string]any{

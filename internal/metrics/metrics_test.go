@@ -98,7 +98,7 @@ func TestRegistry(t *testing.T) {
 		"symvault_mcp_request_duration_seconds": false,
 		"symvault_mcp_auth_denials_total":       false,
 		"symvault_mcp_approvals_total":          false,
-		"symaira_vault_operations_total":       false,
+		"symaira_vault_operations_total":        false,
 		"go_goroutines":                         false,
 		"process_cpu_seconds_total":             false,
 	}

@@ -88,14 +88,14 @@ func buildTemplateVars(agentName string) agentskill.TemplateVars {
 	prefixConfig := agentskill.PrefixConfig(agentName)
 
 	return agentskill.TemplateVars{
-		AgentName:          agentName,
-		ToolPrefix:         prefixConfig.ToolPrefix,
-		SlashPrefix:        prefixConfig.SlashPrefix,
-		SymairaVaultVersion:    cli.AppVersionStr(),
-		ProfileTier:        "safe",
-		VaultPath:          vaultDir,
-		InstalledAt:        time.Now().UTC().Format(time.RFC3339),
-		SkillSchemaVersion: agentskill.DefaultSkillSchemaVersion,
+		AgentName:           agentName,
+		ToolPrefix:          prefixConfig.ToolPrefix,
+		SlashPrefix:         prefixConfig.SlashPrefix,
+		SymairaVaultVersion: cli.AppVersionStr(),
+		ProfileTier:         "safe",
+		VaultPath:           vaultDir,
+		InstalledAt:         time.Now().UTC().Format(time.RFC3339),
+		SkillSchemaVersion:  agentskill.DefaultSkillSchemaVersion,
 	}
 }
 
