@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/danieljustus/OpenPass/internal/config"
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 )
 
 func TestHandleGetAuthStatus(t *testing.T) {

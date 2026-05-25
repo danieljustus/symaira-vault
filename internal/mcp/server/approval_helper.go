@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/danieljustus/OpenPass/internal/envfilter"
-	"github.com/danieljustus/OpenPass/internal/vault/taint"
+	"github.com/danieljustus/symaira-vault/internal/envfilter"
+	"github.com/danieljustus/symaira-vault/internal/vault/taint"
 )
 
 // Intent describes a sensitive operation that requires user approval.

@@ -11,7 +11,7 @@ echo "=== Packaging Neovim Plugin ==="
 cd "${PROJECT_ROOT}"
 
 
-TAR_NAME="openpass-nvim-${VERSION}.tar.gz"
+TAR_NAME="symaira-nvim-${VERSION}.tar.gz"
 tar -czf "${EDITORS_DIR}/${TAR_NAME}" -C "${EDITORS_DIR}" nvim/
 
 echo "✓ Created: ${EDITORS_DIR}/${TAR_NAME}"

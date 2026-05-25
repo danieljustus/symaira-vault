@@ -15,7 +15,7 @@ func TestHasTraversal(t *testing.T) {
 		{name: "nested parent", path: "vault/../other", want: true},
 		{name: "absolute parent", path: "/tmp/../etc", want: true},
 		{name: "literal dots", path: "/tmp/my..vault", want: false},
-		{name: "normal path", path: "/tmp/openpass/vault", want: false},
+		{name: "normal path", path: "/tmp/symaira/vault", want: false},
 	}
 
 	for _, tt := range tests {
@@ -203,7 +203,7 @@ func FuzzHasTraversal(f *testing.F) {
 	f.Add("vault/../other")
 	f.Add("/tmp/../etc")
 	f.Add("/tmp/my..vault")
-	f.Add("/tmp/openpass/vault")
+	f.Add("/tmp/symaira/vault")
 	f.Add("")
 	f.Add(".")
 	f.Add("..")

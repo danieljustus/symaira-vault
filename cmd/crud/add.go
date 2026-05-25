@@ -1,4 +1,4 @@
-// Package crud provides CRUD operations for OpenPass vault entries.
+// Package crud provides CRUD operations for Symaira Vault vault entries.
 package crud
 
 import (
@@ -8,14 +8,14 @@ import (
 	"strings"
 	"time"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 
-	cryptopkg "github.com/danieljustus/OpenPass/internal/crypto"
-	"github.com/danieljustus/OpenPass/internal/ui/cliout"
-	"github.com/danieljustus/OpenPass/internal/ui/forms"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	cryptopkg "github.com/danieljustus/symaira-vault/internal/crypto"
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
+	"github.com/danieljustus/symaira-vault/internal/ui/forms"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 var (
@@ -46,13 +46,13 @@ var addCmd = &cobra.Command{
 
 The entry name can use slash notation for organization (e.g., work/aws).
 Interactive mode prompts for username, password, and URL.`,
-	Example: `  openpass add github
-  openpass add work/aws
-  openpass add personal/bank
-  openpass add github-token --value "my-secret-token"
-  openpass add secure-pass --generate --length 20
-  openpass add aws-key --type api_key --value "AKIA..."
-  openpass add ssh-key --type ssh_key --usage-hint "Production server key"`,
+	Example: `  symaira add github
+  symaira add work/aws
+  symaira add personal/bank
+  symaira add github-token --value "my-secret-token"
+  symaira add secure-pass --generate --length 20
+  symaira add aws-key --type api_key --value "AKIA..."
+  symaira add ssh-key --type ssh_key --usage-hint "Production server key"`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return cli.WithVaultRaw(func(v *vaultpkg.Vault) error {

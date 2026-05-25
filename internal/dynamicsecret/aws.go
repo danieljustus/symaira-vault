@@ -71,7 +71,7 @@ func (e *AWSSTSEngine) Generate(ctx context.Context, req GenerateRequest) (*Secr
 		duration = 43200
 	}
 
-	sessionName := "openpass-session-" + uuid.New().String()[:8]
+	sessionName := "symaira-session-" + uuid.New().String()[:8]
 
 	output, err := client.AssumeRole(ctx, &sts.AssumeRoleInput{
 		RoleArn:         aws.String(roleARN),

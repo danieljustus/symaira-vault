@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
-	"github.com/danieljustus/OpenPass/internal/config"
-	gitpkg "github.com/danieljustus/OpenPass/internal/git"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	gitpkg "github.com/danieljustus/symaira-vault/internal/git"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func resetCmdFlags() {

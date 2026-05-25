@@ -1,13 +1,13 @@
 /**
- * Typed tool wrappers for OpenPass MCP tools.
+ * Typed tool wrappers for Symaira Vault MCP tools.
  * Provides convenient methods for each MCP tool.
  */
 
-import { OpenPassMCPClient } from "./client";
+import { SymairaMCPClient } from "./client";
 import { ToolResult } from "./types";
 
-export class OpenPassTools {
-  constructor(private client: OpenPassMCPClient) {}
+export class SymairaTools {
+  constructor(private client: SymairaMCPClient) {}
 
   async health(): Promise<ToolResult> {
     return this.client.callTool("health", {});

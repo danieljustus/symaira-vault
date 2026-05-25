@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 )
 
 func pollWithTimeout(t *testing.T, condition func() bool, timeout time.Duration, msg string) {
@@ -105,7 +105,7 @@ func TestAgentHeaderSetsContext(t *testing.T) {
 	}))
 
 	req := httptest.NewRequest("POST", "/mcp", nil)
-	req.Header.Set("X-OpenPass-Agent", "claude-code")
+	req.Header.Set("X-Symaira-Agent", "claude-code")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 

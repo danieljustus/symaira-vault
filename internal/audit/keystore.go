@@ -2,7 +2,7 @@
 package audit
 
 const (
-	keyringService       = "openpass"
+	keyringService       = "symaira"
 	keyringAccountPrefix = "audit-hmac-key"
 )
 

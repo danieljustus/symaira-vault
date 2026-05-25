@@ -11,7 +11,7 @@ import (
 
 	"github.com/mattn/go-tty"
 
-	"github.com/danieljustus/OpenPass/internal/ui/theme"
+	"github.com/danieljustus/symaira-vault/internal/ui/theme"
 )
 
 // signalNotify is the indirection point so tests can drive cancellation

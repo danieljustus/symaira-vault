@@ -9,7 +9,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/danieljustus/OpenPass/internal/vault/taint"
+	"github.com/danieljustus/symaira-vault/internal/vault/taint"
 )
 
 // ForTerminal strips ANSI escape sequences, OSC-8 hyperlinks, and control

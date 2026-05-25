@@ -12,18 +12,18 @@ import (
 )
 
 // Manifest represents the YAML frontmatter of a managed skill file.
-// Fields with the "managed_" prefix are the OpenPass sentinel set.
+// Fields with the "managed_" prefix are the Symaira Vault sentinel set.
 type Manifest struct {
-	// Name is the skill name (always "openpass").
+	// Name is the skill name (always "symaira").
 	Name string `yaml:"name"`
 
 	// Description is a short description of the skill.
 	Description string `yaml:"description"`
 
-	// ManagedBy is the sentinel value ("openpass") that marks this file as managed.
+	// ManagedBy is the sentinel value ("symaira") that marks this file as managed.
 	ManagedBy string `yaml:"managed_by"`
 
-	// ManagedVersion is the OpenPass version that installed this skill.
+	// ManagedVersion is the Symaira Vault version that installed this skill.
 	ManagedVersion string `yaml:"managed_version"`
 
 	// ManagedHash is "sha256:" + hex-encoded SHA-256 of the body.
@@ -98,7 +98,7 @@ func findFrontmatterClose(data []byte) int {
 	return -1
 }
 
-// FindSentinel reports whether the data contains a managed_by: openpass sentinel.
+// FindSentinel reports whether the data contains a managed_by: symaira sentinel.
 func FindSentinel(data []byte) bool {
 	manifest, err := ParseManifest(data)
 	if err != nil {

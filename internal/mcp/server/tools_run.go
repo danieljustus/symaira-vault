@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
-	"github.com/danieljustus/OpenPass/internal/metrics"
-	secrets "github.com/danieljustus/OpenPass/internal/secrets"
-	"github.com/danieljustus/OpenPass/internal/vaultsvc"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/metrics"
+	secrets "github.com/danieljustus/symaira-vault/internal/secrets"
+	"github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 func (s *Server) handleRunCommand(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {

@@ -134,7 +134,7 @@ formatters:
       simplify: true
     goimports:
       local-prefixes:
-        - github.com/danieljustus/OpenPass
+        - github.com/danieljustus/symaira-vault
 
 issues:
   max-issues-per-linter: 0

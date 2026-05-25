@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.symaira.mcp</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{.BinaryPath}}</string>
+        <string>serve</string>
+        <string>--port</string>
+        <string>{{.PortStr}}</string>
+        <string>--bind</string>
+        <string>{{.Bind}}</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>SYMAIRA_VAULT</key>
+        <string>{{.VaultDir}}</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>{{.LogPath}}</string>
+    <key>StandardErrorPath</key>
+    <string>{{.ErrorLogPath}}</string>
+</dict>
+</plist>

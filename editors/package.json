@@ -1,8 +1,8 @@
 {
-  "name": "@openpass/editors",
+  "name": "@symaira/editors",
   "version": "1.0.0",
   "private": true,
-  "description": "OpenPass editor plugin ecosystem",
+  "description": "Symaira Vault editor plugin ecosystem",
   "workspaces": [
     "mcp-client",
     "vscode",

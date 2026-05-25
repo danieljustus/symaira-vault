@@ -5,17 +5,17 @@ import (
 
 	"github.com/spf13/cobra"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
-	"github.com/danieljustus/OpenPass/internal/ui"
-	"github.com/danieljustus/OpenPass/internal/ui/cliout"
-	vaultsvc "github.com/danieljustus/OpenPass/internal/vaultsvc"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
+	"github.com/danieljustus/symaira-vault/internal/ui"
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
+	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 var uiPrintKeybindings bool
 
 var uiCmd = &cobra.Command{
 	Use:   "ui",
-	Short: "Launch the OpenPass terminal UI",
+	Short: "Launch the Symaira Vault terminal UI",
 	Long: `Launches the interactive terminal UI for browsing and managing the vault.
 
 Inside the TUI:
@@ -29,10 +29,10 @@ Inside the TUI:
   ?            toggle full keybinding help
   q or Ctrl+C  quit`,
 	Example: `  # Launch the TUI
-  openpass ui
+  symaira ui
 
   # Combined with a specific profile
-  openpass ui --profile work`,
+  symaira ui --profile work`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if uiPrintKeybindings {

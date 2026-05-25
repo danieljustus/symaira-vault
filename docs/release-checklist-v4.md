@@ -132,7 +132,7 @@ justification in the release PR.
 
 - [ ] Install the published binary on a fresh machine (or VM/container) via
       the install script and confirm `openpass version` matches.
-- [ ] `brew install openpass && openpass version` works after the tap merges.
+- [ ] `brew install symaira && openpass version` works after the tap merges.
 - [ ] Update project page on <https://github.com/users/danieljustus/projects/1>
       (issues/PRs moved to Done).
 - [ ] Announce in the README badge area and any external channels.

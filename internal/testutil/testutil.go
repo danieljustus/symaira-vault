@@ -1,4 +1,4 @@
-// Package testutil provides test helpers for the OpenPass project.
+// Package testutil provides test helpers for the Symaira Vault project.
 package testutil
 
 import (

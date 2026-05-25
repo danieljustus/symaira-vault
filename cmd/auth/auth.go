@@ -7,14 +7,14 @@ import (
 	"os"
 	"path/filepath"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
-	cryptopkg "github.com/danieljustus/OpenPass/internal/crypto"
-	"github.com/danieljustus/OpenPass/internal/session"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	cryptopkg "github.com/danieljustus/symaira-vault/internal/crypto"
+	"github.com/danieljustus/symaira-vault/internal/session"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 var AuthStatusJSON bool
@@ -23,13 +23,13 @@ var AuthCmd = &cobra.Command{
 	Use:   "auth",
 	Short: "Manage vault unlock authentication",
 	Example: `  # Check current auth status (passphrase vs Touch ID)
-  openpass auth status
+  symaira auth status
 
   # Enable Touch ID (macOS)
-  openpass auth set touchid
+  symaira auth set touchid
 
   # Switch back to passphrase-only
-  openpass auth set passphrase`,
+  symaira auth set passphrase`,
 }
 
 var AuthStatusCmd = &cobra.Command{
@@ -100,7 +100,7 @@ var AuthSetCmd = &cobra.Command{
 			return nil
 		case configpkg.AuthMethodTouchID:
 			if !session.BiometricAvailable() {
-				return fmt.Errorf("touch ID is not available in this OpenPass build or on this Mac")
+				return fmt.Errorf("touch ID is not available in this Symaira Vault build or on this Mac")
 			}
 			passphrase, err := passphraseForBiometricSetup(vaultDir)
 			if err != nil {
@@ -137,7 +137,7 @@ func loadAuthConfig() (string, *configpkg.Config, error) {
 		return "", nil, err
 	}
 	if !vaultpkg.IsInitialized(vaultDir) {
-		return "", nil, fmt.Errorf("vault not initialized. Run 'openpass init' first")
+		return "", nil, fmt.Errorf("vault not initialized. Run 'symaira init' first")
 	}
 	cfg, err := configpkg.Load(filepath.Join(vaultDir, "config.yaml"))
 	if err != nil {

@@ -7,12 +7,12 @@ import (
 	"strings"
 	"time"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 
-	"github.com/danieljustus/OpenPass/internal/agentskill"
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/agentskill"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 )
 
 var agentSkillCmd = &cobra.Command{
@@ -32,7 +32,7 @@ INSTALL.md with manual install instructions.`,
 		agentName := args[0]
 		outputPath, _ := cmd.Flags().GetString("output")
 		if outputPath == "" {
-			outputPath = fmt.Sprintf("openpass-%s-skill.tar.gz", agentName)
+			outputPath = fmt.Sprintf("symaira-%s-skill.tar.gz", agentName)
 		}
 		outputPath = filepath.Clean(outputPath)
 
@@ -91,7 +91,7 @@ func buildTemplateVars(agentName string) agentskill.TemplateVars {
 		AgentName:          agentName,
 		ToolPrefix:         prefixConfig.ToolPrefix,
 		SlashPrefix:        prefixConfig.SlashPrefix,
-		OpenPassVersion:    cli.AppVersionStr(),
+		SymairaVaultVersion:    cli.AppVersionStr(),
 		ProfileTier:        "safe",
 		VaultPath:          vaultDir,
 		InstalledAt:        time.Now().UTC().Format(time.RFC3339),
@@ -124,7 +124,7 @@ func expandTilde(path string) string {
 }
 
 func init() {
-	agentSkillExportCmd.Flags().StringP("output", "o", "", "Output file path (default: openpass-<agent>-skill.tar.gz)")
+	agentSkillExportCmd.Flags().StringP("output", "o", "", "Output file path (default: symaira-<agent>-skill.tar.gz)")
 
 	agentSkillCmd.AddCommand(agentSkillExportCmd)
 	agentSkillCmd.AddCommand(agentSkillRefreshCmd)

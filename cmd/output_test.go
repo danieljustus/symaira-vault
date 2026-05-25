@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 )
 
 func TestNewPrinter_ValidFormats(t *testing.T) {

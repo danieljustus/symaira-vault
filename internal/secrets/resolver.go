@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"strings"
 
-	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
-	"github.com/danieljustus/OpenPass/internal/vault/taint"
-	vaultsvc "github.com/danieljustus/OpenPass/internal/vaultsvc"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	"github.com/danieljustus/symaira-vault/internal/vault/taint"
+	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 // HandleResolver resolves a SecretHandle to its actual secret value.

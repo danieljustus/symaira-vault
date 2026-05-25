@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	server "github.com/danieljustus/OpenPass/internal/mcp/server"
-	trans "github.com/danieljustus/OpenPass/internal/mcp/transport"
-	"github.com/danieljustus/OpenPass/internal/metrics"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	server "github.com/danieljustus/symaira-vault/internal/mcp/server"
+	trans "github.com/danieljustus/symaira-vault/internal/mcp/transport"
+	"github.com/danieljustus/symaira-vault/internal/metrics"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 // RunStdioServer starts the stdio MCP server.
@@ -38,7 +38,7 @@ func RunStdioServer(ctx context.Context, vault *vaultpkg.Vault, agentName string
 	}()
 
 	st := trans.NewStdioTransport()
-	handler := server.NewProtocolHandler("openpass", "1.0.0", mcpServer)
+	handler := server.NewProtocolHandler("symaira", "1.0.0", mcpServer)
 
 	errCh := make(chan error, 1)
 	go func() {

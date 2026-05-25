@@ -1,0 +1,71 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-migrate-kdf - Migrate vault KDF from scrypt to argon2id
+
+
+.SH SYNOPSIS
+\fBsymaira migrate kdf [flags]\fP
+
+
+.SH DESCRIPTION
+Migrate the vault's key derivation function from scrypt to argon2id.
+
+.PP
+⚠️  This command is a STUB and not yet implemented.
+A future release will provide the full migration workflow.
+
+.PP
+Argon2id is the industry standard for password hashing (2025+) and provides
+stronger resistance against GPU-based attacks compared to scrypt.
+
+.PP
+In the meantime:
+  1. Back up your vault: cp -r ~/.openpass ~/.openpass.backup
+  2. Wait for a future release with full migration support
+  3. Run 'openpass doctor' to track the migration recommendation
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for kdf
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  openpass migrate kdf
+.EE
+
+
+.SH SEE ALSO
+\fBsymaira-migrate(1)\fP

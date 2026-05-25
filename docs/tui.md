@@ -1,6 +1,6 @@
 # TUI Mode
 
-OpenPass includes an interactive terminal UI for browsing, filtering, and managing vault entries without memorizing individual commands. Use it when you want a keyboard-driven view of your vault, quick password copying, or lightweight entry management from a terminal session.
+Symaira Vault includes an interactive terminal UI for browsing, filtering, and managing vault entries without memorizing individual commands. Use it when you want a keyboard-driven view of your vault, quick password copying, or lightweight entry management from a terminal session.
 
 ## Launching
 
@@ -10,7 +10,7 @@ Start the TUI with:
 openpass ui
 ```
 
-The TUI uses your configured vault, the same session cache as other OpenPass commands, and the same clipboard auto-clear behavior.
+The TUI uses your configured vault, the same session cache as other Symaira Vault commands, and the same clipboard auto-clear behavior.
 
 ## Layout
 
@@ -46,4 +46,4 @@ Editing opens the selected entry in `$EDITOR`, so review your editor configurati
 
 ## Clipboard
 
-Press `Enter` to copy the selected entry password to the clipboard. OpenPass automatically clears copied secrets after the configured clipboard timeout; set `auto_clear_duration` in `~/.openpass/config.yaml` to adjust the timeout or use `0` to disable auto-clear.
+Press `Enter` to copy the selected entry password to the clipboard. Symaira Vault automatically clears copied secrets after the configured clipboard timeout; set `auto_clear_duration` in `~/.openpass/config.yaml` to adjust the timeout or use `0` to disable auto-clear.

@@ -15,7 +15,7 @@ import (
 	"filippo.io/age"
 	"github.com/zalando/go-keyring"
 
-	"github.com/danieljustus/OpenPass/internal/logging"
+	"github.com/danieljustus/symaira-vault/internal/logging"
 )
 
 // osKeystore implements Keystore by storing HMAC keys in the OS keyring

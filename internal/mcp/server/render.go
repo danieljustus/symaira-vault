@@ -8,7 +8,7 @@ import (
 
 	"golang.org/x/text/unicode/norm"
 
-	"github.com/danieljustus/OpenPass/internal/vault/taint"
+	"github.com/danieljustus/symaira-vault/internal/vault/taint"
 )
 
 func init() {

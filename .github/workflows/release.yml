@@ -151,28 +151,28 @@ jobs:
         run: |
           TAG="${{ steps.tag.outputs.tag }}"
           VERSION="${TAG#v}"
-          curl -fLO "https://github.com/danieljustus/OpenPass/releases/download/${TAG}/OpenPass_${VERSION}_linux_amd64.tar.gz"
-          curl -fLO "https://github.com/danieljustus/OpenPass/releases/download/${TAG}/OpenPass_${VERSION}_checksums.txt"
+          curl -fLO "https://github.com/danieljustus/symaira-vault/releases/download/${TAG}/Symaira Vault_${VERSION}_linux_amd64.tar.gz"
+          curl -fLO "https://github.com/danieljustus/symaira-vault/releases/download/${TAG}/Symaira Vault_${VERSION}_checksums.txt"
 
       - name: Verify checksum
         run: |
           TAG="${{ steps.tag.outputs.tag }}"
           VERSION="${TAG#v}"
-          sha256sum -c "OpenPass_${VERSION}_checksums.txt" --ignore-missing
+          sha256sum -c "Symaira Vault_${VERSION}_checksums.txt" --ignore-missing
 
       - name: Extract and install
         run: |
-          tar xzf OpenPass_*.tar.gz
-          sudo mv ./*/openpass /usr/local/bin/openpass
-          openpass version
+          tar xzf Symaira Vault_*.tar.gz
+          sudo mv ./*/symaira /usr/local/bin/symaira
+          symaira version
 
       - name: Smoke test - help output
-        run: openpass --help | head -5
+        run: symaira --help | head -5
 
       - name: Smoke test - init vault
         run: |
           TMPDIR=$(mktemp -d)
-          printf '%s\n' "test-passphrase-123" | OPENPASS_VAULT="$TMPDIR/test-vault" openpass init
+          printf '%s\n' "test-passphrase-123" | OPENPASS_VAULT="$TMPDIR/test-vault" symaira init
           rm -rf "$TMPDIR"
 
   smoke-test-deb:
@@ -188,28 +188,28 @@ jobs:
         run: |
           TAG="${{ steps.tag.outputs.tag }}"
           VERSION="${TAG#v}"
-          curl -fLO "https://github.com/danieljustus/OpenPass/releases/download/${TAG}/openpass_${VERSION}_linux_amd64.deb"
-          curl -fLO "https://github.com/danieljustus/OpenPass/releases/download/${TAG}/OpenPass_${VERSION}_checksums.txt"
+          curl -fLO "https://github.com/danieljustus/symaira-vault/releases/download/${TAG}/symaira_${VERSION}_linux_amd64.deb"
+          curl -fLO "https://github.com/danieljustus/symaira-vault/releases/download/${TAG}/Symaira Vault_${VERSION}_checksums.txt"
 
       - name: Verify checksum
         run: |
           TAG="${{ steps.tag.outputs.tag }}"
           VERSION="${TAG#v}"
-          sha256sum -c "OpenPass_${VERSION}_checksums.txt" --ignore-missing
+          sha256sum -c "Symaira Vault_${VERSION}_checksums.txt" --ignore-missing
 
       - name: Install deb package
-        run: sudo dpkg -i openpass_*.deb
+        run: sudo dpkg -i symaira_*.deb
 
       - name: Verify package installed
-        run: 'dpkg -s openpass | grep "Status: install ok installed"'
+        run: 'dpkg -s symaira | grep "Status: install ok installed"'
 
       - name: Smoke test - version
-        run: openpass version
+        run: symaira version
 
       - name: Smoke test - init vault
         run: |
           TMPDIR=$(mktemp -d)
-          printf '%s\n' "test-passphrase-123" | OPENPASS_VAULT="$TMPDIR/test-vault" openpass init
+          printf '%s\n' "test-passphrase-123" | OPENPASS_VAULT="$TMPDIR/test-vault" symaira init
           rm -rf "$TMPDIR"
 
   smoke-test-macos:
@@ -225,28 +225,28 @@ jobs:
         run: |
           TAG="${{ steps.tag.outputs.tag }}"
           VERSION="${TAG#v}"
-          curl -fLO "https://github.com/danieljustus/OpenPass/releases/download/${TAG}/OpenPass_${VERSION}_darwin_amd64.tar.gz"
-          curl -fLO "https://github.com/danieljustus/OpenPass/releases/download/${TAG}/OpenPass_${VERSION}_checksums.txt"
+          curl -fLO "https://github.com/danieljustus/symaira-vault/releases/download/${TAG}/Symaira Vault_${VERSION}_darwin_amd64.tar.gz"
+          curl -fLO "https://github.com/danieljustus/symaira-vault/releases/download/${TAG}/Symaira Vault_${VERSION}_checksums.txt"
 
       - name: Verify checksum
         run: |
           TAG="${{ steps.tag.outputs.tag }}"
           VERSION="${TAG#v}"
-          shasum -a 256 -c "OpenPass_${VERSION}_checksums.txt" --ignore-missing
+          shasum -a 256 -c "Symaira Vault_${VERSION}_checksums.txt" --ignore-missing
 
       - name: Extract and install
         run: |
-          tar xzf OpenPass_*.tar.gz
-          sudo mv ./*/openpass /usr/local/bin/openpass
-          openpass version
+          tar xzf Symaira Vault_*.tar.gz
+          sudo mv ./*/symaira /usr/local/bin/symaira
+          symaira version
 
       - name: Smoke test - help output
-        run: openpass --help | head -5
+        run: symaira --help | head -5
 
       - name: Smoke test - init vault
         run: |
           TMPDIR=$(mktemp -d)
-          printf '%s\n' "test-passphrase-123" | OPENPASS_VAULT="$TMPDIR/test-vault" openpass init
+          printf '%s\n' "test-passphrase-123" | OPENPASS_VAULT="$TMPDIR/test-vault" symaira init
           rm -rf "$TMPDIR"
 
   smoke-test-windows:
@@ -264,16 +264,16 @@ jobs:
         run: |
           $tag = "${{ steps.tag.outputs.tag }}"
           $version = $tag -replace '^v',''
-          curl -fLO "https://github.com/danieljustus/OpenPass/releases/download/${tag}/OpenPass_${version}_windows_amd64.zip"
-          curl -fLO "https://github.com/danieljustus/OpenPass/releases/download/${tag}/OpenPass_${version}_checksums.txt"
+          curl -fLO "https://github.com/danieljustus/symaira-vault/releases/download/${tag}/Symaira Vault_${version}_windows_amd64.zip"
+          curl -fLO "https://github.com/danieljustus/symaira-vault/releases/download/${tag}/Symaira Vault_${version}_checksums.txt"
 
       - name: Verify checksum
         shell: pwsh
         run: |
           $tag = "${{ steps.tag.outputs.tag }}"
           $version = $tag -replace '^v',''
-          $expectedHash = (Get-Content "OpenPass_${version}_checksums.txt" | Where-Object { $_ -match "windows_amd64\.zip$" } | ForEach-Object { ($_ -split '\s+')[0] })
-          $actualHash = (Get-FileHash -Path "OpenPass_${version}_windows_amd64.zip" -Algorithm SHA256).Hash.ToLower()
+          $expectedHash = (Get-Content "Symaira Vault_${version}_checksums.txt" | Where-Object { $_ -match "windows_amd64\.zip$" } | ForEach-Object { ($_ -split '\s+')[0] })
+          $actualHash = (Get-FileHash -Path "Symaira Vault_${version}_windows_amd64.zip" -Algorithm SHA256).Hash.ToLower()
           if ($expectedHash.ToLower() -ne $actualHash) {
             Write-Error "Checksum mismatch: expected $expectedHash, got $actualHash"
             exit 1
@@ -284,8 +284,8 @@ jobs:
         run: |
           $tag = "${{ steps.tag.outputs.tag }}"
           $version = $tag -replace '^v',''
-          Expand-Archive -Path "OpenPass_${version}_windows_amd64.zip" -DestinationPath .\openpass-tmp -Force
-          .\openpass-tmp\openpass_${version}_windows_amd64\openpass.exe version
+          Expand-Archive -Path "Symaira Vault_${version}_windows_amd64.zip" -DestinationPath .\symaira-tmp -Force
+          .\symaira-tmp\symaira_${version}_windows_amd64\symaira.exe version
 
       - name: Smoke test - init vault
         shell: pwsh
@@ -294,7 +294,7 @@ jobs:
           $version = $tag -replace '^v',''
           $tmpdir = Join-Path $env:TEMP "test-vault-$(Get-Random)"
           New-Item -ItemType Directory -Path $tmpdir | Out-Null
-          $exe = ".\openpass-tmp\openpass_${version}_windows_amd64\openpass.exe"
+          $exe = ".\symaira-tmp\symaira_${version}_windows_amd64\symaira.exe"
           "test-passphrase-123" | & $exe init --vault "$tmpdir"
           Remove-Item -Path $tmpdir -Recurse -Force -ErrorAction SilentlyContinue
 
@@ -310,27 +310,27 @@ jobs:
       - name: Fetch Homebrew formula
         run: |
           TAG="${{ steps.tag.outputs.tag }}"
-          curl -fsSL "https://raw.githubusercontent.com/danieljustus/homebrew-tap/main/Formula/openpass.rb" -o openpass.rb
+          curl -fsSL "https://raw.githubusercontent.com/danieljustus/homebrew-tap/main/Formula/symaira.rb" -o symaira.rb
 
       - name: Verify formula exists and has correct version
         run: |
           TAG="${{ steps.tag.outputs.tag }}"
           VERSION="${TAG#v}"
-          if [ ! -s openpass.rb ]; then
+          if [ ! -s symaira.rb ]; then
             echo "Homebrew formula not found or empty"
             exit 1
           fi
-          if ! grep -q "version \"${VERSION}\"" openpass.rb; then
+          if ! grep -q "version \"${VERSION}\"" symaira.rb; then
             echo "Version mismatch: expected ${VERSION} in formula"
             exit 1
           fi
 
       - name: Validate formula syntax
         run: |
-          ruby -c openpass.rb
+          ruby -c symaira.rb
 
       - name: Smoke test - formula audit
         run: |
           brew tap danieljustus/tap
           # Audit the formula; allow failure if tap is not fully set up
-          brew audit --strict --formula openpass.rb || true
+          brew audit --strict --formula symaira.rb || true

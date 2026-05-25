@@ -4,16 +4,16 @@ import * as os from "os";
 import * as yaml from "yaml";
 import { ServerConfig, AgentProfile } from "./types";
 
-const DEFAULT_VAULT_PATH = path.join(os.homedir(), ".openpass");
+const DEFAULT_VAULT_PATH = path.join(os.homedir(), ".symaira");
 
 export interface AuthHeaders {
   Authorization: string;
-  "X-OpenPass-Agent": string;
+  "X-Symaira-Agent": string;
   "MCP-Protocol-Version": string;
 }
 
 export function getVaultPath(): string {
-  return process.env.OPENPASS_VAULT || DEFAULT_VAULT_PATH;
+  return process.env.SYMAIRA_VAULT || DEFAULT_VAULT_PATH;
 }
 
 export function readToken(vaultPath?: string): string {
@@ -21,8 +21,8 @@ export function readToken(vaultPath?: string): string {
   const tokenPath = path.join(vault, "mcp-token");
 
   if (!fs.existsSync(tokenPath)) {
-    throw new OpenPassAuthError(
-      `MCP token not found at ${tokenPath}. Run 'openpass serve' to generate one.`
+    throw new SymairaAuthError(
+      `MCP token not found at ${tokenPath}. Run .symaira serve. to generate one.`
     );
   }
 
@@ -38,7 +38,7 @@ export function readToken(vaultPath?: string): string {
 }
 
 /**
- * Read and parse the OpenPass config.yaml.
+ * Read and parse the Symaira Vault config.yaml.
  */
 export function readConfig(vaultPath?: string): ServerConfig {
   const vault = vaultPath || getVaultPath();
@@ -79,14 +79,14 @@ export function buildAuthHeaders(
   const token = readToken(vaultPath);
   return {
     Authorization: `Bearer ${token}`,
-    "X-OpenPass-Agent": agentName,
+    "X-Symaira-Agent": agentName,
     "MCP-Protocol-Version": "2025-11-25",
   };
 }
 
-export class OpenPassAuthError extends Error {
+export class SymairaAuthError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "OpenPassAuthError";
+    this.name = "SymairaAuthError";
   }
 }

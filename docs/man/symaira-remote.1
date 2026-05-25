@@ -1,0 +1,64 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-remote - Manage git remote for vault sync
+
+
+.SH SYNOPSIS
+\fBsymaira remote [flags]\fP
+
+
+.SH DESCRIPTION
+Manage the git remote used for synchronizing the vault.
+
+.PP
+Use 'openpass remote init \&' to configure a remote git repository
+for vault synchronization. The vault must be initialized first.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for remote
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  openpass remote init hermes@macmini
+  openpass remote init user@host:/custom/path.git
+  openpass remote init hermes@macmini --push
+  openpass remote status
+.EE
+
+
+.SH SEE ALSO
+\fBopenpass(1)\fP, \fBsymaira-remote-init(1)\fP, \fBsymaira-remote-status(1)\fP

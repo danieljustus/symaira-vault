@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
-# Development Environment Setup Script for OpenPass
+# Development Environment Setup Script for Symaira Vault
 #
-# This script sets up the development environment for OpenPass contributors.
+# This script sets up the development environment for Symaira Vault contributors.
 # It is idempotent and safe to run multiple times.
 #
 # Usage: ./scripts/setup-dev.sh [--check]
@@ -323,14 +323,14 @@ install_precommit_hooks() {
 
 # Main execution
 main() {
-    log_info "OpenPass Development Environment Setup"
+    log_info "Symaira Vault Development Environment Setup"
     log_info "======================================"
     echo
     
     # Check if we're in the right directory
-    if [[ ! -f "go.mod" ]] || ! grep -q "github.com/danieljustus/OpenPass" go.mod 2>/dev/null; then
-        log_warn "This doesn't appear to be the OpenPass repository root"
-        log_info "Please run this script from the OpenPass project root directory"
+    if [[ ! -f "go.mod" ]] || ! grep -q "github.com/danieljustus/symaira-vault" go.mod 2>/dev/null; then
+        log_warn "This doesn't appear to be the Symaira Vault repository root"
+        log_info "Please run this script from the Symaira Vault project root directory"
         exit 1
     fi
     

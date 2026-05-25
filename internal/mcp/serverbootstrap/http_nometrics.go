@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 // registerMetricsEndpoint registers a stub /metrics endpoint that returns

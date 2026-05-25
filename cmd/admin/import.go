@@ -10,14 +10,14 @@ import (
 	"strings"
 	"time"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 
-	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
-	"github.com/danieljustus/OpenPass/internal/importer"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
-	vaultsvc "github.com/danieljustus/OpenPass/internal/vaultsvc"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	"github.com/danieljustus/symaira-vault/internal/importer"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
+	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 var (
@@ -34,13 +34,13 @@ var importCmd = &cobra.Command{
 	Short: "Import entries from another password manager",
 	Long:  "Imports password entries from 1Password, Bitwarden, pass, or CSV exports.",
 	Example: `  # Dry-run a Bitwarden export to see what would be imported
-  openpass import bitwarden bw-export.json --dry-run
+  symaira import bitwarden bw-export.json --dry-run
 
   # Import 1Password CSV under a prefix, skipping entries that already exist
-  openpass import 1password export.csv --prefix work/ --skip-existing
+  symaira import 1password export.csv --prefix work/ --skip-existing
 
   # Overwrite collisions
-  openpass import csv data.csv --overwrite`,
+  symaira import csv data.csv --overwrite`,
 	Args: cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		format := importer.Format(strings.ToLower(strings.TrimSpace(args[0])))

@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/danieljustus/OpenPass/internal/config"
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
-	"github.com/danieljustus/OpenPass/internal/vault"
-	"github.com/danieljustus/OpenPass/internal/vault/taint"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/vault"
+	"github.com/danieljustus/symaira-vault/internal/vault/taint"
 )
 
 func TestHandleGetValue_ReturnsValuesForPublicEntry(t *testing.T) {

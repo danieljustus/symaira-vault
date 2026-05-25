@@ -1,4 +1,4 @@
-// Package server implements the Model Context Protocol (MCP) server for OpenPass.
+// Package server implements the Model Context Protocol (MCP) server for Symaira Vault.
 // It provides AI agent integration via stdio and HTTP transports with
 // configurable access control, audit logging, and vault operations.
 package server
@@ -15,14 +15,14 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/danieljustus/OpenPass/internal/anomaly"
-	"github.com/danieljustus/OpenPass/internal/audit"
-	"github.com/danieljustus/OpenPass/internal/authguard"
-	"github.com/danieljustus/OpenPass/internal/config"
-	transport "github.com/danieljustus/OpenPass/internal/mcp/transport"
-	"github.com/danieljustus/OpenPass/internal/notify"
-	"github.com/danieljustus/OpenPass/internal/policy"
-	"github.com/danieljustus/OpenPass/internal/vault"
+	"github.com/danieljustus/symaira-vault/internal/anomaly"
+	"github.com/danieljustus/symaira-vault/internal/audit"
+	"github.com/danieljustus/symaira-vault/internal/authguard"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	transport "github.com/danieljustus/symaira-vault/internal/mcp/transport"
+	"github.com/danieljustus/symaira-vault/internal/notify"
+	"github.com/danieljustus/symaira-vault/internal/policy"
+	"github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 // approvalCache provides a session-level cache for remembered approvals.
@@ -65,11 +65,11 @@ func approvalCacheKey(agentID, toolName, entryPath string) string {
 }
 
 const (
-	defaultServerName    = "OpenPass MCP"
+	defaultServerName    = "Symaira Vault MCP"
 	defaultServerVersion = "1.0.0"
 )
 
-// Server provides the MCP server functionality for OpenPass.
+// Server provides the MCP server functionality for Symaira Vault.
 // It handles agent authentication, vault access, and tool execution.
 type Server struct {
 	vault        *vault.Vault
@@ -241,7 +241,7 @@ func (s *Server) registerConfigHooks(cfg *config.Config) {
 // ServeStdio runs the MCP server using stdio transport.
 func (s *Server) ServeStdio(ctx context.Context) error {
 	st := transport.NewStdioTransport()
-	handler := NewProtocolHandler("OpenPass", "1.0.0", s)
+	handler := NewProtocolHandler("Symaira Vault", "1.0.0", s)
 	return st.Start(ctx, handler.HandleMessage)
 }
 

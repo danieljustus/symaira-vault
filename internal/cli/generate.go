@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"math/big"
 
-	cryptopkg "github.com/danieljustus/OpenPass/internal/crypto"
+	cryptopkg "github.com/danieljustus/symaira-vault/internal/crypto"
 )
 
 const lowerChars = "abcdefghjkmnpqrstuvwxyz"

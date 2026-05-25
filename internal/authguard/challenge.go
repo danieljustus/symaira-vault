@@ -9,7 +9,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/danieljustus/OpenPass/internal/session"
+	"github.com/danieljustus/symaira-vault/internal/session"
 )
 
 // ErrBiometryRequired is returned by policy evaluation when a rule matches

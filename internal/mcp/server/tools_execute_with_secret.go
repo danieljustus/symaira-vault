@@ -10,11 +10,11 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/danieljustus/OpenPass/internal/envfilter"
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
-	"github.com/danieljustus/OpenPass/internal/metrics"
-	"github.com/danieljustus/OpenPass/internal/secrets"
-	"github.com/danieljustus/OpenPass/internal/vaultsvc"
+	"github.com/danieljustus/symaira-vault/internal/envfilter"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/metrics"
+	"github.com/danieljustus/symaira-vault/internal/secrets"
+	"github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 // handleExecuteWithSecret executes a command with secrets injected as environment

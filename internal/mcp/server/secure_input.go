@@ -1,7 +1,7 @@
 package server
 
 import (
-	"github.com/danieljustus/OpenPass/internal/secureui"
+	"github.com/danieljustus/symaira-vault/internal/secureui"
 )
 
 // secureInputPromptFn is the indirection used by handleSecureInput and

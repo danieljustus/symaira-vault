@@ -6,7 +6,7 @@ import (
 	"os"
 	"syscall"
 
-	"github.com/danieljustus/OpenPass/internal/fileutil"
+	"github.com/danieljustus/symaira-vault/internal/fileutil"
 )
 
 // SafeWriteFile atomically writes data to path, rejecting symlink and

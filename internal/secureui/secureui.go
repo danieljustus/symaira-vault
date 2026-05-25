@@ -1,7 +1,7 @@
 // Package secureui provides cross-platform secure input prompts for sensitive
 // data. It supports interactive TTY prompts and native OS GUI dialogs
 // (osascript on macOS, zenity/kdialog on Linux, PowerShell on Windows) so that
-// the OpenPass MCP server can collect secrets from the user even when no
+// the Symaira Vault MCP server can collect secrets from the user even when no
 // terminal is attached (HTTP transport, LaunchAgent, GUI-launched agent).
 package secureui
 
@@ -92,7 +92,7 @@ func FormatPrompt(req PromptRequest) string {
 	case req.Description != "":
 		return req.Description
 	default:
-		return "OpenPass requires a value."
+		return "Symaira Vault requires a value."
 	}
 }
 

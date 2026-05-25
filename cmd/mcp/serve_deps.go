@@ -7,18 +7,18 @@ import (
 	"sync"
 	"syscall"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"net"
 	"strings"
 
 	"github.com/spf13/cobra"
 
-	"github.com/danieljustus/OpenPass/internal/config"
-	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
-	server "github.com/danieljustus/OpenPass/internal/mcp/server"
-	"github.com/danieljustus/OpenPass/internal/mcp/serverbootstrap"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	server "github.com/danieljustus/symaira-vault/internal/mcp/server"
+	"github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 var RunStdioServerFunc = func(ctx context.Context, vault *vaultpkg.Vault, agentName string) error {
@@ -83,7 +83,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if !vaultpkg.IsInitialized(vaultDir) {
-		return errorspkg.NewCLIError(errorspkg.ExitNotInitialized, "vault not initialized. Run 'openpass init' first", errorspkg.ErrVaultNotInitialized)
+		return errorspkg.NewCLIError(errorspkg.ExitNotInitialized, "vault not initialized. Run 'symaira init' first", errorspkg.ErrVaultNotInitialized)
 	}
 	var vault *vaultpkg.Vault
 	if agentName != "" || !stdioFlag {

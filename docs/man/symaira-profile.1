@@ -1,0 +1,41 @@
+.nh
+.TH "SYMAIRA" "1" "Apr 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-profile - Manage vault profiles
+
+
+.SH SYNOPSIS
+\fBsymaira profile [flags]\fP
+
+
+.SH DESCRIPTION
+Manage named vault profiles for switching between multiple vaults.
+
+.PP
+Examples:
+  openpass profile list
+  openpass profile add work --vault ~/.symaira-work
+  openpass profile use work
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for profile
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH SEE ALSO
+\fBopenpass(1)\fP, \fBsymaira-profile-add(1)\fP, \fBsymaira-profile-list(1)\fP, \fBsymaira-profile-use(1)\fP

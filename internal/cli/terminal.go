@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/pflag"
 	"golang.org/x/term"
 
-	"github.com/danieljustus/OpenPass/internal/ui/cliout"
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 )
 
 var ReadPasswordFunc func(int) ([]byte, error) = term.ReadPassword
@@ -43,7 +43,7 @@ func WarnPipeRead(label string) {
 		return
 	}
 	PipeWarningEmitted = true
-	cliout.Warnf("Reading %s from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer OPENPASS_PASSPHRASE or 'openpass auth set touchid'.", label)
+	cliout.Warnf("Reading %s from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer OPENPASS_PASSPHRASE or 'symaira auth set touchid'.", label)
 }
 
 func ReadHiddenInput(prompt string, reader *bufio.Reader) ([]byte, error) {

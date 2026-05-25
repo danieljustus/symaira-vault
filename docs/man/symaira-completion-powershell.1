@@ -1,0 +1,50 @@
+.nh
+.TH "SYMAIRA" "1" "Apr 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-completion-powershell - Generate the autocompletion script for powershell
+
+
+.SH SYNOPSIS
+\fBsymaira completion powershell [flags]\fP
+
+
+.SH DESCRIPTION
+Generate the autocompletion script for powershell.
+
+.PP
+To load completions in your current shell session:
+
+.EX
+symaira completion powershell | Out-String | Invoke-Expression
+.EE
+
+.PP
+To load completions for every new session, add the output of the above command
+to your powershell profile.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for powershell
+
+.PP
+\fB--no-descriptions\fP[=false]
+	disable completion descriptions
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH SEE ALSO
+\fBsymaira-completion(1)\fP

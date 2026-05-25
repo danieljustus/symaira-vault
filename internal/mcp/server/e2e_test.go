@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
-	transport "github.com/danieljustus/OpenPass/internal/mcp/transport"
+	auth "github.com/danieljustus/symaira-vault/internal/mcp/auth"
+	transport "github.com/danieljustus/symaira-vault/internal/mcp/transport"
 )
 
 func pollWithTimeout(t *testing.T, condition func() bool, msg string) {
@@ -56,7 +56,7 @@ func TestE2E_Stdio_Initialize(t *testing.T) {
 	pr, pw := io.Pipe()
 	out := &safeBuffer{}
 	st := transport.NewStdioTransportWithIO(pr, out)
-	handler := NewProtocolHandler("openpass", "1.0.0", nil)
+	handler := NewProtocolHandler("symaira", "1.0.0", nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -130,7 +130,7 @@ func TestE2E_HTTP_Initialize(t *testing.T) {
 	defer server.Close()
 
 	req := httptest.NewRequest("POST", server.URL+"/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}`))
-	req.Header.Set("X-OpenPass-Agent", agentName)
+	req.Header.Set("X-Symaira-Agent", agentName)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnauthorized {
@@ -147,7 +147,7 @@ func TestE2E_HTTP_Initialize(t *testing.T) {
 
 	req = httptest.NewRequest("POST", server.URL+"/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}`))
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("X-OpenPass-Agent", agentName)
+	req.Header.Set("X-Symaira-Agent", agentName)
 	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -172,7 +172,7 @@ func TestE2E_Stdio_Ping(t *testing.T) {
 	pr, pw := io.Pipe()
 	out := &safeBuffer{}
 	st := transport.NewStdioTransportWithIO(pr, out)
-	handler := NewProtocolHandler("openpass", "1.0.0", nil)
+	handler := NewProtocolHandler("symaira", "1.0.0", nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -243,7 +243,7 @@ func TestE2E_HTTP_Ping(t *testing.T) {
 
 	req := httptest.NewRequest("POST", server.URL+"/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"ping"}`))
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("X-OpenPass-Agent", agentName)
+	req.Header.Set("X-Symaira-Agent", agentName)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -268,7 +268,7 @@ func TestE2E_Stdio_InvalidJSON(t *testing.T) {
 	pr, pw := io.Pipe()
 	out := &safeBuffer{}
 	st := transport.NewStdioTransportWithIO(pr, out)
-	handler := NewProtocolHandler("openpass", "1.0.0", nil)
+	handler := NewProtocolHandler("symaira", "1.0.0", nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -316,7 +316,7 @@ func testHTTPMCPError(t *testing.T, body string, wantCode int, wantErrCode int) 
 
 	req := httptest.NewRequest("POST", server.URL+"/mcp", strings.NewReader(body))
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("X-OpenPass-Agent", agentName)
+	req.Header.Set("X-Symaira-Agent", agentName)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -345,7 +345,7 @@ func TestE2E_Stdio_UnknownMethod(t *testing.T) {
 	pr, pw := io.Pipe()
 	out := &safeBuffer{}
 	st := transport.NewStdioTransportWithIO(pr, out)
-	handler := NewProtocolHandler("openpass", "1.0.0", nil)
+	handler := NewProtocolHandler("symaira", "1.0.0", nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -412,7 +412,7 @@ func TestE2E_Stdio_ContextCancel(t *testing.T) {
 	pr, pw := io.Pipe()
 	out := &safeBuffer{}
 	st := transport.NewStdioTransportWithIO(pr, out)
-	handler := NewProtocolHandler("openpass", "1.0.0", nil)
+	handler := NewProtocolHandler("symaira", "1.0.0", nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -452,7 +452,7 @@ func newHTTPMCPTestHandler() http.Handler {
 			return
 		}
 
-		handler := NewProtocolHandler("openpass", "1.0.0", nil)
+		handler := NewProtocolHandler("symaira", "1.0.0", nil)
 		resp, err := handler.HandleMessage(r.Context(), &msg)
 		if err != nil {
 			w.Header().Set("Content-Type", "application/json")

@@ -6,7 +6,7 @@ Superseded
 
 ## Context
 
-OpenPass depends on `github.com/atotto/clipboard` for cross-platform clipboard operations. During development, we use a Go workspace (`go.work`) that replaces the upstream clipboard dependency with a local stub module (`clipboardpkg/`).
+Symaira Vault depends on `github.com/atotto/clipboard` for cross-platform clipboard operations. During development, we use a Go workspace (`go.work`) that replaces the upstream clipboard dependency with a local stub module (`clipboardpkg/`).
 
 This creates two clipboard-related packages in the repository:
 

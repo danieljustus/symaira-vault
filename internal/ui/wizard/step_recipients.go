@@ -7,7 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/danieljustus/OpenPass/internal/crypto"
+	"github.com/danieljustus/symaira-vault/internal/crypto"
 )
 
 // RecipientsStep lets the user add additional age public keys.

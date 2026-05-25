@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
-	"github.com/danieljustus/OpenPass/internal/git"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/git"
 )
 
 func MaybeAutoPull(vaultDir string, cfg *configpkg.Config) {

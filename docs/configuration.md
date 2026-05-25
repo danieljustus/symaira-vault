@@ -50,7 +50,7 @@ vault:
 # Git configuration
 git:
   auto_push: true
-  commit_template: "Update from OpenPass"
+  commit_template: "Update from Symaira Vault"
 
 # MCP server configuration
 mcp:
@@ -75,7 +75,7 @@ mcp:
 |--------|-------------|
 | `allowedPaths` | Path patterns the agent can access (prefix patterns, `*` for all) |
 | `canWrite` | Whether the agent can create/update/delete entries |
-| `canManageConfig` | Whether the agent can change OpenPass auth/config settings via MCP |
+| `canManageConfig` | Whether the agent can change Symaira Vault auth/config settings via MCP |
 | `approvalMode` | `none` (allow all), `deny` (reject writes), `prompt` (degrades to deny in MCP) |
 
 ## Vault Config Options
@@ -102,7 +102,7 @@ Keychain item when Touch ID is enabled.
 | Option | Default | Description |
 |--------|---------|-------------|
 | `auto_push` | `true` | Automatically push after commit |
-| `commit_template` | `"Update from OpenPass"` | Commit message template |
+| `commit_template` | `"Update from Symaira Vault"` | Commit message template |
 
 ## MCP Config Options
 
@@ -178,7 +178,7 @@ openpass profile use work
 
 ## Validation
 
-OpenPass validates your configuration file on load. You can also manually validate it:
+Symaira Vault validates your configuration file on load. You can also manually validate it:
 
 ```bash
 openpass config validate

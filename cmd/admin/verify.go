@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"os"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 var verifyCmd = &cobra.Command{
@@ -17,10 +17,10 @@ var verifyCmd = &cobra.Command{
 	Long: `Verify that all vault entries match their recorded manifest hashes.
 This detects tampered or corrupted entry files.`,
 	Example: `  # Verify manifest matches on-disk entries
-  openpass verify
+  symaira verify
 
   # As part of a scripted health check
-  openpass verify || echo "Manifest mismatch — investigate"`,
+  symaira verify || echo "Manifest mismatch — investigate"`,
 	Annotations: map[string]string{
 		cli.RequiresVaultAnnotation: "true",
 	},
@@ -29,7 +29,7 @@ This detects tampered or corrupted entry files.`,
 			result, err := vaultpkg.VerifyManifestIntegrity(v.Dir, v.Identity)
 			if err != nil {
 				if os.IsNotExist(err) {
-					cmd.Println("No manifest found. Run `openpass verify` after adding entries to create one.")
+					cmd.Println("No manifest found. Run `symaira verify` after adding entries to create one.")
 					return nil
 				}
 				return err

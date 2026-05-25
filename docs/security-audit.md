@@ -1,10 +1,10 @@
 # External Security Audit Engagement
 
-This document outlines how to prepare for, engage, and respond to external security audits of OpenPass.
+This document outlines how to prepare for, engage, and respond to external security audits of Symaira Vault.
 
 ## Overview
 
-External security audits provide independent verification of OpenPass's security posture. They complement our continuous internal security work and help identify blind spots.
+External security audits provide independent verification of Symaira Vault's security posture. They complement our continuous internal security work and help identify blind spots.
 
 ## Audit Types
 
@@ -90,7 +90,7 @@ External security audits provide independent verification of OpenPass's security
 1. **Triage** (within 48 hours)
    - Validate each finding
    - Assign severity (Critical/High/Medium/Low/Info)
-   - Determine exploitability in OpenPass context
+   - Determine exploitability in Symaira Vault context
 
 2. **Track** (within 1 week)
    - Create GitHub security advisory for each confirmed vulnerability

@@ -8,7 +8,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/danieljustus/OpenPass/internal/envfilter"
+	"github.com/danieljustus/symaira-vault/internal/envfilter"
 )
 
 // defaultCapsLockDetector probes xset for the X11 LED state. On Wayland (no

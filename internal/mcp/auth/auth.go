@@ -13,16 +13,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/danieljustus/OpenPass/internal/audit"
-	"github.com/danieljustus/OpenPass/internal/mcp"
-	"github.com/danieljustus/OpenPass/internal/mcp/transport"
+	"github.com/danieljustus/symaira-vault/internal/audit"
+	"github.com/danieljustus/symaira-vault/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/mcp/transport"
 )
 
 type contextKey string
 
-const agentContextKey contextKey = "openpass-agent"
+const agentContextKey contextKey = "symaira-agent"
 
-const tokenContextKey contextKey = "openpass-scoped-token"
+const tokenContextKey contextKey = "symaira-scoped-token"
 
 func WithToken(ctx context.Context, token *ScopedToken) context.Context {
 	return context.WithValue(ctx, tokenContextKey, token)
@@ -216,7 +216,7 @@ func logAuthFailure(logger *audit.Logger, r *http.Request, reason, detail string
 	}
 	if err := logger.LogEntry(audit.LogEntry{
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
-		Agent:     r.Header.Get("X-OpenPass-Agent"),
+		Agent:     r.Header.Get("X-Symaira-Agent"),
 		Action:    "auth_failure",
 		Transport: "http",
 		Reason:    reason + ": " + detail,
@@ -297,9 +297,9 @@ func BearerAuthMiddleware(legacyToken string, registry *TokenRegistry, auditLog 
 
 func AgentHeaderMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		agent := r.Header.Get("X-OpenPass-Agent")
+		agent := r.Header.Get("X-Symaira-Agent")
 		if agent == "" {
-			http.Error(w, "forbidden: missing X-OpenPass-Agent header", http.StatusForbidden)
+			http.Error(w, "forbidden: missing X-Symaira-Agent header", http.StatusForbidden)
 			return
 		}
 		ctx := context.WithValue(r.Context(), agentContextKey, agent)

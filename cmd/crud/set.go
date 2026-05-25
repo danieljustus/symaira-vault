@@ -6,12 +6,12 @@ import (
 	"os"
 	"strings"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 
-	cryptopkg "github.com/danieljustus/OpenPass/internal/crypto"
-	vaultsvc "github.com/danieljustus/OpenPass/internal/vaultsvc"
+	cryptopkg "github.com/danieljustus/symaira-vault/internal/crypto"
+	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 var (
@@ -27,10 +27,10 @@ var setCmd = &cobra.Command{
 	Short: "Set a password entry or field",
 	Long:  "Creates or updates a password entry. Use --value or interactive mode.",
 	Example: `  # Set a field non-interactively
-  openpass set github.password --value "mysecret"
+  symaira set github.password --value "mysecret"
 
   # Set TOTP data
-  openpass set github --totp-secret JBSWY3DPEHPK3PXP`,
+  symaira set github --totp-secret JBSWY3DPEHPK3PXP`,
 	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: cli.EntryCompletionFunc,
 	RunE: func(cmd *cobra.Command, args []string) error {

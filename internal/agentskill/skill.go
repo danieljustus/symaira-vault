@@ -88,20 +88,20 @@ type TemplateVars struct {
 	// AgentName is the agent identifier (e.g., "hermes", "claude-code").
 	AgentName string
 
-	// ToolPrefix is the MCP tool prefix (e.g., "mcp_openpass_", "mcp__openpass__").
+	// ToolPrefix is the MCP tool prefix (e.g., "mcp_symaira_", "mcp__symaira__").
 	ToolPrefix string
 
-	// SlashPrefix is the slash command prefix (e.g., "/openpass:", "/mcp__openpass__").
+	// SlashPrefix is the slash command prefix (e.g., "/symaira:", "/mcp__symaira__").
 	// May be empty for agents that do not support slash commands.
 	SlashPrefix string
 
-	// OpenPassVersion is the version of OpenPass (e.g., "4.0.0").
-	OpenPassVersion string
+	// SymairaVaultVersion is the version of Symaira Vault (e.g., "4.0.0").
+	SymairaVaultVersion string
 
 	// ProfileTier is the agent profile tier (safe, standard, admin, custom).
 	ProfileTier string
 
-	// VaultPath is the path to the OpenPass vault directory (e.g., "~/.openpass").
+	// VaultPath is the path to the Symaira Vault vault directory (e.g., "~/.symaira").
 	VaultPath string
 
 	// InstalledAt is the installation timestamp in RFC3339 format.
@@ -117,8 +117,8 @@ const (
 	// DefaultSkillSchemaVersion is the schema version used when SkillSchemaVersion is empty.
 	DefaultSkillSchemaVersion = "1"
 
-	// SentinelValue is the managed_by marker that identifies OpenPass-managed files.
-	SentinelValue = "openpass"
+	// SentinelValue is the managed_by marker that identifies Symaira Vault-managed files.
+	SentinelValue = "symaira"
 )
 
 // Render renders a skill template for the given agent and returns the complete
@@ -158,10 +158,10 @@ func Render(agentName string, vars TemplateVars) ([]byte, error) {
 	hashStr := HashBytes(body)
 
 	manifest := Manifest{
-		Name:               "openpass",
-		Description:        "Use OpenPass as the credential manager via native MCP tools and CLI.",
+		Name:               "symaira",
+		Description:        "Use Symaira Vault as the credential manager via native MCP tools and CLI.",
 		ManagedBy:          SentinelValue,
-		ManagedVersion:     vars.OpenPassVersion,
+		ManagedVersion:     vars.SymairaVaultVersion,
 		ManagedHash:        hashStr,
 		ManagedInstalledAt: vars.InstalledAt,
 		ManagedProfileTier: vars.ProfileTier,
@@ -213,21 +213,21 @@ func renderForExport(agentName string, vars TemplateVars) (map[string][]byte, er
 		return nil, err
 	}
 
-	installMD := fmt.Sprintf(`# %s OpenPass Skill — Manual Install
+	installMD := fmt.Sprintf(`# %s Symaira Vault Skill — Manual Install
 
-This skill was exported by OpenPass v%s.
+This skill was exported by Symaira Vault v%s.
 
 ## Steps
 
 1. Place %[3]s in your agent's skill directory.
 2. Create a scoped access token:
-   openpass mcp token create --agent %[1]s --tools list,get --expires 90d
+   symaira mcp token create --agent %[1]s --tools list,get --expires 90d
 3. Restart your agent.
 
 ## Verification
 
-Run the agent's MCP discovery command to verify OpenPass tools are available.
-`, agentName, vars.OpenPassVersion, entry.outName)
+Run the agent's MCP discovery command to verify Symaira Vault tools are available.
+`, agentName, vars.SymairaVaultVersion, entry.outName)
 
 	return map[string][]byte{
 		entry.outName: skillData,
@@ -263,8 +263,8 @@ type PrefixResult struct {
 
 // agentPrefixes maps agent names to their MCP tool and slash command prefixes.
 var agentPrefixes = map[string]PrefixResult{
-	"hermes":      {ToolPrefix: "mcp_openpass_", SlashPrefix: "/openpass:"},
-	"claude-code": {ToolPrefix: "mcp__openpass__", SlashPrefix: "/mcp__openpass__"},
+	"hermes":      {ToolPrefix: "mcp_symaira_", SlashPrefix: "/symaira:"},
+	"claude-code": {ToolPrefix: "mcp__symaira__", SlashPrefix: "/mcp__symaira__"},
 	"codex":       {ToolPrefix: "", SlashPrefix: ""},
 	"opencode":    {ToolPrefix: "", SlashPrefix: ""},
 	"openclaw":    {ToolPrefix: "", SlashPrefix: ""},

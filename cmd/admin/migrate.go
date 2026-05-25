@@ -7,13 +7,13 @@ import (
 	"strings"
 	"time"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
-	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 var (
@@ -25,8 +25,8 @@ var MigrateCmd = &cobra.Command{
 	Use:   "migrate",
 	Short: "Vault migration commands",
 	Example: `  # Pseudonymise on-disk paths (one-way)
-  openpass migrate pseudonymize --dry-run
-  openpass migrate pseudonymize`,
+  symaira migrate pseudonymize --dry-run
+  symaira migrate pseudonymize`,
 }
 
 var migratePseudonymizeCmd = &cobra.Command{
@@ -41,7 +41,7 @@ entries/. The old plaintext-named files are removed.
 
 After migration, enable pseudonymize_paths in your vault config.yaml
 to write new entries to pseudonymized paths.`,
-	Example: `  openpass migrate pseudonymize`,
+	Example: `  symaira migrate pseudonymize`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		vaultDir, err := cli.VaultPath()
 		if err != nil {
@@ -50,7 +50,7 @@ to write new entries to pseudonymized paths.`,
 
 		if !vaultpkg.IsInitialized(vaultDir) {
 			return errorspkg.NewCLIError(errorspkg.ExitNotInitialized,
-				"vault not initialized. Run 'openpass init' first",
+				"vault not initialized. Run 'symaira init' first",
 				errorspkg.ErrVaultNotInitialized)
 		}
 
@@ -153,9 +153,9 @@ before any changes are written.
 
 This migration is idempotent — running it multiple times is safe for
 profiles that already have a tier field.`,
-	Example: `  openpass migrate v4
-  openpass migrate v4 --dry-run
-  openpass migrate v4 --yes`,
+	Example: `  symaira migrate v4
+  symaira migrate v4 --dry-run
+  symaira migrate v4 --yes`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		vaultDir, err := cli.VaultPath()
 		if err != nil {
@@ -255,10 +255,10 @@ Argon2id is the industry standard for password hashing (2025+) and provides
 stronger resistance against GPU-based attacks compared to scrypt.
 
 In the meantime:
-  1. Back up your vault: cp -r ~/.openpass ~/.openpass.backup
+  1. Back up your vault: cp -r ~/.symaira ~/.symaira.backup
   2. Wait for a future release with full migration support
-  3. Run 'openpass doctor' to track the migration recommendation`,
-	Example: `  openpass migrate kdf`,
+  3. Run 'symaira doctor' to track the migration recommendation`,
+	Example: `  symaira migrate kdf`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Println("⚠️  Migration from scrypt to argon2id is not yet implemented.")
 		fmt.Println()
@@ -266,7 +266,7 @@ In the meantime:
 		fmt.Println("This feature is planned for a future release.")
 		fmt.Println()
 		fmt.Println("In the meantime, your vault is secure with scrypt (work factor 18).")
-		fmt.Println("To track the recommendation, run: openpass doctor")
+		fmt.Println("To track the recommendation, run: symaira doctor")
 		return nil
 	},
 }

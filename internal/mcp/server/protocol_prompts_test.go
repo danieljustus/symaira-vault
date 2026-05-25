@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	transport "github.com/danieljustus/OpenPass/internal/mcp/transport"
+	transport "github.com/danieljustus/symaira-vault/internal/mcp/transport"
 )
 
 func initialize(t *testing.T, h *ProtocolHandler) {
@@ -27,7 +27,7 @@ func initialize(t *testing.T, h *ProtocolHandler) {
 }
 
 func TestInitialize_AdvertisesPromptsCapability(t *testing.T) {
-	h := NewProtocolHandler("OpenPass", "1.0.0", nil)
+	h := NewProtocolHandler("Symaira Vault", "1.0.0", nil)
 	msg := &transport.Message{
 		JSONRPC: "2.0",
 		ID:      json.RawMessage("1"),
@@ -52,7 +52,7 @@ func TestInitialize_AdvertisesPromptsCapability(t *testing.T) {
 }
 
 func TestPromptsList_NotInitializedRejected(t *testing.T) {
-	h := NewProtocolHandler("OpenPass", "1.0.0", nil)
+	h := NewProtocolHandler("Symaira Vault", "1.0.0", nil)
 	msg := &transport.Message{JSONRPC: "2.0", ID: json.RawMessage("1"), Method: "prompts/list"}
 	resp, err := h.HandleMessage(context.Background(), msg)
 	if err != nil {
@@ -64,7 +64,7 @@ func TestPromptsList_NotInitializedRejected(t *testing.T) {
 }
 
 func TestPromptsList_ReturnsRegisteredPrompts(t *testing.T) {
-	h := NewProtocolHandler("OpenPass", "1.0.0", nil)
+	h := NewProtocolHandler("Symaira Vault", "1.0.0", nil)
 	initialize(t, h)
 
 	msg := &transport.Message{JSONRPC: "2.0", ID: json.RawMessage("2"), Method: "prompts/list"}
@@ -103,7 +103,7 @@ func TestPromptsList_ReturnsRegisteredPrompts(t *testing.T) {
 }
 
 func TestPromptsGet_UnknownPromptErrors(t *testing.T) {
-	h := NewProtocolHandler("OpenPass", "1.0.0", nil)
+	h := NewProtocolHandler("Symaira Vault", "1.0.0", nil)
 	initialize(t, h)
 
 	msg := &transport.Message{
@@ -119,7 +119,7 @@ func TestPromptsGet_UnknownPromptErrors(t *testing.T) {
 }
 
 func TestPromptsGet_MissingNameErrors(t *testing.T) {
-	h := NewProtocolHandler("OpenPass", "1.0.0", nil)
+	h := NewProtocolHandler("Symaira Vault", "1.0.0", nil)
 	initialize(t, h)
 
 	msg := &transport.Message{
@@ -135,7 +135,7 @@ func TestPromptsGet_MissingNameErrors(t *testing.T) {
 }
 
 func TestPromptsGet_MissingRequiredArgumentErrors(t *testing.T) {
-	h := NewProtocolHandler("OpenPass", "1.0.0", nil)
+	h := NewProtocolHandler("Symaira Vault", "1.0.0", nil)
 	initialize(t, h)
 
 	// rotate-credential requires `path`
@@ -155,7 +155,7 @@ func TestPromptsGet_MissingRequiredArgumentErrors(t *testing.T) {
 }
 
 func TestPromptsGet_ReturnsRenderedMessages(t *testing.T) {
-	h := NewProtocolHandler("OpenPass", "1.0.0", nil)
+	h := NewProtocolHandler("Symaira Vault", "1.0.0", nil)
 	initialize(t, h)
 
 	msg := &transport.Message{

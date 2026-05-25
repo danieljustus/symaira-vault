@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
-	"github.com/danieljustus/OpenPass/internal/metrics"
-	"github.com/danieljustus/OpenPass/internal/vaultsvc"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/metrics"
+	"github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 func (s *Server) handleDelete(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {

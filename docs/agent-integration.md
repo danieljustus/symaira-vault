@@ -1,6 +1,6 @@
-# OpenPass Agent Integration
+# Symaira Vault Agent Integration
 
-OpenPass is easiest for AI agents to use through MCP. Prefer MCP over shell
+Symaira Vault is easiest for AI agents to use through MCP. Prefer MCP over shell
 commands for credential reads and writes: it gives agents structured tools,
 per-agent access control, bearer auth for HTTP, and audit logs.
 
@@ -46,7 +46,7 @@ explicit reason and review trail.
 ## Hermes
 
 Hermes has a native MCP client. For a local first trial, prefer stdio over HTTP
-so OpenPass does not expose a listening socket and Hermes does not need a bearer
+so Symaira Vault does not expose a listening socket and Hermes does not need a bearer
 token in config:
 
 ```bash
@@ -66,13 +66,13 @@ example `mcp_openpass_list_entries`, `mcp_openpass_get_entry`, and
 `mcp_openpass_set_entry_field`. Early Hermes profiles should expose only the
 metadata-first tool subset from `hermes-safe-adoption.md`.
 
-If HTTP transport is needed later, bind OpenPass to loopback only
+If HTTP transport is needed later, bind Symaira Vault to loopback only
 (`127.0.0.1`), use scoped short-lived tokens, and keep token values out of
 committed config and chat transcripts.
 
 ### Available MCP Tools
 
-OpenPass exposes the following MCP tools for agent integration:
+Symaira Vault exposes the following MCP tools for agent integration:
 
 **Read Operations**:
 - `list_entries` — List all vault entries
@@ -112,7 +112,7 @@ For agents that support HTTP MCP with custom headers, use:
 openpass --vault ~/.openpass-vault mcp-config openclaw --http
 ```
 
-HTTP mode requires a running OpenPass server:
+HTTP mode requires a running Symaira Vault server:
 
 ```bash
 openpass --vault ~/.openpass-vault serve --port 8090
@@ -207,7 +207,7 @@ TOKEN=$(openpass mcp-config <agent> --token-only)
 
 ## OAuth Dynamic Client Registration
 
-OpenPass supports OAuth 2.1 + PKCE + Dynamic Client Registration (DCR) for MCP
+Symaira Vault supports OAuth 2.1 + PKCE + Dynamic Client Registration (DCR) for MCP
 clients that implement the DCR flow. This allows clients to automatically
 register and obtain scoped tokens without manual bearer token setup.
 
@@ -356,7 +356,7 @@ see the [Field Redaction section in mcp-api.md](mcp-api.md#field-redaction-with-
 
 ## Slash Commands & Auto-Credential-Capture
 
-OpenPass advertises the MCP **prompts** capability. In Claude Code, OpenCode,
+Symaira Vault advertises the MCP **prompts** capability. In Claude Code, OpenCode,
 Hermes and any other MCP client that surfaces prompts as slash commands, four
 guided workflows become available once the server is connected:
 
@@ -379,7 +379,7 @@ recommended pattern is:
 2. Tool returns nothing.
 3. Agent calls `request_credential` with `path`, `field`, and a `reason`
    (shown verbatim to the user).
-4. OpenPass opens a native OS dialog:
+4. Symaira Vault opens a native OS dialog:
    - macOS: `osascript display dialog` with hidden answer field
    - Linux: `zenity --entry --hide-text` (or `kdialog --password`)
    - Windows: `Get-Credential` window
@@ -429,7 +429,7 @@ consider them exposed and rotate them.
 
 ## Metrics and Observability
 
-OpenPass exposes Prometheus metrics for monitoring MCP server health, request
+Symaira Vault exposes Prometheus metrics for monitoring MCP server health, request
 patterns, and security events.
 
 ### Endpoints
@@ -511,7 +511,7 @@ rate(openpass_vault_operations_total[5m])
 
 ### Grafana Dashboard
 
-Import these panels for a basic OpenPass dashboard:
+Import these panels for a basic Symaira Vault dashboard:
 
 1. **Request Rate** — `rate(openpass_mcp_requests_total[5m])`
 2. **Error Rate** — `rate(openpass_mcp_requests_total{status="error"}[5m])`

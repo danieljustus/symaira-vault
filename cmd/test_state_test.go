@@ -14,14 +14,14 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	crud "github.com/danieljustus/OpenPass/cmd/crud"
-	mcpcmd "github.com/danieljustus/OpenPass/cmd/mcp"
-	cli "github.com/danieljustus/OpenPass/internal/cli"
-	clipboardapp "github.com/danieljustus/OpenPass/internal/clipboard"
-	vaultcrypto "github.com/danieljustus/OpenPass/internal/crypto"
-	"github.com/danieljustus/OpenPass/internal/mcp/server"
-	"github.com/danieljustus/OpenPass/internal/mcp/serverbootstrap"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	crud "github.com/danieljustus/symaira-vault/cmd/crud"
+	mcpcmd "github.com/danieljustus/symaira-vault/cmd/mcp"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
+	clipboardapp "github.com/danieljustus/symaira-vault/internal/clipboard"
+	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
+	"github.com/danieljustus/symaira-vault/internal/mcp/server"
+	"github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func TestMain(m *testing.M) {
@@ -52,7 +52,7 @@ func resetCommandTestState() {
 }
 
 func resetCommandFlagGlobals() {
-	cli.Vault = "~/.openpass"
+	cli.Vault = "~/.symaira"
 	crud.SetValue = ""
 	crud.SetTOTPSecret = ""
 	crud.SetTOTPIssuer = ""

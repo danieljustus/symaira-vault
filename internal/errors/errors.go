@@ -1,4 +1,4 @@
-// Package errors provides centralized error handling for OpenPass CLI commands.
+// Package errors provides centralized error handling for Symaira Vault CLI commands.
 // It defines typed errors with exit codes and consistent error wrapping.
 package errors
 

@@ -1,6 +1,6 @@
 /**
- * Main OpenPass MCP HTTP client.
- * Communicates with openpass serve via JSON-RPC 2.0 over HTTP.
+ * Main Symaira Vault MCP HTTP client.
+ * Communicates with symaira serve via JSON-RPC 2.0 over HTTP.
  */
 
 import {
@@ -13,7 +13,7 @@ import {
 } from "./protocol";
 import { buildAuthHeaders, AuthHeaders } from "./auth";
 import { MCPMessage, ToolResult } from "./types";
-import { OpenPassConnectionError, OpenPassToolError } from "./errors";
+import { SymairaConnectionError, SymairaToolError } from "./errors";
 
 export interface ClientOptions {
   baseUrl?: string;
@@ -22,7 +22,7 @@ export interface ClientOptions {
   timeoutMs?: number;
 }
 
-export class OpenPassMCPClient {
+export class SymairaMCPClient {
   private baseUrl: string;
   private headers: AuthHeaders;
   private timeoutMs: number;
@@ -54,7 +54,7 @@ export class OpenPassMCPClient {
     });
 
     if (!response.ok) {
-      throw new OpenPassConnectionError(
+      throw new SymairaConnectionError(
         `Health check failed: ${response.status} ${response.statusText}`
       );
     }
@@ -104,7 +104,7 @@ export class OpenPassMCPClient {
         isError: result.isError || false,
       };
     } catch (error) {
-      throw new OpenPassToolError(
+      throw new SymairaToolError(
         name,
         `Tool '${name}' failed: ${error}`,
         error
@@ -135,11 +135,11 @@ export class OpenPassMCPClient {
 
       if (!response.ok) {
         if (response.status === 401) {
-          throw new OpenPassConnectionError(
+          throw new SymairaConnectionError(
             "Authentication failed. Check your MCP token."
           );
         }
-        throw new OpenPassConnectionError(
+        throw new SymairaConnectionError(
           `HTTP ${response.status}: ${response.statusText}`
         );
       }
@@ -149,18 +149,18 @@ export class OpenPassMCPClient {
     } catch (error) {
       clearTimeout(timeoutId);
 
-      if (error instanceof OpenPassConnectionError) {
+      if (error instanceof SymairaConnectionError) {
         throw error;
       }
 
       if ((error as Error).name === "AbortError") {
-        throw new OpenPassConnectionError(
+        throw new SymairaConnectionError(
           `Request timed out after ${this.timeoutMs}ms`
         );
       }
 
-      throw new OpenPassConnectionError(
-        `Failed to connect to OpenPass server at ${this.baseUrl}: ${error}`
+      throw new SymairaConnectionError(
+        `Failed to connect to Symaira Vault server at ${this.baseUrl}: ${error}`
       );
     }
   }

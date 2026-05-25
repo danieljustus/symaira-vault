@@ -1,0 +1,56 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-update-info - Show OpenPass installation method info
+
+
+.SH SYNOPSIS
+\fBsymaira update info [flags]\fP
+
+
+.SH DESCRIPTION
+Detects how OpenPass was installed and shows whether self-update
+is supported, along with upgrade guidance for the detected method.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for info
+
+.PP
+\fB--json\fP[=false]
+	output info as JSON (deprecated: use --output=json)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH SEE ALSO
+\fBsymaira-update(1)\fP

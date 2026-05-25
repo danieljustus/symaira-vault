@@ -3,8 +3,8 @@ package server
 import (
 	"context"
 
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
-	"github.com/danieljustus/OpenPass/internal/secureui"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/secureui"
 )
 
 // handleRequestCredential handles the `request_credential` MCP tool. It is the
@@ -18,7 +18,7 @@ func (s *Server) handleRequestCredential(ctx context.Context, req mcp.CallToolRe
 		return result, err
 	}
 	return s.promptAndStore(ctx, secureui.PromptRequest{
-		Title:       "OpenPass: Agent requesting credential",
+		Title:       "Symaira Vault: Agent requesting credential",
 		Path:        path,
 		Field:       field,
 		Description: reason,

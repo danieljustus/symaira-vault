@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/danieljustus/OpenPass/internal/vaultsvc"
+	"github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 func TestNewManager(t *testing.T) {

@@ -1,0 +1,87 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-remote-init - Initialize git remote for the vault
+
+
+.SH SYNOPSIS
+\fBsymaira remote init  [flags]\fP
+
+
+.SH DESCRIPTION
+Configure a remote git repository for vault synchronization.
+
+.PP
+The ssh-target can be in these formats:
+  user@host           - bare repo at ~/symaira-remote.git on remote
+  user@host:path      - bare repo at path on remote
+  host                - bare repo at ~/symaira-remote.git using current user
+  host:path           - bare repo at path using current user
+
+.PP
+Flags:
+  --name   - Remote name (default: "origin")
+  --path   - Custom bare repo path on remote (default: ~/symaira-remote.git)
+  --push   - Push the vault to the remote after setup
+
+.PP
+This command also enables git.auto_push in your OpenPass config.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for init
+
+.PP
+\fB-n\fP, \fB--name\fP="origin"
+	Remote name
+
+.PP
+\fB-p\fP, \fB--path\fP=""
+	Custom bare repo path on remote (default: ~/symaira-remote.git)
+
+.PP
+\fB--push\fP[=false]
+	Push vault to remote after setup
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  openpass remote init hermes@macmini
+  openpass remote init dev@server:/srv/git/openpass.git --name upstream
+  openpass remote init hermes@macmini --push
+.EE
+
+
+.SH SEE ALSO
+\fBsymaira-remote(1)\fP

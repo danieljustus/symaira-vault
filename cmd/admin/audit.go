@@ -1,4 +1,4 @@
-// Package admin provides administrative commands for OpenPass vault management.
+// Package admin provides administrative commands for Symaira Vault vault management.
 package admin
 
 import (
@@ -12,8 +12,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/danieljustus/OpenPass/internal/audit"
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	"github.com/danieljustus/symaira-vault/internal/audit"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 )
 
 var (
@@ -33,13 +33,13 @@ By default shows the last 20 entries. Use --tail to change the number of entries
 Use --json for machine-readable output. Use --agent to filter by agent name.
 Use --since to filter by time (e.g. "1h", "24h", "7d").`,
 	Example: `  # Last 20 audit entries
-  openpass audit
+  symaira audit
 
   # Last 100 entries, JSON format
-  openpass audit --tail 100 --output json
+  symaira audit --tail 100 --output json
 
   # Failed invocations in the last day from a specific agent
-  openpass audit --agent claude-code --since 24h --failed`,
+  symaira audit --agent claude-code --since 24h --failed`,
 	Annotations: map[string]string{
 		cli.RequiresVaultAnnotation: "false",
 	},
@@ -77,7 +77,7 @@ func AuditLogPath(agent string) (string, error) {
 	}
 
 	cleanHome := filepath.Clean(home)
-	auditDir := filepath.Join(cleanHome, ".openpass")
+	auditDir := filepath.Join(cleanHome, ".symaira")
 	cleanAuditDir := filepath.Clean(auditDir)
 	if !strings.HasPrefix(cleanAuditDir, cleanHome+string(filepath.Separator)) {
 		return "", fmt.Errorf("invalid audit directory path")

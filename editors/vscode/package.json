@@ -1,9 +1,9 @@
 {
-  "name": "openpass-vscode",
-  "displayName": "OpenPass",
-  "description": "VS Code extension for OpenPass secret manager",
+  "name": "symaira-vscode",
+  "displayName": "Symaira Vault",
+  "description": "VS Code extension for Symaira Vault secret manager",
   "version": "1.0.0",
-  "publisher": "openpass",
+  "publisher": "symaira",
   "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
@@ -16,14 +16,14 @@
     "secrets",
     "vault",
     "mcp",
-    "openpass"
+    "symaira"
   ],
   "activationEvents": [
-    "onView:openpass.vault",
-    "onCommand:openpass.insertSecret",
-    "onCommand:openpass.copyToClipboard",
-    "onCommand:openpass.generatePassword",
-    "onCommand:openpass.quickPickVault",
+    "onView:symaira.vault",
+    "onCommand:symaira.insertSecret",
+    "onCommand:symaira.copyToClipboard",
+    "onCommand:symaira.generatePassword",
+    "onCommand:symaira.quickPickVault",
     "onStartupFinished"
   ],
   "main": "./out/extension.js",
@@ -31,114 +31,114 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "openpass-explorer",
-          "title": "OpenPass",
+          "id": "symaira-explorer",
+          "title": "Symaira Vault",
           "icon": "$(shield)"
         }
       ]
     },
     "views": {
-      "openpass-explorer": [
+      "symaira-explorer": [
         {
-          "id": "openpass.vault",
+          "id": "symaira.vault",
           "name": "Vault",
-          "when": "openpass.enabled"
+          "when": "symaira.enabled"
         }
       ]
     },
     "commands": [
       {
-        "command": "openpass.insertSecret",
+        "command": "symaira.insertSecret",
         "title": "Insert Secret",
-        "category": "OpenPass",
+        "category": "Symaira Vault",
         "icon": "$(insert)"
       },
       {
-        "command": "openpass.copyToClipboard",
+        "command": "symaira.copyToClipboard",
         "title": "Copy to Clipboard",
-        "category": "OpenPass",
+        "category": "Symaira Vault",
         "icon": "$(clippy)"
       },
       {
-        "command": "openpass.generatePassword",
+        "command": "symaira.generatePassword",
         "title": "Generate Password",
-        "category": "OpenPass",
+        "category": "Symaira Vault",
         "icon": "$(symbol-key)"
       },
       {
-        "command": "openpass.quickPickVault",
+        "command": "symaira.quickPickVault",
         "title": "Quick Pick Vault Entry",
-        "category": "OpenPass",
+        "category": "Symaira Vault",
         "icon": "$(list-unordered)"
       },
       {
-        "command": "openpass.refreshVault",
+        "command": "symaira.refreshVault",
         "title": "Refresh Vault",
-        "category": "OpenPass",
+        "category": "Symaira Vault",
         "icon": "$(refresh)"
       },
       {
-        "command": "openpass.openSettings",
+        "command": "symaira.openSettings",
         "title": "Open Settings",
-        "category": "OpenPass",
+        "category": "Symaira Vault",
         "icon": "$(gear)"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "openpass.refreshVault",
-          "when": "view == openpass.vault",
+          "command": "symaira.refreshVault",
+          "when": "view == symaira.vault",
           "group": "navigation"
         },
         {
-          "command": "openpass.openSettings",
-          "when": "view == openpass.vault",
+          "command": "symaira.openSettings",
+          "when": "view == symaira.vault",
           "group": "navigation"
         }
       ],
       "view/item/context": [
         {
-          "command": "openpass.insertSecret",
-          "when": "view == openpass.vault && viewItem == entry",
-          "group": "openpass@1"
+          "command": "symaira.insertSecret",
+          "when": "view == symaira.vault && viewItem == entry",
+          "group": "symaira@1"
         },
         {
-          "command": "openpass.copyToClipboard",
-          "when": "view == openpass.vault && viewItem == entry",
-          "group": "openpass@2"
+          "command": "symaira.copyToClipboard",
+          "when": "view == symaira.vault && viewItem == entry",
+          "group": "symaira@2"
         }
       ],
       "commandPalette": [
         {
-          "command": "openpass.insertSecret",
+          "command": "symaira.insertSecret",
           "when": "false"
         },
         {
-          "command": "openpass.copyToClipboard",
+          "command": "symaira.copyToClipboard",
           "when": "false"
         }
       ]
     },
     "configuration": {
-      "title": "OpenPass",
+      "title": "Symaira Vault",
       "properties": {
-        "openpass.baseUrl": {
+        "symaira.baseUrl": {
           "type": "string",
           "default": "http://127.0.0.1:8080",
-          "description": "Base URL of the OpenPass MCP server"
+          "description": "Base URL of the Symaira Vault MCP server"
         },
-        "openpass.vaultPath": {
+        "symaira.vaultPath": {
           "type": "string",
           "default": "",
-          "description": "Path to the OpenPass vault directory. Leave empty to use $OPENPASS_VAULT or ~/.openpass"
+          "description": "Path to the Symaira Vault vault directory. Leave empty to use $SYMAIRA_VAULT or ~/.symaira"
         },
-        "openpass.agentName": {
+        "symaira.agentName": {
           "type": "string",
           "default": "vscode",
           "description": "Agent name for MCP authentication"
         },
-        "openpass.timeoutMs": {
+        "symaira.timeoutMs": {
           "type": "number",
           "default": 30000,
           "description": "Request timeout in milliseconds"
@@ -153,7 +153,7 @@
     "clean": "rm -rf out/"
   },
   "dependencies": {
-    "@openpass/mcp-client": "file:../mcp-client"
+    "@symaira/mcp-client": "file:../mcp-client"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

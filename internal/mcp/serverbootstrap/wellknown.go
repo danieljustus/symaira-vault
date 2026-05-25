@@ -30,7 +30,7 @@ func handleOAuthProtectedResource(bind string, port int) http.HandlerFunc {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"resource":                 addr + "/mcp",
 			"bearer_methods_supported": []string{"header"},
-			"resource_name":            "OpenPass MCP Server",
+			"resource_name":            "Symaira Vault MCP Server",
 		})
 	}
 }

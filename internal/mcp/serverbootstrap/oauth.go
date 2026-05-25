@@ -18,10 +18,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/danieljustus/OpenPass/internal/fileutil"
-	"github.com/danieljustus/OpenPass/internal/mcp/auth"
-	"github.com/danieljustus/OpenPass/internal/mcp/server"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	"github.com/danieljustus/symaira-vault/internal/fileutil"
+	"github.com/danieljustus/symaira-vault/internal/mcp/auth"
+	"github.com/danieljustus/symaira-vault/internal/mcp/server"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 const (
@@ -37,7 +37,7 @@ var consentPageHTML = `<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OpenPass OAuth Authorization</title>
+    <title>Symaira Vault OAuth Authorization</title>
     <style>
         * { box-sizing: border-box; }
         body {
@@ -171,7 +171,7 @@ var consentPageHTML = `<!DOCTYPE html>
 </head>
 <body>
     <div class="card">
-        <div class="logo">🔐 OpenPass</div>
+        <div class="logo">🔐 Symaira Vault</div>
         <div class="subtitle">OAuth Authorization Request</div>
         {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
         <div class="client-info">
@@ -504,7 +504,7 @@ func handleOAuthAuthorize(store *oauthCodeStore, clientStore *oauthClientStore) 
 		// Validate client_id against registered clients.
 		client, ok := clientStore.get(clientID)
 		if !ok {
-			w.Header().Set("WWW-Authenticate", `Bearer realm="openpass",error="invalid_client",error_description="unknown client_id; register via POST /oauth/register first"`)
+			w.Header().Set("WWW-Authenticate", `Bearer realm="symaira",error="invalid_client",error_description="unknown client_id; register via POST /oauth/register first"`)
 			writeJSON(w, http.StatusBadRequest, map[string]string{
 				"error":             "invalid_client",
 				"error_description": "unknown client_id; register via POST /oauth/register first",

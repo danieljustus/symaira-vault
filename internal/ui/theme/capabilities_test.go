@@ -40,7 +40,7 @@ func TestDetectASCIIOnly(t *testing.T) {
 		env  map[string]string
 		want bool
 	}{
-		{"openpass_ascii=1", map[string]string{"OPENPASS_ASCII": "1"}, true},
+		{"symaira_ascii=1", map[string]string{"OPENPASS_ASCII": "1"}, true},
 		{"lang=C", map[string]string{"LANG": "C"}, true},
 		{"lang=POSIX", map[string]string{"LANG": "POSIX"}, true},
 		{"lang=de_DE.UTF-8", map[string]string{"LANG": "de_DE.UTF-8"}, false},

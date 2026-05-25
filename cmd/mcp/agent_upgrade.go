@@ -8,15 +8,15 @@ import (
 	"path/filepath"
 	"strings"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/danieljustus/OpenPass/internal/agentskill"
-	"github.com/danieljustus/OpenPass/internal/authguard"
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
-	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
+	"github.com/danieljustus/symaira-vault/internal/agentskill"
+	"github.com/danieljustus/symaira-vault/internal/authguard"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	auth "github.com/danieljustus/symaira-vault/internal/mcp/auth"
 )
 
 var (
@@ -172,7 +172,7 @@ func requireBiometricForUpgrade(ctx context.Context, agentName, targetTier strin
 		return nil
 	}
 
-	reason := fmt.Sprintf("Upgrade OpenPass agent %q to %q tier", agentName, targetTier)
+	reason := fmt.Sprintf("Upgrade Symaira Vault agent %q to %q tier", agentName, targetTier)
 	if err := challenger.Challenge(ctx, authguard.OpTierUpgrade, reason); err != nil {
 		return fmt.Errorf("biometric verification required for tier upgrade: %w", err)
 	}
@@ -204,13 +204,13 @@ The --reason flag is required when using --yes for non-interactive mode to ensur
 an audit trail.`,
 	Args: cobra.ExactArgs(1),
 	Example: `  # Interactive upgrade to admin tier with token rotation
-  openpass agent upgrade hermes --tier admin --rotate-token
+  symaira agent upgrade hermes --tier admin --rotate-token
 
   # Dry-run: preview changes without writing
-  openpass agent upgrade claude-code --tier admin --dry-run
+  symaira agent upgrade claude-code --tier admin --dry-run
 
   # Non-interactive upgrade with audit reason
-  openpass agent upgrade opencode --tier standard --yes --reason "CI pipeline automation upgrade"`,
+  symaira agent upgrade opencode --tier standard --yes --reason "CI pipeline automation upgrade"`,
 	Annotations: map[string]string{
 		cli.RequiresVaultAnnotation: "false",
 	},

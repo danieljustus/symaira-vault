@@ -6,7 +6,7 @@ import (
 
 	"golang.org/x/tools/go/analysis/analysistest"
 
-	"github.com/danieljustus/OpenPass/cmd/passlint"
+	"github.com/danieljustus/symaira-vault/cmd/passlint"
 )
 
 func TestAnalyzer(t *testing.T) {

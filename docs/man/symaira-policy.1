@@ -1,0 +1,72 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-policy - Manage declarative policies
+
+
+.SH SYNOPSIS
+\fBsymaira policy [flags]\fP
+
+
+.SH DESCRIPTION
+Manage context-aware auto-approval policies for MCP tool calls.
+
+.PP
+Policies are YAML files stored in ~/.config/openpass/policies/.
+They define rules for when tool calls should be allowed, denied,
+prompted, or require biometric authentication.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for policy
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Validate a policy file before activating it
+  openpass policy validate ./my-policy.yaml
+
+  # Apply a policy
+  openpass policy apply ./my-policy.yaml
+
+  # List active policies
+  openpass policy list
+
+  # Remove a named policy
+  openpass policy remove dev-readonly
+.EE
+
+
+.SH SEE ALSO
+\fBopenpass(1)\fP, \fBsymaira-policy-apply(1)\fP, \fBsymaira-policy-list(1)\fP, \fBsymaira-policy-remove(1)\fP, \fBsymaira-policy-validate(1)\fP

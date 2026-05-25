@@ -15,11 +15,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/danieljustus/OpenPass/internal/masking"
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
-	"github.com/danieljustus/OpenPass/internal/mcp/apitemplates"
-	"github.com/danieljustus/OpenPass/internal/metrics"
-	"github.com/danieljustus/OpenPass/internal/vaultsvc"
+	"github.com/danieljustus/symaira-vault/internal/masking"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/mcp/apitemplates"
+	"github.com/danieljustus/symaira-vault/internal/metrics"
+	"github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 const (

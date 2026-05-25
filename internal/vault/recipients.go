@@ -14,8 +14,8 @@ import (
 
 	"filippo.io/age"
 
-	vaultcrypto "github.com/danieljustus/OpenPass/internal/crypto"
-	"github.com/danieljustus/OpenPass/internal/pathutil"
+	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
+	"github.com/danieljustus/symaira-vault/internal/pathutil"
 )
 
 // Common recipients errors

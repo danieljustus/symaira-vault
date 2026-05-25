@@ -1,7 +1,7 @@
 # Dependency Update Runbook
 
 A procedural guide for evaluating, testing, and merging dependency updates for
-OpenPass. This runbook applies to all direct and transitive Go module
+Symaira Vault. This runbook applies to all direct and transitive Go module
 dependencies. Its goal is to keep the dependency tree current and secure while
 avoiding unplanned breakage in a password manager where stability is
 safety-critical.
@@ -27,7 +27,7 @@ safety-critical.
 
 ## Overview
 
-OpenPass is a command-line password manager that handles sensitive user
+Symaira Vault is a command-line password manager that handles sensitive user
 secrets. A compromised or broken dependency could result in data loss,
 unintended exposure, or build failures. This runbook establishes a repeatable,
 documented workflow for dependency updates so that every change is evaluated
@@ -53,7 +53,7 @@ for risk, validated against tests, and traceable to a decision record.
 ## Evaluation Criteria
 
 Every dependency update must be classified by **semantic version delta** and
-assessed for **risk to OpenPass**.
+assessed for **risk to Symaira Vault**.
 
 ### Version Classification
 
@@ -72,7 +72,7 @@ task.
 | Dimension | Questions to Ask |
 |-----------|------------------|
 | **Crypto / Security** | Does the dependency touch encryption, hashing, randomness, or network TLS? Does the update change any of those code paths? |
-| **API Stability** | Are any exported APIs that OpenPass (or its direct deps) uses marked as changed or deprecated? |
+| **API Stability** | Are any exported APIs that Symaira Vault (or its direct deps) uses marked as changed or deprecated? |
 | **Transitive Impact** | Is this dependency indirect? Does it feed into a critical direct dependency (e.g., `go-git`, `age`)? |
 | **Upstream Trust** | Is the maintainer responsive? Is the release signed or tagged by a known key? Are there open CVEs for the target version? |
 
@@ -88,24 +88,24 @@ They illustrate how the criteria above are applied in practice.
 | Version delta | **Major** (v1.1 → v1.4) |
 | Crypto / Security | **High** — this is a cryptographic library. Breaking changes in crypto APIs could silently alter encryption behavior consumed by `go-git`. |
 | API Stability | **High** — three minor versions ahead; upstream may have refactored internal signing or parsing paths. |
-| Transitive Impact | **Medium** — indirect only (`go-git` → `ProtonMail/go-crypto`). OpenPass has no direct import. Risk is contained in `go-git`. |
+| Transitive Impact | **Medium** — indirect only (`go-git` → `ProtonMail/go-crypto`). Symaira Vault has no direct import. Risk is contained in `go-git`. |
 | Upstream Trust | **Low** — ProtonMail is a known maintainer, but the jump is large and not yet adopted by `go-git`. |
 
 **Decision**: Defer until `go-git` upgrades its own dependency or provides a
-migration advisory. No action required from OpenPass maintainers.
+migration advisory. No action required from Symaira Vault maintainers.
 
 #### 2. `github.com/golang/protobuf` — v1.5.4 (deprecated)
 
 | Dimension | Assessment |
 |-----------|------------|
 | Version delta | N/A — library is **deprecated** by Google. |
-| Crypto / Security | **Low** — protobuf parsing is not in OpenPass's threat model. |
+| Crypto / Security | **Low** — protobuf parsing is not in Symaira Vault's threat model. |
 | API Stability | **Medium** — replacement is `google.golang.org/protobuf`. Migration is upstream's responsibility. |
 | Transitive Impact | **Low** — indirect only (`go-git` → `groupcache` → `golang/protobuf`). `google.golang.org/protobuf` v1.36.7 is already present as a transitive dependency. |
 | Upstream Trust | **Low** — deprecation is official; migration path documented by Google. |
 
 **Decision**: Defer until `groupcache` (or `go-git`) migrates off the deprecated
-module. The deferral may become irrelevant without OpenPass intervention.
+module. The deferral may become irrelevant without Symaira Vault intervention.
 
 ---
 
@@ -158,7 +158,7 @@ trusted; for major updates, every step is mandatory.
   Confirm no compilation errors on the target Go version (currently Go 1.26.3).
 
 - [ ] **7. Cross-compilation smoke test**  
-  Because OpenPass ships for multiple platforms:
+  Because Symaira Vault ships for multiple platforms:
   ```bash
   GOOS=linux   GOARCH=amd64 go build -o /dev/null .
   GOOS=darwin  GOARCH=arm64 go build -o /dev/null .
@@ -238,13 +238,13 @@ line, or in the PR description if deferral is decided during review.
 | **Breaking changes assessment** | Unknown — upstream has not published a migration guide for the v1.1 → v1.4 jump. Crypto APIs may have changed. |
 | **Test results** | Not run — deferral decided during audit before update attempt. |
 | **Decision** | Defer |
-| **Justification** | Dependency is transitive-only (via go-git). OpenPass has no direct import. Upgrade risk is contained in the upstream `go-git` project. Defer until `go-git` adopts the new version or provides migration guidance. |
+| **Justification** | Dependency is transitive-only (via go-git). Symaira Vault has no direct import. Upgrade risk is contained in the upstream `go-git` project. Defer until `go-git` adopts the new version or provides migration guidance. |
 | **Review date** | 2026-07-20 |
 | **Owner** | @danieljustus |
 
 #### Notes
 
-- Dependency path: `OpenPass → go-git → ProtonMail/go-crypto`
+- Dependency path: `Symaira Vault → go-git → ProtonMail/go-crypto`
 - `go-git` v5.18.0 still requires `ProtonMail/go-crypto` v1.1.x.
 - Re-evaluate after next `go-git` minor release.
 ```
@@ -264,15 +264,15 @@ line, or in the PR description if deferral is decided during review.
 | **Breaking changes assessment** | No breaking changes expected; module is frozen. Replacement module `google.golang.org/protobuf` is already in the transitive graph. |
 | **Test results** | N/A |
 | **Decision** | Defer |
-| **Justification** | This is a deprecated transitive dependency pulled in by `groupcache`. OpenPass does not import it directly. The correct fix is for `groupcache` (or `go-git`) to migrate to `google.golang.org/protobuf`. No action required from OpenPass until upstream moves. |
+| **Justification** | This is a deprecated transitive dependency pulled in by `groupcache`. Symaira Vault does not import it directly. The correct fix is for `groupcache` (or `go-git`) to migrate to `google.golang.org/protobuf`. No action required from Symaira Vault until upstream moves. |
 | **Review date** | 2026-07-20 |
 | **Owner** | @danieljustus |
 
 #### Notes
 
-- Dependency path: `OpenPass → go-git → groupcache → golang/protobuf`
+- Dependency path: `Symaira Vault → go-git → groupcache → golang/protobuf`
 - `google.golang.org/protobuf` v1.36.7 is already present as a transitive dep.
-- This deferral may resolve itself without OpenPass intervention.
+- This deferral may resolve itself without Symaira Vault intervention.
 ```
 
 ---
@@ -372,11 +372,11 @@ An **emergency update** is any dependency change required to address a
 ### Emergency Procedure
 
 1. **Assess exposure**  
-   Determine whether OpenPass is actually vulnerable:
+   Determine whether Symaira Vault is actually vulnerable:
    ```bash
    # Check if the vulnerable module is in the module graph
    go list -m all | grep <vulnerable-module>
-   # Check if OpenPass imports it directly or indirectly
+   # Check if Symaira Vault imports it directly or indirectly
    go list -deps ./... | grep <vulnerable-package>
    ```
 

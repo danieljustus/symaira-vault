@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-OpenPass v1.0.0 is the first stable release. Security reports are accepted for
+Symaira Vault v1.0.0 is the first stable release. Security reports are accepted for
 the latest stable 1.x release. Snapshots and local builds are unsupported except
 where a maintainer explicitly requests reproduction details for a current fix.
 
@@ -24,7 +24,7 @@ We take security vulnerabilities seriously. If you discover a security issue, pl
 ### Reporting Process
 
 1. **Do NOT** open a public GitHub issue for security vulnerabilities
-2. Submit a private vulnerability report via [GitHub Security Advisories](https://github.com/danieljustus/OpenPass/security/advisories/new)
+2. Submit a private vulnerability report via [GitHub Security Advisories](https://github.com/danieljustus/symaira-vault/security/advisories/new)
 3. Include the following in your report:
    - Description of the vulnerability
    - Steps to reproduce the issue
@@ -56,11 +56,11 @@ The following are **out of scope**:
 
 **No known vulnerabilities at this time.**
 
-For historical security advisories, see the [Security Advisories](https://github.com/danieljustus/OpenPass/security/advisories) page.
+For historical security advisories, see the [Security Advisories](https://github.com/danieljustus/symaira-vault/security/advisories) page.
 
 ## Release Artifact Verification
 
-OpenPass releases publish SHA-256 checksums for downloadable artifacts. To verify
+Symaira Vault releases publish SHA-256 checksums for downloadable artifacts. To verify
 a downloaded artifact:
 
 ```bash
@@ -102,7 +102,7 @@ chmod 600 ~/.openpass/identity.age
 
 ### Prompt Injection & Agent Safety
 
-OpenPass exposes vault credentials to LLM agents via the MCP server. That
+Symaira Vault exposes vault credentials to LLM agents via the MCP server. That
 makes prompt injection (OWASP LLM01, MITRE ATLAS AML.T0051) the primary
 threat class for this surface. The full threat model — covering direct and
 indirect prompt injection, tool poisoning, sensitive-information disclosure,
@@ -147,7 +147,7 @@ adoption pattern) and review the [`hermes-safe-adoption.md`](docs/hermes-safe-ad
 - Binds to `127.0.0.1` only (localhost) — not exposed to network
 - Bearer token authentication required
 - Token auto-generated and stored at `<vault>/mcp-token`
-- Agent identified per-request via `X-OpenPass-Agent` header
+- Agent identified per-request via `X-Symaira Vault-Agent` header
 - Max request body size: 1MB (requests exceeding this return 413 Request Entity Too Large)
 
 **Security recommendations for HTTP mode:**
@@ -242,7 +242,7 @@ Supported patterns:
 
 ### Touch ID / Biometric Authentication (macOS)
 
-OpenPass supports optional Touch ID authentication for vault unlock on macOS. When enabled, Touch ID is used instead of typing your passphrase for unlock, while still maintaining secure keyring-cached session storage.
+Symaira Vault supports optional Touch ID authentication for vault unlock on macOS. When enabled, Touch ID is used instead of typing your passphrase for unlock, while still maintaining secure keyring-cached session storage.
 
 #### Setup
 
@@ -312,7 +312,7 @@ openpass auth set passphrase
 
 ## Encryption Details
 
-OpenPass uses [age](https://age-encryption.org/) for encryption:
+Symaira Vault uses [age](https://age-encryption.org/) for encryption:
 
 - **Key Exchange**: X25519 (Curve25519 elliptic curve Diffie-Hellman)
 - **Encryption**: ChaCha20-Poly1305 (authenticated encryption)
@@ -325,7 +325,7 @@ Each vault entry is encrypted individually as a standalone `.age` file, ensuring
 
 ### KDF Migration Path (scrypt → argon2id)
 
-OpenPass currently uses **scrypt** (N=262144, r=8, p=1 — work factor 18) for
+Symaira Vault currently uses **scrypt** (N=262144, r=8, p=1 — work factor 18) for
 passphrase-based key derivation. While scrypt provides reasonable protection,
 **argon2id** is the industry-standard memory-hard KDF (RFC 9106) and provides
 stronger resistance against GPU/ASIC-based attacks.
@@ -363,7 +363,7 @@ A future release will provide:
 
 ## Privacy & Telemetry
 
-OpenPass does **NOT** collect any product analytics, error reports, or usage telemetry.
+Symaira Vault does **NOT** collect any product analytics, error reports, or usage telemetry.
 
 ### Our Privacy Commitment
 
@@ -372,7 +372,7 @@ As a password manager handling highly sensitive credentials, we believe telemetr
 - **No external telemetry services**: We don't use Sentry, Datadog, Crashlytics, or similar services
 - **No in-app analytics**: We don't track user behavior, command usage, or feature adoption
 - **No error reporting services**: User errors stay local; no data exfiltration to third parties
-- **No network phoning home**: OpenPass operates entirely offline after installation
+- **No network phoning home**: Symaira Vault operates entirely offline after installation
 - **Local metrics only**: The `/metrics` endpoint serves Prometheus metrics locally on request; no metrics are pushed or transmitted to external services
 
 ### What Stays Local
@@ -385,7 +385,7 @@ All data remains on your device:
 
 ### Audit Logs
 
-OpenPass maintains local audit logs for MCP tool calls (see `internal/audit/audit.go`). These logs:
+Symaira Vault maintains local audit logs for MCP tool calls (see `internal/audit/audit.go`). These logs:
 - Are stored in `~/.openpass/audit-<agent>.log`
 - Rotate when they exceed 100MB per file or 30 days old
 - Are retained up to 5 backup files before oldest are pruned
@@ -403,7 +403,7 @@ Audit log rotation is configurable via environment variables:
 
 ### GDPR Compliance
 
-OpenPass is GDPR-compliant by design:
+Symaira Vault is GDPR-compliant by design:
 - No personal data is collected
 - No data is processed by third parties
 - No consent dialogs required for telemetry (because there is no telemetry)
@@ -412,7 +412,7 @@ For more details on error tracking strategy, see [docs/error-tracking-strategy.m
 
 ## Contact
 
-- **GitHub Security Advisories**: https://github.com/danieljustus/OpenPass/security/advisories/new
-- **Public Security Advisories**: https://github.com/danieljustus/OpenPass/security/advisories
+- **GitHub Security Advisories**: https://github.com/danieljustus/symaira-vault/security/advisories/new
+- **Public Security Advisories**: https://github.com/danieljustus/symaira-vault/security/advisories
 
-For non-security issues, please use the [public issue tracker](https://github.com/danieljustus/OpenPass/issues).
+For non-security issues, please use the [public issue tracker](https://github.com/danieljustus/symaira-vault/issues).

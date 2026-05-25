@@ -1,5 +1,5 @@
 // Package update provides functionality for checking, downloading, and
-// applying OpenPass updates.
+// applying Symaira Vault updates.
 package update
 
 import (
@@ -18,7 +18,7 @@ import (
 
 var (
 	// DefaultDownloadBaseURL is the base URL for GitHub release downloads.
-	DefaultDownloadBaseURL = "https://github.com/danieljustus/OpenPass/releases/download"
+	DefaultDownloadBaseURL = "https://github.com/danieljustus/symaira-vault/releases/download"
 
 	// testHTTPClient is used by tests to inject a mock HTTP client, bypassing
 	// the default clients created by newDownloadClient and newSecureClient.
@@ -39,13 +39,13 @@ func archiveName(version, os, arch string) string {
 	if os == windowsOS {
 		ext = "zip"
 	}
-	return fmt.Sprintf("OpenPass_%s_%s_%s.%s", v, os, arch, ext)
+	return fmt.Sprintf("symaira_%s_%s_%s.%s", v, os, arch, ext)
 }
 
 // checksumsFileName returns the checksums filename for the given version.
 func checksumsFileName(version string) string {
 	v := strings.TrimPrefix(version, "v")
-	return fmt.Sprintf("OpenPass_%s_checksums.txt", v)
+	return fmt.Sprintf("symaira_%s_checksums.txt", v)
 }
 
 // newDownloadClient returns an HTTP client with TLS 1.3 minimum and a longer

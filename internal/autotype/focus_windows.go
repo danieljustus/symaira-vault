@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/danieljustus/OpenPass/internal/envfilter"
+	"github.com/danieljustus/symaira-vault/internal/envfilter"
 )
 
 // defaultCaptureActiveWindow shells out to PowerShell to read the foreground

@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/danieljustus/OpenPass/internal/authguard"
-	"github.com/danieljustus/OpenPass/internal/config"
-	"github.com/danieljustus/OpenPass/internal/crypto"
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
-	"github.com/danieljustus/OpenPass/internal/session"
+	"github.com/danieljustus/symaira-vault/internal/authguard"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/crypto"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/session"
 )
 
 func (s *Server) handleGetAuthStatus(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -37,7 +37,7 @@ func (s *Server) handleSetAuthMethod(ctx context.Context, req mcp.CallToolReques
 		if s != nil && s.agent != nil {
 			agentName = s.agent.Name
 		}
-		return nil, fmt.Errorf("agent %q cannot manage OpenPass configuration", agentName)
+		return nil, fmt.Errorf("agent %q cannot manage Symaira Vault configuration", agentName)
 	}
 	if s == nil || s.vault == nil || s.vault.Config == nil {
 		return nil, fmt.Errorf("vault config unavailable")
@@ -53,11 +53,11 @@ func (s *Server) handleSetAuthMethod(ctx context.Context, req mcp.CallToolReques
 
 	if method == config.AuthMethodTouchID {
 		if !session.BiometricAvailable() {
-			return mcp.NewToolResultError("Touch ID is not available in this OpenPass build or on this Mac"), nil
+			return mcp.NewToolResultError("Touch ID is not available in this Symaira Vault build or on this Mac"), nil
 		}
 		passphrase, err := session.LoadPassphrase(s.vault.Dir)
 		if err != nil || len(passphrase) == 0 {
-			return mcp.NewToolResultError("Touch ID setup requires an active OpenPass session; run openpass unlock first"), nil
+			return mcp.NewToolResultError("Touch ID setup requires an active Symaira Vault session; run symaira unlock first"), nil
 		}
 		defer crypto.Wipe(passphrase)
 		if err := session.SaveBiometricPassphrase(ctx, s.vault.Dir, passphrase); err != nil {
@@ -67,7 +67,7 @@ func (s *Server) handleSetAuthMethod(ctx context.Context, req mcp.CallToolReques
 
 	challenger := s.getBiometricChallenger()
 	if challenger.Available() {
-		reason := fmt.Sprintf("Change OpenPass auth method to %s", method)
+		reason := fmt.Sprintf("Change Symaira Vault auth method to %s", method)
 		if err := challenger.Challenge(ctx, authguard.OpAuthMethodSet, reason); err != nil {
 			s.logAudit(ctx, "auth_method_biometric_failed", "<config>", false)
 			return mcp.NewToolResultError(fmt.Sprintf("biometric verification required: %v", err)), nil

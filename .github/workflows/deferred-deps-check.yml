@@ -67,7 +67,7 @@ jobs:
               cveDetails = 'CVEs found in govulncheck scan (see workflow logs for details)';
             }
             const title = '[SECURITY] CVEs found in deferred dependency: ProtonMail/go-crypto';
-            const body = `The deferred transitive dependency \`github.com/ProtonMail/go-crypto\` has one or more known vulnerabilities:\n\n${cveDetails}\n\nThis dependency is pinned at v1.1.6 (transitive via go-git). The current version is affected by the above CVEs.\n\n**Recommended actions:**\n- [ ] Review each CVE for actual impact on OpenPass\n- [ ] If critical: consider temporary direct upgrade of ProtonMail/go-crypto despite the deferral\n- [ ] Update \`go.mod\` deferral documentation\n\nFor context, see the deferred dependency rationale in \`go.mod:5-16\`.\n`;
+            const body = `The deferred transitive dependency \`github.com/ProtonMail/go-crypto\` has one or more known vulnerabilities:\n\n${cveDetails}\n\nThis dependency is pinned at v1.1.6 (transitive via go-git). The current version is affected by the above CVEs.\n\n**Recommended actions:**\n- [ ] Review each CVE for actual impact on Symaira Vault\n- [ ] If critical: consider temporary direct upgrade of ProtonMail/go-crypto despite the deferral\n- [ ] Update \`go.mod\` deferral documentation\n\nFor context, see the deferred dependency rationale in \`go.mod:5-16\`.\n`;
 
             const issues = await github.rest.issues.listForRepo({
               owner: context.repo.owner,

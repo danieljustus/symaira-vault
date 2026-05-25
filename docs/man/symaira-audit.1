@@ -1,0 +1,60 @@
+.nh
+.TH "SYMAIRA" "1" "Apr 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-audit - View MCP audit logs
+
+
+.SH SYNOPSIS
+\fBsymaira audit [flags]\fP
+
+
+.SH DESCRIPTION
+View audit logs of MCP tool invocations.
+
+.PP
+By default shows the last 20 entries. Use --tail to change the number of entries.
+Use --json for machine-readable output. Use --agent to filter by agent name.
+Use --since to filter by time (e.g. "1h", "24h", "7d").
+
+
+.SH OPTIONS
+\fB-a\fP, \fB--agent\fP="default"
+	Agent name to filter by
+
+.PP
+\fB--failed\fP[=false]
+	Show only failed entries
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for audit
+
+.PP
+\fB-j\fP, \fB--json\fP[=false]
+	Output as JSON
+
+.PP
+\fB-s\fP, \fB--since\fP=""
+	Show entries since duration (e.g. 1h, 24h, 7d)
+
+.PP
+\fB-n\fP, \fB--tail\fP=20
+	Number of entries to show
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH SEE ALSO
+\fBopenpass(1)\fP

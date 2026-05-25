@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/danieljustus/OpenPass/internal/envfilter"
+	"github.com/danieljustus/symaira-vault/internal/envfilter"
 )
 
 // ContextProvider gathers runtime context for policy evaluation.

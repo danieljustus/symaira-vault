@@ -18,11 +18,11 @@ func TestArchiveName(t *testing.T) {
 		arch     string
 		expected string
 	}{
-		{"0.5.0", "darwin", "arm64", "OpenPass_0.5.0_darwin_arm64.tar.gz"},
-		{"v1.2.0", "linux", "amd64", "OpenPass_1.2.0_linux_amd64.tar.gz"},
-		{"2.0.0", "windows", "amd64", "OpenPass_2.0.0_windows_amd64.zip"},
-		{"v0.1.0", "freebsd", "arm64", "OpenPass_0.1.0_freebsd_arm64.tar.gz"},
-		{"v0.5.0", "windows", "arm64", "OpenPass_0.5.0_windows_arm64.zip"},
+		{"0.5.0", "darwin", "arm64", "symaira_0.5.0_darwin_arm64.tar.gz"},
+		{"v1.2.0", "linux", "amd64", "symaira_1.2.0_linux_amd64.tar.gz"},
+		{"2.0.0", "windows", "amd64", "symaira_2.0.0_windows_amd64.zip"},
+		{"v0.1.0", "freebsd", "arm64", "symaira_0.1.0_freebsd_arm64.tar.gz"},
+		{"v0.5.0", "windows", "arm64", "symaira_0.5.0_windows_arm64.zip"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.expected, func(t *testing.T) {
@@ -40,8 +40,8 @@ func TestChecksumsFileName(t *testing.T) {
 		version  string
 		expected string
 	}{
-		{"0.5.0", "OpenPass_0.5.0_checksums.txt"},
-		{"v1.2.0", "OpenPass_1.2.0_checksums.txt"},
+		{"0.5.0", "symaira_0.5.0_checksums.txt"},
+		{"v1.2.0", "symaira_1.2.0_checksums.txt"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.expected, func(t *testing.T) {
@@ -157,7 +157,7 @@ func TestDownloadArchive_NetworkError(t *testing.T) {
 }
 
 func TestFetchChecksums_Success(t *testing.T) {
-	checksumsBody := "sha256hash  OpenPass_0.5.0_darwin_arm64.tar.gz\n"
+	checksumsBody := "sha256hash  symaira_0.5.0_darwin_arm64.tar.gz\n"
 	mu.Lock()
 	testHTTPClient = stubHTTPDoer{
 		do: func(req *http.Request) (*http.Response, error) {
@@ -239,7 +239,7 @@ func TestVerifyChecksum_Success(t *testing.T) {
 	data := []byte("test-archive-content")
 	hash := sha256.Sum256(data)
 	hashStr := hex.EncodeToString(hash[:])
-	archiveName := "OpenPass_0.5.0_darwin_arm64.tar.gz"
+	archiveName := "symaira_0.5.0_darwin_arm64.tar.gz"
 	checksums := fmt.Sprintf("%s  %s\n", hashStr, archiveName)
 
 	if err := VerifyChecksum(data, checksums, archiveName); err != nil {
@@ -249,8 +249,8 @@ func TestVerifyChecksum_Success(t *testing.T) {
 
 func TestVerifyChecksum_Mismatch(t *testing.T) {
 	data := []byte("test-archive-content")
-	checksums := "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef  OpenPass_0.5.0_darwin_arm64.tar.gz\n"
-	archiveName := "OpenPass_0.5.0_darwin_arm64.tar.gz"
+	checksums := "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef  symaira_0.5.0_darwin_arm64.tar.gz\n"
+	archiveName := "symaira_0.5.0_darwin_arm64.tar.gz"
 
 	err := VerifyChecksum(data, checksums, archiveName)
 	if err == nil {
@@ -264,7 +264,7 @@ func TestVerifyChecksum_Mismatch(t *testing.T) {
 func TestVerifyChecksum_NotFound(t *testing.T) {
 	data := []byte("test-archive-content")
 	checksums := "deadbeef  SomeOtherFile.tar.gz\n"
-	archiveName := "OpenPass_0.5.0_darwin_arm64.tar.gz"
+	archiveName := "symaira_0.5.0_darwin_arm64.tar.gz"
 
 	err := VerifyChecksum(data, checksums, archiveName)
 	if err == nil {
@@ -279,7 +279,7 @@ func TestVerifyChecksum_CaseInsensitive(t *testing.T) {
 	data := []byte("test-archive-content")
 	hash := sha256.Sum256(data)
 	hashStr := strings.ToUpper(hex.EncodeToString(hash[:]))
-	archiveName := "OpenPass_0.5.0_darwin_arm64.tar.gz"
+	archiveName := "symaira_0.5.0_darwin_arm64.tar.gz"
 	checksums := fmt.Sprintf("%s  %s\n", hashStr, archiveName)
 
 	if err := VerifyChecksum(data, checksums, archiveName); err != nil {
@@ -291,7 +291,7 @@ func TestVerifyChecksum_IgnoresExtraLines(t *testing.T) {
 	data := []byte("test-archive-content")
 	hash := sha256.Sum256(data)
 	hashStr := hex.EncodeToString(hash[:])
-	archiveName := "OpenPass_0.5.0_darwin_arm64.tar.gz"
+	archiveName := "symaira_0.5.0_darwin_arm64.tar.gz"
 	checksums := fmt.Sprintf("aaaa  other1.tar.gz\n%s  %s\nbbbb  other2.tar.gz\n", hashStr, archiveName)
 
 	if err := VerifyChecksum(data, checksums, archiveName); err != nil {

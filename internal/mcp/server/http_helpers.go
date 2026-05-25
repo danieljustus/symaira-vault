@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	transport "github.com/danieljustus/OpenPass/internal/mcp/transport"
+	transport "github.com/danieljustus/symaira-vault/internal/mcp/transport"
 )
 
 // IsLoopbackBind reports whether bind is a loopback address.

@@ -7,9 +7,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
-	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 var (
@@ -24,16 +24,16 @@ var recipientsCmd = &cobra.Command{
 Recipients are stored in recipients.txt in the vault directory.
 Each line contains one public key in age format (starting with "age1").
 Lines starting with # are treated as comments.`,
-	Example: `  openpass recipients list              # List all recipients
-  openpass recipients add age1...       # Add a new recipient
-  openpass recipients remove age1...    # Remove a recipient`,
+	Example: `  symaira recipients list              # List all recipients
+  symaira recipients add age1...       # Add a new recipient
+  symaira recipients remove age1...    # Remove a recipient`,
 }
 
 var recipientsListCmd = &cobra.Command{
 	Use:     "list",
 	Short:   "List all recipients",
 	Long:    `List all recipients from the recipients.txt file.`,
-	Example: `  openpass recipients list`,
+	Example: `  symaira recipients list`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		vaultDir, err := cli.VaultPath()
 		if err != nil {
@@ -41,7 +41,7 @@ var recipientsListCmd = &cobra.Command{
 		}
 
 		if !vaultpkg.IsInitialized(vaultDir) {
-			return errorspkg.NewCLIError(errorspkg.ExitNotInitialized, "vault not initialized. Run 'openpass init' first", errorspkg.ErrVaultNotInitialized)
+			return errorspkg.NewCLIError(errorspkg.ExitNotInitialized, "vault not initialized. Run 'symaira init' first", errorspkg.ErrVaultNotInitialized)
 		}
 
 		rm := vaultpkg.NewRecipientsManager(vaultDir)
@@ -53,7 +53,7 @@ var recipientsListCmd = &cobra.Command{
 		if len(recipients) == 0 {
 			if cli.OutputFormat == "text" {
 				printlnQuietAware("No recipients configured.")
-				printlnQuietAware("Use 'openpass recipients add <public-key>' to add a recipient.")
+				printlnQuietAware("Use 'symaira recipients add <public-key>' to add a recipient.")
 			} else {
 				if err := PrintResult(map[string]interface{}{"recipients": []string{}}); err != nil {
 					return err
@@ -95,7 +95,7 @@ var recipientsAddCmd = &cobra.Command{
 
 The public key must be a valid age public key starting with "age1".
 Once added, all new entries will be encrypted for this recipient.`,
-	Example: `  openpass recipients add age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p`,
+	Example: `  symaira recipients add age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p`,
 	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return cli.WithVaultRaw(func(v *vaultpkg.Vault) error {
@@ -124,10 +124,10 @@ var recipientsRemoveCmd = &cobra.Command{
 	Short:   "Remove a recipient",
 	Long: `Remove a recipient (public key) from the vault.
 
-The public key must match exactly. Use 'openpass recipients list' to see current recipients.
+The public key must match exactly. Use 'symaira recipients list' to see current recipients.
 
 Use --yes to skip confirmation (useful for scripts).`,
-	Example: `  openpass recipients remove age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p`,
+	Example: `  symaira recipients remove age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p`,
 	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return cli.WithVaultRaw(func(v *vaultpkg.Vault) error {

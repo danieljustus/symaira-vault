@@ -1,5 +1,5 @@
 // Package importer provides parsers for importing password entries from
-// other password managers into OpenPass.
+// other password managers into Symaira Vault.
 package importer
 
 import (

@@ -16,8 +16,8 @@ import (
 	"filippo.io/age"
 	"golang.org/x/crypto/scrypt"
 
-	"github.com/danieljustus/OpenPass/internal/fileutil"
-	"github.com/danieljustus/OpenPass/internal/pathutil"
+	"github.com/danieljustus/symaira-vault/internal/fileutil"
+	"github.com/danieljustus/symaira-vault/internal/pathutil"
 )
 
 // DefaultScryptWorkFactor is the default scrypt work factor used when no explicit

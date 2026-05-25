@@ -7,10 +7,10 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/danieljustus/OpenPass/internal/update/installmethod"
+	"github.com/danieljustus/symaira-vault/internal/update/installmethod"
 )
 
-const binaryName = "openpass"
+const binaryName = "symaira"
 
 // ApplyResult contains details about a completed self-update.
 type ApplyResult struct {
@@ -99,7 +99,7 @@ func Apply(ctx context.Context, currentVersion string, force, dryRun bool) (*App
 
 	// Verify the cosign signature on the checksums file before trusting its
 	// SHA256 hashes. This ensures the checksums were published by the
-	// OpenPass release workflow and haven't been tampered with.
+	// Symaira Vault release workflow and haven't been tampered with.
 	sig, err := FetchCosignSignature(ctx, result.LatestVersion)
 	if err != nil {
 		return nil, fmt.Errorf("fetch cosign signature: %w", err)
@@ -153,7 +153,7 @@ func Apply(ctx context.Context, currentVersion string, force, dryRun bool) (*App
 }
 
 func extractBinaryFromArchive(archiveData []byte) ([]byte, error) {
-	tmpDir, err := os.MkdirTemp("", "openpass-update-*")
+	tmpDir, err := os.MkdirTemp("", "symaira-update-*")
 	if err != nil {
 		return nil, fmt.Errorf("create temp directory: %w", err)
 	}

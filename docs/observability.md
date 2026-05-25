@@ -1,6 +1,6 @@
 # Observability
 
-OpenPass provides opt-in observability through Prometheus metrics and OpenTelemetry traces.
+Symaira Vault provides opt-in observability through Prometheus metrics and OpenTelemetry traces.
 
 ## Metrics
 

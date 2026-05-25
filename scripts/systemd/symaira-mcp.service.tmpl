@@ -1,0 +1,11 @@
+[Unit]
+Description=Symaira Vault MCP Server
+
+[Service]
+Type=simple
+ExecStart={{.BinaryPath}} serve --port {{.PortStr}} --bind {{.Bind}}
+Environment=SYMAIRA_VAULT={{.VaultDir}}
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

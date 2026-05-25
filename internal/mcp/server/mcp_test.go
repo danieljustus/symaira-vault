@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/danieljustus/OpenPass/internal/audit"
-	"github.com/danieljustus/OpenPass/internal/config"
-	"github.com/danieljustus/OpenPass/internal/vault"
+	"github.com/danieljustus/symaira-vault/internal/audit"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 //nolint:unparam // transport always "stdio" in current test suite
@@ -181,7 +181,7 @@ func TestToolActionType(t *testing.T) {
 		{"set_entry_field", "set"},
 		{"secure_input", "set"},
 		{"delete_entry", "delete"},
-		{"openpass_delete", "delete"},
+		{"symaira_delete", "delete"},
 		{"run_command", "run"},
 		{"execute_with_secret", "run"},
 		{"list_entries", "list"},

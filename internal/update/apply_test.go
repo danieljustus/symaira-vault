@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/danieljustus/OpenPass/internal/update/installmethod"
+	"github.com/danieljustus/symaira-vault/internal/update/installmethod"
 )
 
 func TestApplyResult_Fields(t *testing.T) {
@@ -15,8 +15,8 @@ func TestApplyResult_Fields(t *testing.T) {
 		Method:     installmethod.DirectDownload,
 		OldVersion: "1.0.0",
 		NewVersion: "2.0.0",
-		BackupPath: "/usr/local/bin/openpass.backup",
-		BinaryPath: "/usr/local/bin/openpass",
+		BackupPath: "/usr/local/bin/symaira.backup",
+		BinaryPath: "/usr/local/bin/symaira",
 		DryRun:     false,
 	}
 
@@ -29,11 +29,11 @@ func TestApplyResult_Fields(t *testing.T) {
 	if r.NewVersion != "2.0.0" {
 		t.Errorf("NewVersion = %q, want %q", r.NewVersion, "2.0.0")
 	}
-	if r.BackupPath != "/usr/local/bin/openpass.backup" {
-		t.Errorf("BackupPath = %q, want %q", r.BackupPath, "/usr/local/bin/openpass.backup")
+	if r.BackupPath != "/usr/local/bin/symaira.backup" {
+		t.Errorf("BackupPath = %q, want %q", r.BackupPath, "/usr/local/bin/symaira.backup")
 	}
-	if r.BinaryPath != "/usr/local/bin/openpass" {
-		t.Errorf("BinaryPath = %q, want %q", r.BinaryPath, "/usr/local/bin/openpass")
+	if r.BinaryPath != "/usr/local/bin/symaira" {
+		t.Errorf("BinaryPath = %q, want %q", r.BinaryPath, "/usr/local/bin/symaira")
 	}
 	if r.DryRun {
 		t.Error("DryRun = true, want false")
@@ -45,7 +45,7 @@ func TestApplyResult_DryRun(t *testing.T) {
 		Method:     installmethod.GoInstall,
 		OldVersion: "1.0.0",
 		NewVersion: "1.5.0",
-		BinaryPath: "/home/user/go/bin/openpass",
+		BinaryPath: "/home/user/go/bin/symaira",
 		DryRun:     true,
 	}
 	if !r.DryRun {
@@ -55,9 +55,9 @@ func TestApplyResult_DryRun(t *testing.T) {
 
 func TestApplyResult_BackupPath(t *testing.T) {
 	r := &ApplyResult{
-		BackupPath: "/custom/path/openpass.backup",
+		BackupPath: "/custom/path/symaira.backup",
 	}
-	if r.BackupPath != "/custom/path/openpass.backup" {
+	if r.BackupPath != "/custom/path/symaira.backup" {
 		t.Errorf("BackupPath = %q", r.BackupPath)
 	}
 }
@@ -65,7 +65,7 @@ func TestApplyResult_BackupPath(t *testing.T) {
 func TestErrUnsupportedMethod_Error(t *testing.T) {
 	e := &ErrUnsupportedMethod{
 		Method:   installmethod.Homebrew,
-		Guidance: "brew upgrade openpass",
+		Guidance: "brew upgrade symaira",
 	}
 	msg := e.Error()
 	if !strings.Contains(msg, "homebrew") {
@@ -101,15 +101,15 @@ func TestErrUnsupportedMethod_AllMethods(t *testing.T) {
 func TestInfoResult_Fields(t *testing.T) {
 	r := &InfoResult{
 		Method:              installmethod.DirectDownload,
-		BinaryPath:          "/usr/local/bin/openpass",
+		BinaryPath:          "/usr/local/bin/symaira",
 		SelfUpdateSupported: true,
 		Guidance:            "curl ...",
 	}
 	if r.Method != installmethod.DirectDownload {
 		t.Errorf("Method = %q, want %q", r.Method, installmethod.DirectDownload)
 	}
-	if r.BinaryPath != "/usr/local/bin/openpass" {
-		t.Errorf("BinaryPath = %q, want %q", r.BinaryPath, "/usr/local/bin/openpass")
+	if r.BinaryPath != "/usr/local/bin/symaira" {
+		t.Errorf("BinaryPath = %q, want %q", r.BinaryPath, "/usr/local/bin/symaira")
 	}
 	if !r.SelfUpdateSupported {
 		t.Error("SelfUpdateSupported = false, want true")
@@ -205,7 +205,7 @@ func TestExtractBinaryFromArchive_TarGz(t *testing.T) {
 	}
 
 	archive := buildTestTarGz(map[string]string{
-		"openpass": "binary-content-here",
+		"symaira": "binary-content-here",
 	}, false)
 
 	data, err := extractBinaryFromArchive(archive)
@@ -223,10 +223,10 @@ func TestExtractBinaryFromArchive_TarGz_Nested(t *testing.T) {
 	}
 
 	// Archive with the binary nested in a subdirectory, mimicking the
-	// GoReleaser layout: OpenPass_<version>_<os>_<arch>/openpass
+	// GoReleaser layout: symaira_<version>_<os>_<arch>/symaira
 	archive := buildTestTarGz(map[string]string{
-		"OpenPass_1.0.0_darwin_arm64/openpass": "nested-binary",
-		"OpenPass_1.0.0_darwin_arm64/LICENSE":  "MIT",
+		"symaira_1.0.0_darwin_arm64/symaira": "nested-binary",
+		"symaira_1.0.0_darwin_arm64/LICENSE":  "MIT",
 	}, true)
 
 	data, err := extractBinaryFromArchive(archive)
@@ -258,7 +258,7 @@ func TestExtractBinaryFromArchive_NoBinary(t *testing.T) {
 	}
 
 	archive := buildTestTarGz(map[string]string{
-		"README.md": "# OpenPass",
+		"README.md": "# Symaira Vault",
 		"LICENSE":   "MIT",
 	}, false)
 

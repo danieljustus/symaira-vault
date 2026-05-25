@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/danieljustus/OpenPass/internal/pathutil"
+	"github.com/danieljustus/symaira-vault/internal/pathutil"
 )
 
 const backupSuffix = ".bak"
@@ -100,7 +100,7 @@ func Uninstall(targetPath string) error {
 	}
 
 	if !FindSentinel(existing) {
-		return fmt.Errorf("%w: refusing to delete %s (not managed by openpass)", ErrUnmanagedFile, targetPath)
+		return fmt.Errorf("%w: refusing to delete %s (not managed by symaira)", ErrUnmanagedFile, targetPath)
 	}
 
 	if err := os.Remove(targetPath); err != nil {

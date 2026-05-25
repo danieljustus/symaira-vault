@@ -7,12 +7,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
-	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	auth "github.com/danieljustus/symaira-vault/internal/mcp/auth"
 )
 
 var agentWhoamiCmd = &cobra.Command{
@@ -23,13 +23,13 @@ var agentWhoamiCmd = &cobra.Command{
 When the OPENPASS_AGENT environment variable is set, loads that agent's profile
 and shows name, tier, allowed paths, tools, quotas, and vault status.
 
-The --output json flag returns structured data matching the MCP openpass_whoami
+The --output json flag returns structured data matching the MCP symaira_whoami
 response format.`,
 	Example: `  # Show agent context
-  OPENPASS_AGENT=my-agent openpass agent whoami
+  OPENPASS_AGENT=my-agent symaira agent whoami
 
   # Show as JSON
-  OPENPASS_AGENT=my-agent openpass agent whoami --output json`,
+  OPENPASS_AGENT=my-agent symaira agent whoami --output json`,
 	Annotations: map[string]string{
 		cli.RequiresVaultAnnotation: "false",
 	},

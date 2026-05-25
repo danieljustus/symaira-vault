@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/danieljustus/OpenPass/internal/testutil"
+	"github.com/danieljustus/symaira-vault/internal/testutil"
 )
 
 func TestConcurrentWriteEntry(t *testing.T) {

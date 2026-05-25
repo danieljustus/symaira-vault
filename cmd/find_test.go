@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func TestCmdFind_NoMatches(t *testing.T) {

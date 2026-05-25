@@ -1,15 +1,15 @@
-// Package cmd is the entry point for the OpenPass CLI.
+// Package cmd is the entry point for the Symaira Vault CLI.
 // It imports sub-packages so their init() functions register commands
 // with the shared RootCmd from internal/cli.
 package cmd
 
 import (
 	// Register sub-package commands via init() side effects.
-	_ "github.com/danieljustus/OpenPass/cmd/admin"
-	_ "github.com/danieljustus/OpenPass/cmd/auth"
-	_ "github.com/danieljustus/OpenPass/cmd/crud"
-	_ "github.com/danieljustus/OpenPass/cmd/mcp"
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	_ "github.com/danieljustus/symaira-vault/cmd/admin"
+	_ "github.com/danieljustus/symaira-vault/cmd/auth"
+	_ "github.com/danieljustus/symaira-vault/cmd/crud"
+	_ "github.com/danieljustus/symaira-vault/cmd/mcp"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 )
 
 // These are set via ldflags by goreleaser in main.go's var block.

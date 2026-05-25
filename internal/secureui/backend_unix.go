@@ -30,7 +30,7 @@ func newGUIBackend(r runner) backend {
 func (*linuxGUIBackend) capability() Capability { return CapGUI }
 
 func (b *linuxGUIBackend) prompt(req PromptRequest) (string, error) {
-	title := orDefault(req.Title, "OpenPass")
+	title := orDefault(req.Title, "Symaira Vault")
 	body := FormatPrompt(req)
 	switch b.tool {
 	case "zenity":

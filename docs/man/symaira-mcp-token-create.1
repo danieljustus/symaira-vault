@@ -1,0 +1,71 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-mcp-token-create - Create a new scoped token
+
+
+.SH SYNOPSIS
+\fBsymaira mcp token create [flags]\fP
+
+
+.SH DESCRIPTION
+Create a new scoped MCP token with restricted tool access.
+
+.PP
+The raw token is printed exactly once — copy it immediately. It cannot be
+retrieved later.
+
+
+.SH OPTIONS
+\fB--agent\fP=""
+	Agent profile to associate
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for create
+
+.PP
+\fB--label\fP=""
+	Human-readable label
+
+.PP
+\fB--tools\fP=[\fI]
+	Comma-separated allowed tools, or '\fP\&' for all
+
+.PP
+\fB--ttl\fP=""
+	Token TTL (e.g. 24h, 7d); defaults to mcp.scoped_token_ttl from config
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH SEE ALSO
+\fBsymaira-mcp-token(1)\fP

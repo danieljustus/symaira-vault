@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 )
 
 func shareStatusFromString(s string) *mcp.ShareStatus {

@@ -1,0 +1,72 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-sync - Sync vault with remote (pull + optional push)
+
+
+.SH SYNOPSIS
+\fBsymaira sync [flags]\fP
+
+
+.SH DESCRIPTION
+Pulls changes from the remote git repository and optionally pushes local changes.
+
+
+.SH OPTIONS
+\fB-f\fP, \fB--force\fP[=false]
+	force pull (reset local changes)
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for sync
+
+.PP
+\fB-p\fP, \fB--push\fP[=false]
+	also push after pull
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Pull only
+  openpass sync
+
+  # Pull and push
+  openpass sync --push
+
+  # Force pull (reset local changes)
+  openpass sync --force
+.EE
+
+
+.SH SEE ALSO
+\fBopenpass(1)\fP

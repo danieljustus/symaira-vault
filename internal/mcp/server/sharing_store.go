@@ -15,9 +15,9 @@ import (
 
 	"filippo.io/age"
 
-	openpasscrypto "github.com/danieljustus/OpenPass/internal/crypto"
-	"github.com/danieljustus/OpenPass/internal/fileutil"
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
+	openpasscrypto "github.com/danieljustus/symaira-vault/internal/crypto"
+	"github.com/danieljustus/symaira-vault/internal/fileutil"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 )
 
 const shareStoreVersion = 1

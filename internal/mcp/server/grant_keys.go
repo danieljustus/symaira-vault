@@ -13,11 +13,11 @@ import (
 	"filippo.io/age"
 	"github.com/zalando/go-keyring"
 
-	"github.com/danieljustus/OpenPass/internal/logging"
+	"github.com/danieljustus/symaira-vault/internal/logging"
 )
 
 const (
-	grantKeyringService       = "openpass"
+	grantKeyringService       = "symaira"
 	grantKeyringAccountPrefix = "grant-signing-key"
 	grantKeySize              = 32
 )

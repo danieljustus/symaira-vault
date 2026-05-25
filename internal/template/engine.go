@@ -1,4 +1,4 @@
-// Package template provides template-based secret generation for OpenPass.
+// Package template provides template-based secret generation for Symaira Vault.
 // It supports built-in templates (env, docker-compose, k8s-secret, github-actions, terraform)
 // and custom templates loaded from a directory.
 package template
@@ -13,7 +13,7 @@ import (
 	"strings"
 	"text/template"
 
-	vaultsvc "github.com/danieljustus/OpenPass/internal/vaultsvc"
+	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 // ErrTemplateNotFound is returned when a requested template does not exist.

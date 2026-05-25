@@ -1,0 +1,71 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-auth-rotate-passphrase - Change the vault master passphrase
+
+
+.SH SYNOPSIS
+\fBsymaira auth rotate-passphrase [flags]\fP
+
+
+.SH DESCRIPTION
+Change the vault's master passphrase without re-initializing the vault.
+The X25519 key pair stays the same — only the passphrase protecting it is changed.
+Optionally re-encrypts all entries with the new passphrase.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for rotate-passphrase
+
+.PP
+\fB--reencrypt\fP[=true]
+	Re-encrypt all entries
+
+.PP
+\fB-y\fP, \fB--yes\fP[=false]
+	Skip confirmation prompt
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Change the passphrase only
+  openpass rotate-passphrase
+
+  # Change passphrase AND re-encrypt all entries (slow but clean)
+  openpass rotate-passphrase --reencrypt
+.EE
+
+
+.SH SEE ALSO
+\fBsymaira-auth(1)\fP

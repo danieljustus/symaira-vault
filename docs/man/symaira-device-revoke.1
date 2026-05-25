@@ -1,0 +1,68 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-device-revoke - Revoke a device and re-encrypt all entries
+
+
+.SH SYNOPSIS
+\fBsymaira device revoke  [flags]\fP
+
+
+.SH DESCRIPTION
+Revoke a device's access to the vault by removing its public key
+from the device registry and recipients list, then re-encrypting all
+entries so the revoked device can no longer decrypt them.
+
+.PP
+WARNING: This is irreversible. The revoked device will permanently lose
+access to all vault entries.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for revoke
+
+.PP
+\fB-y\fP, \fB--yes\fP[=false]
+	Skip confirmation prompt
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  openpass device revoke macbook
+  openpass device revoke macbook --yes
+.EE
+
+
+.SH SEE ALSO
+\fBsymaira-device(1)\fP

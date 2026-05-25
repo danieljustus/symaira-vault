@@ -13,14 +13,14 @@ import (
 
 	"filippo.io/age"
 
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
-	vaultcrypto "github.com/danieljustus/OpenPass/internal/crypto"
-	"github.com/danieljustus/OpenPass/internal/ui/render"
-	"github.com/danieljustus/OpenPass/internal/vault"
-	"github.com/danieljustus/OpenPass/internal/vault/taint"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
+	"github.com/danieljustus/symaira-vault/internal/ui/render"
+	"github.com/danieljustus/symaira-vault/internal/vault"
+	"github.com/danieljustus/symaira-vault/internal/vault/taint"
 )
 
-const recipientsListHint = "run `openpass recipients list`"
+const recipientsListHint = "run `symaira recipients list`"
 
 func checkRecipients(vaultDir string, _ Options) Result {
 	r := Result{ID: "recipients.count", Name: "Recipients"}
@@ -30,7 +30,7 @@ func checkRecipients(vaultDir string, _ Options) Result {
 		if !rm.RecipientsFileExists() {
 			r.Status = StatusWarn
 			r.Message = "no recipients file — single-device risk"
-			r.Hint = "add a backup recipient: `openpass recipients add <age1...>`"
+			r.Hint = "add a backup recipient: `symaira recipients add <age1...>`"
 			return r
 		}
 		r.Status = StatusWarn
@@ -41,7 +41,7 @@ func checkRecipients(vaultDir string, _ Options) Result {
 	if count <= 1 {
 		r.Status = StatusWarn
 		r.Message = fmt.Sprintf("%d recipient (self only) — if identity is lost, vault is unrecoverable", count)
-		r.Hint = "add a backup recipient: `openpass recipients add <age1...>`"
+		r.Hint = "add a backup recipient: `symaira recipients add <age1...>`"
 	} else {
 		r.Status = StatusOK
 		r.Message = fmt.Sprintf("%d recipients configured", count)
@@ -196,7 +196,7 @@ func checkKDFModern(vaultDir string, _ Options) Result {
 	if cfg.Vault == nil || cfg.Vault.FormatVersion < 2 {
 		r.Status = StatusWarn
 		r.Message = "using scrypt KDF (format v1) — argon2id is recommended for 2025+"
-		r.Hint = "run `openpass migrate kdf` after backing up your vault"
+		r.Hint = "run `symaira migrate kdf` after backing up your vault"
 	} else {
 		r.Status = StatusOK
 		r.Message = "using argon2id KDF (format v2)"
@@ -269,7 +269,7 @@ func checkPasswordReuse(vaultDir string, _ Options) Result {
 	if identity == nil {
 		r.Status = StatusWarn
 		r.Message = msgSessionNeeded
-		r.Hint = "run `openpass unlock` to decrypt entries for password reuse analysis"
+		r.Hint = "run `symaira unlock` to decrypt entries for password reuse analysis"
 		return r
 	}
 

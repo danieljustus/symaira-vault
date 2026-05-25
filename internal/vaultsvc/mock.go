@@ -4,7 +4,7 @@ package vaultsvc
 import (
 	"filippo.io/age"
 
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 // MockService provides a mock implementation of the Service interface for testing.

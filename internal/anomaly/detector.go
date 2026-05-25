@@ -1,4 +1,4 @@
-// Package anomaly provides cross-tool anomaly detection for OpenPass MCP servers.
+// Package anomaly provides cross-tool anomaly detection for Symaira Vault MCP servers.
 //
 // The detector maintains a sliding window of recent tool calls and applies
 // multiple detection rules to identify suspicious behavior: sweep detection,

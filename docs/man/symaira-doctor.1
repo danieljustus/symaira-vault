@@ -1,0 +1,108 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-doctor - Check vault health and configuration
+
+
+.SH SYNOPSIS
+\fBsymaira doctor [flags]\fP
+
+
+.SH DESCRIPTION
+Run a series of health checks on the current vault and report their status.
+
+.PP
+Output modes:
+  --text (default): colored output, one line per check
+  --json:           machine-readable JSON (suitable for CI/monitoring)
+
+.PP
+Use --no-network to skip checks that require network access (git remote reachability, update check).
+
+
+.SH OPTIONS
+\fB--exclude\fP=[]
+	Skip checks matching these glob patterns (comma-separated)
+
+.PP
+\fB--fix\fP[=false]
+	auto-repair safe issues (permissions, gitignore, git init)
+
+.PP
+\fB--fix-dry-run\fP[=false]
+	Log what --fix would do without modifying anything
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for doctor
+
+.PP
+\fB--json\fP[=false]
+	Output in JSON format (deprecated: use --output=json)
+
+.PP
+\fB--no-network\fP[=false]
+	Skip network-dependent checks
+
+.PP
+\fB--only\fP=[]
+	Only run checks matching these glob patterns (comma-separated, e.g. vault.*)
+
+.PP
+\fB--quick\fP[=false]
+	Skip slow checks (scrypt benchmark, update check)
+
+.PP
+\fB--strict\fP[=false]
+	Return non-zero exit code for warnings (7) or failures (8)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Full health check
+  openpass doctor
+
+  # JSON output, no network
+  openpass doctor --output json --no-network
+
+  # Run only config checks
+  openpass doctor --only 'config.*'
+
+  # Auto-fix what's safe to fix (with dry-run first)
+  openpass doctor --fix-dry-run
+  openpass doctor --fix
+.EE
+
+
+.SH SEE ALSO
+\fBopenpass(1)\fP

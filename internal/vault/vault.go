@@ -9,11 +9,11 @@ import (
 	"filippo.io/age"
 	"gopkg.in/yaml.v3"
 
-	vaultconfig "github.com/danieljustus/OpenPass/internal/config"
-	vaultcrypto "github.com/danieljustus/OpenPass/internal/crypto"
-	"github.com/danieljustus/OpenPass/internal/fileutil"
-	"github.com/danieljustus/OpenPass/internal/git"
-	"github.com/danieljustus/OpenPass/internal/pathutil"
+	vaultconfig "github.com/danieljustus/symaira-vault/internal/config"
+	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
+	"github.com/danieljustus/symaira-vault/internal/fileutil"
+	"github.com/danieljustus/symaira-vault/internal/git"
+	"github.com/danieljustus/symaira-vault/internal/pathutil"
 )
 
 const vaultFormatVersion2 = 2
@@ -273,7 +273,7 @@ func (v *Vault) AutoCommit(message string) error {
 		}
 	}
 	if commitMessage == "" {
-		commitMessage = "Update from OpenPass"
+		commitMessage = "Update from Symaira Vault"
 	}
 	return git.AutoCommitAndPush(v.Dir, commitMessage, autoPush)
 }

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func TestCmdList_Empty(t *testing.T) {

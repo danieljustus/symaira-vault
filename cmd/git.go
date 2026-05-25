@@ -5,21 +5,21 @@ import (
 
 	"github.com/spf13/cobra"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
-	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
-	"github.com/danieljustus/OpenPass/internal/git"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	"github.com/danieljustus/symaira-vault/internal/git"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 var gitCmd = &cobra.Command{
 	Use:   "git <push|pull|log> [path]",
 	Short: "Git operations on vault",
 	Example: `  # Sync with the configured remote
-  openpass git pull
-  openpass git push
+  symaira git pull
+  symaira git push
 
   # Show commit history for an entry
-  openpass git log work/aws`,
+  symaira git log work/aws`,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		action := args[0]
@@ -47,7 +47,7 @@ var gitCmd = &cobra.Command{
 			return err
 		}
 		if !vaultpkg.IsInitialized(vaultDir) {
-			return errorspkg.NewCLIError(errorspkg.ExitNotInitialized, "vault not initialized. Run 'openpass init' first", errorspkg.ErrVaultNotInitialized)
+			return errorspkg.NewCLIError(errorspkg.ExitNotInitialized, "vault not initialized. Run 'symaira init' first", errorspkg.ErrVaultNotInitialized)
 		}
 
 		switch action {

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	mcpcmd "github.com/danieljustus/OpenPass/cmd/mcp"
+	mcpcmd "github.com/danieljustus/symaira-vault/cmd/mcp"
 )
 
 func TestFindAvailablePort(t *testing.T) {

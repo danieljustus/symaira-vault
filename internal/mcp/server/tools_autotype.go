@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/danieljustus/OpenPass/internal/autotype"
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
-	"github.com/danieljustus/OpenPass/internal/metrics"
-	"github.com/danieljustus/OpenPass/internal/vaultsvc"
+	"github.com/danieljustus/symaira-vault/internal/autotype"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/metrics"
+	"github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 func (s *Server) handleAutotype(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {

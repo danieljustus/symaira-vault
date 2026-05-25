@@ -1,0 +1,62 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-agent-setup - Create an agent profile interactively
+
+
+.SH SYNOPSIS
+\fBsymaira agent setup  [flags]\fP
+
+
+.SH DESCRIPTION
+Run an interactive wizard to create a new agent profile with:
+  • Security tier (read-only, standard, admin)
+  • Vault path glob restriction
+  • Approval mode (prompt or deny)
+
+.PP
+The wizard creates a profile in config.yaml, a scoped token in the registry,
+a token file, and outputs a ready-to-paste stdio MCP client configuration snippet.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for setup
+
+.PP
+\fB--write-config\fP[=false]
+	write agent profile to config.yaml (always true in interactive mode)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH SEE ALSO
+\fBsymaira-agent(1)\fP

@@ -10,7 +10,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/danieljustus/OpenPass/internal/pathutil"
+	"github.com/danieljustus/symaira-vault/internal/pathutil"
 )
 
 func validateConfigPath(path string) error {
@@ -134,11 +134,11 @@ func builtinAgentProfiles() map[string]AgentProfile {
 	deny := approvalModeDeny
 	return map[string]AgentProfile{
 		"default":     {Name: "default", AllowedPaths: []string{}, CanWrite: &canWriteFalse, CanRunCommands: &canRunFalse, ApprovalMode: &deny, ExposeValueTools: &exposeTrue, AutoUnseal: &autoUnsealFalse},
-		"claude-code": {Name: "claude-code", AllowedPaths: []string{}, CanWrite: &canWriteTrue, CanRunCommands: &canRunTrue, ApprovalMode: &deny, ExposeValueTools: &exposeTrue, AutoUnseal: &autoUnsealFalse, SkillPath: StrPtr("~/.claude/skills/openpass/SKILL.md")},
-		"codex":       {Name: "codex", AllowedPaths: []string{}, CanWrite: &canWriteFalse, CanRunCommands: &canRunTrue, ApprovalMode: &deny, ExposeValueTools: &exposeTrue, AutoUnseal: &autoUnsealFalse, SkillPath: StrPtr("~/.codex/skills/openpass/AGENTS.md")},
-		"hermes":      {Name: "hermes", AllowedPaths: []string{}, CanWrite: &canWriteTrue, CanRunCommands: &canRunTrue, ApprovalMode: &deny, ExposeValueTools: &exposeTrue, AutoUnseal: &autoUnsealFalse, SkillPath: StrPtr("~/.hermes/skills/openpass/SKILL.md")},
-		"openclaw":    {Name: "openclaw", AllowedPaths: []string{}, CanWrite: &canWriteTrue, CanRunCommands: &canRunTrue, ApprovalMode: &deny, ExposeValueTools: &exposeTrue, AutoUnseal: &autoUnsealFalse, SkillPath: StrPtr("~/.openclaw/skills/openpass/SKILL.md")},
-		"opencode":    {Name: "opencode", AllowedPaths: []string{}, CanWrite: &canWriteFalse, CanRunCommands: &canRunTrue, ApprovalMode: &deny, ExposeValueTools: &exposeTrue, AutoUnseal: &autoUnsealFalse, SkillPath: StrPtr("~/.opencode/skills/openpass/SKILL.md")},
+		"claude-code": {Name: "claude-code", AllowedPaths: []string{}, CanWrite: &canWriteTrue, CanRunCommands: &canRunTrue, ApprovalMode: &deny, ExposeValueTools: &exposeTrue, AutoUnseal: &autoUnsealFalse, SkillPath: StrPtr("~/.claude/skills/symaira/SKILL.md")},
+		"codex":       {Name: "codex", AllowedPaths: []string{}, CanWrite: &canWriteFalse, CanRunCommands: &canRunTrue, ApprovalMode: &deny, ExposeValueTools: &exposeTrue, AutoUnseal: &autoUnsealFalse, SkillPath: StrPtr("~/.codex/skills/symaira/AGENTS.md")},
+		"hermes":      {Name: "hermes", AllowedPaths: []string{}, CanWrite: &canWriteTrue, CanRunCommands: &canRunTrue, ApprovalMode: &deny, ExposeValueTools: &exposeTrue, AutoUnseal: &autoUnsealFalse, SkillPath: StrPtr("~/.hermes/skills/symaira/SKILL.md")},
+		"openclaw":    {Name: "openclaw", AllowedPaths: []string{}, CanWrite: &canWriteTrue, CanRunCommands: &canRunTrue, ApprovalMode: &deny, ExposeValueTools: &exposeTrue, AutoUnseal: &autoUnsealFalse, SkillPath: StrPtr("~/.openclaw/skills/symaira/SKILL.md")},
+		"opencode":    {Name: "opencode", AllowedPaths: []string{}, CanWrite: &canWriteFalse, CanRunCommands: &canRunTrue, ApprovalMode: &deny, ExposeValueTools: &exposeTrue, AutoUnseal: &autoUnsealFalse, SkillPath: StrPtr("~/.opencode/skills/symaira/SKILL.md")},
 	}
 }
 

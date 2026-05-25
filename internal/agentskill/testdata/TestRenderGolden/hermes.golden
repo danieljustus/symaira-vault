@@ -1,42 +1,42 @@
 ---
-name: openpass
-description: Use OpenPass as the credential manager via native MCP tools and CLI.
-managed_by: openpass
+name: symaira
+description: Use Symaira Vault as the credential manager via native MCP tools and CLI.
+managed_by: symaira
 managed_version: 4.0.0-test
 managed_hash: sha256:3d553a7e8f8841c8844533245feaa84ee00a1cd0acb3d7d0630f860c011ed41a
 managed_installed_at: "2026-05-17T12:00:00Z"
 managed_profile_tier: safe
 ---
 
-# OpenPass (hermes)
+# Symaira Vault (hermes)
 
-OpenPass is the credential store. Use native MCP tools when they are available.
+Symaira Vault is the credential store. Use native MCP tools when they are available.
 Do not use terminal commands for credential reads or writes unless the user
 explicitly asks for CLI debugging.
 
 ## Bootstrap
 
-First, call `mcp_openpass_openpass_whoami` to learn your permissions and which
+First, call `mcp_symaira_symaira_whoami` to learn your permissions and which
 vault you are connected to.
 
-Vault path: `~/.openpass`
+Vault path: `~/.symaira`
 Agent profile: **hermes** (tier: safe)
 
 ## Preferred Tools
 
-Canonical OpenPass MCP tool names (hermes prefix: `mcp_openpass_`):
+Canonical Symaira Vault MCP tool names (hermes prefix: `mcp_symaira_`):
 
-- `mcp_openpass_list_entries`
-- `mcp_openpass_find_entries`
-- `mcp_openpass_get_entry`
-- `mcp_openpass_get_entry_metadata` — metadata only, no secrets
-- `mcp_openpass_set_entry_field`
-- `mcp_openpass_generate_password`
-- `mcp_openpass_generate_totp`
-- `mcp_openpass_delete_entry`
-- `mcp_openpass_copy_to_clipboard`
-- `mcp_openpass_execute_with_secret`
-- `mcp_openpass_request_credential`
+- `mcp_symaira_list_entries`
+- `mcp_symaira_find_entries`
+- `mcp_symaira_get_entry`
+- `mcp_symaira_get_entry_metadata` — metadata only, no secrets
+- `mcp_symaira_set_entry_field`
+- `mcp_symaira_generate_password`
+- `mcp_symaira_generate_totp`
+- `mcp_symaira_delete_entry`
+- `mcp_symaira_copy_to_clipboard`
+- `mcp_symaira_execute_with_secret`
+- `mcp_symaira_request_credential`
 
 Some MCP clients prepend an additional namespace. If canonical names are
 unavailable, inspect the client's MCP tool list and map to these equivalents.
@@ -48,7 +48,7 @@ Your current profile tier is **safe**.
 
 ⚠️ **Limited access**: You only have metadata tools (list, find, metadata).
 For `get_entry` and write access, ask the user to run:
-  openpass agent upgrade hermes --tier standard
+  symaira agent upgrade hermes --tier standard
 
 
 ## Cache Validation
@@ -80,15 +80,15 @@ Example:
 | Read a credential | `get_entry` MCP tool | Token-scoped, audited, no terminal policy needed |
 | Write a credential | `set_entry_field` MCP tool | Same as above |
 | Generate a password | `generate_password` MCP tool | Built-in generation with configurable rules |
-| Bulk import / export | Terminal `openpass add/get` | MCP tools are single-entry |
-| Debug / diagnose | Terminal `openpass doctor` | Detailed diagnostic output |
+| Bulk import / export | Terminal `symaira add/get` | MCP tools are single-entry |
+| Debug / diagnose | Terminal `symaira doctor` | Detailed diagnostic output |
 | Full vault search | `find_entries` / `list_entries` MCP | Token-scoped, paginated |
 
 ## Error Code Map
 
 | Error | Meaning | Agent action |
 |---|---|---|
-| `ERR_AUTH_FAILED` | Token expired or invalid | Call `mcp_openpass_openpass_whoami` |
+| `ERR_AUTH_FAILED` | Token expired or invalid | Call `mcp_symaira_symaira_whoami` |
 | `ERR_NOT_FOUND` | Entry path not found | Use `find_entries` to locate |
 | `ERR_PERMISSION` | Tier forbids the operation | Ask user to upgrade tier |
 | `ERR_INVALID_INPUT` | Bad field name or path | Check entry shape with `get_entry` |
@@ -106,13 +106,13 @@ Example:
 ## Missing Credentials
 
 If a task requires a credential that is not in the vault, do NOT ask the user
-to type the secret in chat. Call `mcp_openpass_request_credential` instead:
+to type the secret in chat. Call `mcp_symaira_request_credential` instead:
 
 - Provide the target path, field name, and a one-sentence human-readable reason.
-- OpenPass opens a native dialog. You receive only a confirmation, never the
+- Symaira Vault opens a native dialog. You receive only a confirmation, never the
   value itself.
-- Continue the task using `mcp_openpass_execute_with_secret`,
-  `mcp_openpass_copy_to_clipboard`, or `mcp_openpass_autotype` — never
+- Continue the task using `mcp_symaira_execute_with_secret`,
+  `mcp_symaira_copy_to_clipboard`, or `mcp_symaira_autotype` — never
   re-derive or re-print the secret.
 
 ## Expected Entry Shape
@@ -137,16 +137,16 @@ For TOTP, call `generate_totp` instead of reading the `totp` secret directly.
 
 ## Slash Commands
 
-This agent supports slash commands via `/openpass:` prefix. Available
+This agent supports slash commands via `/symaira:` prefix. Available
 commands can be discovered through the agent's native command discovery.
 
 ## Agent-Specific: Hermes
 
-Hermes uses the `mcp_openpass_` tool prefix and `/openpass:` slash prefix.
+Hermes uses the `mcp_symaira_` tool prefix and `/symaira:` slash prefix.
 
 To verify MCP connectivity:
 ```
-hermes mcp test openpass
+hermes mcp test symaira
 ```
 
-Hermes supports scoped tokens via `openpass mcp token create --agent hermes`.
+Hermes supports scoped tokens via `symaira mcp token create --agent hermes`.

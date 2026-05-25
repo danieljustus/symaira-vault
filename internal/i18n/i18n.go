@@ -1,4 +1,4 @@
-// Package i18n provides a minimal message catalog for OpenPass user-facing
+// Package i18n provides a minimal message catalog for Symaira Vault user-facing
 // strings. The design is deliberately lightweight — no external dependency,
 // no plural rules, no ICU — because the user-facing surface is small (CLI
 // prompts and wizard steps), the locales we care about today are EN and DE,

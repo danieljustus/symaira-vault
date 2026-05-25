@@ -34,7 +34,7 @@ func TestOsascriptBackend_BuildsScript(t *testing.T) {
 		t.Fatal("newGUIBackend returned nil with osascript present")
 	}
 	value, err := b.prompt(PromptRequest{
-		Title:       "OpenPass",
+		Title:       "Symaira Vault",
 		Path:        "github",
 		Field:       "token",
 		Description: "for CI",
@@ -53,7 +53,7 @@ func TestOsascriptBackend_BuildsScript(t *testing.T) {
 		t.Fatalf("args = %v, want [-e SCRIPT]", mr.calledArgs)
 	}
 	script := mr.calledArgs[1]
-	for _, want := range []string{"display dialog", "with hidden answer", "github", "token", "for CI", "OpenPass"} {
+	for _, want := range []string{"display dialog", "with hidden answer", "github", "token", "for CI", "Symaira Vault"} {
 		if !strings.Contains(script, want) {
 			t.Errorf("script missing %q in:\n%s", want, script)
 		}

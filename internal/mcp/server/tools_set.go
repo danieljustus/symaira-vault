@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/danieljustus/OpenPass/internal/crypto"
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
-	"github.com/danieljustus/OpenPass/internal/metrics"
-	"github.com/danieljustus/OpenPass/internal/vaultsvc"
+	"github.com/danieljustus/symaira-vault/internal/crypto"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/metrics"
+	"github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 func (s *Server) handleSet(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {

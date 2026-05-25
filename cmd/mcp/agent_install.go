@@ -7,17 +7,17 @@ import (
 	"path/filepath"
 	"strings"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
-	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
-	"github.com/danieljustus/OpenPass/internal/mcp/install"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	auth "github.com/danieljustus/symaira-vault/internal/mcp/auth"
+	"github.com/danieljustus/symaira-vault/internal/mcp/install"
 
-	"github.com/danieljustus/OpenPass/internal/agentskill"
+	"github.com/danieljustus/symaira-vault/internal/agentskill"
 )
 
 var validTiers = map[string]bool{
@@ -46,7 +46,7 @@ type InstallResult struct {
 
 var agentInstallCmd = &cobra.Command{
 	Use:   "install [name]",
-	Short: "Install and configure an AI agent for OpenPass",
+	Short: "Install and configure an AI agent for Symaira Vault",
 	Long: `Unified install command that detects an AI agent, creates a security
 profile in config.yaml, generates a scoped access token, injects the
 MCP server configuration into the agent's config file, and installs the
@@ -60,31 +60,31 @@ security implications.
 
 Supported agents: openclaw, claude-code, hermes, codex, opencode`,
 	Example: `  # Install and configure Claude Code (auto-detect)
-  openpass agent install claude-code
+  symaira agent install claude-code
 
   # Detect all installed agents and configure each
-  openpass agent install --auto-detect
+  symaira agent install --auto-detect
 
   # HTTP transport with auto-generated bearer token
-  openpass agent install hermes --http
+  symaira agent install hermes --http
 
   # Standard tier with explicit confirmation
-  openpass agent install codex --tier standard
+  symaira agent install codex --tier standard
 
   # Preview what would happen without writing anything
-  openpass agent install openclaw --dry-run
+  symaira agent install openclaw --dry-run
 
   # Only install the skill package, skip MCP config
-  openpass agent install opencode --skill-only
+  symaira agent install opencode --skill-only
 
   # Only inject MCP config, skip the skill
-  openpass agent install claude-code --config-only
+  symaira agent install claude-code --config-only
 
   # Force overwrite existing profile and MCP config entries
-  openpass agent install hermes --force
+  symaira agent install hermes --force
 
   # Structured JSON output for scripting
-  openpass agent install opencode --output json`,
+  symaira agent install opencode --output json`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		autoDetect, _ := cmd.Flags().GetBool("auto-detect")
 		if autoDetect {

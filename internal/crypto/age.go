@@ -1,4 +1,4 @@
-// Package crypto provides age-based encryption functionality for OpenPass.
+// Package crypto provides age-based encryption functionality for Symaira Vault.
 // It supports encryption with X25519 recipients, passphrase-based encryption,
 // and multi-recipient encryption for sharing vault entries.
 package crypto

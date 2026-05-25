@@ -10,12 +10,12 @@ import (
 	"strings"
 	"time"
 
-	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
-	"github.com/danieljustus/OpenPass/internal/metrics"
-	"github.com/danieljustus/OpenPass/internal/vault"
-	"github.com/danieljustus/OpenPass/internal/vault/taint"
-	"github.com/danieljustus/OpenPass/internal/vaultsvc"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/metrics"
+	"github.com/danieljustus/symaira-vault/internal/vault"
+	"github.com/danieljustus/symaira-vault/internal/vault/taint"
+	"github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 func vaultServiceErrorResult(err error) (*mcp.CallToolResult, error) {
@@ -120,7 +120,7 @@ func (s *Server) handleGetValue(ctx context.Context, req mcp.CallToolRequest) (*
 		cleanedPath := gopath.Clean(path)
 		if cleanedPath == "quarantine" || strings.HasPrefix(cleanedPath, "quarantine/") {
 			s.logAudit(ctx, "quarantine_block", path, false)
-			return mcp.NewToolResultError("entry is in quarantine — run 'openpass import review promote' to make it accessible"), nil
+			return mcp.NewToolResultError("entry is in quarantine — run 'symaira import review promote' to make it accessible"), nil
 		}
 	}
 

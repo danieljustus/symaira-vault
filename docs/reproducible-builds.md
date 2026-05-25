@@ -1,6 +1,6 @@
 # Reproducible Builds & Signed Releases
 
-This document describes how to create reproducible builds and cryptographically signed releases of OpenPass.
+This document describes how to create reproducible builds and cryptographically signed releases of Symaira Vault.
 
 ## Overview
 
@@ -176,7 +176,7 @@ done
    # Generate a new dedicated release signing key
    gpg --full-generate-key
    # Select: RSA and RSA, 4096 bits, no expiration
-   # Use: OpenPass Release Signing Key <releases@openpass.dev>
+   # Use: Symaira Vault Release Signing Key <releases@openpass.dev>
    ```
 
 2. **Export public key**:
@@ -265,7 +265,7 @@ done
    ```bash
    # Create release with artifacts
    gh release create ${VERSION} \
-     --title "OpenPass ${VERSION}" \
+     --title "Symaira Vault ${VERSION}" \
      --notes-file CHANGELOG-${VERSION}.md \
      dist/*
    ```
@@ -435,21 +435,21 @@ Users should verify downloaded binaries before use:
 gpg --import docs/openpass-release-key.asc
 
 # Download binary and signature
-curl -LO https://github.com/danieljustus/OpenPass/releases/download/v1.2.3/openpass-v1.2.3-linux-amd64
-curl -LO https://github.com/danieljustus/OpenPass/releases/download/v1.2.3/openpass-v1.2.3-linux-amd64.asc
+curl -LO https://github.com/danieljustus/symaira-vault/releases/download/v1.2.3/openpass-v1.2.3-linux-amd64
+curl -LO https://github.com/danieljustus/symaira-vault/releases/download/v1.2.3/openpass-v1.2.3-linux-amd64.asc
 
 # Verify signature
 gpg --verify openpass-v1.2.3-linux-amd64.asc openpass-v1.2.3-linux-amd64
 
-# Expected output: Good signature from "OpenPass Release Signing Key"
+# Expected output: Good signature from "Symaira Vault Release Signing Key"
 ```
 
 ### Verifying Checksums
 
 ```bash
 # Download checksums and signature
-curl -LO https://github.com/danieljustus/OpenPass/releases/download/v1.2.3/checksums.txt
-curl -LO https://github.com/danieljustus/OpenPass/releases/download/v1.2.3/checksums.txt.asc
+curl -LO https://github.com/danieljustus/symaira-vault/releases/download/v1.2.3/checksums.txt
+curl -LO https://github.com/danieljustus/symaira-vault/releases/download/v1.2.3/checksums.txt.asc
 
 # Verify checksums signature
 gpg --verify checksums.txt.asc checksums.txt
@@ -464,8 +464,8 @@ Advanced users can reproduce the build independently:
 
 ```bash
 # Clone the repository at the release tag
-git clone https://github.com/danieljustus/OpenPass.git
-cd OpenPass
+git clone https://github.com/danieljustus/symaira-vault.git
+cd Symaira Vault
 git checkout v1.2.3
 
 # Build with the same flags

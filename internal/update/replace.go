@@ -1,4 +1,4 @@
-// Package update provides functionality for checking and managing OpenPass updates.
+// Package update provides functionality for checking and managing Symaira Vault updates.
 package update
 
 import (
@@ -101,7 +101,7 @@ func verifyBinary(binaryPath string) error {
 // error during write or close, the partially written temp file is removed.
 func writeTempBinary(binaryPath string, data []byte) (string, error) {
 	dir := filepath.Dir(binaryPath)
-	tmpFile, err := os.CreateTemp(dir, ".openpass-update-*")
+	tmpFile, err := os.CreateTemp(dir, ".symaira-update-*")
 	if err != nil {
 		return "", fmt.Errorf("create temp file in %q: %w", dir, err)
 	}

@@ -1,0 +1,69 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-agent-list - List all configured agents
+
+
+.SH SYNOPSIS
+\fBsymaira agent list [flags]\fP
+
+
+.SH DESCRIPTION
+Show all installed agents with their tier, token status, and skill installation status.
+
+.PP
+Output columns:
+  AGENT      Agent profile name
+  TIER       Security tier (read-only, standard, admin, or custom)
+  TOKEN      Token status from the registry (none, valid, invalid)
+  SKILL      Skill file status (missing, installed, managed)
+  LAST SEEN  Most recent token use timestamp
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for list
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # List all agents in a table
+  openpass agent list
+
+  # JSON output for programmatic use
+  openpass agent list --output json
+.EE
+
+
+.SH SEE ALSO
+\fBsymaira-agent(1)\fP

@@ -1,7 +1,7 @@
 {
-  "name": "@openpass/mcp-client",
+  "name": "@symaira/mcp-client",
   "version": "1.0.0",
-  "description": "Shared TypeScript MCP client for OpenPass editor plugins",
+  "description": "Shared TypeScript MCP client for Symaira Vault editor plugins",
   "main": "out/index.js",
   "types": "out/index.d.ts",
   "scripts": {

@@ -7,10 +7,10 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/danieljustus/OpenPass/internal/fileutil"
+	"github.com/danieljustus/symaira-vault/internal/fileutil"
 )
 
-// Save persists the config to the default config file path (~/.openpass/config.yaml).
+// Save persists the config to the default config file path (~/.symaira/config.yaml).
 func (c *Config) Save() error {
 	if c == nil {
 		return errors.New("config is nil")

@@ -1,13 +1,13 @@
-# ADR 0001: Self-Update Mechanism for OpenPass
+# ADR 0001: Self-Update Mechanism for Symaira Vault
 
 **Date:** 2026-04-23  
 **Status:** Proposed  
-**Author:** OpenPass Team  
+**Author:** Symaira Vault Team  
 **Issue:** PNEOS-428
 
 ## Context
 
-OpenPass currently implements update checking via `internal/update/checker.go`, which queries the GitHub Releases API and compares semantic versions. However, the tool does not provide a self-update mechanism. When updates are available, users are directed to manually download new binaries from GitHub or use their original installation channel.
+Symaira Vault currently implements update checking via `internal/update/checker.go`, which queries the GitHub Releases API and compares semantic versions. However, the tool does not provide a self-update mechanism. When updates are available, users are directed to manually download new binaries from GitHub or use their original installation channel.
 
 This ADR addresses the design of a self-update feature, carefully considering the security implications and the diverse installation methods users employ.
 
@@ -27,10 +27,10 @@ What's missing:
 
 ### Installation Methods in Use
 
-Based on README.md and `.goreleaser.yml`, OpenPass is distributed via:
+Based on README.md and `.goreleaser.yml`, Symaira Vault is distributed via:
 
 1. **Direct binary download** from GitHub Releases (tar.gz for macOS/Linux, zip for Windows)
-2. **Go install** (`go install github.com/danieljustus/OpenPass@latest`)
+2. **Go install** (`go install github.com/danieljustus/symaira-vault@latest`)
 3. **Build from source** (manual `go build`)
 4. **Package managers** (DEB, RPM, APK via GoReleaser nfpms)
 5. **Manual copies** (user-built binary placed in custom PATH location)
@@ -139,7 +139,7 @@ func isUserWritable(path string) bool {
 ```go
 // Download checksums file over HTTPS
 checksumsURL := fmt.Sprintf(
-    "https://github.com/danieljustus/OpenPass/releases/download/v%s/OpenPass_%s_checksums.txt",
+    "https://github.com/danieljustus/symaira-vault/releases/download/v%s/OpenPass_%s_checksums.txt",
     version, version,
 )
 
@@ -372,12 +372,12 @@ Self-update is not available for your installation method.
 Detected: Homebrew installation
 Location: /opt/homebrew/bin/openpass
 
-To update OpenPass, use your package manager:
+To update Symaira Vault, use your package manager:
 
   brew upgrade openpass
 
 Alternatively, download the latest release manually:
-https://github.com/danieljustus/OpenPass/releases/tag/v1.2.3
+https://github.com/danieljustus/symaira-vault/releases/tag/v1.2.3
 ```
 
 #### 5.2 Installation-Specific Guidance
@@ -387,8 +387,8 @@ https://github.com/danieljustus/OpenPass/releases/tag/v1.2.3
 | Homebrew | `brew upgrade openpass` |
 | APT | `sudo apt update && sudo apt install openpass` |
 | RPM | `sudo dnf update openpass` or `sudo yum update openpass` |
-| Go install | `go install github.com/danieljustus/OpenPass@latest` |
-| Package manager (unknown) | "Use your package manager to update OpenPass" |
+| Go install | `go install github.com/danieljustus/symaira-vault@latest` |
+| Package manager (unknown) | "Use your package manager to update Symaira Vault" |
 | Manual build | "Rebuild from source or download binary from GitHub Releases" |
 
 #### 5.3 No Silent Failures

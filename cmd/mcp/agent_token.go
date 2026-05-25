@@ -5,11 +5,11 @@ import (
 	"strings"
 	"time"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 
-	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
+	auth "github.com/danieljustus/symaira-vault/internal/mcp/auth"
 )
 
 var agentTokenCmd = &cobra.Command{
@@ -18,16 +18,16 @@ var agentTokenCmd = &cobra.Command{
 	Long:  `Create, list, revoke, and rotate scoped tokens for a specific agent.`,
 	Args:  cobra.ExactArgs(1),
 	Example: `  # Create a scoped token for an agent
-  openpass agent token my-agent new
+  symaira agent token my-agent new
 
   # List tokens for an agent
-  openpass agent token my-agent list
+  symaira agent token my-agent list
 
   # Revoke a token by ID
-  openpass agent token my-agent revoke <token-id>
+  symaira agent token my-agent revoke <token-id>
 
   # Rotate an agent's token (revoke + create new)
-  openpass agent token my-agent rotate`,
+  symaira agent token my-agent rotate`,
 }
 
 var agentTokenNewCmd = &cobra.Command{

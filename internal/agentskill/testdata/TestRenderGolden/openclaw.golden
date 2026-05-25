@@ -1,42 +1,42 @@
 ---
-name: openpass
-description: Use OpenPass as the credential manager via native MCP tools and CLI.
-managed_by: openpass
+name: symaira
+description: Use Symaira Vault as the credential manager via native MCP tools and CLI.
+managed_by: symaira
 managed_version: 4.0.0-test
 managed_hash: sha256:81903c461cf864e2feba802d67a8f0ca219bf77439d5765bc8bfcf31c762b6c9
 managed_installed_at: "2026-05-17T12:00:00Z"
 managed_profile_tier: custom
 ---
 
-# OpenPass (openclaw)
+# Symaira Vault (openclaw)
 
-OpenPass is the credential store. Use native MCP tools when they are available.
+Symaira Vault is the credential store. Use native MCP tools when they are available.
 Do not use terminal commands for credential reads or writes unless the user
 explicitly asks for CLI debugging.
 
 ## Bootstrap
 
-First, call `mcp__openclaw_openpass__openpass_whoami` to learn your permissions and which
+First, call `mcp__openclaw_symaira__symaira_whoami` to learn your permissions and which
 vault you are connected to.
 
-Vault path: `~/.openpass`
+Vault path: `~/.symaira`
 Agent profile: **openclaw** (tier: custom)
 
 ## Preferred Tools
 
-Canonical OpenPass MCP tool names (openclaw prefix: `mcp__openclaw_openpass__`):
+Canonical Symaira Vault MCP tool names (openclaw prefix: `mcp__openclaw_symaira__`):
 
-- `mcp__openclaw_openpass__list_entries`
-- `mcp__openclaw_openpass__find_entries`
-- `mcp__openclaw_openpass__get_entry`
-- `mcp__openclaw_openpass__get_entry_metadata` — metadata only, no secrets
-- `mcp__openclaw_openpass__set_entry_field`
-- `mcp__openclaw_openpass__generate_password`
-- `mcp__openclaw_openpass__generate_totp`
-- `mcp__openclaw_openpass__delete_entry`
-- `mcp__openclaw_openpass__copy_to_clipboard`
-- `mcp__openclaw_openpass__execute_with_secret`
-- `mcp__openclaw_openpass__request_credential`
+- `mcp__openclaw_symaira__list_entries`
+- `mcp__openclaw_symaira__find_entries`
+- `mcp__openclaw_symaira__get_entry`
+- `mcp__openclaw_symaira__get_entry_metadata` — metadata only, no secrets
+- `mcp__openclaw_symaira__set_entry_field`
+- `mcp__openclaw_symaira__generate_password`
+- `mcp__openclaw_symaira__generate_totp`
+- `mcp__openclaw_symaira__delete_entry`
+- `mcp__openclaw_symaira__copy_to_clipboard`
+- `mcp__openclaw_symaira__execute_with_secret`
+- `mcp__openclaw_symaira__request_credential`
 
 Some MCP clients prepend an additional namespace. If canonical names are
 unavailable, inspect the client's MCP tool list and map to these equivalents.
@@ -46,7 +46,7 @@ unavailable, inspect the client's MCP tool list and map to these equivalents.
 Your current profile tier is **custom**.
 
 
-Your profile has custom permission overrides. Call `mcp__openclaw_openpass__openpass_whoami`
+Your profile has custom permission overrides. Call `mcp__openclaw_symaira__symaira_whoami`
 to see your exact capabilities.
 
 
@@ -79,15 +79,15 @@ Example:
 | Read a credential | `get_entry` MCP tool | Token-scoped, audited, no terminal policy needed |
 | Write a credential | `set_entry_field` MCP tool | Same as above |
 | Generate a password | `generate_password` MCP tool | Built-in generation with configurable rules |
-| Bulk import / export | Terminal `openpass add/get` | MCP tools are single-entry |
-| Debug / diagnose | Terminal `openpass doctor` | Detailed diagnostic output |
+| Bulk import / export | Terminal `symaira add/get` | MCP tools are single-entry |
+| Debug / diagnose | Terminal `symaira doctor` | Detailed diagnostic output |
 | Full vault search | `find_entries` / `list_entries` MCP | Token-scoped, paginated |
 
 ## Error Code Map
 
 | Error | Meaning | Agent action |
 |---|---|---|
-| `ERR_AUTH_FAILED` | Token expired or invalid | Call `mcp__openclaw_openpass__openpass_whoami` |
+| `ERR_AUTH_FAILED` | Token expired or invalid | Call `mcp__openclaw_symaira__symaira_whoami` |
 | `ERR_NOT_FOUND` | Entry path not found | Use `find_entries` to locate |
 | `ERR_PERMISSION` | Tier forbids the operation | Ask user to upgrade tier |
 | `ERR_INVALID_INPUT` | Bad field name or path | Check entry shape with `get_entry` |
@@ -105,13 +105,13 @@ Example:
 ## Missing Credentials
 
 If a task requires a credential that is not in the vault, do NOT ask the user
-to type the secret in chat. Call `mcp__openclaw_openpass__request_credential` instead:
+to type the secret in chat. Call `mcp__openclaw_symaira__request_credential` instead:
 
 - Provide the target path, field name, and a one-sentence human-readable reason.
-- OpenPass opens a native dialog. You receive only a confirmation, never the
+- Symaira Vault opens a native dialog. You receive only a confirmation, never the
   value itself.
-- Continue the task using `mcp__openclaw_openpass__execute_with_secret`,
-  `mcp__openclaw_openpass__copy_to_clipboard`, or `mcp__openclaw_openpass__autotype` — never
+- Continue the task using `mcp__openclaw_symaira__execute_with_secret`,
+  `mcp__openclaw_symaira__copy_to_clipboard`, or `mcp__openclaw_symaira__autotype` — never
   re-derive or re-print the secret.
 
 ## Expected Entry Shape
@@ -138,7 +138,7 @@ For TOTP, call `generate_totp` instead of reading the `totp` secret directly.
 
 ## Agent-Specific: OpenClaw
 
-OpenClaw uses `mcp__openclaw_openpass__` as the tool prefix and `` for
+OpenClaw uses `mcp__openclaw_symaira__` as the tool prefix and `` for
 slash commands.
 
 OpenClaw supports native MCP tool discovery. Configure via the standard MCP

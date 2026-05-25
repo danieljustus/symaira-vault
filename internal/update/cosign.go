@@ -22,7 +22,7 @@ var execCommand = exec.Command
 // cosign signing convention where "<artifact>.sig" is the signature.
 func cosignSignatureFileName(version string) string {
 	v := strings.TrimPrefix(version, "v")
-	return fmt.Sprintf("OpenPass_%s_checksums.txt.sig", v)
+	return fmt.Sprintf("symaira_%s_checksums.txt.sig", v)
 }
 
 // cosignCertificateFileName returns the cosign certificate filename for the
@@ -30,7 +30,7 @@ func cosignSignatureFileName(version string) string {
 // cosign signing convention where "<artifact>.pem" is the certificate.
 func cosignCertificateFileName(version string) string {
 	v := strings.TrimPrefix(version, "v")
-	return fmt.Sprintf("OpenPass_%s_checksums.txt.pem", v)
+	return fmt.Sprintf("symaira_%s_checksums.txt.pem", v)
 }
 
 // fetchCosignArtifact downloads a cosign artifact (signature or certificate)
@@ -98,8 +98,8 @@ func FetchCosignCertificate(ctx context.Context, version string) ([]byte, error)
 // The verification enforces:
 //   - The certificate's OIDC issuer must be GitHub Actions
 //     (https://token.actions.githubusercontent.com)
-//   - The certificate identity must match the OpenPass release workflow
-//     (https://github.com/danieljustus/OpenPass/.github/workflows/release.yml)
+//   - The certificate identity must match the Symaira Vault release workflow
+//     (https://github.com/danieljustus/symaira-vault/.github/workflows/release.yml)
 //     with a semantic version tag reference
 //
 // If the cosign CLI is not installed, the function returns a clear error
@@ -113,7 +113,7 @@ func VerifyCosignSignature(content, signature, certificate []byte) error {
 		)
 	}
 
-	tmpDir, err := os.MkdirTemp("", "openpass-cosign-*")
+	tmpDir, err := os.MkdirTemp("", "symaira-cosign-*")
 	if err != nil {
 		return fmt.Errorf("create temp directory: %w", err)
 	}
@@ -139,7 +139,7 @@ func VerifyCosignSignature(content, signature, certificate []byte) error {
 		"--certificate", certPath,
 		"--signature", sigPath,
 		"--certificate-identity-regexp",
-		`https://github\.com/danieljustus/OpenPass/\.github/workflows/release\.yml@refs/tags/v.*`,
+		`https://github\.com/danieljustus/Symaira Vault/\.github/workflows/release\.yml@refs/tags/v.*`,
 		"--certificate-oidc-issuer",
 		"https://token.actions.githubusercontent.com",
 		contentPath,

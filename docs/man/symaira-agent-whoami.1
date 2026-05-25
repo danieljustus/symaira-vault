@@ -1,0 +1,69 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-agent-whoami - Show current agent context
+
+
+.SH SYNOPSIS
+\fBsymaira agent whoami [flags]\fP
+
+
+.SH DESCRIPTION
+Display information about the current agent profile.
+
+.PP
+When the OPENPASS_AGENT environment variable is set, loads that agent's profile
+and shows name, tier, allowed paths, tools, quotas, and vault status.
+
+.PP
+The --output json flag returns structured data matching the MCP openpass_whoami
+response format.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for whoami
+
+.PP
+\fB-o\fP, \fB--output\fP="text"
+	Output format (text, json)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Show agent context
+  OPENPASS_AGENT=my-agent openpass agent whoami
+
+  # Show as JSON
+  OPENPASS_AGENT=my-agent openpass agent whoami --output json
+.EE
+
+
+.SH SEE ALSO
+\fBsymaira-agent(1)\fP

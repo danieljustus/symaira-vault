@@ -8,7 +8,7 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/danieljustus/OpenPass/internal/envfilter"
+	"github.com/danieljustus/symaira-vault/internal/envfilter"
 )
 
 // RunResult contains the result of a command execution.

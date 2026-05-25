@@ -4,20 +4,20 @@ import (
 	"fmt"
 	"os"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 
-	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
-	"github.com/danieljustus/OpenPass/internal/session"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	"github.com/danieljustus/symaira-vault/internal/session"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 var lockCmd = &cobra.Command{
 	Use:   "lock",
 	Short: "Lock the vault (clear session)",
 	Example: `  # Lock the vault (clear session)
-  openpass lock`,
+  symaira lock`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		vaultDir, err := cli.VaultPath()
 		if err != nil {
@@ -25,7 +25,7 @@ var lockCmd = &cobra.Command{
 		}
 
 		if !vaultpkg.IsInitialized(vaultDir) {
-			return errorspkg.NewCLIError(errorspkg.ExitNotInitialized, "vault not initialized. Run 'openpass init' first", errorspkg.ErrVaultNotInitialized)
+			return errorspkg.NewCLIError(errorspkg.ExitNotInitialized, "vault not initialized. Run 'symaira init' first", errorspkg.ErrVaultNotInitialized)
 		}
 
 		if err := session.ClearSession(vaultDir); err != nil {

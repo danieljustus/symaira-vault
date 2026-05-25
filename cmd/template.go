@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"os"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 
-	"github.com/danieljustus/OpenPass/internal/template"
-	vaultsvc "github.com/danieljustus/OpenPass/internal/vaultsvc"
+	"github.com/danieljustus/symaira-vault/internal/template"
+	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 var (
@@ -32,30 +32,30 @@ Supported template types:
   github-actions  - GitHub Actions workflow secrets
   terraform       - Terraform variable definitions`,
 	Example: `  # Generate a .env file from the work/* entries
-  openpass template generate env --prefix work/ > .env
+  symaira template generate env --prefix work/ > .env
 
   # K8s Secret manifest
-  openpass template generate k8s-secret --name prod-secrets prod/*`,
+  symaira template generate k8s-secret --name prod-secrets prod/*`,
 }
 
 var templateGenerateCmd = &cobra.Command{
 	Use:   "generate",
 	Short: "Generate a configuration file from a template",
 	Example: `  # Generate .env file from vault secrets
-  openpass template generate --type env --name myapp
+  symaira template generate --type env --name myapp
 
   # Generate Kubernetes secret manifest
-  openpass template generate --type k8s-secret --name myapp --output k8s/secret.yaml
+  symaira template generate --type k8s-secret --name myapp --output k8s/secret.yaml
 
   # Dry-run to preview without real values
-  openpass template generate --type env --name myapp --dry-run`,
+  symaira template generate --type env --name myapp --dry-run`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return cli.WithVault(func(svc vaultsvc.Service) error {
 			ctx := context.Background()
 			engine := template.NewEngine(svc)
 
 			refs := make(map[string]string)
-			customDir := os.ExpandEnv("$HOME/.config/openpass/templates")
+			customDir := os.ExpandEnv("$HOME/.config/symaira/templates")
 			_ = engine.LoadCustomTemplates(customDir)
 
 			output, err := engine.Render(ctx, templateType, templateName, refs, templateDryRun)

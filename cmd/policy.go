@@ -7,8 +7,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
-	"github.com/danieljustus/OpenPass/internal/policy"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
+	"github.com/danieljustus/symaira-vault/internal/policy"
 )
 
 var policyValidateCmd = &cobra.Command{
@@ -20,7 +20,7 @@ Checks that the policy file has valid YAML structure, correct version,
 valid rule names, known actions, and well-formed conditions.
 
 Example:
-  openpass policy validate ~/.config/openpass/policies/dev.yaml`,
+  symaira policy validate ~/.config/symaira/policies/dev.yaml`,
 	Args: cobra.ExactArgs(1),
 	Annotations: map[string]string{
 		requiresVaultAnnotation: "false",
@@ -60,20 +60,20 @@ var policyCmd = &cobra.Command{
 	Short: "Manage declarative policies",
 	Long: `Manage context-aware auto-approval policies for MCP tool calls.
 
-Policies are YAML files stored in ~/.config/openpass/policies/.
+Policies are YAML files stored in ~/.config/symaira/policies/.
 They define rules for when tool calls should be allowed, denied,
 prompted, or require biometric authentication.`,
 	Example: `  # Validate a policy file before activating it
-  openpass policy validate ./my-policy.yaml
+  symaira policy validate ./my-policy.yaml
 
   # Apply a policy
-  openpass policy apply ./my-policy.yaml
+  symaira policy apply ./my-policy.yaml
 
   # List active policies
-  openpass policy list
+  symaira policy list
 
   # Remove a named policy
-  openpass policy remove dev-readonly`,
+  symaira policy remove dev-readonly`,
 	Annotations: map[string]string{
 		requiresVaultAnnotation: "false",
 	},
@@ -85,7 +85,7 @@ var policyApplyCmd = &cobra.Command{
 	Long: `Load and validate a policy file, then copy it to the vault's policies directory.
 
 Example:
-  openpass policy apply ~/policies/dev.yaml`,
+  symaira policy apply ~/policies/dev.yaml`,
 	Args: cobra.ExactArgs(1),
 	Annotations: map[string]string{
 		requiresVaultAnnotation: "false",

@@ -14,8 +14,8 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/danieljustus/OpenPass/internal/crypto"
-	"github.com/danieljustus/OpenPass/internal/fileutil"
+	"github.com/danieljustus/symaira-vault/internal/crypto"
+	"github.com/danieljustus/symaira-vault/internal/fileutil"
 )
 
 // CurrentToolRegistryHash is set by the server package at startup to enable
@@ -680,12 +680,12 @@ func LoadTokenSystem(vaultDir string, customLegacyPath ...string) (*TokenRegistr
 			if saveErr := reg.Save(); saveErr == nil {
 				// Loud, one-time warning: the legacy token was migrated with
 				// wildcard tool scope. Operators should rotate it via
-				// `openpass mcp token create` with an explicit allow-list and
+				// `symaira mcp token create` with an explicit allow-list and
 				// then revoke the legacy entry.
 				fmt.Fprintf(os.Stderr,
 					"WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=%s).\n"+
-						"         To restrict scope, run: openpass mcp token create --label <name> --tools <list>\n"+
-						"         Then revoke the legacy token: openpass mcp token revoke %s\n",
+						"         To restrict scope, run: symaira mcp token create --label <name> --tools <list>\n"+
+						"         Then revoke the legacy token: symaira mcp token revoke %s\n",
 					id, id)
 				if rmErr := fileutil.SafeRemove(legacyPath); rmErr != nil {
 					fmt.Fprintf(os.Stderr, "Warning: failed to remove legacy token file %s after migration: %v\n", legacyPath, rmErr)

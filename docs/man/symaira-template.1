@@ -1,0 +1,69 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-template - Generate configuration files from templates
+
+
+.SH SYNOPSIS
+\fBsymaira template [flags]\fP
+
+
+.SH DESCRIPTION
+Generate configuration files from built-in or custom templates.
+
+.PP
+Supported template types:
+  env             - Environment variable file
+  docker-compose  - Docker Compose environment section
+  k8s-secret      - Kubernetes Secret manifest
+  github-actions  - GitHub Actions workflow secrets
+  terraform       - Terraform variable definitions
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for template
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Generate a .env file from the work/* entries
+  openpass template generate env --prefix work/ > .env
+
+  # K8s Secret manifest
+  openpass template generate k8s-secret --name prod-secrets prod/*
+.EE
+
+
+.SH SEE ALSO
+\fBopenpass(1)\fP, \fBsymaira-template-generate(1)\fP

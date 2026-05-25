@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	vaultsvc "github.com/danieljustus/OpenPass/internal/vaultsvc"
+	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 // ParsedRef holds the components of a parsed secret reference.

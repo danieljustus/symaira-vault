@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/danieljustus/OpenPass/internal/vaultsvc"
+	"github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 // Manager orchestrates dynamic secret generation across multiple engines.

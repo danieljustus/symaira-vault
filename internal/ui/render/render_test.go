@@ -3,7 +3,7 @@ package render
 import (
 	"testing"
 
-	"github.com/danieljustus/OpenPass/internal/vault/taint"
+	"github.com/danieljustus/symaira-vault/internal/vault/taint"
 )
 
 func TestForTerminal_StripsANSI(t *testing.T) {

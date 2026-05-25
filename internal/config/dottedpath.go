@@ -9,7 +9,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/danieljustus/OpenPass/internal/fileutil"
+	"github.com/danieljustus/symaira-vault/internal/fileutil"
 )
 
 // KnownConfigKeys returns all known config key paths for tab completion.
@@ -125,7 +125,7 @@ func KnownConfigKeys() []string {
 	}
 }
 
-// DefaultConfigFilePath returns the default config file path (~/.openpass/config.yaml).
+// DefaultConfigFilePath returns the default config file path (~/.symaira/config.yaml).
 func DefaultConfigFilePath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {

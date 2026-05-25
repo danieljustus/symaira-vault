@@ -1,4 +1,4 @@
-// Package agentctx provides the AgentContext type for OpenPass v4.0 dual-surface
+// Package agentctx provides the AgentContext type for Symaira Vault v4.0 dual-surface
 // CLI agent mode (ADR-0004). It manages profile loading, tier-based tool/path
 // enforcement, audit logging, and quota tracking for AI agent integration.
 package agentctx
@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/danieljustus/OpenPass/internal/audit"
-	"github.com/danieljustus/OpenPass/internal/config"
-	mcpErr "github.com/danieljustus/OpenPass/internal/mcp/errors"
+	"github.com/danieljustus/symaira-vault/internal/audit"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	mcpErr "github.com/danieljustus/symaira-vault/internal/mcp/errors"
 )
 
 const (
@@ -73,7 +73,7 @@ func Load(agentName, vaultDir string) (*AgentContext, error) {
 		if err != nil {
 			return nil, fmt.Errorf("home dir: %w", err)
 		}
-		vaultDir = filepath.Join(home, ".openpass")
+		vaultDir = filepath.Join(home, ".symaira")
 	}
 
 	configPath := filepath.Join(vaultDir, "config.yaml")
@@ -273,7 +273,7 @@ func upgradeCommand(tier string) string {
 	if name == "" {
 		name = "<agent>"
 	}
-	return fmt.Sprintf("openpass config agent %s --tier %s", name, tier)
+	return fmt.Sprintf("symaira config agent %s --tier %s", name, tier)
 }
 
 // sanitizeAgentName replaces path separators in agent names to prevent

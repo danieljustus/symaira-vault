@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
-import { OpenPassTools } from "@openpass/mcp-client";
+import { SymairaTools } from "@symaira/mcp-client";
 
-export async function copyToClipboard(tools: OpenPassTools, path: string): Promise<void> {
+export async function copyToClipboard(tools: SymairaTools, path: string): Promise<void> {
   try {
     const result = await tools.copyToClipboard(path);
     if (result.isError) {

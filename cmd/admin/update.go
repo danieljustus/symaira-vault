@@ -9,13 +9,13 @@ import (
 	"path/filepath"
 	"time"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
-	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
-	updatepkg "github.com/danieljustus/OpenPass/internal/update"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	updatepkg "github.com/danieljustus/symaira-vault/internal/update"
 )
 
 type UpdateChecker interface {
@@ -28,7 +28,7 @@ func UpdateCacheTTL() time.Duration {
 	if err != nil {
 		return updatepkg.DefaultCacheTTL
 	}
-	cfg, err := configpkg.Load(filepath.Join(home, ".openpass", "config.yaml"))
+	cfg, err := configpkg.Load(filepath.Join(home, ".symaira", "config.yaml"))
 	if err != nil {
 		return updatepkg.DefaultCacheTTL
 	}
@@ -60,8 +60,8 @@ var errUpdateAvailable = errorspkg.NewCLIError(1, "update available", nil)
 
 var UpdateCmd = &cobra.Command{
 	Use:     "update",
-	Short:   "Check for OpenPass updates",
-	Example: `  openpass update check`,
+	Short:   "Check for Symaira Vault updates",
+	Example: `  symaira update check`,
 	Args:    cobra.NoArgs,
 	Annotations: map[string]string{
 		cli.RequiresVaultAnnotation: "false",
@@ -81,7 +81,7 @@ type updateCheckJSONOutput struct {
 
 var UpdateCheckCmd = &cobra.Command{
 	Use:   "check",
-	Short: "Check GitHub for a newer OpenPass release",
+	Short: "Check GitHub for a newer Symaira Vault release",
 	Args:  cobra.NoArgs,
 	Annotations: map[string]string{
 		cli.RequiresVaultAnnotation: "false",
@@ -135,7 +135,7 @@ var UpdateCheckCmd = &cobra.Command{
 		}
 
 		if result.CurrentVersion == result.LatestVersion {
-			cmd.Printf("OpenPass is up to date (%s).\n", result.CurrentVersion)
+			cmd.Printf("Symaira Vault is up to date (%s).\n", result.CurrentVersion)
 			return nil
 		}
 
@@ -162,8 +162,8 @@ type updateInfoJSONOutput struct {
 
 var updateApplyCmd = &cobra.Command{
 	Use:   "apply",
-	Short: "Apply the latest OpenPass self-update",
-	Long: `Downloads, verifies, and applies the latest OpenPass release.
+	Short: "Apply the latest Symaira Vault self-update",
+	Long: `Downloads, verifies, and applies the latest Symaira Vault release.
 
 Supports direct-download installations only. When run via Homebrew, go install,
 or a package manager, self-update is disabled and guidance is shown instead.`,
@@ -208,7 +208,7 @@ or a package manager, self-update is disabled and guidance is shown instead.`,
 			if result.UpdateAvailable {
 				cmd.Printf("Update available: %s -> %s (use --dry-run to preview)\n", result.CurrentVersion, result.LatestVersion)
 			} else {
-				cmd.Printf("OpenPass is up to date (%s).\n", result.CurrentVersion)
+				cmd.Printf("Symaira Vault is up to date (%s).\n", result.CurrentVersion)
 			}
 			return nil
 		}
@@ -252,11 +252,11 @@ or a package manager, self-update is disabled and guidance is shown instead.`,
 		}
 
 		if applyResult.OldVersion == applyResult.NewVersion {
-			cmd.Printf("OpenPass is already up to date (%s).\n", applyResult.NewVersion)
+			cmd.Printf("Symaira Vault is already up to date (%s).\n", applyResult.NewVersion)
 			return nil
 		}
 
-		cmd.Printf("Updated OpenPass: %s -> %s\n", applyResult.OldVersion, applyResult.NewVersion)
+		cmd.Printf("Updated Symaira Vault: %s -> %s\n", applyResult.OldVersion, applyResult.NewVersion)
 		cmd.Printf("Installation method: %s\n", applyResult.Method)
 		cmd.Printf("Binary: %s\n", applyResult.BinaryPath)
 		if applyResult.BackupPath != "" {
@@ -268,8 +268,8 @@ or a package manager, self-update is disabled and guidance is shown instead.`,
 
 var updateInfoCmd = &cobra.Command{
 	Use:   "info",
-	Short: "Show OpenPass installation method info",
-	Long: `Detects how OpenPass was installed and shows whether self-update
+	Short: "Show Symaira Vault installation method info",
+	Long: `Detects how Symaira Vault was installed and shows whether self-update
 is supported, along with upgrade guidance for the detected method.`,
 	Args: cobra.NoArgs,
 	Annotations: map[string]string{

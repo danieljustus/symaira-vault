@@ -7,7 +7,7 @@ import (
 	"io/fs"
 	"os"
 
-	"github.com/danieljustus/OpenPass/internal/fileutil"
+	"github.com/danieljustus/symaira-vault/internal/fileutil"
 )
 
 var errUnsafePath = errors.New("path is not a regular file")

@@ -24,7 +24,7 @@ func newGUIBackend(r runner) backend {
 func (*osascriptBackend) capability() Capability { return CapGUI }
 
 func (b *osascriptBackend) prompt(req PromptRequest) (string, error) {
-	title := orDefault(req.Title, "OpenPass")
+	title := orDefault(req.Title, "Symaira Vault")
 	body := FormatPrompt(req)
 	hidden := " with hidden answer"
 	if !req.Hidden {

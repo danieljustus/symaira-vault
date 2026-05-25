@@ -1,4 +1,4 @@
-// Package health provides the openpass doctor health checks.
+// Package health provides the symaira doctor health checks.
 package health
 
 import (
@@ -9,8 +9,8 @@ const (
 	osDarwin = "darwin"
 	osLinux  = "linux"
 
-	msgSessionNeeded  = "no active session — run `openpass unlock` first"
-	hintSessionNeeded = "run `openpass unlock` to decrypt entries for password strength analysis"
+	msgSessionNeeded  = "no active session — run `symaira unlock` first"
+	hintSessionNeeded = "run `symaira unlock` to decrypt entries for password strength analysis"
 )
 
 // Status represents the outcome of a single check.

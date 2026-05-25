@@ -1,4 +1,4 @@
-// Package logging provides structured logging for OpenPass using Go's standard
+// Package logging provides structured logging for Symaira Vault using Go's standard
 // log/slog package. All log output goes to os.Stderr to keep stdout clean for
 // stdio MCP transport.
 package logging

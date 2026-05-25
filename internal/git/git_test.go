@@ -544,11 +544,11 @@ func TestAutoCommitWithOptionsDefaultAuthor(t *testing.T) {
 	}
 
 	// Should use default author
-	if commit.Author.Name != "OpenPass" {
-		t.Errorf("author name = %q, want %q", commit.Author.Name, "OpenPass")
+	if commit.Author.Name != "Symaira Vault" {
+		t.Errorf("author name = %q, want %q", commit.Author.Name, "Symaira Vault")
 	}
-	if commit.Author.Email != "openpass@example.com" {
-		t.Errorf("author email = %q, want %q", commit.Author.Email, "openpass@example.com")
+	if commit.Author.Email != "symaira@example.com" {
+		t.Errorf("author email = %q, want %q", commit.Author.Email, "symaira@example.com")
 	}
 	if commit.Message != "default template commit" {
 		t.Errorf("message = %q, want %q", commit.Message, "default template commit")
@@ -1403,7 +1403,7 @@ func TestAppendMissingGitignoreEntriesWithTrailingNewline(t *testing.T) {
 	current := "existing content\n"
 	defaults := "new-entry"
 	result := appendMissingGitignoreEntries(current, defaults)
-	if !strings.Contains(result, "existing content\nnew-entry") && !strings.Contains(result, "existing content\n# OpenPass") {
+	if !strings.Contains(result, "existing content\nnew-entry") && !strings.Contains(result, "existing content\n# Symaira Vault") {
 		t.Logf("result preserves content with trailing newline: %q", result)
 	}
 

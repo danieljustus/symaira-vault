@@ -1,0 +1,76 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-run - Run a command with secrets injected as environment variables
+
+
+.SH SYNOPSIS
+\fBsymaira run [flags] --  [args...]\fP
+
+
+.SH DESCRIPTION
+Executes a command with vault secrets injected as environment variables. Use --env NAME=path.field to map secrets.
+
+
+.SH OPTIONS
+\fB-e\fP, \fB--env\fP=[]
+	Environment variable mapping (NAME=path.field)
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for run
+
+.PP
+\fB-t\fP, \fB--timeout\fP=0s
+	Timeout for the command (e.g., 30s)
+
+.PP
+\fB-C\fP, \fB--working-dir\fP=""
+	Working directory for the command
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Inject AWS_SECRET_ACCESS_KEY from vault entry "work/aws.secret"
+  openpass run --env AWS_SECRET_ACCESS_KEY=work/aws.secret -- aws s3 ls
+
+  # Multiple secrets, custom working dir
+  openpass run \\
+    --env DB_PASS=prod/db.password \\
+    --env API_TOKEN=stripe.token \\
+    --workdir /tmp/job -- ./deploy.sh
+.EE
+
+
+.SH SEE ALSO
+\fBopenpass(1)\fP

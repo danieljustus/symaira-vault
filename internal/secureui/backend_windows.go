@@ -24,7 +24,7 @@ func newGUIBackend(r runner) backend {
 func (*powershellBackend) capability() Capability { return CapGUI }
 
 func (b *powershellBackend) prompt(req PromptRequest) (string, error) {
-	title := orDefault(req.Title, "OpenPass")
+	title := orDefault(req.Title, "Symaira Vault")
 	body := FormatPrompt(req)
 
 	var script string
@@ -33,7 +33,7 @@ func (b *powershellBackend) prompt(req PromptRequest) (string, error) {
 		// Title is bundled into the message because Get-Credential lacks a
 		// separate title parameter on some Windows versions.
 		script = fmt.Sprintf(
-			"$cred = Get-Credential -UserName 'openpass' -Message %s; if (-not $cred) { exit 1 }; $cred.GetNetworkCredential().Password",
+			"$cred = Get-Credential -UserName 'symaira' -Message %s; if (-not $cred) { exit 1 }; $cred.GetNetworkCredential().Password",
 			psQuote(title+"\n\n"+body),
 		)
 	} else {

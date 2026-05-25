@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/danieljustus/OpenPass/internal/testutil"
+	"github.com/danieljustus/symaira-vault/internal/testutil"
 )
 
 func TestEncryptedIndexBuildAndMatch(t *testing.T) {

@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
-	vaultsvc "github.com/danieljustus/OpenPass/internal/vaultsvc"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
+	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 var expectedCSVImportPaths = []string{

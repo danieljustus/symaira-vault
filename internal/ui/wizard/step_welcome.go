@@ -7,7 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/danieljustus/OpenPass/internal/vault"
+	"github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 // WelcomeStep greets the user and detects whether a vault already exists.
@@ -122,7 +122,7 @@ func (s *WelcomeStep) View() string {
 	if s.existing {
 		body = fmt.Sprintf(
 			"%s\n\n%s\n\n%s",
-			titleStyle.Render("Re-configuring OpenPass"),
+			titleStyle.Render("Re-configuring Symaira Vault"),
 			"A vault already exists at "+dimStyle.Render(s.vaultDir)+".",
 			"This wizard will let you update your sync, MCP agents, and other settings.\n"+
 				warnStyle.Render("Vault passphrase and identity will not be changed."),
@@ -130,7 +130,7 @@ func (s *WelcomeStep) View() string {
 	} else {
 		body = fmt.Sprintf(
 			"%s\n\n%s\n\n%s",
-			titleStyle.Render("Welcome to OpenPass"),
+			titleStyle.Render("Welcome to Symaira Vault"),
 			"This wizard will guide you through setting up your password vault.",
 			"Press "+focusedStyle.Render("Enter")+" to start  "+helpStyle.Render("Esc to quit"),
 		)

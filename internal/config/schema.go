@@ -104,7 +104,7 @@ func defaultGitConfig() GitConfig {
 		AutoPush:         true,
 		AutoPull:         true,
 		AutoPullInterval: 10 * time.Second,
-		CommitTemplate:   "Update from OpenPass",
+		CommitTemplate:   "Update from Symaira Vault",
 	}
 }
 

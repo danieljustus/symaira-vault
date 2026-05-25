@@ -14,10 +14,10 @@ var manpagesCmd = &cobra.Command{
 	Use:   "manpages <directory>",
 	Short: "Generate manual pages",
 	Example: `  # Generate man pages into ./man
-  openpass manpages ./man
+  symaira manpages ./man
 
   # System-wide install (requires sudo)
-  sudo openpass manpages /usr/local/share/man/man1`,
+  sudo symaira manpages /usr/local/share/man/man1`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		dir, err := filepath.Abs(args[0])
@@ -31,8 +31,8 @@ var manpagesCmd = &cobra.Command{
 		header := &doc.GenManHeader{
 			Title:   strings.ToUpper(rootCmd.Name()),
 			Section: "1",
-			Manual:  "OpenPass Manual",
-			Source:  "OpenPass",
+			Manual:  "Symaira Vault Manual",
+			Source:  "Symaira Vault",
 		}
 		rootCmd.DisableAutoGenTag = true
 		if err := doc.GenManTree(rootCmd, header, dir); err != nil {

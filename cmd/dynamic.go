@@ -7,9 +7,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
-	"github.com/danieljustus/OpenPass/internal/dynamicsecret"
-	vaultsvc "github.com/danieljustus/OpenPass/internal/vaultsvc"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
+	"github.com/danieljustus/symaira-vault/internal/dynamicsecret"
+	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 var (
@@ -27,20 +27,20 @@ Supported engines:
   postgres  - Create temporary PostgreSQL users with GRANT role
   aws-sts   - Generate temporary AWS STS credentials via AssumeRole`,
 	Example: `  # Generate temporary PostgreSQL credentials valid for 1h
-  openpass dynamic generate postgres --role analyst --ttl 1h
+  symaira dynamic generate postgres --role analyst --ttl 1h
 
   # Short-lived AWS STS session
-  openpass dynamic generate aws-sts --role arn:aws:iam::123:role/dev --ttl 15m`,
+  symaira dynamic generate aws-sts --role arn:aws:iam::123:role/dev --ttl 15m`,
 }
 
 var dynamicGenerateCmd = &cobra.Command{
 	Use:   "generate",
 	Short: "Generate a dynamic secret",
 	Example: `  # Generate a PostgreSQL secret with readonly role
-  openpass dynamic generate --engine postgres --role readonly --ttl 1h
+  symaira dynamic generate --engine postgres --role readonly --ttl 1h
 
   # Generate AWS STS credentials for a specific role
-  openpass dynamic generate --engine aws-sts --role arn:aws:iam::123456789012:role/MyRole --ttl 30m`,
+  symaira dynamic generate --engine aws-sts --role arn:aws:iam::123456789012:role/MyRole --ttl 30m`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return cli.WithVault(func(svc vaultsvc.Service) error {
 			ctx := context.Background()

@@ -8,8 +8,8 @@ import (
 	"filippo.io/age"
 	"github.com/spf13/cobra"
 
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func loadGlobalConfig() (*configpkg.Config, error) {
@@ -17,7 +17,7 @@ func loadGlobalConfig() (*configpkg.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	return configpkg.Load(filepath.Join(home, ".openpass", "config.yaml"))
+	return configpkg.Load(filepath.Join(home, ".symaira", "config.yaml"))
 }
 
 func EntryCompletionFunc(_ *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {

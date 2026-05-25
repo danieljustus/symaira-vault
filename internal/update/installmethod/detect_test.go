@@ -27,9 +27,9 @@ func TestDetectHomebrewPaths(t *testing.T) {
 		name string
 		path string
 	}{
-		{name: "Apple Silicon", path: "/opt/homebrew/bin/openpass"},
-		{name: "Intel Cellar", path: "/usr/local/Cellar/openpass/1.0.0/bin/openpass"},
-		{name: "Linuxbrew", path: "/home/linuxbrew/.linuxbrew/bin/openpass"},
+		{name: "Apple Silicon", path: "/opt/homebrew/bin/symaira"},
+		{name: "Intel Cellar", path: "/usr/local/Cellar/symaira/1.0.0/bin/symaira"},
+		{name: "Linuxbrew", path: "/home/linuxbrew/.linuxbrew/bin/symaira"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -53,7 +53,7 @@ func TestDetectDirectDownloadPaths(t *testing.T) {
 		name string
 		path string
 	}{
-		{name: "user local bin", path: "/usr/local/bin/openpass"},
+		{name: "user local bin", path: "/usr/local/bin/symaira"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -73,7 +73,7 @@ func TestDetectPackageManagerPath(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: Unix-specific path test")
 	}
-	method, err := Detect("/usr/bin/openpass")
+	method, err := Detect("/usr/bin/symaira")
 	if err != nil {
 		t.Fatalf("Detect() error = %v", err)
 	}
@@ -88,7 +88,7 @@ func TestDetectGoInstallFromGopath(t *testing.T) {
 	if err != nil {
 		t.Skipf("cannot determine home dir: %v", err)
 	}
-	goBin := filepath.Join(home, "go", "bin", "openpass")
+	goBin := filepath.Join(home, "go", "bin", "symaira")
 	method, err := Detect(goBin)
 	if err != nil {
 		t.Fatalf("Detect(%q) error = %v", goBin, err)
@@ -112,7 +112,7 @@ func TestDetectEnvVars(t *testing.T) {
 	tmp := t.TempDir()
 
 	t.Run("GOPATH env", func(t *testing.T) {
-		binary := filepath.Join(tmp, "bin", "openpass")
+		binary := filepath.Join(tmp, "bin", "symaira")
 		if err := os.MkdirAll(filepath.Dir(binary), 0755); err != nil {
 			t.Fatal(err)
 		}
@@ -130,7 +130,7 @@ func TestDetectEnvVars(t *testing.T) {
 	})
 
 	t.Run("GOMODCACHE env", func(t *testing.T) {
-		binary := filepath.Join(tmp, "bin", "openpass")
+		binary := filepath.Join(tmp, "bin", "symaira")
 		if err := os.MkdirAll(filepath.Dir(binary), 0755); err != nil {
 			t.Fatal(err)
 		}
@@ -148,7 +148,7 @@ func TestDetectEnvVars(t *testing.T) {
 	})
 
 	t.Run("HOMEBREW_PREFIX env", func(t *testing.T) {
-		binary := filepath.Join(tmp, "bin", "openpass")
+		binary := filepath.Join(tmp, "bin", "symaira")
 		if err := os.MkdirAll(filepath.Dir(binary), 0755); err != nil {
 			t.Fatal(err)
 		}
@@ -166,7 +166,7 @@ func TestDetectEnvVars(t *testing.T) {
 	})
 
 	t.Run("layered order env over path", func(t *testing.T) {
-		binary := filepath.Join(tmp, "opt", "homebrew", "bin", "openpass")
+		binary := filepath.Join(tmp, "opt", "homebrew", "bin", "symaira")
 		if err := os.MkdirAll(filepath.Dir(binary), 0755); err != nil {
 			t.Fatal(err)
 		}
@@ -189,7 +189,7 @@ func TestDetectGoCacheMarkers(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: Unix-specific path test")
 	}
-	method, err := Detect("/go/pkg/mod/github.com/danieljustus/OpenPass@v1.0.0/bin/openpass")
+	method, err := Detect("/go/pkg/mod/github.com/danieljustus/symaira-vault@v1.0.0/bin/symaira")
 	if err != nil {
 		t.Fatalf("Detect() error = %v", err)
 	}
@@ -203,7 +203,7 @@ func TestDetectGoInstallAtSign(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: Unix-specific path test")
 	}
-	method, err := Detect("/tmp/gopath/pkg/mod/example.com/openpass@latest/bin/openpass")
+	method, err := Detect("/tmp/gopath/pkg/mod/example.com/symaira@latest/bin/symaira")
 	if err != nil {
 		t.Fatalf("Detect() error = %v", err)
 	}
@@ -223,9 +223,9 @@ func TestDetectUserLocalBins(t *testing.T) {
 		name string
 		path string
 	}{
-		{name: "home bin", path: filepath.Join(home, "bin", "openpass")},
-		{name: "local bin", path: filepath.Join(home, ".local", "bin", "openpass")},
-		{name: "cargo bin", path: filepath.Join(home, ".cargo", "bin", "openpass")},
+		{name: "home bin", path: filepath.Join(home, "bin", "symaira")},
+		{name: "local bin", path: filepath.Join(home, ".local", "bin", "symaira")},
+		{name: "cargo bin", path: filepath.Join(home, ".cargo", "bin", "symaira")},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -247,7 +247,7 @@ func TestDetectHomebrewSymlink(t *testing.T) {
 	}
 	tmp := t.TempDir()
 
-	realBin := filepath.Join(tmp, "Cellar", "openpass", "1.0.0", "bin", "openpass")
+	realBin := filepath.Join(tmp, "Cellar", "symaira", "1.0.0", "bin", "symaira")
 	if err := os.MkdirAll(filepath.Dir(realBin), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -255,7 +255,7 @@ func TestDetectHomebrewSymlink(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	symlinkPath := filepath.Join(tmp, "bin", "openpass")
+	symlinkPath := filepath.Join(tmp, "bin", "symaira")
 	if err := os.MkdirAll(filepath.Dir(symlinkPath), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -275,7 +275,7 @@ func TestDetectHomebrewSymlink(t *testing.T) {
 func TestDetectUnknownPath(t *testing.T) {
 	t.Parallel()
 	tmp := t.TempDir()
-	binary := filepath.Join(tmp, "openpass")
+	binary := filepath.Join(tmp, "symaira")
 	if err := os.WriteFile(binary, []byte("fake"), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -298,7 +298,7 @@ func TestDetectNonExistentPath(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: Unix-specific path test")
 	}
-	method, err := Detect("/nonexistent/openpass")
+	method, err := Detect("/nonexistent/symaira")
 	if err != nil {
 		t.Fatalf("Detect() error = %v", err)
 	}

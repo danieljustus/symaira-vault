@@ -1,7 +1,7 @@
 //go:build !metrics
 
 // Package metrics provides observability instrumentation (Prometheus metrics and
-// OpenTelemetry tracing) for OpenPass. When compiled without the "metrics" build
+// OpenTelemetry tracing) for Symaira Vault. When compiled without the "metrics" build
 // tag, all functions are no-ops.
 package metrics
 
@@ -45,7 +45,7 @@ func RecordPolicyEvalDuration(_ time.Duration) {}
 
 // Registry returns a fresh empty Prometheus registry.
 // Without the metrics build tag, no collectors are registered
-// and no OpenPass metrics are recorded.
+// and no Symaira Vault metrics are recorded.
 func Registry() *prometheus.Registry {
 	return stubReg
 }

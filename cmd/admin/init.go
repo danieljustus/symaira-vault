@@ -7,16 +7,16 @@ import (
 	"path/filepath"
 	"strings"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 
-	"github.com/danieljustus/OpenPass/internal/config"
-	cryptopkg "github.com/danieljustus/OpenPass/internal/crypto"
-	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
-	"github.com/danieljustus/OpenPass/internal/git"
-	"github.com/danieljustus/OpenPass/internal/session"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	cryptopkg "github.com/danieljustus/symaira-vault/internal/crypto"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	"github.com/danieljustus/symaira-vault/internal/git"
+	"github.com/danieljustus/symaira-vault/internal/session"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 var initAuthMethod string
@@ -26,13 +26,13 @@ var initCmd = &cobra.Command{
 	Short: "Initialize a new password vault",
 	Long:  "Creates a new vault directory with identity and configuration.",
 	Example: `  # Initialize default vault
-  openpass init
+  symaira init
 
   # Initialize with specific auth method
-  openpass init --auth touchid
+  symaira init --auth touchid
 
   # Initialize custom vault directory
-  openpass init ~/my-vault`,
+  symaira init ~/my-vault`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var (
@@ -89,7 +89,7 @@ var initCmd = &cobra.Command{
 		// Initialize Git config with defaults (auto-push enabled)
 		cfg.Git = &config.GitConfig{
 			AutoPush:       true,
-			CommitTemplate: "Update from OpenPass",
+			CommitTemplate: "Update from Symaira Vault",
 		}
 
 		identity, err := vaultpkg.InitWithPassphrase(vaultDir, passphrase, cfg)
@@ -124,12 +124,12 @@ func printPostInitHints() {
 	}
 	cli.PrintlnQuietAware("")
 	cli.PrintlnQuietAware("Next steps:")
-	cli.PrintlnQuietAware("  1. Add your first entry:    openpass add my-first-entry")
-	cli.PrintlnQuietAware("  2. Create a backup:         openpass backup")
-	cli.PrintlnQuietAware("  3. Verify the setup:        openpass doctor")
-	cli.PrintlnQuietAware("  4. (Optional) full wizard:  openpass setup   # adds sync, recipients, agents")
+	cli.PrintlnQuietAware("  1. Add your first entry:    symaira add my-first-entry")
+	cli.PrintlnQuietAware("  2. Create a backup:         symaira backup")
+	cli.PrintlnQuietAware("  3. Verify the setup:        symaira doctor")
+	cli.PrintlnQuietAware("  4. (Optional) full wizard:  symaira setup   # adds sync, recipients, agents")
 	cli.PrintlnQuietAware("")
-	cli.PrintlnQuietAware("Tip: 'openpass --help' lists all commands. Use 'openpass <cmd> --help' for details.")
+	cli.PrintlnQuietAware("Tip: 'symaira --help' lists all commands. Use 'symaira <cmd> --help' for details.")
 }
 
 func init() {
@@ -156,7 +156,7 @@ func resolveInitAuthMethod(method string) (string, error) {
 			return "", err
 		}
 		if normalized == config.AuthMethodTouchID && !session.BiometricAvailable() {
-			return "", fmt.Errorf("touch ID is not available in this OpenPass build or on this Mac")
+			return "", fmt.Errorf("touch ID is not available in this Symaira Vault build or on this Mac")
 		}
 		return normalized, nil
 	}

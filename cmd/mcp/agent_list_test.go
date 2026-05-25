@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 )
 
 func TestSortStrings(t *testing.T) {

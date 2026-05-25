@@ -8,10 +8,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
-	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
-	"github.com/danieljustus/OpenPass/internal/secrets"
-	vaultsvc "github.com/danieljustus/OpenPass/internal/vaultsvc"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	"github.com/danieljustus/symaira-vault/internal/secrets"
+	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 var (
@@ -25,10 +25,10 @@ var runCmd = &cobra.Command{
 	Short: "Run a command with secrets injected as environment variables",
 	Long:  "Executes a command with vault secrets injected as environment variables. Use --env NAME=path.field to map secrets.",
 	Example: `  # Inject AWS_SECRET_ACCESS_KEY from vault entry "work/aws.secret"
-  openpass run --env AWS_SECRET_ACCESS_KEY=work/aws.secret -- aws s3 ls
+  symaira run --env AWS_SECRET_ACCESS_KEY=work/aws.secret -- aws s3 ls
 
   # Multiple secrets, custom working dir
-  openpass run \
+  symaira run \
     --env DB_PASS=prod/db.password \
     --env API_TOKEN=stripe.token \
     --workdir /tmp/job -- ./deploy.sh`,

@@ -1,0 +1,67 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-device-pair - Generate a pairing token for a new device
+
+
+.SH SYNOPSIS
+\fBsymaira device pair [flags]\fP
+
+
+.SH DESCRIPTION
+Generate a pairing token that another device can use to join this vault.
+
+.PP
+This saves the pairing token and this device's public key to the vault,
+commits and pushes the token file. The joining device reads this file
+to obtain this device's public key for encryption.
+
+.PP
+IMPORTANT: After the joining device submits its public key (via 'openpass device join'),
+you must run 'openpass device accept \&' to re-encrypt all entries
+for the new device.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for pair
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  openpass device pair
+.EE
+
+
+.SH SEE ALSO
+\fBsymaira-device(1)\fP

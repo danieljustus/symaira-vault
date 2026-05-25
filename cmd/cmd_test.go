@@ -10,13 +10,13 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
-	"github.com/danieljustus/OpenPass/internal/config"
-	"github.com/danieljustus/OpenPass/internal/testutil"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/testutil"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 
-	crudcmd "github.com/danieljustus/OpenPass/cmd/crud"
-	mcpcmd "github.com/danieljustus/OpenPass/cmd/mcp"
+	crudcmd "github.com/danieljustus/symaira-vault/cmd/crud"
+	mcpcmd "github.com/danieljustus/symaira-vault/cmd/mcp"
 )
 
 func TestExpandVaultDir(t *testing.T) {
@@ -214,7 +214,7 @@ func TestUnlockVaultLocked(t *testing.T) {
 }
 
 func TestOutputStdioConfig(t *testing.T) {
-	err := mcpcmd.OutputStdioConfig("claude-code", "openpass")
+	err := mcpcmd.OutputStdioConfig("claude-code", "symaira")
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -232,7 +232,7 @@ func TestOutputHTTPConfig(t *testing.T) {
 		t.Fatalf("failed to init vault: %v", err)
 	}
 
-	err := mcpcmd.OutputHTTPConfig("claude-code", "openpass", true, "")
+	err := mcpcmd.OutputHTTPConfig("claude-code", "symaira", true, "")
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -380,8 +380,8 @@ func TestParseSSHTarget_HostOnly(t *testing.T) {
 	if host != "example.com" {
 		t.Errorf("host = %q, want %q", host, "example.com")
 	}
-	if path != "~/openpass-remote.git" {
-		t.Errorf("path = %q, want %q", path, "~/openpass-remote.git")
+	if path != "~/symaira-remote.git" {
+		t.Errorf("path = %q, want %q", path, "~/symaira-remote.git")
 	}
 }
 

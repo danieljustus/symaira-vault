@@ -18,7 +18,7 @@ func TestWelcomeStep_RenderTokens_NewVault(t *testing.T) {
 	step := NewWelcomeStep(t.TempDir(), true)
 	out := step.View()
 
-	for _, want := range []string{"Welcome to OpenPass", "Enter", "Esc to quit"} {
+	for _, want := range []string{"Welcome to Symaira Vault", "Enter", "Esc to quit"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("View() missing %q in render:\n%s", want, out)
 		}

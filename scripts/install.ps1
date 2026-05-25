@@ -1,22 +1,22 @@
 <#
 .SYNOPSIS
-    Installs OpenPass from GitHub releases.
+    Installs Symaira Vault from GitHub releases.
 
 .DESCRIPTION
-    Downloads the latest (or specified) OpenPass release from GitHub,
+    Downloads the latest (or specified) Symaira Vault release from GitHub,
     verifies the SHA-256 checksum, and installs the binary.
 
 .PARAMETER Version
     Specific version to install (default: latest).
 
 .PARAMETER InstallDir
-    Installation directory (default: $env:LOCALAPPDATA\Programs\OpenPass).
+    Installation directory (default: $env:LOCALAPPDATA\Programs\symaira).
 
 .PARAMETER DryRun
     Download and verify but do not install.
 
 .EXAMPLE
-    irm https://raw.githubusercontent.com/danieljustus/OpenPass/main/scripts/install.ps1 | iex
+    irm https://raw.githubusercontent.com/danieljustus/symaira-vault/main/scripts/install.ps1 | iex
     install.ps1 -Version 1.2.3
     install.ps1 -InstallDir C:\Tools
 #>
@@ -33,9 +33,9 @@ $ErrorActionPreference = 'Stop'
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
-$Repo        = 'danieljustus/OpenPass'
-$Binary      = 'openpass.exe'
-$Project     = 'OpenPass'
+$Repo        = 'danieljustus/symaira-vault'
+$Binary      = 'symaira.exe'
+$Project     = 'symaira'
 $GitHubApi   = 'https://api.github.com'
 $GitHubDl    = "https://github.com/$Repo/releases/download"
 
@@ -51,7 +51,7 @@ function Get-Architecture {
     $arch = if ([Environment]::Is64BitOperatingSystem) {
         if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'amd64' }
     } else {
-        throw 'OpenPass requires a 64-bit operating system.'
+        throw 'Symaira Vault requires a 64-bit operating system.'
     }
     return $arch
 }
@@ -63,7 +63,7 @@ function Get-LatestVersion {
     $url = "$GitHubApi/repos/$Repo/releases/latest"
     $headers = @{
         Accept        = 'application/json'
-        'User-Agent'  = 'openpass-installer'
+        'User-Agent'  = 'symaira-installer'
     }
     $response = Invoke-RestMethod -Uri $url -Headers $headers -UseBasicParsing
     if (-not $response.tag_name) {
@@ -96,7 +96,7 @@ function Test-Checksum {
 
 # ── Main ─────────────────────────────────────────────────────────────────────
 
-function Install-OpenPass {
+function Install-SymairaVault {
     # Resolve version.
     if (-not $Version) {
         $resolvedVersion = Get-LatestVersion
@@ -104,7 +104,7 @@ function Install-OpenPass {
         $resolvedVersion = $Version
     }
     $versionNoV = $resolvedVersion -replace '^v', ''
-    Write-Info "Installing OpenPass $resolvedVersion..."
+    Write-Info "Installing Symaira Vault $resolvedVersion..."
 
     # Detect architecture.
     $arch = Get-Architecture
@@ -119,7 +119,7 @@ function Install-OpenPass {
     $checksumsUrl = "$GitHubDl/$resolvedVersion/$checksumsFile"
 
     # Create temp workspace.
-    $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) "openpass-install-$([guid]::NewGuid().ToString('N').Substring(0,8))"
+    $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) "symaira-install-$([guid]::NewGuid().ToString('N').Substring(0,8))"
     New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
     try {
         # Download checksums.
@@ -158,7 +158,7 @@ function Install-OpenPass {
             New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
         }
         Copy-Item -Path $binaryPath.FullName -Destination (Join-Path $InstallDir $Binary) -Force
-        Write-Info "OpenPass $resolvedVersion installed to $InstallDir\$Binary"
+        Write-Info "Symaira Vault $resolvedVersion installed to $InstallDir\$Binary"
 
         # PATH guidance.
         $currentPath = [Environment]::GetEnvironmentVariable('Path', 'User')
@@ -191,7 +191,7 @@ if (-not $InstallDir) {
     $InstallDir = if ($env:INSTALL_DIR) {
         $env:INSTALL_DIR
     } else {
-        Join-Path $env:LOCALAPPDATA 'Programs\OpenPass'
+        Join-Path $env:LOCALAPPDATA 'Programs\symaira'
     }
 }
 
@@ -203,4 +203,4 @@ if (-not $Version -and $env:VERSION) {
     $Version = $env:VERSION
 }
 
-Install-OpenPass
+Install-SymairaVault

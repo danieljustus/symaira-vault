@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/danieljustus/OpenPass/internal/config"
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
-	"github.com/danieljustus/OpenPass/internal/secureui"
-	"github.com/danieljustus/OpenPass/internal/vault"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/secureui"
+	"github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func TestHandleRequestCredential_StoresValueWithoutLeaking(t *testing.T) {

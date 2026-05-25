@@ -1,4 +1,4 @@
-// Package install provides auto-discovery and configuration of OpenPass MCP
+// Package install provides auto-discovery and configuration of Symaira Vault MCP
 // server for supported AI agents.
 package install
 
@@ -41,7 +41,7 @@ type AgentDefinition struct {
 	Format      ConfigFormat
 	// RootKey is the top-level config key (e.g. "mcpServers" or "mcp_servers").
 	RootKey string
-	// ServerKey is the key used for the OpenPass server entry inside RootKey.
+	// ServerKey is the key used for the Symaira Vault server entry inside RootKey.
 	ServerKey string
 	// ServerConfigExtras are extra fields merged into the server config entry.
 	// Used to add agent-specific fields like "type", "enabled", etc.
@@ -61,7 +61,7 @@ var (
 			BinaryNames: []string{"openclaw"},
 			Format:      FormatJSON,
 			RootKey:     "mcpServers",
-			ServerKey:   "openpass",
+			ServerKey:   "symaira",
 		},
 		AgentClaudeCode: {
 			Type:        AgentClaudeCode,
@@ -73,7 +73,7 @@ var (
 			BinaryNames: []string{"claude", "claude-code"},
 			Format:      FormatJSON,
 			RootKey:     "mcpServers",
-			ServerKey:   "openpass",
+			ServerKey:   "symaira",
 		},
 		AgentHermes: {
 			Type:        AgentHermes,
@@ -87,7 +87,7 @@ var (
 			BinaryNames: []string{"hermes"},
 			Format:      FormatYAML,
 			RootKey:     "mcp_servers",
-			ServerKey:   "openpass",
+			ServerKey:   "symaira",
 		},
 		AgentCodex: {
 			Type:        AgentCodex,
@@ -98,7 +98,7 @@ var (
 			BinaryNames: []string{"codex"},
 			Format:      FormatTOML,
 			RootKey:     "mcp_servers",
-			ServerKey:   "openpass",
+			ServerKey:   "symaira",
 		},
 		AgentOpenCode: {
 			Type:        AgentOpenCode,
@@ -110,7 +110,7 @@ var (
 			BinaryNames: []string{"opencode"},
 			Format:      FormatJSON,
 			RootKey:     "mcp",
-			ServerKey:   "openpass",
+			ServerKey:   "symaira",
 			ServerConfigExtras: map[string]any{
 				"type":    "remote",
 				"enabled": true,

@@ -1,18 +1,18 @@
-# OpenPass
+# Symaira Vault
 
-[![CI](https://github.com/danieljustus/OpenPass/actions/workflows/ci.yml/badge.svg)](https://github.com/danieljustus/OpenPass/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/danieljustus/OpenPass)](https://github.com/danieljustus/OpenPass/releases/latest)
+[![CI](https://github.com/danieljustus/symaira-vault/actions/workflows/ci.yml/badge.svg)](https://github.com/danieljustus/symaira-vault/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/danieljustus/symaira-vault)](https://github.com/danieljustus/symaira-vault/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Go Reference](https://pkg.go.dev/badge/github.com/danieljustus/OpenPass.svg)](https://pkg.go.dev/github.com/danieljustus/OpenPass)
-[![Go Report Card](https://goreportcard.com/badge/github.com/danieljustus/OpenPass)](https://goreportcard.com/report/github.com/danieljustus/OpenPass)
+[![Go Reference](https://pkg.go.dev/badge/github.com/danieljustus/symaira-vault.svg)](https://pkg.go.dev/github.com/danieljustus/symaira-vault)
+[![Go Report Card](https://goreportcard.com/badge/github.com/danieljustus/symaira-vault)](https://goreportcard.com/report/github.com/danieljustus/symaira-vault)
 
-![OpenPass hero](docs/assets/openpass-hero.png)
+![Symaira Vault hero](docs/assets/openpass-hero.png)
 
 A modern, secure command-line password manager written in Go. Uses [age](https://age-encryption.org/) for encryption with built-in MCP server support for AI agent integration.
 
-![OpenPass demo](docs/assets/openpass-demo.gif)
+![Symaira Vault demo](docs/assets/openpass-demo.gif)
 
-> **Safety Notice**: OpenPass manages sensitive secrets. Use at your own risk, keep tested backups of your vault, and verify recovery before relying on it for critical credentials.
+> **Safety Notice**: Symaira Vault manages sensitive secrets. Use at your own risk, keep tested backups of your vault, and verify recovery before relying on it for critical credentials.
 
 ## Features
 
@@ -35,40 +35,40 @@ A modern, secure command-line password manager written in Go. Uses [age](https:/
 
 **macOS / Linux:**
 ```bash
-curl -sSfL https://raw.githubusercontent.com/danieljustus/OpenPass/main/scripts/install.sh | sh
+curl -sSfL https://raw.githubusercontent.com/danieljustus/symaira-vault/main/scripts/install.sh | sh
 ```
 
 **Windows:**
 ```powershell
-irm https://raw.githubusercontent.com/danieljustus/OpenPass/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/danieljustus/symaira-vault/main/scripts/install.ps1 | iex
 ```
 
 **Homebrew:**
 ```bash
 brew tap danieljustus/tap
-brew install openpass
+brew install symaira
 ```
 
 **Scoop:**
 ```powershell
 scoop bucket add openpass https://github.com/danieljustus/scoop-bucket
-scoop install openpass
+scoop install symaira
 ```
 
 **Nix (Flake):**
 ```bash
 # Run directly (no install needed)
-nix run github:danieljustus/OpenPass
+nix run github:danieljustus/symaira-vault
 
 # Or add as a flake input
 # flake.nix:
-#   inputs.openpass.url = "github:danieljustus/OpenPass";
+#   inputs.openpass.url = "github:danieljustus/symaira-vault";
 ```
 > **Note:** The flake is new. Go module dependencies are pinned via `vendorHash` in `flake.nix`. If updating dependencies, run `go mod vendor && nix hash path --sri vendor/` and update the hash.
 
 **Go:**
 ```bash
-go install github.com/danieljustus/OpenPass@latest
+go install github.com/danieljustus/symaira-vault@latest
 ```
 
 For manual downloads, Linux packages, release verification, and build-from-source instructions, see [docs/distribution.md](docs/distribution.md).
@@ -79,7 +79,7 @@ For manual downloads, Linux packages, release verification, and build-from-sourc
 | Linux | ✓ | ✓ | Quick install, Homebrew, Go, Manual, deb/rpm/apk |
 | Windows | ✓ | ✓ | Quick install, Scoop, Go, Manual |
 | FreeBSD | ✓ | ✓ | Go, Manual |
-| NixOS / Nix | ✓ | ✓ | Nix flake (`nix run github:danieljustus/OpenPass`) |
+| NixOS / Nix | ✓ | ✓ | Nix flake (`nix run github:danieljustus/symaira-vault`) |
 
 ## Quick Start
 
@@ -139,7 +139,7 @@ Backup archives contain encrypted vault files, identity material, config, and MC
 
 ## Migration from other managers
 
-OpenPass can import from 1Password, Bitwarden, pass, and CSV exports:
+Symaira Vault can import from 1Password, Bitwarden, pass, and CSV exports:
 
 ```bash
 openpass import <format> <source>
@@ -151,9 +151,9 @@ See [docs/migration.md](docs/migration.md) for export steps, format details, and
 
 ## MCP Server
 
-OpenPass exposes an MCP server for AI agent integration:
+Symaira Vault exposes an MCP server for AI agent integration:
 
-![OpenPass architecture](docs/assets/openpass-architecture.png)
+![Symaira Vault architecture](docs/assets/openpass-architecture.png)
 
 ```bash
 # Stdio mode (recommended for local agents)
@@ -232,7 +232,7 @@ For the full configuration reference, see [docs/configuration.md](docs/configura
 >
 > **Disclaimer:** All product names, logos, and brands referenced in this comparison are trademarks or registered trademarks of their respective owners. Use of these names is for identification and informational purposes only and does not imply endorsement, affiliation, or sponsorship. The information in this comparison is provided "as is" without warranty of any kind.
 
-| Feature | OpenPass | 1Password | Bitwarden | pass (zx2c4) | Sharing with AI Agents in Chat |
+| Feature | Symaira Vault | 1Password | Bitwarden | pass (zx2c4) | Sharing with AI Agents in Chat |
 |---------|----------|-----------|-----------|--------------|-------------------------------|
 | **Encryption** | age (X25519 + ChaCha20-Poly1305) | AES-256 | AES-256 | GPG | None (plaintext) |
 | **Primary Interface** | Terminal-first | GUI-first (CLI available) | GUI-first (CLI available) | Terminal-only | Chat interface |
@@ -252,7 +252,7 @@ For the full configuration reference, see [docs/configuration.md](docs/configura
 | **Telemetry** | **None** | Opt-in (personal), on-by-default (business) | Administrative data only (vault zero-knowledge) | None | Logged by chat providers |
 | **Entry Format** | Individual encrypted files | Proprietary database (1PUX export documented) | Encrypted JSON / SQLite | Individual encrypted files | Plaintext in chat history |
 
-**OpenPass differentiators:**
+**Symaira Vault differentiators:**
 
 - **Terminal-native**: Designed for keyboard-driven workflows without GUI dependency
 - **Modern encryption**: age instead of GPG — simpler key management, no web of trust
@@ -261,7 +261,7 @@ For the full configuration reference, see [docs/configuration.md](docs/configura
 - **Built-in utilities**: TOTP, autotype, secret execution, and password generation without external tools
 - **Git-native**: Automatic sync with full version history of encrypted entries
 
-> **Security note on AI agent chat sharing**: Pasting passwords into chat interfaces exposes secrets in plaintext chat history, model training logs, and provider databases. Unlike OpenPass's MCP integration — which keeps credentials encrypted and uses scoped tokens with audit logging — chat sharing provides no access control, rotation, or revocation capabilities.
+> **Security note on AI agent chat sharing**: Pasting passwords into chat interfaces exposes secrets in plaintext chat history, model training logs, and provider databases. Unlike Symaira Vault's MCP integration — which keeps credentials encrypted and uses scoped tokens with audit logging — chat sharing provides no access control, rotation, or revocation capabilities.
 
 ## Dependencies
 

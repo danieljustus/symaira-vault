@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 
-	"github.com/danieljustus/OpenPass/internal/audit"
+	"github.com/danieljustus/symaira-vault/internal/audit"
 )
 
 type auditFlags struct {
@@ -29,20 +29,20 @@ var agentAuditCmd = &cobra.Command{
 	Short: "Show audit log for an agent",
 	Long: `Display recent audit events for a specific agent.
 
-Reads from the agent's dedicated audit log at ~/.openpass/audit-<name>.log
+Reads from the agent's dedicated audit log at ~/.symaira/audit-<name>.log
 and displays entries in table or JSON format.`,
 	Args: cobra.ExactArgs(1),
 	Example: `  # Show last 50 audit entries for an agent
-  openpass agent audit my-agent
+  symaira agent audit my-agent
 
   # Show entries from the last 24 hours
-  openpass agent audit my-agent --since 24h
+  symaira agent audit my-agent --since 24h
 
   # Output as JSON
-  openpass agent audit my-agent --format json
+  symaira agent audit my-agent --format json
 
   # Show last 100 entries
-  openpass agent audit my-agent --limit 100`,
+  symaira agent audit my-agent --limit 100`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		agentName := args[0]
 

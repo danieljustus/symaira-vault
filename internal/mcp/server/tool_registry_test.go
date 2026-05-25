@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/danieljustus/OpenPass/internal/config"
-	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	auth "github.com/danieljustus/symaira-vault/internal/mcp/auth"
 )
 
 func TestResolveToolAlias(t *testing.T) {
@@ -24,7 +24,7 @@ func TestResolveToolAlias(t *testing.T) {
 		},
 		{
 			name:     "alias resolves to canonical",
-			toolName: "openpass_delete",
+			toolName: "symaira_delete",
 			want:     "delete_entry",
 		},
 		{
@@ -89,13 +89,13 @@ func TestIsToolAllowed(t *testing.T) {
 			token: &auth.ScopedToken{
 				AllowedTools: []string{"delete_entry"},
 			},
-			toolName: "openpass_delete",
+			toolName: "symaira_delete",
 			want:     true,
 		},
 		{
 			name: "canonical allowed when alias is in list",
 			token: &auth.ScopedToken{
-				AllowedTools: []string{"openpass_delete"},
+				AllowedTools: []string{"symaira_delete"},
 			},
 			toolName: "delete_entry",
 			want:     true,
@@ -129,7 +129,7 @@ func TestIsToolAllowed(t *testing.T) {
 		{
 			name:     "nil token with alias still allows",
 			token:    nil,
-			toolName: "openpass_delete",
+			toolName: "symaira_delete",
 			want:     true,
 		},
 		{
@@ -203,7 +203,7 @@ func TestToolsListPayloadMatchesAvailableRegistry(t *testing.T) {
 		}
 	}
 
-	for _, name := range []string{"list_entries", "get_entry", "get_entry_value", "get_entry_metadata", "generate_password", "health", "delete_entry", "openpass_delete"} {
+	for _, name := range []string{"list_entries", "get_entry", "get_entry_value", "get_entry_metadata", "generate_password", "health", "delete_entry", "symaira_delete"} {
 		if _, ok := names[name]; !ok {
 			t.Fatalf("tools/list missing expected tool %q", name)
 		}

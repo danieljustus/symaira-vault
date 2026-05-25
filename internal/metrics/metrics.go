@@ -1,6 +1,6 @@
 //go:build metrics
 
-// Package metrics provides Prometheus metrics for OpenPass MCP server.
+// Package metrics provides Prometheus metrics for Symaira Vault MCP server.
 //
 // It instruments MCP tool calls, authentication denials, approval outcomes,
 // and vault operations with counters and histograms suitable for monitoring
@@ -27,7 +27,7 @@ func init() {
 var (
 	mcpRequestsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "openpass",
+			Namespace: "symaira",
 			Subsystem: "mcp",
 			Name:      "requests_total",
 			Help:      "Total number of MCP tool requests.",
@@ -37,7 +37,7 @@ var (
 
 	mcpRequestDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Namespace: "openpass",
+			Namespace: "symaira",
 			Subsystem: "mcp",
 			Name:      "request_duration_seconds",
 			Help:      "Duration of MCP tool requests in seconds.",
@@ -50,7 +50,7 @@ var (
 var (
 	mcpAuthDenialsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "openpass",
+			Namespace: "symaira",
 			Subsystem: "mcp",
 			Name:      "auth_denials_total",
 			Help:      "Total number of MCP authentication/authorization denials.",
@@ -62,7 +62,7 @@ var (
 var (
 	mcpApprovalsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "openpass",
+			Namespace: "symaira",
 			Subsystem: "mcp",
 			Name:      "approvals_total",
 			Help:      "Total number of MCP approval outcomes.",
@@ -74,7 +74,7 @@ var (
 var (
 	vaultOperationsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "openpass",
+			Namespace: "symaira",
 			Subsystem: "vault",
 			Name:      "operations_total",
 			Help:      "Total number of vault operations.",
@@ -86,7 +86,7 @@ var (
 var (
 	vaultEntriesTotal = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Namespace: "openpass",
+			Namespace: "symaira",
 			Subsystem: "vault",
 			Name:      "entries_total",
 			Help:      "Total number of entries in the vault.",
@@ -96,7 +96,7 @@ var (
 
 	vaultOperationDurationSeconds = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Namespace: "openpass",
+			Namespace: "symaira",
 			Subsystem: "vault",
 			Name:      "operation_duration_seconds",
 			Help:      "Duration of vault operations in seconds.",
@@ -107,7 +107,7 @@ var (
 
 	sessionCacheEventsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "openpass",
+			Namespace: "symaira",
 			Subsystem: "session",
 			Name:      "cache_events_total",
 			Help:      "Total number of session cache events.",
@@ -117,7 +117,7 @@ var (
 
 	identityCacheEventsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "openpass",
+			Namespace: "symaira",
 			Subsystem: "session",
 			Name:      "identity_cache_events_total",
 			Help:      "Total number of identity cache events.",
@@ -127,7 +127,7 @@ var (
 
 	updateCheckTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "openpass",
+			Namespace: "symaira",
 			Subsystem: "update",
 			Name:      "check_total",
 			Help:      "Total number of update check results.",
@@ -137,7 +137,7 @@ var (
 
 	policyEvalDurationSeconds = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Namespace: "openpass",
+			Namespace: "symaira",
 			Subsystem: "policy",
 			Name:      "eval_duration_seconds",
 			Help:      "Duration of policy evaluations in seconds.",
@@ -223,7 +223,7 @@ func RecordPolicyEvalDuration(duration time.Duration) {
 	policyEvalDurationSeconds.WithLabelValues().Observe(duration.Seconds())
 }
 
-// Registry returns the Prometheus registry used by OpenPass.
+// Registry returns the Prometheus registry used by Symaira Vault.
 // Use this with promhttp.HandlerFor to serve metrics over HTTP.
 func Registry() *prometheus.Registry {
 	return registry

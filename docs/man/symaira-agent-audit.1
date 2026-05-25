@@ -1,0 +1,83 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-agent-audit - Show audit log for an agent
+
+
+.SH SYNOPSIS
+\fBsymaira agent audit  [flags]\fP
+
+
+.SH DESCRIPTION
+Display recent audit events for a specific agent.
+
+.PP
+Reads from the agent's dedicated audit log at ~/.openpass/audit-\&.log
+and displays entries in table or JSON format.
+
+
+.SH OPTIONS
+\fB--format\fP="table"
+	Output format (table, json)
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for audit
+
+.PP
+\fB--limit\fP=50
+	Maximum number of entries to show
+
+.PP
+\fB--since\fP=""
+	Show entries since duration (e.g. 24h, 7d)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Show last 50 audit entries for an agent
+  openpass agent audit my-agent
+
+  # Show entries from the last 24 hours
+  openpass agent audit my-agent --since 24h
+
+  # Output as JSON
+  openpass agent audit my-agent --format json
+
+  # Show last 100 entries
+  openpass agent audit my-agent --limit 100
+.EE
+
+
+.SH SEE ALSO
+\fBsymaira-agent(1)\fP

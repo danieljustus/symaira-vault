@@ -1,0 +1,94 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-agent-upgrade - Upgrade an agent's security tier
+
+
+.SH SYNOPSIS
+\fBsymaira agent upgrade  [flags]\fP
+
+
+.SH DESCRIPTION
+Show tier diff and upgrade an agent's security tier with interactive confirmation.
+
+.PP
+The upgrade applies the named tier preset (safe, standard, or admin) to the
+agent profile, updating all capability fields. The legacy alias "read-only"
+is accepted as a synonym for "safe". Use --dry-run to preview changes without
+writing. Use --rotate-token to also rotate the agent's MCP token.
+
+.PP
+The --reason flag is required when using --yes for non-interactive mode to ensure
+an audit trail.
+
+
+.SH OPTIONS
+\fB--dry-run\fP[=false]
+	Show diff without applying changes
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for upgrade
+
+.PP
+\fB--reason\fP=""
+	Audit reason for the upgrade (required with --yes)
+
+.PP
+\fB--rotate-token\fP[=false]
+	Rotate the agent's MCP token on upgrade
+
+.PP
+\fB--tier\fP=""
+	Target security tier (safe, standard, admin; 'read-only' accepted as alias for 'safe')
+
+.PP
+\fB--yes\fP[=false]
+	Non-interactive mode (requires --reason)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Interactive upgrade to admin tier with token rotation
+  openpass agent upgrade hermes --tier admin --rotate-token
+
+  # Dry-run: preview changes without writing
+  openpass agent upgrade claude-code --tier admin --dry-run
+
+  # Non-interactive upgrade with audit reason
+  openpass agent upgrade opencode --tier standard --yes --reason "CI pipeline automation upgrade"
+.EE
+
+
+.SH SEE ALSO
+\fBsymaira-agent(1)\fP

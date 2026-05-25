@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/danieljustus/OpenPass/internal/envfilter"
+	"github.com/danieljustus/symaira-vault/internal/envfilter"
 )
 
 // runner abstracts subprocess execution so backends can be unit-tested with a

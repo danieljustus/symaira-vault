@@ -2,7 +2,7 @@
 
 ## Status: BLOCKED — Apple Developer ID Required
 
-This document outlines the steps needed to enable macOS notarization for OpenPass releases.
+This document outlines the steps needed to enable macOS notarization for Symaira Vault releases.
 
 ## Prerequisites
 
@@ -23,7 +23,7 @@ This document outlines the steps needed to enable macOS notarization for OpenPas
 
 ## GitHub Secrets Required
 
-Add these secrets to the OpenPass repository:
+Add these secrets to the Symaira Vault repository:
 
 | Secret Name | Value |
 |-------------|-------|

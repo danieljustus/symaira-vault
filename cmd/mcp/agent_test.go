@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 )
 
 func TestBuildProfile(t *testing.T) {
@@ -213,11 +213,11 @@ func TestOutputAgentMCPSnippet(t *testing.T) {
 	if !ok {
 		t.Fatalf("mcpServers missing from payload: %#v", payload)
 	}
-	openpass, ok := mcpServers["openpass"].(map[string]any)
+	symaira, ok := mcpServers["symaira"].(map[string]any)
 	if !ok {
-		t.Fatalf("openpass server missing from payload: %#v", mcpServers)
+		t.Fatalf("symaira server missing from payload: %#v", mcpServers)
 	}
-	if openpass["command"] != "openpass" {
-		t.Fatalf("command = %#v, want openpass", openpass["command"])
+	if symaira["command"] != "symaira" {
+		t.Fatalf("command = %#v, want symaira", symaira["command"])
 	}
 }

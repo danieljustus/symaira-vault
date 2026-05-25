@@ -10,11 +10,11 @@ import (
 	"strings"
 	"testing"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
-	admin "github.com/danieljustus/OpenPass/cmd/admin"
-	"github.com/danieljustus/OpenPass/internal/config"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	admin "github.com/danieljustus/symaira-vault/cmd/admin"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func TestCreateBackup(t *testing.T) {

@@ -1,0 +1,67 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-update-apply - Apply the latest OpenPass self-update
+
+
+.SH SYNOPSIS
+\fBsymaira update apply [flags]\fP
+
+
+.SH DESCRIPTION
+Downloads, verifies, and applies the latest OpenPass release.
+
+.PP
+Supports direct-download installations only. When run via Homebrew, go install,
+or a package manager, self-update is disabled and guidance is shown instead.
+
+
+.SH OPTIONS
+\fB--dry-run\fP[=false]
+	preview update without applying
+
+.PP
+\fB--force\fP[=false]
+	bypass cache and force a fresh check
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for apply
+
+.PP
+\fB--json\fP[=false]
+	output apply result as JSON (deprecated: use --output=json)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH SEE ALSO
+\fBsymaira-update(1)\fP

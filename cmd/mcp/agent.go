@@ -9,12 +9,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
-	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 )
 
 var agentCmd = &cobra.Command{
@@ -22,31 +22,31 @@ var agentCmd = &cobra.Command{
 	Short: "Manage agent profiles",
 	Long: `Configure AI agent profiles with scoped permissions, tokens, and MCP integration.
 
-Use 'openpass agent setup <name>' to create a new agent with an interactive wizard
+Use 'symaira agent setup <name>' to create a new agent with an interactive wizard
 that guides you through security tier selection, vault path scoping, and approval mode.`,
 	Example: `  # Interactive new-agent wizard
-  openpass agent setup claude-code
+  symaira agent setup claude-code
 
   # List configured agents
-  openpass agent list
+  symaira agent list
 
   # Issue a token for an agent
-  openpass agent token new claude-code`,
+  symaira agent token new claude-code`,
 }
 
 var agentSetupCmd = &cobra.Command{
 	Use:   "setup <name>",
-	Short: "[Deprecated v4.0, removed in v4.1] Use 'openpass agent install <name>'",
-	Long: `This command was deprecated in OpenPass v4.0 and will be removed in v4.1.
+	Short: "[Deprecated v4.0, removed in v4.1] Use 'symaira agent install <name>'",
+	Long: `This command was deprecated in Symaira Vault v4.0 and will be removed in v4.1.
 
-Use 'openpass agent install <name>' instead to create and configure
+Use 'symaira agent install <name>' instead to create and configure
 agent profiles interactively.`,
 	Hidden: true,
 	Args:   cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: openpass agent install <name>\n")
+		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: symaira agent install <name>\n")
 		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
-			"This command is deprecated in v4.0. Use: openpass agent install <name>", nil)
+			"This command is deprecated in v4.0. Use: symaira agent install <name>", nil)
 	},
 }
 
@@ -149,8 +149,8 @@ func outputAgentMCPSnippet(name, rawToken string) {
 
 	config := map[string]any{
 		"mcpServers": map[string]any{
-			"openpass": map[string]any{
-				"command": "openpass",
+			"symaira": map[string]any{
+				"command": "symaira",
 				"args":    args,
 				"env": map[string]string{
 					"OPENPASS_MCP_TOKEN": rawToken,

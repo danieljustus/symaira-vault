@@ -7,7 +7,7 @@ import (
 )
 
 // TestEveryCommandHasExample is a discoverability guard: every leaf cobra
-// command that the user can invoke must declare Example so `openpass <cmd>
+// command that the user can invoke must declare Example so `symaira <cmd>
 // --help` shows a copyable invocation. The root command is exempt — its
 // usage block is the command list itself.
 //
@@ -28,8 +28,8 @@ func walk(c *cobra.Command, missing *[]string) {
 	// that cobra auto-generates.
 	if c.Parent() == rootCmd && !c.IsAdditionalHelpTopicCommand() &&
 		c.Name() != "help" && c.Name() != "completion" {
-		// Top-level commands MUST declare Example so `openpass --help` plus
-		// `openpass <cmd> --help` give the user a copyable invocation. We
+		// Top-level commands MUST declare Example so `symaira --help` plus
+		// `symaira <cmd> --help` give the user a copyable invocation. We
 		// deliberately don't enforce examples on sub-commands here — the
 		// parent's Example block typically covers them. Track sub-commands
 		// separately in the audit and bring them up to par incrementally.

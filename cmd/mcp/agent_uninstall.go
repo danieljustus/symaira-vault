@@ -7,14 +7,14 @@ import (
 	"path/filepath"
 	"strings"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/danieljustus/OpenPass/internal/agentskill"
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
-	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
+	"github.com/danieljustus/symaira-vault/internal/agentskill"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	auth "github.com/danieljustus/symaira-vault/internal/mcp/auth"
 )
 
 var (
@@ -44,16 +44,16 @@ This command:
   • Removes the agent profile from config.yaml
   • Revokes all MCP tokens associated with the agent
   • Removes the token file from the vault
-  • Removes the skill file if it is managed by OpenPass
+  • Removes the skill file if it is managed by Symaira Vault
 
 Use --keep-skill to preserve the skill file and --keep-config to keep the
 agent's profile in config.yaml. Use --yes to skip the confirmation prompt.`,
 	Args: cobra.ExactArgs(1),
 	Example: `  # Interactive uninstall with confirmation
-  openpass agent uninstall hermes
+  symaira agent uninstall hermes
 
   # Non-interactive uninstall keeping the skill file
-  openpass agent uninstall claude-code --yes --keep-skill`,
+  symaira agent uninstall claude-code --yes --keep-skill`,
 	Annotations: map[string]string{
 		cli.RequiresVaultAnnotation: "false",
 	},

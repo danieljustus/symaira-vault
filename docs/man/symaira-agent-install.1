@@ -1,0 +1,124 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-agent-install - Install and configure an AI agent for OpenPass
+
+
+.SH SYNOPSIS
+\fBsymaira agent install [name] [flags]\fP
+
+
+.SH DESCRIPTION
+Unified install command that detects an AI agent, creates a security
+profile in config.yaml, generates a scoped access token, injects the
+MCP server configuration into the agent's config file, and installs the
+embedded skill package — all in one step.
+
+.PP
+This replaces the older mcp install, mcp-config, and agent setup commands.
+
+.PP
+The default security tier is "safe" (read-only capabilities). For "standard"
+or "admin" tiers, an interactive terminal is required to confirm the
+security implications.
+
+.PP
+Supported agents: openclaw, claude-code, hermes, codex, opencode
+
+
+.SH OPTIONS
+\fB--auto-detect\fP[=false]
+	Detect all installed agents and configure each
+
+.PP
+\fB--config-only\fP[=false]
+	Only inject MCP config, skip the skill
+
+.PP
+\fB--dry-run\fP[=false]
+	Preview changes without applying them
+
+.PP
+\fB--force\fP[=false]
+	Overwrite existing agent profile and MCP config entries
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for install
+
+.PP
+\fB--http\fP[=false]
+	Use HTTP transport with auto-generated bearer token
+
+.PP
+\fB--skill-only\fP[=false]
+	Only install the skill package, skip MCP config
+
+.PP
+\fB--tier\fP="safe"
+	Security tier: safe (default), standard, or admin
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Install and configure Claude Code (auto-detect)
+  openpass agent install claude-code
+
+  # Detect all installed agents and configure each
+  openpass agent install --auto-detect
+
+  # HTTP transport with auto-generated bearer token
+  openpass agent install hermes --http
+
+  # Standard tier with explicit confirmation
+  openpass agent install codex --tier standard
+
+  # Preview what would happen without writing anything
+  openpass agent install openclaw --dry-run
+
+  # Only install the skill package, skip MCP config
+  openpass agent install opencode --skill-only
+
+  # Only inject MCP config, skip the skill
+  openpass agent install claude-code --config-only
+
+  # Force overwrite existing profile and MCP config entries
+  openpass agent install hermes --force
+
+  # Structured JSON output for scripting
+  openpass agent install opencode --output json
+.EE
+
+
+.SH SEE ALSO
+\fBsymaira-agent(1)\fP

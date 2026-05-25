@@ -8,12 +8,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 )
 
 var agentProfileCmd = &cobra.Command{
@@ -22,16 +22,16 @@ var agentProfileCmd = &cobra.Command{
 	Long:  `Show, edit, and export agent profiles.`,
 	Args:  cobra.ExactArgs(1),
 	Example: `  # Show agent profile
-  openpass agent profile my-agent show
+  symaira agent profile my-agent show
 
   # Show profile as JSON
-  openpass agent profile my-agent show --output json
+  symaira agent profile my-agent show --output json
 
   # Edit agent profile in $EDITOR
-  openpass agent profile my-agent edit
+  symaira agent profile my-agent edit
 
   # Export profile as YAML to stdout
-  openpass agent profile my-agent export`,
+  symaira agent profile my-agent export`,
 }
 
 var agentProfileShowCmd = &cobra.Command{
@@ -85,7 +85,7 @@ After saving, the profile is validated and you are prompted to apply changes.`,
 			return fmt.Errorf("read config: %w", err)
 		}
 
-		tmpFile, err := os.CreateTemp("", fmt.Sprintf("openpass-agent-%s-*.yaml", agentName))
+		tmpFile, err := os.CreateTemp("", fmt.Sprintf("symaira-agent-%s-*.yaml", agentName))
 		if err != nil {
 			return fmt.Errorf("create temp file: %w", err)
 		}

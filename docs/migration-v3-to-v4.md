@@ -1,6 +1,6 @@
 # Upgrade Guide: v3.x to v4.0
 
-OpenPass v4.0 restructures the CLI for AI-agent integration, introduces a tier
+Symaira Vault v4.0 restructures the CLI for AI-agent integration, introduces a tier
 system for agent profiles, and ships per-agent skill packages. This guide covers
 the migration from v3.x to v4.0.
 
@@ -19,7 +19,7 @@ v4.0 makes three major changes:
 2. **Tier system.** Agent profiles now have a `tier` field
    (`safe` / `standard` / `admin`) that governs which MCP tools and capabilities
    the agent has. Default for new installs is `safe`.
-3. **Per-agent skill packages.** Skill files are now embedded in the OpenPass
+3. **Per-agent skill packages.** Skill files are now embedded in the Symaira Vault
    binary and install alongside the MCP config. Each agent gets a tailored skill
    file with its own tool prefix and tier hints.
 
@@ -56,7 +56,7 @@ migration helper handles any v3.x profile):
 brew upgrade openpass
 
 # macOS / Linux (install script)
-curl -sSfL https://raw.githubusercontent.com/danieljustus/OpenPass/main/scripts/install.sh | sh
+curl -sSfL https://raw.githubusercontent.com/danieljustus/symaira-vault/main/scripts/install.sh | sh
 
 # Windows (Scoop)
 scoop update openpass
@@ -372,7 +372,7 @@ cp ~/.openpass/config.yaml.bak.v3-$(ls -t ~/.openpass/config.yaml.bak.v3-* | hea
 If you backed up the full vault directory before migrating:
 
 ```bash
-# Stop any running OpenPass processes first
+# Stop any running Symaira Vault processes first
 pkill openpass 2>/dev/null || true
 
 # Restore
@@ -380,16 +380,16 @@ rm -rf ~/.openpass
 cp -a ~/.openpass.backup.20260518 ~/.openpass
 ```
 
-### Downgrade OpenPass
+### Downgrade Symaira Vault
 
 If you need to go back to v3.x:
 
 ```bash
 # macOS (Homebrew)
-brew install openpass@3
+brew install symaira@3
 
 # Manual install from GitHub releases
-# Download v3.0.0 from https://github.com/danieljustus/OpenPass/releases/tag/v3.0.0
+# Download v3.0.0 from https://github.com/danieljustus/symaira-vault/releases/tag/v3.0.0
 ```
 
 The v3.x binary reads the old config format. If you already ran the migration,
@@ -423,4 +423,4 @@ After migration:
    equivalents from the mapping table above.
 
 For the full v4.0 changelog, see the
-[CHANGELOG](https://github.com/danieljustus/OpenPass/releases/tag/v4.0.0).
+[CHANGELOG](https://github.com/danieljustus/symaira-vault/releases/tag/v4.0.0).

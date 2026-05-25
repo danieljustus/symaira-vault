@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	admin "github.com/danieljustus/OpenPass/cmd/admin"
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	admin "github.com/danieljustus/symaira-vault/cmd/admin"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"

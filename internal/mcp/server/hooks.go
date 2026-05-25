@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 )
 
 // PreCallHook is invoked before a tool handler executes.

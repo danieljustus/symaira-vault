@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	cryptopkg "github.com/danieljustus/OpenPass/internal/crypto"
+	cryptopkg "github.com/danieljustus/symaira-vault/internal/crypto"
 )
 
 type EntryFlags struct {

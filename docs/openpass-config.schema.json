@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://openpass.dev/config.schema.json",
+  "$id": "https://symaira.dev/config.schema.json",
   "properties": {
     "Agents": {
       "additionalProperties": {
@@ -274,5 +274,5 @@
     "Profiles",
     "DefaultProfile"
   ],
-  "description": "OpenPass configuration schema"
+  "description": "Symaira Vault configuration schema"
 }

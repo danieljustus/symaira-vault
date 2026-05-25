@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 )
 
 func TestAuthRotate_ValidatesLengthBeforeConfirmation(t *testing.T) {

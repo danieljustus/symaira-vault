@@ -5,12 +5,12 @@ import (
 	"os"
 	"time"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 
-	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 var AuthUnlockCmd = &cobra.Command{
@@ -24,13 +24,13 @@ Use --check to verify if an active session exists without prompting.
 Environment variable OPENPASS_PASSPHRASE can be used in CI/CD environments
 but should NOT be used on shared machines (visible in process listings).`,
 	Example: `  # Unlock the vault
-  openpass unlock
+  symaira unlock
 
   # Check if session is active
-  openpass unlock --check
+  symaira unlock --check
 
   # Unlock with custom TTL
-  openpass unlock --ttl 30m`,
+  symaira unlock --ttl 30m`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		check, _ := cmd.Flags().GetBool("check")
 		ttl, _ := cmd.Flags().GetDuration("ttl")
@@ -46,7 +46,7 @@ but should NOT be used on shared machines (visible in process listings).`,
 		}
 
 		if !vaultpkg.IsInitialized(vaultDir) {
-			return errorspkg.NewCLIError(errorspkg.ExitNotInitialized, "vault not initialized. Run 'openpass init' first", errorspkg.ErrVaultNotInitialized)
+			return errorspkg.NewCLIError(errorspkg.ExitNotInitialized, "vault not initialized. Run 'symaira init' first", errorspkg.ErrVaultNotInitialized)
 		}
 
 		if check {
@@ -65,7 +65,7 @@ but should NOT be used on shared machines (visible in process listings).`,
 		_ = v
 
 		if status := cli.SessionGetCacheStatus(); !status.Persistent {
-			return errorspkg.NewCLIError(errorspkg.ExitLocked, "session cache is memory-only; 'openpass unlock' cannot unlock future serve processes. Start serve with OPENPASS_PASSPHRASE or use a build with OS keyring support", nil)
+			return errorspkg.NewCLIError(errorspkg.ExitLocked, "session cache is memory-only; 'symaira unlock' cannot unlock future serve processes. Start serve with OPENPASS_PASSPHRASE or use a build with OS keyring support", nil)
 		}
 
 		fmt.Fprintf(os.Stderr, "Vault unlocked (session TTL: %s)\n", effectiveTTL)

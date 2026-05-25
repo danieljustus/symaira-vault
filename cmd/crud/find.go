@@ -6,15 +6,15 @@ import (
 	"runtime"
 	"strings"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
-	"github.com/danieljustus/OpenPass/internal/ui/render"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
-	"github.com/danieljustus/OpenPass/internal/vault/taint"
-	vaultsvc "github.com/danieljustus/OpenPass/internal/vaultsvc"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/ui/render"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
+	"github.com/danieljustus/symaira-vault/internal/vault/taint"
+	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 // searchWorkers returns the number of concurrent decryption workers for find
@@ -47,10 +47,10 @@ var findCmd = &cobra.Command{
 	Short:             "Search for entries",
 	Long:              `Searches entry paths and contents for the given query.`,
 	Example: `  # Search for entries containing "bank"
-  openpass find bank
+  symaira find bank
 
   # JSON output
-  openpass find bank --output json`,
+  symaira find bank --output json`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return cli.WithVault(func(svc vaultsvc.Service) error {

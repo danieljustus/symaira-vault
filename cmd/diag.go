@@ -9,13 +9,13 @@ import (
 	"github.com/prometheus/common/expfmt"
 	"github.com/spf13/cobra"
 
-	"github.com/danieljustus/OpenPass/internal/metrics"
+	"github.com/danieljustus/symaira-vault/internal/metrics"
 )
 
 var diagCmd = &cobra.Command{
 	Use:     "diag",
-	Short:   "Diagnostic commands for OpenPass",
-	Example: `  openpass diag metrics`,
+	Short:   "Diagnostic commands for Symaira Vault",
+	Example: `  symaira diag metrics`,
 	Annotations: map[string]string{
 		requiresVaultAnnotation: "false",
 	},

@@ -7,13 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [v4.0.0] - 2026-05-21
 
-v4.0 reshapes OpenPass around AI-agent integration. The CLI becomes a
+v4.0 reshapes Symaira Vault around AI-agent integration. The CLI becomes a
 first-class surface for agents (dual to MCP), agent profiles gain an explicit
 tier system, skill packages ship inside the binary, and the MCP server defaults
 to a lean 7-tool surface to reduce context-window pollution.
 
 See [docs/migration-v3-to-v4.md](docs/migration-v3-to-v4.md) for the upgrade
-guide and [docs/skills/openpass-agent/UPGRADE-TO-V4.md](docs/skills/openpass-agent/UPGRADE-TO-V4.md)
+guide and [docs/skills/symaira-agent/UPGRADE-TO-V4.md](docs/skills/symaira-agent/UPGRADE-TO-V4.md)
 for an AI-agent-ready upgrade prompt. Run `openpass migrate v4 --dry-run` to
 preview, then `openpass migrate v4` to apply.
 
@@ -44,7 +44,7 @@ preview, then `openpass migrate v4` to apply.
   change with interactive diff. Non-interactive `--yes --reason "…"` requires a
   reason for the audit trail. Optional `--rotate-token`.
 - **`openpass agent uninstall <name>`** — removes profile, token, skill, and
-  MCP config entry; skill files without the OpenPass sentinel are preserved.
+  MCP config entry; skill files without the Symaira Vault sentinel are preserved.
 - **`openpass agent doctor <name>` / `--all`** — end-to-end diagnostic for one
   or all agent integrations; detects skill drift via hash comparison.
 - **`openpass agent list`** — installed agents with tier, token status, last-seen.
@@ -136,7 +136,7 @@ preview, then `openpass migrate v4` to apply.
   and `canUseClipboard=true → standard`; metadata-only → `safe`; profiles
   with redact-field overrides that don't match a preset → `custom`.
 - **`docs/migration-v3-to-v4.md`** — full user-facing upgrade guide.
-- **`docs/skills/openpass-agent/UPGRADE-TO-V4.md`** — AI-agent-ready prompt
+- **`docs/skills/symaira-agent/UPGRADE-TO-V4.md`** — AI-agent-ready prompt
   to drive the upgrade end-to-end.
 
 ### Security
@@ -201,7 +201,7 @@ preview, then `openpass migrate v4` to apply.
 - OAuth refresh token grant (RFC 6749 §6) with configurable TTLs (`ScopedToken` gains `RefreshTokenHash`/`RefreshExpiresAt`; `CreateWithRefresh()`/`RotateViaRefreshToken()`; single-use rotation) (#46)
 - Persistent OAuth client registry — client registrations survive server restarts via JSON persistence (`oauthClientStore.Load()`/`Save()`); optional TTL with background expired-client cleanup (#45)
 - Config options `mcp.oauth.access_token_ttl` (default 24h) and `mcp.oauth.refresh_token_ttl` (default 720h/30d) with file config + merge support (#46)
-- Nix flake for NixOS/Nix support — `nix run github:danieljustus/OpenPass` with `buildGoModule` package, default app, and dev shell (#36)
+- Nix flake for NixOS/Nix support — `nix run github:danieljustus/symaira-vault` with `buildGoModule` package, default app, and dev shell (#36)
 - New `internal/ui/render` package with `ForTerminal()`, `QuoteForTerminal()`, `ForTerminalLine()` sanitizers
 - New `internal/mcp/render.go` with `RenderChokepoint` and `SanitizeForMCP()`
 
@@ -308,7 +308,7 @@ preview, then `openpass migrate v4` to apply.
 
 ## [v1.0.0] - 2026-04-22
 
-Initial stable OpenPass release.
+Initial stable Symaira Vault release.
 
 ### Added
 
@@ -341,7 +341,7 @@ Major update with vault improvements, self-update mechanism, and enhanced MCP tr
 ### Added
 
 - Update check command (`openpass update check`) for detecting newer releases
-- Self-update mechanism for managing OpenPass installations
+- Self-update mechanism for managing Symaira Vault installations
 - MCP server stdio transport support for local agent integration
 - Session management commands (`openpass unlock`, `openpass lock`) with configurable TTL
 - Release smoke tests for validating published artifacts
@@ -668,24 +668,24 @@ Interactive TUI, vault management, and observability release.
 - Fixed Ubuntu CI session caching test flakiness
 - Corrected release workflow environment variable duplication
 
-[v1.0.0]: https://github.com/danieljustus/OpenPass/releases/tag/v1.0.0
-[v1.1.0]: https://github.com/danieljustus/OpenPass/releases/tag/v1.1.0
-[v1.1.1]: https://github.com/danieljustus/OpenPass/releases/tag/v1.1.1
-[v1.1.2]: https://github.com/danieljustus/OpenPass/releases/tag/v1.1.2
-[v1.1.3]: https://github.com/danieljustus/OpenPass/releases/tag/v1.1.3
-[v1.1.4]: https://github.com/danieljustus/OpenPass/releases/tag/v1.1.4
-[v1.2.0]: https://github.com/danieljustus/OpenPass/releases/tag/v1.2.0
-[v1.3.0]: https://github.com/danieljustus/OpenPass/releases/tag/v1.3.0
-[v2.0.0]: https://github.com/danieljustus/OpenPass/releases/tag/v2.0.0
-[v2.1.0]: https://github.com/danieljustus/OpenPass/releases/tag/v2.1.0
-[v2.2.0]: https://github.com/danieljustus/OpenPass/releases/tag/v2.2.0
-[v2.2.1]: https://github.com/danieljustus/OpenPass/releases/tag/v2.2.1
-[v2.3.0]: https://github.com/danieljustus/OpenPass/releases/tag/v2.3.0
-[v2.4.0]: https://github.com/danieljustus/OpenPass/releases/tag/v2.4.0
-[v2.5.0]: https://github.com/danieljustus/OpenPass/releases/tag/v2.5.0
-[v2.7.0]: https://github.com/danieljustus/OpenPass/releases/tag/v2.7.0
-[v3.0.0]: https://github.com/danieljustus/OpenPass/releases/tag/v3.0.0
-[v2.9.0]: https://github.com/danieljustus/OpenPass/releases/tag/v2.9.0
-[v2.8.2]: https://github.com/danieljustus/OpenPass/releases/tag/v2.8.2
-[v2.8.1]: https://github.com/danieljustus/OpenPass/releases/tag/v2.8.1
-[v2.8.0]: https://github.com/danieljustus/OpenPass/releases/tag/v2.8.0
+[v1.0.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v1.0.0
+[v1.1.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v1.1.0
+[v1.1.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v1.1.1
+[v1.1.2]: https://github.com/danieljustus/symaira-vault/releases/tag/v1.1.2
+[v1.1.3]: https://github.com/danieljustus/symaira-vault/releases/tag/v1.1.3
+[v1.1.4]: https://github.com/danieljustus/symaira-vault/releases/tag/v1.1.4
+[v1.2.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v1.2.0
+[v1.3.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v1.3.0
+[v2.0.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.0.0
+[v2.1.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.1.0
+[v2.2.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.2.0
+[v2.2.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.2.1
+[v2.3.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.3.0
+[v2.4.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.4.0
+[v2.5.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.5.0
+[v2.7.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.7.0
+[v3.0.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v3.0.0
+[v2.9.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.9.0
+[v2.8.2]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.2
+[v2.8.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.1
+[v2.8.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.0

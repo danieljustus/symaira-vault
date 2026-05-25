@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/danieljustus/OpenPass/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/config"
 )
 
 func TestToolsList_FiltersGetEntryValue_WhenExposeValueToolsFalse(t *testing.T) {

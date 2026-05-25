@@ -1,0 +1,68 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-agent - Manage agent profiles
+
+
+.SH SYNOPSIS
+\fBsymaira agent [flags]\fP
+
+
+.SH DESCRIPTION
+Configure AI agent profiles with scoped permissions, tokens, and MCP integration.
+
+.PP
+Use 'openpass agent setup \&' to create a new agent with an interactive wizard
+that guides you through security tier selection, vault path scoping, and approval mode.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for agent
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Interactive new-agent wizard
+  openpass agent setup claude-code
+
+  # List configured agents
+  openpass agent list
+
+  # Issue a token for an agent
+  openpass agent token new claude-code
+.EE
+
+
+.SH SEE ALSO
+\fBopenpass(1)\fP, \fBsymaira-agent-audit(1)\fP, \fBsymaira-agent-doctor(1)\fP, \fBsymaira-agent-install(1)\fP, \fBsymaira-agent-list(1)\fP, \fBsymaira-agent-profile(1)\fP, \fBsymaira-agent-setup(1)\fP, \fBsymaira-agent-skill(1)\fP, \fBsymaira-agent-token(1)\fP, \fBsymaira-agent-uninstall(1)\fP, \fBsymaira-agent-upgrade(1)\fP, \fBsymaira-agent-whoami(1)\fP

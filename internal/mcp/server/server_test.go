@@ -11,9 +11,9 @@ import (
 
 	"filippo.io/age"
 
-	"github.com/danieljustus/OpenPass/internal/config"
-	"github.com/danieljustus/OpenPass/internal/policy"
-	"github.com/danieljustus/OpenPass/internal/vault"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/policy"
+	"github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func TestNew_NilVault(t *testing.T) {
@@ -786,7 +786,7 @@ func TestExecuteTool_OpenpassDelete(t *testing.T) {
 	srv.vault.Identity = identity
 
 	args := json.RawMessage(`{"path": "github"}`)
-	result, err := srv.executeTool(context.Background(), "openpass_delete", args)
+	result, err := srv.executeTool(context.Background(), "symaira_delete", args)
 	if err != nil {
 		t.Fatalf("executeTool() error = %v", err)
 	}

@@ -10,12 +10,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 
-	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 var BackupExcludeGit bool
@@ -28,10 +28,10 @@ var backupCmd = &cobra.Command{
 The backup includes all vault files: identity.age, config.yaml, entries/, and mcp-token.
 Use --exclude-git to omit the .git/ directory from the backup.`,
 	Example: `  # Full backup to a tarball
-  openpass backup ~/openpass-2026-05-17.tar.gz
+  symaira backup ~/symaira-2026-05-17.tar.gz
 
   # Skip the Git history (smaller archive)
-  openpass backup --exclude-git ~/openpass.tar.gz`,
+  symaira backup --exclude-git ~/symaira.tar.gz`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		vaultDir, err := cli.VaultPath()
@@ -40,7 +40,7 @@ Use --exclude-git to omit the .git/ directory from the backup.`,
 		}
 
 		if !vaultpkg.IsInitialized(vaultDir) {
-			return errorspkg.NewCLIError(errorspkg.ExitNotInitialized, "vault not initialized. Run 'openpass init' first", errorspkg.ErrVaultNotInitialized)
+			return errorspkg.NewCLIError(errorspkg.ExitNotInitialized, "vault not initialized. Run 'symaira init' first", errorspkg.ErrVaultNotInitialized)
 		}
 
 		archivePath := args[0]
@@ -128,10 +128,10 @@ The archive is extracted into the current vault directory. If the vault director
 does not exist, it will be created. After extraction, the vault is verified
 to ensure all expected files are present.`,
 	Example: `  # Restore into the default vault directory
-  openpass restore ~/openpass-2026-05-17.tar.gz
+  symaira restore ~/symaira-2026-05-17.tar.gz
 
   # Restore into a custom location
-  openpass --vault ~/restored restore archive.tar.gz`,
+  symaira --vault ~/restored restore archive.tar.gz`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		vaultDir, err := cli.VaultPath()
@@ -149,7 +149,7 @@ to ensure all expected files are present.`,
 		}
 
 		if !vaultpkg.IsInitialized(vaultDir) {
-			return errorspkg.NewCLIError(errorspkg.ExitNotInitialized, "vault not initialized. Run 'openpass init' first", errorspkg.ErrVaultNotInitialized)
+			return errorspkg.NewCLIError(errorspkg.ExitNotInitialized, "vault not initialized. Run 'symaira init' first", errorspkg.ErrVaultNotInitialized)
 		}
 
 		cli.PrintQuietAware("Vault restored to: %s\n", vaultDir)

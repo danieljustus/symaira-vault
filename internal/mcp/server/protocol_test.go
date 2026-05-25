@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/danieljustus/OpenPass/internal/config"
-	transport "github.com/danieljustus/OpenPass/internal/mcp/transport"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	transport "github.com/danieljustus/symaira-vault/internal/mcp/transport"
 )
 
 func TestProtocolHandler_Initialize(t *testing.T) {
-	handler := NewProtocolHandler("OpenPass", "1.0.0", nil)
+	handler := NewProtocolHandler("Symaira Vault", "1.0.0", nil)
 
 	msg := &transport.Message{
 		JSONRPC: "2.0",
@@ -44,13 +44,13 @@ func TestProtocolHandler_Initialize(t *testing.T) {
 	if result.ServerInfo == nil {
 		t.Fatal("ServerInfo is nil")
 	}
-	if result.ServerInfo.Name != "OpenPass" {
-		t.Errorf("ServerInfo.Name = %q, want OpenPass", result.ServerInfo.Name)
+	if result.ServerInfo.Name != "Symaira Vault" {
+		t.Errorf("ServerInfo.Name = %q, want Symaira Vault", result.ServerInfo.Name)
 	}
 }
 
 func TestProtocolHandler_Initialize_UnsupportedVersion(t *testing.T) {
-	handler := NewProtocolHandler("OpenPass", "1.0.0", nil)
+	handler := NewProtocolHandler("Symaira Vault", "1.0.0", nil)
 
 	msg := &transport.Message{
 		JSONRPC: "2.0",
@@ -81,7 +81,7 @@ func TestProtocolHandler_Initialize_UnsupportedVersion(t *testing.T) {
 }
 
 func TestProtocolHandler_Initialized(t *testing.T) {
-	handler := NewProtocolHandler("OpenPass", "1.0.0", nil)
+	handler := NewProtocolHandler("Symaira Vault", "1.0.0", nil)
 
 	msg := &transport.Message{
 		JSONRPC: "2.0",
@@ -98,7 +98,7 @@ func TestProtocolHandler_Initialized(t *testing.T) {
 }
 
 func TestProtocolHandler_Ping(t *testing.T) {
-	handler := NewProtocolHandler("OpenPass", "1.0.0", nil)
+	handler := NewProtocolHandler("Symaira Vault", "1.0.0", nil)
 
 	msg := &transport.Message{
 		JSONRPC: "2.0",
@@ -119,7 +119,7 @@ func TestProtocolHandler_Ping(t *testing.T) {
 }
 
 func TestProtocolHandler_ToolsList_NotInitialized(t *testing.T) {
-	handler := NewProtocolHandler("OpenPass", "1.0.0", nil)
+	handler := NewProtocolHandler("Symaira Vault", "1.0.0", nil)
 
 	msg := &transport.Message{
 		JSONRPC: "2.0",
@@ -143,7 +143,7 @@ func TestProtocolHandler_ToolsList_NotInitialized(t *testing.T) {
 }
 
 func TestProtocolHandler_ToolsList_Success(t *testing.T) {
-	handler := NewProtocolHandler("OpenPass", "1.0.0", nil)
+	handler := NewProtocolHandler("Symaira Vault", "1.0.0", nil)
 
 	initMsg := &transport.Message{
 		JSONRPC: "2.0",
@@ -199,7 +199,7 @@ func TestProtocolHandler_ToolsList_Success(t *testing.T) {
 }
 
 func TestProtocolHandler_ToolsCall_NotInitialized(t *testing.T) {
-	handler := NewProtocolHandler("OpenPass", "1.0.0", nil)
+	handler := NewProtocolHandler("Symaira Vault", "1.0.0", nil)
 
 	msg := &transport.Message{
 		JSONRPC: "2.0",
@@ -224,7 +224,7 @@ func TestProtocolHandler_ToolsCall_NotInitialized(t *testing.T) {
 }
 
 func TestProtocolHandler_ToolsCall_InvalidParams(t *testing.T) {
-	handler := NewProtocolHandler("OpenPass", "1.0.0", nil)
+	handler := NewProtocolHandler("Symaira Vault", "1.0.0", nil)
 
 	initMsg := &transport.Message{
 		JSONRPC: "2.0",
@@ -261,7 +261,7 @@ func TestProtocolHandler_ToolsCall_InvalidParams(t *testing.T) {
 }
 
 func TestProtocolHandler_ToolsCall_NilTools(t *testing.T) {
-	handler := NewProtocolHandler("OpenPass", "1.0.0", nil)
+	handler := NewProtocolHandler("Symaira Vault", "1.0.0", nil)
 
 	initMsg := &transport.Message{
 		JSONRPC: "2.0",
@@ -301,7 +301,7 @@ func TestProtocolHandler_ToolsCall_NilTools(t *testing.T) {
 }
 
 func TestProtocolHandler_UnknownMethod(t *testing.T) {
-	handler := NewProtocolHandler("OpenPass", "1.0.0", nil)
+	handler := NewProtocolHandler("Symaira Vault", "1.0.0", nil)
 
 	msg := &transport.Message{
 		JSONRPC: "2.0",
@@ -325,7 +325,7 @@ func TestProtocolHandler_UnknownMethod(t *testing.T) {
 }
 
 func TestProtocolHandler_ConcurrentInitialize(t *testing.T) {
-	handler := NewProtocolHandler("OpenPass", "1.0.0", nil)
+	handler := NewProtocolHandler("Symaira Vault", "1.0.0", nil)
 
 	msg := &transport.Message{
 		JSONRPC: "2.0",
@@ -354,14 +354,14 @@ func TestProtocolHandler_ConcurrentInitialize(t *testing.T) {
 }
 
 func TestProtocolHandler_Close(t *testing.T) {
-	handler := NewProtocolHandler("OpenPass", "1.0.0", nil)
+	handler := NewProtocolHandler("Symaira Vault", "1.0.0", nil)
 	if err := handler.Close(); err != nil {
 		t.Fatalf("Close() error = %v", err)
 	}
 }
 
 func TestProtocolHandler_Close_NilTools(t *testing.T) {
-	handler := NewProtocolHandler("OpenPass", "1.0.0", nil)
+	handler := NewProtocolHandler("Symaira Vault", "1.0.0", nil)
 	handler.tools = nil
 	if err := handler.Close(); err != nil {
 		t.Fatalf("Close() error = %v", err)
@@ -375,7 +375,7 @@ func TestProtocolHandler_Close_Error(t *testing.T) {
 		CanWrite:     config.BoolPtr(false),
 		ApprovalMode: config.StrPtr("none"),
 	}, "stdio")
-	handler := NewProtocolHandler("OpenPass", "1.0.0", srv)
+	handler := NewProtocolHandler("Symaira Vault", "1.0.0", srv)
 
 	_ = srv.auditLog.Close()
 
@@ -392,7 +392,7 @@ func TestProtocolHandler_ToolsCall_Success(t *testing.T) {
 		CanWrite:     config.BoolPtr(false),
 		ApprovalMode: config.StrPtr("none"),
 	}, "stdio")
-	handler := NewProtocolHandler("OpenPass", "1.0.0", srv)
+	handler := NewProtocolHandler("Symaira Vault", "1.0.0", srv)
 
 	initMsg := &transport.Message{
 		JSONRPC: "2.0",
@@ -452,7 +452,7 @@ func TestProtocolHandler_ToolsCall_ExecuteError(t *testing.T) {
 		CanWrite:     config.BoolPtr(false),
 		ApprovalMode: config.StrPtr("none"),
 	}, "stdio")
-	handler := NewProtocolHandler("OpenPass", "1.0.0", srv)
+	handler := NewProtocolHandler("Symaira Vault", "1.0.0", srv)
 
 	initMsg := &transport.Message{
 		JSONRPC: "2.0",

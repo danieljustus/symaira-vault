@@ -7,14 +7,14 @@ import (
 	"strings"
 	"testing"
 
-	admin "github.com/danieljustus/OpenPass/cmd/admin"
-	mcpcmd "github.com/danieljustus/OpenPass/cmd/mcp"
-	cli "github.com/danieljustus/OpenPass/internal/cli"
-	"github.com/danieljustus/OpenPass/internal/config"
-	server "github.com/danieljustus/OpenPass/internal/mcp/server"
-	"github.com/danieljustus/OpenPass/internal/mcp/serverbootstrap"
-	"github.com/danieljustus/OpenPass/internal/testutil"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	admin "github.com/danieljustus/symaira-vault/cmd/admin"
+	mcpcmd "github.com/danieljustus/symaira-vault/cmd/mcp"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	server "github.com/danieljustus/symaira-vault/internal/mcp/server"
+	"github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap"
+	"github.com/danieljustus/symaira-vault/internal/testutil"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func TestCommandRegistration(t *testing.T) {
@@ -323,14 +323,14 @@ func TestUnlockVaultWrongPassphrase(t *testing.T) {
 	}
 }
 
-func TestVaultPathWithEnvVarOpenPassVault(t *testing.T) {
+func TestVaultPathWithEnvVarSymairaVault(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: path format differs")
 	}
-	origEnv := os.Getenv("OPENPASS_VAULT")
-	defer func() { _ = os.Setenv("OPENPASS_VAULT", origEnv) }()
+	origEnv := os.Getenv("SYMAIRA_VAULT")
+	defer func() { _ = os.Setenv("SYMAIRA_VAULT", origEnv) }()
 
-	_ = os.Setenv("OPENPASS_VAULT", "/test/vault")
+	_ = os.Setenv("SYMAIRA_VAULT", "/test/vault")
 
 	origVault := vault
 	defer func() { vault = origVault }()
@@ -572,8 +572,8 @@ func TestOutputHTTPConfigMCP(t *testing.T) {
 		}
 	}()
 
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+	_ = os.Setenv("SYMAIRA_VAULT", vaultDir)
+	defer func() { _ = os.Unsetenv("SYMAIRA_VAULT") }()
 
 	vault = vaultDir
 	if vaultFlag != nil {

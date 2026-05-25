@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/danieljustus/OpenPass/internal/config"
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 )
 
 // ---------------------------------------------------------------------------
@@ -914,7 +914,7 @@ func TestHandleRequestShare_Concurrent(t *testing.T) {
 
 func TestHandleRequestShare_StoreWriteError(t *testing.T) {
 	// Use a path we can't write to.
-	store := NewShareStore("/nonexistent-dir-openpass/mcp-shares.json")
+	store := NewShareStore("/nonexistent-dir-symaira/mcp-shares.json")
 	srv := &Server{
 		agent: &config.AgentProfile{
 			Name:         "test-agent",

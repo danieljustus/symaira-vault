@@ -1,0 +1,53 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-agent-skill-export - Export a rendered skill package for an agent
+
+
+.SH SYNOPSIS
+\fBsymaira agent skill export  [flags]\fP
+
+
+.SH DESCRIPTION
+Pack the rendered skill file as a tar.gz archive for drop-in distribution.
+The archive contains the rendered skill file (SKILL.md or AGENTS.md) and an
+INSTALL.md with manual install instructions.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for export
+
+.PP
+\fB-o\fP, \fB--output\fP=""
+	Output file path (default: symaira--skill.tar.gz)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH SEE ALSO
+\fBsymaira-agent-skill(1)\fP

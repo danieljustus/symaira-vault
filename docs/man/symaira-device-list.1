@@ -1,0 +1,63 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-device-list - List all devices
+
+
+.SH SYNOPSIS
+\fBsymaira device list [flags]\fP
+
+
+.SH DESCRIPTION
+List all devices registered in the vault's device registry.
+
+.PP
+Shows device name, public key (truncated), added date, and last seen time.
+Also shows recipients from recipients.txt that are not associated with
+any registered device (unmanaged recipients).
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for list
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  openpass device list
+  openpass device list --output json
+.EE
+
+
+.SH SEE ALSO
+\fBsymaira-device(1)\fP

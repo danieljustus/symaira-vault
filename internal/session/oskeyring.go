@@ -8,7 +8,7 @@ import (
 
 	"github.com/zalando/go-keyring"
 
-	"github.com/danieljustus/OpenPass/internal/logging"
+	"github.com/danieljustus/symaira-vault/internal/logging"
 )
 
 var (

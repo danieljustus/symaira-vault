@@ -11,8 +11,8 @@ import (
 
 	"filippo.io/age"
 
-	"github.com/danieljustus/OpenPass/internal/health"
-	"github.com/danieljustus/OpenPass/internal/vault"
+	"github.com/danieljustus/symaira-vault/internal/health"
+	"github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func TestRunChecks_EmptyDir(t *testing.T) {

@@ -1,6 +1,6 @@
-# Accessibility in OpenPass
+# Accessibility in Symaira Vault
 
-OpenPass ships a terminal UI plus prompts that traditionally are hostile to
+Symaira Vault ships a terminal UI plus prompts that traditionally are hostile to
 screen readers (box-drawing, ANSI color codes, dense status bars). This page
 documents the accessibility hooks the tool exposes and the trade-offs we
 have considered.
@@ -52,7 +52,7 @@ primary surface; `NO_COLOR` is honoured as a standard env.
   non-interactive commands (`openpass get`, `openpass list --output json`,
   `openpass find`) instead, which already produce clean text.
 - **OS-native dialogs**: `osascript`, `zenity`, and PowerShell handle their
-  own accessibility via the host platform; OpenPass does not set ARIA labels
+  own accessibility via the host platform; Symaira Vault does not set ARIA labels
   beyond what the dialog APIs expose.
 
 ## Reporting

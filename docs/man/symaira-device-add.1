@@ -1,0 +1,72 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-device-add - Add this device to an existing multi-device vault
+
+
+.SH SYNOPSIS
+\fBsymaira device add [flags]\fP
+
+
+.SH DESCRIPTION
+Add this device to an existing multi-device vault using a pairing
+token and public key obtained via QR code from the original device.
+
+.PP
+This command is used on the second device after the initial setup wizard
+shows a QR code. It creates a new local vault with its own identity,
+adds the first device's public key as a recipient, and saves a pairing
+request so the first device can accept it.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for add
+
+.PP
+\fB--name\fP=""
+	Name for this device (defaults to hostname)
+
+.PP
+\fB--pair\fP[=false]
+	Pair with an existing device using QR data
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  openpass device add --pair "123456:age1..."
+.EE
+
+
+.SH SEE ALSO
+\fBsymaira-device(1)\fP

@@ -1,8 +1,8 @@
-# OpenPass Launch & Incident Response Runbook
+# Symaira Vault Launch & Incident Response Runbook
 
-**Maintainer**: OpenPass Team
-**Security Contact**: https://github.com/danieljustus/OpenPass/security/advisories/new
-**Repository**: https://github.com/danieljustus/OpenPass
+**Maintainer**: Symaira Vault Team
+**Security Contact**: https://github.com/danieljustus/symaira-vault/security/advisories/new
+**Repository**: https://github.com/danieljustus/symaira-vault
 
 ## Table of Contents
 
@@ -18,7 +18,7 @@
 
 ## CI/CD Overview
 
-OpenPass uses GitHub Actions for CI/CD:
+Symaira Vault uses GitHub Actions for CI/CD:
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
@@ -46,7 +46,7 @@ OpenPass uses GitHub Actions for CI/CD:
 
 ### What This Means
 
-`govulncheck` found vulnerabilities in OpenPass dependencies (not in OpenPass code itself).
+`govulncheck` found vulnerabilities in Symaira Vault dependencies (not in Symaira Vault code itself).
 
 ### Response Matrix
 
@@ -311,7 +311,7 @@ openpass serve --port 8080
 
 ### Vault Backup Strategy
 
-OpenPass stores all data in a vault directory. The vault contains:
+Symaira Vault stores all data in a vault directory. The vault contains:
 
 ```
 <vault>/
@@ -349,7 +349,7 @@ openpass restore ~/backups/openpass-20260427_120000.tar.gz
 
 | Method | Pros | Cons |
 |--------|------|------|
-| **CLI backup** | Built-in, verified, includes integrity checks | Requires OpenPass binary |
+| **CLI backup** | Built-in, verified, includes integrity checks | Requires Symaira Vault binary |
 | **Git auto-sync** | Automatic, versioned, distributed | Requires remote push, .git can grow large |
 | **Manual copy** | Simple, full control | No incremental history, manual effort |
 | **age encryption** | Entries are individually encrypted, portable | Must secure identity.age separately |
@@ -357,7 +357,7 @@ openpass restore ~/backups/openpass-20260427_120000.tar.gz
 
 ### Git Auto-Sync Backup (Recommended)
 
-OpenPass commits vault changes automatically. Ensure remote is configured:
+Symaira Vault commits vault changes automatically. Ensure remote is configured:
 
 ```bash
 # Check remote configuration
@@ -440,9 +440,9 @@ If `identity.age` is lost, **there is no recovery**. The identity is the private
 
 ### Recovery After System Failure
 
-1. Reinstall OpenPass:
+1. Reinstall Symaira Vault:
    ```bash
-   go install github.com/danieljustus/OpenPass@latest
+   go install github.com/danieljustus/symaira-vault@latest
    ```
 
 2. Restore vault from backup (see above)
@@ -483,7 +483,7 @@ rclone sync ~/.openpass/ backblaze:openpass-vaults/$(hostname)/
 
 ## MCP Server Operations
 
-This section covers operational procedures for managing the OpenPass MCP server in production environments.
+This section covers operational procedures for managing the Symaira Vault MCP server in production environments.
 
 ### Health Check Procedures
 
@@ -500,8 +500,8 @@ LOG_FILE="/var/log/openpass-health.log"
 ALERT_EMAIL="ops@example.com"
 
 if ! curl -sf "$HEALTH_URL" > /dev/null 2>&1; then
-    echo "$(date): CRITICAL - OpenPass MCP server unhealthy" >> "$LOG_FILE"
-    echo "OpenPass MCP server is down on $(hostname)" | mail -s "OpenPass Alert" "$ALERT_EMAIL"
+    echo "$(date): CRITICAL - Symaira Vault MCP server unhealthy" >> "$LOG_FILE"
+    echo "Symaira Vault MCP server is down on $(hostname)" | mail -s "Symaira Vault Alert" "$ALERT_EMAIL"
     
     # Attempt automatic recovery
     pkill -f "openpass serve"
@@ -520,14 +520,14 @@ curl -s http://127.0.0.1:8080/health | jq .
 # 2. MCP tool health test
 curl -s -X POST http://127.0.0.1:8080/mcp \
   -H "Authorization: Bearer $(cat ~/.openpass/mcp-token)" \
-  -H "X-OpenPass-Agent: default" \
+  -H "X-Symaira Vault-Agent: default" \
   -H "Content-Type: application/json" \
   -d '{"tool": "health", "arguments": {}}'
 
 # 3. End-to-end test (list entries)
 curl -s -X POST http://127.0.0.1:8080/mcp \
   -H "Authorization: Bearer $(cat ~/.openpass/mcp-token)" \
-  -H "X-OpenPass-Agent: default" \
+  -H "X-Symaira Vault-Agent: default" \
   -H "Content-Type: application/json" \
   -d '{"tool": "list_entries", "arguments": {}}' | jq '.entries | length'
 # Expected: Number of vault entries (0 or more)
@@ -773,7 +773,7 @@ openpass mcp-config claude-code --http --include-token
 
 # 4. Verify health
 curl -H "Authorization: Bearer $NEW_TOKEN" \
-     -H "X-OpenPass-Agent: claude-code" \
+     -H "X-Symaira Vault-Agent: claude-code" \
      http://127.0.0.1:8080/health
 
 # 5. Enable auto-start if previously disabled
@@ -868,7 +868,7 @@ curl -s http://127.0.0.1:8080/metrics | grep "openpass_vault_operations_total"
 
 ### Reporting Process
 
-1. **Receive report** via [GitHub Security Advisories](https://github.com/danieljustus/OpenPass/security/advisories/new)
+1. **Receive report** via [GitHub Security Advisories](https://github.com/danieljustus/symaira-vault/security/advisories/new)
 2. **Acknowledge within 48 hours**
 3. **Assess severity and impact**
 4. **Develop mitigation**
@@ -939,7 +939,7 @@ After every release, verify:
 
 ```bash
 # 1. Download artifacts from GitHub Releases
-# https://github.com/danieljustus/OpenPass/releases/tag/vX.Y.Z
+# https://github.com/danieljustus/symaira-vault/releases/tag/vX.Y.Z
 
 # 2. Verify checksums
 sha256sum -c OpenPass_X.Y.Z_checksums.txt --ignore-missing
@@ -961,8 +961,8 @@ docker run -it ubuntu:latest bash
 apt-get update && apt-get install -y curl gpg
 
 # 3. Download and verify release
-curl -fsSLO https://github.com/danieljustus/OpenPass/releases/download/vX.Y.Z/OpenPass_X.Y.Z_linux_amd64.tar.gz
-curl -fsSLO https://github.com/danieljustus/OpenPass/releases/download/vX.Y.Z/OpenPass_X.Y.Z_checksums.txt
+curl -fsSLO https://github.com/danieljustus/symaira-vault/releases/download/vX.Y.Z/OpenPass_X.Y.Z_linux_amd64.tar.gz
+curl -fsSLO https://github.com/danieljustus/symaira-vault/releases/download/vX.Y.Z/OpenPass_X.Y.Z_checksums.txt
 sha256sum -c OpenPass_X.Y.Z_checksums.txt --ignore-missing
 tar xzf OpenPass_X.Y.Z_linux_amd64.tar.gz
 cp OpenPass_X.Y.Z_linux_amd64/openpass ./openpass
@@ -995,8 +995,8 @@ rm -rf /tmp/test-vault
 
 | Purpose | Contact |
 |---------|---------|
-| Security Issues | [GitHub Security Advisories](https://github.com/danieljustus/OpenPass/security/advisories/new) |
-| General Issues | [GitHub Issues](https://github.com/danieljustus/OpenPass/issues) |
+| Security Issues | [GitHub Security Advisories](https://github.com/danieljustus/symaira-vault/security/advisories/new) |
+| General Issues | [GitHub Issues](https://github.com/danieljustus/symaira-vault/issues) |
 | Release Verification | See post-release checklist above |
 
 ### Useful Links

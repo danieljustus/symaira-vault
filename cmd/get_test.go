@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	crud "github.com/danieljustus/OpenPass/cmd/crud"
-	clipboardapp "github.com/danieljustus/OpenPass/internal/clipboard"
-	"github.com/danieljustus/OpenPass/internal/config"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	crud "github.com/danieljustus/symaira-vault/cmd/crud"
+	clipboardapp "github.com/danieljustus/symaira-vault/internal/clipboard"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func TestGetAutoClearDuration(t *testing.T) {
@@ -32,7 +32,7 @@ func TestGetAutoClearDuration(t *testing.T) {
 		_ = os.Unsetenv("HOME")
 		_ = os.Unsetenv("OPENPASS_VAULT")
 
-		vault = "~/.openpass"
+		vault = "~/.symaira"
 
 		duration := getAutoClearDuration()
 		if duration != 30 {

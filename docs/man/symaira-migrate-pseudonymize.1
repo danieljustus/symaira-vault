@@ -1,0 +1,71 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-migrate-pseudonymize - Migrate vault entries to pseudonymized storage paths
+
+
+.SH SYNOPSIS
+\fBsymaira migrate pseudonymize [flags]\fP
+
+
+.SH DESCRIPTION
+Migrate vault entries to pseudonymized storage paths.
+
+.PP
+WARNING: This rewrites every entry in the vault. Make a backup first.
+Each entry is read, re-encrypted with its plaintext path stored inside
+the encrypted data, and written to an HMAC-SHA256 derived path under
+entries/. The old plaintext-named files are removed.
+
+.PP
+After migration, enable pseudonymize_paths in your vault config.yaml
+to write new entries to pseudonymized paths.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for pseudonymize
+
+.PP
+\fB-y\fP, \fB--yes\fP[=false]
+	Skip confirmation prompt
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  openpass migrate pseudonymize
+.EE
+
+
+.SH SEE ALSO
+\fBsymaira-migrate(1)\fP

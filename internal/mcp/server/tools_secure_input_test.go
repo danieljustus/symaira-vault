@@ -3,8 +3,8 @@ package server
 import (
 	"testing"
 
-	"github.com/danieljustus/OpenPass/internal/config"
-	"github.com/danieljustus/OpenPass/internal/secureui"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/secureui"
 )
 
 func mockSecureInputCapability(t *testing.T, c secureui.Capability) {

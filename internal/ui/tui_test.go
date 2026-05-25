@@ -6,9 +6,9 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/danieljustus/OpenPass/internal/testutil"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
-	vaultsvc "github.com/danieljustus/OpenPass/internal/vaultsvc"
+	"github.com/danieljustus/symaira-vault/internal/testutil"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
+	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 func TestTUIModelLoadsEntries(t *testing.T) {

@@ -94,7 +94,7 @@ func (y YAMLConfigRW) Write(path string, data map[string]any) error {
 
 // TOMLConfigRW reads and writes TOML config files using a simple line-based
 // parser that handles the section structure needed for MCP server configuration
-// (e.g. [mcp_servers.openpass]).
+// (e.g. [mcp_servers.symaira]).
 type TOMLConfigRW struct{}
 
 // Read reads a TOML config file. Only top-level string key-value pairs and
@@ -225,7 +225,7 @@ func GetReaderWriter(format ConfigFormat) (ConfigReaderWriter, error) {
 	}
 }
 
-// InjectServerConfig injects or updates the OpenPass server configuration
+// InjectServerConfig injects or updates the Symaira Vault server configuration
 // into an agent's config map. It returns the updated map and a bool indicating
 // whether a change was made.
 func InjectServerConfig(config map[string]any, rootKey, serverKey string, serverConfig map[string]any) (map[string]any, bool) {

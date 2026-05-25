@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 )
 
 type searchResultSpec struct {
@@ -19,19 +19,19 @@ type searchResultSpec struct {
 }
 
 var cliAlternatives = map[string]string{
-	"list_entries":       "openpass list [prefix]",
-	"get_entry":          "openpass get <path>",
-	"get_entry_value":    "openpass get <path>",
-	"get_entry_metadata": "openpass get <path>",
-	"find_entries":       "openpass find <query>",
-	"set_entry_field":    "openpass set <path>.<field> --value <value>",
-	"delete_entry":       "openpass delete <path>",
-	"generate_password":  "openpass generate --length N --symbols",
-	"generate_totp":      "openpass get <path> --totp",
-	"copy_to_clipboard":  "openpass get <path>.password --clip",
-	"autotype":           "openpass get <path>.password --autotype",
-	"health":             "openpass serve --stdio (health is automatic)",
-	"run_command":        "openpass run --env KEY=path.field -- <command>",
+	"list_entries":       "symaira list [prefix]",
+	"get_entry":          "symaira get <path>",
+	"get_entry_value":    "symaira get <path>",
+	"get_entry_metadata": "symaira get <path>",
+	"find_entries":       "symaira find <query>",
+	"set_entry_field":    "symaira set <path>.<field> --value <value>",
+	"delete_entry":       "symaira delete <path>",
+	"generate_password":  "symaira generate --length N --symbols",
+	"generate_totp":      "symaira get <path> --totp",
+	"copy_to_clipboard":  "symaira get <path>.password --clip",
+	"autotype":           "symaira get <path>.password --autotype",
+	"health":             "symaira serve --stdio (health is automatic)",
+	"run_command":        "symaira run --env KEY=path.field -- <command>",
 }
 
 func riskLevelTier(level RiskLevel) string {

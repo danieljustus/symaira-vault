@@ -24,7 +24,7 @@ func TestDefaultReturnsSensibleConfig(t *testing.T) {
 		t.Fatal("Default returned nil")
 	}
 
-	wantVaultDir := filepath.Join(mustHomeDir(t), ".openpass")
+	wantVaultDir := filepath.Join(mustHomeDir(t), ".symaira")
 	if cfg.VaultDir != wantVaultDir {
 		t.Fatalf("VaultDir = %q, want %q", cfg.VaultDir, wantVaultDir)
 	}
@@ -165,7 +165,7 @@ func TestSaveWritesToDefaultConfigPath(t *testing.T) {
 	t.Setenv("HOME", home)
 
 	cfg := &Config{
-		VaultDir:       filepath.Join(home, ".openpass"),
+		VaultDir:       filepath.Join(home, ".symaira"),
 		DefaultAgent:   "default",
 		SessionTimeout: defaultSessionTimeout,
 		Agents: map[string]AgentProfile{
@@ -182,7 +182,7 @@ func TestSaveWritesToDefaultConfigPath(t *testing.T) {
 		t.Fatalf("Save() error = %v", err)
 	}
 
-	wantPath := filepath.Join(home, ".openpass", "config.yaml")
+	wantPath := filepath.Join(home, ".symaira", "config.yaml")
 	if _, err := os.Stat(wantPath); err != nil {
 		t.Fatalf("config file missing at %q: %v", wantPath, err)
 	}
@@ -209,7 +209,7 @@ func TestSaveCreatesConfigDirectory(t *testing.T) {
 		t.Fatalf("Save() error = %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(home, ".openpass")); err != nil {
+	if _, err := os.Stat(filepath.Join(home, ".symaira")); err != nil {
 		t.Fatalf("config directory missing: %v", err)
 	}
 }
@@ -311,7 +311,7 @@ func TestSaveWritesRedactFields(t *testing.T) {
 	t.Setenv("HOME", home)
 
 	cfg := &Config{
-		VaultDir:       filepath.Join(home, ".openpass"),
+		VaultDir:       filepath.Join(home, ".symaira"),
 		DefaultAgent:   "default",
 		SessionTimeout: defaultSessionTimeout,
 		Agents: map[string]AgentProfile{
@@ -329,7 +329,7 @@ func TestSaveWritesRedactFields(t *testing.T) {
 		t.Fatalf("Save() error = %v", err)
 	}
 
-	loaded, err := Load(filepath.Join(home, ".openpass", "config.yaml"))
+	loaded, err := Load(filepath.Join(home, ".symaira", "config.yaml"))
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -455,7 +455,7 @@ func TestSaveWithAllConfigSections(t *testing.T) {
 	t.Setenv("HOME", home)
 
 	cfg := &Config{
-		VaultDir:       filepath.Join(home, ".openpass"),
+		VaultDir:       filepath.Join(home, ".symaira"),
 		DefaultAgent:   "default",
 		SessionTimeout: defaultSessionTimeout,
 		Agents: map[string]AgentProfile{
@@ -493,7 +493,7 @@ func TestSaveWithAllConfigSections(t *testing.T) {
 		t.Fatalf("Save() error = %v", err)
 	}
 
-	wantPath := filepath.Join(home, ".openpass", "config.yaml")
+	wantPath := filepath.Join(home, ".symaira", "config.yaml")
 	loaded, err := Load(wantPath)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
@@ -546,7 +546,7 @@ func TestSaveLoadRoundTrip_PreservesAllFields(t *testing.T) {
 	t.Setenv("HOME", home)
 
 	cfg := &Config{
-		VaultDir:       filepath.Join(home, ".openpass"),
+		VaultDir:       filepath.Join(home, ".symaira"),
 		DefaultAgent:   "test-agent",
 		SessionTimeout: defaultSessionTimeout,
 		Agents: map[string]AgentProfile{
@@ -588,7 +588,7 @@ func TestSaveLoadRoundTrip_PreservesAllFields(t *testing.T) {
 		t.Fatalf("Save() error = %v", err)
 	}
 
-	wantPath := filepath.Join(home, ".openpass", "config.yaml")
+	wantPath := filepath.Join(home, ".symaira", "config.yaml")
 	loaded, err := Load(wantPath)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
@@ -804,7 +804,7 @@ func TestValidateConfigPath_AcceptsValidPaths(t *testing.T) {
 		"subdir/config.yaml",
 		"./config.yaml",
 		"foo/bar.yaml",
-		"~/.openpass/config.yaml",
+		"~/.symaira/config.yaml",
 	}
 	for _, p := range validPaths {
 		err := validateConfigPath(p)
@@ -1082,7 +1082,7 @@ func TestSave_PermissionDeniedOnReadOnlyDir(t *testing.T) {
 	t.Setenv("HOME", home)
 
 	cfg := &Config{
-		VaultDir:       filepath.Join(readonlyDir, ".openpass"),
+		VaultDir:       filepath.Join(readonlyDir, ".symaira"),
 		DefaultAgent:   "default",
 		SessionTimeout: defaultSessionTimeout,
 		Agents:         builtinAgentProfiles(),
@@ -1098,7 +1098,7 @@ func TestSave_FilePermissionDenied(t *testing.T) {
 	t.Skip("Skipping: root-owned temp dir not reliable on macOS")
 
 	home := t.TempDir()
-	readonlyDir := filepath.Join(home, ".openpass")
+	readonlyDir := filepath.Join(home, ".symaira")
 	if err := os.MkdirAll(readonlyDir, 0o500); err != nil {
 		t.Skip("cannot create dir with restricted perms")
 	}
@@ -1490,7 +1490,7 @@ func TestDefaultConfigPath_ReturnsExpectedPath(t *testing.T) {
 		t.Fatalf("defaultConfigPath() error = %v", err)
 	}
 
-	expected := filepath.Join(home, ".openpass", "config.yaml")
+	expected := filepath.Join(home, ".symaira", "config.yaml")
 	if path != expected {
 		t.Errorf("defaultConfigPath() = %q, want %q", path, expected)
 	}
@@ -1750,7 +1750,7 @@ func TestLoad_Profiles(t *testing.T) {
 	t.Parallel()
 	yaml := `profiles:
   work:
-    vault: ~/.openpass-work
+    vault: ~/.symaira-work
   family:
     vault: ~/vaults/family
 defaultProfile: work
@@ -1770,8 +1770,8 @@ defaultProfile: work
 	if work == nil {
 		t.Fatal("ProfileForName(work) = nil")
 	}
-	if work.VaultPath != "~/.openpass-work" {
-		t.Errorf("work.VaultPath = %q, want ~/.openpass-work", work.VaultPath)
+	if work.VaultPath != "~/.symaira-work" {
+		t.Errorf("work.VaultPath = %q, want ~/.symaira-work", work.VaultPath)
 	}
 }
 
@@ -1816,7 +1816,7 @@ func TestSave_Profiles(t *testing.T) {
 
 	cfg := Default()
 	cfg.Profiles = map[string]*Profile{
-		"work": {VaultPath: "~/.openpass-work"},
+		"work": {VaultPath: "~/.symaira-work"},
 	}
 	cfg.DefaultProfile = "work"
 
@@ -1824,7 +1824,7 @@ func TestSave_Profiles(t *testing.T) {
 		t.Fatalf("Save() error = %v", err)
 	}
 
-	loaded, err := Load(filepath.Join(home, ".openpass", "config.yaml"))
+	loaded, err := Load(filepath.Join(home, ".symaira", "config.yaml"))
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -1835,8 +1835,8 @@ func TestSave_Profiles(t *testing.T) {
 		t.Errorf("DefaultProfile = %q, want work", loaded.DefaultProfile)
 	}
 	work := loaded.ProfileForName("work")
-	if work == nil || work.VaultPath != "~/.openpass-work" {
-		t.Errorf("work profile = %v, want VaultPath=~/.openpass-work", work)
+	if work == nil || work.VaultPath != "~/.symaira-work" {
+		t.Errorf("work profile = %v, want VaultPath=~/.symaira-work", work)
 	}
 }
 
@@ -1844,10 +1844,10 @@ func TestVaultDirForProfile(t *testing.T) {
 	t.Parallel()
 	cfg := Default()
 	cfg.Profiles = map[string]*Profile{
-		"work": {VaultPath: "~/.openpass-work"},
+		"work": {VaultPath: "~/.symaira-work"},
 	}
-	if got := cfg.VaultDirForProfile("work"); got != "~/.openpass-work" {
-		t.Errorf("VaultDirForProfile(work) = %q, want ~/.openpass-work", got)
+	if got := cfg.VaultDirForProfile("work"); got != "~/.symaira-work" {
+		t.Errorf("VaultDirForProfile(work) = %q, want ~/.symaira-work", got)
 	}
 	if got := cfg.VaultDirForProfile("missing"); got != "" {
 		t.Errorf("VaultDirForProfile(missing) = %q, want empty", got)
@@ -2688,7 +2688,7 @@ func TestRoundTrip_AllFieldsSet(t *testing.T) {
 	t.Setenv("HOME", home)
 
 	cfg := &Config{
-		VaultDir:       filepath.Join(home, ".openpass"),
+		VaultDir:       filepath.Join(home, ".symaira"),
 		DefaultAgent:   "test-agent",
 		SessionTimeout: 10 * time.Minute,
 		AuthMethod:     "touchid",
@@ -2696,7 +2696,7 @@ func TestRoundTrip_AllFieldsSet(t *testing.T) {
 		EnvAllowlist:   []string{"HOME", "PATH"},
 		DefaultProfile: "work",
 		Profiles: map[string]*Profile{
-			"work": {VaultPath: "~/.openpass-work"},
+			"work": {VaultPath: "~/.symaira-work"},
 		},
 		ScanPatterns: []CustomPattern{
 			{Name: "test", Pattern: "test.*", Description: "test pattern", Severity: "high"},
@@ -2791,7 +2791,7 @@ func TestRoundTrip_AllFieldsSet(t *testing.T) {
 		},
 	}
 
-	path := filepath.Join(home, ".openpass", "config.yaml")
+	path := filepath.Join(home, ".symaira", "config.yaml")
 	if err := cfg.Save(); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
@@ -2989,7 +2989,7 @@ func TestRoundTrip_DefaultsApplied(t *testing.T) {
 
 	// Minimal config - all defaults should apply
 	cfg := &Config{
-		VaultDir:       filepath.Join(home, ".openpass"),
+		VaultDir:       filepath.Join(home, ".symaira"),
 		DefaultAgent:   "default",
 		SessionTimeout: defaultSessionTimeout,
 		Agents: map[string]AgentProfile{
@@ -2997,7 +2997,7 @@ func TestRoundTrip_DefaultsApplied(t *testing.T) {
 		},
 	}
 
-	path := filepath.Join(home, ".openpass", "config.yaml")
+	path := filepath.Join(home, ".symaira", "config.yaml")
 	if err := cfg.Save(); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
@@ -3024,7 +3024,7 @@ func TestRoundTrip_ExplicitZeroValues(t *testing.T) {
 
 	// Config with explicitly set zero values
 	cfg := &Config{
-		VaultDir:       filepath.Join(home, ".openpass"),
+		VaultDir:       filepath.Join(home, ".symaira"),
 		DefaultAgent:   "default",
 		SessionTimeout: defaultSessionTimeout,
 		AuthMethod:     "passphrase",
@@ -3046,7 +3046,7 @@ func TestRoundTrip_ExplicitZeroValues(t *testing.T) {
 		},
 	}
 
-	path := filepath.Join(home, ".openpass", "config.yaml")
+	path := filepath.Join(home, ".symaira", "config.yaml")
 	if err := cfg.Save(); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}

@@ -1,10 +1,10 @@
-// Package config provides configuration loading, validation, and defaults for OpenPass.
+// Package config provides configuration loading, validation, and defaults for Symaira Vault.
 package config
 
 import "time"
 
 const (
-	defaultConfigDir      = ".openpass"
+	defaultConfigDir      = ".symaira"
 	defaultConfigFile     = "config.yaml"
 	defaultAgentName      = "default"
 	defaultSessionTimeout = 15 * time.Minute

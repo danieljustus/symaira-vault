@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { maskValue } from "@openpass/mcp-client";
+import { maskValue } from "@symaira/mcp-client";
 
 export type VaultTreeItemType = "entry" | "field" | "folder";
 

@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
+	auth "github.com/danieljustus/symaira-vault/internal/mcp/auth"
 )
 
 type mockResponseWriter struct {

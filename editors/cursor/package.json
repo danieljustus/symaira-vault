@@ -1,7 +1,7 @@
 {
-  "name": "openpass-cursor",
-  "displayName": "OpenPass for Cursor",
-  "description": "OpenPass secret manager integration for Cursor IDE",
+  "name": "symaira-cursor",
+  "displayName": "Symaira Vault for Cursor",
+  "description": "Symaira Vault secret manager integration for Cursor IDE",
   "version": "1.0.0",
   "publisher": "danieljustus",
   "engines": {
@@ -9,7 +9,7 @@
     "cursor": "^>=0.40.0"
   },
   "categories": ["Other"],
-  "keywords": ["openpass", "password", "secret", "mcp"],
+  "keywords": ["symaira", "password", "secret", "mcp"],
   "activationEvents": [
     "onStartupFinished"
   ],
@@ -17,20 +17,20 @@
   "contributes": {
     "commands": [
       {
-        "command": "openpass.cursor.refreshContext",
-        "title": "Refresh OpenPass Context",
-        "category": "OpenPass"
+        "command": "symaira.cursor.refreshContext",
+        "title": "Refresh Symaira Vault Context",
+        "category": "Symaira Vault"
       }
     ],
     "configuration": {
-      "title": "OpenPass Cursor",
+      "title": "Symaira Vault Cursor",
       "properties": {
-        "openpass.cursor.injectCursorrules": {
+        "symaira.cursor.injectCursorrules": {
           "type": "boolean",
           "default": true,
-          "description": "Automatically inject OpenPass context into .cursorrules"
+          "description": "Automatically inject Symaira Vault context into .cursorrules"
         },
-        "openpass.cursor.contextFile": {
+        "symaira.cursor.contextFile": {
           "type": "string",
           "default": ".cursorrules",
           "description": "Path to Cursor context file (relative to workspace root)"
@@ -43,7 +43,7 @@
     "watch": "tsc --watch"
   },
   "dependencies": {
-    "@openpass/mcp-client": "^1.0.0"
+    "@symaira/mcp-client": "^1.0.0"
   },
   "devDependencies": {
     "typescript": "^5.4.0",

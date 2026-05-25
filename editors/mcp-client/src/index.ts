@@ -1,9 +1,9 @@
 /**
- * Public API exports for @openpass/mcp-client
+ * Public API exports for @symaira/mcp-client
  */
 
-export { OpenPassMCPClient, ClientOptions } from "./client";
-export { OpenPassTools } from "./tools";
+export { SymairaMCPClient, ClientOptions } from "./client";
+export { SymairaTools } from "./tools";
 export {
   buildAuthHeaders,
   readToken,
@@ -18,10 +18,10 @@ export {
   maskEntryData,
 } from "./masking";
 export {
-  OpenPassError,
-  OpenPassAuthError,
-  OpenPassConnectionError,
-  OpenPassToolError,
+  SymairaError,
+  SymairaAuthError,
+  SymairaConnectionError,
+  SymairaToolError,
 } from "./errors";
 export {
   buildRequest,

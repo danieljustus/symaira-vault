@@ -4,8 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
-	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	auth "github.com/danieljustus/symaira-vault/internal/mcp/auth"
 )
 
 func TestAgentTokenNew(t *testing.T) {

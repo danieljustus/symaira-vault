@@ -1,4 +1,4 @@
-# GoReleaser configuration for OpenPass
+# GoReleaser configuration for Symaira Vault
 # Documentation: https://goreleaser.com
 
 version: 2
@@ -24,9 +24,9 @@ before:
       echo "Secret/artifact gate passed"'
 
 builds:
-  - id: openpass-static
+  - id: symaira-static
     main: .
-    binary: openpass
+    binary: symaira
     env:
       - CGO_ENABLED=0
       - GOWORK=off
@@ -48,9 +48,9 @@ builds:
       - -X main.date={{.Date}}
       - -X main.builtBy=goreleaser
     mod_timestamp: "{{ .CommitTimestamp }}"
-  - id: openpass-darwin
+  - id: symaira-darwin
     main: .
-    binary: openpass
+    binary: symaira
     env:
       - CGO_ENABLED=1
       - GOWORK=off
@@ -70,7 +70,7 @@ builds:
     mod_timestamp: "{{ .CommitTimestamp }}"
 
 archives:
-  - id: openpass
+  - id: symaira
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats: [tar.gz]
     format_overrides:
@@ -114,14 +114,14 @@ changelog:
 release:
   github:
     owner: "danieljustus"
-    name: "OpenPass"
+    name: "symaira-vault"
   draft: false
   prerelease: auto
   name_template: "{{ .ProjectName }} {{ .Version }}"
   header: |
-    ## OpenPass {{ .Version }}
+    ## Symaira Vault {{ .Version }}
     
-    OpenPass is a secure password management CLI tool.
+    Symaira Vault is a secure password management CLI tool.
   footer: |
     ## Installation
 
@@ -129,12 +129,12 @@ release:
 
     **macOS / Linux:**
     ```bash
-    curl -sSfL https://raw.githubusercontent.com/danieljustus/OpenPass/main/scripts/install.sh | sh
+    curl -sSfL https://raw.githubusercontent.com/danieljustus/symaira-vault/main/scripts/install.sh | sh
     ```
 
     **Windows (PowerShell):**
     ```powershell
-    irm https://raw.githubusercontent.com/danieljustus/OpenPass/main/scripts/install.ps1 | iex
+    irm https://raw.githubusercontent.com/danieljustus/symaira-vault/main/scripts/install.ps1 | iex
     ```
 
     ### Download
@@ -142,25 +142,25 @@ release:
 
     ### Build from source
     ```bash
-    go install github.com/danieljustus/OpenPass@{{ .Tag }}
+    go install github.com/danieljustus/symaira-vault@{{ .Tag }}
     ```
 
 brews:
-  - name: openpass
+  - name: symaira
     repository:
       owner: danieljustus
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     directory: Formula
-    homepage: "https://github.com/danieljustus/OpenPass"
+    homepage: "https://github.com/danieljustus/symaira-vault"
     description: "Modern CLI password manager with age encryption"
     license: "MIT"
     install: |
-      bin.install "openpass"
-      generate_completions_from_executable(bin/"openpass", "completion")
+      bin.install "symaira"
+      generate_completions_from_executable(bin/"symaira", "completion")
       man1.install Dir["docs/man/*.1"]
     caveats: |
-      OpenPass has been installed!
+      Symaira Vault has been installed!
 
       To get started:
         openpass init                    # Initialize a new vault
@@ -170,29 +170,29 @@ brews:
       For MCP server setup:
         openpass mcp-config <name>
 
-      Documentation: https://github.com/danieljustus/OpenPass#readme
+      Documentation: https://github.com/danieljustus/symaira-vault#readme
     test: |
-      system "#{bin}/openpass", "version"
+      system "#{bin}/symaira", "version"
 
 scoops:
-  - name: openpass
+  - name: symaira
     repository:
       owner: danieljustus
       name: scoop-bucket
       token: "{{ .Env.SCOOP_BUCKET_GITHUB_TOKEN }}"
     directory: bucket
-    homepage: "https://github.com/danieljustus/OpenPass"
+    homepage: "https://github.com/danieljustus/symaira-vault"
     description: "Modern CLI password manager with age encryption"
     license: MIT
     persist:
       - config.yaml
 
 nfpms:
-  - id: openpass
-    package_name: openpass
+  - id: symaira
+    package_name: symaira
     file_name_template: "{{ .PackageName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     vendor: danieljustus
-    homepage: "https://github.com/danieljustus/OpenPass"
+    homepage: "https://github.com/danieljustus/symaira-vault"
     maintainer: "danieljustus <88160656+danieljustus@users.noreply.github.com>"
     description: "Secure password management CLI tool"
     license: "MIT"

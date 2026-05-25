@@ -24,8 +24,8 @@ func TestDefaultGitConfig(t *testing.T) {
 	if !cfg.AutoPush {
 		t.Error("AutoPush should be true by default")
 	}
-	if cfg.CommitTemplate != "Update from OpenPass" {
-		t.Errorf("CommitTemplate mismatch: got %q, want %q", cfg.CommitTemplate, "Update from OpenPass")
+	if cfg.CommitTemplate != "Update from Symaira Vault" {
+		t.Errorf("CommitTemplate mismatch: got %q, want %q", cfg.CommitTemplate, "Update from Symaira Vault")
 	}
 }
 

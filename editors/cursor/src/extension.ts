@@ -1,20 +1,20 @@
 import * as vscode from "vscode";
-import { OpenPassMCPClient, OpenPassTools } from "@openpass/mcp-client";
+import { SymairaMCPClient, SymairaTools } from "@symaira/mcp-client";
 import { injectCursorContext } from "./cursorContext";
 
-let client: OpenPassMCPClient | undefined;
-let tools: OpenPassTools | undefined;
+let client: SymairaMCPClient | undefined;
+let tools: SymairaTools | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
-  const config = vscode.workspace.getConfiguration("openpass.cursor");
+  const config = vscode.workspace.getConfiguration("symaira.cursor");
   const baseUrl = config.get<string>("baseUrl", "http://127.0.0.1:8080");
   const agentName = config.get<string>("agentName", "cursor");
 
-  client = new OpenPassMCPClient({ baseUrl, agentName });
-  tools = new OpenPassTools(client);
+  client = new SymairaMCPClient({ baseUrl, agentName });
+  tools = new SymairaTools(client);
 
   const refreshCmd = vscode.commands.registerCommand(
-    "openpass.cursor.refreshContext",
+    "symaira.cursor.refreshContext",
     async () => {
       await injectCursorContext(tools!);
     }

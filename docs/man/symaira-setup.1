@@ -1,0 +1,86 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-setup - Interactive setup wizard for OpenPass
+
+
+.SH SYNOPSIS
+\fBsymaira setup [flags]\fP
+
+
+.SH DESCRIPTION
+Launch the interactive setup wizard to initialize or re-configure your vault.
+
+.PP
+The wizard guides you through:
+  • Vault directory and passphrase
+  • Authentication method (Touch ID or passphrase)
+  • Sync strategy (local or git remote)
+  • Multi-device setup hints
+  • Additional recipients for shared access
+  • AI agent (MCP) configuration
+  • Backup recommendations
+  • Profile name
+
+.PP
+For non-interactive environments (CI, scripts), use 'openpass init' instead.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for setup
+
+.PP
+\fB--keep-on-error\fP[=false]
+	do not rollback vault init artifacts when subsequent steps fail
+
+.PP
+\fB--no-resume\fP[=false]
+	disable setup resume after abort
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Run the wizard (resumes from saved state if available)
+  openpass setup
+
+  # Restart from scratch
+  openpass setup --no-resume
+
+  # Keep partial vault artifacts on error for debugging
+  openpass setup --keep-on-error
+.EE
+
+
+.SH SEE ALSO
+\fBopenpass(1)\fP

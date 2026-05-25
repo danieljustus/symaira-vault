@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
-	admin "github.com/danieljustus/OpenPass/cmd/admin"
+	admin "github.com/danieljustus/symaira-vault/cmd/admin"
 )
 
 func TestCmdDoctor_TextOutput(t *testing.T) {
@@ -25,7 +25,7 @@ func TestCmdDoctor_TextOutput(t *testing.T) {
 	_ = cli.RootCmd.Execute()
 
 	out := buf.String()
-	if !strings.Contains(out, "OpenPass Doctor") {
+	if !strings.Contains(out, "Symaira Vault Doctor") {
 		t.Errorf("expected header in output, got: %q", out)
 	}
 	if !strings.Contains(out, "Score:") {

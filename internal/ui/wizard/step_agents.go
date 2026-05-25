@@ -6,7 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/danieljustus/OpenPass/internal/mcp/install"
+	"github.com/danieljustus/symaira-vault/internal/mcp/install"
 )
 
 type agentEntry struct {

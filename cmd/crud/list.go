@@ -3,14 +3,14 @@ package crud
 import (
 	"fmt"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 
-	"github.com/danieljustus/OpenPass/internal/ui/render"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
-	"github.com/danieljustus/OpenPass/internal/vault/taint"
-	vaultsvc "github.com/danieljustus/OpenPass/internal/vaultsvc"
+	"github.com/danieljustus/symaira-vault/internal/ui/render"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
+	"github.com/danieljustus/symaira-vault/internal/vault/taint"
+	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 type listEntryOutput struct {
@@ -26,13 +26,13 @@ var listCmd = &cobra.Command{
 	ValidArgsFunction: cli.EntryCompletionFunc,
 	Short:             "List password entries",
 	Example: `  # List all entries
-  openpass list
+  symaira list
 
   # List entries under "work/" prefix
-  openpass list work/
+  symaira list work/
 
   # JSON output
-  openpass list --output json`,
+  symaira list --output json`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return cli.WithVault(func(svc vaultsvc.Service) error {

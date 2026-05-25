@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	mcpErr "github.com/danieljustus/OpenPass/internal/mcp/errors"
+	mcpErr "github.com/danieljustus/symaira-vault/internal/mcp/errors"
 )
 
 // writeTestConfig creates a minimal config.yaml in dir for the given agents.

@@ -9,7 +9,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/danieljustus/OpenPass/internal/fileutil"
+	"github.com/danieljustus/symaira-vault/internal/fileutil"
 )
 
 const resumeFileName = ".wizard-resume.yaml"
@@ -35,7 +35,7 @@ func resumeFilePath(vaultDir string) string {
 	if dir, err := os.UserCacheDir(); err == nil {
 		hash := sha256.Sum256([]byte(vaultDir))
 		suffix := fmt.Sprintf("%x", hash[:8])
-		return filepath.Join(dir, "openpass", "wizard", suffix+".yaml")
+		return filepath.Join(dir, "symaira", "wizard", suffix+".yaml")
 	}
 	return filepath.Join(vaultDir, resumeFileName)
 }

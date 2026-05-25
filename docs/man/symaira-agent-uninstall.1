@@ -1,0 +1,85 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-agent-uninstall - Remove an agent integration
+
+
+.SH SYNOPSIS
+\fBsymaira agent uninstall  [flags]\fP
+
+
+.SH DESCRIPTION
+Remove an agent profile, revoke all tokens, uninstall the skill file,
+and clean up associated data.
+
+.PP
+This command:
+  • Removes the agent profile from config.yaml
+  • Revokes all MCP tokens associated with the agent
+  • Removes the token file from the vault
+  • Removes the skill file if it is managed by OpenPass
+
+.PP
+Use --keep-skill to preserve the skill file and --keep-config to keep the
+agent's profile in config.yaml. Use --yes to skip the confirmation prompt.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for uninstall
+
+.PP
+\fB--keep-config\fP[=false]
+	Don't modify the agent config file
+
+.PP
+\fB--keep-skill\fP[=false]
+	Don't remove the skill file
+
+.PP
+\fB--yes\fP[=false]
+	Skip confirmation prompt
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Interactive uninstall with confirmation
+  openpass agent uninstall hermes
+
+  # Non-interactive uninstall keeping the skill file
+  openpass agent uninstall claude-code --yes --keep-skill
+.EE
+
+
+.SH SEE ALSO
+\fBsymaira-agent(1)\fP

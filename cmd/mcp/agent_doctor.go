@@ -5,12 +5,12 @@ import (
 	"os"
 	"path/filepath"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 
-	"github.com/danieljustus/OpenPass/internal/agentskill"
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/agentskill"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 )
 
 var agentDoctorCmd = &cobra.Command{
@@ -18,7 +18,7 @@ var agentDoctorCmd = &cobra.Command{
 	Short: "Check agent integration health",
 	Long: `Run end-to-end diagnostics for an agent integration:
   • Profile exists and is valid
-  • Skill file is installed and managed by OpenPass
+  • Skill file is installed and managed by Symaira Vault
   • Skill hash matches current template (detects drift)
   • Token registry entry exists
 Reports structured results; exits 0 if all checks pass.`,
@@ -35,7 +35,7 @@ Reports structured results; exits 0 if all checks pass.`,
 		profile, hasProfile := cfg.Agents[agentName]
 		if !hasProfile {
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\u274c No profile found for agent %q\n", agentName)
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "   Run: openpass agent install %s\n", agentName)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "   Run: symaira agent install %s\n", agentName)
 			return fmt.Errorf("agent %q not configured", agentName)
 		}
 
@@ -51,7 +51,7 @@ Reports structured results; exits 0 if all checks pass.`,
 		}
 		if targetPath == "" {
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\u26a0 No skill path configured for agent %q\n", agentName)
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "   Run: openpass agent install %s --skill-only\n", agentName)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "   Run: symaira agent install %s --skill-only\n", agentName)
 			return fmt.Errorf("no skill path configured")
 		}
 
@@ -61,7 +61,7 @@ Reports structured results; exits 0 if all checks pass.`,
 		if err != nil {
 			if os.IsNotExist(err) {
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\u274c Skill file not found: %s\n", targetPath)
-				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "   Run: openpass agent install %s --skill-only\n", agentName)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "   Run: symaira agent install %s --skill-only\n", agentName)
 				return fmt.Errorf("skill file not installed")
 			}
 			return fmt.Errorf("read skill file: %w", err)
@@ -75,13 +75,13 @@ Reports structured results; exits 0 if all checks pass.`,
 		}
 
 		if manifest.ManagedBy != agentskill.SentinelValue {
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\u26a0 Skill file is not managed by OpenPass\n")
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\u26a0 Skill file is not managed by Symaira Vault\n")
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "   Path: %s\n", targetPath)
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "   To overwrite: openpass agent install %s --skill-only --force\n", agentName)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "   To overwrite: symaira agent install %s --skill-only --force\n", agentName)
 			return fmt.Errorf("unmanaged skill file")
 		}
 
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\u2713 Skill file is managed by OpenPass\n")
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\u2713 Skill file is managed by Symaira Vault\n")
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "   Path:    %s\n", targetPath)
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "   Version: %s\n", manifest.ManagedVersion)
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "   Tier:    %s\n", manifest.ManagedProfileTier)
@@ -90,7 +90,7 @@ Reports structured results; exits 0 if all checks pass.`,
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\n\u26a0 Skill version drift detected\n")
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "   Installed:  %s\n", manifest.ManagedVersion)
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "   Expected:   %s\n", cli.AppVersionStr())
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "   Run: openpass agent skill refresh %s\n", agentName)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "   Run: symaira agent skill refresh %s\n", agentName)
 			return fmt.Errorf("skill drift detected")
 		}
 

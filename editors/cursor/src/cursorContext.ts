@@ -1,18 +1,18 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs";
-import { OpenPassTools, maskValue } from "@openpass/mcp-client";
+import { SymairaTools, maskValue } from "@symaira/mcp-client";
 
-const CONTEXT_MARKER_START = "<!-- OPENPASS CONTEXT -->";
-const CONTEXT_MARKER_END = "<!-- END OPENPASS CONTEXT -->";
+const CONTEXT_MARKER_START = "<!-- SYMAIRA VAULT CONTEXT -->";
+const CONTEXT_MARKER_END = "<!-- END SYMAIRA VAULT CONTEXT -->";
 
-export async function injectCursorContext(tools: OpenPassTools): Promise<void> {
+export async function injectCursorContext(tools: SymairaTools): Promise<void> {
   const workspaceFolders = vscode.workspace.workspaceFolders;
   if (!workspaceFolders || workspaceFolders.length === 0) {
     return;
   }
 
-  const config = vscode.workspace.getConfiguration("openpass.cursor");
+  const config = vscode.workspace.getConfiguration("symaira.cursor");
   const contextFile = config.get<string>("contextFile", ".cursorrules");
 
   for (const folder of workspaceFolders) {
@@ -23,7 +23,7 @@ export async function injectCursorContext(tools: OpenPassTools): Promise<void> {
 
 async function updateCursorrulesFile(
   filePath: string,
-  tools: OpenPassTools
+  tools: SymairaTools
 ): Promise<void> {
   try {
     const result = await tools.listEntries();
@@ -61,13 +61,13 @@ function parseEntries(result: { content: Array<{ type: string; text: string }> }
 
 function buildContextBlock(entries: string[]): string {
   if (entries.length === 0) {
-    return `${CONTEXT_MARKER_START}\nNo OpenPass secrets available.\n${CONTEXT_MARKER_END}`;
+    return `${CONTEXT_MARKER_START}\nNo Symaira Vault secrets available.\n${CONTEXT_MARKER_END}`;
   }
 
   const lines = [
     CONTEXT_MARKER_START,
     "",
-    "The following secrets are available in OpenPass:",
+    "The following secrets are available in Symaira Vault:",
     "",
   ];
 
@@ -77,7 +77,7 @@ function buildContextBlock(entries: string[]): string {
 
   lines.push("");
   lines.push(
-    "To use a secret, reference it with: ${openpass:<path>} or use the OpenPass commands."
+    "To use a secret, reference it with: ${symaira:<path>} or use the Symaira Vault commands."
   );
   lines.push("");
   lines.push(CONTEXT_MARKER_END);

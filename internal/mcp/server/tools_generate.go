@@ -3,8 +3,8 @@ package server
 import (
 	"context"
 
-	"github.com/danieljustus/OpenPass/internal/crypto"
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/crypto"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 )
 
 func (s *Server) handleGenerate(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {

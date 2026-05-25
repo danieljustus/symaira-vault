@@ -1,6 +1,6 @@
-# OpenPass Troubleshooting Guide
+# Symaira Vault Troubleshooting Guide
 
-This guide covers common issues you may encounter when using OpenPass and provides diagnostic steps and solutions.
+This guide covers common issues you may encounter when using Symaira Vault and provides diagnostic steps and solutions.
 
 ## Table of Contents
 
@@ -118,7 +118,7 @@ If `identity.age` is lost, **there is no recovery**. The identity file is the pr
 
 ## MCP Connection Problems
 
-### Symptom: Agent can't connect to OpenPass
+### Symptom: Agent can't connect to Symaira Vault
 
 **Diagnostic steps:**
 
@@ -149,7 +149,7 @@ If `identity.age` is lost, **there is no recovery**. The identity file is the pr
 
 5. **Verify agent name matches:**
    - The `--agent` flag must match a profile in `config.yaml`
-   - For HTTP mode, the `X-OpenPass-Agent` header must match a profile
+   - For HTTP mode, the `X-Symaira Vault-Agent` header must match a profile
 
 **Common MCP issues and solutions:**
 
@@ -166,7 +166,7 @@ If `identity.age` is lost, **there is no recovery**. The identity file is the pr
 ```bash
 # Test HTTP endpoint
 curl -H "Authorization: Bearer $(cat ~/.openpass/mcp-token)" \
-     -H "X-OpenPass-Agent: default" \
+     -H "X-Symaira Vault-Agent: default" \
      http://127.0.0.1:8080/mcp
 
 # Generate config for testing
@@ -241,7 +241,7 @@ git push origin main
 ### macOS
 
 **Keychain access issues:**
-- If passphrase caching fails, check Keychain Access app for "OpenPass" entries
+- If passphrase caching fails, check Keychain Access app for "Symaira Vault" entries
 - Reset keychain: `openpass lock` then `openpass unlock` (re-creates entry)
 - Gatekeeper may block unsigned binaries; allow in System Preferences > Security
 
@@ -277,7 +277,7 @@ ls -la ~/.openpass/
 
 **Session caching uses in-memory fallback in prebuilt binaries:**
 
-OpenPass release binaries (including those from GitHub Releases and `go install`) are built with `CGO_ENABLED=0`. On FreeBSD, the `zalando/go-keyring` dependency requires CGO to access the D-Bus Secret Service API. When CGO is disabled, OpenPass falls back to an **in-memory encrypted session cache**.
+Symaira Vault release binaries (including those from GitHub Releases and `go install`) are built with `CGO_ENABLED=0`. On FreeBSD, the `zalando/go-keyring` dependency requires CGO to access the D-Bus Secret Service API. When CGO is disabled, Symaira Vault falls back to an **in-memory encrypted session cache**.
 
 **Behavior:**
 
@@ -324,7 +324,7 @@ The in-memory fallback is implemented in `internal/session/memory.go` (build tag
 
 **Credential Manager issues:**
 - Open Credential Manager > Windows Credentials
-- Look for "OpenPass" entries
+- Look for "Symaira Vault" entries
 - If missing, run `openpass unlock` to recreate
 
 **PATH issues:**
@@ -394,7 +394,7 @@ openpass unlock                     # Verify passphrase
 # HTTP mode
 curl -s http://127.0.0.1:8080/health
 curl -H "Authorization: Bearer $(cat ~/.openpass/mcp-token)" \
-     -H "X-OpenPass-Agent: default" \
+     -H "X-Symaira Vault-Agent: default" \
      http://127.0.0.1:8080/mcp
 
 # Config generation
@@ -428,7 +428,7 @@ netstat -an | grep 8080
 
 Please complete this checklist before opening a GitHub issue:
 
-- [ ] I am running the latest version of OpenPass (`openpass version`)
+- [ ] I am running the latest version of Symaira Vault (`openpass version`)
 - [ ] I have checked this troubleshooting guide for my issue
 - [ ] My vault is initialized and unlocked (`openpass unlock` works)
 - [ ] The MCP server is running (for agent issues)
@@ -440,7 +440,7 @@ Please complete this checklist before opening a GitHub issue:
 - [ ] I have sanitized my config (removed tokens/secrets) if sharing
 
 **Information to include:**
-1. OpenPass version
+1. Symaira Vault version
 2. Operating system and version
 3. Go version (if building from source)
 4. Steps to reproduce
@@ -450,7 +450,7 @@ Please complete this checklist before opening a GitHub issue:
 8. Output of diagnostic commands above
 
 **For security issues:**
-Do NOT open public issues. Submit a private report via [GitHub Security Advisories](https://github.com/danieljustus/OpenPass/security/advisories/new).
+Do NOT open public issues. Submit a private report via [GitHub Security Advisories](https://github.com/danieljustus/symaira-vault/security/advisories/new).
 
 ---
 
@@ -529,7 +529,7 @@ openpass mcp-config claude-code --http --include-token
 
 # 8. Verify new configuration works
 curl -H "Authorization: Bearer $NEW_TOKEN" \
-     -H "X-OpenPass-Agent: claude-code" \
+     -H "X-Symaira Vault-Agent: claude-code" \
      http://127.0.0.1:8080/mcp
 
 # 9. Remove backup token after verification
@@ -548,7 +548,7 @@ cp ~/.openpass/mcp-token ~/backups/openpass/
 
 2. **Version Control Exclusion**: Ensure runtime files are in `.gitignore`:
    ```gitignore
-   # OpenPass runtime files
+   # Symaira Vault runtime files
    mcp-token
    .runtime-port
    ```
@@ -573,11 +573,11 @@ cp ~/.openpass/mcp-token ~/backups/openpass/
 
 ## Structured Logging
 
-OpenPass uses Go's standard `log/slog` package for structured logging. All logs are written to `stderr` to keep `stdout` clean for stdio MCP transport.
+Symaira Vault uses Go's standard `log/slog` package for structured logging. All logs are written to `stderr` to keep `stdout` clean for stdio MCP transport.
 
 ### Enabling Debug Logging
 
-Set the environment variable before running any OpenPass command:
+Set the environment variable before running any Symaira Vault command:
 
 ```bash
 OPENPASS_LOG_LEVEL=debug openpass serve --stdio --agent claude-code

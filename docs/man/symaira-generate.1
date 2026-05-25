@@ -1,0 +1,55 @@
+.nh
+.TH "SYMAIRA" "1" "Apr 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-generate - Generate a secure password
+
+
+.SH SYNOPSIS
+\fBsymaira generate [flags]\fP
+
+
+.SH DESCRIPTION
+Generate a secure password
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for generate
+
+.PP
+\fB-j\fP, \fB--json\fP[=false]
+	Output as JSON
+
+.PP
+\fB-l\fP, \fB--length\fP=20
+	Password length
+
+.PP
+\fB--quiet\fP[=false]
+	Suppress success output when using --store
+
+.PP
+\fB--reveal\fP[=false]
+	Include generated password in output when using --store
+
+.PP
+\fB--store\fP=""
+	Store at path (optional)
+
+.PP
+\fB-s\fP, \fB--symbols\fP[=false]
+	Include symbols
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH SEE ALSO
+\fBopenpass(1)\fP, \fBsymaira-generate-manpages(1)\fP

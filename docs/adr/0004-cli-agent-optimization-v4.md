@@ -1,4 +1,4 @@
-# OpenPass v4.0 — CLI & AI-Agent Optimization Design
+# Symaira Vault v4.0 — CLI & AI-Agent Optimization Design
 
 - **Status:** Accepted
 - **Date:** 2026-05-17
@@ -11,7 +11,7 @@
 
 ## 0. Summary
 
-OpenPass v3 ships strong AI-agent support via MCP (stdio + HTTP, OAuth/DCR, scoped tokens, per-agent profiles). But three setup commands overlap (`mcp-config`, `mcp install`, `agent setup`), the MCP tool surface (21+) burns context tokens at connect-time, and the skill story is a single static `SKILL.md` without per-agent packaging.
+Symaira Vault v3 ships strong AI-agent support via MCP (stdio + HTTP, OAuth/DCR, scoped tokens, per-agent profiles). But three setup commands overlap (`mcp-config`, `mcp install`, `agent setup`), the MCP tool surface (21+) burns context tokens at connect-time, and the skill story is a single static `SKILL.md` without per-agent packaging.
 
 v4.0 makes a clean break:
 
@@ -23,7 +23,7 @@ v4.0 makes a clean break:
 6. **Dual-surface** — CLI becomes a first-class agent interface via `OPENPASS_AGENT=<name>` env-var, applying the same profile/quota/audit logic as MCP. Skills tell agents to prefer CLI for read-heavy ops, MCP for OS-mediated ops (clipboard, dialogs, approval).
 7. **Migration helper** — `openpass migrate v4` classifies existing v3 profiles into tiers and renders skill packages.
 
-The dual-surface direction (Section 8) is a deliberate response to documented MCP context-window pollution: a typical 3-server MCP install consumes ~143K of 200K tokens before user input, MCP costs 4–32× more tokens than CLI for identical reads, and OpenClaw's creator publicly called MCP "a mistake" in early 2026. OpenPass uniquely fits the MCP-wins case (per-agent auth + audit + approval), so we keep MCP — but stop fattening it and give agents a first-class shell path.
+The dual-surface direction (Section 8) is a deliberate response to documented MCP context-window pollution: a typical 3-server MCP install consumes ~143K of 200K tokens before user input, MCP costs 4–32× more tokens than CLI for identical reads, and OpenClaw's creator publicly called MCP "a mistake" in early 2026. Symaira Vault uniquely fits the MCP-wins case (per-agent auth + audit + approval), so we keep MCP — but stop fattening it and give agents a first-class shell path.
 
 ---
 
@@ -50,7 +50,7 @@ openpass agent                         # umbrella for AI-integration
     --dry-run
     --skill-only                       # NEW: only drop skill, no MCP config
     --config-only                      # NEW: only MCP config, no skill
-    --force                            # overwrite existing OpenPass entries
+    --force                            # overwrite existing Symaira Vault entries
     --output json|yaml|text
   upgrade <name> --tier <new>          # NEW: explicit tier change with diff prompt
     --dry-run
@@ -162,12 +162,12 @@ The exact paths for Codex/OpenClaw will be verified during implementation agains
 | `--dry-run` | Print every file operation as diff, write nothing |
 | `--skill-only` | Drop skill only — for setups where MCP config is manually managed |
 | `--config-only` | MCP config only — for setups where skills are distributed via org sync |
-| `--force` | Overwrite existing OpenPass entries without prompting |
+| `--force` | Overwrite existing Symaira Vault entries without prompting |
 
 ### 2.4 Summary output
 
 ```
-✓ Hermes configured for OpenPass MCP
+✓ Hermes configured for Symaira Vault MCP
   Profile:       hermes (tier=safe, paths=*)
   Token:         opt_tok_a1b2 (OS keyring)
   MCP config:    ~/.hermes/config.yaml
@@ -239,7 +239,7 @@ Templates render deterministically (no `now()` outside `.InstalledAt`) so byte-d
 ```markdown
 ---
 name: openpass
-description: Use OpenPass as the credential manager via native MCP tools and CLI.
+description: Use Symaira Vault as the credential manager via native MCP tools and CLI.
 managed_by: openpass
 managed_version: 4.0.0
 managed_hash: sha256:abc123…
@@ -247,7 +247,7 @@ managed_installed_at: 2026-05-17T15:12:03Z
 managed_profile_tier: safe
 ---
 
-<!-- DO NOT EDIT. Managed by OpenPass. Run `openpass agent install <agent> --skill-only` to refresh. -->
+<!-- DO NOT EDIT. Managed by Symaira Vault. Run `openpass agent install <agent> --skill-only` to refresh. -->
 ```
 
 - `managed_by: openpass` is the **sentinel**. Uninstall + refresh touch only files with the sentinel; user-edited skills never get destroyed.
@@ -297,7 +297,7 @@ Skills are short and imperative. v4.0 content includes:
 
 ### 3.7 Signing (deferred)
 
-For v4.0 skills are unsigned. Trust anchor is the signed OpenPass binary (goreleaser + macOS notarization + SLSA attestation). A skill file without a sentinel is user-managed; the install flow refuses to overwrite without `--force`.
+For v4.0 skills are unsigned. Trust anchor is the signed Symaira Vault binary (goreleaser + macOS notarization + SLSA attestation). A skill file without a sentinel is user-managed; the install flow refuses to overwrite without `--force`.
 
 ### 3.8 Version drift handling
 
@@ -394,7 +394,7 @@ Every failed MCP response returns:
 | `ERR_INVALID_INPUT` | Schema validation failed | Re-check tool schema |
 | `ERR_DRY_RUN` | Call was in dry-run mode | Confirmation that call would have succeeded |
 | `ERR_TIER_UPGRADE_NO_TTY` | Install attempted higher tier without TTY | Run interactively or use `--tier safe` and upgrade later |
-| `ERR_CONFIG_EXISTS_UNMANAGED` | Agent config / skill file exists without OpenPass sentinel | Use `--force` or manual cleanup |
+| `ERR_CONFIG_EXISTS_UNMANAGED` | Agent config / skill file exists without Symaira Vault sentinel | Use `--force` or manual cleanup |
 | `ERR_TOOL_NOT_FOUND` | Tool name unknown | Check `tools/list` or call `openpass_search` |
 
 Codes live in `internal/mcp/errors/codes.go` as constants. Tests verify every triggered error uses a code from this set.
@@ -566,7 +566,7 @@ The following will CHANGE:
 This grants hermes the ability to:
   - read secret values (currently only metadata)
   - write/update vault entries
-  - use clipboard and autotype (secrets leave OpenPass via OS)
+  - use clipboard and autotype (secrets leave Symaira Vault via OS)
   - prompt the user for sensitive input
 
 Recommended: review last 7d of hermes activity:
@@ -655,7 +655,7 @@ agents:
   hermes:
     tier: safe                  # NEW: tier name (safe|standard|admin|custom)
     skill_path: ~/.hermes/skills/openpass/SKILL.md   # NEW: location of installed skill
-    skill_version: 4.0.0        # NEW: OpenPass version that rendered it
+    skill_version: 4.0.0        # NEW: Symaira Vault version that rendered it
     # …existing fields preserved
 ```
 
@@ -818,7 +818,7 @@ func TestInstall_Hermes_Safe(t *testing.T) {
 Negative tests:
 
 - `TestInstall_Hermes_NotDetected` — neither binary nor config → clear error with install hint
-- `TestInstall_Hermes_ConfigExistsUnmanaged` — OpenPass entry without sentinel → abort with `ERR_CONFIG_EXISTS_UNMANAGED`
+- `TestInstall_Hermes_ConfigExistsUnmanaged` — Symaira Vault entry without sentinel → abort with `ERR_CONFIG_EXISTS_UNMANAGED`
 
 ### 7.4 Skill-rendering tests
 
@@ -907,7 +907,7 @@ Build-tagged with `e2e`, runs in `main` merge CI, not on every PR.
 
 ## 8. Dual-Surface: CLI as First-Class Agent Interface
 
-Rationale: measured MCP context-window pollution is severe (a typical 3-server install consumes ~143K of 200K tokens before user input; MCP costs 4–32× more tokens than CLI for identical reads). OpenClaw's creator publicly called MCP "a mistake" in early 2026. OpenPass's value props (per-agent auth, audit, approval) keep MCP relevant — but we stop treating it as the only path.
+Rationale: measured MCP context-window pollution is severe (a typical 3-server install consumes ~143K of 200K tokens before user input; MCP costs 4–32× more tokens than CLI for identical reads). OpenClaw's creator publicly called MCP "a mistake" in early 2026. Symaira Vault's value props (per-agent auth, audit, approval) keep MCP relevant — but we stop treating it as the only path.
 
 ### 8.1 `OPENPASS_AGENT` env-var
 
@@ -1011,7 +1011,7 @@ For read-heavy, deterministic operations: prefer the CLI via Bash.
 For operations that need server-mediated UX, use MCP:
   - request_credential   — needs native OS dialog
   - secure_input         — needs hidden TTY/dialog input
-  - copy_to_clipboard    — needs the running OpenPass process to schedule auto-clear
+  - copy_to_clipboard    — needs the running Symaira Vault process to schedule auto-clear
   - autotype             — needs cross-process OS hooks
   - write with approval  — needs synchronous user confirmation prompt
   - run_command          — needs masked subprocess pipes
@@ -1065,12 +1065,12 @@ The CLI applies your profile (paths, redactions, quotas) just like MCP.
 
 The following ideas surfaced during brainstorming but are not part of v4.0. Each will be filed as a separate GitHub issue post-spec:
 
-- **OpenPass SDK (Go/Python/TS) for in-process consumption** (Approach 2 from brainstorming). Cost of cross-language API maintenance and bypass of MCP audit path outweigh near-term benefits. Revisit if a major agent platform requests it.
+- **Symaira Vault SDK (Go/Python/TS) for in-process consumption** (Approach 2 from brainstorming). Cost of cross-language API maintenance and bypass of MCP audit path outweigh near-term benefits. Revisit if a major agent platform requests it.
 - **Reference handles for opaque secrets** (Approach 3 from brainstorming): `request_handle` / `execute_with_handle` / `autotype_handle` flow where agents never see plaintext. Stronger security model but multi-month effort and migration burden. Filed as a follow-up RFC.
 - **Capability negotiation as a parallel surface to MCP `tools/list`** (Approach 3 sub-idea).
 - **Composite tools** (`find_and_copy`, `find_and_execute`) — defer until skill-level documentation proves insufficient.
 - **Per-agent default tiers** (Section 5.9) — uniform `safe` default in v4.0; if practice shows certain agents always get upgraded, revisit.
-- **Skill signing** (Section 3.7) — trust anchor is the signed OpenPass binary in v4.0.
+- **Skill signing** (Section 3.7) — trust anchor is the signed Symaira Vault binary in v4.0.
 - **Code Execution with MCP** (Anthropic 2025-11 pattern) — agents writing code that calls MCP tools. Worth a separate spec once `openpass_search` lands and we see real usage patterns.
 
 ---

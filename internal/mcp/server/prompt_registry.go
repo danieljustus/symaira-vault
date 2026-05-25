@@ -13,7 +13,7 @@ type promptArgument struct {
 }
 
 // promptMessage is one entry in the rendered prompt body. The MCP spec models
-// content as typed blocks; OpenPass prompts use only text content.
+// content as typed blocks; Symaira Vault prompts use only text content.
 type promptMessage struct {
 	Role string // "user" | "assistant"
 	Text string
@@ -30,12 +30,12 @@ type promptDefinition struct {
 }
 
 // promptDefinitions returns the static list of MCP prompts the server exposes.
-// In Claude Code these surface as slash commands like /mcp__openpass__add-credential.
+// In Claude Code these surface as slash commands like /mcp__symaira__add-credential.
 func promptDefinitions() []promptDefinition {
 	return []promptDefinition{
 		{
 			Name: "add-credential",
-			Description: "Guided workflow to add a new credential to the OpenPass vault. " +
+			Description: "Guided workflow to add a new credential to the Symaira Vault vault. " +
 				"Sensitive fields are collected via secure dialog so the agent never sees the value.",
 			Arguments: []promptArgument{
 				{Name: "service_name", Description: "Friendly name of the service, e.g. 'GitHub' or 'AWS prod'"},
@@ -45,7 +45,7 @@ func promptDefinitions() []promptDefinition {
 		},
 		{
 			Name: "rotate-credential",
-			Description: "Rotate the password/token on an existing OpenPass entry by generating a new value, " +
+			Description: "Rotate the password/token on an existing Symaira Vault entry by generating a new value, " +
 				"storing it, and reminding the user to update it server-side.",
 			Arguments: []promptArgument{
 				{Name: "path", Description: "Vault entry path to rotate", Required: true},
@@ -55,7 +55,7 @@ func promptDefinitions() []promptDefinition {
 		},
 		{
 			Name: "find-and-use",
-			Description: "Find an OpenPass entry by query and suggest the right consumption tool " +
+			Description: "Find an Symaira Vault entry by query and suggest the right consumption tool " +
 				"(copy_to_clipboard, autotype, execute_with_secret) based on the user's stated task.",
 			Arguments: []promptArgument{
 				{Name: "query", Description: "Search query", Required: true},
@@ -169,7 +169,7 @@ func buildAddCredentialPrompt(args map[string]string) []promptMessage {
 		suggested = "<choose-a-path>"
 	}
 	var sb strings.Builder
-	sb.WriteString("Add a new credential to the OpenPass vault.\n\n")
+	sb.WriteString("Add a new credential to the Symaira Vault vault.\n\n")
 	if service != "" {
 		sb.WriteString("Service: ")
 		sb.WriteString(EmbedAsData("service_name", service))
@@ -193,7 +193,7 @@ func buildRotateCredentialPrompt(args map[string]string) []promptMessage {
 	path := argOr(args, "path", "<path>")
 	length := argOr(args, "length", "32")
 	var sb strings.Builder
-	sb.WriteString("Rotate the credential at OpenPass path ")
+	sb.WriteString("Rotate the credential at Symaira Vault path ")
 	sb.WriteString(EmbedAsData("vault_path", path))
 	sb.WriteString(" (data).\n\n")
 	sb.WriteString("Workflow:\n")
@@ -215,7 +215,7 @@ func buildFindAndUsePrompt(args map[string]string) []promptMessage {
 	query := argOr(args, "query", "")
 	task := argOr(args, "task", "")
 	var sb strings.Builder
-	sb.WriteString("Find an OpenPass credential and use it without printing the secret.\n\n")
+	sb.WriteString("Find an Symaira Vault credential and use it without printing the secret.\n\n")
 	if query != "" {
 		sb.WriteString("Search query: ")
 		sb.WriteString(EmbedAsData("search_query", query))
@@ -230,7 +230,7 @@ func buildFindAndUsePrompt(args map[string]string) []promptMessage {
 	sb.WriteString("1. Call `find_entries` with query=")
 	sb.WriteString(EmbedAsData("search_query", query))
 	sb.WriteString(" (data).\n")
-	sb.WriteString("2. If zero matches: suggest creating the entry with `/openpass:add-credential` or call `request_credential` directly.\n")
+	sb.WriteString("2. If zero matches: suggest creating the entry with `/symaira:add-credential` or call `request_credential` directly.\n")
 	sb.WriteString("3. If one match: pick the right consumption tool based on the task:\n")
 	sb.WriteString("   - Web login / GUI app → `autotype` or `copy_to_clipboard`.\n")
 	sb.WriteString("   - Shell/API call → `execute_with_secret` with the appropriate `secret_refs`.\n")
@@ -245,7 +245,7 @@ func buildShareCredentialPrompt(args map[string]string) []promptMessage {
 	ttl := argOr(args, "ttl", "1h")
 	field := argOr(args, "secret_field", "")
 	var sb strings.Builder
-	sb.WriteString("Share OpenPass credential ")
+	sb.WriteString("Share Symaira Vault credential ")
 	sb.WriteString(EmbedAsData("vault_path", path))
 	sb.WriteString(" (data) with agent ")
 	sb.WriteString(EmbedAsData("target_agent", toAgent))

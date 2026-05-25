@@ -19,12 +19,12 @@ import (
 	"sync"
 	"time"
 
-	vaultcrypto "github.com/danieljustus/OpenPass/internal/crypto"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 const (
-	defaultDirName         = ".openpass"
+	defaultDirName         = ".symaira"
 	defaultFileNamePattern = "audit-%s.log"
 	hmacKeyFileName        = "audit-hmac-key"
 	hmacKeySize            = 32

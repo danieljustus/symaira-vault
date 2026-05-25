@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/danieljustus/OpenPass/internal/git"
+	"github.com/danieljustus/symaira-vault/internal/git"
 )
 
 func checkGitRepo(vaultDir string, _ Options) Result {
@@ -26,7 +26,7 @@ func checkGitRepo(vaultDir string, _ Options) Result {
 	} else {
 		r.Status = StatusWarn
 		r.Message = "no git repository in vault directory"
-		r.Hint = "run `openpass git init` to enable version history and sync"
+		r.Hint = "run `symaira git init` to enable version history and sync"
 	}
 	return r
 }
@@ -45,7 +45,7 @@ func checkGitRemote(vaultDir string, _ Options) Result {
 	} else {
 		r.Status = StatusWarn
 		r.Message = "no remote 'origin' — vault is local-only"
-		r.Hint = "run `openpass git remote add origin <url>` to enable sync"
+		r.Hint = "run `symaira git remote add origin <url>` to enable sync"
 	}
 	return r
 }
@@ -90,7 +90,7 @@ func checkGitignoreProtects(vaultDir string, _ Options) Result {
 		if os.IsNotExist(err) {
 			r.Status = StatusWarn
 			r.Message = ".gitignore missing"
-			r.Hint = "run `openpass git init` to create a protective .gitignore"
+			r.Hint = "run `symaira git init` to create a protective .gitignore"
 			return r
 		}
 		r.Status = StatusWarn
@@ -127,14 +127,14 @@ func checkGitLastSync(vaultDir string, _ Options) Result {
 	if t.IsZero() {
 		r.Status = StatusWarn
 		r.Message = "no sync recorded yet"
-		r.Hint = "run `openpass git push` to sync your vault"
+		r.Hint = "run `symaira git push` to sync your vault"
 		return r
 	}
 	age := time.Since(t).Round(time.Hour)
 	if age > 7*24*time.Hour {
 		r.Status = StatusWarn
 		r.Message = fmt.Sprintf("last sync %s ago", age)
-		r.Hint = "run `openpass git pull` to sync latest changes"
+		r.Hint = "run `symaira git pull` to sync latest changes"
 	} else {
 		r.Status = StatusOK
 		r.Message = fmt.Sprintf("last sync %s ago", age)

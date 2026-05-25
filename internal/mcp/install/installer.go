@@ -29,7 +29,7 @@ type InstallOptions struct {
 	DryRun       bool
 }
 
-// Install injects the OpenPass MCP server configuration into an agent's config
+// Install injects the Symaira Vault MCP server configuration into an agent's config
 // file. It is idempotent: running twice with the same config produces no change
 // on the second run.
 func Install(opts InstallOptions) (*Result, error) {

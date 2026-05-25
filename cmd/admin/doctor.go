@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"strings"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 
-	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
-	"github.com/danieljustus/OpenPass/internal/health"
-	cliout "github.com/danieljustus/OpenPass/internal/ui/cliout"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	"github.com/danieljustus/symaira-vault/internal/health"
+	cliout "github.com/danieljustus/symaira-vault/internal/ui/cliout"
 )
 
 var (
@@ -36,17 +36,17 @@ Output modes:
 
 Use --no-network to skip checks that require network access (git remote reachability, update check).`,
 	Example: `  # Full health check
-  openpass doctor
+  symaira doctor
 
   # JSON output, no network
-  openpass doctor --output json --no-network
+  symaira doctor --output json --no-network
 
   # Run only config checks
-  openpass doctor --only 'config.*'
+  symaira doctor --only 'config.*'
 
   # Auto-fix what's safe to fix (with dry-run first)
-  openpass doctor --fix-dry-run
-  openpass doctor --fix`,
+  symaira doctor --fix-dry-run
+  symaira doctor --fix`,
 	Annotations: map[string]string{
 		cli.RequiresVaultAnnotation: "false",
 	},
@@ -107,7 +107,7 @@ Use --no-network to skip checks that require network access (git remote reachabi
 }
 
 func outputDoctorText(cmd *cobra.Command, vaultDir string, results []health.Result) error {
-	cmd.Printf("OpenPass Doctor — Vault: %s\n\n", vaultDir)
+	cmd.Printf("Symaira Vault Doctor — Vault: %s\n\n", vaultDir)
 
 	for _, r := range results {
 		var symbol string

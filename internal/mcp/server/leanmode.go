@@ -3,20 +3,20 @@ package server
 import (
 	"encoding/json"
 
-	"github.com/danieljustus/OpenPass/internal/mcp/transport"
+	"github.com/danieljustus/symaira-vault/internal/mcp/transport"
 )
 
 // LeanToolSet is the default 7-tool lean mode set. When a client does not
 // request all tools (include_all_tools: true), only tools in this set are
 // returned in tools/list responses.
 var LeanToolSet = []string{
-	"openpass_whoami",
-	"openpass_search",
+	"symaira_whoami",
+	"symaira_search",
 	"health",
 	"find_entries",
 	"get_entry_metadata",
 	"request_credential",
-	"openpass_audit_self",
+	"symaira_audit_self",
 }
 
 func filterLeanTools(tools []map[string]any) []map[string]any {

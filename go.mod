@@ -1,4 +1,4 @@
-module github.com/danieljustus/OpenPass
+module github.com/danieljustus/symaira-vault
 
 go 1.26.3
 

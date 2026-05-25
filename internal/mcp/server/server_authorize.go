@@ -10,13 +10,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/danieljustus/OpenPass/internal/audit"
-	"github.com/danieljustus/OpenPass/internal/authguard"
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
-	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
-	"github.com/danieljustus/OpenPass/internal/metrics"
-	"github.com/danieljustus/OpenPass/internal/policy"
-	"github.com/danieljustus/OpenPass/internal/vault"
+	"github.com/danieljustus/symaira-vault/internal/audit"
+	"github.com/danieljustus/symaira-vault/internal/authguard"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+	auth "github.com/danieljustus/symaira-vault/internal/mcp/auth"
+	"github.com/danieljustus/symaira-vault/internal/metrics"
+	"github.com/danieljustus/symaira-vault/internal/policy"
+	"github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 // requestIDKey is used for storing request IDs in context.

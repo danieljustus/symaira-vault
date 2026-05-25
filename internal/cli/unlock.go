@@ -11,12 +11,12 @@ import (
 
 	"filippo.io/age"
 
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
-	cryptopkg "github.com/danieljustus/OpenPass/internal/crypto"
-	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
-	"github.com/danieljustus/OpenPass/internal/metrics"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
-	vaultsvc "github.com/danieljustus/OpenPass/internal/vaultsvc"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	cryptopkg "github.com/danieljustus/symaira-vault/internal/crypto"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	"github.com/danieljustus/symaira-vault/internal/metrics"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
+	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 func UnlockVault(vaultDir string, interactive bool) (*vaultpkg.Vault, error) {
@@ -119,7 +119,7 @@ func WithVault(fn func(vaultsvc.Service) error) error {
 	}
 	if !vaultpkg.IsInitialized(vaultDir) {
 		return errorspkg.NewCLIError(errorspkg.ExitNotInitialized,
-			"vault not initialized. Run 'openpass init' first",
+			"vault not initialized. Run 'symaira init' first",
 			errorspkg.ErrVaultNotInitialized)
 	}
 	v, err := UnlockVault(vaultDir, true)
@@ -136,7 +136,7 @@ func WithVaultRaw(fn func(*vaultpkg.Vault) error) error {
 	}
 	if !vaultpkg.IsInitialized(vaultDir) {
 		return errorspkg.NewCLIError(errorspkg.ExitNotInitialized,
-			"vault not initialized. Run 'openpass init' first",
+			"vault not initialized. Run 'symaira init' first",
 			errorspkg.ErrVaultNotInitialized)
 	}
 	v, err := UnlockVault(vaultDir, true)
@@ -157,9 +157,9 @@ func loadVaultConfigForUnlock(vaultDir string) *configpkg.Config {
 func lockedMessageForCache() string {
 	status := SessionGetCacheStatus()
 	if !status.Persistent {
-		return "vault locked: this build cannot share 'openpass unlock' sessions across processes; set OPENPASS_PASSPHRASE or use a build with OS keyring support"
+		return "vault locked: this build cannot share 'symaira unlock' sessions across processes; set OPENPASS_PASSPHRASE or use a build with OS keyring support"
 	}
-	return "vault locked: run 'openpass unlock' first, enable Touch ID with 'openpass auth set touchid', or set OPENPASS_PASSPHRASE"
+	return "vault locked: run 'symaira unlock' first, enable Touch ID with 'symaira auth set touchid', or set OPENPASS_PASSPHRASE"
 }
 
 func DefaultSessionTTL() time.Duration {

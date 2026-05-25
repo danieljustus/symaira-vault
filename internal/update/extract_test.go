@@ -63,18 +63,18 @@ func buildTestZip(entries map[string]string) []byte {
 func TestExtractTarGz_Success(t *testing.T) {
 	dir := t.TempDir()
 	archive := buildTestTarGz(map[string]string{
-		"OpenPass_0.5.0_darwin_arm64/":          "",
-		"OpenPass_0.5.0_darwin_arm64/openpass":  "binary-content",
-		"OpenPass_0.5.0_darwin_arm64/LICENSE":   "MIT",
-		"OpenPass_0.5.0_darwin_arm64/README.md": "# OpenPass",
+		"symaira_0.5.0_darwin_arm64/":          "",
+		"symaira_0.5.0_darwin_arm64/symaira":  "binary-content",
+		"symaira_0.5.0_darwin_arm64/LICENSE":   "MIT",
+		"symaira_0.5.0_darwin_arm64/README.md": "# Symaira Vault",
 	}, true)
 
-	binaryPath, err := ExtractTarGz(archive, dir, "openpass")
+	binaryPath, err := ExtractTarGz(archive, dir, "symaira")
 	if err != nil {
 		t.Fatalf("ExtractTarGz() error = %v", err)
 	}
 
-	expectedPath := filepath.Join(dir, "OpenPass_0.5.0_darwin_arm64", "openpass")
+	expectedPath := filepath.Join(dir, "symaira_0.5.0_darwin_arm64", "symaira")
 	if binaryPath != expectedPath {
 		t.Fatalf("binaryPath = %q, want %q", binaryPath, expectedPath)
 	}
@@ -91,11 +91,11 @@ func TestExtractTarGz_Success(t *testing.T) {
 func TestExtractTarGz_BinaryNotFound(t *testing.T) {
 	dir := t.TempDir()
 	archive := buildTestTarGz(map[string]string{
-		"OpenPass_0.5.0_darwin_arm64/":        "",
-		"OpenPass_0.5.0_darwin_arm64/LICENSE": "MIT",
+		"symaira_0.5.0_darwin_arm64/":        "",
+		"symaira_0.5.0_darwin_arm64/LICENSE": "MIT",
 	}, true)
 
-	_, err := ExtractTarGz(archive, dir, "openpass")
+	_, err := ExtractTarGz(archive, dir, "symaira")
 	if err == nil {
 		t.Fatal("expected ErrBinaryNotFound")
 	}
@@ -110,7 +110,7 @@ func TestExtractTarGz_PathTraversal(t *testing.T) {
 		"../../../etc/passwd": "root:x:0:0:",
 	}, false)
 
-	_, err := ExtractTarGz(archive, dir, "openpass")
+	_, err := ExtractTarGz(archive, dir, "symaira")
 	if err == nil {
 		t.Fatal("expected path traversal error")
 	}
@@ -125,7 +125,7 @@ func TestExtractTarGz_PathTraversalWithClean(t *testing.T) {
 		"subdir/../../etc/passwd": "root:x:0:0:",
 	}, false)
 
-	_, err := ExtractTarGz(archive, dir, "openpass")
+	_, err := ExtractTarGz(archive, dir, "symaira")
 	if err == nil {
 		t.Fatal("expected path traversal error")
 	}
@@ -135,7 +135,7 @@ func TestExtractTarGz_PathTraversalWithClean(t *testing.T) {
 }
 
 func TestExtractTarGz_GzipError(t *testing.T) {
-	_, err := ExtractTarGz([]byte("not-gzip-data"), t.TempDir(), "openpass")
+	_, err := ExtractTarGz([]byte("not-gzip-data"), t.TempDir(), "symaira")
 	if err == nil {
 		t.Fatal("expected gzip error")
 	}
@@ -144,17 +144,17 @@ func TestExtractTarGz_GzipError(t *testing.T) {
 func TestExtractZip_Success(t *testing.T) {
 	dir := t.TempDir()
 	archive := buildTestZip(map[string]string{
-		"OpenPass_0.5.0_windows_amd64/":             "",
-		"OpenPass_0.5.0_windows_amd64/openpass.exe": "binary-content-win",
-		"OpenPass_0.5.0_windows_amd64/LICENSE":      "MIT",
+		"symaira_0.5.0_windows_amd64/":             "",
+		"symaira_0.5.0_windows_amd64/symaira.exe": "binary-content-win",
+		"symaira_0.5.0_windows_amd64/LICENSE":      "MIT",
 	})
 
-	binaryPath, err := ExtractZip(archive, dir, "openpass.exe")
+	binaryPath, err := ExtractZip(archive, dir, "symaira.exe")
 	if err != nil {
 		t.Fatalf("ExtractZip() error = %v", err)
 	}
 
-	expectedPath := filepath.Join(dir, "OpenPass_0.5.0_windows_amd64", "openpass.exe")
+	expectedPath := filepath.Join(dir, "symaira_0.5.0_windows_amd64", "symaira.exe")
 	if binaryPath != expectedPath {
 		t.Fatalf("binaryPath = %q, want %q", binaryPath, expectedPath)
 	}
@@ -171,11 +171,11 @@ func TestExtractZip_Success(t *testing.T) {
 func TestExtractZip_BinaryNotFound(t *testing.T) {
 	dir := t.TempDir()
 	archive := buildTestZip(map[string]string{
-		"OpenPass_0.5.0_windows_amd64/":        "",
-		"OpenPass_0.5.0_windows_amd64/LICENSE": "MIT",
+		"symaira_0.5.0_windows_amd64/":        "",
+		"symaira_0.5.0_windows_amd64/LICENSE": "MIT",
 	})
 
-	_, err := ExtractZip(archive, dir, "openpass.exe")
+	_, err := ExtractZip(archive, dir, "symaira.exe")
 	if err == nil {
 		t.Fatal("expected ErrBinaryNotFound")
 	}
@@ -190,7 +190,7 @@ func TestExtractZip_PathTraversal(t *testing.T) {
 		"../../../etc/passwd": "root:x:0:0:",
 	})
 
-	_, err := ExtractZip(archive, dir, "openpass")
+	_, err := ExtractZip(archive, dir, "symaira")
 	if err == nil {
 		t.Fatal("expected path traversal error")
 	}
@@ -200,7 +200,7 @@ func TestExtractZip_PathTraversal(t *testing.T) {
 }
 
 func TestExtractZip_InvalidData(t *testing.T) {
-	_, err := ExtractZip([]byte("not-zip-data"), t.TempDir(), "openpass.exe")
+	_, err := ExtractZip([]byte("not-zip-data"), t.TempDir(), "symaira.exe")
 	if err == nil {
 		t.Fatal("expected zip error")
 	}
@@ -212,7 +212,7 @@ func TestExtractZip_EmptyArchive(t *testing.T) {
 	zw := zip.NewWriter(&buf)
 	_ = zw.Close()
 
-	_, err := ExtractZip(buf.Bytes(), dir, "openpass")
+	_, err := ExtractZip(buf.Bytes(), dir, "symaira")
 	if err == nil {
 		t.Fatal("expected ErrBinaryNotFound for empty archive")
 	}
@@ -243,10 +243,10 @@ func TestExtractTarGz_ReadsLargeBinary(t *testing.T) {
 	dir := t.TempDir()
 	content := strings.Repeat("A", 10000)
 	archive := buildTestTarGz(map[string]string{
-		"bundle/openpass": content,
+		"bundle/symaira": content,
 	}, true)
 
-	binaryPath, err := ExtractTarGz(archive, dir, "openpass")
+	binaryPath, err := ExtractTarGz(archive, dir, "symaira")
 	if err != nil {
 		t.Fatalf("ExtractTarGz() error = %v", err)
 	}
@@ -270,7 +270,7 @@ func TestExtractTarGz_PreservesMode(t *testing.T) {
 	gw := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(gw)
 	_ = tw.WriteHeader(&tar.Header{
-		Name:     "openpass",
+		Name:     "symaira",
 		Typeflag: tar.TypeReg,
 		Mode:     0o755,
 		Size:     int64(len("content")),
@@ -279,7 +279,7 @@ func TestExtractTarGz_PreservesMode(t *testing.T) {
 	_ = tw.Close()
 	_ = gw.Close()
 
-	binaryPath, err := ExtractTarGz(buf.Bytes(), dir, "openpass")
+	binaryPath, err := ExtractTarGz(buf.Bytes(), dir, "symaira")
 	if err != nil {
 		t.Fatalf("ExtractTarGz() error = %v", err)
 	}
@@ -311,7 +311,7 @@ func TestExtractTarGz_SkipsSymlinks(t *testing.T) {
 		Linkname: "/etc/passwd",
 	})
 	_ = tw.WriteHeader(&tar.Header{
-		Name:     "subdir/openpass",
+		Name:     "subdir/symaira",
 		Typeflag: tar.TypeReg,
 		Mode:     0o755,
 		Size:     int64(len("safe")),
@@ -320,7 +320,7 @@ func TestExtractTarGz_SkipsSymlinks(t *testing.T) {
 	_ = tw.Close()
 	_ = gw.Close()
 
-	binaryPath, err := ExtractTarGz(buf.Bytes(), dir, "openpass")
+	binaryPath, err := ExtractTarGz(buf.Bytes(), dir, "symaira")
 	if err != nil {
 		t.Fatalf("ExtractTarGz() error = %v", err)
 	}
@@ -342,7 +342,7 @@ func TestExtractTarGz_EmptyArchive(t *testing.T) {
 	gw := gzip.NewWriter(&buf)
 	_ = gw.Close()
 
-	_, err := ExtractTarGz(buf.Bytes(), dir, "openpass")
+	_, err := ExtractTarGz(buf.Bytes(), dir, "symaira")
 	if err == nil {
 		t.Fatal("expected ErrBinaryNotFound for empty archive")
 	}
@@ -354,11 +354,11 @@ func TestExtractZip_ReadsLargeBinary(t *testing.T) {
 
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
-	w, _ := zw.Create("bundle/openpass.exe")
+	w, _ := zw.Create("bundle/symaira.exe")
 	_, _ = w.Write([]byte(content))
 	_ = zw.Close()
 
-	binaryPath, err := ExtractZip(buf.Bytes(), dir, "openpass.exe")
+	binaryPath, err := ExtractZip(buf.Bytes(), dir, "symaira.exe")
 	if err != nil {
 		t.Fatalf("ExtractZip() error = %v", err)
 	}

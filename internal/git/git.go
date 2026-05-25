@@ -1,4 +1,4 @@
-// Package git provides Git integration for OpenPass vaults.
+// Package git provides Git integration for Symaira Vault vaults.
 package git
 
 import (
@@ -69,14 +69,14 @@ type CommitOptions struct {
 }
 
 // DefaultCommitTemplate is the default commit message template
-const DefaultCommitTemplate = "Update from OpenPass"
+const DefaultCommitTemplate = "Update from Symaira Vault"
 
-// DefaultGitignoreContent is the default .gitignore content for OpenPass vaults
-const DefaultGitignoreContent = `# OpenPass vault - ignore sensitive files
+// DefaultGitignoreContent is the default .gitignore content for Symaira Vault vaults
+const DefaultGitignoreContent = `# Symaira Vault vault - ignore sensitive files
 identity.age
 *.key
 *.pem
-# Ignore OpenPass runtime artifacts
+# Ignore Symaira Vault runtime artifacts
 mcp-token
 mcp-tokens.json
 .runtime-port
@@ -196,11 +196,11 @@ func AutoCommitWithOptions(vaultDir string, opts CommitOptions) error {
 	// Determine author
 	authorName := opts.Author
 	if authorName == "" {
-		authorName = "OpenPass"
+		authorName = "Symaira Vault"
 	}
 	authorEmail := opts.Email
 	if authorEmail == "" {
-		authorEmail = "openpass@example.com"
+		authorEmail = "symaira@example.com"
 	}
 
 	_, err = w.Commit(message, &gogit.CommitOptions{
@@ -241,7 +241,7 @@ func appendMissingGitignoreEntries(current string, defaults string) string {
 	if current != "" && !strings.HasSuffix(current, "\n") {
 		b.WriteString("\n")
 	}
-	b.WriteString("# OpenPass runtime artifacts\n")
+	b.WriteString("# Symaira Vault runtime artifacts\n")
 	for _, line := range missing {
 		b.WriteString(line)
 		b.WriteString("\n")
@@ -656,7 +656,7 @@ func ResolveConflicts(vaultDir string, hostname string) error {
 // LastSyncTime returns the time of the last sync operation.
 // It reads the timestamp from a marker file in the vault's .git directory.
 func LastSyncTime(vaultDir string) (time.Time, error) {
-	markerPath := filepath.Join(vaultDir, ".git", "openpass-last-sync")
+	markerPath := filepath.Join(vaultDir, ".git", "symaira-last-sync")
 	data, err := os.ReadFile(markerPath) //#nosec G304 -- vaultDir is not user input
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -674,7 +674,7 @@ func LastSyncTime(vaultDir string) (time.Time, error) {
 
 // SetLastSyncTime writes the current time as the last sync timestamp.
 func SetLastSyncTime(vaultDir string) error {
-	markerPath := filepath.Join(vaultDir, ".git", "openpass-last-sync")
+	markerPath := filepath.Join(vaultDir, ".git", "symaira-last-sync")
 	if err := os.MkdirAll(filepath.Dir(markerPath), 0o700); err != nil {
 		return err
 	}

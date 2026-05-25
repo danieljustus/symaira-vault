@@ -17,10 +17,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/danieljustus/OpenPass/internal/config"
-	server "github.com/danieljustus/OpenPass/internal/mcp/server"
-	transport "github.com/danieljustus/OpenPass/internal/mcp/transport"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	server "github.com/danieljustus/symaira-vault/internal/mcp/server"
+	transport "github.com/danieljustus/symaira-vault/internal/mcp/transport"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 // testTokens stores pre-created MCP tokens for test vaults, keyed by vault
@@ -150,7 +150,7 @@ func testMCPToken(t *testing.T, vaultDir string) string {
 
 func setValidMCPHeaders(req *http.Request, token string) {
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("X-OpenPass-Agent", "default")
+	req.Header.Set("X-Symaira-Agent", "default")
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 }
@@ -323,7 +323,7 @@ func TestRunHTTPServer_MCPMethodNotAllowed(t *testing.T) {
 
 	req, _ := http.NewRequest(http.MethodGet, baseURL+"/mcp", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("X-OpenPass-Agent", "default")
+	req.Header.Set("X-Symaira-Agent", "default")
 
 	resp, err := newTestHTTPClient().Do(req)
 	if err != nil {
@@ -377,7 +377,7 @@ func TestRunHTTPServer_MCPMediaTypeAndAccept(t *testing.T) {
 
 			req, _ := http.NewRequest(http.MethodPost, baseURL+"/mcp", strings.NewReader(tc.body))
 			req.Header.Set("Authorization", "Bearer "+token)
-			req.Header.Set("X-OpenPass-Agent", "default")
+			req.Header.Set("X-Symaira-Agent", "default")
 			if tc.contentType != "" {
 				req.Header.Set("Content-Type", tc.contentType)
 			}
@@ -576,7 +576,7 @@ func TestRunHTTPServer_CustomConfig(t *testing.T) {
 
 	req, _ := http.NewRequest(http.MethodPost, baseURL+"/mcp", strings.NewReader("{}"))
 	req.Header.Set("Authorization", "Bearer "+tokenContent)
-	req.Header.Set("X-OpenPass-Agent", "default")
+	req.Header.Set("X-Symaira-Agent", "default")
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 

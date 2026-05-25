@@ -3,7 +3,7 @@ package vault
 import (
 	"testing"
 
-	"github.com/danieljustus/OpenPass/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/config"
 )
 
 func TestInitWithPassphraseRoundTrip(t *testing.T) {

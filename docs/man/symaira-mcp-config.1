@@ -1,0 +1,79 @@
+.nh
+.TH "SYMAIRA" "1" "Apr 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-mcp-config - Output MCP config snippet for an AI tool
+
+
+.SH SYNOPSIS
+\fBsymaira mcp-config  [flags]\fP
+
+
+.SH DESCRIPTION
+Generate the MCP server configuration snippet for a specific AI tool.
+
+.PP
+The default output is generic JSON that can be pasted into an MCP client
+configuration. Use --format for agent-specific formats:
+  - generic:  JSON stdio/HTTP (default)
+  - hermes:    YAML hermes-specific (write-capable)
+  - claude-code: YAML for Claude Code (write-capable)
+  - codex:     YAML for Codex (read-only)
+  - opencode:  YAML for OpenCode (read-only)
+  - openclaw:  YAML for OpenClaw (write-capable)
+
+.PP
+By default, output uses stdio transport; use --http for HTTP transport.
+
+.PP
+HTTP config output uses a token reference (env:OPENPASS_MCP_TOKEN) by default.
+Use --include-token only when you explicitly want to print the raw bearer token.
+
+.PP
+Use --token-only to output just the raw token (for use in scripts).
+
+
+.SH OPTIONS
+\fB--format\fP="generic"
+	Output format: generic, hermes, claude-code, codex, opencode, openclaw
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for mcp-config
+
+.PP
+\fB--http\fP[=false]
+	Output HTTP-based config instead of stdio
+
+.PP
+\fB--include-token\fP[=false]
+	Include the raw HTTP bearer token in config output
+
+.PP
+\fB--redact\fP[=false]
+	Output token reference (env:OPENPASS_MCP_TOKEN); kept for explicitness because this is the default
+
+.PP
+\fB--server-name\fP="openpass"
+	MCP server name for formats that wrap server config
+
+.PP
+\fB--token-only\fP[=false]
+	Output just the raw token (for scripts)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH SEE ALSO
+\fBopenpass(1)\fP

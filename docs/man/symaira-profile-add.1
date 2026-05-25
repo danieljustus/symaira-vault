@@ -1,0 +1,39 @@
+.nh
+.TH "SYMAIRA" "1" "Apr 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-profile-add - Add a new profile
+
+
+.SH SYNOPSIS
+\fBsymaira profile add  [flags]\fP
+
+
+.SH DESCRIPTION
+Add a new vault profile with a name and vault path.
+
+.PP
+Example:
+  openpass profile add work --vault ~/.symaira-work
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for add
+
+.PP
+\fB--vault\fP=""
+	path to the vault directory (required)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+
+.SH SEE ALSO
+\fBsymaira-profile(1)\fP

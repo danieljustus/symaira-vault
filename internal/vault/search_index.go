@@ -9,7 +9,7 @@ import (
 
 	"filippo.io/age"
 
-	vaultcrypto "github.com/danieljustus/OpenPass/internal/crypto"
+	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
 )
 
 // EncryptedIndex provides an in-memory search index that maps entry paths to

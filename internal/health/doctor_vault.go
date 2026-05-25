@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
-	"github.com/danieljustus/OpenPass/internal/vault"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func checkVaultInitialized(vaultDir string, _ Options) Result {
@@ -20,7 +20,7 @@ func checkVaultInitialized(vaultDir string, _ Options) Result {
 	} else {
 		r.Status = StatusFail
 		r.Message = "vault not initialized at " + vaultDir
-		r.Hint = "run `openpass init` or `openpass setup`"
+		r.Hint = "run `symaira init` or `symaira setup`"
 	}
 	return r
 }
@@ -47,7 +47,7 @@ func checkVaultIdentityEncrypted(vaultDir string, _ Options) Result {
 		if os.IsNotExist(err) {
 			r.Status = StatusFail
 			r.Message = "identity.age not found"
-			r.Hint = "run `openpass init` to create an encrypted identity"
+			r.Hint = "run `symaira init` to create an encrypted identity"
 			return r
 		}
 		r.Status = StatusFail
@@ -62,7 +62,7 @@ func checkVaultIdentityEncrypted(vaultDir string, _ Options) Result {
 	} else {
 		r.Status = StatusFail
 		r.Message = "identity.age does not appear to be age-encrypted"
-		r.Hint = "the file may be corrupted; re-initialize with `openpass init`"
+		r.Hint = "the file may be corrupted; re-initialize with `symaira init`"
 	}
 	return r
 }
@@ -127,7 +127,7 @@ func checkManifestIntegrity(vaultDir string, _ Options) Result {
 	if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
 		r.Status = StatusWarn
 		r.Message = "no manifest.age — entry integrity not tracked"
-		r.Hint = "run `openpass verify` to create and verify a manifest"
+		r.Hint = "run `symaira verify` to create and verify a manifest"
 		return r
 	}
 
@@ -135,7 +135,7 @@ func checkManifestIntegrity(vaultDir string, _ Options) Result {
 	if identity == nil {
 		r.Status = StatusWarn
 		r.Message = msgSessionNeeded
-		r.Hint = "run `openpass unlock` to decrypt your identity for manifest verification"
+		r.Hint = "run `symaira unlock` to decrypt your identity for manifest verification"
 		return r
 	}
 
@@ -143,7 +143,7 @@ func checkManifestIntegrity(vaultDir string, _ Options) Result {
 	if err != nil {
 		r.Status = StatusWarn
 		r.Message = "cannot verify manifest: " + err.Error()
-		r.Hint = "run `openpass verify` to regenerate manifest"
+		r.Hint = "run `symaira verify` to regenerate manifest"
 		return r
 	}
 
@@ -165,7 +165,7 @@ func checkManifestIntegrity(vaultDir string, _ Options) Result {
 			r.Status = StatusWarn
 		}
 		r.Message = strings.Join(issues, "; ")
-		r.Hint = "run `openpass verify` to regenerate manifest"
+		r.Hint = "run `symaira verify` to regenerate manifest"
 		return r
 	}
 
@@ -213,7 +213,7 @@ func checkPassphraseRotation(vaultDir string, _ Options) Result {
 	if cfg.Vault == nil || cfg.Vault.LastRotated.IsZero() {
 		r.Status = StatusWarn
 		r.Message = "passphrase never rotated — rotation is recommended for security hygiene"
-		r.Hint = "run `openpass auth rotate-passphrase` to rotate"
+		r.Hint = "run `symaira auth rotate-passphrase` to rotate"
 		return r
 	}
 
@@ -221,7 +221,7 @@ func checkPassphraseRotation(vaultDir string, _ Options) Result {
 	if age > 365*24*time.Hour {
 		r.Status = StatusWarn
 		r.Message = fmt.Sprintf("last rotated %s ago (recommended: every 365 days)", age.Round(24*time.Hour))
-		r.Hint = "run `openpass auth rotate-passphrase` to rotate"
+		r.Hint = "run `symaira auth rotate-passphrase` to rotate"
 	} else {
 		r.Status = StatusOK
 		r.Message = fmt.Sprintf("last rotated %s ago", age.Round(24*time.Hour))

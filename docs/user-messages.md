@@ -1,4 +1,4 @@
-# OpenPass user-message style guide
+# Symaira Vault user-message style guide
 
 User-facing strings — prompts, error messages, hints — are part of the
 product. They should help the user understand what happened and what to
@@ -8,7 +8,7 @@ do next. This guide describes the conventions we follow.
 
 Assume a user who:
 - knows their way around a terminal
-- may not yet understand OpenPass internals
+- may not yet understand Symaira Vault internals
 - wants the next concrete action, not a Go stack trace
 
 ## Principles

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/danieljustus/OpenPass/internal/config"
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 )
 
 func TestDebugHandleGetMetadata(t *testing.T) {

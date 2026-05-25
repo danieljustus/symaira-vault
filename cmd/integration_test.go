@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/danieljustus/OpenPass/internal/config"
-	"github.com/danieljustus/OpenPass/internal/git"
-	"github.com/danieljustus/OpenPass/internal/session"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/git"
+	"github.com/danieljustus/symaira-vault/internal/session"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func TestCmdGitPush_NoRemote(t *testing.T) {

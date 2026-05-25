@@ -1,0 +1,52 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-agent-profile-edit - Edit agent profile in $EDITOR
+
+
+.SH SYNOPSIS
+\fBsymaira agent profile edit [flags]\fP
+
+
+.SH DESCRIPTION
+Open the agent profile in your configured editor ($EDITOR or $VISUAL).
+After saving, the profile is validated and you are prompted to apply changes.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for edit
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH SEE ALSO
+\fBsymaira-agent-profile(1)\fP

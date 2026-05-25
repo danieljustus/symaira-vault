@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
-	"github.com/danieljustus/OpenPass/internal/metrics"
-	"github.com/danieljustus/OpenPass/internal/secureui"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/metrics"
+	"github.com/danieljustus/symaira-vault/internal/secureui"
 )
 
 func (s *Server) handleSecureInput(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -16,7 +16,7 @@ func (s *Server) handleSecureInput(ctx context.Context, req mcp.CallToolRequest)
 		return result, err
 	}
 	return s.promptAndStore(ctx, secureui.PromptRequest{
-		Title:       "OpenPass: Secure Input",
+		Title:       "Symaira Vault: Secure Input",
 		Path:        path,
 		Field:       field,
 		Description: description,

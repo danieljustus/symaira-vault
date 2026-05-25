@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	vaultsvc "github.com/danieljustus/OpenPass/internal/vaultsvc"
+	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 func TestParseRef(t *testing.T) {

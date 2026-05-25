@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/danieljustus/OpenPass/internal/session"
+	"github.com/danieljustus/symaira-vault/internal/session"
 )
 
 type mockBioAuth struct {

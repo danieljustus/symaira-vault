@@ -1,0 +1,85 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-migrate-v4 - Migrate agent profiles and config to v4.0 format
+
+
+.SH SYNOPSIS
+\fBsymaira migrate v4 [flags]\fP
+
+
+.SH DESCRIPTION
+Migrate agent profiles to the v4.0 format by assigning tier fields.
+
+.PP
+Agent profiles without a tier field are automatically assigned a tier based
+on their existing capabilities:
+.IP \(bu 2
+Profiles with CanRunCommands=true  → admin tier
+.IP \(bu 2
+Profiles with CanWrite=true        → standard tier
+.IP \(bu 2
+All other profiles                 → safe tier
+
+.PP
+The original config is backed up as config.yaml.v3-backup-
+before any changes are written.
+
+.PP
+This migration is idempotent — running it multiple times is safe for
+profiles that already have a tier field.
+
+
+.SH OPTIONS
+\fB--dry-run\fP[=false]
+	Preview changes without writing
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for v4
+
+.PP
+\fB-y\fP, \fB--yes\fP[=false]
+	Skip confirmation prompt
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  openpass migrate v4
+  openpass migrate v4 --dry-run
+  openpass migrate v4 --yes
+.EE
+
+
+.SH SEE ALSO
+\fBsymaira-migrate(1)\fP

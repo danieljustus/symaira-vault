@@ -7,10 +7,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
-	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
-	"github.com/danieljustus/OpenPass/internal/git"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	"github.com/danieljustus/symaira-vault/internal/git"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 var syncPush bool
@@ -21,13 +21,13 @@ var syncCmd = &cobra.Command{
 	Short: "Sync vault with remote (pull + optional push)",
 	Long:  "Pulls changes from the remote git repository and optionally pushes local changes.",
 	Example: `  # Pull only
-  openpass sync
+  symaira sync
 
   # Pull and push
-  openpass sync --push
+  symaira sync --push
 
   # Force pull (reset local changes)
-  openpass sync --force`,
+  symaira sync --force`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		vaultDir, err := cli.VaultPath()
@@ -37,7 +37,7 @@ var syncCmd = &cobra.Command{
 
 		if !vaultpkg.IsInitialized(vaultDir) {
 			return errorspkg.NewCLIError(errorspkg.ExitNotInitialized,
-				"vault not initialized. Run 'openpass init' first",
+				"vault not initialized. Run 'symaira init' first",
 				errorspkg.ErrVaultNotInitialized)
 		}
 

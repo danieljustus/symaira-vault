@@ -10,7 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"golang.org/x/term"
 
-	"github.com/danieljustus/OpenPass/internal/ui/theme"
+	"github.com/danieljustus/symaira-vault/internal/ui/theme"
 )
 
 // ColorMode controls when ANSI color is emitted, regardless of TTY/NO_COLOR.
@@ -20,7 +20,7 @@ const (
 	// ColorAuto is the default: emit color when stderr is a TTY and NO_COLOR
 	// is unset.
 	ColorAuto ColorMode = iota
-	// ColorAlways forces color on, even when piped (e.g. `openpass list
+	// ColorAlways forces color on, even when piped (e.g. `symaira list
 	// --color=always | less -R`).
 	ColorAlways
 	// ColorNever suppresses all color, ignoring TTY/FORCE_COLOR/env hints.

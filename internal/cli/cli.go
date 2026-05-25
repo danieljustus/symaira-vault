@@ -1,4 +1,4 @@
-// Package cli provides shared CLI infrastructure for OpenPass commands.
+// Package cli provides shared CLI infrastructure for Symaira Vault commands.
 // It is the central hub that the cmd/ entry point and all cmd sub-packages
 // import to avoid circular dependencies.
 package cli
@@ -12,17 +12,17 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	agentctx "github.com/danieljustus/OpenPass/internal/agentctx"
-	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
-	"github.com/danieljustus/OpenPass/internal/i18n"
-	"github.com/danieljustus/OpenPass/internal/session"
-	"github.com/danieljustus/OpenPass/internal/ui/cliout"
-	"github.com/danieljustus/OpenPass/internal/ui/theme"
+	agentctx "github.com/danieljustus/symaira-vault/internal/agentctx"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	"github.com/danieljustus/symaira-vault/internal/i18n"
+	"github.com/danieljustus/symaira-vault/internal/session"
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
+	"github.com/danieljustus/symaira-vault/internal/ui/theme"
 )
 
 var OsExit = os.Exit
 
-const RequiresVaultAnnotation = "openpass/requires-vault"
+const RequiresVaultAnnotation = "symaira/requires-vault"
 
 var (
 	SessionLoadPassphrase func(vaultDir string) ([]byte, error)                               = session.LoadPassphrase
@@ -46,26 +46,26 @@ var ColorMode string
 var ThemePreset string
 
 var RootCmd = &cobra.Command{
-	Use:   "openpass",
-	Short: "OpenPass is a Go CLI password manager",
+	Use:   "symaira",
+	Short: "Symaira Vault is a Go CLI password manager",
 	Long: `Quick Start:
-  openpass init            create a vault and identity
-  openpass add <name>      add a credential
-  openpass get <name>      retrieve a credential
+  symaira init            create a vault and identity
+  symaira add <name>      add a credential
+  symaira get <name>      retrieve a credential
 
-OpenPass is a Go CLI password manager with an interactive TUI, multi-device
+Symaira Vault is a Go CLI password manager with an interactive TUI, multi-device
 sync via Git, and an MCP server for AI-agent integration.
 
 First-time setup:
-   1. openpass init         create a vault and identity (non-interactive)
-   2. openpass setup        same, plus guided wizard for sync/agents (TTY only)
-   3. openpass doctor       health-check and self-heal
+   1. symaira init         create a vault and identity (non-interactive)
+   2. symaira setup        same, plus guided wizard for sync/agents (TTY only)
+   3. symaira doctor       health-check and self-heal
 
 Daily use:
-  openpass add <name>      add a credential (interactive form)
-  openpass ui              browse and edit the vault in a TUI
-  openpass get <name>      print a credential
-  openpass --help          full command list`,
+  symaira add <name>      add a credential (interactive form)
+  symaira ui              browse and edit the vault in a TUI
+  symaira get <name>      print a credential
+  symaira --help          full command list`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
@@ -103,11 +103,11 @@ func Execute() {
 		exitCode := errorspkg.ExitCodeFromError(err)
 		switch exitCode {
 		case errorspkg.ExitNotFound:
-			cliout.Hintf("Try: openpass find <search-term>")
+			cliout.Hintf("Try: symaira find <search-term>")
 		case errorspkg.ExitNotInitialized:
-			cliout.Hintf("Run 'openpass init' for a quick start, or 'openpass setup' for the guided wizard.")
+			cliout.Hintf("Run 'symaira init' for a quick start, or 'symaira setup' for the guided wizard.")
 		case errorspkg.ExitLocked:
-			cliout.Hintf("Unlock with 'openpass unlock', or set OPENPASS_PASSPHRASE for non-interactive use.")
+			cliout.Hintf("Unlock with 'symaira unlock', or set OPENPASS_PASSPHRASE for non-interactive use.")
 		case errorspkg.ExitSuccess, errorspkg.ExitGeneralError, errorspkg.ExitPermissionDenied, errorspkg.ExitDoctorWarn, errorspkg.ExitDoctorFail:
 		}
 		OsExit(int(exitCode))
@@ -127,7 +127,7 @@ func PrintlnQuietAware(args ...interface{}) {
 }
 
 func init() {
-	RootCmd.PersistentFlags().StringVar(&Vault, "vault", "~/.openpass", "path to the password vault")
+	RootCmd.PersistentFlags().StringVar(&Vault, "vault", "~/.symaira", "path to the password vault")
 	VaultFlag = RootCmd.PersistentFlags().Lookup("vault")
 	RootCmd.PersistentFlags().BoolVar(&QuietMode, "quiet", false, "suppress non-error output")
 	RootCmd.PersistentFlags().StringVar(&Profile, "profile", "", "use a named vault profile")

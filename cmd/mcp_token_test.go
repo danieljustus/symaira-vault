@@ -7,13 +7,13 @@ import (
 	"testing"
 	"time"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
-	mcpcmd "github.com/danieljustus/OpenPass/cmd/mcp"
-	"github.com/danieljustus/OpenPass/internal/config"
-	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
-	"github.com/danieljustus/OpenPass/internal/testutil"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	mcpcmd "github.com/danieljustus/symaira-vault/cmd/mcp"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	auth "github.com/danieljustus/symaira-vault/internal/mcp/auth"
+	"github.com/danieljustus/symaira-vault/internal/testutil"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func TestMCPTokenCommandRegistration(t *testing.T) {
@@ -235,7 +235,7 @@ func TestMCPTokenCreate_VaultPathError(t *testing.T) {
 	defer func() { _ = os.Setenv("HOME", origHome) }()
 
 	origVault := vault
-	vault = "~/.openpass"
+	vault = "~/.symaira"
 	defer func() { vault = origVault }()
 
 	vaultFlagReset(t)
@@ -895,7 +895,7 @@ func TestMCPTokenRevoke_VaultPathError(t *testing.T) {
 	defer func() { _ = os.Setenv("HOME", origHome) }()
 
 	origVault := vault
-	vault = "~/.openpass"
+	vault = "~/.symaira"
 	defer func() { vault = origVault }()
 
 	vaultFlagReset(t)
@@ -924,7 +924,7 @@ func TestMCPTokenList_VaultPathError(t *testing.T) {
 	defer func() { _ = os.Setenv("HOME", origHome) }()
 
 	origVault := vault
-	vault = "~/.openpass"
+	vault = "~/.symaira"
 	defer func() { vault = origVault }()
 
 	vaultFlagReset(t)

@@ -1,10 +1,10 @@
 import * as vscode from "vscode";
-import { OpenPassTools } from "@openpass/mcp-client";
+import { SymairaTools } from "@symaira/mcp-client";
 
 export class EnvVarCompletionProvider implements vscode.CompletionItemProvider {
-  private tools: OpenPassTools;
+  private tools: SymairaTools;
 
-  constructor(tools: OpenPassTools) {
+  constructor(tools: SymairaTools) {
     this.tools = tools;
   }
 
@@ -17,7 +17,7 @@ export class EnvVarCompletionProvider implements vscode.CompletionItemProvider {
     const lineText = document.lineAt(position).text;
     const prefix = lineText.substring(0, position.character);
 
-    const match = prefix.match(/\$\{openpass:([^}]*)$/);
+    const match = prefix.match(/\$\{symaira:([^}]*)$/);
     if (!match) {
       return undefined;
     }
@@ -43,12 +43,12 @@ export class EnvVarCompletionProvider implements vscode.CompletionItemProvider {
           vscode.CompletionItemKind.Value
         );
         item.insertText = `${entry}}`;
-        item.detail = "OpenPass vault entry";
+        item.detail = "Symaira vault entry";
         item.documentation = new vscode.MarkdownString(
-          `Inserts a reference to the OpenPass vault entry \`${entry}\`.`
+          `Inserts a reference to the Symaira Vault vault entry \`${entry}\`.`
         );
         item.range = new vscode.Range(
-          position.translate(0, -searchTerm.length - "${openpass:".length),
+          position.translate(0, -searchTerm.length - "${symaira:".length),
           position
         );
         return item;

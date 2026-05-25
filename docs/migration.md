@@ -1,6 +1,6 @@
 # Migration Guide
 
-OpenPass can import entries from other password managers and common export formats. Imports read the source export, convert supported fields to OpenPass entries, and write them into your configured vault.
+Symaira Vault can import entries from other password managers and common export formats. Imports read the source export, convert supported fields to Symaira Vault entries, and write them into your configured vault.
 
 Use `--dry-run` first to preview what would be imported before writing to the vault.
 
@@ -18,7 +18,7 @@ Export from 1Password as a 1PUX file:
 4. Select the **1Password Unencrypted Export (.1pux)** format.
 5. Save the export file locally.
 
-Import the 1PUX file into OpenPass:
+Import the 1PUX file into Symaira Vault:
 
 ```bash
 openpass import 1password export.1pux
@@ -26,7 +26,7 @@ openpass import 1password export.1pux
 
 ### Supported Fields
 
-| 1Password Field | OpenPass Field |
+| 1Password Field | Symaira Vault Field |
 |-----------------|----------------|
 | title | title/path |
 | username | username |
@@ -50,7 +50,7 @@ Export from Bitwarden as an unencrypted JSON file:
 4. Select the unencrypted export option.
 5. Save the export file locally.
 
-Import the JSON file into OpenPass:
+Import the JSON file into Symaira Vault:
 
 ```bash
 openpass import bitwarden export.json
@@ -58,7 +58,7 @@ openpass import bitwarden export.json
 
 ### Supported Fields
 
-| Bitwarden Field | OpenPass Field |
+| Bitwarden Field | Symaira Vault Field |
 |-----------------|----------------|
 | name | title/path |
 | username | username |
@@ -74,14 +74,14 @@ openpass import bitwarden export.json
 
 ## pass (password-store)
 
-OpenPass can import from a local `pass` password store.
+Symaira Vault can import from a local `pass` password store.
 
 ### Prerequisites
 
 - `gpg` must be installed and available in `PATH`.
 - The password store must be readable by the current user.
 
-Import a password store into OpenPass:
+Import a password store into Symaira Vault:
 
 ```bash
 openpass import pass ~/.password-store
@@ -89,7 +89,7 @@ openpass import pass ~/.password-store
 
 ### Supported Fields
 
-| pass Data | OpenPass Field |
+| pass Data | Symaira Vault Field |
 |-----------|----------------|
 | first line | password |
 | url | url |
@@ -98,7 +98,7 @@ openpass import pass ~/.password-store
 
 ### Directory Structure
 
-The password store directory structure is preserved when creating OpenPass entry paths. For example, `~/.password-store/work/github.gpg` imports under the `work/github` path.
+The password store directory structure is preserved when creating Symaira Vault entry paths. For example, `~/.password-store/work/github.gpg` imports under the `work/github` path.
 
 ## CSV
 
@@ -109,7 +109,7 @@ title,username,password,url,notes,otp
 github,octocat,secret,https://github.com,Main GitHub account,otpauth://totp/...
 ```
 
-Import a CSV file into OpenPass:
+Import a CSV file into Symaira Vault:
 
 ```bash
 openpass import csv export.csv
@@ -117,7 +117,7 @@ openpass import csv export.csv
 
 ### Default Columns
 
-| CSV Column | OpenPass Field |
+| CSV Column | Symaira Vault Field |
 |------------|----------------|
 | title | title/path |
 | username | username |

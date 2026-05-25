@@ -1,13 +1,13 @@
-# Error Tracking Strategy for OpenPass
+# Error Tracking Strategy for Symaira Vault
 
 **Status**: DECIDED - No External Telemetry
 **Last Updated**: 2026-04-27
 
 ## Decision
 
-OpenPass does **NOT** use external error tracking services (Sentry, Datadog, Crashlytics, etc.) for the following reasons:
+Symaira Vault does **NOT** use external error tracking services (Sentry, Datadog, Crashlytics, etc.) for the following reasons:
 
-1. **Privacy-First**: As a password manager, OpenPass handles highly sensitive data. External telemetry services create unacceptable data exposure risks.
+1. **Privacy-First**: As a password manager, Symaira Vault handles highly sensitive data. External telemetry services create unacceptable data exposure risks.
 2. **Secret Safety**: Even with redaction, error reports from a password manager could inadvertently leak sensitive patterns.
 3. **GDPR Compliance**: External telemetry would require explicit user consent and data processing agreements.
 4. **User Trust**: Password manager users expect minimal network activity and no data exfiltration.
@@ -18,7 +18,7 @@ The following audit, diagnostic, and redaction capabilities are **already implem
 
 ### Audit Logging (internal/audit)
 
-OpenPass maintains comprehensive audit logs for MCP operations:
+Symaira Vault maintains comprehensive audit logs for MCP operations:
 
 | Feature | Implementation | Location |
 |---------|---------------|----------|
@@ -192,7 +192,7 @@ curl -s http://127.0.0.1:8080/health
 ```
 
 When reporting issues, include:
-- OpenPass version and Go version
+- Symaira Vault version and Go version
 - OS/platform information
 - Error message and exit code
 - Steps to reproduce

@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/danieljustus/OpenPass/internal/config"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 
-	crud "github.com/danieljustus/OpenPass/cmd/crud"
+	crud "github.com/danieljustus/symaira-vault/cmd/crud"
 )
 
 func TestAddCommand_HiddenPassword(t *testing.T) {

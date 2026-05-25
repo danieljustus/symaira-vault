@@ -1,0 +1,70 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-device-join - Join an existing vault as a new device
+
+
+.SH SYNOPSIS
+\fBsymaira device join   [flags]\fP
+
+
+.SH DESCRIPTION
+Join an existing vault from a remote git repository.
+
+.PP
+Clones the vault repository, reads the pairing token file to obtain
+the existing device's public key, generates a new identity for this device,
+and submits this device's public key back to the vault.
+
+.PP
+After completion, the existing device must run 'openpass device accept \&'
+to re-encrypt all entries for this new device.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for join
+
+.PP
+\fB--name\fP=""
+	Name for this device (defaults to hostname)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  openpass device join ssh://user@host/path/to/vault.git 123456
+.EE
+
+
+.SH SEE ALSO
+\fBsymaira-device(1)\fP

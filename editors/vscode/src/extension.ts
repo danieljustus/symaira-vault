@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { OpenPassMCPClient, OpenPassTools } from "@openpass/mcp-client";
+import { SymairaMCPClient, SymairaTools } from "@symaira/mcp-client";
 import { VaultTreeProvider } from "./sidebar/vaultTreeProvider";
 import { VaultTreeItem } from "./sidebar/vaultTreeItem";
 import { insertSecret } from "./commands/insertSecret";
@@ -9,8 +9,8 @@ import { quickPickVault } from "./commands/quickPickVault";
 import { MCPStatusBar } from "./statusbar/mcpStatusBar";
 import { EnvVarCompletionProvider } from "./quickinsert/envVarProvider";
 
-let client: OpenPassMCPClient | undefined;
-let tools: OpenPassTools | undefined;
+let client: SymairaMCPClient | undefined;
+let tools: SymairaTools | undefined;
 let treeProvider: VaultTreeProvider | undefined;
 let statusBar: MCPStatusBar | undefined;
 let completionDisposable: vscode.Disposable | undefined;
@@ -21,7 +21,7 @@ function getConfig(): {
   agentName: string;
   timeoutMs: number;
 } {
-  const config = vscode.workspace.getConfiguration("openpass");
+  const config = vscode.workspace.getConfiguration("symaira");
   return {
     baseUrl: config.get<string>("baseUrl", "http://127.0.0.1:8080"),
     vaultPath: config.get<string>("vaultPath", ""),
@@ -30,9 +30,9 @@ function getConfig(): {
   };
 }
 
-function createClient(): OpenPassMCPClient {
+function createClient(): SymairaMCPClient {
   const cfg = getConfig();
-  return new OpenPassMCPClient({
+  return new SymairaMCPClient({
     baseUrl: cfg.baseUrl,
     agentName: cfg.agentName,
     vaultPath: cfg.vaultPath || undefined,
@@ -41,14 +41,14 @@ function createClient(): OpenPassMCPClient {
 }
 
 export function activate(context: vscode.ExtensionContext): void {
-  void vscode.commands.executeCommand("setContext", "openpass.enabled", true);
+  void vscode.commands.executeCommand("setContext", "symaira.enabled", true);
 
   client = createClient();
-  tools = new OpenPassTools(client);
+  tools = new SymairaTools(client);
   treeProvider = new VaultTreeProvider(tools);
   statusBar = new MCPStatusBar(client);
 
-  const treeView = vscode.window.createTreeView("openpass.vault", {
+  const treeView = vscode.window.createTreeView("symaira.vault", {
     treeDataProvider: treeProvider,
     showCollapseAll: true,
   });
@@ -59,21 +59,21 @@ export function activate(context: vscode.ExtensionContext): void {
   completionDisposable = vscode.languages.registerCompletionItemProvider(
     [{ scheme: "file" }, { scheme: "untitled" }],
     completionProvider,
-    "${openpass:"
+    "${symaira:"
   );
 
   const commands: vscode.Disposable[] = [
-    vscode.commands.registerCommand("openpass.refreshVault", () => {
+    vscode.commands.registerCommand("symaira.refreshVault", () => {
       treeProvider?.refresh();
     }),
-    vscode.commands.registerCommand("openpass.openSettings", () => {
+    vscode.commands.registerCommand("symaira.openSettings", () => {
       void vscode.commands.executeCommand(
         "workbench.action.openSettings",
-        "openpass"
+        "symaira"
       );
     }),
     vscode.commands.registerCommand(
-      "openpass.insertSecret",
+      "symaira.insertSecret",
       (item?: VaultTreeItem) => {
         const path = item?.path;
         if (path) {
@@ -84,7 +84,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     ),
     vscode.commands.registerCommand(
-      "openpass.copyToClipboard",
+      "symaira.copyToClipboard",
       (item?: VaultTreeItem) => {
         const path = item?.path;
         if (path) {
@@ -94,26 +94,26 @@ export function activate(context: vscode.ExtensionContext): void {
         }
       }
     ),
-    vscode.commands.registerCommand("openpass.generatePassword", () => {
+    vscode.commands.registerCommand("symaira.generatePassword", () => {
       void generatePassword(tools!);
     }),
-    vscode.commands.registerCommand("openpass.quickPickVault", () => {
+    vscode.commands.registerCommand("symaira.quickPickVault", () => {
       void quickPickVault(tools!);
     }),
   ];
 
   const configChangeDisposable = vscode.workspace.onDidChangeConfiguration(
     (event) => {
-      if (event.affectsConfiguration("openpass")) {
+      if (event.affectsConfiguration("symaira")) {
         client?.close();
         client = createClient();
-        tools = new OpenPassTools(client);
+        tools = new SymairaTools(client);
         treeProvider = new VaultTreeProvider(tools);
         statusBar?.dispose();
         statusBar = new MCPStatusBar(client);
         statusBar.show();
         treeView.dispose();
-        void vscode.window.createTreeView("openpass.vault", {
+        void vscode.window.createTreeView("symaira.vault", {
           treeDataProvider: treeProvider,
           showCollapseAll: true,
         });

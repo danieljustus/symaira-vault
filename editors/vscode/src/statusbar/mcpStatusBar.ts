@@ -1,19 +1,19 @@
 import * as vscode from "vscode";
-import { OpenPassMCPClient } from "@openpass/mcp-client";
+import { SymairaMCPClient } from "@symaira/mcp-client";
 
 export class MCPStatusBar {
   private statusBarItem: vscode.StatusBarItem;
-  private client: OpenPassMCPClient;
+  private client: SymairaMCPClient;
   private refreshInterval: NodeJS.Timeout | undefined;
   private isConnected = false;
 
-  constructor(client: OpenPassMCPClient) {
+  constructor(client: SymairaMCPClient) {
     this.client = client;
     this.statusBarItem = vscode.window.createStatusBarItem(
       vscode.StatusBarAlignment.Right,
       100
     );
-    this.statusBarItem.command = "openpass.quickPickVault";
+    this.statusBarItem.command = "symaira.quickPickVault";
     this.updateStatus(false);
   }
 
@@ -52,13 +52,13 @@ export class MCPStatusBar {
   private updateStatus(connected: boolean): void {
     this.isConnected = connected;
     if (connected) {
-      this.statusBarItem.text = "$(shield) OpenPass";
+      this.statusBarItem.text = "$(shield) Symaira Vault";
       this.statusBarItem.backgroundColor = undefined;
-      this.statusBarItem.tooltip = "OpenPass MCP server is connected. Click to open vault.";
+      this.statusBarItem.tooltip = "Symaira Vault MCP server is connected. Click to open vault.";
     } else {
-      this.statusBarItem.text = "$(shield-x) OpenPass";
+      this.statusBarItem.text = "$(shield-x) Symaira Vault";
       this.statusBarItem.backgroundColor = new vscode.ThemeColor("statusBarItem.errorBackground");
-      this.statusBarItem.tooltip = "OpenPass MCP server is unreachable. Check that 'openpass serve' is running.";
+      this.statusBarItem.tooltip = "Symaira Vault MCP server is unreachable. Check that 'symaira serve' is running.";
     }
   }
 

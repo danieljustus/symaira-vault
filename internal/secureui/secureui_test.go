@@ -30,7 +30,7 @@ func TestFormatPrompt(t *testing.T) {
 		{"path-field-desc", PromptRequest{Path: "github", Field: "token", Description: "Why?"}, "Why?\n\nEntry: github\nField: token"},
 		{"path-field-only", PromptRequest{Path: "github", Field: "token"}, "Entry: github\nField: token"},
 		{"desc-only", PromptRequest{Description: "Why?"}, "Why?"},
-		{"empty", PromptRequest{}, "OpenPass requires a value."},
+		{"empty", PromptRequest{}, "Symaira Vault requires a value."},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

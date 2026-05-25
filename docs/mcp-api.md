@@ -1,6 +1,6 @@
-# OpenPass MCP API Documentation
+# Symaira Vault MCP API Documentation
 
-This document provides comprehensive API documentation for the OpenPass Model Context Protocol (MCP) server, enabling agent developers to integrate with OpenPass securely.
+This document provides comprehensive API documentation for the Symaira Vault Model Context Protocol (MCP) server, enabling agent developers to integrate with Symaira Vault securely.
 
 ## Table of Contents
 
@@ -18,7 +18,7 @@ This document provides comprehensive API documentation for the OpenPass Model Co
 
 ## Overview
 
-OpenPass exposes a Model Context Protocol (MCP) server that allows AI agents to securely read and optionally write password vault entries. The MCP server supports both stdio (standard input/output) and HTTP transports.
+Symaira Vault exposes a Model Context Protocol (MCP) server that allows AI agents to securely read and optionally write password vault entries. The MCP server supports both stdio (standard input/output) and HTTP transports.
 
 ### Key Features
 
@@ -33,7 +33,7 @@ OpenPass exposes a Model Context Protocol (MCP) server that allows AI agents to 
 | Tool | Description | Write Operation |
 |------|-------------|-----------------|
 | `health` | Check server health status | No |
-| `get_auth_status` | Check OpenPass unlock auth status | No |
+| `get_auth_status` | Check Symaira Vault unlock auth status | No |
 | `set_auth_method` | Change unlock auth method | Config write |
 | `list_entries` | List all vault entries | No |
 | `get_entry` | Retrieve entry contents | No |
@@ -73,14 +73,14 @@ Authorization: Bearer <token>
 #### Agent Identification Header
 
 ```
-X-OpenPass-Agent: <agent-profile-name>
+X-Symaira Vault-Agent: <agent-profile-name>
 ```
 
 #### Example Request
 
 ```bash
 curl -H "Authorization: Bearer $(cat ~/.openpass/mcp-token)" \
-     -H "X-OpenPass-Agent: claude-code" \
+     -H "X-Symaira Vault-Agent: claude-code" \
      -H "Content-Type: application/json" \
      -X POST \
      -d '{"tool": "list_entries", "arguments": {}}' \
@@ -101,7 +101,7 @@ The agent name must match a profile in the vault configuration.
 
 ## OAuth 2.1 with PKCE and DCR
 
-OpenPass implements [OAuth 2.1](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1) with [PKCE](https://datatracker.ietf.org/doc/html/rfc7636) and [Dynamic Client Registration](https://datatracker.ietf.org/doc/html/rfc7591) (DCR). This allows MCP clients that support DCR (such as opencode) to automatically register with the OpenPass MCP server and obtain scoped tokens without manual token management.
+Symaira Vault implements [OAuth 2.1](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1) with [PKCE](https://datatracker.ietf.org/doc/html/rfc7636) and [Dynamic Client Registration](https://datatracker.ietf.org/doc/html/rfc7591) (DCR). This allows MCP clients that support DCR (such as opencode) to automatically register with the Symaira Vault MCP server and obtain scoped tokens without manual token management.
 
 ### OAuth Flow Overview
 
@@ -131,7 +131,7 @@ Content-Type: application/json
 {
   "resource": "http://127.0.0.1:8080/mcp",
   "bearer_methods_supported": ["header"],
-  "resource_name": "OpenPass MCP Server"
+  "resource_name": "Symaira Vault MCP Server"
 }
 ```
 
@@ -270,7 +270,7 @@ With this configuration, `opencode mcp auth openpass` will:
       "url": "http://127.0.0.1:8080/mcp",
       "headers": {
         "Authorization": "Bearer YOUR_OPENPASS_TOKEN",
-        "X-OpenPass-Agent": "opencode"
+        "X-Symaira Vault-Agent": "opencode"
       },
       "oauth": false
     }
@@ -382,7 +382,7 @@ backend.
 
 Set the unlock method to `passphrase` or `touchid`. The calling agent profile
 must set `canManageConfig: true`. MCP never accepts a passphrase from the agent;
-Touch ID setup requires an already active OpenPass session.
+Touch ID setup requires an already active Symaira Vault session.
 
 **Request**:
 
@@ -983,7 +983,7 @@ Delete a password entry. Requires write permission.
 
 ## MCP Prompts
 
-OpenPass advertises the MCP `prompts` capability. In MCP clients that surface
+Symaira Vault advertises the MCP `prompts` capability. In MCP clients that surface
 prompts as slash commands (Claude Code, OpenCode, Hermes, …) four guided
 credential workflows become available once the server is connected. The server
 implements the standard `prompts/list` and `prompts/get` JSON-RPC methods.
@@ -1089,7 +1089,7 @@ prompt's argument schema.
 | `approval_required` | 403 | Operation requires approval | `approvalMode: prompt` degrades to deny in MCP |
 | `rate_limited` | 429 | Too many requests | Wait and retry |
 | `internal_error` | 500 | Server error | Check server logs, restart server |
-| `not_implemented` | 501 | Tool not available | Verify OpenPass version |
+| `not_implemented` | 501 | Tool not available | Verify Symaira Vault version |
 
 ### Common Error Scenarios
 
@@ -1147,7 +1147,7 @@ openpass unlock
 
 ## Rate Limiting
 
-OpenPass implements rate limiting to prevent abuse and ensure fair resource usage.
+Symaira Vault implements rate limiting to prevent abuse and ensure fair resource usage.
 
 ### Limits
 
@@ -1221,7 +1221,7 @@ agents:
 
 ### Built-in Profiles
 
-OpenPass includes several pre-configured profiles:
+Symaira Vault includes several pre-configured profiles:
 
 | Profile | `allowedPaths` | `canWrite` | `canRunCommands` | `canUseClipboard` | `canUseAutotype` | Use Case |
 |---------|----------------|------------|-------------------|-------------------|-------------------|----------|
@@ -1438,21 +1438,21 @@ curl -s "$BASE_URL/health" | jq .
 # List entries
 curl -s -X POST "$BASE_URL/mcp" \
   -H "Authorization: Bearer $TOKEN" \
-  -H "X-OpenPass-Agent: $AGENT" \
+  -H "X-Symaira Vault-Agent: $AGENT" \
   -H "Content-Type: application/json" \
   -d '{"tool": "list_entries", "arguments": {}}' | jq .
 
 # Get entry
 curl -s -X POST "$BASE_URL/mcp" \
   -H "Authorization: Bearer $TOKEN" \
-  -H "X-OpenPass-Agent: $AGENT" \
+  -H "X-Symaira Vault-Agent: $AGENT" \
   -H "Content-Type: application/json" \
   -d '{"tool": "get_entry", "arguments": {"path": "github"}}' | jq .
 
 # Generate password
 curl -s -X POST "$BASE_URL/mcp" \
   -H "Authorization: Bearer $TOKEN" \
-  -H "X-OpenPass-Agent: $AGENT" \
+  -H "X-Symaira Vault-Agent: $AGENT" \
   -H "Content-Type: application/json" \
   -d '{"tool": "generate_password", "arguments": {"length": 20}}' | jq .
 ```
@@ -1473,7 +1473,7 @@ echo '{"tool": "list_entries", "arguments": {}}' | openpass serve --stdio --agen
 ### Credential Cache Pattern
 
 ```javascript
-// Pseudocode for credential caching with OpenPass
+// Pseudocode for credential caching with Symaira Vault
 async function getCredential(path) {
   const cached = cache.get(path);
   
@@ -1534,6 +1534,6 @@ async function getCredential(path) {
 
 ---
 
-**Maintainer**: OpenPass Team  
-**Repository**: https://github.com/danieljustus/OpenPass  
-**Security**: Report security issues via [GitHub Security Advisories](https://github.com/danieljustus/OpenPass/security/advisories/new)
+**Maintainer**: Symaira Vault Team  
+**Repository**: https://github.com/danieljustus/symaira-vault  
+**Security**: Report security issues via [GitHub Security Advisories](https://github.com/danieljustus/symaira-vault/security/advisories/new)

@@ -1,0 +1,43 @@
+.nh
+.TH "SYMAIRA" "1" "Apr 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-update-check - Check GitHub for a newer OpenPass release
+
+
+.SH SYNOPSIS
+\fBsymaira update check [flags]\fP
+
+
+.SH DESCRIPTION
+Check GitHub for a newer OpenPass release
+
+
+.SH OPTIONS
+\fB--force\fP[=false]
+	bypass cache and force a fresh check
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for check
+
+.PP
+\fB--json\fP[=false]
+	output update check result as JSON
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-essential output (exit code 1 if update available)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH SEE ALSO
+\fBsymaira-update(1)\fP

@@ -3,7 +3,7 @@
 package session
 
 import (
-	"github.com/danieljustus/OpenPass/internal/logging"
+	"github.com/danieljustus/symaira-vault/internal/logging"
 )
 
 var memoryFallbackActive bool

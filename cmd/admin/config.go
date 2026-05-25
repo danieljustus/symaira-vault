@@ -6,12 +6,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
-	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 )
 
 var (
@@ -23,25 +23,25 @@ const exitConfigError errorspkg.ExitCode = 6
 
 var configCmd = &cobra.Command{
 	Use:   "config",
-	Short: "Manage OpenPass configuration",
-	Long:  `Manage OpenPass configuration including validation, profiles, and key-value editing.`,
+	Short: "Manage Symaira Vault configuration",
+	Long:  `Manage Symaira Vault configuration including validation, profiles, and key-value editing.`,
 	Example: `  # Validate the default config file
-  openpass config validate
+  symaira config validate
 
   # Validate a specific file
-  openpass config validate ~/custom-config.yaml
+  symaira config validate ~/custom-config.yaml
 
   # Get a config value
-  openpass config get vaultDir
+  symaira config get vaultDir
 
   # Set a config value
-  openpass config set agents.claude-code.canWrite true
+  symaira config set agents.claude-code.canWrite true
 
   # List all config
-  openpass config list
+  symaira config list
 
   # JSON output
-  openpass config validate --output json`,
+  symaira config validate --output json`,
 	Annotations: map[string]string{
 		cli.RequiresVaultAnnotation: "false",
 	},
@@ -50,9 +50,9 @@ var configCmd = &cobra.Command{
 var configValidateCmd = &cobra.Command{
 	Use:   "validate [path]",
 	Short: "Validate the configuration file",
-	Long: `Validate the OpenPass configuration file for schema errors.
+	Long: `Validate the Symaira Vault configuration file for schema errors.
 
-If no path is given, validates the default config at ~/.openpass/config.yaml.`,
+If no path is given, validates the default config at ~/.symaira/config.yaml.`,
 	Args: cobra.MaximumNArgs(1),
 	Annotations: map[string]string{
 		cli.RequiresVaultAnnotation: "false",
@@ -66,7 +66,7 @@ If no path is given, validates the default config at ~/.openpass/config.yaml.`,
 			if err != nil {
 				return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "cannot determine home directory", err)
 			}
-			path = filepath.Join(home, ".openpass", "config.yaml")
+			path = filepath.Join(home, ".symaira", "config.yaml")
 		}
 
 		cfg, err := configpkg.Load(path)
@@ -120,7 +120,7 @@ func resolveConfigPath(_ []string) string {
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".openpass", "config.yaml")
+	return filepath.Join(home, ".symaira", "config.yaml")
 }
 
 func ConfigKeyCompletionFunc(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -143,9 +143,9 @@ var configGetCmd = &cobra.Command{
 	Long: `Get the value of a configuration key using dotted path notation.
 
 Examples:
-  openpass config get vaultDir
-  openpass config get agents.claude-code.canWrite
-  openpass config get mcp.port`,
+  symaira config get vaultDir
+  symaira config get agents.claude-code.canWrite
+  symaira config get mcp.port`,
 	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: ConfigKeyCompletionFunc,
 	Annotations: map[string]string{
@@ -185,10 +185,10 @@ The value is automatically parsed as YAML to infer types: true/false for boolean
 numbers for integers, and quoted strings for text.
 
 Examples:
-  openpass config set vaultDir ~/my-vault
-  openpass config set agents.claude-code.canWrite true
-  openpass config set mcp.port 9090
-  openpass config set clipboard.auto_clear_duration 60`,
+  symaira config set vaultDir ~/my-vault
+  symaira config set agents.claude-code.canWrite true
+  symaira config set mcp.port 9090
+  symaira config set clipboard.auto_clear_duration 60`,
 	Args:              cobra.ExactArgs(2),
 	ValidArgsFunction: ConfigKeyCompletionFunc,
 	Annotations: map[string]string{
@@ -227,7 +227,7 @@ Examples:
 var configListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "Show all configuration values",
-	Long: `Display the entire OpenPass configuration in YAML format.
+	Long: `Display the entire Symaira Vault configuration in YAML format.
 
 This shows the raw config file contents as-is.`,
 	Args: cobra.NoArgs,
@@ -252,9 +252,9 @@ This shows the raw config file contents as-is.`,
 func init() {
 	configValidateCmd.Flags().BoolVar(&ConfigValidateJSON, "json", false, "output validation result as JSON (deprecated: use --output=json)")
 
-	configGetCmd.Flags().StringVar(&ConfigFile, "file", "", "path to config file (default: ~/.openpass/config.yaml)")
-	configSetCmd.Flags().StringVar(&ConfigFile, "file", "", "path to config file (default: ~/.openpass/config.yaml)")
-	configListCmd.Flags().StringVar(&ConfigFile, "file", "", "path to config file (default: ~/.openpass/config.yaml)")
+	configGetCmd.Flags().StringVar(&ConfigFile, "file", "", "path to config file (default: ~/.symaira/config.yaml)")
+	configSetCmd.Flags().StringVar(&ConfigFile, "file", "", "path to config file (default: ~/.symaira/config.yaml)")
+	configListCmd.Flags().StringVar(&ConfigFile, "file", "", "path to config file (default: ~/.symaira/config.yaml)")
 
 	configCmd.AddCommand(configValidateCmd)
 	configCmd.AddCommand(configGetCmd)

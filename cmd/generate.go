@@ -6,9 +6,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
-	"github.com/danieljustus/OpenPass/internal/crypto"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
+	"github.com/danieljustus/symaira-vault/internal/crypto"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 var (
@@ -24,13 +24,13 @@ var generateCmd = &cobra.Command{
 	Aliases: []string{"gen"},
 	Short:   "Generate a secure password",
 	Example: `  # Generate a 20-character password
-  openpass generate --length 20
+  symaira generate --length 20
 
   # Include symbols
-  openpass generate --length 32 --symbols
+  symaira generate --length 32 --symbols
 
   # Generate and store
-  openpass generate --store newaccount.password`,
+  symaira generate --store newaccount.password`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		password, cleanup, err := generatePassword(genLength, genSymbols)
 		if err != nil {

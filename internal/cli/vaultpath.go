@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
-	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 )
 
 func VaultPath() (string, error) {
@@ -48,7 +48,7 @@ func VaultPath() (string, error) {
 
 	home, err := os.UserHomeDir()
 	if err == nil {
-		cfg, cfgErr := configpkg.Load(filepath.Join(home, ".openpass", "config.yaml"))
+		cfg, cfgErr := configpkg.Load(filepath.Join(home, ".symaira", "config.yaml"))
 		if cfgErr == nil && cfg.DefaultProfile != "" {
 			p, profErr := resolveProfileVaultDir(cfg.DefaultProfile)
 			if profErr == nil {
@@ -70,7 +70,7 @@ func resolveProfileVaultDir(profileName string) (string, error) {
 		return "", err
 	}
 
-	cfg, err := configpkg.Load(filepath.Join(home, ".openpass", "config.yaml"))
+	cfg, err := configpkg.Load(filepath.Join(home, ".symaira", "config.yaml"))
 	if err != nil {
 		return "", fmt.Errorf("cannot load config: %w", err)
 	}
@@ -105,7 +105,7 @@ func GetVaultDir() string {
 	dir, err := VaultPath()
 	if err != nil {
 		home, _ := os.UserHomeDir()
-		return home + "/.openpass"
+		return home + "/.symaira"
 	}
 	return dir
 }

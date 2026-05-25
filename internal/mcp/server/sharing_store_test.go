@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	openpasscrypto "github.com/danieljustus/OpenPass/internal/crypto"
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
+	openpasscrypto "github.com/danieljustus/symaira-vault/internal/crypto"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 )
 
 func TestShareStore_CreateGet_Roundtrip(t *testing.T) {
@@ -717,7 +717,7 @@ func TestShareStore_SaveFilePermissions(t *testing.T) {
 }
 
 func TestShareStore_Create_WriteError(t *testing.T) {
-	path := filepath.Join("/nonexistent-share-store-dir-openpass", "mcp-shares.json")
+	path := filepath.Join("/nonexistent-share-store-dir-symaira", "mcp-shares.json")
 	store := NewShareStore(path)
 
 	_, err := store.Create("a", "b", "path", "", 0)

@@ -1,0 +1,61 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-mcp - MCP server commands
+
+
+.SH SYNOPSIS
+\fBsymaira mcp [flags]\fP
+
+
+.SH DESCRIPTION
+Commands for managing the Model Context Protocol (MCP) server integration.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for mcp
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Generate a per-tool token
+  openpass mcp token create --name "ide-tools" --tools list,get
+
+  # List configured tokens
+  openpass mcp token list
+.EE
+
+
+.SH SEE ALSO
+\fBopenpass(1)\fP, \fBsymaira-mcp-install(1)\fP, \fBsymaira-mcp-token(1)\fP

@@ -1,0 +1,36 @@
+.nh
+.TH "SYMAIRA" "1" "Apr 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-completion - Generate the autocompletion script for the specified shell
+
+
+.SH SYNOPSIS
+\fBsymaira completion [flags]\fP
+
+
+.SH DESCRIPTION
+Generate the autocompletion script for openpass for the specified shell.
+See each sub-command's help for details on how to use the generated script.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for completion
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH SEE ALSO
+\fBopenpass(1)\fP, \fBsymaira-completion-bash(1)\fP, \fBsymaira-completion-fish(1)\fP, \fBsymaira-completion-powershell(1)\fP, \fBsymaira-completion-zsh(1)\fP

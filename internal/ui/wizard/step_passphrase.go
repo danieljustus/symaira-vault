@@ -7,7 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/danieljustus/OpenPass/internal/crypto"
+	"github.com/danieljustus/symaira-vault/internal/crypto"
 )
 
 const minPassphraseLen = 12

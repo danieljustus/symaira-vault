@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	vaultconfig "github.com/danieljustus/OpenPass/internal/config"
-	"github.com/danieljustus/OpenPass/internal/testutil"
-	"github.com/danieljustus/OpenPass/internal/vault/taint"
+	vaultconfig "github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/testutil"
+	"github.com/danieljustus/symaira-vault/internal/vault/taint"
 )
 
 func TestEntryJSONSerialization(t *testing.T) {

@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/danieljustus/OpenPass/internal/masking"
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
-	"github.com/danieljustus/OpenPass/internal/metrics"
+	"github.com/danieljustus/symaira-vault/internal/masking"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/metrics"
 )
 
 func (s *Server) handleSanitizeOutput(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {

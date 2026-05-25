@@ -11,7 +11,7 @@
 ### 1.1 Direct Dependency Graph
 
 ```
-OpenPass
+Symaira Vault
 ├── github.com/go-git/go-git/v5 v5.18.0 (direct)
 │   └── github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 (indirect)
 │       └── github.com/golang/protobuf v1.5.4 (indirect, DEPRECATED)
@@ -27,7 +27,7 @@ From `go.mod` (lines 7, 12, 48, 70):
 
 ```go
 // github.com/golang/protobuf: v1.5.4 (deprecated, migration to google.golang.org/protobuf needed)
-// OpenPass → go-git → groupcache → golang/protobuf (deprecated)
+// Symaira Vault → go-git → groupcache → golang/protobuf (deprecated)
 
 require (
     github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
@@ -37,9 +37,9 @@ require (
 
 **Key Observation:** `google.golang.org/protobuf v1.36.8` is already present as a transitive dependency. The deprecated `github.com/golang/protobuf v1.5.4` is itself a thin compatibility wrapper around `google.golang.org/protobuf` (since v1.4.0+). Both modules coexist without runtime conflicts.
 
-### 1.3 Why OpenPass Cannot Directly Fix This
+### 1.3 Why Symaira Vault Cannot Directly Fix This
 
-- OpenPass has **zero direct imports** of either protobuf package
+- Symaira Vault has **zero direct imports** of either protobuf package
 - The deprecated dependency enters through **two independent paths**:
   1. `go-git` → `groupcache` → `golang/protobuf`
   2. `grpc` → `golang/protobuf`
@@ -103,7 +103,7 @@ Groupcache still **directly requires** the deprecated module. There is no branch
 | `ksong0xd/groupcache` | **Migrated** to proto3 + `google.golang.org/protobuf`. | Adds gRPC, Kubernetes dependencies; heavily diverged from upstream |
 | `modernprogram/groupcache` | Fork of `mailgun/groupcache`; unclear if protobuf migrated. | Active releases (latest Jan 2026), but still appears to use deprecated dep |
 
-### 3.2 Why Fork Substitution Is Not Viable for OpenPass
+### 3.2 Why Fork Substitution Is Not Viable for Symaira Vault
 
 - `go-git` explicitly imports `github.com/golang/groupcache` — not a fork
 - Swapping the module path requires a `replace` directive or forking `go-git` itself
@@ -120,7 +120,7 @@ Groupcache still **directly requires** the deprecated module. There is no branch
 | go-git v6 (in dev) | Still shows `github.com/golang/groupcache` in dependency tree |
 | go-git activity | High — active development, but no move away from groupcache |
 
-go-git is a widely used library (7K+ stars, consumed by Kubernetes ecosystem, Gitea, Pulumi). If go-git moves away from groupcache, that would break the chain for OpenPass automatically. However, there is **no indication** go-git plans to replace groupcache.
+go-git is a widely used library (7K+ stars, consumed by Kubernetes ecosystem, Gitea, Pulumi). If go-git moves away from groupcache, that would break the chain for Symaira Vault automatically. However, there is **no indication** go-git plans to replace groupcache.
 
 ---
 
@@ -179,7 +179,7 @@ Wait for one of these events:
 Options:
 1. **Open PR to `golang/groupcache`** — Requires protobuf regeneration, testing, and maintainer review. Given repo inactivity, merge is uncertain.
 2. **Open PR to `go-git`** — Replace groupcache or vendor a patched version. High review bar; may be rejected as out of scope.
-3. **`replace` directive in OpenPass `go.mod`** — Pin to a forked groupcache. Fragile; breaks `go install` from remote; creates maintenance burden.
+3. **`replace` directive in Symaira Vault `go.mod`** — Pin to a forked groupcache. Fragile; breaks `go install` from remote; creates maintenance burden.
 
 **Why this is NOT recommended:** The cost/benefit ratio is poor. The problem is cosmetic (deprecated flag), not functional.
 
@@ -201,17 +201,17 @@ Acknowledge the deprecated transitive dependency, document it, and move on. Re-a
 1. **No functional impact.** `github.com/golang/protobuf v1.5.4` is a maintained compatibility wrapper. Builds pass. Tests pass. No CVEs.
 2. **No viable upstream path.** `groupcache` issue #150 has been open since 2021 with zero maintainer engagement. The repository is effectively in maintenance-only mode.
 3. **Intervention is disproportionately expensive.** Forcing a replacement would require either patching two upstream projects (`groupcache` + `go-git`) or maintaining a fork, all to remove a deprecation warning on a transitive dependency.
-4. **Natural resolution is possible.** If `go-git` ever drops `groupcache`, or the Go ecosystem coalesces around an active fork, this resolves without OpenPass taking any action.
+4. **Natural resolution is possible.** If `go-git` ever drops `groupcache`, or the Go ecosystem coalesces around an active fork, this resolves without Symaira Vault taking any action.
 
 ### Action Items
 
 | Action | Owner | Frequency |
 |--------|-------|-----------|
-| Re-audit dependency tree for groupcache/protobuf changes | OpenPass maintainers | Every 6 months |
-| Monitor `golang/groupcache#150` for any activity | OpenPass maintainers | Ad hoc |
-| Monitor `go-git` release notes for groupcache replacement | OpenPass maintainers | Per go-git update |
-| Monitor `grpc` release notes for protobuf migration | OpenPass maintainers | Per grpc update |
-| Update this document if upstream situation changes | OpenPass maintainers | As needed |
+| Re-audit dependency tree for groupcache/protobuf changes | Symaira Vault maintainers | Every 6 months |
+| Monitor `golang/groupcache#150` for any activity | Symaira Vault maintainers | Ad hoc |
+| Monitor `go-git` release notes for groupcache replacement | Symaira Vault maintainers | Per go-git update |
+| Monitor `grpc` release notes for protobuf migration | Symaira Vault maintainers | Per grpc update |
+| Update this document if upstream situation changes | Symaira Vault maintainers | As needed |
 
 ---
 

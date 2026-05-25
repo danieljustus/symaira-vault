@@ -1,4 +1,4 @@
-// Package forms provides interactive Bubble Tea forms for OpenPass CLI operations.
+// Package forms provides interactive Bubble Tea forms for Symaira Vault CLI operations.
 package forms
 
 import (
@@ -10,8 +10,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	cryptopkg "github.com/danieljustus/OpenPass/internal/crypto"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	cryptopkg "github.com/danieljustus/symaira-vault/internal/crypto"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 const placeholderOptional = "optional"

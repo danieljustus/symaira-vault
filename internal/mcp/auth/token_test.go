@@ -160,7 +160,7 @@ func TestLoadOrCreateToken_RandError(t *testing.T) {
 
 func TestLoadOrCreateToken_WriteFileError(t *testing.T) {
 	t.Setenv("OPENPASS_MCP_TOKEN", "")
-	path := filepath.Join("/nonexistent-dir-openpass-test", "mcp-token")
+	path := filepath.Join("/nonexistent-dir-symaira-test", "mcp-token")
 	_, err := LoadOrCreateToken(path)
 	if err == nil {
 		t.Fatal("expected error from WriteFile failure")
@@ -651,14 +651,14 @@ func TestTokenRegistry_IsToolAllowed_ExactMatch(t *testing.T) {
 
 func TestTokenRegistry_IsToolAllowed_AliasNames(t *testing.T) {
 	tok := &ScopedToken{
-		AllowedTools: []string{"delete_entry", "openpass_delete"},
+		AllowedTools: []string{"delete_entry", "symaira_delete"},
 	}
 
 	if !tok.IsToolAllowed("delete_entry") {
 		t.Error("should allow delete_entry")
 	}
-	if !tok.IsToolAllowed("openpass_delete") {
-		t.Error("should allow openpass_delete")
+	if !tok.IsToolAllowed("symaira_delete") {
+		t.Error("should allow symaira_delete")
 	}
 }
 
@@ -772,7 +772,7 @@ func TestTokenRegistry_Create_RandError(t *testing.T) {
 }
 
 func TestTokenRegistry_Create_WriteError(t *testing.T) {
-	path := filepath.Join("/nonexistent-registry-dir-openpass", "mcp-tokens.json")
+	path := filepath.Join("/nonexistent-registry-dir-symaira", "mcp-tokens.json")
 	reg := NewTokenRegistry(path)
 
 	_, _, err := reg.Create("test", []string{"*"}, "", 0)

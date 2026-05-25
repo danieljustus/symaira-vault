@@ -1,5 +1,5 @@
 {
-  description = "OpenPass — modern CLI password manager with age encryption";
+  description = "Symaira Vault — modern CLI password manager with age encryption";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -15,7 +15,7 @@
       in
       {
         packages.default = pkgs.buildGoModule {
-          pname = "openpass";
+          pname = "symaira";
           version = self.version or "dev";
 
           src = ./.;
@@ -37,11 +37,11 @@
 
           meta = with pkgs.lib; {
             description = "Modern CLI password manager with age encryption";
-            homepage = "https://github.com/danieljustus/OpenPass";
+            homepage = "https://github.com/danieljustus/symaira-vault";
             license = licenses.mit;
             maintainers = [ ];
             platforms = platforms.linux ++ platforms.darwin;
-            mainProgram = "openpass";
+            mainProgram = "symaira";
           };
         };
 

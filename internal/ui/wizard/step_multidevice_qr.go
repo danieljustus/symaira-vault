@@ -9,8 +9,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/danieljustus/OpenPass/internal/pairing"
-	"github.com/danieljustus/OpenPass/internal/ui"
+	"github.com/danieljustus/symaira-vault/internal/pairing"
+	"github.com/danieljustus/symaira-vault/internal/ui"
 )
 
 // PairingQRStep shows a QR code with pairing token after vault init
@@ -67,7 +67,7 @@ func (s *PairingQRStep) Init() tea.Cmd {
 		return nil
 	}
 
-	pairingDir := s.state.VaultDir + "/.openpass/pairing"
+	pairingDir := s.state.VaultDir + "/.symaira/pairing"
 	if err := os.MkdirAll(pairingDir, 0o700); err != nil {
 		s.errMsg = fmt.Sprintf("create pairing dir: %v", err)
 		return nil
@@ -128,10 +128,10 @@ func (s *PairingQRStep) View() string {
 		"",
 		"On the second device, run:",
 		"",
-		fmt.Sprintf("  %s", focusedStyle.Render("openpass device add --pair \""+qrData+"\"")),
+		fmt.Sprintf("  %s", focusedStyle.Render("symaira device add --pair \""+qrData+"\"")),
 		"",
 		dimStyle.Render("After the second device has joined, run on this device:"),
-		fmt.Sprintf("  %s", focusedStyle.Render("openpass device accept "+string(s.token))),
+		fmt.Sprintf("  %s", focusedStyle.Render("symaira device accept "+string(s.token))),
 		"",
 		helpStyle.Render("Enter or Q to continue"),
 	}

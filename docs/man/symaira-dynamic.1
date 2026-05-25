@@ -1,0 +1,66 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-dynamic - Generate dynamic secrets with time-limited leases
+
+
+.SH SYNOPSIS
+\fBsymaira dynamic [flags]\fP
+
+
+.SH DESCRIPTION
+Generate dynamic secrets with time-limited leases for various backends.
+
+.PP
+Supported engines:
+  postgres  - Create temporary PostgreSQL users with GRANT role
+  aws-sts   - Generate temporary AWS STS credentials via AssumeRole
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for dynamic
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Generate temporary PostgreSQL credentials valid for 1h
+  openpass dynamic generate postgres --role analyst --ttl 1h
+
+  # Short-lived AWS STS session
+  openpass dynamic generate aws-sts --role arn:aws:iam::123:role/dev --ttl 15m
+.EE
+
+
+.SH SEE ALSO
+\fBopenpass(1)\fP, \fBsymaira-dynamic-generate(1)\fP

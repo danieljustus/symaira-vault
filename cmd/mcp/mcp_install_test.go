@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
+	auth "github.com/danieljustus/symaira-vault/internal/mcp/auth"
 )
 
 func TestBuildHTTPServerConfig_DryRun(t *testing.T) {

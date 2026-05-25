@@ -50,7 +50,7 @@ int touch_id_authenticate(char *reason) {
 	return result;
 }
 
-static CFMutableDictionaryRef openpass_biometric_query(char *service_c, char *account_c) {
+static CFMutableDictionaryRef symaira_biometric_query(char *service_c, char *account_c) {
 	CFMutableDictionaryRef query = CFDictionaryCreateMutable(NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
 	if (query == NULL) {
 		return NULL;
@@ -79,7 +79,7 @@ static CFMutableDictionaryRef openpass_biometric_query(char *service_c, char *ac
 }
 
 int touch_id_store_passphrase(char *service_c, char *account_c, char *passphrase_c) {
-	CFMutableDictionaryRef query = openpass_biometric_query(service_c, account_c);
+	CFMutableDictionaryRef query = symaira_biometric_query(service_c, account_c);
 	if (query == NULL) {
 		return errSecParam;
 	}
@@ -107,7 +107,7 @@ int touch_id_load_passphrase(char *service_c, char *account_c, char *reason_c, c
 	}
 	*passphrase_out = NULL;
 
-	CFMutableDictionaryRef checkQuery = openpass_biometric_query(service_c, account_c);
+	CFMutableDictionaryRef checkQuery = symaira_biometric_query(service_c, account_c);
 	if (checkQuery == NULL) {
 		return errSecParam;
 	}
@@ -155,7 +155,7 @@ int touch_id_load_passphrase(char *service_c, char *account_c, char *reason_c, c
 		return errSecAuthFailed;
 	}
 
-	CFMutableDictionaryRef query = openpass_biometric_query(service_c, account_c);
+	CFMutableDictionaryRef query = symaira_biometric_query(service_c, account_c);
 	if (query == NULL) {
 		return errSecParam;
 	}
@@ -191,7 +191,7 @@ int touch_id_load_passphrase(char *service_c, char *account_c, char *reason_c, c
 }
 
 int touch_id_delete_passphrase(char *service_c, char *account_c) {
-	CFMutableDictionaryRef query = openpass_biometric_query(service_c, account_c);
+	CFMutableDictionaryRef query = symaira_biometric_query(service_c, account_c);
 	if (query == NULL) {
 		return errSecParam;
 	}
@@ -257,7 +257,7 @@ func newTouchIDAuthenticator() BiometricAuthenticator {
 const biometricAccount = "passphrase"
 
 func biometricServiceName(vaultDir string) string {
-	return "openpass-biometric:" + vaultDir
+	return "symaira-biometric:" + vaultDir
 }
 
 type touchIDPassphraseStore struct{}
@@ -297,7 +297,7 @@ func (t *touchIDPassphraseStore) Load(ctx context.Context, vaultDir string) ([]b
 
 	service := C.CString(biometricServiceName(vaultDir))
 	account := C.CString(biometricAccount)
-	reason := C.CString("Unlock OpenPass vault")
+	reason := C.CString("Unlock Symaira Vault vault")
 	defer C.free(unsafe.Pointer(service))
 	defer C.free(unsafe.Pointer(account))
 	defer C.free(unsafe.Pointer(reason))

@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	auth "github.com/danieljustus/OpenPass/cmd/auth"
-	cli "github.com/danieljustus/OpenPass/internal/cli"
-	"github.com/danieljustus/OpenPass/internal/config"
-	"github.com/danieljustus/OpenPass/internal/session"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	auth "github.com/danieljustus/symaira-vault/cmd/auth"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/session"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func resetVaultFlag(t *testing.T) {
@@ -90,7 +90,7 @@ func TestVaultPathErrorWhenHomeDirNotAvailable(t *testing.T) {
 	}()
 
 	// Set vault to a path starting with ~ which requires home directory expansion
-	cli.Vault = "~/.openpass"
+	cli.Vault = "~/.symaira"
 
 	// Call vaultPath and verify it returns an error
 	path, err := cli.VaultPath()
@@ -127,15 +127,15 @@ func TestVaultPathSuccessWithTildeExpansion(t *testing.T) {
 	}()
 
 	// Set vault to a path starting with ~
-	cli.Vault = "~/.openpass"
+	cli.Vault = "~/.symaira"
 
 	// Call vaultPath and verify it returns the expanded path
 	path, err := cli.VaultPath()
 	if err != nil {
 		t.Errorf("cli.VaultPath() should not return error, got: %v", err)
 	}
-	if path != "/Users/testuser/.openpass" {
-		t.Errorf("cli.VaultPath() = %s, want /Users/testuser/.openpass", path)
+	if path != "/Users/testuser/.symaira" {
+		t.Errorf("cli.VaultPath() = %s, want /Users/testuser/.symaira", path)
 	}
 }
 
@@ -188,7 +188,7 @@ func TestVaultPathUsesEnvWhenFlagUnchanged(t *testing.T) {
 	origEnv := os.Getenv("OPENPASS_VAULT")
 	defer func() { _ = os.Setenv("OPENPASS_VAULT", origEnv) }()
 
-	cli.Vault = "~/.openpass"
+	cli.Vault = "~/.symaira"
 	_ = os.Setenv("OPENPASS_VAULT", "/env/vault")
 
 	path, err := cli.VaultPath()

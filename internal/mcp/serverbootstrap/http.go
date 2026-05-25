@@ -14,12 +14,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/danieljustus/OpenPass/internal/audit"
-	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
-	mcpserver "github.com/danieljustus/OpenPass/internal/mcp/server"
-	transport "github.com/danieljustus/OpenPass/internal/mcp/transport"
-	"github.com/danieljustus/OpenPass/internal/metrics"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	"github.com/danieljustus/symaira-vault/internal/audit"
+	auth "github.com/danieljustus/symaira-vault/internal/mcp/auth"
+	mcpserver "github.com/danieljustus/symaira-vault/internal/mcp/server"
+	transport "github.com/danieljustus/symaira-vault/internal/mcp/transport"
+	"github.com/danieljustus/symaira-vault/internal/metrics"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 // bufferPool reduces allocations for JSON encoding on the hot path.
@@ -127,7 +127,7 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 				resultChan <- result{err: mcpErr}
 				return
 			}
-			h := mcpserver.NewProtocolHandler("openpass", "1.0.0", mcpSrv)
+			h := mcpserver.NewProtocolHandler("symaira", "1.0.0", mcpSrv)
 
 			cacheMu.Lock()
 			if existing, ok := handlerCache[agentName]; ok {

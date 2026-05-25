@@ -10,9 +10,9 @@ import (
 
 	"filippo.io/age"
 
-	cryptopkg "github.com/danieljustus/OpenPass/internal/crypto"
-	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	cryptopkg "github.com/danieljustus/symaira-vault/internal/crypto"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 // Service defines the high-level vault operations interface.

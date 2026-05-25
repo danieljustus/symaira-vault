@@ -7,7 +7,7 @@ export async function insertSecret(path: string): Promise<void> {
     return;
   }
 
-  const placeholder = `\${openpass:${path}}`;
+  const placeholder = `\${symaira:${path}}`;
 
   await editor.edit((editBuilder) => {
     editBuilder.insert(editor.selection.active, placeholder);

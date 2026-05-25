@@ -1,5 +1,5 @@
 // Package daemon provides cross-platform service management for
-// installing, uninstalling, and checking the status of the OpenPass
+// installing, uninstalling, and checking the status of the Symaira Vault
 // MCP server as a background service (launchd on macOS, systemd on Linux).
 package daemon
 
@@ -15,9 +15,9 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/danieljustus/OpenPass/internal/config"
-	"github.com/danieljustus/OpenPass/internal/envfilter"
-	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/envfilter"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 )
 
 // runFilteredCmd creates an exec.Cmd with environment whitelist filtering
@@ -32,20 +32,20 @@ func runFilteredCmd(name string, args ...string) *exec.Cmd {
 const (
 	// macOS launchd paths
 	launchAgentDir      = "LaunchAgents"
-	launchAgentLabel    = "com.openpass.mcp"
-	launchAgentFileName = "com.openpass.mcp.plist"
+	launchAgentLabel    = "com.symaira.mcp"
+	launchAgentFileName = "com.symaira.mcp.plist"
 	logDir              = "Logs"
-	logFileName         = "openpass-mcp.log"
-	errorLogFileName    = "openpass-mcp.error.log"
+	logFileName         = "symaira-mcp.log"
+	errorLogFileName    = "symaira-mcp.error.log"
 
 	// Linux systemd paths
 	systemdUserDir  = ".config/systemd/user"
-	systemdUnitName = "openpass-mcp.service"
+	systemdUnitName = "symaira-mcp.service"
 )
 
 // Linux systemd service template — values are pre-escaped before rendering
 const systemdTmpl = `[Unit]
-Description=OpenPass MCP Server
+Description=Symaira Vault MCP Server
 
 [Service]
 Type=simple
@@ -204,7 +204,7 @@ type plistRoot struct {
 	Dict    plistDict `xml:"dict"`
 }
 
-// Installer manages the OpenPass MCP background service on the current platform.
+// Installer manages the Symaira Vault MCP background service on the current platform.
 type Installer struct {
 	binaryPath string
 	vaultDir   string
@@ -315,7 +315,7 @@ func (i *Installer) Bind() string {
 	return i.bind
 }
 
-// BinaryPath returns the path to the openpass binary.
+// BinaryPath returns the path to the symaira binary.
 func (i *Installer) BinaryPath() string {
 	return i.binaryPath
 }
@@ -441,7 +441,7 @@ func (i *Installer) writePlist(path string) error {
 		Version: "1.0",
 		Dict: plistDict{
 			Entries: []plistEntry{
-				{Key: "Label", Str: &plistString{Value: "com.openpass.mcp"}},
+				{Key: "Label", Str: &plistString{Value: "com.symaira.mcp"}},
 				{Key: "ProgramArguments", Arr: &plistArray{
 					Items: []plistString{
 						{Value: i.binaryPath},
@@ -507,13 +507,13 @@ func (i *Installer) installLinux() error {
 			err)
 	}
 
-	if out, err := runFilteredCmd("systemctl", "--user", "enable", "openpass-mcp").CombinedOutput(); err != nil {
+	if out, err := runFilteredCmd("systemctl", "--user", "enable", "symaira-mcp").CombinedOutput(); err != nil {
 		return errorspkg.NewCLIError(errorspkg.ExitGeneralError,
 			fmt.Sprintf("systemctl enable failed: %s", strings.TrimSpace(string(out))),
 			err)
 	}
 
-	if out, err := runFilteredCmd("systemctl", "--user", "start", "openpass-mcp").CombinedOutput(); err != nil {
+	if out, err := runFilteredCmd("systemctl", "--user", "start", "symaira-mcp").CombinedOutput(); err != nil {
 		return errorspkg.NewCLIError(errorspkg.ExitGeneralError,
 			fmt.Sprintf("systemctl start failed: %s", strings.TrimSpace(string(out))),
 			err)
@@ -524,8 +524,8 @@ func (i *Installer) installLinux() error {
 
 func (i *Installer) uninstallLinux() error {
 	// Best-effort stop and disable
-	_ = runFilteredCmd("systemctl", "--user", "stop", "openpass-mcp").Run()
-	_ = runFilteredCmd("systemctl", "--user", "disable", "openpass-mcp").Run()
+	_ = runFilteredCmd("systemctl", "--user", "stop", "symaira-mcp").Run()
+	_ = runFilteredCmd("systemctl", "--user", "disable", "symaira-mcp").Run()
 
 	svcPath, err := i.linuxServicePath()
 	if err != nil {
@@ -553,7 +553,7 @@ func (i *Installer) statusLinux() (string, error) {
 		return "not installed", nil
 	}
 
-	out, err := runFilteredCmd("systemctl", "--user", "is-active", "openpass-mcp").CombinedOutput()
+	out, err := runFilteredCmd("systemctl", "--user", "is-active", "symaira-mcp").CombinedOutput()
 	if err != nil {
 		output := strings.TrimSpace(string(out))
 		if output == "inactive" || output == "failed" {

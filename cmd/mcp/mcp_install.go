@@ -8,24 +8,24 @@ import (
 
 	"github.com/spf13/cobra"
 
-	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
-	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
-	"github.com/danieljustus/OpenPass/internal/mcp/install"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	auth "github.com/danieljustus/symaira-vault/internal/mcp/auth"
+	"github.com/danieljustus/symaira-vault/internal/mcp/install"
 )
 
 var mcpInstallCmd = &cobra.Command{
 	Use:   "install [agent]",
-	Short: "[Deprecated v4.0, removed in v4.1] Use 'openpass agent install [agent]'",
-	Long: `This command was deprecated in OpenPass v4.0 and will be removed in v4.1.
+	Short: "[Deprecated v4.0, removed in v4.1] Use 'symaira agent install [agent]'",
+	Long: `This command was deprecated in Symaira Vault v4.0 and will be removed in v4.1.
 
-Use 'openpass agent install [agent]' instead to install and configure
+Use 'symaira agent install [agent]' instead to install and configure
 AI agents with proper security profiles.`,
-	Example: `  openpass agent install [agent]`,
+	Example: `  symaira agent install [agent]`,
 	Hidden:  true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: openpass agent install [agent]\n")
+		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: symaira agent install [agent]\n")
 		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
-			"This command is deprecated in v4.0. Use: openpass agent install [agent]", nil)
+			"This command is deprecated in v4.0. Use: symaira agent install [agent]", nil)
 	},
 }
 
@@ -38,7 +38,7 @@ func buildServerConfig(vDir, agentName string, httpMode, dryRun bool) (map[strin
 
 func buildStdioServerConfig(agentName string) map[string]any {
 	return map[string]any{
-		"command": "openpass",
+		"command": "symaira",
 		"args":    stdioArgs(agentName),
 		"timeout": 120,
 	}
@@ -91,7 +91,7 @@ func buildHTTPServerConfig(vDir, agentName string, dryRun bool) (map[string]any,
 			"Accept":               httpCfg.Header["Accept"],
 			"Authorization":        "Bearer " + rawToken,
 			"MCP-Protocol-Version": httpCfg.Header["MCP-Protocol-Version"],
-			"X-OpenPass-Agent":     httpCfg.Header["X-OpenPass-Agent"],
+			"X-Symaira-Agent":     httpCfg.Header["X-Symaira-Agent"],
 		},
 	}
 

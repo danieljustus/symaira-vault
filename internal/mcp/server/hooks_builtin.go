@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
-	"github.com/danieljustus/OpenPass/internal/metrics"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/metrics"
 )
 
 // ---------------------------------------------------------------------------

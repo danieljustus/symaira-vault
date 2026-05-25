@@ -1,9 +1,9 @@
 import * as vscode from "vscode";
-import { OpenPassTools } from "@openpass/mcp-client";
+import { SymairaTools } from "@symaira/mcp-client";
 import { insertSecret } from "./insertSecret";
 import { copyToClipboard } from "./copyToClipboard";
 
-export async function quickPickVault(tools: OpenPassTools): Promise<void> {
+export async function quickPickVault(tools: SymairaTools): Promise<void> {
   try {
     const result = await tools.listEntries();
     if (result.isError) {
@@ -30,7 +30,7 @@ export async function quickPickVault(tools: OpenPassTools): Promise<void> {
 
     const action = await vscode.window.showQuickPick(
       [
-        { label: "Insert as ${openpass:...}", action: "insert" },
+        { label: "Insert as ${symaira:...}", action: "insert" },
         { label: "Copy to Clipboard", action: "copy" },
       ],
       { placeHolder: `What to do with "${selected}"?` }

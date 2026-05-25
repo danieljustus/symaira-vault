@@ -11,11 +11,11 @@ import (
 func buildBinary(t *testing.T) string {
 	t.Helper()
 	binDir := t.TempDir()
-	binPath := filepath.Join(binDir, "openpass")
+	binPath := filepath.Join(binDir, "symaira")
 	build := exec.Command("go", "build", "-o", binPath, "..")
 	build.Env = append(os.Environ(), "GOWORK=off")
 	if output, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build openpass: %v\n%s", err, output)
+		t.Fatalf("build symaira: %v\n%s", err, output)
 	}
 	return binPath
 }

@@ -11,12 +11,12 @@ import (
 	"testing"
 	"time"
 
-	admin "github.com/danieljustus/OpenPass/cmd/admin"
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	admin "github.com/danieljustus/symaira-vault/cmd/admin"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"gopkg.in/yaml.v3"
 
-	updatepkg "github.com/danieljustus/OpenPass/internal/update"
+	updatepkg "github.com/danieljustus/symaira-vault/internal/update"
 )
 
 type stubUpdateChecker struct {
@@ -77,7 +77,7 @@ func TestUpdateCheckCommandReportsAvailableUpdate(t *testing.T) {
 		result: &updatepkg.Result{
 			CurrentVersion:  "1.0.0",
 			LatestVersion:   "1.1.0",
-			ReleaseURL:      "https://github.com/danieljustus/OpenPass/releases/tag/v1.1.0",
+			ReleaseURL:      "https://github.com/danieljustus/symaira-vault/releases/tag/v1.1.0",
 			Checkable:       true,
 			UpdateAvailable: true,
 		},
@@ -95,7 +95,7 @@ func TestUpdateCheckCommandReportsAvailableUpdate(t *testing.T) {
 	got := buf.String()
 	for _, want := range []string{
 		"Update available: 1.0.0 -> 1.1.0",
-		"https://github.com/danieljustus/OpenPass/releases/tag/v1.1.0",
+		"https://github.com/danieljustus/symaira-vault/releases/tag/v1.1.0",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("output missing %q: %q", want, got)
@@ -126,7 +126,7 @@ func TestUpdateCheckCommandReportsUpToDate(t *testing.T) {
 	}
 
 	got := buf.String()
-	if !strings.Contains(got, "OpenPass is up to date (1.0.0).") {
+	if !strings.Contains(got, "Symaira Vault is up to date (1.0.0).") {
 		t.Fatalf("unexpected output: %q", got)
 	}
 }
@@ -192,7 +192,7 @@ func TestUpdateCheckCommandDoesNotRequireVault(t *testing.T) {
 	originalChanged := vaultFlag.Changed
 	_ = os.Unsetenv("HOME")
 	_ = os.Unsetenv("OPENPASS_VAULT")
-	vault = "~/.openpass"
+	vault = "~/.symaira"
 	if vaultFlag != nil {
 		_ = vaultFlag.Value.Set(vault)
 		vaultFlag.Changed = false
@@ -227,7 +227,7 @@ func TestUpdateCheckCommandJSONOutput(t *testing.T) {
 		result: &updatepkg.Result{
 			CurrentVersion:  "1.0.0",
 			LatestVersion:   "1.1.0",
-			ReleaseURL:      "https://github.com/danieljustus/OpenPass/releases/tag/v1.1.0",
+			ReleaseURL:      "https://github.com/danieljustus/symaira-vault/releases/tag/v1.1.0",
 			Checkable:       true,
 			UpdateAvailable: true,
 		},
@@ -246,7 +246,7 @@ func TestUpdateCheckCommandJSONOutput(t *testing.T) {
 	for _, want := range []string{
 		`"current_version": "1.0.0"`,
 		`"latest_version": "1.1.0"`,
-		`"release_url": "https://github.com/danieljustus/OpenPass/releases/tag/v1.1.0"`,
+		`"release_url": "https://github.com/danieljustus/symaira-vault/releases/tag/v1.1.0"`,
 		`"checkable": true`,
 		`"update_available": true`,
 	} {
@@ -297,7 +297,7 @@ func TestUpdateCheckCommandQuietModeUpdateAvailable(t *testing.T) {
 		result: &updatepkg.Result{
 			CurrentVersion:  "1.0.0",
 			LatestVersion:   "1.1.0",
-			ReleaseURL:      "https://github.com/danieljustus/OpenPass/releases/tag/v1.1.0",
+			ReleaseURL:      "https://github.com/danieljustus/symaira-vault/releases/tag/v1.1.0",
 			Checkable:       true,
 			UpdateAvailable: true,
 		},
@@ -396,8 +396,8 @@ func TestUpdateCacheTTL_ConfigLoadError(t *testing.T) {
 		_ = os.Setenv("HOME", home)
 	}()
 
-	// Ensure .openpass directory doesn't exist so config load fails
-	_ = os.RemoveAll(filepath.Join(tmpDir, ".openpass"))
+	// Ensure .symaira directory doesn't exist so config load fails
+	_ = os.RemoveAll(filepath.Join(tmpDir, ".symaira"))
 
 	ttl := admin.UpdateCacheTTL()
 	if ttl != updatepkg.DefaultCacheTTL {
@@ -416,8 +416,8 @@ func TestUpdateCacheTTL_CustomCacheTTL(t *testing.T) {
 		_ = os.Setenv("HOME", home)
 	}()
 
-	openpassDir := filepath.Join(tmpDir, ".openpass")
-	if err := os.MkdirAll(openpassDir, 0o700); err != nil {
+	symairaDir := filepath.Join(tmpDir, ".symaira")
+	if err := os.MkdirAll(symairaDir, 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 
@@ -428,7 +428,7 @@ func TestUpdateCacheTTL_CustomCacheTTL(t *testing.T) {
 		},
 	}
 	data, _ := yaml.Marshal(cfg)
-	if err := os.WriteFile(filepath.Join(openpassDir, "config.yaml"), data, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(symairaDir, "config.yaml"), data, 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
@@ -446,8 +446,8 @@ func TestUpdateCacheTTL_DefaultWhenNoUpdateConfig(t *testing.T) {
 		_ = os.Setenv("HOME", home)
 	}()
 
-	openpassDir := filepath.Join(tmpDir, ".openpass")
-	if err := os.MkdirAll(openpassDir, 0o700); err != nil {
+	symairaDir := filepath.Join(tmpDir, ".symaira")
+	if err := os.MkdirAll(symairaDir, 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 
@@ -455,7 +455,7 @@ func TestUpdateCacheTTL_DefaultWhenNoUpdateConfig(t *testing.T) {
 		"vault_dir": "/tmp/vault",
 	}
 	data, _ := yaml.Marshal(cfg)
-	if err := os.WriteFile(filepath.Join(openpassDir, "config.yaml"), data, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(symairaDir, "config.yaml"), data, 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 

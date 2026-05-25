@@ -18,11 +18,11 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 
-	vaultconfig "github.com/danieljustus/OpenPass/internal/config"
-	vaultcrypto "github.com/danieljustus/OpenPass/internal/crypto"
-	"github.com/danieljustus/OpenPass/internal/metrics"
-	"github.com/danieljustus/OpenPass/internal/pathutil"
-	"github.com/danieljustus/OpenPass/internal/vault/taint"
+	vaultconfig "github.com/danieljustus/symaira-vault/internal/config"
+	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
+	"github.com/danieljustus/symaira-vault/internal/metrics"
+	"github.com/danieljustus/symaira-vault/internal/pathutil"
+	"github.com/danieljustus/symaira-vault/internal/vault/taint"
 )
 
 // Entry represents a vault entry with flexible data storage using map[string]any.

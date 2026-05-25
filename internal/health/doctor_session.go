@@ -8,8 +8,8 @@ import (
 	"runtime"
 	"time"
 
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
-	"github.com/danieljustus/OpenPass/internal/session"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/session"
 )
 
 func checkAuthMethod(vaultDir string, _ Options) Result {
@@ -29,7 +29,7 @@ func checkAuthMethod(vaultDir string, _ Options) Result {
 		} else {
 			r.Status = StatusWarn
 			r.Message = "configured as Touch ID but biometric not available on this system"
-			r.Hint = "run `openpass auth set passphrase` to switch to passphrase-only"
+			r.Hint = "run `symaira auth set passphrase` to switch to passphrase-only"
 		}
 	} else {
 		r.Status = StatusOK
@@ -120,9 +120,9 @@ func checkDaemonStatus(_ string, _ Options) Result {
 	var svcPath string
 	switch runtime.GOOS {
 	case osDarwin:
-		svcPath = filepath.Join(home, "Library", "LaunchAgents", "com.openpass.mcp.plist")
+		svcPath = filepath.Join(home, "Library", "LaunchAgents", "com.symaira.mcp.plist")
 	case osLinux:
-		svcPath = filepath.Join(home, ".config", "systemd", "user", "openpass-mcp.service")
+		svcPath = filepath.Join(home, ".config", "systemd", "user", "symaira-mcp.service")
 	default:
 		r.Status = StatusOK
 		r.Message = "daemon not supported on " + runtime.GOOS
@@ -231,7 +231,7 @@ func checkPreCommitHooks(_ string, _ Options) Result {
 
 func checkSessionKeyring(vaultDir string, _ Options) Result {
 	r := Result{ID: "session.keyring", Name: "Session keyring roundtrip"}
-	testData := "openpass-doctor-test"
+	testData := "symaira-doctor-test"
 
 	saveDone := make(chan error, 1)
 	go func() {

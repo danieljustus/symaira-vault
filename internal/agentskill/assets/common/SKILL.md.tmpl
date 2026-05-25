@@ -1,13 +1,13 @@
-{{define "openpass-skill" -}}
-# OpenPass ({{.AgentName}})
+{{define "symaira-skill" -}}
+# Symaira Vault ({{.AgentName}})
 
-OpenPass is the credential store. Use native MCP tools when they are available.
+Symaira Vault is the credential store. Use native MCP tools when they are available.
 Do not use terminal commands for credential reads or writes unless the user
 explicitly asks for CLI debugging.
 
 ## Bootstrap
 
-First, call `{{.ToolPrefix}}openpass_whoami` to learn your permissions and which
+First, call `{{.ToolPrefix}}symaira_whoami` to learn your permissions and which
 vault you are connected to.
 
 Vault path: `{{.VaultPath}}`
@@ -15,7 +15,7 @@ Agent profile: **{{.AgentName}}** (tier: {{.ProfileTier}})
 
 ## Preferred Tools
 
-Canonical OpenPass MCP tool names ({{.AgentName}} prefix: `{{.ToolPrefix}}`):
+Canonical Symaira Vault MCP tool names ({{.AgentName}} prefix: `{{.ToolPrefix}}`):
 
 - `{{.ToolPrefix}}list_entries`
 - `{{.ToolPrefix}}find_entries`
@@ -39,7 +39,7 @@ Your current profile tier is **{{.ProfileTier}}**.
 {{if eq .ProfileTier "safe"}}
 ⚠️ **Limited access**: You only have metadata tools (list, find, metadata).
 For `get_entry` and write access, ask the user to run:
-  openpass agent upgrade {{.AgentName}} --tier standard
+  symaira agent upgrade {{.AgentName}} --tier standard
 {{else if eq .ProfileTier "standard"}}
 You can read entries, generate passwords, and generate TOTP codes, but you
 cannot write or delete entries. This is the default profile for AI agents.
@@ -47,7 +47,7 @@ cannot write or delete entries. This is the default profile for AI agents.
 You have full read **and** write access. Use write operations with care and
 always confirm before overwriting existing entries.
 {{else if eq .ProfileTier "custom"}}
-Your profile has custom permission overrides. Call `{{.ToolPrefix}}openpass_whoami`
+Your profile has custom permission overrides. Call `{{.ToolPrefix}}symaira_whoami`
 to see your exact capabilities.
 {{end}}
 
@@ -80,15 +80,15 @@ Example:
 | Read a credential | `get_entry` MCP tool | Token-scoped, audited, no terminal policy needed |
 | Write a credential | `set_entry_field` MCP tool | Same as above |
 | Generate a password | `generate_password` MCP tool | Built-in generation with configurable rules |
-| Bulk import / export | Terminal `openpass add/get` | MCP tools are single-entry |
-| Debug / diagnose | Terminal `openpass doctor` | Detailed diagnostic output |
+| Bulk import / export | Terminal `symaira add/get` | MCP tools are single-entry |
+| Debug / diagnose | Terminal `symaira doctor` | Detailed diagnostic output |
 | Full vault search | `find_entries` / `list_entries` MCP | Token-scoped, paginated |
 
 ## Error Code Map
 
 | Error | Meaning | Agent action |
 |---|---|---|
-| `ERR_AUTH_FAILED` | Token expired or invalid | Call `{{.ToolPrefix}}openpass_whoami` |
+| `ERR_AUTH_FAILED` | Token expired or invalid | Call `{{.ToolPrefix}}symaira_whoami` |
 | `ERR_NOT_FOUND` | Entry path not found | Use `find_entries` to locate |
 | `ERR_PERMISSION` | Tier forbids the operation | Ask user to upgrade tier |
 | `ERR_INVALID_INPUT` | Bad field name or path | Check entry shape with `get_entry` |
@@ -109,7 +109,7 @@ If a task requires a credential that is not in the vault, do NOT ask the user
 to type the secret in chat. Call `{{.ToolPrefix}}request_credential` instead:
 
 - Provide the target path, field name, and a one-sentence human-readable reason.
-- OpenPass opens a native dialog. You receive only a confirmation, never the
+- Symaira Vault opens a native dialog. You receive only a confirmation, never the
   value itself.
 - Continue the task using `{{.ToolPrefix}}execute_with_secret`,
   `{{.ToolPrefix}}copy_to_clipboard`, or `{{.ToolPrefix}}autotype` — never

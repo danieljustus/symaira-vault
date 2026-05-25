@@ -1,0 +1,43 @@
+.nh
+.TH "SYMAIRA" "1" "Apr 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-recipients-add - Add a recipient
+
+
+.SH SYNOPSIS
+\fBsymaira recipients add  [flags]\fP
+
+
+.SH DESCRIPTION
+Add a new recipient (public key) to the vault.
+
+.PP
+The public key must be a valid age public key starting with "age1".
+Once added, all new entries will be encrypted for this recipient.
+
+.PP
+Example:
+  openpass recipients add age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for add
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH SEE ALSO
+\fBsymaira-recipients(1)\fP

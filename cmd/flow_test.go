@@ -7,14 +7,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/danieljustus/OpenPass/internal/cli"
-	"github.com/danieljustus/OpenPass/internal/config"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	"github.com/danieljustus/symaira-vault/internal/cli"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func testTempDir(t *testing.T) string {
 	t.Helper()
-	dir, err := os.MkdirTemp("", "openpass-flow-test")
+	dir, err := os.MkdirTemp("", "symaira-flow-test")
 	if err != nil {
 		t.Fatalf("create temp dir: %v", err)
 	}
@@ -89,7 +89,7 @@ func TestCmdGet(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping slow CLI flow test in short mode")
 	}
-	vaultDir, err := os.MkdirTemp("", "openpass-flow-test")
+	vaultDir, err := os.MkdirTemp("", "symaira-flow-test")
 	if err != nil {
 		t.Fatalf("create temp dir: %v", err)
 	}

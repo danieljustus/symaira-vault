@@ -9,8 +9,8 @@ Search vault for entries by query string.
 
 ## DON'T USE WHEN
 - You already have the exact path → use get_entry_metadata or get_entry
-- You're checking if vault is unlocked → use openpass_whoami or health
-- You need full-text search across field content → use openpass_search
+- You're checking if vault is unlocked → use symaira_whoami or health
+- You need full-text search across field content → use symaira_search
 
 ## INPUT
 - query (string, required): keyword(s) to match against paths and indexed fields

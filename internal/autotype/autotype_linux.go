@@ -10,7 +10,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/danieljustus/OpenPass/internal/envfilter"
+	"github.com/danieljustus/symaira-vault/internal/envfilter"
 )
 
 func init() {
@@ -83,7 +83,7 @@ func (a *linuxAutotype) typeWayland(text string) error {
 		"  Debian/Ubuntu: sudo apt install wtype  (or sudo apt install ydotool)\n" +
 		"  Arch:          sudo pacman -S wtype     (or ydotool)\n" +
 		"  Fedora:        sudo dnf install wtype   (or ydotool)\n" +
-		"`openpass doctor` will warn about this on every run until one is available")
+		"`symaira doctor` will warn about this on every run until one is available")
 }
 
 func NewLinuxAutotype() Autotype {

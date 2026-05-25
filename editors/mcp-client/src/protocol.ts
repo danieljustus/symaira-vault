@@ -31,7 +31,7 @@ export function buildInitializeRequest(): MCPMessage {
     protocolVersion: "2025-11-25",
     capabilities: {},
     clientInfo: {
-      name: "openpass-editor-plugin",
+      name: "symaira-editor-plugin",
       version: "1.0.0",
     },
   });

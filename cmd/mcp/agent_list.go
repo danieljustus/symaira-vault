@@ -7,13 +7,13 @@ import (
 	"strings"
 	"time"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 
-	"github.com/danieljustus/OpenPass/internal/agentskill"
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
-	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
+	"github.com/danieljustus/symaira-vault/internal/agentskill"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	auth "github.com/danieljustus/symaira-vault/internal/mcp/auth"
 )
 
 // AgentListItem holds the display data for a single agent in the list output.
@@ -27,7 +27,7 @@ type AgentListItem struct {
 	LastSeen       string `json:"last_seen,omitempty"`
 }
 
-// AgentListResult is the structured output for `openpass agent list --output json`.
+// AgentListResult is the structured output for `symaira agent list --output json`.
 type AgentListResult struct {
 	Agents []AgentListItem `json:"agents"`
 	Count  int             `json:"count"`
@@ -79,10 +79,10 @@ Output columns:
   SKILL      Skill file status (missing, installed, managed)
   LAST SEEN  Most recent token use timestamp`,
 	Example: `  # List all agents in a table
-  openpass agent list
+  symaira agent list
 
   # JSON output for programmatic use
-  openpass agent list --output json`,
+  symaira agent list --output json`,
 	Annotations: map[string]string{
 		cli.RequiresVaultAnnotation: "false",
 	},

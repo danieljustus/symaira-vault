@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/danieljustus/OpenPass/internal/config"
-	"github.com/danieljustus/OpenPass/internal/mcp"
-	"github.com/danieljustus/OpenPass/internal/metrics"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/metrics"
 )
 
 func TestRunHTTPServer_MetricsEndpoint(t *testing.T) {
@@ -52,8 +52,8 @@ func TestRunHTTPServer_MetricsEndpoint(t *testing.T) {
 	if !strings.Contains(bodyStr, "go_goroutines") {
 		t.Error("metrics response missing go_goroutines")
 	}
-	if !strings.Contains(bodyStr, "openpass_mcp_requests_total") {
-		t.Error("metrics response missing openpass_mcp_requests_total")
+	if !strings.Contains(bodyStr, "symaira_mcp_requests_total") {
+		t.Error("metrics response missing symaira_mcp_requests_total")
 	}
 }
 

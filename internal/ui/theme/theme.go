@@ -1,5 +1,5 @@
 // Package theme provides centralized color tokens and shared lipgloss styles for
-// the OpenPass UI, TUI, wizard, doctor, and CLI output. All UI components should
+// the Symaira Vault UI, TUI, wizard, doctor, and CLI output. All UI components should
 // import this package rather than defining their own color constants.
 //
 // Colors use lipgloss.AdaptiveColor so they render legibly on both dark and light

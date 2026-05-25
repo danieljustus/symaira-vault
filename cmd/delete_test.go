@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	crud "github.com/danieljustus/OpenPass/cmd/crud"
-	cli "github.com/danieljustus/OpenPass/internal/cli"
-	"github.com/danieljustus/OpenPass/internal/config"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	crud "github.com/danieljustus/symaira-vault/cmd/crud"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func TestCmdDelete_Cancel(t *testing.T) {

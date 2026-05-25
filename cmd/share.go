@@ -5,11 +5,11 @@ import (
 
 	"github.com/spf13/cobra"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
-	"github.com/danieljustus/OpenPass/internal/mcp"
-	server "github.com/danieljustus/OpenPass/internal/mcp/server"
-	"github.com/danieljustus/OpenPass/internal/ui/render"
-	"github.com/danieljustus/OpenPass/internal/vault/taint"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
+	"github.com/danieljustus/symaira-vault/internal/mcp"
+	server "github.com/danieljustus/symaira-vault/internal/mcp/server"
+	"github.com/danieljustus/symaira-vault/internal/ui/render"
+	"github.com/danieljustus/symaira-vault/internal/vault/taint"
 )
 
 var shareCmd = &cobra.Command{
@@ -17,13 +17,13 @@ var shareCmd = &cobra.Command{
 	Short: "Manage secret sharing between agents",
 	Long:  "List and revoke secret share grants between MCP agents.",
 	Example: `  # List all pending share requests
-  openpass share list --status pending
+  symaira share list --status pending
 
   # Revoke a grant by ID
-  openpass share revoke <grant-id>
+  symaira share revoke <grant-id>
 
   # JSON output for tooling
-  openpass share list --output json`,
+  symaira share list --output json`,
 }
 
 var shareListCmd = &cobra.Command{
@@ -32,12 +32,12 @@ var shareListCmd = &cobra.Command{
 	Long: `List all share grants with optional filtering by status, agent, or path.
 
 Examples:
-  openpass share list
-  openpass share list --status approved
-  openpass share list --from agent-a
-  openpass share list --to agent-b
-  openpass share list --path github.password
-  openpass share list --output json`,
+  symaira share list
+  symaira share list --status approved
+  symaira share list --from agent-a
+  symaira share list --to agent-b
+  symaira share list --path github.password
+  symaira share list --output json`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		vDir, err := cli.VaultPath()
 		if err != nil {

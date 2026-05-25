@@ -1,4 +1,4 @@
-// Package vault provides encrypted storage and search for OpenPass entries.
+// Package vault provides encrypted storage and search for Symaira Vault entries.
 //
 // =============================================================================
 // DESIGN DOCUMENT: Scalable Search for Large Vaults
@@ -122,8 +122,8 @@ import (
 	"filippo.io/age"
 	"golang.org/x/exp/slices"
 
-	vaultcrypto "github.com/danieljustus/OpenPass/internal/crypto"
-	"github.com/danieljustus/OpenPass/internal/metrics"
+	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
+	"github.com/danieljustus/symaira-vault/internal/metrics"
 )
 
 type Match struct {
@@ -317,14 +317,14 @@ func storePseudonymizedListCache(vaultDir string, identity *age.X25519Identity, 
 // DESIGN DECISION: Global State vs Per-Vault Context
 //
 // This is intentionally global state because:
-//  1. OpenPass operates with a single active vault per process
+//  1. Symaira Vault operates with a single active vault per process
 //  2. The identity is session-scoped (tied to unlock duration), not vault-scoped
 //  3. atomic.Pointer provides lock-free thread-safe access verified by `go test -race`
 //  4. Per-vault caching would add complexity without clear benefit for single-vault usage
 //
 // Tradeoffs accepted:
 //   - Parallel vault access in tests requires careful sequencing
-//   - Multiple vaults in same process share cache (invalid for OpenPass use case)
+//   - Multiple vaults in same process share cache (invalid for Symaira Vault use case)
 //
 // Future: If multi-vault support is needed, add vaultDir key to a map[VaultDir]*Identity.
 var searchIdentity atomic.Pointer[age.X25519Identity]

@@ -15,9 +15,9 @@ func TestCosignSignatureFileName(t *testing.T) {
 		version  string
 		expected string
 	}{
-		{"0.5.0", "OpenPass_0.5.0_checksums.txt.sig"},
-		{"v1.2.0", "OpenPass_1.2.0_checksums.txt.sig"},
-		{"v", "OpenPass__checksums.txt.sig"},
+		{"0.5.0", "symaira_0.5.0_checksums.txt.sig"},
+		{"v1.2.0", "symaira_1.2.0_checksums.txt.sig"},
+		{"v", "symaira__checksums.txt.sig"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.expected, func(t *testing.T) {
@@ -35,8 +35,8 @@ func TestCosignCertificateFileName(t *testing.T) {
 		version  string
 		expected string
 	}{
-		{"0.5.0", "OpenPass_0.5.0_checksums.txt.pem"},
-		{"v1.2.0", "OpenPass_1.2.0_checksums.txt.pem"},
+		{"0.5.0", "symaira_0.5.0_checksums.txt.pem"},
+		{"v1.2.0", "symaira_1.2.0_checksums.txt.pem"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.expected, func(t *testing.T) {

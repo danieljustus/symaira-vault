@@ -1,10 +1,10 @@
-# OpenPass Architecture
+# Symaira Vault Architecture
 
-This document describes the system architecture of OpenPass, a modern command-line password manager written in Go.
+This document describes the system architecture of Symaira Vault, a modern command-line password manager written in Go.
 
 ## Overview
 
-OpenPass is a CLI password manager that uses [age](https://age-encryption.org/) encryption for securing vault entries. It provides a traditional command-line interface for human users and an MCP (Model Context Protocol) server for AI agent integration.
+Symaira Vault is a CLI password manager that uses [age](https://age-encryption.org/) encryption for securing vault entries. It provides a traditional command-line interface for human users and an MCP (Model Context Protocol) server for AI agent integration.
 
 ```mermaid
 graph TB
@@ -362,7 +362,7 @@ graph TD
 ### MCP Security
 
 - **Stdio:** Agent fixed at startup; process isolation provides security
-- **HTTP:** Bearer token required; agent identified per-request via `X-OpenPass-Agent` header
+- **HTTP:** Bearer token required; agent identified per-request via `X-Symaira Vault-Agent` header
 - **Path restrictions:** Agents can only access allowed path patterns
 - **Write restrictions:** `CanWrite: false` blocks all write operations
 - **Approval modes:** `deny` blocks writes; `prompt` degrades to deny (no stdin)
@@ -399,5 +399,5 @@ Vaults created with the older root-level entry layout are migrated to `entries/`
 | spf13/cobra | CLI framework |
 | zalando/go-keyring | OS keyring integration |
 | go-git/go-git | Git integration |
-| (internal/mcp) | MCP protocol — OpenPass implements its own MCP layer; no external mcp-go library is used |
+| (internal/mcp) | MCP protocol — Symaira Vault implements its own MCP layer; no external mcp-go library is used |
 | atotto/clipboard | Clipboard support |

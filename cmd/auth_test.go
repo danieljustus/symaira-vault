@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	auth "github.com/danieljustus/OpenPass/cmd/auth"
-	cli "github.com/danieljustus/OpenPass/internal/cli"
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
-	"github.com/danieljustus/OpenPass/internal/session"
+	auth "github.com/danieljustus/symaira-vault/cmd/auth"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/session"
 )
 
 type cmdMockBiometricStore struct {

@@ -1,6 +1,6 @@
-# Contributing to OpenPass
+# Contributing to Symaira Vault
 
-Thank you for your interest in contributing to OpenPass! This document provides guidelines and instructions for contributing.
+Thank you for your interest in contributing to Symaira Vault! This document provides guidelines and instructions for contributing.
 
 ## Development Setup
 
@@ -9,8 +9,8 @@ Thank you for your interest in contributing to OpenPass! This document provides 
 Use the automated setup script to install all required tools:
 
 ```bash
-git clone https://github.com/danieljustus/OpenPass
-cd OpenPass
+git clone https://github.com/danieljustus/symaira-vault
+cd Symaira Vault
 ./scripts/setup-dev.sh
 ```
 
@@ -29,8 +29,8 @@ If you prefer manual setup, ensure you have:
 ### Clone and Build
 
 ```bash
-git clone https://github.com/danieljustus/OpenPass
-cd OpenPass
+git clone https://github.com/danieljustus/symaira-vault
+cd Symaira Vault
 go build -o openpass .
 ```
 
@@ -87,7 +87,7 @@ openpass/
 
 ### EditorConfig
 
-OpenPass uses [EditorConfig](https://editorconfig.org) to maintain consistent formatting across editors. The `.editorconfig` file in the repository root defines the rules:
+Symaira Vault uses [EditorConfig](https://editorconfig.org) to maintain consistent formatting across editors. The `.editorconfig` file in the repository root defines the rules:
 
 - **Go files** (`*.go`, `go.mod`): tab indentation
 - **YAML files** (`*.yaml`, `*.yml`): 2-space indentation
@@ -190,7 +190,7 @@ This ensures file handles are closed even on early returns or panics.
 
 ### Output Streams
 
-OpenPass follows standard Unix conventions for output streams:
+Symaira Vault follows standard Unix conventions for output streams:
 
 - **stdout**: Normal output, data, success messages
 - **stderr**: Errors, warnings, interactive prompts
@@ -281,7 +281,7 @@ gosec ./...
 
 ## Commit Message Format
 
-OpenPass uses a structured commit format based on [Conventional Commits](https://www.conventionalcommits.org/):
+Symaira Vault uses a structured commit format based on [Conventional Commits](https://www.conventionalcommits.org/):
 
 ```
 <type>(<scope>): <description>
@@ -375,7 +375,7 @@ Include in your PR description:
 ### Filing an Issue
 
 For **bugs**, include:
-- OpenPass version (`openpass --version` or git commit)
+- Symaira Vault version (`openpass --version` or git commit)
 - Go version (`go version`)
 - Operating system and version
 - Steps to reproduce
@@ -392,7 +392,7 @@ For **feature requests**:
 
 For security vulnerabilities, **do not** file a public issue. Instead:
 
-1. Submit a private vulnerability report via [GitHub Security Advisories](https://github.com/danieljustus/OpenPass/security/advisories/new)
+1. Submit a private vulnerability report via [GitHub Security Advisories](https://github.com/danieljustus/symaira-vault/security/advisories/new)
 2. Wait for acknowledgment
 3. Coordinate disclosure timeline
 
@@ -410,7 +410,7 @@ For full details, see [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
 ## Getting Help
 
-- **Issues**: Use [GitHub Issues](https://github.com/danieljustus/OpenPass/issues) for bugs, feature requests, and questions
+- **Issues**: Use [GitHub Issues](https://github.com/danieljustus/symaira-vault/issues) for bugs, feature requests, and questions
 
 ## License
 

@@ -1,4 +1,4 @@
-# OpenPass Threat Model
+# Symaira Vault Threat Model
 
 > **Scope:** The MCP server surface where LLM agents read and write vault
 > credentials. Other surfaces (CLI, file-format crypto, OS keyring) are
@@ -6,7 +6,7 @@
 
 ## Why this document exists
 
-OpenPass is a password manager that exposes vault credentials to LLM agents via
+Symaira Vault is a password manager that exposes vault credentials to LLM agents via
 its MCP server. That makes it a primary target for prompt-injection attacks
 in two flavors:
 
@@ -16,13 +16,13 @@ in two flavors:
   data carries adversarial instructions that the LLM may interpret as user
   intent.
 
-OpenPass implements multiple, overlapping defenses. This document maps those
+Symaira Vault implements multiple, overlapping defenses. This document maps those
 defenses to recognized threat catalogs so an external reviewer can assess
 coverage without reading the codebase.
 
 ## Threat catalog mapping
 
-| Standard | Section | OpenPass coverage |
+| Standard | Section | Symaira Vault coverage |
 |---|---|---|
 | OWASP LLM 2025 | LLM01 Prompt Injection | §1, §2, §3 |
 | OWASP LLM 2025 | LLM02 Sensitive Information Disclosure | §4, §5 |
@@ -43,7 +43,7 @@ coverage without reading the codebase.
              │  • rate limit (60 req/min)
              ▼
 ┌─────────────────────────────┐
-│  OpenPass MCP server        │  ← trusted, enforces policy
+│  Symaira Vault MCP server        │  ← trusted, enforces policy
 │  • agent profile            │
 │  • approval (TTY)           │
 │  • taint system             │
@@ -69,7 +69,7 @@ and field value it sees is treated as adversarial.
 tool descriptions) could change what the LLM sees as "available tools," using
 that to coerce the agent.
 
-**OpenPass defenses:**
+**Symaira Vault defenses:**
 
 - **Statically hardcoded tool descriptions.** All 34+ MCP tools live in
   `internal/mcp/tool_registry.go` with literal description strings. No vault
@@ -99,7 +99,7 @@ in tokens).
 Tags, `usage_hint`, `notes`, custom fields, and field values can all carry
 prompt-injection payloads that reach the LLM when an agent reads the entry.
 
-**OpenPass defenses:**
+**Symaira Vault defenses:**
 
 - **Central output chokepoint.** Every MCP tool response passes through
   `globalChokepoint.SanitizeForMCP()` in `internal/mcp/render.go` before it
@@ -141,7 +141,7 @@ prompt-injection payloads that reach the LLM when an agent reads the entry.
   if an `Untrusted` value is converted to `string` without going through
   `Render()`.
 
-**Known limitations:** OpenPass strips **structural** injection vectors
+**Known limitations:** Symaira Vault strips **structural** injection vectors
 (Bidi, ANSI, XML tags) but does **not** detect **semantic** prompt injection
 (e.g. natural-language "ignore previous instructions"). See backlog item
 O-2 (opt-in semantic heuristic).
@@ -151,10 +151,10 @@ O-2 (opt-in semantic heuristic).
 ## §3 — Tool poisoning / cross-server confusion / rug pulls
 
 **Threat:** A malicious MCP server in the same agent session impersonates
-OpenPass tools, or the OpenPass server itself is swapped for a malicious
+Symaira Vault tools, or the Symaira Vault server itself is swapped for a malicious
 binary at runtime.
 
-**OpenPass defenses:**
+**Symaira Vault defenses:**
 
 - **Bearer token + constant-time comparison.** `BearerAuthMiddleware` in
   `auth.go` uses `subtle.ConstantTimeCompare` for legacy tokens and SHA-256
@@ -168,7 +168,7 @@ binary at runtime.
   of short-lived access tokens with refresh tokens (`token.go`
   `RefreshToken*`).
 
-**Known limitations:** OpenPass does not currently sign its tool
+**Known limitations:** Symaira Vault does not currently sign its tool
 descriptions, so a man-in-the-middle attacker between the agent and the
 MCP server could in principle alter them. See backlog item O-10.
 
@@ -178,7 +178,7 @@ MCP server could in principle alter them. See backlog item O-10.
 
 **Threat:** Vault credentials leak to the LLM beyond what was asked for.
 
-**OpenPass defenses:**
+**Symaira Vault defenses:**
 
 - **Sealing for high-classification secrets.** Entries with
   `Classification ≥ taint.Secret` are returned as opaque
@@ -211,7 +211,7 @@ MCP server could in principle alter them. See backlog item O-10.
 **Threat:** An agent uses `..`, double slashes, or whitespace to access
 entries outside its authorized prefix.
 
-**OpenPass defenses:**
+**Symaira Vault defenses:**
 
 - **`normalizeScopePath()`** in `server_authorize.go` runs `filepath.Clean`
   (after `FromSlash` + `TrimSpace`) on both the requested path and every
@@ -235,7 +235,7 @@ entries outside its authorized prefix.
 take destructive actions (deletion, command execution, share approval) on a
 scale or in a context the user never intended.
 
-**OpenPass defenses:**
+**Symaira Vault defenses:**
 
 - **Out-of-band approval for critical actions.** TTY-based approval prompt
   (`approval.go`) for all Critical-tier tools. The TTY is a separate

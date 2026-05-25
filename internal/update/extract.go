@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/danieljustus/OpenPass/internal/pathutil"
+	"github.com/danieljustus/symaira-vault/internal/pathutil"
 )
 
 var (

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sync"
 
-	transport "github.com/danieljustus/OpenPass/internal/mcp/transport"
+	transport "github.com/danieljustus/symaira-vault/internal/mcp/transport"
 )
 
 const (

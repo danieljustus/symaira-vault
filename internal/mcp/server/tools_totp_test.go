@@ -8,11 +8,11 @@ import (
 
 	"filippo.io/age"
 
-	"github.com/danieljustus/OpenPass/internal/autotype"
-	"github.com/danieljustus/OpenPass/internal/clipboard"
-	"github.com/danieljustus/OpenPass/internal/config"
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
-	"github.com/danieljustus/OpenPass/internal/vault"
+	"github.com/danieljustus/symaira-vault/internal/autotype"
+	"github.com/danieljustus/symaira-vault/internal/clipboard"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func writeTOTPEntry(t *testing.T, vaultDir string, identity *age.X25519Identity) {

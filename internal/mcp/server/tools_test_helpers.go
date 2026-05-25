@@ -6,11 +6,11 @@ import (
 
 	"filippo.io/age"
 
-	"github.com/danieljustus/OpenPass/internal/audit"
-	"github.com/danieljustus/OpenPass/internal/authguard"
-	"github.com/danieljustus/OpenPass/internal/config"
-	"github.com/danieljustus/OpenPass/internal/session"
-	"github.com/danieljustus/OpenPass/internal/vault"
+	"github.com/danieljustus/symaira-vault/internal/audit"
+	"github.com/danieljustus/symaira-vault/internal/authguard"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/session"
+	"github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 //nolint:unparam // transport always "stdio" in current test suite

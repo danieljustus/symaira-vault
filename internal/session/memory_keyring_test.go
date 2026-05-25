@@ -13,7 +13,7 @@ func TestMemoryKeyring_SetAndGet_RoundTrip(t *testing.T) {
 
 	// Store wrap key so encryption/decryption works
 	wrapKey := base64.StdEncoding.EncodeToString(testKey())
-	mk.Set("openpass:"+vaultDir, wrapKeyAccount, wrapKey)
+	mk.Set("symaira:"+vaultDir, wrapKeyAccount, wrapKey)
 
 	enc, nonce, err := encryptPassphrase([]byte("secret"), testKey())
 	if err != nil {
@@ -30,11 +30,11 @@ func TestMemoryKeyring_SetAndGet_RoundTrip(t *testing.T) {
 	}
 	payload, _ := json.Marshal(sess)
 
-	if err := mk.Set("openpass:"+vaultDir, sessionAccount, string(payload)); err != nil {
+	if err := mk.Set("symaira:"+vaultDir, sessionAccount, string(payload)); err != nil {
 		t.Fatalf("Set() error = %v", err)
 	}
 
-	got, err := mk.Get("openpass:"+vaultDir, sessionAccount)
+	got, err := mk.Get("symaira:"+vaultDir, sessionAccount)
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
 	}
@@ -50,7 +50,7 @@ func TestMemoryKeyring_Set_EncryptsPlaintextPassphrase(t *testing.T) {
 
 	// Store wrap key so Set() can encrypt plaintext passphrase
 	wrapKey := base64.StdEncoding.EncodeToString(testKey())
-	mk.Set("openpass:"+vaultDir, wrapKeyAccount, wrapKey)
+	mk.Set("symaira:"+vaultDir, wrapKeyAccount, wrapKey)
 
 	now := time.Now().UTC()
 	sess := storedSession{
@@ -61,11 +61,11 @@ func TestMemoryKeyring_Set_EncryptsPlaintextPassphrase(t *testing.T) {
 	}
 	payload, _ := json.Marshal(sess)
 
-	if err := mk.Set("openpass:"+vaultDir, sessionAccount, string(payload)); err != nil {
+	if err := mk.Set("symaira:"+vaultDir, sessionAccount, string(payload)); err != nil {
 		t.Fatalf("Set() error = %v", err)
 	}
 
-	got, err := mk.Get("openpass:"+vaultDir, sessionAccount)
+	got, err := mk.Get("symaira:"+vaultDir, sessionAccount)
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
 	}
@@ -88,14 +88,14 @@ func TestMemoryKeyring_Set_EncryptsPlaintextPassphrase(t *testing.T) {
 
 func TestMemoryKeyring_Set_InvalidJSON(t *testing.T) {
 	mk := &memoryKeyring{}
-	if err := mk.Set("openpass:/tmp/vault", sessionAccount, "not-json"); err == nil {
+	if err := mk.Set("symaira:/tmp/vault", sessionAccount, "not-json"); err == nil {
 		t.Fatal("Set() error = nil, want unmarshal error")
 	}
 }
 
 func TestMemoryKeyring_Get_NotFound(t *testing.T) {
 	mk := &memoryKeyring{}
-	_, err := mk.Get("openpass:/nonexistent", sessionAccount)
+	_, err := mk.Get("symaira:/nonexistent", sessionAccount)
 	if err == nil {
 		t.Fatal("Get() error = nil, want not found")
 	}
@@ -103,7 +103,7 @@ func TestMemoryKeyring_Get_NotFound(t *testing.T) {
 
 func TestMemoryKeyring_Get_NilStore(t *testing.T) {
 	mk := &memoryKeyring{}
-	_, err := mk.Get("openpass:/tmp/vault", sessionAccount)
+	_, err := mk.Get("symaira:/tmp/vault", sessionAccount)
 	if err == nil {
 		t.Fatal("Get() error = nil, want not found")
 	}
@@ -121,9 +121,9 @@ func TestMemoryKeyring_Get_Expired(t *testing.T) {
 		TTL:                 int64(time.Minute),
 	}
 	payload, _ := json.Marshal(sess)
-	mk.Set("openpass:"+vaultDir, sessionAccount, string(payload))
+	mk.Set("symaira:"+vaultDir, sessionAccount, string(payload))
 
-	_, err := mk.Get("openpass:"+vaultDir, sessionAccount)
+	_, err := mk.Get("symaira:"+vaultDir, sessionAccount)
 	if err == nil {
 		t.Fatal("Get() error = nil, want expired")
 	}
@@ -141,9 +141,9 @@ func TestMemoryKeyring_Get_ZeroTTL(t *testing.T) {
 		TTL:                 0,
 	}
 	payload, _ := json.Marshal(sess)
-	mk.Set("openpass:"+vaultDir, sessionAccount, string(payload))
+	mk.Set("symaira:"+vaultDir, sessionAccount, string(payload))
 
-	_, err := mk.Get("openpass:"+vaultDir, sessionAccount)
+	_, err := mk.Get("symaira:"+vaultDir, sessionAccount)
 	if err == nil {
 		t.Fatal("Get() error = nil, want expired for zero TTL")
 	}
@@ -152,10 +152,10 @@ func TestMemoryKeyring_Get_ZeroTTL(t *testing.T) {
 func TestMemoryKeyring_Get_MalformedJSON(t *testing.T) {
 	mk := &memoryKeyring{}
 	mk.store = map[string][]byte{
-		"openpass:/tmp/vault|" + sessionAccount: []byte("not-valid-json"),
+		"symaira:/tmp/vault|" + sessionAccount: []byte("not-valid-json"),
 	}
 
-	_, err := mk.Get("openpass:/tmp/vault", sessionAccount)
+	_, err := mk.Get("symaira:/tmp/vault", sessionAccount)
 	if err == nil {
 		t.Fatal("Get() error = nil, want malformed JSON error")
 	}
@@ -173,9 +173,9 @@ func TestMemoryKeyring_Get_CorruptedCiphertext(t *testing.T) {
 		TTL:                 int64(time.Hour),
 	}
 	payload, _ := json.Marshal(sess)
-	mk.Set("openpass:"+vaultDir, sessionAccount, string(payload))
+	mk.Set("symaira:"+vaultDir, sessionAccount, string(payload))
 
-	_, err := mk.Get("openpass:"+vaultDir, sessionAccount)
+	_, err := mk.Get("symaira:"+vaultDir, sessionAccount)
 	if err == nil {
 		t.Fatal("Get() error = nil, want decrypt error")
 	}
@@ -191,9 +191,9 @@ func TestMemoryKeyring_Get_NoPassphraseData(t *testing.T) {
 		TTL:        int64(time.Hour),
 	}
 	payload, _ := json.Marshal(sess)
-	mk.Set("openpass:"+vaultDir, sessionAccount, string(payload))
+	mk.Set("symaira:"+vaultDir, sessionAccount, string(payload))
 
-	_, err := mk.Get("openpass:"+vaultDir, sessionAccount)
+	_, err := mk.Get("symaira:"+vaultDir, sessionAccount)
 	if err == nil {
 		t.Fatal("Get() error = nil, want no data error")
 	}
@@ -205,7 +205,7 @@ func TestMemoryKeyring_Get_UpdatesLastAccess(t *testing.T) {
 
 	// Store wrap key so Set() can encrypt plaintext passphrase
 	wrapKey := base64.StdEncoding.EncodeToString(testKey())
-	mk.Set("openpass:"+vaultDir, wrapKeyAccount, wrapKey)
+	mk.Set("symaira:"+vaultDir, wrapKeyAccount, wrapKey)
 
 	now := time.Now().UTC()
 	sess := storedSession{
@@ -215,10 +215,10 @@ func TestMemoryKeyring_Get_UpdatesLastAccess(t *testing.T) {
 		TTL:        int64(time.Hour),
 	}
 	payload, _ := json.Marshal(sess)
-	mk.Set("openpass:"+vaultDir, sessionAccount, string(payload))
+	mk.Set("symaira:"+vaultDir, sessionAccount, string(payload))
 
 	time.Sleep(time.Millisecond)
-	got, err := mk.Get("openpass:"+vaultDir, sessionAccount)
+	got, err := mk.Get("symaira:"+vaultDir, sessionAccount)
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
 	}
@@ -242,13 +242,13 @@ func TestMemoryKeyring_Delete_RemovesEntry(t *testing.T) {
 		TTL:                 int64(time.Hour),
 	}
 	payload, _ := json.Marshal(sess)
-	mk.Set("openpass:"+vaultDir, sessionAccount, string(payload))
+	mk.Set("symaira:"+vaultDir, sessionAccount, string(payload))
 
-	if err := mk.Delete("openpass:"+vaultDir, sessionAccount); err != nil {
+	if err := mk.Delete("symaira:"+vaultDir, sessionAccount); err != nil {
 		t.Fatalf("Delete() error = %v", err)
 	}
 
-	_, err := mk.Get("openpass:"+vaultDir, sessionAccount)
+	_, err := mk.Get("symaira:"+vaultDir, sessionAccount)
 	if err == nil {
 		t.Fatal("Get() after Delete error = nil, want not found")
 	}
@@ -256,20 +256,20 @@ func TestMemoryKeyring_Delete_RemovesEntry(t *testing.T) {
 
 func TestMemoryKeyring_Delete_NotFound(t *testing.T) {
 	mk := &memoryKeyring{}
-	if err := mk.Delete("openpass:/nonexistent", sessionAccount); err != nil {
+	if err := mk.Delete("symaira:/nonexistent", sessionAccount); err != nil {
 		t.Fatalf("Delete() error = %v, want nil", err)
 	}
 }
 
 func TestMemoryKeyring_Delete_NilStore(t *testing.T) {
 	mk := &memoryKeyring{}
-	if err := mk.Delete("openpass:/tmp/vault", sessionAccount); err != nil {
+	if err := mk.Delete("symaira:/tmp/vault", sessionAccount); err != nil {
 		t.Fatalf("Delete() error = %v, want nil", err)
 	}
 }
 
 func TestVaultDirFromService(t *testing.T) {
-	if got := vaultDirFromService("openpass:/tmp/vault"); got != "/tmp/vault" {
+	if got := vaultDirFromService("symaira:/tmp/vault"); got != "/tmp/vault" {
 		t.Errorf("vaultDirFromService() = %q, want /tmp/vault", got)
 	}
 	if got := vaultDirFromService("/tmp/vault"); got != "/tmp/vault" {
@@ -293,7 +293,7 @@ func TestMemoryKeyring_Set_ZeroesOldData(t *testing.T) {
 
 	// Store wrap key so Set() can encrypt plaintext passphrase
 	wrapKey := base64.StdEncoding.EncodeToString(testKey())
-	mk.Set("openpass:"+vaultDir, wrapKeyAccount, wrapKey)
+	mk.Set("symaira:"+vaultDir, wrapKeyAccount, wrapKey)
 
 	sess1 := storedSession{
 		Passphrase: passphraseBytes([]byte("first-secret")),
@@ -302,7 +302,7 @@ func TestMemoryKeyring_Set_ZeroesOldData(t *testing.T) {
 		TTL:        int64(time.Hour),
 	}
 	payload1, _ := json.Marshal(sess1)
-	mk.Set("openpass:"+vaultDir, sessionAccount, string(payload1))
+	mk.Set("symaira:"+vaultDir, sessionAccount, string(payload1))
 
 	sess2 := storedSession{
 		Passphrase: passphraseBytes([]byte("second-secret")),
@@ -311,10 +311,10 @@ func TestMemoryKeyring_Set_ZeroesOldData(t *testing.T) {
 		TTL:        int64(time.Hour),
 	}
 	payload2, _ := json.Marshal(sess2)
-	mk.Set("openpass:"+vaultDir, sessionAccount, string(payload2))
+	mk.Set("symaira:"+vaultDir, sessionAccount, string(payload2))
 
 	// Verify second value is stored
-	got, err := mk.Get("openpass:"+vaultDir, sessionAccount)
+	got, err := mk.Get("symaira:"+vaultDir, sessionAccount)
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
 	}

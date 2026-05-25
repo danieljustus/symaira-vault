@@ -1,30 +1,30 @@
 ---
-name: openpass
-description: Use OpenPass as the credential manager via native MCP tools and CLI.
-managed_by: openpass
+name: symaira
+description: Use Symaira Vault as the credential manager via native MCP tools and CLI.
+managed_by: symaira
 managed_version: 4.0.0-test
 managed_hash: sha256:3455389685ab7a4e65054054d5f92e3ba7c5f4b2d189d601d13daeae83fd1a62
 managed_installed_at: "2026-05-17T12:00:00Z"
 managed_profile_tier: standard
 ---
 
-# OpenPass (opencode)
+# Symaira Vault (opencode)
 
-OpenPass is the credential store. Use native MCP tools when they are available.
+Symaira Vault is the credential store. Use native MCP tools when they are available.
 Do not use terminal commands for credential reads or writes unless the user
 explicitly asks for CLI debugging.
 
 ## Bootstrap
 
-First, call `mcp0_op_openpass_whoami` to learn your permissions and which
+First, call `mcp0_op_symaira_whoami` to learn your permissions and which
 vault you are connected to.
 
-Vault path: `~/.openpass`
+Vault path: `~/.symaira`
 Agent profile: **opencode** (tier: standard)
 
 ## Preferred Tools
 
-Canonical OpenPass MCP tool names (opencode prefix: `mcp0_op_`):
+Canonical Symaira Vault MCP tool names (opencode prefix: `mcp0_op_`):
 
 - `mcp0_op_list_entries`
 - `mcp0_op_find_entries`
@@ -79,15 +79,15 @@ Example:
 | Read a credential | `get_entry` MCP tool | Token-scoped, audited, no terminal policy needed |
 | Write a credential | `set_entry_field` MCP tool | Same as above |
 | Generate a password | `generate_password` MCP tool | Built-in generation with configurable rules |
-| Bulk import / export | Terminal `openpass add/get` | MCP tools are single-entry |
-| Debug / diagnose | Terminal `openpass doctor` | Detailed diagnostic output |
+| Bulk import / export | Terminal `symaira add/get` | MCP tools are single-entry |
+| Debug / diagnose | Terminal `symaira doctor` | Detailed diagnostic output |
 | Full vault search | `find_entries` / `list_entries` MCP | Token-scoped, paginated |
 
 ## Error Code Map
 
 | Error | Meaning | Agent action |
 |---|---|---|
-| `ERR_AUTH_FAILED` | Token expired or invalid | Call `mcp0_op_openpass_whoami` |
+| `ERR_AUTH_FAILED` | Token expired or invalid | Call `mcp0_op_symaira_whoami` |
 | `ERR_NOT_FOUND` | Entry path not found | Use `find_entries` to locate |
 | `ERR_PERMISSION` | Tier forbids the operation | Ask user to upgrade tier |
 | `ERR_INVALID_INPUT` | Bad field name or path | Check entry shape with `get_entry` |
@@ -108,7 +108,7 @@ If a task requires a credential that is not in the vault, do NOT ask the user
 to type the secret in chat. Call `mcp0_op_request_credential` instead:
 
 - Provide the target path, field name, and a one-sentence human-readable reason.
-- OpenPass opens a native dialog. You receive only a confirmation, never the
+- Symaira Vault opens a native dialog. You receive only a confirmation, never the
   value itself.
 - Continue the task using `mcp0_op_execute_with_secret`,
   `mcp0_op_copy_to_clipboard`, or `mcp0_op_autotype` — never
@@ -136,17 +136,17 @@ For TOTP, call `generate_totp` instead of reading the `totp` secret directly.
 
 ## Slash Commands
 
-This agent supports slash commands via `/openpass:` prefix. Available
+This agent supports slash commands via `/symaira:` prefix. Available
 commands can be discovered through the agent's native command discovery.
 
 ## Agent-Specific: OpenCode
 
-OpenCode uses `mcp0_op_` as the tool prefix and `/openpass:` for
+OpenCode uses `mcp0_op_` as the tool prefix and `/symaira:` for
 slash commands.
 
-To connect OpenPass to OpenCode:
+To connect Symaira Vault to OpenCode:
 ```
-openpass mcp-config opencode
+symaira mcp-config opencode
 ```
 
 Use OpenCode's native MCP configuration for tool discovery and management.

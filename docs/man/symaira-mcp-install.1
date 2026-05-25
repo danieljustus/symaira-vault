@@ -1,0 +1,104 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-mcp-install - Auto-configure an AI agent to use the OpenPass MCP server
+
+
+.SH SYNOPSIS
+\fBsymaira mcp install [agent] [flags]\fP
+
+
+.SH DESCRIPTION
+Automatically detect and configure a supported AI agent to use the OpenPass MCP server.
+
+.PP
+Supported agents:
+  - openclaw    (OpenClaw)
+  - claude-code (Claude Code)
+  - hermes      (Hermes)
+  - codex       (OpenAI Codex CLI)
+  - opencode    (OpenCode)
+
+.PP
+The command detects if the agent is installed, finds its MCP config file,
+and injects the OpenPass server configuration. When using HTTP mode, a
+scoped token is automatically generated for the agent.
+
+.PP
+The operation is idempotent: running it multiple times will not create
+duplicate entries.
+
+.PP
+Examples:
+  openpass mcp install openclaw
+  openpass mcp install claude-code --http
+  openpass mcp install --auto-detect
+  openpass mcp install hermes --dry-run
+
+
+.SH OPTIONS
+\fB--auto-detect\fP[=false]
+	Detect all installed agents and configure them
+
+.PP
+\fB--dry-run\fP[=false]
+	Preview changes without applying them
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for install
+
+.PP
+\fB--http\fP[=false]
+	Use HTTP transport with auto-generated bearer token
+
+.PP
+\fB--stdio\fP[=true]
+	Use stdio transport (default)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Install MCP integration for Claude Code (auto-detected)
+  openpass mcp install claude-code
+
+  # HTTP mode with a fresh scoped token
+  openpass mcp install claude-code --http
+
+  # List installed agent integrations
+  openpass mcp install --list
+.EE
+
+
+.SH SEE ALSO
+\fBsymaira-mcp(1)\fP

@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/danieljustus/OpenPass/internal/config"
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
-	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
-	"github.com/danieljustus/OpenPass/internal/mcp/errors"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+	auth "github.com/danieljustus/symaira-vault/internal/mcp/auth"
+	"github.com/danieljustus/symaira-vault/internal/mcp/errors"
 )
 
 type toolHandler func(*Server, context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error)
@@ -194,7 +194,7 @@ func toolDefinitions() []toolDefinition {
 			RiskLevel: RiskLevelCritical,
 		},
 		{
-			Name:        "openpass_delete",
+			Name:        "symaira_delete",
 			Description: "Deprecated alias for delete_entry. Use delete_entry for new clients.",
 			InputSchema: objectSchema([]string{"path"}, map[string]schemaProperty{
 				"path": {Type: "string", Description: "Entry path to delete"},
@@ -218,21 +218,21 @@ func toolDefinitions() []toolDefinition {
 		},
 		{
 			Name:        "health",
-			Description: "Return OpenPass MCP server health information",
+			Description: "Return Symaira Vault MCP server health information",
 			InputSchema: objectSchema(nil, map[string]schemaProperty{}),
 			Handler:     (*Server).handleHealth,
 			RiskLevel:   RiskLevelLow,
 		},
 		{
 			Name:        "get_auth_status",
-			Description: "Return OpenPass unlock authentication status",
+			Description: "Return Symaira Vault unlock authentication status",
 			InputSchema: objectSchema(nil, map[string]schemaProperty{}),
 			Handler:     (*Server).handleGetAuthStatus,
 			RiskLevel:   RiskLevelLow,
 		},
 		{
 			Name:        "set_auth_method",
-			Description: "Set OpenPass unlock authentication method (requires canManageConfig)",
+			Description: "Set Symaira Vault unlock authentication method (requires canManageConfig)",
 			InputSchema: objectSchema([]string{"method"}, map[string]schemaProperty{
 				"method": {Type: "string", Description: "Authentication method: passphrase or touchid"},
 			}),
@@ -338,14 +338,14 @@ func toolDefinitions() []toolDefinition {
 			RiskLevel: RiskLevelLow,
 		},
 		{
-			Name:        "openpass_whoami",
+			Name:        "symaira_whoami",
 			Description: "Return the agent's profile, available/unavailable tools, quotas, and vault status",
 			InputSchema: objectSchema(nil, map[string]schemaProperty{}),
 			Handler:     (*Server).handleWhoami,
 			RiskLevel:   RiskLevelLow,
 		},
 		{
-			Name:        "openpass_audit_self",
+			Name:        "symaira_audit_self",
 			Description: "Return recent audit events for this agent",
 			InputSchema: objectSchema(nil, map[string]schemaProperty{
 				"limit": {Type: "number", Description: "Maximum number of events to return (default 50, max 100)"},
@@ -354,7 +354,7 @@ func toolDefinitions() []toolDefinition {
 			RiskLevel: RiskLevelLow,
 		},
 		{
-			Name:        "openpass_search",
+			Name:        "symaira_search",
 			Description: "Discover tools by intent matching. Returns tools whose name or description matches the intent.",
 			InputSchema: objectSchema([]string{"intent"}, map[string]schemaProperty{
 				"intent": {Type: "string", Description: "Natural language intent or keyword to search for"},
@@ -456,9 +456,9 @@ func checkToolBlockedByTier(agent *config.AgentProfile, toolName string) *errors
 // returns a template with placeholders.
 func upgradeCmdForAgent(agent *config.AgentProfile) string {
 	if agent == nil || agent.Name == "" || agent.Name == "default" {
-		return "openpass config set agents.<name>.tier <tier>"
+		return "symaira config set agents.<name>.tier <tier>"
 	}
-	return fmt.Sprintf("openpass config set agents.%s.tier <tier>", agent.Name)
+	return fmt.Sprintf("symaira config set agents.%s.tier <tier>", agent.Name)
 }
 
 func findToolDefinition(name string) (toolDefinition, bool) {

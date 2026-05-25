@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/danieljustus/OpenPass/internal/config"
-	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
-	gitpkg "github.com/danieljustus/OpenPass/internal/git"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	gitpkg "github.com/danieljustus/symaira-vault/internal/git"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 var testPassphrase = []byte("test-passphrase")
@@ -24,7 +24,7 @@ func newTestService(t *testing.T, withGit bool) Service {
 
 	vaultDir := t.TempDir()
 	cfg := config.Default()
-	cfg.Git = &config.GitConfig{AutoPush: false, CommitTemplate: "Update from OpenPass"}
+	cfg.Git = &config.GitConfig{AutoPush: false, CommitTemplate: "Update from Symaira Vault"}
 
 	if _, err := vaultpkg.InitWithPassphrase(vaultDir, testPassphrase, cfg); err != nil {
 		t.Fatalf("init vault: %v", err)

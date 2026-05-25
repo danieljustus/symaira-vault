@@ -8,7 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/danieljustus/OpenPass/internal/ui/wizard"
+	"github.com/danieljustus/symaira-vault/internal/ui/wizard"
 )
 
 func TestMeasureStrength(t *testing.T) {

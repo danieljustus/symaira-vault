@@ -1,0 +1,43 @@
+.nh
+.TH "SYMAIRA" "1" "Apr 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-backup - Create a backup archive of the vault
+
+
+.SH SYNOPSIS
+\fBsymaira backup  [flags]\fP
+
+
+.SH DESCRIPTION
+Create a compressed archive (.tar.gz) of the current vault.
+
+.PP
+The backup includes all vault files: identity.age, config.yaml, entries/, and mcp-token.
+Use --exclude-git to omit the .git/ directory from the backup.
+
+
+.SH OPTIONS
+\fB--exclude-git\fP[=false]
+	Exclude .git/ directory from backup
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for backup
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH SEE ALSO
+\fBopenpass(1)\fP

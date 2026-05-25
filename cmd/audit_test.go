@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
-	admin "github.com/danieljustus/OpenPass/cmd/admin"
-	"github.com/danieljustus/OpenPass/internal/audit"
+	admin "github.com/danieljustus/symaira-vault/cmd/admin"
+	"github.com/danieljustus/symaira-vault/internal/audit"
 )
 
 func TestAuditLogPath(t *testing.T) {
@@ -28,7 +28,7 @@ func TestAuditLogPath(t *testing.T) {
 		t.Fatalf("admin.AuditLogPath() error = %v", err)
 	}
 
-	expected := filepath.Join(home, ".openpass", "audit-default.log")
+	expected := filepath.Join(home, ".symaira", "audit-default.log")
 	if path != expected {
 		t.Fatalf("admin.AuditLogPath() = %q, want %q", path, expected)
 	}
@@ -65,7 +65,7 @@ func TestLoadAuditEntries(t *testing.T) {
 		_ = os.Setenv("HOME", h)
 	}()
 
-	auditDir := filepath.Join(home, ".openpass")
+	auditDir := filepath.Join(home, ".symaira")
 	if err := os.MkdirAll(auditDir, 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestLoadAuditEntries_Limit(t *testing.T) {
 		_ = os.Setenv("HOME", h)
 	}()
 
-	auditDir := filepath.Join(home, ".openpass")
+	auditDir := filepath.Join(home, ".symaira")
 	if err := os.MkdirAll(auditDir, 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
@@ -309,7 +309,7 @@ func TestAuditCommand_JSON(t *testing.T) {
 		_ = os.Setenv("HOME", h)
 	}()
 
-	auditDir := filepath.Join(home, ".openpass")
+	auditDir := filepath.Join(home, ".symaira")
 	if err := os.MkdirAll(auditDir, 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
@@ -349,7 +349,7 @@ func TestAuditCommand_Table(t *testing.T) {
 		_ = os.Setenv("HOME", h)
 	}()
 
-	auditDir := filepath.Join(home, ".openpass")
+	auditDir := filepath.Join(home, ".symaira")
 	if err := os.MkdirAll(auditDir, 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
@@ -386,7 +386,7 @@ func TestAuditCommand_SinceFilter(t *testing.T) {
 		_ = os.Setenv("HOME", h)
 	}()
 
-	auditDir := filepath.Join(home, ".openpass")
+	auditDir := filepath.Join(home, ".symaira")
 	if err := os.MkdirAll(auditDir, 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
@@ -432,7 +432,7 @@ func TestAuditCommand_FailedFilter(t *testing.T) {
 		_ = os.Setenv("HOME", h)
 	}()
 
-	auditDir := filepath.Join(home, ".openpass")
+	auditDir := filepath.Join(home, ".symaira")
 	if err := os.MkdirAll(auditDir, 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}

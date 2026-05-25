@@ -5,8 +5,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/danieljustus/OpenPass/internal/config"
-	"github.com/danieljustus/OpenPass/internal/session"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/session"
 )
 
 // AuthStep lets the user pick the authentication method.
@@ -64,7 +64,7 @@ func (s *AuthStep) View() string {
 	lines := []string{
 		titleStyle.Render("Authentication method"),
 		"",
-		"Touch ID was detected. How should OpenPass unlock the vault?",
+		"Touch ID was detected. How should Symaira Vault unlock the vault?",
 		"",
 	}
 	for i, opt := range opts {

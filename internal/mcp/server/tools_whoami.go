@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"log/slog"
 
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
-	"github.com/danieljustus/OpenPass/internal/vaultsvc"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 type whoamiProfile struct {
@@ -50,7 +50,7 @@ type whoamiVault struct {
 
 type whoamiInfo struct {
 	Agent           string        `json:"agent"`
-	OpenPassVersion string        `json:"openpass_version"`
+	OpenPassVersion string        `json:"symaira_version"`
 	Profile         whoamiProfile `json:"profile"`
 	Tools           whoamiTools   `json:"tools"`
 	Quotas          whoamiQuotas  `json:"quotas"`
@@ -134,9 +134,9 @@ func (s *Server) handleWhoami(ctx context.Context, req mcp.CallToolRequest) (*mc
 			Unlocked:     s.vault.Identity != nil,
 			EntriesCount: 0,
 		},
-		CLIAlternative:  "Use 'openpass status' for a comprehensive overview.",
-		ErrorsDoc:       "See https://github.com/danieljustus/OpenPass/blob/main/docs/errors.md for error code documentation.",
-		TierUpgradeHint: "Upgrade your agent tier in ~/.openpass/config.yaml to unlock additional tools.",
+		CLIAlternative:  "Use 'symaira status' for a comprehensive overview.",
+		ErrorsDoc:       "See https://github.com/danieljustus/symaira-vault/blob/main/docs/errors.md for error code documentation.",
+		TierUpgradeHint: "Upgrade your agent tier in ~/.symaira/config.yaml to unlock additional tools.",
 	}
 
 	var available []string

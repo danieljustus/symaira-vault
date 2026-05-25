@@ -10,8 +10,8 @@ import (
 
 	"filippo.io/age"
 
-	vaultconfig "github.com/danieljustus/OpenPass/internal/config"
-	"github.com/danieljustus/OpenPass/internal/testutil"
+	vaultconfig "github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/testutil"
 )
 
 func TestListReturnsAllEntriesWithoutPrefix(t *testing.T) {

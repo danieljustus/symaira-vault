@@ -1,4 +1,4 @@
-// Command generate_schema generates the OpenPass config JSON schema file.
+// Command generate_schema generates the Symaira Vault config JSON schema file.
 package main
 
 import (
@@ -8,7 +8,7 @@ import (
 
 	"github.com/invopop/jsonschema"
 
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 )
 
 func main() {
@@ -17,9 +17,9 @@ func main() {
 	}
 
 	schema := r.Reflect(&configpkg.Config{})
-	schema.ID = "https://openpass.dev/config.schema.json"
+	schema.ID = "https://symaira.dev/config.schema.json"
 	schema.Version = "https://json-schema.org/draft/2020-12/schema"
-	schema.Description = "OpenPass configuration schema"
+	schema.Description = "Symaira Vault configuration schema"
 
 	data, err := json.MarshalIndent(schema, "", "  ")
 	if err != nil {

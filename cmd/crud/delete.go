@@ -6,11 +6,11 @@ import (
 	"os"
 	"strings"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 
-	vaultsvc "github.com/danieljustus/OpenPass/internal/vaultsvc"
+	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 var (
@@ -22,10 +22,10 @@ var deleteCmd = &cobra.Command{
 	Aliases: []string{"rm", "remove"},
 	Short:   "Delete a password entry",
 	Example: `  # Delete an entry (with confirmation)
-  openpass delete github
+  symaira delete github
 
   # Skip confirmation
-  openpass delete github --yes`,
+  symaira delete github --yes`,
 	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: cli.EntryCompletionFunc,
 	RunE: func(cmd *cobra.Command, args []string) error {

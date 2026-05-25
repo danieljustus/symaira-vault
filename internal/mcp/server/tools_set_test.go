@@ -8,9 +8,9 @@ import (
 
 	"filippo.io/age"
 
-	"github.com/danieljustus/OpenPass/internal/config"
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
-	"github.com/danieljustus/OpenPass/internal/vault"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func assertTOTPSet(t *testing.T, vaultDir string, identity *age.X25519Identity, path string) {

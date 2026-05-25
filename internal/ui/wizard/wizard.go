@@ -1,4 +1,4 @@
-// Package wizard provides the openpass setup interactive wizard.
+// Package wizard provides the symaira setup interactive wizard.
 package wizard
 
 import (
@@ -116,8 +116,8 @@ func Run(vaultDir string, keepOnError bool, noResume bool) error {
 		if !final.noResume && final.state.VaultDir != "" {
 			if _, _, lerr := LoadResumeState(final.state.VaultDir); lerr == nil {
 				fmt.Println()
-				fmt.Println("Setup paused. Resume anytime with `openpass setup`.")
-				fmt.Println("Start fresh instead: `openpass setup --no-resume`.")
+				fmt.Println("Setup paused. Resume anytime with `symaira setup`.")
+				fmt.Println("Start fresh instead: `symaira setup --no-resume`.")
 			}
 		}
 		return fmt.Errorf("setup canceled")
@@ -355,7 +355,7 @@ func (m WizardModel) handleApplyFinalize() (tea.Model, tea.Cmd) {
 	}
 
 	if len(m.applyErrs) > 0 {
-		m.applyErr = fmt.Errorf("apply completed with errors — run `openpass doctor` for details")
+		m.applyErr = fmt.Errorf("apply completed with errors — run `symaira doctor` for details")
 	}
 
 	_ = DeleteResumeFile(m.state.VaultDir)
@@ -413,7 +413,7 @@ func (m WizardModel) View() string {
 	footer := helpStyle.Render("Esc to cancel · Ctrl+C to quit")
 
 	if m.applying {
-		header := headerStyle.Render(fmt.Sprintf("OpenPass Setup  Step %d/%d — %s", m.totalSteps, m.totalSteps, m.applyStep))
+		header := headerStyle.Render(fmt.Sprintf("Symaira Vault Setup  Step %d/%d — %s", m.totalSteps, m.totalSteps, m.applyStep))
 		content := "  " + m.spinner.View() + " " + m.applyStep
 		return strings.Join([]string{header, sep, "", content, "", sep, footer}, "\n")
 	}
@@ -426,7 +426,7 @@ func (m WizardModel) View() string {
 	step := m.steps[m.current]
 	pos := m.visiblePos()
 
-	header := headerStyle.Render(fmt.Sprintf("OpenPass Setup  Step %d/%d%s — %s",
+	header := headerStyle.Render(fmt.Sprintf("Symaira Vault Setup  Step %d/%d%s — %s",
 		pos+1, m.totalSteps, progressBar(pos, m.totalSteps), step.Title()))
 	content := step.View()
 

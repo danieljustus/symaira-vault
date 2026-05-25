@@ -1,6 +1,6 @@
 package wizard
 
-import "github.com/danieljustus/OpenPass/internal/ui/theme"
+import "github.com/danieljustus/symaira-vault/internal/ui/theme"
 
 // Theme aliases — all wizard step files reference styles by their original names.
 // These wrappers delegate to the centralized theme package so that step files

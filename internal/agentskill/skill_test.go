@@ -23,11 +23,11 @@ func normalizeEOL(data []byte) []byte {
 func testVars(overrides TemplateVars) TemplateVars {
 	v := TemplateVars{
 		AgentName:          "hermes",
-		ToolPrefix:         "mcp_openpass_",
-		SlashPrefix:        "/openpass:",
-		OpenPassVersion:    "4.0.0-test",
+		ToolPrefix:         "mcp_symaira_",
+		SlashPrefix:        "/symaira:",
+		SymairaVaultVersion:    "4.0.0-test",
 		ProfileTier:        "safe",
-		VaultPath:          "~/.openpass",
+		VaultPath:          "~/.symaira",
 		InstalledAt:        fixedTime.Format(time.RFC3339),
 		SkillSchemaVersion: DefaultSkillSchemaVersion,
 	}
@@ -40,8 +40,8 @@ func testVars(overrides TemplateVars) TemplateVars {
 	if overrides.SlashPrefix != "" || overrides.SlashPrefix == "" && overrides.AgentName != "" {
 		v.SlashPrefix = overrides.SlashPrefix
 	}
-	if overrides.OpenPassVersion != "" {
-		v.OpenPassVersion = overrides.OpenPassVersion
+	if overrides.SymairaVaultVersion != "" {
+		v.SymairaVaultVersion = overrides.SymairaVaultVersion
 	}
 	if overrides.ProfileTier != "" {
 		v.ProfileTier = overrides.ProfileTier
@@ -68,8 +68,8 @@ func TestRenderGolden(t *testing.T) {
 			agentName: "hermes",
 			vars: testVars(TemplateVars{
 				AgentName:   "hermes",
-				ToolPrefix:  "mcp_openpass_",
-				SlashPrefix: "/openpass:",
+				ToolPrefix:  "mcp_symaira_",
+				SlashPrefix: "/symaira:",
 				ProfileTier: "safe",
 			}),
 		},
@@ -78,8 +78,8 @@ func TestRenderGolden(t *testing.T) {
 			agentName: "claude-code",
 			vars: testVars(TemplateVars{
 				AgentName:   "claude-code",
-				ToolPrefix:  "mcp__openpass__",
-				SlashPrefix: "/mcp__openpass__",
+				ToolPrefix:  "mcp__symaira__",
+				SlashPrefix: "/mcp__symaira__",
 				ProfileTier: "standard",
 			}),
 		},
@@ -88,7 +88,7 @@ func TestRenderGolden(t *testing.T) {
 			agentName: "codex",
 			vars: testVars(TemplateVars{
 				AgentName:   "codex",
-				ToolPrefix:  "mcp0_openpass_",
+				ToolPrefix:  "mcp0_symaira_",
 				SlashPrefix: "",
 				ProfileTier: "admin",
 			}),
@@ -99,7 +99,7 @@ func TestRenderGolden(t *testing.T) {
 			vars: testVars(TemplateVars{
 				AgentName:   "opencode",
 				ToolPrefix:  "mcp0_op_",
-				SlashPrefix: "/openpass:",
+				SlashPrefix: "/symaira:",
 				ProfileTier: "standard",
 			}),
 		},
@@ -108,7 +108,7 @@ func TestRenderGolden(t *testing.T) {
 			agentName: "openclaw",
 			vars: testVars(TemplateVars{
 				AgentName:   "openclaw",
-				ToolPrefix:  "mcp__openclaw_openpass__",
+				ToolPrefix:  "mcp__openclaw_symaira__",
 				SlashPrefix: "",
 				ProfileTier: "custom",
 			}),
@@ -166,8 +166,8 @@ func TestRenderGolden(t *testing.T) {
 func TestRender_HashStable(t *testing.T) {
 	vars := testVars(TemplateVars{
 		AgentName:   "hermes",
-		ToolPrefix:  "mcp_openpass_",
-		SlashPrefix: "/openpass:",
+		ToolPrefix:  "mcp_symaira_",
+		SlashPrefix: "/symaira:",
 	})
 
 	first, err := Render("hermes", vars)
@@ -255,8 +255,8 @@ func TestSupportedAgents(t *testing.T) {
 func TestManifestParseGolden(t *testing.T) {
 	vars := testVars(TemplateVars{
 		AgentName:   "hermes",
-		ToolPrefix:  "mcp_openpass_",
-		SlashPrefix: "/openpass:",
+		ToolPrefix:  "mcp_symaira_",
+		SlashPrefix: "/symaira:",
 	})
 	rendered, err := Render("hermes", vars)
 	if err != nil {
@@ -268,8 +268,8 @@ func TestManifestParseGolden(t *testing.T) {
 		t.Fatalf("ParseManifest: %v", err)
 	}
 
-	if manifest.Name != "openpass" {
-		t.Errorf("manifest.Name = %q, want %q", manifest.Name, "openpass")
+	if manifest.Name != "symaira" {
+		t.Errorf("manifest.Name = %q, want %q", manifest.Name, "symaira")
 	}
 	if manifest.ManagedBy != SentinelValue {
 		t.Errorf("manifest.ManagedBy = %q, want %q", manifest.ManagedBy, SentinelValue)
@@ -292,8 +292,8 @@ func TestManifestParseGolden(t *testing.T) {
 func TestFindSentinel(t *testing.T) {
 	vars := testVars(TemplateVars{
 		AgentName:   "hermes",
-		ToolPrefix:  "mcp_openpass_",
-		SlashPrefix: "/openpass:",
+		ToolPrefix:  "mcp_symaira_",
+		SlashPrefix: "/symaira:",
 	})
 
 	rendered, err := Render("hermes", vars)
@@ -319,8 +319,8 @@ func TestFindSentinel(t *testing.T) {
 func TestExtractBody(t *testing.T) {
 	vars := testVars(TemplateVars{
 		AgentName:   "hermes",
-		ToolPrefix:  "mcp_openpass_",
-		SlashPrefix: "/openpass:",
+		ToolPrefix:  "mcp_symaira_",
+		SlashPrefix: "/symaira:",
 	})
 
 	rendered, err := Render("hermes", vars)
@@ -372,8 +372,8 @@ func TestHashBytes(t *testing.T) {
 func TestVerifyHash(t *testing.T) {
 	vars := testVars(TemplateVars{
 		AgentName:   "hermes",
-		ToolPrefix:  "mcp_openpass_",
-		SlashPrefix: "/openpass:",
+		ToolPrefix:  "mcp_symaira_",
+		SlashPrefix: "/symaira:",
 	})
 
 	rendered, err := Render("hermes", vars)
@@ -386,7 +386,7 @@ func TestVerifyHash(t *testing.T) {
 	}
 
 	// Tamper with the body.
-	tampered := bytes.Replace(rendered, []byte("OpenPass is"), []byte("OpenPass was"), 1)
+	tampered := bytes.Replace(rendered, []byte("Symaira Vault is"), []byte("Symaira Vault was"), 1)
 	if err := VerifyHash(tampered); err == nil {
 		t.Error("VerifyHash should fail for tampered content")
 	}
@@ -399,8 +399,8 @@ func TestInstall_FreshWrite(t *testing.T) {
 
 	vars := testVars(TemplateVars{
 		AgentName:   "hermes",
-		ToolPrefix:  "mcp_openpass_",
-		SlashPrefix: "/openpass:",
+		ToolPrefix:  "mcp_symaira_",
+		SlashPrefix: "/symaira:",
 	})
 
 	if err := Install("hermes", target, vars, false); err != nil {
@@ -428,8 +428,8 @@ func TestInstall_Idempotent(t *testing.T) {
 
 	vars := testVars(TemplateVars{
 		AgentName:   "hermes",
-		ToolPrefix:  "mcp_openpass_",
-		SlashPrefix: "/openpass:",
+		ToolPrefix:  "mcp_symaira_",
+		SlashPrefix: "/symaira:",
 	})
 
 	if err := Install("hermes", target, vars, false); err != nil {
@@ -468,8 +468,8 @@ func TestInstall_ReplacesManaged(t *testing.T) {
 
 	firstVars := testVars(TemplateVars{
 		AgentName:   "hermes",
-		ToolPrefix:  "mcp_openpass_",
-		SlashPrefix: "/openpass:",
+		ToolPrefix:  "mcp_symaira_",
+		SlashPrefix: "/symaira:",
 		ProfileTier: "safe",
 	})
 
@@ -479,8 +479,8 @@ func TestInstall_ReplacesManaged(t *testing.T) {
 
 	secondVars := testVars(TemplateVars{
 		AgentName:   "hermes",
-		ToolPrefix:  "mcp_openpass_",
-		SlashPrefix: "/openpass:",
+		ToolPrefix:  "mcp_symaira_",
+		SlashPrefix: "/symaira:",
 		ProfileTier: "admin", // changed tier
 	})
 
@@ -506,8 +506,8 @@ func TestInstall_UnmanagedFile(t *testing.T) {
 
 	vars := testVars(TemplateVars{
 		AgentName:   "hermes",
-		ToolPrefix:  "mcp_openpass_",
-		SlashPrefix: "/openpass:",
+		ToolPrefix:  "mcp_symaira_",
+		SlashPrefix: "/symaira:",
 	})
 
 	err := Install("hermes", target, vars, false)
@@ -531,8 +531,8 @@ func TestRefresh(t *testing.T) {
 
 	vars := testVars(TemplateVars{
 		AgentName:   "hermes",
-		ToolPrefix:  "mcp_openpass_",
-		SlashPrefix: "/openpass:",
+		ToolPrefix:  "mcp_symaira_",
+		SlashPrefix: "/symaira:",
 	})
 
 	if err := Install("hermes", target, vars, false); err != nil {
@@ -549,8 +549,8 @@ func TestRefresh(t *testing.T) {
 func TestRefresh_NotInstalled(t *testing.T) {
 	vars := testVars(TemplateVars{
 		AgentName:   "hermes",
-		ToolPrefix:  "mcp_openpass_",
-		SlashPrefix: "/openpass:",
+		ToolPrefix:  "mcp_symaira_",
+		SlashPrefix: "/symaira:",
 	})
 
 	err := Refresh("hermes", "/nonexistent/path/SKILL.md", vars)
@@ -570,8 +570,8 @@ func TestRefresh_Unmanaged(t *testing.T) {
 
 	vars := testVars(TemplateVars{
 		AgentName:   "hermes",
-		ToolPrefix:  "mcp_openpass_",
-		SlashPrefix: "/openpass:",
+		ToolPrefix:  "mcp_symaira_",
+		SlashPrefix: "/symaira:",
 	})
 
 	err := Refresh("hermes", target, vars)
@@ -587,8 +587,8 @@ func TestUninstall(t *testing.T) {
 
 	vars := testVars(TemplateVars{
 		AgentName:   "hermes",
-		ToolPrefix:  "mcp_openpass_",
-		SlashPrefix: "/openpass:",
+		ToolPrefix:  "mcp_symaira_",
+		SlashPrefix: "/symaira:",
 	})
 
 	if err := Install("hermes", target, vars, false); err != nil {
@@ -638,8 +638,8 @@ func TestExport(t *testing.T) {
 
 	vars := testVars(TemplateVars{
 		AgentName:   "hermes",
-		ToolPrefix:  "mcp_openpass_",
-		SlashPrefix: "/openpass:",
+		ToolPrefix:  "mcp_symaira_",
+		SlashPrefix: "/symaira:",
 	})
 
 	if err := Export("hermes", vars, &buf); err != nil {
@@ -711,8 +711,8 @@ func TestExportToFile(t *testing.T) {
 
 	vars := testVars(TemplateVars{
 		AgentName:   "hermes",
-		ToolPrefix:  "mcp_openpass_",
-		SlashPrefix: "/openpass:",
+		ToolPrefix:  "mcp_symaira_",
+		SlashPrefix: "/symaira:",
 	})
 
 	if err := ExportToFile("hermes", vars, output); err != nil {
@@ -741,8 +741,8 @@ func TestExportToFile(t *testing.T) {
 func TestVerifyRender(t *testing.T) {
 	vars := testVars(TemplateVars{
 		AgentName:   "hermes",
-		ToolPrefix:  "mcp_openpass_",
-		SlashPrefix: "/openpass:",
+		ToolPrefix:  "mcp_symaira_",
+		SlashPrefix: "/symaira:",
 	})
 
 	rendered, err := Render("hermes", vars)
@@ -772,14 +772,14 @@ func TestPrefixConfig(t *testing.T) {
 		{
 			name:        "hermes",
 			agent:       "hermes",
-			toolPrefix:  "mcp_openpass_",
-			slashPrefix: "/openpass:",
+			toolPrefix:  "mcp_symaira_",
+			slashPrefix: "/symaira:",
 		},
 		{
 			name:        "claude-code",
 			agent:       "claude-code",
-			toolPrefix:  "mcp__openpass__",
-			slashPrefix: "/mcp__openpass__",
+			toolPrefix:  "mcp__symaira__",
+			slashPrefix: "/mcp__symaira__",
 		},
 		{
 			name:        "codex",
@@ -838,8 +838,8 @@ func TestInstall_RoundTrip(t *testing.T) {
 
 	vars := testVars(TemplateVars{
 		AgentName:   "hermes",
-		ToolPrefix:  "mcp_openpass_",
-		SlashPrefix: "/openpass:",
+		ToolPrefix:  "mcp_symaira_",
+		SlashPrefix: "/symaira:",
 	})
 
 	if err := Install("hermes", target, vars, false); err != nil {
@@ -871,8 +871,8 @@ func TestInstall_RoundTrip(t *testing.T) {
 func TestManifest_BodyHashConsistency(t *testing.T) {
 	vars := testVars(TemplateVars{
 		AgentName:   "hermes",
-		ToolPrefix:  "mcp_openpass_",
-		SlashPrefix: "/openpass:",
+		ToolPrefix:  "mcp_symaira_",
+		SlashPrefix: "/symaira:",
 	})
 
 	rendered, err := Render("hermes", vars)
@@ -916,8 +916,8 @@ func TestProfileTiers(t *testing.T) {
 		t.Run(tt.tier, func(t *testing.T) {
 			vars := testVars(TemplateVars{
 				AgentName:   "hermes",
-				ToolPrefix:  "mcp_openpass_",
-				SlashPrefix: "/openpass:",
+				ToolPrefix:  "mcp_symaira_",
+				SlashPrefix: "/symaira:",
 				ProfileTier: tt.tier,
 			})
 

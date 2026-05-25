@@ -1,0 +1,61 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-config-get - Get a configuration value
+
+
+.SH SYNOPSIS
+\fBsymaira config get  [flags]\fP
+
+
+.SH DESCRIPTION
+Get the value of a configuration key using dotted path notation.
+
+.PP
+Examples:
+  openpass config get vaultDir
+  openpass config get agents.claude-code.canWrite
+  openpass config get mcp.port
+
+
+.SH OPTIONS
+\fB--file\fP=""
+	path to config file (default: ~/.openpass/config.yaml)
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for get
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH SEE ALSO
+\fBsymaira-config(1)\fP

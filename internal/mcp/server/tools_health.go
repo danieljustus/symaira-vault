@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 )
 
 func (s *Server) handleHealth(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {

@@ -9,12 +9,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
-	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
-	"github.com/danieljustus/OpenPass/internal/git"
-	"github.com/danieljustus/OpenPass/internal/ui/cliout"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	"github.com/danieljustus/symaira-vault/internal/git"
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 var (
@@ -28,12 +28,12 @@ var remoteCmd = &cobra.Command{
 	Short: "Manage git remote for vault sync",
 	Long: `Manage the git remote used for synchronizing the vault.
 
-Use 'openpass remote init <ssh-target>' to configure a remote git repository
+Use 'symaira remote init <ssh-target>' to configure a remote git repository
 for vault synchronization. The vault must be initialized first.`,
-	Example: `  openpass remote init hermes@macmini
-  openpass remote init user@host:/custom/path.git
-  openpass remote init hermes@macmini --push
-  openpass remote status`,
+	Example: `  symaira remote init hermes@macmini
+  symaira remote init user@host:/custom/path.git
+  symaira remote init hermes@macmini --push
+  symaira remote status`,
 	Annotations: map[string]string{
 		requiresVaultAnnotation: "false",
 	},
@@ -45,20 +45,20 @@ var remoteInitCmd = &cobra.Command{
 	Long: `Configure a remote git repository for vault synchronization.
 
 The ssh-target can be in these formats:
-  user@host           - bare repo at ~/openpass-remote.git on remote
+  user@host           - bare repo at ~/symaira-remote.git on remote
   user@host:path      - bare repo at path on remote
-  host                - bare repo at ~/openpass-remote.git using current user
+  host                - bare repo at ~/symaira-remote.git using current user
   host:path           - bare repo at path using current user
 
 Flags:
   --name   - Remote name (default: "origin")
-  --path   - Custom bare repo path on remote (default: ~/openpass-remote.git)
+  --path   - Custom bare repo path on remote (default: ~/symaira-remote.git)
   --push   - Push the vault to the remote after setup
 
-This command also enables git.auto_push in your OpenPass config.`,
-	Example: `  openpass remote init hermes@macmini
-  openpass remote init dev@server:/srv/git/openpass.git --name upstream
-  openpass remote init hermes@macmini --push`,
+This command also enables git.auto_push in your Symaira Vault config.`,
+	Example: `  symaira remote init hermes@macmini
+  symaira remote init dev@server:/srv/git/symaira.git --name upstream
+  symaira remote init hermes@macmini --push`,
 	Args: cobra.ExactArgs(1),
 	Annotations: map[string]string{
 		requiresVaultAnnotation: "false",
@@ -82,7 +82,7 @@ func init() {
 	remoteCmd.AddCommand(remoteStatusCmd)
 
 	remoteInitCmd.Flags().StringVarP(&remoteName, "name", "n", "origin", "Remote name")
-	remoteInitCmd.Flags().StringVarP(&remotePath, "path", "p", "", "Custom bare repo path on remote (default: ~/openpass-remote.git)")
+	remoteInitCmd.Flags().StringVarP(&remotePath, "path", "p", "", "Custom bare repo path on remote (default: ~/symaira-remote.git)")
 	remoteInitCmd.Flags().BoolVar(&remotePushFlag, "push", false, "Push vault to remote after setup")
 }
 
@@ -99,7 +99,7 @@ func runRemoteInit(cmd *cobra.Command, args []string) error {
 
 	if !vaultpkg.IsInitialized(vaultDir) {
 		return errorspkg.NewCLIError(errorspkg.ExitNotInitialized,
-			"vault not initialized. Run 'openpass init' first",
+			"vault not initialized. Run 'symaira init' first",
 			errorspkg.ErrVaultNotInitialized)
 	}
 
@@ -150,7 +150,7 @@ func runRemoteInit(cmd *cobra.Command, args []string) error {
 	} else {
 		cliout.Hintf("Create the bare repo on the remote with:")
 		cliout.Hintf("  ssh %s 'git init --bare %s'", sshHost, repoPath)
-		cliout.Hintf("Then push with: openpass git push")
+		cliout.Hintf("Then push with: symaira git push")
 	}
 
 	return nil
@@ -164,7 +164,7 @@ func runRemoteStatus(cmd *cobra.Command, args []string) error {
 
 	if !vaultpkg.IsInitialized(vaultDir) {
 		return errorspkg.NewCLIError(errorspkg.ExitNotInitialized,
-			"vault not initialized. Run 'openpass init' first",
+			"vault not initialized. Run 'symaira init' first",
 			errorspkg.ErrVaultNotInitialized)
 	}
 
@@ -176,7 +176,7 @@ func runRemoteStatus(cmd *cobra.Command, args []string) error {
 	if url == "" {
 		if cli.OutputFormat == "text" {
 			printlnQuietAware("No remote configured.")
-			cliout.Hintf("Use 'openpass remote init <ssh-target>' to configure a remote.")
+			cliout.Hintf("Use 'symaira remote init <ssh-target>' to configure a remote.")
 		} else {
 			_ = PrintResult(map[string]interface{}{
 				"configured": false,
@@ -245,7 +245,7 @@ func parseSSHTarget(target, customPath string) (user, host, path string, err err
 		path = customPath
 	}
 	if path == "" {
-		path = "~/openpass-remote.git"
+		path = "~/symaira-remote.git"
 	}
 
 	return user, host, path, nil
@@ -268,7 +268,7 @@ func enableAutoPush() error {
 		return fmt.Errorf("cannot determine home directory: %w", err)
 	}
 
-	configPath := filepath.Join(home, ".openpass", "config.yaml")
+	configPath := filepath.Join(home, ".symaira", "config.yaml")
 	cfg, err := configpkg.Load(configPath)
 	if err != nil {
 		cfg = configpkg.Default()
@@ -294,7 +294,7 @@ func loadAutoPushConfig() bool {
 		return false
 	}
 
-	cfg, err := configpkg.Load(filepath.Join(home, ".openpass", "config.yaml"))
+	cfg, err := configpkg.Load(filepath.Join(home, ".symaira", "config.yaml"))
 	if err != nil {
 		return false
 	}

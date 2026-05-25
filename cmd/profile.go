@@ -9,8 +9,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
-	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 )
 
 var profileVaultPath string
@@ -19,9 +19,9 @@ var profileCmd = &cobra.Command{
 	Use:   "profile",
 	Short: "Manage vault profiles",
 	Long:  `Manage named vault profiles for switching between multiple vaults.`,
-	Example: `  openpass profile list
-  openpass profile add work --vault ~/.openpass-work
-  openpass profile use work`,
+	Example: `  symaira profile list
+  symaira profile add work --vault ~/.symaira-work
+  symaira profile use work`,
 	Annotations: map[string]string{
 		requiresVaultAnnotation: "false",
 	},
@@ -40,14 +40,14 @@ var profileListCmd = &cobra.Command{
 			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "cannot determine home directory", err)
 		}
 
-		cfg, err := configpkg.Load(filepath.Join(home, ".openpass", "config.yaml"))
+		cfg, err := configpkg.Load(filepath.Join(home, ".symaira", "config.yaml"))
 		if err != nil {
 			cfg = configpkg.Default()
 		}
 
 		if len(cfg.Profiles) == 0 {
 			printlnQuietAware("No profiles configured.")
-			printlnQuietAware("Use 'openpass profile add <name> --vault <path>' to create a profile.")
+			printlnQuietAware("Use 'symaira profile add <name> --vault <path>' to create a profile.")
 			return nil
 		}
 
@@ -76,7 +76,7 @@ var profileAddCmd = &cobra.Command{
 	Long: `Add a new vault profile with a name and vault path.
 
 Example:
-  openpass profile add work --vault ~/.openpass-work`,
+  symaira profile add work --vault ~/.symaira-work`,
 	Args: cobra.ExactArgs(1),
 	Annotations: map[string]string{
 		requiresVaultAnnotation: "false",
@@ -96,7 +96,7 @@ Example:
 			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "cannot determine home directory", err)
 		}
 
-		configPath := filepath.Join(home, ".openpass", "config.yaml")
+		configPath := filepath.Join(home, ".symaira", "config.yaml")
 		cfg, err := configpkg.Load(configPath)
 		if err != nil {
 			cfg = configpkg.Default()
@@ -127,7 +127,7 @@ var profileUseCmd = &cobra.Command{
 	Long: `Set the default profile to use when no --vault or OPENPASS_VAULT is specified.
 
 Example:
-  openpass profile use work`,
+  symaira profile use work`,
 	Args: cobra.ExactArgs(1),
 	Annotations: map[string]string{
 		requiresVaultAnnotation: "false",
@@ -140,7 +140,7 @@ Example:
 			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "cannot determine home directory", err)
 		}
 
-		configPath := filepath.Join(home, ".openpass", "config.yaml")
+		configPath := filepath.Join(home, ".symaira", "config.yaml")
 		cfg, err := configpkg.Load(configPath)
 		if err != nil {
 			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "cannot load config", err)

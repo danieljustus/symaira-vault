@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
-	"github.com/danieljustus/OpenPass/internal/config"
-	gitpkg "github.com/danieljustus/OpenPass/internal/git"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	gitpkg "github.com/danieljustus/symaira-vault/internal/git"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func TestInitCommand_HiddenPassphrase(t *testing.T) {

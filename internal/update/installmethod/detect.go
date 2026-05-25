@@ -1,4 +1,4 @@
-// Package installmethod detects how OpenPass was installed to determine
+// Package installmethod detects how Symaira Vault was installed to determine
 // whether self-update is safe or if the user should update via their
 // package manager, Go toolchain, or by rebuilding from source.
 package installmethod
@@ -99,17 +99,17 @@ func IsSelfUpdateSupported(method InstallMethod) bool {
 func Guidance(method InstallMethod) string {
 	switch method {
 	case DirectDownload:
-		return "Re-run the quick install script: curl -sSfL https://raw.githubusercontent.com/danieljustus/OpenPass/main/scripts/install.sh | sh"
+		return "Re-run the quick install script: curl -sSfL https://raw.githubusercontent.com/danieljustus/Symaira Vault/main/scripts/install.sh | sh"
 	case Homebrew:
-		return "Update via Homebrew: brew upgrade openpass"
+		return "Update via Homebrew: brew upgrade symaira"
 	case GoInstall:
-		return "Update via Go: go install github.com/danieljustus/OpenPass@latest"
+		return "Update via Go: go install github.com/danieljustus/symaira-vault@latest"
 	case PackageManager:
 		return "Update via your system package manager (e.g., apt upgrade, yum update, pacman -Syu)"
 	case BuildFromSource:
-		return "Rebuild from source: git pull && go build ./cmd/openpass"
+		return "Rebuild from source: git pull && go build ./cmd/symaira"
 	case Unknown:
-		return "Unable to determine installation method. Reinstall from https://github.com/danieljustus/OpenPass/releases"
+		return "Unable to determine installation method. Reinstall from https://github.com/danieljustus/symaira-vault/releases"
 	default:
 		return ""
 	}
@@ -209,7 +209,7 @@ func detectFromReceipts(absPath string) InstallMethod {
 		return Homebrew
 	}
 
-	if _, err := os.Stat("/var/lib/dpkg/info/openpass.list"); err == nil {
+	if _, err := os.Stat("/var/lib/dpkg/info/symaira.list"); err == nil {
 		return PackageManager
 	}
 

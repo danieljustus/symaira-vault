@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/danieljustus/OpenPass/internal/metrics"
+	"github.com/danieljustus/symaira-vault/internal/metrics"
 )
 
-const DefaultLatestReleaseURL = "https://api.github.com/repos/danieljustus/OpenPass/releases/latest"
+const DefaultLatestReleaseURL = "https://api.github.com/repos/danieljustus/Symaira Vault/releases/latest"
 
 // newSecureClient returns an HTTP client with TLS 1.3 minimum version.
 func newSecureClient() *http.Client {
@@ -158,7 +158,7 @@ func (c *Checker) fetchLatestRelease(ctx context.Context, currentVersion string)
 	}
 
 	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", fmt.Sprintf("openpass/%s", strings.TrimSpace(currentVersion)))
+	req.Header.Set("User-Agent", fmt.Sprintf("symaira/%s", strings.TrimSpace(currentVersion)))
 
 	resp, err := client.Do(req) // #nosec G107 — URL is validated and points to GitHub API
 	if err != nil {

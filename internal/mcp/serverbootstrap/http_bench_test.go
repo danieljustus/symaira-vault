@@ -18,7 +18,7 @@ func BenchmarkJSONEncodeDirect(b *testing.B) {
 				"tools": map[string]any{},
 			},
 			"serverInfo": map[string]any{
-				"name":    "openpass",
+				"name":    "symaira",
 				"version": "1.0.0",
 			},
 		},
@@ -46,7 +46,7 @@ func BenchmarkJSONEncodePooled(b *testing.B) {
 				"tools": map[string]any{},
 			},
 			"serverInfo": map[string]any{
-				"name":    "openpass",
+				"name":    "symaira",
 				"version": "1.0.0",
 			},
 		},

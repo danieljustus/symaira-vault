@@ -17,14 +17,14 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-runewidth"
 
-	clipboardapp "github.com/danieljustus/OpenPass/internal/clipboard"
-	vaultcrypto "github.com/danieljustus/OpenPass/internal/crypto"
-	"github.com/danieljustus/OpenPass/internal/envfilter"
-	render "github.com/danieljustus/OpenPass/internal/ui/render"
-	theme "github.com/danieljustus/OpenPass/internal/ui/theme"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
-	taint "github.com/danieljustus/OpenPass/internal/vault/taint"
-	vaultsvc "github.com/danieljustus/OpenPass/internal/vaultsvc"
+	clipboardapp "github.com/danieljustus/symaira-vault/internal/clipboard"
+	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
+	"github.com/danieljustus/symaira-vault/internal/envfilter"
+	render "github.com/danieljustus/symaira-vault/internal/ui/render"
+	theme "github.com/danieljustus/symaira-vault/internal/ui/theme"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
+	taint "github.com/danieljustus/symaira-vault/internal/vault/taint"
+	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 const (
@@ -104,7 +104,7 @@ type logMsg struct {
 	isError bool
 }
 
-// TUIModel is the Bubble Tea model for the OpenPass two-pane terminal UI.
+// TUIModel is the Bubble Tea model for the Symaira Vault two-pane terminal UI.
 type TUIModel struct {
 	svc vaultsvc.Service
 
@@ -299,7 +299,7 @@ func (m TUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m TUIModel) View() string {
 	if m.width == 0 {
-		return "Loading OpenPass UI..."
+		return "Loading Symaira Vault UI..."
 	}
 
 	contentHeight := max(8, m.height-6)
@@ -810,7 +810,7 @@ func editEntryCmd(svc vaultsvc.Service, path string) tea.Cmd {
 			return entryEditedMsg{path: path, err: err}
 		}
 
-		tmp, err := os.CreateTemp("", "openpass-*.json")
+		tmp, err := os.CreateTemp("", "symaira-*.json")
 		if err != nil {
 			return entryEditedMsg{path: path, err: err}
 		}

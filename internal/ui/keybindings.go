@@ -1,7 +1,7 @@
 package ui
 
 // Keybinding documents a single TUI key/action pair. The list is the source
-// of truth for the in-app help text *and* for `openpass ui --print-keybindings`.
+// of truth for the in-app help text *and* for `symaira ui --print-keybindings`.
 // Update this list when you add or change a binding so the docs stay in sync.
 type Keybinding struct {
 	Key    string

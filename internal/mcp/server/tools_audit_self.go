@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/danieljustus/OpenPass/internal/audit"
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/audit"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 )
 
 type auditEvent struct {

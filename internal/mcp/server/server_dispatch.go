@@ -11,13 +11,13 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 
-	"github.com/danieljustus/OpenPass/internal/anomaly"
-	"github.com/danieljustus/OpenPass/internal/authguard"
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
-	auth "github.com/danieljustus/OpenPass/internal/mcp/auth"
-	"github.com/danieljustus/OpenPass/internal/metrics"
-	"github.com/danieljustus/OpenPass/internal/notify"
-	"github.com/danieljustus/OpenPass/internal/vault"
+	"github.com/danieljustus/symaira-vault/internal/anomaly"
+	"github.com/danieljustus/symaira-vault/internal/authguard"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+	auth "github.com/danieljustus/symaira-vault/internal/mcp/auth"
+	"github.com/danieljustus/symaira-vault/internal/metrics"
+	"github.com/danieljustus/symaira-vault/internal/notify"
+	"github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func toolError(msg string) *mcp.CallToolResult {
@@ -28,7 +28,7 @@ func toolActionType(toolName string) string {
 	switch toolName {
 	case "set_entry_field", "secure_input", "request_credential":
 		return "set"
-	case "delete_entry", "openpass_delete":
+	case "delete_entry", "symaira_delete":
 		return "delete"
 	case "run_command", "execute_with_secret", "execute_api_request":
 		return "run"
@@ -129,7 +129,7 @@ func (s *Server) executeTool(ctx context.Context, name string, args json.RawMess
 			s.logAudit(ctx, "tool_registry_drift", name, false)
 			return callToolResultPayload(toolError(
 				"tool registry has changed since this token was issued — " +
-					"re-issue the token with 'openpass mcp token create'",
+					"re-issue the token with 'symaira mcp token create'",
 			)), nil
 		}
 	}
@@ -282,7 +282,7 @@ func (s *Server) challengeBiometric(ctx context.Context, toolName string) error 
 		)
 	}
 
-	reason := fmt.Sprintf("OpenPass agent %q is requesting tool %q", agentName, toolName)
+	reason := fmt.Sprintf("Symaira Vault agent %q is requesting tool %q", agentName, toolName)
 	if err := challenger.Challenge(ctx, authguard.OperationType(toolName), reason); err != nil {
 		s.logAudit(ctx, "policy_biometry_failed", toolName, false)
 		return fmt.Errorf("biometric verification failed for tool %q: %w", toolName, err)

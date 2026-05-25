@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { OpenPassTools, maskValue } from "@openpass/mcp-client";
+import { SymairaTools, maskValue } from "@symaira/mcp-client";
 import { VaultTreeItem } from "./vaultTreeItem";
 
 export class VaultTreeProvider implements vscode.TreeDataProvider<VaultTreeItem> {
@@ -8,10 +8,10 @@ export class VaultTreeProvider implements vscode.TreeDataProvider<VaultTreeItem>
   readonly onDidChangeTreeData: vscode.Event<VaultTreeItem | undefined | void> =
     this._onDidChangeTreeData.event;
 
-  private tools: OpenPassTools;
+  private tools: SymairaTools;
   private entries: string[] = [];
 
-  constructor(tools: OpenPassTools) {
+  constructor(tools: SymairaTools) {
     this.tools = tools;
   }
 

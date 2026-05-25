@@ -1,0 +1,76 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-share-list - List share grants
+
+
+.SH SYNOPSIS
+\fBsymaira share list [flags]\fP
+
+
+.SH DESCRIPTION
+List all share grants with optional filtering by status, agent, or path.
+
+.PP
+Examples:
+  openpass share list
+  openpass share list --status approved
+  openpass share list --from agent-a
+  openpass share list --to agent-b
+  openpass share list --path github.password
+  openpass share list --output json
+
+
+.SH OPTIONS
+\fB--from\fP=""
+	Filter by source agent
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for list
+
+.PP
+\fB--path\fP=""
+	Filter by secret path
+
+.PP
+\fB--status\fP=""
+	Filter by status (pending, approved, revoked, expired, rejected)
+
+.PP
+\fB--to\fP=""
+	Filter by target agent
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH SEE ALSO
+\fBsymaira-share(1)\fP

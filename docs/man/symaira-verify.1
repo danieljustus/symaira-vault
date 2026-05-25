@@ -1,0 +1,62 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-verify - Verify vault entry integrity against manifest
+
+
+.SH SYNOPSIS
+\fBsymaira verify [flags]\fP
+
+
+.SH DESCRIPTION
+Verify that all vault entries match their recorded manifest hashes.
+This detects tampered or corrupted entry files.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for verify
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Verify manifest matches on-disk entries
+  openpass verify
+
+  # As part of a scripted health check
+  openpass verify || echo "Manifest mismatch — investigate"
+.EE
+
+
+.SH SEE ALSO
+\fBopenpass(1)\fP

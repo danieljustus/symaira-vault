@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"os"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
-	"github.com/danieljustus/OpenPass/internal/ui/wizard"
+	"github.com/danieljustus/symaira-vault/internal/ui/wizard"
 )
 
 var setupKeepOnError bool
@@ -17,7 +17,7 @@ var setupNoResume bool
 
 var setupCmd = &cobra.Command{
 	Use:   "setup",
-	Short: "Interactive setup wizard for OpenPass",
+	Short: "Interactive setup wizard for Symaira Vault",
 	Long: `Launch the interactive setup wizard to initialize or re-configure your vault.
 
 The wizard guides you through:
@@ -30,22 +30,22 @@ The wizard guides you through:
   • Backup recommendations
   • Profile name
 
-For non-interactive environments (CI, scripts), use 'openpass init' instead.`,
+For non-interactive environments (CI, scripts), use 'symaira init' instead.`,
 	Example: `  # Run the wizard (resumes from saved state if available)
-  openpass setup
+  symaira setup
 
   # Restart from scratch
-  openpass setup --no-resume
+  symaira setup --no-resume
 
   # Keep partial vault artifacts on error for debugging
-  openpass setup --keep-on-error`,
+  symaira setup --keep-on-error`,
 	Annotations: map[string]string{
 		cli.RequiresVaultAnnotation: "false",
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// WIZ-15: Non-TTY guard.
 		if !term.IsTerminal(int(os.Stdin.Fd())) {
-			return fmt.Errorf("setup needs a TTY; use `openpass init` for non-interactive vault initialization")
+			return fmt.Errorf("setup needs a TTY; use `symaira init` for non-interactive vault initialization")
 		}
 
 		vaultDir := cli.GetVaultDir()

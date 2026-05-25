@@ -6,80 +6,80 @@ import (
 	"strings"
 	"time"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 
-	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 )
 
 var mcpCmd = &cobra.Command{
 	Use:   "mcp",
-	Short: "[Deprecated v4.0] MCP server commands — use 'openpass agent' instead",
+	Short: "[Deprecated v4.0] MCP server commands — use 'symaira agent' instead",
 	Long: `MCP management commands have been replaced by the agent command group.
 
 All MCP server functionality (install, configure, token management) is
-now available via the 'openpass agent' command family.`,
-	Example: `  openpass agent install claude-code`,
+now available via the 'symaira agent' command family.`,
+	Example: `  symaira agent install claude-code`,
 	Hidden:  true,
 }
 
 var McpTokenCmd = &cobra.Command{
 	Use:   "token",
-	Short: "[Deprecated v4.0, removed in v4.1] Use 'openpass agent token <name>'",
-	Long: `This command was deprecated in OpenPass v4.0 and will be removed in v4.1.
+	Short: "[Deprecated v4.0, removed in v4.1] Use 'symaira agent token <name>'",
+	Long: `This command was deprecated in Symaira Vault v4.0 and will be removed in v4.1.
 
-Scoped token management is now available via 'openpass agent token <name>'
+Scoped token management is now available via 'symaira agent token <name>'
 with subcommands new, list, revoke, and rotate.`,
-	Example: `  openpass agent token my-agent new`,
+	Example: `  symaira agent token my-agent new`,
 	Hidden:  true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: openpass agent token <name> new/list/revoke\n")
+		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: symaira agent token <name> new/list/revoke\n")
 		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
-			"This command is deprecated in v4.0. Use: openpass agent token <name> new/list/revoke", nil)
+			"This command is deprecated in v4.0. Use: symaira agent token <name> new/list/revoke", nil)
 	},
 }
 
 var TokenCreateCmd = &cobra.Command{
 	Use:   "create",
-	Short: "[Deprecated v4.0, removed in v4.1] Use 'openpass agent token <name> new'",
-	Long: `This command was deprecated in OpenPass v4.0 and will be removed in v4.1.
+	Short: "[Deprecated v4.0, removed in v4.1] Use 'symaira agent token <name> new'",
+	Long: `This command was deprecated in Symaira Vault v4.0 and will be removed in v4.1.
 
-Create scoped tokens via 'openpass agent token <name> new'.`,
+Create scoped tokens via 'symaira agent token <name> new'.`,
 	Hidden: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: openpass agent token <name> new\n")
+		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: symaira agent token <name> new\n")
 		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
-			"This command is deprecated in v4.0. Use: openpass agent token <name> new", nil)
+			"This command is deprecated in v4.0. Use: symaira agent token <name> new", nil)
 	},
 }
 
 var tokenListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "[Deprecated v4.0, removed in v4.1] Use 'openpass agent token <name> list'",
-	Long: `This command was deprecated in OpenPass v4.0 and will be removed in v4.1.
+	Short: "[Deprecated v4.0, removed in v4.1] Use 'symaira agent token <name> list'",
+	Long: `This command was deprecated in Symaira Vault v4.0 and will be removed in v4.1.
 
-List tokens via 'openpass agent token <name> list'.`,
+List tokens via 'symaira agent token <name> list'.`,
 	Hidden: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: openpass agent token <name> list\n")
+		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: symaira agent token <name> list\n")
 		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
-			"This command is deprecated in v4.0. Use: openpass agent token <name> list", nil)
+			"This command is deprecated in v4.0. Use: symaira agent token <name> list", nil)
 	},
 }
 
 var tokenRevokeCmd = &cobra.Command{
 	Use:   "revoke <token-id>",
-	Short: "[Deprecated v4.0, removed in v4.1] Use 'openpass agent token <name> revoke'",
-	Long: `This command was deprecated in OpenPass v4.0 and will be removed in v4.1.
+	Short: "[Deprecated v4.0, removed in v4.1] Use 'symaira agent token <name> revoke'",
+	Long: `This command was deprecated in Symaira Vault v4.0 and will be removed in v4.1.
 
-Revoke tokens via 'openpass agent token <name> revoke'.`,
+Revoke tokens via 'symaira agent token <name> revoke'.`,
 	Hidden: true,
 	Args:   cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: openpass agent token <name> revoke\n")
+		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: symaira agent token <name> revoke\n")
 		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
-			"This command is deprecated in v4.0. Use: openpass agent token <name> revoke", nil)
+			"This command is deprecated in v4.0. Use: symaira agent token <name> revoke", nil)
 	},
 }
 

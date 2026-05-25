@@ -7,7 +7,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 )
 
 // Printer defines the interface for output formatting.

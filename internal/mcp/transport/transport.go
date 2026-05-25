@@ -1,4 +1,4 @@
-// Package transport implements the Model Context Protocol (MCP) transport layer for OpenPass.
+// Package transport implements the Model Context Protocol (MCP) transport layer for Symaira Vault.
 package transport
 
 import (

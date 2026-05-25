@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
-import { OpenPassTools, maskValue } from "@openpass/mcp-client";
+import { SymairaTools, maskValue } from "@symaira/mcp-client";
 
-export async function generatePassword(tools: OpenPassTools): Promise<void> {
+export async function generatePassword(tools: SymairaTools): Promise<void> {
   const lengthInput = await vscode.window.showInputBox({
     prompt: "Password length",
     value: "32",

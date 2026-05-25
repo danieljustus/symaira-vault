@@ -1,0 +1,56 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-agent-doctor - Check agent integration health
+
+
+.SH SYNOPSIS
+\fBsymaira agent doctor  [flags]\fP
+
+
+.SH DESCRIPTION
+Run end-to-end diagnostics for an agent integration:
+  • Profile exists and is valid
+  • Skill file is installed and managed by OpenPass
+  • Skill hash matches current template (detects drift)
+  • Token registry entry exists
+Reports structured results; exits 0 if all checks pass.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for doctor
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH SEE ALSO
+\fBsymaira-agent(1)\fP

@@ -1,10 +1,10 @@
 #!/bin/sh
-# OpenPass installer script for macOS and Linux.
+# Symaira Vault installer script for macOS and Linux.
 # Downloads the latest (or specified) release from GitHub, verifies the
 # SHA-256 checksum, and installs the binary.
 #
 # Usage:
-#   curl -sSfL https://raw.githubusercontent.com/danieljustus/OpenPass/main/scripts/install.sh | sh
+#   curl -sSfL https://raw.githubusercontent.com/danieljustus/symaira-vault/main/scripts/install.sh | sh
 #
 # Flags:
 #   --version X.Y.Z     Install a specific version (default: latest)
@@ -22,9 +22,9 @@
 set -eu
 
 # ── Constants ────────────────────────────────────────────────────────────────
-REPO="danieljustus/OpenPass"
-BINARY="openpass"
-PROJECT="OpenPass"
+REPO="danieljustus/symaira-vault"
+BINARY="symaira"
+PROJECT="symaira"
 GITHUB_API="https://api.github.com"
 GITHUB_DOWNLOAD="https://github.com/${REPO}/releases/download"
 
@@ -98,11 +98,11 @@ resolve_latest_version() {
     # GitHub API requires User-Agent header.
     if has_cmd curl; then
         response=$(curl -fsSL -H "Accept: application/json" \
-                        -H "User-Agent: openpass-installer" \
+                        -H "User-Agent: symaira-installer" \
                         "$api_url")
     elif has_cmd wget; then
         response=$(wget -qO- --header="Accept: application/json" \
-                           --header="User-Agent: openpass-installer" \
+                           --header="User-Agent: symaira-installer" \
                            "$api_url")
     fi
 
@@ -171,7 +171,7 @@ verify_checksums_signature() {
     cosign verify-blob \
         --certificate "$pem_path" \
         --signature "$sig_path" \
-        --certificate-identity-regexp 'https://github.com/danieljustus/OpenPass/.github/workflows/release.yml@refs/tags/v.*' \
+        --certificate-identity-regexp 'https://github.com/danieljustus/symaira-vault/.github/workflows/release.yml@refs/tags/v.*' \
         --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
         "$checksums_path" >/dev/null 2>&1 || fatal "Cosign signature verification failed for checksums.txt.
   The checksums file may have been tampered with.
@@ -225,7 +225,7 @@ main() {
                 dry_run="true"; shift ;;
             --help|-h)
                 cat <<'USAGE'
-OpenPass installer
+Symaira Vault installer
 
 Usage:
   install.sh [OPTIONS]
@@ -255,7 +255,7 @@ USAGE
     fi
     # Strip leading 'v' if present for file naming (GoReleaser uses bare version).
     version_no_v="${version#v}"
-    info "Installing OpenPass ${version}..."
+    info "Installing Symaira Vault ${version}..."
 
     # Detect platform.
     os="$(detect_os)"
@@ -333,7 +333,7 @@ USAGE
     $sudo_cmd cp "$binary_path" "${install_dir}/${BINARY}"
     $sudo_cmd chmod +x "${install_dir}/${BINARY}"
 
-    info "OpenPass ${version} installed to ${install_dir}/${BINARY}"
+    info "Symaira Vault ${version} installed to ${install_dir}/${BINARY}"
 
     # PATH guidance.
     case ":$PATH:" in

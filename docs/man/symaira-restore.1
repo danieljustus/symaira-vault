@@ -1,0 +1,40 @@
+.nh
+.TH "SYMAIRA" "1" "Apr 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-restore - Restore vault from a backup archive
+
+
+.SH SYNOPSIS
+\fBsymaira restore  [flags]\fP
+
+
+.SH DESCRIPTION
+Restore a vault from a previously created backup archive (.tar.gz).
+
+.PP
+The archive is extracted into the current vault directory. If the vault directory
+does not exist, it will be created. After extraction, the vault is verified
+to ensure all expected files are present.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for restore
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH SEE ALSO
+\fBopenpass(1)\fP

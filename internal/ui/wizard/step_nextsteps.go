@@ -33,30 +33,30 @@ func (s *NextStepsStep) Update(msg tea.Msg) (Step, tea.Cmd) {
 func (s *NextStepsStep) View() string {
 	st := s.state
 	lines := []string{
-		successStyle.Render("✓ OpenPass is ready!"),
+		successStyle.Render("✓ Symaira Vault is ready!"),
 		"",
 		"Quick-start commands:",
 		"",
-		"  " + focusedStyle.Render("openpass add <name>") + "           add your first entry",
-		"  " + focusedStyle.Render("openpass get <name>") + "           retrieve a password",
-		"  " + focusedStyle.Render("openpass tui") + "                  browse entries in terminal UI",
-		"  " + focusedStyle.Render("openpass autotype") + "             auto-type passwords into forms",
-		"  " + focusedStyle.Render("openpass doctor") + "               health check",
-		"  " + focusedStyle.Render("openpass mcp-config") + "           configure MCP agent integrations",
-		"  " + focusedStyle.Render("openpass auth set <method>") + "    change auth method",
-		"  " + focusedStyle.Render("openpass --help") + "               show all commands",
+		"  " + focusedStyle.Render("symaira add <name>") + "           add your first entry",
+		"  " + focusedStyle.Render("symaira get <name>") + "           retrieve a password",
+		"  " + focusedStyle.Render("symaira tui") + "                  browse entries in terminal UI",
+		"  " + focusedStyle.Render("symaira autotype") + "             auto-type passwords into forms",
+		"  " + focusedStyle.Render("symaira doctor") + "               health check",
+		"  " + focusedStyle.Render("symaira mcp-config") + "           configure MCP agent integrations",
+		"  " + focusedStyle.Render("symaira auth set <method>") + "    change auth method",
+		"  " + focusedStyle.Render("symaira --help") + "               show all commands",
 	}
 
 	if st.SyncMode == syncGit && st.MultiDevice {
 		lines = append(lines, "",
 			dimStyle.Render("Pair another device:"),
-			"  "+focusedStyle.Render("openpass device add --pair \"<data>\"")+" on the other device",
-			"  "+focusedStyle.Render("openpass device accept <token>")+"   to complete pairing",
+			"  "+focusedStyle.Render("symaira device add --pair \"<data>\"")+" on the other device",
+			"  "+focusedStyle.Render("symaira device accept <token>")+"   to complete pairing",
 		)
 	}
 
 	if len(st.ApplyErrors) > 0 {
-		lines = append(lines, "", warnStyle.Render("Some steps had issues — run openpass doctor to diagnose."))
+		lines = append(lines, "", warnStyle.Render("Some steps had issues — run symaira doctor to diagnose."))
 	}
 
 	lines = append(lines, "", helpStyle.Render("Enter or Q to exit"))

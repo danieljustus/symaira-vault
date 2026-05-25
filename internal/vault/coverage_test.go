@@ -8,8 +8,8 @@ import (
 
 	"filippo.io/age"
 
-	"github.com/danieljustus/OpenPass/internal/config"
-	"github.com/danieljustus/OpenPass/internal/testutil"
+	"github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/testutil"
 )
 
 // TestOpenWithPathTraversal covers validateVaultDir error path + Open error return.

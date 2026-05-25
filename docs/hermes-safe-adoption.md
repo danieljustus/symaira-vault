@@ -1,9 +1,9 @@
 # Agent safe adoption guide
 
-This guide describes a conservative adoption path for using OpenPass as a local,
+This guide describes a conservative adoption path for using Symaira Vault as a local,
 agent-facing secrets manager for Hermes or other MCP-capable agents.
 
-It is intentionally not a live migration plan. Do not enable OpenPass in live
+It is intentionally not a live migration plan. Do not enable Symaira Vault in live
 Hermes configuration, move existing Hermes secrets, rotate credentials, or
 replace the user's personal password-management workflow until a human explicitly
 approves that later gate.
@@ -12,20 +12,20 @@ approves that later gate.
 
 - The user's existing password manager remains the canonical human password
   manager.
-- OpenPass is only the local, agent-facing secrets manager used to broker
+- Symaira Vault is only the local, agent-facing secrets manager used to broker
   narrowly scoped credentials to MCP-capable agents.
-- OpenPass should not become a broad default profile that lets every Hermes
+- Symaira Vault should not become a broad default profile that lets every Hermes
   session read raw secrets.
-- OpenPass should not initially execute commands with injected secrets unless
+- Symaira Vault should not initially execute commands with injected secrets unless
   the MCP command-output masking fixes have landed, passed regression tests, and
   received independent review.
 
 ## Adoption gates
 
-1. Complete and review the OpenPass hardening work, especially masking of
+1. Complete and review the Symaira Vault hardening work, especially masking of
    `run_command` and `execute_with_secret` output on every success and error
    path.
-2. Create synthetic-test-only OpenPass agent profiles. Do not import live agent
+2. Create synthetic-test-only Symaira Vault agent profiles. Do not import live agent
    `.env` values or personal password-manager items.
 3. Connect Hermes to a read-only, metadata-first profile and verify tool
    discovery and audit logging.
@@ -36,7 +36,7 @@ approves that later gate.
 6. Ask for final human approval before any live Hermes config change, secret
    migration, credential rotation, external push/upstream PR, or production use.
 
-## Recommended initial OpenPass profile
+## Recommended initial Symaira Vault profile
 
 Start with a dedicated Hermes profile that can inspect metadata and search only
 narrow path prefixes. Avoid `allowedPaths: ["*"]` for broad/default profiles.
@@ -67,7 +67,7 @@ agents:
     max_secrets_in_session: 0
 ```
 
-Recommended initial Hermes/OpenPass tool allowlist:
+Recommended initial Hermes/Symaira Vault tool allowlist:
 
 - `health`
 - `get_auth_status`
@@ -191,11 +191,11 @@ Why stdio first:
 - simple one-client lifecycle tied to the Hermes process;
 - easier audit boundary during early adoption.
 
-Use HTTP only when a shared long-running OpenPass server is genuinely needed. If
+Use HTTP only when a shared long-running Symaira Vault server is genuinely needed. If
 HTTP is used, bind loopback only and use a scoped token:
 
 ```yaml
-# OpenPass side, future approved trial only.
+# Symaira Vault side, future approved trial only.
 mcp:
   bind: 127.0.0.1
   port: 8090
@@ -209,7 +209,7 @@ mcp_servers:
     url: http://127.0.0.1:8090/mcp
     headers:
       Authorization: env:OPENPASS_MCP_TOKEN
-      X-OpenPass-Agent: hermes-metadata
+      X-Symaira Vault-Agent: hermes-metadata
     timeout: 60
     connect_timeout: 30
     sampling:
@@ -227,28 +227,28 @@ HTTP safeguards:
 
 ## Hermes profile/tooling guidance
 
-Do not attach OpenPass MCP tools to every Hermes profile by default. Create a
+Do not attach Symaira Vault MCP tools to every Hermes profile by default. Create a
 separate Hermes profile or explicitly controlled worker profile for adoption
-trials. The profile should expose only the OpenPass MCP server and the minimum
+trials. The profile should expose only the Symaira Vault MCP server and the minimum
 Hermes built-in tools needed to validate it.
 
 Recommended first Hermes trial surface:
 
-- OpenPass MCP server: `openpass_metadata`.
-- OpenPass MCP tools: `mcp_openpass_metadata_health`,
+- Symaira Vault MCP server: `openpass_metadata`.
+- Symaira Vault MCP tools: `mcp_openpass_metadata_health`,
   `mcp_openpass_metadata_get_auth_status`,
   `mcp_openpass_metadata_list_entries`,
   `mcp_openpass_metadata_find_entries`,
   `mcp_openpass_metadata_get_entry_metadata`.
 - Hermes built-in tools: no broad terminal/file/browser tools solely for the
-  OpenPass trial unless the task specifically requires them.
+  Symaira Vault trial unless the task specifically requires them.
 - No wildcard MCP tool exposure and no default-profile raw-secret reads.
 
 ## Audit checklist for each trial
 
 Before widening access, record:
 
-- OpenPass profile name and exact `allowedPaths`.
+- Symaira Vault profile name and exact `allowedPaths`.
 - Exact `allowed_tools` list.
 - Transport choice: stdio or HTTP; for HTTP, loopback bind and token lifetime.
 - Whether `get_entry` is allowed, and why metadata-only is insufficient.
@@ -260,6 +260,6 @@ Before widening access, record:
 
 This document does not approve live adoption. It does not approve migrating
 agent `.env` secrets, importing personal password-manager data, rotating real credentials,
-enabling OpenPass MCP in default Hermes profiles, broad wildcard path access,
+enabling Symaira Vault MCP in default Hermes profiles, broad wildcard path access,
 HTTP exposure beyond loopback, or command execution with injected secrets before
 reviewed masking fixes.

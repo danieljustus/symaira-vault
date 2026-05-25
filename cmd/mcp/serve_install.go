@@ -5,20 +5,20 @@ import (
 	"os"
 	"path/filepath"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
-	"github.com/danieljustus/OpenPass/internal/daemon"
-	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
-	"github.com/danieljustus/OpenPass/internal/ui/cliout"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/daemon"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 )
 
 var serveInstallCmd = &cobra.Command{
 	Use:   "install",
 	Short: "Install MCP server as a background service",
-	Long: `Install the OpenPass MCP server as a system background service.
+	Long: `Install the Symaira Vault MCP server as a system background service.
 
 On macOS, this creates a LaunchAgent plist in ~/Library/LaunchAgents/
 and loads it with launchctl. The service starts automatically on login
@@ -27,20 +27,20 @@ and stays running.
 On Linux, this creates a systemd user service in ~/.config/systemd/user/
 and enables it to start automatically.`,
 	Example: `  # Install as autostart service
-  openpass serve install
+  symaira serve install
 
   # Check status
-  openpass serve status
+  symaira serve status
 
   # Remove again
-  openpass serve uninstall`,
+  symaira serve uninstall`,
 	RunE: runServeInstall,
 }
 
 var serveUninstallCmd = &cobra.Command{
 	Use:   "uninstall",
 	Short: "Remove the MCP server background service",
-	Long: `Stop and remove the OpenPass MCP server background service.
+	Long: `Stop and remove the Symaira Vault MCP server background service.
 
 On macOS, this unloads the LaunchAgent and removes the plist file.
 
@@ -52,7 +52,7 @@ the service file.`,
 var serveStatusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show MCP server service status",
-	Long: `Display the current status of the OpenPass MCP server background service.
+	Long: `Display the current status of the Symaira Vault MCP server background service.
 
 Reports whether the service is running, stopped, or not installed,
 along with the service file path, port, and vault directory.`,
@@ -156,6 +156,6 @@ func loadServeConfig() (*configpkg.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	configPath := filepath.Join(home, ".openpass", "config.yaml")
+	configPath := filepath.Join(home, ".symaira", "config.yaml")
 	return configpkg.Load(configPath)
 }

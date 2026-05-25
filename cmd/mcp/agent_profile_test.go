@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 )
 
 func TestLoadAgentProfile(t *testing.T) {

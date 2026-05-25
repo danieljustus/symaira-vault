@@ -11,7 +11,7 @@
 
 **Recommendation: DEFER — Wait for go-git v5.x to bump the dependency.**
 
-OpenPass has zero direct exposure to `ProtonMail/go-crypto` APIs. The dependency is used exclusively by `go-git/v5` for OpenPGP signature verification during Git operations. The go-git maintainers have deliberately kept the v5.x release branch on `ProtonMail/go-crypto v1.1.x` (up to v1.1.6) despite v1.4.1 being available, indicating a conservative stability posture. Upgrading this transitive dependency independently would create an untested dependency combination with marginal security benefit for OpenPass's specific use case (local vault Git sync).
+Symaira Vault has zero direct exposure to `ProtonMail/go-crypto` APIs. The dependency is used exclusively by `go-git/v5` for OpenPGP signature verification during Git operations. The go-git maintainers have deliberately kept the v5.x release branch on `ProtonMail/go-crypto v1.1.x` (up to v1.1.6) despite v1.4.1 being available, indicating a conservative stability posture. Upgrading this transitive dependency independently would create an untested dependency combination with marginal security benefit for Symaira Vault's specific use case (local vault Git sync).
 
 ---
 
@@ -60,20 +60,20 @@ OpenPass has zero direct exposure to `ProtonMail/go-crypto` APIs. The dependency
 
 The following CVE-class issues were fixed between v1.1.6 and v1.4.1:
 
-| Fix | Version | Description | Impact on OpenPass |
+| Fix | Version | Description | Impact on Symaira Vault |
 |-----|---------|-------------|-------------------|
-| Low-order x25519 points | v1.4.0 | Rejects malformed ECDHv4 public keys | Very Low — OpenPass vaults use age (X25519 + ChaCha20-Poly1305), not OpenPGP |
+| Low-order x25519 points | v1.4.0 | Rejects malformed ECDHv4 public keys | Very Low — Symaira Vault vaults use age (X25519 + ChaCha20-Poly1305), not OpenPGP |
 | Invalid ECC points panic | v1.4.1 | Panic → controlled error on bad ECC keys | Very Low — only triggered by malformed OpenPGP keys from Git remotes |
-| Cleartext hash validation | v1.4.0 | Stricter hash algorithm whitelist | Very Low — OpenPass does not use OpenPGP cleartext signing |
+| Cleartext hash validation | v1.4.0 | Stricter hash algorithm whitelist | Very Low — Symaira Vault does not use OpenPGP cleartext signing |
 
-**Important Context:** OpenPass uses `filippo.io/age` for vault encryption. `ProtonMail/go-crypto` is used **only** by `go-git` for OpenPGP commit/tag signature verification during `git pull` / `git push` / `git log` operations. OpenPass does not perform OpenPGP encryption, signing, or key generation.
+**Important Context:** Symaira Vault uses `filippo.io/age` for vault encryption. `ProtonMail/go-crypto` is used **only** by `go-git` for OpenPGP commit/tag signature verification during `git pull` / `git push` / `git log` operations. Symaira Vault does not perform OpenPGP encryption, signing, or key generation.
 
 ---
 
-## OpenPass Impact Assessment
+## Symaira Vault Impact Assessment
 
 ### Direct Usage
-- **Zero direct imports** of `ProtonMail/go-crypto` in OpenPass source code
+- **Zero direct imports** of `ProtonMail/go-crypto` in Symaira Vault source code
 - Verified via `grep -r "ProtonMail\|go-crypto\|openpgp" *.go` — no matches
 
 ### Indirect Usage (via go-git)
@@ -81,12 +81,12 @@ The following CVE-class issues were fixed between v1.1.6 and v1.4.1:
 - Git sync operations (`openpass git pull`, `openpass git push`)
 - Git log viewing (`openpass git log`)
 
-All Git remotes are **user-configured** (typically the user's own private repository). OpenPass does not clone from untrusted sources.
+All Git remotes are **user-configured** (typically the user's own private repository). Symaira Vault does not clone from untrusted sources.
 
 ### Go Version Compatibility
-- OpenPass requires **Go 1.26.3**
+- Symaira Vault requires **Go 1.26.3**
 - `ProtonMail/go-crypto v1.4.0+` requires **Go 1.23.0+**
-- **No Go version blocker** — OpenPass's Go version exceeds all minimum requirements
+- **No Go version blocker** — Symaira Vault's Go version exceeds all minimum requirements
 
 ---
 
@@ -117,9 +117,9 @@ All Git remotes are **user-configured** (typically the user's own private reposi
 
 **Rationale:**
 1. **Untested combination** — go-git v5.18.0 + ProtonMail/go-crypto v1.4.1 has not been validated by the go-git maintainers or the broader ecosystem
-2. **Zero direct benefit** — OpenPass does not invoke ProtonMail/go-crypto directly; all exposure is mediated through go-git
+2. **Zero direct benefit** — Symaira Vault does not invoke ProtonMail/go-crypto directly; all exposure is mediated through go-git
 3. **Historical precedent** — go-git v5.13.0 previously had to revert a ProtonMail/go-crypto bump due to unexpected SSH/host-key regressions ([go-git/go-git #1341](https://github.com/go-git/go-git/issues/1341))
-4. **Low security exposure** — OpenPass's Git usage is limited to user-configured vault remotes; the fixed edge cases (malformed OpenPGP keys, low-order curve points) are extremely unlikely in this context
+4. **Low security exposure** — Symaira Vault's Git usage is limited to user-configured vault remotes; the fixed edge cases (malformed OpenPGP keys, low-order curve points) are extremely unlikely in this context
 5. **Maintainer signal** — go-git v5.18.0 was released **after** v1.4.1 was available on main, yet maintainers deliberately kept v5.x on v1.1.6
 
 ### ✅ Recommended Action
@@ -127,12 +127,12 @@ All Git remotes are **user-configured** (typically the user's own private reposi
 1. **Monitor go-git releases** — Subscribe to [go-git/go-git releases](https://github.com/go-git/go-git/releases)
 2. **Upgrade together** — When go-git v5.19.0+ or v6.0.0 bumps ProtonMail/go-crypto, upgrade `go-git` and let the transitive dependency update naturally
 3. **Remove deferral note** — Once go-git adopts v1.4.1+, remove the deferral comment from `go.mod`
-4. **No workaround needed** — The current v1.1.6 dependency is stable and functionally sufficient for OpenPass's use case
+4. **No workaround needed** — The current v1.1.6 dependency is stable and functionally sufficient for Symaira Vault's use case
 
 ### Exception (re-evaluate if)
 - A **CVE is published** specifically affecting `ProtonMail/go-crypto v1.1.6` with a severity ≥ High that impacts OpenPGP signature verification
 - **go-git v5.x explicitly documents** v1.4.1 compatibility
-- OpenPass begins **cloning from untrusted Git remotes** (increasing exposure to malformed OpenPGP data)
+- Symaira Vault begins **cloning from untrusted Git remotes** (increasing exposure to malformed OpenPGP data)
 
 ---
 
@@ -148,7 +148,7 @@ All Git remotes are **user-configured** (typically the user's own private reposi
 ## Appendix: Dependency Graph
 
 ```
-OpenPass
+Symaira Vault
 └── github.com/go-git/go-git/v5 v5.18.0
     └── github.com/ProtonMail/go-crypto v1.1.6
         ├── github.com/cloudflare/circl v1.3.7
@@ -156,4 +156,4 @@ OpenPass
         └── golang.org/x/sys v0.16.0
 ```
 
-*OpenPass does not import `ProtonMail/go-crypto` directly. The `// indirect` annotation in `go.mod` is correct.*
+*Symaira Vault does not import `ProtonMail/go-crypto` directly. The `// indirect` annotation in `go.mod` is correct.*

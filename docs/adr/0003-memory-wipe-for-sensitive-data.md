@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-OpenPass handles highly sensitive data:
+Symaira Vault handles highly sensitive data:
 
 - Master passphrases for vault unlocking
 - age identity bytes (X25519 private keys)

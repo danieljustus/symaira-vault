@@ -62,5 +62,5 @@ func DefaultPolicyDir() string {
 	if err != nil || home == "" {
 		return ""
 	}
-	return filepath.Join(home, ".config", "openpass", "policies")
+	return filepath.Join(home, ".config", "symaira", "policies")
 }

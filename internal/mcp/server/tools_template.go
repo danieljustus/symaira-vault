@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	mcp "github.com/danieljustus/OpenPass/internal/mcp"
-	"github.com/danieljustus/OpenPass/internal/template"
-	"github.com/danieljustus/OpenPass/internal/vaultsvc"
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/template"
+	"github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 func (s *Server) handleGenerateTemplate(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -39,7 +39,7 @@ func (s *Server) handleGenerateTemplate(ctx context.Context, req mcp.CallToolReq
 
 	svc := vaultsvc.New(slog.Default(), s.vault)
 	engine := template.NewEngine(svc)
-	customDir := os.ExpandEnv("$HOME/.config/openpass/templates")
+	customDir := os.ExpandEnv("$HOME/.config/symaira/templates")
 	_ = engine.LoadCustomTemplates(customDir)
 
 	output, err := engine.Render(ctx, templateType, name, refs, dryRun)

@@ -1,9 +1,9 @@
-# OpenPass configuration example.
-# Copy this file to ~/.openpass/config.yaml for global settings or to a vault
+# Symaira Vault configuration example.
+# Copy this file to ~/.symaira/config.yaml for global settings or to a vault
 # directory as config.yaml for vault-specific settings.
 
-# Default vault directory used when OPENPASS_VAULT and --vault are not set.
-vaultDir: ~/.openpass
+# Default vault directory used when SYMAIRA_VAULT and --vault are not set.
+vaultDir: ~/.symaira
 
 # Default MCP agent profile used when --agent is not set.
 defaultAgent: default
@@ -13,7 +13,7 @@ sessionTimeout: 15m
 
 # Unlock method for this vault. Use "touchid" on macOS to allow Touch ID
 # unlock after the passphrase has been stored in the biometric Keychain item.
-# Change with: openpass auth set passphrase|touchid
+# Change with: symaira auth set passphrase|touchid
 authMethod: passphrase
 
 # Agent profiles for MCP access.
@@ -23,7 +23,7 @@ agents:
     allowedPaths: ["*"]
     # Whether the agent can create, update, or delete entries.
     canWrite: false
-    # Whether the agent may change OpenPass auth/config settings through MCP.
+    # Whether the agent may change Symaira Vault auth/config settings through MCP.
     canManageConfig: false
     # none allows configured operations, deny rejects writes, prompt degrades to
     # deny in MCP contexts where interactive approval is unavailable.
@@ -50,7 +50,7 @@ agents:
 # Vault-specific settings. These can also live inside <vault>/config.yaml.
 vault:
   # Vault directory path.
-  path: ~/.openpass
+  path: ~/.symaira
   # Age recipients used for newly written entries.
   default_recipients: []
   #  - age1...
@@ -61,10 +61,10 @@ vault:
 
 # Git integration for automatic commits and optional pushes.
 git:
-  # Automatically push after OpenPass commits a vault change.
+  # Automatically push after Symaira Vault commits a vault change.
   auto_push: true
   # Commit message used for automatic commits.
-  commit_template: "Update from OpenPass"
+  commit_template: "Update from Symaira Vault"
 
 # MCP server configuration.
 mcp:
@@ -76,7 +76,7 @@ mcp:
   # HTTP bearer token file path. "auto" stores mcp-token in the vault.
   httpTokenFile: auto
   # OpenTelemetry OTLP endpoint for traces. Uses HTTP/protobuf.
-  # When empty, falls back to the OPENPASS_OTLP_ENDPOINT environment variable.
+  # When empty, falls back to the SYMAIRA_OTLP_ENDPOINT environment variable.
   # Example: "localhost:4318" for a local OTel collector.
   # otlp_endpoint: localhost:4318
   # Require bearer token for /metrics on non-loopback binds. Default is true.

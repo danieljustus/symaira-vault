@@ -1,0 +1,67 @@
+.nh
+.TH "SYMAIRA" "1" "May 2026" "Symaira Vault" "OpenPass Manual"
+
+.SH NAME
+symaira-agent-profile - Manage agent profiles
+
+
+.SH SYNOPSIS
+\fBsymaira agent profile  [flags]\fP
+
+
+.SH DESCRIPTION
+Show, edit, and export agent profiles.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for profile
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)
+
+.PP
+\fB--vault\fP="~/.openpass"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Show agent profile
+  openpass agent profile my-agent show
+
+  # Show profile as JSON
+  openpass agent profile my-agent show --output json
+
+  # Edit agent profile in $EDITOR
+  openpass agent profile my-agent edit
+
+  # Export profile as YAML to stdout
+  openpass agent profile my-agent export
+.EE
+
+
+.SH SEE ALSO
+\fBsymaira-agent(1)\fP, \fBsymaira-agent-profile-edit(1)\fP, \fBsymaira-agent-profile-export(1)\fP, \fBsymaira-agent-profile-show(1)\fP

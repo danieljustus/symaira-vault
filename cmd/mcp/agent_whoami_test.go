@@ -3,7 +3,7 @@ package mcp
 import (
 	"testing"
 
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 )
 
 func TestBuildWhoamiInfo(t *testing.T) {

@@ -65,7 +65,7 @@ func run(pass *analysis.Pass) (interface{}, error) {
 // We match by package name ("taint") and type name ("Untrusted") rather than
 // the full import path. This keeps the analyzer portable across testdata
 // (where the package lives at import path "taint") and production (where
-// it lives at "github.com/danieljustus/OpenPass/internal/vault/taint").
+// it lives at "github.com/danieljustus/symaira-vault/internal/vault/taint").
 func isUntrustedType(t types.Type) bool {
 	if t == nil {
 		return false

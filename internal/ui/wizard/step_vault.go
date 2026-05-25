@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/danieljustus/OpenPass/internal/pathutil"
+	"github.com/danieljustus/symaira-vault/internal/pathutil"
 )
 
 // VaultPathStep lets the user confirm or change the vault directory.
@@ -21,7 +21,7 @@ type VaultPathStep struct {
 
 func NewVaultPathStep(defaultDir string) *VaultPathStep {
 	ti := textinput.New()
-	ti.Placeholder = "~/.openpass"
+	ti.Placeholder = "~/.symaira"
 	ti.SetValue(defaultDir)
 	ti.Focus()
 	ti.CharLimit = 512
@@ -51,7 +51,7 @@ func (s *VaultPathStep) View() string {
 	lines := []string{
 		titleStyle.Render("Vault directory"),
 		"",
-		"Where should OpenPass store your vault?",
+		"Where should Symaira Vault store your vault?",
 		"",
 		s.input.View(),
 	}
@@ -94,7 +94,7 @@ func ensureWritable(dir string) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	f, err := os.CreateTemp(dir, ".openpass-write-test-*")
+	f, err := os.CreateTemp(dir, ".symaira-write-test-*")
 	if err != nil {
 		return err
 	}

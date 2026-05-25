@@ -8,18 +8,18 @@ import (
 	"strings"
 	"time"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 
-	clipboardapp "github.com/danieljustus/OpenPass/internal/clipboard"
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
-	vaultcrypto "github.com/danieljustus/OpenPass/internal/crypto"
-	errorspkg "github.com/danieljustus/OpenPass/internal/errors"
-	"github.com/danieljustus/OpenPass/internal/ui/render"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
-	"github.com/danieljustus/OpenPass/internal/vault/taint"
-	vaultsvc "github.com/danieljustus/OpenPass/internal/vaultsvc"
+	clipboardapp "github.com/danieljustus/symaira-vault/internal/clipboard"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	"github.com/danieljustus/symaira-vault/internal/ui/render"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
+	"github.com/danieljustus/symaira-vault/internal/vault/taint"
+	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 var (
@@ -46,19 +46,19 @@ var getCmd = &cobra.Command{
 	Short:   "Get a password entry",
 	Long:    "Retrieves and displays a password entry. Use path.field syntax to get specific fields.",
 	Example: `  # Get a specific field (auto-copies to clipboard on TTY)
-  openpass get github.password
+  symaira get github.password
 
   # Substring search fallback (when exact path doesn't exist)
-  openpass get git
+  symaira get git
 
   # Explicitly print to stdout instead of clipboard
-  openpass get github.password --print
+  symaira get github.password --print
 
   # Output as JSON
-  openpass get github --output json
+  symaira get github --output json
 
   # Use a specific profile
-  openpass get github.password --profile work`,
+  symaira get github.password --profile work`,
 	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: cli.EntryCompletionFunc,
 	RunE: func(cmd *cobra.Command, args []string) error {

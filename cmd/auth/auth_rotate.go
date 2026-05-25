@@ -9,15 +9,15 @@ import (
 	"strings"
 	"time"
 
-	cli "github.com/danieljustus/OpenPass/internal/cli"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 
-	"github.com/danieljustus/OpenPass/internal/audit"
-	configpkg "github.com/danieljustus/OpenPass/internal/config"
-	cryptopkg "github.com/danieljustus/OpenPass/internal/crypto"
-	"github.com/danieljustus/OpenPass/internal/session"
-	vaultpkg "github.com/danieljustus/OpenPass/internal/vault"
+	"github.com/danieljustus/symaira-vault/internal/audit"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	cryptopkg "github.com/danieljustus/symaira-vault/internal/crypto"
+	"github.com/danieljustus/symaira-vault/internal/session"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 var rotateReencrypt bool
@@ -30,10 +30,10 @@ var rotatePassphraseCmd = &cobra.Command{
 The X25519 key pair stays the same — only the passphrase protecting it is changed.
 Optionally re-encrypts all entries with the new passphrase.`,
 	Example: `  # Change the passphrase only
-  openpass rotate-passphrase
+  symaira rotate-passphrase
 
   # Change passphrase AND re-encrypt all entries (slow but clean)
-  openpass rotate-passphrase --reencrypt`,
+  symaira rotate-passphrase --reencrypt`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		_, _ = cmd, args
 		vaultDir, cfg, err := loadAuthConfig()
@@ -127,7 +127,7 @@ Optionally re-encrypts all entries with the new passphrase.`,
 			fmt.Fprintf(os.Stderr, "Warning: git auto-commit failed: %v\n", commitErr)
 		}
 
-		auditLog, auditErr := audit.New("openpass", vaultDir)
+		auditLog, auditErr := audit.New("symaira", vaultDir)
 		if auditErr == nil {
 			if err := auditLog.LogEntry(audit.LogEntry{Action: "rotate-passphrase", OK: true, Timestamp: time.Now().UTC().Format(time.RFC3339)}); err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: audit log write failed: %v\n", err)
