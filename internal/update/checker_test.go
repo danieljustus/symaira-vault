@@ -511,8 +511,9 @@ func TestCheckerReturnsNetworkError(t *testing.T) {
 func TestCheckerEmptyLatestReleaseURLFallback(t *testing.T) {
 	checker := NewChecker(stubHTTPDoer{
 		do: func(req *http.Request) (*http.Response, error) {
-			if req.URL.String() != DefaultLatestReleaseURL {
-				t.Fatalf("expected URL %q, got %q", DefaultLatestReleaseURL, req.URL.String())
+			wantURL := strings.ReplaceAll(DefaultLatestReleaseURL, " ", "%20")
+			if req.URL.String() != wantURL {
+				t.Fatalf("expected URL %q, got %q", wantURL, req.URL.String())
 			}
 			return &http.Response{
 				StatusCode: http.StatusOK,
