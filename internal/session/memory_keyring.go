@@ -132,7 +132,8 @@ func (m *memoryKeyring) Get(service, account string) (string, error) {
 
 	var passphrase []byte
 
-	if sess.EncryptedPassphrase != "" && sess.Nonce != "" {
+	switch {
+	case sess.EncryptedPassphrase != "" && sess.Nonce != "":
 		k, err := m.encryptionKeyForStore(service)
 		if err != nil {
 			zeroBytes(payload)
@@ -146,9 +147,9 @@ func (m *memoryKeyring) Get(service, account string) (string, error) {
 			return "", fmt.Errorf("not found")
 		}
 		passphrase = plain
-	} else if len(sess.Passphrase) > 0 {
+	case len(sess.Passphrase) > 0:
 		passphrase = []byte(sess.Passphrase)
-	} else {
+	default:
 		delete(m.store, key)
 		return "", fmt.Errorf("not found")
 	}
