@@ -163,8 +163,6 @@ func TestMemoryKeyring_Get_MalformedJSON(t *testing.T) {
 	}
 }
 
-
-
 func TestMemoryKeyring_Get_UpdatesLastAccess(t *testing.T) {
 	mk := &memoryKeyring{}
 	vaultDir := "/tmp/vault-mem-la"
