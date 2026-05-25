@@ -3,6 +3,7 @@
 package audit
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -11,12 +12,18 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"filippo.io/age"
 	"github.com/zalando/go-keyring"
 
 	"github.com/danieljustus/symaira-vault/internal/logging"
 )
+
+// keyringTimeout is the maximum time to wait for an OS keyring operation.
+// On macOS, the security command can hang indefinitely when the keychain
+// is locked or when running in a headless environment.
+const keyringTimeout = 5 * time.Second
 
 // osKeystore implements Keystore by storing HMAC keys in the OS keyring
 // with automatic fallback to process memory when the keyring is unavailable.
@@ -97,12 +104,64 @@ func isFallbackActive() bool {
 	return fallbackActive
 }
 
+// keyringSetWithTimeout attempts to store a value in the OS keyring with a
+// timeout. If the operation does not complete within keyringTimeout, the
+// fallback keyring is activated and the value is stored there instead.
+func keyringSetWithTimeout(service, account, value string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), keyringTimeout)
+	defer cancel()
+
+	type result struct {
+		err error
+	}
+	done := make(chan result, 1)
+
+	go func() {
+		done <- result{err: keyring.Set(service, account, value)}
+	}()
+
+	select {
+	case <-ctx.Done():
+		getFallback()
+		return getFallback().Set(service, account, value)
+	case r := <-done:
+		return r.err
+	}
+}
+
+// keyringGetWithTimeout attempts to retrieve a value from the OS keyring with
+// a timeout. If the operation does not complete within keyringTimeout, the
+// fallback keyring is activated and the lookup continues there.
+func keyringGetWithTimeout(service, account string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), keyringTimeout)
+	defer cancel()
+
+	type result struct {
+		val string
+		err error
+	}
+	done := make(chan result, 1)
+
+	go func() {
+		val, err := keyring.Get(service, account)
+		done <- result{val: val, err: err}
+	}()
+
+	select {
+	case <-ctx.Done():
+		getFallback()
+		return getFallback().Get(service, account)
+	case r := <-done:
+		return r.val, r.err
+	}
+}
+
 func (k *osKeystore) setWithFallback(service, account, value string) error {
 	if isFallbackActive() {
 		return getFallback().Set(service, account, value)
 	}
 
-	if err := keyring.Set(service, account, value); err != nil {
+	if err := keyringSetWithTimeout(service, account, value); err != nil {
 		return getFallback().Set(service, account, value)
 	}
 	return nil
@@ -113,7 +172,7 @@ func (k *osKeystore) getWithFallback(service, account string) (string, error) {
 		return getFallback().Get(service, account)
 	}
 
-	val, err := keyring.Get(service, account)
+	val, err := keyringGetWithTimeout(service, account)
 	if err != nil {
 		if errors.Is(err, keyring.ErrNotFound) {
 			return "", err
@@ -181,9 +240,9 @@ func (k *osKeystore) LoadHMACKey() ([]byte, error) {
 var NewKeystore func(auditDir string, identity *age.X25519Identity) Keystore
 
 func init() {
-	// In CI environments, keychain prompts can hang indefinitely.
+	// In CI or headless environments, keychain prompts can hang indefinitely.
 	// Pre-activate memory fallback to avoid blocking.
-	if os.Getenv("CI") != "" {
+	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("HEADLESS") != "" {
 		fallbackActive = true
 		fallback = &memoryKeyring{}
 	}
