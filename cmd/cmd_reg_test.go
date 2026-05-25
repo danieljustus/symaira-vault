@@ -323,14 +323,14 @@ func TestUnlockVaultWrongPassphrase(t *testing.T) {
 	}
 }
 
-func TestVaultPathWithEnvVarSymairaVault(t *testing.T) {
+func TestVaultPathWithEnvVarOpenpassVault(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: path format differs")
 	}
-	origEnv := os.Getenv("SYMAIRA_VAULT")
-	defer func() { _ = os.Setenv("SYMAIRA_VAULT", origEnv) }()
+	origEnv := os.Getenv("OPENPASS_VAULT")
+	defer func() { _ = os.Setenv("OPENPASS_VAULT", origEnv) }()
 
-	_ = os.Setenv("SYMAIRA_VAULT", "/test/vault")
+	_ = os.Setenv("OPENPASS_VAULT", "/test/vault")
 
 	origVault := vault
 	defer func() { vault = origVault }()
@@ -572,8 +572,8 @@ func TestOutputHTTPConfigMCP(t *testing.T) {
 		}
 	}()
 
-	_ = os.Setenv("SYMAIRA_VAULT", vaultDir)
-	defer func() { _ = os.Unsetenv("SYMAIRA_VAULT") }()
+	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
+	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
 
 	vault = vaultDir
 	if vaultFlag != nil {

@@ -3,7 +3,7 @@ name: symaira
 description: Use Symaira Vault as the credential manager via native MCP tools and CLI.
 managed_by: symaira
 managed_version: 4.0.0-test
-managed_hash: sha256:6d0a8cfd02f3fd32aed2b97087e7997c022d0a303e2046c3ba4a4d958754c655
+managed_hash: sha256:597c58ccb218b94cf8a12abbf7bfbb0dc3ec87ee3a595980d593d5fa94452c47
 managed_installed_at: "2026-05-17T12:00:00Z"
 managed_profile_tier: admin
 ---
@@ -19,7 +19,7 @@ explicitly asks for CLI debugging.
 First, call `mcp0_symaira_symaira_whoami` to learn your permissions and which
 vault you are connected to.
 
-Vault path: `~/.symaira`
+Vault path: `~/.symvault`
 Agent profile: **codex** (tier: admin)
 
 ## Preferred Tools
