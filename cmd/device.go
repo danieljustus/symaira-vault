@@ -361,7 +361,7 @@ any registered device (unmanaged recipients).`,
 			if len(unmanaged) > 0 {
 				output["unmanaged_recipients"] = unmanaged
 			}
-			return PrintResult(output)
+			return cli.PrintResult(output)
 		}
 
 		// Text output

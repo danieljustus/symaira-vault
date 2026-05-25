@@ -178,7 +178,7 @@ func runRemoteStatus(cmd *cobra.Command, args []string) error {
 			printlnQuietAware("No remote configured.")
 			cliout.Hintf("Use 'symvault remote init <ssh-target>' to configure a remote.")
 		} else {
-			_ = PrintResult(map[string]interface{}{
+			_ = cli.PrintResult(map[string]interface{}{
 				"configured": false,
 				"message":    "No remote configured",
 			})
@@ -198,7 +198,7 @@ func runRemoteStatus(cmd *cobra.Command, args []string) error {
 			printlnQuietAware("disabled")
 		}
 	} else {
-		_ = PrintResult(map[string]interface{}{
+		_ = cli.PrintResult(map[string]interface{}{
 			"configured": true,
 			"remote": map[string]interface{}{
 				"name":     remoteName,

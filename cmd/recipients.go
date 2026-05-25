@@ -55,7 +55,7 @@ var recipientsListCmd = &cobra.Command{
 				printlnQuietAware("No recipients configured.")
 				printlnQuietAware("Use 'symvault recipients add <public-key>' to add a recipient.")
 			} else {
-				if err := PrintResult(map[string]interface{}{"recipients": []string{}}); err != nil {
+				if err := cli.PrintResult(map[string]interface{}{"recipients": []string{}}); err != nil {
 					return err
 				}
 			}
@@ -79,7 +79,7 @@ var recipientsListCmd = &cobra.Command{
 			for _, r := range recipients {
 				recipientStrings = append(recipientStrings, r.Normalized)
 			}
-			if err := PrintResult(map[string]interface{}{"recipients": recipientStrings}); err != nil {
+			if err := cli.PrintResult(map[string]interface{}{"recipients": recipientStrings}); err != nil {
 				return err
 			}
 		}

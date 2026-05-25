@@ -184,18 +184,18 @@ For detailed agent setup, profiles, token management, and observability, see [do
 
 ## Configuration
 
-Global config: `~/.openpass/config.yaml`. See [`config.yaml.example`](config.yaml.example) for a commented starting point.
+Global config: `~/.symvault/config.yaml`. See [`config.yaml.example`](config.yaml.example) for a commented starting point.
 
 For the full configuration reference, see [docs/configuration.md](docs/configuration.md).
 
 ### Environment Variables
 
-- `OPENPASS_VAULT` — Path to vault directory (default: `~/.openpass`)
+- `OPENPASS_VAULT` — Path to vault directory (default: `~/.symvault`)
 
 ### Vault Structure
 
 ```
-~/.openpass/
+~/.symvault/
 ├── identity.age      # Encrypted age identity
 ├── config.yaml       # Vault configuration
 ├── mcp-token         # Bearer token for HTTP MCP

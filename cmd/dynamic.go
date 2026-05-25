@@ -64,7 +64,7 @@ var dynamicGenerateCmd = &cobra.Command{
 				"data":        secret.Data,
 			}
 
-			return PrintResult(result)
+			return cli.PrintResult(result)
 		})
 	},
 }
