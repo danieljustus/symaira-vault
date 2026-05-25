@@ -130,30 +130,9 @@ func (m *memoryKeyring) Get(service, account string) (string, error) {
 		return "", fmt.Errorf("not found")
 	}
 
-	var passphrase []byte
-
-	switch {
-	case sess.EncryptedPassphrase != "" && sess.Nonce != "":
-		k, err := m.encryptionKeyForStore(service)
-		if err != nil {
-			zeroBytes(payload)
-			delete(m.store, key)
-			return "", fmt.Errorf("not found")
-		}
-		plain, err := decryptPassphrase(sess.EncryptedPassphrase, sess.Nonce, k)
-		if err != nil {
-			zeroBytes(payload)
-			delete(m.store, key)
-			return "", fmt.Errorf("not found")
-		}
-		passphrase = plain
-	case len(sess.Passphrase) > 0:
-		passphrase = []byte(sess.Passphrase)
-	default:
-		delete(m.store, key)
-		return "", fmt.Errorf("not found")
-	}
-
+	// The memory keyring is a transparent storage layer.
+	// SavePassphrase/LoadPassphrase handle encryption/decryption at a higher level.
+	// We only validate the session structure, check TTL, and update LastAccess.
 	sess.LastAccess = time.Now().UTC()
 	newPayload, err := json.Marshal(sess)
 	if err != nil {
@@ -163,7 +142,7 @@ func (m *memoryKeyring) Get(service, account string) (string, error) {
 	zeroBytes(payload)
 	m.store[key] = append([]byte(nil), newPayload...)
 
-	return string(passphrase), nil
+	return string(newPayload), nil
 }
 
 func (m *memoryKeyring) Delete(service, account string) error {

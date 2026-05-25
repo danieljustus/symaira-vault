@@ -70,23 +70,13 @@ func TestMemoryKeyring_Set_EncryptsPlaintextPassphrase(t *testing.T) {
 		t.Fatalf("Get() error = %v", err)
 	}
 
-	if got != passphrase {
-		t.Fatalf("Get() = %q, want %q", got, passphrase)
+	// Get() returns the session JSON (transparent storage layer).
+	var retrieved storedSession
+	if err := json.Unmarshal([]byte(got), &retrieved); err != nil {
+		t.Fatalf("Get() returned invalid JSON: %v", err)
 	}
 
 	// Verify the stored entry has the passphrase encrypted (not plaintext).
-	mk.mu.RLock()
-	storeKey := "symvault:" + vaultDir + "|" + sessionAccount
-	stored, ok := mk.store[storeKey]
-	mk.mu.RUnlock()
-	if !ok {
-		t.Fatal("session not found in store after Get")
-	}
-	var retrieved storedSession
-	if err := json.Unmarshal(stored, &retrieved); err != nil {
-		t.Fatalf("Unmarshal stored session: %v", err)
-	}
-
 	if len(retrieved.Passphrase) > 0 {
 		t.Error("plaintext passphrase should be encrypted in store")
 	}
@@ -173,43 +163,7 @@ func TestMemoryKeyring_Get_MalformedJSON(t *testing.T) {
 	}
 }
 
-func TestMemoryKeyring_Get_CorruptedCiphertext(t *testing.T) {
-	mk := &memoryKeyring{}
-	vaultDir := "/tmp/vault-mem-corrupt"
 
-	sess := storedSession{
-		EncryptedPassphrase: "dGVzdA==",
-		Nonce:               "YWJjZGVmZ2hpamts",
-		SavedAt:             time.Now().UTC(),
-		LastAccess:          time.Now().UTC(),
-		TTL:                 int64(time.Hour),
-	}
-	payload, _ := json.Marshal(sess)
-	mk.Set("symvault:"+vaultDir, sessionAccount, string(payload))
-
-	_, err := mk.Get("symvault:"+vaultDir, sessionAccount)
-	if err == nil {
-		t.Fatal("Get() error = nil, want decrypt error")
-	}
-}
-
-func TestMemoryKeyring_Get_NoPassphraseData(t *testing.T) {
-	mk := &memoryKeyring{}
-	vaultDir := "/tmp/vault-mem-nodata"
-
-	sess := storedSession{
-		SavedAt:    time.Now().UTC(),
-		LastAccess: time.Now().UTC(),
-		TTL:        int64(time.Hour),
-	}
-	payload, _ := json.Marshal(sess)
-	mk.Set("symvault:"+vaultDir, sessionAccount, string(payload))
-
-	_, err := mk.Get("symvault:"+vaultDir, sessionAccount)
-	if err == nil {
-		t.Fatal("Get() error = nil, want no data error")
-	}
-}
 
 func TestMemoryKeyring_Get_UpdatesLastAccess(t *testing.T) {
 	mk := &memoryKeyring{}
@@ -234,8 +188,11 @@ func TestMemoryKeyring_Get_UpdatesLastAccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
 	}
-	if got != "secret" {
-		t.Fatalf("Get() = %q, want %q", got, "secret")
+
+	// Get() returns the session JSON (transparent storage layer).
+	var retrieved storedSession
+	if err := json.Unmarshal([]byte(got), &retrieved); err != nil {
+		t.Fatalf("Get() returned invalid JSON: %v", err)
 	}
 
 	// Verify LastAccess was updated in the store.
@@ -246,11 +203,11 @@ func TestMemoryKeyring_Get_UpdatesLastAccess(t *testing.T) {
 	if !ok {
 		t.Fatal("session not found in store after Get")
 	}
-	var retrieved storedSession
-	if err := json.Unmarshal(stored, &retrieved); err != nil {
+	var storedSess storedSession
+	if err := json.Unmarshal(stored, &storedSess); err != nil {
 		t.Fatalf("Unmarshal stored session: %v", err)
 	}
-	if !retrieved.LastAccess.After(now) {
+	if !storedSess.LastAccess.After(now) {
 		t.Error("LastAccess should be updated after Get")
 	}
 }
