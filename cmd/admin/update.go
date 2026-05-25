@@ -56,7 +56,7 @@ var (
 	updateInfoJSON bool
 )
 
-var errUpdateAvailable = errorspkg.NewCLIError(1, "update available", nil)
+var errUpdateAvailable = errorspkg.NewCLIError(errorspkg.ExitUpdateAvailable, "update available", nil)
 
 var UpdateCmd = &cobra.Command{
 	Use:     "update",

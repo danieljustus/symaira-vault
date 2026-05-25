@@ -25,7 +25,6 @@ var (
 var (
 	vault     = cli.Vault
 	vaultFlag = cli.VaultFlag
-	quietMode = cli.QuietMode
 )
 
 var rootCmd = cli.RootCmd

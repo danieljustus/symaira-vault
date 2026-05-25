@@ -72,7 +72,7 @@ Examples:
 		grants := store.List(filter)
 
 		if cli.OutputFormat != "text" {
-			if err := PrintResult(grants); err != nil {
+			if err := cli.PrintResult(grants); err != nil {
 				return err
 			}
 			return nil

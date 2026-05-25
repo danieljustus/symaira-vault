@@ -58,6 +58,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"path/filepath"
 	"time"
 
 	"github.com/danieljustus/symaira-vault/internal/crypto"
@@ -237,6 +238,13 @@ func serviceName(vaultDir string) string {
 	return "symvault:" + vaultDir
 }
 
+// sanitizeVaultDir returns the last path component of vaultDir for use in
+// user-visible error messages.  The full path is only included in debug-level
+// structured logs to avoid leaking filesystem layout.
+func sanitizeVaultDir(vaultDir string) string {
+	return filepath.Base(vaultDir)
+}
+
 func SavePassphrase(vaultDir string, passphrase []byte, ttl time.Duration) error {
 	now := time.Now().UTC()
 	wrapKey, err := getOrCreateWrapKey(vaultDir)
@@ -278,7 +286,7 @@ func LoadPassphrase(vaultDir string) ([]byte, error) {
 
 	if sess.TTL <= 0 {
 		metrics.RecordSessionCacheEvent("miss")
-		return nil, fmt.Errorf("session expired for vault %s: TTL is zero or negative", vaultDir)
+		return nil, fmt.Errorf("session expired for vault %s: TTL is zero or negative", sanitizeVaultDir(vaultDir))
 	}
 
 	lastActivity := sess.LastAccess
@@ -288,7 +296,7 @@ func LoadPassphrase(vaultDir string) ([]byte, error) {
 	if time.Since(lastActivity) > time.Duration(sess.TTL) {
 		_ = ClearSession(vaultDir)
 		metrics.RecordSessionCacheEvent("miss")
-		return nil, fmt.Errorf("session expired for vault %s: last activity %v exceeded TTL %v", vaultDir, lastActivity.Format(time.RFC3339), time.Duration(sess.TTL))
+		return nil, fmt.Errorf("session expired for vault %s: last activity %v exceeded TTL %v", sanitizeVaultDir(vaultDir), lastActivity.Format(time.RFC3339), time.Duration(sess.TTL))
 	}
 
 	passphrase, resolveErr := resolvePassphrase(&sess, vaultDir)
@@ -321,7 +329,7 @@ func LoadPassphrase(vaultDir string) ([]byte, error) {
 func encryptionKey(vaultDir string) ([]byte, error) {
 	wrapKey, err := loadWrapKey(vaultDir)
 	if err != nil {
-		return nil, fmt.Errorf("no wrap key available for vault %s: please run 'symvault unlock' to re-establish the session", vaultDir)
+		return nil, fmt.Errorf("no wrap key available for vault %s: please run 'symvault unlock' to re-establish the session", sanitizeVaultDir(vaultDir))
 	}
 	return wrapKey, nil
 }
@@ -358,7 +366,7 @@ func resolvePassphrase(sess *storedSession, vaultDir string) ([]byte, error) {
 		return plain, nil
 	}
 
-	return nil, fmt.Errorf("session expired for vault %s: no passphrase data available", vaultDir)
+	return nil, fmt.Errorf("session expired for vault %s: no passphrase data available", sanitizeVaultDir(vaultDir))
 }
 
 func ClearSession(vaultDir string) error {
@@ -415,7 +423,7 @@ func LoadIdentity(vaultDir string) (string, error) {
 	}
 
 	if ident.TTL <= 0 {
-		return "", fmt.Errorf("identity cache expired for vault %s: TTL is zero or negative", vaultDir)
+		return "", fmt.Errorf("identity cache expired for vault %s: TTL is zero or negative", sanitizeVaultDir(vaultDir))
 	}
 
 	lastActivity := ident.LastAccess
@@ -424,7 +432,7 @@ func LoadIdentity(vaultDir string) (string, error) {
 	}
 	if time.Since(lastActivity) > time.Duration(ident.TTL) {
 		_ = ClearIdentity(vaultDir)
-		return "", fmt.Errorf("identity cache expired for vault %s: last activity %v exceeded TTL %v", vaultDir, lastActivity.Format(time.RFC3339), time.Duration(ident.TTL))
+		return "", fmt.Errorf("identity cache expired for vault %s: last activity %v exceeded TTL %v", sanitizeVaultDir(vaultDir), lastActivity.Format(time.RFC3339), time.Duration(ident.TTL))
 	}
 
 	wrapKey, wrapErr := loadWrapKey(vaultDir)

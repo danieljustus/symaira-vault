@@ -148,7 +148,7 @@ var listCache = struct {
 	ttl time.Duration
 }{
 	items: make(map[string]listCacheEntry),
-	ttl:   30 * time.Second,
+	ttl:   300 * time.Second,
 }
 
 // getDirMtime returns the modification time of a directory, or zero if unavailable.
@@ -238,7 +238,7 @@ var pseudonymizedCache = struct {
 	ttl   time.Duration
 }{
 	items: make(map[string]pseudonymizedCacheEntry),
-	ttl:   30 * time.Second,
+	ttl:   300 * time.Second,
 }
 
 // pseudonymizedCacheKey builds a cache key unique to (vaultDir, identity).

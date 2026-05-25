@@ -1,9 +1,9 @@
 # Symaira Vault configuration example.
-# Copy this file to ~/.symaira/config.yaml for global settings or to a vault
+# Copy this file to ~/.symvault/config.yaml for global settings or to a vault
 # directory as config.yaml for vault-specific settings.
 
 # Default vault directory used when SYMAIRA_VAULT and --vault are not set.
-vaultDir: ~/.symaira
+vaultDir: ~/.symvault
 
 # Default MCP agent profile used when --agent is not set.
 defaultAgent: default
@@ -13,7 +13,7 @@ sessionTimeout: 15m
 
 # Unlock method for this vault. Use "touchid" on macOS to allow Touch ID
 # unlock after the passphrase has been stored in the biometric Keychain item.
-# Change with: symaira auth set passphrase|touchid
+# Change with: symvault auth set passphrase|touchid
 authMethod: passphrase
 
 # Agent profiles for MCP access.

@@ -72,7 +72,7 @@ var generateCmd = &cobra.Command{
 					if genReveal {
 						result["password"] = password
 					}
-					if err := PrintResult(result); err != nil {
+					if err := cli.PrintResult(result); err != nil {
 						return err
 					}
 				}
@@ -83,7 +83,7 @@ var generateCmd = &cobra.Command{
 		if cli.OutputFormat == "text" {
 			printlnQuietAware(password)
 		} else {
-			if err := PrintResult(map[string]interface{}{"password": password}); err != nil {
+			if err := cli.PrintResult(map[string]interface{}{"password": password}); err != nil {
 				return err
 			}
 		}

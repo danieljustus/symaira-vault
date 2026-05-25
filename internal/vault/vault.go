@@ -94,8 +94,11 @@ func Open(vaultDir string, identity *age.X25519Identity) (*Vault, error) {
 		return nil, fmt.Errorf("detect legacy mode: %w", err)
 	}
 	rememberSearchIdentity(identity)
-	if err := migrateLegacyEntries(vaultDir); err != nil {
-		return nil, fmt.Errorf("migrate legacy entries: %w", err)
+	if !isLegacyMigrationDone(vaultDir) {
+		if err := migrateLegacyEntries(vaultDir); err != nil {
+			return nil, fmt.Errorf("migrate legacy entries: %w", err)
+		}
+		markLegacyMigrationDone(vaultDir)
 	}
 	// Rebuild manifest only when missing (fresh vaults or missing manifest file).
 	if _, err := os.Stat(filepath.Join(vaultDir, manifestFileName)); os.IsNotExist(err) {
@@ -107,6 +110,17 @@ func Open(vaultDir string, identity *age.X25519Identity) (*Vault, error) {
 		}
 	}
 	return &Vault{Dir: vaultDir, Identity: identity, Config: cfg}, nil
+}
+
+const legacyMigrationMarker = ".symvault-migrated"
+
+func isLegacyMigrationDone(vaultDir string) bool {
+	_, err := os.Stat(filepath.Join(vaultDir, legacyMigrationMarker))
+	return err == nil
+}
+
+func markLegacyMigrationDone(vaultDir string) {
+	_ = os.WriteFile(filepath.Join(vaultDir, legacyMigrationMarker), nil, 0o600)
 }
 
 func OpenWithPassphrase(vaultDir string, passphrase []byte) (*Vault, error) {

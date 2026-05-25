@@ -70,7 +70,7 @@ var templateGenerateCmd = &cobra.Command{
 				if cli.OutputFormat == "text" {
 					fmt.Printf("Template written to: %s\n", templateOutput)
 				} else {
-					return PrintResult(map[string]interface{}{
+					return cli.PrintResult(map[string]interface{}{
 						"output_path": templateOutput,
 						"dry_run":     templateDryRun,
 					})
