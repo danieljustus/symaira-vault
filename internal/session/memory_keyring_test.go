@@ -70,19 +70,31 @@ func TestMemoryKeyring_Set_EncryptsPlaintextPassphrase(t *testing.T) {
 		t.Fatalf("Get() error = %v", err)
 	}
 
+	if got != passphrase {
+		t.Fatalf("Get() = %q, want %q", got, passphrase)
+	}
+
+	// Verify the stored entry has the passphrase encrypted (not plaintext).
+	mk.mu.RLock()
+	storeKey := "symvault:" + vaultDir + "|" + sessionAccount
+	stored, ok := mk.store[storeKey]
+	mk.mu.RUnlock()
+	if !ok {
+		t.Fatal("session not found in store after Get")
+	}
 	var retrieved storedSession
-	if err := json.Unmarshal([]byte(got), &retrieved); err != nil {
-		t.Fatalf("Unmarshal() error = %v", err)
+	if err := json.Unmarshal(stored, &retrieved); err != nil {
+		t.Fatalf("Unmarshal stored session: %v", err)
 	}
 
 	if len(retrieved.Passphrase) > 0 {
-		t.Error("plaintext passphrase should be encrypted after Set")
+		t.Error("plaintext passphrase should be encrypted in store")
 	}
 	if retrieved.EncryptedPassphrase == "" {
-		t.Error("EncryptedPassphrase should be set after Set")
+		t.Error("EncryptedPassphrase should be set in store")
 	}
 	if retrieved.Nonce == "" {
-		t.Error("Nonce should be set after Set")
+		t.Error("Nonce should be set in store")
 	}
 }
 
@@ -222,9 +234,22 @@ func TestMemoryKeyring_Get_UpdatesLastAccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get() error = %v", err)
 	}
+	if got != "secret" {
+		t.Fatalf("Get() = %q, want %q", got, "secret")
+	}
 
+	// Verify LastAccess was updated in the store.
+	mk.mu.RLock()
+	storeKey := "symvault:" + vaultDir + "|" + sessionAccount
+	stored, ok := mk.store[storeKey]
+	mk.mu.RUnlock()
+	if !ok {
+		t.Fatal("session not found in store after Get")
+	}
 	var retrieved storedSession
-	json.Unmarshal([]byte(got), &retrieved)
+	if err := json.Unmarshal(stored, &retrieved); err != nil {
+		t.Fatalf("Unmarshal stored session: %v", err)
+	}
 	if !retrieved.LastAccess.After(now) {
 		t.Error("LastAccess should be updated after Get")
 	}
