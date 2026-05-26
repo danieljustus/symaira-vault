@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 	"gopkg.in/yaml.v3"
+
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 )
 
 type Printer interface {
