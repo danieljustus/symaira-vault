@@ -126,7 +126,7 @@ func detectASCIIOnly() bool {
 	if v == "" {
 		v = os.Getenv("OPENPASS_ASCII")
 	}
-	if v != "" && v != "0" && v != "false" {
+	if v != "" && v != "0" && v != "false" { //nolint:goconst
 		return true
 	}
 	// Best-effort UTF-8 check: most modern environments have UTF-8 locale.
