@@ -55,13 +55,14 @@ func AcquireWriteLock(vaultDir string, timeout time.Duration) (*os.File, error) 
 	f := os.NewFile(uintptr(handle), lockPath)
 
 	deadline := time.Now().Add(timeout)
+	var overlapped windows.Overlapped
 	for {
 		err := windows.LockFileEx(
 			handle,
 			windows.LOCKFILE_EXCLUSIVE_LOCK|windows.LOCKFILE_FAIL_IMMEDIATELY,
 			0,
 			1, 0, // lock 1 byte (advisory lock, sufficient for .lock file)
-			nil,
+			&overlapped,
 		)
 		if err == nil {
 			return f, nil
@@ -90,11 +91,12 @@ func ReleaseLock(lockFile *os.File) error {
 		return nil
 	}
 
+	var overlapped windows.Overlapped
 	if err := windows.UnlockFileEx(
 		windows.Handle(lockFile.Fd()),
 		0,
 		1, 0, // must match the byte range used in LockFileEx
-		nil,
+		&overlapped,
 	); err != nil {
 		_ = lockFile.Close()
 		return fmt.Errorf("unlock error: %w", err)
