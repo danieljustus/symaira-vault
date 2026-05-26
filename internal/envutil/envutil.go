@@ -21,9 +21,9 @@ func Getenv(primary, legacy string) string {
 		return v
 	}
 	if v := os.Getenv(legacy); v != "" {
-		if deprecateWarn.CompareAndSwap(0, 1) {
+		if deprecateWarn.CompareAndSwap(0, 1) && len(legacy) > 8 && legacy[:8] == "OPENPASS" {
 			fmt.Fprintf(os.Stderr,
-				"WARNING: %[1]s is deprecated and will be removed in a future release. "+
+				"WARNING: %[1]s is deprecated and will be removed 3 releases after 2026-05-26. "+
 					"Use %[2]s instead.\n", legacy, primary)
 		}
 		return v
@@ -31,9 +31,9 @@ func Getenv(primary, legacy string) string {
 	return ""
 }
 
-// ResetDeprecationWarning resets the one-shot deprecation warning so that
+// resetDeprecationWarning resets the one-shot deprecation warning so that
 // the next legacy-var lookup prints it again. Intended for testing only.
-func ResetDeprecationWarning() {
+func resetDeprecationWarning() {
 	deprecateWarn.Store(0)
 }
 
