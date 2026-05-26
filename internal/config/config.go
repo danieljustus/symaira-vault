@@ -28,6 +28,7 @@ type Config struct {
 	Clipboard      *ClipboardConfig        `yaml:"clipboard,omitempty"`
 	Audit          *AuditConfig            `yaml:"audit,omitempty"`
 	Logging        *LoggingConfig          `yaml:"logging,omitempty"`
+	Security       *SecurityConfig         `yaml:"security,omitempty"`
 	VaultDir       string                  `yaml:"vaultDir,omitempty"`
 	DefaultAgent   string                  `yaml:"defaultAgent,omitempty"`
 	SessionTimeout time.Duration           `yaml:"sessionTimeout,omitempty"`

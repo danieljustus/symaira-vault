@@ -229,6 +229,34 @@ func checkPreCommitHooks(_ string, _ Options) Result {
 	return r
 }
 
+func checkEnvPassphrase(vaultDir string, _ Options) Result {
+	r := Result{ID: "security.env_passphrase", Name: "Environment passphrase"}
+	cfgPath := filepath.Join(vaultDir, "config.yaml")
+	cfg, err := configpkg.Load(cfgPath)
+	if err != nil {
+		cfg = configpkg.Default()
+	}
+	envPass := os.Getenv("SYMVAULT_PASSPHRASE")
+	if envPass == "" {
+		envPass = os.Getenv("OPENPASS_PASSPHRASE")
+	}
+	if envPass == "" {
+		r.Status = StatusOK
+		r.Message = "not set"
+		return r
+	}
+	if cfg.Security != nil && cfg.Security.DisableEnvPassphrase {
+		r.Status = StatusWarn
+		r.Message = "SYMVAULT_PASSPHRASE is set despite security.disable_env_passphrase: true"
+		r.Hint = "unset the environment variable or remove the security.disable_env_passphrase config option"
+	} else {
+		r.Status = StatusWarn
+		r.Message = "SYMVAULT_PASSPHRASE or OPENPASS_PASSPHRASE is set — passphrase visible in /proc/PID/environ"
+		r.Hint = "set security.disable_env_passphrase: true in config.yaml to disable env var passphrase, or unset the variable"
+	}
+	return r
+}
+
 func checkSessionKeyring(vaultDir string, _ Options) Result {
 	r := Result{ID: "session.keyring", Name: "Session keyring roundtrip"}
 	testData := "symvault-doctor-test"
