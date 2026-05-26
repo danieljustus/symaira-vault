@@ -12,6 +12,7 @@ import (
 
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+	mcperrors "github.com/danieljustus/symaira-vault/internal/mcp/errors"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 	"github.com/danieljustus/symaira-vault/internal/vault/taint"
@@ -26,7 +27,7 @@ func vaultServiceErrorResult(err error) (*mcp.CallToolResult, error) {
 		return nil, fmt.Errorf("vault operation failed: %w", err)
 	}
 	if os.IsNotExist(err) {
-		return mcp.NewToolResultError("entry not found"), nil
+		return mcp.NewToolResultError(mcperrors.EntryNotFound("").Message), nil
 	}
 	return nil, err
 }
