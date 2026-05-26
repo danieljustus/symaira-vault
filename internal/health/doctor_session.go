@@ -234,11 +234,19 @@ func checkEnvPassphrase(vaultDir string, _ Options) Result {
 	cfgPath := filepath.Join(vaultDir, "config.yaml")
 	cfg, err := configpkg.Load(cfgPath)
 	if err != nil {
-		cfg = configpkg.Default()
+		r.Status = StatusWarn
+		r.Message = "cannot load config to determine env-passphrase guard status"
+		return r
 	}
+	var envVarName string
 	envPass := os.Getenv("SYMVAULT_PASSPHRASE")
-	if envPass == "" {
+	if envPass != "" {
+		envVarName = "SYMVAULT_PASSPHRASE"
+	} else {
 		envPass = os.Getenv("OPENPASS_PASSPHRASE")
+		if envPass != "" {
+			envVarName = "OPENPASS_PASSPHRASE"
+		}
 	}
 	if envPass == "" {
 		r.Status = StatusOK
@@ -247,11 +255,11 @@ func checkEnvPassphrase(vaultDir string, _ Options) Result {
 	}
 	if cfg.Security != nil && cfg.Security.DisableEnvPassphrase {
 		r.Status = StatusWarn
-		r.Message = "SYMVAULT_PASSPHRASE is set despite security.disable_env_passphrase: true"
-		r.Hint = "unset the environment variable or remove the security.disable_env_passphrase config option"
+		r.Message = envVarName + " is set despite security.disable_env_passphrase: true"
+		r.Hint = "unset the environment variable to eliminate the exposure"
 	} else {
 		r.Status = StatusWarn
-		r.Message = "SYMVAULT_PASSPHRASE or OPENPASS_PASSPHRASE is set — passphrase visible in /proc/PID/environ"
+		r.Message = envVarName + " is set — passphrase is present in the process environment and may be readable by other processes or crash dumps"
 		r.Hint = "set security.disable_env_passphrase: true in config.yaml to disable env var passphrase, or unset the variable"
 	}
 	return r
