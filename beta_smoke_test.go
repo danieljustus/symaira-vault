@@ -43,7 +43,7 @@ func TestBetaSmokeFlow(t *testing.T) {
 		cmd.Dir = repoRoot(t)
 		cmd.Env = append(os.Environ(),
 			"GOWORK=off",
-			"OPENPASS_PASSPHRASE="+passphrase,
+			"SYMVAULT_PASSPHRASE="+passphrase,
 		)
 		output, err := cmd.Output()
 		if err != nil {
