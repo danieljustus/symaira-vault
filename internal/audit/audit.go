@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/danieljustus/symaira-vault/internal/envutil"
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
@@ -33,9 +34,12 @@ const (
 
 // Environment variable names for audit configuration
 const (
-	envMaxSizeMB  = "OPENPASS_AUDIT_MAX_SIZE_MB"
-	envMaxBackups = "OPENPASS_AUDIT_MAX_BACKUPS"
-	envMaxAgeDays = "OPENPASS_AUDIT_MAX_AGE_DAYS"
+	envMaxSizeMB         = "SYMVAULT_AUDIT_MAX_SIZE_MB"
+	envMaxSizeMBLegacy   = "OPENPASS_AUDIT_MAX_SIZE_MB"
+	envMaxBackups        = "SYMVAULT_AUDIT_MAX_BACKUPS"
+	envMaxBackupsLegacy  = "OPENPASS_AUDIT_MAX_BACKUPS"
+	envMaxAgeDays        = "SYMVAULT_AUDIT_MAX_AGE_DAYS"
+	envMaxAgeDaysLegacy  = "OPENPASS_AUDIT_MAX_AGE_DAYS"
 )
 
 // Config holds the configuration for audit log rotation.
@@ -78,19 +82,19 @@ func parseAuditConfig(base *Config) Config {
 		cfg.MaxAgeDays = base.MaxAgeDays
 	}
 
-	if val := os.Getenv(envMaxSizeMB); val != "" {
+	if val := envutil.Getenv(envMaxSizeMB, envMaxSizeMBLegacy); val != "" {
 		if mb, err := strconv.ParseInt(val, 10, 64); err == nil && mb >= 0 {
 			cfg.MaxFileSize = mb * 1024 * 1024
 		}
 	}
 
-	if val := os.Getenv(envMaxBackups); val != "" {
+	if val := envutil.Getenv(envMaxBackups, envMaxBackupsLegacy); val != "" {
 		if backups, err := strconv.Atoi(val); err == nil && backups >= 0 {
 			cfg.MaxBackups = backups
 		}
 	}
 
-	if val := os.Getenv(envMaxAgeDays); val != "" {
+	if val := envutil.Getenv(envMaxAgeDays, envMaxAgeDaysLegacy); val != "" {
 		if days, err := strconv.Atoi(val); err == nil && days >= 0 {
 			cfg.MaxAgeDays = days
 		}

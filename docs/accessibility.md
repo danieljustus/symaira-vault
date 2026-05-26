@@ -9,8 +9,8 @@ have considered.
 
 | Setting                                | Effect                                                  |
 |----------------------------------------|---------------------------------------------------------|
-| `OPENPASS_SCREEN_READER=1`             | Skip box-drawing; emit "Label: value" lines             |
-| `OPENPASS_ASCII=1`                     | ASCII fallbacks for ✓ ⚠ ✗ ▸ ·                            |
+| `SYMVAULT_SCREEN_READER=1`             | Skip box-drawing; emit "Label: value" lines             |
+| `SYMVAULT_ASCII=1`                     | ASCII fallbacks for ✓ ⚠ ✗ ▸ ·                            |
 | `--theme highcontrast`                 | Maximum-contrast palette for low vision                 |
 | `--theme colorblind`                   | Blue/orange replaces red/green                          |
 | `--color=never`                        | No ANSI color at all                                    |
@@ -21,7 +21,7 @@ have considered.
 
 ### Secure-input prompts (`internal/secureui`)
 
-When `OPENPASS_SCREEN_READER=1` is set, `internal/secureui/backend_tty.go`
+When `SYMVAULT_SCREEN_READER=1` is set, `internal/secureui/backend_tty.go`
 emits a plain-text prompt instead of the box-drawing variant. NVDA, VoiceOver,
 and Orca all speak it intelligibly.
 
@@ -32,12 +32,12 @@ white/yellow/blue set with high luminance contrast. `PresetColorblind` avoids
 the red/green axis in favour of blue/orange — safe for deutan, protan, and
 tritan vision per the Coblis simulator.
 
-The preset is picked from `--theme` or `OPENPASS_THEME` on every `Execute()`.
+The preset is picked from `--theme` or `SYMVAULT_THEME` on every `Execute()`.
 
 ### Symbol fallback
 
 `internal/ui/theme.Detect()` falls back to ASCII symbols (`[OK] [!] [X] > .`)
-on `LANG=C`, `OPENPASS_ASCII=1`, or any non-UTF-8 locale.
+on `LANG=C`, `SYMVAULT_ASCII=1`, or any non-UTF-8 locale.
 
 ### Output color
 

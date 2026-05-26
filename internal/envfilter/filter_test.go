@@ -339,3 +339,55 @@ func envSliceToMap(env []string) map[string]string {
 	}
 	return m
 }
+
+func TestFilterEnv_DoesNotLeakSymvault(t *testing.T) {
+	t.Setenv("SYMVAULT_VAULT", "/tmp/symvault_should_not_leak")
+	t.Setenv("SYMVAULT_MCP_TOKEN", "should_be_removed")
+	t.Setenv("OPENPASS_VAULT", "/tmp/openpass_should_not_leak")
+
+	wl := DefaultWhitelist()
+	result := FilterEnv(wl)
+
+	for _, e := range result {
+		if strings.HasPrefix(e, "SYMVAULT_VAULT=") {
+			t.Errorf("Default whitelist should not pass SYMVAULT_VAULT, got: %s", e)
+		}
+		if strings.HasPrefix(e, "SYMVAULT_MCP_TOKEN=") {
+			t.Errorf("Default whitelist should not pass SYMVAULT_MCP_TOKEN, got: %s", e)
+		}
+		if strings.HasPrefix(e, "OPENPASS_VAULT=") {
+			t.Errorf("Default whitelist should not pass OPENPASS_VAULT, got: %s", e)
+		}
+	}
+}
+
+func TestFilterEnv_DoesNotLeakBothPrefixes(t *testing.T) {
+	t.Setenv("SYMVAULT_VAULT", "/tmp/symvault_should_not_leak")
+	t.Setenv("OPENPASS_VAULT", "/tmp/openpass_should_not_leak")
+	t.Setenv("SYMVAULT_LOG_LEVEL", "debug")
+	t.Setenv("OPENPASS_LOG_LEVEL", "debug")
+
+	wl := DefaultWhitelist()
+	result := FilterEnv(wl)
+
+	for _, e := range result {
+		if strings.HasPrefix(e, "SYMVAULT_") {
+			t.Errorf("Default whitelist should not pass any SYMVAULT_* var, got: %s", e)
+		}
+		if strings.HasPrefix(e, "OPENPASS_") {
+			t.Errorf("Default whitelist should not pass any OPENPASS_* var, got: %s", e)
+		}
+	}
+}
+
+func TestPrepareCmd_NoSymvaultEnvLeak(t *testing.T) {
+	t.Setenv("SYMVAULT_TEST_SECRET", "should_not_leak_to_child")
+
+	cmd := exec.Command("echo", "test")
+	PrepareCmd(cmd)
+
+	envMap := envSliceToMap(cmd.Env)
+	if _, ok := envMap["SYMVAULT_TEST_SECRET"]; ok {
+		t.Error("PrepareCmd leaked SYMVAULT_TEST_SECRET to child process env")
+	}
+}

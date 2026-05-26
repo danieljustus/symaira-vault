@@ -198,7 +198,7 @@ The MCP token (`mcp-token`) is auto-generated on first server start and stored i
 
 set -euo pipefail
 
-VAULT_DIR="${OPENPASS_VAULT:-$HOME/.symvault}"
+VAULT_DIR="${SYMVAULT_VAULT:-$HOME/.symvault}"
 SERVER_PORT="${MCP_PORT:-8080}"
 BACKUP_DIR="$VAULT_DIR/backups"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
@@ -253,13 +253,13 @@ echo "ACTION REQUIRED: Update all agent configurations with new token"
 
 1. Check if backup exists:
    ```bash
-   ls -la ~/.openpass/backups/mcp-token.*
+   ls -la ~/.symvault/backups/mcp-token.*
    ```
 
 2. If backup exists, restore and verify:
    ```bash
-   cp ~/.openpass/backups/mcp-token.latest ~/.openpass/mcp-token
-   chmod 600 ~/.openpass/mcp-token
+   cp ~/.symvault/backups/mcp-token.latest ~/.symvault/mcp-token
+   chmod 600 ~/.symvault/mcp-token
    ```
 
 3. If no backup, regenerate:
@@ -268,13 +268,13 @@ echo "ACTION REQUIRED: Update all agent configurations with new token"
    pkill -f "symvault serve"
    
    # Remove corrupted/missing token
-   rm -f ~/.openpass/mcp-token
+   rm -f ~/.symvault/mcp-token
    
    # Restart (auto-generates new token)
    symvault serve --port 8080
    
    # Get new token
-   cat ~/.openpass/mcp-token
+   cat ~/.symvault/mcp-token
    ```
 
 4. Update all agent configurations with new token
@@ -288,7 +288,7 @@ Verify that all entries are accessible:
 ENTRY_COUNT=$(symvault list | wc -l)
 
 # 2. Count entry files
-FILE_COUNT=$(find ~/.openpass/entries -name "*.age" | wc -l)
+FILE_COUNT=$(find ~/.symvault/entries -name "*.age" | wc -l)
 
 # 3. Compare
 echo "Listed entries: $ENTRY_COUNT, Files: $FILE_COUNT"
@@ -297,7 +297,7 @@ symvault serve --port 8080
 
 ### Prevention Checklist
 
-- [ ] Token file permissions: `chmod 600 ~/.openpass/mcp-token`
+- [ ] Token file permissions: `chmod 600 ~/.symvault/mcp-token`
 - [ ] Token excluded from version control (in `.gitignore`)
 - [ ] Automated backup of token file
 - [ ] Rotation schedule documented and followed
@@ -374,7 +374,7 @@ symvault git push
 To enable a remote for an existing vault:
 
 ```bash
-cd ~/.openpass  # or your vault path
+cd ~/.symvault  # or your vault path
 git remote add origin git@github.com:user/backup-repo.git
 git push -u origin main
 ```
@@ -383,7 +383,7 @@ git push -u origin main
 
 ```bash
 # Create timestamped backup
-VAULT_DIR=~/.openpass
+VAULT_DIR=~/.symvault
 BACKUP_DIR=~/backups/symvault
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
@@ -404,7 +404,7 @@ tar -xzf ~/backups/symvault/vault_20260420_120000.tar.gz -C /tmp/
 ls -la /tmp/.symvault/identity.age
 
 # Move to vault location
-mv ~/.openpass ~/.openpass_old
+mv ~/.symvault ~/.symvault_old
 mv /tmp/.symvault ~/
 
 # Verify vault opens
@@ -415,7 +415,7 @@ symvault list
 
 ```bash
 # Clone backup repository
-git clone git@github.com:user/backup-repo.git ~/.openpass
+git clone git@github.com:user/backup-repo.git ~/.symvault
 
 # Unlock vault
 symvault unlock
@@ -457,7 +457,7 @@ If `identity.age` is lost, **there is no recovery**. The identity is the private
 
 | Step | Action | Verification |
 |------|--------|--------------|
-| 1 | Restore vault directory | `ls -la ~/.openpass/` shows identity.age and entries/ |
+| 1 | Restore vault directory | `ls -la ~/.symvault/` shows identity.age and entries/ |
 | 2 | Unlock vault | `symvault unlock` succeeds |
 | 3 | Verify entries | `symvault list` returns expected entries |
 | 4 | Test entry retrieval | `symvault get <entry>` returns password |
@@ -473,10 +473,10 @@ For critical vaults, use the 3-2-1 rule:
 Example:
 ```bash
 # Daily incremental backup to external drive
-rsync -av --delete ~/.openpass/ /Volumes/Backup/symvault/
+rsync -av --delete ~/.symvault/ /Volumes/Backup/symvault/
 
 # Weekly full backup to cloud storage
-rclone sync ~/.openpass/ backblaze:openpass-vaults/$(hostname)/
+rclone sync ~/.symvault/ backblaze:symvault-vaults/$(hostname)/
 ```
 
 ---
@@ -496,7 +496,7 @@ Set up periodic health monitoring:
 # health-check.sh - Run from cron every minute
 
 HEALTH_URL="http://127.0.0.1:8080/health"
-LOG_FILE="/var/log/openpass-health.log"
+LOG_FILE="/var/log/symvault-health.log"
 ALERT_EMAIL="ops@example.com"
 
 if ! curl -sf "$HEALTH_URL" > /dev/null 2>&1; then
@@ -519,14 +519,14 @@ curl -s http://127.0.0.1:8080/health | jq .
 
 # 2. MCP tool health test
 curl -s -X POST http://127.0.0.1:8080/mcp \
-  -H "Authorization: Bearer $(cat ~/.openpass/mcp-token)" \
+  -H "Authorization: Bearer $(cat ~/.symvault/mcp-token)" \
   -H "X-Symaira Vault-Agent: default" \
   -H "Content-Type: application/json" \
   -d '{"tool": "health", "arguments": {}}'
 
 # 3. End-to-end test (list entries)
 curl -s -X POST http://127.0.0.1:8080/mcp \
-  -H "Authorization: Bearer $(cat ~/.openpass/mcp-token)" \
+  -H "Authorization: Bearer $(cat ~/.symvault/mcp-token)" \
   -H "X-Symaira Vault-Agent: default" \
   -H "Content-Type: application/json" \
   -d '{"tool": "list_entries", "arguments": {}}' | jq '.entries | length'
@@ -553,7 +553,7 @@ curl -s -X POST http://127.0.0.1:8080/mcp \
 
 1. Check agent profile exists:
    ```bash
-   cat ~/.openpass/config.yaml | grep -A 5 "agents:"
+   cat ~/.symvault/config.yaml | grep -A 5 "agents:"
    ```
 
 2. Verify profile name matches:
@@ -569,7 +569,7 @@ curl -s -X POST http://127.0.0.1:8080/mcp \
 
 3. Check profile permissions:
    ```bash
-   cat ~/.openpass/config.yaml | yq '.agents.<agent-name>'
+   cat ~/.symvault/config.yaml | yq '.agents.<agent-name>'
    ```
 
 #### Recovery Procedures
@@ -578,7 +578,7 @@ curl -s -X POST http://127.0.0.1:8080/mcp \
 
 ```bash
 # Add the missing profile to config.yaml
-cat >> ~/.openpass/config.yaml << 'EOF'
+cat >> ~/.symvault/config.yaml << 'EOF'
 
 agents:
   missing-agent:
@@ -596,14 +596,14 @@ symvault serve --port 8080
 
 ```bash
 # Backup current config
-cp ~/.openpass/config.yaml ~/.openpass/config.yaml.bak
+cp ~/.symvault/config.yaml ~/.symvault/config.yaml.bak
 
 # Edit to fix permissions
 # Change canWrite: false to true for write operations
 # Update allowedPaths to include required paths
 
 # Validate config
-symvault --vault ~/.openpass list
+symvault --vault ~/.symvault list
 
 # Restart server
 pkill -f "symvault serve"
@@ -725,7 +725,7 @@ If security incident suspected:
 #!/bin/bash
 # emergency-lockdown.sh
 
-echo "=== OPENPASS EMERGENCY LOCKDOWN ==="
+echo "=== SYMVAULT EMERGENCY LOCKDOWN ==="
 
 # 1. Stop MCP server
 pkill -f "symvault serve"
@@ -736,12 +736,12 @@ symvault lock
 echo "[2/4] Vault locked"
 
 # 3. Invalidate current token (rotate)
-mv ~/.openpass/mcp-token ~/.openpass/mcp-token.compromised.$(date +%Y%m%d_%H%M%S)
+mv ~/.symvault/mcp-token ~/.symvault/mcp-token.compromised.$(date +%Y%m%d_%H%M%S)
 echo "[3/4] Token invalidated (backup created)"
 
 # 4. Disable auto-start (if using LaunchAgent/systemd)
 # macOS LaunchAgent
-launchctl unload ~/Library/LaunchAgents/com.example.openpass-mcp.plist 2>/dev/null || true
+launchctl unload ~/Library/LaunchAgents/com.example.symvault-mcp.plist 2>/dev/null || true
 echo "[4/4] Auto-start disabled"
 
 echo ""
@@ -763,10 +763,10 @@ symvault unlock
 symvault list
 
 # 2. Generate new token (if rotated)
-rm -f ~/.openpass/mcp-token
+rm -f ~/.symvault/mcp-token
 symvault serve --port 8080 &
 sleep 2
-NEW_TOKEN=$(cat ~/.openpass/mcp-token)
+NEW_TOKEN=$(cat ~/.symvault/mcp-token)
 
 # 3. Update all agent configurations
 symvault mcp-config claude-code --http --include-token
@@ -777,7 +777,7 @@ curl -H "Authorization: Bearer $NEW_TOKEN" \
      http://127.0.0.1:8080/health
 
 # 5. Enable auto-start if previously disabled
-launchctl load ~/Library/LaunchAgents/com.example.openpass-mcp.plist
+launchctl load ~/Library/LaunchAgents/com.example.symvault-mcp.plist
 ```
 
 ### Token Invalidation Procedures
@@ -805,13 +805,13 @@ If token compromise suspected:
 pkill -f "symvault serve"
 
 # 2. Backup and remove compromised token
-mv ~/.openpass/mcp-token ~/.openpass/mcp-token.compromised.$(date +%Y%m%d_%H%M%S)
+mv ~/.symvault/mcp-token ~/.symvault/mcp-token.compromised.$(date +%Y%m%d_%H%M%S)
 
 # 3. Start server with new token
 symvault serve --port 8080 &
 
 # 4. Verify new token generated
-cat ~/.openpass/mcp-token
+cat ~/.symvault/mcp-token
 
 # 5. Update critical agent configs immediately
 # (Other agents can wait for scheduled maintenance)
@@ -841,16 +841,16 @@ Monitor these metrics for operational health:
 
 ```bash
 # Request rate
-curl -s http://127.0.0.1:8080/metrics | grep "openpass_mcp_requests_total"
+curl -s http://127.0.0.1:8080/metrics | grep "symvault_mcp_requests_total"
 
 # Error rate
-curl -s http://127.0.0.1:8080/metrics | grep "openpass_mcp_requests_total{status=\"error\"}"
+curl -s http://127.0.0.1:8080/metrics | grep "symvault_mcp_requests_total{status=\"error\"}"
 
 # Auth denials
-curl -s http://127.0.0.1:8080/metrics | grep "openpass_mcp_auth_denials_total"
+curl -s http://127.0.0.1:8080/metrics | grep "symvault_mcp_auth_denials_total"
 
 # Vault operations
-curl -s http://127.0.0.1:8080/metrics | grep "openpass_vault_operations_total"
+curl -s http://127.0.0.1:8080/metrics | grep "symvault_vault_operations_total"
 ```
 
 #### Alert Thresholds
@@ -942,12 +942,12 @@ After every release, verify:
 # https://github.com/danieljustus/symaira-vault/releases/tag/vX.Y.Z
 
 # 2. Verify checksums
-sha256sum -c OpenPass_X.Y.Z_checksums.txt --ignore-missing
+sha256sum -c symaira-vault_X.Y.Z_checksums.txt --ignore-missing
 # or on macOS:
-shasum -a 256 --check OpenPass_X.Y.Z_checksums.txt --ignore-missing
+shasum -a 256 --check symaira-vault_X.Y.Z_checksums.txt --ignore-missing
 
 # 3. Verify binary (Linux example)
-./OpenPass_X.Y.Z_linux_amd64/symvault version
+./symaira-vault_X.Y.Z_linux_amd64/symvault version
 # Should match tag version
 ```
 
@@ -961,11 +961,11 @@ docker run -it ubuntu:latest bash
 apt-get update && apt-get install -y curl gpg
 
 # 3. Download and verify release
-curl -fsSLO https://github.com/danieljustus/symaira-vault/releases/download/vX.Y.Z/OpenPass_X.Y.Z_linux_amd64.tar.gz
-curl -fsSLO https://github.com/danieljustus/symaira-vault/releases/download/vX.Y.Z/OpenPass_X.Y.Z_checksums.txt
-sha256sum -c OpenPass_X.Y.Z_checksums.txt --ignore-missing
-tar xzf OpenPass_X.Y.Z_linux_amd64.tar.gz
-cp OpenPass_X.Y.Z_linux_amd64/symvault ./symvault
+curl -fsSLO https://github.com/danieljustus/symaira-vault/releases/download/vX.Y.Z/symaira-vault_X.Y.Z_linux_amd64.tar.gz
+curl -fsSLO https://github.com/danieljustus/symaira-vault/releases/download/vX.Y.Z/symaira-vault_X.Y.Z_checksums.txt
+sha256sum -c symaira-vault_X.Y.Z_checksums.txt --ignore-missing
+tar xzf symaira-vault_X.Y.Z_linux_amd64.tar.gz
+cp symaira-vault_X.Y.Z_linux_amd64/symvault ./symvault
 
 # 4. Check binary works
 chmod +x symvault

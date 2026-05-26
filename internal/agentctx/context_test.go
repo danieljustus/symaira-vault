@@ -390,17 +390,18 @@ func TestBumpQuotaWithCounter(t *testing.T) {
 // TestIsAgentMode verifies the IsAgentMode function.
 func TestIsAgentMode(t *testing.T) {
 	// Save and restore env.
-	prev := os.Getenv(envAgent)
-	defer os.Setenv(envAgent, prev)
+	prevPrimary := os.Getenv(envAgentPrimary)
+	prevLegacy := os.Getenv(envAgentLegacy)
+	defer os.Setenv(envAgentPrimary, prevPrimary)
+	defer os.Setenv(envAgentLegacy, prevLegacy)
 
-	if err := os.Unsetenv(envAgent); err != nil {
-		t.Fatalf("Unsetenv error: %v", err)
-	}
+	_ = os.Unsetenv(envAgentPrimary)
+	_ = os.Unsetenv(envAgentLegacy)
 	if IsAgentMode() {
 		t.Error("IsAgentMode() = true, want false when env is unset")
 	}
 
-	if err := os.Setenv(envAgent, "test-agent"); err != nil {
+	if err := os.Setenv(envAgentPrimary, "test-agent"); err != nil {
 		t.Fatalf("Setenv error: %v", err)
 	}
 	if !IsAgentMode() {
@@ -414,10 +415,13 @@ func TestIsAgentMode(t *testing.T) {
 
 // TestAgentNameEmpty verifies AgentName returns empty when env is not set.
 func TestAgentNameEmpty(t *testing.T) {
-	prev := os.Getenv(envAgent)
-	defer os.Setenv(envAgent, prev)
+	prevPrimary := os.Getenv(envAgentPrimary)
+	prevLegacy := os.Getenv(envAgentLegacy)
+	defer os.Setenv(envAgentPrimary, prevPrimary)
+	defer os.Setenv(envAgentLegacy, prevLegacy)
 
-	os.Unsetenv(envAgent)
+	_ = os.Unsetenv(envAgentPrimary)
+	_ = os.Unsetenv(envAgentLegacy)
 	if got := AgentName(); got != "" {
 		t.Fatalf("AgentName() = %q, want empty string", got)
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/pflag"
 
 	agentctx "github.com/danieljustus/symaira-vault/internal/agentctx"
+	"github.com/danieljustus/symaira-vault/internal/envutil"
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 	"github.com/danieljustus/symaira-vault/internal/i18n"
 	"github.com/danieljustus/symaira-vault/internal/session"
@@ -77,7 +78,7 @@ Daily use:
 			return err
 		}
 
-		if agentName := os.Getenv("OPENPASS_AGENT"); agentName != "" {
+		if agentName := envutil.Getenv("SYMVAULT_AGENT", "OPENPASS_AGENT"); agentName != "" {
 			_, loadErr := agentctx.Load(agentName, vDir)
 			if loadErr != nil {
 				return errorspkg.NewCLIError(errorspkg.ExitPermissionDenied,
@@ -107,7 +108,7 @@ func Execute() {
 		case errorspkg.ExitNotInitialized:
 			cliout.Hintf("Run 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.")
 		case errorspkg.ExitLocked:
-			cliout.Hintf("Unlock with 'symvault unlock', or set OPENPASS_PASSPHRASE for non-interactive use.")
+			cliout.Hintf("Unlock with 'symvault unlock', or set SYMVAULT_PASSPHRASE (or OPENPASS_PASSPHRASE) for non-interactive use.")
 		case errorspkg.ExitSuccess, errorspkg.ExitGeneralError, errorspkg.ExitPermissionDenied, errorspkg.ExitDoctorWarn, errorspkg.ExitDoctorFail, errorspkg.ExitConfigError, errorspkg.ExitUpdateAvailable:
 		}
 		OsExit(int(exitCode))
@@ -136,7 +137,7 @@ func init() {
 	RootCmd.PersistentFlags().StringVar(&OutputFormat, "output", "text", "Output format (text, json, yaml)")
 	RootCmd.PersistentFlags().BoolVar(&NoPipeWarning, "no-pipe-warning", false, "suppress 'reading from non-TTY' warning when piping secrets")
 	RootCmd.PersistentFlags().StringVar(&ColorMode, "color", "auto", "When to emit ANSI color: auto, always, never")
-	RootCmd.PersistentFlags().StringVar(&ThemePreset, "theme", "", "Color preset: default, highcontrast, colorblind (or OPENPASS_THEME)")
+	RootCmd.PersistentFlags().StringVar(&ThemePreset, "theme", "", "Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)")
 }
 
 func commandRequiresVault(cmd *cobra.Command) bool {

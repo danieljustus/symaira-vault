@@ -139,7 +139,8 @@ func TestLoadOrCreateToken_FileTokenIgnoresEnv(t *testing.T) {
 	if token != "file-token" {
 		t.Fatalf("token = %q, want %q", token, "file-token")
 	}
-	if !bytes.Contains(buf.Bytes(), []byte("Warning: OPENPASS_MCP_TOKEN is set")) {
+	if !bytes.Contains(buf.Bytes(), []byte("OPENPASS_MCP_TOKEN is set")) &&
+		!bytes.Contains(buf.Bytes(), []byte("SYMVAULT_MCP_TOKEN is set")) {
 		t.Fatalf("expected stderr warning, got %q", buf.String())
 	}
 }
@@ -1327,5 +1328,81 @@ func TestIsToolRegistryDriftDetectedNilSafe(t *testing.T) {
 	var tok *ScopedToken
 	if tok.IsToolRegistryDriftDetected() {
 		t.Error("nil token should not report drift")
+	}
+}
+
+func TestLoadOrCreateTokenRespectsEnvVar_Symvault(t *testing.T) {
+	t.Setenv("SYMVAULT_MCP_TOKEN", "symvault-custom-token")
+
+	token, err := LoadOrCreateToken("/nonexistent/path")
+	if err != nil {
+		t.Fatalf("LoadOrCreateToken() error = %v", err)
+	}
+	if token != "symvault-custom-token" {
+		t.Fatalf("token = %q, want %q", token, "symvault-custom-token")
+	}
+}
+
+func TestLoadOrCreateTokenUnsetsEnvVar_Symvault(t *testing.T) {
+	t.Setenv("SYMVAULT_MCP_TOKEN", "symvault-custom-token")
+
+	_, err := LoadOrCreateToken("/nonexistent/path")
+	if err != nil {
+		t.Fatalf("LoadOrCreateToken() error = %v", err)
+	}
+
+	if os.Getenv("SYMVAULT_MCP_TOKEN") != "" {
+		t.Fatalf("SYMVAULT_MCP_TOKEN was not unset after reading")
+	}
+}
+
+func TestLoadOrCreateToken_SymvaultPrecedence(t *testing.T) {
+	// SYMVAULT_MCP_TOKEN should take precedence over OPENPASS_MCP_TOKEN
+	t.Setenv("SYMVAULT_MCP_TOKEN", "symvault-token")
+	t.Setenv("OPENPASS_MCP_TOKEN", "openpass-token")
+
+	token, err := LoadOrCreateToken("/nonexistent/path")
+	if err != nil {
+		t.Fatalf("LoadOrCreateToken() error = %v", err)
+	}
+	if token != "symvault-token" {
+		t.Fatalf("token = %q, want %q (SYMVAULT_ should win)", token, "symvault-token")
+	}
+}
+
+func TestLoadOrCreateToken_FileTokenIgnoresEnv_Symvault(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mcp-token")
+
+	if err := os.WriteFile(path, []byte("file-token\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	t.Setenv("SYMVAULT_MCP_TOKEN", "env-token")
+
+	oldStderr := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe() error = %v", err)
+	}
+	os.Stderr = w
+
+	token, err := LoadOrCreateToken(path)
+
+	os.Stderr = oldStderr
+	_ = w.Close()
+
+	var buf bytes.Buffer
+	_, _ = buf.ReadFrom(r)
+
+	if err != nil {
+		t.Fatalf("LoadOrCreateToken() error = %v", err)
+	}
+	if token != "file-token" {
+		t.Fatalf("token = %q, want %q", token, "file-token")
+	}
+	if !bytes.Contains(buf.Bytes(), []byte("Warning: SYMVAULT_MCP_TOKEN")) &&
+		!bytes.Contains(buf.Bytes(), []byte("Warning: OPENPASS_MCP_TOKEN")) {
+		t.Fatalf("expected stderr warning, got %q", buf.String())
 	}
 }

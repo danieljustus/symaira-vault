@@ -51,7 +51,7 @@ brew install symvault
 
 **Scoop:**
 ```powershell
-scoop bucket add openpass https://github.com/danieljustus/scoop-bucket
+scoop bucket add symvault https://github.com/danieljustus/scoop-bucket
 scoop install symvault
 ```
 
@@ -62,7 +62,7 @@ nix run github:danieljustus/symaira-vault
 
 # Or add as a flake input
 # flake.nix:
-#   inputs.openpass.url = "github:danieljustus/symaira-vault";
+#   inputs.symvault.url = "github:danieljustus/symaira-vault";
 ```
 > **Note:** The flake is new. Go module dependencies are pinned via `vendorHash` in `flake.nix`. If updating dependencies, run `go mod vendor && nix hash path --sri vendor/` and update the hash.
 
@@ -190,7 +190,7 @@ For the full configuration reference, see [docs/configuration.md](docs/configura
 
 ### Environment Variables
 
-- `OPENPASS_VAULT` — Path to vault directory (default: `~/.symvault`)
+- `SYMVAULT_VAULT` — Path to vault directory (default: `~/.symvault`)
 
 ### Vault Structure
 

@@ -19,7 +19,7 @@ function __symvault_perform_completion
     __symvault_debug "last arg: $lastArg"
 
     # Disable ActiveHelp which is not supported for fish shell
-    set -l requestComp "SYMAIRA_ACTIVE_HELP=0 $args[1] __complete $args[2..-1] $lastArg"
+    set -l requestComp "SYMVAULT_ACTIVE_HELP=0 $args[1] __complete $args[2..-1] $lastArg"
 
     __symvault_debug "Calling $requestComp"
     set -l results (eval $requestComp 2> /dev/null)

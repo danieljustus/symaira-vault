@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/pflag"
 	"golang.org/x/term"
 
+	"github.com/danieljustus/symaira-vault/internal/envutil"
 	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 )
 
@@ -28,22 +29,22 @@ func WarnEnvPassphrase() {
 	if EnvPassphraseWarningEmitted || QuietMode {
 		return
 	}
-	if v := os.Getenv("OPENPASS_NO_ENV_WARNING"); v != "" && v != "0" {
+	if v := envutil.Getenv("SYMVAULT_NO_ENV_WARNING", "OPENPASS_NO_ENV_WARNING"); v != "" && v != "0" {
 		return
 	}
 	EnvPassphraseWarningEmitted = true
-	cliout.Warnf("OPENPASS_PASSPHRASE is set — the passphrase is visible in /proc/PID/environ and may be exposed in process listings and crash dumps.")
+	cliout.Warnf("SYMVAULT_PASSPHRASE or OPENPASS_PASSPHRASE is set — the passphrase is visible in /proc/PID/environ and may be exposed in process listings and crash dumps.")
 }
 
 func WarnPipeRead(label string) {
 	if PipeWarningEmitted || QuietMode || NoPipeWarning {
 		return
 	}
-	if v := os.Getenv("OPENPASS_NO_PIPE_WARNING"); v != "" && v != "0" {
+	if v := envutil.Getenv("SYMVAULT_NO_PIPE_WARNING", "OPENPASS_NO_PIPE_WARNING"); v != "" && v != "0" {
 		return
 	}
 	PipeWarningEmitted = true
-	cliout.Warnf("Reading %s from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer OPENPASS_PASSPHRASE or 'symvault auth set touchid'.", label)
+	cliout.Warnf("Reading %s from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer SYMVAULT_PASSPHRASE, OPENPASS_PASSPHRASE, or 'symvault auth set touchid'.", label)
 }
 
 func ReadHiddenInput(prompt string, reader *bufio.Reader) ([]byte, error) {

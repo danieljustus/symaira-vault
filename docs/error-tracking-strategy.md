@@ -22,7 +22,7 @@ Symaira Vault maintains comprehensive audit logs for MCP operations:
 
 | Feature | Implementation | Location |
 |---------|---------------|----------|
-| JSONL audit logs | Per-agent log files | `~/.openpass/audit-<agent>.log` |
+| JSONL audit logs | Per-agent log files | `~/.symvault/audit-<agent>.log` |
 | Log rotation | By size (100MB) and age (30 days) | Automatic on write |
 | Retention policy | Configurable backup count | Default: 5 backups |
 | Health monitoring | `HealthCheck()` function | `internal/audit/audit.go` |
@@ -33,9 +33,9 @@ Symaira Vault maintains comprehensive audit logs for MCP operations:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OPENPASS_AUDIT_MAX_SIZE_MB` | 100 | Max log file size before rotation |
-| `OPENPASS_AUDIT_MAX_BACKUPS` | 5 | Number of rotated backups to retain |
-| `OPENPASS_AUDIT_MAX_AGE_DAYS` | 30 | Max age of rotated files before deletion |
+| `SYMVAULT_AUDIT_MAX_SIZE_MB` | 100 | Max log file size before rotation |
+| `SYMVAULT_AUDIT_MAX_BACKUPS` | 5 | Number of rotated backups to retain |
+| `SYMVAULT_AUDIT_MAX_AGE_DAYS` | 30 | Max age of rotated files before deletion |
 
 **Audit Log Content:**
 - Only action metadata (agent, action, path, field, transport, success/failure)
@@ -52,7 +52,7 @@ Field-level redaction is implemented for MCP agent responses:
 
 | Redaction Feature | Implementation | Usage |
 |-------------------|----------------|-------|
-| Agent field redaction | `redactFields` config | `~/.openpass/config.yaml` |
+| Agent field redaction | `redactFields` config | `~/.symvault/config.yaml` |
 | Token redaction in config | `--redact` flag | `symvault mcp-config <agent> --redact` |
 | Wildcard patterns | `*` and `prefix.*` | Redact all or nested fields |
 
@@ -181,11 +181,11 @@ symvault --version
 symvault list
 
 # Check vault permissions
-ls -la ~/.openpass/
-ls -la ~/.openpass/entries/
+ls -la ~/.symvault/
+ls -la ~/.symvault/entries/
 
 # Check config (review for secrets before sharing)
-cat ~/.openpass/config.yaml
+cat ~/.symvault/config.yaml
 
 # Check audit log health (via health endpoint)
 curl -s http://127.0.0.1:8080/health

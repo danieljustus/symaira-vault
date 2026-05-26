@@ -788,3 +788,135 @@ func TestWarnEnvPassphrase_OnceAndSilenced(t *testing.T) {
 	// Already emitted → second call is silent (idempotent).
 	cli.WarnEnvPassphrase()
 }
+
+// TestVaultPathUsesSymvaultEnvWhenFlagUnchanged verifies that VaultPath uses
+// the SYMVAULT_VAULT environment variable when the --vault flag is not explicitly changed.
+func TestVaultPathUsesSymvaultEnvWhenFlagUnchanged(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: path format differs")
+	}
+	resetVaultFlag(t)
+
+	origEnv := os.Getenv("SYMVAULT_VAULT")
+	defer func() { _ = os.Setenv("SYMVAULT_VAULT", origEnv) }()
+	// Also save/restore OPENPASS_VAULT to avoid interference
+	origOpenpass := os.Getenv("OPENPASS_VAULT")
+	defer func() { _ = os.Setenv("OPENPASS_VAULT", origOpenpass) }()
+	_ = os.Unsetenv("OPENPASS_VAULT")
+
+	cli.Vault = "~/.symvault"
+	_ = os.Setenv("SYMVAULT_VAULT", "/env/symvault")
+
+	path, err := cli.VaultPath()
+	if err != nil {
+		t.Fatalf("cli.VaultPath() unexpected error = %v", err)
+	}
+	if path != "/env/symvault" {
+		t.Fatalf("cli.VaultPath() = %s, want /env/symvault", path)
+	}
+}
+
+// TestVaultPathSymvaultTakesPrecedenceOverOpenpass verifies that SYMVAULT_VAULT
+// takes precedence over OPENPASS_VAULT when both are set.
+func TestVaultPathSymvaultTakesPrecedenceOverOpenpass(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: path format differs")
+	}
+	resetVaultFlag(t)
+
+	origSymvault := os.Getenv("SYMVAULT_VAULT")
+	origOpenpass := os.Getenv("OPENPASS_VAULT")
+	defer func() {
+		_ = os.Setenv("SYMVAULT_VAULT", origSymvault)
+		_ = os.Setenv("OPENPASS_VAULT", origOpenpass)
+	}()
+
+	cli.Vault = "~/.symvault"
+	_ = os.Setenv("SYMVAULT_VAULT", "/env/symvault")
+	_ = os.Setenv("OPENPASS_VAULT", "/env/openpass")
+
+	path, err := cli.VaultPath()
+	if err != nil {
+		t.Fatalf("cli.VaultPath() unexpected error = %v", err)
+	}
+	if path != "/env/symvault" {
+		t.Fatalf("cli.VaultPath() = %s, want /env/symvault (SYMVAULT_VAULT should take precedence)", path)
+	}
+}
+
+// TestUnlockVault_SymvaultEnvVar verifies that unlockVault uses the
+// SYMVAULT_PASSPHRASE environment variable.
+func TestUnlockVault_SymvaultEnvVar(t *testing.T) {
+	vaultDir, passphrase := initVault(t)
+	defer setupVaultFlag(t, vaultDir)()
+
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+	defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
+
+	v, err := cli.UnlockVault(vaultDir, false)
+	if err != nil {
+		t.Fatalf("unlockVault with SYMVAULT_PASSPHRASE env var: %v", err)
+	}
+	if v == nil {
+		t.Fatal("unlockVault returned nil vault")
+	}
+}
+
+// TestUnlockVault_SymvaultTakesPrecedenceOverOpenpass verifies that
+// SYMVAULT_PASSPHRASE takes precedence over OPENPASS_PASSPHRASE when both are set.
+func TestUnlockVault_SymvaultTakesPrecedenceOverOpenpass(t *testing.T) {
+	vaultDir, passphrase := initVault(t)
+	defer setupVaultFlag(t, vaultDir)()
+
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+	_ = os.Setenv("OPENPASS_PASSPHRASE", "wrong-passphrase")
+	defer func() {
+		_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
+		_ = os.Unsetenv("OPENPASS_PASSPHRASE")
+	}()
+
+	v, err := cli.UnlockVault(vaultDir, false)
+	if err != nil {
+		t.Fatalf("unlockVault should use SYMVAULT_PASSPHRASE over OPENPASS_PASSPHRASE: %v", err)
+	}
+	if v == nil {
+		t.Fatal("unlockVault returned nil vault")
+	}
+}
+
+// TestUnlockVault_WrongPassphrase_SymvaultEnv verifies that unlockVault returns
+// an error when SYMVAULT_PASSPHRASE contains an incorrect passphrase.
+func TestUnlockVault_WrongPassphrase_SymvaultEnv(t *testing.T) {
+	vaultDir, _ := initVault(t)
+	defer setupVaultFlag(t, vaultDir)()
+
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", "wrong-passphrase")
+	defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
+
+	_, err := cli.UnlockVault(vaultDir, false)
+	if err == nil {
+		t.Fatal("unlockVault should fail with wrong passphrase set via SYMVAULT_PASSPHRASE")
+	}
+	if !strings.Contains(err.Error(), "open vault") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+// TestWarnEnvPassphrase_SymvaultNoWarning verifies that SYMVAULT_NO_ENV_WARNING
+// suppresses the env passphrase warning (alongside OPENPASS_NO_ENV_WARNING).
+func TestWarnEnvPassphrase_SymvaultNoWarning(t *testing.T) {
+	oldEmitted := cli.EnvPassphraseWarningEmitted
+	oldQuiet := cli.QuietMode
+	defer func() {
+		cli.EnvPassphraseWarningEmitted = oldEmitted
+		cli.QuietMode = oldQuiet
+	}()
+
+	// Suppressed when SYMVAULT_NO_ENV_WARNING is set.
+	cli.EnvPassphraseWarningEmitted = false
+	t.Setenv("SYMVAULT_NO_ENV_WARNING", "1")
+	cli.WarnEnvPassphrase()
+	if cli.EnvPassphraseWarningEmitted {
+		t.Errorf("warning fired despite SYMVAULT_NO_ENV_WARNING")
+	}
+}

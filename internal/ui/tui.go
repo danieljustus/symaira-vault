@@ -171,7 +171,11 @@ func Run(vault *vaultpkg.Vault) error {
 		return fmt.Errorf("nil vault")
 	}
 	opts := []tea.ProgramOption{tea.WithAltScreen()}
-	if logPath := os.Getenv("OPENPASS_TUI_LOG"); logPath != "" {
+	logPath := os.Getenv("SYMVAULT_TUI_LOG")
+	if logPath == "" {
+		logPath = os.Getenv("OPENPASS_TUI_LOG")
+	}
+	if logPath != "" {
 		f, err := tea.LogToFile(logPath, "")
 		if err != nil {
 			return fmt.Errorf("open TUI log: %w", err)

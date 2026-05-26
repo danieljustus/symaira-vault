@@ -10,6 +10,7 @@ import (
 
 	"filippo.io/age"
 
+	"github.com/danieljustus/symaira-vault/internal/envutil"
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	cryptopkg "github.com/danieljustus/symaira-vault/internal/crypto"
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
@@ -83,7 +84,7 @@ func resolveUnlockPassphrase(vaultDir string, interactive bool, cfg *configpkg.C
 			}
 		}
 		if len(passphrase) == 0 {
-			if envPass := os.Getenv("OPENPASS_PASSPHRASE"); envPass != "" {
+			if envPass := envutil.Getenv("SYMVAULT_PASSPHRASE", "OPENPASS_PASSPHRASE"); envPass != "" {
 				// Use unsafe.Slice to alias the string backing array without a heap copy.
 				// This way the deferred Wipe(passphrase) at the call site clears the only
 				// copy of the passphrase in memory, and the os.Unsetenv does not leave a
@@ -94,7 +95,7 @@ func resolveUnlockPassphrase(vaultDir string, interactive bool, cfg *configpkg.C
 				passphraseFromEnv = true
 				WarnEnvPassphrase()
 			}
-			_ = os.Unsetenv("OPENPASS_PASSPHRASE")
+			envutil.Unsetenv("SYMVAULT_PASSPHRASE", "OPENPASS_PASSPHRASE")
 		}
 	}
 	if len(passphrase) == 0 {
@@ -155,9 +156,9 @@ func loadVaultConfigForUnlock(vaultDir string) *configpkg.Config {
 func lockedMessageForCache() string {
 	status := SessionGetCacheStatus()
 	if !status.Persistent {
-		return "vault locked: this build cannot share 'symvault unlock' sessions across processes; set OPENPASS_PASSPHRASE or use a build with OS keyring support"
+		return "vault locked: this build cannot share 'symvault unlock' sessions across processes; set SYMVAULT_PASSPHRASE or OPENPASS_PASSPHRASE, or use a build with OS keyring support"
 	}
-	return "vault locked: run 'symvault unlock' first, enable Touch ID with 'symvault auth set touchid', or set OPENPASS_PASSPHRASE"
+	return "vault locked: run 'symvault unlock' first, enable Touch ID with 'symvault auth set touchid', or set SYMVAULT_PASSPHRASE or OPENPASS_PASSPHRASE"
 }
 
 func DefaultSessionTTL() time.Duration {

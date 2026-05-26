@@ -9,6 +9,8 @@ import (
 	"os"
 	"strings"
 	"sync"
+
+	"github.com/danieljustus/symaira-vault/internal/envutil"
 )
 
 var (
@@ -20,8 +22,10 @@ var (
 // environment variables. It is safe for concurrent use.
 //
 // Environment variables:
-//   - OPENPASS_LOG_LEVEL: debug, info, warn (default), error
-//   - OPENPASS_LOG_FORMAT: text (default), json
+//   - SYMVAULT_LOG_LEVEL: debug, info, warn (default), error
+//   - SYMVAULT_LOG_FORMAT: text (default), json
+//   - OPENPASS_LOG_LEVEL: legacy alias for SYMVAULT_LOG_LEVEL
+//   - OPENPASS_LOG_FORMAT: legacy alias for SYMVAULT_LOG_FORMAT
 func Default() *slog.Logger {
 	initOnce.Do(func() {
 		defaultLogger = NewFromEnv()
@@ -32,8 +36,8 @@ func Default() *slog.Logger {
 // NewFromEnv creates a fresh slog.Logger from environment variables.
 // Prefer Default() for normal use to avoid creating multiple handlers.
 func NewFromEnv() *slog.Logger {
-	level := parseLevel(os.Getenv("OPENPASS_LOG_LEVEL"))
-	format := strings.ToLower(os.Getenv("OPENPASS_LOG_FORMAT"))
+	level := parseLevel(envutil.Getenv("SYMVAULT_LOG_LEVEL", "OPENPASS_LOG_LEVEL"))
+	format := strings.ToLower(envutil.Getenv("SYMVAULT_LOG_FORMAT", "OPENPASS_LOG_FORMAT"))
 	if format == "" {
 		format = "text"
 	}

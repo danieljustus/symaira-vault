@@ -281,3 +281,93 @@ func TestPrompt_TTYBackend_SIGINTCancel(t *testing.T) {
 		t.Fatal("Prompt() did not return after SIGINT")
 	}
 }
+
+func TestPrompt_NoneBackend_Symvault(t *testing.T) {
+	t.Setenv("SYMVAULT_SECUREUI", "none")
+	_, err := Prompt(PromptRequest{Path: "x", Field: "y"})
+	if !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("Prompt() err = %v, want ErrUnavailable", err)
+	}
+}
+
+func TestPrompt_DefaultsTimeout_Symvault(t *testing.T) {
+	t.Setenv("SYMVAULT_SECUREUI", "gui")
+	old := defaultRunner
+	defer func() { defaultRunner = old }()
+
+	mr := &mockRunner{
+		available: guiAvailableMap(),
+		out:       []byte("secret\n"),
+	}
+	defaultRunner = mr
+
+	value, err := Prompt(PromptRequest{Path: "p", Field: "f"})
+	if err != nil {
+		t.Fatalf("Prompt() err = %v", err)
+	}
+	if value != "secret" {
+		t.Errorf("Prompt() value = %q, want %q", value, "secret")
+	}
+	if mr.calledTime != defaultTimeout {
+		t.Errorf("default timeout not applied: got %v, want %v", mr.calledTime, defaultTimeout)
+	}
+}
+
+func TestPrompt_EmptyResultIsCanceled_Symvault(t *testing.T) {
+	t.Setenv("SYMVAULT_SECUREUI", "gui")
+	old := defaultRunner
+	defer func() { defaultRunner = old }()
+
+	defaultRunner = &mockRunner{
+		available: guiAvailableMap(),
+		out:       []byte(""),
+	}
+
+	_, err := Prompt(PromptRequest{Path: "p", Field: "f"})
+	if !errors.Is(err, ErrCanceled) {
+		t.Fatalf("Prompt() err = %v, want ErrCanceled", err)
+	}
+}
+
+func TestPrompt_CancelExitStatus_Symvault(t *testing.T) {
+	t.Setenv("SYMVAULT_SECUREUI", "gui")
+	old := defaultRunner
+	defer func() { defaultRunner = old }()
+
+	defaultRunner = &mockRunner{
+		available: guiAvailableMap(),
+		err:       errors.New("exit status 1"),
+	}
+
+	_, err := Prompt(PromptRequest{Path: "p", Field: "f"})
+	if !errors.Is(err, ErrCanceled) {
+		t.Fatalf("Prompt() err = %v, want ErrCanceled", err)
+	}
+}
+
+func TestPrompt_SymvaultPrecedence(t *testing.T) {
+	// SYMVAULT_SECUREUI should take precedence over OPENPASS_SECUREUI
+	t.Setenv("SYMVAULT_SECUREUI", "none")
+	t.Setenv("OPENPASS_SECUREUI", "gui")
+	_, err := Prompt(PromptRequest{Path: "x", Field: "y"})
+	if !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("Prompt() err = %v, want ErrUnavailable (SYMVAULT_ should win)", err)
+	}
+}
+
+func TestPrompt_TTYBackend_Success_Symvault(t *testing.T) {
+	t.Setenv("SYMVAULT_SECUREUI", "tty")
+	oldOpen := openTTYDevice
+	defer func() { openTTYDevice = oldOpen }()
+	openTTYDevice = func() (ttyDevice, error) {
+		return &fakeTTY{value: "tty-secret"}, nil
+	}
+
+	value, err := Prompt(PromptRequest{Path: "p", Field: "f"})
+	if err != nil {
+		t.Fatalf("Prompt() err = %v", err)
+	}
+	if value != "tty-secret" {
+		t.Errorf("Prompt() value = %q, want tty-secret", value)
+	}
+}

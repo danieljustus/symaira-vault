@@ -1,11 +1,11 @@
 # Configuration Reference
 
-Global config is stored at `~/.openpass/config.yaml`. Vault-specific config is stored in the vault directory.
+Global config is stored at `~/.symvault/config.yaml`. Vault-specific config is stored in the vault directory.
 Use [`config.yaml.example`](../config.yaml.example) as a commented starting point.
 
 ## Environment Variables
 
-- `OPENPASS_VAULT` — Path to vault directory (default: `~/.openpass`)
+- `SYMVAULT_VAULT` — Path to vault directory (default: `~/.symvault`)
 
 Or use the `--vault` flag to override for any command:
 ```bash
@@ -15,10 +15,10 @@ symvault --vault ~/work-vault get aws.secret
 ## config.yaml
 
 ```yaml
-# ~/.openpass/config.yaml — Global configuration
+# ~/.symvault/config.yaml — Global configuration
 
 # Default vault directory
-vaultDir: ~/.openpass
+vaultDir: ~/.symvault
 
 # Default agent for MCP (can be overridden via --agent flag)
 defaultAgent: default
@@ -64,7 +64,7 @@ mcp:
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `vaultDir` | `~/.openpass` | Default vault directory |
+| `vaultDir` | `~/.symvault` | Default vault directory |
 | `defaultAgent` | `default` | Default MCP agent profile |
 | `sessionTimeout` | `15m` | OS keyring cache TTL |
 | `authMethod` | `passphrase` | Unlock method: `passphrase` or macOS `touchid` |
@@ -125,14 +125,14 @@ Logging is configured via environment variables. A `logging` block in `config.ya
 
 | Environment Variable | Default | Description |
 |---------------------|---------|-------------|
-| `OPENPASS_LOG_LEVEL` | `warn` | Log level: `debug`, `info`, `warn`, `error` |
-| `OPENPASS_LOG_FORMAT` | `text` | Output format: `text` or `json` |
+| `SYMVAULT_LOG_LEVEL` | `warn` | Log level: `debug`, `info`, `warn`, `error` |
+| `SYMVAULT_LOG_FORMAT` | `text` | Output format: `text` or `json` |
 
 All log output is written to `os.Stderr` to keep `stdout` clean for stdio MCP transport.
 
 **Example:**
 ```bash
-OPENPASS_LOG_LEVEL=debug OPENPASS_LOG_FORMAT=json symvault serve --stdio
+SYMVAULT_LOG_LEVEL=debug SYMVAULT_LOG_FORMAT=json symvault serve --stdio
 ```
 
 ## Profiles
@@ -157,11 +157,11 @@ defaultProfile: work
 Vault selection follows this priority, from highest to lowest:
 
 1. `--vault` flag
-2. `OPENPASS_VAULT` environment variable
+2. `SYMVAULT_VAULT` environment variable
 3. `--profile` flag
-4. `OPENPASS_PROFILE` environment variable
+4. `SYMVAULT_PROFILE` environment variable
 5. `defaultProfile` from config
-6. Default `~/.openpass`
+6. Default `~/.symvault`
 
 ### Commands
 
@@ -206,14 +206,14 @@ The following rules are checked:
 
 ### JSON Schema
 
-A JSON Schema for editor autocompletion is available at `docs/openpass-config.schema.json`.
+A JSON Schema for editor autocompletion is available at `docs/symvault-config.schema.json`.
 
 For VS Code with the Red Hat YAML extension, add this to `.vscode/settings.json`:
 
 ```json
 {
   "yaml.schemas": {
-    "docs/openpass-config.schema.json": "config.yaml"
+    "docs/symvault-config.schema.json": "config.yaml"
   }
 }
 ```

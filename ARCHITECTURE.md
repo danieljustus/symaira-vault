@@ -163,11 +163,11 @@ sequenceDiagram
 
 ### `internal/config/` — Configuration
 
-YAML-based configuration at `~/.openpass/config.yaml` or `~/.openpass/<vault>/config.yaml`.
+YAML-based configuration at `~/.symvault/config.yaml` or `~/.symvault/<vault>/config.yaml`.
 
 **Config structure:**
 ```yaml
-vaultDir: ~/.openpass
+vaultDir: ~/.symvault
 defaultAgent: claude-code
 agents:
   claude-code:
@@ -242,7 +242,7 @@ graph LR
 - `find_entries` — Search entries
 - `set_entry_field` — Update entry field
 - `generate_password` — Generate password
-- `openpass_delete` — Delete entry
+- `symvault_delete` — Delete entry
 
 ### `internal/audit/` — Audit Logger
 
@@ -340,7 +340,7 @@ sequenceDiagram
 graph TD
     subgraph Sources["Passphrase Sources"]
         interactive["Interactive prompt"]
-        env["OPENPASS_PASSPHRASE"]
+        env["SYMVAULT_PASSPHRASE"]
         keyring["OS Keyring"]
     end
 
@@ -370,7 +370,7 @@ graph TD
 ## Vault Structure
 
 ```
-~/.openpass/
+~/.symvault/
 ├── identity.age      # Encrypted age identity
 ├── config.yaml       # Vault configuration
 ├── mcp-token         # Bearer token for HTTP MCP (auto-generated)

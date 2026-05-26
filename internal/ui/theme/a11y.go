@@ -10,11 +10,15 @@ import "os"
 //
 // The env contract is:
 //
-//	OPENPASS_SCREEN_READER=1   reduce UI to screen-reader-friendly text
-//	OPENPASS_SCREEN_READER=0   force normal UI even if other env hints it
+//	SYMVAULT_SCREEN_READER=1   reduce UI to screen-reader-friendly text
+//	SYMVAULT_SCREEN_READER=0   force normal UI even if other env hints it
 //	(unset)                    auto: check NVDA_SCREEN_READER, ORCA_RUNNING
 func ScreenReaderMode() bool {
-	switch os.Getenv("OPENPASS_SCREEN_READER") {
+	v := os.Getenv("SYMVAULT_SCREEN_READER")
+	if v == "" {
+		v = os.Getenv("OPENPASS_SCREEN_READER")
+	}
+	switch v {
 	case "1", "true", "yes":
 		return true
 	case "0", "false", "no": //nolint:goconst

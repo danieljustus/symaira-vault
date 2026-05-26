@@ -23,10 +23,14 @@ var tracer trace.Tracer
 
 // InitTracing initializes OpenTelemetry tracing with an OTLP HTTP exporter.
 // If endpoint is empty, tracing is disabled and a no-op tracer is used.
-// The endpoint is read from OPENPASS_OTLP_ENDPOINT if not provided.
+// The endpoint is read from SYMVAULT_OTLP_ENDPOINT (or OPENPASS_OTLP_ENDPOINT
+// as fallback) if not provided.
 func InitTracing(endpoint, serviceName string) (func(context.Context) error, error) {
 	if endpoint == "" {
-		endpoint = os.Getenv("OPENPASS_OTLP_ENDPOINT")
+		endpoint = os.Getenv("SYMVAULT_OTLP_ENDPOINT")
+		if endpoint == "" {
+			endpoint = os.Getenv("OPENPASS_OTLP_ENDPOINT")
+		}
 	}
 	if endpoint == "" {
 		tracer = otel.GetTracerProvider().Tracer("symvault")

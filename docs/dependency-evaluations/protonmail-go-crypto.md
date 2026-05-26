@@ -1,6 +1,6 @@
 # Dependency Evaluation: ProtonMail/go-crypto v1.1.6 → v1.4.1
 
-**Work Item:** OPENPASS-466  
+**Work Item:** SYMVAULT-466  
 **Date:** 2026-04-27  
 **Evaluator:** Sisyphus-Junior (autonomous)  
 **Scope:** Transitive dependency via `github.com/go-git/go-git/v5`
@@ -77,9 +77,9 @@ The following CVE-class issues were fixed between v1.1.6 and v1.4.1:
 - Verified via `grep -r "ProtonMail\|go-crypto\|openpgp" *.go` — no matches
 
 ### Indirect Usage (via go-git)
-- Git commit automation (`openpass git commit`, auto-commit on edit)
-- Git sync operations (`openpass git pull`, `openpass git push`)
-- Git log viewing (`openpass git log`)
+- Git commit automation (`symvault git commit`, auto-commit on edit)
+- Git sync operations (`symvault git pull`, `symvault git push`)
+- Git log viewing (`symvault git log`)
 
 All Git remotes are **user-configured** (typically the user's own private repository). Symaira Vault does not clone from untrusted sources.
 

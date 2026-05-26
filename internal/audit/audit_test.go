@@ -2149,3 +2149,216 @@ func TestSetConfig_OverridesDefaults(t *testing.T) {
 		t.Errorf("MaxAgeDays = %d, want %d", got.MaxAgeDays, custom.MaxAgeDays)
 	}
 }
+
+// ---- SYMVAULT_AUDIT_* env var tests ----
+
+func TestConfigEnvVarMaxSizeMB_Symvault(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("SYMVAULT_AUDIT_MAX_SIZE_MB", "50")
+
+	ReloadConfig()
+	defer ReloadConfig()
+
+	if config.MaxFileSize != 50*1024*1024 {
+		t.Fatalf("expected MaxFileSize to be 50MB from SYMVAULT env, got %d", config.MaxFileSize)
+	}
+}
+
+func TestConfigEnvVarMaxBackups_Symvault(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("SYMVAULT_AUDIT_MAX_BACKUPS", "10")
+
+	ReloadConfig()
+	defer ReloadConfig()
+
+	if config.MaxBackups != 10 {
+		t.Fatalf("expected MaxBackups to be 10 from SYMVAULT env, got %d", config.MaxBackups)
+	}
+}
+
+func TestConfigEnvVarMaxAgeDays_Symvault(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("SYMVAULT_AUDIT_MAX_AGE_DAYS", "7")
+
+	ReloadConfig()
+	defer ReloadConfig()
+
+	if config.MaxAgeDays != 7 {
+		t.Fatalf("expected MaxAgeDays to be 7 from SYMVAULT env, got %d", config.MaxAgeDays)
+	}
+}
+
+func TestConfigEnvVarSymvaultPrecedence(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	// SYMVAULT_* should take precedence over OPENPASS_*
+	t.Setenv("SYMVAULT_AUDIT_MAX_SIZE_MB", "25")
+	t.Setenv("OPENPASS_AUDIT_MAX_SIZE_MB", "50")
+
+	ReloadConfig()
+	defer ReloadConfig()
+
+	if config.MaxFileSize != 25*1024*1024 {
+		t.Fatalf("expected MaxFileSize to be 25MB (SYMVAULT wins), got %d", config.MaxFileSize)
+	}
+}
+
+func TestConfigEnvVarInvalidValues_Symvault(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("SYMVAULT_AUDIT_MAX_SIZE_MB", "invalid")
+	t.Setenv("SYMVAULT_AUDIT_MAX_BACKUPS", "negative")
+	t.Setenv("SYMVAULT_AUDIT_MAX_AGE_DAYS", "zero")
+
+	ReloadConfig()
+	defer ReloadConfig()
+
+	// Should fall back to defaults
+	if config.MaxFileSize != 100*1024*1024 {
+		t.Fatalf("expected MaxFileSize to fallback to default, got %d", config.MaxFileSize)
+	}
+	if config.MaxBackups != 5 {
+		t.Fatalf("expected MaxBackups to fallback to default, got %d", config.MaxBackups)
+	}
+	if config.MaxAgeDays != 30 {
+		t.Fatalf("expected MaxAgeDays to fallback to default, got %d", config.MaxAgeDays)
+	}
+}
+
+func TestConfigEnvVarZeroMaxBackups_Symvault(t *testing.T) {
+	t.Setenv("SYMVAULT_AUDIT_MAX_BACKUPS", "0")
+	ReloadConfig()
+	defer ReloadConfig()
+
+	if config.MaxBackups != 0 {
+		t.Fatalf("MaxBackups = %d, want 0", config.MaxBackups)
+	}
+}
+
+func TestConfigEnvVarZeroMaxAgeDays_Symvault(t *testing.T) {
+	t.Setenv("SYMVAULT_AUDIT_MAX_AGE_DAYS", "0")
+	ReloadConfig()
+	defer ReloadConfig()
+
+	if config.MaxAgeDays != 0 {
+		t.Fatalf("MaxAgeDays = %d, want 0", config.MaxAgeDays)
+	}
+}
+
+func TestConfigEnvVarNegativeIgnored_Symvault(t *testing.T) {
+	t.Setenv("SYMVAULT_AUDIT_MAX_SIZE_MB", "-10")
+	t.Setenv("SYMVAULT_AUDIT_MAX_BACKUPS", "-5")
+	t.Setenv("SYMVAULT_AUDIT_MAX_AGE_DAYS", "-1")
+	ReloadConfig()
+	defer ReloadConfig()
+
+	// Negative values should be ignored, defaults used
+	if config.MaxFileSize != 100*1024*1024 {
+		t.Fatalf("MaxFileSize = %d, want default 100MB", config.MaxFileSize)
+	}
+	if config.MaxBackups != 5 {
+		t.Fatalf("MaxBackups = %d, want default 5", config.MaxBackups)
+	}
+	if config.MaxAgeDays != 30 {
+		t.Fatalf("MaxAgeDays = %d, want default 30", config.MaxAgeDays)
+	}
+}
+
+func TestRotateIfNeededSizeLimit_Symvault(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("SYMVAULT_AUDIT_MAX_SIZE_MB", "1")
+
+	ReloadConfig()
+	defer ReloadConfig()
+
+	logger, err := New("size-rotate-symvault-test", "")
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	defer func() { _ = logger.Close() }()
+
+	// Write until we exceed 1MB
+	data := strings.Repeat("x", 1024*1024) // 1MB of data
+	for i := 0; i < 2; i++ {
+		_ = logger.LogEntry(LogEntry{
+			Agent:  "test",
+			Action: "test",
+			Path:   data,
+			OK:     true,
+		})
+	}
+
+	// Force rotation check
+	if err := logger.rotateIfNeeded(); err != nil {
+		t.Fatalf("rotateIfNeeded() error = %v", err)
+	}
+
+	// Verify rotated file exists
+	auditDir := filepath.Join(home, ".symvault")
+	pattern := filepath.Join(auditDir, "audit-size-rotate-symvault-test.log.rotated.*")
+	matches, _ := filepath.Glob(pattern)
+	if len(matches) == 0 {
+		t.Fatal("expected rotated file to exist after size-based rotation")
+	}
+}
+
+func TestRotateIfNeededAgeLimit_Symvault(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("SYMVAULT_AUDIT_MAX_AGE_DAYS", "0") // 0 days means immediate
+
+	ReloadConfig()
+	defer ReloadConfig()
+
+	logger, err := New("age-rotate-symvault-test", "")
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	defer func() { _ = logger.Close() }()
+
+	// Set file mod time to yesterday to trigger age-based rotation
+	oldTime := time.Now().Add(-48 * time.Hour)
+	os.Chtimes(logger.path, oldTime, oldTime) //nolint:errcheck
+
+	// Force rotation check
+	if err := logger.rotateIfNeeded(); err != nil {
+		t.Fatalf("rotateIfNeeded() error = %v", err)
+	}
+
+	// Verify rotated file exists
+	auditDir := filepath.Join(home, ".symvault")
+	pattern := filepath.Join(auditDir, "audit-age-rotate-symvault-test.log.rotated.*")
+	matches, _ := filepath.Glob(pattern)
+	if len(matches) == 0 {
+		t.Fatal("expected rotated file to exist after age-based rotation")
+	}
+}
+
+func TestHealthCheckNeedsRotationBySize_Symvault(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("SYMVAULT_AUDIT_MAX_SIZE_MB", "0") // Very small
+
+	ReloadConfig()
+	defer ReloadConfig()
+
+	logger, err := New("rotation-health-symvault-test", "")
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	defer func() { _ = logger.Close() }()
+
+	_ = logger.LogEntry(LogEntry{Agent: "test", Action: "test", OK: true})
+
+	status, err := logger.HealthCheck()
+	if err != nil {
+		t.Fatalf("HealthCheck() error = %v", err)
+	}
+	if !status.NeedsRotation {
+		t.Fatal("expected NeedsRotation=true for oversized file")
+	}
+}

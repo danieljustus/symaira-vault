@@ -7,7 +7,8 @@
 //   - Other: no-op (log-only)
 //
 // Notifications are best-effort and never block the caller. Opt-out via
-// OPENPASS_NO_NOTIFY=1 or filter by level via OPENPASS_NOTIFY_LEVEL.
+// SYMVAULT_NO_NOTIFY=1 (or OPENPASS_NO_NOTIFY for backwards compatibility)
+// or filter by level via SYMVAULT_NOTIFY_LEVEL (or OPENPASS_NOTIFY_LEVEL).
 package notify
 
 import (
@@ -43,14 +44,22 @@ func parseLevel(s string) Level {
 }
 
 // suppressed returns true when notifications should be skipped entirely.
-// OPENPASS_NO_NOTIFY=1 suppresses everything; OPENPASS_NOTIFY_LEVEL filters
-// out events below the configured threshold (e.g. LEVEL=critical only
-// shows critical events).
+// SYMVAULT_NO_NOTIFY=1 (or OPENPASS_NO_NOTIFY) suppresses everything;
+// SYMVAULT_NOTIFY_LEVEL (or OPENPASS_NOTIFY_LEVEL) filters out events below
+// the configured threshold (e.g. LEVEL=critical only shows critical events).
 func suppressed(want Level) bool {
-	if v := os.Getenv("OPENPASS_NO_NOTIFY"); v != "" && v != "0" && v != "false" {
+	noNotify := os.Getenv("SYMVAULT_NO_NOTIFY")
+	if noNotify == "" {
+		noNotify = os.Getenv("OPENPASS_NO_NOTIFY")
+	}
+	if noNotify != "" && noNotify != "0" && noNotify != "false" {
 		return true
 	}
-	if min := os.Getenv("OPENPASS_NOTIFY_LEVEL"); min != "" {
+	min := os.Getenv("SYMVAULT_NOTIFY_LEVEL")
+	if min == "" {
+		min = os.Getenv("OPENPASS_NOTIFY_LEVEL")
+	}
+	if min != "" {
 		return want < parseLevel(min)
 	}
 	return false

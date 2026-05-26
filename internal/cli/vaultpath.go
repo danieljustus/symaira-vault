@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/danieljustus/symaira-vault/internal/envutil"
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 )
@@ -19,7 +20,7 @@ func VaultPath() (string, error) {
 		return p, nil
 	}
 
-	if envVault := strings.TrimSpace(os.Getenv("OPENPASS_VAULT")); envVault != "" {
+	if envVault := strings.TrimSpace(envutil.Getenv("SYMVAULT_VAULT", "OPENPASS_VAULT")); envVault != "" {
 		p, err := ExpandVaultDir(envVault)
 		if err != nil {
 			return "", errorspkg.NewCLIError(errorspkg.ExitGeneralError, "expand vault path", err)
@@ -38,7 +39,7 @@ func VaultPath() (string, error) {
 		}
 	}
 
-	if envProfile := strings.TrimSpace(os.Getenv("OPENPASS_PROFILE")); envProfile != "" {
+	if envProfile := strings.TrimSpace(envutil.Getenv("SYMVAULT_PROFILE", "OPENPASS_PROFILE")); envProfile != "" {
 		p, err := resolveProfileVaultDir(envProfile)
 		if err != nil {
 			return "", errorspkg.NewCLIError(errorspkg.ExitGeneralError, "resolve profile", err)

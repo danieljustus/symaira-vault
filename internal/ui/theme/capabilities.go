@@ -122,7 +122,11 @@ func detectColor() ColorMode {
 }
 
 func detectASCIIOnly() bool {
-	if v := os.Getenv("OPENPASS_ASCII"); v != "" && v != "0" && v != "false" {
+	v := os.Getenv("SYMVAULT_ASCII")
+	if v == "" {
+		v = os.Getenv("OPENPASS_ASCII")
+	}
+	if v != "" && v != "0" && v != "false" {
 		return true
 	}
 	// Best-effort UTF-8 check: most modern environments have UTF-8 locale.

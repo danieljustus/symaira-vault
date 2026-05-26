@@ -10,24 +10,24 @@ Prometheus metrics are exposed when running the HTTP MCP server on `/metrics`.
 
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
-| `openpass_mcp_requests_total` | Counter | `tool`, `agent`, `status` | Total MCP tool requests |
-| `openpass_mcp_request_duration_seconds` | Histogram | `tool`, `agent` | Request duration |
-| `openpass_mcp_auth_denials_total` | Counter | `reason`, `agent` | Auth denials |
-| `openpass_mcp_approvals_total` | Counter | `agent`, `outcome` | Approval outcomes |
+| `symvault_mcp_requests_total` | Counter | `tool`, `agent`, `status` | Total MCP tool requests |
+| `symvault_mcp_request_duration_seconds` | Histogram | `tool`, `agent` | Request duration |
+| `symvault_mcp_auth_denials_total` | Counter | `reason`, `agent` | Auth denials |
+| `symvault_mcp_approvals_total` | Counter | `agent`, `outcome` | Approval outcomes |
 
 ### Vault Metrics
 
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
-| `openpass_vault_operations_total` | Counter | `operation`, `status` | Vault operations |
-| `openpass_vault_entries_total` | Gauge | `vault` | Number of entries |
-| `openpass_vault_operation_duration_seconds` | Histogram | `op` | Operation duration |
+| `symvault_vault_operations_total` | Counter | `operation`, `status` | Vault operations |
+| `symvault_vault_entries_total` | Gauge | `vault` | Number of entries |
+| `symvault_vault_operation_duration_seconds` | Histogram | `op` | Operation duration |
 
 ### Session Metrics
 
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
-| `openpass_session_cache_events_total` | Counter | `event` | Cache events |
+| `symvault_session_cache_events_total` | Counter | `event` | Cache events |
 
 Event types: `hit`, `miss`, `refresh`, `evict`, `keyring_unavailable`
 
@@ -35,7 +35,7 @@ Event types: `hit`, `miss`, `refresh`, `evict`, `keyring_unavailable`
 
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
-| `openpass_update_check_total` | Counter | `result` | Update check results |
+| `symvault_update_check_total` | Counter | `result` | Update check results |
 
 Result types: `up_to_date`, `update_available`, `error`, `cache_hit`
 
@@ -56,7 +56,7 @@ OpenTelemetry tracing is available for MCP request lifecycle observability.
 Set the OTLP endpoint via environment variable:
 
 ```bash
-export OPENPASS_OTLP_ENDPOINT=http://localhost:4318
+export SYMVAULT_OTLP_ENDPOINT=http://localhost:4318
 symvault serve --port 8080
 ```
 
@@ -86,7 +86,7 @@ Entry paths are hashed before being added as span attributes. Only the first 8 b
 
 ### Performance
 
-When `OPENPASS_OTLP_ENDPOINT` is not set, a no-op tracer is used with zero overhead.
+When `SYMVAULT_OTLP_ENDPOINT` is not set, a no-op tracer is used with zero overhead.
 
 ## Security
 

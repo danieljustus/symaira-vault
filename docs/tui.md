@@ -46,4 +46,4 @@ Editing opens the selected entry in `$EDITOR`, so review your editor configurati
 
 ## Clipboard
 
-Press `Enter` to copy the selected entry password to the clipboard. Symaira Vault automatically clears copied secrets after the configured clipboard timeout; set `auto_clear_duration` in `~/.openpass/config.yaml` to adjust the timeout or use `0` to disable auto-clear.
+Press `Enter` to copy the selected entry password to the clipboard. Symaira Vault automatically clears copied secrets after the configured clipboard timeout; set `auto_clear_duration` in `~/.symvault/config.yaml` to adjust the timeout or use `0` to disable auto-clear.

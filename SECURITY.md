@@ -64,10 +64,10 @@ Symaira Vault releases publish SHA-256 checksums for downloadable artifacts. To 
 a downloaded artifact:
 
 ```bash
-sha256sum --check OpenPass_VERSION_checksums.txt
+sha256sum --check symaira-vault_VERSION_checksums.txt
 ```
 
-On macOS, use `shasum -a 256 --check OpenPass_VERSION_checksums.txt` if
+On macOS, use `shasum -a 256 --check symaira-vault_VERSION_checksums.txt` if
 `sha256sum` is not installed.
 
 ## Security-Related Configuration
@@ -96,8 +96,8 @@ Ensure your vault directory has appropriate access controls:
 
 ```bash
 # Restrict vault directory access (Unix-like systems)
-chmod 700 ~/.openpass
-chmod 600 ~/.openpass/identity.age
+chmod 700 ~/.symvault
+chmod 600 ~/.symvault/identity.age
 ```
 
 ### Prompt Injection & Agent Safety
@@ -187,7 +187,7 @@ When generating MCP configurations that may be displayed in terminals or committ
 symvault mcp-config claude-code --http --redact
 ```
 
-This outputs `env:OPENPASS_MCP_TOKEN` instead of the actual token value. Clients using redacted configs must set the `OPENPASS_MCP_TOKEN` environment variable.
+This outputs `env:SYMVAULT_MCP_TOKEN` instead of the actual token value. Clients using redacted configs must set the `SYMVAULT_MCP_TOKEN` environment variable.
 
 For scripts that need the raw token:
 
@@ -204,7 +204,7 @@ This means agents can safely update shared vault entries without breaking access
 ### Agent Configuration Security
 
 ```yaml
-# ~/.openpass/config.yaml
+# ~/.symvault/config.yaml
 agents:
   # Trusted local agents
   claude-code:
@@ -252,7 +252,7 @@ Set the auth method with the CLI:
 symvault auth set touchid
 ```
 
-Or add to your config (`~/.openpass/config.yaml` or vault `config.yaml`):
+Or add to your config (`~/.symvault/config.yaml` or vault `config.yaml`):
 
 ```yaml
 authMethod: touchid
@@ -294,12 +294,12 @@ symvault auth set passphrase
 
 | Variable                    | Purpose                                      | Security Note                      |
 | --------------------------- | -------------------------------------------- | ---------------------------------- |
-| `OPENPASS_VAULT`            | Override vault location                      | Ensure path has proper permissions |
-| `OPENPASS_PASSPHRASE`       | Non-interactive vault unlock                 | **Unset after reading** to prevent leakage to child processes |
-| `OPENPASS_MCP_TOKEN`        | Override MCP bearer token (HTTP mode)        | **Unset after reading** to prevent leakage to child processes |
-| `OPENPASS_AUDIT_MAX_SIZE_MB` | Max audit log file size in MB                | Higher values increase disk usage  |
-| `OPENPASS_AUDIT_MAX_BACKUPS` | Number of audit backups to retain           | More backups use more disk space   |
-| `OPENPASS_AUDIT_MAX_AGE_DAYS` | Days before audit backups are deleted       | Longer retention uses more space   |
+| `SYMVAULT_VAULT`            | Override vault location                      | Ensure path has proper permissions |
+| `SYMVAULT_PASSPHRASE`       | Non-interactive vault unlock                 | **Unset after reading** to prevent leakage to child processes |
+| `SYMVAULT_MCP_TOKEN`        | Override MCP bearer token (HTTP mode)        | **Unset after reading** to prevent leakage to child processes |
+| `SYMVAULT_AUDIT_MAX_SIZE_MB` | Max audit log file size in MB                | Higher values increase disk usage  |
+| `SYMVAULT_AUDIT_MAX_BACKUPS` | Number of audit backups to retain           | More backups use more disk space   |
+| `SYMVAULT_AUDIT_MAX_AGE_DAYS` | Days before audit backups are deleted       | Longer retention uses more space   |
 
 ## Security Best Practices
 
@@ -348,7 +348,7 @@ A future release will provide:
 
 1. **Back up your vault** before any migration:
    ```bash
-   cp -r ~/.openpass ~/.openpass.backup
+   cp -r ~/.symvault ~/.symvault.backup
    ```
 2. Run `symvault doctor` to check current KDF status
 3. Wait for the migration command to be available in a future release
@@ -379,14 +379,14 @@ As a password manager handling highly sensitive credentials, we believe telemetr
 
 All data remains on your device:
 - **Vault contents**: Your passwords, TOTP secrets, and notes are never transmitted
-- **Audit logs**: Stored locally in `~/.openpass/audit-*.log` with rotation and retention limits
+- **Audit logs**: Stored locally in `~/.symvault/audit-*.log` with rotation and retention limits
 - **Error information**: Diagnostic commands like `symvault --version` and `symvault list` stay on your machine
 - **Session data**: Cached via OS keyring, never transmitted
 
 ### Audit Logs
 
 Symaira Vault maintains local audit logs for MCP tool calls (see `internal/audit/audit.go`). These logs:
-- Are stored in `~/.openpass/audit-<agent>.log`
+- Are stored in `~/.symvault/audit-<agent>.log`
 - Rotate when they exceed 100MB per file or 30 days old
 - Are retained up to 5 backup files before oldest are pruned
 - Contain only action metadata, no field values or secrets
@@ -397,9 +397,9 @@ Audit log rotation is configurable via environment variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OPENPASS_AUDIT_MAX_SIZE_MB` | 100 | Max size in MB per audit log file before rotation |
-| `OPENPASS_AUDIT_MAX_BACKUPS` | 5 | Number of rotated backup files to retain |
-| `OPENPASS_AUDIT_MAX_AGE_DAYS` | 30 | Max age in days before rotated files are deleted |
+| `SYMVAULT_AUDIT_MAX_SIZE_MB` | 100 | Max size in MB per audit log file before rotation |
+| `SYMVAULT_AUDIT_MAX_BACKUPS` | 5 | Number of rotated backup files to retain |
+| `SYMVAULT_AUDIT_MAX_AGE_DAYS` | 30 | Max age in days before rotated files are deleted |
 
 ### GDPR Compliance
 

@@ -2,7 +2,7 @@
 # Copy this file to ~/.symvault/config.yaml for global settings or to a vault
 # directory as config.yaml for vault-specific settings.
 
-# Default vault directory used when SYMAIRA_VAULT and --vault are not set.
+# Default vault directory used when SYMVAULT_VAULT and --vault are not set.
 vaultDir: ~/.symvault
 
 # Default MCP agent profile used when --agent is not set.
@@ -50,7 +50,7 @@ agents:
 # Vault-specific settings. These can also live inside <vault>/config.yaml.
 vault:
   # Vault directory path.
-  path: ~/.symaira
+  path: ~/.symvault
   # Age recipients used for newly written entries.
   default_recipients: []
   #  - age1...
@@ -76,7 +76,7 @@ mcp:
   # HTTP bearer token file path. "auto" stores mcp-token in the vault.
   httpTokenFile: auto
   # OpenTelemetry OTLP endpoint for traces. Uses HTTP/protobuf.
-  # When empty, falls back to the SYMAIRA_OTLP_ENDPOINT environment variable.
+  # When empty, falls back to the SYMVAULT_OTLP_ENDPOINT environment variable.
   # Example: "localhost:4318" for a local OTel collector.
   # otlp_endpoint: localhost:4318
   # Require bearer token for /metrics on non-loopback binds. Default is true.

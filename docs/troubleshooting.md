@@ -22,7 +22,7 @@ Before diving into detailed diagnostics, try these common solutions:
 | Issue | Quick Fix |
 |-------|-----------|
 | Agent can't connect | Restart the MCP server: `symvault serve --stdio --agent default` |
-| Permission denied | Check agent profile in `~/.openpass/config.yaml` |
+| Permission denied | Check agent profile in `~/.symvault/config.yaml` |
 | Vault locked | Run `symvault unlock` and enter your passphrase |
 | Slow response | Check if vault has too many entries; consider organizing into subdirectories |
 | Token invalid | Regenerate with `symvault mcp-config <agent> --http` |
@@ -45,14 +45,14 @@ symvault serve --stdio --agent default  # Restart MCP server
 
 1. Check if vault is initialized:
    ```bash
-   ls -la ~/.openpass/
+   ls -la ~/.symvault/
    ```
    You should see `identity.age`, `config.yaml`, and `entries/` directory.
 
 2. Verify identity file exists and is readable:
    ```bash
-   ls -la ~/.openpass/identity.age
-   file ~/.openpass/identity.age
+   ls -la ~/.symvault/identity.age
+   file ~/.symvault/identity.age
    ```
 
 3. Test passphrase entry:
@@ -68,7 +68,7 @@ symvault serve --stdio --agent default  # Restart MCP server
 | Wrong passphrase | Try again carefully; if forgotten, restore from backup |
 | Corrupted `identity.age` | Restore from backup; without backup, vault is unrecoverable |
 | Missing `identity.age` | Check if vault path is correct: `symvault --vault /path get test` |
-| Permission denied on identity file | Fix permissions: `chmod 600 ~/.openpass/identity.age` |
+| Permission denied on identity file | Fix permissions: `chmod 600 ~/.symvault/identity.age` |
 
 **Session caching issues:**
 - If `symvault unlock` works but MCP server still reports locked, the session cache may have expired
@@ -138,13 +138,13 @@ If `identity.age` is lost, **there is no recovery**. The identity file is the pr
 
 3. **Verify token file exists (HTTP mode):**
    ```bash
-   ls -la ~/.openpass/mcp-token
-   cat ~/.openpass/mcp-token
+   ls -la ~/.symvault/mcp-token
+   cat ~/.symvault/mcp-token
    ```
 
 4. **Check agent profile configuration:**
    ```bash
-   cat ~/.openpass/config.yaml | grep -A 5 "agents:"
+   cat ~/.symvault/config.yaml | grep -A 5 "agents:"
    ```
 
 5. **Verify agent name matches:**
@@ -165,7 +165,7 @@ If `identity.age` is lost, **there is no recovery**. The identity file is the pr
 **Testing MCP connection:**
 ```bash
 # Test HTTP endpoint
-curl -H "Authorization: Bearer $(cat ~/.openpass/mcp-token)" \
+curl -H "Authorization: Bearer $(cat ~/.symvault/mcp-token)" \
      -H "X-Symaira Vault-Agent: default" \
      http://127.0.0.1:8080/mcp
 
@@ -183,7 +183,7 @@ symvault mcp-config default --http
 
 1. Check git status in vault:
    ```bash
-   cd ~/.openpass && git status
+   cd ~/.symvault && git status
    ```
 
 2. View recent commits:
@@ -193,12 +193,12 @@ symvault mcp-config default --http
 
 3. Check remote configuration:
    ```bash
-   cd ~/.openpass && git remote -v
+   cd ~/.symvault && git remote -v
    ```
 
 4. Test connectivity:
    ```bash
-   cd ~/.openpass && git fetch origin
+   cd ~/.symvault && git fetch origin
    ```
 
 **Common Git issues:**
@@ -207,7 +207,7 @@ symvault mcp-config default --http
 |---------|----------|
 | "Merge conflict" | Resolve manually in vault directory, then commit |
 | "Push rejected" | Pull first: `symvault git pull`, resolve conflicts, then push |
-| "No remote configured" | Add remote: `cd ~/.openpass && git remote add origin <url>` |
+| "No remote configured" | Add remote: `cd ~/.symvault && git remote add origin <url>` |
 | "Authentication failed" | Check SSH keys or HTTPS credentials |
 | Changes not auto-pushed | Check `auto_push: true` in `config.yaml` |
 
@@ -215,7 +215,7 @@ symvault mcp-config default --http
 If sensitive runtime artifacts like `mcp-token` or `.runtime-port` were accidentally committed to your vault repository before they were added to `.gitignore`, you can remove them from the history while keeping the local files:
 
 ```bash
-cd ~/.openpass
+cd ~/.symvault
 # Remove from git index but keep local file
 git rm --cached mcp-token .runtime-port
 # Commit the removal
@@ -226,7 +226,7 @@ git push origin main
 
 **Manual sync procedure:**
 ```bash
-cd ~/.openpass
+cd ~/.symvault
 git pull origin main
 # Resolve any conflicts
 git add .
@@ -246,9 +246,9 @@ git push origin main
 - Gatekeeper may block unsigned binaries; allow in System Preferences > Security
 
 **LaunchAgent issues:**
-- Check logs: `tail -f ~/Library/Logs/openpass-mcp.log`
-- Verify plist syntax: `plutil -lint ~/Library/LaunchAgents/com.example.openpass-mcp.plist`
-- Reload agent: `launchctl unload ~/Library/LaunchAgents/com.example.openpass-mcp.plist && launchctl load ~/Library/LaunchAgents/com.example.openpass-mcp.plist`
+- Check logs: `tail -f ~/Library/Logs/symvault-mcp.log`
+- Verify plist syntax: `plutil -lint ~/Library/LaunchAgents/com.example.symvault-mcp.plist`
+- Reload agent: `launchctl unload ~/Library/LaunchAgents/com.example.symvault-mcp.plist && launchctl load ~/Library/LaunchAgents/com.example.symvault-mcp.plist`
 
 ### Linux
 
@@ -269,7 +269,7 @@ journalctl --user -u symvault-mcp -f
 **File permissions:**
 ```bash
 # Ensure proper ownership
-ls -la ~/.openpass/
+ls -la ~/.symvault/
 # Should be owned by your user, not root
 ```
 
@@ -328,8 +328,8 @@ The in-memory fallback is implemented in `internal/session/memory.go` (build tag
 - If missing, run `symvault unlock` to recreate
 
 **PATH issues:**
-- Ensure `openpass.exe` directory is in PATH
-- Use full path if needed: `C:\Users\You\bin\openpass.exe`
+- Ensure `symvault.exe` directory is in PATH
+- Use full path if needed: `C:\Users\You\bin\symvault.exe`
 
 **WSL considerations:**
 - WSL uses Linux keyring (D-Bus), not Windows Credential Manager
@@ -345,18 +345,18 @@ The in-memory fallback is implemented in `internal/session/memory.go` (build tag
 
 1. Check vault size:
    ```bash
-   du -sh ~/.openpass/
-   du -sh ~/.openpass/entries/
+   du -sh ~/.symvault/
+   du -sh ~/.symvault/entries/
    ```
 
 2. Count entries:
    ```bash
-   find ~/.openpass/entries -name "*.age" | wc -l
+   find ~/.symvault/entries -name "*.age" | wc -l
    ```
 
 3. Check for large entries:
    ```bash
-   ls -laS ~/.openpass/entries/ | head -20
+   ls -laS ~/.symvault/entries/ | head -20
    ```
 
 4. Monitor system resources:
@@ -385,7 +385,7 @@ The in-memory fallback is implemented in `internal/session/memory.go` (build tag
 ### Quick status check
 ```bash
 symvault version                    # Show version
-symvault --vault ~/.openpass list   # Test vault access
+symvault --vault ~/.symvault list   # Test vault access
 symvault unlock                     # Verify passphrase
 ```
 
@@ -393,7 +393,7 @@ symvault unlock                     # Verify passphrase
 ```bash
 # HTTP mode
 curl -s http://127.0.0.1:8080/health
-curl -H "Authorization: Bearer $(cat ~/.openpass/mcp-token)" \
+curl -H "Authorization: Bearer $(cat ~/.symvault/mcp-token)" \
      -H "X-Symaira Vault-Agent: default" \
      http://127.0.0.1:8080/mcp
 
@@ -404,10 +404,10 @@ symvault mcp-config default
 
 ### Vault diagnostics
 ```bash
-ls -la ~/.openpass/                 # Check vault structure
-file ~/.openpass/identity.age       # Verify identity file
+ls -la ~/.symvault/                 # Check vault structure
+file ~/.symvault/identity.age       # Verify identity file
 symvault git log                    # Check sync status
-cat ~/.openpass/config.yaml         # Review configuration
+cat ~/.symvault/config.yaml         # Review configuration
 ```
 
 ### System diagnostics
@@ -470,7 +470,7 @@ If the `mcp-token` file is accidentally deleted, the MCP HTTP server will regene
 
 2. Remove the old token file (if partially corrupted):
    ```bash
-   rm -f ~/.openpass/mcp-token
+   rm -f ~/.symvault/mcp-token
    ```
 
 3. Restart the server to generate a new token:
@@ -480,7 +480,7 @@ If the `mcp-token` file is accidentally deleted, the MCP HTTP server will regene
 
 4. Retrieve the new token:
    ```bash
-   cat ~/.openpass/mcp-token
+   cat ~/.symvault/mcp-token
    ```
 
 5. Update agent configurations with the new token:
@@ -504,13 +504,13 @@ For production environments requiring continuous availability:
 ```bash
 # 1. Generate new token (server creates it automatically on restart)
 # Save the current token as backup
-cp ~/.openpass/mcp-token ~/.openpass/mcp-token.backup
+cp ~/.symvault/mcp-token ~/.symvault/mcp-token.backup
 
 # 2. Stop the server gracefully
 pkill -f "symvault serve"
 
 # 3. Remove the old token
-rm ~/.openpass/mcp-token
+rm ~/.symvault/mcp-token
 
 # 4. Start the server (generates new token)
 symvault serve --port 8080 &
@@ -520,7 +520,7 @@ sleep 2
 curl -s http://127.0.0.1:8080/health
 
 # 6. Get the new token
-NEW_TOKEN=$(cat ~/.openpass/mcp-token)
+NEW_TOKEN=$(cat ~/.symvault/mcp-token)
 echo "New token generated"
 
 # 7. Update all agent configurations
@@ -533,7 +533,7 @@ curl -H "Authorization: Bearer $NEW_TOKEN" \
      http://127.0.0.1:8080/mcp
 
 # 9. Remove backup token after verification
-rm ~/.openpass/mcp-token.backup
+rm ~/.symvault/mcp-token.backup
 ```
 
 **Note**: During rotation (steps 2-7), agents cannot connect. Keep this window minimal.
@@ -543,7 +543,7 @@ rm ~/.openpass/mcp-token.backup
 1. **Regular Backups**: Include `mcp-token` in your vault backup strategy
    ```bash
    # Add to backup script
-cp ~/.openpass/mcp-token ~/backups/symvault/
+cp ~/.symvault/mcp-token ~/backups/symvault/
    ```
 
 2. **Version Control Exclusion**: Ensure runtime files are in `.gitignore`:
@@ -555,13 +555,13 @@ cp ~/.openpass/mcp-token ~/backups/symvault/
 
 3. **Token Permissions**: Set restrictive permissions on the token file:
    ```bash
-   chmod 600 ~/.openpass/mcp-token
+   chmod 600 ~/.symvault/mcp-token
    ```
 
 4. **Monitor File Integrity**: Set up alerts for unexpected file changes:
    ```bash
    # Check file hash daily
-   md5 ~/.openpass/mcp-token >> ~/logs/mcp-token.hash
+   md5 ~/.symvault/mcp-token >> ~/logs/mcp-token.hash
    ```
 
 5. **Use Stdio Mode for Local Agents**: Stdio mode doesn't require token management:
@@ -580,7 +580,7 @@ Symaira Vault uses Go's standard `log/slog` package for structured logging. All 
 Set the environment variable before running any Symaira Vault command:
 
 ```bash
-OPENPASS_LOG_LEVEL=debug symvault serve --stdio --agent claude-code
+SYMVAULT_LOG_LEVEL=debug symvault serve --stdio --agent claude-code
 ```
 
 Available levels (from most to least verbose):
@@ -594,7 +594,7 @@ Available levels (from most to least verbose):
 For machine-readable output (e.g., when piping to log aggregation):
 
 ```bash
-OPENPASS_LOG_LEVEL=info OPENPASS_LOG_FORMAT=json symvault serve --http
+SYMVAULT_LOG_LEVEL=info SYMVAULT_LOG_FORMAT=json symvault serve --http
 ```
 
 ### Common Log Messages
@@ -608,7 +608,7 @@ OPENPASS_LOG_LEVEL=info OPENPASS_LOG_FORMAT=json symvault serve --http
 ### MCP Stdio Protocol Cleanliness
 
 If JSON-RPC messages are being interleaved with log output, verify:
-1. `OPENPASS_LOG_FORMAT` is set to `text` or `json` (not a custom format)
+1. `SYMVAULT_LOG_FORMAT` is set to `text` or `json` (not a custom format)
 2. You're using a version with structured logging support
 3. stdout is not being redirected to a file that also captures stderr
 

@@ -50,7 +50,7 @@ so Symaira Vault does not expose a listening socket and Hermes does not need a b
 token in config:
 
 ```bash
-symvault --vault ~/.openpass-vault mcp-config hermes --format hermes
+symvault --vault ~/.symvault-vault mcp-config hermes --format hermes
 ```
 
 Add the output under `mcp_servers` in `~/.hermes/config.yaml` only after the
@@ -61,9 +61,9 @@ reload MCP tools from Hermes. Verify the connection:
 hermes mcp test symvault
 ```
 
-When connected, Hermes registers the tools with the `mcp_openpass_` prefix, for
-example `mcp_openpass_list_entries`, `mcp_openpass_get_entry`, and
-`mcp_openpass_set_entry_field`. Early Hermes profiles should expose only the
+When connected, Hermes registers the tools with the `mcp_symvault_` prefix, for
+example `mcp_symvault_list_entries`, `mcp_symvault_get_entry`, and
+`mcp_symvault_set_entry_field`. Early Hermes profiles should expose only the
 metadata-first tool subset from `hermes-safe-adoption.md`.
 
 If HTTP transport is needed later, bind Symaira Vault to loopback only
@@ -109,13 +109,13 @@ symvault mcp-config openclaw
 For agents that support HTTP MCP with custom headers, use:
 
 ```bash
-symvault --vault ~/.openpass-vault mcp-config openclaw --http
+symvault --vault ~/.symvault-vault mcp-config openclaw --http
 ```
 
 HTTP mode requires a running Symaira Vault server:
 
 ```bash
-symvault --vault ~/.openpass-vault serve --port 8090
+symvault --vault ~/.symvault-vault serve --port 8090
 ```
 
 ## LaunchAgent
@@ -130,7 +130,7 @@ and port as needed:
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.example.openpass-mcp</string>
+  <string>com.example.symvault-mcp</string>
   <key>ProgramArguments</key>
   <array>
     <string>/usr/local/bin/symvault</string>
@@ -145,16 +145,16 @@ and port as needed:
   <key>KeepAlive</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>/Users/USER/Library/Logs/openpass-mcp.log</string>
+  <string>/Users/USER/Library/Logs/symvault-mcp.log</string>
   <key>StandardErrorPath</key>
-  <string>/Users/USER/Library/Logs/openpass-mcp.err</string>
+  <string>/Users/USER/Library/Logs/symvault-mcp.err</string>
 </dict>
 </plist>
 ```
 
 The vault must be unlockable non-interactively. Run `symvault unlock` once so
 the passphrase is cached in the OS keyring, or provide a controlled environment
-for `OPENPASS_PASSPHRASE`.
+for `SYMVAULT_PASSPHRASE`.
 
 ## Token Management
 
@@ -196,8 +196,8 @@ to version control, use the `--redact` flag:
 symvault mcp-config claude-code --http --redact
 ```
 
-This outputs `env:OPENPASS_MCP_TOKEN` instead of the actual token. Agents using
-redacted configs must have `OPENPASS_MCP_TOKEN` set in their environment.
+This outputs `env:SYMVAULT_MCP_TOKEN` instead of the actual token. Agents using
+redacted configs must have `SYMVAULT_MCP_TOKEN` set in their environment.
 
 For automated scripts that need the raw token:
 
@@ -229,7 +229,7 @@ OAuth enabled:
 ```json
 {
   "mcpServers": {
-    "openpass": {
+    "symvault": {
       "type": "remote",
       "url": "http://127.0.0.1:8080/mcp",
       "oauth": true
@@ -367,7 +367,7 @@ guided workflows become available once the server is connected:
 | `find-and-use` | Searches the vault for a query, then picks the right consumption tool (`copy_to_clipboard`, `autotype`, or `execute_with_secret`) based on the stated task. |
 | `share-credential` | Creates a share grant for another agent and explains the human-approval flow. |
 
-In Claude Code these appear as `/mcp__openpass__add-credential` etc. Pass
+In Claude Code these appear as `/mcp__symvault__add-credential` etc. Pass
 prompt arguments via the slash-command UI (e.g. `service_name: GitHub`).
 
 ### Auto-Credential-Capture flow
@@ -395,7 +395,7 @@ recommended pattern is:
 **any** backend is reachable — TTY (if attached) or a native GUI dialog.
 Override with:
 
-| `OPENPASS_SECUREUI` | Behavior |
+| `SYMVAULT_SECUREUI` | Behavior |
 |---------------------|----------|
 | (unset) | TTY if attached, else native GUI |
 | `tty` | Force TTY; if unavailable, tools disappear from the list |
@@ -403,7 +403,7 @@ Override with:
 | `none` | Disable both |
 
 This matters for daemonized setups (LaunchAgent, systemd unit). The
-LaunchAgent example above has no TTY — set `OPENPASS_SECUREUI=gui` to make the
+LaunchAgent example above has no TTY — set `SYMVAULT_SECUREUI=gui` to make the
 secure-input tools available there and they will pop a native dialog on the
 logged-in user's screen.
 
@@ -461,11 +461,11 @@ any compatible monitoring system.
 
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
-| `openpass_mcp_requests_total` | Counter | tool, agent, status | Total MCP tool requests |
-| `openpass_mcp_request_duration_seconds` | Histogram | tool, agent | Tool request latency |
-| `openpass_mcp_auth_denials_total` | Counter | reason, agent | Auth/authorization denials |
-| `openpass_mcp_approvals_total` | Counter | agent, outcome | Write approval outcomes |
-| `openpass_vault_operations_total` | Counter | operation, status | Vault read/write/delete ops |
+| `symvault_mcp_requests_total` | Counter | tool, agent, status | Total MCP tool requests |
+| `symvault_mcp_request_duration_seconds` | Histogram | tool, agent | Tool request latency |
+| `symvault_mcp_auth_denials_total` | Counter | reason, agent | Auth/authorization denials |
+| `symvault_mcp_approvals_total` | Counter | agent, outcome | Write approval outcomes |
+| `symvault_vault_operations_total` | Counter | operation, status | Vault read/write/delete ops |
 
 ### Prometheus Configuration
 
@@ -484,37 +484,37 @@ scrape_configs:
 
 **Request rate by tool:**
 ```promql
-rate(openpass_mcp_requests_total[5m])
+rate(symvault_mcp_requests_total[5m])
 ```
 
 **Error rate:**
 ```promql
-rate(openpass_mcp_requests_total{status="error"}[5m])
+rate(symvault_mcp_requests_total{status="error"}[5m])
 ```
 
 **P95 request latency:**
 ```promql
-histogram_quantile(0.95, rate(openpass_mcp_request_duration_seconds_bucket[5m]))
+histogram_quantile(0.95, rate(symvault_mcp_request_duration_seconds_bucket[5m]))
 ```
 
 **Auth denials by reason:**
 ```promql
-openpass_mcp_auth_denials_total
+symvault_mcp_auth_denials_total
 ```
 
 **Vault operation success rate:**
 ```promql
-rate(openpass_vault_operations_total{status="success"}[5m])
+rate(symvault_vault_operations_total{status="success"}[5m])
 /
-rate(openpass_vault_operations_total[5m])
+rate(symvault_vault_operations_total[5m])
 ```
 
 ### Grafana Dashboard
 
 Import these panels for a basic Symaira Vault dashboard:
 
-1. **Request Rate** — `rate(openpass_mcp_requests_total[5m])`
-2. **Error Rate** — `rate(openpass_mcp_requests_total{status="error"}[5m])`
-3. **Latency P95** — `histogram_quantile(0.95, rate(openpass_mcp_request_duration_seconds_bucket[5m]))`
-4. **Auth Denials** — `openpass_mcp_auth_denials_total`
-5. **Vault Operations** — `rate(openpass_vault_operations_total[5m])`
+1. **Request Rate** — `rate(symvault_mcp_requests_total[5m])`
+2. **Error Rate** — `rate(symvault_mcp_requests_total{status="error"}[5m])`
+3. **Latency P95** — `histogram_quantile(0.95, rate(symvault_mcp_request_duration_seconds_bucket[5m]))`
+4. **Auth Denials** — `symvault_mcp_auth_denials_total`
+5. **Vault Operations** — `rate(symvault_vault_operations_total[5m])`

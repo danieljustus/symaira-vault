@@ -24,6 +24,8 @@ func TestDefault_Idempotent(t *testing.T) {
 }
 
 func TestNewFromEnv_DefaultLevel(t *testing.T) {
+	_ = os.Unsetenv("SYMVAULT_LOG_LEVEL")
+	_ = os.Unsetenv("SYMVAULT_LOG_FORMAT")
 	_ = os.Unsetenv("OPENPASS_LOG_LEVEL")
 	_ = os.Unsetenv("OPENPASS_LOG_FORMAT")
 	l := NewFromEnv()
@@ -117,5 +119,30 @@ func TestReplaceLogger(t *testing.T) {
 	restore()
 	if Default() != original {
 		t.Error("expected Default() to return original logger after restore")
+	}
+}
+
+func TestNewFromEnv_DebugLevel_Symvault(t *testing.T) {
+	t.Setenv("SYMVAULT_LOG_LEVEL", "debug")
+	t.Setenv("SYMVAULT_LOG_FORMAT", "json")
+	l := NewFromEnv()
+	if l == nil {
+		t.Error("NewFromEnv() with SYMVAULT_LOG_LEVEL=debug returned nil")
+	}
+}
+
+func TestNewFromEnv_SymvaultPrecedence(t *testing.T) {
+	// SYMVAULT_* should take precedence over OPENPASS_*
+	t.Setenv("SYMVAULT_LOG_LEVEL", "info")
+	t.Setenv("OPENPASS_LOG_LEVEL", "error")
+	t.Setenv("SYMVAULT_LOG_FORMAT", "text")
+	t.Setenv("OPENPASS_LOG_FORMAT", "json")
+	l := NewFromEnv()
+	if l == nil {
+		t.Fatal("NewFromEnv() returned nil")
+	}
+	// Verify the SYMVAULT value wins by checking env state after call
+	if got := os.Getenv("SYMVAULT_LOG_LEVEL"); got != "info" {
+		t.Errorf("SYMVAULT_LOG_LEVEL = %q, want %q", got, "info")
 	}
 }

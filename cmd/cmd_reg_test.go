@@ -279,6 +279,7 @@ func TestUnlockVaultNoPassphrase(t *testing.T) {
 		}
 	}()
 
+	_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 	_ = os.Unsetenv("OPENPASS_PASSPHRASE")
 	vault = vaultDir
 	if vaultFlag != nil {
@@ -670,5 +671,91 @@ func TestRunStdioServer(t *testing.T) {
 	err = serverbootstrap.RunStdioServer(ctx, v2, "default", server.New)
 	if err != nil {
 		t.Errorf("RunStdioServer unexpected error: %v", err)
+	}
+}
+
+func TestUnlockVaultWithSymvaultEnvVar(t *testing.T) {
+	vaultDir := t.TempDir()
+	passphrase := []byte("test-passphrase")
+
+	if _, err := vaultpkg.InitWithPassphrase(vaultDir, passphrase, config.Default()); err != nil {
+		t.Fatalf("init vault: %v", err)
+	}
+
+	origVault := vault
+	origChanged := vaultFlag.Changed
+	defer func() {
+		vault = origVault
+		if vaultFlag != nil {
+			_ = vaultFlag.Value.Set(origVault)
+			vaultFlag.Changed = origChanged
+		}
+	}()
+
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+	defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
+
+	vault = vaultDir
+	if vaultFlag != nil {
+		vaultFlag.Changed = false
+	}
+
+	_, err := cli.UnlockVault(vaultDir, false)
+	if err != nil {
+		t.Errorf("unlockVault with SYMVAULT_PASSPHRASE env var failed: %v", err)
+	}
+}
+
+func TestVaultPathWithSymvaultEnvVar(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: path format differs")
+	}
+	origEnv := os.Getenv("SYMVAULT_VAULT")
+	defer func() { _ = os.Setenv("SYMVAULT_VAULT", origEnv) }()
+
+	_ = os.Setenv("SYMVAULT_VAULT", "/test/symvault")
+
+	origVault := vault
+	defer func() { vault = origVault }()
+	vault = "~/should-not-be-used"
+
+	path, err := cli.VaultPath()
+	if err != nil {
+		t.Fatalf("cli.VaultPath() error = %v", err)
+	}
+	if path != "/test/symvault" {
+		t.Errorf("cli.VaultPath() = %q, want %q", path, "/test/symvault")
+	}
+}
+
+func TestUnlockVaultWrongPassphraseSymvault(t *testing.T) {
+	vaultDir := t.TempDir()
+	passphrase := []byte("test-passphrase")
+
+	if _, err := vaultpkg.InitWithPassphrase(vaultDir, passphrase, config.Default()); err != nil {
+		t.Fatalf("init vault: %v", err)
+	}
+
+	origVault := vault
+	origChanged := vaultFlag.Changed
+	defer func() {
+		vault = origVault
+		if vaultFlag != nil {
+			_ = vaultFlag.Value.Set(origVault)
+			vaultFlag.Changed = origChanged
+		}
+	}()
+
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", "wrong-passphrase")
+	defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
+
+	vault = vaultDir
+	if vaultFlag != nil {
+		vaultFlag.Changed = false
+	}
+
+	_, err := cli.UnlockVault(vaultDir, false)
+	if err == nil {
+		t.Error("expected error for wrong passphrase via SYMVAULT_PASSPHRASE")
 	}
 }

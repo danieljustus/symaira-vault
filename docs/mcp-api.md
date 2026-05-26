@@ -46,7 +46,7 @@ Symaira Vault exposes a Model Context Protocol (MCP) server that allows AI agent
 | `set_entry_field` | Store or update a field | **Yes** |
 | `run_command` | Execute command with secret env injection | **Yes** |
 | `delete_entry` | Delete an entry | **Yes** |
-| `openpass_delete` | Deprecated alias for delete_entry | **Yes** |
+| `symvault_delete` | Deprecated alias for delete_entry | **Yes** |
 | `secure_input` | Prompt user for sensitive data via TTY or native GUI dialog | **Yes** |
 | `request_credential` | Agent-initiated: native dialog for a missing credential, stored without exposure | **Yes** |
 
@@ -79,7 +79,7 @@ X-Symaira Vault-Agent: <agent-profile-name>
 #### Example Request
 
 ```bash
-curl -H "Authorization: Bearer $(cat ~/.openpass/mcp-token)" \
+curl -H "Authorization: Bearer $(cat ~/.symvault/mcp-token)" \
      -H "X-Symaira Vault-Agent: claude-code" \
      -H "Content-Type: application/json" \
      -X POST \
@@ -92,7 +92,7 @@ curl -H "Authorization: Bearer $(cat ~/.openpass/mcp-token)" \
 Stdio mode does not use HTTP authentication. The agent is identified via the `--agent` flag:
 
 ```bash
-openpass serve --stdio --agent claude-code
+symvault serve --stdio --agent claude-code
 ```
 
 The agent name must match a profile in the vault configuration.
@@ -244,7 +244,7 @@ opencode can use either OAuth with DCR or static bearer token auth.
 ```json
 {
   "mcpServers": {
-    "openpass": {
+    "symvault": {
       "type": "remote",
       "url": "http://127.0.0.1:8080/mcp",
       "oauth": true
@@ -253,7 +253,7 @@ opencode can use either OAuth with DCR or static bearer token auth.
 }
 ```
 
-With this configuration, `opencode mcp auth openpass` will:
+With this configuration, `opencode mcp auth symvault` will:
 1. Discover the authorization server metadata
 2. Register a client via DCR
 3. Walk through the PKCE authorization flow (user consent via TTY)
@@ -265,11 +265,11 @@ With this configuration, `opencode mcp auth openpass` will:
 ```json
 {
   "mcpServers": {
-    "openpass": {
+    "symvault": {
       "type": "remote",
       "url": "http://127.0.0.1:8080/mcp",
       "headers": {
-        "Authorization": "Bearer YOUR_OPENPASS_TOKEN",
+        "Authorization": "Bearer YOUR_SYMVAULT_TOKEN",
         "X-Symaira Vault-Agent": "opencode"
       },
       "oauth": false
@@ -295,13 +295,13 @@ With this configuration, `opencode mcp auth openpass` will:
 **Start the server**:
 
 ```bash
-openpass serve --stdio --agent <profile-name>
+symvault serve --stdio --agent <profile-name>
 ```
 
 **Generate configuration**:
 
 ```bash
-openpass mcp-config <agent-name>
+symvault mcp-config <agent-name>
 ```
 
 ### HTTP Mode
@@ -316,19 +316,19 @@ openpass mcp-config <agent-name>
 **Start the server**:
 
 ```bash
-openpass serve --port 8080 --agent <profile-name>
+symvault serve --port 8080 --agent <profile-name>
 ```
 
 **Generate configuration** (token redacted by default):
 
 ```bash
-openpass mcp-config <agent-name> --http
+symvault mcp-config <agent-name> --http
 ```
 
 **Include token in output**:
 
 ```bash
-openpass mcp-config <agent-name> --http --include-token
+symvault mcp-config <agent-name> --http --include-token
 ```
 
 ---
@@ -491,7 +491,7 @@ Retrieve the contents of a password entry.
 **Errors**:
 - `not_found`: Entry does not exist
 - `access_denied`: Agent profile restricts access to this path
-- `vault_locked`: Vault is locked, run `openpass unlock`
+- `vault_locked`: Vault is locked, run symvault unlock.
 
 ---
 
@@ -779,7 +779,7 @@ Prompt the user for sensitive data via an interactive TTY and store it without e
 **Notes**:
 - Available whenever any secure-input backend is reachable: an interactive TTY
   (stdio mode), or a native GUI dialog (macOS `osascript`, Linux
-  `zenity`/`kdialog`, Windows `Get-Credential`). Set `OPENPASS_SECUREUI=tty|gui|none`
+  `zenity`/`kdialog`, Windows `Get-Credential`). Set `SYMVAULT_SECUREUI=tty|gui|none`
   to override the auto-detected backend.
 - The agent never sees the value being stored
 - Requires `canWrite: true` in agent profile
@@ -802,7 +802,7 @@ requested path and never returned to the agent.
   "arguments": {
     "path": "github/api-token",
     "field": "token",
-    "reason": "Needed to push to main on the openpass repo"
+    "reason": "Needed to push to main on the symvault repo"
   }
 }
 ```
@@ -826,7 +826,7 @@ requested path and never returned to the agent.
 ```
 
 **Notes**:
-- Same backend rules as `secure_input` (TTY or native GUI; `OPENPASS_SECUREUI`
+- Same backend rules as `secure_input` (TTY or native GUI; `SYMVAULT_SECUREUI`
   override applies)
 - `reason` is shown to the user — agents should write it as a clear,
   human-readable sentence
@@ -975,7 +975,7 @@ Delete a password entry. Requires write permission.
 
 ---
 
-### openpass_delete
+### symvault_delete
 
 **Deprecated**: Use `delete_entry` instead. This is a legacy alias maintained for backward compatibility.
 
@@ -1054,7 +1054,7 @@ injects the returned messages into the conversation.
 | `find-and-use` | `query` | Searches the vault and suggests the right consumption tool (`copy_to_clipboard`, `autotype`, `execute_with_secret`). Optional: `task`. |
 | `share-credential` | `path`, `to_agent` | Creates a share grant and explains the human-approval flow. Optional: `ttl` (default `1h`), `secret_field`. |
 
-In Claude Code the prompts appear as `/mcp__openpass__add-credential` (and
+In Claude Code the prompts appear as `/mcp__symvault__add-credential` (and
 similar). The displayed argument form is generated automatically from each
 prompt's argument schema.
 
@@ -1080,7 +1080,7 @@ prompt's argument schema.
 |------|-------------|-------------|------------|
 | `not_found` | 404 | Entry or resource not found | Verify the path exists with `list_entries` |
 | `access_denied` | 403 | Agent not authorized for this operation | Check agent profile in `config.yaml` |
-| `vault_locked` | 403 | Vault is locked | Run `openpass unlock` |
+| `vault_locked` | 403 | Vault is locked | Run `symvault unlock` |
 | `invalid_request` | 400 | Malformed request | Check JSON syntax and parameters |
 | `missing_parameter` | 400 | Required parameter missing | Include all required fields |
 | `invalid_parameter` | 400 | Parameter value invalid | Check parameter constraints |
@@ -1099,7 +1099,7 @@ prompt's argument schema.
 {
   "error": {
     "code": "vault_locked",
-    "message": "Vault is locked. Please run 'openpass unlock' first.",
+    "message": "Vault is locked. Please run symvault unlock. first.",
     "details": {}
   }
 }
@@ -1107,7 +1107,7 @@ prompt's argument schema.
 
 **Resolution**:
 ```bash
-openpass unlock
+symvault unlock
 # Enter passphrase
 ```
 
@@ -1185,12 +1185,12 @@ When rate limit is exceeded:
 
 ## Agent Configuration
 
-Agent profiles are defined in the vault configuration file (`~/.openpass/config.yaml`).
+Agent profiles are defined in the vault configuration file (`~/.symvault/config.yaml`).
 
 ### Configuration Location
 
 ```
-~/.openpass/config.yaml
+~/.symvault/config.yaml
 ```
 
 ### Profile Schema
@@ -1428,7 +1428,7 @@ Note that `generate_totp github` continues to work because it reads the TOTP sec
 
 ```bash
 # Set variables
-TOKEN=$(cat ~/.openpass/mcp-token)
+TOKEN=$(cat ~/.symvault/mcp-token)
 AGENT="claude-code"
 BASE_URL="http://127.0.0.1:8080"
 
@@ -1461,10 +1461,10 @@ curl -s -X POST "$BASE_URL/mcp" \
 
 ```bash
 # Start the server
-openpass serve --stdio --agent claude-code
+symvault serve --stdio --agent claude-code
 
 # Send MCP request (via stdin)
-echo '{"tool": "list_entries", "arguments": {}}' | openpass serve --stdio --agent claude-code
+echo '{"tool": "list_entries", "arguments": {}}' | symvault serve --stdio --agent claude-code
 
 # Or with a proper MCP client
 # The MCP client handles the JSON-RPC framing

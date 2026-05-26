@@ -50,7 +50,7 @@ Description=Symaira Vault MCP Server
 [Service]
 Type=simple
 ExecStart="{{.BinaryPath}}" serve --port {{.PortStr}} --bind "{{.Bind}}"
-Environment="OPENPASS_VAULT={{.VaultDir}}"
+Environment="SYMVAULT_VAULT={{.VaultDir}}"
 Restart=on-failure
 
 [Install]
@@ -454,7 +454,7 @@ func (i *Installer) writePlist(path string) error {
 				}},
 				{Key: "EnvironmentVariables", Dict: &plistDict{
 					Entries: []plistEntry{
-						{Key: "OPENPASS_VAULT", Str: &plistString{Value: i.vaultDir}},
+						{Key: "SYMVAULT_VAULT", Str: &plistString{Value: i.vaultDir}},
 					},
 				}},
 				{Key: "RunAtLoad", Tru: &plistTrue{}},

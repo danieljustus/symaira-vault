@@ -71,3 +71,43 @@ func TestGuardActiveWindow_FirstCaptureFails(t *testing.T) {
 		t.Errorf("guardActiveWindow() err = %v, want %v", err, someErr)
 	}
 }
+
+func TestGuardActiveWindow_UnavailableLenient_Symvault(t *testing.T) {
+	old := captureActiveWindowFunc
+	defer func() { captureActiveWindowFunc = old }()
+
+	t.Setenv("SYMVAULT_AUTOTYPE_STRICT_FOCUS", "0")
+	captureActiveWindowFunc = func() (string, error) { return "", ErrFocusUnavailable }
+
+	if err := guardActiveWindow(); err != nil {
+		t.Errorf("guardActiveWindow() err = %v, want nil in lenient mode", err)
+	}
+}
+
+func TestGuardActiveWindow_UnavailableStrict_Symvault(t *testing.T) {
+	old := captureActiveWindowFunc
+	defer func() { captureActiveWindowFunc = old }()
+
+	t.Setenv("SYMVAULT_AUTOTYPE_STRICT_FOCUS", "1")
+	captureActiveWindowFunc = func() (string, error) { return "", ErrFocusUnavailable }
+
+	err := guardActiveWindow()
+	if !errors.Is(err, ErrFocusUnavailable) {
+		t.Errorf("guardActiveWindow() err = %v, want ErrFocusUnavailable in strict mode", err)
+	}
+}
+
+func TestGuardActiveWindow_SymvaultPrecedence(t *testing.T) {
+	old := captureActiveWindowFunc
+	defer func() { captureActiveWindowFunc = old }()
+
+	// SYMVAULT_AUTOTYPE_STRICT_FOCUS should take precedence
+	t.Setenv("SYMVAULT_AUTOTYPE_STRICT_FOCUS", "1")
+	t.Setenv("OPENPASS_AUTOTYPE_STRICT_FOCUS", "0")
+	captureActiveWindowFunc = func() (string, error) { return "", ErrFocusUnavailable }
+
+	err := guardActiveWindow()
+	if !errors.Is(err, ErrFocusUnavailable) {
+		t.Errorf("guardActiveWindow() err = %v, want ErrFocusUnavailable (SYMVAULT_ should win)", err)
+	}
+}
