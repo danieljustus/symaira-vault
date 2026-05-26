@@ -10,16 +10,36 @@ import (
 	"testing"
 	"text/template"
 
-	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
+	"filippo.io/age"
+
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
-func newMockVault(t *testing.T) vaultsvc.Service {
+func newTestVault(t *testing.T, entries map[string]map[string]any) *vaultpkg.Vault {
 	t.Helper()
-	mock := vaultsvc.NewMockService()
-	mock.GetFieldFunc = func(path, field string) (any, error) {
-		return path + "/" + field + "-value", nil
+	vaultDir := t.TempDir()
+	id, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatalf("generate identity: %v", err)
 	}
-	return mock
+	for path, data := range entries {
+		if err := vaultpkg.WriteEntry(vaultDir, path, &vaultpkg.Entry{Data: data}, id); err != nil {
+			t.Fatalf("WriteEntry(%s): %v", path, err)
+		}
+	}
+	return &vaultpkg.Vault{Dir: vaultDir, Identity: id}
+}
+
+// newMockVault creates a test vault with entries that map to path/field-value responses.
+// For a path/field pair, the entry data will contain field with value "path/field-value".
+func newMockVault(t *testing.T) *vaultpkg.Vault {
+	t.Helper()
+	entries := map[string]map[string]any{
+		"prod/api": {"key": "prod/api/key-value"},
+		"prod/db":  {"password": "prod/db/password-value"},
+		"path":     {"field": "path/field-value"},
+	}
+	return newTestVault(t, entries)
 }
 
 func TestNewEngine(t *testing.T) {
@@ -181,14 +201,10 @@ func TestRenderCustomTemplate(t *testing.T) {
 
 func TestValidate(t *testing.T) {
 	ctx := context.Background()
-	mock := vaultsvc.NewMockService()
-	mock.GetFieldFunc = func(path, field string) (any, error) {
-		if path == "missing" {
-			return nil, errors.New("entry not found")
-		}
-		return "value", nil
-	}
-	eng := NewEngine(mock)
+	vault := newTestVault(t, map[string]map[string]any{
+		"prod/api": {"key": "value"},
+	})
+	eng := NewEngine(vault)
 
 	tests := []struct {
 		name    string

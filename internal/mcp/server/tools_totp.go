@@ -4,15 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 
 	"github.com/danieljustus/symaira-vault/internal/autotype"
 	"github.com/danieljustus/symaira-vault/internal/clipboard"
 	"github.com/danieljustus/symaira-vault/internal/crypto"
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
-	"github.com/danieljustus/symaira-vault/internal/vault"
-	"github.com/danieljustus/symaira-vault/internal/vaultsvc"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 const totpToolName = "generate_totp"
@@ -32,14 +30,13 @@ func (s *Server) handleGenerateTOTP(ctx context.Context, req mcp.CallToolRequest
 	destination := req.GetString("destination", s.defaultTOTPDestination())
 	returnCode := req.GetBool("return_code", false)
 
-	svc := vaultsvc.New(slog.Default(), s.vault)
-	entry, err := svc.GetEntry(path)
+	entry, err := vaultpkg.ReadEntry(s.vault.Dir, path, s.vault.Identity)
 	if err != nil {
 		s.logAudit(ctx, totpToolName, path, false)
 		return vaultServiceErrorResult(err)
 	}
 
-	secret, algorithm, digits, period, hasTOTP := vault.ExtractTOTP(entry.Data)
+	secret, algorithm, digits, period, hasTOTP := vaultpkg.ExtractTOTP(entry.Data)
 	if !hasTOTP {
 		s.logAudit(ctx, totpToolName, path, false)
 		return nil, fmt.Errorf("entry %q does not have TOTP configuration", path)

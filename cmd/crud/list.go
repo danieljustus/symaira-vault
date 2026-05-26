@@ -10,7 +10,6 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/ui/render"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 	"github.com/danieljustus/symaira-vault/internal/vault/taint"
-	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 type listEntryOutput struct {
@@ -35,14 +34,14 @@ var listCmd = &cobra.Command{
   symvault list --output json`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return cli.WithVault(func(svc vaultsvc.Service) error {
-			cli.MaybeAutoPull(svc.GetDir(), svc.Vault().Config)
+		return cli.WithVault(func(v *vaultpkg.Vault) error {
+			cli.MaybeAutoPull(cli.VaultDir(v), v.Config)
 			prefix := ""
 			if len(args) > 0 {
 				prefix = args[0]
 			}
 
-			entries, err := svc.List(prefix)
+			entries, err := cli.ListEntries(v, prefix)
 			if err != nil {
 				return fmt.Errorf("cannot list entries: %w", err)
 			}
@@ -51,7 +50,7 @@ var listCmd = &cobra.Command{
 				outputs := make([]listEntryOutput, 0, len(entries))
 				for _, path := range entries {
 					output := listEntryOutput{Path: path}
-					entry, err := vaultpkg.ReadEntry(svc.GetDir(), path, svc.GetIdentity())
+					entry, err := cli.GetEntry(v, path)
 					if err == nil {
 						output.Type = string(entry.SecretMetadata.Type)
 						output.UsageHint = entry.SecretMetadata.UsageHint

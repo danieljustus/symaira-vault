@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"math"
 	"net/http"
 	"net/url"
@@ -19,7 +18,7 @@ import (
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 	"github.com/danieljustus/symaira-vault/internal/mcp/apitemplates"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
-	"github.com/danieljustus/symaira-vault/internal/vaultsvc"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 const (
@@ -110,8 +109,7 @@ func (s *Server) handleExecuteAPIRequest(ctx context.Context, req mcp.CallToolRe
 		metrics.RecordAuthDenial("scope_denied", s.agent.Name)
 		return nil, fmt.Errorf("access denied: template entry path %q outside allowed scope", entryPath)
 	}
-	svc := vaultsvc.New(slog.Default(), s.vault)
-	entry, entryErr := svc.GetEntry(entryPath)
+	entry, entryErr := vaultpkg.ReadEntry(s.vault.Dir, entryPath, s.vault.Identity)
 	if entryErr != nil {
 		s.logAudit(ctx, "execute_api_request", fmt.Sprintf("<vault-error:%s>", tmpl.Name), false)
 		return mcp.NewToolResultError(fmt.Sprintf("cannot load credentials for %q: %v", tmpl.Name, entryErr)), nil

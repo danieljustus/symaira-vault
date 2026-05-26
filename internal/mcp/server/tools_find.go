@@ -3,12 +3,10 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
 
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
-	"github.com/danieljustus/symaira-vault/internal/vault"
-	"github.com/danieljustus/symaira-vault/internal/vaultsvc"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func (s *Server) handleFind(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -38,12 +36,11 @@ func (s *Server) handleFind(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 }
 
 // findEntries searches vault entries matching a query.
-// It delegates to vaultsvc for concurrent search with scope filtering applied
+// It delegates to vaultpkg for concurrent search with scope filtering applied
 // before decryption. Worker count is read from vault config (SearchWorkers) or
 // auto-scaled based on vault size and CPU cores.
-func (s *Server) findEntries(ctx context.Context, query string) ([]vault.Match, error) {
-	svc := vaultsvc.New(slog.Default(), s.vault)
-	_, span := metrics.StartSpan(ctx, "vault.Find")
+func (s *Server) findEntries(ctx context.Context, query string) ([]vaultpkg.Match, error) {
+	_, span := metrics.StartSpan(ctx, "vault.FindWithOptions")
 	defer span.End()
 
 	workers := 4
@@ -56,7 +53,7 @@ func (s *Server) findEntries(ctx context.Context, query string) ([]vault.Match, 
 		redactPatterns = s.agent.EffectiveRedactFields("find_entries")
 	}
 
-	return svc.Find(query, vault.FindOptions{
+	return vaultpkg.FindWithOptions(s.vault.Dir, query, vaultpkg.FindOptions{
 		MaxWorkers:          workers,
 		ScopeFilter:         s.checkScope,
 		RedactFieldPatterns: redactPatterns,

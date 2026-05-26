@@ -4,11 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
-	"github.com/danieljustus/symaira-vault/internal/vaultsvc"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 type listEntrySummary struct {
@@ -32,9 +31,8 @@ func (s *Server) handleList(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 		return nil, fmt.Errorf("access denied: path %q outside allowed scope", prefix)
 	}
 
-	svc := vaultsvc.New(slog.Default(), s.vault)
 	_, span := metrics.StartSpan(ctx, "vault.List")
-	paths, err := svc.List(prefix)
+	paths, err := vaultpkg.List(s.vault.Dir, prefix)
 	span.End()
 	if err != nil {
 		s.logAudit(ctx, "list", prefix, false)
@@ -57,7 +55,7 @@ func (s *Server) handleList(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 
 	summaries := make([]listEntrySummary, 0, len(paths))
 	for _, path := range paths {
-		entry, getErr := svc.GetEntry(path)
+		entry, getErr := vaultpkg.ReadEntry(s.vault.Dir, path, s.vault.Identity)
 		if getErr != nil {
 			continue
 		}

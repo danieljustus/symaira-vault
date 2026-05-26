@@ -1,14 +1,14 @@
 package ui
 
 import (
-	"log/slog"
 	"path/filepath"
 	"runtime"
 	"testing"
 
+	"filippo.io/age"
+
 	"github.com/danieljustus/symaira-vault/internal/testutil"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
-	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 func TestTUIModelLoadsEntries(t *testing.T) {
@@ -34,21 +34,20 @@ func TestTUIModelLoadsEntries(t *testing.T) {
 		}
 	}
 
-	v := &vaultpkg.Vault{
+	vault := &vaultpkg.Vault{
 		Dir:      vaultDir,
 		Identity: id,
 	}
-	svc := vaultsvc.New(slog.Default(), v)
 
-	m := NewTUIModel(svc)
+	m := NewTUIModel(vault)
 
 	if !m.loading {
 		t.Error("expected model to be in loading state")
 	}
 
-	entriesList, err := svc.List("")
+	entriesList, err := vaultpkg.List(vault.Dir, "")
 	if err != nil {
-		t.Fatalf("svc.List() error = %v", err)
+		t.Fatalf("vaultpkg.List() error = %v", err)
 	}
 
 	msg := entriesLoadedMsg{entries: entriesList}
@@ -70,15 +69,17 @@ func TestTUIModelLoadsEntries(t *testing.T) {
 
 func TestTUIModelHandlesListError(t *testing.T) {
 	vaultDir := t.TempDir()
-	id := testutil.TempIdentity(t)
+	id, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatalf("generate identity: %v", err)
+	}
 
-	v := &vaultpkg.Vault{
+	vault := &vaultpkg.Vault{
 		Dir:      vaultDir,
 		Identity: id,
 	}
-	svc := vaultsvc.New(slog.Default(), v)
 
-	m := NewTUIModel(svc)
+	m := NewTUIModel(vault)
 
 	msg := entriesLoadedMsg{err: filepath.ErrBadPattern}
 	newModel, _ := m.Update(msg)
@@ -103,13 +104,12 @@ func TestLoadEntriesCmdIntegration(t *testing.T) {
 		t.Fatalf("WriteEntry error = %v", err)
 	}
 
-	v := &vaultpkg.Vault{
+	vault := &vaultpkg.Vault{
 		Dir:      vaultDir,
 		Identity: id,
 	}
-	svc := vaultsvc.New(slog.Default(), v)
 
-	entries, err := svc.List("")
+	entries, err := vaultpkg.List(vault.Dir, "")
 	if err != nil {
 		t.Fatalf("List error = %v", err)
 	}

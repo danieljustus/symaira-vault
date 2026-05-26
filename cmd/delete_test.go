@@ -145,8 +145,8 @@ func TestCmdDelete_AutoCommitError(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: stderr capture not reliable")
 	}
-	// Test skipped: delete command uses vaultsvc which logs auto-commit failures
-	// instead of writing to stderr. This is a pre-existing behavior mismatch.
+	// Test skipped: delete command uses slog for auto-commit failure warnings
+	// instead of writing to stderr.
 	t.Skip("skipped: auto-commit warning is logged, not written to stderr")
 	vaultDir, passphrase := initVault(t)
 	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)

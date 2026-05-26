@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -16,7 +15,6 @@ import (
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
-	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 func UnlockVault(vaultDir string, interactive bool) (*vaultpkg.Vault, error) {
@@ -112,7 +110,7 @@ func resolveUnlockPassphrase(vaultDir string, interactive bool, cfg *configpkg.C
 	return passphrase, passphraseFromEnv, passphraseFromBiometric, nil
 }
 
-func WithVault(fn func(vaultsvc.Service) error) error {
+func WithVault(fn func(*vaultpkg.Vault) error) error {
 	vaultDir, err := VaultPath()
 	if err != nil {
 		return err
@@ -126,7 +124,7 @@ func WithVault(fn func(vaultsvc.Service) error) error {
 	if err != nil {
 		return err
 	}
-	return fn(vaultsvc.New(slog.Default(), v))
+	return fn(v)
 }
 
 func WithVaultRaw(fn func(*vaultpkg.Vault) error) error {

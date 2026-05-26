@@ -7,7 +7,7 @@ import (
 
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
-	"github.com/danieljustus/symaira-vault/internal/vaultsvc"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func (s *Server) handleDelete(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -37,15 +37,20 @@ func (s *Server) handleDelete(ctx context.Context, req mcp.CallToolRequest) (*mc
 		return mcp.NewToolResultError(approvalErr.Error()), nil
 	}
 
-	svc := vaultsvc.New(slog.Default(), s.vault)
-	_, span := metrics.StartSpan(ctx, "vault.Delete")
-	err = svc.Delete(path)
+	_, span := metrics.StartSpan(ctx, "vault.DeleteEntry")
+	err = vaultpkg.DeleteEntry(s.vault.Dir, path, s.vault.Identity)
 	span.End()
 	if err != nil {
 		s.logAudit(ctx, "delete", path, false)
 		metrics.RecordVaultOperation("delete", "error")
 		return vaultServiceErrorResult(err)
 	}
+
+	// Auto-commit failure is a warning, not an error.
+	if acErr := s.vault.AutoCommit(fmt.Sprintf("Delete %s", path)); acErr != nil {
+		slog.Default().Warn("auto-commit failed", "error", acErr)
+	}
+	vaultpkg.InvalidateListCache(s.vault.Dir)
 
 	s.logAudit(ctx, "delete", path, true)
 	metrics.RecordVaultOperation("delete", "success")

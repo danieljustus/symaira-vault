@@ -17,7 +17,6 @@ import (
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 	"github.com/danieljustus/symaira-vault/internal/importer"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
-	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 var (
@@ -99,7 +98,7 @@ var importCmd = &cobra.Command{
 			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "parse import source", err)
 		}
 
-		return cli.WithVault(func(svc vaultsvc.Service) error {
+		return cli.WithVault(func(v *vaultpkg.Vault) error {
 			imported, skipped := 0, 0
 			for _, entry := range entries {
 				entryPath := importEntryPath(options.Prefix, entry.Path)
@@ -109,7 +108,7 @@ var importCmd = &cobra.Command{
 					continue
 				}
 
-				exists, err := importEntryExists(svc, entryPath)
+				exists, err := importEntryExists(v, entryPath)
 				if err != nil {
 					return fmt.Errorf("cannot check entry: %w", err)
 				}
@@ -127,13 +126,13 @@ var importCmd = &cobra.Command{
 				}
 
 				if exists && options.Overwrite {
-					if err := svc.Delete(entryPath); err != nil {
+					if err := cli.DeleteEntry(v, entryPath); err != nil {
 						return fmt.Errorf("cannot overwrite entry: %w", err)
 					}
 				}
 
 				record := vaultpkg.WriteRecord{Action: "import"}
-				if err := svc.SetFieldsWithProvenance(entryPath, entry.Data, record); err != nil {
+				if err := cli.SetFieldsWithProvenance(v, entryPath, entry.Data, record); err != nil {
 					return fmt.Errorf("cannot write entry: %w", err)
 				}
 				cli.PrintQuietAware("Imported: %s\n", entryPath)
@@ -196,8 +195,8 @@ func generateImportID() string {
 	return fmt.Sprintf("import-%s-%x", time.Now().UTC().Format("20060102"), buf)
 }
 
-func importEntryExists(svc vaultsvc.Service, entryPath string) (bool, error) {
-	_, err := svc.GetEntry(entryPath)
+func importEntryExists(v *vaultpkg.Vault, entryPath string) (bool, error) {
+	_, err := cli.GetEntry(v, entryPath)
 	if err == nil {
 		return true, nil
 	}
@@ -221,8 +220,8 @@ var importReviewListCmd = &cobra.Command{
 	Short: "List quarantined import batches",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return cli.WithVault(func(svc vaultsvc.Service) error {
-			entries, err := svc.List("quarantine/")
+		return cli.WithVault(func(v *vaultpkg.Vault) error {
+			entries, err := cli.ListEntries(v, "quarantine/")
 			if err != nil {
 				return fmt.Errorf("list quarantine: %w", err)
 			}
@@ -258,8 +257,8 @@ var importReviewPromoteCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		importID := args[0]
 		quarantinePrefix := "quarantine/" + importID + "/"
-		return cli.WithVault(func(svc vaultsvc.Service) error {
-			entries, err := svc.List(quarantinePrefix)
+		return cli.WithVault(func(v *vaultpkg.Vault) error {
+			entries, err := cli.ListEntries(v, quarantinePrefix)
 			if err != nil {
 				return fmt.Errorf("list quarantine batch: %w", err)
 			}
@@ -273,7 +272,7 @@ var importReviewPromoteCmd = &cobra.Command{
 					continue
 				}
 				// Check if destination already exists
-				exists, existsErr := importEntryExists(svc, destPath)
+				exists, existsErr := importEntryExists(v, destPath)
 				if existsErr != nil {
 					cli.PrintQuietAware("Warning: cannot check destination %s: %v\n", destPath, existsErr)
 					hadError = true
@@ -285,19 +284,19 @@ var importReviewPromoteCmd = &cobra.Command{
 					continue
 				}
 				// Read source entry
-				entry, readErr := svc.GetEntry(entryPath)
+				entry, readErr := cli.GetEntry(v, entryPath)
 				if readErr != nil {
 					cli.PrintQuietAware("Warning: failed to read %s: %v\n", entryPath, readErr)
 					hadError = true
 					continue
 				}
 				// Write to destination
-				if writeErr := svc.WriteEntry(destPath, entry); writeErr != nil {
+				if writeErr := cli.WriteEntry(v, destPath, entry); writeErr != nil {
 					cli.PrintQuietAware("Warning: failed to write %s: %v\n", destPath, writeErr)
 					hadError = true
 					continue
 				}
-				if deleteErr := svc.Delete(entryPath); deleteErr != nil {
+				if deleteErr := cli.DeleteEntry(v, entryPath); deleteErr != nil {
 					cli.PrintQuietAware("Warning: failed to delete quarantine entry %s: %v\n", entryPath, deleteErr)
 					// Don't set hadError — promote succeeded
 				}
