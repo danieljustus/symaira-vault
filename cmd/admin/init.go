@@ -129,6 +129,10 @@ func printPostInitHints() {
 	cli.PrintlnQuietAware("  3. Verify the setup:        symvault doctor")
 	cli.PrintlnQuietAware("  4. (Optional) full wizard:  symvault setup   # adds sync, recipients, agents")
 	cli.PrintlnQuietAware("")
+	cli.PrintlnQuietAware("Tip: See config.yaml.example for agent profiles, clipboard timeout, and other")
+	cli.PrintlnQuietAware("     settings — copy it to ~/.symvault/config.yaml as a starting point:")
+	cli.PrintlnQuietAware("     https://github.com/danieljustus/symaira-vault/blob/main/config.yaml.example")
+	cli.PrintlnQuietAware("")
 	cli.PrintlnQuietAware("Tip: 'symvault --help' lists all commands. Use 'symvault <cmd> --help' for details.")
 }
 
