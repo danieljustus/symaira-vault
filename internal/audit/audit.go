@@ -19,8 +19,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/danieljustus/symaira-vault/internal/envutil"
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
+	"github.com/danieljustus/symaira-vault/internal/envutil"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
@@ -34,12 +34,12 @@ const (
 
 // Environment variable names for audit configuration
 const (
-	envMaxSizeMB         = "SYMVAULT_AUDIT_MAX_SIZE_MB"
-	envMaxSizeMBLegacy   = "OPENPASS_AUDIT_MAX_SIZE_MB"
-	envMaxBackups        = "SYMVAULT_AUDIT_MAX_BACKUPS"
-	envMaxBackupsLegacy  = "OPENPASS_AUDIT_MAX_BACKUPS"
-	envMaxAgeDays        = "SYMVAULT_AUDIT_MAX_AGE_DAYS"
-	envMaxAgeDaysLegacy  = "OPENPASS_AUDIT_MAX_AGE_DAYS"
+	envMaxSizeMB        = "SYMVAULT_AUDIT_MAX_SIZE_MB"
+	envMaxSizeMBLegacy  = "OPENPASS_AUDIT_MAX_SIZE_MB"
+	envMaxBackups       = "SYMVAULT_AUDIT_MAX_BACKUPS"
+	envMaxBackupsLegacy = "OPENPASS_AUDIT_MAX_BACKUPS"
+	envMaxAgeDays       = "SYMVAULT_AUDIT_MAX_AGE_DAYS"
+	envMaxAgeDaysLegacy = "OPENPASS_AUDIT_MAX_AGE_DAYS"
 )
 
 // Config holds the configuration for audit log rotation.
