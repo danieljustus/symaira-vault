@@ -414,7 +414,9 @@ func WriteEntry(vaultDir, path string, entry *Entry, identity *age.X25519Identit
 	}
 	lockFile = nil
 	queueManifestUpdate(vaultDir, path, ciphertext, identity)
-	globalIndex.UpdateEntry(vaultDir, path, identity)
+	if err := globalIndex.UpdateEntry(vaultDir, path, identity); err != nil {
+		span.SetStatus(codes.Error, err.Error())
+	}
 	InvalidateListCache("")
 	return nil
 }
@@ -611,7 +613,9 @@ func MergeEntry(vaultDir, path string, partialData map[string]any, identity *age
 	}
 	lockFile = nil
 	queueManifestUpdate(vaultDir, path, ciphertext, identity)
-	globalIndex.UpdateEntry(vaultDir, path, identity)
+	if err := globalIndex.UpdateEntry(vaultDir, path, identity); err != nil {
+		span.SetStatus(codes.Error, err.Error())
+	}
 	InvalidateListCache("")
 	return ReadEntry(vaultDir, path, identity)
 }

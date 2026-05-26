@@ -206,7 +206,7 @@ func (idx *EncryptedIndex) UpdateEntry(vaultDir, path string, identity *age.X255
 	defer vaultcrypto.Wipe(plaintext)
 
 	var doc indexDoc
-	if err := json.Unmarshal(plaintext, &doc); err != nil {
+	if err = json.Unmarshal(plaintext, &doc); err != nil {
 		idx.ciphertext = nil
 		idx.vaultDir = ""
 		idx.idHash = [sha256.Size]byte{}
@@ -274,7 +274,7 @@ func (idx *EncryptedIndex) RemoveEntry(path string) {
 	defer vaultcrypto.Wipe(plaintext)
 
 	var doc indexDoc
-	if err := json.Unmarshal(plaintext, &doc); err != nil {
+	if err = json.Unmarshal(plaintext, &doc); err != nil {
 		idx.ciphertext = nil
 		return
 	}
