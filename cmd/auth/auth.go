@@ -60,6 +60,11 @@ var AuthStatusCmd = &cobra.Command{
 		cli.PrintlnQuietAware("Auth method: " + method)
 		cli.PrintlnQuietAware(fmt.Sprintf("Touch ID available: %t", payload["touchIDAvailable"]))
 		cli.PrintlnQuietAware(fmt.Sprintf("Session cache: %s (persistent: %t)", cache.Backend, cache.Persistent))
+		keyringHealth := "available"
+		if !cache.Persistent {
+			keyringHealth = "unavailable"
+		}
+		cli.PrintlnQuietAware("Keyring health: " + keyringHealth)
 		return nil
 	},
 }
