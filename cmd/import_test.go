@@ -442,9 +442,10 @@ func TestImportReviewPromoteSkipsExisting(t *testing.T) {
 
 	// Create a conflicting destination entry
 	v := importTestVault(t, vaultDir, string(passphrase))
-	if _, err := vaultpkg.MergeEntryWithRecipients(v.Dir, "GitHub,-Personal", map[string]any{
+	entry := &vaultpkg.Entry{Data: map[string]any{
 		"username": "existing@example.com",
-	}, v.Identity); err != nil {
+	}}
+	if err := vaultpkg.WriteEntryWithRecipients(v.Dir, "GitHub,-Personal", entry, v.Identity); err != nil {
 		t.Fatalf("create conflicting destination entry: %v", err)
 	}
 
@@ -512,10 +513,11 @@ func TestImportReviewPromoteOverwrite(t *testing.T) {
 
 	// Create a conflicting destination entry with stale data
 	v := importTestVault(t, vaultDir, string(passphrase))
-	if _, err := vaultpkg.MergeEntryWithRecipients(v.Dir, "GitHub,-Personal", map[string]any{
+	entry := &vaultpkg.Entry{Data: map[string]any{
 		"username": "stale@example.com",
 		"extra":    "stale-field",
-	}, v.Identity); err != nil {
+	}}
+	if err := vaultpkg.WriteEntryWithRecipients(v.Dir, "GitHub,-Personal", entry, v.Identity); err != nil {
 		t.Fatalf("create conflicting destination entry: %v", err)
 	}
 

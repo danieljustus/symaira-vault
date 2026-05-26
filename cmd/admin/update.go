@@ -15,8 +15,8 @@ import (
 
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
-	"github.com/danieljustus/symaira-vault/internal/update/installmethod"
 	updatepkg "github.com/danieljustus/symaira-vault/internal/update"
+	"github.com/danieljustus/symaira-vault/internal/update/installmethod"
 )
 
 type UpdateChecker interface {

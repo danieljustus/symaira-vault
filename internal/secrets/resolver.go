@@ -8,8 +8,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/danieljustus/symaira-vault/internal/vault/taint"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
+	"github.com/danieljustus/symaira-vault/internal/vault/taint"
 )
 
 // HandleResolver resolves a SecretHandle to its actual secret value.

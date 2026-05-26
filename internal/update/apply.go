@@ -18,13 +18,13 @@ const (
 
 // ApplyResult contains details about a completed self-update.
 type ApplyResult struct {
-	Method           installmethod.InstallMethod `json:"method"`
-	OldVersion       string                      `json:"old_version"`
-	NewVersion       string                      `json:"new_version"`
-	BackupPath       string                      `json:"backup_path,omitempty"`
-	BinaryPath       string                      `json:"binary_path"`
-	DryRun           bool                        `json:"dry_run"`
-	LegacySymlinkPath string                     `json:"legacy_symlink_path,omitempty"`
+	Method            installmethod.InstallMethod `json:"method"`
+	OldVersion        string                      `json:"old_version"`
+	NewVersion        string                      `json:"new_version"`
+	BackupPath        string                      `json:"backup_path,omitempty"`
+	BinaryPath        string                      `json:"binary_path"`
+	DryRun            bool                        `json:"dry_run"`
+	LegacySymlinkPath string                      `json:"legacy_symlink_path,omitempty"`
 }
 
 // ErrUnsupportedMethod indicates self-update is not available for the
