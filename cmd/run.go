@@ -11,7 +11,7 @@ import (
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 	"github.com/danieljustus/symaira-vault/internal/secrets"
-	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 var (
@@ -34,7 +34,7 @@ var runCmd = &cobra.Command{
     --workdir /tmp/job -- ./deploy.sh`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return cli.WithVault(func(svc vaultsvc.Service) error {
+		return cli.WithVault(func(v *vaultpkg.Vault) error {
 			// Parse --env flags: each is "ENV_NAME=path.field"
 			envMap := make(map[string]string)
 			for _, envFlag := range runEnvFlags {
@@ -45,7 +45,7 @@ var runCmd = &cobra.Command{
 				envName := parts[0]
 				secretRef := parts[1]
 
-				value, resolveErr := secrets.ResolveSecretRef(svc, secretRef)
+				value, resolveErr := secrets.ResolveSecretRef(v, secretRef)
 				if resolveErr != nil {
 					return resolveErr
 				}

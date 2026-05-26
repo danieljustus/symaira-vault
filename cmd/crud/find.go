@@ -14,7 +14,6 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/ui/render"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 	"github.com/danieljustus/symaira-vault/internal/vault/taint"
-	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 // searchWorkers returns the number of concurrent decryption workers for find
@@ -53,12 +52,12 @@ var findCmd = &cobra.Command{
   symvault find bank --output json`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return cli.WithVault(func(svc vaultsvc.Service) error {
-			cli.MaybeAutoPull(svc.GetDir(), svc.Vault().Config)
-			cfg := svc.Vault().Config
-			workers := searchWorkers(svc.GetDir(), cfg)
+		return cli.WithVault(func(v *vaultpkg.Vault) error {
+			cli.MaybeAutoPull(cli.VaultDir(v), v.Config)
+			cfg := v.Config
+			workers := searchWorkers(cli.VaultDir(v), cfg)
 
-			matches, err := svc.Find(args[0], vaultpkg.FindOptions{MaxWorkers: workers})
+			matches, err := cli.FindEntries(v, args[0], vaultpkg.FindOptions{MaxWorkers: workers})
 			if err != nil {
 				return fmt.Errorf("search failed: %w", err)
 			}

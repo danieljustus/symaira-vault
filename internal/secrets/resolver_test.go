@@ -1,50 +1,39 @@
 package secrets
 
 import (
-	"errors"
-	"log/slog"
 	"testing"
 
-	"github.com/danieljustus/symaira-vault/internal/config"
-	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	"filippo.io/age"
+
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
-	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
-var testPassphrase = []byte("test-passphrase")
-
-func newTestService(t *testing.T) vaultsvc.Service {
+func newTestVault(t *testing.T) *vaultpkg.Vault {
 	t.Helper()
 
 	vaultDir := t.TempDir()
-	cfg := config.Default()
-
-	if _, err := vaultpkg.InitWithPassphrase(vaultDir, testPassphrase, cfg); err != nil {
-		t.Fatalf("init vault: %v", err)
-	}
-
-	v, err := vaultpkg.OpenWithPassphrase(vaultDir, testPassphrase)
+	id, err := age.GenerateX25519Identity()
 	if err != nil {
-		t.Fatalf("open vault: %v", err)
+		t.Fatalf("generate identity: %v", err)
 	}
-	return vaultsvc.New(slog.Default(), v)
+	return &vaultpkg.Vault{Dir: vaultDir, Identity: id}
 }
 
-func writeTestEntry(t *testing.T, svc vaultsvc.Service, path string, data map[string]any) {
+func writeTestEntry(t *testing.T, vault *vaultpkg.Vault, path string, data map[string]any) {
 	t.Helper()
-	if err := svc.WriteEntry(path, &vaultpkg.Entry{Data: data}); err != nil {
+	if err := vaultpkg.WriteEntry(vault.Dir, path, &vaultpkg.Entry{Data: data}, vault.Identity); err != nil {
 		t.Fatalf("write entry %q: %v", path, err)
 	}
 }
 
 func TestResolveSecretRef(t *testing.T) {
-	svc := newTestService(t)
-	writeTestEntry(t, svc, "work/aws", map[string]any{
+	vault := newTestVault(t)
+	writeTestEntry(t, vault, "work/aws", map[string]any{
 		"username": "alice",
 		"password": "secret123",
 		"profile":  map[string]any{"email": "alice@example.com"},
 	})
-	writeTestEntry(t, svc, "github.com", map[string]any{
+	writeTestEntry(t, vault, "github.com", map[string]any{
 		"token": "ghp_token_value",
 	})
 
@@ -99,7 +88,7 @@ func TestResolveSecretRef(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ResolveSecretRef(svc, tt.ref)
+			got, err := ResolveSecretRef(vault, tt.ref)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatalf("ResolveSecretRef() expected error, got nil")
@@ -117,12 +106,12 @@ func TestResolveSecretRef(t *testing.T) {
 }
 
 func TestResolveSecretRef_NestedField(t *testing.T) {
-	svc := newTestService(t)
-	writeTestEntry(t, svc, "github", map[string]any{
+	vault := newTestVault(t)
+	writeTestEntry(t, vault, "github", map[string]any{
 		"password": "s3cret",
 	})
 
-	got, err := ResolveSecretRef(svc, "github.password")
+	got, err := ResolveSecretRef(vault, "github.password")
 	if err != nil {
 		t.Fatalf("ResolveSecretRef() unexpected error: %v", err)
 	}
@@ -132,16 +121,11 @@ func TestResolveSecretRef_NestedField(t *testing.T) {
 }
 
 func TestResolveSecretRef_ErrorKind(t *testing.T) {
-	svc := newTestService(t)
-	writeTestEntry(t, svc, "github", map[string]any{"password": "s3cret"})
+	vault := newTestVault(t)
+	writeTestEntry(t, vault, "github", map[string]any{"password": "s3cret"})
 
-	_, err := ResolveSecretRef(svc, "github.apikey")
+	_, err := ResolveSecretRef(vault, "github.apikey")
 	if err == nil {
 		t.Fatal("expected error for missing field, got nil")
-	}
-
-	var cliErr *errorspkg.CLIError
-	if !errors.As(err, &cliErr) {
-		t.Logf("error is not *errorspkg.CLIError: %v", err)
 	}
 }

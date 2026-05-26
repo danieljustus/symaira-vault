@@ -4,12 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 	"github.com/danieljustus/symaira-vault/internal/vault/taint"
-	"github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 // scalarFieldString converts a scalar vault-field value to its string
@@ -85,8 +84,7 @@ func (s *Server) handleSecretUnseal(ctx context.Context, req mcp.CallToolRequest
 		}
 	}
 
-	svc := vaultsvc.New(slog.Default(), s.vault)
-	entry, vaultErr := svc.GetEntry(handle.Path)
+	entry, vaultErr := vaultpkg.ReadEntry(s.vault.Dir, handle.Path, s.vault.Identity)
 	if vaultErr != nil {
 		s.logAudit(ctx, "secret_unseal", entryPath, false)
 		metrics.RecordVaultOperation("read", "error")

@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/danieljustus/symaira-vault/internal/template"
-	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 var (
@@ -50,9 +50,9 @@ var templateGenerateCmd = &cobra.Command{
   # Dry-run to preview without real values
   symvault template generate --type env --name myapp --dry-run`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return cli.WithVault(func(svc vaultsvc.Service) error {
+		return cli.WithVault(func(v *vaultpkg.Vault) error {
 			ctx := context.Background()
-			engine := template.NewEngine(svc)
+			engine := template.NewEngine(v)
 
 			refs := make(map[string]string)
 			customDir := os.ExpandEnv("$HOME/.config/symvault/templates")

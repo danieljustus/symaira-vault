@@ -15,7 +15,7 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/metrics"
 )
 
-const DefaultLatestReleaseURL = "https://api.github.com/repos/danieljustus/Symaira Vault/releases/latest"
+const DefaultLatestReleaseURL = "https://api.github.com/repos/danieljustus/symaira-vault/releases/latest"
 
 // newSecureClient returns an HTTP client with TLS 1.3 minimum version.
 func newSecureClient() *http.Client {

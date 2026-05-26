@@ -6,20 +6,25 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/danieljustus/symaira-vault/internal/update/installmethod"
 )
 
-const binaryName = "symvault"
+const (
+	binaryName       = "symvault"
+	legacyBinaryName = "openpass"
+)
 
 // ApplyResult contains details about a completed self-update.
 type ApplyResult struct {
-	Method     installmethod.InstallMethod `json:"method"`
-	OldVersion string                      `json:"old_version"`
-	NewVersion string                      `json:"new_version"`
-	BackupPath string                      `json:"backup_path,omitempty"`
-	BinaryPath string                      `json:"binary_path"`
-	DryRun     bool                        `json:"dry_run"`
+	Method            installmethod.InstallMethod `json:"method"`
+	OldVersion        string                      `json:"old_version"`
+	NewVersion        string                      `json:"new_version"`
+	BackupPath        string                      `json:"backup_path,omitempty"`
+	BinaryPath        string                      `json:"binary_path"`
+	DryRun            bool                        `json:"dry_run"`
+	LegacySymlinkPath string                      `json:"legacy_symlink_path,omitempty"`
 }
 
 // ErrUnsupportedMethod indicates self-update is not available for the
@@ -39,6 +44,7 @@ type InfoResult struct {
 	BinaryPath          string                      `json:"binary_path"`
 	SelfUpdateSupported bool                        `json:"self_update_supported"`
 	Guidance            string                      `json:"guidance"`
+	IsLegacyBinary      bool                        `json:"is_legacy_binary"`
 }
 
 func getBinaryPath() (string, error) {
@@ -47,6 +53,40 @@ func getBinaryPath() (string, error) {
 		return "", fmt.Errorf("resolve binary path: %w", err)
 	}
 	return p, nil
+}
+
+// isLegacyBinary reports whether the binary at binaryPath has the legacy
+// "openpass" name instead of the current "symvault" name.
+func isLegacyBinary(binaryPath string) bool {
+	normalized := strings.ReplaceAll(binaryPath, "\\", "/")
+	base := filepath.Base(normalized)
+	base = strings.TrimSuffix(base, ".exe")
+	return base == legacyBinaryName
+}
+
+// createLegacySymlink creates a symbolic link from the legacy binary name
+// (openpass) to the new binary name (symvault) in the same directory.
+// On Windows it returns an empty path and no error because Windows symlink
+// handling for executables is unreliable.
+func createLegacySymlink(symvaultPath string) (string, error) {
+	if runtime.GOOS == windowsOS {
+		// Windows symlinks for executables require special privileges and
+		// behave inconsistently; skip the symlink and let the user update
+		// their PATH or scripts manually.
+		return "", nil
+	}
+
+	dir := filepath.Dir(symvaultPath)
+	legacyPath := filepath.Join(dir, legacyBinaryName)
+
+	_ = os.Remove(legacyPath)
+
+	relTarget := filepath.Base(symvaultPath)
+	if err := os.Symlink(relTarget, legacyPath); err != nil {
+		return "", fmt.Errorf("create legacy symlink %q -> %q: %w", legacyPath, relTarget, err)
+	}
+
+	return legacyPath, nil
 }
 
 // Apply performs a self-update: downloads, verifies, and replaces the
@@ -143,13 +183,22 @@ func Apply(ctx context.Context, currentVersion string, force, dryRun bool) (*App
 		bp = binaryPath + windowsBackupSuffix
 	}
 
-	return &ApplyResult{
+	applyResult := &ApplyResult{
 		Method:     method,
 		OldVersion: currentVersion,
 		NewVersion: result.LatestVersion,
 		BackupPath: bp,
 		BinaryPath: binaryPath,
-	}, nil
+	}
+
+	if isLegacyBinary(binaryPath) {
+		symlinkPath, err := createLegacySymlink(binaryPath)
+		if err == nil && symlinkPath != "" {
+			applyResult.LegacySymlinkPath = symlinkPath
+		}
+	}
+
+	return applyResult, nil
 }
 
 func extractBinaryFromArchive(archiveData []byte) ([]byte, error) {
@@ -198,5 +247,6 @@ func Info() (*InfoResult, error) {
 		BinaryPath:          binaryPath,
 		SelfUpdateSupported: installmethod.IsSelfUpdateSupported(method),
 		Guidance:            installmethod.Guidance(method),
+		IsLegacyBinary:      isLegacyBinary(binaryPath),
 	}, nil
 }

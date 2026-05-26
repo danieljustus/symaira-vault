@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-
-	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 func TestParseRef(t *testing.T) {
@@ -131,12 +129,11 @@ func TestResolveRef(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("successful resolution", func(t *testing.T) {
-		mock := vaultsvc.NewMockService()
-		mock.GetFieldFunc = func(path, field string) (any, error) {
-			return "secret-value", nil
-		}
+		vault := newTestVault(t, map[string]map[string]any{
+			"work/aws": {"password": "secret-value"},
+		})
 
-		got, err := ResolveRef(ctx, mock, "op://work/aws/password")
+		got, err := ResolveRef(ctx, vault, "op://work/aws/password")
 		if err != nil {
 			t.Fatalf("ResolveRef: %v", err)
 		}
@@ -146,12 +143,11 @@ func TestResolveRef(t *testing.T) {
 	})
 
 	t.Run("dot notation", func(t *testing.T) {
-		mock := vaultsvc.NewMockService()
-		mock.GetFieldFunc = func(path, field string) (any, error) {
-			return "dot-value", nil
-		}
+		vault := newTestVault(t, map[string]map[string]any{
+			"work/aws": {"password": "dot-value"},
+		})
 
-		got, err := ResolveRef(ctx, mock, "work/aws.password")
+		got, err := ResolveRef(ctx, vault, "work/aws.password")
 		if err != nil {
 			t.Fatalf("ResolveRef: %v", err)
 		}
@@ -161,12 +157,11 @@ func TestResolveRef(t *testing.T) {
 	})
 
 	t.Run("numeric value", func(t *testing.T) {
-		mock := vaultsvc.NewMockService()
-		mock.GetFieldFunc = func(path, field string) (any, error) {
-			return 42, nil
-		}
+		vault := newTestVault(t, map[string]map[string]any{
+			"path": {"field": 42},
+		})
 
-		got, err := ResolveRef(ctx, mock, "op://path/field")
+		got, err := ResolveRef(ctx, vault, "op://path/field")
 		if err != nil {
 			t.Fatalf("ResolveRef: %v", err)
 		}
@@ -176,32 +171,29 @@ func TestResolveRef(t *testing.T) {
 	})
 
 	t.Run("nil value", func(t *testing.T) {
-		mock := vaultsvc.NewMockService()
-		mock.GetFieldFunc = func(path, field string) (any, error) {
-			return nil, nil
-		}
+		vault := newTestVault(t, map[string]map[string]any{
+			"path": {"field": nil},
+		})
 
-		_, err := ResolveRef(ctx, mock, "op://path/field")
+		_, err := ResolveRef(ctx, vault, "op://path/field")
 		if err == nil {
 			t.Fatal("ResolveRef expected error for nil value, got nil")
 		}
 	})
 
 	t.Run("vault error", func(t *testing.T) {
-		mock := vaultsvc.NewMockService()
-		mock.GetFieldFunc = func(path, field string) (any, error) {
-			return nil, errors.New("vault error")
-		}
+		vault := newTestVault(t, map[string]map[string]any{}) // empty vault, entry won't exist
 
-		_, err := ResolveRef(ctx, mock, "op://missing/entry")
+		_, err := ResolveRef(ctx, vault, "op://missing/entry")
 		if err == nil {
 			t.Fatal("ResolveRef expected error, got nil")
 		}
 	})
 
 	t.Run("invalid ref", func(t *testing.T) {
-		mock := vaultsvc.NewMockService()
-		_, err := ResolveRef(ctx, mock, "invalid-ref")
+		vault := newTestVault(t, map[string]map[string]any{})
+
+		_, err := ResolveRef(ctx, vault, "invalid-ref")
 		if err == nil {
 			t.Fatal("ResolveRef expected error for invalid ref, got nil")
 		}

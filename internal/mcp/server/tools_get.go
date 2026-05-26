@@ -5,17 +5,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
+	"os"
 	gopath "path"
 	"strings"
 	"time"
 
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+	mcperrors "github.com/danieljustus/symaira-vault/internal/mcp/errors"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
-	"github.com/danieljustus/symaira-vault/internal/vault"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 	"github.com/danieljustus/symaira-vault/internal/vault/taint"
-	"github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 func vaultServiceErrorResult(err error) (*mcp.CallToolResult, error) {
@@ -26,10 +26,13 @@ func vaultServiceErrorResult(err error) (*mcp.CallToolResult, error) {
 		}
 		return nil, fmt.Errorf("vault operation failed: %w", err)
 	}
+	if os.IsNotExist(err) {
+		return mcp.NewToolResultError(mcperrors.EntryNotFound("").Message), nil
+	}
 	return nil, err
 }
 
-func buildSecretMetadataResponse(entry *vault.Entry, path string) map[string]any {
+func buildSecretMetadataResponse(entry *vaultpkg.Entry, path string) map[string]any {
 	fields := make([]map[string]any, 0, len(entry.Data))
 	for k, v := range entry.Data {
 		fields = append(fields, map[string]any{
@@ -79,9 +82,8 @@ func (s *Server) handleGet(ctx context.Context, req mcp.CallToolRequest) (*mcp.C
 		return nil, fmt.Errorf("access denied: path %q outside allowed scope", path)
 	}
 
-	svc := vaultsvc.New(slog.Default(), s.vault)
-	_, span := metrics.StartSpan(ctx, "vault.GetEntry")
-	entry, err := svc.GetEntry(path)
+	_, span := metrics.StartSpan(ctx, "vault.ReadEntry")
+	entry, err := vaultpkg.ReadEntry(s.vault.Dir, path, s.vault.Identity)
 	span.End()
 	if err != nil {
 		s.logAudit(ctx, "get", path, false)
@@ -134,9 +136,8 @@ func (s *Server) handleGetValue(ctx context.Context, req mcp.CallToolRequest) (*
 		}
 	}
 
-	svc := vaultsvc.New(slog.Default(), s.vault)
-	_, span := metrics.StartSpan(ctx, "vault.GetEntry")
-	entry, err := svc.GetEntry(path)
+	_, span := metrics.StartSpan(ctx, "vault.ReadEntry")
+	entry, err := vaultpkg.ReadEntry(s.vault.Dir, path, s.vault.Identity)
 	span.End()
 	if err != nil {
 		s.logAudit(ctx, "get_value", path, false)
@@ -208,7 +209,7 @@ func (s *Server) handleGetValue(ctx context.Context, req mcp.CallToolRequest) (*
 	return mcp.NewToolResultText(string(result)), nil
 }
 
-func (s *Server) sealEntryResponse(_ context.Context, entry *vault.Entry, path string) *mcp.CallToolResult {
+func (s *Server) sealEntryResponse(_ context.Context, entry *vaultpkg.Entry, path string) *mcp.CallToolResult {
 	var fieldName string
 	for k := range entry.Data {
 		fieldName = k
@@ -240,8 +241,7 @@ func (s *Server) handleGetMetadata(ctx context.Context, req mcp.CallToolRequest)
 		return nil, fmt.Errorf("access denied: path %q outside allowed scope", path)
 	}
 
-	svc := vaultsvc.New(slog.Default(), s.vault)
-	entry, err := svc.GetEntry(path)
+	entry, err := vaultpkg.ReadEntry(s.vault.Dir, path, s.vault.Identity)
 	if err != nil {
 		s.logAudit(ctx, "get_metadata", path, false)
 		return vaultServiceErrorResult(err)

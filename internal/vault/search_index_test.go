@@ -156,12 +156,8 @@ func TestEncryptedIndexRebuildAfterWrite(t *testing.T) {
 		"username": "bob",
 	})
 
-	if globalIndex.IsBuilt() {
-		t.Fatal("IsBuilt() should be false after WriteEntry")
-	}
-
-	if err := globalIndex.Build(vaultDir, identity); err != nil {
-		t.Fatalf("Build() error = %v", err)
+	if !globalIndex.IsBuilt() {
+		t.Fatal("IsBuilt() should still be true after incremental update")
 	}
 
 	results, err := globalIndex.MatchEntries(vaultDir, identity, []string{"work/aws"}, "bob")
@@ -169,7 +165,7 @@ func TestEncryptedIndexRebuildAfterWrite(t *testing.T) {
 		t.Fatalf("MatchEntries() error = %v", err)
 	}
 	if _, ok := results["work/aws"]; !ok {
-		t.Errorf("MatchEntries('bob') should find work/aws")
+		t.Errorf("MatchEntries('bob') should find work/aws without full rebuild")
 	}
 }
 
@@ -330,8 +326,8 @@ func TestFindAfterWriteInvalidatesIndex(t *testing.T) {
 		"data": "new-data",
 	})
 
-	if globalIndex.IsBuilt() {
-		t.Fatal("Index should be invalidated after write")
+	if !globalIndex.IsBuilt() {
+		t.Fatal("Index should remain built after incremental update")
 	}
 
 	results, err := FindWithOptions(vaultDir, "data", FindOptions{MaxWorkers: 0})
@@ -462,8 +458,8 @@ func TestFindAfterMergeInvalidatesIndex(t *testing.T) {
 		t.Fatalf("MergeEntry() error = %v", err)
 	}
 
-	if globalIndex.IsBuilt() {
-		t.Fatal("Index should be invalidated after merge")
+	if !globalIndex.IsBuilt() {
+		t.Fatal("Index should remain built after incremental update")
 	}
 
 	results, err := FindWithOptions(vaultDir, "newvalue", FindOptions{MaxWorkers: 0})

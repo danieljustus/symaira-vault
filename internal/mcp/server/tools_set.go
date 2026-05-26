@@ -3,13 +3,16 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"time"
 
 	"github.com/danieljustus/symaira-vault/internal/crypto"
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
-	"github.com/danieljustus/symaira-vault/internal/vaultsvc"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func (s *Server) handleSet(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -90,18 +93,74 @@ func (s *Server) handleSet(ctx context.Context, req mcp.CallToolRequest) (*mcp.C
 }
 
 func (s *Server) upsertEntry(ctx context.Context, path string, partialData map[string]any, action string) error {
-	svc := vaultsvc.New(slog.Default(), s.vault)
 	_, span := metrics.StartSpan(ctx, "vault.SetEntry")
-	err := svc.SetFields(path, partialData)
-	span.End()
-	if err != nil {
+	defer span.End()
+
+	// Infer field name from single-key data maps (typical for set_entry_field).
+	field := ""
+	if len(partialData) == 1 {
+		for k := range partialData {
+			field = k
+			break
+		}
+	}
+
+	existing, readErr := vaultpkg.ReadEntry(s.vault.Dir, path, s.vault.Identity)
+	switch {
+	case readErr == nil && existing != nil:
+		// Entry exists — merge new data into it
+		existing.PendingWrite = &vaultpkg.WriteRecord{Field: field, Action: action}
+		if _, err := vaultpkg.MergeEntryWithRecipients(s.vault.Dir, path, partialData, s.vault.Identity); err != nil {
+			s.logAudit(ctx, action, path, false)
+			metrics.RecordVaultOperation("write", "error")
+			_, mappedErr := vaultServiceErrorResult(err)
+			if mappedErr != nil {
+				return mappedErr
+			}
+			return fmt.Errorf("vault operation failed: %w", err)
+		}
+	case errors.Is(readErr, os.ErrNotExist):
+		// New entry
+		entry := &vaultpkg.Entry{
+			Data: partialData,
+			Metadata: vaultpkg.EntryMetadata{
+				Created: time.Now().UTC(),
+				Updated: time.Now().UTC(),
+				Version: 0,
+			},
+			PendingWrite: &vaultpkg.WriteRecord{Field: field, Action: action},
+		}
+		if pwd, ok := partialData["password"]; ok {
+			if pwdStr, ok := pwd.(string); ok && pwdStr != "" {
+				strength := crypto.AssessPasswordStrength(pwdStr)
+				if strength.Weak {
+					entry.AddTag(vaultpkg.TagWeakPassword)
+				}
+			}
+		}
+		if err := vaultpkg.WriteEntryWithRecipients(s.vault.Dir, path, entry, s.vault.Identity); err != nil {
+			s.logAudit(ctx, action, path, false)
+			metrics.RecordVaultOperation("write", "error")
+			_, mappedErr := vaultServiceErrorResult(err)
+			if mappedErr != nil {
+				return mappedErr
+			}
+			return fmt.Errorf("vault operation failed: %w", err)
+		}
+	default:
 		s.logAudit(ctx, action, path, false)
 		metrics.RecordVaultOperation("write", "error")
-		_, mappedErr := vaultServiceErrorResult(err)
+		_, mappedErr := vaultServiceErrorResult(readErr)
 		if mappedErr != nil {
 			return mappedErr
 		}
-		return fmt.Errorf("vault operation failed: %w", err)
+		return fmt.Errorf("vault operation failed: %w", readErr)
 	}
+
+	// Auto-commit failure is a warning, not an error.
+	if acErr := s.vault.AutoCommit(fmt.Sprintf("Update %s", path)); acErr != nil {
+		slog.Default().Warn("auto-commit failed", "error", acErr)
+	}
+	vaultpkg.InvalidateListCache(s.vault.Dir)
 	return nil
 }

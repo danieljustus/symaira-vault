@@ -3,10 +3,9 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
 
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
-	"github.com/danieljustus/symaira-vault/internal/vaultsvc"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 type whoamiProfile struct {
@@ -170,9 +169,8 @@ func (s *Server) handleWhoami(ctx context.Context, req mcp.CallToolRequest) (*mc
 		Unavailable: unavailable,
 	}
 
-	svc := vaultsvc.New(slog.Default(), s.vault)
-	paths, err := svc.List("")
-	if err == nil {
+	paths, listErr := vaultpkg.List(s.vault.Dir, "")
+	if listErr == nil {
 		info.Vault.EntriesCount = len(paths)
 	}
 

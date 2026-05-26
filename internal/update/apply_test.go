@@ -3,6 +3,8 @@ package update
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -12,12 +14,13 @@ import (
 
 func TestApplyResult_Fields(t *testing.T) {
 	r := &ApplyResult{
-		Method:     installmethod.DirectDownload,
-		OldVersion: "1.0.0",
-		NewVersion: "2.0.0",
-		BackupPath: "/usr/local/bin/symvault.backup",
-		BinaryPath: "/usr/local/bin/symvault",
-		DryRun:     false,
+		Method:            installmethod.DirectDownload,
+		OldVersion:        "1.0.0",
+		NewVersion:        "2.0.0",
+		BackupPath:        "/usr/local/bin/symvault.backup",
+		BinaryPath:        "/usr/local/bin/symvault",
+		DryRun:            false,
+		LegacySymlinkPath: "/usr/local/bin/openpass",
 	}
 
 	if r.Method != installmethod.DirectDownload {
@@ -37,6 +40,9 @@ func TestApplyResult_Fields(t *testing.T) {
 	}
 	if r.DryRun {
 		t.Error("DryRun = true, want false")
+	}
+	if r.LegacySymlinkPath != "/usr/local/bin/openpass" {
+		t.Errorf("LegacySymlinkPath = %q, want %q", r.LegacySymlinkPath, "/usr/local/bin/openpass")
 	}
 }
 
@@ -268,5 +274,116 @@ func TestExtractBinaryFromArchive_NoBinary(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "not found") {
 		t.Errorf("error = %q, want it to contain 'not found'", err.Error())
+	}
+}
+
+func TestIsLegacyBinary(t *testing.T) {
+	tests := []struct {
+		name     string
+		path     string
+		expected bool
+	}{
+		{"symvault unix", "/usr/local/bin/symvault", false},
+		{"openpass unix", "/usr/local/bin/openpass", true},
+		{"symvault windows", `C:\\bin\\symvault.exe`, false},
+		{"openpass windows", `C:\\bin\\openpass.exe`, true},
+		{"other binary", "/usr/local/bin/other", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isLegacyBinary(tt.path)
+			if got != tt.expected {
+				t.Errorf("isLegacyBinary(%q) = %v, want %v", tt.path, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestCreateLegacySymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks on windows are unreliable for executables")
+	}
+
+	tmpDir := t.TempDir()
+	symvaultPath := filepath.Join(tmpDir, "symvault")
+
+	if err := os.WriteFile(symvaultPath, []byte("dummy binary"), 0o755); err != nil {
+		t.Fatalf("failed to create dummy binary: %v", err)
+	}
+
+	symlinkPath, err := createLegacySymlink(symvaultPath)
+	if err != nil {
+		t.Fatalf("createLegacySymlink() error = %v", err)
+	}
+
+	expectedPath := filepath.Join(tmpDir, "openpass")
+	if symlinkPath != expectedPath {
+		t.Errorf("createLegacySymlink() path = %q, want %q", symlinkPath, expectedPath)
+	}
+
+	target, err := os.Readlink(symlinkPath)
+	if err != nil {
+		t.Fatalf("os.Readlink(%q) error = %v", symlinkPath, err)
+	}
+	if target != "symvault" {
+		t.Errorf("symlink target = %q, want %q", target, "symvault")
+	}
+}
+
+func TestCreateLegacySymlink_OverwritesExisting(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks on windows are unreliable for executables")
+	}
+
+	tmpDir := t.TempDir()
+	symvaultPath := filepath.Join(tmpDir, "symvault")
+	legacyPath := filepath.Join(tmpDir, "openpass")
+
+	if err := os.WriteFile(symvaultPath, []byte("dummy binary"), 0o755); err != nil {
+		t.Fatalf("failed to create dummy binary: %v", err)
+	}
+
+	if err := os.WriteFile(legacyPath, []byte("old binary"), 0o755); err != nil {
+		t.Fatalf("failed to create old binary: %v", err)
+	}
+
+	symlinkPath, err := createLegacySymlink(symvaultPath)
+	if err != nil {
+		t.Fatalf("createLegacySymlink() error = %v", err)
+	}
+
+	info, err := os.Lstat(symlinkPath)
+	if err != nil {
+		t.Fatalf("os.Lstat(%q) error = %v", symlinkPath, err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("expected %q to be a symlink, got mode %v", symlinkPath, info.Mode())
+	}
+}
+
+func TestInfoResult_LegacyBinary(t *testing.T) {
+	r := &InfoResult{
+		Method:              installmethod.DirectDownload,
+		BinaryPath:          "/usr/local/bin/openpass",
+		SelfUpdateSupported: true,
+		Guidance:            "curl ...",
+		IsLegacyBinary:      true,
+	}
+	if !r.IsLegacyBinary {
+		t.Error("IsLegacyBinary = false, want true")
+	}
+}
+
+func TestInfoResult_NotLegacyBinary(t *testing.T) {
+	r := &InfoResult{
+		Method:              installmethod.DirectDownload,
+		BinaryPath:          "/usr/local/bin/symvault",
+		SelfUpdateSupported: true,
+		Guidance:            "curl ...",
+		IsLegacyBinary:      false,
+	}
+	if r.IsLegacyBinary {
+		t.Error("IsLegacyBinary = true, want false")
 	}
 }

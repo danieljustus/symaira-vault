@@ -24,7 +24,6 @@ import (
 	theme "github.com/danieljustus/symaira-vault/internal/ui/theme"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 	taint "github.com/danieljustus/symaira-vault/internal/vault/taint"
-	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 const (
@@ -41,11 +40,9 @@ const (
 // the compiled-in default. Returning <=0 disables auto-clear, mirroring the
 // semantics in internal/clipboard.
 func (m *TUIModel) autoClearSeconds() int {
-	if m.svc != nil {
-		if v := m.svc.Vault(); v != nil && v.Config != nil && v.Config.Clipboard != nil {
-			if v.Config.Clipboard.AutoClearDuration >= 0 {
-				return v.Config.Clipboard.AutoClearDuration
-			}
+	if m.vault != nil && m.vault.Config != nil && m.vault.Config.Clipboard != nil {
+		if m.vault.Config.Clipboard.AutoClearDuration >= 0 {
+			return m.vault.Config.Clipboard.AutoClearDuration
 		}
 	}
 	return defaultAutoClearSeconds
@@ -106,7 +103,7 @@ type logMsg struct {
 
 // TUIModel is the Bubble Tea model for the Symaira Vault two-pane terminal UI.
 type TUIModel struct {
-	svc vaultsvc.Service
+	vault *vaultpkg.Vault
 
 	entries  []string
 	filtered []string
@@ -147,8 +144,8 @@ var (
 				BorderForeground(theme.ColorFocused)
 )
 
-// NewTUIModel creates a Bubble Tea model backed by the provided vault service.
-func NewTUIModel(svc vaultsvc.Service) TUIModel {
+// NewTUIModel creates a Bubble Tea model backed by the provided vault.
+func NewTUIModel(vault *vaultpkg.Vault) TUIModel {
 	input := textinput.New()
 	input.Placeholder = "filter entries"
 	input.Prompt = "/ "
@@ -160,7 +157,7 @@ func NewTUIModel(svc vaultsvc.Service) TUIModel {
 	tagInput.CharLimit = 256
 
 	return TUIModel{
-		svc:            svc,
+		vault:          vault,
 		filterInput:    input,
 		tagFilterInput: tagInput,
 		loading:        true,
@@ -168,10 +165,10 @@ func NewTUIModel(svc vaultsvc.Service) TUIModel {
 	}
 }
 
-// Run starts the TUI. Command wiring is intentionally left to cmd/ui.go.
-func Run(svc vaultsvc.Service) error {
-	if svc == nil {
-		return fmt.Errorf("nil vault service")
+// Run starts the TUI.
+func Run(vault *vaultpkg.Vault) error {
+	if vault == nil {
+		return fmt.Errorf("nil vault")
 	}
 	opts := []tea.ProgramOption{tea.WithAltScreen()}
 	if logPath := os.Getenv("OPENPASS_TUI_LOG"); logPath != "" {
@@ -181,12 +178,12 @@ func Run(svc vaultsvc.Service) error {
 		}
 		defer func() { _ = f.Close() }()
 	}
-	_, err := tea.NewProgram(NewTUIModel(svc), opts...).Run()
+	_, err := tea.NewProgram(NewTUIModel(vault), opts...).Run()
 	return err
 }
 
 func (m TUIModel) Init() tea.Cmd {
-	return loadEntriesCmd(m.svc)
+	return loadEntriesCmd(m.vault)
 }
 
 //nolint:gocyclo // TUI update loop naturally has high cyclomatic complexity
@@ -253,7 +250,7 @@ func (m TUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		delete(m.metaCache, msg.path)
 		m.err = nil
 		m.status = fmt.Sprintf("Deleted %s", msg.path)
-		return m, loadEntriesCmd(m.svc)
+		return m, loadEntriesCmd(m.vault)
 	case entryEditedMsg:
 		m.mode = modeNormal
 		if msg.err != nil {
@@ -377,9 +374,9 @@ func (m TUIModel) handleKey(msg tea.KeyMsg) (TUIModel, tea.Cmd) {
 				return m, nil
 			}
 			if m.mode == modeConfirmDelete {
-				return m, deleteEntryCmd(m.svc, path)
+				return m, deleteEntryCmd(m.vault, path)
 			}
-			return m, editEntryCmd(m.svc, path)
+			return m, editEntryCmd(m.vault, path)
 		case "n", "N", "esc":
 			m.mode = modeNormal
 			m.status = "Canceled"
@@ -479,7 +476,7 @@ func (m *TUIModel) ensureMetaCache() {
 		if _, ok := m.metaCache[path]; ok {
 			continue
 		}
-		meta, err := vaultpkg.GetEntryMetadata(m.svc.GetDir(), path, m.svc.GetIdentity())
+		meta, err := vaultpkg.GetEntryMetadata(m.vault.Dir, path, m.vault.Identity)
 		if err != nil {
 			continue
 		}
@@ -557,7 +554,7 @@ func (m TUIModel) loadSelectedEntry() tea.Cmd {
 	if path == "" {
 		return nil
 	}
-	return loadEntryCmd(m.svc, path)
+	return loadEntryCmd(m.vault, path)
 }
 
 func (m TUIModel) selectedPath() string {
@@ -573,9 +570,13 @@ func (m TUIModel) copySelectedPassword() tea.Cmd {
 		return nil
 	}
 	return func() tea.Msg {
-		value, err := m.svc.GetField(path, "password")
+		entry, err := vaultpkg.ReadEntry(m.vault.Dir, path, m.vault.Identity)
 		if err != nil {
 			return copiedMsg{err: fmt.Errorf("read password: %w", err)}
+		}
+		value, ok := entry.Data["password"]
+		if !ok {
+			return copiedMsg{err: fmt.Errorf("password field not found")}
 		}
 		return copyTextMsg(fmt.Sprint(value), fmt.Sprintf("Copied password for %s", path))
 	}
@@ -725,14 +726,14 @@ func (m TUIModel) confirmView() string {
 	return theme.ErrorStyle.Render(fmt.Sprintf("Confirm %s %s?", verb, safePath)) + "  " + theme.MutedStyle.Render("y/N")
 }
 
-func loadEntriesCmd(svc vaultsvc.Service) tea.Cmd {
+func loadEntriesCmd(vault *vaultpkg.Vault) tea.Cmd {
 	return func() (msg tea.Msg) {
 		defer func() {
 			if r := recover(); r != nil {
 				msg = entriesLoadedMsg{err: fmt.Errorf("panic loading entries: %v", r)}
 			}
 		}()
-		entries, err := svc.List("")
+		entries, err := vaultpkg.List(vault.Dir, "")
 		if err != nil {
 			return entriesLoadedMsg{err: err}
 		}
@@ -741,14 +742,14 @@ func loadEntriesCmd(svc vaultsvc.Service) tea.Cmd {
 	}
 }
 
-func loadEntryCmd(svc vaultsvc.Service, path string) tea.Cmd {
+func loadEntryCmd(vault *vaultpkg.Vault, path string) tea.Cmd {
 	return func() (msg tea.Msg) {
 		defer func() {
 			if r := recover(); r != nil {
 				msg = entryLoadedMsg{path: path, err: fmt.Errorf("panic loading entry %s: %v", path, r)}
 			}
 		}()
-		entry, err := svc.GetEntry(path)
+		entry, err := vaultpkg.ReadEntry(vault.Dir, path, vault.Identity)
 		return entryLoadedMsg{path: path, entry: entry, err: err}
 	}
 }
@@ -796,16 +797,21 @@ func generatePasswordCmd() tea.Cmd {
 	}
 }
 
-func deleteEntryCmd(svc vaultsvc.Service, path string) tea.Cmd {
+func deleteEntryCmd(vault *vaultpkg.Vault, path string) tea.Cmd {
 	return func() tea.Msg {
-		err := svc.Delete(path)
-		return entryDeletedMsg{path: path, err: err}
+		err := vaultpkg.DeleteEntry(vault.Dir, path, vault.Identity)
+		if err != nil {
+			return entryDeletedMsg{path: path, err: err}
+		}
+		_ = vault.AutoCommit(fmt.Sprintf("Delete %s", path))
+		vaultpkg.InvalidateListCache(vault.Dir)
+		return entryDeletedMsg{path: path}
 	}
 }
 
-func editEntryCmd(svc vaultsvc.Service, path string) tea.Cmd {
+func editEntryCmd(vault *vaultpkg.Vault, path string) tea.Cmd {
 	return func() tea.Msg {
-		entry, err := svc.GetEntry(path)
+		entry, err := vaultpkg.ReadEntry(vault.Dir, path, vault.Identity)
 		if err != nil {
 			return entryEditedMsg{path: path, err: err}
 		}
@@ -851,9 +857,11 @@ func editEntryCmd(svc vaultsvc.Service, path string) tea.Cmd {
 		if edited.Data == nil {
 			return entryEditedMsg{path: path, err: fmt.Errorf("edited entry must contain data")}
 		}
-		if err := svc.WriteEntry(path, &edited); err != nil {
+		if err := vaultpkg.WriteEntryWithRecipients(vault.Dir, path, &edited, vault.Identity); err != nil {
 			return entryEditedMsg{path: path, err: err}
 		}
+		_ = vault.AutoCommit(fmt.Sprintf("Edit %s", path))
+		vaultpkg.InvalidateListCache(vault.Dir)
 		return entryEditedMsg{path: path}
 	}
 }

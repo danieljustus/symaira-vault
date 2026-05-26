@@ -13,7 +13,7 @@ import (
 	"strings"
 	"text/template"
 
-	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 // ErrTemplateNotFound is returned when a requested template does not exist.
@@ -37,14 +37,14 @@ type RenderData struct {
 
 // Engine provides template rendering and validation for secret generation.
 type Engine struct {
-	vault    vaultsvc.Service
+	vault    *vaultpkg.Vault
 	funcs    template.FuncMap
 	builtins map[string]string
 	custom   map[string]string
 }
 
-// NewEngine creates a new template engine backed by the given vault service.
-func NewEngine(vault vaultsvc.Service) *Engine {
+// NewEngine creates a new template engine backed by the given vault.
+func NewEngine(vault *vaultpkg.Vault) *Engine {
 	return &Engine{
 		vault:    vault,
 		funcs:    DefaultFuncMap(),

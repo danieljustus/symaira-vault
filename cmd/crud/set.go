@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	cryptopkg "github.com/danieljustus/symaira-vault/internal/crypto"
-	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 var (
@@ -98,8 +98,8 @@ var setCmd = &cobra.Command{
 			return err
 		}
 
-		return cli.WithVault(func(svc vaultsvc.Service) error {
-			if err := svc.SetFields(path, data); err != nil {
+		return cli.WithVault(func(v *vaultpkg.Vault) error {
+			if err := cli.SetFields(v, path, data); err != nil {
 				return fmt.Errorf("cannot write entry: %w", err)
 			}
 			cli.PrintQuietAware("Entry saved: %s\n", path)

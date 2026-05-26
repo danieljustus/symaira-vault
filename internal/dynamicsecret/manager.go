@@ -5,13 +5,13 @@ import (
 	"errors"
 	"time"
 
-	"github.com/danieljustus/symaira-vault/internal/vaultsvc"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 // Manager orchestrates dynamic secret generation across multiple engines.
 // It provides the high-level API for requesting, renewing, and revoking secrets.
 type Manager struct {
-	vault    vaultsvc.Service
+	vault    *vaultpkg.Vault
 	registry *EngineRegistry
 	leases   *LeaseManager
 }
@@ -22,8 +22,8 @@ var ErrEngineNotFound = errors.New("dynamic secret engine not found")
 // ErrLeaseNotRenewable is returned when attempting to renew a non-renewable lease.
 var ErrLeaseNotRenewable = errors.New("lease is not renewable")
 
-// NewManager creates a new dynamic secret manager with the given vault service.
-func NewManager(vault vaultsvc.Service) *Manager {
+// NewManager creates a new dynamic secret manager with the given vault.
+func NewManager(vault *vaultpkg.Vault) *Manager {
 	return &Manager{
 		vault:    vault,
 		registry: NewEngineRegistry(),

@@ -99,7 +99,7 @@ func IsSelfUpdateSupported(method InstallMethod) bool {
 func Guidance(method InstallMethod) string {
 	switch method {
 	case DirectDownload:
-		return "Re-run the quick install script: curl -sSfL https://raw.githubusercontent.com/danieljustus/Symaira Vault/main/scripts/install.sh | sh"
+		return "Re-run the quick install script: curl -sSfL https://raw.githubusercontent.com/danieljustus/symaira-vault/main/scripts/install.sh | sh"
 	case Homebrew:
 		return "Update via Homebrew: brew upgrade symvault"
 	case GoInstall:
@@ -112,6 +112,21 @@ func Guidance(method InstallMethod) string {
 		return "Unable to determine installation method. Reinstall from https://github.com/danieljustus/symaira-vault/releases"
 	default:
 		return ""
+	}
+}
+
+func LegacyGuidance(method InstallMethod) string {
+	switch method {
+	case Homebrew:
+		return "Migrate via Homebrew:\n  brew uninstall openpass\n  brew install symvault"
+	case DirectDownload:
+		return "Migrate via quick install script:\n  curl -sSfL https://raw.githubusercontent.com/danieljustus/symaira-vault/main/scripts/install.sh | sh"
+	case GoInstall:
+		return "Migrate via Go:\n  go install github.com/danieljustus/symaira-vault@latest"
+	case PackageManager:
+		return "Migrate via your system package manager:\n  # Uninstall the old openpass package\n  # Then install the new symvault package"
+	default:
+		return Guidance(method)
 	}
 }
 

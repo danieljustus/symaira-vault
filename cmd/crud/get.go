@@ -19,7 +19,6 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/ui/render"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 	"github.com/danieljustus/symaira-vault/internal/vault/taint"
-	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 var (
@@ -62,8 +61,8 @@ var getCmd = &cobra.Command{
 	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: cli.EntryCompletionFunc,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return cli.WithVault(func(svc vaultsvc.Service) error {
-			cli.MaybeAutoPull(svc.GetDir(), svc.Vault().Config)
+		return cli.WithVault(func(v *vaultpkg.Vault) error {
+			cli.MaybeAutoPull(cli.VaultDir(v), v.Config)
 			query := args[0]
 			path := query
 			field := ""
@@ -72,13 +71,13 @@ var getCmd = &cobra.Command{
 				candidatePath := query[:idx]
 				candidateField := query[idx+1:]
 
-				if _, readErr := svc.GetField(candidatePath, candidateField); readErr == nil {
+				if _, readErr := cli.GetField(v, candidatePath, candidateField); readErr == nil {
 					path = candidatePath
 					field = candidateField
 				}
 			}
 
-			value, err := svc.GetField(path, field)
+			value, err := cli.GetField(v, path, field)
 			if err != nil {
 				var cliErr *errorspkg.CLIError
 				if !errors.As(err, &cliErr) || cliErr.Code != errorspkg.ExitNotFound {
@@ -92,7 +91,7 @@ var getCmd = &cobra.Command{
 					return fmt.Errorf("cannot read entry: %w", err)
 				}
 
-				matches, findErr := svc.Find(path, vaultpkg.FindOptions{MaxWorkers: 4})
+				matches, findErr := cli.FindEntries(v, path, vaultpkg.FindOptions{MaxWorkers: 4})
 				if findErr != nil {
 					return fmt.Errorf("search entry: %w", findErr)
 				}
@@ -102,7 +101,7 @@ var getCmd = &cobra.Command{
 					return errorspkg.NewCLIError(errorspkg.ExitNotFound, cliErr.Message, errorspkg.ErrEntryNotFound)
 				case 1:
 					path = matches[0].Path
-					value, err = svc.GetField(path, field)
+					value, err = cli.GetField(v, path, field)
 					if err != nil {
 						var cliErr2 *errorspkg.CLIError
 						if errors.As(err, &cliErr2) {
@@ -185,7 +184,7 @@ var getCmd = &cobra.Command{
 				return nil
 			}
 
-			entry, err := svc.GetEntry(path)
+			entry, err := cli.GetEntry(v, path)
 			if err != nil {
 				var cliErr3 *errorspkg.CLIError
 				if errors.As(err, &cliErr3) {

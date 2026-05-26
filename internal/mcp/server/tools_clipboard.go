@@ -3,12 +3,11 @@ package server
 import (
 	"context"
 	"fmt"
-	"log/slog"
 
 	"github.com/danieljustus/symaira-vault/internal/clipboard"
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
-	"github.com/danieljustus/symaira-vault/internal/vaultsvc"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func (s *Server) handleCopyToClipboard(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -40,12 +39,17 @@ func (s *Server) handleCopyToClipboard(ctx context.Context, req mcp.CallToolRequ
 		}
 	}
 
-	svc := vaultsvc.New(slog.Default(), s.vault)
-	value, err := svc.GetField(path, "password")
+	entry, err := vaultpkg.ReadEntry(s.vault.Dir, path, s.vault.Identity)
 	if err != nil {
 		s.logAudit(ctx, "copy_to_clipboard", path, false)
 		metrics.RecordVaultOperation("read", "error")
 		return vaultServiceErrorResult(err)
+	}
+
+	value, ok := entry.Data["password"]
+	if !ok {
+		s.logAudit(ctx, "copy_to_clipboard", path, false)
+		return mcp.NewToolResultError("password field not found"), nil
 	}
 
 	strValue, ok := value.(string)

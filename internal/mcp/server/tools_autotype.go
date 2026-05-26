@@ -3,12 +3,11 @@ package server
 import (
 	"context"
 	"fmt"
-	"log/slog"
 
 	"github.com/danieljustus/symaira-vault/internal/autotype"
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
-	"github.com/danieljustus/symaira-vault/internal/vaultsvc"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func (s *Server) handleAutotype(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -38,12 +37,17 @@ func (s *Server) handleAutotype(ctx context.Context, req mcp.CallToolRequest) (*
 		return nil, fmt.Errorf("autotype denied: approval required but cannot be granted")
 	}
 
-	svc := vaultsvc.New(slog.Default(), s.vault)
-	value, err := svc.GetField(path, field)
+	entry, err := vaultpkg.ReadEntry(s.vault.Dir, path, s.vault.Identity)
 	if err != nil {
 		s.logAudit(ctx, "autotype", path, false)
 		metrics.RecordVaultOperation("read", "error")
 		return vaultServiceErrorResult(err)
+	}
+
+	value, ok := entry.Data[field]
+	if !ok {
+		s.logAudit(ctx, "autotype", path, false)
+		return mcp.NewToolResultError(fmt.Sprintf("field %q not found in entry %s", field, path)), nil
 	}
 
 	strValue, ok := value.(string)

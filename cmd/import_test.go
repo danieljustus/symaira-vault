@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"log/slog"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -12,7 +11,6 @@ import (
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
-	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 var expectedCSVImportPaths = []string{
@@ -28,8 +26,8 @@ func TestImportCommandDryRunDoesNotWriteEntries(t *testing.T) {
 
 	output := runImportCommand(t, string(passphrase), "--vault", vaultDir, "import", "csv", csvImportFixture(t), "--dry-run")
 
-	svc := importTestVaultService(t, vaultDir, string(passphrase))
-	entries, err := svc.List("")
+	v := importTestVault(t, vaultDir, string(passphrase))
+	entries, err := vaultpkg.List(v.Dir, "")
 	if err != nil {
 		t.Fatalf("list entries: %v", err)
 	}
@@ -56,8 +54,8 @@ func TestImportCommandCSVWritesEntries(t *testing.T) {
 	if !strings.Contains(output, "Import summary: 3 imported, 0 skipped") {
 		t.Errorf("import output missing summary: %s", output)
 	}
-	svc := importTestVaultService(t, vaultDir, string(passphrase))
-	assertCSVImportedEntries(t, svc, "")
+	v := importTestVault(t, vaultDir, string(passphrase))
+	assertCSVImportedEntries(t, v, "")
 }
 
 func TestImportCommandSkipExistingDoesNotChangeEntries(t *testing.T) {
@@ -66,11 +64,11 @@ func TestImportCommandSkipExistingDoesNotChangeEntries(t *testing.T) {
 	source := csvImportFixture(t)
 
 	runImportCommand(t, string(passphrase), "--vault", vaultDir, "import", "csv", source)
-	svc := importTestVaultService(t, vaultDir, string(passphrase))
-	before := snapshotImportEntries(t, svc, expectedCSVImportPaths)
+	v := importTestVault(t, vaultDir, string(passphrase))
+	before := snapshotImportEntries(t, v, expectedCSVImportPaths)
 
 	output := runImportCommand(t, string(passphrase), "--vault", vaultDir, "import", "csv", source, "--skip-existing")
-	after := snapshotImportEntries(t, svc, expectedCSVImportPaths)
+	after := snapshotImportEntries(t, v, expectedCSVImportPaths)
 
 	if !reflect.DeepEqual(after, before) {
 		t.Fatalf("entries changed with --skip-existing\nbefore: %#v\nafter:  %#v", before, after)
@@ -87,16 +85,16 @@ func TestImportCommandOverwriteUpdatesExistingEntries(t *testing.T) {
 	source := csvImportFixture(t)
 
 	runImportCommand(t, string(passphrase), "--vault", vaultDir, "import", "csv", source)
-	svc := importTestVaultService(t, vaultDir, string(passphrase))
-	if err := svc.SetFields("GitHub,-Personal", map[string]any{
+	v := importTestVault(t, vaultDir, string(passphrase))
+	if _, err := vaultpkg.MergeEntryWithRecipients(v.Dir, "GitHub,-Personal", map[string]any{
 		"username": "changed@example.com",
 		"extra":    "remove-me",
-	}); err != nil {
+	}, v.Identity); err != nil {
 		t.Fatalf("modify imported entry: %v", err)
 	}
 
 	output := runImportCommand(t, string(passphrase), "--vault", vaultDir, "import", "csv", source, "--overwrite")
-	entry, err := svc.GetEntry("GitHub,-Personal")
+	entry, err := vaultpkg.ReadEntry(v.Dir, "GitHub,-Personal", v.Identity)
 	if err != nil {
 		t.Fatalf("get overwritten entry: %v", err)
 	}
@@ -122,8 +120,8 @@ func TestImportCommandPrefixWritesEntriesUnderPrefix(t *testing.T) {
 	if !strings.Contains(output, "Imported: imports/GitHub,-Personal") {
 		t.Errorf("prefix output missing imported path: %s", output)
 	}
-	svc := importTestVaultService(t, vaultDir, string(passphrase))
-	assertCSVImportedEntries(t, svc, "imports/")
+	v := importTestVault(t, vaultDir, string(passphrase))
+	assertCSVImportedEntries(t, v, "imports/")
 }
 
 func runImportCommand(t *testing.T, passphrase string, args ...string) string {
@@ -153,16 +151,16 @@ func csvImportFixture(t *testing.T) string {
 	return filepath.Join(filepath.Dir(file), "..", "testdata", "importer", "csv", "sample.csv")
 }
 
-func importTestVaultService(t *testing.T, vaultDir, passphrase string) vaultsvc.Service {
+func importTestVault(t *testing.T, vaultDir, passphrase string) *vaultpkg.Vault {
 	t.Helper()
 	v, err := vaultpkg.OpenWithPassphrase(vaultDir, []byte(passphrase))
 	if err != nil {
 		t.Fatalf("open vault: %v", err)
 	}
-	return vaultsvc.New(slog.Default(), v)
+	return v
 }
 
-func assertCSVImportedEntries(t *testing.T, svc vaultsvc.Service, prefix string) {
+func assertCSVImportedEntries(t *testing.T, v *vaultpkg.Vault, prefix string) {
 	t.Helper()
 	entryAssertions := map[string]map[string]any{
 		"GitHub,-Personal": {
@@ -186,7 +184,7 @@ func assertCSVImportedEntries(t *testing.T, svc vaultsvc.Service, prefix string)
 	}
 
 	for path, want := range entryAssertions {
-		entry, err := svc.GetEntry(prefix + path)
+		entry, err := vaultpkg.ReadEntry(v.Dir, prefix+path, v.Identity)
 		if err != nil {
 			t.Fatalf("get imported entry %q: %v", prefix+path, err)
 		}
@@ -246,8 +244,8 @@ func TestImportQuarantinePath(t *testing.T) {
 	}
 
 	// Verify entries are stored under quarantine/<import-id>/
-	svc := importTestVaultService(t, vaultDir, string(passphrase))
-	quarantined, err := svc.List("quarantine/")
+	v := importTestVault(t, vaultDir, string(passphrase))
+	quarantined, err := vaultpkg.List(v.Dir, "quarantine/")
 	if err != nil {
 		t.Fatalf("list quarantine entries: %v", err)
 	}
@@ -398,11 +396,11 @@ func TestImportReviewPromote(t *testing.T) {
 	}
 
 	// Verify entries now exist at final paths
-	svc := importTestVaultService(t, vaultDir, string(passphrase))
-	assertCSVImportedEntries(t, svc, "")
+	v := importTestVault(t, vaultDir, string(passphrase))
+	assertCSVImportedEntries(t, v, "")
 
 	// Quarantine prefix should be empty
-	quarantined, err := svc.List("quarantine/")
+	quarantined, err := vaultpkg.List(v.Dir, "quarantine/")
 	if err != nil {
 		t.Fatalf("list quarantine: %v", err)
 	}
@@ -443,10 +441,11 @@ func TestImportReviewPromoteSkipsExisting(t *testing.T) {
 	}
 
 	// Create a conflicting destination entry
-	svc := importTestVaultService(t, vaultDir, string(passphrase))
-	if err := svc.SetFields("GitHub,-Personal", map[string]any{
+	v := importTestVault(t, vaultDir, string(passphrase))
+	entry := &vaultpkg.Entry{Data: map[string]any{
 		"username": "existing@example.com",
-	}); err != nil {
+	}}
+	if err := vaultpkg.WriteEntryWithRecipients(v.Dir, "GitHub,-Personal", entry, v.Identity); err != nil {
 		t.Fatalf("create conflicting destination entry: %v", err)
 	}
 
@@ -472,7 +471,7 @@ func TestImportReviewPromoteSkipsExisting(t *testing.T) {
 	}
 
 	// Quarantine entry should still exist (not deleted)
-	quarantined, err := svc.List("quarantine/")
+	quarantined, err := vaultpkg.List(v.Dir, "quarantine/")
 	if err != nil {
 		t.Fatalf("list quarantine: %v", err)
 	}
@@ -513,11 +512,12 @@ func TestImportReviewPromoteOverwrite(t *testing.T) {
 	}
 
 	// Create a conflicting destination entry with stale data
-	svc := importTestVaultService(t, vaultDir, string(passphrase))
-	if err := svc.SetFields("GitHub,-Personal", map[string]any{
+	v := importTestVault(t, vaultDir, string(passphrase))
+	entry := &vaultpkg.Entry{Data: map[string]any{
 		"username": "stale@example.com",
 		"extra":    "stale-field",
-	}); err != nil {
+	}}
+	if err := vaultpkg.WriteEntryWithRecipients(v.Dir, "GitHub,-Personal", entry, v.Identity); err != nil {
 		t.Fatalf("create conflicting destination entry: %v", err)
 	}
 
@@ -538,7 +538,7 @@ func TestImportReviewPromoteOverwrite(t *testing.T) {
 	}
 
 	// Destination entry should have been updated with imported data
-	entry, err := svc.GetEntry("GitHub,-Personal")
+	entry, err := vaultpkg.ReadEntry(v.Dir, "GitHub,-Personal", v.Identity)
 	if err != nil {
 		t.Fatalf("get overwritten entry: %v", err)
 	}
@@ -547,7 +547,7 @@ func TestImportReviewPromoteOverwrite(t *testing.T) {
 	}
 
 	// Quarantine should be empty
-	quarantined, err := svc.List("quarantine/")
+	quarantined, err := vaultpkg.List(v.Dir, "quarantine/")
 	if err != nil {
 		t.Fatalf("list quarantine: %v", err)
 	}
@@ -580,11 +580,11 @@ func TestImportReviewPromoteNotFound(t *testing.T) {
 	}
 }
 
-func snapshotImportEntries(t *testing.T, svc vaultsvc.Service, paths []string) map[string]*vaultpkg.Entry {
+func snapshotImportEntries(t *testing.T, v *vaultpkg.Vault, paths []string) map[string]*vaultpkg.Entry {
 	t.Helper()
 	snapshot := make(map[string]*vaultpkg.Entry, len(paths))
 	for _, path := range paths {
-		entry, err := svc.GetEntry(path)
+		entry, err := vaultpkg.ReadEntry(v.Dir, path, v.Identity)
 		if err != nil {
 			t.Fatalf("get entry %q: %v", path, err)
 		}

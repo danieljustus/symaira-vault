@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"sort"
 	"strings"
 	"time"
@@ -14,7 +13,6 @@ import (
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
 	"github.com/danieljustus/symaira-vault/internal/secrets"
-	"github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 // handleExecuteWithSecret executes a command with secrets injected as environment
@@ -69,7 +67,6 @@ func (s *Server) handleExecuteWithSecret(ctx context.Context, req mcp.CallToolRe
 			return mcp.NewToolResultError("argument \"secret_refs\" must be an array"), nil
 		}
 
-		svc := vaultsvc.New(slog.Default(), s.vault)
 		seenEnvVars := make(map[string]bool)
 
 		for i, v := range refsSlice {
@@ -96,7 +93,7 @@ func (s *Server) handleExecuteWithSecret(ctx context.Context, req mcp.CallToolRe
 				resolverRef = entryPath + "." + field
 			}
 
-			value, resolveErr := secrets.ResolveSecretRef(svc, resolverRef)
+			value, resolveErr := secrets.ResolveSecretRef(s.vault, resolverRef)
 			if resolveErr != nil {
 				s.logAudit(ctx, "execute_with_secret", ref, false)
 				return mcp.NewToolResultError(fmt.Sprintf("cannot resolve secret ref %q: %v", ref, resolveErr)), nil

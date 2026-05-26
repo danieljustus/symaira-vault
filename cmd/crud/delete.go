@@ -10,7 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 var (
@@ -30,7 +30,7 @@ var deleteCmd = &cobra.Command{
 	ValidArgsFunction: cli.EntryCompletionFunc,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		path := args[0]
-		return cli.WithVault(func(svc vaultsvc.Service) error {
+		return cli.WithVault(func(v *vaultpkg.Vault) error {
 			if !DeleteYes {
 				fmt.Fprintf(os.Stderr, "Delete %s? (y/N): ", path)
 				answer, err := bufio.NewReader(os.Stdin).ReadString('\n')
@@ -49,7 +49,7 @@ var deleteCmd = &cobra.Command{
 				}
 			}
 
-			if err := svc.Delete(path); err != nil {
+			if err := cli.DeleteEntry(v, path); err != nil {
 				return fmt.Errorf("cannot delete entry: %w", err)
 			}
 			if cli.OutputFormat == "text" {

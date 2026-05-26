@@ -4,14 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 	"github.com/danieljustus/symaira-vault/internal/template"
-	"github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 func (s *Server) handleGenerateTemplate(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -37,8 +35,7 @@ func (s *Server) handleGenerateTemplate(ctx context.Context, req mcp.CallToolReq
 
 	_ = s.checkScope("")
 
-	svc := vaultsvc.New(slog.Default(), s.vault)
-	engine := template.NewEngine(svc)
+	engine := template.NewEngine(s.vault)
 	customDir := os.ExpandEnv("$HOME/.config/symvault/templates")
 	_ = engine.LoadCustomTemplates(customDir)
 

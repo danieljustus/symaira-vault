@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/danieljustus/symaira-vault/internal/vaultsvc"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func TestNewManager(t *testing.T) {
-	mockVault := vaultsvc.NewMockService()
+	mockVault := &vaultpkg.Vault{}
 	mgr := NewManager(mockVault)
 
 	if mgr == nil {
@@ -24,7 +24,7 @@ func TestNewManager(t *testing.T) {
 }
 
 func TestManagerRegisterEngine(t *testing.T) {
-	mockVault := vaultsvc.NewMockService()
+	mockVault := &vaultpkg.Vault{}
 	mgr := NewManager(mockVault)
 
 	mock := NewMockEngine()
@@ -40,7 +40,7 @@ func TestManagerRegisterEngine(t *testing.T) {
 }
 
 func TestManagerGenerate(t *testing.T) {
-	mockVault := vaultsvc.NewMockService()
+	mockVault := &vaultpkg.Vault{}
 	mgr := NewManager(mockVault)
 	defer mgr.Close()
 
@@ -85,7 +85,7 @@ func TestManagerGenerate(t *testing.T) {
 }
 
 func TestManagerGenerateUnknownEngine(t *testing.T) {
-	mockVault := vaultsvc.NewMockService()
+	mockVault := &vaultpkg.Vault{}
 	mgr := NewManager(mockVault)
 	defer mgr.Close()
 
@@ -96,7 +96,7 @@ func TestManagerGenerateUnknownEngine(t *testing.T) {
 }
 
 func TestManagerRevoke(t *testing.T) {
-	mockVault := vaultsvc.NewMockService()
+	mockVault := &vaultpkg.Vault{}
 	mgr := NewManager(mockVault)
 	defer mgr.Close()
 
@@ -126,7 +126,7 @@ func TestManagerRevoke(t *testing.T) {
 }
 
 func TestManagerRevokeNonExistent(t *testing.T) {
-	mockVault := vaultsvc.NewMockService()
+	mockVault := &vaultpkg.Vault{}
 	mgr := NewManager(mockVault)
 	defer mgr.Close()
 
@@ -137,7 +137,7 @@ func TestManagerRevokeNonExistent(t *testing.T) {
 }
 
 func TestManagerLookup(t *testing.T) {
-	mockVault := vaultsvc.NewMockService()
+	mockVault := &vaultpkg.Vault{}
 	mgr := NewManager(mockVault)
 	defer mgr.Close()
 
@@ -168,7 +168,7 @@ func TestManagerLookup(t *testing.T) {
 }
 
 func TestManagerLookupNonExistent(t *testing.T) {
-	mockVault := vaultsvc.NewMockService()
+	mockVault := &vaultpkg.Vault{}
 	mgr := NewManager(mockVault)
 	defer mgr.Close()
 
@@ -179,7 +179,7 @@ func TestManagerLookupNonExistent(t *testing.T) {
 }
 
 func TestManagerRenew(t *testing.T) {
-	mockVault := vaultsvc.NewMockService()
+	mockVault := &vaultpkg.Vault{}
 	mgr := NewManager(mockVault)
 	defer mgr.Close()
 
@@ -214,7 +214,7 @@ func TestManagerRenew(t *testing.T) {
 }
 
 func TestManagerRenewNonRenewable(t *testing.T) {
-	mockVault := vaultsvc.NewMockService()
+	mockVault := &vaultpkg.Vault{}
 	mgr := NewManager(mockVault)
 	defer mgr.Close()
 
@@ -243,7 +243,7 @@ func TestManagerRenewNonRenewable(t *testing.T) {
 }
 
 func TestManagerClose(t *testing.T) {
-	mockVault := vaultsvc.NewMockService()
+	mockVault := &vaultpkg.Vault{}
 	mgr := NewManager(mockVault)
 
 	if err := mgr.Close(); err != nil {
@@ -252,7 +252,7 @@ func TestManagerClose(t *testing.T) {
 }
 
 func TestManagerMultipleEngines(t *testing.T) {
-	mockVault := vaultsvc.NewMockService()
+	mockVault := &vaultpkg.Vault{}
 	mgr := NewManager(mockVault)
 	defer mgr.Close()
 
@@ -267,7 +267,7 @@ func TestManagerMultipleEngines(t *testing.T) {
 }
 
 func TestManagerContextCancellation(t *testing.T) {
-	mockVault := vaultsvc.NewMockService()
+	mockVault := &vaultpkg.Vault{}
 	mgr := NewManager(mockVault)
 	defer mgr.Close()
 

@@ -1,7 +1,11 @@
 // Package errors provides structured error types for MCP tools.
 package errors
 
-import "fmt"
+import (
+	"fmt"
+
+	clierrors "github.com/danieljustus/symaira-vault/internal/errors"
+)
 
 // MCPError represents a structured error response for MCP tools.
 type MCPError struct {
@@ -10,10 +14,14 @@ type MCPError struct {
 	Hint    string         `json:"hint,omitempty"`
 	Details map[string]any `json:"details,omitempty"`
 	Doc     string         `json:"doc,omitempty"`
+	Cause   error          `json:"-"` // Wraps CLIError for overlapping errors
 }
 
 // Error implements the error interface.
 func (e *MCPError) Error() string { return e.Message }
+
+// Unwrap returns the underlying cause for errors.Is/errors.As support.
+func (e *MCPError) Unwrap() error { return e.Cause }
 
 // Error codes as constants.
 const (
@@ -94,7 +102,20 @@ func ToolNotAllowed(tool, tier, upgradeCmd string) *MCPError {
 
 // EntryNotFound creates an entry-not-found error for the given path.
 func EntryNotFound(path string) *MCPError {
-	return New(ErrEntryNotFound, fmt.Sprintf("Entry %q not found", path))
+	return &MCPError{
+		Code:    ErrEntryNotFound,
+		Message: fmt.Sprintf("Entry %q not found", path),
+		Cause:   clierrors.ErrEntryNotFound,
+	}
+}
+
+// FieldNotFound creates a field-not-found error for the given path and field.
+func FieldNotFound(path, field string) *MCPError {
+	return &MCPError{
+		Code:    ErrFieldNotFound,
+		Message: fmt.Sprintf("Field %q not found in entry %q", field, path),
+		Cause:   clierrors.Wrap(clierrors.ExitNotFound, clierrors.ErrFieldNotFound, clierrors.ErrEntryNotFound, "field not found: %s.%s", path, field),
+	}
 }
 
 // QuotaExceeded creates a quota-exceeded error.

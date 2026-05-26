@@ -9,7 +9,7 @@ import (
 
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
 	"github.com/danieljustus/symaira-vault/internal/dynamicsecret"
-	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 var (
@@ -42,9 +42,9 @@ var dynamicGenerateCmd = &cobra.Command{
   # Generate AWS STS credentials for a specific role
   symvault dynamic generate --engine aws-sts --role arn:aws:iam::123456789012:role/MyRole --ttl 30m`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return cli.WithVault(func(svc vaultsvc.Service) error {
+		return cli.WithVault(func(v *vaultpkg.Vault) error {
 			ctx := context.Background()
-			mgr := dynamicsecret.NewManager(svc)
+			mgr := dynamicsecret.NewManager(v)
 
 			req := dynamicsecret.GenerateRequest{
 				Role: dynamicRole,

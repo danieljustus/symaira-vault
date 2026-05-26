@@ -23,7 +23,7 @@ set -eu
 
 # ── Constants ────────────────────────────────────────────────────────────────
 REPO="danieljustus/symaira-vault"
-BINARY="symaira"
+BINARY="symvault"
 PROJECT="symaira"
 GITHUB_API="https://api.github.com"
 GITHUB_DOWNLOAD="https://github.com/${REPO}/releases/download"

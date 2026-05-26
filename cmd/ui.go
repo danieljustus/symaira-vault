@@ -8,7 +8,7 @@ import (
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
 	"github.com/danieljustus/symaira-vault/internal/ui"
 	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
-	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 var uiPrintKeybindings bool
@@ -43,8 +43,8 @@ Inside the TUI:
 			fmt.Print(tbl.Render())
 			return nil
 		}
-		return cli.WithVault(func(svc vaultsvc.Service) error {
-			if err := ui.Run(svc); err != nil {
+		return cli.WithVault(func(v *vaultpkg.Vault) error {
+			if err := ui.Run(v); err != nil {
 				return fmt.Errorf("ui failed: %w", err)
 			}
 

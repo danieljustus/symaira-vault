@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	vaultsvc "github.com/danieljustus/symaira-vault/internal/vaultsvc"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 // ParsedRef holds the components of a parsed secret reference.
@@ -57,17 +57,22 @@ func ParseRef(ref string) (*ParsedRef, error) {
 	}, nil
 }
 
-// ResolveRef resolves a secret reference against the given vault service.
+// ResolveRef resolves a secret reference against the given vault.
 // It parses the reference, looks up the entry in the vault, and returns the field value as a string.
-func ResolveRef(ctx context.Context, svc vaultsvc.Service, ref string) (string, error) {
+func ResolveRef(ctx context.Context, v *vaultpkg.Vault, ref string) (string, error) {
 	parsed, err := ParseRef(ref)
 	if err != nil {
 		return "", err
 	}
 
-	value, err := svc.GetField(parsed.Path, parsed.Field)
+	entry, err := vaultpkg.ReadEntry(v.Dir, parsed.Path, v.Identity)
 	if err != nil {
 		return "", fmt.Errorf("resolve ref %q: %w", ref, err)
+	}
+
+	value, ok := entry.Data[parsed.Field]
+	if !ok {
+		return "", fmt.Errorf("resolve ref %q: field %q not found", ref, parsed.Field)
 	}
 
 	// Convert to string

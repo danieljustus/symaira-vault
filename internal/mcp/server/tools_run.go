@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -13,7 +12,6 @@ import (
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
 	secrets "github.com/danieljustus/symaira-vault/internal/secrets"
-	"github.com/danieljustus/symaira-vault/internal/vaultsvc"
 )
 
 func (s *Server) handleRunCommand(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -74,7 +72,6 @@ func (s *Server) handleRunCommand(ctx context.Context, req mcp.CallToolRequest) 
 			return mcp.NewToolResultError("argument \"env\" must be an object"), nil
 		}
 
-		svc := vaultsvc.New(slog.Default(), s.vault)
 		for envName, refRaw := range envMap {
 			ref, ok := refRaw.(string)
 			if !ok {
@@ -88,7 +85,7 @@ func (s *Server) handleRunCommand(ctx context.Context, req mcp.CallToolRequest) 
 				return nil, fmt.Errorf("access denied: secret ref path %q outside allowed scope", path)
 			}
 
-			value, err := secrets.ResolveSecretRef(svc, ref)
+			value, err := secrets.ResolveSecretRef(s.vault, ref)
 			if err != nil {
 				return mcp.NewToolResultError(fmt.Sprintf("cannot resolve secret ref %q: %v", ref, err)), nil
 			}

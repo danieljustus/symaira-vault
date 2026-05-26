@@ -181,6 +181,122 @@ func (idx *EncryptedIndex) Invalidate() {
 	idx.mu.Unlock()
 }
 
+// UpdateEntry incrementally updates a single entry in the encrypted index.
+// It decrypts the existing index, re-indexes the given path, and re-encrypts.
+// If the index is not built, this is a no-op (the index will be built lazily).
+func (idx *EncryptedIndex) UpdateEntry(vaultDir, path string, identity *age.X25519Identity) error {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+
+	if idx.ciphertext == nil {
+		return nil
+	}
+
+	key := deriveIndexKey(identity)
+	defer vaultcrypto.Wipe(key)
+
+	plaintext, err := vaultcrypto.DecryptWithKey(idx.ciphertext, key)
+	if err != nil {
+		// Corrupt index — clear and let it rebuild lazily
+		idx.ciphertext = nil
+		idx.vaultDir = ""
+		idx.idHash = [sha256.Size]byte{}
+		return nil
+	}
+	defer vaultcrypto.Wipe(plaintext)
+
+	var doc indexDoc
+	if err = json.Unmarshal(plaintext, &doc); err != nil {
+		idx.ciphertext = nil
+		idx.vaultDir = ""
+		idx.idHash = [sha256.Size]byte{}
+		return nil
+	}
+
+	if doc.Values == nil {
+		doc.Values = make(map[string][]string)
+	}
+
+	entry, readErr := ReadEntry(vaultDir, path, identity)
+	if readErr != nil {
+		delete(doc.Values, path)
+	} else {
+		var values []string
+		collectStringValues(&values, entry.Data)
+		if len(values) > 0 {
+			doc.Values[path] = values
+		} else {
+			delete(doc.Values, path)
+		}
+	}
+
+	newPlaintext, err := json.Marshal(doc)
+	if err != nil {
+		return err
+	}
+	defer vaultcrypto.Wipe(newPlaintext)
+
+	newCiphertext, err := vaultcrypto.EncryptWithKey(newPlaintext, key)
+	if err != nil {
+		return err
+	}
+
+	idx.ciphertext = newCiphertext
+	idx.vaultDir = vaultDir
+	idx.idHash = sha256.Sum256([]byte(identity.String()))
+	return nil
+}
+
+// RemoveEntry removes a single path from the encrypted index.
+// If the index is not built, this is a no-op.
+func (idx *EncryptedIndex) RemoveEntry(path string) {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+
+	if idx.ciphertext == nil {
+		return
+	}
+
+	identity := currentSearchIdentity()
+	if identity == nil {
+		idx.ciphertext = nil
+		return
+	}
+
+	key := deriveIndexKey(identity)
+	defer vaultcrypto.Wipe(key)
+
+	plaintext, err := vaultcrypto.DecryptWithKey(idx.ciphertext, key)
+	if err != nil {
+		idx.ciphertext = nil
+		return
+	}
+	defer vaultcrypto.Wipe(plaintext)
+
+	var doc indexDoc
+	if err = json.Unmarshal(plaintext, &doc); err != nil {
+		idx.ciphertext = nil
+		return
+	}
+
+	delete(doc.Values, path)
+
+	newPlaintext, err := json.Marshal(doc)
+	if err != nil {
+		idx.ciphertext = nil
+		return
+	}
+	defer vaultcrypto.Wipe(newPlaintext)
+
+	newCiphertext, err := vaultcrypto.EncryptWithKey(newPlaintext, key)
+	if err != nil {
+		idx.ciphertext = nil
+		return
+	}
+
+	idx.ciphertext = newCiphertext
+}
+
 // InvalidateSearchIndex clears the global in-memory encrypted search index and
 // invalidates the list cache. Called after write operations so both caches are
 // rebuilt on the next search.
