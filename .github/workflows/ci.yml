@@ -140,6 +140,8 @@ jobs:
 
       - name: Run tests
         shell: bash
+        env:
+          CGO_ENABLED: 0
         run: |
           if [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
             go test -v -race -timeout=30m -coverprofile=coverage.out -skip 'TestFlow|TestBinaryE2E|Integration' ./...

@@ -113,6 +113,7 @@ func TestCmdEdit_EditorRunError(t *testing.T) {
 	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
 	entry := &vaultpkg.Entry{Data: map[string]any{"password": "x"}}
 	_ = vaultpkg.WriteEntry(vaultDir, "edit-err", entry, identity.Identity)
+	vaultpkg.FlushManifestUpdates()
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
