@@ -172,7 +172,7 @@ jobs:
       - name: Smoke test - init vault
         run: |
           TMPDIR=$(mktemp -d)
-          printf '%s\n' "test-passphrase-123" | OPENPASS_VAULT="$TMPDIR/test-vault" symvault init
+          printf '%s\n' "test-passphrase-123" | SYMVAULT_VAULT="$TMPDIR/test-vault" symvault init
           rm -rf "$TMPDIR"
 
   smoke-test-deb:
@@ -209,7 +209,7 @@ jobs:
       - name: Smoke test - init vault
         run: |
           TMPDIR=$(mktemp -d)
-          printf '%s\n' "test-passphrase-123" | OPENPASS_VAULT="$TMPDIR/test-vault" symvault init
+          printf '%s\n' "test-passphrase-123" | SYMVAULT_VAULT="$TMPDIR/test-vault" symvault init
           rm -rf "$TMPDIR"
 
   smoke-test-macos:
@@ -246,7 +246,7 @@ jobs:
       - name: Smoke test - init vault
         run: |
           TMPDIR=$(mktemp -d)
-          printf '%s\n' "test-passphrase-123" | OPENPASS_VAULT="$TMPDIR/test-vault" symvault init
+          printf '%s\n' "test-passphrase-123" | SYMVAULT_VAULT="$TMPDIR/test-vault" symvault init
           rm -rf "$TMPDIR"
 
   smoke-test-windows:
