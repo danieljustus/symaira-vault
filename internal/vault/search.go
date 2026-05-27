@@ -784,10 +784,11 @@ func filterPathsUsingIndex(vaultDir string, candidates []string, needle string) 
 		return candidates
 	}
 
-	// Build index lazily on first use
 	if !globalIndex.IsBuilt() {
-		if err := globalIndex.Build(vaultDir, identity); err != nil {
-			return candidates
+		if err := globalIndex.loadFromDisk(vaultDir, identity); err != nil || !globalIndex.IsBuilt() {
+			if err := globalIndex.Build(vaultDir, identity); err != nil {
+				return candidates
+			}
 		}
 	}
 

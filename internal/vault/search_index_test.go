@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"crypto/sha256"
 	"os"
 	"path/filepath"
 	"strings"
@@ -501,5 +502,155 @@ func TestEncryptedIndexSearchableAfterBuild(t *testing.T) {
 		if results != nil {
 			t.Errorf("MatchEntries(%q) with nil candidates should return nil", needle)
 		}
+	}
+}
+
+func TestEncryptedIndexPersistence(t *testing.T) {
+	vaultDir := t.TempDir()
+	identity := testutil.TempIdentity(t)
+
+	mustWriteEntry(t, vaultDir, identity, "github.com/user", map[string]interface{}{
+		"username": "alice",
+		"password": "s3cr3t",
+	})
+
+	rememberSearchIdentity(identity)
+	t.Cleanup(func() { searchIdentity.Store(nil) })
+
+	idx := &EncryptedIndex{}
+	if err := idx.Build(vaultDir, identity); err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	indexPath := indexFilePath(vaultDir)
+	if _, err := os.Stat(indexPath); os.IsNotExist(err) {
+		t.Fatal("index file should exist after Build()")
+	}
+
+	// Simulate restart: fresh in-memory index loads from disk
+	freshIdx := &EncryptedIndex{}
+	if err := freshIdx.loadFromDisk(vaultDir, identity); err != nil {
+		t.Fatalf("loadFromDisk() error = %v", err)
+	}
+	if !freshIdx.IsBuilt() {
+		t.Fatal("freshIdx should be built after loadFromDisk()")
+	}
+
+	candidates := []string{"github.com/user"}
+	results, err := freshIdx.MatchEntries(vaultDir, identity, candidates, "alice")
+	if err != nil {
+		t.Fatalf("MatchEntries() error = %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("MatchEntries('alice') = %d results, want 1", len(results))
+	}
+}
+
+func TestEncryptedIndexStaleDetection(t *testing.T) {
+	vaultDir := t.TempDir()
+	identity := testutil.TempIdentity(t)
+
+	mustWriteEntry(t, vaultDir, identity, "entry/one", map[string]interface{}{
+		"data": "value-one",
+	})
+
+	rememberSearchIdentity(identity)
+	t.Cleanup(func() { searchIdentity.Store(nil) })
+
+	idx := &EncryptedIndex{}
+	if err := idx.Build(vaultDir, identity); err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	// Add another entry after build, making the persisted index stale
+	mustWriteEntry(t, vaultDir, identity, "entry/two", map[string]interface{}{
+		"data": "value-two",
+	})
+
+	// loadFromDisk should detect stale count and remove the file
+	freshIdx := &EncryptedIndex{}
+	if err := freshIdx.loadFromDisk(vaultDir, identity); err == nil {
+		t.Fatal("loadFromDisk() should fail for stale index")
+	}
+	if freshIdx.IsBuilt() {
+		t.Fatal("freshIdx should not be built after stale load")
+	}
+
+	// The stale file should be removed
+	indexPath := indexFilePath(vaultDir)
+	if _, err := os.Stat(indexPath); !os.IsNotExist(err) {
+		t.Fatal("stale index file should be removed")
+	}
+}
+
+func TestEncryptedIndexInvalidationRemovesFile(t *testing.T) {
+	vaultDir := t.TempDir()
+	identity := testutil.TempIdentity(t)
+
+	mustWriteEntry(t, vaultDir, identity, "test/entry", map[string]interface{}{
+		"key": "value",
+	})
+
+	rememberSearchIdentity(identity)
+	t.Cleanup(func() { searchIdentity.Store(nil) })
+
+	idx := &EncryptedIndex{}
+	if err := idx.Build(vaultDir, identity); err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	indexPath := indexFilePath(vaultDir)
+	if _, err := os.Stat(indexPath); os.IsNotExist(err) {
+		t.Fatal("index file should exist after Build()")
+	}
+
+	idx.Invalidate()
+
+	if _, err := os.Stat(indexPath); !os.IsNotExist(err) {
+		t.Fatal("index file should be removed after Invalidate()")
+	}
+}
+
+func TestEncryptedIndexFilterPathsUsingIndexLoadsFromDisk(t *testing.T) {
+	globalIndex.Invalidate()
+
+	vaultDir := t.TempDir()
+	identity := testutil.TempIdentity(t)
+
+	mustWriteEntry(t, vaultDir, identity, "github.com/user", map[string]interface{}{
+		"username": "alice",
+	})
+
+	rememberSearchIdentity(identity)
+	t.Cleanup(func() { searchIdentity.Store(nil) })
+
+	// Build the index (this also saves to disk)
+	if err := globalIndex.Build(vaultDir, identity); err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	if !globalIndex.IsBuilt() {
+		t.Fatal("globalIndex should be built")
+	}
+
+	// Invalidate in-memory only, simulating process restart
+	globalIndex.mu.Lock()
+	globalIndex.ciphertext = nil
+	globalIndex.vaultDir = ""
+	globalIndex.idHash = [sha256.Size]byte{}
+	globalIndex.mu.Unlock()
+
+	if globalIndex.IsBuilt() {
+		t.Fatal("globalIndex should not be built after clearing memory")
+	}
+
+	// filterPathsUsingIndex should load from disk
+	results := filterPathsUsingIndex(vaultDir, []string{"github.com/user"}, "alice")
+	if len(results) != 1 {
+		t.Fatalf("filterPathsUsingIndex() = %d results, want 1", len(results))
+	}
+
+	if !globalIndex.IsBuilt() {
+		t.Fatal("globalIndex should be built after loading from disk")
 	}
 }
