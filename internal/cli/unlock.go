@@ -2,11 +2,11 @@ package cli
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"path/filepath"
 	"time"
 	"unsafe"
+
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 
 	"filippo.io/age"
 
@@ -65,7 +65,7 @@ func UnlockVaultWithTTL(vaultDir string, interactive bool, ttlOverride time.Dura
 	}
 	if cfg.EffectiveAuthMethod() == configpkg.AuthMethodTouchID && !passphraseFromBiometric && (!passphraseFromEnv || cacheEnvPassphrase) {
 		if err := SessionSaveBiometric(context.Background(), vaultDir, passphrase); err != nil && interactive {
-			fmt.Fprintf(os.Stderr, "Warning: could not update Touch ID unlock: %v\n", err)
+			cliout.Warnf("Warning: could not update Touch ID unlock: %v", err)
 		}
 	}
 

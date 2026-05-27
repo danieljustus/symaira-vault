@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	cryptopkg "github.com/danieljustus/symaira-vault/internal/crypto"
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 )
 
 type EntryFlags struct {
@@ -226,7 +227,7 @@ func confirmWeakPassword(password string) error {
 		return nil
 	}
 
-	fmt.Fprintf(os.Stderr, "Warning: %s\n", s.Message)
+	cliout.Warnf("Warning: %s", s.Message)
 	if IsTerminalFunc(int(os.Stdin.Fd())) {
 		ok, err := ConfirmInteractive("Use this password anyway?", false)
 		if err != nil {

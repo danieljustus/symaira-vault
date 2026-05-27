@@ -15,6 +15,7 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/agentskill"
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	auth "github.com/danieljustus/symaira-vault/internal/mcp/auth"
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 )
 
 var (
@@ -73,7 +74,7 @@ agent's profile in config.yaml. Use --yes to skip the confirmation prompt.`,
 		}
 
 		if !agentUninstallYes && !confirmUninstall(agentName) {
-			fmt.Fprintln(os.Stderr, "Uninstall canceled.")
+			cliout.Warnf("Uninstall canceled.")
 			return nil
 		}
 

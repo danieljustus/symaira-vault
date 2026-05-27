@@ -96,7 +96,7 @@ Interactive mode prompts for username, password, and URL.`,
 				if fdRaw <= uintptr(^uint(0)>>1) {
 					fd := int(fdRaw)
 					if cli.IsTerminalFunc(fd) {
-						fmt.Fprintf(os.Stderr, "Warning: --value is visible in process listings (ps aux). Use --stdin-value for secure input.\n")
+						cliout.Warnf("Warning: --value is visible in process listings (ps aux). Use --stdin-value for secure input.")
 					}
 				}
 			}
@@ -105,7 +105,7 @@ Interactive mode prompts for username, password, and URL.`,
 				if fdRaw <= uintptr(^uint(0)>>1) {
 					fd := int(fdRaw)
 					if cli.IsTerminalFunc(fd) {
-						fmt.Fprintf(os.Stderr, "Warning: --totp-secret is visible in process listings (ps aux). Use --stdin-totp-secret for secure input.\n")
+						cliout.Warnf("Warning: --totp-secret is visible in process listings (ps aux). Use --stdin-totp-secret for secure input.")
 					}
 				}
 			}

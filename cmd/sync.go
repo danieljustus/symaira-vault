@@ -10,6 +10,7 @@ import (
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 	"github.com/danieljustus/symaira-vault/internal/git"
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
@@ -65,12 +66,12 @@ var syncCmd = &cobra.Command{
 		if result.Success {
 			printlnQuietAware("Pulled from remote")
 			if err := git.SetLastSyncTime(vaultDir); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: could not record sync time: %v\n", err)
+				cliout.Warnf("Warning: could not record sync time: %v", err)
 			}
 
 			hostname, _ := os.Hostname()
 			if err := git.ResolveConflicts(vaultDir, hostname); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: conflict resolution failed: %v\n", err)
+				cliout.Warnf("Warning: conflict resolution failed: %v", err)
 			}
 		} else {
 			printlnQuietAware("Already up to date")
@@ -86,9 +87,9 @@ var syncCmd = &cobra.Command{
 
 		conflictFiles := findConflictFiles(vaultDir)
 		if len(conflictFiles) > 0 {
-			fmt.Fprintf(os.Stderr, "Warning: %d conflict file(s) created:\n", len(conflictFiles))
+			cliout.Warnf("Warning: %d conflict file(s) created:", len(conflictFiles))
 			for _, f := range conflictFiles {
-				fmt.Fprintf(os.Stderr, "  %s\n", f)
+				cliout.Warnf("  %s", f)
 			}
 		}
 
