@@ -21,7 +21,7 @@ import (
 	vaultconfig "github.com/danieljustus/symaira-vault/internal/config"
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
-	"github.com/danieljustus/symaira-vault/internal/pathutil"
+	"github.com/danieljustus/symaira-vault/internal/fsutil"
 	"github.com/danieljustus/symaira-vault/internal/vault/taint"
 )
 
@@ -133,7 +133,7 @@ func validateRawEntryPath(path string) error {
 	path = strings.TrimSpace(path)
 
 	// Use centralized path validation from pathutil
-	if err := pathutil.ValidatePath(path); err != nil {
+	if err := fsutil.ValidatePath(path); err != nil {
 		return fmt.Errorf("entry path %q: %w", path, err)
 	}
 

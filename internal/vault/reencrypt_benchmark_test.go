@@ -9,7 +9,7 @@ import (
 	"filippo.io/age"
 
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
-	"github.com/danieljustus/symaira-vault/internal/fileutil"
+	"github.com/danieljustus/symaira-vault/internal/fsutil"
 )
 
 func BenchmarkReencryptAll(b *testing.B) {
@@ -43,7 +43,7 @@ func BenchmarkReencryptAll(b *testing.B) {
 		}
 
 		filePath := filepath.Join(entriesDir, fmt.Sprintf("test%d.age", i))
-		if err := fileutil.AtomicWriteFile(filePath, ciphertext, 0o600); err != nil {
+		if err := fsutil.AtomicWriteFile(filePath, ciphertext, 0o600); err != nil {
 			b.Fatalf("write file: %v", err)
 		}
 	}

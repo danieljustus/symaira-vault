@@ -8,13 +8,13 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/danieljustus/symaira-vault/internal/pathutil"
+	"github.com/danieljustus/symaira-vault/internal/fsutil"
 )
 
 const backupSuffix = ".bak"
 
 func Install(agentName string, targetPath string, vars TemplateVars, force bool) error {
-	if pathutil.HasTraversal(targetPath) {
+	if fsutil.HasTraversal(targetPath) {
 		return fmt.Errorf("target path contains traversal: %s", targetPath)
 	}
 
@@ -63,7 +63,7 @@ func Install(agentName string, targetPath string, vars TemplateVars, force bool)
 }
 
 func Refresh(agentName string, targetPath string, vars TemplateVars) error {
-	if pathutil.HasTraversal(targetPath) {
+	if fsutil.HasTraversal(targetPath) {
 		return fmt.Errorf("target path contains traversal: %s", targetPath)
 	}
 
@@ -85,7 +85,7 @@ func Refresh(agentName string, targetPath string, vars TemplateVars) error {
 }
 
 func Uninstall(targetPath string) error {
-	if pathutil.HasTraversal(targetPath) {
+	if fsutil.HasTraversal(targetPath) {
 		return fmt.Errorf("target path contains traversal: %s", targetPath)
 	}
 

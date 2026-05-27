@@ -6,7 +6,7 @@ import (
 	"os"
 	"syscall"
 
-	"github.com/danieljustus/symaira-vault/internal/fileutil"
+	"github.com/danieljustus/symaira-vault/internal/fsutil"
 )
 
 // SafeWriteFile atomically writes data to path, rejecting symlink and
@@ -25,7 +25,7 @@ func SafeWriteFile(path string, data []byte, perm os.FileMode) error {
 		return &os.PathError{Op: "lstat", Path: path, Err: err}
 	}
 
-	return fileutil.AtomicWriteFile(path, data, perm)
+	return fsutil.AtomicWriteFile(path, data, perm)
 }
 
 func SafeRemove(path string) error {

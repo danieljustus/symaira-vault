@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/danieljustus/symaira-vault/internal/envfilter"
+	"github.com/danieljustus/symaira-vault/internal/secrets"
 )
 
 // ContextProvider gathers runtime context for policy evaluation.
@@ -61,7 +61,7 @@ func (cp *ContextProvider) getGitBranch(workingDir string) string {
 	}
 
 	cmd := exec.Command("git", "-C", workingDir, "rev-parse", "--abbrev-ref", "HEAD")
-	cmd.Env = envfilter.FilterEnv(envfilter.DefaultWhitelist())
+	cmd.Env = secrets.FilterEnv(secrets.DefaultWhitelist())
 	out, err := cmd.Output()
 	if err != nil {
 		return ""

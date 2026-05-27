@@ -11,9 +11,8 @@ import (
 
 	vaultconfig "github.com/danieljustus/symaira-vault/internal/config"
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
-	"github.com/danieljustus/symaira-vault/internal/fileutil"
+	"github.com/danieljustus/symaira-vault/internal/fsutil"
 	"github.com/danieljustus/symaira-vault/internal/git"
-	"github.com/danieljustus/symaira-vault/internal/pathutil"
 )
 
 const vaultFormatVersion2 = 2
@@ -28,7 +27,7 @@ var (
 )
 
 func validateVaultDir(vaultDir string) error {
-	if pathutil.HasTraversal(vaultDir) {
+	if fsutil.HasTraversal(vaultDir) {
 		return ErrVaultDirEscapes
 	}
 	return nil
@@ -61,7 +60,7 @@ func Init(vaultDir string, identity *age.X25519Identity, cfg *vaultconfig.Config
 	if err != nil {
 		return fmt.Errorf("marshal config: %w", err)
 	}
-	if writeErr := fileutil.AtomicWriteFile(cfgPath, configData, 0o600); writeErr != nil {
+	if writeErr := fsutil.AtomicWriteFile(cfgPath, configData, 0o600); writeErr != nil {
 		return fmt.Errorf("write config: %w", writeErr)
 	}
 	identityData := []byte(identity.String())
@@ -69,7 +68,7 @@ func Init(vaultDir string, identity *age.X25519Identity, cfg *vaultconfig.Config
 	if err != nil {
 		return fmt.Errorf("encrypt identity: %w", err)
 	}
-	if err := fileutil.AtomicWriteFile(filepath.Join(vaultDir, "identity.age"), ciphertext, 0o600); err != nil {
+	if err := fsutil.AtomicWriteFile(filepath.Join(vaultDir, "identity.age"), ciphertext, 0o600); err != nil {
 		return fmt.Errorf("write identity: %w", err)
 	}
 	return nil
@@ -207,7 +206,7 @@ func InitWithPassphrase(vaultDir string, passphrase []byte, cfg *vaultconfig.Con
 	if err != nil {
 		return nil, fmt.Errorf("marshal config: %w", err)
 	}
-	if err := fileutil.AtomicWriteFile(cfgPath, configData, 0o600); err != nil {
+	if err := fsutil.AtomicWriteFile(cfgPath, configData, 0o600); err != nil {
 		return nil, fmt.Errorf("write config: %w", err)
 	}
 	identityPath := filepath.Join(vaultDir, "identity.age")

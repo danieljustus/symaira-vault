@@ -8,7 +8,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/danieljustus/symaira-vault/internal/envfilter"
+	"github.com/danieljustus/symaira-vault/internal/secrets"
 )
 
 // defaultCapsLockDetector probes xset for the X11 LED state. On Wayland (no
@@ -20,7 +20,7 @@ func defaultCapsLockDetector() bool {
 		return false
 	}
 	cmd := exec.Command("xset", "q")
-	envfilter.PrepareCmd(cmd)
+	secrets.PrepareCmd(cmd)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	if err := cmd.Run(); err != nil {

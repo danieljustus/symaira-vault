@@ -10,7 +10,7 @@ import (
 	"filippo.io/age"
 
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
-	"github.com/danieljustus/symaira-vault/internal/fileutil"
+	"github.com/danieljustus/symaira-vault/internal/fsutil"
 )
 
 const defaultReencryptWorkers = 4
@@ -133,7 +133,7 @@ func reencryptFile(path string, identity *age.X25519Identity, recipients []*age.
 		return fmt.Errorf("encrypt: %w", err)
 	}
 
-	if err := fileutil.AtomicWriteFile(path, ciphertext, 0o600); err != nil {
+	if err := fsutil.AtomicWriteFile(path, ciphertext, 0o600); err != nil {
 		return fmt.Errorf("atomic write: %w", err)
 	}
 

@@ -16,7 +16,7 @@ import (
 	"filippo.io/age"
 
 	openpasscrypto "github.com/danieljustus/symaira-vault/internal/crypto"
-	"github.com/danieljustus/symaira-vault/internal/fileutil"
+	"github.com/danieljustus/symaira-vault/internal/fsutil"
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 )
 
@@ -133,7 +133,7 @@ func (s *ShareStore) Save() error {
 		return fmt.Errorf("marshal share store: %w", err)
 	}
 
-	if err := fileutil.AtomicWriteFile(s.path, append(data, '\n'), 0o600); err != nil {
+	if err := fsutil.AtomicWriteFile(s.path, append(data, '\n'), 0o600); err != nil {
 		return fmt.Errorf("write share store: %w", err)
 	}
 	return nil

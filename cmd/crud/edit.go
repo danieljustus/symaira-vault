@@ -11,7 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/danieljustus/symaira-vault/internal/envfilter"
+	"github.com/danieljustus/symaira-vault/internal/secrets"
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
@@ -84,7 +84,7 @@ The editor is determined by the --editor flag or EDITOR environment variable (de
 
 			//#nosec G204 -- editor path validated via exec.LookPath above
 			editorCmd := exec.Command(editor, tmpFile.Name())
-			envfilter.PrepareCmd(editorCmd)
+			secrets.PrepareCmd(editorCmd)
 			editorCmd.Stdin = os.Stdin
 			editorCmd.Stdout = os.Stdout
 			editorCmd.Stderr = os.Stderr

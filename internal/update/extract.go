@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/danieljustus/symaira-vault/internal/pathutil"
+	"github.com/danieljustus/symaira-vault/internal/fsutil"
 )
 
 var (
@@ -34,7 +34,7 @@ const maxExtractSize = 100 * 1024 * 1024 // 100 MB
 // for parent-directory traversal segments and verifies that the cleaned,
 // resolved path is a child of destDir.
 func safeArchivePath(destDir, entryPath string) (string, error) {
-	if pathutil.HasTraversal(entryPath) {
+	if fsutil.HasTraversal(entryPath) {
 		return "", fmt.Errorf("%w: %q", ErrPathTraversal, entryPath)
 	}
 

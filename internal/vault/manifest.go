@@ -13,7 +13,7 @@ import (
 	"filippo.io/age"
 
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
-	"github.com/danieljustus/symaira-vault/internal/fileutil"
+	"github.com/danieljustus/symaira-vault/internal/fsutil"
 )
 
 // ManifestEntry stores integrity metadata for a single vault entry.
@@ -93,7 +93,7 @@ func writeManifest(vaultDir string, m *Manifest, identity *age.X25519Identity) e
 	}
 
 	manifestPath := filepath.Join(vaultDir, manifestFileName)
-	if err := fileutil.AtomicWriteFile(manifestPath, ciphertext, 0o600); err != nil {
+	if err := fsutil.AtomicWriteFile(manifestPath, ciphertext, 0o600); err != nil {
 		return fmt.Errorf("write manifest: %w", err)
 	}
 

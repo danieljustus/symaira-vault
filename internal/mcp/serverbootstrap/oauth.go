@@ -18,7 +18,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/danieljustus/symaira-vault/internal/fileutil"
+	"github.com/danieljustus/symaira-vault/internal/fsutil"
 	"github.com/danieljustus/symaira-vault/internal/mcp/auth"
 	"github.com/danieljustus/symaira-vault/internal/mcp/server"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
@@ -309,7 +309,7 @@ func (s *oauthClientStore) Save() error {
 		return fmt.Errorf("marshal oauth client store: %w", err)
 	}
 
-	if err := fileutil.AtomicWriteFile(s.path, append(data, '\n'), 0o600); err != nil {
+	if err := fsutil.AtomicWriteFile(s.path, append(data, '\n'), 0o600); err != nil {
 		return fmt.Errorf("write oauth client store: %w", err)
 	}
 	return nil

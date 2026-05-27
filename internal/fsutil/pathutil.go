@@ -1,5 +1,5 @@
-// Package pathutil provides path validation and traversal detection utilities.
-package pathutil
+// Package fsutil provides path validation, traversal detection, and safe file I/O.
+package fsutil
 
 import (
 	"errors"

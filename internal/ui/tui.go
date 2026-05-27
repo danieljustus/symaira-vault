@@ -19,7 +19,7 @@ import (
 
 	clipboardapp "github.com/danieljustus/symaira-vault/internal/clipboard"
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
-	"github.com/danieljustus/symaira-vault/internal/envfilter"
+	"github.com/danieljustus/symaira-vault/internal/secrets"
 	render "github.com/danieljustus/symaira-vault/internal/ui/render"
 	theme "github.com/danieljustus/symaira-vault/internal/ui/theme"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
@@ -842,7 +842,7 @@ func editEntryCmd(vault *vaultpkg.Vault, path string) tea.Cmd {
 			return entryEditedMsg{path: path, err: editorErr}
 		}
 		cmd := exec.Command(editor, tmpPath) //#nosec G204 G702 -- editor path resolved via exec.LookPath above.
-		envfilter.PrepareCmd(cmd)
+		secrets.PrepareCmd(cmd)
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr

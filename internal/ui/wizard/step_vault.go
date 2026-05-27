@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/danieljustus/symaira-vault/internal/pathutil"
+	"github.com/danieljustus/symaira-vault/internal/fsutil"
 )
 
 // VaultPathStep lets the user confirm or change the vault directory.
@@ -70,7 +70,7 @@ func (s *VaultPathStep) validate() error {
 	if v == "" {
 		return fmt.Errorf("vault path must not be empty")
 	}
-	if pathutil.HasTraversal(v) {
+	if fsutil.HasTraversal(v) {
 		return fmt.Errorf("invalid path (traversal detected)")
 	}
 	if !filepath.IsAbs(v) {

@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/danieljustus/symaira-vault/internal/envfilter"
+	"github.com/danieljustus/symaira-vault/internal/secrets"
 )
 
 // defaultCaptureActiveWindow shells out to PowerShell to read the foreground
@@ -27,7 +27,7 @@ if ($p) { $p.ProcessName }`
 
 func defaultCaptureActiveWindow() (string, error) {
 	cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", foregroundProbe)
-	envfilter.PrepareCmd(cmd)
+	secrets.PrepareCmd(cmd)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	if err := cmd.Run(); err != nil {

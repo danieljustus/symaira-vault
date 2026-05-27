@@ -16,7 +16,7 @@ import (
 	"text/template"
 
 	"github.com/danieljustus/symaira-vault/internal/config"
-	"github.com/danieljustus/symaira-vault/internal/envfilter"
+	"github.com/danieljustus/symaira-vault/internal/secrets"
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 )
 
@@ -25,7 +25,7 @@ import (
 // launchctl and systemctl.
 func runFilteredCmd(name string, args ...string) *exec.Cmd {
 	cmd := exec.Command(name, args...)
-	envfilter.PrepareCmd(cmd)
+	secrets.PrepareCmd(cmd)
 	return cmd
 }
 

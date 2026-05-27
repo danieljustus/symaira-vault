@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/danieljustus/symaira-vault/internal/masking"
+	"github.com/danieljustus/symaira-vault/internal/mcp/masking"
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 	"github.com/danieljustus/symaira-vault/internal/mcp/apitemplates"
 	"github.com/danieljustus/symaira-vault/internal/metrics"

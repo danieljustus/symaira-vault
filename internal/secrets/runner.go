@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"os/exec"
 	"time"
-
-	"github.com/danieljustus/symaira-vault/internal/envfilter"
 )
 
 // RunResult contains the result of a command execution.
@@ -60,7 +58,7 @@ func RunCommand(opts RunOptions) (*RunResult, error) {
 	// This prevents leaking sensitive process env vars (API keys, OPENPASS_*, AWS_*,
 	// etc.) to child processes. Only the DefaultWhitelist vars are passed through.
 	// Later entries override earlier ones for the same key.
-	cmd.Env = envfilter.FilterEnv(envfilter.DefaultWhitelist())
+	cmd.Env = FilterEnv(DefaultWhitelist())
 	for k, v := range opts.Env {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}

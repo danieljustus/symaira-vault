@@ -8,7 +8,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/danieljustus/symaira-vault/internal/envfilter"
+	"github.com/danieljustus/symaira-vault/internal/secrets"
 )
 
 func defaultCaptureActiveWindow() (string, error) {
@@ -22,7 +22,7 @@ func defaultCaptureActiveWindow() (string, error) {
 	// "getactivewindow getwindowclassname" returns the WM_CLASS, which is the
 	// most stable identifier for "the same application" across re-focus events.
 	cmd := exec.Command(path, "getactivewindow", "getwindowclassname") // #nosec G204 — path resolved via exec.LookPath for a specific trusted utility
-	envfilter.PrepareCmd(cmd)
+	secrets.PrepareCmd(cmd)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	if err := cmd.Run(); err != nil {
