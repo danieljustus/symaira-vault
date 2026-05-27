@@ -109,6 +109,8 @@
 package vault
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -133,10 +135,12 @@ type Match struct {
 
 // listCacheEntry holds cached List results with invalidation metadata.
 type listCacheEntry struct {
-	paths        []string
-	createdAt    time.Time
-	entriesMtime time.Time
-	vaultMtime   time.Time
+	paths          []string
+	createdAt      time.Time
+	entriesMtime   time.Time
+	vaultMtime     time.Time
+	entriesDirHash string
+	vaultDirHash   string
 }
 
 // listCache provides TTL-cached path listings to avoid repetitive directory walks.
@@ -160,6 +164,30 @@ func getDirMtime(dir string) time.Time {
 	return info.ModTime()
 }
 
+func computeDirHash(dir string) string {
+	h := sha256.New()
+	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(dir, path)
+		if err != nil {
+			return nil
+		}
+		h.Write([]byte(rel))
+		info, err := d.Info()
+		if err != nil {
+			return nil
+		}
+		_, _ = fmt.Fprintf(h, "%d|%d", info.Size(), info.ModTime().UnixNano())
+		return nil
+	})
+	return hex.EncodeToString(h.Sum(nil))
+}
+
 // cachedList returns cached paths if valid, or nil if cache miss / expired / invalidated.
 func cachedList(vaultDir string) []string {
 	listCache.mu.RLock()
@@ -178,6 +206,12 @@ func cachedList(vaultDir string) []string {
 	if !getDirMtime(vaultDir).Equal(entry.vaultMtime) {
 		return nil
 	}
+	if computeDirHash(entriesDir(vaultDir)) != entry.entriesDirHash {
+		return nil
+	}
+	if computeDirHash(vaultDir) != entry.vaultDirHash {
+		return nil
+	}
 	return entry.paths
 }
 
@@ -185,10 +219,12 @@ func cachedList(vaultDir string) []string {
 func storeListCache(vaultDir string, paths []string) {
 	listCache.mu.Lock()
 	listCache.items[vaultDir] = listCacheEntry{
-		paths:        append([]string(nil), paths...),
-		createdAt:    time.Now(),
-		entriesMtime: getDirMtime(entriesDir(vaultDir)),
-		vaultMtime:   getDirMtime(vaultDir),
+		paths:          append([]string(nil), paths...),
+		createdAt:      time.Now(),
+		entriesMtime:   getDirMtime(entriesDir(vaultDir)),
+		vaultMtime:     getDirMtime(vaultDir),
+		entriesDirHash: computeDirHash(entriesDir(vaultDir)),
+		vaultDirHash:   computeDirHash(vaultDir),
 	}
 	listCache.mu.Unlock()
 }
@@ -223,11 +259,13 @@ func InvalidateListCache(vaultDir string) {
 // Unlike listCacheEntry, it also stores decrypted entry data so that
 // FindWithOptions can reuse entries already decrypted during listing.
 type pseudonymizedCacheEntry struct {
-	paths        []string
-	entries      map[string]map[string]any // path -> decrypted entry data
-	createdAt    time.Time
-	entriesMtime time.Time
-	vaultMtime   time.Time
+	paths          []string
+	entries        map[string]map[string]any // path -> decrypted entry data
+	createdAt      time.Time
+	entriesMtime   time.Time
+	vaultMtime     time.Time
+	entriesDirHash string
+	vaultDirHash   string
 }
 
 // pseudonymizedCache provides TTL-cached pseudonymized listings keyed by
@@ -267,6 +305,12 @@ func cachedPseudonymizedList(vaultDir string, identity *age.X25519Identity) []st
 	if !getDirMtime(vaultDir).Equal(entry.vaultMtime) {
 		return nil
 	}
+	if computeDirHash(entriesDir(vaultDir)) != entry.entriesDirHash {
+		return nil
+	}
+	if computeDirHash(vaultDir) != entry.vaultDirHash {
+		return nil
+	}
 	return entry.paths
 }
 
@@ -289,6 +333,12 @@ func cachedPseudonymizedEntry(vaultDir string, identity *age.X25519Identity, pat
 	if !getDirMtime(vaultDir).Equal(entry.vaultMtime) {
 		return nil
 	}
+	if computeDirHash(entriesDir(vaultDir)) != entry.entriesDirHash {
+		return nil
+	}
+	if computeDirHash(vaultDir) != entry.vaultDirHash {
+		return nil
+	}
 	return entry.entries[path]
 }
 
@@ -303,11 +353,13 @@ func storePseudonymizedListCache(vaultDir string, identity *age.X25519Identity, 
 	key := pseudonymizedCacheKey(vaultDir, identity)
 	pseudonymizedCache.mu.Lock()
 	pseudonymizedCache.items[key] = pseudonymizedCacheEntry{
-		paths:        append([]string(nil), paths...),
-		entries:      entries,
-		createdAt:    time.Now(),
-		entriesMtime: getDirMtime(entriesDir(vaultDir)),
-		vaultMtime:   getDirMtime(vaultDir),
+		paths:          append([]string(nil), paths...),
+		entries:        entries,
+		createdAt:      time.Now(),
+		entriesMtime:   getDirMtime(entriesDir(vaultDir)),
+		vaultMtime:     getDirMtime(vaultDir),
+		entriesDirHash: computeDirHash(entriesDir(vaultDir)),
+		vaultDirHash:   computeDirHash(vaultDir),
 	}
 	pseudonymizedCache.mu.Unlock()
 }
