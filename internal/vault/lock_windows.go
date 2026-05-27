@@ -57,7 +57,6 @@ func AcquireWriteLock(vaultDir string, timeout time.Duration) (*os.File, error) 
 	deadline := time.Now().Add(timeout)
 	var overlapped windows.Overlapped
 	for {
-		var overlapped windows.Overlapped
 		err := windows.LockFileEx(
 			handle,
 			windows.LOCKFILE_EXCLUSIVE_LOCK|windows.LOCKFILE_FAIL_IMMEDIATELY,
