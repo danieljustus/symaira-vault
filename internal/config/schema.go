@@ -82,6 +82,18 @@ type LoggingConfig struct {
 	Format string `yaml:"format,omitempty"`
 }
 
+// SecurityConfig holds security-related configuration.
+type SecurityConfig struct {
+	DisableEnvPassphrase bool `yaml:"disable_env_passphrase,omitempty"`
+}
+
+// defaultSecurityConfig returns the default security configuration.
+func defaultSecurityConfig() SecurityConfig {
+	return SecurityConfig{
+		DisableEnvPassphrase: false,
+	}
+}
+
 // Profile holds a named vault profile configuration.
 type Profile struct {
 	VaultPath string `yaml:"vault,omitempty"`
