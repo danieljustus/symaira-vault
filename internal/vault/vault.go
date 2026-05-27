@@ -155,21 +155,35 @@ func OpenWithPassphrase(vaultDir string, passphrase []byte) (*Vault, error) {
 		vaultcrypto.Wipe(migrationPassphrase)
 		return nil, err
 	}
-	if format != "argon2id" && v.Config != nil && v.Config.Vault != nil &&
-		v.Config.Vault.FormatVersion < vaultFormatVersion2 {
-		params := vaultcrypto.DefaultArgon2idParams()
-		if migrateErr := vaultcrypto.SaveIdentityWithArgon2id(identity, identityPath, migrationPassphrase, params); migrateErr == nil {
-			v.Config.Vault.FormatVersion = vaultFormatVersion2
-			v.Config.Vault.ScryptWorkFactor = 0
-			if cfgPath := filepath.Join(vaultDir, "config.yaml"); cfgPath != "" {
-				_ = v.Config.SaveTo(cfgPath)
-			}
-		} else {
-			v.NeedsMigration = true
-		}
+	if format != "argon2id" {
+		_ = MigrateKDF(vaultDir, identity, migrationPassphrase, v)
 	}
 	vaultcrypto.Wipe(migrationPassphrase)
 	return v, nil
+}
+
+// MigrateKDF re-encrypts the vault identity from scrypt to argon2id when the
+// vault format version indicates an older KDF. It updates the config and marks
+// the vault as migrated on success, or sets NeedsMigration on failure.
+func MigrateKDF(vaultDir string, identity *age.X25519Identity, passphrase []byte, v *Vault) error {
+	if v == nil || v.Config == nil || v.Config.Vault == nil {
+		return nil
+	}
+	if v.Config.Vault.FormatVersion >= vaultFormatVersion2 {
+		return nil
+	}
+	identityPath := filepath.Join(vaultDir, "identity.age")
+	params := vaultcrypto.DefaultArgon2idParams()
+	if migrateErr := vaultcrypto.SaveIdentityWithArgon2id(identity, identityPath, cloneBytes(passphrase), params); migrateErr == nil {
+		v.Config.Vault.FormatVersion = vaultFormatVersion2
+		v.Config.Vault.ScryptWorkFactor = 0
+		if cfgPath := filepath.Join(vaultDir, "config.yaml"); cfgPath != "" {
+			_ = v.Config.SaveTo(cfgPath)
+		}
+	} else {
+		v.NeedsMigration = true
+	}
+	return nil
 }
 
 func OpenWithCachedIdentity(vaultDir string, identity *age.X25519Identity) (*Vault, error) {
@@ -358,4 +372,37 @@ func cloneBytes(b []byte) []byte {
 	clone := make([]byte, len(b))
 	copy(clone, b)
 	return clone
+}
+
+// List returns all entry paths in this vault, optionally filtered by prefix.
+// Uses the vault's identity for pseudonymized listings instead of global state.
+func (v *Vault) List(prefix string) ([]string, error) {
+	if v == nil {
+		return nil, errors.New("vault is nil")
+	}
+	cfg, err := loadVaultConfig(v.Dir)
+	if err != nil {
+		return nil, err
+	}
+	if isPseudonymizeEnabled(cfg) {
+		return listPseudonymizedWithIdentity(v.Dir, prefix, v.Identity)
+	}
+	return List(v.Dir, prefix)
+}
+
+// FindWithOptions searches this vault's entries using the vault's identity
+// instead of global state.
+func (v *Vault) FindWithOptions(query string, opts FindOptions) ([]Match, error) {
+	if v == nil {
+		return nil, errors.New("vault is nil")
+	}
+	return findWithOptionsIdentity(v.Dir, query, opts, v.Identity)
+}
+
+// ReadEntry reads a single entry from this vault using the vault's identity.
+func (v *Vault) ReadEntry(path string) (*Entry, error) {
+	if v == nil {
+		return nil, errors.New("vault is nil")
+	}
+	return ReadEntry(v.Dir, path, v.Identity)
 }

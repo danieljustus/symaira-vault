@@ -1576,8 +1576,8 @@ func TestValidate_EmptyVaultDirFails(t *testing.T) {
 	if !strings.Contains(errStr, "vaultDir") {
 		t.Errorf("error = %q, should mention vaultDir", errStr)
 	}
-	if !strings.Contains(errStr, "OPENPASS_VAULT") {
-		t.Errorf("error = %q, should mention OPENPASS_VAULT environment variable", errStr)
+	if !strings.Contains(errStr, "SYMVAULT_VAULT") {
+		t.Errorf("error = %q, should mention SYMVAULT_VAULT environment variable", errStr)
 	}
 	if !strings.Contains(errStr, "config.yaml") {
 		t.Errorf("error = %q, should mention config.yaml", errStr)
@@ -1680,8 +1680,8 @@ func TestValidate_MultipleErrorsAggregated(t *testing.T) {
 	if !strings.Contains(errStr, "defaultAgent") {
 		t.Error("missing defaultAgent error")
 	}
-	if !strings.Contains(errStr, "OPENPASS_VAULT") {
-		t.Error("hint for vaultDir should mention OPENPASS_VAULT")
+	if !strings.Contains(errStr, "SYMVAULT_VAULT") {
+		t.Error("hint for vaultDir should mention SYMVAULT_VAULT")
 	}
 }
 

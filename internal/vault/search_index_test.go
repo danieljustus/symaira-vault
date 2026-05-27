@@ -645,7 +645,7 @@ func TestEncryptedIndexFilterPathsUsingIndexLoadsFromDisk(t *testing.T) {
 	}
 
 	// filterPathsUsingIndex should load from disk
-	results := filterPathsUsingIndex(vaultDir, []string{"github.com/user"}, "alice")
+	results := filterPathsUsingIndex(vaultDir, []string{"github.com/user"}, "alice", nil)
 	if len(results) != 1 {
 		t.Fatalf("filterPathsUsingIndex() = %d results, want 1", len(results))
 	}

@@ -133,9 +133,9 @@ install: build
 # Generate shell completions
 completions: build
 	@mkdir -p completions
-	./$(BINARY_NAME) completion bash > completions/openpass.bash
-	./$(BINARY_NAME) completion zsh > completions/openpass.zsh
-	./$(BINARY_NAME) completion fish > completions/openpass.fish
+	./$(BINARY_NAME) completion bash > completions/symvault.bash
+	./$(BINARY_NAME) completion zsh > completions/symvault.zsh
+	./$(BINARY_NAME) completion fish > completions/symvault.fish
 
 # Generate manual pages
 manpages: build
