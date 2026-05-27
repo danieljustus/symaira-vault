@@ -13,6 +13,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
+
 	"github.com/danieljustus/symaira-vault/internal/audit"
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	cryptopkg "github.com/danieljustus/symaira-vault/internal/crypto"
@@ -108,13 +110,13 @@ Optionally re-encrypts all entries with the new passphrase.`,
 
 		ttl := cli.ConfiguredSessionTTL(v, 0)
 		if cacheErr := cli.SessionSavePassphrase(vaultDir, newPassphrase, ttl); cacheErr != nil {
-			fmt.Fprintf(os.Stderr, "Warning: could not update session cache: %v\n", cacheErr)
+			cliout.Warnf("Warning: could not update session cache: %v", cacheErr)
 		}
 		_ = cli.SessionSaveIdentity(vaultDir, v.Identity.String(), ttl)
 
 		if cfg.EffectiveAuthMethod() == configpkg.AuthMethodTouchID {
 			if bioErr := session.SaveBiometricPassphrase(context.Background(), vaultDir, newPassphrase); bioErr != nil {
-				fmt.Fprintf(os.Stderr, "Warning: could not update Touch ID unlock: %v\n", bioErr)
+				cliout.Warnf("Warning: could not update Touch ID unlock: %v", bioErr)
 			}
 		}
 
@@ -124,13 +126,13 @@ Optionally re-encrypts all entries with the new passphrase.`,
 		}
 
 		if commitErr := v.AutoCommit("Rotate vault passphrase"); commitErr != nil {
-			fmt.Fprintf(os.Stderr, "Warning: git auto-commit failed: %v\n", commitErr)
+			cliout.Warnf("Warning: git auto-commit failed: %v", commitErr)
 		}
 
 		auditLog, auditErr := audit.New("symvault", vaultDir)
 		if auditErr == nil {
 			if err := auditLog.LogEntry(audit.LogEntry{Action: "rotate-passphrase", OK: true, Timestamp: time.Now().UTC().Format(time.RFC3339)}); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: audit log write failed: %v\n", err)
+				cliout.Warnf("Warning: audit log write failed: %v", err)
 			}
 			_ = auditLog.Close()
 		}

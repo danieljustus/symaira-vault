@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
@@ -68,7 +69,7 @@ but should NOT be used on shared machines (visible in process listings).`,
 			return errorspkg.NewCLIError(errorspkg.ExitLocked, "session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with OPENPASS_PASSPHRASE or use a build with OS keyring support", nil)
 		}
 
-		fmt.Fprintf(os.Stderr, "Vault unlocked (session TTL: %s)\n", effectiveTTL)
+		cliout.Hintf("Vault unlocked (session TTL: %s)", effectiveTTL)
 		return nil
 	},
 }

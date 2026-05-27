@@ -6,6 +6,8 @@ import (
 	"os"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 )
 
 type Printer interface {
@@ -75,7 +77,7 @@ func PrintJSON(v interface{}) {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetEscapeHTML(false)
 	if err := enc.Encode(v); err != nil {
-		fmt.Fprintf(os.Stderr, "JSON encoding error: %v\n", err)
+		cliout.Errorf("JSON encoding error: %v", err)
 	}
 }
 
@@ -88,7 +90,7 @@ func WantJSONOutput(legacyJSON bool) bool {
 	if legacyJSON {
 		if !jsonDeprecationWarned {
 			jsonDeprecationWarned = true
-			fmt.Fprintln(os.Stderr, "Note: --json is deprecated; prefer --output=json (works on all commands).")
+			cliout.Warnf("Note: --json is deprecated; prefer --output=json (works on all commands).")
 		}
 		return true
 	}
