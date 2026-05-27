@@ -113,12 +113,12 @@ var initCmd = &cobra.Command{
 
 		cli.PrintQuietAware("Vault initialized at %s\n", vaultDir)
 		cli.PrintQuietAware("Public key: %s\n", identity.Recipient().String())
-		printPostInitHints()
+		printPostInitHints(vaultDir)
 		return nil
 	},
 }
 
-func printPostInitHints() {
+func printPostInitHints(vaultDir string) {
 	if cli.QuietMode {
 		return
 	}
@@ -128,6 +128,12 @@ func printPostInitHints() {
 	cli.PrintlnQuietAware("  2. Create a backup:         symvault backup")
 	cli.PrintlnQuietAware("  3. Verify the setup:        symvault doctor")
 	cli.PrintlnQuietAware("  4. (Optional) full wizard:  symvault setup   # adds sync, recipients, agents")
+	cli.PrintlnQuietAware("")
+	cli.PrintlnQuietAware("Tip: See config.yaml.example for agent profiles, clipboard timeout, and other")
+	cli.PrintlnQuietAware("     settings — copy it to one of these locations as a starting point:")
+	cli.PrintlnQuietAware("     - Vault config:  " + filepath.Join(vaultDir, "config.yaml"))
+	cli.PrintlnQuietAware("     - Global config: ~/.symvault/config.yaml")
+	cli.PrintlnQuietAware("     https://github.com/danieljustus/symaira-vault/blob/main/config.yaml.example")
 	cli.PrintlnQuietAware("")
 	cli.PrintlnQuietAware("Tip: 'symvault --help' lists all commands. Use 'symvault <cmd> --help' for details.")
 }
