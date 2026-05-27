@@ -155,21 +155,35 @@ func OpenWithPassphrase(vaultDir string, passphrase []byte) (*Vault, error) {
 		vaultcrypto.Wipe(migrationPassphrase)
 		return nil, err
 	}
-	if format != "argon2id" && v.Config != nil && v.Config.Vault != nil &&
-		v.Config.Vault.FormatVersion < vaultFormatVersion2 {
-		params := vaultcrypto.DefaultArgon2idParams()
-		if migrateErr := vaultcrypto.SaveIdentityWithArgon2id(identity, identityPath, migrationPassphrase, params); migrateErr == nil {
-			v.Config.Vault.FormatVersion = vaultFormatVersion2
-			v.Config.Vault.ScryptWorkFactor = 0
-			if cfgPath := filepath.Join(vaultDir, "config.yaml"); cfgPath != "" {
-				_ = v.Config.SaveTo(cfgPath)
-			}
-		} else {
-			v.NeedsMigration = true
-		}
+	if format != "argon2id" {
+		_ = MigrateKDF(vaultDir, identity, migrationPassphrase, v)
 	}
 	vaultcrypto.Wipe(migrationPassphrase)
 	return v, nil
+}
+
+// MigrateKDF re-encrypts the vault identity from scrypt to argon2id when the
+// vault format version indicates an older KDF. It updates the config and marks
+// the vault as migrated on success, or sets NeedsMigration on failure.
+func MigrateKDF(vaultDir string, identity *age.X25519Identity, passphrase []byte, v *Vault) error {
+	if v == nil || v.Config == nil || v.Config.Vault == nil {
+		return nil
+	}
+	if v.Config.Vault.FormatVersion >= vaultFormatVersion2 {
+		return nil
+	}
+	identityPath := filepath.Join(vaultDir, "identity.age")
+	params := vaultcrypto.DefaultArgon2idParams()
+	if migrateErr := vaultcrypto.SaveIdentityWithArgon2id(identity, identityPath, cloneBytes(passphrase), params); migrateErr == nil {
+		v.Config.Vault.FormatVersion = vaultFormatVersion2
+		v.Config.Vault.ScryptWorkFactor = 0
+		if cfgPath := filepath.Join(vaultDir, "config.yaml"); cfgPath != "" {
+			_ = v.Config.SaveTo(cfgPath)
+		}
+	} else {
+		v.NeedsMigration = true
+	}
+	return nil
 }
 
 func OpenWithCachedIdentity(vaultDir string, identity *age.X25519Identity) (*Vault, error) {
