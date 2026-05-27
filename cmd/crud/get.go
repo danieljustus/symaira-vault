@@ -16,6 +16,7 @@ import (
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 	"github.com/danieljustus/symaira-vault/internal/ui/render"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 	"github.com/danieljustus/symaira-vault/internal/vault/taint"
@@ -114,9 +115,9 @@ var getCmd = &cobra.Command{
 						return fmt.Errorf("cannot read entry: %w", err)
 					}
 				default:
-					fmt.Fprintln(os.Stderr, "Multiple matches:")
+					cliout.Warnf("Multiple matches:")
 					for _, m := range matches {
-						fmt.Fprintf(os.Stderr, "  %s\n", render.ForTerminal(taint.Wrap(m.Path, taint.Provenance{Source: "cli.path"})))
+						cliout.Warnf("  %s", render.ForTerminal(taint.Wrap(m.Path, taint.Provenance{Source: "cli.path"})))
 					}
 					return errorspkg.NewCLIError(errorspkg.ExitNotFound, fmt.Sprintf("ambiguous path: %s", path), errorspkg.ErrEntryNotFound)
 				}
@@ -156,7 +157,7 @@ var getCmd = &cobra.Command{
 					if clipErr := GetClipboard().Copy(strValue); clipErr != nil {
 						return fmt.Errorf("copy to clipboard: %w", clipErr)
 					}
-					fmt.Fprintln(os.Stderr, "[copied to clipboard]")
+					cliout.Hintf("[copied to clipboard]")
 
 					autoClearDuration := GetAutoClearDuration()
 					if autoClearDuration > 0 {
@@ -168,7 +169,7 @@ var getCmd = &cobra.Command{
 							close(cancelCh)
 							copied := strValue
 							if clearErr := GetClipboard().Copy(""); clearErr != nil {
-								fmt.Fprintf(os.Stderr, "Warning: failed to clear clipboard: %v\n", clearErr)
+								cliout.Warnf("Warning: failed to clear clipboard: %v", clearErr)
 							}
 							if verr := clipboardapp.VerifyCleared(copied, GetClipboard().Read); verr != nil {
 								fmt.Fprintf(os.Stderr, "\rWarning: %v — consider disabling clipboard-history retention.\n", verr)
@@ -242,7 +243,7 @@ var getCmd = &cobra.Command{
 			if secret, algorithm, digits, period, hasTOTP := vaultpkg.ExtractTOTP(entry.Data); hasTOTP {
 				totpCode, err := vaultcrypto.GenerateTOTP(secret, algorithm, digits, period)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "\n[Warning: could not generate TOTP code: %v]\n", err)
+					cliout.Warnf("Warning: could not generate TOTP code: %v", err)
 				} else {
 					period := int64(totpCode.Period)
 					if period == 0 {

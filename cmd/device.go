@@ -20,6 +20,7 @@ import (
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 	"github.com/danieljustus/symaira-vault/internal/git"
 	"github.com/danieljustus/symaira-vault/internal/pairing"
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
@@ -82,7 +83,7 @@ for the new device.`,
 		}
 
 		if err := git.AutoCommitAndPush(vaultDir, fmt.Sprintf("Pairing token %s", token), v.Config.Git.AutoPush); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: could not auto-commit/push: %v\n", err)
+			cliout.Warnf("Warning: could not auto-commit/push: %v", err)
 		}
 
 		printQuietAware("\n=== Pairing Token ===\n")
@@ -123,7 +124,7 @@ to re-encrypt all entries for this new device.`,
 			return fmt.Errorf("vault already initialized at %s. Use a different --vault or remove the existing vault first", vaultDir)
 		}
 
-		fmt.Fprintf(os.Stderr, "Cloning vault from %s ...\n", remoteURL)
+		cliout.Hintf("Cloning vault from %s ...", remoteURL)
 		if _, err = gogit.PlainClone(vaultDir, false, &gogit.CloneOptions{
 			URL:      remoteURL,
 			Progress: os.Stderr,
@@ -142,7 +143,7 @@ to re-encrypt all entries for this new device.`,
 			return fmt.Errorf("invalid pairing file: %w", err)
 		}
 
-		fmt.Fprintf(os.Stderr, "Pairing with device (public key: %s)\n", truncatePubkey(pf.PublicKey))
+		cliout.Hintf("Pairing with device (public key: %s)", truncatePubkey(pf.PublicKey))
 
 		passphrase, err := cli.ReadHiddenInput("Enter passphrase for this device (minimum 12 characters): ", nil)
 		if err != nil {
@@ -216,7 +217,7 @@ to re-encrypt all entries for this new device.`,
 			return fmt.Errorf("commit: %w", err)
 		}
 
-		fmt.Fprintf(os.Stderr, "\n=== Join Successful ===\n")
+		cliout.Hintf("=== Join Successful ===")
 		printQuietAware("\nYour public key: %s\n", myPubkey)
 		printQuietAware("Device name: %s\n\n", joinedData.Name)
 		printQuietAware("IMPORTANT: Entries cannot be decrypted yet.\n")
@@ -224,8 +225,8 @@ to re-encrypt all entries for this new device.`,
 		printQuietAware("  symvault device accept %s\n\n", token)
 
 		if err := git.Push(vaultDir); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: Could not push joined file: %v\n", err)
-			fmt.Fprintf(os.Stderr, "Push manually with: symvault git push\n")
+			cliout.Warnf("Warning: Could not push joined file: %v", err)
+			cliout.Hintf("Push manually with: symvault git push")
 		}
 
 		return nil
@@ -264,7 +265,7 @@ can decrypt them.`,
 			return fmt.Errorf("parse joined file: %w", err)
 		}
 
-		fmt.Fprintf(os.Stderr, "Accepting join from device: %s (public key: %s)\n", jf.Name, truncatePubkey(jf.PublicKey))
+		cliout.Hintf("Accepting join from device: %s (public key: %s)", jf.Name, truncatePubkey(jf.PublicKey))
 
 		rm := vaultpkg.NewRecipientsManager(vaultDir)
 		if err = rm.AddRecipient(jf.PublicKey); err != nil {
@@ -276,7 +277,7 @@ can decrypt them.`,
 			return fmt.Errorf("get recipients: %w", err)
 		}
 
-		fmt.Fprintf(os.Stderr, "Re-encrypting all entries for %d recipient(s)...\n", len(allRecipients))
+		cliout.Hintf("Re-encrypting all entries for %d recipient(s)...", len(allRecipients))
 		if err := vaultpkg.ReencryptAll(vaultDir, v.Identity, allRecipients); err != nil {
 			return fmt.Errorf("re-encrypt: %w", err)
 		}
@@ -284,7 +285,7 @@ can decrypt them.`,
 		_ = os.Remove(joinedPath)
 
 		if err := git.AutoCommitAndPush(vaultDir, fmt.Sprintf("Accept device join: %s", jf.Name), v.Config.Git.AutoPush); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: could not auto-commit/push: %v\n", err)
+			cliout.Warnf("Warning: could not auto-commit/push: %v", err)
 		}
 
 		printQuietAware("\n=== Pairing Complete ===\n")
@@ -519,7 +520,7 @@ request so the first device can accept it.`,
 			return fmt.Errorf("save joined file: %w", err)
 		}
 
-		fmt.Fprintf(os.Stderr, "\n=== Pairing Setup Complete ===\n")
+		cliout.Hintf("=== Pairing Setup Complete ===")
 		fmt.Fprintf(os.Stderr, "Your public key: %s\n", identity.Recipient().String())
 		fmt.Fprintf(os.Stderr, "Device name: %s\n\n", joinedData.Name)
 		fmt.Fprintf(os.Stderr, "IMPORTANT: Entries cannot be decrypted yet.\n")
@@ -613,14 +614,14 @@ access to all vault entries.`,
 		}
 
 		// Re-encrypt all entries without the revoked device
-		fmt.Fprintf(os.Stderr, "Re-encrypting all entries for %d recipient(s)...\n", len(allRecipients))
+		cliout.Hintf("Re-encrypting all entries for %d recipient(s)...", len(allRecipients))
 		if err := vaultpkg.ReencryptAll(vaultDir, v.Identity, allRecipients); err != nil {
 			return fmt.Errorf("re-encrypt: %w", err)
 		}
 
 		// Auto-commit and push
 		if err := git.AutoCommitAndPush(vaultDir, fmt.Sprintf("Revoke device: %s", deviceName), v.Config.Git.AutoPush); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: could not auto-commit/push: %v\n", err)
+			cliout.Warnf("Warning: could not auto-commit/push: %v", err)
 		}
 
 		printQuietAware("\nDevice %q has been revoked and all entries re-encrypted.\n", deviceName)

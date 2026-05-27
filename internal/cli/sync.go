@@ -1,13 +1,13 @@
 package cli
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	"github.com/danieljustus/symaira-vault/internal/git"
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 )
 
 func MaybeAutoPull(vaultDir string, cfg *configpkg.Config) {
@@ -46,19 +46,19 @@ func MaybeAutoPull(vaultDir string, cfg *configpkg.Config) {
 	}
 
 	if err := git.SetLastSyncTime(vaultDir); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not record sync time: %v\n", err)
+		cliout.Warnf("Warning: could not record sync time: %v", err)
 	}
 
 	hostname, _ := os.Hostname()
 	if err := git.ResolveConflicts(vaultDir, hostname); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: conflict resolution failed: %v\n", err)
+		cliout.Warnf("Warning: conflict resolution failed: %v", err)
 	}
 
 	conflictFiles := findConflictFiles(vaultDir)
 	if len(conflictFiles) > 0 {
-		fmt.Fprintf(os.Stderr, "Warning: %d conflict file(s) detected after auto-pull:\n", len(conflictFiles))
+		cliout.Warnf("Warning: %d conflict file(s) detected after auto-pull:", len(conflictFiles))
 		for _, f := range conflictFiles {
-			fmt.Fprintf(os.Stderr, "  %s\n", f)
+			cliout.Warnf("  %s", f)
 		}
 	}
 }
