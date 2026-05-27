@@ -75,7 +75,7 @@ func Load(agentName, vaultDir string) (*AgentContext, error) {
 		if err != nil {
 			return nil, fmt.Errorf("home dir: %w", err)
 		}
-		vaultDir = filepath.Join(home, ".symvault")
+		vaultDir = filepath.Join(home, config.DefaultVaultSubdir)
 	}
 
 	configPath := filepath.Join(vaultDir, "config.yaml")
