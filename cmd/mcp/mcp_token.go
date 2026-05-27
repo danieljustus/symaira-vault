@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 )
 
 var mcpCmd = &cobra.Command{
@@ -34,7 +34,7 @@ with subcommands new, list, revoke, and rotate.`,
 	Example: `  symvault agent token my-agent new`,
 	Hidden:  true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: symvault agent token <name> new/list/revoke\n")
+		cliout.Warnf("This command is deprecated in v4.0. Use: symvault agent token <name> new/list/revoke")
 		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
 			"This command is deprecated in v4.0. Use: symvault agent token <name> new/list/revoke", nil)
 	},
@@ -48,7 +48,7 @@ var TokenCreateCmd = &cobra.Command{
 Create scoped tokens via 'symvault agent token <name> new'.`,
 	Hidden: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: symvault agent token <name> new\n")
+		cliout.Warnf("This command is deprecated in v4.0. Use: symvault agent token <name> new")
 		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
 			"This command is deprecated in v4.0. Use: symvault agent token <name> new", nil)
 	},
@@ -62,7 +62,7 @@ var tokenListCmd = &cobra.Command{
 List tokens via 'symvault agent token <name> list'.`,
 	Hidden: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: symvault agent token <name> list\n")
+		cliout.Warnf("This command is deprecated in v4.0. Use: symvault agent token <name> list")
 		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
 			"This command is deprecated in v4.0. Use: symvault agent token <name> list", nil)
 	},
@@ -77,7 +77,7 @@ Revoke tokens via 'symvault agent token <name> revoke'.`,
 	Hidden: true,
 	Args:   cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: symvault agent token <name> revoke\n")
+		cliout.Warnf("This command is deprecated in v4.0. Use: symvault agent token <name> revoke")
 		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
 			"This command is deprecated in v4.0. Use: symvault agent token <name> revoke", nil)
 	},

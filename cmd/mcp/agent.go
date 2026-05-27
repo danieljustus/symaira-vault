@@ -15,6 +15,7 @@ import (
 
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 )
 
 var agentCmd = &cobra.Command{
@@ -44,7 +45,7 @@ agent profiles interactively.`,
 	Hidden: true,
 	Args:   cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: symvault agent install <name>\n")
+		cliout.Warnf("This command is deprecated in v4.0. Use: symvault agent install <name>")
 		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
 			"This command is deprecated in v4.0. Use: symvault agent install <name>", nil)
 	},
@@ -59,7 +60,7 @@ func promptApprovalMode(reader *bufio.Reader) string {
 
 		input, err := reader.ReadString('\n')
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading input: %v\n", err)
+			cliout.Errorf("Error reading input: %v", err)
 			continue
 		}
 		input = strings.TrimSpace(input)
@@ -159,11 +160,11 @@ func outputAgentMCPSnippet(name, rawToken string) {
 		},
 	}
 
-	fmt.Fprint(os.Stderr, "MCP config (generic stdio):\n")
+	cliout.Hintf("MCP config (generic stdio):")
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(config); err != nil {
-		fmt.Fprintf(os.Stderr, "Error encoding config: %v\n", err)
+		cliout.Errorf("Error encoding config: %v", err)
 	}
 }
 

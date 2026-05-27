@@ -14,6 +14,7 @@ import (
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	cryptopkg "github.com/danieljustus/symaira-vault/internal/crypto"
 	"github.com/danieljustus/symaira-vault/internal/session"
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
@@ -94,7 +95,7 @@ var AuthSetCmd = &cobra.Command{
 				return fmt.Errorf("save config: %w", err)
 			}
 			if err := session.ClearBiometricPassphrase(vaultDir); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: could not remove Touch ID unlock item: %v\n", err)
+				cliout.Warnf("Warning: could not remove Touch ID unlock item: %v", err)
 			}
 			cli.PrintlnQuietAware("Auth method set to passphrase")
 			return nil

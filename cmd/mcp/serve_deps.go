@@ -18,6 +18,7 @@ import (
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 	server "github.com/danieljustus/symaira-vault/internal/mcp/server"
 	"github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap"
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
@@ -73,7 +74,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("--bind must not be empty; use '127.0.0.1' for localhost-only")
 	}
 	if !IsLocalhostBind(bind) {
-		fmt.Fprintf(os.Stderr, "Warning: binding to %s without TLS — traffic will be unencrypted. Use --tls-cert/--tls-key for secure connections.\n", bind)
+		cliout.Warnf("Warning: binding to %s without TLS — traffic will be unencrypted. Use --tls-cert/--tls-key for secure connections.", bind)
 	}
 	if stdioFlag && agentName == "" {
 		return fmt.Errorf("--agent is required in --stdio mode")
@@ -117,7 +118,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 	go func() {
 		sig := <-sigCh
 		if sig == syscall.SIGQUIT {
-			fmt.Fprintln(os.Stderr, "Received SIGQUIT, shutting down gracefully...")
+			cliout.Warnf("Received SIGQUIT, shutting down gracefully...")
 		}
 		cancel()
 	}()
@@ -138,12 +139,12 @@ func runServe(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("port allocation failed: %w", err)
 		}
 		if !isPreferred {
-			fmt.Fprintf(os.Stderr, "Port %d is in use, using port %d instead\n", port, actualPort)
+			cliout.Warnf("Port %d is in use, using port %d instead", port, actualPort)
 		}
 		if err := cli.SaveRuntimePort(vaultDir, actualPort); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: could not save runtime port: %v\n", err)
+			cliout.Warnf("Warning: could not save runtime port: %v", err)
 		}
-		fmt.Fprintf(os.Stderr, "MCP server listening on %s:%d\n", bind, actualPort)
+		cliout.Hintf("MCP server listening on %s:%d", bind, actualPort)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
