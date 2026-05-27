@@ -48,7 +48,7 @@ func (c *Config) Validate() error {
 	var errs error
 
 	if strings.TrimSpace(c.VaultDir) == "" {
-		errs = errors.Join(errs, errors.New("vaultDir: must not be empty (set SYMVAULT_VAULT or OPENPASS_VAULT environment variable or configure vaultDir in config.yaml)"))
+		errs = errors.Join(errs, errors.New("vaultDir: must not be empty (set SYMVAULT_VAULT environment variable or configure vaultDir in config.yaml)"))
 	}
 
 	if c.SessionTimeout <= 0 {
