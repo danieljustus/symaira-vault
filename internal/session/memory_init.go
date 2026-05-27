@@ -3,6 +3,9 @@
 package session
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/danieljustus/symaira-vault/internal/logging"
 )
 
@@ -14,6 +17,7 @@ func init() {
 	keyringGet = mk.Get
 	keyringDelete = mk.Delete
 	memoryFallbackActive = true
+	fmt.Fprintln(os.Stderr, "Warning: OS keyring unavailable — session will clear when this process exits. Run 'symvault doctor' for help.")
 	cacheStatusProvider = func() CacheStatus {
 		return CacheStatus{
 			Backend:    CacheBackendMemory,
