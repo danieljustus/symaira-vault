@@ -109,6 +109,8 @@
 package vault
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -133,10 +135,12 @@ type Match struct {
 
 // listCacheEntry holds cached List results with invalidation metadata.
 type listCacheEntry struct {
-	paths        []string
-	createdAt    time.Time
-	entriesMtime time.Time
-	vaultMtime   time.Time
+	paths          []string
+	createdAt      time.Time
+	entriesMtime   time.Time
+	vaultMtime     time.Time
+	entriesDirHash string
+	vaultDirHash   string
 }
 
 // listCache provides TTL-cached path listings to avoid repetitive directory walks.
@@ -160,6 +164,30 @@ func getDirMtime(dir string) time.Time {
 	return info.ModTime()
 }
 
+func computeDirHash(dir string) string {
+	h := sha256.New()
+	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(dir, path)
+		if err != nil {
+			return nil
+		}
+		h.Write([]byte(rel))
+		info, err := d.Info()
+		if err != nil {
+			return nil
+		}
+		_, _ = fmt.Fprintf(h, "%d|%d", info.Size(), info.ModTime().UnixNano())
+		return nil
+	})
+	return hex.EncodeToString(h.Sum(nil))
+}
+
 // cachedList returns cached paths if valid, or nil if cache miss / expired / invalidated.
 func cachedList(vaultDir string) []string {
 	listCache.mu.RLock()
@@ -178,6 +206,12 @@ func cachedList(vaultDir string) []string {
 	if !getDirMtime(vaultDir).Equal(entry.vaultMtime) {
 		return nil
 	}
+	if computeDirHash(entriesDir(vaultDir)) != entry.entriesDirHash {
+		return nil
+	}
+	if computeDirHash(vaultDir) != entry.vaultDirHash {
+		return nil
+	}
 	return entry.paths
 }
 
@@ -185,10 +219,12 @@ func cachedList(vaultDir string) []string {
 func storeListCache(vaultDir string, paths []string) {
 	listCache.mu.Lock()
 	listCache.items[vaultDir] = listCacheEntry{
-		paths:        append([]string(nil), paths...),
-		createdAt:    time.Now(),
-		entriesMtime: getDirMtime(entriesDir(vaultDir)),
-		vaultMtime:   getDirMtime(vaultDir),
+		paths:          append([]string(nil), paths...),
+		createdAt:      time.Now(),
+		entriesMtime:   getDirMtime(entriesDir(vaultDir)),
+		vaultMtime:     getDirMtime(vaultDir),
+		entriesDirHash: computeDirHash(entriesDir(vaultDir)),
+		vaultDirHash:   computeDirHash(vaultDir),
 	}
 	listCache.mu.Unlock()
 }
@@ -223,11 +259,13 @@ func InvalidateListCache(vaultDir string) {
 // Unlike listCacheEntry, it also stores decrypted entry data so that
 // FindWithOptions can reuse entries already decrypted during listing.
 type pseudonymizedCacheEntry struct {
-	paths        []string
-	entries      map[string]map[string]any // path -> decrypted entry data
-	createdAt    time.Time
-	entriesMtime time.Time
-	vaultMtime   time.Time
+	paths          []string
+	entries        map[string]map[string]any // path -> decrypted entry data
+	createdAt      time.Time
+	entriesMtime   time.Time
+	vaultMtime     time.Time
+	entriesDirHash string
+	vaultDirHash   string
 }
 
 // pseudonymizedCache provides TTL-cached pseudonymized listings keyed by
@@ -267,6 +305,12 @@ func cachedPseudonymizedList(vaultDir string, identity *age.X25519Identity) []st
 	if !getDirMtime(vaultDir).Equal(entry.vaultMtime) {
 		return nil
 	}
+	if computeDirHash(entriesDir(vaultDir)) != entry.entriesDirHash {
+		return nil
+	}
+	if computeDirHash(vaultDir) != entry.vaultDirHash {
+		return nil
+	}
 	return entry.paths
 }
 
@@ -289,6 +333,12 @@ func cachedPseudonymizedEntry(vaultDir string, identity *age.X25519Identity, pat
 	if !getDirMtime(vaultDir).Equal(entry.vaultMtime) {
 		return nil
 	}
+	if computeDirHash(entriesDir(vaultDir)) != entry.entriesDirHash {
+		return nil
+	}
+	if computeDirHash(vaultDir) != entry.vaultDirHash {
+		return nil
+	}
 	return entry.entries[path]
 }
 
@@ -303,11 +353,13 @@ func storePseudonymizedListCache(vaultDir string, identity *age.X25519Identity, 
 	key := pseudonymizedCacheKey(vaultDir, identity)
 	pseudonymizedCache.mu.Lock()
 	pseudonymizedCache.items[key] = pseudonymizedCacheEntry{
-		paths:        append([]string(nil), paths...),
-		entries:      entries,
-		createdAt:    time.Now(),
-		entriesMtime: getDirMtime(entriesDir(vaultDir)),
-		vaultMtime:   getDirMtime(vaultDir),
+		paths:          append([]string(nil), paths...),
+		entries:        entries,
+		createdAt:      time.Now(),
+		entriesMtime:   getDirMtime(entriesDir(vaultDir)),
+		vaultMtime:     getDirMtime(vaultDir),
+		entriesDirHash: computeDirHash(entriesDir(vaultDir)),
+		vaultDirHash:   computeDirHash(vaultDir),
 	}
 	pseudonymizedCache.mu.Unlock()
 }
@@ -410,7 +462,10 @@ func List(vaultDir string, prefix string) ([]string, error) {
 // Uses a bounded worker pool for parallel decryption and caches results
 // (including decrypted entry data) for reuse by FindWithOptions.
 func listPseudonymized(vaultDir, prefix string) ([]string, error) {
-	identity := currentSearchIdentity()
+	return listPseudonymizedWithIdentity(vaultDir, prefix, currentSearchIdentity())
+}
+
+func listPseudonymizedWithIdentity(vaultDir, prefix string, identity *age.X25519Identity) ([]string, error) {
 	if identity == nil {
 		return nil, fmt.Errorf("no search identity available for pseudonymized listing")
 	}
@@ -611,9 +666,14 @@ func isRedactedField(field string, patterns []string) bool {
 // FindWithOptions searches vault entries with configurable options.
 // It supports both sequential and concurrent decryption, and optional
 // scope filtering before decrypt.
+// Uses the global searchIdentity for backward compatibility; prefer Vault.FindWithOptions.
 //
 //nolint:gocyclo // Search orchestration: listing, filtering, decryption, ranking
 func FindWithOptions(vaultDir string, query string, opts FindOptions) ([]Match, error) {
+	return findWithOptionsIdentity(vaultDir, query, opts, currentSearchIdentity())
+}
+
+func findWithOptionsIdentity(vaultDir string, query string, opts FindOptions, identity *age.X25519Identity) ([]Match, error) {
 	start := time.Now()
 	defer func() {
 		metrics.RecordVaultOperationDuration("search", time.Since(start))
@@ -624,7 +684,9 @@ func FindWithOptions(vaultDir string, query string, opts FindOptions) ([]Match, 
 		return nil, err
 	}
 
-	identity := currentSearchIdentity()
+	if identity == nil {
+		identity = currentSearchIdentity()
+	}
 	if identity == nil {
 		return nil, fmt.Errorf("no search identity available")
 	}
@@ -652,7 +714,7 @@ func FindWithOptions(vaultDir string, query string, opts FindOptions) ([]Match, 
 	// The index maps search tokens to entry paths. Entries whose field values
 	// don't contain any query token can be safely skipped.
 	if len(pathsNeedingDecrypt) > 0 && needle != "" {
-		pathsNeedingDecrypt = filterPathsUsingIndex(vaultDir, pathsNeedingDecrypt, needle)
+		pathsNeedingDecrypt = filterPathsUsingIndex(vaultDir, pathsNeedingDecrypt, needle, identity)
 	}
 
 	maxWorkers := opts.MaxWorkers
@@ -778,8 +840,10 @@ func hasField(fields []string, want string) bool {
 // entry paths that need field-level decryption. It returns only paths whose
 // stored string values contain the query as a substring. On any error the
 // original slice is returned unchanged, preserving correct behavior.
-func filterPathsUsingIndex(vaultDir string, candidates []string, needle string) []string {
-	identity := currentSearchIdentity()
+func filterPathsUsingIndex(vaultDir string, candidates []string, needle string, identity *age.X25519Identity) []string {
+	if identity == nil {
+		identity = currentSearchIdentity()
+	}
 	if identity == nil {
 		return candidates
 	}

@@ -361,6 +361,16 @@ A future release will provide:
 - **RFC 9106**: Standardized by the IETF
 - **Broader ecosystem**: Used by major password managers and security tools
 
+### Memory Wiping Limitations
+
+Symaira Vault uses `unsafe.Pointer` and package-level sink variables to attempt to clear sensitive data (passphrases, decrypted entry contents) from memory after use via `crypto.Wipe()`. This is a **best-effort measure** with known limitations:
+
+- Go's runtime may create copies of data that `Wipe()` cannot reach (string interning, GC compaction, escape analysis)
+- The OS may swap memory to disk
+- Memory clearing is not guaranteed by the Go language specification
+
+For users with the highest security requirements, consider using a memory-safe library such as [`github.com/awnumar/memguard`](https://github.com/awnumar/memguard) in a future release.
+
 ## Privacy & Telemetry
 
 Symaira Vault does **NOT** collect any product analytics, error reports, or usage telemetry.

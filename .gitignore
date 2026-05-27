@@ -66,3 +66,6 @@ AGENTS.md
 CLAUDE.md
 .opencode/
 .claude/
+
+# Code review artifacts (local working files, not for release)
+.github/review/
