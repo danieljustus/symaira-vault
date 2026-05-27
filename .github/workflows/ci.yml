@@ -347,10 +347,10 @@ jobs:
           echo "$PASSPHRASE" | $BIN init "$VAULT_DIR"
           
           echo "Testing entry creation..."
-          OPENPASS_PASSPHRASE="$PASSPHRASE" $BIN --vault "$VAULT_DIR" set "test.entry" --value "test-value-456"
+          SYMVAULT_PASSPHRASE="$PASSPHRASE" $BIN --vault "$VAULT_DIR" set "test.entry" --value "test-value-456"
           
           echo "Testing entry retrieval..."
-          OUTPUT=$(OPENPASS_PASSPHRASE="$PASSPHRASE" $BIN --vault "$VAULT_DIR" get "test.entry")
+          OUTPUT=$(SYMVAULT_PASSPHRASE="$PASSPHRASE" $BIN --vault "$VAULT_DIR" get "test.entry")
           if [ "$OUTPUT" != "test-value-456" ]; then
             echo "ERROR: Expected 'test-value-456', got '$OUTPUT'"
             exit 1
@@ -358,7 +358,7 @@ jobs:
           echo "Entry retrieval successful"
           
           echo "Testing list command..."
-          LIST_OUTPUT=$(OPENPASS_PASSPHRASE="$PASSPHRASE" $BIN --vault "$VAULT_DIR" list)
+          LIST_OUTPUT=$(SYMVAULT_PASSPHRASE="$PASSPHRASE" $BIN --vault "$VAULT_DIR" list)
           if ! echo "$LIST_OUTPUT" | grep -q "test"; then
             echo "ERROR: List output does not contain 'test'"
             exit 1
@@ -366,7 +366,7 @@ jobs:
           echo "List command successful"
           
           echo "Testing find command..."
-          FIND_OUTPUT=$(OPENPASS_PASSPHRASE="$PASSPHRASE" $BIN --vault "$VAULT_DIR" find "test-value")
+          FIND_OUTPUT=$(SYMVAULT_PASSPHRASE="$PASSPHRASE" $BIN --vault "$VAULT_DIR" find "test-value")
           if ! echo "$FIND_OUTPUT" | grep -q "test"; then
             echo "ERROR: Find output does not contain 'test'"
             exit 1

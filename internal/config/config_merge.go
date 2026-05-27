@@ -126,6 +126,9 @@ func mergeSections(cfg *Config, raw Config, sectionFields map[string]map[string]
 	if raw.Logging != nil {
 		cfg.Logging = mergeLoggingConfig(raw.Logging, sectionFields["logging"])
 	}
+	if raw.Security != nil {
+		cfg.Security = mergeSecurityConfig(raw.Security, sectionFields["security"])
+	}
 }
 
 func mergeAgentProfile(current AgentProfile, name string, yamlProfile AgentProfile, fields map[string]bool) AgentProfile {
@@ -412,6 +415,14 @@ func mergeLoggingConfig(raw *LoggingConfig, sf map[string]bool) *LoggingConfig {
 	}
 	if sf["format"] {
 		defaults.Format = raw.Format
+	}
+	return &defaults
+}
+
+func mergeSecurityConfig(raw *SecurityConfig, sf map[string]bool) *SecurityConfig {
+	defaults := defaultSecurityConfig()
+	if sf["disable_env_passphrase"] {
+		defaults.DisableEnvPassphrase = raw.DisableEnvPassphrase
 	}
 	return &defaults
 }

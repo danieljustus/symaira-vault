@@ -83,7 +83,7 @@ func resolveUnlockPassphrase(vaultDir string, interactive bool, cfg *configpkg.C
 				passphraseFromBiometric = true
 			}
 		}
-		if len(passphrase) == 0 {
+		if len(passphrase) == 0 && (cfg == nil || cfg.Security == nil || !cfg.Security.DisableEnvPassphrase) {
 			if envPass := envutil.Getenv("SYMVAULT_PASSPHRASE", "OPENPASS_PASSPHRASE"); envPass != "" {
 				// Use unsafe.Slice to alias the string backing array without a heap copy.
 				// This way the deferred Wipe(passphrase) at the call site clears the only

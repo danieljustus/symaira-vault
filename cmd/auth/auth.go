@@ -44,11 +44,16 @@ var AuthStatusCmd = &cobra.Command{
 		}
 		method := cfg.EffectiveAuthMethod()
 		cache := session.GetCacheStatus()
+		keyringHealth := "available"
+		if !cache.Persistent {
+			keyringHealth = "unavailable"
+		}
 		payload := map[string]any{
 			"vault":            vaultDir,
 			"method":           method,
 			"touchIDAvailable": session.BiometricAvailable(),
 			"cache":            cache,
+			"keyringHealth":    keyringHealth,
 		}
 		if cli.WantJSONOutput(AuthStatusJSON) {
 			printer, err := cli.NewPrinter("json")
@@ -61,6 +66,7 @@ var AuthStatusCmd = &cobra.Command{
 		cli.PrintlnQuietAware("Auth method: " + method)
 		cli.PrintlnQuietAware(fmt.Sprintf("Touch ID available: %t", payload["touchIDAvailable"]))
 		cli.PrintlnQuietAware(fmt.Sprintf("Session cache: %s (persistent: %t)", cache.Backend, cache.Persistent))
+		cli.PrintlnQuietAware("Keyring health: " + keyringHealth)
 		return nil
 	},
 }

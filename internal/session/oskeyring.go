@@ -4,6 +4,8 @@ package session
 
 import (
 	"errors"
+	"fmt"
+	"os"
 	"sync"
 
 	"github.com/zalando/go-keyring"
@@ -23,6 +25,7 @@ func getFallback() *memoryKeyring {
 
 	if fallback == nil {
 		fallback = &memoryKeyring{}
+		fmt.Fprintln(os.Stderr, "Warning: OS keyring unavailable \u2014 session will clear when this process exits. Run 'symvault doctor' for help.")
 		logging.Default().Warn("OS keyring unavailable. Using memory-only session cache (session will clear on process exit).")
 	}
 	fallbackActive = true
