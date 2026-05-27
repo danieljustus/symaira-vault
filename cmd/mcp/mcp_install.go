@@ -3,7 +3,6 @@ package mcp
 import (
 	"fmt"
 	"maps"
-	"os"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -11,6 +10,7 @@ import (
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 	auth "github.com/danieljustus/symaira-vault/internal/mcp/auth"
 	"github.com/danieljustus/symaira-vault/internal/mcp/install"
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 )
 
 var mcpInstallCmd = &cobra.Command{
@@ -23,7 +23,7 @@ AI agents with proper security profiles.`,
 	Example: `  symvault agent install [agent]`,
 	Hidden:  true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: symvault agent install [agent]\n")
+		cliout.Warnf("This command is deprecated in v4.0. Use: symvault agent install [agent]")
 		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
 			"This command is deprecated in v4.0. Use: symvault agent install [agent]", nil)
 	},

@@ -18,6 +18,7 @@ import (
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 	auth "github.com/danieljustus/symaira-vault/internal/mcp/auth"
 	server "github.com/danieljustus/symaira-vault/internal/mcp/server"
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 )
 
 var McpConfigCmd = &cobra.Command{
@@ -30,7 +31,7 @@ Use 'symvault agent install <agent> --config-only' to output MCP config snippets
 	Hidden:  true,
 	Args:    cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: symvault agent install <agent> --config-only\n")
+		cliout.Warnf("This command is deprecated in v4.0. Use: symvault agent install <agent> --config-only")
 		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
 			"This command is deprecated in v4.0. Use: symvault agent install <agent> --config-only", nil)
 	},
@@ -46,7 +47,7 @@ Token rotation is now managed per-agent via 'symvault agent token <name> rotate'
 	Hidden:  true,
 	Args:    cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Fprintf(os.Stderr, "This command is deprecated in v4.0. Use: symvault agent token <name> rotate\n")
+		cliout.Warnf("This command is deprecated in v4.0. Use: symvault agent token <name> rotate")
 		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
 			"This command is deprecated in v4.0. Use: symvault agent token <name> rotate", nil)
 	},

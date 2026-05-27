@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -18,6 +19,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/danieljustus/symaira-vault/internal/logging"
 
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
 	"github.com/danieljustus/symaira-vault/internal/envutil"
@@ -420,7 +423,7 @@ func (l *Logger) HealthCheck() (*HealthStatus, error) {
 	matches, err := filepath.Glob(pattern)
 	if err != nil {
 		// Log error but continue with what we have
-		fmt.Fprintf(os.Stderr, "failed to glob audit files: %v\n", err)
+		logging.Default().Warn("failed to glob audit files", slog.String("error", err.Error()))
 	}
 	for _, path := range matches {
 		if info, statErr := os.Stat(path); statErr == nil {
