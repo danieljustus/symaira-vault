@@ -20,8 +20,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/danieljustus/symaira-vault/internal/logging"
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/logging"
 
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
 	"github.com/danieljustus/symaira-vault/internal/envutil"

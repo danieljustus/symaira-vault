@@ -20,8 +20,8 @@ import (
 
 	vaultconfig "github.com/danieljustus/symaira-vault/internal/config"
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
-	"github.com/danieljustus/symaira-vault/internal/metrics"
 	"github.com/danieljustus/symaira-vault/internal/fsutil"
+	"github.com/danieljustus/symaira-vault/internal/metrics"
 	"github.com/danieljustus/symaira-vault/internal/vault/taint"
 )
 
@@ -175,8 +175,8 @@ var configCache = struct {
 }
 
 type configCacheEntry struct {
-	cfg       *vaultconfig.Config
-	mtime     time.Time
+	cfg        *vaultconfig.Config
+	mtime      time.Time
 	accessedAt time.Time
 }
 
