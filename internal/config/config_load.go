@@ -240,7 +240,7 @@ func loadSectionFields(doc *yaml.Node) map[string]map[string]bool {
 	if root.Kind != yaml.MappingNode {
 		return nil
 	}
-	sections := []string{"vault", "git", "mcp", "update", "clipboard", "audit", "logging"}
+	sections := []string{"vault", "git", "mcp", "update", "clipboard", "audit", "logging", "security"}
 	result := make(map[string]map[string]bool)
 	for i := 0; i < len(root.Content)-1; i += 2 {
 		key := root.Content[i].Value

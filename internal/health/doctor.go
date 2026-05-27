@@ -108,6 +108,7 @@ var allChecks = []checkDef{
 	{fn: checkSessionKeyring},
 	{fn: checkPasswordStrength, tags: []string{"slow"}},
 	{fn: checkPasswordReuse, tags: []string{"slow"}},
+	{fn: checkEnvPassphrase},
 }
 
 // RunChecks runs all doctor checks against vaultDir and returns the results.
