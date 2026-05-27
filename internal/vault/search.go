@@ -410,7 +410,10 @@ func List(vaultDir string, prefix string) ([]string, error) {
 // Uses a bounded worker pool for parallel decryption and caches results
 // (including decrypted entry data) for reuse by FindWithOptions.
 func listPseudonymized(vaultDir, prefix string) ([]string, error) {
-	identity := currentSearchIdentity()
+	return listPseudonymizedWithIdentity(vaultDir, prefix, currentSearchIdentity())
+}
+
+func listPseudonymizedWithIdentity(vaultDir, prefix string, identity *age.X25519Identity) ([]string, error) {
 	if identity == nil {
 		return nil, fmt.Errorf("no search identity available for pseudonymized listing")
 	}
@@ -611,9 +614,14 @@ func isRedactedField(field string, patterns []string) bool {
 // FindWithOptions searches vault entries with configurable options.
 // It supports both sequential and concurrent decryption, and optional
 // scope filtering before decrypt.
+// Uses the global searchIdentity for backward compatibility; prefer Vault.FindWithOptions.
 //
 //nolint:gocyclo // Search orchestration: listing, filtering, decryption, ranking
 func FindWithOptions(vaultDir string, query string, opts FindOptions) ([]Match, error) {
+	return findWithOptionsIdentity(vaultDir, query, opts, currentSearchIdentity())
+}
+
+func findWithOptionsIdentity(vaultDir string, query string, opts FindOptions, identity *age.X25519Identity) ([]Match, error) {
 	start := time.Now()
 	defer func() {
 		metrics.RecordVaultOperationDuration("search", time.Since(start))
@@ -624,7 +632,9 @@ func FindWithOptions(vaultDir string, query string, opts FindOptions) ([]Match, 
 		return nil, err
 	}
 
-	identity := currentSearchIdentity()
+	if identity == nil {
+		identity = currentSearchIdentity()
+	}
 	if identity == nil {
 		return nil, fmt.Errorf("no search identity available")
 	}
@@ -652,7 +662,7 @@ func FindWithOptions(vaultDir string, query string, opts FindOptions) ([]Match, 
 	// The index maps search tokens to entry paths. Entries whose field values
 	// don't contain any query token can be safely skipped.
 	if len(pathsNeedingDecrypt) > 0 && needle != "" {
-		pathsNeedingDecrypt = filterPathsUsingIndex(vaultDir, pathsNeedingDecrypt, needle)
+		pathsNeedingDecrypt = filterPathsUsingIndex(vaultDir, pathsNeedingDecrypt, needle, identity)
 	}
 
 	maxWorkers := opts.MaxWorkers
@@ -778,8 +788,10 @@ func hasField(fields []string, want string) bool {
 // entry paths that need field-level decryption. It returns only paths whose
 // stored string values contain the query as a substring. On any error the
 // original slice is returned unchanged, preserving correct behavior.
-func filterPathsUsingIndex(vaultDir string, candidates []string, needle string) []string {
-	identity := currentSearchIdentity()
+func filterPathsUsingIndex(vaultDir string, candidates []string, needle string, identity *age.X25519Identity) []string {
+	if identity == nil {
+		identity = currentSearchIdentity()
+	}
 	if identity == nil {
 		return candidates
 	}

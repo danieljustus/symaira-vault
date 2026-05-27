@@ -373,3 +373,36 @@ func cloneBytes(b []byte) []byte {
 	copy(clone, b)
 	return clone
 }
+
+// List returns all entry paths in this vault, optionally filtered by prefix.
+// Uses the vault's identity for pseudonymized listings instead of global state.
+func (v *Vault) List(prefix string) ([]string, error) {
+	if v == nil {
+		return nil, errors.New("vault is nil")
+	}
+	cfg, err := loadVaultConfig(v.Dir)
+	if err != nil {
+		return nil, err
+	}
+	if isPseudonymizeEnabled(cfg) {
+		return listPseudonymizedWithIdentity(v.Dir, prefix, v.Identity)
+	}
+	return List(v.Dir, prefix)
+}
+
+// FindWithOptions searches this vault's entries using the vault's identity
+// instead of global state.
+func (v *Vault) FindWithOptions(query string, opts FindOptions) ([]Match, error) {
+	if v == nil {
+		return nil, errors.New("vault is nil")
+	}
+	return findWithOptionsIdentity(v.Dir, query, opts, v.Identity)
+}
+
+// ReadEntry reads a single entry from this vault using the vault's identity.
+func (v *Vault) ReadEntry(path string) (*Entry, error) {
+	if v == nil {
+		return nil, errors.New("vault is nil")
+	}
+	return ReadEntry(v.Dir, path, v.Identity)
+}
