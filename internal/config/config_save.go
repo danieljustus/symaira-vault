@@ -7,7 +7,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/danieljustus/symaira-vault/internal/fileutil"
+	"github.com/danieljustus/symaira-vault/internal/fsutil"
 )
 
 // Save persists the config to the default config file path (~/.symvault/config.yaml).
@@ -159,5 +159,5 @@ func (c *Config) SaveTo(path string) error {
 	if err != nil {
 		return err
 	}
-	return fileutil.AtomicWriteFile(path, data, 0o600)
+	return fsutil.AtomicWriteFile(path, data, 0o600)
 }

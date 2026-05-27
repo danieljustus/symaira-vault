@@ -16,7 +16,7 @@ import (
 
 	"github.com/danieljustus/symaira-vault/internal/crypto"
 	"github.com/danieljustus/symaira-vault/internal/envutil"
-	"github.com/danieljustus/symaira-vault/internal/fileutil"
+	"github.com/danieljustus/symaira-vault/internal/fsutil"
 )
 
 // CurrentToolRegistryHash is set by the server package at startup to enable
@@ -249,7 +249,7 @@ func (r *TokenRegistry) Save() error {
 		return fmt.Errorf("marshal token registry: %w", err)
 	}
 
-	if err := fileutil.AtomicWriteFile(r.path, append(data, '\n'), 0o600); err != nil {
+	if err := fsutil.AtomicWriteFile(r.path, append(data, '\n'), 0o600); err != nil {
 		return fmt.Errorf("write token registry: %w", err)
 	}
 	return nil
@@ -688,7 +688,7 @@ func LoadTokenSystem(vaultDir string, customLegacyPath ...string) (*TokenRegistr
 						"         To restrict scope, run: symvault mcp token create --label <name> --tools <list>\n"+
 						"         Then revoke the legacy token: symvault mcp token revoke %s\n",
 					id, id)
-				if rmErr := fileutil.SafeRemove(legacyPath); rmErr != nil {
+				if rmErr := fsutil.SafeRemove(legacyPath); rmErr != nil {
 					fmt.Fprintf(os.Stderr, "Warning: failed to remove legacy token file %s after migration: %v\n", legacyPath, rmErr)
 				}
 			}
@@ -732,7 +732,7 @@ func LoadOrCreateToken(path string) (string, error) {
 	}
 	token := hex.EncodeToString(buf)
 
-	if err := fileutil.AtomicWriteFile(path, []byte(token+"\n"), 0o600); err != nil {
+	if err := fsutil.AtomicWriteFile(path, []byte(token+"\n"), 0o600); err != nil {
 		return "", fmt.Errorf("write token file: %w", err)
 	}
 
@@ -749,7 +749,7 @@ func RotateToken(path string) (string, error) {
 	}
 	token := hex.EncodeToString(buf)
 
-	if err := fileutil.AtomicWriteFile(path, []byte(token+"\n"), 0o600); err != nil {
+	if err := fsutil.AtomicWriteFile(path, []byte(token+"\n"), 0o600); err != nil {
 		return "", fmt.Errorf("write token file: %w", err)
 	}
 

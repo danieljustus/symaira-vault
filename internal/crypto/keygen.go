@@ -16,8 +16,7 @@ import (
 	"filippo.io/age"
 	"golang.org/x/crypto/scrypt"
 
-	"github.com/danieljustus/symaira-vault/internal/fileutil"
-	"github.com/danieljustus/symaira-vault/internal/pathutil"
+	"github.com/danieljustus/symaira-vault/internal/fsutil"
 )
 
 // DefaultScryptWorkFactor is the default scrypt work factor used when no explicit
@@ -93,7 +92,7 @@ func GenerateIdentity() (*age.X25519Identity, error) {
 
 // validateIdentityPath ensures the identity file path doesn't escape expected directories.
 func validateIdentityPath(path string) error {
-	if pathutil.HasTraversal(path) {
+	if fsutil.HasTraversal(path) {
 		return errors.New("identity file path escapes expected directory")
 	}
 	return nil
@@ -148,7 +147,7 @@ func SaveIdentity(id *age.X25519Identity, path string, passphrase []byte, workFa
 		return fmt.Errorf("close encryptor: %w", err)
 	}
 
-	if err := fileutil.AtomicWriteFile(path, buf.Bytes(), 0o600); err != nil {
+	if err := fsutil.AtomicWriteFile(path, buf.Bytes(), 0o600); err != nil {
 		return fmt.Errorf("write file: %w", err)
 	}
 
@@ -239,7 +238,7 @@ func SaveIdentityWithArgon2id(id *age.X25519Identity, path string, passphrase []
 	if err := w.Close(); err != nil {
 		return fmt.Errorf("close encryptor: %w", err)
 	}
-	if err := fileutil.AtomicWriteFile(path, buf.Bytes(), 0o600); err != nil {
+	if err := fsutil.AtomicWriteFile(path, buf.Bytes(), 0o600); err != nil {
 		return fmt.Errorf("write file: %w", err)
 	}
 	return nil

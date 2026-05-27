@@ -9,7 +9,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/danieljustus/symaira-vault/internal/fileutil"
+	"github.com/danieljustus/symaira-vault/internal/fsutil"
 )
 
 const resumeFileName = ".wizard-resume.yaml"
@@ -71,7 +71,7 @@ func SaveResumeState(vaultDir string, state *WizardState, lastStep string) error
 		return fmt.Errorf("create resume dir: %w", err)
 	}
 
-	return fileutil.AtomicWriteFile(path, data, 0o600)
+	return fsutil.AtomicWriteFile(path, data, 0o600)
 }
 
 func LoadResumeState(vaultDir string) (*WizardState, string, error) {
@@ -153,7 +153,7 @@ func MigrateLegacyResumeFile(vaultDir string) {
 	if err := os.MkdirAll(filepath.Dir(current), 0o700); err != nil {
 		return
 	}
-	if err := fileutil.AtomicWriteFile(current, data, 0o600); err != nil {
+	if err := fsutil.AtomicWriteFile(current, data, 0o600); err != nil {
 		return
 	}
 	_ = os.Remove(legacy)

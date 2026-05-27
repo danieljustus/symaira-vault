@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/danieljustus/symaira-vault/internal/pathutil"
+	"github.com/danieljustus/symaira-vault/internal/fsutil"
 )
 
 const (
@@ -159,7 +159,7 @@ func defaultCachePath() string {
 }
 
 func validateCachePath(path string) error {
-	if pathutil.HasTraversal(path) {
+	if fsutil.HasTraversal(path) {
 		return errors.New("cache file path escapes expected directory")
 	}
 	return nil

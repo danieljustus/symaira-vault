@@ -1,8 +1,4 @@
-// Package envfilter provides environment variable whitelist filtering for
-// subprocess execution. It prevents leaking sensitive process environment
-// variables (API keys, tokens, secrets) to child processes by only passing
-// through a curated set of safe variables.
-package envfilter
+package secrets
 
 import (
 	"os"

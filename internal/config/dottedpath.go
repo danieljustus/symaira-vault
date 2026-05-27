@@ -9,7 +9,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/danieljustus/symaira-vault/internal/fileutil"
+	"github.com/danieljustus/symaira-vault/internal/fsutil"
 )
 
 // KnownConfigKeys returns all known config key paths for tab completion.
@@ -161,7 +161,7 @@ func SaveConfigNode(path string, root *yaml.Node) error {
 	}
 	_ = encoder.Close()
 
-	return fileutil.AtomicWriteFile(path, buf.Bytes(), 0o600)
+	return fsutil.AtomicWriteFile(path, buf.Bytes(), 0o600)
 }
 
 // NodeToString returns the YAML string representation of a yaml.Node.

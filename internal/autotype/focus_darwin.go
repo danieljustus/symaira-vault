@@ -7,13 +7,13 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/danieljustus/symaira-vault/internal/envfilter"
+	"github.com/danieljustus/symaira-vault/internal/secrets"
 )
 
 func defaultCaptureActiveWindow() (string, error) {
 	cmd := exec.Command("osascript", "-e",
 		`tell application "System Events" to get name of first application process whose frontmost is true`)
-	envfilter.PrepareCmd(cmd)
+	secrets.PrepareCmd(cmd)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	if err := cmd.Run(); err != nil {

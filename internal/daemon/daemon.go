@@ -16,8 +16,8 @@ import (
 	"text/template"
 
 	"github.com/danieljustus/symaira-vault/internal/config"
-	"github.com/danieljustus/symaira-vault/internal/envfilter"
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	"github.com/danieljustus/symaira-vault/internal/secrets"
 )
 
 // runFilteredCmd creates an exec.Cmd with environment whitelist filtering
@@ -25,7 +25,7 @@ import (
 // launchctl and systemctl.
 func runFilteredCmd(name string, args ...string) *exec.Cmd {
 	cmd := exec.Command(name, args...)
-	envfilter.PrepareCmd(cmd)
+	secrets.PrepareCmd(cmd)
 	return cmd
 }
 

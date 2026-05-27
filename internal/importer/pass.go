@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/danieljustus/symaira-vault/internal/envfilter"
+	"github.com/danieljustus/symaira-vault/internal/secrets"
 )
 
 type passImporter struct {
@@ -80,7 +80,7 @@ func (i *passImporter) Parse(r io.Reader) ([]ImportedEntry, error) {
 
 func decryptPassFile(path string) (string, error) {
 	cmd := exec.Command("gpg", "--decrypt", "--batch", "--yes", path)
-	envfilter.PrepareCmd(cmd)
+	secrets.PrepareCmd(cmd)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 

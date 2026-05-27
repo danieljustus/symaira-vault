@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/pflag"
 
 	agentctx "github.com/danieljustus/symaira-vault/internal/agentctx"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	"github.com/danieljustus/symaira-vault/internal/envutil"
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 	"github.com/danieljustus/symaira-vault/internal/i18n"
@@ -128,7 +129,7 @@ func PrintlnQuietAware(args ...interface{}) {
 }
 
 func init() {
-	RootCmd.PersistentFlags().StringVar(&Vault, "vault", "~/.symvault", "path to the password vault")
+	RootCmd.PersistentFlags().StringVar(&Vault, "vault", "~/"+configpkg.DefaultVaultSubdir, "path to the password vault")
 	VaultFlag = RootCmd.PersistentFlags().Lookup("vault")
 	RootCmd.PersistentFlags().BoolVar(&QuietMode, "quiet", false, "suppress non-error output")
 	RootCmd.PersistentFlags().StringVar(&Profile, "profile", "", "use a named vault profile")

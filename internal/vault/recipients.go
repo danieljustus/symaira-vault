@@ -15,7 +15,7 @@ import (
 	"filippo.io/age"
 
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
-	"github.com/danieljustus/symaira-vault/internal/pathutil"
+	"github.com/danieljustus/symaira-vault/internal/fsutil"
 )
 
 // Common recipients errors
@@ -40,7 +40,7 @@ func NewRecipientsManager(vaultDir string) *RecipientsManager {
 
 // validateVaultDir ensures the vault directory path stays within expected bounds.
 func (rm *RecipientsManager) validateVaultDir() error {
-	if pathutil.HasTraversal(rm.vaultDir) {
+	if fsutil.HasTraversal(rm.vaultDir) {
 		return fmt.Errorf("vault directory path escapes intended directory")
 	}
 	return nil

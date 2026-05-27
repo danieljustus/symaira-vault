@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/danieljustus/symaira-vault/internal/envfilter"
+	"github.com/danieljustus/symaira-vault/internal/secrets"
 	"github.com/danieljustus/symaira-vault/internal/vault/taint"
 )
 
@@ -139,7 +139,7 @@ func getGitBranch(workingDir string) string {
 		return ""
 	}
 	cmd := exec.Command("git", "-C", workingDir, "rev-parse", "--abbrev-ref", "HEAD")
-	envfilter.PrepareCmd(cmd)
+	secrets.PrepareCmd(cmd)
 	out, err := cmd.Output()
 	if err != nil {
 		return ""

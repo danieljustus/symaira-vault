@@ -20,8 +20,8 @@ import (
 
 	vaultconfig "github.com/danieljustus/symaira-vault/internal/config"
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
+	"github.com/danieljustus/symaira-vault/internal/fsutil"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
-	"github.com/danieljustus/symaira-vault/internal/pathutil"
 	"github.com/danieljustus/symaira-vault/internal/vault/taint"
 )
 
@@ -133,7 +133,7 @@ func validateRawEntryPath(path string) error {
 	path = strings.TrimSpace(path)
 
 	// Use centralized path validation from pathutil
-	if err := pathutil.ValidatePath(path); err != nil {
+	if err := fsutil.ValidatePath(path); err != nil {
 		return fmt.Errorf("entry path %q: %w", path, err)
 	}
 
@@ -162,6 +162,8 @@ func validateLegacyEntryPath(vaultDir, path string) error {
 	return nil
 }
 
+const maxConfigCacheSize = 16
+
 // configCache memoizes parsed vault configs per vaultDir, keyed by the
 // config file's mtime. It avoids re-parsing config.yaml on every entry
 // read during a search — the hot path for large vaults.
@@ -173,8 +175,9 @@ var configCache = struct {
 }
 
 type configCacheEntry struct {
-	cfg   *vaultconfig.Config
-	mtime time.Time
+	cfg        *vaultconfig.Config
+	mtime      time.Time
+	accessedAt time.Time
 }
 
 // InvalidateConfigCache drops the cached config for vaultDir. Callers should
@@ -196,6 +199,10 @@ func loadVaultConfig(vaultDir string) (*vaultconfig.Config, error) {
 	entry, ok := configCache.items[vaultDir]
 	configCache.mu.RUnlock()
 	if ok && entry.mtime.Equal(mtime) && entry.cfg != nil {
+		configCache.mu.Lock()
+		entry.accessedAt = time.Now()
+		configCache.items[vaultDir] = entry
+		configCache.mu.Unlock()
 		return entry.cfg, nil
 	}
 
@@ -208,7 +215,20 @@ func loadVaultConfig(vaultDir string) (*vaultconfig.Config, error) {
 	}
 
 	configCache.mu.Lock()
-	configCache.items[vaultDir] = configCacheEntry{cfg: cfg, mtime: mtime}
+	if len(configCache.items) >= maxConfigCacheSize {
+		var oldestKey string
+		var oldestTime time.Time
+		for k, v := range configCache.items {
+			if oldestTime.IsZero() || v.accessedAt.Before(oldestTime) {
+				oldestTime = v.accessedAt
+				oldestKey = k
+			}
+		}
+		if oldestKey != "" {
+			delete(configCache.items, oldestKey)
+		}
+	}
+	configCache.items[vaultDir] = configCacheEntry{cfg: cfg, mtime: mtime, accessedAt: time.Now()}
 	configCache.mu.Unlock()
 	return cfg, nil
 }

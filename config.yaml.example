@@ -3,6 +3,7 @@
 # directory as config.yaml for vault-specific settings.
 
 # Default vault directory used when SYMVAULT_VAULT and --vault are not set.
+# The default subdirectory name is defined by internal/config.DefaultVaultSubdir.
 vaultDir: ~/.symvault
 
 # Default MCP agent profile used when --agent is not set.
@@ -50,6 +51,7 @@ agents:
 # Vault-specific settings. These can also live inside <vault>/config.yaml.
 vault:
   # Vault directory path.
+  # The default subdirectory name is defined by internal/config.DefaultVaultSubdir.
   path: ~/.symvault
   # Age recipients used for newly written entries.
   default_recipients: []

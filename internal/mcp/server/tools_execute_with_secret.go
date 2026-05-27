@@ -9,7 +9,6 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/danieljustus/symaira-vault/internal/envfilter"
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
 	"github.com/danieljustus/symaira-vault/internal/secrets"
@@ -131,7 +130,7 @@ func (s *Server) handleExecuteWithSecret(ctx context.Context, req mcp.CallToolRe
 
 	// Check for denied env vars
 	if len(resolvedEnv) > 0 {
-		denied := envfilter.RejectDenied(resolvedEnv)
+		denied := secrets.RejectDenied(resolvedEnv)
 		if len(denied) > 0 {
 			s.logAudit(ctx, "execute_with_secret", "<validation-denied-env>", false)
 			return mcp.NewToolResultError(fmt.Sprintf("env_vars contains denied keys: %s", strings.Join(denied, ", "))), nil

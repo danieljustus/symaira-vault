@@ -8,12 +8,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"filippo.io/age"
 
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
-	"github.com/danieljustus/symaira-vault/internal/fileutil"
+	"github.com/danieljustus/symaira-vault/internal/fsutil"
 )
 
 // ManifestEntry stores integrity metadata for a single vault entry.
@@ -93,7 +94,7 @@ func writeManifest(vaultDir string, m *Manifest, identity *age.X25519Identity) e
 	}
 
 	manifestPath := filepath.Join(vaultDir, manifestFileName)
-	if err := fileutil.AtomicWriteFile(manifestPath, ciphertext, 0o600); err != nil {
+	if err := fsutil.AtomicWriteFile(manifestPath, ciphertext, 0o600); err != nil {
 		return fmt.Errorf("write manifest: %w", err)
 	}
 
@@ -210,6 +211,9 @@ func RebuildManifest(vaultDir string, identity *age.X25519Identity) error {
 	}
 
 	entriesPath := entriesDir(vaultDir)
+
+	// First pass: collect all .age file paths.
+	var paths []string
 	err := filepath.Walk(entriesPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil // skip inaccessible files
@@ -217,29 +221,76 @@ func RebuildManifest(vaultDir string, identity *age.X25519Identity) error {
 		if info.IsDir() || !strings.HasSuffix(info.Name(), ".age") {
 			return nil
 		}
-
-		data, err := os.ReadFile(path) // #nosec G304 — path is within entriesDir
-		if err != nil {
-			return nil // skip unreadable files
-		}
-
-		// Derive logical path from file path
-		rel, err := filepath.Rel(entriesPath, path)
-		if err != nil {
-			return nil
-		}
-		logicalPath := strings.TrimSuffix(filepath.ToSlash(rel), ".age")
-
-		hash := sha256.Sum256(data)
-		m.Entries[logicalPath] = ManifestEntry{
-			SHA256: hex.EncodeToString(hash[:]),
-			Size:   int64(len(data)),
-			MTime:  info.ModTime(),
-		}
+		paths = append(paths, path)
 		return nil
 	})
 	if err != nil {
 		return fmt.Errorf("walk entries for manifest rebuild: %w", err)
+	}
+
+	// Second pass: compute SHA-256 hashes in parallel with 4 workers.
+	type result struct {
+		logicalPath string
+		entry       ManifestEntry
+	}
+
+	pathCh := make(chan string, len(paths))
+	for _, p := range paths {
+		pathCh <- p
+	}
+	close(pathCh)
+
+	resultCh := make(chan result, len(paths))
+	var wg sync.WaitGroup
+	numWorkers := 4
+	if len(paths) < numWorkers {
+		numWorkers = len(paths)
+	}
+
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for path := range pathCh {
+				data, err := os.ReadFile(path) // #nosec G304 — path is within entriesDir
+				if err != nil {
+					continue // skip unreadable files
+				}
+
+				info, err := os.Stat(path)
+				if err != nil {
+					continue
+				}
+
+				rel, err := filepath.Rel(entriesPath, path)
+				if err != nil {
+					continue
+				}
+				logicalPath := strings.TrimSuffix(filepath.ToSlash(rel), ".age")
+
+				hash := sha256.Sum256(data)
+				resultCh <- result{
+					logicalPath: logicalPath,
+					entry: ManifestEntry{
+						SHA256: hex.EncodeToString(hash[:]),
+						Size:   int64(len(data)),
+						MTime:  info.ModTime(),
+					},
+				}
+			}
+		}()
+	}
+
+	go func() {
+		wg.Wait()
+		close(resultCh)
+	}()
+
+	var mu sync.Mutex
+	for r := range resultCh {
+		mu.Lock()
+		m.Entries[r.logicalPath] = r.entry
+		mu.Unlock()
 	}
 
 	return writeManifest(vaultDir, m, identity)

@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	"github.com/danieljustus/symaira-vault/internal/logging"
 
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
@@ -28,7 +29,7 @@ import (
 )
 
 const (
-	defaultDirName         = ".symvault"
+	defaultDirName         = configpkg.DefaultVaultSubdir
 	defaultFileNamePattern = "audit-%s.log"
 	hmacKeyFileName        = "audit-hmac-key"
 	hmacKeySize            = 32

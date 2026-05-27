@@ -9,7 +9,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/danieljustus/symaira-vault/internal/envfilter"
+	"github.com/danieljustus/symaira-vault/internal/secrets"
 )
 
 func init() {
@@ -30,7 +30,7 @@ func (a *darwinAutotype) Type(text string) error {
 	// inline) through stdin keeps it out of argv where any local user could
 	// read it via `ps -ef`.
 	cmd := exec.Command("osascript")
-	envfilter.PrepareCmd(cmd)
+	secrets.PrepareCmd(cmd)
 	cmd.Stdin = strings.NewReader(script)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("autotype failed: %w", err)

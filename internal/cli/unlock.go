@@ -129,20 +129,7 @@ func WithVault(fn func(*vaultpkg.Vault) error) error {
 }
 
 func WithVaultRaw(fn func(*vaultpkg.Vault) error) error {
-	vaultDir, err := VaultPath()
-	if err != nil {
-		return err
-	}
-	if !vaultpkg.IsInitialized(vaultDir) {
-		return errorspkg.NewCLIError(errorspkg.ExitNotInitialized,
-			"vault not initialized. Run 'symvault init' first",
-			errorspkg.ErrVaultNotInitialized)
-	}
-	v, err := UnlockVault(vaultDir, true)
-	if err != nil {
-		return err
-	}
-	return fn(v)
+	return WithVault(fn)
 }
 
 func loadVaultConfigForUnlock(vaultDir string) *configpkg.Config {

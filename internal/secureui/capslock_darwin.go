@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/danieljustus/symaira-vault/internal/envfilter"
+	"github.com/danieljustus/symaira-vault/internal/secrets"
 )
 
 // defaultCapsLockDetector inspects `ioreg` for the AlphaLock modifier.
@@ -16,7 +16,7 @@ import (
 // return false (best-effort).
 func defaultCapsLockDetector() bool {
 	cmd := exec.Command("ioreg", "-l", "-w0", "-n", "IOHIDSystem")
-	envfilter.PrepareCmd(cmd)
+	secrets.PrepareCmd(cmd)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	if err := cmd.Run(); err != nil {

@@ -10,7 +10,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/danieljustus/symaira-vault/internal/envfilter"
+	"github.com/danieljustus/symaira-vault/internal/secrets"
 )
 
 func init() {
@@ -49,7 +49,7 @@ func (a *linuxAutotype) typeX11(text string) error {
 	// xdotool reads text from stdin when --file - is used. This keeps the
 	// password out of argv, where any local user could read it via ps.
 	cmd := execCommand("xdotool", "type", "--clearmodifiers", "--delay", "0", "--file", "-")
-	envfilter.PrepareCmd(cmd)
+	secrets.PrepareCmd(cmd)
 	if err := runWithStdin(cmd, text); err != nil {
 		return fmt.Errorf("autotype failed (xdotool may not be installed or display not available): %w", err)
 	}
@@ -60,7 +60,7 @@ func (a *linuxAutotype) typeWayland(text string) error {
 	if _, err := lookPath("wtype"); err == nil {
 		// wtype reads from stdin when "-" is given as the argument.
 		cmd := execCommand("wtype", "-")
-		envfilter.PrepareCmd(cmd)
+		secrets.PrepareCmd(cmd)
 		if err := runWithStdin(cmd, text); err != nil {
 			return fmt.Errorf("autotype failed (wtype): %w", err)
 		}
@@ -71,7 +71,7 @@ func (a *linuxAutotype) typeWayland(text string) error {
 		// ydotool reads from a file specified with --file; /dev/stdin
 		// routes the text through stdin so it doesn't appear in argv.
 		cmd := execCommand("ydotool", "type", "--file", "/dev/stdin")
-		envfilter.PrepareCmd(cmd)
+		secrets.PrepareCmd(cmd)
 		if err := runWithStdin(cmd, text); err != nil {
 			return fmt.Errorf("autotype failed (ydotool): %w", err)
 		}

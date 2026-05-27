@@ -7,7 +7,7 @@ import (
 	"io/fs"
 	"os"
 
-	"github.com/danieljustus/symaira-vault/internal/fileutil"
+	"github.com/danieljustus/symaira-vault/internal/fsutil"
 )
 
 var errUnsafePath = errors.New("path is not a regular file")
@@ -27,7 +27,7 @@ func SafeWriteFile(path string, data []byte, perm os.FileMode) error {
 		return err
 	}
 
-	return fileutil.AtomicWriteFile(path, data, perm)
+	return fsutil.AtomicWriteFile(path, data, perm)
 }
 
 func SafeRemove(path string) error {

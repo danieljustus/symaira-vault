@@ -9,7 +9,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/danieljustus/symaira-vault/internal/envfilter"
+	"github.com/danieljustus/symaira-vault/internal/secrets"
 )
 
 func init() {
@@ -35,7 +35,7 @@ func (a *windowsAutotype) Type(text string) error {
 
 	cmd := exec.Command("powershell.exe",
 		"-NoProfile", "-NonInteractive", "-Command", readSendKeysWrapper)
-	envfilter.PrepareCmd(cmd)
+	secrets.PrepareCmd(cmd)
 	cmd.Stdin = strings.NewReader(escaped)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("autotype failed: %w", err)

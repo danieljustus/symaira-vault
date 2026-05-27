@@ -10,7 +10,7 @@ import (
 	"filippo.io/age"
 
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
-	"github.com/danieljustus/symaira-vault/internal/fileutil"
+	"github.com/danieljustus/symaira-vault/internal/fsutil"
 )
 
 const defaultReencryptWorkers = 4
@@ -39,41 +39,11 @@ func ReencryptAll(vaultDir string, identity *age.X25519Identity, recipients []*a
 
 	entriesPath := entriesDir(vaultDir)
 
-	type entryFile struct {
-		fullPath string
-	}
-	var files []entryFile
-
-	err := filepath.Walk(entriesPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			return nil
-		}
-		if strings.EqualFold(filepath.Ext(info.Name()), ".age") {
-			files = append(files, entryFile{fullPath: path})
-		}
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("walk entries directory: %w", err)
-	}
-
-	if len(files) == 0 {
-		return nil
-	}
-
-	workers := defaultReencryptWorkers
-	if len(files) < workers {
-		workers = len(files)
-	}
-
-	taskCh := make(chan reencryptTask, len(files))
-	resultCh := make(chan reencryptResult, len(files))
+	taskCh := make(chan reencryptTask, defaultReencryptWorkers*2)
+	resultCh := make(chan reencryptResult, defaultReencryptWorkers*2)
 
 	var wg sync.WaitGroup
-	for i := 0; i < workers; i++ {
+	for i := 0; i < defaultReencryptWorkers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -84,11 +54,23 @@ func ReencryptAll(vaultDir string, identity *age.X25519Identity, recipients []*a
 		}()
 	}
 
+	var fileCount int64
+	var walkErr error
 	go func() {
-		for _, f := range files {
-			taskCh <- reencryptTask{path: f.fullPath}
-		}
-		close(taskCh)
+		defer close(taskCh)
+		walkErr = filepath.Walk(entriesPath, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.IsDir() {
+				return nil
+			}
+			if strings.EqualFold(filepath.Ext(info.Name()), ".age") {
+				taskCh <- reencryptTask{path: path}
+				fileCount++
+			}
+			return nil
+		})
 	}()
 
 	go func() {
@@ -96,20 +78,28 @@ func ReencryptAll(vaultDir string, identity *age.X25519Identity, recipients []*a
 		close(resultCh)
 	}()
 
-	var i int
+	var processed int64
 	for result := range resultCh {
-		i++
-		fmt.Fprintf(os.Stderr, "Re-encrypting %d/%d...\r", i, len(files))
+		processed++
+		fmt.Fprintf(os.Stderr, "Re-encrypting %d/%d...\r", processed, fileCount)
 		if result.err != nil {
 			return fmt.Errorf("re-encrypt %s: %w", result.path, result.err)
 		}
+	}
+
+	if walkErr != nil {
+		return fmt.Errorf("walk entries directory: %w", walkErr)
+	}
+
+	if fileCount == 0 {
+		return nil
 	}
 
 	if err := RebuildManifest(vaultDir, identity); err != nil {
 		return fmt.Errorf("rebuild manifest: %w", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "\nRe-encrypted %d entries successfully.\n", len(files))
+	fmt.Fprintf(os.Stderr, "\nRe-encrypted %d entries successfully.\n", fileCount)
 	return nil
 }
 
@@ -133,7 +123,7 @@ func reencryptFile(path string, identity *age.X25519Identity, recipients []*age.
 		return fmt.Errorf("encrypt: %w", err)
 	}
 
-	if err := fileutil.AtomicWriteFile(path, ciphertext, 0o600); err != nil {
+	if err := fsutil.AtomicWriteFile(path, ciphertext, 0o600); err != nil {
 		return fmt.Errorf("atomic write: %w", err)
 	}
 

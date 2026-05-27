@@ -1,4 +1,4 @@
-package envfilter
+package secrets
 
 import (
 	"os/exec"

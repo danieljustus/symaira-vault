@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/danieljustus/symaira-vault/internal/envfilter"
+	"github.com/danieljustus/symaira-vault/internal/secrets"
 )
 
 // runner abstracts subprocess execution so backends can be unit-tested with a
@@ -25,7 +25,7 @@ func (execRunner) run(name string, args []string, timeout time.Duration) ([]byte
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
-	envfilter.PrepareCmd(cmd)
+	secrets.PrepareCmd(cmd)
 	out, err := cmd.Output()
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return nil, ErrTimeout
