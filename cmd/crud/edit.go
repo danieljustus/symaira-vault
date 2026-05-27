@@ -11,8 +11,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/danieljustus/symaira-vault/internal/secrets"
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	"github.com/danieljustus/symaira-vault/internal/secrets"
 	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )

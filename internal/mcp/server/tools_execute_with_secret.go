@@ -9,9 +9,9 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/danieljustus/symaira-vault/internal/secrets"
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
+	"github.com/danieljustus/symaira-vault/internal/secrets"
 )
 
 // handleExecuteWithSecret executes a command with secrets injected as environment

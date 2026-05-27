@@ -16,8 +16,8 @@ import (
 	"text/template"
 
 	"github.com/danieljustus/symaira-vault/internal/config"
-	"github.com/danieljustus/symaira-vault/internal/secrets"
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	"github.com/danieljustus/symaira-vault/internal/secrets"
 )
 
 // runFilteredCmd creates an exec.Cmd with environment whitelist filtering
