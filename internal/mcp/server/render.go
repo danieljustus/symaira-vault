@@ -224,11 +224,17 @@ func stripDangerousUnicode(s string) string {
 	return out.String()
 }
 
+// randReadFunc is the random source used by generateMarker. It is a variable
+// (not a direct call) so tests can inject a failing reader to verify panic behavior.
+var randReadFunc = rand.Read
+
 // generateMarker produces a cryptographically random hex string for use
 // as an unpredictable marker in EmbedAsData output.
 func generateMarker() string {
 	b := make([]byte, 8)
-	_, _ = rand.Read(b)
+	if _, err := randReadFunc(b); err != nil {
+		panic(fmt.Sprintf("crypto/rand.Read failed: %v", err))
+	}
 	return hex.EncodeToString(b)
 }
 

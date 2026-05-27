@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -463,6 +464,23 @@ func TestGenerateMarker_HexOnly(t *testing.T) {
 			t.Errorf("marker contains non-hex character: %c", r)
 		}
 	}
+}
+
+func TestGenerateMarker_PanicsOnRandFailure(t *testing.T) {
+	orig := randReadFunc
+	randReadFunc = func(b []byte) (int, error) {
+		return 0, fmt.Errorf("injected entropy failure")
+	}
+	defer func() { randReadFunc = orig }()
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("generateMarker() did not panic on rand.Read failure")
+		} else if !strings.Contains(fmt.Sprintf("%v", r), "crypto/rand.Read failed") {
+			t.Errorf("generateMarker() panic message = %v, want 'crypto/rand.Read failed'", r)
+		}
+	}()
+	generateMarker()
 }
 
 // --- stripDangerousUnicode tests -----------------------------------------

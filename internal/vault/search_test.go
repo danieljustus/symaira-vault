@@ -553,6 +553,47 @@ func TestListCacheTTLExpiration(t *testing.T) {
 	}
 }
 
+func TestListCacheSurvivesMtimeOnlyChange(t *testing.T) {
+	vaultDir := t.TempDir()
+	id := testutil.TempIdentity(t)
+
+	mustWriteEntry(t, vaultDir, id, "github.com/user", map[string]interface{}{"username": "alice"})
+
+	beforeTouch, err := List(vaultDir, "")
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(beforeTouch) != 1 {
+		t.Fatalf("List() returned %d paths, want 1", len(beforeTouch))
+	}
+
+	future := time.Now().Add(1 * time.Second)
+	if terr := os.Chtimes(vaultDir, future, future); terr != nil {
+		t.Fatalf("Chtimes(vaultDir) error = %v", terr)
+	}
+	if terr := os.Chtimes(filepath.Join(vaultDir, "entries"), future, future); terr != nil {
+		t.Fatalf("Chtimes(entriesDir) error = %v", terr)
+	}
+
+	afterTouch, err := List(vaultDir, "")
+	if err != nil {
+		t.Fatalf("List() after touch error = %v", err)
+	}
+	if !reflect.DeepEqual(beforeTouch, afterTouch) {
+		t.Fatalf("List() after touch = %v, want %v", afterTouch, beforeTouch)
+	}
+
+	mustWriteEntry(t, vaultDir, id, "example.com/admin", map[string]interface{}{"username": "admin"})
+
+	afterAdd, err := List(vaultDir, "")
+	if err != nil {
+		t.Fatalf("List() after add error = %v", err)
+	}
+	if len(afterAdd) != 2 {
+		t.Fatalf("List() after add returned %d paths, want 2", len(afterAdd))
+	}
+}
+
 func TestFindWithRedactFieldPatterns(t *testing.T) {
 	vaultDir := t.TempDir()
 	id := testutil.TempIdentity(t)
