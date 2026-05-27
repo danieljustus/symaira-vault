@@ -4,6 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -12,11 +14,12 @@ import (
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
 )
 
-// EncryptedIndex provides an in-memory search index that maps entry paths to
-// the string values from their decrypted data, all encrypted with a key
-// derived from the vault identity. The index is held as ciphertext in memory
-// and decrypted only during search operations, preventing plaintext index
-// data from leaking during memory dumps or swap.
+// EncryptedIndex provides a persistent encrypted search index that maps entry
+// paths to the string values from their decrypted data. The index ciphertext is
+// stored both in memory and on disk (at vaultDir/.search-index) so it survives
+// process restarts. It is encrypted with a key derived from the vault identity
+// and decrypted only during search operations, preventing plaintext index data
+// from leaking during memory dumps or swap.
 //
 // When searching, the index is decrypted once and the query is matched as a
 // substring against all stored values. This preserves the existing substring
@@ -25,7 +28,9 @@ import (
 //
 // The index is:
 //   - Built lazily on first search after vault unlock
-//   - Invalidated on any write operation
+//   - Saved to disk after building so it persists across restarts
+//   - Loaded from disk on first search if available and valid
+//   - Invalidated on any write operation (clears both memory and disk)
 //   - Rebuilt automatically on the next search
 //   - Encrypted with a key derived from the vault identity
 type EncryptedIndex struct {
@@ -35,12 +40,19 @@ type EncryptedIndex struct {
 	idHash     [sha256.Size]byte // sha256 of identity for change detection
 }
 
+func indexFilePath(vaultDir string) string {
+	return filepath.Join(vaultDir, ".search-index")
+}
+
 // indexDoc stores raw string values per entry path for substring matching.
 // The needle is matched as a substring (case-insensitive) against all stored
 // values when performing a search.
 type indexDoc struct {
 	// Values maps entry path → lowercased string values from its data.
 	Values map[string][]string `json:"v"`
+	// EntryCount is the number of entries in the vault when the index was built.
+	// Used for stale detection — if the count differs, the index is rebuilt.
+	EntryCount int `json:"c,omitempty"`
 }
 
 var globalIndex EncryptedIndex
@@ -61,7 +73,8 @@ func (idx *EncryptedIndex) Build(vaultDir string, identity *age.X25519Identity) 
 	}
 
 	doc := indexDoc{
-		Values: make(map[string][]string, len(paths)),
+		Values:     make(map[string][]string, len(paths)),
+		EntryCount: len(paths),
 	}
 
 	for _, entryPath := range paths {
@@ -99,6 +112,7 @@ func (idx *EncryptedIndex) Build(vaultDir string, identity *age.X25519Identity) 
 	idx.idHash = idHash
 	idx.mu.Unlock()
 
+	_ = idx.saveToDisk(vaultDir)
 	return nil
 }
 
@@ -171,14 +185,19 @@ func (idx *EncryptedIndex) IsBuilt() bool {
 	return built
 }
 
-// Invalidate clears the encrypted index, forcing a rebuild on the next
-// MatchEntries call.
+// Invalidate clears the encrypted index from memory and deletes the on-disk
+// copy, forcing a rebuild on the next MatchEntries call.
 func (idx *EncryptedIndex) Invalidate() {
 	idx.mu.Lock()
+	vaultDir := idx.vaultDir
 	idx.ciphertext = nil
 	idx.vaultDir = ""
 	idx.idHash = [sha256.Size]byte{}
 	idx.mu.Unlock()
+
+	if vaultDir != "" {
+		_ = os.Remove(indexFilePath(vaultDir))
+	}
 }
 
 // UpdateEntry incrementally updates a single entry in the encrypted index.
@@ -295,6 +314,66 @@ func (idx *EncryptedIndex) RemoveEntry(path string) {
 	}
 
 	idx.ciphertext = newCiphertext
+}
+
+func (idx *EncryptedIndex) saveToDisk(vaultDir string) error {
+	idx.mu.RLock()
+	ct := idx.ciphertext
+	idx.mu.RUnlock()
+
+	if ct == nil {
+		return nil
+	}
+
+	indexPath := indexFilePath(vaultDir)
+	return os.WriteFile(indexPath, ct, 0600)
+}
+
+func (idx *EncryptedIndex) loadFromDisk(vaultDir string, identity *age.X25519Identity) error {
+	indexPath := indexFilePath(vaultDir)
+	ct, err := os.ReadFile(indexPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+
+	key := deriveIndexKey(identity)
+	defer vaultcrypto.Wipe(key)
+
+	plaintext, err := vaultcrypto.DecryptWithKey(ct, key)
+	if err != nil {
+		_ = os.Remove(indexPath)
+		return err
+	}
+	defer vaultcrypto.Wipe(plaintext)
+
+	var doc indexDoc
+	if err := json.Unmarshal(plaintext, &doc); err != nil {
+		_ = os.Remove(indexPath)
+		return err
+	}
+
+	paths, listErr := List(vaultDir, "")
+	if listErr != nil {
+		_ = os.Remove(indexPath)
+		return listErr
+	}
+	if doc.EntryCount > 0 && doc.EntryCount != len(paths) {
+		_ = os.Remove(indexPath)
+		return errors.New("stale index")
+	}
+
+	idHash := sha256.Sum256([]byte(identity.String()))
+
+	idx.mu.Lock()
+	idx.ciphertext = ct
+	idx.vaultDir = vaultDir
+	idx.idHash = idHash
+	idx.mu.Unlock()
+
+	return nil
 }
 
 // InvalidateSearchIndex clears the global in-memory encrypted search index and
