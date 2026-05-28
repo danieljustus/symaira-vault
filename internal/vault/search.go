@@ -230,7 +230,15 @@ func storeListCache(vaultDir string, paths []string) {
 	listCache.mu.Unlock()
 }
 
-// InvalidateListCache removes cached listings for a vault directory.
+// SetListCacheTTL overrides the default list cache TTL. Pass 0 to disable
+// caching. Typically called from vault initialization with the configured
+// vault.listing_cache_ttl value.
+func SetListCacheTTL(ttl time.Duration) {
+	listCache.mu.Lock()
+	listCache.ttl = ttl
+	listCache.mu.Unlock()
+}
+
 // Callers should invoke this after write operations that affect vault contents.
 // When vaultDir is empty, the entire list cache is cleared.
 func InvalidateListCache(vaultDir string) {
@@ -445,6 +453,17 @@ func List(vaultDir string, prefix string) ([]string, error) {
 		}
 	}
 
+	// Manifest fast path: when listing the entire vault without a prefix,
+	// the manifest already holds every entry path. This avoids a full
+	// directory walk. Falls back to walk on any error (missing manifest,
+	// no identity, decrypt failure).
+	if prefix == "" {
+		if paths := listViaManifest(vaultDir); paths != nil {
+			storeListCache(vaultDir, paths)
+			return paths, nil
+		}
+	}
+
 	start := time.Now()
 	seen := map[string]struct{}{}
 
@@ -618,6 +637,27 @@ func listPseudonymizedWithIdentity(vaultDir, prefix string, identity *age.X25519
 	metrics.RecordVaultOperationDuration("list_pseudonymized", time.Since(start))
 	metrics.RecordVaultEntryCount(vaultDir, len(paths))
 	return paths, nil
+}
+
+// listViaManifest returns entry paths from the manifest when available and
+// valid. Returns nil on any error so callers fall back to directory walk.
+func listViaManifest(vaultDir string) []string {
+	identity := currentSearchIdentity()
+	if identity == nil {
+		return nil
+	}
+	FlushManifestUpdates()
+	m, err := LoadManifest(vaultDir, identity)
+	if err != nil || m == nil || len(m.Entries) == 0 {
+		return nil
+	}
+	paths := make([]string, 0, len(m.Entries))
+	for path := range m.Entries {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	metrics.RecordVaultEntryCount(vaultDir, len(paths))
+	return paths
 }
 
 func listEntriesFast(root, base, prefix string, seen map[string]struct{}, legacy bool) error {

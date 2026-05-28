@@ -93,6 +93,9 @@ func Open(vaultDir string, identity *age.X25519Identity) (*Vault, error) {
 		return nil, fmt.Errorf("detect legacy mode: %w", err)
 	}
 	rememberSearchIdentity(identity)
+	if cfg != nil && cfg.Vault != nil && cfg.Vault.ListingCacheTTL > 0 {
+		SetListCacheTTL(cfg.Vault.ListingCacheTTL)
+	}
 	if !isLegacyMigrationDone(vaultDir) {
 		if err := migrateLegacyEntries(vaultDir); err != nil {
 			return nil, fmt.Errorf("migrate legacy entries: %w", err)
@@ -385,7 +388,11 @@ func (v *Vault) List(prefix string) ([]string, error) {
 		return nil, err
 	}
 	if isPseudonymizeEnabled(cfg) {
-		return listPseudonymizedWithIdentity(v.Dir, prefix, v.Identity)
+		workers := 0
+		if cfg != nil && cfg.Vault != nil {
+			workers = cfg.Vault.SearchWorkers
+		}
+		return listPseudonymizedWithIdentity(v.Dir, prefix, v.Identity, workers)
 	}
 	return List(v.Dir, prefix)
 }
