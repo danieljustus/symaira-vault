@@ -369,7 +369,14 @@ Symaira Vault uses `unsafe.Pointer` and package-level sink variables to attempt 
 - The OS may swap memory to disk
 - Memory clearing is not guaranteed by the Go language specification
 
-For users with the highest security requirements, consider using a memory-safe library such as [`github.com/awnumar/memguard`](https://github.com/awnumar/memguard) in a future release.
+**Explicit threat model boundary:** Symaira Vault's memory wiping protects against casual recovery of secrets from stale process memory (e.g., reused heap pages). It does **not** protect against an attacker with memory dump access (core dumps, swap analysis, debugger attachment, or /proc/pid/mem inspection). The `crypto.Wipe` mechanism raises the bar for post-compromise forensics but is not a defense against a determined local attacker.
+
+A full evaluation of `github.com/awnumar/memguard` (which provides `mlock(2)`-backed guarded heap allocations) was performed in [ADR 0003](docs/adr/0003-memory-wipe-for-sensitive-data.md). The decision was to keep the zero-dependency best-effort approach because:
+- Passphrases exist in memory only briefly during unlock operations
+- Adding `memguard` would require refactoring every crypto and vault API
+- The primary threat for a CLI password manager is local malware, where `Wipe` raises the bar sufficiently
+
+The ADR will be revisited if a concrete threat model justifies the complexity cost of guarded memory allocations.
 
 ## Privacy & Telemetry
 
