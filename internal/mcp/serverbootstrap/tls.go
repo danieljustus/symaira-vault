@@ -13,6 +13,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/danieljustus/symaira-vault/internal/fsutil"
 )
 
 const (
@@ -82,18 +84,20 @@ func generateSelfSignedCert(certFile, keyFile string) error {
 		return fmt.Errorf("create certificate: %w", err)
 	}
 
-	// Write private key
+	if err := os.MkdirAll(filepath.Dir(keyFile), 0o700); err != nil {
+		return fmt.Errorf("create cert directory: %w", err)
+	}
 	privBytes, err := x509.MarshalPKCS8PrivateKey(priv)
 	if err != nil {
 		return fmt.Errorf("marshal private key: %w", err)
 	}
-	if err := os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privBytes}), 0o600); err != nil {
+	if err := fsutil.SafeWriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privBytes}), 0o600); err != nil {
 		return fmt.Errorf("write private key: %w", err)
 	}
 
 	// Write certificate
-	if err := os.WriteFile(certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER}), 0o644); err != nil {
-		os.Remove(keyFile) // clean up key on failure
+	if err := fsutil.SafeWriteFile(certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER}), 0o644); err != nil {
+		os.Remove(keyFile)
 		return fmt.Errorf("write certificate: %w", err)
 	}
 
