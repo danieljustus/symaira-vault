@@ -62,21 +62,21 @@ func (c *Config) SaveTo(path string) error {
 			vaultAuthMethod = authMethod
 		}
 		raw.Vault = &VaultConfig{
-			Path:              c.Vault.Path,
-			DefaultRecipients: append([]string(nil), c.Vault.DefaultRecipients...),
-			ConfirmRemove:     c.Vault.ConfirmRemove,
-			AuthMethod:        vaultAuthMethod,
-			UseTouchID:        c.Vault.UseTouchID,
-			LegacyMode:        c.Vault.LegacyMode,
-			SearchWorkers:     c.Vault.SearchWorkers,
-	ConfigCacheEntries: c.Vault.ConfigCacheEntries,
-			PseudonymizePaths: c.Vault.PseudonymizePaths,
-			ScryptWorkFactor:  c.Vault.ScryptWorkFactor,
-			LastRotated:       c.Vault.LastRotated,
-			FormatVersion:     c.Vault.FormatVersion,
-			Argon2idTime:      c.Vault.Argon2idTime,
-			Argon2idMemory:    c.Vault.Argon2idMemory,
-			Argon2idThreads:   c.Vault.Argon2idThreads,
+			Path:               c.Vault.Path,
+			DefaultRecipients:  append([]string(nil), c.Vault.DefaultRecipients...),
+			ConfirmRemove:      c.Vault.ConfirmRemove,
+			AuthMethod:         vaultAuthMethod,
+			UseTouchID:         c.Vault.UseTouchID,
+			LegacyMode:         c.Vault.LegacyMode,
+			SearchWorkers:      c.Vault.SearchWorkers,
+			ConfigCacheEntries: c.Vault.ConfigCacheEntries,
+			PseudonymizePaths:  c.Vault.PseudonymizePaths,
+			ScryptWorkFactor:   c.Vault.ScryptWorkFactor,
+			LastRotated:        c.Vault.LastRotated,
+			FormatVersion:      c.Vault.FormatVersion,
+			Argon2idTime:       c.Vault.Argon2idTime,
+			Argon2idMemory:     c.Vault.Argon2idMemory,
+			Argon2idThreads:    c.Vault.Argon2idThreads,
 		}
 	}
 

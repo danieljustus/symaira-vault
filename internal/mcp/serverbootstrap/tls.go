@@ -84,8 +84,8 @@ func generateSelfSignedCert(certFile, keyFile string) error {
 		return fmt.Errorf("create certificate: %w", err)
 	}
 
-	if err := os.MkdirAll(filepath.Dir(keyFile), 0o700); err != nil {
-		return fmt.Errorf("create cert directory: %w", err)
+	if mkdirErr := os.MkdirAll(filepath.Dir(keyFile), 0o700); mkdirErr != nil {
+		return fmt.Errorf("create cert directory: %w", mkdirErr)
 	}
 	privBytes, err := x509.MarshalPKCS8PrivateKey(priv)
 	if err != nil {
@@ -97,7 +97,7 @@ func generateSelfSignedCert(certFile, keyFile string) error {
 
 	// Write certificate
 	if err := fsutil.SafeWriteFile(certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER}), 0o644); err != nil {
-		os.Remove(keyFile)
+		_ = os.Remove(keyFile)
 		return fmt.Errorf("write certificate: %w", err)
 	}
 
