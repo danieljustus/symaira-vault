@@ -72,9 +72,11 @@ func newTestVault(t *testing.T) *vaultpkg.Vault {
 	if err := os.WriteFile(filepath.Join(tmpDir, "mcp-token"), []byte(token), 0o600); err != nil {
 		t.Fatalf("write test token: %v", err)
 	}
+	cfg := config.Default()
+	cfg.MCP = &config.MCPConfig{AllowInsecureBind: true}
 	return &vaultpkg.Vault{
 		Dir:    tmpDir,
-		Config: config.Default(),
+		Config: cfg,
 	}
 }
 

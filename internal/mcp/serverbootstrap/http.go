@@ -324,16 +324,32 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 		tlsKey = strings.TrimSpace(v.Config.MCP.TLSKeyFile)
 		allowInsecure = v.Config.MCP.AllowInsecureBind
 	}
+
+	if !allowInsecure && (tlsCert == "" || tlsKey == "") {
+		autoCert, autoKey, autoErr := ensureTLSCert(vaultDir)
+		if autoErr != nil {
+			fmt.Fprintf(os.Stderr,
+				"WARNING: could not generate self-signed TLS certificate for MCP server: %v\n", autoErr)
+		}
+		if autoCert != "" && autoKey != "" {
+			tlsCert = autoCert
+			tlsKey = autoKey
+		}
+	}
 	tlsEnabled := tlsCert != "" && tlsKey != ""
 
-	if !mcpserver.IsLoopbackBind(bind) && !tlsEnabled && !allowInsecure {
-		return fmt.Errorf("refusing to serve MCP without TLS on non-loopback bind %q: "+
+	if !tlsEnabled && !allowInsecure {
+		return fmt.Errorf("refusing to serve MCP without TLS on bind %q: "+
 			"set MCP.tls_cert_file + MCP.tls_key_file, or explicitly opt-in with MCP.allow_insecure_bind=true "+
-			"(bearer tokens would otherwise be sent in cleartext)", bind)
+			"(bearer tokens would otherwise be sent in cleartext; even on loopback, a local attacker or compromised process can sniff traffic)", bind)
 	}
-	if !mcpserver.IsLoopbackBind(bind) && !tlsEnabled && allowInsecure {
+	if !tlsEnabled && allowInsecure {
+		loopbackNote := ""
+		if mcpserver.IsLoopbackBind(bind) {
+			loopbackNote = " Even on loopback, a local attacker or compromised process on the same machine can sniff traffic."
+		}
 		fmt.Fprintf(os.Stderr,
-			"WARNING: MCP server is binding %q without TLS; bearer tokens travel in cleartext (MCP.allow_insecure_bind=true).\n", bind)
+			"WARNING: MCP server is binding %q without TLS; bearer tokens travel in cleartext (MCP.allow_insecure_bind=true).%s\n", bind, loopbackNote)
 	}
 
 	go func() {
