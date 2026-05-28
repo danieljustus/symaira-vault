@@ -26,6 +26,8 @@ type VaultConfig struct {
 // GitConfig holds git-related configuration for automatic commits and pushes.
 type GitConfig struct {
 	CommitTemplate   string        `yaml:"commit_template,omitempty"`
+	Author           string        `yaml:"author,omitempty"`
+	Email            string        `yaml:"email,omitempty"`
 	AutoPush         bool          `yaml:"auto_push,omitempty"`
 	AutoPull         bool          `yaml:"auto_pull,omitempty"`
 	AutoPullInterval time.Duration `yaml:"auto_pull_interval,omitempty"`
