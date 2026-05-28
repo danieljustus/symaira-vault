@@ -60,6 +60,10 @@ vault:
   confirm_remove: true
   # Optional per-vault override for authMethod.
   # authMethod: touchid
+  # Number of concurrent workers for search/listing decryption. Set to 0 (default)
+  # for auto-scaling based on CPU count (min(runtime.NumCPU(), 8)). Increase for
+  # large vaults with many entries to improve search throughput.
+  # search_workers: 4
 
 # Git integration for automatic commits and optional pushes.
 git:

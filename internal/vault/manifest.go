@@ -228,7 +228,7 @@ func RebuildManifest(vaultDir string, identity *age.X25519Identity) error {
 		return fmt.Errorf("walk entries for manifest rebuild: %w", err)
 	}
 
-	// Second pass: compute SHA-256 hashes in parallel with 4 workers.
+	// Second pass: compute SHA-256 hashes in parallel with auto-scaled workers.
 	type result struct {
 		logicalPath string
 		entry       ManifestEntry
@@ -242,7 +242,7 @@ func RebuildManifest(vaultDir string, identity *age.X25519Identity) error {
 
 	resultCh := make(chan result, len(paths))
 	var wg sync.WaitGroup
-	numWorkers := 4
+	numWorkers := SearchWorkerCount(0)
 	if len(paths) < numWorkers {
 		numWorkers = len(paths)
 	}

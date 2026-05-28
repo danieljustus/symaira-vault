@@ -43,7 +43,7 @@ func (s *Server) findEntries(ctx context.Context, query string) ([]vaultpkg.Matc
 	_, span := metrics.StartSpan(ctx, "vault.FindWithOptions")
 	defer span.End()
 
-	workers := 4
+	workers := vaultpkg.SearchWorkerCount(0)
 	if s.vault != nil && s.vault.Config != nil && s.vault.Config.Vault != nil && s.vault.Config.Vault.SearchWorkers > 0 {
 		workers = s.vault.Config.Vault.SearchWorkers
 	}

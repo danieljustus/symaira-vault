@@ -115,6 +115,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -400,6 +401,23 @@ func CurrentSearchIdentity() *age.X25519Identity {
 	return currentSearchIdentity()
 }
 
+// SearchWorkerCount returns the number of concurrent decryption workers
+// to use for search/listing operations. When configured > 0, that value is
+// used. Otherwise it auto-scales to min(runtime.NumCPU(), 8).
+func SearchWorkerCount(configured int) int {
+	if configured > 0 {
+		return configured
+	}
+	cpus := runtime.NumCPU()
+	if cpus > 8 {
+		return 8
+	}
+	if cpus < 1 {
+		return 1
+	}
+	return cpus
+}
+
 // List returns all entry paths in the vault, optionally filtered by prefix.
 // It uses os.ReadDir for efficient directory traversal without stat calls.
 // Results are cached with a 30-second TTL to avoid repetitive walks during
@@ -412,7 +430,11 @@ func List(vaultDir string, prefix string) ([]string, error) {
 		return nil, err
 	}
 	if isPseudonymizeEnabled(cfg) {
-		return listPseudonymized(vaultDir, prefix)
+		workers := 0
+		if cfg != nil && cfg.Vault != nil {
+			workers = cfg.Vault.SearchWorkers
+		}
+		return listPseudonymized(vaultDir, prefix, workers)
 	}
 
 	// Check cache when listing the entire vault (prefix == "").
@@ -461,11 +483,11 @@ func List(vaultDir string, prefix string) ([]string, error) {
 //
 // Uses a bounded worker pool for parallel decryption and caches results
 // (including decrypted entry data) for reuse by FindWithOptions.
-func listPseudonymized(vaultDir, prefix string) ([]string, error) {
-	return listPseudonymizedWithIdentity(vaultDir, prefix, currentSearchIdentity())
+func listPseudonymized(vaultDir, prefix string, configuredWorkers int) ([]string, error) {
+	return listPseudonymizedWithIdentity(vaultDir, prefix, currentSearchIdentity(), configuredWorkers)
 }
 
-func listPseudonymizedWithIdentity(vaultDir, prefix string, identity *age.X25519Identity) ([]string, error) {
+func listPseudonymizedWithIdentity(vaultDir, prefix string, identity *age.X25519Identity, configuredWorkers int) ([]string, error) {
 	if identity == nil {
 		return nil, fmt.Errorf("no search identity available for pseudonymized listing")
 	}
@@ -510,9 +532,7 @@ func listPseudonymizedWithIdentity(vaultDir, prefix string, identity *age.X25519
 	}
 
 	// Second pass: decrypt entries in parallel using a bounded worker pool.
-	// Default 4 workers balances throughput vs memory pressure, matching
-	// the rationale documented for FindWithOptions concurrent decryption.
-	const maxWorkers = 4
+	maxWorkers := SearchWorkerCount(configuredWorkers)
 
 	type decryptResult struct {
 		entryPath string
