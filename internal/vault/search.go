@@ -239,6 +239,7 @@ func SetListCacheTTL(ttl time.Duration) {
 	listCache.mu.Unlock()
 }
 
+// InvalidateListCache removes the cached entry list for vaultDir.
 // Callers should invoke this after write operations that affect vault contents.
 // When vaultDir is empty, the entire list cache is cleared.
 func InvalidateListCache(vaultDir string) {

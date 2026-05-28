@@ -56,16 +56,12 @@ func objectSchema(required []string, properties map[string]schemaProperty) map[s
 // vector an attacker-controlled agent can exploit.
 const MaxToolDefinitions = 32
 
-// toolDefinitionsMaxGuard is a runtime safeguard: if the registry exceeds
-// MaxToolDefinitions the binary refuses to start. This catches additions
-// during development before they reach production.
-var toolDefinitionsMaxGuard = func() int {
+func init() {
 	n := len(toolDefinitions())
 	if n > MaxToolDefinitions {
 		panic(fmt.Sprintf("tool registry has %d tools, exceeding max %d; see ARCHITECTURE.md § Tool Addition Review", n, MaxToolDefinitions))
 	}
-	return n
-}()
+}
 
 func toolDefinitions() []toolDefinition {
 	return []toolDefinition{
