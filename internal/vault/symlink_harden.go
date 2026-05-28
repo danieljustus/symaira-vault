@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"github.com/danieljustus/symaira-vault/internal/fsutil"
+	"github.com/danieljustus/symaira-vault/internal/fsutil/safepath"
 )
 
 // SafeWriteFile atomically writes data to path, rejecting symlink and
@@ -28,35 +29,13 @@ func SafeWriteFile(path string, data []byte, perm os.FileMode) error {
 	return fsutil.AtomicWriteFile(path, data, perm)
 }
 
+// SafeRemove delegates to the safepath package's symlink-hardened remove.
 func SafeRemove(path string) error {
-	flags := syscall.O_NOFOLLOW | syscall.O_RDONLY
-
-	fd, err := syscall.Open(path, flags, 0)
-	if err != nil {
-		return &os.PathError{Op: "open", Path: path, Err: err}
-	}
-	defer func() { _ = syscall.Close(fd) }()
-
-	var stat syscall.Stat_t
-	if err = syscall.Fstat(fd, &stat); err != nil {
-		return &os.PathError{Op: "fstat", Path: path, Err: err}
-	}
-
-	if stat.Mode&syscall.S_IFMT != syscall.S_IFREG {
-		return &os.PathError{
-			Op:   "open",
-			Path: path,
-			Err:  syscall.ENOTDIR,
-		}
-	}
-
-	if err = syscall.Close(fd); err != nil {
-		return &os.PathError{Op: "close", Path: path, Err: err}
-	}
-
-	return os.Remove(path)
+	return safepath.DefaultManager.Remove(path)
 }
 
+// SafeMkdirAll delegates to the safepath package's component-walking
+// mkdir that rejects non-root symlinks at each path component.
 func SafeMkdirAll(path string, perm os.FileMode) error {
-	return os.MkdirAll(path, perm)
+	return safepath.DefaultManager.MkdirAll(path, perm)
 }
