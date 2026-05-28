@@ -69,3 +69,6 @@ CLAUDE.md
 
 # Code review artifacts (local working files, not for release)
 .github/review/
+
+# New binary name (post-rename)
+symvault

@@ -182,6 +182,9 @@ brews:
     homepage: "https://github.com/danieljustus/symaira-vault"
     description: "Transitional package for Symaira Vault"
     license: "MIT"
+    custom_block: |
+      version_scheme 1
+      deprecate! date: "2026-05-28", because: "has been renamed to symvault", replacement_formula: "symvault"
     conflicts:
       - symvault
     install: |
@@ -248,7 +251,7 @@ sboms:
 signs:
   - cmd: cosign
     certificate: "${artifact}.pem"
-    args: ["sign-blob", "--yes", "--oidc-issuer=https://token.actions.githubusercontent.com", "--output-certificate=${certificate}", "--output-signature=${signature}", "${artifact}"]
+    args: ["sign-blob", "--yes", "--output-certificate=${certificate}", "--output-signature=${signature}", "${artifact}"]
     artifacts: all
 
 snapshot:

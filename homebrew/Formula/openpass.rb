@@ -14,6 +14,8 @@ class Openpass < Formula
   sha256 "{{ .Checksum }}"
 
   license "MIT"
+  version_scheme 1
+  deprecate! date: "2026-05-28", because: "has been renamed to symvault", replacement_formula: "symvault"
 
   depends_on "go" => :build
 
