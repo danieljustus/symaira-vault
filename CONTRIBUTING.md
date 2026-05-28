@@ -42,7 +42,18 @@ After running the setup script (or installing pre-commit manually):
 pre-commit install
 ```
 
-This installs git hooks that run formatting, linting, and short tests before each commit, catching issues locally before they reach CI.
+This installs git hooks that run formatting, linting, and fast tests before each commit, catching issues locally before they reach CI. The pre-commit hook uses `make test-fast` which runs all tests without the race detector for quicker feedback (<30 seconds for typical changes).
+
+### Two-Tier Test Workflow
+
+Symaira Vault uses a two-tier testing approach:
+
+| Command | Purpose | What it runs |
+|---------|---------|-------------|
+| `make test-fast` | Local iteration, pre-commit hook | All tests without race detector |
+| `make test` | CI gate, before pushing shared branches | All tests with race detector |
+
+Use `make test-fast` during development for fast feedback. Run `make test` before pushing a PR to catch concurrency issues that only the race detector surfaces. CI always runs `make test`.
 
 ### Running from Source
 
