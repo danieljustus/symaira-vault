@@ -89,6 +89,9 @@ func Open(vaultDir string, identity *age.X25519Identity) (*Vault, error) {
 		return nil, fmt.Errorf("load config: %w", err)
 	}
 	normalizeConfig(cfg)
+	if cfg.Vault != nil && cfg.Vault.ConfigCacheEntries > 0 {
+		SetConfigCacheSize(cfg.Vault.ConfigCacheEntries)
+	}
 	if err := detectLegacyMode(cfg, vaultDir); err != nil {
 		return nil, fmt.Errorf("detect legacy mode: %w", err)
 	}
