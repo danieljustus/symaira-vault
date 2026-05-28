@@ -311,6 +311,7 @@ jobs:
         run: |
           TAG="${{ steps.tag.outputs.tag }}"
           curl -fsSL "https://raw.githubusercontent.com/danieljustus/homebrew-tap/main/Formula/symvault.rb" -o symvault.rb
+          curl -fsSL "https://raw.githubusercontent.com/danieljustus/homebrew-tap/main/Formula/openpass.rb" -o openpass.rb
 
       - name: Verify formula exists and has correct version
         run: |
@@ -320,17 +321,27 @@ jobs:
             echo "Homebrew formula not found or empty"
             exit 1
           fi
+          if [ ! -s openpass.rb ]; then
+            echo "Transitional Homebrew formula not found or empty"
+            exit 1
+          fi
           if ! grep -q "version \"${VERSION}\"" symvault.rb; then
             echo "Version mismatch: expected ${VERSION} in formula"
+            exit 1
+          fi
+          if ! grep -q "version \"${VERSION}\"" openpass.rb; then
+            echo "Version mismatch: expected ${VERSION} in transitional formula"
             exit 1
           fi
 
       - name: Validate formula syntax
         run: |
           ruby -c symvault.rb
+          ruby -c openpass.rb
 
       - name: Smoke test - formula audit
         run: |
           brew tap danieljustus/tap
           # Audit the formula; allow failure if tap is not fully set up
           brew audit --strict --formula symvault.rb || true
+          brew audit --strict --formula openpass.rb || true

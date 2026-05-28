@@ -1,9 +1,12 @@
-# This formula is a reference template. GoReleaser generates the actual
-# formula with correct version/SHA at release time (see .goreleaser.yml brews).
-# To test locally, use the instructions in homebrew/README.md.
+# Transitional OpenPass formula.
+#
+# Keep this formula for existing Homebrew users who installed the old package
+# name. `brew upgrade openpass` only checks the installed formula name, so
+# removing this file would strand those installations on the last OpenPass
+# release instead of moving them to Symaira Vault.
 
-class Symvault < Formula
-  desc "Modern CLI password manager with age encryption"
+class Openpass < Formula
+  desc "Transitional package for Symaira Vault"
   homepage "https://github.com/danieljustus/symaira-vault"
   # GoReleaser replaces these at release time:
   url "https://github.com/danieljustus/symaira-vault/archive/refs/tags/v{{ .Tag }}.tar.gz"
@@ -13,6 +16,8 @@ class Symvault < Formula
   license "MIT"
 
   depends_on "go" => :build
+
+  conflicts_with "symvault", because: "openpass is a transitional package for symvault"
 
   def install
     ldflags = %W[
@@ -24,6 +29,7 @@ class Symvault < Formula
     ]
 
     system "go", "build", "-ldflags", ldflags.join(" "), "-o", bin/"symvault", "."
+    bin.install_symlink "symvault" => "openpass"
     generate_completions_from_executable(bin/"symvault", "completion")
 
     man_dir = buildpath/"docs/man"
@@ -33,21 +39,22 @@ class Symvault < Formula
 
   def caveats
     <<~EOS
-      Symaira Vault has been installed!
+      OpenPass has been renamed to Symaira Vault.
 
-      To get started:
-        symvault init                    # Initialize a new vault
-        symvault set github.com/username # Add your first entry
-        symvault get github.com/username # Retrieve it
+      This transitional formula installed the new command:
+        symvault
 
-      For MCP server setup:
-        symvault mcp-config <name>
+      The old command remains available as an alias:
+        openpass
 
-      Documentation: https://github.com/danieljustus/symaira-vault#readme
+      To move to the new formula name:
+        brew uninstall openpass
+        brew install symvault
     EOS
   end
 
   test do
     system "#{bin}/symvault", "version"
+    system "#{bin}/openpass", "version"
   end
 end

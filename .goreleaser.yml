@@ -173,6 +173,37 @@ brews:
       Documentation: https://github.com/danieljustus/symaira-vault#readme
     test: |
       system "#{bin}/symvault", "version"
+  - name: openpass
+    repository:
+      owner: danieljustus
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/danieljustus/symaira-vault"
+    description: "Transitional package for Symaira Vault"
+    license: "MIT"
+    conflicts:
+      - symvault
+    install: |
+      bin.install "symvault"
+      bin.install_symlink "symvault" => "openpass"
+      generate_completions_from_executable(bin/"symvault", "completion")
+      man1.install Dir["docs/man/*.1"]
+    caveats: |
+      OpenPass has been renamed to Symaira Vault.
+
+      This transitional formula installed the new command:
+        symvault
+
+      The old command remains available as an alias:
+        openpass
+
+      To move to the new formula name:
+        brew uninstall openpass
+        brew install symvault
+    test: |
+      system "#{bin}/symvault", "version"
+      system "#{bin}/openpass", "version"
 
 scoops:
   - name: symvault
