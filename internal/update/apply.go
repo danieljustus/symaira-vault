@@ -192,13 +192,43 @@ func Apply(ctx context.Context, currentVersion string, force, dryRun bool) (*App
 	}
 
 	if isLegacyBinary(binaryPath) {
-		symlinkPath, err := createLegacySymlink(binaryPath)
-		if err == nil && symlinkPath != "" {
+		newBinaryPath, symlinkPath, err := migrateLegacyBinaryName(binaryPath)
+		if err != nil {
+			return nil, fmt.Errorf("migrate legacy binary name: %w", err)
+		}
+		applyResult.BinaryPath = newBinaryPath
+		if symlinkPath != "" {
 			applyResult.LegacySymlinkPath = symlinkPath
 		}
 	}
 
 	return applyResult, nil
+}
+
+func migrateLegacyBinaryName(binaryPath string) (string, string, error) {
+	if !isLegacyBinary(binaryPath) || runtime.GOOS == windowsOS {
+		return binaryPath, "", nil
+	}
+
+	dir := filepath.Dir(binaryPath)
+	symvaultPath := filepath.Join(dir, binaryName)
+	if _, err := os.Lstat(symvaultPath); err == nil {
+		return binaryPath, "", nil
+	} else if !os.IsNotExist(err) {
+		return "", "", fmt.Errorf("check %q: %w", symvaultPath, err)
+	}
+
+	if err := os.Rename(binaryPath, symvaultPath); err != nil {
+		return "", "", fmt.Errorf("rename legacy binary %q -> %q: %w", binaryPath, symvaultPath, err)
+	}
+
+	symlinkPath, err := createLegacySymlink(symvaultPath)
+	if err != nil {
+		_ = os.Rename(symvaultPath, binaryPath)
+		return "", "", err
+	}
+
+	return symvaultPath, symlinkPath, nil
 }
 
 func extractBinaryFromArchive(archiveData []byte) ([]byte, error) {

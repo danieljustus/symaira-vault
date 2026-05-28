@@ -362,6 +362,41 @@ func TestCreateLegacySymlink_OverwritesExisting(t *testing.T) {
 	}
 }
 
+func TestMigrateLegacyBinaryNameRenamesOpenPassAndLeavesAlias(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks on windows are unreliable for executables")
+	}
+
+	tmpDir := t.TempDir()
+	legacyPath := filepath.Join(tmpDir, "openpass")
+	if err := os.WriteFile(legacyPath, []byte("new binary"), 0o755); err != nil {
+		t.Fatalf("failed to create legacy binary: %v", err)
+	}
+
+	binaryPath, symlinkPath, err := migrateLegacyBinaryName(legacyPath)
+	if err != nil {
+		t.Fatalf("migrateLegacyBinaryName() error = %v", err)
+	}
+
+	expectedBinaryPath := filepath.Join(tmpDir, "symvault")
+	if binaryPath != expectedBinaryPath {
+		t.Fatalf("binaryPath = %q, want %q", binaryPath, expectedBinaryPath)
+	}
+	if symlinkPath != legacyPath {
+		t.Fatalf("symlinkPath = %q, want %q", symlinkPath, legacyPath)
+	}
+	if data, err := os.ReadFile(expectedBinaryPath); err != nil || string(data) != "new binary" {
+		t.Fatalf("symvault binary data = %q, err = %v", data, err)
+	}
+	target, err := os.Readlink(legacyPath)
+	if err != nil {
+		t.Fatalf("os.Readlink(%q) error = %v", legacyPath, err)
+	}
+	if target != "symvault" {
+		t.Fatalf("legacy symlink target = %q, want %q", target, "symvault")
+	}
+}
+
 func TestInfoResult_LegacyBinary(t *testing.T) {
 	r := &InfoResult{
 		Method:              installmethod.DirectDownload,

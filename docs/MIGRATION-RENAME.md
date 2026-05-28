@@ -50,14 +50,23 @@ openpass backup ~/backups/openpass-pre-rename-$(date +%Y%m%d).tar.gz
 
 #### Homebrew (macOS / Linux)
 
-```bash
-# Remove the old formula
-brew uninstall openpass
+Existing OpenPass Homebrew users:
 
-# Tap and install the new one
+```bash
+brew update
+brew upgrade openpass
+```
+
+This installs the new `symvault` command and keeps `openpass` as a
+backward-compatible alias. To switch to the new formula name later:
+
+```bash
+brew uninstall openpass
 brew tap danieljustus/tap
 brew install symvault
 ```
+
+New users can install `symvault` directly.
 
 #### Scoop (Windows)
 
@@ -105,8 +114,9 @@ symvault list         # All entries should appear
 symvault auth status  # Identity should be recognised
 ```
 
-Your vault directory (`~/.openpass` by default) has **not** moved. Symaira Vault
-continues to use the same directory unless you explicitly change it.
+Existing OpenPass vaults at `~/.openpass` are detected automatically when no
+`~/.symvault` vault exists. New Symaira Vault installations use `~/.symvault` by
+default.
 
 ### 4. Update shell completions (optional)
 
@@ -200,16 +210,21 @@ The following environment variables have been renamed:
 | `OPENPASS_CONFIG` | `SYMVAULT_CONFIG` |
 | `OPENPASS_AGENT` | `SYMVAULT_AGENT` |
 
-**Backward compatibility:** If `SYMVAULT_VAULT` is not set, Symaira Vault will
-still fall back to `OPENPASS_VAULT` for one release cycle (deprecated, will be
-removed in v0.2.0).
+**Backward compatibility:** If `SYMVAULT_VAULT` is not set, Symaira Vault still
+falls back to `OPENPASS_VAULT`. Deprecated `OPENPASS_*` variables emit a warning
+and are scheduled for removal three releases after 2026-05-26.
 
 ---
 
 ## Data Directory
 
-By default, Symaira Vault continues to use `~/.openpass` as the vault directory.
-You do **not** need to move your data.
+New Symaira Vault installations use `~/.symvault` as the default vault
+directory. Existing OpenPass installations continue to work without moving data:
+if `~/.openpass` contains a vault and `~/.symvault` does not, `symvault` uses
+`~/.openpass` automatically.
+
+If both directories exist, `~/.symvault` wins. Use `--vault`, `SYMVAULT_VAULT`,
+or a configured profile to select another vault explicitly.
 
 If you prefer to align the directory name with the new project name:
 
@@ -269,8 +284,10 @@ Your vault data remains compatible. Both binaries read the same vault format.
 any changes.
 
 ### Q: Will `symvault` create a new vault if I already have one?
-**A:** No. It will detect and use your existing vault at `~/.openpass` (or
-`$SYMVAULT_VAULT`).
+**A:** No. If `~/.openpass` exists and `~/.symvault` does not, it will detect and
+use the existing OpenPass vault. If both directories exist, `~/.symvault` is the
+default; set `SYMVAULT_VAULT="$HOME/.openpass"` or pass `--vault ~/.openpass` to
+select the old vault explicitly.
 
 ### Q: What happens to my Git sync remote?
 **A:** Nothing. The sync remote URL is stored in your vault config and remains

@@ -179,6 +179,61 @@ func TestVaultPathWithTildeOnly(t *testing.T) {
 	}
 }
 
+func TestVaultPathUsesLegacyOpenPassVaultWhenOnlyLegacyExists(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("SYMVAULT_VAULT", "")
+	t.Setenv("OPENPASS_VAULT", "")
+	t.Setenv("SYMVAULT_PROFILE", "")
+	t.Setenv("OPENPASS_PROFILE", "")
+
+	origVault := cli.Vault
+	origProfile := cli.Profile
+	origVaultFlagChanged := false
+	origProfileFlagChanged := false
+	if cli.VaultFlag != nil {
+		origVaultFlagChanged = cli.VaultFlag.Changed
+	}
+	if cli.ProfileFlag != nil {
+		origProfileFlagChanged = cli.ProfileFlag.Changed
+	}
+	t.Cleanup(func() {
+		cli.Vault = origVault
+		cli.Profile = origProfile
+		if cli.VaultFlag != nil {
+			cli.VaultFlag.Changed = origVaultFlagChanged
+		}
+		if cli.ProfileFlag != nil {
+			cli.ProfileFlag.Changed = origProfileFlagChanged
+		}
+	})
+
+	cli.Vault = "~/" + config.DefaultVaultSubdir
+	cli.Profile = ""
+	if cli.VaultFlag != nil {
+		cli.VaultFlag.Changed = false
+	}
+	if cli.ProfileFlag != nil {
+		cli.ProfileFlag.Changed = false
+	}
+
+	legacyVault := filepath.Join(home, config.LegacyDefaultVaultSubdir)
+	if err := os.MkdirAll(legacyVault, 0o700); err != nil {
+		t.Fatalf("create legacy vault dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(legacyVault, "config.yaml"), []byte("vaultDir: "+legacyVault+"\n"), 0o600); err != nil {
+		t.Fatalf("write legacy config: %v", err)
+	}
+
+	got, err := cli.VaultPath()
+	if err != nil {
+		t.Fatalf("cli.VaultPath() error = %v", err)
+	}
+	if got != legacyVault {
+		t.Fatalf("cli.VaultPath() = %q, want legacy vault %q", got, legacyVault)
+	}
+}
+
 func TestLoadConfigSilent(t *testing.T) {
 	_, err := mcpcmd.LoadConfigSilent("/tmp/nonexistent/config.yaml")
 	if err == nil {

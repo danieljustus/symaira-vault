@@ -5,13 +5,14 @@ import "time"
 
 const (
 	// DefaultVaultSubdir is the default vault directory name under the user's home directory.
-	DefaultVaultSubdir    = ".symvault"
-	defaultConfigDir      = DefaultVaultSubdir
-	defaultConfigFile     = "config.yaml"
-	defaultAgentName      = "default"
-	defaultSessionTimeout = 15 * time.Minute
-	AuthMethodPassphrase  = "passphrase"
-	AuthMethodTouchID     = "touchid"
+	DefaultVaultSubdir       = ".symvault"
+	LegacyDefaultVaultSubdir = ".openpass"
+	defaultConfigDir         = DefaultVaultSubdir
+	defaultConfigFile        = "config.yaml"
+	defaultAgentName         = "default"
+	defaultSessionTimeout    = 15 * time.Minute
+	AuthMethodPassphrase     = "passphrase"
+	AuthMethodTouchID        = "touchid"
 )
 
 type CustomPattern struct {

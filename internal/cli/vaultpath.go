@@ -56,6 +56,13 @@ func VaultPath() (string, error) {
 				return p, nil
 			}
 		}
+		if isDefaultVaultFlagValue(Vault) {
+			legacyVault := filepath.Join(home, configpkg.LegacyDefaultVaultSubdir)
+			newVault := filepath.Join(home, configpkg.DefaultVaultSubdir)
+			if vaultExists(legacyVault) && !vaultExists(newVault) {
+				return legacyVault, nil
+			}
+		}
 	}
 
 	p, err := ExpandVaultDir(Vault)
@@ -63,6 +70,20 @@ func VaultPath() (string, error) {
 		return "", errorspkg.NewCLIError(errorspkg.ExitGeneralError, "expand vault path", err)
 	}
 	return p, nil
+}
+
+func isDefaultVaultFlagValue(vaultDir string) bool {
+	trimmed := strings.TrimSpace(vaultDir)
+	return trimmed == "" || trimmed == "~/"+configpkg.DefaultVaultSubdir
+}
+
+func vaultExists(vaultDir string) bool {
+	return fileExists(filepath.Join(vaultDir, "config.yaml")) || fileExists(filepath.Join(vaultDir, "identity.age"))
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }
 
 func resolveProfileVaultDir(profileName string) (string, error) {
