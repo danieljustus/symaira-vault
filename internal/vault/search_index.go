@@ -331,7 +331,7 @@ func (idx *EncryptedIndex) saveToDisk(vaultDir string) error {
 
 func (idx *EncryptedIndex) loadFromDisk(vaultDir string, identity *age.X25519Identity) error {
 	indexPath := indexFilePath(vaultDir)
-	ct, err := os.ReadFile(indexPath) // #nosec G304 — indexPath is filepath.Join(vaultDir, ".search-index"); vaultDir is validated by validateVaultDir() and the filename is hardcoded.
+	ct, err := os.ReadFile(indexPath) // #nosec G304 — indexPath is filepath.Join(vaultDir, ".search-index"). Callers pass Vault.Dir from Open, which validates the directory via validateVaultDir(), and the filename is hardcoded.
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil
