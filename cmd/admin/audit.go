@@ -215,5 +215,37 @@ func init() {
 	AuditCmd.Flags().StringVarP(&AuditAgent, "agent", "a", "default", "Agent name to filter by")
 	AuditCmd.Flags().StringVarP(&AuditSince, "since", "s", "", "Show entries since duration (e.g. 1h, 24h, 7d)")
 	AuditCmd.Flags().BoolVar(&AuditFailed, "failed", false, "Show only failed entries")
+	AuditCmd.AddCommand(rotateKeyCmd)
 	cli.RootCmd.AddCommand(AuditCmd)
+}
+
+var rotateKeyCmd = &cobra.Command{
+	Use:   "rotate-key",
+	Short: "Rotate the audit log HMAC key",
+	Long: `Generate a new HMAC key for audit log integrity and archive the current key.
+
+The old key is archived to a timestamped file (audit-hmac-key.rotated.YYYY-MM-DD)
+in the vault directory. A new audit log file is started with the new key.`,
+	Annotations: map[string]string{
+		cli.RequiresVaultAnnotation: "true",
+	},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		vaultDir, err := cli.VaultPath()
+		if err != nil {
+			return err
+		}
+
+		ks := audit.NewKeystore(vaultDir, nil)
+		newKey, err := ks.RotateKey()
+		if err != nil {
+			return fmt.Errorf("rotate HMAC key: %w", err)
+		}
+
+		archivePath := audit.RotateKeyArchivePath(vaultDir)
+		cmd.Printf("HMAC key rotated successfully.\n")
+		cmd.Printf("New key: %x (first 4 bytes)\n", newKey[:4])
+		cmd.Printf("Old key archived to: %s\n", archivePath)
+		cmd.Printf("A new audit log will be started on the next audit write.\n")
+		return nil
+	},
 }

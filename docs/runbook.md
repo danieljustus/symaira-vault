@@ -307,6 +307,60 @@ symvault serve --port 8080
 
 ---
 
+## Audit Log HMAC Key Rotation
+
+The audit log uses an HMAC key to provide integrity guarantees (tamper detection via
+chained HMACs). If the HMAC key is compromised, all historical audit log integrity
+verification is void. Rotate the key periodically and after any suspected compromise.
+
+### Rotating the HMAC Key
+
+```bash
+symvault audit rotate-key
+```
+
+This command:
+
+1. Generates a new 32-byte HMAC key using `crypto/rand`
+2. Archives the current key to `audit-hmac-key.rotated.YYYY-MM-DD` in the vault directory
+3. Stores the new key in the OS keyring (or encrypted file on unsupported platforms)
+4. A new audit log file starts with the next audit write
+
+### Key Backup Requirements
+
+- **Archive files** (`audit-hmac-key.rotated.*`) must be backed up alongside the vault.
+  Without the archived key, historical audit log verification is impossible.
+- Store backup keys **separately** from the vault backup to avoid single-point compromise.
+- **Rotate after key exposure**: If the HMAC key may have been exposed (compromised machine,
+  shared access token, keyring extraction), rotate immediately and verify the audit log
+  integrity with both the old and new keys.
+- **Rotation frequency**: Rotate at least annually, or immediately after any security
+  incident involving the vault directory or OS keyring access.
+
+### Verifying After Rotation
+
+After rotation, verify the audit log with both keys:
+
+```bash
+# Verify with current key (auto-detected)
+symvault audit verify
+
+# Manually verify rotated files with archived keys
+symvault audit verify --key-file ~/.symvault/audit-hmac-key.rotated.2026-05-28
+```
+
+### Recovery from Key Loss
+
+If all HMAC keys are lost (no archived copies, keyring cleared), audit log entries
+become unverifiable but remain readable. To recover:
+
+1. Generate a fresh key: `symvault audit rotate-key`
+2. All future entries will use the new HMAC chain
+3. Historical entries can be read but integrity cannot be verified
+4. Document the key loss event in the incident log
+
+---
+
 ## Backup & Recovery
 
 ### Vault Backup Strategy

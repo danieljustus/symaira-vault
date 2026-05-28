@@ -233,6 +233,35 @@ func (k *osKeystore) LoadHMACKey() ([]byte, error) {
 	return data, nil
 }
 
+// RotateKey generates a new HMAC key, archives the existing key as a
+// hex-encoded file in the audit directory, and stores the new key in
+// the OS keyring (with memory fallback).
+func (k *osKeystore) RotateKey() ([]byte, error) {
+	oldKey, err := k.LoadHMACKey()
+	if err != nil {
+		return nil, fmt.Errorf("load existing key for rotation: %w", err)
+	}
+
+	archivePath := RotateKeyArchivePath(k.auditDir)
+	hexOld := hex.EncodeToString(oldKey)
+	if err := os.WriteFile(archivePath, []byte(hexOld), 0o600); err != nil {
+		return nil, fmt.Errorf("archive old HMAC key: %w", err)
+	}
+
+	newKey := make([]byte, hmacKeySize)
+	if _, err := io.ReadFull(rand.Reader, newKey); err != nil {
+		return nil, fmt.Errorf("generate new HMAC key: %w", err)
+	}
+
+	account := keyringAccount(k.auditDir)
+	hexNew := hex.EncodeToString(newKey)
+	if err := k.setWithFallback(keyringService, account, hexNew); err != nil {
+		return nil, fmt.Errorf("store new HMAC key in keyring: %w", err)
+	}
+
+	return newKey, nil
+}
+
 // NewKeystore is the package-level factory for creating a Keystore backed
 // by the OS keyring. It is set by init() on platforms that support it.
 // The identity parameter is used by the fallback keystore for encrypting
