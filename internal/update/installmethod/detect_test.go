@@ -373,7 +373,7 @@ func TestLegacyGuidance(t *testing.T) {
 		method InstallMethod
 		want   string
 	}{
-		{method: Homebrew, want: "brew uninstall openpass"},
+		{method: Homebrew, want: "brew update"},
 		{method: DirectDownload, want: "install.sh"},
 		{method: GoInstall, want: "go install"},
 		{method: PackageManager, want: "Uninstall"},
@@ -387,6 +387,9 @@ func TestLegacyGuidance(t *testing.T) {
 			}
 			if !containsAny(got, tt.want) {
 				t.Fatalf("LegacyGuidance(%q) = %q, want it to contain %q", tt.method, got, tt.want)
+			}
+			if tt.method == Homebrew && !containsAny(got, "brew upgrade") {
+				t.Fatalf("LegacyGuidance(Homebrew) = %q, want it to mention brew upgrade", got)
 			}
 		})
 	}

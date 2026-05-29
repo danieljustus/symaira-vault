@@ -54,17 +54,12 @@ Existing OpenPass Homebrew users:
 
 ```bash
 brew update
-brew upgrade openpass
+brew upgrade
 ```
 
-This installs the new `symvault` command and keeps `openpass` as a
-backward-compatible alias. To switch to the new formula name later:
-
-```bash
-brew uninstall openpass
-brew tap danieljustus/tap
-brew install symvault
-```
+Homebrew applies the `openpass` -> `symvault` formula rename from the tap,
+installs the new `symvault` command, and keeps `openpass` as a
+backward-compatible alias.
 
 New users can install `symvault` directly.
 
@@ -270,7 +265,8 @@ If you need to revert to the old OpenPass binary:
 # Re-install the last OpenPass release
 go install github.com/danieljustus/OpenPass@v4.0.0
 # or
-brew install danieljustus/tap/openpass@4.0.0
+# download v4.0.0 directly from GitHub Releases:
+# https://github.com/danieljustus/symaira-vault/releases/tag/v4.0.0
 ```
 
 Your vault data remains compatible. Both binaries read the same vault format.
