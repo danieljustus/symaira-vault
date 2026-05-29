@@ -155,8 +155,11 @@ brews:
     homepage: "https://github.com/danieljustus/symaira-vault"
     description: "Modern CLI password manager with age encryption"
     license: "MIT"
+    custom_block: |
+      version_scheme 1
     install: |
       bin.install "symvault"
+      bin.install_symlink "symvault" => "openpass"
       generate_completions_from_executable(bin/"symvault", "completion")
       man1.install Dir["docs/man/*.1"]
     caveats: |
@@ -170,40 +173,9 @@ brews:
       For MCP server setup:
         symvault mcp-config <name>
 
+      The legacy openpass command remains available as a compatibility alias.
+
       Documentation: https://github.com/danieljustus/symaira-vault#readme
-    test: |
-      system "#{bin}/symvault", "version"
-  - name: openpass
-    repository:
-      owner: danieljustus
-      name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    directory: Formula
-    homepage: "https://github.com/danieljustus/symaira-vault"
-    description: "Transitional package for Symaira Vault"
-    license: "MIT"
-    custom_block: |
-      version_scheme 1
-      deprecate! date: "2026-05-28", because: "has been renamed to symvault", replacement_formula: "symvault"
-    conflicts:
-      - symvault
-    install: |
-      bin.install "symvault"
-      bin.install_symlink "symvault" => "openpass"
-      generate_completions_from_executable(bin/"symvault", "completion")
-      man1.install Dir["docs/man/*.1"]
-    caveats: |
-      OpenPass has been renamed to Symaira Vault.
-
-      This transitional formula installed the new command:
-        symvault
-
-      The old command remains available as an alias:
-        openpass
-
-      To move to the new formula name:
-        brew uninstall openpass
-        brew install symvault
     test: |
       system "#{bin}/symvault", "version"
       system "#{bin}/openpass", "version"

@@ -101,7 +101,7 @@ func Guidance(method InstallMethod) string {
 	case DirectDownload:
 		return "Re-run the quick install script: curl -sSfL https://raw.githubusercontent.com/danieljustus/symaira-vault/main/scripts/install.sh | sh"
 	case Homebrew:
-		return "Update via Homebrew: brew upgrade symvault"
+		return "Update via Homebrew: brew update && brew upgrade symvault"
 	case GoInstall:
 		return "Update via Go: go install github.com/danieljustus/symaira-vault@latest"
 	case PackageManager:
@@ -118,7 +118,7 @@ func Guidance(method InstallMethod) string {
 func LegacyGuidance(method InstallMethod) string {
 	switch method {
 	case Homebrew:
-		return "Migrate via Homebrew:\n  brew uninstall openpass\n  brew install symvault"
+		return "Migrate via Homebrew:\n  brew update\n  brew upgrade"
 	case DirectDownload:
 		return "Migrate via quick install script:\n  curl -sSfL https://raw.githubusercontent.com/danieljustus/symaira-vault/main/scripts/install.sh | sh"
 	case GoInstall:
