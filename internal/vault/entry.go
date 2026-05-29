@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -171,6 +172,9 @@ var configCacheMaxSize int32 = 32
 func SetConfigCacheSize(n int) {
 	if n <= 0 {
 		n = 32
+	}
+	if n > math.MaxInt32 {
+		n = math.MaxInt32
 	}
 	atomic.StoreInt32(&configCacheMaxSize, int32(n))
 }
