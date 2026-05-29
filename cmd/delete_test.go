@@ -141,6 +141,7 @@ func TestCmdDelete_EmptyConfirm(t *testing.T) {
 	})
 	os.Stdin = oldStdin
 	_ = r.Close()
+	time.Sleep(100 * time.Millisecond)
 }
 
 func TestCmdDelete_AutoCommitError(t *testing.T) {
