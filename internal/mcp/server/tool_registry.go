@@ -49,6 +49,20 @@ func objectSchema(required []string, properties map[string]schemaProperty) map[s
 	return schema
 }
 
+// MaxToolDefinitions is the maximum number of tools allowed in the registry.
+// Adding a tool beyond this cap requires explicit architectural review (see
+// ARCHITECTURE.md § Tool Addition Review). The cap balances functionality
+// against the prompt injection attack surface — each additional tool is another
+// vector an attacker-controlled agent can exploit.
+const MaxToolDefinitions = 32
+
+func init() {
+	n := len(toolDefinitions())
+	if n > MaxToolDefinitions {
+		panic(fmt.Sprintf("tool registry has %d tools, exceeding max %d; see ARCHITECTURE.md § Tool Addition Review", n, MaxToolDefinitions))
+	}
+}
+
 func toolDefinitions() []toolDefinition {
 	return []toolDefinition{
 		{

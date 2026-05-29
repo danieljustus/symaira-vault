@@ -391,6 +391,27 @@ Vaults created with the older root-level entry layout are migrated to `entries/`
 4. **Build-tagged clipboard:** `internal/clipboard/` uses `//go:build` tags to switch between real clipboard (`!test_headless`) and no-op stub (`test_headless`)
 5. **HTTP MCP token:** Auto-generated, stored at `<vault>/mcp-token`
 
+## Tool Addition Review
+
+Symaira Vault caps the MCP tool registry at `MaxToolDefinitions` (32, defined in `internal/mcp/server/tool_registry.go`). Each tool is a potential prompt injection vector — an attacker-controlled agent can exploit any exposed tool. The cap forces deliberate tradeoffs: every new tool must displace another or justify raising the limit.
+
+**Adding a new tool** requires:
+
+1. A written rationale (commit message or design doc) covering:
+   - What user/agent need the tool addresses
+   - Why existing tools cannot satisfy the need
+   - The tool's risk level (Low/Medium/High/Critical per `RiskLevel`)
+   - Which agent tiers may access the tool
+
+2. If the cap is reached, choose ONE of:
+   - Deprecate an existing tool (add `Deprecated: true` and an `AliasFor` migration path)
+   - Raise `MaxToolDefinitions` with explicit justification (e.g., deprecated tools count as half-weight)
+   - Split into core/admin MCP servers with separate token scopes
+
+3. Update `docs/threat-model.md` under "Tool Descriptions & Injection" to reflect the new tool's risk profile.
+
+The cap is enforced at init-time: exceeding `MaxToolDefinitions` panics before any MCP handler runs, preventing deployment of an unbounded tool surface.
+
 ## Dependencies
 
 | Package | Purpose |
