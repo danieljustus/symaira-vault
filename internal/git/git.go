@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -193,12 +194,18 @@ func AutoCommitWithOptions(vaultDir string, opts CommitOptions) error {
 		message = DefaultCommitTemplate
 	}
 
-	// Determine author
+	// Determine author: explicit override → git config → hardcoded default
 	authorName := opts.Author
+	if authorName == "" {
+		authorName = gitConfigUser("user.name")
+	}
+	authorEmail := opts.Email
+	if authorEmail == "" {
+		authorEmail = gitConfigUser("user.email")
+	}
 	if authorName == "" {
 		authorName = "Symaira Vault"
 	}
-	authorEmail := opts.Email
 	if authorEmail == "" {
 		authorEmail = "symvault@example.com"
 	}
@@ -855,3 +862,13 @@ func GetRemoteURL(vaultDir, remoteName string) (string, error) {
 }
 
 var _ = config.RemoteConfig{}
+
+// gitConfigUser reads a git config value via the system's git binary.
+// Returns empty string if git is not available or the key is not set.
+func gitConfigUser(key string) string {
+	out, err := exec.Command("git", "config", "--get", key).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}

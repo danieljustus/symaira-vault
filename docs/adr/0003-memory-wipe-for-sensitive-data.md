@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted (reconfirmed 2026-05-28 after code review reassessment)
 
 ## Context
 

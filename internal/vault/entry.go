@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"filippo.io/age"
@@ -162,7 +163,17 @@ func validateLegacyEntryPath(vaultDir, path string) error {
 	return nil
 }
 
-const maxConfigCacheSize = 16
+var configCacheMaxSize int32 = 32
+
+// SetConfigCacheSize sets the maximum number of cached vault configs.
+// Call during vault initialization with the value from config, or 0 to
+// reset to the default of 32.
+func SetConfigCacheSize(n int) {
+	if n <= 0 {
+		n = 32
+	}
+	atomic.StoreInt32(&configCacheMaxSize, int32(n))
+}
 
 // configCache memoizes parsed vault configs per vaultDir, keyed by the
 // config file's mtime. It avoids re-parsing config.yaml on every entry
@@ -215,7 +226,7 @@ func loadVaultConfig(vaultDir string) (*vaultconfig.Config, error) {
 	}
 
 	configCache.mu.Lock()
-	if len(configCache.items) >= maxConfigCacheSize {
+	if len(configCache.items) >= int(atomic.LoadInt32(&configCacheMaxSize)) {
 		var oldestKey string
 		var oldestTime time.Time
 		for k, v := range configCache.items {

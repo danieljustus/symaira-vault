@@ -255,6 +255,9 @@ func mergeVaultConfig(raw *VaultConfig, sf map[string]bool, rawAuthMethod string
 	if sf["search_workers"] {
 		defaults.SearchWorkers = raw.SearchWorkers
 	}
+	if sf["config_cache_entries"] {
+		defaults.ConfigCacheEntries = raw.ConfigCacheEntries
+	}
 	if sf["pseudonymize_paths"] {
 		defaults.PseudonymizePaths = raw.PseudonymizePaths
 	}

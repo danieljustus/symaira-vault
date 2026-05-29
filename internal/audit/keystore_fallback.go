@@ -194,6 +194,39 @@ func (k *fallbackKeystore) LoadHMACKey() ([]byte, error) {
 	return data, nil
 }
 
+// RotateKey generates a new HMAC key, archives the existing key file to
+// a timestamped backup, and writes the new key to the key file.
+func (k *fallbackKeystore) RotateKey() ([]byte, error) {
+	keyPath := filepath.Join(k.auditDir, hmacKeyFileName)
+
+	_, err := k.LoadHMACKey()
+	if err != nil {
+		return nil, fmt.Errorf("load existing key for rotation: %w", err)
+	}
+
+	archivePath := RotateKeyArchivePath(k.auditDir)
+	if err := os.Rename(keyPath, archivePath); err != nil {
+		return nil, fmt.Errorf("archive old HMAC key: %w", err)
+	}
+
+	newKey := make([]byte, hmacKeySize)
+	if _, err := io.ReadFull(rand.Reader, newKey); err != nil {
+		return nil, fmt.Errorf("generate new HMAC key: %w", err)
+	}
+
+	if k.identity != nil {
+		if err := vaultcrypto.SaveEncryptedKey(keyPath, newKey, k.identity); err != nil {
+			return nil, fmt.Errorf("write encrypted HMAC key: %w", err)
+		}
+	} else {
+		if err := k.saveLocallyEncrypted(keyPath, newKey); err != nil {
+			return nil, fmt.Errorf("write locally-encrypted HMAC key: %w", err)
+		}
+	}
+
+	return newKey, nil
+}
+
 // NewKeystore is set by init() to create a fallbackKeystore on platforms
 // without OS keyring support.
 var NewKeystore func(auditDir string, identity *age.X25519Identity) Keystore

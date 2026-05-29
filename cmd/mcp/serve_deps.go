@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -44,6 +45,17 @@ func IsLocalhostBind(bind string) bool {
 
 var ServeUnlockVault = cli.UnlockVault
 
+func confirmServeInsecure() (bool, error) {
+	fmt.Fprintf(os.Stderr, "Bind MCP server without TLS? Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes. [y/N] ")
+	reader := bufio.NewReader(os.Stdin)
+	reply, err := reader.ReadString('\n')
+	if err != nil {
+		return false, err
+	}
+	reply = strings.TrimSpace(strings.ToLower(reply))
+	return reply == "y" || reply == "yes", nil
+}
+
 //nolint:gocyclo // Complex CLI orchestration: vault unlock + server bootstrap + signal handling
 func runServe(cmd *cobra.Command, args []string) error {
 	agentName, err := cmd.Flags().GetString("agent")
@@ -72,9 +84,6 @@ func runServe(cmd *cobra.Command, args []string) error {
 	}
 	if bind == "" {
 		return fmt.Errorf("--bind must not be empty; use '127.0.0.1' for localhost-only")
-	}
-	if !IsLocalhostBind(bind) {
-		cliout.Warnf("Warning: binding to %s without TLS — traffic will be unencrypted. Use --tls-cert/--tls-key for secure connections.", bind)
 	}
 	if stdioFlag && agentName == "" {
 		return fmt.Errorf("--agent is required in --stdio mode")
@@ -111,6 +120,17 @@ func runServe(cmd *cobra.Command, args []string) error {
 			vault.Config.MCP.TLSKeyFile = tlsKeyFlag
 		}
 	}
+	if !stdioFlag && vault != nil && vault.Config != nil && vault.Config.MCP != nil && vault.Config.MCP.AllowInsecureBind {
+		cliout.Warnf("MCP.allow_insecure_bind is enabled. Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes.")
+		confirmed, confirmErr := confirmServeInsecure()
+		if confirmErr != nil {
+			return fmt.Errorf("read insecure bind confirmation: %w", confirmErr)
+		}
+		if !confirmed {
+			return fmt.Errorf("insecure bind not confirmed; set MCP.allow_insecure_bind=false to use TLS (auto-generated self-signed certificate)")
+		}
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	sigCh := make(chan os.Signal, 1)

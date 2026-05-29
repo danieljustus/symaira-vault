@@ -66,9 +66,14 @@ example `mcp_symvault_list_entries`, `mcp_symvault_get_entry`, and
 `mcp_symvault_set_entry_field`. Early Hermes profiles should expose only the
 metadata-first tool subset from `hermes-safe-adoption.md`.
 
-If HTTP transport is needed later, bind Symaira Vault to loopback only
-(`127.0.0.1`), use scoped short-lived tokens, and keep token values out of
-committed config and chat transcripts.
+If HTTP transport is needed later, Symaira Vault binds to loopback (`127.0.0.1`) by
+default with a self-signed TLS certificate auto-generated on first serve. Use a
+custom certificate by setting `MCP.tls_cert_file` and `MCP.tls_key_file` in
+`config.yaml`. For cases where TLS is not feasible (e.g., containerized proxy
+terminates TLS externally), set `MCP.allow_insecure_bind: true` — this requires
+explicit confirmation at startup and logs a warning about cleartext tokens and
+loopback sniffing risk. Keep token values out of committed config and chat
+transcripts in all configurations.
 
 ### Available MCP Tools
 
@@ -117,6 +122,20 @@ HTTP mode requires a running Symaira Vault server:
 ```bash
 symvault --vault ~/.symvault-vault serve --port 8090
 ```
+
+By default, the HTTP server starts with a self-signed TLS certificate auto-generated
+on first run. The certificate is stored in the vault directory as `mcp-cert.pem` and
+`mcp-key.pem`. For a custom certificate, set `mcp.tls_cert_file` and
+`mcp.tls_key_file` in `config.yaml` or pass `--tls-cert` and `--tls-key` flags:
+
+```bash
+symvault serve --tls-cert /path/to/cert.pem --tls-key /path/to/key.pem
+```
+
+To run without TLS, set `mcp.allow_insecure_bind: true` in `config.yaml`. This
+requires explicit confirmation at startup and logs a warning: bearer tokens travel
+in cleartext and are vulnerable to loopback sniffing by local processes on the
+same machine. Prefer TLS in all production and multi-user environments.
 
 ## LaunchAgent
 

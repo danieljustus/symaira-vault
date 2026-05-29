@@ -100,6 +100,10 @@ func newTestVault(t *testing.T) *vaultpkg.Vault {
 	if err != nil {
 		t.Fatalf("open vault: %v", err)
 	}
+	if v.Config.MCP == nil {
+		v.Config.MCP = &config.MCPConfig{}
+	}
+	v.Config.MCP.AllowInsecureBind = true
 	return v
 }
 
@@ -647,7 +651,8 @@ func TestRunHTTPServer_CustomTokenPath(t *testing.T) {
 	}
 
 	v.Config.MCP = &config.MCPConfig{
-		HTTPTokenFile: customTokenPath,
+		HTTPTokenFile:     customTokenPath,
+		AllowInsecureBind: true,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1321,8 +1326,13 @@ func TestCmdServe_NonLoopbackWarning(t *testing.T) {
 		<-done
 	})
 
-	if !strings.Contains(stderr, "Warning:") || !strings.Contains(stderr, "unencrypted") {
-		t.Errorf("expected TLS warning on stderr for non-loopback bind, got: %s", stderr)
+	// With TLS as the default, non-loopback binds use auto-generated
+	// certificates and no longer emit an "unencrypted" warning.
+	if strings.Contains(stderr, "unencrypted") || strings.Contains(stderr, "cleartext") {
+		t.Errorf("unexpected insecure-bind warning with TLS default, got: %s", stderr)
+	}
+	if !strings.Contains(stderr, "MCP server listening on 0.0.0.0:18181") {
+		t.Errorf("expected listening hint on stderr, got: %s", stderr)
 	}
 }
 

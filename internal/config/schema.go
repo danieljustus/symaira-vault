@@ -6,26 +6,29 @@ import (
 
 // VaultConfig holds vault-related configuration.
 type VaultConfig struct {
-	Path              string        `yaml:"path,omitempty"`
-	DefaultRecipients []string      `yaml:"default_recipients,omitempty"`
-	ConfirmRemove     bool          `yaml:"confirm_remove,omitempty"`
-	AuthMethod        string        `yaml:"authMethod,omitempty"`
-	UseTouchID        bool          `yaml:"useTouchID,omitempty"`
-	LegacyMode        *bool         `yaml:"legacy_mode,omitempty"`
-	SearchWorkers     int           `yaml:"search_workers,omitempty"`
-	PseudonymizePaths bool          `yaml:"pseudonymize_paths,omitempty"`
-	ScryptWorkFactor  int           `yaml:"scrypt_work_factor,omitempty"`
-	LastRotated       time.Time     `yaml:"last_rotated,omitempty"`
-	FormatVersion     int           `yaml:"format_version,omitempty"`
-	Argon2idTime      int           `yaml:"argon2id_time,omitempty"`
-	Argon2idMemory    int           `yaml:"argon2id_memory,omitempty"`
-	Argon2idThreads   int           `yaml:"argon2id_threads,omitempty"`
-	ListingCacheTTL   time.Duration `yaml:"listing_cache_ttl,omitempty"`
+	Path               string        `yaml:"path,omitempty"`
+	DefaultRecipients  []string      `yaml:"default_recipients,omitempty"`
+	ConfirmRemove      bool          `yaml:"confirm_remove,omitempty"`
+	AuthMethod         string        `yaml:"authMethod,omitempty"`
+	UseTouchID         bool          `yaml:"useTouchID,omitempty"`
+	LegacyMode         *bool         `yaml:"legacy_mode,omitempty"`
+	SearchWorkers      int           `yaml:"search_workers,omitempty"`
+	ConfigCacheEntries int           `yaml:"config_cache_entries,omitempty"`
+	PseudonymizePaths  bool          `yaml:"pseudonymize_paths,omitempty"`
+	ScryptWorkFactor   int           `yaml:"scrypt_work_factor,omitempty"`
+	LastRotated        time.Time     `yaml:"last_rotated,omitempty"`
+	FormatVersion      int           `yaml:"format_version,omitempty"`
+	Argon2idTime       int           `yaml:"argon2id_time,omitempty"`
+	Argon2idMemory     int           `yaml:"argon2id_memory,omitempty"`
+	Argon2idThreads    int           `yaml:"argon2id_threads,omitempty"`
+	ListingCacheTTL    time.Duration `yaml:"listing_cache_ttl,omitempty"`
 }
 
 // GitConfig holds git-related configuration for automatic commits and pushes.
 type GitConfig struct {
 	CommitTemplate   string        `yaml:"commit_template,omitempty"`
+	Author           string        `yaml:"author,omitempty"`
+	Email            string        `yaml:"email,omitempty"`
 	AutoPush         bool          `yaml:"auto_push,omitempty"`
 	AutoPull         bool          `yaml:"auto_pull,omitempty"`
 	AutoPullInterval time.Duration `yaml:"auto_pull_interval,omitempty"`

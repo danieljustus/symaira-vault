@@ -42,9 +42,9 @@ repos:
         files: \.go$
         pass_filenames: false
         
-      - id: go-test-short
-        name: Go Test (Short)
-        entry: bash -c 'go test -short ./...'
+      - id: go-test-fast
+        name: Go Test (Fast)
+        entry: bash -c 'make test-fast'
         language: system
         files: \.go$
         pass_filenames: false

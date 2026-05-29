@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	crud "github.com/danieljustus/symaira-vault/cmd/crud"
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
@@ -54,6 +55,7 @@ func TestCmdDelete_StdinError(t *testing.T) {
 	if !strings.Contains(stderr, "read confirmation") {
 		t.Errorf("expected read confirmation error, got: %s", stderr)
 	}
+	time.Sleep(100 * time.Millisecond)
 }
 
 func TestCmdDelete_NotFound(t *testing.T) {
@@ -139,6 +141,7 @@ func TestCmdDelete_EmptyConfirm(t *testing.T) {
 	})
 	os.Stdin = oldStdin
 	_ = r.Close()
+	time.Sleep(100 * time.Millisecond)
 }
 
 func TestCmdDelete_AutoCommitError(t *testing.T) {
