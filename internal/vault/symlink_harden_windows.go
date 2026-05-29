@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/danieljustus/symaira-vault/internal/fsutil"
+	"github.com/danieljustus/symaira-vault/internal/fsutil/safepath"
 )
 
 var errUnsafePath = errors.New("path is not a regular file")
@@ -31,18 +32,11 @@ func SafeWriteFile(path string, data []byte, perm os.FileMode) error {
 }
 
 func SafeRemove(path string) error {
-	info, err := os.Lstat(path)
-	if err != nil {
-		return err
-	}
-	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
-		return &os.PathError{Op: "open", Path: path, Err: errUnsafePath}
-	}
-	return os.Remove(path)
+	return safepath.DefaultManager.Remove(path)
 }
 
 func SafeMkdirAll(path string, perm os.FileMode) error {
-	return os.MkdirAll(path, perm)
+	return safepath.DefaultManager.MkdirAll(path, perm)
 }
 
 func rejectSymlink(path string) error {

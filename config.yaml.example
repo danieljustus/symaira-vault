@@ -60,6 +60,14 @@ vault:
   confirm_remove: true
   # Optional per-vault override for authMethod.
   # authMethod: touchid
+  # Number of concurrent workers for search/listing decryption. Set to 0 (default)
+  # for auto-scaling based on CPU count (min(runtime.NumCPU(), 8)). Increase for
+  # large vaults with many entries to improve search throughput.
+  # search_workers: 4
+  # Cache TTL for entry listing results. Set to 0 to disable caching.
+  # Default is 300s (5 minutes). Shorter values reduce staleness at the cost
+  # of more frequent directory walks.
+  # listing_cache_ttl: 300s
 
 # Git integration for automatic commits and optional pushes.
 git:

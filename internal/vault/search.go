@@ -115,6 +115,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -229,7 +230,16 @@ func storeListCache(vaultDir string, paths []string) {
 	listCache.mu.Unlock()
 }
 
-// InvalidateListCache removes cached listings for a vault directory.
+// SetListCacheTTL overrides the default list cache TTL. Pass 0 to disable
+// caching. Typically called from vault initialization with the configured
+// vault.listing_cache_ttl value.
+func SetListCacheTTL(ttl time.Duration) {
+	listCache.mu.Lock()
+	listCache.ttl = ttl
+	listCache.mu.Unlock()
+}
+
+// InvalidateListCache removes the cached entry list for vaultDir.
 // Callers should invoke this after write operations that affect vault contents.
 // When vaultDir is empty, the entire list cache is cleared.
 func InvalidateListCache(vaultDir string) {
@@ -400,6 +410,23 @@ func CurrentSearchIdentity() *age.X25519Identity {
 	return currentSearchIdentity()
 }
 
+// SearchWorkerCount returns the number of concurrent decryption workers
+// to use for search/listing operations. When configured > 0, that value is
+// used. Otherwise it auto-scales to min(runtime.NumCPU(), 8).
+func SearchWorkerCount(configured int) int {
+	if configured > 0 {
+		return configured
+	}
+	cpus := runtime.NumCPU()
+	if cpus > 8 {
+		return 8
+	}
+	if cpus < 1 {
+		return 1
+	}
+	return cpus
+}
+
 // List returns all entry paths in the vault, optionally filtered by prefix.
 // It uses os.ReadDir for efficient directory traversal without stat calls.
 // Results are cached with a 30-second TTL to avoid repetitive walks during
@@ -412,7 +439,11 @@ func List(vaultDir string, prefix string) ([]string, error) {
 		return nil, err
 	}
 	if isPseudonymizeEnabled(cfg) {
-		return listPseudonymized(vaultDir, prefix)
+		workers := 0
+		if cfg != nil && cfg.Vault != nil {
+			workers = cfg.Vault.SearchWorkers
+		}
+		return listPseudonymized(vaultDir, prefix, workers)
 	}
 
 	// Check cache when listing the entire vault (prefix == "").
@@ -420,6 +451,17 @@ func List(vaultDir string, prefix string) ([]string, error) {
 		if cached := cachedList(vaultDir); cached != nil {
 			metrics.RecordVaultOperationDuration("list_cached", 0)
 			return cached, nil
+		}
+	}
+
+	// Manifest fast path: when listing the entire vault without a prefix,
+	// the manifest already holds every entry path. This avoids a full
+	// directory walk. Falls back to walk on any error (missing manifest,
+	// no identity, decrypt failure).
+	if prefix == "" {
+		if paths := listViaManifest(vaultDir); paths != nil {
+			storeListCache(vaultDir, paths)
+			return paths, nil
 		}
 	}
 
@@ -461,11 +503,11 @@ func List(vaultDir string, prefix string) ([]string, error) {
 //
 // Uses a bounded worker pool for parallel decryption and caches results
 // (including decrypted entry data) for reuse by FindWithOptions.
-func listPseudonymized(vaultDir, prefix string) ([]string, error) {
-	return listPseudonymizedWithIdentity(vaultDir, prefix, currentSearchIdentity())
+func listPseudonymized(vaultDir, prefix string, configuredWorkers int) ([]string, error) {
+	return listPseudonymizedWithIdentity(vaultDir, prefix, currentSearchIdentity(), configuredWorkers)
 }
 
-func listPseudonymizedWithIdentity(vaultDir, prefix string, identity *age.X25519Identity) ([]string, error) {
+func listPseudonymizedWithIdentity(vaultDir, prefix string, identity *age.X25519Identity, configuredWorkers int) ([]string, error) {
 	if identity == nil {
 		return nil, fmt.Errorf("no search identity available for pseudonymized listing")
 	}
@@ -510,9 +552,7 @@ func listPseudonymizedWithIdentity(vaultDir, prefix string, identity *age.X25519
 	}
 
 	// Second pass: decrypt entries in parallel using a bounded worker pool.
-	// Default 4 workers balances throughput vs memory pressure, matching
-	// the rationale documented for FindWithOptions concurrent decryption.
-	const maxWorkers = 4
+	maxWorkers := SearchWorkerCount(configuredWorkers)
 
 	type decryptResult struct {
 		entryPath string
@@ -598,6 +638,27 @@ func listPseudonymizedWithIdentity(vaultDir, prefix string, identity *age.X25519
 	metrics.RecordVaultOperationDuration("list_pseudonymized", time.Since(start))
 	metrics.RecordVaultEntryCount(vaultDir, len(paths))
 	return paths, nil
+}
+
+// listViaManifest returns entry paths from the manifest when available and
+// valid. Returns nil on any error so callers fall back to directory walk.
+func listViaManifest(vaultDir string) []string {
+	identity := currentSearchIdentity()
+	if identity == nil {
+		return nil
+	}
+	FlushManifestUpdates()
+	m, err := LoadManifest(vaultDir, identity)
+	if err != nil || m == nil || len(m.Entries) == 0 {
+		return nil
+	}
+	paths := make([]string, 0, len(m.Entries))
+	for path := range m.Entries {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	metrics.RecordVaultEntryCount(vaultDir, len(paths))
+	return paths
 }
 
 func listEntriesFast(root, base, prefix string, seen map[string]struct{}, legacy bool) error {
