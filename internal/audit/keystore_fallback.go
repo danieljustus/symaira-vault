@@ -199,7 +199,7 @@ func (k *fallbackKeystore) LoadHMACKey() ([]byte, error) {
 func (k *fallbackKeystore) RotateKey() ([]byte, error) {
 	keyPath := filepath.Join(k.auditDir, hmacKeyFileName)
 
-	oldKey, err := k.LoadHMACKey()
+	_, err := k.LoadHMACKey()
 	if err != nil {
 		return nil, fmt.Errorf("load existing key for rotation: %w", err)
 	}
