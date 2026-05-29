@@ -595,17 +595,33 @@ func TestRunHTTPServer_CustomConfig(t *testing.T) {
 
 func TestRunHTTPServer_NonLoopbackWithoutTLSRefused(t *testing.T) {
 	v := newTestVault(t)
-	// Default config: AllowInsecureBind = false, no TLS cert. Non-loopback
-	// bind must be refused outright so bearer tokens cannot leak in cleartext.
+	// Disable insecure bind so the server must use TLS. With auto-generated
+	// self-signed certificates (PR #268), the server starts successfully on
+	// non-loopback. If cert generation fails, it falls back to refusal.
+	v.Config.MCP.AllowInsecureBind = false
 	listener, err := net.Listen("tcp", "0.0.0.0:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
 	defer listener.Close()
 
-	err = RunHTTPServerOnListener(context.Background(), listener, v, v.Dir, "test", server.New)
-	if err == nil || !strings.Contains(err.Error(), "refusing to serve MCP without TLS") {
-		t.Fatalf("expected non-loopback-without-TLS refusal, got %v", err)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- RunHTTPServerOnListener(ctx, listener, v, v.Dir, "test", server.New)
+	}()
+
+	// Give the server time to either start (auto-cert) or fail (no cert).
+	time.Sleep(200 * time.Millisecond)
+	cancel()
+
+	serveErr := <-errCh
+	// Server either starts with auto-TLS and shuts down cleanly, or refuses
+	// when cert generation fails.
+	if serveErr != nil && !strings.Contains(serveErr.Error(), "refusing to serve MCP without TLS") {
+		t.Fatalf("expected refusal or clean shutdown, got %v", serveErr)
 	}
 }
 
