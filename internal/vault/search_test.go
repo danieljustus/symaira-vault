@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 	"time"
 
@@ -705,5 +706,52 @@ func TestIsRedactedField(t *testing.T) {
 				t.Errorf("isRedactedField(%q, %v) = %v, want %v", tt.field, tt.patterns, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestSearchWorkerCount_AutoScale(t *testing.T) {
+	workers := SearchWorkerCount(0)
+	cpus := runtime.NumCPU()
+	if cpus > 8 {
+		if workers != 8 {
+			t.Errorf("SearchWorkerCount(0) = %d, want 8 (capped at 8 with %d CPUs)", workers, cpus)
+		}
+	} else {
+		if workers < 1 || workers > 8 {
+			t.Errorf("SearchWorkerCount(0) = %d, want between 1 and 8", workers)
+		}
+	}
+}
+
+func TestSearchWorkerCount_ConfiguredValue(t *testing.T) {
+	workers := SearchWorkerCount(12)
+	if workers != 12 {
+		t.Errorf("SearchWorkerCount(12) = %d, want 12", workers)
+	}
+}
+
+func TestSearchWorkerCount_CappedAtMaximum(t *testing.T) {
+	workers := SearchWorkerCount(99999)
+	if workers != 64 {
+		t.Errorf("SearchWorkerCount(99999) = %d, want 64 (capped)", workers)
+	}
+}
+
+func TestSearchWorkerCount_BoundaryValues(t *testing.T) {
+	if w := SearchWorkerCount(1); w != 1 {
+		t.Errorf("SearchWorkerCount(1) = %d, want 1", w)
+	}
+	if w := SearchWorkerCount(64); w != 64 {
+		t.Errorf("SearchWorkerCount(64) = %d, want 64", w)
+	}
+	if w := SearchWorkerCount(65); w != 64 {
+		t.Errorf("SearchWorkerCount(65) = %d, want 64 (capped)", w)
+	}
+}
+
+func TestSearchWorkerCount_NegativeDefault(t *testing.T) {
+	workers := SearchWorkerCount(-1)
+	if workers < 1 {
+		t.Errorf("SearchWorkerCount(-1) = %d, want >= 1", workers)
 	}
 }
