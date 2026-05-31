@@ -132,6 +132,7 @@ func TestKeystoreHMACVerificationAfterKeystoreUse(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 	defer func() { _ = logger.Close() }()
+	logger.SetSyncMode(true)
 
 	_ = logger.LogEntry(LogEntry{
 		Agent:  "test-agent",
