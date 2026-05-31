@@ -186,11 +186,30 @@ func entryToScopedToken(e TokenRegistryEntry) *ScopedToken {
 // TokenRegistry provides thread-safe management of scoped MCP tokens backed
 // by an on-disk JSON file.
 type TokenRegistry struct {
-	path        string
-	mu          sync.RWMutex
-	entries     map[string]*ScopedToken // keyed by token hash
-	stopFn      func()                  // stops the background cleanup goroutine
-	watchStopFn func()                  // stops the file watcher goroutine
+	path             string
+	mu               sync.RWMutex
+	entries          map[string]*ScopedToken                                        // keyed by token hash
+	stopFn           func()                                                         // stops the background cleanup goroutine
+	watchStopFn      func()                                                         // stops the file watcher goroutine
+	revokedRetention time.Duration                                                  // how long revoked tokens are retained before cleanup
+	cleanupLogger    func(action, tokenID string, tokenLabel string, reason string) // optional audit log callback
+}
+
+// SetRevokedRetention configures how long revoked tokens are retained before
+// being cleaned up. A zero or negative value disables revoked-token cleanup.
+func (r *TokenRegistry) SetRevokedRetention(d time.Duration) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.revokedRetention = d
+}
+
+// SetCleanupLogger sets an optional callback that is invoked for each token
+// removed during cleanup. It receives the action ("expired" or "revoked"),
+// token ID, label, and reason.
+func (r *TokenRegistry) SetCleanupLogger(fn func(action, tokenID, label, reason string)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.cleanupLogger = fn
 }
 
 // NewTokenRegistry creates a TokenRegistry that loads/saves from the given
@@ -522,15 +541,52 @@ func (r *TokenRegistry) StartCleanup(ctx context.Context, interval time.Duration
 	return r.stopFn
 }
 
-// cleanupOnce performs a single sweep that removes expired tokens.
+// cleanupOnce performs a single sweep that removes expired tokens and revoked
+// tokens past their retention period. When tokens are removed, the optional
+// cleanup logger is invoked and the registry is persisted to disk.
 func (r *TokenRegistry) cleanupOnce() {
 	r.mu.Lock()
-	defer r.mu.Unlock()
 
+	var expiredIDs, revokedIDs []struct {
+		id    string
+		label string
+	}
+	now := time.Now()
 	for hash, t := range r.entries {
 		if t.IsExpired() {
+			expiredIDs = append(expiredIDs, struct {
+				id    string
+				label string
+			}{t.ID, t.Label})
+			delete(r.entries, hash)
+			continue
+		}
+		if t.Revoked && r.revokedRetention > 0 && t.RevokedAt != nil && now.Sub(*t.RevokedAt) > r.revokedRetention {
+			revokedIDs = append(revokedIDs, struct {
+				id    string
+				label string
+			}{t.ID, t.Label})
 			delete(r.entries, hash)
 		}
+	}
+
+	logFn := r.cleanupLogger
+	r.mu.Unlock()
+
+	cleaned := len(expiredIDs) + len(revokedIDs)
+	for _, e := range expiredIDs {
+		if logFn != nil {
+			logFn("expired", e.id, e.label, "token expired")
+		}
+	}
+	for _, e := range revokedIDs {
+		if logFn != nil {
+			logFn("revoked", e.id, e.label, "revoked token past retention period")
+		}
+	}
+
+	if cleaned > 0 {
+		_ = r.Save()
 	}
 }
 
