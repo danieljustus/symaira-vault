@@ -541,10 +541,10 @@ func (r *TokenRegistry) cleanupOnce() {
 func (r *TokenRegistry) StartFileWatcher(ctx context.Context, interval time.Duration) func() {
 	stopCh := make(chan struct{})
 
-	var lastModTime time.Time
+	var lastInfo os.FileInfo
 	fi, err := os.Stat(r.path)
 	if err == nil {
-		lastModTime = fi.ModTime()
+		lastInfo = fi
 	}
 
 	go func() {
@@ -557,9 +557,8 @@ func (r *TokenRegistry) StartFileWatcher(ctx context.Context, interval time.Dura
 				if err != nil {
 					continue
 				}
-				mt := fi.ModTime()
-				if mt.After(lastModTime) {
-					lastModTime = mt
+				if lastInfo == nil || !os.SameFile(fi, lastInfo) || !fi.ModTime().Equal(lastInfo.ModTime()) || fi.Size() != lastInfo.Size() {
+					lastInfo = fi
 					if err := r.Load(); err != nil {
 						fmt.Fprintf(os.Stderr, "error reloading token registry from %s: %v\n", r.path, err)
 					}

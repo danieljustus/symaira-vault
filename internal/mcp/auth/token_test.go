@@ -1215,6 +1215,54 @@ func TestTokenRegistry_FileWatcherReloadsOnChange(t *testing.T) {
 	}
 }
 
+func TestTokenRegistry_FileWatcherReloadsAtomicReplacementWithSameModTime(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mcp-tokens.json")
+
+	reg := NewTokenRegistry(path)
+	if _, _, err := reg.Create("initial", []string{"*"}, "", 1*time.Hour); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	initialInfo, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat initial registry: %v", err)
+	}
+	initialModTime := initialInfo.ModTime()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stop := reg.StartFileWatcher(ctx, 50*time.Millisecond)
+	defer stop()
+
+	reg2 := NewTokenRegistry(path)
+	if err := reg2.Load(); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	_, raw2, err := reg2.Create("cli-created", []string{"get_entry"}, "cli", 0)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	hash2 := sha256Hex(raw2)
+
+	if err := os.Chtimes(path, initialModTime, initialModTime); err != nil {
+		t.Fatalf("preserve registry modtime: %v", err)
+	}
+
+	deadline := time.After(500 * time.Millisecond)
+	ticker := time.NewTicker(25 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-deadline:
+			t.Fatal("file watcher should reload after atomic replacement even when modtime is unchanged")
+		case <-ticker.C:
+			if _, found := reg.Get(hash2); found {
+				return
+			}
+		}
+	}
+}
+
 func TestTokenRegistry_FileWatcherStopsOnContextCancel(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "mcp-tokens.json")
