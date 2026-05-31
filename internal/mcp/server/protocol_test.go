@@ -368,7 +368,7 @@ func TestProtocolHandler_Close_NilTools(t *testing.T) {
 	}
 }
 
-func TestProtocolHandler_Close_Error(t *testing.T) {
+func TestProtocolHandler_Close_Idempotent(t *testing.T) {
 	srv := newTestServer(t, config.AgentProfile{
 		Name:         "test",
 		AllowedPaths: []string{"*"},
@@ -379,9 +379,10 @@ func TestProtocolHandler_Close_Error(t *testing.T) {
 
 	_ = srv.auditLog.Close()
 
+	// Logger.Close is idempotent — a second close must not error.
 	err := handler.Close()
-	if err == nil {
-		t.Fatal("Close() expected error, got nil")
+	if err != nil {
+		t.Fatalf("Close() after audit log closed returned error: %v", err)
 	}
 }
 

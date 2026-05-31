@@ -539,9 +539,9 @@ func (r *TokenRegistry) StartCleanup(ctx context.Context, interval time.Duration
 
 // CleanupResult reports the outcome of a token registry cleanup pass.
 type CleanupResult struct {
-	ExpiredRemoved    int
-	RevokedRemoved    int
-	RemovedIDs        []string
+	ExpiredRemoved int
+	RevokedRemoved int
+	RemovedIDs     []string
 }
 
 // Cleanup performs a single sweep that removes expired tokens and revoked
