@@ -12,6 +12,12 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/vault"
 )
 
+const (
+	defaultSessionTimeout = 15 * time.Minute
+	defaultAuditMaxMB     = 100
+	defaultApprovalMode   = "deny"
+)
+
 func checkVaultInitialized(vaultDir string, _ Options) Result {
 	r := Result{ID: "vault.initialized", Name: "Vault initialized"}
 	if vault.IsInitialized(vaultDir) {
@@ -37,6 +43,93 @@ func checkVaultConfigParses(vaultDir string, _ Options) Result {
 	r.Status = StatusOK
 	r.Message = "config.yaml loads without errors"
 	return r
+}
+
+func checkVaultConfigValidates(vaultDir string, _ Options) Result {
+	r := Result{ID: "vault.config.validates", Name: "Vault config validates"}
+	cfgPath := filepath.Join(vaultDir, "config.yaml")
+	cfg, err := configpkg.Load(cfgPath)
+	if err != nil {
+		r.Status = StatusFail
+		r.Message = "failed to load config: " + err.Error()
+		r.Hint = "inspect " + cfgPath + " for syntax errors"
+		return r
+	}
+
+	if valErr := cfg.Validate(); valErr != nil {
+		msgs := strings.Split(strings.TrimSpace(valErr.Error()), "\n")
+		r.Status = StatusWarn
+		r.Message = "config validation error: " + msgs[0]
+		if len(msgs) > 1 {
+			r.Message += " (+" + fmt.Sprintf("%d", len(msgs)-1) + " more)"
+		}
+		r.Hint = "run `symvault doctor --fix` to auto-correct common issues"
+		r.Fixable = true
+		r.Fix = func() error {
+			return fixConfigValidation(cfgPath, vaultDir)
+		}
+		return r
+	}
+
+	r.Status = StatusOK
+	r.Message = "config.yaml passes validation"
+	return r
+}
+
+// fixConfigValidation reapplies safe defaults for common config validation errors.
+func fixConfigValidation(cfgPath, vaultDir string) error {
+	if FixDryRun {
+		return nil
+	}
+
+	cfg, err := configpkg.Load(cfgPath)
+	if err != nil {
+		return fmt.Errorf("reload config: %w", err)
+	}
+
+	fixed := false
+
+	// Fix 1: sessionTimeout <= 0 → restore default
+	if cfg.SessionTimeout <= 0 {
+		cfg.SessionTimeout = defaultSessionTimeout
+		fixed = true
+	}
+
+	// Fix 2: invalid approvalMode → deny (safe default)
+	for name, agent := range cfg.Agents {
+		if agent.ApprovalMode != nil {
+			mode := *agent.ApprovalMode
+			switch mode {
+			case "", "none", "deny", "prompt", "auto":
+				// valid, skip
+			default:
+				deny := "deny"
+				agent.ApprovalMode = &deny
+				cfg.Agents[name] = agent
+				fixed = true
+			}
+		}
+	}
+
+	// Fix 3: audit.maxFileSize <= 0 → 100 MB default
+	if cfg.Audit != nil && cfg.Audit.MaxFileSize <= 0 {
+		cfg.Audit.MaxFileSize = defaultAuditMaxMB * 1024 * 1024
+		fixed = true
+	} else if cfg.Audit == nil {
+		// No audit section → nothing to fix. Creating one would change behavior.
+	}
+
+	// Fix 4: clipboard.autoClearDuration < 0 → 0 (disabled)
+	if cfg.Clipboard != nil && cfg.Clipboard.AutoClearDuration < 0 {
+		cfg.Clipboard.AutoClearDuration = 0
+		fixed = true
+	}
+
+	if !fixed {
+		return nil // nothing to fix
+	}
+
+	return cfg.SaveTo(cfgPath)
 }
 
 func checkVaultIdentityEncrypted(vaultDir string, _ Options) Result {
