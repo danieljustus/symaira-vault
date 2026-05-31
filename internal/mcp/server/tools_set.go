@@ -164,3 +164,18 @@ func (s *Server) upsertEntry(ctx context.Context, path string, partialData map[s
 	vaultpkg.InvalidateListCache(s.vault.Dir)
 	return nil
 }
+
+func init() {
+	RegisterTool(toolDefinition{
+		Name:        "set_entry_field",
+		Description: "Set a field on an entry (requires write scope)",
+		InputSchema: objectSchema([]string{"path", "field", "value"}, map[string]schemaProperty{
+			"path":  {Type: "string", Description: "Entry path"},
+			"field": {Type: "string", Description: "Field name"},
+			"value": {Type: "string", Description: "Field value"},
+			"force": {Type: "boolean", Description: "Skip password strength validation. Default: false."},
+		}),
+		Handler:   (*Server).handleSet,
+		RiskLevel: RiskLevelCritical,
+	})
+}
