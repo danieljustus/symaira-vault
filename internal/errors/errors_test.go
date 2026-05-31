@@ -3,6 +3,7 @@ package errors
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -187,5 +188,58 @@ func TestIsWriteError_NotFoundError(t *testing.T) {
 	err := NotFound("entry %q not found", "github")
 	if IsWriteError(err) {
 		t.Error("expected IsWriteError=false for NotFound error")
+	}
+}
+
+func TestNotFoundHasHint(t *testing.T) {
+	err := NotFound("entry not found: foo")
+	if err.Hint == "" {
+		t.Error("expected NotFound error to have a hint")
+	}
+	if !strings.Contains(err.Hint, "symvault list") && !strings.Contains(err.Hint, "symvault find") {
+		t.Errorf("expected hint to mention symvault list or symvault find, got: %s", err.Hint)
+	}
+}
+
+func TestWithHint(t *testing.T) {
+	err := NewCLIError(ExitGeneralError, "something went wrong", nil)
+	err.WithHint("Run symvault doctor to check your configuration.")
+
+	if err.Hint != "Run symvault doctor to check your configuration." {
+		t.Errorf("hint = %q, want specific hint", err.Hint)
+	}
+}
+
+func TestHintForError(t *testing.T) {
+	err := NotFound("entry not found: foo")
+	hint := HintForError(err)
+	if hint == "" {
+		t.Error("expected HintForError to return a hint for NotFound")
+	}
+}
+
+func TestHintForError_NoHint(t *testing.T) {
+	err := fmt.Errorf("plain error")
+	hint := HintForError(err)
+	if hint != "" {
+		t.Errorf("expected empty hint for plain error, got: %s", hint)
+	}
+}
+
+func TestCLIErrorWithoutHint(t *testing.T) {
+	err := NewCLIError(ExitLocked, "vault is locked", nil)
+	hint := HintForError(err)
+	if hint != "" {
+		t.Errorf("expected empty hint for CLIError without hint, got: %s", hint)
+	}
+}
+
+func TestCLIErrorWithHintTakesPrecedence(t *testing.T) {
+	err := NewCLIError(ExitPermissionDenied, "access denied", nil)
+	err.WithHint("Check your agent's token scope: symvault mcp token list")
+
+	hint := HintForError(err)
+	if hint != "Check your agent's token scope: symvault mcp token list" {
+		t.Errorf("hint = %q, want token scope hint", hint)
 	}
 }

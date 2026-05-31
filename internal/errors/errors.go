@@ -73,12 +73,14 @@ func IsWriteError(err error) bool {
 	return false
 }
 
-// CLIError is a structured error with an exit code and user-friendly message.
+// CLIError is a structured error with an exit code, user-friendly message,
+// and optional remediation hint displayed to the user after the error.
 type CLIError struct {
 	Code    ExitCode
 	Kind    ErrorKind
 	Message string
 	Cause   error
+	Hint    string
 }
 
 // Error implements the error interface.
@@ -101,6 +103,21 @@ func NewCLIError(code ExitCode, msg string, cause error) *CLIError {
 		Message: msg,
 		Cause:   cause,
 	}
+}
+
+// WithHint returns a new CLIError with the hint set.
+func (e *CLIError) WithHint(hint string) *CLIError {
+	e.Hint = hint
+	return e
+}
+
+// HintForError returns a remediation hint for a known error type.
+func HintForError(err error) string {
+	var cliErr *CLIError
+	if errors.As(err, &cliErr) && cliErr.Hint != "" {
+		return cliErr.Hint
+	}
+	return ""
 }
 
 // ExitCodeFromError extracts the exit code from an error.
@@ -146,6 +163,7 @@ func NotFound(format string, args ...any) *CLIError {
 		Kind:    ErrNotFound,
 		Message: fmt.Sprintf(format, args...),
 		Cause:   ErrEntryNotFound,
+		Hint:    "Try: symvault list to browse entries, or symvault find <term> to search by keyword.",
 	}
 }
 
