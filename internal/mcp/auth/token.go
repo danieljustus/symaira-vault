@@ -191,15 +191,30 @@ type TokenRegistry struct {
 	entries     map[string]*ScopedToken // keyed by token hash
 	stopFn      func()                  // stops the background cleanup goroutine
 	watchStopFn func()                  // stops the file watcher goroutine
+
+	revokedRetention time.Duration // how long to keep revoked tokens before removal
 }
+
+// DefaultRevokedTokenRetention is the default retention period for revoked
+// tokens before they are purged from the registry.
+const DefaultRevokedTokenRetention = 30 * 24 * time.Hour
 
 // NewTokenRegistry creates a TokenRegistry that loads/saves from the given
 // file path. The caller must call Load() to populate the registry from disk.
 func NewTokenRegistry(path string) *TokenRegistry {
 	return &TokenRegistry{
-		path:    path,
-		entries: make(map[string]*ScopedToken),
+		path:             path,
+		entries:          make(map[string]*ScopedToken),
+		revokedRetention: DefaultRevokedTokenRetention,
 	}
+}
+
+// SetRevokedRetention overrides the retention period for revoked tokens.
+// A zero or negative duration disables automatic cleanup of revoked tokens.
+func (r *TokenRegistry) SetRevokedRetention(d time.Duration) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.revokedRetention = d
 }
 
 // Load reads the JSON registry file from disk and populates the in-memory
@@ -522,16 +537,47 @@ func (r *TokenRegistry) StartCleanup(ctx context.Context, interval time.Duration
 	return r.stopFn
 }
 
-// cleanupOnce performs a single sweep that removes expired tokens.
-func (r *TokenRegistry) cleanupOnce() {
+// CleanupResult reports the outcome of a token registry cleanup pass.
+type CleanupResult struct {
+	ExpiredRemoved    int
+	RevokedRemoved    int
+	RemovedIDs        []string
+}
+
+// Cleanup performs a single sweep that removes expired tokens and revoked
+// tokens past their retention period. It returns counts and IDs of removed
+// tokens for audit logging by the caller.
+func (r *TokenRegistry) Cleanup() CleanupResult {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	var result CleanupResult
+	retention := r.revokedRetention
+	now := time.Now()
+
 	for hash, t := range r.entries {
 		if t.IsExpired() {
+			result.ExpiredRemoved++
+			result.RemovedIDs = append(result.RemovedIDs, t.ID)
 			delete(r.entries, hash)
+			continue
+		}
+		if t.Revoked && retention > 0 && t.RevokedAt != nil {
+			if now.Sub(*t.RevokedAt) >= retention {
+				result.RevokedRemoved++
+				result.RemovedIDs = append(result.RemovedIDs, t.ID)
+				delete(r.entries, hash)
+			}
 		}
 	}
+
+	return result
+}
+
+// cleanupOnce performs a single sweep that removes expired and long-revoked
+// tokens. It is called by the background cleanup goroutine.
+func (r *TokenRegistry) cleanupOnce() {
+	r.Cleanup()
 }
 
 // StartFileWatcher begins polling the registry file's modification time at the

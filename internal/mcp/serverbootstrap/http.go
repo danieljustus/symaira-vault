@@ -89,6 +89,19 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 	}
 	defer func() { _ = authAuditLog.Close() }()
 
+	if registry != nil {
+		result := registry.Cleanup()
+		totalRemoved := result.ExpiredRemoved + result.RevokedRemoved
+		if totalRemoved > 0 {
+			_ = authAuditLog.LogEntry(audit.LogEntry{
+				Agent:  "system",
+				Action: "token_cleanup",
+				Reason: fmt.Sprintf("removed %d expired, %d revoked (%d total)", result.ExpiredRemoved, result.RevokedRemoved, totalRemoved),
+				OK:     true,
+			})
+		}
+	}
+
 	rateLimit := 60
 	var trustedProxyIPs []string
 	if v != nil && v.Config != nil && v.Config.MCP != nil {
