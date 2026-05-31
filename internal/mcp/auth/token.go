@@ -186,13 +186,30 @@ func entryToScopedToken(e TokenRegistryEntry) *ScopedToken {
 // TokenRegistry provides thread-safe management of scoped MCP tokens backed
 // by an on-disk JSON file.
 type TokenRegistry struct {
-	path        string
-	mu          sync.RWMutex
-	entries     map[string]*ScopedToken // keyed by token hash
-	stopFn      func()                  // stops the background cleanup goroutine
-	watchStopFn func()                  // stops the file watcher goroutine
+	path             string
+	mu               sync.RWMutex
+	entries          map[string]*ScopedToken                                        // keyed by token hash
+	stopFn           func()                                                         // stops the background cleanup goroutine
+	watchStopFn      func()                                                         // stops the file watcher goroutine
+	revokedRetention time.Duration                                                  // how long revoked tokens are retained before cleanup
+	cleanupLogger    func(action, tokenID string, tokenLabel string, reason string) // optional audit log callback
+}
 
-	revokedRetention time.Duration // how long to keep revoked tokens before removal
+// SetRevokedRetention configures how long revoked tokens are retained before
+// being cleaned up. A zero or negative value disables revoked-token cleanup.
+func (r *TokenRegistry) SetRevokedRetention(d time.Duration) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.revokedRetention = d
+}
+
+// SetCleanupLogger sets an optional callback that is invoked for each token
+// removed during cleanup. It receives the action ("expired" or "revoked"),
+// token ID, label, and reason.
+func (r *TokenRegistry) SetCleanupLogger(fn func(action, tokenID, label, reason string)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.cleanupLogger = fn
 }
 
 // DefaultRevokedTokenRetention is the default retention period for revoked
@@ -207,14 +224,6 @@ func NewTokenRegistry(path string) *TokenRegistry {
 		entries:          make(map[string]*ScopedToken),
 		revokedRetention: DefaultRevokedTokenRetention,
 	}
-}
-
-// SetRevokedRetention overrides the retention period for revoked tokens.
-// A zero or negative duration disables automatic cleanup of revoked tokens.
-func (r *TokenRegistry) SetRevokedRetention(d time.Duration) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.revokedRetention = d
 }
 
 // Load reads the JSON registry file from disk and populates the in-memory
@@ -574,10 +583,24 @@ func (r *TokenRegistry) Cleanup() CleanupResult {
 	return result
 }
 
-// cleanupOnce performs a single sweep that removes expired and long-revoked
-// tokens. It is called by the background cleanup goroutine.
+// cleanupOnce performs a single sweep that removes expired tokens and revoked
+// tokens past their retention period. When tokens are removed, the optional
+// cleanup logger is invoked and the registry is persisted to disk.
 func (r *TokenRegistry) cleanupOnce() {
-	r.Cleanup()
+	result := r.Cleanup()
+
+	logFn := r.cleanupLogger
+	cleaned := result.ExpiredRemoved + result.RevokedRemoved
+
+	for _, id := range result.RemovedIDs {
+		if logFn != nil {
+			logFn("removed", id, "", "token removed during cleanup")
+		}
+	}
+
+	if cleaned > 0 {
+		_ = r.Save()
+	}
 }
 
 // StartFileWatcher begins polling the registry file's modification time at the
