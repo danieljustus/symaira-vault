@@ -75,8 +75,28 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 		return fmt.Errorf("load token system: %w", err)
 	}
 
+	// Create a dedicated audit logger for token cleanup events before
+	// starting the cleanup goroutine so it can reference the logger.
+	cleanupAuditLog, err := audit.New("token-cleanup", vaultDir)
+	if err != nil {
+		return fmt.Errorf("create token cleanup audit logger: %w", err)
+	}
+	defer func() { _ = cleanupAuditLog.Close() }()
+
 	// Start background cleanup for token registry
 	if registry != nil {
+		registry.SetRevokedRetention(30 * 24 * time.Hour) // 30-day retention for revoked tokens
+		registry.SetCleanupLogger(func(action, tokenID, label, reason string) {
+			if logErr := cleanupAuditLog.LogEntry(audit.LogEntry{
+				Action:  "token_cleanup",
+				Agent:   "token-cleanup",
+				Reason:  reason,
+				TokenID: tokenID,
+				OK:      true,
+			}); logErr != nil {
+				fmt.Fprintf(os.Stderr, "token cleanup audit log write failed: %v\n", logErr)
+			}
+		})
 		cleanupInterval := 5 * time.Minute
 		_ = registry.StartCleanup(ctx, cleanupInterval)
 		// Start file watcher to reload token registry when CLI creates new tokens
