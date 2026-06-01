@@ -215,3 +215,48 @@ func filterShareGrants(grants []*mcp.ShareGrant, filter mcp.ShareFilter) []*mcp.
 	}
 	return filtered
 }
+
+func init() {
+	RegisterTool(toolDefinition{
+		Name:        "request_share",
+		Description: "Request to share a secret with another agent. Creates a pending share grant that requires human approval.",
+		InputSchema: objectSchema([]string{"to_agent", "secret_path"}, map[string]schemaProperty{
+			"to_agent":     {Type: "string", Description: "Name of the agent to share the secret with"},
+			"secret_path":  {Type: "string", Description: "Path to the secret entry (e.g., \"api-keys/stripe\")"},
+			"secret_field": {Type: "string", Description: "Specific field to share (optional, shares entire entry if omitted)"},
+			"ttl":          {Type: "string", Description: "Time-to-live duration (e.g., \"1h\", \"30m\"). Share expires after this duration."},
+		}),
+		Handler:   (*Server).handleRequestShare,
+		RiskLevel: RiskLevelMedium,
+	})
+	RegisterTool(toolDefinition{
+		Name:        "approve_share",
+		Description: "Approve a pending share request. Requires human confirmation.",
+		InputSchema: objectSchema([]string{"grant_id"}, map[string]schemaProperty{
+			"grant_id": {Type: "string", Description: "ID of the share grant to approve"},
+		}),
+		Handler:   (*Server).handleApproveShare,
+		RiskLevel: RiskLevelHigh,
+	})
+	RegisterTool(toolDefinition{
+		Name:        "revoke_share",
+		Description: "Revoke an active share grant, immediately removing access.",
+		InputSchema: objectSchema([]string{"grant_id"}, map[string]schemaProperty{
+			"grant_id": {Type: "string", Description: "ID of the share grant to revoke"},
+		}),
+		Handler:   (*Server).handleRevokeShare,
+		RiskLevel: RiskLevelHigh,
+	})
+	RegisterTool(toolDefinition{
+		Name:        "list_shares",
+		Description: "List share grants. Can filter by status, agent, or secret path.",
+		InputSchema: objectSchema([]string{}, map[string]schemaProperty{
+			"status":      {Type: "string", Description: "Filter by status: pending, approved, revoked, expired, rejected"},
+			"from_agent":  {Type: "string", Description: "Filter by source agent name"},
+			"to_agent":    {Type: "string", Description: "Filter by target agent name"},
+			"secret_path": {Type: "string", Description: "Filter by secret path"},
+		}),
+		Handler:   (*Server).handleListShares,
+		RiskLevel: RiskLevelLow,
+	})
+}

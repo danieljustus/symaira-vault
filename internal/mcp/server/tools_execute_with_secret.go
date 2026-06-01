@@ -266,3 +266,19 @@ func mapKeys(m map[string]string) []string {
 	sort.Strings(keys)
 	return keys
 }
+
+func init() {
+	RegisterTool(toolDefinition{
+		Name:        "execute_with_secret",
+		Description: "Execute a command with vault secrets injected as environment variables. The agent never sees the secret values. Requires command execution permission.",
+		InputSchema: objectSchema([]string{"command", "secret_refs"}, map[string]schemaProperty{
+			"command":     {Type: "array", Description: "\"Command and arguments as an array (e.g. [\"terraform\", \"apply\"])"},
+			"secret_refs": {Type: "array", Description: "\"Array of op:// vault references (e.g. [\"op://vault/aws/access_key\"])"},
+			"working_dir": {Type: "string", Description: "Working directory for the command"},
+			"env_vars":    {Type: "object", Description: "Additional non-secret environment variables"},
+			"timeout":     {Type: "number", Description: "Timeout in seconds (default: 30)"},
+		}),
+		Handler:   (*Server).handleExecuteWithSecret,
+		RiskLevel: RiskLevelHigh,
+	})
+}

@@ -184,3 +184,18 @@ func generateTOTPAvailable(s *Server) bool {
 	}
 	return s.canUseClipboard() || s.canUseAutotype() || s.canReadValues()
 }
+
+func init() {
+	RegisterTool(toolDefinition{
+		Name:        "generate_totp",
+		Description: "Generate a TOTP code for an entry with TOTP configuration. By default the code is copied to the clipboard without being returned in the response. Use destination=\"autotype\" to type the code directly, or destination=\"return\" with return_code=true to return the code in the response (requires approval).",
+		InputSchema: objectSchema([]string{"path"}, map[string]schemaProperty{
+			"path":        {Type: "string", Description: "Entry path with TOTP configuration"},
+			"destination": {Type: "string", Description: "Where to send the code: \"clipboard\" (default, not returned), \"autotype\" (type directly), \"return\" (return in response, requires approval)"},
+			"return_code": {Type: "boolean", Description: "Must be true when destination=\"return\""},
+		}),
+		Handler:   (*Server).handleGenerateTOTP,
+		Available: generateTOTPAvailable,
+		RiskLevel: RiskLevelHigh,
+	})
+}

@@ -12,6 +12,7 @@ type VaultConfig struct {
 	AuthMethod         string        `yaml:"authMethod,omitempty"`
 	UseTouchID         bool          `yaml:"useTouchID,omitempty"`
 	LegacyMode         *bool         `yaml:"legacy_mode,omitempty"`
+	SearchIndex        bool          `yaml:"search_index,omitempty"`
 	SearchWorkers      int           `yaml:"search_workers,omitempty"`
 	ConfigCacheEntries int           `yaml:"config_cache_entries,omitempty"`
 	PseudonymizePaths  bool          `yaml:"pseudonymize_paths,omitempty"`
@@ -109,6 +110,7 @@ func defaultVaultConfig() VaultConfig {
 		Path:              "",
 		DefaultRecipients: []string{},
 		AuthMethod:        AuthMethodPassphrase,
+		SearchIndex:       true,
 		ScryptWorkFactor:  18,
 		FormatVersion:     1,
 	}

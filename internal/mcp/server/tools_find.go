@@ -59,3 +59,15 @@ func (s *Server) findEntries(ctx context.Context, query string) ([]vaultpkg.Matc
 		RedactFieldPatterns: redactPatterns,
 	})
 }
+
+func init() {
+	RegisterTool(toolDefinition{
+		Name:        "find_entries",
+		Description: "Search entries by query string",
+		InputSchema: objectSchema([]string{"query"}, map[string]schemaProperty{
+			"query": {Type: "string", Description: "Search query"},
+		}),
+		Handler:   (*Server).handleFind,
+		RiskLevel: RiskLevelLow,
+	})
+}

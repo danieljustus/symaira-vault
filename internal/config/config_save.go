@@ -68,6 +68,7 @@ func (c *Config) SaveTo(path string) error {
 			AuthMethod:         vaultAuthMethod,
 			UseTouchID:         c.Vault.UseTouchID,
 			LegacyMode:         c.Vault.LegacyMode,
+			SearchIndex:        c.Vault.SearchIndex,
 			SearchWorkers:      c.Vault.SearchWorkers,
 			ConfigCacheEntries: c.Vault.ConfigCacheEntries,
 			PseudonymizePaths:  c.Vault.PseudonymizePaths,

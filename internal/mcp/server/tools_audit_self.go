@@ -90,3 +90,15 @@ func (s *Server) handleAuditSelf(ctx context.Context, req mcp.CallToolRequest) (
 	}
 	return mcp.NewToolResultText(string(resultJSON)), nil
 }
+
+func init() {
+	RegisterTool(toolDefinition{
+		Name:        "symaira_audit_self",
+		Description: "Return recent audit events for this agent",
+		InputSchema: objectSchema(nil, map[string]schemaProperty{
+			"limit": {Type: "number", Description: "Maximum number of events to return (default 50, max 100)"},
+		}),
+		Handler:   (*Server).handleAuditSelf,
+		RiskLevel: RiskLevelLow,
+	})
+}
