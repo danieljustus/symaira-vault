@@ -262,7 +262,7 @@ func callToolResultPayload(result *mcp.CallToolResult) map[string]any {
 		result = mcp.NewToolResultText("")
 	}
 	sanitized := globalChokepoint.SanitizeForMCP(result.Text)
-	return map[string]any{
+	payload := map[string]any{
 		"content": []map[string]any{
 			{
 				"type": "text",
@@ -271,6 +271,10 @@ func callToolResultPayload(result *mcp.CallToolResult) map[string]any {
 		},
 		"isError": result.IsError,
 	}
+	if result.StructuredContent != nil {
+		payload["structuredContent"] = result.StructuredContent
+	}
+	return payload
 }
 
 func decodeToolRequest(args json.RawMessage) (mcp.CallToolRequest, error) {

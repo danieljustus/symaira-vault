@@ -39,6 +39,8 @@ Symaira Vault exposes a Model Context Protocol (MCP) server that allows AI agent
 | `get_entry` | Retrieve entry contents | No |
 | `get_entry_metadata` | Get entry metadata without sensitive data | No |
 | `find_entries` | Search entries by path | No |
+| `search` | Search vault entries by query (OpenAI Company Knowledge format) | No |
+| `fetch` | Fetch vault entry by path/id (OpenAI Company Knowledge format) | No |
 | `generate_password` | Generate secure passwords | No |
 | `generate_totp` | Generate TOTP codes | No |
 | `copy_to_clipboard` | Copy entry password to system clipboard (auto-clears) | No |
@@ -581,6 +583,127 @@ Search for entries by path substring.
   ]
 }
 ```
+
+---
+
+### search
+
+Search vault entries by query. Returns results in OpenAI Company Knowledge compatible format with both structured and text content.
+
+**Request**:
+
+```json
+{
+  "tool": "search",
+  "arguments": {
+    "query": "aws"
+  }
+}
+```
+
+**Parameters**:
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `query` | string | Yes | Search query to match against entry paths and field values |
+
+**Response**:
+
+The response includes both `structuredContent` and `content` fields simultaneously:
+
+```json
+{
+  "structuredContent": {
+    "results": [
+      {
+        "id": "work/aws",
+        "title": "aws",
+        "url": "symvault://entry/work/aws"
+      },
+      {
+        "id": "work/aws-staging",
+        "title": "aws-staging",
+        "url": "symvault://entry/work/aws-staging"
+      }
+    ]
+  },
+  "content": [
+    {
+      "type": "text",
+      "text": "[{\"id\":\"work/aws\",\"title\":\"aws\",\"url\":\"symvault://entry/work/aws\"},{\"id\":\"work/aws-staging\",\"title\":\"aws-staging\",\"url\":\"symvault://entry/work/aws-staging\"}]"
+    }
+  ]
+}
+```
+
+**Notes**:
+- Uses the same search engine as `find_entries`
+- Each result includes `id` (entry path), `title` (entry name), and `url` (vault URL)
+- Scope filtering respects the agent's `allowedPaths` configuration
+- Read-only operation (no write permissions required)
+
+---
+
+### fetch
+
+Fetch a vault entry by path/id. Returns full entry content with metadata and values in OpenAI Company Knowledge compatible format.
+
+**Request**:
+
+```json
+{
+  "tool": "fetch",
+  "arguments": {
+    "id": "work/aws"
+  }
+}
+```
+
+**Parameters**:
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | string | Yes | Entry path or id to fetch (e.g., "github" or "work/aws") |
+
+**Response**:
+
+The response includes both `structuredContent` and `content` fields simultaneously:
+
+```json
+{
+  "structuredContent": {
+    "id": "work/aws",
+    "title": "aws",
+    "url": "symvault://entry/work/aws",
+    "metadata": {
+      "created": "2026-01-15T14:32:00Z",
+      "updated": "2026-04-21T09:45:00Z",
+      "version": 5,
+      "type": "password"
+    },
+    "values": {
+      "password": "...",
+      "username": "admin"
+    }
+  },
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"id\":\"work/aws\",\"title\":\"aws\",\"url\":\"symvault://entry/work/aws\",\"metadata\":{\"created\":\"2026-01-15T14:32:00Z\",\"updated\":\"2026-04-21T09:45:00Z\",\"version\":5,\"type\":\"password\"},\"values\":{\"password\":\"...\",\"username\":\"admin\"}}"
+    }
+  ]
+}
+```
+
+**Notes**:
+- The `metadata` field always contains `created`, `updated`, `version`, and `type`
+- The `values` field is only included when the agent's profile has value access (standard/admin tier or `canReadValues: true`)
+- Scope filtering respects the agent's `allowedPaths` configuration
+- Read-only operation (no write permissions required)
+
+**Errors**:
+- `access_denied`: Entry path is outside the agent's allowed scope
+- `not_found`: Entry does not exist
 
 ---
 
@@ -1528,6 +1651,7 @@ async function getCredential(path) {
 
 | Version | Changes |
 |---------|---------|
+| 2.5.0 | Added `search` and `fetch` tools for OpenAI Company Knowledge compatibility; added `structuredContent` field support in tool responses |
 | 2.2.0 | Added `copy_to_clipboard`, `autotype`, and `run_command` tools; added `canUseClipboard` and `canUseAutotype` agent permissions; added scoped token management |
 | 2.0.0 | Added `run_command` tool, `canRunCommands` permission, and HTTP MCP authentication |
 | 1.0.0 | Initial MCP API documentation |
