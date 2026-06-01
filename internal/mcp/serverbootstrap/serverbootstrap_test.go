@@ -3,7 +3,11 @@ package serverbootstrap
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"net"
@@ -1119,5 +1123,65 @@ func TestRunHTTPServer_OAuthClientPersistenceAcrossRestart(t *testing.T) {
 		if errBody["error"] == "invalid_client" {
 			t.Fatalf("client was not persisted across restart: %v", errBody)
 		}
+	}
+}
+
+func TestGenerateSelfSignedCert_ECDSA_P256(t *testing.T) {
+	tmpDir := t.TempDir()
+	certFile := filepath.Join(tmpDir, "test.crt")
+	keyFile := filepath.Join(tmpDir, "test.key")
+
+	if err := generateSelfSignedCert(certFile, keyFile); err != nil {
+		t.Fatalf("generateSelfSignedCert failed: %v", err)
+	}
+
+	certPEM, err := os.ReadFile(certFile)
+	if err != nil {
+		t.Fatalf("read cert file: %v", err)
+	}
+
+	block, _ := pem.Decode(certPEM)
+	if block == nil {
+		t.Fatal("failed to decode certificate PEM")
+	}
+
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		t.Fatalf("parse certificate: %v", err)
+	}
+
+	if cert.PublicKeyAlgorithm != x509.ECDSA {
+		t.Errorf("expected public key algorithm ECDSA, got %v", cert.PublicKeyAlgorithm)
+	}
+
+	ecdsaPub, ok := cert.PublicKey.(*ecdsa.PublicKey)
+	if !ok {
+		t.Fatalf("expected *ecdsa.PublicKey, got %T", cert.PublicKey)
+	}
+
+	if ecdsaPub.Curve != elliptic.P256() {
+		t.Errorf("expected P-256 curve, got %v", ecdsaPub.Curve.Params().Name)
+	}
+
+	foundLocalhost := false
+	for _, dns := range cert.DNSNames {
+		if dns == "localhost" {
+			foundLocalhost = true
+			break
+		}
+	}
+	if !foundLocalhost {
+		t.Error("expected DNSNames to contain 'localhost'")
+	}
+
+	foundLoopback := false
+	for _, ip := range cert.IPAddresses {
+		if ip.Equal(net.ParseIP("127.0.0.1")) || ip.Equal(net.ParseIP("::1")) {
+			foundLoopback = true
+			break
+		}
+	}
+	if !foundLoopback {
+		t.Error("expected IPAddresses to contain loopback address")
 	}
 }

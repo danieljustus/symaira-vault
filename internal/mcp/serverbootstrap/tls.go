@@ -2,7 +2,8 @@
 package serverbootstrap
 
 import (
-	"crypto/ed25519"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -46,14 +47,15 @@ func ensureTLSCert(vaultDir string) (certFile, keyFile string, err error) {
 	return certFile, keyFile, nil
 }
 
-// generateSelfSignedCert creates a self-signed Ed25519 certificate valid for
+// generateSelfSignedCert creates a self-signed ECDSA P-256 certificate valid for
 // loopback addresses and writes the PEM-encoded certificate and private key
 // to the specified paths.
 func generateSelfSignedCert(certFile, keyFile string) error {
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		return fmt.Errorf("generate ed25519 key: %w", err)
+		return fmt.Errorf("generate ecdsa key: %w", err)
 	}
+	pub := &priv.PublicKey
 
 	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 	if err != nil {
