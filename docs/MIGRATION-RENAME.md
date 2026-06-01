@@ -17,8 +17,9 @@ project and CLI binary names change.
 | **Homebrew formula** | `openpass` | `symvault` |
 | **Scoop package** | `openpass` | `symvault` |
 
-**Your vault data stays the same.** The rename is cosmetic; no vault migration is
-required.
+**Your vault data stays the same.** The encrypted vault format is unchanged.
+Local integrations such as shell commands, service files, environment variables,
+and macOS Touch ID Keychain entries may still need rename-aware handling.
 
 ---
 
@@ -204,6 +205,7 @@ The following environment variables have been renamed:
 | `OPENPASS_VAULT` | `SYMVAULT_VAULT` |
 | `OPENPASS_CONFIG` | `SYMVAULT_CONFIG` |
 | `OPENPASS_AGENT` | `SYMVAULT_AGENT` |
+| `OPENPASS_PASSPHRASE` | `SYMVAULT_PASSPHRASE` |
 
 **Backward compatibility:** If `SYMVAULT_VAULT` is not set, Symaira Vault still
 falls back to `OPENPASS_VAULT`. Deprecated `OPENPASS_*` variables emit a warning
@@ -236,6 +238,40 @@ export SYMVAULT_VAULT="$HOME/.symvault"
 # 4. Add to your shell profile
 echo 'export SYMVAULT_VAULT="$HOME/.symvault"' >> ~/.zshrc
 ```
+
+## Touch ID / macOS Keychain
+
+OpenPass stored Touch ID unlock passphrases in macOS Keychain under service
+names derived from the old binary name and vault path:
+
+| Case | Keychain service |
+|---|---|
+| Old OpenPass | `openpass-biometric:<vault-path>` |
+| New Symaira Vault | `symvault-biometric:<vault-path>` |
+
+This matters if the vault was moved or copied from `~/.openpass` to
+`~/.symvault`: the encrypted vault files may be identical, but the Keychain item
+can still point at `openpass-biometric:$HOME/.openpass`.
+
+Current Symaira Vault builds handle this automatically on macOS:
+
+- `symvault unlock` first tries the current `symvault-biometric:<vault-path>`
+  item.
+- If that is missing, it tries legacy `openpass-biometric:<vault-path>` items.
+- For the default directory rename, it also checks both service names for
+  `$HOME/.openpass` when the active vault is `$HOME/.symvault`.
+- After the passphrase successfully opens the active vault, Symaira Vault writes
+  the canonical `symvault-biometric:<active-vault>` item so future unlocks no
+  longer depend on the legacy entry.
+- `symvault auth set passphrase` removes biometric entries for the active vault
+  path under both the current and legacy service names. It does not remove
+  Keychain items for a different vault path.
+
+If both `~/.openpass` and `~/.symvault` exist but contain different vaults,
+`~/.symvault` is selected by default. A legacy Touch ID passphrase from
+`~/.openpass` will only be kept if it actually decrypts the selected vault.
+Otherwise unlock fails safely and you must choose the right vault with `--vault`
+or `SYMVAULT_VAULT`.
 
 ---
 
