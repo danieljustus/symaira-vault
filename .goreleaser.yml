@@ -29,7 +29,7 @@ builds:
     binary: symvault
     hooks:
       post:
-        - 'scripts/build-mcpb.sh --version "{{ .Version }}" --os "{{ .Os }}" --arch "{{ .Arch }}"'
+        - 'scripts/build-mcpb.sh --version "{{ .Version }}" --os "{{ .Os }}" --arch "{{ .Arch }}" --binary "{{ .Path }}"'
     env:
       - CGO_ENABLED=0
       - GOWORK=off
@@ -56,7 +56,7 @@ builds:
     binary: symvault
     hooks:
       post:
-        - 'scripts/build-mcpb.sh --version "{{ .Version }}" --os "{{ .Os }}" --arch "{{ .Arch }}"'
+        - 'scripts/build-mcpb.sh --version "{{ .Version }}" --os "{{ .Os }}" --arch "{{ .Arch }}" --binary "{{ .Path }}"'
     env:
       - CGO_ENABLED=1
       - GOWORK=off
