@@ -228,3 +228,73 @@ rpm -q symvault
 # Alpine
 apk info symvault
 ```
+
+## Docker
+
+Symvault Vault is available as a Docker image on GitHub Container Registry:
+
+**Image:** `ghcr.io/danieljustus/symvault`
+
+### Quick Start
+
+```bash
+# Pull the image
+docker pull ghcr.io/danieljustus/symvault:latest
+
+# Run a one-off command
+docker run --rm -v "$HOME/.symvault:/home/symvault/.symvault" \
+  ghcr.io/danieljustus/symvault version
+
+# Initialize a new vault
+docker run --rm -it -v "$HOME/.symvault:/home/symvault/.symvault" \
+  ghcr.io/danieljustus/symvault init
+```
+
+### MCP HTTP Server with Docker
+
+Run the MCP HTTP server behind a TLS proxy:
+
+```bash
+# Start the MCP server
+docker run -d --name symvault \
+  -v "$HOME/.symvault:/home/symvault/.symvault" \
+  -p 8080:8080 \
+  ghcr.io/danieljustus/symvault serve --port 8080
+```
+
+### Remote Gateway Deployment
+
+For production deployments with HTTPS, use the provided `docker-compose.yml`:
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/danieljustus/symaira-vault
+   cd symaira-vault
+   ```
+
+2. Place your TLS certificates in `docker/certs/`:
+   ```bash
+   cp /path/to/server.crt docker/certs/
+   cp /path/to/server.key docker/certs/
+   ```
+
+3. Update `docker/caddy/Caddyfile` with your domain.
+
+4. Start the services:
+   ```bash
+   docker compose up -d
+   ```
+
+The compose setup provisions:
+- **Caddy** — TLS termination and reverse proxy
+- **Symvault** — MCP server behind the proxy
+- **vault_data** — Persistent volume for vault data
+
+### Multi-Architecture
+
+The Docker image supports both `linux/amd64` and `linux/arm64`:
+
+```bash
+# Inspect the image for supported architectures
+docker manifest inspect ghcr.io/danieljustus/symvault:latest
+```
