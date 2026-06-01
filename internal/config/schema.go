@@ -41,28 +41,36 @@ type OAuthConfig struct {
 	RefreshTokenTTL time.Duration `yaml:"refresh_token_ttl,omitempty"`
 }
 
+// PerplexityConfig holds Perplexity API client configuration.
+type PerplexityConfig struct {
+	APIKey          string `yaml:"api_key,omitempty"`
+	BaseURL         string `yaml:"base_url,omitempty"`
+	RateLimitPerMin int    `yaml:"rate_limit_per_min,omitempty"`
+}
+
 // MCPConfig holds MCP server-related configuration for AI agent integration.
 type MCPConfig struct {
-	Port                int           `yaml:"port,omitempty"`
-	Bind                string        `yaml:"bind,omitempty"`
-	HTTPTokenFile       string        `yaml:"httpTokenFile,omitempty"`
-	OTLPEndpoint        string        `yaml:"otlp_endpoint,omitempty"`
-	Stdio               bool          `yaml:"stdio,omitempty"`
-	ApprovalRequired    bool          `yaml:"approval_required,omitempty"`
-	ReadHeaderTimeout   time.Duration `yaml:"read_header_timeout,omitempty"`
-	ReadTimeout         time.Duration `yaml:"read_timeout,omitempty"`
-	WriteTimeout        time.Duration `yaml:"write_timeout,omitempty"`
-	ShutdownTimeout     time.Duration `yaml:"shutdown_timeout,omitempty"`
-	ApprovalTimeout     time.Duration `yaml:"approval_timeout,omitempty"`
-	RateLimit           int           `yaml:"rate_limit,omitempty"`
-	TrustedProxyIPs     []string      `yaml:"trusted_proxy_ips,omitempty"`
-	MetricsAuthRequired bool          `yaml:"metrics_auth_required,omitempty"`
-	TLSCertFile         string        `yaml:"tls_cert_file,omitempty"`
-	TLSKeyFile          string        `yaml:"tls_key_file,omitempty"`
-	TLSClientCAFile     string        `yaml:"tls_client_ca_file,omitempty"`
-	MTLSEnabled         bool          `yaml:"mtls_enabled,omitempty"`
-	AllowInsecureBind   bool          `yaml:"allow_insecure_bind,omitempty"`
-	OAuth               *OAuthConfig  `yaml:"oauth,omitempty"`
+	Port                int               `yaml:"port,omitempty"`
+	Bind                string            `yaml:"bind,omitempty"`
+	HTTPTokenFile       string            `yaml:"httpTokenFile,omitempty"`
+	OTLPEndpoint        string            `yaml:"otlp_endpoint,omitempty"`
+	Stdio               bool              `yaml:"stdio,omitempty"`
+	ApprovalRequired    bool              `yaml:"approval_required,omitempty"`
+	ReadHeaderTimeout   time.Duration     `yaml:"read_header_timeout,omitempty"`
+	ReadTimeout         time.Duration     `yaml:"read_timeout,omitempty"`
+	WriteTimeout        time.Duration     `yaml:"write_timeout,omitempty"`
+	ShutdownTimeout     time.Duration     `yaml:"shutdown_timeout,omitempty"`
+	ApprovalTimeout     time.Duration     `yaml:"approval_timeout,omitempty"`
+	RateLimit           int               `yaml:"rate_limit,omitempty"`
+	TrustedProxyIPs     []string          `yaml:"trusted_proxy_ips,omitempty"`
+	MetricsAuthRequired bool              `yaml:"metrics_auth_required,omitempty"`
+	TLSCertFile         string            `yaml:"tls_cert_file,omitempty"`
+	TLSKeyFile          string            `yaml:"tls_key_file,omitempty"`
+	TLSClientCAFile     string            `yaml:"tls_client_ca_file,omitempty"`
+	MTLSEnabled         bool              `yaml:"mtls_enabled,omitempty"`
+	AllowInsecureBind   bool              `yaml:"allow_insecure_bind,omitempty"`
+	OAuth               *OAuthConfig      `yaml:"oauth,omitempty"`
+	Perplexity          *PerplexityConfig `yaml:"perplexity,omitempty"`
 }
 
 // UpdateConfig holds update check-related configuration.
@@ -125,6 +133,14 @@ func defaultGitConfig() GitConfig {
 		AutoPull:         true,
 		AutoPullInterval: 10 * time.Second,
 		CommitTemplate:   "Update from Symaira Vault",
+	}
+}
+
+// defaultPerplexityConfig returns the default Perplexity API configuration.
+func defaultPerplexityConfig() PerplexityConfig {
+	return PerplexityConfig{
+		BaseURL:         "https://api.perplexity.ai",
+		RateLimitPerMin: 10,
 	}
 }
 
@@ -353,6 +369,20 @@ func MergeFromMCP(dst *MCPConfig, src MCPConfig) {
 		}
 		if src.OAuth.RefreshTokenTTL > 0 {
 			dst.OAuth.RefreshTokenTTL = src.OAuth.RefreshTokenTTL
+		}
+	}
+	if src.Perplexity != nil {
+		if dst.Perplexity == nil {
+			dst.Perplexity = &PerplexityConfig{}
+		}
+		if src.Perplexity.APIKey != "" {
+			dst.Perplexity.APIKey = src.Perplexity.APIKey
+		}
+		if src.Perplexity.BaseURL != "" {
+			dst.Perplexity.BaseURL = src.Perplexity.BaseURL
+		}
+		if src.Perplexity.RateLimitPerMin > 0 {
+			dst.Perplexity.RateLimitPerMin = src.Perplexity.RateLimitPerMin
 		}
 	}
 }

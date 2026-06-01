@@ -1,0 +1,9 @@
+base_url: https://api.perplexity.ai
+auth_type: bearer
+entry_ref: op:///perplexity
+allowed_endpoints:
+  - /chat/completions
+allowed_methods:
+  - POST
+default_headers:
+  Content-Type: application/json

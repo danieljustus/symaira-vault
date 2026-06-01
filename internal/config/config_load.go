@@ -252,7 +252,8 @@ func loadSectionFields(doc *yaml.Node) map[string]map[string]bool {
 					for j := 0; j < len(secNode.Content)-1; j += 2 {
 						fieldKey := secNode.Content[j].Value
 						fields[fieldKey] = true
-						if fieldKey == "oauth" && sec == "mcp" {
+						switch {
+						case fieldKey == "oauth" && sec == "mcp":
 							oAuthNode := secNode.Content[j+1]
 							if oAuthNode.Kind == yaml.MappingNode {
 								oAuthFields := make(map[string]bool)
@@ -260,6 +261,15 @@ func loadSectionFields(doc *yaml.Node) map[string]map[string]bool {
 									oAuthFields[oAuthNode.Content[k].Value] = true
 								}
 								result["mcp_oauth"] = oAuthFields
+							}
+						case fieldKey == "perplexity" && sec == "mcp":
+							perpNode := secNode.Content[j+1]
+							if perpNode.Kind == yaml.MappingNode {
+								perpFields := make(map[string]bool)
+								for k := 0; k < len(perpNode.Content)-1; k += 2 {
+									perpFields[perpNode.Content[k].Value] = true
+								}
+								result["mcp_perplexity"] = perpFields
 							}
 						}
 					}

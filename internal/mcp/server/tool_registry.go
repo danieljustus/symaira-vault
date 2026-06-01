@@ -57,7 +57,7 @@ func objectSchema(required []string, properties map[string]schemaProperty) map[s
 // ARCHITECTURE.md § Tool Addition Review). The cap balances functionality
 // against the prompt injection attack surface — each additional tool is another
 // vector an attacker-controlled agent can exploit.
-const MaxToolDefinitions = 32
+const MaxToolDefinitions = 34
 
 var (
 	toolRegistry   []toolDefinition

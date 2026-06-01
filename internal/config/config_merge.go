@@ -112,7 +112,7 @@ func mergeSections(cfg *Config, raw Config, sectionFields map[string]map[string]
 		cfg.Git = mergeGitConfig(raw.Git, sectionFields["git"])
 	}
 	if raw.MCP != nil {
-		cfg.MCP = mergeMCPConfig(raw.MCP, sectionFields["mcp"], sectionFields["mcp_oauth"])
+		cfg.MCP = mergeMCPConfig(raw.MCP, sectionFields["mcp"], sectionFields["mcp_oauth"], sectionFields["mcp_perplexity"])
 	}
 	if raw.Update != nil {
 		cfg.Update = mergeUpdateConfig(raw.Update, sectionFields["update"])
@@ -314,7 +314,7 @@ func mergeGitConfig(raw *GitConfig, sf map[string]bool) *GitConfig {
 	return &defaults
 }
 
-func mergeMCPConfig(raw *MCPConfig, sf, oaf map[string]bool) *MCPConfig {
+func mergeMCPConfig(raw *MCPConfig, sf, oaf, ppf map[string]bool) *MCPConfig {
 	defaults := defaultMCPConfig()
 	if raw.ApprovalRequired {
 		fmt.Fprintln(os.Stderr, "Warning: approval_required is deprecated and will be removed in a future version")
@@ -382,6 +382,20 @@ func mergeMCPConfig(raw *MCPConfig, sf, oaf map[string]bool) *MCPConfig {
 		}
 		if oaf["refresh_token_ttl"] && raw.OAuth.RefreshTokenTTL > 0 {
 			defaults.OAuth.RefreshTokenTTL = raw.OAuth.RefreshTokenTTL
+		}
+	}
+	if sf["perplexity"] && raw.Perplexity != nil {
+		if defaults.Perplexity == nil {
+			defaults.Perplexity = &PerplexityConfig{}
+		}
+		if ppf["api_key"] && raw.Perplexity.APIKey != "" {
+			defaults.Perplexity.APIKey = raw.Perplexity.APIKey
+		}
+		if ppf["base_url"] && raw.Perplexity.BaseURL != "" {
+			defaults.Perplexity.BaseURL = raw.Perplexity.BaseURL
+		}
+		if ppf["rate_limit_per_min"] && raw.Perplexity.RateLimitPerMin > 0 {
+			defaults.Perplexity.RateLimitPerMin = raw.Perplexity.RateLimitPerMin
 		}
 	}
 	return &defaults
