@@ -26,6 +26,21 @@ func (c cmdMockBiometricStore) Load(context.Context, string) ([]byte, error) {
 }
 func (c cmdMockBiometricStore) Delete(string) error { return nil }
 
+type cmdRecordingBiometricStore struct {
+	available bool
+	saved     []byte
+}
+
+func (c *cmdRecordingBiometricStore) IsAvailable() bool { return c.available }
+func (c *cmdRecordingBiometricStore) Save(_ context.Context, _ string, passphrase []byte) error {
+	c.saved = append([]byte(nil), passphrase...)
+	return nil
+}
+func (c *cmdRecordingBiometricStore) Load(context.Context, string) ([]byte, error) {
+	return nil, session.ErrBiometricNotConfigured
+}
+func (c *cmdRecordingBiometricStore) Delete(string) error { return nil }
+
 func TestAuthSetPassphraseUpdatesConfig(t *testing.T) {
 	vaultDir, _ := initVault(t)
 	defer setupVaultFlag(t, vaultDir)()
@@ -60,6 +75,32 @@ func TestAuthSetPassphraseUpdatesConfig(t *testing.T) {
 	}
 	if got := loaded.EffectiveAuthMethod(); got != configpkg.AuthMethodPassphrase {
 		t.Fatalf("auth method = %q, want passphrase", got)
+	}
+}
+
+func TestAuthSetTouchIDUsesSymvaultPassphraseEnv(t *testing.T) {
+	vaultDir, passphrase := initVault(t)
+	defer setupVaultFlag(t, vaultDir)()
+
+	store := &cmdRecordingBiometricStore{available: true}
+	oldStore := session.DefaultBiometricPassphraseStore()
+	session.SetBiometricPassphraseStore(store)
+	t.Cleanup(func() { session.SetBiometricPassphraseStore(oldStore) })
+	t.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+
+	if err := auth.AuthSetCmd.RunE(auth.AuthSetCmd, []string{"touchid"}); err != nil {
+		t.Fatalf("auth set touchid error = %v", err)
+	}
+	if string(store.saved) != string(passphrase) {
+		t.Fatalf("saved passphrase = %q, want %q", store.saved, passphrase)
+	}
+
+	loaded, err := configpkg.Load(filepath.Join(vaultDir, "config.yaml"))
+	if err != nil {
+		t.Fatalf("Load() after auth set error = %v", err)
+	}
+	if got := loaded.EffectiveAuthMethod(); got != configpkg.AuthMethodTouchID {
+		t.Fatalf("auth method = %q, want touchid", got)
 	}
 }
 
