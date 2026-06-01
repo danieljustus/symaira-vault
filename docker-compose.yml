@@ -1,0 +1,40 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: symvault-proxy
+    restart: unless-stopped
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./docker/caddy/data:/data
+      - ./docker/caddy/config:/config
+      - ./docker/certs:/certs:ro
+    networks:
+      - symvault
+    depends_on:
+      - symvault
+
+  symvault:
+    image: ghcr.io/danieljustus/symvault:latest
+    container_name: symvault
+    restart: unless-stopped
+    expose:
+      - "8080"
+    volumes:
+      - vault_data:/home/symvault/.symvault
+      - ./docker/certs:/certs:ro
+    environment:
+      - SYMVAULT_VAULT=/home/symvault/.symvault
+      - SYMVAULT_SERVE_TLS_CERT=/certs/server.crt
+      - SYMVAULT_SERVE_TLS_KEY=/certs/server.key
+    networks:
+      - symvault
+
+volumes:
+  vault_data:
+
+networks:
+  symvault:
+    driver: bridge

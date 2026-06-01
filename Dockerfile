@@ -1,19 +1,39 @@
-# Minimal Dockerfile for Symaira Vault
-# Uses scratch base for smallest possible image
-# Build context: repository root with goreleaser-built binary
+# Multi-stage build for Symvault Vault
+# Build stage
+FROM golang:1.26-alpine AS build
 
-FROM scratch
+RUN apk add --no-cache gcc musl-dev
 
-# Copy CA certificates for HTTPS operations (git push/pull)
-COPY --from=alpine:latest /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
 
-# Copy the binary built by GoReleaser
-COPY symaira /usr/bin/symaira
+COPY . .
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /usr/bin/symvault .
 
-# Symaira Vault stores vault data in ~/.symaira by default
-# In container context, users should mount a volume:
-#   docker run -v ~/.symaira:/root/.symaira ghcr.io/danieljustus/symaira:latest
-VOLUME ["/root/.symaira"]
+# Final stage
+FROM alpine:3.21
 
-ENTRYPOINT ["/usr/bin/symaira"]
+RUN apk add --no-cache ca-certificates tzdata
+
+RUN addgroup -S symvault && adduser -S symvault -G symvault -h /home/symvault
+
+COPY --from=build /usr/bin/symvault /usr/bin/symvault
+
+RUN mkdir -p /home/symvault/.symvault && chown -R symvault:symvault /home/symvault/.symvault
+
+USER symvault
+
+VOLUME ["/home/symvault/.symvault"]
+
+LABEL org.opencontainers.image.title="Symvault Vault"
+LABEL org.opencontainers.image.description="Modern CLI password manager with age encryption"
+LABEL org.opencontainers.image.url="https://github.com/danieljustus/symaira-vault"
+LABEL org.opencontainers.image.source="https://github.com/danieljustus/symaira-vault"
+LABEL org.opencontainers.image.licenses="MIT"
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD ["symvault", "version"]
+
+ENTRYPOINT ["symvault"]
 CMD ["--help"]

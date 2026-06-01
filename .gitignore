@@ -72,3 +72,8 @@ CLAUDE.md
 
 # New binary name (post-rename)
 symvault
+
+# Docker runtime data (environment-specific)
+docker/certs/
+docker/caddy/data/
+docker/caddy/config/
