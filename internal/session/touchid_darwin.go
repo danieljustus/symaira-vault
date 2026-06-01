@@ -209,7 +209,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"unsafe"
+
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 )
 
 var errTouchIDNotAvailable = errors.New("touch id not available")
@@ -256,8 +259,64 @@ func newTouchIDAuthenticator() BiometricAuthenticator {
 
 const biometricAccount = "passphrase"
 
+const (
+	currentBiometricServicePrefix = "symvault-biometric:"
+	legacyBiometricServicePrefix  = "openpass-biometric:"
+)
+
 func biometricServiceName(vaultDir string) string {
-	return "symvault-biometric:" + vaultDir
+	return currentBiometricServicePrefix + vaultDir
+}
+
+func biometricServiceNames(vaultDir string) []string {
+	candidates := []string{
+		currentBiometricServicePrefix + vaultDir,
+		legacyBiometricServicePrefix + vaultDir,
+	}
+
+	if legacyDir := legacyDefaultVaultDir(vaultDir); legacyDir != "" && legacyDir != vaultDir {
+		candidates = append(candidates,
+			currentBiometricServicePrefix+legacyDir,
+			legacyBiometricServicePrefix+legacyDir,
+		)
+	}
+
+	return uniqueServices(candidates...)
+}
+
+func biometricDeleteServiceNames(vaultDir string) []string {
+	return uniqueServices(
+		currentBiometricServicePrefix+vaultDir,
+		legacyBiometricServicePrefix+vaultDir,
+	)
+}
+
+func uniqueServices(candidates ...string) []string {
+	var services []string
+	for _, service := range candidates {
+		if service == "" {
+			continue
+		}
+		exists := false
+		for _, existing := range services {
+			if existing == service {
+				exists = true
+				break
+			}
+		}
+		if !exists {
+			services = append(services, service)
+		}
+	}
+	return services
+}
+
+func legacyDefaultVaultDir(vaultDir string) string {
+	clean := filepath.Clean(vaultDir)
+	if filepath.Base(clean) != configpkg.DefaultVaultSubdir {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(clean), configpkg.LegacyDefaultVaultSubdir)
 }
 
 type touchIDPassphraseStore struct{}
@@ -295,7 +354,26 @@ func (t *touchIDPassphraseStore) Load(ctx context.Context, vaultDir string) ([]b
 		return nil, ErrBiometricNotAvailable
 	}
 
-	service := C.CString(biometricServiceName(vaultDir))
+	var lastNotConfigured error
+	for _, serviceName := range biometricServiceNames(vaultDir) {
+		passphrase, err := t.loadFromService(serviceName)
+		if err == nil {
+			return passphrase, nil
+		}
+		if errors.Is(err, ErrBiometricNotConfigured) {
+			lastNotConfigured = err
+			continue
+		}
+		return nil, err
+	}
+	if lastNotConfigured != nil {
+		return nil, lastNotConfigured
+	}
+	return nil, ErrBiometricNotConfigured
+}
+
+func (t *touchIDPassphraseStore) loadFromService(serviceName string) ([]byte, error) {
+	service := C.CString(serviceName)
 	account := C.CString(biometricAccount)
 	reason := C.CString("Unlock Symaira Vault vault")
 	defer C.free(unsafe.Pointer(service))
@@ -319,7 +397,17 @@ func (t *touchIDPassphraseStore) Load(ctx context.Context, vaultDir string) ([]b
 }
 
 func (t *touchIDPassphraseStore) Delete(vaultDir string) error {
-	service := C.CString(biometricServiceName(vaultDir))
+	var firstErr error
+	for _, serviceName := range biometricDeleteServiceNames(vaultDir) {
+		if err := t.deleteFromService(serviceName); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
+func (t *touchIDPassphraseStore) deleteFromService(serviceName string) error {
+	service := C.CString(serviceName)
 	account := C.CString(biometricAccount)
 	defer C.free(unsafe.Pointer(service))
 	defer C.free(unsafe.Pointer(account))

@@ -1,0 +1,123 @@
+package cli
+
+import (
+	"context"
+	"errors"
+	"path/filepath"
+	"testing"
+	"time"
+
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/session"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
+)
+
+func TestUnlockVaultWithTTLRefreshesTouchIDItemAfterBiometricUnlock(t *testing.T) {
+	vaultDir := t.TempDir()
+	passphrase := []byte("test-passphrase")
+	cfg := configpkg.Default()
+	if err := cfg.SetAuthMethod(configpkg.AuthMethodTouchID); err != nil {
+		t.Fatalf("SetAuthMethod() error = %v", err)
+	}
+	if _, err := vaultpkg.InitWithPassphrase(vaultDir, passphrase, cfg); err != nil {
+		t.Fatalf("InitWithPassphrase() error = %v", err)
+	}
+	if err := cfg.SaveTo(filepath.Join(vaultDir, "config.yaml")); err != nil {
+		t.Fatalf("SaveTo() error = %v", err)
+	}
+
+	oldLoadPassphrase := SessionLoadPassphrase
+	oldSavePassphrase := SessionSavePassphrase
+	oldLoadBiometric := SessionLoadBiometric
+	oldSaveBiometric := SessionSaveBiometric
+	oldLoadIdentity := SessionLoadIdentity
+	oldSaveIdentity := SessionSaveIdentity
+	t.Cleanup(func() {
+		SessionLoadPassphrase = oldLoadPassphrase
+		SessionSavePassphrase = oldSavePassphrase
+		SessionLoadBiometric = oldLoadBiometric
+		SessionSaveBiometric = oldSaveBiometric
+		SessionLoadIdentity = oldLoadIdentity
+		SessionSaveIdentity = oldSaveIdentity
+	})
+
+	SessionLoadIdentity = func(string) (string, error) { return "", errors.New("miss") }
+	SessionLoadPassphrase = func(string) ([]byte, error) { return nil, errors.New("miss") }
+	SessionSavePassphrase = func(string, []byte, time.Duration) error { return nil }
+	SessionSaveIdentity = func(string, string, time.Duration) error { return nil }
+	SessionLoadBiometric = func(context.Context, string) ([]byte, error) {
+		return append([]byte(nil), passphrase...), nil
+	}
+	var savedVaultDir string
+	var savedPassphrase []byte
+	SessionSaveBiometric = func(_ context.Context, dir string, p []byte) error {
+		savedVaultDir = dir
+		savedPassphrase = append([]byte(nil), p...)
+		return nil
+	}
+
+	v, _, err := UnlockVaultWithTTL(vaultDir, false, 0, false)
+	if err != nil {
+		t.Fatalf("UnlockVaultWithTTL() error = %v", err)
+	}
+	if v == nil {
+		t.Fatal("UnlockVaultWithTTL() returned nil vault")
+	}
+	if savedVaultDir != vaultDir {
+		t.Fatalf("biometric vault dir = %q, want %q", savedVaultDir, vaultDir)
+	}
+	if string(savedPassphrase) != string(passphrase) {
+		t.Fatalf("biometric passphrase = %q, want %q", savedPassphrase, passphrase)
+	}
+}
+
+func TestUnlockVaultWithTTLDoesNotSaveTouchIDItemForUncachedEnvPassphrase(t *testing.T) {
+	vaultDir := t.TempDir()
+	passphrase := []byte("test-passphrase")
+	cfg := configpkg.Default()
+	if err := cfg.SetAuthMethod(configpkg.AuthMethodTouchID); err != nil {
+		t.Fatalf("SetAuthMethod() error = %v", err)
+	}
+	if _, err := vaultpkg.InitWithPassphrase(vaultDir, passphrase, cfg); err != nil {
+		t.Fatalf("InitWithPassphrase() error = %v", err)
+	}
+	if err := cfg.SaveTo(filepath.Join(vaultDir, "config.yaml")); err != nil {
+		t.Fatalf("SaveTo() error = %v", err)
+	}
+
+	oldLoadPassphrase := SessionLoadPassphrase
+	oldSavePassphrase := SessionSavePassphrase
+	oldLoadBiometric := SessionLoadBiometric
+	oldSaveBiometric := SessionSaveBiometric
+	oldLoadIdentity := SessionLoadIdentity
+	oldSaveIdentity := SessionSaveIdentity
+	t.Cleanup(func() {
+		SessionLoadPassphrase = oldLoadPassphrase
+		SessionSavePassphrase = oldSavePassphrase
+		SessionLoadBiometric = oldLoadBiometric
+		SessionSaveBiometric = oldSaveBiometric
+		SessionLoadIdentity = oldLoadIdentity
+		SessionSaveIdentity = oldSaveIdentity
+	})
+
+	SessionLoadIdentity = func(string) (string, error) { return "", errors.New("miss") }
+	SessionLoadPassphrase = func(string) ([]byte, error) { return nil, errors.New("miss") }
+	SessionLoadBiometric = func(context.Context, string) ([]byte, error) {
+		return nil, session.ErrBiometricNotConfigured
+	}
+	SessionSavePassphrase = func(string, []byte, time.Duration) error { return nil }
+	SessionSaveIdentity = func(string, string, time.Duration) error { return nil }
+	SessionSaveBiometric = func(context.Context, string, []byte) error {
+		t.Fatal("SessionSaveBiometric should not be called for uncached env passphrase")
+		return nil
+	}
+	t.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+
+	v, _, err := UnlockVaultWithTTL(vaultDir, false, 0, false)
+	if err != nil {
+		t.Fatalf("UnlockVaultWithTTL() error = %v", err)
+	}
+	if v == nil {
+		t.Fatal("UnlockVaultWithTTL() returned nil vault")
+	}
+}

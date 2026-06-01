@@ -40,7 +40,7 @@ func UnlockVaultWithTTL(vaultDir string, interactive bool, ttlOverride time.Dura
 
 	cfg := loadVaultConfigForUnlock(vaultDir)
 
-	passphrase, passphraseFromEnv, passphraseFromBiometric, err := resolveUnlockPassphrase(vaultDir, interactive, cfg)
+	passphrase, passphraseFromEnv, _, err := resolveUnlockPassphrase(vaultDir, interactive, cfg)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -63,7 +63,7 @@ func UnlockVaultWithTTL(vaultDir string, interactive bool, ttlOverride time.Dura
 			_ = SessionSaveIdentity(vaultDir, v.Identity.String(), ttl)
 		}
 	}
-	if cfg.EffectiveAuthMethod() == configpkg.AuthMethodTouchID && !passphraseFromBiometric && (!passphraseFromEnv || cacheEnvPassphrase) {
+	if cfg.EffectiveAuthMethod() == configpkg.AuthMethodTouchID && (!passphraseFromEnv || cacheEnvPassphrase) {
 		if err := SessionSaveBiometric(context.Background(), vaultDir, passphrase); err != nil && interactive {
 			cliout.Warnf("Warning: could not update Touch ID unlock: %v", err)
 		}
