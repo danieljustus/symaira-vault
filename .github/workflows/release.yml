@@ -227,17 +227,17 @@ jobs:
 
       - name: Verify manifest.json
         run: |
-          python3 -c "
-import json
-with open('mcpb-test/manifest.json') as f:
-    m = json.load(f)
-assert m['manifest_version'] == '0.3'
-assert m['name'] == 'symvault'
-assert m['server']['type'] == 'binary'
-assert m['server']['entry_point'] == 'server/symvault'
-assert m['server']['mcp_config']['args'] == ['serve', '--stdio']
-print('manifest.json validated')
-"
+          python3 <<'EOF'
+          import json
+          with open('mcpb-test/manifest.json') as f:
+              m = json.load(f)
+          assert m['manifest_version'] == '0.3'
+          assert m['name'] == 'symvault'
+          assert m['server']['type'] == 'binary'
+          assert m['server']['entry_point'] == 'server/symvault'
+          assert m['server']['mcp_config']['args'] == ['serve', '--stdio']
+          print('manifest.json validated')
+          EOF
 
       - name: Verify binary works
         run: |
