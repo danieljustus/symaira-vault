@@ -52,15 +52,15 @@ type perplexityMessage struct {
 }
 
 type perplexityChatRequest struct {
-	Model       string               `json:"model"`
-	Messages    []perplexityMessage  `json:"messages"`
-	MaxTokens   int                  `json:"max_tokens,omitempty"`
+	Model     string              `json:"model"`
+	Messages  []perplexityMessage `json:"messages"`
+	MaxTokens int                 `json:"max_tokens,omitempty"`
 }
 
 type perplexityChatChoice struct {
-	Index        int                 `json:"index"`
-	Message      perplexityMessage   `json:"message"`
-	FinishReason string              `json:"finish_reason"`
+	Index        int               `json:"index"`
+	Message      perplexityMessage `json:"message"`
+	FinishReason string            `json:"finish_reason"`
 }
 
 type perplexityUsage struct {

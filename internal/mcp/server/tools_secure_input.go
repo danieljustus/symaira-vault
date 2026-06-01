@@ -118,9 +118,9 @@ func init() {
 			"field":       {Type: "string", Description: "Field name to store the value under"},
 			"description": {Type: "string", Description: "Optional description shown to the user in the prompt"},
 		}),
-		Handler:   (*Server).handleSecureInput,
-		Available: secureInputToolAvailable,
-		RiskLevel: RiskLevelCritical,
+		Handler:         (*Server).handleSecureInput,
+		Available:       secureInputToolAvailable,
+		RiskLevel:       RiskLevelCritical,
 		DestructiveHint: true,
 	})
 }

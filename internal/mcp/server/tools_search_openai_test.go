@@ -173,11 +173,11 @@ func TestHandleSearchOpenAI_NoResults(t *testing.T) {
 func TestHandleFetchOpenAI_Success(t *testing.T) {
 	vaultDir, identity := mockVault(t)
 	srv := newTestServerWithVault(t, config.AgentProfile{
-		Name:         "test",
-		AllowedPaths: []string{"*"},
-		CanWrite:     config.BoolPtr(false),
+		Name:          "test",
+		AllowedPaths:  []string{"*"},
+		CanWrite:      config.BoolPtr(false),
 		CanReadValues: config.BoolPtr(true),
-		ApprovalMode: config.StrPtr("none"),
+		ApprovalMode:  config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -237,11 +237,11 @@ func TestHandleFetchOpenAI_Success(t *testing.T) {
 func TestHandleFetchOpenAI_NoValues(t *testing.T) {
 	vaultDir, identity := mockVault(t)
 	srv := newTestServerWithVault(t, config.AgentProfile{
-		Name:         "test",
-		AllowedPaths: []string{"*"},
-		CanWrite:     config.BoolPtr(false),
+		Name:          "test",
+		AllowedPaths:  []string{"*"},
+		CanWrite:      config.BoolPtr(false),
 		CanReadValues: config.BoolPtr(false),
-		ApprovalMode: config.StrPtr("none"),
+		ApprovalMode:  config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -532,11 +532,11 @@ func TestExecuteTool_SearchOpenAI(t *testing.T) {
 func TestExecuteTool_FetchOpenAI(t *testing.T) {
 	vaultDir, identity := mockVault(t)
 	srv := newTestServerWithVault(t, config.AgentProfile{
-		Name:         "test",
-		AllowedPaths: []string{"*"},
-		CanWrite:     config.BoolPtr(false),
+		Name:          "test",
+		AllowedPaths:  []string{"*"},
+		CanWrite:      config.BoolPtr(false),
 		CanReadValues: config.BoolPtr(true),
-		ApprovalMode: config.StrPtr("none"),
+		ApprovalMode:  config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 

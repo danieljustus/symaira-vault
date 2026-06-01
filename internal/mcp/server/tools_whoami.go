@@ -183,11 +183,11 @@ func (s *Server) handleWhoami(ctx context.Context, req mcp.CallToolRequest) (*mc
 
 func init() {
 	RegisterTool(toolDefinition{
-		Name:        "symaira_whoami",
-		Description: "Return the agent profile, available/unavailable tools, quotas, and vault status",
-		InputSchema: objectSchema(nil, map[string]schemaProperty{}),
-		Handler:     (*Server).handleWhoami,
-		RiskLevel:   RiskLevelLow,
+		Name:         "symaira_whoami",
+		Description:  "Return the agent profile, available/unavailable tools, quotas, and vault status",
+		InputSchema:  objectSchema(nil, map[string]schemaProperty{}),
+		Handler:      (*Server).handleWhoami,
+		RiskLevel:    RiskLevelLow,
 		ReadOnlyHint: true,
 	})
 }

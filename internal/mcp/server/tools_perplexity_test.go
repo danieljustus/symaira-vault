@@ -42,11 +42,11 @@ func newTestPerplexityServer(t *testing.T, searchResponse bool) *httptest.Server
 		}
 
 		resp := map[string]any{
-			"id":      "test-chat-id",
-			"model":   "sonar-pro",
+			"id":    "test-chat-id",
+			"model": "sonar-pro",
 			"choices": []map[string]any{
 				{
-					"index":        0,
+					"index":         0,
 					"finish_reason": "stop",
 					"message": map[string]any{
 						"role":    "assistant",

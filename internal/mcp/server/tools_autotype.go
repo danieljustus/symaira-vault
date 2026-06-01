@@ -80,8 +80,8 @@ func init() {
 			"path":  {Type: "string", Description: "Entry path"},
 			"field": {Type: "string", Description: "Field name to type (default: password)"},
 		}),
-		Handler:   (*Server).handleAutotype,
-		RiskLevel: RiskLevelHigh,
+		Handler:         (*Server).handleAutotype,
+		RiskLevel:       RiskLevelHigh,
 		DestructiveHint: true,
 	})
 }

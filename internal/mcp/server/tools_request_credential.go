@@ -39,9 +39,9 @@ func init() {
 			"field":  {Type: "string", Description: "Field name, e.g. \"token\", \"password\", \"api_key\""},
 			"reason": {Type: "string", Description: "Short human-readable reason shown in the dialog (why does the agent need this?)"},
 		}),
-		Handler:   (*Server).handleRequestCredential,
-		Available: secureInputToolAvailable,
-		RiskLevel: RiskLevelCritical,
+		Handler:         (*Server).handleRequestCredential,
+		Available:       secureInputToolAvailable,
+		RiskLevel:       RiskLevelCritical,
 		DestructiveHint: true,
 	})
 }

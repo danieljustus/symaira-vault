@@ -483,9 +483,9 @@ func init() {
 			"headers":  {Type: "object", Description: "Additional request headers (optional)"},
 			"timeout":  {Type: "number", Description: "Timeout in seconds (default: 30)"},
 		}),
-		Handler:   (*Server).handleExecuteAPIRequest,
-		Available: executeAPIAvailable,
-		RiskLevel: RiskLevelCritical,
+		Handler:         (*Server).handleExecuteAPIRequest,
+		Available:       executeAPIAvailable,
+		RiskLevel:       RiskLevelCritical,
 		DestructiveHint: true,
 	})
 }

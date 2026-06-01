@@ -306,8 +306,8 @@ func init() {
 			"path":          {Type: "string", Description: "Entry path"},
 			"include_value": {Type: "boolean", Description: "When true, returns the full entry with secret values. Default: false."},
 		}),
-		Handler:   (*Server).handleGet,
-		RiskLevel: RiskLevelMedium,
+		Handler:      (*Server).handleGet,
+		RiskLevel:    RiskLevelMedium,
 		ReadOnlyHint: true,
 	})
 	RegisterTool(toolDefinition{
@@ -316,8 +316,8 @@ func init() {
 		InputSchema: objectSchema([]string{"path"}, map[string]schemaProperty{
 			"path": {Type: "string", Description: "Entry path"},
 		}),
-		Handler:   (*Server).handleGetValue,
-		RiskLevel: RiskLevelHigh,
+		Handler:      (*Server).handleGetValue,
+		RiskLevel:    RiskLevelHigh,
 		ReadOnlyHint: true,
 	})
 	RegisterTool(toolDefinition{
@@ -326,8 +326,8 @@ func init() {
 		InputSchema: objectSchema([]string{"path"}, map[string]schemaProperty{
 			"path": {Type: "string", Description: "Entry path"},
 		}),
-		Handler:   (*Server).handleGetMetadata,
-		RiskLevel: RiskLevelMedium,
+		Handler:      (*Server).handleGetMetadata,
+		RiskLevel:    RiskLevelMedium,
 		ReadOnlyHint: true,
 	})
 }

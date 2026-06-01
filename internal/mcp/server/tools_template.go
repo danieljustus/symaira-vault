@@ -132,8 +132,8 @@ func init() {
 			"secret_refs":   {Type: "object", Description: "Map of template variable names to vault references"},
 			"dry_run":       {Type: "boolean", Description: "Show template with masked values. Default: false"},
 		}),
-		Handler:   (*Server).handleGenerateTemplate,
-		RiskLevel: RiskLevelMedium,
+		Handler:      (*Server).handleGenerateTemplate,
+		RiskLevel:    RiskLevelMedium,
 		ReadOnlyHint: true,
 	})
 }

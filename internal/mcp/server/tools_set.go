@@ -175,8 +175,8 @@ func init() {
 			"value": {Type: "string", Description: "Field value"},
 			"force": {Type: "boolean", Description: "Skip password strength validation. Default: false."},
 		}),
-		Handler:   (*Server).handleSet,
-		RiskLevel: RiskLevelCritical,
+		Handler:         (*Server).handleSet,
+		RiskLevel:       RiskLevelCritical,
 		DestructiveHint: true,
 	})
 }

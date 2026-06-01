@@ -92,8 +92,8 @@ func init() {
 		InputSchema: objectSchema([]string{"path"}, map[string]schemaProperty{
 			"path": {Type: "string", Description: "Entry path"},
 		}),
-		Handler:   (*Server).handleCopyToClipboard,
-		RiskLevel: RiskLevelHigh,
+		Handler:         (*Server).handleCopyToClipboard,
+		RiskLevel:       RiskLevelHigh,
 		DestructiveHint: true,
 	})
 }
