@@ -81,7 +81,12 @@ mkdir -p "$TMPDIR/server"
 cp "$BINARY_PATH" "$TMPDIR/server/$BINARY_NAME"
 chmod +x "$TMPDIR/server/$BINARY_NAME"
 
-MCPB_FILE="${DIST_DIR}/${NAME}_${VERSION_CLEAN}_${GOOS}_${GOARCH}.mcpb"
+if [[ "${DIST_DIR}" = /* ]]; then
+  MCPB_FILE="${DIST_DIR}/${NAME}_${VERSION_CLEAN}_${GOOS}_${GOARCH}.mcpb"
+else
+  MCPB_FILE="$(pwd)/${DIST_DIR}/${NAME}_${VERSION_CLEAN}_${GOOS}_${GOARCH}.mcpb"
+fi
+mkdir -p "$(dirname "$MCPB_FILE")"
 (cd "$TMPDIR" && zip -q -r "$MCPB_FILE" .)
 
 echo "Created: $MCPB_FILE"
