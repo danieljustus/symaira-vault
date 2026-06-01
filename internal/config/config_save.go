@@ -117,6 +117,12 @@ func (c *Config) SaveTo(path string) error {
 		if c.MCP.TLSKeyFile != "" {
 			raw.MCP.TLSKeyFile = c.MCP.TLSKeyFile
 		}
+		if c.MCP.TLSClientCAFile != "" {
+			raw.MCP.TLSClientCAFile = c.MCP.TLSClientCAFile
+		}
+		if c.MCP.MTLSEnabled {
+			raw.MCP.MTLSEnabled = true
+		}
 	}
 
 	if c.Update != nil {

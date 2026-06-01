@@ -59,6 +59,8 @@ type MCPConfig struct {
 	MetricsAuthRequired bool          `yaml:"metrics_auth_required,omitempty"`
 	TLSCertFile         string        `yaml:"tls_cert_file,omitempty"`
 	TLSKeyFile          string        `yaml:"tls_key_file,omitempty"`
+	TLSClientCAFile     string        `yaml:"tls_client_ca_file,omitempty"`
+	MTLSEnabled         bool          `yaml:"mtls_enabled,omitempty"`
 	AllowInsecureBind   bool          `yaml:"allow_insecure_bind,omitempty"`
 	OAuth               *OAuthConfig  `yaml:"oauth,omitempty"`
 }
@@ -332,6 +334,12 @@ func MergeFromMCP(dst *MCPConfig, src MCPConfig) {
 	}
 	if src.TLSKeyFile != "" {
 		dst.TLSKeyFile = src.TLSKeyFile
+	}
+	if src.TLSClientCAFile != "" {
+		dst.TLSClientCAFile = src.TLSClientCAFile
+	}
+	if src.MTLSEnabled {
+		dst.MTLSEnabled = true
 	}
 	if src.AllowInsecureBind {
 		dst.AllowInsecureBind = true

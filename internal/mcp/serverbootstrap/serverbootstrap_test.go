@@ -5,11 +5,15 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"math/big"
 	"net"
 	"net/http"
 	"net/url"
@@ -1184,4 +1188,208 @@ func TestGenerateSelfSignedCert_ECDSA_P256(t *testing.T) {
 	if !foundLoopback {
 		t.Error("expected IPAddresses to contain loopback address")
 	}
+}
+
+func generateTestCA(t *testing.T) (certPEM, keyPEM []byte) {
+	t.Helper()
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate CA key: %v", err)
+	}
+	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	if err != nil {
+		t.Fatalf("generate CA serial: %v", err)
+	}
+	template := &x509.Certificate{
+		SerialNumber: serial,
+		Subject: pkix.Name{
+			CommonName:   "Test CA",
+			Organization: []string{"Test"},
+		},
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+		MaxPathLen:            0,
+	}
+	certDER, err := x509.CreateCertificate(rand.Reader, template, template, &priv.PublicKey, priv)
+	if err != nil {
+		t.Fatalf("create CA cert: %v", err)
+	}
+	certPEM = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+	privBytes, err := x509.MarshalPKCS8PrivateKey(priv)
+	if err != nil {
+		t.Fatalf("marshal CA key: %v", err)
+	}
+	keyPEM = pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privBytes})
+	return certPEM, keyPEM
+}
+
+func generateTestCert(t *testing.T, caCertPEM, caKeyPEM []byte, cn string) (certPEM, keyPEM []byte) {
+	t.Helper()
+	caBlock, _ := pem.Decode(caCertPEM)
+	if caBlock == nil {
+		t.Fatal("decode CA cert PEM")
+	}
+	caCert, err := x509.ParseCertificate(caBlock.Bytes)
+	if err != nil {
+		t.Fatalf("parse CA cert: %v", err)
+	}
+	caBlock, _ = pem.Decode(caKeyPEM)
+	if caBlock == nil {
+		t.Fatal("decode CA key PEM")
+	}
+	caKey, err := x509.ParsePKCS8PrivateKey(caBlock.Bytes)
+	if err != nil {
+		t.Fatalf("parse CA key: %v", err)
+	}
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	if err != nil {
+		t.Fatalf("generate serial: %v", err)
+	}
+	template := &x509.Certificate{
+		SerialNumber: serial,
+		Subject: pkix.Name{
+			CommonName:   cn,
+			Organization: []string{"Test"},
+		},
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
+		BasicConstraintsValid: true,
+		IsCA:                  false,
+		DNSNames:              []string{"localhost"},
+		IPAddresses:           []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::1")},
+	}
+	certDER, err := x509.CreateCertificate(rand.Reader, template, caCert, &priv.PublicKey, caKey)
+	if err != nil {
+		t.Fatalf("create cert: %v", err)
+	}
+	certPEM = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+	privBytes, err := x509.MarshalPKCS8PrivateKey(priv)
+	if err != nil {
+		t.Fatalf("marshal key: %v", err)
+	}
+	keyPEM = pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privBytes})
+	return certPEM, keyPEM
+}
+
+func writeCert(t *testing.T, dir, name string, pemData []byte) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, pemData, 0o644); err != nil {
+		t.Fatalf("write %s: %v", name, err)
+	}
+	return path
+}
+
+func writeKey(t *testing.T, dir, name string, pemData []byte) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, pemData, 0o600); err != nil {
+		t.Fatalf("write %s: %v", name, err)
+	}
+	return path
+}
+
+func TestRunHTTPServer_MTLS(t *testing.T) {
+	caCertPEM, caKeyPEM := generateTestCA(t)
+	serverCertPEM, serverKeyPEM := generateTestCert(t, caCertPEM, caKeyPEM, "server")
+	clientCertPEM, clientKeyPEM := generateTestCert(t, caCertPEM, caKeyPEM, "client")
+	wrongCACertPEM, wrongCAKeyPEM := generateTestCA(t)
+	wrongClientCertPEM, wrongClientKeyPEM := generateTestCert(t, wrongCACertPEM, wrongCAKeyPEM, "wrong-client")
+
+	tmpDir := t.TempDir()
+	caFile := writeCert(t, tmpDir, "ca.pem", caCertPEM)
+	serverCertFile := writeCert(t, tmpDir, "server.pem", serverCertPEM)
+	serverKeyFile := writeKey(t, tmpDir, "server.key", serverKeyPEM)
+
+	v := newTestVault(t)
+	v.Config.MCP = &config.MCPConfig{
+		TLSCertFile:     serverCertFile,
+		TLSKeyFile:      serverKeyFile,
+		TLSClientCAFile: caFile,
+		MTLSEnabled:     true,
+	}
+
+	port := reserveFreePort(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	waitForServer := runHTTPServerAsync(ctx, t, "127.0.0.1", port, v, server.New)
+	defer func() {
+		cancel()
+		waitForServer()
+	}()
+
+	caCertPool := x509.NewCertPool()
+	if !caCertPool.AppendCertsFromPEM(caCertPEM) {
+		t.Fatal("append CA cert to pool")
+	}
+
+	clientTLSCert, err := tls.X509KeyPair(clientCertPEM, clientKeyPEM)
+	if err != nil {
+		t.Fatalf("load client key pair: %v", err)
+	}
+
+	baseURL := fmt.Sprintf("https://127.0.0.1:%d", port)
+
+	t.Run("valid client cert succeeds", func(t *testing.T) {
+		client := &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					Certificates: []tls.Certificate{clientTLSCert},
+					RootCAs:      caCertPool,
+				},
+			},
+			Timeout: 5 * time.Second,
+		}
+		resp, err := client.Get(baseURL + "/health")
+		if err != nil {
+			t.Fatalf("mTLS request failed: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("health status = %d, want %d", resp.StatusCode, http.StatusOK)
+		}
+	})
+
+	t.Run("no client cert is rejected", func(t *testing.T) {
+		client := &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					RootCAs: caCertPool,
+				},
+			},
+			Timeout: 5 * time.Second,
+		}
+		_, err := client.Get(baseURL + "/health")
+		if err == nil {
+			t.Error("expected error without client cert, got nil")
+		}
+	})
+
+	t.Run("wrong client cert is rejected", func(t *testing.T) {
+		wrongCert, certErr := tls.X509KeyPair(wrongClientCertPEM, wrongClientKeyPEM)
+		if certErr != nil {
+			t.Fatalf("load wrong client key pair: %v", certErr)
+		}
+		client := &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					Certificates: []tls.Certificate{wrongCert},
+					RootCAs:      caCertPool,
+				},
+			},
+			Timeout: 5 * time.Second,
+		}
+		_, err := client.Get(baseURL + "/health")
+		if err == nil {
+			t.Error("expected error with wrong client cert, got nil")
+		}
+	})
 }

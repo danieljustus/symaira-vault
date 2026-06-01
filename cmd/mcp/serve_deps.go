@@ -82,6 +82,10 @@ func runServe(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("read tls-key flag: %w", err)
 	}
+	tlsCAFlag, err := cmd.Flags().GetString("tls-ca")
+	if err != nil {
+		return fmt.Errorf("read tls-ca flag: %w", err)
+	}
 	if bind == "" {
 		return fmt.Errorf("--bind must not be empty; use '127.0.0.1' for localhost-only")
 	}
@@ -118,6 +122,10 @@ func runServe(cmd *cobra.Command, args []string) error {
 		}
 		if tlsKeyFlag != "" {
 			vault.Config.MCP.TLSKeyFile = tlsKeyFlag
+		}
+		if tlsCAFlag != "" {
+			vault.Config.MCP.TLSClientCAFile = tlsCAFlag
+			vault.Config.MCP.MTLSEnabled = true
 		}
 	}
 	if !stdioFlag && vault != nil && vault.Config != nil && vault.Config.MCP != nil && vault.Config.MCP.AllowInsecureBind {
