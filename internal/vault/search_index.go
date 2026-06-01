@@ -463,11 +463,9 @@ func tokenize(s string) []string {
 	for _, r := range s {
 		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '-' || r == '.' {
 			current.WriteRune(r)
-		} else {
-			if current.Len() > 0 {
-				tokens = append(tokens, current.String())
-				current.Reset()
-			}
+		} else if current.Len() > 0 {
+			tokens = append(tokens, current.String())
+			current.Reset()
 		}
 	}
 	if current.Len() > 0 {

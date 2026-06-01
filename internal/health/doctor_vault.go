@@ -66,7 +66,7 @@ func checkVaultConfigValidates(vaultDir string, _ Options) Result {
 		r.Hint = "run `symvault doctor --fix` to auto-correct common issues"
 		r.Fixable = true
 		r.Fix = func() error {
-			return fixConfigValidation(cfgPath, vaultDir)
+			return fixConfigValidation(cfgPath)
 		}
 		return r
 	}
@@ -77,7 +77,7 @@ func checkVaultConfigValidates(vaultDir string, _ Options) Result {
 }
 
 // fixConfigValidation reapplies safe defaults for common config validation errors.
-func fixConfigValidation(cfgPath, vaultDir string) error {
+func fixConfigValidation(cfgPath string) error {
 	if FixDryRun {
 		return nil
 	}
@@ -115,8 +115,6 @@ func fixConfigValidation(cfgPath, vaultDir string) error {
 	if cfg.Audit != nil && cfg.Audit.MaxFileSize <= 0 {
 		cfg.Audit.MaxFileSize = defaultAuditMaxMB * 1024 * 1024
 		fixed = true
-	} else if cfg.Audit == nil {
-		// No audit section → nothing to fix. Creating one would change behavior.
 	}
 
 	// Fix 4: clipboard.autoClearDuration < 0 → 0 (disabled)
