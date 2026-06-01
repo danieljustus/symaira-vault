@@ -1454,3 +1454,167 @@ func TestLoadOrCreateToken_FileTokenIgnoresEnv_Symvault(t *testing.T) {
 		t.Fatalf("expected stderr warning, got %q", buf.String())
 	}
 }
+
+func TestTokenRegistry_RevokedTokenCleanupAfterRetention(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mcp-tokens.json")
+
+	reg := NewTokenRegistry(path)
+	reg.SetRevokedRetention(50 * time.Millisecond)
+
+	st, _, err := reg.Create("test-token", []string{"*"}, "", 1*time.Hour)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	if !reg.Revoke(st.ID) {
+		t.Fatal("Revoke() failed")
+	}
+
+	result := reg.Cleanup()
+	if result.RevokedRemoved != 0 {
+		t.Fatalf("RevokedRemoved = %d, want 0 (retention not yet elapsed)", result.RevokedRemoved)
+	}
+
+	time.Sleep(150 * time.Millisecond)
+
+	result = reg.Cleanup()
+	if result.RevokedRemoved != 1 {
+		t.Fatalf("RevokedRemoved = %d, want 1", result.RevokedRemoved)
+	}
+	if len(result.RemovedIDs) != 1 || result.RemovedIDs[0] != st.ID {
+		t.Fatalf("RemovedIDs = %v, want [%s]", result.RemovedIDs, st.ID)
+	}
+}
+
+func TestTokenRegistry_ExpiredTokensCleanedUp(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mcp-tokens.json")
+
+	reg := NewTokenRegistry(path)
+
+	_, _, err := reg.Create("short-lived", []string{"*"}, "", 50*time.Millisecond)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	_, _, err = reg.Create("persistent", []string{"*"}, "", 1*time.Hour)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	time.Sleep(150 * time.Millisecond)
+
+	result := reg.Cleanup()
+	if result.ExpiredRemoved != 1 {
+		t.Fatalf("ExpiredRemoved = %d, want 1", result.ExpiredRemoved)
+	}
+	if len(result.RemovedIDs) != 1 {
+		t.Fatalf("len(RemovedIDs) = %d, want 1", len(result.RemovedIDs))
+	}
+}
+
+func TestTokenRegistry_ZeroRetentionDisablesRevokedCleanup(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mcp-tokens.json")
+
+	reg := NewTokenRegistry(path)
+	reg.SetRevokedRetention(0)
+
+	st, _, err := reg.Create("test-token", []string{"*"}, "", 1*time.Hour)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	if !reg.Revoke(st.ID) {
+		t.Fatal("Revoke() failed")
+	}
+
+	result := reg.Cleanup()
+	if result.RevokedRemoved != 0 {
+		t.Fatalf("RevokedRemoved = %d, want 0 (retention disabled)", result.RevokedRemoved)
+	}
+}
+
+func TestTokenRegistry_DefaultRevokedRetention(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mcp-tokens.json")
+
+	reg := NewTokenRegistry(path)
+
+	reg.mu.RLock()
+	retention := reg.revokedRetention
+	reg.mu.RUnlock()
+
+	if retention != DefaultRevokedTokenRetention {
+		t.Fatalf("default retention = %v, want %v", retention, DefaultRevokedTokenRetention)
+	}
+}
+
+func TestTokenRegistry_BackgroundCleanupRemovesRevoked(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mcp-tokens.json")
+
+	reg := NewTokenRegistry(path)
+	reg.SetRevokedRetention(50 * time.Millisecond)
+
+	_, _, err := reg.Create("short-lived", []string{"*"}, "", 100*time.Millisecond)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	st, _, err := reg.Create("revoked-then-cleaned", []string{"*"}, "", 1*time.Hour)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if !reg.Revoke(st.ID) {
+		t.Fatal("Revoke() failed")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	stop := reg.StartCleanup(ctx, 50*time.Millisecond)
+	defer stop()
+
+	time.Sleep(300 * time.Millisecond)
+
+	reg.mu.RLock()
+	count := len(reg.entries)
+	reg.mu.RUnlock()
+
+	if count != 0 {
+		t.Errorf("entries after cleanup = %d, want 0 (both expired and revoked removed)", count)
+	}
+}
+
+func TestTokenRegistry_CleanupReportsBothTypes(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mcp-tokens.json")
+
+	reg := NewTokenRegistry(path)
+	reg.SetRevokedRetention(50 * time.Millisecond)
+
+	_, _, err := reg.Create("expired", []string{"*"}, "", 50*time.Millisecond)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	st, _, err := reg.Create("revoked", []string{"*"}, "", 1*time.Hour)
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if !reg.Revoke(st.ID) {
+		t.Fatal("Revoke() failed")
+	}
+
+	time.Sleep(150 * time.Millisecond)
+
+	result := reg.Cleanup()
+	if result.ExpiredRemoved != 1 {
+		t.Fatalf("ExpiredRemoved = %d, want 1", result.ExpiredRemoved)
+	}
+	if result.RevokedRemoved != 1 {
+		t.Fatalf("RevokedRemoved = %d, want 1", result.RevokedRemoved)
+	}
+	if len(result.RemovedIDs) != 2 {
+		t.Fatalf("len(RemovedIDs) = %d, want 2", len(result.RemovedIDs))
+	}
+}

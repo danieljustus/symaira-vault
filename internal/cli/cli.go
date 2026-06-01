@@ -103,14 +103,20 @@ func Execute() {
 	if err := RootCmd.Execute(); err != nil {
 		cliout.Errorf("Error: %v", err)
 		exitCode := errorspkg.ExitCodeFromError(err)
-		switch exitCode {
-		case errorspkg.ExitNotFound:
-			cliout.Hintf("Try: symvault find <search-term>")
-		case errorspkg.ExitNotInitialized:
-			cliout.Hintf("Run 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.")
-		case errorspkg.ExitLocked:
-			cliout.Hintf("Unlock with 'symvault unlock', or set SYMVAULT_PASSPHRASE (or OPENPASS_PASSPHRASE) for non-interactive use.")
-		case errorspkg.ExitSuccess, errorspkg.ExitGeneralError, errorspkg.ExitPermissionDenied, errorspkg.ExitDoctorWarn, errorspkg.ExitDoctorFail, errorspkg.ExitConfigError, errorspkg.ExitUpdateAvailable:
+		if hint := errorspkg.HintForError(err); hint != "" {
+			cliout.Hintf("%s", hint)
+		} else {
+			switch exitCode {
+			case errorspkg.ExitNotFound:
+				cliout.Hintf("Try: symvault find <search-term>")
+			case errorspkg.ExitNotInitialized:
+				cliout.Hintf("Run 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.")
+			case errorspkg.ExitLocked:
+				cliout.Hintf("Unlock with 'symvault unlock', or set SYMVAULT_PASSPHRASE (or OPENPASS_PASSPHRASE) for non-interactive use.")
+			case errorspkg.ExitConfigError:
+				cliout.Hintf("Run 'symvault doctor' to diagnose and fix configuration issues.")
+			case errorspkg.ExitSuccess, errorspkg.ExitGeneralError, errorspkg.ExitPermissionDenied, errorspkg.ExitDoctorWarn, errorspkg.ExitDoctorFail, errorspkg.ExitUpdateAvailable:
+			}
 		}
 		OsExit(int(exitCode))
 	}

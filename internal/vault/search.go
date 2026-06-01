@@ -412,9 +412,13 @@ func CurrentSearchIdentity() *age.X25519Identity {
 
 // SearchWorkerCount returns the number of concurrent decryption workers
 // to use for search/listing operations. When configured > 0, that value is
-// used. Otherwise it auto-scales to min(runtime.NumCPU(), 8).
+// used (capped at 64 to prevent resource exhaustion). Otherwise it
+// auto-scales to min(runtime.NumCPU(), 8).
 func SearchWorkerCount(configured int) int {
 	if configured > 0 {
+		if configured > 64 {
+			return 64
+		}
 		return configured
 	}
 	cpus := runtime.NumCPU()

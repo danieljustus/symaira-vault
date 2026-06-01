@@ -1720,6 +1720,7 @@ func TestMaxLogSizeTrigger(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 	defer func() { _ = logger.Close() }()
+	logger.SetSyncMode(true)
 
 	// Write exactly 1MB - should NOT trigger rotation yet
 	data := strings.Repeat("x", 1024*1024)
@@ -2280,6 +2281,7 @@ func TestRotateIfNeededSizeLimit_Symvault(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 	defer func() { _ = logger.Close() }()
+	logger.SetSyncMode(true)
 
 	// Write until we exceed 1MB
 	data := strings.Repeat("x", 1024*1024) // 1MB of data

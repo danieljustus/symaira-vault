@@ -212,12 +212,17 @@ func (r *TokenRegistry) SetCleanupLogger(fn func(action, tokenID, label, reason 
 	r.cleanupLogger = fn
 }
 
+// DefaultRevokedTokenRetention is the default retention period for revoked
+// tokens before they are purged from the registry.
+const DefaultRevokedTokenRetention = 30 * 24 * time.Hour
+
 // NewTokenRegistry creates a TokenRegistry that loads/saves from the given
 // file path. The caller must call Load() to populate the registry from disk.
 func NewTokenRegistry(path string) *TokenRegistry {
 	return &TokenRegistry{
-		path:    path,
-		entries: make(map[string]*ScopedToken),
+		path:             path,
+		entries:          make(map[string]*ScopedToken),
+		revokedRetention: DefaultRevokedTokenRetention,
 	}
 }
 
@@ -541,47 +546,55 @@ func (r *TokenRegistry) StartCleanup(ctx context.Context, interval time.Duration
 	return r.stopFn
 }
 
+// CleanupResult reports the outcome of a token registry cleanup pass.
+type CleanupResult struct {
+	ExpiredRemoved int
+	RevokedRemoved int
+	RemovedIDs     []string
+}
+
+// Cleanup performs a single sweep that removes expired tokens and revoked
+// tokens past their retention period. It returns counts and IDs of removed
+// tokens for audit logging by the caller.
+func (r *TokenRegistry) Cleanup() CleanupResult {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var result CleanupResult
+	retention := r.revokedRetention
+	now := time.Now()
+
+	for hash, t := range r.entries {
+		if t.IsExpired() {
+			result.ExpiredRemoved++
+			result.RemovedIDs = append(result.RemovedIDs, t.ID)
+			delete(r.entries, hash)
+			continue
+		}
+		if t.Revoked && retention > 0 && t.RevokedAt != nil {
+			if now.Sub(*t.RevokedAt) >= retention {
+				result.RevokedRemoved++
+				result.RemovedIDs = append(result.RemovedIDs, t.ID)
+				delete(r.entries, hash)
+			}
+		}
+	}
+
+	return result
+}
+
 // cleanupOnce performs a single sweep that removes expired tokens and revoked
 // tokens past their retention period. When tokens are removed, the optional
 // cleanup logger is invoked and the registry is persisted to disk.
 func (r *TokenRegistry) cleanupOnce() {
-	r.mu.Lock()
-
-	var expiredIDs, revokedIDs []struct {
-		id    string
-		label string
-	}
-	now := time.Now()
-	for hash, t := range r.entries {
-		if t.IsExpired() {
-			expiredIDs = append(expiredIDs, struct {
-				id    string
-				label string
-			}{t.ID, t.Label})
-			delete(r.entries, hash)
-			continue
-		}
-		if t.Revoked && r.revokedRetention > 0 && t.RevokedAt != nil && now.Sub(*t.RevokedAt) > r.revokedRetention {
-			revokedIDs = append(revokedIDs, struct {
-				id    string
-				label string
-			}{t.ID, t.Label})
-			delete(r.entries, hash)
-		}
-	}
+	result := r.Cleanup()
 
 	logFn := r.cleanupLogger
-	r.mu.Unlock()
+	cleaned := result.ExpiredRemoved + result.RevokedRemoved
 
-	cleaned := len(expiredIDs) + len(revokedIDs)
-	for _, e := range expiredIDs {
+	for _, id := range result.RemovedIDs {
 		if logFn != nil {
-			logFn("expired", e.id, e.label, "token expired")
-		}
-	}
-	for _, e := range revokedIDs {
-		if logFn != nil {
-			logFn("revoked", e.id, e.label, "revoked token past retention period")
+			logFn("removed", id, "", "token removed during cleanup")
 		}
 	}
 

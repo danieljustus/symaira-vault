@@ -378,6 +378,54 @@ A full evaluation of `github.com/awnumar/memguard` (which provides `mlock(2)`-ba
 
 The ADR will be revisited if a concrete threat model justifies the complexity cost of guarded memory allocations.
 
+### OS Keyring Buffer Retention
+
+Symaira Vault uses [`zalando/go-keyring`](https://github.com/zalando/go-keyring) to
+cache session passphrases in the OS keyring. The library interface uses Go `string`
+values (`keyring.Set(service, user, password string)`), which introduces additional
+memory copies beyond Symaira Vault's own `crypto.Wipe` scope:
+
+- **macOS**: Passphrases are piped via `stdin` to `/usr/bin/security`. The kernel
+  manages the stdin buffer, and the command-line tool may retain the value in its
+  own memory space until the process exits.
+- **Linux / D-Bus**: Passphrases are serialized into D-Bus message buffers (Secret
+  Service API). D-Bus is a local IPC bus; message buffers are managed by the
+  D-Bus daemon and may persist in the daemon's memory beyond the library call.
+- **Windows**: Passphrases pass through the Credential Manager API, which may
+  retain data in internal buffers managed by the operating system.
+
+These intermediate copies are created by the OS keyring transport layer and are
+outside Go's control — they cannot be reached by `crypto.Wipe()`. An attacker with
+kernel-level memory access, swap analysis, or D-Bus message interception capability
+may recover passphrase fragments from these buffers.
+
+**Evaluation of go-keyring wipe hooks** (May 2026): The `go-keyring` v0.2.8
+library exposes no zeroing or wipe API. Its `Keyring` interface defines only
+`Set`, `Get`, `Delete`, and `DeleteAll`. The library communicates with OS-native
+tools (`security`, D-Bus, Credential Manager) that manage their own buffers
+independently. No amount of Go-level memory zeroing can reach these
+OS-managed buffers.
+
+**Deployment advisory for high-security environments:**
+
+- **Enable mlock where supported**: On Linux, use `setrlimit(RLIMIT_MEMLOCK)` to
+  prevent the process heap from being swapped to disk. This reduces the risk of
+  passphrase data appearing in swap files. The `symvault` binary does not call
+  `mlock` by default; site operators must configure this via systemd or PAM.
+  ```ini
+  # systemd service unit
+  [Service]
+  LimitMEMLOCK=infinity
+  MemoryDenyWriteExecute=yes
+  ```
+- **Minimize session TTL**: Set `sessionTimeout: 0` in `config.yaml` to disable
+  session caching entirely. This forces passphrase entry on every operation,
+  eliminating the keyring as a persistence vector.
+- **Use stdio MCP mode**: The `symvault serve --stdio` mode avoids D-Bus entirely
+  for MCP transport, reducing the keyring's attack surface to the unlock path.
+- **Prefer passphrase-only unlock**: Set `authMethod: passphrase` to avoid
+  biometric keychain items that may have different access control properties.
+
 ## Privacy & Telemetry
 
 Symaira Vault does **NOT** collect any product analytics, error reports, or usage telemetry.

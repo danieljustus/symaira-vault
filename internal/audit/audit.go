@@ -34,6 +34,8 @@ const (
 	hmacKeyFileName        = "audit-hmac-key"
 	hmacKeySize            = 32
 	hexHMACSize            = sha256.Size * 2 // 64 hex chars
+	defaultBufferSize      = 256             // max buffered entries before blocking
+	defaultFlushInterval   = 100             // milliseconds between flushes
 )
 
 // Environment variable names for audit configuration
@@ -46,11 +48,13 @@ const (
 	envMaxAgeDaysLegacy = "OPENPASS_AUDIT_MAX_AGE_DAYS"
 )
 
-// Config holds the configuration for audit log rotation.
+// Config holds the configuration for audit log rotation and buffering.
 type Config struct {
-	MaxFileSize int64
-	MaxBackups  int
-	MaxAgeDays  int
+	MaxFileSize   int64
+	MaxBackups    int
+	MaxAgeDays    int
+	BufferSize    int
+	FlushInterval time.Duration
 }
 
 // config holds the parsed audit configuration.
@@ -58,6 +62,7 @@ var config = parseAuditConfig(nil)
 
 // SetConfig overrides the global audit configuration with values from config.yaml.
 // Environment variables still take precedence over config file values.
+// When BufferSize > 0, async buffered writing is enabled.
 func SetConfig(cfg *Config) {
 	config = parseAuditConfig(cfg)
 }
@@ -168,6 +173,13 @@ type Logger struct {
 	mu        sync.Mutex
 	hmacKey   []byte
 	prevHMAC  []byte
+
+	entryCh    chan *LogEntry
+	flushReq   chan chan struct{}
+	flushDone  chan struct{}
+	bufferSize int
+	closed     bool
+	syncMode   bool
 }
 
 func New(agentName string, vaultDir string) (*Logger, error) {
@@ -223,10 +235,15 @@ func New(agentName string, vaultDir string) (*Logger, error) {
 	}
 
 	l := &Logger{
-		file:      file,
-		agentName: agentName,
-		path:      cleanPath,
-		hmacKey:   hmacKey,
+		file:       file,
+		agentName:  agentName,
+		path:       cleanPath,
+		hmacKey:    hmacKey,
+		bufferSize: defaultBufferSize,
+		entryCh:    make(chan *LogEntry, defaultBufferSize),
+		flushReq:   make(chan chan struct{}, 1),
+		flushDone:  make(chan struct{}),
+		syncMode:   true,
 	}
 
 	if rotErr := l.rotateIfNeeded(); rotErr != nil {
@@ -241,6 +258,8 @@ func New(agentName string, vaultDir string) (*Logger, error) {
 	}
 	l.prevHMAC = prevHMAC
 
+	go l.flushLoop()
+
 	return l, nil
 }
 
@@ -249,37 +268,36 @@ func (l *Logger) LogEntry(entry LogEntry) error {
 		return nil
 	}
 
+	l.mu.Lock()
+	closed := l.closed
+	l.mu.Unlock()
+	if closed {
+		return fmt.Errorf("audit logger is closed")
+	}
+
 	if entry.Timestamp == "" {
 		entry.Timestamp = time.Now().UTC().Format(time.RFC3339)
 	}
 
+	if l.syncMode {
+		l.writeEntry(&entry)
+		return nil
+	}
+
+	select {
+	case l.entryCh <- &entry:
+		return nil
+	default:
+		return fmt.Errorf("audit buffer full (%d entries), dropping log entry", l.bufferSize)
+	}
+}
+
+// SetSyncMode enables or disables synchronous writes. When sync mode is
+// enabled, LogEntry writes directly to disk without buffering.
+func (l *Logger) SetSyncMode(sync bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-
-	if len(l.hmacKey) > 0 {
-		entry.HMAC = computeHMAC(l.hmacKey, l.prevHMAC, entry)
-	}
-
-	data, err := json.Marshal(entry)
-	if err != nil {
-		return err
-	}
-	data = append(data, '\n')
-	if _, err := l.file.Write(data); err != nil {
-		return err
-	}
-
-	if entry.HMAC != "" {
-		if prevBytes, derr := hex.DecodeString(entry.HMAC); derr == nil {
-			l.prevHMAC = prevBytes
-		}
-	}
-
-	if err := l.file.Sync(); err != nil {
-		return err
-	}
-
-	return nil
+	l.syncMode = sync
 }
 
 func (l *Logger) rotateIfNeeded() error {
@@ -578,6 +596,18 @@ func (l *Logger) Close() error {
 	if l == nil || l.file == nil {
 		return nil
 	}
+
+	l.mu.Lock()
+	if l.closed {
+		l.mu.Unlock()
+		return nil
+	}
+	l.closed = true
+	l.mu.Unlock()
+
+	close(l.entryCh)
+	<-l.flushDone
+
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	err := l.file.Close()
@@ -586,6 +616,91 @@ func (l *Logger) Close() error {
 	l.hmacKey = nil
 	l.prevHMAC = nil
 	return err
+}
+
+// Flush forces all buffered entries to be written to disk immediately.
+// It blocks until the flush is complete.
+func (l *Logger) Flush() {
+	if l == nil {
+		return
+	}
+	done := make(chan struct{})
+	select {
+	case l.flushReq <- done:
+		<-done
+	default:
+	}
+}
+
+func (l *Logger) flushLoop() {
+	ticker := time.NewTicker(time.Duration(defaultFlushInterval) * time.Millisecond)
+	defer ticker.Stop()
+
+	var batch []*LogEntry
+
+	flush := func() {
+		if len(batch) > 0 {
+			l.flushBatch(batch)
+			batch = batch[:0]
+		}
+	}
+
+	for {
+		select {
+		case entry, ok := <-l.entryCh:
+			if !ok {
+				flush()
+				close(l.flushDone)
+				return
+			}
+			batch = append(batch, entry)
+			if len(batch) >= l.bufferSize/2 {
+				flush()
+			}
+		case done := <-l.flushReq:
+			flush()
+			close(done)
+		case <-ticker.C:
+			flush()
+		}
+	}
+}
+
+func (l *Logger) flushBatch(entries []*LogEntry) {
+	for _, entry := range entries {
+		l.writeEntry(entry)
+	}
+	if l.file != nil {
+		_ = l.file.Sync()
+	}
+}
+
+func (l *Logger) writeEntry(entry *LogEntry) {
+	if entry == nil {
+		return
+	}
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if len(l.hmacKey) > 0 {
+		entry.HMAC = computeHMAC(l.hmacKey, l.prevHMAC, *entry)
+	}
+
+	data, err := json.Marshal(entry)
+	if err != nil {
+		return
+	}
+	data = append(data, '\n')
+	if _, err := l.file.Write(data); err != nil {
+		return
+	}
+
+	if entry.HMAC != "" {
+		if prevBytes, derr := hex.DecodeString(entry.HMAC); derr == nil {
+			l.prevHMAC = prevBytes
+		}
+	}
 }
 
 func (l *Logger) readLastHMAC() ([]byte, error) {
