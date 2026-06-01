@@ -228,6 +228,7 @@ func init() {
 		}),
 		Handler:   (*Server).handleRequestShare,
 		RiskLevel: RiskLevelMedium,
+		DestructiveHint: true,
 	})
 	RegisterTool(toolDefinition{
 		Name:        "approve_share",
@@ -237,6 +238,7 @@ func init() {
 		}),
 		Handler:   (*Server).handleApproveShare,
 		RiskLevel: RiskLevelHigh,
+		DestructiveHint: true,
 	})
 	RegisterTool(toolDefinition{
 		Name:        "revoke_share",
@@ -246,6 +248,7 @@ func init() {
 		}),
 		Handler:   (*Server).handleRevokeShare,
 		RiskLevel: RiskLevelHigh,
+		DestructiveHint: true,
 	})
 	RegisterTool(toolDefinition{
 		Name:        "list_shares",
@@ -258,5 +261,6 @@ func init() {
 		}),
 		Handler:   (*Server).handleListShares,
 		RiskLevel: RiskLevelLow,
+		ReadOnlyHint: true,
 	})
 }

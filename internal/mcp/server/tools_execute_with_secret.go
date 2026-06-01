@@ -280,5 +280,6 @@ func init() {
 		}),
 		Handler:   (*Server).handleExecuteWithSecret,
 		RiskLevel: RiskLevelHigh,
+		DestructiveHint: true,
 	})
 }

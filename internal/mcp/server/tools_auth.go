@@ -97,6 +97,7 @@ func init() {
 		InputSchema: objectSchema(nil, map[string]schemaProperty{}),
 		Handler:     (*Server).handleGetAuthStatus,
 		RiskLevel:   RiskLevelLow,
+		ReadOnlyHint: true,
 	})
 	RegisterTool(toolDefinition{
 		Name:        "set_auth_method",
@@ -106,5 +107,6 @@ func init() {
 		}),
 		Handler:   (*Server).handleSetAuthMethod,
 		RiskLevel: RiskLevelHigh,
+		DestructiveHint: true,
 	})
 }

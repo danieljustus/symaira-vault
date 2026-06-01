@@ -29,5 +29,6 @@ func init() {
 		InputSchema: objectSchema(nil, map[string]schemaProperty{}),
 		Handler:     (*Server).handleHealth,
 		RiskLevel:   RiskLevelLow,
+		ReadOnlyHint: true,
 	})
 }

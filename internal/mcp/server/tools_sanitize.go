@@ -74,5 +74,6 @@ func init() {
 		}),
 		Handler:   (*Server).handleSanitizeOutput,
 		RiskLevel: RiskLevelLow,
+		ReadOnlyHint: true,
 	})
 }

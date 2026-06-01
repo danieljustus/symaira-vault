@@ -66,6 +66,7 @@ func init() {
 		}),
 		Handler:   (*Server).handleDelete,
 		RiskLevel: RiskLevelCritical,
+		DestructiveHint: true,
 	})
 	RegisterTool(toolDefinition{
 		Name:        "symaira_delete",
@@ -77,5 +78,6 @@ func init() {
 		Deprecated: true,
 		AliasFor:   "delete_entry",
 		RiskLevel:  RiskLevelCritical,
+		DestructiveHint: true,
 	})
 }

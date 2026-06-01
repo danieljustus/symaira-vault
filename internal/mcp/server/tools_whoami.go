@@ -188,5 +188,6 @@ func init() {
 		InputSchema: objectSchema(nil, map[string]schemaProperty{}),
 		Handler:     (*Server).handleWhoami,
 		RiskLevel:   RiskLevelLow,
+		ReadOnlyHint: true,
 	})
 }

@@ -133,5 +133,6 @@ func init() {
 		}),
 		Handler:   (*Server).handleSearch,
 		RiskLevel: RiskLevelLow,
+		ReadOnlyHint: true,
 	})
 }

@@ -308,6 +308,7 @@ func init() {
 		}),
 		Handler:   (*Server).handleGet,
 		RiskLevel: RiskLevelMedium,
+		ReadOnlyHint: true,
 	})
 	RegisterTool(toolDefinition{
 		Name:        "get_entry_value",
@@ -317,6 +318,7 @@ func init() {
 		}),
 		Handler:   (*Server).handleGetValue,
 		RiskLevel: RiskLevelHigh,
+		ReadOnlyHint: true,
 	})
 	RegisterTool(toolDefinition{
 		Name:        "get_entry_metadata",
@@ -326,5 +328,6 @@ func init() {
 		}),
 		Handler:   (*Server).handleGetMetadata,
 		RiskLevel: RiskLevelMedium,
+		ReadOnlyHint: true,
 	})
 }

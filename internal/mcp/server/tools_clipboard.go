@@ -94,5 +94,6 @@ func init() {
 		}),
 		Handler:   (*Server).handleCopyToClipboard,
 		RiskLevel: RiskLevelHigh,
+		DestructiveHint: true,
 	})
 }

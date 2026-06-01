@@ -197,5 +197,6 @@ func init() {
 		Handler:   (*Server).handleGenerateTOTP,
 		Available: generateTOTPAvailable,
 		RiskLevel: RiskLevelHigh,
+		ReadOnlyHint: true,
 	})
 }

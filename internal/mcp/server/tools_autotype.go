@@ -82,5 +82,6 @@ func init() {
 		}),
 		Handler:   (*Server).handleAutotype,
 		RiskLevel: RiskLevelHigh,
+		DestructiveHint: true,
 	})
 }

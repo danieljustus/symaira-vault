@@ -486,5 +486,6 @@ func init() {
 		Handler:   (*Server).handleExecuteAPIRequest,
 		Available: executeAPIAvailable,
 		RiskLevel: RiskLevelCritical,
+		DestructiveHint: true,
 	})
 }

@@ -11,9 +11,11 @@ import (
 // ToolHashDef is a minimal representation of a tool used for computing
 // a content-hash of the tool registry.
 type ToolHashDef struct {
-	Name        string
-	Description string
-	InputSchema map[string]any
+	Name            string
+	Description     string
+	InputSchema     map[string]any
+	ReadOnlyHint    bool
+	DestructiveHint bool
 }
 
 // ComputeToolRegistryHash returns a SHA-256 hex digest of the given tool
@@ -29,7 +31,7 @@ func ComputeToolRegistryHash(defs []ToolHashDef) string {
 		if err != nil {
 			schemaJSON = []byte("{}")
 		}
-		_, _ = fmt.Fprintf(h, "%s|%s|%s\n", def.Name, def.Description, schemaJSON)
+		_, _ = fmt.Fprintf(h, "%s|%s|%s|%v|%v\n", def.Name, def.Description, schemaJSON, def.ReadOnlyHint, def.DestructiveHint)
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }

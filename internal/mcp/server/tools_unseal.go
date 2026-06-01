@@ -130,5 +130,6 @@ func init() {
 		}),
 		Handler:   (*Server).handleSecretUnseal,
 		RiskLevel: RiskLevelHigh,
+		ReadOnlyHint: true,
 	})
 }

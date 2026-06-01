@@ -42,5 +42,6 @@ func init() {
 		Handler:   (*Server).handleRequestCredential,
 		Available: secureInputToolAvailable,
 		RiskLevel: RiskLevelCritical,
+		DestructiveHint: true,
 	})
 }

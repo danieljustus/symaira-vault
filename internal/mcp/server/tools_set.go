@@ -177,5 +177,6 @@ func init() {
 		}),
 		Handler:   (*Server).handleSet,
 		RiskLevel: RiskLevelCritical,
+		DestructiveHint: true,
 	})
 }

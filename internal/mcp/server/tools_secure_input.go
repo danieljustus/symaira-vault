@@ -121,5 +121,6 @@ func init() {
 		Handler:   (*Server).handleSecureInput,
 		Available: secureInputToolAvailable,
 		RiskLevel: RiskLevelCritical,
+		DestructiveHint: true,
 	})
 }

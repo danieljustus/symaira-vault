@@ -69,5 +69,6 @@ func init() {
 		}),
 		Handler:   (*Server).handleFind,
 		RiskLevel: RiskLevelLow,
+		ReadOnlyHint: true,
 	})
 }

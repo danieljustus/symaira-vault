@@ -165,5 +165,6 @@ func init() {
 		}),
 		Handler:   (*Server).handleRunCommand,
 		RiskLevel: RiskLevelHigh,
+		DestructiveHint: true,
 	})
 }

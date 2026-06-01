@@ -134,5 +134,6 @@ func init() {
 		}),
 		Handler:   (*Server).handleGenerateTemplate,
 		RiskLevel: RiskLevelMedium,
+		ReadOnlyHint: true,
 	})
 }

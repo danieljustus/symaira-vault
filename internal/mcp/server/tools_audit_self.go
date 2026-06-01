@@ -100,5 +100,6 @@ func init() {
 		}),
 		Handler:   (*Server).handleAuditSelf,
 		RiskLevel: RiskLevelLow,
+		ReadOnlyHint: true,
 	})
 }
