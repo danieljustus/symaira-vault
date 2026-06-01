@@ -79,6 +79,7 @@ type checkDef struct {
 var allChecks = []checkDef{
 	{fn: checkVaultInitialized},
 	{fn: checkVaultConfigParses},
+	{fn: checkVaultConfigValidates},
 	{fn: checkVaultIdentityEncrypted},
 	{fn: checkVaultPermissions},
 	{fn: checkAuthMethod},

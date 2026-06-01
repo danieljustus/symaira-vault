@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"unicode"
 
 	"filippo.io/age"
 
@@ -47,9 +48,17 @@ func indexFilePath(vaultDir string) string {
 // indexDoc stores raw string values per entry path for substring matching.
 // The needle is matched as a substring (case-insensitive) against all stored
 // values when performing a search.
+//
+// A TokenIndex provides O(1) pre-filtering: each unique token extracted from
+// string values maps to the set of entry paths containing that token. During
+// search, an exact token lookup avoids scanning all values. Substring fallback
+// handles partial matches (e.g., "ali" matching "alice").
 type indexDoc struct {
 	// Values maps entry path → lowercased string values from its data.
 	Values map[string][]string `json:"v"`
+	// TokenIndex maps token → entry paths containing that token.
+	// Tokens are lowercased and split on whitespace/punctuation boundaries.
+	TokenIndex map[string]map[string]struct{} `json:"ti,omitempty"`
 	// EntryCount is the number of entries in the vault when the index was built.
 	// Used for stale detection — if the count differs, the index is rebuilt.
 	EntryCount int `json:"c,omitempty"`
@@ -74,6 +83,7 @@ func (idx *EncryptedIndex) Build(vaultDir string, identity *age.X25519Identity) 
 
 	doc := indexDoc{
 		Values:     make(map[string][]string, len(paths)),
+		TokenIndex: make(map[string]map[string]struct{}),
 		EntryCount: len(paths),
 	}
 
@@ -87,6 +97,14 @@ func (idx *EncryptedIndex) Build(vaultDir string, identity *age.X25519Identity) 
 		collectStringValues(&values, entry.Data)
 		if len(values) > 0 {
 			doc.Values[entryPath] = values
+			for _, val := range values {
+				for _, token := range tokenize(val) {
+					if doc.TokenIndex[token] == nil {
+						doc.TokenIndex[token] = make(map[string]struct{})
+					}
+					doc.TokenIndex[token][entryPath] = struct{}{}
+				}
+			}
 		}
 	}
 
@@ -161,6 +179,23 @@ func (idx *EncryptedIndex) MatchEntries(vaultDir string, identity *age.X25519Ide
 	needleLower := strings.ToLower(needle)
 	matching := make(map[string]struct{}, len(candidates))
 
+	// Fast path: O(1) token lookup — if the search needle is a whole token
+	// (no whitespace, single word), check the token index directly. This
+	// avoids scanning all values in the common case of exact-term searches.
+	if isSingleToken(needle) && doc.TokenIndex != nil {
+		if paths, ok := doc.TokenIndex[needleLower]; ok {
+			for _, path := range candidates {
+				if _, found := paths[path]; found {
+					matching[path] = struct{}{}
+				}
+			}
+			if len(matching) > 0 {
+				return matching, nil
+			}
+		}
+	}
+
+	// Fallback: substring scan for multi-word queries or partial matches.
 	for _, path := range candidates {
 		values, ok := doc.Values[path]
 		if !ok {
@@ -235,17 +270,20 @@ func (idx *EncryptedIndex) UpdateEntry(vaultDir, path string, identity *age.X255
 	if doc.Values == nil {
 		doc.Values = make(map[string][]string)
 	}
+	if doc.TokenIndex == nil {
+		doc.TokenIndex = make(map[string]map[string]struct{})
+	}
+
+	removeFromTokenIndex(doc.TokenIndex, path)
+	delete(doc.Values, path)
 
 	entry, readErr := ReadEntry(vaultDir, path, identity)
-	if readErr != nil {
-		delete(doc.Values, path)
-	} else {
+	if readErr == nil {
 		var values []string
 		collectStringValues(&values, entry.Data)
 		if len(values) > 0 {
 			doc.Values[path] = values
-		} else {
-			delete(doc.Values, path)
+			addToTokenIndex(doc.TokenIndex, values, path)
 		}
 	}
 
@@ -299,6 +337,9 @@ func (idx *EncryptedIndex) RemoveEntry(path string) {
 	}
 
 	delete(doc.Values, path)
+	if doc.TokenIndex != nil {
+		removeFromTokenIndex(doc.TokenIndex, path)
+	}
 
 	newPlaintext, err := json.Marshal(doc)
 	if err != nil {
@@ -412,4 +453,58 @@ func collectStringValues(dst *[]string, data any) {
 func deriveIndexKey(identity *age.X25519Identity) []byte {
 	h := sha256.Sum256([]byte(identity.String()))
 	return h[:]
+}
+
+// tokenize splits a lowercased string into individual tokens on whitespace and
+// punctuation boundaries. Consecutive delimiters produce no empty tokens.
+func tokenize(s string) []string {
+	var tokens []string
+	current := strings.Builder{}
+	for _, r := range s {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '-' || r == '.' {
+			current.WriteRune(r)
+		} else if current.Len() > 0 {
+			tokens = append(tokens, current.String())
+			current.Reset()
+		}
+	}
+	if current.Len() > 0 {
+		tokens = append(tokens, current.String())
+	}
+	return tokens
+}
+
+// isSingleToken returns true if the needle contains no whitespace or
+// punctuation that would split it into multiple tokens.
+func isSingleToken(needle string) bool {
+	for _, r := range needle {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' && r != '-' && r != '.' {
+			return false
+		}
+	}
+	return true
+}
+
+// addToTokenIndex adds all tokens from a set of values to the token index,
+// associating them with the given entry path.
+func addToTokenIndex(ti map[string]map[string]struct{}, values []string, path string) {
+	for _, val := range values {
+		for _, token := range tokenize(val) {
+			if ti[token] == nil {
+				ti[token] = make(map[string]struct{})
+			}
+			ti[token][path] = struct{}{}
+		}
+	}
+}
+
+// removeFromTokenIndex removes all references to a path from the token index.
+// Empty token maps are cleaned up to keep the index compact.
+func removeFromTokenIndex(ti map[string]map[string]struct{}, path string) {
+	for token, paths := range ti {
+		delete(paths, path)
+		if len(paths) == 0 {
+			delete(ti, token)
+		}
+	}
 }

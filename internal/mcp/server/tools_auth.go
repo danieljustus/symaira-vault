@@ -89,3 +89,22 @@ func (s *Server) handleSetAuthMethod(ctx context.Context, req mcp.CallToolReques
 	s.logAudit(ctx, "auth_config", "<config>", true)
 	return mcp.NewToolResultText(fmt.Sprintf("Auth method set to %s", method)), nil
 }
+
+func init() {
+	RegisterTool(toolDefinition{
+		Name:        "get_auth_status",
+		Description: "Return Symaira Vault unlock authentication status",
+		InputSchema: objectSchema(nil, map[string]schemaProperty{}),
+		Handler:     (*Server).handleGetAuthStatus,
+		RiskLevel:   RiskLevelLow,
+	})
+	RegisterTool(toolDefinition{
+		Name:        "set_auth_method",
+		Description: "Set Symaira Vault unlock authentication method (requires canManageConfig)",
+		InputSchema: objectSchema([]string{"method"}, map[string]schemaProperty{
+			"method": {Type: "string", Description: "Authentication method: passphrase or touchid"},
+		}),
+		Handler:   (*Server).handleSetAuthMethod,
+		RiskLevel: RiskLevelHigh,
+	})
+}

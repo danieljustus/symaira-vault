@@ -84,3 +84,15 @@ func (s *Server) handleCopyToClipboard(ctx context.Context, req mcp.CallToolRequ
 
 	return mcp.NewToolResultText(`{"success": true}`), nil
 }
+
+func init() {
+	RegisterTool(toolDefinition{
+		Name:        "copy_to_clipboard",
+		Description: "Copy a vault entry password field to the system clipboard without exposing the value to the agent",
+		InputSchema: objectSchema([]string{"path"}, map[string]schemaProperty{
+			"path": {Type: "string", Description: "Entry path"},
+		}),
+		Handler:   (*Server).handleCopyToClipboard,
+		RiskLevel: RiskLevelHigh,
+	})
+}

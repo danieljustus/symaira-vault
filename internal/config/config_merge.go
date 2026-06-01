@@ -252,6 +252,9 @@ func mergeVaultConfig(raw *VaultConfig, sf map[string]bool, rawAuthMethod string
 	if sf["legacy_mode"] && raw.LegacyMode != nil {
 		defaults.LegacyMode = raw.LegacyMode
 	}
+	if sf["search_index"] {
+		defaults.SearchIndex = raw.SearchIndex
+	}
 	if sf["search_workers"] {
 		defaults.SearchWorkers = raw.SearchWorkers
 	}
