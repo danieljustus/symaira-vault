@@ -1367,8 +1367,9 @@ func TestRunHTTPServer_MTLS(t *testing.T) {
 			},
 			Timeout: 5 * time.Second,
 		}
-		_, err := client.Get(baseURL + "/health")
+		resp, err := client.Get(baseURL + "/health")
 		if err == nil {
+			resp.Body.Close()
 			t.Error("expected error without client cert, got nil")
 		}
 	})
@@ -1387,8 +1388,9 @@ func TestRunHTTPServer_MTLS(t *testing.T) {
 			},
 			Timeout: 5 * time.Second,
 		}
-		_, err := client.Get(baseURL + "/health")
+		resp, err := client.Get(baseURL + "/health")
 		if err == nil {
+			resp.Body.Close()
 			t.Error("expected error with wrong client cert, got nil")
 		}
 	})

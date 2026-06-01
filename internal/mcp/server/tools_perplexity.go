@@ -92,7 +92,7 @@ type perplexityAskResult struct {
 	Context   []string `json:"context,omitempty"`
 }
 
-func (s *Server) resolvePerplexityAPIKey(ctx context.Context) (string, error) {
+func (s *Server) resolvePerplexityAPIKey(_ context.Context) (string, error) {
 	if s.vault != nil && s.vault.Config != nil && s.vault.Config.MCP != nil &&
 		s.vault.Config.MCP.Perplexity != nil && s.vault.Config.MCP.Perplexity.APIKey != "" {
 		return s.vault.Config.MCP.Perplexity.APIKey, nil

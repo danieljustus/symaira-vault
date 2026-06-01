@@ -136,14 +136,6 @@ func defaultGitConfig() GitConfig {
 	}
 }
 
-// defaultPerplexityConfig returns the default Perplexity API configuration.
-func defaultPerplexityConfig() PerplexityConfig {
-	return PerplexityConfig{
-		BaseURL:         "https://api.perplexity.ai",
-		RateLimitPerMin: 10,
-	}
-}
-
 // defaultMCPConfig returns the default MCP server configuration.
 func defaultMCPConfig() MCPConfig {
 	return MCPConfig{

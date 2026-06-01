@@ -314,6 +314,7 @@ func mergeGitConfig(raw *GitConfig, sf map[string]bool) *GitConfig {
 	return &defaults
 }
 
+//nolint:gocyclo // merging many config fields is inherently sequential
 func mergeMCPConfig(raw *MCPConfig, sf, oaf, ppf map[string]bool) *MCPConfig {
 	defaults := defaultMCPConfig()
 	if raw.ApprovalRequired {
