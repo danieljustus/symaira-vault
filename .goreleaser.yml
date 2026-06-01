@@ -27,6 +27,9 @@ builds:
   - id: symvault-static
     main: .
     binary: symvault
+    hooks:
+      post:
+        - 'scripts/build-mcpb.sh --version "{{ .Version }}" --os "{{ .Os }}" --arch "{{ .Arch }}"'
     env:
       - CGO_ENABLED=0
       - GOWORK=off
@@ -51,6 +54,9 @@ builds:
   - id: symvault-darwin
     main: .
     binary: symvault
+    hooks:
+      post:
+        - 'scripts/build-mcpb.sh --version "{{ .Version }}" --os "{{ .Os }}" --arch "{{ .Arch }}"'
     env:
       - CGO_ENABLED=1
       - GOWORK=off

@@ -196,6 +196,55 @@ jobs:
         with:
           subject-path: 'dist/**'
 
+      - name: Upload MCPB bundles to release
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          gh release upload "$TAG" dist/*.mcpb --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  smoke-test-mcpb:
+    name: Smoke Test (MCPB Bundle)
+    runs-on: ubuntu-latest
+    needs: [release]
+    steps:
+      - name: Get release tag
+        id: tag
+        run: echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+
+      - name: Download MCPB bundle
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          VERSION="${TAG#v}"
+          curl -fLO "https://github.com/danieljustus/symaira-vault/releases/download/${TAG}/symvault_${VERSION}_linux_amd64.mcpb"
+
+      - name: Verify MCPB structure
+        run: |
+          unzip -q symvault_*.mcpb -d mcpb-test
+          test -f mcpb-test/manifest.json
+          test -f mcpb-test/server/symvault
+          test -x mcpb-test/server/symvault
+
+      - name: Verify manifest.json
+        run: |
+          python3 -c "
+import json
+with open('mcpb-test/manifest.json') as f:
+    m = json.load(f)
+assert m['manifest_version'] == '0.3'
+assert m['name'] == 'symvault'
+assert m['server']['type'] == 'binary'
+assert m['server']['entry_point'] == 'server/symvault'
+assert m['server']['mcp_config']['args'] == ['serve', '--stdio']
+print('manifest.json validated')
+"
+
+      - name: Verify binary works
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          VERSION="${TAG#v}"
+          ./mcpb-test/server/symvault version | grep -q "$VERSION"
+
   smoke-test-linux:
     name: Smoke Test (Linux amd64)
     runs-on: ubuntu-latest

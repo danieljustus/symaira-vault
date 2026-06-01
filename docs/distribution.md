@@ -6,9 +6,9 @@ Symaira Vault is distributed through multiple channels to support different plat
 
 | OS | Arch | Formats |
 |----|------|---------|
-| Linux | amd64, arm64 | tar.gz, deb, rpm, apk |
-| macOS | amd64, arm64 | tar.gz, Homebrew |
-| Windows | amd64, arm64 | zip |
+| Linux | amd64, arm64 | tar.gz, deb, rpm, apk, mcpb |
+| macOS | amd64, arm64 | tar.gz, Homebrew, mcpb |
+| Windows | amd64 | zip |
 | FreeBSD | amd64, arm64 | tar.gz |
 | NixOS / Nix | amd64, arm64 | Nix flake |
 
@@ -29,6 +29,7 @@ Each release includes:
 - `symvault_<version>_<os>_<arch>.deb` (Debian/Ubuntu)
 - `symvault_<version>_<os>_<arch>.rpm` (Fedora/RHEL)
 - `symvault_<version>_<os>_<arch>.apk` (Alpine)
+- `symvault_<version>_<os>_<arch>.mcpb` (MCP Bundle for Claude Desktop)
 - `symaira-vault_<version>_checksums.txt` (SHA-256 checksums)
 
 ### Homebrew (macOS/Linux)
@@ -107,6 +108,23 @@ nix run github:danieljustus/symaira-vault
 ```
 
 > **Note:** Go module dependencies are pinned via `vendorHash` in `flake.nix`. If updating dependencies, run `go mod vendor && nix hash path --sri vendor/` and update the hash.
+
+### MCP Bundle (.mcpb)
+
+Symaira Vault can be installed as an MCP Bundle for Claude Desktop and other MCP clients that support the `.mcpb` format.
+
+```bash
+# Download the MCP bundle for your platform
+curl -fLO https://github.com/danieljustus/symaira-vault/releases/latest/download/symvault_<version>_<os>_<arch>.mcpb
+
+# Install (copy to Claude Desktop config directory)
+mkdir -p ~/Library/Application\ Support/Claude/mcp-bundles
+cp symvault_*.mcpb ~/Library/Application\ Support/Claude/mcp-bundles/
+```
+
+Available MCPB platforms: `darwin-amd64`, `darwin-arm64`, `linux-amd64`, `linux-arm64`.
+
+For detailed installation instructions, see [docs/mcpb-install.md](mcpb-install.md).
 
 ### Go Install
 
