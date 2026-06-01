@@ -194,8 +194,9 @@ func init() {
 			"destination": {Type: "string", Description: "Where to send the code: \"clipboard\" (default, not returned), \"autotype\" (type directly), \"return\" (return in response, requires approval)"},
 			"return_code": {Type: "boolean", Description: "Must be true when destination=\"return\""},
 		}),
-		Handler:   (*Server).handleGenerateTOTP,
-		Available: generateTOTPAvailable,
-		RiskLevel: RiskLevelHigh,
+		Handler:      (*Server).handleGenerateTOTP,
+		Available:    generateTOTPAvailable,
+		RiskLevel:    RiskLevelHigh,
+		ReadOnlyHint: true,
 	})
 }

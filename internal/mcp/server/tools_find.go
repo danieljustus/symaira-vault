@@ -67,7 +67,8 @@ func init() {
 		InputSchema: objectSchema([]string{"query"}, map[string]schemaProperty{
 			"query": {Type: "string", Description: "Search query"},
 		}),
-		Handler:   (*Server).handleFind,
-		RiskLevel: RiskLevelLow,
+		Handler:      (*Server).handleFind,
+		RiskLevel:    RiskLevelLow,
+		ReadOnlyHint: true,
 	})
 }

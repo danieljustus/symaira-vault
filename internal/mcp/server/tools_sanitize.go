@@ -72,7 +72,8 @@ func init() {
 			"mask_with_op_refs": {Type: "boolean", Description: "Replace vault-known secrets with op:// references"},
 			"mask":              {Type: "string", Description: "Custom mask string (default: ***)"},
 		}),
-		Handler:   (*Server).handleSanitizeOutput,
-		RiskLevel: RiskLevelLow,
+		Handler:      (*Server).handleSanitizeOutput,
+		RiskLevel:    RiskLevelLow,
+		ReadOnlyHint: true,
 	})
 }

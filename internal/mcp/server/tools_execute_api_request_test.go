@@ -83,14 +83,14 @@ func TestAPITemplateLoadAll(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadAll() error = %v", err)
 	}
-	if len(templates) != 4 {
-		t.Fatalf("LoadAll() returned %d templates, want 4", len(templates))
+	if len(templates) != 5 {
+		t.Fatalf("LoadAll() returned %d templates, want 5", len(templates))
 	}
 	names := make(map[string]bool)
 	for _, tmpl := range templates {
 		names[tmpl.Name] = true
 	}
-	for _, name := range []string{"github", "openai", "anthropic", "slack"} {
+	for _, name := range []string{"github", "openai", "anthropic", "slack", "perplexity"} {
 		if !names[name] {
 			t.Errorf("LoadAll() missing template %q", name)
 		}

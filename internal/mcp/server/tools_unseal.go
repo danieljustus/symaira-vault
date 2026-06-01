@@ -128,7 +128,8 @@ func init() {
 		InputSchema: objectSchema([]string{"handle"}, map[string]schemaProperty{
 			"handle": {Type: "string", Description: "Secret handle to unseal (e.g. op://github/password)"},
 		}),
-		Handler:   (*Server).handleSecretUnseal,
-		RiskLevel: RiskLevelHigh,
+		Handler:      (*Server).handleSecretUnseal,
+		RiskLevel:    RiskLevelHigh,
+		ReadOnlyHint: true,
 	})
 }

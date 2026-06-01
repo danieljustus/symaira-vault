@@ -163,7 +163,8 @@ func init() {
 			"working_dir": {Type: "string", Description: "Working directory for the command"},
 			"timeout":     {Type: "number", Description: "Timeout in seconds (default: 30)"},
 		}),
-		Handler:   (*Server).handleRunCommand,
-		RiskLevel: RiskLevelHigh,
+		Handler:         (*Server).handleRunCommand,
+		RiskLevel:       RiskLevelHigh,
+		DestructiveHint: true,
 	})
 }

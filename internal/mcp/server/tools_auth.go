@@ -92,11 +92,12 @@ func (s *Server) handleSetAuthMethod(ctx context.Context, req mcp.CallToolReques
 
 func init() {
 	RegisterTool(toolDefinition{
-		Name:        "get_auth_status",
-		Description: "Return Symaira Vault unlock authentication status",
-		InputSchema: objectSchema(nil, map[string]schemaProperty{}),
-		Handler:     (*Server).handleGetAuthStatus,
-		RiskLevel:   RiskLevelLow,
+		Name:         "get_auth_status",
+		Description:  "Return Symaira Vault unlock authentication status",
+		InputSchema:  objectSchema(nil, map[string]schemaProperty{}),
+		Handler:      (*Server).handleGetAuthStatus,
+		RiskLevel:    RiskLevelLow,
+		ReadOnlyHint: true,
 	})
 	RegisterTool(toolDefinition{
 		Name:        "set_auth_method",
@@ -104,7 +105,8 @@ func init() {
 		InputSchema: objectSchema([]string{"method"}, map[string]schemaProperty{
 			"method": {Type: "string", Description: "Authentication method: passphrase or touchid"},
 		}),
-		Handler:   (*Server).handleSetAuthMethod,
-		RiskLevel: RiskLevelHigh,
+		Handler:         (*Server).handleSetAuthMethod,
+		RiskLevel:       RiskLevelHigh,
+		DestructiveHint: true,
 	})
 }

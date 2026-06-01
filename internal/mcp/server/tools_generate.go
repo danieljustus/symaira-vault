@@ -43,7 +43,8 @@ func init() {
 			"length":  {Type: "number", Description: "Password length"},
 			"symbols": {Type: "boolean", Description: "Include symbols. Default: true."},
 		}),
-		Handler:   (*Server).handleGenerate,
-		RiskLevel: RiskLevelLow,
+		Handler:      (*Server).handleGenerate,
+		RiskLevel:    RiskLevelLow,
+		ReadOnlyHint: true,
 	})
 }

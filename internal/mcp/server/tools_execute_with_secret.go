@@ -278,7 +278,8 @@ func init() {
 			"env_vars":    {Type: "object", Description: "Additional non-secret environment variables"},
 			"timeout":     {Type: "number", Description: "Timeout in seconds (default: 30)"},
 		}),
-		Handler:   (*Server).handleExecuteWithSecret,
-		RiskLevel: RiskLevelHigh,
+		Handler:         (*Server).handleExecuteWithSecret,
+		RiskLevel:       RiskLevelHigh,
+		DestructiveHint: true,
 	})
 }

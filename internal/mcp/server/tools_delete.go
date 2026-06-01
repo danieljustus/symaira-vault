@@ -64,8 +64,9 @@ func init() {
 		InputSchema: objectSchema([]string{"path"}, map[string]schemaProperty{
 			"path": {Type: "string", Description: "Entry path to delete"},
 		}),
-		Handler:   (*Server).handleDelete,
-		RiskLevel: RiskLevelCritical,
+		Handler:         (*Server).handleDelete,
+		RiskLevel:       RiskLevelCritical,
+		DestructiveHint: true,
 	})
 	RegisterTool(toolDefinition{
 		Name:        "symaira_delete",
@@ -73,9 +74,10 @@ func init() {
 		InputSchema: objectSchema([]string{"path"}, map[string]schemaProperty{
 			"path": {Type: "string", Description: "Entry path to delete"},
 		}),
-		Handler:    (*Server).handleDelete,
-		Deprecated: true,
-		AliasFor:   "delete_entry",
-		RiskLevel:  RiskLevelCritical,
+		Handler:         (*Server).handleDelete,
+		Deprecated:      true,
+		AliasFor:        "delete_entry",
+		RiskLevel:       RiskLevelCritical,
+		DestructiveHint: true,
 	})
 }

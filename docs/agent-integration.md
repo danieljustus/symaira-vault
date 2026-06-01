@@ -446,6 +446,69 @@ Use a two-phase migration:
 Avoid putting tokens, passphrases, and passwords in prompts. If that happens,
 consider them exposed and rotate them.
 
+## Perplexity AI Integration
+
+Symaira Vault provides two MCP tools for using Perplexity AI's search and question-answering
+capabilities directly from AI agents, without requiring an MCP server from Perplexity.
+
+### Tools
+
+- **`perplexity_search`**: Accepts a natural language query and returns synthesized search
+  results with citations from the web.
+- **`perplexity_ask`**: Accepts a question with optional vault entry context and returns an
+  AI-generated answer with citations.
+
+### Setup
+
+1. **Create a Perplexity API key** at [perplexity.ai/settings/api](https://www.perplexity.ai/settings/api).
+
+2. **Store the API key** using one of two methods:
+
+   **Option A: Vault entry (recommended)**:
+   ```bash
+   symvault set perplexity.credential --value "pplx-..."
+   symvault add perplexity --fields credential
+   ```
+
+   **Option B: Config file** (`~/.symvault/config.yaml`):
+   ```yaml
+   mcp:
+     perplexity:
+       api_key: "pplx-..."
+       base_url: "https://api.perplexity.ai"  # optional, default
+       rate_limit_per_min: 10                  # optional, default
+   ```
+
+3. **Verify the integration**:
+   ```bash
+   symvault mcp test perplexity_search --args '{"query": "latest AI developments"}'
+   ```
+
+### API Template
+
+Perplexity is also available as an `execute_api_request` template using the vault entry
+`perplexity`:
+
+```yaml
+template: perplexity
+endpoint: /chat/completions
+method: POST
+body: '{"model":"sonar-pro","messages":[{"role":"user","content":"your query"}]}'
+```
+
+### Configuration Reference
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `mcp.perplexity.api_key` | string | — | Perplexity API key (prefer vault entry) |
+| `mcp.perplexity.base_url` | string | `https://api.perplexity.ai` | Custom API endpoint |
+| `mcp.perplexity.rate_limit_per_min` | int | `10` | Max API requests per minute |
+
+### Audit Logging
+
+All Perplexity API calls are logged to the audit log with the action, query/question
+summary, model used, citation count, and success status.
+
 ## Metrics and Observability
 
 Symaira Vault exposes Prometheus metrics for monitoring MCP server health, request

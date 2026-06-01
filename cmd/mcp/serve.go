@@ -39,4 +39,5 @@ func init() {
 	ServeCmd.Flags().String("bind", "127.0.0.1", "Bind address for HTTP server")
 	ServeCmd.Flags().String("tls-cert", "", "TLS certificate file path (overrides config)")
 	ServeCmd.Flags().String("tls-key", "", "TLS key file path (overrides config)")
+	ServeCmd.Flags().String("tls-ca", "", "CA certificate file path for mTLS client verification (enables mTLS)")
 }

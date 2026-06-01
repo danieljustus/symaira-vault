@@ -16,14 +16,16 @@ type toolHandler func(*Server, context.Context, mcp.CallToolRequest) (*mcp.CallT
 type toolAvailable func(*Server) bool
 
 type toolDefinition struct {
-	Name        string
-	Description string
-	InputSchema map[string]any
-	Handler     toolHandler
-	Available   toolAvailable
-	Deprecated  bool
-	AliasFor    string
-	RiskLevel   RiskLevel
+	Name            string
+	Description     string
+	InputSchema     map[string]any
+	Handler         toolHandler
+	Available       toolAvailable
+	Deprecated      bool
+	AliasFor        string
+	RiskLevel       RiskLevel
+	ReadOnlyHint    bool
+	DestructiveHint bool
 }
 
 type schemaProperty struct {
@@ -55,7 +57,7 @@ func objectSchema(required []string, properties map[string]schemaProperty) map[s
 // ARCHITECTURE.md § Tool Addition Review). The cap balances functionality
 // against the prompt injection attack surface — each additional tool is another
 // vector an attacker-controlled agent can exploit.
-const MaxToolDefinitions = 32
+const MaxToolDefinitions = 34
 
 var (
 	toolRegistry   []toolDefinition
@@ -217,6 +219,12 @@ func toolsListPayload(s *Server) []map[string]any {
 		if def.AliasFor != "" {
 			payload["aliasFor"] = def.AliasFor
 		}
+		if def.ReadOnlyHint {
+			payload["readOnlyHint"] = true
+		}
+		if def.DestructiveHint {
+			payload["destructiveHint"] = true
+		}
 		tools = append(tools, payload)
 	}
 	return tools
@@ -254,7 +262,7 @@ func callToolResultPayload(result *mcp.CallToolResult) map[string]any {
 		result = mcp.NewToolResultText("")
 	}
 	sanitized := globalChokepoint.SanitizeForMCP(result.Text)
-	return map[string]any{
+	payload := map[string]any{
 		"content": []map[string]any{
 			{
 				"type": "text",
@@ -263,6 +271,10 @@ func callToolResultPayload(result *mcp.CallToolResult) map[string]any {
 		},
 		"isError": result.IsError,
 	}
+	if result.StructuredContent != nil {
+		payload["structuredContent"] = result.StructuredContent
+	}
+	return payload
 }
 
 func decodeToolRequest(args json.RawMessage) (mcp.CallToolRequest, error) {
@@ -283,9 +295,11 @@ func computeToolRegistryHashDefs(defs []toolDefinition) string {
 	hashDefs := make([]mcp.ToolHashDef, len(defs))
 	for i, d := range defs {
 		hashDefs[i] = mcp.ToolHashDef{
-			Name:        d.Name,
-			Description: d.Description,
-			InputSchema: d.InputSchema,
+			Name:            d.Name,
+			Description:     d.Description,
+			InputSchema:     d.InputSchema,
+			ReadOnlyHint:    d.ReadOnlyHint,
+			DestructiveHint: d.DestructiveHint,
 		}
 	}
 	return mcp.ComputeToolRegistryHash(hashDefs)

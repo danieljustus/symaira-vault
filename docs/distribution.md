@@ -6,9 +6,9 @@ Symaira Vault is distributed through multiple channels to support different plat
 
 | OS | Arch | Formats |
 |----|------|---------|
-| Linux | amd64, arm64 | tar.gz, deb, rpm, apk |
-| macOS | amd64, arm64 | tar.gz, Homebrew |
-| Windows | amd64, arm64 | zip |
+| Linux | amd64, arm64 | tar.gz, deb, rpm, apk, mcpb |
+| macOS | amd64, arm64 | tar.gz, Homebrew, mcpb |
+| Windows | amd64 | zip |
 | FreeBSD | amd64, arm64 | tar.gz |
 | NixOS / Nix | amd64, arm64 | Nix flake |
 
@@ -29,6 +29,7 @@ Each release includes:
 - `symvault_<version>_<os>_<arch>.deb` (Debian/Ubuntu)
 - `symvault_<version>_<os>_<arch>.rpm` (Fedora/RHEL)
 - `symvault_<version>_<os>_<arch>.apk` (Alpine)
+- `symvault_<version>_<os>_<arch>.mcpb` (MCP Bundle for Claude Desktop)
 - `symaira-vault_<version>_checksums.txt` (SHA-256 checksums)
 
 ### Homebrew (macOS/Linux)
@@ -107,6 +108,23 @@ nix run github:danieljustus/symaira-vault
 ```
 
 > **Note:** Go module dependencies are pinned via `vendorHash` in `flake.nix`. If updating dependencies, run `go mod vendor && nix hash path --sri vendor/` and update the hash.
+
+### MCP Bundle (.mcpb)
+
+Symaira Vault can be installed as an MCP Bundle for Claude Desktop and other MCP clients that support the `.mcpb` format.
+
+```bash
+# Download the MCP bundle for your platform
+curl -fLO https://github.com/danieljustus/symaira-vault/releases/latest/download/symvault_<version>_<os>_<arch>.mcpb
+
+# Install (copy to Claude Desktop config directory)
+mkdir -p ~/Library/Application\ Support/Claude/mcp-bundles
+cp symvault_*.mcpb ~/Library/Application\ Support/Claude/mcp-bundles/
+```
+
+Available MCPB platforms: `darwin-amd64`, `darwin-arm64`, `linux-amd64`, `linux-arm64`.
+
+For detailed installation instructions, see [docs/mcpb-install.md](mcpb-install.md).
 
 ### Go Install
 
@@ -227,4 +245,74 @@ rpm -q symvault
 
 # Alpine
 apk info symvault
+```
+
+## Docker
+
+Symvault Vault is available as a Docker image on GitHub Container Registry:
+
+**Image:** `ghcr.io/danieljustus/symvault`
+
+### Quick Start
+
+```bash
+# Pull the image
+docker pull ghcr.io/danieljustus/symvault:latest
+
+# Run a one-off command
+docker run --rm -v "$HOME/.symvault:/home/symvault/.symvault" \
+  ghcr.io/danieljustus/symvault version
+
+# Initialize a new vault
+docker run --rm -it -v "$HOME/.symvault:/home/symvault/.symvault" \
+  ghcr.io/danieljustus/symvault init
+```
+
+### MCP HTTP Server with Docker
+
+Run the MCP HTTP server behind a TLS proxy:
+
+```bash
+# Start the MCP server
+docker run -d --name symvault \
+  -v "$HOME/.symvault:/home/symvault/.symvault" \
+  -p 8080:8080 \
+  ghcr.io/danieljustus/symvault serve --port 8080
+```
+
+### Remote Gateway Deployment
+
+For production deployments with HTTPS, use the provided `docker-compose.yml`:
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/danieljustus/symaira-vault
+   cd symaira-vault
+   ```
+
+2. Place your TLS certificates in `docker/certs/`:
+   ```bash
+   cp /path/to/server.crt docker/certs/
+   cp /path/to/server.key docker/certs/
+   ```
+
+3. Update `docker/caddy/Caddyfile` with your domain.
+
+4. Start the services:
+   ```bash
+   docker compose up -d
+   ```
+
+The compose setup provisions:
+- **Caddy** — TLS termination and reverse proxy
+- **Symvault** — MCP server behind the proxy
+- **vault_data** — Persistent volume for vault data
+
+### Multi-Architecture
+
+The Docker image supports both `linux/amd64` and `linux/arm64`:
+
+```bash
+# Inspect the image for supported architectures
+docker manifest inspect ghcr.io/danieljustus/symvault:latest
 ```

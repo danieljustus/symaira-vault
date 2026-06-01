@@ -4,6 +4,8 @@ package serverbootstrap
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -351,10 +353,14 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 
 	tlsCert := ""
 	tlsKey := ""
+	tlsCAFile := ""
+	mtlsEnabled := false
 	allowInsecure := false
 	if v != nil && v.Config != nil && v.Config.MCP != nil {
 		tlsCert = strings.TrimSpace(v.Config.MCP.TLSCertFile)
 		tlsKey = strings.TrimSpace(v.Config.MCP.TLSKeyFile)
+		tlsCAFile = strings.TrimSpace(v.Config.MCP.TLSClientCAFile)
+		mtlsEnabled = v.Config.MCP.MTLSEnabled
 		allowInsecure = v.Config.MCP.AllowInsecureBind
 	}
 
@@ -408,7 +414,30 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 
 	var serveErr error
 	if tlsEnabled {
-		serveErr = server.ServeTLS(listener, tlsCert, tlsKey)
+		if mtlsEnabled && tlsCAFile != "" {
+			caCert, readErr := os.ReadFile(tlsCAFile)
+			if readErr != nil {
+				return fmt.Errorf("read client CA certificate: %w", readErr)
+			}
+			caCertPool := x509.NewCertPool()
+			if !caCertPool.AppendCertsFromPEM(caCert) {
+				return fmt.Errorf("parse client CA certificate: no valid PEM block found in %q", tlsCAFile)
+			}
+			cert, loadErr := tls.LoadX509KeyPair(tlsCert, tlsKey)
+			if loadErr != nil {
+				return fmt.Errorf("load server TLS key pair: %w", loadErr)
+			}
+			tlsConfig := &tls.Config{
+				Certificates: []tls.Certificate{cert},
+				ClientAuth:   tls.RequireAndVerifyClientCert,
+				ClientCAs:    caCertPool,
+				MinVersion:   tls.VersionTLS12,
+			}
+			tlsListener := tls.NewListener(listener, tlsConfig)
+			serveErr = server.Serve(tlsListener)
+		} else {
+			serveErr = server.ServeTLS(listener, tlsCert, tlsKey)
+		}
 	} else {
 		serveErr = server.Serve(listener)
 	}

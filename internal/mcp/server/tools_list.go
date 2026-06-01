@@ -86,7 +86,8 @@ func init() {
 			"prefix":          {Type: "string", Description: "Path prefix to filter"},
 			"include_details": {Type: "boolean", Description: "When true, returns metadata for each entry. Default: true."},
 		}),
-		Handler:   (*Server).handleList,
-		RiskLevel: RiskLevelLow,
+		Handler:      (*Server).handleList,
+		RiskLevel:    RiskLevelLow,
+		ReadOnlyHint: true,
 	})
 }

@@ -226,8 +226,9 @@ func init() {
 			"secret_field": {Type: "string", Description: "Specific field to share (optional, shares entire entry if omitted)"},
 			"ttl":          {Type: "string", Description: "Time-to-live duration (e.g., \"1h\", \"30m\"). Share expires after this duration."},
 		}),
-		Handler:   (*Server).handleRequestShare,
-		RiskLevel: RiskLevelMedium,
+		Handler:         (*Server).handleRequestShare,
+		RiskLevel:       RiskLevelMedium,
+		DestructiveHint: true,
 	})
 	RegisterTool(toolDefinition{
 		Name:        "approve_share",
@@ -235,8 +236,9 @@ func init() {
 		InputSchema: objectSchema([]string{"grant_id"}, map[string]schemaProperty{
 			"grant_id": {Type: "string", Description: "ID of the share grant to approve"},
 		}),
-		Handler:   (*Server).handleApproveShare,
-		RiskLevel: RiskLevelHigh,
+		Handler:         (*Server).handleApproveShare,
+		RiskLevel:       RiskLevelHigh,
+		DestructiveHint: true,
 	})
 	RegisterTool(toolDefinition{
 		Name:        "revoke_share",
@@ -244,8 +246,9 @@ func init() {
 		InputSchema: objectSchema([]string{"grant_id"}, map[string]schemaProperty{
 			"grant_id": {Type: "string", Description: "ID of the share grant to revoke"},
 		}),
-		Handler:   (*Server).handleRevokeShare,
-		RiskLevel: RiskLevelHigh,
+		Handler:         (*Server).handleRevokeShare,
+		RiskLevel:       RiskLevelHigh,
+		DestructiveHint: true,
 	})
 	RegisterTool(toolDefinition{
 		Name:        "list_shares",
@@ -256,7 +259,8 @@ func init() {
 			"to_agent":    {Type: "string", Description: "Filter by target agent name"},
 			"secret_path": {Type: "string", Description: "Filter by secret path"},
 		}),
-		Handler:   (*Server).handleListShares,
-		RiskLevel: RiskLevelLow,
+		Handler:      (*Server).handleListShares,
+		RiskLevel:    RiskLevelLow,
+		ReadOnlyHint: true,
 	})
 }

@@ -131,7 +131,8 @@ func init() {
 			"intent": {Type: "string", Description: "Natural language intent or keyword to search for"},
 			"return": {Type: "string", Description: "Output format: \"spec\" (full tool specs) or \"names\" (just tool names). Default: \"spec\"."},
 		}),
-		Handler:   (*Server).handleSearch,
-		RiskLevel: RiskLevelLow,
+		Handler:      (*Server).handleSearch,
+		RiskLevel:    RiskLevelLow,
+		ReadOnlyHint: true,
 	})
 }

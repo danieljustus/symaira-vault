@@ -98,7 +98,8 @@ func init() {
 		InputSchema: objectSchema(nil, map[string]schemaProperty{
 			"limit": {Type: "number", Description: "Maximum number of events to return (default 50, max 100)"},
 		}),
-		Handler:   (*Server).handleAuditSelf,
-		RiskLevel: RiskLevelLow,
+		Handler:      (*Server).handleAuditSelf,
+		RiskLevel:    RiskLevelLow,
+		ReadOnlyHint: true,
 	})
 }

@@ -110,8 +110,9 @@ func (r CallToolRequest) GetBool(key string, def bool) bool {
 
 // CallToolResult represents the result of calling an MCP tool
 type CallToolResult struct {
-	Text    string
-	IsError bool
+	Text              string
+	IsError           bool
+	StructuredContent any
 }
 
 // NewToolResultError creates a new tool result representing an error
@@ -122,6 +123,14 @@ func NewToolResultError(msg string) *CallToolResult {
 // NewToolResultText creates a new tool result containing text
 func NewToolResultText(text string) *CallToolResult {
 	return &CallToolResult{Text: text}
+}
+
+// NewToolResultStructured creates a new tool result containing both structured
+// content and a serialized text representation. StructuredContent is surfaced
+// as the "structuredContent" field in the response alongside the standard
+// "content" array.
+func NewToolResultStructured(text string, structured any) *CallToolResult {
+	return &CallToolResult{Text: text, StructuredContent: structured}
 }
 
 // Tool represents an MCP tool definition

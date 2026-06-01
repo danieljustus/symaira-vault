@@ -1,0 +1,17 @@
+# Symvault Vault HTTPS proxy
+# Update the domain below for production use
+symvault.example.com {
+    tls /certs/server.crt /certs/server.key
+
+    reverse_proxy symvault:8080 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    log {
+        output file /data/access.log
+        format json
+    }
+}
