@@ -379,6 +379,7 @@ func writeEntryLocked(vaultDir, path string, entry *Entry, identity *age.X25519I
 	if err != nil {
 		return nil, err
 	}
+	defer vaultcrypto.Wipe(plaintext)
 
 	start := time.Now()
 	ciphertext, err := vaultcrypto.Encrypt(plaintext, identity.Recipient())
