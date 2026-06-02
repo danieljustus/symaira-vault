@@ -2,6 +2,16 @@
 
 Thank you for your interest in contributing to Symaira Vault! This document provides guidelines and instructions for contributing.
 
+## License and Commercial Boundary
+
+Contributions to this public repository are made under the MIT License used by
+Symaira Vault self-hosted. The self-hosted product must remain buildable,
+testable, and runnable without any private commercial code.
+
+Commercial hosted-service code is kept in a separate private repository. See
+`docs/commercial-boundary.md` for the boundary between the public self-hosted
+core and the private cloud layer.
+
 ## Development Setup
 
 ### Quick Setup (Recommended)
