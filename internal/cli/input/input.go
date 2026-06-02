@@ -1,3 +1,5 @@
+// Package input provides interactive input collection functions for the CLI,
+// including password entry, TOTP metadata, and confirmation prompts.
 package input
 
 import (

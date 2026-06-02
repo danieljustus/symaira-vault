@@ -132,9 +132,8 @@ func NewTestContext() *CLIContext {
 // before calling Execute to isolate state without modifying package globals.
 var ActiveContext *CLIContext
 
-// Legacy package-level variables bound to cobra flags. These remain for
-// flag-binding compatibility (cobra requires a pointer target via StringVar).
-// Execute syncs ActiveContext state into these after cobra parses flags.
+// Vault path used for flag-binding compatibility with cobra.
+// Execute syncs ActiveContext state into this after cobra parses flags.
 var Vault string
 var VaultFlag *pflag.Flag
 var QuietMode bool

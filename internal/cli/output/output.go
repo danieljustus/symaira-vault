@@ -1,3 +1,5 @@
+// Package output provides output formatting and printing utilities for the CLI,
+// supporting text, JSON, and YAML output formats.
 package output
 
 import (
@@ -52,9 +54,11 @@ func (p YAMLPrinter) Print(v interface{}) error {
 	return err
 }
 
+const formatText = "text"
+
 func NewPrinter(format string) (Printer, error) {
 	switch format {
-	case "text", "":
+	case formatText, "":
 		return TextPrinter{}, nil
 	case "json":
 		return JSONPrinter{}, nil
@@ -66,7 +70,7 @@ func NewPrinter(format string) (Printer, error) {
 }
 
 func PrintResult(v interface{}) error {
-	format := "text"
+	format := formatText
 	if OutputFormatFn != nil {
 		format = OutputFormatFn()
 	}
@@ -91,7 +95,7 @@ func PrintJSON(v interface{}) {
 var jsonDeprecationWarned = false
 
 func WantJSONOutput(legacyJSON bool) bool {
-	format := "text"
+	format := formatText
 	if OutputFormatFn != nil {
 		format = OutputFormatFn()
 	}
