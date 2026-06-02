@@ -40,4 +40,5 @@ func init() {
 	ServeCmd.Flags().String("tls-cert", "", "TLS certificate file path (overrides config)")
 	ServeCmd.Flags().String("tls-key", "", "TLS key file path (overrides config)")
 	ServeCmd.Flags().String("tls-ca", "", "CA certificate file path for mTLS client verification (enables mTLS)")
+	ServeCmd.Flags().Bool("allow-locked", false, "Allow the MCP server to start even when the vault is locked (stdio mode only)")
 }

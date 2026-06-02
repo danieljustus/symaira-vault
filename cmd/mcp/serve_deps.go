@@ -3,6 +3,7 @@ package mcp
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -45,6 +46,14 @@ func IsLocalhostBind(bind string) bool {
 
 var ServeUnlockVault = cli.UnlockVault
 
+func isVaultLockedError(err error) bool {
+	var cliErr *errorspkg.CLIError
+	if errors.As(err, &cliErr) {
+		return cliErr.Code == errorspkg.ExitLocked
+	}
+	return false
+}
+
 func confirmServeInsecure() (bool, error) {
 	fmt.Fprintf(os.Stderr, "Bind MCP server without TLS? Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes. [y/N] ")
 	reader := bufio.NewReader(os.Stdin)
@@ -86,6 +95,13 @@ func runServe(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("read tls-ca flag: %w", err)
 	}
+	allowLocked, err := cmd.Flags().GetBool("allow-locked")
+	if err != nil {
+		return fmt.Errorf("read allow-locked flag: %w", err)
+	}
+	if allowLocked && !stdioFlag {
+		return fmt.Errorf("--allow-locked is only supported in --stdio mode")
+	}
 	if bind == "" {
 		return fmt.Errorf("--bind must not be empty; use '127.0.0.1' for localhost-only")
 	}
@@ -108,7 +124,12 @@ func runServe(cmd *cobra.Command, args []string) error {
 			vault, err = ServeUnlockVault(vaultDir, !stdioFlag)
 		}
 		if err != nil {
-			return err
+			if allowLocked && stdioFlag && isVaultLockedError(err) {
+				cliout.Warnf("Vault is locked; starting MCP server in read-only mode. Run 'symvault unlock' to enable vault tools.")
+				vault = nil
+			} else {
+				return err
+			}
 		}
 	}
 	// Apply CLI TLS flag overrides to the vault config so they take
