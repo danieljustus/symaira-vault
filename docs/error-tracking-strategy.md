@@ -43,6 +43,8 @@ Symaira Vault maintains comprehensive audit logs for MCP operations:
 - Duration, timestamp, and error reasons (redacted)
 
 See also:
+- [`audit-schema.md`](audit-schema.md) — Stable audit event schema and action reference
+- [`audit-retention.md`](audit-retention.md) — Retention configuration, key rotation, integrity verification
 - `SECURITY.md` § Audit Logs for privacy details
 - `internal/audit/audit.go` for implementation
 
