@@ -513,6 +513,9 @@ func TestAutoCommitWithOptionsWithCustomAuthor(t *testing.T) {
 func TestAutoCommitWithOptionsDefaultAuthor(t *testing.T) {
 	dir := t.TempDir()
 
+	// Isolate from user's global git config so the fallback defaults are used.
+	t.Setenv("HOME", t.TempDir())
+
 	if err := Init(dir); err != nil {
 		t.Fatalf("Init() error = %v", err)
 	}

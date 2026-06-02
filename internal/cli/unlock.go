@@ -78,7 +78,9 @@ func resolveUnlockPassphrase(vaultDir string, interactive bool, cfg *configpkg.C
 	passphraseFromBiometric := false
 	if err != nil || len(passphrase) == 0 {
 		if cfg.EffectiveAuthMethod() == configpkg.AuthMethodTouchID {
-			if biometricPassphrase, biometricErr := SessionLoadBiometric(context.Background(), vaultDir); biometricErr == nil && len(biometricPassphrase) > 0 {
+			biometricCtx, biometricCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer biometricCancel()
+			if biometricPassphrase, biometricErr := SessionLoadBiometric(biometricCtx, vaultDir); biometricErr == nil && len(biometricPassphrase) > 0 {
 				passphrase = biometricPassphrase
 				passphraseFromBiometric = true
 			}

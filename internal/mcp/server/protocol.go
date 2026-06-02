@@ -212,7 +212,7 @@ func (h *ProtocolHandler) handleToolsCall(ctx context.Context, msg *transport.Me
 	}
 
 	if h.tools == nil {
-		return transport.NewErrorResponse(msg.ID, transport.ErrCodeInternalError, "Tools not available", nil), nil
+		return transport.NewErrorResponse(msg.ID, transport.ErrCodeInternalError, "vault locked: run 'symvault unlock' first", nil), nil
 	}
 
 	var params struct {
