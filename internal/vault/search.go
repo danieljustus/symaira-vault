@@ -144,16 +144,24 @@ type listCacheEntry struct {
 	vaultDirHash   string
 }
 
+const (
+	defaultListCacheTTL = 300 * time.Second
+	minListCacheTTL     = 30 * time.Second
+	maxListCacheTTL     = 10 * time.Minute
+)
+
 // listCache provides TTL-cached path listings to avoid repetitive directory walks.
 // It invalidates entries when the underlying directories' modification times change.
+// The TTL adapts based on hit rate: extends when hit rate > 90%, shrinks when < 50%.
 var listCache = struct {
 	mu    sync.RWMutex
 	items map[string]listCacheEntry
-	// TTL is the cache duration. It is a variable (not const) so tests can override it.
-	ttl time.Duration
+	ttl   time.Duration
+	_hits uint64
+	_miss uint64
 }{
 	items: make(map[string]listCacheEntry),
-	ttl:   300 * time.Second,
+	ttl:   defaultListCacheTTL,
 }
 
 // getDirMtime returns the modification time of a directory, or zero if unavailable.
@@ -189,30 +197,72 @@ func computeDirHash(dir string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
+func adaptListCacheTTL() {
+	hits := atomic.LoadUint64(&listCache._hits)
+	miss := atomic.LoadUint64(&listCache._miss)
+	total := hits + miss
+	if total < 100 {
+		return
+	}
+	effectiveMax := maxListCacheTTL
+	if configuredListCacheTTL > 0 && configuredListCacheTTL < effectiveMax {
+		effectiveMax = configuredListCacheTTL
+	}
+	ratio := float64(hits) / float64(total)
+	listCache.mu.Lock()
+	if ratio > 0.9 && listCache.ttl < effectiveMax {
+		listCache.ttl *= 2
+		if listCache.ttl > effectiveMax {
+			listCache.ttl = effectiveMax
+		}
+	} else if ratio < 0.5 && listCache.ttl > minListCacheTTL {
+		listCache.ttl /= 2
+		if listCache.ttl < minListCacheTTL {
+			listCache.ttl = minListCacheTTL
+		}
+	}
+	listCache.mu.Unlock()
+	atomic.StoreUint64(&listCache._hits, 0)
+	atomic.StoreUint64(&listCache._miss, 0)
+}
+
 // cachedList returns cached paths if valid, or nil if cache miss / expired / invalidated.
 func cachedList(vaultDir string) []string {
 	listCache.mu.RLock()
 	entry, ok := listCache.items[vaultDir]
 	listCache.mu.RUnlock()
 	if !ok {
+		atomic.AddUint64(&listCache._miss, 1)
+		adaptListCacheTTL()
 		return nil
 	}
 	if time.Since(entry.createdAt) > listCache.ttl {
+		atomic.AddUint64(&listCache._miss, 1)
+		adaptListCacheTTL()
 		return nil
 	}
-	// Validate mtimes: if either directory changed since caching, invalidate
 	if !getDirMtime(entriesDir(vaultDir)).Equal(entry.entriesMtime) {
+		atomic.AddUint64(&listCache._miss, 1)
+		adaptListCacheTTL()
 		return nil
 	}
 	if !getDirMtime(vaultDir).Equal(entry.vaultMtime) {
+		atomic.AddUint64(&listCache._miss, 1)
+		adaptListCacheTTL()
 		return nil
 	}
 	if computeDirHash(entriesDir(vaultDir)) != entry.entriesDirHash {
+		atomic.AddUint64(&listCache._miss, 1)
+		adaptListCacheTTL()
 		return nil
 	}
 	if computeDirHash(vaultDir) != entry.vaultDirHash {
+		atomic.AddUint64(&listCache._miss, 1)
+		adaptListCacheTTL()
 		return nil
 	}
+	atomic.AddUint64(&listCache._hits, 1)
+	adaptListCacheTTL()
 	return entry.paths
 }
 
@@ -230,13 +280,20 @@ func storeListCache(vaultDir string, paths []string) {
 	listCache.mu.Unlock()
 }
 
+var configuredListCacheTTL time.Duration
+
 // SetListCacheTTL overrides the default list cache TTL. Pass 0 to disable
 // caching. Typically called from vault initialization with the configured
-// vault.listing_cache_ttl value.
+// vault.listing_cache_ttl value. The adaptive TTL will not grow past this value.
 func SetListCacheTTL(ttl time.Duration) {
 	listCache.mu.Lock()
-	listCache.ttl = ttl
+	if ttl <= 0 {
+		listCache.ttl = 0
+	} else {
+		listCache.ttl = ttl
+	}
 	listCache.mu.Unlock()
+	configuredListCacheTTL = ttl
 }
 
 // InvalidateListCache removes the cached entry list for vaultDir.
