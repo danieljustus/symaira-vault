@@ -41,7 +41,7 @@ var (
 // Every update/remove operation resets this timer. When the timer fires all
 // accumulated changes for the affected vault are flushed in a single read-
 // modify-write cycle.
-const manifestFlushInterval = 200 * time.Millisecond
+const manifestFlushInterval = 50 * time.Millisecond
 
 // pendingVaultState tracks accumulated manifest changes for a single vault
 // directory. All fields are accessed only from the worker goroutine.
