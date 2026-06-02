@@ -26,6 +26,54 @@ var OsExit = os.Exit
 
 const RequiresVaultAnnotation = "symvault/requires-vault"
 
+// SessionManager abstracts session persistence operations, allowing
+// tests to substitute mock implementations and avoid global state.
+type SessionManager interface {
+	LoadPassphrase(vaultDir string) ([]byte, error)
+	SavePassphrase(vaultDir string, passphrase []byte, ttl time.Duration) error
+	IsExpired(vaultDir string) bool
+	LoadBiometric(ctx context.Context, vaultDir string) ([]byte, error)
+	SaveBiometric(ctx context.Context, vaultDir string, passphrase []byte) error
+	GetCacheStatus() session.CacheStatus
+	LoadIdentity(vaultDir string) (string, error)
+	SaveIdentity(vaultDir string, identity string, ttl time.Duration) error
+}
+
+// defaultSessionManager delegates to the real session package.
+type defaultSessionManager struct{}
+
+func (defaultSessionManager) LoadPassphrase(vaultDir string) ([]byte, error) {
+	return session.LoadPassphrase(vaultDir)
+}
+func (defaultSessionManager) SavePassphrase(vaultDir string, passphrase []byte, ttl time.Duration) error {
+	return session.SavePassphrase(vaultDir, passphrase, ttl)
+}
+func (defaultSessionManager) IsExpired(vaultDir string) bool {
+	return session.IsSessionExpired(vaultDir)
+}
+func (defaultSessionManager) LoadBiometric(ctx context.Context, vaultDir string) ([]byte, error) {
+	return session.LoadBiometricPassphrase(ctx, vaultDir)
+}
+func (defaultSessionManager) SaveBiometric(ctx context.Context, vaultDir string, passphrase []byte) error {
+	return session.SaveBiometricPassphrase(ctx, vaultDir, passphrase)
+}
+func (defaultSessionManager) GetCacheStatus() session.CacheStatus {
+	return session.GetCacheStatus()
+}
+func (defaultSessionManager) LoadIdentity(vaultDir string) (string, error) {
+	return session.LoadIdentity(vaultDir)
+}
+func (defaultSessionManager) SaveIdentity(vaultDir string, identity string, ttl time.Duration) error {
+	return session.SaveIdentity(vaultDir, identity, ttl)
+}
+
+// DefaultSessionManager is a SessionManager that delegates to the real
+// session package. It is used by NewCLIContext by default.
+var DefaultSessionManager SessionManager = defaultSessionManager{}
+
+// Legacy function variables retained for backwards compatibility.
+// They delegate to the session package directly. Prefer injecting
+// a SessionManager via CLIContext in new code.
 var (
 	SessionLoadPassphrase func(vaultDir string) ([]byte, error)                               = session.LoadPassphrase
 	SessionSavePassphrase func(vaultDir string, passphrase []byte, ttl time.Duration) error   = session.SavePassphrase
@@ -37,6 +85,56 @@ var (
 	SessionSaveIdentity   func(vaultDir string, identity string, ttl time.Duration) error     = session.SaveIdentity
 )
 
+// CLIContext groups mutable state that was previously stored as package-level
+// globals. Holding state in a context struct makes test isolation straightforward:
+// each test can create a fresh CLIContext via NewTestContext and avoid
+// interference from parallel tests.
+type CLIContext struct {
+	Vault         string
+	QuietMode     bool
+	OutputFormat  string
+	NoPipeWarning bool
+	ColorMode     string
+	ThemePreset   string
+	Profile       string
+	Session       SessionManager
+	OsExit        func(int)
+
+	vaultFlag   *pflag.Flag
+	profileFlag *pflag.Flag
+}
+
+// NewCLIContext returns a CLIContext with production defaults and
+// DefaultSessionManager.
+func NewCLIContext() *CLIContext {
+	return &CLIContext{
+		Vault:         "~/" + configpkg.DefaultVaultSubdir,
+		OutputFormat:  "text",
+		ColorMode:     "auto",
+		Session:       DefaultSessionManager,
+		OsExit:        os.Exit,
+	}
+}
+
+// NewTestContext returns a CLIContext pre-configured for test isolation.
+// The caller can set Session to a mock to avoid real keyring access.
+func NewTestContext() *CLIContext {
+	return &CLIContext{
+		Vault:         "~/" + configpkg.DefaultVaultSubdir,
+		OutputFormat:  "text",
+		ColorMode:     "auto",
+		Session:       DefaultSessionManager,
+		OsExit:        os.Exit,
+	}
+}
+
+// ActiveContext is the CLIContext used by Execute. Tests may replace it
+// before calling Execute to isolate state without modifying package globals.
+var ActiveContext *CLIContext
+
+// Legacy package-level variables bound to cobra flags. These remain for
+// flag-binding compatibility (cobra requires a pointer target via StringVar).
+// Execute syncs ActiveContext state into these after cobra parses flags.
 var Vault string
 var VaultFlag *pflag.Flag
 var QuietMode bool
@@ -46,6 +144,41 @@ var OutputFormat string
 var NoPipeWarning bool
 var ColorMode string
 var ThemePreset string
+
+// syncFromContext copies the ActiveContext state into the legacy globals
+// so that cobra flag binding and code that reads the globals stay in sync.
+func syncFromContext(ctx *CLIContext) {
+	if ctx == nil {
+		return
+	}
+	OsExit = ctx.OsExit
+	// Sync flag-bound variables from context so cobra's StringVar/BoolVar
+	// writes into the correct targets that other code reads.
+	Vault = ctx.Vault
+	QuietMode = ctx.QuietMode
+	Profile = ctx.Profile
+	OutputFormat = ctx.OutputFormat
+	NoPipeWarning = ctx.NoPipeWarning
+	ColorMode = ctx.ColorMode
+	ThemePreset = ctx.ThemePreset
+}
+
+// syncToContext copies the cobra-parsed globals back into the context
+// after RootCmd.Execute() processes flags.
+func syncToContext(ctx *CLIContext) {
+	if ctx == nil {
+		return
+	}
+	ctx.Vault = Vault
+	ctx.QuietMode = QuietMode
+	ctx.Profile = Profile
+	ctx.OutputFormat = OutputFormat
+	ctx.NoPipeWarning = NoPipeWarning
+	ctx.ColorMode = ColorMode
+	ctx.ThemePreset = ThemePreset
+	ctx.vaultFlag = VaultFlag
+	ctx.profileFlag = ProfileFlag
+}
 
 var RootCmd = &cobra.Command{
 	Use:   "symvault",
@@ -91,12 +224,26 @@ Daily use:
 	},
 }
 
+// Execute runs the CLI with the ActiveContext. If ActiveContext is nil,
+// it creates a default context. The context's state is synced into the
+// legacy package globals before and after cobra execution so that both
+// flag binding and direct globals reads stay coherent.
 func Execute() {
-	cliout.SetQuiet(QuietMode)
-	cliout.SetColorMode(cliout.ParseColorMode(ColorMode))
+	ctx := ActiveContext
+	if ctx == nil {
+		ctx = NewCLIContext()
+		// Preserve the current OsExit so tests that install a custom
+		// exit handler (e.g. a panic-to-capture) are not overwritten.
+		ctx.OsExit = OsExit
+	}
+	ActiveContext = ctx
+	syncFromContext(ctx)
+
+	cliout.SetQuiet(ctx.QuietMode)
+	cliout.SetColorMode(cliout.ParseColorMode(ctx.ColorMode))
 	i18n.ApplyFromEnv()
-	if ThemePreset != "" {
-		theme.ApplyPreset(theme.ParsePreset(ThemePreset))
+	if ctx.ThemePreset != "" {
+		theme.ApplyPreset(theme.ParsePreset(ctx.ThemePreset))
 	} else {
 		theme.ApplyPresetFromEnv()
 	}
@@ -118,8 +265,17 @@ func Execute() {
 			case errorspkg.ExitSuccess, errorspkg.ExitGeneralError, errorspkg.ExitPermissionDenied, errorspkg.ExitDoctorWarn, errorspkg.ExitDoctorFail, errorspkg.ExitUpdateAvailable:
 			}
 		}
-		OsExit(int(exitCode))
+		ctx.OsExit(int(exitCode))
 	}
+
+	syncToContext(ctx)
+}
+
+// ExecuteWithContext is the context-aware entry point for Execute.
+// It sets ActiveContext then delegates to Execute.
+func ExecuteWithContext(ctx *CLIContext) {
+	ActiveContext = ctx
+	Execute()
 }
 
 func PrintQuietAware(format string, args ...interface{}) {
