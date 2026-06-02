@@ -95,6 +95,12 @@ func (s *Server) handleRunCommand(ctx context.Context, req mcp.CallToolRequest) 
 	}
 	sort.Strings(envNames)
 
+	denied := secrets.RejectDenied(resolvedEnv)
+	if len(denied) > 0 {
+		s.logAudit(ctx, "run_command", "<validation-denied-env>", false)
+		return mcp.NewToolResultError(fmt.Sprintf("env contains denied keys: %s", strings.Join(denied, ", "))), nil
+	}
+
 	if s.requiresApproval() {
 		s.logAudit(ctx, "approval_denied", "run_command", false)
 		metrics.RecordApproval(s.agent.Name, "denied")

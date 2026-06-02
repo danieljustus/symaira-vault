@@ -396,6 +396,95 @@ func TestHandleRunCommand_InvalidCommand(t *testing.T) {
 	}
 }
 
+func TestHandleRunCommand_DeniedEnvVar(t *testing.T) {
+	vaultDir, identity := mockVaultWithEntry(t, "github", map[string]any{
+		"api_key": "test-token",
+	})
+
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	tests := []struct {
+		name    string
+		env     map[string]any
+		wantErr string
+	}{
+		{
+			name: "LD_PRELOAD denied",
+			env: map[string]any{
+				"LD_PRELOAD": "github.api_key",
+			},
+			wantErr: "env contains denied keys: LD_PRELOAD",
+		},
+		{
+			name: "PATH denied",
+			env: map[string]any{
+				"PATH": "github.api_key",
+			},
+			wantErr: "env contains denied keys: PATH",
+		},
+		{
+			name: "DYLD_INSERT_LIBRARIES denied",
+			env: map[string]any{
+				"DYLD_INSERT_LIBRARIES": "github.api_key",
+			},
+			wantErr: "env contains denied keys: DYLD_INSERT_LIBRARIES",
+		},
+		{
+			name: "multiple denied vars",
+			env: map[string]any{
+				"LD_PRELOAD":            "github.api_key",
+				"DYLD_INSERT_LIBRARIES": "github.api_key",
+			},
+			wantErr: "env contains denied keys",
+		},
+		{
+			name: "benign var allowed",
+			env: map[string]any{
+				"MY_API_KEY": "github.api_key",
+			},
+			wantErr: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := mcp.CallToolRequest{
+				Arguments: map[string]any{
+					"command": []any{"echo", "test"},
+					"env":     tt.env,
+				},
+			}
+
+			result, err := srv.handleRunCommand(context.Background(), req)
+			if err != nil {
+				t.Fatalf("handleRunCommand() error = %v", err)
+			}
+			if result == nil {
+				t.Fatal("handleRunCommand() returned nil result")
+			}
+
+			if tt.wantErr != "" {
+				if !result.IsError {
+					t.Fatal("handleRunCommand() expected error result for denied env var")
+				}
+				if !strings.Contains(result.Text, tt.wantErr) {
+					t.Errorf("result text = %q, want to contain %q", result.Text, tt.wantErr)
+				}
+			} else {
+				if result.IsError {
+					t.Fatalf("handleRunCommand() unexpected error: %s", result.Text)
+				}
+			}
+		})
+	}
+}
+
 func TestHandleRunCommand_MissingSecretRef(t *testing.T) {
 	vaultDir, identity := mockVaultWithEntry(t, "github", map[string]any{
 		"api_key": "test-token",
