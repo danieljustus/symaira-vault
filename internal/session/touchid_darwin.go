@@ -147,10 +147,13 @@ int touch_id_load_passphrase(char *service_c, char *account_c, char *reason_c, c
 		authResult = success ? 1 : 0;
 		dispatch_semaphore_signal(semaphore);
 	}];
-	dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
+	long waitResult = dispatch_semaphore_wait(semaphore, dispatch_time(DISPATCH_TIME_NOW, 30 * NSEC_PER_SEC));
 	[semaphore release];
 	[laCtx release];
 
+	if (waitResult != 0) {
+		return errSecAuthFailed;
+	}
 	if (authResult != 1) {
 		return errSecAuthFailed;
 	}
