@@ -221,6 +221,8 @@ For the full configuration reference, see [docs/configuration.md](docs/configura
 - [Configuration reference](docs/configuration.md)
 - [Agent integration](docs/agent-integration.md)
 - [MCP API](docs/mcp-api.md)
+- [Audit event schema](docs/audit-schema.md)
+- [Audit retention & integrity](docs/audit-retention.md)
 - [Distribution channels](docs/distribution.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Architecture](ARCHITECTURE.md)
