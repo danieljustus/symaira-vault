@@ -108,11 +108,11 @@ type CLIContext struct {
 // DefaultSessionManager.
 func NewCLIContext() *CLIContext {
 	return &CLIContext{
-		Vault:         "~/" + configpkg.DefaultVaultSubdir,
-		OutputFormat:  "text",
-		ColorMode:     "auto",
-		Session:       DefaultSessionManager,
-		OsExit:        os.Exit,
+		Vault:        "~/" + configpkg.DefaultVaultSubdir,
+		OutputFormat: "text",
+		ColorMode:    "auto",
+		Session:      DefaultSessionManager,
+		OsExit:       os.Exit,
 	}
 }
 
@@ -120,11 +120,11 @@ func NewCLIContext() *CLIContext {
 // The caller can set Session to a mock to avoid real keyring access.
 func NewTestContext() *CLIContext {
 	return &CLIContext{
-		Vault:         "~/" + configpkg.DefaultVaultSubdir,
-		OutputFormat:  "text",
-		ColorMode:     "auto",
-		Session:       DefaultSessionManager,
-		OsExit:        os.Exit,
+		Vault:        "~/" + configpkg.DefaultVaultSubdir,
+		OutputFormat: "text",
+		ColorMode:    "auto",
+		Session:      DefaultSessionManager,
+		OsExit:       os.Exit,
 	}
 }
 

@@ -10,14 +10,14 @@ import (
 
 // mockSessionManager implements SessionManager for testing.
 type mockSessionManager struct {
-	loadPassphrase  func(vaultDir string) ([]byte, error)
-	savePassphrase  func(vaultDir string, passphrase []byte, ttl time.Duration) error
-	isExpired       func(vaultDir string) bool
-	loadBiometric   func(ctx context.Context, vaultDir string) ([]byte, error)
-	saveBiometric   func(ctx context.Context, vaultDir string, passphrase []byte) error
-	getCacheStatus  func() session.CacheStatus
-	loadIdentity    func(vaultDir string) (string, error)
-	saveIdentity    func(vaultDir string, identity string, ttl time.Duration) error
+	loadPassphrase func(vaultDir string) ([]byte, error)
+	savePassphrase func(vaultDir string, passphrase []byte, ttl time.Duration) error
+	isExpired      func(vaultDir string) bool
+	loadBiometric  func(ctx context.Context, vaultDir string) ([]byte, error)
+	saveBiometric  func(ctx context.Context, vaultDir string, passphrase []byte) error
+	getCacheStatus func() session.CacheStatus
+	loadIdentity   func(vaultDir string) (string, error)
+	saveIdentity   func(vaultDir string, identity string, ttl time.Duration) error
 }
 
 func (m *mockSessionManager) LoadPassphrase(vaultDir string) ([]byte, error) {
