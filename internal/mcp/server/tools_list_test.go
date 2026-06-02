@@ -21,7 +21,7 @@ func TestHandleList_WithPrefix(t *testing.T) {
 	srv.vault.Identity = identity
 
 	req := mcp.CallToolRequest{
-		Arguments: map[string]any{"prefix": ""},
+		Arguments: map[string]any{"prefix": "", "include_details": true},
 	}
 
 	result, err := srv.handleList(context.Background(), req)
@@ -99,7 +99,7 @@ func TestExecuteTool_ListEntries(t *testing.T) {
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
-	args := json.RawMessage(`{"prefix": ""}`)
+	args := json.RawMessage(`{"prefix": "", "include_details": true}`)
 	result, err := srv.executeTool(context.Background(), "list_entries", args)
 	if err != nil {
 		t.Fatalf("executeTool() error = %v", err)

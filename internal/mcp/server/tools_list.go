@@ -43,7 +43,7 @@ func (s *Server) handleList(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 	s.logAudit(ctx, "list", prefix, true)
 	metrics.RecordVaultOperation("list", "success")
 
-	includeDetails := req.GetBool("include_details", true)
+	includeDetails := req.GetBool("include_details", false)
 
 	if !includeDetails {
 		result, marshalErr := json.Marshal(paths)
@@ -84,7 +84,7 @@ func init() {
 		Description: "List vault entries matching a prefix with metadata",
 		InputSchema: objectSchema(nil, map[string]schemaProperty{
 			"prefix":          {Type: "string", Description: "Path prefix to filter"},
-			"include_details": {Type: "boolean", Description: "When true, returns metadata for each entry. Default: true."},
+			"include_details": {Type: "boolean", Description: "When true, returns metadata for each entry. Default: false to avoid expensive decryption on large vaults."},
 		}),
 		Handler:      (*Server).handleList,
 		RiskLevel:    RiskLevelLow,
