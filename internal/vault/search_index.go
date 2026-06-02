@@ -1,9 +1,11 @@
 package vault
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +13,7 @@ import (
 	"unicode"
 
 	"filippo.io/age"
+	"golang.org/x/crypto/hkdf"
 
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
 )
@@ -37,6 +40,7 @@ import (
 type EncryptedIndex struct {
 	mu         sync.RWMutex
 	ciphertext []byte            // encrypted serialized index
+	salt       []byte            // 16-byte HKDF salt (nil for legacy)
 	vaultDir   string            // vault directory the index covers
 	idHash     [sha256.Size]byte // sha256 of identity for change detection
 }
@@ -62,6 +66,9 @@ type indexDoc struct {
 	// EntryCount is the number of entries in the vault when the index was built.
 	// Used for stale detection — if the count differs, the index is rebuilt.
 	EntryCount int `json:"c,omitempty"`
+	// Salt is the random salt for HKDF-based index key derivation.
+	// Empty for legacy indices (pre-v0.4.1) that used raw SHA-256 keying.
+	Salt []byte `json:"s,omitempty"`
 }
 
 var globalIndex EncryptedIndex
@@ -86,6 +93,12 @@ func (idx *EncryptedIndex) Build(vaultDir string, identity *age.X25519Identity) 
 		TokenIndex: make(map[string]map[string]struct{}),
 		EntryCount: len(paths),
 	}
+
+	salt := make([]byte, indexSaltLen)
+	if _, randErr := rand.Read(salt); randErr != nil {
+		return randErr
+	}
+	doc.Salt = salt
 
 	for _, entryPath := range paths {
 		entry, readErr := ReadEntry(vaultDir, entryPath, identity)
@@ -114,7 +127,7 @@ func (idx *EncryptedIndex) Build(vaultDir string, identity *age.X25519Identity) 
 	}
 	defer vaultcrypto.Wipe(plaintext)
 
-	key := deriveIndexKey(identity)
+	key := deriveIndexKey(identity, salt)
 	defer vaultcrypto.Wipe(key)
 
 	ciphertext, err := vaultcrypto.EncryptWithKey(plaintext, key)
@@ -126,6 +139,7 @@ func (idx *EncryptedIndex) Build(vaultDir string, identity *age.X25519Identity) 
 
 	idx.mu.Lock()
 	idx.ciphertext = ciphertext
+	idx.salt = salt
 	idx.vaultDir = vaultDir
 	idx.idHash = idHash
 	idx.mu.Unlock()
@@ -151,6 +165,7 @@ func (idx *EncryptedIndex) MatchEntries(vaultDir string, identity *age.X25519Ide
 	idx.mu.RLock()
 	ct := idx.ciphertext
 	idHash := idx.idHash
+	storedSalt := idx.salt
 	idx.mu.RUnlock()
 
 	if ct == nil {
@@ -162,7 +177,7 @@ func (idx *EncryptedIndex) MatchEntries(vaultDir string, identity *age.X25519Ide
 		return nil, errors.New("identity changed")
 	}
 
-	key := deriveIndexKey(identity)
+	key := deriveIndexKey(identity, storedSalt)
 	defer vaultcrypto.Wipe(key)
 
 	plaintext, err := vaultcrypto.DecryptWithKey(ct, key)
@@ -226,6 +241,7 @@ func (idx *EncryptedIndex) Invalidate() {
 	idx.mu.Lock()
 	vaultDir := idx.vaultDir
 	idx.ciphertext = nil
+	idx.salt = nil
 	idx.vaultDir = ""
 	idx.idHash = [sha256.Size]byte{}
 	idx.mu.Unlock()
@@ -246,13 +262,14 @@ func (idx *EncryptedIndex) UpdateEntry(vaultDir, path string, identity *age.X255
 		return nil
 	}
 
-	key := deriveIndexKey(identity)
+	storedSalt := idx.salt
+	key := deriveIndexKey(identity, storedSalt)
 	defer vaultcrypto.Wipe(key)
 
 	plaintext, err := vaultcrypto.DecryptWithKey(idx.ciphertext, key)
 	if err != nil {
-		// Corrupt index — clear and let it rebuild lazily
 		idx.ciphertext = nil
+		idx.salt = nil
 		idx.vaultDir = ""
 		idx.idHash = [sha256.Size]byte{}
 		return nil
@@ -262,6 +279,7 @@ func (idx *EncryptedIndex) UpdateEntry(vaultDir, path string, identity *age.X255
 	var doc indexDoc
 	if err = json.Unmarshal(plaintext, &doc); err != nil {
 		idx.ciphertext = nil
+		idx.salt = nil
 		idx.vaultDir = ""
 		idx.idHash = [sha256.Size]byte{}
 		return nil
@@ -317,15 +335,17 @@ func (idx *EncryptedIndex) RemoveEntry(path string) {
 	identity := currentSearchIdentity()
 	if identity == nil {
 		idx.ciphertext = nil
+		idx.salt = nil
 		return
 	}
 
-	key := deriveIndexKey(identity)
+	key := deriveIndexKey(identity, idx.salt)
 	defer vaultcrypto.Wipe(key)
 
 	plaintext, err := vaultcrypto.DecryptWithKey(idx.ciphertext, key)
 	if err != nil {
 		idx.ciphertext = nil
+		idx.salt = nil
 		return
 	}
 	defer vaultcrypto.Wipe(plaintext)
@@ -357,9 +377,12 @@ func (idx *EncryptedIndex) RemoveEntry(path string) {
 	idx.ciphertext = newCiphertext
 }
 
+const indexFormatVersion = byte(0x01)
+
 func (idx *EncryptedIndex) saveToDisk(vaultDir string) error {
 	idx.mu.RLock()
 	ct := idx.ciphertext
+	storedSalt := idx.salt
 	idx.mu.RUnlock()
 
 	if ct == nil {
@@ -367,12 +390,16 @@ func (idx *EncryptedIndex) saveToDisk(vaultDir string) error {
 	}
 
 	indexPath := indexFilePath(vaultDir)
-	return os.WriteFile(indexPath, ct, 0600)
+	data := make([]byte, 0, 1+len(storedSalt)+len(ct))
+	data = append(data, indexFormatVersion)
+	data = append(data, storedSalt...)
+	data = append(data, ct...)
+	return os.WriteFile(indexPath, data, 0600)
 }
 
 func (idx *EncryptedIndex) loadFromDisk(vaultDir string, identity *age.X25519Identity) error {
 	indexPath := indexFilePath(vaultDir)
-	ct, err := os.ReadFile(indexPath) // #nosec G304 — indexPath is filepath.Join(vaultDir, ".search-index"). Callers pass Vault.Dir from Open, which validates the directory via validateVaultDir(), and the filename is hardcoded.
+	raw, err := os.ReadFile(indexPath) // #nosec G304 — indexPath is filepath.Join(vaultDir, ".search-index"). Callers pass Vault.Dir from Open, which validates the directory via validateVaultDir(), and the filename is hardcoded.
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil
@@ -380,11 +407,28 @@ func (idx *EncryptedIndex) loadFromDisk(vaultDir string, identity *age.X25519Ide
 		return err
 	}
 
-	key := deriveIndexKey(identity)
+	var salt []byte
+	var ct []byte
+
+	if len(raw) > 1 && raw[0] == indexFormatVersion {
+		if len(raw) < 1+indexSaltLen+1 {
+			_ = os.Remove(indexPath)
+			return errors.New("truncated search index")
+		}
+		salt = raw[1 : 1+indexSaltLen]
+		ct = raw[1+indexSaltLen:]
+	} else {
+		ct = raw
+	}
+
+	key := deriveIndexKey(identity, salt)
 	defer vaultcrypto.Wipe(key)
 
 	plaintext, err := vaultcrypto.DecryptWithKey(ct, key)
-	if err != nil {
+	if err != nil && len(salt) == 0 {
+		_ = os.Remove(indexPath)
+		return err
+	} else if err != nil {
 		_ = os.Remove(indexPath)
 		return err
 	}
@@ -410,9 +454,14 @@ func (idx *EncryptedIndex) loadFromDisk(vaultDir string, identity *age.X25519Ide
 
 	idx.mu.Lock()
 	idx.ciphertext = ct
+	idx.salt = salt
 	idx.vaultDir = vaultDir
 	idx.idHash = idHash
 	idx.mu.Unlock()
+
+	if len(salt) == 0 {
+		_ = idx.saveToDisk(vaultDir)
+	}
 
 	return nil
 }
@@ -449,11 +498,23 @@ func collectStringValues(dst *[]string, data any) {
 }
 
 // deriveIndexKey derives a 32-byte symmetric encryption key from the vault
-// identity using SHA-256 of the identity string.
-func deriveIndexKey(identity *age.X25519Identity) []byte {
-	h := sha256.Sum256([]byte(identity.String()))
-	return h[:]
+// identity using HKDF-SHA256 with a per-index random salt and an info label.
+// Legacy indices without a salt use raw SHA-256 for backward compatibility.
+func deriveIndexKey(identity *age.X25519Identity, salt []byte) []byte {
+	identityBytes := []byte(identity.String())
+	if len(salt) == 0 {
+		h := sha256.Sum256(identityBytes)
+		return h[:]
+	}
+	kdf := hkdf.New(sha256.New, identityBytes, salt, []byte("symvault-search-index-v1"))
+	key := make([]byte, 32)
+	if _, err := io.ReadFull(kdf, key); err != nil {
+		panic("hkdf read failed: " + err.Error())
+	}
+	return key
 }
+
+const indexSaltLen = 16
 
 // tokenize splits a lowercased string into individual tokens on whitespace and
 // punctuation boundaries. Consecutive delimiters produce no empty tokens.

@@ -23,6 +23,7 @@ type VaultConfig struct {
 	Argon2idMemory     int           `yaml:"argon2id_memory,omitempty"`
 	Argon2idThreads    int           `yaml:"argon2id_threads,omitempty"`
 	ListingCacheTTL    time.Duration `yaml:"listing_cache_ttl,omitempty"`
+	ManifestGeneration int           `yaml:"manifest_generation,omitempty"`
 }
 
 // GitConfig holds git-related configuration for automatic commits and pushes.

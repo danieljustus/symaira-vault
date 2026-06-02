@@ -26,10 +26,11 @@ type ManifestEntry struct {
 
 // Manifest tracks integrity of all .age entry files in the vault.
 type Manifest struct {
-	Version int                      `json:"version"`
-	Created time.Time                `json:"created"`
-	Updated time.Time                `json:"updated"`
-	Entries map[string]ManifestEntry `json:"entries"`
+	Version    int                      `json:"version"`
+	Generation int                      `json:"generation"`
+	Created    time.Time                `json:"created"`
+	Updated    time.Time                `json:"updated"`
+	Entries    map[string]ManifestEntry `json:"entries"`
 }
 
 // ManifestVerifyResult contains the outcome of a full manifest integrity check.
@@ -74,6 +75,7 @@ func writeManifest(vaultDir string, m *Manifest, identity *age.X25519Identity) e
 	if m.Version == 0 {
 		m.Version = 1
 	}
+	m.Generation++
 	m.Updated = time.Now().UTC()
 
 	plaintext, err := json.Marshal(m)
