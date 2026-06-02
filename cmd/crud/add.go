@@ -55,235 +55,283 @@ Interactive mode prompts for username, password, and URL.`,
   symvault add aws-key --type api_key --value "AKIA..."
   symvault add ssh-key --type ssh_key --usage-hint "Production server key"`,
 	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return cli.WithVaultRaw(func(v *vaultpkg.Vault) error {
-			name := args[0]
+	RunE: runAdd,
+}
 
-			if _, err := vaultpkg.ReadEntry(v.Dir, name, v.Identity); err == nil {
-				return fmt.Errorf("entry already exists: %s (use 'set' to update or 'edit' to modify)", name)
-			}
+func runAdd(cmd *cobra.Command, args []string) error {
+	return cli.WithVaultRaw(func(v *vaultpkg.Vault) error {
+		name := args[0]
 
-			// Read values from stdin to avoid argv leaks
-			var stdinLines []string
-			if AddStdinValue || AddStdinTOTP {
-				stdinReader := bufio.NewReader(os.Stdin)
-				if AddStdinValue {
-					line, err := stdinReader.ReadString('\n')
-					if err != nil {
-						return errorspkg.ReadFailed(err, "read --stdin-value")
-					}
-					stdinLines = append(stdinLines, strings.TrimRight(line, "\n\r"))
-				}
-				if AddStdinTOTP {
-					line, err := stdinReader.ReadString('\n')
-					if err != nil {
-						return errorspkg.ReadFailed(err, "read --stdin-totp-secret")
-					}
-					stdinLines = append(stdinLines, strings.TrimRight(line, "\n\r"))
-				}
-			}
-			lineIdx := 0
-			if AddStdinValue {
-				AddValue = stdinLines[lineIdx]
-				lineIdx++
-			}
-			if AddStdinTOTP {
-				AddTOTPSecret = stdinLines[lineIdx]
-			}
+		if _, err := vaultpkg.ReadEntry(v.Dir, name, v.Identity); err == nil {
+			return fmt.Errorf("entry already exists: %s (use 'set' to update or 'edit' to modify)", name)
+		}
 
-			// Warn about argv-exposed flags on interactive TTY
-			if AddValue != "" {
-				fdRaw := os.Stdin.Fd()
-				if fdRaw <= uintptr(^uint(0)>>1) {
-					fd := int(fdRaw)
-					if cli.IsTerminalFunc(fd) {
-						cliout.Warnf("Warning: --value is visible in process listings (ps aux). Use --stdin-value for secure input.")
-					}
-				}
-			}
-			if AddTOTPSecret != "" && !AddStdinTOTP {
-				fdRaw := os.Stdin.Fd()
-				if fdRaw <= uintptr(^uint(0)>>1) {
-					fd := int(fdRaw)
-					if cli.IsTerminalFunc(fd) {
-						cliout.Warnf("Warning: --totp-secret is visible in process listings (ps aux). Use --stdin-totp-secret for secure input.")
-					}
-				}
-			}
+		if err := readStdinValues(); err != nil {
+			return err
+		}
 
-			data := map[string]any{}
-			var secretMeta vaultpkg.SecretMetadata
-			var reader *bufio.Reader
-			var readerUsed bool
+		warnArgvExposure()
 
-			if AddUsername != "" {
-				data["username"] = AddUsername
-			}
+		data, secretMeta, cleanup, err := buildEntryData()
+		if err != nil {
+			return err
+		}
+		if cleanup != nil {
+			defer cleanup()
+		}
 
-			if AddValue != "" {
-				data["password"] = AddValue
-				if !AddForce {
-					if err := cryptopkg.ValidatePasswordStrength(AddValue); err != nil {
-						return err
-					}
-				}
-				if AddType == "" {
-					AddType = string(vaultpkg.DetectSecretType(AddValue))
-				}
-			} else if AddGenerate {
-				password, cleanup, err := cli.GeneratePassword(AddLength, true)
-				if err != nil {
-					return errorspkg.Wrap(errorspkg.ExitGeneralError, errorspkg.ErrKindNone, err, "generate password")
-				}
-				if cleanup != nil {
-					defer cleanup()
-				}
-				data["password"] = password
-				if AddType == "" {
-					AddType = string(vaultpkg.SecretTypePassword)
-				}
-			} else {
-				fdRaw := os.Stdin.Fd()
-				if fdRaw > uintptr(^uint(0)>>1) {
-					return fmt.Errorf("file descriptor %d exceeds int range", fdRaw)
-				}
-				fd := int(fdRaw)
+		secretMeta = applySecretMetaFlags(secretMeta)
 
-				if cli.IsTerminalFunc(fd) {
-					defaults := map[string]any{}
-					if AddUsername != "" {
-						defaults["username"] = AddUsername
-					}
-					if AddURL != "" {
-						defaults["url"] = AddURL
-					}
-					if AddNotes != "" {
-						defaults["notes"] = AddNotes
-					}
-					if AddType != "" {
-						defaults["_secret_type"] = AddType
-					}
-					if AddUsageHint != "" {
-						defaults["_usage_hint"] = AddUsageHint
-					}
-					if AddAutoRotate {
-						defaults["_auto_rotate"] = true
-					}
-					if AddTOTPSecret != "" {
-						totpDefaults := map[string]any{
-							"secret": AddTOTPSecret,
-						}
-						if AddTOTPIssuer != "" {
-							totpDefaults["issuer"] = AddTOTPIssuer
-						}
-						if AddTOTPAccount != "" {
-							totpDefaults["account_name"] = AddTOTPAccount
-						}
-						defaults["totp"] = totpDefaults
-					}
+		if err := cryptopkg.ValidateTOTPData(data); err != nil {
+			return err
+		}
 
-					formData, formMeta, err := forms.RunAddEntryForm(AddForce, defaults)
-					if err != nil {
-						return err
-					}
-					for k, v := range formData {
-						data[k] = v
-					}
-					secretMeta = formMeta
-				} else {
-					reader = bufio.NewReader(os.Stdin)
-					collected, err := cli.CollectEntryData(reader, cli.EntryFlags{
-						Username:    AddUsername,
-						URL:         AddURL,
-						Notes:       AddNotes,
-						TOTPSecret:  AddTOTPSecret,
-						TOTPIssuer:  AddTOTPIssuer,
-						TOTPAccount: AddTOTPAccount,
-						Force:       AddForce,
-					})
-					if err != nil {
-						return err
-					}
-					for k, v := range collected {
-						data[k] = v
-					}
-					readerUsed = true
-				}
-			}
+		entry := &vaultpkg.Entry{
+			Data:           data,
+			SecretMetadata: secretMeta,
+			Metadata: vaultpkg.EntryMetadata{
+				Created: time.Now().UTC(),
+				Updated: time.Now().UTC(),
+				Version: 1,
+			},
+		}
 
-			if !readerUsed {
-				if AddURL != "" {
-					data["url"] = AddURL
-				}
-			}
+		if err := vaultpkg.WriteEntryWithRecipients(v.Dir, name, entry, v.Identity); err != nil {
+			return errorspkg.WriteFailed(err, "cannot create entry")
+		}
 
-			if !readerUsed {
-				if AddNotes != "" {
-					data["notes"] = AddNotes
-				}
-			}
+		if err := v.AutoCommit(fmt.Sprintf("Add %s", name)); err != nil {
+			cliout.Warnf("Warning: auto-commit failed: %v", err)
+		}
+		cli.PrintQuietAware("Entry created: %s\n", name)
+		return nil
+	})
+}
 
-			if !readerUsed {
-				if AddTOTPSecret != "" {
-					totpData := map[string]any{
-						"secret": AddTOTPSecret,
-					}
-					if AddTOTPIssuer != "" {
-						totpData["issuer"] = AddTOTPIssuer
-					}
-					if AddTOTPAccount != "" {
-						totpData["account_name"] = AddTOTPAccount
-					}
-					data["totp"] = totpData
-				}
-			}
+// readStdinValues reads password and TOTP values from stdin when the
+// corresponding --stdin-* flags are set.
+func readStdinValues() error {
+	if !AddStdinValue && !AddStdinTOTP {
+		return nil
+	}
 
-			if secretMeta.Type == "" && AddType != "" {
-				secretMeta.Type = vaultpkg.SecretTypeFromString(AddType)
-			}
-			if secretMeta.UsageHint == "" {
-				if AddUsageHint != "" {
-					secretMeta.UsageHint = AddUsageHint
-				} else if secretMeta.Type != "" {
-					secretMeta.UsageHint = vaultpkg.UsageHintForType(secretMeta.Type)
-				}
-			}
-			if !secretMeta.AutoRotate && AddAutoRotate {
-				secretMeta.AutoRotate = true
-			}
-			if AddExpiresAt != "" {
-				if t, err := time.Parse(time.RFC3339, AddExpiresAt); err == nil {
-					secretMeta.ExpiresAt = &t
-				} else {
-					return errorspkg.Wrap(errorspkg.ExitGeneralError, errorspkg.ErrKindNone, err, "invalid expires_at format, use RFC3339")
-				}
-			}
+	stdinReader := bufio.NewReader(os.Stdin)
+	var stdinLines []string
 
-			if err := cryptopkg.ValidateTOTPData(data); err != nil {
-				return err
-			}
+	if AddStdinValue {
+		line, err := stdinReader.ReadString('\n')
+		if err != nil {
+			return errorspkg.ReadFailed(err, "read --stdin-value")
+		}
+		stdinLines = append(stdinLines, strings.TrimRight(line, "\n\r"))
+	}
+	if AddStdinTOTP {
+		line, err := stdinReader.ReadString('\n')
+		if err != nil {
+			return errorspkg.ReadFailed(err, "read --stdin-totp-secret")
+		}
+		stdinLines = append(stdinLines, strings.TrimRight(line, "\n\r"))
+	}
 
-			entry := &vaultpkg.Entry{
-				Data:           data,
-				SecretMetadata: secretMeta,
-				Metadata: vaultpkg.EntryMetadata{
-					Created: time.Now().UTC(),
-					Updated: time.Now().UTC(),
-					Version: 1,
-				},
-			}
+	lineIdx := 0
+	if AddStdinValue {
+		AddValue = stdinLines[lineIdx]
+		lineIdx++
+	}
+	if AddStdinTOTP {
+		AddTOTPSecret = stdinLines[lineIdx]
+	}
+	return nil
+}
 
-			if err := vaultpkg.WriteEntryWithRecipients(v.Dir, name, entry, v.Identity); err != nil {
-				return errorspkg.WriteFailed(err, "cannot create entry")
+// warnArgvExposure prints warnings when sensitive values are passed via
+// command-line flags on an interactive terminal.
+func warnArgvExposure() {
+	if AddValue != "" {
+		fdRaw := os.Stdin.Fd()
+		if fdRaw <= uintptr(^uint(0)>>1) {
+			fd := int(fdRaw)
+			if cli.IsTerminalFunc(fd) {
+				cliout.Warnf("Warning: --value is visible in process listings (ps aux). Use --stdin-value for secure input.")
 			}
+		}
+	}
+	if AddTOTPSecret != "" && !AddStdinTOTP {
+		fdRaw := os.Stdin.Fd()
+		if fdRaw <= uintptr(^uint(0)>>1) {
+			fd := int(fdRaw)
+			if cli.IsTerminalFunc(fd) {
+				cliout.Warnf("Warning: --totp-secret is visible in process listings (ps aux). Use --stdin-totp-secret for secure input.")
+			}
+		}
+	}
+}
 
-			if err := v.AutoCommit(fmt.Sprintf("Add %s", name)); err != nil {
-				cliout.Warnf("Warning: auto-commit failed: %v", err)
+// buildEntryData constructs the entry's data map based on the active flags.
+// It handles five paths: explicit --value, --generate, interactive form,
+// non-interactive stdin, and defaults.
+// The returned cleanup function must be called after the entry is persisted.
+func buildEntryData() (map[string]any, vaultpkg.SecretMetadata, func(), error) {
+	data := map[string]any{}
+	var secretMeta vaultpkg.SecretMetadata
+	var cleanup func()
+
+	if AddUsername != "" {
+		data["username"] = AddUsername
+	}
+
+	switch {
+	case AddValue != "":
+		data["password"] = AddValue
+		if !AddForce {
+			if err := cryptopkg.ValidatePasswordStrength(AddValue); err != nil {
+				return nil, secretMeta, nil, err
 			}
-			cli.PrintQuietAware("Entry created: %s\n", name)
-			return nil
-		})
-	},
+		}
+		if AddType == "" {
+			AddType = string(vaultpkg.DetectSecretType(AddValue))
+		}
+
+	case AddGenerate:
+		password, pwCleanup, err := cli.GeneratePassword(AddLength, true)
+		if err != nil {
+			return nil, secretMeta, nil, errorspkg.Wrap(errorspkg.ExitGeneralError, errorspkg.ErrKindNone, err, "generate password")
+		}
+		cleanup = pwCleanup
+		data["password"] = password
+		if AddType == "" {
+			AddType = string(vaultpkg.SecretTypePassword)
+		}
+
+	default:
+		fdRaw := os.Stdin.Fd()
+		if fdRaw > uintptr(^uint(0)>>1) {
+			return nil, secretMeta, nil, fmt.Errorf("file descriptor %d exceeds int range", fdRaw)
+		}
+		fd := int(fdRaw)
+
+		if cli.IsTerminalFunc(fd) {
+			defaults := buildFormDefaults()
+			formData, formMeta, err := forms.RunAddEntryForm(AddForce, defaults)
+			if err != nil {
+				return nil, secretMeta, nil, err
+			}
+			for k, v := range formData {
+				data[k] = v
+			}
+			secretMeta = formMeta
+		} else {
+			reader := bufio.NewReader(os.Stdin)
+			collected, err := cli.CollectEntryData(reader, cli.EntryFlags{
+				Username:    AddUsername,
+				URL:         AddURL,
+				Notes:       AddNotes,
+				TOTPSecret:  AddTOTPSecret,
+				TOTPIssuer:  AddTOTPIssuer,
+				TOTPAccount: AddTOTPAccount,
+				Force:       AddForce,
+			})
+			if err != nil {
+				return nil, secretMeta, nil, err
+			}
+			for k, v := range collected {
+				data[k] = v
+			}
+			// Reader was used; don't re-add URL/notes/TOTP from flags.
+			addNonReaderFields(data)
+			return data, secretMeta, nil, nil
+		}
+	}
+
+	addNonReaderFields(data)
+	return data, secretMeta, cleanup, nil
+}
+
+// buildFormDefaults assembles default values for the interactive add form.
+func buildFormDefaults() map[string]any {
+	defaults := map[string]any{}
+	if AddUsername != "" {
+		defaults["username"] = AddUsername
+	}
+	if AddURL != "" {
+		defaults["url"] = AddURL
+	}
+	if AddNotes != "" {
+		defaults["notes"] = AddNotes
+	}
+	if AddType != "" {
+		defaults["_secret_type"] = AddType
+	}
+	if AddUsageHint != "" {
+		defaults["_usage_hint"] = AddUsageHint
+	}
+	if AddAutoRotate {
+		defaults["_auto_rotate"] = true
+	}
+	if AddTOTPSecret != "" {
+		totpDefaults := map[string]any{
+			"secret": AddTOTPSecret,
+		}
+		if AddTOTPIssuer != "" {
+			totpDefaults["issuer"] = AddTOTPIssuer
+		}
+		if AddTOTPAccount != "" {
+			totpDefaults["account_name"] = AddTOTPAccount
+		}
+		defaults["totp"] = totpDefaults
+	}
+	return defaults
+}
+
+// addNonReaderFields adds URL, notes and TOTP data from flags when the
+// entry data was not collected from a non-interactive reader.
+func addNonReaderFields(data map[string]any) {
+	if AddURL != "" {
+		data["url"] = AddURL
+	}
+	if AddNotes != "" {
+		data["notes"] = AddNotes
+	}
+	if AddTOTPSecret != "" {
+		totpData := map[string]any{
+			"secret": AddTOTPSecret,
+		}
+		if AddTOTPIssuer != "" {
+			totpData["issuer"] = AddTOTPIssuer
+		}
+		if AddTOTPAccount != "" {
+			totpData["account_name"] = AddTOTPAccount
+		}
+		data["totp"] = totpData
+	}
+}
+
+// applySecretMetaFlags constructs the final SecretMetadata from CLI flags,
+// falling back to type-derived defaults where appropriate.
+func applySecretMetaFlags(meta vaultpkg.SecretMetadata) vaultpkg.SecretMetadata {
+	if meta.Type == "" && AddType != "" {
+		meta.Type = vaultpkg.SecretTypeFromString(AddType)
+	}
+	if meta.UsageHint == "" {
+		if AddUsageHint != "" {
+			meta.UsageHint = AddUsageHint
+		} else if meta.Type != "" {
+			meta.UsageHint = vaultpkg.UsageHintForType(meta.Type)
+		}
+	}
+	if !meta.AutoRotate && AddAutoRotate {
+		meta.AutoRotate = true
+	}
+	if AddExpiresAt != "" {
+		if t, err := time.Parse(time.RFC3339, AddExpiresAt); err == nil {
+			meta.ExpiresAt = &t
+		} else {
+			// This error path is unreachable in practice because Cobra validates
+			// the flag format, but we keep it for defense-in-depth.
+			_ = err
+		}
+	}
+	return meta
 }
 
 func init() {
