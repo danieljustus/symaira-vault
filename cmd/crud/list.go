@@ -1,12 +1,11 @@
 package crud
 
 import (
-	"fmt"
-
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 	"github.com/danieljustus/symaira-vault/internal/ui/render"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 	"github.com/danieljustus/symaira-vault/internal/vault/taint"
@@ -43,7 +42,7 @@ var listCmd = &cobra.Command{
 
 			entries, err := cli.ListEntries(v, prefix)
 			if err != nil {
-				return fmt.Errorf("cannot list entries: %w", err)
+				return errorspkg.ReadFailed(err, "cannot list entries")
 			}
 
 			if cli.OutputFormat != "text" {

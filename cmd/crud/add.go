@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	cryptopkg "github.com/danieljustus/symaira-vault/internal/crypto"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 	"github.com/danieljustus/symaira-vault/internal/ui/forms"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
@@ -69,14 +70,14 @@ Interactive mode prompts for username, password, and URL.`,
 				if AddStdinValue {
 					line, err := stdinReader.ReadString('\n')
 					if err != nil {
-						return fmt.Errorf("read --stdin-value: %w", err)
+						return errorspkg.ReadFailed(err, "read --stdin-value")
 					}
 					stdinLines = append(stdinLines, strings.TrimRight(line, "\n\r"))
 				}
 				if AddStdinTOTP {
 					line, err := stdinReader.ReadString('\n')
 					if err != nil {
-						return fmt.Errorf("read --stdin-totp-secret: %w", err)
+						return errorspkg.ReadFailed(err, "read --stdin-totp-secret")
 					}
 					stdinLines = append(stdinLines, strings.TrimRight(line, "\n\r"))
 				}
@@ -132,7 +133,7 @@ Interactive mode prompts for username, password, and URL.`,
 			} else if AddGenerate {
 				password, cleanup, err := cli.GeneratePassword(AddLength, true)
 				if err != nil {
-					return fmt.Errorf("generate password: %w", err)
+					return errorspkg.Wrap(errorspkg.ExitGeneralError, errorspkg.ErrKindNone, err, "generate password")
 				}
 				if cleanup != nil {
 					defer cleanup()
@@ -254,7 +255,7 @@ Interactive mode prompts for username, password, and URL.`,
 				if t, err := time.Parse(time.RFC3339, AddExpiresAt); err == nil {
 					secretMeta.ExpiresAt = &t
 				} else {
-					return fmt.Errorf("invalid expires_at format, use RFC3339: %w", err)
+					return errorspkg.Wrap(errorspkg.ExitGeneralError, errorspkg.ErrKindNone, err, "invalid expires_at format, use RFC3339")
 				}
 			}
 
@@ -273,7 +274,7 @@ Interactive mode prompts for username, password, and URL.`,
 			}
 
 			if err := vaultpkg.WriteEntryWithRecipients(v.Dir, name, entry, v.Identity); err != nil {
-				return fmt.Errorf("cannot create entry: %w", err)
+				return errorspkg.WriteFailed(err, "cannot create entry")
 			}
 
 			if err := v.AutoCommit(fmt.Sprintf("Add %s", name)); err != nil {

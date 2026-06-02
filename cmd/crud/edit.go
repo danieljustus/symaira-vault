@@ -44,7 +44,7 @@ The editor is determined by the --editor flag or EDITOR environment variable (de
 
 			entry, err := vaultpkg.ReadEntry(v.Dir, name, v.Identity)
 			if err != nil {
-				return errorspkg.NewCLIError(errorspkg.ExitNotFound, fmt.Sprintf("entry not found: %s", name), errorspkg.ErrEntryNotFound)
+				return errorspkg.NotFound("entry not found: %s", name)
 			}
 
 			editor := EditorFlag
@@ -57,18 +57,18 @@ The editor is determined by the --editor flag or EDITOR environment variable (de
 
 			// Validate editor exists in PATH before executing (G204 mitigation)
 			if _, lookErr := exec.LookPath(editor); lookErr != nil {
-				return fmt.Errorf("editor %q not found in PATH: %w", editor, lookErr)
+				return errorspkg.Wrap(errorspkg.ExitGeneralError, errorspkg.ErrKindNone, lookErr, "editor %q not found in PATH", editor)
 			}
 
 			var tmpFile *os.File
 			tmpFile, err = OSCreateTemp("", "symvault-edit-*.json")
 			if err != nil {
-				return fmt.Errorf("cannot create temp file: %w", err)
+				return errorspkg.WriteFailed(err, "cannot create temp file")
 			}
 			if err = os.Chmod(tmpFile.Name(), 0o600); err != nil {
 				_ = tmpFile.Close()
 				_ = os.Remove(tmpFile.Name())
-				return fmt.Errorf("cannot set temp file permissions: %w", err)
+				return errorspkg.WriteFailed(err, "cannot set temp file permissions")
 			}
 			defer func() { _ = os.Remove(tmpFile.Name()) }()
 
@@ -76,10 +76,10 @@ The editor is determined by the --editor flag or EDITOR environment variable (de
 			encoder.SetIndent("", "  ")
 			if encErr := encoder.Encode(entry); encErr != nil {
 				_ = tmpFile.Close()
-				return fmt.Errorf("cannot encode entry: %w", encErr)
+				return errorspkg.WriteFailed(encErr, "cannot encode entry")
 			}
 			if closeErr := tmpFile.Close(); closeErr != nil {
-				return fmt.Errorf("cannot close temp file: %w", closeErr)
+				return errorspkg.WriteFailed(closeErr, "cannot close temp file")
 			}
 
 			//#nosec G204 -- editor path validated via exec.LookPath above
@@ -90,12 +90,12 @@ The editor is determined by the --editor flag or EDITOR environment variable (de
 			editorCmd.Stderr = os.Stderr
 
 			if runErr := editorCmd.Run(); runErr != nil {
-				return fmt.Errorf("editor failed: %w", runErr)
+				return errorspkg.Wrap(errorspkg.ExitGeneralError, errorspkg.ErrKindNone, runErr, "editor failed")
 			}
 
 			content, err := os.ReadFile(tmpFile.Name())
 			if err != nil {
-				return fmt.Errorf("cannot read edited file: %w", err)
+				return errorspkg.ReadFailed(err, "cannot read edited file")
 			}
 
 			content = bytes.TrimSpace(content)
@@ -105,7 +105,7 @@ The editor is determined by the --editor flag or EDITOR environment variable (de
 
 			var updatedEntry vaultpkg.Entry
 			if err := json.Unmarshal(content, &updatedEntry); err != nil {
-				return fmt.Errorf("invalid JSON: %w", err)
+				return errorspkg.Wrap(errorspkg.ExitGeneralError, errorspkg.ErrKindNone, err, "invalid JSON")
 			}
 
 			if updatedEntry.Data == nil {
@@ -113,7 +113,7 @@ The editor is determined by the --editor flag or EDITOR environment variable (de
 			}
 
 			if err := vaultpkg.WriteEntryWithRecipients(v.Dir, name, &updatedEntry, v.Identity); err != nil {
-				return fmt.Errorf("cannot save entry: %w", err)
+				return errorspkg.WriteFailed(err, "cannot save entry")
 			}
 
 			if err := v.AutoCommit(fmt.Sprintf("Edit %s", name)); err != nil {

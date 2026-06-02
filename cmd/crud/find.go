@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 	"github.com/danieljustus/symaira-vault/internal/ui/render"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 	"github.com/danieljustus/symaira-vault/internal/vault/taint"
@@ -59,7 +60,7 @@ var findCmd = &cobra.Command{
 
 			matches, err := cli.FindEntries(v, args[0], vaultpkg.FindOptions{MaxWorkers: workers})
 			if err != nil {
-				return fmt.Errorf("search failed: %w", err)
+				return errorspkg.ReadFailed(err, "search failed")
 			}
 
 			if len(matches) == 0 {
