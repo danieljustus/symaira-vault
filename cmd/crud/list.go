@@ -12,13 +12,6 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/vault/taint"
 )
 
-type listEntryOutput struct {
-	Path       string `json:"path"`
-	Type       string `json:"type,omitempty"`
-	UsageHint  string `json:"usage_hint,omitempty"`
-	AutoRotate bool   `json:"auto_rotate,omitempty"`
-}
-
 var listCmd = &cobra.Command{
 	Use:               "list [prefix]",
 	Aliases:           []string{"ls"},
@@ -47,9 +40,9 @@ var listCmd = &cobra.Command{
 			}
 
 			if cli.OutputFormat != "text" {
-				outputs := make([]listEntryOutput, 0, len(entries))
+				outputs := make([]vaultpkg.ListEntryInfo, 0, len(entries))
 				for _, path := range entries {
-					output := listEntryOutput{Path: path}
+					output := vaultpkg.ListEntryInfo{Path: path}
 					entry, err := cli.GetEntry(v, path)
 					if err == nil {
 						output.Type = string(entry.SecretMetadata.Type)

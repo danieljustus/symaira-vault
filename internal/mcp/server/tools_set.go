@@ -3,11 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"log/slog"
-	"os"
-	"time"
 
 	"github.com/danieljustus/symaira-vault/internal/crypto"
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
@@ -53,7 +49,6 @@ func (s *Server) handleSet(ctx context.Context, req mcp.CallToolRequest) (*mcp.C
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	// Prepare the partial data to merge
 	partialData := make(map[string]any)
 	if field == "totp" {
 		var totpData map[string]any
@@ -83,86 +78,22 @@ func (s *Server) handleSet(ctx context.Context, req mcp.CallToolRequest) (*mcp.C
 		}
 	}
 
-	if err := s.upsertEntry(ctx, path, partialData, "set"); err != nil {
-		return nil, err
+	if err := vaultpkg.Ops.UpsertEntry(s.vault, path, partialData, "set", nil); err != nil {
+		s.logAudit(ctx, "set", path, false)
+		metrics.RecordVaultOperation("write", "error")
+		mapped, mappedErr := vaultServiceErrorResult(err)
+		if mapped != nil {
+			return mapped, nil
+		}
+		if mappedErr != nil {
+			return nil, mappedErr
+		}
+		return nil, fmt.Errorf("vault operation failed: %w", err)
 	}
 
 	s.logAudit(ctx, "set", path, true)
 	metrics.RecordVaultOperation("write", "success")
 	return mcp.NewToolResultText(fmt.Sprintf("Set %s.%s = ***", path, field)), nil
-}
-
-func (s *Server) upsertEntry(ctx context.Context, path string, partialData map[string]any, action string) error {
-	_, span := metrics.StartSpan(ctx, "vault.SetEntry")
-	defer span.End()
-
-	// Infer field name from single-key data maps (typical for set_entry_field).
-	field := ""
-	if len(partialData) == 1 {
-		for k := range partialData {
-			field = k
-			break
-		}
-	}
-
-	existing, readErr := vaultpkg.ReadEntry(s.vault.Dir, path, s.vault.Identity)
-	switch {
-	case readErr == nil && existing != nil:
-		// Entry exists — merge new data into it
-		existing.PendingWrite = &vaultpkg.WriteRecord{Field: field, Action: action}
-		if _, err := vaultpkg.MergeEntryWithRecipients(s.vault.Dir, path, partialData, s.vault.Identity); err != nil {
-			s.logAudit(ctx, action, path, false)
-			metrics.RecordVaultOperation("write", "error")
-			_, mappedErr := vaultServiceErrorResult(err)
-			if mappedErr != nil {
-				return mappedErr
-			}
-			return fmt.Errorf("vault operation failed: %w", err)
-		}
-	case errors.Is(readErr, os.ErrNotExist):
-		// New entry
-		entry := &vaultpkg.Entry{
-			Data: partialData,
-			Metadata: vaultpkg.EntryMetadata{
-				Created: time.Now().UTC(),
-				Updated: time.Now().UTC(),
-				Version: 0,
-			},
-			PendingWrite: &vaultpkg.WriteRecord{Field: field, Action: action},
-		}
-		if pwd, ok := partialData["password"]; ok {
-			if pwdStr, ok := pwd.(string); ok && pwdStr != "" {
-				strength := crypto.AssessPasswordStrength(pwdStr)
-				if strength.Weak {
-					entry.AddTag(vaultpkg.TagWeakPassword)
-				}
-			}
-		}
-		if err := vaultpkg.WriteEntryWithRecipients(s.vault.Dir, path, entry, s.vault.Identity); err != nil {
-			s.logAudit(ctx, action, path, false)
-			metrics.RecordVaultOperation("write", "error")
-			_, mappedErr := vaultServiceErrorResult(err)
-			if mappedErr != nil {
-				return mappedErr
-			}
-			return fmt.Errorf("vault operation failed: %w", err)
-		}
-	default:
-		s.logAudit(ctx, action, path, false)
-		metrics.RecordVaultOperation("write", "error")
-		_, mappedErr := vaultServiceErrorResult(readErr)
-		if mappedErr != nil {
-			return mappedErr
-		}
-		return fmt.Errorf("vault operation failed: %w", readErr)
-	}
-
-	// Auto-commit failure is a warning, not an error.
-	if acErr := s.vault.AutoCommit(fmt.Sprintf("Update %s", path)); acErr != nil {
-		slog.Default().Warn("auto-commit failed", "error", acErr)
-	}
-	vaultpkg.InvalidateListCache(s.vault.Dir)
-	return nil
 }
 
 func init() {

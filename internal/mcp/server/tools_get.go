@@ -83,7 +83,7 @@ func (s *Server) handleGet(ctx context.Context, req mcp.CallToolRequest) (*mcp.C
 	}
 
 	_, span := metrics.StartSpan(ctx, "vault.ReadEntry")
-	entry, err := vaultpkg.ReadEntry(s.vault.Dir, path, s.vault.Identity)
+	entry, err := vaultpkg.Ops.GetEntry(s.vault, path)
 	span.End()
 	if err != nil {
 		s.logAudit(ctx, "get", path, false)
@@ -137,7 +137,7 @@ func (s *Server) handleGetValue(ctx context.Context, req mcp.CallToolRequest) (*
 	}
 
 	_, span := metrics.StartSpan(ctx, "vault.ReadEntry")
-	entry, err := vaultpkg.ReadEntry(s.vault.Dir, path, s.vault.Identity)
+	entry, err := vaultpkg.Ops.GetEntry(s.vault, path)
 	span.End()
 	if err != nil {
 		s.logAudit(ctx, "get_value", path, false)
@@ -241,7 +241,7 @@ func (s *Server) handleGetMetadata(ctx context.Context, req mcp.CallToolRequest)
 		return nil, fmt.Errorf("access denied: path %q outside allowed scope", path)
 	}
 
-	entry, err := vaultpkg.ReadEntry(s.vault.Dir, path, s.vault.Identity)
+	entry, err := vaultpkg.Ops.GetEntry(s.vault, path)
 	if err != nil {
 		s.logAudit(ctx, "get_metadata", path, false)
 		return vaultServiceErrorResult(err)

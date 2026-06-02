@@ -10,15 +10,6 @@ import (
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
-type listEntrySummary struct {
-	Path       string `json:"path"`
-	Type       string `json:"type,omitempty"`
-	UsageHint  string `json:"usage_hint,omitempty"`
-	AutoRotate bool   `json:"auto_rotate,omitempty"`
-	HasValue   bool   `json:"has_value,omitempty"`
-	FieldCount int    `json:"field_count,omitempty"`
-}
-
 func (s *Server) handleList(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	prefix, err := req.RequireString("prefix")
 	if err != nil {
@@ -32,7 +23,7 @@ func (s *Server) handleList(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 	}
 
 	_, span := metrics.StartSpan(ctx, "vault.List")
-	paths, err := vaultpkg.List(s.vault.Dir, prefix)
+	paths, err := vaultpkg.Ops.ListEntries(s.vault, prefix)
 	span.End()
 	if err != nil {
 		s.logAudit(ctx, "list", prefix, false)
@@ -53,14 +44,14 @@ func (s *Server) handleList(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 		return mcp.NewToolResultText(string(result)), nil
 	}
 
-	summaries := make([]listEntrySummary, 0, len(paths))
+	summaries := make([]vaultpkg.ListEntryInfo, 0, len(paths))
 	for _, path := range paths {
-		entry, getErr := vaultpkg.ReadEntry(s.vault.Dir, path, s.vault.Identity)
+		entry, getErr := vaultpkg.Ops.GetEntry(s.vault, path)
 		if getErr != nil {
 			continue
 		}
 
-		summary := listEntrySummary{
+		summary := vaultpkg.ListEntryInfo{
 			Path:       globalChokepoint.SanitizeForMCP(path),
 			Type:       string(entry.SecretMetadata.Type),
 			UsageHint:  globalChokepoint.SanitizeForMCP(entry.SecretMetadata.UsageHint),
