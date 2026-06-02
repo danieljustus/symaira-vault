@@ -39,6 +39,7 @@ func resetCommandTestState() {
 	resetCommandFlagGlobals()
 	resetCobraCommand(rootCmd)
 	resetCommandEnv()
+	cli.ActiveContext = nil
 	cli.OsExit = os.Exit
 	mcpcmd.ServeSignalNotify = signal.Notify
 	mcpcmd.RunStdioServerFunc = func(ctx context.Context, vault *vaultpkg.Vault, agentName string) error {
