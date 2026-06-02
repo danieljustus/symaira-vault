@@ -71,7 +71,6 @@ type indexDoc struct {
 	Salt []byte `json:"s,omitempty"`
 }
 
-
 var globalIndex EncryptedIndex
 
 // Build constructs the encrypted search index by scanning all entries in the
@@ -96,8 +95,8 @@ func (idx *EncryptedIndex) Build(vaultDir string, identity *age.X25519Identity) 
 	}
 
 	salt := make([]byte, indexSaltLen)
-	if _, err := rand.Read(salt); err != nil {
-		return err
+	if _, randErr := rand.Read(salt); randErr != nil {
+		return randErr
 	}
 	doc.Salt = salt
 
