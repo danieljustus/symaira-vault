@@ -74,9 +74,9 @@ func (s *Server) handleCopyToClipboard(ctx context.Context, req mcp.CallToolRequ
 	}
 
 	if autoClearDuration > 0 {
-		go clipboard.StartAutoClear(autoClearDuration, func() {
+		s.startClipboardAutoClear(autoClearDuration, func() {
 			_ = clip.Copy("")
-		}, make(chan struct{}))
+		})
 	}
 
 	s.logAudit(ctx, "copy_to_clipboard", path, true)

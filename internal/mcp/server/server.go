@@ -18,6 +18,7 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/anomaly"
 	"github.com/danieljustus/symaira-vault/internal/audit"
 	"github.com/danieljustus/symaira-vault/internal/authguard"
+	"github.com/danieljustus/symaira-vault/internal/clipboard"
 	"github.com/danieljustus/symaira-vault/internal/config"
 	transport "github.com/danieljustus/symaira-vault/internal/mcp/transport"
 	"github.com/danieljustus/symaira-vault/internal/notify"
@@ -88,6 +89,8 @@ type Server struct {
 	anomalyDetector *anomaly.AnomalyDetector
 
 	biometricChallenger *authguard.Challenger
+
+	clipboardCancel chan struct{}
 }
 
 // SessionID returns the server's unique session identifier.
@@ -276,7 +279,13 @@ func (s *Server) invalidateApprovalCache() {
 
 // Close shuts down the server and closes the audit log.
 func (s *Server) Close() error {
-	if s == nil || s.auditLog == nil {
+	if s == nil {
+		return nil
+	}
+	if s.clipboardCancel != nil {
+		close(s.clipboardCancel)
+	}
+	if s.auditLog == nil {
 		return nil
 	}
 	return s.auditLog.Close()
@@ -285,6 +294,14 @@ func (s *Server) Close() error {
 // getBiometricChallenger returns the server's biometric challenger, falling
 // back to the default if none is configured. Tests may set biometryChallenger
 // to a mock to avoid real system prompts.
+func (s *Server) startClipboardAutoClear(duration int, clearFn func()) {
+	if s.clipboardCancel != nil {
+		close(s.clipboardCancel)
+	}
+	s.clipboardCancel = make(chan struct{})
+	go clipboard.StartAutoClear(duration, clearFn, s.clipboardCancel)
+}
+
 func (s *Server) getBiometricChallenger() *authguard.Challenger {
 	if s != nil && s.biometricChallenger != nil {
 		return s.biometricChallenger
