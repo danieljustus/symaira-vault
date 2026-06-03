@@ -27,7 +27,6 @@ func TestEncryptedIndexBuildAndMatch(t *testing.T) {
 		"password": "s3cr3t-aws",
 	})
 
-
 	idx := &EncryptedIndex{}
 	if err := idx.Build(vaultDir, identity); err != nil {
 		t.Fatalf("Build() error = %v", err)
@@ -104,7 +103,6 @@ func TestEncryptedIndexInvalidate(t *testing.T) {
 		"username": "alice",
 	})
 
-
 	idx := &EncryptedIndex{}
 	if err := idx.Build(vaultDir, identity); err != nil {
 		t.Fatalf("Build() error = %v", err)
@@ -137,7 +135,6 @@ func TestEncryptedIndexRebuildAfterWrite(t *testing.T) {
 	mustWriteEntry(t, vaultDir, identity, "github.com/user", map[string]interface{}{
 		"username": "alice",
 	})
-
 
 	if err := globalIndex.Build(vaultDir, identity); err != nil {
 		t.Fatalf("Build() error = %v", err)
@@ -198,7 +195,6 @@ func TestEncryptedIndexIntegrationWithFind(t *testing.T) {
 		"email": "bob@example.com",
 	})
 
-
 	got, err := FindWithOptions(vaultDir, "alice", FindOptions{MaxWorkers: 0}, identity)
 	if err != nil {
 		t.Fatalf("FindWithOptions() error = %v", err)
@@ -233,7 +229,6 @@ func TestEncryptedIndexWithNestedData(t *testing.T) {
 			map[string]interface{}{"name": "admin", "role": "owner"},
 		},
 	})
-
 
 	idx := &EncryptedIndex{}
 	if err := idx.Build(vaultDir, identity); err != nil {
@@ -272,7 +267,6 @@ func TestEncryptedIndexUnreadableEntry(t *testing.T) {
 		t.Fatalf("WriteFile error = %v", err)
 	}
 
-
 	idx := &EncryptedIndex{}
 	if err := idx.Build(vaultDir, identity); err != nil {
 		t.Fatalf("Build() error = %v", err)
@@ -296,7 +290,6 @@ func TestFindAfterWriteInvalidatesIndex(t *testing.T) {
 	mustWriteEntry(t, vaultDir, identity, "entry/one", map[string]interface{}{
 		"data": "original-data",
 	})
-
 
 	_, err := FindWithOptions(vaultDir, "original", FindOptions{MaxWorkers: 0}, identity)
 	if err != nil {
@@ -334,7 +327,6 @@ func TestEncryptedIndexSubstringMatching(t *testing.T) {
 		"email":       "alice@example.com",
 	})
 
-
 	idx := &EncryptedIndex{}
 	if err := idx.Build(vaultDir, identity); err != nil {
 		t.Fatalf("Build() error = %v", err)
@@ -356,7 +348,6 @@ func TestEncryptedIndexCaseInsensitive(t *testing.T) {
 	mustWriteEntry(t, vaultDir, identity, "test/entry", map[string]interface{}{
 		"host": "MyDB.Example.com",
 	})
-
 
 	idx := &EncryptedIndex{}
 	if err := idx.Build(vaultDir, identity); err != nil {
@@ -380,7 +371,6 @@ func TestFindAfterDeleteInvalidatesIndex(t *testing.T) {
 
 	mustWriteEntry(t, vaultDir, identity, "keep/entry", map[string]interface{}{"value": "important"})
 	mustWriteEntry(t, vaultDir, identity, "delete/entry", map[string]interface{}{"value": "gone"})
-
 
 	results, err := FindWithOptions(vaultDir, "entry", FindOptions{MaxWorkers: 0}, identity)
 	if err != nil {
@@ -419,7 +409,6 @@ func TestFindAfterMergeInvalidatesIndex(t *testing.T) {
 	mustWriteEntry(t, vaultDir, identity, "test/entry", map[string]interface{}{
 		"initial": "value",
 	})
-
 
 	_, err := FindWithOptions(vaultDir, "initial", FindOptions{MaxWorkers: 0}, identity)
 	if err != nil {
@@ -460,7 +449,6 @@ func TestEncryptedIndexSearchableAfterBuild(t *testing.T) {
 		})
 	}
 
-
 	idx := &EncryptedIndex{}
 	if err := idx.Build(vaultDir, identity); err != nil {
 		t.Fatalf("Build() error = %v", err)
@@ -487,7 +475,6 @@ func TestEncryptedIndexPersistence(t *testing.T) {
 		"username": "alice",
 		"password": "s3cr3t",
 	})
-
 
 	idx := &EncryptedIndex{}
 	if err := idx.Build(vaultDir, identity); err != nil {
@@ -526,7 +513,6 @@ func TestEncryptedIndexStaleDetection(t *testing.T) {
 		"data": "value-one",
 	})
 
-
 	idx := &EncryptedIndex{}
 	if err := idx.Build(vaultDir, identity); err != nil {
 		t.Fatalf("Build() error = %v", err)
@@ -561,7 +547,6 @@ func TestEncryptedIndexInvalidationRemovesFile(t *testing.T) {
 		"key": "value",
 	})
 
-
 	idx := &EncryptedIndex{}
 	if err := idx.Build(vaultDir, identity); err != nil {
 		t.Fatalf("Build() error = %v", err)
@@ -589,7 +574,6 @@ func TestEncryptedIndexFilterPathsUsingIndexLoadsFromDisk(t *testing.T) {
 		"username": "alice",
 	})
 
-
 	// Build the index (this also saves to disk)
 	if err := globalIndex.Build(vaultDir, identity); err != nil {
 		t.Fatalf("Build() error = %v", err)
@@ -611,7 +595,7 @@ func TestEncryptedIndexFilterPathsUsingIndexLoadsFromDisk(t *testing.T) {
 	}
 
 	// filterPathsUsingIndex should load from disk
-	results := filterPathsUsingIndex(vaultDir, []string{"github.com/user"}, "alice", nil)
+	results := filterPathsUsingIndex(vaultDir, []string{"github.com/user"}, "alice", identity)
 	if len(results) != 1 {
 		t.Fatalf("filterPathsUsingIndex() = %d results, want 1", len(results))
 	}

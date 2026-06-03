@@ -292,8 +292,7 @@ func TestFindWithNoIdentity(t *testing.T) {
 
 	mustWriteEntry(t, vaultDir, id, "github.com/user", map[string]interface{}{"username": "alice"})
 
-
-	_, err := FindWithOptions(vaultDir, "github", FindOptions{MaxWorkers: 0}, id)
+	_, err := FindWithOptions(vaultDir, "github", FindOptions{MaxWorkers: 0}, nil)
 	if err == nil {
 		t.Fatal("expected error when no search identity is available")
 	}
@@ -390,7 +389,7 @@ func TestFindConcurrentNoIdentity(t *testing.T) {
 	t.Cleanup(func() {
 	})
 
-	_, err := FindWithOptions(vaultDir, "github", FindOptions{MaxWorkers: 4}, id)
+	_, err := FindWithOptions(vaultDir, "github", FindOptions{MaxWorkers: 4}, nil)
 	if err == nil {
 		t.Fatal("expected error when no search identity is available")
 	}
