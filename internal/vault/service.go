@@ -179,7 +179,7 @@ func (DefaultOperationService) DeleteEntry(v *Vault, path string) error {
 }
 
 func (DefaultOperationService) ListEntries(v *Vault, prefix string) ([]string, error) {
-	entries, err := List(v.Dir, prefix)
+	entries, err := List(v.Dir, prefix, v.Identity)
 	if err != nil {
 		return nil, errorspkg.ReadFailed(err, "cannot list entries: %v", err)
 	}
@@ -187,7 +187,7 @@ func (DefaultOperationService) ListEntries(v *Vault, prefix string) ([]string, e
 }
 
 func (DefaultOperationService) FindEntries(v *Vault, query string, opts FindOptions) ([]Match, error) {
-	matches, err := FindWithOptions(v.Dir, query, opts)
+	matches, err := FindWithOptions(v.Dir, query, opts, v.Identity)
 	if err != nil {
 		return nil, errorspkg.ReadFailed(err, "search failed: %v", err)
 	}

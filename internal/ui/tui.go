@@ -737,7 +737,7 @@ func loadEntriesCmd(vault *vaultpkg.Vault) tea.Cmd {
 				msg = entriesLoadedMsg{err: fmt.Errorf("panic loading entries: %v", r)}
 			}
 		}()
-		entries, err := vaultpkg.List(vault.Dir, "")
+		entries, err := vaultpkg.List(vault.Dir, "", vault.Identity)
 		if err != nil {
 			return entriesLoadedMsg{err: err}
 		}

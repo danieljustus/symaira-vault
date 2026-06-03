@@ -83,7 +83,7 @@ func (idx *EncryptedIndex) Build(vaultDir string, identity *age.X25519Identity) 
 	// would miss them.
 	InvalidateListCache(vaultDir)
 
-	paths, err := List(vaultDir, "")
+	paths, err := List(vaultDir, "", identity)
 	if err != nil {
 		return err
 	}
@@ -324,7 +324,7 @@ func (idx *EncryptedIndex) UpdateEntry(vaultDir, path string, identity *age.X255
 
 // RemoveEntry removes a single path from the encrypted index.
 // If the index is not built, this is a no-op.
-func (idx *EncryptedIndex) RemoveEntry(path string) {
+func (idx *EncryptedIndex) RemoveEntry(path string, identity *age.X25519Identity) {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 
@@ -332,7 +332,6 @@ func (idx *EncryptedIndex) RemoveEntry(path string) {
 		return
 	}
 
-	identity := currentSearchIdentity()
 	if identity == nil {
 		idx.ciphertext = nil
 		idx.salt = nil
@@ -440,7 +439,7 @@ func (idx *EncryptedIndex) loadFromDisk(vaultDir string, identity *age.X25519Ide
 		return err
 	}
 
-	paths, listErr := List(vaultDir, "")
+	paths, listErr := List(vaultDir, "", identity)
 	if listErr != nil {
 		_ = os.Remove(indexPath)
 		return listErr

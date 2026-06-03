@@ -169,7 +169,7 @@ func (s *Server) handleWhoami(ctx context.Context, req mcp.CallToolRequest) (*mc
 		Unavailable: unavailable,
 	}
 
-	paths, listErr := vaultpkg.List(s.vault.Dir, "")
+	paths, listErr := vaultpkg.List(s.vault.Dir, "", s.vault.Identity)
 	if listErr == nil {
 		info.Vault.EntriesCount = len(paths)
 	}

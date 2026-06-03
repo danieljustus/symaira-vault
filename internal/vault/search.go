@@ -431,40 +431,13 @@ func storePseudonymizedListCache(vaultDir string, identity *age.X25519Identity, 
 	pseudonymizedCache.mu.Unlock()
 }
 
-// searchIdentity holds the cached decryption identity for search operations.
-//
-// DESIGN DECISION: Global State vs Per-Vault Context
-//
-// This is intentionally global state because:
-//  1. Symaira Vault operates with a single active vault per process
-//  2. The identity is session-scoped (tied to unlock duration), not vault-scoped
-//  3. atomic.Pointer provides lock-free thread-safe access verified by `go test -race`
-//  4. Per-vault caching would add complexity without clear benefit for single-vault usage
-//
-// Tradeoffs accepted:
-//   - Parallel vault access in tests requires careful sequencing
-//   - Multiple vaults in same process share cache (invalid for Symaira Vault use case)
-//
-// Future: If multi-vault support is needed, add vaultDir key to a map[VaultDir]*Identity.
-var searchIdentity atomic.Pointer[age.X25519Identity]
-
-func rememberSearchIdentity(identity *age.X25519Identity) {
-	if identity == nil {
-		return
+// CurrentSearchIdentity returns the cached decryption identity from the vault,
+// or nil if no vault identity is available (e.g., vault not opened).
+func (v *Vault) CurrentSearchIdentity() *age.X25519Identity {
+	if v == nil {
+		return nil
 	}
-	searchIdentity.Store(identity)
-}
-
-func currentSearchIdentity() *age.X25519Identity {
-	return searchIdentity.Load()
-}
-
-// CurrentSearchIdentity returns the cached decryption identity, or nil if
-// no identity has been cached yet (e.g., vault not unlocked in this session).
-// This is used by health checks to verify manifest integrity without requiring
-// the user to re-enter their passphrase.
-func CurrentSearchIdentity() *age.X25519Identity {
-	return currentSearchIdentity()
+	return v.searchIdentity.Load()
 }
 
 // SearchWorkerCount returns the number of concurrent decryption workers
@@ -494,17 +467,20 @@ func SearchWorkerCount(configured int) int {
 // MCP sessions. The cache invalidates automatically when directory mtimes change.
 // When pseudonymization is enabled, entries are decrypted to extract the plaintext
 // path from the entry data.
-func List(vaultDir string, prefix string) ([]string, error) {
+func List(vaultDir string, prefix string, identity *age.X25519Identity) ([]string, error) {
 	cfg, err := loadVaultConfig(vaultDir)
 	if err != nil {
 		return nil, err
 	}
 	if isPseudonymizeEnabled(cfg) {
+		if identity == nil {
+			return nil, fmt.Errorf("identity required for pseudonymized vault listing")
+		}
 		workers := 0
 		if cfg != nil && cfg.Vault != nil {
 			workers = cfg.Vault.SearchWorkers
 		}
-		return listPseudonymized(vaultDir, prefix, workers)
+		return listPseudonymized(vaultDir, prefix, identity, workers)
 	}
 
 	// Check cache when listing the entire vault (prefix == "").
@@ -520,7 +496,7 @@ func List(vaultDir string, prefix string) ([]string, error) {
 	// directory walk. Falls back to walk on any error (missing manifest,
 	// no identity, decrypt failure).
 	if prefix == "" {
-		if paths := listViaManifest(vaultDir); paths != nil {
+		if paths := listViaManifest(vaultDir, identity); paths != nil {
 			storeListCache(vaultDir, paths)
 			return paths, nil
 		}
@@ -564,8 +540,8 @@ func List(vaultDir string, prefix string) ([]string, error) {
 //
 // Uses a bounded worker pool for parallel decryption and caches results
 // (including decrypted entry data) for reuse by FindWithOptions.
-func listPseudonymized(vaultDir, prefix string, configuredWorkers int) ([]string, error) {
-	return listPseudonymizedWithIdentity(vaultDir, prefix, currentSearchIdentity(), configuredWorkers)
+func listPseudonymized(vaultDir, prefix string, identity *age.X25519Identity, configuredWorkers int) ([]string, error) {
+	return listPseudonymizedWithIdentity(vaultDir, prefix, identity, configuredWorkers)
 }
 
 func listPseudonymizedWithIdentity(vaultDir, prefix string, identity *age.X25519Identity, configuredWorkers int) ([]string, error) {
@@ -703,8 +679,7 @@ func listPseudonymizedWithIdentity(vaultDir, prefix string, identity *age.X25519
 
 // listViaManifest returns entry paths from the manifest when available and
 // valid. Returns nil on any error so callers fall back to directory walk.
-func listViaManifest(vaultDir string) []string {
-	identity := currentSearchIdentity()
+func listViaManifest(vaultDir string, identity *age.X25519Identity) []string {
 	if identity == nil {
 		return nil
 	}
@@ -788,11 +763,11 @@ func isRedactedField(field string, patterns []string) bool {
 // FindWithOptions searches vault entries with configurable options.
 // It supports both sequential and concurrent decryption, and optional
 // scope filtering before decrypt.
-// Uses the global searchIdentity for backward compatibility; prefer Vault.FindWithOptions.
+// Prefer Vault.FindWithOptions which passes identity from the vault instance.
 //
 //nolint:gocyclo // Search orchestration: listing, filtering, decryption, ranking
-func FindWithOptions(vaultDir string, query string, opts FindOptions) ([]Match, error) {
-	return findWithOptionsIdentity(vaultDir, query, opts, currentSearchIdentity())
+func FindWithOptions(vaultDir string, query string, opts FindOptions, identity *age.X25519Identity) ([]Match, error) {
+	return findWithOptionsIdentity(vaultDir, query, opts, identity)
 }
 
 func findWithOptionsIdentity(vaultDir string, query string, opts FindOptions, identity *age.X25519Identity) ([]Match, error) {
@@ -801,14 +776,11 @@ func findWithOptionsIdentity(vaultDir string, query string, opts FindOptions, id
 		metrics.RecordVaultOperationDuration("search", time.Since(start))
 	}()
 
-	paths, err := List(vaultDir, "")
+	paths, err := List(vaultDir, "", identity)
 	if err != nil {
 		return nil, err
 	}
 
-	if identity == nil {
-		identity = currentSearchIdentity()
-	}
 	if identity == nil {
 		return nil, fmt.Errorf("no search identity available")
 	}
@@ -963,9 +935,6 @@ func hasField(fields []string, want string) bool {
 // stored string values contain the query as a substring. On any error the
 // original slice is returned unchanged, preserving correct behavior.
 func filterPathsUsingIndex(vaultDir string, candidates []string, needle string, identity *age.X25519Identity) []string {
-	if identity == nil {
-		identity = currentSearchIdentity()
-	}
 	if identity == nil {
 		return candidates
 	}

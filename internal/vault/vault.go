@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 
 	"filippo.io/age"
 	"gopkg.in/yaml.v3"
@@ -38,6 +39,8 @@ type Vault struct {
 	Config         *vaultconfig.Config
 	Dir            string
 	NeedsMigration bool
+
+	searchIdentity atomic.Pointer[age.X25519Identity]
 }
 
 func Init(vaultDir string, identity *age.X25519Identity, cfg *vaultconfig.Config) error {
@@ -95,7 +98,6 @@ func Open(vaultDir string, identity *age.X25519Identity) (*Vault, error) {
 	if err := detectLegacyMode(cfg, vaultDir); err != nil {
 		return nil, fmt.Errorf("detect legacy mode: %w", err)
 	}
-	rememberSearchIdentity(identity)
 	if cfg != nil && cfg.Vault != nil && cfg.Vault.ListingCacheTTL > 0 {
 		SetListCacheTTL(cfg.Vault.ListingCacheTTL)
 	}
@@ -124,7 +126,9 @@ func Open(vaultDir string, identity *age.X25519Identity) (*Vault, error) {
 			return nil, fmt.Errorf("update gitignore: %w", err)
 		}
 	}
-	return &Vault{Dir: vaultDir, Identity: identity, Config: cfg}, nil
+	v := &Vault{Dir: vaultDir, Identity: identity, Config: cfg}
+	v.searchIdentity.Store(identity)
+	return v, nil
 }
 
 const legacyMigrationMarker = ".symvault-migrated"
@@ -396,18 +400,7 @@ func (v *Vault) List(prefix string) ([]string, error) {
 	if v == nil {
 		return nil, errors.New("vault is nil")
 	}
-	cfg, err := loadVaultConfig(v.Dir)
-	if err != nil {
-		return nil, err
-	}
-	if isPseudonymizeEnabled(cfg) {
-		workers := 0
-		if cfg != nil && cfg.Vault != nil {
-			workers = cfg.Vault.SearchWorkers
-		}
-		return listPseudonymizedWithIdentity(v.Dir, prefix, v.Identity, workers)
-	}
-	return List(v.Dir, prefix)
+	return List(v.Dir, prefix, v.Identity)
 }
 
 // FindWithOptions searches this vault's entries using the vault's identity
