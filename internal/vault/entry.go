@@ -444,12 +444,16 @@ func WriteEntry(vaultDir, path string, entry *Entry, identity *age.X25519Identit
 		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
+	queueManifestUpdate(vaultDir, path, ciphertext, identity)
+	if cfg.Vault != nil {
+		cfg.Vault.ManifestGeneration++
+	}
+	FlushManifestUpdates()
 	if err := ReleaseLock(lockFile); err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 	lockFile = nil
-	queueManifestUpdate(vaultDir, path, ciphertext, identity)
 	if err := globalIndex.UpdateEntry(vaultDir, path, identity); err != nil {
 		span.SetStatus(codes.Error, err.Error())
 	}
@@ -503,12 +507,16 @@ func DeleteEntry(vaultDir, path string, identity *age.X25519Identity) error {
 			span.SetStatus(codes.Error, err.Error())
 			return err
 		}
+		queueManifestRemove(vaultDir, path, identity)
+		if cfg.Vault != nil {
+			cfg.Vault.ManifestGeneration++
+		}
+		FlushManifestUpdates()
 		if err := ReleaseLock(lockFile); err != nil {
 			span.SetStatus(codes.Error, err.Error())
 			return err
 		}
 		lockFile = nil
-		queueManifestRemove(vaultDir, path, identity)
 		globalIndex.RemoveEntry(path)
 		InvalidateListCache("")
 		return nil
@@ -524,12 +532,16 @@ func DeleteEntry(vaultDir, path string, identity *age.X25519Identity) error {
 			return err
 		}
 	}
+	queueManifestRemove(vaultDir, path, identity)
+	if cfg.Vault != nil {
+		cfg.Vault.ManifestGeneration++
+	}
+	FlushManifestUpdates()
 	if err := ReleaseLock(lockFile); err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 	lockFile = nil
-	queueManifestRemove(vaultDir, path, identity)
 	globalIndex.RemoveEntry(path)
 	InvalidateListCache("")
 	return nil
