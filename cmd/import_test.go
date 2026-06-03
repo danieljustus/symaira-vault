@@ -27,7 +27,7 @@ func TestImportCommandDryRunDoesNotWriteEntries(t *testing.T) {
 	output := runImportCommand(t, string(passphrase), "--vault", vaultDir, "import", "csv", csvImportFixture(t), "--dry-run")
 
 	v := importTestVault(t, vaultDir, string(passphrase))
-	entries, err := vaultpkg.List(v.Dir, "")
+	entries, err := vaultpkg.List(v.Dir, "", nil)
 	if err != nil {
 		t.Fatalf("list entries: %v", err)
 	}
@@ -245,7 +245,7 @@ func TestImportQuarantinePath(t *testing.T) {
 
 	// Verify entries are stored under quarantine/<import-id>/
 	v := importTestVault(t, vaultDir, string(passphrase))
-	quarantined, err := vaultpkg.List(v.Dir, "quarantine/")
+	quarantined, err := vaultpkg.List(v.Dir, "quarantine/", nil)
 	if err != nil {
 		t.Fatalf("list quarantine entries: %v", err)
 	}
@@ -400,7 +400,7 @@ func TestImportReviewPromote(t *testing.T) {
 	assertCSVImportedEntries(t, v, "")
 
 	// Quarantine prefix should be empty
-	quarantined, err := vaultpkg.List(v.Dir, "quarantine/")
+	quarantined, err := vaultpkg.List(v.Dir, "quarantine/", nil)
 	if err != nil {
 		t.Fatalf("list quarantine: %v", err)
 	}
@@ -471,7 +471,7 @@ func TestImportReviewPromoteSkipsExisting(t *testing.T) {
 	}
 
 	// Quarantine entry should still exist (not deleted)
-	quarantined, err := vaultpkg.List(v.Dir, "quarantine/")
+	quarantined, err := vaultpkg.List(v.Dir, "quarantine/", nil)
 	if err != nil {
 		t.Fatalf("list quarantine: %v", err)
 	}
@@ -547,7 +547,7 @@ func TestImportReviewPromoteOverwrite(t *testing.T) {
 	}
 
 	// Quarantine should be empty
-	quarantined, err := vaultpkg.List(v.Dir, "quarantine/")
+	quarantined, err := vaultpkg.List(v.Dir, "quarantine/", nil)
 	if err != nil {
 		t.Fatalf("list quarantine: %v", err)
 	}

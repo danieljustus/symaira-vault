@@ -114,7 +114,7 @@ func benchmarkList(b *testing.B, numEntries int) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		paths, err := List(vaultDir, "")
+		paths, err := List(vaultDir, "", identity)
 		if err != nil {
 			b.Fatalf("List failed: %v", err)
 		}
@@ -128,7 +128,6 @@ func benchmarkFindPathOnly(b *testing.B, numEntries int) {
 	vaultDir := b.TempDir()
 	identity := generateTestIdentity(b)
 	createTestEntries(b, vaultDir, identity, numEntries)
-	rememberSearchIdentity(identity)
 
 	// Find a path number that exists in all vault sizes (use 50 for 100-entry vaults)
 	pathQuery := fmt.Sprintf("entry-%05d", min(50, numEntries-1))
@@ -138,7 +137,7 @@ func benchmarkFindPathOnly(b *testing.B, numEntries int) {
 
 	for i := 0; i < b.N; i++ {
 		// Query that matches path - uses fast path (no decryption)
-		matches, err := FindWithOptions(vaultDir, pathQuery, FindOptions{MaxWorkers: 0})
+		matches, err := FindWithOptions(vaultDir, pathQuery, FindOptions{MaxWorkers: 0}, identity)
 		if err != nil {
 			b.Fatalf("Find failed: %v", err)
 		}
@@ -152,7 +151,6 @@ func benchmarkFindFieldSearch(b *testing.B, numEntries int) {
 	vaultDir := b.TempDir()
 	identity := generateTestIdentity(b)
 	createTestEntries(b, vaultDir, identity, numEntries)
-	rememberSearchIdentity(identity)
 
 	fieldQuery := fmt.Sprintf("secret-password-%05d", min(50, numEntries-1))
 
@@ -160,7 +158,7 @@ func benchmarkFindFieldSearch(b *testing.B, numEntries int) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		matches, err := FindWithOptions(vaultDir, fieldQuery, FindOptions{MaxWorkers: 0})
+		matches, err := FindWithOptions(vaultDir, fieldQuery, FindOptions{MaxWorkers: 0}, identity)
 		if err != nil {
 			b.Fatalf("Find failed: %v", err)
 		}
@@ -174,7 +172,6 @@ func benchmarkFindWithOptions(b *testing.B, numEntries int, maxWorkers int) {
 	vaultDir := b.TempDir()
 	identity := generateTestIdentity(b)
 	createTestEntries(b, vaultDir, identity, numEntries)
-	rememberSearchIdentity(identity)
 
 	fieldQuery := fmt.Sprintf("secret-password-%05d", min(50, numEntries-1))
 
@@ -182,7 +179,7 @@ func benchmarkFindWithOptions(b *testing.B, numEntries int, maxWorkers int) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		matches, err := FindWithOptions(vaultDir, fieldQuery, FindOptions{MaxWorkers: maxWorkers})
+		matches, err := FindWithOptions(vaultDir, fieldQuery, FindOptions{MaxWorkers: maxWorkers}, identity)
 		if err != nil {
 			b.Fatalf("FindWithOptions failed: %v", err)
 		}
@@ -220,11 +217,9 @@ func benchmarkIndexBuild(b *testing.B, numEntries int) {
 	vaultDir := b.TempDir()
 	identity := generateTestIdentity(b)
 	createTestEntries(b, vaultDir, identity, numEntries)
-	rememberSearchIdentity(identity)
-	b.Cleanup(func() { searchIdentity.Store(nil) })
 
 	// Pre-warm list cache by listing once
-	_, err := List(vaultDir, "")
+	_, err := List(vaultDir, "", identity)
 	if err != nil {
 		b.Fatalf("List failed: %v", err)
 	}
@@ -247,13 +242,11 @@ func benchmarkFindFieldSearchIndexHot(b *testing.B, numEntries int) {
 	vaultDir := b.TempDir()
 	identity := generateTestIdentity(b)
 	createTestEntries(b, vaultDir, identity, numEntries)
-	rememberSearchIdentity(identity)
-	b.Cleanup(func() { searchIdentity.Store(nil) })
 
 	fieldQuery := fmt.Sprintf("secret-password-%05d", min(50, numEntries-1))
 
 	// First search warms the index (build + search)
-	_, err := FindWithOptions(vaultDir, fieldQuery, FindOptions{MaxWorkers: 0})
+	_, err := FindWithOptions(vaultDir, fieldQuery, FindOptions{MaxWorkers: 0}, identity)
 	if err != nil {
 		b.Fatalf("Warmup FindWithOptions failed: %v", err)
 	}
@@ -269,7 +262,7 @@ func benchmarkFindFieldSearchIndexHot(b *testing.B, numEntries int) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		matches, err := FindWithOptions(vaultDir, fieldQuery, FindOptions{MaxWorkers: 0})
+		matches, err := FindWithOptions(vaultDir, fieldQuery, FindOptions{MaxWorkers: 0}, identity)
 		if err != nil {
 			b.Fatalf("FindWithOptions failed: %v", err)
 		}

@@ -27,8 +27,6 @@ func TestEncryptedIndexBuildAndMatch(t *testing.T) {
 		"password": "s3cr3t-aws",
 	})
 
-	rememberSearchIdentity(identity)
-	t.Cleanup(func() { searchIdentity.Store(nil) })
 
 	idx := &EncryptedIndex{}
 	if err := idx.Build(vaultDir, identity); err != nil {
@@ -106,8 +104,6 @@ func TestEncryptedIndexInvalidate(t *testing.T) {
 		"username": "alice",
 	})
 
-	rememberSearchIdentity(identity)
-	t.Cleanup(func() { searchIdentity.Store(nil) })
 
 	idx := &EncryptedIndex{}
 	if err := idx.Build(vaultDir, identity); err != nil {
@@ -142,8 +138,6 @@ func TestEncryptedIndexRebuildAfterWrite(t *testing.T) {
 		"username": "alice",
 	})
 
-	rememberSearchIdentity(identity)
-	t.Cleanup(func() { searchIdentity.Store(nil) })
 
 	if err := globalIndex.Build(vaultDir, identity); err != nil {
 		t.Fatalf("Build() error = %v", err)
@@ -176,8 +170,6 @@ func TestEncryptedIndexGlobalInvalidate(t *testing.T) {
 	vaultDir := t.TempDir()
 	identity := testutil.TempIdentity(t)
 	mustWriteEntry(t, vaultDir, identity, "test/path", map[string]interface{}{"key": "value"})
-	rememberSearchIdentity(identity)
-	t.Cleanup(func() { searchIdentity.Store(nil) })
 
 	if err := globalIndex.Build(vaultDir, identity); err != nil {
 		t.Fatalf("Build() error = %v", err)
@@ -206,10 +198,8 @@ func TestEncryptedIndexIntegrationWithFind(t *testing.T) {
 		"email": "bob@example.com",
 	})
 
-	rememberSearchIdentity(identity)
-	t.Cleanup(func() { searchIdentity.Store(nil) })
 
-	got, err := FindWithOptions(vaultDir, "alice", FindOptions{MaxWorkers: 0})
+	got, err := FindWithOptions(vaultDir, "alice", FindOptions{MaxWorkers: 0}, identity)
 	if err != nil {
 		t.Fatalf("FindWithOptions() error = %v", err)
 	}
@@ -221,7 +211,7 @@ func TestEncryptedIndexIntegrationWithFind(t *testing.T) {
 		t.Fatal("globalIndex should be built after first FindWithOptions")
 	}
 
-	got2, err := FindWithOptions(vaultDir, "bob@example.com", FindOptions{MaxWorkers: 0})
+	got2, err := FindWithOptions(vaultDir, "bob@example.com", FindOptions{MaxWorkers: 0}, identity)
 	if err != nil {
 		t.Fatalf("FindWithOptions() error = %v", err)
 	}
@@ -244,8 +234,6 @@ func TestEncryptedIndexWithNestedData(t *testing.T) {
 		},
 	})
 
-	rememberSearchIdentity(identity)
-	t.Cleanup(func() { searchIdentity.Store(nil) })
 
 	idx := &EncryptedIndex{}
 	if err := idx.Build(vaultDir, identity); err != nil {
@@ -284,8 +272,6 @@ func TestEncryptedIndexUnreadableEntry(t *testing.T) {
 		t.Fatalf("WriteFile error = %v", err)
 	}
 
-	rememberSearchIdentity(identity)
-	t.Cleanup(func() { searchIdentity.Store(nil) })
 
 	idx := &EncryptedIndex{}
 	if err := idx.Build(vaultDir, identity); err != nil {
@@ -311,10 +297,8 @@ func TestFindAfterWriteInvalidatesIndex(t *testing.T) {
 		"data": "original-data",
 	})
 
-	rememberSearchIdentity(identity)
-	t.Cleanup(func() { searchIdentity.Store(nil) })
 
-	_, err := FindWithOptions(vaultDir, "original", FindOptions{MaxWorkers: 0})
+	_, err := FindWithOptions(vaultDir, "original", FindOptions{MaxWorkers: 0}, identity)
 	if err != nil {
 		t.Fatalf("FindWithOptions() error = %v", err)
 	}
@@ -331,7 +315,7 @@ func TestFindAfterWriteInvalidatesIndex(t *testing.T) {
 		t.Fatal("Index should remain built after incremental update")
 	}
 
-	results, err := FindWithOptions(vaultDir, "data", FindOptions{MaxWorkers: 0})
+	results, err := FindWithOptions(vaultDir, "data", FindOptions{MaxWorkers: 0}, identity)
 	if err != nil {
 		t.Fatalf("FindWithOptions() error = %v", err)
 	}
@@ -350,8 +334,6 @@ func TestEncryptedIndexSubstringMatching(t *testing.T) {
 		"email":       "alice@example.com",
 	})
 
-	rememberSearchIdentity(identity)
-	t.Cleanup(func() { searchIdentity.Store(nil) })
 
 	idx := &EncryptedIndex{}
 	if err := idx.Build(vaultDir, identity); err != nil {
@@ -375,8 +357,6 @@ func TestEncryptedIndexCaseInsensitive(t *testing.T) {
 		"host": "MyDB.Example.com",
 	})
 
-	rememberSearchIdentity(identity)
-	t.Cleanup(func() { searchIdentity.Store(nil) })
 
 	idx := &EncryptedIndex{}
 	if err := idx.Build(vaultDir, identity); err != nil {
@@ -401,10 +381,8 @@ func TestFindAfterDeleteInvalidatesIndex(t *testing.T) {
 	mustWriteEntry(t, vaultDir, identity, "keep/entry", map[string]interface{}{"value": "important"})
 	mustWriteEntry(t, vaultDir, identity, "delete/entry", map[string]interface{}{"value": "gone"})
 
-	rememberSearchIdentity(identity)
-	t.Cleanup(func() { searchIdentity.Store(nil) })
 
-	results, err := FindWithOptions(vaultDir, "entry", FindOptions{MaxWorkers: 0})
+	results, err := FindWithOptions(vaultDir, "entry", FindOptions{MaxWorkers: 0}, identity)
 	if err != nil {
 		t.Fatalf("FindWithOptions() error = %v", err)
 	}
@@ -420,7 +398,7 @@ func TestFindAfterDeleteInvalidatesIndex(t *testing.T) {
 		t.Fatal("Index should be invalidated after delete")
 	}
 
-	results, err = FindWithOptions(vaultDir, "entry", FindOptions{MaxWorkers: 0})
+	results, err = FindWithOptions(vaultDir, "entry", FindOptions{MaxWorkers: 0}, identity)
 	if err != nil {
 		t.Fatalf("FindWithOptions() error = %v", err)
 	}
@@ -442,10 +420,8 @@ func TestFindAfterMergeInvalidatesIndex(t *testing.T) {
 		"initial": "value",
 	})
 
-	rememberSearchIdentity(identity)
-	t.Cleanup(func() { searchIdentity.Store(nil) })
 
-	_, err := FindWithOptions(vaultDir, "initial", FindOptions{MaxWorkers: 0})
+	_, err := FindWithOptions(vaultDir, "initial", FindOptions{MaxWorkers: 0}, identity)
 	if err != nil {
 		t.Fatalf("FindWithOptions() error = %v", err)
 	}
@@ -463,7 +439,7 @@ func TestFindAfterMergeInvalidatesIndex(t *testing.T) {
 		t.Fatal("Index should remain built after incremental update")
 	}
 
-	results, err := FindWithOptions(vaultDir, "newvalue", FindOptions{MaxWorkers: 0})
+	results, err := FindWithOptions(vaultDir, "newvalue", FindOptions{MaxWorkers: 0}, identity)
 	if err != nil {
 		t.Fatalf("FindWithOptions() error = %v", err)
 	}
@@ -484,8 +460,6 @@ func TestEncryptedIndexSearchableAfterBuild(t *testing.T) {
 		})
 	}
 
-	rememberSearchIdentity(identity)
-	t.Cleanup(func() { searchIdentity.Store(nil) })
 
 	idx := &EncryptedIndex{}
 	if err := idx.Build(vaultDir, identity); err != nil {
@@ -514,8 +488,6 @@ func TestEncryptedIndexPersistence(t *testing.T) {
 		"password": "s3cr3t",
 	})
 
-	rememberSearchIdentity(identity)
-	t.Cleanup(func() { searchIdentity.Store(nil) })
 
 	idx := &EncryptedIndex{}
 	if err := idx.Build(vaultDir, identity); err != nil {
@@ -554,8 +526,6 @@ func TestEncryptedIndexStaleDetection(t *testing.T) {
 		"data": "value-one",
 	})
 
-	rememberSearchIdentity(identity)
-	t.Cleanup(func() { searchIdentity.Store(nil) })
 
 	idx := &EncryptedIndex{}
 	if err := idx.Build(vaultDir, identity); err != nil {
@@ -591,8 +561,6 @@ func TestEncryptedIndexInvalidationRemovesFile(t *testing.T) {
 		"key": "value",
 	})
 
-	rememberSearchIdentity(identity)
-	t.Cleanup(func() { searchIdentity.Store(nil) })
 
 	idx := &EncryptedIndex{}
 	if err := idx.Build(vaultDir, identity); err != nil {
@@ -621,8 +589,6 @@ func TestEncryptedIndexFilterPathsUsingIndexLoadsFromDisk(t *testing.T) {
 		"username": "alice",
 	})
 
-	rememberSearchIdentity(identity)
-	t.Cleanup(func() { searchIdentity.Store(nil) })
 
 	// Build the index (this also saves to disk)
 	if err := globalIndex.Build(vaultDir, identity); err != nil {
