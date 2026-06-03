@@ -229,12 +229,6 @@ func checkManifestIntegrity(vaultDir string, _ Options) Result {
 		r.Hint = "run `symvault unlock` to decrypt your identity for manifest verification"
 		return r
 	}
-	if err != nil {
-		r.Status = StatusWarn
-		r.Message = "cannot verify manifest: " + err.Error()
-		r.Hint = "run `symvault verify` to regenerate manifest"
-		return r
-	}
 
 	var issues []string
 	if len(result.Tampered) > 0 {
