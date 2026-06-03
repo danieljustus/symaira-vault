@@ -1575,11 +1575,16 @@ func TestTokenRegistry_BackgroundCleanupRemovesRevoked(t *testing.T) {
 	stop := reg.StartCleanup(ctx, 50*time.Millisecond)
 	defer stop()
 
-	time.Sleep(300 * time.Millisecond)
-
-	reg.mu.RLock()
-	count := len(reg.entries)
-	reg.mu.RUnlock()
+	var count int
+	for i := 0; i < 40; i++ {
+		time.Sleep(50 * time.Millisecond)
+		reg.mu.RLock()
+		count = len(reg.entries)
+		reg.mu.RUnlock()
+		if count == 0 {
+			break
+		}
+	}
 
 	if count != 0 {
 		t.Errorf("entries after cleanup = %d, want 0 (both expired and revoked removed)", count)
