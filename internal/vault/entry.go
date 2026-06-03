@@ -253,7 +253,6 @@ func ReadEntry(vaultDir, path string, identity *age.X25519Identity) (*Entry, err
 	if identity == nil {
 		return nil, errors.New("nil identity")
 	}
-	rememberSearchIdentity(identity)
 
 	_, span := metrics.StartSpan(context.Background(), "vault.ReadEntry",
 		attribute.String("operation", "read"),
@@ -408,7 +407,6 @@ func WriteEntry(vaultDir, path string, entry *Entry, identity *age.X25519Identit
 	if identity == nil {
 		return errors.New("nil identity")
 	}
-	rememberSearchIdentity(identity)
 
 	_, span := metrics.StartSpan(context.Background(), "vault.WriteEntry",
 		attribute.String("operation", "write"),
@@ -517,7 +515,7 @@ func DeleteEntry(vaultDir, path string, identity *age.X25519Identity) error {
 			return err
 		}
 		lockFile = nil
-		globalIndex.RemoveEntry(path)
+		globalIndex.RemoveEntry(path, identity)
 		InvalidateListCache("")
 		return nil
 	}
@@ -542,7 +540,7 @@ func DeleteEntry(vaultDir, path string, identity *age.X25519Identity) error {
 		return err
 	}
 	lockFile = nil
-	globalIndex.RemoveEntry(path)
+	globalIndex.RemoveEntry(path, identity)
 	InvalidateListCache("")
 	return nil
 }

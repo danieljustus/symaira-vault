@@ -207,25 +207,18 @@ func checkKDFModern(vaultDir string, _ Options) Result {
 func checkPasswordStrength(vaultDir string, _ Options) Result {
 	r := Result{ID: "password.strength", Name: "Weak password detection"}
 
-	identity := vault.CurrentSearchIdentity()
-	if identity == nil {
+	paths, err := vault.List(vaultDir, "", nil)
+	if err != nil {
 		r.Status = StatusWarn
 		r.Message = msgSessionNeeded
 		r.Hint = hintSessionNeeded
 		return r
 	}
 
-	paths, err := vault.List(vaultDir, "")
-	if err != nil {
-		r.Status = StatusWarn
-		r.Message = "cannot list entries: " + err.Error()
-		return r
-	}
-
 	var weakCount int
 	var examplePaths []string
 	for _, path := range paths {
-		entry, err := vault.ReadEntry(vaultDir, path, identity)
+		entry, err := vault.ReadEntry(vaultDir, path, nil)
 		if err != nil {
 			continue
 		}
@@ -265,24 +258,17 @@ func checkPasswordStrength(vaultDir string, _ Options) Result {
 func checkPasswordReuse(vaultDir string, _ Options) Result {
 	r := Result{ID: "password.reuse", Name: "Password reuse detection"}
 
-	identity := vault.CurrentSearchIdentity()
-	if identity == nil {
+	paths, err := vault.List(vaultDir, "", nil)
+	if err != nil {
 		r.Status = StatusWarn
 		r.Message = msgSessionNeeded
 		r.Hint = "run `symvault unlock` to decrypt entries for password reuse analysis"
 		return r
 	}
 
-	paths, err := vault.List(vaultDir, "")
-	if err != nil {
-		r.Status = StatusWarn
-		r.Message = "cannot list entries: " + err.Error()
-		return r
-	}
-
 	hashToPaths := make(map[string][]string)
 	for _, path := range paths {
-		entry, err := vault.ReadEntry(vaultDir, path, identity)
+		entry, err := vault.ReadEntry(vaultDir, path, nil)
 		if err != nil {
 			continue
 		}

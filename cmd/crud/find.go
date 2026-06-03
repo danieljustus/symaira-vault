@@ -25,7 +25,7 @@ func searchWorkers(vaultDir string, cfg *configpkg.Config) int {
 		return cfg.Vault.SearchWorkers
 	}
 
-	entries, _ := vaultpkg.List(vaultDir, "")
+	entries, _ := vaultpkg.List(vaultDir, "", nil)
 	entryCount := len(entries)
 	cpuCount := runtime.GOMAXPROCS(0)
 

@@ -48,7 +48,7 @@ func TestListSkipsIdentityMetadata(t *testing.T) {
 		t.Fatalf("WriteEntry() error = %v", err)
 	}
 
-	entries, err := List(vaultDir, "")
+	entries, err := List(vaultDir, "", nil)
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}

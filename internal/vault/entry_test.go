@@ -771,7 +771,6 @@ func TestWriteAndReadEntryWithPseudonymization(t *testing.T) {
 	writePseudonymizeConfig(t, vaultDir)
 
 	id := testutil.TempIdentity(t)
-	rememberSearchIdentity(id)
 
 	entry := &Entry{
 		Data: map[string]any{
@@ -818,7 +817,6 @@ func TestDeleteEntryWithPseudonymization(t *testing.T) {
 	writePseudonymizeConfig(t, vaultDir)
 
 	id := testutil.TempIdentity(t)
-	rememberSearchIdentity(id)
 
 	entry := &Entry{Data: map[string]any{"x": 1}}
 	if err := WriteEntry(vaultDir, "github.com/user", entry, id); err != nil {
@@ -847,13 +845,12 @@ func TestListWithPseudonymizedEntries(t *testing.T) {
 	writePseudonymizeConfig(t, vaultDir)
 
 	id := testutil.TempIdentity(t)
-	rememberSearchIdentity(id)
 
 	mustWriteEntry(t, vaultDir, id, "github.com/user", map[string]interface{}{"username": "alice"})
 	mustWriteEntry(t, vaultDir, id, "github.com/work", map[string]interface{}{"username": "bob"})
 	mustWriteEntry(t, vaultDir, id, "personal/email", map[string]interface{}{"username": "carol"})
 
-	got, err := List(vaultDir, "")
+	got, err := List(vaultDir, "", id)
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -870,13 +867,12 @@ func TestListWithPseudonymizedEntriesAndPrefix(t *testing.T) {
 	writePseudonymizeConfig(t, vaultDir)
 
 	id := testutil.TempIdentity(t)
-	rememberSearchIdentity(id)
 
 	mustWriteEntry(t, vaultDir, id, "github.com/user", map[string]interface{}{"username": "alice"})
 	mustWriteEntry(t, vaultDir, id, "github.com/work", map[string]interface{}{"username": "bob"})
 	mustWriteEntry(t, vaultDir, id, "personal/email", map[string]interface{}{"username": "carol"})
 
-	got, err := List(vaultDir, "github.com")
+	got, err := List(vaultDir, "github.com", id)
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
@@ -914,7 +910,6 @@ func TestGetEntryMetadataWithPseudonymization(t *testing.T) {
 	writePseudonymizeConfig(t, vaultDir)
 
 	id := testutil.TempIdentity(t)
-	rememberSearchIdentity(id)
 
 	entry := &Entry{
 		Data: map[string]any{"username": "alice", "password": "s3cr3t"},

@@ -25,7 +25,6 @@ import (
 
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
 	"github.com/danieljustus/symaira-vault/internal/envutil"
-	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 const (
@@ -227,7 +226,7 @@ func New(agentName string, vaultDir string) (*Logger, error) {
 		return nil, fmt.Errorf("open audit log: %w", err)
 	}
 
-	ks := NewKeystore(cleanAuditDir, vaultpkg.CurrentSearchIdentity())
+	ks := NewKeystore(cleanAuditDir, nil)
 	hmacKey, err := ks.LoadOrCreateHMACKey()
 	if err != nil {
 		_ = file.Close()

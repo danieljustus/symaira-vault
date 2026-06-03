@@ -53,7 +53,7 @@ func (s *Server) findEntries(ctx context.Context, query string) ([]vaultpkg.Matc
 		redactPatterns = s.agent.EffectiveRedactFields("find_entries")
 	}
 
-	return vaultpkg.FindWithOptions(s.vault.Dir, query, vaultpkg.FindOptions{
+	return s.vault.FindWithOptions(query, vaultpkg.FindOptions{
 		MaxWorkers:          workers,
 		ScopeFilter:         s.checkScope,
 		RedactFieldPatterns: redactPatterns,

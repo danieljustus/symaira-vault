@@ -222,19 +222,11 @@ func checkManifestIntegrity(vaultDir string, _ Options) Result {
 		return r
 	}
 
-	identity := vault.CurrentSearchIdentity()
-	if identity == nil {
+	result, err := vault.VerifyManifestIntegrity(vaultDir, nil)
+	if err != nil {
 		r.Status = StatusWarn
 		r.Message = msgSessionNeeded
 		r.Hint = "run `symvault unlock` to decrypt your identity for manifest verification"
-		return r
-	}
-
-	result, err := vault.VerifyManifestIntegrity(vaultDir, identity)
-	if err != nil {
-		r.Status = StatusWarn
-		r.Message = "cannot verify manifest: " + err.Error()
-		r.Hint = "run `symvault verify` to regenerate manifest"
 		return r
 	}
 

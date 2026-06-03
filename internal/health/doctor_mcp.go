@@ -14,7 +14,6 @@ import (
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	auth "github.com/danieljustus/symaira-vault/internal/mcp/auth"
 	"github.com/danieljustus/symaira-vault/internal/update"
-	"github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func checkMCPTokens(vaultDir string, _ Options) Result {
@@ -73,7 +72,7 @@ func checkAuditLog(vaultDir string, _ Options) Result {
 	}
 
 	// HMAC key is shared across all audit logs in the vault directory.
-	ks := audit.NewKeystore(vaultDir, vault.CurrentSearchIdentity())
+	ks := audit.NewKeystore(vaultDir, nil)
 	key, keyErr := ks.LoadHMACKey()
 	if keyErr != nil {
 		r.Status = StatusWarn
