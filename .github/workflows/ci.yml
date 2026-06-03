@@ -35,13 +35,13 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version: '1.26.3'
+          go-version: '1.26.4'
           cache: true
 
       - name: Run govulncheck
         uses: golang/govulncheck-action@b625fbe08f3bccbe446d94fbf87fcc875a4f50ee # v1
         with:
-          go-version-input: '1.26.3'
+          go-version-input: '1.26.4'
           go-package: ./...
 
   dependency-scan:
@@ -54,7 +54,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version: '1.26.3'
+          go-version: '1.26.4'
           cache: true
 
       - name: Run OSV Scanner
@@ -83,7 +83,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version: '1.26.3'
+          go-version: '1.26.4'
           cache: true
 
       - name: Check formatting
@@ -122,7 +122,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        go-version: ['1.26.3']
+        go-version: ['1.26.4']
       fail-fast: false
     steps:
       - name: Checkout code
@@ -217,7 +217,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version: '1.26.3'
+          go-version: '1.26.4'
           cache: true
 
       - name: Run fuzz tests
@@ -263,7 +263,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version: '1.26.3'
+          go-version: '1.26.4'
           cache: true
 
       - name: Build binary
@@ -294,7 +294,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
-          go-version: '1.26.3'
+          go-version: '1.26.4'
           cache: true
 
       - name: Install dependencies
@@ -377,3 +377,11 @@ jobs:
           rm -rf "$VAULT_DIR"
           
           echo "All smoke tests passed!"
+
+  ci-gate:
+    name: CI Success
+    runs-on: ubuntu-latest
+    needs: [govulncheck, dependency-scan, lint, test, fuzz, build, integration-test, smoke-test]
+    steps:
+      - name: Confirm Success
+        run: echo "All checks passed successfully!"

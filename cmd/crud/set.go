@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	cryptopkg "github.com/danieljustus/symaira-vault/internal/crypto"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
@@ -60,7 +61,7 @@ var setCmd = &cobra.Command{
 				fmt.Fprintf(os.Stderr, "Enter value for %s: ", field)
 				value, err := reader.ReadString('\n')
 				if err != nil && value == "" {
-					return fmt.Errorf("read value: %w", err)
+					return errorspkg.ReadFailed(err, "read value")
 				}
 				data[field] = strings.TrimSpace(value)
 			} else {
@@ -100,7 +101,7 @@ var setCmd = &cobra.Command{
 
 		return cli.WithVault(func(v *vaultpkg.Vault) error {
 			if err := cli.SetFields(v, path, data); err != nil {
-				return fmt.Errorf("cannot write entry: %w", err)
+				return errorspkg.WriteFailed(err, "cannot write entry")
 			}
 			cli.PrintQuietAware("Entry saved: %s\n", path)
 			return nil

@@ -89,12 +89,12 @@ var getCmd = &cobra.Command{
 						default:
 						}
 					}
-					return fmt.Errorf("cannot read entry: %w", err)
+					return errorspkg.ReadFailed(err, "cannot read entry")
 				}
 
 				matches, findErr := cli.FindEntries(v, path, vaultpkg.FindOptions{MaxWorkers: 4})
 				if findErr != nil {
-					return fmt.Errorf("search entry: %w", findErr)
+					return errorspkg.ReadFailed(findErr, "search entry")
 				}
 
 				switch len(matches) {
@@ -112,7 +112,7 @@ var getCmd = &cobra.Command{
 							default:
 							}
 						}
-						return fmt.Errorf("cannot read entry: %w", err)
+						return errorspkg.ReadFailed(err, "cannot read entry")
 					}
 				default:
 					cliout.Warnf("Multiple matches:")
@@ -155,7 +155,7 @@ var getCmd = &cobra.Command{
 				if !shouldPrint {
 					// Copy to clipboard (default TTY behavior)
 					if clipErr := GetClipboard().Copy(strValue); clipErr != nil {
-						return fmt.Errorf("copy to clipboard: %w", clipErr)
+						return errorspkg.Wrap(errorspkg.ExitGeneralError, errorspkg.ErrKindNone, clipErr, "copy to clipboard")
 					}
 					cliout.Hintf("[copied to clipboard]")
 
@@ -195,7 +195,7 @@ var getCmd = &cobra.Command{
 					default:
 					}
 				}
-				return fmt.Errorf("cannot read entry: %w", err)
+				return errorspkg.ReadFailed(err, "cannot read entry")
 			}
 
 			if cli.OutputFormat != "text" {

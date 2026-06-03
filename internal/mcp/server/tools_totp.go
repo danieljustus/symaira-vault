@@ -89,9 +89,9 @@ func (s *Server) totpClipboard(ctx context.Context, path string, code *crypto.TO
 	}
 
 	if autoClearDuration > 0 {
-		go clipboard.StartAutoClear(autoClearDuration, func() {
+		s.startClipboardAutoClear(autoClearDuration, func() {
 			_ = clip.Copy("")
-		}, make(chan struct{}))
+		})
 	}
 
 	s.logAudit(ctx, totpToolName+".clipboard", path, true)

@@ -316,6 +316,13 @@ func TestRejectDenied_EmptyMap(t *testing.T) {
 	}
 }
 
+func TestRejectDenied_PATH(t *testing.T) {
+	result := RejectDenied(map[string]string{"PATH": "/tmp/evil"})
+	if len(result) != 1 || result[0] != "PATH" {
+		t.Errorf("RejectDenied(PATH) = %v, want [PATH]", result)
+	}
+}
+
 // Test helpers
 
 func contains(slice []string, item string) bool {

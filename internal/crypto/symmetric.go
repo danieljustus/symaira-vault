@@ -10,6 +10,7 @@ import (
 	"io"
 	"math"
 	"strings"
+	"unsafe"
 
 	"filippo.io/age"
 	"golang.org/x/crypto/argon2"
@@ -240,7 +241,9 @@ func EncryptWithPassphraseArgon2id(plaintext []byte, passphrase []byte, params A
 		return nil, errors.New("passphrase is empty")
 	}
 
-	recipient := NewArgon2idRecipient(string(passphrase), params)
+	// #nosec G103 — intentional: unsafe.String avoids heap-copying the passphrase
+	// so that the subsequent Wipe() clears the only copy in memory.
+	recipient := NewArgon2idRecipient(unsafe.String(unsafe.SliceData(passphrase), len(passphrase)), params)
 	Wipe(passphrase)
 
 	var buf bytes.Buffer
@@ -268,7 +271,9 @@ func DecryptWithPassphraseArgon2id(ciphertext []byte, passphrase []byte) ([]byte
 		return nil, errors.New("passphrase is empty")
 	}
 
-	identity := NewArgon2idIdentity(string(passphrase))
+	// #nosec G103 — intentional: unsafe.String avoids heap-copying the passphrase
+	// so that the subsequent Wipe() clears the only copy in memory.
+	identity := NewArgon2idIdentity(unsafe.String(unsafe.SliceData(passphrase), len(passphrase)))
 	Wipe(passphrase)
 
 	r, err := age.Decrypt(bytes.NewReader(ciphertext), identity)

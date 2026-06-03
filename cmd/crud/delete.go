@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
@@ -35,7 +36,7 @@ var deleteCmd = &cobra.Command{
 				fmt.Fprintf(os.Stderr, "Delete %s? (y/N): ", path)
 				answer, err := bufio.NewReader(os.Stdin).ReadString('\n')
 				if err != nil && answer == "" {
-					return fmt.Errorf("read confirmation: %w", err)
+					return errorspkg.ReadFailed(err, "read confirmation")
 				}
 				if strings.ToLower(strings.TrimSpace(answer)) != "y" {
 					if cli.OutputFormat == "text" { //nolint:goconst // output format literal
@@ -50,7 +51,7 @@ var deleteCmd = &cobra.Command{
 			}
 
 			if err := cli.DeleteEntry(v, path); err != nil {
-				return fmt.Errorf("cannot delete entry: %w", err)
+				return errorspkg.WriteFailed(err, "cannot delete entry")
 			}
 			if cli.OutputFormat == "text" {
 				cli.PrintQuietAware("Deleted: %s\n", path)
