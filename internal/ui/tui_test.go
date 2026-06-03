@@ -45,7 +45,7 @@ func TestTUIModelLoadsEntries(t *testing.T) {
 		t.Error("expected model to be in loading state")
 	}
 
-	entriesList, err := vaultpkg.List(vault.Dir, "")
+	entriesList, err := vaultpkg.List(vault.Dir, "", vault.Identity)
 	if err != nil {
 		t.Fatalf("vaultpkg.List() error = %v", err)
 	}
@@ -109,7 +109,7 @@ func TestLoadEntriesCmdIntegration(t *testing.T) {
 		Identity: id,
 	}
 
-	entries, err := vaultpkg.List(vault.Dir, "")
+	entries, err := vaultpkg.List(vault.Dir, "", vault.Identity)
 	if err != nil {
 		t.Fatalf("List error = %v", err)
 	}

@@ -125,9 +125,10 @@ func TestInvalidateConfigCache(t *testing.T) {
 }
 
 func TestCurrentSearchIdentity_InitialNil(t *testing.T) {
-	id := currentSearchIdentity()
+	var v *Vault
+	id := v.CurrentSearchIdentity()
 	if id != nil {
-		t.Error("currentSearchIdentity() should be nil initially")
+		t.Error("CurrentSearchIdentity() on nil vault should return nil")
 	}
 }
 
