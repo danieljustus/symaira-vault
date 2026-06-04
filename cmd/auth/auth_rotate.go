@@ -129,7 +129,7 @@ Optionally re-encrypts all entries with the new passphrase.`,
 			cliout.Warnf("Warning: git auto-commit failed: %v", commitErr)
 		}
 
-		auditLog, auditErr := audit.New("symvault", vaultDir)
+		auditLog, auditErr := audit.New("symvault", vaultDir, v.Identity)
 		if auditErr == nil {
 			if err := auditLog.LogEntry(audit.LogEntry{Action: "rotate-passphrase", OK: true, Timestamp: time.Now().UTC().Format(time.RFC3339)}); err != nil {
 				cliout.Warnf("Warning: audit log write failed: %v", err)

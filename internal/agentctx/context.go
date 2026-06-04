@@ -99,7 +99,7 @@ func Load(agentName, vaultDir string) (*AgentContext, error) {
 	// Attempt to create the audit logger; silently continue without it on
 	// failure so agentctx can still function even if audit logging is down.
 	var auditLog *audit.Logger
-	auditLog, _ = audit.New(agentName, vaultDir)
+	auditLog, _ = audit.New(agentName, vaultDir, nil)
 
 	return &AgentContext{
 		profile:   &profile,
