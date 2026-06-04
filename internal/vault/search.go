@@ -223,7 +223,13 @@ func cachedList(vaultDir string) []string {
 		adaptListCacheTTL()
 		return nil
 	}
-	entry := elem.Value.(*listCachePayload).entry
+	payload, ok := elem.Value.(*listCachePayload)
+	if !ok {
+		atomic.AddUint64(&listCache._miss, 1)
+		adaptListCacheTTL()
+		return nil
+	}
+	entry := payload.entry
 	if time.Since(entry.createdAt) > listCache.ttl {
 		atomic.AddUint64(&listCache._miss, 1)
 		adaptListCacheTTL()
@@ -255,7 +261,11 @@ func storeListCache(vaultDir string, paths []string) {
 	defer listCache.mu.Unlock()
 
 	if elem, ok := listCache.index[vaultDir]; ok {
-		elem.Value.(*listCachePayload).entry = listCacheEntry{
+		payload, ok := elem.Value.(*listCachePayload)
+		if !ok {
+			return
+		}
+		payload.entry = listCacheEntry{
 			paths:        append([]string(nil), paths...),
 			createdAt:    time.Now(),
 			entriesMtime: getDirMtime(entriesDir(vaultDir)),
@@ -268,7 +278,11 @@ func storeListCache(vaultDir string, paths []string) {
 	if listCache.order.Len() >= maxListCacheVaults {
 		oldest := listCache.order.Back()
 		if oldest != nil {
-			oldKey := oldest.Value.(*listCachePayload).key
+			oldPayload, ok := oldest.Value.(*listCachePayload)
+			if !ok {
+				return
+			}
+			oldKey := oldPayload.key
 			delete(listCache.index, oldKey)
 			listCache.order.Remove(oldest)
 		}
