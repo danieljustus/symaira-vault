@@ -92,7 +92,7 @@ var getCmd = &cobra.Command{
 					return errorspkg.ReadFailed(err, "cannot read entry")
 				}
 
-				matches, findErr := cli.FindEntries(v, path, vaultpkg.FindOptions{MaxWorkers: 4})
+				matches, findErr := cli.FindEntries(v, path, vaultpkg.FindOptions{})
 				if findErr != nil {
 					return errorspkg.ReadFailed(findErr, "search entry")
 				}

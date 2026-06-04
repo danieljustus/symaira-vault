@@ -98,7 +98,8 @@
 //
 // FindConcurrent uses a bounded worker pool for parallel decryption:
 //   - Same two-pass logic as Find, but decrypts entries concurrently
-//   - Default 4 concurrent workers balances throughput vs memory pressure
+//   - Default worker count derived from runtime.NumCPU() capped at 8,
+//     overridable via config vault.search_workers or FindOptions.MaxWorkers
 //   - Best for field-search queries on large vaults (10k+ entries)
 //
 // Limits:
@@ -813,6 +814,9 @@ func findWithOptionsIdentity(vaultDir string, query string, opts FindOptions, id
 
 	maxWorkers := opts.MaxWorkers
 	if maxWorkers <= 0 {
+		maxWorkers = min(runtime.NumCPU(), 8)
+	}
+	if maxWorkers <= 1 {
 		for _, path := range pathsNeedingDecrypt {
 			data := maybeCachedEntryData(vaultDir, identity, path)
 			if data == nil {
