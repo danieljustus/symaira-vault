@@ -110,6 +110,7 @@
 package vault
 
 import (
+	"container/list"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -154,15 +155,27 @@ const (
 // listCache provides TTL-cached path listings to avoid repetitive directory walks.
 // It invalidates entries when the underlying directories' modification times change.
 // The TTL adapts based on hit rate: extends when hit rate > 90%, shrinks when < 50%.
+// Cache size is bounded by maxListCacheVaults to prevent unbounded growth in
+// multi-vault or CI scenarios; least-recently-used entries are evicted when full.
+const maxListCacheVaults = 16
+
 var listCache = struct {
 	mu    sync.RWMutex
-	items map[string]listCacheEntry
+	index map[string]*list.Element // vaultDir → list element
+	order *list.List               // LRU order (front = most recent)
 	ttl   time.Duration
 	_hits uint64
 	_miss uint64
 }{
-	items: make(map[string]listCacheEntry),
+	index: make(map[string]*list.Element),
+	order: list.New(),
 	ttl:   defaultListCacheTTL,
+}
+
+// listCachePayload pairs a vault directory key with its cached entry.
+type listCachePayload struct {
+	key   string
+	entry listCacheEntry
 }
 
 // getDirMtime returns the modification time of a directory, or zero if unavailable.
@@ -230,13 +243,14 @@ func adaptListCacheTTL() {
 // cachedList returns cached paths if valid, or nil if cache miss / expired / invalidated.
 func cachedList(vaultDir string) []string {
 	listCache.mu.RLock()
-	entry, ok := listCache.items[vaultDir]
+	elem, ok := listCache.index[vaultDir]
 	listCache.mu.RUnlock()
 	if !ok {
 		atomic.AddUint64(&listCache._miss, 1)
 		adaptListCacheTTL()
 		return nil
 	}
+	entry := elem.Value.(*listCachePayload).entry
 	if time.Since(entry.createdAt) > listCache.ttl {
 		atomic.AddUint64(&listCache._miss, 1)
 		adaptListCacheTTL()
@@ -264,21 +278,54 @@ func cachedList(vaultDir string) []string {
 	}
 	atomic.AddUint64(&listCache._hits, 1)
 	adaptListCacheTTL()
+	listCache.mu.Lock()
+	listCache.order.MoveToFront(elem)
+	listCache.mu.Unlock()
 	return entry.paths
 }
 
 // storeListCache stores the result of a List call for the given vaultDir.
+// When the cache exceeds maxListCacheVaults the least-recently-used entry
+// is evicted.
 func storeListCache(vaultDir string, paths []string) {
 	listCache.mu.Lock()
-	listCache.items[vaultDir] = listCacheEntry{
-		paths:          append([]string(nil), paths...),
-		createdAt:      time.Now(),
-		entriesMtime:   getDirMtime(entriesDir(vaultDir)),
-		vaultMtime:     getDirMtime(vaultDir),
-		entriesDirHash: computeDirHash(entriesDir(vaultDir)),
-		vaultDirHash:   computeDirHash(vaultDir),
+	defer listCache.mu.Unlock()
+
+	if elem, ok := listCache.index[vaultDir]; ok {
+		elem.Value.(*listCachePayload).entry = listCacheEntry{
+			paths:          append([]string(nil), paths...),
+			createdAt:      time.Now(),
+			entriesMtime:   getDirMtime(entriesDir(vaultDir)),
+			vaultMtime:     getDirMtime(vaultDir),
+			entriesDirHash: computeDirHash(entriesDir(vaultDir)),
+			vaultDirHash:   computeDirHash(vaultDir),
+		}
+		listCache.order.MoveToFront(elem)
+		return
 	}
-	listCache.mu.Unlock()
+
+	if listCache.order.Len() >= maxListCacheVaults {
+		oldest := listCache.order.Back()
+		if oldest != nil {
+			oldKey := oldest.Value.(*listCachePayload).key
+			delete(listCache.index, oldKey)
+			listCache.order.Remove(oldest)
+		}
+	}
+
+	payload := &listCachePayload{
+		key: vaultDir,
+		entry: listCacheEntry{
+			paths:          append([]string(nil), paths...),
+			createdAt:      time.Now(),
+			entriesMtime:   getDirMtime(entriesDir(vaultDir)),
+			vaultMtime:     getDirMtime(vaultDir),
+			entriesDirHash: computeDirHash(entriesDir(vaultDir)),
+			vaultDirHash:   computeDirHash(vaultDir),
+		},
+	}
+	elem := listCache.order.PushFront(payload)
+	listCache.index[vaultDir] = elem
 }
 
 var configuredListCacheTTL time.Duration
@@ -303,9 +350,13 @@ func SetListCacheTTL(ttl time.Duration) {
 func InvalidateListCache(vaultDir string) {
 	listCache.mu.Lock()
 	if vaultDir == "" {
-		listCache.items = make(map[string]listCacheEntry)
+		listCache.index = make(map[string]*list.Element)
+		listCache.order.Init()
 	} else {
-		delete(listCache.items, vaultDir)
+		if elem, ok := listCache.index[vaultDir]; ok {
+			delete(listCache.index, vaultDir)
+			listCache.order.Remove(elem)
+		}
 	}
 	listCache.mu.Unlock()
 
