@@ -4,7 +4,6 @@ import (
 	"context"
 	"path/filepath"
 	"time"
-	"unsafe"
 
 	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 
@@ -12,7 +11,6 @@ import (
 
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	cryptopkg "github.com/danieljustus/symaira-vault/internal/crypto"
-	"github.com/danieljustus/symaira-vault/internal/envutil"
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
@@ -86,18 +84,13 @@ func resolveUnlockPassphrase(vaultDir string, interactive bool, cfg *configpkg.C
 			}
 		}
 		if len(passphrase) == 0 && (cfg == nil || cfg.Security == nil || !cfg.Security.DisableEnvPassphrase) {
-			if envPass := envutil.Getenv("SYMVAULT_PASSPHRASE", "OPENPASS_PASSPHRASE"); envPass != "" {
-				// Use unsafe.Slice to alias the string backing array without a heap copy.
-				// This way the deferred Wipe(passphrase) at the call site clears the only
-				// copy of the passphrase in memory, and the os.Unsetenv does not leave a
-				// lingering string on the heap.
-				// #nosec G103 — intentional: unsafe.Slice avoids heap-copying the passphrase
-				// so that the subsequent Wipe clears the only copy in memory.
-				passphrase = unsafe.Slice(unsafe.StringData(envPass), len(envPass))
+			// Check the early-cached env passphrase first (sniffed in main()
+			// before any child process could inherit it).
+			if cached := consumeCachedEnvPassphrase(); len(cached) > 0 {
+				passphrase = cached
 				passphraseFromEnv = true
 				WarnEnvPassphrase()
 			}
-			envutil.Unsetenv("SYMVAULT_PASSPHRASE", "OPENPASS_PASSPHRASE")
 		}
 	}
 	if len(passphrase) == 0 {
