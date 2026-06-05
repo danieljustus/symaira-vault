@@ -11,6 +11,7 @@ import (
 
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	cryptopkg "github.com/danieljustus/symaira-vault/internal/crypto"
+	"github.com/danieljustus/symaira-vault/internal/envutil"
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
@@ -90,17 +91,21 @@ func resolveUnlockPassphrase(vaultDir string, interactive bool, cfg *configpkg.C
 				passphrase = cached
 				passphraseFromEnv = true
 				WarnEnvPassphrase()
+			} else if p := envutil.Getenv("SYMVAULT_PASSPHRASE", "OPENPASS_PASSPHRASE"); p != "" {
+				passphrase = []byte(p)
+				passphraseFromEnv = true
+				WarnEnvPassphrase()
 			}
 		}
-	}
-	if len(passphrase) == 0 {
-		if !interactive {
-			return nil, false, false, errorspkg.NewCLIError(errorspkg.ExitLocked, lockedMessageForCache(), nil)
-		}
-		var readErr error
-		passphrase, readErr = ReadHiddenInput("Passphrase: ", nil)
-		if readErr != nil {
-			return nil, false, false, errorspkg.NewCLIError(errorspkg.ExitLocked, "read passphrase", readErr)
+		if len(passphrase) == 0 {
+			if !interactive {
+				return nil, false, false, errorspkg.NewCLIError(errorspkg.ExitLocked, lockedMessageForCache(), nil)
+			}
+			var readErr error
+			passphrase, readErr = ReadHiddenInput("Passphrase: ", nil)
+			if readErr != nil {
+				return nil, false, false, errorspkg.NewCLIError(errorspkg.ExitLocked, "read passphrase", readErr)
+			}
 		}
 	}
 	return passphrase, passphraseFromEnv, passphraseFromBiometric, nil
