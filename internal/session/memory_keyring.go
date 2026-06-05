@@ -35,8 +35,9 @@ func (m *memoryKeyring) Set(service, account, value string) error {
 
 	var sess storedSession
 	if err := json.Unmarshal([]byte(value), &sess); err != nil {
-		if account == wrapKeyAccount {
-			// Wrap keys are stored as raw base64 (not session JSON)
+		if account == wrapKeyAccount || account == identityAccount {
+			// Wrap keys and identities are stored opaquely (not re-marshaled
+			// through storedSession to preserve all fields).
 			key := service + "|" + account
 			if old, ok := m.store[key]; ok {
 				zeroBytes(old)
@@ -106,8 +107,9 @@ func (m *memoryKeyring) Get(service, account string) (string, error) {
 
 	var sess storedSession
 	if err := json.Unmarshal(payload, &sess); err != nil {
-		if account == wrapKeyAccount {
-			// Wrap keys are stored as raw base64 (not session JSON)
+		if account == wrapKeyAccount || account == identityAccount {
+			// Wrap keys and identities are stored opaquely (not re-marshaled
+			// through storedSession to preserve all fields).
 			return string(payload), nil
 		}
 		delete(m.store, key)
