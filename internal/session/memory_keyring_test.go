@@ -257,6 +257,52 @@ func TestVaultDirFromService(t *testing.T) {
 	}
 }
 
+func TestMemoryKeyring_Identity_RoundTrip(t *testing.T) {
+	mk := &memoryKeyring{}
+	vaultDir := "/tmp/vault-mem-id"
+
+	// Store wrap key so encryption/decryption works
+	wrapKey := base64.StdEncoding.EncodeToString(testKey())
+	mk.Set("symvault:"+vaultDir, wrapKeyAccount, wrapKey)
+
+	identity := "AGE-SECRET-KEY-1TESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTEST"
+	enc, nonce, err := encryptPassphrase([]byte(identity), testKey())
+	if err != nil {
+		t.Fatalf("setup encrypt failed: %v", err)
+	}
+
+	now := time.Now().UTC()
+	ident := storedIdentity{
+		EncryptedIdentity: enc,
+		Nonce:             nonce,
+		SavedAt:           now,
+		LastAccess:        now,
+		TTL:               int64(time.Hour),
+	}
+	payload, _ := json.Marshal(ident)
+
+	if err := mk.Set("symvault:"+vaultDir, identityAccount, string(payload)); err != nil {
+		t.Fatalf("Set() error = %v", err)
+	}
+
+	got, err := mk.Get("symvault:"+vaultDir, identityAccount)
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+
+	var retrieved storedIdentity
+	if err := json.Unmarshal([]byte(got), &retrieved); err != nil {
+		t.Fatalf("Get() returned invalid JSON: %v", err)
+	}
+
+	if retrieved.EncryptedIdentity != enc {
+		t.Errorf("EncryptedIdentity lost in round-trip: got %q, want %q", retrieved.EncryptedIdentity, enc)
+	}
+	if retrieved.Nonce != nonce {
+		t.Errorf("Nonce lost in round-trip: got %q, want %q", retrieved.Nonce, nonce)
+	}
+}
+
 func TestZeroBytes(t *testing.T) {
 	b := []byte("hello world")
 	zeroBytes(b)
