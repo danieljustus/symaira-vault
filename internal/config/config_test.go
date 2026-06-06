@@ -3171,13 +3171,13 @@ func TestAgentProfileNormalizeFillsAllNilPointerFields(t *testing.T) {
 	}
 
 	sliceFields := map[string][]string{
-		"AllowedPaths":      p.AllowedPaths,
-		"AllowedTools":      p.AllowedTools,
-		"AllowedEnvVars":    p.AllowedEnvVars,
+		"AllowedPaths":       p.AllowedPaths,
+		"AllowedTools":       p.AllowedTools,
+		"AllowedEnvVars":     p.AllowedEnvVars,
 		"AllowedExecutables": p.AllowedExecutables,
-		"RedactFields":      p.RedactFields,
-		"PreCallHooks":      p.PreCallHooks,
-		"PostCallHooks":     p.PostCallHooks,
+		"RedactFields":       p.RedactFields,
+		"PreCallHooks":       p.PreCallHooks,
+		"PostCallHooks":      p.PostCallHooks,
 	}
 	for name, field := range sliceFields {
 		if field == nil {
@@ -3333,9 +3333,9 @@ func TestAgentProfileValueAccessorsHandleNilAndZero(t *testing.T) {
 
 	// Set fields: accessor returns the set value.
 	p2 := &AgentProfile{
-		Tier:           sptr("standard"),
-		ApprovalMode:   sptr("prompt"),
-		CanWrite:       bptr(true),
+		Tier:            sptr("standard"),
+		ApprovalMode:    sptr("prompt"),
+		CanWrite:        bptr(true),
 		ApprovalTimeout: dptr(2 * time.Minute),
 	}
 	if got := p2.TierValue(); got != "standard" {
