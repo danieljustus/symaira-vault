@@ -3112,3 +3112,242 @@ func TestRoundTrip_ExplicitZeroValues(t *testing.T) {
 		t.Errorf("ApprovalMode = %v, want deny", agent.ApprovalMode)
 	}
 }
+
+func TestAgentProfileNormalizeFillsAllNilPointerFields(t *testing.T) {
+	t.Parallel()
+
+	p := &AgentProfile{}
+
+	p.Normalize()
+
+	if p.Tier == nil || *p.Tier != "" {
+		t.Errorf("Tier = %v, want pointer to empty string", p.Tier)
+	}
+	if p.ApprovalMode == nil || *p.ApprovalMode != "deny" {
+		t.Errorf("ApprovalMode = %v, want pointer to %q", p.ApprovalMode, "deny")
+	}
+	if p.PromptInjectionMode == nil || *p.PromptInjectionMode != "off" {
+		t.Errorf("PromptInjectionMode = %v, want pointer to %q", p.PromptInjectionMode, "off")
+	}
+	if p.SkillPath == nil || *p.SkillPath != "" {
+		t.Errorf("SkillPath = %v, want pointer to empty string", p.SkillPath)
+	}
+	if p.SkillVersion == nil || *p.SkillVersion != "" {
+		t.Errorf("SkillVersion = %v, want pointer to empty string", p.SkillVersion)
+	}
+
+	boolFields := map[string]*bool{
+		"CanWrite":         p.CanWrite,
+		"CanRunCommands":   p.CanRunCommands,
+		"CanManageConfig":  p.CanManageConfig,
+		"CanUseClipboard":  p.CanUseClipboard,
+		"CanUseAutotype":   p.CanUseAutotype,
+		"CanReadValues":    p.CanReadValues,
+		"ExposeValueTools": p.ExposeValueTools,
+		"AutoUnseal":       p.AutoUnseal,
+		"RequireApproval":  p.RequireApproval,
+	}
+	for name, field := range boolFields {
+		if field == nil {
+			t.Errorf("%s = nil, want pointer to false", name)
+			continue
+		}
+		if *field {
+			t.Errorf("%s = true, want false", name)
+		}
+	}
+
+	if p.ApprovalTimeout == nil || *p.ApprovalTimeout != 5*time.Minute {
+		t.Errorf("ApprovalTimeout = %v, want pointer to 5m", p.ApprovalTimeout)
+	}
+	if p.MaxReadsPerHour == nil || *p.MaxReadsPerHour != 0 {
+		t.Errorf("MaxReadsPerHour = %v, want pointer to 0", p.MaxReadsPerHour)
+	}
+	if p.MaxReadsPerDay == nil || *p.MaxReadsPerDay != 0 {
+		t.Errorf("MaxReadsPerDay = %v, want pointer to 0", p.MaxReadsPerDay)
+	}
+	if p.MaxSecretsInSession == nil || *p.MaxSecretsInSession != 0 {
+		t.Errorf("MaxSecretsInSession = %v, want pointer to 0", p.MaxSecretsInSession)
+	}
+
+	sliceFields := map[string][]string{
+		"AllowedPaths":      p.AllowedPaths,
+		"AllowedTools":      p.AllowedTools,
+		"AllowedEnvVars":    p.AllowedEnvVars,
+		"AllowedExecutables": p.AllowedExecutables,
+		"RedactFields":      p.RedactFields,
+		"PreCallHooks":      p.PreCallHooks,
+		"PostCallHooks":     p.PostCallHooks,
+	}
+	for name, field := range sliceFields {
+		if field == nil {
+			t.Errorf("%s = nil, want empty slice", name)
+		}
+	}
+	if p.PerToolRedactFields == nil {
+		t.Error("PerToolRedactFields = nil, want empty map")
+	}
+	if p.DynamicProviders == nil {
+		t.Error("DynamicProviders = nil, want empty map")
+	}
+}
+
+func TestAgentProfileNormalizePreservesSetFields(t *testing.T) {
+	t.Parallel()
+
+	p := &AgentProfile{
+		Tier:                sptr("admin"),
+		ApprovalMode:        sptr("prompt"),
+		PromptInjectionMode: sptr("block"),
+		CanWrite:            bptr(true),
+		CanRunCommands:      bptr(true),
+		ApprovalTimeout:     dptr(30 * time.Second),
+		AllowedPaths:        []string{"/data"},
+		AllowedTools:        []string{"get"},
+		PerToolRedactFields: map[string][]string{"get": {"password"}},
+	}
+
+	p.Normalize()
+
+	if *p.Tier != "admin" {
+		t.Errorf("Tier overwritten: got %q, want %q", *p.Tier, "admin")
+	}
+	if *p.ApprovalMode != "prompt" {
+		t.Errorf("ApprovalMode overwritten: got %q, want %q", *p.ApprovalMode, "prompt")
+	}
+	if *p.PromptInjectionMode != "block" {
+		t.Errorf("PromptInjectionMode overwritten: got %q, want %q", *p.PromptInjectionMode, "block")
+	}
+	if !*p.CanWrite {
+		t.Error("CanWrite overwritten: got false, want true")
+	}
+	if !*p.CanRunCommands {
+		t.Error("CanRunCommands overwritten: got false, want true")
+	}
+	if *p.ApprovalTimeout != 30*time.Second {
+		t.Errorf("ApprovalTimeout overwritten: got %v, want 30s", *p.ApprovalTimeout)
+	}
+	if len(p.AllowedPaths) != 1 || p.AllowedPaths[0] != "/data" {
+		t.Errorf("AllowedPaths overwritten: got %v", p.AllowedPaths)
+	}
+	if len(p.AllowedTools) != 1 || p.AllowedTools[0] != "get" {
+		t.Errorf("AllowedTools overwritten: got %v", p.AllowedTools)
+	}
+	if got := p.PerToolRedactFields["get"]; len(got) != 1 || got[0] != "password" {
+		t.Errorf("PerToolRedactFields overwritten: got %v", p.PerToolRedactFields)
+	}
+}
+
+func TestAgentProfileNormalizeIsIdempotent(t *testing.T) {
+	t.Parallel()
+
+	p := &AgentProfile{}
+	p.Normalize()
+	firstTier := *p.Tier
+	firstApprovalMode := *p.ApprovalMode
+	firstApprovalTimeout := *p.ApprovalTimeout
+
+	p.Normalize()
+
+	if *p.Tier != firstTier {
+		t.Errorf("Tier changed after second Normalize: %q -> %q", firstTier, *p.Tier)
+	}
+	if *p.ApprovalMode != firstApprovalMode {
+		t.Errorf("ApprovalMode changed after second Normalize: %q -> %q", firstApprovalMode, *p.ApprovalMode)
+	}
+	if *p.ApprovalTimeout != firstApprovalTimeout {
+		t.Errorf("ApprovalTimeout changed after second Normalize: %v -> %v", firstApprovalTimeout, *p.ApprovalTimeout)
+	}
+}
+
+func TestAgentProfileNormalizeNilSafe(t *testing.T) {
+	t.Parallel()
+
+	var p *AgentProfile
+	// Must not panic on nil receiver.
+	p.Normalize()
+}
+
+func TestAgentProfileValueAccessorsHandleNilAndZero(t *testing.T) {
+	t.Parallel()
+
+	// Nil receiver: every accessor must return the zero/default value, not panic.
+	var nilP *AgentProfile
+	if got := nilP.TierValue(); got != "" {
+		t.Errorf("nilP.TierValue() = %q, want empty string", got)
+	}
+	if got := nilP.ApprovalModeValue(); got != "deny" {
+		t.Errorf("nilP.ApprovalModeValue() = %q, want %q", got, "deny")
+	}
+	if got := nilP.SkillPathValue(); got != "" {
+		t.Errorf("nilP.SkillPathValue() = %q, want empty string", got)
+	}
+	if got := nilP.SkillVersionValue(); got != "" {
+		t.Errorf("nilP.SkillVersionValue() = %q, want empty string", got)
+	}
+	if got := nilP.PromptInjectionModeValue(); got != "off" {
+		t.Errorf("nilP.PromptInjectionModeValue() = %q, want %q", got, "off")
+	}
+	if got := nilP.ApprovalTimeoutValue(); got != 5*time.Minute {
+		t.Errorf("nilP.ApprovalTimeoutValue() = %v, want 5m", got)
+	}
+	if nilP.CanWriteValue() {
+		t.Error("nilP.CanWriteValue() = true, want false")
+	}
+	if nilP.CanRunCommandsValue() {
+		t.Error("nilP.CanRunCommandsValue() = true, want false")
+	}
+	if nilP.CanManageConfigValue() {
+		t.Error("nilP.CanManageConfigValue() = true, want false")
+	}
+	if nilP.CanUseClipboardValue() {
+		t.Error("nilP.CanUseClipboardValue() = true, want false")
+	}
+	if nilP.CanUseAutotypeValue() {
+		t.Error("nilP.CanUseAutotypeValue() = true, want false")
+	}
+	if nilP.CanReadValuesValue() {
+		t.Error("nilP.CanReadValuesValue() = true, want false")
+	}
+	if nilP.ExposeValueToolsValue() {
+		t.Error("nilP.ExposeValueToolsValue() = true, want false")
+	}
+	if nilP.AutoUnsealValue() {
+		t.Error("nilP.AutoUnsealValue() = true, want false")
+	}
+	if nilP.RequireApprovalValue() {
+		t.Error("nilP.RequireApprovalValue() = true, want false")
+	}
+
+	// Nil pointer fields on a non-nil profile: same defaults.
+	p := &AgentProfile{}
+	if got := p.TierValue(); got != "" {
+		t.Errorf("p.TierValue() = %q, want empty string", got)
+	}
+	if got := p.ApprovalModeValue(); got != "deny" {
+		t.Errorf("p.ApprovalModeValue() = %q, want %q", got, "deny")
+	}
+	if p.CanWriteValue() {
+		t.Error("p.CanWriteValue() = true, want false")
+	}
+
+	// Set fields: accessor returns the set value.
+	p2 := &AgentProfile{
+		Tier:           sptr("standard"),
+		ApprovalMode:   sptr("prompt"),
+		CanWrite:       bptr(true),
+		ApprovalTimeout: dptr(2 * time.Minute),
+	}
+	if got := p2.TierValue(); got != "standard" {
+		t.Errorf("p2.TierValue() = %q, want %q", got, "standard")
+	}
+	if got := p2.ApprovalModeValue(); got != "prompt" {
+		t.Errorf("p2.ApprovalModeValue() = %q, want %q", got, "prompt")
+	}
+	if !p2.CanWriteValue() {
+		t.Error("p2.CanWriteValue() = false, want true")
+	}
+	if got := p2.ApprovalTimeoutValue(); got != 2*time.Minute {
+		t.Errorf("p2.ApprovalTimeoutValue() = %v, want 2m", got)
+	}
+}
