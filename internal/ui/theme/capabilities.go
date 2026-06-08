@@ -91,7 +91,7 @@ func detectColor() ColorMode {
 	}
 
 	// Explicit overrides.
-	if v := strings.ToLower(os.Getenv("FORCE_COLOR")); v != "" && v != "0" && v != "false" {
+	if v := strings.ToLower(os.Getenv("FORCE_COLOR")); v != "" && v != "0" && v != "false" { //nolint:goconst
 		// FORCE_COLOR=1|true → 16; FORCE_COLOR=2 → 256; FORCE_COLOR=3 → truecolor.
 		switch v {
 		case "3", "truecolor", "24bit":
