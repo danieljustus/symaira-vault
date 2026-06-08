@@ -28,3 +28,8 @@ func TestMCPMarshalAnalyzer(t *testing.T) {
 	testdata := analysistest.TestData()
 	analysistest.Run(t, testdata, passlint.MCPMarshalAnalyzer, "mcp/marshal")
 }
+
+func TestCLIErrorAnalyzer(t *testing.T) {
+	testdata := analysistest.TestData()
+	analysistest.Run(t, testdata, passlint.CLIErrorAnalyzer, "clierror/a")
+}

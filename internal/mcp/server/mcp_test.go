@@ -14,7 +14,7 @@ import (
 func newTestServer(t *testing.T, profile config.AgentProfile, transport string) *Server {
 	t.Helper()
 
-	auditLog, err := audit.New("test", "")
+	auditLog, err := audit.New("test", "", nil)
 	if err != nil {
 		t.Fatalf("audit.New() error = %v", err)
 	}

@@ -14,7 +14,7 @@ func TestHMACChainValidPasses(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("hmac-valid-test", "")
+	logger, err := New("hmac-valid-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -59,7 +59,7 @@ func TestHMACTamperedEntryDetected(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("hmac-tamper-test", "")
+	logger, err := New("hmac-tamper-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -147,7 +147,7 @@ func TestHMACLegacyLogAccepted(t *testing.T) {
 		t.Fatalf("WriteFile error = %v", err)
 	}
 
-	logger, err := New("legacy-test", "")
+	logger, err := New("legacy-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -184,7 +184,7 @@ func TestHMACEmptyLog(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("hmac-empty-test", "")
+	logger, err := New("hmac-empty-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -206,7 +206,7 @@ func TestHMACChainContinuity(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("hmac-chain-test", "")
+	logger, err := New("hmac-chain-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -269,7 +269,7 @@ func TestHMACMultipleWrites(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("hmac-multi-test", "")
+	logger, err := New("hmac-multi-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -349,7 +349,7 @@ func TestHMACReopenRetainsChain(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("hmac-reopen-test", "")
+	logger, err := New("hmac-reopen-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -368,7 +368,7 @@ func TestHMACReopenRetainsChain(t *testing.T) {
 	})
 	_ = logger.Close()
 
-	logger2, err := New("hmac-reopen-test", "")
+	logger2, err := New("hmac-reopen-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error on reopen = %v", err)
 	}
@@ -409,7 +409,7 @@ func TestHMACMixedLegacyAndNew(t *testing.T) {
 		t.Fatalf("WriteFile error = %v", err)
 	}
 
-	logger, err := New("mixed-test", "")
+	logger, err := New("mixed-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
