@@ -499,6 +499,7 @@ func TestHandleSet_PreservesMultiRecipientAccess(t *testing.T) {
 			Dir:      writerDir,
 			Identity: writerIdentity,
 		},
+		ops:  vault.DefaultOperationService{},
 		agent: &config.AgentProfile{
 			Name:         "test",
 			AllowedPaths: []string{"*"},
@@ -574,6 +575,7 @@ func TestHandleSet_MergePreservesMultiRecipientAccess(t *testing.T) {
 			Dir:      writerDir,
 			Identity: writerIdentity,
 		},
+		ops:  vault.DefaultOperationService{},
 		agent: &config.AgentProfile{
 			Name:         "test",
 			AllowedPaths: []string{"*"},

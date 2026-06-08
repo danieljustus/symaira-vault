@@ -8,12 +8,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"filippo.io/age"
@@ -164,88 +162,26 @@ func validateLegacyEntryPath(vaultDir, path string) error {
 	return nil
 }
 
-var configCacheMaxSize int32 = 32
-
-// SetConfigCacheSize sets the maximum number of cached vault configs.
-// Call during vault initialization with the value from config, or 0 to
-// reset to the default of 32.
 func SetConfigCacheSize(n int) {
-	if n <= 0 {
-		n = 32
-	}
-	if n > math.MaxInt32 {
-		n = math.MaxInt32
-	}
-	atomic.StoreInt32(&configCacheMaxSize, int32(n))
+	globalCache.SetConfigCacheSize(n)
 }
 
-// configCache memoizes parsed vault configs per vaultDir, keyed by the
-// config file's mtime. It avoids re-parsing config.yaml on every entry
-// read during a search — the hot path for large vaults.
-var configCache = struct {
-	mu    sync.RWMutex
-	items map[string]configCacheEntry
-}{
-	items: make(map[string]configCacheEntry),
-}
-
-type configCacheEntry struct {
-	cfg        *vaultconfig.Config
-	mtime      time.Time
-	accessedAt time.Time
-}
-
-// InvalidateConfigCache drops the cached config for vaultDir. Callers should
-// invoke this after writing config.yaml so the next load sees the new value.
 func InvalidateConfigCache(vaultDir string) {
-	configCache.mu.Lock()
-	delete(configCache.items, vaultDir)
-	configCache.mu.Unlock()
+	globalCache.InvalidateConfig(vaultDir)
 }
 
 func loadVaultConfig(vaultDir string) (*vaultconfig.Config, error) {
-	configPath := filepath.Join(vaultDir, "config.yaml")
-	mtime := time.Time{}
-	if info, err := os.Stat(configPath); err == nil {
-		mtime = info.ModTime()
-	}
-
-	configCache.mu.RLock()
-	entry, ok := configCache.items[vaultDir]
-	configCache.mu.RUnlock()
-	if ok && entry.mtime.Equal(mtime) && entry.cfg != nil {
-		configCache.mu.Lock()
-		entry.accessedAt = time.Now()
-		configCache.items[vaultDir] = entry
-		configCache.mu.Unlock()
-		return entry.cfg, nil
-	}
-
-	cfg, err := vaultconfig.Load(configPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return vaultconfig.Default(), nil
-		}
-		return nil, fmt.Errorf("load vault config: %w", err)
-	}
-
-	configCache.mu.Lock()
-	if len(configCache.items) >= int(atomic.LoadInt32(&configCacheMaxSize)) {
-		var oldestKey string
-		var oldestTime time.Time
-		for k, v := range configCache.items {
-			if oldestTime.IsZero() || v.accessedAt.Before(oldestTime) {
-				oldestTime = v.accessedAt
-				oldestKey = k
+	return globalCache.GetOrLoadConfig(vaultDir, func() (*vaultconfig.Config, error) {
+		configPath := filepath.Join(vaultDir, "config.yaml")
+		cfg, err := vaultconfig.Load(configPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return vaultconfig.Default(), nil
 			}
+			return nil, fmt.Errorf("load vault config: %w", err)
 		}
-		if oldestKey != "" {
-			delete(configCache.items, oldestKey)
-		}
-	}
-	configCache.items[vaultDir] = configCacheEntry{cfg: cfg, mtime: mtime, accessedAt: time.Now()}
-	configCache.mu.Unlock()
-	return cfg, nil
+		return cfg, nil
+	})
 }
 
 // ReadEntry reads and decrypts an entry from the vault

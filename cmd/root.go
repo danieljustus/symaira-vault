@@ -4,12 +4,14 @@
 package cmd
 
 import (
-	// Register sub-package commands via init() side effects.
-	_ "github.com/danieljustus/symaira-vault/cmd/admin"
+	// Register auth/mcp sub-package commands via init() side effects.
 	_ "github.com/danieljustus/symaira-vault/cmd/auth"
-	_ "github.com/danieljustus/symaira-vault/cmd/crud"
 	_ "github.com/danieljustus/symaira-vault/cmd/mcp"
+
+	"github.com/danieljustus/symaira-vault/cmd/admin"
+	"github.com/danieljustus/symaira-vault/cmd/crud"
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 // These are set via ldflags by goreleaser in main.go's var block.
@@ -28,6 +30,12 @@ var (
 )
 
 var rootCmd = cli.RootCmd
+
+func init() {
+	ops := vaultpkg.DefaultOperationService{}
+	crud.RegisterCommands(cli.RootCmd, ops)
+	cli.RootCmd.AddCommand(admin.NewImportCmd(ops))
+}
 
 func Execute() {
 	cli.Execute()

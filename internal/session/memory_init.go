@@ -12,10 +12,7 @@ import (
 var memoryFallbackActive bool
 
 func init() {
-	mk := &memoryKeyring{}
-	keyringSet = mk.Set
-	keyringGet = mk.Get
-	keyringDelete = mk.Delete
+	DefaultBackend = &memoryKeyring{}
 	memoryFallbackActive = true
 	fmt.Fprintln(os.Stderr, "Warning: OS keyring unavailable — session will clear when this process exits. Run 'symvault doctor' for help.")
 	cacheStatusProvider = func() CacheStatus {

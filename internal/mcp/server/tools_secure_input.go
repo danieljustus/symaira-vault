@@ -8,7 +8,6 @@ import (
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
 	"github.com/danieljustus/symaira-vault/internal/secureui"
-	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func (s *Server) handleSecureInput(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -101,7 +100,7 @@ func (s *Server) promptAndStore(
 	}
 
 	partial := map[string]any{req.Field: value}
-	if err := vaultpkg.Ops.UpsertEntry(s.vault, req.Path, partial, auditTag, nil); err != nil {
+	if err := s.ops.UpsertEntry(s.vault, req.Path, partial, auditTag, nil); err != nil {
 		s.logAudit(ctx, auditTag, req.Path, false)
 		metrics.RecordVaultOperation("write", "error")
 		return nil, fmt.Errorf("vault operation failed: %w", err)

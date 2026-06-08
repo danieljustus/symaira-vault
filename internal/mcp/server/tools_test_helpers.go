@@ -35,6 +35,7 @@ func newTestServerWithVault(t *testing.T, profile config.AgentProfile, transport
 			Dir:      vaultDir,
 			Identity: identity,
 		},
+		ops:          vault.DefaultOperationService{},
 		agent:        &profile,
 		auditLog:     auditLog,
 		transport:    transport,

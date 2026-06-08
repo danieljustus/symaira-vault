@@ -38,74 +38,92 @@ var (
 	AddExpiresAt   string
 )
 
-var addCmd = &cobra.Command{
-	Use:               "add <name>",
-	Aliases:           []string{"new", "create"},
-	ValidArgsFunction: cli.EntryCompletionFunc,
-	Short:             "Add a new password entry",
-	Long: `Creates a new password entry in the vault.
+func NewAddCmd(ops vaultpkg.OperationService) *cobra.Command {
+	addCmd := &cobra.Command{
+		Use:               "add <name>",
+		Aliases:           []string{"new", "create"},
+		ValidArgsFunction: cli.EntryCompletionFunc,
+		Short:             "Add a new password entry",
+		Long: `Creates a new password entry in the vault.
 
 The entry name can use slash notation for organization (e.g., work/aws).
 Interactive mode prompts for username, password, and URL.`,
-	Example: `  symvault add github
+		Example: `  symvault add github
   symvault add work/aws
   symvault add personal/bank
   symvault add github-token --value "my-secret-token"
   symvault add secure-pass --generate --length 20
   symvault add aws-key --type api_key --value "AKIA..."
   symvault add ssh-key --type ssh_key --usage-hint "Production server key"`,
-	Args: cobra.ExactArgs(1),
-	RunE: runAdd,
-}
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cli.WithVaultRaw(func(v *vaultpkg.Vault) error {
+				s := vaultpkg.NewVaultService(v, ops)
+				name := args[0]
 
-func runAdd(cmd *cobra.Command, args []string) error {
-	return cli.WithVaultRaw(func(v *vaultpkg.Vault) error {
-		name := args[0]
+				if _, err := s.GetEntry(name); err == nil {
+					return errorspkg.AlreadyExists("entry %q already exists (use 'set' to update or 'edit' to modify)", name)
+				}
 
-		if _, err := vaultpkg.ReadEntry(v.Dir, name, v.Identity); err == nil {
-			return errorspkg.AlreadyExists("entry %q already exists (use 'set' to update or 'edit' to modify)", name)
-		}
+				if err := readStdinValues(); err != nil {
+					return err
+				}
 
-		if err := readStdinValues(); err != nil {
-			return err
-		}
+				warnArgvExposure()
 
-		warnArgvExposure()
+				data, secretMeta, cleanup, err := buildEntryData()
+				if err != nil {
+					return err
+				}
+				if cleanup != nil {
+					defer cleanup()
+				}
 
-		data, secretMeta, cleanup, err := buildEntryData()
-		if err != nil {
-			return err
-		}
-		if cleanup != nil {
-			defer cleanup()
-		}
+				secretMeta = applySecretMetaFlags(secretMeta)
 
-		secretMeta = applySecretMetaFlags(secretMeta)
+				if err := cryptopkg.ValidateTOTPData(data); err != nil {
+					return err
+				}
 
-		if err := cryptopkg.ValidateTOTPData(data); err != nil {
-			return err
-		}
+				entry := &vaultpkg.Entry{
+					Data:           data,
+					SecretMetadata: secretMeta,
+					Metadata: vaultpkg.EntryMetadata{
+						Created: time.Now().UTC(),
+						Updated: time.Now().UTC(),
+						Version: 1,
+					},
+				}
 
-		entry := &vaultpkg.Entry{
-			Data:           data,
-			SecretMetadata: secretMeta,
-			Metadata: vaultpkg.EntryMetadata{
-				Created: time.Now().UTC(),
-				Updated: time.Now().UTC(),
-				Version: 1,
-			},
-		}
+				if err := s.WriteEntry(name, entry); err != nil {
+					return errorspkg.WriteFailed(err, "cannot create entry")
+				}
 
-		if err := vaultpkg.WriteEntryWithRecipients(v.Dir, name, entry, v.Identity); err != nil {
-			return errorspkg.WriteFailed(err, "cannot create entry")
-		}
-
-		if err := v.AutoCommit(fmt.Sprintf("Add %s", name)); err != nil {
-			cliout.Warnf("Warning: auto-commit failed: %v", err)
-		}
-		cli.PrintQuietAware("Entry created: %s\n", name)
-		return nil
-	})
+				if err := v.AutoCommit(fmt.Sprintf("Add %s", name)); err != nil {
+					cliout.Warnf("Warning: auto-commit failed: %v", err)
+				}
+				cli.PrintQuietAware("Entry created: %s\n", name)
+				return nil
+			})
+		},
+	}
+	addCmd.Flags().StringVar(&AddValue, "value", "", "Password value (non-interactive, visible in process listings)")
+	addCmd.Flags().BoolVar(&AddStdinValue, "stdin-value", false, "Read password value from stdin (prevents argv leak)")
+	addCmd.Flags().BoolVar(&AddStdinTOTP, "stdin-totp-secret", false, "Read TOTP secret from stdin (prevents argv leak)")
+	addCmd.Flags().BoolVar(&AddGenerate, "generate", false, "Generate a secure password (non-interactive)")
+	addCmd.Flags().IntVar(&AddLength, "length", 20, "Generated password length for --generate")
+	addCmd.Flags().StringVar(&AddUsername, "username", "", "Username (non-interactive)")
+	addCmd.Flags().StringVar(&AddURL, "url", "", "URL (non-interactive)")
+	addCmd.Flags().StringVar(&AddNotes, "notes", "", "Notes (non-interactive)")
+	addCmd.Flags().StringVar(&AddTOTPSecret, "totp-secret", "", "TOTP secret key (base32 encoded, visible in process listings)")
+	addCmd.Flags().StringVar(&AddTOTPIssuer, "totp-issuer", "", "TOTP issuer/service name")
+	addCmd.Flags().StringVar(&AddTOTPAccount, "totp-account", "", "TOTP account name/username")
+	addCmd.Flags().BoolVar(&AddForce, "force", false, "Skip password strength validation")
+	addCmd.Flags().StringVar(&AddType, "type", "", "Secret type (api_key, bearer_token, basic_auth, ssh_key, password, certificate, database_url, totp_seed, custom). Auto-detected if not specified.")
+	addCmd.Flags().StringVar(&AddUsageHint, "usage-hint", "", "Usage hint for AI agents")
+	addCmd.Flags().BoolVar(&AddAutoRotate, "auto-rotate", false, "Enable automatic rotation reminder")
+	addCmd.Flags().StringVar(&AddExpiresAt, "expires-at", "", "Expiration date (RFC3339 format)")
+	return addCmd
 }
 
 // readStdinValues reads password and TOTP values from stdin when the
@@ -334,22 +352,4 @@ func applySecretMetaFlags(meta vaultpkg.SecretMetadata) vaultpkg.SecretMetadata 
 	return meta
 }
 
-func init() {
-	addCmd.Flags().StringVar(&AddValue, "value", "", "Password value (non-interactive, visible in process listings)")
-	addCmd.Flags().BoolVar(&AddStdinValue, "stdin-value", false, "Read password value from stdin (prevents argv leak)")
-	addCmd.Flags().BoolVar(&AddStdinTOTP, "stdin-totp-secret", false, "Read TOTP secret from stdin (prevents argv leak)")
-	addCmd.Flags().BoolVar(&AddGenerate, "generate", false, "Generate a secure password (non-interactive)")
-	addCmd.Flags().IntVar(&AddLength, "length", 20, "Generated password length for --generate")
-	addCmd.Flags().StringVar(&AddUsername, "username", "", "Username (non-interactive)")
-	addCmd.Flags().StringVar(&AddURL, "url", "", "URL (non-interactive)")
-	addCmd.Flags().StringVar(&AddNotes, "notes", "", "Notes (non-interactive)")
-	addCmd.Flags().StringVar(&AddTOTPSecret, "totp-secret", "", "TOTP secret key (base32 encoded, visible in process listings)")
-	addCmd.Flags().StringVar(&AddTOTPIssuer, "totp-issuer", "", "TOTP issuer/service name")
-	addCmd.Flags().StringVar(&AddTOTPAccount, "totp-account", "", "TOTP account name/username")
-	addCmd.Flags().BoolVar(&AddForce, "force", false, "Skip password strength validation")
-	addCmd.Flags().StringVar(&AddType, "type", "", "Secret type (api_key, bearer_token, basic_auth, ssh_key, password, certificate, database_url, totp_seed, custom). Auto-detected if not specified.")
-	addCmd.Flags().StringVar(&AddUsageHint, "usage-hint", "", "Usage hint for AI agents")
-	addCmd.Flags().BoolVar(&AddAutoRotate, "auto-rotate", false, "Enable automatic rotation reminder")
-	addCmd.Flags().StringVar(&AddExpiresAt, "expires-at", "", "Expiration date (RFC3339 format)")
-	cli.RootCmd.AddCommand(addCmd)
-}
+// init removed in favor of explicit constructor registration

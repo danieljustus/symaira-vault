@@ -10,7 +10,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-	"unsafe"
 )
 
 type fakeKeyring struct {
@@ -86,20 +85,25 @@ func setupTestWrapKey(t *testing.T, fake *fakeKeyring, vaultDir string) []byte {
 	return key
 }
 
+func (f *fakeKeyring) Set(service, account, value string) error {
+	return f.set(service, account, value)
+}
+
+func (f *fakeKeyring) Get(service, account string) (string, error) {
+	return f.get(service, account)
+}
+
+func (f *fakeKeyring) Delete(service, account string) error {
+	return f.delete(service, account)
+}
+
 func stubKeyring(t *testing.T, fake *fakeKeyring) {
 	t.Helper()
-	oldSet := keyringSet
-	oldGet := keyringGet
-	oldDelete := keyringDelete
-
-	keyringSet = fake.set
-	keyringGet = fake.get
-	keyringDelete = fake.delete
+	oldBackend := DefaultBackend
+	DefaultBackend = fake
 
 	t.Cleanup(func() {
-		keyringSet = oldSet
-		keyringGet = oldGet
-		keyringDelete = oldDelete
+		DefaultBackend = oldBackend
 	})
 }
 
@@ -413,6 +417,18 @@ func TestBackwardCompat_LoadOldPlaintextFormat(t *testing.T) {
 		t.Fatalf("fake.set() error = %v", err)
 	}
 
+	// Loading must return legacy format error
+	_, err := LoadPassphrase(vaultDir)
+	if !errors.Is(err, ErrLegacySessionFormat) {
+		t.Fatalf("LoadPassphrase() error = %v, want ErrLegacySessionFormat", err)
+	}
+
+	// Migrate manually
+	if err := MigrateLegacySession(vaultDir); err != nil {
+		t.Fatalf("MigrateLegacySession() error = %v", err)
+	}
+
+	// Now loading must succeed
 	got, err := LoadPassphrase(vaultDir)
 	if err != nil {
 		t.Fatalf("LoadPassphrase() error = %v", err)
@@ -438,7 +454,17 @@ func TestMigration_OldFormatAutoMigratesToEncrypted(t *testing.T) {
 		t.Fatalf("fake.set() error = %v", err)
 	}
 
-	// First load triggers migration
+	// Must fail with ErrLegacySessionFormat
+	_, err := LoadPassphrase(vaultDir)
+	if !errors.Is(err, ErrLegacySessionFormat) {
+		t.Fatalf("LoadPassphrase() error = %v, want ErrLegacySessionFormat", err)
+	}
+
+	// Migrate manually
+	if err := MigrateLegacySession(vaultDir); err != nil {
+		t.Fatalf("MigrateLegacySession() error = %v", err)
+	}
+
 	got, err := LoadPassphrase(vaultDir)
 	if err != nil {
 		t.Fatalf("LoadPassphrase() error = %v", err)
@@ -776,6 +802,10 @@ func TestLoadPassphrase_LastAccessBeforeSavedAt(t *testing.T) {
 		t.Fatalf("fake.set() error = %v", err)
 	}
 
+	if err := MigrateLegacySession(vaultDir); err != nil {
+		t.Fatalf("MigrateLegacySession() error = %v", err)
+	}
+
 	got, err := LoadPassphrase(vaultDir)
 	if err != nil {
 		t.Fatalf("LoadPassphrase() error = %v", err)
@@ -796,6 +826,10 @@ func TestLoadPassphrase_ZeroLastAccessUsesSavedAt(t *testing.T) {
 		int64(time.Hour))
 	if err := fake.set("symvault:"+vaultDir, sessionAccount, payload); err != nil {
 		t.Fatalf("fake.set() error = %v", err)
+	}
+
+	if err := MigrateLegacySession(vaultDir); err != nil {
+		t.Fatalf("MigrateLegacySession() error = %v", err)
 	}
 
 	got, err := LoadPassphrase(vaultDir)
@@ -864,9 +898,21 @@ func TestResolvePassphrase_LegacyFormatMigrates(t *testing.T) {
 		t.Fatalf("fake.set() error = %v", err)
 	}
 
+	// Should fail with ErrLegacySessionFormat
+	_, err = LoadPassphrase(vaultDir)
+	if !errors.Is(err, ErrLegacySessionFormat) {
+		t.Fatalf("LoadPassphrase() error = %v, want ErrLegacySessionFormat", err)
+	}
+
+	// Migrate it
+	if err := MigrateLegacySession(vaultDir); err != nil {
+		t.Fatalf("MigrateLegacySession() error = %v", err)
+	}
+
+	// Should now succeed
 	got, err := LoadPassphrase(vaultDir)
 	if err != nil {
-		t.Fatalf("LoadPassphrase() error = %v", err)
+		t.Fatalf("LoadPassphrase() after migration error = %v", err)
 	}
 	if string(got) != passphrase {
 		t.Errorf("LoadPassphrase() = %q, want %q", got, passphrase)
@@ -904,7 +950,11 @@ func TestResolvePassphrase_WipesPlaintextAfterMigration(t *testing.T) {
 		t.Fatalf("fake.set() error = %v", err)
 	}
 
-	// Re-read from the fake keyring to get a fresh sess with a known backing array
+	// Migrate
+	if err := MigrateLegacySession(vaultDir); err != nil {
+		t.Fatalf("MigrateLegacySession() error = %v", err)
+	}
+
 	raw, err := fake.get("symvault:"+vaultDir, sessionAccount)
 	if err != nil {
 		t.Fatalf("fake.get() error = %v", err)
@@ -913,35 +963,8 @@ func TestResolvePassphrase_WipesPlaintextAfterMigration(t *testing.T) {
 	if jsonErr := json.Unmarshal([]byte(raw), &loaded); jsonErr != nil {
 		t.Fatalf("json.Unmarshal() error = %v", jsonErr)
 	}
-	if len(loaded.Passphrase) == 0 {
-		t.Fatal("expected legacy passphrase to be present before migration")
-	}
-
-	// Capture the backing data pointer before migration.
-	// #nosec G103 — intentional: confirming wipe side-effect in test.
-	origData := unsafe.SliceData(loaded.Passphrase)
-	origLen := len(loaded.Passphrase)
-
-	got, err := resolvePassphrase(&loaded, vaultDir)
-	if err != nil {
-		t.Fatalf("resolvePassphrase() error = %v", err)
-	}
-	if string(got) != passphrase {
-		t.Errorf("resolvePassphrase() = %q, want %q", got, passphrase)
-	}
-
-	// After migration the original backing data should be zeroed
-	// (the slice was explicitly wiped before being set to nil).
-	buf := unsafe.Slice(origData, origLen)
-	for i, b := range buf {
-		if b != 0 {
-			t.Errorf("backing data at offset %d = %d, want 0", i, b)
-		}
-	}
-
-	// The struct field must be nil now
 	if len(loaded.Passphrase) > 0 {
-		t.Error("sess.Passphrase should be nil after migration")
+		t.Error("expected legacy passphrase to be cleared/nil after migration")
 	}
 }
 
@@ -1064,12 +1087,12 @@ func TestResolvePassphrase_EncryptFailsDuringMigration(t *testing.T) {
 	payload, _ := json.Marshal(sess)
 	fake.set("symvault:"+vaultDir, sessionAccount, string(payload))
 
-	got, err := LoadPassphrase(vaultDir)
-	if err != nil {
-		t.Fatalf("LoadPassphrase failed: %v", err)
-	}
-	if string(got) != plain {
-		t.Errorf("LoadPassphrase = %q, want %q", got, plain)
+	// Make the keyring save fail during migration
+	fake.setErr = errors.New("keyring write failed")
+
+	err := MigrateLegacySession(vaultDir)
+	if err == nil {
+		t.Fatal("expected MigrateLegacySession to fail when keyring write fails")
 	}
 }
 

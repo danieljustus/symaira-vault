@@ -350,6 +350,7 @@ func TestHandleGet_RedactedTOTPStillGeneratesCode(t *testing.T) {
 			Dir:      vaultDir,
 			Identity: identity,
 		},
+		ops:  vault.DefaultOperationService{},
 		agent: &config.AgentProfile{
 			Name:         "restricted",
 			AllowedPaths: []string{"*"},
@@ -770,6 +771,7 @@ func TestGetValuePerToolRedact(t *testing.T) {
 			Dir:      vaultDir,
 			Identity: identity,
 		},
+		ops:  vault.DefaultOperationService{},
 		agent: &config.AgentProfile{
 			Name:          "restricted",
 			AllowedPaths:  []string{"*"},
@@ -836,6 +838,7 @@ func TestGetValueBlocksQuarantinedPath(t *testing.T) {
 			Dir:      vaultDir,
 			Identity: identity,
 		},
+		ops:  vault.DefaultOperationService{},
 		agent: &config.AgentProfile{
 			Name:          "test",
 			AllowedPaths:  []string{"*"},

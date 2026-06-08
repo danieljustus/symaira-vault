@@ -8,7 +8,6 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/crypto"
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
-	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func (s *Server) handleSet(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -78,7 +77,7 @@ func (s *Server) handleSet(ctx context.Context, req mcp.CallToolRequest) (*mcp.C
 		}
 	}
 
-	if err := vaultpkg.Ops.UpsertEntry(s.vault, path, partialData, "set", nil); err != nil {
+	if err := s.ops.UpsertEntry(s.vault, path, partialData, "set", nil); err != nil {
 		s.logAudit(ctx, "set", path, false)
 		metrics.RecordVaultOperation("write", "error")
 		mapped, mappedErr := vaultServiceErrorResult(err)

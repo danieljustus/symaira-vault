@@ -21,6 +21,7 @@ func newTestServer(t *testing.T, profile config.AgentProfile, transport string) 
 
 	return &Server{
 		vault:     &vault.Vault{},
+		ops:       vault.DefaultOperationService{},
 		agent:     &profile,
 		auditLog:  auditLog,
 		transport: transport,

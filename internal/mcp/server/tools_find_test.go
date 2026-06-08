@@ -243,6 +243,7 @@ func TestFindPerToolRedact(t *testing.T) {
 			Dir:      vaultDir,
 			Identity: identity,
 		},
+		ops:  vault.DefaultOperationService{},
 		agent: &config.AgentProfile{
 			Name:         "restricted",
 			AllowedPaths: []string{"*"},

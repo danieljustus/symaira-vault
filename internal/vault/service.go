@@ -38,7 +38,54 @@ type OperationService interface {
 
 type DefaultOperationService struct{}
 
-var Ops OperationService = DefaultOperationService{}
+type VaultService struct {
+	Vault *Vault
+	Ops   OperationService
+}
+
+func NewVaultService(v *Vault, ops OperationService) *VaultService {
+	return &VaultService{
+		Vault: v,
+		Ops:   ops,
+	}
+}
+
+func (s *VaultService) GetField(path, field string) (any, error) {
+	return s.Ops.GetField(s.Vault, path, field)
+}
+
+func (s *VaultService) UpsertEntry(path string, data map[string]any, action string, provenance *WriteRecord) error {
+	return s.Ops.UpsertEntry(s.Vault, path, data, action, provenance)
+}
+
+func (s *VaultService) GetEntry(path string) (*Entry, error) {
+	return s.Ops.GetEntry(s.Vault, path)
+}
+
+func (s *VaultService) WriteEntry(path string, entry *Entry) error {
+	return s.Ops.WriteEntry(s.Vault, path, entry)
+}
+
+func (s *VaultService) DeleteEntry(path string) error {
+	return s.Ops.DeleteEntry(s.Vault, path)
+}
+
+func (s *VaultService) ListEntries(prefix string) ([]string, error) {
+	return s.Ops.ListEntries(s.Vault, prefix)
+}
+
+func (s *VaultService) FindEntries(query string, opts FindOptions) ([]Match, error) {
+	return s.Ops.FindEntries(s.Vault, query, opts)
+}
+
+func (s *VaultService) VaultDir() string {
+	return s.Ops.VaultDir(s.Vault)
+}
+
+func (s *VaultService) VaultIdentity() *age.X25519Identity {
+	return s.Ops.VaultIdentity(s.Vault)
+}
+
 
 func (DefaultOperationService) GetField(v *Vault, path, field string) (any, error) {
 	entry, err := ReadEntry(v.Dir, path, v.Identity)

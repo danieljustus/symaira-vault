@@ -11,12 +11,13 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/vault/taint"
 )
 
-var listCmd = &cobra.Command{
-	Use:               "list [prefix]",
-	Aliases:           []string{"ls"},
-	ValidArgsFunction: cli.EntryCompletionFunc,
-	Short:             "List password entries",
-	Example: `  # List all entries
+func NewListCmd(ops vaultpkg.OperationService) *cobra.Command {
+	listCmd := &cobra.Command{
+		Use:               "list [prefix]",
+		Aliases:           []string{"ls"},
+		ValidArgsFunction: cli.EntryCompletionFunc,
+		Short:             "List password entries",
+		Example: `  # List all entries
   symvault list
 
   # List entries under "work/" prefix
@@ -24,47 +25,46 @@ var listCmd = &cobra.Command{
 
   # JSON output
   symvault list --output json`,
-	Args: cobra.MaximumNArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return cli.WithVault(func(v *vaultpkg.Vault) error {
-			cli.MaybeAutoPull(cli.VaultDir(v), v.Config)
-			prefix := ""
-			if len(args) > 0 {
-				prefix = args[0]
-			}
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cli.WithVault(func(v *vaultpkg.Vault) error {
+				s := vaultpkg.NewVaultService(v, ops)
+				cli.MaybeAutoPull(s.VaultDir(), v.Config)
+				prefix := ""
+				if len(args) > 0 {
+					prefix = args[0]
+				}
 
-			entries, err := cli.ListEntries(v, prefix)
-			if err != nil {
-				return errorspkg.ReadFailed(err, "cannot list entries")
-			}
+				entries, err := s.ListEntries(prefix)
+				if err != nil {
+					return errorspkg.ReadFailed(err, "cannot list entries")
+				}
 
-			if cli.OutputFormat != "text" {
-				outputs := make([]vaultpkg.ListEntryInfo, 0, len(entries))
-				for _, path := range entries {
-					output := vaultpkg.ListEntryInfo{Path: path}
-					entry, err := cli.GetEntry(v, path)
-					if err == nil {
-						output.Type = string(entry.SecretMetadata.Type)
-						output.UsageHint = entry.SecretMetadata.UsageHint
-						output.AutoRotate = entry.SecretMetadata.AutoRotate
+				if cli.OutputFormat != "text" {
+					outputs := make([]vaultpkg.ListEntryInfo, 0, len(entries))
+					for _, path := range entries {
+						output := vaultpkg.ListEntryInfo{Path: path}
+						entry, err := s.GetEntry(path)
+						if err == nil {
+							output.Type = string(entry.SecretMetadata.Type)
+							output.UsageHint = entry.SecretMetadata.UsageHint
+							output.AutoRotate = entry.SecretMetadata.AutoRotate
+						}
+						outputs = append(outputs, output)
 					}
-					outputs = append(outputs, output)
+					if err := cli.PrintResult(outputs); err != nil {
+						return err
+					}
+					return nil
 				}
-				if err := cli.PrintResult(outputs); err != nil {
-					return err
+
+				for _, e := range entries {
+					cli.PrintlnQuietAware(render.ForTerminal(taint.Wrap(e, taint.Provenance{Source: "cli.path"})))
 				}
+
 				return nil
-			}
-
-			for _, e := range entries {
-				cli.PrintlnQuietAware(render.ForTerminal(taint.Wrap(e, taint.Provenance{Source: "cli.path"})))
-			}
-
-			return nil
-		})
-	},
-}
-
-func init() {
-	cli.RootCmd.AddCommand(listCmd)
+			})
+		},
+	}
+	return listCmd
 }

@@ -55,9 +55,9 @@ func BenchmarkListPseudonymized(b *testing.B) {
 	}
 
 	// Force cache miss every iteration to measure parallel decryption.
-	origTTL := pseudonymizedCache.ttl
-	pseudonymizedCache.ttl = 0
-	defer func() { pseudonymizedCache.ttl = origTTL }()
+	origTTL := globalCache.pseudoTTL
+	globalCache.pseudoTTL = 0
+	defer func() { globalCache.pseudoTTL = origTTL }()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -521,9 +521,9 @@ func TestListCacheTTLExpiration(t *testing.T) {
 	mustWriteEntry(t, vaultDir, id, "github.com/user", map[string]interface{}{"username": "alice"})
 
 	// Set a very short TTL
-	originalTTL := listCache.ttl
-	listCache.ttl = 1 * time.Millisecond
-	defer func() { listCache.ttl = originalTTL }()
+	originalTTL := globalCache.listTTL
+	globalCache.listTTL = 1 * time.Millisecond
+	defer func() { globalCache.listTTL = originalTTL }()
 
 	// First call populates cache
 	_, err := List(vaultDir, "", nil)

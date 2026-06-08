@@ -13,6 +13,7 @@ import (
 
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	"github.com/danieljustus/symaira-vault/internal/session"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
@@ -288,6 +289,27 @@ func enablePseudonymizeConfig(vaultDir string) error {
 	return nil
 }
 
+var migrateSessionCmd = &cobra.Command{
+	Use:   "session",
+	Short: "Migrate legacy plaintext sessions to wrap-key encryption",
+	Long: `Migrates legacy plaintext sessions stored in the OS keyring to the new
+wrap-key encrypted format.`,
+	Example: `  symvault migrate session`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		vaultDir, err := cli.VaultPath()
+		if err != nil {
+			return err
+		}
+
+		if err := session.MigrateLegacySession(vaultDir); err != nil {
+			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "session migration failed", err)
+		}
+
+		cli.PrintlnQuietAware("Session migration complete.")
+		return nil
+	},
+}
+
 func init() {
 	MigrateCmd.AddCommand(migratePseudonymizeCmd)
 	migratePseudonymizeCmd.Flags().BoolVarP(&MigrateYes, "yes", "y", false, "Skip confirmation prompt")
@@ -295,5 +317,6 @@ func init() {
 	MigrateCmd.AddCommand(migrateV4Cmd)
 	migrateV4Cmd.Flags().BoolVarP(&MigrateYes, "yes", "y", false, "Skip confirmation prompt")
 	migrateV4Cmd.Flags().BoolVar(&MigrateV4DryRun, "dry-run", false, "Preview changes without writing")
+	MigrateCmd.AddCommand(migrateSessionCmd)
 	cli.RootCmd.AddCommand(MigrateCmd)
 }

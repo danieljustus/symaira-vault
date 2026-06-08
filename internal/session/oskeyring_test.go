@@ -3,176 +3,162 @@
 package session
 
 import (
+	"errors"
 	"testing"
-	"time"
 )
 
-func TestFallback_KeyringOperations(t *testing.T) {
-	oldSet := keyringSet
-	oldGet := keyringGet
-	oldDelete := keyringDelete
-	oldFallbackActive := fallbackActive
-	oldFallback := fallback
+type mockKeyringBackend struct {
+	getErr    error
+	setErr    error
+	deleteErr error
+	store     map[string]string
+}
 
-	fallbackMu.Lock()
-	fallbackActive = true
-	fallback = &memoryKeyring{}
-	fallbackMu.Unlock()
+func newMockKeyringBackend() *mockKeyringBackend {
+	return &mockKeyringBackend{store: make(map[string]string)}
+}
 
-	keyringSet = setWithFallback
-	keyringGet = getWithFallback
-	keyringDelete = deleteWithFallback
+func (m *mockKeyringBackend) Set(service, account, value string) error {
+	if m.setErr != nil {
+		return m.setErr
+	}
+	m.store[service+"|"+account] = value
+	return nil
+}
 
-	t.Cleanup(func() {
-		keyringSet = oldSet
-		keyringGet = oldGet
-		keyringDelete = oldDelete
-		fallbackMu.Lock()
-		fallbackActive = oldFallbackActive
-		fallback = oldFallback
-		fallbackMu.Unlock()
-	})
+func (m *mockKeyringBackend) Get(service, account string) (string, error) {
+	if m.getErr != nil {
+		return "", m.getErr
+	}
+	val, ok := m.store[service+"|"+account]
+	if !ok {
+		return "", errors.New("not found")
+	}
+	return val, nil
+}
 
-	vaultDir := "/tmp/vault-fallback"
-	passphrase := []byte("fallback-secret")
+func (m *mockKeyringBackend) Delete(service, account string) error {
+	if m.deleteErr != nil {
+		return m.deleteErr
+	}
+	delete(m.store, service+"|"+account)
+	return nil
+}
 
-	if err := SavePassphrase(vaultDir, passphrase, time.Hour); err != nil {
-		t.Fatalf("SavePassphrase() error = %v", err)
+func TestFallbackBackend_PrimaryWorks(t *testing.T) {
+	primary := newMockKeyringBackend()
+	fallback := newMockKeyringBackend()
+	fb := NewFallbackBackend(primary, fallback)
+
+	if err := fb.Set("serv", "acc", "val"); err != nil {
+		t.Fatalf("Set failed: %v", err)
 	}
 
-	got, err := LoadPassphrase(vaultDir)
+	if fb.isFallbackActive() {
+		t.Error("expected fallback NOT to be active")
+	}
+
+	got, err := fb.Get("serv", "acc")
 	if err != nil {
-		t.Fatalf("LoadPassphrase() error = %v", err)
+		t.Fatalf("Get failed: %v", err)
 	}
-	if string(got) != string(passphrase) {
-		t.Errorf("LoadPassphrase() = %q, want %q", got, passphrase)
-	}
-
-	if err := ClearSession(vaultDir); err != nil {
-		t.Fatalf("ClearSession() error = %v", err)
+	if got != "val" {
+		t.Errorf("got %q, want %q", got, "val")
 	}
 
-	_, err = LoadPassphrase(vaultDir)
-	if err == nil {
-		t.Fatal("LoadPassphrase() after ClearSession error = nil, want not found")
+	// Verify only primary was modified
+	if primary.store["serv|acc"] != "val" {
+		t.Error("expected value in primary store")
+	}
+	if len(fallback.store) != 0 {
+		t.Error("expected fallback store to be empty")
+	}
+
+	if err := fb.Delete("serv", "acc"); err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+	if _, ok := primary.store["serv|acc"]; ok {
+		t.Error("expected deleted key in primary")
 	}
 }
 
-func TestFallback_Set_WrapsForKeyringPath(t *testing.T) {
-	oldSet := keyringSet
-	oldFallbackActive := fallbackActive
-	oldFallback := fallback
-	oldGet := keyringGet
-	oldDelete := keyringDelete
+func TestFallbackBackend_FallbackTriggered(t *testing.T) {
+	primary := newMockKeyringBackend()
+	fallback := newMockKeyringBackend()
+	fb := NewFallbackBackend(primary, fallback)
 
-	fallbackMu.Lock()
-	fallbackActive = false
-	fallback = &memoryKeyring{}
-	fallbackMu.Unlock()
+	// Make primary fail on set
+	primary.setErr = errors.New("primary set failed")
 
-	keyringSet = setWithFallback
-	keyringGet = getWithFallback
-	keyringDelete = deleteWithFallback
-
-	t.Cleanup(func() {
-		keyringSet = oldSet
-		keyringGet = oldGet
-		keyringDelete = oldDelete
-		fallbackMu.Lock()
-		fallbackActive = oldFallbackActive
-		fallback = oldFallback
-		fallbackMu.Unlock()
-	})
-
-	vaultDir := "/tmp/vault-fallback-real"
-	passphrase := []byte("real-keyring-test")
-
-	err := SavePassphrase(vaultDir, passphrase, time.Hour)
-	if err != nil {
-		t.Fatalf("SavePassphrase() error = %v", err)
+	if err := fb.Set("serv", "acc", "val"); err != nil {
+		t.Fatalf("Set failed: %v", err)
 	}
 
-	got, err := LoadPassphrase(vaultDir)
-	if err != nil {
-		t.Fatalf("LoadPassphrase() error = %v", err)
+	if !fb.isFallbackActive() {
+		t.Error("expected fallback to be active")
 	}
-	if string(got) != string(passphrase) {
-		t.Errorf("LoadPassphrase() = %q, want %q", got, passphrase)
+
+	// Primary should not have the value, fallback should
+	if len(primary.store) != 0 {
+		t.Error("expected primary store to be empty")
+	}
+	if fallback.store["serv|acc"] != "val" {
+		t.Error("expected value in fallback store")
+	}
+
+	// Subsequent Get/Delete should go straight to fallback
+	got, err := fb.Get("serv", "acc")
+	if err != nil {
+		t.Fatalf("Get failed: %v", err)
+	}
+	if got != "val" {
+		t.Errorf("got %q, want %q", got, "val")
+	}
+
+	if err := fb.Delete("serv", "acc"); err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+	if _, ok := fallback.store["serv|acc"]; ok {
+		t.Error("expected deleted key in fallback")
 	}
 }
 
-func TestFallback_Delete_ThroughFallback(t *testing.T) {
-	oldSet := keyringSet
-	oldGet := keyringGet
-	oldDelete := keyringDelete
-	oldFallbackActive := fallbackActive
-	oldFallback := fallback
+func TestFallbackBackend_GetTriggersFallback(t *testing.T) {
+	primary := newMockKeyringBackend()
+	fallback := newMockKeyringBackend()
+	fb := NewFallbackBackend(primary, fallback)
 
-	fallbackMu.Lock()
-	fallbackActive = true
-	fallback = &memoryKeyring{}
-	fallbackMu.Unlock()
+	// Make primary fail on get
+	primary.getErr = errors.New("primary get failed")
+	fallback.store["serv|acc"] = "val"
 
-	keyringSet = setWithFallback
-	keyringGet = getWithFallback
-	keyringDelete = deleteWithFallback
-
-	t.Cleanup(func() {
-		keyringSet = oldSet
-		keyringGet = oldGet
-		keyringDelete = oldDelete
-		fallbackMu.Lock()
-		fallbackActive = oldFallbackActive
-		fallback = oldFallback
-		fallbackMu.Unlock()
-	})
-
-	vaultDir := "/tmp/vault-delete-fallback"
-	err := SavePassphrase(vaultDir, []byte("secret"), time.Hour)
+	got, err := fb.Get("serv", "acc")
 	if err != nil {
-		t.Fatalf("SavePassphrase() error = %v", err)
+		t.Fatalf("Get failed: %v", err)
+	}
+	if got != "val" {
+		t.Errorf("got %q, want %q", got, "val")
 	}
 
-	got, err := LoadPassphrase(vaultDir)
-	if err != nil {
-		t.Fatalf("LoadPassphrase() error = %v", err)
-	}
-	if string(got) != "secret" {
-		t.Errorf("LoadPassphrase() = %q, want %q", got, "secret")
-	}
-
-	if err := ClearSession(vaultDir); err != nil {
-		t.Fatalf("ClearSession() error = %v", err)
-	}
-
-	_, err = LoadPassphrase(vaultDir)
-	if err == nil {
-		t.Fatal("LoadPassphrase() after ClearSession should fail")
+	if !fb.isFallbackActive() {
+		t.Error("expected fallback to be active")
 	}
 }
 
-func TestFallback_Get_NotFound(t *testing.T) {
-	oldGet := keyringGet
-	oldFallbackActive := fallbackActive
-	oldFallback := fallback
+func TestFallbackBackend_DeleteTriggersFallback(t *testing.T) {
+	primary := newMockKeyringBackend()
+	fallback := newMockKeyringBackend()
+	fb := NewFallbackBackend(primary, fallback)
 
-	fallbackMu.Lock()
-	fallbackActive = true
-	fallback = &memoryKeyring{}
-	fallbackMu.Unlock()
+	// Make primary fail on delete
+	primary.deleteErr = errors.New("primary delete failed")
+	fallback.store["serv|acc"] = "val"
 
-	keyringGet = getWithFallback
+	if err := fb.Delete("serv", "acc"); err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
 
-	t.Cleanup(func() {
-		keyringGet = oldGet
-		fallbackMu.Lock()
-		fallbackActive = oldFallbackActive
-		fallback = oldFallback
-		fallbackMu.Unlock()
-	})
-
-	_, err := LoadPassphrase("/tmp/vault-fallback-notfound")
-	if err == nil {
-		t.Fatal("LoadPassphrase() error = nil, want not found")
+	if !fb.isFallbackActive() {
+		t.Error("expected fallback to be active")
 	}
 }
