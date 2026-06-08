@@ -9,9 +9,15 @@ import (
 	"fmt"
 	"os"
 	"sync/atomic"
+
+	"golang.org/x/term"
 )
 
 var deprecateWarn atomic.Uint32
+
+// ForceDeprecationWarning forces the deprecation warning to print even when
+// stderr is not a terminal. Used in tests.
+var ForceDeprecationWarning bool
 
 // Getenv checks the primary environment variable first, then falls back to the
 // legacy variable. Prints a one-shot deprecation warning when a legacy
@@ -22,9 +28,11 @@ func Getenv(primary, legacy string) string {
 	}
 	if v := os.Getenv(legacy); v != "" {
 		if deprecateWarn.CompareAndSwap(0, 1) && len(legacy) > 8 && legacy[:8] == "OPENPASS" {
-			fmt.Fprintf(os.Stderr,
-				"WARNING: %[1]s is deprecated and will be removed 3 releases after 2026-05-26. "+
-					"Use %[2]s instead.\n", legacy, primary)
+			if ForceDeprecationWarning || term.IsTerminal(int(os.Stderr.Fd())) {
+				fmt.Fprintf(os.Stderr,
+					"WARNING: %[1]s is deprecated and will be removed 3 releases after 2026-05-26. "+
+						"Use %[2]s instead.\n", legacy, primary)
+			}
 		}
 		return v
 	}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"path/filepath"
 	"time"
-	"unsafe"
 
 	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 
@@ -86,28 +85,27 @@ func resolveUnlockPassphrase(vaultDir string, interactive bool, cfg *configpkg.C
 			}
 		}
 		if len(passphrase) == 0 && (cfg == nil || cfg.Security == nil || !cfg.Security.DisableEnvPassphrase) {
-			if envPass := envutil.Getenv("SYMVAULT_PASSPHRASE", "OPENPASS_PASSPHRASE"); envPass != "" {
-				// Use unsafe.Slice to alias the string backing array without a heap copy.
-				// This way the deferred Wipe(passphrase) at the call site clears the only
-				// copy of the passphrase in memory, and the os.Unsetenv does not leave a
-				// lingering string on the heap.
-				// #nosec G103 — intentional: unsafe.Slice avoids heap-copying the passphrase
-				// so that the subsequent Wipe clears the only copy in memory.
-				passphrase = unsafe.Slice(unsafe.StringData(envPass), len(envPass))
+			// Check the early-cached env passphrase first (sniffed in main()
+			// before any child process could inherit it).
+			if cached := consumeCachedEnvPassphrase(); len(cached) > 0 {
+				passphrase = cached
+				passphraseFromEnv = true
+				WarnEnvPassphrase()
+			} else if p := envutil.Getenv("SYMVAULT_PASSPHRASE", "OPENPASS_PASSPHRASE"); p != "" {
+				passphrase = []byte(p)
 				passphraseFromEnv = true
 				WarnEnvPassphrase()
 			}
-			envutil.Unsetenv("SYMVAULT_PASSPHRASE", "OPENPASS_PASSPHRASE")
 		}
-	}
-	if len(passphrase) == 0 {
-		if !interactive {
-			return nil, false, false, errorspkg.NewCLIError(errorspkg.ExitLocked, lockedMessageForCache(), nil)
-		}
-		var readErr error
-		passphrase, readErr = ReadHiddenInput("Passphrase: ", nil)
-		if readErr != nil {
-			return nil, false, false, errorspkg.NewCLIError(errorspkg.ExitLocked, "read passphrase", readErr)
+		if len(passphrase) == 0 {
+			if !interactive {
+				return nil, false, false, errorspkg.NewCLIError(errorspkg.ExitLocked, lockedMessageForCache(), nil)
+			}
+			var readErr error
+			passphrase, readErr = ReadHiddenInput("Passphrase: ", nil)
+			if readErr != nil {
+				return nil, false, false, errorspkg.NewCLIError(errorspkg.ExitLocked, "read passphrase", readErr)
+			}
 		}
 	}
 	return passphrase, passphraseFromEnv, passphraseFromBiometric, nil

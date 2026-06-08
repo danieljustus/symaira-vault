@@ -39,6 +39,12 @@ func SetVersionInfo(version, commit, date string) {
 
 func AppVersion() string { return cli.AppVersionStr() }
 
+// SniffAndClearEnvPassphrase reads and caches the SYMVAULT_PASSPHRASE env var
+// then unsets it so child processes cannot inherit the raw passphrase.
+func SniffAndClearEnvPassphrase() {
+	cli.SniffAndClearEnvPassphrase()
+}
+
 // printQuietAware prints to stdout unless quiet mode is enabled
 func printQuietAware(format string, args ...interface{}) {
 	cli.PrintQuietAware(format, args...)

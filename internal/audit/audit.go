@@ -20,6 +20,8 @@ import (
 	"sync"
 	"time"
 
+	"filippo.io/age"
+
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	"github.com/danieljustus/symaira-vault/internal/logging"
 
@@ -181,7 +183,12 @@ type Logger struct {
 	syncMode   bool
 }
 
-func New(agentName string, vaultDir string) (*Logger, error) {
+// New creates a new audit Logger for the given agent and vault directory.
+// When identity is non-nil (platforms without OS keyring), the HMAC key
+// is encrypted with the vault's age identity so it cannot be forged by an
+// attacker who exfiltrates only the vault directory without the passphrase.
+// On platforms with OS keyring support the identity is ignored.
+func New(agentName string, vaultDir string, identity *age.X25519Identity) (*Logger, error) {
 	if strings.Contains(agentName, "/") || strings.Contains(agentName, "\\") || agentName == ".." || agentName == "." {
 		return nil, errors.New("agent name must not contain path separators or traversal patterns")
 	}
@@ -226,7 +233,7 @@ func New(agentName string, vaultDir string) (*Logger, error) {
 		return nil, fmt.Errorf("open audit log: %w", err)
 	}
 
-	ks := NewKeystore(cleanAuditDir, nil)
+	ks := NewKeystore(cleanAuditDir, identity)
 	hmacKey, err := ks.LoadOrCreateHMACKey()
 	if err != nil {
 		_ = file.Close()

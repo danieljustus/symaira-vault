@@ -137,7 +137,7 @@ func New(v *vault.Vault, agentName string, transport string) (*Server, error) {
 		})
 	}
 
-	auditLog, err := audit.New(agentName, v.Dir)
+	auditLog, err := audit.New(agentName, v.Dir, v.Identity)
 	if err != nil {
 		return nil, err
 	}
