@@ -8,7 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"filippo.io/age"
+
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/session"
 	"github.com/danieljustus/symaira-vault/internal/vault"
 )
 
@@ -222,7 +225,15 @@ func checkManifestIntegrity(vaultDir string, _ Options) Result {
 		return r
 	}
 
-	result, err := vault.VerifyManifestIntegrity(vaultDir, nil)
+	identity, err := loadIdentityForVault(vaultDir)
+	if err != nil {
+		r.Status = StatusWarn
+		r.Message = msgSessionNeeded
+		r.Hint = "run `symvault unlock` to decrypt your identity for manifest verification"
+		return r
+	}
+
+	result, err := vault.VerifyManifestIntegrity(vaultDir, identity)
 	if err != nil {
 		r.Status = StatusWarn
 		r.Message = msgSessionNeeded
@@ -255,6 +266,21 @@ func checkManifestIntegrity(vaultDir string, _ Options) Result {
 	r.Status = StatusOK
 	r.Message = fmt.Sprintf("all %d entries verified", result.OK)
 	return r
+}
+
+// loadIdentityForVault attempts to load a cached X25519 identity from the
+// session keyring for the given vault directory. Returns nil when no valid
+// cached identity is available.
+func loadIdentityForVault(vaultDir string) (*age.X25519Identity, error) {
+	cached, err := session.LoadIdentity(vaultDir)
+	if err != nil {
+		return nil, err
+	}
+	identity, err := age.ParseX25519Identity(cached)
+	if err != nil {
+		return nil, err
+	}
+	return identity, nil
 }
 
 func checkVaultSize(vaultDir string, _ Options) Result {

@@ -79,7 +79,7 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 
 	// Create a dedicated audit logger for token cleanup events before
 	// starting the cleanup goroutine so it can reference the logger.
-	cleanupAuditLog, err := audit.New("token-cleanup", vaultDir)
+	cleanupAuditLog, err := audit.New("token-cleanup", vaultDir, v.Identity)
 	if err != nil {
 		return fmt.Errorf("create token cleanup audit logger: %w", err)
 	}
@@ -105,7 +105,7 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 		_ = registry.StartFileWatcher(ctx, 2*time.Second)
 	}
 
-	authAuditLog, err := audit.New("auth-failures", vaultDir)
+	authAuditLog, err := audit.New("auth-failures", vaultDir, v.Identity)
 	if err != nil {
 		return fmt.Errorf("create auth audit logger: %w", err)
 	}

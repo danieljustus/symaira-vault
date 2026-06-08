@@ -90,6 +90,8 @@ func captureStderr(fn func()) string {
 
 func TestGetenvDeprecationWarning(t *testing.T) {
 	t.Run("warns once when legacy var is consumed", func(t *testing.T) {
+		ForceDeprecationWarning = true
+		defer func() { ForceDeprecationWarning = false }()
 		resetDeprecationWarning()
 		os.Unsetenv("SYMVAULT_DEPTEST")
 		t.Setenv("OPENPASS_DEPTEST", "legacy-value")
