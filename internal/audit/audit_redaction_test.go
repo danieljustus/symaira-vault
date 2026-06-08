@@ -15,7 +15,7 @@ func TestFieldNameOnlyNeverValue(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("field-name-test", "")
+	logger, err := New("field-name-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -59,7 +59,7 @@ func TestNoSecretValuesInPathEntries(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("path-secret-test", "")
+	logger, err := New("path-secret-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -118,7 +118,7 @@ func TestSecretRedactionFixtureBased(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("fixture-test", "")
+	logger, err := New("fixture-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -249,7 +249,7 @@ func TestAuditLogDoesNotContainJSONValues(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("no-values-test", "")
+	logger, err := New("no-values-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -373,7 +373,7 @@ func TestSensitivePathPatternsDoesNotLeakValues(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("sensitive-path-test", "")
+	logger, err := New("sensitive-path-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -434,7 +434,7 @@ func TestReasonFieldDoesNotLeakValues(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("reason-test", "")
+	logger, err := New("reason-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -497,7 +497,7 @@ func TestConcurrentNoValueLeak(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("concurrent-redact-test", "")
+	logger, err := New("concurrent-redact-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}

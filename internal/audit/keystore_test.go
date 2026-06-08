@@ -100,7 +100,7 @@ func TestKeystoreWithAuditLogIntegration(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("keystore-integ-test", "")
+	logger, err := New("keystore-integ-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -127,7 +127,7 @@ func TestKeystoreHMACVerificationAfterKeystoreUse(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("verify-keystore-test", "")
+	logger, err := New("verify-keystore-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}

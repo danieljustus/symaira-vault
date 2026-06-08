@@ -11,6 +11,11 @@ var (
 )
 
 func main() {
+	// Sniff and clear SYMVAULT_PASSPHRASE from the environment before any
+	// child process can inherit it. The cached value is consumed by the
+	// unlock flow in internal/cli.
+	cmd.SniffAndClearEnvPassphrase()
+
 	cmd.SetVersionInfo(version, commit, date)
 	cmd.Execute()
 }

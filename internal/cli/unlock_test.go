@@ -111,7 +111,9 @@ func TestUnlockVaultWithTTLDoesNotSaveTouchIDItemForUncachedEnvPassphrase(t *tes
 		t.Fatal("SessionSaveBiometric should not be called for uncached env passphrase")
 		return nil
 	}
-	t.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+	// Prime the early-cached env passphrase (normally sniffed in main()
+	// before any child process can inherit it).
+	cachedEnvPassphrase = append([]byte(nil), passphrase...)
 
 	v, _, err := UnlockVaultWithTTL(vaultDir, false, 0, false)
 	if err != nil {
