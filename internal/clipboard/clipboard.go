@@ -3,6 +3,8 @@ package clipboard
 
 import (
 	"errors"
+	"os"
+	"os/signal"
 	"time"
 )
 
@@ -14,6 +16,9 @@ import (
 var ErrClipboardNotCleared = errors.New("clipboard still contains the copied secret after clear; a clipboard-history manager may have restored it")
 
 // StartAutoClear clears the clipboard after the configured timeout unless canceled.
+// It also registers handlers for SIGINT, SIGTERM, and SIGHUP (on supported
+// platforms) so the clipboard is cleared if the process is terminated before
+// the timer fires.
 func StartAutoClear(duration int, clearFn func(), cancelCh <-chan struct{}) {
 	if duration <= 0 || clearFn == nil {
 		return
@@ -22,10 +27,16 @@ func StartAutoClear(duration int, clearFn func(), cancelCh <-chan struct{}) {
 	timer := time.NewTimer(time.Duration(duration) * time.Second)
 	defer timer.Stop()
 
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, terminationSignals()...)
+	defer signal.Stop(sigCh)
+
 	select {
 	case <-timer.C:
 		clearFn()
 	case <-cancelCh:
+	case <-sigCh:
+		clearFn()
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 	"filippo.io/age"
 
 	"github.com/danieljustus/symaira-vault/internal/health"
+	"github.com/danieljustus/symaira-vault/internal/session"
 	"github.com/danieljustus/symaira-vault/internal/vault"
 )
 
@@ -882,8 +883,13 @@ func TestRunChecks_ManifestIntegrity_AllOK(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Cache identity by opening vault (this calls rememberSearchIdentity).
+	// Cache identity by opening vault.
 	if _, err := vault.OpenWithCachedIdentity(dir, identity); err != nil {
+		t.Fatal(err)
+	}
+
+	// Save identity to session so the health check can load it.
+	if err := session.SaveIdentity(dir, identity.String(), 15*time.Minute); err != nil {
 		t.Fatal(err)
 	}
 

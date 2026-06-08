@@ -102,3 +102,241 @@ func (p *AgentProfile) EffectiveRedactFields(toolName string) []string {
 	}
 	return result
 }
+
+// Default values applied by (*AgentProfile).Normalize when a pointer field
+// is nil. Keep these conservative (deny-by-default, safe for an unknown
+// agent). The defaults intentionally match the zero value of each type for
+// fields where the zero value is the right default (numeric rate limits,
+// string names).
+const (
+	defaultApprovalMode        = "deny"
+	defaultPromptInjectionMode = "off"
+	defaultApprovalTimeout     = 5 * time.Minute
+)
+
+// Normalize fills every nil pointer field on p with its documented default
+// value, mutating p in place. Already-set fields are preserved. After
+// Normalize, call sites can dereference any field without nil checks.
+//
+// The pointer-based layout is retained for YAML round-tripping (omitempty
+// needs pointers to distinguish "set" from "absent"). Normalize is the
+// runtime convenience layer that materializes the documented defaults
+// without changing the on-disk format.
+func (p *AgentProfile) Normalize() {
+	if p == nil {
+		return
+	}
+	if p.Tier == nil {
+		p.Tier = StrPtr("")
+	}
+	if p.ApprovalMode == nil {
+		p.ApprovalMode = StrPtr(defaultApprovalMode)
+	}
+	if p.PromptInjectionMode == nil {
+		p.PromptInjectionMode = StrPtr(defaultPromptInjectionMode)
+	}
+	if p.SkillPath == nil {
+		p.SkillPath = StrPtr("")
+	}
+	if p.SkillVersion == nil {
+		p.SkillVersion = StrPtr("")
+	}
+	if p.CanWrite == nil {
+		p.CanWrite = BoolPtr(false)
+	}
+	if p.CanRunCommands == nil {
+		p.CanRunCommands = BoolPtr(false)
+	}
+	if p.CanManageConfig == nil {
+		p.CanManageConfig = BoolPtr(false)
+	}
+	if p.CanUseClipboard == nil {
+		p.CanUseClipboard = BoolPtr(false)
+	}
+	if p.CanUseAutotype == nil {
+		p.CanUseAutotype = BoolPtr(false)
+	}
+	if p.CanReadValues == nil {
+		p.CanReadValues = BoolPtr(false)
+	}
+	if p.ExposeValueTools == nil {
+		p.ExposeValueTools = BoolPtr(false)
+	}
+	if p.AutoUnseal == nil {
+		p.AutoUnseal = BoolPtr(false)
+	}
+	if p.RequireApproval == nil {
+		p.RequireApproval = BoolPtr(false)
+	}
+	if p.ApprovalTimeout == nil {
+		p.ApprovalTimeout = DurationPtr(defaultApprovalTimeout)
+	}
+	if p.MaxReadsPerHour == nil {
+		p.MaxReadsPerHour = IntPtr(0)
+	}
+	if p.MaxReadsPerDay == nil {
+		p.MaxReadsPerDay = IntPtr(0)
+	}
+	if p.MaxSecretsInSession == nil {
+		p.MaxSecretsInSession = IntPtr(0)
+	}
+	if p.AllowedPaths == nil {
+		p.AllowedPaths = []string{}
+	}
+	if p.AllowedTools == nil {
+		p.AllowedTools = []string{}
+	}
+	if p.AllowedEnvVars == nil {
+		p.AllowedEnvVars = []string{}
+	}
+	if p.AllowedExecutables == nil {
+		p.AllowedExecutables = []string{}
+	}
+	if p.RedactFields == nil {
+		p.RedactFields = []string{}
+	}
+	if p.PerToolRedactFields == nil {
+		p.PerToolRedactFields = map[string][]string{}
+	}
+	if p.DynamicProviders == nil {
+		p.DynamicProviders = map[string][]string{}
+	}
+	if p.PreCallHooks == nil {
+		p.PreCallHooks = []string{}
+	}
+	if p.PostCallHooks == nil {
+		p.PostCallHooks = []string{}
+	}
+}
+
+// TierValue returns *p.Tier or "" when p is nil / p.Tier is nil.
+func (p *AgentProfile) TierValue() string {
+	if p == nil || p.Tier == nil {
+		return ""
+	}
+	return *p.Tier
+}
+
+// ApprovalModeValue returns *p.ApprovalMode or "deny" when p is nil /
+// p.ApprovalMode is nil.
+func (p *AgentProfile) ApprovalModeValue() string {
+	if p == nil || p.ApprovalMode == nil {
+		return defaultApprovalMode
+	}
+	return *p.ApprovalMode
+}
+
+// SkillPathValue returns *p.SkillPath or "" when p is nil / p.SkillPath is nil.
+func (p *AgentProfile) SkillPathValue() string {
+	if p == nil || p.SkillPath == nil {
+		return ""
+	}
+	return *p.SkillPath
+}
+
+// SkillVersionValue returns *p.SkillVersion or "" when p is nil /
+// p.SkillVersion is nil.
+func (p *AgentProfile) SkillVersionValue() string {
+	if p == nil || p.SkillVersion == nil {
+		return ""
+	}
+	return *p.SkillVersion
+}
+
+// CanWriteValue returns *p.CanWrite or false when p is nil / p.CanWrite is nil.
+func (p *AgentProfile) CanWriteValue() bool {
+	if p == nil || p.CanWrite == nil {
+		return false
+	}
+	return *p.CanWrite
+}
+
+// CanRunCommandsValue returns *p.CanRunCommands or false when p is nil /
+// p.CanRunCommands is nil.
+func (p *AgentProfile) CanRunCommandsValue() bool {
+	if p == nil || p.CanRunCommands == nil {
+		return false
+	}
+	return *p.CanRunCommands
+}
+
+// CanManageConfigValue returns *p.CanManageConfig or false when p is nil /
+// p.CanManageConfig is nil.
+func (p *AgentProfile) CanManageConfigValue() bool {
+	if p == nil || p.CanManageConfig == nil {
+		return false
+	}
+	return *p.CanManageConfig
+}
+
+// CanUseClipboardValue returns *p.CanUseClipboard or false when p is nil /
+// p.CanUseClipboard is nil.
+func (p *AgentProfile) CanUseClipboardValue() bool {
+	if p == nil || p.CanUseClipboard == nil {
+		return false
+	}
+	return *p.CanUseClipboard
+}
+
+// CanUseAutotypeValue returns *p.CanUseAutotype or false when p is nil /
+// p.CanUseAutotype is nil.
+func (p *AgentProfile) CanUseAutotypeValue() bool {
+	if p == nil || p.CanUseAutotype == nil {
+		return false
+	}
+	return *p.CanUseAutotype
+}
+
+// CanReadValuesValue returns *p.CanReadValues or false when p is nil /
+// p.CanReadValues is nil.
+func (p *AgentProfile) CanReadValuesValue() bool {
+	if p == nil || p.CanReadValues == nil {
+		return false
+	}
+	return *p.CanReadValues
+}
+
+// ExposeValueToolsValue returns *p.ExposeValueTools or false when p is nil /
+// p.ExposeValueTools is nil.
+func (p *AgentProfile) ExposeValueToolsValue() bool {
+	if p == nil || p.ExposeValueTools == nil {
+		return false
+	}
+	return *p.ExposeValueTools
+}
+
+// AutoUnsealValue returns *p.AutoUnseal or false when p is nil /
+// p.AutoUnseal is nil.
+func (p *AgentProfile) AutoUnsealValue() bool {
+	if p == nil || p.AutoUnseal == nil {
+		return false
+	}
+	return *p.AutoUnseal
+}
+
+// RequireApprovalValue returns *p.RequireApproval or false when p is nil /
+// p.RequireApproval is nil.
+func (p *AgentProfile) RequireApprovalValue() bool {
+	if p == nil || p.RequireApproval == nil {
+		return false
+	}
+	return *p.RequireApproval
+}
+
+// PromptInjectionModeValue returns *p.PromptInjectionMode or "off" when
+// p is nil / p.PromptInjectionMode is nil.
+func (p *AgentProfile) PromptInjectionModeValue() string {
+	if p == nil || p.PromptInjectionMode == nil {
+		return defaultPromptInjectionMode
+	}
+	return *p.PromptInjectionMode
+}
+
+// ApprovalTimeoutValue returns *p.ApprovalTimeout or the default timeout
+// when p is nil / p.ApprovalTimeout is nil.
+func (p *AgentProfile) ApprovalTimeoutValue() time.Duration {
+	if p == nil || p.ApprovalTimeout == nil {
+		return defaultApprovalTimeout
+	}
+	return *p.ApprovalTimeout
+}

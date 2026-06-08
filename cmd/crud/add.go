@@ -63,7 +63,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 		name := args[0]
 
 		if _, err := vaultpkg.ReadEntry(v.Dir, name, v.Identity); err == nil {
-			return fmt.Errorf("entry already exists: %s (use 'set' to update or 'edit' to modify)", name)
+			return errorspkg.AlreadyExists("entry %q already exists (use 'set' to update or 'edit' to modify)", name)
 		}
 
 		if err := readStdinValues(); err != nil {
@@ -206,7 +206,7 @@ func buildEntryData() (map[string]any, vaultpkg.SecretMetadata, func(), error) {
 	default:
 		fdRaw := os.Stdin.Fd()
 		if fdRaw > uintptr(^uint(0)>>1) {
-			return nil, secretMeta, nil, fmt.Errorf("file descriptor %d exceeds int range", fdRaw)
+			return nil, secretMeta, nil, errorspkg.Internal("file descriptor %d exceeds int range", fdRaw)
 		}
 		fd := int(fdRaw)
 
