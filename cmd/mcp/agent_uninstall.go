@@ -72,6 +72,7 @@ agent's profile in config.yaml. Use --yes to skip the confirmation prompt.`,
 		if !hasProfile {
 			return fmt.Errorf("agent %q not found in config", agentName)
 		}
+		profile.Normalize()
 
 		if !agentUninstallYes && !confirmUninstall(agentName) {
 			cliout.Warnf("Uninstall canceled.")
@@ -118,10 +119,7 @@ agent's profile in config.yaml. Use --yes to skip the confirmation prompt.`,
 		}
 
 		if !agentUninstallKeepSkill {
-			var skillPath string
-			if profile.SkillPath != nil {
-				skillPath = *profile.SkillPath
-			}
+			skillPath := profile.SkillPathValue()
 			if skillPath != "" {
 				expanded := expandTilde(skillPath)
 				expanded = filepath.Clean(expanded)

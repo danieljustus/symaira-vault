@@ -33,7 +33,7 @@ func validateAgents(agents map[string]AgentProfile) error {
 			mode = *profile.PromptInjectionMode
 		}
 		switch mode {
-		case "", "off", "log-only", "wrap", approvalModeDeny:
+		case "", defaultPromptInjectionMode, "log-only", "wrap", approvalModeDeny:
 		default:
 			return fmt.Errorf("agent %q: invalid promptInjectionMode %q (valid: off, log-only, wrap, deny)", name, mode)
 		}

@@ -47,7 +47,7 @@ var recipientsListCmd = &cobra.Command{
 		rm := vaultpkg.NewRecipientsManager(vaultDir)
 		recipients, err := rm.ListRecipients()
 		if err != nil {
-			return fmt.Errorf("cannot list recipients: %w", err)
+			return errorspkg.ReadFailed(err, "cannot list recipients")
 		}
 
 		if len(recipients) == 0 {
@@ -104,12 +104,12 @@ Once added, all new entries will be encrypted for this recipient.`,
 			rm := vaultpkg.NewRecipientsManager(v.Dir)
 			if err := rm.AddRecipient(recipient); err != nil {
 				if errors.Is(err, vaultpkg.ErrRecipientAlreadyExists) {
-					return fmt.Errorf("recipient already exists")
+					return errorspkg.AlreadyExists("recipient already exists")
 				}
 				if errors.Is(err, vaultpkg.ErrInvalidRecipient) {
-					return fmt.Errorf("invalid recipient: must be a valid age public key starting with 'age1'")
+					return errorspkg.InvalidInput("invalid recipient: must be a valid age public key starting with 'age1'")
 				}
-				return fmt.Errorf("cannot add recipient: %w", err)
+				return errorspkg.WriteFailed(err, "cannot add recipient")
 			}
 
 			printlnQuietAware("Recipient added successfully.")
@@ -145,12 +145,12 @@ Use --yes to skip confirmation (useful for scripts).`,
 			rm := vaultpkg.NewRecipientsManager(v.Dir)
 			if err := rm.RemoveRecipient(recipient); err != nil {
 				if errors.Is(err, vaultpkg.ErrRecipientNotFound) {
-					return fmt.Errorf("recipient not found")
+					return errorspkg.NotFound("recipient %q not found", recipient)
 				}
 				if errors.Is(err, vaultpkg.ErrInvalidRecipient) {
-					return fmt.Errorf("invalid recipient: must be a valid age public key starting with 'age1'")
+					return errorspkg.InvalidInput("invalid recipient: must be a valid age public key starting with 'age1'")
 				}
-				return fmt.Errorf("cannot remove recipient: %w", err)
+				return errorspkg.WriteFailed(err, "cannot remove recipient")
 			}
 
 			printlnQuietAware("Recipient removed successfully.")

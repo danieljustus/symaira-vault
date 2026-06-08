@@ -240,6 +240,91 @@ func TestCLIErrorWithHintTakesPrecedence(t *testing.T) {
 
 	hint := HintForError(err)
 	if hint != "Check your agent's token scope: symvault mcp token list" {
-		t.Errorf("hint = %q, want token scope hint", hint)
+		t.Errorf("hint = %q, want token scope hint", err.Hint)
+	}
+}
+
+func TestNotInitialized(t *testing.T) {
+	err := NotInitialized("vault at %s is not ready", "/tmp/vault")
+	if err.Code != ExitNotInitialized {
+		t.Errorf("code = %d, want %d", err.Code, ExitNotInitialized)
+	}
+	if !strings.Contains(err.Message, "/tmp/vault") {
+		t.Errorf("message = %q, want path interpolated", err.Message)
+	}
+	if !errors.Is(err, ErrVaultNotInitialized) {
+		t.Error("expected cause to be ErrVaultNotInitialized")
+	}
+	if err.Hint == "" {
+		t.Error("expected NotInitialized to have a hint")
+	}
+}
+
+func TestLocked(t *testing.T) {
+	err := Locked("vault is locked: %s", "session expired")
+	if err.Code != ExitLocked {
+		t.Errorf("code = %d, want %d", err.Code, ExitLocked)
+	}
+	if !errors.Is(err, ErrVaultLocked) {
+		t.Error("expected cause to be ErrVaultLocked")
+	}
+	if err.Hint == "" {
+		t.Error("expected Locked to have a hint")
+	}
+}
+
+func TestPermissionDenied(t *testing.T) {
+	err := PermissionDenied("agent %s cannot write", "hermes")
+	if err.Code != ExitPermissionDenied {
+		t.Errorf("code = %d, want %d", err.Code, ExitPermissionDenied)
+	}
+	if !errors.Is(err, ErrPermissionDenied) {
+		t.Error("expected cause to be ErrPermissionDenied")
+	}
+	if ExitCodeFromError(err) != ExitPermissionDenied {
+		t.Errorf("ExitCodeFromError = %d, want %d", ExitCodeFromError(err), ExitPermissionDenied)
+	}
+}
+
+func TestInvalidInput(t *testing.T) {
+	err := InvalidInput("flag --length must be > 0")
+	if err.Code != ExitInvalidInput {
+		t.Errorf("code = %d, want %d", err.Code, ExitInvalidInput)
+	}
+	if err.Kind != ErrKindNone {
+		t.Errorf("kind = %d, want %d", err.Kind, ErrKindNone)
+	}
+	if ExitCodeFromError(err) != ExitInvalidInput {
+		t.Errorf("ExitCodeFromError = %d, want %d", ExitCodeFromError(err), ExitInvalidInput)
+	}
+}
+
+func TestConfigError(t *testing.T) {
+	err := ConfigError("config.yaml: invalid value for %q", "sessionTimeout")
+	if err.Code != ExitConfigError {
+		t.Errorf("code = %d, want %d", err.Code, ExitConfigError)
+	}
+	if ExitCodeFromError(err) != ExitConfigError {
+		t.Errorf("ExitCodeFromError = %d, want %d", ExitCodeFromError(err), ExitConfigError)
+	}
+}
+
+func TestInternal(t *testing.T) {
+	err := Internal("unexpected state: %s", "nil vault pointer")
+	if err.Code != ExitGeneralError {
+		t.Errorf("code = %d, want %d", err.Code, ExitGeneralError)
+	}
+	if ExitCodeFromError(err) != ExitGeneralError {
+		t.Errorf("ExitCodeFromError = %d, want %d", ExitCodeFromError(err), ExitGeneralError)
+	}
+}
+
+func TestAlreadyExists(t *testing.T) {
+	err := AlreadyExists("entry %q already exists", "github")
+	if err.Code != ExitGeneralError {
+		t.Errorf("code = %d, want %d", err.Code, ExitGeneralError)
+	}
+	if err.Message != "entry \"github\" already exists" {
+		t.Errorf("message = %q, want formatted message", err.Message)
 	}
 }

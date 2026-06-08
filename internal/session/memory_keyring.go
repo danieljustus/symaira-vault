@@ -33,17 +33,20 @@ func (m *memoryKeyring) Set(service, account, value string) error {
 		m.store = make(map[string][]byte)
 	}
 
+	// Wrap keys and identities have different JSON schemas than storedSession;
+	// round-tripping through storedSession would silently drop fields like
+	// EncryptedIdentity. Store them opaquely.
+	if account == wrapKeyAccount || account == identityAccount {
+		key := service + "|" + account
+		if old, ok := m.store[key]; ok {
+			zeroBytes(old)
+		}
+		m.store[key] = []byte(value)
+		return nil
+	}
+
 	var sess storedSession
 	if err := json.Unmarshal([]byte(value), &sess); err != nil {
-		if account == wrapKeyAccount {
-			// Wrap keys are stored as raw base64 (not session JSON)
-			key := service + "|" + account
-			if old, ok := m.store[key]; ok {
-				zeroBytes(old)
-			}
-			m.store[key] = []byte(value)
-			return nil
-		}
 		return fmt.Errorf("unmarshal session: %w", err)
 	}
 
@@ -104,12 +107,15 @@ func (m *memoryKeyring) Get(service, account string) (string, error) {
 		return "", fmt.Errorf("not found")
 	}
 
+	// Wrap keys and identities have different JSON schemas than storedSession;
+	// round-tripping through storedSession would silently drop fields like
+	// EncryptedIdentity. Return them opaquely.
+	if account == wrapKeyAccount || account == identityAccount {
+		return string(payload), nil
+	}
+
 	var sess storedSession
 	if err := json.Unmarshal(payload, &sess); err != nil {
-		if account == wrapKeyAccount {
-			// Wrap keys are stored as raw base64 (not session JSON)
-			return string(payload), nil
-		}
 		delete(m.store, key)
 		return "", fmt.Errorf("not found")
 	}

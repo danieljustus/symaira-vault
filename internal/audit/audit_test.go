@@ -16,7 +16,7 @@ func TestLogEntryWritesJSONL(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("test-agent", "")
+	logger, err := New("test-agent", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -63,7 +63,7 @@ func TestLogEntryDenialIncludesReason(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("test-agent", "")
+	logger, err := New("test-agent", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -131,7 +131,7 @@ func TestLogEntryMultipleWrites(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("multi-write", "")
+	logger, err := New("multi-write", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -169,7 +169,7 @@ func TestLogEntryAutoTimestamp(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("timestamp-test", "")
+	logger, err := New("timestamp-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -201,7 +201,7 @@ func TestLogEntryPreservesProvidedTimestamp(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("preserved-ts", "")
+	logger, err := New("preserved-ts", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -234,7 +234,7 @@ func TestNewRejectsPathSeparator(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	_, err := New("agent/with/slash", "")
+	_, err := New("agent/with/slash", "", nil)
 	if err == nil {
 		t.Fatal("expected error for agent name with slash")
 	}
@@ -244,7 +244,7 @@ func TestNewRejectsBackslash(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	_, err := New("agent\\with\\backslash", "")
+	_, err := New("agent\\with\\backslash", "", nil)
 	if err == nil {
 		t.Fatal("expected error for agent name with backslash")
 	}
@@ -254,7 +254,7 @@ func TestNewRejectsDotDot(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	_, err := New("..", "")
+	_, err := New("..", "", nil)
 	if err == nil {
 		t.Fatal("expected error for .. agent name")
 	}
@@ -264,7 +264,7 @@ func TestNewRejectsDot(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	_, err := New(".", "")
+	_, err := New(".", "", nil)
 	if err == nil {
 		t.Fatal("expected error for . agent name")
 	}
@@ -274,7 +274,7 @@ func TestNewRejectsDotDotInName(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	_, err := New("my..agent", "")
+	_, err := New("my..agent", "", nil)
 	if err == nil {
 		t.Fatal("expected error for agent name containing ..")
 	}
@@ -287,7 +287,7 @@ func TestNewCreatesAuditDirectory(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	_, err := New("create-dir-test", "")
+	_, err := New("create-dir-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -302,7 +302,7 @@ func TestNewCreatesLogFile(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("logfile-test", "")
+	logger, err := New("logfile-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -321,7 +321,7 @@ func TestNewSetsCorrectPermissions(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("perms-test", "")
+	logger, err := New("perms-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -351,7 +351,7 @@ func TestNewUsesUserHomeDirWhenHomeEmpty(t *testing.T) {
 	}()
 
 	// os.UserHomeDir may fail in some environments; skip if so
-	logger, err := New("home-dir-test", "")
+	logger, err := New("home-dir-test", "", nil)
 	if err != nil && strings.Contains(err.Error(), "not defined") {
 		t.Skip("HOME not available in this environment")
 	}
@@ -376,7 +376,7 @@ func TestNewErrorWhenAuditDirNotCreatable(t *testing.T) {
 
 	t.Setenv("HOME", parent)
 
-	_, err := New("dir-fail-agent", "")
+	_, err := New("dir-fail-agent", "", nil)
 	if err == nil {
 		t.Fatal("expected error when audit dir cannot be created, got nil")
 	}
@@ -405,7 +405,7 @@ func TestNewErrorWhenLogFileNotWritable(t *testing.T) {
 	}
 	defer os.Chmod(auditDir, 0o700) //nolint:errcheck
 
-	_, err := New("file-fail-agent", "")
+	_, err := New("file-fail-agent", "", nil)
 	if err == nil {
 		t.Fatal("expected error when log file cannot be opened, got nil")
 	}
@@ -496,7 +496,7 @@ func TestRotateIfNeededSizeLimit(t *testing.T) {
 	ReloadConfig()
 	defer ReloadConfig()
 
-	logger, err := New("size-rotate-test", "")
+	logger, err := New("size-rotate-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -535,7 +535,7 @@ func TestRotateIfNeededAgeLimit(t *testing.T) {
 	ReloadConfig()
 	defer ReloadConfig()
 
-	logger, err := New("age-rotate-test", "")
+	logger, err := New("age-rotate-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -569,7 +569,7 @@ func TestEnforceRetentionMaxBackups(t *testing.T) {
 	ReloadConfig()
 	defer ReloadConfig()
 
-	logger, err := New("backup-cleanup-test", "")
+	logger, err := New("backup-cleanup-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -610,7 +610,7 @@ func TestEnforceRetentionMaxAge(t *testing.T) {
 	ReloadConfig()
 	defer ReloadConfig()
 
-	logger, err := New("age-cleanup-test", "")
+	logger, err := New("age-cleanup-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -643,7 +643,7 @@ func TestEnforceRetentionNoFiles(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("no-backups-test", "")
+	logger, err := New("no-backups-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -663,7 +663,7 @@ func TestEnforceRetentionPreservesNewest(t *testing.T) {
 	ReloadConfig()
 	defer ReloadConfig()
 
-	logger, err := New("preserve-newest-test", "")
+	logger, err := New("preserve-newest-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -701,7 +701,7 @@ func TestNoLogLossDuringRotation(t *testing.T) {
 	ReloadConfig()
 	defer ReloadConfig()
 
-	logger, err := New("no-loss-test", "")
+	logger, err := New("no-loss-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -799,7 +799,7 @@ func TestHealthCheckHealthy(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("health-test", "")
+	logger, err := New("health-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -840,7 +840,7 @@ func TestHealthCheckEmptyLog(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("empty-health-test", "")
+	logger, err := New("empty-health-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -869,7 +869,7 @@ func TestHealthCheckNeedsRotationBySize(t *testing.T) {
 	ReloadConfig()
 	defer ReloadConfig()
 
-	logger, err := New("rotation-health-test", "")
+	logger, err := New("rotation-health-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -890,7 +890,7 @@ func TestGetErrorsFiltersErrors(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("errors-test", "")
+	logger, err := New("errors-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -924,7 +924,7 @@ func TestGetErrorsNoErrors(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("no-errors-test", "")
+	logger, err := New("no-errors-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -945,7 +945,7 @@ func TestGetErrorsLimit(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("limit-errors-test", "")
+	logger, err := New("limit-errors-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -977,7 +977,7 @@ func TestLastNEntriesEmptyFile(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("empty-entries-test", "")
+	logger, err := New("empty-entries-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -1040,7 +1040,7 @@ func TestLastNEntriesReturnsCorrectCount(t *testing.T) {
 			home := t.TempDir()
 			t.Setenv("HOME", home)
 
-			logger, err := New("lastn-"+tt.name, "")
+			logger, err := New("lastn-"+tt.name, "", nil)
 			if err != nil {
 				t.Fatalf("New() error = %v", err)
 			}
@@ -1072,7 +1072,7 @@ func TestLastNEntriesMoreThanAvailable(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("more-entries-test", "")
+	logger, err := New("more-entries-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -1096,7 +1096,7 @@ func TestLastNEntriesSkipsMalformedLines(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("malformed-test", "")
+	logger, err := New("malformed-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -1212,7 +1212,7 @@ func TestLogEntryAutoFillsEmptyTimestamp(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("autofill-ts-test", "")
+	logger, err := New("autofill-ts-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -1249,7 +1249,7 @@ func TestNewRejectsDotDotInMiddle(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	_, err := New("agent..name", "")
+	_, err := New("agent..name", "", nil)
 	if err == nil {
 		t.Fatal("expected error for agent name containing ..")
 	}
@@ -1259,7 +1259,7 @@ func TestHealthCheckMultipleErrors(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("multi-error-test", "")
+	logger, err := New("multi-error-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -1286,7 +1286,7 @@ func TestGetErrorsAllOk(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("all-ok-test", "")
+	logger, err := New("all-ok-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -1309,7 +1309,7 @@ func TestGetErrorsAllErrors(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("all-errors-test", "")
+	logger, err := New("all-errors-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -1379,7 +1379,7 @@ func TestLogEntryAllFields(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("all-fields-test", "")
+	logger, err := New("all-fields-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -1443,7 +1443,7 @@ func TestNewValidAgentNames(t *testing.T) {
 	validNames := []string{"claude", "my-agent", "agent_1", "Agent123"}
 	for _, name := range validNames {
 		t.Run(name, func(t *testing.T) {
-			logger, err := New(name, "")
+			logger, err := New(name, "", nil)
 			if err != nil {
 				t.Fatalf("New(%q) error = %v", name, err)
 			}
@@ -1461,7 +1461,7 @@ func TestHealthCheckIncludesRotatedSize(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("rotated-size-test", "")
+	logger, err := New("rotated-size-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -1492,7 +1492,7 @@ func TestLastNEntriesCorruptedJSON(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("corrupt-json-test", "")
+	logger, err := New("corrupt-json-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -1526,7 +1526,7 @@ func TestLastNEntriesMissingFields(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("missing-fields-test", "")
+	logger, err := New("missing-fields-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -1557,7 +1557,7 @@ func TestLastNEntriesEmptyTimestamp(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("empty-ts-test", "")
+	logger, err := New("empty-ts-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -1587,7 +1587,7 @@ func TestConcurrentWrites(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("concurrent-test", "")
+	logger, err := New("concurrent-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -1645,7 +1645,7 @@ func TestConcurrentWritesWithClose(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("concurrent-close-test", "")
+	logger, err := New("concurrent-close-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -1687,7 +1687,7 @@ func TestRotateIfNeededRenameFailure(t *testing.T) {
 	ReloadConfig()
 	defer ReloadConfig()
 
-	logger, err := New("rename-fail-test", "")
+	logger, err := New("rename-fail-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -1715,7 +1715,7 @@ func TestMaxLogSizeTrigger(t *testing.T) {
 	ReloadConfig()
 	defer ReloadConfig()
 
-	logger, err := New("max-size-trigger-test", "")
+	logger, err := New("max-size-trigger-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -1756,7 +1756,7 @@ func TestLogEntryWriteErrorReturned(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("write-error-test", "")
+	logger, err := New("write-error-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -1784,7 +1784,7 @@ func TestEnforceRetentionStatError(t *testing.T) {
 	ReloadConfig()
 	defer ReloadConfig()
 
-	logger, err := New("stat-error-test", "")
+	logger, err := New("stat-error-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -1822,7 +1822,7 @@ func TestEnforceRetentionRemoveError(t *testing.T) {
 	ReloadConfig()
 	defer ReloadConfig()
 
-	logger, err := New("remove-error-test", "")
+	logger, err := New("remove-error-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -1854,7 +1854,7 @@ func TestHealthCheckSeekError(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("seek-error-test", "")
+	logger, err := New("seek-error-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -1880,7 +1880,7 @@ func TestLastNEntriesReadFileError(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("readfile-error-test", "")
+	logger, err := New("readfile-error-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -1916,7 +1916,7 @@ func TestNewPathSeparators(t *testing.T) {
 	badNames := []string{"agent/name", "agent\\name"}
 	for _, name := range badNames {
 		t.Run(name, func(t *testing.T) {
-			_, err := New(name, "")
+			_, err := New(name, "", nil)
 			if err == nil {
 				t.Fatalf("expected error for agent name %q", name)
 			}
@@ -1932,7 +1932,7 @@ func TestHealthCheckZeroMaxAge(t *testing.T) {
 	ReloadConfig()
 	defer ReloadConfig()
 
-	logger, err := New("zero-age-test", "")
+	logger, err := New("zero-age-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -1954,7 +1954,7 @@ func TestRotateIfNeededFileStatError(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("stat-error-test", "")
+	logger, err := New("stat-error-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -1977,7 +1977,7 @@ func TestRotateIfNeededClosedFileStatError(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("closed-stat-test", "")
+	logger, err := New("closed-stat-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -1995,7 +1995,7 @@ func TestHealthCheckClosedFileStatError(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("closed-health-test", "")
+	logger, err := New("closed-health-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -2056,7 +2056,7 @@ func TestNewOpenFilePermissionDenied(t *testing.T) {
 	}
 	defer os.Chmod(auditDir, 0o700) //nolint:errcheck
 
-	_, err := New("perm-denied-test", "")
+	_, err := New("perm-denied-test", "", nil)
 	if err == nil {
 		t.Fatal("expected error when OpenFile fails")
 	}
@@ -2066,7 +2066,7 @@ func TestEnforceRetentionEmptyDir(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("empty-dir-test", "")
+	logger, err := New("empty-dir-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -2083,7 +2083,7 @@ func TestLastNEntriesFileSizeZero(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	logger, err := New("zero-size-test", "")
+	logger, err := New("zero-size-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -2276,7 +2276,7 @@ func TestRotateIfNeededSizeLimit_Symvault(t *testing.T) {
 	ReloadConfig()
 	defer ReloadConfig()
 
-	logger, err := New("size-rotate-symvault-test", "")
+	logger, err := New("size-rotate-symvault-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -2316,7 +2316,7 @@ func TestRotateIfNeededAgeLimit_Symvault(t *testing.T) {
 	ReloadConfig()
 	defer ReloadConfig()
 
-	logger, err := New("age-rotate-symvault-test", "")
+	logger, err := New("age-rotate-symvault-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -2348,7 +2348,7 @@ func TestHealthCheckNeedsRotationBySize_Symvault(t *testing.T) {
 	ReloadConfig()
 	defer ReloadConfig()
 
-	logger, err := New("rotation-health-symvault-test", "")
+	logger, err := New("rotation-health-symvault-test", "", nil)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
