@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// memoryKeyring stores encrypted sessions in process memory only.
+// memoryKeyring stores session and identity entries in process memory only.
 type memoryKeyring struct {
 	mu    sync.RWMutex
 	store map[string][]byte
@@ -33,10 +33,7 @@ func (m *memoryKeyring) Set(service, account, value string) error {
 		m.store = make(map[string][]byte)
 	}
 
-	// Wrap keys and identities have different JSON schemas than storedSession;
-	// round-tripping through storedSession would silently drop fields like
-	// EncryptedIdentity. Store them opaquely.
-	if account == wrapKeyAccount || account == identityAccount {
+	if account == wrapKeyAccount || account == identityAccount || account == sessionAccount {
 		key := service + "|" + account
 		if old, ok := m.store[key]; ok {
 			zeroBytes(old)
@@ -70,20 +67,17 @@ func (m *memoryKeyring) Set(service, account, value string) error {
 	}
 
 	key := service + "|" + account
-
 	if old, ok := m.store[key]; ok {
 		zeroBytes(old)
 	}
-
 	m.store[key] = append([]byte(nil), payload...)
 
 	return nil
 }
 
-// encryptionKeyForStore returns the encryption key for the given service,
-// looking up the wrap key from the store directly (must be called while holding m.mu).
+// encryptionKeyForStore looks up the wrap key for the given service
+// directly in the store. Must be called while holding m.mu.
 func (m *memoryKeyring) encryptionKeyForStore(service string) ([]byte, error) {
-	// Try to find wrap key in our store
 	wrapKeyKey := service + "|" + wrapKeyAccount
 	if w, ok := m.store[wrapKeyKey]; ok {
 		if k, err := base64.StdEncoding.DecodeString(string(w)); err == nil && len(k) == wrapKeyLen {
@@ -107,9 +101,6 @@ func (m *memoryKeyring) Get(service, account string) (string, error) {
 		return "", fmt.Errorf("not found")
 	}
 
-	// Wrap keys and identities have different JSON schemas than storedSession;
-	// round-tripping through storedSession would silently drop fields like
-	// EncryptedIdentity. Return them opaquely.
 	if account == wrapKeyAccount || account == identityAccount {
 		return string(payload), nil
 	}
@@ -136,9 +127,6 @@ func (m *memoryKeyring) Get(service, account string) (string, error) {
 		return "", fmt.Errorf("not found")
 	}
 
-	// The memory keyring is a transparent storage layer.
-	// SavePassphrase/LoadPassphrase handle encryption/decryption at a higher level.
-	// We only validate the session structure, check TTL, and update LastAccess.
 	sess.LastAccess = time.Now().UTC()
 	newPayload, err := json.Marshal(sess)
 	if err != nil {
@@ -166,4 +154,39 @@ func (m *memoryKeyring) Delete(service, account string) error {
 	}
 
 	return nil
+}
+
+// memoryKeyringBackend adapts memoryKeyring to the KeyringBackend
+// interface by splitting the single composite key back into the
+// service/account pair the underlying store uses.
+type memoryKeyringBackend struct {
+	inner *memoryKeyring
+}
+
+func (m *memoryKeyringBackend) Get(key string) (string, error) {
+	service, account := splitKey(key)
+	v, err := m.inner.Get(service, account)
+	if err != nil {
+		return "", ErrKeyringNotFound
+	}
+	return v, nil
+}
+
+func (m *memoryKeyringBackend) Set(key string, value string) error {
+	service, account := splitKey(key)
+	return m.inner.Set(service, account, value)
+}
+
+func (m *memoryKeyringBackend) Delete(key string) error {
+	service, account := splitKey(key)
+	return m.inner.Delete(service, account)
+}
+
+// splitKey is the inverse of keyFor.
+func splitKey(key string) (service, account string) {
+	idx := strings.LastIndex(key, "|")
+	if idx < 0 {
+		return "", key
+	}
+	return key[:idx], key[idx+1:]
 }

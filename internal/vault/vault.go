@@ -40,6 +40,8 @@ type Vault struct {
 	Dir            string
 	NeedsMigration bool
 
+	Cache *VaultCache
+
 	searchIdentity atomic.Pointer[age.X25519Identity]
 }
 
@@ -92,14 +94,8 @@ func Open(vaultDir string, identity *age.X25519Identity) (*Vault, error) {
 		return nil, fmt.Errorf("load config: %w", err)
 	}
 	normalizeConfig(cfg)
-	if cfg.Vault != nil && cfg.Vault.ConfigCacheEntries > 0 {
-		SetConfigCacheSize(cfg.Vault.ConfigCacheEntries)
-	}
 	if err := detectLegacyMode(cfg, vaultDir); err != nil {
 		return nil, fmt.Errorf("detect legacy mode: %w", err)
-	}
-	if cfg != nil && cfg.Vault != nil && cfg.Vault.ListingCacheTTL > 0 {
-		SetListCacheTTL(cfg.Vault.ListingCacheTTL)
 	}
 	if !isLegacyMigrationDone(vaultDir) {
 		if err := migrateLegacyEntries(vaultDir); err != nil {
@@ -126,8 +122,18 @@ func Open(vaultDir string, identity *age.X25519Identity) (*Vault, error) {
 			return nil, fmt.Errorf("update gitignore: %w", err)
 		}
 	}
-	v := &Vault{Dir: vaultDir, Identity: identity, Config: cfg}
+	cache := NewVaultCache(VaultCacheConfig{})
+	if cfg != nil && cfg.Vault != nil {
+		if cfg.Vault.ConfigCacheEntries > 0 {
+			cache.SetConfigCacheSize(cfg.Vault.ConfigCacheEntries)
+		}
+		if cfg.Vault.ListingCacheTTL > 0 {
+			cache.SetListCacheTTL(cfg.Vault.ListingCacheTTL)
+		}
+	}
+	v := &Vault{Dir: vaultDir, Identity: identity, Config: cfg, Cache: cache}
 	v.searchIdentity.Store(identity)
+	registerVaultCache(vaultDir, cache)
 	return v, nil
 }
 

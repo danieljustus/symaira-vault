@@ -6,84 +6,63 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"sync"
 
 	"github.com/zalando/go-keyring"
 
 	"github.com/danieljustus/symaira-vault/internal/logging"
 )
 
-var (
-	fallbackActive bool
-	fallbackMu     sync.RWMutex
-	fallback       *memoryKeyring
-)
+// osKeyring wraps zalando/go-keyring to conform to the KeyringBackend
+// interface. It owns no state and is safe for concurrent use; the OS
+// keyring is itself the source of truth.
+type osKeyring struct{}
 
-func getFallback() *memoryKeyring {
-	fallbackMu.Lock()
-	defer fallbackMu.Unlock()
-
-	if fallback == nil {
-		fallback = &memoryKeyring{}
-		fmt.Fprintln(os.Stderr, "Warning: OS keyring unavailable \u2014 session will clear when this process exits. Run 'symvault doctor' for help.")
-		logging.Default().Warn("OS keyring unavailable. Using memory-only session cache (session will clear on process exit).")
-	}
-	fallbackActive = true
-	return fallback
+// NewOSKeyring returns a KeyringBackend that stores entries in the
+// operating system keyring (macOS Keychain, GNOME Keyring / D-Bus Secret
+// Service on Linux, Windows Credential Manager).
+func NewOSKeyring() KeyringBackend {
+	return &osKeyring{}
 }
 
-func isFallbackActive() bool {
-	fallbackMu.RLock()
-	defer fallbackMu.RUnlock()
-	return fallbackActive
-}
-
-func setWithFallback(service, account, value string) error {
-	if isFallbackActive() {
-		return getFallback().Set(service, account, value)
-	}
-
-	if err := keyring.Set(service, account, value); err != nil {
-		return getFallback().Set(service, account, value)
-	}
-	return nil
-}
-
-func getWithFallback(service, account string) (string, error) {
-	if isFallbackActive() {
-		return getFallback().Get(service, account)
-	}
-
+func (o *osKeyring) Get(key string) (string, error) {
+	service, account := splitKey(key)
 	val, err := keyring.Get(service, account)
 	if err != nil {
 		if errors.Is(err, keyring.ErrNotFound) {
-			return "", err
+			return "", ErrKeyringNotFound
 		}
-		return getFallback().Get(service, account)
+		return "", err
 	}
 	return val, nil
 }
 
-func deleteWithFallback(service, account string) error {
-	if isFallbackActive() {
-		return getFallback().Delete(service, account)
-	}
+func (o *osKeyring) Set(key string, value string) error {
+	service, account := splitKey(key)
+	return keyring.Set(service, account, value)
+}
 
+func (o *osKeyring) Delete(key string) error {
+	service, account := splitKey(key)
 	if err := keyring.Delete(service, account); err != nil {
 		if errors.Is(err, keyring.ErrNotFound) {
-			return nil
+			return ErrKeyringNotFound
 		}
-		return getFallback().Delete(service, account)
+		return err
 	}
 	return nil
 }
 
-func init() {
-	keyringSet = setWithFallback
-	keyringGet = getWithFallback
-	keyringDelete = deleteWithFallback
-	cacheStatusProvider = func() CacheStatus {
-		if isFallbackActive() {
+// newPlatformKeyring returns the appropriate KeyringBackend for the
+// current build. On supported platforms this wires the OS keyring
+// behind an in-memory fallback. The cascading fallback behavior matches
+// the previous setWithFallback / getWithFallback / deleteWithFallback
+// helpers: a keyring failure on the primary backend flips the fallback
+// on and re-routes subsequent calls to the in-memory store for the rest
+// of the process lifetime.
+func newPlatformKeyring() KeyringBackend {
+	inner := &fallbackKeyring{primary: NewOSKeyring(), fallback: &memoryKeyring{}}
+	platformCacheStatus = func() CacheStatus {
+		if inner.IsFallbackActive() {
 			return CacheStatus{
 				Backend:    CacheBackendMemory,
 				Persistent: false,
@@ -96,4 +75,7 @@ func init() {
 			Message:    "OS keyring session cache is available.",
 		}
 	}
+	fmt.Fprintln(os.Stderr, "Note: session cache uses OS keyring with in-memory fallback. Run 'symvault doctor' for help if you see fallback warnings.")
+	logging.Default().Info("Session cache configured with OS keyring primary and in-memory fallback.")
+	return inner
 }

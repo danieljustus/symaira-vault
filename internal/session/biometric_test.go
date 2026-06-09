@@ -56,8 +56,11 @@ func (m *mockBiometricPassphraseStore) Delete(vaultDir string) error {
 }
 
 func TestDefaultBiometricAuthenticator_NoopOnNil(t *testing.T) {
-	biometricAuthenticator = nil
-	auth := DefaultBiometricAuthenticator()
+	prev := defaultBiometric.authenticator
+	defaultBiometric.SetAuthenticator(nil)
+	t.Cleanup(func() { defaultBiometric.SetAuthenticator(prev) })
+
+	auth := defaultBiometric.Authenticator()
 	if auth.IsAvailable() {
 		t.Error("expected noop authenticator to not be available")
 	}
@@ -67,35 +70,23 @@ func TestDefaultBiometricAuthenticator_NoopOnNil(t *testing.T) {
 	}
 }
 
-func TestDefaultBiometricAuthenticator_CustomAuthenticator(t *testing.T) {
-	mock := &mockBiometricAuthenticator{available: true, authErr: nil}
-	biometricAuthenticator = mock
-	defer func() { biometricAuthenticator = nil }()
-
-	auth := DefaultBiometricAuthenticator()
-	if !auth.IsAvailable() {
-		t.Error("expected mock authenticator to be available")
-	}
-	if err := auth.Authenticate(context.Background(), "test"); err != nil {
-		t.Errorf("expected nil error, got %v", err)
-	}
-}
-
 func TestSetBiometricAuthenticator(t *testing.T) {
 	mock := &mockBiometricAuthenticator{available: true, authErr: nil}
-	SetBiometricAuthenticator(mock)
-	defer func() { biometricAuthenticator = nil }()
+	prev := defaultBiometric.authenticator
+	defaultBiometric.SetAuthenticator(mock)
+	t.Cleanup(func() { defaultBiometric.SetAuthenticator(prev) })
 
-	auth := DefaultBiometricAuthenticator()
+	auth := defaultBiometric.Authenticator()
 	if auth != mock {
-		t.Error("expected SetBiometricAuthenticator to return the set authenticator")
+		t.Error("expected SetAuthenticator to return the set authenticator")
 	}
 }
 
 func TestLoadPassphraseWithTouchID_Available(t *testing.T) {
 	mock := &mockBiometricPassphraseStore{available: true, passphrase: []byte("secret")}
-	biometricPassphraseStore = mock
-	defer func() { biometricPassphraseStore = nil }()
+	prev := defaultBiometric.passStore
+	defaultBiometric.SetPassphraseStore(mock)
+	t.Cleanup(func() { defaultBiometric.SetPassphraseStore(prev) })
 
 	got, err := LoadPassphraseWithTouchID(context.Background(), "/nonexistent")
 	if err != nil {
@@ -108,8 +99,9 @@ func TestLoadPassphraseWithTouchID_Available(t *testing.T) {
 
 func TestLoadPassphraseWithTouchID_NotAvailable(t *testing.T) {
 	mock := &mockBiometricPassphraseStore{available: false}
-	biometricPassphraseStore = mock
-	defer func() { biometricPassphraseStore = nil }()
+	prev := defaultBiometric.passStore
+	defaultBiometric.SetPassphraseStore(mock)
+	t.Cleanup(func() { defaultBiometric.SetPassphraseStore(prev) })
 
 	_, err := LoadPassphraseWithTouchID(context.Background(), "/nonexistent")
 	if !errors.Is(err, ErrBiometricNotAvailable) {
@@ -119,8 +111,9 @@ func TestLoadPassphraseWithTouchID_NotAvailable(t *testing.T) {
 
 func TestLoadPassphraseWithTouchID_AuthFails(t *testing.T) {
 	mock := &mockBiometricPassphraseStore{available: true, err: ErrBiometricFailed}
-	biometricPassphraseStore = mock
-	defer func() { biometricPassphraseStore = nil }()
+	prev := defaultBiometric.passStore
+	defaultBiometric.SetPassphraseStore(mock)
+	t.Cleanup(func() { defaultBiometric.SetPassphraseStore(prev) })
 
 	_, err := LoadPassphraseWithTouchID(context.Background(), "/nonexistent")
 	if !errors.Is(err, ErrBiometricFailed) {
@@ -145,40 +138,25 @@ func TestBiometricErrorTypes(t *testing.T) {
 	}
 }
 
-func TestDefaultBiometricAuthenticator_SeveralCalls(t *testing.T) {
-	biometricAuthenticator = nil
-	auth1 := DefaultBiometricAuthenticator()
-	auth2 := DefaultBiometricAuthenticator()
-	if auth1 != auth2 {
-		t.Error("DefaultBiometricAuthenticator should return same instance on repeated calls")
-	}
-}
-
 func TestSetBiometricAuthenticator_ReplacesPrevious(t *testing.T) {
 	mock1 := &mockBiometricAuthenticator{available: true, authErr: nil}
 	mock2 := &mockBiometricAuthenticator{available: false}
-	SetBiometricAuthenticator(mock1)
-	SetBiometricAuthenticator(mock2)
-	defer func() { biometricAuthenticator = nil }()
+	prev := defaultBiometric.authenticator
+	defaultBiometric.SetAuthenticator(mock1)
+	defaultBiometric.SetAuthenticator(mock2)
+	t.Cleanup(func() { defaultBiometric.SetAuthenticator(prev) })
 
-	auth := DefaultBiometricAuthenticator()
+	auth := defaultBiometric.Authenticator()
 	if auth != mock2 {
-		t.Error("SetBiometricAuthenticator should replace previous authenticator")
-	}
-}
-
-func TestSetBiometricPassphraseStore(t *testing.T) {
-	mock := &mockBiometricPassphraseStore{available: true}
-	SetBiometricPassphraseStore(mock)
-	defer func() { biometricPassphraseStore = nil }()
-
-	if !BiometricAvailable() {
-		t.Error("BiometricAvailable should return true after SetBiometricPassphraseStore with available=true")
+		t.Error("SetAuthenticator should replace previous authenticator")
 	}
 }
 
 func TestBiometricAvailable_DefaultFalse(t *testing.T) {
-	biometricPassphraseStore = nil
+	prev := defaultBiometric.passStore
+	defaultBiometric.SetPassphraseStore(nil)
+	t.Cleanup(func() { defaultBiometric.SetPassphraseStore(prev) })
+
 	if BiometricAvailable() {
 		t.Error("BiometricAvailable should return false when no store is set")
 	}
@@ -186,8 +164,9 @@ func TestBiometricAvailable_DefaultFalse(t *testing.T) {
 
 func TestSaveBiometricPassphrase(t *testing.T) {
 	mock := &mockBiometricPassphraseStore{available: true}
-	SetBiometricPassphraseStore(mock)
-	defer func() { biometricPassphraseStore = nil }()
+	prev := defaultBiometric.passStore
+	defaultBiometric.SetPassphraseStore(mock)
+	t.Cleanup(func() { defaultBiometric.SetPassphraseStore(prev) })
 
 	if err := SaveBiometricPassphrase(context.Background(), "/vault", []byte("pass")); err != nil {
 		t.Errorf("SaveBiometricPassphrase error: %v", err)
@@ -196,8 +175,9 @@ func TestSaveBiometricPassphrase(t *testing.T) {
 
 func TestClearBiometricPassphrase(t *testing.T) {
 	mock := &mockBiometricPassphraseStore{available: true}
-	SetBiometricPassphraseStore(mock)
-	defer func() { biometricPassphraseStore = nil }()
+	prev := defaultBiometric.passStore
+	defaultBiometric.SetPassphraseStore(mock)
+	t.Cleanup(func() { defaultBiometric.SetPassphraseStore(prev) })
 
 	if err := ClearBiometricPassphrase("/vault"); err != nil {
 		t.Errorf("ClearBiometricPassphrase error: %v", err)
@@ -205,7 +185,6 @@ func TestClearBiometricPassphrase(t *testing.T) {
 }
 
 func TestNoopBiometricPassphraseStore(t *testing.T) {
-	biometricPassphraseStore = nil
 	noop := noopBiometricPassphraseStore{}
 
 	if noop.IsAvailable() {

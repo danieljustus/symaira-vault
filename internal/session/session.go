@@ -43,8 +43,8 @@
 // Backward Compatibility:
 //
 // Sessions stored in the legacy plaintext format (with a "passphrase" JSON
-// field) are still readable. On load, old-format sessions are automatically
-// re-encrypted and saved in the new format.
+// field) are no longer auto-migrated on load. Run
+// "symvault migrate session <vault-dir>" to upgrade an existing vault.
 //
 // See: https://github.com/zalando/go-keyring for library details.
 package session
@@ -56,6 +56,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -73,34 +74,23 @@ const (
 	aesGCMNonceLen  = 12
 )
 
-var (
-	keyringSet    func(service, account, value string) error
-	keyringGet    func(service, account string) (string, error)
-	keyringDelete func(service, account string) error
-)
-
 const (
 	CacheBackendOSKeyring = "os-keyring"
 	CacheBackendMemory    = "memory"
 	CacheBackendUnknown   = "unknown"
 )
 
+// ErrLegacyPlaintextSession is returned by LoadPassphrase when the cached
+// session is in the legacy plaintext format. Run
+// "symvault migrate session <vault-dir>" to upgrade.
+var ErrLegacyPlaintextSession = errors.New("legacy plaintext session: run 'symvault migrate session' to upgrade")
+
+// CacheStatus reports which storage backend the package is currently using
+// and whether the cache survives process exit.
 type CacheStatus struct {
 	Backend    string `json:"backend"`
 	Persistent bool   `json:"persistent"`
 	Message    string `json:"message"`
-}
-
-var cacheStatusProvider = func() CacheStatus {
-	return CacheStatus{
-		Backend:    CacheBackendUnknown,
-		Persistent: false,
-		Message:    "Session cache backend has not been initialized.",
-	}
-}
-
-func GetCacheStatus() CacheStatus {
-	return cacheStatusProvider()
 }
 
 // passphraseBytes is a byte slice that marshals to/from a plain JSON string
@@ -150,9 +140,62 @@ func generateWrapKey() ([]byte, error) {
 	return key, nil
 }
 
-func loadWrapKey(vaultDir string) ([]byte, error) {
-	encWrapKey, err := keyringGet(serviceName(vaultDir), wrapKeyAccount)
+// serviceNameForVault returns the keyring service name used for a vault.
+func serviceNameForVault(vaultDir string) string {
+	return "symvault:" + vaultDir
+}
+
+// sanitizeVaultDir returns the last path component of vaultDir for use in
+// user-visible error messages.
+func sanitizeVaultDir(vaultDir string) string {
+	return filepath.Base(vaultDir)
+}
+
+// Manager is the dependency-injected entry point for the session package.
+// It holds a KeyringBackend and exposes the high-level Save/Load/Clear
+// operations the rest of the codebase uses. The package also keeps a
+// process-wide DefaultManager initialized from the platform's preferred
+// backend (OS keyring with in-memory fallback on supported platforms, an
+// in-memory store elsewhere) so existing call sites that use the free
+// functions SavePassphrase / LoadPassphrase / etc. keep working.
+type Manager struct {
+	keyring KeyringBackend
+	status  func() CacheStatus
+}
+
+// NewManager wires a KeyringBackend behind a Manager. The statusProvider
+// is invoked by GetCacheStatus; pass nil to receive a default "unknown"
+// status.
+func NewManager(keyring KeyringBackend, statusProvider func() CacheStatus) *Manager {
+	if statusProvider == nil {
+		statusProvider = func() CacheStatus {
+			return CacheStatus{
+				Backend:    CacheBackendUnknown,
+				Persistent: false,
+				Message:    "Session cache backend has not been initialized.",
+			}
+		}
+	}
+	return &Manager{keyring: keyring, status: statusProvider}
+}
+
+// Keyring exposes the underlying backend for callers that need to
+// migrate data or read raw entries (e.g. the migrate session subcommand).
+func (m *Manager) Keyring() KeyringBackend {
+	return m.keyring
+}
+
+// GetCacheStatus returns a description of the currently configured backend.
+func (m *Manager) GetCacheStatus() CacheStatus {
+	return m.status()
+}
+
+func (m *Manager) loadWrapKey(vaultDir string) ([]byte, error) {
+	encWrapKey, err := m.keyring.Get(keyFor(serviceNameForVault(vaultDir), wrapKeyAccount))
 	if err != nil {
+		if errors.Is(err, ErrKeyringNotFound) {
+			return nil, fmt.Errorf("wrap key not found")
+		}
 		return nil, fmt.Errorf("load wrap key: %w", err)
 	}
 	if encWrapKey == "" {
@@ -168,8 +211,8 @@ func loadWrapKey(vaultDir string) ([]byte, error) {
 	return wrapKey, nil
 }
 
-func getOrCreateWrapKey(vaultDir string) ([]byte, error) {
-	wrapKey, err := loadWrapKey(vaultDir)
+func (m *Manager) getOrCreateWrapKey(vaultDir string) ([]byte, error) {
+	wrapKey, err := m.loadWrapKey(vaultDir)
 	if err == nil {
 		return wrapKey, nil
 	}
@@ -180,14 +223,17 @@ func getOrCreateWrapKey(vaultDir string) ([]byte, error) {
 	}
 
 	encWrapKey := base64.StdEncoding.EncodeToString(wrapKey)
-	if setErr := keyringSet(serviceName(vaultDir), wrapKeyAccount, encWrapKey); setErr != nil {
+	if setErr := m.keyring.Set(keyFor(serviceNameForVault(vaultDir), wrapKeyAccount), encWrapKey); setErr != nil {
 		return nil, fmt.Errorf("save wrap key: %w", setErr)
 	}
 	return wrapKey, nil
 }
 
-func deleteWrapKey(vaultDir string) error {
-	if err := keyringDelete(serviceName(vaultDir), wrapKeyAccount); err != nil {
+func (m *Manager) deleteWrapKey(vaultDir string) error {
+	if err := m.keyring.Delete(keyFor(serviceNameForVault(vaultDir), wrapKeyAccount)); err != nil {
+		if errors.Is(err, ErrKeyringNotFound) {
+			return nil
+		}
 		return fmt.Errorf("delete wrap key: %w", err)
 	}
 	return nil
@@ -234,20 +280,12 @@ func decryptPassphrase(encB64, nonceB64 string, key []byte) ([]byte, error) {
 	return plaintext, nil
 }
 
-func serviceName(vaultDir string) string {
-	return "symvault:" + vaultDir
-}
-
-// sanitizeVaultDir returns the last path component of vaultDir for use in
-// user-visible error messages.  The full path is only included in debug-level
-// structured logs to avoid leaking filesystem layout.
-func sanitizeVaultDir(vaultDir string) string {
-	return filepath.Base(vaultDir)
-}
-
-func SavePassphrase(vaultDir string, passphrase []byte, ttl time.Duration) error {
+// SavePassphrase encrypts passphrase with a freshly generated wrap key
+// (creating the wrap key if it does not exist) and stores the encrypted
+// payload in the configured KeyringBackend.
+func (m *Manager) SavePassphrase(vaultDir string, passphrase []byte, ttl time.Duration) error {
 	now := time.Now().UTC()
-	wrapKey, err := getOrCreateWrapKey(vaultDir)
+	wrapKey, err := m.getOrCreateWrapKey(vaultDir)
 	if err != nil {
 		return fmt.Errorf("wrap key: %w", err)
 	}
@@ -265,16 +303,22 @@ func SavePassphrase(vaultDir string, passphrase []byte, ttl time.Duration) error
 	if err != nil {
 		return fmt.Errorf("marshal session: %w", err)
 	}
-	if err := keyringSet(serviceName(vaultDir), sessionAccount, string(payload)); err != nil {
+	if err := m.keyring.Set(keyFor(serviceNameForVault(vaultDir), sessionAccount), string(payload)); err != nil {
 		return fmt.Errorf("save session: %w", err)
 	}
 	return nil
 }
 
-func LoadPassphrase(vaultDir string) ([]byte, error) {
-	raw, err := keyringGet(serviceName(vaultDir), sessionAccount)
+// LoadPassphrase returns the cached passphrase. The hot path refuses to
+// transparently upgrade a legacy plaintext session — the caller must run
+// "symvault migrate session" first and receive ErrLegacyPlaintextSession.
+func (m *Manager) LoadPassphrase(vaultDir string) ([]byte, error) {
+	raw, err := m.keyring.Get(keyFor(serviceNameForVault(vaultDir), sessionAccount))
 	if err != nil {
 		metrics.RecordSessionCacheEvent("keyring_unavailable")
+		if errors.Is(err, ErrKeyringNotFound) {
+			return nil, fmt.Errorf("load session: %w", ErrKeyringNotFound)
+		}
 		return nil, fmt.Errorf("load session: %w", err)
 	}
 
@@ -294,97 +338,131 @@ func LoadPassphrase(vaultDir string) ([]byte, error) {
 		lastActivity = sess.SavedAt
 	}
 	if time.Since(lastActivity) > time.Duration(sess.TTL) {
-		_ = ClearSession(vaultDir)
+		_ = m.ClearSession(vaultDir)
 		metrics.RecordSessionCacheEvent("miss")
 		return nil, fmt.Errorf("session expired for vault %s: last activity %v exceeded TTL %v", sanitizeVaultDir(vaultDir), lastActivity.Format(time.RFC3339), time.Duration(sess.TTL))
 	}
 
-	passphrase, resolveErr := resolvePassphrase(&sess, vaultDir)
-	if resolveErr != nil {
+	if len(sess.Passphrase) > 0 {
 		metrics.RecordSessionCacheEvent("miss")
-		return nil, resolveErr
+		return nil, fmt.Errorf("%w: vault %s", ErrLegacyPlaintextSession, sanitizeVaultDir(vaultDir))
 	}
 
-	// Migrate to wrap-key if still using PBKDF2-derived key
-	_, wrapErr := loadWrapKey(vaultDir)
-	if wrapErr != nil {
-		_ = SavePassphrase(vaultDir, passphrase, time.Duration(sess.TTL))
-	} else {
-		sess.LastAccess = time.Now().UTC()
-		payload, err := json.Marshal(sess)
-		if err != nil {
-			metrics.RecordSessionCacheEvent("hit")
-			return passphrase, nil
-		}
-		if updateErr := keyringSet(serviceName(vaultDir), sessionAccount, string(payload)); updateErr != nil {
-			metrics.RecordSessionCacheEvent("hit")
-			return passphrase, nil
-		}
-		metrics.RecordSessionCacheEvent("refresh")
+	if sess.EncryptedPassphrase == "" || sess.Nonce == "" {
+		metrics.RecordSessionCacheEvent("miss")
+		return nil, fmt.Errorf("session expired for vault %s: no passphrase data available", sanitizeVaultDir(vaultDir))
 	}
+
+	wrapKey, err := m.loadWrapKey(vaultDir)
+	if err != nil {
+		metrics.RecordSessionCacheEvent("miss")
+		return nil, fmt.Errorf("load wrap key: %w", err)
+	}
+
+	passphrase, err := decryptPassphrase(sess.EncryptedPassphrase, sess.Nonce, wrapKey)
+	if err != nil {
+		metrics.RecordSessionCacheEvent("miss")
+		return nil, fmt.Errorf("decrypt session: %w", err)
+	}
+
+	sess.LastAccess = time.Now().UTC()
+	payload, marshalErr := json.Marshal(sess)
+	if marshalErr != nil {
+		metrics.RecordSessionCacheEvent("hit")
+		return passphrase, nil
+	}
+	if updateErr := m.keyring.Set(keyFor(serviceNameForVault(vaultDir), sessionAccount), string(payload)); updateErr != nil {
+		metrics.RecordSessionCacheEvent("hit")
+		return passphrase, nil
+	}
+	metrics.RecordSessionCacheEvent("refresh")
 
 	return passphrase, nil
 }
 
-func encryptionKey(vaultDir string) ([]byte, error) {
-	wrapKey, err := loadWrapKey(vaultDir)
+// MigrateSession reads the cached session in the legacy plaintext format
+// and writes the encrypted form back to the backend. It is a no-op when
+// the session is already in the new format. The returned boolean reports
+// whether an upgrade was performed.
+func (m *Manager) MigrateSession(vaultDir string) (bool, error) {
+	raw, err := m.keyring.Get(keyFor(serviceNameForVault(vaultDir), sessionAccount))
+	if err != nil {
+		if errors.Is(err, ErrKeyringNotFound) {
+			return false, nil
+		}
+		return false, fmt.Errorf("load session: %w", err)
+	}
+	var sess storedSession
+	if decodeErr := json.Unmarshal([]byte(raw), &sess); decodeErr != nil {
+		return false, fmt.Errorf("decode session: %w", decodeErr)
+	}
+	if len(sess.Passphrase) == 0 {
+		return false, nil
+	}
+	wrapKey, err := m.getOrCreateWrapKey(vaultDir)
+	if err != nil {
+		return false, fmt.Errorf("wrap key: %w", err)
+	}
+	enc, nonce, err := encryptPassphrase(sess.Passphrase, wrapKey)
+	if err != nil {
+		return false, fmt.Errorf("encrypt passphrase: %w", err)
+	}
+	sess.EncryptedPassphrase = enc
+	sess.Nonce = nonce
+	crypto.Wipe(sess.Passphrase)
+	sess.Passphrase = nil
+	payload, err := json.Marshal(sess)
+	if err != nil {
+		return false, fmt.Errorf("marshal session: %w", err)
+	}
+	if err := m.keyring.Set(keyFor(serviceNameForVault(vaultDir), sessionAccount), string(payload)); err != nil {
+		return false, fmt.Errorf("save migrated session: %w", err)
+	}
+	return true, nil
+}
+
+// HasLegacyPlaintextSession reports whether the cached session is in the
+// legacy plaintext format.
+func (m *Manager) HasLegacyPlaintextSession(vaultDir string) (bool, error) {
+	raw, err := m.keyring.Get(keyFor(serviceNameForVault(vaultDir), sessionAccount))
+	if err != nil {
+		if errors.Is(err, ErrKeyringNotFound) {
+			return false, nil
+		}
+		return false, fmt.Errorf("load session: %w", err)
+	}
+	var sess storedSession
+	if err := json.Unmarshal([]byte(raw), &sess); err != nil {
+		return false, fmt.Errorf("decode session: %w", err)
+	}
+	return len(sess.Passphrase) > 0, nil
+}
+
+func (m *Manager) encryptionKey(vaultDir string) ([]byte, error) {
+	wrapKey, err := m.loadWrapKey(vaultDir)
 	if err != nil {
 		return nil, fmt.Errorf("no wrap key available for vault %s: please run 'symvault unlock' to re-establish the session", sanitizeVaultDir(vaultDir))
 	}
 	return wrapKey, nil
 }
 
-func resolvePassphrase(sess *storedSession, vaultDir string) ([]byte, error) {
-	if sess.EncryptedPassphrase != "" && sess.Nonce != "" {
-		key, err := encryptionKey(vaultDir)
-		if err != nil {
-			return nil, err
+// ClearSession removes the cached passphrase, wrap key, and identity
+// from the backend.
+func (m *Manager) ClearSession(vaultDir string) error {
+	if err := m.keyring.Delete(keyFor(serviceNameForVault(vaultDir), sessionAccount)); err != nil {
+		if !errors.Is(err, ErrKeyringNotFound) {
+			return fmt.Errorf("clear session: %w", err)
 		}
-		plain, err := decryptPassphrase(sess.EncryptedPassphrase, sess.Nonce, key)
-		if err != nil {
-			return nil, fmt.Errorf("decrypt session: %w", err)
-		}
-		return plain, nil
 	}
-
-	if len(sess.Passphrase) > 0 {
-		// Copy before encrypting so the original backing array can be zeroed
-		// without affecting the returned plaintext.
-		plain := make([]byte, len(sess.Passphrase))
-		copy(plain, sess.Passphrase)
-		key, err := encryptionKey(vaultDir)
-		if err != nil {
-			return nil, err
-		}
-		enc, nonce, encErr := encryptPassphrase(plain, key)
-		if encErr == nil {
-			sess.EncryptedPassphrase = enc
-			sess.Nonce = nonce
-			crypto.Wipe(sess.Passphrase)
-			sess.Passphrase = nil
-		}
-		return plain, nil
-	}
-
-	return nil, fmt.Errorf("session expired for vault %s: no passphrase data available", sanitizeVaultDir(vaultDir))
-}
-
-func ClearSession(vaultDir string) error {
-	if err := keyringDelete(serviceName(vaultDir), sessionAccount); err != nil {
-		return fmt.Errorf("clear session: %w", err)
-	}
-	_ = deleteWrapKey(vaultDir)
-	_ = ClearIdentity(vaultDir)
+	_ = m.deleteWrapKey(vaultDir)
+	_ = m.ClearIdentity(vaultDir)
 	metrics.RecordSessionCacheEvent("evict")
 	return nil
 }
 
-// SaveIdentity encrypts the X25519 identity string and stores it in the OS
-// keyring with the same TTL semantics as the passphrase cache. On a cache
-// hit, the scrypt KDF can be skipped entirely by using OpenWithCachedIdentity.
-func SaveIdentity(vaultDir string, identity string, ttl time.Duration) error {
+func (m *Manager) SaveIdentity(vaultDir string, identity string, ttl time.Duration) error {
 	now := time.Now().UTC()
-	wrapKey, err := getOrCreateWrapKey(vaultDir)
+	wrapKey, err := m.getOrCreateWrapKey(vaultDir)
 	if err != nil {
 		return fmt.Errorf("wrap key: %w", err)
 	}
@@ -402,17 +480,14 @@ func SaveIdentity(vaultDir string, identity string, ttl time.Duration) error {
 	if err != nil {
 		return fmt.Errorf("marshal identity: %w", err)
 	}
-	if err := keyringSet(serviceName(vaultDir), identityAccount, string(payload)); err != nil {
+	if err := m.keyring.Set(keyFor(serviceNameForVault(vaultDir), identityAccount), string(payload)); err != nil {
 		return fmt.Errorf("save identity: %w", err)
 	}
 	return nil
 }
 
-// LoadIdentity decrypts the cached X25519 identity from the OS keyring.
-// Returns the identity string (AGE-SECRET-KEY-1... format) on success,
-// or an error if the cache is missing, expired, or cannot be decrypted.
-func LoadIdentity(vaultDir string) (string, error) {
-	raw, err := keyringGet(serviceName(vaultDir), identityAccount)
+func (m *Manager) LoadIdentity(vaultDir string) (string, error) {
+	raw, err := m.keyring.Get(keyFor(serviceNameForVault(vaultDir), identityAccount))
 	if err != nil {
 		return "", fmt.Errorf("load identity: %w", err)
 	}
@@ -431,11 +506,11 @@ func LoadIdentity(vaultDir string) (string, error) {
 		lastActivity = ident.SavedAt
 	}
 	if time.Since(lastActivity) > time.Duration(ident.TTL) {
-		_ = ClearIdentity(vaultDir)
+		_ = m.ClearIdentity(vaultDir)
 		return "", fmt.Errorf("identity cache expired for vault %s: last activity %v exceeded TTL %v", sanitizeVaultDir(vaultDir), lastActivity.Format(time.RFC3339), time.Duration(ident.TTL))
 	}
 
-	wrapKey, wrapErr := loadWrapKey(vaultDir)
+	wrapKey, wrapErr := m.loadWrapKey(vaultDir)
 	if wrapErr != nil {
 		return "", fmt.Errorf("identity wrap key: %w", wrapErr)
 	}
@@ -451,23 +526,25 @@ func LoadIdentity(vaultDir string) (string, error) {
 	if marshalErr != nil {
 		return identityStr, nil
 	}
-	if updateErr := keyringSet(serviceName(vaultDir), identityAccount, string(payload)); updateErr != nil {
+	if updateErr := m.keyring.Set(keyFor(serviceNameForVault(vaultDir), identityAccount), string(payload)); updateErr != nil {
 		return identityStr, nil
 	}
 
 	return identityStr, nil
 }
 
-// ClearIdentity removes the cached identity from the OS keyring.
-func ClearIdentity(vaultDir string) error {
-	if err := keyringDelete(serviceName(vaultDir), identityAccount); err != nil {
+func (m *Manager) ClearIdentity(vaultDir string) error {
+	if err := m.keyring.Delete(keyFor(serviceNameForVault(vaultDir), identityAccount)); err != nil {
+		if errors.Is(err, ErrKeyringNotFound) {
+			return nil
+		}
 		return fmt.Errorf("clear identity: %w", err)
 	}
 	return nil
 }
 
-func IsSessionExpired(vaultDir string) bool {
-	raw, err := keyringGet(serviceName(vaultDir), sessionAccount)
+func (m *Manager) IsSessionExpired(vaultDir string) bool {
+	raw, err := m.keyring.Get(keyFor(serviceNameForVault(vaultDir), sessionAccount))
 	if err != nil {
 		return true
 	}
@@ -488,6 +565,75 @@ func IsSessionExpired(vaultDir string) bool {
 	return time.Since(lastActivity) > time.Duration(sess.TTL)
 }
 
-func LoadPassphraseWithTouchID(ctx context.Context, vaultDir string) ([]byte, error) {
+func (m *Manager) LoadPassphraseWithTouchID(ctx context.Context, vaultDir string) ([]byte, error) {
 	return LoadBiometricPassphrase(ctx, vaultDir)
+}
+
+// defaultManager is the process-wide Manager used by the package-level
+// Save/Load/Clear helpers. It is initialized once in init() from the
+// platform-preferred backend.
+var defaultManager *Manager
+
+// SetDefaultManager replaces the process-wide Manager. Tests use this to
+// inject a KeyringBackend without touching the global.
+func SetDefaultManager(mgr *Manager) {
+	defaultManager = mgr
+}
+
+// DefaultManager returns the process-wide Manager. It is initialized in
+// init() so callers can rely on it being non-nil after package load.
+func DefaultManager() *Manager {
+	return defaultManager
+}
+
+// GetCacheStatus is the package-level entry point used by callers that
+// have not been refactored to take a *Manager.
+func GetCacheStatus() CacheStatus {
+	return defaultManager.GetCacheStatus()
+}
+
+func SavePassphrase(vaultDir string, passphrase []byte, ttl time.Duration) error {
+	return defaultManager.SavePassphrase(vaultDir, passphrase, ttl)
+}
+
+func LoadPassphrase(vaultDir string) ([]byte, error) {
+	return defaultManager.LoadPassphrase(vaultDir)
+}
+
+func ClearSession(vaultDir string) error {
+	return defaultManager.ClearSession(vaultDir)
+}
+
+func IsSessionExpired(vaultDir string) bool {
+	return defaultManager.IsSessionExpired(vaultDir)
+}
+
+func SaveIdentity(vaultDir string, identity string, ttl time.Duration) error {
+	return defaultManager.SaveIdentity(vaultDir, identity, ttl)
+}
+
+func LoadIdentity(vaultDir string) (string, error) {
+	return defaultManager.LoadIdentity(vaultDir)
+}
+
+func ClearIdentity(vaultDir string) error {
+	return defaultManager.ClearIdentity(vaultDir)
+}
+
+func LoadPassphraseWithTouchID(ctx context.Context, vaultDir string) ([]byte, error) {
+	return defaultManager.LoadPassphraseWithTouchID(ctx, vaultDir)
+}
+
+func init() {
+	defaultManager = NewManager(newPlatformKeyring(), platformCacheStatus)
+}
+
+// platformCacheStatus is set by the platform-specific init() that runs
+// first (oskeyring.go on supported platforms, memory_init.go elsewhere).
+var platformCacheStatus = func() CacheStatus {
+	return CacheStatus{
+		Backend:    CacheBackendUnknown,
+		Persistent: false,
+		Message:    "Session cache backend has not been initialized.",
+	}
 }

@@ -422,6 +422,6 @@ func (t *touchIDPassphraseStore) deleteFromService(serviceName string) error {
 }
 
 func init() {
-	biometricAuthenticator = newTouchIDAuthenticator()
-	biometricPassphraseStore = &touchIDPassphraseStore{}
+	SetBiometricAuthenticator(newTouchIDAuthenticator())
+	SetBiometricPassphraseStore(&touchIDPassphraseStore{})
 }

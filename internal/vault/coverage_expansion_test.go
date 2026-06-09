@@ -121,7 +121,7 @@ func TestSetEntryCanary_NilIdentity(t *testing.T) {
 }
 
 func TestInvalidateConfigCache(t *testing.T) {
-	InvalidateConfigCache(t.TempDir())
+	listCacheFor(t.TempDir()).InvalidateConfig(t.TempDir())
 }
 
 func TestCurrentSearchIdentity_InitialNil(t *testing.T) {

@@ -55,13 +55,14 @@ func BenchmarkListPseudonymized(b *testing.B) {
 	}
 
 	// Force cache miss every iteration to measure parallel decryption.
-	origTTL := pseudonymizedCache.ttl
-	pseudonymizedCache.ttl = 0
-	defer func() { pseudonymizedCache.ttl = origTTL }()
+	cache := listCacheFor(vaultDir)
+	origTTL := cache.PseudonymCacheTTL()
+	cache.SetPseudonymCacheTTL(0)
+	defer cache.SetPseudonymCacheTTL(origTTL)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		InvalidateListCache(vaultDir)
+		cache.Invalidate()
 		paths, err := List(vaultDir, "", nil)
 		if err != nil {
 			b.Fatalf("List() error = %v", err)
@@ -473,7 +474,7 @@ func TestListCacheInvalidation(t *testing.T) {
 	}
 
 	// Invalidate cache
-	InvalidateListCache(vaultDir)
+	listCacheFor(vaultDir).Invalidate()
 
 	// Add another entry
 	mustWriteEntry(t, vaultDir, id, "example.com/admin", map[string]interface{}{"username": "admin"})
@@ -521,9 +522,10 @@ func TestListCacheTTLExpiration(t *testing.T) {
 	mustWriteEntry(t, vaultDir, id, "github.com/user", map[string]interface{}{"username": "alice"})
 
 	// Set a very short TTL
-	originalTTL := listCache.ttl
-	listCache.ttl = 1 * time.Millisecond
-	defer func() { listCache.ttl = originalTTL }()
+	cache := listCacheFor(vaultDir)
+	originalTTL := cache.ListCacheTTL()
+	cache.SetListCacheTTL(1 * time.Millisecond)
+	defer cache.SetListCacheTTL(originalTTL)
 
 	// First call populates cache
 	_, err := List(vaultDir, "", nil)

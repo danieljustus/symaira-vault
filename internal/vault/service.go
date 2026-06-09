@@ -182,7 +182,7 @@ func (DefaultOperationService) UpsertEntry(v *Vault, path string, data map[strin
 	if err := v.AutoCommit(fmt.Sprintf("Update %s", path)); err != nil {
 		slog.Default().Warn("auto-commit failed", "error", err)
 	}
-	InvalidateListCache(v.Dir)
+	v.Cache.Invalidate()
 	return nil
 }
 
@@ -205,7 +205,7 @@ func (DefaultOperationService) WriteEntry(v *Vault, path string, entry *Entry) e
 	if err := v.AutoCommit(fmt.Sprintf("Update %s", path)); err != nil {
 		slog.Default().Warn("auto-commit failed", "error", err)
 	}
-	InvalidateListCache(v.Dir)
+	v.Cache.Invalidate()
 	return nil
 }
 
@@ -220,7 +220,7 @@ func (DefaultOperationService) DeleteEntry(v *Vault, path string) error {
 	if err := v.AutoCommit(fmt.Sprintf("Delete %s", path)); err != nil {
 		slog.Default().Warn("auto-commit failed", "error", err)
 	}
-	InvalidateListCache(v.Dir)
+	v.Cache.Invalidate()
 	return nil
 }
 

@@ -9,21 +9,19 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/logging"
 )
 
-var memoryFallbackActive bool
-
-func init() {
-	mk := &memoryKeyring{}
-	keyringSet = mk.Set
-	keyringGet = mk.Get
-	keyringDelete = mk.Delete
-	memoryFallbackActive = true
-	fmt.Fprintln(os.Stderr, "Warning: OS keyring unavailable — session will clear when this process exits. Run 'symvault doctor' for help.")
-	cacheStatusProvider = func() CacheStatus {
+// newPlatformKeyring returns the appropriate KeyringBackend for the
+// current build. On platforms without an OS keyring implementation this
+// is a plain in-memory store. The warning the previous memory_init.go
+// printed on first use is preserved.
+func newPlatformKeyring() KeyringBackend {
+	platformCacheStatus = func() CacheStatus {
 		return CacheStatus{
 			Backend:    CacheBackendMemory,
 			Persistent: false,
 			Message:    "This build uses a memory-only session cache.",
 		}
 	}
+	fmt.Fprintln(os.Stderr, "Warning: OS keyring unavailable — session will clear when this process exits. Run 'symvault doctor' for help.")
 	logging.Default().Warn("Using memory-only session cache (session will clear on process exit).")
+	return &memoryKeyringBackend{inner: &memoryKeyring{}}
 }
