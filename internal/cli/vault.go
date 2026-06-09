@@ -6,49 +6,55 @@ import (
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
-var vaultOps vaultpkg.OperationService = vaultpkg.Ops
-
-func GetField(v *vaultpkg.Vault, path, field string) (any, error) {
-	return vaultOps.GetField(v, path, field)
+type VaultService struct {
+	vaultService *vaultpkg.VaultService
 }
 
-func SetField(v *vaultpkg.Vault, path, field string, value any) error {
+func NewVaultService(v *vaultpkg.Vault, ops vaultpkg.OperationService) *VaultService {
+	return &VaultService{vaultService: vaultpkg.NewVaultService(v, ops)}
+}
+
+func (s *VaultService) GetField(path, field string) (any, error) {
+	return s.vaultService.GetField(path, field)
+}
+
+func (s *VaultService) SetField(path, field string, value any) error {
 	data := map[string]any{field: value}
-	return vaultOps.UpsertEntry(v, path, data, "set", nil)
+	return s.vaultService.UpsertEntry(path, data, "set", nil)
 }
 
-func SetFields(v *vaultpkg.Vault, path string, data map[string]any) error {
-	return vaultOps.UpsertEntry(v, path, data, "set", nil)
+func (s *VaultService) SetFields(path string, data map[string]any) error {
+	return s.vaultService.UpsertEntry(path, data, "set", nil)
 }
 
-func SetFieldsWithProvenance(v *vaultpkg.Vault, path string, data map[string]any, record vaultpkg.WriteRecord) error {
-	return vaultOps.UpsertEntry(v, path, data, "set", &record)
+func (s *VaultService) SetFieldsWithProvenance(path string, data map[string]any, record vaultpkg.WriteRecord) error {
+	return s.vaultService.UpsertEntry(path, data, "set", &record)
 }
 
-func DeleteEntry(v *vaultpkg.Vault, path string) error {
-	return vaultOps.DeleteEntry(v, path)
+func (s *VaultService) DeleteEntry(path string) error {
+	return s.vaultService.DeleteEntry(path)
 }
 
-func ListEntries(v *vaultpkg.Vault, prefix string) ([]string, error) {
-	return vaultOps.ListEntries(v, prefix)
+func (s *VaultService) ListEntries(prefix string) ([]string, error) {
+	return s.vaultService.ListEntries(prefix)
 }
 
-func FindEntries(v *vaultpkg.Vault, query string, opts vaultpkg.FindOptions) ([]vaultpkg.Match, error) {
-	return vaultOps.FindEntries(v, query, opts)
+func (s *VaultService) FindEntries(query string, opts vaultpkg.FindOptions) ([]vaultpkg.Match, error) {
+	return s.vaultService.FindEntries(query, opts)
 }
 
-func GetEntry(v *vaultpkg.Vault, path string) (*vaultpkg.Entry, error) {
-	return vaultOps.GetEntry(v, path)
+func (s *VaultService) GetEntry(path string) (*vaultpkg.Entry, error) {
+	return s.vaultService.GetEntry(path)
 }
 
-func WriteEntry(v *vaultpkg.Vault, path string, entry *vaultpkg.Entry) error {
-	return vaultOps.WriteEntry(v, path, entry)
+func (s *VaultService) WriteEntry(path string, entry *vaultpkg.Entry) error {
+	return s.vaultService.WriteEntry(path, entry)
 }
 
-func VaultDir(v *vaultpkg.Vault) string {
-	return vaultOps.VaultDir(v)
+func (s *VaultService) VaultDir() string {
+	return s.vaultService.VaultDir()
 }
 
-func VaultIdentity(v *vaultpkg.Vault) *age.X25519Identity {
-	return vaultOps.VaultIdentity(v)
+func (s *VaultService) VaultIdentity() *age.X25519Identity {
+	return s.vaultService.VaultIdentity()
 }

@@ -30,11 +30,14 @@ func newTestServerWithVault(t *testing.T, profile config.AgentProfile, transport
 		}
 	}
 
+	v := &vault.Vault{
+		Dir:      vaultDir,
+		Identity: identity,
+	}
+
 	return &Server{
-		vault: &vault.Vault{
-			Dir:      vaultDir,
-			Identity: identity,
-		},
+		vault:        v,
+		vaultService: vault.NewVaultService(v, nil),
 		agent:        &profile,
 		auditLog:     auditLog,
 		transport:    transport,

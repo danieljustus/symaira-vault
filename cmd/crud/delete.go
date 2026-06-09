@@ -31,7 +31,7 @@ var deleteCmd = &cobra.Command{
 	ValidArgsFunction: cli.EntryCompletionFunc,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		path := args[0]
-		return cli.WithVault(func(v *vaultpkg.Vault) error {
+		return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
 			if !DeleteYes {
 				fmt.Fprintf(os.Stderr, "Delete %s? (y/N): ", path)
 				answer, err := bufio.NewReader(os.Stdin).ReadString('\n')
@@ -50,7 +50,7 @@ var deleteCmd = &cobra.Command{
 				}
 			}
 
-			if err := cli.DeleteEntry(v, path); err != nil {
+			if err := vs.DeleteEntry(path); err != nil {
 				return errorspkg.WriteFailed(err, "cannot delete entry")
 			}
 			if cli.OutputFormat == "text" {

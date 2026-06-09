@@ -26,14 +26,14 @@ var listCmd = &cobra.Command{
   symvault list --output json`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return cli.WithVault(func(v *vaultpkg.Vault) error {
-			cli.MaybeAutoPull(cli.VaultDir(v), v.Config)
+		return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
+			cli.MaybeAutoPull(vs.VaultDir(), v.Config)
 			prefix := ""
 			if len(args) > 0 {
 				prefix = args[0]
 			}
 
-			entries, err := cli.ListEntries(v, prefix)
+			entries, err := vs.ListEntries(prefix)
 			if err != nil {
 				return errorspkg.ReadFailed(err, "cannot list entries")
 			}
@@ -42,7 +42,7 @@ var listCmd = &cobra.Command{
 				outputs := make([]vaultpkg.ListEntryInfo, 0, len(entries))
 				for _, path := range entries {
 					output := vaultpkg.ListEntryInfo{Path: path}
-					entry, err := cli.GetEntry(v, path)
+					entry, err := vs.GetEntry(path)
 					if err == nil {
 						output.Type = string(entry.SecretMetadata.Type)
 						output.UsageHint = entry.SecretMetadata.UsageHint

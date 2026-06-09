@@ -42,7 +42,7 @@ var dynamicGenerateCmd = &cobra.Command{
   # Generate AWS STS credentials for a specific role
   symvault dynamic generate --engine aws-sts --role arn:aws:iam::123456789012:role/MyRole --ttl 30m`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return cli.WithVault(func(v *vaultpkg.Vault) error {
+		return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
 			ctx := context.Background()
 			mgr := dynamicsecret.NewManager(v)
 

@@ -74,6 +74,7 @@ const (
 // It handles agent authentication, vault access, and tool execution.
 type Server struct {
 	vault        *vault.Vault
+	vaultService *vault.VaultService
 	agent        *config.AgentProfile
 	auditLog     *audit.Logger
 	transport    string
@@ -171,6 +172,7 @@ func New(v *vault.Vault, agentName string, transport string) (*Server, error) {
 
 	srv := &Server{
 		vault:               v,
+		vaultService:        vault.NewVaultService(v, nil),
 		agent:               &agent,
 		auditLog:            auditLog,
 		transport:           transport,

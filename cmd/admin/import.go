@@ -98,7 +98,7 @@ var importCmd = &cobra.Command{
 			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "parse import source", err)
 		}
 
-		return cli.WithVault(func(v *vaultpkg.Vault) error {
+		return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
 			imported, skipped := 0, 0
 			for _, entry := range entries {
 				entryPath := importEntryPath(options.Prefix, entry.Path)
@@ -108,7 +108,7 @@ var importCmd = &cobra.Command{
 					continue
 				}
 
-				exists, err := importEntryExists(v, entryPath)
+				exists, err := importEntryExists(vs, entryPath)
 				if err != nil {
 					return fmt.Errorf("cannot check entry: %w", err)
 				}
@@ -126,13 +126,13 @@ var importCmd = &cobra.Command{
 				}
 
 				if exists && options.Overwrite {
-					if err := cli.DeleteEntry(v, entryPath); err != nil {
+					if err := vs.DeleteEntry(entryPath); err != nil {
 						return fmt.Errorf("cannot overwrite entry: %w", err)
 					}
 				}
 
 				record := vaultpkg.WriteRecord{Action: "import"}
-				if err := cli.SetFieldsWithProvenance(v, entryPath, entry.Data, record); err != nil {
+				if err := vs.SetFieldsWithProvenance(entryPath, entry.Data, record); err != nil {
 					return fmt.Errorf("cannot write entry: %w", err)
 				}
 				cli.PrintQuietAware("Imported: %s\n", entryPath)
@@ -195,8 +195,8 @@ func generateImportID() string {
 	return fmt.Sprintf("import-%s-%x", time.Now().UTC().Format("20060102"), buf)
 }
 
-func importEntryExists(v *vaultpkg.Vault, entryPath string) (bool, error) {
-	_, err := cli.GetEntry(v, entryPath)
+func importEntryExists(vs *cli.VaultService, entryPath string) (bool, error) {
+	_, err := vs.GetEntry(entryPath)
 	if err == nil {
 		return true, nil
 	}
@@ -220,8 +220,8 @@ var importReviewListCmd = &cobra.Command{
 	Short: "List quarantined import batches",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return cli.WithVault(func(v *vaultpkg.Vault) error {
-			entries, err := cli.ListEntries(v, "quarantine/")
+		return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
+			entries, err := vs.ListEntries("quarantine/")
 			if err != nil {
 				return fmt.Errorf("list quarantine: %w", err)
 			}
@@ -257,8 +257,8 @@ var importReviewPromoteCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		importID := args[0]
 		quarantinePrefix := "quarantine/" + importID + "/"
-		return cli.WithVault(func(v *vaultpkg.Vault) error {
-			entries, err := cli.ListEntries(v, quarantinePrefix)
+		return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
+			entries, err := vs.ListEntries(quarantinePrefix)
 			if err != nil {
 				return fmt.Errorf("list quarantine batch: %w", err)
 			}
@@ -272,7 +272,7 @@ var importReviewPromoteCmd = &cobra.Command{
 					continue
 				}
 				// Check if destination already exists
-				exists, existsErr := importEntryExists(v, destPath)
+				exists, existsErr := importEntryExists(vs, destPath)
 				if existsErr != nil {
 					cli.PrintQuietAware("Warning: cannot check destination %s: %v\n", destPath, existsErr)
 					hadError = true
@@ -284,19 +284,19 @@ var importReviewPromoteCmd = &cobra.Command{
 					continue
 				}
 				// Read source entry
-				entry, readErr := cli.GetEntry(v, entryPath)
+				entry, readErr := vs.GetEntry(entryPath)
 				if readErr != nil {
 					cli.PrintQuietAware("Warning: failed to read %s: %v\n", entryPath, readErr)
 					hadError = true
 					continue
 				}
 				// Write to destination
-				if writeErr := cli.WriteEntry(v, destPath, entry); writeErr != nil {
+				if writeErr := vs.WriteEntry(destPath, entry); writeErr != nil {
 					cli.PrintQuietAware("Warning: failed to write %s: %v\n", destPath, writeErr)
 					hadError = true
 					continue
 				}
-				if deleteErr := cli.DeleteEntry(v, entryPath); deleteErr != nil {
+				if deleteErr := vs.DeleteEntry(entryPath); deleteErr != nil {
 					cli.PrintQuietAware("Warning: failed to delete quarantine entry %s: %v\n", entryPath, deleteErr)
 					// Don't set hadError — promote succeeded
 				}

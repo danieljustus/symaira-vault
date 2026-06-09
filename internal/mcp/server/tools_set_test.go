@@ -494,11 +494,13 @@ func TestHandleSet_PreservesMultiRecipientAccess(t *testing.T) {
 		t.Fatalf("AddRecipient() error = %v", addErr)
 	}
 
+	v := &vault.Vault{
+		Dir:      writerDir,
+		Identity: writerIdentity,
+	}
 	srv := &Server{
-		vault: &vault.Vault{
-			Dir:      writerDir,
-			Identity: writerIdentity,
-		},
+		vault:        v,
+		vaultService: vault.NewVaultService(v, nil),
 		agent: &config.AgentProfile{
 			Name:         "test",
 			AllowedPaths: []string{"*"},
@@ -569,11 +571,13 @@ func TestHandleSet_MergePreservesMultiRecipientAccess(t *testing.T) {
 		t.Fatalf("AddRecipient() error = %v", addErr)
 	}
 
+	v := &vault.Vault{
+		Dir:      writerDir,
+		Identity: writerIdentity,
+	}
 	srv := &Server{
-		vault: &vault.Vault{
-			Dir:      writerDir,
-			Identity: writerIdentity,
-		},
+		vault:        v,
+		vaultService: vault.NewVaultService(v, nil),
 		agent: &config.AgentProfile{
 			Name:         "test",
 			AllowedPaths: []string{"*"},

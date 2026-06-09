@@ -62,8 +62,8 @@ var getCmd = &cobra.Command{
 	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: cli.EntryCompletionFunc,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return cli.WithVault(func(v *vaultpkg.Vault) error {
-			cli.MaybeAutoPull(cli.VaultDir(v), v.Config)
+		return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
+			cli.MaybeAutoPull(vs.VaultDir(), v.Config)
 			query := args[0]
 			path := query
 			field := ""
@@ -72,13 +72,13 @@ var getCmd = &cobra.Command{
 				candidatePath := query[:idx]
 				candidateField := query[idx+1:]
 
-				if _, readErr := cli.GetField(v, candidatePath, candidateField); readErr == nil {
+				if _, readErr := vs.GetField(candidatePath, candidateField); readErr == nil {
 					path = candidatePath
 					field = candidateField
 				}
 			}
 
-			value, err := cli.GetField(v, path, field)
+			value, err := vs.GetField(path, field)
 			if err != nil {
 				var cliErr *errorspkg.CLIError
 				if !errors.As(err, &cliErr) || cliErr.Code != errorspkg.ExitNotFound {
@@ -92,7 +92,7 @@ var getCmd = &cobra.Command{
 					return errorspkg.ReadFailed(err, "cannot read entry")
 				}
 
-				matches, findErr := cli.FindEntries(v, path, vaultpkg.FindOptions{})
+				matches, findErr := vs.FindEntries(path, vaultpkg.FindOptions{})
 				if findErr != nil {
 					return errorspkg.ReadFailed(findErr, "search entry")
 				}
@@ -102,7 +102,7 @@ var getCmd = &cobra.Command{
 					return errorspkg.NewCLIError(errorspkg.ExitNotFound, cliErr.Message, errorspkg.ErrEntryNotFound)
 				case 1:
 					path = matches[0].Path
-					value, err = cli.GetField(v, path, field)
+					value, err = vs.GetField(path, field)
 					if err != nil {
 						var cliErr2 *errorspkg.CLIError
 						if errors.As(err, &cliErr2) {
@@ -185,7 +185,7 @@ var getCmd = &cobra.Command{
 				return nil
 			}
 
-			entry, err := cli.GetEntry(v, path)
+			entry, err := vs.GetEntry(path)
 			if err != nil {
 				var cliErr3 *errorspkg.CLIError
 				if errors.As(err, &cliErr3) {

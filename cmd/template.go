@@ -50,7 +50,7 @@ var templateGenerateCmd = &cobra.Command{
   # Dry-run to preview without real values
   symvault template generate --type env --name myapp --dry-run`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return cli.WithVault(func(v *vaultpkg.Vault) error {
+		return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
 			ctx := context.Background()
 			engine := template.NewEngine(v)
 

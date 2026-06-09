@@ -59,10 +59,10 @@ Interactive mode prompts for username, password, and URL.`,
 }
 
 func runAdd(cmd *cobra.Command, args []string) error {
-	return cli.WithVaultRaw(func(v *vaultpkg.Vault) error {
+	return cli.WithVaultRaw(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
 		name := args[0]
 
-		if _, err := vaultpkg.ReadEntry(v.Dir, name, v.Identity); err == nil {
+		if _, err := vs.GetEntry(name); err == nil {
 			return errorspkg.AlreadyExists("entry %q already exists (use 'set' to update or 'edit' to modify)", name)
 		}
 
@@ -96,7 +96,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 			},
 		}
 
-		if err := vaultpkg.WriteEntryWithRecipients(v.Dir, name, entry, v.Identity); err != nil {
+		if err := vs.WriteEntry(name, entry); err != nil {
 			return errorspkg.WriteFailed(err, "cannot create entry")
 		}
 

@@ -53,12 +53,12 @@ var findCmd = &cobra.Command{
   symvault find bank --output json`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return cli.WithVault(func(v *vaultpkg.Vault) error {
-			cli.MaybeAutoPull(cli.VaultDir(v), v.Config)
+		return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
+			cli.MaybeAutoPull(vs.VaultDir(), v.Config)
 			cfg := v.Config
-			workers := searchWorkers(cli.VaultDir(v), cfg)
+			workers := searchWorkers(vs.VaultDir(), cfg)
 
-			matches, err := cli.FindEntries(v, args[0], vaultpkg.FindOptions{MaxWorkers: workers})
+			matches, err := vs.FindEntries(args[0], vaultpkg.FindOptions{MaxWorkers: workers})
 			if err != nil {
 				return errorspkg.ReadFailed(err, "search failed")
 			}

@@ -99,8 +99,8 @@ var setCmd = &cobra.Command{
 			return err
 		}
 
-		return cli.WithVault(func(v *vaultpkg.Vault) error {
-			if err := cli.SetFields(v, path, data); err != nil {
+		return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
+			if err := vs.SetFields(path, data); err != nil {
 				return errorspkg.WriteFailed(err, "cannot write entry")
 			}
 			cli.PrintQuietAware("Entry saved: %s\n", path)

@@ -6,7 +6,6 @@ import (
 
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
-	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func (s *Server) handleDelete(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -37,7 +36,7 @@ func (s *Server) handleDelete(ctx context.Context, req mcp.CallToolRequest) (*mc
 	}
 
 	_, span := metrics.StartSpan(ctx, "vault.DeleteEntry")
-	err = vaultpkg.Ops.DeleteEntry(s.vault, path)
+	err = s.vaultService.DeleteEntry(path)
 	span.End()
 	if err != nil {
 		s.logAudit(ctx, "delete", path, false)

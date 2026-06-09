@@ -34,7 +34,7 @@ var runCmd = &cobra.Command{
     --workdir /tmp/job -- ./deploy.sh`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return cli.WithVault(func(v *vaultpkg.Vault) error {
+		return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
 			// Parse --env flags: each is "ENV_NAME=path.field"
 			envMap := make(map[string]string)
 			for _, envFlag := range runEnvFlags {

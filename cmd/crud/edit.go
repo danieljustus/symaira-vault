@@ -39,10 +39,10 @@ The editor is determined by the --editor flag or EDITOR environment variable (de
 	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: cli.EntryCompletionFunc,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return cli.WithVaultRaw(func(v *vaultpkg.Vault) error {
+		return cli.WithVaultRaw(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
 			name := args[0]
 
-			entry, err := vaultpkg.ReadEntry(v.Dir, name, v.Identity)
+			entry, err := vs.GetEntry(name)
 			if err != nil {
 				return errorspkg.NotFound("entry not found: %s", name)
 			}
@@ -112,7 +112,7 @@ The editor is determined by the --editor flag or EDITOR environment variable (de
 				updatedEntry.Data = map[string]any{}
 			}
 
-			if err := vaultpkg.WriteEntryWithRecipients(v.Dir, name, &updatedEntry, v.Identity); err != nil {
+			if err := vs.WriteEntry(name, &updatedEntry); err != nil {
 				return errorspkg.WriteFailed(err, "cannot save entry")
 			}
 
