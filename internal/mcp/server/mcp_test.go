@@ -19,11 +19,13 @@ func newTestServer(t *testing.T, profile config.AgentProfile, transport string) 
 		t.Fatalf("audit.New() error = %v", err)
 	}
 
+	v := &vault.Vault{}
 	return &Server{
-		vault:     &vault.Vault{},
-		agent:     &profile,
-		auditLog:  auditLog,
-		transport: transport,
+		vault:         v,
+		vaultService:  vault.NewVaultService(v, nil),
+		agent:         &profile,
+		auditLog:      auditLog,
+		transport:     transport,
 	}
 }
 

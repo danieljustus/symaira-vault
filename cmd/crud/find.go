@@ -52,48 +52,48 @@ var findCmd = &cobra.Command{
   # JSON output
   symvault find bank --output json`,
 	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return cli.WithVault(func(v *vaultpkg.Vault) error {
-			cli.MaybeAutoPull(cli.VaultDir(v), v.Config)
-			cfg := v.Config
-			workers := searchWorkers(cli.VaultDir(v), cfg)
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
+				cli.MaybeAutoPull(vs.VaultDir(), v.Config)
+				cfg := v.Config
+				workers := searchWorkers(vs.VaultDir(), cfg)
 
-			matches, err := cli.FindEntries(v, args[0], vaultpkg.FindOptions{MaxWorkers: workers})
-			if err != nil {
-				return errorspkg.ReadFailed(err, "search failed")
-			}
-
-			if len(matches) == 0 {
-				fmt.Fprintln(os.Stderr, "No matches found")
-				return nil
-			}
-
-			if cli.OutputFormat != "text" {
-				type matchEntry struct {
-					Path   string   `json:"path"`
-					Fields []string `json:"fields,omitempty"`
+				matches, err := vs.FindEntries(args[0], vaultpkg.FindOptions{MaxWorkers: workers})
+				if err != nil {
+					return errorspkg.ReadFailed(err, "search failed")
 				}
-				out := make([]matchEntry, 0, len(matches))
+
+				if len(matches) == 0 {
+					fmt.Fprintln(os.Stderr, "No matches found")
+					return nil
+				}
+
+				if cli.OutputFormat != "text" {
+					type matchEntry struct {
+						Path   string   `json:"path"`
+						Fields []string `json:"fields,omitempty"`
+					}
+					out := make([]matchEntry, 0, len(matches))
+					for _, m := range matches {
+						out = append(out, matchEntry{Path: m.Path, Fields: m.Fields})
+					}
+					if err := cli.PrintResult(map[string]interface{}{"matches": out}); err != nil {
+						return err
+					}
+					return nil
+				}
+
 				for _, m := range matches {
-					out = append(out, matchEntry{Path: m.Path, Fields: m.Fields})
+					cli.PrintQuietAware("%s", render.ForTerminal(taint.Wrap(m.Path, taint.Provenance{Source: "cli.path"})))
+					if len(m.Fields) > 0 {
+						cli.PrintQuietAware(" (matches: %s)", strings.Join(m.Fields, ", "))
+					}
+					cli.PrintlnQuietAware()
 				}
-				if err := cli.PrintResult(map[string]interface{}{"matches": out}); err != nil {
-					return err
-				}
+
 				return nil
-			}
-
-			for _, m := range matches {
-				cli.PrintQuietAware("%s", render.ForTerminal(taint.Wrap(m.Path, taint.Provenance{Source: "cli.path"})))
-				if len(m.Fields) > 0 {
-					cli.PrintQuietAware(" (matches: %s)", strings.Join(m.Fields, ", "))
-				}
-				cli.PrintlnQuietAware()
-			}
-
-			return nil
-		})
-	},
+			})
+		},
 }
 
 func init() {

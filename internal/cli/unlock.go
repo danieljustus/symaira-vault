@@ -111,7 +111,7 @@ func resolveUnlockPassphrase(vaultDir string, interactive bool, cfg *configpkg.C
 	return passphrase, passphraseFromEnv, passphraseFromBiometric, nil
 }
 
-func WithVault(fn func(*vaultpkg.Vault) error) error {
+func WithVault(fn func(*vaultpkg.Vault, *VaultService) error) error {
 	vaultDir, err := VaultPath()
 	if err != nil {
 		return err
@@ -125,10 +125,11 @@ func WithVault(fn func(*vaultpkg.Vault) error) error {
 	if err != nil {
 		return err
 	}
-	return fn(v)
+	vs := NewVaultService(v, nil)
+	return fn(v, vs)
 }
 
-func WithVaultRaw(fn func(*vaultpkg.Vault) error) error {
+func WithVaultRaw(fn func(*vaultpkg.Vault, *VaultService) error) error {
 	return WithVault(fn)
 }
 

@@ -43,7 +43,7 @@ Inside the TUI:
 			fmt.Print(tbl.Render())
 			return nil
 		}
-		return cli.WithVault(func(v *vaultpkg.Vault) error {
+		return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
 			if err := ui.Run(v); err != nil {
 				return fmt.Errorf("ui failed: %w", err)
 			}

@@ -25,7 +25,7 @@ This detects tampered or corrupted entry files.`,
 		cli.RequiresVaultAnnotation: "true",
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return cli.WithVaultRaw(func(v *vaultpkg.Vault) error {
+		return cli.WithVaultRaw(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
 			result, err := vaultpkg.VerifyManifestIntegrity(v.Dir, v.Identity)
 			if err != nil {
 				if os.IsNotExist(err) {

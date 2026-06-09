@@ -25,7 +25,7 @@ var gitCmd = &cobra.Command{
 		action := args[0]
 
 		if action == "log" {
-			return cli.WithVaultRaw(func(v *vaultpkg.Vault) error {
+			return cli.WithVaultRaw(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
 				path := ""
 				if len(args) > 1 {
 					path = args[1]

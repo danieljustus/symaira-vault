@@ -345,11 +345,13 @@ func TestHandleGet_RedactedTOTPStillGeneratesCode(t *testing.T) {
 		t.Fatalf("WriteEntry() error = %v", writeErr)
 	}
 
+	v := &vault.Vault{
+		Dir:      vaultDir,
+		Identity: identity,
+	}
 	srv := &Server{
-		vault: &vault.Vault{
-			Dir:      vaultDir,
-			Identity: identity,
-		},
+		vault:         v,
+		vaultService:  vault.NewVaultService(v, nil),
 		agent: &config.AgentProfile{
 			Name:         "restricted",
 			AllowedPaths: []string{"*"},
@@ -765,11 +767,13 @@ func TestGetValuePerToolRedact(t *testing.T) {
 		t.Fatalf("WriteEntry: %v", err)
 	}
 
+	v := &vault.Vault{
+		Dir:      vaultDir,
+		Identity: identity,
+	}
 	srv := &Server{
-		vault: &vault.Vault{
-			Dir:      vaultDir,
-			Identity: identity,
-		},
+		vault:         v,
+		vaultService:  vault.NewVaultService(v, nil),
 		agent: &config.AgentProfile{
 			Name:          "restricted",
 			AllowedPaths:  []string{"*"},

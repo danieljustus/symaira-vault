@@ -23,7 +23,7 @@ func (s *Server) handleList(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 	}
 
 	_, span := metrics.StartSpan(ctx, "vault.List")
-	paths, err := vaultpkg.Ops.ListEntries(s.vault, prefix)
+	paths, err := s.vaultService.ListEntries(prefix)
 	span.End()
 	if err != nil {
 		s.logAudit(ctx, "list", prefix, false)
@@ -46,7 +46,7 @@ func (s *Server) handleList(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 
 	summaries := make([]vaultpkg.ListEntryInfo, 0, len(paths))
 	for _, path := range paths {
-		entry, getErr := vaultpkg.Ops.GetEntry(s.vault, path)
+		entry, getErr := s.vaultService.GetEntry(path)
 		if getErr != nil {
 			continue
 		}
