@@ -43,12 +43,11 @@ func TestMemoryKeyring_SetAndGet_RoundTrip(t *testing.T) {
 	}
 }
 
-func TestMemoryKeyring_Set_EncryptsPlaintextPassphrase(t *testing.T) {
+func TestMemoryKeyring_Set_StoresOpaque(t *testing.T) {
 	mk := &memoryKeyring{}
 	vaultDir := "/tmp/vault-mem-encrypt"
 	passphrase := "plain-secret"
 
-	// Store wrap key so Set() can encrypt plaintext passphrase
 	wrapKey := base64.StdEncoding.EncodeToString(testKey())
 	mk.Set("symvault:"+vaultDir, wrapKeyAccount, wrapKey)
 
@@ -70,27 +69,26 @@ func TestMemoryKeyring_Set_EncryptsPlaintextPassphrase(t *testing.T) {
 		t.Fatalf("Get() error = %v", err)
 	}
 
-	// Get() returns the session JSON (transparent storage layer).
 	var retrieved storedSession
 	if err := json.Unmarshal([]byte(got), &retrieved); err != nil {
 		t.Fatalf("Get() returned invalid JSON: %v", err)
 	}
 
-	// Verify the stored entry has the passphrase encrypted (not plaintext).
-	if len(retrieved.Passphrase) > 0 {
-		t.Error("plaintext passphrase should be encrypted in store")
+	if string(retrieved.Passphrase) != passphrase {
+		t.Errorf("plaintext passphrase was not preserved verbatim, got %q", retrieved.Passphrase)
 	}
-	if retrieved.EncryptedPassphrase == "" {
-		t.Error("EncryptedPassphrase should be set in store")
-	}
-	if retrieved.Nonce == "" {
-		t.Error("Nonce should be set in store")
+	if retrieved.EncryptedPassphrase != "" {
+		t.Error("memory keyring should not transparently encrypt; that is MigrateSession's job")
 	}
 }
 
 func TestMemoryKeyring_Set_InvalidJSON(t *testing.T) {
 	mk := &memoryKeyring{}
-	if err := mk.Set("symvault:/tmp/vault", sessionAccount, "not-json"); err == nil {
+	mk.store = map[string][]byte{}
+	if err := mk.Set("symvault:/tmp/vault", wrapKeyAccount, ""); err != nil {
+		t.Fatalf("Set wrap key error = %v", err)
+	}
+	if err := mk.Set("symvault:/tmp/vault", "some-other-account", "not-json"); err == nil {
 		t.Fatal("Set() error = nil, want unmarshal error")
 	}
 }
@@ -346,8 +344,7 @@ func TestMemoryKeyring_Set_ZeroesOldData(t *testing.T) {
 	}
 	var retrieved storedSession
 	json.Unmarshal([]byte(got), &retrieved)
-	// After Set encrypts plaintext, the passphrase should be empty
-	if len(retrieved.Passphrase) > 0 {
-		t.Error("Passphrase should be encrypted/empty after Set")
+	if string(retrieved.Passphrase) != "second-secret" {
+		t.Errorf("Passphrase = %q, want second-secret (memory keyring is opaque storage)", retrieved.Passphrase)
 	}
 }

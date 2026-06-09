@@ -10,7 +10,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-	"unsafe"
 )
 
 type fakeKeyring struct {
@@ -31,19 +30,7 @@ func newFakeKeyring() *fakeKeyring {
 	return &fakeKeyring{store: make(map[string]string)}
 }
 
-func (f *fakeKeyring) set(service, account, value string) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	if f.setErr != nil {
-		err := f.setErr
-		f.setErr = nil
-		return err
-	}
-	f.store[service+"|"+account] = value
-	return nil
-}
-
-func (f *fakeKeyring) get(service, account string) (string, error) {
+func (f *fakeKeyring) Get(key string) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.getErr != nil {
@@ -51,14 +38,26 @@ func (f *fakeKeyring) get(service, account string) (string, error) {
 		f.getErr = nil
 		return "", err
 	}
-	v, ok := f.store[service+"|"+account]
+	v, ok := f.store[key]
 	if !ok {
-		return "", errors.New("not found")
+		return "", ErrKeyringNotFound
 	}
 	return v, nil
 }
 
-func (f *fakeKeyring) delete(service, account string) error {
+func (f *fakeKeyring) Set(key string, value string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.setErr != nil {
+		err := f.setErr
+		f.setErr = nil
+		return err
+	}
+	f.store[key] = value
+	return nil
+}
+
+func (f *fakeKeyring) Delete(key string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.deleteErr != nil {
@@ -66,56 +65,45 @@ func (f *fakeKeyring) delete(service, account string) error {
 		f.deleteErr = nil
 		return err
 	}
-	delete(f.store, service+"|"+account)
+	delete(f.store, key)
 	return nil
 }
 
-// testKey returns a fixed 32-byte key for testing encrypt/decrypt directly.
 func testKey() []byte {
 	return []byte("0123456789abcdefghijklmnopqrstuv")
 }
 
-// setupTestWrapKey generates a random wrap key and stores it in the fake keyring.
+func newTestManager(t *testing.T) (*Manager, *fakeKeyring) {
+	t.Helper()
+	fake := newFakeKeyring()
+	mgr := NewManager(fake, func() CacheStatus {
+		return CacheStatus{Backend: "test", Persistent: false, Message: "test"}
+	})
+	return mgr, fake
+}
+
 func setupTestWrapKey(t *testing.T, fake *fakeKeyring, vaultDir string) []byte {
 	t.Helper()
 	key := testKey()
 	encKey := base64.StdEncoding.EncodeToString(key)
-	if err := fake.set(serviceName(vaultDir), wrapKeyAccount, encKey); err != nil {
+	if err := fake.Set(keyFor(serviceNameForVault(vaultDir), wrapKeyAccount), encKey); err != nil {
 		t.Fatalf("store wrap key: %v", err)
 	}
 	return key
 }
 
-func stubKeyring(t *testing.T, fake *fakeKeyring) {
-	t.Helper()
-	oldSet := keyringSet
-	oldGet := keyringGet
-	oldDelete := keyringDelete
-
-	keyringSet = fake.set
-	keyringGet = fake.get
-	keyringDelete = fake.delete
-
-	t.Cleanup(func() {
-		keyringSet = oldSet
-		keyringGet = oldGet
-		keyringDelete = oldDelete
-	})
-}
-
 func TestSaveAndLoadPassphraseRoundTrip(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault"
 	setupTestWrapKey(t, fake, vaultDir)
 	passphrase := "correct horse battery staple"
 
-	if err := SavePassphrase(vaultDir, []byte(passphrase), time.Minute); err != nil {
+	if err := mgr.SavePassphrase(vaultDir, []byte(passphrase), time.Minute); err != nil {
 		t.Fatalf("SavePassphrase() error = %v", err)
 	}
 
-	got, err := LoadPassphrase(vaultDir)
+	got, err := mgr.LoadPassphrase(vaultDir)
 	if err != nil {
 		t.Fatalf("LoadPassphrase() error = %v", err)
 	}
@@ -125,35 +113,32 @@ func TestSaveAndLoadPassphraseRoundTrip(t *testing.T) {
 }
 
 func TestClearSessionRemovesFromKeyring(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault"
 	setupTestWrapKey(t, fake, vaultDir)
-	if err := SavePassphrase(vaultDir, []byte("secret"), time.Minute); err != nil {
+	if err := mgr.SavePassphrase(vaultDir, []byte("secret"), time.Minute); err != nil {
 		t.Fatalf("SavePassphrase() error = %v", err)
 	}
 
-	if err := ClearSession(vaultDir); err != nil {
+	if err := mgr.ClearSession(vaultDir); err != nil {
 		t.Fatalf("ClearSession() error = %v", err)
 	}
 
-	if _, err := LoadPassphrase(vaultDir); err == nil {
+	if _, err := mgr.LoadPassphrase(vaultDir); err == nil {
 		t.Fatal("LoadPassphrase() error = nil, want not found")
 	}
 }
 
 func TestLoadPassphraseExpiresAfterTTL(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault"
 	setupTestWrapKey(t, fake, vaultDir)
-	if err := SavePassphrase(vaultDir, []byte("secret"), 10*time.Millisecond); err != nil {
+	if err := mgr.SavePassphrase(vaultDir, []byte("secret"), 10*time.Millisecond); err != nil {
 		t.Fatalf("SavePassphrase() error = %v", err)
 	}
 
-	// Wait for TTL to expire using channel-based notification instead of time.Sleep
 	done := make(chan struct{})
 	go func() {
 		time.Sleep(25 * time.Millisecond)
@@ -161,34 +146,30 @@ func TestLoadPassphraseExpiresAfterTTL(t *testing.T) {
 	}()
 	<-done
 
-	if _, err := LoadPassphrase(vaultDir); err == nil {
+	if _, err := mgr.LoadPassphrase(vaultDir); err == nil {
 		t.Fatal("LoadPassphrase() error = nil, want expired")
 	}
 }
 
 func TestIsSessionExpired_NoSession(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault"
 	setupTestWrapKey(t, fake, vaultDir)
-	if !IsSessionExpired(vaultDir) {
+	if !mgr.IsSessionExpired(vaultDir) {
 		t.Error("IsSessionExpired() = false, want true when no session exists")
 	}
 }
 
 func TestIsSessionExpired_ExpiredSession(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault"
 	setupTestWrapKey(t, fake, vaultDir)
-	// Save a session with very short TTL
-	if err := SavePassphrase(vaultDir, []byte("secret"), 10*time.Millisecond); err != nil {
+	if err := mgr.SavePassphrase(vaultDir, []byte("secret"), 10*time.Millisecond); err != nil {
 		t.Fatalf("SavePassphrase() error = %v", err)
 	}
 
-	// Wait for TTL to expire
 	done := make(chan struct{})
 	go func() {
 		time.Sleep(25 * time.Millisecond)
@@ -196,148 +177,135 @@ func TestIsSessionExpired_ExpiredSession(t *testing.T) {
 	}()
 	<-done
 
-	if !IsSessionExpired(vaultDir) {
+	if !mgr.IsSessionExpired(vaultDir) {
 		t.Error("IsSessionExpired() = false, want true for expired session")
 	}
 }
 
 func TestIsSessionExpired_ValidSession(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault"
 	setupTestWrapKey(t, fake, vaultDir)
-	if err := SavePassphrase(vaultDir, []byte("secret"), time.Hour); err != nil {
+	if err := mgr.SavePassphrase(vaultDir, []byte("secret"), time.Hour); err != nil {
 		t.Fatalf("SavePassphrase() error = %v", err)
 	}
 
-	if IsSessionExpired(vaultDir) {
+	if mgr.IsSessionExpired(vaultDir) {
 		t.Error("IsSessionExpired() = true, want false for valid session")
 	}
 }
 
 func TestLoadPassphrase_KeyringGetError(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	fake.getErr = errors.New("keyring unavailable")
 
-	_, err := LoadPassphrase("/tmp/vault")
-	if err == nil {
+	if _, err := mgr.LoadPassphrase("/tmp/vault"); err == nil {
 		t.Fatal("LoadPassphrase() error = nil, want keyring error")
 	}
 }
 
 func TestLoadPassphrase_MalformedJSON(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault"
 	setupTestWrapKey(t, fake, vaultDir)
 
-	//nolint:errcheck // fake.set is only used in tests
-	fake.set("symvault:"+vaultDir, sessionAccount, "not valid json{{{")
-	_, err := LoadPassphrase(vaultDir)
-	if err == nil {
+	if err := fake.Set(keyFor(serviceNameForVault(vaultDir), sessionAccount), "not valid json{{{"); err != nil {
+		t.Fatalf("fake.Set() error = %v", err)
+	}
+	if _, err := mgr.LoadPassphrase(vaultDir); err == nil {
 		t.Fatal("LoadPassphrase() error = nil, want unmarshal error")
 	}
 }
 
 func TestClearSession_DeleteError(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault"
 	setupTestWrapKey(t, fake, vaultDir)
-	if err := SavePassphrase(vaultDir, []byte("secret"), time.Minute); err != nil {
+	if err := mgr.SavePassphrase(vaultDir, []byte("secret"), time.Minute); err != nil {
 		t.Fatalf("SavePassphrase() error = %v", err)
 	}
 
 	fake.deleteErr = errors.New("keyring delete failed")
 
-	err := ClearSession(vaultDir)
-	if err == nil {
+	if err := mgr.ClearSession(vaultDir); err == nil {
 		t.Fatal("ClearSession() error = nil, want delete error")
 	}
 }
 
 func TestSavePassphrase_KeyringSetError(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	fake.setErr = errors.New("keyring write failed")
 
-	err := SavePassphrase("/tmp/vault", []byte("secret"), time.Minute)
-	if err == nil {
+	if err := mgr.SavePassphrase("/tmp/vault", []byte("secret"), time.Minute); err == nil {
 		t.Fatal("SavePassphrase() error = nil, want keyring set error")
 	}
 }
 
 func TestLoadPassphrase_ZeroTTL(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-zerott"
 	setupTestWrapKey(t, fake, vaultDir)
 	payload := `{"saved_at":"2024-01-01T00:00:00Z","last_access":"2024-01-01T00:00:00Z","passphrase":"secret","ttl_ns":0}`
-	if err := fake.set("symvault:"+vaultDir, sessionAccount, payload); err != nil {
-		t.Fatalf("fake.set() error = %v", err)
+	if err := fake.Set(keyFor(serviceNameForVault(vaultDir), sessionAccount), payload); err != nil {
+		t.Fatalf("fake.Set() error = %v", err)
 	}
 
-	_, err := LoadPassphrase(vaultDir)
-	if err == nil {
+	if _, err := mgr.LoadPassphrase(vaultDir); err == nil {
 		t.Fatal("LoadPassphrase() error = nil, want expired error for zero TTL")
 	}
 }
 
 func TestIsSessionExpired_ZeroTTL(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-zerott2"
 	setupTestWrapKey(t, fake, vaultDir)
 	payload := `{"saved_at":"2024-01-01T00:00:00Z","last_access":"2024-01-01T00:00:00Z","passphrase":"secret","ttl_ns":0}`
-	if err := fake.set("symvault:"+vaultDir, sessionAccount, payload); err != nil {
-		t.Fatalf("fake.set() error = %v", err)
+	if err := fake.Set(keyFor(serviceNameForVault(vaultDir), sessionAccount), payload); err != nil {
+		t.Fatalf("fake.Set() error = %v", err)
 	}
 
-	if !IsSessionExpired(vaultDir) {
+	if !mgr.IsSessionExpired(vaultDir) {
 		t.Error("IsSessionExpired() = false, want true for zero TTL")
 	}
 }
 
 func TestIsSessionExpired_ZeroLastAccess_NotExpired(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-zerola"
 	setupTestWrapKey(t, fake, vaultDir)
 	savedAt := time.Now().UTC().Add(-1 * time.Second).Format(time.RFC3339Nano)
 	ttlNs := int64(time.Hour)
 	payload := fmt.Sprintf(`{"saved_at":%q,"last_access":"0001-01-01T00:00:00Z","passphrase":"secret","ttl_ns":%d}`, savedAt, ttlNs)
-	if err := fake.set("symvault:"+vaultDir, sessionAccount, payload); err != nil {
-		t.Fatalf("fake.set() error = %v", err)
+	if err := fake.Set(keyFor(serviceNameForVault(vaultDir), sessionAccount), payload); err != nil {
+		t.Fatalf("fake.Set() error = %v", err)
 	}
 
-	if IsSessionExpired(vaultDir) {
+	if mgr.IsSessionExpired(vaultDir) {
 		t.Error("IsSessionExpired() = true, want false when last_access is zero but saved_at is recent")
 	}
 }
 
 func TestIsSessionExpired_ZeroLastAccess_Expired(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-zerola2"
 	setupTestWrapKey(t, fake, vaultDir)
 	savedAt := time.Now().UTC().Add(-10 * time.Minute).Format(time.RFC3339Nano)
 	ttlNs := int64(time.Minute)
 	payload := fmt.Sprintf(`{"saved_at":%q,"last_access":"0001-01-01T00:00:00Z","passphrase":"secret","ttl_ns":%d}`, savedAt, ttlNs)
-	if err := fake.set("symvault:"+vaultDir, sessionAccount, payload); err != nil {
-		t.Fatalf("fake.set() error = %v", err)
+	if err := fake.Set(keyFor(serviceNameForVault(vaultDir), sessionAccount), payload); err != nil {
+		t.Fatalf("fake.Set() error = %v", err)
 	}
 
-	if !IsSessionExpired(vaultDir) {
+	if !mgr.IsSessionExpired(vaultDir) {
 		t.Error("IsSessionExpired() = false, want true when last_access is zero and saved_at is past TTL")
 	}
 }
@@ -379,7 +347,6 @@ func TestEncryptDifferentVaultsProduceDifferentCiphertext(t *testing.T) {
 		t.Error("different vault identities should produce different ciphertext (nonce collision or same key)")
 	}
 
-	// Decrypting with wrong key should fail
 	if _, err := decryptPassphrase(enc1, nonce1, keyB); err == nil {
 		t.Fatal("decryptPassphrase() with wrong key should fail")
 	}
@@ -397,9 +364,8 @@ func TestDecryptFailsWithWrongKey(t *testing.T) {
 	}
 }
 
-func TestBackwardCompat_LoadOldPlaintextFormat(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+func TestLoadPassphrase_RejectsLegacyPlaintext(t *testing.T) {
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-old-format"
 	setupTestWrapKey(t, fake, vaultDir)
@@ -409,85 +375,48 @@ func TestBackwardCompat_LoadOldPlaintextFormat(t *testing.T) {
 		time.Now().UTC().Format(time.RFC3339Nano),
 		passphrase,
 		int64(time.Hour))
-	if err := fake.set("symvault:"+vaultDir, sessionAccount, payload); err != nil {
-		t.Fatalf("fake.set() error = %v", err)
+	if err := fake.Set(keyFor(serviceNameForVault(vaultDir), sessionAccount), payload); err != nil {
+		t.Fatalf("fake.Set() error = %v", err)
 	}
 
-	got, err := LoadPassphrase(vaultDir)
+	// The hot path now refuses to transparently load a legacy plaintext
+	// session. Run the migrate subcommand to upgrade.
+	_, err := mgr.LoadPassphrase(vaultDir)
+	if !errors.Is(err, ErrLegacyPlaintextSession) {
+		t.Fatalf("LoadPassphrase() error = %v, want ErrLegacyPlaintextSession", err)
+	}
+
+	upgraded, err := mgr.MigrateSession(vaultDir)
 	if err != nil {
-		t.Fatalf("LoadPassphrase() error = %v", err)
+		t.Fatalf("MigrateSession() error = %v", err)
+	}
+	if !upgraded {
+		t.Fatal("MigrateSession() = false, want true after upgrade")
+	}
+
+	got, err := mgr.LoadPassphrase(vaultDir)
+	if err != nil {
+		t.Fatalf("LoadPassphrase() after migrate error = %v", err)
 	}
 	if string(got) != passphrase {
-		t.Fatalf("LoadPassphrase() = %q, want %q", got, passphrase)
-	}
-}
-
-func TestMigration_OldFormatAutoMigratesToEncrypted(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
-
-	vaultDir := "/tmp/vault-migrate"
-	setupTestWrapKey(t, fake, vaultDir)
-	passphrase := "migrate-me"
-	payload := fmt.Sprintf(`{"saved_at":%q,"last_access":%q,"passphrase":%q,"ttl_ns":%d}`,
-		time.Now().UTC().Format(time.RFC3339Nano),
-		time.Now().UTC().Format(time.RFC3339Nano),
-		passphrase,
-		int64(time.Hour))
-	if err := fake.set("symvault:"+vaultDir, sessionAccount, payload); err != nil {
-		t.Fatalf("fake.set() error = %v", err)
-	}
-
-	// First load triggers migration
-	got, err := LoadPassphrase(vaultDir)
-	if err != nil {
-		t.Fatalf("LoadPassphrase() error = %v", err)
-	}
-	if string(got) != passphrase {
-		t.Fatalf("LoadPassphrase() = %q, want %q", got, passphrase)
-	}
-
-	// Verify the stored format is now encrypted (no plaintext passphrase field)
-	raw, err := fake.get("symvault:"+vaultDir, sessionAccount)
-	if err != nil {
-		t.Fatalf("fake.get() error = %v", err)
-	}
-	var sess storedSession
-	if jsonErr := json.Unmarshal([]byte(raw), &sess); jsonErr != nil {
-		t.Fatalf("json.Unmarshal() error = %v", jsonErr)
-	}
-	if len(sess.Passphrase) > 0 {
-		t.Error("after migration, plaintext passphrase field should be empty")
-	}
-	if sess.EncryptedPassphrase == "" || sess.Nonce == "" {
-		t.Error("after migration, encrypted_passphrase and nonce should be set")
-	}
-
-	// Second load should still return the correct passphrase (from encrypted format)
-	got2, err := LoadPassphrase(vaultDir)
-	if err != nil {
-		t.Fatalf("second LoadPassphrase() error = %v", err)
-	}
-	if string(got2) != passphrase {
-		t.Fatalf("second LoadPassphrase() = %q, want %q", got2, passphrase)
+		t.Fatalf("LoadPassphrase() after migrate = %q, want %q", got, passphrase)
 	}
 }
 
 func TestNewFormatStoredEncrypted(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-new-format"
 	setupTestWrapKey(t, fake, vaultDir)
 	passphrase := "new-encrypted-secret"
 
-	if err := SavePassphrase(vaultDir, []byte(passphrase), time.Hour); err != nil {
+	if err := mgr.SavePassphrase(vaultDir, []byte(passphrase), time.Hour); err != nil {
 		t.Fatalf("SavePassphrase() error = %v", err)
 	}
 
-	raw, err := fake.get("symvault:"+vaultDir, sessionAccount)
+	raw, err := fake.Get(keyFor(serviceNameForVault(vaultDir), sessionAccount))
 	if err != nil {
-		t.Fatalf("fake.get() error = %v", err)
+		t.Fatalf("fake.Get() error = %v", err)
 	}
 
 	var sess storedSession
@@ -513,7 +442,6 @@ func TestDecryptPassphrase_InvalidBase64Ciphertext(t *testing.T) {
 }
 
 func TestDecryptPassphrase_InvalidBase64Nonce(t *testing.T) {
-	// Valid base64 for ciphertext but invalid base64 for nonce
 	_, err := decryptPassphrase("dGVzdA==", "!!!not-base64", testKey())
 	if err == nil {
 		t.Fatal("decryptPassphrase() error = nil, want base64 decode error for invalid nonce")
@@ -532,28 +460,25 @@ func TestEncryptPassphrase_RandomReaderError(t *testing.T) {
 }
 
 func TestSavePassphrase_EncryptError(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, _ := newTestManager(t)
 
 	oldReader := crand.Reader
 	crand.Reader = errReader{}
 	t.Cleanup(func() { crand.Reader = oldReader })
 
-	if err := SavePassphrase("/tmp/vault-save-encrypt-error", []byte("secret"), time.Hour); err == nil {
+	if err := mgr.SavePassphrase("/tmp/vault-save-encrypt-error", []byte("secret"), time.Hour); err == nil {
 		t.Fatal("SavePassphrase() error = nil, want encrypt error")
 	}
 }
 
 func TestLoadPassphrase_ResolveDecryptError(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-corrupt-enc"
 	setupTestWrapKey(t, fake, vaultDir)
-	// Store a session with valid JSON but corrupted ciphertext (valid base64, wrong encryption)
 	sess := storedSession{
-		EncryptedPassphrase: "dGVzdA==",         // "test" in base64 — not valid AES-GCM ciphertext
-		Nonce:               "YWJjZGVmZ2hpamts", // "abcdefghijkl" in base64 — 12 bytes
+		EncryptedPassphrase: "dGVzdA==",
+		Nonce:               "YWJjZGVmZ2hpamts",
 		SavedAt:             time.Now().UTC(),
 		LastAccess:          time.Now().UTC(),
 		TTL:                 int64(time.Hour),
@@ -562,33 +487,30 @@ func TestLoadPassphrase_ResolveDecryptError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
-	if setErr := fake.set("symvault:"+vaultDir, sessionAccount, string(payload)); setErr != nil {
-		t.Fatalf("fake.set() error = %v", setErr)
+	if setErr := fake.Set(keyFor(serviceNameForVault(vaultDir), sessionAccount), string(payload)); setErr != nil {
+		t.Fatalf("fake.Set() error = %v", setErr)
 	}
 
-	_, err = LoadPassphrase(vaultDir)
+	_, err = mgr.LoadPassphrase(vaultDir)
 	if err == nil {
 		t.Fatal("LoadPassphrase() error = nil, want decrypt error for corrupted ciphertext")
 	}
 }
 
 func TestLoadPassphrase_UpdateKeyringSetError(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-update-err"
 	setupTestWrapKey(t, fake, vaultDir)
 	passphrase := "update-test-secret"
 
-	// Save a valid session first
-	if err := SavePassphrase(vaultDir, []byte(passphrase), time.Hour); err != nil {
+	if err := mgr.SavePassphrase(vaultDir, []byte(passphrase), time.Hour); err != nil {
 		t.Fatalf("SavePassphrase() error = %v", err)
 	}
 
-	// Now set a one-shot error for the next keyringSet call (which happens during LoadPassphrase update)
 	fake.setErr = errors.New("keyring update failed")
 
-	loaded, err := LoadPassphrase(vaultDir)
+	loaded, err := mgr.LoadPassphrase(vaultDir)
 	if err != nil {
 		t.Fatalf("LoadPassphrase() error = %v, want nil (should not fail on update error)", err)
 	}
@@ -598,25 +520,24 @@ func TestLoadPassphrase_UpdateKeyringSetError(t *testing.T) {
 }
 
 func TestIsSessionExpired_MalformedJSON(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-bad-json"
 	setupTestWrapKey(t, fake, vaultDir)
-	// Store malformed JSON directly
-	if err := fake.set("symvault:"+vaultDir, sessionAccount, "{invalid json!!!"); err != nil {
-		t.Fatalf("fake.set() error = %v", err)
+	if err := fake.Set(keyFor(serviceNameForVault(vaultDir), sessionAccount), "{invalid json!!!"); err != nil {
+		t.Fatalf("fake.Set() error = %v", err)
 	}
 
-	if !IsSessionExpired(vaultDir) {
+	if !mgr.IsSessionExpired(vaultDir) {
 		t.Error("IsSessionExpired() = false, want true for malformed JSON")
 	}
 }
 
 func TestLoadPassphraseWithTouchID_BiometricSuccessButLoadFails(t *testing.T) {
 	mock := &mockBiometricPassphraseStore{available: true, err: ErrBiometricNotConfigured}
-	biometricPassphraseStore = mock
-	defer func() { biometricPassphraseStore = nil }()
+	prev := defaultBiometric.passStore
+	defaultBiometric.SetPassphraseStore(mock)
+	t.Cleanup(func() { defaultBiometric.SetPassphraseStore(prev) })
 
 	_, err := LoadPassphraseWithTouchID(context.Background(), "/tmp/vault-no-session")
 	if !errors.Is(err, ErrBiometricNotConfigured) {
@@ -625,12 +546,10 @@ func TestLoadPassphraseWithTouchID_BiometricSuccessButLoadFails(t *testing.T) {
 }
 
 func TestResolvePassphrase_NoData(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-no-data"
 	setupTestWrapKey(t, fake, vaultDir)
-	// Store a session with no passphrase data at all
 	sess := storedSession{
 		SavedAt:    time.Now().UTC(),
 		LastAccess: time.Now().UTC(),
@@ -640,45 +559,43 @@ func TestResolvePassphrase_NoData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
-	if setErr := fake.set("symvault:"+vaultDir, sessionAccount, string(payload)); setErr != nil {
-		t.Fatalf("fake.set() error = %v", setErr)
+	if setErr := fake.Set(keyFor(serviceNameForVault(vaultDir), sessionAccount), string(payload)); setErr != nil {
+		t.Fatalf("fake.Set() error = %v", setErr)
 	}
 
-	_, err = LoadPassphrase(vaultDir)
+	_, err = mgr.LoadPassphrase(vaultDir)
 	if err == nil {
 		t.Fatal("LoadPassphrase() error = nil, want no passphrase data error")
 	}
 }
 
 func TestLoadPassphrase_NegativeTTL(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-neg-ttl"
 	setupTestWrapKey(t, fake, vaultDir)
 	payload := fmt.Sprintf(`{"saved_at":"2024-01-01T00:00:00Z","last_access":"2024-01-01T00:00:00Z","passphrase":"secret","ttl_ns":%d}`, int64(-1))
-	if err := fake.set("symvault:"+vaultDir, sessionAccount, payload); err != nil {
-		t.Fatalf("fake.set() error = %v", err)
+	if err := fake.Set(keyFor(serviceNameForVault(vaultDir), sessionAccount), payload); err != nil {
+		t.Fatalf("fake.Set() error = %v", err)
 	}
 
-	_, err := LoadPassphrase(vaultDir)
+	_, err := mgr.LoadPassphrase(vaultDir)
 	if err == nil {
 		t.Fatal("LoadPassphrase() error = nil, want expired error for negative TTL")
 	}
 }
 
 func TestIsSessionExpired_NegativeTTL(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-neg-ttl2"
 	setupTestWrapKey(t, fake, vaultDir)
 	payload := fmt.Sprintf(`{"saved_at":"2024-01-01T00:00:00Z","last_access":"2024-01-01T00:00:00Z","passphrase":"secret","ttl_ns":%d}`, int64(-1))
-	if err := fake.set("symvault:"+vaultDir, sessionAccount, payload); err != nil {
-		t.Fatalf("fake.set() error = %v", err)
+	if err := fake.Set(keyFor(serviceNameForVault(vaultDir), sessionAccount), payload); err != nil {
+		t.Fatalf("fake.Set() error = %v", err)
 	}
 
-	if !IsSessionExpired(vaultDir) {
+	if !mgr.IsSessionExpired(vaultDir) {
 		t.Error("IsSessionExpired() = false, want true for negative TTL")
 	}
 }
@@ -708,19 +625,18 @@ func TestDecryptPassphrase_AESCipherError(t *testing.T) {
 }
 
 func TestSavePassphrase_MarshalError(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-marshal"
 	setupTestWrapKey(t, fake, vaultDir)
 
-	if err := SavePassphrase(vaultDir, []byte("secret"), time.Hour); err != nil {
+	if err := mgr.SavePassphrase(vaultDir, []byte("secret"), time.Hour); err != nil {
 		t.Fatalf("SavePassphrase failed: %v", err)
 	}
 
-	raw, err := fake.get("symvault:"+vaultDir, sessionAccount)
+	raw, err := fake.Get(keyFor(serviceNameForVault(vaultDir), sessionAccount))
 	if err != nil {
-		t.Fatalf("fake.get() error = %v", err)
+		t.Fatalf("fake.Get() error = %v", err)
 	}
 	if raw == "" {
 		t.Error("session should be stored in keyring")
@@ -728,18 +644,17 @@ func TestSavePassphrase_MarshalError(t *testing.T) {
 }
 
 func TestLoadPassphrase_UpdateSessionOnAccess(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-update"
 	setupTestWrapKey(t, fake, vaultDir)
 	passphrase := "update-test"
 
-	if err := SavePassphrase(vaultDir, []byte(passphrase), time.Hour); err != nil {
+	if err := mgr.SavePassphrase(vaultDir, []byte(passphrase), time.Hour); err != nil {
 		t.Fatalf("SavePassphrase error = %v", err)
 	}
 
-	got, err := LoadPassphrase(vaultDir)
+	got, err := mgr.LoadPassphrase(vaultDir)
 	if err != nil {
 		t.Fatalf("LoadPassphrase error = %v", err)
 	}
@@ -747,9 +662,9 @@ func TestLoadPassphrase_UpdateSessionOnAccess(t *testing.T) {
 		t.Errorf("LoadPassphrase = %q, want %q", got, passphrase)
 	}
 
-	raw, err := fake.get("symvault:"+vaultDir, sessionAccount)
+	raw, err := fake.Get(keyFor(serviceNameForVault(vaultDir), sessionAccount))
 	if err != nil {
-		t.Fatalf("fake.get() error = %v", err)
+		t.Fatalf("fake.Get() error = %v", err)
 	}
 
 	var sess storedSession
@@ -762,21 +677,28 @@ func TestLoadPassphrase_UpdateSessionOnAccess(t *testing.T) {
 }
 
 func TestLoadPassphrase_LastAccessBeforeSavedAt(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-la-before-sa"
-	setupTestWrapKey(t, fake, vaultDir)
+	wrapKey := setupTestWrapKey(t, fake, vaultDir)
 	now := time.Now().UTC()
-	payload := fmt.Sprintf(`{"saved_at":%q,"last_access":%q,"passphrase":"secret","ttl_ns":%d}`,
-		now.Format(time.RFC3339Nano),
-		now.Add(-time.Second).Format(time.RFC3339Nano),
-		int64(time.Hour))
-	if err := fake.set("symvault:"+vaultDir, sessionAccount, payload); err != nil {
-		t.Fatalf("fake.set() error = %v", err)
+	enc, nonce, err := encryptPassphrase([]byte("secret"), wrapKey)
+	if err != nil {
+		t.Fatalf("setup encrypt failed: %v", err)
+	}
+	sess := storedSession{
+		EncryptedPassphrase: enc,
+		Nonce:               nonce,
+		SavedAt:             now,
+		LastAccess:          now.Add(-time.Second),
+		TTL:                 int64(time.Hour),
+	}
+	payload, _ := json.Marshal(sess)
+	if err := fake.Set(keyFor(serviceNameForVault(vaultDir), sessionAccount), string(payload)); err != nil {
+		t.Fatalf("fake.Set() error = %v", err)
 	}
 
-	got, err := LoadPassphrase(vaultDir)
+	got, err := mgr.LoadPassphrase(vaultDir)
 	if err != nil {
 		t.Fatalf("LoadPassphrase() error = %v", err)
 	}
@@ -786,30 +708,27 @@ func TestLoadPassphrase_LastAccessBeforeSavedAt(t *testing.T) {
 }
 
 func TestLoadPassphrase_ZeroLastAccessUsesSavedAt(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-load-zero-last-access"
 	setupTestWrapKey(t, fake, vaultDir)
 	payload := fmt.Sprintf(`{"saved_at":%q,"last_access":"0001-01-01T00:00:00Z","passphrase":"secret","ttl_ns":%d}`,
 		time.Now().UTC().Format(time.RFC3339Nano),
 		int64(time.Hour))
-	if err := fake.set("symvault:"+vaultDir, sessionAccount, payload); err != nil {
-		t.Fatalf("fake.set() error = %v", err)
+	if err := fake.Set(keyFor(serviceNameForVault(vaultDir), sessionAccount), payload); err != nil {
+		t.Fatalf("fake.Set() error = %v", err)
 	}
 
-	got, err := LoadPassphrase(vaultDir)
-	if err != nil {
-		t.Fatalf("LoadPassphrase() error = %v", err)
-	}
-	if string(got) != "secret" {
-		t.Errorf("LoadPassphrase() = %q, want %q", got, "secret")
+	_, err := mgr.LoadPassphrase(vaultDir)
+	// Zero last_access with a plaintext passphrase is the legacy format;
+	// the hot path refuses to load it.
+	if !errors.Is(err, ErrLegacyPlaintextSession) {
+		t.Fatalf("LoadPassphrase() error = %v, want ErrLegacyPlaintextSession", err)
 	}
 }
 
 func TestResolvePassphrase_BothEncryptedAndPlaintext(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-both"
 	setupTestWrapKey(t, fake, vaultDir)
@@ -830,61 +749,135 @@ func TestResolvePassphrase_BothEncryptedAndPlaintext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
-	if err := fake.set("symvault:"+vaultDir, sessionAccount, string(payload)); err != nil {
-		t.Fatalf("fake.set() error = %v", err)
+	if err := fake.Set(keyFor(serviceNameForVault(vaultDir), sessionAccount), string(payload)); err != nil {
+		t.Fatalf("fake.Set() error = %v", err)
 	}
 
-	got, err := LoadPassphrase(vaultDir)
-	if err != nil {
-		t.Fatalf("LoadPassphrase() error = %v", err)
-	}
-	if string(got) != "actual-secret" {
-		t.Errorf("LoadPassphrase() = %q, want encrypted value to be used", got)
+	_, err = mgr.LoadPassphrase(vaultDir)
+	if !errors.Is(err, ErrLegacyPlaintextSession) {
+		t.Fatalf("LoadPassphrase() error = %v, want ErrLegacyPlaintextSession", err)
 	}
 }
 
-func TestResolvePassphrase_LegacyFormatMigrates(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+func TestMigrateSession_UpgradesPlaintext(t *testing.T) {
+	mgr, fake := newTestManager(t)
 
-	vaultDir := "/tmp/vault-legacy"
+	vaultDir := "/tmp/vault-migrate"
 	setupTestWrapKey(t, fake, vaultDir)
-	passphrase := "legacy-value"
-	sess := storedSession{
-		Passphrase: passphraseBytes([]byte(passphrase)),
-		SavedAt:    time.Now().UTC(),
-		LastAccess: time.Now().UTC(),
-		TTL:        int64(time.Hour),
-	}
-	payload, err := json.Marshal(sess)
-	if err != nil {
-		t.Fatalf("json.Marshal() error = %v", err)
-	}
-	if err := fake.set("symvault:"+vaultDir, sessionAccount, string(payload)); err != nil {
-		t.Fatalf("fake.set() error = %v", err)
+	passphrase := "migrate-me"
+	payload := fmt.Sprintf(`{"saved_at":%q,"last_access":%q,"passphrase":%q,"ttl_ns":%d}`,
+		time.Now().UTC().Format(time.RFC3339Nano),
+		time.Now().UTC().Format(time.RFC3339Nano),
+		passphrase,
+		int64(time.Hour))
+	if err := fake.Set(keyFor(serviceNameForVault(vaultDir), sessionAccount), payload); err != nil {
+		t.Fatalf("fake.Set() error = %v", err)
 	}
 
-	got, err := LoadPassphrase(vaultDir)
+	upgraded, err := mgr.MigrateSession(vaultDir)
+	if err != nil {
+		t.Fatalf("MigrateSession() error = %v", err)
+	}
+	if !upgraded {
+		t.Fatal("MigrateSession() = false, want true after upgrade")
+	}
+
+	raw, err := fake.Get(keyFor(serviceNameForVault(vaultDir), sessionAccount))
+	if err != nil {
+		t.Fatalf("fake.Get() error = %v", err)
+	}
+	var sess storedSession
+	if jsonErr := json.Unmarshal([]byte(raw), &sess); jsonErr != nil {
+		t.Fatalf("json.Unmarshal() error = %v", jsonErr)
+	}
+	if len(sess.Passphrase) > 0 {
+		t.Error("after migration, plaintext passphrase field should be empty")
+	}
+	if sess.EncryptedPassphrase == "" || sess.Nonce == "" {
+		t.Error("after migration, encrypted_passphrase and nonce should be set")
+	}
+
+	got, err := mgr.LoadPassphrase(vaultDir)
 	if err != nil {
 		t.Fatalf("LoadPassphrase() error = %v", err)
 	}
 	if string(got) != passphrase {
-		t.Errorf("LoadPassphrase() = %q, want %q", got, passphrase)
+		t.Fatalf("LoadPassphrase() = %q, want %q", got, passphrase)
+	}
+}
+
+func TestMigrateSession_AlreadyEncrypted(t *testing.T) {
+	mgr, fake := newTestManager(t)
+
+	vaultDir := "/tmp/vault-migrate-already"
+	setupTestWrapKey(t, fake, vaultDir)
+	if err := mgr.SavePassphrase(vaultDir, []byte("already-encrypted"), time.Hour); err != nil {
+		t.Fatalf("SavePassphrase() error = %v", err)
 	}
 
-	raw, _ := fake.get("symvault:"+vaultDir, sessionAccount)
-	var updated storedSession
-	if jsonErr := json.Unmarshal([]byte(raw), &updated); jsonErr != nil {
-		t.Fatalf("json.Unmarshal() error = %v", jsonErr)
+	upgraded, err := mgr.MigrateSession(vaultDir)
+	if err != nil {
+		t.Fatalf("MigrateSession() error = %v", err)
 	}
-	if len(updated.Passphrase) > 0 {
-		t.Error("legacy plaintext should be cleared after migration")
+	if upgraded {
+		t.Error("MigrateSession() = true, want false when session is already encrypted")
+	}
+}
+
+func TestMigrateSession_NoSession(t *testing.T) {
+	mgr, _ := newTestManager(t)
+
+	upgraded, err := mgr.MigrateSession("/tmp/vault-migrate-empty")
+	if err != nil {
+		t.Fatalf("MigrateSession() error = %v", err)
+	}
+	if upgraded {
+		t.Error("MigrateSession() = true, want false when no session exists")
+	}
+}
+
+func TestHasLegacyPlaintextSession_DetectsLegacy(t *testing.T) {
+	mgr, fake := newTestManager(t)
+
+	vaultDir := "/tmp/vault-legacy-detect"
+	setupTestWrapKey(t, fake, vaultDir)
+	payload := fmt.Sprintf(`{"saved_at":%q,"last_access":%q,"passphrase":"legacy","ttl_ns":%d}`,
+		time.Now().UTC().Format(time.RFC3339Nano),
+		time.Now().UTC().Format(time.RFC3339Nano),
+		int64(time.Hour))
+	if err := fake.Set(keyFor(serviceNameForVault(vaultDir), sessionAccount), payload); err != nil {
+		t.Fatalf("fake.Set() error = %v", err)
+	}
+
+	legacy, err := mgr.HasLegacyPlaintextSession(vaultDir)
+	if err != nil {
+		t.Fatalf("HasLegacyPlaintextSession() error = %v", err)
+	}
+	if !legacy {
+		t.Error("HasLegacyPlaintextSession() = false, want true for legacy payload")
+	}
+}
+
+func TestHasLegacyPlaintextSession_NewFormat(t *testing.T) {
+	mgr, fake := newTestManager(t)
+
+	vaultDir := "/tmp/vault-new-detect"
+	setupTestWrapKey(t, fake, vaultDir)
+	if err := mgr.SavePassphrase(vaultDir, []byte("encrypted"), time.Hour); err != nil {
+		t.Fatalf("SavePassphrase() error = %v", err)
+	}
+
+	legacy, err := mgr.HasLegacyPlaintextSession(vaultDir)
+	if err != nil {
+		t.Fatalf("HasLegacyPlaintextSession() error = %v", err)
+	}
+	if legacy {
+		t.Error("HasLegacyPlaintextSession() = true, want false for new format")
 	}
 }
 
 func TestResolvePassphrase_WipesPlaintextAfterMigration(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-wipe-legacy-pass"
 	setupTestWrapKey(t, fake, vaultDir)
@@ -900,69 +893,53 @@ func TestResolvePassphrase_WipesPlaintextAfterMigration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
-	if err := fake.set("symvault:"+vaultDir, sessionAccount, string(payload)); err != nil {
-		t.Fatalf("fake.set() error = %v", err)
+	if err := fake.Set(keyFor(serviceNameForVault(vaultDir), sessionAccount), string(payload)); err != nil {
+		t.Fatalf("fake.Set() error = %v", err)
 	}
 
-	// Re-read from the fake keyring to get a fresh sess with a known backing array
-	raw, err := fake.get("symvault:"+vaultDir, sessionAccount)
+	upgraded, err := mgr.MigrateSession(vaultDir)
 	if err != nil {
-		t.Fatalf("fake.get() error = %v", err)
+		t.Fatalf("MigrateSession() error = %v", err)
 	}
-	var loaded storedSession
-	if jsonErr := json.Unmarshal([]byte(raw), &loaded); jsonErr != nil {
-		t.Fatalf("json.Unmarshal() error = %v", jsonErr)
-	}
-	if len(loaded.Passphrase) == 0 {
-		t.Fatal("expected legacy passphrase to be present before migration")
+	if !upgraded {
+		t.Fatal("MigrateSession() = false, want true after upgrade")
 	}
 
-	// Capture the backing data pointer before migration.
-	// #nosec G103 — intentional: confirming wipe side-effect in test.
-	origData := unsafe.SliceData(loaded.Passphrase)
-	origLen := len(loaded.Passphrase)
-
-	got, err := resolvePassphrase(&loaded, vaultDir)
+	// After migration the stored payload must no longer contain the
+	// plaintext passphrase and must carry the encrypted form.
+	raw, err := fake.Get(keyFor(serviceNameForVault(vaultDir), sessionAccount))
 	if err != nil {
-		t.Fatalf("resolvePassphrase() error = %v", err)
+		t.Fatalf("fake.Get() error = %v", err)
 	}
-	if string(got) != passphrase {
-		t.Errorf("resolvePassphrase() = %q, want %q", got, passphrase)
+	var updated storedSession
+	if err := json.Unmarshal([]byte(raw), &updated); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
-
-	// After migration the original backing data should be zeroed
-	// (the slice was explicitly wiped before being set to nil).
-	buf := unsafe.Slice(origData, origLen)
-	for i, b := range buf {
-		if b != 0 {
-			t.Errorf("backing data at offset %d = %d, want 0", i, b)
-		}
+	if len(updated.Passphrase) > 0 {
+		t.Errorf("plaintext passphrase should be empty after migration, got %q", updated.Passphrase)
 	}
-
-	// The struct field must be nil now
-	if len(loaded.Passphrase) > 0 {
-		t.Error("sess.Passphrase should be nil after migration")
+	if updated.EncryptedPassphrase == "" || updated.Nonce == "" {
+		t.Error("encrypted_passphrase and nonce should be set after migration")
 	}
 }
 
 func TestSavePassphrase_UpdatesLastAccessOnLoad(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-updates-la"
 	setupTestWrapKey(t, fake, vaultDir)
-	if err := SavePassphrase(vaultDir, []byte("secret"), time.Hour); err != nil {
+	if err := mgr.SavePassphrase(vaultDir, []byte("secret"), time.Hour); err != nil {
 		t.Fatalf("SavePassphrase error = %v", err)
 	}
 
-	raw1, _ := fake.get("symvault:"+vaultDir, sessionAccount)
+	raw1, _ := fake.Get(keyFor(serviceNameForVault(vaultDir), sessionAccount))
 	var sess1 storedSession
 	json.Unmarshal([]byte(raw1), &sess1)
 	time.Sleep(time.Millisecond)
 
-	LoadPassphrase(vaultDir)
+	mgr.LoadPassphrase(vaultDir)
 
-	raw2, _ := fake.get("symvault:"+vaultDir, sessionAccount)
+	raw2, _ := fake.Get(keyFor(serviceNameForVault(vaultDir), sessionAccount))
 	var sess2 storedSession
 	json.Unmarshal([]byte(raw2), &sess2)
 
@@ -972,8 +949,7 @@ func TestSavePassphrase_UpdatesLastAccessOnLoad(t *testing.T) {
 }
 
 func TestSavePassphrase_EncryptFails(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-enc-fail"
 	setupTestWrapKey(t, fake, vaultDir)
@@ -987,15 +963,14 @@ func TestSavePassphrase_EncryptFails(t *testing.T) {
 		t.Error("setup produced empty values")
 	}
 
-	err = SavePassphrase(vaultDir, []byte(passphrase), time.Hour)
+	err = mgr.SavePassphrase(vaultDir, []byte(passphrase), time.Hour)
 	if err != nil {
 		t.Fatalf("SavePassphrase failed: %v", err)
 	}
 }
 
 func TestLoadPassphrase_ResolveError(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-resolve-err"
 	setupTestWrapKey(t, fake, vaultDir)
@@ -1015,17 +990,16 @@ func TestLoadPassphrase_ResolveError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("setup failed: %v", err)
 	}
-	fake.set("symvault:"+vaultDir, sessionAccount, string(payload))
+	fake.Set(keyFor(serviceNameForVault(vaultDir), sessionAccount), string(payload))
 
-	_, err = LoadPassphrase(vaultDir)
+	_, err = mgr.LoadPassphrase(vaultDir)
 	if err != nil {
 		t.Fatalf("LoadPassphrase failed: %v", err)
 	}
 }
 
 func TestLoadPassphrase_MarshalFailsOnUpdate(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-marshal-fail"
 	setupTestWrapKey(t, fake, vaultDir)
@@ -1038,38 +1012,11 @@ func TestLoadPassphrase_MarshalFailsOnUpdate(t *testing.T) {
 		TTL:                 int64(time.Hour),
 	}
 	payload, _ := json.Marshal(sess)
-	fake.set("symvault:"+vaultDir, sessionAccount, string(payload))
+	fake.Set(keyFor(serviceNameForVault(vaultDir), sessionAccount), string(payload))
 
-	got, err := LoadPassphrase(vaultDir)
+	got, err := mgr.LoadPassphrase(vaultDir)
 	if err == nil {
 		t.Logf("LoadPassphrase succeeded with dummy data, got: %q", got)
-	}
-}
-
-func TestResolvePassphrase_EncryptFailsDuringMigration(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
-
-	vaultDir := "/tmp/vault-mig-fail"
-	setupTestWrapKey(t, fake, vaultDir)
-
-	plain := "legacy-passphrase"
-
-	sess := storedSession{
-		Passphrase: passphraseBytes([]byte(plain)),
-		SavedAt:    time.Now().UTC(),
-		LastAccess: time.Now().UTC(),
-		TTL:        int64(time.Hour),
-	}
-	payload, _ := json.Marshal(sess)
-	fake.set("symvault:"+vaultDir, sessionAccount, string(payload))
-
-	got, err := LoadPassphrase(vaultDir)
-	if err != nil {
-		t.Fatalf("LoadPassphrase failed: %v", err)
-	}
-	if string(got) != plain {
-		t.Errorf("LoadPassphrase = %q, want %q", got, plain)
 	}
 }
 
@@ -1081,8 +1028,7 @@ func TestGetCacheStatus_Default(t *testing.T) {
 }
 
 func TestSaveAndLoadIdentity(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-identity-test"
 	setupTestWrapKey(t, fake, vaultDir)
@@ -1090,11 +1036,11 @@ func TestSaveAndLoadIdentity(t *testing.T) {
 	identity := "AGE-SECRET-KEY-1FAKE0000000000000000000000000000000000000000000000000000"
 	ttl := time.Hour
 
-	if err := SaveIdentity(vaultDir, identity, ttl); err != nil {
+	if err := mgr.SaveIdentity(vaultDir, identity, ttl); err != nil {
 		t.Fatalf("SaveIdentity error: %v", err)
 	}
 
-	got, err := LoadIdentity(vaultDir)
+	got, err := mgr.LoadIdentity(vaultDir)
 	if err != nil {
 		t.Fatalf("LoadIdentity error: %v", err)
 	}
@@ -1104,46 +1050,42 @@ func TestSaveAndLoadIdentity(t *testing.T) {
 }
 
 func TestLoadIdentity_NotFound(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, _ := newTestManager(t)
 
-	_, err := LoadIdentity("/tmp/vault-no-identity")
+	_, err := mgr.LoadIdentity("/tmp/vault-no-identity")
 	if err == nil {
 		t.Error("expected error when identity not cached")
 	}
 }
 
 func TestSaveIdentity_MarshalError(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-identity-marshal"
 	setupTestWrapKey(t, fake, vaultDir)
 
 	identity := "AGE-SECRET-KEY-1" + string(make([]byte, 100000))
-	err := SaveIdentity(vaultDir, identity, time.Hour)
+	err := mgr.SaveIdentity(vaultDir, identity, time.Hour)
 	if err != nil {
 		t.Logf("SaveIdentity returned error (may be marshal or keyring set): %v", err)
 	}
 }
 
 func TestSaveIdentity_KeyringSetError(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-identity-set-err"
 	setupTestWrapKey(t, fake, vaultDir)
 
 	fake.setErr = errors.New("keyring write failed")
-	err := SaveIdentity(vaultDir, "AGE-SECRET-KEY-1FAKE", time.Hour)
+	err := mgr.SaveIdentity(vaultDir, "AGE-SECRET-KEY-1FAKE", time.Hour)
 	if err == nil {
 		t.Fatal("SaveIdentity error = nil, want keyring set error")
 	}
 }
 
 func TestLoadIdentity_ExpiredTTL(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-identity-expired"
 	setupTestWrapKey(t, fake, vaultDir)
@@ -1156,17 +1098,16 @@ func TestLoadIdentity_ExpiredTTL(t *testing.T) {
 		TTL:               0,
 	}
 	payload, _ := json.Marshal(ident)
-	fake.set("symvault:"+vaultDir, identityAccount, string(payload))
+	fake.Set(keyFor(serviceNameForVault(vaultDir), identityAccount), string(payload))
 
-	_, err := LoadIdentity(vaultDir)
+	_, err := mgr.LoadIdentity(vaultDir)
 	if err == nil {
 		t.Fatal("LoadIdentity error = nil, want expired identity error")
 	}
 }
 
 func TestLoadIdentity_WrapKeyNotFound(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-identity-no-wrap"
 	setupTestWrapKey(t, fake, vaultDir)
@@ -1179,94 +1120,87 @@ func TestLoadIdentity_WrapKeyNotFound(t *testing.T) {
 		TTL:               int64(time.Hour),
 	}
 	payload, _ := json.Marshal(ident)
-	fake.set("symvault:"+vaultDir, identityAccount, string(payload))
+	fake.Set(keyFor(serviceNameForVault(vaultDir), identityAccount), string(payload))
 
-	fake.delete("symvault:"+vaultDir, wrapKeyAccount)
+	fake.Delete(keyFor(serviceNameForVault(vaultDir), wrapKeyAccount))
 
-	_, err := LoadIdentity(vaultDir)
+	_, err := mgr.LoadIdentity(vaultDir)
 	if err == nil {
 		t.Fatal("LoadIdentity error = nil, want wrap key error")
 	}
 }
 
 func TestClearIdentity_DeleteError(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-clear-identity"
 	setupTestWrapKey(t, fake, vaultDir)
 
-	err := SaveIdentity(vaultDir, "AGE-SECRET-KEY-1FAKE", time.Hour)
+	err := mgr.SaveIdentity(vaultDir, "AGE-SECRET-KEY-1FAKE", time.Hour)
 	if err != nil {
 		t.Fatalf("SaveIdentity failed: %v", err)
 	}
 
 	fake.deleteErr = errors.New("keyring delete failed")
-	err = ClearIdentity(vaultDir)
+	err = mgr.ClearIdentity(vaultDir)
 	if err == nil {
 		t.Fatal("ClearIdentity error = nil, want delete error")
 	}
 }
 
 func TestLoadWrapKey_EmptyString(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-wrap-empty"
-	fake.set("symvault:"+vaultDir, wrapKeyAccount, "")
+	fake.Set(keyFor(serviceNameForVault(vaultDir), wrapKeyAccount), "")
 
-	_, err := loadWrapKey(vaultDir)
+	_, err := mgr.loadWrapKey(vaultDir)
 	if err == nil {
 		t.Fatal("loadWrapKey error = nil, want empty wrap key error")
 	}
 }
 
 func TestLoadWrapKey_InvalidBase64(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-wrap-badbase64"
-	fake.set("symvault:"+vaultDir, wrapKeyAccount, "!!!not-base64!!!")
+	fake.Set(keyFor(serviceNameForVault(vaultDir), wrapKeyAccount), "!!!not-base64!!!")
 
-	_, err := loadWrapKey(vaultDir)
+	_, err := mgr.loadWrapKey(vaultDir)
 	if err == nil {
 		t.Fatal("loadWrapKey error = nil, want base64 decode error")
 	}
 }
 
 func TestLoadWrapKey_InvalidLength(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-wrap-badlen"
-	// Base64 of "short" - only 5 bytes, not 32
-	fake.set("symvault:"+vaultDir, wrapKeyAccount, base64.StdEncoding.EncodeToString([]byte("short")))
+	fake.Set(keyFor(serviceNameForVault(vaultDir), wrapKeyAccount), base64.StdEncoding.EncodeToString([]byte("short")))
 
-	_, err := loadWrapKey(vaultDir)
+	_, err := mgr.loadWrapKey(vaultDir)
 	if err == nil {
 		t.Fatal("loadWrapKey error = nil, want invalid length error")
 	}
 }
 
 func TestDeleteWrapKey_Error(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-delete-wrap"
 	setupTestWrapKey(t, fake, vaultDir)
 
 	fake.deleteErr = errors.New("keyring delete failed")
-	err := deleteWrapKey(vaultDir)
+	err := mgr.deleteWrapKey(vaultDir)
 	if err == nil {
 		t.Fatal("deleteWrapKey error = nil, want delete error")
 	}
 }
 
 func TestEncryptionKey_NoWrapKey(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, _ := newTestManager(t)
 
-	_, err := encryptionKey("/tmp/vault-no-wrap")
+	_, err := mgr.encryptionKey("/tmp/vault-no-wrap")
 	if err == nil {
 		t.Fatal("encryptionKey error = nil, want no wrap key error")
 	}
@@ -1281,59 +1215,55 @@ func TestEncryptPassphrase_InvalidKeyLength(t *testing.T) {
 }
 
 func TestSavePassphrase_KeyringSetOnSaveFails(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-save-set-err"
 	setupTestWrapKey(t, fake, vaultDir)
 
 	fake.setErr = errors.New("keyring save failed")
-	err := SavePassphrase(vaultDir, []byte("secret"), time.Hour)
+	err := mgr.SavePassphrase(vaultDir, []byte("secret"), time.Hour)
 	if err == nil {
 		t.Fatal("SavePassphrase error = nil, want keyring set error")
 	}
 }
 
 func TestSaveIdentity_KeyringSetOnSaveFails(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-id-save-set-err"
 	setupTestWrapKey(t, fake, vaultDir)
 
 	fake.setErr = errors.New("keyring save failed")
-	err := SaveIdentity(vaultDir, "AGE-SECRET-KEY-1FAKE", time.Hour)
+	err := mgr.SaveIdentity(vaultDir, "AGE-SECRET-KEY-1FAKE", time.Hour)
 	if err == nil {
 		t.Fatal("SaveIdentity error = nil, want keyring set error")
 	}
 }
 
 func TestSavePassphrase_MarshalSucceeds(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-marshal-succeeds"
 	setupTestWrapKey(t, fake, vaultDir)
 
-	err := SavePassphrase(vaultDir, []byte("secret"), time.Hour)
+	err := mgr.SavePassphrase(vaultDir, []byte("secret"), time.Hour)
 	if err != nil {
 		t.Fatalf("SavePassphrase failed: %v", err)
 	}
 }
 
 func TestLoadIdentity_KeyringUpdateSucceeds(t *testing.T) {
-	fake := newFakeKeyring()
-	stubKeyring(t, fake)
+	mgr, fake := newTestManager(t)
 
 	vaultDir := "/tmp/vault-id-update"
 	setupTestWrapKey(t, fake, vaultDir)
 
 	identity := "AGE-SECRET-KEY-1FAKE0000000000000000000000000000000000000000000000000000000"
-	if err := SaveIdentity(vaultDir, identity, time.Hour); err != nil {
+	if err := mgr.SaveIdentity(vaultDir, identity, time.Hour); err != nil {
 		t.Fatalf("SaveIdentity failed: %v", err)
 	}
 
-	got, err := LoadIdentity(vaultDir)
+	got, err := mgr.LoadIdentity(vaultDir)
 	if err != nil {
 		t.Fatalf("LoadIdentity failed: %v", err)
 	}
