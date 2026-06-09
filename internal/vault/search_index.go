@@ -18,6 +18,13 @@ import (
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
 )
 
+// ErrIndexBuildEmpty is returned by Build when the vault contains entries
+// but none of them could be decrypted with the supplied identity. This
+// typically signals a wrong identity, vault-wide corruption, or a read
+// error that affected every entry. Callers should fall back to a full
+// decrypt pass over the candidate paths.
+var ErrIndexBuildEmpty = errors.New("search index build produced no entries")
+
 // EncryptedIndex provides a persistent encrypted search index that maps entry
 // paths to the string values from their decrypted data. The index ciphertext is
 // stored both in memory and on disk (at vaultDir/.search-index) so it survives
@@ -76,6 +83,13 @@ var globalIndex EncryptedIndex
 // Build constructs the encrypted search index by scanning all entries in the
 // vault and collecting their string field values. The resulting path→values
 // mapping is serialized to JSON and encrypted with the vault identity key.
+//
+// If the vault contains entries but none of them could be decrypted with the
+// provided identity (for example, the wrong identity was supplied, or every
+// entry on disk is corrupt), the build is treated as a failure and an error
+// is returned. The resulting in-memory state and on-disk file are not
+// updated. Callers can detect this and fall back to a full decrypt pass
+// over the candidates.
 func (idx *EncryptedIndex) Build(vaultDir string, identity *age.X25519Identity) error {
 	// Invalidate the list cache to ensure we see entries written after the
 	// last list — writes create files in subdirectories which do not update
@@ -119,6 +133,16 @@ func (idx *EncryptedIndex) Build(vaultDir string, identity *age.X25519Identity) 
 				}
 			}
 		}
+	}
+
+	// Refuse to commit an index that covers zero entries when the vault
+	// actually has entries. This is the signature of a wrong identity, a
+	// vault-wide corruption, or any other condition where the index would
+	// silently look empty. Returning an error lets callers fall back to
+	// the full decrypt path (or surface the problem to the user) instead
+	// of producing misleading "no matches" results.
+	if len(paths) > 0 && len(doc.Values) == 0 {
+		return ErrIndexBuildEmpty
 	}
 
 	plaintext, err := json.Marshal(doc)
