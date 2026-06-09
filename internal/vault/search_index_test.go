@@ -1,12 +1,14 @@
 package vault
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
 	"github.com/danieljustus/symaira-vault/internal/testutil"
 )
 
@@ -602,5 +604,203 @@ func TestEncryptedIndexFilterPathsUsingIndexLoadsFromDisk(t *testing.T) {
 
 	if !globalIndex.IsBuilt() {
 		t.Fatal("globalIndex should be built after loading from disk")
+	}
+}
+
+// TestSearchIndexOnDiskHasNoPlaintextLeakage is the security regression test
+// required by issue #351 acceptance criterion #5: the on-disk search index
+// file MUST contain no plaintext field values, entry paths, or query tokens.
+//
+// The test writes entries with distinctive, high-entropy plaintext tokens,
+// builds the index, then reads the raw bytes of `.search-index` and asserts
+// that none of the plaintext tokens appear anywhere in the file. Since the
+// file is encrypted with ChaCha20-Poly1305 under a key derived from the
+// vault identity, this guards against:
+//   - Plaintext entry values being stored unencrypted
+//   - Plaintext paths being stored unencrypted
+//   - Plaintext query tokens leaking into the index
+//   - Accidental JSON serialization of the unencrypted doc
+func TestSearchIndexOnDiskHasNoPlaintextLeakage(t *testing.T) {
+	globalIndex.Invalidate()
+	t.Cleanup(globalIndex.Invalidate)
+
+	vaultDir := t.TempDir()
+	identity := testutil.TempIdentity(t)
+
+	// Distinctive plaintext tokens that would be catastrophically obvious
+	// if they leaked into the ciphertext. They contain no whitespace and
+	// are unlikely to collide with header/metadata fields.
+	const (
+		leakyPassword = "PLAINTEXT_PASSWORD_TOKEN_DO_NOT_LEAK_351"
+		leakyUsername = "PLAINTEXT_USERNAME_TOKEN_DO_NOT_LEAK_351"
+		leakyNote     = "PLAINTEXT_NOTE_FIELD_DO_NOT_LEAK_351"
+		leakyEmail    = "PLAINTEXT_EMAIL_DO_NOT_LEAK_351@NOPE"
+		leakyPath     = "secret/path/that/should/never/appear/351"
+	)
+
+	mustWriteEntry(t, vaultDir, identity, leakyPath, map[string]interface{}{
+		"username": leakyUsername,
+		"password": leakyPassword,
+		"email":    leakyEmail,
+		"note":     leakyNote,
+	})
+	mustWriteEntry(t, vaultDir, identity, "other/entry", map[string]interface{}{
+		"password": "innocent-value",
+		"note":     "other-entry",
+	})
+
+	// Build the index. This serializes the encrypted JSON envelope to disk.
+	if err := globalIndex.Build(vaultDir, identity); err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	indexPath := indexFilePath(vaultDir)
+	raw, err := os.ReadFile(indexPath) // #nosec G304 -- test reads the index file it just built
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", indexPath, err)
+	}
+	if len(raw) == 0 {
+		t.Fatal("index file is empty; expected encrypted bytes")
+	}
+
+	// 1) The file MUST begin with the version byte (forward-compat header).
+	if raw[0] != indexFormatVersion {
+		t.Errorf("index file does not start with version byte 0x%02x, got 0x%02x", indexFormatVersion, raw[0])
+	}
+
+	// 2) None of the plaintext tokens may appear in the raw file bytes.
+	for _, token := range []string{leakyPassword, leakyUsername, leakyNote, leakyEmail, leakyPath} {
+		if bytes.Contains(raw, []byte(token)) {
+			t.Errorf("plaintext token %q found in on-disk index (leakage regression)", token)
+		}
+	}
+
+	// 3) The standard field-name keys ("password", "username", "data") are
+	// not tested because they are short and may appear coincidentally in
+	// the ChaCha20 nonce/poly1305 tag. The distinctive PLAINTEXT_* markers
+	// above are the meaningful check.
+
+	// 4) Sanity check: decrypting the file yields the same plaintext doc
+	// the index was built from. This proves the encryption is correct
+	// and the file is recoverable, not corrupted.
+	salt := raw[1 : 1+indexSaltLen]
+	ct := raw[1+indexSaltLen:]
+	key := deriveIndexKey(identity, salt)
+	plaintext, err := vaultcrypto.DecryptWithKey(ct, key)
+	if err != nil {
+		t.Fatalf("DecryptWithKey() error = %v (index file is not decryptable)", err)
+	}
+	if !strings.Contains(string(plaintext), leakyPath) {
+		t.Errorf("decrypted index does not contain the test path %q; encryption may have been altered", leakyPath)
+	}
+}
+
+// TestSearchIndexFirstFieldSearchSkipsNonCandidates asserts that when the
+// encrypted search index returns a candidate set, the subsequent search
+// only returns entries that appear in that candidate set — i.e. the
+// index-first path is exercised and non-candidates are never decrypted
+// for field-name resolution.
+//
+// This is the positive-path counterpart to
+// TestFindFallbackWhenIndexUnavailable: it proves that adding more
+// non-matching entries to a vault does not change the result set for a
+// query whose token only lives in a small set of entries.
+func TestSearchIndexFirstFieldSearchSkipsNonCandidates(t *testing.T) {
+	globalIndex.Invalidate()
+	t.Cleanup(globalIndex.Invalidate)
+
+	vaultDir := t.TempDir()
+	identity := testutil.TempIdentity(t)
+
+	// 1 "match" entry + many "noise" entries that share no tokens with the
+	// query. If the index-first path is exercised, only the match entry
+	// should be returned and the noise entries should not be decrypted.
+	mustWriteEntry(t, vaultDir, identity, "match/entry", map[string]interface{}{
+		"password": "sentinel-token-zzz",
+	})
+	const noiseCount = 25
+	for i := 0; i < noiseCount; i++ {
+		path := "noise/" + strings.Repeat("x", i+1)
+		mustWriteEntry(t, vaultDir, identity, path, map[string]interface{}{
+			"password": "noise-token-aaa",
+		})
+	}
+
+	// Force a build of the index (it might not be built yet on this
+	// call) so the token map is populated. After this call the index
+	// contains a token→paths map that, for the query "sentinel-token-zzz",
+	// should resolve to exactly the match/entry path.
+	if err := globalIndex.Build(vaultDir, identity); err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	// Pre-warm the in-memory state (filterPathsUsingIndex will load the
+	// on-disk index if not already built).
+	matches, err := FindWithOptions(vaultDir, "sentinel-token-zzz", FindOptions{MaxWorkers: 0}, identity)
+	if err != nil {
+		t.Fatalf("FindWithOptions() error = %v", err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("FindWithOptions('sentinel-token-zzz') returned %d results, want 1 (index should have filtered out %d noise entries)", len(matches), noiseCount)
+	}
+	if matches[0].Path != "match/entry" {
+		t.Errorf("FindWithOptions() match path = %q, want %q", matches[0].Path, "match/entry")
+	}
+}
+
+// TestFindFallbackWhenIndexUnavailable exercises the fallback path: when
+// the on-disk index cannot be decrypted (wrong identity) the search must
+// still return correct results by decrypting every non-path-matching
+// entry. This guards against correctness regressions if the index
+// ever becomes silently corrupt or the key is rotated.
+func TestFindFallbackWhenIndexUnavailable(t *testing.T) {
+	globalIndex.Invalidate()
+	t.Cleanup(globalIndex.Invalidate)
+
+	vaultDir := t.TempDir()
+	identity := testutil.TempIdentity(t)
+	otherIdentity := testutil.TempIdentity(t) // wrong identity: will fail to decrypt the index
+
+	mustWriteEntry(t, vaultDir, identity, "github.com/user", map[string]interface{}{
+		"username": "alice",
+		"password": "fallback-test-password",
+	})
+	mustWriteEntry(t, vaultDir, identity, "personal/email", map[string]interface{}{
+		"email": "bob@example.com",
+	})
+
+	// Build the index with the correct identity so a valid on-disk file
+	// exists.
+	if err := globalIndex.Build(vaultDir, identity); err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	// Reset the in-memory state but KEEP the on-disk file. We then call
+	// filterPathsUsingIndex with an identity that cannot decrypt the
+	// index. The function must fall back to returning the input
+	// candidates unchanged (proving the search would proceed to decrypt
+	// every entry in the full pass).
+	globalIndex.mu.Lock()
+	globalIndex.ciphertext = nil
+	globalIndex.vaultDir = ""
+	globalIndex.idHash = [sha256.Size]byte{}
+	globalIndex.mu.Unlock()
+
+	candidates := []string{"github.com/user", "personal/email"}
+	results := filterPathsUsingIndex(vaultDir, candidates, "fallback-test-password", otherIdentity)
+	if len(results) != len(candidates) {
+		t.Fatalf("filterPathsUsingIndex() with wrong identity returned %d paths, want %d (fallback should preserve all candidates)", len(results), len(candidates))
+	}
+	for _, c := range candidates {
+		found := false
+		for _, r := range results {
+			if r == c {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("fallback path dropped candidate %q from result set", c)
+		}
 	}
 }

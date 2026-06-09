@@ -80,6 +80,45 @@
 // 3. Consider adding plausible deniability via fake entries
 //
 // =============================================================================
+// INDEX-FIRST FIELD SEARCH (issue #351)
+// =============================================================================
+//
+// As of v0.4.1, the encrypted search index (internal/vault/search_index.go)
+// doubles as a field-search accelerator:
+//
+//   - Build: when the index is built (lazily on first FindWithOptions after
+//     vault unlock) it stores, per entry, a token→path map derived from
+//     lowercased, space/punctuation-split tokens of every string value
+//     (`indexDoc.TokenIndex`, search_index.go).
+//   - Lookup: `filterPathsUsingIndex` decrypts the index once and uses the
+//     token map to return the candidate set of entry paths whose values
+//     contain the query token. For single-token queries the fast path is
+//     O(1) per candidate; multi-token or partial-substring queries fall
+//     back to a scan of `indexDoc.Values` (also inside the encrypted blob).
+//   - Decrypt: only the candidate paths in `pathsNeedingDecrypt` are
+//     decrypted for the final field-name resolution step. The O(n) full
+//     decrypt pass is therefore avoided in the common case.
+//
+// FALLBACK POLICY (graceful degradation, issue #351 acceptance criterion):
+//
+//	The fallback to the original O(n) decrypt-everything pass is triggered
+//	when ANY of the following is true:
+//	  1. No identity is available (caller must not pass nil).
+//	  2. The on-disk index file does not exist OR is stale (entry count
+//	     mismatch) OR cannot be decrypted (corruption/wrong key) —
+//	     `filterPathsUsingIndex` returns the input candidates unchanged
+//	     and `FindWithOptions` then decrypts every non-path-matching entry.
+//	  3. The on-disk index exists but `MatchEntries` reports zero
+//	     candidates (the needle token has no entry in the token index).
+//	     The search returns the empty set, which is correct: no entry
+//	     contains the query, so there is nothing to decrypt. (A subsequent
+//	     search for a different token would still use the index.)
+//	The fallback path therefore always preserves correct results; the
+//	index is a pure performance optimization. No plaintext ever leaves the
+//	encrypted envelope on disk (see `search_index_test.go::TestSearchIndex
+//	OnDiskHasNoPlaintextLeakage`).
+//
+// =============================================================================
 // END DESIGN DOCUMENT
 // =============================================================================
 //
@@ -648,6 +687,13 @@ func hasField(fields []string, want string) bool {
 // entry paths that need field-level decryption. It returns only paths whose
 // stored string values contain the query as a substring. On any error the
 // original slice is returned unchanged, preserving correct behavior.
+//
+// Fallback policy (graceful degradation): if the index cannot be loaded, the
+// rebuild path is exercised, or the rebuild fails (e.g., the wrong identity
+// is supplied and the resulting index is empty), the function returns the
+// input candidates unchanged so the caller can still perform a full decrypt
+// pass. This guards against silently returning an empty set when the
+// on-disk index was built with a different key.
 func filterPathsUsingIndex(vaultDir string, candidates []string, needle string, identity *age.X25519Identity) []string {
 	if identity == nil {
 		return candidates
