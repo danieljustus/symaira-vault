@@ -8,12 +8,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"filippo.io/age"
@@ -164,60 +162,22 @@ func validateLegacyEntryPath(vaultDir, path string) error {
 	return nil
 }
 
-var configCacheMaxSize int32 = 32
-
-// SetConfigCacheSize sets the maximum number of cached vault configs.
-// Call during vault initialization with the value from config, or 0 to
-// reset to the default of 32.
-func SetConfigCacheSize(n int) {
-	if n <= 0 {
-		n = 32
-	}
-	if n > math.MaxInt32 {
-		n = math.MaxInt32
-	}
-	atomic.StoreInt32(&configCacheMaxSize, int32(n))
-}
-
-// configCache memoizes parsed vault configs per vaultDir, keyed by the
-// config file's mtime. It avoids re-parsing config.yaml on every entry
-// read during a search — the hot path for large vaults.
-var configCache = struct {
-	mu    sync.RWMutex
-	items map[string]configCacheEntry
-}{
-	items: make(map[string]configCacheEntry),
-}
-
-type configCacheEntry struct {
-	cfg        *vaultconfig.Config
-	mtime      time.Time
-	accessedAt time.Time
-}
-
-// InvalidateConfigCache drops the cached config for vaultDir. Callers should
-// invoke this after writing config.yaml so the next load sees the new value.
-func InvalidateConfigCache(vaultDir string) {
-	configCache.mu.Lock()
-	delete(configCache.items, vaultDir)
-	configCache.mu.Unlock()
-}
-
 func loadVaultConfig(vaultDir string) (*vaultconfig.Config, error) {
+	cache := listCacheFor(vaultDir)
 	configPath := filepath.Join(vaultDir, "config.yaml")
 	mtime := time.Time{}
 	if info, err := os.Stat(configPath); err == nil {
 		mtime = info.ModTime()
 	}
 
-	configCache.mu.RLock()
-	entry, ok := configCache.items[vaultDir]
-	configCache.mu.RUnlock()
+	cache.configMu.RLock()
+	entry, ok := cache.configItems[vaultDir]
+	cache.configMu.RUnlock()
 	if ok && entry.mtime.Equal(mtime) && entry.cfg != nil {
-		configCache.mu.Lock()
+		cache.configMu.Lock()
 		entry.accessedAt = time.Now()
-		configCache.items[vaultDir] = entry
-		configCache.mu.Unlock()
+		cache.configItems[vaultDir] = entry
+		cache.configMu.Unlock()
 		return entry.cfg, nil
 	}
 
@@ -229,22 +189,22 @@ func loadVaultConfig(vaultDir string) (*vaultconfig.Config, error) {
 		return nil, fmt.Errorf("load vault config: %w", err)
 	}
 
-	configCache.mu.Lock()
-	if len(configCache.items) >= int(atomic.LoadInt32(&configCacheMaxSize)) {
+	cache.configMu.Lock()
+	if cache.configMaxSize > 0 && len(cache.configItems) >= cache.configMaxSize {
 		var oldestKey string
 		var oldestTime time.Time
-		for k, v := range configCache.items {
+		for k, v := range cache.configItems {
 			if oldestTime.IsZero() || v.accessedAt.Before(oldestTime) {
 				oldestTime = v.accessedAt
 				oldestKey = k
 			}
 		}
 		if oldestKey != "" {
-			delete(configCache.items, oldestKey)
+			delete(cache.configItems, oldestKey)
 		}
 	}
-	configCache.items[vaultDir] = configCacheEntry{cfg: cfg, mtime: mtime, accessedAt: time.Now()}
-	configCache.mu.Unlock()
+	cache.configItems[vaultDir] = configCacheEntry{cfg: cfg, mtime: mtime, accessedAt: time.Now()}
+	cache.configMu.Unlock()
 	return cfg, nil
 }
 
@@ -455,7 +415,7 @@ func WriteEntry(vaultDir, path string, entry *Entry, identity *age.X25519Identit
 	if err := globalIndex.UpdateEntry(vaultDir, path, identity); err != nil {
 		span.SetStatus(codes.Error, err.Error())
 	}
-	InvalidateListCache("")
+	listCacheFor(vaultDir).Invalidate()
 	return nil
 }
 
@@ -516,7 +476,7 @@ func DeleteEntry(vaultDir, path string, identity *age.X25519Identity) error {
 		}
 		lockFile = nil
 		globalIndex.RemoveEntry(path, identity)
-		InvalidateListCache("")
+		listCacheFor(vaultDir).Invalidate()
 		return nil
 	}
 
@@ -541,7 +501,7 @@ func DeleteEntry(vaultDir, path string, identity *age.X25519Identity) error {
 	}
 	lockFile = nil
 	globalIndex.RemoveEntry(path, identity)
-	InvalidateListCache("")
+	listCacheFor(vaultDir).Invalidate()
 	return nil
 }
 
@@ -662,7 +622,7 @@ func MergeEntry(vaultDir, path string, partialData map[string]any, identity *age
 	if err := globalIndex.UpdateEntry(vaultDir, path, identity); err != nil {
 		span.SetStatus(codes.Error, err.Error())
 	}
-	InvalidateListCache("")
+	listCacheFor(vaultDir).Invalidate()
 	return ReadEntry(vaultDir, path, identity)
 }
 

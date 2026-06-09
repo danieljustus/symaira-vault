@@ -808,7 +808,7 @@ func deleteEntryCmd(vault *vaultpkg.Vault, path string) tea.Cmd {
 			return entryDeletedMsg{path: path, err: err}
 		}
 		_ = vault.AutoCommit(fmt.Sprintf("Delete %s", path))
-		vaultpkg.InvalidateListCache(vault.Dir)
+		vault.Cache.Invalidate()
 		return entryDeletedMsg{path: path}
 	}
 }
@@ -865,7 +865,7 @@ func editEntryCmd(vault *vaultpkg.Vault, path string) tea.Cmd {
 			return entryEditedMsg{path: path, err: err}
 		}
 		_ = vault.AutoCommit(fmt.Sprintf("Edit %s", path))
-		vaultpkg.InvalidateListCache(vault.Dir)
+		vault.Cache.Invalidate()
 		return entryEditedMsg{path: path}
 	}
 }

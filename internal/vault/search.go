@@ -110,7 +110,6 @@
 package vault
 
 import (
-	"container/list"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -119,7 +118,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"filippo.io/age"
@@ -134,310 +132,14 @@ type Match struct {
 	Fields []string
 }
 
-// listCacheEntry holds cached List results with invalidation metadata.
-// Invalidation uses directory mtime (O(1)) instead of tree-walking hash.
-type listCacheEntry struct {
-	paths        []string
-	createdAt    time.Time
-	entriesMtime time.Time
-	vaultMtime   time.Time
-}
-
-const (
-	defaultListCacheTTL = 300 * time.Second
-	minListCacheTTL     = 30 * time.Second
-	maxListCacheTTL     = 10 * time.Minute
-)
-
-// listCache provides TTL-cached path listings to avoid repetitive directory walks.
-// It invalidates entries when the underlying directories' modification times change.
-// The TTL adapts based on hit rate: extends when hit rate > 90%, shrinks when < 50%.
-// Cache size is bounded by maxListCacheVaults to prevent unbounded growth in
-// multi-vault or CI scenarios; least-recently-used entries are evicted when full.
-const maxListCacheVaults = 16
-
-var listCache = struct {
-	mu    sync.RWMutex
-	index map[string]*list.Element // vaultDir → list element
-	order *list.List               // LRU order (front = most recent)
-	ttl   time.Duration
-	_hits uint64
-	_miss uint64
-}{
-	index: make(map[string]*list.Element),
-	order: list.New(),
-	ttl:   defaultListCacheTTL,
-}
-
-// listCachePayload pairs a vault directory key with its cached entry.
-type listCachePayload struct {
-	key   string
-	entry listCacheEntry
-}
-
-// getDirMtime returns the modification time of a directory, or zero if unavailable.
-func getDirMtime(dir string) time.Time {
-	info, err := os.Stat(dir)
-	if err != nil {
-		return time.Time{}
+// listCacheFor returns the VaultCache that owns the in-memory caches for
+// the given vaultDir. Vaults registered via registerVaultCache take
+// precedence; otherwise the process-wide default cache is used.
+func listCacheFor(vaultDir string) *VaultCache {
+	if c := lookupVaultCache(vaultDir); c != nil {
+		return c
 	}
-	return info.ModTime()
-}
-
-func adaptListCacheTTL() {
-	hits := atomic.LoadUint64(&listCache._hits)
-	miss := atomic.LoadUint64(&listCache._miss)
-	total := hits + miss
-	if total < 100 {
-		return
-	}
-	effectiveMax := maxListCacheTTL
-	if configuredListCacheTTL > 0 && configuredListCacheTTL < effectiveMax {
-		effectiveMax = configuredListCacheTTL
-	}
-	ratio := float64(hits) / float64(total)
-	listCache.mu.Lock()
-	if ratio > 0.9 && listCache.ttl < effectiveMax {
-		listCache.ttl *= 2
-		if listCache.ttl > effectiveMax {
-			listCache.ttl = effectiveMax
-		}
-	} else if ratio < 0.5 && listCache.ttl > minListCacheTTL {
-		listCache.ttl /= 2
-		if listCache.ttl < minListCacheTTL {
-			listCache.ttl = minListCacheTTL
-		}
-	}
-	listCache.mu.Unlock()
-	atomic.StoreUint64(&listCache._hits, 0)
-	atomic.StoreUint64(&listCache._miss, 0)
-}
-
-// cachedList returns cached paths if valid, or nil if cache miss / expired / invalidated.
-func cachedList(vaultDir string) []string {
-	listCache.mu.RLock()
-	elem, ok := listCache.index[vaultDir]
-	listCache.mu.RUnlock()
-	if !ok {
-		atomic.AddUint64(&listCache._miss, 1)
-		adaptListCacheTTL()
-		return nil
-	}
-	payload, ok := elem.Value.(*listCachePayload)
-	if !ok {
-		atomic.AddUint64(&listCache._miss, 1)
-		adaptListCacheTTL()
-		return nil
-	}
-	entry := payload.entry
-	if time.Since(entry.createdAt) > listCache.ttl {
-		atomic.AddUint64(&listCache._miss, 1)
-		adaptListCacheTTL()
-		return nil
-	}
-	if !getDirMtime(entriesDir(vaultDir)).Equal(entry.entriesMtime) {
-		atomic.AddUint64(&listCache._miss, 1)
-		adaptListCacheTTL()
-		return nil
-	}
-	if !getDirMtime(vaultDir).Equal(entry.vaultMtime) {
-		atomic.AddUint64(&listCache._miss, 1)
-		adaptListCacheTTL()
-		return nil
-	}
-	atomic.AddUint64(&listCache._hits, 1)
-	adaptListCacheTTL()
-	listCache.mu.Lock()
-	listCache.order.MoveToFront(elem)
-	listCache.mu.Unlock()
-	return entry.paths
-}
-
-// storeListCache stores the result of a List call for the given vaultDir.
-// When the cache exceeds maxListCacheVaults the least-recently-used entry
-// is evicted.
-func storeListCache(vaultDir string, paths []string) {
-	listCache.mu.Lock()
-	defer listCache.mu.Unlock()
-
-	if elem, ok := listCache.index[vaultDir]; ok {
-		payload, ok := elem.Value.(*listCachePayload)
-		if !ok {
-			return
-		}
-		payload.entry = listCacheEntry{
-			paths:        append([]string(nil), paths...),
-			createdAt:    time.Now(),
-			entriesMtime: getDirMtime(entriesDir(vaultDir)),
-			vaultMtime:   getDirMtime(vaultDir),
-		}
-		listCache.order.MoveToFront(elem)
-		return
-	}
-
-	if listCache.order.Len() >= maxListCacheVaults {
-		oldest := listCache.order.Back()
-		if oldest != nil {
-			oldPayload, ok := oldest.Value.(*listCachePayload)
-			if !ok {
-				return
-			}
-			oldKey := oldPayload.key
-			delete(listCache.index, oldKey)
-			listCache.order.Remove(oldest)
-		}
-	}
-
-	payload := &listCachePayload{
-		key: vaultDir,
-		entry: listCacheEntry{
-			paths:        append([]string(nil), paths...),
-			createdAt:    time.Now(),
-			entriesMtime: getDirMtime(entriesDir(vaultDir)),
-			vaultMtime:   getDirMtime(vaultDir),
-		},
-	}
-	elem := listCache.order.PushFront(payload)
-	listCache.index[vaultDir] = elem
-}
-
-var configuredListCacheTTL time.Duration
-
-// SetListCacheTTL overrides the default list cache TTL. Pass 0 to disable
-// caching. Typically called from vault initialization with the configured
-// vault.listing_cache_ttl value. The adaptive TTL will not grow past this value.
-func SetListCacheTTL(ttl time.Duration) {
-	listCache.mu.Lock()
-	if ttl <= 0 {
-		listCache.ttl = 0
-	} else {
-		listCache.ttl = ttl
-	}
-	listCache.mu.Unlock()
-	configuredListCacheTTL = ttl
-}
-
-// InvalidateListCache removes the cached entry list for vaultDir.
-// Callers should invoke this after write operations that affect vault contents.
-// When vaultDir is empty, the entire list cache is cleared.
-func InvalidateListCache(vaultDir string) {
-	listCache.mu.Lock()
-	if vaultDir == "" {
-		listCache.index = make(map[string]*list.Element)
-		listCache.order.Init()
-	} else {
-		if elem, ok := listCache.index[vaultDir]; ok {
-			delete(listCache.index, vaultDir)
-			listCache.order.Remove(elem)
-		}
-	}
-	listCache.mu.Unlock()
-
-	pseudonymizedCache.mu.Lock()
-	if vaultDir == "" {
-		pseudonymizedCache.items = make(map[string]pseudonymizedCacheEntry)
-	} else {
-		prefix := vaultDir + "\x00"
-		for k := range pseudonymizedCache.items {
-			if strings.HasPrefix(k, prefix) {
-				delete(pseudonymizedCache.items, k)
-			}
-		}
-	}
-	pseudonymizedCache.mu.Unlock()
-}
-
-// pseudonymizedCacheEntry holds cached pseudonymized list results.
-// Unlike listCacheEntry, it also stores decrypted entry data so that
-// FindWithOptions can reuse entries already decrypted during listing.
-type pseudonymizedCacheEntry struct {
-	paths        []string
-	entries      map[string]map[string]any // path -> decrypted entry data
-	createdAt    time.Time
-	entriesMtime time.Time
-	vaultMtime   time.Time
-}
-
-// pseudonymizedCache provides TTL-cached pseudonymized listings keyed by
-// vaultDir + identity recipient (different identities see different pseudonyms).
-var pseudonymizedCache = struct {
-	mu    sync.RWMutex
-	items map[string]pseudonymizedCacheEntry
-	ttl   time.Duration
-}{
-	items: make(map[string]pseudonymizedCacheEntry),
-	ttl:   300 * time.Second,
-}
-
-// pseudonymizedCacheKey builds a cache key unique to (vaultDir, identity).
-// The recipient (public key) string is used rather than the full identity
-// to avoid caching the secret key material in the in-memory map keys.
-func pseudonymizedCacheKey(vaultDir string, identity *age.X25519Identity) string {
-	return vaultDir + "\x00" + identity.Recipient().String()
-}
-
-// cachedPseudonymizedList returns cached pseudonymized paths if valid,
-// or nil if cache miss / expired / invalidated.
-func cachedPseudonymizedList(vaultDir string, identity *age.X25519Identity) []string {
-	key := pseudonymizedCacheKey(vaultDir, identity)
-	pseudonymizedCache.mu.RLock()
-	entry, ok := pseudonymizedCache.items[key]
-	pseudonymizedCache.mu.RUnlock()
-	if !ok {
-		return nil
-	}
-	if time.Since(entry.createdAt) > pseudonymizedCache.ttl {
-		return nil
-	}
-	if !getDirMtime(entriesDir(vaultDir)).Equal(entry.entriesMtime) {
-		return nil
-	}
-	if !getDirMtime(vaultDir).Equal(entry.vaultMtime) {
-		return nil
-	}
-	return entry.paths
-}
-
-// cachedPseudonymizedEntry returns the decrypted entry data for a single
-// path from the pseudonymized cache, or nil if not found or invalid.
-func cachedPseudonymizedEntry(vaultDir string, identity *age.X25519Identity, path string) map[string]any {
-	key := pseudonymizedCacheKey(vaultDir, identity)
-	pseudonymizedCache.mu.RLock()
-	entry, ok := pseudonymizedCache.items[key]
-	pseudonymizedCache.mu.RUnlock()
-	if !ok {
-		return nil
-	}
-	if time.Since(entry.createdAt) > pseudonymizedCache.ttl {
-		return nil
-	}
-	if !getDirMtime(entriesDir(vaultDir)).Equal(entry.entriesMtime) {
-		return nil
-	}
-	if !getDirMtime(vaultDir).Equal(entry.vaultMtime) {
-		return nil
-	}
-	return entry.entries[path]
-}
-
-// maybeCachedEntryData returns entry data from the pseudonymized cache
-// (populated by a preceding listPseudonymized call), or nil on miss.
-func maybeCachedEntryData(vaultDir string, identity *age.X25519Identity, path string) map[string]any {
-	return cachedPseudonymizedEntry(vaultDir, identity, path)
-}
-
-// storePseudonymizedListCache stores the result of a pseudonymized List call.
-func storePseudonymizedListCache(vaultDir string, identity *age.X25519Identity, paths []string, entries map[string]map[string]any) {
-	key := pseudonymizedCacheKey(vaultDir, identity)
-	pseudonymizedCache.mu.Lock()
-	pseudonymizedCache.items[key] = pseudonymizedCacheEntry{
-		paths:        append([]string(nil), paths...),
-		entries:      entries,
-		createdAt:    time.Now(),
-		entriesMtime: getDirMtime(entriesDir(vaultDir)),
-		vaultMtime:   getDirMtime(vaultDir),
-	}
-	pseudonymizedCache.mu.Unlock()
+	return defaultVaultCache
 }
 
 // CurrentSearchIdentity returns the cached decryption identity from the vault,
@@ -494,7 +196,7 @@ func List(vaultDir string, prefix string, identity *age.X25519Identity) ([]strin
 
 	// Check cache when listing the entire vault (prefix == "").
 	if prefix == "" {
-		if cached := cachedList(vaultDir); cached != nil {
+		if cached := listCacheFor(vaultDir).cachedList(vaultDir); cached != nil {
 			metrics.RecordVaultOperationDuration("list_cached", 0)
 			return cached, nil
 		}
@@ -506,7 +208,7 @@ func List(vaultDir string, prefix string, identity *age.X25519Identity) ([]strin
 	// no identity, decrypt failure).
 	if prefix == "" {
 		if paths := listViaManifest(vaultDir, identity); paths != nil {
-			storeListCache(vaultDir, paths)
+			listCacheFor(vaultDir).storeListCache(vaultDir, paths)
 			return paths, nil
 		}
 	}
@@ -536,7 +238,7 @@ func List(vaultDir string, prefix string, identity *age.X25519Identity) ([]strin
 	metrics.RecordVaultEntryCount(vaultDir, len(paths))
 
 	if prefix == "" {
-		storeListCache(vaultDir, paths)
+		listCacheFor(vaultDir).storeListCache(vaultDir, paths)
 	}
 
 	return paths, nil
@@ -560,7 +262,7 @@ func listPseudonymizedWithIdentity(vaultDir, prefix string, identity *age.X25519
 
 	// Check cache for full-vault listings (prefix == "").
 	if prefix == "" {
-		if paths := cachedPseudonymizedList(vaultDir, identity); paths != nil {
+		if paths := listCacheFor(vaultDir).cachedPseudonymizedList(vaultDir, identity); paths != nil {
 			metrics.RecordVaultOperationDuration("list_pseudonymized_cached", 0)
 			return paths, nil
 		}
@@ -592,7 +294,7 @@ func listPseudonymizedWithIdentity(vaultDir, prefix string, identity *age.X25519
 		metrics.RecordVaultOperationDuration("list_pseudonymized", time.Since(start))
 		metrics.RecordVaultEntryCount(vaultDir, 0)
 		if prefix == "" {
-			storePseudonymizedListCache(vaultDir, identity, nil, nil)
+			listCacheFor(vaultDir).storePseudonymizedListCache(vaultDir, identity, nil, nil)
 		}
 		return nil, nil
 	}
@@ -678,7 +380,7 @@ func listPseudonymizedWithIdentity(vaultDir, prefix string, identity *age.X25519
 	sort.Strings(paths)
 
 	if prefix == "" {
-		storePseudonymizedListCache(vaultDir, identity, paths, cachedEntries)
+		listCacheFor(vaultDir).storePseudonymizedListCache(vaultDir, identity, paths, cachedEntries)
 	}
 
 	metrics.RecordVaultOperationDuration("list_pseudonymized", time.Since(start))
@@ -826,7 +528,7 @@ func findWithOptionsIdentity(vaultDir string, query string, opts FindOptions, id
 	}
 	if maxWorkers <= 1 {
 		for _, path := range pathsNeedingDecrypt {
-			data := maybeCachedEntryData(vaultDir, identity, path)
+			data := listCacheFor(vaultDir).cachedPseudonymizedEntry(vaultDir, identity, path)
 			if data == nil {
 				entry, err := ReadEntry(vaultDir, path, identity)
 				if err != nil {
@@ -873,7 +575,7 @@ func findWithOptionsIdentity(vaultDir string, query string, opts FindOptions, id
 			go func() {
 				defer wg.Done()
 				for path := range pathChan {
-					data := maybeCachedEntryData(vaultDir, identity, path)
+					data := listCacheFor(vaultDir).cachedPseudonymizedEntry(vaultDir, identity, path)
 					if data == nil {
 						entry, err := ReadEntry(vaultDir, path, identity)
 						if err != nil {

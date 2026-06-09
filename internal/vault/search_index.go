@@ -81,7 +81,7 @@ func (idx *EncryptedIndex) Build(vaultDir string, identity *age.X25519Identity) 
 	// last list — writes create files in subdirectories which do not update
 	// the parent entries/ directory mtime, so the mtime-based cache check
 	// would miss them.
-	InvalidateListCache(vaultDir)
+	listCacheFor(vaultDir).Invalidate()
 
 	paths, err := List(vaultDir, "", identity)
 	if err != nil {
@@ -474,7 +474,7 @@ func InvalidateSearchIndex() {
 	// which do not update the parent entries/ directory mtime. Without this, a
 	// subsequent List call would return stale paths, and the index would be built
 	// from incomplete data.
-	InvalidateListCache("")
+	defaultVaultCache.Invalidate()
 }
 
 // collectStringValues recursively extracts lowercase string values from entry
