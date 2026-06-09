@@ -499,8 +499,8 @@ func TestHandleSet_PreservesMultiRecipientAccess(t *testing.T) {
 		Identity: writerIdentity,
 	}
 	srv := &Server{
-		vault:         v,
-		vaultService:  vault.NewVaultService(v, nil),
+		vault:        v,
+		vaultService: vault.NewVaultService(v, nil),
 		agent: &config.AgentProfile{
 			Name:         "test",
 			AllowedPaths: []string{"*"},
@@ -576,8 +576,8 @@ func TestHandleSet_MergePreservesMultiRecipientAccess(t *testing.T) {
 		Identity: writerIdentity,
 	}
 	srv := &Server{
-		vault:         v,
-		vaultService:  vault.NewVaultService(v, nil),
+		vault:        v,
+		vaultService: vault.NewVaultService(v, nil),
 		agent: &config.AgentProfile{
 			Name:         "test",
 			AllowedPaths: []string{"*"},

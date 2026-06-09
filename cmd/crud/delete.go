@@ -29,40 +29,40 @@ var deleteCmd = &cobra.Command{
   symvault delete github --yes`,
 	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: cli.EntryCompletionFunc,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			path := args[0]
-			return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
-				if !DeleteYes {
-					fmt.Fprintf(os.Stderr, "Delete %s? (y/N): ", path)
-					answer, err := bufio.NewReader(os.Stdin).ReadString('\n')
-					if err != nil && answer == "" {
-						return errorspkg.ReadFailed(err, "read confirmation")
-					}
-					if strings.ToLower(strings.TrimSpace(answer)) != "y" {
-						if cli.OutputFormat == "text" { //nolint:goconst // output format literal
-							fmt.Fprintln(os.Stderr, "Canceled")
-						} else {
-							if err := cli.PrintResult(map[string]any{"deleted": false, "path": path, "canceled": true}); err != nil {
-								return err
-							}
+	RunE: func(cmd *cobra.Command, args []string) error {
+		path := args[0]
+		return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
+			if !DeleteYes {
+				fmt.Fprintf(os.Stderr, "Delete %s? (y/N): ", path)
+				answer, err := bufio.NewReader(os.Stdin).ReadString('\n')
+				if err != nil && answer == "" {
+					return errorspkg.ReadFailed(err, "read confirmation")
+				}
+				if strings.ToLower(strings.TrimSpace(answer)) != "y" {
+					if cli.OutputFormat == "text" { //nolint:goconst // output format literal
+						fmt.Fprintln(os.Stderr, "Canceled")
+					} else {
+						if err := cli.PrintResult(map[string]any{"deleted": false, "path": path, "canceled": true}); err != nil {
+							return err
 						}
-						return nil
 					}
+					return nil
 				}
+			}
 
-				if err := vs.DeleteEntry(path); err != nil {
-					return errorspkg.WriteFailed(err, "cannot delete entry")
+			if err := vs.DeleteEntry(path); err != nil {
+				return errorspkg.WriteFailed(err, "cannot delete entry")
+			}
+			if cli.OutputFormat == "text" {
+				cli.PrintQuietAware("Deleted: %s\n", path)
+			} else {
+				if err := cli.PrintResult(map[string]any{"deleted": true, "path": path}); err != nil {
+					return err
 				}
-				if cli.OutputFormat == "text" {
-					cli.PrintQuietAware("Deleted: %s\n", path)
-				} else {
-					if err := cli.PrintResult(map[string]any{"deleted": true, "path": path}); err != nil {
-						return err
-					}
-				}
-				return nil
-			})
-		},
+			}
+			return nil
+		})
+	},
 }
 
 func init() {

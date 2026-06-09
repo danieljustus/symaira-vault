@@ -350,8 +350,8 @@ func TestHandleGet_RedactedTOTPStillGeneratesCode(t *testing.T) {
 		Identity: identity,
 	}
 	srv := &Server{
-		vault:         v,
-		vaultService:  vault.NewVaultService(v, nil),
+		vault:        v,
+		vaultService: vault.NewVaultService(v, nil),
 		agent: &config.AgentProfile{
 			Name:         "restricted",
 			AllowedPaths: []string{"*"},
@@ -772,8 +772,8 @@ func TestGetValuePerToolRedact(t *testing.T) {
 		Identity: identity,
 	}
 	srv := &Server{
-		vault:         v,
-		vaultService:  vault.NewVaultService(v, nil),
+		vault:        v,
+		vaultService: vault.NewVaultService(v, nil),
 		agent: &config.AgentProfile{
 			Name:          "restricted",
 			AllowedPaths:  []string{"*"},

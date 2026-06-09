@@ -21,11 +21,11 @@ func newTestServer(t *testing.T, profile config.AgentProfile, transport string) 
 
 	v := &vault.Vault{}
 	return &Server{
-		vault:         v,
-		vaultService:  vault.NewVaultService(v, nil),
-		agent:         &profile,
-		auditLog:      auditLog,
-		transport:     transport,
+		vault:        v,
+		vaultService: vault.NewVaultService(v, nil),
+		agent:        &profile,
+		auditLog:     auditLog,
+		transport:    transport,
 	}
 }
 

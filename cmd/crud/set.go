@@ -34,79 +34,79 @@ var setCmd = &cobra.Command{
   symvault set github --totp-secret JBSWY3DPEHPK3PXP`,
 	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: cli.EntryCompletionFunc,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			query := args[0]
-			path := query
-			field := ""
-			if idx := strings.LastIndex(query, "."); idx > 0 {
-				path = query[:idx]
-				field = query[idx+1:]
-			}
+	RunE: func(cmd *cobra.Command, args []string) error {
+		query := args[0]
+		path := query
+		field := ""
+		if idx := strings.LastIndex(query, "."); idx > 0 {
+			path = query[:idx]
+			field = query[idx+1:]
+		}
 
-			data := map[string]any{}
-			if SetValue != "" {
-				if field != "" {
-					data[field] = SetValue
-				} else {
-					data["password"] = SetValue
-				}
-				if !SetForce && (field == "" || field == "password") {
-					if err := cryptopkg.ValidatePasswordStrength(SetValue); err != nil {
-						return err
-					}
-				}
+		data := map[string]any{}
+		if SetValue != "" {
+			if field != "" {
+				data[field] = SetValue
 			} else {
-				reader := bufio.NewReader(os.Stdin)
-				if field != "" {
-					fmt.Fprintf(os.Stderr, "Enter value for %s: ", field)
-					value, err := reader.ReadString('\n')
-					if err != nil && value == "" {
-						return errorspkg.ReadFailed(err, "read value")
-					}
-					data[field] = strings.TrimSpace(value)
-				} else {
-					collected, err := cli.CollectEntryData(reader, cli.EntryFlags{
-						TOTPSecret:      SetTOTPSecret,
-						TOTPIssuer:      SetTOTPIssuer,
-						TOTPAccount:     SetTOTPAccount,
-						Force:           SetForce,
-						SkipNotes:       true,
-						SkipTOTPDetails: true,
-					})
-					if err != nil {
-						return err
-					}
-					for k, v := range collected {
-						data[k] = v
-					}
+				data["password"] = SetValue
+			}
+			if !SetForce && (field == "" || field == "password") {
+				if err := cryptopkg.ValidatePasswordStrength(SetValue); err != nil {
+					return err
 				}
 			}
-
-			if SetTOTPSecret != "" {
-				totpData := map[string]any{
-					"secret": SetTOTPSecret,
+		} else {
+			reader := bufio.NewReader(os.Stdin)
+			if field != "" {
+				fmt.Fprintf(os.Stderr, "Enter value for %s: ", field)
+				value, err := reader.ReadString('\n')
+				if err != nil && value == "" {
+					return errorspkg.ReadFailed(err, "read value")
 				}
-				if SetTOTPIssuer != "" {
-					totpData["issuer"] = SetTOTPIssuer
+				data[field] = strings.TrimSpace(value)
+			} else {
+				collected, err := cli.CollectEntryData(reader, cli.EntryFlags{
+					TOTPSecret:      SetTOTPSecret,
+					TOTPIssuer:      SetTOTPIssuer,
+					TOTPAccount:     SetTOTPAccount,
+					Force:           SetForce,
+					SkipNotes:       true,
+					SkipTOTPDetails: true,
+				})
+				if err != nil {
+					return err
 				}
-				if SetTOTPAccount != "" {
-					totpData["account_name"] = SetTOTPAccount
+				for k, v := range collected {
+					data[k] = v
 				}
-				data["totp"] = totpData
 			}
+		}
 
-			if err := cryptopkg.ValidateTOTPData(data); err != nil {
-				return err
+		if SetTOTPSecret != "" {
+			totpData := map[string]any{
+				"secret": SetTOTPSecret,
 			}
+			if SetTOTPIssuer != "" {
+				totpData["issuer"] = SetTOTPIssuer
+			}
+			if SetTOTPAccount != "" {
+				totpData["account_name"] = SetTOTPAccount
+			}
+			data["totp"] = totpData
+		}
 
-			return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
-				if err := vs.SetFields(path, data); err != nil {
-					return errorspkg.WriteFailed(err, "cannot write entry")
-				}
-				cli.PrintQuietAware("Entry saved: %s\n", path)
-				return nil
-			})
-		},
+		if err := cryptopkg.ValidateTOTPData(data); err != nil {
+			return err
+		}
+
+		return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
+			if err := vs.SetFields(path, data); err != nil {
+				return errorspkg.WriteFailed(err, "cannot write entry")
+			}
+			cli.PrintQuietAware("Entry saved: %s\n", path)
+			return nil
+		})
+	},
 }
 
 func init() {

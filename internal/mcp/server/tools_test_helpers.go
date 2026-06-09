@@ -36,12 +36,12 @@ func newTestServerWithVault(t *testing.T, profile config.AgentProfile, transport
 	}
 
 	return &Server{
-		vault:         v,
-		vaultService:  vault.NewVaultService(v, nil),
-		agent:         &profile,
-		auditLog:      auditLog,
-		transport:     transport,
-		hookRegistry:  NewHookRegistry(),
+		vault:        v,
+		vaultService: vault.NewVaultService(v, nil),
+		agent:        &profile,
+		auditLog:     auditLog,
+		transport:    transport,
+		hookRegistry: NewHookRegistry(),
 		biometricChallenger: &authguard.Challenger{
 			Authenticator: func() session.BiometricAuthenticator {
 				return &noopTestBiometricAuth{}

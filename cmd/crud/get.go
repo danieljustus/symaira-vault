@@ -61,9 +61,9 @@ var getCmd = &cobra.Command{
   symvault get github.password --profile work`,
 	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: cli.EntryCompletionFunc,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
-				cli.MaybeAutoPull(vs.VaultDir(), v.Config)
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
+			cli.MaybeAutoPull(vs.VaultDir(), v.Config)
 			query := args[0]
 			path := query
 			field := ""
