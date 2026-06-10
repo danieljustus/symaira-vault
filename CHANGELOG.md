@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+> **Note — release series:** The releases `v1.0.0` through `v4.0.0` were
+> published under the legacy **OpenPass** name. The current **Symaira Vault**
+> series begins at `v0.1.0` and follows the `v0.x` line. Historical OpenPass
+> releases remain in this changelog for reference only and are not part of the
+> current Symaira Vault release target. See
+> [docs/MIGRATION-RENAME.md](docs/MIGRATION-RENAME.md) for the rename context
+> and [docs/commercial-boundary.md](docs/commercial-boundary.md) for the
+> current release-line policy. (Added 2026-06-10, see #384.)
+
 ## [v4.0.0] - 2026-05-21
 
 v4.0 reshapes Symaira Vault around AI-agent integration. The CLI becomes a
