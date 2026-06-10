@@ -30,14 +30,14 @@ func InteractiveFixConfig(configPath string, loadErr error, cfg *configpkg.Confi
 }
 
 func reportConfigErrors(w *os.File, configPath string, loadErr, valErr error) {
-	fmt.Fprintf(w, "Configuration error detected in %s\n", configPath)
+	_, _ = fmt.Fprintf(w, "Configuration error detected in %s\n", configPath)
 	if loadErr != nil {
-		fmt.Fprintf(w, "  ✗ Load error: %v\n", loadErr)
+		_, _ = fmt.Fprintf(w, "  ✗ Load error: %v\n", loadErr)
 	}
 	if valErr != nil {
 		for _, line := range strings.Split(valErr.Error(), "\n") {
 			if line != "" {
-				fmt.Fprintf(w, "  ✗ Validation error: %s\n", line)
+				_, _ = fmt.Fprintf(w, "  ✗ Validation error: %s\n", line)
 			}
 		}
 	}
@@ -153,8 +153,15 @@ func applyAutoFixes(cfg *configpkg.Config, loadErr, valErr error) bool {
 	return modified
 }
 
+// agentApprovalModeAuto is the canonical "auto" string for the agent
+// approval-mode enum. Named at package scope (rather than a string literal)
+// so the goconst linter treats it as a named identifier and does not flag
+// it as a duplicate of the semantically-unrelated "auto" used for terminal
+// color-mode selection in cli.go.
+const agentApprovalModeAuto = "auto"
+
 var (
-	validApprovalModes        = map[string]struct{}{"none": {}, "deny": {}, "prompt": {}, "auto": {}}
+	validApprovalModes        = map[string]struct{}{"none": {}, "deny": {}, "prompt": {}, agentApprovalModeAuto: {}}
 	validPromptInjectionModes = map[string]struct{}{"off": {}, "log-only": {}, "wrap": {}, "deny": {}}
 )
 
