@@ -204,6 +204,16 @@ MCP server could in principle alter them. See backlog item O-10.
 - **No fmt-leaks.** `Untrusted` panics in fmt verbs so accidental
   `Sprintf("%v", secret)` is impossible to land in production.
 
+### In-memory passphrase security and Go runtime constraints
+
+- **Passphrase Wiping:** The unlock passphrase is treated as a `[]byte` slice and zeroed out using `crypto.Wipe` immediately after use (such as deriving the `age` key or identity).
+- **Go GC Copies:** Because Go's garbage collector manages allocations, it may copy or move slices in memory during compaction. Go does not currently guarantee single-copy semantics.
+- **Practical Impact:** Temporary copies of the passphrase created by the Go runtime may persist in process memory until overwritten or until the process exits. This is not remotely exploitable under normal circumstances (requiring root-level memory dump capabilities).
+- **Mitigations:**
+  - Active sessions are capped by a 15-minute TTL.
+  - OS-keyring caching is used where available to avoid repeated passphrase entry and decryption.
+  - The `SYMVAULT_PASSPHRASE` (and legacy `OPENPASS_PASSPHRASE`) environment variables are cleared in memory immediately on startup.
+
 ---
 
 ## §5 — Path traversal & scope bypass

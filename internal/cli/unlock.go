@@ -174,14 +174,6 @@ func WithVaultRaw(fn func(*vaultpkg.Vault, *VaultService) error) error {
 	return WithVault(fn)
 }
 
-func loadVaultConfigForUnlock(vaultDir string) *configpkg.Config {
-	cfg, err := resolveConfig(vaultDir, false)
-	if err != nil {
-		return configpkg.Default()
-	}
-	return cfg
-}
-
 func lockedMessageForCache() string {
 	status := SessionGetCacheStatus()
 	if !status.Persistent {

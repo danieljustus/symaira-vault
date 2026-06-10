@@ -18,163 +18,213 @@ import (
 // after the user edits the file, so the call returns only when the file
 // validates cleanly, the user aborts, or an I/O error occurs.
 func InteractiveFixConfig(configPath string, loadErr error, cfg *configpkg.Config, valErr error) (*configpkg.Config, error) {
-	fmt.Fprintf(os.Stderr, "Configuration error detected in %s\n", configPath)
+	reportConfigErrors(os.Stderr, configPath, loadErr, valErr)
+
+	if cfg != nil {
+		if modified := applyAutoFixes(cfg, loadErr, valErr); modified {
+			return saveAndRevalidate(configPath, cfg)
+		}
+	}
+
+	return runEditorFix(configPath)
+}
+
+func reportConfigErrors(w *os.File, configPath string, loadErr, valErr error) {
+	fmt.Fprintf(w, "Configuration error detected in %s\n", configPath)
 	if loadErr != nil {
-		fmt.Fprintf(os.Stderr, "  ✗ Load error: %v\n", loadErr)
+		fmt.Fprintf(w, "  ✗ Load error: %v\n", loadErr)
 	}
 	if valErr != nil {
 		for _, line := range strings.Split(valErr.Error(), "\n") {
 			if line != "" {
-				fmt.Fprintf(os.Stderr, "  ✗ Validation error: %s\n", line)
+				fmt.Fprintf(w, "  ✗ Validation error: %s\n", line)
+			}
+		}
+	}
+}
+
+// combinedErrorString joins the load-time and validation error messages so the
+// pattern matchers below can find substrings regardless of which stage
+// surfaced the problem.
+func combinedErrorString(loadErr, valErr error) string {
+	var sb strings.Builder
+	if loadErr != nil {
+		sb.WriteString(loadErr.Error())
+		sb.WriteString("\n")
+	}
+	if valErr != nil {
+		sb.WriteString(valErr.Error())
+	}
+	return sb.String()
+}
+
+// applyAutoFixes walks through the well-known validation errors and asks the
+// user whether to apply the deterministic fix for each. Returns whether any
+// change was made.
+func applyAutoFixes(cfg *configpkg.Config, loadErr, valErr error) bool {
+	errStr := combinedErrorString(loadErr, valErr)
+	modified := false
+
+	type fix struct {
+		matches bool
+		confirm string
+		apply   func() bool
+	}
+	fixes := []fix{
+		{strings.Contains(errStr, "sessionTimeout"), "Field 'sessionTimeout' must be greater than 0. Suggestion: 15m. Apply this fix?", func() bool { cfg.SessionTimeout = 15 * time.Minute; return true }},
+		{strings.Contains(errStr, "audit.maxFileSize"), "Field 'audit.maxFileSize' must be greater than 0. Suggestion: 100MB. Apply this fix?", func() bool {
+			if cfg.Audit == nil {
+				cfg.Audit = &configpkg.AuditConfig{}
+			}
+			cfg.Audit.MaxFileSize = 100 * 1024 * 1024
+			return true
+		}},
+		{strings.Contains(errStr, "clipboard.autoClearDuration"), "Field 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix?", func() bool {
+			if cfg.Clipboard == nil {
+				cfg.Clipboard = &configpkg.ClipboardConfig{}
+			}
+			cfg.Clipboard.AutoClearDuration = 30
+			return true
+		}},
+		{strings.Contains(errStr, "mcp.bind") || (loadErr != nil && strings.Contains(loadErr.Error(), "mcp.bind")), "Field 'mcp.bind' must not be empty. Suggestion: 127.0.0.1. Apply this fix?", func() bool {
+			if cfg.MCP == nil {
+				cfg.MCP = &configpkg.MCPConfig{}
+			}
+			cfg.MCP.Bind = "127.0.0.1"
+			return true
+		}},
+	}
+	for _, f := range fixes {
+		if !f.matches {
+			continue
+		}
+		ok, _ := ConfirmInteractive(f.confirm, false)
+		if ok && f.apply() {
+			modified = true
+		}
+	}
+
+	if strings.Contains(errStr, "vaultDir: must not be empty") {
+		defaultDir, _ := os.UserHomeDir()
+		suggestion := "~/.symvault"
+		if defaultDir != "" {
+			suggestion = filepath.Join(defaultDir, ".symvault")
+		}
+		ok, _ := ConfirmInteractive(fmt.Sprintf("Field 'vaultDir' must not be empty. Suggestion: %s. Apply this fix?", suggestion), false)
+		if ok {
+			cfg.VaultDir = suggestion
+			modified = true
+		}
+	}
+
+	if strings.Contains(errStr, "defaultAgent:") && strings.Contains(errStr, "not found in agents") {
+		if firstAgent := firstAgentName(cfg); firstAgent != "" {
+			ok, _ := ConfirmInteractive(fmt.Sprintf("Field 'defaultAgent' references an agent profile that does not exist. Suggestion: %q (the only defined agent). Apply this fix?", firstAgent), false)
+			if ok {
+				cfg.DefaultAgent = firstAgent
+				modified = true
 			}
 		}
 	}
 
-	// Try to auto-fix deterministic errors if cfg is loaded
-	if cfg != nil {
-		modified := false
-		// Some validation errors are surfaced at Load() time (e.g. invalid
-		// approvalMode) rather than from Validate(), so we match against
-		// the combined error string from both sources.
-		var sb strings.Builder
-		if loadErr != nil {
-			sb.WriteString(loadErr.Error())
-			sb.WriteString("\n")
+	if strings.Contains(errStr, "invalid approvalMode") {
+		ok, _ := ConfirmInteractive("An agent profile has an invalid approvalMode. Suggestion: 'prompt'. Apply this fix for all affected agents?", false)
+		if ok {
+			modified = repairAgentMode(cfg, "approvalMode", validApprovalModes, "prompt") || modified
 		}
-		if valErr != nil {
-			sb.WriteString(valErr.Error())
-		}
-		errStr := sb.String()
+	}
 
-		if strings.Contains(errStr, "sessionTimeout") {
-			ok, _ := ConfirmInteractive("Field 'sessionTimeout' must be greater than 0. Suggestion: 15m. Apply this fix?", false)
-			if ok {
-				cfg.SessionTimeout = 15 * time.Minute
-				modified = true
-			}
+	if strings.Contains(errStr, "invalid promptInjectionMode") {
+		ok, _ := ConfirmInteractive("An agent profile has an invalid promptInjectionMode. Suggestion: 'off'. Apply this fix for all affected agents?", false)
+		if ok {
+			modified = repairAgentMode(cfg, "promptInjectionMode", validPromptInjectionModes, "off") || modified
 		}
-		if strings.Contains(errStr, "audit.maxFileSize") {
-			ok, _ := ConfirmInteractive("Field 'audit.maxFileSize' must be greater than 0. Suggestion: 100MB. Apply this fix?", false)
-			if ok {
-				if cfg.Audit == nil {
-					cfg.Audit = &configpkg.AuditConfig{}
-				}
-				cfg.Audit.MaxFileSize = 100 * 1024 * 1024
-				modified = true
-			}
-		}
-		if strings.Contains(errStr, "clipboard.autoClearDuration") {
-			ok, _ := ConfirmInteractive("Field 'clipboard.autoClearDuration' must be non-negative. Suggestion: 30s. Apply this fix?", false)
-			if ok {
-				if cfg.Clipboard == nil {
-					cfg.Clipboard = &configpkg.ClipboardConfig{}
-				}
-				cfg.Clipboard.AutoClearDuration = 30
-				modified = true
-			}
-		}
-		if strings.Contains(errStr, "mcp.bind") || (loadErr != nil && strings.Contains(loadErr.Error(), "mcp.bind")) {
-			ok, _ := ConfirmInteractive("Field 'mcp.bind' must not be empty. Suggestion: 127.0.0.1. Apply this fix?", false)
-			if ok {
-				if cfg.MCP == nil {
-					cfg.MCP = &configpkg.MCPConfig{}
-				}
-				cfg.MCP.Bind = "127.0.0.1"
-				modified = true
-			}
-		}
-		if strings.Contains(errStr, "vaultDir: must not be empty") {
-			defaultDir, _ := os.UserHomeDir()
-			suggestion := "~/.symvault"
-			if defaultDir != "" {
-				suggestion = filepath.Join(defaultDir, ".symvault")
-			}
-			ok, _ := ConfirmInteractive(fmt.Sprintf("Field 'vaultDir' must not be empty. Suggestion: %s. Apply this fix?", suggestion), false)
-			if ok {
-				cfg.VaultDir = suggestion
-				modified = true
-			}
-		}
-		if strings.Contains(errStr, "defaultAgent:") && strings.Contains(errStr, "not found in agents") {
-			firstAgent := ""
-			for name := range cfg.Agents {
-				firstAgent = name
-				break
-			}
-			if firstAgent != "" {
-				ok, _ := ConfirmInteractive(fmt.Sprintf("Field 'defaultAgent' references an agent profile that does not exist. Suggestion: %q (the only defined agent). Apply this fix?", firstAgent), false)
-				if ok {
-					cfg.DefaultAgent = firstAgent
-					modified = true
-				}
-			}
-		}
-		if strings.Contains(errStr, "invalid approvalMode") {
-			ok, _ := ConfirmInteractive("An agent profile has an invalid approvalMode. Suggestion: 'prompt'. Apply this fix for all affected agents?", false)
-			if ok {
-				for name, agent := range cfg.Agents {
-					mode := ""
-					if agent.ApprovalMode != nil {
-						mode = *agent.ApprovalMode
-					}
-					if mode != "" && mode != "none" && mode != "deny" && mode != "prompt" && mode != "auto" {
-						suggestion := "prompt"
-						agent.ApprovalMode = &suggestion
-						cfg.Agents[name] = agent
-						modified = true
-					}
-				}
-			}
-		}
-		if strings.Contains(errStr, "invalid promptInjectionMode") {
-			ok, _ := ConfirmInteractive("An agent profile has an invalid promptInjectionMode. Suggestion: 'off'. Apply this fix for all affected agents?", false)
-			if ok {
-				for name, agent := range cfg.Agents {
-					mode := ""
-					if agent.PromptInjectionMode != nil {
-						mode = *agent.PromptInjectionMode
-					}
-					if mode != "" && mode != "off" && mode != "log-only" && mode != "wrap" && mode != "deny" {
-						suggestion := "off"
-						agent.PromptInjectionMode = &suggestion
-						cfg.Agents[name] = agent
-						modified = true
-					}
-				}
-			}
-		}
-		if strings.Contains(errStr, "invalid auth method") || strings.Contains(errStr, "invalid authMethod") {
-			ok, _ := ConfirmInteractive("Auth method is invalid. Suggestion: 'passphrase'. Apply this fix?", false)
-			if ok {
-				if err := cfg.SetAuthMethod(configpkg.AuthMethodPassphrase); err == nil {
-					modified = true
-				}
-			}
-		}
+	}
 
-		if modified {
-			if saveErr := cfg.SaveTo(configPath); saveErr != nil {
-				fmt.Fprintf(os.Stderr, "Failed to save auto-fixes: %v\n", saveErr)
-			} else {
-				fmt.Fprintln(os.Stderr, "Auto-fixes applied successfully.")
-				// Re-validate
-				newCfg, newLoadErr := configpkg.Load(configPath)
-				var newValErr error
-				if newLoadErr == nil && newCfg != nil {
-					newValErr = newCfg.Validate()
-				}
-				if newLoadErr == nil && newValErr == nil {
-					return newCfg, nil
-				}
-				// Otherwise, continue to manual editor fix
-				cfg = newCfg
-				loadErr = newLoadErr
-				valErr = newValErr
+	if strings.Contains(errStr, "invalid auth method") || strings.Contains(errStr, "invalid authMethod") {
+		ok, _ := ConfirmInteractive("Auth method is invalid. Suggestion: 'passphrase'. Apply this fix?", false)
+		if ok {
+			if err := cfg.SetAuthMethod(configpkg.AuthMethodPassphrase); err == nil {
+				modified = true
 			}
 		}
 	}
 
-	// Manual editor fix prompt
+	return modified
+}
+
+var (
+	validApprovalModes        = map[string]struct{}{"none": {}, "deny": {}, "prompt": {}, approvalModeAutoValue: {}}
+	validPromptInjectionModes = map[string]struct{}{"off": {}, "log-only": {}, "wrap": {}, "deny": {}}
+)
+
+const approvalModeAutoValue = "auto"
+
+func firstAgentName(cfg *configpkg.Config) string {
+	for name := range cfg.Agents {
+		return name
+	}
+	return ""
+}
+
+// repairAgentMode scans the agent profiles and replaces values for the named
+// field that fall outside the allowed set with the given suggestion. Returns
+// whether any profile was changed.
+func repairAgentMode(cfg *configpkg.Config, field string, valid map[string]struct{}, suggestion string) bool {
+	modified := false
+	for name, agent := range cfg.Agents {
+		var current *string
+		switch field {
+		case "approvalMode":
+			current = agent.ApprovalMode
+		case "promptInjectionMode":
+			current = agent.PromptInjectionMode
+		}
+		if current == nil {
+			continue
+		}
+		if _, ok := valid[*current]; ok {
+			continue
+		}
+		if *current == "" {
+			continue
+		}
+		s := suggestion
+		switch field {
+		case "approvalMode":
+			agent.ApprovalMode = &s
+		case "promptInjectionMode":
+			agent.PromptInjectionMode = &s
+		}
+		cfg.Agents[name] = agent
+		modified = true
+	}
+	return modified
+}
+
+func saveAndRevalidate(configPath string, cfg *configpkg.Config) (*configpkg.Config, error) {
+	if saveErr := cfg.SaveTo(configPath); saveErr != nil {
+		fmt.Fprintf(os.Stderr, "Failed to save auto-fixes: %v\n", saveErr)
+	} else {
+		fmt.Fprintln(os.Stderr, "Auto-fixes applied successfully.")
+		// Re-validate
+		newCfg, newLoadErr := configpkg.Load(configPath)
+		var newValErr error
+		if newLoadErr == nil && newCfg != nil {
+			newValErr = newCfg.Validate()
+		}
+		if newLoadErr == nil && newValErr == nil {
+			return newCfg, nil
+		}
+		// Otherwise, continue to manual editor fix
+		_ = newCfg
+		_ = newLoadErr
+		_ = newValErr
+	}
+	return runEditorFix(configPath)
+}
+
+func runEditorFix(configPath string) (*configpkg.Config, error) {
 	ok, _ := ConfirmInteractive("Open config.yaml in $EDITOR to fix manually?", false)
 	if !ok {
 		return nil, fmt.Errorf("configuration fix aborted by user")
