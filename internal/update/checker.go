@@ -99,12 +99,16 @@ func (c *Checker) CheckWithForce(ctx context.Context, currentVersion string, for
 		if entry, err := c.Cache.Load(); err == nil && entry != nil {
 			latest, cacheOk := parseStableVersion(entry.LatestVersion)
 			if cacheOk {
+				updateAvailable := compareStableVersions(current, latest) < 0
+				if current.major == 0 && latest.major > 0 {
+					updateAvailable = false
+				}
 				result := &Result{
 					CurrentVersion:  current.String(),
 					LatestVersion:   latest.String(),
 					ReleaseURL:      entry.ReleaseURL,
 					Checkable:       true,
-					UpdateAvailable: compareStableVersions(current, latest) < 0,
+					UpdateAvailable: updateAvailable,
 				}
 				if result.UpdateAvailable {
 					metrics.RecordUpdateCheck("update_available")
@@ -129,12 +133,17 @@ func (c *Checker) CheckWithForce(ctx context.Context, currentVersion string, for
 		return nil, fmt.Errorf("latest release tag %q is not a stable semantic version", release.TagName)
 	}
 
+	updateAvailable := compareStableVersions(current, latest) < 0
+	if current.major == 0 && latest.major > 0 {
+		updateAvailable = false
+	}
+
 	result := &Result{
 		CurrentVersion:  current.String(),
 		LatestVersion:   latest.String(),
 		ReleaseURL:      strings.TrimSpace(release.HTMLURL),
 		Checkable:       true,
-		UpdateAvailable: compareStableVersions(current, latest) < 0,
+		UpdateAvailable: updateAvailable,
 	}
 
 	if c.Cache != nil {

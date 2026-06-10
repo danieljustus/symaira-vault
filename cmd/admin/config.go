@@ -17,6 +17,7 @@ import (
 var (
 	ConfigValidateJSON bool
 	ConfigFile         string
+	ConfigValidateFix  bool
 )
 
 var configCmd = &cobra.Command{
@@ -50,7 +51,11 @@ var configValidateCmd = &cobra.Command{
 	Short: "Validate the configuration file",
 	Long: `Validate the Symaira Vault configuration file for schema errors.
 
-If no path is given, validates the default config at ~/.symvault/config.yaml.`,
+If no path is given, validates the default config at ~/.symvault/config.yaml.
+
+When --fix is supplied, validation failures and recoverable load errors trigger
+an interactive repair flow: deterministic defaults are offered for fields that
+have safe replacements, and a manual $EDITOR session is offered as a fall-back.`,
 	Args: cobra.MaximumNArgs(1),
 	Annotations: map[string]string{
 		cli.RequiresVaultAnnotation: "false",
@@ -70,6 +75,24 @@ If no path is given, validates the default config at ~/.symvault/config.yaml.`,
 		cfg, err := configpkg.Load(path)
 		jsonOut := cli.WantJSONOutput(ConfigValidateJSON)
 		if err != nil {
+			if ConfigValidateFix && cli.IsTerminalFunc(int(os.Stdin.Fd())) {
+				fixed, fixErr := cli.InteractiveFixConfig(path, err, nil, nil)
+				if fixErr != nil {
+					return errorspkg.NewCLIError(errorspkg.ExitConfigError, "config fix failed", fixErr)
+				}
+				if fixed != nil {
+					cli.PrintlnQuietAware("Configuration repaired successfully.")
+					cfg = fixed
+					goto revalidate
+				}
+				// User edited the file in $EDITOR; reload and re-validate.
+				newCfg, reloadErr := configpkg.Load(path)
+				if reloadErr != nil {
+					return errorspkg.NewCLIError(errorspkg.ExitConfigError, "config still invalid after manual edit", reloadErr)
+				}
+				cfg = newCfg
+				goto revalidate
+			}
 			if jsonOut {
 				cli.PrintJSON(map[string]interface{}{
 					"valid": false,
@@ -80,22 +103,50 @@ If no path is given, validates the default config at ~/.symvault/config.yaml.`,
 			return errorspkg.NewCLIError(errorspkg.ExitConfigError, fmt.Sprintf("cannot load config from %s: %v", path, err), err)
 		}
 
-		if err := cfg.Validate(); err != nil {
+	revalidate:
+		if valErr := cfg.Validate(); valErr != nil {
+			if ConfigValidateFix && cli.IsTerminalFunc(int(os.Stdin.Fd())) {
+				fixed, fixErr := cli.InteractiveFixConfig(path, nil, cfg, valErr)
+				if fixErr != nil {
+					return errorspkg.NewCLIError(errorspkg.ExitConfigError, "config fix failed", fixErr)
+				}
+				if fixed != nil {
+					cli.PrintlnQuietAware("Configuration repaired successfully.")
+					cfg = fixed
+					if valErr2 := cfg.Validate(); valErr2 != nil {
+						return errorspkg.NewCLIError(errorspkg.ExitConfigError, "config still invalid after auto-fix", valErr2)
+					}
+					goto ok
+				}
+				// User edited the file in $EDITOR; reload and re-validate.
+				newCfg, reloadErr := configpkg.Load(path)
+				if reloadErr != nil {
+					return errorspkg.NewCLIError(errorspkg.ExitConfigError, "config still invalid after manual edit", reloadErr)
+				}
+				if valErr2 := newCfg.Validate(); valErr2 != nil {
+					return errorspkg.NewCLIError(errorspkg.ExitConfigError, "config still invalid after manual edit", valErr2)
+				}
+				cli.PrintlnQuietAware("Configuration repaired successfully.")
+				cfg = newCfg
+				goto ok
+			}
 			if jsonOut {
 				cli.PrintJSON(map[string]interface{}{
 					"valid":  false,
-					"errors": strings.Split(err.Error(), "\n"),
+					"errors": strings.Split(valErr.Error(), "\n"),
 				})
-				return errorspkg.NewCLIError(errorspkg.ExitConfigError, "config validation failed", err)
+				return errorspkg.NewCLIError(errorspkg.ExitConfigError, "config validation failed", valErr)
 			}
 			cli.PrintlnQuietAware(fmt.Sprintf("Configuration is invalid (%s):", path))
-			for _, line := range strings.Split(err.Error(), "\n") {
+			for _, line := range strings.Split(valErr.Error(), "\n") {
 				if line != "" {
 					cli.PrintlnQuietAware("  ✗ " + line)
 				}
 			}
-			return errorspkg.NewCLIError(errorspkg.ExitConfigError, "config validation failed", err)
+			return errorspkg.NewCLIError(errorspkg.ExitConfigError, "config validation failed", valErr)
 		}
+
+	ok:
 
 		if jsonOut {
 			cli.PrintJSON(map[string]interface{}{
@@ -249,6 +300,7 @@ This shows the raw config file contents as-is.`,
 
 func init() {
 	configValidateCmd.Flags().BoolVar(&ConfigValidateJSON, "json", false, "output validation result as JSON (deprecated: use --output=json)")
+	configValidateCmd.Flags().BoolVar(&ConfigValidateFix, "fix", false, "interactively repair validation errors (requires a TTY)")
 
 	configGetCmd.Flags().StringVar(&ConfigFile, "file", "", "path to config file (default: ~/.symvault/config.yaml)")
 	configSetCmd.Flags().StringVar(&ConfigFile, "file", "", "path to config file (default: ~/.symvault/config.yaml)")

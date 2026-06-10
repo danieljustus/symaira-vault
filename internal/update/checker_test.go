@@ -91,6 +91,26 @@ func TestCheckerReportsUpToDate(t *testing.T) {
 	}
 }
 
+func TestCheckerFiltersHistoricalVersions(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"tag_name":"v4.0.0","html_url":"https://example.com/v4.0.0"}`))
+	}))
+	defer server.Close()
+
+	checker := NewChecker(server.Client())
+	checker.LatestReleaseURL = server.URL
+	checker.Cache = nil
+
+	result, err := checker.Check(context.Background(), "0.4.0")
+	if err != nil {
+		t.Fatalf("Check() error = %v", err)
+	}
+	if result.UpdateAvailable {
+		t.Fatal("expected no update to be available when current major is 0 and latest is > 0")
+	}
+}
+
 func TestCheckerRejectsInvalidLatestTag(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

@@ -153,9 +153,8 @@ func EncryptWithPassphrase(plaintext []byte, passphrase []byte, workFactor int) 
 	// This way Wipe(passphrase) actually clears the only copy of the secret.
 	// #nosec G103 — intentional: unsafe.String avoids heap-copying the passphrase
 	// so that the subsequent Wipe() clears the only copy in memory.
-	// FIXME: Go runtime may still create copies (string interning, GC).
-	// Consider migrating to github.com/awnumar/memguard for stronger guarantees.
-	// See SECURITY.md "Memory Wiping Limitations".
+	// Note: Go runtime may still create copies (string interning, GC).
+	// See docs/threat-model.md "In-memory passphrase security and Go runtime constraints".
 	recipient, err := age.NewScryptRecipient(unsafe.String(unsafe.SliceData(passphrase), len(passphrase)))
 	Wipe(passphrase)
 	if err != nil {
@@ -193,9 +192,8 @@ func DecryptWithPassphrase(ciphertext []byte, passphrase []byte) ([]byte, error)
 
 	// #nosec G103 — intentional: unsafe.String avoids heap-copying the passphrase
 	// so that the subsequent Wipe() clears the only copy in memory.
-	// FIXME: Go runtime may still create copies (string interning, GC).
-	// Consider migrating to github.com/awnumar/memguard for stronger guarantees.
-	// See SECURITY.md "Memory Wiping Limitations".
+	// Note: Go runtime may still create copies (string interning, GC).
+	// See docs/threat-model.md "In-memory passphrase security and Go runtime constraints".
 	identity, err := age.NewScryptIdentity(unsafe.String(unsafe.SliceData(passphrase), len(passphrase)))
 	Wipe(passphrase)
 	if err != nil {
