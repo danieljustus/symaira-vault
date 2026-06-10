@@ -23,8 +23,10 @@ import (
 )
 
 var (
-	GetPrint     bool
-	GetClipboard = clipboardapp.DefaultClipboard
+	GetPrint                 bool
+	GetClipboard             = clipboardapp.DefaultClipboard
+	GetAutoClearDurationFunc = GetAutoClearDuration
+	StartAutoClear           = clipboardapp.StartAutoClear
 )
 
 type totpOutput struct {
@@ -159,13 +161,13 @@ var getCmd = &cobra.Command{
 					}
 					cliout.Hintf("[copied to clipboard]")
 
-					autoClearDuration := GetAutoClearDuration()
+					autoClearDuration := GetAutoClearDurationFunc()
 					if autoClearDuration > 0 {
 						cancelCh := make(chan struct{})
 						go clipboardapp.Countdown(autoClearDuration, func(remaining int) {
 							fmt.Fprintf(os.Stderr, "\r[clearing clipboard in %ds] ", remaining)
 						}, cancelCh)
-						go clipboardapp.StartAutoClear(autoClearDuration, func() {
+						StartAutoClear(autoClearDuration, func() {
 							close(cancelCh)
 							copied := strValue
 							if clearErr := GetClipboard().Copy(""); clearErr != nil {
