@@ -2,11 +2,8 @@
 package ui
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -19,7 +16,7 @@ import (
 
 	clipboardapp "github.com/danieljustus/symaira-vault/internal/clipboard"
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
-	"github.com/danieljustus/symaira-vault/internal/secrets"
+	"github.com/danieljustus/symaira-vault/internal/secureedit"
 	render "github.com/danieljustus/symaira-vault/internal/ui/render"
 	theme "github.com/danieljustus/symaira-vault/internal/ui/theme"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
@@ -846,118 +843,17 @@ func editEntryCmd(vault *vaultpkg.Vault, path string) tea.Cmd {
 			return entryEditedMsg{path: path, err: err}
 		}
 
-		tmp, err := os.CreateTemp("", "symvault-*.json")
+		edited, err := secureedit.EditEntry(entry, os.Getenv("EDITOR"), secureedit.DefaultStreams())
 		if err != nil {
 			return entryEditedMsg{path: path, err: err}
 		}
-		tmpPath := tmp.Name()
-		defer func() { _ = secureDeleteFile(tmpPath) }()
-
-		encoder := json.NewEncoder(tmp)
-		encoder.SetIndent("", "  ")
-		if encErr := encoder.Encode(entry); encErr != nil {
-			_ = tmp.Close()
-			return entryEditedMsg{path: path, err: encErr}
-		}
-		if closeErr := tmp.Close(); closeErr != nil {
-			return entryEditedMsg{path: path, err: closeErr}
-		}
-
-		editor, editorErr := resolveEditor(os.Getenv("EDITOR"))
-		if editorErr != nil {
-			return entryEditedMsg{path: path, err: editorErr}
-		}
-		cmd := exec.Command(editor, tmpPath) //#nosec G204 G702 -- editor path resolved via exec.LookPath above.
-		secrets.PrepareCmd(cmd)
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if runErr := cmd.Run(); runErr != nil {
-			return entryEditedMsg{path: path, err: fmt.Errorf("run editor: %w", runErr)}
-		}
-
-		data, err := os.ReadFile(filepath.Clean(tmpPath)) //#nosec G304 -- tmpPath was created by this process.
-		if err != nil {
-			return entryEditedMsg{path: path, err: err}
-		}
-		var edited vaultpkg.Entry
-		if err := json.Unmarshal(data, &edited); err != nil {
-			return entryEditedMsg{path: path, err: fmt.Errorf("parse edited entry: %w", err)}
-		}
-		if edited.Data == nil {
-			return entryEditedMsg{path: path, err: fmt.Errorf("edited entry must contain data")}
-		}
-		if err := vaultpkg.WriteEntryWithRecipients(vault.Dir, path, &edited, vault.Identity); err != nil {
+		if err := vaultpkg.WriteEntryWithRecipients(vault.Dir, path, edited, vault.Identity); err != nil {
 			return entryEditedMsg{path: path, err: err}
 		}
 		_ = vault.AutoCommit(fmt.Sprintf("Edit %s", path))
 		vault.Cache.Invalidate()
 		return entryEditedMsg{path: path}
 	}
-}
-
-// resolveEditor returns an absolute path to a usable editor binary. It tries
-// the user-provided value (typically $EDITOR) first, then falls back to a
-// short list of common editors. Returns an error if none are found on PATH.
-func resolveEditor(preferred string) (string, error) {
-	candidates := make([]string, 0, 4)
-	if preferred != "" {
-		candidates = append(candidates, preferred)
-	}
-	candidates = append(candidates, "vim", "nano", "vi")
-	for _, c := range candidates {
-		if path, err := exec.LookPath(c); err == nil {
-			return path, nil
-		}
-	}
-	return "", fmt.Errorf("no editor found on PATH (tried %v); set $EDITOR to a valid editor", candidates)
-}
-
-// secureDeleteFile overwrites the file at path with zeros, syncs it, and
-// then removes it. If overwriting fails, removal is still attempted to
-// avoid leaving temporary files behind.
-func secureDeleteFile(path string) error {
-	f, err := os.OpenFile(path, os.O_WRONLY, 0) //#nosec G304 -- path comes from tmp.Name() in the same function
-	if err != nil {
-		// Cannot open, but still try to remove.
-		_ = os.Remove(path)
-		return err
-	}
-	defer func() { _ = f.Close() }()
-
-	fi, err := f.Stat()
-	if err != nil {
-		_ = f.Close()
-		_ = os.Remove(path)
-		return err
-	}
-
-	size := fi.Size()
-	zeros := make([]byte, 4096)
-	remaining := size
-	for remaining > 0 {
-		chunk := zeros
-		if remaining < int64(len(chunk)) {
-			chunk = chunk[:remaining]
-		}
-		n, werr := f.Write(chunk)
-		if werr != nil {
-			_ = f.Close()
-			_ = os.Remove(path)
-			return werr
-		}
-		remaining -= int64(n)
-	}
-
-	if serr := f.Sync(); serr != nil {
-		_ = f.Close()
-		_ = os.Remove(path)
-		return serr
-	}
-
-	// Close before remove on some platforms (Windows).
-	_ = f.Close()
-	return os.Remove(path)
 }
 
 func fuzzyMatch(query, value string) bool {
