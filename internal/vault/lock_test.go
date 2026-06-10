@@ -111,6 +111,8 @@ func TestConcurrentMergeEntry(t *testing.T) {
 	if got.Data["field_c"] != "value_c" {
 		t.Errorf("field_c missing: got %v", got.Data["field_c"])
 	}
+
+	FlushManifestUpdates()
 }
 
 func TestAcquireWriteLockDefaultTimeout(t *testing.T) {
