@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -23,6 +24,11 @@ func UnlockVault(vaultDir string, interactive bool) (*vaultpkg.Vault, error) {
 }
 
 func UnlockVaultWithTTL(vaultDir string, interactive bool, ttlOverride time.Duration, cacheEnvPassphrase bool) (*vaultpkg.Vault, time.Duration, error) {
+	cfg, err := resolveConfig(vaultDir, interactive)
+	if err != nil {
+		return nil, 0, errorspkg.NewCLIError(errorspkg.ExitConfigError, "configuration is invalid", err)
+	}
+
 	if cachedIdentity, cacheErr := SessionLoadIdentity(vaultDir); cacheErr == nil && cachedIdentity != "" {
 		if identity, parseErr := age.ParseX25519Identity(cachedIdentity); parseErr == nil {
 			v, openErr := vaultpkg.OpenWithCachedIdentity(vaultDir, identity)
@@ -36,8 +42,6 @@ func UnlockVaultWithTTL(vaultDir string, interactive bool, ttlOverride time.Dura
 	} else {
 		metrics.RecordIdentityCacheEvent("miss")
 	}
-
-	cfg := loadVaultConfigForUnlock(vaultDir)
 
 	passphrase, passphraseFromEnv, _, err := resolveUnlockPassphrase(vaultDir, interactive, cfg)
 	if err != nil {
@@ -69,6 +73,43 @@ func UnlockVaultWithTTL(vaultDir string, interactive bool, ttlOverride time.Dura
 	}
 
 	return v, ttl, nil
+}
+
+func resolveConfig(vaultDir string, interactive bool) (*configpkg.Config, error) {
+	configPath := filepath.Join(vaultDir, "config.yaml")
+	if _, statErr := os.Stat(configPath); os.IsNotExist(statErr) {
+		return configpkg.Default(), nil
+	}
+
+	for {
+		cfg, loadErr := configpkg.Load(configPath)
+		var valErr error
+		if loadErr == nil && cfg != nil {
+			valErr = cfg.Validate()
+		}
+
+		if loadErr == nil && valErr == nil {
+			return cfg, nil
+		}
+
+		if !interactive {
+			combinedErr := loadErr
+			if combinedErr == nil {
+				combinedErr = valErr
+			}
+			return nil, combinedErr
+		}
+
+		// Interactive fix
+		fixedCfg, fixErr := InteractiveFixConfig(configPath, loadErr, cfg, valErr)
+		if fixErr != nil {
+			return nil, fixErr
+		}
+		if fixedCfg != nil {
+			return fixedCfg, nil
+		}
+		// If fixedCfg is nil, it means user edited the file in editor, so loop to re-load and re-validate.
+	}
 }
 
 func resolveUnlockPassphrase(vaultDir string, interactive bool, cfg *configpkg.Config) ([]byte, bool, bool, error) {
@@ -134,7 +175,7 @@ func WithVaultRaw(fn func(*vaultpkg.Vault, *VaultService) error) error {
 }
 
 func loadVaultConfigForUnlock(vaultDir string) *configpkg.Config {
-	cfg, err := configpkg.Load(filepath.Join(vaultDir, "config.yaml"))
+	cfg, err := resolveConfig(vaultDir, false)
 	if err != nil {
 		return configpkg.Default()
 	}

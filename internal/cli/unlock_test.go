@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -121,5 +122,31 @@ func TestUnlockVaultWithTTLDoesNotSaveTouchIDItemForUncachedEnvPassphrase(t *tes
 	}
 	if v == nil {
 		t.Fatal("UnlockVaultWithTTL() returned nil vault")
+	}
+}
+
+func TestUnlockVaultWithTTL_InvalidConfigNonInteractive(t *testing.T) {
+	vaultDir := t.TempDir()
+	passphrase := []byte("test-passphrase")
+	cfg := configpkg.Default()
+	if _, err := vaultpkg.InitWithPassphrase(vaultDir, passphrase, cfg); err != nil {
+		t.Fatalf("InitWithPassphrase() error = %v", err)
+	}
+
+	// Make the config invalid by setting clipboard.autoClearDuration to < 0
+	cfg.Clipboard = &configpkg.ClipboardConfig{
+		AutoClearDuration: -1,
+	}
+	if err := cfg.SaveTo(filepath.Join(vaultDir, "config.yaml")); err != nil {
+		t.Fatalf("SaveTo() error = %v", err)
+	}
+
+	// Try to unlock non-interactively
+	_, _, err := UnlockVaultWithTTL(vaultDir, false, 0, false)
+	if err == nil {
+		t.Fatal("expected error when unlocking with invalid config non-interactively")
+	}
+	if !strings.Contains(err.Error(), "clipboard.autoClearDuration") {
+		t.Errorf("expected error to mention clipboard.autoClearDuration, got: %v", err)
 	}
 }
