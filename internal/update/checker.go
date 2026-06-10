@@ -15,6 +15,19 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/metrics"
 )
 
+// DefaultLatestReleaseURL targets GitHub's "latest stable release" endpoint for
+// the symaira-vault repository. The returned release is whatever GitHub
+// currently advertises as latest.
+//
+// Release-line context (2026-06): the repository carries two lineages. The
+// historical OpenPass releases v1.0.0–v4.0.0 remain in the tag list, and the
+// current Symaira Vault series begins at v0.1.0. The semver comparison below
+// is correct within any single series (e.g. v0.4.0 → v0.4.1) but is NOT
+// designed to span the rename boundary — a user on v0.x will be told a v4.x
+// release is "newer" because 4.0.0 > 0.4.0 numerically, even though the v4.x
+// releases belong to the discontinued OpenPass line. See CHANGELOG.md (the
+// release-series note added in #384) and docs/commercial-boundary.md for the
+// current policy.
 const DefaultLatestReleaseURL = "https://api.github.com/repos/danieljustus/symaira-vault/releases/latest"
 
 // newSecureClient returns an HTTP client with TLS 1.3 minimum version.
