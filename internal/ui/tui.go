@@ -94,6 +94,10 @@ type clipboardClearedMsg struct {
 	err error
 }
 
+type clipboardQuitClearedMsg struct {
+	err error
+}
+
 type clipboardTickMsg struct{}
 
 type logMsg struct {
@@ -133,6 +137,8 @@ type TUIModel struct {
 }
 
 var (
+	writeClipboard = clipboard.WriteAll
+
 	appStyle = lipgloss.NewStyle().Padding(1, 2)
 
 	borderStyle = lipgloss.NewStyle().
@@ -277,6 +283,13 @@ func (m TUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.clipboardSeconds = 0
 		m.status = "Clipboard cleared"
 		return m, nil
+	case clipboardQuitClearedMsg:
+		m.clipboardSeconds = 0
+		if msg.err != nil {
+			m.err = msg.err
+			m.status = "Clipboard clear failed"
+		}
+		return m, tea.Quit
 	case clipboardTickMsg:
 		if m.clipboardSeconds > 0 {
 			m.clipboardSeconds--
@@ -335,7 +348,7 @@ func (m TUIModel) handleKey(msg tea.KeyMsg) (TUIModel, tea.Cmd) {
 			m.filterInput.Blur()
 			return m, m.loadSelectedEntry()
 		case keyQuit:
-			return m, tea.Quit
+			return m, m.quitCmd()
 		}
 
 		var cmd tea.Cmd
@@ -360,7 +373,7 @@ func (m TUIModel) handleKey(msg tea.KeyMsg) (TUIModel, tea.Cmd) {
 			m.applyFilter()
 			return m, m.loadSelectedEntry()
 		case keyQuit:
-			return m, tea.Quit
+			return m, m.quitCmd()
 		}
 
 		var cmd tea.Cmd
@@ -386,14 +399,14 @@ func (m TUIModel) handleKey(msg tea.KeyMsg) (TUIModel, tea.Cmd) {
 			m.status = "Canceled"
 			return m, nil
 		case keyQuit:
-			return m, tea.Quit
+			return m, m.quitCmd()
 		}
 		return m, nil
 	}
 
 	switch msg.String() {
 	case "q", keyQuit:
-		return m, tea.Quit
+		return m, m.quitCmd()
 	case "?":
 		m.help = !m.help
 		return m, nil
@@ -453,6 +466,13 @@ func (m TUIModel) handleKey(msg tea.KeyMsg) (TUIModel, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+func (m TUIModel) quitCmd() tea.Cmd {
+	if m.clipboardSeconds <= 0 {
+		return tea.Quit
+	}
+	return clearClipboardBeforeQuitCmd()
 }
 
 func (m *TUIModel) applyFilter() {
@@ -769,7 +789,7 @@ func copyTextCmd(text, message string, cleanup func()) tea.Cmd {
 }
 
 func copyTextMsg(text, message string) tea.Msg {
-	if err := clipboard.WriteAll(text); err != nil {
+	if err := writeClipboard(text); err != nil {
 		return copiedMsg{err: fmt.Errorf("copy to clipboard: %w", err)}
 	}
 	return copiedMsg{message: message}
@@ -780,11 +800,17 @@ func clearClipboardCmd(seconds int) tea.Cmd {
 		done := make(chan struct{})
 		var clearErr error
 		clipboardapp.StartAutoClear(seconds, func() {
-			clearErr = clipboard.WriteAll("")
+			clearErr = writeClipboard("")
 			close(done)
 		}, nil)
 		<-done
 		return clipboardClearedMsg{err: clearErr}
+	}
+}
+
+func clearClipboardBeforeQuitCmd() tea.Cmd {
+	return func() tea.Msg {
+		return clipboardQuitClearedMsg{err: writeClipboard("")}
 	}
 }
 

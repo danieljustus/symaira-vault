@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"filippo.io/age"
+	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/danieljustus/symaira-vault/internal/testutil"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
@@ -91,6 +92,60 @@ func TestTUIModelHandlesListError(t *testing.T) {
 
 	if newM.err == nil {
 		t.Error("expected error to be set")
+	}
+}
+
+func TestTUIModelClearsClipboardBeforeQuitWhenCopyPending(t *testing.T) {
+	origWriteClipboard := writeClipboard
+	t.Cleanup(func() { writeClipboard = origWriteClipboard })
+
+	tests := []struct {
+		name string
+		mode mode
+		key  tea.KeyMsg
+	}{
+		{name: "normal q", mode: modeNormal, key: tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}}},
+		{name: "normal ctrl-c", mode: modeNormal, key: tea.KeyMsg{Type: tea.KeyCtrlC}},
+		{name: "filter ctrl-c", mode: modeFilter, key: tea.KeyMsg{Type: tea.KeyCtrlC}},
+		{name: "tag filter ctrl-c", mode: modeTagFilter, key: tea.KeyMsg{Type: tea.KeyCtrlC}},
+		{name: "confirm delete ctrl-c", mode: modeConfirmDelete, key: tea.KeyMsg{Type: tea.KeyCtrlC}},
+		{name: "confirm edit ctrl-c", mode: modeConfirmEdit, key: tea.KeyMsg{Type: tea.KeyCtrlC}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			writes := []string{}
+			writeClipboard = func(text string) error {
+				writes = append(writes, text)
+				return nil
+			}
+
+			m := NewTUIModel(&vaultpkg.Vault{})
+			m.mode = tt.mode
+			m.clipboardSeconds = 10
+
+			_, cmd := m.handleKey(tt.key)
+			if cmd == nil {
+				t.Fatal("expected quit path to clear clipboard before quitting")
+			}
+
+			msg := cmd()
+			if _, ok := msg.(clipboardQuitClearedMsg); !ok {
+				t.Fatalf("message = %T, want clipboardQuitClearedMsg", msg)
+			}
+			if len(writes) != 1 || writes[0] != "" {
+				t.Fatalf("clipboard writes = %#v, want one clear write", writes)
+			}
+
+			newModel, quitCmd := m.Update(msg)
+			newM := newModel.(TUIModel)
+			if newM.clipboardSeconds != 0 {
+				t.Fatalf("clipboardSeconds = %d, want 0", newM.clipboardSeconds)
+			}
+			if quitCmd == nil {
+				t.Fatal("expected quit command after clipboard clear")
+			}
+		})
 	}
 }
 
