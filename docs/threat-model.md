@@ -203,6 +203,12 @@ MCP server could in principle alter them. See backlog item O-10.
   (`map[issuer:GitHub secret:JBSW...]`).
 - **No fmt-leaks.** `Untrusted` panics in fmt verbs so accidental
   `Sprintf("%v", secret)` is impossible to land in production.
+- **Pseudonymized list cache stripping.** When `pseudonymize_paths` is
+  enabled, the list cache stores paths and only non-secret entry data.
+  Entries containing password, secret, token, key, OTP, or PIN-style field
+  names are omitted from cached entry data, so later value searches
+  re-decrypt the single matching entry instead of retaining those secrets
+  in heap memory for the cache TTL.
 
 ### In-memory passphrase security and Go runtime constraints
 

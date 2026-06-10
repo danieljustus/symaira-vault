@@ -861,6 +861,46 @@ func TestListWithPseudonymizedEntries(t *testing.T) {
 	}
 }
 
+func TestPseudonymizedListCacheOmitsSecretBearingEntries(t *testing.T) {
+	vaultDir := t.TempDir()
+	writePseudonymizeConfig(t, vaultDir)
+	id := testutil.TempIdentity(t)
+
+	listCacheFor(vaultDir).Invalidate()
+	globalIndex.Invalidate()
+
+	mustWriteEntry(t, vaultDir, id, "github.com/user", map[string]interface{}{
+		"username": "alice",
+		"password": "clip-secret-value",
+		"totp": map[string]interface{}{
+			"secret": "JBSWY3DPEHPK3PXP",
+		},
+	})
+	mustWriteEntry(t, vaultDir, id, "public/profile", map[string]interface{}{
+		"username": "bob",
+		"url":      "https://example.com",
+	})
+
+	if _, err := List(vaultDir, "", id); err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+
+	if got := listCacheFor(vaultDir).cachedPseudonymizedEntry(vaultDir, id, "github.com/user"); got != nil {
+		t.Fatalf("secret-bearing entry cached as %#v, want nil", got)
+	}
+	if got := listCacheFor(vaultDir).cachedPseudonymizedEntry(vaultDir, id, "public/profile"); got == nil {
+		t.Fatal("non-secret entry was not cached")
+	}
+
+	matches, err := FindWithOptions(vaultDir, "clip-secret-value", FindOptions{MaxWorkers: 1}, id)
+	if err != nil {
+		t.Fatalf("FindWithOptions() error = %v", err)
+	}
+	if len(matches) != 1 || matches[0].Path != "github.com/user" {
+		t.Fatalf("FindWithOptions() = %#v, want github.com/user", matches)
+	}
+}
+
 func TestListWithPseudonymizedEntriesAndPrefix(t *testing.T) {
 	vaultDir := t.TempDir()
 

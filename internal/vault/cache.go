@@ -80,8 +80,11 @@ type listCachePayload struct {
 }
 
 // pseudonymizedCacheEntry holds cached pseudonymized list results.
-// Unlike listCacheEntry, it also stores decrypted entry data so that
+// Unlike listCacheEntry, it may also store decrypted entry data so that
 // FindWithOptions can reuse entries already decrypted during listing.
+// Secret-bearing entries are deliberately omitted from entries so callers
+// fall back to a single-entry decrypt instead of retaining those values in
+// heap memory for the cache TTL.
 type pseudonymizedCacheEntry struct {
 	paths        []string
 	entries      map[string]map[string]any
