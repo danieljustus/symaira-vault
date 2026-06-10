@@ -124,6 +124,9 @@ update:
 clipboard:
   # Seconds before copied secrets are cleared. Set 0 to disable auto-clear.
   auto_clear_duration: 30
+  # Copy field values to the clipboard by default on a TTY.
+  # Set false to print to stdout unless --print is already supplied.
+  copyByDefault: true
 
 # Custom PII/secret scan patterns for the output sanitizer.
 # These are merged with built-in defaults and compiled at runtime.

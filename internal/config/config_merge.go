@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sync/atomic"
 	"time"
 )
+
+var clipboardPrintByDefaultWarningEmitted atomic.Bool
 
 func mergeStringPtr(dst, src *string) *string {
 	if src != nil {
@@ -415,8 +418,13 @@ func mergeClipboardConfig(raw *ClipboardConfig, sf map[string]bool) *ClipboardCo
 	if sf["auto_clear_duration"] {
 		defaults.AutoClearDuration = raw.AutoClearDuration
 	}
-	if sf["printByDefault"] {
-		defaults.PrintByDefault = raw.PrintByDefault
+	if sf["copyByDefault"] {
+		defaults.CopyByDefault = raw.CopyByDefault
+	} else if sf["printByDefault"] {
+		if !clipboardPrintByDefaultWarningEmitted.Swap(true) {
+			fmt.Fprintln(os.Stderr, "Warning: clipboard.printByDefault is deprecated; use clipboard.copyByDefault instead")
+		}
+		defaults.CopyByDefault = raw.PrintByDefault
 	}
 	return &defaults
 }

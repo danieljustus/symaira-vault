@@ -134,7 +134,7 @@ func (c *Config) SaveTo(path string) error {
 	if c.Clipboard != nil {
 		raw.Clipboard = &ClipboardConfig{
 			AutoClearDuration: c.Clipboard.AutoClearDuration,
-			PrintByDefault:    c.Clipboard.PrintByDefault,
+			CopyByDefault:     c.Clipboard.CopyByDefault,
 		}
 	}
 	if c.Audit != nil {

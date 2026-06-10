@@ -109,6 +109,7 @@ func KnownConfigKeys() []string {
 		// Clipboard
 		"clipboard",
 		"clipboard.auto_clear_duration",
+		"clipboard.copyByDefault",
 
 		// Audit
 		"audit",

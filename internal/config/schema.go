@@ -82,6 +82,7 @@ type UpdateConfig struct {
 // ClipboardConfig holds clipboard-related configuration.
 type ClipboardConfig struct {
 	AutoClearDuration int  `yaml:"auto_clear_duration,omitempty"`
+	CopyByDefault     bool `yaml:"copyByDefault,omitempty"`
 	PrintByDefault    bool `yaml:"printByDefault,omitempty"`
 }
 
@@ -169,7 +170,7 @@ func defaultUpdateConfig() UpdateConfig {
 func defaultClipboardConfig() ClipboardConfig {
 	return ClipboardConfig{
 		AutoClearDuration: 30,
-		PrintByDefault:    true,
+		CopyByDefault:     true,
 	}
 }
 
@@ -392,8 +393,8 @@ func MergeFromClipboard(dst *ClipboardConfig, src ClipboardConfig) {
 	if src.AutoClearDuration > 0 {
 		dst.AutoClearDuration = src.AutoClearDuration
 	}
-	if src.PrintByDefault {
-		dst.PrintByDefault = true
+	if src.CopyByDefault {
+		dst.CopyByDefault = true
 	}
 }
 

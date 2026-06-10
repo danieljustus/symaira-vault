@@ -118,6 +118,7 @@ Keychain item when Touch ID is enabled.
 | Option | Default | Description |
 |--------|---------|-------------|
 | `auto_clear_duration` | `30` | Seconds before copied secrets are cleared; `0` disables auto-clear |
+| `copyByDefault` | `true` | Copy field values to the clipboard by default on a TTY; set `false` to print to stdout |
 
 ## Logging Config Options
 

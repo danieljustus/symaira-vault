@@ -133,7 +133,7 @@ var getCmd = &cobra.Command{
 				// 2. --print flag: always print to stdout
 				// 3. Not a TTY: print to stdout (for scripts/pipes)
 				// 4. TTY + no --print: copy to clipboard (default)
-				// 5. Config override: clipboard.printByDefault=false restores old behavior
+				// 5. Config override: clipboard.copyByDefault=false restores old behavior
 
 				if cli.OutputFormat != "text" {
 					if printErr := cli.PrintResult(strValue); printErr != nil {
@@ -145,12 +145,15 @@ var getCmd = &cobra.Command{
 				shouldPrint := GetPrint || !cli.IsTerminalFunc(int(os.Stdout.Fd()))
 				if !shouldPrint {
 					// Check config override
-					vaultDir, _ := cli.VaultPath()
-					if vaultDir != "" {
-						cfg, _ := configpkg.Load(vaultDir + "/config.yaml")
-						if cfg != nil && cfg.Clipboard != nil && !cfg.Clipboard.PrintByDefault {
-							shouldPrint = true
+					cfg := v.Config
+					if cfg == nil {
+						vaultDir := vs.VaultDir()
+						if vaultDir != "" {
+							cfg, _ = configpkg.Load(vaultDir + "/config.yaml")
 						}
+					}
+					if cfg != nil && cfg.Clipboard != nil && !cfg.Clipboard.CopyByDefault {
+						shouldPrint = true
 					}
 				}
 

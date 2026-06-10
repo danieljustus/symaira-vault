@@ -424,6 +424,46 @@ func TestCmdGet_FieldTTY_AutoClearRunsBeforeReturn(t *testing.T) {
 	}
 }
 
+func TestCmdGet_FieldTTY_CopyByDefaultFalsePrints(t *testing.T) {
+	vaultDir, passphrase := initVault(t)
+	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
+	if err := os.WriteFile(filepath.Join(vaultDir, "config.yaml"), []byte("clipboard:\n  copyByDefault: false\n  auto_clear_duration: 0\n"), 0o600); err != nil {
+		t.Fatalf("write clipboard config: %v", err)
+	}
+	entry := &vaultpkg.Entry{Data: map[string]any{"password": "copy-default-disabled"}}
+	_ = vaultpkg.WriteEntry(vaultDir, "copy-config-entry", entry, identity.Identity)
+	setPassEnv(t, string(passphrase))
+	oldVaultFlagChanged := cli.VaultFlag.Changed
+	cli.VaultFlag.Changed = false
+	t.Cleanup(func() { cli.VaultFlag.Changed = oldVaultFlagChanged })
+	t.Setenv("OPENPASS_VAULT", vaultDir)
+	crud.GetAutoClearDurationFunc = func() int { return 0 }
+	t.Cleanup(func() { crud.GetAutoClearDurationFunc = crud.GetAutoClearDuration })
+	resolvedVaultDir, err := cli.VaultPath()
+	if err != nil {
+		t.Fatalf("VaultPath() error = %v", err)
+	}
+	if resolvedVaultDir != vaultDir {
+		t.Fatalf("VaultPath() = %q, want %q", resolvedVaultDir, vaultDir)
+	}
+	cfg, err := config.Load(filepath.Join(vaultDir, "config.yaml"))
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Clipboard == nil || cfg.Clipboard.CopyByDefault {
+		t.Fatalf("CopyByDefault = %v, want false", cfg.Clipboard)
+	}
+
+	oldIsTerminal := cli.IsTerminalFunc
+	cli.IsTerminalFunc = func(int) bool { return true }
+	defer func() { cli.IsTerminalFunc = oldIsTerminal }()
+
+	out := execWithStdout("get", "copy-config-entry.password")
+	if strings.TrimSpace(out) != "copy-default-disabled" {
+		t.Fatalf("stdout = %q, want copy-default-disabled", out)
+	}
+}
+
 func TestCmdGet_FieldPipe_DefaultPrint(t *testing.T) {
 	vaultDir, passphrase := initVault(t)
 	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -1253,6 +1254,60 @@ func TestLoad_ClipboardWithAutoClearDuration(t *testing.T) {
 	}
 	if cfg.Clipboard.AutoClearDuration != 0 {
 		t.Errorf("Clipboard.AutoClearDuration = %d, want 0 (disabled)", cfg.Clipboard.AutoClearDuration)
+	}
+}
+
+func TestLoad_ClipboardCopyByDefault(t *testing.T) {
+	yaml := `clipboard:
+  copyByDefault: false
+`
+	path := writeTempFile(t, []byte(yaml))
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Clipboard == nil {
+		t.Fatal("Clipboard should not be nil")
+	}
+	if cfg.Clipboard.CopyByDefault {
+		t.Fatal("Clipboard.CopyByDefault = true, want false")
+	}
+}
+
+func TestLoad_ClipboardPrintByDefaultDeprecatedAlias(t *testing.T) {
+	clipboardPrintByDefaultWarningEmitted.Store(false)
+	t.Cleanup(func() { clipboardPrintByDefaultWarningEmitted.Store(false) })
+
+	yaml := `clipboard:
+  printByDefault: false
+`
+	path := writeTempFile(t, []byte(yaml))
+
+	origStderr := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("stderr pipe: %v", err)
+	}
+	os.Stderr = w
+
+	cfg, loadErr := Load(path)
+	_ = w.Close()
+	os.Stderr = origStderr
+	output, readErr := io.ReadAll(r)
+	if readErr != nil {
+		t.Fatalf("read stderr: %v", readErr)
+	}
+	if loadErr != nil {
+		t.Fatalf("Load() error = %v", loadErr)
+	}
+	if cfg.Clipboard == nil {
+		t.Fatal("Clipboard should not be nil")
+	}
+	if cfg.Clipboard.CopyByDefault {
+		t.Fatal("Clipboard.CopyByDefault = true, want false from deprecated alias")
+	}
+	if !strings.Contains(string(output), "clipboard.printByDefault is deprecated") {
+		t.Fatalf("stderr = %q, want deprecation warning", string(output))
 	}
 }
 
@@ -2778,7 +2833,7 @@ func TestRoundTrip_AllFieldsSet(t *testing.T) {
 		},
 		Clipboard: &ClipboardConfig{
 			AutoClearDuration: 45,
-			PrintByDefault:    false,
+			CopyByDefault:     false,
 		},
 		Audit: &AuditConfig{
 			MaxFileSize: 50 * 1024 * 1024,
