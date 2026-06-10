@@ -71,7 +71,7 @@ nix run github:danieljustus/symaira-vault
 go install github.com/danieljustus/symaira-vault@latest
 ```
 
-For manual downloads, Linux packages, release verification, and build-from-source instructions, see [docs/distribution.md](docs/distribution.md).
+For manual downloads, Linux packages, release verification (including Cosign signature verification), and build-from-source instructions, see [docs/distribution.md](docs/distribution.md).
 
 | Platform | amd64 | arm64 | Install Methods |
 |----------|-------|-------|-----------------|

@@ -154,11 +154,9 @@ func applyAutoFixes(cfg *configpkg.Config, loadErr, valErr error) bool {
 }
 
 var (
-	validApprovalModes        = map[string]struct{}{"none": {}, "deny": {}, "prompt": {}, approvalModeAutoValue: {}}
+	validApprovalModes        = map[string]struct{}{"none": {}, "deny": {}, "prompt": {}, "auto": {}}
 	validPromptInjectionModes = map[string]struct{}{"off": {}, "log-only": {}, "wrap": {}, "deny": {}}
 )
-
-const approvalModeAutoValue = "auto"
 
 func firstAgentName(cfg *configpkg.Config) string {
 	for name := range cfg.Agents {

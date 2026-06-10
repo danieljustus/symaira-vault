@@ -141,6 +141,29 @@ make build
 sudo mv symvault /usr/local/bin/
 ```
 
+## Code Signing and Notarization Policy
+
+To protect users against supply-chain attacks and avoid operating system warnings, Symaira Vault evaluates and implements code signing for its releases.
+
+### macOS (Notarization)
+- **Status:** Unsigned (Self-Hosted/Core)
+- **Detail:** macOS notarization requires an active Apple Developer Program membership ($99/year). Because the self-hosted core is maintained as a free and open-source project without commercial backing, the binaries are currently distributed unsigned.
+- **Workaround:** When installing via curl or manual download, users on macOS may encounter Gatekeeper quarantine blocks. To bypass:
+  ```bash
+  xattr -d com.apple.quarantine /usr/local/bin/symvault
+  ```
+- **Recommended Channel:** Homebrew installations via `brew install` automatically handle quarantine settings and do not trigger Gatekeeper warnings.
+
+### Windows (Authenticode)
+- **Status:** Unsigned (Self-Hosted/Core)
+- **Detail:** Authenticode signing requires a commercial Code Signing Certificate from a trusted CA. The self-hosted open-source distribution does not use Authenticode.
+- **Mitigation:** The community-maintained Scoop installer checks checksums but does not require Authenticode.
+
+### Linux and Cross-Platform (Sigstore/Cosign)
+- **Status:** Enabled (Automated)
+- **Detail:** All release artifacts are transparently signed during the GitHub Actions release workflow using [Cosign](https://github.com/sigstore/cosign). This provides SLSA-compatible provenance and allows users to verify that the binaries were built from this specific GitHub repository.
+- **Verification:** See [Cosign Signature Verification](#cosign-signature-verification) below.
+
 ## Build Pipeline
 
 All artifacts are built by [GoReleaser](https://goreleaser.com/) via the release workflow (`.github/workflows/release.yml`).
@@ -169,6 +192,27 @@ curl -LO https://github.com/danieljustus/symaira-vault/releases/latest/download/
 # Verify a specific artifact
 sha256sum -c symaira-vault_<version>_checksums.txt --ignore-missing
 ```
+
+### Cosign Signature Verification
+
+Release artifacts are signed using [Cosign](https://github.com/sigstore/cosign) for SLSA-compliant supply-chain security. To verify the signature of a downloaded archive (e.g., `symaira-vault_0.4.1_linux_amd64.tar.gz`):
+
+1. Install Cosign: https://docs.sigstore.dev/cosign/system_config/installation/
+2. Download the artifact's certificate and signature:
+   ```bash
+   curl -LO https://github.com/danieljustus/symaira-vault/releases/latest/download/symaira-vault_<version>_linux_amd64.tar.gz.pem
+   curl -LO https://github.com/danieljustus/symaira-vault/releases/latest/download/symaira-vault_<version>_linux_amd64.tar.gz.sig
+   ```
+3. Verify the blob:
+   ```bash
+   cosign verify-blob \
+     --certificate symaira-vault_<version>_linux_amd64.tar.gz.pem \
+     --signature symaira-vault_<version>_linux_amd64.tar.gz.sig \
+     --certificate-identity-regexp "https://github.com/danieljustus/symaira-vault" \
+     --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+     symaira-vault_<version>_linux_amd64.tar.gz
+   ```
+
 
 Or manually:
 
