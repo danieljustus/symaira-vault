@@ -17,6 +17,18 @@ import (
 // CLI being installed.
 var execCommand = exec.Command
 
+// CosignIdentityRegexp is the certificate identity regexp passed to
+// cosign verify-blob. It must match the full OIDC identity embedded in
+// release certificates produced by the GitHub Actions release workflow.
+// The repo slug must be lowercase and hyphenated (danieljustus/symaira-vault).
+// This constant is also referenced in scripts/install.sh — keep in sync.
+const CosignIdentityRegexp = `https://github\.com/danieljustus/symaira-vault/\.github/workflows/release\.yml@refs/tags/v.*`
+
+// CosignOIDCIssuer is the expected OIDC issuer for cosign keyless signatures.
+// All GitHub Actions workflows use this issuer. This constant is also
+// referenced in scripts/install.sh — keep in sync.
+const CosignOIDCIssuer = `https://token.actions.githubusercontent.com`
+
 // cosignSignatureFileName returns the cosign signature filename for the
 // checksums file of the given release version. Matches the GoReleaser
 // cosign signing convention where "<artifact>.sig" is the signature.
@@ -139,9 +151,9 @@ func VerifyCosignSignature(content, signature, certificate []byte) error {
 		"--certificate", certPath,
 		"--signature", sigPath,
 		"--certificate-identity-regexp",
-		`https://github\.com/danieljustus/Symaira Vault/\.github/workflows/release\.yml@refs/tags/v.*`,
+		CosignIdentityRegexp,
 		"--certificate-oidc-issuer",
-		"https://token.actions.githubusercontent.com",
+		CosignOIDCIssuer,
 		contentPath,
 	)
 	cmd.Stderr = &stderr

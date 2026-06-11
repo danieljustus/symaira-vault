@@ -274,3 +274,77 @@ func TestVerifyCosignSignature_ExecFailure(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestVerifyCosignSignature_CorrectArgs(t *testing.T) {
+	if _, err := exec.LookPath("cosign"); err != nil {
+		t.Skip("cosign not on PATH — argv assertion test requires cosign to pass LookPath")
+	}
+
+	origExec := execCommand
+	t.Cleanup(func() { execCommand = origExec })
+
+	var capturedName string
+	var capturedArgs []string
+	execCommand = func(name string, arg ...string) *exec.Cmd {
+		capturedName = name
+		capturedArgs = arg
+		return exec.Command("true")
+	}
+
+	err := VerifyCosignSignature(
+		[]byte("content"),
+		[]byte("sig"),
+		[]byte("cert"),
+	)
+	if err != nil {
+		t.Fatalf("VerifyCosignSignature() error = %v", err)
+	}
+
+	if capturedName != "cosign" {
+		t.Fatalf("expected cosign command, got %q", capturedName)
+	}
+
+	argsStr := strings.Join(capturedArgs, " ")
+
+	identityFlagIdx := -1
+	for i, arg := range capturedArgs {
+		if arg == "--certificate-identity-regexp" {
+			identityFlagIdx = i
+			break
+		}
+	}
+	if identityFlagIdx == -1 || identityFlagIdx+1 >= len(capturedArgs) {
+		t.Fatalf("expected --certificate-identity-regexp flag in args: %s", argsStr)
+	}
+	identityValue := capturedArgs[identityFlagIdx+1]
+	if identityValue != CosignIdentityRegexp {
+		t.Fatalf("--certificate-identity-regexp = %q, want %q", identityValue, CosignIdentityRegexp)
+	}
+
+	issuerFlagIdx := -1
+	for i, arg := range capturedArgs {
+		if arg == "--certificate-oidc-issuer" {
+			issuerFlagIdx = i
+			break
+		}
+	}
+	if issuerFlagIdx == -1 || issuerFlagIdx+1 >= len(capturedArgs) {
+		t.Fatalf("expected --certificate-oidc-issuer flag in args: %s", argsStr)
+	}
+	issuerValue := capturedArgs[issuerFlagIdx+1]
+	if issuerValue != CosignOIDCIssuer {
+		t.Fatalf("--certificate-oidc-issuer = %q, want %q", issuerValue, CosignOIDCIssuer)
+	}
+}
+
+func TestCosignIdentityRegexp_MatchesSymairaVault(t *testing.T) {
+	// The regexp must use the correct lowercase-hyphenated repo slug.
+	// Regression test for the OpenPass→Symaira rename where "Symaira Vault"
+	// (with space) was left in the regexp, causing every verification to fail.
+	if strings.Contains(CosignIdentityRegexp, "Symaira Vault") {
+		t.Fatal("CosignIdentityRegexp contains 'Symaira Vault' — must use 'symaira-vault' (lowercase, hyphenated)")
+	}
+	if !strings.Contains(CosignIdentityRegexp, `danieljustus/symaira-vault`) {
+		t.Fatal("CosignIdentityRegexp must contain 'danieljustus/symaira-vault'")
+	}
+}

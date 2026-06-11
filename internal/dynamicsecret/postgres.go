@@ -106,11 +106,18 @@ func (e *PostgreSQLEngine) Generate(ctx context.Context, req GenerateRequest) (*
 
 	validUntil := time.Now().UTC().Add(req.TTL).Format("2006-01-02 15:04:05Z07:00")
 
+	// Inline the password as a safely quoted string literal instead of using
+	// bind parameters. PostgreSQL does not allow DDL statements (CREATE USER)
+	// to be prepared via the extended protocol, so bind parameters fail with
+	// a parse error. The password charset is alphanumeric, so quoting is safe.
+	escapedPassword := strings.ReplaceAll(password, "'", "''")
 	createSQL := fmt.Sprintf(
-		"CREATE USER %s WITH PASSWORD $1 VALID UNTIL $2",
+		"CREATE USER %s WITH PASSWORD '%s' VALID UNTIL '%s'",
 		quoteIdentifier(username),
+		escapedPassword,
+		validUntil,
 	)
-	if _, err := db.ExecContext(ctx, createSQL, password, validUntil); err != nil {
+	if _, err := db.ExecContext(ctx, createSQL); err != nil {
 		return nil, fmt.Errorf("postgres: create user: %w", err)
 	}
 

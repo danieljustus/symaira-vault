@@ -468,13 +468,66 @@ func cloneWithoutSensitiveFields(prefix string, data map[string]any) (map[string
 }
 
 func isSensitiveCacheField(field string) bool {
+	return !isSafeCacheField(field)
+}
+
+// isSafeCacheField returns true if the field is known to be non-sensitive
+// metadata that can safely be retained in the pseudonymized list cache.
+// Only fields in this allowlist are cached; all other fields are stripped
+// to prevent secrets from remaining in heap memory for the cache TTL.
+var safeCacheFields = map[string]bool{
+	"username":    true,
+	"user":        true,
+	"email":       true,
+	"url":         true,
+	"host":        true,
+	"domain":      true,
+	"tags":        true,
+	"notes":       true,
+	"note":        true,
+	"description": true,
+	"title":       true,
+	"name":        true,
+	"group":       true,
+	"category":    true,
+	"type":        true,
+	"created":     true,
+	"updated":     true,
+	"modified":    true,
+	"version":     true,
+	"label":       true,
+	"labels":      true,
+	"service":     true,
+	"provider":    true,
+	"website":     true,
+	"pathname":    true,
+	"path":        true,
+	"identifier":  true,
+	"id":          true,
+	"icon":        true,
+	"favicon":     true,
+	"language":    true,
+	"locale":      true,
+	"color":       true,
+	"icon_url":    true,
+	"avatar_url":  true,
+	"issuer":      true,
+	"algorithm":   true,
+	"digits":      true,
+	"period":      true,
+}
+
+func isSafeCacheField(field string) bool {
 	field = strings.ToLower(field)
-	return strings.Contains(field, "pass") ||
-		strings.Contains(field, "secret") ||
-		strings.Contains(field, "token") ||
-		strings.Contains(field, "key") ||
-		strings.Contains(field, "otp") ||
-		strings.Contains(field, "pin")
+	if safeCacheFields[field] {
+		return true
+	}
+	for safe := range safeCacheFields {
+		if strings.HasSuffix(field, "."+safe) {
+			return true
+		}
+	}
+	return false
 }
 
 // listViaManifest returns entry paths from the manifest when available and

@@ -79,6 +79,8 @@ func TestOsascriptBackend_UserCanceled(t *testing.T) {
 	}
 	b := newGUIBackend(mr)
 	_, err := b.prompt(PromptRequest{Path: "p", Field: "f"})
+	// With the new implementation, a plain "exit status 1" error without stderr
+	// content is treated as cancellation for backward compatibility.
 	if !errors.Is(err, ErrCanceled) {
 		t.Fatalf("err = %v, want ErrCanceled", err)
 	}

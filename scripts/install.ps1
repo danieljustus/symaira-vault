@@ -38,6 +38,8 @@ $Binary      = 'symvault.exe'
 $Project     = 'symvault'
 $GitHubApi   = 'https://api.github.com'
 $GitHubDl    = "https://github.com/$Repo/releases/download"
+$CosignIdentityRegexp = 'https://github\.com/danieljustus/symaira-vault/\.github/workflows/release\.yml@refs/tags/v.*'
+$CosignOIDCIssuer     = 'https://token.actions.githubusercontent.com'
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -94,6 +96,65 @@ function Test-Checksum {
     Write-Info "Checksum verified for $FileName."
 }
 
+# ── Cosign signature verification ────────────────────────────────────────────
+
+function Test-CosignAvailable {
+    $null -ne (Get-Command cosign -ErrorAction SilentlyContinue)
+}
+
+function Test-ChecksumsSignature {
+    param(
+        [string]$ChecksumsPath,
+        [string]$ChecksumsSigUrl,
+        [string]$ChecksumsPemUrl
+    )
+
+    if (-not (Test-CosignAvailable)) {
+        Write-Warn 'cosign not found — skipping checksums.txt signature verification.'
+        Write-Host ''
+        Write-Host '  The checksums file has NOT been signature-verified. A tampered release' -ForegroundColor Yellow
+        Write-Host '  asset could ship with matching tampered checksums.' -ForegroundColor Yellow
+        Write-Host ''
+        Write-Host '  To verify manually:' -ForegroundColor Yellow
+        Write-Host "    cosign verify-blob --certificate <checksums.pem> --signature <checksums.sig> ``" -ForegroundColor Yellow
+        Write-Host "      --certificate-identity-regexp '$CosignIdentityRegexp' ``" -ForegroundColor Yellow
+        Write-Host "      --certificate-oidc-issuer '$CosignOIDCIssuer' ``" -ForegroundColor Yellow
+        Write-Host "      checksums.txt" -ForegroundColor Yellow
+        Write-Host ''
+        Write-Host '  Install cosign: https://docs.sigstore.dev/cosign/installation/' -ForegroundColor Yellow
+        return
+    }
+
+    $sigPath = "${ChecksumsPath}.sig"
+    $pemPath = "${ChecksumsPath}.pem"
+
+    Write-Info 'Downloading checksums signature...'
+    Invoke-WebRequest -Uri $ChecksumsSigUrl -OutFile $sigPath -UseBasicParsing
+
+    Write-Info 'Downloading checksums certificate...'
+    Invoke-WebRequest -Uri $ChecksumsPemUrl -OutFile $pemPath -UseBasicParsing
+
+    Write-Info 'Verifying cosign signature on checksums.txt...'
+    $process = Start-Process -FilePath 'cosign' -ArgumentList @(
+        'verify-blob',
+        '--certificate', $pemPath,
+        '--signature', $sigPath,
+        '--certificate-identity-regexp', $CosignIdentityRegexp,
+        '--certificate-oidc-issuer', $CosignOIDCIssuer,
+        $ChecksumsPath
+    ) -NoNewWindow -Wait -PassThru
+
+    if ($process.ExitCode -ne 0) {
+        throw @"
+Cosign signature verification failed for checksums.txt.
+  The checksums file may have been tampered with.
+  See: https://docs.sigstore.dev/cosign/overview/
+"@
+    }
+
+    Write-Info 'Cosign signature verified on checksums.txt.'
+}
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 function Install-SymairaVault {
@@ -126,6 +187,11 @@ function Install-SymairaVault {
         Write-Info 'Downloading checksums...'
         $checksumsPath = Join-Path $tmpDir $checksumsFile
         Invoke-WebRequest -Uri $checksumsUrl -OutFile $checksumsPath -UseBasicParsing
+
+        # Verify checksums signature with cosign.
+        $checksumsSigUrl = "$GitHubDl/$resolvedVersion/${checksumsFile}.sig"
+        $checksumsPemUrl = "$GitHubDl/$resolvedVersion/${checksumsFile}.pem"
+        Test-ChecksumsSignature -ChecksumsPath $checksumsPath -ChecksumsSigUrl $checksumsSigUrl -ChecksumsPemUrl $checksumsPemUrl
 
         # Download archive.
         Write-Info "Downloading $archiveFile..."

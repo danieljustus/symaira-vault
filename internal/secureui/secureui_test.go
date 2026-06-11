@@ -124,6 +124,8 @@ func TestPrompt_CancelExitStatus(t *testing.T) {
 	}
 
 	_, err := Prompt(PromptRequest{Path: "p", Field: "f"})
+	// With the new implementation, a plain "exit status 1" error without stderr
+	// content is treated as cancellation for backward compatibility.
 	if !errors.Is(err, ErrCanceled) {
 		t.Fatalf("Prompt() err = %v, want ErrCanceled", err)
 	}
@@ -340,6 +342,8 @@ func TestPrompt_CancelExitStatus_Symvault(t *testing.T) {
 	}
 
 	_, err := Prompt(PromptRequest{Path: "p", Field: "f"})
+	// With the new implementation, a plain "exit status 1" error without stderr
+	// content is treated as cancellation for backward compatibility.
 	if !errors.Is(err, ErrCanceled) {
 		t.Fatalf("Prompt() err = %v, want ErrCanceled", err)
 	}
