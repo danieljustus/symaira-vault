@@ -1,3 +1,5 @@
+// Package secureedit provides secure editing and deletion of temporary files
+// used during the interactive entry editing workflow.
 package secureedit
 
 import (
@@ -41,18 +43,18 @@ func EditEntry(entry *vaultpkg.Entry, preferredEditor string, streams Streams) (
 	tmpPath := tmp.Name()
 	defer func() { _ = SecureDeleteFile(tmpPath) }()
 
-	if err := os.Chmod(tmpPath, 0o600); err != nil {
+	if err = os.Chmod(tmpPath, 0o600); err != nil {
 		_ = tmp.Close()
 		return nil, fmt.Errorf("set temp file permissions: %w", err)
 	}
 
 	encoder := json.NewEncoder(tmp)
 	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(entry); err != nil {
+	if err = encoder.Encode(entry); err != nil {
 		_ = tmp.Close()
 		return nil, fmt.Errorf("encode entry: %w", err)
 	}
-	if err := tmp.Close(); err != nil {
+	if err = tmp.Close(); err != nil {
 		return nil, fmt.Errorf("close temp file: %w", err)
 	}
 
@@ -67,7 +69,7 @@ func EditEntry(entry *vaultpkg.Entry, preferredEditor string, streams Streams) (
 	cmd.Stdin = streams.Stdin
 	cmd.Stdout = streams.Stdout
 	cmd.Stderr = streams.Stderr
-	if err := cmd.Run(); err != nil {
+	if err = cmd.Run(); err != nil {
 		return nil, fmt.Errorf("editor failed: %w", err)
 	}
 

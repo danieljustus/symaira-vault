@@ -100,7 +100,7 @@ func TestTUIModelDebouncesCursorDetailLoads(t *testing.T) {
 		t.Fatal("stale debounced request should not start a decrypt")
 	}
 
-	model, cmd = model.(TUIModel).Update(entryLoadRequestedMsg{requestID: 2, path: "c"})
+	_, cmd = model.(TUIModel).Update(entryLoadRequestedMsg{requestID: 2, path: "c"})
 	if cmd == nil {
 		t.Fatal("current debounced request should start a decrypt")
 	}
