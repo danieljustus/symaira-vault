@@ -38,7 +38,7 @@ func (b *osascriptBackend) prompt(req PromptRequest) (string, error) {
 	)
 	out, err := b.r.run("osascript", []string{"-e", script}, req.Timeout)
 	if err != nil {
-		canceled,osaErr := isOsaCancel(err)
+		canceled, osaErr := isOsaCancel(err)
 		if canceled {
 			return "", ErrCanceled
 		}
