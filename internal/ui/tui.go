@@ -56,9 +56,15 @@ const (
 )
 
 type entryLoadedMsg struct {
-	path  string
-	entry *vaultpkg.Entry
-	err   error
+	requestID uint64
+	path      string
+	entry     *vaultpkg.Entry
+	err       error
+}
+
+type entryLoadRequestedMsg struct {
+	requestID uint64
+	path      string
 }
 
 type entriesLoadedMsg struct {
@@ -118,6 +124,7 @@ type TUIModel struct {
 	revealed       bool
 	help           bool
 	loading        bool
+	detailRequest  uint64
 
 	sortMode  int // 0=name-asc, 1=name-desc, 2=updated-asc, 3=updated-desc
 	filterTag string
@@ -135,6 +142,7 @@ type TUIModel struct {
 
 var (
 	writeClipboard = clipboard.WriteAll
+	detailDebounce = 100 * time.Millisecond
 
 	appStyle = lipgloss.NewStyle().Padding(1, 2)
 
@@ -213,17 +221,23 @@ func (m TUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applyFilter()
 		m.status = fmt.Sprintf("%d entries", len(m.entries))
 		return m, m.loadSelectedEntry()
+	case entryLoadRequestedMsg:
+		if msg.requestID != m.detailRequest || msg.path != m.selectedPath() {
+			return m, nil
+		}
+		return m, loadEntryCmd(m.vault, msg.path, msg.requestID)
 	case entryLoadedMsg:
+		if msg.requestID != m.detailRequest || msg.path != m.selectedPath() {
+			return m, nil
+		}
 		if msg.err != nil {
 			m.err = msg.err
 			m.status = "Could not read entry"
 			return m, nil
 		}
-		if msg.path == m.selectedPath() {
-			m.entry = msg.entry
-			m.entryFor = msg.path
-			m.err = nil
-		}
+		m.entry = msg.entry
+		m.entryFor = msg.path
+		m.err = nil
 		return m, nil
 	case copiedMsg:
 		if msg.err != nil {
@@ -428,23 +442,23 @@ func (m TUIModel) handleKey(msg tea.KeyMsg) (TUIModel, tea.Cmd) {
 		if m.selected > 0 {
 			m.selected--
 			m.clipboardSeconds = 0
-			return m, m.loadSelectedEntry()
+			return m, m.debounceSelectedEntry()
 		}
 	case "down", "j":
 		if m.selected < len(m.filtered)-1 {
 			m.selected++
 			m.clipboardSeconds = 0
-			return m, m.loadSelectedEntry()
+			return m, m.debounceSelectedEntry()
 		}
 	case "home":
 		m.selected = 0
 		m.clipboardSeconds = 0
-		return m, m.loadSelectedEntry()
+		return m, m.debounceSelectedEntry()
 	case "end":
 		if len(m.filtered) > 0 {
 			m.selected = len(m.filtered) - 1
 			m.clipboardSeconds = 0
-			return m, m.loadSelectedEntry()
+			return m, m.debounceSelectedEntry()
 		}
 	case "enter":
 		return m, m.copySelectedPassword()
@@ -570,12 +584,33 @@ func (m TUIModel) sortLabel() string {
 	}
 }
 
-func (m TUIModel) loadSelectedEntry() tea.Cmd {
+func (m *TUIModel) loadSelectedEntry() tea.Cmd {
+	return m.scheduleSelectedEntryLoad(0)
+}
+
+func (m *TUIModel) debounceSelectedEntry() tea.Cmd {
+	return m.scheduleSelectedEntryLoad(detailDebounce)
+}
+
+func (m *TUIModel) scheduleSelectedEntryLoad(delay time.Duration) tea.Cmd {
 	path := m.selectedPath()
 	if path == "" {
+		m.entry = nil
+		m.entryFor = ""
 		return nil
 	}
-	return loadEntryCmd(m.vault, path)
+	if m.entryFor != path {
+		m.entry = nil
+		m.entryFor = ""
+	}
+	m.detailRequest++
+	requestID := m.detailRequest
+	if delay <= 0 {
+		return loadEntryCmd(m.vault, path, requestID)
+	}
+	return tea.Tick(delay, func(time.Time) tea.Msg {
+		return entryLoadRequestedMsg{requestID: requestID, path: path}
+	})
 }
 
 func (m TUIModel) selectedPath() string {
@@ -763,15 +798,15 @@ func loadEntriesCmd(vault *vaultpkg.Vault) tea.Cmd {
 	}
 }
 
-func loadEntryCmd(vault *vaultpkg.Vault, path string) tea.Cmd {
+func loadEntryCmd(vault *vaultpkg.Vault, path string, requestID uint64) tea.Cmd {
 	return func() (msg tea.Msg) {
 		defer func() {
 			if r := recover(); r != nil {
-				msg = entryLoadedMsg{path: path, err: fmt.Errorf("panic loading entry %s: %v", path, r)}
+				msg = entryLoadedMsg{requestID: requestID, path: path, err: fmt.Errorf("panic loading entry %s: %v", path, r)}
 			}
 		}()
 		entry, err := vaultpkg.ReadEntry(vault.Dir, path, vault.Identity)
-		return entryLoadedMsg{path: path, entry: entry, err: err}
+		return entryLoadedMsg{requestID: requestID, path: path, entry: entry, err: err}
 	}
 }
 

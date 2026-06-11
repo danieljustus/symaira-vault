@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"filippo.io/age"
 	tea "github.com/charmbracelet/bubbletea"
@@ -65,6 +66,72 @@ func TestTUIModelLoadsEntries(t *testing.T) {
 
 	if len(newM.filtered) != 3 {
 		t.Errorf("expected 3 filtered entries, got %d", len(newM.filtered))
+	}
+}
+
+func TestTUIModelDebouncesCursorDetailLoads(t *testing.T) {
+	origDebounce := detailDebounce
+	detailDebounce = time.Hour
+	t.Cleanup(func() { detailDebounce = origDebounce })
+
+	m := NewTUIModel(&vaultpkg.Vault{})
+	m.loading = false
+	m.entries = []string{"a", "b", "c"}
+	m.filtered = append([]string(nil), m.entries...)
+
+	next, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	if cmd == nil {
+		t.Fatal("expected first cursor move to schedule detail load")
+	}
+	if next.selected != 1 || next.detailRequest != 1 {
+		t.Fatalf("after first move selected=%d request=%d, want selected=1 request=1", next.selected, next.detailRequest)
+	}
+
+	next, cmd = next.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	if cmd == nil {
+		t.Fatal("expected second cursor move to schedule detail load")
+	}
+	if next.selected != 2 || next.detailRequest != 2 {
+		t.Fatalf("after second move selected=%d request=%d, want selected=2 request=2", next.selected, next.detailRequest)
+	}
+
+	model, cmd := next.Update(entryLoadRequestedMsg{requestID: 1, path: "b"})
+	if cmd != nil {
+		t.Fatal("stale debounced request should not start a decrypt")
+	}
+
+	model, cmd = model.(TUIModel).Update(entryLoadRequestedMsg{requestID: 2, path: "c"})
+	if cmd == nil {
+		t.Fatal("current debounced request should start a decrypt")
+	}
+}
+
+func TestTUIModelIgnoresStaleEntryLoads(t *testing.T) {
+	m := NewTUIModel(&vaultpkg.Vault{})
+	m.loading = false
+	m.entries = []string{"a", "b"}
+	m.filtered = append([]string(nil), m.entries...)
+	m.selected = 1
+	m.detailRequest = 2
+
+	staleEntry := &vaultpkg.Entry{Data: map[string]any{"password": "stale"}}
+	model, cmd := m.Update(entryLoadedMsg{requestID: 1, path: "a", entry: staleEntry})
+	if cmd != nil {
+		t.Fatal("stale loaded entry should not return a command")
+	}
+	next := model.(TUIModel)
+	if next.entry != nil || next.entryFor != "" {
+		t.Fatalf("stale entry updated detail pane: entry=%v entryFor=%q", next.entry, next.entryFor)
+	}
+
+	currentEntry := &vaultpkg.Entry{Data: map[string]any{"password": "current"}}
+	model, cmd = next.Update(entryLoadedMsg{requestID: 2, path: "b", entry: currentEntry})
+	if cmd != nil {
+		t.Fatal("current loaded entry should not return a command")
+	}
+	next = model.(TUIModel)
+	if next.entry != currentEntry || next.entryFor != "b" {
+		t.Fatalf("current entry not applied: entry=%v entryFor=%q", next.entry, next.entryFor)
 	}
 }
 
