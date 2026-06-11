@@ -392,7 +392,14 @@ jobs:
           $tag = "${{ steps.tag.outputs.tag }}"
           $version = $tag -replace '^v',''
           Expand-Archive -Path "symaira-vault_${version}_windows_amd64.zip" -DestinationPath .\symvault-tmp -Force
-          .\symvault-tmp\symaira-vault_${version}_windows_amd64\symvault.exe version
+          $exe = Get-ChildItem -Path .\symvault-tmp -Recurse -Filter "symvault.exe" | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $exe) {
+            Write-Error "symvault.exe not found after extraction"
+            Get-ChildItem -Path .\symvault-tmp -Recurse | Format-Table FullName
+            exit 1
+          }
+          Write-Host "Found exe at: $exe"
+          & $exe version
 
       - name: Smoke test - init vault
         shell: pwsh
@@ -401,7 +408,11 @@ jobs:
           $version = $tag -replace '^v',''
           $tmpdir = Join-Path $env:TEMP "test-vault-$(Get-Random)"
           New-Item -ItemType Directory -Path $tmpdir | Out-Null
-          $exe = ".\symvault-tmp\symaira-vault_${version}_windows_amd64\symvault.exe"
+          $exe = Get-ChildItem -Path .\symvault-tmp -Recurse -Filter "symvault.exe" | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $exe) {
+            Write-Error "symvault.exe not found after extraction"
+            exit 1
+          }
           "test-passphrase-123" | & $exe init --vault "$tmpdir"
           Remove-Item -Path $tmpdir -Recurse -Force -ErrorAction SilentlyContinue
 
