@@ -16,10 +16,16 @@ type Lease struct {
 	CreatedAt time.Time
 }
 
+// Engine defines the interface for engine-specific revoke operations.
+type Engine interface {
+	Revoke(ctx context.Context, leaseID string) error
+}
+
 // LeaseManager tracks active leases and handles lifecycle operations.
 type LeaseManager struct {
 	mu        sync.RWMutex
 	leases    map[string]*Lease
+	engine    Engine
 	cleanupCh chan struct{}
 	closed    bool
 }
@@ -33,6 +39,13 @@ func NewLeaseManager() *LeaseManager {
 		leases:    make(map[string]*Lease),
 		cleanupCh: make(chan struct{}),
 	}
+}
+
+// SetEngine sets the engine for server-side revocation during cleanup.
+func (lm *LeaseManager) SetEngine(engine Engine) {
+	lm.mu.Lock()
+	defer lm.mu.Unlock()
+	lm.engine = engine
 }
 
 // Create registers a new lease for the given secret.
@@ -120,6 +133,9 @@ func (lm *LeaseManager) StartCleanup(ctx context.Context, interval time.Duration
 				now := time.Now()
 				for id, lease := range lm.leases {
 					if now.After(lease.ExpiresAt) || lease.Revoked {
+						if lm.engine != nil {
+							_ = lm.engine.Revoke(context.Background(), id)
+						}
 						delete(lm.leases, id)
 					}
 				}
