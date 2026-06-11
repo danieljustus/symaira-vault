@@ -750,3 +750,59 @@ func TestSearchWorkerCount_NegativeDefault(t *testing.T) {
 		t.Errorf("SearchWorkerCount(-1) = %d, want >= 1", workers)
 	}
 }
+
+func TestIsSafeCacheField_SafeFields(t *testing.T) {
+	safeFields := []string{
+		"username", "user", "email", "url", "host", "domain",
+		"tags", "notes", "note", "description", "title", "name",
+		"group", "category", "type", "created", "updated", "modified",
+		"version", "label", "labels", "service", "provider", "website",
+		"pathname", "path", "identifier", "id", "icon", "favicon",
+		"language", "locale", "color", "icon_url", "avatar_url",
+		"issuer", "algorithm", "digits", "period",
+	}
+	for _, field := range safeFields {
+		if !isSafeCacheField(field) {
+			t.Errorf("isSafeCacheField(%q) = false, want true", field)
+		}
+	}
+}
+
+func TestIsSafeCacheField_SensitiveFields(t *testing.T) {
+	sensitiveFields := []string{
+		"password", "passwd", "passphrase",
+		"secret", "secret_key", "api_secret",
+		"token", "access_token", "bearer_token", "refresh_token",
+		"key", "api_key", "private_key", "ssh_key",
+		"otp", "totp_secret", "hotp_secret",
+		"pin", "pin_code", "security_pin",
+		"cvv", "cvv2", "cvc",
+		"seed", "mnemonic", "recovery_seed",
+		"card_number", "account_number", "routing_number",
+		"database_url", "db_password", "connection_string",
+		"credential", "credentials", "auth_token",
+		"private_key_pem", "certificate_pem",
+	}
+	for _, field := range sensitiveFields {
+		if isSafeCacheField(field) {
+			t.Errorf("isSafeCacheField(%q) = true, want false (should be stripped)", field)
+		}
+	}
+}
+
+func TestIsSensitiveCacheField_DenylistDeprecated(t *testing.T) {
+	// Verify that isSensitiveCacheField delegates to !isSafeCacheField.
+	// This ensures the denylist behavior is replaced by the allowlist.
+	safeFields := []string{"username", "email", "url", "notes"}
+	for _, field := range safeFields {
+		if isSensitiveCacheField(field) {
+			t.Errorf("isSensitiveCacheField(%q) = true, want false (safe field should not be sensitive)", field)
+		}
+	}
+	sensitiveFields := []string{"password", "secret", "token", "cvv", "seed"}
+	for _, field := range sensitiveFields {
+		if !isSensitiveCacheField(field) {
+			t.Errorf("isSensitiveCacheField(%q) = false, want true (sensitive field should be stripped)", field)
+		}
+	}
+}
