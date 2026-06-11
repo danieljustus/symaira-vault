@@ -63,10 +63,11 @@ type SyncResult struct {
 
 // CommitOptions holds options for committing
 type CommitOptions struct {
-	Message  string
-	Template string
-	Author   string
-	Email    string
+	Message       string
+	Template      string
+	Author        string
+	Email         string
+	AffectedPaths []string
 }
 
 // DefaultCommitTemplate is the default commit message template
@@ -165,21 +166,28 @@ func AutoCommitWithOptions(vaultDir string, opts CommitOptions) error {
 		return gitignoreErr
 	}
 
-	if addErr := w.AddWithOptions(&gogit.AddOptions{All: true}); addErr != nil {
-		return addErr
+	if len(opts.AffectedPaths) > 0 {
+		if addErr := stageAffectedPaths(repo, w, vaultDir, opts.AffectedPaths); addErr != nil {
+			return addErr
+		}
+	} else {
+		if addErr := w.AddWithOptions(&gogit.AddOptions{All: true}); addErr != nil {
+			return addErr
+		}
 	}
 
 	status, statusErr := w.Status()
 	if statusErr != nil {
 		return nil
 	}
-	if unstageErr := unstageProtectedRuntimeArtifacts(repo, w, status); unstageErr != nil {
+	unstaged, unstageErr := unstageProtectedRuntimeArtifacts(repo, w, status)
+	if unstageErr != nil {
 		return unstageErr
 	}
-
-	status, statusErr = w.Status()
-	if statusErr != nil {
-		return nil
+	for _, path := range unstaged {
+		fileStatus := status[path]
+		fileStatus.Staging = gogit.Unmodified
+		status[path] = fileStatus
 	}
 	if !hasStagedChanges(status) {
 		return nil
@@ -265,7 +273,61 @@ func hasStagedChanges(status gogit.Status) bool {
 	return false
 }
 
-func unstageProtectedRuntimeArtifacts(repo *gogit.Repository, w *gogit.Worktree, status gogit.Status) error {
+func stageAffectedPaths(repo *gogit.Repository, w *gogit.Worktree, vaultDir string, paths []string) error {
+	seen := make(map[string]bool, len(paths)+1)
+	for _, path := range append(paths, ".gitignore") {
+		normalized, ok, err := normalizeAffectedPath(path)
+		if err != nil {
+			return err
+		}
+		if !ok || seen[normalized] || isProtectedRuntimePath(normalized) {
+			continue
+		}
+		seen[normalized] = true
+
+		fullPath := filepath.Join(vaultDir, filepath.FromSlash(normalized))
+		if _, err := os.Lstat(fullPath); err != nil {
+			if os.IsNotExist(err) {
+				if removeErr := removeFromIndex(repo, normalized); removeErr != nil {
+					return removeErr
+				}
+				continue
+			}
+			return err
+		}
+		if err := w.AddWithOptions(&gogit.AddOptions{Path: normalized, SkipStatus: true}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func normalizeAffectedPath(path string) (string, bool, error) {
+	if filepath.IsAbs(path) {
+		return "", false, fmt.Errorf("affected path %q must be relative", path)
+	}
+	normalized := filepath.ToSlash(filepath.Clean(path))
+	if normalized == "." || normalized == "" {
+		return "", false, nil
+	}
+	if normalized == ".." || strings.HasPrefix(normalized, "../") {
+		return "", false, fmt.Errorf("affected path %q escapes repository", path)
+	}
+	return normalized, true, nil
+}
+
+func removeFromIndex(repo *gogit.Repository, path string) error {
+	idx, err := repo.Storer.Index()
+	if err != nil {
+		return err
+	}
+	if _, err := idx.Remove(path); err != nil {
+		return nil
+	}
+	return repo.Storer.SetIndex(idx)
+}
+
+func unstageProtectedRuntimeArtifacts(repo *gogit.Repository, w *gogit.Worktree, status gogit.Status) ([]string, error) {
 	var staged []string
 	for path, fileStatus := range status {
 		if !isProtectedRuntimePath(path) {
@@ -276,21 +338,21 @@ func unstageProtectedRuntimeArtifacts(repo *gogit.Repository, w *gogit.Worktree,
 		}
 	}
 	if len(staged) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	if _, err := repo.Head(); err == nil {
-		return w.Reset(&gogit.ResetOptions{Mode: gogit.MixedReset, Files: staged})
+		return staged, w.Reset(&gogit.ResetOptions{Mode: gogit.MixedReset, Files: staged})
 	}
 
 	idx, err := repo.Storer.Index()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	for _, path := range staged {
 		_, _ = idx.Remove(path)
 	}
-	return repo.Storer.SetIndex(idx)
+	return staged, repo.Storer.SetIndex(idx)
 }
 
 func isProtectedRuntimePath(path string) bool {
@@ -458,8 +520,13 @@ func classifyPushError(err error) *PushError {
 
 // AutoCommitAndPush performs auto-commit and optionally auto-push
 func AutoCommitAndPush(vaultDir string, message string, autoPush bool) error {
+	return AutoCommitAndPushWithOptions(vaultDir, CommitOptions{Message: message}, autoPush)
+}
+
+// AutoCommitAndPushWithOptions performs auto-commit with options and optionally auto-push.
+func AutoCommitAndPushWithOptions(vaultDir string, opts CommitOptions, autoPush bool) error {
 	// Perform commit
-	if err := AutoCommit(vaultDir, message); err != nil {
+	if err := AutoCommitWithOptions(vaultDir, opts); err != nil {
 		return fmt.Errorf("commit failed: %w", err)
 	}
 

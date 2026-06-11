@@ -314,6 +314,22 @@ func (v *Vault) ValidateIdentity(identity *age.X25519Identity) error {
 }
 
 func (v *Vault) AutoCommit(message string) error {
+	return v.AutoCommitPaths(message)
+}
+
+func (v *Vault) AutoCommitEntry(message, path string) error {
+	if v == nil {
+		return errors.New("vault is nil")
+	}
+	entryPath := EntryPath(v, path)
+	relPath, err := filepath.Rel(v.Dir, entryPath)
+	if err != nil {
+		return err
+	}
+	return v.AutoCommitPaths(message, filepath.ToSlash(relPath))
+}
+
+func (v *Vault) AutoCommitPaths(message string, affectedPaths ...string) error {
 	if v == nil {
 		return errors.New("vault is nil")
 	}
@@ -328,7 +344,10 @@ func (v *Vault) AutoCommit(message string) error {
 	if commitMessage == "" {
 		commitMessage = "Update from Symaira Vault"
 	}
-	return git.AutoCommitAndPush(v.Dir, commitMessage, autoPush)
+	return git.AutoCommitAndPushWithOptions(v.Dir, git.CommitOptions{
+		Message:       commitMessage,
+		AffectedPaths: affectedPaths,
+	}, autoPush)
 }
 
 func normalizeConfig(cfg *vaultconfig.Config) {

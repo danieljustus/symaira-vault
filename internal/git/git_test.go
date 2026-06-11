@@ -252,6 +252,132 @@ func TestAutoCommitDoesNotCommitRuntimeArtifacts(t *testing.T) {
 	}
 }
 
+func TestAutoCommitWithOptionsAffectedPathsStagesOnlyKnownPath(t *testing.T) {
+	dir := t.TempDir()
+	if err := Init(dir); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "entries"), 0o700); err != nil {
+		t.Fatalf("mkdir entries: %v", err)
+	}
+
+	writeFile(t, dir, "entries/a.age", []byte("a-1"))
+	writeFile(t, dir, "entries/b.age", []byte("b-1"))
+	if err := AutoCommit(dir, "initial"); err != nil {
+		t.Fatalf("AutoCommit() error = %v", err)
+	}
+
+	writeFile(t, dir, "entries/a.age", []byte("a-2"))
+	writeFile(t, dir, "entries/b.age", []byte("b-2"))
+	if err := AutoCommitWithOptions(dir, CommitOptions{
+		Message:       "update a",
+		AffectedPaths: []string{"entries/a.age"},
+	}); err != nil {
+		t.Fatalf("AutoCommitWithOptions() error = %v", err)
+	}
+
+	repo, err := gogit.PlainOpen(dir)
+	if err != nil {
+		t.Fatalf("open repo: %v", err)
+	}
+	ref, err := repo.Head()
+	if err != nil {
+		t.Fatalf("repo.Head(): %v", err)
+	}
+	commit, err := repo.CommitObject(ref.Hash())
+	if err != nil {
+		t.Fatalf("CommitObject(): %v", err)
+	}
+	aFile, err := commit.File("entries/a.age")
+	if err != nil {
+		t.Fatalf("commit missing entries/a.age: %v", err)
+	}
+	aContents, err := aFile.Contents()
+	if err != nil {
+		t.Fatalf("read committed a: %v", err)
+	}
+	if aContents != "a-2" {
+		t.Fatalf("committed a = %q, want a-2", aContents)
+	}
+	bFile, err := commit.File("entries/b.age")
+	if err != nil {
+		t.Fatalf("commit missing entries/b.age: %v", err)
+	}
+	bContents, err := bFile.Contents()
+	if err != nil {
+		t.Fatalf("read committed b: %v", err)
+	}
+	if bContents != "b-1" {
+		t.Fatalf("committed b = %q, want unchanged b-1", bContents)
+	}
+
+	w, err := repo.Worktree()
+	if err != nil {
+		t.Fatalf("Worktree(): %v", err)
+	}
+	status, err := w.Status()
+	if err != nil {
+		t.Fatalf("Status(): %v", err)
+	}
+	if got := status.File("entries/b.age").Worktree; got == gogit.Unmodified {
+		t.Fatalf("entries/b.age worktree status = %v, want modified", got)
+	}
+}
+
+func TestAutoCommitWithOptionsAffectedPathsStagesDeletionOnly(t *testing.T) {
+	dir := t.TempDir()
+	if err := Init(dir); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "entries"), 0o700); err != nil {
+		t.Fatalf("mkdir entries: %v", err)
+	}
+
+	writeFile(t, dir, "entries/a.age", []byte("a-1"))
+	writeFile(t, dir, "entries/b.age", []byte("b-1"))
+	if err := AutoCommit(dir, "initial"); err != nil {
+		t.Fatalf("AutoCommit() error = %v", err)
+	}
+
+	if err := os.Remove(filepath.Join(dir, "entries/a.age")); err != nil {
+		t.Fatalf("remove entries/a.age: %v", err)
+	}
+	writeFile(t, dir, "entries/b.age", []byte("b-2"))
+	if err := AutoCommitWithOptions(dir, CommitOptions{
+		Message:       "delete a",
+		AffectedPaths: []string{"entries/a.age"},
+	}); err != nil {
+		t.Fatalf("AutoCommitWithOptions() error = %v", err)
+	}
+
+	repo, err := gogit.PlainOpen(dir)
+	if err != nil {
+		t.Fatalf("open repo: %v", err)
+	}
+	ref, err := repo.Head()
+	if err != nil {
+		t.Fatalf("repo.Head(): %v", err)
+	}
+	commit, err := repo.CommitObject(ref.Hash())
+	if err != nil {
+		t.Fatalf("CommitObject(): %v", err)
+	}
+	if _, err := commit.File("entries/a.age"); err == nil {
+		t.Fatal("entries/a.age should be deleted in commit")
+	}
+	bFile, err := commit.File("entries/b.age")
+	if err != nil {
+		t.Fatalf("commit missing entries/b.age: %v", err)
+	}
+	bContents, err := bFile.Contents()
+	if err != nil {
+		t.Fatalf("read committed b: %v", err)
+	}
+	if bContents != "b-1" {
+		t.Fatalf("committed b = %q, want unchanged b-1", bContents)
+	}
+}
+
 func TestAutoCommitAndPush_NoAutoPush(t *testing.T) {
 	local := t.TempDir()
 	if err := Init(local); err != nil {
@@ -1565,8 +1691,12 @@ func TestUnstageProtectedRuntimeArtifactsDirect(t *testing.T) {
 		t.Fatalf("Status(): %v", err)
 	}
 
-	if err := unstageProtectedRuntimeArtifacts(repo, w, status); err != nil {
+	unstaged, err := unstageProtectedRuntimeArtifacts(repo, w, status)
+	if err != nil {
 		t.Fatalf("unstageProtectedRuntimeArtifacts(): %v", err)
+	}
+	if len(unstaged) != 1 || unstaged[0] != "mcp-token" {
+		t.Fatalf("unstaged = %v, want [mcp-token]", unstaged)
 	}
 
 	status2, err := w.Status()
@@ -1606,8 +1736,12 @@ func TestUnstageProtectedRuntimeArtifactsNoHead(t *testing.T) {
 		t.Fatalf("Status(): %v", err)
 	}
 
-	if err := unstageProtectedRuntimeArtifacts(repo, w, status); err != nil {
+	unstaged, err := unstageProtectedRuntimeArtifacts(repo, w, status)
+	if err != nil {
 		t.Fatalf("unstageProtectedRuntimeArtifacts(): %v", err)
+	}
+	if len(unstaged) != 1 || unstaged[0] != "mcp-token" {
+		t.Fatalf("unstaged = %v, want [mcp-token]", unstaged)
 	}
 
 	status2, err := w.Status()

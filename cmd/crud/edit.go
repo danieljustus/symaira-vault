@@ -63,7 +63,7 @@ The editor is determined by the --editor flag or EDITOR environment variable (de
 				return errorspkg.WriteFailed(err, "cannot save entry")
 			}
 
-			if err := v.AutoCommit(fmt.Sprintf("Edit %s", name)); err != nil {
+			if err := v.AutoCommitEntry(fmt.Sprintf("Edit %s", name), name); err != nil {
 				cliout.Warnf("Warning: auto-commit failed: %v", err)
 			}
 			cli.PrintQuietAware("Entry updated: %s\n", name)

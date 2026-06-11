@@ -830,7 +830,7 @@ func deleteEntryCmd(vault *vaultpkg.Vault, path string) tea.Cmd {
 		if err != nil {
 			return entryDeletedMsg{path: path, err: err}
 		}
-		_ = vault.AutoCommit(fmt.Sprintf("Delete %s", path))
+		_ = vault.AutoCommitEntry(fmt.Sprintf("Delete %s", path), path)
 		vault.Cache.Invalidate()
 		return entryDeletedMsg{path: path}
 	}
@@ -850,7 +850,7 @@ func editEntryCmd(vault *vaultpkg.Vault, path string) tea.Cmd {
 		if err := vaultpkg.WriteEntryWithRecipients(vault.Dir, path, edited, vault.Identity); err != nil {
 			return entryEditedMsg{path: path, err: err}
 		}
-		_ = vault.AutoCommit(fmt.Sprintf("Edit %s", path))
+		_ = vault.AutoCommitEntry(fmt.Sprintf("Edit %s", path), path)
 		vault.Cache.Invalidate()
 		return entryEditedMsg{path: path}
 	}

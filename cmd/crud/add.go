@@ -100,7 +100,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 			return errorspkg.WriteFailed(err, "cannot create entry")
 		}
 
-		if err := v.AutoCommit(fmt.Sprintf("Add %s", name)); err != nil {
+		if err := v.AutoCommitEntry(fmt.Sprintf("Add %s", name), name); err != nil {
 			cliout.Warnf("Warning: auto-commit failed: %v", err)
 		}
 		cli.PrintQuietAware("Entry created: %s\n", name)
