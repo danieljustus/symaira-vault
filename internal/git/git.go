@@ -170,27 +170,30 @@ func AutoCommitWithOptions(vaultDir string, opts CommitOptions) error {
 		if addErr := stageAffectedPaths(repo, w, vaultDir, opts.AffectedPaths); addErr != nil {
 			return addErr
 		}
+		if !hasStagedChangesForPaths(repo, opts.AffectedPaths) {
+			return nil
+		}
 	} else {
 		if addErr := w.AddWithOptions(&gogit.AddOptions{All: true}); addErr != nil {
 			return addErr
 		}
-	}
 
-	status, statusErr := w.Status()
-	if statusErr != nil {
-		return nil
-	}
-	unstaged, unstageErr := unstageProtectedRuntimeArtifacts(repo, w, status)
-	if unstageErr != nil {
-		return unstageErr
-	}
-	for _, path := range unstaged {
-		fileStatus := status[path]
-		fileStatus.Staging = gogit.Unmodified
-		status[path] = fileStatus
-	}
-	if !hasStagedChanges(status) {
-		return nil
+		status, statusErr := w.Status()
+		if statusErr != nil {
+			return nil
+		}
+		unstaged, unstageErr := unstageProtectedRuntimeArtifacts(repo, w, status)
+		if unstageErr != nil {
+			return unstageErr
+		}
+		for _, path := range unstaged {
+			fileStatus := status[path]
+			fileStatus.Staging = gogit.Unmodified
+			status[path] = fileStatus
+		}
+		if !hasStagedChanges(status) {
+			return nil
+		}
 	}
 
 	// Determine commit message
@@ -270,6 +273,55 @@ func hasStagedChanges(status gogit.Status) bool {
 			return true
 		}
 	}
+	return false
+}
+
+// hasStagedChangesForPaths checks if any of the specified paths have staged
+// changes by comparing the index against HEAD. This avoids the full worktree
+// walk that w.Status() performs.
+func hasStagedChangesForPaths(repo *gogit.Repository, paths []string) bool {
+	head, err := repo.Head()
+	if err != nil {
+		return true
+	}
+
+	headCommit, err := repo.CommitObject(head.Hash())
+	if err != nil {
+		return true
+	}
+
+	headTree, err := headCommit.Tree()
+	if err != nil {
+		return true
+	}
+
+	idx, err := repo.Storer.Index()
+	if err != nil {
+		return true
+	}
+
+	for _, path := range paths {
+		normalized := filepath.ToSlash(filepath.Clean(path))
+
+		idxEntry, err := idx.Entry(normalized)
+		if err != nil {
+			return true
+		}
+
+		headEntry, err := headTree.FindEntry(normalized)
+		if err != nil {
+			return true
+		}
+
+		if headEntry == nil {
+			return true
+		}
+
+		if idxEntry.Hash != headEntry.Hash {
+			return true
+		}
+	}
+
 	return false
 }
 
