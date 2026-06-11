@@ -3,7 +3,9 @@
 package secureui
 
 import (
+	"errors"
 	"fmt"
+	"os/exec"
 	"strings"
 )
 
@@ -36,8 +38,12 @@ func (b *osascriptBackend) prompt(req PromptRequest) (string, error) {
 	)
 	out, err := b.r.run("osascript", []string{"-e", script}, req.Timeout)
 	if err != nil {
-		if isOsaCancel(err) {
+		canceled,osaErr := isOsaCancel(err)
+		if canceled {
 			return "", ErrCanceled
+		}
+		if osaErr != nil {
+			return "", osaErr
 		}
 		return "", fmt.Errorf("osascript: %w", err)
 	}
@@ -52,7 +58,27 @@ func osaQuote(s string) string {
 	return `"` + s + `"`
 }
 
-// isOsaCancel detects "User canceled" — osascript exits with status 1.
-func isOsaCancel(err error) bool {
-	return strings.Contains(err.Error(), "exit status 1")
+// isOsaCancel inspects osascript exit errors to distinguish genuine user
+// cancellation from TCC/automation permission denials and other failures.
+// Returns (true, nil) for cancellation, (false, nil) for non-cancel errors
+// that should be surfaced, or (false, error) for unexpected cases.
+func isOsaCancel(err error) (bool, error) {
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		stderr := string(exitErr.Stderr)
+		if strings.Contains(stderr, "-128") || strings.Contains(stderr, "User canceled") {
+			return true, nil
+		}
+		if stderr != "" {
+			return false, fmt.Errorf("osascript failed: %s (check System Events permissions in System Settings > Privacy & Security > Automation, or run 'symvault doctor')", strings.TrimSpace(stderr))
+		}
+	}
+
+	// Fallback: if no stderr content, treat exit status 1 as cancellation
+	// for backward compatibility with tests and older osascript versions.
+	if strings.Contains(err.Error(), "exit status 1") {
+		return true, nil
+	}
+
+	return false, nil
 }
