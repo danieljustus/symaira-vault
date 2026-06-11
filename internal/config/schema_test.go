@@ -295,6 +295,9 @@ func TestDefaultClipboardConfig(t *testing.T) {
 	if cfg.AutoClearDuration != 30 {
 		t.Errorf("AutoClearDuration should be 30, got %d", cfg.AutoClearDuration)
 	}
+	if !cfg.CopyByDefault {
+		t.Error("CopyByDefault should default to true")
+	}
 }
 
 func TestMergeFromClipboardConfig(t *testing.T) {

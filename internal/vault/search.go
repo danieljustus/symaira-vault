@@ -412,7 +412,9 @@ func listPseudonymizedWithIdentity(vaultDir, prefix string, identity *age.X25519
 		}
 		paths = append(paths, result.entryPath)
 		if result.data != nil {
-			cachedEntries[result.entryPath] = result.data
+			if cachedData := pseudonymCacheSafeData(result.data); cachedData != nil {
+				cachedEntries[result.entryPath] = cachedData
+			}
 		}
 	}
 
@@ -425,6 +427,54 @@ func listPseudonymizedWithIdentity(vaultDir, prefix string, identity *age.X25519
 	metrics.RecordVaultOperationDuration("list_pseudonymized", time.Since(start))
 	metrics.RecordVaultEntryCount(vaultDir, len(paths))
 	return paths, nil
+}
+
+func pseudonymCacheSafeData(data map[string]any) map[string]any {
+	if len(data) == 0 {
+		return nil
+	}
+	cloned, stripped := cloneWithoutSensitiveFields("", data)
+	if stripped {
+		return nil
+	}
+	return cloned
+}
+
+func cloneWithoutSensitiveFields(prefix string, data map[string]any) (map[string]any, bool) {
+	cloned := make(map[string]any, len(data))
+	stripped := false
+	for key, value := range data {
+		field := key
+		if prefix != "" {
+			field = prefix + "." + key
+		}
+		if isSensitiveCacheField(field) {
+			stripped = true
+			continue
+		}
+		switch typed := value.(type) {
+		case map[string]any:
+			nested, nestedStripped := cloneWithoutSensitiveFields(field, typed)
+			if nestedStripped {
+				stripped = true
+				continue
+			}
+			cloned[key] = nested
+		default:
+			cloned[key] = value
+		}
+	}
+	return cloned, stripped
+}
+
+func isSensitiveCacheField(field string) bool {
+	field = strings.ToLower(field)
+	return strings.Contains(field, "pass") ||
+		strings.Contains(field, "secret") ||
+		strings.Contains(field, "token") ||
+		strings.Contains(field, "key") ||
+		strings.Contains(field, "otp") ||
+		strings.Contains(field, "pin")
 }
 
 // listViaManifest returns entry paths from the manifest when available and

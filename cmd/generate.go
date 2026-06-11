@@ -54,7 +54,7 @@ var generateCmd = &cobra.Command{
 					}
 				}
 
-				if err := v.AutoCommit(fmt.Sprintf("Generate password for %s", genStore)); err != nil {
+				if err := v.AutoCommitEntry(fmt.Sprintf("Generate password for %s", genStore), genStore); err != nil {
 					return fmt.Errorf("auto-commit failed: %w", err)
 				}
 

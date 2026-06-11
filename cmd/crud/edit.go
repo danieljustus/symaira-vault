@@ -1,18 +1,15 @@
 package crud
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
-	"github.com/danieljustus/symaira-vault/internal/secrets"
+	"github.com/danieljustus/symaira-vault/internal/secureedit"
 	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
@@ -20,7 +17,7 @@ import (
 var EditorFlag string
 
 // OSCreateTemp is overridable in tests for permission verification.
-var OSCreateTemp = os.CreateTemp
+var OSCreateTemp = secureedit.CreateTemp
 
 var editCmd = &cobra.Command{
 	Use:     "edit <name>",
@@ -55,68 +52,18 @@ The editor is determined by the --editor flag or EDITOR environment variable (de
 				editor = "vi"
 			}
 
-			// Validate editor exists in PATH before executing (G204 mitigation)
-			if _, lookErr := exec.LookPath(editor); lookErr != nil {
-				return errorspkg.Wrap(errorspkg.ExitGeneralError, errorspkg.ErrKindNone, lookErr, "editor %q not found in PATH", editor)
-			}
-
-			var tmpFile *os.File
-			tmpFile, err = OSCreateTemp("", "symvault-edit-*.json")
+			secureedit.CreateTemp = OSCreateTemp
+			defer func() { secureedit.CreateTemp = os.CreateTemp }()
+			updatedEntry, err := secureedit.EditEntry(entry, editor, secureedit.DefaultStreams())
 			if err != nil {
-				return errorspkg.WriteFailed(err, "cannot create temp file")
-			}
-			if err = os.Chmod(tmpFile.Name(), 0o600); err != nil {
-				_ = tmpFile.Close()
-				_ = os.Remove(tmpFile.Name())
-				return errorspkg.WriteFailed(err, "cannot set temp file permissions")
-			}
-			defer func() { _ = os.Remove(tmpFile.Name()) }()
-
-			encoder := json.NewEncoder(tmpFile)
-			encoder.SetIndent("", "  ")
-			if encErr := encoder.Encode(entry); encErr != nil {
-				_ = tmpFile.Close()
-				return errorspkg.WriteFailed(encErr, "cannot encode entry")
-			}
-			if closeErr := tmpFile.Close(); closeErr != nil {
-				return errorspkg.WriteFailed(closeErr, "cannot close temp file")
+				return errorspkg.Wrap(errorspkg.ExitGeneralError, errorspkg.ErrKindNone, err, "edit entry")
 			}
 
-			//#nosec G204 -- editor path validated via exec.LookPath above
-			editorCmd := exec.Command(editor, tmpFile.Name())
-			secrets.PrepareCmd(editorCmd)
-			editorCmd.Stdin = os.Stdin
-			editorCmd.Stdout = os.Stdout
-			editorCmd.Stderr = os.Stderr
-
-			if runErr := editorCmd.Run(); runErr != nil {
-				return errorspkg.Wrap(errorspkg.ExitGeneralError, errorspkg.ErrKindNone, runErr, "editor failed")
-			}
-
-			content, err := os.ReadFile(tmpFile.Name())
-			if err != nil {
-				return errorspkg.ReadFailed(err, "cannot read edited file")
-			}
-
-			content = bytes.TrimSpace(content)
-			if len(content) == 0 {
-				return fmt.Errorf("empty file, changes discarded")
-			}
-
-			var updatedEntry vaultpkg.Entry
-			if err := json.Unmarshal(content, &updatedEntry); err != nil {
-				return errorspkg.Wrap(errorspkg.ExitGeneralError, errorspkg.ErrKindNone, err, "invalid JSON")
-			}
-
-			if updatedEntry.Data == nil {
-				updatedEntry.Data = map[string]any{}
-			}
-
-			if err := vs.WriteEntry(name, &updatedEntry); err != nil {
+			if err := vs.WriteEntry(name, updatedEntry); err != nil {
 				return errorspkg.WriteFailed(err, "cannot save entry")
 			}
 
-			if err := v.AutoCommit(fmt.Sprintf("Edit %s", name)); err != nil {
+			if err := v.AutoCommitEntry(fmt.Sprintf("Edit %s", name), name); err != nil {
 				cliout.Warnf("Warning: auto-commit failed: %v", err)
 			}
 			cli.PrintQuietAware("Entry updated: %s\n", name)

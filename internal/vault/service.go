@@ -179,7 +179,7 @@ func (DefaultOperationService) UpsertEntry(v *Vault, path string, data map[strin
 		return errorspkg.ReadFailed(readErr, "cannot read entry %s: %v", path, readErr)
 	}
 
-	if err := v.AutoCommit(fmt.Sprintf("Update %s", path)); err != nil {
+	if err := v.AutoCommitEntry(fmt.Sprintf("Update %s", path), path); err != nil {
 		slog.Default().Warn("auto-commit failed", "error", err)
 	}
 	v.Cache.Invalidate()
@@ -202,7 +202,7 @@ func (DefaultOperationService) WriteEntry(v *Vault, path string, entry *Entry) e
 		return errorspkg.WriteFailed(err, "cannot write entry %s: %v", path, err)
 	}
 
-	if err := v.AutoCommit(fmt.Sprintf("Update %s", path)); err != nil {
+	if err := v.AutoCommitEntry(fmt.Sprintf("Update %s", path), path); err != nil {
 		slog.Default().Warn("auto-commit failed", "error", err)
 	}
 	v.Cache.Invalidate()
@@ -217,7 +217,7 @@ func (DefaultOperationService) DeleteEntry(v *Vault, path string) error {
 		return errorspkg.WriteFailed(err, "cannot delete entry %s: %v", path, err)
 	}
 
-	if err := v.AutoCommit(fmt.Sprintf("Delete %s", path)); err != nil {
+	if err := v.AutoCommitEntry(fmt.Sprintf("Delete %s", path), path); err != nil {
 		slog.Default().Warn("auto-commit failed", "error", err)
 	}
 	v.Cache.Invalidate()

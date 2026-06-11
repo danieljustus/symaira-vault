@@ -74,6 +74,8 @@ func resetCommandFlagGlobals() {
 	genSymbols = false
 	genStore = ""
 	crud.GetClipboard = clipboardapp.DefaultClipboard
+	crud.GetAutoClearDurationFunc = crud.GetAutoClearDuration
+	crud.StartAutoClear = clipboardapp.StartAutoClear
 	cli.OutputFormat = "text"
 }
 

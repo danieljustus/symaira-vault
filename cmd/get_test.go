@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	crud "github.com/danieljustus/symaira-vault/cmd/crud"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 	clipboardapp "github.com/danieljustus/symaira-vault/internal/clipboard"
 	"github.com/danieljustus/symaira-vault/internal/config"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
@@ -20,10 +21,10 @@ func TestGetAutoClearDuration(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("skipping on windows: HOME env behavior differs")
 		}
-		origVault := vault
+		origVault := cli.Vault
 		origFlagChanged := vaultFlag.Changed
 		defer func() {
-			vault = origVault
+			cli.Vault = origVault
 			vaultFlag.Changed = origFlagChanged
 		}()
 
@@ -32,9 +33,9 @@ func TestGetAutoClearDuration(t *testing.T) {
 		_ = os.Unsetenv("HOME")
 		_ = os.Unsetenv("OPENPASS_VAULT")
 
-		vault = "~/.symvault"
+		cli.Vault = "~/.symvault"
 
-		duration := getAutoClearDuration()
+		duration := crud.GetAutoClearDuration()
 		if duration != 30 {
 			t.Errorf("duration = %d, want 30", duration)
 		}
@@ -42,16 +43,16 @@ func TestGetAutoClearDuration(t *testing.T) {
 
 	t.Run("returns default when config file missing", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		origVault := vault
+		origVault := cli.Vault
 		origFlagChanged := vaultFlag.Changed
 		defer func() {
-			vault = origVault
+			cli.Vault = origVault
 			vaultFlag.Changed = origFlagChanged
 		}()
 
-		vault = tmpDir
+		cli.Vault = tmpDir
 
-		duration := getAutoClearDuration()
+		duration := crud.GetAutoClearDuration()
 		if duration != 30 {
 			t.Errorf("duration = %d, want 30", duration)
 		}
@@ -68,16 +69,16 @@ func TestGetAutoClearDuration(t *testing.T) {
 			t.Fatalf("write config: %v", err)
 		}
 
-		origVault := vault
+		origVault := cli.Vault
 		origFlagChanged := vaultFlag.Changed
 		defer func() {
-			vault = origVault
+			cli.Vault = origVault
 			vaultFlag.Changed = origFlagChanged
 		}()
 
-		vault = tmpDir
+		cli.Vault = tmpDir
 
-		duration := getAutoClearDuration()
+		duration := crud.GetAutoClearDuration()
 		if duration != 30 {
 			t.Errorf("duration = %d, want 30", duration)
 		}
@@ -94,16 +95,16 @@ func TestGetAutoClearDuration(t *testing.T) {
 			t.Fatalf("write config: %v", err)
 		}
 
-		origVault := vault
+		origVault := cli.Vault
 		origFlagChanged := vaultFlag.Changed
 		defer func() {
-			vault = origVault
+			cli.Vault = origVault
 			vaultFlag.Changed = origFlagChanged
 		}()
 
-		vault = tmpDir
+		cli.Vault = tmpDir
 
-		duration := getAutoClearDuration()
+		duration := crud.GetAutoClearDuration()
 		if duration != 60 {
 			t.Errorf("duration = %d, want 60", duration)
 		}
@@ -122,16 +123,16 @@ func TestGetAutoClearDurationFromConfig(t *testing.T) {
 			t.Fatalf("write config: %v", err)
 		}
 
-		origVault := vault
+		origVault := cli.Vault
 		origFlagChanged := vaultFlag.Changed
 		defer func() {
-			vault = origVault
+			cli.Vault = origVault
 			vaultFlag.Changed = origFlagChanged
 		}()
 
-		vault = tmpDir
+		cli.Vault = tmpDir
 
-		duration := getAutoClearDuration()
+		duration := crud.GetAutoClearDuration()
 		if duration != 0 {
 			t.Errorf("duration = %d, want 0", duration)
 		}
@@ -148,16 +149,16 @@ func TestGetAutoClearDurationFromConfig(t *testing.T) {
 			t.Fatalf("write config: %v", err)
 		}
 
-		origVault := vault
+		origVault := cli.Vault
 		origFlagChanged := vaultFlag.Changed
 		defer func() {
-			vault = origVault
+			cli.Vault = origVault
 			vaultFlag.Changed = origFlagChanged
 		}()
 
-		vault = tmpDir
+		cli.Vault = tmpDir
 
-		duration := getAutoClearDuration()
+		duration := crud.GetAutoClearDuration()
 		if duration != 120 {
 			t.Errorf("duration = %d, want 120", duration)
 		}
@@ -343,10 +344,12 @@ func TestCmdGet_FieldTTY_DefaultClipboard(t *testing.T) {
 	defer setupVaultFlag(t, vaultDir)()
 	clipboardapp.SetClipboard(clipboardapp.NewNullClipboard())
 	t.Cleanup(func() { clipboardapp.SetClipboard(nil) })
+	crud.GetAutoClearDurationFunc = func() int { return 0 }
+	t.Cleanup(func() { crud.GetAutoClearDurationFunc = crud.GetAutoClearDuration })
 
-	oldIsTerminal := isTerminalFunc
-	isTerminalFunc = func(int) bool { return true }
-	defer func() { isTerminalFunc = oldIsTerminal }()
+	oldIsTerminal := cli.IsTerminalFunc
+	cli.IsTerminalFunc = func(int) bool { return true }
+	defer func() { cli.IsTerminalFunc = oldIsTerminal }()
 
 	var stdout string
 	var execErr error
@@ -372,6 +375,95 @@ func TestCmdGet_FieldTTY_DefaultClipboard(t *testing.T) {
 	}
 }
 
+func TestCmdGet_FieldTTY_AutoClearRunsBeforeReturn(t *testing.T) {
+	vaultDir, passphrase := initVault(t)
+	if err := os.WriteFile(filepath.Join(vaultDir, "config.yaml"), []byte("clipboard:\n  auto_clear_duration: 1\n"), 0o600); err != nil {
+		t.Fatalf("enable clipboard auto-clear: %v", err)
+	}
+	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
+	entry := &vaultpkg.Entry{Data: map[string]any{"password": "clear-before-return"}}
+	_ = vaultpkg.WriteEntry(vaultDir, "clear-entry", entry, identity.Identity)
+	setPassEnv(t, string(passphrase))
+	defer setupVaultFlag(t, vaultDir)()
+	clipboardapp.SetClipboard(clipboardapp.NewNullClipboard())
+	t.Cleanup(func() { clipboardapp.SetClipboard(nil) })
+	crud.GetAutoClearDurationFunc = func() int { return 1 }
+	t.Cleanup(func() { crud.GetAutoClearDurationFunc = crud.GetAutoClearDuration })
+
+	oldIsTerminal := cli.IsTerminalFunc
+	cli.IsTerminalFunc = func(int) bool { return true }
+	defer func() { cli.IsTerminalFunc = oldIsTerminal }()
+
+	cleared := false
+	crud.StartAutoClear = func(duration int, clearFn func(), cancelCh <-chan struct{}) {
+		if duration != 1 {
+			t.Fatalf("duration = %d, want 1", duration)
+		}
+		clearFn()
+		cleared = true
+	}
+	t.Cleanup(func() { crud.StartAutoClear = clipboardapp.StartAutoClear })
+
+	var execErr error
+	captureStderr(func() {
+		captureStdout(func() {
+			rootCmd.SetArgs([]string{"--vault", vaultDir, "get", "clear-entry.password"})
+			execErr = rootCmd.Execute()
+			rootCmd.SetArgs(nil)
+		})
+	})
+	if execErr != nil {
+		t.Fatalf("get command failed: %v", execErr)
+	}
+	if !cleared {
+		t.Fatal("auto-clear callback did not run before command returned")
+	}
+	copied, _ := clipboardapp.DefaultClipboard().Read()
+	if copied != "" {
+		t.Fatalf("clipboard = %q, want cleared", copied)
+	}
+}
+
+func TestCmdGet_FieldTTY_CopyByDefaultFalsePrints(t *testing.T) {
+	vaultDir, passphrase := initVault(t)
+	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
+	if err := os.WriteFile(filepath.Join(vaultDir, "config.yaml"), []byte("clipboard:\n  copyByDefault: false\n  auto_clear_duration: 0\n"), 0o600); err != nil {
+		t.Fatalf("write clipboard config: %v", err)
+	}
+	entry := &vaultpkg.Entry{Data: map[string]any{"password": "copy-default-disabled"}}
+	_ = vaultpkg.WriteEntry(vaultDir, "copy-config-entry", entry, identity.Identity)
+	setPassEnv(t, string(passphrase))
+	oldVaultFlagChanged := cli.VaultFlag.Changed
+	cli.VaultFlag.Changed = false
+	t.Cleanup(func() { cli.VaultFlag.Changed = oldVaultFlagChanged })
+	t.Setenv("OPENPASS_VAULT", vaultDir)
+	crud.GetAutoClearDurationFunc = func() int { return 0 }
+	t.Cleanup(func() { crud.GetAutoClearDurationFunc = crud.GetAutoClearDuration })
+	resolvedVaultDir, err := cli.VaultPath()
+	if err != nil {
+		t.Fatalf("VaultPath() error = %v", err)
+	}
+	if resolvedVaultDir != vaultDir {
+		t.Fatalf("VaultPath() = %q, want %q", resolvedVaultDir, vaultDir)
+	}
+	cfg, err := config.Load(filepath.Join(vaultDir, "config.yaml"))
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Clipboard == nil || cfg.Clipboard.CopyByDefault {
+		t.Fatalf("CopyByDefault = %v, want false", cfg.Clipboard)
+	}
+
+	oldIsTerminal := cli.IsTerminalFunc
+	cli.IsTerminalFunc = func(int) bool { return true }
+	defer func() { cli.IsTerminalFunc = oldIsTerminal }()
+
+	out := execWithStdout("get", "copy-config-entry.password")
+	if strings.TrimSpace(out) != "copy-default-disabled" {
+		t.Fatalf("stdout = %q, want copy-default-disabled", out)
+	}
+}
+
 func TestCmdGet_FieldPipe_DefaultPrint(t *testing.T) {
 	vaultDir, passphrase := initVault(t)
 	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
@@ -380,9 +472,9 @@ func TestCmdGet_FieldPipe_DefaultPrint(t *testing.T) {
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
-	oldIsTerminal := isTerminalFunc
-	isTerminalFunc = func(int) bool { return false }
-	defer func() { isTerminalFunc = oldIsTerminal }()
+	oldIsTerminal := cli.IsTerminalFunc
+	cli.IsTerminalFunc = func(int) bool { return false }
+	defer func() { cli.IsTerminalFunc = oldIsTerminal }()
 
 	out := execWithStdout("--vault", vaultDir, "get", "pipe-entry.password")
 	if strings.TrimSpace(out) != "pipe-pass-456" {
@@ -398,9 +490,9 @@ func TestCmdGet_FieldPrintFlag_OverridesTTY(t *testing.T) {
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
-	oldIsTerminal := isTerminalFunc
-	isTerminalFunc = func(int) bool { return true }
-	defer func() { isTerminalFunc = oldIsTerminal }()
+	oldIsTerminal := cli.IsTerminalFunc
+	cli.IsTerminalFunc = func(int) bool { return true }
+	defer func() { cli.IsTerminalFunc = oldIsTerminal }()
 
 	out := execWithStdout("--vault", vaultDir, "get", "print-entry.password", "--print")
 	if strings.TrimSpace(out) != "print-pass-789" {

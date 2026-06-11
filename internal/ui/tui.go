@@ -2,11 +2,8 @@
 package ui
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -19,7 +16,7 @@ import (
 
 	clipboardapp "github.com/danieljustus/symaira-vault/internal/clipboard"
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
-	"github.com/danieljustus/symaira-vault/internal/secrets"
+	"github.com/danieljustus/symaira-vault/internal/secureedit"
 	render "github.com/danieljustus/symaira-vault/internal/ui/render"
 	theme "github.com/danieljustus/symaira-vault/internal/ui/theme"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
@@ -59,9 +56,15 @@ const (
 )
 
 type entryLoadedMsg struct {
-	path  string
-	entry *vaultpkg.Entry
-	err   error
+	requestID uint64
+	path      string
+	entry     *vaultpkg.Entry
+	err       error
+}
+
+type entryLoadRequestedMsg struct {
+	requestID uint64
+	path      string
 }
 
 type entriesLoadedMsg struct {
@@ -94,6 +97,10 @@ type clipboardClearedMsg struct {
 	err error
 }
 
+type clipboardQuitClearedMsg struct {
+	err error
+}
+
 type clipboardTickMsg struct{}
 
 type logMsg struct {
@@ -117,6 +124,7 @@ type TUIModel struct {
 	revealed       bool
 	help           bool
 	loading        bool
+	detailRequest  uint64
 
 	sortMode  int // 0=name-asc, 1=name-desc, 2=updated-asc, 3=updated-desc
 	filterTag string
@@ -133,6 +141,9 @@ type TUIModel struct {
 }
 
 var (
+	writeClipboard = clipboard.WriteAll
+	detailDebounce = 100 * time.Millisecond
+
 	appStyle = lipgloss.NewStyle().Padding(1, 2)
 
 	borderStyle = lipgloss.NewStyle().
@@ -210,17 +221,23 @@ func (m TUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applyFilter()
 		m.status = fmt.Sprintf("%d entries", len(m.entries))
 		return m, m.loadSelectedEntry()
+	case entryLoadRequestedMsg:
+		if msg.requestID != m.detailRequest || msg.path != m.selectedPath() {
+			return m, nil
+		}
+		return m, loadEntryCmd(m.vault, msg.path, msg.requestID)
 	case entryLoadedMsg:
+		if msg.requestID != m.detailRequest || msg.path != m.selectedPath() {
+			return m, nil
+		}
 		if msg.err != nil {
 			m.err = msg.err
 			m.status = "Could not read entry"
 			return m, nil
 		}
-		if msg.path == m.selectedPath() {
-			m.entry = msg.entry
-			m.entryFor = msg.path
-			m.err = nil
-		}
+		m.entry = msg.entry
+		m.entryFor = msg.path
+		m.err = nil
 		return m, nil
 	case copiedMsg:
 		if msg.err != nil {
@@ -277,6 +294,13 @@ func (m TUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.clipboardSeconds = 0
 		m.status = "Clipboard cleared"
 		return m, nil
+	case clipboardQuitClearedMsg:
+		m.clipboardSeconds = 0
+		if msg.err != nil {
+			m.err = msg.err
+			m.status = "Clipboard clear failed"
+		}
+		return m, tea.Quit
 	case clipboardTickMsg:
 		if m.clipboardSeconds > 0 {
 			m.clipboardSeconds--
@@ -335,7 +359,7 @@ func (m TUIModel) handleKey(msg tea.KeyMsg) (TUIModel, tea.Cmd) {
 			m.filterInput.Blur()
 			return m, m.loadSelectedEntry()
 		case keyQuit:
-			return m, tea.Quit
+			return m, m.quitCmd()
 		}
 
 		var cmd tea.Cmd
@@ -360,7 +384,7 @@ func (m TUIModel) handleKey(msg tea.KeyMsg) (TUIModel, tea.Cmd) {
 			m.applyFilter()
 			return m, m.loadSelectedEntry()
 		case keyQuit:
-			return m, tea.Quit
+			return m, m.quitCmd()
 		}
 
 		var cmd tea.Cmd
@@ -386,14 +410,14 @@ func (m TUIModel) handleKey(msg tea.KeyMsg) (TUIModel, tea.Cmd) {
 			m.status = "Canceled"
 			return m, nil
 		case keyQuit:
-			return m, tea.Quit
+			return m, m.quitCmd()
 		}
 		return m, nil
 	}
 
 	switch msg.String() {
 	case "q", keyQuit:
-		return m, tea.Quit
+		return m, m.quitCmd()
 	case "?":
 		m.help = !m.help
 		return m, nil
@@ -418,23 +442,23 @@ func (m TUIModel) handleKey(msg tea.KeyMsg) (TUIModel, tea.Cmd) {
 		if m.selected > 0 {
 			m.selected--
 			m.clipboardSeconds = 0
-			return m, m.loadSelectedEntry()
+			return m, m.debounceSelectedEntry()
 		}
 	case "down", "j":
 		if m.selected < len(m.filtered)-1 {
 			m.selected++
 			m.clipboardSeconds = 0
-			return m, m.loadSelectedEntry()
+			return m, m.debounceSelectedEntry()
 		}
 	case "home":
 		m.selected = 0
 		m.clipboardSeconds = 0
-		return m, m.loadSelectedEntry()
+		return m, m.debounceSelectedEntry()
 	case "end":
 		if len(m.filtered) > 0 {
 			m.selected = len(m.filtered) - 1
 			m.clipboardSeconds = 0
-			return m, m.loadSelectedEntry()
+			return m, m.debounceSelectedEntry()
 		}
 	case "enter":
 		return m, m.copySelectedPassword()
@@ -453,6 +477,13 @@ func (m TUIModel) handleKey(msg tea.KeyMsg) (TUIModel, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+func (m TUIModel) quitCmd() tea.Cmd {
+	if m.clipboardSeconds <= 0 {
+		return tea.Quit
+	}
+	return clearClipboardBeforeQuitCmd()
 }
 
 func (m *TUIModel) applyFilter() {
@@ -553,12 +584,33 @@ func (m TUIModel) sortLabel() string {
 	}
 }
 
-func (m TUIModel) loadSelectedEntry() tea.Cmd {
+func (m *TUIModel) loadSelectedEntry() tea.Cmd {
+	return m.scheduleSelectedEntryLoad(0)
+}
+
+func (m *TUIModel) debounceSelectedEntry() tea.Cmd {
+	return m.scheduleSelectedEntryLoad(detailDebounce)
+}
+
+func (m *TUIModel) scheduleSelectedEntryLoad(delay time.Duration) tea.Cmd {
 	path := m.selectedPath()
 	if path == "" {
+		m.entry = nil
+		m.entryFor = ""
 		return nil
 	}
-	return loadEntryCmd(m.vault, path)
+	if m.entryFor != path {
+		m.entry = nil
+		m.entryFor = ""
+	}
+	m.detailRequest++
+	requestID := m.detailRequest
+	if delay <= 0 {
+		return loadEntryCmd(m.vault, path, requestID)
+	}
+	return tea.Tick(delay, func(time.Time) tea.Msg {
+		return entryLoadRequestedMsg{requestID: requestID, path: path}
+	})
 }
 
 func (m TUIModel) selectedPath() string {
@@ -746,15 +798,15 @@ func loadEntriesCmd(vault *vaultpkg.Vault) tea.Cmd {
 	}
 }
 
-func loadEntryCmd(vault *vaultpkg.Vault, path string) tea.Cmd {
+func loadEntryCmd(vault *vaultpkg.Vault, path string, requestID uint64) tea.Cmd {
 	return func() (msg tea.Msg) {
 		defer func() {
 			if r := recover(); r != nil {
-				msg = entryLoadedMsg{path: path, err: fmt.Errorf("panic loading entry %s: %v", path, r)}
+				msg = entryLoadedMsg{requestID: requestID, path: path, err: fmt.Errorf("panic loading entry %s: %v", path, r)}
 			}
 		}()
 		entry, err := vaultpkg.ReadEntry(vault.Dir, path, vault.Identity)
-		return entryLoadedMsg{path: path, entry: entry, err: err}
+		return entryLoadedMsg{requestID: requestID, path: path, entry: entry, err: err}
 	}
 }
 
@@ -769,7 +821,7 @@ func copyTextCmd(text, message string, cleanup func()) tea.Cmd {
 }
 
 func copyTextMsg(text, message string) tea.Msg {
-	if err := clipboard.WriteAll(text); err != nil {
+	if err := writeClipboard(text); err != nil {
 		return copiedMsg{err: fmt.Errorf("copy to clipboard: %w", err)}
 	}
 	return copiedMsg{message: message}
@@ -780,11 +832,17 @@ func clearClipboardCmd(seconds int) tea.Cmd {
 		done := make(chan struct{})
 		var clearErr error
 		clipboardapp.StartAutoClear(seconds, func() {
-			clearErr = clipboard.WriteAll("")
+			clearErr = writeClipboard("")
 			close(done)
 		}, nil)
 		<-done
 		return clipboardClearedMsg{err: clearErr}
+	}
+}
+
+func clearClipboardBeforeQuitCmd() tea.Cmd {
+	return func() tea.Msg {
+		return clipboardQuitClearedMsg{err: writeClipboard("")}
 	}
 }
 
@@ -807,7 +865,7 @@ func deleteEntryCmd(vault *vaultpkg.Vault, path string) tea.Cmd {
 		if err != nil {
 			return entryDeletedMsg{path: path, err: err}
 		}
-		_ = vault.AutoCommit(fmt.Sprintf("Delete %s", path))
+		_ = vault.AutoCommitEntry(fmt.Sprintf("Delete %s", path), path)
 		vault.Cache.Invalidate()
 		return entryDeletedMsg{path: path}
 	}
@@ -820,118 +878,17 @@ func editEntryCmd(vault *vaultpkg.Vault, path string) tea.Cmd {
 			return entryEditedMsg{path: path, err: err}
 		}
 
-		tmp, err := os.CreateTemp("", "symvault-*.json")
+		edited, err := secureedit.EditEntry(entry, os.Getenv("EDITOR"), secureedit.DefaultStreams())
 		if err != nil {
 			return entryEditedMsg{path: path, err: err}
 		}
-		tmpPath := tmp.Name()
-		defer func() { _ = secureDeleteFile(tmpPath) }()
-
-		encoder := json.NewEncoder(tmp)
-		encoder.SetIndent("", "  ")
-		if encErr := encoder.Encode(entry); encErr != nil {
-			_ = tmp.Close()
-			return entryEditedMsg{path: path, err: encErr}
-		}
-		if closeErr := tmp.Close(); closeErr != nil {
-			return entryEditedMsg{path: path, err: closeErr}
-		}
-
-		editor, editorErr := resolveEditor(os.Getenv("EDITOR"))
-		if editorErr != nil {
-			return entryEditedMsg{path: path, err: editorErr}
-		}
-		cmd := exec.Command(editor, tmpPath) //#nosec G204 G702 -- editor path resolved via exec.LookPath above.
-		secrets.PrepareCmd(cmd)
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if runErr := cmd.Run(); runErr != nil {
-			return entryEditedMsg{path: path, err: fmt.Errorf("run editor: %w", runErr)}
-		}
-
-		data, err := os.ReadFile(filepath.Clean(tmpPath)) //#nosec G304 -- tmpPath was created by this process.
-		if err != nil {
+		if err := vaultpkg.WriteEntryWithRecipients(vault.Dir, path, edited, vault.Identity); err != nil {
 			return entryEditedMsg{path: path, err: err}
 		}
-		var edited vaultpkg.Entry
-		if err := json.Unmarshal(data, &edited); err != nil {
-			return entryEditedMsg{path: path, err: fmt.Errorf("parse edited entry: %w", err)}
-		}
-		if edited.Data == nil {
-			return entryEditedMsg{path: path, err: fmt.Errorf("edited entry must contain data")}
-		}
-		if err := vaultpkg.WriteEntryWithRecipients(vault.Dir, path, &edited, vault.Identity); err != nil {
-			return entryEditedMsg{path: path, err: err}
-		}
-		_ = vault.AutoCommit(fmt.Sprintf("Edit %s", path))
+		_ = vault.AutoCommitEntry(fmt.Sprintf("Edit %s", path), path)
 		vault.Cache.Invalidate()
 		return entryEditedMsg{path: path}
 	}
-}
-
-// resolveEditor returns an absolute path to a usable editor binary. It tries
-// the user-provided value (typically $EDITOR) first, then falls back to a
-// short list of common editors. Returns an error if none are found on PATH.
-func resolveEditor(preferred string) (string, error) {
-	candidates := make([]string, 0, 4)
-	if preferred != "" {
-		candidates = append(candidates, preferred)
-	}
-	candidates = append(candidates, "vim", "nano", "vi")
-	for _, c := range candidates {
-		if path, err := exec.LookPath(c); err == nil {
-			return path, nil
-		}
-	}
-	return "", fmt.Errorf("no editor found on PATH (tried %v); set $EDITOR to a valid editor", candidates)
-}
-
-// secureDeleteFile overwrites the file at path with zeros, syncs it, and
-// then removes it. If overwriting fails, removal is still attempted to
-// avoid leaving temporary files behind.
-func secureDeleteFile(path string) error {
-	f, err := os.OpenFile(path, os.O_WRONLY, 0) //#nosec G304 -- path comes from tmp.Name() in the same function
-	if err != nil {
-		// Cannot open, but still try to remove.
-		_ = os.Remove(path)
-		return err
-	}
-	defer func() { _ = f.Close() }()
-
-	fi, err := f.Stat()
-	if err != nil {
-		_ = f.Close()
-		_ = os.Remove(path)
-		return err
-	}
-
-	size := fi.Size()
-	zeros := make([]byte, 4096)
-	remaining := size
-	for remaining > 0 {
-		chunk := zeros
-		if remaining < int64(len(chunk)) {
-			chunk = chunk[:remaining]
-		}
-		n, werr := f.Write(chunk)
-		if werr != nil {
-			_ = f.Close()
-			_ = os.Remove(path)
-			return werr
-		}
-		remaining -= int64(n)
-	}
-
-	if serr := f.Sync(); serr != nil {
-		_ = f.Close()
-		_ = os.Remove(path)
-		return serr
-	}
-
-	// Close before remove on some platforms (Windows).
-	_ = f.Close()
-	return os.Remove(path)
 }
 
 func fuzzyMatch(query, value string) bool {

@@ -80,8 +80,11 @@ type listCachePayload struct {
 }
 
 // pseudonymizedCacheEntry holds cached pseudonymized list results.
-// Unlike listCacheEntry, it also stores decrypted entry data so that
+// Unlike listCacheEntry, it may also store decrypted entry data so that
 // FindWithOptions can reuse entries already decrypted during listing.
+// Secret-bearing entries are deliberately omitted from entries so callers
+// fall back to a single-entry decrypt instead of retaining those values in
+// heap memory for the cache TTL.
 type pseudonymizedCacheEntry struct {
 	paths        []string
 	entries      map[string]map[string]any
@@ -238,8 +241,8 @@ func (c *VaultCache) SetListCacheTTL(ttl time.Duration) {
 	} else {
 		c.listCacheTTL = ttl
 	}
-	c.listCacheMu.Unlock()
 	c.configuredTTL = ttl
+	c.listCacheMu.Unlock()
 }
 
 // SetConfigCacheSize sets the maximum number of cached vault configs.
@@ -296,12 +299,12 @@ func (c *VaultCache) adaptListCacheTTL() {
 	if total < 100 {
 		return
 	}
+	ratio := float64(hits) / float64(total)
+	c.listCacheMu.Lock()
 	effectiveMax := maxListCacheTTL
 	if c.configuredTTL > 0 && c.configuredTTL < effectiveMax {
 		effectiveMax = c.configuredTTL
 	}
-	ratio := float64(hits) / float64(total)
-	c.listCacheMu.Lock()
 	if ratio > 0.9 && c.listCacheTTL < effectiveMax {
 		c.listCacheTTL *= 2
 		if c.listCacheTTL > effectiveMax {
@@ -326,20 +329,23 @@ func (c *VaultCache) cachedList(vaultDir string) []string {
 	}
 	c.listCacheMu.RLock()
 	elem, ok := c.listCacheIndex[vaultDir]
-	c.listCacheMu.RUnlock()
 	if !ok {
+		c.listCacheMu.RUnlock()
 		atomic.AddUint64(&c.listCacheMisses, 1)
 		c.adaptListCacheTTL()
 		return nil
 	}
 	payload, ok := elem.Value.(*listCachePayload)
 	if !ok {
+		c.listCacheMu.RUnlock()
 		atomic.AddUint64(&c.listCacheMisses, 1)
 		c.adaptListCacheTTL()
 		return nil
 	}
 	entry := payload.entry
-	if time.Since(entry.createdAt) > c.listCacheTTL {
+	ttl := c.listCacheTTL
+	c.listCacheMu.RUnlock()
+	if time.Since(entry.createdAt) > ttl {
 		atomic.AddUint64(&c.listCacheMisses, 1)
 		c.adaptListCacheTTL()
 		return nil
