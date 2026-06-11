@@ -13,6 +13,8 @@ package session
 
 import (
 	"errors"
+	"fmt"
+	"os"
 	"sync"
 )
 
@@ -65,6 +67,7 @@ type fallbackKeyring struct {
 
 	mu     sync.Mutex
 	active bool
+	warned bool
 }
 
 // NewFallbackKeyring returns a KeyringBackend that prefers primary but falls
@@ -155,5 +158,11 @@ func (f *fallbackKeyring) fallbackAdapter() KeyringBackend {
 func (f *fallbackKeyring) activateLocked() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.active = true
+	if !f.active {
+		f.active = true
+		if !f.warned {
+			f.warned = true
+			fmt.Fprintln(os.Stderr, "Warning: OS keyring unavailable — session cache falling back to in-memory storage. Sessions will not persist across restarts. Run 'symvault doctor' for help.")
+		}
+	}
 }

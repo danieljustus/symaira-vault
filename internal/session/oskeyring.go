@@ -4,8 +4,6 @@ package session
 
 import (
 	"errors"
-	"fmt"
-	"os"
 
 	"github.com/zalando/go-keyring"
 
@@ -75,7 +73,6 @@ func newPlatformKeyring() KeyringBackend {
 			Message:    "OS keyring session cache is available.",
 		}
 	}
-	fmt.Fprintln(os.Stderr, "Note: session cache uses OS keyring with in-memory fallback. Run 'symvault doctor' for help if you see fallback warnings.")
-	logging.Default().Info("Session cache configured with OS keyring primary and in-memory fallback.")
+	logging.Default().Debug("Session cache configured with OS keyring primary and in-memory fallback.")
 	return inner
 }
