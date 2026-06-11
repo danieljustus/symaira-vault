@@ -213,6 +213,8 @@ Release artifacts are signed using [Cosign](https://github.com/sigstore/cosign) 
      symaira-vault_<version>_linux_amd64.tar.gz
    ```
 
+**Windows (PowerShell):** The quick-install script (`install.ps1`) automatically verifies the checksums signature with cosign when available. If cosign is not installed, a prominent warning is displayed with manual verification instructions.
+
 
 Or manually:
 
