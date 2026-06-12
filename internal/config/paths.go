@@ -120,5 +120,5 @@ func expandTilde(path string) (string, error) {
 		}
 		return filepath.Join(home, path[2:]), nil
 	}
-	return filepath.Clean(path), nil
+	return path, nil
 }

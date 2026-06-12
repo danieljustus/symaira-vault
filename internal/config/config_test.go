@@ -21,8 +21,7 @@ func TestDefaultReturnsSensibleConfig(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := setTestHome(t)
 
 	cfg := Default()
 	if cfg == nil {
@@ -166,8 +165,7 @@ func TestSaveWritesToDefaultConfigPath(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := setTestHome(t)
 
 	cfg := &Config{
 		VaultDir:       filepath.Join(home, DefaultVaultSubdir),
@@ -206,8 +204,7 @@ func TestSaveCreatesConfigDirectory(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := setTestHome(t)
 
 	cfg := Default()
 	if err := cfg.Save(); err != nil {
@@ -312,8 +309,7 @@ func TestSaveWritesRedactFields(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := setTestHome(t)
 
 	cfg := &Config{
 		VaultDir:       filepath.Join(home, DefaultVaultSubdir),
@@ -456,8 +452,7 @@ func TestSaveWithAllConfigSections(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := setTestHome(t)
 
 	cfg := &Config{
 		VaultDir:       filepath.Join(home, DefaultVaultSubdir),
@@ -547,8 +542,7 @@ func TestSaveLoadRoundTrip_PreservesAllFields(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := setTestHome(t)
 
 	cfg := &Config{
 		VaultDir:       filepath.Join(home, DefaultVaultSubdir),
@@ -1541,8 +1535,7 @@ func TestDefaultConfigPath_ReturnsExpectedPath(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := setTestHome(t)
 
 	path := defaultConfigPath()
 
@@ -1867,8 +1860,7 @@ func TestSave_Profiles(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := setTestHome(t)
 
 	cfg := Default()
 	cfg.Profiles = map[string]*Profile{
@@ -2211,8 +2203,7 @@ func TestPresets_UnknownTier_Ignored(t *testing.T) {
 // --- Tier Preset Load Tests ---
 
 func TestLoad_TierStandardPreset(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t)
 
 	yamlContent := `agents:
   my-agent:
@@ -2243,8 +2234,7 @@ func TestLoad_TierStandardPreset(t *testing.T) {
 }
 
 func TestLoad_TierStandardWithExplicitOverride(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t)
 
 	yamlContent := `agents:
   my-agent:
@@ -2271,8 +2261,7 @@ func TestLoad_TierStandardWithExplicitOverride(t *testing.T) {
 }
 
 func TestLoad_TierReadOnlyPreset(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t)
 
 	yamlContent := `agents:
   my-agent:
@@ -2299,8 +2288,7 @@ func TestLoad_TierReadOnlyPreset(t *testing.T) {
 }
 
 func TestLoad_TierAdminPreset(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t)
 
 	yamlContent := `agents:
   my-agent:
@@ -2332,8 +2320,7 @@ func TestLoad_TierAdminPreset(t *testing.T) {
 // --- ExposeValueTools Tests ---
 
 func TestLoad_ExposeValueToolsExplicitTrue(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t)
 
 	yamlContent := `agents:
   my-agent:
@@ -2351,8 +2338,7 @@ func TestLoad_ExposeValueToolsExplicitTrue(t *testing.T) {
 }
 
 func TestLoad_ExposeValueToolsExplicitFalse(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t)
 
 	yamlContent := `agents:
   my-agent:
@@ -2370,8 +2356,7 @@ func TestLoad_ExposeValueToolsExplicitFalse(t *testing.T) {
 }
 
 func TestLoad_ExposeValueToolsBackwardCompat(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t)
 
 	// Config without tier and without exposeValueTools should default to true
 	yamlContent := `agents:
@@ -2390,8 +2375,7 @@ func TestLoad_ExposeValueToolsBackwardCompat(t *testing.T) {
 }
 
 func TestLoad_ExposeValueToolsTierOverridesDefault(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t)
 
 	// Config with tier=standard but no exposeValueTools - should be false from preset
 	yamlContent := `agents:
@@ -2410,8 +2394,7 @@ func TestLoad_ExposeValueToolsTierOverridesDefault(t *testing.T) {
 }
 
 func TestLoad_ExposeValueToolsExplicitOverridesTier(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t)
 
 	// Config with tier=standard but explicit exposeValueTools: true - value should be true
 	yamlContent := `agents:
@@ -2740,8 +2723,7 @@ func TestRoundTrip_AllFieldsSet(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := setTestHome(t)
 
 	cfg := &Config{
 		VaultDir:       filepath.Join(home, DefaultVaultSubdir),
@@ -3040,8 +3022,7 @@ func TestRoundTrip_DefaultsApplied(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := setTestHome(t)
 
 	// Minimal config - all defaults should apply
 	cfg := &Config{
@@ -3075,8 +3056,7 @@ func TestRoundTrip_ExplicitZeroValues(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := setTestHome(t)
 
 	// Config with explicitly set zero values
 	cfg := &Config{

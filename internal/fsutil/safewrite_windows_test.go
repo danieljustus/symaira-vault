@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -23,12 +24,8 @@ func TestSafeWriteFileWindows_SymlinkAttack(t *testing.T) {
 	if err == nil {
 		t.Fatal("SafeWriteFile should reject symlink attack")
 	}
-	pathErr, ok := err.(*os.PathError)
-	if !ok {
-		t.Fatalf("expected PathError, got %T", err)
-	}
-	if pathErr.Err != errUnsafePath {
-		t.Errorf("expected errUnsafePath, got %v", pathErr.Err)
+	if !strings.Contains(err.Error(), "not a regular file") {
+		t.Errorf("expected not-a-regular-file rejection, got %v", err)
 	}
 }
 

@@ -11,8 +11,7 @@ func TestPathResolver_FreshInstall_UsesXDG(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := setTestHome(t)
 
 	r := NewPathResolver()
 
@@ -41,8 +40,7 @@ func TestPathResolver_ExistingInstall_ReadsFromLegacy(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := setTestHome(t)
 
 	legacyDir := filepath.Join(home, LegacyVaultSubdir)
 	if err := os.MkdirAll(legacyDir, 0o700); err != nil {
@@ -74,8 +72,7 @@ func TestPathResolver_BothExist_PostMigration(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := setTestHome(t)
 
 	legacyDir := filepath.Join(home, LegacyVaultSubdir)
 	if err := os.MkdirAll(legacyDir, 0o700); err != nil {
@@ -109,8 +106,7 @@ func TestPathResolver_SymvaultVaultEnvOverride(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := setTestHome(t)
 	t.Setenv("SYMVAULT_VAULT", filepath.Join(home, "custom-vault"))
 
 	r := NewPathResolver()
@@ -125,8 +121,7 @@ func TestPathResolver_SymvaultVaultEnvTildeExpansion(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := setTestHome(t)
 	t.Setenv("SYMVAULT_VAULT", "~/my-vault")
 
 	r := NewPathResolver()
@@ -141,8 +136,7 @@ func TestPathResolver_ConfigPath(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := setTestHome(t)
 
 	r := NewPathResolver()
 
@@ -156,8 +150,7 @@ func TestPathResolver_VaultDataDir(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := setTestHome(t)
 
 	r := NewPathResolver()
 
@@ -171,8 +164,7 @@ func TestPathResolver_AuditDir(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := setTestHome(t)
 
 	r := NewPathResolver()
 
@@ -186,8 +178,7 @@ func TestPathResolver_CachePath(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := setTestHome(t)
 
 	r := NewPathResolver()
 
@@ -201,8 +192,7 @@ func TestPathResolver_LegacyInstall_VaultDataDirEqualsDataDir(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := setTestHome(t)
 
 	legacyDir := filepath.Join(home, LegacyVaultSubdir)
 	if err := os.MkdirAll(legacyDir, 0o700); err != nil {
