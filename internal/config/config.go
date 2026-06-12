@@ -20,8 +20,8 @@ const (
 	DataSubdir   = "symaira-vault" // under $XDG_DATA_HOME
 	CacheSubdir  = "symaira-vault" // under $XDG_CACHE_HOME
 
-	// Deprecated: Use DefaultConfigDir(), DefaultDataDir(), or DefaultCacheDir() instead.
-	// Kept for backward compatibility and migration detection.
+	// Prefer DefaultConfigDir(), DefaultDataDir(), or DefaultCacheDir() for
+	// new code. Kept for backward compatibility and migration detection.
 	DefaultVaultSubdir       = ".symvault"
 	LegacyDefaultVaultSubdir = ".openpass"
 	defaultConfigDir         = DefaultVaultSubdir
