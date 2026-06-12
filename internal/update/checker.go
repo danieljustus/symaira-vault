@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/danieljustus/symaira-corekit/updatecheck"
+
 	"github.com/danieljustus/symaira-vault/internal/metrics"
 )
 

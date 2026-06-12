@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/danieljustus/symaira-corekit/logkit"
+
 	"github.com/danieljustus/symaira-vault/internal/envutil"
 )
 

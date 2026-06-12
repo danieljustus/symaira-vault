@@ -33,9 +33,9 @@ func Default() *Config {
 	}
 }
 
-func defaultConfigPath() (string, error) {
+func defaultConfigPath() string {
 	r := NewPathResolver()
-	return r.ConfigPath(), nil
+	return r.ConfigPath()
 }
 
 // NormalizeAuthMethod normalizes an auth method string to a canonical value.

@@ -1544,10 +1544,7 @@ func TestDefaultConfigPath_ReturnsExpectedPath(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	path, err := defaultConfigPath()
-	if err != nil {
-		t.Fatalf("defaultConfigPath() error = %v", err)
-	}
+	path := defaultConfigPath()
 
 	expected := filepath.Join(home, ".config", "symaira-vault", "config.yaml")
 	if path != expected {
