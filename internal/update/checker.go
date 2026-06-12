@@ -3,15 +3,13 @@ package update
 import (
 	"context"
 	"crypto/tls"
-	"crypto/x509"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/danieljustus/symaira-corekit/updatecheck"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
 )
 
@@ -46,10 +44,14 @@ type httpDoer interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
+// Checker checks for application updates via GitHub releases, delegating
+// the network fetch to corekit's updatecheck.Checker while preserving
+// vault-specific file-based caching and metrics.
 type Checker struct {
 	HTTPClient       httpDoer
 	LatestReleaseURL string
 	Cache            *Cache
+	corekit          *updatecheck.Checker
 }
 
 type Result struct {
@@ -58,13 +60,6 @@ type Result struct {
 	ReleaseURL      string
 	Checkable       bool
 	UpdateAvailable bool
-}
-
-type latestReleaseResponse struct {
-	Draft      bool   `json:"draft"`
-	HTMLURL    string `json:"html_url"`
-	Prerelease bool   `json:"prerelease"`
-	TagName    string `json:"tag_name"`
 }
 
 type stableVersion struct {
@@ -85,6 +80,22 @@ func NewChecker(client httpDoer) *Checker {
 	}
 }
 
+// syncCorekit ensures the inner corekit Checker is created and reflects
+// the vault Checker's current HTTPClient and LatestReleaseURL settings.
+func (c *Checker) syncCorekit() {
+	if c.corekit == nil {
+		c.corekit = updatecheck.NewChecker("danieljustus", "symaira-vault")
+	}
+	if c.HTTPClient != nil {
+		c.corekit.HTTPClient = c.HTTPClient
+	}
+	url := strings.TrimSpace(c.LatestReleaseURL)
+	if url == "" {
+		url = DefaultLatestReleaseURL
+	}
+	c.corekit.LatestReleaseURL = url
+}
+
 func (c *Checker) Check(ctx context.Context, currentVersion string) (*Result, error) {
 	return c.CheckWithForce(ctx, currentVersion, false)
 }
@@ -95,6 +106,8 @@ func (c *Checker) CheckWithForce(ctx context.Context, currentVersion string, for
 		return &Result{CurrentVersion: strings.TrimSpace(currentVersion)}, nil
 	}
 
+	// File cache check — avoids network round-trip when a recent result
+	// is already persisted on disk.
 	if !force && c.Cache != nil {
 		if entry, err := c.Cache.Load(); err == nil && entry != nil {
 			latest, cacheOk := parseStableVersion(entry.LatestVersion)
@@ -121,29 +134,34 @@ func (c *Checker) CheckWithForce(ctx context.Context, currentVersion string, for
 		}
 	}
 
-	release, err := c.fetchLatestRelease(ctx, currentVersion)
+	// Delegate the GitHub API fetch to corekit.
+	c.syncCorekit()
+	release, err := c.corekit.CheckWithForce(ctx, currentVersion, force)
 	if err != nil {
 		metrics.RecordUpdateCheck("error")
 		return nil, err
 	}
 
-	latest, ok := parseStableVersion(release.TagName)
-	if !ok {
-		metrics.RecordUpdateCheck("error")
-		return nil, fmt.Errorf("latest release tag %q is not a stable semantic version", release.TagName)
-	}
-
-	updateAvailable := compareStableVersions(current, latest) < 0
-	if current.major == 0 && latest.major > 0 {
-		updateAvailable = false
-	}
-
-	result := &Result{
-		CurrentVersion:  current.String(),
-		LatestVersion:   latest.String(),
-		ReleaseURL:      strings.TrimSpace(release.HTMLURL),
-		Checkable:       true,
-		UpdateAvailable: updateAvailable,
+	var result *Result
+	if release != nil {
+		result = &Result{
+			CurrentVersion:  current.String(),
+			LatestVersion:   strings.TrimPrefix(release.TagName, "v"),
+			ReleaseURL:      release.HTMLURL,
+			Checkable:       true,
+			UpdateAvailable: true,
+		}
+	} else {
+		// Corekit returns nil when the current version is already
+		// up-to-date (or when the version is cross-series). In both
+		// cases there is no newer version to report.
+		result = &Result{
+			CurrentVersion:  current.String(),
+			LatestVersion:   current.String(),
+			ReleaseURL:      "",
+			Checkable:       true,
+			UpdateAvailable: false,
+		}
 	}
 
 	if c.Cache != nil {
@@ -161,74 +179,6 @@ func (c *Checker) CheckWithForce(ctx context.Context, currentVersion string, for
 	}
 
 	return result, nil
-}
-
-func (c *Checker) fetchLatestRelease(ctx context.Context, currentVersion string) (*latestReleaseResponse, error) {
-	url := strings.TrimSpace(c.LatestReleaseURL)
-	if url == "" {
-		url = DefaultLatestReleaseURL
-	}
-
-	client := c.HTTPClient
-	if client == nil {
-		client = newSecureClient()
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("create latest release request: %w", err)
-	}
-
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", fmt.Sprintf("symvault/%s", strings.TrimSpace(currentVersion)))
-
-	resp, err := client.Do(req) // #nosec G107 — URL is validated and points to GitHub API
-	if err != nil {
-		if isTLSCertificateError(err) {
-			return nil, fmt.Errorf("update check failed: TLS certificate verification error - %w", err)
-		}
-		return nil, fmt.Errorf("request latest release: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		if resp.StatusCode == http.StatusForbidden && resp.Header.Get("X-RateLimit-Remaining") == "0" {
-			return nil, fmt.Errorf("GitHub API rate limit exceeded")
-		}
-		return nil, fmt.Errorf("GitHub API returned HTTP %d", resp.StatusCode)
-	}
-
-	var release latestReleaseResponse
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-		return nil, fmt.Errorf("decode latest release response: %w", err)
-	}
-
-	if release.Draft {
-		return nil, fmt.Errorf("latest release response returned a draft release")
-	}
-	if release.Prerelease {
-		return nil, fmt.Errorf("latest release response returned a prerelease")
-	}
-	if strings.TrimSpace(release.TagName) == "" {
-		return nil, fmt.Errorf("latest release response did not include a tag name")
-	}
-
-	return &release, nil
-}
-
-// isTLSCertificateError reports whether an error is caused by a TLS
-// certificate verification failure.
-func isTLSCertificateError(err error) bool {
-	var certErr *x509.CertificateInvalidError
-	if errors.As(err, &certErr) {
-		return true
-	}
-	var hostnameErr x509.HostnameError
-	if errors.As(err, &hostnameErr) {
-		return true
-	}
-	var unknownAuthorityErr x509.UnknownAuthorityError
-	return errors.As(err, &unknownAuthorityErr)
 }
 
 func parseStableVersion(raw string) (stableVersion, bool) {

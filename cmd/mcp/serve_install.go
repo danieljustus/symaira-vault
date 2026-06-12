@@ -156,6 +156,6 @@ func loadServeConfig() (*configpkg.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	configPath := filepath.Join(home, ".symvault", "config.yaml")
+	configPath := filepath.Join(home, configpkg.DefaultVaultSubdir, "config.yaml")
 	return configpkg.Load(configPath)
 }

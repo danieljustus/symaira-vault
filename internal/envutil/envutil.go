@@ -10,6 +10,7 @@ import (
 	"os"
 	"sync/atomic"
 
+	corekitenvutil "github.com/danieljustus/symaira-corekit/envutil"
 	"golang.org/x/term"
 )
 
@@ -23,20 +24,23 @@ var ForceDeprecationWarning bool
 // legacy variable. Prints a one-shot deprecation warning when a legacy
 // OPENPASS_* variable is consumed. Returns the value (may be empty).
 func Getenv(primary, legacy string) string {
-	if v := os.Getenv(primary); v != "" {
+	v := corekitenvutil.Getenv(primary, legacy)
+	if v == "" {
+		return ""
+	}
+	// If the value came from the primary variable, no warning is needed.
+	if p := os.Getenv(primary); p != "" {
 		return v
 	}
-	if v := os.Getenv(legacy); v != "" {
-		if deprecateWarn.CompareAndSwap(0, 1) && len(legacy) > 8 && legacy[:8] == "OPENPASS" {
-			if ForceDeprecationWarning || term.IsTerminal(int(os.Stderr.Fd())) {
-				fmt.Fprintf(os.Stderr,
-					"WARNING: %[1]s is deprecated and will be removed 3 releases after 2026-05-26. "+
-						"Use %[2]s instead.\n", legacy, primary)
-			}
+	// Value came from legacy — fire deprecation warning.
+	if deprecateWarn.CompareAndSwap(0, 1) && len(legacy) > 8 && legacy[:8] == "OPENPASS" {
+		if ForceDeprecationWarning || term.IsTerminal(int(os.Stderr.Fd())) {
+			fmt.Fprintf(os.Stderr,
+				"WARNING: %[1]s is deprecated and will be removed 3 releases after 2026-05-26. "+
+					"Use %[2]s instead.\n", legacy, primary)
 		}
-		return v
 	}
-	return ""
+	return v
 }
 
 // resetDeprecationWarning resets the one-shot deprecation warning so that
@@ -47,6 +51,6 @@ func resetDeprecationWarning() {
 
 // Unsetenv unsets both the primary and legacy environment variable names.
 func Unsetenv(primary, legacy string) {
-	_ = os.Unsetenv(primary)
-	_ = os.Unsetenv(legacy)
+	_ = corekitenvutil.Unsetenv(primary)
+	_ = corekitenvutil.Unsetenv(legacy)
 }

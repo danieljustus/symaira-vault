@@ -90,7 +90,7 @@ func TestVaultPathErrorWhenHomeDirNotAvailable(t *testing.T) {
 	}()
 
 	// Set vault to a path starting with ~ which requires home directory expansion
-	cli.Vault = "~/.symvault"
+	cli.Vault = "~/" + config.DefaultVaultSubdir
 
 	// Call vaultPath and verify it returns an error
 	path, err := cli.VaultPath()
@@ -100,7 +100,7 @@ func TestVaultPathErrorWhenHomeDirNotAvailable(t *testing.T) {
 }
 
 // TestVaultPathSuccessWithTildeExpansion verifies that vaultPath correctly expands
-// tilde paths when home directory is available.
+// tilde paths when home directory is available and a non-default vault is set.
 func TestVaultPathSuccessWithTildeExpansion(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: path format differs")
@@ -126,16 +126,15 @@ func TestVaultPathSuccessWithTildeExpansion(t *testing.T) {
 		cli.Vault = origVaultFlag
 	}()
 
-	// Set vault to a path starting with ~
-	cli.Vault = "~/.symvault"
+	cli.Vault = "~/.custom-vault"
 
 	// Call vaultPath and verify it returns the expanded path
 	path, err := cli.VaultPath()
 	if err != nil {
 		t.Errorf("cli.VaultPath() should not return error, got: %v", err)
 	}
-	if path != "/Users/testuser/.symvault" {
-		t.Errorf("cli.VaultPath() = %s, want /Users/testuser/.symvault", path)
+	if path != "/Users/testuser/.custom-vault" {
+		t.Errorf("cli.VaultPath() = %s, want /Users/testuser/.custom-vault", path)
 	}
 }
 
@@ -188,7 +187,7 @@ func TestVaultPathUsesEnvWhenFlagUnchanged(t *testing.T) {
 	origEnv := os.Getenv("OPENPASS_VAULT")
 	defer func() { _ = os.Setenv("OPENPASS_VAULT", origEnv) }()
 
-	cli.Vault = "~/.symvault"
+	cli.Vault = "~/" + config.DefaultVaultSubdir
 	_ = os.Setenv("OPENPASS_VAULT", "/env/vault")
 
 	path, err := cli.VaultPath()
@@ -804,7 +803,7 @@ func TestVaultPathUsesSymvaultEnvWhenFlagUnchanged(t *testing.T) {
 	defer func() { _ = os.Setenv("OPENPASS_VAULT", origOpenpass) }()
 	_ = os.Unsetenv("OPENPASS_VAULT")
 
-	cli.Vault = "~/.symvault"
+	cli.Vault = "~/" + config.DefaultVaultSubdir
 	_ = os.Setenv("SYMVAULT_VAULT", "/env/symvault")
 
 	path, err := cli.VaultPath()
@@ -831,7 +830,7 @@ func TestVaultPathSymvaultTakesPrecedenceOverOpenpass(t *testing.T) {
 		_ = os.Setenv("OPENPASS_VAULT", origOpenpass)
 	}()
 
-	cli.Vault = "~/.symvault"
+	cli.Vault = "~/" + config.DefaultVaultSubdir
 	_ = os.Setenv("SYMVAULT_VAULT", "/env/symvault")
 	_ = os.Setenv("OPENPASS_VAULT", "/env/openpass")
 

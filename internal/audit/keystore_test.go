@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 )
 
 func TestKeystoreLoadOrCreateAndLoadBack(t *testing.T) {
@@ -110,7 +112,7 @@ func TestKeystoreWithAuditLogIntegration(t *testing.T) {
 		t.Fatalf("logger HMAC key length %d, want %d", len(logger.hmacKey), hmacKeySize)
 	}
 
-	auditDir := filepath.Join(home, ".symvault")
+	auditDir := filepath.Join(home, configpkg.DefaultVaultSubdir)
 
 	ks := NewKeystore(auditDir, nil)
 	loaded, err := ks.LoadHMACKey()

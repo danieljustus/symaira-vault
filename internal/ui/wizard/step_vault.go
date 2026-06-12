@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/danieljustus/symaira-vault/internal/config"
 	"github.com/danieljustus/symaira-vault/internal/fsutil"
 )
 
@@ -21,7 +22,7 @@ type VaultPathStep struct {
 
 func NewVaultPathStep(defaultDir string) *VaultPathStep {
 	ti := textinput.New()
-	ti.Placeholder = "~/.symvault"
+	ti.Placeholder = "~/" + config.DefaultVaultSubdir
 	ti.SetValue(defaultDir)
 	ti.Focus()
 	ti.CharLimit = 512

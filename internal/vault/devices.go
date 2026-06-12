@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/danieljustus/symaira-vault/internal/config"
 )
 
 // Device represents a known device in the vault's device registry.
@@ -27,7 +29,7 @@ func NewDeviceManager(vaultDir string) *DeviceManager {
 }
 
 func (dm *DeviceManager) devicesPath() string {
-	return filepath.Join(dm.vaultDir, ".symvault", "devices.json")
+	return filepath.Join(dm.vaultDir, config.DefaultVaultSubdir, "devices.json")
 }
 
 func (dm *DeviceManager) ensureDir() error {

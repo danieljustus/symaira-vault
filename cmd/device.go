@@ -132,7 +132,7 @@ to re-encrypt all entries for this new device.`,
 			return fmt.Errorf("clone vault: %w", err)
 		}
 
-		pairingPath := filepath.Join(vaultDir, ".symvault", "pairing", token+".json")
+		pairingPath := filepath.Join(vaultDir, configpkg.DefaultVaultSubdir, "pairing", token+".json")
 		var pf pairingFile
 		// #nosec G304 -- pairingPath is constructed within the vault directory
 		pfData, err := os.ReadFile(pairingPath)
@@ -208,7 +208,7 @@ to re-encrypt all entries for this new device.`,
 			return fmt.Errorf("save joined file: %w", err)
 		}
 
-		cleanupPairingFile := filepath.Join(vaultDir, ".symvault", "pairing", token+".json")
+		cleanupPairingFile := filepath.Join(vaultDir, configpkg.DefaultVaultSubdir, "pairing", token+".json")
 		_ = os.Remove(cleanupPairingFile)
 
 		if err := git.AutoCommitWithOptions(vaultDir, git.CommitOptions{
@@ -254,7 +254,7 @@ can decrypt them.`,
 			return err
 		}
 
-		joinedPath := filepath.Join(vaultDir, ".symvault", "pairing", token+"-joined.json")
+		joinedPath := filepath.Join(vaultDir, configpkg.DefaultVaultSubdir, "pairing", token+"-joined.json")
 		var jf joinedFile
 		// #nosec G304 -- joinedPath is constructed within the vault directory
 		jfData, err := os.ReadFile(joinedPath)
@@ -657,7 +657,7 @@ type joinedFile struct {
 }
 
 func savePairingFile(vaultDir, filename string, data any) error {
-	pairingDir := filepath.Join(vaultDir, ".symvault", "pairing")
+	pairingDir := filepath.Join(vaultDir, configpkg.DefaultVaultSubdir, "pairing")
 	if err := os.MkdirAll(pairingDir, 0o700); err != nil {
 		return fmt.Errorf("create pairing dir: %w", err)
 	}

@@ -153,7 +153,7 @@ func applyProfile(state *WizardState, errs *[]string) {
 		return
 	}
 	home, _ := os.UserHomeDir()
-	globalCfgPath := filepath.Join(home, ".symvault", "config.yaml")
+	globalCfgPath := filepath.Join(home, configpkg.DefaultVaultSubdir, "config.yaml")
 	cfg, err := configpkg.Load(globalCfgPath)
 	if err != nil {
 		cfg = configpkg.Default()

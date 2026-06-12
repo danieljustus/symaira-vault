@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"filippo.io/age"
+
+	"github.com/danieljustus/symaira-vault/internal/config"
 )
 
 func TestValidateIdentityPathTraversal(t *testing.T) {
@@ -18,7 +20,7 @@ func TestValidateIdentityPathTraversal(t *testing.T) {
 
 func TestValidateIdentityPathAbsolute(t *testing.T) {
 	// A path without ".." should pass validation
-	if err := validateIdentityPath("/home/user/.symvault/identity.age"); err != nil {
+	if err := validateIdentityPath(filepath.Join("/home/user", config.DefaultVaultSubdir, "identity.age")); err != nil {
 		t.Fatalf("validateIdentityPath() error = %v, want nil for safe path", err)
 	}
 }

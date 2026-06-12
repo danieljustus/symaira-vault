@@ -14,6 +14,7 @@ import (
 
 	"github.com/danieljustus/symaira-vault/internal/audit"
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 )
 
 var (
@@ -77,7 +78,7 @@ func AuditLogPath(agent string) (string, error) {
 	}
 
 	cleanHome := filepath.Clean(home)
-	auditDir := filepath.Join(cleanHome, ".symvault")
+	auditDir := filepath.Join(cleanHome, configpkg.DefaultVaultSubdir)
 	cleanAuditDir := filepath.Clean(auditDir)
 	if !strings.HasPrefix(cleanAuditDir, cleanHome+string(filepath.Separator)) {
 		return "", fmt.Errorf("invalid audit directory path")

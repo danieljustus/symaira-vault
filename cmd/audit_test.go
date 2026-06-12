@@ -13,6 +13,7 @@ import (
 
 	admin "github.com/danieljustus/symaira-vault/cmd/admin"
 	"github.com/danieljustus/symaira-vault/internal/audit"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 )
 
 func TestAuditLogPath(t *testing.T) {
@@ -28,7 +29,7 @@ func TestAuditLogPath(t *testing.T) {
 		t.Fatalf("admin.AuditLogPath() error = %v", err)
 	}
 
-	expected := filepath.Join(home, ".symvault", "audit-default.log")
+	expected := filepath.Join(home, configpkg.DefaultVaultSubdir, "audit-default.log")
 	if path != expected {
 		t.Fatalf("admin.AuditLogPath() = %q, want %q", path, expected)
 	}
@@ -65,7 +66,7 @@ func TestLoadAuditEntries(t *testing.T) {
 		_ = os.Setenv("HOME", h)
 	}()
 
-	auditDir := filepath.Join(home, ".symvault")
+	auditDir := filepath.Join(home, configpkg.DefaultVaultSubdir)
 	if err := os.MkdirAll(auditDir, 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
@@ -120,7 +121,7 @@ func TestLoadAuditEntries_Limit(t *testing.T) {
 		_ = os.Setenv("HOME", h)
 	}()
 
-	auditDir := filepath.Join(home, ".symvault")
+	auditDir := filepath.Join(home, configpkg.DefaultVaultSubdir)
 	if err := os.MkdirAll(auditDir, 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
@@ -309,7 +310,7 @@ func TestAuditCommand_JSON(t *testing.T) {
 		_ = os.Setenv("HOME", h)
 	}()
 
-	auditDir := filepath.Join(home, ".symvault")
+	auditDir := filepath.Join(home, configpkg.DefaultVaultSubdir)
 	if err := os.MkdirAll(auditDir, 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
@@ -349,7 +350,7 @@ func TestAuditCommand_Table(t *testing.T) {
 		_ = os.Setenv("HOME", h)
 	}()
 
-	auditDir := filepath.Join(home, ".symvault")
+	auditDir := filepath.Join(home, configpkg.DefaultVaultSubdir)
 	if err := os.MkdirAll(auditDir, 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
@@ -386,7 +387,7 @@ func TestAuditCommand_SinceFilter(t *testing.T) {
 		_ = os.Setenv("HOME", h)
 	}()
 
-	auditDir := filepath.Join(home, ".symvault")
+	auditDir := filepath.Join(home, configpkg.DefaultVaultSubdir)
 	if err := os.MkdirAll(auditDir, 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
@@ -432,7 +433,7 @@ func TestAuditCommand_FailedFilter(t *testing.T) {
 		_ = os.Setenv("HOME", h)
 	}()
 
-	auditDir := filepath.Join(home, ".symvault")
+	auditDir := filepath.Join(home, configpkg.DefaultVaultSubdir)
 	if err := os.MkdirAll(auditDir, 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}

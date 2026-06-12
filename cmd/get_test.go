@@ -33,7 +33,7 @@ func TestGetAutoClearDuration(t *testing.T) {
 		_ = os.Unsetenv("HOME")
 		_ = os.Unsetenv("OPENPASS_VAULT")
 
-		cli.Vault = "~/.symvault"
+		cli.Vault = "~/" + config.DefaultVaultSubdir
 
 		duration := crud.GetAutoClearDuration()
 		if duration != 30 {

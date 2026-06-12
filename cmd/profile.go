@@ -40,7 +40,7 @@ var profileListCmd = &cobra.Command{
 			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "cannot determine home directory", err)
 		}
 
-		cfg, err := configpkg.Load(filepath.Join(home, ".symvault", "config.yaml"))
+		cfg, err := configpkg.Load(filepath.Join(home, configpkg.DefaultVaultSubdir, "config.yaml"))
 		if err != nil {
 			cfg = configpkg.Default()
 		}
@@ -96,7 +96,7 @@ Example:
 			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "cannot determine home directory", err)
 		}
 
-		configPath := filepath.Join(home, ".symvault", "config.yaml")
+		configPath := filepath.Join(home, configpkg.DefaultVaultSubdir, "config.yaml")
 		cfg, err := configpkg.Load(configPath)
 		if err != nil {
 			cfg = configpkg.Default()
@@ -140,7 +140,7 @@ Example:
 			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "cannot determine home directory", err)
 		}
 
-		configPath := filepath.Join(home, ".symvault", "config.yaml")
+		configPath := filepath.Join(home, configpkg.DefaultVaultSubdir, "config.yaml")
 		cfg, err := configpkg.Load(configPath)
 		if err != nil {
 			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "cannot load config", err)
