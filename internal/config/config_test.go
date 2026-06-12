@@ -18,14 +18,17 @@ func iptr(v int) *int                     { return &v }
 func dptr(v time.Duration) *time.Duration { return &v }
 
 func TestDefaultReturnsSensibleConfig(t *testing.T) {
-	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: HOME env behavior differs")
+	}
+	home := setTestHome(t)
 
 	cfg := Default()
 	if cfg == nil {
 		t.Fatal("Default returned nil")
 	}
 
-	wantVaultDir := filepath.Join(mustHomeDir(t), ".symvault")
+	wantVaultDir := filepath.Join(home, ".local", "share", "symaira-vault")
 	if cfg.VaultDir != wantVaultDir {
 		t.Fatalf("VaultDir = %q, want %q", cfg.VaultDir, wantVaultDir)
 	}
@@ -162,11 +165,10 @@ func TestSaveWritesToDefaultConfigPath(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := setTestHome(t)
 
 	cfg := &Config{
-		VaultDir:       filepath.Join(home, ".symvault"),
+		VaultDir:       filepath.Join(home, DefaultVaultSubdir),
 		DefaultAgent:   "default",
 		SessionTimeout: defaultSessionTimeout,
 		Agents: map[string]AgentProfile{
@@ -183,7 +185,7 @@ func TestSaveWritesToDefaultConfigPath(t *testing.T) {
 		t.Fatalf("Save() error = %v", err)
 	}
 
-	wantPath := filepath.Join(home, ".symvault", "config.yaml")
+	wantPath := filepath.Join(home, ".config", "symaira-vault", "config.yaml")
 	if _, err := os.Stat(wantPath); err != nil {
 		t.Fatalf("config file missing at %q: %v", wantPath, err)
 	}
@@ -202,15 +204,14 @@ func TestSaveCreatesConfigDirectory(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := setTestHome(t)
 
 	cfg := Default()
 	if err := cfg.Save(); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(home, ".symvault")); err != nil {
+	if _, err := os.Stat(filepath.Join(home, ".config", "symaira-vault")); err != nil {
 		t.Fatalf("config directory missing: %v", err)
 	}
 }
@@ -308,11 +309,10 @@ func TestSaveWritesRedactFields(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := setTestHome(t)
 
 	cfg := &Config{
-		VaultDir:       filepath.Join(home, ".symvault"),
+		VaultDir:       filepath.Join(home, DefaultVaultSubdir),
 		DefaultAgent:   "default",
 		SessionTimeout: defaultSessionTimeout,
 		Agents: map[string]AgentProfile{
@@ -330,7 +330,7 @@ func TestSaveWritesRedactFields(t *testing.T) {
 		t.Fatalf("Save() error = %v", err)
 	}
 
-	loaded, err := Load(filepath.Join(home, ".symvault", "config.yaml"))
+	loaded, err := Load(filepath.Join(home, ".config", "symaira-vault", "config.yaml"))
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -452,11 +452,10 @@ func TestSaveWithAllConfigSections(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := setTestHome(t)
 
 	cfg := &Config{
-		VaultDir:       filepath.Join(home, ".symvault"),
+		VaultDir:       filepath.Join(home, DefaultVaultSubdir),
 		DefaultAgent:   "default",
 		SessionTimeout: defaultSessionTimeout,
 		Agents: map[string]AgentProfile{
@@ -494,7 +493,7 @@ func TestSaveWithAllConfigSections(t *testing.T) {
 		t.Fatalf("Save() error = %v", err)
 	}
 
-	wantPath := filepath.Join(home, ".symvault", "config.yaml")
+	wantPath := filepath.Join(home, ".config", "symaira-vault", "config.yaml")
 	loaded, err := Load(wantPath)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
@@ -543,11 +542,10 @@ func TestSaveLoadRoundTrip_PreservesAllFields(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := setTestHome(t)
 
 	cfg := &Config{
-		VaultDir:       filepath.Join(home, ".symvault"),
+		VaultDir:       filepath.Join(home, DefaultVaultSubdir),
 		DefaultAgent:   "test-agent",
 		SessionTimeout: defaultSessionTimeout,
 		Agents: map[string]AgentProfile{
@@ -589,7 +587,7 @@ func TestSaveLoadRoundTrip_PreservesAllFields(t *testing.T) {
 		t.Fatalf("Save() error = %v", err)
 	}
 
-	wantPath := filepath.Join(home, ".symvault", "config.yaml")
+	wantPath := filepath.Join(home, ".config", "symaira-vault", "config.yaml")
 	loaded, err := Load(wantPath)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
@@ -805,7 +803,7 @@ func TestValidateConfigPath_AcceptsValidPaths(t *testing.T) {
 		"subdir/config.yaml",
 		"./config.yaml",
 		"foo/bar.yaml",
-		"~/.symvault/config.yaml",
+		"~/" + DefaultVaultSubdir + "/config.yaml",
 	}
 	for _, p := range validPaths {
 		err := validateConfigPath(p)
@@ -1083,7 +1081,7 @@ func TestSave_PermissionDeniedOnReadOnlyDir(t *testing.T) {
 	t.Setenv("HOME", home)
 
 	cfg := &Config{
-		VaultDir:       filepath.Join(readonlyDir, ".symvault"),
+		VaultDir:       filepath.Join(readonlyDir, DefaultVaultSubdir),
 		DefaultAgent:   "default",
 		SessionTimeout: defaultSessionTimeout,
 		Agents:         builtinAgentProfiles(),
@@ -1099,7 +1097,7 @@ func TestSave_FilePermissionDenied(t *testing.T) {
 	t.Skip("Skipping: root-owned temp dir not reliable on macOS")
 
 	home := t.TempDir()
-	readonlyDir := filepath.Join(home, ".symvault")
+	readonlyDir := filepath.Join(home, DefaultVaultSubdir)
 	if err := os.MkdirAll(readonlyDir, 0o500); err != nil {
 		t.Skip("cannot create dir with restricted perms")
 	}
@@ -1537,15 +1535,11 @@ func TestDefaultConfigPath_ReturnsExpectedPath(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := setTestHome(t)
 
-	path, err := defaultConfigPath()
-	if err != nil {
-		t.Fatalf("defaultConfigPath() error = %v", err)
-	}
+	path := defaultConfigPath()
 
-	expected := filepath.Join(home, ".symvault", "config.yaml")
+	expected := filepath.Join(home, ".config", "symaira-vault", "config.yaml")
 	if path != expected {
 		t.Errorf("defaultConfigPath() = %q, want %q", path, expected)
 	}
@@ -1866,8 +1860,7 @@ func TestSave_Profiles(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := setTestHome(t)
 
 	cfg := Default()
 	cfg.Profiles = map[string]*Profile{
@@ -1879,7 +1872,7 @@ func TestSave_Profiles(t *testing.T) {
 		t.Fatalf("Save() error = %v", err)
 	}
 
-	loaded, err := Load(filepath.Join(home, ".symvault", "config.yaml"))
+	loaded, err := Load(filepath.Join(home, ".config", "symaira-vault", "config.yaml"))
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -2210,8 +2203,7 @@ func TestPresets_UnknownTier_Ignored(t *testing.T) {
 // --- Tier Preset Load Tests ---
 
 func TestLoad_TierStandardPreset(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t)
 
 	yamlContent := `agents:
   my-agent:
@@ -2242,8 +2234,7 @@ func TestLoad_TierStandardPreset(t *testing.T) {
 }
 
 func TestLoad_TierStandardWithExplicitOverride(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t)
 
 	yamlContent := `agents:
   my-agent:
@@ -2270,8 +2261,7 @@ func TestLoad_TierStandardWithExplicitOverride(t *testing.T) {
 }
 
 func TestLoad_TierReadOnlyPreset(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t)
 
 	yamlContent := `agents:
   my-agent:
@@ -2298,8 +2288,7 @@ func TestLoad_TierReadOnlyPreset(t *testing.T) {
 }
 
 func TestLoad_TierAdminPreset(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t)
 
 	yamlContent := `agents:
   my-agent:
@@ -2331,8 +2320,7 @@ func TestLoad_TierAdminPreset(t *testing.T) {
 // --- ExposeValueTools Tests ---
 
 func TestLoad_ExposeValueToolsExplicitTrue(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t)
 
 	yamlContent := `agents:
   my-agent:
@@ -2350,8 +2338,7 @@ func TestLoad_ExposeValueToolsExplicitTrue(t *testing.T) {
 }
 
 func TestLoad_ExposeValueToolsExplicitFalse(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t)
 
 	yamlContent := `agents:
   my-agent:
@@ -2369,8 +2356,7 @@ func TestLoad_ExposeValueToolsExplicitFalse(t *testing.T) {
 }
 
 func TestLoad_ExposeValueToolsBackwardCompat(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t)
 
 	// Config without tier and without exposeValueTools should default to true
 	yamlContent := `agents:
@@ -2389,8 +2375,7 @@ func TestLoad_ExposeValueToolsBackwardCompat(t *testing.T) {
 }
 
 func TestLoad_ExposeValueToolsTierOverridesDefault(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t)
 
 	// Config with tier=standard but no exposeValueTools - should be false from preset
 	yamlContent := `agents:
@@ -2409,8 +2394,7 @@ func TestLoad_ExposeValueToolsTierOverridesDefault(t *testing.T) {
 }
 
 func TestLoad_ExposeValueToolsExplicitOverridesTier(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t)
 
 	// Config with tier=standard but explicit exposeValueTools: true - value should be true
 	yamlContent := `agents:
@@ -2739,11 +2723,10 @@ func TestRoundTrip_AllFieldsSet(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := setTestHome(t)
 
 	cfg := &Config{
-		VaultDir:       filepath.Join(home, ".symvault"),
+		VaultDir:       filepath.Join(home, DefaultVaultSubdir),
 		DefaultAgent:   "test-agent",
 		SessionTimeout: 10 * time.Minute,
 		AuthMethod:     "touchid",
@@ -2846,7 +2829,7 @@ func TestRoundTrip_AllFieldsSet(t *testing.T) {
 		},
 	}
 
-	path := filepath.Join(home, ".symvault", "config.yaml")
+	path := filepath.Join(home, ".config", "symaira-vault", "config.yaml")
 	if err := cfg.Save(); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
@@ -3039,12 +3022,11 @@ func TestRoundTrip_DefaultsApplied(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := setTestHome(t)
 
 	// Minimal config - all defaults should apply
 	cfg := &Config{
-		VaultDir:       filepath.Join(home, ".symvault"),
+		VaultDir:       filepath.Join(home, DefaultVaultSubdir),
 		DefaultAgent:   "default",
 		SessionTimeout: defaultSessionTimeout,
 		Agents: map[string]AgentProfile{
@@ -3052,7 +3034,7 @@ func TestRoundTrip_DefaultsApplied(t *testing.T) {
 		},
 	}
 
-	path := filepath.Join(home, ".symvault", "config.yaml")
+	path := filepath.Join(home, ".config", "symaira-vault", "config.yaml")
 	if err := cfg.Save(); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
@@ -3074,12 +3056,11 @@ func TestRoundTrip_ExplicitZeroValues(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
+	home := setTestHome(t)
 
 	// Config with explicitly set zero values
 	cfg := &Config{
-		VaultDir:       filepath.Join(home, ".symvault"),
+		VaultDir:       filepath.Join(home, DefaultVaultSubdir),
 		DefaultAgent:   "default",
 		SessionTimeout: defaultSessionTimeout,
 		AuthMethod:     "passphrase",
@@ -3101,7 +3082,7 @@ func TestRoundTrip_ExplicitZeroValues(t *testing.T) {
 		},
 	}
 
-	path := filepath.Join(home, ".symvault", "config.yaml")
+	path := filepath.Join(home, ".config", "symaira-vault", "config.yaml")
 	if err := cfg.Save(); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}

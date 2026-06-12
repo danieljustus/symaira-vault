@@ -235,7 +235,7 @@ func TestMCPTokenCreate_VaultPathError(t *testing.T) {
 	defer func() { _ = os.Setenv("HOME", origHome) }()
 
 	origVault := vault
-	vault = "~/.symvault"
+	vault = "~/" + config.DefaultVaultSubdir
 	defer func() { vault = origVault }()
 
 	vaultFlagReset(t)
@@ -895,7 +895,7 @@ func TestMCPTokenRevoke_VaultPathError(t *testing.T) {
 	defer func() { _ = os.Setenv("HOME", origHome) }()
 
 	origVault := vault
-	vault = "~/.symvault"
+	vault = "~/" + config.DefaultVaultSubdir
 	defer func() { vault = origVault }()
 
 	vaultFlagReset(t)
@@ -924,7 +924,7 @@ func TestMCPTokenList_VaultPathError(t *testing.T) {
 	defer func() { _ = os.Setenv("HOME", origHome) }()
 
 	origVault := vault
-	vault = "~/.symvault"
+	vault = "~/" + config.DefaultVaultSubdir
 	defer func() { vault = origVault }()
 
 	vaultFlagReset(t)

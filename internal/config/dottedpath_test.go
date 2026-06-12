@@ -327,8 +327,8 @@ func TestDefaultConfigFilePath(t *testing.T) {
 	if !strings.HasPrefix(path, home) {
 		t.Errorf("path = %q, should start with home %q", path, home)
 	}
-	if !strings.HasSuffix(path, "/.symvault/config.yaml") && !strings.HasSuffix(path, "\\.symvault\\config.yaml") {
-		t.Errorf("path = %q, should end with .symvault/config.yaml", path)
+	if !strings.HasSuffix(path, "/"+DefaultVaultSubdir+"/config.yaml") && !strings.HasSuffix(path, "\\"+DefaultVaultSubdir+"\\config.yaml") {
+		t.Errorf("path = %q, should end with %s/config.yaml", path, DefaultVaultSubdir)
 	}
 }
 

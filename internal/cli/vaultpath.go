@@ -47,21 +47,31 @@ func VaultPath() (string, error) {
 		return p, nil
 	}
 
-	home, err := os.UserHomeDir()
-	if err == nil {
-		cfg, cfgErr := configpkg.Load(filepath.Join(home, configpkg.DefaultVaultSubdir, "config.yaml"))
-		if cfgErr == nil && cfg.DefaultProfile != "" {
-			p, profErr := resolveProfileVaultDir(cfg.DefaultProfile)
-			if profErr == nil {
-				return p, nil
-			}
+	r := configpkg.NewPathResolver()
+
+	cfg, cfgErr := configpkg.Load(r.ConfigPath())
+	if cfgErr == nil && cfg.DefaultProfile != "" {
+		p, profErr := resolveProfileVaultDir(cfg.DefaultProfile)
+		if profErr == nil {
+			return p, nil
 		}
-		if isDefaultVaultFlagValue(Vault) {
+	}
+
+	if isDefaultVaultFlagValue(Vault) {
+		// .openpass → .symvault migration detection (kept for backward compat).
+		home, homeErr := os.UserHomeDir()
+		if homeErr == nil {
 			legacyVault := filepath.Join(home, configpkg.LegacyDefaultVaultSubdir)
-			newVault := filepath.Join(home, configpkg.DefaultVaultSubdir)
+			newVault := filepath.Join(home, configpkg.LegacyVaultSubdir)
 			if vaultExists(legacyVault) && !vaultExists(newVault) {
 				return legacyVault, nil
 			}
+		}
+
+		// .symvault → XDG: PathResolver already resolved the correct data dir
+		// based on which directories exist (legacy vs XDG).
+		if r.DataDir != "" {
+			return r.DataDir, nil
 		}
 	}
 
@@ -87,12 +97,9 @@ func fileExists(path string) bool {
 }
 
 func resolveProfileVaultDir(profileName string) (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
+	r := configpkg.NewPathResolver()
 
-	cfg, err := configpkg.Load(filepath.Join(home, configpkg.DefaultVaultSubdir, "config.yaml"))
+	cfg, err := configpkg.Load(r.ConfigPath())
 	if err != nil {
 		return "", fmt.Errorf("cannot load config: %w", err)
 	}
@@ -126,8 +133,8 @@ func ExpandVaultDir(vaultDir string) (string, error) {
 func GetVaultDir() string {
 	dir, err := VaultPath()
 	if err != nil {
-		home, _ := os.UserHomeDir()
-		return filepath.Join(home, configpkg.DefaultVaultSubdir)
+		r := configpkg.NewPathResolver()
+		return r.DataDir
 	}
 	return dir
 }

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/danieljustus/symaira-vault/internal/config"
 )
 
 // fixedTime is a deterministic timestamp used in tests that check output.
@@ -27,7 +29,7 @@ func testVars(overrides TemplateVars) TemplateVars {
 		SlashPrefix:         "/symvault:",
 		SymairaVaultVersion: "4.0.0-test",
 		ProfileTier:         "safe",
-		VaultPath:           "~/.symvault",
+		VaultPath:           "~/" + config.DefaultVaultSubdir,
 		InstalledAt:         fixedTime.Format(time.RFC3339),
 		SkillSchemaVersion:  DefaultSkillSchemaVersion,
 	}

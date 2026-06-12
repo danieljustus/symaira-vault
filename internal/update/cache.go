@@ -9,15 +9,12 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/danieljustus/symaira-vault/internal/config"
 	"github.com/danieljustus/symaira-vault/internal/fsutil"
 )
 
 const (
-	// DefaultCacheTTL is the default time-to-live for cached update check results.
 	DefaultCacheTTL = 24 * time.Hour
-
-	cacheDirName  = ".symvault"
-	cacheFileName = "update-cache.json"
 )
 
 // CacheEntry represents a cached update check result.
@@ -151,11 +148,8 @@ func (c *Cache) TTL() time.Duration {
 }
 
 func defaultCachePath() string {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return ""
-	}
-	return filepath.Join(home, cacheDirName, cacheFileName)
+	r := config.NewPathResolver()
+	return r.CachePath()
 }
 
 func validateCachePath(path string) error {

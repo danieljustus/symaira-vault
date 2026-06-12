@@ -174,6 +174,28 @@ func WithVaultRaw(fn func(*vaultpkg.Vault, *VaultService) error) error {
 	return WithVault(fn)
 }
 
+// WithVaultForScripting is the non-interactive variant of WithVault intended
+// for scripting and subprocess use. It never prompts for input; if the vault
+// is locked and no passphrase is available via session cache or environment
+// variable, it returns ExitLocked immediately.
+func WithVaultForScripting(fn func(*vaultpkg.Vault, *VaultService) error) error {
+	vaultDir, err := VaultPath()
+	if err != nil {
+		return err
+	}
+	if !vaultpkg.IsInitialized(vaultDir) {
+		return errorspkg.NewCLIError(errorspkg.ExitNotInitialized,
+			"vault not initialized. Run 'symvault init' first",
+			errorspkg.ErrVaultNotInitialized)
+	}
+	v, err := UnlockVault(vaultDir, false)
+	if err != nil {
+		return err
+	}
+	vs := NewVaultService(v, nil)
+	return fn(v, vs)
+}
+
 func lockedMessageForCache() string {
 	status := SessionGetCacheStatus()
 	if !status.Persistent {

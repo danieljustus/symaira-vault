@@ -64,7 +64,11 @@ var getCmd = &cobra.Command{
 	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: cli.EntryCompletionFunc,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
+		unlockVault := cli.WithVault
+		if !cli.IsTerminalFunc(int(os.Stdin.Fd())) {
+			unlockVault = cli.WithVaultForScripting
+		}
+		return unlockVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
 			cli.MaybeAutoPull(vs.VaultDir(), v.Config)
 			query := args[0]
 			path := query

@@ -268,7 +268,7 @@ func enableAutoPush() error {
 		return fmt.Errorf("cannot determine home directory: %w", err)
 	}
 
-	configPath := filepath.Join(home, ".symvault", "config.yaml")
+	configPath := filepath.Join(home, configpkg.DefaultVaultSubdir, "config.yaml")
 	cfg, err := configpkg.Load(configPath)
 	if err != nil {
 		cfg = configpkg.Default()
@@ -294,7 +294,7 @@ func loadAutoPushConfig() bool {
 		return false
 	}
 
-	cfg, err := configpkg.Load(filepath.Join(home, ".symvault", "config.yaml"))
+	cfg, err := configpkg.Load(filepath.Join(home, configpkg.DefaultVaultSubdir, "config.yaml"))
 	if err != nil {
 		return false
 	}

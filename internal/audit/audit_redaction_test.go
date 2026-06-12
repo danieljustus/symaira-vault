@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 )
 
 // TestFieldNameOnlyNeverValue verifies that the Field field in audit entries
@@ -31,7 +33,7 @@ func TestFieldNameOnlyNeverValue(t *testing.T) {
 		OK:     true,
 	})
 
-	content, err := os.ReadFile(filepath.Join(home, ".symvault", "audit-field-name-test.log"))
+	content, err := os.ReadFile(filepath.Join(home, configpkg.DefaultVaultSubdir, "audit-field-name-test.log"))
 	if err != nil {
 		t.Fatalf("ReadFile error = %v", err)
 	}
@@ -83,7 +85,7 @@ func TestNoSecretValuesInPathEntries(t *testing.T) {
 		})
 	}
 
-	content, err := os.ReadFile(filepath.Join(home, ".symvault", "audit-path-secret-test.log"))
+	content, err := os.ReadFile(filepath.Join(home, configpkg.DefaultVaultSubdir, "audit-path-secret-test.log"))
 	if err != nil {
 		t.Fatalf("ReadFile error = %v", err)
 	}
@@ -227,7 +229,7 @@ func TestSecretRedactionFixtureBased(t *testing.T) {
 		})
 	}
 
-	content, err := os.ReadFile(filepath.Join(home, ".symvault", "audit-fixture-test.log"))
+	content, err := os.ReadFile(filepath.Join(home, configpkg.DefaultVaultSubdir, "audit-fixture-test.log"))
 	if err != nil {
 		t.Fatalf("ReadFile error = %v", err)
 	}
@@ -284,7 +286,7 @@ func TestAuditLogDoesNotContainJSONValues(t *testing.T) {
 		OK:     true,
 	})
 
-	content, err := os.ReadFile(filepath.Join(home, ".symvault", "audit-no-values-test.log"))
+	content, err := os.ReadFile(filepath.Join(home, configpkg.DefaultVaultSubdir, "audit-no-values-test.log"))
 	if err != nil {
 		t.Fatalf("ReadFile error = %v", err)
 	}
@@ -398,7 +400,7 @@ func TestSensitivePathPatternsDoesNotLeakValues(t *testing.T) {
 		})
 	}
 
-	content, err := os.ReadFile(filepath.Join(home, ".symvault", "audit-sensitive-path-test.log"))
+	content, err := os.ReadFile(filepath.Join(home, configpkg.DefaultVaultSubdir, "audit-sensitive-path-test.log"))
 	if err != nil {
 		t.Fatalf("ReadFile error = %v", err)
 	}
@@ -462,7 +464,7 @@ func TestReasonFieldDoesNotLeakValues(t *testing.T) {
 		})
 	}
 
-	content, err := os.ReadFile(filepath.Join(home, ".symvault", "audit-reason-test.log"))
+	content, err := os.ReadFile(filepath.Join(home, configpkg.DefaultVaultSubdir, "audit-reason-test.log"))
 	if err != nil {
 		t.Fatalf("ReadFile error = %v", err)
 	}
@@ -528,7 +530,7 @@ func TestConcurrentNoValueLeak(t *testing.T) {
 		<-done
 	}
 
-	content, err := os.ReadFile(filepath.Join(home, ".symvault", "audit-concurrent-redact-test.log"))
+	content, err := os.ReadFile(filepath.Join(home, configpkg.DefaultVaultSubdir, "audit-concurrent-redact-test.log"))
 	if err != nil {
 		t.Fatalf("ReadFile error = %v", err)
 	}

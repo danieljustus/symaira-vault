@@ -5,6 +5,8 @@ package errors
 import (
 	"errors"
 	"fmt"
+
+	corekitexitcodes "github.com/danieljustus/symaira-corekit/exitcodes"
 )
 
 // ExitCode represents a process exit code for CLI commands.
@@ -275,5 +277,67 @@ func AlreadyExists(format string, args ...any) *CLIError {
 		Code:    ExitGeneralError,
 		Kind:    ErrKindNone,
 		Message: fmt.Sprintf(format, args...),
+	}
+}
+
+// FormatCLIError formats an error for human-readable CLI output.
+// If the error is a *CLIError with a non-empty Hint, the hint is appended
+// on a separate line prefixed with "Hint: ".
+// If the error has a Cause, the full chain is shown.
+// If the error is not a *CLIError, the default error string is returned.
+func FormatCLIError(err error) string {
+	if err == nil {
+		return ""
+	}
+	var cliErr *CLIError
+	if !errors.As(err, &cliErr) {
+		return err.Error()
+	}
+	msg := cliErr.Error()
+	if cliErr.Hint != "" {
+		return fmt.Sprintf("%s\nHint: %s", msg, cliErr.Hint)
+	}
+	return msg
+}
+
+// ToCorekitExitCode converts a vault ExitCode to a corekit exitcodes.ExitCode.
+// Vault-specific codes that have no corekit equivalent map to ExitGeneric.
+func ToCorekitExitCode(code ExitCode) corekitexitcodes.ExitCode {
+	switch code {
+	case ExitSuccess:
+		return corekitexitcodes.ExitOK
+	case ExitGeneralError:
+		return corekitexitcodes.ExitGeneric
+	case ExitNotFound:
+		return corekitexitcodes.ExitNotFound
+	case ExitPermissionDenied:
+		return corekitexitcodes.ExitForbidden
+	case ExitConfigError:
+		return corekitexitcodes.ExitConfig
+	case ExitInvalidInput:
+		return corekitexitcodes.ExitNoInput
+	default:
+		return corekitexitcodes.ExitGeneric
+	}
+}
+
+// FromCorekitExitCode converts a corekit exitcodes.ExitCode to a vault ExitCode.
+// Corekit codes that have no vault equivalent map to ExitGeneralError.
+func FromCorekitExitCode(code corekitexitcodes.ExitCode) ExitCode {
+	switch code {
+	case corekitexitcodes.ExitOK:
+		return ExitSuccess
+	case corekitexitcodes.ExitGeneric:
+		return ExitGeneralError
+	case corekitexitcodes.ExitNotFound:
+		return ExitNotFound
+	case corekitexitcodes.ExitForbidden:
+		return ExitPermissionDenied
+	case corekitexitcodes.ExitConfig:
+		return ExitConfigError
+	case corekitexitcodes.ExitNoInput:
+		return ExitInvalidInput
+	default:
+		return ExitGeneralError
 	}
 }

@@ -1,6 +1,6 @@
 // Package logging provides structured logging for Symaira Vault using Go's standard
-// log/slog package. All log output goes to os.Stderr to keep stdout clean for
-// stdio MCP transport.
+// log/slog package via the shared corekit/logkit library. All log output goes to
+// os.Stderr to keep stdout clean for stdio MCP transport.
 package logging
 
 import (
@@ -9,6 +9,8 @@ import (
 	"os"
 	"strings"
 	"sync"
+
+	"github.com/danieljustus/symaira-corekit/logkit"
 
 	"github.com/danieljustus/symaira-vault/internal/envutil"
 )
@@ -36,31 +38,29 @@ func Default() *slog.Logger {
 // NewFromEnv creates a fresh slog.Logger from environment variables.
 // Prefer Default() for normal use to avoid creating multiple handlers.
 func NewFromEnv() *slog.Logger {
-	level := parseLevel(envutil.Getenv("SYMVAULT_LOG_LEVEL", "OPENPASS_LOG_LEVEL"))
-	format := strings.ToLower(envutil.Getenv("SYMVAULT_LOG_FORMAT", "OPENPASS_LOG_FORMAT"))
-	if format == "" {
-		format = "text"
-	}
+	mapOpenPassToSymvault()
+	return logkit.NewFromEnv("symvault")
+}
 
-	return New(os.Stderr, level, format)
+// mapOpenPassToSymvault maps legacy OPENPASS_* env vars to SYMVAULT_* if the
+// SYMVAULT_* vars are not set, printing deprecation warnings via envutil.
+func mapOpenPassToSymvault() {
+	if v := os.Getenv("SYMVAULT_LOG_LEVEL"); v == "" {
+		if legacy := envutil.Getenv("SYMVAULT_LOG_LEVEL", "OPENPASS_LOG_LEVEL"); legacy != "" {
+			_ = os.Setenv("SYMVAULT_LOG_LEVEL", legacy)
+		}
+	}
+	if v := os.Getenv("SYMVAULT_LOG_FORMAT"); v == "" {
+		if legacy := envutil.Getenv("SYMVAULT_LOG_FORMAT", "OPENPASS_LOG_FORMAT"); legacy != "" {
+			_ = os.Setenv("SYMVAULT_LOG_FORMAT", legacy)
+		}
+	}
 }
 
 // New creates a slog.Logger with the specified writer, level and format.
 // Format must be "text" or "json".
 func New(w io.Writer, level slog.Level, format string) *slog.Logger {
-	opts := &slog.HandlerOptions{
-		Level: level,
-	}
-
-	var handler slog.Handler
-	switch format {
-	case "json":
-		handler = slog.NewJSONHandler(w, opts)
-	default:
-		handler = slog.NewTextHandler(w, opts)
-	}
-
-	return slog.New(handler)
+	return logkit.New(w, level, format)
 }
 
 func parseLevel(s string) slog.Level {

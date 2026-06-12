@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/danieljustus/symaira-vault/internal/config"
 )
 
 func TestDeviceManager_NewDeviceManager(t *testing.T) {
@@ -16,7 +18,7 @@ func TestDeviceManager_NewDeviceManager(t *testing.T) {
 
 func TestDeviceManager_DevicesPath(t *testing.T) {
 	dm := NewDeviceManager("/tmp/test-vault")
-	expected := "/tmp/test-vault/.symvault/devices.json"
+	expected := "/tmp/test-vault/" + config.DefaultVaultSubdir + "/devices.json"
 	if got := dm.devicesPath(); got != expected {
 		t.Errorf("devicesPath() = %q, want %q", got, expected)
 	}
@@ -160,7 +162,7 @@ func TestDeviceManager_LoadDevices_CorruptFile(t *testing.T) {
 	dir := t.TempDir()
 	dm := NewDeviceManager(dir)
 
-	devicesPath := filepath.Join(dir, ".symvault", "devices.json")
+	devicesPath := filepath.Join(dir, config.DefaultVaultSubdir, "devices.json")
 	os.MkdirAll(filepath.Dir(devicesPath), 0o700)
 	os.WriteFile(devicesPath, []byte("invalid json"), 0o600)
 

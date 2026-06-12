@@ -29,7 +29,7 @@ func UpdateCacheTTL() time.Duration {
 	if err != nil {
 		return updatepkg.DefaultCacheTTL
 	}
-	cfg, err := configpkg.Load(filepath.Join(home, ".symvault", "config.yaml"))
+	cfg, err := configpkg.Load(filepath.Join(home, configpkg.DefaultVaultSubdir, "config.yaml"))
 	if err != nil {
 		return updatepkg.DefaultCacheTTL
 	}

@@ -135,7 +135,7 @@ func stdioArgs(agentName string) []string {
 }
 
 func shouldIncludeVaultArg(vDir string) bool {
-	defaultVault, err := cli.ExpandVaultDir("~/.symvault")
+	defaultVault, err := cli.ExpandVaultDir("~/" + configpkg.DefaultVaultSubdir)
 	if err != nil {
 		return false
 	}

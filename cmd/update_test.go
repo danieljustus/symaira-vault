@@ -13,6 +13,7 @@ import (
 
 	admin "github.com/danieljustus/symaira-vault/cmd/admin"
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
+	"github.com/danieljustus/symaira-vault/internal/config"
 
 	"gopkg.in/yaml.v3"
 
@@ -192,7 +193,7 @@ func TestUpdateCheckCommandDoesNotRequireVault(t *testing.T) {
 	originalChanged := vaultFlag.Changed
 	_ = os.Unsetenv("HOME")
 	_ = os.Unsetenv("OPENPASS_VAULT")
-	vault = "~/.symvault"
+	vault = "~/" + config.DefaultVaultSubdir
 	if vaultFlag != nil {
 		_ = vaultFlag.Value.Set(vault)
 		vaultFlag.Changed = false
@@ -397,7 +398,7 @@ func TestUpdateCacheTTL_ConfigLoadError(t *testing.T) {
 	}()
 
 	// Ensure .symvault directory doesn't exist so config load fails
-	_ = os.RemoveAll(filepath.Join(tmpDir, ".symvault"))
+	_ = os.RemoveAll(filepath.Join(tmpDir, config.DefaultVaultSubdir))
 
 	ttl := admin.UpdateCacheTTL()
 	if ttl != updatepkg.DefaultCacheTTL {
@@ -416,7 +417,7 @@ func TestUpdateCacheTTL_CustomCacheTTL(t *testing.T) {
 		_ = os.Setenv("HOME", home)
 	}()
 
-	symvaultDir := filepath.Join(tmpDir, ".symvault")
+	symvaultDir := filepath.Join(tmpDir, config.DefaultVaultSubdir)
 	if err := os.MkdirAll(symvaultDir, 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
@@ -446,7 +447,7 @@ func TestUpdateCacheTTL_DefaultWhenNoUpdateConfig(t *testing.T) {
 		_ = os.Setenv("HOME", home)
 	}()
 
-	symvaultDir := filepath.Join(tmpDir, ".symvault")
+	symvaultDir := filepath.Join(tmpDir, config.DefaultVaultSubdir)
 	if err := os.MkdirAll(symvaultDir, 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}

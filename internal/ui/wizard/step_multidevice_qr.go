@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/danieljustus/symaira-vault/internal/config"
 	"github.com/danieljustus/symaira-vault/internal/pairing"
 	"github.com/danieljustus/symaira-vault/internal/ui"
 )
@@ -67,7 +69,7 @@ func (s *PairingQRStep) Init() tea.Cmd {
 		return nil
 	}
 
-	pairingDir := s.state.VaultDir + "/.symvault/pairing"
+	pairingDir := filepath.Join(s.state.VaultDir, config.DefaultVaultSubdir, "pairing")
 	if err := os.MkdirAll(pairingDir, 0o700); err != nil {
 		s.errMsg = fmt.Sprintf("create pairing dir: %v", err)
 		return nil

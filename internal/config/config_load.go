@@ -23,13 +23,9 @@ func validateConfigPath(path string) error {
 // Default returns a Config populated with sensible defaults, including built-in
 // agent profiles.
 func Default() *Config {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		home = "~"
-	}
-
+	r := NewPathResolver()
 	return &Config{
-		VaultDir:       filepath.Join(home, defaultConfigDir),
+		VaultDir:       r.DataDir,
 		DefaultAgent:   defaultAgentName,
 		SessionTimeout: defaultSessionTimeout,
 		AuthMethod:     AuthMethodPassphrase,
@@ -37,12 +33,9 @@ func Default() *Config {
 	}
 }
 
-func defaultConfigPath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return "", errors.New("unable to determine home directory")
-	}
-	return filepath.Join(home, defaultConfigDir, defaultConfigFile), nil
+func defaultConfigPath() string {
+	r := NewPathResolver()
+	return r.ConfigPath()
 }
 
 // NormalizeAuthMethod normalizes an auth method string to a canonical value.

@@ -16,11 +16,7 @@ func (c *Config) Save() error {
 		return errors.New("config is nil")
 	}
 
-	path, err := defaultConfigPath()
-	if err != nil {
-		return err
-	}
-	return c.SaveTo(path)
+	return c.SaveTo(defaultConfigPath())
 }
 
 // SaveTo persists the config to the given file path, creating parent directories

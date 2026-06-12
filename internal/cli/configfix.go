@@ -106,9 +106,9 @@ func applyAutoFixes(cfg *configpkg.Config, loadErr, valErr error) bool {
 
 	if strings.Contains(errStr, "vaultDir: must not be empty") {
 		defaultDir, _ := os.UserHomeDir()
-		suggestion := "~/.symvault"
+		suggestion := "~/" + configpkg.DefaultVaultSubdir
 		if defaultDir != "" {
-			suggestion = filepath.Join(defaultDir, ".symvault")
+			suggestion = filepath.Join(defaultDir, configpkg.DefaultVaultSubdir)
 		}
 		ok, _ := ConfirmInteractive(fmt.Sprintf("Field 'vaultDir' must not be empty. Suggestion: %s. Apply this fix?", suggestion), false)
 		if ok {

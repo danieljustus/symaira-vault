@@ -113,7 +113,7 @@ func TestOutputAgentHTTPConfig_ResolveError(t *testing.T) {
 	defer func() { _ = os.Setenv("HOME", origHome) }()
 
 	origVault := vault
-	vault = "~/.symvault"
+	vault = "~/" + config.DefaultVaultSubdir
 	defer func() { vault = origVault }()
 
 	err := mcpcmd.OutputAgentHTTPConfig("claude-code", "claude_code", "claude-code", true, "")
@@ -155,7 +155,7 @@ func TestOutputTokenOnly_VaultPathError(t *testing.T) {
 	defer func() { _ = os.Setenv("HOME", origHome) }()
 
 	origVault := vault
-	vault = "~/.symvault"
+	vault = "~/" + config.DefaultVaultSubdir
 	defer func() { vault = origVault }()
 
 	err := mcpcmd.OutputTokenOnly()
@@ -339,7 +339,7 @@ func TestOutputHTTPConfig_VaultPathError(t *testing.T) {
 	origChanged := vaultFlag.Changed
 	_ = os.Unsetenv("HOME")
 	_ = os.Unsetenv("OPENPASS_VAULT")
-	vault = "~/.symvault"
+	vault = "~/" + config.DefaultVaultSubdir
 	vaultFlag.Changed = false
 	t.Cleanup(func() {
 		_ = os.Setenv("HOME", origHome)

@@ -1,10 +1,27 @@
 // Package config provides configuration loading, validation, and defaults for Symaira Vault.
 package config
 
-import "time"
+import (
+	"os"
+	"path/filepath"
+	"time"
+)
 
 const (
-	// DefaultVaultSubdir is the default vault directory name under the user's home directory.
+	// AppName is the canonical application name used for XDG paths.
+	AppName = "symaira-vault"
+
+	// Legacy paths (for migration detection from pre-XDG installs).
+	LegacyVaultSubdir    = ".symvault"
+	LegacyOpenpassSubdir = ".openpass"
+
+	// XDG subdirectory names.
+	ConfigSubdir = "symaira-vault" // under $XDG_CONFIG_HOME
+	DataSubdir   = "symaira-vault" // under $XDG_DATA_HOME
+	CacheSubdir  = "symaira-vault" // under $XDG_CACHE_HOME
+
+	// Prefer DefaultConfigDir(), DefaultDataDir(), or DefaultCacheDir() for
+	// new code. Kept for backward compatibility and migration detection.
 	DefaultVaultSubdir       = ".symvault"
 	LegacyDefaultVaultSubdir = ".openpass"
 	defaultConfigDir         = DefaultVaultSubdir
@@ -14,6 +31,60 @@ const (
 	AuthMethodPassphrase     = "passphrase"
 	AuthMethodTouchID        = "touchid"
 )
+
+// XDGConfigHome returns the XDG config directory ($XDG_CONFIG_HOME or
+// ~/.config).
+func XDGConfigHome() string {
+	if dir := os.Getenv("XDG_CONFIG_HOME"); dir != "" {
+		return dir
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".config")
+}
+
+// XDGDataHome returns the XDG data directory ($XDG_DATA_HOME or
+// ~/.local/share).
+func XDGDataHome() string {
+	if dir := os.Getenv("XDG_DATA_HOME"); dir != "" {
+		return dir
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".local", "share")
+}
+
+// XDGCacheHome returns the XDG cache directory ($XDG_CACHE_HOME or
+// ~/.cache).
+func XDGCacheHome() string {
+	if dir := os.Getenv("XDG_CACHE_HOME"); dir != "" {
+		return dir
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".cache")
+}
+
+// DefaultConfigDir returns the default XDG config directory for symaira-vault.
+func DefaultConfigDir() string {
+	return filepath.Join(XDGConfigHome(), ConfigSubdir)
+}
+
+// DefaultDataDir returns the default XDG data directory for symaira-vault.
+func DefaultDataDir() string {
+	return filepath.Join(XDGDataHome(), DataSubdir)
+}
+
+// DefaultCacheDir returns the default XDG cache directory for symaira-vault.
+func DefaultCacheDir() string {
+	return filepath.Join(XDGCacheHome(), CacheSubdir)
+}
 
 type CustomPattern struct {
 	Name        string `yaml:"name"`

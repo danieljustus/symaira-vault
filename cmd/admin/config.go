@@ -69,7 +69,7 @@ have safe replacements, and a manual $EDITOR session is offered as a fall-back.`
 			if err != nil {
 				return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "cannot determine home directory", err)
 			}
-			path = filepath.Join(home, ".symvault", "config.yaml")
+			path = filepath.Join(home, configpkg.DefaultVaultSubdir, "config.yaml")
 		}
 
 		cfg, err := configpkg.Load(path)
@@ -169,7 +169,7 @@ func resolveConfigPath(_ []string) string {
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".symvault", "config.yaml")
+	return filepath.Join(home, configpkg.DefaultVaultSubdir, "config.yaml")
 }
 
 func ConfigKeyCompletionFunc(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
