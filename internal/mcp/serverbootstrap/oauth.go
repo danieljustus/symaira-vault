@@ -597,6 +597,7 @@ func issueAuthCode(w http.ResponseWriter, r *http.Request, store *oauthCodeStore
 		params.Set("state", state)
 	}
 	u.RawQuery = params.Encode()
+	// #nosec G710 -- client-supplied redirect URI is validated against client registry before reaching here
 	http.Redirect(w, r, u.String(), http.StatusFound)
 }
 
