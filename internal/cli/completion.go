@@ -50,7 +50,7 @@ func entryPathSuggestions(toComplete string) ([]string, cobra.ShellCompDirective
 	}
 
 	prefix := strings.TrimSpace(toComplete)
-	paths, err := vaultpkg.List(vaultDir, "", v.Identity)
+	paths, err := vaultpkg.List(vaultDir, prefix, v.Identity)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}

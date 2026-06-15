@@ -55,7 +55,7 @@ Field-level redaction is implemented for MCP agent responses:
 | Redaction Feature | Implementation | Usage |
 |-------------------|----------------|-------|
 | Agent field redaction | `redactFields` config | `~/.symvault/config.yaml` |
-| Token redaction in config | `--redact` flag | `symvault mcp-config <agent> --redact` |
+| Token redaction in config | environment token reference | `symvault agent install <agent> --http --config-only` |
 | Wildcard patterns | `*` and `prefix.*` | Redact all or nested fields |
 
 **Example Agent Configuration:**

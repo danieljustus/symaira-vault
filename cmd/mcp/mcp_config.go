@@ -84,22 +84,7 @@ func resolveHTTPConfig(agentName string, tokenID string) (*httpConfig, error) {
 
 	var token string
 	if tokenID != "" {
-		registry, _, loadErr := auth.LoadTokenSystem(vDir)
-		if loadErr != nil {
-			return nil, fmt.Errorf("load token registry: %w", loadErr)
-		}
-		found := false
-		list := registry.List()
-		for i := range list {
-			if list[i].ID == tokenID {
-				token = list[i].Hash
-				found = true
-				break
-			}
-		}
-		if !found {
-			return nil, fmt.Errorf("token %q not found in registry", tokenID)
-		}
+		return nil, fmt.Errorf("token %q cannot be used for config generation because scoped token raw values are only shown at creation time; create a fresh token with 'symvault agent token %s new'", tokenID, agentName)
 	} else {
 		tokenPath := filepath.Join(vDir, "mcp-token")
 		if cfg, cfgErr := LoadConfigSilent(cfgPath); cfgErr == nil && cfg.MCP != nil {

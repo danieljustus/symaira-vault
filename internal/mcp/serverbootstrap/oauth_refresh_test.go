@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -256,6 +257,21 @@ func TestOAuthRefreshToken_RegisterResponseIncludesRefresh(t *testing.T) {
 	}
 	if !hasRefresh {
 		t.Error("refresh_token missing from grant_types")
+	}
+}
+
+func TestOAuthRegisterRejectsExternalRedirectURI(t *testing.T) {
+	clientStore := newOAuthClientStore()
+	handler := handleOAuthRegister(clientStore)
+
+	req := httptest.NewRequest(http.MethodPost, "/oauth/register", strings.NewReader(`{"redirect_uris":["https://example.com/callback"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
 	}
 }
 

@@ -303,7 +303,7 @@ symvault serve --stdio --agent <profile-name>
 **Generate configuration**:
 
 ```bash
-symvault mcp-config <agent-name>
+symvault agent install <agent-name> --config-only
 ```
 
 ### HTTP Mode
@@ -324,13 +324,13 @@ symvault serve --port 8080 --agent <profile-name>
 **Generate configuration** (token redacted by default):
 
 ```bash
-symvault mcp-config <agent-name> --http
+symvault agent install <agent-name> --http --config-only
 ```
 
 **Include token in output**:
 
 ```bash
-symvault mcp-config <agent-name> --http --include-token
+symvault agent token <agent-name> new --tools list_entries,get_entry --expires 24h
 ```
 
 ---
