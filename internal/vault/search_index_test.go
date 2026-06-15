@@ -3,10 +3,14 @@ package vault
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+
+	"filippo.io/age"
 
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
 	"github.com/danieljustus/symaira-vault/internal/testutil"
@@ -95,6 +99,68 @@ func TestEncryptedIndexBuildAndMatch(t *testing.T) {
 			t.Fatalf("MatchEntries(empty candidates) = %v, want nil", results)
 		}
 	})
+}
+
+func TestEncryptedIndexBuildDeterministicDoc(t *testing.T) {
+	vaultDir := t.TempDir()
+	identity := testutil.TempIdentity(t)
+
+	mustWriteEntry(t, vaultDir, identity, "z-last", map[string]interface{}{
+		"nested": map[string]interface{}{
+			"owner": "Carol",
+			"note":  "Alpha Beta",
+		},
+	})
+	mustWriteEntry(t, vaultDir, identity, "a-first", map[string]interface{}{
+		"username": "alice",
+		"password": "s3cr3t",
+	})
+
+	idx := &EncryptedIndex{}
+	if err := idx.Build(vaultDir, identity); err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	first := decryptIndexDocForTest(t, idx, identity)
+
+	idx.Invalidate()
+	if err := idx.Build(vaultDir, identity); err != nil {
+		t.Fatalf("Build() second error = %v", err)
+	}
+	second := decryptIndexDocForTest(t, idx, identity)
+
+	if !reflect.DeepEqual(first.Values, second.Values) {
+		t.Fatalf("Values changed after rebuild:\nfirst: %#v\nsecond: %#v", first.Values, second.Values)
+	}
+	if !reflect.DeepEqual(first.TokenIndex, second.TokenIndex) {
+		t.Fatalf("TokenIndex changed after rebuild:\nfirst: %#v\nsecond: %#v", first.TokenIndex, second.TokenIndex)
+	}
+	if first.EntryCount != second.EntryCount {
+		t.Fatalf("EntryCount changed after rebuild: %d != %d", first.EntryCount, second.EntryCount)
+	}
+}
+
+func decryptIndexDocForTest(t *testing.T, idx *EncryptedIndex, identity *age.X25519Identity) indexDoc {
+	t.Helper()
+
+	idx.mu.RLock()
+	ct := append([]byte(nil), idx.ciphertext...)
+	salt := append([]byte(nil), idx.salt...)
+	idx.mu.RUnlock()
+
+	key := deriveIndexKey(identity, salt)
+	defer vaultcrypto.Wipe(key)
+
+	plaintext, err := vaultcrypto.DecryptWithKey(ct, key)
+	if err != nil {
+		t.Fatalf("DecryptWithKey() error = %v", err)
+	}
+	defer vaultcrypto.Wipe(plaintext)
+
+	var doc indexDoc
+	if err := json.Unmarshal(plaintext, &doc); err != nil {
+		t.Fatalf("Unmarshal index doc error = %v", err)
+	}
+	return doc
 }
 
 func TestEncryptedIndexInvalidate(t *testing.T) {

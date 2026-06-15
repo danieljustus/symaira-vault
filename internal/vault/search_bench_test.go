@@ -211,6 +211,12 @@ func BenchmarkFind_10kEntries_FieldSearch_IndexHot(b *testing.B) {
 	benchmarkFindFieldSearchIndexHot(b, 10000)
 }
 
+// BenchmarkFind_10kEntries_FieldSearch_IndexCold measures first field search
+// latency when the encrypted index must be built from entry ciphertexts.
+func BenchmarkFind_10kEntries_FieldSearch_IndexCold(b *testing.B) {
+	benchmarkFindFieldSearchIndexCold(b, 10000)
+}
+
 // benchmarkIndexBuild builds the encrypted search index for the given number
 // of entries and reports the time taken.
 func benchmarkIndexBuild(b *testing.B, numEntries int) {
@@ -262,6 +268,28 @@ func benchmarkFindFieldSearchIndexHot(b *testing.B, numEntries int) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
+		matches, err := FindWithOptions(vaultDir, fieldQuery, FindOptions{MaxWorkers: 0}, identity)
+		if err != nil {
+			b.Fatalf("FindWithOptions failed: %v", err)
+		}
+		if len(matches) != 1 {
+			b.Fatalf("expected 1 match, got %d", len(matches))
+		}
+	}
+}
+
+func benchmarkFindFieldSearchIndexCold(b *testing.B, numEntries int) {
+	vaultDir := b.TempDir()
+	identity := generateTestIdentity(b)
+	createTestEntries(b, vaultDir, identity, numEntries)
+
+	fieldQuery := fmt.Sprintf("secret-password-%05d", min(50, numEntries-1))
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		globalIndex.Invalidate()
 		matches, err := FindWithOptions(vaultDir, fieldQuery, FindOptions{MaxWorkers: 0}, identity)
 		if err != nil {
 			b.Fatalf("FindWithOptions failed: %v", err)

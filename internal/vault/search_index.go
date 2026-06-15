@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"unicode"
@@ -114,23 +115,71 @@ func (idx *EncryptedIndex) Build(vaultDir string, identity *age.X25519Identity) 
 	}
 	doc.Salt = salt
 
-	for _, entryPath := range paths {
-		entry, readErr := ReadEntry(vaultDir, entryPath, identity)
-		if readErr != nil {
+	type indexJob struct {
+		i    int
+		path string
+	}
+	type indexResult struct {
+		i      int
+		path   string
+		values []string
+	}
+
+	jobs := make(chan indexJob, len(paths))
+	results := make(chan indexResult, len(paths))
+
+	maxWorkers := SearchWorkerCount(0)
+	if len(paths) < maxWorkers {
+		maxWorkers = len(paths)
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < maxWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for job := range jobs {
+				entry, readErr := ReadEntry(vaultDir, job.path, identity)
+				if readErr != nil {
+					results <- indexResult{i: job.i, path: job.path}
+					continue
+				}
+
+				var values []string
+				collectStringValues(&values, entry.Data)
+				sort.Strings(values)
+				results <- indexResult{i: job.i, path: job.path, values: values}
+			}
+		}()
+	}
+
+	for i, entryPath := range paths {
+		jobs <- indexJob{i: i, path: entryPath}
+	}
+	close(jobs)
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	collected := make([]indexResult, len(paths))
+	for result := range results {
+		collected[result.i] = result
+	}
+
+	for _, result := range collected {
+		if len(result.values) == 0 {
 			continue
 		}
 
-		var values []string
-		collectStringValues(&values, entry.Data)
-		if len(values) > 0 {
-			doc.Values[entryPath] = values
-			for _, val := range values {
-				for _, token := range tokenize(val) {
-					if doc.TokenIndex[token] == nil {
-						doc.TokenIndex[token] = make(map[string]struct{})
-					}
-					doc.TokenIndex[token][entryPath] = struct{}{}
+		doc.Values[result.path] = result.values
+		for _, val := range result.values {
+			for _, token := range tokenize(val) {
+				if doc.TokenIndex[token] == nil {
+					doc.TokenIndex[token] = make(map[string]struct{})
 				}
+				doc.TokenIndex[token][result.path] = struct{}{}
 			}
 		}
 	}
