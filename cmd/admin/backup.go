@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -15,7 +16,13 @@ import (
 	"github.com/spf13/cobra"
 
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	"github.com/danieljustus/symaira-vault/internal/fsutil"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
+)
+
+var (
+	maxRestoreFileSize  int64 = 1 << 30        // 1 GiB per restored file
+	maxRestoreTotalSize int64 = 16 * (1 << 30) // 16 GiB per archive
 )
 
 var BackupExcludeGit bool
@@ -62,7 +69,7 @@ func CreateBackup(vaultDir, archivePath string, excludeGit bool) error {
 		return fmt.Errorf("create backup directory: %w", err)
 	}
 
-	f, err := os.Create(archivePath) // #nosec // archivePath is user-provided output path
+	f, err := os.OpenFile(archivePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) // #nosec // archivePath is user-provided output path
 	if err != nil {
 		return fmt.Errorf("create archive: %w", err)
 	}
@@ -87,6 +94,9 @@ func CreateBackup(vaultDir, archivePath string, excludeGit bool) error {
 		relPath, err := filepath.Rel(vaultDir, path)
 		if err != nil {
 			return err
+		}
+		if relPath == "." {
+			return nil
 		}
 
 		if excludeGit && strings.HasPrefix(relPath, ".git") {
@@ -158,7 +168,7 @@ to ensure all expected files are present.`,
 }
 
 func RestoreBackup(archivePath, vaultDir string) error {
-	if err := os.MkdirAll(vaultDir, 0o700); err != nil {
+	if err := fsutil.SafeMkdirAll(vaultDir, 0o700); err != nil {
 		return fmt.Errorf("create vault directory: %w", err)
 	}
 
@@ -175,6 +185,7 @@ func RestoreBackup(archivePath, vaultDir string) error {
 	defer func() { _ = gr.Close() }()
 
 	tr := tar.NewReader(gr)
+	var totalSize int64
 
 	for {
 		header, err := tr.Next()
@@ -185,7 +196,12 @@ func RestoreBackup(archivePath, vaultDir string) error {
 			return fmt.Errorf("read archive: %w", err)
 		}
 
-		targetPath := filepath.Join(vaultDir, header.Name) // #nosec // path traversal checked below
+		relName, err := cleanBackupMemberName(header.Name)
+		if err != nil {
+			return err
+		}
+
+		targetPath := filepath.Join(vaultDir, relName) // #nosec // path traversal checked below
 		cleanTarget := filepath.Clean(targetPath)
 		cleanVaultDir := filepath.Clean(vaultDir)
 		if !strings.HasPrefix(cleanTarget, cleanVaultDir+string(filepath.Separator)) && cleanTarget != cleanVaultDir {
@@ -205,11 +221,22 @@ func RestoreBackup(archivePath, vaultDir string) error {
 				return fmt.Errorf("invalid negative mode in archive: %s", header.Name)
 			}
 			mode := os.FileMode(header.Mode) & 0o700 // #nosec G115 // header.Mode validated as non-negative above
-			if err := os.MkdirAll(targetPath, mode); err != nil {
+			if err := fsutil.SafeMkdirAll(targetPath, mode); err != nil {
 				return fmt.Errorf("create directory: %w", err)
 			}
 		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(targetPath), 0o700); err != nil {
+			if header.Size < 0 {
+				return fmt.Errorf("invalid negative size in archive: %s", header.Name)
+			}
+			if header.Size > maxRestoreFileSize {
+				return fmt.Errorf("archive entry %s exceeds maximum file size of %d bytes", header.Name, maxRestoreFileSize)
+			}
+			if totalSize > maxRestoreTotalSize-header.Size {
+				return fmt.Errorf("archive exceeds maximum extraction size of %d bytes", maxRestoreTotalSize)
+			}
+			totalSize += header.Size
+
+			if err := fsutil.SafeMkdirAll(filepath.Dir(targetPath), 0o700); err != nil {
 				return fmt.Errorf("create parent directory: %w", err)
 			}
 			if header.Mode < 0 {
@@ -231,6 +258,25 @@ func RestoreBackup(archivePath, vaultDir string) error {
 	}
 
 	return VerifyBackup(vaultDir)
+}
+
+func cleanBackupMemberName(name string) (string, error) {
+	if name == "" || name == "." {
+		return "", fmt.Errorf("archive contains unsafe path: %s", name)
+	}
+	if strings.Contains(name, "\\") {
+		return "", fmt.Errorf("archive contains unsafe path: %s", name)
+	}
+	if strings.HasPrefix(name, "/") || filepath.IsAbs(name) || (len(name) >= 2 && name[1] == ':') {
+		return "", fmt.Errorf("archive contains absolute path: %s", name)
+	}
+
+	name = strings.TrimSuffix(name, "/")
+	clean := path.Clean(name)
+	if clean == "." || clean != name || clean == ".." || strings.HasPrefix(clean, "../") {
+		return "", fmt.Errorf("archive contains path traversal: %s", name)
+	}
+	return filepath.FromSlash(clean), nil
 }
 
 func VerifyBackup(vaultDir string) error {
