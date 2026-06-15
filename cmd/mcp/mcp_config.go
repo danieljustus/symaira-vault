@@ -85,17 +85,17 @@ func resolveHTTPConfig(agentName string, tokenID string) (*httpConfig, error) {
 	var token string
 	if tokenID != "" {
 		return nil, fmt.Errorf("token %q cannot be used for config generation because scoped token raw values are only shown at creation time; create a fresh token with 'symvault agent token %s new'", tokenID, agentName)
-	} else {
-		tokenPath := filepath.Join(vDir, "mcp-token")
-		if cfg, cfgErr := LoadConfigSilent(cfgPath); cfgErr == nil && cfg.MCP != nil {
-			if cfg.MCP.HTTPTokenFile != "" && cfg.MCP.HTTPTokenFile != "auto" {
-				tokenPath = cfg.MCP.HTTPTokenFile
-			}
+	}
+
+	tokenPath := filepath.Join(vDir, "mcp-token")
+	if cfg, cfgErr := LoadConfigSilent(cfgPath); cfgErr == nil && cfg.MCP != nil {
+		if cfg.MCP.HTTPTokenFile != "" && cfg.MCP.HTTPTokenFile != "auto" {
+			tokenPath = cfg.MCP.HTTPTokenFile
 		}
-		token, err = auth.LoadOrCreateToken(tokenPath)
-		if err != nil {
-			return nil, fmt.Errorf("load token: %w", err)
-		}
+	}
+	token, err = auth.LoadOrCreateToken(tokenPath)
+	if err != nil {
+		return nil, fmt.Errorf("load token: %w", err)
 	}
 
 	return &httpConfig{
