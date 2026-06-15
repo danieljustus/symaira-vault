@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a reproducible problem in OpenPass.
+description: Report a reproducible problem in Symaira Vault.
 title: "bug: "
 labels:
   - bug
@@ -11,9 +11,9 @@ body:
   - type: input
     id: version
     attributes:
-      label: OpenPass version
-      description: Run `openpass version` or provide the commit SHA.
-      placeholder: "v1.0.0"
+      label: Symaira Vault version
+      description: Run `symvault version` or provide the commit SHA.
+      placeholder: "v0.4.1"
     validations:
       required: true
   - type: input
@@ -35,7 +35,7 @@ body:
       label: Steps to reproduce
       description: Use a minimal synthetic example. Do not paste real secrets.
       placeholder: |
-        1. Run `openpass ...`
+        1. Run `symvault ...`
         2. Observe ...
     validations:
       required: true

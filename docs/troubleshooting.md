@@ -149,7 +149,7 @@ If `identity.age` is lost, **there is no recovery**. The identity file is the pr
 
 5. **Verify agent name matches:**
    - The `--agent` flag must match a profile in `config.yaml`
-   - For HTTP mode, the `X-Symaira Vault-Agent` header must match a profile
+   - For HTTP mode, the `X-Symaira-Agent` header must match a profile
 
 **Common MCP issues and solutions:**
 
@@ -166,7 +166,7 @@ If `identity.age` is lost, **there is no recovery**. The identity file is the pr
 ```bash
 # Test HTTP endpoint
 curl -H "Authorization: Bearer $(cat ~/.symvault/mcp-token)" \
-     -H "X-Symaira Vault-Agent: default" \
+     -H "X-Symaira-Agent: default" \
      http://127.0.0.1:8080/mcp
 
 # Generate config for testing
@@ -394,7 +394,7 @@ symvault unlock                     # Verify passphrase
 # HTTP mode
 curl -s http://127.0.0.1:8080/health
 curl -H "Authorization: Bearer $(cat ~/.symvault/mcp-token)" \
-     -H "X-Symaira Vault-Agent: default" \
+     -H "X-Symaira-Agent: default" \
      http://127.0.0.1:8080/mcp
 
 # Config generation
@@ -529,7 +529,7 @@ symvault mcp-config claude-code --http --include-token
 
 # 8. Verify new configuration works
 curl -H "Authorization: Bearer $NEW_TOKEN" \
-     -H "X-Symaira Vault-Agent: claude-code" \
+     -H "X-Symaira-Agent: claude-code" \
      http://127.0.0.1:8080/mcp
 
 # 9. Remove backup token after verification

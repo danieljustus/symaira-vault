@@ -65,7 +65,7 @@ justification in the release PR.
       written, token issued, skill dropped, smoke test passes).
 - [ ] `symvault agent upgrade hermes --tier standard` shows the spec'd diff
       and the upgrade applies after confirmation.
-- [ ] Real Hermes session can call `mcp_openpass_openpass_whoami` and
+- [ ] Real Hermes session can call `mcp_openpass_whoami` and
       `mcp_openpass_get_entry` against the upgraded profile.
 - [ ] `OPENPASS_AGENT=hermes symvault list --output json` respects the
       profile's `allowedPaths`.

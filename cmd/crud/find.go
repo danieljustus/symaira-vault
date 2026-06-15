@@ -3,7 +3,6 @@ package crud
 import (
 	"fmt"
 	"os"
-	"runtime"
 	"strings"
 
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
@@ -18,26 +17,14 @@ import (
 )
 
 // searchWorkers returns the number of concurrent decryption workers for find
-// operations. It uses the vault.searchWorkers config if set (> 0), otherwise
-// auto-scales based on vault entry count and CPU cores.
-func searchWorkers(vaultDir string, cfg *configpkg.Config) int {
+// operations. It uses the vault.searchWorkers config if set (> 0), otherwise it
+// lets the vault package apply its default bounded worker policy.
+func searchWorkers(cfg *configpkg.Config) int {
+	configured := 0
 	if cfg != nil && cfg.Vault != nil && cfg.Vault.SearchWorkers > 0 {
-		return cfg.Vault.SearchWorkers
+		configured = cfg.Vault.SearchWorkers
 	}
-
-	entries, _ := vaultpkg.List(vaultDir, "", nil)
-	entryCount := len(entries)
-	cpuCount := runtime.GOMAXPROCS(0)
-
-	// Scale workers with vault size: base 2, +1 per 1000 entries, capped at CPU count
-	workers := entryCount/1000 + 2
-	if workers > cpuCount {
-		workers = cpuCount
-	}
-	if workers < 2 {
-		workers = 2
-	}
-	return workers
+	return vaultpkg.SearchWorkerCount(configured)
 }
 
 var findCmd = &cobra.Command{
@@ -56,7 +43,7 @@ var findCmd = &cobra.Command{
 		return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
 			cli.MaybeAutoPull(vs.VaultDir(), v.Config)
 			cfg := v.Config
-			workers := searchWorkers(vs.VaultDir(), cfg)
+			workers := searchWorkers(cfg)
 
 			matches, err := vs.FindEntries(args[0], vaultpkg.FindOptions{MaxWorkers: workers})
 			if err != nil {

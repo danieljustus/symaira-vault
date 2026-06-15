@@ -3,6 +3,7 @@ package cmd
 import (
 	"archive/tar"
 	"compress/gzip"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -32,6 +33,31 @@ func TestCreateBackup(t *testing.T) {
 
 	if _, err := os.Stat(archivePath); err != nil {
 		t.Fatalf("archive not created: %v", err)
+	}
+}
+
+func TestCreateBackup_ArchiveMode0600(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: file mode behavior differs")
+	}
+	vaultDir := t.TempDir()
+	passphrase := []byte("test-passphrase-123")
+	cfg := config.Default()
+	if _, err := vaultpkg.InitWithPassphrase(vaultDir, passphrase, cfg); err != nil {
+		t.Fatalf("init vault: %v", err)
+	}
+
+	archivePath := filepath.Join(t.TempDir(), "backup.tar.gz")
+	if err := admin.CreateBackup(vaultDir, archivePath, false); err != nil {
+		t.Fatalf("admin.CreateBackup() error = %v", err)
+	}
+
+	info, err := os.Stat(archivePath)
+	if err != nil {
+		t.Fatalf("stat archive: %v", err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("archive mode = %o, want 0600", info.Mode().Perm())
 	}
 }
 
@@ -137,6 +163,54 @@ func TestRestoreBackup_PathTraversal(t *testing.T) {
 	restoreDir := t.TempDir()
 	if err := admin.RestoreBackup(archivePath, restoreDir); err == nil {
 		t.Fatal("expected error for path traversal in archive")
+	}
+}
+
+func TestRestoreBackup_RejectsNonCleanMemberName(t *testing.T) {
+	archivePath := filepath.Join(t.TempDir(), "nonclean.tar.gz")
+	if err := writeTestTarGz(archivePath, []testTarEntry{
+		{name: "identity.age", mode: 0o600, content: "id", typ: tar.TypeReg},
+		{name: "config.yaml", mode: 0o600, content: "cfg", typ: tar.TypeReg},
+		{name: "entries", mode: 0o700, typ: tar.TypeDir},
+		{name: "entries/../evil.txt", mode: 0o600, content: "evil", typ: tar.TypeReg},
+	}); err != nil {
+		t.Fatalf("write archive: %v", err)
+	}
+
+	restoreDir := t.TempDir()
+	err := admin.RestoreBackup(archivePath, restoreDir)
+	if err == nil {
+		t.Fatal("expected error for non-clean archive member name")
+	}
+	if !strings.Contains(err.Error(), "path traversal") {
+		t.Fatalf("error = %v, want path traversal rejection", err)
+	}
+}
+
+func TestRestoreBackup_RejectsSymlinkParent(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: symlink privileges vary")
+	}
+	archivePath := filepath.Join(t.TempDir(), "symlink-parent.tar.gz")
+	if err := writeTestTarGz(archivePath, []testTarEntry{
+		{name: "identity.age", mode: 0o600, content: "id", typ: tar.TypeReg},
+		{name: "config.yaml", mode: 0o600, content: "cfg", typ: tar.TypeReg},
+		{name: "entries/secret.txt", mode: 0o600, content: "secret", typ: tar.TypeReg},
+	}); err != nil {
+		t.Fatalf("write archive: %v", err)
+	}
+
+	restoreDir := t.TempDir()
+	targetDir := t.TempDir()
+	if err := os.Symlink(targetDir, filepath.Join(restoreDir, "entries")); err != nil {
+		t.Fatalf("create symlink: %v", err)
+	}
+
+	if err := admin.RestoreBackup(archivePath, restoreDir); err == nil {
+		t.Fatal("expected error when archive writes through symlink parent")
+	}
+	if _, err := os.Stat(filepath.Join(targetDir, "secret.txt")); !os.IsNotExist(err) {
+		t.Fatalf("symlink target was written through, stat error = %v", err)
 	}
 }
 
@@ -540,4 +614,46 @@ func TestCreateBackup_UnreadableFile(t *testing.T) {
 	if err := admin.CreateBackup(vaultDir, archivePath, false); err == nil {
 		t.Fatal("expected error for unreadable file")
 	}
+}
+
+type testTarEntry struct {
+	name    string
+	mode    int64
+	content string
+	typ     byte
+}
+
+func writeTestTarGz(path string, entries []testTarEntry) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("create archive: %w", err)
+	}
+	defer f.Close()
+
+	gw := gzip.NewWriter(f)
+	defer gw.Close()
+	tw := tar.NewWriter(gw)
+	defer tw.Close()
+
+	for _, entry := range entries {
+		size := int64(len(entry.content))
+		if entry.typ == tar.TypeDir {
+			size = 0
+		}
+		header := &tar.Header{
+			Name:     entry.name,
+			Mode:     entry.mode,
+			Size:     size,
+			Typeflag: entry.typ,
+		}
+		if err := tw.WriteHeader(header); err != nil {
+			return fmt.Errorf("write header %s: %w", entry.name, err)
+		}
+		if entry.typ == tar.TypeReg && entry.content != "" {
+			if _, err := tw.Write([]byte(entry.content)); err != nil {
+				return fmt.Errorf("write %s: %w", entry.name, err)
+			}
+		}
+	}
+	return nil
 }

@@ -117,6 +117,54 @@ func TestAgentHeaderSetsContext(t *testing.T) {
 	}
 }
 
+func TestAgentHeaderRejectsScopedTokenAgentMismatch(t *testing.T) {
+	handler := AgentHeaderMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("handler should not be reached for mismatched token agent")
+	}))
+
+	req := httptest.NewRequest("POST", "/mcp", nil)
+	req.Header.Set("X-Symaira-Agent", "opencode")
+	req = req.WithContext(WithToken(req.Context(), &ScopedToken{AgentName: "claude-code"}))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", rec.Code)
+	}
+}
+
+func TestAgentHeaderAcceptsScopedTokenAgentMatch(t *testing.T) {
+	handler := AgentHeaderMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("POST", "/mcp", nil)
+	req.Header.Set("X-Symaira-Agent", "claude-code")
+	req = req.WithContext(WithToken(req.Context(), &ScopedToken{AgentName: "claude-code"}))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+}
+
+func TestAgentHeaderAllowsLegacyUnscopedToken(t *testing.T) {
+	handler := BearerAuthMiddleware("legacy-secret", nil, nil, AgentHeaderMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})))
+
+	req := httptest.NewRequest("POST", "/mcp", nil)
+	req.Header.Set("Authorization", "Bearer legacy-secret")
+	req.Header.Set("X-Symaira-Agent", "opencode")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+}
+
 func TestRateLimiterStartCleanupPeriodic(t *testing.T) {
 	rl := NewRateLimiter(5, 50*time.Millisecond)
 	ctx, cancel := context.WithCancel(context.Background())
