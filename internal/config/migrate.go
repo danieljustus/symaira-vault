@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -60,32 +61,32 @@ func MigrateLegacyToXDG() (bool, error) {
 	}
 
 	// 2. Migrate config.
-	if err := migrateFile(filepath.Join(legacyDir, "config.yaml"), filepath.Join(xdgConfigDir, "config.yaml")); err != nil {
+	if err := migrateFile(legacyDir, "config.yaml", filepath.Join(xdgConfigDir, "config.yaml")); err != nil {
 		return false, fmt.Errorf("migrate config.yaml: %w", err)
 	}
 
 	// 3. Migrate vault data (entire directory).
-	if err := migrateDir(filepath.Join(legacyDir, "vault"), filepath.Join(xdgDataDir, "vault")); err != nil {
+	if err := migrateDir(legacyDir, "vault", filepath.Join(xdgDataDir, "vault")); err != nil {
 		return false, fmt.Errorf("migrate vault/: %w", err)
 	}
 
 	// 4. Migrate audit.
-	if err := migrateDir(filepath.Join(legacyDir, "audit"), filepath.Join(xdgDataDir, "audit")); err != nil {
+	if err := migrateDir(legacyDir, "audit", filepath.Join(xdgDataDir, "audit")); err != nil {
 		return false, fmt.Errorf("migrate audit/: %w", err)
 	}
 
 	// 5. Migrate devices.json.
-	if err := migrateFile(filepath.Join(legacyDir, "devices.json"), filepath.Join(xdgDataDir, "devices.json")); err != nil {
+	if err := migrateFile(legacyDir, "devices.json", filepath.Join(xdgDataDir, "devices.json")); err != nil {
 		return false, fmt.Errorf("migrate devices.json: %w", err)
 	}
 
 	// 6. Migrate pairing.
-	if err := migrateDir(filepath.Join(legacyDir, "pairing"), filepath.Join(xdgDataDir, "pairing")); err != nil {
+	if err := migrateDir(legacyDir, "pairing", filepath.Join(xdgDataDir, "pairing")); err != nil {
 		return false, fmt.Errorf("migrate pairing/: %w", err)
 	}
 
 	// 7. Migrate update cache.
-	if err := migrateFile(filepath.Join(legacyDir, "update-cache.json"), filepath.Join(xdgCacheDir, "update-cache.json")); err != nil {
+	if err := migrateFile(legacyDir, "update-cache.json", filepath.Join(xdgCacheDir, "update-cache.json")); err != nil {
 		return false, fmt.Errorf("migrate update-cache.json: %w", err)
 	}
 
@@ -97,19 +98,31 @@ func MigrateLegacyToXDG() (bool, error) {
 	return true, nil
 }
 
-func migrateFile(src, dst string) error {
-	data, err := os.ReadFile(src)
+func migrateFile(baseDir, relPath, dst string) error {
+	src := filepath.Join(baseDir, relPath)
+	cleaned := filepath.Clean(src)
+	cleanBase := filepath.Clean(baseDir)
+	if cleaned != cleanBase && !strings.HasPrefix(cleaned, cleanBase+string(filepath.Separator)) {
+		return fmt.Errorf("path traversal: %s escapes base %s", relPath, baseDir)
+	}
+	data, err := os.ReadFile(cleaned)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil // Source doesn't exist, skip.
+			return nil
 		}
 		return err
 	}
 	return os.WriteFile(dst, data, 0o600)
 }
 
-func migrateDir(src, dst string) error {
-	entries, err := os.ReadDir(src)
+func migrateDir(baseDir, srcRel, dst string) error {
+	src := filepath.Join(baseDir, srcRel)
+	cleaned := filepath.Clean(src)
+	cleanBase := filepath.Clean(baseDir)
+	if cleaned != cleanBase && !strings.HasPrefix(cleaned, cleanBase+string(filepath.Separator)) {
+		return fmt.Errorf("path traversal: %s escapes base %s", srcRel, baseDir)
+	}
+	entries, err := os.ReadDir(cleaned)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil
@@ -120,14 +133,14 @@ func migrateDir(src, dst string) error {
 		return err
 	}
 	for _, entry := range entries {
-		srcPath := filepath.Join(src, entry.Name())
 		dstPath := filepath.Join(dst, entry.Name())
+		entryRel := filepath.Join(srcRel, entry.Name())
 		if entry.IsDir() {
-			if err := migrateDir(srcPath, dstPath); err != nil {
+			if err := migrateDir(baseDir, entryRel, dstPath); err != nil {
 				return err
 			}
 		} else {
-			if err := migrateFile(srcPath, dstPath); err != nil {
+			if err := migrateFile(baseDir, entryRel, dstPath); err != nil {
 				return err
 			}
 		}
