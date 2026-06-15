@@ -574,14 +574,14 @@ curl -s http://127.0.0.1:8080/health | jq .
 # 2. MCP tool health test
 curl -s -X POST http://127.0.0.1:8080/mcp \
   -H "Authorization: Bearer $(cat ~/.symvault/mcp-token)" \
-  -H "X-Symaira Vault-Agent: default" \
+  -H "X-Symaira-Agent: default" \
   -H "Content-Type: application/json" \
   -d '{"tool": "health", "arguments": {}}'
 
 # 3. End-to-end test (list entries)
 curl -s -X POST http://127.0.0.1:8080/mcp \
   -H "Authorization: Bearer $(cat ~/.symvault/mcp-token)" \
-  -H "X-Symaira Vault-Agent: default" \
+  -H "X-Symaira-Agent: default" \
   -H "Content-Type: application/json" \
   -d '{"tool": "list_entries", "arguments": {}}' | jq '.entries | length'
 # Expected: Number of vault entries (0 or more)
@@ -827,7 +827,7 @@ symvault mcp-config claude-code --http --include-token
 
 # 4. Verify health
 curl -H "Authorization: Bearer $NEW_TOKEN" \
-     -H "X-Symaira Vault-Agent: claude-code" \
+     -H "X-Symaira-Agent: claude-code" \
      http://127.0.0.1:8080/health
 
 # 5. Enable auto-start if previously disabled

@@ -207,7 +207,7 @@ editors-clean:
 docs-check:
 	@echo "Checking documentation for deprecated terms and incorrect syntax..."
 	@errors=0; \
-	for pattern in "brew install --cask openpass" "mcp-config --agent" "mcp_openpass_openpass"; do \
+	for pattern in "brew install --cask openpass" "mcp-config --agent" "mcp_openpass_openpass" "X-Symaira Vault-Agent"; do \
 		if grep -r "$$pattern" README.md docs homebrew .gitignore --exclude-dir=dist --exclude-dir=coverage --exclude-dir=node_modules 2>/dev/null; then \
 			echo "Found deprecated pattern: $$pattern"; \
 			errors=$$((errors + 1)); \

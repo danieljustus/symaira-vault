@@ -209,7 +209,7 @@ mcp_servers:
     url: http://127.0.0.1:8090/mcp
     headers:
       Authorization: env:OPENPASS_MCP_TOKEN
-      X-Symaira Vault-Agent: hermes-metadata
+      X-Symaira-Agent: hermes-metadata
     timeout: 60
     connect_timeout: 30
     sampling:

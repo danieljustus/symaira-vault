@@ -2,13 +2,14 @@
 
 ## Supported Versions
 
-Symaira Vault v1.0.0 is the first stable release. Security reports are accepted for
-the latest stable 1.x release. Snapshots and local builds are unsupported except
-where a maintainer explicitly requests reproduction details for a current fix.
+Symaira Vault currently follows the public v0.x release line. Security reports
+are accepted for the latest public v0.x release. Snapshots and local builds are
+unsupported except where a maintainer explicitly requests reproduction details
+for a current fix.
 
 | Version                   | Supported         | Notes                                                   |
 | ------------------------- | ----------------- | ------------------------------------------------------- |
-| v1.x                      | :white_check_mark: | Latest stable release line                              |
+| v0.x                      | :white_check_mark: | Current public self-hosted release line                 |
 | Snapshots and local builds | :x:               | Reproduce on the latest stable release before reporting |
 
 ### Stable Security Support
@@ -147,7 +148,7 @@ adoption pattern) and review the [`hermes-safe-adoption.md`](docs/hermes-safe-ad
 - Binds to `127.0.0.1` only (localhost) — not exposed to network
 - Bearer token authentication required
 - Token auto-generated and stored at `<vault>/mcp-token`
-- Agent identified per-request via `X-Symaira Vault-Agent` header
+- Agent identified per-request via `X-Symaira-Agent` header
 - Max request body size: 1MB (requests exceeding this return 413 Request Entity Too Large)
 
 **Security recommendations for HTTP mode:**
@@ -330,7 +331,7 @@ passphrase-based key derivation. While scrypt provides reasonable protection,
 **argon2id** is the industry-standard memory-hard KDF (RFC 9106) and provides
 stronger resistance against GPU/ASIC-based attacks.
 
-#### Current Status (v1.x)
+#### Current Status (v0.x)
 
 | Vault Format | KDF    | Work Factor | Doctor Check         |
 |-------------|--------|-------------|---------------------|

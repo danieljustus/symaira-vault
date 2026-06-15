@@ -75,14 +75,14 @@ Authorization: Bearer <token>
 #### Agent Identification Header
 
 ```
-X-Symaira Vault-Agent: <agent-profile-name>
+X-Symaira-Agent: <agent-profile-name>
 ```
 
 #### Example Request
 
 ```bash
 curl -H "Authorization: Bearer $(cat ~/.symvault/mcp-token)" \
-     -H "X-Symaira Vault-Agent: claude-code" \
+     -H "X-Symaira-Agent: claude-code" \
      -H "Content-Type: application/json" \
      -X POST \
      -d '{"tool": "list_entries", "arguments": {}}' \
@@ -272,7 +272,7 @@ With this configuration, `opencode mcp auth symvault` will:
       "url": "http://127.0.0.1:8080/mcp",
       "headers": {
         "Authorization": "Bearer YOUR_SYMVAULT_TOKEN",
-        "X-Symaira Vault-Agent": "opencode"
+        "X-Symaira-Agent": "opencode"
       },
       "oauth": false
     }
@@ -1561,21 +1561,21 @@ curl -s "$BASE_URL/health" | jq .
 # List entries
 curl -s -X POST "$BASE_URL/mcp" \
   -H "Authorization: Bearer $TOKEN" \
-  -H "X-Symaira Vault-Agent: $AGENT" \
+  -H "X-Symaira-Agent: $AGENT" \
   -H "Content-Type: application/json" \
   -d '{"tool": "list_entries", "arguments": {}}' | jq .
 
 # Get entry
 curl -s -X POST "$BASE_URL/mcp" \
   -H "Authorization: Bearer $TOKEN" \
-  -H "X-Symaira Vault-Agent: $AGENT" \
+  -H "X-Symaira-Agent: $AGENT" \
   -H "Content-Type: application/json" \
   -d '{"tool": "get_entry", "arguments": {"path": "github"}}' | jq .
 
 # Generate password
 curl -s -X POST "$BASE_URL/mcp" \
   -H "Authorization: Bearer $TOKEN" \
-  -H "X-Symaira Vault-Agent: $AGENT" \
+  -H "X-Symaira-Agent: $AGENT" \
   -H "Content-Type: application/json" \
   -d '{"tool": "generate_password", "arguments": {"length": 20}}' | jq .
 ```

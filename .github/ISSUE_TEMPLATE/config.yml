@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Security vulnerability
-    url: https://github.com/danieljustus/OpenPass/security/advisories/new
+    url: https://github.com/danieljustus/symaira-vault/security/advisories/new
     about: Please report suspected vulnerabilities privately. Do not open a public issue for security reports.
   - name: Questions and ideas
-    url: https://github.com/danieljustus/OpenPass/discussions
+    url: https://github.com/danieljustus/symaira-vault/discussions
     about: Use GitHub Discussions for usage questions, design ideas, and early feature proposals.

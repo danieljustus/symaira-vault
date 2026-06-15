@@ -1,5 +1,5 @@
 name: Installation problem
-description: Report trouble installing or setting up OpenPass.
+description: Report trouble installing or setting up Symaira Vault.
 title: "install: "
 labels:
   - installation
@@ -12,7 +12,7 @@ body:
     id: method
     attributes:
       label: Installation method
-      description: How did you try to install OpenPass?
+      description: How did you try to install Symaira Vault?
       options:
         - Quick install script (curl / PowerShell)
         - Homebrew
@@ -27,9 +27,9 @@ body:
   - type: input
     id: version
     attributes:
-      label: OpenPass version
-      description: If known. Run `openpass version` after installation, or provide the release tag you tried.
-      placeholder: "v2.1.0"
+      label: Symaira Vault version
+      description: If known. Run `symvault version` after installation, or provide the release tag you tried.
+      placeholder: "v0.4.1"
   - type: input
     id: os
     attributes:
