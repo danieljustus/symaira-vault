@@ -303,6 +303,10 @@ func AgentHeaderMiddleware(next http.Handler) http.Handler {
 			http.Error(w, "forbidden: missing X-Symaira-Agent header", http.StatusForbidden)
 			return
 		}
+		if token, ok := TokenFromContext(r.Context()); ok && token != nil && token.AgentName != "" && token.AgentName != agent {
+			http.Error(w, "forbidden: token agent does not match X-Symaira-Agent header", http.StatusForbidden)
+			return
+		}
 		ctx := context.WithValue(r.Context(), agentContextKey, agent)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
