@@ -17,8 +17,8 @@ func TestInitCommand_HiddenPassphrase(t *testing.T) {
 	vaultDir := t.TempDir()
 	passphrase := []byte("test-hidden-passphrase")
 
-	restore := pipeStdin(t, string(passphrase)+"\n")
-	defer restore()
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+	defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
 
 	cli.RootCmd.SetArgs([]string{"init", vaultDir})
 	defer cli.RootCmd.SetArgs(nil)
@@ -58,15 +58,8 @@ func TestCmdInit_Success(t *testing.T) {
 	vaultDir := t.TempDir()
 	vaultFlagReset(t)
 
-	oldStdin := os.Stdin
-	r, w, _ := os.Pipe()
-	os.Stdin = r
-	_, _ = w.WriteString("supersecretpassphrase123\n")
-	_ = w.Close()
-	t.Cleanup(func() {
-		os.Stdin = oldStdin
-		_ = r.Close()
-	})
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", "supersecretpassphrase123")
+	defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
 
 	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "init"})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
@@ -108,15 +101,8 @@ func TestCmdInit_ShortPassphrase(t *testing.T) {
 	vaultDir := t.TempDir()
 	vaultFlagReset(t)
 
-	oldStdin := os.Stdin
-	r, w, _ := os.Pipe()
-	os.Stdin = r
-	_, _ = w.WriteString("short\n")
-	_ = w.Close()
-	t.Cleanup(func() {
-		os.Stdin = oldStdin
-		_ = r.Close()
-	})
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", "short")
+	defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
 
 	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "init"})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })

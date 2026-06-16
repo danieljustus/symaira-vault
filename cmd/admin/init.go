@@ -63,9 +63,14 @@ var initCmd = &cobra.Command{
 			return fmt.Errorf("cannot create vault directory: %w", mkdirErr)
 		}
 
-		passphrase, err := cli.ReadHiddenInput("Enter passphrase for vault identity (minimum 12 characters): ", nil)
-		if err != nil {
-			return fmt.Errorf("cannot read passphrase: %w", err)
+		var passphrase []byte
+		if envPassphrase := os.Getenv("SYMVAULT_PASSPHRASE"); envPassphrase != "" {
+			passphrase = []byte(envPassphrase)
+		} else {
+			passphrase, err = cli.ReadHiddenInput("Enter passphrase for vault identity (minimum 12 characters): ", nil)
+			if err != nil {
+				return fmt.Errorf("cannot read passphrase: %w", err)
+			}
 		}
 		defer cryptopkg.Wipe(passphrase)
 		if len(passphrase) < 12 {
