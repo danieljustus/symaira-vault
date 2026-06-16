@@ -227,13 +227,8 @@ func (k *fallbackKeystore) RotateKey() ([]byte, error) {
 	return newKey, nil
 }
 
-// NewKeystore is set by init() to create a fallbackKeystore on platforms
-// without OS keyring support.
-var NewKeystore func(auditDir string, identity *age.X25519Identity) Keystore
-
-func init() {
-	NewKeystore = func(auditDir string, identity *age.X25519Identity) Keystore {
-		logging.Default().Warn("Using file-based HMAC key storage (unsupported platform).")
-		return &fallbackKeystore{auditDir: auditDir, identity: identity}
-	}
+// NewKeystore creates a fallbackKeystore on platforms without OS keyring support.
+func NewKeystore(auditDir string, identity *age.X25519Identity) Keystore {
+	logging.Default().Warn("Using file-based HMAC key storage (unsupported platform).")
+	return &fallbackKeystore{auditDir: auditDir, identity: identity}
 }

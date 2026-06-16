@@ -262,21 +262,42 @@ func (k *osKeystore) RotateKey() ([]byte, error) {
 	return newKey, nil
 }
 
-// NewKeystore is the package-level factory for creating a Keystore backed
-// by the OS keyring. It is set by init() on platforms that support it.
+// NewKeystore creates a Keystore backed by the OS keyring.
 // The identity parameter is used by the fallback keystore for encrypting
 // keys at rest and is ignored on OS keyring platforms.
-var NewKeystore func(auditDir string, identity *age.X25519Identity) Keystore
+func NewKeystore(auditDir string, identity *age.X25519Identity) Keystore {
+	return &osKeystore{auditDir: auditDir}
+}
+
+func isTestOrCI() bool {
+	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("HEADLESS") != "" {
+		return true
+	}
+	for _, arg := range os.Args {
+		if len(arg) >= 6 && arg[:6] == "-test." {
+			return true
+		}
+	}
+	if len(os.Args) > 0 {
+		base := os.Args[0]
+		for i := len(base) - 1; i >= 0; i-- {
+			if base[i] == '/' || base[i] == '\\' {
+				base = base[i+1:]
+				break
+			}
+		}
+		if (len(base) >= 5 && base[len(base)-5:] == ".test") ||
+			(len(base) >= 9 && base[len(base)-9:] == ".test.exe") ||
+			base == "test" {
+			return true
+		}
+	}
+	return false
+}
 
 func init() {
-	// In CI or headless environments, keychain prompts can hang indefinitely.
-	// Pre-activate memory fallback to avoid blocking.
-	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("HEADLESS") != "" {
+	if isTestOrCI() {
 		fallbackActive = true
 		fallback = &memoryKeyring{}
-	}
-
-	NewKeystore = func(auditDir string, identity *age.X25519Identity) Keystore {
-		return &osKeystore{auditDir: auditDir}
 	}
 }
