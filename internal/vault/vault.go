@@ -44,6 +44,17 @@ type Vault struct {
 	searchIdentity atomic.Pointer[age.X25519Identity]
 }
 
+// WarmSearchIndex triggers a background build of the encrypted search index.
+// This eliminates cold-start latency on the first FindWithOptions call.
+func (v *Vault) WarmSearchIndex() {
+	if v == nil || v.Identity == nil {
+		return
+	}
+	go func() {
+		_ = globalIndex.BuildMemoryOnly(v.Dir, v.Identity)
+	}()
+}
+
 func Init(vaultDir string, identity *age.X25519Identity, cfg *vaultconfig.Config) error {
 	if vaultDir == "" {
 		return ErrVaultDirEmpty
@@ -133,6 +144,7 @@ func Open(vaultDir string, identity *age.X25519Identity) (*Vault, error) {
 	v := &Vault{Dir: vaultDir, Identity: identity, Config: cfg, Cache: cache}
 	v.searchIdentity.Store(identity)
 	registerVaultCache(vaultDir, cache)
+	v.WarmSearchIndex()
 	return v, nil
 }
 

@@ -603,6 +603,19 @@ func isToolBlockedByAgent(agent *config.AgentProfile, toolName string) *errors.M
 	return nil
 }
 
+// authorizeTool performs a single-pass authorization check that evaluates
+// agent tier, token scope, and special flags. Returns nil when the tool is
+// allowed, or an *errors.MCPError describing the denial reason.
+func authorizeTool(agent *config.AgentProfile, token *auth.ScopedToken, toolName string) *errors.MCPError {
+	if err := isToolBlockedByAgent(agent, toolName); err != nil {
+		return err
+	}
+	if !isToolAllowed(token, toolName) {
+		return errors.ToolNotAllowed(toolName, "token_scope", "")
+	}
+	return nil
+}
+
 // checkToolBlockedByTier applies tier-based tool blocking rules.
 // Returns an *errors.MCPError describing the block, or nil if allowed.
 func checkToolBlockedByTier(agent *config.AgentProfile, toolName string) *errors.MCPError {

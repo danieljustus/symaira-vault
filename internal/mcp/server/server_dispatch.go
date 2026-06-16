@@ -180,33 +180,30 @@ func (s *Server) validateToolAccess(ctx context.Context, def toolDefinition, nam
 		return callToolResultPayload(toolError(msg))
 	}
 
-	if agentErr := isToolBlockedByAgent(s.agent, name); agentErr != nil {
-		span.SetStatus(codes.Error, "agent_tool_denied")
-		metrics.RecordMCPRequest(name, agentName, "agent_tool_denied", time.Since(start))
-		s.logAudit(ctx, "agent_tool_denied", name, false)
-		return callToolResultPayload(toolError(agentErr.Error()))
+	token, _ := auth.TokenFromContext(ctx)
+	if authErr := authorizeTool(s.agent, token, name); authErr != nil {
+		span.SetStatus(codes.Error, "tool_denied")
+		if token != nil {
+			metrics.RecordAuthDenial("tool_scope_denied", agentName)
+		} else {
+			metrics.RecordMCPRequest(name, agentName, "agent_tool_denied", time.Since(start))
+		}
+		s.logAudit(ctx, "tool_denied", name, false)
+		return callToolResultPayload(toolError(authErr.Error()))
 	}
 
-	if token, ok := auth.TokenFromContext(ctx); ok {
-		if !isToolAllowed(token, name) {
-			span.SetStatus(codes.Error, "tool scope denied")
-			metrics.RecordAuthDenial("tool_scope_denied", agentName)
-			s.logAudit(ctx, "tool_scope_denied", name, false)
-			return nil
-		}
+	if token != nil {
 		token.UpdateLastUsed()
 	}
 
-	if token, ok := auth.TokenFromContext(ctx); ok && token != nil {
-		if token.IsToolRegistryDriftDetected() {
-			span.SetStatus(codes.Error, "tool registry drift")
-			metrics.RecordMCPRequest(name, agentName, "error", time.Since(start))
-			s.logAudit(ctx, "tool_registry_drift", name, false)
-			return callToolResultPayload(toolError(
-				"tool registry has changed since this token was issued — " +
-					"re-issue the token with 'symvault mcp token create'",
-			))
-		}
+	if token != nil && token.IsToolRegistryDriftDetected() {
+		span.SetStatus(codes.Error, "tool registry drift")
+		metrics.RecordMCPRequest(name, agentName, "error", time.Since(start))
+		s.logAudit(ctx, "tool_registry_drift", name, false)
+		return callToolResultPayload(toolError(
+			"tool registry has changed since this token was issued — " +
+				"re-issue the token with 'symvault mcp token create'",
+		))
 	}
 
 	if entryPath != "" {

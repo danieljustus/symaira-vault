@@ -39,6 +39,11 @@ func TokenFromContext(ctx context.Context) (*ScopedToken, bool) {
 // When the cap is reached, the oldest tracked entries are evicted.
 const MaxRateLimiterEntries = 10000
 
+// defaultCleanupInterval is how often the background sweeper runs to
+// remove entries that somehow survived past their resetAt (e.g. timer
+// coalescing, GC pauses).
+const defaultCleanupInterval = 5 * time.Minute
+
 type RateLimiter struct {
 	attempts       map[string]*rateLimitEntry
 	mu             sync.Mutex
@@ -49,6 +54,7 @@ type RateLimiter struct {
 	evictionCount  int64
 	log            *slog.Logger
 	trustedProxies []string
+	stopCh         chan struct{} // closed by Close() to stop background cleanup
 }
 
 type rateLimitEntry struct {
@@ -56,14 +62,22 @@ type rateLimitEntry struct {
 	count   int
 }
 
+// defaultRateLimiterContext is the background context for the auto-started
+// cleanup goroutine. It is never canceled — cleanup runs for the lifetime
+// of the process and is stopped only via Close().
+var defaultRateLimiterContext = context.Background()
+
 func NewRateLimiter(limit int, dur time.Duration, trustedProxies ...string) *RateLimiter {
-	return &RateLimiter{
+	rl := &RateLimiter{
 		attempts:       make(map[string]*rateLimitEntry),
 		limit:          limit,
 		window:         dur,
 		maxEntries:     MaxRateLimiterEntries,
 		trustedProxies: trustedProxies,
+		stopCh:         make(chan struct{}),
 	}
+	rl.startCleanup(defaultRateLimiterContext, defaultCleanupInterval)
+	return rl
 }
 
 // SetMaxEntriesForTests overrides the eviction cap; intended only for tests.
@@ -149,6 +163,25 @@ func (rl *RateLimiter) Cleanup() {
 	}
 }
 
+// startCleanup starts a background goroutine that periodically calls cleanupOnce.
+// It runs until the RateLimiter's stopCh is closed.
+func (rl *RateLimiter) startCleanup(ctx context.Context, interval time.Duration) {
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				rl.cleanupOnce()
+			case <-rl.stopCh:
+				return
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+}
+
 // StartCleanup starts a background goroutine that periodically calls Cleanup.
 // It cleans up expired rate limit entries every interval duration until the context is canceled.
 // Returns a cancellable stop function.
@@ -198,6 +231,7 @@ func (rl *RateLimiter) CleanupCount() int64 {
 }
 
 func (rl *RateLimiter) Close() error {
+	close(rl.stopCh)
 	return nil
 }
 

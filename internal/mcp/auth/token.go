@@ -14,6 +14,8 @@ import (
 	"time"
 	"unsafe"
 
+	"filippo.io/age"
+
 	"github.com/danieljustus/symaira-vault/internal/crypto"
 	"github.com/danieljustus/symaira-vault/internal/envutil"
 	"github.com/danieljustus/symaira-vault/internal/fsutil"
@@ -185,9 +187,11 @@ func entryToScopedToken(e TokenRegistryEntry) *ScopedToken {
 }
 
 // TokenRegistry provides thread-safe management of scoped MCP tokens backed
-// by an on-disk JSON file.
+// by an encrypted age file (registry.age). Falls back to plaintext JSON for
+// migration from older versions.
 type TokenRegistry struct {
 	path             string
+	identity         *age.X25519Identity // when non-nil, registry is encrypted at rest
 	mu               sync.RWMutex
 	entries          map[string]*ScopedToken                                        // keyed by token hash
 	stopFn           func()                                                         // stops the background cleanup goroutine
@@ -213,6 +217,15 @@ func (r *TokenRegistry) SetCleanupLogger(fn func(action, tokenID, label, reason 
 	r.cleanupLogger = fn
 }
 
+// SetIdentity enables encrypted-at-rest persistence for the token registry.
+// When set, the registry is encrypted using the vault's age identity on save
+// and decrypted on load.
+func (r *TokenRegistry) SetIdentity(identity *age.X25519Identity) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.identity = identity
+}
+
 // DefaultRevokedTokenRetention is the default retention period for revoked
 // tokens before they are purged from the registry.
 const DefaultRevokedTokenRetention = 30 * 24 * time.Hour
@@ -227,11 +240,25 @@ func NewTokenRegistry(path string) *TokenRegistry {
 	}
 }
 
-// Load reads the JSON registry file from disk and populates the in-memory
-// entries. If the file does not exist it is a no-op (empty registry).
+// Load reads the registry from disk and populates the in-memory entries.
+// When an identity is set it first attempts to load from the encrypted
+// registry.age file. If that does not exist it falls back to the plaintext
+// JSON file (migration path from pre-encryption versions).
 func (r *TokenRegistry) Load() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	if r.identity != nil {
+		encryptedPath := TokenRegistryEncryptedFilePath(filepath.Dir(r.path))
+		if data, err := os.ReadFile(encryptedPath); err == nil { // #nosec G304
+			plaintext, err := crypto.Decrypt(data, r.identity)
+			if err != nil {
+				return fmt.Errorf("decrypt token registry: %w", err)
+			}
+			defer crypto.Wipe(plaintext)
+			return r.unmarshalEntries(plaintext)
+		}
+	}
 
 	data, err := os.ReadFile(r.path) //#nosec G304 -- path comes from NewTokenRegistry which is controlled
 	if err != nil {
@@ -241,6 +268,10 @@ func (r *TokenRegistry) Load() error {
 		return fmt.Errorf("read token registry: %w", err)
 	}
 
+	return r.unmarshalEntries(data)
+}
+
+func (r *TokenRegistry) unmarshalEntries(data []byte) error {
 	var file TokenRegistryFile
 	if err := json.Unmarshal(data, &file); err != nil {
 		return fmt.Errorf("parse token registry: %w", err)
@@ -256,10 +287,16 @@ func (r *TokenRegistry) Load() error {
 	return nil
 }
 
-// Save persists the current in-memory entries to the JSON registry file with
-// 0o600 permissions.
+// Save persists the current in-memory entries to disk. When an identity is
+// set the data is encrypted to registry.age; otherwise it is written as
+// plaintext JSON for migration compatibility. The lock is held for the
+// entire marshal+write operation to prevent a concurrent Create() or
+// Revoke() from mutating entries after the snapshot is taken but before
+// it is persisted — a crash in that window would silently lose the mutation.
 func (r *TokenRegistry) Save() error {
 	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	file := TokenRegistryFile{
 		Version: 2,
 		Tokens:  make(map[string]TokenRegistryEntry, len(r.entries)),
@@ -267,11 +304,23 @@ func (r *TokenRegistry) Save() error {
 	for _, t := range r.entries {
 		file.Tokens[t.ID] = t.toEntry()
 	}
-	r.mu.Unlock()
 
 	data, err := json.MarshalIndent(file, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal token registry: %w", err)
+	}
+	defer crypto.Wipe(data)
+
+	if r.identity != nil {
+		ciphertext, err := crypto.Encrypt(data, r.identity.Recipient())
+		if err != nil {
+			return fmt.Errorf("encrypt token registry: %w", err)
+		}
+		encryptedPath := TokenRegistryEncryptedFilePath(filepath.Dir(r.path))
+		if err := fsutil.AtomicWriteFile(encryptedPath, ciphertext, 0o600); err != nil {
+			return fmt.Errorf("write encrypted token registry: %w", err)
+		}
+		return nil
 	}
 
 	if err := fsutil.AtomicWriteFile(r.path, append(data, '\n'), 0o600); err != nil {
@@ -694,15 +743,32 @@ func TokenRegistryFilePath(vaultDir string) string {
 	return filepath.Join(vaultDir, "mcp-tokens.json")
 }
 
-// LoadTokenSystem tries to load the scoped token registry from
-// <vaultDir>/mcp-tokens.json. If that file does not exist it falls back to the
-// legacy single-token file and transparently seeds a new registry with one
-// wildcard-allowing entry. An optional customLegacyPath can be provided to
-// override the default <vaultDir>/mcp-token location. The returned string is
-// the raw legacy token (empty when the new registry is used).
+// TokenRegistryEncryptedFilePath returns the path to the encrypted token
+// registry file. The encrypted format supersedes the plaintext JSON for
+// tokens created after encryption is enabled.
+func TokenRegistryEncryptedFilePath(vaultDir string) string {
+	return filepath.Join(vaultDir, "registry.age")
+}
+
+// LoadTokenSystem tries to load the scoped token registry from the encrypted
+// registry.age (if identity is provided) or from mcp-tokens.json. If that
+// file does not exist it falls back to the legacy single-token file and
+// transparently seeds a new registry with one wildcard-allowing entry. The
+// returned string is the raw legacy token (empty when the new registry is
+// used).
 func LoadTokenSystem(vaultDir string, customLegacyPath ...string) (*TokenRegistry, string, error) {
+	return LoadTokenSystemWithIdentity(nil, vaultDir, customLegacyPath...)
+}
+
+// LoadTokenSystemWithIdentity is like LoadTokenSystem but accepts an optional
+// age identity for encrypted-at-rest token registry storage. When identity is
+// non-nil the registry is loaded from and saved to registry.age.
+func LoadTokenSystemWithIdentity(identity *age.X25519Identity, vaultDir string, customLegacyPath ...string) (*TokenRegistry, string, error) {
 	regPath := TokenRegistryFilePath(vaultDir)
 	reg := NewTokenRegistry(regPath)
+	if identity != nil {
+		reg.SetIdentity(identity)
+	}
 
 	if err := reg.Load(); err != nil {
 		return nil, "", err

@@ -72,8 +72,21 @@ func (s *Server) handleSet(ctx context.Context, req mcp.CallToolRequest) (*mcp.C
 	}
 
 	if field == "password" && !req.GetBool("force", false) {
-		if err := crypto.ValidatePasswordStrength(value); err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("%s — re-call with force:true if you want to store this password (the entry will be tagged as weak)", err.Error())), nil
+		strength := crypto.AssessPasswordStrength(value)
+		if strength.Weak {
+			detail := map[string]any{
+				"weak":    true,
+				"entropy": strength.Entropy,
+				"message": fmt.Sprintf("%s — re-call with force:true to store this password (the entry will be tagged as weak)", strength.Message),
+			}
+			if len(strength.Missing) > 0 {
+				detail["missing"] = strength.Missing
+			}
+			detailJSON, err := json.Marshal(detail)
+			if err != nil {
+				return mcp.NewToolResultError("password too weak"), nil
+			}
+			return mcp.NewToolResultError(string(detailJSON)), nil
 		}
 	}
 

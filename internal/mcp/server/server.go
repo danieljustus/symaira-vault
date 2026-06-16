@@ -80,6 +80,7 @@ type Server struct {
 	transport    string
 	policyEngine *policy.Engine
 	shareStore   *ShareStore
+	tools        []toolDefinition // per-instance tool set, populated from global registry
 
 	approvalCache      *approvalCache
 	approvalKeyCounter atomic.Int64
@@ -177,6 +178,7 @@ func New(v *vault.Vault, agentName string, transport string) (*Server, error) {
 		auditLog:            auditLog,
 		transport:           transport,
 		policyEngine:        policyEngine,
+		tools:               toolDefinitions(),
 		approvalCache:       newApprovalCache(),
 		hookRegistry:        NewHookRegistry(),
 		sessionID:           sessionID,
