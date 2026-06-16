@@ -55,9 +55,10 @@ func generatePasswordWithReader(length int, useSymbols bool, reader io.Reader) (
 
 // PasswordStrength represents the result of a password strength assessment.
 type PasswordStrength struct {
-	Weak    bool    `json:"weak"`
-	Message string  `json:"message,omitempty"`
-	Entropy float64 `json:"entropy"`
+	Weak    bool     `json:"weak"`
+	Message string   `json:"message,omitempty"`
+	Entropy float64  `json:"entropy"`
+	Missing []string `json:"missing,omitempty"`
 }
 
 // AssessPasswordStrength evaluates password strength without blocking.
@@ -89,6 +90,19 @@ func AssessPasswordStrength(password string) PasswordStrength {
 		case unicode.IsPunct(r), unicode.IsSymbol(r):
 			hasSymbol = true
 		}
+	}
+
+	if !hasLower {
+		s.Missing = append(s.Missing, "lowercase")
+	}
+	if !hasUpper {
+		s.Missing = append(s.Missing, "uppercase")
+	}
+	if !hasDigit {
+		s.Missing = append(s.Missing, "digits")
+	}
+	if !hasSymbol {
+		s.Missing = append(s.Missing, "symbols")
 	}
 
 	if hasLower {
