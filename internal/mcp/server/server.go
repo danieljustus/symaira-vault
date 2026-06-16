@@ -103,17 +103,6 @@ func (s *Server) SessionID() string {
 	return s.sessionID
 }
 
-// ToolDefinitions returns a snapshot of the server's tool definitions.
-// This enables per-instance tool sets without global state mutation.
-func (s *Server) ToolDefinitions() []toolDefinition {
-	if s == nil {
-		return nil
-	}
-	result := make([]toolDefinition, len(s.tools))
-	copy(result, s.tools)
-	return result
-}
-
 // New creates a new MCP server instance with the specified vault and agent configuration.
 func New(v *vault.Vault, agentName string, transport string) (*Server, error) {
 	if v == nil {

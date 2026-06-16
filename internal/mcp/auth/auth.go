@@ -63,7 +63,7 @@ type rateLimitEntry struct {
 }
 
 // defaultRateLimiterContext is the background context for the auto-started
-// cleanup goroutine. It is never cancelled — cleanup runs for the lifetime
+// cleanup goroutine. It is never canceled — cleanup runs for the lifetime
 // of the process and is stopped only via Close().
 var defaultRateLimiterContext = context.Background()
 

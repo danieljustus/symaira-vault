@@ -82,7 +82,10 @@ func (s *Server) handleSet(ctx context.Context, req mcp.CallToolRequest) (*mcp.C
 			if len(strength.Missing) > 0 {
 				detail["missing"] = strength.Missing
 			}
-			detailJSON, _ := json.Marshal(detail)
+			detailJSON, err := json.Marshal(detail)
+			if err != nil {
+				return mcp.NewToolResultError("password too weak"), nil
+			}
 			return mcp.NewToolResultError(string(detailJSON)), nil
 		}
 	}
