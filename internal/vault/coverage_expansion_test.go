@@ -323,3 +323,45 @@ func TestVaultCache_PseudonymCacheTTL(t *testing.T) {
 		t.Errorf("expected 10m, got %v", ttl)
 	}
 }
+
+func TestDefaultVaultCache(t *testing.T) {
+	cache := DefaultVaultCache()
+	if cache == nil {
+		t.Fatal("DefaultVaultCache() returned nil")
+	}
+	if cache != DefaultVaultCache() {
+		t.Error("DefaultVaultCache() should return the same instance")
+	}
+}
+
+func TestRegisterVaultCache(t *testing.T) {
+	vaultCachesMu.Lock()
+	original := vaultCaches
+	vaultCaches = make(map[string]*VaultCache)
+	vaultCachesMu.Unlock()
+
+	defer func() {
+		vaultCachesMu.Lock()
+		vaultCaches = original
+		vaultCachesMu.Unlock()
+	}()
+
+	cache := NewVaultCache(VaultCacheConfig{})
+	registerVaultCache("/test/vault", cache)
+
+	if got := lookupVaultCache("/test/vault"); got != cache {
+		t.Error("registerVaultCache did not register the cache")
+	}
+
+	// Test nil cache
+	registerVaultCache("/test/nil", nil)
+	if got := lookupVaultCache("/test/nil"); got != nil {
+		t.Error("registerVaultCache with nil should not register")
+	}
+
+	// Test empty vaultDir
+	registerVaultCache("", cache)
+	if got := lookupVaultCache(""); got != nil {
+		t.Error("registerVaultCache with empty vaultDir should not register")
+	}
+}
