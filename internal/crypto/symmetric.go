@@ -13,7 +13,6 @@ import (
 	"unsafe"
 
 	"filippo.io/age"
-	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/hkdf"
 )
@@ -44,7 +43,10 @@ func (r *argon2idRecipient) Wrap(fileKey []byte) ([]*age.Stanza, error) {
 		return nil, err
 	}
 
-	l := argon2.IDKey([]byte(r.passphrase), salt, r.params.Time, r.params.Memory, r.params.Parallelism(), Argon2idKeyLen)
+	l, err := Argon2idDeriveKey([]byte(r.passphrase), salt, r.params)
+	if err != nil {
+		return nil, fmt.Errorf("argon2id derive key: %w", err)
+	}
 
 	kdf := hkdf.New(sha256.New, l, salt, []byte(ageArgon2idLabel))
 	wrapKey := make([]byte, Argon2idKeyLen)
@@ -105,7 +107,10 @@ func (id *argon2idIdentity) Unwrap(stanzas []*age.Stanza) ([]byte, error) {
 			continue
 		}
 
-		l := argon2.IDKey([]byte(id.passphrase), salt, params.Time, params.Memory, params.Parallelism(), Argon2idKeyLen)
+		l, kdfErr := Argon2idDeriveKey([]byte(id.passphrase), salt, params)
+		if kdfErr != nil {
+			continue
+		}
 
 		kdf := hkdf.New(sha256.New, l, salt, []byte(ageArgon2idLabel))
 		wrapKey := make([]byte, Argon2idKeyLen)
