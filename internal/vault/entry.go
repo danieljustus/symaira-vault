@@ -210,6 +210,10 @@ func loadVaultConfig(vaultDir string) (*vaultconfig.Config, error) {
 
 // ReadEntry reads and decrypts an entry from the vault
 func ReadEntry(vaultDir, path string, identity *age.X25519Identity) (*Entry, error) {
+	return readEntryInner(vaultDir, path, identity, nil)
+}
+
+func readEntryInner(vaultDir, path string, identity *age.X25519Identity, pseudoKey []byte) (*Entry, error) {
 	if identity == nil {
 		return nil, errors.New("nil identity")
 	}
@@ -230,7 +234,13 @@ func ReadEntry(vaultDir, path string, identity *age.X25519Identity) (*Entry, err
 		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
-	filePath := entryStoragePath(vaultDir, path, identity, cfg)
+
+	var filePath string
+	if pseudoKey != nil {
+		filePath = entryStoragePathCached(vaultDir, path, cfg, pseudoKey)
+	} else {
+		filePath = entryStoragePath(vaultDir, path, identity, cfg)
+	}
 	// #nosec G304 -- filePath is constructed by entryStoragePath from validated vaultDir and path
 	raw, err := os.ReadFile(filePath)
 	if os.IsNotExist(err) && canUseLegacyEntryPath(path) {
@@ -653,6 +663,14 @@ func entryStoragePath(vaultDir, path string, identity *age.X25519Identity, cfg *
 	if identity != nil && isPseudonymizeEnabled(cfg) {
 		key := derivePseudonymizationKey(identity)
 		hash := pseudonymizePath(path, key)
+		return filepath.Join(entriesDir(vaultDir), hash[:2], hash+".age")
+	}
+	return entryFilePath(vaultDir, path)
+}
+
+func entryStoragePathCached(vaultDir, path string, cfg *vaultconfig.Config, pseudoKey []byte) string {
+	if pseudoKey != nil {
+		hash := pseudonymizePath(path, pseudoKey)
 		return filepath.Join(entriesDir(vaultDir), hash[:2], hash+".age")
 	}
 	return entryFilePath(vaultDir, path)

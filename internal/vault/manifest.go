@@ -161,8 +161,13 @@ func VerifyManifestIntegrity(vaultDir string, identity *age.X25519Identity) (*Ma
 	result := &ManifestVerifyResult{}
 	storagePaths := make(map[string]bool)
 
+	var pseudoKey []byte
+	if identity != nil && isPseudonymizeEnabled(cfg) {
+		pseudoKey = derivePseudonymizationKey(identity)
+	}
+
 	for logicalPath, manifestEntry := range m.Entries {
-		filePath := entryStoragePath(vaultDir, logicalPath, identity, cfg)
+		filePath := entryStoragePathCached(vaultDir, logicalPath, cfg, pseudoKey)
 		storagePaths[filePath] = true
 
 		data, err := os.ReadFile(filePath) //#nosec G304 -- path derived from manifest entries
