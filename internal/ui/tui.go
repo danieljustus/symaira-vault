@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -54,6 +55,7 @@ const (
 	modeConfirmEdit
 	modeTagFilter
 	modeAdd
+	modeGenConfig
 )
 
 type entryLoadedMsg struct {
@@ -127,6 +129,8 @@ type TUIModel struct {
 	filterInput    textinput.Model
 	tagFilterInput textinput.Model
 	addPathInput   textinput.Model
+	genLengthInput textinput.Model
+	genSymbols     bool
 	mode           mode
 	revealed       bool
 	help           bool
@@ -181,11 +185,18 @@ func NewTUIModel(vault *vaultpkg.Vault) TUIModel {
 	addInput.Prompt = "a: "
 	addInput.CharLimit = 256
 
+	genInput := textinput.New()
+	genInput.Placeholder = "20"
+	genInput.Prompt = "length: "
+	genInput.CharLimit = 4
+
 	return TUIModel{
 		vault:          vault,
 		filterInput:    input,
 		tagFilterInput: tagInput,
 		addPathInput:   addInput,
+		genLengthInput: genInput,
+		genSymbols:     true,
 		loading:        true,
 		status:         "Loading entries...",
 	}
@@ -366,7 +377,7 @@ func (m TUIModel) View() string {
 	rightWidth := max(32, m.width-leftWidth-8)
 
 	bs := borderStyle
-	if m.mode == modeFilter || m.mode == modeTagFilter || m.mode == modeAdd {
+	if m.mode == modeFilter || m.mode == modeTagFilter || m.mode == modeAdd || m.mode == modeGenConfig {
 		bs = borderFocusStyle
 	}
 	left := bs.Width(leftWidth).Height(contentHeight).Render(m.leftView(leftWidth, contentHeight))
@@ -449,6 +460,39 @@ func (m TUIModel) handleKey(msg tea.KeyMsg) (TUIModel, tea.Cmd) {
 
 		var cmd tea.Cmd
 		m.addPathInput, cmd = m.addPathInput.Update(msg)
+		return m, cmd
+	}
+
+	if m.mode == modeGenConfig {
+		switch msg.String() {
+		case keyEsc:
+			m.mode = modeNormal
+			m.genLengthInput.Blur()
+			m.status = ""
+			return m, nil
+		case keyEnter:
+			length := generatedPasswordLength
+			val := strings.TrimSpace(m.genLengthInput.Value())
+			if val != "" {
+				if n, err := strconv.Atoi(val); err == nil && n > 0 && n <= 512 {
+					length = n
+				} else {
+					m.status = "Invalid length (1-512)"
+					return m, nil
+				}
+			}
+			m.mode = modeNormal
+			m.genLengthInput.Blur()
+			return m, generatePasswordCmd(length, m.genSymbols)
+		case "s":
+			m.genSymbols = !m.genSymbols
+			return m, nil
+		case keyQuit:
+			return m, m.quitCmd()
+		}
+
+		var cmd tea.Cmd
+		m.genLengthInput, cmd = m.genLengthInput.Update(msg)
 		return m, cmd
 	}
 
@@ -537,7 +581,10 @@ func (m TUIModel) handleKey(msg tea.KeyMsg) (TUIModel, tea.Cmd) {
 		m.addPathInput.Focus()
 		return m, textinput.Blink
 	case "g":
-		return m, generatePasswordCmd()
+		m.mode = modeGenConfig
+		m.genLengthInput.SetValue("")
+		m.genLengthInput.Focus()
+		return m, textinput.Blink
 	}
 
 	return m, nil
@@ -728,6 +775,13 @@ func (m TUIModel) leftView(width, height int) string {
 		}
 	} else if m.mode == modeAdd {
 		b.WriteString(m.addPathInput.View())
+	} else if m.mode == modeGenConfig {
+		b.WriteString(m.genLengthInput.View())
+		symbolsLabel := "off"
+		if m.genSymbols {
+			symbolsLabel = "on"
+		}
+		b.WriteString(" s: symbols [" + symbolsLabel + "]")
 	} else if q := strings.TrimSpace(m.filterInput.Value()); q != "" {
 		b.WriteString(theme.MutedStyle.Render("Filter: " + q))
 		if m.filterTag != "" {
@@ -820,6 +874,9 @@ func (m TUIModel) statusView() string {
 		status = theme.ErrorStyle.Render(m.err.Error())
 	}
 	keys := "↑/↓ select · Enter copy · r reveal · a add · e edit · d delete · g gen · s sort · t tag · / filter · esc clear · ? help · q quit"
+	if m.mode == modeGenConfig {
+		keys = "Enter confirm · s toggle symbols · esc cancel"
+	}
 	return theme.MutedStyle.Render(keys) + "\n" + status
 }
 
@@ -835,7 +892,7 @@ func (m TUIModel) helpView() string {
 		"r: reveal or redact sensitive fields",
 		"e: edit selected entry after confirmation",
 		"d: delete selected entry after confirmation",
-		"g: generate password and copy it to clipboard",
+		"g: configure and generate password (length, symbols)",
 		"q or Ctrl+C: quit",
 	}, "\n")
 }
@@ -919,9 +976,9 @@ func clipboardTickCmd() tea.Cmd {
 	})
 }
 
-func generatePasswordCmd() tea.Cmd {
+func generatePasswordCmd(length int, symbols bool) tea.Cmd {
 	return func() tea.Msg {
-		password, cleanup, err := vaultcrypto.GeneratePassword(generatedPasswordLength, true)
+		password, cleanup, err := vaultcrypto.GeneratePassword(length, symbols)
 		return passwordGeneratedMsg{password: password, cleanup: cleanup, err: err}
 	}
 }
