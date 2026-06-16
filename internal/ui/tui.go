@@ -53,6 +53,7 @@ const (
 	modeConfirmDelete
 	modeConfirmEdit
 	modeTagFilter
+	modeAdd
 )
 
 type entryLoadedMsg struct {
@@ -84,6 +85,11 @@ type passwordGeneratedMsg struct {
 }
 
 type entryDeletedMsg struct {
+	path string
+	err  error
+}
+
+type entryAddedMsg struct {
 	path string
 	err  error
 }
@@ -120,6 +126,7 @@ type TUIModel struct {
 
 	filterInput    textinput.Model
 	tagFilterInput textinput.Model
+	addPathInput   textinput.Model
 	mode           mode
 	revealed       bool
 	help           bool
@@ -135,6 +142,8 @@ type TUIModel struct {
 
 	status string
 	err    error
+
+	pendingSelectPath string
 
 	clipboardSeconds int
 	clipboardMessage string
@@ -167,10 +176,16 @@ func NewTUIModel(vault *vaultpkg.Vault) TUIModel {
 	tagInput.Prompt = "t: "
 	tagInput.CharLimit = 256
 
+	addInput := textinput.New()
+	addInput.Placeholder = "entry path"
+	addInput.Prompt = "a: "
+	addInput.CharLimit = 256
+
 	return TUIModel{
 		vault:          vault,
 		filterInput:    input,
 		tagFilterInput: tagInput,
+		addPathInput:   addInput,
 		loading:        true,
 		status:         "Loading entries...",
 	}
@@ -220,6 +235,15 @@ func (m TUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.entries = msg.entries
 		m.applyFilter()
 		m.status = fmt.Sprintf("%d entries", len(m.entries))
+		if m.pendingSelectPath != "" {
+			for i, e := range m.filtered {
+				if e == m.pendingSelectPath {
+					m.selected = i
+					break
+				}
+			}
+			m.pendingSelectPath = ""
+		}
 		return m, m.loadSelectedEntry()
 	case entryLoadRequestedMsg:
 		if msg.requestID != m.detailRequest || msg.path != m.selectedPath() {
@@ -271,6 +295,16 @@ func (m TUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		delete(m.metaCache, msg.path)
 		m.err = nil
 		m.status = fmt.Sprintf("Deleted %s", msg.path)
+		return m, loadEntriesCmd(m.vault)
+	case entryAddedMsg:
+		if msg.err != nil {
+			m.err = msg.err
+			m.status = "Add failed"
+			return m, nil
+		}
+		m.err = nil
+		m.status = fmt.Sprintf("Added %s", msg.path)
+		m.pendingSelectPath = msg.path
 		return m, loadEntriesCmd(m.vault)
 	case entryEditedMsg:
 		m.mode = modeNormal
@@ -332,7 +366,7 @@ func (m TUIModel) View() string {
 	rightWidth := max(32, m.width-leftWidth-8)
 
 	bs := borderStyle
-	if m.mode == modeFilter || m.mode == modeTagFilter {
+	if m.mode == modeFilter || m.mode == modeTagFilter || m.mode == modeAdd {
 		bs = borderFocusStyle
 	}
 	left := bs.Width(leftWidth).Height(contentHeight).Render(m.leftView(leftWidth, contentHeight))
@@ -390,6 +424,31 @@ func (m TUIModel) handleKey(msg tea.KeyMsg) (TUIModel, tea.Cmd) {
 		var cmd tea.Cmd
 		m.tagFilterInput, cmd = m.tagFilterInput.Update(msg)
 		m.applyFilter()
+		return m, cmd
+	}
+
+	if m.mode == modeAdd {
+		switch msg.String() {
+		case keyEsc:
+			m.mode = modeNormal
+			m.addPathInput.Blur()
+			m.status = ""
+			return m, nil
+		case keyEnter:
+			path := strings.TrimSpace(m.addPathInput.Value())
+			if path == "" {
+				m.status = "Path cannot be empty"
+				return m, nil
+			}
+			m.mode = modeNormal
+			m.addPathInput.Blur()
+			return m, addEntryCmd(m.vault, path)
+		case keyQuit:
+			return m, m.quitCmd()
+		}
+
+		var cmd tea.Cmd
+		m.addPathInput, cmd = m.addPathInput.Update(msg)
 		return m, cmd
 	}
 
@@ -472,6 +531,11 @@ func (m TUIModel) handleKey(msg tea.KeyMsg) (TUIModel, tea.Cmd) {
 			m.mode = modeConfirmEdit
 		}
 		return m, nil
+	case "a":
+		m.mode = modeAdd
+		m.addPathInput.SetValue("")
+		m.addPathInput.Focus()
+		return m, textinput.Blink
 	case "g":
 		return m, generatePasswordCmd()
 	}
@@ -662,6 +726,8 @@ func (m TUIModel) leftView(width, height int) string {
 			}
 			b.WriteString(theme.MutedStyle.Render("tags: " + strings.Join(escapedTags, " ")))
 		}
+	} else if m.mode == modeAdd {
+		b.WriteString(m.addPathInput.View())
 	} else if q := strings.TrimSpace(m.filterInput.Value()); q != "" {
 		b.WriteString(theme.MutedStyle.Render("Filter: " + q))
 		if m.filterTag != "" {
@@ -753,7 +819,7 @@ func (m TUIModel) statusView() string {
 	if m.err != nil {
 		status = theme.ErrorStyle.Render(m.err.Error())
 	}
-	keys := "↑/↓ select · Enter copy · r reveal · e edit · d delete · g gen · s sort · t tag · / filter · esc clear · ? help · q quit"
+	keys := "↑/↓ select · Enter copy · r reveal · a add · e edit · d delete · g gen · s sort · t tag · / filter · esc clear · ? help · q quit"
 	return theme.MutedStyle.Render(keys) + "\n" + status
 }
 
@@ -764,6 +830,7 @@ func (m TUIModel) helpView() string {
 		"/: fuzzy filter entries",
 		"s: cycle sort (name/updated, asc/desc)",
 		"t: filter by tag",
+		"a: add a new entry",
 		"Enter: copy password field to clipboard",
 		"r: reveal or redact sensitive fields",
 		"e: edit selected entry after confirmation",
@@ -888,6 +955,32 @@ func editEntryCmd(vault *vaultpkg.Vault, path string) tea.Cmd {
 		_ = vault.AutoCommitEntry(fmt.Sprintf("Edit %s", path), path)
 		vault.Cache.Invalidate()
 		return entryEditedMsg{path: path}
+	}
+}
+
+func addEntryCmd(vault *vaultpkg.Vault, path string) tea.Cmd {
+	return func() tea.Msg {
+		now := time.Now()
+		entry := &vaultpkg.Entry{
+			Path: path,
+			Data: map[string]any{"password": ""},
+			Metadata: vaultpkg.EntryMetadata{
+				Created: now,
+				Updated: now,
+				Version: 1,
+			},
+		}
+
+		edited, err := secureedit.EditEntry(entry, os.Getenv("EDITOR"), secureedit.DefaultStreams())
+		if err != nil {
+			return entryAddedMsg{path: path, err: err}
+		}
+		if err := vaultpkg.WriteEntryWithRecipients(vault.Dir, path, edited, vault.Identity); err != nil {
+			return entryAddedMsg{path: path, err: err}
+		}
+		_ = vault.AutoCommitEntry(fmt.Sprintf("Add %s", path), path)
+		vault.Cache.Invalidate()
+		return entryAddedMsg{path: path}
 	}
 }
 
