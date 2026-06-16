@@ -110,5 +110,3 @@ func (s *Server) promptAndStore(
 	metrics.RecordVaultOperation("write", "success")
 	return mcp.NewToolResultText(fmt.Sprintf("Securely stored %s.%s = *** (value hidden from agent)", req.Path, req.Field)), nil
 }
-
-

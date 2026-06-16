@@ -281,5 +281,3 @@ func redactSecrets(command []string, secretEnv map[string]string) []string {
 	}
 	return redacted
 }
-
-

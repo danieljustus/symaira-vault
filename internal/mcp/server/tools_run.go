@@ -158,5 +158,3 @@ func extractPathFromRef(ref string) string {
 	}
 	return ref
 }
-
-

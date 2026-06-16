@@ -21,5 +21,3 @@ func (s *Server) handleHealth(ctx context.Context, req mcp.CallToolRequest) (*mc
 	}
 	return mcp.NewToolResultText(string(resultJSON)), nil
 }
-
-

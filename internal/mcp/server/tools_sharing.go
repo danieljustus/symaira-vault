@@ -215,5 +215,3 @@ func filterShareGrants(grants []*mcp.ShareGrant, filter mcp.ShareFilter) []*mcp.
 	}
 	return filtered
 }
-
-

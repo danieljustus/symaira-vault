@@ -142,7 +142,6 @@ func entryStoragePath(vaultDir, path string, identity *age.X25519Identity, cfg *
 	return entryFilePath(vaultDir, path)
 }
 
-
 func entryStoragePathCached(vaultDir, path string, cfg *vaultconfig.Config, pseudoKey []byte) string {
 	if pseudoKey != nil {
 		hash := pseudonymizePath(path, pseudoKey)

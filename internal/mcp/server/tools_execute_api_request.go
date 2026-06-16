@@ -470,5 +470,3 @@ func (s *Server) checkApproval(ctx context.Context, operation, detailFmt string)
 func executeAPIAvailable(s *Server) bool {
 	return s != nil && s.agent != nil && s.agent.CanRunCommands != nil && *s.agent.CanRunCommands
 }
-
-

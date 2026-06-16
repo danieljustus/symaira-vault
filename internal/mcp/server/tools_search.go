@@ -122,5 +122,3 @@ func riskLevelName(level RiskLevel) string {
 		return "unknown"
 	}
 }
-
-

@@ -133,5 +133,3 @@ func (s *Server) handleFetchOpenAI(ctx context.Context, req mcp.CallToolRequest)
 
 	return mcp.NewToolResultStructured(string(textJSON), response), nil
 }
-
-

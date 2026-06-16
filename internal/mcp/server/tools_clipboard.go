@@ -84,5 +84,3 @@ func (s *Server) handleCopyToClipboard(ctx context.Context, req mcp.CallToolRequ
 
 	return mcp.NewToolResultText(`{"success": true}`), nil
 }
-
-

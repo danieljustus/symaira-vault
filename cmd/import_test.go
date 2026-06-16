@@ -24,7 +24,7 @@ func TestImportCommandDryRunDoesNotWriteEntries(t *testing.T) {
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
-	output := runImportCommand(t, string(passphrase), "--vault", vaultDir, "import", "csv", csvImportFixture(t), "--dry-run")
+	output := runImportCommand(t, string(passphrase), "--vault", vaultDir, "import", "--format", "csv", csvImportFixture(t), "--dry-run")
 
 	v := importTestVault(t, vaultDir, string(passphrase))
 	entries, err := vaultpkg.List(v.Dir, "", nil)
@@ -49,7 +49,7 @@ func TestImportCommandCSVWritesEntries(t *testing.T) {
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
-	output := runImportCommand(t, string(passphrase), "--vault", vaultDir, "import", "csv", csvImportFixture(t))
+	output := runImportCommand(t, string(passphrase), "--vault", vaultDir, "import", "--format", "csv", csvImportFixture(t))
 
 	if !strings.Contains(output, "Import summary: 3 imported, 0 skipped") {
 		t.Errorf("import output missing summary: %s", output)
@@ -63,11 +63,11 @@ func TestImportCommandSkipExistingDoesNotChangeEntries(t *testing.T) {
 	defer setupVaultFlag(t, vaultDir)()
 	source := csvImportFixture(t)
 
-	runImportCommand(t, string(passphrase), "--vault", vaultDir, "import", "csv", source)
+	runImportCommand(t, string(passphrase), "--vault", vaultDir, "import", "--format", "csv", source)
 	v := importTestVault(t, vaultDir, string(passphrase))
 	before := snapshotImportEntries(t, v, expectedCSVImportPaths)
 
-	output := runImportCommand(t, string(passphrase), "--vault", vaultDir, "import", "csv", source, "--skip-existing")
+	output := runImportCommand(t, string(passphrase), "--vault", vaultDir, "import", "--format", "csv", source, "--skip-existing")
 	after := snapshotImportEntries(t, v, expectedCSVImportPaths)
 
 	if !reflect.DeepEqual(after, before) {
@@ -84,7 +84,7 @@ func TestImportCommandOverwriteUpdatesExistingEntries(t *testing.T) {
 	defer setupVaultFlag(t, vaultDir)()
 	source := csvImportFixture(t)
 
-	runImportCommand(t, string(passphrase), "--vault", vaultDir, "import", "csv", source)
+	runImportCommand(t, string(passphrase), "--vault", vaultDir, "import", "--format", "csv", source)
 	v := importTestVault(t, vaultDir, string(passphrase))
 	if _, err := vaultpkg.MergeEntryWithRecipients(v.Dir, "GitHub,-Personal", map[string]any{
 		"username": "changed@example.com",
@@ -93,7 +93,7 @@ func TestImportCommandOverwriteUpdatesExistingEntries(t *testing.T) {
 		t.Fatalf("modify imported entry: %v", err)
 	}
 
-	output := runImportCommand(t, string(passphrase), "--vault", vaultDir, "import", "csv", source, "--overwrite")
+	output := runImportCommand(t, string(passphrase), "--vault", vaultDir, "import", "--format", "csv", source, "--overwrite")
 	entry, err := vaultpkg.ReadEntry(v.Dir, "GitHub,-Personal", v.Identity)
 	if err != nil {
 		t.Fatalf("get overwritten entry: %v", err)
@@ -115,7 +115,7 @@ func TestImportCommandPrefixWritesEntriesUnderPrefix(t *testing.T) {
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
-	output := runImportCommand(t, string(passphrase), "--vault", vaultDir, "import", "csv", csvImportFixture(t), "--prefix", "imports/")
+	output := runImportCommand(t, string(passphrase), "--vault", vaultDir, "import", "--format", "csv", csvImportFixture(t), "--prefix", "imports/")
 
 	if !strings.Contains(output, "Imported: imports/GitHub,-Personal") {
 		t.Errorf("prefix output missing imported path: %s", output)
@@ -204,7 +204,7 @@ func TestImportQuarantineMutualExclusion(t *testing.T) {
 	if err := os.Setenv("OPENPASS_PASSPHRASE", string(passphrase)); err != nil {
 		t.Fatalf("set passphrase env: %v", err)
 	}
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "import", "csv", csvImportFixture(t), "--quarantine", "--prefix", "myprefix/"})
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "import", "--format", "csv", csvImportFixture(t), "--quarantine", "--prefix", "myprefix/"})
 	defer cli.RootCmd.SetArgs(nil)
 
 	var execErr error
@@ -227,7 +227,7 @@ func TestImportQuarantinePath(t *testing.T) {
 	if err := os.Setenv("OPENPASS_PASSPHRASE", string(passphrase)); err != nil {
 		t.Fatalf("set passphrase env: %v", err)
 	}
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "import", "csv", csvImportFixture(t), "--quarantine"})
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "import", "--format", "csv", csvImportFixture(t), "--quarantine"})
 	defer cli.RootCmd.SetArgs(nil)
 
 	var execErr error
@@ -296,7 +296,7 @@ func TestImportReviewList(t *testing.T) {
 	if err := os.Setenv("OPENPASS_PASSPHRASE", string(passphrase)); err != nil {
 		t.Fatalf("set passphrase env: %v", err)
 	}
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "import", "csv", csvImportFixture(t), "--quarantine"})
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "import", "--format", "csv", csvImportFixture(t), "--quarantine"})
 	var importOutput string
 	var importErr error
 	importOutput = captureStdout(func() {
@@ -350,7 +350,7 @@ func TestImportReviewPromote(t *testing.T) {
 	if err := os.Setenv("OPENPASS_PASSPHRASE", string(passphrase)); err != nil {
 		t.Fatalf("set passphrase env: %v", err)
 	}
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "import", "csv", csvImportFixture(t), "--quarantine"})
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "import", "--format", "csv", csvImportFixture(t), "--quarantine"})
 	var importOutput string
 	var importErr error
 	importOutput = captureStdout(func() {
@@ -418,7 +418,7 @@ func TestImportReviewPromoteSkipsExisting(t *testing.T) {
 	if err := os.Setenv("OPENPASS_PASSPHRASE", string(passphrase)); err != nil {
 		t.Fatalf("set passphrase env: %v", err)
 	}
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "import", "csv", csvImportFixture(t), "--quarantine"})
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "import", "--format", "csv", csvImportFixture(t), "--quarantine"})
 	var importOutput string
 	var importErr error
 	importOutput = captureStdout(func() {
@@ -489,7 +489,7 @@ func TestImportReviewPromoteOverwrite(t *testing.T) {
 	if err := os.Setenv("OPENPASS_PASSPHRASE", string(passphrase)); err != nil {
 		t.Fatalf("set passphrase env: %v", err)
 	}
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "import", "csv", csvImportFixture(t), "--quarantine"})
+	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "import", "--format", "csv", csvImportFixture(t), "--quarantine"})
 	var importOutput string
 	var importErr error
 	importOutput = captureStdout(func() {

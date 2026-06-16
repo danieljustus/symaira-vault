@@ -94,5 +94,3 @@ func (s *Server) handleSet(ctx context.Context, req mcp.CallToolRequest) (*mcp.C
 	metrics.RecordVaultOperation("write", "success")
 	return mcp.NewToolResultText(fmt.Sprintf("Set %s.%s = ***", path, field)), nil
 }
-
-

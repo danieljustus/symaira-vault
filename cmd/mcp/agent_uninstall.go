@@ -126,10 +126,10 @@ agent's profile in config.yaml. Use --yes to skip the confirmation prompt.`,
 				if data, readErr := os.ReadFile(expanded); readErr == nil {
 					manifest, parseErr := agentskill.ParseManifest(data)
 					if parseErr == nil && manifest.ManagedBy == agentskill.SentinelValue {
-				if rmErr := os.Remove(expanded); rmErr != nil {
-						cliout.Warnf("\u26a0 Failed to remove skill file %s: %v", expanded, rmErr)
-					} else {
-						cliout.Hintf("\u2713 Removed skill file %s", expanded)
+						if rmErr := os.Remove(expanded); rmErr != nil {
+							cliout.Warnf("\u26a0 Failed to remove skill file %s: %v", expanded, rmErr)
+						} else {
+							cliout.Hintf("\u2713 Removed skill file %s", expanded)
 						}
 					}
 				}

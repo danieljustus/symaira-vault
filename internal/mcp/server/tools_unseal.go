@@ -120,5 +120,3 @@ func (s *Server) handleSecretUnseal(ctx context.Context, req mcp.CallToolRequest
 
 	return mcp.NewToolResultText(value), nil
 }
-
-

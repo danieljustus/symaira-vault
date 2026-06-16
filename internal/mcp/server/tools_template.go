@@ -120,5 +120,3 @@ func (s *Server) validateOutputPath(outputPath string) error {
 
 	return nil
 }
-
-

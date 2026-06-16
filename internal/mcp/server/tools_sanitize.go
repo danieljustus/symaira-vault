@@ -62,5 +62,3 @@ func (s *Server) sanitizeKnownSecretValues(text string, resolvedEnv map[string]s
 
 	return masking.SanitizeWithKnownSecrets(text, resolvedEnv, "***")
 }
-
-

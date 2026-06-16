@@ -89,5 +89,3 @@ func (s *Server) handleSetAuthMethod(ctx context.Context, req mcp.CallToolReques
 	s.logAudit(ctx, "auth_config", "<config>", true)
 	return mcp.NewToolResultText(fmt.Sprintf("Auth method set to %s", method)), nil
 }
-
-

@@ -59,5 +59,3 @@ func (s *Server) findEntries(ctx context.Context, query string) ([]vaultpkg.Matc
 		RedactFieldPatterns: redactPatterns,
 	})
 }
-
-

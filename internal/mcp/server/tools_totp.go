@@ -184,5 +184,3 @@ func generateTOTPAvailable(s *Server) bool {
 	}
 	return s.canUseClipboard() || s.canUseAutotype() || s.canReadValues()
 }
-
-

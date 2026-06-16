@@ -297,5 +297,3 @@ func inferFieldKind(v any) string {
 		return fmt.Sprintf("%T", val)
 	}
 }
-
-

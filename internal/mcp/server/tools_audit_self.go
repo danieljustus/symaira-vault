@@ -90,5 +90,3 @@ func (s *Server) handleAuditSelf(ctx context.Context, req mcp.CallToolRequest) (
 	}
 	return mcp.NewToolResultText(string(resultJSON)), nil
 }
-
-

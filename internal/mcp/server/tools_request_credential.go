@@ -25,5 +25,3 @@ func (s *Server) handleRequestCredential(ctx context.Context, req mcp.CallToolRe
 		Hidden:      true,
 	}, "request_credential")
 }
-
-

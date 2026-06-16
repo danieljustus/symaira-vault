@@ -68,5 +68,3 @@ func (s *Server) handleList(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 	}
 	return mcp.NewToolResultText(string(result)), nil
 }
-
-

@@ -71,5 +71,3 @@ func (s *Server) handleAutotype(ctx context.Context, req mcp.CallToolRequest) (*
 
 	return mcp.NewToolResultText(`{"success": true}`), nil
 }
-
-

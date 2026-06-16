@@ -34,5 +34,3 @@ func (s *Server) handleGenerate(ctx context.Context, req mcp.CallToolRequest) (*
 func generatePassword(length int, symbols bool) (string, func(), error) {
 	return crypto.GeneratePassword(length, symbols)
 }
-
-

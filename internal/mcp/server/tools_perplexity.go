@@ -296,5 +296,3 @@ func (s *Server) handlePerplexityAsk(ctx context.Context, req mcp.CallToolReques
 
 	return mcp.NewToolResultText(string(resultJSON)), nil
 }
-
-

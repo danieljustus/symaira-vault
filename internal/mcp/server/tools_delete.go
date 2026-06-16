@@ -48,5 +48,3 @@ func (s *Server) handleDelete(ctx context.Context, req mcp.CallToolRequest) (*mc
 	metrics.RecordVaultOperation("delete", "success")
 	return mcp.NewToolResultText(fmt.Sprintf("Successfully deleted entry: %s", path)), nil
 }
-
-
