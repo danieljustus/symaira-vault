@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
@@ -40,6 +41,9 @@ func TestExpandVaultDir_TildeSlash(t *testing.T) {
 }
 
 func TestExpandVaultDir_AbsolutePath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Test uses Unix-style absolute paths")
+	}
 	got, err := ExpandVaultDir("/tmp/test-vault")
 	if err != nil {
 		t.Fatalf("ExpandVaultDir(\"/tmp/test-vault\") error = %v", err)
@@ -50,6 +54,9 @@ func TestExpandVaultDir_AbsolutePath(t *testing.T) {
 }
 
 func TestExpandVaultDir_RelativePath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Test uses Unix-style path separators")
+	}
 	got, err := ExpandVaultDir("relative/path")
 	if err != nil {
 		t.Fatalf("ExpandVaultDir(\"relative/path\") error = %v", err)

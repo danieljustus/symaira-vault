@@ -108,7 +108,7 @@ func TestFindConflictFiles_EmptyDir(t *testing.T) {
 
 func TestFindConflictFiles_NestedConflicts(t *testing.T) {
 	dir := t.TempDir()
-	subdir := dir + "/subdir"
+	subdir := filepath.Join(dir, "subdir")
 	createTestDir(t, subdir)
 	createTestFiles(t, subdir, ".conflict-nested.txt")
 
@@ -116,8 +116,10 @@ func TestFindConflictFiles_NestedConflicts(t *testing.T) {
 	if len(files) != 1 {
 		t.Fatalf("findConflictFiles() returned %d files, want 1", len(files))
 	}
-	if files[0] != "subdir/.conflict-nested.txt" {
-		t.Errorf("conflict file = %q, want subdir/.conflict-nested.txt", files[0])
+	want := filepath.ToSlash("subdir/.conflict-nested.txt")
+	got := filepath.ToSlash(files[0])
+	if got != want {
+		t.Errorf("conflict file = %q, want %q", got, want)
 	}
 }
 

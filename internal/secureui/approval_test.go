@@ -2,6 +2,7 @@ package secureui
 
 import (
 	"errors"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -307,6 +308,9 @@ func TestPromptApproval_Remembered(t *testing.T) {
 }
 
 func TestPromptApproval_EmptyResponseIsDenied(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Mock GUI runner does not work on Windows")
+	}
 	t.Setenv("OPENPASS_SECUREUI", "gui")
 	old := defaultRunner
 	defer func() { defaultRunner = old }()

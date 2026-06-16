@@ -4,6 +4,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -169,6 +170,9 @@ func TestLoadRuntimePort_PathTraversalPrevention(t *testing.T) {
 }
 
 func TestSaveRuntimePort_SecurityBits(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not enforce Unix-style file permissions")
+	}
 	dir := t.TempDir()
 
 	if err := SaveRuntimePort(dir, 8080); err != nil {
