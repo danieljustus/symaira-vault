@@ -21,6 +21,7 @@ import (
 	mcpserver "github.com/danieljustus/symaira-vault/internal/mcp/server"
 	transport "github.com/danieljustus/symaira-vault/internal/mcp/transport"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
@@ -96,7 +97,7 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 				TokenID: tokenID,
 				OK:      true,
 			}); logErr != nil {
-				fmt.Fprintf(os.Stderr, "token cleanup audit log write failed: %v\n", logErr)
+				cliout.Errorf("token cleanup audit log write failed: %v", logErr)
 			}
 		})
 		cleanupInterval := 5 * time.Minute
@@ -367,8 +368,7 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 	if !allowInsecure && (tlsCert == "" || tlsKey == "") {
 		autoCert, autoKey, autoErr := ensureTLSCert(vaultDir)
 		if autoErr != nil {
-			fmt.Fprintf(os.Stderr,
-				"WARNING: could not generate self-signed TLS certificate for MCP server: %v\n", autoErr)
+			cliout.Warnf("could not generate self-signed TLS certificate for MCP server: %v", autoErr)
 		}
 		if autoCert != "" && autoKey != "" {
 			tlsCert = autoCert
@@ -387,8 +387,8 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 		if mcpserver.IsLoopbackBind(bind) {
 			loopbackNote = " Even on loopback, a local attacker or compromised process on the same machine can sniff traffic."
 		}
-		fmt.Fprintf(os.Stderr,
-			"WARNING: MCP server is binding %q without TLS; bearer tokens travel in cleartext (MCP.allow_insecure_bind=true).%s\n", bind, loopbackNote)
+		cliout.Warnf(
+			"MCP server is binding %q without TLS; bearer tokens travel in cleartext (MCP.allow_insecure_bind=true).%s", bind, loopbackNote)
 	}
 
 	go func() {
