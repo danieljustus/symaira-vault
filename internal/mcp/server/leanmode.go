@@ -15,6 +15,7 @@ var LeanToolSet = []string{
 	"symaira_search",
 	"health",
 	"find_entries",
+	"get_entry",
 	"get_entry_metadata",
 	"request_credential",
 	"set_entry_field",
