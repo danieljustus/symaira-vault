@@ -10,6 +10,7 @@ import (
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	"github.com/danieljustus/symaira-vault/internal/config"
 	cryptopkg "github.com/danieljustus/symaira-vault/internal/crypto"
@@ -35,6 +36,10 @@ var initCmd = &cobra.Command{
   symvault init ~/my-vault`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if !term.IsTerminal(int(os.Stdin.Fd())) && !cli.HasCachedEnvPassphrase() {
+			return fmt.Errorf("init requires a TTY or SYMVAULT_PASSPHRASE/OPENPASS_PASSPHRASE env var; use `symvault setup` for interactive initialization")
+		}
+
 		var (
 			vaultDir string
 			err      error
@@ -58,9 +63,14 @@ var initCmd = &cobra.Command{
 			return fmt.Errorf("cannot create vault directory: %w", mkdirErr)
 		}
 
-		passphrase, err := cli.ReadHiddenInput("Enter passphrase for vault identity (minimum 12 characters): ", nil)
-		if err != nil {
-			return fmt.Errorf("cannot read passphrase: %w", err)
+		var passphrase []byte
+		if cached := cli.ConsumeCachedEnvPassphrase(); len(cached) > 0 {
+			passphrase = cached
+		} else {
+			passphrase, err = cli.ReadHiddenInput("Enter passphrase for vault identity (minimum 12 characters): ", nil)
+			if err != nil {
+				return fmt.Errorf("cannot read passphrase: %w", err)
+			}
 		}
 		defer cryptopkg.Wipe(passphrase)
 		if len(passphrase) < 12 {

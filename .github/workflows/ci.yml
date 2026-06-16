@@ -344,7 +344,7 @@ jobs:
           PASSPHRASE="test-passphrase-123"
           
           echo "Testing vault initialization..."
-          echo "$PASSPHRASE" | $BIN init "$VAULT_DIR"
+          SYMVAULT_PASSPHRASE="$PASSPHRASE" $BIN init "$VAULT_DIR"
           
           echo "Testing entry creation..."
           SYMVAULT_PASSPHRASE="$PASSPHRASE" $BIN --vault "$VAULT_DIR" set "test.entry" --value "test-value-456"

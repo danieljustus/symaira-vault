@@ -128,7 +128,7 @@ func resolveUnlockPassphrase(vaultDir string, interactive bool, cfg *configpkg.C
 		if len(passphrase) == 0 && (cfg == nil || cfg.Security == nil || !cfg.Security.DisableEnvPassphrase) {
 			// Check the early-cached env passphrase first (sniffed in main()
 			// before any child process could inherit it).
-			if cached := consumeCachedEnvPassphrase(); len(cached) > 0 {
+			if cached := ConsumeCachedEnvPassphrase(); len(cached) > 0 {
 				passphrase = cached
 				passphraseFromEnv = true
 				WarnEnvPassphrase()

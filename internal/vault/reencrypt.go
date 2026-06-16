@@ -31,7 +31,7 @@ type reencryptResult struct {
 // Returns an error if any file fails.
 func ReencryptAll(vaultDir string, identity *age.X25519Identity, recipients []*age.X25519Recipient) error {
 	if identity == nil {
-		return ErrNilIdentity
+		return vaultcrypto.ErrNilIdentity
 	}
 	if len(recipients) == 0 {
 		return fmt.Errorf("no recipients provided for re-encryption")

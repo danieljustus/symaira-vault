@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"filippo.io/age"
+
+	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
 )
 
 const testRecipient = "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
@@ -476,7 +478,7 @@ func TestVault_GetAllRecipientsForEncryption_NilIdentity(t *testing.T) {
 		t.Error("GetAllRecipientsForEncryption() should return error for nil identity")
 	}
 
-	if !errors.Is(err, ErrNilIdentity) {
+	if !errors.Is(err, vaultcrypto.ErrNilIdentity) {
 		t.Errorf("GetAllRecipientsForEncryption() error = %v, want ErrNilIdentity", err)
 	}
 }

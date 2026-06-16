@@ -17,8 +17,8 @@ func TestInitCommand_HiddenPassphrase(t *testing.T) {
 	vaultDir := t.TempDir()
 	passphrase := []byte("test-hidden-passphrase")
 
-	restore := pipeStdin(t, string(passphrase)+"\n")
-	defer restore()
+	cli.SetCachedEnvPassphrase(passphrase)
+	defer cli.SetCachedEnvPassphrase(nil)
 
 	cli.RootCmd.SetArgs([]string{"init", vaultDir})
 	defer cli.RootCmd.SetArgs(nil)
@@ -58,15 +58,8 @@ func TestCmdInit_Success(t *testing.T) {
 	vaultDir := t.TempDir()
 	vaultFlagReset(t)
 
-	oldStdin := os.Stdin
-	r, w, _ := os.Pipe()
-	os.Stdin = r
-	_, _ = w.WriteString("supersecretpassphrase123\n")
-	_ = w.Close()
-	t.Cleanup(func() {
-		os.Stdin = oldStdin
-		_ = r.Close()
-	})
+	cli.SetCachedEnvPassphrase([]byte("supersecretpassphrase123"))
+	defer cli.SetCachedEnvPassphrase(nil)
 
 	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "init"})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
@@ -88,6 +81,9 @@ func TestCmdInit_AlreadyInitialized(t *testing.T) {
 		t.Fatalf("pre-init vault: %v", err)
 	}
 
+	cli.SetCachedEnvPassphrase([]byte("supersecretpassphrase123"))
+	defer cli.SetCachedEnvPassphrase(nil)
+
 	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "init"})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
 
@@ -108,15 +104,8 @@ func TestCmdInit_ShortPassphrase(t *testing.T) {
 	vaultDir := t.TempDir()
 	vaultFlagReset(t)
 
-	oldStdin := os.Stdin
-	r, w, _ := os.Pipe()
-	os.Stdin = r
-	_, _ = w.WriteString("short\n")
-	_ = w.Close()
-	t.Cleanup(func() {
-		os.Stdin = oldStdin
-		_ = r.Close()
-	})
+	cli.SetCachedEnvPassphrase([]byte("short"))
+	defer cli.SetCachedEnvPassphrase(nil)
 
 	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "init"})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
@@ -140,6 +129,9 @@ func TestInit_ErrorPaths(t *testing.T) {
 
 		_ = os.Setenv("OPENPASS_VAULT", tmpDir)
 		defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+
+		cli.SetCachedEnvPassphrase([]byte("test"))
+		defer cli.SetCachedEnvPassphrase(nil)
 
 		cli.RootCmd.SetArgs([]string{"--vault", tmpDir, "init"})
 		defer cli.RootCmd.SetArgs(nil)

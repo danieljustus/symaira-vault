@@ -340,7 +340,7 @@ type RecipientInfo struct {
 // This includes the vault's own recipient plus all recipients from the recipients.txt file.
 func (v *Vault) GetAllRecipientsForEncryption() ([]*age.X25519Recipient, error) {
 	if v.Identity == nil {
-		return nil, ErrNilIdentity
+		return nil, vaultcrypto.ErrNilIdentity
 	}
 
 	// Start with the vault's own recipient

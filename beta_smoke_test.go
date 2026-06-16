@@ -31,7 +31,10 @@ func TestBetaSmokeFlow(t *testing.T) {
 
 	initCmd := exec.Command(binPath, "init", vaultDir)
 	initCmd.Dir = repoRoot(t)
-	initCmd.Stdin = strings.NewReader(passphrase + "\n")
+	initCmd.Env = append(os.Environ(),
+		"GOWORK=off",
+		"SYMVAULT_PASSPHRASE="+passphrase,
+	)
 	if output, err := initCmd.CombinedOutput(); err != nil {
 		t.Fatalf("init vault: %v\n%s", err, output)
 	}

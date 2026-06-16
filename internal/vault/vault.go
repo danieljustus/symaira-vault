@@ -20,7 +20,6 @@ const vaultFormatVersion2 = 2
 
 var (
 	ErrVaultDirEmpty       = errors.New("vault directory is empty")
-	ErrNilIdentity         = errors.New("identity is nil")
 	ErrNilConfig           = errors.New("config is nil")
 	ErrIdentityMismatch    = errors.New("identity mismatch")
 	ErrVaultNotInitialized = errors.New("vault not initialized")
@@ -50,7 +49,7 @@ func Init(vaultDir string, identity *age.X25519Identity, cfg *vaultconfig.Config
 		return ErrVaultDirEmpty
 	}
 	if identity == nil {
-		return ErrNilIdentity
+		return vaultcrypto.ErrNilIdentity
 	}
 	if cfg == nil {
 		return ErrNilConfig
@@ -84,7 +83,7 @@ func Open(vaultDir string, identity *age.X25519Identity) (*Vault, error) {
 		return nil, ErrVaultDirEmpty
 	}
 	if identity == nil {
-		return nil, ErrNilIdentity
+		return nil, vaultcrypto.ErrNilIdentity
 	}
 	if err := validateVaultDir(vaultDir); err != nil {
 		return nil, err
@@ -217,7 +216,7 @@ func OpenWithCachedIdentity(vaultDir string, identity *age.X25519Identity) (*Vau
 		return nil, ErrVaultDirEmpty
 	}
 	if identity == nil {
-		return nil, ErrNilIdentity
+		return nil, vaultcrypto.ErrNilIdentity
 	}
 	return Open(vaultDir, identity)
 }
@@ -295,7 +294,7 @@ func (v *Vault) GetRecipient() (*age.X25519Recipient, error) {
 		return nil, errors.New("vault is nil")
 	}
 	if v.Identity == nil {
-		return nil, ErrNilIdentity
+		return nil, vaultcrypto.ErrNilIdentity
 	}
 	return v.Identity.Recipient(), nil
 }
@@ -305,7 +304,7 @@ func (v *Vault) ValidateIdentity(identity *age.X25519Identity) error {
 		return errors.New("vault is nil")
 	}
 	if identity == nil {
-		return ErrNilIdentity
+		return vaultcrypto.ErrNilIdentity
 	}
 	if v.Identity.String() != identity.String() {
 		return ErrIdentityMismatch
