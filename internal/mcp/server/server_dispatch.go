@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/danieljustus/symaira-vault/internal/anomaly"
 	"github.com/danieljustus/symaira-vault/internal/authguard"
@@ -22,6 +24,20 @@ import (
 
 func toolError(msg string) *mcp.CallToolResult {
 	return mcp.NewToolResultError(msg)
+}
+
+func describeRequirements(caps *ToolCapabilities) string {
+	if caps == nil {
+		return ""
+	}
+	var parts []string
+	if caps.RequiresTTY {
+		parts = append(parts, "TTY")
+	}
+	if caps.RequiresGUI {
+		parts = append(parts, "GUI dialog")
+	}
+	return strings.Join(parts, " or ")
 }
 
 func toolActionType(toolName string) string {
@@ -62,7 +78,6 @@ func (s *Server) executeTool(ctx context.Context, name string, args json.RawMess
 		agentName = s.agent.Name
 	}
 
-	// Generate request ID and propagate it through context for audit logging
 	reqID, err := generateRequestID()
 	if err != nil {
 		slog.Default().Warn("failed to generate request ID", "err", err)
@@ -84,7 +99,6 @@ func (s *Server) executeTool(ctx context.Context, name string, args json.RawMess
 	}
 
 	entryPath, _ := req.RequireString("path")
-
 	if entryPath != "" {
 		span.SetAttributes(attribute.String("entry.path", metrics.HashEntryPath(entryPath)))
 	}
@@ -95,64 +109,11 @@ func (s *Server) executeTool(ctx context.Context, name string, args json.RawMess
 		metrics.RecordMCPRequest(name, agentName, "error", time.Since(start))
 		return nil, fmt.Errorf("unknown tool: %s", name)
 	}
-	if def.Available != nil && !def.Available(s) {
-		span.SetStatus(codes.Error, "tool not available")
-		metrics.RecordMCPRequest(name, agentName, "error", time.Since(start))
-		return nil, fmt.Errorf("tool %q is not available in the current environment", name)
-	}
-	if agentErr := isToolBlockedByAgent(s.agent, name); agentErr != nil {
-		span.SetStatus(codes.Error, "agent_tool_denied")
-		metrics.RecordMCPRequest(name, agentName, "agent_tool_denied", time.Since(start))
-		s.logAudit(ctx, "agent_tool_denied", name, false)
-		return callToolResultPayload(toolError(agentErr.Error())), nil
+
+	if blockResult := s.validateToolAccess(ctx, def, name, agentName, entryPath, start, span); blockResult != nil {
+		return blockResult, nil
 	}
 
-	// Check token tool scope
-	if token, ok := auth.TokenFromContext(ctx); ok {
-		if !isToolAllowed(token, name) {
-			span.SetStatus(codes.Error, "tool scope denied")
-			metrics.RecordAuthDenial("tool_scope_denied", agentName)
-			s.logAudit(ctx, "tool_scope_denied", name, false)
-			return nil, fmt.Errorf("tool %q not allowed by token scope", name)
-		}
-		token.UpdateLastUsed()
-	}
-
-	// Registry drift check: reject if binary was updated since this token was issued.
-	// Returns a user-visible tool error (not a protocol error) so the agent sees
-	// a descriptive message. Pattern: return callToolResultPayload(...), nil
-	// (contrast with the scope check above which returns nil, fmt.Errorf — a protocol error).
-	if token, ok := auth.TokenFromContext(ctx); ok && token != nil {
-		if token.IsToolRegistryDriftDetected() {
-			span.SetStatus(codes.Error, "tool registry drift")
-			metrics.RecordMCPRequest(name, agentName, "error", time.Since(start))
-			s.logAudit(ctx, "tool_registry_drift", name, false)
-			return callToolResultPayload(toolError(
-				"tool registry has changed since this token was issued — " +
-					"re-issue the token with 'symvault mcp token create'",
-			)), nil
-		}
-	}
-
-	// Evaluate declarative policies before tool execution
-	if entryPath != "" {
-		if policyErr := s.checkPolicy(ctx, entryPath, toolActionType(name)); policyErr != nil {
-			if errors.Is(policyErr, authguard.ErrBiometryRequired) {
-				if bioErr := s.challengeBiometric(ctx, name); bioErr != nil {
-					span.SetStatus(codes.Error, bioErr.Error())
-					metrics.RecordMCPRequest(name, agentName, "error", time.Since(start))
-					return nil, bioErr
-				}
-				s.logAudit(ctx, "policy_biometry_passed", entryPath, true)
-			} else {
-				span.SetStatus(codes.Error, policyErr.Error())
-				metrics.RecordMCPRequest(name, agentName, "error", time.Since(start))
-				return nil, policyErr
-			}
-		}
-	}
-
-	// Execute pre-call hooks
 	if s.hookRegistry != nil {
 		for _, hook := range s.hookRegistry.PreCallHooks() {
 			ctx, err = hook(ctx, name, req, s)
@@ -166,9 +127,6 @@ func (s *Server) executeTool(ctx context.Context, name string, args json.RawMess
 
 	result, err := def.Handler(s, ctx, req)
 
-	// Execute post-call hooks
-	// Post-call hook errors are logged but never abort execution
-	// (the result has already been computed by the handler).
 	if s.hookRegistry != nil {
 		for _, hook := range s.hookRegistry.PostCallHooks() {
 			newResult, newErr := hook(ctx, name, req, result, err)
@@ -185,7 +143,6 @@ func (s *Server) executeTool(ctx context.Context, name string, args json.RawMess
 		span.SetStatus(codes.Error, err.Error())
 		span.SetAttributes(attribute.String("status", "error"))
 		metrics.RecordMCPRequest(name, agentName, "error", duration)
-		// Fire-and-forget anomaly detection (non-blocking)
 		s.detectAnomalyAsync(ctx, name, entryPath, reqID, agentName, duration, false, 0)
 		return nil, err
 	}
@@ -198,16 +155,78 @@ func (s *Server) executeTool(ctx context.Context, name string, args json.RawMess
 	span.SetAttributes(attribute.String("status", status))
 	metrics.RecordMCPRequest(name, agentName, status, duration)
 
-	// Compute field length for anomaly detection (read tools only)
 	fieldLength := 0
 	if !result.IsError && (name == "get_entry" || name == "get_entry_value") {
 		fieldLength = len(result.Text)
 	}
-
-	// Fire-and-forget anomaly detection (non-blocking)
 	s.detectAnomalyAsync(ctx, name, entryPath, reqID, agentName, duration, true, fieldLength)
 
 	return callToolResultPayload(result), nil
+}
+
+func (s *Server) validateToolAccess(ctx context.Context, def toolDefinition, name, agentName, entryPath string, start time.Time, span trace.Span) map[string]any {
+	if def.Available != nil && !def.Available(s) {
+		span.SetStatus(codes.Error, "tool not available")
+		metrics.RecordMCPRequest(name, agentName, "error", time.Since(start))
+		msg := fmt.Sprintf("tool %q is not available in the current environment", name)
+		if def.Capabilities != nil {
+			if def.Capabilities.RequiresTTY || def.Capabilities.RequiresGUI {
+				msg += fmt.Sprintf(" (requires %s)", describeRequirements(def.Capabilities))
+			}
+			if len(def.Capabilities.Alternatives) > 0 {
+				msg += fmt.Sprintf(". Alternatives: %s", strings.Join(def.Capabilities.Alternatives, ", "))
+			}
+		}
+		return callToolResultPayload(toolError(msg))
+	}
+
+	if agentErr := isToolBlockedByAgent(s.agent, name); agentErr != nil {
+		span.SetStatus(codes.Error, "agent_tool_denied")
+		metrics.RecordMCPRequest(name, agentName, "agent_tool_denied", time.Since(start))
+		s.logAudit(ctx, "agent_tool_denied", name, false)
+		return callToolResultPayload(toolError(agentErr.Error()))
+	}
+
+	if token, ok := auth.TokenFromContext(ctx); ok {
+		if !isToolAllowed(token, name) {
+			span.SetStatus(codes.Error, "tool scope denied")
+			metrics.RecordAuthDenial("tool_scope_denied", agentName)
+			s.logAudit(ctx, "tool_scope_denied", name, false)
+			return nil
+		}
+		token.UpdateLastUsed()
+	}
+
+	if token, ok := auth.TokenFromContext(ctx); ok && token != nil {
+		if token.IsToolRegistryDriftDetected() {
+			span.SetStatus(codes.Error, "tool registry drift")
+			metrics.RecordMCPRequest(name, agentName, "error", time.Since(start))
+			s.logAudit(ctx, "tool_registry_drift", name, false)
+			return callToolResultPayload(toolError(
+				"tool registry has changed since this token was issued — " +
+					"re-issue the token with 'symvault mcp token create'",
+			))
+		}
+	}
+
+	if entryPath != "" {
+		if policyErr := s.checkPolicy(ctx, entryPath, toolActionType(name)); policyErr != nil {
+			if errors.Is(policyErr, authguard.ErrBiometryRequired) {
+				if bioErr := s.challengeBiometric(ctx, name); bioErr != nil {
+					span.SetStatus(codes.Error, bioErr.Error())
+					metrics.RecordMCPRequest(name, agentName, "error", time.Since(start))
+					return nil
+				}
+				s.logAudit(ctx, "policy_biometry_passed", entryPath, true)
+			} else {
+				span.SetStatus(codes.Error, policyErr.Error())
+				metrics.RecordMCPRequest(name, agentName, "error", time.Since(start))
+				return nil
+			}
+		}
+	}
+
+	return nil
 }
 
 // detectAnomalyAsync runs anomaly detection in a separate goroutine so it

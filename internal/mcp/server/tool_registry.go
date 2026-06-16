@@ -26,6 +26,23 @@ type toolDefinition struct {
 	RiskLevel       RiskLevel
 	ReadOnlyHint    bool
 	DestructiveHint bool
+	// Capabilities describes runtime requirements and alternatives for this tool.
+	// When set, it is included in the tools/list response so agents can make
+	// informed decisions about tool selection and fallback strategies.
+	Capabilities *ToolCapabilities
+}
+
+// ToolCapabilities describes a tool's runtime requirements and fallback options.
+// This metadata helps agents understand when a tool might be unavailable and
+// what alternatives exist.
+type ToolCapabilities struct {
+	// RequiresTTY indicates the tool needs an interactive terminal.
+	RequiresTTY bool `json:"requires_tty,omitempty"`
+	// RequiresGUI indicates the tool needs a native OS dialog backend.
+	RequiresGUI bool `json:"requires_gui,omitempty"`
+	// Alternatives lists tool names that can achieve a similar goal when this
+	// tool is unavailable. Agents should try these in order.
+	Alternatives []string `json:"alternatives,omitempty"`
 }
 
 type schemaProperty struct {
@@ -224,6 +241,9 @@ func toolsListPayload(s *Server) []map[string]any {
 		}
 		if def.DestructiveHint {
 			payload["destructiveHint"] = true
+		}
+		if def.Capabilities != nil {
+			payload["capabilities"] = def.Capabilities
 		}
 		tools = append(tools, payload)
 	}
