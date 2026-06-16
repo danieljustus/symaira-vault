@@ -24,6 +24,13 @@ import (
 
 var OsExit = os.Exit
 
+// StartTime is captured at the earliest possible point in main.go to measure
+// CLI startup time. It is set by cmd.SetStartTime() before cobra execution.
+var StartTime = time.Now()
+
+// SetStartTime records the program start time for startup profiling.
+func SetStartTime(t time.Time) { StartTime = t }
+
 const RequiresVaultAnnotation = "symvault/requires-vault"
 
 // SessionManager abstracts session persistence operations, allowing
