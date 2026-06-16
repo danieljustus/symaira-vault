@@ -154,6 +154,7 @@ adoption pattern) and review the [`hermes-safe-adoption.md`](docs/hermes-safe-ad
 **Security recommendations for HTTP mode:**
 - Never expose the MCP server port to the network
 - Use `approvalMode: deny` or `approvalMode: prompt` for untrusted agents
+- **Cleartext tokens on loopback**: When TLS is disabled (the default for loopback), bearer tokens are transmitted in cleartext over the loopback interface. While loopback traffic is generally safe from remote attackers, other local processes with sufficient privileges can sniff loopback traffic. For highest security, enable TLS or use stdio mode (`symvault serve --stdio`).
 
 #### Metrics Endpoint
 
