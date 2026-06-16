@@ -39,10 +39,10 @@ func (s *NextStepsStep) View() string {
 		"",
 		"  " + focusedStyle.Render("symvault add <name>") + "           add your first entry",
 		"  " + focusedStyle.Render("symvault get <name>") + "           retrieve a password",
-		"  " + focusedStyle.Render("symvault tui") + "                  browse entries in terminal UI",
-		"  " + focusedStyle.Render("symvault autotype") + "             auto-type passwords into forms",
+		"  " + focusedStyle.Render("symvault ui") + "                   browse entries in terminal UI",
+		"  " + focusedStyle.Render("symvault get --autotype") + "      auto-type passwords into forms",
 		"  " + focusedStyle.Render("symvault doctor") + "               health check",
-		"  " + focusedStyle.Render("symvault mcp-config") + "           configure MCP agent integrations",
+		"  " + focusedStyle.Render("symvault agent install <agent>") + "  configure MCP agent integrations",
 		"  " + focusedStyle.Render("symvault auth set <method>") + "    change auth method",
 		"  " + focusedStyle.Render("symvault --help") + "               show all commands",
 	}
