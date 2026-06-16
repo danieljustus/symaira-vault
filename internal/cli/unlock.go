@@ -117,13 +117,15 @@ func resolveUnlockPassphrase(vaultDir string, interactive bool, cfg *configpkg.C
 	passphraseFromEnv := false
 	passphraseFromBiometric := false
 	if err != nil || len(passphrase) == 0 {
-		if cfg.EffectiveAuthMethod() == configpkg.AuthMethodTouchID {
+		if cfg.EffectiveAuthMethod() == configpkg.AuthMethodTouchID && interactive {
 			biometricCtx, biometricCancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer biometricCancel()
 			if biometricPassphrase, biometricErr := SessionLoadBiometric(biometricCtx, vaultDir); biometricErr == nil && len(biometricPassphrase) > 0 {
 				passphrase = biometricPassphrase
 				passphraseFromBiometric = true
 			}
+		} else if cfg.EffectiveAuthMethod() == configpkg.AuthMethodTouchID && !interactive {
+			cliout.Warnf("Touch ID skipped in non-interactive mode; use 'symvault unlock' or set SYMVAULT_PASSPHRASE")
 		}
 		if len(passphrase) == 0 && (cfg == nil || cfg.Security == nil || !cfg.Security.DisableEnvPassphrase) {
 			// Check the early-cached env passphrase first (sniffed in main()
