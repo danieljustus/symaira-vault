@@ -77,7 +77,7 @@ func TestIsDefaultVaultFlagValue_Empty(t *testing.T) {
 }
 
 func TestIsDefaultVaultFlagValue_Default(t *testing.T) {
-	if !isDefaultVaultFlagValue("~/"+configpkg.DefaultVaultSubdir) {
+	if !isDefaultVaultFlagValue("~/" + configpkg.DefaultVaultSubdir) {
 		t.Errorf("isDefaultVaultFlagValue(%q) = false, want true", "~/"+configpkg.DefaultVaultSubdir)
 	}
 }

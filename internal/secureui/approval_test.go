@@ -63,8 +63,8 @@ func TestParseApprovalResponse_Whitespace(t *testing.T) {
 
 func TestBuildApprovalPrompt_WithRemember(t *testing.T) {
 	req := ApprovalRequest{
-		Operation:  "set_entry_field",
-		Details:    "Write password to github.token",
+		Operation:   "set_entry_field",
+		Details:     "Write password to github.token",
 		CanRemember: true,
 	}
 	prompt := buildApprovalPrompt(req)
@@ -85,8 +85,8 @@ func TestBuildApprovalPrompt_WithRemember(t *testing.T) {
 
 func TestBuildApprovalPrompt_WithoutRemember(t *testing.T) {
 	req := ApprovalRequest{
-		Operation:  "delete_entry",
-		Details:    "Delete github.token",
+		Operation:   "delete_entry",
+		Details:     "Delete github.token",
 		CanRemember: false,
 	}
 	prompt := buildApprovalPrompt(req)
@@ -113,8 +113,8 @@ func TestBuildApprovalPrompt_EmptyFields(t *testing.T) {
 
 func TestBuildApprovalDescription_WithRemember(t *testing.T) {
 	req := ApprovalRequest{
-		Operation:  "add_credential",
-		Details:    "Add AWS key",
+		Operation:   "add_credential",
+		Details:     "Add AWS key",
 		CanRemember: true,
 	}
 	desc := buildApprovalDescription(req)
@@ -132,8 +132,8 @@ func TestBuildApprovalDescription_WithRemember(t *testing.T) {
 
 func TestBuildApprovalDescription_WithoutRemember(t *testing.T) {
 	req := ApprovalRequest{
-		Operation:  "rotate_key",
-		Details:    "Rotate API key",
+		Operation:   "rotate_key",
+		Details:     "Rotate API key",
 		CanRemember: false,
 	}
 	desc := buildApprovalDescription(req)

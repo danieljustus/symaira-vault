@@ -15,7 +15,7 @@ func TestCommandRequiresVault_RootCommand(t *testing.T) {
 
 func TestCommandRequiresVault_AnnotationTrue(t *testing.T) {
 	cmd := &cobra.Command{
-		Use:        "test",
+		Use:         "test",
 		Annotations: map[string]string{RequiresVaultAnnotation: "true"},
 	}
 	if !commandRequiresVault(cmd) {
@@ -25,7 +25,7 @@ func TestCommandRequiresVault_AnnotationTrue(t *testing.T) {
 
 func TestCommandRequiresVault_AnnotationFalse(t *testing.T) {
 	cmd := &cobra.Command{
-		Use:        "test",
+		Use:         "test",
 		Annotations: map[string]string{RequiresVaultAnnotation: "false"},
 	}
 	if commandRequiresVault(cmd) {
@@ -35,7 +35,7 @@ func TestCommandRequiresVault_AnnotationFalse(t *testing.T) {
 
 func TestCommandRequiresVault_ParentAnnotation(t *testing.T) {
 	parent := &cobra.Command{
-		Use:        "parent",
+		Use:         "parent",
 		Annotations: map[string]string{RequiresVaultAnnotation: "false"},
 	}
 	child := &cobra.Command{Use: "child"}
@@ -62,7 +62,7 @@ func TestCommandRequiresVault_EmptyAnnotations(t *testing.T) {
 
 func TestCommandRequiresVault_UnrelatedAnnotation(t *testing.T) {
 	cmd := &cobra.Command{
-		Use:        "test",
+		Use:         "test",
 		Annotations: map[string]string{"other-key": "value"},
 	}
 	if !commandRequiresVault(cmd) {
