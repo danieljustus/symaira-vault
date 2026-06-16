@@ -348,3 +348,42 @@ func TestMemoryKeyring_Set_ZeroesOldData(t *testing.T) {
 		t.Errorf("Passphrase = %q, want second-secret (memory keyring is opaque storage)", retrieved.Passphrase)
 	}
 }
+
+func TestMemoryKeyring_encryptionKeyForStore(t *testing.T) {
+	mk := &memoryKeyring{}
+	vaultDir := "/tmp/vault-encryption-key"
+	service := "symvault:" + vaultDir
+
+	// Test with no wrap key
+	_, err := mk.encryptionKeyForStore(service)
+	if err == nil {
+		t.Fatal("encryptionKeyForStore() error = nil, want error when no wrap key")
+	}
+
+	// Test with invalid base64 wrap key
+	mk.store = map[string][]byte{}
+	mk.store[service+"|"+wrapKeyAccount] = []byte("invalid-base64")
+	_, err = mk.encryptionKeyForStore(service)
+	if err == nil {
+		t.Fatal("encryptionKeyForStore() error = nil, want error for invalid base64")
+	}
+
+	// Test with wrong length wrap key
+	validKey := testKey()
+	wrongLengthKey := validKey[:16] // 16 bytes instead of 32
+	mk.store[service+"|"+wrapKeyAccount] = []byte(base64.StdEncoding.EncodeToString(wrongLengthKey))
+	_, err = mk.encryptionKeyForStore(service)
+	if err == nil {
+		t.Fatal("encryptionKeyForStore() error = nil, want error for wrong key length")
+	}
+
+	// Test with valid wrap key
+	mk.store[service+"|"+wrapKeyAccount] = []byte(base64.StdEncoding.EncodeToString(validKey))
+	key, err := mk.encryptionKeyForStore(service)
+	if err != nil {
+		t.Fatalf("encryptionKeyForStore() error = %v", err)
+	}
+	if len(key) != wrapKeyLen {
+		t.Errorf("encryptionKeyForStore() key length = %d, want %d", len(key), wrapKeyLen)
+	}
+}
