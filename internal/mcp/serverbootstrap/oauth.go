@@ -444,6 +444,12 @@ func handleOAuthRegister(clientStore *oauthClientStore) http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_redirect_uri"})
 			return
 		}
+		for _, redirectURI := range req.RedirectURIs {
+			if !isAllowedRegistrationRedirectURI(redirectURI) {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_redirect_uri"})
+				return
+			}
+		}
 
 		// Generate a unique client_id instead of a hardcoded value.
 		b := make([]byte, 16)
@@ -591,6 +597,7 @@ func issueAuthCode(w http.ResponseWriter, r *http.Request, store *oauthCodeStore
 		params.Set("state", state)
 	}
 	u.RawQuery = params.Encode()
+	// #nosec G710 -- client-supplied redirect URI is validated against client registry before reaching here
 	http.Redirect(w, r, u.String(), http.StatusFound)
 }
 
@@ -775,4 +782,21 @@ func isAllowedRedirectURI(redirectURI string, allowedURIs []string) bool {
 		}
 	}
 	return false
+}
+
+func isAllowedRegistrationRedirectURI(redirectURI string) bool {
+	u, err := url.Parse(redirectURI)
+	if err != nil || u.Scheme == "" {
+		return false
+	}
+	if u.User != nil || u.Fragment != "" {
+		return false
+	}
+	switch u.Scheme {
+	case "http", "https":
+		host := u.Hostname()
+		return host == "localhost" || host == "127.0.0.1" || host == "::1"
+	default:
+		return strings.HasPrefix(u.Scheme, "symvault") || strings.HasPrefix(u.Scheme, "symaira")
+	}
 }
