@@ -162,7 +162,8 @@ func (s *Server) handleExecuteWithSecret(ctx context.Context, req mcp.CallToolRe
 		exitCode = -1
 	}
 
-	auditPath := fmt.Sprintf("command=[%s], refs=%v, exit=%d", strings.Join(command, " "), secretRefs, exitCode)
+	redactedCommand := redactSecrets(command, secretEnv)
+	auditPath := fmt.Sprintf("command=[%s], refs=%v, exit=%d", strings.Join(redactedCommand, " "), secretRefs, exitCode)
 	s.logAudit(ctx, "execute_with_secret", auditPath, exitCode == 0 && runErr == nil)
 
 	if runErr != nil {
@@ -265,6 +266,20 @@ func mapKeys(m map[string]string) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+func redactSecrets(command []string, secretEnv map[string]string) []string {
+	redacted := make([]string, len(command))
+	for i, arg := range command {
+		redacted[i] = arg
+		for _, secret := range secretEnv {
+			if arg == secret {
+				redacted[i] = "[REDACTED]"
+				break
+			}
+		}
+	}
+	return redacted
 }
 
 func init() {
