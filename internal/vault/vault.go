@@ -51,7 +51,7 @@ func (v *Vault) WarmSearchIndex() {
 		return
 	}
 	go func() {
-		_ = globalIndex.Build(v.Dir, v.Identity)
+		_ = globalIndex.BuildMemoryOnly(v.Dir, v.Identity)
 	}()
 }
 
@@ -116,16 +116,15 @@ func Open(vaultDir string, identity *age.X25519Identity) (*Vault, error) {
 	// Flush any pending manifest updates before checking consistency.
 	FlushManifestUpdates()
 
-	// Check manifest consistency: rebuild in background if missing, or if the
-	// manifest is stale (config generation counter > manifest generation counter,
-	// indicating unflushed writes from a prior crash). The rebuild is
-	// non-blocking — reads are served from the directory walk while it runs.
+	// Check manifest consistency: rebuild if missing, or if the manifest is stale
+	// (config generation counter > manifest generation counter, indicating unflushed
+	// writes from a prior crash).
 	if _, err := os.Stat(filepath.Join(vaultDir, manifestFileName)); os.IsNotExist(err) {
-		go func() { _ = RebuildManifest(vaultDir, identity) }()
+		_ = RebuildManifest(vaultDir, identity) // best-effort
 	} else if cfg.Vault != nil && cfg.Vault.ManifestGeneration > 0 {
 		m, loadErr := LoadManifest(vaultDir, identity)
 		if loadErr == nil && m.Generation < cfg.Vault.ManifestGeneration {
-			go func() { _ = RebuildManifest(vaultDir, identity) }()
+			_ = RebuildManifest(vaultDir, identity) // best-effort
 		}
 	}
 	if _, err := os.Stat(filepath.Join(vaultDir, ".git")); err == nil {

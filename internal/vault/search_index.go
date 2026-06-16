@@ -227,6 +227,134 @@ func (idx *EncryptedIndex) Build(vaultDir string, identity *age.X25519Identity) 
 	return nil
 }
 
+// BuildMemoryOnly builds the in-memory index without persisting to disk.
+// This is used by WarmSearchIndex to eliminate cold-start latency without
+// risking stale on-disk state from background goroutine races.
+func (idx *EncryptedIndex) BuildMemoryOnly(vaultDir string, identity *age.X25519Identity) error {
+	listCacheFor(vaultDir).Invalidate()
+
+	paths, err := List(vaultDir, "", identity)
+	if err != nil {
+		return err
+	}
+
+	doc := indexDoc{
+		Values:     make(map[string][]string, len(paths)),
+		TokenIndex: make(map[string]map[string]struct{}),
+		EntryCount: len(paths),
+	}
+
+	salt := make([]byte, indexSaltLen)
+	if _, randErr := rand.Read(salt); randErr != nil {
+		return randErr
+	}
+	doc.Salt = salt
+
+	type indexJob struct {
+		i    int
+		path string
+	}
+	type indexResult struct {
+		i      int
+		path   string
+		values []string
+	}
+
+	jobs := make(chan indexJob, len(paths))
+	results := make(chan indexResult, len(paths))
+
+	maxWorkers := SearchWorkerCount(0)
+	if len(paths) < maxWorkers {
+		maxWorkers = len(paths)
+	}
+
+	var pseudoKey []byte
+	cfg, cfgErr := loadVaultConfig(vaultDir)
+	if cfgErr == nil && identity != nil && isPseudonymizeEnabled(cfg) {
+		pseudoKey = derivePseudonymizationKey(identity)
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < maxWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for job := range jobs {
+				entry, readErr := readEntryInner(vaultDir, job.path, identity, pseudoKey)
+				if readErr != nil {
+					results <- indexResult{i: job.i, path: job.path}
+					continue
+				}
+
+				var values []string
+				collectStringValues(&values, entry.Data)
+				sort.Strings(values)
+				results <- indexResult{i: job.i, path: job.path, values: values}
+			}
+		}()
+	}
+
+	for i, entryPath := range paths {
+		jobs <- indexJob{i: i, path: entryPath}
+	}
+	close(jobs)
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	collected := make([]indexResult, len(paths))
+	for result := range results {
+		collected[result.i] = result
+	}
+
+	for _, result := range collected {
+		if len(result.values) == 0 {
+			continue
+		}
+
+		doc.Values[result.path] = result.values
+		for _, val := range result.values {
+			for _, token := range tokenize(val) {
+				if doc.TokenIndex[token] == nil {
+					doc.TokenIndex[token] = make(map[string]struct{})
+				}
+				doc.TokenIndex[token][result.path] = struct{}{}
+			}
+		}
+	}
+
+	if len(paths) > 0 && len(doc.Values) == 0 {
+		return ErrIndexBuildEmpty
+	}
+
+	plaintext, err := json.Marshal(doc)
+	if err != nil {
+		return err
+	}
+	defer vaultcrypto.Wipe(plaintext)
+
+	key := deriveIndexKey(identity, salt)
+	defer vaultcrypto.Wipe(key)
+
+	ciphertext, err := vaultcrypto.EncryptWithKey(plaintext, key)
+	if err != nil {
+		return err
+	}
+
+	idHash := sha256.Sum256([]byte(identity.String()))
+
+	idx.mu.Lock()
+	idx.ciphertext = ciphertext
+	idx.salt = salt
+	idx.vaultDir = vaultDir
+	idx.idHash = idHash
+	idx.mu.Unlock()
+
+	return nil
+}
+
 // MatchEntries decrypts the index and checks which of the given entry paths
 // contain the needle as a substring in any of their stored values. Returns
 // the subset of paths that match.
