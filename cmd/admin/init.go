@@ -10,6 +10,7 @@ import (
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	"github.com/danieljustus/symaira-vault/internal/config"
 	cryptopkg "github.com/danieljustus/symaira-vault/internal/crypto"
@@ -35,6 +36,10 @@ var initCmd = &cobra.Command{
   symvault init ~/my-vault`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if !term.IsTerminal(int(os.Stdin.Fd())) && os.Getenv("SYMVAULT_PASSPHRASE") == "" {
+			return fmt.Errorf("init requires a TTY or SYMVAULT_PASSPHRASE env var; use `symvault setup` for interactive initialization")
+		}
+
 		var (
 			vaultDir string
 			err      error
