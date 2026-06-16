@@ -198,10 +198,10 @@ func buildApprovalPrompt(req ApprovalRequest) string {
 	sb.WriteString("║                 MCP OPERATION APPROVAL REQUIRED              ║\n")
 	sb.WriteString("╠══════════════════════════════════════════════════════════════╣\n")
 	if req.Operation != "" {
-		fmt.Fprintf(&sb, "║ Operation: %-50s ║\n", truncate(req.Operation, 50))
+		fmt.Fprintf(&sb, "║ Operation: %-50s ║\n", truncate(req.Operation))
 	}
 	if req.Details != "" {
-		fmt.Fprintf(&sb, "║ Details:   %-50s ║\n", truncate(req.Details, 50))
+		fmt.Fprintf(&sb, "║ Details:   %-50s ║\n", truncate(req.Details))
 	}
 	sb.WriteString("╚══════════════════════════════════════════════════════════════╝\n")
 	if req.CanRemember {

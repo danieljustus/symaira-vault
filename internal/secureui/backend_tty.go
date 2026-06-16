@@ -149,13 +149,13 @@ func buildTTYPrompt(req PromptRequest) string {
 	sb.WriteString("║           SECURE INPUT REQUIRED — AGENT CANNOT SEE          ║\n")
 	sb.WriteString("╠══════════════════════════════════════════════════════════════╣\n")
 	if req.Path != "" {
-		fmt.Fprintf(&sb, "║ Entry:    %-50s ║\n", truncate(req.Path, 50))
+		fmt.Fprintf(&sb, "║ Entry:    %-50s ║\n", truncate(req.Path))
 	}
 	if req.Field != "" {
-		fmt.Fprintf(&sb, "║ Field:    %-50s ║\n", truncate(req.Field, 50))
+		fmt.Fprintf(&sb, "║ Field:    %-50s ║\n", truncate(req.Field))
 	}
 	if req.Description != "" {
-		fmt.Fprintf(&sb, "║ Details:  %-50s ║\n", truncate(req.Description, 50))
+		fmt.Fprintf(&sb, "║ Details:  %-50s ║\n", truncate(req.Description))
 	}
 	sb.WriteString("╚══════════════════════════════════════════════════════════════╝\n")
 	sb.WriteString("Enter value (input hidden): ")
@@ -181,12 +181,10 @@ func buildPlainTTYPrompt(req PromptRequest) string {
 	return sb.String()
 }
 
-func truncate(s string, max int) string {
+func truncate(s string) string {
+	const max = 50
 	if len(s) <= max {
 		return s
-	}
-	if max <= 3 {
-		return s[:max]
 	}
 	return s[:max-3] + "..."
 }
