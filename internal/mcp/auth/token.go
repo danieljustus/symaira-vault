@@ -257,9 +257,14 @@ func (r *TokenRegistry) Load() error {
 }
 
 // Save persists the current in-memory entries to the JSON registry file with
-// 0o600 permissions.
+// 0o600 permissions. The lock is held for the entire marshal+write operation
+// to prevent a concurrent Create() or Revoke() from mutating entries after
+// the snapshot is taken but before it is persisted — a crash in that window
+// would silently lose the mutation.
 func (r *TokenRegistry) Save() error {
 	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	file := TokenRegistryFile{
 		Version: 2,
 		Tokens:  make(map[string]TokenRegistryEntry, len(r.entries)),
@@ -267,7 +272,6 @@ func (r *TokenRegistry) Save() error {
 	for _, t := range r.entries {
 		file.Tokens[t.ID] = t.toEntry()
 	}
-	r.mu.Unlock()
 
 	data, err := json.MarshalIndent(file, "", "  ")
 	if err != nil {

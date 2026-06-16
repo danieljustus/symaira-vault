@@ -1623,3 +1623,35 @@ func TestTokenRegistry_CleanupReportsBothTypes(t *testing.T) {
 		t.Fatalf("len(RemovedIDs) = %d, want 2", len(result.RemovedIDs))
 	}
 }
+
+func TestTokenRegistry_SaveConcurrentCreateNoLoss(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mcp-tokens.json")
+	reg := NewTokenRegistry(path)
+
+	const N = 50
+	var wg sync.WaitGroup
+	wg.Add(N)
+	for i := range N {
+		go func(i int) {
+			defer wg.Done()
+			label := fmt.Sprintf("token-%d", i)
+			if _, _, err := reg.Create(label, []string{"*"}, "", 1*time.Hour); err != nil {
+				t.Errorf("Create(%q) error = %v", label, err)
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	if err := reg.Save(); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	reg2 := NewTokenRegistry(path)
+	if err := reg2.Load(); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if tokens := reg2.List(); len(tokens) != N {
+		t.Fatalf("loaded %d tokens, want %d", len(tokens), N)
+	}
+}
