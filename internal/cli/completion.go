@@ -36,6 +36,15 @@ func entryPathSuggestions(toComplete string) ([]string, cobra.ShellCompDirective
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 
+	prefix := strings.TrimSpace(toComplete)
+
+	// Check the completion cache first. On a hit, filter by prefix in
+	// memory — this avoids the expensive identity load, vault open, and
+	// full directory listing that would otherwise run on every TAB press.
+	if cachedPaths, ok := globalCompletionCache.Get(vaultDir); ok {
+		return filterPathsByPrefix(cachedPaths, prefix), cobra.ShellCompDirectiveNoFileComp
+	}
+
 	cachedIdentity, err := SessionLoadIdentity(vaultDir)
 	if err != nil || cachedIdentity == "" {
 		return nil, cobra.ShellCompDirectiveNoFileComp
@@ -49,19 +58,29 @@ func entryPathSuggestions(toComplete string) ([]string, cobra.ShellCompDirective
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 
-	prefix := strings.TrimSpace(toComplete)
-	paths, err := vaultpkg.List(vaultDir, prefix, v.Identity)
+	// Fetch the full entry list (empty prefix) so subsequent calls with
+	// different prefixes can be served from cache.
+	allPaths, err := vaultpkg.List(vaultDir, "", v.Identity)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 
+	globalCompletionCache.Set(vaultDir, allPaths)
+
+	return filterPathsByPrefix(allPaths, prefix), cobra.ShellCompDirectiveNoFileComp
+}
+
+func filterPathsByPrefix(paths []string, prefix string) []string {
+	if prefix == "" {
+		return paths
+	}
 	matches := make([]string, 0, len(paths))
 	for _, p := range paths {
-		if prefix == "" || strings.HasPrefix(p, prefix) {
+		if strings.HasPrefix(p, prefix) {
 			matches = append(matches, p)
 		}
 	}
-	return matches, cobra.ShellCompDirectiveNoFileComp
+	return matches
 }
 
 func ProfileCompletionFunc(_ *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
