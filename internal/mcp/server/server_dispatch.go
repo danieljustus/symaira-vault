@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -22,6 +23,20 @@ import (
 
 func toolError(msg string) *mcp.CallToolResult {
 	return mcp.NewToolResultError(msg)
+}
+
+func describeRequirements(caps *ToolCapabilities) string {
+	if caps == nil {
+		return ""
+	}
+	var parts []string
+	if caps.RequiresTTY {
+		parts = append(parts, "TTY")
+	}
+	if caps.RequiresGUI {
+		parts = append(parts, "GUI dialog")
+	}
+	return strings.Join(parts, " or ")
 }
 
 func toolActionType(toolName string) string {
@@ -98,7 +113,16 @@ func (s *Server) executeTool(ctx context.Context, name string, args json.RawMess
 	if def.Available != nil && !def.Available(s) {
 		span.SetStatus(codes.Error, "tool not available")
 		metrics.RecordMCPRequest(name, agentName, "error", time.Since(start))
-		return nil, fmt.Errorf("tool %q is not available in the current environment", name)
+		msg := fmt.Sprintf("tool %q is not available in the current environment", name)
+		if def.Capabilities != nil {
+			if def.Capabilities.RequiresTTY || def.Capabilities.RequiresGUI {
+				msg += fmt.Sprintf(" (requires %s)", describeRequirements(def.Capabilities))
+			}
+			if len(def.Capabilities.Alternatives) > 0 {
+				msg += fmt.Sprintf(". Alternatives: %s", strings.Join(def.Capabilities.Alternatives, ", "))
+			}
+		}
+		return callToolResultPayload(toolError(msg)), nil
 	}
 	if agentErr := isToolBlockedByAgent(s.agent, name); agentErr != nil {
 		span.SetStatus(codes.Error, "agent_tool_denied")

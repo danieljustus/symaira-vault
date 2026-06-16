@@ -43,5 +43,10 @@ func init() {
 		Available:       secureInputToolAvailable,
 		RiskLevel:       RiskLevelCritical,
 		DestructiveHint: true,
+		Capabilities: &ToolCapabilities{
+			RequiresTTY:  true,
+			RequiresGUI:  true,
+			Alternatives: []string{"set_entry_field"},
+		},
 	})
 }

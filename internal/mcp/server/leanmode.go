@@ -6,9 +6,10 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/mcp/transport"
 )
 
-// LeanToolSet is the default 7-tool lean mode set. When a client does not
+// LeanToolSet is the default lean mode set. When a client does not
 // request all tools (include_all_tools: true), only tools in this set are
-// returned in tools/list responses.
+// returned in tools/list responses. This set includes the most commonly needed
+// tools for agent workflows while keeping the prompt surface small.
 var LeanToolSet = []string{
 	"symaira_whoami",
 	"symaira_search",
@@ -17,6 +18,7 @@ var LeanToolSet = []string{
 	"get_entry_metadata",
 	"request_credential",
 	"set_entry_field",
+	"generate_password",
 	"symaira_audit_self",
 }
 
