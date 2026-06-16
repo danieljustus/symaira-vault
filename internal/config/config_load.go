@@ -11,6 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/danieljustus/symaira-vault/internal/fsutil"
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 )
 
 func validateConfigPath(path string) error {
@@ -166,7 +167,7 @@ func Load(path string) (*Config, error) {
 	}
 
 	if raw.EnvWhitelist != nil {
-		fmt.Fprintln(os.Stderr, "Warning: envWhitelist is deprecated and will be removed in a future version; use envAllowlist instead")
+		cliout.Warnf("envWhitelist is deprecated and will be removed in a future version; use envAllowlist instead")
 	}
 
 	mergeTopLevel(cfg, raw)

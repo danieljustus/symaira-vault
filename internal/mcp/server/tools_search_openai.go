@@ -133,26 +133,3 @@ func (s *Server) handleFetchOpenAI(ctx context.Context, req mcp.CallToolRequest)
 
 	return mcp.NewToolResultStructured(string(textJSON), response), nil
 }
-
-func init() {
-	RegisterTool(toolDefinition{
-		Name:        "search",
-		Description: "Search vault entries by query. Returns results with id, title, and url for each matching entry.",
-		InputSchema: objectSchema([]string{"query"}, map[string]schemaProperty{
-			"query": {Type: "string", Description: "Search query to match against entry paths and field values"},
-		}),
-		Handler:      (*Server).handleSearchOpenAI,
-		RiskLevel:    RiskLevelLow,
-		ReadOnlyHint: true,
-	})
-	RegisterTool(toolDefinition{
-		Name:        "fetch",
-		Description: "Fetch a vault entry by path/id. Returns the full entry content with metadata and values.",
-		InputSchema: objectSchema([]string{"id"}, map[string]schemaProperty{
-			"id": {Type: "string", Description: "Entry path or id to fetch (e.g., 'github' or 'work/aws')"},
-		}),
-		Handler:      (*Server).handleFetchOpenAI,
-		RiskLevel:    RiskLevelLow,
-		ReadOnlyHint: true,
-	})
-}

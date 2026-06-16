@@ -68,17 +68,3 @@ func (s *Server) handleList(ctx context.Context, req mcp.CallToolRequest) (*mcp.
 	}
 	return mcp.NewToolResultText(string(result)), nil
 }
-
-func init() {
-	RegisterTool(toolDefinition{
-		Name:        "list_entries",
-		Description: "List vault entries matching a prefix with metadata",
-		InputSchema: objectSchema(nil, map[string]schemaProperty{
-			"prefix":          {Type: "string", Description: "Path prefix to filter"},
-			"include_details": {Type: "boolean", Description: "When true, returns metadata for each entry. Default: false to avoid expensive decryption on large vaults."},
-		}),
-		Handler:      (*Server).handleList,
-		RiskLevel:    RiskLevelLow,
-		ReadOnlyHint: true,
-	})
-}

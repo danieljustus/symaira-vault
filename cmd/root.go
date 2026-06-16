@@ -4,6 +4,8 @@
 package cmd
 
 import (
+	"time"
+
 	// Register sub-package commands via init() side effects.
 	_ "github.com/danieljustus/symaira-vault/cmd/admin"
 	_ "github.com/danieljustus/symaira-vault/cmd/auth"
@@ -28,6 +30,10 @@ var (
 )
 
 var rootCmd = cli.RootCmd
+
+func SetStartTime(t time.Time) {
+	cli.SetStartTime(t)
+}
 
 func Execute() {
 	cli.Execute()

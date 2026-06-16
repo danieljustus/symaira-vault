@@ -84,9 +84,9 @@ agent's profile in config.yaml. Use --yes to skip the confirmation prompt.`,
 			if err := cfg.SaveTo(configPath); err != nil {
 				return fmt.Errorf("save config: %w", err)
 			}
-			fmt.Fprintf(os.Stderr, "\u2713 Profile for %q removed from config\n", agentName)
+			cliout.Hintf("\u2713 Profile for %q removed from config", agentName)
 		} else {
-			fmt.Fprintf(os.Stderr, "\u26a0 Keeping profile for %q in config (--keep-config)\n", agentName)
+			cliout.Warnf("\u26a0 Keeping profile for %q in config (--keep-config)", agentName)
 		}
 
 		regPath := auth.TokenRegistryFilePath(vaultDir)
@@ -101,20 +101,20 @@ agent's profile in config.yaml. Use --yes to skip the confirmation prompt.`,
 			}
 			if revokedCount > 0 {
 				if saveErr := reg.Save(); saveErr != nil {
-					fmt.Fprintf(os.Stderr, "\u26a0 Failed to save token registry: %v\n", saveErr)
+					cliout.Warnf("\u26a0 Failed to save token registry: %v", saveErr)
 				}
 			}
 		}
 		if revokedCount > 0 {
-			fmt.Fprintf(os.Stderr, "\u2713 Revoked %d token(s) for %q\n", revokedCount, agentName)
+			cliout.Hintf("\u2713 Revoked %d token(s) for %q", revokedCount, agentName)
 		}
 
 		tokenFilePath := filepath.Join(vaultDir, "mcp-tokens", agentName+".token")
 		if _, statErr := os.Stat(tokenFilePath); statErr == nil {
 			if rmErr := os.Remove(tokenFilePath); rmErr != nil {
-				fmt.Fprintf(os.Stderr, "\u26a0 Failed to remove token file %s: %v\n", tokenFilePath, rmErr)
+				cliout.Warnf("\u26a0 Failed to remove token file %s: %v", tokenFilePath, rmErr)
 			} else {
-				fmt.Fprintf(os.Stderr, "\u2713 Removed token file %s\n", tokenFilePath)
+				cliout.Hintf("\u2713 Removed token file %s", tokenFilePath)
 			}
 		}
 
@@ -127,15 +127,15 @@ agent's profile in config.yaml. Use --yes to skip the confirmation prompt.`,
 					manifest, parseErr := agentskill.ParseManifest(data)
 					if parseErr == nil && manifest.ManagedBy == agentskill.SentinelValue {
 						if rmErr := os.Remove(expanded); rmErr != nil {
-							fmt.Fprintf(os.Stderr, "\u26a0 Failed to remove skill file %s: %v\n", expanded, rmErr)
+							cliout.Warnf("\u26a0 Failed to remove skill file %s: %v", expanded, rmErr)
 						} else {
-							fmt.Fprintf(os.Stderr, "\u2713 Removed skill file %s\n", expanded)
+							cliout.Hintf("\u2713 Removed skill file %s", expanded)
 						}
 					}
 				}
 			}
 		} else {
-			fmt.Fprintf(os.Stderr, "\u26a0 Keeping skill file (--keep-skill)\n")
+			cliout.Warnf("\u26a0 Keeping skill file (--keep-skill)")
 		}
 
 		fmt.Fprintf(os.Stderr, "\nAgent %q has been uninstalled.\n", agentName)

@@ -94,19 +94,3 @@ func (s *Server) handleSet(ctx context.Context, req mcp.CallToolRequest) (*mcp.C
 	metrics.RecordVaultOperation("write", "success")
 	return mcp.NewToolResultText(fmt.Sprintf("Set %s.%s = ***", path, field)), nil
 }
-
-func init() {
-	RegisterTool(toolDefinition{
-		Name:        "set_entry_field",
-		Description: "Set a field on an entry (requires write scope)",
-		InputSchema: objectSchema([]string{"path", "field", "value"}, map[string]schemaProperty{
-			"path":  {Type: "string", Description: "Entry path"},
-			"field": {Type: "string", Description: "Field name"},
-			"value": {Type: "string", Description: "Field value"},
-			"force": {Type: "boolean", Description: "Skip password strength validation. Default: false."},
-		}),
-		Handler:         (*Server).handleSet,
-		RiskLevel:       RiskLevelCritical,
-		DestructiveHint: true,
-	})
-}

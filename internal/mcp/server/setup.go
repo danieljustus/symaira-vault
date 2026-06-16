@@ -5,5 +5,6 @@ import (
 )
 
 func init() {
+	RegisterTools()
 	auth.CurrentToolRegistryHash = computeToolRegistryHashDefs(toolDefinitions())
 }

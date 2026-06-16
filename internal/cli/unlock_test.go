@@ -13,6 +13,45 @@ import (
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
+func TestUnlockVaultWithTTL_InteractiveSkipsBiometric(t *testing.T) {
+	vaultDir := t.TempDir()
+	passphrase := []byte("test-passphrase")
+	cfg := configpkg.Default()
+	if err := cfg.SetAuthMethod(configpkg.AuthMethodTouchID); err != nil {
+		t.Fatalf("SetAuthMethod() error = %v", err)
+	}
+	if _, err := vaultpkg.InitWithPassphrase(vaultDir, passphrase, cfg); err != nil {
+		t.Fatalf("InitWithPassphrase() error = %v", err)
+	}
+	if err := cfg.SaveTo(filepath.Join(vaultDir, "config.yaml")); err != nil {
+		t.Fatalf("SaveTo() error = %v", err)
+	}
+
+	oldLoadPassphrase := SessionLoadPassphrase
+	oldLoadBiometric := SessionLoadBiometric
+	t.Cleanup(func() {
+		SessionLoadPassphrase = oldLoadPassphrase
+		SessionLoadBiometric = oldLoadBiometric
+	})
+
+	SessionLoadPassphrase = func(string) ([]byte, error) { return nil, errors.New("miss") }
+
+	biometricCalled := false
+	SessionLoadBiometric = func(context.Context, string) ([]byte, error) {
+		biometricCalled = true
+		return append([]byte(nil), passphrase...), nil
+	}
+
+	// Non-interactive unlock: biometric must NOT be called.
+	_, _, err := UnlockVaultWithTTL(vaultDir, false, 0, false)
+	if err == nil {
+		t.Fatal("expected locked error for non-interactive unlock without session or env passphrase")
+	}
+	if biometricCalled {
+		t.Fatal("SessionLoadBiometric must not be called in non-interactive mode")
+	}
+}
+
 func TestUnlockVaultWithTTLRefreshesTouchIDItemAfterBiometricUnlock(t *testing.T) {
 	vaultDir := t.TempDir()
 	passphrase := []byte("test-passphrase")
@@ -57,7 +96,7 @@ func TestUnlockVaultWithTTLRefreshesTouchIDItemAfterBiometricUnlock(t *testing.T
 		return nil
 	}
 
-	v, _, err := UnlockVaultWithTTL(vaultDir, false, 0, false)
+	v, _, err := UnlockVaultWithTTL(vaultDir, true, 0, false)
 	if err != nil {
 		t.Fatalf("UnlockVaultWithTTL() error = %v", err)
 	}

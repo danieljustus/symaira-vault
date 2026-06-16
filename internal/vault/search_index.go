@@ -133,13 +133,19 @@ func (idx *EncryptedIndex) Build(vaultDir string, identity *age.X25519Identity) 
 		maxWorkers = len(paths)
 	}
 
+	var pseudoKey []byte
+	cfg, cfgErr := loadVaultConfig(vaultDir)
+	if cfgErr == nil && identity != nil && isPseudonymizeEnabled(cfg) {
+		pseudoKey = derivePseudonymizationKey(identity)
+	}
+
 	var wg sync.WaitGroup
 	for i := 0; i < maxWorkers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for job := range jobs {
-				entry, readErr := ReadEntry(vaultDir, job.path, identity)
+				entry, readErr := readEntryInner(vaultDir, job.path, identity, pseudoKey)
 				if readErr != nil {
 					results <- indexResult{i: job.i, path: job.path}
 					continue

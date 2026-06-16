@@ -34,17 +34,3 @@ func (s *Server) handleGenerate(ctx context.Context, req mcp.CallToolRequest) (*
 func generatePassword(length int, symbols bool) (string, func(), error) {
 	return crypto.GeneratePassword(length, symbols)
 }
-
-func init() {
-	RegisterTool(toolDefinition{
-		Name:        "generate_password",
-		Description: "Generate a secure password",
-		InputSchema: objectSchema(nil, map[string]schemaProperty{
-			"length":  {Type: "number", Description: "Password length"},
-			"symbols": {Type: "boolean", Description: "Include symbols. Default: true."},
-		}),
-		Handler:      (*Server).handleGenerate,
-		RiskLevel:    RiskLevelLow,
-		ReadOnlyHint: true,
-	})
-}

@@ -3,10 +3,8 @@
 package session
 
 import (
-	"fmt"
-	"os"
-
 	"github.com/danieljustus/symaira-vault/internal/logging"
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 )
 
 // newPlatformKeyring returns the appropriate KeyringBackend for the
@@ -21,7 +19,7 @@ func newPlatformKeyring() KeyringBackend {
 			Message:    "This build uses a memory-only session cache.",
 		}
 	}
-	fmt.Fprintln(os.Stderr, "Warning: OS keyring unavailable — session will clear when this process exits. Run 'symvault doctor' for help.")
+	cliout.Warnf("OS keyring unavailable — session will clear when this process exits. Run 'symvault doctor' for help.")
 	logging.Default().Warn("Using memory-only session cache (session will clear on process exit).")
 	return &memoryKeyringBackend{inner: &memoryKeyring{}}
 }

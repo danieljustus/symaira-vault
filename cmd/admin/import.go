@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -26,25 +27,47 @@ var (
 	ImportOverwrite    bool
 	ImportMapping      string
 	ImportQuarantine   bool
+	ImportFormat       string
 )
 
 var importCmd = &cobra.Command{
-	Use:   "import <format> <source>",
+	Use:   "import <source>",
 	Short: "Import entries from another password manager",
-	Long:  "Imports password entries from 1Password, Bitwarden, pass, or CSV exports.",
-	Example: `  # Dry-run a Bitwarden export to see what would be imported
+	Long: `Imports password entries from another password manager.
+
+When --format is not specified, the format is auto-detected from the input file extension:
+  .csv  → CSV format
+  .json → JSON format
+  .yaml/.yml → YAML format
+
+Use --format to override auto-detection or when the file extension does not match the actual format.`,
+	Example: `  # Auto-detect format from file extension
+  symvault import bw-export.json --dry-run
+
+  # Explicitly specify format (overrides auto-detection)
   symvault import bitwarden bw-export.json --dry-run
 
   # Import 1Password CSV under a prefix, skipping entries that already exist
-  symvault import 1password export.csv --prefix work/ --skip-existing
+  symvault import export.csv --format 1password --prefix work/ --skip-existing
 
-  # Overwrite collisions
-  symvault import csv data.csv --overwrite`,
-	Args: cobra.ExactArgs(2),
+  # Auto-detect CSV from .csv extension
+  symvault import data.csv --overwrite`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		format := importer.Format(strings.ToLower(strings.TrimSpace(args[0])))
+		sourcePath := args[0]
+
+		var format importer.Format
+		if ImportFormat != "" {
+			format = importer.Format(strings.ToLower(strings.TrimSpace(ImportFormat)))
+		} else {
+			var err error
+			format, err = detectFormatFromExt(sourcePath)
+			if err != nil {
+				return errorspkg.NewCLIError(errorspkg.ExitGeneralError, err.Error(), nil)
+			}
+		}
 		if !isSupportedImportFormat(format) {
-			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, fmt.Sprintf("unsupported import format: %s", args[0]), nil)
+			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, fmt.Sprintf("unsupported import format: %s", format), nil)
 		}
 
 		if ImportSkipExisting && ImportOverwrite {
@@ -73,7 +96,7 @@ var importCmd = &cobra.Command{
 			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "invalid CSV mapping", err)
 		}
 
-		source, err := os.Open(args[1]) //nolint:gosec G304 — import source path is user-provided CLI argument
+		source, err := os.Open(sourcePath) //nolint:gosec G304 — import source path is user-provided CLI argument
 		if err != nil {
 			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "open import source", err)
 		}
@@ -152,6 +175,7 @@ func init() {
 	importCmd.Flags().BoolVar(&ImportOverwrite, "overwrite", false, "Delete existing entries before writing")
 	importCmd.Flags().StringVar(&ImportMapping, "mapping", "", "CSV column mapping (format: title=col1,username=col2,...)")
 	importCmd.Flags().BoolVar(&ImportQuarantine, "quarantine", false, "Import entries into quarantine/<import-id>/ for human review before agent access")
+	importCmd.Flags().StringVar(&ImportFormat, "format", "", "Import format (auto-detected from file extension when omitted)")
 	cli.RootCmd.AddCommand(importCmd)
 }
 
@@ -161,6 +185,22 @@ func isSupportedImportFormat(format importer.Format) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// detectFormatFromExt derives the import format from the file extension.
+// Returns an error if the extension does not match any known format.
+func detectFormatFromExt(filename string) (importer.Format, error) {
+	ext := strings.ToLower(filepath.Ext(filename))
+	switch ext {
+	case ".csv":
+		return importer.FormatCSV, nil
+	case ".json":
+		return "json", nil
+	case ".yaml", ".yml":
+		return "yaml", nil
+	default:
+		return "", fmt.Errorf("cannot detect format from file extension %q; use --format to specify", ext)
 	}
 }
 

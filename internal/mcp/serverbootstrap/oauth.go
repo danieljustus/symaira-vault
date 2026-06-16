@@ -21,6 +21,7 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/fsutil"
 	"github.com/danieljustus/symaira-vault/internal/mcp/auth"
 	"github.com/danieljustus/symaira-vault/internal/mcp/server"
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
@@ -323,7 +324,7 @@ func (s *oauthClientStore) put(c *registeredClient) {
 	// Best-effort persistence: log error but never fail the registration.
 	if s.path != "" {
 		if err := s.Save(); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to persist OAuth client store: %v\n", err)
+			cliout.Warnf("failed to persist OAuth client store: %v", err)
 		}
 	}
 }
@@ -361,7 +362,7 @@ func (s *oauthClientStore) cleanupExpired() int {
 
 	if needsSave {
 		if err := s.Save(); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to persist OAuth client store after cleanup: %v\n", err)
+			cliout.Warnf("failed to persist OAuth client store after cleanup: %v", err)
 		}
 	}
 	return removed

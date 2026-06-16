@@ -21,14 +21,3 @@ func (s *Server) handleHealth(ctx context.Context, req mcp.CallToolRequest) (*mc
 	}
 	return mcp.NewToolResultText(string(resultJSON)), nil
 }
-
-func init() {
-	RegisterTool(toolDefinition{
-		Name:         "health",
-		Description:  "Return Symaira Vault MCP server health information",
-		InputSchema:  objectSchema(nil, map[string]schemaProperty{}),
-		Handler:      (*Server).handleHealth,
-		RiskLevel:    RiskLevelLow,
-		ReadOnlyHint: true,
-	})
-}

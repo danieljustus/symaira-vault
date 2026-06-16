@@ -25,28 +25,3 @@ func (s *Server) handleRequestCredential(ctx context.Context, req mcp.CallToolRe
 		Hidden:      true,
 	}, "request_credential")
 }
-
-func init() {
-	RegisterTool(toolDefinition{
-		Name: "request_credential",
-		Description: "Request the user to securely enter a credential the agent needs " +
-			"but cannot find in the vault. Opens a native input dialog (TTY box or " +
-			"OS-native popup). The value is stored in the vault and never exposed to " +
-			"the agent. Use this after find_entries / get_entry returns nothing for an " +
-			"expected path, instead of asking the user for the secret in chat.",
-		InputSchema: objectSchema([]string{"path", "field", "reason"}, map[string]schemaProperty{
-			"path":   {Type: "string", Description: "Vault path to store the new credential, e.g. \"github/api-token\""},
-			"field":  {Type: "string", Description: "Field name, e.g. \"token\", \"password\", \"api_key\""},
-			"reason": {Type: "string", Description: "Short human-readable reason shown in the dialog (why does the agent need this?)"},
-		}),
-		Handler:         (*Server).handleRequestCredential,
-		Available:       secureInputToolAvailable,
-		RiskLevel:       RiskLevelCritical,
-		DestructiveHint: true,
-		Capabilities: &ToolCapabilities{
-			RequiresTTY:  true,
-			RequiresGUI:  true,
-			Alternatives: []string{"set_entry_field"},
-		},
-	})
-}

@@ -120,20 +120,3 @@ func (s *Server) validateOutputPath(outputPath string) error {
 
 	return nil
 }
-
-func init() {
-	RegisterTool(toolDefinition{
-		Name:        "generate_template",
-		Description: "Generate a configuration file from a template",
-		InputSchema: objectSchema([]string{"template_type"}, map[string]schemaProperty{
-			"template_type": {Type: "string", Description: "Template type (env, docker-compose, k8s-secret, github-actions, terraform)"},
-			"name":          {Type: "string", Description: "Name of the resource being generated. Default: app"},
-			"output_path":   {Type: "string", Description: "Output file path (optional)"},
-			"secret_refs":   {Type: "object", Description: "Map of template variable names to vault references"},
-			"dry_run":       {Type: "boolean", Description: "Show template with masked values. Default: false"},
-		}),
-		Handler:      (*Server).handleGenerateTemplate,
-		RiskLevel:    RiskLevelMedium,
-		ReadOnlyHint: true,
-	})
-}

@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash"
 	"io"
 	"log/slog"
 	"os"
@@ -784,8 +785,13 @@ func (l *Logger) readLastHMAC() ([]byte, error) {
 }
 
 func computeHMAC(key, prevHMAC []byte, entry LogEntry) string {
-	canonical := canonicalJSON(entry)
 	mac := hmac.New(sha256.New, key)
+	return computeHMACWith(mac, prevHMAC, entry)
+}
+
+func computeHMACWith(mac hash.Hash, prevHMAC []byte, entry LogEntry) string {
+	mac.Reset()
+	canonical := canonicalJSON(entry)
 	if len(prevHMAC) > 0 {
 		mac.Write(prevHMAC)
 	}
@@ -832,6 +838,7 @@ func VerifyLog(logFilePath string, key []byte) (*VerifyResult, error) {
 		FirstBadIdx: -1,
 	}
 
+	mac := hmac.New(sha256.New, key)
 	var prevHMAC []byte
 	for i, entry := range entries {
 		if entry.HMAC == "" {
@@ -840,7 +847,7 @@ func VerifyLog(logFilePath string, key []byte) (*VerifyResult, error) {
 			continue
 		}
 
-		expectedHMAC := computeHMAC(key, prevHMAC, entry)
+		expectedHMAC := computeHMACWith(mac, prevHMAC, entry)
 		entryHMACBytes, decodeErr := hex.DecodeString(entry.HMAC)
 		expectedHMACBytes, decodeExpectedErr := hex.DecodeString(expectedHMAC)
 		if decodeErr != nil || decodeExpectedErr != nil || !hmac.Equal(expectedHMACBytes, entryHMACBytes) {

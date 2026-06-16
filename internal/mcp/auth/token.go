@@ -17,6 +17,7 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/crypto"
 	"github.com/danieljustus/symaira-vault/internal/envutil"
 	"github.com/danieljustus/symaira-vault/internal/fsutil"
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 )
 
 // CurrentToolRegistryHash is set by the server package at startup to enable
@@ -629,7 +630,7 @@ func (r *TokenRegistry) StartFileWatcher(ctx context.Context, interval time.Dura
 				if lastInfo == nil || !os.SameFile(fi, lastInfo) || !fi.ModTime().Equal(lastInfo.ModTime()) || fi.Size() != lastInfo.Size() {
 					lastInfo = fi
 					if err := r.Load(); err != nil {
-						fmt.Fprintf(os.Stderr, "error reloading token registry from %s: %v\n", r.path, err)
+						cliout.Errorf("error reloading token registry from %s: %v", r.path, err)
 					}
 				}
 			case <-stopCh:
@@ -751,13 +752,13 @@ func LoadTokenSystem(vaultDir string, customLegacyPath ...string) (*TokenRegistr
 				// wildcard tool scope. Operators should rotate it via
 				// `symvault mcp token create` with an explicit allow-list and
 				// then revoke the legacy entry.
-				fmt.Fprintf(os.Stderr,
+				cliout.Warnf(
 					"WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=%s).\n"+
 						"         To restrict scope, run: symvault mcp token create --label <name> --tools <list>\n"+
-						"         Then revoke the legacy token: symvault mcp token revoke %s\n",
+						"         Then revoke the legacy token: symvault mcp token revoke %s",
 					id, id)
 				if rmErr := fsutil.SafeRemove(legacyPath); rmErr != nil {
-					fmt.Fprintf(os.Stderr, "Warning: failed to remove legacy token file %s after migration: %v\n", legacyPath, rmErr)
+					cliout.Warnf("failed to remove legacy token file %s after migration: %v", legacyPath, rmErr)
 				}
 			}
 		}
@@ -774,7 +775,7 @@ func LoadOrCreateToken(path string) (string, error) {
 		token := strings.TrimSpace(string(data))
 		if token != "" {
 			if envToken := envutil.Getenv("SYMVAULT_MCP_TOKEN", "OPENPASS_MCP_TOKEN"); envToken != "" {
-				fmt.Fprintf(os.Stderr, "Warning: SYMVAULT_MCP_TOKEN or OPENPASS_MCP_TOKEN is set but file token exists at %s; using file token\n", path)
+				cliout.Warnf("Warning: SYMVAULT_MCP_TOKEN or OPENPASS_MCP_TOKEN is set but file token exists at %s; using file token", path)
 				envutil.Unsetenv("SYMVAULT_MCP_TOKEN", "OPENPASS_MCP_TOKEN")
 				// #nosec G103 — intentional: unsafe.StringData aliases the Getenv
 				// backing array so Wipe can zero the only copy in memory.

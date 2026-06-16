@@ -17,6 +17,7 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/authguard"
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	auth "github.com/danieljustus/symaira-vault/internal/mcp/auth"
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 )
 
 var (
@@ -167,8 +168,8 @@ func requireBiometricForUpgrade(ctx context.Context, agentName, targetTier strin
 					"Re-run with --no-biometric to bypass (not recommended)",
 			)
 		}
-		fmt.Fprintf(os.Stderr, "\u26a0  Biometric verification is not available on this platform.\n")
-		fmt.Fprintf(os.Stderr, "   The upgrade will proceed after interactive confirmation.\n\n")
+		cliout.Warnf("\u26a0 Biometric verification is not available on this platform.")
+		fmt.Fprintln(os.Stderr, "   The upgrade will proceed after interactive confirmation.")
 		return nil
 	}
 
@@ -288,7 +289,7 @@ an audit trail.`,
 		if err := cfg.SaveTo(configPath); err != nil {
 			return fmt.Errorf("save config: %w", err)
 		}
-		fmt.Fprintf(os.Stderr, "\u2713 Profile for %q upgraded to %q\n", agentName, agentUpgradeTier)
+		cliout.Hintf("\u2713 Profile for %q upgraded to %q", agentName, agentUpgradeTier)
 
 		if agentUpgradeRotate {
 			regPath := auth.TokenRegistryFilePath(vaultDir)
@@ -320,7 +321,7 @@ an audit trail.`,
 			if writeErr != nil {
 				return fmt.Errorf("write token file: %w", writeErr)
 			}
-			fmt.Fprintf(os.Stderr, "\u2713 Token rotated: %s (id=%s)\n", tokenPath, newTok.ID)
+			cliout.Hintf("\u2713 Token rotated: %s (id=%s)", tokenPath, newTok.ID)
 		}
 
 		targetPath := ""
@@ -332,9 +333,9 @@ an audit trail.`,
 			vars := buildTemplateVars(agentName)
 			vars.ProfileTier = agentUpgradeTier
 			if err := agentskill.Refresh(agentName, expanded, vars); err != nil {
-				fmt.Fprintf(os.Stderr, "\u26a0 Skill refresh: %v\n", err)
+				cliout.Warnf("\u26a0 Skill refresh: %v", err)
 			} else {
-				fmt.Fprintf(os.Stderr, "\u2713 Skill refreshed at %s\n", expanded)
+				cliout.Hintf("\u2713 Skill refreshed at %s", expanded)
 			}
 		}
 

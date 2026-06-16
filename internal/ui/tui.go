@@ -4,38 +4,26 @@ package ui
 import (
 	"fmt"
 	"os"
-	"sort"
-	"strings"
 	"time"
 
 	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/mattn/go-runewidth"
 
-	clipboardapp "github.com/danieljustus/symaira-vault/internal/clipboard"
-	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
-	"github.com/danieljustus/symaira-vault/internal/secureedit"
-	render "github.com/danieljustus/symaira-vault/internal/ui/render"
 	theme "github.com/danieljustus/symaira-vault/internal/ui/theme"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
-	taint "github.com/danieljustus/symaira-vault/internal/vault/taint"
 )
 
 const (
 	defaultAutoClearSeconds = 30
-	redactedValue           = "••••"
+	redactedValue           = "\u2022\u2022\u2022\u2022"
 	generatedPasswordLength = 20
 	keyQuit                 = "ctrl+c"
 	keyEnter                = "enter"
 	keyEsc                  = "esc"
 )
 
-// autoClearSeconds returns the clipboard auto-clear TTL for this TUI session,
-// pulled from vault config.Clipboard.AutoClearDuration when available, else
-// the compiled-in default. Returning <=0 disables auto-clear, mirroring the
-// semantics in internal/clipboard.
 func (m *TUIModel) autoClearSeconds() int {
 	if m.vault != nil && m.vault.Config != nil && m.vault.Config.Clipboard != nil {
 		if m.vault.Config.Clipboard.AutoClearDuration >= 0 {
@@ -53,6 +41,8 @@ const (
 	modeConfirmDelete
 	modeConfirmEdit
 	modeTagFilter
+	modeAdd
+	modeGenConfig
 )
 
 type entryLoadedMsg struct {
@@ -84,6 +74,11 @@ type passwordGeneratedMsg struct {
 }
 
 type entryDeletedMsg struct {
+	path string
+	err  error
+}
+
+type entryAddedMsg struct {
 	path string
 	err  error
 }
@@ -120,13 +115,16 @@ type TUIModel struct {
 
 	filterInput    textinput.Model
 	tagFilterInput textinput.Model
+	addPathInput   textinput.Model
+	genLengthInput textinput.Model
+	genSymbols     bool
 	mode           mode
 	revealed       bool
 	help           bool
 	loading        bool
 	detailRequest  uint64
 
-	sortMode  int // 0=name-asc, 1=name-desc, 2=updated-asc, 3=updated-desc
+	sortMode  int
 	filterTag string
 	metaCache map[string]vaultpkg.EntryMetadata
 
@@ -135,6 +133,8 @@ type TUIModel struct {
 
 	status string
 	err    error
+
+	pendingSelectPath string
 
 	clipboardSeconds int
 	clipboardMessage string
@@ -167,10 +167,23 @@ func NewTUIModel(vault *vaultpkg.Vault) TUIModel {
 	tagInput.Prompt = "t: "
 	tagInput.CharLimit = 256
 
+	addInput := textinput.New()
+	addInput.Placeholder = "entry path"
+	addInput.Prompt = "a: "
+	addInput.CharLimit = 256
+
+	genInput := textinput.New()
+	genInput.Placeholder = "20"
+	genInput.Prompt = "length: "
+	genInput.CharLimit = 4
+
 	return TUIModel{
 		vault:          vault,
 		filterInput:    input,
 		tagFilterInput: tagInput,
+		addPathInput:   addInput,
+		genLengthInput: genInput,
+		genSymbols:     true,
 		loading:        true,
 		status:         "Loading entries...",
 	}
@@ -201,7 +214,7 @@ func (m TUIModel) Init() tea.Cmd {
 	return loadEntriesCmd(m.vault)
 }
 
-//nolint:gocyclo // TUI update loop naturally has high cyclomatic complexity
+//nolint:gocyclo
 func (m TUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -220,6 +233,15 @@ func (m TUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.entries = msg.entries
 		m.applyFilter()
 		m.status = fmt.Sprintf("%d entries", len(m.entries))
+		if m.pendingSelectPath != "" {
+			for i, e := range m.filtered {
+				if e == m.pendingSelectPath {
+					m.selected = i
+					break
+				}
+			}
+			m.pendingSelectPath = ""
+		}
 		return m, m.loadSelectedEntry()
 	case entryLoadRequestedMsg:
 		if msg.requestID != m.detailRequest || msg.path != m.selectedPath() {
@@ -267,10 +289,19 @@ func (m TUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = "Delete failed"
 			return m, nil
 		}
-		// Drop the stale cache entry so re-renders see fresh metadata.
 		delete(m.metaCache, msg.path)
 		m.err = nil
 		m.status = fmt.Sprintf("Deleted %s", msg.path)
+		return m, loadEntriesCmd(m.vault)
+	case entryAddedMsg:
+		if msg.err != nil {
+			m.err = msg.err
+			m.status = "Add failed"
+			return m, nil
+		}
+		m.err = nil
+		m.status = fmt.Sprintf("Added %s", msg.path)
+		m.pendingSelectPath = msg.path
 		return m, loadEntriesCmd(m.vault)
 	case entryEditedMsg:
 		m.mode = modeNormal
@@ -279,8 +310,6 @@ func (m TUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = "Edit failed"
 			return m, nil
 		}
-		// Drop the cached metadata for this path so the next sort/filter
-		// reflects the edit (tags, updated timestamp).
 		delete(m.metaCache, msg.path)
 		m.err = nil
 		m.status = fmt.Sprintf("Updated %s", msg.path)
@@ -322,266 +351,11 @@ func (m TUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m TUIModel) View() string {
-	if m.width == 0 {
-		return "Loading Symaira Vault UI..."
-	}
-
-	contentHeight := max(8, m.height-6)
-	leftWidth := max(24, m.width/3)
-	rightWidth := max(32, m.width-leftWidth-8)
-
-	bs := borderStyle
-	if m.mode == modeFilter || m.mode == modeTagFilter {
-		bs = borderFocusStyle
-	}
-	left := bs.Width(leftWidth).Height(contentHeight).Render(m.leftView(leftWidth, contentHeight))
-	right := bs.Width(rightWidth).Height(contentHeight).Render(m.rightView(rightWidth, contentHeight))
-	body := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
-
-	footer := m.statusView()
-	if m.help {
-		footer = m.helpView()
-	}
-	if m.mode == modeConfirmDelete || m.mode == modeConfirmEdit {
-		footer = m.confirmView()
-	}
-
-	return appStyle.Render(lipgloss.JoinVertical(lipgloss.Left, body, footer))
-}
-
-//nolint:gocyclo // Key handler dispatches across many keyboard shortcuts by design.
-func (m TUIModel) handleKey(msg tea.KeyMsg) (TUIModel, tea.Cmd) {
-	if m.mode == modeFilter {
-		switch msg.String() {
-		case keyEsc, keyEnter:
-			m.mode = modeNormal
-			m.filterInput.Blur()
-			return m, m.loadSelectedEntry()
-		case keyQuit:
-			return m, m.quitCmd()
-		}
-
-		var cmd tea.Cmd
-		m.filterInput, cmd = m.filterInput.Update(msg)
-		m.applyFilter()
-		return m, cmd
-	}
-
-	if m.mode == modeTagFilter {
-		switch msg.String() {
-		case keyEnter:
-			m.mode = modeNormal
-			m.tagFilterInput.Blur()
-			m.filterTag = strings.TrimSpace(m.tagFilterInput.Value())
-			m.applyFilter()
-			return m, m.loadSelectedEntry()
-		case keyEsc:
-			m.mode = modeNormal
-			m.tagFilterInput.Blur()
-			m.tagFilterInput.SetValue("")
-			m.filterTag = ""
-			m.applyFilter()
-			return m, m.loadSelectedEntry()
-		case keyQuit:
-			return m, m.quitCmd()
-		}
-
-		var cmd tea.Cmd
-		m.tagFilterInput, cmd = m.tagFilterInput.Update(msg)
-		m.applyFilter()
-		return m, cmd
-	}
-
-	if m.mode == modeConfirmDelete || m.mode == modeConfirmEdit {
-		switch msg.String() {
-		case "y", "Y":
-			path := m.selectedPath()
-			if path == "" {
-				m.mode = modeNormal
-				return m, nil
-			}
-			if m.mode == modeConfirmDelete {
-				return m, deleteEntryCmd(m.vault, path)
-			}
-			return m, editEntryCmd(m.vault, path)
-		case "n", "N", "esc":
-			m.mode = modeNormal
-			m.status = "Canceled"
-			return m, nil
-		case keyQuit:
-			return m, m.quitCmd()
-		}
-		return m, nil
-	}
-
-	switch msg.String() {
-	case "q", keyQuit:
-		return m, m.quitCmd()
-	case "?":
-		m.help = !m.help
-		return m, nil
-	case "/":
-		m.mode = modeFilter
-		m.filterInput.Focus()
-		return m, textinput.Blink
-	case "r":
-		m.revealed = !m.revealed
-		return m, nil
-	case "s":
-		m.sortMode = (m.sortMode + 1) % 4
-		m.applyFilter()
-		return m, nil
-	case "t":
-		m.ensureMetaCache()
-		m.tagFilterInput.SetValue(m.filterTag)
-		m.mode = modeTagFilter
-		m.tagFilterInput.Focus()
-		return m, textinput.Blink
-	case "up", "k":
-		if m.selected > 0 {
-			m.selected--
-			m.clipboardSeconds = 0
-			return m, m.debounceSelectedEntry()
-		}
-	case "down", "j":
-		if m.selected < len(m.filtered)-1 {
-			m.selected++
-			m.clipboardSeconds = 0
-			return m, m.debounceSelectedEntry()
-		}
-	case "home":
-		m.selected = 0
-		m.clipboardSeconds = 0
-		return m, m.debounceSelectedEntry()
-	case "end":
-		if len(m.filtered) > 0 {
-			m.selected = len(m.filtered) - 1
-			m.clipboardSeconds = 0
-			return m, m.debounceSelectedEntry()
-		}
-	case "enter":
-		return m, m.copySelectedPassword()
-	case "d":
-		if m.selectedPath() != "" {
-			m.mode = modeConfirmDelete
-		}
-		return m, nil
-	case "e":
-		if m.selectedPath() != "" {
-			m.mode = modeConfirmEdit
-		}
-		return m, nil
-	case "g":
-		return m, generatePasswordCmd()
-	}
-
-	return m, nil
-}
-
 func (m TUIModel) quitCmd() tea.Cmd {
 	if m.clipboardSeconds <= 0 {
 		return tea.Quit
 	}
 	return clearClipboardBeforeQuitCmd()
-}
-
-func (m *TUIModel) applyFilter() {
-	query := strings.TrimSpace(m.filterInput.Value())
-	m.filtered = m.filtered[:0]
-	for _, entry := range m.entries {
-		if fuzzyMatch(query, entry) && m.tagMatch(entry) {
-			m.filtered = append(m.filtered, entry)
-		}
-	}
-	m.sortFiltered()
-	if m.selected >= len(m.filtered) {
-		m.selected = max(0, len(m.filtered)-1)
-	}
-}
-
-func (m *TUIModel) ensureMetaCache() {
-	if m.metaCache == nil {
-		m.metaCache = make(map[string]vaultpkg.EntryMetadata)
-	}
-	// Fill in any entries that are missing from the cache. After a delete or
-	// edit we drop the affected path; this loop re-populates it lazily on the
-	// next sort/filter pass.
-	for _, path := range m.entries {
-		if _, ok := m.metaCache[path]; ok {
-			continue
-		}
-		meta, err := vaultpkg.GetEntryMetadata(m.vault.Dir, path, m.vault.Identity)
-		if err != nil {
-			continue
-		}
-		m.metaCache[path] = *meta
-	}
-}
-
-func (m TUIModel) tagMatch(entry string) bool {
-	if m.filterTag == "" {
-		return true
-	}
-	meta, ok := m.metaCache[entry]
-	if !ok {
-		return false
-	}
-	for _, tag := range meta.Tags {
-		if strings.HasPrefix(strings.ToLower(tag), strings.ToLower(m.filterTag)) {
-			return true
-		}
-	}
-	return false
-}
-
-func (m *TUIModel) sortFiltered() {
-	if m.sortMode == 0 || m.sortMode == 1 {
-		sort.SliceStable(m.filtered, func(i, j int) bool {
-			if m.sortMode == 0 {
-				return m.filtered[i] < m.filtered[j]
-			}
-			return m.filtered[i] > m.filtered[j]
-		})
-		return
-	}
-	m.ensureMetaCache()
-	sort.SliceStable(m.filtered, func(i, j int) bool {
-		mi := m.metaCache[m.filtered[i]]
-		mj := m.metaCache[m.filtered[j]]
-		if m.sortMode == 2 {
-			return mi.Updated.Before(mj.Updated)
-		}
-		return mi.Updated.After(mj.Updated)
-	})
-}
-
-func (m TUIModel) availableTags() []string {
-	tagSet := make(map[string]struct{})
-	for _, meta := range m.metaCache {
-		for _, tag := range meta.Tags {
-			tagSet[tag] = struct{}{}
-		}
-	}
-	tags := make([]string, 0, len(tagSet))
-	for tag := range tagSet {
-		tags = append(tags, tag)
-	}
-	sort.Strings(tags)
-	return tags
-}
-
-func (m TUIModel) sortLabel() string {
-	switch m.sortMode {
-	case 0:
-		return "name↑"
-	case 1:
-		return "name↓"
-	case 2:
-		return "updated↑"
-	default:
-		return "updated↓"
-	}
 }
 
 func (m *TUIModel) loadSelectedEntry() tea.Cmd {
@@ -636,310 +410,4 @@ func (m TUIModel) copySelectedPassword() tea.Cmd {
 		}
 		return copyTextMsg(fmt.Sprint(value), fmt.Sprintf("Copied password for %s", path))
 	}
-}
-
-func (m TUIModel) leftView(width, height int) string {
-	var b strings.Builder
-	pos := ""
-	if len(m.filtered) > 0 {
-		pos = fmt.Sprintf(" [%d/%d]", m.selected+1, len(m.filtered))
-	}
-	b.WriteString(theme.TitleStyle.Render("Entries" + pos))
-	b.WriteString(" ")
-	b.WriteString(theme.MutedStyle.Render(fmt.Sprintf("[sort: %s]", m.sortLabel())))
-	b.WriteString("\n")
-	if m.mode == modeFilter {
-		b.WriteString(m.filterInput.View())
-	} else if m.mode == modeTagFilter {
-		b.WriteString(m.tagFilterInput.View())
-		tags := m.availableTags()
-		if len(tags) > 0 {
-			b.WriteString("\n")
-			escapedTags := make([]string, len(tags))
-			for i, tag := range tags {
-				u := taint.Wrap(tag, taint.Provenance{Source: "ui.tag"})
-				escapedTags[i] = render.QuoteForTerminal(u)
-			}
-			b.WriteString(theme.MutedStyle.Render("tags: " + strings.Join(escapedTags, " ")))
-		}
-	} else if q := strings.TrimSpace(m.filterInput.Value()); q != "" {
-		b.WriteString(theme.MutedStyle.Render("Filter: " + q))
-		if m.filterTag != "" {
-			b.WriteString(" ")
-			b.WriteString(theme.MutedStyle.Render(fmt.Sprintf("[tag:%s]", m.filterTag)))
-		}
-	} else if m.filterTag != "" {
-		b.WriteString(theme.MutedStyle.Render(fmt.Sprintf("Tag: %s", m.filterTag)))
-	} else {
-		b.WriteString(theme.MutedStyle.Render("/ filter · t tag · s sort"))
-	}
-	b.WriteString("\n\n")
-
-	if m.loading {
-		b.WriteString("Loading entries...\n")
-		return b.String()
-	}
-	if len(m.filtered) == 0 {
-		b.WriteString(theme.MutedStyle.Render("No entries"))
-		return b.String()
-	}
-
-	listHeight := max(1, height-5)
-	start := 0
-	if m.selected >= listHeight {
-		start = m.selected - listHeight + 1
-	}
-	end := min(len(m.filtered), start+listHeight)
-
-	for i := start; i < end; i++ {
-		safePath := render.ForTerminal(taint.Wrap(m.filtered[i], taint.Provenance{Source: "ui.path"}))
-		line := truncate(safePath, width-4)
-		if i == m.selected {
-			line = theme.SelectedStyle.Width(width - 4).Render(line)
-		}
-		b.WriteString(line)
-		b.WriteString("\n")
-	}
-	return b.String()
-}
-
-func (m TUIModel) rightView(width, height int) string {
-	path := m.selectedPath()
-	if path == "" {
-		return theme.TitleStyle.Render("Details") + "\n\n" + theme.MutedStyle.Render("Select an entry")
-	}
-	if m.entry == nil || m.entryFor != path {
-		safePath := render.ForTerminal(taint.Wrap(path, taint.Provenance{Source: "ui.path"}))
-		return theme.TitleStyle.Render(safePath) + "\n\n" + theme.MutedStyle.Render("Loading details...")
-	}
-
-	var b strings.Builder
-	safePath := render.ForTerminal(taint.Wrap(path, taint.Provenance{Source: "ui.path"}))
-	b.WriteString(theme.TitleStyle.Render(safePath))
-	b.WriteString("\n")
-	b.WriteString(theme.MutedStyle.Render("Updated: " + m.entry.Metadata.Updated.Format("2006-01-02 15:04")))
-	b.WriteString("\n\n")
-
-	keys := make([]string, 0, len(m.entry.Data))
-	for key := range m.entry.Data {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-
-	maxRows := max(1, height-6)
-	for i, key := range keys {
-		if i >= maxRows {
-			b.WriteString(theme.MutedStyle.Render("..."))
-			break
-		}
-		rawValue := fmt.Sprint(m.entry.Data[key])
-		var value string
-		if !m.revealed && isSensitiveField(key) {
-			value = redactedValue
-		} else {
-			u := taint.Wrap(rawValue, taint.Provenance{Source: "ui.entry", EntryPath: m.entry.Path, FieldName: key})
-			value = render.ForTerminal(u)
-		}
-		line := fmt.Sprintf("%s: %s", theme.KeyStyle.Render(key), value)
-		b.WriteString(truncate(line, width-4))
-		b.WriteString("\n")
-	}
-
-	return b.String()
-}
-
-func (m TUIModel) statusView() string {
-	status := m.status
-	if m.err != nil {
-		status = theme.ErrorStyle.Render(m.err.Error())
-	}
-	keys := "↑/↓ select · Enter copy · r reveal · e edit · d delete · g gen · s sort · t tag · / filter · esc clear · ? help · q quit"
-	return theme.MutedStyle.Render(keys) + "\n" + status
-}
-
-func (m TUIModel) helpView() string {
-	return strings.Join([]string{
-		theme.TitleStyle.Render("Help"),
-		"↑/↓ or k/j: move selection",
-		"/: fuzzy filter entries",
-		"s: cycle sort (name/updated, asc/desc)",
-		"t: filter by tag",
-		"Enter: copy password field to clipboard",
-		"r: reveal or redact sensitive fields",
-		"e: edit selected entry after confirmation",
-		"d: delete selected entry after confirmation",
-		"g: generate password and copy it to clipboard",
-		"q or Ctrl+C: quit",
-	}, "\n")
-}
-
-func (m TUIModel) confirmView() string {
-	verb := "delete"
-	if m.mode == modeConfirmEdit {
-		verb = "edit"
-	}
-	safePath := render.ForTerminal(taint.Wrap(m.selectedPath(), taint.Provenance{Source: "ui.path"}))
-	return theme.ErrorStyle.Render(fmt.Sprintf("Confirm %s %s?", verb, safePath)) + "  " + theme.MutedStyle.Render("y/N")
-}
-
-func loadEntriesCmd(vault *vaultpkg.Vault) tea.Cmd {
-	return func() (msg tea.Msg) {
-		defer func() {
-			if r := recover(); r != nil {
-				msg = entriesLoadedMsg{err: fmt.Errorf("panic loading entries: %v", r)}
-			}
-		}()
-		entries, err := vaultpkg.List(vault.Dir, "", vault.Identity)
-		if err != nil {
-			return entriesLoadedMsg{err: err}
-		}
-		sort.Strings(entries)
-		return entriesLoadedMsg{entries: entries}
-	}
-}
-
-func loadEntryCmd(vault *vaultpkg.Vault, path string, requestID uint64) tea.Cmd {
-	return func() (msg tea.Msg) {
-		defer func() {
-			if r := recover(); r != nil {
-				msg = entryLoadedMsg{requestID: requestID, path: path, err: fmt.Errorf("panic loading entry %s: %v", path, r)}
-			}
-		}()
-		entry, err := vaultpkg.ReadEntry(vault.Dir, path, vault.Identity)
-		return entryLoadedMsg{requestID: requestID, path: path, entry: entry, err: err}
-	}
-}
-
-func copyTextCmd(text, message string, cleanup func()) tea.Cmd {
-	return func() tea.Msg {
-		result := copyTextMsg(text, message)
-		if cleanup != nil {
-			cleanup()
-		}
-		return result
-	}
-}
-
-func copyTextMsg(text, message string) tea.Msg {
-	if err := writeClipboard(text); err != nil {
-		return copiedMsg{err: fmt.Errorf("copy to clipboard: %w", err)}
-	}
-	return copiedMsg{message: message}
-}
-
-func clearClipboardCmd(seconds int) tea.Cmd {
-	return func() tea.Msg {
-		done := make(chan struct{})
-		var clearErr error
-		clipboardapp.StartAutoClear(seconds, func() {
-			clearErr = writeClipboard("")
-			close(done)
-		}, nil)
-		<-done
-		return clipboardClearedMsg{err: clearErr}
-	}
-}
-
-func clearClipboardBeforeQuitCmd() tea.Cmd {
-	return func() tea.Msg {
-		return clipboardQuitClearedMsg{err: writeClipboard("")}
-	}
-}
-
-func clipboardTickCmd() tea.Cmd {
-	return tea.Tick(time.Second, func(_ time.Time) tea.Msg {
-		return clipboardTickMsg{}
-	})
-}
-
-func generatePasswordCmd() tea.Cmd {
-	return func() tea.Msg {
-		password, cleanup, err := vaultcrypto.GeneratePassword(generatedPasswordLength, true)
-		return passwordGeneratedMsg{password: password, cleanup: cleanup, err: err}
-	}
-}
-
-func deleteEntryCmd(vault *vaultpkg.Vault, path string) tea.Cmd {
-	return func() tea.Msg {
-		err := vaultpkg.DeleteEntry(vault.Dir, path, vault.Identity)
-		if err != nil {
-			return entryDeletedMsg{path: path, err: err}
-		}
-		_ = vault.AutoCommitEntry(fmt.Sprintf("Delete %s", path), path)
-		vault.Cache.Invalidate()
-		return entryDeletedMsg{path: path}
-	}
-}
-
-func editEntryCmd(vault *vaultpkg.Vault, path string) tea.Cmd {
-	return func() tea.Msg {
-		entry, err := vaultpkg.ReadEntry(vault.Dir, path, vault.Identity)
-		if err != nil {
-			return entryEditedMsg{path: path, err: err}
-		}
-
-		edited, err := secureedit.EditEntry(entry, os.Getenv("EDITOR"), secureedit.DefaultStreams())
-		if err != nil {
-			return entryEditedMsg{path: path, err: err}
-		}
-		if err := vaultpkg.WriteEntryWithRecipients(vault.Dir, path, edited, vault.Identity); err != nil {
-			return entryEditedMsg{path: path, err: err}
-		}
-		_ = vault.AutoCommitEntry(fmt.Sprintf("Edit %s", path), path)
-		vault.Cache.Invalidate()
-		return entryEditedMsg{path: path}
-	}
-}
-
-func fuzzyMatch(query, value string) bool {
-	query = strings.ToLower(strings.TrimSpace(query))
-	if query == "" {
-		return true
-	}
-	value = strings.ToLower(value)
-	if strings.Contains(value, query) {
-		return true
-	}
-	queryRunes := []rune(query)
-	idx := 0
-	for _, r := range value {
-		if idx < len(queryRunes) && r == queryRunes[idx] {
-			idx++
-		}
-	}
-	return idx == len(queryRunes)
-}
-
-func isSensitiveField(field string) bool {
-	field = strings.ToLower(field)
-	return strings.Contains(field, "pass") ||
-		strings.Contains(field, "secret") ||
-		strings.Contains(field, "token") ||
-		strings.Contains(field, "key") ||
-		strings.Contains(field, "otp") ||
-		strings.Contains(field, "pin")
-}
-
-func truncate(value string, width int) string {
-	if width <= 1 {
-		return value
-	}
-	if runewidth.StringWidth(value) <= width {
-		return value
-	}
-	return runewidth.Truncate(value, width, "…")
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

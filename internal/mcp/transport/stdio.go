@@ -9,6 +9,8 @@ import (
 	"os"
 	"sync"
 	"sync/atomic"
+
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 )
 
 // StdioTransport implements MCP transport over stdin/stdout
@@ -130,7 +132,7 @@ func (t *StdioTransport) handleLine(ctx context.Context, line string, handler Me
 	if msg.IsNotification() {
 		_, err := handler(ctx, &msg)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to handle notification: %v\n", err)
+			cliout.Errorf("failed to handle notification: %v", err)
 		}
 		return
 	}
@@ -160,7 +162,7 @@ func (t *StdioTransport) handleLine(ctx context.Context, line string, handler Me
 func (t *StdioTransport) writeMessage(msg *Message) {
 	data, err := json.Marshal(msg)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to marshal response: %v\n", err)
+		cliout.Errorf("failed to marshal response: %v", err)
 		return
 	}
 
@@ -168,7 +170,7 @@ func (t *StdioTransport) writeMessage(msg *Message) {
 	defer t.mu.Unlock()
 
 	if _, err := fmt.Fprintln(t.writer, string(data)); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to write message: %v\n", err)
+		cliout.Errorf("failed to write message: %v", err)
 	}
 }
 

@@ -13,9 +13,9 @@ package session
 
 import (
 	"errors"
-	"fmt"
-	"os"
 	"sync"
+
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 )
 
 // ErrKeyringNotFound is returned by Get when the backend has no value for the
@@ -162,7 +162,7 @@ func (f *fallbackKeyring) activateLocked() {
 		f.active = true
 		if !f.warned {
 			f.warned = true
-			fmt.Fprintln(os.Stderr, "Warning: OS keyring unavailable — session cache falling back to in-memory storage. Sessions will not persist across restarts. Run 'symvault doctor' for help.")
+			cliout.Warnf("OS keyring unavailable — session cache falling back to in-memory storage. Sessions will not persist across restarts. Run 'symvault doctor' for help.")
 		}
 	}
 }

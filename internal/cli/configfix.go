@@ -9,6 +9,7 @@ import (
 	"time"
 
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 )
 
 // InteractiveFixConfig walks the user through repairing a malformed or
@@ -209,9 +210,9 @@ func repairAgentMode(cfg *configpkg.Config, field string, valid map[string]struc
 
 func saveAndRevalidate(configPath string, cfg *configpkg.Config) (*configpkg.Config, error) {
 	if saveErr := cfg.SaveTo(configPath); saveErr != nil {
-		fmt.Fprintf(os.Stderr, "Failed to save auto-fixes: %v\n", saveErr)
+		cliout.Errorf("Failed to save auto-fixes: %v", saveErr)
 	} else {
-		fmt.Fprintln(os.Stderr, "Auto-fixes applied successfully.")
+		cliout.Hintf("Auto-fixes applied successfully.")
 		// Re-validate
 		newCfg, newLoadErr := configpkg.Load(configPath)
 		var newValErr error
