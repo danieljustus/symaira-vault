@@ -17,8 +17,8 @@ func TestInitCommand_HiddenPassphrase(t *testing.T) {
 	vaultDir := t.TempDir()
 	passphrase := []byte("test-hidden-passphrase")
 
-	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
-	defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
+	cli.SetCachedEnvPassphrase(passphrase)
+	defer cli.SetCachedEnvPassphrase(nil)
 
 	cli.RootCmd.SetArgs([]string{"init", vaultDir})
 	defer cli.RootCmd.SetArgs(nil)
@@ -58,8 +58,8 @@ func TestCmdInit_Success(t *testing.T) {
 	vaultDir := t.TempDir()
 	vaultFlagReset(t)
 
-	_ = os.Setenv("SYMVAULT_PASSPHRASE", "supersecretpassphrase123")
-	defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
+	cli.SetCachedEnvPassphrase([]byte("supersecretpassphrase123"))
+	defer cli.SetCachedEnvPassphrase(nil)
 
 	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "init"})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
@@ -81,8 +81,8 @@ func TestCmdInit_AlreadyInitialized(t *testing.T) {
 		t.Fatalf("pre-init vault: %v", err)
 	}
 
-	_ = os.Setenv("SYMVAULT_PASSPHRASE", "supersecretpassphrase123")
-	defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
+	cli.SetCachedEnvPassphrase([]byte("supersecretpassphrase123"))
+	defer cli.SetCachedEnvPassphrase(nil)
 
 	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "init"})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
@@ -104,8 +104,8 @@ func TestCmdInit_ShortPassphrase(t *testing.T) {
 	vaultDir := t.TempDir()
 	vaultFlagReset(t)
 
-	_ = os.Setenv("SYMVAULT_PASSPHRASE", "short")
-	defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
+	cli.SetCachedEnvPassphrase([]byte("short"))
+	defer cli.SetCachedEnvPassphrase(nil)
 
 	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "init"})
 	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
@@ -130,8 +130,8 @@ func TestInit_ErrorPaths(t *testing.T) {
 		_ = os.Setenv("OPENPASS_VAULT", tmpDir)
 		defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
 
-		_ = os.Setenv("SYMVAULT_PASSPHRASE", "test")
-		defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
+		cli.SetCachedEnvPassphrase([]byte("test"))
+		defer cli.SetCachedEnvPassphrase(nil)
 
 		cli.RootCmd.SetArgs([]string{"--vault", tmpDir, "init"})
 		defer cli.RootCmd.SetArgs(nil)

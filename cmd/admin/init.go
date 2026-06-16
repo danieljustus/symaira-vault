@@ -36,8 +36,8 @@ var initCmd = &cobra.Command{
   symvault init ~/my-vault`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if !term.IsTerminal(int(os.Stdin.Fd())) && os.Getenv("SYMVAULT_PASSPHRASE") == "" {
-			return fmt.Errorf("init requires a TTY or SYMVAULT_PASSPHRASE env var; use `symvault setup` for interactive initialization")
+		if !term.IsTerminal(int(os.Stdin.Fd())) && !cli.HasCachedEnvPassphrase() {
+			return fmt.Errorf("init requires a TTY or SYMVAULT_PASSPHRASE/OPENPASS_PASSPHRASE env var; use `symvault setup` for interactive initialization")
 		}
 
 		var (
@@ -64,8 +64,8 @@ var initCmd = &cobra.Command{
 		}
 
 		var passphrase []byte
-		if envPassphrase := os.Getenv("SYMVAULT_PASSPHRASE"); envPassphrase != "" {
-			passphrase = []byte(envPassphrase)
+		if cached := cli.ConsumeCachedEnvPassphrase(); len(cached) > 0 {
+			passphrase = cached
 		} else {
 			passphrase, err = cli.ReadHiddenInput("Enter passphrase for vault identity (minimum 12 characters): ", nil)
 			if err != nil {
