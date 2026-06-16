@@ -116,15 +116,16 @@ func Open(vaultDir string, identity *age.X25519Identity) (*Vault, error) {
 	// Flush any pending manifest updates before checking consistency.
 	FlushManifestUpdates()
 
-	// Check manifest consistency: rebuild if missing, or if the manifest is stale
-	// (config generation counter > manifest generation counter, indicating unflushed
-	// writes from a prior crash).
+	// Check manifest consistency: rebuild in background if missing, or if the
+	// manifest is stale (config generation counter > manifest generation counter,
+	// indicating unflushed writes from a prior crash). The rebuild is
+	// non-blocking — reads are served from the directory walk while it runs.
 	if _, err := os.Stat(filepath.Join(vaultDir, manifestFileName)); os.IsNotExist(err) {
-		_ = RebuildManifest(vaultDir, identity) // best-effort
+		go func() { _ = RebuildManifest(vaultDir, identity) }()
 	} else if cfg.Vault != nil && cfg.Vault.ManifestGeneration > 0 {
 		m, loadErr := LoadManifest(vaultDir, identity)
 		if loadErr == nil && m.Generation < cfg.Vault.ManifestGeneration {
-			_ = RebuildManifest(vaultDir, identity) // best-effort
+			go func() { _ = RebuildManifest(vaultDir, identity) }()
 		}
 	}
 	if _, err := os.Stat(filepath.Join(vaultDir, ".git")); err == nil {
