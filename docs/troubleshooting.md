@@ -25,7 +25,7 @@ Before diving into detailed diagnostics, try these common solutions:
 | Permission denied | Check agent profile in `~/.symvault/config.yaml` |
 | Vault locked | Run `symvault unlock` and enter your passphrase |
 | Slow response | Check if vault has too many entries; consider organizing into subdirectories |
-| Token invalid | Regenerate with `symvault mcp-config <agent> --http` |
+| Token invalid | Regenerate with `symvault agent install <agent> --http --config-only` |
 | Changes not syncing | Run `symvault git push` manually |
 
 **General restart sequence:**
@@ -156,7 +156,7 @@ If `identity.age` is lost, **there is no recovery**. The identity file is the pr
 | Problem | Solution |
 |---------|----------|
 | "Agent not recognized" | Verify agent name in `--agent` flag matches `config.yaml` profile |
-| "Invalid bearer token" | Regenerate token: `symvault mcp-config <agent> --http` |
+| "Invalid bearer token" | Regenerate token: `symvault agent install <agent> --http --config-only` |
 | "Connection refused" | Ensure server is running on correct port; check firewall |
 | "Port already in use" | Use different port: `symvault serve --port 8081` |
 | Stdio mode hangs | Ensure no other process is reading from stdin |
@@ -170,7 +170,7 @@ curl -H "Authorization: Bearer $(cat ~/.symvault/mcp-token)" \
      http://127.0.0.1:8080/mcp
 
 # Generate config for testing
-symvault mcp-config default --http
+symvault agent install default --http --config-only
 ```
 
 ---
@@ -398,8 +398,8 @@ curl -H "Authorization: Bearer $(cat ~/.symvault/mcp-token)" \
      http://127.0.0.1:8080/mcp
 
 # Config generation
-symvault mcp-config default --http
-symvault mcp-config default
+symvault agent install default --http --config-only
+symvault agent install default --config-only
 ```
 
 ### Vault diagnostics
@@ -485,7 +485,7 @@ If the `mcp-token` file is accidentally deleted, the MCP HTTP server will regene
 
 5. Update agent configurations with the new token:
    ```bash
-   symvault mcp-config claude-code --http --include-token
+   symvault agent install claude-code --http --config-only
    ```
 
 **Impact**: All existing agent connections will be invalidated. Agents must be reconfigured with the new token.
@@ -524,7 +524,7 @@ NEW_TOKEN=$(cat ~/.symvault/mcp-token)
 echo "New token generated"
 
 # 7. Update all agent configurations
-symvault mcp-config claude-code --http --include-token
+symvault agent install claude-code --http --config-only
 # Repeat for each agent
 
 # 8. Verify new configuration works

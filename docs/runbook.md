@@ -823,7 +823,7 @@ sleep 2
 NEW_TOKEN=$(cat ~/.symvault/mcp-token)
 
 # 3. Update all agent configurations
-symvault mcp-config claude-code --http --include-token
+symvault agent install claude-code --http --config-only
 
 # 4. Verify health
 curl -H "Authorization: Bearer $NEW_TOKEN" \

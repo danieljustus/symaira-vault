@@ -213,6 +213,20 @@ docs-check:
 			errors=$$((errors + 1)); \
 		fi; \
 	done; \
+	for pattern in "symvault mcp-config" "symvault mcp token" "symvault mcp-token-rotate"; do \
+		if grep -r "$$pattern" README.md docs \
+			--exclude="migration-v3-to-v4.md" \
+			--exclude="MIGRATION-RENAME.md" \
+			--exclude-dir=adr \
+			--exclude-dir=man \
+			--exclude-dir=skills \
+			--exclude-dir=dist \
+			--exclude-dir=coverage \
+			--exclude-dir=node_modules 2>/dev/null; then \
+			echo "Found deprecated active documentation command: $$pattern"; \
+			errors=$$((errors + 1)); \
+		fi; \
+	done; \
 	for tool in "openpass_list" "openpass_get" "openpass_generate" "openpass_health"; do \
 		if grep -rE "\b$$tool\b" README.md docs homebrew .gitignore --exclude-dir=dist --exclude-dir=coverage --exclude-dir=node_modules 2>/dev/null; then \
 			echo "Found deprecated tool name: $$tool"; \

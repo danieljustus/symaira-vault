@@ -50,7 +50,7 @@ so Symaira Vault does not expose a listening socket and Hermes does not need a b
 token in config:
 
 ```bash
-symvault --vault ~/.symvault-vault mcp-config hermes --format hermes
+symvault --vault ~/.symvault-vault agent install hermes --config-only
 ```
 
 Add the output under `mcp_servers` in `~/.hermes/config.yaml` only after the
@@ -108,13 +108,13 @@ Symaira Vault exposes the following MCP tools for agent integration:
 For agents that support stdio MCP, use:
 
 ```bash
-symvault mcp-config openclaw
+symvault agent install openclaw --config-only
 ```
 
 For agents that support HTTP MCP with custom headers, use:
 
 ```bash
-symvault --vault ~/.symvault-vault mcp-config openclaw --http
+symvault --vault ~/.symvault-vault agent install openclaw --http --config-only
 ```
 
 HTTP mode requires a running Symaira Vault server:
@@ -183,13 +183,13 @@ Create fine-grained access tokens with restricted tool access and optional expir
 
 ```bash
 # Create a token limited to specific tools
-symvault mcp token create --agent hermes --tools list_entries,get_entry --expires 24h
+symvault agent token hermes new --tools list_entries,get_entry --expires 24h
 
 # List all active tokens
-symvault mcp token list
+symvault agent token list
 
 # Revoke a token
-symvault mcp token revoke <token-id>
+symvault agent token hermes revoke <token-id>
 ```
 
 Scoped tokens are stored with SHA-256 hashing and can be restricted to specific MCP tools
@@ -200,7 +200,7 @@ and time windows. This is safer than the global bearer token for multi-agent set
 If you suspect your MCP token has been compromised, rotate it:
 
 ```bash
-symvault mcp-token-rotate
+symvault agent token hermes rotate
 ```
 
 This invalidates the old token and generates a new one. Update any agent configurations
@@ -212,7 +212,7 @@ When generating MCP configurations that might be displayed in terminals or commi
 to version control, use the `--redact` flag:
 
 ```bash
-symvault mcp-config claude-code --http --redact
+symvault agent install claude-code --http --config-only
 ```
 
 This outputs `env:SYMVAULT_MCP_TOKEN` instead of the actual token. Agents using
@@ -221,7 +221,7 @@ redacted configs must have `SYMVAULT_MCP_TOKEN` set in their environment.
 For automated scripts that need the raw token:
 
 ```bash
-TOKEN=$(symvault mcp-config <agent> --token-only)
+TOKEN=$(symvault agent token <agent> new --tools list_entries --expires 24h --json | jq -r .token)
 ```
 
 ## OAuth Dynamic Client Registration

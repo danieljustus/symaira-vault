@@ -130,7 +130,7 @@ Claude Code does not use the `.mcpb` bundle format directly. Instead, configure 
 Or use the automatic config generator:
 
 ```bash
-symvault mcp-config claude-code
+symvault agent install claude-code --config-only
 ```
 
 ## Building from Source
