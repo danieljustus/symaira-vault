@@ -139,7 +139,7 @@ func readEntryInner(vaultDir, path string, identity *age.X25519Identity, pseudoK
 
 	var filePath string
 	if pseudoKey != nil {
-		filePath = entryStoragePathCached(vaultDir, path, cfg, pseudoKey)
+		filePath = entryStoragePathCached(vaultDir, path, pseudoKey)
 	} else {
 		filePath = entryStoragePath(vaultDir, path, identity, cfg)
 	}

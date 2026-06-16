@@ -63,9 +63,9 @@ var exportCmd = &cobra.Command{
 			// Read all entries
 			var exportEntries []exporter.ExportEntry
 			for _, entryPath := range entries {
-				entry, err := vs.GetEntry(entryPath)
-				if err != nil {
-					return fmt.Errorf("read entry %s: %w", entryPath, err)
+				entry, readErr := vs.GetEntry(entryPath)
+				if readErr != nil {
+					return fmt.Errorf("read entry %s: %w", entryPath, readErr)
 				}
 				exportEntries = append(exportEntries, exporter.ExportEntry{
 					Path: entryPath,
@@ -76,9 +76,9 @@ var exportCmd = &cobra.Command{
 			// Determine output destination
 			var w io.Writer
 			if ExportOutput != "" {
-				f, err := os.Create(ExportOutput) //nolint:gosec G304 — output path is user-provided CLI argument
-				if err != nil {
-					return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "create output file", err)
+				f, createErr := os.Create(ExportOutput) //nolint:gosec G304 — output path is user-provided CLI argument
+				if createErr != nil {
+					return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "create output file", createErr)
 				}
 				defer func() { _ = f.Close() }()
 				w = f

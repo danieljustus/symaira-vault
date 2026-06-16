@@ -50,13 +50,19 @@ func validateLegacyEntryPath(vaultDir, path string) error {
 	filePath := legacyEntryFilePath(vaultDir, path)
 	cleanPath := filepath.Clean(filePath)
 	vaultDirClean := filepath.Clean(vaultDir)
-	if !strings.HasPrefix(cleanPath, vaultDirClean+string(filepath.Separator)) || cleanPath == filepath.Join(vaultDirClean, "identity.age") {
+	if !strings.HasPrefix(cleanPath, vaultDirClean+string(filepath.Separator)) || cleanPath == filepath.Join(vaultDirClean, identityAgeName) {
 		return fmt.Errorf("legacy entry path %q escapes vault entry namespace", path)
 	}
 	return nil
 }
 
 const entriesDirName = "entries"
+
+const (
+	entryExtAge     = ".age"
+	identityAgeName = "identity.age"
+	manifestAgeName = "manifest.age"
+)
 
 func entriesDir(vaultDir string) string {
 	return filepath.Join(vaultDir, entriesDirName)
@@ -68,7 +74,7 @@ func canUseLegacyEntryPath(path string) bool {
 }
 
 func legacyEntryFilePath(vaultDir, path string) string {
-	return filepath.Join(vaultDir, filepath.FromSlash(path)+".age")
+	return filepath.Join(vaultDir, filepath.FromSlash(path)+entryExtAge)
 }
 
 func migrateLegacyEntries(vaultDir string) error {
@@ -94,7 +100,7 @@ func migrateLegacyEntries(vaultDir string) error {
 			}
 			return nil
 		}
-		if filepath.Ext(path) != ".age" {
+		if filepath.Ext(path) != entryExtAge {
 			return nil
 		}
 		rel, err := filepath.Rel(vaultDirClean, path)
@@ -102,7 +108,7 @@ func migrateLegacyEntries(vaultDir string) error {
 			return err
 		}
 		relSlash := filepath.ToSlash(rel)
-		if relSlash == "identity.age" || relSlash == "manifest.age" {
+		if relSlash == identityAgeName || relSlash == manifestAgeName {
 			return nil
 		}
 		target := filepath.Join(entriesDirClean, rel)
@@ -119,7 +125,7 @@ func migrateLegacyEntries(vaultDir string) error {
 }
 
 func entryFilePath(vaultDir, path string) string {
-	return filepath.Join(entriesDir(vaultDir), filepath.FromSlash(path)+".age")
+	return filepath.Join(entriesDir(vaultDir), filepath.FromSlash(path)+entryExtAge)
 }
 
 func derivePseudonymizationKey(identity *age.X25519Identity) []byte {
@@ -137,15 +143,15 @@ func entryStoragePath(vaultDir, path string, identity *age.X25519Identity, cfg *
 	if identity != nil && isPseudonymizeEnabled(cfg) {
 		key := derivePseudonymizationKey(identity)
 		hash := pseudonymizePath(path, key)
-		return filepath.Join(entriesDir(vaultDir), hash[:2], hash+".age")
+		return filepath.Join(entriesDir(vaultDir), hash[:2], hash+entryExtAge)
 	}
 	return entryFilePath(vaultDir, path)
 }
 
-func entryStoragePathCached(vaultDir, path string, cfg *vaultconfig.Config, pseudoKey []byte) string {
+func entryStoragePathCached(vaultDir, path string, pseudoKey []byte) string {
 	if pseudoKey != nil {
 		hash := pseudonymizePath(path, pseudoKey)
-		return filepath.Join(entriesDir(vaultDir), hash[:2], hash+".age")
+		return filepath.Join(entriesDir(vaultDir), hash[:2], hash+entryExtAge)
 	}
 	return entryFilePath(vaultDir, path)
 }

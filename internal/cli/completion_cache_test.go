@@ -94,16 +94,16 @@ func TestCompletionCache_ConcurrentAccess(t *testing.T) {
 	c := newCompletionCache()
 	var wg sync.WaitGroup
 
-	for i := range 100 {
+	for range 100 {
 		wg.Add(1)
-		go func(i int) {
+		go func() {
 			defer wg.Done()
 			dir := "/vault/concurrent"
 			c.Set(dir, []string{"entry"})
 			c.Get(dir)
 			c.Invalidate(dir)
 			c.Get(dir)
-		}(i)
+		}()
 	}
 	wg.Wait()
 }

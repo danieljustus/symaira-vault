@@ -7,7 +7,9 @@ import (
 	"testing"
 
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
+	"github.com/danieljustus/symaira-vault/internal/config"
 	"github.com/danieljustus/symaira-vault/internal/importer"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func TestDetectFormatFromExt(t *testing.T) {
@@ -90,6 +92,16 @@ func TestImportCommandAutoDetectCSV(t *testing.T) {
 		t.Fatalf("write csv: %v", err)
 	}
 
+	vaultDir := t.TempDir()
+	passphrase := "test-passphrase"
+	if _, err := vaultpkg.InitWithPassphrase(vaultDir, []byte(passphrase), config.Default()); err != nil {
+		t.Fatalf("init vault: %v", err)
+	}
+	origVault := cli.Vault
+	cli.Vault = vaultDir
+	t.Cleanup(func() { cli.Vault = origVault })
+	t.Setenv("SYMVAULT_PASSPHRASE", passphrase)
+
 	// Reset global flags
 	oldFormat := ImportFormat
 	oldDryRun := ImportDryRun
@@ -114,6 +126,16 @@ func TestImportCommandExplicitFormatOverride(t *testing.T) {
 	if err := os.WriteFile(csvFile, []byte("title,username,password\ngithub,user,pass123\n"), 0o600); err != nil {
 		t.Fatalf("write csv: %v", err)
 	}
+
+	vaultDir := t.TempDir()
+	passphrase := "test-passphrase"
+	if _, err := vaultpkg.InitWithPassphrase(vaultDir, []byte(passphrase), config.Default()); err != nil {
+		t.Fatalf("init vault: %v", err)
+	}
+	origVault := cli.Vault
+	cli.Vault = vaultDir
+	t.Cleanup(func() { cli.Vault = origVault })
+	t.Setenv("SYMVAULT_PASSPHRASE", passphrase)
 
 	// Reset global flags
 	oldFormat := ImportFormat

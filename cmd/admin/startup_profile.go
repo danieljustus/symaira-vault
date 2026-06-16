@@ -9,7 +9,6 @@ import (
 	"runtime"
 	"runtime/trace"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -158,10 +157,14 @@ func runProfileWithTrace(cmd *cobra.Command) error {
 	if err != nil {
 		return fmt.Errorf("cannot create trace file: %w", err)
 	}
-	defer f.Close()
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil {
+			cmd.Printf("Warning: closing trace file: %v\n", closeErr)
+		}
+	}()
 
-	if err := trace.Start(f); err != nil {
-		return fmt.Errorf("cannot start trace: %w", err)
+	if traceErr := trace.Start(f); traceErr != nil {
+		return fmt.Errorf("cannot start trace: %w", traceErr)
 	}
 	defer trace.Stop()
 
@@ -247,27 +250,4 @@ func percentile(sorted []time.Duration, pct int) time.Duration {
 		idx = len(sorted) - 1
 	}
 	return sorted[idx]
-}
-
-func formatDuration(d time.Duration) string {
-	if d < time.Microsecond {
-		return fmt.Sprintf("%dns", d.Nanoseconds())
-	}
-	if d < time.Millisecond {
-		return fmt.Sprintf("%.1fµs", float64(d.Microseconds()))
-	}
-	if d < time.Second {
-		return fmt.Sprintf("%.1fms", float64(d.Nanoseconds())/1e6)
-	}
-	return fmt.Sprintf("%.2fs", d.Seconds())
-}
-
-// parseChildOutput parses the nanosecond value output by a child profiling run.
-func parseChildOutput(line string) (time.Duration, error) {
-	line = strings.TrimSpace(line)
-	ns, err := strconv.ParseInt(line, 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("invalid child output: %q", line)
-	}
-	return time.Duration(ns), nil
 }

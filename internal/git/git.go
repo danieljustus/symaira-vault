@@ -1,3 +1,4 @@
+// Package git provides local git operations for the Symaira Vault repository.
 package git
 
 import (
