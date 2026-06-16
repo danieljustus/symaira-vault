@@ -21,9 +21,11 @@ func GeneratePassword(length int, useSymbols bool) (string, func(), error) {
 }
 
 func generatePasswordWithReader(length int, useSymbols bool, reader io.Reader) (string, func(), error) {
+	// Ambiguous-character-free charset: excludes l, I, 1, O, 0 to avoid
+	// confusion in passwords displayed in terminals or printed media.
 	const (
-		letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-		symbols = "!@#$%^&*()_+-=[]{}|;:,.<>?"
+		letters = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789"
+		symbols = "!@#$%^&*()-_=+[]{}|;:,.<>?/~"
 	)
 
 	if length <= 0 {

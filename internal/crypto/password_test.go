@@ -257,3 +257,20 @@ func TestAssessPasswordStrength_ExactBoundary(t *testing.T) {
 		t.Error("expected Weak=true for 10 lowercase chars (≈47 bits < 60)")
 	}
 }
+
+func TestGeneratePassword_NoAmbiguousChars(t *testing.T) {
+	ambiguousChars := "lI1O0"
+	password, cleanup, err := GeneratePassword(1000, true)
+	if cleanup != nil {
+		defer cleanup()
+	}
+	if err != nil {
+		t.Fatalf("GeneratePassword() error = %v", err)
+	}
+
+	for _, c := range password {
+		if strings.ContainsRune(ambiguousChars, c) {
+			t.Errorf("password contains ambiguous character %q", c)
+		}
+	}
+}
