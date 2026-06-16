@@ -80,6 +80,7 @@ type Server struct {
 	transport    string
 	policyEngine *policy.Engine
 	shareStore   *ShareStore
+	tools        []toolDefinition // per-instance tool set, populated from global registry
 
 	approvalCache      *approvalCache
 	approvalKeyCounter atomic.Int64
@@ -100,6 +101,17 @@ func (s *Server) SessionID() string {
 		return ""
 	}
 	return s.sessionID
+}
+
+// ToolDefinitions returns a snapshot of the server's tool definitions.
+// This enables per-instance tool sets without global state mutation.
+func (s *Server) ToolDefinitions() []toolDefinition {
+	if s == nil {
+		return nil
+	}
+	result := make([]toolDefinition, len(s.tools))
+	copy(result, s.tools)
+	return result
 }
 
 // New creates a new MCP server instance with the specified vault and agent configuration.
@@ -177,6 +189,7 @@ func New(v *vault.Vault, agentName string, transport string) (*Server, error) {
 		auditLog:            auditLog,
 		transport:           transport,
 		policyEngine:        policyEngine,
+		tools:               toolDefinitions(),
 		approvalCache:       newApprovalCache(),
 		hookRegistry:        NewHookRegistry(),
 		sessionID:           sessionID,
