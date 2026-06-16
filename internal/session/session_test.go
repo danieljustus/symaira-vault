@@ -1286,3 +1286,86 @@ func TestDecryptPassphrase_FailsWithWrongKey(t *testing.T) {
 		t.Fatal("decryptPassphrase with wrong key should fail")
 	}
 }
+
+func TestSetDefaultManager_And_DefaultManager(t *testing.T) {
+	original := DefaultManager()
+	defer SetDefaultManager(original)
+
+	fake := newFakeKeyring()
+	mgr := NewManager(fake, nil)
+
+	SetDefaultManager(mgr)
+	if got := DefaultManager(); got != mgr {
+		t.Errorf("DefaultManager() = %v, want %v", got, mgr)
+	}
+}
+
+func TestPackageLevelFunctions(t *testing.T) {
+	fake := newFakeKeyring()
+	mgr := NewManager(fake, nil)
+	SetDefaultManager(mgr)
+
+	vaultDir := "/tmp/vault-package-level"
+	setupTestWrapKey(t, fake, vaultDir)
+
+	err := SavePassphrase(vaultDir, []byte("secret"), time.Hour)
+	if err != nil {
+		t.Fatalf("SavePassphrase failed: %v", err)
+	}
+
+	pass, err := LoadPassphrase(vaultDir)
+	if err != nil {
+		t.Fatalf("LoadPassphrase failed: %v", err)
+	}
+	if string(pass) != "secret" {
+		t.Errorf("LoadPassphrase = %q, want %q", string(pass), "secret")
+	}
+
+	if IsSessionExpired(vaultDir) {
+		t.Error("IsSessionExpired = true, want false")
+	}
+
+	err = ClearSession(vaultDir)
+	if err != nil {
+		t.Fatalf("ClearSession failed: %v", err)
+	}
+
+	identity := "AGE-SECRET-KEY-1FAKE0000000000000000000000000000000000000000000000000000000"
+	err = SaveIdentity(vaultDir, identity, time.Hour)
+	if err != nil {
+		t.Fatalf("SaveIdentity failed: %v", err)
+	}
+
+	loaded, err := LoadIdentity(vaultDir)
+	if err != nil {
+		t.Fatalf("LoadIdentity failed: %v", err)
+	}
+	if loaded != identity {
+		t.Errorf("LoadIdentity = %q, want %q", loaded, identity)
+	}
+
+	err = ClearIdentity(vaultDir)
+	if err != nil {
+		t.Fatalf("ClearIdentity failed: %v", err)
+	}
+}
+
+func TestFallbackKeyring_ActivateFallback(t *testing.T) {
+	primary := newFakeKeyring()
+	fb := NewFallbackKeyring(primary)
+
+	fbImpl, ok := fb.(*fallbackKeyring)
+	if !ok {
+		t.Fatal("NewFallbackKeyring did not return *fallbackKeyring")
+	}
+
+	if fbImpl.IsFallbackActive() {
+		t.Error("IsFallbackActive() = true, want false")
+	}
+
+	fbImpl.ActivateFallback()
+
+	if !fbImpl.IsFallbackActive() {
+		t.Error("IsFallbackActive() = false, want true")
+	}
+}
