@@ -14,6 +14,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"filippo.io/age"
 )
 
 func TestLoadOrCreateTokenCreatesFile(t *testing.T) {
@@ -1653,5 +1655,53 @@ func TestTokenRegistry_SaveConcurrentCreateNoLoss(t *testing.T) {
 	}
 	if tokens := reg2.List(); len(tokens) != N {
 		t.Fatalf("loaded %d tokens, want %d", len(tokens), N)
+	}
+}
+
+func TestTokenRegistry_EncryptedAtRest(t *testing.T) {
+	identity, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatalf("GenerateX25519Identity() error = %v", err)
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mcp-tokens.json")
+	reg := NewTokenRegistry(path)
+	reg.SetIdentity(identity)
+
+	if _, _, err := reg.Create("secret-agent", []string{"find_entries"}, "test", 1*time.Hour); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+	if err := reg.Save(); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Plaintext JSON should NOT exist when encrypted mode is active.
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatal("plaintext mcp-tokens.json should not exist when encrypted mode is active")
+	}
+
+	// Encrypted file should exist.
+	encryptedPath := TokenRegistryEncryptedFilePath(dir)
+	if _, err := os.Stat(encryptedPath); err != nil {
+		t.Fatalf("registry.age should exist, got: %v", err)
+	}
+
+	// Reload with same identity.
+	reg2 := NewTokenRegistry(path)
+	reg2.SetIdentity(identity)
+	if err := reg2.Load(); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if tokens := reg2.List(); len(tokens) != 1 {
+		t.Fatalf("loaded %d tokens, want 1", len(tokens))
+	}
+
+	// Reload with wrong identity should fail or return empty.
+	wrongIdentity, _ := age.GenerateX25519Identity()
+	reg3 := NewTokenRegistry(path)
+	reg3.SetIdentity(wrongIdentity)
+	if err := reg3.Load(); err == nil {
+		t.Fatal("Load() with wrong identity should fail")
 	}
 }
