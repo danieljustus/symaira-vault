@@ -63,17 +63,4 @@ func (s *Server) sanitizeKnownSecretValues(text string, resolvedEnv map[string]s
 	return masking.SanitizeWithKnownSecrets(text, resolvedEnv, "***")
 }
 
-func init() {
-	RegisterTool(toolDefinition{
-		Name:        "sanitize_output",
-		Description: "Scan text for secrets and replace them with masked values. Use before sending output to LLM chat.",
-		InputSchema: objectSchema([]string{"text"}, map[string]schemaProperty{
-			"text":              {Type: "string", Description: "Text to scan for secrets"},
-			"mask_with_op_refs": {Type: "boolean", Description: "Replace vault-known secrets with op:// references"},
-			"mask":              {Type: "string", Description: "Custom mask string (default: ***)"},
-		}),
-		Handler:      (*Server).handleSanitizeOutput,
-		RiskLevel:    RiskLevelLow,
-		ReadOnlyHint: true,
-	})
-}
+

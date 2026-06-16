@@ -297,26 +297,4 @@ func (s *Server) handlePerplexityAsk(ctx context.Context, req mcp.CallToolReques
 	return mcp.NewToolResultText(string(resultJSON)), nil
 }
 
-func init() {
-	RegisterTool(toolDefinition{
-		Name:        "perplexity_search",
-		Description: "Search the web using Perplexity AI. Returns synthesized search results with citations from the web.",
-		InputSchema: objectSchema([]string{"query"}, map[string]schemaProperty{
-			"query": {Type: "string", Description: "Natural language search query"},
-		}),
-		Handler:      (*Server).handlePerplexitySearch,
-		RiskLevel:    RiskLevelLow,
-		ReadOnlyHint: true,
-	})
-	RegisterTool(toolDefinition{
-		Name:        "perplexity_ask",
-		Description: "Ask Perplexity AI a question with optional vault entry context. Returns an AI-generated answer with citations.",
-		InputSchema: objectSchema([]string{"question"}, map[string]schemaProperty{
-			"question": {Type: "string", Description: "Question to ask Perplexity AI"},
-			"context":  {Type: "string", Description: "Optional context from vault entries to include in the question"},
-		}),
-		Handler:      (*Server).handlePerplexityAsk,
-		RiskLevel:    RiskLevelLow,
-		ReadOnlyHint: true,
-	})
-}
+

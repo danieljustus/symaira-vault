@@ -49,27 +49,4 @@ func (s *Server) handleDelete(ctx context.Context, req mcp.CallToolRequest) (*mc
 	return mcp.NewToolResultText(fmt.Sprintf("Successfully deleted entry: %s", path)), nil
 }
 
-func init() {
-	RegisterTool(toolDefinition{
-		Name:        "delete_entry",
-		Description: "Delete a password entry by path",
-		InputSchema: objectSchema([]string{"path"}, map[string]schemaProperty{
-			"path": {Type: "string", Description: "Entry path to delete"},
-		}),
-		Handler:         (*Server).handleDelete,
-		RiskLevel:       RiskLevelCritical,
-		DestructiveHint: true,
-	})
-	RegisterTool(toolDefinition{
-		Name:        "symaira_delete",
-		Description: "Deprecated alias for delete_entry. Use delete_entry for new clients.",
-		InputSchema: objectSchema([]string{"path"}, map[string]schemaProperty{
-			"path": {Type: "string", Description: "Entry path to delete"},
-		}),
-		Handler:         (*Server).handleDelete,
-		Deprecated:      true,
-		AliasFor:        "delete_entry",
-		RiskLevel:       RiskLevelCritical,
-		DestructiveHint: true,
-	})
-}
+

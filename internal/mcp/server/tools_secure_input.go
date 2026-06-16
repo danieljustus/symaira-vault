@@ -111,23 +111,4 @@ func (s *Server) promptAndStore(
 	return mcp.NewToolResultText(fmt.Sprintf("Securely stored %s.%s = *** (value hidden from agent)", req.Path, req.Field)), nil
 }
 
-func init() {
-	RegisterTool(toolDefinition{
-		Name:        "secure_input",
-		Description: "Prompt the user for sensitive data via TTY or native GUI dialog and store it without exposing the value to the agent",
-		InputSchema: objectSchema([]string{"path", "field"}, map[string]schemaProperty{
-			"path":        {Type: "string", Description: "Entry path to store the value"},
-			"field":       {Type: "string", Description: "Field name to store the value under"},
-			"description": {Type: "string", Description: "Optional description shown to the user in the prompt"},
-		}),
-		Handler:         (*Server).handleSecureInput,
-		Available:       secureInputToolAvailable,
-		RiskLevel:       RiskLevelCritical,
-		DestructiveHint: true,
-		Capabilities: &ToolCapabilities{
-			RequiresTTY:  true,
-			RequiresGUI:  true,
-			Alternatives: []string{"set_entry_field"},
-		},
-	})
-}
+

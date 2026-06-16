@@ -471,21 +471,4 @@ func executeAPIAvailable(s *Server) bool {
 	return s != nil && s.agent != nil && s.agent.CanRunCommands != nil && *s.agent.CanRunCommands
 }
 
-func init() {
-	RegisterTool(toolDefinition{
-		Name:        "execute_api_request",
-		Description: "Execute an HTTP API request using a named template with vault-injected credentials. The agent never sees the credential values. Requires command execution permission.",
-		InputSchema: objectSchema([]string{"template", "endpoint"}, map[string]schemaProperty{
-			"template": {Type: "string", Description: "API template name (e.g. github, openai, anthropic, slack)"},
-			"endpoint": {Type: "string", Description: "API endpoint path (e.g. /repos/owner/repo)"},
-			"method":   {Type: "string", Description: "HTTP method (default: GET)"},
-			"body":     {Type: "string", Description: "Request body (optional)"},
-			"headers":  {Type: "object", Description: "Additional request headers (optional)"},
-			"timeout":  {Type: "number", Description: "Timeout in seconds (default: 30)"},
-		}),
-		Handler:         (*Server).handleExecuteAPIRequest,
-		Available:       executeAPIAvailable,
-		RiskLevel:       RiskLevelCritical,
-		DestructiveHint: true,
-	})
-}
+

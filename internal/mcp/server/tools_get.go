@@ -298,36 +298,4 @@ func inferFieldKind(v any) string {
 	}
 }
 
-func init() {
-	RegisterTool(toolDefinition{
-		Name:        "get_entry",
-		Description: "Get metadata for a vault entry. Returns type, usage hints, and field names without secret values. Use get_entry_value to retrieve actual values.",
-		InputSchema: objectSchema([]string{"path"}, map[string]schemaProperty{
-			"path":          {Type: "string", Description: "Entry path"},
-			"include_value": {Type: "boolean", Description: "When true, returns the full entry with secret values. Default: false."},
-		}),
-		Handler:      (*Server).handleGet,
-		RiskLevel:    RiskLevelMedium,
-		ReadOnlyHint: true,
-	})
-	RegisterTool(toolDefinition{
-		Name:        "get_entry_value",
-		Description: "Get the actual secret values for a vault entry. Use with caution - only request values when absolutely needed.",
-		InputSchema: objectSchema([]string{"path"}, map[string]schemaProperty{
-			"path": {Type: "string", Description: "Entry path"},
-		}),
-		Handler:      (*Server).handleGetValue,
-		RiskLevel:    RiskLevelHigh,
-		ReadOnlyHint: true,
-	})
-	RegisterTool(toolDefinition{
-		Name:        "get_entry_metadata",
-		Description: "Get metadata for a vault entry without retrieving sensitive data",
-		InputSchema: objectSchema([]string{"path"}, map[string]schemaProperty{
-			"path": {Type: "string", Description: "Entry path"},
-		}),
-		Handler:      (*Server).handleGetMetadata,
-		RiskLevel:    RiskLevelMedium,
-		ReadOnlyHint: true,
-	})
-}
+

@@ -159,18 +159,4 @@ func extractPathFromRef(ref string) string {
 	return ref
 }
 
-func init() {
-	RegisterTool(toolDefinition{
-		Name:        "run_command",
-		Description: "Execute a command on the host with secrets injected as environment variables. Requires write permission.",
-		InputSchema: objectSchema([]string{"command"}, map[string]schemaProperty{
-			"command":     {Type: "array", Description: "\"Command and arguments as an array (e.g. [\"curl\", \"https://api.example.com\"])"},
-			"env":         {Type: "object", Description: "\"Map of environment variable names to secret references (e.g. {\"API_KEY\": \"github.api_key\"})"},
-			"working_dir": {Type: "string", Description: "Working directory for the command"},
-			"timeout":     {Type: "number", Description: "Timeout in seconds (default: 30)"},
-		}),
-		Handler:         (*Server).handleRunCommand,
-		RiskLevel:       RiskLevelHigh,
-		DestructiveHint: true,
-	})
-}
+

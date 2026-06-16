@@ -72,16 +72,4 @@ func (s *Server) handleAutotype(ctx context.Context, req mcp.CallToolRequest) (*
 	return mcp.NewToolResultText(`{"success": true}`), nil
 }
 
-func init() {
-	RegisterTool(toolDefinition{
-		Name:        "autotype",
-		Description: "Type a vault entry field value as keyboard input into the currently focused application without exposing the value to the agent",
-		InputSchema: objectSchema([]string{"path"}, map[string]schemaProperty{
-			"path":  {Type: "string", Description: "Entry path"},
-			"field": {Type: "string", Description: "Field name to type (default: password)"},
-		}),
-		Handler:         (*Server).handleAutotype,
-		RiskLevel:       RiskLevelHigh,
-		DestructiveHint: true,
-	})
-}
+

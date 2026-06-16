@@ -121,15 +121,4 @@ func (s *Server) handleSecretUnseal(ctx context.Context, req mcp.CallToolRequest
 	return mcp.NewToolResultText(value), nil
 }
 
-func init() {
-	RegisterTool(toolDefinition{
-		Name:        "secret_unseal",
-		Description: "Unseal a secret handle to reveal its value. High-sensitivity entries return handles (op://path/field) instead of plaintext. This tool resolves those handles. Requires user approval per handle.",
-		InputSchema: objectSchema([]string{"handle"}, map[string]schemaProperty{
-			"handle": {Type: "string", Description: "Secret handle to unseal (e.g. op://github/password)"},
-		}),
-		Handler:      (*Server).handleSecretUnseal,
-		RiskLevel:    RiskLevelHigh,
-		ReadOnlyHint: true,
-	})
-}
+
