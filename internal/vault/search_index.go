@@ -523,7 +523,7 @@ func (idx *EncryptedIndex) loadFromDisk(vaultDir string, identity *age.X25519Ide
 		_ = os.Remove(indexPath)
 		return listErr
 	}
-	if doc.EntryCount > 0 && doc.EntryCount != len(paths) {
+	if doc.EntryCount != len(paths) {
 		_ = os.Remove(indexPath)
 		return errors.New("stale index")
 	}
