@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/danieljustus/symaira-vault/internal/secrets"
+	"github.com/danieljustus/symaira-vault/internal/secureui"
 	"github.com/danieljustus/symaira-vault/internal/vault/taint"
 )
 
@@ -52,9 +53,9 @@ func (s *Server) requireApproval(ctx context.Context, intent Intent) error {
 		s.logAudit(ctx, "approval."+intent.Action+".denied", intent.EntryPath, false)
 		return fmt.Errorf("%s denied: approval mode is 'deny'", intent.Action)
 	case "prompt":
-		if !IsTTYPresent() {
+		if !IsTTYPresent() && secureui.Detect() == secureui.CapNone {
 			s.logAudit(ctx, "approval."+intent.Action+".denied", intent.EntryPath, false)
-			return fmt.Errorf("%s requires approval but no TTY available", intent.Action)
+			return fmt.Errorf("%s requires approval but no TTY or GUI dialog available", intent.Action)
 		}
 
 		riskLevel := toolRiskLevel(intent.Action)
@@ -75,6 +76,30 @@ func (s *Server) requireApproval(ctx context.Context, intent Intent) error {
 		}
 		if timeout <= 0 {
 			timeout = defaultTimeout
+		}
+
+		if !IsTTYPresent() && secureui.Detect() == secureui.CapGUI {
+			result, err := secureui.PromptApproval(secureui.ApprovalRequest{
+				Operation:   intent.Action,
+				Details:     intent.Summary,
+				Timeout:     timeout,
+				CanRemember: riskLevel.CanRemember(),
+			})
+			if err != nil {
+				return fmt.Errorf("%s approval failed: %w", intent.Action, err)
+			}
+			if !result.Approved {
+				s.logAudit(ctx, "approval."+intent.Action+".denied", intent.EntryPath, false)
+				return fmt.Errorf("%s denied: user did not approve", intent.Action)
+			}
+			if result.Remembered && riskLevel.CanRemember() && s.approvalCache != nil {
+				cacheKey := approvalCacheKey(s.agent.Name, intent.Action, intent.EntryPath)
+				s.approvalCache.setRemembered(cacheKey)
+				s.logAudit(ctx, "approval."+intent.Action+".remembered", intent.EntryPath, true)
+			}
+			s.approvalKeyCounter.Add(1)
+			s.logAudit(ctx, "approval."+intent.Action+".granted", intent.EntryPath, true)
+			return nil
 		}
 
 		workingDir := getWorkingDir()

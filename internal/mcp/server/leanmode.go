@@ -16,6 +16,7 @@ var LeanToolSet = []string{
 	"find_entries",
 	"get_entry_metadata",
 	"request_credential",
+	"set_entry_field",
 	"symaira_audit_self",
 }
 
