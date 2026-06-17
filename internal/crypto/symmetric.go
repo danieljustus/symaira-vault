@@ -22,17 +22,26 @@ const ageArgon2idLabel = "symvault-argon2id-v1"
 const argon2idStanzaType = "argon2id"
 
 type argon2idRecipient struct {
-	passphrase string
+	passphrase []byte
 	params     Argon2idParams
 }
 
+// NewArgon2idRecipient builds an age.Recipient that derives its wrapping key
+// from the passphrase via Argon2id.
+//
+// The passphrase is copied into a buffer owned by the recipient. This is
+// deliberate: callers alias their secret with unsafe.String and Wipe it
+// immediately after construction, so the recipient must not retain a reference
+// to the caller's backing array — otherwise key derivation (which happens later,
+// inside age.Encrypt) would run over zeroed memory and the passphrase would be
+// silently ignored.
 func NewArgon2idRecipient(passphrase string, params Argon2idParams) age.Recipient {
 	params = resolveArgon2idParams(params)
 	if params.Time == 0 && params.Memory == 0 && params.Threads == 0 {
 		params = DefaultArgon2idParams()
 	}
 	return &argon2idRecipient{
-		passphrase: passphrase,
+		passphrase: append([]byte(nil), passphrase...),
 		params:     params,
 	}
 }
@@ -43,7 +52,7 @@ func (r *argon2idRecipient) Wrap(fileKey []byte) ([]*age.Stanza, error) {
 		return nil, err
 	}
 
-	l, err := Argon2idDeriveKey([]byte(r.passphrase), salt, r.params)
+	l, err := Argon2idDeriveKey(r.passphrase, salt, r.params)
 	if err != nil {
 		return nil, fmt.Errorf("argon2id derive key: %w", err)
 	}
@@ -79,12 +88,16 @@ func (r *argon2idRecipient) Wrap(fileKey []byte) ([]*age.Stanza, error) {
 }
 
 type argon2idIdentity struct {
-	passphrase string
+	passphrase []byte
 }
 
+// NewArgon2idIdentity builds an age.Identity that derives its unwrapping key
+// from the passphrase via Argon2id. The passphrase is copied into a buffer
+// owned by the identity for the same reason as NewArgon2idRecipient: callers
+// Wipe their copy immediately, and Unwrap runs later inside age.Decrypt.
 func NewArgon2idIdentity(passphrase string) age.Identity {
 	return &argon2idIdentity{
-		passphrase: passphrase,
+		passphrase: append([]byte(nil), passphrase...),
 	}
 }
 
@@ -107,7 +120,7 @@ func (id *argon2idIdentity) Unwrap(stanzas []*age.Stanza) ([]byte, error) {
 			continue
 		}
 
-		l, kdfErr := Argon2idDeriveKey([]byte(id.passphrase), salt, params)
+		l, kdfErr := Argon2idDeriveKey(id.passphrase, salt, params)
 		if kdfErr != nil {
 			continue
 		}
