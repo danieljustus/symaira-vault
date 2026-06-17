@@ -92,7 +92,7 @@ func runProfileBenchmark(cmd *cobra.Command) error {
 
 	for i := 0; i < count; i++ {
 		start := time.Now()
-		c := exec.Command(binary)
+		c := exec.Command(binary) // #nosec G204 -- binary from os.Executable(), not user input
 		c.Env = append(cleanEnv(), envProfileChild+"=1")
 		c.Stdout = nil
 		c.Stderr = nil
@@ -153,7 +153,7 @@ func runProfileBenchmark(cmd *cobra.Command) error {
 }
 
 func runProfileWithTrace(cmd *cobra.Command) error {
-	f, err := os.Create(startupProfileTraceFile)
+	f, err := os.Create(startupProfileTraceFile) // #nosec G304 -- trace file path from CLI flag, not untrusted input
 	if err != nil {
 		return fmt.Errorf("cannot create trace file: %w", err)
 	}
@@ -178,7 +178,7 @@ func runProfileWithTrace(cmd *cobra.Command) error {
 	times := make([]time.Duration, 0, 5)
 	for i := 0; i < 5; i++ {
 		start := time.Now()
-		c := exec.Command(binary)
+		c := exec.Command(binary) // #nosec G204 -- binary from os.Executable(), not user input
 		c.Env = append(cleanEnv(), envProfileChild+"=1")
 		c.Stdout = nil
 		c.Stderr = nil

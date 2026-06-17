@@ -96,7 +96,7 @@ Use --format to override auto-detection or when the file extension does not matc
 			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "invalid CSV mapping", err)
 		}
 
-		source, err := os.Open(sourcePath) //nolint:gosec G304 — import source path is user-provided CLI argument
+		source, err := os.Open(sourcePath) // #nosec G304 -- import source path is user-provided CLI argument
 		if err != nil {
 			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "open import source", err)
 		}
