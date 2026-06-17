@@ -192,16 +192,30 @@ func OpenWithPassphrase(vaultDir string, passphrase []byte) (*Vault, error) {
 		vaultcrypto.Wipe(migrationPassphrase)
 		return nil, err
 	}
+	// Only auto-migrate the identity KDF when the user has explicitly opted in.
+	// Rewriting the master identity file in place is not something to do silently
+	// on every open; vaults that don't opt in are flagged as migratable instead.
 	if format != "argon2id" {
-		_ = MigrateKDF(vaultDir, identity, migrationPassphrase, v)
+		if v.Config != nil && v.Config.Vault != nil && v.Config.Vault.AutoMigrateKDF {
+			_ = MigrateKDF(vaultDir, identity, migrationPassphrase, v)
+		} else if v.Config != nil && v.Config.Vault != nil && v.Config.Vault.FormatVersion < vaultFormatVersion2 {
+			v.NeedsMigration = true
+		}
 	}
 	vaultcrypto.Wipe(migrationPassphrase)
 	return v, nil
 }
 
 // MigrateKDF re-encrypts the vault identity from scrypt to argon2id when the
-// vault format version indicates an older KDF. It updates the config and marks
-// the vault as migrated on success, or sets NeedsMigration on failure.
+// vault format version indicates an older KDF. It is opt-in (gated by the
+// caller on Config.Vault.AutoMigrateKDF).
+//
+// The rewrite is safe: the existing identity.age is backed up to
+// identity.age.bak, the new argon2id identity is written and then verified to
+// decrypt with the same passphrase before the migration is considered
+// successful. On any failure the original file is restored and NeedsMigration
+// is set, so an interrupted or faulty migration never leaves the vault with an
+// unreadable master key.
 func MigrateKDF(vaultDir string, identity *age.X25519Identity, passphrase []byte, v *Vault) error {
 	if v == nil || v.Config == nil || v.Config.Vault == nil {
 		return nil
@@ -210,16 +224,49 @@ func MigrateKDF(vaultDir string, identity *age.X25519Identity, passphrase []byte
 		return nil
 	}
 	identityPath := filepath.Join(vaultDir, "identity.age")
-	params := vaultcrypto.DefaultArgon2idParams()
-	if migrateErr := vaultcrypto.SaveIdentityWithArgon2id(identity, identityPath, cloneBytes(passphrase), params); migrateErr == nil {
-		v.Config.Vault.FormatVersion = vaultFormatVersion2
-		v.Config.Vault.ScryptWorkFactor = 0
-		if cfgPath := filepath.Join(vaultDir, "config.yaml"); cfgPath != "" {
-			_ = v.Config.SaveTo(cfgPath)
-		}
-	} else {
+	backupPath := identityPath + ".bak"
+
+	original, readErr := os.ReadFile(identityPath) // #nosec G304 — fixed filename under validated vaultDir
+	if readErr != nil {
 		v.NeedsMigration = true
+		return nil
 	}
+	if err := fsutil.AtomicWriteFile(backupPath, original, 0o600); err != nil {
+		v.NeedsMigration = true
+		return nil
+	}
+
+	params := vaultcrypto.DefaultArgon2idParams()
+	if err := vaultcrypto.SaveIdentityWithArgon2id(identity, identityPath, cloneBytes(passphrase), params); err != nil {
+		_ = restoreIdentityBackup(identityPath, backupPath, original)
+		v.NeedsMigration = true
+		return nil
+	}
+
+	// Verify the freshly written identity actually decrypts with this passphrase
+	// before committing the migration.
+	if _, err := vaultcrypto.LoadIdentityWithArgon2id(identityPath, cloneBytes(passphrase)); err != nil {
+		_ = restoreIdentityBackup(identityPath, backupPath, original)
+		v.NeedsMigration = true
+		return nil
+	}
+
+	v.Config.Vault.FormatVersion = vaultFormatVersion2
+	v.Config.Vault.ScryptWorkFactor = 0
+	if cfgPath := filepath.Join(vaultDir, "config.yaml"); cfgPath != "" {
+		_ = v.Config.SaveTo(cfgPath)
+	}
+	// Keep the backup until the next successful unlock confirms the new file.
+	return nil
+}
+
+// restoreIdentityBackup puts the original identity bytes back in place after a
+// failed migration attempt.
+func restoreIdentityBackup(identityPath, backupPath string, original []byte) error {
+	if err := fsutil.AtomicWriteFile(identityPath, original, 0o600); err != nil {
+		return err
+	}
+	_ = os.Remove(backupPath)
 	return nil
 }
 

@@ -17,6 +17,7 @@ type VaultConfig struct {
 	ConfigCacheEntries int           `yaml:"config_cache_entries,omitempty"`
 	PseudonymizePaths  bool          `yaml:"pseudonymize_paths,omitempty"`
 	ScryptWorkFactor   int           `yaml:"scrypt_work_factor,omitempty"`
+	AutoMigrateKDF     bool          `yaml:"auto_migrate_kdf,omitempty"`
 	LastRotated        time.Time     `yaml:"last_rotated,omitempty"`
 	FormatVersion      int           `yaml:"format_version,omitempty"`
 	Argon2idTime       int           `yaml:"argon2id_time,omitempty"`
@@ -258,6 +259,9 @@ func MergeFromVault(dst *VaultConfig, src VaultConfig) {
 	}
 	if src.PseudonymizePaths {
 		dst.PseudonymizePaths = true
+	}
+	if src.AutoMigrateKDF {
+		dst.AutoMigrateKDF = true
 	}
 	if src.ScryptWorkFactor > 0 {
 		dst.ScryptWorkFactor = src.ScryptWorkFactor

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/danieljustus/symaira-vault/internal/config"
+	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
 	"github.com/danieljustus/symaira-vault/internal/testutil"
 )
 
@@ -572,5 +573,69 @@ func BenchmarkEntryStoragePathOldStyle(b *testing.B) {
 	b.ResetTimer()
 	for b.Loop() {
 		_ = entryStoragePath(vaultDir, "github.com/user", identity, nil)
+	}
+}
+
+// makeScryptVault creates an initialized vault whose identity is encrypted with
+// scrypt (FormatVersion 1), for exercising the opt-in KDF auto-migration gate.
+func makeScryptVault(t *testing.T, passphrase []byte) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "entries"), 0o700); err != nil {
+		t.Fatalf("mkdir entries: %v", err)
+	}
+	identity := testutil.TempIdentity(t)
+	if err := vaultcrypto.SaveIdentity(identity, filepath.Join(dir, "identity.age"), cloneBytes(passphrase), 0); err != nil {
+		t.Fatalf("SaveIdentity: %v", err)
+	}
+	cfg := config.Default()
+	cfg.VaultDir = dir
+	cfg.Vault = &config.VaultConfig{FormatVersion: 1, ScryptWorkFactor: 18}
+	if err := cfg.SaveTo(filepath.Join(dir, "config.yaml")); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	return dir
+}
+
+func TestOpenWithPassphrase_KDFMigrationIsOptIn(t *testing.T) {
+	pass := []byte("correct horse battery staple")
+	dir := makeScryptVault(t, pass)
+
+	v, err := OpenWithPassphrase(dir, cloneBytes(pass))
+	if err != nil {
+		t.Fatalf("OpenWithPassphrase: %v", err)
+	}
+	if !v.NeedsMigration {
+		t.Error("expected NeedsMigration=true when auto-migration is not opted in")
+	}
+	raw, _ := os.ReadFile(filepath.Join(dir, "identity.age"))
+	if got := vaultcrypto.DetectEncryptedIdentityFormat(raw); got != "scrypt" {
+		t.Errorf("identity should remain scrypt without opt-in, got %q", got)
+	}
+}
+
+func TestOpenWithPassphrase_KDFMigrationOptIn(t *testing.T) {
+	pass := []byte("correct horse battery staple")
+	dir := makeScryptVault(t, pass)
+
+	cfg, err := config.Load(filepath.Join(dir, "config.yaml"))
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	cfg.Vault.AutoMigrateKDF = true
+	if err := cfg.SaveTo(filepath.Join(dir, "config.yaml")); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	if _, err := OpenWithPassphrase(dir, cloneBytes(pass)); err != nil {
+		t.Fatalf("OpenWithPassphrase: %v", err)
+	}
+	raw, _ := os.ReadFile(filepath.Join(dir, "identity.age"))
+	if got := vaultcrypto.DetectEncryptedIdentityFormat(raw); got != "argon2id" {
+		t.Errorf("identity should be migrated to argon2id with opt-in, got %q", got)
+	}
+	// Migrated identity must still decrypt with the original passphrase.
+	if _, err := vaultcrypto.LoadIdentityWithArgon2id(filepath.Join(dir, "identity.age"), cloneBytes(pass)); err != nil {
+		t.Fatalf("migrated identity failed to decrypt: %v", err)
 	}
 }

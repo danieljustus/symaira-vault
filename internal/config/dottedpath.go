@@ -67,6 +67,7 @@ func KnownConfigKeys() []string {
 		"vault.search_workers",
 		"vault.pseudonymize_paths",
 		"vault.scrypt_work_factor",
+		"vault.auto_migrate_kdf",
 		"vault.last_rotated",
 		"vault.format_version",
 		"vault.legacy_mode",
