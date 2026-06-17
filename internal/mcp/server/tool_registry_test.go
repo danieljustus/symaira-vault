@@ -62,67 +62,67 @@ func TestIsToolAllowed(t *testing.T) {
 		},
 		{
 			name: "wildcard allows all tools",
-			token: &auth.ScopedToken{
+			token: &auth.ScopedToken{TokenData: auth.TokenData{
 				AllowedTools: []string{"*"},
-			},
+			}},
 			toolName: "delete_entry",
 			want:     true,
 		},
 		{
 			name: "exact match allowed",
-			token: &auth.ScopedToken{
+			token: &auth.ScopedToken{TokenData: auth.TokenData{
 				AllowedTools: []string{"delete_entry", "list_entries"},
-			},
+			}},
 			toolName: "delete_entry",
 			want:     true,
 		},
 		{
 			name: "tool not in allowed list",
-			token: &auth.ScopedToken{
+			token: &auth.ScopedToken{TokenData: auth.TokenData{
 				AllowedTools: []string{"list_entries"},
-			},
+			}},
 			toolName: "delete_entry",
 			want:     false,
 		},
 		{
 			name: "alias allowed when canonical is in list",
-			token: &auth.ScopedToken{
+			token: &auth.ScopedToken{TokenData: auth.TokenData{
 				AllowedTools: []string{"delete_entry"},
-			},
+			}},
 			toolName: "symaira_delete",
 			want:     true,
 		},
 		{
 			name: "canonical allowed when alias is in list",
-			token: &auth.ScopedToken{
+			token: &auth.ScopedToken{TokenData: auth.TokenData{
 				AllowedTools: []string{"symaira_delete"},
-			},
+			}},
 			toolName: "delete_entry",
 			want:     true,
 		},
 		{
 			name: "expired token denies all",
-			token: &auth.ScopedToken{
+			token: &auth.ScopedToken{TokenData: auth.TokenData{
 				AllowedTools: []string{"*"},
 				ExpiresAt:    &past,
-			},
+			}},
 			toolName: "delete_entry",
 			want:     false,
 		},
 		{
 			name: "revoked token denies all",
-			token: &auth.ScopedToken{
+			token: &auth.ScopedToken{TokenData: auth.TokenData{
 				AllowedTools: []string{"*"},
 				Revoked:      true,
-			},
+			}},
 			toolName: "delete_entry",
 			want:     false,
 		},
 		{
 			name: "empty allowed list denies all",
-			token: &auth.ScopedToken{
+			token: &auth.ScopedToken{TokenData: auth.TokenData{
 				AllowedTools: []string{},
-			},
+			}},
 			toolName: "delete_entry",
 			want:     false,
 		},
@@ -134,10 +134,10 @@ func TestIsToolAllowed(t *testing.T) {
 		},
 		{
 			name: "non-expired token with exact match allows",
-			token: &auth.ScopedToken{
+			token: &auth.ScopedToken{TokenData: auth.TokenData{
 				AllowedTools: []string{"list_entries"},
 				ExpiresAt:    &future,
-			},
+			}},
 			toolName: "list_entries",
 			want:     true,
 		},

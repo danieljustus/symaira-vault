@@ -124,7 +124,7 @@ func TestAgentHeaderRejectsScopedTokenAgentMismatch(t *testing.T) {
 
 	req := httptest.NewRequest("POST", "/mcp", nil)
 	req.Header.Set("X-Symaira-Agent", "opencode")
-	req = req.WithContext(WithToken(req.Context(), &ScopedToken{AgentName: "claude-code"}))
+	req = req.WithContext(WithToken(req.Context(), &ScopedToken{TokenData: TokenData{AgentName: "claude-code"}}))
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -140,7 +140,7 @@ func TestAgentHeaderAcceptsScopedTokenAgentMatch(t *testing.T) {
 
 	req := httptest.NewRequest("POST", "/mcp", nil)
 	req.Header.Set("X-Symaira-Agent", "claude-code")
-	req = req.WithContext(WithToken(req.Context(), &ScopedToken{AgentName: "claude-code"}))
+	req = req.WithContext(WithToken(req.Context(), &ScopedToken{TokenData: TokenData{AgentName: "claude-code"}}))
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -999,13 +999,13 @@ func TestBearerAuthScopedTokenUnknownHash(t *testing.T) {
 }
 
 func TestWithTokenAndTokenFromContextRoundtrip(t *testing.T) {
-	tok := &ScopedToken{
+	tok := &ScopedToken{TokenData: TokenData{
 		ID:           "tok-roundtrip",
 		Label:        "test",
 		Hash:         sha256Hex("test-me"),
 		Prefix:       "test",
 		AllowedTools: []string{"get_entry"},
-	}
+	}}
 	ctx := WithToken(context.Background(), tok)
 
 	got, ok := TokenFromContext(ctx)
