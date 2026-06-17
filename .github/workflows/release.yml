@@ -279,7 +279,7 @@ jobs:
       - name: Smoke test - init vault
         run: |
           TMPDIR=$(mktemp -d)
-          printf '%s\n' "test-passphrase-123" | SYMVAULT_VAULT="$TMPDIR/test-vault" symvault init
+          SYMVAULT_PASSPHRASE="test-passphrase-123" SYMVAULT_VAULT="$TMPDIR/test-vault" symvault init
           rm -rf "$TMPDIR"
 
   smoke-test-deb:
@@ -316,7 +316,7 @@ jobs:
       - name: Smoke test - init vault
         run: |
           TMPDIR=$(mktemp -d)
-          printf '%s\n' "test-passphrase-123" | SYMVAULT_VAULT="$TMPDIR/test-vault" symvault init
+          SYMVAULT_PASSPHRASE="test-passphrase-123" SYMVAULT_VAULT="$TMPDIR/test-vault" symvault init
           rm -rf "$TMPDIR"
 
   smoke-test-macos:
@@ -353,7 +353,7 @@ jobs:
       - name: Smoke test - init vault
         run: |
           TMPDIR=$(mktemp -d)
-          printf '%s\n' "test-passphrase-123" | SYMVAULT_VAULT="$TMPDIR/test-vault" symvault init
+          SYMVAULT_PASSPHRASE="test-passphrase-123" SYMVAULT_VAULT="$TMPDIR/test-vault" symvault init
           rm -rf "$TMPDIR"
 
   smoke-test-windows:
@@ -413,7 +413,9 @@ jobs:
             Write-Error "symvault.exe not found after extraction"
             exit 1
           }
-          "test-passphrase-123" | & $exe init --vault "$tmpdir"
+          $env:SYMVAULT_PASSPHRASE = "test-passphrase-123"
+          & $exe init --vault "$tmpdir"
+          Remove-Item Env:SYMVAULT_PASSPHRASE
           Remove-Item -Path $tmpdir -Recurse -Force -ErrorAction SilentlyContinue
 
   smoke-test-homebrew:
