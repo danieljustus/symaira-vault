@@ -76,7 +76,7 @@ var exportCmd = &cobra.Command{
 			// Determine output destination
 			var w io.Writer
 			if ExportOutput != "" {
-				f, createErr := os.Create(ExportOutput) //nolint:gosec G304 — output path is user-provided CLI argument
+				f, createErr := os.Create(ExportOutput) // #nosec G304 -- output path is user-provided CLI argument
 				if createErr != nil {
 					return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "create output file", createErr)
 				}
