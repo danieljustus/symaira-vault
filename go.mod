@@ -34,7 +34,7 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/creack/pty v1.1.24
-	github.com/danieljustus/symaira-corekit v0.1.0
+	github.com/danieljustus/symaira-corekit v0.1.1
 	github.com/go-git/go-git/v5 v5.19.1
 	github.com/google/uuid v1.6.0
 	github.com/invopop/jsonschema v0.14.0
