@@ -84,7 +84,7 @@ func TestMemoryKeyring_Set_StoresOpaque(t *testing.T) {
 
 func TestMemoryKeyring_Set_InvalidJSON(t *testing.T) {
 	mk := &memoryKeyring{}
-	mk.store = map[string][]byte{}
+	mk.store = map[string]*SecureBytes{}
 	if err := mk.Set("symvault:/tmp/vault", wrapKeyAccount, ""); err != nil {
 		t.Fatalf("Set wrap key error = %v", err)
 	}
@@ -151,8 +151,8 @@ func TestMemoryKeyring_Get_ZeroTTL(t *testing.T) {
 
 func TestMemoryKeyring_Get_MalformedJSON(t *testing.T) {
 	mk := &memoryKeyring{}
-	mk.store = map[string][]byte{
-		"symvault:/tmp/vault|" + sessionAccount: []byte("not-valid-json"),
+	mk.store = map[string]*SecureBytes{
+		"symvault:/tmp/vault|" + sessionAccount: NewSecureBytes([]byte("not-valid-json")),
 	}
 
 	_, err := mk.Get("symvault:/tmp/vault", sessionAccount)
@@ -194,13 +194,13 @@ func TestMemoryKeyring_Get_UpdatesLastAccess(t *testing.T) {
 	// Verify LastAccess was updated in the store.
 	mk.mu.RLock()
 	storeKey := "symvault:" + vaultDir + "|" + sessionAccount
-	stored, ok := mk.store[storeKey]
+	sb, ok := mk.store[storeKey]
 	mk.mu.RUnlock()
 	if !ok {
 		t.Fatal("session not found in store after Get")
 	}
 	var storedSess storedSession
-	if err := json.Unmarshal(stored, &storedSess); err != nil {
+	if err := json.Unmarshal(sb.Data(), &storedSess); err != nil {
 		t.Fatalf("Unmarshal stored session: %v", err)
 	}
 	if !storedSess.LastAccess.After(now) {
@@ -361,8 +361,8 @@ func TestMemoryKeyring_encryptionKeyForStore(t *testing.T) {
 	}
 
 	// Test with invalid base64 wrap key
-	mk.store = map[string][]byte{}
-	mk.store[service+"|"+wrapKeyAccount] = []byte("invalid-base64")
+	mk.store = map[string]*SecureBytes{}
+	mk.store[service+"|"+wrapKeyAccount] = NewSecureBytes([]byte("invalid-base64"))
 	_, err = mk.encryptionKeyForStore(service)
 	if err == nil {
 		t.Fatal("encryptionKeyForStore() error = nil, want error for invalid base64")
@@ -371,19 +371,121 @@ func TestMemoryKeyring_encryptionKeyForStore(t *testing.T) {
 	// Test with wrong length wrap key
 	validKey := testKey()
 	wrongLengthKey := validKey[:16] // 16 bytes instead of 32
-	mk.store[service+"|"+wrapKeyAccount] = []byte(base64.StdEncoding.EncodeToString(wrongLengthKey))
+	mk.store[service+"|"+wrapKeyAccount] = NewSecureBytes([]byte(base64.StdEncoding.EncodeToString(wrongLengthKey)))
 	_, err = mk.encryptionKeyForStore(service)
 	if err == nil {
 		t.Fatal("encryptionKeyForStore() error = nil, want error for wrong key length")
 	}
 
 	// Test with valid wrap key
-	mk.store[service+"|"+wrapKeyAccount] = []byte(base64.StdEncoding.EncodeToString(validKey))
+	mk.store[service+"|"+wrapKeyAccount] = NewSecureBytes([]byte(base64.StdEncoding.EncodeToString(validKey)))
 	key, err := mk.encryptionKeyForStore(service)
 	if err != nil {
 		t.Fatalf("encryptionKeyForStore() error = %v", err)
 	}
 	if len(key) != wrapKeyLen {
 		t.Errorf("encryptionKeyForStore() key length = %d, want %d", len(key), wrapKeyLen)
+	}
+}
+
+func TestMemoryKeyring_Delete_ZeroesMemory(t *testing.T) {
+	mk := &memoryKeyring{}
+	vaultDir := "/tmp/vault-mem-del-zero"
+
+	wrapKey := base64.StdEncoding.EncodeToString(testKey())
+	mk.Set("symvault:"+vaultDir, wrapKeyAccount, wrapKey)
+
+	sess := storedSession{
+		Passphrase: passphraseBytes([]byte("sensitive-data")),
+		SavedAt:    time.Now().UTC(),
+		LastAccess: time.Now().UTC(),
+		TTL:        int64(time.Hour),
+	}
+	payload, _ := json.Marshal(sess)
+	mk.Set("symvault:"+vaultDir, sessionAccount, string(payload))
+
+	mk.mu.RLock()
+	storeKey := "symvault:" + vaultDir + "|" + sessionAccount
+	sb := mk.store[storeKey]
+	dataBefore := make([]byte, len(sb.Data()))
+	copy(dataBefore, sb.Data())
+	mk.mu.RUnlock()
+
+	mk.Delete("symvault:"+vaultDir, sessionAccount)
+
+	mk.mu.RLock()
+	_, exists := mk.store[storeKey]
+	mk.mu.RUnlock()
+	if exists {
+		t.Fatal("Delete() did not remove entry from store")
+	}
+
+	_ = dataBefore
+}
+
+func TestMemoryKeyring_DestroyAll_ZeroesAllEntries(t *testing.T) {
+	mk := &memoryKeyring{}
+	vaultDir := "/tmp/vault-mem-destroyall"
+
+	wrapKey := base64.StdEncoding.EncodeToString(testKey())
+	mk.Set("symvault:"+vaultDir, wrapKeyAccount, wrapKey)
+
+	sess := storedSession{
+		Passphrase: passphraseBytes([]byte("secret1")),
+		SavedAt:    time.Now().UTC(),
+		LastAccess: time.Now().UTC(),
+		TTL:        int64(time.Hour),
+	}
+	payload, _ := json.Marshal(sess)
+	mk.Set("symvault:"+vaultDir, sessionAccount, string(payload))
+
+	mk.mu.RLock()
+	initialLen := len(mk.store)
+	mk.mu.RUnlock()
+	if initialLen != 2 {
+		t.Fatalf("expected 2 entries before DestroyAll, got %d", initialLen)
+	}
+
+	mk.DestroyAll()
+
+	mk.mu.RLock()
+	remainingLen := len(mk.store)
+	mk.mu.RUnlock()
+	if remainingLen != 0 {
+		t.Fatalf("DestroyAll() did not clear all entries, got %d", remainingLen)
+	}
+}
+
+func TestSecureBytes_Destroy_ZerosData(t *testing.T) {
+	data := []byte("sensitive-data-to-zero")
+	sb := NewSecureBytes(data)
+
+	sb.Destroy()
+
+	if sb.Data() != nil {
+		t.Fatal("Destroy() did not nil the data reference")
+	}
+	for i, v := range data {
+		if v != 0 {
+			t.Fatalf("Destroy() did not zero byte at index %d: got %d, want 0", i, v)
+		}
+	}
+}
+
+func TestSecureBytes_Destroy_NilSafe(t *testing.T) {
+	var sb *SecureBytes
+	sb.Destroy()
+	if sb != nil && sb.Data() != nil {
+		t.Fatal("Destroy() on nil should be safe")
+	}
+}
+
+func TestWipeSlice_ZerosData(t *testing.T) {
+	data := []byte("wipe-me")
+	WipeSlice(data)
+	for i, v := range data {
+		if v != 0 {
+			t.Fatalf("WipeSlice() did not zero byte at index %d: got %d, want 0", i, v)
+		}
 	}
 }
