@@ -6,9 +6,9 @@ import (
 )
 
 type tokenBucket struct {
-	failures  int
-	lockedAt  time.Time
-	lastFail  time.Time
+	failures int
+	lockedAt time.Time
+	lastFail time.Time
 }
 
 type TokenRateLimiter struct {
