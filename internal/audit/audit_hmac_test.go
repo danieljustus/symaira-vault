@@ -427,7 +427,7 @@ func TestHMACInsertedLegacyRecord(t *testing.T) {
 	}
 
 	legacyEntry := `{"ts":"2024-01-01T00:00:00Z","agent":"attacker","action":"injected","path":"x","ok":true}`
-	var tamperedLines []string
+	tamperedLines := make([]string, 0, 4)
 	tamperedLines = append(tamperedLines, lines[0], lines[1], legacyEntry, lines[2])
 
 	if err := os.WriteFile(logFile, []byte(strings.Join(tamperedLines, "\n")+"\n"), 0o600); err != nil {
@@ -493,7 +493,7 @@ func TestHMACTrailingLegacyRecord(t *testing.T) {
 	}
 
 	legacyEntry := `{"ts":"2024-01-01T00:00:00Z","agent":"attacker","action":"trailing","path":"x","ok":true}`
-	var tamperedLines []string
+	tamperedLines := make([]string, 0, len(lines)+1)
 	tamperedLines = append(tamperedLines, lines...)
 	tamperedLines = append(tamperedLines, legacyEntry)
 

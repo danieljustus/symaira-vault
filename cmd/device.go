@@ -453,8 +453,8 @@ request so the first device can accept it.`,
 			token = raw
 		}
 
-		if err := pairing.ValidatePairingToken(token); err != nil {
-			return fmt.Errorf("invalid pairing token: %w", err)
+		if valErr := pairing.ValidatePairingToken(token); valErr != nil {
+			return fmt.Errorf("invalid pairing token: %w", valErr)
 		}
 
 		if !strings.HasPrefix(existingPubkey, "age1") || len(existingPubkey) < 50 {

@@ -172,7 +172,7 @@ func (rm *RecipientsManager) AddRecipient(recipientStr string) error {
 
 	// Create file if it doesn't exist, or append to existing
 	// Verify file is not a symlink before opening for append.
-	if info, err := os.Lstat(path); err == nil {
+	if info, lstatErr := os.Lstat(path); lstatErr == nil {
 		if info.Mode()&os.ModeSymlink != 0 {
 			return &os.PathError{Op: "open", Path: path, Err: syscall.ELOOP}
 		}
