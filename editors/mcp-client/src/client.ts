@@ -13,13 +13,47 @@ import {
 } from "./protocol";
 import { buildAuthHeaders, AuthHeaders } from "./auth";
 import { MCPMessage, ToolResult } from "./types";
-import { SymairaConnectionError, SymairaToolError } from "./errors";
+import { SymairaConnectionError, SymairaToolError, SymairaURLError } from "./errors";
 
 export interface ClientOptions {
   baseUrl?: string;
   agentName?: string;
   vaultPath?: string;
   timeoutMs?: number;
+}
+
+/**
+ * Validate that a URL points to a loopback address.
+ * Only allows http/https protocols and loopback hostnames:
+ * 127.0.0.1, localhost, ::1, [::1], 0.0.0.0
+ */
+export function validateBaseUrl(urlString: string): void {
+  let url: URL;
+  try {
+    url = new URL(urlString);
+  } catch {
+    throw new SymairaURLError(`Invalid URL: "${urlString}"`);
+  }
+
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new SymairaURLError(
+      `Only http and https protocols are allowed, got "${url.protocol}"`
+    );
+  }
+
+  const LOOPBACK_HOSTNAMES = new Set([
+    "127.0.0.1",
+    "localhost",
+    "::1",
+    "[::1]",
+    "0.0.0.0",
+  ]);
+
+  if (!LOOPBACK_HOSTNAMES.has(url.hostname)) {
+    throw new SymairaURLError(
+      `URL must point to a loopback address (127.0.0.1, localhost, ::1, 0.0.0.0), got "${url.hostname}"`
+    );
+  }
 }
 
 export class SymairaMCPClient {
@@ -30,6 +64,7 @@ export class SymairaMCPClient {
 
   constructor(options: ClientOptions = {}) {
     this.baseUrl = options.baseUrl || "http://127.0.0.1:8080";
+    validateBaseUrl(this.baseUrl);
     const agentName = options.agentName || "vscode";
     this.headers = buildAuthHeaders(agentName, options.vaultPath);
     this.timeoutMs = options.timeoutMs || 30000;

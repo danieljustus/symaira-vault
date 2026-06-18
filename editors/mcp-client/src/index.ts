@@ -2,7 +2,7 @@
  * Public API exports for @symaira/mcp-client
  */
 
-export { SymairaMCPClient, ClientOptions } from "./client";
+export { SymairaMCPClient, ClientOptions, validateBaseUrl } from "./client";
 export { SymairaTools } from "./tools";
 export {
   buildAuthHeaders,
@@ -22,6 +22,7 @@ export {
   SymairaAuthError,
   SymairaConnectionError,
   SymairaToolError,
+  SymairaURLError,
 } from "./errors";
 export {
   buildRequest,
