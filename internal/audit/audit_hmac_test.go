@@ -396,6 +396,139 @@ func TestHMACReopenRetainsChain(t *testing.T) {
 	}
 }
 
+func TestHMACInsertedLegacyRecord(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	logger, err := New("hmac-insert-legacy-test", "", nil)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	for i := 0; i < 3; i++ {
+		_ = logger.LogEntry(LogEntry{
+			Agent:  "test-agent",
+			Action: fmt.Sprintf("get-%d", i),
+			Path:   "test/path",
+			OK:     true,
+		})
+	}
+	_ = logger.Close()
+
+	logFile := filepath.Join(home, configpkg.DefaultVaultSubdir, "audit-hmac-insert-legacy-test.log")
+	content, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("ReadFile error = %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(content)), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("expected 3 lines, got %d", len(lines))
+	}
+
+	legacyEntry := `{"ts":"2024-01-01T00:00:00Z","agent":"attacker","action":"injected","path":"x","ok":true}`
+	var tamperedLines []string
+	tamperedLines = append(tamperedLines, lines[0], lines[1], legacyEntry, lines[2])
+
+	if err := os.WriteFile(logFile, []byte(strings.Join(tamperedLines, "\n")+"\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile error = %v", err)
+	}
+
+	auditDir := filepath.Join(home, configpkg.DefaultVaultSubdir)
+	ks := NewKeystore(auditDir, nil)
+	key, err := ks.LoadHMACKey()
+	if err != nil {
+		t.Fatalf("LoadHMACKey() error = %v", err)
+	}
+
+	result, err := VerifyLog(logFile, key)
+	if err != nil {
+		t.Fatalf("VerifyLog() error = %v", err)
+	}
+	if result.Valid {
+		t.Fatal("expected inserted legacy record to be detected as tampered, got Valid=true")
+	}
+	if result.Tampered != 1 {
+		t.Fatalf("Tampered = %d, want 1", result.Tampered)
+	}
+	if result.Verified != 3 {
+		t.Fatalf("Verified = %d, want 3", result.Verified)
+	}
+	if result.Legacy != 0 {
+		t.Fatalf("Legacy = %d, want 0", result.Legacy)
+	}
+	if result.FirstBadIdx != 2 {
+		t.Fatalf("FirstBadIdx = %d, want 2", result.FirstBadIdx)
+	}
+}
+
+func TestHMACTrailingLegacyRecord(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	logger, err := New("hmac-trail-legacy-test", "", nil)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	for i := 0; i < 3; i++ {
+		_ = logger.LogEntry(LogEntry{
+			Agent:  "test-agent",
+			Action: fmt.Sprintf("get-%d", i),
+			Path:   "test/path",
+			OK:     true,
+		})
+	}
+	_ = logger.Close()
+
+	logFile := filepath.Join(home, configpkg.DefaultVaultSubdir, "audit-hmac-trail-legacy-test.log")
+	content, err := os.ReadFile(logFile)
+	if err != nil {
+		t.Fatalf("ReadFile error = %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(content)), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("expected 3 lines, got %d", len(lines))
+	}
+
+	legacyEntry := `{"ts":"2024-01-01T00:00:00Z","agent":"attacker","action":"trailing","path":"x","ok":true}`
+	var tamperedLines []string
+	tamperedLines = append(tamperedLines, lines...)
+	tamperedLines = append(tamperedLines, legacyEntry)
+
+	if err := os.WriteFile(logFile, []byte(strings.Join(tamperedLines, "\n")+"\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile error = %v", err)
+	}
+
+	auditDir := filepath.Join(home, configpkg.DefaultVaultSubdir)
+	ks := NewKeystore(auditDir, nil)
+	key, err := ks.LoadHMACKey()
+	if err != nil {
+		t.Fatalf("LoadHMACKey() error = %v", err)
+	}
+
+	result, err := VerifyLog(logFile, key)
+	if err != nil {
+		t.Fatalf("VerifyLog() error = %v", err)
+	}
+	if result.Valid {
+		t.Fatal("expected trailing legacy record to be detected as tampered, got Valid=true")
+	}
+	if result.Tampered != 1 {
+		t.Fatalf("Tampered = %d, want 1", result.Tampered)
+	}
+	if result.Verified != 3 {
+		t.Fatalf("Verified = %d, want 3", result.Verified)
+	}
+	if result.Legacy != 0 {
+		t.Fatalf("Legacy = %d, want 0", result.Legacy)
+	}
+	if result.FirstBadIdx != 3 {
+		t.Fatalf("FirstBadIdx = %d, want 3", result.FirstBadIdx)
+	}
+}
+
 func TestHMACMixedLegacyAndNew(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
