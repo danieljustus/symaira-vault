@@ -45,7 +45,7 @@ func (dm *DeviceManager) LoadDevices() ([]Device, error) {
 	}
 
 	// #nosec G304 -- path is the devices.json file within the vault directory
-	data, err := os.ReadFile(path)
+	data, err := SafeReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read devices file: %w", err)
 	}
@@ -69,7 +69,7 @@ func (dm *DeviceManager) SaveDevices(devices []Device) error {
 		return fmt.Errorf("marshal devices: %w", err)
 	}
 
-	if err := os.WriteFile(dm.devicesPath(), data, 0o600); err != nil {
+	if err := SafeWriteFile(dm.devicesPath(), data, 0o600); err != nil {
 		return fmt.Errorf("write devices file: %w", err)
 	}
 

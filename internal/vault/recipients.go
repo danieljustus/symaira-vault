@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"filippo.io/age"
@@ -120,7 +121,7 @@ func (rm *RecipientsManager) LoadRecipientStrings() ([]string, error) {
 		return []string{}, nil
 	}
 
-	data, err := os.ReadFile(path) //#nosec G304 -- path is constructed from validated vaultDir via RecipientsFilePath()
+	data, err := SafeReadFile(path) //#nosec G304 -- path is constructed from validated vaultDir via RecipientsFilePath()
 	if err != nil {
 		return nil, fmt.Errorf("read recipients file: %w", err)
 	}
@@ -170,6 +171,12 @@ func (rm *RecipientsManager) AddRecipient(recipientStr string) error {
 	}
 
 	// Create file if it doesn't exist, or append to existing
+	// Verify file is not a symlink before opening for append.
+	if info, err := os.Lstat(path); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			return &os.PathError{Op: "open", Path: path, Err: syscall.ELOOP}
+		}
+	}
 	flags := os.O_APPEND | os.O_WRONLY | os.O_CREATE
 	file, err := os.OpenFile(path, flags, 0o600) //#nosec G304 -- path is constructed from validated vaultDir via RecipientsFilePath()
 	if err != nil {
@@ -225,7 +232,7 @@ func (rm *RecipientsManager) RemoveRecipient(recipientStr string) error {
 	}
 
 	// Read all lines
-	data, err := os.ReadFile(path) //#nosec G304 -- path is constructed from validated vaultDir via RecipientsFilePath()
+	data, err := SafeReadFile(path) //#nosec G304 -- path is constructed from validated vaultDir via RecipientsFilePath()
 	if err != nil {
 		return fmt.Errorf("read recipients file: %w", err)
 	}
@@ -285,7 +292,7 @@ func (rm *RecipientsManager) ListRecipients() ([]RecipientInfo, error) {
 		return []RecipientInfo{}, nil
 	}
 
-	data, err := os.ReadFile(path) //#nosec G304 -- path is constructed from validated vaultDir via RecipientsFilePath()
+	data, err := SafeReadFile(path) //#nosec G304 -- path is constructed from validated vaultDir via RecipientsFilePath()
 	if err != nil {
 		return nil, fmt.Errorf("read recipients file: %w", err)
 	}

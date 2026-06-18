@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 // TokenTTL is the time-to-live for pairing tokens. Exported for testing.
@@ -71,6 +72,35 @@ func GenerateToken() (Token, error) {
 	// base32 hex encoding is URL-safe, case-insensitive, and readable.
 	token := base32.HexEncoding.WithPadding(base32.NoPadding).EncodeToString(b)
 	return Token(token), nil
+}
+
+var errInvalidTokenFormat = fmt.Errorf("invalid pairing token format")
+
+// ValidatePairingToken checks that a token string is safe to use in
+// file-path construction. It rejects tokens containing path separators,
+// null bytes, control characters, or characters outside the base32-hex
+// alphabet that GenerateToken produces.
+func ValidatePairingToken(token string) error {
+	if token == "" {
+		return errInvalidTokenFormat
+	}
+	if len(token) > 64 {
+		return errInvalidTokenFormat
+	}
+	for _, ch := range token {
+		switch {
+		case ch == '/' || ch == '\\':
+			return errInvalidTokenFormat
+		case ch == 0:
+			return errInvalidTokenFormat
+		case unicode.IsControl(ch):
+			return errInvalidTokenFormat
+		case (ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'V') || (ch >= 'a' && ch <= 'v'):
+		default:
+			return errInvalidTokenFormat
+		}
+	}
+	return nil
 }
 
 // Store saves a token with its associated public key and sets expiry.

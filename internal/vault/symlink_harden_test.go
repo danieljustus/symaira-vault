@@ -196,3 +196,62 @@ func TestSafeRemove_FstatFails(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func TestSafeReadFile_SymlinkAttack(t *testing.T) {
+	vaultDir := t.TempDir()
+
+	targetPath := filepath.Join(t.TempDir(), "secret.txt")
+	os.WriteFile(targetPath, []byte("sensitive"), 0o600)
+
+	symlinkPath := filepath.Join(vaultDir, "tricked")
+	os.Symlink(targetPath, symlinkPath)
+
+	_, err := SafeReadFile(symlinkPath)
+	if err == nil {
+		t.Fatal("SafeReadFile should reject symlink")
+	}
+	pathErr, ok := err.(*os.PathError)
+	if !ok {
+		t.Fatalf("expected PathError, got %T", err)
+	}
+	if pathErr.Err != syscall.ELOOP && pathErr.Err != syscall.ENOTDIR {
+		t.Errorf("expected ELOOP or ENOTDIR, got %v", pathErr.Err)
+	}
+}
+
+func TestSafeReadFile_RegularFile(t *testing.T) {
+	vaultDir := t.TempDir()
+	filePath := filepath.Join(vaultDir, "test.age")
+
+	data := []byte("hello world")
+	if err := os.WriteFile(filePath, data, 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	got, err := SafeReadFile(filePath)
+	if err != nil {
+		t.Fatalf("SafeReadFile() error = %v", err)
+	}
+	if string(got) != string(data) {
+		t.Errorf("content = %q, want %q", string(got), string(data))
+	}
+}
+
+func TestSafeReadFile_NotExist(t *testing.T) {
+	vaultDir := t.TempDir()
+	_, err := SafeReadFile(filepath.Join(vaultDir, "nonexistent"))
+	if err == nil {
+		t.Fatal("expected error for non-existent file")
+	}
+}
+
+func TestSafeReadFile_DirectoryTarget(t *testing.T) {
+	vaultDir := t.TempDir()
+	dirPath := filepath.Join(vaultDir, "mydir")
+	os.MkdirAll(dirPath, 0o700)
+
+	_, err := SafeReadFile(dirPath)
+	if err == nil {
+		t.Fatal("SafeReadFile should reject directory target")
+	}
+}
