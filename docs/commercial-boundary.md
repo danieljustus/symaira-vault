@@ -27,3 +27,9 @@ The current Symaira Vault release line is `v0.x`. Historical OpenPass releases
 such as `v4.0.0` remain part of the old release history and must not be treated
 as the current Symaira Vault release target. The next planned core milestone is
 `v0.4.1`.
+
+## Related
+
+- [`research-handoff-eu-commercialization.md`](research-handoff-eu-commercialization.md)
+  preserves the public-core findings from the EU compliance and commercialization
+  research folders.
