@@ -19,7 +19,8 @@ import (
 
 const ageArgon2idLabel = "symvault-argon2id-v1"
 
-const argon2idStanzaType = "argon2id"
+// Argon2idStanzaType is the age stanza type identifier for argon2id-encrypted identities.
+const Argon2idStanzaType = "argon2id"
 
 type argon2idRecipient struct {
 	passphrase []byte
@@ -78,7 +79,7 @@ func (r *argon2idRecipient) Wrap(fileKey []byte) ([]*age.Stanza, error) {
 	params := fmt.Sprintf("t=%d,m=%d,p=%d", r.params.Time, r.params.Memory, r.params.Threads)
 
 	return []*age.Stanza{{
-		Type: argon2idStanzaType,
+		Type: Argon2idStanzaType,
 		Args: []string{
 			base64.RawStdEncoding.EncodeToString(salt),
 			params,
@@ -103,7 +104,7 @@ func NewArgon2idIdentity(passphrase string) age.Identity {
 
 func (id *argon2idIdentity) Unwrap(stanzas []*age.Stanza) ([]byte, error) {
 	for _, s := range stanzas {
-		if s.Type != argon2idStanzaType {
+		if s.Type != Argon2idStanzaType {
 			continue
 		}
 		if len(s.Args) < 2 {

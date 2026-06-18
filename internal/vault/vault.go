@@ -178,7 +178,7 @@ func OpenWithPassphrase(vaultDir string, passphrase []byte) (*Vault, error) {
 	format := vaultcrypto.DetectEncryptedIdentityFormat(raw)
 	var identity *age.X25519Identity
 	switch format {
-	case "argon2id":
+	case vaultcrypto.Argon2idStanzaType:
 		identity, err = vaultcrypto.LoadIdentityWithArgon2id(identityPath, cloneBytes(passphrase))
 	default:
 		identity, err = vaultcrypto.LoadIdentity(identityPath, cloneBytes(passphrase))
@@ -195,7 +195,7 @@ func OpenWithPassphrase(vaultDir string, passphrase []byte) (*Vault, error) {
 	// Only auto-migrate the identity KDF when the user has explicitly opted in.
 	// Rewriting the master identity file in place is not something to do silently
 	// on every open; vaults that don't opt in are flagged as migratable instead.
-	if format != "argon2id" {
+	if format != vaultcrypto.Argon2idStanzaType {
 		if v.Config != nil && v.Config.Vault != nil && v.Config.Vault.AutoMigrateKDF {
 			_ = MigrateKDF(vaultDir, identity, migrationPassphrase, v)
 		} else if v.Config != nil && v.Config.Vault != nil && v.Config.Vault.FormatVersion < vaultFormatVersion2 {
