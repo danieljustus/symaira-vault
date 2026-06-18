@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -285,7 +286,21 @@ func clientIP(r *http.Request, trustedProxies []string) string {
 }
 
 func BearerAuthMiddleware(legacyToken string, registry *TokenRegistry, auditLog *audit.Logger, next http.Handler) http.Handler {
+	return BearerAuthMiddlewareWithRateLimit(legacyToken, registry, auditLog, nil, next)
+}
+
+func BearerAuthMiddlewareWithRateLimit(legacyToken string, registry *TokenRegistry, auditLog *audit.Logger, rateLimiter *TokenRateLimiter, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		agentID := r.Header.Get("X-Symaira-Agent")
+
+		if rateLimiter != nil && agentID != "" && rateLimiter.IsLocked(agentID) {
+			remaining := rateLimiter.RemainingLockout(agentID)
+			logAuthFailure(auditLog, r, "rate_limited", "agent locked out due to too many failed attempts")
+			w.Header().Set("Retry-After", formatDuration(remaining))
+			http.Error(w, "rate limited: too many failed token attempts", http.StatusTooManyRequests)
+			return
+		}
+
 		auth := r.Header.Get("Authorization")
 		if !strings.HasPrefix(auth, "Bearer ") {
 			logAuthFailure(auditLog, r, "missing_bearer", "authorization header missing or malformed")
@@ -295,6 +310,9 @@ func BearerAuthMiddleware(legacyToken string, registry *TokenRegistry, auditLog 
 		provided := strings.TrimPrefix(auth, "Bearer ")
 
 		if legacyToken != "" && subtle.ConstantTimeCompare([]byte(provided), []byte(legacyToken)) == 1 {
+			if rateLimiter != nil && agentID != "" {
+				rateLimiter.RecordSuccess(agentID)
+			}
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -303,6 +321,9 @@ func BearerAuthMiddleware(legacyToken string, registry *TokenRegistry, auditLog 
 			hash := sha256Hex(provided)
 			tok, ok := registry.Get(hash)
 			if ok {
+				if rateLimiter != nil && agentID != "" {
+					rateLimiter.RecordSuccess(agentID)
+				}
 				ctx := WithToken(r.Context(), tok)
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
@@ -318,6 +339,10 @@ func BearerAuthMiddleware(legacyToken string, registry *TokenRegistry, auditLog 
 					logAuthFailure(auditLog, r, "token_expired", "token has expired")
 				}
 			}
+		}
+
+		if rateLimiter != nil && agentID != "" {
+			rateLimiter.RecordFailure(agentID)
 		}
 
 		if legacyToken == "" && registry == nil {
@@ -390,4 +415,15 @@ func AgentFromContext(ctx context.Context) string {
 		return v
 	}
 	return ""
+}
+
+func formatDuration(d time.Duration) string {
+	if d <= 0 {
+		return "0"
+	}
+	secs := int(d.Seconds())
+	if secs < 1 {
+		return "1"
+	}
+	return fmt.Sprintf("%d", secs)
 }

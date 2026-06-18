@@ -10,9 +10,12 @@ import (
 )
 
 // memoryKeyring stores session and identity entries in process memory only.
+// All stored values are wrapped in SecureBytes for explicit memory zeroing
+// on eviction, preventing sensitive data from lingering in process memory
+// after lock/timeout.
 type memoryKeyring struct {
 	mu    sync.RWMutex
-	store map[string][]byte
+	store map[string]*SecureBytes
 }
 
 func vaultDirFromService(service string) string {
@@ -30,15 +33,15 @@ func (m *memoryKeyring) Set(service, account, value string) error {
 	defer m.mu.Unlock()
 
 	if m.store == nil {
-		m.store = make(map[string][]byte)
+		m.store = make(map[string]*SecureBytes)
 	}
 
 	if account == wrapKeyAccount || account == identityAccount || account == sessionAccount {
 		key := service + "|" + account
 		if old, ok := m.store[key]; ok {
-			zeroBytes(old)
+			old.Destroy()
 		}
-		m.store[key] = []byte(value)
+		m.store[key] = NewSecureBytes([]byte(value))
 		return nil
 	}
 
@@ -68,9 +71,9 @@ func (m *memoryKeyring) Set(service, account, value string) error {
 
 	key := service + "|" + account
 	if old, ok := m.store[key]; ok {
-		zeroBytes(old)
+		old.Destroy()
 	}
-	m.store[key] = append([]byte(nil), payload...)
+	m.store[key] = NewSecureBytes(append([]byte(nil), payload...))
 
 	return nil
 }
@@ -80,7 +83,7 @@ func (m *memoryKeyring) Set(service, account, value string) error {
 func (m *memoryKeyring) encryptionKeyForStore(service string) ([]byte, error) {
 	wrapKeyKey := service + "|" + wrapKeyAccount
 	if w, ok := m.store[wrapKeyKey]; ok {
-		if k, err := base64.StdEncoding.DecodeString(string(w)); err == nil && len(k) == wrapKeyLen {
+		if k, err := base64.StdEncoding.DecodeString(string(w.Data())); err == nil && len(k) == wrapKeyLen {
 			return k, nil
 		}
 	}
@@ -96,23 +99,25 @@ func (m *memoryKeyring) Get(service, account string) (string, error) {
 	}
 
 	key := service + "|" + account
-	payload, ok := m.store[key]
+	sb, ok := m.store[key]
 	if !ok {
 		return "", fmt.Errorf("not found")
 	}
 
+	payload := sb.Data()
 	if account == wrapKeyAccount || account == identityAccount {
 		return string(payload), nil
 	}
 
 	var sess storedSession
 	if err := json.Unmarshal(payload, &sess); err != nil {
+		sb.Destroy()
 		delete(m.store, key)
 		return "", fmt.Errorf("not found")
 	}
 
 	if sess.TTL <= 0 {
-		zeroBytes(payload)
+		sb.Destroy()
 		delete(m.store, key)
 		return "", fmt.Errorf("not found")
 	}
@@ -122,7 +127,7 @@ func (m *memoryKeyring) Get(service, account string) (string, error) {
 		lastActivity = sess.SavedAt
 	}
 	if time.Since(lastActivity) > time.Duration(sess.TTL) {
-		zeroBytes(payload)
+		sb.Destroy()
 		delete(m.store, key)
 		return "", fmt.Errorf("not found")
 	}
@@ -133,8 +138,8 @@ func (m *memoryKeyring) Get(service, account string) (string, error) {
 		return "", fmt.Errorf("not found")
 	}
 
-	zeroBytes(payload)
-	m.store[key] = append([]byte(nil), newPayload...)
+	sb.Destroy()
+	m.store[key] = NewSecureBytes(append([]byte(nil), newPayload...))
 
 	return string(newPayload), nil
 }
@@ -148,12 +153,25 @@ func (m *memoryKeyring) Delete(service, account string) error {
 	}
 
 	key := service + "|" + account
-	if payload, ok := m.store[key]; ok {
-		zeroBytes(payload)
+	if sb, ok := m.store[key]; ok {
+		sb.Destroy()
 		delete(m.store, key)
 	}
 
 	return nil
+}
+
+// DestroyAll zeroes every entry in the keyring at once. This is used
+// by ClearSession/Lock to ensure all sensitive data is wiped even if
+// individual Delete calls are skipped.
+func (m *memoryKeyring) DestroyAll() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for key, sb := range m.store {
+		sb.Destroy()
+		delete(m.store, key)
+	}
 }
 
 // memoryKeyringBackend adapts memoryKeyring to the KeyringBackend

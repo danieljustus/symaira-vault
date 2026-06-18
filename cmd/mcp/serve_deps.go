@@ -128,7 +128,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 				cliout.Warnf("Vault is locked; starting MCP server in read-only mode. Run 'symvault unlock' to enable vault tools.")
 				vault = nil
 			} else {
-				return err
+				return wrapVaultError(err, vaultDir)
 			}
 		}
 	}
@@ -223,5 +223,28 @@ func runServe(cmd *cobra.Command, args []string) error {
 			_ = cli.ClearRuntimePort(vDir)
 		}
 		return nil
+	}
+}
+
+func wrapVaultError(err error, vaultDir string) error {
+	if err == nil {
+		return nil
+	}
+
+	errMsg := err.Error()
+
+	switch {
+	case strings.Contains(errMsg, "load config"):
+		return fmt.Errorf("vault configuration is missing or corrupted — run 'symvault init' to reinitialize, or restore config.yaml from backup: %w", err)
+	case strings.Contains(errMsg, "permission denied") || strings.Contains(errMsg, "EACCES"):
+		return fmt.Errorf("permission denied accessing vault at %s — check file permissions (ls -la %s): %w", vaultDir, vaultDir, err)
+	case strings.Contains(errMsg, "no such file") || strings.Contains(errMsg, "ENOENT"):
+		return fmt.Errorf("vault directory not found at %s — run 'symvault init' to create a new vault: %w", vaultDir, err)
+	case strings.Contains(errMsg, "identity") && strings.Contains(errMsg, "decrypt"):
+		return fmt.Errorf("cannot decrypt vault identity — wrong passphrase? Run 'symvault unlock' and try again: %w", err)
+	case isVaultLockedError(err):
+		return err
+	default:
+		return err
 	}
 }
