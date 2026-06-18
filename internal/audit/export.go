@@ -495,7 +495,7 @@ func StreamExportAuditLog(opts ExportOptions, callback StreamEntry) (*ExportResu
 		}
 
 		for _, f := range files {
-			streamAndFilterFile(f, agent, opts, callback, result, mac, &prevHMAC, &chainStarted)
+			streamAndFilterFile(f, opts, callback, result, mac, &prevHMAC, &chainStarted)
 		}
 	}
 
@@ -503,7 +503,7 @@ func StreamExportAuditLog(opts ExportOptions, callback StreamEntry) (*ExportResu
 }
 
 func streamAndFilterFile(
-	path, agent string,
+	path string,
 	opts ExportOptions,
 	callback StreamEntry,
 	result *ExportResult,

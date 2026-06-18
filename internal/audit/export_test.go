@@ -12,9 +12,9 @@ import (
 	"time"
 )
 
-func writeTestLog(t *testing.T, dir, agent string, entries []LogEntry) {
+func writeTestLog(t *testing.T, dir string, entries []LogEntry) {
 	t.Helper()
-	path := filepath.Join(dir, "audit-"+agent+".log")
+	path := filepath.Join(dir, "audit-test.log")
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		t.Fatal(err)
@@ -91,7 +91,7 @@ func TestLoadAuditLogFiles(t *testing.T) {
 		{Timestamp: "2026-01-02T00:00:00Z", Agent: "test", Action: "set_entry", OK: true},
 		{Timestamp: "2026-01-03T00:00:00Z", Agent: "test", Action: "get_entry", OK: false},
 	}
-	writeTestLog(t, dir, "test", entries)
+	writeTestLog(t, dir, entries)
 
 	got, err := LoadAuditLogFiles("test", dir, 0)
 	if err != nil {
@@ -111,7 +111,7 @@ func TestLoadAuditLogFilesLimit(t *testing.T) {
 		{Timestamp: "2026-01-04T00:00:00Z", Agent: "test", Action: "d", OK: true},
 		{Timestamp: "2026-01-05T00:00:00Z", Agent: "test", Action: "e", OK: true},
 	}
-	writeTestLog(t, dir, "test", entries)
+	writeTestLog(t, dir, entries)
 
 	got, err := LoadAuditLogFiles("test", dir, 2)
 	if err != nil {
@@ -131,7 +131,7 @@ func TestLoadAuditLogFilesZeroLimit(t *testing.T) {
 		{Timestamp: "2026-01-01T00:00:00Z", Agent: "test", Action: "a", OK: true},
 		{Timestamp: "2026-01-02T00:00:00Z", Agent: "test", Action: "b", OK: true},
 	}
-	writeTestLog(t, dir, "test", entries)
+	writeTestLog(t, dir, entries)
 
 	got, err := LoadAuditLogFiles("test", dir, 0)
 	if err != nil {
@@ -150,11 +150,11 @@ func TestLoadAuditLogFilesWithRotated(t *testing.T) {
 	entries2 := []LogEntry{
 		{Timestamp: "2026-01-02T00:00:00Z", Agent: "test", Action: "new", OK: true},
 	}
-	writeTestLog(t, dir, "test", entries1)
+	writeTestLog(t, dir, entries1)
 	// Rotate: rename current to rotated
 	rotated := filepath.Join(dir, "audit-test.log.rotated.20260101-120000")
 	os.Rename(filepath.Join(dir, "audit-test.log"), rotated)
-	writeTestLog(t, dir, "test", entries2)
+	writeTestLog(t, dir, entries2)
 
 	got, err := LoadAuditLogFiles("test", dir, 0)
 	if err != nil {
@@ -299,10 +299,11 @@ func TestExportAuditLogJSON(t *testing.T) {
 		{Timestamp: "2026-01-01T00:00:00Z", Agent: "test", Action: "get_entry", OK: true, Path: "github/token"},
 		{Timestamp: "2026-01-02T00:00:00Z", Agent: "test", Action: "set_entry", OK: true, Path: "work/aws"},
 	}
-	writeTestLog(t, auditDir, "test", entries)
+	writeTestLog(t, auditDir, entries)
 
 	// Override home dir for testing
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // Windows
 
 	var buf bytes.Buffer
 	opts := ExportOptions{Agent: "test"}
@@ -333,9 +334,10 @@ func TestExportAuditLogTable(t *testing.T) {
 	entries := []LogEntry{
 		{Timestamp: "2026-01-01T00:00:00Z", Agent: "test", Action: "get_entry", OK: true},
 	}
-	writeTestLog(t, auditDir, "test", entries)
+	writeTestLog(t, auditDir, entries)
 
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // Windows
 
 	var buf bytes.Buffer
 	opts := ExportOptions{Agent: "test"}
@@ -365,9 +367,10 @@ func TestExportAuditLogActionFilter(t *testing.T) {
 		{Timestamp: "2026-01-02T00:00:00Z", Agent: "test", Action: "set_entry", OK: true},
 		{Timestamp: "2026-01-03T00:00:00Z", Agent: "test", Action: "get_entry", OK: true},
 	}
-	writeTestLog(t, auditDir, "test", entries)
+	writeTestLog(t, auditDir, entries)
 
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // Windows
 
 	var buf bytes.Buffer
 	opts := ExportOptions{Agent: "test", Action: "set_entry"}
@@ -395,9 +398,10 @@ func TestExportAuditLogFailedOnly(t *testing.T) {
 		{Timestamp: "2026-01-02T00:00:00Z", Agent: "test", Action: "set_entry", OK: false},
 		{Timestamp: "2026-01-03T00:00:00Z", Agent: "test", Action: "get_entry", OK: true},
 	}
-	writeTestLog(t, auditDir, "test", entries)
+	writeTestLog(t, auditDir, entries)
 
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // Windows
 
 	var buf bytes.Buffer
 	opts := ExportOptions{Agent: "test", FailedOnly: true}
@@ -420,9 +424,10 @@ func TestExportAuditLogRedactPaths(t *testing.T) {
 	entries := []LogEntry{
 		{Timestamp: "2026-01-01T00:00:00Z", Agent: "test", Action: "get_entry", OK: true, Path: "github/token"},
 	}
-	writeTestLog(t, auditDir, "test", entries)
+	writeTestLog(t, auditDir, entries)
 
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // Windows
 
 	var buf bytes.Buffer
 	opts := ExportOptions{Agent: "test", RedactPaths: true}
@@ -456,6 +461,7 @@ func TestExportAuditLogVerifyHMAC(t *testing.T) {
 	writeTestLogWithHMAC(t, auditDir, "test", entries, key)
 
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // Windows
 
 	var buf bytes.Buffer
 	opts := ExportOptions{Agent: "test", VerifyHMAC: true, HMACKey: key}
@@ -488,6 +494,7 @@ func TestExportAuditLogEmpty(t *testing.T) {
 	os.MkdirAll(auditDir, 0o700)
 
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // Windows
 
 	var buf bytes.Buffer
 	opts := ExportOptions{Agent: "nonexistent"}
@@ -512,9 +519,10 @@ func TestStreamExportAuditLog(t *testing.T) {
 		{Timestamp: "2026-01-02T00:00:00Z", Agent: "test", Action: "b", OK: true},
 		{Timestamp: "2026-01-03T00:00:00Z", Agent: "test", Action: "c", OK: true},
 	}
-	writeTestLog(t, auditDir, "test", entries)
+	writeTestLog(t, auditDir, entries)
 
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // Windows
 
 	var count int
 	callback := func(entry ExportEntry) bool {
@@ -546,9 +554,10 @@ func TestStreamExportAuditLogEarlyStop(t *testing.T) {
 		{Timestamp: "2026-01-02T00:00:00Z", Agent: "test", Action: "b", OK: true},
 		{Timestamp: "2026-01-03T00:00:00Z", Agent: "test", Action: "c", OK: true},
 	}
-	writeTestLog(t, auditDir, "test", entries)
+	writeTestLog(t, auditDir, entries)
 
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // Windows
 
 	var count int
 	callback := func(entry ExportEntry) bool {
