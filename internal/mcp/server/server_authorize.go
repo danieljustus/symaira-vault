@@ -41,45 +41,10 @@ func RequestIDFromContext(ctx context.Context) string {
 }
 
 func (s *Server) authorize(ctx context.Context, path string, write bool, approved bool) error {
-	if s == nil || s.agent == nil {
+	if s == nil || s.authorizer == nil {
 		return errors.New("server not initialized")
 	}
-	if path == "" {
-		return errors.New("empty path")
-	}
-
-	actionType := "read"
-	if write {
-		actionType = "write"
-	}
-
-	if err := s.checkPolicy(ctx, path, actionType); err != nil {
-		return err
-	}
-
-	if !s.checkScope(path) {
-		s.logAudit(ctx, "scope_denied", path, false)
-		metrics.RecordAuthDenial("scope_denied", s.agent.Name)
-		return fmt.Errorf("path %q is outside agent scope", path)
-	}
-
-	if write && !s.canWrite() {
-		s.logAudit(ctx, "write_denied", path, false)
-		metrics.RecordAuthDenial("write_denied", s.agent.Name)
-		return fmt.Errorf("agent %q cannot write", s.agent.Name)
-	}
-
-	if write && s.requiresApproval() && !approved {
-		s.logAudit(ctx, "approval_required", path, false)
-		metrics.RecordAuthDenial("approval_required", s.agent.Name)
-		return fmt.Errorf("write to %q requires approval", path)
-	}
-
-	s.logAudit(ctx, actionType, path, approved)
-	if write && approved {
-		metrics.RecordApproval(s.agent.Name, "granted")
-	}
-	return nil
+	return s.authorizer.Authorize(ctx, path, write, approved)
 }
 
 func (s *Server) checkPolicy(ctx context.Context, path, actionType string) error {

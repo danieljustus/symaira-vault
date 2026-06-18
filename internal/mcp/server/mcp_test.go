@@ -7,6 +7,7 @@ import (
 
 	"github.com/danieljustus/symaira-vault/internal/audit"
 	"github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/policy"
 	"github.com/danieljustus/symaira-vault/internal/vault"
 )
 
@@ -20,13 +21,30 @@ func newTestServer(t *testing.T, profile config.AgentProfile, transport string) 
 	}
 
 	v := &vault.Vault{}
-	return &Server{
+	srv := &Server{
 		vault:        v,
 		vaultService: vault.NewVaultService(v, nil),
 		agent:        &profile,
 		auditLog:     auditLog,
 		transport:    transport,
 	}
+
+	canWrite := profile.CanWrite != nil && *profile.CanWrite
+	approvalMode := ""
+	if profile.ApprovalMode != nil {
+		approvalMode = *profile.ApprovalMode
+	}
+	authorizerConfig := policy.AuthorizerConfig{
+		AgentName:    profile.Name,
+		AllowedPaths: profile.AllowedPaths,
+		CanWrite:     canWrite,
+		ApprovalMode: approvalMode,
+	}
+	srv.authorizer = policy.NewAuthorizer(authorizerConfig,
+		policy.WithAuditLog(auditLog),
+	)
+
+	return srv
 }
 
 func TestAuthorizeDeniesWritesWhenAgentCannotWrite(t *testing.T) {
