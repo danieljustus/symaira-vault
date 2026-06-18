@@ -6,6 +6,64 @@ import { SymairaTools, maskValue } from "@symaira/mcp-client";
 const CONTEXT_MARKER_START = "<!-- SYMAIRA VAULT CONTEXT -->";
 const CONTEXT_MARKER_END = "<!-- END SYMAIRA VAULT CONTEXT -->";
 
+/**
+ * Sanitize an entry path to prevent prompt injection when writing to
+ * .cursorrules or similar context files.
+ *
+ * - Replaces newlines (LF, CR, CRLF) with escaped sequences
+ * - Escapes backticks to prevent code injection
+ * - Escapes pipe characters to prevent markdown table injection
+ */
+export function sanitizeEntryPath(entryPath: string): string {
+  // CRLF must be replaced before LF/CR to avoid partial escapes
+  let sanitized = entryPath.replace(/\r\n/g, "\\r\\n");
+  sanitized = sanitized.replace(/\n/g, "\\n");
+  sanitized = sanitized.replace(/\r/g, "\\r");
+  sanitized = sanitized.replace(/`/g, "\\`");
+  sanitized = sanitized.replace(/\|/g, "\\|");
+  return sanitized;
+}
+
+/**
+ * Validate a context file path to prevent path traversal attacks.
+ *
+ * - Rejects absolute paths (starting with / or drive letter on Windows)
+ * - Rejects paths containing `..` traversal
+ * - Verifies the resolved path stays inside the workspace folder
+ *
+ * @param contextFile - The context file path from configuration
+ * @param workspaceFolder - The workspace folder absolute path
+ * @returns The validated absolute path
+ * @throws Error if the path is invalid or escapes the workspace
+ */
+export function validateContextFilePath(
+  contextFile: string,
+  workspaceFolder: string
+): string {
+  if (path.isAbsolute(contextFile)) {
+    throw new Error(
+      `Context file path must be relative, got absolute path: ${contextFile}`
+    );
+  }
+
+  if (contextFile.includes("..")) {
+    throw new Error(
+      `Context file path must not contain ".." traversal: ${contextFile}`
+    );
+  }
+
+  const resolved = path.resolve(workspaceFolder, contextFile);
+  const resolvedWorkspace = path.resolve(workspaceFolder);
+
+  if (!resolved.startsWith(resolvedWorkspace + path.sep) && resolved !== resolvedWorkspace) {
+    throw new Error(
+      `Context file path escapes workspace folder: ${contextFile} resolves to ${resolved}`
+    );
+  }
+
+  return resolved;
+}
+
 export async function injectCursorContext(tools: SymairaTools): Promise<void> {
   const workspaceFolders = vscode.workspace.workspaceFolders;
   if (!workspaceFolders || workspaceFolders.length === 0) {
@@ -16,7 +74,10 @@ export async function injectCursorContext(tools: SymairaTools): Promise<void> {
   const contextFile = config.get<string>("contextFile", ".cursorrules");
 
   for (const folder of workspaceFolders) {
-    const cursorrulesPath = path.join(folder.uri.fsPath, contextFile);
+    const cursorrulesPath = validateContextFilePath(
+      contextFile,
+      folder.uri.fsPath
+    );
     await updateCursorrulesFile(cursorrulesPath, tools);
   }
 }
@@ -59,7 +120,7 @@ function parseEntries(result: { content: Array<{ type: string; text: string }> }
   return entries;
 }
 
-function buildContextBlock(entries: string[]): string {
+export function buildContextBlock(entries: string[]): string {
   if (entries.length === 0) {
     return `${CONTEXT_MARKER_START}\nNo Symaira Vault secrets available.\n${CONTEXT_MARKER_END}`;
   }
@@ -72,7 +133,8 @@ function buildContextBlock(entries: string[]): string {
   ];
 
   for (const entry of entries) {
-    lines.push(`- ${entry} (value: ${maskValue(entry)})`);
+    const sanitized = sanitizeEntryPath(entry);
+    lines.push(`- ${sanitized} (value: ${maskValue(entry)})`);
   }
 
   lines.push("");
