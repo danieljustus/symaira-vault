@@ -39,6 +39,10 @@ func (s *VaultService) ListEntries(prefix string) ([]string, error) {
 	return s.vaultService.ListEntries(prefix)
 }
 
+func (s *VaultService) ListEntryInfos(prefix string, configuredWorkers int) ([]vaultpkg.ListEntryInfo, error) {
+	return s.vaultService.ListEntryInfos(prefix, configuredWorkers)
+}
+
 func (s *VaultService) FindEntries(query string, opts vaultpkg.FindOptions) ([]vaultpkg.Match, error) {
 	return s.vaultService.FindEntries(query, opts)
 }

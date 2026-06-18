@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"runtime"
+	"sync"
 	"time"
 
 	"filippo.io/age"
@@ -31,6 +33,7 @@ type OperationService interface {
 	WriteEntry(v *Vault, path string, entry *Entry) error
 	DeleteEntry(v *Vault, path string) error
 	ListEntries(v *Vault, prefix string) ([]string, error)
+	ListEntryInfos(v *Vault, prefix string, configuredWorkers int) ([]ListEntryInfo, error)
 	FindEntries(v *Vault, query string, opts FindOptions) ([]Match, error)
 	VaultDir(v *Vault) string
 	VaultIdentity(v *Vault) *age.X25519Identity
@@ -72,6 +75,10 @@ func (s *VaultService) DeleteEntry(path string) error {
 
 func (s *VaultService) ListEntries(prefix string) ([]string, error) {
 	return s.Ops.ListEntries(s.Vault, prefix)
+}
+
+func (s *VaultService) ListEntryInfos(prefix string, configuredWorkers int) ([]ListEntryInfo, error) {
+	return s.Ops.ListEntryInfos(s.Vault, prefix, configuredWorkers)
 }
 
 func (s *VaultService) FindEntries(query string, opts FindOptions) ([]Match, error) {
@@ -230,6 +237,85 @@ func (DefaultOperationService) ListEntries(v *Vault, prefix string) ([]string, e
 		return nil, errorspkg.ReadFailed(err, "cannot list entries: %v", err)
 	}
 	return entries, nil
+}
+
+// ListEntryInfos returns entry metadata concurrently using a bounded worker pool.
+// This is significantly faster than sequential GetEntry calls for large vaults.
+func (DefaultOperationService) ListEntryInfos(v *Vault, prefix string, configuredWorkers int) ([]ListEntryInfo, error) {
+	paths, err := List(v.Dir, prefix, v.Identity)
+	if err != nil {
+		return nil, errorspkg.ReadFailed(err, "cannot list entries: %v", err)
+	}
+
+	if len(paths) == 0 {
+		return nil, nil
+	}
+
+	maxWorkers := configuredWorkers
+	if maxWorkers <= 0 {
+		maxWorkers = min(runtime.NumCPU(), 8)
+	}
+	if maxWorkers < 1 {
+		maxWorkers = 1
+	}
+	if maxWorkers > len(paths) {
+		maxWorkers = len(paths)
+	}
+
+	type entryResult struct {
+		index int
+		info  ListEntryInfo
+	}
+
+	pathChan := make(chan struct {
+		index int
+		path  string
+	}, len(paths))
+	resultChan := make(chan entryResult, len(paths))
+
+	var wg sync.WaitGroup
+	for i := 0; i < maxWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for item := range pathChan {
+				info := ListEntryInfo{Path: item.path}
+				entry, readErr := ReadEntry(v.Dir, item.path, v.Identity)
+				if readErr == nil && entry != nil {
+					info.Type = string(entry.SecretMetadata.Type)
+					info.UsageHint = entry.SecretMetadata.UsageHint
+					info.AutoRotate = entry.SecretMetadata.AutoRotate
+					if entry.Data != nil {
+						info.FieldCount = len(entry.Data)
+						info.HasValue = entry.Data["password"] != nil || entry.Data["secret"] != nil
+					}
+				}
+				resultChan <- entryResult{index: item.index, info: info}
+			}
+		}()
+	}
+
+	go func() {
+		for i, path := range paths {
+			pathChan <- struct {
+				index int
+				path  string
+			}{index: i, path: path}
+		}
+		close(pathChan)
+	}()
+
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+
+	infos := make([]ListEntryInfo, len(paths))
+	for result := range resultChan {
+		infos[result.index] = result.info
+	}
+
+	return infos, nil
 }
 
 func (DefaultOperationService) FindEntries(v *Vault, query string, opts FindOptions) ([]Match, error) {

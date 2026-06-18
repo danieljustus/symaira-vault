@@ -33,27 +33,24 @@ var listCmd = &cobra.Command{
 				prefix = args[0]
 			}
 
-			entries, err := vs.ListEntries(prefix)
-			if err != nil {
-				return errorspkg.ReadFailed(err, "cannot list entries")
-			}
-
 			if cli.OutputFormat != "text" {
-				outputs := make([]vaultpkg.ListEntryInfo, 0, len(entries))
-				for _, path := range entries {
-					output := vaultpkg.ListEntryInfo{Path: path}
-					entry, err := vs.GetEntry(path)
-					if err == nil {
-						output.Type = string(entry.SecretMetadata.Type)
-						output.UsageHint = entry.SecretMetadata.UsageHint
-						output.AutoRotate = entry.SecretMetadata.AutoRotate
-					}
-					outputs = append(outputs, output)
+				workers := 0
+				if v.Config != nil && v.Config.Vault != nil {
+					workers = v.Config.Vault.SearchWorkers
 				}
-				if err := cli.PrintResult(outputs); err != nil {
+				infos, err := vs.ListEntryInfos(prefix, workers)
+				if err != nil {
+					return errorspkg.ReadFailed(err, "cannot list entries")
+				}
+				if err := cli.PrintResult(infos); err != nil {
 					return err
 				}
 				return nil
+			}
+
+			entries, err := vs.ListEntries(prefix)
+			if err != nil {
+				return errorspkg.ReadFailed(err, "cannot list entries")
 			}
 
 			for _, e := range entries {
