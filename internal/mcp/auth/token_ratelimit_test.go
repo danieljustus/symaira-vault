@@ -111,7 +111,7 @@ func TestTokenRateLimiter_ConcurrentAccess(t *testing.T) {
 
 	done := make(chan struct{})
 	for i := 0; i < 10; i++ {
-		go func(id int) {
+		go func(_ int) {
 			defer func() { done <- struct{}{} }()
 			agentID := "concurrent-agent"
 			for j := 0; j < 50; j++ {

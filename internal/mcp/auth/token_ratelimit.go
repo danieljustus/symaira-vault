@@ -37,13 +37,14 @@ func (rl *TokenRateLimiter) RecordFailure(agentID string) {
 	defer rl.mu.Unlock()
 
 	b, ok := rl.buckets[agentID]
-	if !ok {
+	switch {
+	case !ok:
 		b = &tokenBucket{failures: 1, lastFail: time.Now()}
 		rl.buckets[agentID] = b
-	} else if !b.lockedAt.IsZero() && time.Since(b.lockedAt) > rl.lockout {
+	case !b.lockedAt.IsZero() && time.Since(b.lockedAt) > rl.lockout:
 		b.failures = 1
 		b.lockedAt = time.Time{}
-	} else if b.lockedAt.IsZero() {
+	case b.lockedAt.IsZero():
 		b.failures++
 	}
 	b.lastFail = time.Now()
