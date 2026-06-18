@@ -15,17 +15,24 @@
 .PARAMETER DryRun
     Download and verify but do not install.
 
+.PARAMETER SkipCosignVerification
+    Skip cosign signature verification of the checksums file.
+    By default, the installer requires cosign and fails if it is not installed.
+    Use this flag only if you cannot install cosign and understand the risk
+    of an unauthenticated checksums file.
+
 .EXAMPLE
     irm https://raw.githubusercontent.com/danieljustus/symaira-vault/main/scripts/install.ps1 | iex
     install.ps1 -Version 1.2.3
     install.ps1 -InstallDir C:\Tools
 #>
 
-[CmdletBinding()]
+    [CmdletBinding()]
 param(
     [string]$Version,
     [string]$InstallDir,
-    [switch]$DryRun
+    [switch]$DryRun,
+    [switch]$SkipCosignVerification
 )
 
 Set-StrictMode -Version Latest
@@ -106,23 +113,39 @@ function Test-ChecksumsSignature {
     param(
         [string]$ChecksumsPath,
         [string]$ChecksumsSigUrl,
-        [string]$ChecksumsPemUrl
+        [string]$ChecksumsPemUrl,
+        [switch]$SkipCosignVerification
     )
 
     if (-not (Test-CosignAvailable)) {
-        Write-Warn 'cosign not found — skipping checksums.txt signature verification.'
-        Write-Host ''
-        Write-Host '  The checksums file has NOT been signature-verified. A tampered release' -ForegroundColor Yellow
-        Write-Host '  asset could ship with matching tampered checksums.' -ForegroundColor Yellow
-        Write-Host ''
-        Write-Host '  To verify manually:' -ForegroundColor Yellow
-        Write-Host "    cosign verify-blob --certificate <checksums.pem> --signature <checksums.sig> ``" -ForegroundColor Yellow
-        Write-Host "      --certificate-identity-regexp '$CosignIdentityRegexp' ``" -ForegroundColor Yellow
-        Write-Host "      --certificate-oidc-issuer '$CosignOIDCIssuer' ``" -ForegroundColor Yellow
-        Write-Host "      checksums.txt" -ForegroundColor Yellow
-        Write-Host ''
-        Write-Host '  Install cosign: https://docs.sigstore.dev/cosign/installation/' -ForegroundColor Yellow
-        return
+        if ($SkipCosignVerification) {
+            Write-Warn 'cosign not found — skipping checksums.txt signature verification.'
+            Write-Host ''
+            Write-Host '  WARNING: You are installing with -SkipCosignVerification.' -ForegroundColor Yellow
+            Write-Host '  The checksums file has NOT been signature-verified. A tampered release' -ForegroundColor Yellow
+            Write-Host '  asset could ship with matching tampered checksums.' -ForegroundColor Yellow
+            Write-Host ''
+            Write-Host '  To verify manually:' -ForegroundColor Yellow
+            Write-Host "    cosign verify-blob --certificate <checksums.pem> --signature <checksums.sig> ``" -ForegroundColor Yellow
+            Write-Host "      --certificate-identity-regexp '$CosignIdentityRegexp' ``" -ForegroundColor Yellow
+            Write-Host "      --certificate-oidc-issuer '$CosignOIDCIssuer' ``" -ForegroundColor Yellow
+            Write-Host "      checksums.txt" -ForegroundColor Yellow
+            Write-Host ''
+            Write-Host '  Install cosign: https://docs.sigstore.dev/cosign/installation/' -ForegroundColor Yellow
+            return
+        }
+
+        throw @"
+cosign is required but was not found in PATH.
+
+  The installer cannot verify the checksums file signature without cosign.
+  This means a tampered release could ship with matching tampered checksums.
+
+  Install cosign: https://docs.sigstore.dev/cosign/installation/
+
+  If you understand the risk and want to bypass this check, re-run with:
+    -SkipCosignVerification
+"@
     }
 
     $sigPath = "${ChecksumsPath}.sig"
@@ -191,7 +214,7 @@ function Install-SymairaVault {
         # Verify checksums signature with cosign.
         $checksumsSigUrl = "$GitHubDl/$resolvedVersion/${checksumsFile}.sig"
         $checksumsPemUrl = "$GitHubDl/$resolvedVersion/${checksumsFile}.pem"
-        Test-ChecksumsSignature -ChecksumsPath $checksumsPath -ChecksumsSigUrl $checksumsSigUrl -ChecksumsPemUrl $checksumsPemUrl
+        Test-ChecksumsSignature -ChecksumsPath $checksumsPath -ChecksumsSigUrl $checksumsSigUrl -ChecksumsPemUrl $checksumsPemUrl -SkipCosignVerification:$SkipCosignVerification
 
         # Download archive.
         Write-Info "Downloading $archiveFile..."
