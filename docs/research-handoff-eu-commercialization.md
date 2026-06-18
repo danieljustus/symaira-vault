@@ -26,7 +26,7 @@ and compliance operations belong to `symaira-vault-pro`.
 | Configurable local audit retention | Implemented | `docs/audit-retention.md`, `config.yaml.example` |
 | Release hardening, checksums, signing, SBOM direction | Mostly implemented | `.goreleaser.yml`, `SECURITY.md`, `docs/distribution.md`, `docs/reproducible-builds.md` |
 | Redacted audit evidence export for self-hosted users | Open | `docs/error-tracking-strategy.md` marks audit export as future work |
-| Post-quantum transition planning | Open | No public PQC or ML-KEM migration plan is documented |
+| Post-quantum transition planning | Implemented | `docs/adr/0005-post-quantum-transition-plan.md` documents the strategy, migration risks, and monitoring inputs |
 | Enterprise SSO, SCIM, hosted RBAC, SIEM, compliance UI | Out of scope here | Tracked in `symaira-vault-pro` |
 
 ## Core Decisions
@@ -49,7 +49,8 @@ and compliance operations belong to `symaira-vault-pro`.
    without leaking secret values or raw vault paths.
 3. X25519 and ChaCha20-Poly1305 remain the current cryptographic baseline, but
    German/EU regulated buyers will ask for a documented post-quantum transition
-   plan before long-term procurement decisions.
+   plan before long-term procurement decisions. The plan now exists at
+   `docs/adr/0005-post-quantum-transition-plan.md`.
 4. Hardware-backed unlock and FIDO2/WebAuthn are enterprise-relevant, but hosted
    MFA enforcement belongs to Pro. Public core may later evaluate local
    hardware-key unlock without creating paid gates.
@@ -66,3 +67,4 @@ The following issues preserve the remaining public-core work:
   add a redacted self-hosted audit evidence export.
 - [#485](https://github.com/danieljustus/symaira-vault/issues/485):
   document the post-quantum transition plan for the public crypto envelope.
+  -- Resolved by `docs/adr/0005-post-quantum-transition-plan.md`.
