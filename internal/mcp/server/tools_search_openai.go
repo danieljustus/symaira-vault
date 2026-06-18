@@ -8,9 +8,11 @@ import (
 	"strings"
 	"time"
 
-	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
+	"github.com/danieljustus/symaira-vault/internal/vault/taint"
+
+	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 )
 
 type openAISearchResult struct {
@@ -122,7 +124,71 @@ func (s *Server) handleFetchOpenAI(ctx context.Context, req mcp.CallToolRequest)
 		},
 	}
 
-	if s.canReadValues() && len(entry.Data) > 0 {
+	// Block value access for quarantined entries. Normalize path first to prevent
+	// traversal bypasses (e.g., "quarantine/../secrets/foo" normalizes to
+	// "secrets/foo", correctly bypassing the check — that path is not quarantined).
+	{
+		cleanedPath := path.Clean(id)
+		if cleanedPath == "quarantine" || strings.HasPrefix(cleanedPath, "quarantine/") {
+			s.logAudit(ctx, "quarantine_block", id, false)
+			return mcp.NewToolResultError("entry is in quarantine — run 'symvault import review promote' to make it accessible"), nil
+		}
+	}
+
+	// Gate value exposure on ExposeValueTools: when false, fetch returns metadata-only.
+	// ExposeValueTools controls whether the get_entry_value tool is registered at all;
+	// fetch must respect the same gate to avoid a side-channel bypass.
+	exposeValues := s.agent != nil && s.agent.ExposeValueTools != nil && *s.agent.ExposeValueTools
+
+	if exposeValues && s.canReadValues() && len(entry.Data) > 0 {
+		// Apply the same security controls as handleGetValue for value exposure.
+
+		if s.agent != nil {
+			if patterns := s.agent.EffectiveRedactFields("fetch_openai"); len(patterns) > 0 {
+				entry = redactEntry(entry, patterns)
+			}
+		}
+
+		shouldSeal := entry.Classification >= taint.Secret && (s.agent == nil || s.agent.AutoUnseal == nil || !*s.agent.AutoUnseal)
+		if shouldSeal {
+			return s.sealEntryResponse(ctx, entry, id), nil
+		}
+
+		maxSecrets := 0
+		if s.agent.MaxSecretsInSession != nil {
+			maxSecrets = *s.agent.MaxSecretsInSession
+		}
+		if maxSecrets > 0 {
+			accessed := s.secretsAccessed.Load()
+			fieldCount := int64(len(entry.Data))
+			if accessed+fieldCount > int64(maxSecrets) {
+				return mcp.NewToolResultError(
+					fmt.Sprintf("max secrets per session exceeded (%d/%d)", accessed+fieldCount, maxSecrets)), nil
+			}
+		}
+
+		for range entry.Data {
+			s.secretsAccessed.Add(1)
+		}
+
+		entry.Data = wrapDataFields(entry.Data)
+
+		piMode := ""
+		if s.agent != nil && s.agent.PromptInjectionMode != nil {
+			piMode = *s.agent.PromptInjectionMode
+		}
+		if piMode != "" && piMode != "off" {
+			for k, v := range entry.Data {
+				if str, ok := v.(string); ok {
+					checked, checkErr := s.applySemanticInjectionCheck(str)
+					if checkErr != nil {
+						return mcp.NewToolResultError(checkErr.Error()), nil
+					}
+					entry.Data[k] = checked
+				}
+			}
+		}
+
 		response.Values = entry.Data
 	}
 
