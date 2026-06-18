@@ -33,12 +33,12 @@ type Authorizer interface {
 
 // AuthorizerConfig holds configuration for the authorizer.
 type AuthorizerConfig struct {
-	AgentName        string
-	AllowedPaths     []string
-	CanWrite         bool
-	ApprovalMode     string
+	AgentName           string
+	AllowedPaths        []string
+	CanWrite            bool
+	ApprovalMode        string
 	PromptInjectionMode string
-	RedactFields     []string
+	RedactFields        []string
 }
 
 // AuthorizerOption is a functional option for configuring the authorizer.
@@ -72,10 +72,10 @@ type ShareStore interface {
 
 // authorizerImpl implements the Authorizer interface.
 type authorizerImpl struct {
-	config      AuthorizerConfig
+	config       AuthorizerConfig
 	policyEngine *Engine
-	auditLog    *audit.Logger
-	shareStore  ShareStore
+	auditLog     *audit.Logger
+	shareStore   ShareStore
 }
 
 // NewAuthorizer creates a new Authorizer with the given configuration and options.

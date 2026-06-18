@@ -194,10 +194,10 @@ func New(v *vault.Vault, agentName string, transport string) (*Server, error) {
 		approvalMode = *agent.ApprovalMode
 	}
 	authorizerConfig := policy.AuthorizerConfig{
-		AgentName:        agentName,
-		AllowedPaths:     agent.AllowedPaths,
-		CanWrite:         canWrite,
-		ApprovalMode:     approvalMode,
+		AgentName:    agentName,
+		AllowedPaths: agent.AllowedPaths,
+		CanWrite:     canWrite,
+		ApprovalMode: approvalMode,
 		PromptInjectionMode: func() string {
 			if agent.PromptInjectionMode != nil {
 				return *agent.PromptInjectionMode
