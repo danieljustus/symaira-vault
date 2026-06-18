@@ -36,8 +36,12 @@ type TokenRegistryFile struct {
 	Tokens  map[string]TokenRegistryEntry `json:"tokens"`
 }
 
-// TokenRegistryEntry is a single entry in the on-disk token registry.
-type TokenRegistryEntry struct {
+// TokenData holds the fields shared by the on-disk TokenRegistryEntry and the
+// in-memory ScopedToken. Defining them once keeps the two representations in
+// sync: a new token attribute only needs to be added here. The struct is
+// embedded anonymously, so its fields are promoted and marshal inline — the
+// on-disk JSON layout is unchanged.
+type TokenData struct {
 	ID               string     `json:"id"`
 	Label            string     `json:"label,omitempty"`
 	Hash             string     `json:"hash"`
@@ -54,23 +58,15 @@ type TokenRegistryEntry struct {
 	RefreshExpiresAt *time.Time `json:"refresh_expires_at,omitempty"`
 }
 
+// TokenRegistryEntry is a single entry in the on-disk token registry.
+type TokenRegistryEntry struct {
+	TokenData
+}
+
 // ScopedToken is the in-memory representation of a scoped token with its
 // associated metadata. It is safe for concurrent access.
 type ScopedToken struct {
-	ID               string     `json:"id"`
-	Label            string     `json:"label,omitempty"`
-	Hash             string     `json:"hash"`
-	Prefix           string     `json:"prefix"`
-	AllowedTools     []string   `json:"allowed_tools"`
-	ToolRegistryHash string     `json:"tool_registry_hash,omitempty"`
-	AgentName        string     `json:"agent_name,omitempty"`
-	CreatedAt        time.Time  `json:"created_at"`
-	ExpiresAt        *time.Time `json:"expires_at,omitempty"`
-	LastUsedAt       *time.Time `json:"last_used_at,omitempty"`
-	Revoked          bool       `json:"revoked"`
-	RevokedAt        *time.Time `json:"revoked_at,omitempty"`
-	RefreshTokenHash string     `json:"refresh_token_hash,omitempty"`
-	RefreshExpiresAt *time.Time `json:"refresh_expires_at,omitempty"`
+	TokenData
 
 	mu sync.Mutex
 }
@@ -144,46 +140,16 @@ func (t *ScopedToken) toEntry() TokenRegistryEntry {
 	if t == nil {
 		return TokenRegistryEntry{}
 	}
-	return TokenRegistryEntry{
-		ID:               t.ID,
-		Label:            t.Label,
-		Hash:             t.Hash,
-		Prefix:           t.Prefix,
-		AllowedTools:     t.AllowedTools,
-		ToolRegistryHash: t.ToolRegistryHash,
-		AgentName:        t.AgentName,
-		CreatedAt:        t.CreatedAt,
-		ExpiresAt:        t.ExpiresAt,
-		LastUsedAt:       t.LastUsedAt,
-		Revoked:          t.Revoked,
-		RevokedAt:        t.RevokedAt,
-		RefreshTokenHash: t.RefreshTokenHash,
-		RefreshExpiresAt: t.RefreshExpiresAt,
-	}
+	return TokenRegistryEntry{TokenData: t.TokenData}
 }
 
 // entryToScopedToken converts an on-disk entry to in-memory ScopedToken.
 func entryToScopedToken(e TokenRegistryEntry) *ScopedToken {
-	allowed := e.AllowedTools
-	if allowed == nil {
-		allowed = []string{}
+	t := &ScopedToken{TokenData: e.TokenData}
+	if t.AllowedTools == nil {
+		t.AllowedTools = []string{}
 	}
-	return &ScopedToken{
-		ID:               e.ID,
-		Label:            e.Label,
-		Hash:             e.Hash,
-		Prefix:           e.Prefix,
-		AllowedTools:     allowed,
-		ToolRegistryHash: e.ToolRegistryHash,
-		AgentName:        e.AgentName,
-		CreatedAt:        e.CreatedAt,
-		ExpiresAt:        e.ExpiresAt,
-		LastUsedAt:       e.LastUsedAt,
-		Revoked:          e.Revoked,
-		RevokedAt:        e.RevokedAt,
-		RefreshTokenHash: e.RefreshTokenHash,
-		RefreshExpiresAt: e.RefreshExpiresAt,
-	}
+	return t
 }
 
 // TokenRegistry provides thread-safe management of scoped MCP tokens backed
@@ -355,7 +321,7 @@ func (r *TokenRegistry) Create(label string, allowedTools []string, agentName st
 	}
 
 	createdAt := time.Now().UTC()
-	t := &ScopedToken{
+	t := &ScopedToken{TokenData: TokenData{
 		ID:               id,
 		Label:            label,
 		Hash:             hash,
@@ -365,7 +331,7 @@ func (r *TokenRegistry) Create(label string, allowedTools []string, agentName st
 		AgentName:        agentName,
 		CreatedAt:        createdAt,
 		ExpiresAt:        expiresAt,
-	}
+	}}
 
 	r.mu.Lock()
 	r.entries[hash] = t
@@ -468,7 +434,7 @@ func (r *TokenRegistry) CreateWithRefresh(label string, allowedTools []string, a
 	}
 
 	createdAt := time.Now().UTC()
-	t := &ScopedToken{
+	t := &ScopedToken{TokenData: TokenData{
 		ID:               id,
 		Label:            label,
 		Hash:             accessHash,
@@ -480,7 +446,7 @@ func (r *TokenRegistry) CreateWithRefresh(label string, allowedTools []string, a
 		ExpiresAt:        expiresAt,
 		RefreshTokenHash: refreshHash,
 		RefreshExpiresAt: refreshExpiresAt,
-	}
+	}}
 
 	r.mu.Lock()
 	r.entries[accessHash] = t
@@ -797,7 +763,7 @@ func LoadTokenSystemWithIdentity(identity *age.X25519Identity, vaultDir string, 
 		prefix := legacyToken[:4]
 		if _, exists := reg.Get(hash); !exists {
 			id := generateTokenID()
-			entry := &ScopedToken{
+			entry := &ScopedToken{TokenData: TokenData{
 				ID:           id,
 				Label:        "legacy (auto-migrated, unscoped)",
 				Hash:         hash,
@@ -805,7 +771,7 @@ func LoadTokenSystemWithIdentity(identity *age.X25519Identity, vaultDir string, 
 				AllowedTools: []string{"*"},
 				AgentName:    "legacy",
 				CreatedAt:    time.Now().UTC(),
-			}
+			}}
 			reg.mu.Lock()
 			reg.entries[hash] = entry
 			reg.mu.Unlock()

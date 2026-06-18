@@ -621,9 +621,9 @@ func TestTokenRegistry_GetNotFound(t *testing.T) {
 }
 
 func TestTokenRegistry_IsToolAllowed_Wildcards(t *testing.T) {
-	tok := &ScopedToken{
+	tok := &ScopedToken{TokenData: TokenData{
 		AllowedTools: []string{"*"},
-	}
+	}}
 
 	if !tok.IsToolAllowed("any_tool") {
 		t.Error("wildcard '*' should allow any tool")
@@ -634,9 +634,9 @@ func TestTokenRegistry_IsToolAllowed_Wildcards(t *testing.T) {
 }
 
 func TestTokenRegistry_IsToolAllowed_ExactMatch(t *testing.T) {
-	tok := &ScopedToken{
+	tok := &ScopedToken{TokenData: TokenData{
 		AllowedTools: []string{"get_entry", "list_entries", "find_entries"},
-	}
+	}}
 
 	if !tok.IsToolAllowed("get_entry") {
 		t.Error("should allow get_entry")
@@ -653,9 +653,9 @@ func TestTokenRegistry_IsToolAllowed_ExactMatch(t *testing.T) {
 }
 
 func TestTokenRegistry_IsToolAllowed_AliasNames(t *testing.T) {
-	tok := &ScopedToken{
+	tok := &ScopedToken{TokenData: TokenData{
 		AllowedTools: []string{"delete_entry", "symaira_delete"},
-	}
+	}}
 
 	if !tok.IsToolAllowed("delete_entry") {
 		t.Error("should allow delete_entry")
@@ -666,9 +666,9 @@ func TestTokenRegistry_IsToolAllowed_AliasNames(t *testing.T) {
 }
 
 func TestTokenRegistry_IsToolAllowed_EmptyList(t *testing.T) {
-	tok := &ScopedToken{
+	tok := &ScopedToken{TokenData: TokenData{
 		AllowedTools: []string{},
-	}
+	}}
 
 	if tok.IsToolAllowed("anything") {
 		t.Error("empty allowed list should deny everything")
@@ -992,7 +992,7 @@ func TestScopedToken_Roundtrip(t *testing.T) {
 	now := time.Now().UTC()
 	expiry := now.Add(1 * time.Hour)
 
-	original := &ScopedToken{
+	original := &ScopedToken{TokenData: TokenData{
 		ID:           "tok-20260101-abc12345",
 		Label:        "my-token",
 		Hash:         sha256Hex("dummy"),
@@ -1003,7 +1003,7 @@ func TestScopedToken_Roundtrip(t *testing.T) {
 		ExpiresAt:    &expiry,
 		LastUsedAt:   &now,
 		Revoked:      false,
-	}
+	}}
 
 	entry := original.toEntry()
 	restored := entryToScopedToken(entry)
@@ -1023,12 +1023,12 @@ func TestScopedToken_Roundtrip(t *testing.T) {
 }
 
 func TestScopedToken_Roundtrip_NilFields(t *testing.T) {
-	original := &ScopedToken{
+	original := &ScopedToken{TokenData: TokenData{
 		ID:        "tok-minimal",
 		Hash:      sha256Hex("minimal"),
 		Prefix:    "mini",
 		CreatedAt: time.Now().UTC(),
-	}
+	}}
 
 	// AllowedTools nil → should become empty slice.
 	entry := original.toEntry()
@@ -1354,21 +1354,21 @@ func TestTokenRegistryHashStoredOnCreateWithRefresh(t *testing.T) {
 }
 
 func TestTokenLegacyNoHashSkipsCheck(t *testing.T) {
-	tok := &ScopedToken{
+	tok := &ScopedToken{TokenData: TokenData{
 		ID:               "tok-test",
 		Hash:             "abc",
 		AllowedTools:     []string{"*"},
 		ToolRegistryHash: "", // legacy token
-	}
+	}}
 	if tok.IsToolRegistryDriftDetected() {
 		t.Error("legacy token (no hash) should not report drift")
 	}
 }
 
 func TestTokenDriftDetected(t *testing.T) {
-	tok := &ScopedToken{
+	tok := &ScopedToken{TokenData: TokenData{
 		ToolRegistryHash: "stale-hash-does-not-match",
-	}
+	}}
 	if !tok.IsToolRegistryDriftDetected() {
 		t.Error("stale hash should report drift")
 	}

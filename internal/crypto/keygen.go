@@ -278,8 +278,8 @@ func LoadIdentityWithArgon2id(path string, passphrase []byte) (*age.X25519Identi
 
 // DetectEncryptedIdentityFormat checks the age stanza type. Returns "scrypt", "argon2id", or "".
 func DetectEncryptedIdentityFormat(raw []byte) string {
-	if bytes.Contains(raw, []byte("-> argon2id")) {
-		return "argon2id"
+	if bytes.Contains(raw, []byte("-> "+Argon2idStanzaType)) {
+		return Argon2idStanzaType
 	}
 	if bytes.Contains(raw, []byte("-> scrypt")) {
 		return "scrypt"

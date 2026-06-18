@@ -334,6 +334,41 @@ func TestSaveLoadIdentityWithArgon2idWrongPassphrase(t *testing.T) {
 	}
 }
 
+// TestSaveLoadIdentityWithArgon2idWrongPassphraseSameLength is a regression
+// test for the bug where the argon2id recipient/identity aliased the caller's
+// passphrase buffer, which was Wipe()d before key derivation ran. The key was
+// then derived from zeroed memory, so the passphrase content was ignored and
+// any passphrase of the same byte length would decrypt the identity. The
+// existing wrong-passphrase test missed it because its wrong passphrase had a
+// different length (decryption failed for the wrong reason). This test pins the
+// fix by using a wrong passphrase of the SAME length as the correct one.
+func TestSaveLoadIdentityWithArgon2idWrongPassphraseSameLength(t *testing.T) {
+	identity, err := GenerateIdentity()
+	if err != nil {
+		t.Fatalf("GenerateIdentity() error = %v", err)
+	}
+
+	dir := t.TempDir()
+	path := dir + string(os.PathSeparator) + "identity.age"
+
+	correct := []byte("correctpassword01")      // 17 bytes
+	wrongSameLen := []byte("wrongpasswordZZ99") // 17 bytes, different content
+	if len(correct) != len(wrongSameLen) {
+		t.Fatalf("test setup: passphrases must be the same length")
+	}
+
+	if err = SaveIdentityWithArgon2id(identity, path, correct, Argon2idParams{}); err != nil {
+		t.Fatalf("SaveIdentityWithArgon2id() error = %v", err)
+	}
+
+	if _, err = LoadIdentityWithArgon2id(path, wrongSameLen); err == nil {
+		t.Fatal("a different passphrase of the same length must not decrypt the identity (passphrase content is ignored)")
+	}
+	if !errors.Is(err, ErrDecryptionFailed) {
+		t.Fatalf("expected ErrDecryptionFailed, got: %v", err)
+	}
+}
+
 func TestDetectEncryptedIdentityFormat(t *testing.T) {
 	tests := []struct {
 		name     string

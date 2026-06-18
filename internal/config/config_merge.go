@@ -270,6 +270,9 @@ func mergeVaultConfig(raw *VaultConfig, sf map[string]bool, rawAuthMethod string
 	if sf["scrypt_work_factor"] {
 		defaults.ScryptWorkFactor = raw.ScryptWorkFactor
 	}
+	if sf["auto_migrate_kdf"] {
+		defaults.AutoMigrateKDF = raw.AutoMigrateKDF
+	}
 	if sf["last_rotated"] {
 		defaults.LastRotated = raw.LastRotated
 	}

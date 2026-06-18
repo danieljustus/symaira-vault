@@ -69,6 +69,7 @@ func (c *Config) SaveTo(path string) error {
 			ConfigCacheEntries: c.Vault.ConfigCacheEntries,
 			PseudonymizePaths:  c.Vault.PseudonymizePaths,
 			ScryptWorkFactor:   c.Vault.ScryptWorkFactor,
+			AutoMigrateKDF:     c.Vault.AutoMigrateKDF,
 			LastRotated:        c.Vault.LastRotated,
 			FormatVersion:      c.Vault.FormatVersion,
 			Argon2idTime:       c.Vault.Argon2idTime,
