@@ -34,3 +34,10 @@ export class SymairaToolError extends SymairaError {
     this.toolError = toolError;
   }
 }
+
+export class SymairaURLError extends SymairaError {
+  constructor(message: string) {
+    super(message);
+    this.name = "SymairaURLError";
+  }
+}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/danieljustus/symaira-vault/internal/config"
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func TestHandleSearchOpenAI_Success(t *testing.T) {
@@ -173,11 +174,12 @@ func TestHandleSearchOpenAI_NoResults(t *testing.T) {
 func TestHandleFetchOpenAI_Success(t *testing.T) {
 	vaultDir, identity := mockVault(t)
 	srv := newTestServerWithVault(t, config.AgentProfile{
-		Name:          "test",
-		AllowedPaths:  []string{"*"},
-		CanWrite:      config.BoolPtr(false),
-		CanReadValues: config.BoolPtr(true),
-		ApprovalMode:  config.StrPtr("none"),
+		Name:             "test",
+		AllowedPaths:     []string{"*"},
+		CanWrite:         config.BoolPtr(false),
+		CanReadValues:    config.BoolPtr(true),
+		ExposeValueTools: config.BoolPtr(true),
+		ApprovalMode:     config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -532,11 +534,12 @@ func TestExecuteTool_SearchOpenAI(t *testing.T) {
 func TestExecuteTool_FetchOpenAI(t *testing.T) {
 	vaultDir, identity := mockVault(t)
 	srv := newTestServerWithVault(t, config.AgentProfile{
-		Name:          "test",
-		AllowedPaths:  []string{"*"},
-		CanWrite:      config.BoolPtr(false),
-		CanReadValues: config.BoolPtr(true),
-		ApprovalMode:  config.StrPtr("none"),
+		Name:             "test",
+		AllowedPaths:     []string{"*"},
+		CanWrite:         config.BoolPtr(false),
+		CanReadValues:    config.BoolPtr(true),
+		ExposeValueTools: config.BoolPtr(true),
+		ApprovalMode:     config.StrPtr("none"),
 	}, "stdio", vaultDir)
 	srv.vault.Identity = identity
 
@@ -557,5 +560,77 @@ func TestExecuteTool_FetchOpenAI(t *testing.T) {
 
 	if _, ok := result["structuredContent"]; !ok {
 		t.Error("expected structuredContent in result")
+	}
+}
+
+func TestFetchOpenAI_QuarantineBlocked(t *testing.T) {
+	vaultDir, identity := mockVault(t)
+
+	entry := &vault.Entry{
+		Data: map[string]any{"password": "testpass123"},
+	}
+	if err := vault.WriteEntry(vaultDir, "quarantine/bad", entry, identity); err != nil {
+		t.Fatalf("write quarantine entry: %v", err)
+	}
+
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:             "test",
+		AllowedPaths:     []string{"*"},
+		CanWrite:         config.BoolPtr(false),
+		CanReadValues:    config.BoolPtr(true),
+		ExposeValueTools: config.BoolPtr(true),
+		ApprovalMode:     config.StrPtr("none"),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{"id": "quarantine/bad"},
+	}
+
+	result, err := srv.handleFetchOpenAI(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleFetchOpenAI() error = %v", err)
+	}
+	if result == nil || !result.IsError {
+		t.Fatal("handleFetchOpenAI() expected error for quarantined entry")
+	}
+	if !strings.Contains(result.Text, "quarantine") {
+		t.Errorf("error = %q, want quarantine message", result.Text)
+	}
+}
+
+func TestFetchOpenAI_ValuesBlockedWhenExposeValueToolsFalse(t *testing.T) {
+	vaultDir, identity := mockVault(t)
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:             "test",
+		AllowedPaths:     []string{"*"},
+		CanWrite:         config.BoolPtr(false),
+		CanReadValues:    config.BoolPtr(true),
+		ExposeValueTools: config.BoolPtr(false),
+		ApprovalMode:     config.StrPtr("none"),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{"id": "github"},
+	}
+
+	result, err := srv.handleFetchOpenAI(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleFetchOpenAI() error = %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("handleFetchOpenAI() returned error: %s", result.Text)
+	}
+
+	structured, ok := result.StructuredContent.(openAIFetchResponse)
+	if !ok {
+		t.Fatalf("StructuredContent type = %T, want openAIFetchResponse", result.StructuredContent)
+	}
+	if structured.Values != nil {
+		t.Error("Values must be nil when ExposeValueTools=false, even if canReadValues=true")
+	}
+	if structured.Metadata == nil {
+		t.Error("Metadata should still be present")
 	}
 }

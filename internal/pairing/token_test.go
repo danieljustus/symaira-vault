@@ -308,3 +308,72 @@ func TestGenerateToken_DisplayFormat(t *testing.T) {
 		t.Errorf("Display reconstruction mismatch: %q vs %q", reconstructed, string(token))
 	}
 }
+
+func TestValidatePairingToken_Valid(t *testing.T) {
+	token, err := GenerateToken()
+	if err != nil {
+		t.Fatalf("GenerateToken error: %v", err)
+	}
+	if err := ValidatePairingToken(string(token)); err != nil {
+		t.Errorf("ValidatePairingToken(%q) = %v, want nil", string(token), err)
+	}
+}
+
+func TestValidatePairingToken_Empty(t *testing.T) {
+	if err := ValidatePairingToken(""); err == nil {
+		t.Error("expected error for empty token")
+	}
+}
+
+func TestValidatePairingToken_PathSeparator(t *testing.T) {
+	for _, tok := range []string{"../../../etc/passwd", "abc/def", `abc\def`} {
+		if err := ValidatePairingToken(tok); err == nil {
+			t.Errorf("expected error for token %q", tok)
+		}
+	}
+}
+
+func TestValidatePairingToken_NullByte(t *testing.T) {
+	if err := ValidatePairingToken("abc\x00def"); err == nil {
+		t.Error("expected error for null byte in token")
+	}
+}
+
+func TestValidatePairingToken_ControlChars(t *testing.T) {
+	if err := ValidatePairingToken("abc\x01def"); err == nil {
+		t.Error("expected error for control character in token")
+	}
+}
+
+func TestValidatePairingToken_InvalidChars(t *testing.T) {
+	for _, tok := range []string{"abc def", "abc:def", "abc=def", "abc+def"} {
+		if err := ValidatePairingToken(tok); err == nil {
+			t.Errorf("expected error for token %q", tok)
+		}
+	}
+}
+
+func TestValidatePairingToken_LowercaseValid(t *testing.T) {
+	if err := ValidatePairingToken("abcdef012345"); err != nil {
+		t.Errorf("lowercase base32 hex should be valid, got %v", err)
+	}
+}
+
+func TestValidatePairingToken_TooLong(t *testing.T) {
+	long := strings.Repeat("A", 65)
+	if err := ValidatePairingToken(long); err == nil {
+		t.Error("expected error for token > 64 chars")
+	}
+}
+
+func TestValidatePairingToken_GenerateTokenAlwaysValid(t *testing.T) {
+	for i := 0; i < 50; i++ {
+		token, err := GenerateToken()
+		if err != nil {
+			t.Fatalf("iteration %d: GenerateToken error: %v", i, err)
+		}
+		if err := ValidatePairingToken(string(token)); err != nil {
+			t.Errorf("iteration %d: generated token %q rejected: %v", i, string(token), err)
+		}
+	}
+}

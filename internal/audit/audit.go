@@ -840,10 +840,21 @@ func VerifyLog(logFilePath string, key []byte) (*VerifyResult, error) {
 
 	mac := hmac.New(sha256.New, key)
 	var prevHMAC []byte
+	chainStarted := false
 	for i, entry := range entries {
 		if entry.HMAC == "" {
-			result.Legacy++
-			prevHMAC = nil
+			if chainStarted {
+				// Legacy record after HMAC chain started — tampered (chain reset attack).
+				result.Tampered++
+				result.Valid = false
+				if result.FirstBadIdx < 0 {
+					result.FirstBadIdx = i
+				}
+			} else {
+				// Legacy record before any HMAC entry — backward-compatible legacy prefix.
+				result.Legacy++
+				prevHMAC = nil
+			}
 			continue
 		}
 
@@ -859,6 +870,7 @@ func VerifyLog(logFilePath string, key []byte) (*VerifyResult, error) {
 		} else {
 			result.Verified++
 			prevHMAC = entryHMACBytes
+			chainStarted = true
 		}
 	}
 

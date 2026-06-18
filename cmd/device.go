@@ -115,6 +115,10 @@ to re-encrypt all entries for this new device.`,
 		remoteURL := args[0]
 		token := strings.TrimSpace(args[1])
 
+		if err := pairing.ValidatePairingToken(token); err != nil {
+			return fmt.Errorf("invalid pairing token: %w", err)
+		}
+
 		vaultDir, err := cli.VaultPath()
 		if err != nil {
 			return err
@@ -135,7 +139,7 @@ to re-encrypt all entries for this new device.`,
 		pairingPath := filepath.Join(vaultDir, configpkg.DefaultVaultSubdir, "pairing", token+".json")
 		var pf pairingFile
 		// #nosec G304 -- pairingPath is constructed within the vault directory
-		pfData, err := os.ReadFile(pairingPath)
+		pfData, err := vaultpkg.SafeReadFile(pairingPath)
 		if err != nil {
 			return fmt.Errorf("invalid or expired pairing token: could not read pairing file. Ensure the token is correct and the pairing device has pushed the token file: %w", err)
 		}
@@ -244,6 +248,10 @@ can decrypt them.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		token := strings.TrimSpace(args[0])
 
+		if err := pairing.ValidatePairingToken(token); err != nil {
+			return fmt.Errorf("invalid pairing token: %w", err)
+		}
+
 		vaultDir, err := cli.VaultPath()
 		if err != nil {
 			return err
@@ -257,7 +265,7 @@ can decrypt them.`,
 		joinedPath := filepath.Join(vaultDir, configpkg.DefaultVaultSubdir, "pairing", token+"-joined.json")
 		var jf joinedFile
 		// #nosec G304 -- joinedPath is constructed within the vault directory
-		jfData, err := os.ReadFile(joinedPath)
+		jfData, err := vaultpkg.SafeReadFile(joinedPath)
 		if err != nil {
 			return fmt.Errorf("no join request found for token %s. Ensure the joining device has completed 'symvault device join' and pushed: %w", token, err)
 		}
@@ -443,6 +451,10 @@ request so the first device can accept it.`,
 			existingPubkey = raw[idx+1:]
 		} else {
 			token = raw
+		}
+
+		if valErr := pairing.ValidatePairingToken(token); valErr != nil {
+			return fmt.Errorf("invalid pairing token: %w", valErr)
 		}
 
 		if !strings.HasPrefix(existingPubkey, "age1") || len(existingPubkey) < 50 {

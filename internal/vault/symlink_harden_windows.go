@@ -39,6 +39,24 @@ func SafeMkdirAll(path string, perm os.FileMode) error {
 	return safepath.DefaultManager.MkdirAll(path, perm)
 }
 
+// SafeReadFile reads the file at path after verifying it is not a symlink
+// or other non-regular file. This prevents an attacker who controls a
+// symlink at path from having the vault read an arbitrary file.
+func SafeReadFile(path string) ([]byte, error) {
+	if err := rejectSymlink(path); err != nil {
+		return nil, err
+	}
+	if info, err := os.Lstat(path); err == nil {
+		if !info.Mode().IsRegular() {
+			return nil, &os.PathError{Op: "open", Path: path, Err: errUnsafePath}
+		}
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return nil, err
+	}
+
+	return os.ReadFile(path) // #nosec G304 -- symlink check performed above
+}
+
 func rejectSymlink(path string) error {
 	info, err := os.Lstat(path)
 	if err == nil {

@@ -82,14 +82,13 @@ func ReadEntry(vaultDir, path string, identity *age.X25519Identity) (*Entry, err
 		return nil, err
 	}
 	filePath := entryStoragePath(vaultDir, path, identity, cfg)
-	// #nosec G304
-	raw, err := os.ReadFile(filePath)
+	raw, err := SafeReadFile(filePath)
 	if os.IsNotExist(err) && canUseLegacyEntryPath(path) {
 		if legacyErr := validateLegacyEntryPath(vaultDir, path); legacyErr != nil {
 			span.SetStatus(codes.Error, legacyErr.Error())
 			return nil, legacyErr
 		}
-		raw, err = os.ReadFile(legacyEntryFilePath(vaultDir, path))
+		raw, err = SafeReadFile(legacyEntryFilePath(vaultDir, path))
 	}
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
@@ -143,14 +142,13 @@ func readEntryInner(vaultDir, path string, identity *age.X25519Identity, pseudoK
 	} else {
 		filePath = entryStoragePath(vaultDir, path, identity, cfg)
 	}
-	// #nosec G304 -- filePath is constructed by entryStoragePath from validated vaultDir and path
-	raw, err := os.ReadFile(filePath)
+	raw, err := SafeReadFile(filePath)
 	if os.IsNotExist(err) && canUseLegacyEntryPath(path) {
 		if legacyErr := validateLegacyEntryPath(vaultDir, path); legacyErr != nil {
 			span.SetStatus(codes.Error, legacyErr.Error())
 			return nil, legacyErr
 		}
-		raw, err = os.ReadFile(legacyEntryFilePath(vaultDir, path))
+		raw, err = SafeReadFile(legacyEntryFilePath(vaultDir, path))
 	}
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
@@ -446,12 +444,12 @@ func GetEntryMetadata(vaultDir, path string, identity *age.X25519Identity) (*Ent
 	if err != nil {
 		return nil, err
 	}
-	raw, err := os.ReadFile(entryStoragePath(vaultDir, path, identity, cfg))
+	raw, err := SafeReadFile(entryStoragePath(vaultDir, path, identity, cfg))
 	if os.IsNotExist(err) && canUseLegacyEntryPath(path) {
 		if legacyErr := validateLegacyEntryPath(vaultDir, path); legacyErr != nil {
 			return nil, legacyErr
 		}
-		raw, err = os.ReadFile(legacyEntryFilePath(vaultDir, path))
+		raw, err = SafeReadFile(legacyEntryFilePath(vaultDir, path))
 	}
 	if err != nil {
 		return nil, err
