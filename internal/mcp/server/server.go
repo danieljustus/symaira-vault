@@ -82,6 +82,8 @@ type Server struct {
 	shareStore   *ShareStore
 	tools        []toolDefinition // per-instance tool set, populated from global registry
 
+	authorizer policy.Authorizer
+
 	approvalCache      *approvalCache
 	approvalKeyCounter atomic.Int64
 	secretsAccessed    atomic.Int64
@@ -185,6 +187,29 @@ func New(v *vault.Vault, agentName string, transport string) (*Server, error) {
 		anomalyDetector:     detector,
 		biometricChallenger: authguard.DefaultChallenger(),
 	}
+
+	canWrite := agent.CanWrite != nil && *agent.CanWrite
+	approvalMode := ""
+	if agent.ApprovalMode != nil {
+		approvalMode = *agent.ApprovalMode
+	}
+	authorizerConfig := policy.AuthorizerConfig{
+		AgentName:    agentName,
+		AllowedPaths: agent.AllowedPaths,
+		CanWrite:     canWrite,
+		ApprovalMode: approvalMode,
+		PromptInjectionMode: func() string {
+			if agent.PromptInjectionMode != nil {
+				return *agent.PromptInjectionMode
+			}
+			return ""
+		}(),
+		RedactFields: agent.RedactFields,
+	}
+	srv.authorizer = policy.NewAuthorizer(authorizerConfig,
+		policy.WithPolicyEngine(policyEngine),
+		policy.WithAuditLog(auditLog),
+	)
 
 	// Register hooks specified in the agent's config profile
 	srv.registerConfigHooks(cfg)

@@ -201,7 +201,7 @@ func (c *Conditions) validate() error {
 
 	if c.ActionType != "" {
 		switch c.ActionType {
-		case "read", "write", "delete", "run", "list", "get", "set", "find":
+		case "read", "write", "delete", "run", "list", "get", "set", "find": //nolint:goconst // string literals in switch
 			// valid
 		default:
 			return fmt.Errorf("invalid action type %q", c.ActionType)
