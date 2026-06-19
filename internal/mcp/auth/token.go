@@ -216,10 +216,11 @@ func (r *TokenRegistry) Load() error {
 
 	if r.identity != nil {
 		encryptedPath := TokenRegistryEncryptedFilePath(filepath.Dir(r.path))
-		if data, err := os.ReadFile(encryptedPath); err == nil { // #nosec G304
-			plaintext, err := crypto.Decrypt(data, r.identity)
-			if err != nil {
-				return fmt.Errorf("decrypt token registry: %w", err)
+		data, err := os.ReadFile(encryptedPath) // #nosec G304 -- path derived from the validated token registry directory
+		if err == nil {
+			plaintext, decErr := crypto.Decrypt(data, r.identity)
+			if decErr != nil {
+				return fmt.Errorf("decrypt token registry: %w", decErr)
 			}
 			defer crypto.Wipe(plaintext)
 			return r.unmarshalEntries(plaintext)
