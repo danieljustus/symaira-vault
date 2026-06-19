@@ -162,7 +162,8 @@ func New(v *vault.Vault, agentName string, transport string) (*Server, error) {
 	// that they are no longer loaded; they must be re-applied with
 	// "symvault policy apply" so they live under the vault.
 	if legacyDir := policy.DefaultPolicyDir(); legacyDir != "" && legacyDir != policyDir {
-		if legacyPolicies, err := policy.LoadPoliciesFromDir(legacyDir); err == nil && len(legacyPolicies) > 0 {
+		legacyPolicies, legacyErr := policy.LoadPoliciesFromDir(legacyDir)
+		if legacyErr == nil && len(legacyPolicies) > 0 {
 			slog.Default().Warn("ignoring policies in legacy location; re-apply them with 'symvault policy apply'",
 				"legacy_dir", legacyDir, "active_dir", policyDir)
 		}

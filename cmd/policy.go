@@ -144,8 +144,8 @@ Example:
 			return err
 		}
 
-		if err := fsutil.SafeMkdirAll(policiesDir, 0750); err != nil {
-			return fmt.Errorf("create policies directory: %w", err)
+		if mkdirErr := fsutil.SafeMkdirAll(policiesDir, 0750); mkdirErr != nil {
+			return fmt.Errorf("create policies directory: %w", mkdirErr)
 		}
 
 		data, err := os.ReadFile(sourcePath) //#nosec G304 -- sourcePath is validated by LoadPolicy above
@@ -153,8 +153,8 @@ Example:
 			return fmt.Errorf("read policy file: %w", err)
 		}
 
-		if err := fsutil.SafeWriteFile(destPath, data, 0640); err != nil {
-			return fmt.Errorf("write policy file: %w", err)
+		if writeErr := fsutil.SafeWriteFile(destPath, data, 0640); writeErr != nil {
+			return fmt.Errorf("write policy file: %w", writeErr)
 		}
 
 		cmd.Printf("✅ Policy %q applied (%d rules)\n", p.Version, len(p.Rules))
