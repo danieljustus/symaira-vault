@@ -186,7 +186,7 @@ func checkScryptBenchmark(vaultDir string, _ Options) Result {
 func checkKDFModern(vaultDir string, _ Options) Result {
 	r := Result{ID: "crypto.kdf.modern", Name: "KDF modernity"}
 
-	raw, readErr := os.ReadFile(filepath.Join(vaultDir, "identity.age"))
+	raw, readErr := os.ReadFile(filepath.Join(vaultDir, "identity.age")) // #nosec G304 — fixed filename under vaultDir, the trusted vault path from the caller
 	if readErr != nil {
 		r.Status = StatusWarn
 		r.Message = "cannot read identity.age"
