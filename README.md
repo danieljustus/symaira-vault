@@ -187,18 +187,18 @@ For detailed agent setup, profiles, token management, and observability, see [do
 
 ## Configuration
 
-Global config: `~/.symvault/config.yaml`. See [`config.yaml.example`](config.yaml.example) for a commented starting point.
+Global config lives in the XDG config directory: `$XDG_CONFIG_HOME/symaira-vault/config.yaml` (default `~/.config/symaira-vault/config.yaml`). Installs created before the XDG layout continue to read from the legacy `~/.symvault/config.yaml`. See [`config.yaml.example`](config.yaml.example) for a commented starting point.
 
 For the full configuration reference, see [docs/configuration.md](docs/configuration.md).
 
 ### Environment Variables
 
-- `SYMVAULT_VAULT` — Path to vault directory (default: `~/.symvault`)
+- `SYMVAULT_VAULT` — Path to vault directory (default: `$XDG_DATA_HOME/symaira-vault`, i.e. `~/.local/share/symaira-vault`; legacy installs use `~/.symvault`)
 
 ### Vault Structure
 
 ```
-~/.symvault/
+~/.local/share/symaira-vault/   # XDG data dir (legacy installs: ~/.symvault/)
 ├── identity.age      # Encrypted age identity
 ├── config.yaml       # Vault configuration
 ├── mcp-token         # Bearer token for HTTP MCP

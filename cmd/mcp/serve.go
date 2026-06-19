@@ -1,9 +1,12 @@
 package mcp
 
 import (
+	"fmt"
 	"os/signal"
+	"path/filepath"
 
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
+	"github.com/danieljustus/symaira-vault/internal/config"
 
 	"github.com/spf13/cobra"
 )
@@ -11,15 +14,26 @@ import (
 var ServeSignalNotify = signal.Notify
 var Version = "dev"
 
+// serveLongDescription builds the serve help text, deriving the advertised
+// config location from the same resolver the binary uses so help and behavior
+// cannot drift. New installs use the XDG default; existing installs may still
+// read from the legacy ~/.symvault directory.
+func serveLongDescription() string {
+	return fmt.Sprintf(`Start an MCP server that exposes vault operations to AI agents.
+
+Each agent must be configured in the agents section of the config file
+(default: %s; existing installs may use the legacy
+~/%s/config.yaml) with specific permissions and scope restrictions.
+
+The server can run in HTTP mode or stdio mode.`,
+		filepath.Join(config.DefaultConfigDir(), "config.yaml"),
+		config.LegacyVaultSubdir)
+}
+
 var ServeCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "Start MCP server for agent access",
-	Long: `Start an MCP server that exposes vault operations to AI agents.
-
-Each agent must be configured in ~/.symvault/config.yaml with specific
-permissions and scope restrictions.
-
-The server can run in HTTP mode or stdio mode.`,
+	Long:  serveLongDescription(),
 	Example: `  # HTTP mode bound to localhost:8080
   symvault serve --bind 127.0.0.1 --port 8080
 
