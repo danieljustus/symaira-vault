@@ -146,13 +146,25 @@ func New(v *vault.Vault, agentName string, transport string) (*Server, error) {
 		return nil, err
 	}
 
-	// Load policy engine
-	policyDir := policy.DefaultPolicyDir()
+	// Load the policy engine from the vault's policy directory — the same
+	// location the CLI writes to via "policy apply" — so applied policies are
+	// actually enforced here.
+	policyDir := policy.VaultPolicyDir(v.Dir)
 	var policyEngine *policy.Engine
 	if policyDir != "" {
 		policies, loadErr := policy.LoadPoliciesFromDir(policyDir)
 		if loadErr == nil && len(policies) > 0 {
 			policyEngine = policy.NewEngine(policies)
+		}
+	}
+
+	// Detect policies left in the legacy, vault-independent location and warn
+	// that they are no longer loaded; they must be re-applied with
+	// "symvault policy apply" so they live under the vault.
+	if legacyDir := policy.DefaultPolicyDir(); legacyDir != "" && legacyDir != policyDir {
+		if legacyPolicies, err := policy.LoadPoliciesFromDir(legacyDir); err == nil && len(legacyPolicies) > 0 {
+			slog.Default().Warn("ignoring policies in legacy location; re-apply them with 'symvault policy apply'",
+				"legacy_dir", legacyDir, "active_dir", policyDir)
 		}
 	}
 

@@ -88,7 +88,9 @@ var policyCmd = &cobra.Command{
 	Short: "Manage declarative policies",
 	Long: `Manage context-aware auto-approval policies for MCP tool calls.
 
-Policies are YAML files stored in ~/.config/symvault/policies/.
+Policies are YAML files stored in the vault's "policies" directory
+(<vault>/policies). The MCP server loads policies from this same location,
+so a policy applied with "policy apply" is enforced by the server.
 They define rules for when tool calls should be allowed, denied,
 prompted, or require biometric authentication.`,
 	Example: `  # Validate a policy file before activating it
@@ -135,7 +137,7 @@ Example:
 		}
 
 		vaultDir, _ := cli.VaultPath()
-		policiesDir := filepath.Join(vaultDir, "policies")
+		policiesDir := policy.VaultPolicyDir(vaultDir)
 
 		destPath, err := safePolicyPath(policiesDir, filepath.Base(sourcePath))
 		if err != nil {
@@ -169,7 +171,7 @@ var policyListCmd = &cobra.Command{
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		vaultDir, _ := cli.VaultPath()
-		policiesDir := filepath.Join(vaultDir, "policies")
+		policiesDir := policy.VaultPolicyDir(vaultDir)
 
 		entries, err := os.ReadDir(policiesDir)
 		if err != nil {
@@ -205,7 +207,7 @@ var policyRemoveCmd = &cobra.Command{
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		vaultDir, _ := cli.VaultPath()
-		policiesDir := filepath.Join(vaultDir, "policies")
+		policiesDir := policy.VaultPolicyDir(vaultDir)
 
 		policyPath, err := safePolicyPath(policiesDir, args[0])
 		if err != nil {
