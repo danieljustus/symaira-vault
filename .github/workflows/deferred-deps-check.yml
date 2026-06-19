@@ -53,7 +53,7 @@ jobs:
 
       - name: Create issue if CVEs found in deferred crypto dependency
         if: steps.cve.outputs.has_cves == 'true'
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799c7f6 # v9
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
             const fs = require('fs');
@@ -111,7 +111,7 @@ jobs:
 
       - name: Create issue if ProtonMail/go-crypto updated
         if: steps.check.outputs.proton_version != '' && !contains(steps.check.outputs.proton_version, 'v1.1.')
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799c7f6 # v9
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
             const version = '${{ steps.check.outputs.proton_version }}';
@@ -138,7 +138,7 @@ jobs:
 
       - name: Create issue if golang/protobuf still present
         if: steps.check.outputs.has_golang_protobuf != ''
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799c7f6 # v9
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
         with:
           script: |
             const version = '${{ steps.check.outputs.has_golang_protobuf }}';
