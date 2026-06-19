@@ -11,13 +11,29 @@ import (
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
+var (
+	verifyRebuild     bool
+	verifyRebuildOnly bool
+)
+
 var verifyCmd = &cobra.Command{
 	Use:   "verify",
 	Short: "Verify vault entry integrity against manifest",
 	Long: `Verify that all vault entries match their recorded manifest hashes.
-This detects tampered or corrupted entry files.`,
+This detects tampered or corrupted entry files.
+
+Use --rebuild to regenerate the manifest from the on-disk .age files (use
+this when entries have been added out-of-band, e.g. via git sync, and the
+manifest has not been updated). Use --rebuild-only to skip the integrity
+check and only rebuild.`,
 	Example: `  # Verify manifest matches on-disk entries
   symvault verify
+
+  # Rebuild the manifest from on-disk entries (fixes "unknown" entries from sync)
+  symvault verify --rebuild
+
+  # Just rebuild, skip the integrity check
+  symvault verify --rebuild-only
 
   # As part of a scripted health check
   symvault verify || echo "Manifest mismatch — investigate"`,
@@ -26,10 +42,20 @@ This detects tampered or corrupted entry files.`,
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return cli.WithVaultRaw(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
+			if verifyRebuild || verifyRebuildOnly {
+				if err := vaultpkg.RebuildManifest(v.Dir, v.Identity); err != nil {
+					return fmt.Errorf("rebuild manifest: %w", err)
+				}
+				cmd.Println("Manifest rebuilt from on-disk entries.")
+				if verifyRebuildOnly {
+					return nil
+				}
+			}
+
 			result, err := vaultpkg.VerifyManifestIntegrity(v.Dir, v.Identity)
 			if err != nil {
 				if os.IsNotExist(err) {
-					cmd.Println("No manifest found. Run `symvault verify` after adding entries to create one.")
+					cmd.Println("No manifest found. Run `symvault verify --rebuild` to create one from on-disk entries.")
 					return nil
 				}
 				return err
@@ -55,6 +81,7 @@ This detects tampered or corrupted entry files.`,
 				for _, p := range result.Unknown {
 					cmd.Printf("  - %s\n", p)
 				}
+				cmd.Println("\nHint: run `symvault verify --rebuild` to add these entries to the manifest.")
 			}
 
 			if len(result.Tampered) > 0 {
@@ -67,4 +94,6 @@ This detects tampered or corrupted entry files.`,
 
 func init() {
 	cli.RootCmd.AddCommand(verifyCmd)
+	verifyCmd.Flags().BoolVar(&verifyRebuild, "rebuild", false, "Rebuild the manifest from on-disk entries after the integrity check")
+	verifyCmd.Flags().BoolVar(&verifyRebuildOnly, "rebuild-only", false, "Rebuild the manifest and skip the integrity check")
 }
