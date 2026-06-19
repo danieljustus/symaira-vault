@@ -802,8 +802,12 @@ func filterPathsUsingIndex(vaultDir string, candidates []string, needle string, 
 		return candidates
 	}
 
-	if !globalIndex.IsBuilt() {
-		if err := globalIndex.loadFromDisk(vaultDir, identity); err != nil || !globalIndex.IsBuilt() {
+	// Build or load the index only when the shared slot does not already cover
+	// this exact vault directory and identity. Covers (rather than IsBuilt)
+	// ensures a second vault opened with the same identity does not reuse the
+	// first vault's index.
+	if !globalIndex.Covers(vaultDir, identity) {
+		if err := globalIndex.loadFromDisk(vaultDir, identity); err != nil || !globalIndex.Covers(vaultDir, identity) {
 			if err := globalIndex.Build(vaultDir, identity); err != nil {
 				return candidates
 			}
@@ -812,8 +816,9 @@ func filterPathsUsingIndex(vaultDir string, candidates []string, needle string, 
 
 	matching, err := globalIndex.MatchEntries(vaultDir, identity, candidates, needle)
 	if err != nil {
-		// Index stale, rebuild and retry once
-		globalIndex.Invalidate()
+		// The slot now holds a different vault, or the index is stale: rebuild
+		// for this vault and retry once. Build overwrites the in-memory slot and
+		// rewrites this vault's on-disk index without deleting another vault's.
 		if buildErr := globalIndex.Build(vaultDir, identity); buildErr != nil {
 			return candidates
 		}

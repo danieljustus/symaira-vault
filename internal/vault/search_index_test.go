@@ -16,6 +16,75 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/testutil"
 )
 
+// TestFilterPathsUsingIndex_SameIdentityDifferentVaults guards against the
+// shared global index leaking one vault's contents into another vault's search
+// results when both are opened with the same identity.
+func TestFilterPathsUsingIndex_SameIdentityDifferentVaults(t *testing.T) {
+	identity := testutil.TempIdentity(t)
+
+	// Reset the shared global slot and restore it afterwards so this test is
+	// isolated from the rest of the package.
+	globalIndex.Invalidate()
+	t.Cleanup(globalIndex.Invalidate)
+
+	vaultA := t.TempDir()
+	mustWriteEntry(t, vaultA, identity, "alpha", map[string]interface{}{"user": "alice-in-a"})
+
+	vaultB := t.TempDir()
+	mustWriteEntry(t, vaultB, identity, "beta", map[string]interface{}{"user": "bob-in-b"})
+
+	// Populate the slot with vault A's index.
+	aMatches := filterPathsUsingIndex(vaultA, []string{"alpha"}, "alice-in-a", identity)
+	if len(aMatches) != 1 || aMatches[0] != "alpha" {
+		t.Fatalf("vault A search = %v, want [alpha]", aMatches)
+	}
+
+	// Searching vault B with the same identity must reflect vault B, not the
+	// index still resident from vault A. A value present only in vault B must be
+	// found (the bug returned an incomplete result from vault A's index).
+	bOwn := filterPathsUsingIndex(vaultB, []string{"beta"}, "bob-in-b", identity)
+	if len(bOwn) != 1 || bOwn[0] != "beta" {
+		t.Fatalf("vault B search for its own value = %v, want [beta]", bOwn)
+	}
+
+	// A value that exists only in vault A must not match within vault B.
+	bForeign := filterPathsUsingIndex(vaultB, []string{"beta"}, "alice-in-a", identity)
+	if len(bForeign) != 0 {
+		t.Fatalf("vault B matched a value that only exists in vault A: %v", bForeign)
+	}
+
+	// Switching back to vault A must still return correct results.
+	aAgain := filterPathsUsingIndex(vaultA, []string{"alpha"}, "alice-in-a", identity)
+	if len(aAgain) != 1 || aAgain[0] != "alpha" {
+		t.Fatalf("vault A re-search = %v, want [alpha]", aAgain)
+	}
+}
+
+// TestMatchEntries_RejectsDifferentVaultDir verifies the lookup-time guard:
+// an index built for one vault must refuse to answer lookups for another.
+func TestMatchEntries_RejectsDifferentVaultDir(t *testing.T) {
+	identity := testutil.TempIdentity(t)
+
+	vaultA := t.TempDir()
+	mustWriteEntry(t, vaultA, identity, "alpha", map[string]interface{}{"user": "alice"})
+
+	idx := &EncryptedIndex{}
+	if err := idx.Build(vaultA, identity); err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	vaultB := t.TempDir()
+	if _, err := idx.MatchEntries(vaultB, identity, []string{"alpha"}, "alice"); err == nil {
+		t.Fatal("MatchEntries against a different vault dir: expected error, got nil")
+	}
+	if idx.Covers(vaultB, identity) {
+		t.Fatal("Covers reported true for a vault the index was not built for")
+	}
+	if !idx.Covers(vaultA, identity) {
+		t.Fatal("Covers reported false for the vault the index was built for")
+	}
+}
+
 func TestEncryptedIndexBuildAndMatch(t *testing.T) {
 	vaultDir := t.TempDir()
 	identity := testutil.TempIdentity(t)
