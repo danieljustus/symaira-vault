@@ -273,6 +273,9 @@ func mergeVaultConfig(raw *VaultConfig, sf map[string]bool, rawAuthMethod string
 	if sf["auto_migrate_kdf"] {
 		defaults.AutoMigrateKDF = raw.AutoMigrateKDF
 	}
+	if sf["auto_heal_zero_key"] {
+		defaults.AutoHealZeroKey = raw.AutoHealZeroKey
+	}
 	if sf["last_rotated"] {
 		defaults.LastRotated = raw.LastRotated
 	}

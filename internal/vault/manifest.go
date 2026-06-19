@@ -13,6 +13,7 @@ import (
 
 	"filippo.io/age"
 
+	vaultconfig "github.com/danieljustus/symaira-vault/internal/config"
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
 	"github.com/danieljustus/symaira-vault/internal/fsutil"
 )
@@ -205,6 +206,47 @@ func VerifyManifestIntegrity(vaultDir string, identity *age.X25519Identity) (*Ma
 	})
 
 	return result, nil
+}
+
+// DetectOutOfBandEntries returns the .age files under the vault's entries
+// directory that are not tracked by the manifest (typical after a git/rsync
+// sync that brings new entries in without updating the manifest). It does not
+// hash entries; callers that need a tamper check should call
+// VerifyManifestIntegrity. Returns os.IsNotExist if no manifest exists yet.
+func DetectOutOfBandEntries(vaultDir string, identity *age.X25519Identity, cfg *vaultconfig.Config) ([]string, error) {
+	m, err := LoadManifest(vaultDir, identity)
+	if err != nil {
+		return nil, err
+	}
+
+	expected := make(map[string]bool, len(m.Entries))
+	var pseudoKey []byte
+	if identity != nil && isPseudonymizeEnabled(cfg) {
+		pseudoKey = derivePseudonymizationKey(identity)
+	}
+	for logicalPath := range m.Entries {
+		expected[entryStoragePathCached(vaultDir, logicalPath, pseudoKey)] = true
+	}
+
+	var outOfBand []string
+	entriesPath := entriesDir(vaultDir)
+	_ = filepath.Walk(entriesPath, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return nil
+		}
+		if info.IsDir() || !strings.HasSuffix(info.Name(), ".age") {
+			return nil
+		}
+		if !expected[path] {
+			rel, relErr := filepath.Rel(entriesPath, path)
+			if relErr == nil {
+				outOfBand = append(outOfBand, rel)
+			}
+		}
+		return nil
+	})
+
+	return outOfBand, nil
 }
 
 // RebuildManifest walks all .age entry files in the vault and regenerates the

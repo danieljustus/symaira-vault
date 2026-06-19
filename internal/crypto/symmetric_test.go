@@ -471,3 +471,79 @@ func ioReadAll(r interface{ Read([]byte) (int, error) }) ([]byte, error) {
 	}
 	return buf.Bytes(), nil
 }
+
+// wrapIdentityUnderZeroKey simulates the pre-#476 buggy wrap path by passing a
+// passphrase composed entirely of zero bytes of length n to the recipient. The
+// resulting ciphertext is structurally identical to what the broken code would
+// have written and exercises the recovery path in RecoverZeroKeyIdentity.
+func wrapIdentityUnderZeroKey(t *testing.T, identity *age.X25519Identity, n int) []byte {
+	t.Helper()
+	zeros := make([]byte, n)
+	// #nosec G103 — intentional: this string is a buffer of zeros, not a secret.
+	recipient := NewArgon2idRecipient(string(zeros), Argon2idParams{})
+	var buf bytes.Buffer
+	w, err := age.Encrypt(&buf, recipient)
+	if err != nil {
+		t.Fatalf("age.Encrypt: %v", err)
+	}
+	if _, err := w.Write([]byte(identity.String())); err != nil {
+		t.Fatalf("write identity: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	return buf.Bytes()
+}
+
+func TestRecoverZeroKeyIdentity(t *testing.T) {
+	identity, err := GenerateIdentity()
+	if err != nil {
+		t.Fatalf("GenerateIdentity: %v", err)
+	}
+	const n = 17
+	raw := wrapIdentityUnderZeroKey(t, identity, n)
+
+	recovered, err := RecoverZeroKeyIdentity(raw, n)
+	if err != nil {
+		t.Fatalf("RecoverZeroKeyIdentity: %v", err)
+	}
+	if recovered.String() != identity.String() {
+		t.Fatalf("recovered identity mismatch:\n got = %q\nwant = %q", recovered.String(), identity.String())
+	}
+	if !bytes.Contains(raw, []byte("-> argon2id")) {
+		t.Fatal("test setup: ciphertext should be argon2id-formatted")
+	}
+}
+
+func TestRecoverZeroKeyIdentityWrongLength(t *testing.T) {
+	identity, err := GenerateIdentity()
+	if err != nil {
+		t.Fatalf("GenerateIdentity: %v", err)
+	}
+	const correctN = 17
+	raw := wrapIdentityUnderZeroKey(t, identity, correctN)
+
+	if _, err := RecoverZeroKeyIdentity(raw, correctN+1); err == nil {
+		t.Fatal("expected error recovering with wrong length n")
+	}
+	if _, err := RecoverZeroKeyIdentity(raw, correctN-1); err == nil {
+		t.Fatal("expected error recovering with wrong length n (shorter)")
+	}
+}
+
+func TestRecoverZeroKeyIdentityRejectsNonArgon2id(t *testing.T) {
+	const n = 8
+	scryptWrapped := []byte("-> scrypt AAAA\nbody-bytes")
+	if _, err := RecoverZeroKeyIdentity(scryptWrapped, n); err == nil {
+		t.Fatal("expected error recovering a non-argon2id file")
+	}
+}
+
+func TestRecoverZeroKeyIdentityRejectsZeroLength(t *testing.T) {
+	if _, err := RecoverZeroKeyIdentity([]byte("-> argon2id t=1,m=64,p=1\nAAAA"), 0); err == nil {
+		t.Fatal("expected error for n = 0")
+	}
+	if _, err := RecoverZeroKeyIdentity([]byte("-> argon2id t=1,m=64,p=1\nAAAA"), -1); err == nil {
+		t.Fatal("expected error for negative n")
+	}
+}

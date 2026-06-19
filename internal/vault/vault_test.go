@@ -1,11 +1,14 @@
 package vault
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+
+	"filippo.io/age"
 
 	"github.com/danieljustus/symaira-vault/internal/config"
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
@@ -597,6 +600,48 @@ func makeScryptVault(t *testing.T, passphrase []byte) string {
 	return dir
 }
 
+// makeZeroKeyVault builds a vault whose identity.age was wrapped under the
+// pre-#476 zero-key bug for a passphrase of length n. The returned dir holds a
+// recipients.txt that lists the identity's public key, which is the only
+// independent source of truth the heal path can check against. Pass an empty
+// recipients line to leave recipients.txt absent.
+func makeZeroKeyVault(t *testing.T, identity *age.X25519Identity, n int, recipients string) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "entries"), 0o700); err != nil {
+		t.Fatalf("mkdir entries: %v", err)
+	}
+	zeroKey := make([]byte, n)
+	// #nosec G103 — intentional: this string is a buffer of zeros, not a secret.
+	recipient := vaultcrypto.NewArgon2idRecipient(string(zeroKey), vaultcrypto.Argon2idParams{})
+	var buf bytes.Buffer
+	w, err := age.Encrypt(&buf, recipient)
+	if err != nil {
+		t.Fatalf("age.Encrypt: %v", err)
+	}
+	if _, err := w.Write([]byte(identity.String())); err != nil {
+		t.Fatalf("write identity: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "identity.age"), buf.Bytes(), 0o600); err != nil {
+		t.Fatalf("write identity.age: %v", err)
+	}
+	if recipients != "" {
+		if err := os.WriteFile(filepath.Join(dir, "recipients.txt"), []byte(recipients+"\n"), 0o600); err != nil {
+			t.Fatalf("write recipients.txt: %v", err)
+		}
+	}
+	cfg := config.Default()
+	cfg.VaultDir = dir
+	cfg.Vault = &config.VaultConfig{FormatVersion: 2}
+	if err := cfg.SaveTo(filepath.Join(dir, "config.yaml")); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	return dir
+}
+
 func TestOpenWithPassphrase_KDFMigrationIsOptIn(t *testing.T) {
 	pass := []byte("correct horse battery staple")
 	dir := makeScryptVault(t, pass)
@@ -638,4 +683,167 @@ func TestOpenWithPassphrase_KDFMigrationOptIn(t *testing.T) {
 	if _, err := vaultcrypto.LoadIdentityWithArgon2id(filepath.Join(dir, "identity.age"), cloneBytes(pass)); err != nil {
 		t.Fatalf("migrated identity failed to decrypt: %v", err)
 	}
+}
+
+// makeScryptVaultWithStaleV2 mirrors makeScryptVault but stamps
+// FormatVersion=2 on the config, simulating a vault that was restored from a
+// scrypt identity backup while its config still claims the v2 argon2id
+// format. This is the desync state #514 is meant to catch.
+func makeScryptVaultWithStaleV2(t *testing.T, passphrase []byte, autoMigrate bool) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "entries"), 0o700); err != nil {
+		t.Fatalf("mkdir entries: %v", err)
+	}
+	identity := testutil.TempIdentity(t)
+	if err := vaultcrypto.SaveIdentity(identity, filepath.Join(dir, "identity.age"), cloneBytes(passphrase), 0); err != nil {
+		t.Fatalf("SaveIdentity: %v", err)
+	}
+	cfg := config.Default()
+	cfg.VaultDir = dir
+	cfg.Vault = &config.VaultConfig{FormatVersion: 2, ScryptWorkFactor: 18, AutoMigrateKDF: autoMigrate}
+	if err := cfg.SaveTo(filepath.Join(dir, "config.yaml")); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	return dir
+}
+
+func TestOpenWithPassphrase_MigratesStaleV2ScryptWithOptIn(t *testing.T) {
+	pass := []byte("correct horse battery staple")
+	dir := makeScryptVaultWithStaleV2(t, pass, true /* AutoMigrateKDF */)
+
+	v, err := OpenWithPassphrase(dir, cloneBytes(pass))
+	if err != nil {
+		t.Fatalf("OpenWithPassphrase: %v", err)
+	}
+	if v.NeedsMigration {
+		t.Error("NeedsMigration should be false after a successful migration")
+	}
+	raw, _ := os.ReadFile(filepath.Join(dir, "identity.age"))
+	if got := vaultcrypto.DetectEncryptedIdentityFormat(raw); got != "argon2id" {
+		t.Errorf("stale-v2 scrypt file should be migrated to argon2id, got %q", got)
+	}
+	// Config.FormatVersion should remain 2 (and not be reset to 1) after the
+	// migration — the file and config are now in agreement.
+	loaded, err := config.Load(filepath.Join(dir, "config.yaml"))
+	if err != nil {
+		t.Fatalf("reload config: %v", err)
+	}
+	if loaded.Vault.FormatVersion != 2 {
+		t.Errorf("FormatVersion = %d, want 2", loaded.Vault.FormatVersion)
+	}
+}
+
+func TestOpenWithPassphrase_FlagsNeedsMigrationForStaleV2Scrypt(t *testing.T) {
+	pass := []byte("correct horse battery staple")
+	dir := makeScryptVaultWithStaleV2(t, pass, false /* AutoMigrateKDF */)
+
+	v, err := OpenWithPassphrase(dir, cloneBytes(pass))
+	if err != nil {
+		t.Fatalf("OpenWithPassphrase: %v", err)
+	}
+	if !v.NeedsMigration {
+		t.Error("NeedsMigration should be true for a scrypt file regardless of stale FormatVersion")
+	}
+	// The file must NOT have been migrated (opt-in was false).
+	raw, _ := os.ReadFile(filepath.Join(dir, "identity.age"))
+	if got := vaultcrypto.DetectEncryptedIdentityFormat(raw); got != "scrypt" {
+		t.Errorf("identity should remain scrypt without opt-in, got %q", got)
+	}
+}
+
+func TestOpenWithPassphrase_HealsZeroKeyIdentity(t *testing.T) {
+	identity := testutil.TempIdentity(t)
+	const n = 17
+	dir := makeZeroKeyVault(t, identity, n, identity.Recipient().String())
+
+	// Passphrase of the correct length N. The real passphrase content is
+	// not the proof — the recipients.txt match is.
+	userPassphrase := bytes.Repeat([]byte("a"), n)
+
+	v, err := OpenWithPassphrase(dir, cloneBytes(userPassphrase))
+	if err != nil {
+		t.Fatalf("OpenWithPassphrase: %v", err)
+	}
+	if !v.HealedFromZeroKey {
+		t.Error("expected HealedFromZeroKey=true after recovery")
+	}
+	if v.Identity == nil || v.Identity.String() != identity.String() {
+		t.Errorf("recovered identity mismatch: got %q, want %q",
+			identityStringOrEmpty(v.Identity), identity.String())
+	}
+
+	// The on-disk file must now be wrapped under the real passphrase.
+	raw, err := os.ReadFile(filepath.Join(dir, "identity.age"))
+	if err != nil {
+		t.Fatalf("read identity.age: %v", err)
+	}
+	if got := vaultcrypto.DetectEncryptedIdentityFormat(raw); got != "argon2id" {
+		t.Fatalf("expected argon2id after heal, got %q", got)
+	}
+	// And a subsequent Open must succeed without recovery and without
+	// flagging HealedFromZeroKey.
+	v2, err := OpenWithPassphrase(dir, cloneBytes(userPassphrase))
+	if err != nil {
+		t.Fatalf("second OpenWithPassphrase: %v", err)
+	}
+	if v2.HealedFromZeroKey {
+		t.Error("second open should not flag HealedFromZeroKey")
+	}
+	if v2.Identity == nil || v2.Identity.String() != identity.String() {
+		t.Errorf("second open identity mismatch: got %q, want %q",
+			identityStringOrEmpty(v2.Identity), identity.String())
+	}
+}
+
+func TestOpenWithPassphrase_ZeroKeyHealRejectsMissingRecipients(t *testing.T) {
+	identity := testutil.TempIdentity(t)
+	const n = 13
+	dir := makeZeroKeyVault(t, identity, n, "" /* no recipients.txt */)
+
+	// Same-length passphrase so the zero-key unwrap would succeed, but
+	// without recipients.txt verification the heal must be rejected.
+	passphrase := bytes.Repeat([]byte("x"), n)
+
+	_, err := OpenWithPassphrase(dir, cloneBytes(passphrase))
+	if err == nil {
+		t.Fatal("expected error when recipients.txt is absent (no independent source of truth)")
+	}
+	// The on-disk file must remain untouched.
+	raw, _ := os.ReadFile(filepath.Join(dir, "identity.age"))
+	if !bytes.Contains(raw, []byte("-> argon2id")) {
+		t.Fatal("identity.age should remain argon2id-formatted (not healed)")
+	}
+}
+
+func TestOpenWithPassphrase_ZeroKeyHealRejectsUnknownKey(t *testing.T) {
+	identity := testutil.TempIdentity(t)
+	const n = 12
+	other := testutil.TempIdentity(t)
+	dir := makeZeroKeyVault(t, identity, n, other.Recipient().String())
+
+	passphrase := bytes.Repeat([]byte("y"), n)
+	_, err := OpenWithPassphrase(dir, cloneBytes(passphrase))
+	if err == nil {
+		t.Fatal("expected error when recovered public key is not in recipients.txt")
+	}
+}
+
+func TestOpenWithPassphrase_ZeroKeyHealWrongLengthFails(t *testing.T) {
+	identity := testutil.TempIdentity(t)
+	const n = 17
+	dir := makeZeroKeyVault(t, identity, n, identity.Recipient().String())
+
+	wrongLen := bytes.Repeat([]byte("z"), n-1)
+	_, err := OpenWithPassphrase(dir, cloneBytes(wrongLen))
+	if err == nil {
+		t.Fatal("expected error when passphrase length differs from n")
+	}
+}
+
+func identityStringOrEmpty(id *age.X25519Identity) string {
+	if id == nil {
+		return ""
+	}
+	return id.String()
 }

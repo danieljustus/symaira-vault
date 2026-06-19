@@ -755,6 +755,84 @@ func TestRunChecks_KDFModern_NoVault(t *testing.T) {
 	}
 }
 
+// writeKDFModernityVaultFixture writes a config.yaml + identity.age with the
+// requested KDF/format-version combination so checkKDFModern can be exercised
+// in every state the real check needs to distinguish.
+func writeKDFModernityVaultFixture(t *testing.T, kdf string, formatVersion int) string {
+	t.Helper()
+	dir := t.TempDir()
+	cfg := fmt.Sprintf("vaultDir: %s\nvault:\n  format_version: %d\n", dir, formatVersion)
+	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte(cfg), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	var identity string
+	switch kdf {
+	case "scrypt":
+		identity = "age-encryption.org/v1\n-> scrypt fakesalt\nfakebody\n"
+	case "argon2id":
+		identity = "age-encryption.org/v1\n-> argon2id fakesalt t=1,m=64,p=1\nfakebody\n"
+	default:
+		t.Fatalf("unknown KDF %q", kdf)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "identity.age"), []byte(identity), 0o600); err != nil {
+		t.Fatalf("write identity: %v", err)
+	}
+	return dir
+}
+
+func runKDFModern(t *testing.T, dir string) health.Result {
+	t.Helper()
+	results := health.RunChecks(dir, health.Options{Only: []string{"crypto.kdf.modern"}, NoNetwork: true})
+	if len(results) == 0 {
+		t.Fatal("expected KDF modernity result")
+	}
+	return results[0]
+}
+
+func TestRunChecks_KDFModern_Argon2idMatchesV2(t *testing.T) {
+	dir := writeKDFModernityVaultFixture(t, "argon2id", 2)
+	r := runKDFModern(t, dir)
+	if r.Status != health.StatusOK {
+		t.Errorf("expected OK for argon2id+v2, got %s: %s", r.Status, r.Message)
+	}
+	if !strings.Contains(r.Message, "argon2id") {
+		t.Errorf("message should mention argon2id, got %q", r.Message)
+	}
+}
+
+func TestRunChecks_KDFModern_ScryptMatchesV1(t *testing.T) {
+	dir := writeKDFModernityVaultFixture(t, "scrypt", 1)
+	r := runKDFModern(t, dir)
+	if r.Status != health.StatusWarn {
+		t.Errorf("expected warn for scrypt+v1, got %s: %s", r.Status, r.Message)
+	}
+	if !strings.Contains(r.Message, "scrypt") {
+		t.Errorf("message should mention scrypt, got %q", r.Message)
+	}
+}
+
+func TestRunChecks_KDFModern_DesyncScryptFileV2Config(t *testing.T) {
+	dir := writeKDFModernityVaultFixture(t, "scrypt", 2)
+	r := runKDFModern(t, dir)
+	if r.Status != health.StatusWarn {
+		t.Errorf("expected desync warn for scrypt file + v2 config, got %s: %s", r.Status, r.Message)
+	}
+	if !strings.Contains(r.Message, "out of sync") {
+		t.Errorf("message should mention desync, got %q", r.Message)
+	}
+}
+
+func TestRunChecks_KDFModern_DesyncArgon2idFileV1Config(t *testing.T) {
+	dir := writeKDFModernityVaultFixture(t, "argon2id", 1)
+	r := runKDFModern(t, dir)
+	if r.Status != health.StatusWarn {
+		t.Errorf("expected desync warn for argon2id file + v1 config, got %s: %s", r.Status, r.Message)
+	}
+	if !strings.Contains(r.Message, "out of sync") {
+		t.Errorf("message should mention desync, got %q", r.Message)
+	}
+}
+
 func TestRunChecks_Quick_SkipsSlow(t *testing.T) {
 	dir := t.TempDir()
 	results := health.RunChecks(dir, health.Options{Quick: true, NoNetwork: true})
@@ -971,5 +1049,94 @@ func TestRunChecks_PassphraseRotation_NoRotation(t *testing.T) {
 	}
 	if r.Status != health.StatusWarn {
 		t.Errorf("expected warn for no rotation, got %s: %s", r.Status, r.Message)
+	}
+}
+
+// TestRunChecks_ManifestIntegrity_HintPointsAtRebuild verifies that the
+// doctor hint for the "no manifest" case points at the real rebuild command
+// (the previous hint told users to run `symvault verify`, which is read-only
+// and would not create a manifest).
+func TestRunChecks_ManifestIntegrity_HintPointsAtRebuild(t *testing.T) {
+	dir := t.TempDir()
+	results := health.RunChecks(dir, health.Options{Only: []string{"vault.manifest.intact"}, NoNetwork: true})
+	if len(results) == 0 {
+		t.Fatal("expected at least one result")
+	}
+	r := results[0]
+	if !strings.Contains(r.Hint, "verify --rebuild") {
+		t.Errorf("expected hint to point at `symvault verify --rebuild`, got: %q", r.Hint)
+	}
+}
+
+// TestRunChecks_ManifestIntegrity_OutOfBandIsFixable verifies that when the
+// manifest has Unknown entries (i.e. .age files on disk not tracked by the
+// manifest, the #515 bug) the doctor marks the check as fixable and a Fix
+// call rebuilds the manifest so the unknown entries are picked up.
+func TestRunChecks_ManifestIntegrity_OutOfBandIsFixable(t *testing.T) {
+	dir := t.TempDir()
+
+	// Set up an initialized vault with one tracked entry, then drop an
+	// out-of-band .age file directly into entries/. This mirrors the live
+	// failure mode (git pull brings new entries in but the manifest lags).
+	cfgPath := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(cfgPath, []byte("vaultDir: "+dir+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	identity, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	entriesDir := filepath.Join(dir, "entries")
+	if err := os.MkdirAll(entriesDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	tracked := []byte("tracked-ciphertext")
+	if err := os.WriteFile(filepath.Join(entriesDir, "tracked.age"), tracked, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := vault.UpdateManifestEntry(dir, "tracked", tracked, identity); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(entriesDir, "out-of-band.age"), []byte("sneaked-in"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := session.SaveIdentity(dir, identity.String(), 15*time.Minute); err != nil {
+		t.Fatal(err)
+	}
+
+	results := health.RunChecks(dir, health.Options{Only: []string{"vault.manifest.intact"}, NoNetwork: true})
+	if len(results) == 0 {
+		t.Fatal("expected at least one result")
+	}
+	r := results[0]
+	if r.Status != health.StatusWarn {
+		t.Fatalf("expected warn for out-of-band, got %s: %s", r.Status, r.Message)
+	}
+	if !strings.Contains(r.Message, "unknown") {
+		t.Errorf("expected 'unknown' in message, got: %s", r.Message)
+	}
+	if !r.Fixable {
+		t.Errorf("expected Fixable=true for out-of-band entries, got false")
+	}
+	if r.Fix == nil {
+		t.Fatal("expected Fix function for out-of-band entries, got nil")
+	}
+	if !strings.Contains(r.Hint, "verify --rebuild") {
+		t.Errorf("expected hint to point at `symvault verify --rebuild`, got: %q", r.Hint)
+	}
+
+	// Apply the fix and confirm the manifest now knows about the out-of-band
+	// entry. We invoke Fix directly (bypassing the --fix CLI plumbing) so
+	// the test exercises the rebuild path.
+	if err := r.Fix(); err != nil {
+		t.Fatalf("Fix() failed: %v", err)
+	}
+
+	m, err := vault.LoadManifest(dir, identity)
+	if err != nil {
+		t.Fatalf("load manifest after fix: %v", err)
+	}
+	if _, ok := m.Entries["out-of-band"]; !ok {
+		t.Errorf("manifest after fix should include 'out-of-band' entry, got entries: %v", m.Entries)
 	}
 }

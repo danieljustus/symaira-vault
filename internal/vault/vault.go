@@ -38,6 +38,14 @@ type Vault struct {
 	Config         *vaultconfig.Config
 	Dir            string
 	NeedsMigration bool
+	// HealedFromZeroKey is true when OpenWithPassphrase detected that the
+	// identity.age file was wrapped under the pre-#476 zero-key bug, recovered
+	// the identity via RecoverZeroKeyIdentity, verified it against
+	// recipients.txt, and atomically re-wrapped the file under the user's real
+	// passphrase. Callers (e.g. the CLI) can use this flag to surface a
+	// "your identity was wrapped under an insecure key and has been healed"
+	// warning.
+	HealedFromZeroKey bool
 
 	Cache *VaultCache
 
@@ -116,16 +124,24 @@ func Open(vaultDir string, identity *age.X25519Identity) (*Vault, error) {
 	// Flush any pending manifest updates before checking consistency.
 	FlushManifestUpdates()
 
-	// Check manifest consistency: rebuild if missing, or if the manifest is stale
-	// (config generation counter > manifest generation counter, indicating unflushed
-	// writes from a prior crash).
+	// Check manifest consistency: rebuild if missing, stale (config generation
+	// counter > manifest generation counter), or if the entries directory has
+	// .age files the manifest does not know about (typical after a git pull
+	// or rsync brought new entries in without updating the manifest).
 	if _, err := os.Stat(filepath.Join(vaultDir, manifestFileName)); os.IsNotExist(err) {
 		_ = RebuildManifest(vaultDir, identity) // best-effort
 	} else if cfg.Vault != nil && cfg.Vault.ManifestGeneration > 0 {
 		m, loadErr := LoadManifest(vaultDir, identity)
-		if loadErr == nil && m.Generation < cfg.Vault.ManifestGeneration {
+		switch {
+		case loadErr == nil && m.Generation < cfg.Vault.ManifestGeneration:
 			_ = RebuildManifest(vaultDir, identity) // best-effort
+		case loadErr == nil:
+			if unknown, oobErr := DetectOutOfBandEntries(vaultDir, identity, cfg); oobErr == nil && len(unknown) > 0 {
+				_ = RebuildManifest(vaultDir, identity) // best-effort
+			}
 		}
+	} else if unknown, oobErr := DetectOutOfBandEntries(vaultDir, identity, cfg); oobErr == nil && len(unknown) > 0 {
+		_ = RebuildManifest(vaultDir, identity) // best-effort
 	}
 	if _, err := os.Stat(filepath.Join(vaultDir, ".git")); err == nil {
 		if err := git.CreateGitignore(vaultDir); err != nil {
@@ -177,9 +193,18 @@ func OpenWithPassphrase(vaultDir string, passphrase []byte) (*Vault, error) {
 	migrationPassphrase := cloneBytes(passphrase)
 	format := vaultcrypto.DetectEncryptedIdentityFormat(raw)
 	var identity *age.X25519Identity
+	healedFromZeroKey := false
 	switch format {
 	case vaultcrypto.Argon2idStanzaType:
 		identity, err = vaultcrypto.LoadIdentityWithArgon2id(identityPath, cloneBytes(passphrase))
+		if err != nil {
+			// The argon2id unwrap failed. The file may have been written under
+			// the pre-#476 zero-key bug, in which case the wrap key depends
+			// only on the passphrase byte length. Attempt a length-n recovery
+			// and, if it yields a key present in recipients.txt, atomically
+			// re-wrap the file under the real passphrase.
+			identity, healedFromZeroKey, err = tryHealZeroKeyIdentity(vaultDir, identityPath, raw, passphrase)
+		}
 	default:
 		identity, err = vaultcrypto.LoadIdentity(identityPath, cloneBytes(passphrase))
 	}
@@ -192,13 +217,17 @@ func OpenWithPassphrase(vaultDir string, passphrase []byte) (*Vault, error) {
 		vaultcrypto.Wipe(migrationPassphrase)
 		return nil, err
 	}
+	v.HealedFromZeroKey = healedFromZeroKey
 	// Only auto-migrate the identity KDF when the user has explicitly opted in.
 	// Rewriting the master identity file in place is not something to do silently
 	// on every open; vaults that don't opt in are flagged as migratable instead.
+	// The trigger is the on-disk file's actual KDF, not config.FormatVersion —
+	// after an identity restore the file may be scrypt while FormatVersion is
+	// still 2, and we must not silently treat that as "already migrated".
 	if format != vaultcrypto.Argon2idStanzaType {
 		if v.Config != nil && v.Config.Vault != nil && v.Config.Vault.AutoMigrateKDF {
 			_ = MigrateKDF(vaultDir, identity, migrationPassphrase, v)
-		} else if v.Config != nil && v.Config.Vault != nil && v.Config.Vault.FormatVersion < vaultFormatVersion2 {
+		} else {
 			v.NeedsMigration = true
 		}
 	}
@@ -206,9 +235,42 @@ func OpenWithPassphrase(vaultDir string, passphrase []byte) (*Vault, error) {
 	return v, nil
 }
 
-// MigrateKDF re-encrypts the vault identity from scrypt to argon2id when the
-// vault format version indicates an older KDF. It is opt-in (gated by the
-// caller on Config.Vault.AutoMigrateKDF).
+// tryHealZeroKeyIdentity attempts to recover an identity.age that was wrapped
+// under the pre-#476 zero-key bug. It derives the wrap key from
+// Argon2id(zeros[len(passphrase)], salt, params), verifies the recovered
+// identity's public key is listed in vaultDir/recipients.txt, and on a verified
+// match atomically re-wraps the file under the real passphrase. The returned
+// bool is true when the on-disk file was rewritten.
+//
+// If the config disables auto-heal, if recipients.txt is missing, or if the
+// recovered public key is not in recipients.txt, the function returns the
+// recovery error so the caller sees the original load failure and the file
+// stays untouched.
+func tryHealZeroKeyIdentity(vaultDir, identityPath string, raw, passphrase []byte) (*age.X25519Identity, bool, error) {
+	recovered, recErr := vaultcrypto.RecoverZeroKeyIdentity(raw, len(passphrase))
+	if recErr != nil {
+		return nil, false, recErr
+	}
+	verified, verifyErr := verifyRecoveryAgainstRecipients(vaultDir, recovered)
+	if verifyErr != nil {
+		return nil, false, fmt.Errorf("verify recovery: %w", verifyErr)
+	}
+	if !verified {
+		return nil, false, errors.New("recovered identity not present in recipients.txt; refusing to silently re-key the vault")
+	}
+	if err := rewriteIdentityAtomic(identityPath, recovered, cloneBytes(passphrase)); err != nil {
+		return nil, false, fmt.Errorf("atomic rewrite of healed identity: %w", err)
+	}
+	return recovered, true, nil
+}
+
+// MigrateKDF re-encrypts the vault identity from scrypt to argon2id. The
+// caller is responsible for deciding when to call it (typically: the on-disk
+// identity is scrypt, the user opted in to AutoMigrateKDF, and the file is
+// ready to be rewritten). The trigger is the on-disk file's actual KDF —
+// not config.FormatVersion — so a restored scrypt identity with a stale
+// "format 2" config is still migrated, instead of silently treated as
+// already-modern.
 //
 // The rewrite is safe: the existing identity.age is backed up to
 // identity.age.bak, the new argon2id identity is written and then verified to
@@ -220,37 +282,11 @@ func MigrateKDF(vaultDir string, identity *age.X25519Identity, passphrase []byte
 	if v == nil || v.Config == nil || v.Config.Vault == nil {
 		return nil
 	}
-	if v.Config.Vault.FormatVersion >= vaultFormatVersion2 {
-		return nil
-	}
 	identityPath := filepath.Join(vaultDir, "identity.age")
-	backupPath := identityPath + ".bak"
-
-	original, readErr := os.ReadFile(identityPath) // #nosec G304 — fixed filename under validated vaultDir
-	if readErr != nil {
+	if err := rewriteIdentityAtomic(identityPath, identity, passphrase); err != nil {
 		v.NeedsMigration = true
 		return nil
 	}
-	if err := fsutil.AtomicWriteFile(backupPath, original, 0o600); err != nil {
-		v.NeedsMigration = true
-		return nil
-	}
-
-	params := vaultcrypto.DefaultArgon2idParams()
-	if err := vaultcrypto.SaveIdentityWithArgon2id(identity, identityPath, cloneBytes(passphrase), params); err != nil {
-		_ = restoreIdentityBackup(identityPath, backupPath, original)
-		v.NeedsMigration = true
-		return nil
-	}
-
-	// Verify the freshly written identity actually decrypts with this passphrase
-	// before committing the migration.
-	if _, err := vaultcrypto.LoadIdentityWithArgon2id(identityPath, cloneBytes(passphrase)); err != nil {
-		_ = restoreIdentityBackup(identityPath, backupPath, original)
-		v.NeedsMigration = true
-		return nil
-	}
-
 	v.Config.Vault.FormatVersion = vaultFormatVersion2
 	v.Config.Vault.ScryptWorkFactor = 0
 	if cfgPath := filepath.Join(vaultDir, "config.yaml"); cfgPath != "" {
@@ -258,6 +294,57 @@ func MigrateKDF(vaultDir string, identity *age.X25519Identity, passphrase []byte
 	}
 	// Keep the backup until the next successful unlock confirms the new file.
 	return nil
+}
+
+// rewriteIdentityAtomic replaces identity.age with one freshly encrypted under
+// the given passphrase. The existing file is backed up to identity.age.bak
+// first, the new content is written and then verified to decrypt with the
+// passphrase; on any failure the original is restored and an error is
+// returned. This is the shared safety primitive used by both the scrypt→argon2id
+// KDF migration and the pre-#476 zero-key identity heal.
+func rewriteIdentityAtomic(identityPath string, identity *age.X25519Identity, passphrase []byte) error {
+	backupPath := identityPath + ".bak"
+	original, readErr := os.ReadFile(identityPath) // #nosec G304 — fixed filename under validated vaultDir
+	if readErr != nil {
+		return fmt.Errorf("read original identity: %w", readErr)
+	}
+	if err := fsutil.AtomicWriteFile(backupPath, original, 0o600); err != nil {
+		return fmt.Errorf("write backup: %w", err)
+	}
+	params := vaultcrypto.DefaultArgon2idParams()
+	if err := vaultcrypto.SaveIdentityWithArgon2id(identity, identityPath, cloneBytes(passphrase), params); err != nil {
+		_ = restoreIdentityBackup(identityPath, backupPath, original)
+		return fmt.Errorf("save new identity: %w", err)
+	}
+	if _, err := vaultcrypto.LoadIdentityWithArgon2id(identityPath, cloneBytes(passphrase)); err != nil {
+		_ = restoreIdentityBackup(identityPath, backupPath, original)
+		return fmt.Errorf("verify new identity: %w", err)
+	}
+	return nil
+}
+
+// verifyRecoveryAgainstRecipients returns true when the public key derived
+// from the recovered identity appears in vaultDir/recipients.txt. It returns
+// (false, nil) when recipients.txt is absent — recovery is rejected in that
+// case because there is no independent source of truth to compare against,
+// which would otherwise allow a wrong-length passphrase to silently re-key
+// the vault to a typo's length-equivalent identity.
+func verifyRecoveryAgainstRecipients(vaultDir string, identity *age.X25519Identity) (bool, error) {
+	rm := NewRecipientsManager(vaultDir)
+	if !rm.RecipientsFileExists() {
+		return false, nil
+	}
+	recipients, err := rm.LoadRecipients()
+	if err != nil {
+		return false, fmt.Errorf("load recipients: %w", err)
+	}
+	pubKey := identity.Recipient().String()
+	for _, r := range recipients {
+		if r.String() == pubKey {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // restoreIdentityBackup puts the original identity bytes back in place after a

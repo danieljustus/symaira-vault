@@ -221,7 +221,7 @@ func checkManifestIntegrity(vaultDir string, _ Options) Result {
 	if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
 		r.Status = StatusWarn
 		r.Message = "no manifest.age — entry integrity not tracked"
-		r.Hint = "run `symvault verify` to create and verify a manifest"
+		r.Hint = "run `symvault verify --rebuild` to create a manifest from on-disk entries"
 		return r
 	}
 
@@ -259,7 +259,18 @@ func checkManifestIntegrity(vaultDir string, _ Options) Result {
 			r.Status = StatusWarn
 		}
 		r.Message = strings.Join(issues, "; ")
-		r.Hint = "run `symvault verify` to regenerate manifest"
+		// Only out-of-band (Unknown) entries are auto-fixable — tampering
+		// or deletion must not be silently rewritten away.
+		if len(result.Unknown) > 0 && len(result.Tampered) == 0 {
+			r.Fixable = true
+			r.Fix = func() error {
+				if FixDryRun {
+					return nil
+				}
+				return vault.RebuildManifest(vaultDir, identity)
+			}
+		}
+		r.Hint = "run `symvault verify --rebuild` to regenerate the manifest from on-disk entries"
 		return r
 	}
 
