@@ -14,6 +14,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > and [docs/commercial-boundary.md](docs/commercial-boundary.md) for the
 > current release-line policy. (Added 2026-06-10, see #384.)
 
+## [v0.7.1] - unreleased
+
+### Added — repository operations
+
+- **Projects v2 board** — a new GitHub Projects v2 board named `Symaira
+  Vault` (number 11) is linked to this repository. The board includes a
+  `Status` single-select (Todo / In Progress / Done), a `Priority`
+  single-select (Urgent / High / Medium / Low), and an `Iteration` field
+  with two-week iterations starting `2026-06-16` (v0.7.x, v0.8.x, v0.9.x,
+  v0.10.x). The previous Projects v2 board (`symaira-vault`, number 1)
+  remains read-only historical context. Tracked issues can now be
+  assigned to an iteration alongside the milestone. See #508.
+
 ## [v4.0.0] - 2026-05-21
 
 v4.0 reshapes Symaira Vault around AI-agent integration. The CLI becomes a
