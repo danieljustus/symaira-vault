@@ -18,6 +18,7 @@ type VaultConfig struct {
 	PseudonymizePaths  bool          `yaml:"pseudonymize_paths,omitempty"`
 	ScryptWorkFactor   int           `yaml:"scrypt_work_factor,omitempty"`
 	AutoMigrateKDF     bool          `yaml:"auto_migrate_kdf,omitempty"`
+	AutoHealZeroKey    bool          `yaml:"auto_heal_zero_key,omitempty"`
 	LastRotated        time.Time     `yaml:"last_rotated,omitempty"`
 	FormatVersion      int           `yaml:"format_version,omitempty"`
 	Argon2idTime       int           `yaml:"argon2id_time,omitempty"`
@@ -125,6 +126,7 @@ func defaultVaultConfig() VaultConfig {
 		AuthMethod:        AuthMethodPassphrase,
 		SearchIndex:       true,
 		ScryptWorkFactor:  18,
+		AutoHealZeroKey:   true,
 		FormatVersion:     1,
 	}
 }
@@ -262,6 +264,9 @@ func MergeFromVault(dst *VaultConfig, src VaultConfig) {
 	}
 	if src.AutoMigrateKDF {
 		dst.AutoMigrateKDF = true
+	}
+	if src.AutoHealZeroKey {
+		dst.AutoHealZeroKey = true
 	}
 	if src.ScryptWorkFactor > 0 {
 		dst.ScryptWorkFactor = src.ScryptWorkFactor

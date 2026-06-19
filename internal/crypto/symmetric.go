@@ -154,6 +154,101 @@ func (id *argon2idIdentity) Unwrap(stanzas []*age.Stanza) ([]byte, error) {
 	return nil, errors.New("argon2id: no matching stanza found")
 }
 
+// zeroKeyArgon2idIdentity is an age.Identity that derives the wrap key from
+// Argon2id(zeros[n], salt, params) instead of from a real passphrase. It is
+// the recovery counterpart to argon2idIdentity for files wrapped under the
+// pre-#476 zero-key bug: any passphrase-shaped input of length n produced
+// the same wrap key, so the only thing the wrap key depends on is n.
+//
+// The recovered identity's public key MUST be verified against an
+// independent source of truth (e.g. recipients.txt) before being trusted.
+// See RecoverZeroKeyIdentity for the documented entry point.
+type zeroKeyArgon2idIdentity struct {
+	n int
+}
+
+func (z *zeroKeyArgon2idIdentity) Unwrap(stanzas []*age.Stanza) ([]byte, error) {
+	if z.n <= 0 {
+		return nil, errors.New("zero-key recovery: n must be > 0")
+	}
+	zeros := make([]byte, z.n)
+	defer Wipe(zeros)
+	for _, s := range stanzas {
+		if s.Type != Argon2idStanzaType {
+			continue
+		}
+		if len(s.Args) < 2 {
+			continue
+		}
+		salt, err := base64.RawStdEncoding.DecodeString(s.Args[0])
+		if err != nil {
+			continue
+		}
+		params, err := parseArgon2idParams(s.Args[1])
+		if err != nil {
+			continue
+		}
+		l, kdfErr := Argon2idDeriveKey(zeros, salt, params)
+		if kdfErr != nil {
+			continue
+		}
+		kdf := hkdf.New(sha256.New, l, salt, []byte(ageArgon2idLabel))
+		wrapKey := make([]byte, Argon2idKeyLen)
+		if _, readErr := io.ReadFull(kdf, wrapKey); readErr != nil {
+			continue
+		}
+		aead, err := chacha20poly1305.New(wrapKey)
+		if err != nil {
+			continue
+		}
+		nonceSize := aead.NonceSize()
+		if len(s.Body) < nonceSize {
+			continue
+		}
+		nonce, ciphertext := s.Body[:nonceSize], s.Body[nonceSize:]
+		fileKey, err := aead.Open(nil, nonce, ciphertext, nil)
+		if err != nil {
+			continue
+		}
+		return fileKey, nil
+	}
+	return nil, errors.New("argon2id zero-key: no matching stanza found")
+}
+
+// RecoverZeroKeyIdentity attempts to decrypt an age file (typically
+// identity.age) that was wrapped under the pre-#476 zero-key bug, where the
+// argon2id wrap key was derived from Argon2id(zeros[n], salt, params) and n
+// was the length of the user's passphrase. As a consequence, any input of
+// length n produced the same wrap key, so a vault written under the bug can
+// be recovered if we still know the right n.
+//
+// The returned identity's public key MUST be verified against an independent
+// source of truth (for example, a recipients.txt entry) before being trusted:
+// the zero-key unwrap succeeds for any length-n input, so the passphrase
+// alone is not a proof of correctness.
+//
+// n must be > 0. A non-argon2id file, or one whose zero-key derivation does
+// not decrypt, yields an error.
+func RecoverZeroKeyIdentity(raw []byte, n int) (*age.X25519Identity, error) {
+	if n <= 0 {
+		return nil, errors.New("zero-key recovery: n must be > 0")
+	}
+	r, err := age.Decrypt(bytes.NewReader(raw), &zeroKeyArgon2idIdentity{n: n})
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrDecryptionFailed, err)
+	}
+	plaintext, err := io.ReadAll(r)
+	if err != nil {
+		return nil, fmt.Errorf("read decrypted data: %w", err)
+	}
+	defer Wipe(plaintext)
+	parsed, err := age.ParseX25519Identity(strings.TrimSpace(string(plaintext)))
+	if err != nil {
+		return nil, fmt.Errorf("parse identity: %w", err)
+	}
+	return parsed, nil
+}
+
 func parseArgon2idParams(s string) (Argon2idParams, error) {
 	var params Argon2idParams
 	parts := strings.Split(s, ",")
