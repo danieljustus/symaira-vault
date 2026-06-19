@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -185,22 +186,45 @@ func checkScryptBenchmark(vaultDir string, _ Options) Result {
 func checkKDFModern(vaultDir string, _ Options) Result {
 	r := Result{ID: "crypto.kdf.modern", Name: "KDF modernity"}
 
-	cfgPath := filepath.Join(vaultDir, "config.yaml")
-	cfg, err := configpkg.Load(cfgPath)
-	if err != nil {
+	raw, readErr := os.ReadFile(filepath.Join(vaultDir, "identity.age"))
+	if readErr != nil {
 		r.Status = StatusWarn
-		r.Message = "cannot check KDF version"
+		r.Message = "cannot read identity.age"
+		return r
+	}
+	detected := vaultcrypto.DetectEncryptedIdentityFormat(raw)
+	if detected == "" {
+		r.Status = StatusWarn
+		r.Message = "identity.age has no recognized KDF stanza"
 		return r
 	}
 
-	if cfg.Vault == nil || cfg.Vault.FormatVersion < 2 {
+	var formatVersion int
+	if cfg, cfgErr := configpkg.Load(filepath.Join(vaultDir, "config.yaml")); cfgErr == nil && cfg.Vault != nil {
+		formatVersion = cfg.Vault.FormatVersion
+	}
+
+	fileIsArgon2id := detected == vaultcrypto.Argon2idStanzaType
+	configClaimsArgon2id := formatVersion >= 2
+	if fileIsArgon2id != configClaimsArgon2id {
+		r.Status = StatusWarn
+		if fileIsArgon2id {
+			r.Message = "identity.age is argon2id but config.FormatVersion < 2 — config is out of sync with the on-disk file"
+		} else {
+			r.Message = "identity.age is scrypt but config.FormatVersion >= 2 — config is out of sync with the on-disk file"
+		}
+		r.Hint = "restore the correct identity.age, or run `symvault migrate kdf` to reconcile the file with the config"
+		return r
+	}
+
+	if !fileIsArgon2id {
 		r.Status = StatusWarn
 		r.Message = "using scrypt KDF (format v1) — argon2id is recommended for 2025+"
 		r.Hint = "run `symvault migrate kdf` after backing up your vault"
-	} else {
-		r.Status = StatusOK
-		r.Message = "using argon2id KDF (format v2)"
+		return r
 	}
+	r.Status = StatusOK
+	r.Message = "using argon2id KDF (format v2)"
 	return r
 }
 

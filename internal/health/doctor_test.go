@@ -755,6 +755,84 @@ func TestRunChecks_KDFModern_NoVault(t *testing.T) {
 	}
 }
 
+// writeKDFModernityVaultFixture writes a config.yaml + identity.age with the
+// requested KDF/format-version combination so checkKDFModern can be exercised
+// in every state the real check needs to distinguish.
+func writeKDFModernityVaultFixture(t *testing.T, kdf string, formatVersion int) string {
+	t.Helper()
+	dir := t.TempDir()
+	cfg := fmt.Sprintf("vaultDir: %s\nvault:\n  format_version: %d\n", dir, formatVersion)
+	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte(cfg), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	var identity string
+	switch kdf {
+	case "scrypt":
+		identity = "age-encryption.org/v1\n-> scrypt fakesalt\nfakebody\n"
+	case "argon2id":
+		identity = "age-encryption.org/v1\n-> argon2id fakesalt t=1,m=64,p=1\nfakebody\n"
+	default:
+		t.Fatalf("unknown KDF %q", kdf)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "identity.age"), []byte(identity), 0o600); err != nil {
+		t.Fatalf("write identity: %v", err)
+	}
+	return dir
+}
+
+func runKDFModern(t *testing.T, dir string) health.Result {
+	t.Helper()
+	results := health.RunChecks(dir, health.Options{Only: []string{"crypto.kdf.modern"}, NoNetwork: true})
+	if len(results) == 0 {
+		t.Fatal("expected KDF modernity result")
+	}
+	return results[0]
+}
+
+func TestRunChecks_KDFModern_Argon2idMatchesV2(t *testing.T) {
+	dir := writeKDFModernityVaultFixture(t, "argon2id", 2)
+	r := runKDFModern(t, dir)
+	if r.Status != health.StatusOK {
+		t.Errorf("expected OK for argon2id+v2, got %s: %s", r.Status, r.Message)
+	}
+	if !strings.Contains(r.Message, "argon2id") {
+		t.Errorf("message should mention argon2id, got %q", r.Message)
+	}
+}
+
+func TestRunChecks_KDFModern_ScryptMatchesV1(t *testing.T) {
+	dir := writeKDFModernityVaultFixture(t, "scrypt", 1)
+	r := runKDFModern(t, dir)
+	if r.Status != health.StatusWarn {
+		t.Errorf("expected warn for scrypt+v1, got %s: %s", r.Status, r.Message)
+	}
+	if !strings.Contains(r.Message, "scrypt") {
+		t.Errorf("message should mention scrypt, got %q", r.Message)
+	}
+}
+
+func TestRunChecks_KDFModern_DesyncScryptFileV2Config(t *testing.T) {
+	dir := writeKDFModernityVaultFixture(t, "scrypt", 2)
+	r := runKDFModern(t, dir)
+	if r.Status != health.StatusWarn {
+		t.Errorf("expected desync warn for scrypt file + v2 config, got %s: %s", r.Status, r.Message)
+	}
+	if !strings.Contains(r.Message, "out of sync") {
+		t.Errorf("message should mention desync, got %q", r.Message)
+	}
+}
+
+func TestRunChecks_KDFModern_DesyncArgon2idFileV1Config(t *testing.T) {
+	dir := writeKDFModernityVaultFixture(t, "argon2id", 1)
+	r := runKDFModern(t, dir)
+	if r.Status != health.StatusWarn {
+		t.Errorf("expected desync warn for argon2id file + v1 config, got %s: %s", r.Status, r.Message)
+	}
+	if !strings.Contains(r.Message, "out of sync") {
+		t.Errorf("message should mention desync, got %q", r.Message)
+	}
+}
+
 func TestRunChecks_Quick_SkipsSlow(t *testing.T) {
 	dir := t.TempDir()
 	results := health.RunChecks(dir, health.Options{Quick: true, NoNetwork: true})
