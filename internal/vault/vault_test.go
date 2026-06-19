@@ -685,6 +685,73 @@ func TestOpenWithPassphrase_KDFMigrationOptIn(t *testing.T) {
 	}
 }
 
+// makeScryptVaultWithStaleV2 mirrors makeScryptVault but stamps
+// FormatVersion=2 on the config, simulating a vault that was restored from a
+// scrypt identity backup while its config still claims the v2 argon2id
+// format. This is the desync state #514 is meant to catch.
+func makeScryptVaultWithStaleV2(t *testing.T, passphrase []byte, autoMigrate bool) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "entries"), 0o700); err != nil {
+		t.Fatalf("mkdir entries: %v", err)
+	}
+	identity := testutil.TempIdentity(t)
+	if err := vaultcrypto.SaveIdentity(identity, filepath.Join(dir, "identity.age"), cloneBytes(passphrase), 0); err != nil {
+		t.Fatalf("SaveIdentity: %v", err)
+	}
+	cfg := config.Default()
+	cfg.VaultDir = dir
+	cfg.Vault = &config.VaultConfig{FormatVersion: 2, ScryptWorkFactor: 18, AutoMigrateKDF: autoMigrate}
+	if err := cfg.SaveTo(filepath.Join(dir, "config.yaml")); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	return dir
+}
+
+func TestOpenWithPassphrase_MigratesStaleV2ScryptWithOptIn(t *testing.T) {
+	pass := []byte("correct horse battery staple")
+	dir := makeScryptVaultWithStaleV2(t, pass, true /* AutoMigrateKDF */)
+
+	v, err := OpenWithPassphrase(dir, cloneBytes(pass))
+	if err != nil {
+		t.Fatalf("OpenWithPassphrase: %v", err)
+	}
+	if v.NeedsMigration {
+		t.Error("NeedsMigration should be false after a successful migration")
+	}
+	raw, _ := os.ReadFile(filepath.Join(dir, "identity.age"))
+	if got := vaultcrypto.DetectEncryptedIdentityFormat(raw); got != "argon2id" {
+		t.Errorf("stale-v2 scrypt file should be migrated to argon2id, got %q", got)
+	}
+	// Config.FormatVersion should remain 2 (and not be reset to 1) after the
+	// migration — the file and config are now in agreement.
+	loaded, err := config.Load(filepath.Join(dir, "config.yaml"))
+	if err != nil {
+		t.Fatalf("reload config: %v", err)
+	}
+	if loaded.Vault.FormatVersion != 2 {
+		t.Errorf("FormatVersion = %d, want 2", loaded.Vault.FormatVersion)
+	}
+}
+
+func TestOpenWithPassphrase_FlagsNeedsMigrationForStaleV2Scrypt(t *testing.T) {
+	pass := []byte("correct horse battery staple")
+	dir := makeScryptVaultWithStaleV2(t, pass, false /* AutoMigrateKDF */)
+
+	v, err := OpenWithPassphrase(dir, cloneBytes(pass))
+	if err != nil {
+		t.Fatalf("OpenWithPassphrase: %v", err)
+	}
+	if !v.NeedsMigration {
+		t.Error("NeedsMigration should be true for a scrypt file regardless of stale FormatVersion")
+	}
+	// The file must NOT have been migrated (opt-in was false).
+	raw, _ := os.ReadFile(filepath.Join(dir, "identity.age"))
+	if got := vaultcrypto.DetectEncryptedIdentityFormat(raw); got != "scrypt" {
+		t.Errorf("identity should remain scrypt without opt-in, got %q", got)
+	}
+}
+
 func TestOpenWithPassphrase_HealsZeroKeyIdentity(t *testing.T) {
 	identity := testutil.TempIdentity(t)
 	const n = 17

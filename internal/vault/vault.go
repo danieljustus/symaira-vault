@@ -213,10 +213,13 @@ func OpenWithPassphrase(vaultDir string, passphrase []byte) (*Vault, error) {
 	// Only auto-migrate the identity KDF when the user has explicitly opted in.
 	// Rewriting the master identity file in place is not something to do silently
 	// on every open; vaults that don't opt in are flagged as migratable instead.
+	// The trigger is the on-disk file's actual KDF, not config.FormatVersion —
+	// after an identity restore the file may be scrypt while FormatVersion is
+	// still 2, and we must not silently treat that as "already migrated".
 	if format != vaultcrypto.Argon2idStanzaType {
 		if v.Config != nil && v.Config.Vault != nil && v.Config.Vault.AutoMigrateKDF {
 			_ = MigrateKDF(vaultDir, identity, migrationPassphrase, v)
-		} else if v.Config != nil && v.Config.Vault != nil && v.Config.Vault.FormatVersion < vaultFormatVersion2 {
+		} else {
 			v.NeedsMigration = true
 		}
 	}
@@ -253,9 +256,13 @@ func tryHealZeroKeyIdentity(vaultDir, identityPath string, raw, passphrase []byt
 	return recovered, true, nil
 }
 
-// MigrateKDF re-encrypts the vault identity from scrypt to argon2id when the
-// vault format version indicates an older KDF. It is opt-in (gated by the
-// caller on Config.Vault.AutoMigrateKDF).
+// MigrateKDF re-encrypts the vault identity from scrypt to argon2id. The
+// caller is responsible for deciding when to call it (typically: the on-disk
+// identity is scrypt, the user opted in to AutoMigrateKDF, and the file is
+// ready to be rewritten). The trigger is the on-disk file's actual KDF —
+// not config.FormatVersion — so a restored scrypt identity with a stale
+// "format 2" config is still migrated, instead of silently treated as
+// already-modern.
 //
 // The rewrite is safe: the existing identity.age is backed up to
 // identity.age.bak, the new argon2id identity is written and then verified to
@@ -265,9 +272,6 @@ func tryHealZeroKeyIdentity(vaultDir, identityPath string, raw, passphrase []byt
 // unreadable master key.
 func MigrateKDF(vaultDir string, identity *age.X25519Identity, passphrase []byte, v *Vault) error {
 	if v == nil || v.Config == nil || v.Config.Vault == nil {
-		return nil
-	}
-	if v.Config.Vault.FormatVersion >= vaultFormatVersion2 {
 		return nil
 	}
 	identityPath := filepath.Join(vaultDir, "identity.age")
