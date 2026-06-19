@@ -223,7 +223,7 @@ func (a *authorizerImpl) RequiresApproval() bool {
 	}
 }
 
-func (a *authorizerImpl) logAudit(ctx context.Context, action, path string, ok bool) {
+func (a *authorizerImpl) logAudit(_ context.Context, action, path string, ok bool) {
 	if a.auditLog == nil {
 		return
 	}
@@ -244,7 +244,7 @@ func (a *authorizerImpl) logAudit(ctx context.Context, action, path string, ok b
 	}
 }
 
-func (a *authorizerImpl) logAuditShare(ctx context.Context, action, path string, grant *mcp.ShareGrant, ok bool) {
+func (a *authorizerImpl) logAuditShare(_ context.Context, action, path string, grant *mcp.ShareGrant, ok bool) {
 	if a.auditLog == nil {
 		return
 	}
