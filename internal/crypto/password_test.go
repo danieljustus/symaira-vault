@@ -258,6 +258,37 @@ func TestAssessPasswordStrength_ExactBoundary(t *testing.T) {
 	}
 }
 
+func TestAssessPasswordStrength_ShortNonLatin(t *testing.T) {
+	// 5 CJK characters: only 5 runes despite 15 bytes. Must be reported as too
+	// short, not credited for its byte width.
+	s := AssessPasswordStrength("日本語テスト")
+	if !s.Weak {
+		t.Errorf("expected Weak=true for 5-character non-Latin password, got %q", s.Message)
+	}
+	if !strings.Contains(s.Message, "too short") {
+		t.Errorf("expected 'too short' message, got %q", s.Message)
+	}
+}
+
+func TestValidatePasswordStrength_ShortNonLatin(t *testing.T) {
+	if err := ValidatePasswordStrength("日本語テスト"); err == nil {
+		t.Error("expected error for 5-character non-Latin password, got nil")
+	}
+}
+
+func TestAssessPasswordStrength_WeakNonLatinLowEntropy(t *testing.T) {
+	// 10 runes drawn from only 5 distinct CJK characters. The old byte-length +
+	// 256-symbol-fallback estimate scored this ≈240 bits (strong); by rune count
+	// and observed-alphabet crediting it is ≈10*log2(5) ≈ 23 bits → weak.
+	s := AssessPasswordStrength("あいうえおあいうえお")
+	if !s.Weak {
+		t.Errorf("expected Weak=true for low-entropy non-Latin password, got entropy %.1f", s.Entropy)
+	}
+	if s.Entropy >= 60 {
+		t.Errorf("expected entropy well below 60 bits, got %.1f", s.Entropy)
+	}
+}
+
 func TestGeneratePassword_NoAmbiguousChars(t *testing.T) {
 	ambiguousChars := "lI1O0"
 	password, cleanup, err := GeneratePassword(1000, true)
