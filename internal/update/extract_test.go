@@ -221,21 +221,21 @@ func TestExtractZip_EmptyArchive(t *testing.T) {
 	}
 }
 
-func TestSafeArchivePath_RejectsTraversal(t *testing.T) {
-	_, err := safeArchivePath("/tmp/dest", "../etc/passwd")
-	if err == nil {
+func TestValidateArchiveEntryName_RejectsTraversal(t *testing.T) {
+	if err := validateArchiveEntryName("../etc/passwd"); err == nil {
 		t.Fatal("expected path traversal error")
 	}
 }
 
-func TestSafeArchivePath_AcceptsNestedPath(t *testing.T) {
-	path, err := safeArchivePath("/tmp/dest", "subdir/file.txt")
-	if err != nil {
-		t.Fatalf("safeArchivePath() error = %v", err)
+func TestValidateArchiveEntryName_RejectsAbsolute(t *testing.T) {
+	if err := validateArchiveEntryName("/etc/passwd"); err == nil {
+		t.Fatal("expected path traversal error for absolute path")
 	}
-	expected := filepath.Join("/tmp/dest", "subdir/file.txt")
-	if path != expected {
-		t.Fatalf("got %q, want %q", path, expected)
+}
+
+func TestValidateArchiveEntryName_AcceptsNestedPath(t *testing.T) {
+	if err := validateArchiveEntryName("subdir/file.txt"); err != nil {
+		t.Fatalf("validateArchiveEntryName() error = %v", err)
 	}
 }
 

@@ -11,7 +11,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/danieljustus/symaira-vault/internal/fsutil"
 )
@@ -30,24 +29,17 @@ var (
 // decompression bomb attacks (G110).
 const maxExtractSize = 100 * 1024 * 1024 // 100 MB
 
-// safeArchivePath validates that entryPath does not escape destDir. It checks
-// for parent-directory traversal segments and verifies that the cleaned,
-// resolved path is a child of destDir.
-func safeArchivePath(destDir, entryPath string) (string, error) {
-	if fsutil.HasTraversal(entryPath) {
-		return "", fmt.Errorf("%w: %q", ErrPathTraversal, entryPath)
+// validateArchiveEntryName rejects archive entry names that reference an
+// absolute path or contain a parent-directory traversal segment before they
+// ever reach a filesystem call. Containment is additionally enforced at the
+// syscall level by os.Root in ExtractTarGz/ExtractZip, which refuses any
+// access that would escape the destination directory even if this check were
+// bypassed (e.g. via a symlinked path component).
+func validateArchiveEntryName(entryPath string) error {
+	if entryPath == "" || filepath.IsAbs(entryPath) || fsutil.HasTraversal(entryPath) {
+		return fmt.Errorf("%w: %q", ErrPathTraversal, entryPath)
 	}
-
-	cleanDest := filepath.Clean(destDir)
-	fullPath := filepath.Clean(filepath.Join(cleanDest, entryPath))
-
-	// Ensure the resolved path is within destDir (or is destDir itself for
-	// the root directory entry).
-	if !strings.HasPrefix(fullPath, cleanDest+string(filepath.Separator)) && fullPath != cleanDest {
-		return "", fmt.Errorf("%w: %q resolves outside %q", ErrPathTraversal, entryPath, destDir)
-	}
-
-	return fullPath, nil
+	return nil
 }
 
 // ExtractTarGz extracts a gzip-compressed tar archive to destDir and returns
@@ -60,8 +52,14 @@ func ExtractTarGz(data []byte, destDir, expectedBinaryName string) (string, erro
 	}
 	defer func() { _ = gr.Close() }()
 
+	root, err := os.OpenRoot(destDir)
+	if err != nil {
+		return "", fmt.Errorf("open destination directory %q: %w", destDir, err)
+	}
+	defer func() { _ = root.Close() }()
+
 	tr := tar.NewReader(gr)
-	var binaryPath string
+	var binaryName string
 	var totalSize int64
 
 	for {
@@ -73,46 +71,46 @@ func ExtractTarGz(data []byte, destDir, expectedBinaryName string) (string, erro
 			return "", fmt.Errorf("read tar header: %w", err)
 		}
 
-		safePath, err := safeArchivePath(destDir, header.Name)
-		if err != nil {
+		if err := validateArchiveEntryName(header.Name); err != nil {
 			return "", err
 		}
+		name := filepath.Clean(filepath.ToSlash(header.Name))
 
 		switch header.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(safePath, 0o750); err != nil {
-				return "", fmt.Errorf("create directory %q: %w", safePath, err)
+			if err := root.MkdirAll(name, 0o750); err != nil {
+				return "", fmt.Errorf("create directory %q: %w", name, err)
 			}
 
 		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(safePath), 0o750); err != nil {
-				return "", fmt.Errorf("create parent dir for %q: %w", safePath, err)
+			if err := root.MkdirAll(filepath.Dir(name), 0o750); err != nil {
+				return "", fmt.Errorf("create parent dir for %q: %w", name, err)
 			}
 
 			var mode os.FileMode
 			if header.Mode < 0 || header.Mode > math.MaxUint32 {
 				mode = 0o600
 			} else {
-				mode = os.FileMode(header.Mode)
+				mode = os.FileMode(header.Mode).Perm()
 			}
 
-			f, err := os.OpenFile(filepath.Clean(safePath), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode) // #nosec G304 -- safePath is validated by safeArchivePath() against path traversal
+			f, err := root.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
 			if err != nil {
-				return "", fmt.Errorf("create file %q: %w", safePath, err)
+				return "", fmt.Errorf("create file %q: %w", name, err)
 			}
 
 			n, err := io.Copy(f, io.LimitReader(tr, maxExtractSize-totalSize))
 			totalSize += n
 			_ = f.Close()
 			if err != nil {
-				return "", fmt.Errorf("write file %q: %w", safePath, err)
+				return "", fmt.Errorf("write file %q: %w", name, err)
 			}
 			if totalSize >= maxExtractSize {
 				return "", fmt.Errorf("archive exceeds maximum extraction size of %d bytes", maxExtractSize)
 			}
 
-			if filepath.Base(header.Name) == expectedBinaryName {
-				binaryPath = safePath
+			if filepath.Base(name) == expectedBinaryName {
+				binaryName = name
 			}
 
 		default:
@@ -121,11 +119,11 @@ func ExtractTarGz(data []byte, destDir, expectedBinaryName string) (string, erro
 		}
 	}
 
-	if binaryPath == "" {
+	if binaryName == "" {
 		return "", fmt.Errorf("%w: %s", ErrBinaryNotFound, expectedBinaryName)
 	}
 
-	return binaryPath, nil
+	return filepath.Join(destDir, binaryName), nil
 }
 
 // ExtractZip extracts a zip archive to destDir and returns the path to the
@@ -137,24 +135,30 @@ func ExtractZip(data []byte, destDir, expectedBinaryName string) (string, error)
 		return "", fmt.Errorf("open zip archive: %w", err)
 	}
 
-	var binaryPath string
+	root, err := os.OpenRoot(destDir)
+	if err != nil {
+		return "", fmt.Errorf("open destination directory %q: %w", destDir, err)
+	}
+	defer func() { _ = root.Close() }()
+
+	var binaryName string
 	var totalSize int64
 
 	for _, f := range zr.File {
-		safePath, err := safeArchivePath(destDir, f.Name)
-		if err != nil {
+		if err := validateArchiveEntryName(f.Name); err != nil {
 			return "", err
 		}
+		name := filepath.Clean(filepath.ToSlash(f.Name))
 
 		if f.FileInfo().IsDir() {
-			if mkdirErr := os.MkdirAll(safePath, 0o750); mkdirErr != nil {
-				return "", fmt.Errorf("create directory %q: %w", safePath, mkdirErr)
+			if mkdirErr := root.MkdirAll(name, 0o750); mkdirErr != nil {
+				return "", fmt.Errorf("create directory %q: %w", name, mkdirErr)
 			}
 			continue
 		}
 
-		if mkdirErr := os.MkdirAll(filepath.Dir(safePath), 0o750); mkdirErr != nil {
-			return "", fmt.Errorf("create parent dir for %q: %w", safePath, mkdirErr)
+		if mkdirErr := root.MkdirAll(filepath.Dir(name), 0o750); mkdirErr != nil {
+			return "", fmt.Errorf("create parent dir for %q: %w", name, mkdirErr)
 		}
 
 		rc, err := f.Open()
@@ -162,10 +166,10 @@ func ExtractZip(data []byte, destDir, expectedBinaryName string) (string, error)
 			return "", fmt.Errorf("open zip entry %q: %w", f.Name, err)
 		}
 
-		out, err := os.OpenFile(filepath.Clean(safePath), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, f.Mode())
+		out, err := root.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, f.Mode().Perm())
 		if err != nil {
 			_ = rc.Close()
-			return "", fmt.Errorf("create file %q: %w", safePath, err)
+			return "", fmt.Errorf("create file %q: %w", name, err)
 		}
 
 		n, err := io.Copy(out, io.LimitReader(rc, maxExtractSize-totalSize))
@@ -173,20 +177,20 @@ func ExtractZip(data []byte, destDir, expectedBinaryName string) (string, error)
 		_ = out.Close()
 		_ = rc.Close()
 		if err != nil {
-			return "", fmt.Errorf("write file %q: %w", safePath, err)
+			return "", fmt.Errorf("write file %q: %w", name, err)
 		}
 		if totalSize >= maxExtractSize {
 			return "", fmt.Errorf("archive exceeds maximum extraction size of %d bytes", maxExtractSize)
 		}
 
-		if filepath.Base(f.Name) == expectedBinaryName {
-			binaryPath = safePath
+		if filepath.Base(name) == expectedBinaryName {
+			binaryName = name
 		}
 	}
 
-	if binaryPath == "" {
+	if binaryName == "" {
 		return "", fmt.Errorf("%w: %s", ErrBinaryNotFound, expectedBinaryName)
 	}
 
-	return binaryPath, nil
+	return filepath.Join(destDir, binaryName), nil
 }
