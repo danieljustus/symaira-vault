@@ -16,7 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/danieljustus/symaira-vault/internal/audit"
 	auth "github.com/danieljustus/symaira-vault/internal/mcp/auth"
 	mcpserver "github.com/danieljustus/symaira-vault/internal/mcp/server"
 	transport "github.com/danieljustus/symaira-vault/internal/mcp/transport"
@@ -65,80 +64,18 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 
 	addr := net.JoinHostPort(bind, strconv.Itoa(port))
 
-	// Load token system (registry + legacy fallback)
-	tokenPath := ""
-	if v != nil && v.Config != nil && v.Config.MCP != nil {
-		tf := v.Config.MCP.HTTPTokenFile
-		if tf != "" && tf != "auto" {
-			tokenPath = tf
-		}
-	}
-	registry, legacyToken, err := auth.LoadTokenSystem(vaultDir, tokenPath)
+	// Load the token registry (with legacy fallback), wire its cleanup audit
+	// logging and background cleanup, and build the auth audit logger.
+	ts, err := setupTokenSystem(ctx, v, vaultDir)
 	if err != nil {
-		return fmt.Errorf("load token system: %w", err)
+		return err
 	}
+	defer ts.Close()
+	registry := ts.registry
+	legacyToken := ts.legacyToken
+	authAuditLog := ts.authAuditLog
 
-	// Create a dedicated audit logger for token cleanup events before
-	// starting the cleanup goroutine so it can reference the logger.
-	cleanupAuditLog, err := audit.New("token-cleanup", vaultDir, v.Identity)
-	if err != nil {
-		return fmt.Errorf("create token cleanup audit logger: %w", err)
-	}
-	defer func() { _ = cleanupAuditLog.Close() }()
-
-	// Start background cleanup for token registry
-	if registry != nil {
-		registry.SetRevokedRetention(30 * 24 * time.Hour) // 30-day retention for revoked tokens
-		registry.SetCleanupLogger(func(action, tokenID, label, reason string) {
-			if logErr := cleanupAuditLog.LogEntry(audit.LogEntry{
-				Action:  "token_cleanup",
-				Agent:   "token-cleanup",
-				Reason:  reason,
-				TokenID: tokenID,
-				OK:      true,
-			}); logErr != nil {
-				cliout.Errorf("token cleanup audit log write failed: %v", logErr)
-			}
-		})
-		cleanupInterval := 5 * time.Minute
-		_ = registry.StartCleanup(ctx, cleanupInterval)
-		// Start file watcher to reload token registry when CLI creates new tokens
-		_ = registry.StartFileWatcher(ctx, 2*time.Second)
-	}
-
-	authAuditLog, err := audit.New("auth-failures", vaultDir, v.Identity)
-	if err != nil {
-		return fmt.Errorf("create auth audit logger: %w", err)
-	}
-	defer func() { _ = authAuditLog.Close() }()
-
-	if registry != nil {
-		result := registry.Cleanup()
-		totalRemoved := result.ExpiredRemoved + result.RevokedRemoved
-		if totalRemoved > 0 {
-			_ = authAuditLog.LogEntry(audit.LogEntry{
-				Agent:  "system",
-				Action: "token_cleanup",
-				Reason: fmt.Sprintf("removed %d expired, %d revoked (%d total)", result.ExpiredRemoved, result.RevokedRemoved, totalRemoved),
-				OK:     true,
-			})
-		}
-	}
-
-	rateLimit := 60
-	var trustedProxyIPs []string
-	if v != nil && v.Config != nil && v.Config.MCP != nil {
-		if v.Config.MCP.RateLimit >= 0 {
-			rateLimit = v.Config.MCP.RateLimit
-		}
-		trustedProxyIPs = v.Config.MCP.TrustedProxyIPs
-	}
-	var rateLimiter *auth.RateLimiter
-	var stopCleanup func()
-	if rateLimit > 0 {
-		rateLimiter = auth.NewRateLimiter(rateLimit, time.Minute, trustedProxyIPs...)
-		stopCleanup = rateLimiter.StartCleanup(ctx, 5*time.Minute)
-	}
+	rateLimiter, stopCleanup := setupRateLimiter(ctx, v)
 
 	handlerCache := make(map[string]*mcpserver.ProtocolHandler)
 	var cacheMu sync.RWMutex
@@ -322,32 +259,15 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 	}
 	mux.Handle("/mcp", mcpChain)
 
-	readHeaderTimeout := 5 * time.Second
-	readTimeout := 10 * time.Second
-	writeTimeout := 10 * time.Second
-	shutdownTimeout := 5 * time.Second
-	if v != nil && v.Config != nil && v.Config.MCP != nil {
-		mcpCfg := v.Config.MCP
-		if mcpCfg.ReadHeaderTimeout > 0 {
-			readHeaderTimeout = mcpCfg.ReadHeaderTimeout
-		}
-		if mcpCfg.ReadTimeout > 0 {
-			readTimeout = mcpCfg.ReadTimeout
-		}
-		if mcpCfg.WriteTimeout > 0 {
-			writeTimeout = mcpCfg.WriteTimeout
-		}
-		if mcpCfg.ShutdownTimeout > 0 {
-			shutdownTimeout = mcpCfg.ShutdownTimeout
-		}
-	}
+	timeouts := resolveServerTimeouts(v)
+	shutdownTimeout := timeouts.shutdown
 
 	server := &http.Server{
 		Addr:              addr,
 		Handler:           mux,
-		ReadHeaderTimeout: readHeaderTimeout,
-		ReadTimeout:       readTimeout,
-		WriteTimeout:      writeTimeout,
+		ReadHeaderTimeout: timeouts.readHeader,
+		ReadTimeout:       timeouts.read,
+		WriteTimeout:      timeouts.write,
 		IdleTimeout:       120 * time.Second,
 		MaxHeaderBytes:    1 << 20,
 	}
