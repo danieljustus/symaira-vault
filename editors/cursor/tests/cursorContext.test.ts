@@ -30,6 +30,15 @@ describe("sanitizeEntryPath", () => {
     expect(sanitizeEntryPath("github|injection")).toBe("github\\|injection");
   });
 
+  it("escapes pre-existing backslashes before other escapes", () => {
+    // A raw backslash must not be able to combine with an added escape and
+    // break out of the intended escaping (js/incomplete-sanitization).
+    expect(sanitizeEntryPath("github\\injection")).toBe("github\\\\injection");
+    expect(sanitizeEntryPath("github\\`injection")).toBe(
+      "github\\\\\\`injection"
+    );
+  });
+
   it("handles multiple injection vectors in one path", () => {
     const malicious = "github\n`malicious`|table";
     expect(sanitizeEntryPath(malicious)).toBe(

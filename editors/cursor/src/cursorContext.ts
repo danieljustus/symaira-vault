@@ -10,13 +10,19 @@ const CONTEXT_MARKER_END = "<!-- END SYMAIRA VAULT CONTEXT -->";
  * Sanitize an entry path to prevent prompt injection when writing to
  * .cursorrules or similar context files.
  *
+ * - Escapes pre-existing backslashes first so the escape sequences added
+ *   below cannot be subverted by attacker-controlled backslashes
  * - Replaces newlines (LF, CR, CRLF) with escaped sequences
  * - Escapes backticks to prevent code injection
  * - Escapes pipe characters to prevent markdown table injection
  */
 export function sanitizeEntryPath(entryPath: string): string {
+  // Escape backslashes before introducing any new backslash escapes below;
+  // otherwise an input backslash could combine with an added escape and break
+  // out of the intended escaping (js/incomplete-sanitization).
+  let sanitized = entryPath.replace(/\\/g, "\\\\");
   // CRLF must be replaced before LF/CR to avoid partial escapes
-  let sanitized = entryPath.replace(/\r\n/g, "\\r\\n");
+  sanitized = sanitized.replace(/\r\n/g, "\\r\\n");
   sanitized = sanitized.replace(/\n/g, "\\n");
   sanitized = sanitized.replace(/\r/g, "\\r");
   sanitized = sanitized.replace(/`/g, "\\`");
