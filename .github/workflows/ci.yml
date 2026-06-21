@@ -167,19 +167,36 @@ jobs:
 
           echo ""
           echo "=== Per-package coverage checks for security-critical packages ==="
+          # Includes the network-facing MCP auth surface (token/OAuth/registry/rate-limit),
+          # the only remotely reachable code, alongside the local crypto/session/vault core.
+          PKG_COV_TMP=$(mktemp -d)
           for PACKAGE in "./internal/crypto/..." \
                          "./internal/session/..." \
-                         "./internal/vault/..."; do
-            PKG_OUT=$(go test -coverprofile=/dev/null -covermode=atomic -count=1 -timeout=2m \
-                      -skip 'TestFlow|TestBinaryE2E|Integration' "$PACKAGE" 2>&1 | grep "coverage:" | tail -1)
-            PKG_COV=$(echo "$PKG_OUT" | grep -oE '[0-9]+\.[0-9]+' | tail -1 || echo "0")
-            PKG_NAME=$(basename "$PACKAGE")
-            # Phased target: raise to 85.0 in follow-up PRs
+                         "./internal/vault/..." \
+                         "./internal/mcp/auth/..." \
+                         "./internal/mcp/serverbootstrap/..."; do
+            # Derive a stable name from the package path. Note: plain
+            # `basename "./internal/crypto/..."` returns "..." (the glob segment),
+            # so strip the trailing "/..." before taking the basename.
+            PKG_NAME=$(basename "${PACKAGE%/...}")
+            PKG_PROFILE="$PKG_COV_TMP/${PKG_NAME}.out"
+            go test -coverprofile="$PKG_PROFILE" -covermode=atomic -count=1 -timeout=10m \
+              -skip 'TestFlow|TestBinaryE2E|Integration' "$PACKAGE"
+            # Aggregate across the whole package tree. `go test ... | grep coverage: | tail -1`
+            # would report an arbitrary subpackage (e.g. internal/vault/taint) instead of the
+            # combined total, so read the total from the merged profile instead.
+            PKG_COV=$(go tool cover -func="$PKG_PROFILE" | grep '^total:' | grep -oE '[0-9]+\.[0-9]+' | tail -1)
+            [ -z "$PKG_COV" ] && PKG_COV=0
+            # Thresholds sit a few points below current measured coverage so the gate
+            # guards against regression without flaking on minor line-count drift.
+            # Phased target: raise toward 85.0 in follow-up PRs.
             case "$PKG_NAME" in
-              crypto)  PKG_THRESHOLD=85.0 ;;
-              session) PKG_THRESHOLD=75.0 ;;
-              vault)   PKG_THRESHOLD=75.0 ;;
-              *)       PKG_THRESHOLD=65.0 ;;
+              crypto)          PKG_THRESHOLD=85.0 ;;
+              session)         PKG_THRESHOLD=70.0 ;;
+              vault)           PKG_THRESHOLD=72.0 ;;
+              auth)            PKG_THRESHOLD=82.0 ;;
+              serverbootstrap) PKG_THRESHOLD=78.0 ;;
+              *)               PKG_THRESHOLD=65.0 ;;
             esac
             echo "${PKG_NAME}: ${PKG_COV}% (threshold: ${PKG_THRESHOLD}%)"
             if awk "BEGIN {exit !($PKG_COV < $PKG_THRESHOLD)}"; then
@@ -188,6 +205,7 @@ jobs:
             fi
             echo "PASS: ${PKG_NAME} coverage ${PKG_COV}% meets threshold of ${PKG_THRESHOLD}%"
           done
+          rm -rf "$PKG_COV_TMP"
 
       - name: Run smoke tests
         shell: bash
