@@ -7,6 +7,7 @@ import (
 	"math"
 	"math/big"
 	"unicode"
+	"unicode/utf8"
 )
 
 // MaxPasswordLength is the upper bound for generated password length.
@@ -67,7 +68,12 @@ type PasswordStrength struct {
 func AssessPasswordStrength(password string) PasswordStrength {
 	var s PasswordStrength
 
-	if len(password) < 10 {
+	// Measure length in Unicode characters, not bytes. A multi-byte rune must
+	// count as a single character so that a short non-ASCII passphrase cannot
+	// satisfy the minimum-length requirement purely through its byte width.
+	runeCount := utf8.RuneCountInString(password)
+
+	if runeCount < 10 {
 		s.Weak = true
 		s.Message = "password too short: must be at least 10 characters"
 		return s
@@ -78,6 +84,11 @@ func AssessPasswordStrength(password string) PasswordStrength {
 	hasUpper := false
 	hasDigit := false
 	hasSymbol := false
+	// Distinct characters that fall outside the Latin classes (e.g. CJK or
+	// other scripts). Their alphabet size is unknown, so we credit only the
+	// distinct runes actually observed — a conservative lower bound — instead
+	// of assuming a full 256-symbol alphabet.
+	otherRunes := make(map[rune]struct{})
 
 	for _, r := range password {
 		switch {
@@ -89,6 +100,8 @@ func AssessPasswordStrength(password string) PasswordStrength {
 			hasDigit = true
 		case unicode.IsPunct(r), unicode.IsSymbol(r):
 			hasSymbol = true
+		default:
+			otherRunes[r] = struct{}{}
 		}
 	}
 
@@ -117,11 +130,14 @@ func AssessPasswordStrength(password string) PasswordStrength {
 	if hasSymbol {
 		charsetSize += 32
 	}
+	// Credit non-Latin characters by the number of distinct runes actually
+	// used, a conservative lower bound on their alphabet size.
+	charsetSize += len(otherRunes)
 	if charsetSize == 0 {
-		charsetSize = 256
+		charsetSize = 1
 	}
 
-	s.Entropy = float64(len(password)) * math.Log2(float64(charsetSize))
+	s.Entropy = float64(runeCount) * math.Log2(float64(charsetSize))
 	if s.Entropy < 60 {
 		s.Weak = true
 		s.Message = fmt.Sprintf("password too weak: estimated entropy %.1f bits, need at least 60 bits", s.Entropy)
