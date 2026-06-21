@@ -11,6 +11,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/danieljustus/symaira-vault/internal/fsutil"
 )
@@ -36,7 +37,11 @@ const maxExtractSize = 100 * 1024 * 1024 // 100 MB
 // access that would escape the destination directory even if this check were
 // bypassed (e.g. via a symlinked path component).
 func validateArchiveEntryName(entryPath string) error {
-	if entryPath == "" || filepath.IsAbs(entryPath) || fsutil.HasTraversal(entryPath) {
+	// Archive entries use POSIX-style forward slashes regardless of the host
+	// OS, so a leading slash means "rooted" even on Windows, where
+	// filepath.IsAbs requires a drive letter and would otherwise miss it.
+	if entryPath == "" || filepath.IsAbs(entryPath) ||
+		strings.HasPrefix(filepath.ToSlash(entryPath), "/") || fsutil.HasTraversal(entryPath) {
 		return fmt.Errorf("%w: %q", ErrPathTraversal, entryPath)
 	}
 	return nil
