@@ -163,11 +163,11 @@ sequenceDiagram
 
 ### `internal/config/` — Configuration
 
-YAML-based configuration at `~/.symvault/config.yaml` or `~/.symvault/<vault>/config.yaml`.
+YAML-based configuration at `~/.config/symaira-vault/config.yaml` (XDG default). Installs created before the XDG layout continue to read from the legacy `~/.symvault/config.yaml`.
 
 **Config structure:**
 ```yaml
-vaultDir: ~/.symvault
+vaultDir: ~/.local/share/symaira-vault   # XDG default; legacy installs: ~/.symvault
 defaultAgent: claude-code
 agents:
   claude-code:
@@ -370,7 +370,7 @@ graph TD
 ## Vault Structure
 
 ```
-~/.symvault/
+~/.local/share/symaira-vault/   # XDG data dir (legacy installs: ~/.symvault/)
 ├── identity.age      # Encrypted age identity
 ├── config.yaml       # Vault configuration
 ├── mcp-token         # Bearer token for HTTP MCP (auto-generated)

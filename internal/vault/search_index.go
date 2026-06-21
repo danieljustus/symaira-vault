@@ -57,6 +57,17 @@ func indexFilePath(vaultDir string) string {
 	return filepath.Join(vaultDir, ".search-index")
 }
 
+// canonicalVaultDir returns a canonical form of vaultDir for index-ownership
+// comparison. It resolves symlinks when possible and otherwise falls back to a
+// lexical clean, so two references to the same vault compare equal while two
+// distinct vaults stay distinct.
+func canonicalVaultDir(vaultDir string) string {
+	if resolved, err := filepath.EvalSymlinks(vaultDir); err == nil {
+		return resolved
+	}
+	return filepath.Clean(vaultDir)
+}
+
 // indexDoc stores raw string values per entry path for substring matching.
 // The needle is matched as a substring (case-insensitive) against all stored
 // values when performing a search.
@@ -373,6 +384,7 @@ func (idx *EncryptedIndex) MatchEntries(vaultDir string, identity *age.X25519Ide
 	ct := idx.ciphertext
 	idHash := idx.idHash
 	storedSalt := idx.salt
+	storedDir := idx.vaultDir
 	idx.mu.RUnlock()
 
 	if ct == nil {
@@ -382,6 +394,13 @@ func (idx *EncryptedIndex) MatchEntries(vaultDir string, identity *age.X25519Ide
 	currentHash := sha256.Sum256([]byte(identity.String()))
 	if currentHash != idHash {
 		return nil, errors.New("identity changed")
+	}
+	// The index is a single shared slot. Reject a lookup against a different
+	// vault directory even when the identity matches — otherwise a second vault
+	// opened with the same identity would filter its candidates against the
+	// first vault's index and return incomplete or incorrect results.
+	if canonicalVaultDir(storedDir) != canonicalVaultDir(vaultDir) {
+		return nil, errors.New("vault directory changed")
 	}
 
 	key := deriveIndexKey(identity, storedSalt)
@@ -440,6 +459,24 @@ func (idx *EncryptedIndex) IsBuilt() bool {
 	built := idx.ciphertext != nil
 	idx.mu.RUnlock()
 	return built
+}
+
+// Covers reports whether the built index belongs to the given vault directory
+// and identity. A different vault directory (even with the same identity) or a
+// different identity means the index must be rebuilt before it can be used for
+// this vault's lookups.
+func (idx *EncryptedIndex) Covers(vaultDir string, identity *age.X25519Identity) bool {
+	if identity == nil {
+		return false
+	}
+	idHash := sha256.Sum256([]byte(identity.String()))
+	want := canonicalVaultDir(vaultDir)
+
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	return idx.ciphertext != nil &&
+		idx.idHash == idHash &&
+		canonicalVaultDir(idx.vaultDir) == want
 }
 
 // Invalidate clears the encrypted index from memory and deletes the on-disk

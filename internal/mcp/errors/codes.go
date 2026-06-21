@@ -35,7 +35,7 @@ const (
 	ErrFieldNotFound         = "ERR_FIELD_NOT_FOUND"
 	ErrFieldRedacted         = "ERR_FIELD_REDACTED"
 	ErrQuotaExceeded         = "ERR_QUOTA_EXCEEDED"
-	ErrTokenExpired          = "ERR_TOKEN_EXPIRED"
+	ErrTokenExpired          = "ERR_TOKEN_EXPIRED" // #nosec G101 -- MCP error code identifier, not a credential
 	ErrInvalidInput          = "ERR_INVALID_INPUT"
 	ErrDryRun                = "ERR_DRY_RUN"
 	ErrTierUpgradeNoTTY      = "ERR_TIER_UPGRADE_NO_TTY"

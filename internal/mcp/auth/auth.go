@@ -23,8 +23,7 @@ type contextKey string
 
 const agentContextKey contextKey = "symaira-agent"
 
-//nolint:gosec // context key identifier, not a credential
-const tokenContextKey contextKey = "symvault-scoped-token"
+const tokenContextKey contextKey = "symvault-scoped-token" // #nosec G101 -- context key identifier, not a credential
 
 func WithToken(ctx context.Context, token *ScopedToken) context.Context {
 	return context.WithValue(ctx, tokenContextKey, token)

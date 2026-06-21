@@ -105,6 +105,75 @@ func TestNew_LoadConfig(t *testing.T) {
 	_ = srv.Close()
 }
 
+// TestNew_LoadsPolicyFromVaultDir is the server half of the end-to-end proof
+// that an applied policy changes MCP authorization: the CLI's "policy apply"
+// writes into policy.VaultPolicyDir(vault) (covered by the cmd round-trip
+// test), and here New() loads and enforces a policy from that same directory.
+func TestNew_LoadsPolicyFromVaultDir(t *testing.T) {
+	dir := t.TempDir()
+	identity, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatalf("generate identity: %v", err)
+	}
+	cfg := &config.Config{
+		DefaultAgent: "test",
+		Agents: map[string]config.AgentProfile{
+			"test": {
+				Name:         "test",
+				AllowedPaths: []string{"*"},
+				CanWrite:     config.BoolPtr(true),
+				ApprovalMode: config.StrPtr("none"),
+			},
+		},
+	}
+	v := &vault.Vault{Dir: dir, Identity: identity, Config: cfg}
+
+	// Before any policy is applied, the server loads no policy engine and
+	// applies no policy-level restriction.
+	srv, err := New(v, "test", "stdio")
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	if srv.policyEngine != nil {
+		t.Fatal("policyEngine is non-nil before any policy is applied")
+	}
+	if err := srv.checkPolicy(context.Background(), "secret/path", "read"); err != nil {
+		t.Fatalf("checkPolicy without a policy should pass, got %v", err)
+	}
+	_ = srv.Close()
+
+	// Apply a deny-all policy into the vault's policy directory — the same
+	// location the CLI's "policy apply" writes to.
+	policiesDir := policy.VaultPolicyDir(dir)
+	if err := os.MkdirAll(policiesDir, 0o750); err != nil {
+		t.Fatalf("mkdir policies: %v", err)
+	}
+	denyPolicy := `version: "1.0"
+rules:
+  - name: "deny all"
+    priority: 100
+    conditions:
+      agent_id: "test"
+    action: "deny"
+`
+	if err := os.WriteFile(filepath.Join(policiesDir, "deny.yaml"), []byte(denyPolicy), 0o600); err != nil {
+		t.Fatalf("write policy: %v", err)
+	}
+
+	// A new server now loads and enforces the applied policy.
+	srv2, err := New(v, "test", "stdio")
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	defer func() { _ = srv2.Close() }()
+	if srv2.policyEngine == nil {
+		t.Fatal("policyEngine is nil after a policy was applied to the vault dir")
+	}
+	if err := srv2.checkPolicy(context.Background(), "secret/path", "read"); err == nil {
+		t.Fatal("applied deny policy was not enforced by the MCP server")
+	}
+}
+
 func TestNew_EmptyAgentName(t *testing.T) {
 	dir := t.TempDir()
 	identity, err := age.GenerateX25519Identity()

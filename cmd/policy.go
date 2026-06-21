@@ -4,12 +4,40 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
+	"github.com/danieljustus/symaira-vault/internal/fsutil"
 	"github.com/danieljustus/symaira-vault/internal/policy"
 )
+
+// safePolicyPath validates name as a bare policy file name and returns its
+// absolute path inside policiesDir. It rejects path separators, parent
+// traversal and any extension other than .yaml/.yml, and verifies the cleaned
+// result stays directly within policiesDir, so an argument such as
+// "../identity.age" cannot escape the policies directory and delete or
+// overwrite another vault file.
+func safePolicyPath(policiesDir, name string) (string, error) {
+	if name == "" || name != filepath.Base(name) || name == "." || name == ".." {
+		return "", fmt.Errorf("policy name %q must be a bare file name without path separators", name)
+	}
+	if err := fsutil.ValidatePath(name); err != nil {
+		return "", fmt.Errorf("invalid policy name %q: %w", name, err)
+	}
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".yaml", ".yml":
+	default:
+		return "", fmt.Errorf("policy name %q must end in .yaml or .yml", name)
+	}
+	dir := filepath.Clean(policiesDir)
+	dest := filepath.Join(dir, name)
+	if filepath.Dir(dest) != dir {
+		return "", fmt.Errorf("policy name %q escapes the policies directory", name)
+	}
+	return dest, nil
+}
 
 var policyValidateCmd = &cobra.Command{
 	Use:   "validate <file>",
@@ -60,7 +88,9 @@ var policyCmd = &cobra.Command{
 	Short: "Manage declarative policies",
 	Long: `Manage context-aware auto-approval policies for MCP tool calls.
 
-Policies are YAML files stored in ~/.config/symvault/policies/.
+Policies are YAML files stored in the vault's "policies" directory
+(<vault>/policies). The MCP server loads policies from this same location,
+so a policy applied with "policy apply" is enforced by the server.
 They define rules for when tool calls should be allowed, denied,
 prompted, or require biometric authentication.`,
 	Example: `  # Validate a policy file before activating it
@@ -72,8 +102,8 @@ prompted, or require biometric authentication.`,
   # List active policies
   symvault policy list
 
-  # Remove a named policy
-  symvault policy remove dev-readonly`,
+  # Remove a named policy (use the file name shown by 'policy list')
+  symvault policy remove dev.yaml`,
 	Annotations: map[string]string{
 		requiresVaultAnnotation: "false",
 	},
@@ -107,18 +137,24 @@ Example:
 		}
 
 		vaultDir, _ := cli.VaultPath()
-		policiesDir := filepath.Join(vaultDir, "policies")
-		_ = os.MkdirAll(policiesDir, 0750)
+		policiesDir := policy.VaultPolicyDir(vaultDir)
 
-		destPath := filepath.Join(policiesDir, filepath.Base(sourcePath))
-		data, err := os.ReadFile(sourcePath) //#nosec G304 -- sourcePath is validated by caller
+		destPath, err := safePolicyPath(policiesDir, filepath.Base(sourcePath))
+		if err != nil {
+			return err
+		}
+
+		if mkdirErr := fsutil.SafeMkdirAll(policiesDir, 0750); mkdirErr != nil {
+			return fmt.Errorf("create policies directory: %w", mkdirErr)
+		}
+
+		data, err := os.ReadFile(sourcePath) //#nosec G304 -- sourcePath is validated by LoadPolicy above
 		if err != nil {
 			return fmt.Errorf("read policy file: %w", err)
 		}
 
-		// #nosec G306 -- 0640 is intentional for policy files within vault
-		if err := os.WriteFile(destPath, data, 0640); err != nil {
-			return fmt.Errorf("write policy file: %w", err)
+		if writeErr := fsutil.SafeWriteFile(destPath, data, 0640); writeErr != nil {
+			return fmt.Errorf("write policy file: %w", writeErr)
 		}
 
 		cmd.Printf("✅ Policy %q applied (%d rules)\n", p.Version, len(p.Rules))
@@ -135,7 +171,7 @@ var policyListCmd = &cobra.Command{
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		vaultDir, _ := cli.VaultPath()
-		policiesDir := filepath.Join(vaultDir, "policies")
+		policiesDir := policy.VaultPolicyDir(vaultDir)
 
 		entries, err := os.ReadDir(policiesDir)
 		if err != nil {
@@ -171,14 +207,18 @@ var policyRemoveCmd = &cobra.Command{
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		vaultDir, _ := cli.VaultPath()
-		policiesDir := filepath.Join(vaultDir, "policies")
-		policyPath := filepath.Join(policiesDir, args[0])
+		policiesDir := policy.VaultPolicyDir(vaultDir)
 
-		if _, err := os.Stat(policyPath); os.IsNotExist(err) {
+		policyPath, err := safePolicyPath(policiesDir, args[0])
+		if err != nil {
+			return err
+		}
+
+		if _, statErr := os.Stat(policyPath); os.IsNotExist(statErr) {
 			return fmt.Errorf("policy %q not found", args[0])
 		}
 
-		if err := os.Remove(policyPath); err != nil {
+		if err := fsutil.SafeRemove(policyPath); err != nil {
 			return fmt.Errorf("remove policy: %w", err)
 		}
 
