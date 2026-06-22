@@ -1,4 +1,4 @@
-.PHONY: all build install test test-fast test-coverage test-verbose test-race test-ci clean lint lint-fix fmt fmt-check vet passlint completions manpages help docs-check
+.PHONY: all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages help docs-check
 
 # Variables
 BINARY_NAME := symvault
@@ -79,9 +79,17 @@ test-crypto:
 test-bench:
 	$(GO) test ./... -bench=. -benchmem
 
-# Clean build artifacts and coverage files
+# Generate coverage report (canonical single-file output)
+cover:
+	@mkdir -p $(COVERAGE_DIR)
+	$(GO) test ./... -coverprofile=$(COVERAGE_FILE) -covermode=atomic
+	$(GO) tool cover -func=$(COVERAGE_FILE)
+	@echo ""
+	@echo "Coverage report: $(COVERAGE_FILE)"
+
+# Clean build artifacts, coverage files, and scratch directories
 clean:
-	rm -f $(BINARY_NAME) *.test *.out *_output.txt
+	rm -f $(BINARY_NAME) *.test *.test.exe *.out coverage*.out *_output.txt
 	rm -rf $(COVERAGE_DIR) dist/ coverage.html vault_coverage.html
 	$(GO) clean -cache -testcache
 
@@ -154,6 +162,7 @@ help:
 	@echo "  test               - Run all tests with race detector"
 	@echo "  test-fast          - Run all tests without race detector (quick iteration)"
 	@echo "  test-coverage      - Run tests with coverage report"
+	@echo "  cover              - Generate canonical coverage.out report"
 	@echo "  test-coverage-html - Generate HTML coverage report"
 	@echo "  test-race          - Run tests with race detector"
 	@echo "  test-ci            - Run CI-like tests (race + coverage + timeout)"
@@ -163,7 +172,7 @@ help:
 	@echo "  test-config        - Run config package tests"
 	@echo "  test-crypto        - Run crypto package tests"
 	@echo "  test-bench         - Run benchmarks"
-	@echo "  clean              - Clean build artifacts"
+	@echo "  clean              - Clean build artifacts, coverage files, and scratch dirs"
 	@echo "  lint               - Run linter"
 	@echo "  lint-fix           - Run linter with auto-fix"
 	@echo "  fmt                - Format code"
