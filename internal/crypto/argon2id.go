@@ -4,8 +4,6 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
-	"math"
-	"sync/atomic"
 
 	"golang.org/x/crypto/argon2"
 )
@@ -32,25 +30,6 @@ func DefaultArgon2idParams() Argon2idParams {
 	}
 }
 
-var testArgon2idParams = func() atomic.Value {
-	var v atomic.Value
-	v.Store(&Argon2idParams{
-		Time:    DefaultArgon2idTime,
-		Memory:  DefaultArgon2idMemory,
-		Threads: DefaultArgon2idThreads,
-	})
-	return v
-}()
-
-func SetTestArgon2idParams(p Argon2idParams) (restore func()) {
-	prev := testArgon2idParams.Load()
-	if p.Time > math.MaxInt32 || p.Memory > math.MaxInt32 {
-		panic(fmt.Sprintf("argon2id params overflow: time=%d, memory=%d", p.Time, p.Memory))
-	}
-	testArgon2idParams.Store(&p)
-	return func() { testArgon2idParams.Store(prev) }
-}
-
 func validateArgon2idParams(p Argon2idParams) error {
 	if p.Time == 0 {
 		return errors.New("argon2id time parameter must be > 0")
@@ -74,12 +53,7 @@ func (p Argon2idParams) Parallelism() uint8 {
 
 func resolveArgon2idParams(params Argon2idParams) Argon2idParams {
 	if params.Time == 0 && params.Memory == 0 && params.Threads == 0 {
-		if tp := testArgon2idParams.Load(); tp != nil {
-			p, ok := tp.(*Argon2idParams)
-			if ok {
-				return *p
-			}
-		}
+		return DefaultArgon2idParams()
 	}
 	return params
 }
