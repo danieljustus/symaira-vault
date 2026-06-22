@@ -94,7 +94,106 @@ type indexDoc struct {
 	Salt []byte `json:"s,omitempty"`
 }
 
-var globalIndex EncryptedIndex
+// maxIndexStoreSize is the maximum number of per-vault indices kept in the
+// process-wide store. When the cap is exceeded the least-recently-used index
+// is evicted (in-memory state cleared; the on-disk file survives so
+// loadFromDisk can restore it without a full rebuild).
+const maxIndexStoreSize = 8
+
+// indexStore is a bounded, mutex-guarded map of per-vault encrypted search
+// indices keyed by canonical vault directory. Each vault keeps its own built
+// index across switches, and cross-vault isolation is preserved because
+// lookups always resolve to the index that was built for that specific vault.
+type indexStore struct {
+	mu      sync.Mutex
+	indices map[string]*EncryptedIndex
+	order   []string // LRU: most-recently-used at end
+}
+
+// get returns the EncryptedIndex for vaultDir, creating a new empty one if
+// absent. The entry is promoted to the most-recently-used position.
+func (s *indexStore) get(vaultDir string) *EncryptedIndex {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := canonicalVaultDir(vaultDir)
+	if idx, ok := s.indices[key]; ok {
+		s.touchLocked(key)
+		return idx
+	}
+	idx := &EncryptedIndex{}
+	s.indices[key] = idx
+	s.order = append(s.order, key)
+	s.evictLocked()
+	return idx
+}
+
+// touchLocked moves key to the end of the LRU order. Caller must hold s.mu.
+func (s *indexStore) touchLocked(key string) {
+	for i, k := range s.order {
+		if k == key {
+			s.order = append(s.order[:i], s.order[i+1:]...)
+			s.order = append(s.order, key)
+			return
+		}
+	}
+}
+
+// evictLocked removes the oldest entries when the store exceeds the cap.
+// Evicted indices have their in-memory state cleared but their on-disk
+// files are preserved so loadFromDisk can restore them later.
+func (s *indexStore) evictLocked() {
+	for len(s.order) > maxIndexStoreSize {
+		oldest := s.order[0]
+		s.order = s.order[1:]
+		idx := s.indices[oldest]
+		idx.mu.Lock()
+		idx.clearLocked()
+		idx.mu.Unlock()
+		delete(s.indices, oldest)
+	}
+}
+
+// invalidate removes and invalidates the index for a single vault directory,
+// including its on-disk file.
+func (s *indexStore) invalidate(vaultDir string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := canonicalVaultDir(vaultDir)
+	if idx, ok := s.indices[key]; ok {
+		idx.Invalidate()
+		delete(s.indices, key)
+		for i, k := range s.order {
+			if k == key {
+				s.order = append(s.order[:i], s.order[i+1:]...)
+				return
+			}
+		}
+	}
+}
+
+// invalidateAll clears every index in the store and deletes their on-disk
+// files. Used by the global InvalidateSearchIndex function.
+func (s *indexStore) invalidateAll() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, idx := range s.indices {
+		idx.Invalidate()
+	}
+	s.indices = make(map[string]*EncryptedIndex)
+	s.order = s.order[:0]
+}
+
+// searchIndexStore is the process-wide store of per-vault encrypted search
+// indices. Each vault directory maps to its own EncryptedIndex, so multiple
+// vaults opened with the same identity maintain independent indices.
+var searchIndexStore = indexStore{indices: make(map[string]*EncryptedIndex)}
+
+// searchIndexForVault returns the EncryptedIndex for the given vault
+// directory, creating one if it does not yet exist. Callers use the returned
+// index for Build, MatchEntries, Covers, and incremental updates.
+func searchIndexForVault(vaultDir string) *EncryptedIndex {
+	return searchIndexStore.get(vaultDir)
+}
 
 // Build constructs the encrypted search index by scanning all entries in the
 // vault and collecting their string field values. The resulting path→values
@@ -631,16 +730,21 @@ func (idx *EncryptedIndex) loadFromDisk(vaultDir string, identity *age.X25519Ide
 	return nil
 }
 
-// InvalidateSearchIndex clears the global in-memory encrypted search index and
-// invalidates the list cache. Called after write operations so both caches are
-// rebuilt on the next search.
+// InvalidateSearchIndex clears every per-vault encrypted search index in the
+// process-wide store and invalidates the list cache. Called after write
+// operations so both caches are rebuilt on the next search.
 func InvalidateSearchIndex() {
-	globalIndex.Invalidate()
-	// Also invalidate the list cache because writes create files in subdirectories
-	// which do not update the parent entries/ directory mtime. Without this, a
-	// subsequent List call would return stale paths, and the index would be built
-	// from incomplete data.
+	searchIndexStore.invalidateAll()
 	defaultVaultCache.Invalidate()
+}
+
+// ClearMemory clears the in-memory index state without deleting the on-disk
+// file. This simulates a process restart: the next MatchEntries or Covers
+// call will reload from disk (or rebuild if the file is missing/stale).
+func (idx *EncryptedIndex) ClearMemory() {
+	idx.mu.Lock()
+	idx.clearLocked()
+	idx.mu.Unlock()
 }
 
 // collectStringValues recursively extracts lowercase string values from entry

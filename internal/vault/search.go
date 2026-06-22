@@ -804,27 +804,26 @@ func filterPathsUsingIndex(vaultDir string, candidates []string, needle string, 
 		return candidates
 	}
 
-	// Build or load the index only when the shared slot does not already cover
-	// this exact vault directory and identity. Covers (rather than IsBuilt)
-	// ensures a second vault opened with the same identity does not reuse the
-	// first vault's index.
-	if !globalIndex.Covers(vaultDir, identity) {
-		if err := globalIndex.loadFromDisk(vaultDir, identity); err != nil || !globalIndex.Covers(vaultDir, identity) {
-			if err := globalIndex.Build(vaultDir, identity); err != nil {
+	// Build or load the index only when the per-vault store does not already
+	// cover this exact vault directory and identity. Covers (rather than
+	// IsBuilt) ensures a second vault opened with the same identity does not
+	// reuse the first vault's index.
+	idx := searchIndexForVault(vaultDir)
+	if !idx.Covers(vaultDir, identity) {
+		if err := idx.loadFromDisk(vaultDir, identity); err != nil || !idx.Covers(vaultDir, identity) {
+			if err := idx.Build(vaultDir, identity); err != nil {
 				return candidates
 			}
 		}
 	}
 
-	matching, err := globalIndex.MatchEntries(vaultDir, identity, candidates, needle)
+	matching, err := idx.MatchEntries(vaultDir, identity, candidates, needle)
 	if err != nil {
-		// The slot now holds a different vault, or the index is stale: rebuild
-		// for this vault and retry once. Build overwrites the in-memory slot and
-		// rewrites this vault's on-disk index without deleting another vault's.
-		if buildErr := globalIndex.Build(vaultDir, identity); buildErr != nil {
+		// The vault's index is stale or corrupted: rebuild and retry once.
+		if buildErr := idx.Build(vaultDir, identity); buildErr != nil {
 			return candidates
 		}
-		matching, err = globalIndex.MatchEntries(vaultDir, identity, candidates, needle)
+		matching, err = idx.MatchEntries(vaultDir, identity, candidates, needle)
 		if err != nil {
 			return candidates
 		}

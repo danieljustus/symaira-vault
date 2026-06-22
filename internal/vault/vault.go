@@ -59,7 +59,7 @@ func (v *Vault) WarmSearchIndex() {
 		return
 	}
 	go func() {
-		_ = globalIndex.BuildMemoryOnly(v.Dir, v.Identity)
+		_ = searchIndexForVault(v.Dir).BuildMemoryOnly(v.Dir, v.Identity)
 	}()
 }
 

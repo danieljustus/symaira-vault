@@ -2,7 +2,6 @@ package vault
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -24,8 +23,8 @@ func TestFilterPathsUsingIndex_SameIdentityDifferentVaults(t *testing.T) {
 
 	// Reset the shared global slot and restore it afterwards so this test is
 	// isolated from the rest of the package.
-	globalIndex.Invalidate()
-	t.Cleanup(globalIndex.Invalidate)
+	searchIndexStore.invalidateAll()
+	t.Cleanup(searchIndexStore.invalidateAll)
 
 	vaultA := t.TempDir()
 	mustWriteEntry(t, vaultA, identity, "alpha", map[string]interface{}{"user": "alice-in-a"})
@@ -264,7 +263,7 @@ func TestEncryptedIndexInvalidate(t *testing.T) {
 }
 
 func TestEncryptedIndexRebuildAfterWrite(t *testing.T) {
-	globalIndex.Invalidate()
+	searchIndexStore.invalidateAll()
 
 	vaultDir := t.TempDir()
 	identity := testutil.TempIdentity(t)
@@ -273,11 +272,11 @@ func TestEncryptedIndexRebuildAfterWrite(t *testing.T) {
 		"username": "alice",
 	})
 
-	if err := globalIndex.Build(vaultDir, identity); err != nil {
+	if err := searchIndexForVault(vaultDir).Build(vaultDir, identity); err != nil {
 		t.Fatalf("Build() error = %v", err)
 	}
 
-	if !globalIndex.IsBuilt() {
+	if !searchIndexForVault(vaultDir).IsBuilt() {
 		t.Fatal("IsBuilt() should be true after Build()")
 	}
 
@@ -285,11 +284,11 @@ func TestEncryptedIndexRebuildAfterWrite(t *testing.T) {
 		"username": "bob",
 	})
 
-	if !globalIndex.IsBuilt() {
+	if !searchIndexForVault(vaultDir).IsBuilt() {
 		t.Fatal("IsBuilt() should still be true after incremental update")
 	}
 
-	results, err := globalIndex.MatchEntries(vaultDir, identity, []string{"work/aws"}, "bob")
+	results, err := searchIndexForVault(vaultDir).MatchEntries(vaultDir, identity, []string{"work/aws"}, "bob")
 	if err != nil {
 		t.Fatalf("MatchEntries() error = %v", err)
 	}
@@ -299,28 +298,28 @@ func TestEncryptedIndexRebuildAfterWrite(t *testing.T) {
 }
 
 func TestEncryptedIndexGlobalInvalidate(t *testing.T) {
-	globalIndex.Invalidate()
+	searchIndexStore.invalidateAll()
 
 	vaultDir := t.TempDir()
 	identity := testutil.TempIdentity(t)
 	mustWriteEntry(t, vaultDir, identity, "test/path", map[string]interface{}{"key": "value"})
 
-	if err := globalIndex.Build(vaultDir, identity); err != nil {
+	if err := searchIndexForVault(vaultDir).Build(vaultDir, identity); err != nil {
 		t.Fatalf("Build() error = %v", err)
 	}
 
-	if !globalIndex.IsBuilt() {
+	if !searchIndexForVault(vaultDir).IsBuilt() {
 		t.Fatal("globalIndex should be built")
 	}
 
 	InvalidateSearchIndex()
-	if globalIndex.IsBuilt() {
+	if searchIndexForVault(vaultDir).IsBuilt() {
 		t.Fatal("globalIndex should be invalidated after InvalidateSearchIndex()")
 	}
 }
 
 func TestEncryptedIndexIntegrationWithFind(t *testing.T) {
-	globalIndex.Invalidate()
+	searchIndexStore.invalidateAll()
 
 	vaultDir := t.TempDir()
 	identity := testutil.TempIdentity(t)
@@ -340,7 +339,7 @@ func TestEncryptedIndexIntegrationWithFind(t *testing.T) {
 		t.Fatalf("FindWithOptions('alice') = %d results, want 1", len(got))
 	}
 
-	if !globalIndex.IsBuilt() {
+	if !searchIndexForVault(vaultDir).IsBuilt() {
 		t.Fatal("globalIndex should be built after first FindWithOptions")
 	}
 
@@ -419,7 +418,7 @@ func TestEncryptedIndexUnreadableEntry(t *testing.T) {
 }
 
 func TestFindAfterWriteInvalidatesIndex(t *testing.T) {
-	globalIndex.Invalidate()
+	searchIndexStore.invalidateAll()
 
 	vaultDir := t.TempDir()
 	identity := testutil.TempIdentity(t)
@@ -433,7 +432,7 @@ func TestFindAfterWriteInvalidatesIndex(t *testing.T) {
 		t.Fatalf("FindWithOptions() error = %v", err)
 	}
 
-	if !globalIndex.IsBuilt() {
+	if !searchIndexForVault(vaultDir).IsBuilt() {
 		t.Fatal("Index should be built after find")
 	}
 
@@ -441,7 +440,7 @@ func TestFindAfterWriteInvalidatesIndex(t *testing.T) {
 		"data": "new-data",
 	})
 
-	if !globalIndex.IsBuilt() {
+	if !searchIndexForVault(vaultDir).IsBuilt() {
 		t.Fatal("Index should remain built after incremental update")
 	}
 
@@ -501,7 +500,7 @@ func TestEncryptedIndexCaseInsensitive(t *testing.T) {
 }
 
 func TestFindAfterDeleteInvalidatesIndex(t *testing.T) {
-	globalIndex.Invalidate()
+	searchIndexStore.invalidateAll()
 
 	vaultDir := t.TempDir()
 	identity := testutil.TempIdentity(t)
@@ -521,7 +520,7 @@ func TestFindAfterDeleteInvalidatesIndex(t *testing.T) {
 		t.Fatalf("DeleteEntry() error = %v", err)
 	}
 
-	if globalIndex.IsBuilt() {
+	if searchIndexForVault(vaultDir).IsBuilt() {
 		t.Fatal("Index should be invalidated after delete")
 	}
 
@@ -538,7 +537,7 @@ func TestFindAfterDeleteInvalidatesIndex(t *testing.T) {
 }
 
 func TestFindAfterMergeInvalidatesIndex(t *testing.T) {
-	globalIndex.Invalidate()
+	searchIndexStore.invalidateAll()
 
 	vaultDir := t.TempDir()
 	identity := testutil.TempIdentity(t)
@@ -552,7 +551,7 @@ func TestFindAfterMergeInvalidatesIndex(t *testing.T) {
 		t.Fatalf("FindWithOptions() error = %v", err)
 	}
 
-	if !globalIndex.IsBuilt() {
+	if !searchIndexForVault(vaultDir).IsBuilt() {
 		t.Fatal("Index should be built")
 	}
 
@@ -561,7 +560,7 @@ func TestFindAfterMergeInvalidatesIndex(t *testing.T) {
 		t.Fatalf("MergeEntry() error = %v", err)
 	}
 
-	if !globalIndex.IsBuilt() {
+	if !searchIndexForVault(vaultDir).IsBuilt() {
 		t.Fatal("Index should remain built after incremental update")
 	}
 
@@ -702,7 +701,7 @@ func TestEncryptedIndexInvalidationRemovesFile(t *testing.T) {
 }
 
 func TestEncryptedIndexFilterPathsUsingIndexLoadsFromDisk(t *testing.T) {
-	globalIndex.Invalidate()
+	searchIndexStore.invalidateAll()
 
 	vaultDir := t.TempDir()
 	identity := testutil.TempIdentity(t)
@@ -712,23 +711,19 @@ func TestEncryptedIndexFilterPathsUsingIndexLoadsFromDisk(t *testing.T) {
 	})
 
 	// Build the index (this also saves to disk)
-	if err := globalIndex.Build(vaultDir, identity); err != nil {
+	if err := searchIndexForVault(vaultDir).Build(vaultDir, identity); err != nil {
 		t.Fatalf("Build() error = %v", err)
 	}
 
-	if !globalIndex.IsBuilt() {
+	if !searchIndexForVault(vaultDir).IsBuilt() {
 		t.Fatal("globalIndex should be built")
 	}
 
 	// Invalidate in-memory only, simulating process restart
-	globalIndex.mu.Lock()
-	globalIndex.ciphertext = nil
-	globalIndex.vaultDir = ""
-	globalIndex.idHash = [sha256.Size]byte{}
-	globalIndex.mu.Unlock()
+	searchIndexForVault(vaultDir).ClearMemory()
 
-	if globalIndex.IsBuilt() {
-		t.Fatal("globalIndex should not be built after clearing memory")
+	if searchIndexForVault(vaultDir).IsBuilt() {
+		t.Fatal("index should not be built after clearing memory")
 	}
 
 	// filterPathsUsingIndex should load from disk
@@ -737,8 +732,8 @@ func TestEncryptedIndexFilterPathsUsingIndexLoadsFromDisk(t *testing.T) {
 		t.Fatalf("filterPathsUsingIndex() = %d results, want 1", len(results))
 	}
 
-	if !globalIndex.IsBuilt() {
-		t.Fatal("globalIndex should be built after loading from disk")
+	if !searchIndexForVault(vaultDir).IsBuilt() {
+		t.Fatal("index should be built after loading from disk")
 	}
 }
 
@@ -756,8 +751,8 @@ func TestEncryptedIndexFilterPathsUsingIndexLoadsFromDisk(t *testing.T) {
 //   - Plaintext query tokens leaking into the index
 //   - Accidental JSON serialization of the unencrypted doc
 func TestSearchIndexOnDiskHasNoPlaintextLeakage(t *testing.T) {
-	globalIndex.Invalidate()
-	t.Cleanup(globalIndex.Invalidate)
+	searchIndexStore.invalidateAll()
+	t.Cleanup(searchIndexStore.invalidateAll)
 
 	vaultDir := t.TempDir()
 	identity := testutil.TempIdentity(t)
@@ -785,7 +780,7 @@ func TestSearchIndexOnDiskHasNoPlaintextLeakage(t *testing.T) {
 	})
 
 	// Build the index. This serializes the encrypted JSON envelope to disk.
-	if err := globalIndex.Build(vaultDir, identity); err != nil {
+	if err := searchIndexForVault(vaultDir).Build(vaultDir, identity); err != nil {
 		t.Fatalf("Build() error = %v", err)
 	}
 
@@ -841,8 +836,8 @@ func TestSearchIndexOnDiskHasNoPlaintextLeakage(t *testing.T) {
 // non-matching entries to a vault does not change the result set for a
 // query whose token only lives in a small set of entries.
 func TestSearchIndexFirstFieldSearchSkipsNonCandidates(t *testing.T) {
-	globalIndex.Invalidate()
-	t.Cleanup(globalIndex.Invalidate)
+	searchIndexStore.invalidateAll()
+	t.Cleanup(searchIndexStore.invalidateAll)
 
 	vaultDir := t.TempDir()
 	identity := testutil.TempIdentity(t)
@@ -865,7 +860,7 @@ func TestSearchIndexFirstFieldSearchSkipsNonCandidates(t *testing.T) {
 	// call) so the token map is populated. After this call the index
 	// contains a token→paths map that, for the query "sentinel-token-zzz",
 	// should resolve to exactly the match/entry path.
-	if err := globalIndex.Build(vaultDir, identity); err != nil {
+	if err := searchIndexForVault(vaultDir).Build(vaultDir, identity); err != nil {
 		t.Fatalf("Build() error = %v", err)
 	}
 
@@ -889,8 +884,8 @@ func TestSearchIndexFirstFieldSearchSkipsNonCandidates(t *testing.T) {
 // entry. This guards against correctness regressions if the index
 // ever becomes silently corrupt or the key is rotated.
 func TestFindFallbackWhenIndexUnavailable(t *testing.T) {
-	globalIndex.Invalidate()
-	t.Cleanup(globalIndex.Invalidate)
+	searchIndexStore.invalidateAll()
+	t.Cleanup(searchIndexStore.invalidateAll)
 
 	vaultDir := t.TempDir()
 	identity := testutil.TempIdentity(t)
@@ -906,7 +901,7 @@ func TestFindFallbackWhenIndexUnavailable(t *testing.T) {
 
 	// Build the index with the correct identity so a valid on-disk file
 	// exists.
-	if err := globalIndex.Build(vaultDir, identity); err != nil {
+	if err := searchIndexForVault(vaultDir).Build(vaultDir, identity); err != nil {
 		t.Fatalf("Build() error = %v", err)
 	}
 
@@ -915,11 +910,7 @@ func TestFindFallbackWhenIndexUnavailable(t *testing.T) {
 	// index. The function must fall back to returning the input
 	// candidates unchanged (proving the search would proceed to decrypt
 	// every entry in the full pass).
-	globalIndex.mu.Lock()
-	globalIndex.ciphertext = nil
-	globalIndex.vaultDir = ""
-	globalIndex.idHash = [sha256.Size]byte{}
-	globalIndex.mu.Unlock()
+	searchIndexForVault(vaultDir).ClearMemory()
 
 	candidates := []string{"github.com/user", "personal/email"}
 	results := filterPathsUsingIndex(vaultDir, candidates, "fallback-test-password", otherIdentity)

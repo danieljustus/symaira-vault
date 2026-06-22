@@ -12,8 +12,8 @@ import (
 // in-place edit leaves the vault entry count unchanged, so the on-disk
 // staleness check (entry count) would otherwise happily accept a stale index.
 func TestUpdateEntryPersistsEditToDisk(t *testing.T) {
-	globalIndex.Invalidate()
-	t.Cleanup(globalIndex.Invalidate)
+	searchIndexStore.invalidateAll()
+	t.Cleanup(searchIndexStore.invalidateAll)
 
 	vaultDir := t.TempDir()
 	identity := testutil.TempIdentity(t)
@@ -61,8 +61,8 @@ func TestUpdateEntryPersistsEditToDisk(t *testing.T) {
 // decremented, so the reloaded index passes the staleness check and no longer
 // matches the removed entry.
 func TestRemoveEntryPersistsDeleteToDisk(t *testing.T) {
-	globalIndex.Invalidate()
-	t.Cleanup(globalIndex.Invalidate)
+	searchIndexStore.invalidateAll()
+	t.Cleanup(searchIndexStore.invalidateAll)
 
 	vaultDir := t.TempDir()
 	identity := testutil.TempIdentity(t)
