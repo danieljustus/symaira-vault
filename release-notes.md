@@ -1,24 +1,25 @@
 ## What's changed
 
-### Features
-- #494 Add redacted self-hosted audit evidence export (+7 more) — closes #484, #487, #488, #489, #490, #491, #492, #493
-- #502 Concurrent file I/O and authorization middleware extraction — closes #498, #499
-
 ### Security
-- #476 Fix argon2id passphrase handling, KDF migration safety, and related cleanup — closes #472, #473, #474, #475
-- #483 v0.6.1 security hardening — 6 vulnerabilities — closes #477, #478, #479, #480, #481, #482
-- #501 Strengthen session cache, add MCP rate-limiting, improve error messages — closes #495, #496, #497
+- #516 Argon2id zero-key self-heal and KDF state from identity.age
+- #524 Harden policy storage, MCP policy loading, search isolation, and the gosec gate
+- #527 Escape backslashes first in cursor path sanitizer
+- #518 Annotate G304 false positive in KDF doctor check
+- #543 Fix weak-sensitive-data-hashing in search index — closes #540, #541, #542
 
 ### Fixes
-- #471 Fix smoke test init + corekit v0.1.1 upgrade
+- #537 Recipients remove no longer revokes access to existing entries
+- #526 Measure password strength by rune count, not byte length
 
-### Documentation
-- #486 Add post-quantum transition plan — closes #485
+### Added
+- #532 Search-index persistence, MCP coverage gate, and server-bootstrap cleanup
+- #516 Manifest rebuild capability
+- #517 Projects v2 board with Status/Priority/Iteration fields
 
 ### Dependencies
-- #470 Bump the go-dependencies group with 3 updates
+- #543 Clean build artifacts and harden Argon2id KDF path
 
 ### CI
-- #469 Use SYMVAULT_PASSPHRASE env var in smoke tests
+- #511 Pin docker/* actions and fix invalid github-script pin
 
-**Full Changelog**: https://github.com/danieljustus/symaira-vault/compare/v0.6.0...v0.7.0
+**Full Changelog**: https://github.com/danieljustus/symaira-vault/compare/v0.7.0...v0.7.1

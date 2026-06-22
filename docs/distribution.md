@@ -195,7 +195,7 @@ sha256sum -c symaira-vault_<version>_checksums.txt --ignore-missing
 
 ### Cosign Signature Verification
 
-Release artifacts are signed using [Cosign](https://github.com/sigstore/cosign) for SLSA-compliant supply-chain security. To verify the signature of a downloaded archive (e.g., `symaira-vault_0.4.1_linux_amd64.tar.gz`):
+Release artifacts are signed using [Cosign](https://github.com/sigstore/cosign) for SLSA-compliant supply-chain security. To verify the signature of a downloaded archive (e.g., `symaira-vault_<version>_linux_amd64.tar.gz`):
 
 1. Install Cosign: https://docs.sigstore.dev/cosign/system_config/installation/
 2. Download the artifact's certificate and signature:

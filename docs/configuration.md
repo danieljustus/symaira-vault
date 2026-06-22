@@ -147,7 +147,7 @@ Add profiles to your `config.yaml`:
 ```yaml
 profiles:
   work:
-    vault: ~/.openpass-work
+    vault: ~/.symvault-work
   family:
     vault: ~/vaults/family
 defaultProfile: work
@@ -171,7 +171,7 @@ Vault selection follows this priority, from highest to lowest:
 symvault profile list
 
 # Add a profile
-symvault profile add work --vault ~/.openpass-work
+symvault profile add work --vault ~/.symvault-work
 
 # Set default profile
 symvault profile use work
