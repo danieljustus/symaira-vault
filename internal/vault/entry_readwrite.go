@@ -297,7 +297,7 @@ func WriteEntry(vaultDir, path string, entry *Entry, identity *age.X25519Identit
 		return err
 	}
 	lockFile = nil
-	if err := globalIndex.UpdateEntry(vaultDir, path, identity); err != nil {
+	if err := searchIndexForVault(vaultDir).UpdateEntry(vaultDir, path, identity); err != nil {
 		span.SetStatus(codes.Error, err.Error())
 	}
 	listCacheFor(vaultDir).Invalidate()
@@ -354,7 +354,7 @@ func DeleteEntry(vaultDir, path string, identity *age.X25519Identity) error {
 			return err
 		}
 		lockFile = nil
-		globalIndex.RemoveEntry(path, identity)
+		searchIndexForVault(vaultDir).RemoveEntry(path, identity)
 		listCacheFor(vaultDir).Invalidate()
 		return nil
 	}
@@ -378,7 +378,7 @@ func DeleteEntry(vaultDir, path string, identity *age.X25519Identity) error {
 		return err
 	}
 	lockFile = nil
-	globalIndex.RemoveEntry(path, identity)
+	searchIndexForVault(vaultDir).RemoveEntry(path, identity)
 	listCacheFor(vaultDir).Invalidate()
 	return nil
 }
@@ -425,7 +425,7 @@ func MergeEntry(vaultDir, path string, partialData map[string]any, identity *age
 	}
 	lockFile = nil
 	queueManifestUpdate(vaultDir, path, ciphertext, identity)
-	if err := globalIndex.UpdateEntry(vaultDir, path, identity); err != nil {
+	if err := searchIndexForVault(vaultDir).UpdateEntry(vaultDir, path, identity); err != nil {
 		span.SetStatus(codes.Error, err.Error())
 	}
 	listCacheFor(vaultDir).Invalidate()

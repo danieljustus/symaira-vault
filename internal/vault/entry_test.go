@@ -867,7 +867,7 @@ func TestPseudonymizedListCacheOmitsSecretBearingEntries(t *testing.T) {
 	id := testutil.TempIdentity(t)
 
 	listCacheFor(vaultDir).Invalidate()
-	globalIndex.Invalidate()
+	searchIndexStore.invalidateAll()
 
 	mustWriteEntry(t, vaultDir, id, "github.com/user", map[string]interface{}{
 		"username": "alice",

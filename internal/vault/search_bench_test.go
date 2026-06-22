@@ -257,10 +257,10 @@ func benchmarkFindFieldSearchIndexHot(b *testing.B, numEntries int) {
 		b.Fatalf("Warmup FindWithOptions failed: %v", err)
 	}
 
-	globalIndex.Invalidate()
+	searchIndexStore.invalidateAll()
 
 	// Rebuild index explicitly (so we measure hot-index search, not build)
-	if err := globalIndex.Build(vaultDir, identity); err != nil {
+	if err := searchIndexForVault(vaultDir).Build(vaultDir, identity); err != nil {
 		b.Fatalf("Build failed: %v", err)
 	}
 
@@ -289,7 +289,7 @@ func benchmarkFindFieldSearchIndexCold(b *testing.B, numEntries int) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		globalIndex.Invalidate()
+		searchIndexStore.invalidateAll()
 		matches, err := FindWithOptions(vaultDir, fieldQuery, FindOptions{MaxWorkers: 0}, identity)
 		if err != nil {
 			b.Fatalf("FindWithOptions failed: %v", err)

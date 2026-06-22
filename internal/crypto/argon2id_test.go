@@ -155,22 +155,17 @@ func TestGenerateArgon2idSalt(t *testing.T) {
 	}
 }
 
-func TestSetTestArgon2idParams(t *testing.T) {
-	prev := testArgon2idParams.Load()
-
-	params := Argon2idParams{Time: 42, Memory: 128, Threads: 2}
-	restore := SetTestArgon2idParams(params)
-
+func TestResolveArgon2idParams(t *testing.T) {
 	got := resolveArgon2idParams(Argon2idParams{})
-	if got.Time != 42 || got.Memory != 128 || got.Threads != 2 {
-		t.Errorf("test params not applied: got %+v, want %+v", got, params)
+	expected := DefaultArgon2idParams()
+	if got.Time != expected.Time || got.Memory != expected.Memory || got.Threads != expected.Threads {
+		t.Errorf("all-zero params should resolve to defaults: got %+v, want %+v", got, expected)
 	}
 
-	restore()
-	restored := resolveArgon2idParams(Argon2idParams{})
-	expected := *prev.(*Argon2idParams)
-	if restored.Time != expected.Time || restored.Memory != expected.Memory || restored.Threads != expected.Threads {
-		t.Errorf("params not restored: got %+v, want %+v", restored, expected)
+	custom := Argon2idParams{Time: 42, Memory: 128, Threads: 2}
+	passed := resolveArgon2idParams(custom)
+	if passed.Time != 42 || passed.Memory != 128 || passed.Threads != 2 {
+		t.Errorf("non-zero params should pass through: got %+v, want %+v", passed, custom)
 	}
 }
 

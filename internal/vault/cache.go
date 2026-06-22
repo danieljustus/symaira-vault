@@ -180,7 +180,7 @@ func (c *VaultCache) InvalidateConfig(vaultDir string) {
 // InvalidateSearchIndex clears the global persistent encrypted search
 // index and all in-memory caches.
 func (c *VaultCache) InvalidateSearchIndex() {
-	globalIndex.Invalidate()
+	searchIndexStore.invalidateAll()
 	c.Invalidate()
 }
 
