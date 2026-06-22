@@ -50,7 +50,7 @@ so Symaira Vault does not expose a listening socket and Hermes does not need a b
 token in config:
 
 ```bash
-symvault --vault ~/.symvault-vault agent install hermes --config-only
+symvault --vault ~/.symvault agent install hermes --config-only
 ```
 
 Add the output under `mcp_servers` in `~/.hermes/config.yaml` only after the
@@ -114,13 +114,13 @@ symvault agent install openclaw --config-only
 For agents that support HTTP MCP with custom headers, use:
 
 ```bash
-symvault --vault ~/.symvault-vault agent install openclaw --http --config-only
+symvault --vault ~/.symvault agent install openclaw --http --config-only
 ```
 
 HTTP mode requires a running Symaira Vault server:
 
 ```bash
-symvault --vault ~/.symvault-vault serve --port 8090
+symvault --vault ~/.symvault serve --port 8090
 ```
 
 By default, the HTTP server starts with a self-signed TLS certificate auto-generated
@@ -154,7 +154,7 @@ and port as needed:
   <array>
     <string>/usr/local/bin/symvault</string>
     <string>--vault</string>
-    <string>/Users/USER/.openpass-vault</string>
+    <string>/Users/USER/.symvault</string>
     <string>serve</string>
     <string>--port</string>
     <string>8090</string>

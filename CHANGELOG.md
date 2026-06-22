@@ -16,8 +16,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [v0.7.1] - unreleased
 
-### Added — repository operations
+Security hardening, KDF improvements, search-index persistence, and bug
+fixes since v0.7.0.
 
+### Security
+
+- **Argon2id zero-key self-heal** — automatically replaces a corrupted
+  zero-length Argon2id key derived from `identity.age`, preventing silent
+  decryption failures on restored or migrated vaults. KDF state is now
+  derived from `identity.age` instead of recomputing on every unlock
+  (#516).
+- **Harden policy storage and MCP policy loading** — search isolation
+  improvements and a resolved gosec gate ensure that policy files and
+  MCP-loaded policies cannot be tampered with at rest or in transit
+  (#524).
+- **Cursor path sanitizer** — escape backslashes first in the cursor
+  path sanitizer to prevent path-traversal bypasses via backslash
+  sequences (#527).
+- **Weak-sensitive-data-hashing** — fix `go/weak-sensitive-data-hashing`
+  finding in `internal/vault/search_index.go` by replacing the weak hash
+  with a safe alternative (#543, #540).
+- **G304 false positive annotation** — annotate a known false positive
+  in the KDF doctor check where the file path is user-controlled but
+  validated before use (#518).
+
+### Added
+
+- **Search-index persistence** — the search index is now persisted to
+  disk and restored on server startup, eliminating a cold-start re-scan
+  of the full vault on every `serve` invocation (#532).
+- **Manifest rebuild** — a new manifest-rebuild path ensures the vault
+  manifest stays consistent after entry create, update, or delete
+  operations (#516).
 - **Projects v2 board** — a new GitHub Projects v2 board named `Symaira
   Vault` (number 11) is linked to this repository. The board includes a
   `Status` single-select (Todo / In Progress / Done), a `Priority`
@@ -26,6 +56,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   v0.10.x). The previous Projects v2 board (`symaira-vault`, number 1)
   remains read-only historical context. Tracked issues can now be
   assigned to an iteration alongside the milestone. See #508.
+
+### Fixed
+
+- **Recipients remove no longer revokes access** — removing a recipient
+  from the vault no longer invalidates access to entries that were
+  already encrypted for that recipient (#537).
+- **Password strength by rune count** — measure password strength by
+  rune count instead of byte length so multi-byte characters (CJK,
+  emoji, accented letters) are counted correctly (#526).
+
+### Changed
+
+- **Search-index refactor** — the search index internals were refactored
+  for clarity and the Argon2id KDF path was hardened against edge cases;
+  build artifacts were cleaned up (#543).
+- **Server-bootstrap cleanup** — the MCP server bootstrap sequence was
+  simplified to reduce startup latency and remove dead code (#532).
+
+### CI
+
+- **Pin `docker/*` GitHub Actions** — pin `docker/build-push-action` and
+  `docker/login-action` to SHA-pinned versions and fix an invalid
+  `github-script` pin to prevent supply-chain drift (#511).
 
 ## [v4.0.0] - 2026-05-21
 
