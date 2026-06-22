@@ -561,8 +561,11 @@ func TestCmdRecipientsRemove_WithYesFlag(t *testing.T) {
 		_ = rootCmd.Execute()
 	})
 
-	if !strings.Contains(output, "Recipient removed successfully") {
-		t.Errorf("expected 'Recipient removed successfully', got: %q", output)
+	if !strings.Contains(output, "Recipient removed") {
+		t.Errorf("expected output containing 'Recipient removed', got: %q", output)
+	}
+	if !strings.Contains(output, "re-encrypted successfully") {
+		t.Errorf("expected output containing 're-encrypted successfully', got: %q", output)
 	}
 }
 

@@ -13,7 +13,9 @@ import (
 )
 
 var (
-	confirmRemove bool
+	confirmRemove     bool
+	noReencrypt       bool
+	reencryptAfterAdd bool
 )
 
 var recipientsCmd = &cobra.Command{
@@ -112,7 +114,21 @@ Once added, all new entries will be encrypted for this recipient.`,
 				return errorspkg.WriteFailed(err, "cannot add recipient")
 			}
 
-			printlnQuietAware("Recipient added successfully.")
+			if reencryptAfterAdd {
+				recipients, err := v.GetAllRecipientsForEncryption()
+				if err != nil {
+					return fmt.Errorf("get recipients: %w", err)
+				}
+				printQuietAware("Recipient added. Re-encrypting all entries for %d recipient(s)...\n", len(recipients))
+				if err := vaultpkg.ReencryptAll(v.Dir, v.Identity, recipients); err != nil {
+					return fmt.Errorf("re-encrypt entries: %w", err)
+				}
+				printlnQuietAware("Recipient added and all entries re-encrypted successfully.")
+			} else {
+				printlnQuietAware("Recipient added successfully.")
+				printQuietAware("Note: existing entries are not yet shared with this recipient. ")
+				printlnQuietAware("Run 'symvault recipients add <key> --reencrypt' or 'symvault auth rotate' to re-encrypt existing entries.")
+			}
 			return nil
 		})
 	},
@@ -153,7 +169,21 @@ Use --yes to skip confirmation (useful for scripts).`,
 				return errorspkg.WriteFailed(err, "cannot remove recipient")
 			}
 
-			printlnQuietAware("Recipient removed successfully.")
+			if noReencrypt {
+				printlnQuietAware("Recipient removed successfully.")
+				printQuietAware("Warning: existing entries are still encrypted to the removed recipient. ")
+				printlnQuietAware("Run 'symvault auth rotate' to re-encrypt all entries and fully revoke access.")
+			} else {
+				recipients, err := v.GetAllRecipientsForEncryption()
+				if err != nil {
+					return fmt.Errorf("get remaining recipients: %w", err)
+				}
+				printQuietAware("Recipient removed. Re-encrypting %d entries for %d recipient(s)...\n", 0, len(recipients))
+				if err := vaultpkg.ReencryptAll(v.Dir, v.Identity, recipients); err != nil {
+					return fmt.Errorf("re-encrypt entries: %w", err)
+				}
+				printlnQuietAware("Recipient removed and all entries re-encrypted successfully.")
+			}
 			return nil
 		})
 	},
@@ -164,5 +194,7 @@ func init() {
 	recipientsCmd.AddCommand(recipientsListCmd)
 	recipientsCmd.AddCommand(recipientsAddCmd)
 	recipientsCmd.AddCommand(recipientsRemoveCmd)
+	recipientsAddCmd.Flags().BoolVar(&reencryptAfterAdd, "reencrypt", false, "Re-encrypt existing entries for the new recipient")
 	recipientsRemoveCmd.Flags().BoolVarP(&confirmRemove, "yes", "y", false, "Skip confirmation prompt")
+	recipientsRemoveCmd.Flags().BoolVar(&noReencrypt, "no-reencrypt", false, "Skip re-encrypting existing entries after removal")
 }
