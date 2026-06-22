@@ -562,11 +562,11 @@ func TestCmdRecipientsRemove_WithYesFlag(t *testing.T) {
 	})
 
 	if !strings.Contains(output, "Recipient removed") {
-			t.Errorf("expected output containing 'Recipient removed', got: %q", output)
-		}
-		if !strings.Contains(output, "re-encrypted successfully") {
-			t.Errorf("expected output containing 're-encrypted successfully', got: %q", output)
-		}
+		t.Errorf("expected output containing 'Recipient removed', got: %q", output)
+	}
+	if !strings.Contains(output, "re-encrypted successfully") {
+		t.Errorf("expected output containing 're-encrypted successfully', got: %q", output)
+	}
 }
 
 func TestCmdRecipientsRemove_InvalidKey(t *testing.T) {
