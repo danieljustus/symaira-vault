@@ -61,6 +61,9 @@ func initVault(t *testing.T) (string, []byte) {
 	if _, err := vaultpkg.InitWithPassphrase(vaultDir, passphrase, config.Default()); err != nil {
 		t.Fatalf("init vault: %v", err)
 	}
+	// Flush the async manifest debounce timer before the temp dir is removed;
+	// otherwise the background flush can race with t.TempDir cleanup on macOS.
+	t.Cleanup(vaultpkg.FlushManifestUpdates)
 	return vaultDir, passphrase
 }
 
