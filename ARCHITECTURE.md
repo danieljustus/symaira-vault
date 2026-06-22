@@ -236,13 +236,54 @@ graph LR
 - `CanWrite` — Whether write operations are allowed
 - `ApprovalMode` — `none`, `deny`, or `prompt` (degrades to deny in MCP)
 
-**Available tools:**
-- `list_entries` — List vault entries
-- `get_entry` — Retrieve entry
-- `find_entries` — Search entries
-- `set_entry_field` — Update entry field
-- `generate_password` — Generate password
-- `symvault_delete` — Delete entry
+**Available tools (34 registered, excluding the deprecated `symaira_delete` alias):**
+
+Vault operations:
+- `list_entries` — List vault entries matching a prefix
+- `get_entry` — Get entry metadata (fields, type) without secrets
+- `get_entry_value` — Get actual secret values
+- `get_entry_metadata` — Get metadata without sensitive data
+- `set_entry_field` — Set a field on an entry
+- `delete_entry` — Delete an entry by path
+- `find_entries` — Search entries by query
+- `generate_password` — Generate a secure password
+- `generate_totp` — Generate a TOTP code
+
+Secret execution:
+- `run_command` — Execute a command with secrets injected as env vars
+- `execute_with_secret` — Execute command with op:// secret references
+- `execute_api_request` — Execute HTTP API request with template-injected credentials
+- `secret_unseal` — Unseal a secret handle to reveal its value
+
+Agent & session:
+- `symaira_whoami` — Return agent profile, tool availability, quotas
+- `symaira_search` — Discover tools by intent matching
+- `symaira_audit_self` — Return recent audit events for this agent
+- `get_auth_status` — Return vault unlock authentication status
+- `set_auth_method` — Set unlock authentication method
+- `health` — Return MCP server health information
+
+Sharing:
+- `request_share` — Request to share a secret with another agent
+- `approve_share` — Approve a pending share request
+- `revoke_share` — Revoke an active share grant
+- `list_shares` — List share grants with filters
+
+Input/Output:
+- `request_credential` — Prompt user to securely enter a credential (native dialog)
+- `secure_input` — Prompt user for sensitive data via TTY/GUI dialog
+- `copy_to_clipboard` — Copy entry field to clipboard without exposing value
+- `autotype` — Type entry field as keyboard input into focused application
+- `sanitize_output` — Scan text for secrets and mask them
+
+Web & AI:
+- `perplexity_search` — Search the web via Perplexity AI
+- `perplexity_ask` — Ask Perplexity AI a question with vault context
+- `search` — Search vault entries (OpenAI-compatible)
+- `fetch` — Fetch vault entry by path (OpenAI-compatible)
+
+Templates:
+- `generate_template` — Generate config file from template (env, docker-compose, k8s, etc.)
 
 ### `internal/audit/` — Audit Logger
 
@@ -261,6 +302,39 @@ Shared utilities for testing.
 ### `internal/clipboard/` — Clipboard Application Logic
 
 Application-level clipboard utilities: auto-clear timer, countdown display, and cross-platform clipboard integration. Imported by CLI commands (e.g., `cmd/get.go`) as `clipboardapp`.
+
+### Additional `internal/` Packages
+
+| Package | Purpose |
+|---------|---------|
+| `internal/agentctx` | Agent context propagation through MCP call chain |
+| `internal/agentskill` | Agent skill management and version compatibility |
+| `internal/anomaly` | Anomaly detection for vault operations |
+| `internal/authguard` | Authorization guard layer for MCP tool access |
+| `internal/autotype` | Cross-platform keyboard autotype backend |
+| `internal/cli` | CLI helper utilities (vault path, output, with-vault) |
+| `internal/daemon` | Background service management |
+| `internal/dynamicsecret` | Dynamic secret generation with time-limited leases |
+| `internal/envutil` | Environment variable utilities |
+| `internal/errors` | Structured error types and CLI error formatting |
+| `internal/exporter` | Vault entry export (CSV, JSON) |
+| `internal/fsutil` | Filesystem utilities (safe read/write, traversal checks) |
+| `internal/health` | Vault health check logic |
+| `internal/i18n` | Internationalization and localization |
+| `internal/importer` | Import from other password managers |
+| `internal/logging` | Structured logging infrastructure |
+| `internal/metrics` | Operational metrics collection |
+| `internal/notify` | Desktop notification support |
+| `internal/pairing` | Device pairing protocol |
+| `internal/policy` | Declarative vault policy engine |
+| `internal/quotas` | MCP tool usage quotas and rate limiting |
+| `internal/secrets` | Secret handle resolution and sealed-ref management |
+| `internal/secureedit` | Secure in-place entry editing |
+| `internal/secureui` | Native OS dialog integration for secure input |
+| `internal/template` | Configuration template generation |
+| `internal/ui` | Terminal UI (TUI) rendering |
+| `internal/update` | Self-update mechanism |
+
 
 ## Data Flow
 
@@ -362,7 +436,7 @@ graph TD
 ### MCP Security
 
 - **Stdio:** Agent fixed at startup; process isolation provides security
-- **HTTP:** Bearer token required; agent identified per-request via `X-Symaira Vault-Agent` header
+- **HTTP:** Bearer token required; agent identified per-request via `X-Symaira-Agent` header
 - **Path restrictions:** Agents can only access allowed path patterns
 - **Write restrictions:** `CanWrite: false` blocks all write operations
 - **Approval modes:** `deny` blocks writes; `prompt` degrades to deny (no stdin)
@@ -393,7 +467,7 @@ Vaults created with the older root-level entry layout are migrated to `entries/`
 
 ## Tool Addition Review
 
-Symaira Vault caps the MCP tool registry at `MaxToolDefinitions` (32, defined in `internal/mcp/server/tool_registry.go`). Each tool is a potential prompt injection vector — an attacker-controlled agent can exploit any exposed tool. The cap forces deliberate tradeoffs: every new tool must displace another or justify raising the limit.
+Symaira Vault caps the MCP tool registry at `MaxToolDefinitions` (34, defined in `internal/mcp/server/tool_registry.go`). Each tool is a potential prompt injection vector — an attacker-controlled agent can exploit any exposed tool. The cap forces deliberate tradeoffs: every new tool must displace another or justify raising the limit.
 
 **Adding a new tool** requires:
 
