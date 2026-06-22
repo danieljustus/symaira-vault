@@ -54,7 +54,7 @@ type EncryptedIndex struct {
 	ciphertext []byte            // encrypted serialized index
 	salt       []byte            // 16-byte HKDF salt (nil for legacy)
 	vaultDir   string            // vault directory the index covers
-	idHash     [sha256.Size]byte // sha256 of identity for change detection
+	idHash     [sha256.Size]byte // sha256 of identity recipient for change detection
 }
 
 func indexFilePath(vaultDir string) string {
@@ -229,7 +229,7 @@ func (idx *EncryptedIndex) Build(vaultDir string, identity *age.X25519Identity) 
 		return err
 	}
 
-	idHash := sha256.Sum256([]byte(identity.String()))
+	idHash := sha256.Sum256([]byte(identity.Recipient().String()))
 
 	idx.mu.Lock()
 	idx.ciphertext = ciphertext
@@ -358,7 +358,7 @@ func (idx *EncryptedIndex) BuildMemoryOnly(vaultDir string, identity *age.X25519
 		return err
 	}
 
-	idHash := sha256.Sum256([]byte(identity.String()))
+	idHash := sha256.Sum256([]byte(identity.Recipient().String()))
 
 	idx.mu.Lock()
 	idx.ciphertext = ciphertext
@@ -395,7 +395,7 @@ func (idx *EncryptedIndex) MatchEntries(vaultDir string, identity *age.X25519Ide
 		return nil, nil
 	}
 
-	currentHash := sha256.Sum256([]byte(identity.String()))
+	currentHash := sha256.Sum256([]byte(identity.Recipient().String()))
 	if currentHash != idHash {
 		return nil, errors.New("identity changed")
 	}
@@ -473,7 +473,7 @@ func (idx *EncryptedIndex) Covers(vaultDir string, identity *age.X25519Identity)
 	if identity == nil {
 		return false
 	}
-	idHash := sha256.Sum256([]byte(identity.String()))
+	idHash := sha256.Sum256([]byte(identity.Recipient().String()))
 	want := canonicalVaultDir(vaultDir)
 
 	idx.mu.RLock()
@@ -562,7 +562,7 @@ func (idx *EncryptedIndex) UpdateEntry(vaultDir, path string, identity *age.X255
 
 	idx.ciphertext = newCiphertext
 	idx.vaultDir = vaultDir
-	idx.idHash = sha256.Sum256([]byte(identity.String()))
+	idx.idHash = sha256.Sum256([]byte(identity.Recipient().String()))
 
 	// Persist the incrementally-updated index so the on-disk copy tracks the
 	// write. Without this the edited entry's previous value would remain on
@@ -727,7 +727,7 @@ func (idx *EncryptedIndex) loadFromDisk(vaultDir string, identity *age.X25519Ide
 		return errors.New("stale index")
 	}
 
-	idHash := sha256.Sum256([]byte(identity.String()))
+	idHash := sha256.Sum256([]byte(identity.Recipient().String()))
 
 	idx.mu.Lock()
 	idx.ciphertext = ct
