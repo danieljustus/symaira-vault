@@ -42,8 +42,12 @@ var ErrIndexBuildEmpty = errors.New("search index build produced no entries")
 //   - Built lazily on first search after vault unlock
 //   - Saved to disk after building so it persists across restarts
 //   - Loaded from disk on first search if available and valid
-//   - Invalidated on any write operation (clears both memory and disk)
-//   - Rebuilt automatically on the next search
+//   - Updated incrementally on single-entry add/update/delete: UpdateEntry and
+//     RemoveEntry re-index just that path and re-persist the ciphertext, so a
+//     write no longer discards the whole index
+//   - Fully invalidated only by bulk/structural operations (recipient changes,
+//     migrations, manifest rebuild) via InvalidateSearchIndex, then rebuilt on
+//     the next search
 //   - Encrypted with a key derived from the vault identity
 type EncryptedIndex struct {
 	mu         sync.RWMutex
@@ -512,20 +516,16 @@ func (idx *EncryptedIndex) UpdateEntry(vaultDir, path string, identity *age.X255
 
 	plaintext, err := vaultcrypto.DecryptWithKey(idx.ciphertext, key)
 	if err != nil {
-		idx.ciphertext = nil
-		idx.salt = nil
-		idx.vaultDir = ""
-		idx.idHash = [sha256.Size]byte{}
+		idx.clearLocked()
+		_ = os.Remove(indexFilePath(vaultDir))
 		return nil
 	}
 	defer vaultcrypto.Wipe(plaintext)
 
 	var doc indexDoc
 	if err = json.Unmarshal(plaintext, &doc); err != nil {
-		idx.ciphertext = nil
-		idx.salt = nil
-		idx.vaultDir = ""
-		idx.idHash = [sha256.Size]byte{}
+		idx.clearLocked()
+		_ = os.Remove(indexFilePath(vaultDir))
 		return nil
 	}
 
@@ -563,7 +563,12 @@ func (idx *EncryptedIndex) UpdateEntry(vaultDir, path string, identity *age.X255
 	idx.ciphertext = newCiphertext
 	idx.vaultDir = vaultDir
 	idx.idHash = sha256.Sum256([]byte(identity.String()))
-	return nil
+
+	// Persist the incrementally-updated index so the on-disk copy tracks the
+	// write. Without this the edited entry's previous value would remain on
+	// disk and, because an in-place edit leaves the entry count unchanged, be
+	// reloaded as a valid index after a restart — returning stale results.
+	return writeIndexFile(vaultDir, storedSalt, newCiphertext)
 }
 
 // RemoveEntry removes a single path from the encrypted index.
@@ -576,26 +581,33 @@ func (idx *EncryptedIndex) RemoveEntry(path string, identity *age.X25519Identity
 		return
 	}
 
+	vaultDir := idx.vaultDir
+	dropDisk := func() {
+		idx.clearLocked()
+		if vaultDir != "" {
+			_ = os.Remove(indexFilePath(vaultDir))
+		}
+	}
+
 	if identity == nil {
-		idx.ciphertext = nil
-		idx.salt = nil
+		dropDisk()
 		return
 	}
 
-	key := deriveIndexKey(identity, idx.salt)
+	storedSalt := idx.salt
+	key := deriveIndexKey(identity, storedSalt)
 	defer vaultcrypto.Wipe(key)
 
 	plaintext, err := vaultcrypto.DecryptWithKey(idx.ciphertext, key)
 	if err != nil {
-		idx.ciphertext = nil
-		idx.salt = nil
+		dropDisk()
 		return
 	}
 	defer vaultcrypto.Wipe(plaintext)
 
 	var doc indexDoc
 	if err = json.Unmarshal(plaintext, &doc); err != nil {
-		idx.ciphertext = nil
+		dropDisk()
 		return
 	}
 
@@ -603,24 +615,55 @@ func (idx *EncryptedIndex) RemoveEntry(path string, identity *age.X25519Identity
 	if doc.TokenIndex != nil {
 		removeFromTokenIndex(doc.TokenIndex, path)
 	}
+	// A delete removes exactly one vault entry; keep the persisted entry count
+	// in step so the on-disk index stays valid (not flagged stale) on reload.
+	if doc.EntryCount > 0 {
+		doc.EntryCount--
+	}
 
 	newPlaintext, err := json.Marshal(doc)
 	if err != nil {
-		idx.ciphertext = nil
+		dropDisk()
 		return
 	}
 	defer vaultcrypto.Wipe(newPlaintext)
 
 	newCiphertext, err := vaultcrypto.EncryptWithKey(newPlaintext, key)
 	if err != nil {
-		idx.ciphertext = nil
+		dropDisk()
 		return
 	}
 
 	idx.ciphertext = newCiphertext
+	// Persist so the deletion is reflected on disk and survives a restart.
+	_ = writeIndexFile(vaultDir, storedSalt, newCiphertext)
 }
 
 const indexFormatVersion = byte(0x01)
+
+// writeIndexFile serializes the salted index ciphertext to the on-disk index
+// file. It deliberately does not touch idx.mu, so callers that already hold the
+// write lock (UpdateEntry, RemoveEntry) can persist without deadlocking against
+// the non-reentrant RWMutex that saveToDisk's RLock would otherwise take.
+func writeIndexFile(vaultDir string, salt, ciphertext []byte) error {
+	if ciphertext == nil {
+		return nil
+	}
+	data := make([]byte, 0, 1+len(salt)+len(ciphertext))
+	data = append(data, indexFormatVersion)
+	data = append(data, salt...)
+	data = append(data, ciphertext...)
+	return os.WriteFile(indexFilePath(vaultDir), data, 0600)
+}
+
+// clearLocked resets the in-memory index to the unbuilt state. The caller must
+// hold idx.mu.
+func (idx *EncryptedIndex) clearLocked() {
+	idx.ciphertext = nil
+	idx.salt = nil
+	idx.vaultDir = ""
+	idx.idHash = [sha256.Size]byte{}
+}
 
 func (idx *EncryptedIndex) saveToDisk(vaultDir string) error {
 	idx.mu.RLock()
@@ -628,16 +671,7 @@ func (idx *EncryptedIndex) saveToDisk(vaultDir string) error {
 	storedSalt := idx.salt
 	idx.mu.RUnlock()
 
-	if ct == nil {
-		return nil
-	}
-
-	indexPath := indexFilePath(vaultDir)
-	data := make([]byte, 0, 1+len(storedSalt)+len(ct))
-	data = append(data, indexFormatVersion)
-	data = append(data, storedSalt...)
-	data = append(data, ct...)
-	return os.WriteFile(indexPath, data, 0600)
+	return writeIndexFile(vaultDir, storedSalt, ct)
 }
 
 func (idx *EncryptedIndex) loadFromDisk(vaultDir string, identity *age.X25519Identity) error {

@@ -20,8 +20,9 @@
 //
 // Bounded Parallelism Rationale:
 // -----------------------------
-// We use a bounded worker pool (default: 4 concurrent decryptions) rather than
-// unbounded parallelism for these reasons:
+// We use a bounded worker pool (default: one worker per CPU core, capped at 8;
+// configurable up to 64 — see SearchWorkerCount) rather than unbounded
+// parallelism for these reasons:
 //
 //  1. Memory Pressure: Each decrypted entry consumes memory. With unbounded
 //     parallelism on a 50k entry vault, we could spawn 50k goroutines all
@@ -35,11 +36,12 @@
 //     (X25519 key exchange, ChaCha20-Poly1305). Too many concurrent operations
 //     can cause CPU cache thrashing.
 //
-//  4. Practical Results: Testing shows 4 workers provides near-optimal throughput
-//     for typical user machines while keeping memory bounded.
+//  4. Practical Results: Testing shows one worker per core (capped at 8)
+//     provides near-optimal throughput for typical user machines while
+//     keeping memory bounded.
 //
-// Performance Targets (4 workers):
-// --------------------------------
+// Performance Targets (approximate, default worker count on a multi-core machine):
+// -------------------------------------------------------------------------------
 // - 50k entries, path-only: ~500ms (no decryption needed)
 // - 50k entries, field-search: ~2-4s (bounded by decrypt parallelism)
 // - 10k entries, field-search: ~500ms-1s
