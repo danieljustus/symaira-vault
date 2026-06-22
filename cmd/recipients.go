@@ -14,6 +14,7 @@ import (
 
 var (
 	confirmRemove bool
+	noReencrypt   bool
 )
 
 var recipientsCmd = &cobra.Command{
@@ -153,7 +154,21 @@ Use --yes to skip confirmation (useful for scripts).`,
 				return errorspkg.WriteFailed(err, "cannot remove recipient")
 			}
 
-			printlnQuietAware("Recipient removed successfully.")
+			if noReencrypt {
+				printlnQuietAware("Recipient removed successfully.")
+				printQuietAware("Warning: existing entries are still encrypted to the removed recipient. ")
+				printlnQuietAware("Run 'symvault auth rotate' to re-encrypt all entries and fully revoke access.")
+			} else {
+				recipients, err := v.GetAllRecipientsForEncryption()
+				if err != nil {
+					return fmt.Errorf("get remaining recipients: %w", err)
+				}
+				printQuietAware("Recipient removed. Re-encrypting %d entries for %d recipient(s)...\n", 0, len(recipients))
+				if err := vaultpkg.ReencryptAll(v.Dir, v.Identity, recipients); err != nil {
+					return fmt.Errorf("re-encrypt entries: %w", err)
+				}
+				printlnQuietAware("Recipient removed and all entries re-encrypted successfully.")
+			}
 			return nil
 		})
 	},
@@ -165,4 +180,5 @@ func init() {
 	recipientsCmd.AddCommand(recipientsAddCmd)
 	recipientsCmd.AddCommand(recipientsRemoveCmd)
 	recipientsRemoveCmd.Flags().BoolVarP(&confirmRemove, "yes", "y", false, "Skip confirmation prompt")
+	recipientsRemoveCmd.Flags().BoolVar(&noReencrypt, "no-reencrypt", false, "Skip re-encrypting existing entries after removal")
 }
