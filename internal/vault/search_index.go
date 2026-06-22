@@ -153,24 +153,6 @@ func (s *indexStore) evictLocked() {
 	}
 }
 
-// invalidate removes and invalidates the index for a single vault directory,
-// including its on-disk file.
-func (s *indexStore) invalidate(vaultDir string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	key := canonicalVaultDir(vaultDir)
-	if idx, ok := s.indices[key]; ok {
-		idx.Invalidate()
-		delete(s.indices, key)
-		for i, k := range s.order {
-			if k == key {
-				s.order = append(s.order[:i], s.order[i+1:]...)
-				return
-			}
-		}
-	}
-}
-
 // invalidateAll clears every index in the store and deletes their on-disk
 // files. Used by the global InvalidateSearchIndex function.
 func (s *indexStore) invalidateAll() {
