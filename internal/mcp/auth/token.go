@@ -542,9 +542,14 @@ func (r *TokenRegistry) List() []*ScopedToken {
 // the goroutine and a final cleanup run.
 func (r *TokenRegistry) StartCleanup(ctx context.Context, interval time.Duration) func() {
 	stopCh := make(chan struct{})
-	r.stopFn = func() { close(stopCh) }
+	doneCh := make(chan struct{})
+	r.stopFn = func() {
+		close(stopCh)
+		<-doneCh
+	}
 
 	go func() {
+		defer close(doneCh)
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -668,14 +673,17 @@ func (r *TokenRegistry) StartFileWatcher(ctx context.Context, interval time.Dura
 // are running.
 func (r *TokenRegistry) Close() error {
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.stopFn != nil {
-		r.stopFn()
-		r.stopFn = nil
+	stopFn := r.stopFn
+	r.stopFn = nil
+	watchStopFn := r.watchStopFn
+	r.watchStopFn = nil
+	r.mu.Unlock()
+
+	if stopFn != nil {
+		stopFn()
 	}
-	if r.watchStopFn != nil {
-		r.watchStopFn()
-		r.watchStopFn = nil
+	if watchStopFn != nil {
+		watchStopFn()
 	}
 	return nil
 }
