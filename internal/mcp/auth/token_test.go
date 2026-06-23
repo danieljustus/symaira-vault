@@ -1574,8 +1574,8 @@ func TestTokenRegistry_BackgroundCleanupRemovesRevoked(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	stop := reg.StartCleanup(ctx, 50*time.Millisecond)
-	defer stop()
+	_ = reg.StartCleanup(ctx, 50*time.Millisecond)
+	defer reg.Close()
 
 	var count int
 	for i := 0; i < 40; i++ {
