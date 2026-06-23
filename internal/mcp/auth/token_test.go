@@ -2079,10 +2079,10 @@ func TestRotateViaRefreshToken_ExpiredRefreshToken(t *testing.T) {
 	time.Sleep(5 * time.Millisecond)
 
 	_, _, tok, err := reg.RotateViaRefreshToken(rawRefresh)
+	_ = tok
 	if err == nil {
 		t.Fatal("RotateViaRefreshToken() should error for expired refresh token")
 	}
-	_ = tok
 	if !strings.Contains(err.Error(), "expired") {
 		t.Errorf("error = %q, want 'expired'", err.Error())
 	}
