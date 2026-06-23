@@ -173,9 +173,9 @@ func TestReencryptAll_NestedDirectories(t *testing.T) {
 
 	// Write entries in nested subdirectories.
 	entries := map[string]map[string]any{
-		"work/prod/db":      {"host": "prod-db.internal", "password": "s3cret"},
-		"work/staging/api":  {"url": "https://staging.api", "token": "tok123"},
-		"personal/email":    {"email": "alice@example.com", "password": "mail-pw"},
+		"work/prod/db":     {"host": "prod-db.internal", "password": "s3cret"},
+		"work/staging/api": {"url": "https://staging.api", "token": "tok123"},
+		"personal/email":   {"email": "alice@example.com", "password": "mail-pw"},
 	}
 	for name, data := range entries {
 		if err := WriteEntry(vaultDir, name, &Entry{Data: data}, identity1); err != nil {
