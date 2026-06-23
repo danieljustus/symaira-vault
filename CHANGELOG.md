@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > and [docs/commercial-boundary.md](docs/commercial-boundary.md) for the
 > current release-line policy. (Added 2026-06-10, see #384.)
 
-## [v0.7.1] - unreleased
+## [v0.7.1] - 2026-06-23
 
 Security hardening, KDF improvements, search-index persistence, and bug
 fixes since v0.7.0.
