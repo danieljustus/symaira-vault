@@ -530,23 +530,25 @@ func handleOAuthAuthorize(store *oauthCodeStore, clientStore *oauthClientStore) 
 
 		// Require explicit user consent via TTY prompt.
 		// Without this, any local process can silently mint tokens (see #21).
+		// Check TTY presence first to avoid false "denied" when TTY exists but is non-interactive.
+		if !server.IsTTYPresent() {
+			// Daemon mode: render browser-based consent page with passphrase challenge.
+			renderConsentPage(w, consentPageData{
+				ClientID:            clientID,
+				RedirectURI:         redirectURI,
+				State:               state,
+				CodeChallenge:       codeChallenge,
+				CodeChallengeMethod: challengeMethod,
+			})
+			return
+		}
+
 		result := server.RequestApproval(server.ApprovalRequest{
 			Operation: "OAuth Authorization Request",
 			Details:   fmt.Sprintf("Client %q requests vault access\n  Redirect URI: %s", clientID, redirectURI),
 			Timeout:   60 * time.Second,
 		})
 		if !result.Approved {
-			if result.Error != nil && strings.Contains(result.Error.Error(), "no TTY available") {
-				// Daemon mode: render browser-based consent page with passphrase challenge.
-				renderConsentPage(w, consentPageData{
-					ClientID:            clientID,
-					RedirectURI:         redirectURI,
-					State:               state,
-					CodeChallenge:       codeChallenge,
-					CodeChallengeMethod: challengeMethod,
-				})
-				return
-			}
 			writeJSON(w, http.StatusForbidden, map[string]string{
 				"error":             "access_denied",
 				"error_description": "Authorization denied by user",
