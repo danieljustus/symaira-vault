@@ -16,6 +16,13 @@ import (
 	"time"
 )
 
+// Verify status constants for HMAC verification results.
+const (
+	verifyStatusVerified = "verified"
+	verifyStatusLegacy   = "legacy"
+	verifyStatusTampered = "tampered"
+)
+
 // ExportOptions configures audit log export behavior.
 type ExportOptions struct {
 	Agent       string // filter by agent name, "" or "all" means all agents
@@ -91,11 +98,11 @@ func ExportAuditLog(opts ExportOptions, w io.Writer, format string) (*ExportResu
 		verifyExportedEntries(allEntries, opts.HMACKey)
 		for _, e := range allEntries {
 			switch e.VerifyStatus {
-			case "verified":
+			case verifyStatusVerified:
 				result.Verified++
-			case "legacy":
+			case verifyStatusLegacy:
 				result.Legacy++
-			case "tampered":
+			case verifyStatusTampered:
 				result.Tampered++
 			}
 		}
@@ -312,9 +319,9 @@ func verifyExportedEntries(entries []ExportEntry, key []byte) {
 		entry := &entries[i]
 		if entry.HMAC == "" {
 			if chainStarted {
-				entry.VerifyStatus = "tampered"
+				entry.VerifyStatus = verifyStatusTampered
 			} else {
-				entry.VerifyStatus = "legacy"
+				entry.VerifyStatus = verifyStatusLegacy
 				prevHMAC = nil
 			}
 			continue
@@ -324,9 +331,9 @@ func verifyExportedEntries(entries []ExportEntry, key []byte) {
 		entryHMACBytes, decodeErr := hex.DecodeString(entry.HMAC)
 		expectedHMACBytes, expectedErr := hex.DecodeString(expectedHMAC)
 		if decodeErr != nil || expectedErr != nil || !hmac.Equal(expectedHMACBytes, entryHMACBytes) {
-			entry.VerifyStatus = "tampered"
+			entry.VerifyStatus = verifyStatusTampered
 		} else {
-			entry.VerifyStatus = "verified"
+			entry.VerifyStatus = verifyStatusVerified
 			prevHMAC = entryHMACBytes
 			chainStarted = true
 		}
@@ -349,9 +356,9 @@ func VerifyExportLog(entries []LogEntry, key []byte) ([]string, error) {
 	for i, entry := range entries {
 		if entry.HMAC == "" {
 			if chainStarted {
-				statuses[i] = "tampered"
+				statuses[i] = verifyStatusTampered
 			} else {
-				statuses[i] = "legacy"
+				statuses[i] = verifyStatusLegacy
 				prevHMAC = nil
 			}
 			continue
@@ -361,9 +368,9 @@ func VerifyExportLog(entries []LogEntry, key []byte) ([]string, error) {
 		entryHMACBytes, decodeErr := hex.DecodeString(entry.HMAC)
 		expectedHMACBytes, expectedErr := hex.DecodeString(expectedHMAC)
 		if decodeErr != nil || expectedErr != nil || !hmac.Equal(expectedHMACBytes, entryHMACBytes) {
-			statuses[i] = "tampered"
+			statuses[i] = verifyStatusTampered
 		} else {
-			statuses[i] = "verified"
+			statuses[i] = verifyStatusVerified
 			prevHMAC = entryHMACBytes
 			chainStarted = true
 		}
@@ -556,9 +563,9 @@ func streamAndFilterFile(
 		if opts.VerifyHMAC && mac != nil {
 			if entry.HMAC == "" {
 				if *chainStarted {
-					exportEntry.VerifyStatus = "tampered"
+					exportEntry.VerifyStatus = verifyStatusTampered
 				} else {
-					exportEntry.VerifyStatus = "legacy"
+					exportEntry.VerifyStatus = verifyStatusLegacy
 					*prevHMAC = nil
 				}
 			} else {
@@ -566,9 +573,9 @@ func streamAndFilterFile(
 				entryHMACBytes, decodeErr := hex.DecodeString(entry.HMAC)
 				expectedHMACBytes, expectedErr := hex.DecodeString(expectedHMAC)
 				if decodeErr != nil || expectedErr != nil || !hmac.Equal(expectedHMACBytes, entryHMACBytes) {
-					exportEntry.VerifyStatus = "tampered"
+					exportEntry.VerifyStatus = verifyStatusTampered
 				} else {
-					exportEntry.VerifyStatus = "verified"
+					exportEntry.VerifyStatus = verifyStatusVerified
 					*prevHMAC = entryHMACBytes
 					*chainStarted = true
 				}
@@ -582,11 +589,11 @@ func streamAndFilterFile(
 
 		result.Total++
 		switch exportEntry.VerifyStatus {
-		case "verified":
+		case verifyStatusVerified:
 			result.Verified++
-		case "legacy":
+		case verifyStatusLegacy:
 			result.Legacy++
-		case "tampered":
+		case verifyStatusTampered:
 			result.Tampered++
 		}
 
