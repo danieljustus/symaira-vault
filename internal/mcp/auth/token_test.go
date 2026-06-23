@@ -1926,10 +1926,11 @@ func TestCreateWithRefresh_RandError_AccessToken(t *testing.T) {
 	randReader = &errorReader{}
 	defer func() { randReader = oldReader }()
 
-	_, _, _, err := reg.CreateWithRefresh("test", []string{"*"}, "", 1*time.Hour, 1*time.Hour)
+	tok, _, _, err := reg.CreateWithRefresh("test", []string{"*"}, "", 1*time.Hour, 1*time.Hour)
 	if err == nil {
 		t.Fatal("CreateWithRefresh() should error on rand failure for access token")
 	}
+	_ = tok
 }
 
 func TestCreateWithRefresh_RandError_RefreshToken(t *testing.T) {
@@ -1945,20 +1946,22 @@ func TestCreateWithRefresh_RandError_RefreshToken(t *testing.T) {
 	}
 	defer func() { randReader = oldReader }()
 
-	_, _, _, err := reg.CreateWithRefresh("test", []string{"*"}, "", 1*time.Hour, 1*time.Hour)
+	tok, _, _, err := reg.CreateWithRefresh("test", []string{"*"}, "", 1*time.Hour, 1*time.Hour)
 	if err == nil {
 		t.Fatal("CreateWithRefresh() should error on rand failure for refresh token")
 	}
+	_ = tok
 }
 
 func TestCreateWithRefresh_WriteError(t *testing.T) {
 	path := filepath.Join("/nonexistent-registry-dir-symvault-test", "tokens.json")
 	reg := NewTokenRegistry(path)
 
-	_, _, _, err := reg.CreateWithRefresh("test", []string{"*"}, "", 1*time.Hour, 1*time.Hour)
+	tok, _, _, err := reg.CreateWithRefresh("test", []string{"*"}, "", 1*time.Hour, 1*time.Hour)
 	if err == nil {
 		t.Fatal("CreateWithRefresh() should error on write failure")
 	}
+	_ = tok
 }
 
 func TestRotateViaRefreshToken_HappyPath(t *testing.T) {
@@ -2040,7 +2043,8 @@ func TestRotateViaRefreshToken_InvalidRefreshToken(t *testing.T) {
 		t.Fatalf("CreateWithRefresh() error = %v", err)
 	}
 
-	_, _, _, err := reg.RotateViaRefreshToken("totally-fake-refresh-token")
+	_, _, tok, err := reg.RotateViaRefreshToken("totally-fake-refresh-token")
+	_ = tok
 	if err == nil {
 		t.Fatal("RotateViaRefreshToken() should error for invalid refresh token")
 	}
@@ -2053,7 +2057,8 @@ func TestRotateViaRefreshToken_EmptyRegistry(t *testing.T) {
 	dir := t.TempDir()
 	reg := NewTokenRegistry(filepath.Join(dir, "tokens.json"))
 
-	_, _, _, err := reg.RotateViaRefreshToken("any-token")
+	_, _, tok, err := reg.RotateViaRefreshToken("any-token")
+	_ = tok
 	if err == nil {
 		t.Fatal("RotateViaRefreshToken() should error on empty registry")
 	}
@@ -2073,7 +2078,8 @@ func TestRotateViaRefreshToken_ExpiredRefreshToken(t *testing.T) {
 
 	time.Sleep(5 * time.Millisecond)
 
-	_, _, _, err = reg.RotateViaRefreshToken(rawRefresh)
+	_, _, tok, err := reg.RotateViaRefreshToken(rawRefresh)
+	_ = tok
 	if err == nil {
 		t.Fatal("RotateViaRefreshToken() should error for expired refresh token")
 	}
@@ -2103,7 +2109,9 @@ func TestRotateViaRefreshToken_RevokedEntry(t *testing.T) {
 		t.Fatal("Revoke() failed")
 	}
 
-	_, _, _, err = reg.RotateViaRefreshToken(rawRefresh)
+	_, newAccess, newRefresh, err := reg.RotateViaRefreshToken(rawRefresh)
+	_ = newAccess
+	_ = newRefresh
 	if err == nil {
 		t.Fatal("RotateViaRefreshToken() should error for revoked entry")
 	}
