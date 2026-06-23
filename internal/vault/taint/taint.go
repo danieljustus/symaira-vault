@@ -11,6 +11,8 @@ import (
 	"strings"
 )
 
+const taintNameSecret = "secret"
+
 // SecretHandle is a handle that can be displayed to the user containing the
 // path to a secret in the vault in the "op://path/field" format.
 // It implements fmt.Stringer and is safe for display because it only contains
@@ -70,7 +72,7 @@ func (c Classification) String() string {
 	case Confidential:
 		return "confidential"
 	case Secret:
-		return "secret"
+		return taintNameSecret
 	case Restricted:
 		return "restricted"
 	default:

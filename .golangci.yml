@@ -106,6 +106,13 @@ linters:
       - path: 'internal/mcp/.+\.go'
         linters:
           - goconst
+      # Vault metadata field names — domain-standard keys in safeCacheFields and canary test data
+      - path: 'internal/vault/search\.go'
+        linters:
+          - goconst
+      - path: 'internal/vault/entry_canary\.go'
+        linters:
+          - goconst
       # Output format literals and OS names — constants would not improve readability
       - path: 'cmd/.+\.go'
         linters:

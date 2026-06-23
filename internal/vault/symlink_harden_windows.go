@@ -22,7 +22,7 @@ func SafeWriteFile(path string, data []byte, perm os.FileMode) error {
 	}
 	if info, err := os.Lstat(path); err == nil {
 		if !info.Mode().IsRegular() {
-			return &os.PathError{Op: "open", Path: path, Err: errUnsafePath}
+			return &os.PathError{Op: errOpOpen, Path: path, Err: errUnsafePath}
 		}
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return err
@@ -61,7 +61,7 @@ func rejectSymlink(path string) error {
 	info, err := os.Lstat(path)
 	if err == nil {
 		if info.Mode()&os.ModeSymlink != 0 {
-			return &os.PathError{Op: "open", Path: path, Err: errUnsafePath}
+			return &os.PathError{Op: errOpOpen, Path: path, Err: errUnsafePath}
 		}
 		return nil
 	}
