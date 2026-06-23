@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"filippo.io/age"
 
@@ -56,9 +57,10 @@ func ReencryptAll(vaultDir string, identity *age.X25519Identity, recipients []*a
 
 	var fileCount int64
 	var walkErr error
+	var walkErrMu sync.Mutex
 	go func() {
 		defer close(taskCh)
-		walkErr = filepath.Walk(entriesPath, func(path string, info os.FileInfo, err error) error {
+		err := filepath.Walk(entriesPath, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
@@ -67,10 +69,13 @@ func ReencryptAll(vaultDir string, identity *age.X25519Identity, recipients []*a
 			}
 			if strings.EqualFold(filepath.Ext(info.Name()), ".age") {
 				taskCh <- reencryptTask{path: path}
-				fileCount++
+				atomic.AddInt64(&fileCount, 1)
 			}
 			return nil
 		})
+		walkErrMu.Lock()
+		walkErr = err
+		walkErrMu.Unlock()
 	}()
 
 	go func() {
@@ -81,17 +86,20 @@ func ReencryptAll(vaultDir string, identity *age.X25519Identity, recipients []*a
 	var processed int64
 	for result := range resultCh {
 		processed++
-		fmt.Fprintf(os.Stderr, "Re-encrypting %d/%d...\r", processed, fileCount)
+		fmt.Fprintf(os.Stderr, "Re-encrypting %d/%d...\r", processed, atomic.LoadInt64(&fileCount))
 		if result.err != nil {
 			return fmt.Errorf("re-encrypt %s: %w", result.path, result.err)
 		}
 	}
 
-	if walkErr != nil {
-		return fmt.Errorf("walk entries directory: %w", walkErr)
+	walkErrMu.Lock()
+	err := walkErr
+	walkErrMu.Unlock()
+	if err != nil {
+		return fmt.Errorf("walk entries directory: %w", err)
 	}
 
-	if fileCount == 0 {
+	if atomic.LoadInt64(&fileCount) == 0 {
 		return nil
 	}
 
@@ -99,7 +107,7 @@ func ReencryptAll(vaultDir string, identity *age.X25519Identity, recipients []*a
 		return fmt.Errorf("rebuild manifest: %w", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "\nRe-encrypted %d entries successfully.\n", fileCount)
+	fmt.Fprintf(os.Stderr, "\nRe-encrypted %d entries successfully.\n", atomic.LoadInt64(&fileCount))
 	return nil
 }
 
