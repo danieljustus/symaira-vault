@@ -19,6 +19,12 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/fsutil"
 )
 
+// errOpOpen is the Op string for os.PathError when rejecting unsafe paths.
+// Defined here (not in symlink_harden.go) because that file has a
+// //go:build !windows constraint, but this constant must be available on
+// all platforms.
+const errOpOpen = "open"
+
 // Common recipients errors
 var (
 	ErrRecipientAlreadyExists = errors.New("recipient already exists")
@@ -174,7 +180,7 @@ func (rm *RecipientsManager) AddRecipient(recipientStr string) error {
 	// Verify file is not a symlink before opening for append.
 	if info, lstatErr := os.Lstat(path); lstatErr == nil {
 		if info.Mode()&os.ModeSymlink != 0 {
-			return &os.PathError{Op: "open", Path: path, Err: syscall.ELOOP}
+			return &os.PathError{Op: errOpOpen, Path: path, Err: syscall.ELOOP}
 		}
 	}
 	flags := os.O_APPEND | os.O_WRONLY | os.O_CREATE

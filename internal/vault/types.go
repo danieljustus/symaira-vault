@@ -38,23 +38,23 @@ func AllSecretTypes() []SecretType {
 // SecretTypeFromString parses a secret type from string, defaulting to custom.
 func SecretTypeFromString(s string) SecretType {
 	switch strings.ToLower(s) {
-	case "api_key":
+	case string(SecretTypeAPIKey):
 		return SecretTypeAPIKey
-	case "bearer_token":
+	case string(SecretTypeBearerToken):
 		return SecretTypeBearerToken
-	case "basic_auth":
+	case string(SecretTypeBasicAuth):
 		return SecretTypeBasicAuth
-	case "ssh_key":
+	case string(SecretTypeSSHKey):
 		return SecretTypeSSHKey
 	case string(SecretTypePassword):
 		return SecretTypePassword
-	case "certificate":
+	case string(SecretTypeCertificate):
 		return SecretTypeCertificate
-	case "database_url":
+	case string(SecretTypeDatabaseURL):
 		return SecretTypeDatabaseURL
-	case "totp_seed":
+	case string(SecretTypeTOTPSeed):
 		return SecretTypeTOTPSeed
-	case "custom":
+	case string(SecretTypeCustom):
 		return SecretTypeCustom
 	default:
 		return SecretTypeCustom
@@ -64,8 +64,8 @@ func SecretTypeFromString(s string) SecretType {
 // IsValidSecretType checks if the given string is a valid secret type.
 func IsValidSecretType(s string) bool {
 	switch strings.ToLower(s) {
-	case "api_key", "bearer_token", "basic_auth", "ssh_key",
-		string(SecretTypePassword), "certificate", "database_url", "totp_seed", "custom":
+	case string(SecretTypeAPIKey), string(SecretTypeBearerToken), string(SecretTypeBasicAuth), string(SecretTypeSSHKey),
+		string(SecretTypePassword), string(SecretTypeCertificate), string(SecretTypeDatabaseURL), string(SecretTypeTOTPSeed), string(SecretTypeCustom):
 		return true
 	}
 	return false
