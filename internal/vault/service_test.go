@@ -88,7 +88,7 @@ func (f *fakeOperationService) ListEntryInfos(_ *Vault, _ string, _ int) ([]List
 func (f *fakeOperationService) FindEntries(_ *Vault, _ string, _ FindOptions) ([]Match, error) {
 	return nil, nil
 }
-func (f *fakeOperationService) VaultDir(_ *Vault) string { return "" }
+func (f *fakeOperationService) VaultDir(_ *Vault) string                   { return "" }
 func (f *fakeOperationService) VaultIdentity(_ *Vault) *age.X25519Identity { return nil }
 
 // --- ValidateFieldLengths ---
@@ -995,10 +995,10 @@ func TestNewVaultService_KeepsCustomOps(t *testing.T) {
 
 func TestValidateFieldLengths_MapWithNonStringNonMapValues(t *testing.T) {
 	data := map[string]any{
-		"ints":    12345,
-		"floats":  3.14,
+		"ints":     12345,
+		"floats":   3.14,
 		"booleans": true,
-		"nilval":  nil,
+		"nilval":   nil,
 	}
 	if err := ValidateFieldLengths(data); err != nil {
 		t.Errorf("ValidateFieldLengths() error = %v, want nil", err)
