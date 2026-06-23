@@ -1705,3 +1705,531 @@ func TestTokenRegistry_EncryptedAtRest(t *testing.T) {
 		t.Fatal("Load() with wrong identity should fail")
 	}
 }
+
+func TestIsRefreshExpired_NilToken(t *testing.T) {
+	var tok *ScopedToken
+	if !tok.IsRefreshExpired() {
+		t.Error("nil token should be considered refresh-expired")
+	}
+}
+
+func TestIsRefreshExpired_NoExpiry(t *testing.T) {
+	tok := &ScopedToken{TokenData: TokenData{
+		RefreshExpiresAt: nil,
+	}}
+	if tok.IsRefreshExpired() {
+		t.Error("nil RefreshExpiresAt should not be expired")
+	}
+}
+
+func TestIsRefreshExpired_Expired(t *testing.T) {
+	past := time.Now().UTC().Add(-1 * time.Hour)
+	tok := &ScopedToken{TokenData: TokenData{
+		RefreshExpiresAt: &past,
+	}}
+	if !tok.IsRefreshExpired() {
+		t.Error("past RefreshExpiresAt should be expired")
+	}
+}
+
+func TestIsRefreshExpired_NotExpired(t *testing.T) {
+	future := time.Now().UTC().Add(1 * time.Hour)
+	tok := &ScopedToken{TokenData: TokenData{
+		RefreshExpiresAt: &future,
+	}}
+	if tok.IsRefreshExpired() {
+		t.Error("future RefreshExpiresAt should not be expired")
+	}
+}
+
+func TestGetByRefreshTokenHash_Found(t *testing.T) {
+	dir := t.TempDir()
+	reg := NewTokenRegistry(filepath.Join(dir, "tokens.json"))
+
+	_, rawAccess, rawRefresh, err := reg.CreateWithRefresh("test", []string{"get_entry"}, "agent", 1*time.Hour, 1*time.Hour)
+	if err != nil {
+		t.Fatalf("CreateWithRefresh() error = %v", err)
+	}
+	_ = rawAccess
+
+	refreshHash := sha256Hex(rawRefresh)
+	tok := reg.getByRefreshTokenHash(refreshHash)
+	if tok == nil {
+		t.Fatal("getByRefreshTokenHash should find valid entry")
+	}
+	if tok.RefreshTokenHash != refreshHash {
+		t.Errorf("returned token RefreshTokenHash = %q, want %q", tok.RefreshTokenHash, refreshHash)
+	}
+}
+
+func TestGetByRefreshTokenHash_NotFound(t *testing.T) {
+	dir := t.TempDir()
+	reg := NewTokenRegistry(filepath.Join(dir, "tokens.json"))
+
+	if _, _, _, err := reg.CreateWithRefresh("test", []string{"*"}, "agent", 1*time.Hour, 1*time.Hour); err != nil {
+		t.Fatalf("CreateWithRefresh() error = %v", err)
+	}
+
+	tok := reg.getByRefreshTokenHash("nonexistent-hash")
+	if tok != nil {
+		t.Error("getByRefreshTokenHash should return nil for unknown hash")
+	}
+}
+
+func TestGetByRefreshTokenHash_RevokedEntry(t *testing.T) {
+	dir := t.TempDir()
+	reg := NewTokenRegistry(filepath.Join(dir, "tokens.json"))
+
+	tok, _, rawRefresh, err := reg.CreateWithRefresh("test", []string{"*"}, "agent", 1*time.Hour, 1*time.Hour)
+	if err != nil {
+		t.Fatalf("CreateWithRefresh() error = %v", err)
+	}
+
+	if !reg.Revoke(tok.ID) {
+		t.Fatal("Revoke() failed")
+	}
+
+	refreshHash := sha256Hex(rawRefresh)
+	found := reg.getByRefreshTokenHash(refreshHash)
+	if found != nil {
+		t.Error("getByRefreshTokenHash should return nil for revoked entry")
+	}
+}
+
+func TestGetByRefreshTokenHash_ExpiredAccessToken(t *testing.T) {
+	dir := t.TempDir()
+	reg := NewTokenRegistry(filepath.Join(dir, "tokens.json"))
+
+	_, _, rawRefresh, err := reg.CreateWithRefresh("test", []string{"*"}, "agent", 1*time.Nanosecond, 1*time.Hour)
+	if err != nil {
+		t.Fatalf("CreateWithRefresh() error = %v", err)
+	}
+
+	time.Sleep(5 * time.Millisecond)
+
+	refreshHash := sha256Hex(rawRefresh)
+	found := reg.getByRefreshTokenHash(refreshHash)
+	if found != nil {
+		t.Error("getByRefreshTokenHash should return nil when access token is expired")
+	}
+}
+
+func TestCreateWithRefresh_Roundtrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mcp-tokens.json")
+	reg := NewTokenRegistry(path)
+
+	tok, rawAccess, rawRefresh, err := reg.CreateWithRefresh(
+		"roundtrip-test", []string{"get_entry", "list_entries"}, "test-agent", 1*time.Hour, 24*time.Hour,
+	)
+	if err != nil {
+		t.Fatalf("CreateWithRefresh() error = %v", err)
+	}
+	if len(rawAccess) != 64 {
+		t.Errorf("raw access token length = %d, want 64", len(rawAccess))
+	}
+	if len(rawRefresh) != 64 {
+		t.Errorf("raw refresh token length = %d, want 64", len(rawRefresh))
+	}
+	if rawAccess == rawRefresh {
+		t.Error("access and refresh tokens should differ")
+	}
+
+	accessHash := sha256Hex(rawAccess)
+	got, ok := reg.Get(accessHash)
+	if !ok {
+		t.Fatal("Get() should find access token")
+	}
+	if got.ID != tok.ID {
+		t.Errorf("token ID = %q, want %q", got.ID, tok.ID)
+	}
+	if got.RefreshTokenHash == "" {
+		t.Error("RefreshTokenHash should be set")
+	}
+	if got.RefreshExpiresAt == nil {
+		t.Error("RefreshExpiresAt should be set")
+	}
+
+	if got.RefreshTokenHash != sha256Hex(rawRefresh) {
+		t.Errorf("RefreshTokenHash mismatch: got %q, want %q", got.RefreshTokenHash, sha256Hex(rawRefresh))
+	}
+
+	if got.ExpiresAt == nil {
+		t.Fatal("ExpiresAt should be set")
+	}
+	if got.ExpiresAt.Before(time.Now().UTC()) {
+		t.Error("ExpiresAt should be in the future")
+	}
+	if got.RefreshExpiresAt.Before(time.Now().UTC()) {
+		t.Error("RefreshExpiresAt should be in the future")
+	}
+
+	reg2 := NewTokenRegistry(path)
+	if err := reg2.Load(); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	got2, ok2 := reg2.Get(accessHash)
+	if !ok2 {
+		t.Fatal("loaded registry should contain access token")
+	}
+	if got2.Label != "roundtrip-test" {
+		t.Errorf("loaded label = %q, want roundtrip-test", got2.Label)
+	}
+	if got2.AgentName != "test-agent" {
+		t.Errorf("loaded agent = %q, want test-agent", got2.AgentName)
+	}
+}
+
+func TestCreateWithRefresh_ZeroTTL(t *testing.T) {
+	dir := t.TempDir()
+	reg := NewTokenRegistry(filepath.Join(dir, "tokens.json"))
+
+	tok, _, _, err := reg.CreateWithRefresh("no-expiry", []string{"*"}, "", 0, 0)
+	if err != nil {
+		t.Fatalf("CreateWithRefresh() error = %v", err)
+	}
+	if tok.ExpiresAt != nil {
+		t.Error("zero access TTL should produce nil ExpiresAt")
+	}
+	if tok.RefreshExpiresAt != nil {
+		t.Error("zero refresh TTL should produce nil RefreshExpiresAt")
+	}
+	if tok.IsExpired() {
+		t.Error("token with nil ExpiresAt should not be expired")
+	}
+	if tok.IsRefreshExpired() {
+		t.Error("token with nil RefreshExpiresAt should not be refresh-expired")
+	}
+}
+
+func TestCreateWithRefresh_NilAllowedTools(t *testing.T) {
+	dir := t.TempDir()
+	reg := NewTokenRegistry(filepath.Join(dir, "tokens.json"))
+
+	tok, _, _, err := reg.CreateWithRefresh("nil-tools", nil, "", 0, 0)
+	if err != nil {
+		t.Fatalf("CreateWithRefresh() error = %v", err)
+	}
+	if tok.AllowedTools == nil {
+		t.Error("AllowedTools should be non-nil empty slice, not nil")
+	}
+	if len(tok.AllowedTools) != 0 {
+		t.Errorf("AllowedTools length = %d, want 0", len(tok.AllowedTools))
+	}
+}
+
+func TestCreateWithRefresh_RandError_AccessToken(t *testing.T) {
+	dir := t.TempDir()
+	reg := NewTokenRegistry(filepath.Join(dir, "tokens.json"))
+
+	oldReader := randReader
+	randReader = &errorReader{}
+	defer func() { randReader = oldReader }()
+
+	tok, _, _, err := reg.CreateWithRefresh("test", []string{"*"}, "", 1*time.Hour, 1*time.Hour)
+	if err == nil {
+		t.Fatal("CreateWithRefresh() should error on rand failure for access token")
+	}
+	_ = tok
+}
+
+func TestCreateWithRefresh_RandError_RefreshToken(t *testing.T) {
+	dir := t.TempDir()
+	reg := NewTokenRegistry(filepath.Join(dir, "tokens.json"))
+
+	oldReader := randReader
+	randReader = &sequenceReader{
+		stages: []readerStage{
+			{err: nil},
+			{err: fmt.Errorf("rand failure")},
+		},
+	}
+	defer func() { randReader = oldReader }()
+
+	tok, _, _, err := reg.CreateWithRefresh("test", []string{"*"}, "", 1*time.Hour, 1*time.Hour)
+	if err == nil {
+		t.Fatal("CreateWithRefresh() should error on rand failure for refresh token")
+	}
+	_ = tok
+}
+
+func TestCreateWithRefresh_WriteError(t *testing.T) {
+	path := filepath.Join("/nonexistent-registry-dir-symvault-test", "tokens.json")
+	reg := NewTokenRegistry(path)
+
+	tok, _, _, err := reg.CreateWithRefresh("test", []string{"*"}, "", 1*time.Hour, 1*time.Hour)
+	if err == nil {
+		t.Fatal("CreateWithRefresh() should error on write failure")
+	}
+	_ = tok
+}
+
+func TestRotateViaRefreshToken_HappyPath(t *testing.T) {
+	dir := t.TempDir()
+	reg := NewTokenRegistry(filepath.Join(dir, "tokens.json"))
+
+	tok, rawAccess, rawRefresh, err := reg.CreateWithRefresh(
+		"rotate-me", []string{"get_entry"}, "agent", 1*time.Hour, 24*time.Hour,
+	)
+	if err != nil {
+		t.Fatalf("CreateWithRefresh() error = %v", err)
+	}
+
+	oldAccessHash := sha256Hex(rawAccess)
+
+	if _, ok := reg.Get(oldAccessHash); !ok {
+		t.Fatal("old access token should be valid before rotation")
+	}
+
+	newTok, newRawAccess, newRawRefresh, err := reg.RotateViaRefreshToken(rawRefresh)
+	if err != nil {
+		t.Fatalf("RotateViaRefreshToken() error = %v", err)
+	}
+	if newRawAccess == rawAccess {
+		t.Error("new access token should differ from old")
+	}
+	if newRawRefresh == rawRefresh {
+		t.Error("new refresh token should differ from old")
+	}
+	if newTok.ID == tok.ID {
+		t.Error("new token should have different ID")
+	}
+
+	if _, ok := reg.Get(oldAccessHash); ok {
+		t.Error("old access token should be revoked after rotation")
+	}
+
+	reg.mu.RLock()
+	oldEntry := reg.entries[oldAccessHash]
+	reg.mu.RUnlock()
+	if oldEntry == nil {
+		t.Fatal("old entry should still be in registry (for audit trail)")
+	}
+	if !oldEntry.Revoked {
+		t.Error("old entry should be marked Revoked=true")
+	}
+	if oldEntry.RevokedAt == nil {
+		t.Error("old entry should have RevokedAt set")
+	}
+
+	newAccessHash := sha256Hex(newRawAccess)
+	got, ok := reg.Get(newAccessHash)
+	if !ok {
+		t.Fatal("new access token should be valid")
+	}
+	if got.ID != newTok.ID {
+		t.Errorf("new token ID mismatch: got %q, want %q", got.ID, newTok.ID)
+	}
+	if got.Label != "rotate-me" {
+		t.Errorf("label not preserved: got %q, want rotate-me", got.Label)
+	}
+	if !got.IsToolAllowed("get_entry") {
+		t.Error("allowed tools not preserved")
+	}
+	if got.AgentName != "agent" {
+		t.Errorf("agent name not preserved: got %q, want agent", got.AgentName)
+	}
+
+	if _, _, _, err := reg.RotateViaRefreshToken(rawRefresh); err == nil {
+		t.Error("rotating with old refresh token should fail (single-use)")
+	}
+}
+
+func TestRotateViaRefreshToken_InvalidRefreshToken(t *testing.T) {
+	dir := t.TempDir()
+	reg := NewTokenRegistry(filepath.Join(dir, "tokens.json"))
+
+	if _, _, _, err := reg.CreateWithRefresh("test", []string{"*"}, "", 1*time.Hour, 1*time.Hour); err != nil {
+		t.Fatalf("CreateWithRefresh() error = %v", err)
+	}
+
+	_, _, tok, err := reg.RotateViaRefreshToken("totally-fake-refresh-token")
+	_ = tok
+	if err == nil {
+		t.Fatal("RotateViaRefreshToken() should error for invalid refresh token")
+	}
+	if !strings.Contains(err.Error(), "invalid refresh token") {
+		t.Errorf("error = %q, want 'invalid refresh token'", err.Error())
+	}
+}
+
+func TestRotateViaRefreshToken_EmptyRegistry(t *testing.T) {
+	dir := t.TempDir()
+	reg := NewTokenRegistry(filepath.Join(dir, "tokens.json"))
+
+	_, _, tok, err := reg.RotateViaRefreshToken("any-token")
+	_ = tok
+	if err == nil {
+		t.Fatal("RotateViaRefreshToken() should error on empty registry")
+	}
+}
+
+func TestRotateViaRefreshToken_ExpiredRefreshToken(t *testing.T) {
+	dir := t.TempDir()
+	reg := NewTokenRegistry(filepath.Join(dir, "tokens.json"))
+
+	_, rawAccess, rawRefresh, err := reg.CreateWithRefresh(
+		"exp-refresh", []string{"*"}, "agent", 1*time.Hour, 1*time.Nanosecond,
+	)
+	if err != nil {
+		t.Fatalf("CreateWithRefresh() error = %v", err)
+	}
+	_ = rawAccess
+
+	time.Sleep(5 * time.Millisecond)
+
+	_, _, tok, err := reg.RotateViaRefreshToken(rawRefresh)
+	_ = tok
+	if err == nil {
+		t.Fatal("RotateViaRefreshToken() should error for expired refresh token")
+	}
+	if !strings.Contains(err.Error(), "expired") {
+		t.Errorf("error = %q, want 'expired'", err.Error())
+	}
+
+	accessHash := sha256Hex(rawAccess)
+	if _, ok := reg.Get(accessHash); !ok {
+		t.Error("original access token should still be valid after failed rotation")
+	}
+}
+
+func TestRotateViaRefreshToken_RevokedEntry(t *testing.T) {
+	dir := t.TempDir()
+	reg := NewTokenRegistry(filepath.Join(dir, "tokens.json"))
+
+	tok, _, rawRefresh, err := reg.CreateWithRefresh(
+		"revoke-then-rotate", []string{"*"}, "agent", 1*time.Hour, 1*time.Hour,
+	)
+	if err != nil {
+		t.Fatalf("CreateWithRefresh() error = %v", err)
+	}
+
+	// Revoke the token.
+	if !reg.Revoke(tok.ID) {
+		t.Fatal("Revoke() failed")
+	}
+
+	_, newAccess, newRefresh, err := reg.RotateViaRefreshToken(rawRefresh)
+	_ = newAccess
+	_ = newRefresh
+	if err == nil {
+		t.Fatal("RotateViaRefreshToken() should error for revoked entry")
+	}
+	if !strings.Contains(err.Error(), "invalid refresh token") {
+		t.Errorf("error = %q, want 'invalid refresh token'", err.Error())
+	}
+}
+
+func TestRotateViaRefreshToken_PreservesMetadata(t *testing.T) {
+	dir := t.TempDir()
+	reg := NewTokenRegistry(filepath.Join(dir, "tokens.json"))
+
+	tools := []string{"get_entry", "list_entries", "find_entries"}
+	_, _, rawRefresh, err := reg.CreateWithRefresh(
+		"meta-test", tools, "hermes-agent", 1*time.Hour, 24*time.Hour,
+	)
+	if err != nil {
+		t.Fatalf("CreateWithRefresh() error = %v", err)
+	}
+
+	newTok, _, _, err := reg.RotateViaRefreshToken(rawRefresh)
+	if err != nil {
+		t.Fatalf("RotateViaRefreshToken() error = %v", err)
+	}
+
+	if newTok.Label != "meta-test" {
+		t.Errorf("label = %q, want meta-test", newTok.Label)
+	}
+	if newTok.AgentName != "hermes-agent" {
+		t.Errorf("agent = %q, want hermes-agent", newTok.AgentName)
+	}
+	if len(newTok.AllowedTools) != len(tools) {
+		t.Fatalf("tools count = %d, want %d", len(newTok.AllowedTools), len(tools))
+	}
+	for i, tool := range tools {
+		if newTok.AllowedTools[i] != tool {
+			t.Errorf("tool[%d] = %q, want %q", i, newTok.AllowedTools[i], tool)
+		}
+	}
+}
+
+func TestRotateViaRefreshToken_ZeroTTL(t *testing.T) {
+	dir := t.TempDir()
+	reg := NewTokenRegistry(filepath.Join(dir, "tokens.json"))
+
+	_, _, rawRefresh, err := reg.CreateWithRefresh("no-expiry", []string{"*"}, "", 0, 0)
+	if err != nil {
+		t.Fatalf("CreateWithRefresh() error = %v", err)
+	}
+
+	newTok, _, _, err := reg.RotateViaRefreshToken(rawRefresh)
+	if err != nil {
+		t.Fatalf("RotateViaRefreshToken() error = %v", err)
+	}
+
+	if newTok.ExpiresAt != nil {
+		t.Error("rotated token with zero TTL should have nil ExpiresAt")
+	}
+	if newTok.RefreshExpiresAt != nil {
+		t.Error("rotated token with zero TTL should have nil RefreshExpiresAt")
+	}
+}
+
+func TestRotateViaRefreshToken_NegativeTTLCapsToZero(t *testing.T) {
+	dir := t.TempDir()
+
+	reg := NewTokenRegistry(filepath.Join(dir, "tokens.json"))
+	_, _, rawRefresh, err := reg.CreateWithRefresh("pos-ttl", []string{"*"}, "", 1*time.Hour, 1*time.Hour)
+	if err != nil {
+		t.Fatalf("CreateWithRefresh() error = %v", err)
+	}
+	newTok, _, _, err := reg.RotateViaRefreshToken(rawRefresh)
+	if err != nil {
+		t.Fatalf("RotateViaRefreshToken() should succeed with positive TTLs: %v", err)
+	}
+	if newTok.ExpiresAt == nil {
+		t.Error("rotated token should have ExpiresAt set")
+	}
+	if newTok.RefreshExpiresAt == nil {
+		t.Error("rotated token should have RefreshExpiresAt set")
+	}
+}
+
+func TestRotateViaRefreshToken_OnlyOneRefreshUse(t *testing.T) {
+	dir := t.TempDir()
+	reg := NewTokenRegistry(filepath.Join(dir, "tokens.json"))
+
+	_, _, rawRefresh, err := reg.CreateWithRefresh("single-use", []string{"*"}, "", 1*time.Hour, 1*time.Hour)
+	if err != nil {
+		t.Fatalf("CreateWithRefresh() error = %v", err)
+	}
+
+	if _, _, _, err := reg.RotateViaRefreshToken(rawRefresh); err != nil {
+		t.Fatalf("first RotateViaRefreshToken() error = %v", err)
+	}
+
+	if _, _, _, err := reg.RotateViaRefreshToken(rawRefresh); err == nil {
+		t.Error("second rotation with same refresh token should fail")
+	}
+}
+
+type readerStage struct {
+	err error
+}
+
+type sequenceReader struct {
+	stages []readerStage
+	idx    int
+}
+
+func (r *sequenceReader) Read(p []byte) (int, error) {
+	if r.idx >= len(r.stages) {
+		return 0, fmt.Errorf("sequenceReader: no more stages")
+	}
+	stage := r.stages[r.idx]
+	r.idx++
+	if stage.err != nil {
+		return 0, stage.err
+	}
+	return len(p), nil
+}
