@@ -530,14 +530,27 @@ func handleOAuthAuthorize(store *oauthCodeStore, clientStore *oauthClientStore) 
 
 		// Require explicit user consent via TTY prompt.
 		// Without this, any local process can silently mint tokens (see #21).
+		// Check TTY presence first to avoid false "denied" when TTY exists but is non-interactive.
+		if !server.IsTTYPresent() {
+			renderConsentPage(w, consentPageData{
+				ClientID:            clientID,
+				RedirectURI:         redirectURI,
+				State:               state,
+				CodeChallenge:       codeChallenge,
+				CodeChallengeMethod: challengeMethod,
+			})
+			return
+		}
+
 		result := server.RequestApproval(server.ApprovalRequest{
 			Operation: "OAuth Authorization Request",
 			Details:   fmt.Sprintf("Client %q requests vault access\n  Redirect URI: %s", clientID, redirectURI),
 			Timeout:   60 * time.Second,
 		})
 		if !result.Approved {
-			if result.Error != nil && strings.Contains(result.Error.Error(), "no TTY available") {
-				// Daemon mode: render browser-based consent page with passphrase challenge.
+			// Render consent page for any TTY-related failure (no TTY, raw-mode error,
+			// write/read failure, timeout). Only hard-deny when the user explicitly refused.
+			if result.Error != nil && isTTYError(result.Error) {
 				renderConsentPage(w, consentPageData{
 					ClientID:            clientID,
 					RedirectURI:         redirectURI,
@@ -556,6 +569,15 @@ func handleOAuthAuthorize(store *oauthCodeStore, clientStore *oauthClientStore) 
 
 		issueAuthCode(w, r, store, clientID, redirectURI, state, codeChallenge, challengeMethod)
 	}
+}
+
+func isTTYError(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "no TTY available") ||
+		strings.Contains(msg, "terminal raw mode") ||
+		strings.Contains(msg, "failed to write to terminal") ||
+		strings.Contains(msg, "failed to read from terminal") ||
+		strings.Contains(msg, "approval timed out")
 }
 
 // renderConsentPage renders the HTML consent page for daemon-mode OAuth approval.
