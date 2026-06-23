@@ -8,6 +8,8 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/vault/taint"
 )
 
+const defaultTOTPAlgorithm = "SHA1"
+
 // Entry represents a vault entry with flexible data storage using map[string]any.
 type Entry struct {
 	Path           string               `json:"path,omitempty"`
@@ -103,7 +105,7 @@ func ExtractTOTP(data map[string]any) (secret, algorithm string, digits, period 
 	if !ok || secretVal == "" {
 		return "", "", 0, 0, false
 	}
-	algorithm = "SHA1"
+	algorithm = defaultTOTPAlgorithm
 	if v, ok := totpData["algorithm"].(string); ok && v != "" {
 		algorithm = v
 	}
