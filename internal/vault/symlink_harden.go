@@ -17,10 +17,10 @@ import (
 func SafeWriteFile(path string, data []byte, perm os.FileMode) error {
 	if info, err := os.Lstat(path); err == nil {
 		if info.Mode()&os.ModeSymlink != 0 {
-			return &os.PathError{Op: "open", Path: path, Err: syscall.ELOOP}
+			return &os.PathError{Op: errOpOpen, Path: path, Err: syscall.ELOOP}
 		}
 		if !info.Mode().IsRegular() {
-			return &os.PathError{Op: "open", Path: path, Err: syscall.ENOTDIR}
+			return &os.PathError{Op: errOpOpen, Path: path, Err: syscall.ENOTDIR}
 		}
 	} else if !os.IsNotExist(err) {
 		return &os.PathError{Op: "lstat", Path: path, Err: err}
@@ -35,10 +35,10 @@ func SafeWriteFile(path string, data []byte, perm os.FileMode) error {
 func SafeReadFile(path string) ([]byte, error) {
 	if info, err := os.Lstat(path); err == nil {
 		if info.Mode()&os.ModeSymlink != 0 {
-			return nil, &os.PathError{Op: "open", Path: path, Err: syscall.ELOOP}
+			return nil, &os.PathError{Op: errOpOpen, Path: path, Err: syscall.ELOOP}
 		}
 		if !info.Mode().IsRegular() {
-			return nil, &os.PathError{Op: "open", Path: path, Err: syscall.ENOTDIR}
+			return nil, &os.PathError{Op: errOpOpen, Path: path, Err: syscall.ENOTDIR}
 		}
 	} else if !os.IsNotExist(err) {
 		return nil, &os.PathError{Op: "lstat", Path: path, Err: err}

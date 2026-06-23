@@ -15,7 +15,10 @@ import (
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 )
 
-const MaxFieldLength = 4096
+const (
+	MaxFieldLength = 4096
+	actionCreate   = "create"
+)
 
 type ListEntryInfo struct {
 	Path       string `json:"path"`
@@ -156,7 +159,7 @@ func (DefaultOperationService) UpsertEntry(v *Vault, path string, data map[strin
 			return errorspkg.WriteFailed(err, "cannot update entry %s: %v", path, err)
 		}
 	case errors.Is(readErr, os.ErrNotExist):
-		createAction := "create"
+		createAction := actionCreate
 		if provenance != nil && provenance.Action != "" {
 			createAction = provenance.Action
 		} else if action != "" {
