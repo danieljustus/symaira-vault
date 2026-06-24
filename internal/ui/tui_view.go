@@ -10,6 +10,7 @@ import (
 	render "github.com/danieljustus/symaira-vault/internal/ui/render"
 	theme "github.com/danieljustus/symaira-vault/internal/ui/theme"
 	taint "github.com/danieljustus/symaira-vault/internal/vault/taint"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func (m TUIModel) View() string {
@@ -95,11 +96,25 @@ func (m TUIModel) leftView(width, height int) string {
 		start = m.selected - listHeight + 1
 	}
 	end := min(len(m.filtered), start+listHeight)
+	grouped := m.sortMode == 4 || m.sortMode == 5
+	var lastType vaultpkg.SecretType
 	for i := start; i < end; i++ {
+		if grouped {
+			currentType := m.secretTypeCache[m.filtered[i]]
+			if currentType != lastType {
+				header := fmt.Sprintf("  %s %s (%d)", vaultpkg.SecretTypeIcon(currentType), currentType, m.typeCount(currentType))
+				b.WriteString(theme.MutedStyle.Render(header))
+				b.WriteString("\n")
+				lastType = currentType
+			}
+		}
 		safePath := render.ForTerminal(taint.Wrap(m.filtered[i], taint.Provenance{Source: "ui.path"}))
 		line := truncate(safePath, width-4)
 		if i == m.selected {
 			line = theme.SelectedStyle.Width(width - 4).Render(line)
+		}
+		if grouped {
+			b.WriteString("  ")
 		}
 		b.WriteString(line)
 		b.WriteString("\n")
@@ -165,7 +180,7 @@ func (m TUIModel) helpView() string {
 		theme.TitleStyle.Render("Help"),
 		"\u2191/\u2193 or k/j: move selection",
 		"/: fuzzy filter entries",
-		"s: cycle sort (name/updated, asc/desc)",
+		"s: cycle sort (name/updated/type, asc/desc)",
 		"t: filter by tag",
 		"a: add a new entry",
 		"Enter: copy password field to clipboard",

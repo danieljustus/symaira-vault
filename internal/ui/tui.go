@@ -128,6 +128,7 @@ type TUIModel struct {
 	sortMode  int
 	filterTag string
 	metaCache map[string]vaultpkg.EntryMetadata
+	secretTypeCache map[string]vaultpkg.SecretType
 
 	width  int
 	height int
