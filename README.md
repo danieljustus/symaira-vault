@@ -119,8 +119,8 @@ symvault auth status
 symvault auth set touchid      # macOS Touch ID unlock
 symvault auth set passphrase   # passphrase-only unlock
 
-# Interactive Terminal UI (Experimental)
-symvault ui --experimental
+# Interactive Terminal UI
+symvault ui
 
 # Recipients for multi-user vaults
 symvault recipients list

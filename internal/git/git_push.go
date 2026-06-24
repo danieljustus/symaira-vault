@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -33,13 +34,31 @@ func getSSHAuth() (*ssh.PublicKeysCallback, error) {
 	return auth, nil
 }
 
+func systemGitAvailable() bool {
+	_, err := exec.LookPath("git")
+	return err == nil
+}
+
+func pushWithSystemGit(vaultDir string) error {
+	var stderr strings.Builder
+	cmd := exec.Command("git", "-C", vaultDir, "push", "origin", "HEAD")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = &stderr
+	cmd.Stdin = os.Stdin
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("system git push failed: %w (%s)", err, strings.TrimSpace(stderr.String()))
+	}
+	return nil
+}
+
 func pushWithSSHAuth(repo *gogit.Repository, remoteURL string) error {
 	opts := &gogit.PushOptions{RemoteName: "origin"}
 	if isSSHURL(remoteURL) {
 		auth, err := getSSHAuth()
-		if err == nil {
-			opts.Auth = auth
+		if err != nil {
+			return err
 		}
+		opts.Auth = auth
 	}
 	return repo.Push(opts)
 }
@@ -78,7 +97,27 @@ func PushWithResult(vaultDir string) PushResult {
 		return result
 	}
 
-	err = pushWithSSHAuth(repo, originRemote.Config().URLs[0])
+	remoteURL := originRemote.Config().URLs[0]
+
+	// For SSH remotes, prefer the user's system git/OpenSSH setup so that
+	// ~/.ssh/config, the SSH agent, and known_hosts behave exactly like normal git.
+	if isSSHURL(remoteURL) && systemGitAvailable() {
+		sysErr := pushWithSystemGit(vaultDir)
+		if sysErr == nil {
+			result.Success = true
+			return result
+		}
+		// "Everything up-to-date" is a successful no-op.
+		if strings.Contains(sysErr.Error(), "Everything up-to-date") {
+			result.Success = true
+			result.Skipped = true
+			return result
+		}
+		result.Error = classifyPushError(sysErr)
+		return result
+	}
+
+	err = pushWithSSHAuth(repo, remoteURL)
 	if err == nil {
 		result.Success = true
 		return result

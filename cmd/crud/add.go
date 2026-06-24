@@ -120,14 +120,14 @@ func readStdinValues() error {
 
 	if AddStdinValue {
 		line, err := stdinReader.ReadString('\n')
-		if err != nil {
+		if err != nil && line == "" {
 			return errorspkg.ReadFailed(err, "read --stdin-value")
 		}
 		stdinLines = append(stdinLines, strings.TrimRight(line, "\n\r"))
 	}
 	if AddStdinTOTP {
 		line, err := stdinReader.ReadString('\n')
-		if err != nil {
+		if err != nil && line == "" {
 			return errorspkg.ReadFailed(err, "read --stdin-totp-secret")
 		}
 		stdinLines = append(stdinLines, strings.TrimRight(line, "\n\r"))

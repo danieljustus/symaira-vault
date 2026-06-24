@@ -4,6 +4,7 @@ package ui
 import (
 	"fmt"
 	"os"
+	"sort"
 	"time"
 
 	"github.com/atotto/clipboard"
@@ -404,10 +405,32 @@ func (m TUIModel) copySelectedPassword() tea.Cmd {
 		if err != nil {
 			return copiedMsg{err: fmt.Errorf("read password: %w", err)}
 		}
-		value, ok := entry.Data["password"]
-		if !ok {
-			return copiedMsg{err: fmt.Errorf("password field not found")}
+		fieldName, value := selectCopyField(entry.Data)
+		if fieldName == "" {
+			return copiedMsg{err: fmt.Errorf("no fields found in entry")}
 		}
-		return copyTextMsg(fmt.Sprint(value), fmt.Sprintf("Copied password for %s", path))
+		return copyTextMsg(fmt.Sprint(value), fmt.Sprintf("Copied %s for %s", fieldName, path))
 	}
+}
+
+// selectCopyField chooses the best field to copy from an entry.
+// It prefers common secret field names, then falls back to the first
+// field sorted alphabetically so the choice is deterministic.
+func selectCopyField(data map[string]any) (string, any) {
+	if len(data) == 0 {
+		return "", nil
+	}
+	//nolint:goconst // field names reused across the vault core
+	candidates := []string{string(vaultpkg.SecretTypePassword), "secret", "token", "seed_phrase", string(vaultpkg.SecretTypeAPIKey), "private_key"}
+	for _, name := range candidates {
+		if v, ok := data[name]; ok {
+			return name, v
+		}
+	}
+	names := make([]string, 0, len(data))
+	for name := range data {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names[0], data[names[0]]
 }
