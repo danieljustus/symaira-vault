@@ -4,6 +4,7 @@ package session
 
 import (
 	"context"
+	"os"
 	"testing"
 )
 
@@ -13,6 +14,9 @@ func TestTouchIDAuthenticator_IsAvailable(t *testing.T) {
 }
 
 func TestTouchIDAuthenticator_Authenticate(t *testing.T) {
+	if os.Getenv("SYMVAULT_E2E") == "" {
+		t.Skip("Skipping TouchID authenticate test: set SYMVAULT_E2E=1 to run (triggers real hardware prompt)")
+	}
 	auth := &touchIDAuthenticator{}
 	err := auth.Authenticate(context.Background(), "test")
 	if err == nil {
@@ -26,6 +30,9 @@ func TestTouchIDAvailable_Function(t *testing.T) {
 }
 
 func TestTouchIDAuthenticate_Function(t *testing.T) {
+	if os.Getenv("SYMVAULT_E2E") == "" {
+		t.Skip("Skipping TouchID authenticate function test: set SYMVAULT_E2E=1 to run (triggers real hardware prompt)")
+	}
 	result := touchIDAuthenticate(context.Background(), "test reason")
 	t.Logf("touchIDAuthenticate() = %v", result)
 }
@@ -69,8 +76,9 @@ func TestTouchIDAuthenticator_ImplementsInterface(t *testing.T) {
 	// Test IsAvailable method
 	_ = auth.IsAvailable()
 
-	// Test Authenticate method
-	_ = auth.Authenticate(context.Background(), "test reason")
+	if os.Getenv("SYMVAULT_E2E") != "" {
+		_ = auth.Authenticate(context.Background(), "test reason")
+	}
 
 	// Verify it satisfies BiometricAuthenticator
 	var _ BiometricAuthenticator = auth
