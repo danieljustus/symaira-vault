@@ -200,7 +200,11 @@ func buildEntryData(name string) (map[string]any, vaultpkg.SecretMetadata, func(
 		}
 		cleanup = pwCleanup
 		if AddType == "" {
-			AddType = string(vaultpkg.InferSecretType(name, "", password, ""))
+			// --generate creates a password entry. Do not auto-detect the secret
+			// type from the random value, because it can accidentally match
+			// heuristics for API keys, tokens, etc. and be stored under the
+			// wrong field (e.g., not under "password").
+			AddType = string(vaultpkg.SecretTypePassword)
 		}
 		fieldName := vaultpkg.PrimaryFieldForType(vaultpkg.SecretTypeFromString(AddType))
 		data[fieldName] = password
