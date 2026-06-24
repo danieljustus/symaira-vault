@@ -72,7 +72,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 
 		warnArgvExposure()
 
-		data, secretMeta, cleanup, err := buildEntryData()
+		data, secretMeta, cleanup, err := buildEntryData(name)
 		if err != nil {
 			return err
 		}
@@ -171,7 +171,7 @@ func warnArgvExposure() {
 // It handles five paths: explicit --value, --generate, interactive form,
 // non-interactive stdin, and defaults.
 // The returned cleanup function must be called after the entry is persisted.
-func buildEntryData() (map[string]any, vaultpkg.SecretMetadata, func(), error) {
+func buildEntryData(name string) (map[string]any, vaultpkg.SecretMetadata, func(), error) {
 	data := map[string]any{}
 	var secretMeta vaultpkg.SecretMetadata
 	var cleanup func()
@@ -182,14 +182,15 @@ func buildEntryData() (map[string]any, vaultpkg.SecretMetadata, func(), error) {
 
 	switch {
 	case AddValue != "":
-		data["password"] = AddValue
+		if AddType == "" {
+			AddType = string(vaultpkg.InferSecretType(name, "", AddValue, ""))
+		}
+		fieldName := vaultpkg.PrimaryFieldForType(vaultpkg.SecretTypeFromString(AddType))
+		data[fieldName] = AddValue
 		if !AddForce {
 			if err := cryptopkg.ValidatePasswordStrength(AddValue); err != nil {
 				return nil, secretMeta, nil, err
 			}
-		}
-		if AddType == "" {
-			AddType = string(vaultpkg.DetectSecretType(AddValue))
 		}
 
 	case AddGenerate:
@@ -198,10 +199,11 @@ func buildEntryData() (map[string]any, vaultpkg.SecretMetadata, func(), error) {
 			return nil, secretMeta, nil, errorspkg.Wrap(errorspkg.ExitGeneralError, errorspkg.ErrKindNone, err, "generate password")
 		}
 		cleanup = pwCleanup
-		data["password"] = password
 		if AddType == "" {
-			AddType = string(vaultpkg.SecretTypePassword)
+			AddType = string(vaultpkg.InferSecretType(name, "", password, ""))
 		}
+		fieldName := vaultpkg.PrimaryFieldForType(vaultpkg.SecretTypeFromString(AddType))
+		data[fieldName] = password
 
 	default:
 		fdRaw := os.Stdin.Fd()

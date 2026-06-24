@@ -119,6 +119,113 @@ func TestDetectSecretType(t *testing.T) {
 	}
 }
 
+func TestDetectTypeFromPath(t *testing.T) {
+	tests := []struct {
+		path string
+		want SecretType
+	}{
+		{"minimax/api-key", SecretTypeAPIKey},
+		{"service/apikey", SecretTypeAPIKey},
+		{"copilot/github-token", SecretTypeBearerToken},
+		{"electrum/wallet-seed", SecretTypeTOTPSeed},
+		{"wallet/mnemonic", SecretTypeTOTPSeed},
+		{"server/ssh-access", SecretTypeSSHKey},
+		{"gcp/symaira-vault-pro-db", SecretTypeDatabaseURL},
+		{"db/prod", SecretTypeDatabaseURL},
+		{"tls/cert", SecretTypeCertificate},
+		{"vault/pfx", SecretTypeCertificate},
+		{"personal/password", SecretTypePassword},
+		{"foo/bar", ""},
+	}
+	for _, tt := range tests {
+		got := DetectTypeFromPath(tt.path)
+		if got != tt.want {
+			t.Errorf("DetectTypeFromPath(%q) = %q, want %q", tt.path, got, tt.want)
+		}
+	}
+}
+
+func TestDetectTypeFromFieldName(t *testing.T) {
+	tests := []struct {
+		field string
+		want  SecretType
+	}{
+		{"api_key", SecretTypeAPIKey},
+		{"apikey", SecretTypeAPIKey},
+		{"token", SecretTypeBearerToken},
+		{"access_token", SecretTypeBearerToken},
+		{"bearer_token", SecretTypeBearerToken},
+		{"seed_phrase", SecretTypeTOTPSeed},
+		{"mnemonic", SecretTypeTOTPSeed},
+		{"private_key", SecretTypeSSHKey},
+		{"ssh_key", SecretTypeSSHKey},
+		{"database_url", SecretTypeDatabaseURL},
+		{"connection_string", SecretTypeDatabaseURL},
+		{"cert_pem", SecretTypeCertificate},
+		{"username", ""},
+		{"host", ""},
+		{"port", ""},
+		{"password", ""},
+	}
+	for _, tt := range tests {
+		got := DetectTypeFromFieldName(tt.field)
+		if got != tt.want {
+			t.Errorf("DetectTypeFromFieldName(%q) = %q, want %q", tt.field, got, tt.want)
+		}
+	}
+}
+
+func TestInferSecretType(t *testing.T) {
+	tests := []struct {
+		name         string
+		path         string
+		field        string
+		value        string
+		explicitType string
+		want         SecretType
+	}{
+		{"explicit type wins", "foo/bar", "password", "simple", "api_key", SecretTypeAPIKey},
+		{"value pattern wins over path", "minimax/api-key", "", "AKIA0123456789ABCDEF", "", SecretTypeAPIKey},
+		{"path fallback", "minimax/api-key", "", "simple-value", "", SecretTypeAPIKey},
+		{"field fallback", "foo/bar", "api_key", "simple-value", "", SecretTypeAPIKey},
+		{"path before field", "copilot/token", "api_key", "simple-value", "", SecretTypeBearerToken},
+		{"default password", "foo/bar", "", "simple-value", "", SecretTypePassword},
+		{"seed from path", "electrum/wallet-seed", "", "simple-value", "", SecretTypeTOTPSeed},
+		{"database from path", "gcp/db", "", "simple-value", "", SecretTypeDatabaseURL},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := InferSecretType(tt.path, tt.field, tt.value, tt.explicitType)
+			if got != tt.want {
+				t.Errorf("InferSecretType(%q, %q, %q, %q) = %q, want %q", tt.path, tt.field, tt.value, tt.explicitType, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPrimaryFieldForType(t *testing.T) {
+	tests := []struct {
+		typ  SecretType
+		want string
+	}{
+		{SecretTypeAPIKey, "api_key"},
+		{SecretTypeBearerToken, "token"},
+		{SecretTypeSSHKey, "private_key"},
+		{SecretTypeDatabaseURL, "connection_string"},
+		{SecretTypeCertificate, "cert_pem"},
+		{SecretTypeTOTPSeed, "seed"},
+		{SecretTypeBasicAuth, "basic_auth"},
+		{SecretTypePassword, "password"},
+		{SecretTypeCustom, "password"},
+	}
+	for _, tt := range tests {
+		got := PrimaryFieldForType(tt.typ)
+		if got != tt.want {
+			t.Errorf("PrimaryFieldForType(%q) = %q, want %q", tt.typ, got, tt.want)
+		}
+	}
+}
+
 func TestUsageHintForType(t *testing.T) {
 	tests := []struct {
 		st   SecretType
