@@ -130,7 +130,9 @@ func isSensitiveField(field string) bool {
 		strings.Contains(field, "token") ||
 		strings.Contains(field, "key") ||
 		strings.Contains(field, "otp") ||
-		strings.Contains(field, "pin")
+		strings.Contains(field, "pin") ||
+		strings.Contains(field, "backup") ||
+		strings.Contains(field, "seed")
 }
 
 func truncate(value string, width int) string {

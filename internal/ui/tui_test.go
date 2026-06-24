@@ -244,3 +244,86 @@ func TestLoadEntriesCmdIntegration(t *testing.T) {
 		t.Errorf("expected 'test/entry', got %q", entries[0])
 	}
 }
+
+func TestSelectCopyField(t *testing.T) {
+	tests := []struct {
+		name      string
+		data      map[string]any
+		wantField string
+		wantValue any
+	}{
+		{
+			name:      "password field",
+			data:      map[string]any{"password": "secret"},
+			wantField: "password",
+			wantValue: "secret",
+		},
+		{
+			name:      "seed phrase fallback",
+			data:      map[string]any{"seed_phrase": "word1 word2"},
+			wantField: "seed_phrase",
+			wantValue: "word1 word2",
+		},
+		{
+			name:      "api key fallback",
+			data:      map[string]any{"api_key": "ak-123"},
+			wantField: "api_key",
+			wantValue: "ak-123",
+		},
+		{
+			name:      "first alphabetical fallback",
+			data:      map[string]any{"host": "h", "port": "p", "username": "u"},
+			wantField: "host",
+			wantValue: "h",
+		},
+		{
+			name:      "candidate precedence over alphabetical",
+			data:      map[string]any{"aaa": "x", "password": "y"},
+			wantField: "password",
+			wantValue: "y",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			field, value := selectCopyField(tt.data)
+			if field != tt.wantField {
+				t.Errorf("selectCopyField() field = %q, want %q", field, tt.wantField)
+			}
+			if value != tt.wantValue {
+				t.Errorf("selectCopyField() value = %v, want %v", value, tt.wantValue)
+			}
+		})
+	}
+}
+
+func TestSelectCopyFieldEmpty(t *testing.T) {
+	field, value := selectCopyField(map[string]any{})
+	if field != "" || value != nil {
+		t.Errorf("selectCopyField(empty) = (%q, %v), want (\"\", nil)", field, value)
+	}
+}
+
+func TestIsSensitiveField(t *testing.T) {
+	tests := []struct {
+		field string
+		want  bool
+	}{
+		{"password", true},
+		{"api_key", true},
+		{"seed_phrase", true},
+		{"backup_codes", true},
+		{"token", true},
+		{"host", false},
+		{"port", false},
+		{"username", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.field, func(t *testing.T) {
+			if got := isSensitiveField(tt.field); got != tt.want {
+				t.Errorf("isSensitiveField(%q) = %v, want %v", tt.field, got, tt.want)
+			}
+		})
+	}
+}
