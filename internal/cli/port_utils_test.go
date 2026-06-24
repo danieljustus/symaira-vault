@@ -11,16 +11,25 @@ import (
 )
 
 func TestFindAvailablePort_PreferredAvailable(t *testing.T) {
-	// Pick an unlikely-used high port
-	port, isPreferred, err := FindAvailablePort("127.0.0.1", 49152)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to allocate preferred port: %v", err)
+	}
+	preferredAddr := ln.Addr().(*net.TCPAddr)
+	preferredPort := preferredAddr.Port
+	if err := ln.Close(); err != nil {
+		t.Fatalf("failed to close preferred port probe: %v", err)
+	}
+
+	port, isPreferred, err := FindAvailablePort("127.0.0.1", preferredPort)
 	if err != nil {
 		t.Fatalf("FindAvailablePort() error = %v", err)
 	}
 	if !isPreferred {
 		t.Errorf("expected preferred port, got fallback port %d", port)
 	}
-	if port != 49152 {
-		t.Errorf("port = %d, want 49152", port)
+	if port != preferredPort {
+		t.Errorf("port = %d, want %d", port, preferredPort)
 	}
 }
 
