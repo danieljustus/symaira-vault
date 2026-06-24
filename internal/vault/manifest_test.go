@@ -171,3 +171,171 @@ func keysOf(m map[string]ManifestEntry) []string {
 	}
 	return out
 }
+
+// TestUpdateManifestEntry_CreatesAndUpdates covers UpdateManifestEntry when the
+// manifest does not exist yet and when it updates an existing entry.
+func TestUpdateManifestEntry_CreatesAndUpdates(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: manifest uses cgo age crypto")
+	}
+	vaultDir := t.TempDir()
+	id := testutil.TempIdentity(t)
+	if _, err := InitWithPassphrase(vaultDir, []byte("test-passphrase"), testConfig(vaultDir)); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+
+	entryData := []byte("first-version")
+	if err := UpdateManifestEntry(vaultDir, "alpha", entryData, id); err != nil {
+		t.Fatalf("UpdateManifestEntry first: %v", err)
+	}
+
+	m, err := LoadManifest(vaultDir, id)
+	if err != nil {
+		t.Fatalf("LoadManifest: %v", err)
+	}
+	if _, ok := m.Entries["alpha"]; !ok {
+		t.Fatal("expected alpha entry in manifest after create")
+	}
+	if m.Entries["alpha"].Size != int64(len(entryData)) {
+		t.Errorf("size = %d, want %d", m.Entries["alpha"].Size, len(entryData))
+	}
+
+	updatedData := []byte("second-version-longer")
+	if err := UpdateManifestEntry(vaultDir, "alpha", updatedData, id); err != nil {
+		t.Fatalf("UpdateManifestEntry update: %v", err)
+	}
+
+	m, err = LoadManifest(vaultDir, id)
+	if err != nil {
+		t.Fatalf("LoadManifest after update: %v", err)
+	}
+	if m.Entries["alpha"].Size != int64(len(updatedData)) {
+		t.Errorf("size after update = %d, want %d", m.Entries["alpha"].Size, len(updatedData))
+	}
+}
+
+// TestUpdateManifestEntry_LoadError covers UpdateManifestEntry when the manifest
+// file exists but cannot be decrypted.
+func TestUpdateManifestEntry_LoadError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: manifest uses cgo age crypto")
+	}
+	vaultDir := t.TempDir()
+	id := testutil.TempIdentity(t)
+	if _, err := InitWithPassphrase(vaultDir, []byte("test-passphrase"), testConfig(vaultDir)); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(vaultDir, manifestFileName), []byte("not-valid-age"), 0o600); err != nil {
+		t.Fatalf("write bad manifest: %v", err)
+	}
+
+	if err := UpdateManifestEntry(vaultDir, "alpha", []byte("data"), id); err == nil {
+		t.Fatal("expected error when manifest cannot be loaded")
+	}
+}
+
+// TestRemoveManifestEntry_RemovesExisting covers RemoveManifestEntry deleting an
+// entry and persisting the manifest.
+func TestRemoveManifestEntry_RemovesExisting(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: manifest uses cgo age crypto")
+	}
+	vaultDir := t.TempDir()
+	id := testutil.TempIdentity(t)
+	if _, err := InitWithPassphrase(vaultDir, []byte("test-passphrase"), testConfig(vaultDir)); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+
+	if err := WriteEntry(vaultDir, "alpha", &Entry{Data: map[string]any{"v": "a"}}, id); err != nil {
+		t.Fatalf("write alpha: %v", err)
+	}
+	FlushManifestUpdates()
+
+	if err := RemoveManifestEntry(vaultDir, "alpha", id); err != nil {
+		t.Fatalf("RemoveManifestEntry: %v", err)
+	}
+
+	m, err := LoadManifest(vaultDir, id)
+	if err != nil {
+		t.Fatalf("LoadManifest: %v", err)
+	}
+	if _, ok := m.Entries["alpha"]; ok {
+		t.Fatal("expected alpha entry removed from manifest")
+	}
+}
+
+// TestRemoveManifestEntry_MissingManifestNoOp covers RemoveManifestEntry when no
+// manifest exists yet.
+func TestRemoveManifestEntry_MissingManifestNoOp(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: manifest uses cgo age crypto")
+	}
+	vaultDir := t.TempDir()
+	id := testutil.TempIdentity(t)
+	if _, err := InitWithPassphrase(vaultDir, []byte("test-passphrase"), testConfig(vaultDir)); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	if err := os.RemoveAll(filepath.Join(vaultDir, manifestFileName)); err != nil {
+		t.Fatalf("remove manifest: %v", err)
+	}
+
+	if err := RemoveManifestEntry(vaultDir, "alpha", id); err != nil {
+		t.Fatalf("RemoveManifestEntry on missing manifest: %v", err)
+	}
+}
+
+// TestVerifyManifestIntegrity_OKMissingTamperedUnknown covers the four main
+// integrity verdicts: matching entry, missing file, tampered file, and unknown
+// file on disk.
+func TestVerifyManifestIntegrity_OKMissingTamperedUnknown(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: manifest uses cgo age crypto")
+	}
+	vaultDir := t.TempDir()
+	id := testutil.TempIdentity(t)
+	if _, err := InitWithPassphrase(vaultDir, []byte("test-passphrase"), testConfig(vaultDir)); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+
+	if err := WriteEntry(vaultDir, "alpha", &Entry{Data: map[string]any{"v": "a"}}, id); err != nil {
+		t.Fatalf("write alpha: %v", err)
+	}
+	if err := WriteEntry(vaultDir, "beta", &Entry{Data: map[string]any{"v": "b"}}, id); err != nil {
+		t.Fatalf("write beta: %v", err)
+	}
+	FlushManifestUpdates()
+
+	// Tamper with beta's ciphertext and add an unknown file.
+	betaPath := entryFilePath(vaultDir, "beta")
+	if err := os.WriteFile(betaPath, []byte("tampered"), 0o600); err != nil {
+		t.Fatalf("tamper beta: %v", err)
+	}
+	unknownPath := filepath.Join(vaultDir, entriesDirName, "unknown.age")
+	if err := os.WriteFile(unknownPath, []byte("sneaked-in"), 0o600); err != nil {
+		t.Fatalf("write unknown: %v", err)
+	}
+
+	// Remove alpha's file so it is reported missing.
+	alphaPath := entryFilePath(vaultDir, "alpha")
+	if err := os.Remove(alphaPath); err != nil {
+		t.Fatalf("remove alpha: %v", err)
+	}
+
+	result, err := VerifyManifestIntegrity(vaultDir, id)
+	if err != nil {
+		t.Fatalf("VerifyManifestIntegrity: %v", err)
+	}
+	if result.OK != 0 {
+		t.Errorf("OK = %d, want 0", result.OK)
+	}
+	if len(result.Missing) != 1 || result.Missing[0] != "alpha" {
+		t.Errorf("Missing = %v, want [alpha]", result.Missing)
+	}
+	if len(result.Tampered) != 1 || result.Tampered[0] != "beta" {
+		t.Errorf("Tampered = %v, want [beta]", result.Tampered)
+	}
+	if len(result.Unknown) != 1 || result.Unknown[0] != "unknown.age" {
+		t.Errorf("Unknown = %v, want [unknown.age]", result.Unknown)
+	}
+}
