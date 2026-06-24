@@ -84,12 +84,16 @@ func ReencryptAll(vaultDir string, identity *age.X25519Identity, recipients []*a
 	}()
 
 	var processed int64
+	var firstErr error
 	for result := range resultCh {
 		processed++
 		fmt.Fprintf(os.Stderr, "Re-encrypting %d/%d...\r", processed, atomic.LoadInt64(&fileCount))
-		if result.err != nil {
-			return fmt.Errorf("re-encrypt %s: %w", result.path, result.err)
+		if result.err != nil && firstErr == nil {
+			firstErr = fmt.Errorf("re-encrypt %s: %w", result.path, result.err)
 		}
+	}
+	if firstErr != nil {
+		return firstErr
 	}
 
 	walkErrMu.Lock()
