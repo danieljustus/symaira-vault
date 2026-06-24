@@ -111,6 +111,7 @@ func ReadEntry(vaultDir, path string, identity *age.X25519Identity) (*Entry, err
 	if entry.Data == nil {
 		entry.Data = map[string]any{}
 	}
+	MigrateBackupCodes(&entry)
 	return &entry, nil
 }
 
@@ -172,6 +173,7 @@ func readEntryInner(vaultDir, path string, identity *age.X25519Identity, pseudoK
 	if entry.Data == nil {
 		entry.Data = map[string]any{}
 	}
+	MigrateBackupCodes(&entry)
 	return &entry, nil
 }
 
