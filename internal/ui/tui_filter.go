@@ -56,15 +56,15 @@ func (m TUIModel) tagMatch(entry string) bool {
 }
 
 func (m *TUIModel) sortFiltered() {
-	switch {
-	case m.sortMode == 0 || m.sortMode == 1:
+	switch m.sortMode {
+	case 0, 1:
 		sort.SliceStable(m.filtered, func(i, j int) bool {
 			if m.sortMode == 0 {
 				return m.filtered[i] < m.filtered[j]
 			}
 			return m.filtered[i] > m.filtered[j]
 		})
-	case m.sortMode == 2 || m.sortMode == 3:
+	case 2, 3:
 		m.ensureMetaCache()
 		sort.SliceStable(m.filtered, func(i, j int) bool {
 			mi := m.metaCache[m.filtered[i]]
@@ -156,22 +156,11 @@ func (m TUIModel) availableTags() []string {
 }
 
 func (m TUIModel) sortLabel() string {
-	switch m.sortMode {
-	case 0:
-		return "name\u2191"
-	case 1:
-		return "name\u2193"
-	case 2:
-		return "updated\u2191"
-	case 3:
-		return "updated\u2193"
-	case 4:
-		return "type\u2191"
-	case 5:
-		return "type\u2193"
-	default:
-		return "name\u2191"
+	labels := []string{"name\u2191", "name\u2193", "updated\u2191", "updated\u2193", "type\u2191", "type\u2193"}
+	if m.sortMode >= 0 && m.sortMode < len(labels) {
+		return labels[m.sortMode]
 	}
+	return labels[0]
 }
 
 func fuzzyMatch(query, value string) bool {

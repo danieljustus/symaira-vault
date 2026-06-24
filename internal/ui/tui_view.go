@@ -9,9 +9,11 @@ import (
 
 	render "github.com/danieljustus/symaira-vault/internal/ui/render"
 	theme "github.com/danieljustus/symaira-vault/internal/ui/theme"
-	taint "github.com/danieljustus/symaira-vault/internal/vault/taint"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
+	taint "github.com/danieljustus/symaira-vault/internal/vault/taint"
 )
+
+const uiPathProvenance = "ui.path"
 
 func (m TUIModel) View() string {
 	if m.width == 0 {
@@ -108,7 +110,7 @@ func (m TUIModel) leftView(width, height int) string {
 				lastType = currentType
 			}
 		}
-		safePath := render.ForTerminal(taint.Wrap(m.filtered[i], taint.Provenance{Source: "ui.path"}))
+		safePath := render.ForTerminal(taint.Wrap(m.filtered[i], taint.Provenance{Source: uiPathProvenance}))
 		line := truncate(safePath, width-4)
 		if i == m.selected {
 			line = theme.SelectedStyle.Width(width - 4).Render(line)
@@ -128,11 +130,11 @@ func (m TUIModel) rightView(width, height int) string {
 		return theme.TitleStyle.Render("Details") + "\n\n" + theme.MutedStyle.Render("Select an entry")
 	}
 	if m.entry == nil || m.entryFor != path {
-		safePath := render.ForTerminal(taint.Wrap(path, taint.Provenance{Source: "ui.path"}))
+		safePath := render.ForTerminal(taint.Wrap(path, taint.Provenance{Source: uiPathProvenance}))
 		return theme.TitleStyle.Render(safePath) + "\n\n" + theme.MutedStyle.Render("Loading details...")
 	}
 	var b strings.Builder
-	safePath := render.ForTerminal(taint.Wrap(path, taint.Provenance{Source: "ui.path"}))
+	safePath := render.ForTerminal(taint.Wrap(path, taint.Provenance{Source: uiPathProvenance}))
 	b.WriteString(theme.TitleStyle.Render(safePath))
 	b.WriteString("\n")
 	b.WriteString(theme.MutedStyle.Render("Updated: " + m.entry.Metadata.Updated.Format("2006-01-02 15:04")))
@@ -197,6 +199,6 @@ func (m TUIModel) confirmView() string {
 	if m.mode == modeConfirmEdit {
 		verb = "edit"
 	}
-	safePath := render.ForTerminal(taint.Wrap(m.selectedPath(), taint.Provenance{Source: "ui.path"}))
+	safePath := render.ForTerminal(taint.Wrap(m.selectedPath(), taint.Provenance{Source: uiPathProvenance}))
 	return theme.ErrorStyle.Render(fmt.Sprintf("Confirm %s %s?", verb, safePath)) + "  " + theme.MutedStyle.Render("y/N")
 }

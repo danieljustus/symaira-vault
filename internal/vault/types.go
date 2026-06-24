@@ -159,6 +159,8 @@ func DetectSecretType(value string) SecretType {
 
 // DetectTypeFromPath infers a secret type from the entry path segments.
 // Returns an empty string when no strong signal is present.
+//
+//nolint:goconst // matching against natural language path tokens is clearer as literals
 func DetectTypeFromPath(path string) SecretType {
 	path = strings.ToLower(path)
 	for _, part := range strings.Split(path, "/") {
@@ -169,20 +171,20 @@ func DetectTypeFromPath(path string) SecretType {
 			return SecretTypeAPIKey
 		}
 		for _, seg := range strings.Split(part, "-") {
-			switch {
-			case seg == "apikey":
+			switch seg {
+			case "apikey":
 				return SecretTypeAPIKey
-			case seg == "token":
+			case "token":
 				return SecretTypeBearerToken
-			case seg == "ssh":
+			case "ssh":
 				return SecretTypeSSHKey
-			case seg == "seed", seg == "mnemonic":
+			case "seed", "mnemonic":
 				return SecretTypeTOTPSeed
-			case seg == "database", seg == "db":
+			case "database", "db":
 				return SecretTypeDatabaseURL
-			case seg == "cert", seg == "certificate", seg == "pfx":
+			case "cert", "certificate", "pfx":
 				return SecretTypeCertificate
-			case seg == "password", seg == "pass":
+			case "password", "pass":
 				return SecretTypePassword
 			}
 		}
@@ -192,20 +194,22 @@ func DetectTypeFromPath(path string) SecretType {
 
 // DetectTypeFromFieldName infers a secret type from a data field name.
 // Returns an empty string when the field name is not a strong type signal.
+//
+//nolint:goconst // matching against natural language field names is clearer as literals
 func DetectTypeFromFieldName(field string) SecretType {
 	field = strings.ToLower(strings.TrimSpace(field))
-	switch {
-	case field == "api_key", field == "apikey":
+	switch field {
+	case "api_key", "apikey":
 		return SecretTypeAPIKey
-	case field == "token", field == "access_token", field == "bearer_token":
+	case "token", "access_token", "bearer_token":
 		return SecretTypeBearerToken
-	case field == "seed_phrase", field == "mnemonic":
+	case "seed_phrase", "mnemonic":
 		return SecretTypeTOTPSeed
-	case field == "private_key", field == "ssh_key":
+	case "private_key", "ssh_key":
 		return SecretTypeSSHKey
-	case field == "database_url", field == "connection_string":
+	case "database_url", "connection_string":
 		return SecretTypeDatabaseURL
-	case field == "cert_pem", field == "certificate":
+	case "cert_pem", "certificate":
 		return SecretTypeCertificate
 	default:
 		return ""
@@ -250,7 +254,7 @@ func PrimaryFieldForType(t SecretType) string {
 	case SecretTypeTOTPSeed:
 		return "seed"
 	case SecretTypeBasicAuth:
-		return "basic_auth"
+		return string(SecretTypeBasicAuth)
 	default:
 		return "password"
 	}
