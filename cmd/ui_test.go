@@ -22,4 +22,3 @@ func TestUICommandLaunchWithoutExperimental(t *testing.T) {
 		t.Fatal("expected --experimental flag to be registered on uiCmd")
 	}
 }
-
