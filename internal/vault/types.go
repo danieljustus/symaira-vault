@@ -157,6 +157,109 @@ func DetectSecretType(value string) SecretType {
 	return SecretTypePassword
 }
 
+// DetectTypeFromPath infers a secret type from the entry path segments.
+// Returns an empty string when no strong signal is present.
+//
+//nolint:goconst // matching against natural language path tokens is clearer as literals
+func DetectTypeFromPath(path string) SecretType {
+	path = strings.ToLower(path)
+	for _, part := range strings.Split(path, "/") {
+		// Check full hyphenated tokens first so "api-key" is recognized as a
+		// single API-key signal before being split into "api" and "key".
+		switch part {
+		case "api-key", "apikey":
+			return SecretTypeAPIKey
+		}
+		for _, seg := range strings.Split(part, "-") {
+			switch seg {
+			case "apikey":
+				return SecretTypeAPIKey
+			case "token":
+				return SecretTypeBearerToken
+			case "ssh":
+				return SecretTypeSSHKey
+			case "seed", "mnemonic":
+				return SecretTypeTOTPSeed
+			case "database", "db":
+				return SecretTypeDatabaseURL
+			case "cert", "certificate", "pfx":
+				return SecretTypeCertificate
+			case "password", "pass":
+				return SecretTypePassword
+			}
+		}
+	}
+	return ""
+}
+
+// DetectTypeFromFieldName infers a secret type from a data field name.
+// Returns an empty string when the field name is not a strong type signal.
+//
+//nolint:goconst // matching against natural language field names is clearer as literals
+func DetectTypeFromFieldName(field string) SecretType {
+	field = strings.ToLower(strings.TrimSpace(field))
+	switch field {
+	case "api_key", "apikey":
+		return SecretTypeAPIKey
+	case "token", "access_token", "bearer_token":
+		return SecretTypeBearerToken
+	case "seed_phrase", "mnemonic":
+		return SecretTypeTOTPSeed
+	case "private_key", "ssh_key":
+		return SecretTypeSSHKey
+	case "database_url", "connection_string":
+		return SecretTypeDatabaseURL
+	case "cert_pem", "certificate":
+		return SecretTypeCertificate
+	default:
+		return ""
+	}
+}
+
+// InferSecretType combines explicit type, value pattern, path and field-name
+// signals to choose the most appropriate secret type.
+// The explicitType parameter is the user-provided --type flag; pass an empty
+// string when the caller has not specified a type.
+func InferSecretType(path, fieldName, value, explicitType string) SecretType {
+	if explicitType != "" {
+		return SecretTypeFromString(explicitType)
+	}
+	if t := DetectSecretType(value); t != SecretTypePassword {
+		return t
+	}
+	if t := DetectTypeFromPath(path); t != "" {
+		return t
+	}
+	if t := DetectTypeFromFieldName(fieldName); t != "" {
+		return t
+	}
+	return SecretTypePassword
+}
+
+// PrimaryFieldForType returns the conventional primary data field name for a
+// secret type. This keeps newly-added entries consistent so the TUI and MCP
+// tools can find the secret value without guessing.
+func PrimaryFieldForType(t SecretType) string {
+	switch t {
+	case SecretTypeAPIKey:
+		return "api_key"
+	case SecretTypeBearerToken:
+		return "token"
+	case SecretTypeSSHKey:
+		return "private_key"
+	case SecretTypeDatabaseURL:
+		return "connection_string"
+	case SecretTypeCertificate:
+		return "cert_pem"
+	case SecretTypeTOTPSeed:
+		return "seed"
+	case SecretTypeBasicAuth:
+		return string(SecretTypeBasicAuth)
+	default:
+		return "password"
+	}
+}
+
 // UsageHintForType returns a predefined usage hint for the given secret type.
 func UsageHintForType(t SecretType) string {
 	switch t {

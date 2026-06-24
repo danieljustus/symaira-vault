@@ -56,24 +56,88 @@ func (m TUIModel) tagMatch(entry string) bool {
 }
 
 func (m *TUIModel) sortFiltered() {
-	if m.sortMode == 0 || m.sortMode == 1 {
+	switch m.sortMode {
+	case 0, 1:
 		sort.SliceStable(m.filtered, func(i, j int) bool {
 			if m.sortMode == 0 {
 				return m.filtered[i] < m.filtered[j]
 			}
 			return m.filtered[i] > m.filtered[j]
 		})
-		return
+	case 2, 3:
+		m.ensureMetaCache()
+		sort.SliceStable(m.filtered, func(i, j int) bool {
+			mi := m.metaCache[m.filtered[i]]
+			mj := m.metaCache[m.filtered[j]]
+			if m.sortMode == 2 {
+				return mi.Updated.Before(mj.Updated)
+			}
+			return mi.Updated.After(mj.Updated)
+		})
+	default:
+		m.sortByType(m.sortMode == 5)
 	}
-	m.ensureMetaCache()
-	sort.SliceStable(m.filtered, func(i, j int) bool {
-		mi := m.metaCache[m.filtered[i]]
-		mj := m.metaCache[m.filtered[j]]
-		if m.sortMode == 2 {
-			return mi.Updated.Before(mj.Updated)
+}
+
+func (m *TUIModel) ensureSecretTypeCache() {
+	if m.secretTypeCache == nil {
+		m.secretTypeCache = make(map[string]vaultpkg.SecretType)
+	}
+	for _, path := range m.filtered {
+		if _, ok := m.secretTypeCache[path]; ok {
+			continue
 		}
-		return mi.Updated.After(mj.Updated)
+		entry, err := vaultpkg.ReadEntry(m.vault.Dir, path, m.vault.Identity)
+		if err != nil {
+			m.secretTypeCache[path] = vaultpkg.SecretTypeCustom
+			continue
+		}
+		t := entry.SecretMetadata.Type
+		if t == "" {
+			t = vaultpkg.SecretTypeCustom
+		}
+		m.secretTypeCache[path] = t
+	}
+}
+
+func (m *TUIModel) sortByType(reverse bool) {
+	m.ensureSecretTypeCache()
+
+	typeOrder := map[vaultpkg.SecretType]int{
+		vaultpkg.SecretTypeAPIKey:      0,
+		vaultpkg.SecretTypeBearerToken: 1,
+		vaultpkg.SecretTypeSSHKey:      2,
+		vaultpkg.SecretTypePassword:    3,
+		vaultpkg.SecretTypeDatabaseURL: 4,
+		vaultpkg.SecretTypeCertificate: 5,
+		vaultpkg.SecretTypeTOTPSeed:    6,
+		vaultpkg.SecretTypeBasicAuth:   7,
+		vaultpkg.SecretTypeCustom:      8,
+	}
+
+	sort.SliceStable(m.filtered, func(i, j int) bool {
+		ti := m.secretTypeCache[m.filtered[i]]
+		tj := m.secretTypeCache[m.filtered[j]]
+		oi := typeOrder[ti]
+		oj := typeOrder[tj]
+		if oi == oj {
+			return m.filtered[i] < m.filtered[j]
+		}
+		if reverse {
+			return oi > oj
+		}
+		return oi < oj
 	})
+}
+
+func (m *TUIModel) typeCount(t vaultpkg.SecretType) int {
+	count := 0
+	for _, path := range m.filtered {
+		if m.secretTypeCache[path] == t {
+			count++
+		}
+	}
+	return count
 }
 
 func (m TUIModel) availableTags() []string {
@@ -92,16 +156,11 @@ func (m TUIModel) availableTags() []string {
 }
 
 func (m TUIModel) sortLabel() string {
-	switch m.sortMode {
-	case 0:
-		return "name\u2191"
-	case 1:
-		return "name\u2193"
-	case 2:
-		return "updated\u2191"
-	default:
-		return "updated\u2193"
+	labels := []string{"name\u2191", "name\u2193", "updated\u2191", "updated\u2193", "type\u2191", "type\u2193"}
+	if m.sortMode >= 0 && m.sortMode < len(labels) {
+		return labels[m.sortMode]
 	}
+	return labels[0]
 }
 
 func fuzzyMatch(query, value string) bool {

@@ -136,7 +136,7 @@ func (m TUIModel) handleKey(msg tea.KeyMsg) (TUIModel, tea.Cmd) {
 		m.revealed = !m.revealed
 		return m, nil
 	case "s":
-		m.sortMode = (m.sortMode + 1) % 4
+		m.sortMode = (m.sortMode + 1) % 6
 		m.applyFilter()
 		return m, nil
 	case "t":

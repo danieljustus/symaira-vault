@@ -304,6 +304,89 @@ func TestSelectCopyFieldEmpty(t *testing.T) {
 	}
 }
 
+func TestSortByTypeGroupsEntries(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: LockFileEx access violation in AcquireWriteLock")
+	}
+	vaultDir := t.TempDir()
+	id := testutil.TempIdentity(t)
+
+	entries := []struct {
+		path string
+		data map[string]any
+		typ  vaultpkg.SecretType
+	}{
+		{"api/a", map[string]any{"api_key": "ak"}, vaultpkg.SecretTypeAPIKey},
+		{"api/b", map[string]any{"api_key": "bk"}, vaultpkg.SecretTypeAPIKey},
+		{"pass/a", map[string]any{"password": "pa"}, vaultpkg.SecretTypePassword},
+		{"token/a", map[string]any{"token": "ta"}, vaultpkg.SecretTypeBearerToken},
+	}
+
+	for _, e := range entries {
+		entry := &vaultpkg.Entry{
+			Data:           e.data,
+			SecretMetadata: vaultpkg.SecretMetadata{Type: e.typ},
+		}
+		if err := vaultpkg.WriteEntry(vaultDir, e.path, entry, id); err != nil {
+			t.Fatalf("WriteEntry(%s) error = %v", e.path, err)
+		}
+	}
+
+	vault := &vaultpkg.Vault{Dir: vaultDir, Identity: id}
+	m := NewTUIModel(vault)
+	list, err := vaultpkg.List(vaultDir, "", id)
+	if err != nil {
+		t.Fatalf("List error = %v", err)
+	}
+	m.entries = list
+	m.filtered = append([]string(nil), list...)
+
+	m.sortMode = 4
+	m.applyFilter()
+
+	want := []string{"api/a", "api/b", "token/a", "pass/a"}
+	if len(m.filtered) != len(want) {
+		t.Fatalf("filtered length = %d, want %d", len(m.filtered), len(want))
+	}
+	for i, path := range want {
+		if m.filtered[i] != path {
+			t.Errorf("filtered[%d] = %q, want %q", i, m.filtered[i], path)
+		}
+	}
+
+	if m.secretTypeCache["api/a"] != vaultpkg.SecretTypeAPIKey {
+		t.Errorf("secretTypeCache[api/a] = %q, want api_key", m.secretTypeCache["api/a"])
+	}
+}
+
+func TestSortLabelCoversAllModes(t *testing.T) {
+	m := NewTUIModel(&vaultpkg.Vault{})
+	want := []string{"name\u2191", "name\u2193", "updated\u2191", "updated\u2193", "type\u2191", "type\u2193"}
+	for i, expected := range want {
+		m.sortMode = i
+		if got := m.sortLabel(); got != expected {
+			t.Errorf("sortLabel() mode %d = %q, want %q", i, got, expected)
+		}
+	}
+}
+
+func TestTypeCount(t *testing.T) {
+	m := NewTUIModel(&vaultpkg.Vault{})
+	m.filtered = []string{"a", "b", "c", "d"}
+	m.secretTypeCache = map[string]vaultpkg.SecretType{
+		"a": vaultpkg.SecretTypeAPIKey,
+		"b": vaultpkg.SecretTypeAPIKey,
+		"c": vaultpkg.SecretTypePassword,
+		"d": vaultpkg.SecretTypeAPIKey,
+	}
+	if got := m.typeCount(vaultpkg.SecretTypeAPIKey); got != 3 {
+		t.Errorf("typeCount(api_key) = %d, want 3", got)
+	}
+	if got := m.typeCount(vaultpkg.SecretTypePassword); got != 1 {
+		t.Errorf("typeCount(password) = %d, want 1", got)
+	}
+}
+
 func TestIsSensitiveField(t *testing.T) {
 	tests := []struct {
 		field string
