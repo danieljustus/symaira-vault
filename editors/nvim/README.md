@@ -107,4 +107,4 @@ lua/symvault/
 
 ## License
 
-MIT — see [LICENSE](../../LICENSE) in the Symaira Vault repository.
+Apache-2.0 — see [LICENSE](../../LICENSE) in the Symaira Vault repository.

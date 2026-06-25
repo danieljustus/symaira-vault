@@ -1,6 +1,6 @@
 # Commercial Boundary
 
-Symaira Vault self-hosted remains free and open source under the MIT License.
+Symaira Vault self-hosted remains free and open source under the Apache-2.0 License.
 
 The public repository contains the self-hosted core, CLI, runtime behavior,
 documentation, and release artifacts that users can run independently. Public
@@ -12,7 +12,7 @@ cloud deployment automation, compliance operations, and monitoring.
 
 ## Rules
 
-- Keep self-hosted functionality free and MIT-licensed in this repository.
+- Keep self-hosted functionality free and Apache-2.0 licensed in this repository.
 - Do not require private code to build, test, or run the public self-hosted
   product.
 - Do not copy private Pro code into the public repository.

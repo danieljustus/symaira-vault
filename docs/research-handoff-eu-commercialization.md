@@ -6,7 +6,7 @@ This document preserves the actionable findings from the local research folders:
 - `sonstiges/Research/Kimi_Research_symvault-exopenpass-kommerzialisierung`
 
 The original folders can be deleted once the linked GitHub issues are visible.
-This file keeps only the parts that belong in the public MIT self-hosted core.
+This file keeps only the parts that belong in the public Apache-2.0 self-hosted core.
 Hosted service, billing, tenant operations, SSO/SCIM, hosted RBAC, SIEM export,
 and compliance operations belong to `symaira-vault-pro`.
 
@@ -31,7 +31,7 @@ and compliance operations belong to `symaira-vault-pro`.
 
 ## Core Decisions
 
-- Keep Symaira Vault self-hosted free and MIT licensed.
+- Keep Symaira Vault self-hosted free and Apache-2.0 licensed.
 - Do not add Cloud Pro, billing, customer-support, tenant-management, or hosted
   compliance code to this repo.
 - General core/runtime capabilities that Pro needs must be implemented here

@@ -1,7 +1,7 @@
 *symvault.txt*	Symaira Neovim plugin
 
 Author:  Symaira contributors <https://github.com/danieljustus/symaira-vault>
-License: MIT
+License: Apache-2.0
 
 ==============================================================================
 CONTENTS                                                *symvault-contents*

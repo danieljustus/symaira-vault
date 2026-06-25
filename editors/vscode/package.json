@@ -4,7 +4,7 @@
   "description": "VS Code extension for Symaira Vault secret manager",
   "version": "1.0.0",
   "publisher": "symvault",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "engines": {
     "vscode": "^1.85.0"
   },

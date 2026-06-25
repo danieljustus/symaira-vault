@@ -14,6 +14,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > and [docs/commercial-boundary.md](docs/commercial-boundary.md) for the
 > current release-line policy. (Added 2026-06-10, see #384.)
 
+## [v0.8.0] - Unreleased
+
+### Added
+
+- Type detection: infer secret type from path and field names (#567)
+- TUI: sort entries by type with grouped headers (#567)
+- Backup codes: structured data model and migration (#567)
+
+### Fixed
+
+- stdin-value: accept values without trailing newline (#566)
+- Git push: use system git for SSH remotes (#566)
+- Generated-password field storage: force SecretTypePassword with --generate (#568)
+- Goroutine leak in ReencryptAll on early error (#579)
+
 ## [v0.7.1] - 2026-06-23
 
 Security hardening, KDF improvements, search-index persistence, and bug
