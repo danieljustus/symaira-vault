@@ -1,4 +1,4 @@
-# Symaira Vault (ex. OpenPass)
+# Symaira Vault (symvault)
 
 [![CI](https://github.com/danieljustus/symaira-vault/actions/workflows/ci.yml/badge.svg)](https://github.com/danieljustus/symaira-vault/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/danieljustus/symaira-vault)](https://github.com/danieljustus/symaira-vault/releases/latest)
@@ -307,6 +307,7 @@ Apache-2.0 License
 
 - Inspired by [pass](https://www.passwordstore.org/) from zx2c4
 - MCP support via [mark3labs/mcp-go](https://github.com/mark3labs/mcp-go)
+- Former name: OpenPass
 
 ## Disclaimer
 
