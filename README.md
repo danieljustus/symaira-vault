@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/danieljustus/symaira-vault/actions/workflows/ci.yml/badge.svg)](https://github.com/danieljustus/symaira-vault/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/danieljustus/symaira-vault)](https://github.com/danieljustus/symaira-vault/releases/latest)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Go Reference](https://pkg.go.dev/badge/github.com/danieljustus/symaira-vault.svg)](https://pkg.go.dev/github.com/danieljustus/symaira-vault)
 [![Go Report Card](https://goreportcard.com/badge/github.com/danieljustus/symaira-vault)](https://goreportcard.com/report/github.com/danieljustus/symaira-vault)
 
@@ -242,10 +242,10 @@ For the full configuration reference, see [docs/configuration.md](docs/configura
 | **Encryption** | age (X25519 + ChaCha20-Poly1305) | AES-256 | AES-256 | GPG | None (plaintext) |
 | **Primary Interface** | Terminal-first | GUI-first (CLI available) | GUI-first (CLI available) | Terminal-only | Chat interface |
 | **AI Integration** | MCP server (stdio + HTTP) with scoped tokens | Agentic Autofill, SDKs for AI agents | MCP server, Agent Access SDK | No AI integration | Paste secrets into prompts |
-| **Pricing** | Free (MIT) | Subscription ($47.88/yr Individual) | Freemium / Subscription ($19.80/yr Premium) | Free (GPL) | Free (but risky) |
+| **Pricing** | Free (Apache-2.0) | Subscription ($47.88/yr Individual) | Freemium / Subscription ($19.80/yr Premium) | Free (GPL) | Free (but risky) |
 | **Sync** | Git (built-in) | Cloud (1Password servers) | Cloud (Bitwarden servers) or self-host | Git (automatic commits) | Manual copy-paste |
 | **Self-hosting** | Full control (local vault + git) | Partial (Connect Server, SCIM Bridge) | Yes (official Docker/K8s or Vaultwarden) | Full control | N/A |
-| **Open Source** | Yes (MIT) | Partial (SDKs open, core proprietary) | Mostly (core GPL/AGPL, Enterprise Bitwarden License) | Yes (GPLv2+) | N/A |
+| **Open Source** | Yes (Apache-2.0) | Partial (SDKs open, core proprietary) | Mostly (core GPL/AGPL, Enterprise Bitwarden \
 | **TOTP** | Built-in | Built-in | Premium feature | Extension only | Manual entry |
 | **Autotype** | Built-in (cross-platform) | Built-in (Windows Auto-Type, macOS Universal Autofill) | Browser autofill only (desktop autotype in development) | No built-in | Manual entry |
 | **Secret Execution** | Built-in (`symvault run`) | Built-in (`op run`) | Built-in (`bws run`) | No built-in | Not applicable |
@@ -301,7 +301,7 @@ Some tests are skipped automatically:
 
 ## License
 
-MIT License
+Apache-2.0 License
 
 ## Acknowledgments
 

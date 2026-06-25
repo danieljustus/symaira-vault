@@ -4,7 +4,7 @@ Thank you for your interest in contributing to Symaira Vault! This document prov
 
 ## License and Commercial Boundary
 
-Contributions to this public repository are made under the MIT License used by
+Contributions to this public repository are made under the Apache-2.0 License used by
 Symaira Vault self-hosted. The self-hosted product must remain buildable,
 testable, and runnable without any private commercial code.
 
@@ -435,4 +435,4 @@ For full details, see [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the MIT License.
+By contributing, you agree that your contributions will be licensed under the Apache-2.0 License.

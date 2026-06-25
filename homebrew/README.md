@@ -73,4 +73,4 @@ Full documentation is available at: https://github.com/danieljustus/symaira-vaul
 
 ## License
 
-MIT License - see https://github.com/danieljustus/symaira-vault/blob/main/LICENSE
+Apache-2.0 License - see https://github.com/danieljustus/symaira-vault/blob/main/LICENSE
