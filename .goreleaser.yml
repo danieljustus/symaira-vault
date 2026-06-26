@@ -57,6 +57,11 @@ builds:
     hooks:
       post:
         - 'scripts/build-mcpb.sh --version "{{ .Version }}" --os "{{ .Os }}" --arch "{{ .Arch }}" --binary "{{ .Path }}"'
+        - cmd: |
+            if [ -n "${CODESIGN_IDENTITY:-}" ]; then
+              codesign -s "$CODESIGN_IDENTITY" --timestamp --options runtime "{{ .Path }}"
+              echo "Signed {{ .Path }}"
+            fi
     env:
       - CGO_ENABLED=1
       - GOWORK=off
