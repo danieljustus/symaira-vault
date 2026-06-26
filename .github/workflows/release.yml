@@ -157,13 +157,40 @@ jobs:
 
   release:
     name: Release
-    runs-on: macos-latest
+    runs-on: macos-15
     needs: [test, govulncheck, lint]
+    environment: release
     steps:
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
+
+      - name: Import signing certificate
+        id: signing
+        env:
+          CERTIFICATE_P12: ${{ secrets.CERTIFICATE_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          if [ -z "${CERTIFICATE_P12:-}" ]; then
+            echo "::warning::CERTIFICATE_P12 secret is not set. Building unsigned."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+          KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          CERTIFICATE_PATH="$RUNNER_TEMP/certificate.p12"
+          echo -n "$CERTIFICATE_P12" | base64 --decode -o "$CERTIFICATE_PATH"
+          security import "$CERTIFICATE_PATH" -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          echo "CODESIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
 
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
@@ -190,6 +217,33 @@ jobs:
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
           SCOOP_BUCKET_GITHUB_TOKEN: ${{ secrets.SCOOP_BUCKET_GITHUB_TOKEN }}
 
+      - name: Notarize macOS binaries
+        if: steps.signing.outputs.signed == 'true'
+        env:
+          NOTARY_API_KEY: ${{ secrets.NOTARY_API_KEY }}
+          NOTARY_API_ISSUER: ${{ secrets.NOTARY_API_ISSUER }}
+          NOTARY_API_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
+        run: |
+          if [ -z "${NOTARY_API_KEY:-}" ]; then
+            echo "::warning::NOTARY_API_KEY secret is not set. Skipping notarization."
+            exit 0
+          fi
+          for ARCH in amd64 arm64; do
+            for f in dist/*_darwin_${ARCH}/*; do
+              if [ -f "$f" ] && file "$f" | grep -q "Mach-O"; then
+                echo "Notarizing $f..."
+                ZIP_PATH="$RUNNER_TEMP/notarize_${ARCH}.zip"
+                ditto -c -k --keepParent "$f" "$ZIP_PATH"
+                xcrun notarytool submit "$ZIP_PATH" \
+                  --apple-id "${NOTARY_API_KEY_ID}" \
+                  --team-id "${NOTARY_API_ISSUER}" \
+                  --password "${NOTARY_API_KEY}" \
+                  --wait
+                rm -f "$ZIP_PATH"
+              fi
+            done
+          done
+
       - name: Attest build provenance
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
         with:
@@ -201,6 +255,13 @@ jobs:
           gh release upload "$TAG" dist/*.mcpb --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Clean up signing material
+        if: always()
+        run: |
+          if [ -n "${KEYCHAIN_PATH:-}" ] && [ -f "$KEYCHAIN_PATH" ]; then
+            security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
+          fi
 
   smoke-test-mcpb:
     name: Smoke Test (MCPB Bundle)
