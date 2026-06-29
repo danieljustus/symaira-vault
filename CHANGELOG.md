@@ -14,7 +14,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > and [docs/commercial-boundary.md](docs/commercial-boundary.md) for the
 > current release-line policy. (Added 2026-06-10, see #384.)
 
-## [v0.8.0] - Unreleased
+## [v0.8.1] - 2026-06-29
+
+### Security
+
+- macOS release binaries are now signed with a Developer ID and notarized by Apple, eliminating Gatekeeper warnings (#583)
+
+### Changed
+
+- Rename title to Symaira Vault (symvault) with former name note (#582)
+- Quarterly re-audit of golang/protobuf migration documentation (#585)
+
+## [v0.8.0] - 2026-06-25
 
 ### Added
 
