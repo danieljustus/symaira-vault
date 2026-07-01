@@ -204,3 +204,46 @@ func TestRunCommand_StdinForwarding(t *testing.T) {
 		t.Errorf("expected 'heredoc_data' in stdout from stdin forwarding, got: %q", result.Stdout)
 	}
 }
+
+func TestRunCommand_Passthrough(t *testing.T) {
+	t.Setenv("SYMVAULT_TEST_PASSTHROUGH_VAR", "from_parent")
+
+	result, err := RunCommand(RunOptions{
+		Command: []string{"sh", "-c", "echo $SYMVAULT_TEST_PASSTHROUGH_VAR"},
+		Passthrough: []string{"SYMVAULT_TEST_PASSTHROUGH_VAR"},
+	})
+	if err != nil {
+		t.Fatalf("RunCommand() unexpected error: %v", err)
+	}
+	if !strings.Contains(result.Stdout, "from_parent") {
+		t.Errorf("expected passthrough env var 'from_parent' in stdout, got: %q", result.Stdout)
+	}
+}
+
+func TestRunCommand_PassthroughMultiple(t *testing.T) {
+	t.Setenv("SYMVAULT_TEST_PT_A", "alpha")
+	t.Setenv("SYMVAULT_TEST_PT_B", "beta")
+
+	result, err := RunCommand(RunOptions{
+		Command: []string{"sh", "-c", "echo $SYMVAULT_TEST_PT_A $SYMVAULT_TEST_PT_B"},
+		Passthrough: []string{"SYMVAULT_TEST_PT_A", "SYMVAULT_TEST_PT_B"},
+	})
+	if err != nil {
+		t.Fatalf("RunCommand() unexpected error: %v", err)
+	}
+	if !strings.Contains(result.Stdout, "alpha beta") {
+		t.Errorf("expected 'alpha beta' in stdout, got: %q", result.Stdout)
+	}
+}
+
+func TestRunCommand_NonExitError(t *testing.T) {
+	_, err := RunCommand(RunOptions{
+		Command: []string{"symvault_nonexistent_command_xyz"},
+	})
+	if err == nil {
+		t.Fatal("expected error for nonexistent command, got nil")
+	}
+	if !strings.Contains(err.Error(), "failed to run command") {
+		t.Errorf("expected 'failed to run command' in error, got: %q", err.Error())
+	}
+}
