@@ -81,11 +81,11 @@ var runCmd = &cobra.Command{
 
 			// args contains the command and its arguments (everything after --)
 			result, err := secrets.RunCommand(secrets.RunOptions{
-				Command:    args,
-				Env:        envMap,
+				Command:     args,
+				Env:         envMap,
 				Passthrough: runPassthrough,
-				WorkingDir: runWorkingDir,
-				Timeout:    runTimeout,
+				WorkingDir:  runWorkingDir,
+				Timeout:     runTimeout,
 			})
 			if err != nil {
 				return err
