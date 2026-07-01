@@ -161,7 +161,7 @@ brews:
     directory: Formula
     homepage: "https://github.com/danieljustus/symaira-vault"
     description: "Modern CLI password manager with age encryption"
-    license: "MIT"
+    license: "Apache-2.0"
     custom_block: |
       version_scheme 1
     install: |
@@ -196,7 +196,7 @@ scoops:
     directory: bucket
     homepage: "https://github.com/danieljustus/symaira-vault"
     description: "Modern CLI password manager with age encryption"
-    license: MIT
+    license: Apache-2.0
     persist:
       - config.yaml
 
@@ -208,7 +208,7 @@ nfpms:
     homepage: "https://github.com/danieljustus/symaira-vault"
     maintainer: "danieljustus <88160656+danieljustus@users.noreply.github.com>"
     description: "Secure password management CLI tool"
-    license: "MIT"
+    license: "Apache-2.0"
     formats:
       - deb
       - rpm
