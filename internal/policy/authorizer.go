@@ -89,14 +89,19 @@ func NewAuthorizer(config AuthorizerConfig, opts ...AuthorizerOption) Authorizer
 	return a
 }
 
+const (
+	actionRead  = "read"
+	actionWrite = "write"
+)
+
 func (a *authorizerImpl) Authorize(ctx context.Context, path string, write bool, approved bool) error {
 	if path == "" {
 		return errors.New("empty path")
 	}
 
-	actionType := "read"
+	actionType := actionRead
 	if write {
-		actionType = "write"
+		actionType = actionWrite
 	}
 
 	if err := a.checkPolicy(ctx, path, actionType); err != nil {
