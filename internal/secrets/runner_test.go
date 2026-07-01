@@ -181,3 +181,26 @@ func TestRunCommand_Args(t *testing.T) {
 		t.Fatalf("Stdout = %q, want 'arg1 arg2 arg3'", result.Stdout)
 	}
 }
+
+func TestRunCommand_StdinForwarding(t *testing.T) {
+	oldStdin := os.Stdin
+	defer func() { os.Stdin = oldStdin }()
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	os.Stdin = r
+	_, _ = w.WriteString("heredoc_data")
+	_ = w.Close()
+
+	result, err := RunCommand(RunOptions{
+		Command: []string{"cat"},
+	})
+	if err != nil {
+		t.Fatalf("RunCommand() unexpected error: %v", err)
+	}
+	if !strings.Contains(result.Stdout, "heredoc_data") {
+		t.Errorf("expected 'heredoc_data' in stdout from stdin forwarding, got: %q", result.Stdout)
+	}
+}

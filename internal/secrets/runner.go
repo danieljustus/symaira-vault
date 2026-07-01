@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"time"
 )
@@ -71,6 +72,7 @@ func RunCommand(opts RunOptions) (*RunResult, error) {
 	}
 
 	var stdout, stderr bytes.Buffer
+	cmd.Stdin = os.Stdin
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 

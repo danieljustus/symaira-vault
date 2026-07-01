@@ -482,3 +482,25 @@ func TestCmdRun_PassthroughMultiple(t *testing.T) {
 		t.Errorf("expected 'P2=val2' in stdout, got: %q", out)
 	}
 }
+
+func TestCmdRun_StdinForwarding(t *testing.T) {
+	vaultDir, passphrase := initVault(t)
+	setPassEnv(t, string(passphrase))
+	defer setupVaultFlag(t, vaultDir)()
+
+	oldStdin := os.Stdin
+	defer func() { os.Stdin = oldStdin }()
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	os.Stdin = r
+	_, _ = w.WriteString("stdin_test_data")
+	_ = w.Close()
+
+	out := execWithStdout("--vault", vaultDir, "run", "--", "cat")
+	if !strings.Contains(out, "stdin_test_data") {
+		t.Errorf("expected 'stdin_test_data' in stdout from stdin forwarding, got: %q", out)
+	}
+}
