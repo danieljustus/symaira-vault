@@ -133,6 +133,15 @@ symvault git push
 # Secret execution (injects vault secrets as env vars)
 symvault run --env API_KEY=api.kimi-key -- curl -H "Authorization: Bearer $API_KEY" https://api.example.com
 
+# Load mappings from a file (each line: NAME=path.field)
+symvault run --env-file .env.symvault -- npm run dev
+
+# Pass through parent env vars such as NODE_ENV and PORT
+NODE_ENV=production PORT=8080 symvault run --passthrough NODE_ENV,PORT --env DB_PASS=prod/db.password -- ./deploy.sh
+
+# Forward stdin to the child process (heredocs and pipes work)
+cat input.json | symvault run --env API_KEY=api.kimi-key -- node process.js
+
 # Backup/Restore
 symvault backup ~/backups/symvault-$(date +%Y%m%d).tar.gz
 symvault restore ~/backups/symvault-20260427.tar.gz
@@ -151,6 +160,29 @@ symvault import pass ~/.password-store
 ```
 
 See [docs/migration.md](docs/migration.md) for export steps, format details, and verification guidance.
+
+## Configuration templates
+
+Generate configuration files from vault secrets without exposing values in shell history or intermediate files. Templates support positional `KEY=ref` arguments and the `--prefix` flag to auto-select every entry under a vault path.
+
+```bash
+# Generate a .env file from specific vault secrets
+symvault template generate --type env DB_PASS=prod/db.password API_KEY=stripe.token
+
+# Generate a .env file from every entry under work/ (key becomes entry.field)
+symvault template generate --type env --prefix work/ > .env
+
+# Generate a Kubernetes Secret manifest, mixing a prefix with one explicit ref
+symvault template generate --type k8s-secret --name prod-secrets --prefix work/ DB_HOST=infra.db.host
+
+# Preview output with secrets masked
+symvault template generate --type env --prefix work/ --dry-run
+
+# Write output to a file (created with 0600 permissions)
+symvault template generate --type docker-compose --prefix work/ --output docker-compose.env
+```
+
+Supported template types: `env`, `docker-compose`, `k8s-secret`, `github-actions`, and `terraform`. Custom templates can be added in `$HOME/.config/symvault/templates`.
 
 ## MCP Server
 
