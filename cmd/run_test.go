@@ -434,6 +434,77 @@ func TestParseEnvFile(t *testing.T) {
 	}
 }
 
+func TestParseEnvFile_EmptyName(t *testing.T) {
+	envFile := filepath.Join(t.TempDir(), ".env.symvault")
+	if err := os.WriteFile(envFile, []byte("=db.password\n"), 0600); err != nil {
+		t.Fatalf("write env file: %v", err)
+	}
+
+	_, err := parseEnvFile(envFile)
+	if err == nil {
+		t.Fatal("expected error for empty name in env file, got nil")
+	}
+	if !strings.Contains(err.Error(), "empty name or ref") {
+		t.Errorf("expected 'empty name or ref' in error, got: %q", err.Error())
+	}
+}
+
+func TestParseEnvFile_EmptyRef(t *testing.T) {
+	envFile := filepath.Join(t.TempDir(), ".env.symvault")
+	if err := os.WriteFile(envFile, []byte("DB_PASS=\n"), 0600); err != nil {
+		t.Fatalf("write env file: %v", err)
+	}
+
+	_, err := parseEnvFile(envFile)
+	if err == nil {
+		t.Fatal("expected error for empty ref in env file, got nil")
+	}
+	if !strings.Contains(err.Error(), "empty name or ref") {
+		t.Errorf("expected 'empty name or ref' in error, got: %q", err.Error())
+	}
+}
+
+func TestParseEnvFile_VeryLongLine(t *testing.T) {
+	envFile := filepath.Join(t.TempDir(), ".env.symvault")
+	// bufio.Scanner default buffer is 64KB; a line exceeding this triggers scanner.Err
+	longLine := strings.Repeat("A", 65*1024)
+	if err := os.WriteFile(envFile, []byte(longLine+"=value\n"), 0600); err != nil {
+		t.Fatalf("write env file: %v", err)
+	}
+
+	_, err := parseEnvFile(envFile)
+	if err == nil {
+		t.Fatal("expected error for very long line in env file, got nil")
+	}
+	if !strings.Contains(err.Error(), "read env file") {
+		t.Errorf("expected 'read env file' in error, got: %q", err.Error())
+	}
+}
+
+func TestCmdRun_EnvFileMissingSecret(t *testing.T) {
+	vaultDir, passphrase := initVault(t)
+	setPassEnv(t, string(passphrase))
+	defer setupVaultFlag(t, vaultDir)()
+
+	envFile := filepath.Join(t.TempDir(), ".env.symvault")
+	if err := os.WriteFile(envFile, []byte("MISSING=nonexistent.entry\n"), 0600); err != nil {
+		t.Fatalf("write env file: %v", err)
+	}
+
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "run", "--env-file", envFile, "--", "echo", "hello"})
+	defer rootCmd.SetArgs(nil)
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Error("expected error for missing secret in env file, got nil")
+	} else {
+		errStr := err.Error()
+		if !strings.Contains(errStr, "not found") && !strings.Contains(errStr, "secret ref") {
+			t.Errorf("expected 'not found' or 'secret ref' in error, got: %q", errStr)
+		}
+	}
+}
+
 func TestCmdRun_Passthrough(t *testing.T) {
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))

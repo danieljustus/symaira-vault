@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
@@ -168,5 +169,146 @@ func TestCmdTemplateGenerate_OutputFile(t *testing.T) {
 	}
 	if !strings.Contains(string(content), "filetest") {
 		t.Errorf("expected 'filetest' in output file, got: %q", string(content))
+	}
+}
+
+func TestCmdTemplateGenerate_EmptyKeyInRef(t *testing.T) {
+	vaultDir, passphrase := initVault(t)
+	setPassEnv(t, string(passphrase))
+	defer setupVaultFlag(t, vaultDir)()
+
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "template", "generate", "--type", "env",
+		"=db.password"})
+	defer rootCmd.SetArgs(nil)
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Error("expected error for empty key in ref, got nil")
+	} else {
+		if !strings.Contains(err.Error(), "empty key or ref") {
+			t.Errorf("expected 'empty key or ref' in error, got: %q", err.Error())
+		}
+	}
+}
+
+func TestCmdTemplateGenerate_EmptyRefInRef(t *testing.T) {
+	vaultDir, passphrase := initVault(t)
+	setPassEnv(t, string(passphrase))
+	defer setupVaultFlag(t, vaultDir)()
+
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "template", "generate", "--type", "env",
+		"DB_PASS="})
+	defer rootCmd.SetArgs(nil)
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Error("expected error for empty ref in positional arg, got nil")
+	} else {
+		if !strings.Contains(err.Error(), "empty key or ref") {
+			t.Errorf("expected 'empty key or ref' in error, got: %q", err.Error())
+		}
+	}
+}
+
+func TestCmdTemplateGenerate_InvalidTemplateType(t *testing.T) {
+	vaultDir, passphrase := initVault(t)
+	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
+	entry := &vaultpkg.Entry{Data: map[string]any{"password": "s3cret"}}
+	_ = vaultpkg.WriteEntry(vaultDir, "db", entry, identity.Identity)
+	setPassEnv(t, string(passphrase))
+	defer setupVaultFlag(t, vaultDir)()
+
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "template", "generate", "--type", "nonexistent",
+		"DB_PASS=db.password"})
+	defer rootCmd.SetArgs(nil)
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Error("expected error for invalid template type, got nil")
+	} else {
+		if !strings.Contains(err.Error(), "render template") && !strings.Contains(err.Error(), "unknown template") {
+			t.Errorf("expected template render error, got: %q", err.Error())
+		}
+	}
+}
+
+func TestCmdTemplateGenerate_OutputFilePermissionError(t *testing.T) {
+	vaultDir, passphrase := initVault(t)
+	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
+	entry := &vaultpkg.Entry{Data: map[string]any{"password": "permtest"}}
+	_ = vaultpkg.WriteEntry(vaultDir, "db", entry, identity.Identity)
+	setPassEnv(t, string(passphrase))
+	defer setupVaultFlag(t, vaultDir)()
+
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "template", "generate", "--type", "env",
+		"--output", "/nonexistent/dir/output.env", "DB_PASS=db.password"})
+	defer rootCmd.SetArgs(nil)
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Error("expected error for unwritable output path, got nil")
+	} else {
+		if !strings.Contains(err.Error(), "write output file") {
+			t.Errorf("expected 'write output file' in error, got: %q", err.Error())
+		}
+	}
+}
+
+func TestCmdTemplateGenerate_JSONOutputWithFile(t *testing.T) {
+	vaultDir, passphrase := initVault(t)
+	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
+	entry := &vaultpkg.Entry{Data: map[string]any{"password": "json_out_test"}}
+	_ = vaultpkg.WriteEntry(vaultDir, "db", entry, identity.Identity)
+	setPassEnv(t, string(passphrase))
+	defer setupVaultFlag(t, vaultDir)()
+
+	cli.OutputFormat = "json"
+	t.Cleanup(func() { cli.OutputFormat = "text" })
+
+	outFile := filepath.Join(t.TempDir(), "output.env")
+	stdout := captureStdout(func() {
+		rootCmd.SetArgs([]string{"--vault", vaultDir, "template", "generate", "--type", "env",
+			"--output", outFile, "DB_PASS=db.password"})
+		_ = rootCmd.Execute()
+		rootCmd.SetArgs(nil)
+	})
+
+	fileContent, readErr := os.ReadFile(outFile)
+	if readErr != nil {
+		t.Fatalf("read output file: %v", readErr)
+	}
+	if !strings.Contains(string(fileContent), "json_out_test") {
+		t.Errorf("expected 'json_out_test' in output file, got: %q", string(fileContent))
+	}
+	if !strings.Contains(stdout, "output_path") {
+		t.Errorf("expected 'output_path' in JSON stdout, got: %q", stdout)
+	}
+}
+
+func TestCmdTemplateGenerate_PrefixReadError(t *testing.T) {
+	vaultDir, passphrase := initVault(t)
+	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
+	entry := &vaultpkg.Entry{Data: map[string]any{"token": "good_token"}}
+	_ = vaultpkg.WriteEntry(vaultDir, "work/api", entry, identity.Identity)
+	setPassEnv(t, string(passphrase))
+	defer setupVaultFlag(t, vaultDir)()
+
+	entryDir := filepath.Join(vaultDir, "entries", "work")
+	badFile := filepath.Join(entryDir, "bad_entry.age")
+	if err := os.WriteFile(badFile, []byte("not-valid-age-data"), 0600); err != nil {
+		t.Fatalf("write bad entry file: %v", err)
+	}
+
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "template", "generate", "--type", "env",
+		"--prefix", "work/"})
+	defer rootCmd.SetArgs(nil)
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Error("expected error for unreadable entry in prefix, got nil")
+	} else {
+		if !strings.Contains(err.Error(), "read entry") {
+			t.Errorf("expected 'read entry' in error, got: %q", err.Error())
+		}
 	}
 }
