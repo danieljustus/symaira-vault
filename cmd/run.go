@@ -16,10 +16,11 @@ import (
 )
 
 var (
-	runEnvFlags   []string
-	runEnvFiles   []string
-	runWorkingDir string
-	runTimeout    time.Duration
+	runEnvFlags    []string
+	runEnvFiles    []string
+	runPassthrough []string
+	runWorkingDir  string
+	runTimeout     time.Duration
 )
 
 var runCmd = &cobra.Command{
@@ -31,6 +32,9 @@ var runCmd = &cobra.Command{
 
   # Multiple secrets from env file
   symvault run --env-file .env.symvault -- npm run dev
+
+  # Pass through parent NODE_ENV and PORT to the child process
+  NODE_ENV=production PORT=8080 symvault run --passthrough NODE_ENV,PORT -- npm start
 
   # Multiple secrets, custom working dir
   symvault run \
@@ -79,6 +83,7 @@ var runCmd = &cobra.Command{
 			result, err := secrets.RunCommand(secrets.RunOptions{
 				Command:    args,
 				Env:        envMap,
+				Passthrough: runPassthrough,
 				WorkingDir: runWorkingDir,
 				Timeout:    runTimeout,
 			})
@@ -142,6 +147,7 @@ func parseEnvFile(path string) (map[string]string, error) {
 func init() {
 	runCmd.Flags().StringArrayVarP(&runEnvFlags, "env", "e", nil, "Environment variable mapping (NAME=path.field)")
 	runCmd.Flags().StringArrayVarP(&runEnvFiles, "env-file", "f", nil, "File with env variable mappings (NAME=path.field), one per line")
+	runCmd.Flags().StringArrayVar(&runPassthrough, "passthrough", nil, "Parent env var names to pass through to the child process (comma-separated)")
 	runCmd.Flags().StringVarP(&runWorkingDir, "working-dir", "C", "", "Working directory for the command")
 	runCmd.Flags().DurationVarP(&runTimeout, "timeout", "t", 0, "Timeout for the command (e.g., 30s)")
 	rootCmd.AddCommand(runCmd)

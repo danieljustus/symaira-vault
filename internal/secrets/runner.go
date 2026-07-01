@@ -23,6 +23,9 @@ type RunOptions struct {
 	Command []string
 	// Env contains additional environment variables that overlay os.Environ().
 	Env map[string]string
+	// Passthrough is a list of parent env var names to add to the whitelist
+	// so they pass through to the child process alongside DefaultWhitelist.
+	Passthrough []string
 	// WorkingDir is the directory the command runs in. Empty means current directory.
 	WorkingDir string
 	// Timeout is the maximum duration. Zero means no timeout.
@@ -56,9 +59,13 @@ func RunCommand(opts RunOptions) (*RunResult, error) {
 
 	// Start with a whitelisted env subset as base, then overlay opts.Env.
 	// This prevents leaking sensitive process env vars (API keys, OPENPASS_*, AWS_*,
-	// etc.) to child processes. Only the DefaultWhitelist vars are passed through.
-	// Later entries override earlier ones for the same key.
-	cmd.Env = FilterEnv(DefaultWhitelist())
+	// etc.) to child processes. Only the DefaultWhitelist vars (plus any passthrough)
+	// are passed through. Later entries override earlier ones for the same key.
+	whitelist := DefaultWhitelist()
+	if len(opts.Passthrough) > 0 {
+		whitelist = MergeWhitelist(whitelist, opts.Passthrough)
+	}
+	cmd.Env = FilterEnv(whitelist)
 	for k, v := range opts.Env {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}

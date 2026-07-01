@@ -433,3 +433,52 @@ func TestParseEnvFile(t *testing.T) {
 		t.Errorf("API_KEY = %q, want %q", result["API_KEY"], "stripe.token")
 	}
 }
+
+func TestCmdRun_Passthrough(t *testing.T) {
+	vaultDir, passphrase := initVault(t)
+	setPassEnv(t, string(passphrase))
+	defer setupVaultFlag(t, vaultDir)()
+
+	t.Setenv("SYMVAULT_TEST_PASSTHROUGH", "parent_val")
+
+	out := execWithStdout("--vault", vaultDir, "run",
+		"--passthrough", "SYMVAULT_TEST_PASSTHROUGH",
+		"--", "sh", "-c", "echo $SYMVAULT_TEST_PASSTHROUGH")
+	if !strings.Contains(out, "parent_val") {
+		t.Errorf("expected 'parent_val' in stdout, got: %q", out)
+	}
+}
+
+func TestCmdRun_PassthroughNotUsed(t *testing.T) {
+	vaultDir, passphrase := initVault(t)
+	setPassEnv(t, string(passphrase))
+	defer setupVaultFlag(t, vaultDir)()
+
+	t.Setenv("SYMVAULT_TEST_NO_PASS", "should_be_stripped")
+
+	out := execWithStdout("--vault", vaultDir, "run",
+		"--", "sh", "-c", "echo $SYMVAULT_TEST_NO_PASS")
+	if strings.Contains(out, "should_be_stripped") {
+		t.Errorf("env var should be stripped without --passthrough, got: %q", out)
+	}
+}
+
+func TestCmdRun_PassthroughMultiple(t *testing.T) {
+	vaultDir, passphrase := initVault(t)
+	setPassEnv(t, string(passphrase))
+	defer setupVaultFlag(t, vaultDir)()
+
+	t.Setenv("SYMVAULT_TEST_P1", "val1")
+	t.Setenv("SYMVAULT_TEST_P2", "val2")
+
+	out := execWithStdout("--vault", vaultDir, "run",
+		"--passthrough", "SYMVAULT_TEST_P1",
+		"--passthrough", "SYMVAULT_TEST_P2",
+		"--", "sh", "-c", "echo P1=$SYMVAULT_TEST_P1 P2=$SYMVAULT_TEST_P2")
+	if !strings.Contains(out, "P1=val1") {
+		t.Errorf("expected 'P1=val1' in stdout, got: %q", out)
+	}
+	if !strings.Contains(out, "P2=val2") {
+		t.Errorf("expected 'P2=val2' in stdout, got: %q", out)
+	}
+}
