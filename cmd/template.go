@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
@@ -18,6 +19,7 @@ var (
 	templateOutput string
 	templateDryRun bool
 	templateName   string
+	templatePrefix string
 )
 
 var templateCmd = &cobra.Command{
@@ -39,22 +41,71 @@ Supported template types:
 }
 
 var templateGenerateCmd = &cobra.Command{
-	Use:   "generate",
+	Use:   "generate [KEY=ref ...]",
 	Short: "Generate a configuration file from a template",
-	Example: `  # Generate .env file from vault secrets
-  symvault template generate --type env --name myapp
+	Long: `Generate a configuration file from a template.
 
-  # Generate Kubernetes secret manifest
-  symvault template generate --type k8s-secret --name myapp --output k8s/secret.yaml
+Refs can be specified as positional KEY=ref arguments or via --prefix to
+automatically select entries matching a vault path prefix. Each ref is a
+vault entry path with an optional dot-separated field (e.g. db.password).
+When --prefix is used without positional args, all matching entries are
+included with the entry basename as the key.`,
+	Example: `  # Generate .env file from specific vault secrets
+  symvault template generate --type env DB_PASS=prod/db.password API_KEY=stripe.token
+
+  # Generate .env from all entries under work/
+  symvault template generate --type env --prefix work/
+
+  # Generate Kubernetes secret manifest with mixed refs
+  symvault template generate --type k8s-secret --name prod-secrets --prefix work/ DB_HOST=infra.db.host
 
   # Dry-run to preview without real values
-  symvault template generate --type env --name myapp --dry-run`,
+  symvault template generate --type env --prefix work/ --dry-run`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
 			ctx := context.Background()
 			engine := template.NewEngine(v)
 
 			refs := make(map[string]string)
+
+			if templatePrefix != "" {
+				entries, listErr := vaultpkg.List(v.Dir, templatePrefix, v.Identity)
+				if listErr != nil {
+					return fmt.Errorf("list entries with prefix %q: %w", templatePrefix, listErr)
+				}
+				for _, entryPath := range entries {
+					entry, readErr := vaultpkg.ReadEntry(v.Dir, entryPath, v.Identity)
+					if readErr != nil {
+						return fmt.Errorf("read entry %q: %w", entryPath, readErr)
+					}
+					for field := range entry.Data {
+						basename := entryPath
+						if idx := strings.LastIndex(entryPath, "/"); idx >= 0 {
+							basename = entryPath[idx+1:]
+						}
+						key := basename + "." + field
+						refs[key] = entryPath + "." + field
+					}
+				}
+			}
+
+			for _, arg := range args {
+				parts := strings.SplitN(arg, "=", 2)
+				if len(parts) != 2 {
+					return fmt.Errorf("invalid ref format: %q (expected KEY=path[.field])", arg)
+				}
+				key := parts[0]
+				ref := parts[1]
+				if key == "" || ref == "" {
+					return fmt.Errorf("empty key or ref in: %q", arg)
+				}
+				refs[key] = ref
+			}
+
+			if len(refs) == 0 {
+				return fmt.Errorf("no secret references provided: use positional KEY=ref arguments or --prefix")
+			}
+
 			customDir := os.ExpandEnv("$HOME/.config/symvault/templates")
 			_ = engine.LoadCustomTemplates(customDir)
 
@@ -89,6 +140,7 @@ func init() {
 	templateGenerateCmd.Flags().StringVar(&templateOutput, "output", "", "Output file path (optional)")
 	templateGenerateCmd.Flags().BoolVar(&templateDryRun, "dry-run", false, "Show template with masked values")
 	templateGenerateCmd.Flags().StringVar(&templateName, "name", "app", "Name of the resource being generated")
+	templateGenerateCmd.Flags().StringVar(&templatePrefix, "prefix", "", "Vault path prefix to auto-select entries (e.g. work/)")
 	_ = templateGenerateCmd.MarkFlagRequired("type")
 
 	templateCmd.AddCommand(templateGenerateCmd)

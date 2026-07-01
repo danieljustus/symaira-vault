@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"strings"
@@ -15,9 +16,11 @@ import (
 )
 
 var (
-	runEnvFlags   []string
-	runWorkingDir string
-	runTimeout    time.Duration
+	runEnvFlags    []string
+	runEnvFiles    []string
+	runPassthrough []string
+	runWorkingDir  string
+	runTimeout     time.Duration
 )
 
 var runCmd = &cobra.Command{
@@ -26,6 +29,12 @@ var runCmd = &cobra.Command{
 	Long:  "Executes a command with vault secrets injected as environment variables. Use --env NAME=path.field to map secrets.",
 	Example: `  # Inject AWS_SECRET_ACCESS_KEY from vault entry "work/aws.secret"
   symvault run --env AWS_SECRET_ACCESS_KEY=work/aws.secret -- aws s3 ls
+
+  # Multiple secrets from env file
+  symvault run --env-file .env.symvault -- npm run dev
+
+  # Pass through parent NODE_ENV and PORT to the child process
+  NODE_ENV=production PORT=8080 symvault run --passthrough NODE_ENV,PORT -- npm start
 
   # Multiple secrets, custom working dir
   symvault run \
@@ -52,12 +61,31 @@ var runCmd = &cobra.Command{
 				envMap[envName] = value
 			}
 
+			// Parse --env-file flags: each file contains "ENV_NAME=path.field" lines
+			for _, envFilePath := range runEnvFiles {
+				parsed, parseErr := parseEnvFile(envFilePath)
+				if parseErr != nil {
+					return parseErr
+				}
+				for envName, secretRef := range parsed {
+					if _, exists := envMap[envName]; exists {
+						return fmt.Errorf("duplicate env var %q: defined in both --env and --env-file (or in multiple --env-file)", envName)
+					}
+					value, resolveErr := secrets.ResolveSecretRef(v, secretRef)
+					if resolveErr != nil {
+						return resolveErr
+					}
+					envMap[envName] = value
+				}
+			}
+
 			// args contains the command and its arguments (everything after --)
 			result, err := secrets.RunCommand(secrets.RunOptions{
-				Command:    args,
-				Env:        envMap,
-				WorkingDir: runWorkingDir,
-				Timeout:    runTimeout,
+				Command:     args,
+				Env:         envMap,
+				Passthrough: runPassthrough,
+				WorkingDir:  runWorkingDir,
+				Timeout:     runTimeout,
 			})
 			if err != nil {
 				return err
@@ -80,8 +108,46 @@ var runCmd = &cobra.Command{
 	},
 }
 
+// parseEnvFile reads an env file and returns a map of env var names to secret references.
+// Lines starting with # are comments. Blank lines are ignored.
+// Each non-comment line must be in the format NAME=path.field.
+func parseEnvFile(path string) (map[string]string, error) {
+	f, err := os.Open(path) // #nosec G304 -- env file path is user-provided CLI argument
+	if err != nil {
+		return nil, fmt.Errorf("open env file %q: %w", path, err)
+	}
+	defer func() { _ = f.Close() }()
+
+	result := make(map[string]string)
+	scanner := bufio.NewScanner(f)
+	lineNum := 0
+	for scanner.Scan() {
+		lineNum++
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid format in %s:%d: %q (expected NAME=path.field)", path, lineNum, line)
+		}
+		name := strings.TrimSpace(parts[0])
+		ref := strings.TrimSpace(parts[1])
+		if name == "" || ref == "" {
+			return nil, fmt.Errorf("empty name or ref in %s:%d: %q", path, lineNum, line)
+		}
+		result[name] = ref
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("read env file %q: %w", path, err)
+	}
+	return result, nil
+}
+
 func init() {
 	runCmd.Flags().StringArrayVarP(&runEnvFlags, "env", "e", nil, "Environment variable mapping (NAME=path.field)")
+	runCmd.Flags().StringArrayVarP(&runEnvFiles, "env-file", "f", nil, "File with env variable mappings (NAME=path.field), one per line")
+	runCmd.Flags().StringArrayVar(&runPassthrough, "passthrough", nil, "Parent env var names to pass through to the child process (comma-separated)")
 	runCmd.Flags().StringVarP(&runWorkingDir, "working-dir", "C", "", "Working directory for the command")
 	runCmd.Flags().DurationVarP(&runTimeout, "timeout", "t", 0, "Timeout for the command (e.g., 30s)")
 	rootCmd.AddCommand(runCmd)
