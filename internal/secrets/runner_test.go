@@ -209,7 +209,7 @@ func TestRunCommand_Passthrough(t *testing.T) {
 	t.Setenv("SYMVAULT_TEST_PASSTHROUGH_VAR", "from_parent")
 
 	result, err := RunCommand(RunOptions{
-		Command: []string{"sh", "-c", "echo $SYMVAULT_TEST_PASSTHROUGH_VAR"},
+		Command:     []string{"sh", "-c", "echo $SYMVAULT_TEST_PASSTHROUGH_VAR"},
 		Passthrough: []string{"SYMVAULT_TEST_PASSTHROUGH_VAR"},
 	})
 	if err != nil {
@@ -225,7 +225,7 @@ func TestRunCommand_PassthroughMultiple(t *testing.T) {
 	t.Setenv("SYMVAULT_TEST_PT_B", "beta")
 
 	result, err := RunCommand(RunOptions{
-		Command: []string{"sh", "-c", "echo $SYMVAULT_TEST_PT_A $SYMVAULT_TEST_PT_B"},
+		Command:     []string{"sh", "-c", "echo $SYMVAULT_TEST_PT_A $SYMVAULT_TEST_PT_B"},
 		Passthrough: []string{"SYMVAULT_TEST_PT_A", "SYMVAULT_TEST_PT_B"},
 	})
 	if err != nil {
