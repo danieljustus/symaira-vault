@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -250,5 +251,185 @@ func TestCmdRun_InvalidEnvFormat(t *testing.T) {
 		if !strings.Contains(errStr, "invalid --env format") {
 			t.Errorf("expected 'invalid --env format' in error, got: %q", errStr)
 		}
+	}
+}
+
+func TestCmdRun_EnvFile(t *testing.T) {
+	vaultDir, passphrase := initVault(t)
+	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
+	entry := &vaultpkg.Entry{Data: map[string]any{"password": "filesecret"}}
+	_ = vaultpkg.WriteEntry(vaultDir, "db", entry, identity.Identity)
+	setPassEnv(t, string(passphrase))
+	defer setupVaultFlag(t, vaultDir)()
+
+	envFile := filepath.Join(t.TempDir(), ".env.symvault")
+	if err := os.WriteFile(envFile, []byte("DB_PASS=db.password\n"), 0600); err != nil {
+		t.Fatalf("write env file: %v", err)
+	}
+
+	out := execWithStdout("--vault", vaultDir, "run", "--env-file", envFile, "--", "sh", "-c", "echo $DB_PASS")
+	if !strings.Contains(out, "filesecret") {
+		t.Errorf("expected 'filesecret' in stdout, got: %q", out)
+	}
+}
+
+func TestCmdRun_EnvFileMultiple(t *testing.T) {
+	vaultDir, passphrase := initVault(t)
+	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
+	entry1 := &vaultpkg.Entry{Data: map[string]any{"token": "tok_from_file"}}
+	entry2 := &vaultpkg.Entry{Data: map[string]any{"secret": "sec_from_file"}}
+	_ = vaultpkg.WriteEntry(vaultDir, "svc1", entry1, identity.Identity)
+	_ = vaultpkg.WriteEntry(vaultDir, "svc2", entry2, identity.Identity)
+	setPassEnv(t, string(passphrase))
+	defer setupVaultFlag(t, vaultDir)()
+
+	envFile := filepath.Join(t.TempDir(), ".env.symvault")
+	content := "TOKEN=svc1.token\nSECRET=svc2.secret\n"
+	if err := os.WriteFile(envFile, []byte(content), 0600); err != nil {
+		t.Fatalf("write env file: %v", err)
+	}
+
+	out := execWithStdout("--vault", vaultDir, "run", "--env-file", envFile, "--",
+		"sh", "-c", "echo TOKEN=$TOKEN SECRET=$SECRET")
+	if !strings.Contains(out, "TOKEN=tok_from_file") {
+		t.Errorf("expected TOKEN=tok_from_file in stdout, got: %q", out)
+	}
+	if !strings.Contains(out, "SECRET=sec_from_file") {
+		t.Errorf("expected SECRET=sec_from_file in stdout, got: %q", out)
+	}
+}
+
+func TestCmdRun_EnvFileWithComments(t *testing.T) {
+	vaultDir, passphrase := initVault(t)
+	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
+	entry := &vaultpkg.Entry{Data: map[string]any{"password": "comment_test"}}
+	_ = vaultpkg.WriteEntry(vaultDir, "db", entry, identity.Identity)
+	setPassEnv(t, string(passphrase))
+	defer setupVaultFlag(t, vaultDir)()
+
+	envFile := filepath.Join(t.TempDir(), ".env.symvault")
+	content := "# This is a comment\nDB_PASS=db.password\n# Another comment\n"
+	if err := os.WriteFile(envFile, []byte(content), 0600); err != nil {
+		t.Fatalf("write env file: %v", err)
+	}
+
+	out := execWithStdout("--vault", vaultDir, "run", "--env-file", envFile, "--", "sh", "-c", "echo $DB_PASS")
+	if !strings.Contains(out, "comment_test") {
+		t.Errorf("expected 'comment_test' in stdout, got: %q", out)
+	}
+}
+
+func TestCmdRun_EnvFileNotFound(t *testing.T) {
+	vaultDir, passphrase := initVault(t)
+	setPassEnv(t, string(passphrase))
+	defer setupVaultFlag(t, vaultDir)()
+
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "run", "--env-file", "/nonexistent/.env.symvault", "--", "echo", "hello"})
+	defer rootCmd.SetArgs(nil)
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Error("expected error for missing env file, got nil")
+	} else {
+		errStr := err.Error()
+		if !strings.Contains(errStr, "open env file") && !strings.Contains(errStr, "no such file") {
+			t.Errorf("expected env file error, got: %q", errStr)
+		}
+	}
+}
+
+func TestCmdRun_EnvFileInvalidFormat(t *testing.T) {
+	vaultDir, passphrase := initVault(t)
+	setPassEnv(t, string(passphrase))
+	defer setupVaultFlag(t, vaultDir)()
+
+	envFile := filepath.Join(t.TempDir(), ".env.symvault")
+	if err := os.WriteFile(envFile, []byte("NOEQUALSIGN\n"), 0600); err != nil {
+		t.Fatalf("write env file: %v", err)
+	}
+
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "run", "--env-file", envFile, "--", "echo", "hello"})
+	defer rootCmd.SetArgs(nil)
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Error("expected error for invalid env file format, got nil")
+	} else {
+		errStr := err.Error()
+		if !strings.Contains(errStr, "invalid format") {
+			t.Errorf("expected 'invalid format' in error, got: %q", errStr)
+		}
+	}
+}
+
+func TestCmdRun_EnvFileDuplicateVar(t *testing.T) {
+	vaultDir, passphrase := initVault(t)
+	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
+	entry := &vaultpkg.Entry{Data: map[string]any{"password": "dup_test"}}
+	_ = vaultpkg.WriteEntry(vaultDir, "db", entry, identity.Identity)
+	setPassEnv(t, string(passphrase))
+	defer setupVaultFlag(t, vaultDir)()
+
+	envFile := filepath.Join(t.TempDir(), ".env.symvault")
+	if err := os.WriteFile(envFile, []byte("DB_PASS=db.password\n"), 0600); err != nil {
+		t.Fatalf("write env file: %v", err)
+	}
+
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "run",
+		"--env", "DB_PASS=db.password",
+		"--env-file", envFile,
+		"--", "echo", "hello"})
+	defer rootCmd.SetArgs(nil)
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Error("expected error for duplicate env var, got nil")
+	} else {
+		errStr := err.Error()
+		if !strings.Contains(errStr, "duplicate env var") {
+			t.Errorf("expected 'duplicate env var' in error, got: %q", errStr)
+		}
+	}
+}
+
+func TestCmdRun_EnvFileEmptyLines(t *testing.T) {
+	vaultDir, passphrase := initVault(t)
+	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
+	entry := &vaultpkg.Entry{Data: map[string]any{"password": "empty_lines_test"}}
+	_ = vaultpkg.WriteEntry(vaultDir, "db", entry, identity.Identity)
+	setPassEnv(t, string(passphrase))
+	defer setupVaultFlag(t, vaultDir)()
+
+	envFile := filepath.Join(t.TempDir(), ".env.symvault")
+	content := "\n\nDB_PASS=db.password\n\n\n"
+	if err := os.WriteFile(envFile, []byte(content), 0600); err != nil {
+		t.Fatalf("write env file: %v", err)
+	}
+
+	out := execWithStdout("--vault", vaultDir, "run", "--env-file", envFile, "--", "sh", "-c", "echo $DB_PASS")
+	if !strings.Contains(out, "empty_lines_test") {
+		t.Errorf("expected 'empty_lines_test' in stdout, got: %q", out)
+	}
+}
+
+func TestParseEnvFile(t *testing.T) {
+	envFile := filepath.Join(t.TempDir(), ".env.symvault")
+	content := "# Comment\nDB_PASS=db.password\nAPI_KEY=stripe.token\n\n# Another comment\n"
+	if err := os.WriteFile(envFile, []byte(content), 0600); err != nil {
+		t.Fatalf("write env file: %v", err)
+	}
+
+	result, err := parseEnvFile(envFile)
+	if err != nil {
+		t.Fatalf("parseEnvFile() unexpected error: %v", err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(result))
+	}
+	if result["DB_PASS"] != "db.password" {
+		t.Errorf("DB_PASS = %q, want %q", result["DB_PASS"], "db.password")
+	}
+	if result["API_KEY"] != "stripe.token" {
+		t.Errorf("API_KEY = %q, want %q", result["API_KEY"], "stripe.token")
 	}
 }
