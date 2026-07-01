@@ -14,7 +14,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > and [docs/commercial-boundary.md](docs/commercial-boundary.md) for the
 > current release-line policy. (Added 2026-06-10, see #384.)
 
-## [v0.8.1] - 2026-06-29
+## [v0.9.0] - 2026-07-01
+
+v0.9.0 extends secret execution and adds a template engine for generating configuration files from vault secrets.
+
+### Added
+
+- **`symvault run --env-file`** — load multiple secret-to-environment mappings from a file, one `NAME=path.field` per line, with comment and blank-line support (#594).
+- **`symvault run --passthrough`** — pass through selected parent environment variables to the child process, so variables such as `NODE_ENV` and `PORT` stay available (#594).
+- **`symvault template generate`** — generate `.env`, Docker Compose, Kubernetes Secret, GitHub Actions, and Terraform files from vault secrets (#594).
+- **Positional `KEY=ref` template arguments** — map arbitrary template keys to specific vault refs on the command line (#594).
+- **`symvault template generate --prefix`** — auto-select every entry under a vault path prefix (for example, `work/`) and include each field as a template variable (#594).
+
+### Fixed
+
+- **Stdin forwarding in `symvault run`** — child processes now receive stdin, enabling heredocs and piped input (#594).
+
 
 ### Security
 
@@ -790,3 +805,4 @@ Interactive TUI, vault management, and observability release.
 [v2.8.2]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.2
 [v2.8.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.1
 [v2.8.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.0
+[v0.9.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.9.0
