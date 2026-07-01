@@ -112,7 +112,7 @@ var runCmd = &cobra.Command{
 // Lines starting with # are comments. Blank lines are ignored.
 // Each non-comment line must be in the format NAME=path.field.
 func parseEnvFile(path string) (map[string]string, error) {
-	f, err := os.Open(path)
+	f, err := os.Open(path) // #nosec G304 -- env file path is user-provided CLI argument
 	if err != nil {
 		return nil, fmt.Errorf("open env file %q: %w", path, err)
 	}
