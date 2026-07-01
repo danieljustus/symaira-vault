@@ -94,7 +94,7 @@ func (a *authorizerImpl) Authorize(ctx context.Context, path string, write bool,
 		return errors.New("empty path")
 	}
 
-	actionType := "read"
+	actionType := "read" //nolint:goconst // action type literal paired with "write" below
 	if write {
 		actionType = "write"
 	}
