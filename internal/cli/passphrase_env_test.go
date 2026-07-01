@@ -76,10 +76,8 @@ func TestConsumeCachedEnvPassphrase_EmptyCache(t *testing.T) {
 
 func TestSniffAndClearEnvPassphrase_SetsCache(t *testing.T) {
 	orig := cachedEnvPassphrase
-	origOnce := cachedEnvPassphraseOnce
 	t.Cleanup(func() {
 		cachedEnvPassphrase = orig
-		cachedEnvPassphraseOnce = origOnce
 	})
 
 	cachedEnvPassphraseOnce = sync.Once{}
@@ -98,10 +96,8 @@ func TestSniffAndClearEnvPassphrase_SetsCache(t *testing.T) {
 
 func TestSniffAndClearEnvPassphrase_LegacyEnvVar(t *testing.T) {
 	orig := cachedEnvPassphrase
-	origOnce := cachedEnvPassphraseOnce
 	t.Cleanup(func() {
 		cachedEnvPassphrase = orig
-		cachedEnvPassphraseOnce = origOnce
 	})
 
 	cachedEnvPassphraseOnce = sync.Once{}
@@ -117,10 +113,8 @@ func TestSniffAndClearEnvPassphrase_LegacyEnvVar(t *testing.T) {
 
 func TestSniffAndClearEnvPassphrase_EmptyEnv(t *testing.T) {
 	orig := cachedEnvPassphrase
-	origOnce := cachedEnvPassphraseOnce
 	t.Cleanup(func() {
 		cachedEnvPassphrase = orig
-		cachedEnvPassphraseOnce = origOnce
 	})
 
 	cachedEnvPassphraseOnce = sync.Once{}
@@ -137,10 +131,8 @@ func TestSniffAndClearEnvPassphrase_EmptyEnv(t *testing.T) {
 
 func TestSniffAndClearEnvPassphrase_UnsetsEnv(t *testing.T) {
 	orig := cachedEnvPassphrase
-	origOnce := cachedEnvPassphraseOnce
 	t.Cleanup(func() {
 		cachedEnvPassphrase = orig
-		cachedEnvPassphraseOnce = origOnce
 		os.Unsetenv("SYMVAULT_PASSPHRASE")
 	})
 
@@ -157,10 +149,8 @@ func TestSniffAndClearEnvPassphrase_UnsetsEnv(t *testing.T) {
 
 func TestSniffAndClearEnvPassphrase_SymvaultTakesPrecedence(t *testing.T) {
 	orig := cachedEnvPassphrase
-	origOnce := cachedEnvPassphraseOnce
 	t.Cleanup(func() {
 		cachedEnvPassphrase = orig
-		cachedEnvPassphraseOnce = origOnce
 		os.Unsetenv("SYMVAULT_PASSPHRASE")
 		os.Unsetenv("OPENPASS_PASSPHRASE")
 	})
@@ -180,10 +170,8 @@ func TestSniffAndClearEnvPassphrase_SymvaultTakesPrecedence(t *testing.T) {
 
 func TestConsumeCachedEnvPassphrase_OnlyConsumesOnce(t *testing.T) {
 	orig := cachedEnvPassphrase
-	origOnce := cachedEnvPassphraseOnce
 	t.Cleanup(func() {
 		cachedEnvPassphrase = orig
-		cachedEnvPassphraseOnce = origOnce
 	})
 
 	cachedEnvPassphraseOnce = sync.Once{}
