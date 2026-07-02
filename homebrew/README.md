@@ -8,9 +8,9 @@ Use the release binaries from GitHub or install from source with Go. The formula
 in this directory is intended for local formula validation and future tap
 publishing.
 
-## Testing the v1.0.0 formula locally
+## Testing the v0.9.0 formula locally
 
-The checked-in formula builds from the `v1.0.0` source tag and is intended for local formula testing.
+The checked-in formula builds from the `v0.9.0` source tag and is intended for local formula testing.
 
 Homebrew 5 requires formula files to live in a tap. From the repository root, create a throwaway local tap and install from it:
 
