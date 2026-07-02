@@ -4,7 +4,6 @@
 [![Release](https://img.shields.io/github/v/release/danieljustus/symaira-vault)](https://github.com/danieljustus/symaira-vault/releases/latest)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Go Reference](https://pkg.go.dev/badge/github.com/danieljustus/symaira-vault.svg)](https://pkg.go.dev/github.com/danieljustus/symaira-vault)
-[![Go Report Card](https://goreportcard.com/badge/github.com/danieljustus/symaira-vault)](https://goreportcard.com/report/github.com/danieljustus/symaira-vault)
 
 ![Symaira Vault hero](docs/assets/symvault-hero.png)
 
