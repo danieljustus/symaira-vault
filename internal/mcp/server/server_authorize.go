@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -152,7 +151,7 @@ func (s *Server) checkScope(path string) bool {
 		if normalizedPath == normalizedAllowed {
 			return true
 		}
-		if strings.HasPrefix(normalizedPath, normalizedAllowed+string(os.PathSeparator)) {
+		if strings.HasPrefix(normalizedPath, normalizedAllowed+"/") {
 			return true
 		}
 	}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -190,7 +189,7 @@ func (a *authorizerImpl) CheckScope(path string) bool {
 		if normalizedPath == normalizedAllowed {
 			return true
 		}
-		if strings.HasPrefix(normalizedPath, normalizedAllowed+string(os.PathSeparator)) {
+		if strings.HasPrefix(normalizedPath, normalizedAllowed+"/") {
 			return true
 		}
 	}
