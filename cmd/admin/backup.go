@@ -48,7 +48,7 @@ Use --exclude-git to omit the .git/ directory from the backup.`,
 		}
 
 		if !vaultpkg.IsInitialized(vaultDir) {
-			return errorspkg.NewCLIError(errorspkg.ExitNotInitialized, "vault not initialized. Run 'symvault init' first", errorspkg.ErrVaultNotInitialized)
+			return errorspkg.NewVaultNotInitialized()
 		}
 
 		archivePath := args[0]
@@ -160,7 +160,7 @@ to ensure all expected files are present.`,
 		}
 
 		if !vaultpkg.IsInitialized(vaultDir) {
-			return errorspkg.NewCLIError(errorspkg.ExitNotInitialized, "vault not initialized. Run 'symvault init' first", errorspkg.ErrVaultNotInitialized)
+			return errorspkg.NewVaultNotInitialized()
 		}
 
 		cli.PrintQuietAware("Vault restored to: %s\n", vaultDir)

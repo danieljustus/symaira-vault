@@ -43,7 +43,7 @@ var recipientsListCmd = &cobra.Command{
 		}
 
 		if !vaultpkg.IsInitialized(vaultDir) {
-			return errorspkg.NewCLIError(errorspkg.ExitNotInitialized, "vault not initialized. Run 'symvault init' first", errorspkg.ErrVaultNotInitialized)
+			return errorspkg.NewVaultNotInitialized()
 		}
 
 		rm := vaultpkg.NewRecipientsManager(vaultDir)

@@ -5,6 +5,7 @@ package errors
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	corekitexitcodes "github.com/danieljustus/symaira-corekit/exitcodes"
 )
@@ -101,6 +102,9 @@ type CLIError struct {
 // Error implements the error interface.
 func (e *CLIError) Error() string {
 	if e.Cause != nil {
+		if e.Cause == ErrVaultNotInitialized && strings.Contains(strings.ToLower(e.Message), "vault not initialized") {
+			return e.Message
+		}
 		return fmt.Sprintf("%s: %v", e.Message, e.Cause)
 	}
 	return e.Message
@@ -211,6 +215,16 @@ func NotInitialized(format string, args ...any) *CLIError {
 		Message: fmt.Sprintf(format, args...),
 		Cause:   ErrVaultNotInitialized,
 		Hint:    "Run: symvault init to initialize a new vault.",
+	}
+}
+
+// NewVaultNotInitialized returns a CLIError for an uninitialized vault.
+func NewVaultNotInitialized() *CLIError {
+	return &CLIError{
+		Code:    ExitNotInitialized,
+		Kind:    ErrKindNone,
+		Message: "vault not initialized. Run 'symvault init' first",
+		Cause:   ErrVaultNotInitialized,
 	}
 }
 

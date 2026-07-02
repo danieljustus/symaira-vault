@@ -47,7 +47,7 @@ but should NOT be used on shared machines (visible in process listings).`,
 		}
 
 		if !vaultpkg.IsInitialized(vaultDir) {
-			return errorspkg.NewCLIError(errorspkg.ExitNotInitialized, "vault not initialized. Run 'symvault init' first", errorspkg.ErrVaultNotInitialized)
+			return errorspkg.NewVaultNotInitialized()
 		}
 
 		if check {

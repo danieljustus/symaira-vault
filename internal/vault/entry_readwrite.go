@@ -44,19 +44,7 @@ func loadVaultConfig(vaultDir string) (*vaultconfig.Config, error) {
 		return nil, fmt.Errorf("load vault config: %w", err)
 	}
 	cache.configMu.Lock()
-	if cache.configMaxSize > 0 && len(cache.configItems) >= cache.configMaxSize {
-		var oldestKey string
-		var oldestTime time.Time
-		for k, v := range cache.configItems {
-			if oldestTime.IsZero() || v.accessedAt.Before(oldestTime) {
-				oldestTime = v.accessedAt
-				oldestKey = k
-			}
-		}
-		if oldestKey != "" {
-			delete(cache.configItems, oldestKey)
-		}
-	}
+	cache.evictOldestConfigLocked()
 	cache.configItems[vaultDir] = configCacheEntry{cfg: cfg, mtime: mtime, accessedAt: time.Now()}
 	cache.configMu.Unlock()
 	return cfg, nil

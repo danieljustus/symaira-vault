@@ -160,9 +160,7 @@ func WithVault(fn func(*vaultpkg.Vault, *VaultService) error) error {
 		return err
 	}
 	if !vaultpkg.IsInitialized(vaultDir) {
-		return errorspkg.NewCLIError(errorspkg.ExitNotInitialized,
-			"vault not initialized. Run 'symvault init' first",
-			errorspkg.ErrVaultNotInitialized)
+		return errorspkg.NewVaultNotInitialized()
 	}
 	v, err := UnlockVault(vaultDir, true)
 	if err != nil {
@@ -186,9 +184,7 @@ func WithVaultForScripting(fn func(*vaultpkg.Vault, *VaultService) error) error 
 		return err
 	}
 	if !vaultpkg.IsInitialized(vaultDir) {
-		return errorspkg.NewCLIError(errorspkg.ExitNotInitialized,
-			"vault not initialized. Run 'symvault init' first",
-			errorspkg.ErrVaultNotInitialized)
+		return errorspkg.NewVaultNotInitialized()
 	}
 	v, err := UnlockVault(vaultDir, false)
 	if err != nil {

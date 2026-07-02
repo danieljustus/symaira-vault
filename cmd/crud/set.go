@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
+	cliinput "github.com/danieljustus/symaira-vault/internal/cli/input"
 
 	"github.com/spf13/cobra"
 
@@ -17,6 +18,7 @@ import (
 
 var (
 	SetValue       string
+	SetStdinValue  bool
 	SetTOTPSecret  string
 	SetTOTPIssuer  string
 	SetTOTPAccount string
@@ -24,10 +26,13 @@ var (
 )
 
 var setCmd = &cobra.Command{
-	Use:   "set <path[.field]> [--value value]",
+	Use:   "set <path[.field]>",
 	Short: "Set a password entry or field",
-	Long:  "Creates or updates a password entry. Use --value or interactive mode.",
-	Example: `  # Set a field non-interactively
+	Long:  "Creates or updates a password entry. Use --value, --stdin-value, or interactive mode.",
+	Example: `  # Set a field from stdin
+  echo "mysecret" | symvault set github.password --stdin-value
+
+  # Set a field non-interactively (visible in process listing)
   symvault set github.password --value "mysecret"
 
   # Set TOTP data
@@ -42,6 +47,17 @@ var setCmd = &cobra.Command{
 			path = query[:idx]
 			field = query[idx+1:]
 		}
+
+		if SetStdinValue {
+			stdinReader := bufio.NewReader(os.Stdin)
+			line, err := stdinReader.ReadString('\n')
+			if err != nil && line == "" {
+				return errorspkg.ReadFailed(err, "read --stdin-value")
+			}
+			SetValue = strings.TrimRight(line, "\n\r")
+		}
+
+		warnArgvExposure(SetValue, SetTOTPSecret, false)
 
 		data := map[string]any{}
 		if SetValue != "" {
@@ -58,12 +74,13 @@ var setCmd = &cobra.Command{
 		} else {
 			reader := bufio.NewReader(os.Stdin)
 			if field != "" {
-				fmt.Fprintf(os.Stderr, "Enter value for %s: ", field)
-				value, err := reader.ReadString('\n')
-				if err != nil && value == "" {
+				prompt := fmt.Sprintf("Enter value for %s: ", field)
+				valueBytes, err := cliinput.ReadHiddenInputFn(prompt, reader)
+				if err != nil && len(valueBytes) == 0 {
 					return errorspkg.ReadFailed(err, "read value")
 				}
-				data[field] = strings.TrimSpace(value)
+				defer cryptopkg.Wipe(valueBytes)
+				data[field] = string(valueBytes)
 			} else {
 				collected, err := cli.CollectEntryData(reader, cli.EntryFlags{
 					TOTPSecret:      SetTOTPSecret,
@@ -110,8 +127,9 @@ var setCmd = &cobra.Command{
 }
 
 func init() {
-	setCmd.Flags().StringVar(&SetValue, "value", "", "Value to set (skip interactive)")
-	setCmd.Flags().StringVar(&SetTOTPSecret, "totp-secret", "", "TOTP secret key (base32 encoded)")
+	setCmd.Flags().StringVar(&SetValue, "value", "", "Value to set (non-interactive, visible in process listings)")
+	setCmd.Flags().BoolVar(&SetStdinValue, "stdin-value", false, "Read value from stdin (prevents argv leak)")
+	setCmd.Flags().StringVar(&SetTOTPSecret, "totp-secret", "", "TOTP secret key (base32 encoded, visible in process listings)")
 	setCmd.Flags().StringVar(&SetTOTPIssuer, "totp-issuer", "", "TOTP issuer/service name")
 	setCmd.Flags().StringVar(&SetTOTPAccount, "totp-account", "", "TOTP account name/username")
 	setCmd.Flags().BoolVar(&SetForce, "force", false, "Skip password strength validation")

@@ -566,9 +566,7 @@ access to all vault entries.`,
 		}
 
 		if !vaultpkg.IsInitialized(vaultDir) {
-			return errorspkg.NewCLIError(errorspkg.ExitNotInitialized,
-				"vault not initialized. Run 'symvault init' first",
-				errorspkg.ErrVaultNotInitialized)
+			return errorspkg.NewVaultNotInitialized()
 		}
 
 		v, err := cli.UnlockVault(vaultDir, true)

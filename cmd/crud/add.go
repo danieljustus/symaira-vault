@@ -70,7 +70,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 			return err
 		}
 
-		warnArgvExposure()
+		warnArgvExposure(AddValue, AddTOTPSecret, AddStdinTOTP)
 
 		data, secretMeta, cleanup, err := buildEntryData(name)
 		if err != nil {
@@ -146,8 +146,8 @@ func readStdinValues() error {
 
 // warnArgvExposure prints warnings when sensitive values are passed via
 // command-line flags on an interactive terminal.
-func warnArgvExposure() {
-	if AddValue != "" {
+func warnArgvExposure(value string, totpSecret string, stdinTOTP bool) {
+	if value != "" {
 		fdRaw := os.Stdin.Fd()
 		if fdRaw <= uintptr(^uint(0)>>1) {
 			fd := int(fdRaw)
@@ -156,7 +156,7 @@ func warnArgvExposure() {
 			}
 		}
 	}
-	if AddTOTPSecret != "" && !AddStdinTOTP {
+	if totpSecret != "" && !stdinTOTP {
 		fdRaw := os.Stdin.Fd()
 		if fdRaw <= uintptr(^uint(0)>>1) {
 			fd := int(fdRaw)

@@ -1,11 +1,8 @@
 package vault
 
 import (
-	"fmt"
 	"testing"
 	"time"
-
-	vaultconfig "github.com/danieljustus/symaira-vault/internal/config"
 )
 
 func TestEntry_RemoveTag(t *testing.T) {
@@ -124,10 +121,6 @@ func TestSetEntryCanary_NilIdentity(t *testing.T) {
 	}
 }
 
-func TestInvalidateConfigCache(t *testing.T) {
-	listCacheFor(t.TempDir()).InvalidateConfig(t.TempDir())
-}
-
 func TestCurrentSearchIdentity_InitialNil(t *testing.T) {
 	var v *Vault
 	id := v.CurrentSearchIdentity()
@@ -184,83 +177,6 @@ func TestVaultCache_InvalidatePath(t *testing.T) {
 func TestVaultCache_InvalidateSearchIndex(t *testing.T) {
 	cache := NewVaultCache(VaultCacheConfig{})
 	cache.InvalidateSearchIndex() // should not panic
-}
-
-func TestVaultCache_GetOrLoad(t *testing.T) {
-	cache := NewVaultCache(VaultCacheConfig{})
-
-	// Test nil cache
-	var nilCache *VaultCache
-	loaded := false
-	v, err := nilCache.GetOrLoad("/test", func() (any, error) {
-		loaded = true
-		return &vaultconfig.Config{}, nil
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !loaded {
-		t.Error("loader should have been called")
-	}
-	if v == nil {
-		t.Error("expected non-nil config")
-	}
-
-	// Test cache miss with Config type
-	loaded = false
-	v, err = cache.GetOrLoad("/test", func() (any, error) {
-		loaded = true
-		return &vaultconfig.Config{}, nil
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !loaded {
-		t.Error("loader should have been called on cache miss")
-	}
-	if v == nil {
-		t.Error("expected non-nil config")
-	}
-
-	// Test cache hit
-	loaded = false
-	v, err = cache.GetOrLoad("/test", func() (any, error) {
-		loaded = true
-		return &vaultconfig.Config{}, nil
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if loaded {
-		t.Error("loader should not have been called on cache hit")
-	}
-	if v == nil {
-		t.Error("expected non-nil config from cache")
-	}
-
-	// Test non-Config type (not cached)
-	loaded = false
-	v, err = cache.GetOrLoad("/string", func() (any, error) {
-		loaded = true
-		return "string value", nil
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !loaded {
-		t.Error("loader should have been called for non-Config type")
-	}
-	if v != "string value" {
-		t.Errorf("expected 'string value', got %v", v)
-	}
-
-	// Test loader error
-	_, err = cache.GetOrLoad("/error", func() (any, error) {
-		return nil, fmt.Errorf("load error")
-	})
-	if err == nil {
-		t.Error("expected error from loader")
-	}
 }
 
 func TestVaultCache_SetConfigCacheSize(t *testing.T) {

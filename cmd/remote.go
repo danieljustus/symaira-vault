@@ -98,9 +98,7 @@ func runRemoteInit(cmd *cobra.Command, args []string) error {
 	}
 
 	if !vaultpkg.IsInitialized(vaultDir) {
-		return errorspkg.NewCLIError(errorspkg.ExitNotInitialized,
-			"vault not initialized. Run 'symvault init' first",
-			errorspkg.ErrVaultNotInitialized)
+		return errorspkg.NewVaultNotInitialized()
 	}
 
 	hasRemote, err := git.HasRemote(vaultDir, remoteName)
@@ -163,9 +161,7 @@ func runRemoteStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	if !vaultpkg.IsInitialized(vaultDir) {
-		return errorspkg.NewCLIError(errorspkg.ExitNotInitialized,
-			"vault not initialized. Run 'symvault init' first",
-			errorspkg.ErrVaultNotInitialized)
+		return errorspkg.NewVaultNotInitialized()
 	}
 
 	url, err := git.GetRemoteURL(vaultDir, "origin")
