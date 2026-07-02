@@ -102,7 +102,7 @@ type CLIError struct {
 // Error implements the error interface.
 func (e *CLIError) Error() string {
 	if e.Cause != nil {
-		if e.Cause == ErrVaultNotInitialized && strings.Contains(strings.ToLower(e.Message), "vault not initialized") {
+		if errors.Is(e.Cause, ErrVaultNotInitialized) && strings.Contains(strings.ToLower(e.Message), "vault not initialized") {
 			return e.Message
 		}
 		return fmt.Sprintf("%s: %v", e.Message, e.Cause)
