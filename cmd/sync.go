@@ -37,9 +37,7 @@ var syncCmd = &cobra.Command{
 		}
 
 		if !vaultpkg.IsInitialized(vaultDir) {
-			return errorspkg.NewCLIError(errorspkg.ExitNotInitialized,
-				"vault not initialized. Run 'symvault init' first",
-				errorspkg.ErrVaultNotInitialized)
+			return errorspkg.NewVaultNotInitialized()
 		}
 
 		hasRemote, _ := git.HasRemote(vaultDir, "origin")

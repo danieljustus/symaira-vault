@@ -88,8 +88,8 @@ symvault init
 
 # Add a password
 symvault add github
-# or non-interactive:
-symvault set github.password --value "mysecretpassword"
+# or non-interactive (reads from stdin):
+echo "mysecretpassword" | symvault set github.password --stdin-value
 
 # Add TOTP metadata
 symvault add github --totp-secret JBSWY3DPEHPK3PXP --totp-issuer GitHub

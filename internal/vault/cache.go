@@ -165,51 +165,9 @@ func (c *VaultCache) InvalidatePath(path string) {
 	c.pseudonymMu.Unlock()
 }
 
-// InvalidateConfig drops the cached parsed config for vaultDir.
-// Callers should invoke this after writing config.yaml so the next
-// load sees the new value.
-func (c *VaultCache) InvalidateConfig(vaultDir string) {
-	if c == nil {
-		return
-	}
-	c.configMu.Lock()
-	delete(c.configItems, vaultDir)
-	c.configMu.Unlock()
-}
-
-// InvalidateSearchIndex clears the global persistent encrypted search
-// index and all in-memory caches.
-func (c *VaultCache) InvalidateSearchIndex() {
-	searchIndexStore.invalidateAll()
-	c.Invalidate()
-}
-
-// GetOrLoad returns the cached config associated with vaultDir, calling
-// loader on miss and caching its result. It is the cache-miss-or-load
-// helper for the config cache.
-func (c *VaultCache) GetOrLoad(vaultDir string, loader func() (any, error)) (any, error) {
-	if c == nil {
-		return loader()
-	}
-	c.configMu.RLock()
-	entry, ok := c.configItems[vaultDir]
-	c.configMu.RUnlock()
-	if ok && entry.cfg != nil {
-		c.configMu.Lock()
-		entry.accessedAt = time.Now()
-		c.configItems[vaultDir] = entry
-		c.configMu.Unlock()
-		return entry.cfg, nil
-	}
-	v, err := loader()
-	if err != nil {
-		return nil, err
-	}
-	cfg, ok := v.(*vaultconfig.Config)
-	if !ok {
-		return v, nil
-	}
-	c.configMu.Lock()
+// evictOldestConfigLocked evicts the oldest configuration cache entry.
+// The caller must hold configMu.Lock().
+func (c *VaultCache) evictOldestConfigLocked() {
 	if c.configMaxSize > 0 && len(c.configItems) >= c.configMaxSize {
 		var oldestKey string
 		var oldestTime time.Time
@@ -223,9 +181,13 @@ func (c *VaultCache) GetOrLoad(vaultDir string, loader func() (any, error)) (any
 			delete(c.configItems, oldestKey)
 		}
 	}
-	c.configItems[vaultDir] = configCacheEntry{cfg: cfg, mtime: time.Time{}, accessedAt: time.Now()}
-	c.configMu.Unlock()
-	return cfg, nil
+}
+
+// InvalidateSearchIndex clears the global persistent encrypted search
+// index and all in-memory caches.
+func (c *VaultCache) InvalidateSearchIndex() {
+	searchIndexStore.invalidateAll()
+	c.Invalidate()
 }
 
 // SetListCacheTTL overrides the effective list cache TTL. Pass 0 to
