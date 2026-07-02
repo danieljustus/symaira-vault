@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -151,7 +151,7 @@ func (s *Server) checkScope(path string) bool {
 		if normalizedPath == normalizedAllowed {
 			return true
 		}
-		if strings.HasPrefix(normalizedPath, normalizedAllowed+string(os.PathSeparator)) {
+		if strings.HasPrefix(normalizedPath, normalizedAllowed+"/") {
 			return true
 		}
 	}
@@ -329,8 +329,8 @@ func redactValue(field string, value any, redactFields []string) any {
 	}
 }
 
-func normalizeScopePath(path string) string {
-	cleaned := filepath.Clean(strings.TrimSpace(filepath.FromSlash(path)))
+func normalizeScopePath(p string) string {
+	cleaned := path.Clean(strings.TrimSpace(filepath.ToSlash(p)))
 	if cleaned == "." {
 		return ""
 	}
