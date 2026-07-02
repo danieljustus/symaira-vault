@@ -190,8 +190,6 @@ func (c *VaultCache) InvalidateSearchIndex() {
 	c.Invalidate()
 }
 
-
-
 // SetListCacheTTL overrides the effective list cache TTL. Pass 0 to
 // disable caching. The adaptive TTL controller will not grow past the
 // configured ceiling.
