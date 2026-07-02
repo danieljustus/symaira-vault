@@ -1,25 +1,32 @@
 ## What's changed
 
-### Security
-- #516 Argon2id zero-key self-heal and KDF state from identity.age
-- #524 Harden policy storage, MCP policy loading, search isolation, and the gosec gate
-- #527 Escape backslashes first in cursor path sanitizer
-- #518 Annotate G304 false positive in KDF doctor check
-- #543 Fix weak-sensitive-data-hashing in search index — closes #540, #541, #542
+### Features
+- #594 `symvault run` and `symvault template` improvements — closes #590, #591, #592, #593
+  - Load environment-variable mappings from a file with `--env-file` (`-f`).
+  - Pass positional `KEY=ref` arguments to `symvault template generate`.
+  - Add `--prefix` to enumerate entry fields as individual refs.
+  - Add `--passthrough` to allow specific parent environment variables through to the child process.
+  - Forward stdin to child processes in `symvault run` so heredocs and piped input work.
 
 ### Fixes
-- #537 Recipients remove no longer revokes access to existing entries
-- #526 Measure password strength by rune count, not byte length
+- #613 Harden `symvault set` secret input, centralize "vault not initialized" error handling, remove dead `cmd/port_utils.go`, and unify the LRU-backed cache eviction path — closes #608, #609, #610, #611
+- #600 Fix `go vet` failure in `passphrase_env_test.go` and resolve a `goconst` lint finding in `internal/policy/authorizer.go` — closes #595, #596
+- #606 Correct `.goreleaser.yml` license from MIT to Apache-2.0 and document v0.9.0 `run`/`template` features — closes #597, #598
 
-### Added
-- #532 Search-index persistence, MCP coverage gate, and server-bootstrap cleanup
-- #516 Manifest rebuild capability
-- #517 Projects v2 board with Status/Priority/Iteration fields
+### Tests
+- #607 Improve patch coverage for `run`/`template`/`runner` error branches — closes #599
+- #615 Add policy authorizer tests to restore the overall coverage baseline — closes #614
 
 ### Dependencies
-- #543 Clean build artifacts and harden Argon2id KDF path
+- #605 Bump the Go dependency group with 4 updates
 
 ### CI
-- #511 Pin docker/* actions and fix invalid github-script pin
+- #601 Bump `goreleaser/goreleaser-action` from 7.2.2 to 7.2.3
+- #602 Bump `golangci/golangci-lint-action` from 9.2.1 to 9.3.0
+- #603 Bump `docker/setup-qemu-action` from 4.1.0 to 4.2.0
+- #604 Bump `actions/attest-build-provenance` from 4.1.0 to 4.1.1
 
-**Full Changelog**: https://github.com/danieljustus/symaira-vault/compare/v0.7.0...v0.7.1
+### Docs
+- #612 Remove the retired Go Report Card badge from the README
+
+**Full Changelog**: https://github.com/danieljustus/symaira-vault/compare/v0.8.1...v0.9.0
