@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -329,8 +330,8 @@ func redactValue(field string, value any, redactFields []string) any {
 	}
 }
 
-func normalizeScopePath(path string) string {
-	cleaned := filepath.Clean(strings.TrimSpace(filepath.FromSlash(path)))
+func normalizeScopePath(p string) string {
+	cleaned := path.Clean(strings.TrimSpace(filepath.ToSlash(p)))
 	if cleaned == "." {
 		return ""
 	}

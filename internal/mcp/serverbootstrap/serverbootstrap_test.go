@@ -13,6 +13,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"net"
 	"net/http"
@@ -230,6 +231,9 @@ func TestRunStdioServer_Success(t *testing.T) {
 	pr, pw, _ := os.Pipe()
 	os.Stdout = pw
 
+	// Drain stdout so log output does not block on the unbuffered pipe.
+	go func() { _, _ = io.Copy(io.Discard, pr) }()
+
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
@@ -239,6 +243,10 @@ func TestRunStdioServer_Success(t *testing.T) {
 
 	time.Sleep(50 * time.Millisecond)
 	cancel()
+	// Closing stdin signals EOF to the reader, ensuring the transport exits
+	// promptly on platforms where the blocked read is not interrupted by context
+	// cancellation alone.
+	_ = w.Close()
 
 	done := make(chan struct{})
 	go func() {
@@ -255,7 +263,6 @@ func TestRunStdioServer_Success(t *testing.T) {
 	os.Stdin = oldStdin
 	os.Stdout = oldStdout
 	_ = r.Close()
-	_ = w.Close()
 	_ = pr.Close()
 	_ = pw.Close()
 }

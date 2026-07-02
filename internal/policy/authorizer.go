@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -268,8 +269,8 @@ func (a *authorizerImpl) logAuditShare(_ context.Context, action, path string, g
 	}
 }
 
-func normalizeScopePath(path string) string {
-	cleaned := filepath.Clean(strings.TrimSpace(filepath.FromSlash(path)))
+func normalizeScopePath(p string) string {
+	cleaned := path.Clean(strings.TrimSpace(filepath.ToSlash(p)))
 	if cleaned == "." {
 		return ""
 	}
