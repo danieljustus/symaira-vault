@@ -83,3 +83,9 @@ docker/caddy/config/
 .agentsroom/handoff-summary-*.md
 # Agent/developer workspace run logs
 .omo/
+
+# Local agent reports / session state
+.github/coverage/
+.github/audit/
+.omo/run-continuation/
+.omo/notepads/
