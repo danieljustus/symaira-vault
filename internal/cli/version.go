@@ -43,13 +43,12 @@ var versionCmd = &cobra.Command{
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		flagJSON, _ := cmd.Flags().GetBool("json")
-		
 		info := versionkit.New("symvault", AppVersion, 1)
 		if WantJSONOutput(flagJSON) {
 			return info.Write(cmd.OutOrStdout())
 		}
-		fmt.Fprintln(cmd.OutOrStdout(), info.String())
-		return nil
+		_, err := fmt.Fprintln(cmd.OutOrStdout(), info.String())
+		return err
 	},
 }
 
