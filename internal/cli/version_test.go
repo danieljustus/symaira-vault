@@ -145,3 +145,44 @@ func marshalYAML(t *testing.T, v interface{}) string {
 func contains(s, substr string) bool {
 	return strings.Contains(s, substr)
 }
+
+func TestVersionCommand(t *testing.T) {
+	// Reset/Save original version info
+	origVersion := AppVersion
+	t.Cleanup(func() { AppVersion = origVersion })
+	AppVersion = "2.3.4"
+
+	var out strings.Builder
+	RootCmd.SetOut(&out)
+	RootCmd.SetErr(&out)
+	t.Cleanup(func() {
+		RootCmd.SetOut(nil)
+		RootCmd.SetErr(nil)
+		RootCmd.SetArgs(nil)
+	})
+
+	RootCmd.SetArgs([]string{"version"})
+	if err := RootCmd.Execute(); err != nil {
+		t.Fatalf("version execute error: %v", err)
+	}
+	if got := strings.TrimSpace(out.String()); got != "symvault 2.3.4" {
+		t.Errorf("expected version output 'symvault 2.3.4', got %q", got)
+	}
+
+	out.Reset()
+	RootCmd.SetArgs([]string{"version", "--json"})
+	if err := RootCmd.Execute(); err != nil {
+		t.Fatalf("version json execute error: %v", err)
+	}
+	var resp struct {
+		Tool          string `json:"tool"`
+		Version       string `json:"version"`
+		SchemaVersion int    `json:"schema_version"`
+	}
+	if err := json.Unmarshal([]byte(out.String()), &resp); err != nil {
+		t.Fatalf("parse JSON version: %v, output was %q", err, out.String())
+	}
+	if resp.Tool != "symvault" || resp.Version != "2.3.4" || resp.SchemaVersion != 1 {
+		t.Errorf("unexpected JSON version payload: %+v", resp)
+	}
+}
