@@ -73,6 +73,7 @@ CLAUDE.md
 
 # New binary name (post-rename)
 symvault
+symvault-local
 
 # Docker runtime data (environment-specific)
 docker/certs/
