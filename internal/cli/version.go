@@ -1,7 +1,11 @@
 package cli
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
+
+	"github.com/danieljustus/symaira-corekit/versionkit"
 )
 
 var (
@@ -33,20 +37,22 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print the version of Symaira Vault",
 	Example: `  symvault version
-  symvault version --output json`,
+  symvault version --json`,
 	Annotations: map[string]string{
 		RequiresVaultAnnotation: "false",
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		result := VersionResult{
-			Version: AppVersion,
-			Commit:  AppCommit,
-			Built:   AppDate,
+		flagJSON, _ := cmd.Flags().GetBool("json")
+		info := versionkit.New("symvault", AppVersion, 1)
+		if WantJSONOutput(flagJSON) {
+			return info.Write(cmd.OutOrStdout())
 		}
-		return PrintResult(result)
+		_, err := fmt.Fprintln(cmd.OutOrStdout(), info.String())
+		return err
 	},
 }
 
 func init() {
+	versionCmd.Flags().Bool("json", false, "Emit version as machine-readable JSON")
 	RootCmd.AddCommand(versionCmd)
 }
