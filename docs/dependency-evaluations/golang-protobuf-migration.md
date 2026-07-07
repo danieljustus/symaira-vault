@@ -12,18 +12,18 @@
 
 ```
 Symaira Vault
-├── github.com/go-git/go-git/v5 v5.18.0 (direct)
+├── github.com/go-git/go-git/v5 v5.19.1 (direct)
 │   └── github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 (indirect)
 │       └── github.com/golang/protobuf v1.5.4 (indirect, DEPRECATED)
-│           └── google.golang.org/protobuf v1.33.0+ (indirect)
-└── google.golang.org/grpc v1.80.0 (indirect)
+│           └── google.golang.org/protobuf v1.36.11+ (indirect)
+└── google.golang.org/grpc v1.81.1 (indirect)
     └── github.com/golang/protobuf v1.5.4 (indirect, DEPRECATED)
-        └── google.golang.org/protobuf v1.33.0+ (indirect)
+        └── google.golang.org/protobuf v1.36.11+ (indirect)
 ```
 
 ### 1.2 go.mod Evidence
 
-From `go.mod` (lines 7, 12, 48, 70):
+From `go.mod` (lines 7, 12, 37, 104, 144, 145):
 
 ```go
 // github.com/golang/protobuf: v1.5.4 (deprecated, migration to google.golang.org/protobuf needed)
@@ -31,11 +31,12 @@ From `go.mod` (lines 7, 12, 48, 70):
 
 require (
     github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
-    google.golang.org/protobuf v1.36.8 // indirect
+    google.golang.org/grpc v1.81.1 // indirect
+    google.golang.org/protobuf v1.36.11 // indirect
 )
 ```
 
-**Key Observation:** `google.golang.org/protobuf v1.36.8` is already present as a transitive dependency. The deprecated `github.com/golang/protobuf v1.5.4` is itself a thin compatibility wrapper around `google.golang.org/protobuf` (since v1.4.0+). Both modules coexist without runtime conflicts.
+**Key Observation:** `google.golang.org/protobuf v1.36.11` is already present as a transitive dependency. The deprecated `github.com/golang/protobuf v1.5.4` is itself a thin compatibility wrapper around `google.golang.org/protobuf` (since v1.4.0+). Both modules coexist without runtime conflicts.
 
 ### 1.3 Why Symaira Vault Cannot Directly Fix This
 
@@ -128,11 +129,11 @@ go-git is a widely used library (7K+ stars, consumed by Kubernetes ecosystem, Gi
 
 | Attribute | Value |
 |-----------|-------|
-| grpc v1.80.0 | Still depends on `github.com/golang/protobuf` v1.5.4 |
-| grpc v1.81.0 (latest) | **Still depends on `github.com/golang/protobuf` v1.5.4** |
+| grpc v1.81.1 | Still depends on `github.com/golang/protobuf` v1.5.4 |
+| grpc v1.81.1 (latest) | **Still depends on `github.com/golang/protobuf` v1.5.4** |
 | grpc migration status | No active migration off deprecated protobuf observed |
 
-**Verdict:** Even upgrading to the latest grpc release (v1.81.0) does **not** remove the deprecated `golang/protobuf` dependency. grpc remains a second, independent path for the deprecated module. This was verified by testing `go get google.golang.org/grpc@v1.81.0` — the `golang/protobuf` edge persists in the module graph.
+**Verdict:** Even upgrading to the latest grpc release (v1.81.1) does **not** remove the deprecated `golang/protobuf` dependency. grpc remains a second, independent path for the deprecated module. This was verified by inspecting the grpc module graph — the `golang/protobuf` edge persists.
 
 ---
 
@@ -224,6 +225,7 @@ Acknowledge the deprecated transitive dependency, document it, and move on. Re-a
 | 2026-05-05 | Sisyphus | DEFER | Re-audit discovered **second path**: `grpc` → `golang/protobuf`. Tested grpc v1.81.0 upgrade — deprecated dep persists. No viable resolution path. |
 | 2026-06-22 | Sisyphus-Junior | DEFER | Re-audit for #536: grpc at v1.81.1, still depends on `golang/protobuf`. groupcache #150 still open (no new activity since Apr 2024). No upstream changes. |
 | 2026-06-29 | Sisyphus | DEFER | Quarterly re-audit for #584: groupcache still at v0.0.0-20241129210726 (no new commits since Nov 2024). grpc v1.81.1 still directly requires `github.com/golang/protobuf v1.5.4`. No upstream migration activity. Status quo remains. |
+| 2026-07-07 | Sisyphus | DEFER | Re-audit for #617: groupcache issue #150 still open, no maintainer engagement. groupcache still directly requires `github.com/golang/protobuf v1.5.4`. grpc v1.81.1 still depends on `github.com/golang/protobuf v1.5.4`. Direct update is not possible; status quo maintained. |
 
 ---
 
