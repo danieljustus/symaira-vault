@@ -1,0 +1,3 @@
+[[IgnoredVulns]]
+id = "GO-2026-5932"
+reason = "The golang.org/x/crypto/openpgp package is unmaintained but is not imported or used by Symaira Vault."
