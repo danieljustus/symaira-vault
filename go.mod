@@ -1,6 +1,6 @@
 module github.com/danieljustus/symaira-vault
 
-go 1.26.4
+go 1.26.5
 
 // Deferred major updates (intentionally deferred):
 // - github.com/ProtonMail/go-crypto: v1.1.6 -> v1.4.1 (major version bump, potential breaking changes in crypto APIs)

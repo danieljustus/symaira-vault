@@ -84,7 +84,7 @@ The following CVE-class issues were fixed between v1.1.6 and v1.4.1:
 All Git remotes are **user-configured** (typically the user's own private repository). Symaira Vault does not clone from untrusted sources.
 
 ### Go Version Compatibility
-- Symaira Vault requires **Go 1.26.4**
+- Symaira Vault requires **Go 1.26.5**
 - `ProtonMail/go-crypto v1.4.0+` requires **Go 1.23.0+**
 - **No Go version blocker** — Symaira Vault's Go version exceeds all minimum requirements
 
