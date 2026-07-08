@@ -62,6 +62,7 @@ jobs:
         with:
           scan-args: >-
             --lockfile=go.mod
+            --config=osv-scanner.toml
             --format=sarif
             --output=osv-results.sarif
 
