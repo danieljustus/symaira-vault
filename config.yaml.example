@@ -1,10 +1,15 @@
 # Symaira Vault configuration example.
-# Copy this file to ~/.symvault/config.yaml for global settings or to a vault
+# Copy this file to $XDG_CONFIG_HOME/symaira-vault/config.yaml (defaults to
+# ~/.config/symaira-vault/config.yaml) for global settings, or to a vault
 # directory as config.yaml for vault-specific settings.
+# Legacy installs that still have a ~/.symvault directory keep reading and
+# writing config.yaml there until migrated; see internal/config/paths.go.
 
 # Default vault directory used when SYMVAULT_VAULT and --vault are not set.
-# The default subdirectory name is defined by internal/config.DefaultVaultSubdir.
-vaultDir: ~/.symvault
+# New installs default to the XDG data directory (see
+# internal/config.DefaultDataDir), typically ~/.local/share/symaira-vault.
+# Legacy installs keep using ~/.symvault until migrated.
+vaultDir: ~/.local/share/symaira-vault
 
 # Default MCP agent profile used when --agent is not set.
 defaultAgent: default
@@ -51,8 +56,10 @@ agents:
 # Vault-specific settings. These can also live inside <vault>/config.yaml.
 vault:
   # Vault directory path.
-  # The default subdirectory name is defined by internal/config.DefaultVaultSubdir.
-  path: ~/.symvault
+  # New installs default to the XDG data directory (see
+  # internal/config.DefaultDataDir), typically ~/.local/share/symaira-vault.
+  # Legacy installs keep using ~/.symvault until migrated.
+  path: ~/.local/share/symaira-vault
   # Age recipients used for newly written entries.
   default_recipients: []
   #  - age1...

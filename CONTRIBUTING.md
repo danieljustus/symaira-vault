@@ -20,7 +20,7 @@ Use the automated setup script to install all required tools:
 
 ```bash
 git clone https://github.com/danieljustus/symaira-vault
-cd Symaira Vault
+cd symaira-vault
 ./scripts/setup-dev.sh
 ```
 
@@ -40,7 +40,7 @@ If you prefer manual setup, ensure you have:
 
 ```bash
 git clone https://github.com/danieljustus/symaira-vault
-cd Symaira Vault
+cd symaira-vault
 go build -o symvault .
 ```
 
@@ -68,13 +68,13 @@ Use `make test-fast` during development for fast feedback. Run `make test` befor
 ### Running from Source
 
 ```bash
-./openpass --help
+./symvault --help
 ```
 
 ### Project Structure
 
 ```
-openpass/
+symaira-vault/
 ├── main.go              # Entry point
 ├── cmd/                 # CLI commands (Cobra)
 │   ├── root.go          # Root command
