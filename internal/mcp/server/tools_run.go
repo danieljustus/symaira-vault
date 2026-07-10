@@ -62,6 +62,12 @@ func (s *Server) handleRunCommand(ctx context.Context, req mcp.CallToolRequest) 
 		}
 	}
 
+	timeoutSeconds, timeoutErr := parseCommandTimeoutSeconds(req.Arguments["timeout"])
+	if timeoutErr != nil {
+		s.logAudit(ctx, "run_command", "<invalid:timeout>", false)
+		return mcp.NewToolResultError(timeoutErr.Error()), nil
+	}
+
 	resolvedEnv := make(map[string]string)
 	// Audit data: env var names only, never secret values.
 	envNames := make([]string, 0)
@@ -108,7 +114,6 @@ func (s *Server) handleRunCommand(ctx context.Context, req mcp.CallToolRequest) 
 	}
 
 	workingDir := req.GetString("working_dir", "")
-	timeoutSeconds := int(req.GetFloat("timeout", 30))
 
 	auditPath := strings.Join(command, " ")
 	if len(envNames) > 0 {
