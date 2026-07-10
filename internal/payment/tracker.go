@@ -107,13 +107,13 @@ func (dt *DailyTotals) save() error {
 }
 
 func addRatStrings(a, b string) (string, error) {
-	ra, ok := new(big.Rat).SetString(a)
-	if !ok {
-		return "", fmt.Errorf("parse %q as decimal", a)
+	ra, err := parseAmount(a)
+	if err != nil {
+		return "", fmt.Errorf("parse %q as decimal: %w", a, err)
 	}
-	rb, ok := new(big.Rat).SetString(b)
-	if !ok {
-		return "", fmt.Errorf("parse %q as decimal", b)
+	rb, err := parseAmount(b)
+	if err != nil {
+		return "", fmt.Errorf("parse %q as decimal: %w", b, err)
 	}
 	sum := new(big.Rat).Add(ra, rb)
 	return sum.RatString(), nil

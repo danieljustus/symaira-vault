@@ -84,15 +84,15 @@ func (e *Enforcer) Check(req PaymentRequest) error {
 		}
 	}
 
-	reqAmount, ok := new(big.Rat).SetString(req.Amount)
-	if !ok {
-		return fmt.Errorf("invalid amount %q", req.Amount)
+	reqAmount, err := parseAmount(req.Amount)
+	if err != nil {
+		return fmt.Errorf("invalid amount: %w", err)
 	}
 
 	if e.policy.MaxAmount.PerTransaction != "" {
-		limit, ok := new(big.Rat).SetString(e.policy.MaxAmount.PerTransaction)
-		if !ok {
-			return fmt.Errorf("invalid per_transaction limit %q", e.policy.MaxAmount.PerTransaction)
+		limit, err := parseAmount(e.policy.MaxAmount.PerTransaction)
+		if err != nil {
+			return fmt.Errorf("invalid per_transaction limit: %w", err)
 		}
 		if reqAmount.Cmp(limit) > 0 {
 			return &DenialError{
@@ -103,17 +103,17 @@ func (e *Enforcer) Check(req PaymentRequest) error {
 	}
 
 	if e.policy.MaxAmount.PerDay != "" && e.tracker != nil {
-		dayLimit, ok := new(big.Rat).SetString(e.policy.MaxAmount.PerDay)
-		if !ok {
-			return fmt.Errorf("invalid per_day limit %q", e.policy.MaxAmount.PerDay)
+		dayLimit, err := parseAmount(e.policy.MaxAmount.PerDay)
+		if err != nil {
+			return fmt.Errorf("invalid per_day limit: %w", err)
 		}
 		todayTotal := e.tracker.TodayTotal(e.policy.Instrument)
 		if todayTotal == "" {
 			todayTotal = "0"
 		}
-		todayRat, ok := new(big.Rat).SetString(todayTotal)
-		if !ok {
-			todayRat = new(big.Rat)
+		todayRat, err := parseAmount(todayTotal)
+		if err != nil {
+			return fmt.Errorf("invalid today total: %w", err)
 		}
 		projected := new(big.Rat).Add(todayRat, reqAmount)
 		if projected.Cmp(dayLimit) > 0 {

@@ -42,6 +42,41 @@ func validateAgents(agents map[string]AgentProfile) error {
 	return nil
 }
 
+func validateDecimalString(s, field string) error {
+	if len(s) == 0 || len(s) > 30 {
+		return fmt.Errorf("%s: %q is not a valid decimal amount", field, s)
+	}
+	sawDot := false
+	hasDigit := false
+	for i, r := range s {
+		switch r {
+		case '-':
+			if i != 0 {
+				return fmt.Errorf("%s: %q is not a valid decimal amount (minus sign must be leading)", field, s)
+			}
+		case '.':
+			if sawDot {
+				return fmt.Errorf("%s: %q is not a valid decimal amount (multiple decimal points)", field, s)
+			}
+			sawDot = true
+		case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
+			hasDigit = true
+		default:
+			return fmt.Errorf("%s: %q is not a valid decimal amount", field, s)
+		}
+	}
+	if !hasDigit {
+		return fmt.Errorf("%s: %q is not a valid decimal amount (no digits)", field, s)
+	}
+	// Length and format are validated above, so the input cannot trigger the
+	// malformed-string memory blowup described in CVE-2022-23772.
+	// #nosec G113
+	if _, ok := new(big.Rat).SetString(s); !ok {
+		return fmt.Errorf("%s: %q is not a valid decimal amount", field, s)
+	}
+	return nil
+}
+
 func validatePaymentPolicies(policies map[string]PaymentPolicy) error {
 	for name, policy := range policies {
 		if strings.TrimSpace(policy.Instrument) == "" {
@@ -56,13 +91,13 @@ func validatePaymentPolicies(policies map[string]PaymentPolicy) error {
 			return fmt.Errorf("paymentPolicies.%s.currency: required when max_amount limits are set", name)
 		}
 		if policy.MaxAmount.PerTransaction != "" {
-			if _, ok := new(big.Rat).SetString(policy.MaxAmount.PerTransaction); !ok {
-				return fmt.Errorf("paymentPolicies.%s.max_amount.per_transaction: %q is not a valid decimal amount", name, policy.MaxAmount.PerTransaction)
+			if err := validateDecimalString(policy.MaxAmount.PerTransaction, fmt.Sprintf("paymentPolicies.%s.max_amount.per_transaction", name)); err != nil {
+				return err
 			}
 		}
 		if policy.MaxAmount.PerDay != "" {
-			if _, ok := new(big.Rat).SetString(policy.MaxAmount.PerDay); !ok {
-				return fmt.Errorf("paymentPolicies.%s.max_amount.per_day: %q is not a valid decimal amount", name, policy.MaxAmount.PerDay)
+			if err := validateDecimalString(policy.MaxAmount.PerDay, fmt.Sprintf("paymentPolicies.%s.max_amount.per_day", name)); err != nil {
+				return err
 			}
 		}
 	}
