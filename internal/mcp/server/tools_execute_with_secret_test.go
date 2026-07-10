@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"runtime"
 	"strings"
 	"testing"
@@ -437,6 +438,32 @@ func TestHandleExecuteWithSecret_Timeout(t *testing.T) {
 	}
 	if !strings.Contains(result.Text, "timed out") {
 		t.Fatalf("result text = %q, want 'timed out'", result.Text)
+	}
+}
+
+func TestHandleExecuteWithSecret_InvalidTimeout(t *testing.T) {
+	srv := newTestServer(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
+	}, "stdio")
+
+	result, err := srv.handleExecuteWithSecret(context.Background(), mcp.CallToolRequest{
+		Arguments: map[string]any{
+			"command":     []any{"echo", "test"},
+			"secret_refs": []any{},
+			"timeout":     math.Inf(1),
+		},
+	})
+	if err != nil {
+		t.Fatalf("handleExecuteWithSecret() error = %v", err)
+	}
+	if result == nil || !result.IsError {
+		t.Fatal("handleExecuteWithSecret() expected a timeout validation error result")
+	}
+	if !strings.Contains(result.Text, "must be a finite number") {
+		t.Fatalf("result text = %q, want finite-timeout validation", result.Text)
 	}
 }
 

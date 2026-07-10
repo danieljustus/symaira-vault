@@ -50,6 +50,12 @@ func (s *Server) handleExecuteWithSecret(ctx context.Context, req mcp.CallToolRe
 		command[i] = str
 	}
 
+	timeoutSeconds, timeoutErr := parseCommandTimeoutSeconds(req.Arguments["timeout"])
+	if timeoutErr != nil {
+		s.logAudit(ctx, "execute_with_secret", "<invalid:timeout>", false)
+		return mcp.NewToolResultError(timeoutErr.Error()), nil
+	}
+
 	refsRaw, ok := req.Arguments["secret_refs"]
 	if !ok {
 		s.logAudit(ctx, "execute_with_secret", "<invalid:missing-secret_refs>", false)
@@ -145,7 +151,6 @@ func (s *Server) handleExecuteWithSecret(ctx context.Context, req mcp.CallToolRe
 	}
 
 	workingDir := req.GetString("working_dir", "")
-	timeoutSeconds := int(req.GetFloat("timeout", 30))
 
 	result, runErr := secrets.RunCommand(secrets.RunOptions{
 		Command:    command,

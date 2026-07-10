@@ -288,6 +288,31 @@ func TestHandleRunCommand_Timeout(t *testing.T) {
 	}
 }
 
+func TestHandleRunCommand_InvalidTimeout(t *testing.T) {
+	srv := newTestServer(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
+	}, "stdio")
+
+	result, err := srv.handleRunCommand(context.Background(), mcp.CallToolRequest{
+		Arguments: map[string]any{
+			"command": []any{"echo", "test"},
+			"timeout": float64(0),
+		},
+	})
+	if err != nil {
+		t.Fatalf("handleRunCommand() error = %v", err)
+	}
+	if result == nil || !result.IsError {
+		t.Fatal("handleRunCommand() expected a timeout validation error result")
+	}
+	if !strings.Contains(result.Text, "between 1 and 300 seconds") {
+		t.Fatalf("result text = %q, want timeout bounds", result.Text)
+	}
+}
+
 func TestHandleRunCommand_MasksSecretEnvOnTimeoutError(t *testing.T) {
 	const secret = "synthetic-run-command-timeout-secret"
 	vaultDir, identity := mockVaultWithEntry(t, "github", map[string]any{

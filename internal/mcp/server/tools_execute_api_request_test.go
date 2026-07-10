@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/danieljustus/symaira-vault/internal/config"
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
@@ -58,6 +60,48 @@ func TestAPITemplateLoad_Builtin(t *testing.T) {
 				t.Error("AllowedMethods is empty")
 			}
 		})
+	}
+}
+
+func TestValidateAPIURL_RejectsResolvedPrivateAddress(t *testing.T) {
+	resolver := func(context.Context, string) ([]net.IPAddr, error) {
+		return []net.IPAddr{{IP: net.ParseIP("127.0.0.1")}}, nil
+	}
+
+	err := validateAPIURL(context.Background(), "http://public.example/secret", false, resolver)
+	if err == nil {
+		t.Fatal("validateAPIURL() expected a private-address error")
+	}
+	if !strings.Contains(err.Error(), "resolves to private") {
+		t.Fatalf("error = %v, want resolved-private explanation", err)
+	}
+}
+
+func TestAPIHTTPClient_RejectsPrivateRedirect(t *testing.T) {
+	resolver := func(context.Context, string) ([]net.IPAddr, error) {
+		return []net.IPAddr{{IP: net.ParseIP("192.168.1.10")}}, nil
+	}
+	client := newAPIHTTPClientWithResolver(time.Second, false, resolver)
+	req := httptest.NewRequest(http.MethodGet, "http://private.example/secret", nil)
+
+	err := client.CheckRedirect(req, nil)
+	if err == nil {
+		t.Fatal("CheckRedirect() expected a private-address error")
+	}
+	if !strings.Contains(err.Error(), "redirect rejected") {
+		t.Fatalf("error = %v, want redirect rejection", err)
+	}
+}
+
+func TestAPIHTTPClient_AllowsPrivateOverride(t *testing.T) {
+	resolver := func(context.Context, string) ([]net.IPAddr, error) {
+		return nil, fmt.Errorf("resolver should not be called when private access is allowed")
+	}
+	client := newAPIHTTPClientWithResolver(time.Second, true, resolver)
+	req := httptest.NewRequest(http.MethodGet, "http://localhost/secret", nil)
+
+	if err := client.CheckRedirect(req, nil); err != nil {
+		t.Fatalf("CheckRedirect() error with allow_private: %v", err)
 	}
 }
 
