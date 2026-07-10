@@ -1,7 +1,6 @@
 package secrets
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -12,10 +11,12 @@ import (
 
 // RunResult contains the result of a command execution.
 type RunResult struct {
-	ExitCode int
-	Stdout   string
-	Stderr   string
-	Duration time.Duration
+	ExitCode        int
+	Stdout          string
+	Stderr          string
+	Duration        time.Duration
+	StdoutTruncated bool
+	StderrTruncated bool
 }
 
 // RunOptions configures a command execution.
@@ -33,10 +34,41 @@ type RunOptions struct {
 	Timeout time.Duration
 }
 
+// boundedBuffer captures up to max bytes of written data while still reporting
+// every byte as consumed, so a child process pipe is drained (not blocked)
+// even once the retained capture is full. This keeps peak memory bounded to
+// max regardless of how much output the child actually produces.
+type boundedBuffer struct {
+	max       int
+	data      []byte
+	truncated bool
+}
+
+func newBoundedBuffer(max int) *boundedBuffer {
+	return &boundedBuffer{max: max, data: make([]byte, 0, max)}
+}
+
+func (b *boundedBuffer) Write(p []byte) (int, error) {
+	if remaining := b.max - len(b.data); remaining > 0 {
+		n := len(p)
+		if n > remaining {
+			n = remaining
+		}
+		b.data = append(b.data, p[:n]...)
+		if n < len(p) {
+			b.truncated = true
+		}
+	} else if len(p) > 0 {
+		b.truncated = true
+	}
+	return len(p), nil
+}
+
 // RunCommand executes a command with the given options and captures the result.
 // Environment variables from opts.Env are merged on top of the current process
-// environment. Stdout and stderr are each capped at 100KB to prevent memory
-// exhaustion from excessive output.
+// environment. Stdout and stderr are each bounded at 100KB during capture to
+// prevent memory exhaustion from excessive output; child pipes are drained in
+// full so the process is never blocked by the cap.
 func RunCommand(opts RunOptions) (*RunResult, error) {
 	if len(opts.Command) == 0 {
 		return nil, fmt.Errorf("command must have at least one element")
@@ -71,21 +103,23 @@ func RunCommand(opts RunOptions) (*RunResult, error) {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
 
-	var stdout, stderr bytes.Buffer
+	const maxOutput = 100 * 1024
+	stdout := newBoundedBuffer(maxOutput)
+	stderr := newBoundedBuffer(maxOutput)
 	cmd.Stdin = os.Stdin
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 
 	start := time.Now()
 	runErr := cmd.Run()
 	duration := time.Since(start)
 
-	const maxOutput = 100 * 1024
-
 	result := &RunResult{
-		Duration: duration,
-		Stdout:   string(truncateBytes(stdout.Bytes(), maxOutput)),
-		Stderr:   string(truncateBytes(stderr.Bytes(), maxOutput)),
+		Duration:        duration,
+		Stdout:          string(stdout.data),
+		Stderr:          string(stderr.data),
+		StdoutTruncated: stdout.truncated,
+		StderrTruncated: stderr.truncated,
 	}
 
 	if runErr != nil {
@@ -102,14 +136,4 @@ func RunCommand(opts RunOptions) (*RunResult, error) {
 	}
 
 	return result, nil
-}
-
-// truncateBytes returns a copy of data truncated to maxLen bytes.
-func truncateBytes(data []byte, maxLen int) []byte {
-	if len(data) <= maxLen {
-		return data
-	}
-	truncated := make([]byte, maxLen)
-	copy(truncated, data)
-	return truncated
 }

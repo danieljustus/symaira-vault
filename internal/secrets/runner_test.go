@@ -119,6 +119,77 @@ func TestRunCommand_OutputCap(t *testing.T) {
 	if len(result.Stderr) > maxOutput {
 		t.Fatalf("Stderr length = %d exceeds cap %d", len(result.Stderr), maxOutput)
 	}
+	if !result.StdoutTruncated {
+		t.Fatal("StdoutTruncated = false, want true for output exceeding the cap")
+	}
+}
+
+func TestRunCommand_StderrOutputCap(t *testing.T) {
+	result, err := RunCommand(RunOptions{
+		Command: []string{"sh", "-c", "i=0; while [ $i -lt 2000 ]; do printf '%-100s\n' 'x' >&2; i=$((i+1)); done"},
+	})
+	if err != nil {
+		t.Fatalf("RunCommand() unexpected error: %v", err)
+	}
+
+	const maxOutput = 100 * 1024
+	if len(result.Stderr) != maxOutput {
+		t.Fatalf("Stderr length = %d, want exactly %d (capped)", len(result.Stderr), maxOutput)
+	}
+	if !result.StderrTruncated {
+		t.Fatal("StderrTruncated = false, want true for output exceeding the cap")
+	}
+	if result.StdoutTruncated {
+		t.Fatal("StdoutTruncated = true, want false when stdout stayed under the cap")
+	}
+}
+
+func TestRunCommand_OutputUnderCapNotTruncated(t *testing.T) {
+	result, err := RunCommand(RunOptions{
+		Command: []string{"echo", "small"},
+	})
+	if err != nil {
+		t.Fatalf("RunCommand() unexpected error: %v", err)
+	}
+	if result.StdoutTruncated || result.StderrTruncated {
+		t.Fatalf("expected no truncation for small output, got stdout=%v stderr=%v",
+			result.StdoutTruncated, result.StderrTruncated)
+	}
+}
+
+func TestBoundedBuffer_DrainsBeyondCapWithoutGrowing(t *testing.T) {
+	const max = 16
+	b := newBoundedBuffer(max)
+
+	chunk := make([]byte, 1024)
+	for i := range chunk {
+		chunk[i] = 'x'
+	}
+
+	var totalWritten int
+	for i := 0; i < 100; i++ {
+		n, err := b.Write(chunk)
+		if err != nil {
+			t.Fatalf("Write() unexpected error: %v", err)
+		}
+		if n != len(chunk) {
+			t.Fatalf("Write() returned n = %d, want %d (child must never see a short write)", n, len(chunk))
+		}
+		totalWritten += n
+	}
+
+	if len(b.data) != max {
+		t.Fatalf("retained data length = %d, want exactly %d", len(b.data), max)
+	}
+	if cap(b.data) != max {
+		t.Fatalf("retained data capacity = %d, want exactly %d (must not grow past the cap)", cap(b.data), max)
+	}
+	if !b.truncated {
+		t.Fatal("truncated = false, want true after writing far beyond the cap")
+	}
+	if totalWritten <= max {
+		t.Fatalf("totalWritten = %d, want > %d to actually exercise draining", totalWritten, max)
+	}
 }
 
 func TestRunCommand_WorkingDir(t *testing.T) {
