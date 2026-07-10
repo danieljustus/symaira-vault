@@ -221,6 +221,45 @@ func TestBitwardenImporterParse(t *testing.T) {
 	}
 }
 
+func TestBitwardenImporterParseCard(t *testing.T) {
+	cardJSON := strings.Join([]string{
+		`{"folders":[{"id":"f-pay","name":"Payment"}],`,
+		`"items":[{`,
+		`"type":2,"name":"Visa Personal","folderId":"f-pay",`,
+		`"card":{"cardholderName":"Jane Doe","brand":"Visa",`,
+		`"number":"4111111111111111","expMonth":"12","expYear":"2028","code":"123"},`,
+		`"fields":[{"name":"notes","value":"primary card"}]`,
+		`}]}`,
+	}, "")
+
+	entries, err := (&bitwardenImporter{}).Parse(strings.NewReader(cardJSON))
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("Parse() returned %d entries, want 1", len(entries))
+	}
+
+	entry := entries[0]
+	if entry.Path != "Payment/Visa-Personal" {
+		t.Errorf("path = %q, want Payment/Visa-Personal", entry.Path)
+	}
+	assertStringField(t, entry.Data, "card_number", "4111111111111111")
+	assertStringField(t, entry.Data, "cardholder", "Jane Doe")
+	assertStringField(t, entry.Data, "expiry_month", "12")
+	assertStringField(t, entry.Data, "expiry_year", "2028")
+	assertStringField(t, entry.Data, "cvc", "123")
+	assertStringField(t, entry.Data, "subtype", "card")
+	assertStringField(t, entry.Data, "notes", "primary card")
+
+	if entry.SecretMetadata == nil {
+		t.Fatal("card entry should have SecretMetadata set")
+	}
+	if entry.SecretMetadata.Type != "payment" {
+		t.Errorf("SecretMetadata.Type = %q, want payment", entry.SecretMetadata.Type)
+	}
+}
+
 func TestCSVImporterParseDefaultMapping(t *testing.T) {
 	f := openFixture(t, "../../testdata/importer/csv/sample.csv")
 	defer f.Close()

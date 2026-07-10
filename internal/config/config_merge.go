@@ -90,6 +90,12 @@ func mergeTopLevel(cfg *Config, raw Config) {
 	if raw.ScanPatterns != nil {
 		cfg.ScanPatterns = append([]CustomPattern(nil), raw.ScanPatterns...)
 	}
+	if raw.PaymentPolicies != nil {
+		cfg.PaymentPolicies = make(map[string]PaymentPolicy, len(raw.PaymentPolicies))
+		for name, policy := range raw.PaymentPolicies {
+			cfg.PaymentPolicies[name] = policy
+		}
+	}
 	if raw.Profiles != nil {
 		cfg.Profiles = make(map[string]*Profile, len(raw.Profiles))
 		for name, fp := range raw.Profiles {
@@ -217,6 +223,8 @@ func mergeAgentProfile(current AgentProfile, name string, yamlProfile AgentProfi
 	current.PromptInjectionMode = mergeStringPtr(current.PromptInjectionMode, yamlProfile.PromptInjectionMode)
 	current.SkillPath = mergeStringPtr(current.SkillPath, yamlProfile.SkillPath)
 	current.SkillVersion = mergeStringPtr(current.SkillVersion, yamlProfile.SkillVersion)
+	current.ExposePaymentValues = mergeBoolPtr(current.ExposePaymentValues, yamlProfile.ExposePaymentValues)
+	current.PaymentPolicy = mergeStringPtr(current.PaymentPolicy, yamlProfile.PaymentPolicy)
 
 	return current
 }

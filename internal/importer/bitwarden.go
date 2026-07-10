@@ -4,9 +4,24 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
-const bitwardenLoginType = 1
+const (
+	bitwardenLoginType = 1
+	bitwardenCardType  = 2
+)
+
+const (
+	bitwardenFieldUsername = "username"
+	bitwardenFieldPassword = "password"
+	bitwardenFieldURL      = "url"
+	bitwardenFieldURLs     = "urls"
+	bitwardenFieldNotes    = "notes"
+	bitwardenFieldTOTP     = "totp"
+	bitwardenFieldSecret   = "secret"
+)
 
 type bitwardenImporter struct{}
 
@@ -25,6 +40,7 @@ type bitwardenItem struct {
 	Name     string           `json:"name"`
 	FolderID string           `json:"folderId"`
 	Login    bitwardenLogin   `json:"login"`
+	Card     bitwardenCard    `json:"card"`
 	Notes    string           `json:"notes"`
 	Fields   []bitwardenField `json:"fields"`
 }
@@ -45,6 +61,15 @@ type bitwardenField struct {
 	Value string `json:"value"`
 }
 
+type bitwardenCard struct {
+	CardholderName string `json:"cardholderName"`
+	Brand          string `json:"brand"`
+	Number         string `json:"number"`
+	ExpMonth       string `json:"expMonth"`
+	ExpYear        string `json:"expYear"`
+	Code           string `json:"code"`
+}
+
 func (i *bitwardenImporter) Parse(r io.Reader) ([]ImportedEntry, error) {
 	var export bitwardenExport
 	if err := json.NewDecoder(r).Decode(&export); err != nil {
@@ -61,33 +86,16 @@ func (i *bitwardenImporter) Parse(r io.Reader) ([]ImportedEntry, error) {
 
 	entries := make([]ImportedEntry, 0, len(export.Items))
 	for _, item := range export.Items {
-		if item.Type != bitwardenLoginType {
+		switch item.Type {
+		case bitwardenLoginType:
+			entry := bitwardenParseLogin(item, folders)
+			entries = append(entries, entry)
+		case bitwardenCardType:
+			entry := bitwardenParseCard(item, folders)
+			entries = append(entries, entry)
+		default:
 			continue
 		}
-
-		data := map[string]any{
-			"username": item.Login.Username,
-			"password": item.Login.Password,
-			"url":      bitwardenPrimaryURI(item.Login.URIs),
-			"urls":     bitwardenURIs(item.Login.URIs),
-			"notes":    item.Notes,
-		}
-
-		for _, field := range item.Fields {
-			if field.Name == "" {
-				continue
-			}
-			data[field.Name] = field.Value
-		}
-
-		if item.Login.TOTP != "" {
-			data["totp"] = map[string]any{"secret": item.Login.TOTP}
-		}
-
-		entries = append(entries, ImportedEntry{
-			Path: bitwardenPath(item, folders),
-			Data: data,
-		})
 	}
 
 	return entries, nil
@@ -117,4 +125,57 @@ func bitwardenPath(item bitwardenItem, folders map[string]string) string {
 		path = ApplyPrefix(folderName, path)
 	}
 	return NormalizePath(path)
+}
+
+func bitwardenParseLogin(item bitwardenItem, folders map[string]string) ImportedEntry {
+	data := map[string]any{
+		bitwardenFieldUsername: item.Login.Username,
+		bitwardenFieldPassword: item.Login.Password,
+		bitwardenFieldURL:      bitwardenPrimaryURI(item.Login.URIs),
+		bitwardenFieldURLs:     bitwardenURIs(item.Login.URIs),
+		bitwardenFieldNotes:    item.Notes,
+	}
+
+	for _, field := range item.Fields {
+		if field.Name == "" {
+			continue
+		}
+		data[field.Name] = field.Value
+	}
+
+	if item.Login.TOTP != "" {
+		data[bitwardenFieldTOTP] = map[string]any{bitwardenFieldSecret: item.Login.TOTP}
+	}
+
+	return ImportedEntry{
+		Path: bitwardenPath(item, folders),
+		Data: data,
+	}
+}
+
+func bitwardenParseCard(item bitwardenItem, folders map[string]string) ImportedEntry {
+	data := map[string]any{
+		vaultpkg.PaymentFieldCardNumber:  item.Card.Number,
+		vaultpkg.PaymentFieldCardholder:  item.Card.CardholderName,
+		vaultpkg.PaymentFieldExpiryMonth: item.Card.ExpMonth,
+		vaultpkg.PaymentFieldExpiryYear:  item.Card.ExpYear,
+		vaultpkg.PaymentFieldCVC:         item.Card.Code,
+		vaultpkg.PaymentFieldSubtype:     string(vaultpkg.PaymentSubtypeCard),
+	}
+
+	for _, field := range item.Fields {
+		if field.Name == "" {
+			continue
+		}
+		data[field.Name] = field.Value
+	}
+
+	return ImportedEntry{
+		Path: bitwardenPath(item, folders),
+		Data: data,
+		SecretMetadata: &vaultpkg.SecretMetadata{
+			Type:      vaultpkg.SecretTypePayment,
+			UsageHint: vaultpkg.UsageHintForType(vaultpkg.SecretTypePayment),
+		},
+	}
 }

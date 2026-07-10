@@ -1,0 +1,139 @@
+// Package payment enforces payment policies for the Symaira Vault prepare_payment flow.
+package payment
+
+import (
+	"fmt"
+	"math/big"
+	"strings"
+
+	"github.com/danieljustus/symaira-vault/internal/config"
+)
+
+type DenialReason string
+
+const (
+	DenialMerchantNotAllowed DenialReason = "merchant_not_allowed"
+	DenialCurrencyMismatch   DenialReason = "currency_mismatch"
+	DenialOverPerTransaction DenialReason = "over_per_transaction"
+	DenialOverPerDay         DenialReason = "over_per_day"
+)
+
+type DenialError struct {
+	Reason DenialReason
+	Detail string
+}
+
+func (e *DenialError) Error() string {
+	return fmt.Sprintf("payment policy denied: %s — %s", e.Reason, e.Detail)
+}
+
+type Enforcer struct {
+	policy   config.PaymentPolicy
+	tracker  *DailyTotals
+	stateDir string
+}
+
+func NewEnforcer(policy config.PaymentPolicy, tracker *DailyTotals) *Enforcer {
+	return &Enforcer{
+		policy:  policy,
+		tracker: tracker,
+	}
+}
+
+func NewEnforcerFromFile(policy config.PaymentPolicy, statePath string) (*Enforcer, error) {
+	tracker, err := LoadDailyTotals(statePath)
+	if err != nil {
+		return nil, fmt.Errorf("load daily totals: %w", err)
+	}
+	return &Enforcer{
+		policy:   policy,
+		tracker:  tracker,
+		stateDir: statePath,
+	}, nil
+}
+
+type PaymentRequest struct {
+	EntryPath string
+	Merchant  string
+	Amount    string
+	Currency  string
+}
+
+func (e *Enforcer) Check(req PaymentRequest) error {
+	if len(e.policy.AllowedMerchants) > 0 {
+		allowed := false
+		reqMerchant := strings.ToLower(strings.TrimSpace(req.Merchant))
+		for _, m := range e.policy.AllowedMerchants {
+			if strings.ToLower(strings.TrimSpace(m)) == reqMerchant {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return &DenialError{
+				Reason: DenialMerchantNotAllowed,
+				Detail: fmt.Sprintf("merchant %q not in allowed list", req.Merchant),
+			}
+		}
+	}
+
+	if e.policy.Currency != "" && !strings.EqualFold(strings.TrimSpace(req.Currency), strings.TrimSpace(e.policy.Currency)) {
+		return &DenialError{
+			Reason: DenialCurrencyMismatch,
+			Detail: fmt.Sprintf("requested currency %q does not match policy currency %q", req.Currency, e.policy.Currency),
+		}
+	}
+
+	reqAmount, err := parseAmount(req.Amount)
+	if err != nil {
+		return fmt.Errorf("invalid amount: %w", err)
+	}
+
+	if e.policy.MaxAmount.PerTransaction != "" {
+		limit, err := parseAmount(e.policy.MaxAmount.PerTransaction)
+		if err != nil {
+			return fmt.Errorf("invalid per_transaction limit: %w", err)
+		}
+		if reqAmount.Cmp(limit) > 0 {
+			return &DenialError{
+				Reason: DenialOverPerTransaction,
+				Detail: fmt.Sprintf("amount %s exceeds per-transaction limit %s", req.Amount, e.policy.MaxAmount.PerTransaction),
+			}
+		}
+	}
+
+	if e.policy.MaxAmount.PerDay != "" && e.tracker != nil {
+		dayLimit, err := parseAmount(e.policy.MaxAmount.PerDay)
+		if err != nil {
+			return fmt.Errorf("invalid per_day limit: %w", err)
+		}
+		todayTotal := e.tracker.TodayTotal(e.policy.Instrument)
+		if todayTotal == "" {
+			todayTotal = "0"
+		}
+		todayRat, err := parseAmount(todayTotal)
+		if err != nil {
+			return fmt.Errorf("invalid today total: %w", err)
+		}
+		projected := new(big.Rat).Add(todayRat, reqAmount)
+		if projected.Cmp(dayLimit) > 0 {
+			return &DenialError{
+				Reason: DenialOverPerDay,
+				Detail: fmt.Sprintf("amount %s + today's total %s would exceed per-day limit %s", req.Amount, todayTotal, e.policy.MaxAmount.PerDay),
+			}
+		}
+	}
+
+	return nil
+}
+
+func (e *Enforcer) RecordApproved(req PaymentRequest) error {
+	if e.tracker == nil {
+		return nil
+	}
+	return e.tracker.AddToToday(e.policy.Instrument, req.Amount)
+}
+
+func (e *Enforcer) PolicyName() string {
+	return e.policy.Instrument
+}

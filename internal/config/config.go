@@ -94,26 +94,51 @@ type CustomPattern struct {
 }
 
 type Config struct {
-	Agents         map[string]AgentProfile `yaml:"agents,omitempty"`
-	Vault          *VaultConfig            `yaml:"vault,omitempty"`
-	Git            *GitConfig              `yaml:"git,omitempty"`
-	MCP            *MCPConfig              `yaml:"mcp,omitempty"`
-	Update         *UpdateConfig           `yaml:"update,omitempty"`
-	Clipboard      *ClipboardConfig        `yaml:"clipboard,omitempty"`
-	Audit          *AuditConfig            `yaml:"audit,omitempty"`
-	Logging        *LoggingConfig          `yaml:"logging,omitempty"`
-	Security       *SecurityConfig         `yaml:"security,omitempty"`
-	VaultDir       string                  `yaml:"vaultDir,omitempty"`
-	DefaultAgent   string                  `yaml:"defaultAgent,omitempty"`
-	SessionTimeout time.Duration           `yaml:"sessionTimeout,omitempty"`
-	AuthMethod     string                  `yaml:"authMethod,omitempty"`
-	UseTouchID     *bool                   `yaml:"useTouchID,omitempty"`
-	Profiles       map[string]*Profile     `yaml:"profiles,omitempty"`
-	DefaultProfile string                  `yaml:"defaultProfile,omitempty"`
-	EnvAllowlist   []string                `yaml:"envAllowlist,omitempty"`
-	// EnvWhitelist is the deprecated name for EnvAllowlist; kept for backward compatibility.
-	EnvWhitelist []string        `yaml:"envWhitelist,omitempty"`
-	ScanPatterns []CustomPattern `yaml:"scan_patterns,omitempty"`
+	Agents          map[string]AgentProfile  `yaml:"agents,omitempty"`
+	Vault           *VaultConfig             `yaml:"vault,omitempty"`
+	Git             *GitConfig               `yaml:"git,omitempty"`
+	MCP             *MCPConfig               `yaml:"mcp,omitempty"`
+	Update          *UpdateConfig            `yaml:"update,omitempty"`
+	Clipboard       *ClipboardConfig         `yaml:"clipboard,omitempty"`
+	Audit           *AuditConfig             `yaml:"audit,omitempty"`
+	Logging         *LoggingConfig           `yaml:"logging,omitempty"`
+	Security        *SecurityConfig          `yaml:"security,omitempty"`
+	VaultDir        string                   `yaml:"vaultDir,omitempty"`
+	DefaultAgent    string                   `yaml:"defaultAgent,omitempty"`
+	SessionTimeout  time.Duration            `yaml:"sessionTimeout,omitempty"`
+	AuthMethod      string                   `yaml:"authMethod,omitempty"`
+	UseTouchID      *bool                    `yaml:"useTouchID,omitempty"`
+	Profiles        map[string]*Profile      `yaml:"profiles,omitempty"`
+	DefaultProfile  string                   `yaml:"defaultProfile,omitempty"`
+	EnvAllowlist    []string                 `yaml:"envAllowlist,omitempty"`
+	EnvWhitelist    []string                 `yaml:"envWhitelist,omitempty"`
+	ScanPatterns    []CustomPattern          `yaml:"scan_patterns,omitempty"`
+	PaymentPolicies map[string]PaymentPolicy `yaml:"paymentPolicies,omitempty"`
+}
+
+// PaymentMaxAmount defines per-transaction and per-day spending limits.
+// Both fields are strings to safely represent decimal amounts without
+// floating-point rounding errors.
+type PaymentMaxAmount struct {
+	PerTransaction string `yaml:"per_transaction,omitempty"`
+	PerDay         string `yaml:"per_day,omitempty"`
+}
+
+// PaymentPolicy constrains prepare_payment requests before the native
+// approval prompt is shown. Each policy is referenced by name from an
+// agent profile via the PaymentPolicy field.
+type PaymentPolicy struct {
+	// Instrument is the vault entry path of the payment instrument (card/bank
+	// account) that this policy applies to.
+	Instrument string `yaml:"instrument"`
+	// AllowedMerchants is an allowlist of merchant names (case-insensitive).
+	// When non-empty, only these merchants may proceed.
+	AllowedMerchants []string `yaml:"allowed_merchants,omitempty"`
+	// MaxAmount defines per-transaction and per-day spending limits.
+	MaxAmount PaymentMaxAmount `yaml:"max_amount,omitempty"`
+	// Currency is the required ISO-4217 currency code (e.g. "EUR", "USD").
+	// Must be non-empty when any limit is set.
+	Currency string `yaml:"currency,omitempty"`
 }
 
 type AgentProfile struct {
@@ -145,6 +170,8 @@ type AgentProfile struct {
 	PostCallHooks       []string            `yaml:"post_call_hooks,omitempty"`
 	SkillPath           *string             `yaml:"skillPath,omitempty"`
 	SkillVersion        *string             `yaml:"skillVersion,omitempty"`
+	ExposePaymentValues *bool               `yaml:"exposePaymentValues,omitempty"`
+	PaymentPolicy       *string             `yaml:"paymentPolicy,omitempty"`
 }
 
 func (p *AgentProfile) EffectiveRedactFields(toolName string) []string {
@@ -211,6 +238,9 @@ func (p *AgentProfile) Normalize() {
 	}
 	if p.SkillVersion == nil {
 		p.SkillVersion = StrPtr("")
+	}
+	if p.ExposePaymentValues == nil {
+		p.ExposePaymentValues = BoolPtr(false)
 	}
 	if p.CanWrite == nil {
 		p.CanWrite = BoolPtr(false)
@@ -374,6 +404,24 @@ func (p *AgentProfile) ExposeValueToolsValue() bool {
 		return false
 	}
 	return *p.ExposeValueTools
+}
+
+// ExposePaymentValuesValue returns *p.ExposePaymentValues or false when p is
+// nil / p.ExposePaymentValues is nil.
+func (p *AgentProfile) ExposePaymentValuesValue() bool {
+	if p == nil || p.ExposePaymentValues == nil {
+		return false
+	}
+	return *p.ExposePaymentValues
+}
+
+// PaymentPolicyValue returns *p.PaymentPolicy or "" when p is nil /
+// p.PaymentPolicy is nil.
+func (p *AgentProfile) PaymentPolicyValue() string {
+	if p == nil || p.PaymentPolicy == nil {
+		return ""
+	}
+	return *p.PaymentPolicy
 }
 
 // AutoUnsealValue returns *p.AutoUnseal or false when p is nil /

@@ -46,6 +46,7 @@ var blockedToolsByTier = map[string]map[string]bool{
 		"request_credential":  true,
 		"copy_to_clipboard":   true,
 		"autotype":            true,
+		"prepare_payment":     true,
 	},
 	tierStandard: {
 		"delete_entry":        true,

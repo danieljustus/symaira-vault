@@ -146,6 +146,9 @@ func (s *Server) handleGetValue(ctx context.Context, req mcp.CallToolRequest) (*
 	}
 
 	if s.agent != nil {
+		if entry.SecretMetadata.Type == vaultpkg.SecretTypePayment && !s.agent.ExposePaymentValuesValue() {
+			entry = redactEntry(entry, vaultpkg.AllPaymentSensitiveFields())
+		}
 		if patterns := s.agent.EffectiveRedactFields("get_entry_value"); len(patterns) > 0 {
 			entry = redactEntry(entry, patterns)
 		}

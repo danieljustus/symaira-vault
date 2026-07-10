@@ -51,6 +51,7 @@ Symaira Vault exposes a Model Context Protocol (MCP) server that allows AI agent
 | `symvault_delete` | Deprecated alias for delete_entry | **Yes** |
 | `secure_input` | Prompt user for sensitive data via TTY or native GUI dialog | **Yes** |
 | `request_credential` | Agent-initiated: native dialog for a missing credential, stored without exposure | **Yes** |
+| `prepare_payment` | Validate a payment entry, show approval prompt, autotype card/bank fields — card values never returned | No |
 
 ---
 
@@ -958,6 +959,137 @@ requested path and never returned to the agent.
 
 ---
 
+### prepare_payment
+
+Validate a payment entry, show a native approval prompt with merchant/amount/currency details, and on user approval autotype the card or bank account fields into the focused checkout window. Card number, CVC, and IBAN values are never returned in the tool response.
+
+**Request**:
+
+```json
+{
+  "tool": "prepare_payment",
+  "arguments": {
+    "entry_path": "payments/mycard",
+    "merchant": "shop.example",
+    "amount": "75.00",
+    "currency": "EUR"
+  }
+}
+```
+
+**Parameters**:
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `entry_path` | string | Yes | - | Vault path of the payment entry |
+| `merchant` | string | Yes | - | Merchant name or origin (e.g. `shop.example`) |
+| `amount` | string | Yes | - | Payment amount (e.g. `75.00`) |
+| `currency` | string | Yes | - | Currency code (e.g. `EUR`, `USD`) |
+| `description` | string | No | - | Optional description shown in the approval prompt |
+
+**Response**:
+
+```json
+{
+  "success": true
+}
+```
+
+**Security guarantees**:
+- Card number, CVC, and IBAN values are **never** returned in the MCP response
+- The user sees a native approval prompt (e.g. "Allow payment of EUR 75.00 to shop.example?") before any autotyping occurs
+- Approval mode must not be `deny`; the tool requires user interaction
+- Risk level: **Critical** — cannot be remembered across sessions
+- Requires `canUseAutotype: true` in agent profile
+
+**Autotype field order**:
+- Card entries: `card_number` → `expiry_month` → `expiry_year` → `cvc`
+- Bank account entries: `iban`
+
+**Notes**:
+- Entry must have `type: "payment"` in its secret metadata
+- Payment subtype (`card` or `bank_account`) is read from the entry's `subtype` field or the request `subtype` argument
+- Same autotype backend as `autotype` tool (macOS, Linux, Windows)
+- Falls back gracefully on unsupported platforms
+
+**Errors**:
+- `denied`: User declined the approval prompt
+- `not_a_payment_entry`: Entry type is not `payment`
+- `not_found`: Entry does not exist
+- `outside_allowed_scope`: Path is outside the agent's allowed scope
+- `payment.policy_denied`: Payment policy check failed (merchant not allowed, currency mismatch, or amount limit exceeded)
+
+---
+
+## Payment Policies
+
+Payment policies provide declarative guardrails on `prepare_payment` requests. When an agent profile references a policy, the enforcer checks merchant allowlists, per-transaction limits, per-day limits, and currency requirements **before** the native approval prompt is shown.
+
+### Configuration
+
+Define policies under `paymentPolicies` in `config.yaml`:
+
+```yaml
+paymentPolicies:
+  shopping-limited:
+    instrument: "payments/visa"                    # vault entry path of the payment instrument
+    allowed_merchants:
+      - "amazon.de"
+      - "otto.de"
+      - "mediamarkt.de"
+    max_amount:
+      per_transaction: "75.00"
+      per_day: "150.00"
+    currency: "EUR"
+```
+
+Link a policy to an agent profile:
+
+```yaml
+agents:
+  hermes:
+    allowedPaths: ["*"]
+    canWrite: true
+    approvalMode: none
+    paymentPolicy: "shopping-limited"             # reference the policy by name
+```
+
+### Policy Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `instrument` | string | Yes | Vault entry path of the payment instrument (card/bank account) |
+| `allowed_merchants` | array | No | Allowlist of merchant names (case-insensitive exact match) |
+| `max_amount.per_transaction` | string | No | Maximum single-transaction amount (decimal string, e.g. `"75.00"`) |
+| `max_amount.per_day` | string | No | Maximum total per calendar day (decimal string, e.g. `"150.00"`) |
+| `currency` | string | Yes when limits set | Required ISO-4217 currency code (e.g. `"EUR"`, `"USD"`) |
+
+### How Enforcement Works
+
+1. The agent calls `prepare_payment` with `entry_path`, `merchant`, `amount`, `currency`.
+2. If the agent has a `paymentPolicy`, the enforcer checks:
+   - **Merchant allowlist**: if `allowed_merchants` is non-empty, the merchant must match (case-insensitive).
+   - **Currency**: must match the policy's `currency` when limits are set.
+   - **Per-transaction**: `amount` must not exceed `per_transaction`.
+   - **Per-day**: `amount` + today's accumulated total must not exceed `per_day`.
+3. If any check fails, the request is rejected with a `payment.policy_denied` audit event. The native approval prompt is **never** shown.
+4. If all checks pass, the native approval prompt is shown as usual. On approval, the daily total is incremented.
+
+### Per-Day Persistence
+
+Per-day totals are stored on disk at `$XDG_DATA_HOME/symaira-vault/payment-state/<vault-hash>/<policy>/daily-totals.json`. Entries older than today are automatically expired on load and save. Totals survive daemon restarts.
+
+### Error Responses
+
+| Reason | Description |
+|--------|-------------|
+| `merchant_not_allowed` | Merchant is not in the policy's `allowed_merchants` list |
+| `currency_mismatch` | Requested currency does not match the policy's required currency |
+| `over_per_transaction` | Amount exceeds the per-transaction limit |
+| `over_per_day` | Amount + today's total would exceed the per-day limit |
+
+---
+
 ### set_entry_field
 
 Store or update a single field in an entry. Requires write permission.
@@ -1341,6 +1473,7 @@ agents:
 | `canUseAutotype` | boolean | `false` | Whether the agent can type passwords via keyboard input through `autotype` |
 | `approvalMode` | string | `"none"` | Write approval behavior: `none` (allow), `deny` (reject), `prompt` (degrades to deny in MCP) |
 | `redactFields` | array | `[]` | Field names to redact from `get_entry` responses (e.g., `["totp.secret"]` shows `[REDACTED]`) |
+| `exposePaymentValues` | boolean | `false` | When `true`, payment entries (`type: payment`) expose sensitive fields (`card_number`, `cvc`, `iban`). Disabled by default — these fields are always redacted for agents unless this flag is set |
 
 ### Built-in Profiles
 
@@ -1406,6 +1539,20 @@ agents:
 ## Field Redaction with `redactFields`
 
 The `redactFields` agent profile setting controls which entry fields are hidden from `get_entry` responses. Redacted fields appear as `[REDACTED]` instead of their actual values.
+
+### Payment Entry Automatic Redaction
+
+Entries with `secret_meta.type = "payment"` have their sensitive fields automatically redacted in all agent responses, independent of the profile's `redactFields` configuration:
+
+| Sensitive Field | Description |
+|----------------|-------------|
+| `card_number` | Full card number (e.g., `4111111111111111`) |
+| `cvc` | Card verification code |
+| `iban` | International bank account number |
+
+Non-sensitive payment fields (`cardholder`, `expiry_month`, `expiry_year`, `bic`, `subtype`) are always returned.
+
+To opt out and expose raw payment values, set `exposePaymentValues: true` on the agent profile. This requires the agent to also have `canReadValues: true` or value-tool access.
 
 ### What Gets Redacted
 

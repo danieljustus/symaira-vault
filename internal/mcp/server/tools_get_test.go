@@ -976,3 +976,186 @@ func TestHandleGetValue_SealsAutoDetectedGitHubPAT(t *testing.T) {
 		t.Error("sealed response should not contain raw data field")
 	}
 }
+
+func TestHandleGetValue_PaymentRedactedByDefault(t *testing.T) {
+	vaultDir, identity := mockVault(t)
+
+	entry := &vault.Entry{
+		Data: map[string]any{
+			"card_number":  "4111111111111111",
+			"cardholder":   "Jane Doe",
+			"expiry_month": "12",
+			"expiry_year":  "2028",
+			"cvc":          "123",
+			"subtype":      "card",
+		},
+		SecretMetadata: vault.SecretMetadata{Type: vault.SecretTypePayment},
+	}
+	if err := vault.WriteEntry(vaultDir, "payment/visa", entry, identity); err != nil {
+		t.Fatalf("WriteEntry: %v", err)
+	}
+
+	srv := &Server{
+		vault: &vault.Vault{
+			Dir:      vaultDir,
+			Identity: identity,
+		},
+		vaultService: vault.NewVaultService(&vault.Vault{Dir: vaultDir, Identity: identity}, nil),
+		agent: &config.AgentProfile{
+			Name:          "test",
+			AllowedPaths:  []string{"*"},
+			CanReadValues: config.BoolPtr(true),
+			ApprovalMode:  config.StrPtr("none"),
+			AutoUnseal:    config.BoolPtr(true),
+		},
+		hookRegistry: NewHookRegistry(),
+	}
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{"path": "payment/visa"},
+	}
+
+	result, err := srv.handleGetValue(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleGetValue() error = %v", err)
+	}
+	if result == nil || result.IsError {
+		t.Fatalf("handleGetValue() returned error: %v", result)
+	}
+
+	var resp vault.Entry
+	if parseErr := json.Unmarshal([]byte(result.Text), &resp); parseErr != nil {
+		t.Fatalf("parse result: %v", parseErr)
+	}
+
+	cardNumber, _ := resp.Data["card_number"].(string)
+	if !strings.Contains(cardNumber, "[REDACTED]") {
+		t.Errorf("card_number should be redacted, got %q", cardNumber)
+	}
+	cvc, _ := resp.Data["cvc"].(string)
+	if !strings.Contains(cvc, "[REDACTED]") {
+		t.Errorf("cvc should be redacted, got %q", cvc)
+	}
+	cardholder, _ := resp.Data["cardholder"].(string)
+	if strings.Contains(cardholder, "[REDACTED]") {
+		t.Errorf("cardholder should NOT be redacted, got %q", cardholder)
+	}
+	expiryMonth, _ := resp.Data["expiry_month"].(string)
+	if strings.Contains(expiryMonth, "[REDACTED]") {
+		t.Errorf("expiry_month should NOT be redacted, got %q", expiryMonth)
+	}
+}
+
+func TestHandleGetValue_PaymentExposedWhenOptOut(t *testing.T) {
+	vaultDir, identity := mockVault(t)
+
+	entry := &vault.Entry{
+		Data: map[string]any{
+			"card_number":  "4111111111111111",
+			"cardholder":   "Jane Doe",
+			"expiry_month": "12",
+			"expiry_year":  "2028",
+			"cvc":          "123",
+			"subtype":      "card",
+		},
+		SecretMetadata: vault.SecretMetadata{Type: vault.SecretTypePayment},
+	}
+	if err := vault.WriteEntry(vaultDir, "payment/visa", entry, identity); err != nil {
+		t.Fatalf("WriteEntry: %v", err)
+	}
+
+	srv := &Server{
+		vault: &vault.Vault{
+			Dir:      vaultDir,
+			Identity: identity,
+		},
+		vaultService: vault.NewVaultService(&vault.Vault{Dir: vaultDir, Identity: identity}, nil),
+		agent: &config.AgentProfile{
+			Name:                "test",
+			AllowedPaths:        []string{"*"},
+			CanReadValues:       config.BoolPtr(true),
+			ApprovalMode:        config.StrPtr("none"),
+			AutoUnseal:          config.BoolPtr(true),
+			ExposePaymentValues: config.BoolPtr(true),
+		},
+		hookRegistry: NewHookRegistry(),
+	}
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{"path": "payment/visa"},
+	}
+
+	result, err := srv.handleGetValue(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleGetValue() error = %v", err)
+	}
+	if result == nil || result.IsError {
+		t.Fatalf("handleGetValue() returned error: %v", result)
+	}
+
+	var resp vault.Entry
+	if parseErr := json.Unmarshal([]byte(result.Text), &resp); parseErr != nil {
+		t.Fatalf("parse result: %v", parseErr)
+	}
+
+	cardNumber, _ := resp.Data["card_number"].(string)
+	if strings.Contains(cardNumber, "[REDACTED]") {
+		t.Errorf("card_number should NOT be redacted with exposePaymentValues, got %q", cardNumber)
+	}
+	cvc, _ := resp.Data["cvc"].(string)
+	if strings.Contains(cvc, "[REDACTED]") {
+		t.Errorf("cvc should NOT be redacted with exposePaymentValues, got %q", cvc)
+	}
+}
+
+func TestHandleGetValue_NonPaymentTypeNotRedacted(t *testing.T) {
+	vaultDir, identity := mockVault(t)
+
+	entry := &vault.Entry{
+		Data: map[string]any{
+			"password": "s3cr3t",
+			"username": "alice",
+		},
+	}
+	if err := vault.WriteEntry(vaultDir, "github", entry, identity); err != nil {
+		t.Fatalf("WriteEntry: %v", err)
+	}
+
+	srv := &Server{
+		vault: &vault.Vault{
+			Dir:      vaultDir,
+			Identity: identity,
+		},
+		vaultService: vault.NewVaultService(&vault.Vault{Dir: vaultDir, Identity: identity}, nil),
+		agent: &config.AgentProfile{
+			Name:          "test",
+			AllowedPaths:  []string{"*"},
+			CanReadValues: config.BoolPtr(true),
+			ApprovalMode:  config.StrPtr("none"),
+			AutoUnseal:    config.BoolPtr(true),
+		},
+		hookRegistry: NewHookRegistry(),
+	}
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{"path": "github"},
+	}
+
+	result, err := srv.handleGetValue(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleGetValue() error = %v", err)
+	}
+	if result == nil || result.IsError {
+		t.Fatalf("handleGetValue() returned error: %v", result)
+	}
+
+	var resp vault.Entry
+	if parseErr := json.Unmarshal([]byte(result.Text), &resp); parseErr != nil {
+		t.Fatalf("parse result: %v", parseErr)
+	}
+
+	password, _ := resp.Data["password"].(string)
+	if strings.Contains(password, "[REDACTED]") {
+		t.Errorf("password should NOT be redacted for non-payment entry, got %q", password)
+	}
+}

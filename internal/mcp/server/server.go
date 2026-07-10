@@ -6,6 +6,7 @@ package server
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -22,6 +23,7 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/config"
 	transport "github.com/danieljustus/symaira-vault/internal/mcp/transport"
 	"github.com/danieljustus/symaira-vault/internal/notify"
+	"github.com/danieljustus/symaira-vault/internal/payment"
 	"github.com/danieljustus/symaira-vault/internal/policy"
 	"github.com/danieljustus/symaira-vault/internal/vault"
 )
@@ -93,6 +95,8 @@ type Server struct {
 	anomalyDetector *anomaly.AnomalyDetector
 
 	biometricChallenger *authguard.Challenger
+
+	paymentEnforcer *payment.Enforcer
 
 	clipboardCancel chan struct{}
 }
@@ -227,6 +231,17 @@ func New(v *vault.Vault, agentName string, transport string) (*Server, error) {
 	// Register hooks specified in the agent's config profile
 	srv.registerConfigHooks(cfg)
 
+	// Attach payment policy enforcer if the agent references one.
+	if policyName := agent.PaymentPolicyValue(); policyName != "" && cfg.PaymentPolicies != nil {
+		if pp, ok := cfg.PaymentPolicies[policyName]; ok {
+			statePath := paymentStatePath(v.Dir, policyName)
+			enforcer, enfErr := payment.NewEnforcerFromFile(pp, statePath)
+			if enfErr == nil {
+				srv.paymentEnforcer = enforcer
+			}
+		}
+	}
+
 	return srv, nil
 }
 
@@ -349,4 +364,14 @@ func (s *Server) getBiometricChallenger() *authguard.Challenger {
 		return s.biometricChallenger
 	}
 	return authguard.DefaultChallenger()
+}
+
+func paymentStatePath(vaultDir, policyName string) string {
+	h := sha256Short(vaultDir)
+	return filepath.Join(config.DefaultDataDir(), "payment-state", h, policyName, "daily-totals.json")
+}
+
+func sha256Short(s string) string {
+	h := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(h[:])[:12]
 }

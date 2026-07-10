@@ -74,7 +74,7 @@ func objectSchema(required []string, properties map[string]schemaProperty) map[s
 // ARCHITECTURE.md § Tool Addition Review). The cap balances functionality
 // against the prompt injection attack surface — each additional tool is another
 // vector an attacker-controlled agent can exploit.
-const MaxToolDefinitions = 34
+const MaxToolDefinitions = 35
 
 var (
 	toolRegistry   []toolDefinition
@@ -130,6 +130,22 @@ func RegisterTools() {
 		}),
 		Handler:         (*Server).handleAutotype,
 		RiskLevel:       RiskLevelHigh,
+		DestructiveHint: true,
+	})
+
+	// -- tools_prepare_payment.go
+	RegisterTool(toolDefinition{
+		Name:        "prepare_payment",
+		Description: "Prepare a payment by validating a payment entry, showing a native approval prompt with merchant/amount/currency, and on approval autotyping card or bank account fields into the focused checkout window. Card values are never returned to the agent.",
+		InputSchema: objectSchema([]string{"entry_path", "merchant", "amount", "currency"}, map[string]schemaProperty{
+			"entry_path":  {Type: "string", Description: "Vault path of the payment entry"},
+			"merchant":    {Type: "string", Description: "Merchant name or origin (e.g. shop.example)"},
+			"amount":      {Type: "string", Description: "Payment amount (e.g. 75.00)"},
+			"currency":    {Type: "string", Description: "Currency code (e.g. EUR, USD)"},
+			"description": {Type: "string", Description: "Optional description shown in the approval prompt"},
+		}),
+		Handler:         (*Server).handlePreparePayment,
+		RiskLevel:       RiskLevelCritical,
 		DestructiveHint: true,
 	})
 
@@ -635,6 +651,7 @@ func checkToolBlockedByTier(agent *config.AgentProfile, toolName string) *errors
 			"request_credential":  true,
 			"copy_to_clipboard":   true,
 			"autotype":            true,
+			"prepare_payment":     true,
 		}
 		if blocked[toolName] {
 			return errors.ToolNotAllowed(toolName, "standard", upgradeCmdForAgent(agent))

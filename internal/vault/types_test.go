@@ -7,8 +7,8 @@ import (
 
 func TestAllSecretTypes(t *testing.T) {
 	types := AllSecretTypes()
-	if len(types) != 9 {
-		t.Errorf("AllSecretTypes() returned %d types, want 9", len(types))
+	if len(types) != 10 {
+		t.Errorf("AllSecretTypes() returned %d types, want 10", len(types))
 	}
 	// Should include all known types
 	seen := make(map[SecretType]bool)
@@ -18,7 +18,8 @@ func TestAllSecretTypes(t *testing.T) {
 	for _, st := range []SecretType{
 		SecretTypeAPIKey, SecretTypeBearerToken, SecretTypeBasicAuth,
 		SecretTypeSSHKey, SecretTypePassword, SecretTypeCertificate,
-		SecretTypeDatabaseURL, SecretTypeTOTPSeed, SecretTypeCustom,
+		SecretTypeDatabaseURL, SecretTypeTOTPSeed, SecretTypePayment,
+		SecretTypeCustom,
 	} {
 		if !seen[st] {
 			t.Errorf("AllSecretTypes() missing %q", st)
@@ -42,6 +43,8 @@ func TestSecretTypeFromString(t *testing.T) {
 		{"certificate", SecretTypeCertificate},
 		{"database_url", SecretTypeDatabaseURL},
 		{"totp_seed", SecretTypeTOTPSeed},
+		{"payment", SecretTypePayment},
+		{"PAYMENT", SecretTypePayment},
 		{"custom", SecretTypeCustom},
 		{"unknown", SecretTypeCustom},
 		{"", SecretTypeCustom},
@@ -57,7 +60,7 @@ func TestSecretTypeFromString(t *testing.T) {
 func TestIsValidSecretType(t *testing.T) {
 	valid := []string{
 		"api_key", "bearer_token", "basic_auth", "ssh_key",
-		"password", "certificate", "database_url", "totp_seed", "custom",
+		"password", "certificate", "database_url", "totp_seed", "payment", "custom",
 		"API_KEY", "PASSWORD",
 	}
 	for _, s := range valid {
@@ -214,6 +217,7 @@ func TestPrimaryFieldForType(t *testing.T) {
 		{SecretTypeDatabaseURL, "connection_string"},
 		{SecretTypeCertificate, "cert_pem"},
 		{SecretTypeTOTPSeed, "seed"},
+		{SecretTypePayment, "card_number"},
 		{SecretTypeBasicAuth, "basic_auth"},
 		{SecretTypePassword, "password"},
 		{SecretTypeCustom, "password"},
@@ -239,6 +243,7 @@ func TestUsageHintForType(t *testing.T) {
 		{SecretTypeCertificate, "TLS/SSL"},
 		{SecretTypeDatabaseURL, "connection string"},
 		{SecretTypeTOTPSeed, "TOTP generator"},
+		{SecretTypePayment, "Payment card"},
 		{SecretTypeCustom, "specific integration"},
 	}
 	for _, tt := range tests {
@@ -259,5 +264,81 @@ func TestSecretTypeIcon(t *testing.T) {
 	}
 	if icon := SecretTypeIcon("unknown_type"); icon == "" {
 		t.Error("SecretTypeIcon(unknown) returned empty, want default")
+	}
+}
+
+func TestPaymentSubtypeRoundTrip(t *testing.T) {
+	tests := []struct {
+		input string
+		want  PaymentSubtype
+	}{
+		{"card", PaymentSubtypeCard},
+		{"bank_account", PaymentSubtypeBankAccount},
+		{"", PaymentSubtypeCard},
+		{"unknown", PaymentSubtypeCard},
+	}
+	for _, tt := range tests {
+		got := PaymentSubtypeFromString(tt.input)
+		if got != tt.want {
+			t.Errorf("PaymentSubtypeFromString(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestIsValidPaymentSubtype(t *testing.T) {
+	valid := []string{"card", "bank_account"}
+	for _, s := range valid {
+		if !IsValidPaymentSubtype(s) {
+			t.Errorf("IsValidPaymentSubtype(%q) = false, want true", s)
+		}
+	}
+	invalid := []string{"", "credit", "debit", "payment"}
+	for _, s := range invalid {
+		if IsValidPaymentSubtype(s) {
+			t.Errorf("IsValidPaymentSubtype(%q) = true, want false", s)
+		}
+	}
+}
+
+func TestPaymentSensitiveFields(t *testing.T) {
+	cardSensitive := PaymentSensitiveFields(PaymentSubtypeCard)
+	if len(cardSensitive) != 2 {
+		t.Errorf("PaymentSensitiveFields(card) returned %d fields, want 2", len(cardSensitive))
+	}
+	seen := make(map[string]bool)
+	for _, f := range cardSensitive {
+		seen[f] = true
+	}
+	if !seen["card_number"] || !seen["cvc"] {
+		t.Errorf("PaymentSensitiveFields(card) = %v, want card_number and cvc", cardSensitive)
+	}
+
+	bankSensitive := PaymentSensitiveFields(PaymentSubtypeBankAccount)
+	if len(bankSensitive) != 1 {
+		t.Errorf("PaymentSensitiveFields(bank_account) returned %d fields, want 1", len(bankSensitive))
+	}
+	if bankSensitive[0] != "iban" {
+		t.Errorf("PaymentSensitiveFields(bank_account) = %v, want [iban]", bankSensitive)
+	}
+
+	unknownSensitive := PaymentSensitiveFields("unknown")
+	if unknownSensitive != nil {
+		t.Errorf("PaymentSensitiveFields(unknown) = %v, want nil", unknownSensitive)
+	}
+}
+
+func TestAllPaymentSensitiveFields(t *testing.T) {
+	fields := AllPaymentSensitiveFields()
+	if len(fields) != 3 {
+		t.Errorf("AllPaymentSensitiveFields() returned %d fields, want 3", len(fields))
+	}
+	seen := make(map[string]bool)
+	for _, f := range fields {
+		seen[f] = true
+	}
+	for _, want := range []string{"card_number", "cvc", "iban"} {
+		if !seen[want] {
+			t.Errorf("AllPaymentSensitiveFields() missing %q", want)
+		}
 	}
 }

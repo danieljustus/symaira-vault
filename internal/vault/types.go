@@ -17,6 +17,7 @@ const (
 	SecretTypeCertificate SecretType = "certificate"
 	SecretTypeDatabaseURL SecretType = "database_url"
 	SecretTypeTOTPSeed    SecretType = "totp_seed"
+	SecretTypePayment     SecretType = "payment"
 	SecretTypeCustom      SecretType = "custom"
 )
 
@@ -31,6 +32,7 @@ func AllSecretTypes() []SecretType {
 		SecretTypeCertificate,
 		SecretTypeDatabaseURL,
 		SecretTypeTOTPSeed,
+		SecretTypePayment,
 		SecretTypeCustom,
 	}
 }
@@ -54,6 +56,8 @@ func SecretTypeFromString(s string) SecretType {
 		return SecretTypeDatabaseURL
 	case string(SecretTypeTOTPSeed):
 		return SecretTypeTOTPSeed
+	case string(SecretTypePayment):
+		return SecretTypePayment
 	case string(SecretTypeCustom):
 		return SecretTypeCustom
 	default:
@@ -65,7 +69,8 @@ func SecretTypeFromString(s string) SecretType {
 func IsValidSecretType(s string) bool {
 	switch strings.ToLower(s) {
 	case string(SecretTypeAPIKey), string(SecretTypeBearerToken), string(SecretTypeBasicAuth), string(SecretTypeSSHKey),
-		string(SecretTypePassword), string(SecretTypeCertificate), string(SecretTypeDatabaseURL), string(SecretTypeTOTPSeed), string(SecretTypeCustom):
+		string(SecretTypePassword), string(SecretTypeCertificate), string(SecretTypeDatabaseURL), string(SecretTypeTOTPSeed),
+		string(SecretTypePayment), string(SecretTypeCustom):
 		return true
 	}
 	return false
@@ -253,6 +258,8 @@ func PrimaryFieldForType(t SecretType) string {
 		return "cert_pem"
 	case SecretTypeTOTPSeed:
 		return "seed"
+	case SecretTypePayment:
+		return PaymentFieldCardNumber
 	case SecretTypeBasicAuth:
 		return string(SecretTypeBasicAuth)
 	default:
@@ -279,6 +286,8 @@ func UsageHintForType(t SecretType) string {
 		return "Use as connection string. Ensure credentials are not logged."
 	case SecretTypeTOTPSeed:
 		return "Use with TOTP generator. Never share the seed - only share generated codes."
+	case SecretTypePayment:
+		return "Payment card or bank account details. Sensitive fields (card_number, cvc, iban) are redacted by default."
 	case SecretTypeCustom:
 		return "Follow the specific integration instructions for this secret."
 	default:
@@ -305,6 +314,8 @@ func SecretTypeIcon(t SecretType) string {
 		return "🗄️"
 	case SecretTypeTOTPSeed:
 		return "⏱️"
+	case SecretTypePayment:
+		return "💳"
 	case SecretTypeCustom:
 		return "📦"
 	default:
