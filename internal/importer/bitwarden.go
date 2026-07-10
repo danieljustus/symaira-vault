@@ -13,6 +13,16 @@ const (
 	bitwardenCardType  = 2
 )
 
+const (
+	bitwardenFieldUsername = "username"
+	bitwardenFieldPassword = "password"
+	bitwardenFieldURL      = "url"
+	bitwardenFieldURLs     = "urls"
+	bitwardenFieldNotes    = "notes"
+	bitwardenFieldTOTP     = "totp"
+	bitwardenFieldSecret   = "secret"
+)
+
 type bitwardenImporter struct{}
 
 type bitwardenExport struct {
@@ -119,11 +129,11 @@ func bitwardenPath(item bitwardenItem, folders map[string]string) string {
 
 func bitwardenParseLogin(item bitwardenItem, folders map[string]string) ImportedEntry {
 	data := map[string]any{
-		"username": item.Login.Username,
-		"password": item.Login.Password,
-		"url":      bitwardenPrimaryURI(item.Login.URIs),
-		"urls":     bitwardenURIs(item.Login.URIs),
-		"notes":    item.Notes,
+		bitwardenFieldUsername: item.Login.Username,
+		bitwardenFieldPassword: item.Login.Password,
+		bitwardenFieldURL:      bitwardenPrimaryURI(item.Login.URIs),
+		bitwardenFieldURLs:     bitwardenURIs(item.Login.URIs),
+		bitwardenFieldNotes:    item.Notes,
 	}
 
 	for _, field := range item.Fields {
@@ -134,7 +144,7 @@ func bitwardenParseLogin(item bitwardenItem, folders map[string]string) Imported
 	}
 
 	if item.Login.TOTP != "" {
-		data["totp"] = map[string]any{"secret": item.Login.TOTP}
+		data[bitwardenFieldTOTP] = map[string]any{bitwardenFieldSecret: item.Login.TOTP}
 	}
 
 	return ImportedEntry{
@@ -145,12 +155,12 @@ func bitwardenParseLogin(item bitwardenItem, folders map[string]string) Imported
 
 func bitwardenParseCard(item bitwardenItem, folders map[string]string) ImportedEntry {
 	data := map[string]any{
-		"card_number":  item.Card.Number,
-		"cardholder":   item.Card.CardholderName,
-		"expiry_month": item.Card.ExpMonth,
-		"expiry_year":  item.Card.ExpYear,
-		"cvc":          item.Card.Code,
-		"subtype":      string(vaultpkg.PaymentSubtypeCard),
+		vaultpkg.PaymentFieldCardNumber:  item.Card.Number,
+		vaultpkg.PaymentFieldCardholder:  item.Card.CardholderName,
+		vaultpkg.PaymentFieldExpiryMonth: item.Card.ExpMonth,
+		vaultpkg.PaymentFieldExpiryYear:  item.Card.ExpYear,
+		vaultpkg.PaymentFieldCVC:         item.Card.Code,
+		vaultpkg.PaymentFieldSubtype:     string(vaultpkg.PaymentSubtypeCard),
 	}
 
 	for _, field := range item.Fields {

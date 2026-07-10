@@ -1,5 +1,17 @@
 package vault
 
+// Payment field names used across the vault and MCP layers.
+const (
+	PaymentFieldCardNumber  = "card_number"
+	PaymentFieldExpiryMonth = "expiry_month"
+	PaymentFieldExpiryYear  = "expiry_year"
+	PaymentFieldCVC         = "cvc"
+	PaymentFieldCardholder  = "cardholder"
+	PaymentFieldIBAN        = "iban"
+	PaymentFieldBIC         = "bic"
+	PaymentFieldSubtype     = "subtype"
+)
+
 // PaymentSubtype represents the subtype of a payment entry.
 type PaymentSubtype string
 
@@ -48,18 +60,18 @@ type paymentField struct {
 // agent responses.
 var PaymentFields = map[PaymentSubtype][]paymentField{
 	PaymentSubtypeCard: {
-		{Name: "card_number", Sensitive: true},
-		{Name: "expiry_month", Sensitive: false},
-		{Name: "expiry_year", Sensitive: false},
-		{Name: "cvc", Sensitive: true},
-		{Name: "cardholder", Sensitive: false},
-		{Name: "subtype", Sensitive: false},
+		{Name: PaymentFieldCardNumber, Sensitive: true},
+		{Name: PaymentFieldExpiryMonth, Sensitive: false},
+		{Name: PaymentFieldExpiryYear, Sensitive: false},
+		{Name: PaymentFieldCVC, Sensitive: true},
+		{Name: PaymentFieldCardholder, Sensitive: false},
+		{Name: PaymentFieldSubtype, Sensitive: false},
 	},
 	PaymentSubtypeBankAccount: {
-		{Name: "iban", Sensitive: true},
-		{Name: "bic", Sensitive: false},
-		{Name: "cardholder", Sensitive: false},
-		{Name: "subtype", Sensitive: false},
+		{Name: PaymentFieldIBAN, Sensitive: true},
+		{Name: PaymentFieldBIC, Sensitive: false},
+		{Name: PaymentFieldCardholder, Sensitive: false},
+		{Name: PaymentFieldSubtype, Sensitive: false},
 	},
 }
 
@@ -83,5 +95,5 @@ func PaymentSensitiveFields(subtype PaymentSubtype) []string {
 // AllPaymentSensitiveFields returns the union of sensitive field names across
 // all payment subtypes. Use this when the subtype is not yet known.
 func AllPaymentSensitiveFields() []string {
-	return []string{"card_number", "cvc", "iban"}
+	return []string{PaymentFieldCardNumber, PaymentFieldCVC, PaymentFieldIBAN}
 }

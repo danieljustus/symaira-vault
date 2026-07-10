@@ -259,7 +259,7 @@ func PrimaryFieldForType(t SecretType) string {
 	case SecretTypeTOTPSeed:
 		return "seed"
 	case SecretTypePayment:
-		return "card_number"
+		return PaymentFieldCardNumber
 	case SecretTypeBasicAuth:
 		return string(SecretTypeBasicAuth)
 	default:
