@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -26,40 +25,17 @@ func (s *Server) handleRunCommand(ctx context.Context, req mcp.CallToolRequest) 
 		s.logAudit(ctx, "run_command", "<invalid>", false)
 		return mcp.NewToolResultError("missing required argument \"command\""), nil
 	}
-	cmdSlice, ok := cmdRaw.([]any)
-	if !ok {
+	command, err := parseCommandArray(cmdRaw)
+	if err != nil {
 		s.logAudit(ctx, "run_command", "<invalid>", false)
-		return mcp.NewToolResultError("argument \"command\" must be an array"), nil
-	}
-	if len(cmdSlice) == 0 {
-		s.logAudit(ctx, "run_command", "<invalid>", false)
-		return mcp.NewToolResultError("command array must not be empty"), nil
-	}
-	command := make([]string, len(cmdSlice))
-	for i, v := range cmdSlice {
-		str, ok := v.(string)
-		if !ok {
-			s.logAudit(ctx, "run_command", "<invalid>", false)
-			return mcp.NewToolResultError(fmt.Sprintf("command[%d] must be a string", i)), nil
-		}
-		command[i] = str
+		return mcp.NewToolResultError(err.Error()), nil
 	}
 
 	// Enforce per-agent executable allowlist.
-	if len(s.agent.AllowedExecutables) > 0 {
-		exe := filepath.Base(command[0])
-		allowed := false
-		for _, a := range s.agent.AllowedExecutables {
-			if exe == a {
-				allowed = true
-				break
-			}
-		}
-		if !allowed {
-			s.logAudit(ctx, "run_command", command[0], false)
-			metrics.RecordAuthDenial("executable_denied", s.agent.Name)
-			return nil, fmt.Errorf("command execution denied: executable %q not in agent allowlist", exe)
-		}
+	if allowErr := s.checkExecutableAllowlist(command); allowErr != nil {
+		s.logAudit(ctx, "run_command", command[0], false)
+		metrics.RecordAuthDenial("executable_denied", s.agent.Name)
+		return nil, allowErr
 	}
 
 	timeoutSeconds, timeoutErr := parseCommandTimeoutSeconds(req.Arguments["timeout"])
@@ -91,9 +67,9 @@ func (s *Server) handleRunCommand(ctx context.Context, req mcp.CallToolRequest) 
 				return nil, fmt.Errorf("access denied: secret ref path %q outside allowed scope", path)
 			}
 
-			value, err := secrets.ResolveSecretRef(s.vault, ref)
-			if err != nil {
-				return mcp.NewToolResultError(fmt.Sprintf("cannot resolve secret ref %q: %v", ref, err)), nil
+			value, resolveErr := secrets.ResolveSecretRef(s.vault, ref)
+			if resolveErr != nil {
+				return mcp.NewToolResultError(fmt.Sprintf("cannot resolve secret ref %q: %v", ref, resolveErr)), nil
 			}
 			resolvedEnv[envName] = value
 			envNames = append(envNames, envName)

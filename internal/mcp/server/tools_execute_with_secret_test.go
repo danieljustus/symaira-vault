@@ -1114,3 +1114,84 @@ func TestHandleExecuteWithSecret_ToolListed(t *testing.T) {
 		t.Fatal("execute_with_secret not in tools list payload")
 	}
 }
+
+func TestHandleExecuteWithSecret_ExecutableAllowlist_Allowed(t *testing.T) {
+	srv := newTestServer(t, config.AgentProfile{
+		Name:               "test",
+		AllowedPaths:       []string{"*"},
+		CanRunCommands:     config.BoolPtr(true),
+		ApprovalMode:       config.StrPtr("none"),
+		AllowedExecutables: []string{"echo", "cat"},
+	}, "stdio")
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{
+			"command":     []any{"echo", "hello"},
+			"secret_refs": []any{},
+		},
+	}
+
+	result, err := srv.handleExecuteWithSecret(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleExecuteWithSecret() error = %v", err)
+	}
+	if result == nil {
+		t.Fatal("handleExecuteWithSecret() returned nil result")
+	}
+	if result.IsError {
+		t.Fatalf("handleExecuteWithSecret() returned error: %s", result.Text)
+	}
+}
+
+func TestHandleExecuteWithSecret_ExecutableAllowlist_Denied(t *testing.T) {
+	srv := newTestServer(t, config.AgentProfile{
+		Name:               "test",
+		AllowedPaths:       []string{"*"},
+		CanRunCommands:     config.BoolPtr(true),
+		ApprovalMode:       config.StrPtr("none"),
+		AllowedExecutables: []string{"echo", "cat"},
+	}, "stdio")
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{
+			"command":     []any{"sh", "-c", "echo hello"},
+			"secret_refs": []any{},
+		},
+	}
+
+	_, err := srv.handleExecuteWithSecret(context.Background(), req)
+	if err == nil {
+		t.Fatal("handleExecuteWithSecret() expected error for disallowed executable, got nil")
+	}
+	if !strings.Contains(err.Error(), "not in agent allowlist") {
+		t.Fatalf("error = %v, want 'not in agent allowlist'", err)
+	}
+}
+
+func TestHandleExecuteWithSecret_ExecutableAllowlist_PathQualified_Allowed(t *testing.T) {
+	srv := newTestServer(t, config.AgentProfile{
+		Name:               "test",
+		AllowedPaths:       []string{"*"},
+		CanRunCommands:     config.BoolPtr(true),
+		ApprovalMode:       config.StrPtr("none"),
+		AllowedExecutables: []string{"echo", "cat"},
+	}, "stdio")
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{
+			"command":     []any{"/bin/echo", "hello"},
+			"secret_refs": []any{},
+		},
+	}
+
+	result, err := srv.handleExecuteWithSecret(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleExecuteWithSecret() error = %v", err)
+	}
+	if result == nil {
+		t.Fatal("handleExecuteWithSecret() returned nil result")
+	}
+	if result.IsError {
+		t.Fatalf("handleExecuteWithSecret() returned error: %s", result.Text)
+	}
+}

@@ -31,23 +31,26 @@ func (s *Server) handleExecuteWithSecret(ctx context.Context, req mcp.CallToolRe
 		s.logAudit(ctx, "execute_with_secret", "<invalid:missing-command>", false)
 		return mcp.NewToolResultError("missing required argument \"command\""), nil
 	}
-	cmdSlice, ok := cmdRaw.([]any)
-	if !ok {
-		s.logAudit(ctx, "execute_with_secret", "<invalid:command-not-array>", false)
-		return mcp.NewToolResultError("argument \"command\" must be an array"), nil
-	}
-	if len(cmdSlice) == 0 {
-		s.logAudit(ctx, "execute_with_secret", "<invalid:empty-command>", false)
-		return mcp.NewToolResultError("command array must not be empty"), nil
-	}
-	command := make([]string, len(cmdSlice))
-	for i, v := range cmdSlice {
-		str, valid := v.(string)
-		if !valid {
-			s.logAudit(ctx, "execute_with_secret", "<invalid:command-type>", false)
-			return mcp.NewToolResultError(fmt.Sprintf("command[%d] must be a string", i)), nil
+	command, err := parseCommandArray(cmdRaw)
+	if err != nil {
+		var auditTag string
+		switch {
+		case strings.Contains(err.Error(), "must be an array"):
+			auditTag = "<invalid:command-not-array>"
+		case strings.Contains(err.Error(), "must not be empty"):
+			auditTag = "<invalid:empty-command>"
+		default:
+			auditTag = "<invalid:command-type>"
 		}
-		command[i] = str
+		s.logAudit(ctx, "execute_with_secret", auditTag, false)
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	// Enforce per-agent executable allowlist.
+	if allowErr := s.checkExecutableAllowlist(command); allowErr != nil {
+		s.logAudit(ctx, "execute_with_secret", command[0], false)
+		metrics.RecordAuthDenial("executable_denied", s.agent.Name)
+		return nil, allowErr
 	}
 
 	timeoutSeconds, timeoutErr := parseCommandTimeoutSeconds(req.Arguments["timeout"])
