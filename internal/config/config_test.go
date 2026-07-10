@@ -3481,10 +3481,10 @@ func TestValidate_PaymentPolicy_ValidPolicy(t *testing.T) {
 	cfg := Default()
 	cfg.PaymentPolicies = map[string]PaymentPolicy{
 		"shopping": {
-			Instrument:      "payments/visa",
+			Instrument:       "payments/visa",
 			AllowedMerchants: []string{"amazon.de"},
-			MaxAmount:       PaymentMaxAmount{PerTransaction: "75.00", PerDay: "150.00"},
-			Currency:        "EUR",
+			MaxAmount:        PaymentMaxAmount{PerTransaction: "75.00", PerDay: "150.00"},
+			Currency:         "EUR",
 		},
 	}
 	if err := cfg.Validate(); err != nil {

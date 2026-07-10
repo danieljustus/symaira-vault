@@ -94,25 +94,25 @@ type CustomPattern struct {
 }
 
 type Config struct {
-	Agents         map[string]AgentProfile `yaml:"agents,omitempty"`
-	Vault          *VaultConfig            `yaml:"vault,omitempty"`
-	Git            *GitConfig              `yaml:"git,omitempty"`
-	MCP            *MCPConfig              `yaml:"mcp,omitempty"`
-	Update         *UpdateConfig           `yaml:"update,omitempty"`
-	Clipboard      *ClipboardConfig        `yaml:"clipboard,omitempty"`
-	Audit          *AuditConfig            `yaml:"audit,omitempty"`
-	Logging        *LoggingConfig          `yaml:"logging,omitempty"`
-	Security       *SecurityConfig         `yaml:"security,omitempty"`
-	VaultDir       string                  `yaml:"vaultDir,omitempty"`
-	DefaultAgent   string                  `yaml:"defaultAgent,omitempty"`
-	SessionTimeout time.Duration           `yaml:"sessionTimeout,omitempty"`
-	AuthMethod     string                  `yaml:"authMethod,omitempty"`
-	UseTouchID     *bool                   `yaml:"useTouchID,omitempty"`
-	Profiles       map[string]*Profile     `yaml:"profiles,omitempty"`
-	DefaultProfile string                  `yaml:"defaultProfile,omitempty"`
-	EnvAllowlist    []string                `yaml:"envAllowlist,omitempty"`
-	EnvWhitelist    []string                `yaml:"envWhitelist,omitempty"`
-	ScanPatterns    []CustomPattern         `yaml:"scan_patterns,omitempty"`
+	Agents          map[string]AgentProfile  `yaml:"agents,omitempty"`
+	Vault           *VaultConfig             `yaml:"vault,omitempty"`
+	Git             *GitConfig               `yaml:"git,omitempty"`
+	MCP             *MCPConfig               `yaml:"mcp,omitempty"`
+	Update          *UpdateConfig            `yaml:"update,omitempty"`
+	Clipboard       *ClipboardConfig         `yaml:"clipboard,omitempty"`
+	Audit           *AuditConfig             `yaml:"audit,omitempty"`
+	Logging         *LoggingConfig           `yaml:"logging,omitempty"`
+	Security        *SecurityConfig          `yaml:"security,omitempty"`
+	VaultDir        string                   `yaml:"vaultDir,omitempty"`
+	DefaultAgent    string                   `yaml:"defaultAgent,omitempty"`
+	SessionTimeout  time.Duration            `yaml:"sessionTimeout,omitempty"`
+	AuthMethod      string                   `yaml:"authMethod,omitempty"`
+	UseTouchID      *bool                    `yaml:"useTouchID,omitempty"`
+	Profiles        map[string]*Profile      `yaml:"profiles,omitempty"`
+	DefaultProfile  string                   `yaml:"defaultProfile,omitempty"`
+	EnvAllowlist    []string                 `yaml:"envAllowlist,omitempty"`
+	EnvWhitelist    []string                 `yaml:"envWhitelist,omitempty"`
+	ScanPatterns    []CustomPattern          `yaml:"scan_patterns,omitempty"`
 	PaymentPolicies map[string]PaymentPolicy `yaml:"paymentPolicies,omitempty"`
 }
 

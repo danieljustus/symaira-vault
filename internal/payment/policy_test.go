@@ -18,9 +18,9 @@ func newTestEnforcer(t *testing.T, policy config.PaymentPolicy) *Enforcer {
 
 func TestCheck_Allowlist_AllowedMerchant(t *testing.T) {
 	e := newTestEnforcer(t, config.PaymentPolicy{
-		Instrument:      "payments/visa",
+		Instrument:       "payments/visa",
 		AllowedMerchants: []string{"amazon.de", "otto.de"},
-		Currency:        "EUR",
+		Currency:         "EUR",
 	})
 	err := e.Check(PaymentRequest{
 		EntryPath: "payments/visa",
@@ -35,9 +35,9 @@ func TestCheck_Allowlist_AllowedMerchant(t *testing.T) {
 
 func TestCheck_Allowlist_DeniedMerchant(t *testing.T) {
 	e := newTestEnforcer(t, config.PaymentPolicy{
-		Instrument:      "payments/visa",
+		Instrument:       "payments/visa",
 		AllowedMerchants: []string{"amazon.de"},
-		Currency:        "EUR",
+		Currency:         "EUR",
 	})
 	err := e.Check(PaymentRequest{
 		EntryPath: "payments/visa",
@@ -58,9 +58,9 @@ func TestCheck_Allowlist_DeniedMerchant(t *testing.T) {
 
 func TestCheck_Allowlist_CaseInsensitive(t *testing.T) {
 	e := newTestEnforcer(t, config.PaymentPolicy{
-		Instrument:      "payments/visa",
+		Instrument:       "payments/visa",
 		AllowedMerchants: []string{"Amazon.de"},
-		Currency:        "EUR",
+		Currency:         "EUR",
 	})
 	err := e.Check(PaymentRequest{
 		EntryPath: "payments/visa",
@@ -75,10 +75,10 @@ func TestCheck_Allowlist_CaseInsensitive(t *testing.T) {
 
 func TestCheck_CurrencyMismatch(t *testing.T) {
 	e := newTestEnforcer(t, config.PaymentPolicy{
-		Instrument:      "payments/visa",
+		Instrument:       "payments/visa",
 		AllowedMerchants: []string{"shop.com"},
-		MaxAmount:       config.PaymentMaxAmount{PerTransaction: "100.00"},
-		Currency:        "EUR",
+		MaxAmount:        config.PaymentMaxAmount{PerTransaction: "100.00"},
+		Currency:         "EUR",
 	})
 	err := e.Check(PaymentRequest{
 		EntryPath: "payments/visa",
@@ -99,10 +99,10 @@ func TestCheck_CurrencyMismatch(t *testing.T) {
 
 func TestCheck_OverPerTransaction(t *testing.T) {
 	e := newTestEnforcer(t, config.PaymentPolicy{
-		Instrument:      "payments/visa",
+		Instrument:       "payments/visa",
 		AllowedMerchants: []string{"shop.com"},
-		MaxAmount:       config.PaymentMaxAmount{PerTransaction: "75.00"},
-		Currency:        "EUR",
+		MaxAmount:        config.PaymentMaxAmount{PerTransaction: "75.00"},
+		Currency:         "EUR",
 	})
 	err := e.Check(PaymentRequest{
 		EntryPath: "payments/visa",
@@ -123,10 +123,10 @@ func TestCheck_OverPerTransaction(t *testing.T) {
 
 func TestCheck_OverPerDay(t *testing.T) {
 	e := newTestEnforcer(t, config.PaymentPolicy{
-		Instrument:      "payments/visa",
+		Instrument:       "payments/visa",
 		AllowedMerchants: []string{"shop.com"},
-		MaxAmount:       config.PaymentMaxAmount{PerDay: "200.00"},
-		Currency:        "EUR",
+		MaxAmount:        config.PaymentMaxAmount{PerDay: "200.00"},
+		Currency:         "EUR",
 	})
 	if err := e.tracker.AddToToday("payments/visa", "150.00"); err != nil {
 		t.Fatalf("AddToToday() error = %v", err)
@@ -150,10 +150,10 @@ func TestCheck_OverPerDay(t *testing.T) {
 
 func TestCheck_UnderLimits(t *testing.T) {
 	e := newTestEnforcer(t, config.PaymentPolicy{
-		Instrument:      "payments/visa",
+		Instrument:       "payments/visa",
 		AllowedMerchants: []string{"shop.com"},
-		MaxAmount:       config.PaymentMaxAmount{PerTransaction: "75.00", PerDay: "200.00"},
-		Currency:        "EUR",
+		MaxAmount:        config.PaymentMaxAmount{PerTransaction: "75.00", PerDay: "200.00"},
+		Currency:         "EUR",
 	})
 	if err := e.tracker.AddToToday("payments/visa", "100.00"); err != nil {
 		t.Fatalf("AddToToday() error = %v", err)

@@ -503,10 +503,10 @@ func TestHandlePreparePayment_Policy_DeniedMerchant(t *testing.T) {
 
 	srv.paymentEnforcer = payment.NewEnforcer(
 		config.PaymentPolicy{
-			Instrument:      "payments/mycard",
+			Instrument:       "payments/mycard",
 			AllowedMerchants: []string{"amazon.de"},
-			MaxAmount:       config.PaymentMaxAmount{PerTransaction: "100.00", PerDay: "200.00"},
-			Currency:        "EUR",
+			MaxAmount:        config.PaymentMaxAmount{PerTransaction: "100.00", PerDay: "200.00"},
+			Currency:         "EUR",
 		},
 		nil,
 	)
@@ -548,10 +548,10 @@ func TestHandlePreparePayment_Policy_CurrencyMismatch(t *testing.T) {
 
 	srv.paymentEnforcer = payment.NewEnforcer(
 		config.PaymentPolicy{
-			Instrument:      "payments/mycard",
+			Instrument:       "payments/mycard",
 			AllowedMerchants: []string{"shop.example"},
-			MaxAmount:       config.PaymentMaxAmount{PerTransaction: "100.00"},
-			Currency:        "EUR",
+			MaxAmount:        config.PaymentMaxAmount{PerTransaction: "100.00"},
+			Currency:         "EUR",
 		},
 		nil,
 	)
@@ -593,10 +593,10 @@ func TestHandlePreparePayment_Policy_OverPerTransaction(t *testing.T) {
 
 	srv.paymentEnforcer = payment.NewEnforcer(
 		config.PaymentPolicy{
-			Instrument:      "payments/mycard",
+			Instrument:       "payments/mycard",
 			AllowedMerchants: []string{"shop.example"},
-			MaxAmount:       config.PaymentMaxAmount{PerTransaction: "75.00"},
-			Currency:        "EUR",
+			MaxAmount:        config.PaymentMaxAmount{PerTransaction: "75.00"},
+			Currency:         "EUR",
 		},
 		nil,
 	)
@@ -648,10 +648,10 @@ func TestHandlePreparePayment_Policy_OverPerDay(t *testing.T) {
 
 	srv.paymentEnforcer = payment.NewEnforcer(
 		config.PaymentPolicy{
-			Instrument:      "payments/mycard",
+			Instrument:       "payments/mycard",
 			AllowedMerchants: []string{"shop.example"},
-			MaxAmount:       config.PaymentMaxAmount{PerTransaction: "100.00", PerDay: "200.00"},
-			Currency:        "EUR",
+			MaxAmount:        config.PaymentMaxAmount{PerTransaction: "100.00", PerDay: "200.00"},
+			Currency:         "EUR",
 		},
 		tracker,
 	)
@@ -702,10 +702,10 @@ func TestHandlePreparePayment_Policy_PassesAndIncrements(t *testing.T) {
 
 	srv.paymentEnforcer = payment.NewEnforcer(
 		config.PaymentPolicy{
-			Instrument:      "payments/mycard",
+			Instrument:       "payments/mycard",
 			AllowedMerchants: []string{"shop.example"},
-			MaxAmount:       config.PaymentMaxAmount{PerTransaction: "75.00", PerDay: "200.00"},
-			Currency:        "EUR",
+			MaxAmount:        config.PaymentMaxAmount{PerTransaction: "75.00", PerDay: "200.00"},
+			Currency:         "EUR",
 		},
 		tracker,
 	)
