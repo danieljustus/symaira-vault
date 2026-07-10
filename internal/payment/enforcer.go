@@ -1,3 +1,4 @@
+// Package payment enforces payment policies for the Symaira Vault prepare_payment flow.
 package payment
 
 import (
@@ -76,7 +77,7 @@ func (e *Enforcer) Check(req PaymentRequest) error {
 		}
 	}
 
-	if e.policy.Currency != "" && strings.ToUpper(strings.TrimSpace(req.Currency)) != strings.ToUpper(strings.TrimSpace(e.policy.Currency)) {
+	if e.policy.Currency != "" && !strings.EqualFold(strings.TrimSpace(req.Currency), strings.TrimSpace(e.policy.Currency)) {
 		return &DenialError{
 			Reason: DenialCurrencyMismatch,
 			Detail: fmt.Sprintf("requested currency %q does not match policy currency %q", req.Currency, e.policy.Currency),
