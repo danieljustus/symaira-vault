@@ -242,6 +242,12 @@ docs-check:
 			errors=$$((errors + 1)); \
 		fi; \
 	done; \
+	for pattern in "./openpass" "cd Symaira Vault"; do \
+		if grep -rF "$$pattern" CONTRIBUTING.md 2>/dev/null; then \
+			echo "Found stale post-rename example in CONTRIBUTING.md: $$pattern"; \
+			errors=$$((errors + 1)); \
+		fi; \
+	done; \
 	echo "Checking README.md links..."; \
 	for link in $$(grep -oE '\[([^]]+)\]\(([^)]+)\)' README.md | grep -v '^http' | grep -v '^#' | sed 's/.*](\([^)]*\)).*/\1/'); do \
 		case "$$link" in \
