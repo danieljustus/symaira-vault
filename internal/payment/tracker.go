@@ -25,7 +25,8 @@ func LoadDailyTotals(path string) (*DailyTotals, error) {
 		entries: make(map[string]map[string]string),
 		path:    path,
 	}
-	data, err := os.ReadFile(path)
+	// path is constructed from DefaultDataDir and a SHA-256 hash of the vault dir with a fixed filename.
+	data, err := os.ReadFile(path) // #nosec G304
 	if err != nil {
 		if os.IsNotExist(err) {
 			return dt, nil
