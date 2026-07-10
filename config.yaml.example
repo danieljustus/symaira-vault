@@ -56,6 +56,22 @@ agents:
     # agent. Disabled by default — payment sensitive fields are redacted for
     # all agents unless this is explicitly set to true.
     # exposePaymentValues: true
+    # Restrict payment operations via a named payment policy.
+    # paymentPolicy: shopping-limited
+
+# Payment policies constrain prepare_payment requests before the native
+# approval prompt is shown. Link a policy to an agent via its paymentPolicy field.
+# paymentPolicies:
+#   shopping-limited:
+#     instrument: "payments/visa"
+#     allowed_merchants:
+#       - "amazon.de"
+#       - "otto.de"
+#       - "mediamarkt.de"
+#     max_amount:
+#       per_transaction: "75.00"
+#       per_day: "150.00"
+#     currency: "EUR"
 
 # Vault-specific settings. These can also live inside <vault>/config.yaml.
 vault:

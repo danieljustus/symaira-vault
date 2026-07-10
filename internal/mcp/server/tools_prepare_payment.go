@@ -3,11 +3,13 @@ package server
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/danieljustus/symaira-vault/internal/autotype"
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
+	"github.com/danieljustus/symaira-vault/internal/payment"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
@@ -75,6 +77,20 @@ func (s *Server) handlePreparePayment(ctx context.Context, req mcp.CallToolReque
 	// --- Build approval summary ---
 	summary := buildPaymentSummary(merchant, amount, currency, description)
 
+	// --- Enforce payment policy ---
+	if s.paymentEnforcer != nil {
+		req := payment.PaymentRequest{
+			EntryPath: path,
+			Merchant:  merchant,
+			Amount:    amount,
+			Currency:  currency,
+		}
+		if err := s.paymentEnforcer.Check(req); err != nil {
+			s.logAudit(ctx, "payment.policy_denied", path, false)
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+	}
+
 	// --- Require user approval ---
 	if err := s.requireApproval(ctx, Intent{
 		Action:    "prepare_payment",
@@ -86,6 +102,17 @@ func (s *Server) handlePreparePayment(ctx context.Context, req mcp.CallToolReque
 	}
 
 	s.logAudit(ctx, "payment.approved", path, true)
+
+	if s.paymentEnforcer != nil {
+		if recErr := s.paymentEnforcer.RecordApproved(payment.PaymentRequest{
+			EntryPath: path,
+			Merchant:  merchant,
+			Amount:    amount,
+			Currency:  currency,
+		}); recErr != nil {
+			slog.Default().Warn("failed to record payment total", "err", recErr)
+		}
+	}
 
 	// --- Determine payment subtype and field order ---
 	subtype := vaultpkg.PaymentSubtypeCard

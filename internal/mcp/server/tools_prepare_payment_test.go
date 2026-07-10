@@ -11,6 +11,7 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/autotype"
 	"github.com/danieljustus/symaira-vault/internal/config"
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/payment"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
@@ -483,5 +484,298 @@ func TestBuildPaymentSummary(t *testing.T) {
 	withDesc := buildPaymentSummary("shop.example", "75.00", "EUR", "Gift for mom")
 	if !strings.Contains(withDesc, "Gift for mom") {
 		t.Errorf("summary = %q, want description", withDesc)
+	}
+}
+
+func TestHandlePreparePayment_Policy_DeniedMerchant(t *testing.T) {
+	vaultDir, identity := mockPaymentVault(t)
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanUseAutotype: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	origPaymentAutotype := paymentAutotype
+	paymentAutotype = func(text string) error { return nil }
+	defer func() { paymentAutotype = origPaymentAutotype }()
+
+	srv.paymentEnforcer = payment.NewEnforcer(
+		config.PaymentPolicy{
+			Instrument:      "payments/mycard",
+			AllowedMerchants: []string{"amazon.de"},
+			MaxAmount:       config.PaymentMaxAmount{PerTransaction: "100.00", PerDay: "200.00"},
+			Currency:        "EUR",
+		},
+		nil,
+	)
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{
+			"entry_path": "payments/mycard",
+			"merchant":   "evil.com",
+			"amount":     "50.00",
+			"currency":   "EUR",
+		},
+	}
+
+	result, err := srv.handlePreparePayment(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handlePreparePayment() error = %v", err)
+	}
+	if result == nil || !result.IsError {
+		t.Fatal("expected error result for denied merchant")
+	}
+	if !strings.Contains(result.Text, "merchant_not_allowed") {
+		t.Errorf("result = %q, want 'merchant_not_allowed'", result.Text)
+	}
+}
+
+func TestHandlePreparePayment_Policy_CurrencyMismatch(t *testing.T) {
+	vaultDir, identity := mockPaymentVault(t)
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanUseAutotype: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	origPaymentAutotype := paymentAutotype
+	paymentAutotype = func(text string) error { return nil }
+	defer func() { paymentAutotype = origPaymentAutotype }()
+
+	srv.paymentEnforcer = payment.NewEnforcer(
+		config.PaymentPolicy{
+			Instrument:      "payments/mycard",
+			AllowedMerchants: []string{"shop.example"},
+			MaxAmount:       config.PaymentMaxAmount{PerTransaction: "100.00"},
+			Currency:        "EUR",
+		},
+		nil,
+	)
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{
+			"entry_path": "payments/mycard",
+			"merchant":   "shop.example",
+			"amount":     "50.00",
+			"currency":   "USD",
+		},
+	}
+
+	result, err := srv.handlePreparePayment(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handlePreparePayment() error = %v", err)
+	}
+	if result == nil || !result.IsError {
+		t.Fatal("expected error result for currency mismatch")
+	}
+	if !strings.Contains(result.Text, "currency_mismatch") {
+		t.Errorf("result = %q, want 'currency_mismatch'", result.Text)
+	}
+}
+
+func TestHandlePreparePayment_Policy_OverPerTransaction(t *testing.T) {
+	vaultDir, identity := mockPaymentVault(t)
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanUseAutotype: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	origPaymentAutotype := paymentAutotype
+	paymentAutotype = func(text string) error { return nil }
+	defer func() { paymentAutotype = origPaymentAutotype }()
+
+	srv.paymentEnforcer = payment.NewEnforcer(
+		config.PaymentPolicy{
+			Instrument:      "payments/mycard",
+			AllowedMerchants: []string{"shop.example"},
+			MaxAmount:       config.PaymentMaxAmount{PerTransaction: "75.00"},
+			Currency:        "EUR",
+		},
+		nil,
+	)
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{
+			"entry_path": "payments/mycard",
+			"merchant":   "shop.example",
+			"amount":     "100.00",
+			"currency":   "EUR",
+		},
+	}
+
+	result, err := srv.handlePreparePayment(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handlePreparePayment() error = %v", err)
+	}
+	if result == nil || !result.IsError {
+		t.Fatal("expected error result for over per-transaction")
+	}
+	if !strings.Contains(result.Text, "over_per_transaction") {
+		t.Errorf("result = %q, want 'over_per_transaction'", result.Text)
+	}
+}
+
+func TestHandlePreparePayment_Policy_OverPerDay(t *testing.T) {
+	vaultDir, identity := mockPaymentVault(t)
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanUseAutotype: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	origPaymentAutotype := paymentAutotype
+	paymentAutotype = func(text string) error { return nil }
+	defer func() { paymentAutotype = origPaymentAutotype }()
+
+	// Pre-populate the tracker with a previous total
+	dir := t.TempDir()
+	tracker, err := payment.LoadDailyTotals(dir + "/test-totals.json")
+	if err != nil {
+		t.Fatalf("LoadDailyTotals() error = %v", err)
+	}
+	if err := tracker.AddToToday("payments/mycard", "150.00"); err != nil {
+		t.Fatalf("AddToToday() error = %v", err)
+	}
+
+	srv.paymentEnforcer = payment.NewEnforcer(
+		config.PaymentPolicy{
+			Instrument:      "payments/mycard",
+			AllowedMerchants: []string{"shop.example"},
+			MaxAmount:       config.PaymentMaxAmount{PerTransaction: "100.00", PerDay: "200.00"},
+			Currency:        "EUR",
+		},
+		tracker,
+	)
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{
+			"entry_path": "payments/mycard",
+			"merchant":   "shop.example",
+			"amount":     "60.00",
+			"currency":   "EUR",
+		},
+	}
+
+	result, err := srv.handlePreparePayment(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handlePreparePayment() error = %v", err)
+	}
+	if result == nil || !result.IsError {
+		t.Fatal("expected error result for over per-day")
+	}
+	if !strings.Contains(result.Text, "over_per_day") {
+		t.Errorf("result = %q, want 'over_per_day'", result.Text)
+	}
+}
+
+func TestHandlePreparePayment_Policy_PassesAndIncrements(t *testing.T) {
+	vaultDir, identity := mockPaymentVault(t)
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanUseAutotype: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	mockAT := &trackingAutotype{}
+	autotype.SetAutotype(mockAT)
+	defer autotype.SetAutotype(nil)
+	origPaymentAutotype := paymentAutotype
+	paymentAutotype = mockAT.Type
+	defer func() { paymentAutotype = origPaymentAutotype }()
+
+	dir := t.TempDir()
+	tracker, err := payment.LoadDailyTotals(dir + "/test-totals.json")
+	if err != nil {
+		t.Fatalf("LoadDailyTotals() error = %v", err)
+	}
+
+	srv.paymentEnforcer = payment.NewEnforcer(
+		config.PaymentPolicy{
+			Instrument:      "payments/mycard",
+			AllowedMerchants: []string{"shop.example"},
+			MaxAmount:       config.PaymentMaxAmount{PerTransaction: "75.00", PerDay: "200.00"},
+			Currency:        "EUR",
+		},
+		tracker,
+	)
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{
+			"entry_path": "payments/mycard",
+			"merchant":   "shop.example",
+			"amount":     "60.00",
+			"currency":   "EUR",
+		},
+	}
+
+	result, err := srv.handlePreparePayment(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handlePreparePayment() error = %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", result.Text)
+	}
+
+	typed := mockAT.typedFields()
+	if len(typed) != 4 {
+		t.Fatalf("typed %d fields, want 4", len(typed))
+	}
+
+	if got := tracker.TodayTotal("payments/mycard"); got != "60" {
+		t.Errorf("TodayTotal() = %q, want \"60\"", got)
+	}
+}
+
+func TestHandlePreparePayment_NoPolicy_AllowsEverything(t *testing.T) {
+	vaultDir, identity := mockPaymentVault(t)
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanUseAutotype: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	mockAT := &trackingAutotype{}
+	autotype.SetAutotype(mockAT)
+	defer autotype.SetAutotype(nil)
+	origPaymentAutotype := paymentAutotype
+	paymentAutotype = mockAT.Type
+	defer func() { paymentAutotype = origPaymentAutotype }()
+
+	srv.paymentEnforcer = nil
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{
+			"entry_path": "payments/mycard",
+			"merchant":   "any-merchant",
+			"amount":     "99999.99",
+			"currency":   "USD",
+		},
+	}
+
+	result, err := srv.handlePreparePayment(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handlePreparePayment() error = %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got error: %s", result.Text)
 	}
 }

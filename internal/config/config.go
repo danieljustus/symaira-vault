@@ -110,10 +110,35 @@ type Config struct {
 	UseTouchID     *bool                   `yaml:"useTouchID,omitempty"`
 	Profiles       map[string]*Profile     `yaml:"profiles,omitempty"`
 	DefaultProfile string                  `yaml:"defaultProfile,omitempty"`
-	EnvAllowlist   []string                `yaml:"envAllowlist,omitempty"`
-	// EnvWhitelist is the deprecated name for EnvAllowlist; kept for backward compatibility.
-	EnvWhitelist []string        `yaml:"envWhitelist,omitempty"`
-	ScanPatterns []CustomPattern `yaml:"scan_patterns,omitempty"`
+	EnvAllowlist    []string                `yaml:"envAllowlist,omitempty"`
+	EnvWhitelist    []string                `yaml:"envWhitelist,omitempty"`
+	ScanPatterns    []CustomPattern         `yaml:"scan_patterns,omitempty"`
+	PaymentPolicies map[string]PaymentPolicy `yaml:"paymentPolicies,omitempty"`
+}
+
+// PaymentMaxAmount defines per-transaction and per-day spending limits.
+// Both fields are strings to safely represent decimal amounts without
+// floating-point rounding errors.
+type PaymentMaxAmount struct {
+	PerTransaction string `yaml:"per_transaction,omitempty"`
+	PerDay         string `yaml:"per_day,omitempty"`
+}
+
+// PaymentPolicy constrains prepare_payment requests before the native
+// approval prompt is shown. Each policy is referenced by name from an
+// agent profile via the PaymentPolicy field.
+type PaymentPolicy struct {
+	// Instrument is the vault entry path of the payment instrument (card/bank
+	// account) that this policy applies to.
+	Instrument string `yaml:"instrument"`
+	// AllowedMerchants is an allowlist of merchant names (case-insensitive).
+	// When non-empty, only these merchants may proceed.
+	AllowedMerchants []string `yaml:"allowed_merchants,omitempty"`
+	// MaxAmount defines per-transaction and per-day spending limits.
+	MaxAmount PaymentMaxAmount `yaml:"max_amount,omitempty"`
+	// Currency is the required ISO-4217 currency code (e.g. "EUR", "USD").
+	// Must be non-empty when any limit is set.
+	Currency string `yaml:"currency,omitempty"`
 }
 
 type AgentProfile struct {
@@ -146,6 +171,7 @@ type AgentProfile struct {
 	SkillPath           *string             `yaml:"skillPath,omitempty"`
 	SkillVersion        *string             `yaml:"skillVersion,omitempty"`
 	ExposePaymentValues *bool               `yaml:"exposePaymentValues,omitempty"`
+	PaymentPolicy       *string             `yaml:"paymentPolicy,omitempty"`
 }
 
 func (p *AgentProfile) EffectiveRedactFields(toolName string) []string {
@@ -387,6 +413,15 @@ func (p *AgentProfile) ExposePaymentValuesValue() bool {
 		return false
 	}
 	return *p.ExposePaymentValues
+}
+
+// PaymentPolicyValue returns *p.PaymentPolicy or "" when p is nil /
+// p.PaymentPolicy is nil.
+func (p *AgentProfile) PaymentPolicyValue() string {
+	if p == nil || p.PaymentPolicy == nil {
+		return ""
+	}
+	return *p.PaymentPolicy
 }
 
 // AutoUnsealValue returns *p.AutoUnseal or false when p is nil /

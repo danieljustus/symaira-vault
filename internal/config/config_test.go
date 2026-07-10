@@ -2598,6 +2598,7 @@ func TestCopyAgentProfiles_DeepCopyAllFields(t *testing.T) {
 		PostCallHooks:       []string{"post1"},
 		SkillPath:           sptr("~/.skills/test/SKILL.md"),
 		SkillVersion:        sptr("1.0.0"),
+		PaymentPolicy:       sptr("shopping-limited"),
 	}
 
 	srcMap := map[string]AgentProfile{"agent": src}
@@ -3386,5 +3387,210 @@ func TestAgentProfileValueAccessorsHandleNilAndZero(t *testing.T) {
 	}
 	if got := p2.ApprovalTimeoutValue(); got != 2*time.Minute {
 		t.Errorf("p2.ApprovalTimeoutValue() = %v, want 2m", got)
+	}
+}
+
+func TestValidate_PaymentPolicy_EmptyInstrumentFails(t *testing.T) {
+	t.Parallel()
+	cfg := Default()
+	cfg.PaymentPolicies = map[string]PaymentPolicy{
+		"test": {Instrument: "", Currency: "EUR", MaxAmount: PaymentMaxAmount{PerTransaction: "50"}},
+	}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("Validate() with empty instrument = nil, want error")
+	}
+	if !strings.Contains(err.Error(), "instrument") {
+		t.Errorf("error = %q, should mention instrument", err.Error())
+	}
+}
+
+func TestValidate_PaymentPolicy_NoLimitNoAllowlistFails(t *testing.T) {
+	t.Parallel()
+	cfg := Default()
+	cfg.PaymentPolicies = map[string]PaymentPolicy{
+		"test": {Instrument: "payments/visa", Currency: "EUR"},
+	}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("Validate() with no limits and no allowlist = nil, want error")
+	}
+	if !strings.Contains(err.Error(), "at least one") {
+		t.Errorf("error = %q, should mention at least one", err.Error())
+	}
+}
+
+func TestValidate_PaymentPolicy_AllowlistOnly(t *testing.T) {
+	t.Parallel()
+	cfg := Default()
+	cfg.PaymentPolicies = map[string]PaymentPolicy{
+		"test": {Instrument: "payments/visa", AllowedMerchants: []string{"shop.com"}},
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Validate() = %v, want nil (allowlist only is valid)", err)
+	}
+}
+
+func TestValidate_PaymentPolicy_LimitsWithoutCurrencyFails(t *testing.T) {
+	t.Parallel()
+	cfg := Default()
+	cfg.PaymentPolicies = map[string]PaymentPolicy{
+		"test": {Instrument: "payments/visa", MaxAmount: PaymentMaxAmount{PerTransaction: "50"}},
+	}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("Validate() with limits but no currency = nil, want error")
+	}
+	if !strings.Contains(err.Error(), "currency") {
+		t.Errorf("error = %q, should mention currency", err.Error())
+	}
+}
+
+func TestValidate_PaymentPolicy_InvalidPerTransactionDecimal(t *testing.T) {
+	t.Parallel()
+	cfg := Default()
+	cfg.PaymentPolicies = map[string]PaymentPolicy{
+		"test": {Instrument: "payments/visa", Currency: "EUR", MaxAmount: PaymentMaxAmount{PerTransaction: "not-a-number"}},
+	}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("Validate() with invalid per_transaction = nil, want error")
+	}
+	if !strings.Contains(err.Error(), "per_transaction") {
+		t.Errorf("error = %q, should mention per_transaction", err.Error())
+	}
+}
+
+func TestValidate_PaymentPolicy_InvalidPerDayDecimal(t *testing.T) {
+	t.Parallel()
+	cfg := Default()
+	cfg.PaymentPolicies = map[string]PaymentPolicy{
+		"test": {Instrument: "payments/visa", Currency: "EUR", MaxAmount: PaymentMaxAmount{PerDay: "abc"}},
+	}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("Validate() with invalid per_day = nil, want error")
+	}
+	if !strings.Contains(err.Error(), "per_day") {
+		t.Errorf("error = %q, should mention per_day", err.Error())
+	}
+}
+
+func TestValidate_PaymentPolicy_ValidPolicy(t *testing.T) {
+	t.Parallel()
+	cfg := Default()
+	cfg.PaymentPolicies = map[string]PaymentPolicy{
+		"shopping": {
+			Instrument:      "payments/visa",
+			AllowedMerchants: []string{"amazon.de"},
+			MaxAmount:       PaymentMaxAmount{PerTransaction: "75.00", PerDay: "150.00"},
+			Currency:        "EUR",
+		},
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Validate() = %v, want nil", err)
+	}
+}
+
+func TestValidate_AgentPaymentPolicy_ReferenceNonexistent(t *testing.T) {
+	t.Parallel()
+	cfg := Default()
+	agent := cfg.Agents["default"]
+	agent.PaymentPolicy = StrPtr("nonexistent")
+	cfg.Agents["default"] = agent
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("Validate() with nonexistent payment policy ref = nil, want error")
+	}
+	if !strings.Contains(err.Error(), "paymentPolicy") {
+		t.Errorf("error = %q, should mention paymentPolicy", err.Error())
+	}
+}
+
+func TestValidate_AgentPaymentPolicy_ReferenceValid(t *testing.T) {
+	t.Parallel()
+	cfg := Default()
+	cfg.PaymentPolicies = map[string]PaymentPolicy{
+		"test-policy": {Instrument: "payments/visa", AllowedMerchants: []string{"shop.com"}},
+	}
+	agent := cfg.Agents["default"]
+	agent.PaymentPolicy = StrPtr("test-policy")
+	cfg.Agents["default"] = agent
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Validate() = %v, want nil", err)
+	}
+}
+
+func TestAgentProfile_PaymentPolicyValue(t *testing.T) {
+	t.Parallel()
+	if got := (*AgentProfile)(nil).PaymentPolicyValue(); got != "" {
+		t.Errorf("nil PaymentPolicyValue() = %q, want \"\"", got)
+	}
+	p := &AgentProfile{PaymentPolicy: StrPtr("my-policy")}
+	if got := p.PaymentPolicyValue(); got != "my-policy" {
+		t.Errorf("PaymentPolicyValue() = %q, want \"my-policy\"", got)
+	}
+}
+
+func TestLoad_PaymentPolicies(t *testing.T) {
+	t.Parallel()
+	yaml := `
+vaultDir: /tmp/test
+paymentPolicies:
+  shopping:
+    instrument: payments/visa
+    allowed_merchants:
+      - shop.example
+    max_amount:
+      per_transaction: "50.00"
+      per_day: "100.00"
+    currency: EUR
+`
+	path := writeTempFile(t, []byte(yaml))
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	policy, ok := cfg.PaymentPolicies["shopping"]
+	if !ok {
+		t.Fatal("missing payment policy 'shopping'")
+	}
+	if policy.Instrument != "payments/visa" {
+		t.Errorf("Instrument = %q, want %q", policy.Instrument, "payments/visa")
+	}
+	if len(policy.AllowedMerchants) != 1 || policy.AllowedMerchants[0] != "shop.example" {
+		t.Errorf("AllowedMerchants = %v, want [shop.example]", policy.AllowedMerchants)
+	}
+	if policy.MaxAmount.PerTransaction != "50.00" {
+		t.Errorf("PerTransaction = %q, want %q", policy.MaxAmount.PerTransaction, "50.00")
+	}
+	if policy.MaxAmount.PerDay != "100.00" {
+		t.Errorf("PerDay = %q, want %q", policy.MaxAmount.PerDay, "100.00")
+	}
+	if policy.Currency != "EUR" {
+		t.Errorf("Currency = %q, want %q", policy.Currency, "EUR")
+	}
+}
+
+func TestLoad_AgentPaymentPolicy(t *testing.T) {
+	t.Parallel()
+	yaml := `
+vaultDir: /tmp/test
+paymentPolicies:
+  test-policy:
+    instrument: payments/visa
+    allowed_merchants: ["shop.com"]
+agents:
+  default:
+    paymentPolicy: test-policy
+`
+	path := writeTempFile(t, []byte(yaml))
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	agent := cfg.Agents["default"]
+	if agent.PaymentPolicyValue() != "test-policy" {
+		t.Errorf("PaymentPolicyValue() = %q, want %q", agent.PaymentPolicyValue(), "test-policy")
 	}
 }

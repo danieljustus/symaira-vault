@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"math/big"
 	"path/filepath"
 	"strings"
 )
@@ -36,6 +37,46 @@ func validateAgents(agents map[string]AgentProfile) error {
 		case "", defaultPromptInjectionMode, "log-only", "wrap", approvalModeDeny:
 		default:
 			return fmt.Errorf("agent %q: invalid promptInjectionMode %q (valid: off, log-only, wrap, deny)", name, mode)
+		}
+	}
+	return nil
+}
+
+func validatePaymentPolicies(policies map[string]PaymentPolicy) error {
+	for name, policy := range policies {
+		if strings.TrimSpace(policy.Instrument) == "" {
+			return fmt.Errorf("paymentPolicies.%s.instrument: must not be empty", name)
+		}
+		hasAllowlist := len(policy.AllowedMerchants) > 0
+		hasLimits := policy.MaxAmount.PerTransaction != "" || policy.MaxAmount.PerDay != ""
+		if !hasAllowlist && !hasLimits {
+			return fmt.Errorf("paymentPolicies.%s: must have at least one allowed_merchant or max_amount limit", name)
+		}
+		if hasLimits && strings.TrimSpace(policy.Currency) == "" {
+			return fmt.Errorf("paymentPolicies.%s.currency: required when max_amount limits are set", name)
+		}
+		if policy.MaxAmount.PerTransaction != "" {
+			if _, ok := new(big.Rat).SetString(policy.MaxAmount.PerTransaction); !ok {
+				return fmt.Errorf("paymentPolicies.%s.max_amount.per_transaction: %q is not a valid decimal amount", name, policy.MaxAmount.PerTransaction)
+			}
+		}
+		if policy.MaxAmount.PerDay != "" {
+			if _, ok := new(big.Rat).SetString(policy.MaxAmount.PerDay); !ok {
+				return fmt.Errorf("paymentPolicies.%s.max_amount.per_day: %q is not a valid decimal amount", name, policy.MaxAmount.PerDay)
+			}
+		}
+	}
+	return nil
+}
+
+func validateAgentPaymentPolicies(agents map[string]AgentProfile, policies map[string]PaymentPolicy) error {
+	for name, profile := range agents {
+		policyName := profile.PaymentPolicyValue()
+		if policyName == "" {
+			continue
+		}
+		if _, ok := policies[policyName]; !ok {
+			return fmt.Errorf("agents.%s.paymentPolicy: policy %q not found in paymentPolicies", name, policyName)
 		}
 	}
 	return nil
@@ -103,6 +144,14 @@ func (c *Config) Validate() error {
 
 	if c.Clipboard != nil && c.Clipboard.AutoClearDuration < 0 {
 		errs = errors.Join(errs, errors.New("clipboard.autoClearDuration: must be non-negative (configure clipboard.autoClearDuration in config.yaml)"))
+	}
+
+	if err := validatePaymentPolicies(c.PaymentPolicies); err != nil {
+		errs = errors.Join(errs, err)
+	}
+
+	if err := validateAgentPaymentPolicies(c.Agents, c.PaymentPolicies); err != nil {
+		errs = errors.Join(errs, err)
 	}
 
 	return errs

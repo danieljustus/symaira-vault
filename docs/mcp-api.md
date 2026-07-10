@@ -1017,6 +1017,76 @@ Validate a payment entry, show a native approval prompt with merchant/amount/cur
 - `not_a_payment_entry`: Entry type is not `payment`
 - `not_found`: Entry does not exist
 - `outside_allowed_scope`: Path is outside the agent's allowed scope
+- `payment.policy_denied`: Payment policy check failed (merchant not allowed, currency mismatch, or amount limit exceeded)
+
+---
+
+## Payment Policies
+
+Payment policies provide declarative guardrails on `prepare_payment` requests. When an agent profile references a policy, the enforcer checks merchant allowlists, per-transaction limits, per-day limits, and currency requirements **before** the native approval prompt is shown.
+
+### Configuration
+
+Define policies under `paymentPolicies` in `config.yaml`:
+
+```yaml
+paymentPolicies:
+  shopping-limited:
+    instrument: "payments/visa"                    # vault entry path of the payment instrument
+    allowed_merchants:
+      - "amazon.de"
+      - "otto.de"
+      - "mediamarkt.de"
+    max_amount:
+      per_transaction: "75.00"
+      per_day: "150.00"
+    currency: "EUR"
+```
+
+Link a policy to an agent profile:
+
+```yaml
+agents:
+  hermes:
+    allowedPaths: ["*"]
+    canWrite: true
+    approvalMode: none
+    paymentPolicy: "shopping-limited"             # reference the policy by name
+```
+
+### Policy Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `instrument` | string | Yes | Vault entry path of the payment instrument (card/bank account) |
+| `allowed_merchants` | array | No | Allowlist of merchant names (case-insensitive exact match) |
+| `max_amount.per_transaction` | string | No | Maximum single-transaction amount (decimal string, e.g. `"75.00"`) |
+| `max_amount.per_day` | string | No | Maximum total per calendar day (decimal string, e.g. `"150.00"`) |
+| `currency` | string | Yes when limits set | Required ISO-4217 currency code (e.g. `"EUR"`, `"USD"`) |
+
+### How Enforcement Works
+
+1. The agent calls `prepare_payment` with `entry_path`, `merchant`, `amount`, `currency`.
+2. If the agent has a `paymentPolicy`, the enforcer checks:
+   - **Merchant allowlist**: if `allowed_merchants` is non-empty, the merchant must match (case-insensitive).
+   - **Currency**: must match the policy's `currency` when limits are set.
+   - **Per-transaction**: `amount` must not exceed `per_transaction`.
+   - **Per-day**: `amount` + today's accumulated total must not exceed `per_day`.
+3. If any check fails, the request is rejected with a `payment.policy_denied` audit event. The native approval prompt is **never** shown.
+4. If all checks pass, the native approval prompt is shown as usual. On approval, the daily total is incremented.
+
+### Per-Day Persistence
+
+Per-day totals are stored on disk at `$XDG_DATA_HOME/symaira-vault/payment-state/<vault-hash>/<policy>/daily-totals.json`. Entries older than today are automatically expired on load and save. Totals survive daemon restarts.
+
+### Error Responses
+
+| Reason | Description |
+|--------|-------------|
+| `merchant_not_allowed` | Merchant is not in the policy's `allowed_merchants` list |
+| `currency_mismatch` | Requested currency does not match the policy's required currency |
+| `over_per_transaction` | Amount exceeds the per-transaction limit |
+| `over_per_day` | Amount + today's total would exceed the per-day limit |
 
 ---
 
