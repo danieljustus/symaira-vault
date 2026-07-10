@@ -31,6 +31,15 @@ func (s *VaultService) SetFieldsWithProvenance(path string, data map[string]any,
 	return s.vaultService.UpsertEntry(path, data, "set", &record)
 }
 
+func (s *VaultService) SetSecretMetadata(path string, meta vaultpkg.SecretMetadata) error {
+	entry, err := s.vaultService.GetEntry(path)
+	if err != nil {
+		return err
+	}
+	entry.SecretMetadata = meta
+	return s.vaultService.WriteEntry(path, entry)
+}
+
 func (s *VaultService) DeleteEntry(path string) error {
 	return s.vaultService.DeleteEntry(path)
 }

@@ -52,6 +52,10 @@ agents:
     canWrite: true
     canManageConfig: false
     approvalMode: none
+    # Expose raw payment card/bank details (card_number, cvc, iban) to this
+    # agent. Disabled by default — payment sensitive fields are redacted for
+    # all agents unless this is explicitly set to true.
+    # exposePaymentValues: true
 
 # Vault-specific settings. These can also live inside <vault>/config.yaml.
 vault:

@@ -1341,6 +1341,7 @@ agents:
 | `canUseAutotype` | boolean | `false` | Whether the agent can type passwords via keyboard input through `autotype` |
 | `approvalMode` | string | `"none"` | Write approval behavior: `none` (allow), `deny` (reject), `prompt` (degrades to deny in MCP) |
 | `redactFields` | array | `[]` | Field names to redact from `get_entry` responses (e.g., `["totp.secret"]` shows `[REDACTED]`) |
+| `exposePaymentValues` | boolean | `false` | When `true`, payment entries (`type: payment`) expose sensitive fields (`card_number`, `cvc`, `iban`). Disabled by default — these fields are always redacted for agents unless this flag is set |
 
 ### Built-in Profiles
 
@@ -1406,6 +1407,20 @@ agents:
 ## Field Redaction with `redactFields`
 
 The `redactFields` agent profile setting controls which entry fields are hidden from `get_entry` responses. Redacted fields appear as `[REDACTED]` instead of their actual values.
+
+### Payment Entry Automatic Redaction
+
+Entries with `secret_meta.type = "payment"` have their sensitive fields automatically redacted in all agent responses, independent of the profile's `redactFields` configuration:
+
+| Sensitive Field | Description |
+|----------------|-------------|
+| `card_number` | Full card number (e.g., `4111111111111111`) |
+| `cvc` | Card verification code |
+| `iban` | International bank account number |
+
+Non-sensitive payment fields (`cardholder`, `expiry_month`, `expiry_year`, `bic`, `subtype`) are always returned.
+
+To opt out and expose raw payment values, set `exposePaymentValues: true` on the agent profile. This requires the agent to also have `canReadValues: true` or value-tool access.
 
 ### What Gets Redacted
 

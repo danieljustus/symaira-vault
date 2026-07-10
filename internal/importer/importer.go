@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 // ImportedEntry represents a single entry parsed from an external source.
@@ -14,6 +16,9 @@ type ImportedEntry struct {
 	Path string
 	// Data contains the entry fields (username, password, url, notes, totp, etc.).
 	Data map[string]any
+	// SecretMetadata carries the semantic type and hints set by the importer.
+	// When set, the import pipeline writes this metadata to the vault entry.
+	SecretMetadata *vaultpkg.SecretMetadata
 }
 
 // Importer parses a password export format and returns imported entries.

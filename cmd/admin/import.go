@@ -158,6 +158,11 @@ Use --format to override auto-detection or when the file extension does not matc
 				if err := vs.SetFieldsWithProvenance(entryPath, entry.Data, record); err != nil {
 					return fmt.Errorf("cannot write entry: %w", err)
 				}
+				if entry.SecretMetadata != nil {
+					if err := vs.SetSecretMetadata(entryPath, *entry.SecretMetadata); err != nil {
+						return fmt.Errorf("cannot set secret metadata: %w", err)
+					}
+				}
 				cli.PrintQuietAware("Imported: %s\n", entryPath)
 				imported++
 			}

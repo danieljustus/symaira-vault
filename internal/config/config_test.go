@@ -2582,6 +2582,7 @@ func TestCopyAgentProfiles_DeepCopyAllFields(t *testing.T) {
 		CanUseAutotype:      bptr(true),
 		CanReadValues:       bptr(true),
 		ExposeValueTools:    bptr(true),
+		ExposePaymentValues: bptr(true),
 		AutoUnseal:          bptr(true),
 		RequireApproval:     bptr(true),
 		ApprovalTimeout:     dptr(2 * time.Minute),

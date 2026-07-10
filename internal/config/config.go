@@ -145,6 +145,7 @@ type AgentProfile struct {
 	PostCallHooks       []string            `yaml:"post_call_hooks,omitempty"`
 	SkillPath           *string             `yaml:"skillPath,omitempty"`
 	SkillVersion        *string             `yaml:"skillVersion,omitempty"`
+	ExposePaymentValues *bool               `yaml:"exposePaymentValues,omitempty"`
 }
 
 func (p *AgentProfile) EffectiveRedactFields(toolName string) []string {
@@ -211,6 +212,9 @@ func (p *AgentProfile) Normalize() {
 	}
 	if p.SkillVersion == nil {
 		p.SkillVersion = StrPtr("")
+	}
+	if p.ExposePaymentValues == nil {
+		p.ExposePaymentValues = BoolPtr(false)
 	}
 	if p.CanWrite == nil {
 		p.CanWrite = BoolPtr(false)
@@ -374,6 +378,15 @@ func (p *AgentProfile) ExposeValueToolsValue() bool {
 		return false
 	}
 	return *p.ExposeValueTools
+}
+
+// ExposePaymentValuesValue returns *p.ExposePaymentValues or false when p is
+// nil / p.ExposePaymentValues is nil.
+func (p *AgentProfile) ExposePaymentValuesValue() bool {
+	if p == nil || p.ExposePaymentValues == nil {
+		return false
+	}
+	return *p.ExposePaymentValues
 }
 
 // AutoUnsealValue returns *p.AutoUnseal or false when p is nil /
