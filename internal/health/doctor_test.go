@@ -1140,3 +1140,21 @@ func TestRunChecks_ManifestIntegrity_OutOfBandIsFixable(t *testing.T) {
 		t.Errorf("manifest after fix should include 'out-of-band' entry, got entries: %v", m.Entries)
 	}
 }
+
+func TestRunChecks_SearchIndexPersistence_NoFailureRecorded(t *testing.T) {
+	dir := t.TempDir()
+
+	results := health.RunChecks(dir, health.Options{NoNetwork: true})
+	byID := map[string]health.Result{}
+	for _, r := range results {
+		byID[r.ID] = r
+	}
+
+	r, ok := byID["vault.search_index.persistence"]
+	if !ok {
+		t.Fatal("expected vault.search_index.persistence check to run")
+	}
+	if r.Status != health.StatusOK {
+		t.Errorf("expected ok for vault.search_index.persistence with no prior build, got %s: %s", r.Status, r.Message)
+	}
+}

@@ -94,6 +94,7 @@ var allChecks = []checkDef{
 	{fn: checkAuditLog},
 	{fn: checkUpdateAvailable, tags: []string{"network", "slow"}},
 	{fn: checkVaultSize},
+	{fn: checkSearchIndexPersistence},
 	{fn: checkScryptBenchmark, tags: []string{"slow"}},
 	{fn: checkKDFModern},
 	{fn: checkManifestIntegrity},

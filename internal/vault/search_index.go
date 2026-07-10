@@ -55,6 +55,21 @@ type EncryptedIndex struct {
 	salt       []byte            // 16-byte HKDF salt (nil for legacy)
 	vaultDir   string            // vault directory the index covers
 	idHash     [sha256.Size]byte // sha256 of identity recipient for change detection
+	persistErr error             // last on-disk persistence failure, if any
+}
+
+// LastPersistError returns the error from the most recent attempt to persist
+// the search index to disk (full build, incremental update, or delete), or
+// nil if the last attempt succeeded or none has been attempted yet. A failed
+// persist never affects the correctness of in-memory search — the index
+// keeps serving matches — but it does mean the next process start rebuilds
+// the index from scratch instead of loading it from disk. Exposed so
+// `symvault doctor` can surface persistent write failures instead of the
+// vault silently losing this performance optimization.
+func (idx *EncryptedIndex) LastPersistError() error {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	return idx.persistErr
 }
 
 func indexFilePath(vaultDir string) string {
@@ -175,6 +190,14 @@ var searchIndexStore = indexStore{indices: make(map[string]*EncryptedIndex)}
 // index for Build, MatchEntries, Covers, and incremental updates.
 func searchIndexForVault(vaultDir string) *EncryptedIndex {
 	return searchIndexStore.get(vaultDir)
+}
+
+// SearchIndexPersistError returns the error from the most recent attempt to
+// persist vaultDir's search index to disk, or nil if the last attempt
+// succeeded or no index has been built for this vault in this process yet.
+// Used by `symvault doctor` to surface a silently failing persistence path.
+func SearchIndexPersistError(vaultDir string) error {
+	return searchIndexForVault(vaultDir).LastPersistError()
 }
 
 // Build constructs the encrypted search index by scanning all entries in the
@@ -334,7 +357,10 @@ func (idx *EncryptedIndex) buildIndex(vaultDir string, identity *age.X25519Ident
 	idx.mu.Unlock()
 
 	if persist {
-		_ = idx.saveToDisk(vaultDir)
+		persistErr := idx.saveToDisk(vaultDir)
+		idx.mu.Lock()
+		idx.persistErr = persistErr
+		idx.mu.Unlock()
 	}
 	return nil
 }
@@ -537,7 +563,9 @@ func (idx *EncryptedIndex) UpdateEntry(vaultDir, path string, identity *age.X255
 	// write. Without this the edited entry's previous value would remain on
 	// disk and, because an in-place edit leaves the entry count unchanged, be
 	// reloaded as a valid index after a restart — returning stale results.
-	return writeIndexFile(vaultDir, storedSalt, newCiphertext)
+	persistErr := writeIndexFile(vaultDir, storedSalt, newCiphertext)
+	idx.persistErr = persistErr
+	return persistErr
 }
 
 // RemoveEntry removes a single path from the encrypted index.
@@ -605,7 +633,7 @@ func (idx *EncryptedIndex) RemoveEntry(path string, identity *age.X25519Identity
 
 	idx.ciphertext = newCiphertext
 	// Persist so the deletion is reflected on disk and survives a restart.
-	_ = writeIndexFile(vaultDir, storedSalt, newCiphertext)
+	idx.persistErr = writeIndexFile(vaultDir, storedSalt, newCiphertext)
 }
 
 const indexFormatVersion = byte(0x01)
@@ -614,6 +642,11 @@ const indexFormatVersion = byte(0x01)
 // file. It deliberately does not touch idx.mu, so callers that already hold the
 // write lock (UpdateEntry, RemoveEntry) can persist without deadlocking against
 // the non-reentrant RWMutex that saveToDisk's RLock would otherwise take.
+//
+// The write is atomic: data is written to a temporary file in the same
+// directory and then renamed into place, so a process crash or write error
+// partway through can never leave a truncated or half-written index file
+// that a later loadFromDisk would accept as valid.
 func writeIndexFile(vaultDir string, salt, ciphertext []byte) error {
 	if ciphertext == nil {
 		return nil
@@ -622,7 +655,30 @@ func writeIndexFile(vaultDir string, salt, ciphertext []byte) error {
 	data = append(data, indexFormatVersion)
 	data = append(data, salt...)
 	data = append(data, ciphertext...)
-	return os.WriteFile(indexFilePath(vaultDir), data, 0600)
+
+	finalPath := indexFilePath(vaultDir)
+	tmp, err := os.CreateTemp(vaultDir, ".search-index.tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer func() { _ = os.Remove(tmpPath) }() // no-op once the rename below succeeds
+
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmpPath, 0600); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, finalPath)
 }
 
 // clearLocked resets the in-memory index to the unbuilt state. The caller must
@@ -706,7 +762,10 @@ func (idx *EncryptedIndex) loadFromDisk(vaultDir string, identity *age.X25519Ide
 	idx.mu.Unlock()
 
 	if len(salt) == 0 {
-		_ = idx.saveToDisk(vaultDir)
+		persistErr := idx.saveToDisk(vaultDir)
+		idx.mu.Lock()
+		idx.persistErr = persistErr
+		idx.mu.Unlock()
 	}
 
 	return nil

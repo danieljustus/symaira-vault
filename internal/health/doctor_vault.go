@@ -319,6 +319,19 @@ func checkVaultSize(vaultDir string, _ Options) Result {
 	return r
 }
 
+func checkSearchIndexPersistence(vaultDir string, _ Options) Result {
+	r := Result{ID: "vault.search_index.persistence", Name: "Search index persistence"}
+	if err := vault.SearchIndexPersistError(vaultDir); err != nil {
+		r.Status = StatusWarn
+		r.Message = "search index failed to persist to disk: " + err.Error()
+		r.Hint = "search results stay correct in this session, but the index will rebuild from scratch on the next restart; check disk space and permissions in " + vaultDir
+		return r
+	}
+	r.Status = StatusOK
+	r.Message = "no search index persistence failures recorded this session"
+	return r
+}
+
 func checkPassphraseRotation(vaultDir string, _ Options) Result {
 	r := Result{ID: "auth.passphrase.rotation", Name: "Passphrase rotation"}
 
