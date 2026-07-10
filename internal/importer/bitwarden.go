@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	bitwardenLoginType   = 1
-	bitwardenCardType    = 2
+	bitwardenLoginType = 1
+	bitwardenCardType  = 2
 )
 
 type bitwardenImporter struct{}
