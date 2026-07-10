@@ -51,6 +51,7 @@ Symaira Vault exposes a Model Context Protocol (MCP) server that allows AI agent
 | `symvault_delete` | Deprecated alias for delete_entry | **Yes** |
 | `secure_input` | Prompt user for sensitive data via TTY or native GUI dialog | **Yes** |
 | `request_credential` | Agent-initiated: native dialog for a missing credential, stored without exposure | **Yes** |
+| `prepare_payment` | Validate a payment entry, show approval prompt, autotype card/bank fields — card values never returned | No |
 
 ---
 
@@ -955,6 +956,67 @@ requested path and never returned to the agent.
   human-readable sentence
 - Recommended call site: after `find_entries` / `get_entry` returns nothing
   for an expected path, instead of asking the user for the secret in chat
+
+---
+
+### prepare_payment
+
+Validate a payment entry, show a native approval prompt with merchant/amount/currency details, and on user approval autotype the card or bank account fields into the focused checkout window. Card number, CVC, and IBAN values are never returned in the tool response.
+
+**Request**:
+
+```json
+{
+  "tool": "prepare_payment",
+  "arguments": {
+    "entry_path": "payments/mycard",
+    "merchant": "shop.example",
+    "amount": "75.00",
+    "currency": "EUR"
+  }
+}
+```
+
+**Parameters**:
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `entry_path` | string | Yes | - | Vault path of the payment entry |
+| `merchant` | string | Yes | - | Merchant name or origin (e.g. `shop.example`) |
+| `amount` | string | Yes | - | Payment amount (e.g. `75.00`) |
+| `currency` | string | Yes | - | Currency code (e.g. `EUR`, `USD`) |
+| `description` | string | No | - | Optional description shown in the approval prompt |
+
+**Response**:
+
+```json
+{
+  "success": true
+}
+```
+
+**Security guarantees**:
+- Card number, CVC, and IBAN values are **never** returned in the MCP response
+- The user sees a native approval prompt (e.g. "Allow payment of EUR 75.00 to shop.example?") before any autotyping occurs
+- Approval mode must not be `deny`; the tool requires user interaction
+- Risk level: **Critical** — cannot be remembered across sessions
+- Requires `canUseAutotype: true` in agent profile
+
+**Autotype field order**:
+- Card entries: `card_number` → `expiry_month` → `expiry_year` → `cvc`
+- Bank account entries: `iban`
+
+**Notes**:
+- Entry must have `type: "payment"` in its secret metadata
+- Payment subtype (`card` or `bank_account`) is read from the entry's `subtype` field or the request `subtype` argument
+- Same autotype backend as `autotype` tool (macOS, Linux, Windows)
+- Falls back gracefully on unsupported platforms
+
+**Errors**:
+- `denied`: User declined the approval prompt
+- `not_a_payment_entry`: Entry type is not `payment`
+- `not_found`: Entry does not exist
+- `outside_allowed_scope`: Path is outside the agent's allowed scope
 
 ---
 
