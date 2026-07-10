@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net"
 	"net/http"
 	"net/url"
 	"path"
@@ -90,6 +91,12 @@ func (s *Server) handleExecuteAPIRequest(ctx context.Context, req mcp.CallToolRe
 		return mcp.NewToolResultError(fmt.Sprintf("method not allowed: %s", method)), nil
 	}
 
+	requestURL := tmpl.BaseURL + normalizedEndpoint
+	if targetErr := validateAPIURL(ctx, requestURL, tmpl.AllowPrivate, net.DefaultResolver.LookupIPAddr); targetErr != nil {
+		s.logAudit(ctx, "execute_api_request", fmt.Sprintf("<blocked-target:%s>", tmpl.Name), false)
+		return mcp.NewToolResultError(targetErr.Error()), nil
+	}
+
 	// Approval check before vault access
 	approvalErr := s.checkExecuteAPIRequestApproval(ctx)
 	if approvalErr != nil {
@@ -116,7 +123,6 @@ func (s *Server) handleExecuteAPIRequest(ctx context.Context, req mcp.CallToolRe
 	}
 
 	// Build the request
-	requestURL := tmpl.BaseURL + normalizedEndpoint
 	var requestBody io.Reader
 	if bodyStr != "" {
 		requestBody = strings.NewReader(bodyStr)
@@ -163,9 +169,7 @@ func (s *Server) handleExecuteAPIRequest(ctx context.Context, req mcp.CallToolRe
 	}
 
 	// Execute request
-	client := &http.Client{
-		Timeout: time.Duration(timeoutSec) * time.Second,
-	}
+	client := newAPIHTTPClient(time.Duration(timeoutSec)*time.Second, tmpl.AllowPrivate)
 	resp, respErr := client.Do(httpReq)
 	if respErr != nil {
 		s.logAudit(ctx, "execute_api_request", fmt.Sprintf("template=%s, endpoint=%s, method=%s, status=error",
@@ -235,6 +239,96 @@ func (s *Server) handleExecuteAPIRequest(ctx context.Context, req mcp.CallToolRe
 	}
 
 	return mcp.NewToolResultText(string(resultJSON)), nil
+}
+
+type apiIPResolver func(context.Context, string) ([]net.IPAddr, error)
+
+func newAPIHTTPClient(timeout time.Duration, allowPrivate bool) *http.Client {
+	return newAPIHTTPClientWithResolver(timeout, allowPrivate, net.DefaultResolver.LookupIPAddr)
+}
+
+func newAPIHTTPClientWithResolver(timeout time.Duration, allowPrivate bool, resolve apiIPResolver) *http.Client {
+	dialer := &net.Dialer{}
+	transport := &http.Transport{
+		Proxy: nil,
+		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+			return dialAPIAddress(ctx, dialer, network, address, allowPrivate, resolve)
+		},
+	}
+	return &http.Client{
+		Timeout:   timeout,
+		Transport: transport,
+		CheckRedirect: func(req *http.Request, _ []*http.Request) error {
+			if err := validateAPIURL(req.Context(), req.URL.String(), allowPrivate, resolve); err != nil {
+				return fmt.Errorf("redirect rejected: %w", err)
+			}
+			return nil
+		},
+	}
+}
+
+func validateAPIURL(ctx context.Context, rawURL string, allowPrivate bool, resolve apiIPResolver) error {
+	if allowPrivate {
+		return nil
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("blocked request target: invalid URL: %w", err)
+	}
+	if u.Hostname() == "" {
+		return fmt.Errorf("blocked request target: URL host is required")
+	}
+	if apitemplates.IsPrivateHost(u.Host) {
+		return fmt.Errorf("blocked request target %q: private or local network address", u.Host)
+	}
+	addresses, err := resolve(ctx, u.Hostname())
+	if err != nil {
+		return fmt.Errorf("cannot resolve request target %q: %w", u.Hostname(), err)
+	}
+	for _, address := range addresses {
+		if apitemplates.IsPrivateIP(address.IP) {
+			return fmt.Errorf("blocked request target %q: resolves to private or local network address", u.Hostname())
+		}
+	}
+	return nil
+}
+
+func dialAPIAddress(ctx context.Context, dialer *net.Dialer, network, address string, allowPrivate bool, resolve apiIPResolver) (net.Conn, error) {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return nil, fmt.Errorf("invalid request address %q: %w", address, err)
+	}
+	if allowPrivate {
+		return dialer.DialContext(ctx, network, address)
+	}
+	if apitemplates.IsPrivateHost(host) {
+		return nil, fmt.Errorf("blocked request target %q: private or local network address", host)
+	}
+	addresses, err := resolve(ctx, host)
+	if err != nil {
+		return nil, fmt.Errorf("cannot resolve request target %q: %w", host, err)
+	}
+	var lastErr error
+	for _, resolved := range addresses {
+		if apitemplates.IsPrivateIP(resolved.IP) {
+			return nil, fmt.Errorf("blocked request target %q: resolves to private or local network address", host)
+		}
+		if network == "tcp4" && resolved.IP.To4() == nil {
+			continue
+		}
+		if network == "tcp6" && resolved.IP.To4() != nil {
+			continue
+		}
+		conn, dialErr := dialer.DialContext(ctx, network, net.JoinHostPort(resolved.IP.String(), port))
+		if dialErr == nil {
+			return conn, nil
+		}
+		lastErr = dialErr
+	}
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return nil, fmt.Errorf("no usable addresses for request target %q", host)
 }
 
 func parseTemplateEntryRef(entryRef string) (string, error) {

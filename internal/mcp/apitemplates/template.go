@@ -48,6 +48,9 @@ type APITemplate struct {
 	AllowedMethods []string `yaml:"allowed_methods" json:"allowed_methods"`
 	// DefaultHeaders are headers to include in every request.
 	DefaultHeaders map[string]string `yaml:"default_headers" json:"default_headers,omitempty"`
+	// AllowPrivate permits requests to private or local network destinations.
+	// It is intentionally opt-in because templates can inject vault credentials.
+	AllowPrivate bool `yaml:"allow_private" json:"allow_private,omitempty"`
 }
 
 // templateFile is the on-disk representation of an APITemplate.
@@ -151,10 +154,32 @@ var blockedPrivateRanges = func() []*net.IPNet {
 	return nets
 }()
 
-// isPrivateHost reports whether the given host resolves to a loopback,
-// link-local, or RFC 1918 private address. It accepts IP literals and
-// hostnames; hostnames are checked against known loopback names.
-func isPrivateHost(host string) bool {
+// IsPrivateIP reports whether ip is a local, private, multicast, or
+// otherwise non-routable address that must not receive injected credentials.
+func IsPrivateIP(ip net.IP) bool {
+	if ip == nil {
+		return false
+	}
+	if v4 := ip.To4(); v4 != nil {
+		ip = v4
+	}
+	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsPrivate() || ip.IsMulticast() || ip.IsUnspecified() {
+		return true
+	}
+	for _, blocked := range blockedPrivateRanges {
+		if blocked.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsPrivateHost reports whether the given host is a loopback, link-local,
+// private, multicast, or unspecified address. Hostnames are checked against
+// known local names; DNS names are resolved by the request transport at dial
+// time so DNS rebinding cannot bypass this check.
+func IsPrivateHost(host string) bool {
 	if h, _, err := net.SplitHostPort(host); err == nil {
 		host = h
 	}
@@ -167,13 +192,7 @@ func isPrivateHost(host string) bool {
 	if ip == nil {
 		return false
 	}
-
-	for _, blocked := range blockedPrivateRanges {
-		if blocked.Contains(ip) {
-			return true
-		}
-	}
-	return false
+	return IsPrivateIP(ip)
 }
 
 // parseTemplate parses YAML data into an APITemplate.
@@ -190,7 +209,7 @@ func parseTemplate(name string, data []byte) (*APITemplate, error) {
 	if err != nil {
 		return nil, fmt.Errorf("template %q: invalid base_url: %w", name, err)
 	}
-	if isPrivateHost(parsedURL.Host) && !tf.AllowPrivate {
+	if IsPrivateHost(parsedURL.Host) && !tf.AllowPrivate {
 		return nil, fmt.Errorf("template %q: base_url host %q resolves to a private/internal address; set allow_private: true to override", name, parsedURL.Host)
 	}
 	if tf.AuthType == "" {
@@ -208,5 +227,6 @@ func parseTemplate(name string, data []byte) (*APITemplate, error) {
 		AllowedEndpoints: tf.AllowedEndpoints,
 		AllowedMethods:   tf.AllowedMethods,
 		DefaultHeaders:   tf.DefaultHeaders,
+		AllowPrivate:     tf.AllowPrivate,
 	}, nil
 }
