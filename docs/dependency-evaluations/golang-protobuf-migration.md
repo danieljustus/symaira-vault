@@ -226,6 +226,7 @@ Acknowledge the deprecated transitive dependency, document it, and move on. Re-a
 | 2026-06-22 | Sisyphus-Junior | DEFER | Re-audit for #536: grpc at v1.81.1, still depends on `golang/protobuf`. groupcache #150 still open (no new activity since Apr 2024). No upstream changes. |
 | 2026-06-29 | Sisyphus | DEFER | Quarterly re-audit for #584: groupcache still at v0.0.0-20241129210726 (no new commits since Nov 2024). grpc v1.81.1 still directly requires `github.com/golang/protobuf v1.5.4`. No upstream migration activity. Status quo remains. |
 | 2026-07-07 | Sisyphus | DEFER | Re-audit for #617: groupcache issue #150 still open, no maintainer engagement. groupcache still directly requires `github.com/golang/protobuf v1.5.4`. grpc v1.81.1 still depends on `github.com/golang/protobuf v1.5.4`. Direct update is not possible; status quo maintained. |
+| 2026-07-14 | Sisyphus-Junior | DEFER | Re-audit for #646: groupcache still at v0.0.0-20241129210726 (no new commits). grpc v1.82.0 released but still depends on `github.com/golang/protobuf v1.5.4`. groupcache issue #150 last updated 2024-04-25, no maintainer engagement. No upstream changes; status quo maintained. |
 
 ---
 
