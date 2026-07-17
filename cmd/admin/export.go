@@ -2,7 +2,6 @@ package admin
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/audit"
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 	"github.com/danieljustus/symaira-vault/internal/exporter"
+	"github.com/danieljustus/symaira-vault/internal/fsutil"
 	"github.com/danieljustus/symaira-vault/internal/importer"
 	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
@@ -49,7 +49,8 @@ var exportCmd = &cobra.Command{
 			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, fmt.Sprintf("unsupported export format: %s", ExportFormat), nil)
 		}
 
-		if _, err := importer.ParseMapping(ExportMapping); err != nil {
+		mapping, err := importer.ParseMapping(ExportMapping)
+		if err != nil {
 			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "invalid mapping", err)
 		}
 
@@ -101,30 +102,18 @@ var exportCmd = &cobra.Command{
 			}
 
 			// Determine output destination
-			var w io.Writer
-			if ExportOutput != "" {
-				f, createErr := createOutputFile(ExportOutput)
-				if createErr != nil {
-					return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "create output file", createErr)
+			out, createErr := fsutil.CreateSensitiveOutput(ExportOutput)
+			if createErr != nil {
+				return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "create output file", createErr)
+			}
+			defer func() {
+				if closeErr := out.Close(); closeErr != nil && retErr == nil {
+					retErr = errorspkg.NewCLIError(errorspkg.ExitGeneralError, "close output file", closeErr)
 				}
-				defer func() {
-					if closeErr := f.Close(); closeErr != nil && retErr == nil {
-						retErr = errorspkg.NewCLIError(errorspkg.ExitGeneralError, "close output file", closeErr)
-					}
-				}()
-				w = f
-			} else {
-				w = os.Stdout
-			}
-
-			// Parse mapping
-			mapping, err := importer.ParseMapping(ExportMapping)
-			if err != nil {
-				return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "parse mapping", err)
-			}
+			}()
 
 			// Export
-			if err := exp.Export(w, exportEntries, mapping); err != nil {
+			if err := exp.Export(out, exportEntries, mapping); err != nil {
 				return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "export entries", err)
 			}
 
@@ -175,8 +164,4 @@ func newExporter(format exporter.Format) (exporter.Exporter, error) {
 	default:
 		return nil, fmt.Errorf("unsupported export format: %s", format)
 	}
-}
-
-func createOutputFile(path string) (*os.File, error) {
-	return os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) // #nosec G304 -- output path is user-provided CLI argument
 }

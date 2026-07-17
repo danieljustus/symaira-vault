@@ -10,6 +10,7 @@ import (
 
 	"github.com/danieljustus/symaira-vault/internal/audit"
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
+	"github.com/danieljustus/symaira-vault/internal/fsutil"
 )
 
 var (
@@ -47,7 +48,7 @@ Optionally verify HMAC integrity and redact vault paths.`,
 	Annotations: map[string]string{
 		cli.RequiresVaultAnnotation: "false",
 	},
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (retErr error) {
 		vaultDir, _ := cli.VaultPath()
 
 		opts := audit.ExportOptions{
@@ -79,13 +80,17 @@ Optionally verify HMAC integrity and redact vault paths.`,
 				return fmt.Errorf("create output directory: %w", err)
 			}
 
-			f, err := os.OpenFile(cleanPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) // #nosec G304 -- output path is user-provided CLI argument
+			out, err := fsutil.CreateSensitiveOutput(cleanPath)
 			if err != nil {
 				return fmt.Errorf("create output file: %w", err)
 			}
-			defer func() { _ = f.Close() }()
+			defer func() {
+				if closeErr := out.Close(); closeErr != nil && retErr == nil {
+					retErr = fmt.Errorf("close output file: %w", closeErr)
+				}
+			}()
 
-			result, err := audit.ExportAuditLog(opts, f, auditExportFormat)
+			result, err := audit.ExportAuditLog(opts, out, auditExportFormat)
 			if err != nil {
 				return err
 			}

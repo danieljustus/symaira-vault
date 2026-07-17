@@ -65,18 +65,22 @@ Use --exclude-git to omit the .git/ directory from the backup.`,
 	},
 }
 
-func CreateBackup(vaultDir, archivePath string, excludeGit bool) error {
+func CreateBackup(vaultDir, archivePath string, excludeGit bool) (retErr error) {
 	if err := os.MkdirAll(filepath.Dir(archivePath), 0o700); err != nil {
 		return fmt.Errorf("create backup directory: %w", err)
 	}
 
-	f, err := os.OpenFile(archivePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) // #nosec // archivePath is user-provided output path
+	out, err := fsutil.CreateSensitiveOutput(archivePath)
 	if err != nil {
 		return fmt.Errorf("create archive: %w", err)
 	}
-	defer func() { _ = f.Close() }()
+	defer func() {
+		if closeErr := out.Close(); closeErr != nil && retErr == nil {
+			retErr = fmt.Errorf("close archive: %w", closeErr)
+		}
+	}()
 
-	gw := gzip.NewWriter(f)
+	gw := gzip.NewWriter(out)
 	defer func() { _ = gw.Close() }()
 
 	tw := tar.NewWriter(gw)
