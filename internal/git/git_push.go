@@ -154,8 +154,8 @@ func classifyPushError(err error) *PushError {
 		}
 	case strings.Contains(errStr, "authentication"),
 		strings.Contains(errStr, "credentials"),
-		strings.Contains(errStr, "401"),
-		strings.Contains(errStr, "403"):
+		strings.Contains(errStr, "error: 401"),
+		strings.Contains(errStr, "error: 403"):
 		return &PushError{
 			Message: "authentication failed - please check your credentials",
 			Cause:   err,
