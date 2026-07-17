@@ -44,7 +44,7 @@ var exportCmd = &cobra.Command{
 			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "invalid mapping", err)
 		}
 
-		return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
+		return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) (retErr error) {
 			entries, err := vs.ListEntries("")
 			if err != nil {
 				return fmt.Errorf("list entries: %w", err)
@@ -76,11 +76,15 @@ var exportCmd = &cobra.Command{
 			// Determine output destination
 			var w io.Writer
 			if ExportOutput != "" {
-				f, createErr := os.Create(ExportOutput) // #nosec G304 -- output path is user-provided CLI argument
+				f, createErr := createOutputFile(ExportOutput)
 				if createErr != nil {
 					return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "create output file", createErr)
 				}
-				defer func() { _ = f.Close() }()
+				defer func() {
+					if closeErr := f.Close(); closeErr != nil && retErr == nil {
+						retErr = errorspkg.NewCLIError(errorspkg.ExitGeneralError, "close output file", closeErr)
+					}
+				}()
 				w = f
 			} else {
 				w = os.Stdout
@@ -129,4 +133,8 @@ func newExporter(format exporter.Format) (exporter.Exporter, error) {
 	default:
 		return nil, fmt.Errorf("unsupported export format: %s", format)
 	}
+}
+
+func createOutputFile(path string) (*os.File, error) {
+	return os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) // #nosec G304 -- output path is user-provided CLI argument
 }

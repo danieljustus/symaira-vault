@@ -50,7 +50,6 @@ func (e *CSVExporter) Export(w io.Writer, entries []ExportEntry, mapping map[str
 
 	// Write CSV
 	writer := csv.NewWriter(w)
-	defer writer.Flush()
 
 	if err := writer.Write(headers); err != nil {
 		return fmt.Errorf("write CSV header: %w", err)
@@ -74,5 +73,9 @@ func (e *CSVExporter) Export(w io.Writer, entries []ExportEntry, mapping map[str
 		}
 	}
 
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		return fmt.Errorf("flush csv writer: %w", err)
+	}
 	return nil
 }
