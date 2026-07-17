@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -13,6 +14,10 @@ import (
 )
 
 func TestCreateOutputFile_Mode0600(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits are not honored on Windows")
+	}
+
 	path := filepath.Join(t.TempDir(), "export.txt")
 
 	f, err := createOutputFile(path)
