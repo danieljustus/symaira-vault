@@ -117,6 +117,10 @@ linters:
       - path: 'cmd/.+\.go'
         linters:
           - goconst
+      # Domain field names — vault path key and attachment chunking keys
+      - path: 'internal/exporter/.+\.go'
+        linters:
+          - goconst
       - path: 'internal/daemon/.+\.go'
         linters:
           - goconst
