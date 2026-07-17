@@ -2,7 +2,9 @@ package admin
 
 import (
 	"fmt"
+	"io"
 	"os"
+	"sync"
 	"time"
 
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
@@ -83,25 +85,6 @@ var exportCmd = &cobra.Command{
 				return nil
 			}
 
-			exp, err := newExporter(format)
-			if err != nil {
-				return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "create exporter", err)
-			}
-
-			// Read all entries
-			var exportEntries []exporter.ExportEntry
-			for _, entryPath := range entries {
-				entry, readErr := vs.GetEntry(entryPath)
-				if readErr != nil {
-					return fmt.Errorf("read entry %s: %w", entryPath, readErr)
-				}
-				exportEntries = append(exportEntries, exporter.ExportEntry{
-					Path: entryPath,
-					Data: entry.Data,
-				})
-			}
-
-			// Determine output destination
 			out, createErr := fsutil.CreateSensitiveOutput(ExportOutput)
 			if createErr != nil {
 				return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "create output file", createErr)
@@ -112,12 +95,94 @@ var exportCmd = &cobra.Command{
 				}
 			}()
 
-			// Export
-			if err := exp.Export(out, exportEntries, mapping); err != nil {
-				return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "export entries", err)
+			workers := 0
+			if v.Config != nil && v.Config.Vault != nil {
+				workers = v.Config.Vault.SearchWorkers
+			}
+			maxWorkers := vaultpkg.SearchWorkerCount(workers)
+
+			entryChan := make(chan struct {
+				index int
+				path  string
+			}, len(entries))
+			resultChan := make(chan exportResult, len(entries))
+
+			done := make(chan struct{})
+			var cancelOnce sync.Once
+			cancel := func() { cancelOnce.Do(func() { close(done) }) }
+
+			var wg sync.WaitGroup
+			for i := 0; i < maxWorkers; i++ {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					for item := range entryChan {
+						select {
+						case <-done:
+							return
+						default:
+						}
+						entry, readErr := vs.GetEntry(item.path)
+						if readErr != nil {
+							resultChan <- exportResult{
+								index: item.index,
+								err:   fmt.Errorf("read entry %s: %w", item.path, readErr),
+							}
+							cancel()
+							return
+						}
+						resultChan <- exportResult{
+							index: item.index,
+							entry: exporter.ExportEntry{
+								Path: item.path,
+								Data: entry.Data,
+							},
+						}
+					}
+				}()
 			}
 
-			// Best-effort audit log — do not fail the export on audit errors.
+			go func() {
+				defer close(entryChan)
+				for i, path := range entries {
+					select {
+					case <-done:
+						return
+					case entryChan <- struct {
+						index int
+						path  string
+					}{index: i, path: path}:
+					}
+				}
+			}()
+
+			go func() {
+				wg.Wait()
+				close(resultChan)
+			}()
+
+			if format == exporter.FormatJSON {
+				if err := exportJSONStreaming(out, resultChan, mapping); err != nil {
+					return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "export entries", err)
+				}
+			} else {
+				exportEntries := make([]exporter.ExportEntry, len(entries))
+				for result := range resultChan {
+					if result.err != nil {
+						return result.err
+					}
+					exportEntries[result.index] = result.entry
+				}
+
+				exp, expErr := newExporter(format)
+				if expErr != nil {
+					return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "create exporter", expErr)
+				}
+				if err := exp.Export(out, exportEntries, mapping); err != nil {
+					return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "export entries", err)
+				}
+			}
+
 			if auditLog, auditErr := audit.New("symvault", v.Dir, v.Identity); auditErr == nil {
 				if logErr := auditLog.LogEntry(audit.LogEntry{
 					Action:    "export",
@@ -131,7 +196,7 @@ var exportCmd = &cobra.Command{
 				}
 			}
 
-			cli.PrintQuietAware("Exported %d entries\n", len(exportEntries))
+			cli.PrintQuietAware("Exported %d entries\n", len(entries))
 			return nil
 		})
 	},
@@ -164,4 +229,44 @@ func newExporter(format exporter.Format) (exporter.Exporter, error) {
 	default:
 		return nil, fmt.Errorf("unsupported export format: %s", format)
 	}
+}
+
+type exportResult struct {
+	index int
+	entry exporter.ExportEntry
+	err   error
+}
+
+func exportJSONStreaming(out io.Writer, resultChan <-chan exportResult, mapping map[string]string) error {
+	stream := exporter.NewJSONStream(out, mapping)
+
+	pending := make(map[int]exporter.ExportEntry)
+	nextIdx := 0
+
+	for result := range resultChan {
+		if result.err != nil {
+			return result.err
+		}
+		if result.index == nextIdx {
+			if err := stream.WriteEntry(result.entry); err != nil {
+				return err
+			}
+			nextIdx++
+			for {
+				if entry, ok := pending[nextIdx]; ok {
+					delete(pending, nextIdx)
+					if err := stream.WriteEntry(entry); err != nil {
+						return err
+					}
+					nextIdx++
+				} else {
+					break
+				}
+			}
+		} else {
+			pending[result.index] = result.entry
+		}
+	}
+
+	return stream.Close()
 }
