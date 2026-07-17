@@ -4,14 +4,17 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 
+	"github.com/danieljustus/symaira-vault/internal/audit"
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 	"github.com/danieljustus/symaira-vault/internal/exporter"
 	"github.com/danieljustus/symaira-vault/internal/importer"
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
@@ -19,7 +22,13 @@ var (
 	ExportFormat  string
 	ExportMapping string
 	ExportOutput  string
+	ExportYes     bool
 )
+
+// confirmExport prompts the user for confirmation before exporting vault entries.
+// Tests may replace this to control stdin behavior without modifying
+// cli.ConfirmInteractive's shared implementation.
+var confirmExport = cli.ConfirmInteractive
 
 var exportCmd = &cobra.Command{
 	Use:   "export",
@@ -42,6 +51,24 @@ var exportCmd = &cobra.Command{
 
 		if _, err := importer.ParseMapping(ExportMapping); err != nil {
 			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "invalid mapping", err)
+		}
+
+		const warningMsg = "WARNING: Vault export produces unencrypted output. All secrets will be in plaintext."
+		if ExportYes {
+			// Scripting mode: respect --quiet suppression via cliout.
+			cliout.Warnf(warningMsg)
+		} else {
+			// Interactive mode: always show, even in quiet — user must see before confirming.
+			fmt.Fprintln(os.Stderr, warningMsg)
+		}
+
+		confirmed, err := confirmExport("Export all vault entries as plaintext?", ExportYes)
+		if err != nil {
+			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "export confirmation failed", err)
+		}
+		if !confirmed {
+			fmt.Fprintln(os.Stderr, "Export canceled.")
+			return nil
 		}
 
 		return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) (retErr error) {
@@ -101,6 +128,20 @@ var exportCmd = &cobra.Command{
 				return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "export entries", err)
 			}
 
+			// Best-effort audit log — do not fail the export on audit errors.
+			if auditLog, auditErr := audit.New("symvault", v.Dir, v.Identity); auditErr == nil {
+				if logErr := auditLog.LogEntry(audit.LogEntry{
+					Action:    "export",
+					OK:        true,
+					Timestamp: time.Now().UTC().Format(time.RFC3339),
+				}); logErr != nil {
+					cliout.Warnf("Warning: audit log write failed: %v", logErr)
+				}
+				if closeErr := auditLog.Close(); closeErr != nil {
+					cliout.Warnf("Warning: audit log close failed: %v", closeErr)
+				}
+			}
+
 			cli.PrintQuietAware("Exported %d entries\n", len(exportEntries))
 			return nil
 		})
@@ -111,6 +152,7 @@ func init() {
 	exportCmd.Flags().StringVar(&ExportFormat, "format", "", "Export format: csv or json (required)")
 	exportCmd.Flags().StringVar(&ExportMapping, "mapping", "", "Column mapping (format: vault_field=output_header,...)")
 	exportCmd.Flags().StringVar(&ExportOutput, "output", "", "Output file path (default: stdout)")
+	exportCmd.Flags().BoolVarP(&ExportYes, "yes", "y", false, "Skip confirmation prompt")
 	_ = exportCmd.MarkFlagRequired("format") //nolint:errcheck
 	cli.RootCmd.AddCommand(exportCmd)
 }
