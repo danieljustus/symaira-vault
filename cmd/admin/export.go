@@ -169,7 +169,7 @@ func isSupportedExportFormat(format exporter.Format) bool {
 func newExporter(format exporter.Format) (exporter.Exporter, error) {
 	switch format {
 	case exporter.FormatCSV:
-		return &exporter.CSVExporter{}, nil
+		return &exporter.CSVExporter{NoticeWriter: os.Stderr}, nil
 	case exporter.FormatJSON:
 		return &exporter.JSONExporter{}, nil
 	default:
