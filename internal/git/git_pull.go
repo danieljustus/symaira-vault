@@ -90,7 +90,7 @@ func PullWithResult(vaultDir string) PullResult {
 
 	errStr := pullErr.Error()
 	if strings.Contains(errStr, "authentication") || strings.Contains(errStr, "credentials") ||
-		strings.Contains(errStr, "401") || strings.Contains(errStr, "403") {
+		strings.Contains(errStr, "error: 401") || strings.Contains(errStr, "error: 403") {
 		result.Error = &PushError{
 			Message: "authentication failed - please check your credentials",
 			Cause:   pullErr,
