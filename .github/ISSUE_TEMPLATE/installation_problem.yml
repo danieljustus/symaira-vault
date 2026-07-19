@@ -29,7 +29,7 @@ body:
     attributes:
       label: Symaira Vault version
       description: If known. Run `symvault version` after installation, or provide the release tag you tried.
-      placeholder: "v0.10.0"
+      placeholder: "v0.11.0"
   - type: input
     id: os
     attributes:

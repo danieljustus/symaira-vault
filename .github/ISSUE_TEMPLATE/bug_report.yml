@@ -13,7 +13,7 @@ body:
     attributes:
       label: Symaira Vault version
       description: Run `symvault version` or provide the commit SHA.
-      placeholder: "v0.10.0"
+      placeholder: "v0.11.0"
     validations:
       required: true
   - type: input
