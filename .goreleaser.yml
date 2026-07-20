@@ -124,7 +124,7 @@ release:
     name: "symaira-vault"
   draft: false
   prerelease: auto
-  name_template: "{{ .ProjectName }} {{ .Version }}"
+  name_template: "{{ .Tag }}"
   header: |
     ## Symaira Vault {{ .Version }}
     
