@@ -1,0 +1,54 @@
+name: CodeQL (Swift)
+
+# The Swift client package (client/) depends on the private repository
+# danieljustus/symaira-appkit. The default CodeQL setup has no way to
+# authenticate that clone during autobuild, so Swift analysis runs here
+# instead, with a scoped token injected only for that one dependency URL.
+on:
+  push:
+    branches: [ main ]
+    tags-ignore:
+      - 'v*'
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze-swift:
+    name: Analyze (swift)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Allow SwiftPM to clone the private symaira-appkit dependency
+        run: |
+          git config --global url."https://x-access-token:${APPKIT_TOKEN}@github.com/danieljustus/symaira-appkit.git".insteadOf "https://github.com/danieljustus/symaira-appkit.git"
+        env:
+          APPKIT_TOKEN: ${{ secrets.SYMAIRA_APPKIT_GITHUB_TOKEN }}
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4
+        with:
+          languages: swift
+          build-mode: autobuild
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4
+        with:
+          category: "/language:swift"
