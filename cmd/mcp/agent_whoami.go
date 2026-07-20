@@ -68,6 +68,7 @@ response format.`,
 
 type whoamiInfo struct {
 	Name            string   `json:"name"`
+	VaultDir        string   `json:"vault_dir"`
 	Tier            string   `json:"tier"`
 	AllowedPaths    []string `json:"allowed_paths"`
 	AllowedTools    []string `json:"allowed_tools,omitempty"`
@@ -106,6 +107,7 @@ func buildWhoamiInfo(agentName, vaultDir string, profile *configpkg.AgentProfile
 
 	info := whoamiInfo{
 		Name:            agentName,
+		VaultDir:        vaultDir,
 		Tier:            sv(profile.Tier),
 		AllowedPaths:    profile.AllowedPaths,
 		AllowedTools:    profile.AllowedTools,
@@ -151,6 +153,7 @@ func countAgentTokens(vaultDir, agentName string) int {
 
 func printWhoamiTable(cmd *cobra.Command, info whoamiInfo) {
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Agent:      %s\n", info.Name)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Vault Dir:  %s\n", info.VaultDir)
 	if info.Tier != "" {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Tier:       %s\n", info.Tier)
 	}

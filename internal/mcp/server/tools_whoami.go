@@ -43,8 +43,9 @@ type quotaInfo struct {
 }
 
 type whoamiVault struct {
-	Unlocked     bool `json:"unlocked"`
-	EntriesCount int  `json:"entries_count"`
+	Unlocked     bool   `json:"unlocked"`
+	EntriesCount int    `json:"entries_count"`
+	Dir          string `json:"dir"`
 }
 
 type whoamiInfo struct {
@@ -132,6 +133,7 @@ func (s *Server) handleWhoami(ctx context.Context, req mcp.CallToolRequest) (*mc
 		Vault: whoamiVault{
 			Unlocked:     s.vault.Identity != nil,
 			EntriesCount: 0,
+			Dir:          s.vault.Dir,
 		},
 		CLIAlternative:  "Use 'symvault status' for a comprehensive overview.",
 		ErrorsDoc:       "See https://github.com/danieljustus/symaira-vault/blob/main/docs/errors.md for error code documentation.",
