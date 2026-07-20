@@ -178,10 +178,11 @@ type Logger struct {
 
 	entryCh    chan *LogEntry
 	flushReq   chan chan struct{}
-	flushDone  chan struct{}
-	bufferSize int
-	closed     bool
-	syncMode   bool
+	flushDone   chan struct{}
+	bufferSize  int
+	closed      bool
+	syncMode    bool
+	loopStarted bool
 }
 
 // New creates a new audit Logger for the given agent and vault directory.
@@ -265,6 +266,7 @@ func New(agentName string, vaultDir string, identity *age.X25519Identity) (*Logg
 	}
 	l.prevHMAC = prevHMAC
 
+	l.loopStarted = true
 	go l.flushLoop()
 
 	return l, nil
@@ -610,10 +612,13 @@ func (l *Logger) Close() error {
 		return nil
 	}
 	l.closed = true
+	loopStarted := l.loopStarted
 	l.mu.Unlock()
 
 	close(l.entryCh)
-	<-l.flushDone
+	if loopStarted {
+		<-l.flushDone
+	}
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
