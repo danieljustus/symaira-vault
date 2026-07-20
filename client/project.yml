@@ -1,0 +1,59 @@
+name: Symvault
+options:
+  bundleIdPrefix: dev.symaira
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "16.0"
+  generateEmptyDirectories: false
+  groupSortPosition: top
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+packages:
+  SymvaultClient:
+    path: "."
+
+targets:
+  Symvault:
+    type: application
+    platform: macOS
+    deploymentTarget:
+      macOS: "14.0"
+    dependencies:
+      - package: SymvaultClient
+        product: SymvaultFeature
+    sources:
+      - path: Sources/SymvaultApp
+    entitlements:
+      path: Symvault.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.symaira.Symvault
+        PRODUCT_NAME: Symvault
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        ENABLE_HARDENED_RUNTIME: true
+        COMBINE_HIDPI_IMAGES: true
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Symaira Vault
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    postBuildScripts:
+      - name: Embed symvault Engine
+        script: |
+          SRC="${PROJECT_DIR}/../symvault"
+          DST="${BUILT_PRODUCTS_DIR}/${CONTENTS_FOLDER_PATH}/Resources"
+          if [ -f "$SRC" ]; then
+            mkdir -p "$DST"
+            cp "$SRC" "$DST/symvault"
+            chmod +x "$DST/symvault"
+            echo "Embedded symvault into $DST/symvault"
+          else
+            echo "warning: symvault not found at $SRC — run 'make build' first"
+          fi
+        runOnlyWhenInstalling: false
+        basedOnDependencyAnalysis: false

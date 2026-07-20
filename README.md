@@ -26,6 +26,7 @@ A modern, secure command-line password manager written in Go. Uses [age](https:/
 - **MCP Server**: stdio and HTTP for AI agent integration with scoped token management
 - **MCP Slash Commands**: `add-credential`, `rotate-credential`, `find-and-use`, `share-credential` — guided workflows surfaced as slash commands in Claude Code, OpenCode, Hermes
 - **Native Secure-Input Dialog**: cross-platform popups (macOS osascript, Linux zenity/kdialog, Windows Get-Credential) for collecting credentials from agents without exposing them in chat
+- **Native macOS Client**: SwiftUI app for browsing, unlocking, creating, editing, generating, copying, and deleting local vault entries
 - **Cross-Platform**: macOS, Linux, Windows, FreeBSD
 
 ## Installation
@@ -79,6 +80,20 @@ For manual downloads, Linux packages, release verification (including Cosign sig
 | Windows | ✓ | ✓ | Quick install, Scoop, Go, Manual |
 | FreeBSD | ✓ | ✓ | Go, Manual |
 | NixOS / Nix | ✓ | ✓ | Nix flake (`nix run github:danieljustus/symaira-vault`) |
+
+### Native macOS app (from source)
+
+The repository includes a native SwiftUI client in [`client/`](client/README.md).
+It embeds the public `symvault` runtime in the app bundle and also exposes a
+reusable `SymvaultFeature` module for Symaira Hub. No Cloud or Pro service is
+required.
+
+```bash
+make build
+cd client
+xcodegen generate
+xcodebuild -project Symvault.xcodeproj -scheme Symvault -scmProvider system build
+```
 
 ## Quick Start
 
