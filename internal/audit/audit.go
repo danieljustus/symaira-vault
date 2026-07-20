@@ -176,8 +176,8 @@ type Logger struct {
 	hmacKey   []byte
 	prevHMAC  []byte
 
-	entryCh    chan *LogEntry
-	flushReq   chan chan struct{}
+	entryCh     chan *LogEntry
+	flushReq    chan chan struct{}
 	flushDone   chan struct{}
 	bufferSize  int
 	closed      bool
