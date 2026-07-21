@@ -318,3 +318,165 @@ func TestRunCommand_NonExitError(t *testing.T) {
 		t.Errorf("expected 'failed to run command' in error, got: %q", err.Error())
 	}
 }
+
+// --- Files (ephemeral file injection, issue #671) ---
+
+func TestRunCommand_FileInjection(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: relies on sh")
+	}
+	result, err := RunCommand(RunOptions{
+		Command: []string{"sh", "-c", `cat "$SYMVAULT_FILE_CERT"`},
+		Files:   map[string]string{"CERT": "certificate-bytes"},
+	})
+	if err != nil {
+		t.Fatalf("RunCommand() unexpected error: %v", err)
+	}
+	if !strings.Contains(result.Stdout, "certificate-bytes") {
+		t.Fatalf("Stdout = %q, want file content 'certificate-bytes'", result.Stdout)
+	}
+}
+
+func TestRunCommand_FileInjection_RemovedAfterSuccess(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: relies on sh")
+	}
+	result, err := RunCommand(RunOptions{
+		Command: []string{"sh", "-c", `echo "$SYMVAULT_FILE_CERT"`},
+		Files:   map[string]string{"CERT": "x"},
+	})
+	if err != nil {
+		t.Fatalf("RunCommand() unexpected error: %v", err)
+	}
+	path := strings.TrimSpace(result.Stdout)
+	if path == "" {
+		t.Fatal("SYMVAULT_FILE_CERT was empty")
+	}
+	if !filepath.IsAbs(path) {
+		t.Fatalf("SYMVAULT_FILE_CERT = %q, want absolute path", path)
+	}
+	if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+		t.Fatalf("expected ephemeral file %q removed after RunCommand returns, stat err = %v", path, statErr)
+	}
+}
+
+func TestRunCommand_FileInjection_RemovedAfterNonZeroExit(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: relies on sh")
+	}
+	result, err := RunCommand(RunOptions{
+		Command: []string{"sh", "-c", `echo "$SYMVAULT_FILE_CERT"; exit 7`},
+		Files:   map[string]string{"CERT": "x"},
+	})
+	if err != nil {
+		t.Fatalf("RunCommand() unexpected error: %v", err)
+	}
+	if result.ExitCode != 7 {
+		t.Fatalf("ExitCode = %d, want 7", result.ExitCode)
+	}
+	path := strings.TrimSpace(result.Stdout)
+	if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+		t.Fatalf("expected ephemeral file removed after non-zero exit, stat err = %v", statErr)
+	}
+}
+
+func TestRunCommand_FileInjection_RemovedAfterTimeout(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: relies on sh")
+	}
+	result, err := RunCommand(RunOptions{
+		// exec replaces the shell with sleep in-place (no forked grandchild),
+		// so the context-timeout kill lands on the actual sleeping process and
+		// its stdout/stderr pipes close immediately instead of staying open
+		// until a forked "sh -c '...; sleep 10'" grandchild exits on its own.
+		Command: []string{"sh", "-c", `echo "$SYMVAULT_FILE_CERT"; exec sleep 10`},
+		Files:   map[string]string{"CERT": "x"},
+		Timeout: 200 * time.Millisecond,
+	})
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
+	}
+	if !strings.Contains(err.Error(), "timed out") {
+		t.Fatalf("error message does not mention timeout: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result on timeout")
+	}
+	path := strings.TrimSpace(result.Stdout)
+	if path == "" {
+		t.Fatal("expected the child to have printed the file path before being killed")
+	}
+	if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+		t.Fatalf("expected ephemeral file removed after timeout kill, stat err = %v", statErr)
+	}
+}
+
+func TestMaterializeFiles_Empty(t *testing.T) {
+	env, cleanup, err := materializeFiles(nil)
+	if err != nil {
+		t.Fatalf("materializeFiles(nil) error = %v", err)
+	}
+	if len(env) != 0 {
+		t.Fatalf("env = %v, want empty", env)
+	}
+	cleanup() // must not panic on a no-op cleanup
+}
+
+func TestMaterializeFiles_InvalidName(t *testing.T) {
+	for _, name := range []string{"", "../etc/passwd", "a/b", "a b", "a.b", "a$b"} {
+		if _, _, err := materializeFiles(map[string]string{name: "x"}); err == nil {
+			t.Errorf("materializeFiles(%q) expected error, got nil", name)
+		}
+	}
+}
+
+func TestMaterializeFiles_WritesAndCleansUp(t *testing.T) {
+	env, cleanup, err := materializeFiles(map[string]string{"CERT": "hello"})
+	if err != nil {
+		t.Fatalf("materializeFiles() error = %v", err)
+	}
+	path := env["SYMVAULT_FILE_CERT"]
+	if path == "" {
+		t.Fatal("env[SYMVAULT_FILE_CERT] is empty")
+	}
+
+	data, readErr := os.ReadFile(path)
+	if readErr != nil {
+		t.Fatalf("ReadFile(%q): %v", path, readErr)
+	}
+	if string(data) != "hello" {
+		t.Fatalf("content = %q, want %q", data, "hello")
+	}
+
+	if runtime.GOOS != "windows" {
+		info, statErr := os.Stat(path)
+		if statErr != nil {
+			t.Fatalf("Stat(%q): %v", path, statErr)
+		}
+		if info.Mode().Perm() != 0o600 {
+			t.Errorf("mode = %v, want 0600", info.Mode().Perm())
+		}
+	}
+
+	cleanup()
+	if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+		t.Fatalf("expected file removed after cleanup, stat err = %v", statErr)
+	}
+}
+
+func TestMaterializeFiles_BinaryContentPreserved(t *testing.T) {
+	content := string([]byte{0x00, 0xFF, 0x10, 0x89, 0x50, 0x4E, 0x47})
+	env, cleanup, err := materializeFiles(map[string]string{"BIN": content})
+	if err != nil {
+		t.Fatalf("materializeFiles() error = %v", err)
+	}
+	defer cleanup()
+
+	data, readErr := os.ReadFile(env["SYMVAULT_FILE_BIN"])
+	if readErr != nil {
+		t.Fatalf("ReadFile: %v", readErr)
+	}
+	if string(data) != content {
+		t.Fatalf("content mismatch: got %d bytes, want %d bytes", len(data), len(content))
+	}
+}

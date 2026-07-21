@@ -1158,12 +1158,37 @@ Execute a command on the host with secrets injected as environment variables.
 }
 ```
 
+Some consumers need a **file path**, not an environment variable — e.g. a
+certificate a tool opens by path. `files` materializes each referenced secret
+into an ephemeral, `0600`, owner-only file for the lifetime of the command,
+exposed as `$SYMVAULT_FILE_<name>`; the file is shredded and removed once the
+command finishes, whether it succeeds, fails, or times out. A plain string
+value is treated as raw text (same convention as `env`); use the
+`{"ref": ..., "encoding": "base64"}` form to decode base64-encoded binary
+content (e.g. a PKCS#12 certificate) before it is written to disk:
+
+```json
+{
+  "tool": "run_command",
+  "arguments": {
+    "command": ["ericctl", "send", "--cert", "$SYMVAULT_FILE_CERT"],
+    "files": {
+      "CERT": {"ref": "elster/org-zertifikat.pfx", "encoding": "base64"}
+    },
+    "env": {
+      "ELSTER_PIN": "elster/org-zertifikat.pin"
+    }
+  }
+}
+```
+
 **Parameters**:
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | `command` | array | Yes | - | Command and arguments as strings |
 | `env` | object | No | `{}` | Map of env var names to secret refs (e.g. `{"API_KEY": "github.api_key"}`) |
+| `files` | object | No | `{}` | Map of names to secret refs (string) or `{"ref", "encoding"}` objects, materialized as ephemeral `$SYMVAULT_FILE_<name>` files |
 | `working_dir` | string | No | current dir | Working directory for the command |
 | `timeout` | number | No | 30 | Timeout in seconds |
 
@@ -1180,10 +1205,10 @@ Execute a command on the host with secrets injected as environment variables.
 
 **Notes**:
 - Requires `canRunCommands: true` in agent profile (separate from `canWrite`)
-- Each secret ref is scope-checked individually
-- Secret values are never exposed in the MCP response or audit logs
+- Each secret ref (`env` and `files`) is scope-checked individually
+- Secret values are never exposed in the MCP response or audit logs — audit logs record `files` refs, never their content
 - Output is capped at 100KB per stream to prevent context bloat
-- Timeout kills the process with exit code `-1`
+- Timeout kills the process with exit code `-1`, and any `files` are still removed
 
 **Errors**:
 - `run_denied`: Agent profile has `canRunCommands: false`
