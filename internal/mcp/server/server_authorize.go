@@ -198,6 +198,22 @@ func (s *Server) canRunCommands() bool {
 	return s != nil && s.agent != nil && s.agent.CanRunCommands != nil && *s.agent.CanRunCommands
 }
 
+// runCommandDeniedError builds an actionable denial message for tools gated
+// by canRunCommands, naming the exact profile remedy instead of a bare
+// refusal — mirrors upgradeCmdForAgent's "<name>" placeholder for an unknown
+// or generic agent name.
+func runCommandDeniedError(agentName, tool string) error {
+	name := agentName
+	if name == "" || name == "default" {
+		name = "<name>"
+	}
+	return fmt.Errorf(
+		"command execution not permitted for this agent: set \"canRunCommands: true\" in its profile "+
+			"(symvault config set agents.%s.canRunCommands true), or add %q to allowed_tools if tier-based "+
+			"scoping applies. For interactive use without running commands, use copy_to_clipboard, autotype, "+
+			"or request_credential instead", name, tool)
+}
+
 func (s *Server) canManageConfig() bool {
 	return s != nil && s.agent != nil && s.agent.CanManageConfig != nil && *s.agent.CanManageConfig
 }

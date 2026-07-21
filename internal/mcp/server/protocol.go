@@ -39,7 +39,28 @@ type InitializeResult struct {
 	Capabilities    *ServerCapabilities `json:"capabilities"`
 	ServerInfo      *ServerInfo         `json:"serverInfo"`
 	ProtocolVersion string              `json:"protocolVersion"`
+	Instructions    string              `json:"instructions,omitempty"`
 }
+
+// serverInstructions is surfaced to every client in the initialize response so
+// agents can self-discover the "consume a secret without seeing it" pattern
+// instead of dead-ending on a redacted reference (issue #667). It intentionally
+// does not vary per agent/profile — it describes the pattern, not this agent's
+// specific permissions, which the agent learns from tool availability and from
+// the per-field "usage" hints in get_entry/get_entry_value responses.
+const serverInstructions = `SymVault redacts secret values by default: get_entry and get_entry_value ` +
+	`return a reference (a "handle", e.g. op://path/field) instead of the plaintext, plus a per-field ` +
+	`"usage" hint. Do not try to resolve that reference yourself — you are not meant to see the value.
+
+To consume a secret without seeing it:
+  - run_command / execute_with_secret: pass "path.field" (not the op:// handle) as an env map value, ` +
+	`e.g. {"env": {"GH_TOKEN": "github.token"}}. SymVault resolves and injects it; only the child ` +
+	`process sees the value.
+  - copy_to_clipboard / autotype: for interactive, human-facing use.
+  - request_credential: ask the user to supply or confirm a credential directly.
+
+If a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — ` +
+	`read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.`
 
 // ServerCapabilities represents the capabilities of the MCP server
 type ServerCapabilities struct {
@@ -143,6 +164,7 @@ func (h *ProtocolHandler) handleInitialize(_ context.Context, msg *transport.Mes
 			Name:    h.serverName,
 			Version: h.serverVersion,
 		},
+		Instructions: serverInstructions,
 	}
 
 	h.mu.Lock()

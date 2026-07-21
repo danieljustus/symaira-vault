@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/danieljustus/symaira-vault/internal/config"
@@ -46,6 +47,14 @@ func TestProtocolHandler_Initialize(t *testing.T) {
 	}
 	if result.ServerInfo.Name != "Symaira Vault" {
 		t.Errorf("ServerInfo.Name = %q, want Symaira Vault", result.ServerInfo.Name)
+	}
+	// Instructions must teach agents the "consume without seeing" pattern up
+	// front instead of leaving them to dead-end on a redacted reference. Issue #667.
+	if !strings.Contains(result.Instructions, "run_command") {
+		t.Errorf("Instructions = %q, want it to mention run_command", result.Instructions)
+	}
+	if !strings.Contains(result.Instructions, "path.field") {
+		t.Errorf("Instructions = %q, want it to mention the path.field env-ref syntax", result.Instructions)
 	}
 }
 

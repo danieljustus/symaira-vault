@@ -85,7 +85,14 @@ func NewScopeCheckPreHook() PreCallHook {
 			}
 		}
 		server.logAudit(ctx, "tool_scope_denied", toolName, false)
-		return ctx, fmt.Errorf("tool %q is not in the agent's allowed tools", toolName)
+		name := server.agent.Name
+		if name == "" || name == "default" {
+			name = "<name>"
+		}
+		return ctx, fmt.Errorf(
+			"tool %q is not in the agent's allowed tools: add it to agents.%s.allowed_tools in the profile "+
+				"(symvault config set agents.%s.allowed_tools '[...]'), or remove the allowed_tools restriction "+
+				"to allow every registered tool", toolName, name, name)
 	}
 }
 

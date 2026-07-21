@@ -39,6 +39,7 @@ func buildSecretMetadataResponse(entry *vaultpkg.Entry, path string) map[string]
 			"name":   k,
 			"handle": (taint.SecretHandle{Path: path, Field: k}).String(),
 			"kind":   inferFieldKind(v),
+			"usage":  consumptionUsageHint(path, k),
 		})
 	}
 
@@ -224,12 +225,35 @@ func (s *Server) sealEntryResponse(_ context.Context, entry *vaultpkg.Entry, pat
 		"handle":         handle,
 		"classification": entry.Classification.String(),
 		"note":           "Use secret_unseal tool to reveal the value",
+		"usage":          consumptionUsageHint(path, fieldName),
 	}
 	result, err := json.Marshal(resp)
 	if err != nil {
 		return mcp.NewToolResultError("failed to marshal sealed response")
 	}
 	return mcp.NewToolResultText(string(result))
+}
+
+// consumptionUsageHint tells an agent how to consume a redacted/sealed field
+// without ever seeing its plaintext value. run_command's env map (and the
+// equivalent CLI/config secret-ref syntax) takes a "path.field" reference —
+// not the "op://path/field" handle used elsewhere — so the hint spells that
+// out explicitly rather than pointing the agent at the handle string, which
+// run_command's resolver does not accept.
+func consumptionUsageHint(path, field string) map[string]any {
+	ref := path
+	if field != "" {
+		ref = path + "." + field
+	}
+	return map[string]any{
+		"run_command": map[string]any{
+			"env": map[string]string{"<VAR_NAME>": ref},
+		},
+		"note": "The raw value is never returned to agents. Pass \"" + ref + "\" as a run_command " +
+			"env reference (SymVault resolves and injects it; the command sees the value, you don't), " +
+			"or use copy_to_clipboard/autotype for interactive use, or request_credential to ask the " +
+			"user directly. Consuming it this way does not require unsealing first.",
+	}
 }
 
 func (s *Server) handleGetMetadata(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
