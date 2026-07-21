@@ -135,8 +135,9 @@ func TestDetectTypeFromPath(t *testing.T) {
 		{"server/ssh-access", SecretTypeSSHKey},
 		{"gcp/symaira-vault-pro-db", SecretTypeDatabaseURL},
 		{"db/prod", SecretTypeDatabaseURL},
-		{"tls/cert", SecretTypeCertificate},
-		{"vault/pfx", SecretTypeCertificate},
+		{"tls/cert", ""},
+		{"vault/pfx", ""},
+		{"apple-developer/certificate-p12", ""},
 		{"personal/password", SecretTypePassword},
 		{"foo/bar", ""},
 	}
@@ -195,6 +196,9 @@ func TestInferSecretType(t *testing.T) {
 		{"default password", "foo/bar", "", "simple-value", "", SecretTypePassword},
 		{"seed from path", "electrum/wallet-seed", "", "simple-value", "", SecretTypeTOTPSeed},
 		{"database from path", "gcp/db", "", "simple-value", "", SecretTypeDatabaseURL},
+		{"PKCS#12 passphrase not inferred as certificate from path", "apple-developer/certificate-p12", "", "a normal passphrase", "", SecretTypePassword},
+		{"self-identifying PEM certificate wins regardless of path", "apple-developer/certificate-p12", "", "-----BEGIN CERTIFICATE-----\n...", "", SecretTypeCertificate},
+		{"explicit certificate type still wins for a PKCS#12 path", "apple-developer/certificate-p12", "", "a normal passphrase", "certificate", SecretTypeCertificate},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
