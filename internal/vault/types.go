@@ -165,6 +165,13 @@ func DetectSecretType(value string) SecretType {
 // DetectTypeFromPath infers a secret type from the entry path segments.
 // Returns an empty string when no strong signal is present.
 //
+// Certificate/PKCS#12 tokens ("cert", "certificate", "pfx") are deliberately
+// not matched here: a certificate payload always self-identifies via its PEM
+// header (see DetectSecretType) or an explicit --type, whereas a bare value
+// can just as easily be the passphrase for a same-path PKCS#12 file (e.g.
+// "apple-developer/certificate-p12"). Treating that path segment as a strong
+// signal silently mis-files the passphrase under the cert_pem field.
+//
 //nolint:goconst // matching against natural language path tokens is clearer as literals
 func DetectTypeFromPath(path string) SecretType {
 	path = strings.ToLower(path)
@@ -187,8 +194,6 @@ func DetectTypeFromPath(path string) SecretType {
 				return SecretTypeTOTPSeed
 			case "database", "db":
 				return SecretTypeDatabaseURL
-			case "cert", "certificate", "pfx":
-				return SecretTypeCertificate
 			case "password", "pass":
 				return SecretTypePassword
 			}
@@ -222,7 +227,25 @@ func DetectTypeFromFieldName(field string) SecretType {
 }
 
 // InferSecretType combines explicit type, value pattern, path and field-name
-// signals to choose the most appropriate secret type.
+// signals to choose the most appropriate secret type, in that fixed
+// precedence order:
+//
+//  1. explicitType (the user-provided --type flag)
+//  2. the value's own content (DetectSecretType) — a value that
+//     self-identifies (a PEM certificate/key, a JWT, a DB URL, ...) always
+//     wins, because it is the strongest available evidence
+//  3. the entry path (DetectTypeFromPath) — a naming convention, weaker than
+//     the value itself
+//  4. the data field name (DetectTypeFromFieldName) — weakest, since it is
+//     rarely known ahead of the type at entry-creation time
+//
+// A PKCS#12 (.p12/.pfx) certificate and its import passphrase are different
+// materials that commonly share a path (e.g. "apple-developer/certificate-p12"
+// holding the passphrase under a "password" field). Store the certificate
+// payload as PEM text (self-identifying) or via an explicit --type on its own
+// entry/field, and the passphrase as a separate password entry or field, so
+// this precedence order never has to guess between the two.
+//
 // The explicitType parameter is the user-provided --type flag; pass an empty
 // string when the caller has not specified a type.
 func InferSecretType(path, fieldName, value, explicitType string) SecretType {
