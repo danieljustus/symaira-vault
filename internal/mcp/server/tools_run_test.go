@@ -2,7 +2,9 @@ package server
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"runtime"
 	"strings"
 	"testing"
@@ -770,5 +772,296 @@ func TestHandleRunCommand_ExecutableAllowlist_EmptyAllowsAll(t *testing.T) {
 	}
 	if result.IsError {
 		t.Fatalf("handleRunCommand() returned error: %s", result.Text)
+	}
+}
+
+// --- files map (ephemeral file injection, issue #671) ---
+
+func TestHandleRunCommand_FileInjection(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: relies on sh")
+	}
+	vaultDir, identity := mockVaultWithEntry(t, "elster/org-zertifikat", map[string]any{
+		"pin": "1234-secret-pin",
+	})
+
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{
+			"command": []any{"sh", "-c", `cat "$SYMVAULT_FILE_PIN"`},
+			"files": map[string]any{
+				"PIN": "elster/org-zertifikat.pin",
+			},
+		},
+	}
+
+	result, err := srv.handleRunCommand(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleRunCommand() error = %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("handleRunCommand() returned error: %s", result.Text)
+	}
+
+	var output map[string]any
+	if err := json.Unmarshal([]byte(result.Text), &output); err != nil {
+		t.Fatalf("parse result: %v", err)
+	}
+	stdout, _ := output["stdout"].(string)
+	if strings.Contains(stdout, "1234-secret-pin") {
+		t.Errorf("stdout = %q, should not contain plaintext secret", stdout)
+	}
+	if !strings.Contains(stdout, "***") {
+		t.Errorf("stdout = %q, want masked file content ('***') echoed back through the command output", stdout)
+	}
+}
+
+func TestHandleRunCommand_FileInjection_Base64Encoding(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: relies on sh")
+	}
+	binaryContent := []byte{0x50, 0x4b, 0x03, 0x04, 0x00, 0xff, 0x10} // fake PKCS#12-ish bytes
+	vaultDir, identity := mockVaultWithEntry(t, "elster/org-zertifikat", map[string]any{
+		"pfx": base64.StdEncoding.EncodeToString(binaryContent),
+	})
+
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{
+			"command": []any{"sh", "-c", `wc -c < "$SYMVAULT_FILE_CERT"`},
+			"files": map[string]any{
+				"CERT": map[string]any{
+					"ref":      "elster/org-zertifikat.pfx",
+					"encoding": "base64",
+				},
+			},
+		},
+	}
+
+	result, err := srv.handleRunCommand(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleRunCommand() error = %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("handleRunCommand() returned error: %s", result.Text)
+	}
+
+	var output map[string]any
+	if err := json.Unmarshal([]byte(result.Text), &output); err != nil {
+		t.Fatalf("parse result: %v", err)
+	}
+	stdout, _ := output["stdout"].(string)
+	if !strings.Contains(stdout, fmt.Sprintf("%d", len(binaryContent))) {
+		t.Errorf("stdout = %q, want decoded byte count %d (proves base64 was decoded before materialization, not written as base64 text)", stdout, len(binaryContent))
+	}
+}
+
+func TestHandleRunCommand_FileInjection_BadBase64(t *testing.T) {
+	vaultDir, identity := mockVaultWithEntry(t, "elster/org-zertifikat", map[string]any{
+		"pfx": "not-valid-base64!!!",
+	})
+
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{
+			"command": []any{"echo", "test"},
+			"files": map[string]any{
+				"CERT": map[string]any{
+					"ref":      "elster/org-zertifikat.pfx",
+					"encoding": "base64",
+				},
+			},
+		},
+	}
+
+	result, err := srv.handleRunCommand(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleRunCommand() error = %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("handleRunCommand() expected error result for invalid base64 content")
+	}
+	if !strings.Contains(result.Text, "cannot base64-decode") {
+		t.Fatalf("result text = %q, want 'cannot base64-decode'", result.Text)
+	}
+}
+
+func TestHandleRunCommand_FileInjection_UnsupportedEncoding(t *testing.T) {
+	vaultDir, identity := mockVaultWithEntry(t, "elster/org-zertifikat", map[string]any{
+		"pfx": "value",
+	})
+
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{
+			"command": []any{"echo", "test"},
+			"files": map[string]any{
+				"CERT": map[string]any{
+					"ref":      "elster/org-zertifikat.pfx",
+					"encoding": "rot13",
+				},
+			},
+		},
+	}
+
+	result, err := srv.handleRunCommand(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleRunCommand() error = %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("handleRunCommand() expected error result for unsupported encoding")
+	}
+	if !strings.Contains(result.Text, "unsupported encoding") {
+		t.Fatalf("result text = %q, want 'unsupported encoding'", result.Text)
+	}
+}
+
+func TestHandleRunCommand_FileInjection_ScopeCheck(t *testing.T) {
+	vaultDir, identity := mockVaultWithEntry(t, "work/cert", map[string]any{
+		"pfx": "secret-bytes",
+	})
+
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"personal/"},
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{
+			"command": []any{"echo", "test"},
+			"files": map[string]any{
+				"CERT": "work/cert.pfx",
+			},
+		},
+	}
+
+	_, err := srv.handleRunCommand(context.Background(), req)
+	if err == nil {
+		t.Fatal("handleRunCommand() expected error for out-of-scope file ref, got nil")
+	}
+	if !strings.Contains(err.Error(), "outside allowed scope") {
+		t.Fatalf("error = %v, want 'outside allowed scope'", err)
+	}
+}
+
+func TestHandleRunCommand_FileInjection_MissingRef(t *testing.T) {
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
+	}, "stdio", t.TempDir())
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{
+			"command": []any{"echo", "test"},
+			"files": map[string]any{
+				"CERT": "nonexistent/entry.pfx",
+			},
+		},
+	}
+
+	result, err := srv.handleRunCommand(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleRunCommand() error = %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("handleRunCommand() expected error result for missing file ref")
+	}
+	if !strings.Contains(result.Text, "cannot resolve secret ref") {
+		t.Fatalf("result text = %q, want 'cannot resolve secret ref'", result.Text)
+	}
+}
+
+func TestHandleRunCommand_FileInjection_ExecutableDenied(t *testing.T) {
+	// A denied executable must block the whole call before any file ref is
+	// ever resolved or materialized — files share the same allowlist gate
+	// as env refs, checked earlier in handleRunCommand.
+	vaultDir, identity := mockVaultWithEntry(t, "elster/org-zertifikat", map[string]any{
+		"pfx": "secret-bytes",
+	})
+
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:               "test",
+		AllowedPaths:       []string{"*"},
+		CanRunCommands:     config.BoolPtr(true),
+		ApprovalMode:       config.StrPtr("none"),
+		AllowedExecutables: []string{"echo"},
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{
+			"command": []any{"sh", "-c", `cat "$SYMVAULT_FILE_CERT"`},
+			"files": map[string]any{
+				"CERT": "elster/org-zertifikat.pfx",
+			},
+		},
+	}
+
+	_, err := srv.handleRunCommand(context.Background(), req)
+	if err == nil {
+		t.Fatal("handleRunCommand() expected error for disallowed executable, got nil")
+	}
+	if !strings.Contains(err.Error(), "not in agent allowlist") {
+		t.Fatalf("error = %v, want 'not in agent allowlist'", err)
+	}
+}
+
+func TestHandleRunCommand_FileInjection_FilesNotObject(t *testing.T) {
+	srv := newTestServer(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
+	}, "stdio")
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{
+			"command": []any{"echo", "test"},
+			"files":   "not-an-object",
+		},
+	}
+
+	result, err := srv.handleRunCommand(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleRunCommand() error = %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("handleRunCommand() expected error result for files not an object")
+	}
+	if !strings.Contains(result.Text, "must be an object") {
+		t.Fatalf("result text = %q, want 'must be an object'", result.Text)
 	}
 }

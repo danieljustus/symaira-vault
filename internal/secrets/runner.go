@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"sort"
 	"time"
 )
 
@@ -32,6 +34,14 @@ type RunOptions struct {
 	WorkingDir string
 	// Timeout is the maximum duration. Zero means no timeout.
 	Timeout time.Duration
+	// Files maps a name to plaintext content that must be materialized into an
+	// ephemeral 0600 file for the lifetime of the child process, exposed to it
+	// as $SYMVAULT_FILE_<name>. Content is never logged. Every file (and its
+	// private directory) is best-effort shredded and removed once the command
+	// finishes, regardless of how it finishes — success, non-zero exit, or a
+	// timeout kill. Keys must be safe identifiers ([A-Za-z0-9_]+): they become
+	// both an env var suffix and a filename.
+	Files map[string]string
 }
 
 // boundedBuffer captures up to max bytes of written data while still reporting
@@ -74,6 +84,12 @@ func RunCommand(opts RunOptions) (*RunResult, error) {
 		return nil, fmt.Errorf("command must have at least one element")
 	}
 
+	fileEnv, cleanupFiles, err := materializeFiles(opts.Files)
+	if err != nil {
+		return nil, err
+	}
+	defer cleanupFiles()
+
 	ctx := context.Background()
 	var cancel context.CancelFunc
 	if opts.Timeout > 0 {
@@ -100,6 +116,9 @@ func RunCommand(opts RunOptions) (*RunResult, error) {
 	}
 	cmd.Env = FilterEnv(whitelist)
 	for k, v := range opts.Env {
+		cmd.Env = append(cmd.Env, k+"="+v)
+	}
+	for k, v := range fileEnv {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
 
@@ -136,4 +155,92 @@ func RunCommand(opts RunOptions) (*RunResult, error) {
 	}
 
 	return result, nil
+}
+
+// isSafeFileName reports whether name is safe to use both as an environment
+// variable suffix and as a filename component — no path separators, no "..",
+// no empty string.
+func isSafeFileName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, r := range name {
+		switch {
+		case r >= 'A' && r <= 'Z', r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '_':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// materializeFiles writes each named secret to a private, 0600 ephemeral file
+// and returns the SYMVAULT_FILE_<name> environment assignments plus a cleanup
+// function that best-effort shreds and removes every file it created (and the
+// private directory holding them). The returned cleanup is always safe to
+// call, even after a partial failure — callers should defer it immediately
+// after a nil error so cleanup runs no matter how the caller's command
+// finishes (success, non-zero exit, or a timeout kill).
+func materializeFiles(files map[string]string) (map[string]string, func(), error) {
+	noop := func() {}
+	if len(files) == 0 {
+		return nil, noop, nil
+	}
+
+	names := make([]string, 0, len(files))
+	for name := range files {
+		if !isSafeFileName(name) {
+			return nil, noop, fmt.Errorf("invalid file name %q: must match [A-Za-z0-9_]+", name)
+		}
+		names = append(names, name)
+	}
+	sort.Strings(names) // deterministic materialization order
+
+	dir, err := os.MkdirTemp("", "symvault-file-*")
+	if err != nil {
+		return nil, noop, fmt.Errorf("create ephemeral file directory: %w", err)
+	}
+	// #nosec G302 -- 0700 is correct for a private directory; 0600 would remove the execute bit needed to enter it
+	if err := os.Chmod(dir, 0o700); err != nil {
+		_ = os.RemoveAll(dir)
+		return nil, noop, fmt.Errorf("secure ephemeral file directory: %w", err)
+	}
+
+	var written []string
+	cleanup := func() {
+		for _, p := range written {
+			shredFile(p)
+		}
+		_ = os.RemoveAll(dir)
+	}
+
+	env := make(map[string]string, len(files))
+	for _, name := range names {
+		path := filepath.Join(dir, name)
+		// #nosec G304 -- path is built from filepath.Join(dir, name) where dir is our own MkdirTemp result and name was already validated by isSafeFileName
+		if err := os.WriteFile(path, []byte(files[name]), 0o600); err != nil {
+			cleanup()
+			return nil, noop, fmt.Errorf("materialize file %q: %w", name, err)
+		}
+		written = append(written, path)
+		env["SYMVAULT_FILE_"+name] = path
+	}
+
+	return env, cleanup, nil
+}
+
+// shredFile best-effort overwrites a file's content with zeros before
+// removing it, so the plaintext does not linger in free disk blocks after
+// cleanup. Errors are intentionally swallowed — cleanup must never fail the
+// caller, and a failed overwrite still leaves the subsequent remove to try.
+func shredFile(path string) {
+	if info, statErr := os.Stat(path); statErr == nil && info.Size() > 0 {
+		// #nosec G304 -- path is one of the paths this package just wrote in materializeFiles, reopened only to overwrite it with zeros before removal
+		if f, openErr := os.OpenFile(path, os.O_WRONLY, 0o600); openErr == nil {
+			_, _ = f.Write(make([]byte, info.Size()))
+			_ = f.Sync()
+			_ = f.Close()
+		}
+	}
+	_ = os.Remove(path)
 }
