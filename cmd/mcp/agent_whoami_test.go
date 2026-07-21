@@ -19,6 +19,9 @@ func TestBuildWhoamiInfo(t *testing.T) {
 	if info.Name != "test-agent" {
 		t.Errorf("Name = %q, want %q", info.Name, "test-agent")
 	}
+	if info.VaultDir != vaultDir {
+		t.Errorf("VaultDir = %q, want %q", info.VaultDir, vaultDir)
+	}
 	if info.Tier != "safe" {
 		t.Errorf("Tier = %q, want %q", info.Tier, "safe")
 	}

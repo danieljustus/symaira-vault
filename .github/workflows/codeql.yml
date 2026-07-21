@@ -1,0 +1,73 @@
+name: CodeQL
+
+# Advanced (workflow-based) CodeQL setup, replacing GitHub's default setup.
+# Needed because the client/ Swift package depends on the private repo
+# danieljustus/symaira-appkit: default setup has no way to authenticate
+# that clone during autobuild, so its Swift analysis always failed. GitHub
+# does not allow default setup and an advanced workflow to run side by
+# side for the same repo, so this workflow now covers every previously
+# scanned language, not just swift.
+on:
+  push:
+    branches: [ main ]
+    tags-ignore:
+      - 'v*'
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ${{ matrix.language == 'swift' && 'macos-latest' || 'ubuntu-latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+          - language: go
+            build-mode: autobuild
+          - language: javascript-typescript
+            build-mode: none
+          - language: ruby
+            build-mode: none
+          - language: swift
+            build-mode: autobuild
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Allow SwiftPM to clone the private symaira-appkit dependency
+        if: matrix.language == 'swift'
+        run: |
+          git config --global url."https://x-access-token:${APPKIT_TOKEN}@github.com/danieljustus/symaira-appkit.git".insteadOf "https://github.com/danieljustus/symaira-appkit.git"
+        env:
+          APPKIT_TOKEN: ${{ secrets.SYMAIRA_APPKIT_GITHUB_TOKEN }}
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - name: Autobuild
+        if: matrix.build-mode == 'autobuild'
+        uses: github/codeql-action/autobuild@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4
+        with:
+          category: "/language:${{ matrix.language }}"
