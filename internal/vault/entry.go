@@ -1,6 +1,8 @@
 package vault
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -39,10 +41,21 @@ type EntryMetadata struct {
 
 // SecretMetadata contains semantic metadata about a secret for AI agent usage.
 type SecretMetadata struct {
-	Type       SecretType `json:"type,omitempty"`
-	UsageHint  string     `json:"usage_hint,omitempty"`
-	AutoRotate bool       `json:"auto_rotate,omitempty"`
-	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
+	Type        SecretType                `json:"type,omitempty"`
+	UsageHint   string                    `json:"usage_hint,omitempty"`
+	AutoRotate  bool                      `json:"auto_rotate,omitempty"`
+	ExpiresAt   *time.Time                `json:"expires_at,omitempty"`
+	Attachments map[string]AttachmentInfo `json:"attachments,omitempty"`
+}
+
+// AttachmentInfo records provenance for a Data field holding base64-encoded
+// binary file content added via `symvault file add`, so `file get`/`file use`
+// can detect silent corruption and report the original filename/size without
+// having to guess whether a field is text or a file attachment.
+type AttachmentInfo struct {
+	Filename string `json:"filename,omitempty"`
+	Size     int64  `json:"size"`
+	SHA256   string `json:"sha256"`
 }
 
 // MarshalJSON implements custom JSON marshaling for Entry
@@ -208,4 +221,12 @@ func (e *Entry) HasField(name string) bool {
 	}
 	_, ok := e.Data[name]
 	return ok
+}
+
+// HashAttachmentSHA256 returns the lowercase hex-encoded SHA-256 digest of
+// file content, recorded in AttachmentInfo at add time and re-checked at
+// get/use time to detect silent corruption of the stored base64 content.
+func HashAttachmentSHA256(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
 }

@@ -10,6 +10,7 @@ import (
 	_ "github.com/danieljustus/symaira-vault/cmd/admin"
 	_ "github.com/danieljustus/symaira-vault/cmd/auth"
 	_ "github.com/danieljustus/symaira-vault/cmd/crud"
+	_ "github.com/danieljustus/symaira-vault/cmd/file"
 	_ "github.com/danieljustus/symaira-vault/cmd/mcp"
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
 )
