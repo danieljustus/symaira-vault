@@ -256,6 +256,10 @@ func TestHandleRunCommand_RunDenied(t *testing.T) {
 	if !strings.Contains(err.Error(), "command execution not permitted") {
 		t.Fatalf("error = %v, want 'command execution not permitted'", err)
 	}
+	// The denial must name the concrete profile remedy, not just refuse. Issue #667.
+	if !strings.Contains(err.Error(), "canRunCommands: true") || !strings.Contains(err.Error(), "agents.readonly.canRunCommands") {
+		t.Fatalf("error = %v, want it to name the canRunCommands profile remedy", err)
+	}
 }
 
 func TestHandleRunCommand_Timeout(t *testing.T) {

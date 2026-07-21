@@ -118,6 +118,68 @@ func TestHandleGet_WithValue(t *testing.T) {
 	}
 }
 
+// TestHandleGet_FieldUsageHint verifies that each field in a get_entry
+// response carries a machine-readable "usage" hint so an agent that only
+// ever sees a reference (never the plaintext value) knows how to consume it
+// — e.g. via run_command's env map — instead of dead-ending. Issue #667.
+func TestHandleGet_FieldUsageHint(t *testing.T) {
+	vaultDir, identity := mockVault(t)
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:         "test",
+		AllowedPaths: []string{"*"},
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	req := mcp.CallToolRequest{Arguments: map[string]any{"path": "github"}}
+
+	result, err := srv.handleGet(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleGet() error = %v", err)
+	}
+
+	var response map[string]any
+	if err := json.Unmarshal([]byte(result.Text), &response); err != nil {
+		t.Fatalf("parse result: %v", err)
+	}
+
+	fields, _ := response["fields"].([]any)
+	var passwordField map[string]any
+	for _, f := range fields {
+		fm := f.(map[string]any)
+		if fm["name"] == "password" {
+			passwordField = fm
+		}
+	}
+	if passwordField == nil {
+		t.Fatal(`fields should contain field "password"`)
+	}
+
+	usage, ok := passwordField["usage"].(map[string]any)
+	if !ok {
+		t.Fatal(`field "password" should have a "usage" hint`)
+	}
+	runCommand, ok := usage["run_command"].(map[string]any)
+	if !ok {
+		t.Fatal(`usage should have a "run_command" example`)
+	}
+	env, ok := runCommand["env"].(map[string]any)
+	if !ok || len(env) == 0 {
+		t.Fatal(`usage.run_command should have a non-empty "env" example`)
+	}
+	// run_command's resolver takes "path.field", not the "op://path/field"
+	// handle — the hint must use the syntax that actually works.
+	for _, ref := range env {
+		if ref != "github.password" {
+			t.Errorf(`usage.run_command.env ref = %q, want "github.password"`, ref)
+		}
+	}
+	if note, _ := usage["note"].(string); note == "" {
+		t.Error(`usage should have a non-empty "note"`)
+	}
+}
+
 // TestHandleGet_WithoutMetadata tests without the include_value flag.
 // This is the default behavior — always returns metadata.
 
@@ -468,6 +530,59 @@ func TestHandleGetValue_SealsSecretClassification(t *testing.T) {
 	}
 	if note == "" {
 		t.Error("expected non-empty note")
+	}
+}
+
+// TestHandleGetValue_SealedResponseHasUsageHint verifies a sealed response
+// tells the agent it can consume the secret via run_command without ever
+// unsealing it — secret_unseal is only needed to see the plaintext directly.
+// Issue #667.
+func TestHandleGetValue_SealedResponseHasUsageHint(t *testing.T) {
+	vaultDir, identity := mockVault(t)
+	secretEntry := &vault.Entry{
+		Data:           map[string]any{"pin": "1234"},
+		Classification: taint.Secret,
+	}
+	if err := vault.WriteEntry(vaultDir, "sealed-entry", secretEntry, identity); err != nil {
+		t.Fatalf("write secret entry: %v", err)
+	}
+
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:         "test",
+		AllowedPaths: []string{"*"},
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
+		AutoUnseal:   config.BoolPtr(false),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	req := mcp.CallToolRequest{Arguments: map[string]any{"path": "sealed-entry"}}
+	result, err := srv.handleGetValue(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleGetValue() error = %v", err)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal([]byte(result.Text), &resp); err != nil {
+		t.Fatalf("parse result: %v", err)
+	}
+
+	usage, ok := resp["usage"].(map[string]any)
+	if !ok {
+		t.Fatal(`sealed response should have a "usage" hint`)
+	}
+	runCommand, ok := usage["run_command"].(map[string]any)
+	if !ok {
+		t.Fatal(`usage should have a "run_command" example`)
+	}
+	env, _ := runCommand["env"].(map[string]any)
+	for _, ref := range env {
+		if ref != "sealed-entry.pin" {
+			t.Errorf(`usage.run_command.env ref = %q, want "sealed-entry.pin"`, ref)
+		}
+	}
+	if len(env) == 0 {
+		t.Error("usage.run_command.env should not be empty")
 	}
 }
 

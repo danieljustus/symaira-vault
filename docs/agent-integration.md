@@ -103,6 +103,67 @@ Symaira Vault exposes the following MCP tools for agent integration:
 - `get_auth_status` — Check unlock authentication status
 - `set_auth_method` — Change unlock method (passphrase / touchid)
 
+## Consuming a Secret Without Seeing It
+
+A metadata-first profile (like `hermes-metadata` above) never returns plaintext
+values. `get_entry` and `get_entry_value` instead return a **reference** — a
+`handle` such as `op://github/token/token` — plus a per-field `usage` hint
+describing how to act on it. Do not try to resolve that reference yourself;
+you are not meant to see the value. The pattern is:
+
+1. Call `get_entry` (or `get_entry_metadata`) to discover the field(s) and their
+   `handle`/`usage` hint.
+2. Pass the secret to a consuming tool by **reference**, not by value:
+   - `run_command` / `execute_with_secret` — put `"path.field"` in the `env`
+     map (not the `op://` handle — the resolver expects dot notation):
+     ```json
+     {"tool": "run_command",
+      "arguments": {"command": ["gh", "api", "user"],
+                    "env": {"GH_TOKEN": "github/token.token"}}}
+     ```
+     SymVault resolves the reference and injects the value into the child
+     process's environment only. It is never returned to you.
+   - `copy_to_clipboard` / `autotype` — for interactive, human-facing use.
+   - `request_credential` — ask the user to supply or confirm a credential
+     directly when no vault entry exists yet.
+
+If a consuming tool call is denied (`run_denied`, or "not in the agent's
+allowed tools"), the error names the exact profile fix — read it before giving
+up. For example, `run_command` denied by `canRunCommands: false` explains which
+config key to set and suggests the fallback tools above.
+
+### Escalating to a runner profile
+
+Metadata-first profiles deliberately omit `run_command`/`execute_with_secret`.
+When a task genuinely needs to consume a secret (not just discover it exists),
+use a separate, narrowly-scoped runner profile instead of widening the
+metadata profile:
+
+```yaml
+agents:
+  hermes-runner-provider-smoke:
+    allowedPaths:
+      - agents/providers/example-provider/
+    canWrite: false
+    canRunCommands: true
+    canManageConfig: false
+    canUseClipboard: false
+    canUseAutotype: false
+    approvalMode: deny
+    allowed_tools:
+      - health
+      - get_entry_metadata
+      - run_command
+      - execute_with_secret
+    max_reads_per_hour: 5
+    max_reads_per_day: 20
+    max_secrets_in_session: 1
+```
+
+See [`docs/hermes-safe-adoption.md`](hermes-safe-adoption.md) § "Separate
+runner profile after masking review" for the full runner-profile rules
+(narrow `allowedPaths`, tight `allowed_tools`, session/rate caps).
+
 ## OpenClaw and Other Local Agents
 
 For agents that support stdio MCP, use:

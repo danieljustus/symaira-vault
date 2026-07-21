@@ -38,7 +38,7 @@ func (s *Server) handleExecuteAPIRequest(ctx context.Context, req mcp.CallToolRe
 	if !s.canRunCommands() {
 		s.logAudit(ctx, "execute_api_request", "<run-denied>", false)
 		metrics.RecordAuthDenial("run_denied", s.agent.Name)
-		return nil, fmt.Errorf("command execution not permitted for this agent")
+		return nil, runCommandDeniedError(s.agent.Name, "execute_api_request")
 	}
 
 	templateName, err := req.RequireString("template")

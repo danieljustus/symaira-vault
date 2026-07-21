@@ -17,7 +17,7 @@ func (s *Server) handleRunCommand(ctx context.Context, req mcp.CallToolRequest) 
 	if !s.canRunCommands() {
 		s.logAudit(ctx, "run_command", "<run-denied>", false)
 		metrics.RecordAuthDenial("run_denied", s.agent.Name)
-		return nil, fmt.Errorf("command execution not permitted for this agent")
+		return nil, runCommandDeniedError(s.agent.Name, "run_command")
 	}
 
 	cmdRaw, ok := req.Arguments["command"]

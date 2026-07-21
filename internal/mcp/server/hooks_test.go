@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -572,6 +573,10 @@ func TestScopeCheckHook_DeniesDisallowedTool(t *testing.T) {
 	_, err := srv.executeTool(context.Background(), "generate_password", nil)
 	if err == nil {
 		t.Fatal("executeTool() expected scope error, got nil")
+	}
+	// The denial must name the concrete profile remedy, not just refuse. Issue #667.
+	if !strings.Contains(err.Error(), "agents.test.allowed_tools") {
+		t.Fatalf("error = %v, want it to name the allowed_tools profile remedy", err)
 	}
 }
 
