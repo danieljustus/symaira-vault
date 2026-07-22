@@ -1236,4 +1236,3 @@ func TestRunChecks_EnvPassphrase_SafeSourceFile(t *testing.T) {
 		t.Errorf("expected hasUnsafePerm=false for mode 0600")
 	}
 }
-
