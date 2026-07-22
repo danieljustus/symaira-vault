@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
@@ -229,14 +230,67 @@ func checkPreCommitHooks(_ string, _ Options) Result {
 	return r
 }
 
+// InspectPassphraseSourceFilesForTest is an exported helper for package health unit tests.
+func InspectPassphraseSourceFilesForTest(candidates []string) (string, os.FileMode, bool) {
+	return inspectPassphraseSourceFiles(candidates)
+}
+
+func inspectPassphraseSourceFiles(candidates []string) (foundPath string, perm os.FileMode, hasUnsafePerm bool) {
+	if len(candidates) == 0 {
+		home, err := os.UserHomeDir()
+		if err == nil && home != "" {
+			candidates = append(candidates,
+				filepath.Join(home, ".env"),
+				filepath.Join(home, ".bashrc"),
+				filepath.Join(home, ".zshrc"),
+				filepath.Join(home, ".bash_profile"),
+				filepath.Join(home, ".profile"),
+				filepath.Join(home, ".config", "fish", "config.fish"),
+			)
+		}
+		cwd, err := os.Getwd()
+		if err == nil && cwd != "" {
+			candidates = append(candidates,
+				filepath.Join(cwd, ".env"),
+				filepath.Join(cwd, ".env.local"),
+			)
+		}
+	}
+
+	for _, p := range candidates {
+		info, err := os.Stat(p)
+		if err != nil || info.IsDir() {
+			continue
+		}
+		f, err := os.Open(p)
+		if err != nil {
+			continue
+		}
+		buf := make([]byte, 1024*1024)
+		n, _ := f.Read(buf)
+		_ = f.Close()
+		content := string(buf[:n])
+
+		if strings.Contains(content, "SYMVAULT_PASSPHRASE") || strings.Contains(content, "OPENPASS_PASSPHRASE") {
+			mode := info.Mode().Perm()
+			isUnsafe := (mode & 0077) != 0
+			return p, mode, isUnsafe
+		}
+	}
+	return "", 0, false
+}
+
 func checkEnvPassphrase(vaultDir string, _ Options) Result {
 	r := Result{ID: "security.env_passphrase", Name: "Environment passphrase"}
 	cfgPath := filepath.Join(vaultDir, "config.yaml")
 	cfg, err := configpkg.Load(cfgPath)
-	if err != nil {
+	if err != nil && !os.IsNotExist(err) {
 		r.Status = StatusWarn
 		r.Message = "cannot load config to determine env-passphrase guard status"
 		return r
+	}
+	if cfg == nil {
+		cfg = &configpkg.Config{}
 	}
 	var envVarName string
 	envPass := os.Getenv("SYMVAULT_PASSPHRASE")
@@ -248,24 +302,59 @@ func checkEnvPassphrase(vaultDir string, _ Options) Result {
 			envVarName = "OPENPASS_PASSPHRASE"
 		}
 	}
-	if envPass == "" {
+
+	sourceFile, sourcePerm, hasUnsafePerm := inspectPassphraseSourceFiles(nil)
+
+	if envPass == "" && !hasUnsafePerm {
 		r.Status = StatusOK
-		r.Message = "not set"
+		if cfg.Security != nil && cfg.Security.DisableEnvPassphrase {
+			r.Message = "not set (environment passphrase disabled in config)"
+		} else {
+			r.Message = "not set"
+		}
 		return r
 	}
-	if cfg.Security != nil && cfg.Security.DisableEnvPassphrase {
-		r.Status = StatusWarn
-		r.Message = envVarName + " is set despite security.disable_env_passphrase: true"
-		r.Hint = "unset the environment variable to eliminate the exposure"
-	} else if cfg.Security == nil || !cfg.Security.AllowEnvPassphrase {
-		r.Status = StatusWarn
-		r.Message = envVarName + " is set in environment but allow_env_passphrase is false (default-deny) — variable is ignored"
-		r.Hint = "enable security.allow_env_passphrase: true in config.yaml or set SYMVAULT_ALLOW_ENV_PASSPHRASE=1 if required for headless use, or unset the variable"
-	} else {
-		r.Status = StatusWarn
-		r.Message = envVarName + " is set and allowed — passphrase is present in process environment and may be readable by other processes or crash dumps"
-		r.Hint = "unset the environment variable or set security.disable_env_passphrase: true"
+
+	r.Status = StatusWarn
+
+	var msg string
+	if envVarName == "" {
+		envVarName = "passphrase environment variable"
 	}
+
+	if hasUnsafePerm {
+		msg = fmt.Sprintf("%s is referenced in source file %s with overly permissive permissions %04o (expected 0600)", envVarName, sourceFile, sourcePerm)
+	} else if envPass != "" {
+		switch {
+		case cfg.Security != nil && cfg.Security.DisableEnvPassphrase:
+			msg = fmt.Sprintf("%s is set despite security.disable_env_passphrase: true", envVarName)
+		case cfg.Security == nil || !cfg.Security.AllowEnvPassphrase:
+			msg = fmt.Sprintf("%s is set in environment but allow_env_passphrase is false (default-deny) — variable is ignored", envVarName)
+		default:
+			msg = fmt.Sprintf("%s is set and allowed — passphrase is present in process environment and readable by child processes/dumps", envVarName)
+		}
+	}
+	r.Message = msg
+
+	var hints []string
+	if hasUnsafePerm {
+		hints = append(hints, fmt.Sprintf("run `chmod 0600 %s` to restrict file permissions", sourceFile))
+	}
+
+	switch {
+	case runtime.GOOS == osDarwin:
+		if session.BiometricAvailable() {
+			hints = append(hints, "on macOS, Touch ID / Keychain is recommended over environment passphrase variables")
+		} else {
+			hints = append(hints, "on macOS, Keychain session storage is recommended over environment passphrase variables")
+		}
+	case os.Getenv("CI") != "" || os.Getenv("CONTINUOUS_INTEGRATION") != "":
+		hints = append(hints, "in CI/headless environments, use restricted permissions (0600) or short-lived token injection")
+	default:
+		hints = append(hints, fmt.Sprintf("unset %s and use `symvault unlock` with interactive prompt or OS keychain", envVarName))
+	}
+
+	r.Hint = strings.Join(hints, "; ")
 	return r
 }
 

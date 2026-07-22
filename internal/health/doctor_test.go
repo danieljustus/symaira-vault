@@ -1158,3 +1158,81 @@ func TestRunChecks_SearchIndexPersistence_NoFailureRecorded(t *testing.T) {
 		t.Errorf("expected ok for vault.search_index.persistence with no prior build, got %s: %s", r.Status, r.Message)
 	}
 }
+
+func TestRunChecks_EnvPassphrase_Absent(t *testing.T) {
+	t.Setenv("SYMVAULT_PASSPHRASE", "")
+	t.Setenv("OPENPASS_PASSPHRASE", "")
+	dir := t.TempDir()
+	results := health.RunChecks(dir, health.Options{Only: []string{"security.env_passphrase"}, NoNetwork: true})
+	if len(results) == 0 {
+		t.Fatal("expected security.env_passphrase result")
+	}
+	r := results[0]
+	if r.Status != health.StatusOK {
+		t.Errorf("expected StatusOK when env passphrase absent, got %s: %s", r.Status, r.Message)
+	}
+}
+
+func TestRunChecks_EnvPassphrase_Present(t *testing.T) {
+	secretValue := "SUPER_SECRET_TEST_PASSPHRASE_12345"
+	t.Setenv("SYMVAULT_PASSPHRASE", secretValue)
+	dir := t.TempDir()
+	results := health.RunChecks(dir, health.Options{Only: []string{"security.env_passphrase"}, NoNetwork: true})
+	if len(results) == 0 {
+		t.Fatal("expected security.env_passphrase result")
+	}
+	r := results[0]
+	if r.Status != health.StatusWarn {
+		t.Errorf("expected StatusWarn when env passphrase present, got %s: %s", r.Status, r.Message)
+	}
+	if strings.Contains(r.Message, secretValue) || strings.Contains(r.Hint, secretValue) {
+		t.Errorf("SECURITY RISK: doctor output exposed passphrase value!")
+	}
+	if !strings.Contains(r.Message, "SYMVAULT_PASSPHRASE") {
+		t.Errorf("expected message to reference variable name, got %q", r.Message)
+	}
+}
+
+func TestRunChecks_EnvPassphrase_UnsafeSourceFile(t *testing.T) {
+	t.Setenv("SYMVAULT_PASSPHRASE", "")
+	t.Setenv("OPENPASS_PASSPHRASE", "")
+
+	dir := t.TempDir()
+	envFile := filepath.Join(dir, ".env")
+	if err := os.WriteFile(envFile, []byte("SYMVAULT_PASSPHRASE=secret_in_file\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	foundPath, perm, hasUnsafePerm := health.InspectPassphraseSourceFilesForTest([]string{envFile})
+	if foundPath != envFile {
+		t.Errorf("expected foundPath %s, got %s", envFile, foundPath)
+	}
+	if perm != 0o644 {
+		t.Errorf("expected perm 0644, got %o", perm)
+	}
+	if !hasUnsafePerm {
+		t.Errorf("expected hasUnsafePerm=true for mode 0644")
+	}
+}
+
+func TestRunChecks_EnvPassphrase_SafeSourceFile(t *testing.T) {
+	t.Setenv("SYMVAULT_PASSPHRASE", "")
+	t.Setenv("OPENPASS_PASSPHRASE", "")
+
+	dir := t.TempDir()
+	envFile := filepath.Join(dir, ".env")
+	if err := os.WriteFile(envFile, []byte("SYMVAULT_PASSPHRASE=secret_in_file\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	foundPath, perm, hasUnsafePerm := health.InspectPassphraseSourceFilesForTest([]string{envFile})
+	if foundPath != envFile {
+		t.Errorf("expected foundPath %s, got %s", envFile, foundPath)
+	}
+	if perm != 0o600 {
+		t.Errorf("expected perm 0600, got %o", perm)
+	}
+	if hasUnsafePerm {
+		t.Errorf("expected hasUnsafePerm=false for mode 0600")
+	}
+}

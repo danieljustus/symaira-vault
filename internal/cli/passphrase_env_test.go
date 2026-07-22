@@ -286,4 +286,3 @@ func TestIsEnvPassphraseAllowed_DisableOverridesAllow(t *testing.T) {
 		t.Error("IsEnvPassphraseAllowed(cfg) = true when DisableEnvPassphrase: true, want false")
 	}
 }
-
