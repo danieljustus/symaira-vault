@@ -473,6 +473,9 @@ func mergeSecurityConfig(raw *SecurityConfig, sf map[string]bool) *SecurityConfi
 	if sf["disable_env_passphrase"] {
 		defaults.DisableEnvPassphrase = raw.DisableEnvPassphrase
 	}
+	if sf["allow_env_passphrase"] {
+		defaults.AllowEnvPassphrase = raw.AllowEnvPassphrase
+	}
 	return &defaults
 }
 

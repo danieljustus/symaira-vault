@@ -153,6 +153,7 @@ func TestUnlockVaultWithTTLDoesNotSaveTouchIDItemForUncachedEnvPassphrase(t *tes
 	}
 	// Prime the early-cached env passphrase (normally sniffed in main()
 	// before any child process can inherit it).
+	t.Setenv("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
 	cachedEnvPassphrase = append([]byte(nil), passphrase...)
 
 	v, _, err := UnlockVaultWithTTL(vaultDir, false, 0, false)

@@ -104,12 +104,14 @@ type LoggingConfig struct {
 // SecurityConfig holds security-related configuration.
 type SecurityConfig struct {
 	DisableEnvPassphrase bool `yaml:"disable_env_passphrase,omitempty"`
+	AllowEnvPassphrase   bool `yaml:"allow_env_passphrase,omitempty"`
 }
 
 // defaultSecurityConfig returns the default security configuration.
 func defaultSecurityConfig() SecurityConfig {
 	return SecurityConfig{
 		DisableEnvPassphrase: false,
+		AllowEnvPassphrase:   false,
 	}
 }
 
