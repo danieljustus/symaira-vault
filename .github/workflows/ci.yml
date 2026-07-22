@@ -364,6 +364,7 @@ jobs:
           BIN="./bin/symvault-linux-amd64"
           VAULT_DIR=$(mktemp -d)
           PASSPHRASE="test-passphrase-123"
+          export SYMVAULT_ALLOW_ENV_PASSPHRASE=1
           
           echo "Testing vault initialization..."
           SYMVAULT_PASSPHRASE="$PASSPHRASE" $BIN init "$VAULT_DIR"
