@@ -150,9 +150,10 @@ var sensitiveNameTokens = []string{
 // holds a secret value, based on common naming conventions (passphrase,
 // password, secret, token, API key, credential). This is independent of who
 // supplied the name: it applies even when a caller explicitly requests the
-// variable via RunOptions.Env or RunOptions.Passthrough, so an accidental or
-// malicious request to forward e.g. VAULT_PASSPHRASE to a child process is
-// rejected rather than honored.
+// variable via RunOptions.Passthrough, so an accidental or malicious request
+// to forward e.g. VAULT_PASSPHRASE from the parent process to a child is
+// rejected rather than honored. Callers must not apply it to RunOptions.Env:
+// that map contains intentional, already-resolved vault-secret injection.
 func IsSensitiveName(name string) bool {
 	upper := strings.ToUpper(name)
 	// Strip non-alphanumeric separators so "API_KEY" and "APIKEY" both match

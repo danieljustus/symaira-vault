@@ -262,6 +262,7 @@ func inspectPassphraseSourceFiles(candidates []string) (foundPath string, perm o
 		if err != nil || info.IsDir() {
 			continue
 		}
+		// #nosec G304 -- production candidates are fixed local shell/config paths; caller-supplied candidates exist only for unit tests.
 		f, err := os.Open(p)
 		if err != nil {
 			continue

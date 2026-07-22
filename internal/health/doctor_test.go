@@ -1194,6 +1194,9 @@ func TestRunChecks_EnvPassphrase_Present(t *testing.T) {
 }
 
 func TestRunChecks_EnvPassphrase_UnsafeSourceFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not preserve the requested Unix permission bits")
+	}
 	t.Setenv("SYMVAULT_PASSPHRASE", "")
 	t.Setenv("OPENPASS_PASSPHRASE", "")
 
@@ -1216,6 +1219,9 @@ func TestRunChecks_EnvPassphrase_UnsafeSourceFile(t *testing.T) {
 }
 
 func TestRunChecks_EnvPassphrase_SafeSourceFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not preserve the requested Unix permission bits")
+	}
 	t.Setenv("SYMVAULT_PASSPHRASE", "")
 	t.Setenv("OPENPASS_PASSPHRASE", "")
 
