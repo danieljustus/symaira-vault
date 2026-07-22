@@ -209,7 +209,7 @@ func materializeFiles(files map[string]string) (map[string]string, func(), error
 	var written []string
 	cleanup := func() {
 		for _, p := range written {
-			shredFile(p)
+			ShredFile(p)
 		}
 		_ = os.RemoveAll(dir)
 	}
@@ -229,11 +229,11 @@ func materializeFiles(files map[string]string) (map[string]string, func(), error
 	return env, cleanup, nil
 }
 
-// shredFile best-effort overwrites a file's content with zeros before
+// ShredFile best-effort overwrites a file's content with zeros before
 // removing it, so the plaintext does not linger in free disk blocks after
 // cleanup. Errors are intentionally swallowed — cleanup must never fail the
 // caller, and a failed overwrite still leaves the subsequent remove to try.
-func shredFile(path string) {
+func ShredFile(path string) {
 	if info, statErr := os.Stat(path); statErr == nil && info.Size() > 0 {
 		// #nosec G304 -- path is one of the paths this package just wrote in materializeFiles, reopened only to overwrite it with zeros before removal
 		if f, openErr := os.OpenFile(path, os.O_WRONLY, 0o600); openErr == nil {

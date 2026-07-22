@@ -164,6 +164,77 @@ See [`docs/hermes-safe-adoption.md`](hermes-safe-adoption.md) § "Separate
 runner profile after masking review" for the full runner-profile rules
 (narrow `allowedPaths`, tight `allowed_tools`, session/rate caps).
 
+## File Attachments: An ELSTER `.pfx` Walkthrough
+
+Some integrations need a secret to arrive on disk as a real file, not an
+environment variable — for example, ELSTER (the German tax authority's
+e-filing API) authenticates with a PKCS#12 certificate (`.pfx`) plus a PIN.
+Symaira Vault stores the certificate as a base64-encoded attachment field and
+materializes it back to an ephemeral, private file only for the lifetime of
+the command that needs it — the plaintext certificate never lives
+permanently unencrypted on disk.
+
+### 1. Store the certificate and PIN
+
+```bash
+# Store the PKCS#12 certificate as an attachment field, with sha256,
+# filename and size recorded as metadata. --shred best-effort wipes the
+# source file afterward once it is safely in the vault.
+symvault file add elster/cert --field cert_p12 --from ~/Downloads/elster.pfx --shred
+
+# Store the PIN as a regular field on the same entry
+symvault set elster/cert.pin --stdin-value
+```
+
+### 2. Consume it from an MCP agent
+
+An agent with `canRunCommands: true` invokes `run_command` with both `env`
+(for the PIN) and `files` (for the certificate) in one call:
+
+```json
+{
+  "tool": "run_command",
+  "arguments": {
+    "command": ["java", "-jar", "elstertool.jar", "--cert", "$SYMVAULT_FILE_CERT", "--pin-env", "ELSTER_PIN"],
+    "env": {"ELSTER_PIN": "elster/cert.pin"},
+    "files": {"CERT": {"ref": "elster/cert.cert_p12", "encoding": "base64"}}
+  }
+}
+```
+
+SymVault decodes `cert_p12` (base64) into a private 0600 file exposed to the
+child process as `$SYMVAULT_FILE_CERT`, and injects `ELSTER_PIN` into its
+environment — the agent never sees either value. Both are shredded and
+removed once the command exits, regardless of success, non-zero exit, or a
+timeout kill. See [`docs/mcp-api.md`](mcp-api.md) for the full `files`
+parameter reference.
+
+### 3. Consume it from the CLI directly
+
+For a human or script running outside an MCP agent, `symvault file use` is
+the CLI twin of the same mechanism — no manual `base64 -d` or temp-file
+bookkeeping required:
+
+```bash
+ELSTER_PIN=$(symvault get elster/cert.pin --print) \
+  symvault file use elster/cert -- java -jar elstertool.jar --cert "$SYMVAULT_FILE_CERT_P12"
+```
+
+`file use` auto-detects the field when the entry has exactly one recorded
+attachment (add `--field cert_p12` explicitly if it has more than one), and
+the materialized path is exposed as `$SYMVAULT_FILE_<NAME>` where `<NAME>`
+defaults to the uppercased field name (override with `--as`). To export the
+certificate to a real path instead of materializing it just-in-time (e.g. to
+hand it to a tool that cannot read an ephemeral path from an env var), use:
+
+```bash
+symvault file get elster/cert#cert_p12 --out ~/elster.pfx
+```
+
+`file get` re-checks the exported bytes against the sha256 recorded at
+`file add` time and warns on a mismatch, so silent corruption between add and
+export does not go unnoticed.
+
 ## OpenClaw and Other Local Agents
 
 For agents that support stdio MCP, use:
