@@ -325,11 +325,12 @@ func checkEnvPassphrase(vaultDir string, _ Options) Result {
 	if hasUnsafePerm {
 		msg = fmt.Sprintf("%s is referenced in source file %s with overly permissive permissions %04o (expected 0600)", envVarName, sourceFile, sourcePerm)
 	} else if envPass != "" {
-		if cfg.Security != nil && cfg.Security.DisableEnvPassphrase {
+		switch {
+		case cfg.Security != nil && cfg.Security.DisableEnvPassphrase:
 			msg = fmt.Sprintf("%s is set despite security.disable_env_passphrase: true", envVarName)
-		} else if cfg.Security == nil || !cfg.Security.AllowEnvPassphrase {
+		case cfg.Security == nil || !cfg.Security.AllowEnvPassphrase:
 			msg = fmt.Sprintf("%s is set in environment but allow_env_passphrase is false (default-deny) — variable is ignored", envVarName)
-		} else {
+		default:
 			msg = fmt.Sprintf("%s is set and allowed — passphrase is present in process environment and readable by child processes/dumps", envVarName)
 		}
 	}
@@ -340,15 +341,16 @@ func checkEnvPassphrase(vaultDir string, _ Options) Result {
 		hints = append(hints, fmt.Sprintf("run `chmod 0600 %s` to restrict file permissions", sourceFile))
 	}
 
-	if runtime.GOOS == osDarwin {
+	switch {
+	case runtime.GOOS == osDarwin:
 		if session.BiometricAvailable() {
 			hints = append(hints, "on macOS, Touch ID / Keychain is recommended over environment passphrase variables")
 		} else {
 			hints = append(hints, "on macOS, Keychain session storage is recommended over environment passphrase variables")
 		}
-	} else if os.Getenv("CI") != "" || os.Getenv("CONTINUOUS_INTEGRATION") != "" {
+	case os.Getenv("CI") != "" || os.Getenv("CONTINUOUS_INTEGRATION") != "":
 		hints = append(hints, "in CI/headless environments, use restricted permissions (0600) or short-lived token injection")
-	} else {
+	default:
 		hints = append(hints, fmt.Sprintf("unset %s and use `symvault unlock` with interactive prompt or OS keychain", envVarName))
 	}
 
