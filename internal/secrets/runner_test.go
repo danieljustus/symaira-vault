@@ -505,22 +505,29 @@ func TestRunCommand_RejectsSensitivePassthrough(t *testing.T) {
 	}
 }
 
-func TestRunCommand_RejectsSensitiveOptsEnv(t *testing.T) {
+// TestRunCommand_OptsEnvSensitiveNamesStillDelivered proves opts.Env is
+// never subject to the sensitive-name reject: it is caller-supplied,
+// already-resolved data (e.g. a vault secret execute_with_secret injects
+// under a name like AWS_SECRET_ACCESS_KEY), not an ambient parent-env
+// forward. Rejecting it by name would silently break that feature for any
+// secret whose generated env var name contains KEY/SECRET/TOKEN/PASSWORD —
+// which is the common case.
+func TestRunCommand_OptsEnvSensitiveNamesStillDelivered(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: relies on sh")
 	}
 	result, err := RunCommand(RunOptions{
 		Command: []string{"sh", "-c", "echo VAL=[$API_TOKEN]"},
-		Env:     map[string]string{"API_TOKEN": "should_never_reach_child"},
+		Env:     map[string]string{"API_TOKEN": "resolved_secret_value"},
 	})
 	if err != nil {
 		t.Fatalf("RunCommand() unexpected error: %v", err)
 	}
-	if strings.Contains(result.Stdout, "should_never_reach_child") {
-		t.Fatalf("sensitive opts.Env var leaked to child: %q", result.Stdout)
+	if !strings.Contains(result.Stdout, "VAL=[resolved_secret_value]") {
+		t.Fatalf("expected opts.Env value to reach child regardless of sensitive-looking name, got: %q", result.Stdout)
 	}
-	if !contains(result.RejectedEnvVars, "API_TOKEN") {
-		t.Errorf("RejectedEnvVars = %v, want API_TOKEN", result.RejectedEnvVars)
+	if len(result.RejectedEnvVars) != 0 {
+		t.Errorf("RejectedEnvVars = %v, want none (opts.Env is never rejected by name)", result.RejectedEnvVars)
 	}
 }
 
