@@ -33,7 +33,7 @@ func WarnEnvPassphrase() {
 		return
 	}
 	EnvPassphraseWarningEmitted = true
-	cliout.Warnf("SYMVAULT_PASSPHRASE or OPENPASS_PASSPHRASE is set — the passphrase is visible in /proc/PID/environ and may be exposed in process listings and crash dumps.")
+	cliout.Warnf("SYMVAULT_PASSPHRASE or OPENPASS_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.")
 }
 
 func WarnPipeRead(label string) {
@@ -44,7 +44,7 @@ func WarnPipeRead(label string) {
 		return
 	}
 	PipeWarningEmitted = true
-	cliout.Warnf("Reading %s from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer SYMVAULT_PASSPHRASE, OPENPASS_PASSPHRASE, or 'symvault auth set touchid'.", label)
+	cliout.Warnf("Reading %s from a non-TTY source — the producing process may expose it in 'ps' or audit logs. Prefer 'symvault unlock' or 'symvault auth set touchid'.", label)
 }
 
 func ReadHiddenInput(prompt string, reader *bufio.Reader) ([]byte, error) {

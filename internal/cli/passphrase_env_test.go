@@ -4,6 +4,8 @@ import (
 	"os"
 	"sync"
 	"testing"
+
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 )
 
 func TestHasCachedEnvPassphrase_Empty(t *testing.T) {
@@ -207,3 +209,81 @@ func TestSetCachedEnvPassphrase_EmptyBytes(t *testing.T) {
 		t.Error("HasCachedEnvPassphrase() = true after SetCachedEnvPassphrase([]), want false")
 	}
 }
+
+func TestClearCachedEnvPassphrase_Zeroizes(t *testing.T) {
+	buf := []byte("secret-to-zeroize")
+	cachedEnvPassphrase = buf
+	t.Cleanup(func() { cachedEnvPassphrase = nil })
+
+	ClearCachedEnvPassphrase()
+
+	if HasCachedEnvPassphrase() {
+		t.Error("HasCachedEnvPassphrase() = true after ClearCachedEnvPassphrase, want false")
+	}
+	for i, b := range buf {
+		if b != 0 {
+			t.Errorf("buf[%d] = %d after ClearCachedEnvPassphrase, want 0", i, b)
+		}
+	}
+}
+
+func TestSetCachedEnvPassphrase_ZeroizesOldBytes(t *testing.T) {
+	oldBuf := []byte("old-secret")
+	cachedEnvPassphrase = oldBuf
+	t.Cleanup(func() { cachedEnvPassphrase = nil })
+
+	SetCachedEnvPassphrase([]byte("new-secret"))
+
+	for i, b := range oldBuf {
+		if b != 0 {
+			t.Errorf("oldBuf[%d] = %d after replacement, want 0", i, b)
+		}
+	}
+}
+
+func TestIsEnvPassphraseAllowed_DefaultDeny(t *testing.T) {
+	t.Setenv("SYMVAULT_ALLOW_ENV_PASSPHRASE", "")
+	t.Setenv("OPENPASS_ALLOW_ENV_PASSPHRASE", "")
+
+	if IsEnvPassphraseAllowed(nil) {
+		t.Error("IsEnvPassphraseAllowed(nil) = true by default, want false (default-deny)")
+	}
+}
+
+func TestIsEnvPassphraseAllowed_ConfigOptIn(t *testing.T) {
+	t.Setenv("SYMVAULT_ALLOW_ENV_PASSPHRASE", "")
+	t.Setenv("OPENPASS_ALLOW_ENV_PASSPHRASE", "")
+
+	cfg := &configpkg.Config{
+		Security: &configpkg.SecurityConfig{
+			AllowEnvPassphrase: true,
+		},
+	}
+	if !IsEnvPassphraseAllowed(cfg) {
+		t.Error("IsEnvPassphraseAllowed(cfg) = false with AllowEnvPassphrase: true, want true")
+	}
+}
+
+func TestIsEnvPassphraseAllowed_EnvOptIn(t *testing.T) {
+	t.Setenv("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
+	t.Setenv("OPENPASS_ALLOW_ENV_PASSPHRASE", "")
+
+	if !IsEnvPassphraseAllowed(nil) {
+		t.Error("IsEnvPassphraseAllowed(nil) = false with SYMVAULT_ALLOW_ENV_PASSPHRASE=1, want true")
+	}
+}
+
+func TestIsEnvPassphraseAllowed_DisableOverridesAllow(t *testing.T) {
+	t.Setenv("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
+
+	cfg := &configpkg.Config{
+		Security: &configpkg.SecurityConfig{
+			AllowEnvPassphrase:   true,
+			DisableEnvPassphrase: true,
+		},
+	}
+	if IsEnvPassphraseAllowed(cfg) {
+		t.Error("IsEnvPassphraseAllowed(cfg) = true when DisableEnvPassphrase: true, want false")
+	}
+}
+

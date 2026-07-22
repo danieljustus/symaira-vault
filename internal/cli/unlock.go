@@ -112,6 +112,20 @@ func resolveConfig(vaultDir string, interactive bool) (*configpkg.Config, error)
 	}
 }
 
+// IsEnvPassphraseAllowed checks if environment passphrase unlocking is allowed.
+// Environment passphrase usage is default-deny and requires explicit opt-in
+// via security.allow_env_passphrase: true in config.yaml or SYMVAULT_ALLOW_ENV_PASSPHRASE=1.
+func IsEnvPassphraseAllowed(cfg *configpkg.Config) bool {
+	if cfg != nil && cfg.Security != nil && cfg.Security.DisableEnvPassphrase {
+		return false
+	}
+	if cfg != nil && cfg.Security != nil && cfg.Security.AllowEnvPassphrase {
+		return true
+	}
+	v := envutil.Getenv("SYMVAULT_ALLOW_ENV_PASSPHRASE", "OPENPASS_ALLOW_ENV_PASSPHRASE")
+	return v == "1" || v == "true" || v == "yes"
+}
+
 func resolveUnlockPassphrase(vaultDir string, interactive bool, cfg *configpkg.Config) ([]byte, bool, bool, error) {
 	passphrase, err := SessionLoadPassphrase(vaultDir)
 	passphraseFromEnv := false
@@ -125,9 +139,9 @@ func resolveUnlockPassphrase(vaultDir string, interactive bool, cfg *configpkg.C
 				passphraseFromBiometric = true
 			}
 		} else if cfg.EffectiveAuthMethod() == configpkg.AuthMethodTouchID && !interactive {
-			cliout.Warnf("Touch ID skipped in non-interactive mode; use 'symvault unlock' or set SYMVAULT_PASSPHRASE")
+			cliout.Warnf("Touch ID skipped in non-interactive mode; use 'symvault unlock' or enable security.allow_env_passphrase / SYMVAULT_ALLOW_ENV_PASSPHRASE")
 		}
-		if len(passphrase) == 0 && (cfg == nil || cfg.Security == nil || !cfg.Security.DisableEnvPassphrase) {
+		if len(passphrase) == 0 && IsEnvPassphraseAllowed(cfg) {
 			// Check the early-cached env passphrase first (sniffed in main()
 			// before any child process could inherit it).
 			if cached := ConsumeCachedEnvPassphrase(); len(cached) > 0 {
@@ -197,9 +211,9 @@ func WithVaultForScripting(fn func(*vaultpkg.Vault, *VaultService) error) error 
 func lockedMessageForCache() string {
 	status := SessionGetCacheStatus()
 	if !status.Persistent {
-		return "vault locked: this build cannot share 'symvault unlock' sessions across processes; set SYMVAULT_PASSPHRASE or OPENPASS_PASSPHRASE, or use a build with OS keyring support"
+		return "vault locked: this build cannot share 'symvault unlock' sessions across processes; use 'symvault unlock', enable Touch ID, or for headless/CI set security.allow_env_passphrase: true / SYMVAULT_ALLOW_ENV_PASSPHRASE=1"
 	}
-	return "vault locked: run 'symvault unlock' first, enable Touch ID with 'symvault auth set touchid', or set SYMVAULT_PASSPHRASE or OPENPASS_PASSPHRASE"
+	return "vault locked: run 'symvault unlock' first or enable Touch ID with 'symvault auth set touchid' (for headless/CI see security.allow_env_passphrase)"
 }
 
 func DefaultSessionTTL() time.Duration {

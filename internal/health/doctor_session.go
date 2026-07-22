@@ -257,10 +257,14 @@ func checkEnvPassphrase(vaultDir string, _ Options) Result {
 		r.Status = StatusWarn
 		r.Message = envVarName + " is set despite security.disable_env_passphrase: true"
 		r.Hint = "unset the environment variable to eliminate the exposure"
+	} else if cfg.Security == nil || !cfg.Security.AllowEnvPassphrase {
+		r.Status = StatusWarn
+		r.Message = envVarName + " is set in environment but allow_env_passphrase is false (default-deny) — variable is ignored"
+		r.Hint = "enable security.allow_env_passphrase: true in config.yaml or set SYMVAULT_ALLOW_ENV_PASSPHRASE=1 if required for headless use, or unset the variable"
 	} else {
 		r.Status = StatusWarn
-		r.Message = envVarName + " is set — passphrase is present in the process environment and may be readable by other processes or crash dumps"
-		r.Hint = "set security.disable_env_passphrase: true in config.yaml to disable env var passphrase, or unset the variable"
+		r.Message = envVarName + " is set and allowed — passphrase is present in process environment and may be readable by other processes or crash dumps"
+		r.Hint = "unset the environment variable or set security.disable_env_passphrase: true"
 	}
 	return r
 }
