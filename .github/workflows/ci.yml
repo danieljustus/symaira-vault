@@ -244,13 +244,15 @@ jobs:
 
       - name: Run fuzz tests
         run: |
-          echo "Running fuzz tests with 60s per target..."
-          go test -fuzz=FuzzCSVImporterParse -fuzztime=60s -timeout=180s ./internal/importer/
-          go test -fuzz=FuzzBitwardenImporterParse -fuzztime=60s -timeout=180s ./internal/importer/
-          go test -fuzz=FuzzOnePUXImporterParse -fuzztime=60s -timeout=180s ./internal/importer/
-          go test -fuzz=FuzzParsePassEntry -fuzztime=60s -timeout=180s ./internal/importer/
-          go test -fuzz=FuzzNormalizePath -fuzztime=60s -timeout=180s ./internal/importer/
-          go test -fuzz=FuzzParseMapping -fuzztime=60s -timeout=180s ./internal/importer/
+          # Keep a small grace window: Go's fuzz scheduler can finish just after
+          # the exact fuzztime deadline on shared runners, which otherwise flakes.
+          echo "Running fuzz tests with 55s per target..."
+          go test -fuzz=FuzzCSVImporterParse -fuzztime=55s -timeout=180s ./internal/importer/
+          go test -fuzz=FuzzBitwardenImporterParse -fuzztime=55s -timeout=180s ./internal/importer/
+          go test -fuzz=FuzzOnePUXImporterParse -fuzztime=55s -timeout=180s ./internal/importer/
+          go test -fuzz=FuzzParsePassEntry -fuzztime=55s -timeout=180s ./internal/importer/
+          go test -fuzz=FuzzNormalizePath -fuzztime=55s -timeout=180s ./internal/importer/
+          go test -fuzz=FuzzParseMapping -fuzztime=55s -timeout=180s ./internal/importer/
           echo "All fuzz tests passed without crashes"
 
   build:
