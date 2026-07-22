@@ -19,6 +19,12 @@ type RunResult struct {
 	Duration        time.Duration
 	StdoutTruncated bool
 	StderrTruncated bool
+	// RejectedEnvVars lists the names (never values) of environment
+	// variables that were requested via RunOptions.Env or
+	// RunOptions.Passthrough but withheld from the child process because
+	// their name looks sensitive (see IsSensitiveName). Sorted, nil when
+	// nothing was rejected.
+	RejectedEnvVars []string
 }
 
 // RunOptions configures a command execution.
@@ -110,17 +116,31 @@ func RunCommand(opts RunOptions) (*RunResult, error) {
 	// This prevents leaking sensitive process env vars (API keys, OPENPASS_*, AWS_*,
 	// etc.) to child processes. Only the DefaultWhitelist vars (plus any passthrough)
 	// are passed through. Later entries override earlier ones for the same key.
+	//
+	// Passthrough and Env are caller-requested additions on top of the
+	// whitelist, so a sensitive-looking name is rejected here even though the
+	// caller asked for it explicitly — fail closed rather than trust intent.
+	safePassthrough, rejectedPassthrough := RejectSensitiveNames(opts.Passthrough)
 	whitelist := DefaultWhitelist()
-	if len(opts.Passthrough) > 0 {
-		whitelist = MergeWhitelist(whitelist, opts.Passthrough)
+	if len(safePassthrough) > 0 {
+		whitelist = MergeWhitelist(whitelist, safePassthrough)
 	}
 	cmd.Env = FilterEnv(whitelist)
-	for k, v := range opts.Env {
-		cmd.Env = append(cmd.Env, k+"="+v)
+
+	envKeys := make([]string, 0, len(opts.Env))
+	for k := range opts.Env {
+		envKeys = append(envKeys, k)
+	}
+	safeEnvKeys, rejectedEnv := RejectSensitiveNames(envKeys)
+	for _, k := range safeEnvKeys {
+		cmd.Env = append(cmd.Env, k+"="+opts.Env[k])
 	}
 	for k, v := range fileEnv {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
+
+	rejected := MergeWhitelist(rejectedPassthrough, rejectedEnv)
+	sort.Strings(rejected)
 
 	const maxOutput = 100 * 1024
 	stdout := newBoundedBuffer(maxOutput)
@@ -139,6 +159,7 @@ func RunCommand(opts RunOptions) (*RunResult, error) {
 		Stderr:          string(stderr.data),
 		StdoutTruncated: stdout.truncated,
 		StderrTruncated: stderr.truncated,
+		RejectedEnvVars: rejected,
 	}
 
 	if runErr != nil {

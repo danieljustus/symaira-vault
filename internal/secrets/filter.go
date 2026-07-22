@@ -129,3 +129,75 @@ func RejectDenied(env map[string]string) []string {
 	sort.Strings(rejected)
 	return rejected
 }
+
+// sensitiveNameTokens are the naming conventions that mark an environment
+// variable as likely holding a secret value (passphrase, password, token,
+// API key, credential). Matched as a whole underscore-delimited token so
+// "PASSWORD" flags "DB_PASSWORD" and "PASSWORD" but not "PASSWORDLESS_MODE".
+var sensitiveNameTokens = []string{
+	"PASSPHRASE",
+	"PASSWORD",
+	"PASSWD",
+	"SECRET",
+	"TOKEN",
+	"APIKEY",
+	"CREDENTIAL",
+	"CREDENTIALS",
+	"PRIVATEKEY",
+}
+
+// IsSensitiveName reports whether an environment variable name looks like it
+// holds a secret value, based on common naming conventions (passphrase,
+// password, secret, token, API key, credential). This is independent of who
+// supplied the name: it applies even when a caller explicitly requests the
+// variable via RunOptions.Env or RunOptions.Passthrough, so an accidental or
+// malicious request to forward e.g. VAULT_PASSPHRASE to a child process is
+// rejected rather than honored.
+func IsSensitiveName(name string) bool {
+	upper := strings.ToUpper(name)
+	// Strip non-alphanumeric separators so "API_KEY" and "APIKEY" both match
+	// the "APIKEY" token, and "-" / "." separators are treated the same as "_".
+	normalized := strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+			return r
+		default:
+			return '_'
+		}
+	}, upper)
+	for _, sep := range []string{"-", "."} {
+		normalized = strings.ReplaceAll(normalized, sep, "_")
+	}
+	tokens := strings.Split(strings.Trim(normalized, "_"), "_")
+	// Also check tokens with adjacent underscore-free runs collapsed, so
+	// "API_KEY" (two tokens) matches the single "APIKEY" sensitive token.
+	joined := strings.ReplaceAll(strings.Trim(normalized, "_"), "_", "")
+	for _, sensitive := range sensitiveNameTokens {
+		if strings.Contains(joined, sensitive) {
+			return true
+		}
+		for _, t := range tokens {
+			if t == sensitive {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// RejectSensitiveNames splits names into safe (not sensitive-looking) and
+// rejected (sensitive-looking, sorted) based on IsSensitiveName. Unlike
+// RejectDenied (which targets interpreter/loader injection vectors like
+// LD_PRELOAD), this targets names that likely hold a secret value regardless
+// of injection risk.
+func RejectSensitiveNames(names []string) (safe []string, rejected []string) {
+	for _, n := range names {
+		if IsSensitiveName(n) {
+			rejected = append(rejected, n)
+			continue
+		}
+		safe = append(safe, n)
+	}
+	sort.Strings(rejected)
+	return safe, rejected
+}
