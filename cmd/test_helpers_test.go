@@ -69,12 +69,12 @@ func initVault(t *testing.T) (string, []byte) {
 
 func setPassEnv(t *testing.T, passphrase string) {
 	t.Helper()
-	_ = os.Setenv("SYMVAULT_PASSPHRASE", passphrase)
-	_ = os.Setenv("OPENPASS_PASSPHRASE", passphrase)
-	t.Cleanup(func() {
-		_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
-		_ = os.Unsetenv("OPENPASS_PASSPHRASE")
-	})
+	// Environment passphrase use is deliberately default-deny in production.
+	// Command tests use it as their non-interactive unlock fixture, so opt in
+	// explicitly rather than weakening the production default.
+	t.Setenv("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
+	t.Setenv("SYMVAULT_PASSPHRASE", passphrase)
+	t.Setenv("OPENPASS_PASSPHRASE", passphrase)
 }
 
 func fakeEditorWithContent(t *testing.T, content string) string {

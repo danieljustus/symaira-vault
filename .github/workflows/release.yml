@@ -339,7 +339,7 @@ jobs:
       - name: Smoke test - init vault
         run: |
           TMPDIR=$(mktemp -d)
-          SYMVAULT_PASSPHRASE="test-passphrase-123" SYMVAULT_VAULT="$TMPDIR/test-vault" symvault init
+          SYMVAULT_ALLOW_ENV_PASSPHRASE=1 SYMVAULT_PASSPHRASE="test-passphrase-123" SYMVAULT_VAULT="$TMPDIR/test-vault" symvault init
           rm -rf "$TMPDIR"
 
   smoke-test-deb:
@@ -376,7 +376,7 @@ jobs:
       - name: Smoke test - init vault
         run: |
           TMPDIR=$(mktemp -d)
-          SYMVAULT_PASSPHRASE="test-passphrase-123" SYMVAULT_VAULT="$TMPDIR/test-vault" symvault init
+          SYMVAULT_ALLOW_ENV_PASSPHRASE=1 SYMVAULT_PASSPHRASE="test-passphrase-123" SYMVAULT_VAULT="$TMPDIR/test-vault" symvault init
           rm -rf "$TMPDIR"
 
   smoke-test-macos:
@@ -413,7 +413,7 @@ jobs:
       - name: Smoke test - init vault
         run: |
           TMPDIR=$(mktemp -d)
-          SYMVAULT_PASSPHRASE="test-passphrase-123" SYMVAULT_VAULT="$TMPDIR/test-vault" symvault init
+          SYMVAULT_ALLOW_ENV_PASSPHRASE=1 SYMVAULT_PASSPHRASE="test-passphrase-123" SYMVAULT_VAULT="$TMPDIR/test-vault" symvault init
           rm -rf "$TMPDIR"
 
   smoke-test-windows:
@@ -474,8 +474,10 @@ jobs:
             exit 1
           }
           $env:SYMVAULT_PASSPHRASE = "test-passphrase-123"
+          $env:SYMVAULT_ALLOW_ENV_PASSPHRASE = "1"
           & $exe init --vault "$tmpdir"
           Remove-Item Env:SYMVAULT_PASSPHRASE
+          Remove-Item Env:SYMVAULT_ALLOW_ENV_PASSPHRASE
           Remove-Item -Path $tmpdir -Recurse -Force -ErrorAction SilentlyContinue
 
   smoke-test-homebrew:

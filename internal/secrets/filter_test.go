@@ -398,3 +398,59 @@ func TestPrepareCmd_NoSymvaultEnvLeak(t *testing.T) {
 		t.Error("PrepareCmd leaked SYMVAULT_TEST_SECRET to child process env")
 	}
 }
+
+func TestIsSensitiveName_KnownPatterns(t *testing.T) {
+	cases := []string{
+		"PASSPHRASE", "VAULT_PASSPHRASE", "OPENPASS_VAULT_PASSPHRASE",
+		"PASSWORD", "DB_PASSWORD", "PASSWD",
+		"SECRET", "AWS_SECRET_ACCESS_KEY", "APP_SECRET",
+		"TOKEN", "SYMVAULT_MCP_TOKEN", "AUTH_TOKEN",
+		"API_KEY", "APIKEY", "STRIPE_API_KEY",
+		"CREDENTIAL", "CREDENTIALS", "GOOGLE_CREDENTIALS",
+		"PRIVATE_KEY", "SSH_PRIVATE_KEY",
+	}
+	for _, name := range cases {
+		if !IsSensitiveName(name) {
+			t.Errorf("IsSensitiveName(%q) = false, want true", name)
+		}
+	}
+}
+
+func TestIsSensitiveName_BenignNames(t *testing.T) {
+	cases := []string{
+		"PATH", "HOME", "TERM", "LANG", "CUSTOM_VAR", "MY_API_BASE",
+		"GIT_SSH_COMMAND", "DISPLAY", "TMPDIR", "COLORTERM",
+	}
+	for _, name := range cases {
+		if IsSensitiveName(name) {
+			t.Errorf("IsSensitiveName(%q) = true, want false", name)
+		}
+	}
+}
+
+func TestRejectSensitiveNames_SplitsCorrectly(t *testing.T) {
+	safe, rejected := RejectSensitiveNames([]string{"CUSTOM_VAR", "VAULT_PASSPHRASE", "PATH", "API_KEY"})
+
+	if !contains(safe, "CUSTOM_VAR") || !contains(safe, "PATH") {
+		t.Errorf("RejectSensitiveNames safe = %v, want CUSTOM_VAR and PATH present", safe)
+	}
+	if contains(safe, "VAULT_PASSPHRASE") || contains(safe, "API_KEY") {
+		t.Errorf("RejectSensitiveNames safe = %v, should not contain sensitive names", safe)
+	}
+	expected := []string{"API_KEY", "VAULT_PASSPHRASE"}
+	if len(rejected) != len(expected) {
+		t.Fatalf("RejectSensitiveNames rejected = %v, want %v", rejected, expected)
+	}
+	for i, v := range expected {
+		if rejected[i] != v {
+			t.Errorf("rejected[%d] = %s, want %s", i, rejected[i], v)
+		}
+	}
+}
+
+func TestRejectSensitiveNames_Empty(t *testing.T) {
+	safe, rejected := RejectSensitiveNames(nil)
+	if len(safe) != 0 || len(rejected) != 0 {
+		t.Errorf("RejectSensitiveNames(nil) = (%v, %v), want ([], [])", safe, rejected)
+	}
+}

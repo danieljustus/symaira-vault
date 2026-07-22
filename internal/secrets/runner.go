@@ -19,6 +19,13 @@ type RunResult struct {
 	Duration        time.Duration
 	StdoutTruncated bool
 	StderrTruncated bool
+	// RejectedEnvVars lists the names (never values) of ambient parent-process
+	// environment variables that were requested via RunOptions.Passthrough but
+	// withheld from the child process because their name looks sensitive (see
+	// IsSensitiveName). Does not apply to RunOptions.Env, which is caller-
+	// supplied and already-resolved (see RunCommand). Sorted, nil when nothing
+	// was rejected.
+	RejectedEnvVars []string
 }
 
 // RunOptions configures a command execution.
@@ -110,17 +117,35 @@ func RunCommand(opts RunOptions) (*RunResult, error) {
 	// This prevents leaking sensitive process env vars (API keys, OPENPASS_*, AWS_*,
 	// etc.) to child processes. Only the DefaultWhitelist vars (plus any passthrough)
 	// are passed through. Later entries override earlier ones for the same key.
+	//
+	// Passthrough forwards an *ambient* parent-process variable to the child by
+	// name only — the caller never sees or chooses its value, so a
+	// sensitive-looking name (VAULT_PASSPHRASE, AWS_SECRET_ACCESS_KEY, ...) is
+	// rejected even though the caller asked for it explicitly: fail closed
+	// rather than trust that the name was requested with full knowledge of its
+	// value. opts.Env is different — it is the caller handing RunCommand an
+	// already-resolved value it explicitly chose to inject (e.g. a vault secret
+	// the agent asked to inject by name via execute_with_secret); rejecting
+	// those by name would break that feature outright, since resolved secret
+	// env var names routinely contain KEY/SECRET/TOKEN/PASSWORD. opts.Env still
+	// goes through RejectDenied (interpreter/loader injection names) at the
+	// call site.
+	safePassthrough, rejectedPassthrough := RejectSensitiveNames(opts.Passthrough)
 	whitelist := DefaultWhitelist()
-	if len(opts.Passthrough) > 0 {
-		whitelist = MergeWhitelist(whitelist, opts.Passthrough)
+	if len(safePassthrough) > 0 {
+		whitelist = MergeWhitelist(whitelist, safePassthrough)
 	}
 	cmd.Env = FilterEnv(whitelist)
+
 	for k, v := range opts.Env {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
 	for k, v := range fileEnv {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
+
+	rejected := append([]string(nil), rejectedPassthrough...)
+	sort.Strings(rejected)
 
 	const maxOutput = 100 * 1024
 	stdout := newBoundedBuffer(maxOutput)
@@ -139,6 +164,7 @@ func RunCommand(opts RunOptions) (*RunResult, error) {
 		Stderr:          string(stderr.data),
 		StdoutTruncated: stdout.truncated,
 		StderrTruncated: stderr.truncated,
+		RejectedEnvVars: rejected,
 	}
 
 	if runErr != nil {

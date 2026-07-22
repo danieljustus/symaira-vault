@@ -480,3 +480,78 @@ func TestMaterializeFiles_BinaryContentPreserved(t *testing.T) {
 		t.Fatalf("content mismatch: got %d bytes, want %d bytes", len(data), len(content))
 	}
 }
+
+func TestRunCommand_RejectsSensitivePassthrough(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: relies on sh")
+	}
+	t.Setenv("MY_APP_PASSPHRASE", "should_never_reach_child")
+
+	result, err := RunCommand(RunOptions{
+		Command:     []string{"sh", "-c", "echo VAL=[$MY_APP_PASSPHRASE]"},
+		Passthrough: []string{"MY_APP_PASSPHRASE"},
+	})
+	if err != nil {
+		t.Fatalf("RunCommand() unexpected error: %v", err)
+	}
+	if strings.Contains(result.Stdout, "should_never_reach_child") {
+		t.Fatalf("sensitive passthrough var leaked to child: %q", result.Stdout)
+	}
+	if !strings.Contains(result.Stdout, "VAL=[]") {
+		t.Fatalf("expected empty var in child, got: %q", result.Stdout)
+	}
+	if !contains(result.RejectedEnvVars, "MY_APP_PASSPHRASE") {
+		t.Errorf("RejectedEnvVars = %v, want MY_APP_PASSPHRASE", result.RejectedEnvVars)
+	}
+}
+
+// TestRunCommand_OptsEnvSensitiveNamesStillDelivered proves opts.Env is
+// never subject to the sensitive-name reject: it is caller-supplied,
+// already-resolved data (e.g. a vault secret execute_with_secret injects
+// under a name like AWS_SECRET_ACCESS_KEY), not an ambient parent-env
+// forward. Rejecting it by name would silently break that feature for any
+// secret whose generated env var name contains KEY/SECRET/TOKEN/PASSWORD —
+// which is the common case.
+func TestRunCommand_OptsEnvSensitiveNamesStillDelivered(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: relies on sh")
+	}
+	result, err := RunCommand(RunOptions{
+		Command: []string{"sh", "-c", "echo VAL=[$API_TOKEN]"},
+		Env:     map[string]string{"API_TOKEN": "resolved_secret_value"},
+	})
+	if err != nil {
+		t.Fatalf("RunCommand() unexpected error: %v", err)
+	}
+	if !strings.Contains(result.Stdout, "VAL=[resolved_secret_value]") {
+		t.Fatalf("expected opts.Env value to reach child regardless of sensitive-looking name, got: %q", result.Stdout)
+	}
+	if len(result.RejectedEnvVars) != 0 {
+		t.Errorf("RejectedEnvVars = %v, want none (opts.Env is never rejected by name)", result.RejectedEnvVars)
+	}
+}
+
+func TestRunCommand_NonSensitiveEnvAndPassthroughStillWork(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: relies on sh")
+	}
+	t.Setenv("MY_CUSTOM_FLAG", "on")
+
+	result, err := RunCommand(RunOptions{
+		Command:     []string{"sh", "-c", "echo A=[$MY_CUSTOM_FLAG] B=[$OTHER_VAR]"},
+		Passthrough: []string{"MY_CUSTOM_FLAG"},
+		Env:         map[string]string{"OTHER_VAR": "plain_value"},
+	})
+	if err != nil {
+		t.Fatalf("RunCommand() unexpected error: %v", err)
+	}
+	if !strings.Contains(result.Stdout, "A=[on]") {
+		t.Errorf("expected MY_CUSTOM_FLAG to pass through, got: %q", result.Stdout)
+	}
+	if !strings.Contains(result.Stdout, "B=[plain_value]") {
+		t.Errorf("expected OTHER_VAR to pass through, got: %q", result.Stdout)
+	}
+	if len(result.RejectedEnvVars) != 0 {
+		t.Errorf("RejectedEnvVars = %v, want none", result.RejectedEnvVars)
+	}
+}

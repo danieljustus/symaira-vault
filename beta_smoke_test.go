@@ -33,6 +33,9 @@ func TestBetaSmokeFlow(t *testing.T) {
 	initCmd.Dir = repoRoot(t)
 	initCmd.Env = append(os.Environ(),
 		"GOWORK=off",
+		// The smoke flow intentionally runs non-interactive subprocesses with a
+		// synthetic passphrase. Production stays default-deny without this opt-in.
+		"SYMVAULT_ALLOW_ENV_PASSPHRASE=1",
 		"SYMVAULT_PASSPHRASE="+passphrase,
 	)
 	if output, err := initCmd.CombinedOutput(); err != nil {
@@ -46,6 +49,7 @@ func TestBetaSmokeFlow(t *testing.T) {
 		cmd.Dir = repoRoot(t)
 		cmd.Env = append(os.Environ(),
 			"GOWORK=off",
+			"SYMVAULT_ALLOW_ENV_PASSPHRASE=1",
 			"SYMVAULT_PASSPHRASE="+passphrase,
 		)
 		output, err := cmd.Output()

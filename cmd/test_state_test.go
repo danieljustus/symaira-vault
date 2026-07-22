@@ -27,6 +27,9 @@ import (
 
 func TestMain(m *testing.M) {
 	_ = os.Unsetenv("OPENPASS_MCP_TOKEN")
+	// Command fixtures use synthetic passphrases non-interactively. This is
+	// test-process only; production remains default-deny.
+	_ = os.Setenv("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
 	restoreScryptWorkFactor := vaultcrypto.SetTestScryptWorkFactor(12)
 	if runtime.GOOS == "windows" {
 		return // skip cmd tests on Windows: LockFileEx access violation in AcquireWriteLock
