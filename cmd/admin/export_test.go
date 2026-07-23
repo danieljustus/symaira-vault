@@ -66,6 +66,7 @@ func TestExport_ConfirmAccept_WithEntries(t *testing.T) {
 	origVault := cli.Vault
 	cli.Vault = vaultDir
 	t.Cleanup(func() { cli.Vault = origVault })
+	t.Setenv("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
 	t.Setenv("SYMVAULT_PASSPHRASE", passphrase)
 
 	v, err := cli.UnlockVault(vaultDir, true)
@@ -107,6 +108,7 @@ func TestExport_YesFlag_SkipsPrompt(t *testing.T) {
 	origVault := cli.Vault
 	cli.Vault = vaultDir
 	t.Cleanup(func() { cli.Vault = origVault })
+	t.Setenv("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
 	t.Setenv("SYMVAULT_PASSPHRASE", passphrase)
 
 	v, err := cli.UnlockVault(vaultDir, true)
@@ -162,6 +164,7 @@ func setupTestVault(t *testing.T, searchWorkers int) *cli.VaultService {
 	origVault := cli.Vault
 	cli.Vault = vaultDir
 	t.Cleanup(func() { cli.Vault = origVault })
+	t.Setenv("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
 	t.Setenv("SYMVAULT_PASSPHRASE", passphrase)
 
 	v, err := cli.UnlockVault(vaultDir, true)

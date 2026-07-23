@@ -100,6 +100,7 @@ func TestImportCommandAutoDetectCSV(t *testing.T) {
 	origVault := cli.Vault
 	cli.Vault = vaultDir
 	t.Cleanup(func() { cli.Vault = origVault })
+	t.Setenv("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
 	t.Setenv("SYMVAULT_PASSPHRASE", passphrase)
 
 	// Reset global flags
@@ -135,6 +136,7 @@ func TestImportCommandExplicitFormatOverride(t *testing.T) {
 	origVault := cli.Vault
 	cli.Vault = vaultDir
 	t.Cleanup(func() { cli.Vault = origVault })
+	t.Setenv("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
 	t.Setenv("SYMVAULT_PASSPHRASE", passphrase)
 
 	// Reset global flags
