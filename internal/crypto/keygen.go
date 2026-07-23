@@ -19,8 +19,21 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/fsutil"
 )
 
+// ScryptBenchmarkTarget is the KDF derivation duration DefaultScryptWorkFactor
+// was chosen to reach, and the same duration BenchmarkScryptWorkFactor uses to
+// compute a machine-specific recommendation (see `symvault doctor`). Anchoring
+// both to one documented constant means "doctor recommends a higher work
+// factor than the default" is a statement about *this machine* being faster
+// than the baseline the default targets — not evidence the default is unsafe.
+const ScryptBenchmarkTarget = 250 * time.Millisecond
+
 // DefaultScryptWorkFactor is the default scrypt work factor used when no explicit
 // value is provided. Higher values increase KDF cost exponentially (N = 1<<workFactor).
+// 18 is the work factor that reached ScryptBenchmarkTarget on typical hardware
+// at the time this default was set; faster hardware will derive scrypt keys in
+// under that target at work factor 18, which is what `symvault doctor` flags.
+// This only affects vaults still on the legacy scrypt KDF (format v1) — new
+// vaults default to argon2id and never read this value.
 const DefaultScryptWorkFactor = 18
 
 // testScryptWorkFactor is an atomic override for tests. When non-zero, it is used

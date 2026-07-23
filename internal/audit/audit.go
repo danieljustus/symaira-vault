@@ -166,6 +166,17 @@ type VerifyResult struct {
 	Legacy      int
 	Tampered    int
 	FirstBadIdx int
+	// Unverifiable is true when the log could not be verified with the
+	// primary key or any archived key, and the failure pattern (no entry
+	// verified from the start — see VerifyLogAgainstKeys) is consistent with
+	// a missing or lost key generation rather than tampering. Valid is still
+	// false in this case, but Tampered is forced to 0: a missing key must
+	// never be reported the same way as a proven-altered entry.
+	Unverifiable bool
+	// VerifiedKeyGeneration, when non-empty, names the archived key
+	// generation (see ArchivedKey.Label) that verified this log, as opposed
+	// to the primary key passed to VerifyLogAgainstKeys.
+	VerifiedKeyGeneration string
 }
 
 type Logger struct {
@@ -891,4 +902,46 @@ func (l *Logger) Verify() (*VerifyResult, error) {
 		return nil, errors.New("logger is nil")
 	}
 	return VerifyLog(l.path, l.hmacKey)
+}
+
+// VerifyLogAgainstKeys verifies logFilePath against primaryKey first (see
+// VerifyLog). A single wrong key invalidates the whole HMAC hash chain from
+// the very first entry onward — the exact "N/N entries invalid, first entry
+// affected" signature reported in #685 for logs written entirely under an
+// older, since-rotated key. When primaryKey shows that signature (no entry
+// verified at all — result.Verified == 0), each candidate in archivedKeys is
+// tried in turn; the first that fully verifies the file is returned, tagged
+// with its generation label so callers can report "verified under an older
+// key" instead of a plain OK.
+//
+// If primaryKey does verify a prefix of the log before failing
+// (result.Verified > 0), that prefix proves primaryKey is the correct key
+// for this file, so the remaining failure is treated as a genuine tamper:
+// archived keys are not consulted and the Tampered verdict is returned as
+// VerifyLog produced it.
+//
+// If nothing verifies the log and primaryKey never proved itself correct on
+// a known-good prefix, the result is marked Unverifiable (with Tampered
+// forced to 0) instead of left as Tampered — a missing older key generation
+// must never be reported the same way as proven tampering.
+func VerifyLogAgainstKeys(logFilePath string, primaryKey []byte, archivedKeys []ArchivedKey) (*VerifyResult, error) {
+	result, err := VerifyLog(logFilePath, primaryKey)
+	if err != nil || result.Valid || result.Verified > 0 {
+		return result, err
+	}
+
+	for _, ak := range archivedKeys {
+		candidate, cErr := VerifyLog(logFilePath, ak.Key)
+		if cErr != nil || candidate == nil {
+			continue
+		}
+		if candidate.Valid {
+			candidate.VerifiedKeyGeneration = ak.Label
+			return candidate, nil
+		}
+	}
+
+	result.Unverifiable = true
+	result.Tampered = 0
+	return result, nil
 }

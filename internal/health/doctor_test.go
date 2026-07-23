@@ -833,6 +833,25 @@ func TestRunChecks_KDFModern_DesyncArgon2idFileV1Config(t *testing.T) {
 	}
 }
 
+// TestRunChecks_ScryptBenchmark_SkippedForArgon2idVault is the #683
+// regression test: a vault whose identity.age already uses argon2id must
+// never see a scrypt work-factor warning, since ScryptWorkFactor is not
+// read for argon2id vaults at all.
+func TestRunChecks_ScryptBenchmark_SkippedForArgon2idVault(t *testing.T) {
+	dir := writeKDFModernityVaultFixture(t, "argon2id", 2)
+	results := health.RunChecks(dir, health.Options{Only: []string{"crypto.scrypt.benchmark"}, NoNetwork: true})
+	if len(results) == 0 {
+		t.Fatal("expected crypto.scrypt.benchmark result")
+	}
+	r := results[0]
+	if r.Status != health.StatusOK {
+		t.Errorf("expected OK for argon2id vault, got %s: %s", r.Status, r.Message)
+	}
+	if !strings.Contains(r.Message, "argon2id") {
+		t.Errorf("message should mention argon2id, got %q", r.Message)
+	}
+}
+
 func TestRunChecks_Quick_SkipsSlow(t *testing.T) {
 	dir := t.TempDir()
 	results := health.RunChecks(dir, health.Options{Quick: true, NoNetwork: true})

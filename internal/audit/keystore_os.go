@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -260,6 +261,30 @@ func (k *osKeystore) RotateKey() ([]byte, error) {
 	}
 
 	return newKey, nil
+}
+
+// LoadArchivedKeys reads every hex-encoded rotation-archive file RotateKey
+// has written to the audit directory. A file that can't be read or decoded,
+// or whose decoded length is wrong, is skipped rather than returned as an
+// error.
+func (k *osKeystore) LoadArchivedKeys() ([]ArchivedKey, error) {
+	paths, err := archivedKeyPaths(k.auditDir)
+	if err != nil {
+		return nil, err
+	}
+	var keys []ArchivedKey
+	for _, p := range paths {
+		data, readErr := os.ReadFile(p) //#nosec G304 -- fixed glob pattern under the trusted audit dir
+		if readErr != nil {
+			continue
+		}
+		key, decodeErr := hex.DecodeString(strings.TrimSpace(string(data)))
+		if decodeErr != nil || len(key) != hmacKeySize {
+			continue
+		}
+		keys = append(keys, ArchivedKey{Label: archivedKeyLabel(p), Key: key})
+	}
+	return keys, nil
 }
 
 // NewKeystore creates a Keystore backed by the OS keyring.
