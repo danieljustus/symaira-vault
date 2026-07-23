@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"filippo.io/age"
+	"gopkg.in/yaml.v3"
 
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
@@ -157,30 +158,85 @@ func checkRecipientsRecovery(vaultDir string, _ Options) Result {
 
 func checkScryptBenchmark(vaultDir string, _ Options) Result {
 	r := Result{ID: "crypto.scrypt.benchmark", Name: "Scrypt KDF performance"}
-	wf, elapsed, err := vaultcrypto.BenchmarkScryptWorkFactor(250 * time.Millisecond)
+
+	// Only applies to vaults whose identity.age is still on the legacy
+	// scrypt KDF. Argon2id vaults (the default for every newly created
+	// vault, and after `migrate kdf`) never read ScryptWorkFactor, so
+	// benchmarking scrypt against them produced a permanent false-positive
+	// warning on fast hardware (#683) even though the value is unused.
+	if raw, readErr := os.ReadFile(filepath.Join(vaultDir, "identity.age")); readErr == nil { //#nosec G304 -- fixed filename under vaultDir, the trusted vault path from the caller
+		if vaultcrypto.DetectEncryptedIdentityFormat(raw) == vaultcrypto.Argon2idStanzaType {
+			r.Status = StatusOK
+			r.Message = "using argon2id KDF — scrypt work factor does not apply"
+			return r
+		}
+	}
+
+	wf, elapsed, err := vaultcrypto.BenchmarkScryptWorkFactor(vaultcrypto.ScryptBenchmarkTarget)
 	if err != nil {
 		r.Status = StatusWarn
 		r.Message = "scrypt benchmark failed: " + err.Error()
 		return r
 	}
 
+	configPath := filepath.Join(vaultDir, "config.yaml")
 	current := vaultcrypto.DefaultScryptWorkFactor
-	if cfg, err := configpkg.Load(filepath.Join(vaultDir, "config.yaml")); err == nil && cfg.Vault != nil && cfg.Vault.ScryptWorkFactor > 0 {
+	if cfg, err := configpkg.Load(configPath); err == nil && cfg.Vault != nil && cfg.Vault.ScryptWorkFactor > 0 {
 		current = cfg.Vault.ScryptWorkFactor
 	}
+	explicit := scryptWorkFactorIsExplicit(configPath)
+
+	return scryptBenchmarkResult(current, wf, elapsed, explicit)
+}
+
+// scryptBenchmarkResult is the pure comparison behind checkScryptBenchmark,
+// split out so slow-machine / fast-machine / boundary cases can be unit
+// tested deterministically without depending on real scrypt timing (#683's
+// "Tests decken langsame und schnelle Maschinen sowie Grenzwerte ab").
+// current is the effective configured work factor (explicit or default); wf
+// is what BenchmarkScryptWorkFactor recommends for this machine; explicit
+// reports whether current came from a config.yaml key the user set.
+func scryptBenchmarkResult(current, wf int, elapsed time.Duration, explicit bool) Result {
+	r := Result{ID: "crypto.scrypt.benchmark", Name: "Scrypt KDF performance"}
 	switch {
 	case wf == current:
 		r.Status = StatusOK
 		r.Message = fmt.Sprintf("config work factor %d matches recommendation (%d, %.0fms)", current, wf, elapsed.Seconds()*1000)
 	case wf > current:
 		r.Status = StatusWarn
-		r.Message = fmt.Sprintf("config work factor %d is below recommended %d (%.0fms)", current, wf, elapsed.Seconds()*1000)
-		r.Hint = fmt.Sprintf("set vault.scrypt_work_factor: %d in config.yaml for better security", wf)
+		if explicit {
+			r.Message = fmt.Sprintf("explicitly configured work factor %d is below this machine's recommended %d (%.0fms to reach the %s target)", current, wf, elapsed.Seconds()*1000, vaultcrypto.ScryptBenchmarkTarget)
+		} else {
+			r.Message = fmt.Sprintf("default work factor %d is below this machine's recommended %d (%.0fms to reach the %s target)", current, wf, elapsed.Seconds()*1000, vaultcrypto.ScryptBenchmarkTarget)
+		}
+		r.Hint = fmt.Sprintf("set vault.scrypt_work_factor: %d in config.yaml, then run `symvault migrate kdf` — changing the config value alone does not re-encrypt the existing identity.age", wf)
 	default:
 		r.Status = StatusOK
 		r.Message = fmt.Sprintf("config work factor %d exceeds recommendation (benchmark: %d, %.0fms)", current, wf, elapsed.Seconds()*1000)
 	}
 	return r
+}
+
+// scryptWorkFactorIsExplicit reports whether config.yaml has a
+// vault.scrypt_work_factor key present, as opposed to the value coming from
+// the compiled-in default because the key is absent. This lets the doctor
+// message distinguish an implicit legacy default from a value the user
+// deliberately chose (#683's "doctor unterscheidet zwischen implizitem
+// Legacy-Default und bewusst konfiguriertem Work Factor").
+func scryptWorkFactorIsExplicit(configPath string) bool {
+	data, err := os.ReadFile(configPath) //#nosec G304 -- fixed filename under vaultDir, the trusted vault path from the caller
+	if err != nil {
+		return false
+	}
+	var doc struct {
+		Vault struct {
+			ScryptWorkFactor *int `yaml:"scrypt_work_factor"`
+		} `yaml:"vault"`
+	}
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return false
+	}
+	return doc.Vault.ScryptWorkFactor != nil
 }
 
 func checkKDFModern(vaultDir string, _ Options) Result {
