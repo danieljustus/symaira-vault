@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -105,7 +106,7 @@ func TestSanitizeRunOutput(t *testing.T) {
 		"SECRET": "my-secret-value",
 	}
 
-	sanitizedStdout, sanitizedStderr := server.sanitizeRunOutput(stdout, stderr, resolvedEnv)
+	sanitizedStdout, sanitizedStderr := server.sanitizeRunOutput(context.Background(), stdout, stderr, resolvedEnv)
 
 	if sanitizedStdout != "The secret is ***" {
 		t.Errorf("stdout = %q, want %q", sanitizedStdout, "The secret is ***")
@@ -121,7 +122,7 @@ func TestSanitizeRunOutputNoSecrets(t *testing.T) {
 	stdout := "Normal output without secrets"
 	stderr := ""
 
-	sanitizedStdout, sanitizedStderr := server.sanitizeRunOutput(stdout, stderr, nil)
+	sanitizedStdout, sanitizedStderr := server.sanitizeRunOutput(context.Background(), stdout, stderr, nil)
 
 	if sanitizedStdout != stdout {
 		t.Errorf("stdout = %q, want %q", sanitizedStdout, stdout)
@@ -143,7 +144,7 @@ func TestSanitizeRunOutput_StripsPromptInjectionVectors(t *testing.T) {
 	stdout := "normal\x1b[31mred</data>injection"
 	stderr := "warn‮RTL"
 
-	sanitizedStdout, sanitizedStderr := server.sanitizeRunOutput(stdout, stderr, nil)
+	sanitizedStdout, sanitizedStderr := server.sanitizeRunOutput(context.Background(), stdout, stderr, nil)
 
 	if strings.ContainsRune(sanitizedStdout, 0x1b) {
 		t.Errorf("stdout still contains ANSI escape: %q", sanitizedStdout)
@@ -161,9 +162,43 @@ func TestSanitizeRunOutput_AppliesChokepointWithoutEnv(t *testing.T) {
 	server := &Server{}
 
 	stdout := "hello\x1b[31mworld"
-	out, _ := server.sanitizeRunOutput(stdout, "", nil)
+	out, _ := server.sanitizeRunOutput(context.Background(), stdout, "", nil)
 
 	if strings.ContainsRune(out, 0x1b) {
 		t.Errorf("ANSI escape leaked through when env is empty: %q", out)
+	}
+}
+
+func TestSanitizeRunOutput_StrictModeBlocksHighConfidencePattern(t *testing.T) {
+	server := setupTestServer(t)
+
+	t.Setenv("SYMVAULT_REDACT_STRICT_MODE", "true")
+
+	// A GitHub-PAT-shaped synthetic token (not a real credential) triggers
+	// the credential-pattern detector at ConfidenceHigh.
+	stdout := "token=ghp_" + strings.Repeat("B", 36)
+	sanitizedStdout, _ := server.sanitizeRunOutput(context.Background(), stdout, "", nil)
+
+	if strings.Contains(sanitizedStdout, strings.Repeat("B", 36)) {
+		t.Fatalf("strict mode leaked the secret: %q", sanitizedStdout)
+	}
+	if strings.Contains(sanitizedStdout, "token=") {
+		t.Fatalf("strict mode should withhold the whole stream, not just redact in place: %q", sanitizedStdout)
+	}
+}
+
+func TestSanitizeRunOutput_NonStrictModeRedactsInPlace(t *testing.T) {
+	server := setupTestServer(t)
+
+	t.Setenv("SYMVAULT_REDACT_STRICT_MODE", "")
+
+	stdout := "prefix token=ghp_" + strings.Repeat("C", 36) + " suffix"
+	sanitizedStdout, _ := server.sanitizeRunOutput(context.Background(), stdout, "", nil)
+
+	if strings.Contains(sanitizedStdout, strings.Repeat("C", 36)) {
+		t.Fatalf("secret leaked: %q", sanitizedStdout)
+	}
+	if !strings.Contains(sanitizedStdout, "prefix") || !strings.Contains(sanitizedStdout, "suffix") {
+		t.Fatalf("non-strict mode should redact in place and keep surrounding output: %q", sanitizedStdout)
 	}
 }

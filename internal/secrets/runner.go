@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"sort"
 	"time"
+
+	"github.com/danieljustus/symaira-vault/internal/redact"
 )
 
 // RunResult contains the result of a command execution.
@@ -167,6 +169,20 @@ func RunCommand(opts RunOptions) (*RunResult, error) {
 		RejectedEnvVars: rejected,
 	}
 
+	// Redact explicit credential-shaped patterns out of the captured
+	// output before it can leave the process boundary — this is the
+	// output-scanning redaction core (#695), pattern-detection layer.
+	// RunCommand is a general-purpose executor (opts.Env is arbitrary
+	// caller-supplied values, not necessarily secret material — see the
+	// TestRunCommand_EnvOverlay-style callers), so it does not have
+	// enough context to safely exact-match opts.Env as "known secrets";
+	// that exact-value redaction happens one layer up, in
+	// internal/mcp/server (sanitizeKnownSecretValues /
+	// sanitizeRunOutput), where the caller knows which resolved values
+	// are actual vault secrets. This pattern-only pass is defense in
+	// depth that composes with, not replaces, that layer.
+	redactResult(result)
+
 	if runErr != nil {
 		var exitErr *exec.ExitError
 		if errors.As(runErr, &exitErr) {
@@ -181,6 +197,24 @@ func RunCommand(opts RunOptions) (*RunResult, error) {
 	}
 
 	return result, nil
+}
+
+// redactResult scans result.Stdout and result.Stderr for explicit
+// credential-shaped patterns (see internal/redact), replacing any match
+// with the stable redact.Marker in place. It fails closed: if scanning
+// itself errors, the affected field is replaced with a fixed "withheld"
+// marker rather than left unredacted.
+func redactResult(result *RunResult) {
+	scanner := redact.NewScanner(redact.NewPatternDetector())
+
+	// Result.Text is always safe to use regardless of the returned error —
+	// on a detector failure it is a fixed "withheld" marker, never the raw
+	// text (fail-closed).
+	stdoutRes, _ := scanner.Scan(result.Stdout, redact.ScanOptions{})
+	result.Stdout = stdoutRes.Text
+
+	stderrRes, _ := scanner.Scan(result.Stderr, redact.ScanOptions{})
+	result.Stderr = stderrRes.Text
 }
 
 // isSafeFileName reports whether name is safe to use both as an environment

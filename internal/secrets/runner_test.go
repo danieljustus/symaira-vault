@@ -555,3 +555,15 @@ func TestRunCommand_NonSensitiveEnvAndPassthroughStillWork(t *testing.T) {
 		t.Errorf("RejectedEnvVars = %v, want none", result.RejectedEnvVars)
 	}
 }
+
+func TestRunCommand_RedactsCredentialShapedPatternFromOutput(t *testing.T) {
+	result, err := RunCommand(RunOptions{
+		Command: []string{"sh", "-c", "echo token=ghp_" + strings.Repeat("A", 36)},
+	})
+	if err != nil {
+		t.Fatalf("RunCommand() unexpected error: %v", err)
+	}
+	if strings.Contains(result.Stdout, strings.Repeat("A", 36)) {
+		t.Fatalf("pattern-shaped secret leaked into Stdout: %q", result.Stdout)
+	}
+}

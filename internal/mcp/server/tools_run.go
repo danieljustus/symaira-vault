@@ -130,7 +130,7 @@ func (s *Server) handleRunCommand(ctx context.Context, req mcp.CallToolRequest) 
 	if err != nil {
 		s.logAudit(ctx, "run_command", auditPath, false)
 		if result != nil {
-			sanitizedStdout, sanitizedStderr := s.sanitizeRunOutput(result.Stdout, result.Stderr, knownSecrets)
+			sanitizedStdout, sanitizedStderr := s.sanitizeRunOutput(ctx, result.Stdout, result.Stderr, knownSecrets)
 			sanitizedErr := s.sanitizeKnownSecretValues(err.Error(), knownSecrets)
 			return mcp.NewToolResultError(fmt.Sprintf("%s\nExit code: %d\nStdout: %s\nStderr: %s",
 				sanitizedErr, result.ExitCode, EmbedAsData("command_output", sanitizedStdout), EmbedAsData("command_output", sanitizedStderr))), nil
@@ -140,7 +140,7 @@ func (s *Server) handleRunCommand(ctx context.Context, req mcp.CallToolRequest) 
 
 	s.logAudit(ctx, "run_command", auditPath, true)
 
-	sanitizedStdout, sanitizedStderr := s.sanitizeRunOutput(result.Stdout, result.Stderr, knownSecrets)
+	sanitizedStdout, sanitizedStderr := s.sanitizeRunOutput(ctx, result.Stdout, result.Stderr, knownSecrets)
 
 	resultJSON, err := json.Marshal(map[string]any{
 		"exit_code":   result.ExitCode,
