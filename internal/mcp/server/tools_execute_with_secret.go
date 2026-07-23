@@ -176,7 +176,7 @@ func (s *Server) handleExecuteWithSecret(ctx context.Context, req mcp.CallToolRe
 
 	if runErr != nil {
 		if result != nil {
-			sanitizedStdout, sanitizedStderr := s.sanitizeRunOutput(result.Stdout, result.Stderr, secretEnv)
+			sanitizedStdout, sanitizedStderr := s.sanitizeRunOutput(ctx, result.Stdout, result.Stderr, secretEnv)
 			sanitizedErr := s.sanitizeKnownSecretValues(runErr.Error(), secretEnv)
 			return mcp.NewToolResultError(fmt.Sprintf("%s\nExit code: %d\nStdout: %s\nStderr: %s",
 				sanitizedErr, result.ExitCode, EmbedAsData("command_output", sanitizedStdout), EmbedAsData("command_output", sanitizedStderr))), nil
@@ -184,7 +184,7 @@ func (s *Server) handleExecuteWithSecret(ctx context.Context, req mcp.CallToolRe
 		return mcp.NewToolResultError(s.sanitizeKnownSecretValues(runErr.Error(), secretEnv)), nil
 	}
 
-	sanitizedStdout, sanitizedStderr := s.sanitizeRunOutput(result.Stdout, result.Stderr, secretEnv)
+	sanitizedStdout, sanitizedStderr := s.sanitizeRunOutput(ctx, result.Stdout, result.Stderr, secretEnv)
 	resultJSON, err := json.Marshal(map[string]any{
 		"exit_code":   result.ExitCode,
 		"stdout":      EmbedAsData("command_output", sanitizedStdout),

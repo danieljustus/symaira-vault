@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -183,7 +184,7 @@ func TestE2E_PromptInjection_SubprocessOutput(t *testing.T) {
 
 	for _, p := range promptInjectionCorpus() {
 		t.Run(p.name, func(t *testing.T) {
-			stdout, stderr := srv.sanitizeRunOutput("prefix "+p.value+" suffix",
+			stdout, stderr := srv.sanitizeRunOutput(context.Background(), "prefix "+p.value+" suffix",
 				p.value, nil)
 			// Build the same JSON envelope tools_run.go would.
 			envelope, _ := json.Marshal(map[string]any{
