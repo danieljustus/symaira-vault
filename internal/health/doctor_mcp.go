@@ -83,7 +83,7 @@ func checkAuditLog(vaultDir string, _ Options) Result {
 		return r
 	}
 
-	var issues []string
+	var tamperedIssues []string
 	var totalSize int64
 	var unverifiable int
 	for _, logPath := range matches {
@@ -93,30 +93,40 @@ func checkAuditLog(vaultDir string, _ Options) Result {
 		}
 		result, verErr := audit.VerifyLogAgainstKeys(logPath, keys, currentKid)
 		if verErr != nil {
-			issues = append(issues, fmt.Sprintf("%s: verify error: %v", filepath.Base(logPath), verErr))
+			tamperedIssues = append(tamperedIssues, fmt.Sprintf("%s: verify error: %v", filepath.Base(logPath), verErr))
 			continue
 		}
 		if result == nil {
 			continue
 		}
 		if !result.Valid {
-			issues = append(issues, fmt.Sprintf("%s: integrity check failed", filepath.Base(logPath)))
+			tamperedIssues = append(tamperedIssues, fmt.Sprintf("%s: integrity check failed (%d/%d entries)", filepath.Base(logPath), result.Tampered, result.Total))
 		}
 		unverifiable += result.Unverifiable
 	}
 
 	auditCfg := audit.GetConfig()
+	var sizeIssue string
 	if totalSize >= auditCfg.MaxFileSize {
-		issues = append(issues, fmt.Sprintf("total audit size %.1f MB at limit", float64(totalSize)/1024/1024))
+		sizeIssue = fmt.Sprintf("total audit size %.1f MB at limit", float64(totalSize)/1024/1024)
+	}
+
+	var issues []string
+	issues = append(issues, tamperedIssues...)
+	if sizeIssue != "" {
+		issues = append(issues, sizeIssue)
 	}
 
 	switch {
 	case len(issues) > 0:
 		r.Status = StatusWarn
 		r.Message = strings.Join(issues, "; ")
+		if len(tamperedIssues) > 0 {
+			r.Hint = "investigate the affected file(s) for tampering; entries listed as unverifiable are a separate, lower-severity finding"
+		}
 	case unverifiable > 0:
 		r.Status = StatusWarn
-		r.Message = fmt.Sprintf("%d log file(s), total %.1f MB, %d entries unverifiable (signing key generation unavailable)",
+		r.Message = fmt.Sprintf("%d log file(s), total %.1f MB, %d entries cannot verify (signing key generation unavailable)",
 			len(matches), float64(totalSize)/1024/1024, unverifiable)
 		r.Hint = "an archived HMAC key may be missing; this does not indicate tampering"
 	default:

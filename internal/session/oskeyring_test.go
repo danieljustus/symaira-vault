@@ -8,6 +8,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/zalando/go-keyring"
 )
 
 func TestFallback_KeyringOperations(t *testing.T) {
@@ -133,6 +135,114 @@ func (f *flakyKeyring) Delete(key string) error {
 	}
 	service, account := splitKey(key)
 	return f.inner.Delete(service, account)
+}
+
+// TestNewPlatformKeyring_NeverTouchesRealKeyringUnderTest guards against the
+// class of bug in #682: multiple test binaries / parallel agents hitting the
+// real macOS Keychain and triggering a native "keychain not found for
+// wrap-key" GUI dialog. Under `go test`, isTestOrCI() must be true and the
+// platform keyring must start with its in-memory fallback already active, so
+// no test ever reaches the real OS keychain.
+func TestNewPlatformKeyring_NeverTouchesRealKeyringUnderTest(t *testing.T) {
+	if !isTestOrCI() {
+		t.Fatal("isTestOrCI() = false while running under go test")
+	}
+
+	kb := newPlatformKeyring()
+	fb, ok := kb.(*fallbackKeyring)
+	if !ok {
+		t.Fatalf("newPlatformKeyring() returned %T, want *fallbackKeyring", kb)
+	}
+	if !fb.IsFallbackActive() {
+		t.Fatal("expected in-memory fallback to be active under go test, so the real OS keychain is never touched")
+	}
+
+	for _, account := range []string{wrapKeyAccount, identityAccount} {
+		key := keyFor("symvault:/tmp/vault-platform-test", account)
+		want := "value-" + account
+		if err := fb.Set(key, want); err != nil {
+			t.Fatalf("Set(%s) error = %v", account, err)
+		}
+		got, err := fb.Get(key)
+		if err != nil {
+			t.Fatalf("Get(%s) error = %v", account, err)
+		}
+		if got != want {
+			t.Fatalf("Get(%s) = %q, want %q", account, got, want)
+		}
+	}
+
+	// sessionAccount stores a structured storedSession payload, not a plain
+	// string — round-trip it through the same helper the rest of this file
+	// uses for that account.
+	sessionKey := keyFor("symvault:/tmp/vault-platform-test", sessionAccount)
+	sessionPayload := string(mustMarshalSession(t, []byte("fallback-secret"), time.Hour))
+	if err := fb.Set(sessionKey, sessionPayload); err != nil {
+		t.Fatalf("Set(%s) error = %v", sessionAccount, err)
+	}
+	if _, err := fb.Get(sessionKey); err != nil {
+		t.Fatalf("Get(%s) error = %v", sessionAccount, err)
+	}
+}
+
+// TestOSKeyring_NotFound_WrapKeySessionIdentity is the regression test the
+// #682 acceptance criteria asks for: errSecItemNotFound (translated by
+// zalando/go-keyring as keyring.ErrNotFound) must surface as the stable
+// ErrKeyringNotFound domain error for each of the three accounts symvault
+// stores, never as a raw/opaque error and never by blocking.
+func TestOSKeyring_NotFound_WrapKeySessionIdentity(t *testing.T) {
+	origGet := rawKeyringGet
+	defer func() { rawKeyringGet = origGet }()
+	rawKeyringGet = func(service, account string) (string, error) {
+		return "", keyring.ErrNotFound
+	}
+
+	o := &osKeyring{}
+	for _, account := range []string{wrapKeyAccount, sessionAccount, identityAccount} {
+		key := keyFor("symvault:/tmp/vault-notfound-test", account)
+		if _, err := o.Get(key); !errors.Is(err, ErrKeyringNotFound) {
+			t.Fatalf("Get(%s) error = %v, want ErrKeyringNotFound", account, err)
+		}
+	}
+}
+
+// TestOSKeyring_Set_TimesOutInsteadOfBlockingOnGUIDialog reproduces the
+// blocking Set() call from #682: when the underlying OS keyring call hangs
+// (e.g. waiting on a native "no keychain found" dialog with no TTY to
+// dismiss it), osKeyring must return ErrKeyringUnavailable within
+// keyringTimeout instead of hanging indefinitely.
+func TestOSKeyring_Set_TimesOutInsteadOfBlockingOnGUIDialog(t *testing.T) {
+	origSet := rawKeyringSet
+	origTimeout := keyringTimeout
+	keyringTimeout = 20 * time.Millisecond
+	block := make(chan struct{})
+	started := make(chan struct{})
+	rawKeyringSet = func(service, account, value string) error {
+		close(started) // signals the read of rawKeyringSet already happened
+		<-block        // simulates a real keychain call blocked on a GUI prompt
+		return nil
+	}
+
+	o := &osKeyring{}
+	start := time.Now()
+	err := o.Set(keyFor("symvault:/tmp/vault-timeout-test", wrapKeyAccount), "v")
+	elapsed := time.Since(start)
+
+	// setWithTimeout's goroutine outlives the timed-out call. Wait for it to
+	// have actually started (and thus finished reading the package-level
+	// rawKeyringSet var) before restoring it below — otherwise restoring
+	// concurrently with that read is itself a data race.
+	<-started
+	close(block)
+	rawKeyringSet = origSet
+	keyringTimeout = origTimeout
+
+	if !errors.Is(err, ErrKeyringUnavailable) {
+		t.Fatalf("Set() error = %v, want ErrKeyringUnavailable", err)
+	}
+	if elapsed > time.Second {
+		t.Fatalf("Set() took %v, want it to return promptly after keyringTimeout", elapsed)
+	}
 }
 
 func mustMarshalSession(t *testing.T, passphrase []byte, ttl time.Duration) []byte {
