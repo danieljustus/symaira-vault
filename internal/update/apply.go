@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/danieljustus/symaira-corekit/updatecheck/extract"
+
 	"github.com/danieljustus/symaira-vault/internal/update/installmethod"
 )
 
@@ -245,9 +247,9 @@ func extractBinaryFromArchive(archiveData []byte) ([]byte, error) {
 
 	var extractedPath string
 	if runtime.GOOS == windowsOS {
-		extractedPath, err = ExtractZip(archiveData, tmpDir, binName)
+		extractedPath, err = extract.ExtractZip(archiveData, tmpDir, binName)
 	} else {
-		extractedPath, err = ExtractTarGz(archiveData, tmpDir, binName)
+		extractedPath, err = extract.ExtractTarGz(archiveData, tmpDir, binName)
 	}
 	if err != nil {
 		return nil, err

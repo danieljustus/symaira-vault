@@ -161,11 +161,11 @@ type LogEntry struct {
 
 // VerifyResult reports the outcome of audit log integrity verification.
 type VerifyResult struct {
-	Valid       bool
-	Total       int
-	Verified    int
-	Legacy      int
-	Tampered    int
+	Valid    bool
+	Total    int
+	Verified int
+	Legacy   int
+	Tampered int
 	// Unverifiable counts entries whose signing key generation is not
 	// among the keys the verifier was given (e.g. an archived key that has
 	// been lost). Unlike Tampered, this is not evidence of manipulation —
