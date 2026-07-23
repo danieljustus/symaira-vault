@@ -53,7 +53,7 @@ func TestKeystoreRotateKey(t *testing.T) {
 		t.Fatalf("LoadOrCreateHMACKey() error = %v", err)
 	}
 
-	newKey, err := ks.RotateKey()
+	newKey, archivePath, err := ks.RotateKey()
 	if err != nil {
 		t.Fatalf("RotateKey() error = %v", err)
 	}
@@ -73,10 +73,32 @@ func TestKeystoreRotateKey(t *testing.T) {
 		t.Fatal("loaded key does not match rotated key")
 	}
 
-	archivePath := RotateKeyArchivePath(dir)
+	if archivePath != RotateKeyArchivePath(dir, key) {
+		t.Fatalf("archivePath = %s, want %s", archivePath, RotateKeyArchivePath(dir, key))
+	}
 	if _, err := os.Stat(archivePath); os.IsNotExist(err) {
 		t.Skipf("archive file not created at %s (expected on file-based keystore)", archivePath)
 	}
+
+	archived, err := ks.LoadArchivedKeys()
+	if err != nil {
+		t.Fatalf("LoadArchivedKeys() error = %v", err)
+	}
+	oldKeyLoaded, ok := archived[KeyFingerprint(key)]
+	if !ok {
+		t.Fatalf("LoadArchivedKeys() missing old key fingerprint %s, got %v", KeyFingerprint(key), keysOf(archived))
+	}
+	if hex.EncodeToString(oldKeyLoaded) != hex.EncodeToString(key) {
+		t.Fatal("archived key does not match original key")
+	}
+}
+
+func keysOf(m map[string][]byte) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 func TestKeystoreIdempotentLoadOrCreate(t *testing.T) {

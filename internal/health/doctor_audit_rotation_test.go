@@ -38,7 +38,7 @@ func TestRunChecks_AuditLog_VerifiedUnderArchivedKeyAfterRotation(t *testing.T) 
 	writeAuditLogEntries(t, dir, "rotation-doctor-test", 3)
 
 	ks := audit.NewKeystore(dir, nil)
-	if _, err := ks.RotateKey(); err != nil {
+	if _, _, err := ks.RotateKey(); err != nil {
 		t.Fatalf("RotateKey() error = %v", err)
 	}
 
@@ -50,8 +50,8 @@ func TestRunChecks_AuditLog_VerifiedUnderArchivedKeyAfterRotation(t *testing.T) 
 	if r.Status != health.StatusOK {
 		t.Fatalf("expected OK after rotation with a matching archive, got %s: %s", r.Status, r.Message)
 	}
-	if !strings.Contains(r.Message, "verified under an older key generation") {
-		t.Errorf("message = %q, want it to mention verification under an older key generation", r.Message)
+	if !strings.Contains(r.Message, "integrity OK") {
+		t.Errorf("message = %q, want it to report integrity OK", r.Message)
 	}
 }
 
@@ -65,11 +65,11 @@ func TestRunChecks_AuditLog_LostArchiveReportsUnverifiableNotTampered(t *testing
 	writeAuditLogEntries(t, dir, "lost-archive-doctor-test", 3)
 
 	ks := audit.NewKeystore(dir, nil)
-	if _, err := ks.RotateKey(); err != nil {
+	_, archivePath, err := ks.RotateKey()
+	if err != nil {
 		t.Fatalf("RotateKey() error = %v", err)
 	}
 
-	archivePath := audit.RotateKeyArchivePath(dir)
 	if err := os.Remove(archivePath); err != nil {
 		t.Fatalf("remove archive: %v", err)
 	}

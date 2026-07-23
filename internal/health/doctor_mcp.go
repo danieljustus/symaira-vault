@@ -71,28 +71,27 @@ func checkAuditLog(vaultDir string, _ Options) Result {
 		return r
 	}
 
-	// HMAC key is shared across all audit logs in the vault directory.
+	// HMAC keys (current + archived generations) are shared across all
+	// audit logs in the vault directory. Archived keys let the verifier
+	// correctly check logs written under a since-rotated key instead of
+	// misreporting them as tampered.
 	ks := audit.NewKeystore(vaultDir, nil)
-	key, keyErr := ks.LoadHMACKey()
+	keys, currentKid, keyErr := audit.LoadVerificationKeys(ks)
 	if keyErr != nil {
 		r.Status = StatusWarn
 		r.Message = fmt.Sprintf("cannot read hmac key: %v", keyErr)
 		return r
 	}
-	// Best-effort: a glob/read failure here just means no fallback
-	// candidates are available, not that verification itself failed.
-	archivedKeys, _ := ks.LoadArchivedKeys()
 
 	var tamperedIssues []string
-	var unverifiableFiles []string
-	var verifiedOlderGen int
 	var totalSize int64
+	var unverifiable int
 	for _, logPath := range matches {
 		info, statErr := os.Stat(logPath)
 		if statErr == nil {
 			totalSize += info.Size()
 		}
-		result, verErr := audit.VerifyLogAgainstKeys(logPath, key, archivedKeys)
+		result, verErr := audit.VerifyLogAgainstKeys(logPath, keys, currentKid)
 		if verErr != nil {
 			tamperedIssues = append(tamperedIssues, fmt.Sprintf("%s: verify error: %v", filepath.Base(logPath), verErr))
 			continue
@@ -100,19 +99,10 @@ func checkAuditLog(vaultDir string, _ Options) Result {
 		if result == nil {
 			continue
 		}
-		switch {
-		case result.Valid && result.VerifiedKeyGeneration != "":
-			verifiedOlderGen++
-		case result.Unverifiable:
-			// No current or archived key matches this log from the start —
-			// consistent with a lost/missing older key generation (a
-			// keychain reset, or a rotation with no matching archive), not
-			// with tampering. See #685: this must never be reported as
-			// "integrity check failed" alongside genuine tamper cases.
-			unverifiableFiles = append(unverifiableFiles, filepath.Base(logPath))
-		case !result.Valid:
+		if !result.Valid {
 			tamperedIssues = append(tamperedIssues, fmt.Sprintf("%s: integrity check failed (%d/%d entries)", filepath.Base(logPath), result.Tampered, result.Total))
 		}
+		unverifiable += result.Unverifiable
 	}
 
 	auditCfg := audit.GetConfig()
@@ -123,26 +113,25 @@ func checkAuditLog(vaultDir string, _ Options) Result {
 
 	var issues []string
 	issues = append(issues, tamperedIssues...)
-	if len(unverifiableFiles) > 0 {
-		issues = append(issues, fmt.Sprintf("%s: cannot verify — no current or archived key matches (likely predates a keychain reset or a rotation with no matching archive; not evidence of tampering)", strings.Join(unverifiableFiles, ", ")))
-	}
 	if sizeIssue != "" {
 		issues = append(issues, sizeIssue)
 	}
 
-	if len(issues) > 0 {
+	switch {
+	case len(issues) > 0:
 		r.Status = StatusWarn
 		r.Message = strings.Join(issues, "; ")
 		if len(tamperedIssues) > 0 {
-			r.Hint = "investigate the affected file(s) for tampering; files listed as unverifiable are a separate, lower-severity finding"
+			r.Hint = "investigate the affected file(s) for tampering; entries listed as unverifiable are a separate, lower-severity finding"
 		}
-	} else {
-		msg := fmt.Sprintf("%d log file(s), total %.1f MB, integrity OK", len(matches), float64(totalSize)/1024/1024)
-		if verifiedOlderGen > 0 {
-			msg += fmt.Sprintf(" (%d verified under an older key generation)", verifiedOlderGen)
-		}
+	case unverifiable > 0:
+		r.Status = StatusWarn
+		r.Message = fmt.Sprintf("%d log file(s), total %.1f MB, %d entries cannot verify (signing key generation unavailable)",
+			len(matches), float64(totalSize)/1024/1024, unverifiable)
+		r.Hint = "an archived HMAC key may be missing; this does not indicate tampering"
+	default:
 		r.Status = StatusOK
-		r.Message = msg
+		r.Message = fmt.Sprintf("%d log file(s), total %.1f MB, integrity OK", len(matches), float64(totalSize)/1024/1024)
 	}
 	return r
 }
