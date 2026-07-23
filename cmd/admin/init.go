@@ -83,6 +83,13 @@ var initCmd = &cobra.Command{
 
 		cfg := config.Default()
 		cfg.VaultDir = vaultDir
+		// A non-nil Vault section is required for InitWithPassphrase to take
+		// the argon2id path (see internal/vault/vault.go); without it, new
+		// vaults would silently fall back to legacy scrypt.
+		cfg.Vault = &config.VaultConfig{
+			SearchIndex:     true,
+			AutoHealZeroKey: true,
+		}
 		if authErr := cfg.SetAuthMethod(authMethod); authErr != nil {
 			return authErr
 		}
