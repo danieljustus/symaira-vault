@@ -91,7 +91,14 @@ func (s *Server) sanitizeKnownSecretValues(text string, resolvedEnv map[string]s
 // name, channel, confidence, redaction count, and correlationID only;
 // never the matched value or any excerpt of it.
 func (s *Server) scanOutputPatterns(ctx context.Context, channel, correlationID, text string) string {
-	scanner := redact.NewScanner(redact.NewPatternDetector())
+	// Detector order matters for Scanner.Scan's audit/strict-mode
+	// bookkeeping only in that later detectors see earlier ones' already-
+	// redacted text; ConfidenceHigh patterns run first, followed by the
+	// conservative ConfidenceLow entropy heuristic (#697) as the last
+	// resort for secret-shaped strings the explicit patterns miss. Strict
+	// mode (#696) only ever blocks on a ConfidenceHigh finding, so an
+	// entropy-only match is always redacted in place, never blocked.
+	scanner := redact.NewScanner(redact.NewPatternDetector(), redact.NewEntropyDetector())
 	scanner.Channel = channel
 	scanner.Audit = func(e redact.AuditEvent) {
 		s.logAudit(ctx, redactAuditAction, redactAuditPath(e), true)
