@@ -5,49 +5,9 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"strings"
 	"testing"
 )
-
-func TestCosignSignatureFileName(t *testing.T) {
-	tests := []struct {
-		version  string
-		expected string
-	}{
-		{"0.5.0", "symvault_0.5.0_checksums.txt.sig"},
-		{"v1.2.0", "symvault_1.2.0_checksums.txt.sig"},
-		{"v", "symvault__checksums.txt.sig"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.expected, func(t *testing.T) {
-			got := cosignSignatureFileName(tt.version)
-			if got != tt.expected {
-				t.Fatalf("cosignSignatureFileName(%q) = %q, want %q",
-					tt.version, got, tt.expected)
-			}
-		})
-	}
-}
-
-func TestCosignCertificateFileName(t *testing.T) {
-	tests := []struct {
-		version  string
-		expected string
-	}{
-		{"0.5.0", "symvault_0.5.0_checksums.txt.pem"},
-		{"v1.2.0", "symvault_1.2.0_checksums.txt.pem"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.expected, func(t *testing.T) {
-			got := cosignCertificateFileName(tt.version)
-			if got != tt.expected {
-				t.Fatalf("cosignCertificateFileName(%q) = %q, want %q",
-					tt.version, got, tt.expected)
-			}
-		})
-	}
-}
 
 func TestFetchCosignSignature_Success(t *testing.T) {
 	expectedBody := []byte("fake-cosign-signature")
@@ -222,118 +182,6 @@ func TestVerifyCosignSignature_CosignNotFound(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "cosign CLI not found") {
 		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestVerifyCosignSignature_InvalidArgs(t *testing.T) {
-	if _, err := exec.LookPath("cosign"); err == nil {
-		t.Skip("cosign is installed — this test is for the binary-not-found path")
-	}
-
-	origPath := os.Getenv("PATH")
-	t.Cleanup(func() { os.Setenv("PATH", origPath) })
-	os.Setenv("PATH", "")
-
-	err := VerifyCosignSignature(
-		[]byte("random-content"),
-		[]byte("random-sig"),
-		[]byte("random-cert"),
-	)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	if !strings.Contains(err.Error(), "install cosign") {
-		t.Fatalf("error should instruct user to install cosign: %v", err)
-	}
-}
-
-func TestVerifyCosignSignature_ExecFailure(t *testing.T) {
-	if _, err := exec.LookPath("cosign"); err != nil {
-		t.Skip("cosign not on PATH — exec failure test requires cosign to pass LookPath")
-	}
-
-	origExec := execCommand
-	t.Cleanup(func() { execCommand = origExec })
-
-	execCommand = func(name string, arg ...string) *exec.Cmd {
-		if name == "cosign" {
-			return exec.Command("false")
-		}
-		return exec.Command(name, arg...)
-	}
-
-	err := VerifyCosignSignature(
-		[]byte("content"),
-		[]byte("sig"),
-		[]byte("cert"),
-	)
-	if err == nil {
-		t.Fatal("expected error from cosign exec failure")
-	}
-	if !strings.Contains(err.Error(), "cosign verify-blob failed") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestVerifyCosignSignature_CorrectArgs(t *testing.T) {
-	if _, err := exec.LookPath("cosign"); err != nil {
-		t.Skip("cosign not on PATH — argv assertion test requires cosign to pass LookPath")
-	}
-
-	origExec := execCommand
-	t.Cleanup(func() { execCommand = origExec })
-
-	var capturedName string
-	var capturedArgs []string
-	execCommand = func(name string, arg ...string) *exec.Cmd {
-		capturedName = name
-		capturedArgs = arg
-		return exec.Command("true")
-	}
-
-	err := VerifyCosignSignature(
-		[]byte("content"),
-		[]byte("sig"),
-		[]byte("cert"),
-	)
-	if err != nil {
-		t.Fatalf("VerifyCosignSignature() error = %v", err)
-	}
-
-	if capturedName != "cosign" {
-		t.Fatalf("expected cosign command, got %q", capturedName)
-	}
-
-	argsStr := strings.Join(capturedArgs, " ")
-
-	identityFlagIdx := -1
-	for i, arg := range capturedArgs {
-		if arg == "--certificate-identity-regexp" {
-			identityFlagIdx = i
-			break
-		}
-	}
-	if identityFlagIdx == -1 || identityFlagIdx+1 >= len(capturedArgs) {
-		t.Fatalf("expected --certificate-identity-regexp flag in args: %s", argsStr)
-	}
-	identityValue := capturedArgs[identityFlagIdx+1]
-	if identityValue != CosignIdentityRegexp {
-		t.Fatalf("--certificate-identity-regexp = %q, want %q", identityValue, CosignIdentityRegexp)
-	}
-
-	issuerFlagIdx := -1
-	for i, arg := range capturedArgs {
-		if arg == "--certificate-oidc-issuer" {
-			issuerFlagIdx = i
-			break
-		}
-	}
-	if issuerFlagIdx == -1 || issuerFlagIdx+1 >= len(capturedArgs) {
-		t.Fatalf("expected --certificate-oidc-issuer flag in args: %s", argsStr)
-	}
-	issuerValue := capturedArgs[issuerFlagIdx+1]
-	if issuerValue != CosignOIDCIssuer {
-		t.Fatalf("--certificate-oidc-issuer = %q, want %q", issuerValue, CosignOIDCIssuer)
 	}
 }
 

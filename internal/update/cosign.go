@@ -1,107 +1,69 @@
 package update
 
 import (
-	"bytes"
 	"context"
-	"fmt"
-	"io"
 	"net/http"
-	"net/url"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
-)
 
-// execCommand is overridden in tests to allow verification without the cosign
-// CLI being installed.
-var execCommand = exec.Command
+	corekitcosign "github.com/danieljustus/symaira-corekit/updatecheck/cosign"
+)
 
 // CosignIdentityRegexp is the certificate identity regexp passed to
 // cosign verify-blob. It must match the full OIDC identity embedded in
 // release certificates produced by the GitHub Actions release workflow.
 // The repo slug must be lowercase and hyphenated (danieljustus/symaira-vault).
 // This constant is also referenced in scripts/install.sh — keep in sync.
+//
+// This is passed explicitly to corekitcosign.Config rather than relying on
+// its IdentityRegexpOrDefault(), which double-escapes the dot separators and
+// would never match a real certificate identity.
 const CosignIdentityRegexp = `https://github\.com/danieljustus/symaira-vault/\.github/workflows/release\.yml@refs/tags/v.*`
 
 // CosignOIDCIssuer is the expected OIDC issuer for cosign keyless signatures.
 // All GitHub Actions workflows use this issuer. This constant is also
 // referenced in scripts/install.sh — keep in sync.
-const CosignOIDCIssuer = `https://token.actions.githubusercontent.com`
+const CosignOIDCIssuer = corekitcosign.OIDCIssuer
 
-// cosignSignatureFileName returns the cosign signature filename for the
-// checksums file of the given release version. Matches the GoReleaser
-// cosign signing convention where "<artifact>.sig" is the signature.
-func cosignSignatureFileName(version string) string {
-	v := strings.TrimPrefix(version, "v")
-	return fmt.Sprintf("symvault_%s_checksums.txt.sig", v)
+// doerRoundTripper adapts an httpDoer (vault's test-injectable interface) to
+// http.RoundTripper so it can back an *http.Client, which is the concrete
+// type corekitcosign.Config.HTTPClient requires.
+type doerRoundTripper struct{ doer httpDoer }
+
+func (d doerRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	return d.doer.Do(req)
 }
 
-// cosignCertificateFileName returns the cosign certificate filename for the
-// checksums file of the given release version. Matches the GoReleaser
-// cosign signing convention where "<artifact>.pem" is the certificate.
-func cosignCertificateFileName(version string) string {
-	v := strings.TrimPrefix(version, "v")
-	return fmt.Sprintf("symvault_%s_checksums.txt.pem", v)
+// cosignHTTPClient adapts checksumsClient() (test-injectable, TLS-1.3-pinned
+// by default) into the *http.Client shape corekitcosign.Config expects.
+func cosignHTTPClient() *http.Client {
+	doer := checksumsClient()
+	if hc, ok := doer.(*http.Client); ok {
+		return hc
+	}
+	return &http.Client{Transport: doerRoundTripper{doer: doer}}
 }
 
-// fetchCosignArtifact downloads a cosign artifact (signature or certificate)
-// for the given release version. The artifactName function produces the
-// filename (e.g., cosignSignatureFileName or cosignCertificateFileName).
-func fetchCosignArtifact(ctx context.Context, version string, artifactName func(string) string, artifactLabel string) ([]byte, error) {
-	v := strings.TrimPrefix(version, "v")
-	if v == "" {
-		return nil, fmt.Errorf("version must not be empty")
+func cosignConfig() corekitcosign.Config {
+	return corekitcosign.Config{
+		Repo:            "danieljustus/symaira-vault",
+		BinaryName:      binaryName,
+		DownloadBaseURL: DefaultDownloadBaseURL,
+		IdentityRegexp:  CosignIdentityRegexp,
+		HTTPClient:      cosignHTTPClient(),
 	}
-
-	name := artifactName(version)
-	u := fmt.Sprintf("%s/v%s/%s", DefaultDownloadBaseURL, v, name)
-
-	parsed, err := url.Parse(u)
-	if err != nil {
-		return nil, fmt.Errorf("invalid cosign %s URL: %w", artifactLabel, err)
-	}
-	const httpsScheme = "https"
-	if parsed.Scheme != httpsScheme {
-		return nil, fmt.Errorf("cosign %s URL must use HTTPS, got %q", artifactLabel, parsed.Scheme)
-	}
-
-	client := checksumsClient()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	if err != nil {
-		return nil, fmt.Errorf("create cosign %s request: %w", artifactLabel, err)
-	}
-
-	resp, err := client.Do(req) // #nosec G107 — URL is constructed from controlled inputs
-	if err != nil {
-		return nil, fmt.Errorf("fetch cosign %s: %w", artifactLabel, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetch cosign %s: HTTP %d", artifactLabel, resp.StatusCode)
-	}
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read cosign %s response: %w", artifactLabel, err)
-	}
-
-	return data, nil
 }
 
 // FetchCosignSignature downloads the cosign signature file for the release
 // checksums. The signature is produced by GoReleaser using cosign keyless
 // signing and is published alongside the checksums file.
 func FetchCosignSignature(ctx context.Context, version string) ([]byte, error) {
-	return fetchCosignArtifact(ctx, version, cosignSignatureFileName, "signature")
+	return cosignConfig().FetchSignature(ctx, version)
 }
 
 // FetchCosignCertificate downloads the cosign certificate file for the release
 // checksums. The certificate is produced by GoReleaser using cosign keyless
 // signing and contains the OIDC identity from the GitHub Actions workflow run.
 func FetchCosignCertificate(ctx context.Context, version string) ([]byte, error) {
-	return fetchCosignArtifact(ctx, version, cosignCertificateFileName, "certificate")
+	return cosignConfig().FetchCertificate(ctx, version)
 }
 
 // VerifyCosignSignature verifies a cosign keyless signature on the given content
@@ -118,53 +80,5 @@ func FetchCosignCertificate(ctx context.Context, version string) ([]byte, error)
 // instructing the user to install it. This is a security requirement — the
 // update is aborted when cosign is not available.
 func VerifyCosignSignature(content, signature, certificate []byte) error {
-	if _, err := exec.LookPath("cosign"); err != nil {
-		return fmt.Errorf(
-			"cosign CLI not found — install cosign from https://docs.sigstore.dev "+
-				"to verify release signatures: %w", err,
-		)
-	}
-
-	tmpDir, err := os.MkdirTemp("", "symvault-cosign-*")
-	if err != nil {
-		return fmt.Errorf("create temp directory: %w", err)
-	}
-	defer func() { _ = os.RemoveAll(tmpDir) }()
-
-	contentPath := filepath.Join(tmpDir, "content")
-	sigPath := filepath.Join(tmpDir, "signature.sig")
-	certPath := filepath.Join(tmpDir, "certificate.pem")
-
-	if err := os.WriteFile(contentPath, content, 0o600); err != nil {
-		return fmt.Errorf("write content file: %w", err)
-	}
-	if err := os.WriteFile(sigPath, signature, 0o600); err != nil {
-		return fmt.Errorf("write signature file: %w", err)
-	}
-	if err := os.WriteFile(certPath, certificate, 0o600); err != nil {
-		return fmt.Errorf("write certificate file: %w", err)
-	}
-
-	var stderr bytes.Buffer
-	cmd := execCommand("cosign",
-		"verify-blob",
-		"--certificate", certPath,
-		"--signature", sigPath,
-		"--certificate-identity-regexp",
-		CosignIdentityRegexp,
-		"--certificate-oidc-issuer",
-		CosignOIDCIssuer,
-		contentPath,
-	)
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf(
-			"cosign verify-blob failed: %s: %w",
-			strings.TrimSpace(stderr.String()),
-			err,
-		)
-	}
-
-	return nil
+	return cosignConfig().VerifySignature(content, signature, certificate)
 }
