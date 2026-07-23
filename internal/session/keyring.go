@@ -24,6 +24,14 @@ import (
 // match a single error type.
 var ErrKeyringNotFound = errors.New("session: keyring entry not found")
 
+// ErrKeyringUnavailable is returned when the OS keyring backend did not
+// respond within its timeout — typically because the keychain is locked or
+// unavailable and would otherwise block on an interactive OS prompt (the
+// native "keychain not found" dialog reported in #682). Distinct from
+// ErrKeyringNotFound: the entry may still exist, but the backend could not
+// be reached non-interactively.
+var ErrKeyringUnavailable = errors.New("session: OS keyring unavailable (locked or non-interactive)")
+
 // KeyringBackend is the dependency-injected storage layer for session and
 // identity entries. Implementations must be safe for concurrent use.
 type KeyringBackend interface {
@@ -162,7 +170,7 @@ func (f *fallbackKeyring) activateLocked() {
 		f.active = true
 		if !f.warned {
 			f.warned = true
-			cliout.Warnf("OS keyring unavailable — session cache falling back to in-memory storage. Sessions will not persist across restarts. Run 'symvault doctor' for help.")
+			cliout.Warnf("OS keyring unavailable — session cache falling back to in-memory storage. Sessions will not persist across restarts. For headless or non-interactive agents, set SYMVAULT_ALLOW_ENV_PASSPHRASE=1 and SYMVAULT_PASSPHRASE to unlock without the OS keychain. Run 'symvault doctor' for help.")
 		}
 	}
 }
