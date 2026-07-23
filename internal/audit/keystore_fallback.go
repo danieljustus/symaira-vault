@@ -227,6 +227,27 @@ func (k *fallbackKeystore) RotateKey() ([]byte, error) {
 	return newKey, nil
 }
 
+// LoadArchivedKeys reads every rotation-archive file RotateKey has written
+// to the audit directory, reusing loadHMACKey to handle whichever format
+// (age-encrypted, locally-encrypted, or legacy plaintext) the archive was
+// saved in. A file that can't be decrypted (e.g. no matching identity or
+// KEK) is skipped rather than returned as an error.
+func (k *fallbackKeystore) LoadArchivedKeys() ([]ArchivedKey, error) {
+	paths, err := archivedKeyPaths(k.auditDir)
+	if err != nil {
+		return nil, err
+	}
+	var keys []ArchivedKey
+	for _, p := range paths {
+		key, loadErr := k.loadHMACKey(p)
+		if loadErr != nil || len(key) != hmacKeySize {
+			continue
+		}
+		keys = append(keys, ArchivedKey{Label: archivedKeyLabel(p), Key: key})
+	}
+	return keys, nil
+}
+
 // NewKeystore creates a fallbackKeystore on platforms without OS keyring support.
 func NewKeystore(auditDir string, identity *age.X25519Identity) Keystore {
 	logging.Default().Warn("Using file-based HMAC key storage (unsupported platform).")

@@ -79,35 +79,70 @@ func checkAuditLog(vaultDir string, _ Options) Result {
 		r.Message = fmt.Sprintf("cannot read hmac key: %v", keyErr)
 		return r
 	}
+	// Best-effort: a glob/read failure here just means no fallback
+	// candidates are available, not that verification itself failed.
+	archivedKeys, _ := ks.LoadArchivedKeys()
 
-	var issues []string
+	var tamperedIssues []string
+	var unverifiableFiles []string
+	var verifiedOlderGen int
 	var totalSize int64
 	for _, logPath := range matches {
 		info, statErr := os.Stat(logPath)
 		if statErr == nil {
 			totalSize += info.Size()
 		}
-		result, verErr := audit.VerifyLog(logPath, key)
+		result, verErr := audit.VerifyLogAgainstKeys(logPath, key, archivedKeys)
 		if verErr != nil {
-			issues = append(issues, fmt.Sprintf("%s: verify error: %v", filepath.Base(logPath), verErr))
+			tamperedIssues = append(tamperedIssues, fmt.Sprintf("%s: verify error: %v", filepath.Base(logPath), verErr))
 			continue
 		}
-		if result != nil && !result.Valid {
-			issues = append(issues, fmt.Sprintf("%s: integrity check failed", filepath.Base(logPath)))
+		if result == nil {
+			continue
+		}
+		switch {
+		case result.Valid && result.VerifiedKeyGeneration != "":
+			verifiedOlderGen++
+		case result.Unverifiable:
+			// No current or archived key matches this log from the start —
+			// consistent with a lost/missing older key generation (a
+			// keychain reset, or a rotation with no matching archive), not
+			// with tampering. See #685: this must never be reported as
+			// "integrity check failed" alongside genuine tamper cases.
+			unverifiableFiles = append(unverifiableFiles, filepath.Base(logPath))
+		case !result.Valid:
+			tamperedIssues = append(tamperedIssues, fmt.Sprintf("%s: integrity check failed (%d/%d entries)", filepath.Base(logPath), result.Tampered, result.Total))
 		}
 	}
 
 	auditCfg := audit.GetConfig()
+	var sizeIssue string
 	if totalSize >= auditCfg.MaxFileSize {
-		issues = append(issues, fmt.Sprintf("total audit size %.1f MB at limit", float64(totalSize)/1024/1024))
+		sizeIssue = fmt.Sprintf("total audit size %.1f MB at limit", float64(totalSize)/1024/1024)
+	}
+
+	var issues []string
+	issues = append(issues, tamperedIssues...)
+	if len(unverifiableFiles) > 0 {
+		issues = append(issues, fmt.Sprintf("%s: cannot verify — no current or archived key matches (likely predates a keychain reset or a rotation with no matching archive; not evidence of tampering)", strings.Join(unverifiableFiles, ", ")))
+	}
+	if sizeIssue != "" {
+		issues = append(issues, sizeIssue)
 	}
 
 	if len(issues) > 0 {
 		r.Status = StatusWarn
 		r.Message = strings.Join(issues, "; ")
+		if len(tamperedIssues) > 0 {
+			r.Hint = "investigate the affected file(s) for tampering; files listed as unverifiable are a separate, lower-severity finding"
+		}
 	} else {
+		msg := fmt.Sprintf("%d log file(s), total %.1f MB, integrity OK", len(matches), float64(totalSize)/1024/1024)
+		if verifiedOlderGen > 0 {
+			msg += fmt.Sprintf(" (%d verified under an older key generation)", verifiedOlderGen)
+		}
 		r.Status = StatusOK
-		r.Message = fmt.Sprintf("%d log file(s), total %.1f MB, integrity OK", len(matches), float64(totalSize)/1024/1024)
+		r.Message = msg
 	}
 	return r
 }
