@@ -272,6 +272,7 @@ For the full configuration reference, see [docs/configuration.md](docs/configura
 - [MCP API](docs/mcp-api.md)
 - [Audit event schema](docs/audit-schema.md)
 - [Audit retention & integrity](docs/audit-retention.md)
+- [Local secret-leak detection](docs/leak-detection.md)
 - [Distribution channels](docs/distribution.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Architecture](ARCHITECTURE.md)
