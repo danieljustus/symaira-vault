@@ -244,14 +244,26 @@ profiles that already have a tier field.`,
 
 var migrateKDFCmd = &cobra.Command{
 	Use:   "kdf",
-	Short: "Report the vault identity's key derivation function",
-	Long: `Report which key derivation function currently protects the vault identity.
+	Short: "Migrate the vault identity from scrypt to argon2id",
+	Long: `Migrate the vault identity's key derivation function from the legacy
+scrypt KDF to argon2id.
 
 Argon2id is the industry standard for password hashing and provides stronger
 resistance against GPU-based attacks than scrypt. New vaults already use
-argon2id, and scrypt vaults are upgraded to argon2id when they are next opened,
-so no explicit migration command is required.`,
-	Example: `  symvault migrate kdf`,
+argon2id.
+
+This command performs the migration itself — it does not just report status.
+Automatic migration on every unlock additionally happens when
+vault.auto_migrate_kdf: true is set in config.yaml, but by default that is
+off, so this command is the way to upgrade an existing scrypt vault.
+
+identity.age is backed up to identity.age.bak before any change, and the new
+file is decrypt-verified before the migration is considered done. On any
+failure the original identity.age is restored automatically. Changing
+config.yaml's scrypt_work_factor alone does not perform this migration —
+only this command (or auto_migrate_kdf) re-encrypts identity.age.`,
+	Example: `  symvault migrate kdf
+  symvault migrate kdf --yes`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		vaultDir := cli.GetVaultDir()
 		identityPath := filepath.Join(vaultDir, "identity.age")
@@ -262,16 +274,70 @@ so no explicit migration command is required.`,
 
 		switch cryptopkg.DetectEncryptedIdentityFormat(raw) {
 		case "argon2id":
-			fmt.Println("✓ Your vault identity is protected with argon2id.")
-			fmt.Println("No migration is needed — this is the current default.")
+			fmt.Println("✓ Your vault identity is already protected with argon2id.")
+			fmt.Println("No migration is needed.")
+			return nil
 		case "scrypt":
-			fmt.Println("Your vault identity is currently protected with scrypt.")
-			fmt.Println("It will be upgraded to argon2id automatically the next time the vault is opened.")
-			fmt.Println("Back up your vault first: cp -r ~/.symvault ~/.symvault.backup")
+			// handled below
 		default:
 			fmt.Println("Could not determine the vault identity's key derivation function.")
 			fmt.Println("Run 'symvault doctor' for a full diagnosis.")
+			return nil
 		}
+
+		fmt.Println("Your vault identity is currently protected with scrypt.")
+
+		// Unlock (which needs the passphrase) before the confirmation prompt,
+		// not after: ConfirmInteractive reads through a buffered os.Stdin
+		// reader that is free to consume more than the "y\n" line, which
+		// would silently steal bytes a later raw passphrase read expects.
+		// This also fails fast on a wrong passphrase before asking the user
+		// to confirm a migration that couldn't proceed anyway.
+		passphrase, err := cli.ReadHiddenInput("Passphrase: ", nil)
+		if err != nil {
+			return fmt.Errorf("read passphrase: %w", err)
+		}
+		defer cryptopkg.Wipe(passphrase)
+
+		v, err := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
+		if err != nil {
+			return fmt.Errorf("unlock vault: %w", err)
+		}
+
+		// OpenWithPassphrase already migrates when vault.auto_migrate_kdf is
+		// set — v.NeedsMigration is only true when it left the file as scrypt
+		// (auto-migrate off, or a prior attempt failed). When auto-migrate
+		// already did the work, report that instead of asking for a
+		// confirmation the open call has already acted on.
+		if !v.NeedsMigration {
+			fmt.Println("✓ Migrated automatically on unlock (vault.auto_migrate_kdf is enabled).")
+			fmt.Println("The previous identity.age was backed up to identity.age.bak.")
+			return nil
+		}
+
+		confirmed, err := cli.ConfirmInteractive(
+			"Migrate the vault identity to argon2id now (identity.age is backed up to identity.age.bak first)",
+			MigrateYes,
+		)
+		if err != nil {
+			return err
+		}
+		if !confirmed {
+			fmt.Fprintln(os.Stderr, "Canceled")
+			return nil
+		}
+
+		if err := vaultpkg.MigrateKDF(vaultDir, v.Identity, passphrase, v); err != nil {
+			return fmt.Errorf("migrate kdf: %w", err)
+		}
+
+		raw2, readErr := os.ReadFile(identityPath) // #nosec G304 -- fixed filename under the resolved vault dir
+		if readErr != nil || cryptopkg.DetectEncryptedIdentityFormat(raw2) != "argon2id" {
+			return fmt.Errorf("migration did not complete — identity.age was restored to its original form; run `symvault doctor` for details")
+		}
+
+		fmt.Println("✓ Migrated vault identity to argon2id.")
+		fmt.Println("The previous identity.age was backed up to identity.age.bak.")
 		return nil
 	},
 }
@@ -297,6 +363,7 @@ func init() {
 	MigrateCmd.AddCommand(migratePseudonymizeCmd)
 	migratePseudonymizeCmd.Flags().BoolVarP(&MigrateYes, "yes", "y", false, "Skip confirmation prompt")
 	MigrateCmd.AddCommand(migrateKDFCmd)
+	migrateKDFCmd.Flags().BoolVarP(&MigrateYes, "yes", "y", false, "Skip confirmation prompt")
 	MigrateCmd.AddCommand(migrateV4Cmd)
 	migrateV4Cmd.Flags().BoolVarP(&MigrateYes, "yes", "y", false, "Skip confirmation prompt")
 	migrateV4Cmd.Flags().BoolVar(&MigrateV4DryRun, "dry-run", false, "Preview changes without writing")
