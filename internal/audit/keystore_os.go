@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -234,32 +235,58 @@ func (k *osKeystore) LoadHMACKey() ([]byte, error) {
 }
 
 // RotateKey generates a new HMAC key, archives the existing key as a
-// hex-encoded file in the audit directory, and stores the new key in
-// the OS keyring (with memory fallback).
-func (k *osKeystore) RotateKey() ([]byte, error) {
+// hex-encoded file in the audit directory (named after the old key's
+// fingerprint so repeated rotations never collide), and stores the new key
+// in the OS keyring (with memory fallback).
+func (k *osKeystore) RotateKey() ([]byte, string, error) {
 	oldKey, err := k.LoadHMACKey()
 	if err != nil {
-		return nil, fmt.Errorf("load existing key for rotation: %w", err)
+		return nil, "", fmt.Errorf("load existing key for rotation: %w", err)
 	}
 
-	archivePath := RotateKeyArchivePath(k.auditDir)
+	archivePath := RotateKeyArchivePath(k.auditDir, oldKey)
 	hexOld := hex.EncodeToString(oldKey)
 	if err := os.WriteFile(archivePath, []byte(hexOld), 0o600); err != nil {
-		return nil, fmt.Errorf("archive old HMAC key: %w", err)
+		return nil, "", fmt.Errorf("archive old HMAC key: %w", err)
 	}
 
 	newKey := make([]byte, hmacKeySize)
 	if _, err := io.ReadFull(rand.Reader, newKey); err != nil {
-		return nil, fmt.Errorf("generate new HMAC key: %w", err)
+		return nil, "", fmt.Errorf("generate new HMAC key: %w", err)
 	}
 
 	account := keyringAccount(k.auditDir)
 	hexNew := hex.EncodeToString(newKey)
 	if err := k.setWithFallback(keyringService, account, hexNew); err != nil {
-		return nil, fmt.Errorf("store new HMAC key in keyring: %w", err)
+		return nil, "", fmt.Errorf("store new HMAC key in keyring: %w", err)
 	}
 
-	return newKey, nil
+	return newKey, archivePath, nil
+}
+
+// LoadArchivedKeys reads every rotated-out HMAC key file in the audit
+// directory and returns them keyed by fingerprint. Archive files are
+// hex-encoded, matching the format RotateKey writes.
+func (k *osKeystore) LoadArchivedKeys() (map[string][]byte, error) {
+	pattern := filepath.Join(k.auditDir, hmacKeyFileName+".rotated.*")
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return nil, fmt.Errorf("glob archived hmac keys: %w", err)
+	}
+
+	keys := make(map[string][]byte, len(matches))
+	for _, path := range matches {
+		data, readErr := os.ReadFile(path) //#nosec G304 -- path comes from Glob over k.auditDir
+		if readErr != nil {
+			continue
+		}
+		key, decodeErr := hex.DecodeString(strings.TrimSpace(string(data)))
+		if decodeErr != nil || len(key) != hmacKeySize {
+			continue
+		}
+		keys[KeyFingerprint(key)] = key
+	}
+	return keys, nil
 }
 
 // NewKeystore creates a Keystore backed by the OS keyring.

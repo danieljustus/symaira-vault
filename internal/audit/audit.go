@@ -154,6 +154,7 @@ type LogEntry struct {
 	TokenID     string `json:"token_id,omitempty"`
 	RequestID   string `json:"req_id,omitempty"`
 	SessionID   string `json:"sess_id,omitempty"`
+	Kid         string `json:"kid,omitempty"`
 	HMAC        string `json:"hmac,omitempty"`
 	OK          bool   `json:"ok"`
 }
@@ -165,7 +166,12 @@ type VerifyResult struct {
 	Verified    int
 	Legacy      int
 	Tampered    int
-	FirstBadIdx int
+	// Unverifiable counts entries whose signing key generation is not
+	// among the keys the verifier was given (e.g. an archived key that has
+	// been lost). Unlike Tampered, this is not evidence of manipulation —
+	// it does not affect Valid.
+	Unverifiable int
+	FirstBadIdx  int
 }
 
 type Logger struct {
@@ -174,6 +180,7 @@ type Logger struct {
 	file      *os.File
 	mu        sync.Mutex
 	hmacKey   []byte
+	keyID     string
 	prevHMAC  []byte
 
 	entryCh     chan *LogEntry
@@ -247,6 +254,7 @@ func New(agentName string, vaultDir string, identity *age.X25519Identity) (*Logg
 		agentName:  agentName,
 		path:       cleanPath,
 		hmacKey:    hmacKey,
+		keyID:      KeyFingerprint(hmacKey),
 		bufferSize: defaultBufferSize,
 		entryCh:    make(chan *LogEntry, defaultBufferSize),
 		flushReq:   make(chan chan struct{}, 1),
@@ -696,6 +704,7 @@ func (l *Logger) writeEntry(entry *LogEntry) {
 	defer l.mu.Unlock()
 
 	if len(l.hmacKey) > 0 {
+		entry.Kid = l.keyID
 		entry.HMAC = computeHMAC(l.hmacKey, l.prevHMAC, *entry)
 	}
 
@@ -813,9 +822,39 @@ func canonicalJSON(entry LogEntry) []byte {
 	return data
 }
 
+// VerifyLog verifies a log file's HMAC chain against a single key. It is a
+// backward-compatible wrapper around VerifyLogAgainstKeys for callers that
+// only have one key on hand (e.g. no keystore access to archived
+// generations).
 func VerifyLog(logFilePath string, key []byte) (*VerifyResult, error) {
 	if len(key) == 0 {
 		return nil, errors.New("hmac key is empty")
+	}
+	kid := KeyFingerprint(key)
+	return VerifyLogAgainstKeys(logFilePath, map[string][]byte{kid: key}, kid)
+}
+
+// VerifyLogAgainstKeys verifies a log file's HMAC chain against a set of
+// known HMAC keys, keyed by key-generation fingerprint (kid, see
+// KeyFingerprint). currentKid identifies the caller's current key within
+// keys; it anchors the trial order used for entries that predate the kid
+// field.
+//
+// Entries carrying a kid look up their signing key directly, which
+// correctly verifies a log file that straddles a key rotation mid-stream
+// (some entries signed under an old key, later entries under a new one).
+// Entries without a kid (written before this field existed) are tried
+// against each known key in turn — current key first, then archived keys —
+// mirroring the original single-key verification behavior. A kid that
+// isn't present in keys, or a no-kid entry that matches no known key, is
+// reported as Unverifiable rather than Tampered: a missing key generation
+// (e.g. an archived key that was never recovered) is not evidence of
+// manipulation, only that this entry can't be checked. An entry whose
+// stored HMAC doesn't match its recomputed value under the resolved key is
+// always Tampered.
+func VerifyLogAgainstKeys(logFilePath string, keys map[string][]byte, currentKid string) (*VerifyResult, error) {
+	if len(keys) == 0 {
+		return nil, errors.New("no hmac keys provided")
 	}
 
 	data, err := os.ReadFile(logFilePath) //#nosec G304 -- logFilePath is provided by the caller and expected to be a trusted audit log path
@@ -843,7 +882,12 @@ func VerifyLog(logFilePath string, key []byte) (*VerifyResult, error) {
 		FirstBadIdx: -1,
 	}
 
-	mac := hmac.New(sha256.New, key)
+	macByKid := make(map[string]hash.Hash, len(keys))
+	for kid, key := range keys {
+		macByKid[kid] = hmac.New(sha256.New, key)
+	}
+	trialKids := trialKidOrder(keys, currentKid)
+
 	var prevHMAC []byte
 	chainStarted := false
 	for i, entry := range entries {
@@ -863,20 +907,52 @@ func VerifyLog(logFilePath string, key []byte) (*VerifyResult, error) {
 			continue
 		}
 
-		expectedHMAC := computeHMACWith(mac, prevHMAC, entry)
 		entryHMACBytes, decodeErr := hex.DecodeString(entry.HMAC)
-		expectedHMACBytes, decodeExpectedErr := hex.DecodeString(expectedHMAC)
-		if decodeErr != nil || decodeExpectedErr != nil || !hmac.Equal(expectedHMACBytes, entryHMACBytes) {
+		if decodeErr != nil {
 			result.Tampered++
 			result.Valid = false
 			if result.FirstBadIdx < 0 {
 				result.FirstBadIdx = i
 			}
-		} else {
-			result.Verified++
-			prevHMAC = entryHMACBytes
-			chainStarted = true
+			continue
 		}
+
+		var matched, known bool
+		if entry.Kid != "" {
+			if mac, ok := macByKid[entry.Kid]; ok {
+				known = true
+				expectedBytes, _ := hex.DecodeString(computeHMACWith(mac, prevHMAC, entry))
+				matched = hmac.Equal(expectedBytes, entryHMACBytes)
+			}
+		} else {
+			for _, kid := range trialKids {
+				expectedBytes, _ := hex.DecodeString(computeHMACWith(macByKid[kid], prevHMAC, entry))
+				if hmac.Equal(expectedBytes, entryHMACBytes) {
+					known, matched = true, true
+					break
+				}
+			}
+		}
+
+		switch {
+		case matched:
+			result.Verified++
+		case known:
+			result.Tampered++
+			result.Valid = false
+			if result.FirstBadIdx < 0 {
+				result.FirstBadIdx = i
+			}
+		default:
+			result.Unverifiable++
+		}
+
+		// Chain forward from this entry's own stored HMAC regardless of
+		// verification outcome: it's the literal value later entries were
+		// signed against, so one bad or unverifiable entry doesn't cascade
+		// into false failures for everything after it.
+		prevHMAC = entryHMACBytes
+		chainStarted = true
 	}
 
 	if result.Total == 0 {
@@ -886,9 +962,28 @@ func VerifyLog(logFilePath string, key []byte) (*VerifyResult, error) {
 	return result, nil
 }
 
+// trialKidOrder returns a deterministic key-trial order for entries with no
+// kid: the caller's current key first (matching historical single-key
+// verification behavior), then remaining keys in a stable order.
+func trialKidOrder(keys map[string][]byte, currentKid string) []string {
+	order := make([]string, 0, len(keys))
+	if _, ok := keys[currentKid]; ok {
+		order = append(order, currentKid)
+	}
+	rest := make([]string, 0, len(keys))
+	for kid := range keys {
+		if kid == currentKid {
+			continue
+		}
+		rest = append(rest, kid)
+	}
+	sort.Strings(rest)
+	return append(order, rest...)
+}
+
 func (l *Logger) Verify() (*VerifyResult, error) {
 	if l == nil {
 		return nil, errors.New("logger is nil")
 	}
-	return VerifyLog(l.path, l.hmacKey)
+	return VerifyLogAgainstKeys(l.path, map[string][]byte{l.keyID: l.hmacKey}, l.keyID)
 }

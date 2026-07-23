@@ -71,9 +71,12 @@ func checkAuditLog(vaultDir string, _ Options) Result {
 		return r
 	}
 
-	// HMAC key is shared across all audit logs in the vault directory.
+	// HMAC keys (current + archived generations) are shared across all
+	// audit logs in the vault directory. Archived keys let the verifier
+	// correctly check logs written under a since-rotated key instead of
+	// misreporting them as tampered.
 	ks := audit.NewKeystore(vaultDir, nil)
-	key, keyErr := ks.LoadHMACKey()
+	keys, currentKid, keyErr := audit.LoadVerificationKeys(ks)
 	if keyErr != nil {
 		r.Status = StatusWarn
 		r.Message = fmt.Sprintf("cannot read hmac key: %v", keyErr)
@@ -82,19 +85,24 @@ func checkAuditLog(vaultDir string, _ Options) Result {
 
 	var issues []string
 	var totalSize int64
+	var unverifiable int
 	for _, logPath := range matches {
 		info, statErr := os.Stat(logPath)
 		if statErr == nil {
 			totalSize += info.Size()
 		}
-		result, verErr := audit.VerifyLog(logPath, key)
+		result, verErr := audit.VerifyLogAgainstKeys(logPath, keys, currentKid)
 		if verErr != nil {
 			issues = append(issues, fmt.Sprintf("%s: verify error: %v", filepath.Base(logPath), verErr))
 			continue
 		}
-		if result != nil && !result.Valid {
+		if result == nil {
+			continue
+		}
+		if !result.Valid {
 			issues = append(issues, fmt.Sprintf("%s: integrity check failed", filepath.Base(logPath)))
 		}
+		unverifiable += result.Unverifiable
 	}
 
 	auditCfg := audit.GetConfig()
@@ -102,10 +110,16 @@ func checkAuditLog(vaultDir string, _ Options) Result {
 		issues = append(issues, fmt.Sprintf("total audit size %.1f MB at limit", float64(totalSize)/1024/1024))
 	}
 
-	if len(issues) > 0 {
+	switch {
+	case len(issues) > 0:
 		r.Status = StatusWarn
 		r.Message = strings.Join(issues, "; ")
-	} else {
+	case unverifiable > 0:
+		r.Status = StatusWarn
+		r.Message = fmt.Sprintf("%d log file(s), total %.1f MB, %d entries unverifiable (signing key generation unavailable)",
+			len(matches), float64(totalSize)/1024/1024, unverifiable)
+		r.Hint = "an archived HMAC key may be missing; this does not indicate tampering"
+	default:
 		r.Status = StatusOK
 		r.Message = fmt.Sprintf("%d log file(s), total %.1f MB, integrity OK", len(matches), float64(totalSize)/1024/1024)
 	}

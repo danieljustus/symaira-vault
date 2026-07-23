@@ -194,37 +194,61 @@ func (k *fallbackKeystore) LoadHMACKey() ([]byte, error) {
 	return data, nil
 }
 
-// RotateKey generates a new HMAC key, archives the existing key file to
-// a timestamped backup, and writes the new key to the key file.
-func (k *fallbackKeystore) RotateKey() ([]byte, error) {
+// RotateKey generates a new HMAC key, archives the existing key file to a
+// backup named after the old key's fingerprint (so repeated rotations never
+// collide), and writes the new key to the key file.
+func (k *fallbackKeystore) RotateKey() ([]byte, string, error) {
 	keyPath := filepath.Join(k.auditDir, hmacKeyFileName)
 
-	_, err := k.LoadHMACKey()
+	oldKey, err := k.LoadHMACKey()
 	if err != nil {
-		return nil, fmt.Errorf("load existing key for rotation: %w", err)
+		return nil, "", fmt.Errorf("load existing key for rotation: %w", err)
 	}
 
-	archivePath := RotateKeyArchivePath(k.auditDir)
+	archivePath := RotateKeyArchivePath(k.auditDir, oldKey)
 	if err := os.Rename(keyPath, archivePath); err != nil {
-		return nil, fmt.Errorf("archive old HMAC key: %w", err)
+		return nil, "", fmt.Errorf("archive old HMAC key: %w", err)
 	}
 
 	newKey := make([]byte, hmacKeySize)
 	if _, err := io.ReadFull(rand.Reader, newKey); err != nil {
-		return nil, fmt.Errorf("generate new HMAC key: %w", err)
+		return nil, "", fmt.Errorf("generate new HMAC key: %w", err)
 	}
 
 	if k.identity != nil {
 		if err := vaultcrypto.SaveEncryptedKey(keyPath, newKey, k.identity); err != nil {
-			return nil, fmt.Errorf("write encrypted HMAC key: %w", err)
+			return nil, "", fmt.Errorf("write encrypted HMAC key: %w", err)
 		}
 	} else {
 		if err := k.saveLocallyEncrypted(keyPath, newKey); err != nil {
-			return nil, fmt.Errorf("write locally-encrypted HMAC key: %w", err)
+			return nil, "", fmt.Errorf("write locally-encrypted HMAC key: %w", err)
 		}
 	}
 
-	return newKey, nil
+	return newKey, archivePath, nil
+}
+
+// LoadArchivedKeys reads every rotated-out HMAC key file in the audit
+// directory and returns them keyed by fingerprint. Archived files retain
+// whatever encryption format they had while live (age-encrypted,
+// locally-encrypted, or legacy plaintext), so they're loaded via the same
+// loadHMACKey path used for the current key.
+func (k *fallbackKeystore) LoadArchivedKeys() (map[string][]byte, error) {
+	pattern := filepath.Join(k.auditDir, hmacKeyFileName+".rotated.*")
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return nil, fmt.Errorf("glob archived hmac keys: %w", err)
+	}
+
+	keys := make(map[string][]byte, len(matches))
+	for _, path := range matches {
+		key, loadErr := k.loadHMACKey(path)
+		if loadErr != nil || len(key) != hmacKeySize {
+			continue
+		}
+		keys[KeyFingerprint(key)] = key
+	}
+	return keys, nil
 }
 
 // NewKeystore creates a fallbackKeystore on platforms without OS keyring support.

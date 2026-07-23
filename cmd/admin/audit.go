@@ -237,12 +237,11 @@ in the vault directory. A new audit log file is started with the new key.`,
 		}
 
 		ks := audit.NewKeystore(vaultDir, nil)
-		newKey, err := ks.RotateKey()
+		newKey, archivePath, err := ks.RotateKey()
 		if err != nil {
 			return fmt.Errorf("rotate HMAC key: %w", err)
 		}
 
-		archivePath := audit.RotateKeyArchivePath(vaultDir)
 		cmd.Printf("HMAC key rotated successfully.\n")
 		cmd.Printf("New key: %x (first 4 bytes)\n", newKey[:4])
 		cmd.Printf("Old key archived to: %s\n", archivePath)
