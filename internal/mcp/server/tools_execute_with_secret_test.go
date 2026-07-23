@@ -94,8 +94,13 @@ func TestHandleExecuteWithSecret_SecretInjection(t *testing.T) {
 	if strings.Contains(stdout, "AKIAIO...MPLE") {
 		t.Errorf("stdout = %q, should not contain plaintext secret", stdout)
 	}
-	if !strings.Contains(stdout, "***") {
-		t.Errorf("stdout = %q, want to contain masked value '***'", stdout)
+	// The AWS-shaped key is caught by the credential-pattern detector
+	// (internal/redact) inside secrets.RunCommand itself, before the
+	// MCP-layer known-value masking even sees it, so the marker here may
+	// be either layer's: "***" (known-value mask) or "[REDACTED]"
+	// (pattern detector marker).
+	if !strings.Contains(stdout, "***") && !strings.Contains(stdout, "[REDACTED]") {
+		t.Errorf("stdout = %q, want to contain a masked/redacted value", stdout)
 	}
 }
 
