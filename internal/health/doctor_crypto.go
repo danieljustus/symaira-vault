@@ -164,12 +164,11 @@ func checkScryptBenchmark(vaultDir string, _ Options) Result {
 	// vault, and after `migrate kdf`) never read ScryptWorkFactor, so
 	// benchmarking scrypt against them produced a permanent false-positive
 	// warning on fast hardware (#683) even though the value is unused.
-	if raw, readErr := os.ReadFile(filepath.Join(vaultDir, "identity.age")); readErr == nil { //#nosec G304 -- fixed filename under vaultDir, the trusted vault path from the caller
-		if vaultcrypto.DetectEncryptedIdentityFormat(raw) == vaultcrypto.Argon2idStanzaType {
-			r.Status = StatusOK
-			r.Message = "using argon2id KDF — scrypt work factor does not apply"
-			return r
-		}
+	raw, readErr := os.ReadFile(filepath.Join(vaultDir, "identity.age")) // #nosec G304 -- fixed filename under vaultDir, the trusted vault path from the caller
+	if readErr == nil && vaultcrypto.DetectEncryptedIdentityFormat(raw) == vaultcrypto.Argon2idStanzaType {
+		r.Status = StatusOK
+		r.Message = "using argon2id KDF — scrypt work factor does not apply"
+		return r
 	}
 
 	wf, elapsed, err := vaultcrypto.BenchmarkScryptWorkFactor(vaultcrypto.ScryptBenchmarkTarget)
