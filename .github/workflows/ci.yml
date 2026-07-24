@@ -3,10 +3,20 @@ name: CI
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - 'LICENSE'
+      - '.github/ISSUE_TEMPLATE/**'
     tags-ignore:
       - 'v*'
   pull_request:
     branches: [ main ]
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - 'LICENSE'
+      - '.github/ISSUE_TEMPLATE/**'
   schedule:
     - cron: '0 6 * * 1'
 
@@ -23,6 +33,8 @@ env:
   GOSEC_VERSION: v2.22.0
 
 jobs:
+  # ── Always-run jobs (PR + main) ──────────────────────────────────────────
+
   govulncheck:
     name: govulncheck
     runs-on: ubuntu-latest
@@ -117,8 +129,101 @@ jobs:
         with:
           sarif_file: gosec.sarif
 
+  flake-vendorhash:
+    name: Flake vendorHash
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+
+      - name: Verify flake.nix vendorHash matches go.mod/go.sum
+        run: |
+          EXPECTED=$(grep -oP 'vendorHash\s*=\s*"\K[^"]+' flake.nix)
+          if [ -z "$EXPECTED" ]; then
+            echo "FAIL: could not find vendorHash in flake.nix"
+            exit 1
+          fi
+          go mod vendor
+          ACTUAL=$(nix --extra-experimental-features 'nix-command flakes' hash path --sri vendor/)
+          rm -rf vendor
+          echo "flake.nix vendorHash: $EXPECTED"
+          echo "computed vendorHash:  $ACTUAL"
+          if [ "$EXPECTED" != "$ACTUAL" ]; then
+            echo "FAIL: flake.nix vendorHash is stale — update it to $ACTUAL"
+            exit 1
+          fi
+          echo "PASS: flake.nix vendorHash matches the current go.mod/go.sum tree"
+
+  # ── PR-fast jobs ─────────────────────────────────────────────────────────
+
+  test-pr:
+    name: Test (ubuntu) — PR
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.5'
+          cache: true
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Run tests
+        env:
+          CGO_ENABLED: '1'
+          SYMVAULT_ALLOW_ENV_PASSPHRASE: '1'
+        run: |
+          go test -v -race -timeout=30m -skip 'TestFlow|TestBinaryE2E|Integration' ./...
+
+  build-pr:
+    name: Build (linux-amd64) — PR
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    needs: [lint, test-pr, govulncheck, dependency-scan]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.5'
+          cache: true
+
+      - name: Build binary
+        env:
+          GOOS: linux
+          GOARCH: amd64
+          CGO_ENABLED: 0
+        run: |
+          go build -ldflags="-s -w -X main.version=dev -X main.commit=${{ github.sha }}" -o symvault-linux-amd64 .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: symvault-linux-amd64
+          path: symvault-linux-amd64
+          retention-days: 1
+
+  # ── Main / schedule only jobs ────────────────────────────────────────────
+
   test:
-    name: Test
+    name: Test (${{ matrix.os }})
+    if: github.event_name != 'pull_request'
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -136,23 +241,19 @@ jobs:
           cache: true
 
       - name: Install dependencies
-        run: |
-          go mod download
+        run: go mod download
 
       - name: Run tests
         shell: bash
         env:
           CGO_ENABLED: ${{ matrix.os == 'ubuntu-latest' && '1' || '0' }}
-          # Command tests exercise non-interactive vault unlocks with synthetic
-          # passphrases; production remains default-deny outside the test job.
-          SYMVAULT_ALLOW_ENV_PASSPHRASE: "1"
+          SYMVAULT_ALLOW_ENV_PASSPHRASE: '1'
         run: |
           if [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
             go test -v -race -timeout=30m -coverprofile=coverage.out -skip 'TestFlow|TestBinaryE2E|Integration' ./...
           else
             go test -v -timeout=30m -skip 'TestFlow|TestBinaryE2E|Integration' ./...
           fi
-
 
       - name: Check coverage threshold
         if: matrix.os == 'ubuntu-latest'
@@ -172,29 +273,18 @@ jobs:
 
           echo ""
           echo "=== Per-package coverage checks for security-critical packages ==="
-          # Includes the network-facing MCP auth surface (token/OAuth/registry/rate-limit),
-          # the only remotely reachable code, alongside the local crypto/session/vault core.
           PKG_COV_TMP=$(mktemp -d)
           for PACKAGE in "./internal/crypto/..." \
                          "./internal/session/..." \
                          "./internal/vault/..." \
                          "./internal/mcp/auth/..." \
                          "./internal/mcp/serverbootstrap/..."; do
-            # Derive a stable name from the package path. Note: plain
-            # `basename "./internal/crypto/..."` returns "..." (the glob segment),
-            # so strip the trailing "/..." before taking the basename.
             PKG_NAME=$(basename "${PACKAGE%/...}")
             PKG_PROFILE="$PKG_COV_TMP/${PKG_NAME}.out"
             go test -coverprofile="$PKG_PROFILE" -covermode=atomic -count=1 -timeout=10m \
               -skip 'TestFlow|TestBinaryE2E|Integration' "$PACKAGE"
-            # Aggregate across the whole package tree. `go test ... | grep coverage: | tail -1`
-            # would report an arbitrary subpackage (e.g. internal/vault/taint) instead of the
-            # combined total, so read the total from the merged profile instead.
             PKG_COV=$(go tool cover -func="$PKG_PROFILE" | grep '^total:' | grep -oE '[0-9]+\.[0-9]+' | tail -1)
             [ -z "$PKG_COV" ] && PKG_COV=0
-            # Thresholds sit a few points below current measured coverage so the gate
-            # guards against regression without flaking on minor line-count drift.
-            # Phased target: raise toward 85.0 in follow-up PRs.
             case "$PKG_NAME" in
               crypto)          PKG_THRESHOLD=85.0 ;;
               session)         PKG_THRESHOLD=70.0 ;;
@@ -230,6 +320,7 @@ jobs:
 
   fuzz:
     name: Fuzz Tests
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     needs: [lint]
     steps:
@@ -244,8 +335,6 @@ jobs:
 
       - name: Run fuzz tests
         run: |
-          # Keep a small grace window: Go's fuzz scheduler can finish just after
-          # the exact fuzztime deadline on shared runners, which otherwise flakes.
           echo "Running fuzz tests with 55s per target..."
           go test -fuzz=FuzzCSVImporterParse -fuzztime=55s -timeout=180s ./internal/importer/
           go test -fuzz=FuzzBitwardenImporterParse -fuzztime=55s -timeout=180s ./internal/importer/
@@ -257,6 +346,7 @@ jobs:
 
   build:
     name: Build
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     needs: [lint, test, govulncheck, dependency-scan]
     strategy:
@@ -309,6 +399,7 @@ jobs:
 
   integration-test:
     name: Integration Tests
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     needs: [lint]
     steps:
@@ -322,8 +413,7 @@ jobs:
           cache: true
 
       - name: Install dependencies
-        run: |
-          go mod download
+        run: go mod download
 
       - name: Install GPG (for encryption tests)
         run: |
@@ -332,13 +422,13 @@ jobs:
 
       - name: Run integration tests
         run: |
-          # Run tests with longer timeout for integration tests
           go test -v -timeout=10m ./... -run Integration 2>&1
         env:
           CI: true
 
   smoke-test:
     name: Binary Smoke Test
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     needs: [build]
     steps:
@@ -367,13 +457,13 @@ jobs:
           VAULT_DIR=$(mktemp -d)
           PASSPHRASE="test-passphrase-123"
           export SYMVAULT_ALLOW_ENV_PASSPHRASE=1
-          
+
           echo "Testing vault initialization..."
           SYMVAULT_PASSPHRASE="$PASSPHRASE" $BIN init "$VAULT_DIR"
-          
+
           echo "Testing entry creation..."
           SYMVAULT_PASSPHRASE="$PASSPHRASE" $BIN --vault "$VAULT_DIR" set "test.entry" --value "test-value-456"
-          
+
           echo "Testing entry retrieval..."
           OUTPUT=$(SYMVAULT_PASSPHRASE="$PASSPHRASE" $BIN --vault "$VAULT_DIR" get "test.entry")
           if [ "$OUTPUT" != "test-value-456" ]; then
@@ -381,7 +471,7 @@ jobs:
             exit 1
           fi
           echo "Entry retrieval successful"
-          
+
           echo "Testing list command..."
           LIST_OUTPUT=$(SYMVAULT_PASSPHRASE="$PASSPHRASE" $BIN --vault "$VAULT_DIR" list)
           if ! echo "$LIST_OUTPUT" | grep -q "test"; then
@@ -389,7 +479,7 @@ jobs:
             exit 1
           fi
           echo "List command successful"
-          
+
           echo "Testing find command..."
           FIND_OUTPUT=$(SYMVAULT_PASSPHRASE="$PASSPHRASE" $BIN --vault "$VAULT_DIR" find "test-value")
           if ! echo "$FIND_OUTPUT" | grep -q "test"; then
@@ -397,50 +487,84 @@ jobs:
             exit 1
           fi
           echo "Find command successful"
-          
+
           echo "Cleaning up test vault..."
           rm -rf "$VAULT_DIR"
-          
+
           echo "All smoke tests passed!"
 
-  flake-vendorhash:
-    name: Flake vendorHash
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache: false
-
-      - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
-
-      - name: Verify flake.nix vendorHash matches go.mod/go.sum
-        run: |
-          EXPECTED=$(grep -oP 'vendorHash\s*=\s*"\K[^"]+' flake.nix)
-          if [ -z "$EXPECTED" ]; then
-            echo "FAIL: could not find vendorHash in flake.nix"
-            exit 1
-          fi
-          go mod vendor
-          ACTUAL=$(nix --extra-experimental-features 'nix-command flakes' hash path --sri vendor/)
-          rm -rf vendor
-          echo "flake.nix vendorHash: $EXPECTED"
-          echo "computed vendorHash:  $ACTUAL"
-          if [ "$EXPECTED" != "$ACTUAL" ]; then
-            echo "FAIL: flake.nix vendorHash is stale — update it to $ACTUAL"
-            exit 1
-          fi
-          echo "PASS: flake.nix vendorHash matches the current go.mod/go.sum tree"
+  # ── Gate ─────────────────────────────────────────────────────────────────
+  #
+  # Uses if: always() so that skipped main-only jobs (fuzz, integration-test,
+  # smoke-test, the full test/build matrices) don't block the PR gate.
+  # On PR: test-pr + build-pr must pass. On main: test + build + fuzz +
+  # integration-test + smoke-test must pass.
 
   ci-gate:
     name: CI Success
     runs-on: ubuntu-latest
-    needs: [govulncheck, dependency-scan, lint, test, fuzz, build, integration-test, smoke-test, flake-vendorhash]
+    if: always()
+    needs:
+      - govulncheck
+      - dependency-scan
+      - lint
+      - test-pr
+      - test
+      - fuzz
+      - build-pr
+      - build
+      - integration-test
+      - smoke-test
+      - flake-vendorhash
     steps:
-      - name: Confirm Success
-        run: echo "All checks passed successfully!"
+      - name: Verify required jobs
+        env:
+          RES_GOVULNCHECK: ${{ needs.govulncheck.result }}
+          RES_DEPENDENCY_SCAN: ${{ needs.dependency-scan.result }}
+          RES_LINT: ${{ needs.lint.result }}
+          RES_FLAKE_VENDORHASH: ${{ needs.flake-vendorhash.result }}
+          RES_TEST_PR: ${{ needs.test-pr.result }}
+          RES_BUILD_PR: ${{ needs.build-pr.result }}
+          RES_TEST: ${{ needs.test.result }}
+          RES_FUZZ: ${{ needs.fuzz.result }}
+          RES_BUILD: ${{ needs.build.result }}
+          RES_INTEGRATION_TEST: ${{ needs.integration-test.result }}
+          RES_SMOKE_TEST: ${{ needs.smoke-test.result }}
+        run: |
+          set -e
+          check() {
+            local result="$1"
+            local label="$2"
+            case "$result" in
+              success|skipped) echo "  ✅ ${label} (${result})" ;;
+              *) echo "  ❌ ${label} (${result})"; exit 1 ;;
+            esac
+          }
+          echo "Checking required jobs..."
+
+          # Always required
+          check "$RES_GOVULNCHECK"      govulncheck
+          check "$RES_DEPENDENCY_SCAN"  dependency-scan
+          check "$RES_LINT"             lint
+          check "$RES_FLAKE_VENDORHASH" flake-vendorhash
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            check "$RES_TEST_PR"   test-pr
+            check "$RES_BUILD_PR"  build-pr
+            # Main-only jobs: must be ok (skipped/success), must not have failed
+            check "$RES_TEST"             test
+            check "$RES_FUZZ"             fuzz
+            check "$RES_BUILD"            build
+            check "$RES_INTEGRATION_TEST" integration-test
+            check "$RES_SMOKE_TEST"       smoke-test
+          else
+            check "$RES_TEST"             test
+            check "$RES_FUZZ"             fuzz
+            check "$RES_BUILD"            build
+            check "$RES_INTEGRATION_TEST" integration-test
+            check "$RES_SMOKE_TEST"       smoke-test
+            check "$RES_TEST_PR"          test-pr
+            check "$RES_BUILD_PR"         build-pr
+          fi
+
+          echo "✅ All required checks passed"
