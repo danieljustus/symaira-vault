@@ -263,6 +263,68 @@ jobs:
             security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
           fi
 
+  gui-release:
+    name: GUI Release (macOS App DMG)
+    runs-on: macos-15
+    needs: [release]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Git auth for private SPM dependencies
+        env:
+          APP_TOKEN: ${{ secrets.SYMAIRA_APPKIT_GITHUB_TOKEN }}
+        run: |
+          if [ -z "${APP_TOKEN:-}" ]; then
+            echo "::warning::SYMAIRA_APPKIT_GITHUB_TOKEN not set — SPM may fail fetching private deps"
+          else
+            git config --global url."https://${APP_TOKEN}@github.com/".insteadOf "https://github.com/"
+          fi
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.5'
+          cache: true
+
+      - name: Build symvault binary (for embedding)
+        run: go build -o symvault .
+
+      - name: Generate Xcode project
+        run: xcodegen --spec client/project.yml --project client
+
+      - name: Build macOS app
+        run: |
+          cd client
+          xcodebuild -project Symvault.xcodeproj \
+            -scheme Symvault \
+            -configuration Release \
+            -archivePath Symvault.xcarchive \
+            archive \
+            CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Manual \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Create DMG
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          APP_PATH="client/Symvault.xcarchive/Products/Applications/Symvault.app"
+          DMG_PATH="SymairaVault_${TAG}_macos.dmg"
+          hdiutil create -volname "Symaira Vault ${TAG}" \
+            -srcfolder "$APP_PATH" \
+            -ov -format UDZO \
+            "$DMG_PATH"
+          echo "DMG_PATH=$DMG_PATH" >> "$GITHUB_ENV"
+
+      - name: Upload DMG to release
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          gh release upload "$TAG" "${{ env.DMG_PATH }}" --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   smoke-test-mcpb:
     name: Smoke Test (MCPB Bundle)
     runs-on: ubuntu-latest
