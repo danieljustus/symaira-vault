@@ -305,7 +305,9 @@ and port as needed:
 
 The vault must be unlockable non-interactively. Run `symvault unlock` once so
 the passphrase is cached in the OS keyring, or provide a controlled environment
-for `SYMVAULT_PASSPHRASE`.
+for `SYMVAULT_PASSPHRASE`. Note that `SYMVAULT_PASSPHRASE` alone is ignored
+(default-deny): also set `SYMVAULT_ALLOW_ENV_PASSPHRASE=1` or
+`security.allow_env_passphrase: true` in config.yaml.
 
 ## Token Management
 

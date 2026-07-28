@@ -9,6 +9,7 @@ import (
 	"time"
 
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 	"github.com/danieljustus/symaira-vault/internal/session"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
@@ -162,6 +163,91 @@ func TestUnlockVaultWithTTLDoesNotSaveTouchIDItemForUncachedEnvPassphrase(t *tes
 	}
 	if v == nil {
 		t.Fatal("UnlockVaultWithTTL() returned nil vault")
+	}
+}
+
+// TestUnlockVaultWithTTL_EnvPassphraseSetButGateDisabled reproduces issue #714:
+// SYMVAULT_PASSPHRASE alone (without the explicit opt-in gate) is silently
+// ignored in non-interactive mode. The error must now say why.
+func TestUnlockVaultWithTTL_EnvPassphraseSetButGateDisabled(t *testing.T) {
+	vaultDir := t.TempDir()
+	passphrase := []byte("test-passphrase")
+	cfg := configpkg.Default()
+	if _, err := vaultpkg.InitWithPassphrase(vaultDir, passphrase, cfg); err != nil {
+		t.Fatalf("InitWithPassphrase() error = %v", err)
+	}
+
+	oldLoadPassphrase := SessionLoadPassphrase
+	oldLoadIdentity := SessionLoadIdentity
+	t.Cleanup(func() {
+		SessionLoadPassphrase = oldLoadPassphrase
+		SessionLoadIdentity = oldLoadIdentity
+		ClearCachedEnvPassphrase()
+	})
+	SessionLoadIdentity = func(string) (string, error) { return "", errors.New("miss") }
+	SessionLoadPassphrase = func(string) ([]byte, error) { return nil, errors.New("miss") }
+
+	// Isolate from ambient environments where the gate may be enabled.
+	t.Setenv("SYMVAULT_ALLOW_ENV_PASSPHRASE", "")
+	t.Setenv("OPENPASS_ALLOW_ENV_PASSPHRASE", "")
+
+	// Env passphrase is available but the opt-in gate is NOT enabled.
+	SetCachedEnvPassphrase(append([]byte(nil), passphrase...))
+
+	_, _, err := UnlockVaultWithTTL(vaultDir, false, 0, false)
+	if err == nil {
+		t.Fatal("expected locked error when the env passphrase gate is disabled")
+	}
+	var cliErr *errorspkg.CLIError
+	if !errors.As(err, &cliErr) {
+		t.Fatalf("expected *CLIError, got %T: %v", err, err)
+	}
+	if cliErr.Code != errorspkg.ExitLocked {
+		t.Errorf("expected ExitLocked, got %v", cliErr.Code)
+	}
+	if !strings.Contains(err.Error(), "disabled") {
+		t.Errorf("expected error to state that the env passphrase is disabled, got: %v", err)
+	}
+	if !strings.Contains(cliErr.Hint, "SYMVAULT_ALLOW_ENV_PASSPHRASE") ||
+		!strings.Contains(cliErr.Hint, "security.allow_env_passphrase") {
+		t.Errorf("expected hint to name SYMVAULT_ALLOW_ENV_PASSPHRASE and security.allow_env_passphrase, got: %q", cliErr.Hint)
+	}
+	// The security gate must be preserved: the cached passphrase is not consumed.
+	if !HasCachedEnvPassphrase() {
+		t.Error("cached env passphrase must not be consumed when the gate is disabled")
+	}
+}
+
+func TestEnvPassphraseIgnored(t *testing.T) {
+	ClearCachedEnvPassphrase()
+	t.Cleanup(ClearCachedEnvPassphrase)
+	// Isolate from ambient developer/CI environments where the gate may be enabled.
+	t.Setenv("SYMVAULT_ALLOW_ENV_PASSPHRASE", "")
+	t.Setenv("OPENPASS_ALLOW_ENV_PASSPHRASE", "")
+
+	// Nothing set: not "ignored", simply absent.
+	if envPassphraseIgnored(configpkg.Default()) {
+		t.Error("expected false when no env passphrase is set")
+	}
+
+	// Set but not allowed: ignored.
+	t.Setenv("SYMVAULT_PASSPHRASE", "x")
+	if !envPassphraseIgnored(configpkg.Default()) {
+		t.Error("expected true when SYMVAULT_PASSPHRASE is set without the opt-in gate")
+	}
+
+	// Set and allowed via env: honored, not ignored.
+	t.Setenv("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
+	if envPassphraseIgnored(configpkg.Default()) {
+		t.Error("expected false when SYMVAULT_ALLOW_ENV_PASSPHRASE=1 allows the env passphrase")
+	}
+
+	// Set and allowed via config: honored, not ignored.
+	allowedCfg := configpkg.Default()
+	allowedCfg.Security = &configpkg.SecurityConfig{AllowEnvPassphrase: true}
+	t.Setenv("SYMVAULT_ALLOW_ENV_PASSPHRASE", "")
+	if envPassphraseIgnored(allowedCfg) {
+		t.Error("expected false when security.allow_env_passphrase allows the env passphrase")
 	}
 }
 
