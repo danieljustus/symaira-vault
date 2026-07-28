@@ -128,7 +128,7 @@ Wraps [filippo.io/age](https://pkg.go.dev/filippo.io/age) for X25519+ChaCha20-Po
 - `Encrypt(plaintext, recipient)` — Encrypt for single recipient
 - `EncryptWithRecipients(plaintext, ...recipients)` — Multi-recipient encryption
 - `Decrypt(ciphertext, identity)` — Decrypt with identity
-- `EncryptWithPassphrase(plaintext, passphrase)` — Passphrase encryption (scrypt)
+- `EncryptWithPassphrase(plaintext, passphrase)` — Passphrase encryption (argon2id for new vaults; scrypt supported for legacy vaults, see `symvault migrate kdf`)
 - `DecryptWithPassphrase(ciphertext, passphrase)` — Passphrase decryption
 - `GenerateIdentity()` — Generate new X25519 identity
 - `LoadIdentity(path, passphrase)` — Load passphrase-protected identity
@@ -404,7 +404,7 @@ sequenceDiagram
 ### Encryption
 
 - **Algorithm:** age (X25519 key exchange + ChaCha20-Poly1305)
-- **Identity protection:** `identity.age` encrypted with passphrase via scrypt
+- **Identity protection:** `identity.age` encrypted with passphrase via argon2id (new vaults) or scrypt (legacy vaults, migratable via `symvault migrate kdf`)
 - **Entry encryption:** Each entry encrypted with vault's X25519 recipient
 - **Multi-recipient:** Entries can be encrypted for additional recipients (shared access)
 
@@ -460,7 +460,7 @@ Vaults created with the older root-level entry layout are migrated to `entries/`
 ## Key Design Decisions
 
 1. **Individual entry encryption:** Each `.age` file is self-contained and decryptable independently
-2. **Identity self-encryption:** `identity.age` is encrypted with the identity's own public key, protected by passphrase at the scrypt layer
+2. **Identity self-encryption:** `identity.age` is encrypted with the identity's own public key, protected by passphrase at the argon2id (or, for un-migrated legacy vaults, scrypt) layer
 3. **Passphrase never stored:** Only cached in OS keyring with TTL
 4. **Build-tagged clipboard:** `internal/clipboard/` uses `//go:build` tags to switch between real clipboard (`!test_headless`) and no-op stub (`test_headless`)
 5. **HTTP MCP token:** Auto-generated, stored at `<vault>/mcp-token`

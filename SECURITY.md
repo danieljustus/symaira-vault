@@ -318,7 +318,7 @@ Symaira Vault uses [age](https://age-encryption.org/) for encryption:
 
 - **Key Exchange**: X25519 (Curve25519 elliptic curve Diffie-Hellman)
 - **Encryption**: ChaCha20-Poly1305 (authenticated encryption)
-- **Identity File**: Encrypted with the identity's own public key, protected by scrypt (passphrase)
+- **Identity File**: Encrypted with the identity's own public key, protected by a passphrase-derived key (argon2id for new vaults; scrypt for vaults not yet migrated — see below)
 
 Each vault entry is encrypted individually as a standalone `.age` file, ensuring:
 - No compound encryption failures
@@ -327,33 +327,35 @@ Each vault entry is encrypted individually as a standalone `.age` file, ensuring
 
 ### KDF Migration Path (scrypt → argon2id)
 
-Symaira Vault currently uses **scrypt** (N=262144, r=8, p=1 — work factor 18) for
-passphrase-based key derivation. While scrypt provides reasonable protection,
-**argon2id** is the industry-standard memory-hard KDF (RFC 9106) and provides
-stronger resistance against GPU/ASIC-based attacks.
+Symaira Vault historically used **scrypt** (N=262144, r=8, p=1 — work factor 18) for
+passphrase-based key derivation. **argon2id** is the industry-standard memory-hard KDF
+(RFC 9106) and provides stronger resistance against GPU/ASIC-based attacks. As of
+`symvault init` uses argon2id for all newly created vaults (#705); vaults created
+before this change (format v1) still use scrypt until migrated.
 
-#### Current Status (v0.x)
+#### Current Status
 
-| Vault Format | KDF    | Work Factor | Doctor Check         |
-|-------------|--------|-------------|---------------------|
-| v1 (current) | scrypt | 18          | `crypto.kdf.modern` warns |
-| v2 (planned) | argon2id | TBD       | `crypto.kdf.modern` OK    |
+| Vault Format | KDF    | Work Factor    | Doctor Check              |
+|-------------|--------|-----------------|---------------------------|
+| v1 (legacy)  | scrypt | 18              | `crypto.kdf.modern` warns |
+| v2 (current, default for new vaults) | argon2id | time=3, memory=64 MiB, threads=4 | `crypto.kdf.modern` OK |
 
-#### Migration Plan
+#### Migrating an Existing Vault
 
-A future release will provide:
-- `symvault migrate kdf` command to re-encrypt vault entries with argon2id
-- Automatic detection of vault format version
-- Doctor check `crypto.kdf.modern` to track migration status
+- `symvault migrate kdf` re-encrypts `identity.age` from scrypt to argon2id.
+- Setting `vault.auto_migrate_kdf: true` in `config.yaml` migrates automatically on the
+  next unlock instead of requiring the explicit command.
+- Run `symvault doctor` at any time to check the current KDF status
+  (`crypto.kdf.modern` check).
 
-#### Preparing for Migration
+#### Before Migrating
 
-1. **Back up your vault** before any migration:
+1. **Back up your vault** before running the migration:
    ```bash
    cp -r ~/.symvault ~/.symvault.backup
    ```
-2. Run `symvault doctor` to check current KDF status
-3. Wait for the migration command to be available in a future release
+2. Run `symvault doctor` to confirm the current format and KDF.
+3. Run `symvault migrate kdf` (or enable `auto_migrate_kdf`) to upgrade.
 
 #### Why argon2id?
 

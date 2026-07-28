@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="tile" x1="120" y1="96" x2="900" y2="936" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#17191D"/>
+      <stop offset="0.52" stop-color="#090B0F"/>
+      <stop offset="1" stop-color="#15100B"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="160" y1="120" x2="850" y2="920" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF1C8"/>
+      <stop offset="0.34" stop-color="#E7BD6A"/>
+      <stop offset="0.72" stop-color="#8E6729"/>
+      <stop offset="1" stop-color="#F4D99A"/>
+    </linearGradient>
+    <radialGradient id="goldGlow" cx="0" cy="0" r="1" gradientTransform="translate(226 190) rotate(42) scale(540)">
+      <stop stop-color="#F5CE79" stop-opacity=".24"/>
+      <stop offset=".56" stop-color="#C9923F" stop-opacity=".06"/>
+      <stop offset="1" stop-color="#C9923F" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="accentGlow" cx="0" cy="0" r="1" gradientTransform="translate(790 776) rotate(-132) scale(410)">
+      <stop stop-color="#71D9F0" stop-opacity=".22"/>
+      <stop offset="1" stop-color="#71D9F0" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="tileShadow" x="10" y="18" width="1004" height="1004" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="24" stdDeviation="24" flood-color="#000000" flood-opacity=".42"/>
+    </filter>
+    <filter id="glyphGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="9" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+    <clipPath id="clip">
+      <rect x="64" y="64" width="896" height="896" rx="208"/>
+    </clipPath>
+  </defs>
+
+  <g filter="url(#tileShadow)">
+    <rect x="64" y="64" width="896" height="896" rx="208" fill="url(#tile)"/>
+  </g>
+  <g clip-path="url(#clip)">
+    <rect x="64" y="64" width="896" height="896" fill="url(#goldGlow)"/>
+    <rect x="64" y="64" width="896" height="896" fill="url(#accentGlow)"/>
+    <g fill="none" stroke="#F8E4AE" stroke-opacity=".065" stroke-width="2">
+      <path d="M64 256H960M64 384H960M64 512H960M64 640H960M64 768H960"/>
+      <path d="M256 64V960M384 64V960M512 64V960M640 64V960M768 64V960"/>
+    </g>
+    <path d="M146 395C176 224 304 132 474 148C548 155 615 181 672 223"
+          fill="none" stroke="url(#rim)" stroke-width="22" stroke-linecap="round" opacity=".66"/>
+    <path d="M878 629C848 800 720 892 550 876C476 869 409 843 352 801"
+          fill="none" stroke="url(#rim)" stroke-width="22" stroke-linecap="round" opacity=".66"/>
+    <path d="M165 414C201 264 322 187 464 202" fill="none"
+          stroke="#FFF2C8" stroke-width="4" stroke-linecap="round" opacity=".26"/>
+    <path d="M859 610C823 760 702 837 560 822" fill="none"
+          stroke="#FFF2C8" stroke-width="4" stroke-linecap="round" opacity=".26"/>
+    <circle cx="150" cy="395" r="8" fill="#F7E0A8"/>
+    <circle cx="874" cy="629" r="8" fill="#71D9F0"/>
+  </g>
+  <rect x="70" y="70" width="884" height="884" rx="202" fill="none"
+        stroke="url(#rim)" stroke-width="7" opacity=".78"/>
+  <rect x="84" y="84" width="856" height="856" rx="190" fill="none"
+        stroke="#FFFFFF" stroke-width="2" opacity=".11"/>
+
+  <g transform="translate(256 256)" color="#71D9F0">
+<path d="M256 72L398 126V238C398 332 342 406 256 440C170 406 114 332 114 238V126Z" fill="none" stroke="#71D9F0" stroke-width="28" stroke-linejoin="round" />
+  
+<path d="M199 248V211C199 179 224 154 256 154C288 154 313 179 313 211V248" fill="none" stroke="#F7E0A8" stroke-width="25" stroke-linecap="round" />
+  
+<rect x="175" y="238" width="162" height="125" rx="30" fill="none" stroke="#F7E0A8" stroke-width="25" />
+  
+<circle cx="256" cy="292" r="17" fill="#F7E0A8" />
+  
+<path d="M256 307V334" stroke="#F7E0A8" stroke-width="16" stroke-linecap="round" />
+
+  </g>
+</svg>
