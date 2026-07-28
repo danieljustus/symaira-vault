@@ -126,6 +126,21 @@ func IsEnvPassphraseAllowed(cfg *configpkg.Config) bool {
 	return v == "1" || v == "true" || v == "yes"
 }
 
+// envPassphraseIgnored reports whether an environment passphrase is available
+// (cached from main() or still set in the environment) but will be ignored
+// because the opt-in gate (security.allow_env_passphrase in config.yaml or
+// SYMVAULT_ALLOW_ENV_PASSPHRASE=1) is not enabled. Used to surface an explicit
+// hint instead of silently discarding SYMVAULT_PASSPHRASE.
+func envPassphraseIgnored(cfg *configpkg.Config) bool {
+	if IsEnvPassphraseAllowed(cfg) {
+		return false
+	}
+	if HasCachedEnvPassphrase() {
+		return true
+	}
+	return envutil.Getenv("SYMVAULT_PASSPHRASE", "OPENPASS_PASSPHRASE") != ""
+}
+
 func resolveUnlockPassphrase(vaultDir string, interactive bool, cfg *configpkg.Config) ([]byte, bool, bool, error) {
 	passphrase, err := SessionLoadPassphrase(vaultDir)
 	passphraseFromEnv := false
@@ -155,6 +170,14 @@ func resolveUnlockPassphrase(vaultDir string, interactive bool, cfg *configpkg.C
 			}
 		}
 		if len(passphrase) == 0 {
+			if envPassphraseIgnored(cfg) {
+				if !interactive {
+					return nil, false, false, errorspkg.NewCLIError(errorspkg.ExitLocked,
+						"vault locked: SYMVAULT_PASSPHRASE is set but env passphrase unlock is disabled", nil).
+						WithHint("Set SYMVAULT_ALLOW_ENV_PASSPHRASE=1 or security.allow_env_passphrase: true in config.yaml to allow SYMVAULT_PASSPHRASE for non-interactive use.")
+				}
+				cliout.Warnf("SYMVAULT_PASSPHRASE is set but ignored: env passphrase unlock is disabled. Set SYMVAULT_ALLOW_ENV_PASSPHRASE=1 or security.allow_env_passphrase: true in config.yaml to allow it.")
+			}
 			if !interactive {
 				return nil, false, false, errorspkg.NewCLIError(errorspkg.ExitLocked, lockedMessageForCache(), nil)
 			}
