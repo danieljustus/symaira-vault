@@ -265,7 +265,7 @@ func Execute() {
 			case errorspkg.ExitNotInitialized:
 				cliout.Hintf("Run 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.")
 			case errorspkg.ExitLocked:
-				cliout.Hintf("Unlock with 'symvault unlock', or set SYMVAULT_PASSPHRASE (or OPENPASS_PASSPHRASE) for non-interactive use.")
+				cliout.Hintf("Unlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.")
 			case errorspkg.ExitConfigError:
 				cliout.Hintf("Run 'symvault doctor' to diagnose and fix configuration issues.")
 			case errorspkg.ExitSuccess, errorspkg.ExitGeneralError, errorspkg.ExitPermissionDenied, errorspkg.ExitInvalidInput, errorspkg.ExitDoctorWarn, errorspkg.ExitDoctorFail, errorspkg.ExitUpdateAvailable:

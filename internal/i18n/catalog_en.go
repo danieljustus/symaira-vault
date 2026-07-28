@@ -18,7 +18,7 @@ func init() {
 		"error.passphrase.mismatch":   "passphrases did not match",
 		"error.vault.locked":          "vault is locked",
 		"error.vault.not_initialized": "vault not initialized — run 'symvault init' first",
-		"hint.unlock":                 "Unlock with 'symvault unlock', or set OPENPASS_PASSPHRASE for non-interactive use.",
+		"hint.unlock":                 "Unlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml).",
 		"hint.find":                   "Try: symvault find <search-term>",
 		"hint.first_run":              "Run 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.",
 		"notify.security_alert":       "Symaira Vault security alert",

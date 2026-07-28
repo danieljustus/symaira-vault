@@ -62,10 +62,16 @@ Full exit code reference: [cli-exit-codes.md](cli-exit-codes.md).
 
 | Variable                | Purpose                                              |
 | ----------------------- | ---------------------------------------------------- |
-| `SYMVAULT_PASSPHRASE`   | Passphrase for non-interactive unlock (preferred).   |
+| `SYMVAULT_PASSPHRASE`   | Passphrase for non-interactive unlock (preferred). Requires the opt-in gate below — alone it is ignored (default-deny). |
 | `OPENPASS_PASSPHRASE`   | Alias for `SYMVAULT_PASSPHRASE` (legacy compat).    |
+| `SYMVAULT_ALLOW_ENV_PASSPHRASE` | Set to `1` to allow unlock via `SYMVAULT_PASSPHRASE` (alternatively `security.allow_env_passphrase: true` in config.yaml). |
 | `SYMVAULT_NO_ENV_WARNING` | Set to `1` to suppress env passphrase warning.     |
 | `SYMVAULT_NO_PIPE_WARNING` | Set to `1` to suppress pipe-read warning.         |
+
+> **Note:** For security, `SYMVAULT_PASSPHRASE` is ignored unless
+> `SYMVAULT_ALLOW_ENV_PASSPHRASE=1` (or `security.allow_env_passphrase: true`)
+> is also set. When the variable is detected but not allowed, the CLI exits
+> with `ExitLocked` and an explicit hint instead of silently prompting.
 
 ## Example: Go Integration with Timeout
 

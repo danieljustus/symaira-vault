@@ -13,7 +13,7 @@ func init() {
 		"error.passphrase.mismatch":   "Passphrasen stimmen nicht überein",
 		"error.vault.locked":          "Vault ist gesperrt",
 		"error.vault.not_initialized": "Vault nicht initialisiert — führe 'symvault init' aus",
-		"hint.unlock":                 "Mit 'symvault unlock' entsperren, oder OPENPASS_PASSPHRASE für nicht-interaktive Nutzung setzen.", //nolint:misspell
+		"hint.unlock":                 "Mit 'symvault unlock' entsperren. Für nicht-interaktive Nutzung SYMVAULT_PASSPHRASE zusammen mit SYMVAULT_ALLOW_ENV_PASSPHRASE=1 setzen (oder security.allow_env_passphrase: true in config.yaml).", //nolint:misspell
 		"hint.find":                   "Versuche: symvault find <Suchbegriff>",
 		"hint.first_run":              "Führe 'symvault init' für einen schnellen Start aus oder 'symvault setup' für den geführten Assistenten.",
 		"notify.security_alert":       "Symaira Vault Sicherheitswarnung",

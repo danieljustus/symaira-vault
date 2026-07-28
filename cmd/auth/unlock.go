@@ -22,8 +22,12 @@ OS keyring. This allows MCP servers to start without interactive prompts.
 
 Use --check to verify if an active session exists without prompting.
 
-Environment variable OPENPASS_PASSPHRASE can be used in CI/CD environments
-but should NOT be used on shared machines (visible in process listings).`,
+Environment variable SYMVAULT_PASSPHRASE (legacy alias OPENPASS_PASSPHRASE)
+can be used for non-interactive unlock in CI/CD environments, but only when
+explicitly allowed via SYMVAULT_ALLOW_ENV_PASSPHRASE=1 or
+security.allow_env_passphrase: true in config.yaml — the passphrase variable
+alone is ignored (default-deny). It should NOT be used on shared machines
+(visible in process listings).`,
 	Example: `  # Unlock the vault
   symvault unlock
 
