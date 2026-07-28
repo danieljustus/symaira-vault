@@ -16,7 +16,7 @@ Symaira Vault
 │   └── github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 (indirect)
 │       └── github.com/golang/protobuf v1.5.4 (indirect, DEPRECATED)
 │           └── google.golang.org/protobuf v1.36.11+ (indirect)
-└── google.golang.org/grpc v1.81.1 (indirect)
+└── google.golang.org/grpc v1.82.1 (indirect)
     └── github.com/golang/protobuf v1.5.4 (indirect, DEPRECATED)
         └── google.golang.org/protobuf v1.36.11+ (indirect)
 ```
@@ -31,7 +31,7 @@ From `go.mod` (lines 7, 12, 37, 104, 144, 145):
 
 require (
     github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
-    google.golang.org/grpc v1.81.1 // indirect
+    google.golang.org/grpc v1.82.1 // indirect
     google.golang.org/protobuf v1.36.11 // indirect
 )
 ```
@@ -129,11 +129,11 @@ go-git is a widely used library (7K+ stars, consumed by Kubernetes ecosystem, Gi
 
 | Attribute | Value |
 |-----------|-------|
-| grpc v1.81.1 | Still depends on `github.com/golang/protobuf` v1.5.4 |
-| grpc v1.81.1 (latest) | **Still depends on `github.com/golang/protobuf` v1.5.4** |
+| grpc v1.82.1 | Still depends on `github.com/golang/protobuf` v1.5.4 |
+| grpc v1.82.1 (latest) | **Still depends on `github.com/golang/protobuf` v1.5.4** |
 | grpc migration status | No active migration off deprecated protobuf observed |
 
-**Verdict:** Even upgrading to the latest grpc release (v1.81.1) does **not** remove the deprecated `golang/protobuf` dependency. grpc remains a second, independent path for the deprecated module. This was verified by inspecting the grpc module graph — the `golang/protobuf` edge persists.
+**Verdict:** Even upgrading to the latest grpc release (v1.82.1) does **not** remove the deprecated `golang/protobuf` dependency. grpc remains a second, independent path for the deprecated module. This was verified by inspecting the grpc module graph — the `golang/protobuf` edge persists.
 
 ---
 
@@ -228,6 +228,7 @@ Acknowledge the deprecated transitive dependency, document it, and move on. Re-a
 | 2026-07-07 | Sisyphus | DEFER | Re-audit for #617: groupcache issue #150 still open, no maintainer engagement. groupcache still directly requires `github.com/golang/protobuf v1.5.4`. grpc v1.81.1 still depends on `github.com/golang/protobuf v1.5.4`. Direct update is not possible; status quo maintained. |
 | 2026-07-14 | Sisyphus-Junior | DEFER | Re-audit for #646: groupcache still at v0.0.0-20241129210726 (no new commits). grpc v1.82.0 released but still depends on `github.com/golang/protobuf v1.5.4`. groupcache issue #150 last updated 2024-04-25, no maintainer engagement. No upstream changes; status quo maintained. |
 | 2026-07-20 | Sisyphus-Junior | DEFER | Re-audit for #662: groupcache remains at v0.0.0-20241129210726 (no new commits). grpc v1.82.1 released but still requires `github.com/golang/protobuf v1.5.4`. No upstream migration activity. Status quo maintained. |
+| 2026-07-28 | Automated re-audit | DEFER | Re-audit for #713: groupcache still at v0.0.0-20241129210726-2c02b8208cf8 (no commits since Nov 2024); master `go.mod` still directly requires `github.com/golang/protobuf v1.5.4`. grpc v1.82.1 still requires `github.com/golang/protobuf v1.5.4` (verified in go.mod graph and grpc-go master). go-git v5.19.1 and go-git master still depend on official groupcache. No direct update path exists; `golang/protobuf` v1.5.4 remains the final release of the shim module. Status quo maintained. |
 
 ---
 
