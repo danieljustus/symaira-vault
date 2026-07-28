@@ -8,25 +8,8 @@ name: CodeQL
 # side for the same repo, so this workflow now covers every previously
 # scanned language, not just swift.
 on:
-  push:
-    branches: [ main ]
-    paths-ignore:
-      - 'docs/**'
-      - '**.md'
-      - 'LICENSE'
-      - '.github/ISSUE_TEMPLATE/**'
-    tags-ignore:
-      - 'v*'
-  pull_request:
-    branches: [ main ]
-    paths-ignore:
-      - 'docs/**'
-      - '**.md'
-      - 'LICENSE'
-      - '.github/ISSUE_TEMPLATE/**'
   schedule:
     - cron: '0 6 * * 1'
-
 permissions:
   contents: read
   security-events: write
