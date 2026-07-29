@@ -3594,3 +3594,41 @@ agents:
 		t.Errorf("PaymentPolicyValue() = %q, want %q", agent.PaymentPolicyValue(), "test-policy")
 	}
 }
+
+func TestValidate_Argon2idParamsBounds(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		time    int
+		memory  int
+		threads int
+		wantErr bool
+	}{
+		{"valid defaults", 3, 65536, 4, false},
+		{"valid floors", 2, 19456, 1, false},
+		{"valid ceilings", 16, 2097152, 16, false},
+		{"time below floor", 1, 65536, 4, true},
+		{"time above ceiling", 17, 65536, 4, true},
+		{"memory below floor", 3, 1024, 4, true},
+		{"memory above ceiling", 3, 3000000, 4, true},
+		{"threads below floor", 3, 65536, -1, true},
+		{"threads above ceiling", 3, 65536, 20, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := Default()
+			cfg.Vault = &VaultConfig{
+				Argon2idTime:    tt.time,
+				Argon2idMemory:  tt.memory,
+				Argon2idThreads: tt.threads,
+			}
+			err := cfg.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}

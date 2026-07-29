@@ -1,6 +1,8 @@
 package vault
 
 import (
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/danieljustus/symaira-vault/internal/config"
@@ -30,6 +32,41 @@ func TestInitWithPassphraseRoundTrip(t *testing.T) {
 	}
 	if v.Config == nil || v.Config.VaultDir != vaultDir {
 		t.Fatalf("OpenWithPassphrase() config vault = %v, want %s", v.Config, vaultDir)
+	}
+}
+
+func TestInitWithPassphraseCustomArgon2idParams(t *testing.T) {
+	vaultDir := t.TempDir()
+	cfg := config.Default()
+	cfg.VaultDir = vaultDir
+	cfg.Vault = &config.VaultConfig{
+		Argon2idTime:    4,
+		Argon2idMemory:  131072,
+		Argon2idThreads: 2,
+	}
+
+	passphrase := []byte("custom params passphrase")
+	identity, err := InitWithPassphrase(vaultDir, passphrase, cfg)
+	if err != nil {
+		t.Fatalf("InitWithPassphrase() error = %v", err)
+	}
+
+	raw, err := os.ReadFile(vaultDir + "/identity.age")
+	if err != nil {
+		t.Fatalf("os.ReadFile() error = %v", err)
+	}
+
+	rawStr := string(raw)
+	if !strings.Contains(rawStr, "t=4,m=131072,p=2") {
+		t.Fatalf("identity.age does not contain configured Argon2id params 't=4,m=131072,p=2': %s", rawStr)
+	}
+
+	v, err := OpenWithPassphrase(vaultDir, passphrase)
+	if err != nil {
+		t.Fatalf("OpenWithPassphrase() error = %v", err)
+	}
+	if v.Identity.String() != identity.String() {
+		t.Fatalf("identity mismatch: got %s, want %s", v.Identity.String(), identity.String())
 	}
 }
 

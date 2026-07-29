@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"strconv"
 	"strings"
 	"unsafe"
 
@@ -282,21 +283,21 @@ func parseArgon2idParams(s string) (Argon2idParams, error) {
 			return params, fmt.Errorf("invalid params: %w", err)
 		}
 	}
-	if params.Time == 0 || params.Memory == 0 || params.Threads == 0 {
-		return params, errors.New("incomplete argon2id params")
+	if err := validateArgon2idParams(params); err != nil {
+		return params, err
 	}
 	return params, nil
 }
 
 func parseUint32(s string) (uint32, error) {
-	var n uint32
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			return 0, fmt.Errorf("invalid number: %q", s)
-		}
-		n = n*10 + uint32(c-'0')
+	if len(s) == 0 {
+		return 0, fmt.Errorf("invalid number: %q", s)
 	}
-	return n, nil
+	u, err := strconv.ParseUint(s, 10, 32)
+	if err != nil {
+		return 0, fmt.Errorf("invalid number: %q: %w", s, err)
+	}
+	return uint32(u), nil
 }
 
 func EncryptWithKey(plaintext []byte, key []byte) ([]byte, error) {

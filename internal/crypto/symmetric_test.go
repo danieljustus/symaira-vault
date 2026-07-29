@@ -2,6 +2,7 @@ package crypto
 
 import (
 	"bytes"
+	"encoding/base64"
 	"errors"
 	"os"
 	"strings"
@@ -546,4 +547,98 @@ func TestRecoverZeroKeyIdentityRejectsZeroLength(t *testing.T) {
 	if _, err := RecoverZeroKeyIdentity([]byte("-> argon2id t=1,m=64,p=1\nAAAA"), -1); err == nil {
 		t.Fatal("expected error for negative n")
 	}
+}
+
+func TestArgon2idParams_UpperBounds(t *testing.T) {
+	t.Parallel()
+
+	pass := []byte("passphrase")
+	salt := []byte("0123456789abcdef")
+
+	tests := []struct {
+		name    string
+		params  Argon2idParams
+		wantErr bool
+	}{
+		{"valid default", DefaultArgon2idParams(), false},
+		{"valid max memory", Argon2idParams{Time: 3, Memory: 2097152, Threads: 4}, false},
+		{"valid max time", Argon2idParams{Time: 16, Memory: 65536, Threads: 4}, false},
+		{"valid max threads", Argon2idParams{Time: 3, Memory: 65536, Threads: 16}, false},
+		{"time over ceiling", Argon2idParams{Time: 17, Memory: 65536, Threads: 4}, true},
+		{"memory over ceiling", Argon2idParams{Time: 3, Memory: 2097153, Threads: 4}, true},
+		{"threads over ceiling", Argon2idParams{Time: 3, Memory: 65536, Threads: 17}, true},
+		{"memory below min 4*threads", Argon2idParams{Time: 3, Memory: 15, Threads: 4}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := Argon2idDeriveKey(pass, salt, tt.params)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Argon2idDeriveKey() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestParseArgon2idParams_UnboundedMemory(t *testing.T) {
+	t.Parallel()
+
+	invalidStanzas := []string{
+		"t=3,m=4294967295,p=4",
+		"t=3,m=9999999999,p=4",
+		"t=4294967295,m=65536,p=4",
+		"t=3,m=65536,p=255",
+		"t=0,m=65536,p=4",
+		"t=3,m=0,p=4",
+		"t=3,m=65536,p=0",
+	}
+
+	for _, s := range invalidStanzas {
+		_, err := parseArgon2idParams(s)
+		if err == nil {
+			t.Errorf("parseArgon2idParams(%q) = nil, want error", s)
+		}
+	}
+}
+
+func TestUnwrapArgon2id_RejectsOverLimitStanza(t *testing.T) {
+	t.Parallel()
+
+	identity := NewArgon2idIdentity("testphrase")
+	salt := base64.RawStdEncoding.EncodeToString([]byte("0123456789abcdef"))
+
+	// Create stanza with m=4294967295
+	stanza := &age.Stanza{
+		Type: Argon2idStanzaType,
+		Args: []string{salt, "t=3,m=4294967295,p=4"},
+		Body: make([]byte, 32),
+	}
+
+	_, err := identity.Unwrap([]*age.Stanza{stanza})
+	if err == nil {
+		t.Fatal("expected error unwrapping over-limit Argon2id stanza, got nil")
+	}
+}
+
+func FuzzParseArgon2idParams(f *testing.F) {
+	seeds := []string{
+		"t=3,m=65536,p=4",
+		"t=3,m=4294967295,p=4",
+		"t=0,m=0,p=0",
+		"invalid",
+		"t=16,m=2097152,p=16",
+	}
+	for _, s := range seeds {
+		f.Add(s)
+	}
+
+	f.Fuzz(func(t *testing.T, input string) {
+		p, err := parseArgon2idParams(input)
+		if err == nil {
+			if p.Memory > MaxArgon2idMemory || p.Time > MaxArgon2idTime || p.Threads > MaxArgon2idThreads {
+				t.Fatalf("parseArgon2idParams(%q) returned out-of-bounds params: %+v", input, p)
+			}
+		}
+	})
 }

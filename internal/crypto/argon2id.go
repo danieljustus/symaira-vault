@@ -12,6 +12,9 @@ const (
 	DefaultArgon2idTime    = 3
 	DefaultArgon2idMemory  = 64 * 1024
 	DefaultArgon2idThreads = 4
+	MaxArgon2idTime        = 16
+	MaxArgon2idMemory      = 2097152 // 2 GiB in KiB
+	MaxArgon2idThreads     = 16
 	SaltLen                = 16
 	Argon2idKeyLen         = 32
 )
@@ -34,11 +37,20 @@ func validateArgon2idParams(p Argon2idParams) error {
 	if p.Time == 0 {
 		return errors.New("argon2id time parameter must be > 0")
 	}
+	if p.Time > MaxArgon2idTime {
+		return fmt.Errorf("argon2id time parameter (%d) exceeds maximum ceiling (%d)", p.Time, MaxArgon2idTime)
+	}
 	if p.Memory == 0 {
 		return errors.New("argon2id memory parameter must be > 0")
 	}
+	if p.Memory > MaxArgon2idMemory {
+		return fmt.Errorf("argon2id memory parameter (%d KiB) exceeds maximum ceiling (%d KiB)", p.Memory, MaxArgon2idMemory)
+	}
 	if p.Threads == 0 {
 		return errors.New("argon2id threads parameter must be > 0")
+	}
+	if p.Threads > MaxArgon2idThreads {
+		return fmt.Errorf("argon2id threads parameter (%d) exceeds maximum ceiling (%d)", p.Threads, MaxArgon2idThreads)
 	}
 	minMem := 4 * uint32(p.Threads)
 	if p.Memory < minMem {

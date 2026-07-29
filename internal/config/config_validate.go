@@ -189,5 +189,50 @@ func (c *Config) Validate() error {
 		errs = errors.Join(errs, err)
 	}
 
+	if err := validateArgon2idConfig(c.Vault); err != nil {
+		errs = errors.Join(errs, err)
+	}
+
+	return errs
+}
+
+func validateArgon2idConfig(v *VaultConfig) error {
+	if v == nil {
+		return nil
+	}
+	var errs error
+	if v.Argon2idTime != 0 {
+		if v.Argon2idTime < 2 {
+			errs = errors.Join(errs, fmt.Errorf("vault.argon2id_time: %d is below minimum floor of 2", v.Argon2idTime))
+		} else if v.Argon2idTime > 16 {
+			errs = errors.Join(errs, fmt.Errorf("vault.argon2id_time: %d exceeds maximum ceiling of 16", v.Argon2idTime))
+		}
+	}
+
+	effThreads := v.Argon2idThreads
+	if effThreads != 0 {
+		if effThreads < 1 {
+			errs = errors.Join(errs, fmt.Errorf("vault.argon2id_threads: %d is below minimum floor of 1", effThreads))
+		} else if effThreads > 16 {
+			errs = errors.Join(errs, fmt.Errorf("vault.argon2id_threads: %d exceeds maximum ceiling of 16", effThreads))
+		}
+	} else {
+		effThreads = 4
+	}
+
+	if v.Argon2idMemory != 0 {
+		if v.Argon2idMemory < 19456 {
+			errs = errors.Join(errs, fmt.Errorf("vault.argon2id_memory: %d KiB is below minimum floor of 19456 KiB", v.Argon2idMemory))
+		} else if v.Argon2idMemory > 2097152 {
+			errs = errors.Join(errs, fmt.Errorf("vault.argon2id_memory: %d KiB exceeds maximum ceiling of 2097152 KiB", v.Argon2idMemory))
+		}
+		if effThreads > 0 {
+			minMem := 4 * effThreads
+			if v.Argon2idMemory < minMem {
+				errs = errors.Join(errs, fmt.Errorf("vault.argon2id_memory: %d KiB must be at least 4*threads (%d KiB)", v.Argon2idMemory, minMem))
+			}
+		}
+	}
+
 	return errs
 }
