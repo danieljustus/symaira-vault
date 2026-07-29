@@ -301,13 +301,13 @@ func resolveArgon2idParams(cfg *vaultconfig.Config) vaultcrypto.Argon2idParams {
 	params := vaultcrypto.DefaultArgon2idParams()
 	if cfg != nil && cfg.Vault != nil {
 		if cfg.Vault.Argon2idTime > 0 {
-			params.Time = uint32(cfg.Vault.Argon2idTime)
+			params.Time = uint32(cfg.Vault.Argon2idTime) // #nosec G115 — bounds-checked in Config.Validate
 		}
 		if cfg.Vault.Argon2idMemory > 0 {
-			params.Memory = uint32(cfg.Vault.Argon2idMemory)
+			params.Memory = uint32(cfg.Vault.Argon2idMemory) // #nosec G115 — bounds-checked in Config.Validate
 		}
 		if cfg.Vault.Argon2idThreads > 0 {
-			params.Threads = uint8(cfg.Vault.Argon2idThreads)
+			params.Threads = uint8(cfg.Vault.Argon2idThreads) // #nosec G115 — bounds-checked in Config.Validate
 		}
 	}
 	return params
