@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"unicode"
 
 	"filippo.io/age"
@@ -56,6 +57,65 @@ type EncryptedIndex struct {
 	vaultDir   string            // vault directory the index covers
 	idHash     [sha256.Size]byte // sha256 of identity recipient for change detection
 	persistErr error             // last on-disk persistence failure, if any
+	suspended  bool              // batch mode: incremental writes defer to Resume
+	dirty      bool              // set when a write was skipped while suspended
+}
+
+// indexBuildCounter counts successful index builds (buildIndex commits). It
+// exists so tests and benchmarks can assert that a batch of writes triggers
+// exactly one full index build instead of one rebuild per write.
+var indexBuildCounter atomic.Int64
+
+// Suspend puts the index into batch mode: subsequent UpdateEntry/RemoveEntry
+// calls mark the index dirty instead of decrypting, re-marshaling,
+// re-encrypting, and re-persisting the whole document per write. Resume must
+// be called afterwards (typically deferred) to perform a single full rebuild
+// if any write was skipped. Suspend is idempotent.
+func (idx *EncryptedIndex) Suspend() {
+	idx.mu.Lock()
+	idx.suspended = true
+	idx.mu.Unlock()
+}
+
+// Resume leaves batch mode. If any incremental write was skipped while
+// suspended, it rebuilds the index exactly once from the current vault state
+// and persists it. If the rebuild fails, the index is explicitly invalidated
+// (in-memory and on-disk) so callers are never left with a silently stale
+// index, and the build error is returned. Resume on a non-suspended index is
+// a no-op.
+func (idx *EncryptedIndex) Resume(vaultDir string, identity *age.X25519Identity) error {
+	idx.mu.Lock()
+	if !idx.suspended {
+		idx.mu.Unlock()
+		return nil
+	}
+	idx.suspended = false
+	dirty := idx.dirty
+	idx.dirty = false
+	idx.mu.Unlock()
+
+	if !dirty {
+		return nil
+	}
+	if err := idx.buildIndex(vaultDir, identity, true); err != nil {
+		idx.Invalidate()
+		return err
+	}
+	return nil
+}
+
+// SuspendSearchIndex puts the search index for vaultDir into batch mode so a
+// bulk write loop (e.g. import) does not pay a full index re-encryption per
+// entry. Pair with a deferred ResumeSearchIndex.
+func SuspendSearchIndex(vaultDir string) {
+	searchIndexForVault(vaultDir).Suspend()
+}
+
+// ResumeSearchIndex leaves batch mode for vaultDir's search index. If writes
+// were skipped while suspended it performs exactly one full rebuild; on
+// rebuild failure the index is invalidated and the error returned.
+func ResumeSearchIndex(vaultDir string, identity *age.X25519Identity) error {
+	return searchIndexForVault(vaultDir).Resume(vaultDir, identity)
 }
 
 // LastPersistError returns the error from the most recent attempt to persist
@@ -101,6 +161,12 @@ type indexDoc struct {
 	// TokenIndex maps token → entry paths containing that token.
 	// Tokens are lowercased and split on whitespace/punctuation boundaries.
 	TokenIndex map[string]map[string]struct{} `json:"ti,omitempty"`
+	// PathTokens is the reverse of TokenIndex: entry path → the deduplicated
+	// tokens extracted from its values. It lets incremental updates remove a
+	// path from the token index in O(tokens of that path) instead of scanning
+	// every token in the index. May be nil in indices written before this
+	// field existed; it is rebuilt lazily on the first incremental update.
+	PathTokens map[string][]string `json:"pt,omitempty"`
 	// EntryCount is the number of entries in the vault when the index was built.
 	// Used for stale detection — if the count differs, the index is rebuilt.
 	EntryCount int `json:"c,omitempty"`
@@ -239,6 +305,7 @@ func (idx *EncryptedIndex) buildIndex(vaultDir string, identity *age.X25519Ident
 	doc := indexDoc{
 		Values:     make(map[string][]string, len(paths)),
 		TokenIndex: make(map[string]map[string]struct{}),
+		PathTokens: make(map[string][]string, len(paths)),
 		EntryCount: len(paths),
 	}
 
@@ -313,14 +380,7 @@ func (idx *EncryptedIndex) buildIndex(vaultDir string, identity *age.X25519Ident
 		}
 
 		doc.Values[result.path] = result.values
-		for _, val := range result.values {
-			for _, token := range tokenize(val) {
-				if doc.TokenIndex[token] == nil {
-					doc.TokenIndex[token] = make(map[string]struct{})
-				}
-				doc.TokenIndex[token][result.path] = struct{}{}
-			}
-		}
+		addToTokenIndex(doc.TokenIndex, doc.PathTokens, result.values, result.path)
 	}
 
 	// Refuse to commit an index that covers zero entries when the vault
@@ -355,6 +415,8 @@ func (idx *EncryptedIndex) buildIndex(vaultDir string, identity *age.X25519Ident
 	idx.vaultDir = vaultDir
 	idx.idHash = idHash
 	idx.mu.Unlock()
+
+	indexBuildCounter.Add(1)
 
 	if persist {
 		persistErr := idx.saveToDisk(vaultDir)
@@ -505,6 +567,13 @@ func (idx *EncryptedIndex) UpdateEntry(vaultDir, path string, identity *age.X255
 		return nil
 	}
 
+	// Batch mode: skip the per-write decrypt/re-encrypt/persist cycle and let
+	// Resume rebuild the index once.
+	if idx.suspended {
+		idx.dirty = true
+		return nil
+	}
+
 	storedSalt := idx.salt
 	key := deriveIndexKey(identity, storedSalt)
 	defer vaultcrypto.Wipe(key)
@@ -530,8 +599,9 @@ func (idx *EncryptedIndex) UpdateEntry(vaultDir, path string, identity *age.X255
 	if doc.TokenIndex == nil {
 		doc.TokenIndex = make(map[string]map[string]struct{})
 	}
+	ensurePathTokens(&doc)
 
-	removeFromTokenIndex(doc.TokenIndex, path)
+	removeFromTokenIndex(doc.TokenIndex, doc.PathTokens, path)
 	delete(doc.Values, path)
 
 	entry, readErr := ReadEntry(vaultDir, path, identity)
@@ -540,7 +610,7 @@ func (idx *EncryptedIndex) UpdateEntry(vaultDir, path string, identity *age.X255
 		collectStringValues(&values, entry.Data)
 		if len(values) > 0 {
 			doc.Values[path] = values
-			addToTokenIndex(doc.TokenIndex, values, path)
+			addToTokenIndex(doc.TokenIndex, doc.PathTokens, values, path)
 		}
 	}
 
@@ -578,6 +648,13 @@ func (idx *EncryptedIndex) RemoveEntry(path string, identity *age.X25519Identity
 		return
 	}
 
+	// Batch mode: skip the per-write decrypt/re-encrypt/persist cycle and let
+	// Resume rebuild the index once.
+	if idx.suspended {
+		idx.dirty = true
+		return
+	}
+
 	vaultDir := idx.vaultDir
 	dropDisk := func() {
 		idx.clearLocked()
@@ -610,7 +687,8 @@ func (idx *EncryptedIndex) RemoveEntry(path string, identity *age.X25519Identity
 
 	delete(doc.Values, path)
 	if doc.TokenIndex != nil {
-		removeFromTokenIndex(doc.TokenIndex, path)
+		ensurePathTokens(&doc)
+		removeFromTokenIndex(doc.TokenIndex, doc.PathTokens, path)
 	}
 	// A delete removes exactly one vault entry; keep the persisted entry count
 	// in step so the on-disk index stays valid (not flagged stale) on reload.
@@ -857,25 +935,68 @@ func isSingleToken(needle string) bool {
 }
 
 // addToTokenIndex adds all tokens from a set of values to the token index,
-// associating them with the given entry path.
-func addToTokenIndex(ti map[string]map[string]struct{}, values []string, path string) {
-	for _, val := range values {
-		for _, token := range tokenize(val) {
-			if ti[token] == nil {
-				ti[token] = make(map[string]struct{})
-			}
-			ti[token][path] = struct{}{}
+// associating them with the given entry path, and records the deduplicated
+// token set in the reverse path→tokens map.
+func addToTokenIndex(ti map[string]map[string]struct{}, pt map[string][]string, values []string, path string) {
+	tokens := uniqueTokens(values)
+	for _, token := range tokens {
+		if ti[token] == nil {
+			ti[token] = make(map[string]struct{})
 		}
+		ti[token][path] = struct{}{}
+	}
+	if pt != nil {
+		pt[path] = tokens
 	}
 }
 
-// removeFromTokenIndex removes all references to a path from the token index.
-// Empty token maps are cleaned up to keep the index compact.
-func removeFromTokenIndex(ti map[string]map[string]struct{}, path string) {
-	for token, paths := range ti {
+// uniqueTokens returns the deduplicated set of tokens across all values.
+func uniqueTokens(values []string) []string {
+	seen := make(map[string]struct{})
+	var tokens []string
+	for _, val := range values {
+		for _, token := range tokenize(val) {
+			if _, ok := seen[token]; ok {
+				continue
+			}
+			seen[token] = struct{}{}
+			tokens = append(tokens, token)
+		}
+	}
+	return tokens
+}
+
+// ensurePathTokens lazily rebuilds the reverse path→tokens map from Values
+// for index documents written before PathTokens existed. This runs at most
+// once per legacy document; afterwards removals are O(tokens of the path).
+func ensurePathTokens(doc *indexDoc) {
+	if doc.PathTokens != nil {
+		return
+	}
+	doc.PathTokens = make(map[string][]string, len(doc.Values))
+	for path, values := range doc.Values {
+		doc.PathTokens[path] = uniqueTokens(values)
+	}
+}
+
+// removeFromTokenIndex removes all references to a path from the token index
+// using the reverse path→tokens map, so only the tokens that actually occur
+// in the removed path are touched. Empty token maps are cleaned up to keep
+// the index compact.
+func removeFromTokenIndex(ti map[string]map[string]struct{}, pt map[string][]string, path string) {
+	tokens, ok := pt[path]
+	if !ok {
+		return
+	}
+	for _, token := range tokens {
+		paths, found := ti[token]
+		if !found {
+			continue
+		}
 		delete(paths, path)
 		if len(paths) == 0 {
 			delete(ti, token)
 		}
 	}
+	delete(pt, path)
 }

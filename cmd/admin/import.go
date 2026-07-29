@@ -122,6 +122,21 @@ Use --format to override auto-detection or when the file extension does not matc
 		}
 
 		return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
+			// Batch mode: the write loop below would otherwise trigger a full
+			// decrypt/re-encrypt/persist of the search index per entry (O(N²)
+			// total). Suspend defers index maintenance; the deferred Resume
+			// performs exactly one rebuild — even when the import fails midway —
+			// and invalidates the index explicitly if that rebuild fails, so the
+			// index is never left silently stale.
+			if !options.DryRun {
+				vaultpkg.SuspendSearchIndex(v.Dir)
+				defer func() {
+					if err := vaultpkg.ResumeSearchIndex(v.Dir, v.Identity); err != nil {
+						cli.PrintQuietAware("Warning: search index rebuild failed after import; the index was invalidated and will be rebuilt on the next search: %v\n", err)
+					}
+				}()
+			}
+
 			imported, skipped := 0, 0
 			for _, entry := range entries {
 				entryPath := importEntryPath(options.Prefix, entry.Path)
