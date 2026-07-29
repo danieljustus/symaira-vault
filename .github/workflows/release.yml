@@ -292,6 +292,9 @@ jobs:
       - name: Build symvault binary (for embedding)
         run: go build -o symvault .
 
+      - name: Install xcodegen
+        run: brew install xcodegen
+
       - name: Generate Xcode project
         run: xcodegen --spec client/project.yml --project client
 
