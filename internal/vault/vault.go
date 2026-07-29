@@ -258,7 +258,7 @@ func tryHealZeroKeyIdentity(vaultDir, identityPath string, raw, passphrase []byt
 	if !verified {
 		return nil, false, errors.New("recovered identity not present in recipients.txt; refusing to silently re-key the vault")
 	}
-	if err := rewriteIdentityAtomic(identityPath, recovered, cloneBytes(passphrase)); err != nil {
+	if err := rewriteIdentityAtomic(identityPath, recovered, cloneBytes(passphrase), vaultcrypto.DefaultArgon2idParams()); err != nil {
 		return nil, false, fmt.Errorf("atomic rewrite of healed identity: %w", err)
 	}
 	return recovered, true, nil
@@ -283,7 +283,8 @@ func MigrateKDF(vaultDir string, identity *age.X25519Identity, passphrase []byte
 		return nil
 	}
 	identityPath := filepath.Join(vaultDir, "identity.age")
-	if err := rewriteIdentityAtomic(identityPath, identity, passphrase); err != nil {
+	params := resolveArgon2idParams(v.Config)
+	if err := rewriteIdentityAtomic(identityPath, identity, passphrase, params); err != nil {
 		v.NeedsMigration = true
 		return nil
 	}
@@ -296,13 +297,29 @@ func MigrateKDF(vaultDir string, identity *age.X25519Identity, passphrase []byte
 	return nil
 }
 
+func resolveArgon2idParams(cfg *vaultconfig.Config) vaultcrypto.Argon2idParams {
+	params := vaultcrypto.DefaultArgon2idParams()
+	if cfg != nil && cfg.Vault != nil {
+		if cfg.Vault.Argon2idTime > 0 {
+			params.Time = uint32(cfg.Vault.Argon2idTime) // #nosec G115 — bounds-checked in Config.Validate
+		}
+		if cfg.Vault.Argon2idMemory > 0 {
+			params.Memory = uint32(cfg.Vault.Argon2idMemory) // #nosec G115 — bounds-checked in Config.Validate
+		}
+		if cfg.Vault.Argon2idThreads > 0 {
+			params.Threads = uint8(cfg.Vault.Argon2idThreads) // #nosec G115 — bounds-checked in Config.Validate
+		}
+	}
+	return params
+}
+
 // rewriteIdentityAtomic replaces identity.age with one freshly encrypted under
 // the given passphrase. The existing file is backed up to identity.age.bak
 // first, the new content is written and then verified to decrypt with the
 // passphrase; on any failure the original is restored and an error is
 // returned. This is the shared safety primitive used by both the scrypt→argon2id
 // KDF migration and the pre-#476 zero-key identity heal.
-func rewriteIdentityAtomic(identityPath string, identity *age.X25519Identity, passphrase []byte) error {
+func rewriteIdentityAtomic(identityPath string, identity *age.X25519Identity, passphrase []byte, params vaultcrypto.Argon2idParams) error {
 	backupPath := identityPath + ".bak"
 	original, readErr := os.ReadFile(identityPath) // #nosec G304 — fixed filename under validated vaultDir
 	if readErr != nil {
@@ -311,7 +328,6 @@ func rewriteIdentityAtomic(identityPath string, identity *age.X25519Identity, pa
 	if err := fsutil.AtomicWriteFile(backupPath, original, 0o600); err != nil {
 		return fmt.Errorf("write backup: %w", err)
 	}
-	params := vaultcrypto.DefaultArgon2idParams()
 	if err := vaultcrypto.SaveIdentityWithArgon2id(identity, identityPath, cloneBytes(passphrase), params); err != nil {
 		_ = restoreIdentityBackup(identityPath, backupPath, original)
 		return fmt.Errorf("save new identity: %w", err)
@@ -397,7 +413,7 @@ func InitWithPassphrase(vaultDir string, passphrase []byte, cfg *vaultconfig.Con
 	identityPath := filepath.Join(vaultDir, "identity.age")
 	if cfg.Vault != nil {
 		cfg.Vault.FormatVersion = vaultFormatVersion2
-		params := vaultcrypto.DefaultArgon2idParams()
+		params := resolveArgon2idParams(cfg)
 		if err := vaultcrypto.SaveIdentityWithArgon2id(identity, identityPath, cloneBytes(passphrase), params); err != nil {
 			return nil, fmt.Errorf("save identity with argon2id: %w", err)
 		}

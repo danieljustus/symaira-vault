@@ -86,6 +86,9 @@ mcp:
 | `default_recipients` | Default age recipients for new entries |
 | `confirm_remove` | Ask for confirmation before removing recipients |
 | `authMethod` | Optional per-vault override: `passphrase` or `touchid` |
+| `argon2id_time` | Argon2id time cost parameter (default: 3, floor: 2, ceiling: 16) |
+| `argon2id_memory` | Argon2id memory cost parameter in KiB (default: 65536, floor: 19456, ceiling: 2097152) |
+| `argon2id_threads` | Argon2id parallelism parameter (default: 4, floor: 1, ceiling: 16) |
 
 ## Authentication
 
