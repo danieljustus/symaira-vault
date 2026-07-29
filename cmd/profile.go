@@ -7,9 +7,9 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	cli "github.com/danieljustus/symaira-vault/internal/cli"
 	"github.com/spf13/cobra"
 
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 )
