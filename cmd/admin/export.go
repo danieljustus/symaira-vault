@@ -208,6 +208,7 @@ func init() {
 	exportCmd.Flags().StringVar(&ExportOutput, "output", "", "Output file path (default: stdout)")
 	exportCmd.Flags().BoolVarP(&ExportYes, "yes", "y", false, "Skip confirmation prompt")
 	_ = exportCmd.MarkFlagRequired("format") //nolint:errcheck
+	exportCmd.GroupID = cli.GroupIDSharingSync
 	cli.RootCmd.AddCommand(exportCmd)
 }
 

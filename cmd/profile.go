@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 )
@@ -168,5 +169,6 @@ func init() {
 	profileCmd.AddCommand(profileListCmd)
 	profileCmd.AddCommand(profileAddCmd)
 	profileCmd.AddCommand(profileUseCmd)
+	profileCmd.GroupID = cli.GroupIDAdministration
 	rootCmd.AddCommand(profileCmd)
 }

@@ -135,6 +135,7 @@ func parseDurationNumber(s string) (int, error) {
 }
 
 func init() {
+	mcpCmd.GroupID = cli.GroupIDAgentsMCP
 	cli.RootCmd.AddCommand(mcpCmd)
 	mcpCmd.AddCommand(McpTokenCmd)
 	McpTokenCmd.AddCommand(TokenCreateCmd)

@@ -146,6 +146,7 @@ var shareRevokeCmd = &cobra.Command{
 }
 
 func init() {
+	shareCmd.GroupID = cli.GroupIDSharingSync
 	rootCmd.AddCommand(shareCmd)
 	shareCmd.AddCommand(shareListCmd)
 	shareCmd.AddCommand(shareRevokeCmd)

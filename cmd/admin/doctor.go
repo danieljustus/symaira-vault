@@ -187,6 +187,7 @@ func outputDoctorJSON(cmd *cobra.Command, vaultDir string, results []health.Resu
 }
 
 func init() {
+	DoctorCmd.GroupID = cli.GroupIDEssentials
 	cli.RootCmd.AddCommand(DoctorCmd)
 	DoctorCmd.Flags().BoolVar(&DoctorJSON, "json", false, "Output in JSON format (deprecated: use --output=json)")
 	DoctorCmd.Flags().BoolVar(&DoctorNoNetwork, "no-network", false, "Skip network-dependent checks")

@@ -190,6 +190,7 @@ Use --yes to skip confirmation (useful for scripts).`,
 }
 
 func init() {
+	recipientsCmd.GroupID = cli.GroupIDVault
 	rootCmd.AddCommand(recipientsCmd)
 	recipientsCmd.AddCommand(recipientsListCmd)
 	recipientsCmd.AddCommand(recipientsAddCmd)

@@ -348,5 +348,6 @@ func init() {
 	UpdateCmd.AddCommand(UpdateCheckCmd)
 	UpdateCmd.AddCommand(updateApplyCmd)
 	UpdateCmd.AddCommand(updateInfoCmd)
+	UpdateCmd.GroupID = cli.GroupIDAdministration
 	cli.RootCmd.AddCommand(UpdateCmd)
 }

@@ -67,5 +67,6 @@ var deleteCmd = &cobra.Command{
 
 func init() {
 	deleteCmd.Flags().BoolVarP(&DeleteYes, "yes", "y", false, "Skip confirmation prompt")
+	deleteCmd.GroupID = cli.GroupIDEssentials
 	cli.RootCmd.AddCommand(deleteCmd)
 }

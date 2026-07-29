@@ -59,5 +59,6 @@ func init() {
 	// --experimental is kept as a no-op for backward compatibility with scripts
 	// that used it while the TUI was gated. It no longer has any effect.
 	uiCmd.Flags().BoolVar(&uiExperimental, "experimental", false, "(deprecated, no longer needed)")
+	uiCmd.GroupID = cli.GroupIDEssentials
 	rootCmd.AddCommand(uiCmd)
 }

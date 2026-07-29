@@ -63,5 +63,6 @@ var listCmd = &cobra.Command{
 }
 
 func init() {
+	listCmd.GroupID = cli.GroupIDEssentials
 	cli.RootCmd.AddCommand(listCmd)
 }

@@ -38,5 +38,6 @@ var lockCmd = &cobra.Command{
 }
 
 func init() {
+	lockCmd.GroupID = cli.GroupIDAuthAccess
 	cli.RootCmd.AddCommand(lockCmd)
 }

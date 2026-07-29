@@ -98,6 +98,7 @@ var syncCmd = &cobra.Command{
 func init() {
 	syncCmd.Flags().BoolVarP(&syncPush, "push", "p", false, "also push after pull")
 	syncCmd.Flags().BoolVarP(&syncForce, "force", "f", false, "force pull (reset local changes)")
+	syncCmd.GroupID = cli.GroupIDSharingSync
 	rootCmd.AddCommand(syncCmd)
 }
 

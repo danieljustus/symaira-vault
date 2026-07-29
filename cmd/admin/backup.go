@@ -317,6 +317,8 @@ func ComputeSHA256(path string) (string, error) {
 
 func init() {
 	backupCmd.Flags().BoolVar(&BackupExcludeGit, "exclude-git", false, "Exclude .git/ directory from backup")
+	backupCmd.GroupID = cli.GroupIDSharingSync
 	cli.RootCmd.AddCommand(backupCmd)
+	restoreCmd.GroupID = cli.GroupIDSharingSync
 	cli.RootCmd.AddCommand(restoreCmd)
 }

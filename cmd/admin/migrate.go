@@ -367,5 +367,6 @@ func init() {
 	MigrateCmd.AddCommand(migrateV4Cmd)
 	migrateV4Cmd.Flags().BoolVarP(&MigrateYes, "yes", "y", false, "Skip confirmation prompt")
 	migrateV4Cmd.Flags().BoolVar(&MigrateV4DryRun, "dry-run", false, "Preview changes without writing")
+	MigrateCmd.GroupID = cli.GroupIDAdministration
 	cli.RootCmd.AddCommand(MigrateCmd)
 }

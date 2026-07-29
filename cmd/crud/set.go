@@ -133,5 +133,6 @@ func init() {
 	setCmd.Flags().StringVar(&SetTOTPIssuer, "totp-issuer", "", "TOTP issuer/service name")
 	setCmd.Flags().StringVar(&SetTOTPAccount, "totp-account", "", "TOTP account name/username")
 	setCmd.Flags().BoolVar(&SetForce, "force", false, "Skip password strength validation")
+	setCmd.GroupID = cli.GroupIDEssentials
 	cli.RootCmd.AddCommand(setCmd)
 }

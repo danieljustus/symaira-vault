@@ -51,6 +51,7 @@ func init() {
 	startupProfileCmd.Flags().IntVarP(&startupProfileCount, "count", "n", 10, "number of benchmark iterations")
 	startupProfileCmd.Flags().IntVar(&startupProfileTopN, "top", 5, "show top N slowest phases in trace breakdown")
 	startupProfileCmd.Flags().StringVar(&startupProfileTraceFile, "trace", "", "write a runtime trace file (viewable with 'go tool trace')")
+	startupProfileCmd.GroupID = cli.GroupIDAdministration
 	cli.RootCmd.AddCommand(startupProfileCmd)
 }
 

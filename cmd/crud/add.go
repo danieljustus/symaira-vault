@@ -357,5 +357,6 @@ func init() {
 	addCmd.Flags().StringVar(&AddUsageHint, "usage-hint", "", "Usage hint for AI agents")
 	addCmd.Flags().BoolVar(&AddAutoRotate, "auto-rotate", false, "Enable automatic rotation reminder")
 	addCmd.Flags().StringVar(&AddExpiresAt, "expires-at", "", "Expiration date (RFC3339 format)")
+	addCmd.GroupID = cli.GroupIDEssentials
 	cli.RootCmd.AddCommand(addCmd)
 }
