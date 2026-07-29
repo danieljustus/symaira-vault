@@ -232,5 +232,6 @@ func init() {
 	policyCmd.AddCommand(policyApplyCmd)
 	policyCmd.AddCommand(policyListCmd)
 	policyCmd.AddCommand(policyRemoveCmd)
+	policyCmd.GroupID = cli.GroupIDAdministration
 	rootCmd.AddCommand(policyCmd)
 }

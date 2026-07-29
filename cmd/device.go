@@ -640,6 +640,7 @@ access to all vault entries.`,
 }
 
 func init() {
+	deviceCmd.GroupID = cli.GroupIDSharingSync
 	rootCmd.AddCommand(deviceCmd)
 	deviceCmd.AddCommand(devicePairCmd)
 	deviceCmd.AddCommand(deviceJoinCmd)

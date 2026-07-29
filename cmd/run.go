@@ -150,5 +150,6 @@ func init() {
 	runCmd.Flags().StringArrayVar(&runPassthrough, "passthrough", nil, "Parent env var names to pass through to the child process (comma-separated)")
 	runCmd.Flags().StringVarP(&runWorkingDir, "working-dir", "C", "", "Working directory for the command")
 	runCmd.Flags().DurationVarP(&runTimeout, "timeout", "t", 0, "Timeout for the command (e.g., 30s)")
+	runCmd.GroupID = cli.GroupIDVault
 	rootCmd.AddCommand(runCmd)
 }

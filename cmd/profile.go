@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 	"os"
 	"path/filepath"
 	"strings"
@@ -168,5 +169,6 @@ func init() {
 	profileCmd.AddCommand(profileListCmd)
 	profileCmd.AddCommand(profileAddCmd)
 	profileCmd.AddCommand(profileUseCmd)
+	profileCmd.GroupID = cli.GroupIDAdministration
 	rootCmd.AddCommand(profileCmd)
 }

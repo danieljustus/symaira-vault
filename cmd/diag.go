@@ -5,6 +5,7 @@ package cmd
 import (
 	"bytes"
 	"fmt"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/prometheus/common/expfmt"
 	"github.com/spf13/cobra"
@@ -59,6 +60,7 @@ func printMetrics(cmd *cobra.Command) error {
 }
 
 func init() {
+	diagCmd.GroupID = cli.GroupIDAdministration
 	rootCmd.AddCommand(diagCmd)
 	diagCmd.AddCommand(diagMetricsCmd)
 }

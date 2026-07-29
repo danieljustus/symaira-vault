@@ -93,6 +93,7 @@ check and only rebuild.`,
 }
 
 func init() {
+	verifyCmd.GroupID = cli.GroupIDAdministration
 	cli.RootCmd.AddCommand(verifyCmd)
 	verifyCmd.Flags().BoolVar(&verifyRebuild, "rebuild", false, "Rebuild the manifest from on-disk entries after the integrity check")
 	verifyCmd.Flags().BoolVar(&verifyRebuildOnly, "rebuild-only", false, "Rebuild the manifest and skip the integrity check")

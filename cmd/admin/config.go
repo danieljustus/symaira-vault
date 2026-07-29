@@ -310,5 +310,6 @@ func init() {
 	configCmd.AddCommand(configGetCmd)
 	configCmd.AddCommand(configSetCmd)
 	configCmd.AddCommand(configListCmd)
+	configCmd.GroupID = cli.GroupIDAdministration
 	cli.RootCmd.AddCommand(configCmd)
 }

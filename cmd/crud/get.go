@@ -273,6 +273,7 @@ var getCmd = &cobra.Command{
 
 func init() {
 	getCmd.Flags().BoolVarP(&GetPrint, "print", "p", false, "Print value to stdout instead of copying to clipboard")
+	getCmd.GroupID = cli.GroupIDEssentials
 	cli.RootCmd.AddCommand(getCmd)
 }
 

@@ -84,5 +84,6 @@ var findCmd = &cobra.Command{
 }
 
 func init() {
+	findCmd.GroupID = cli.GroupIDEssentials
 	cli.RootCmd.AddCommand(findCmd)
 }

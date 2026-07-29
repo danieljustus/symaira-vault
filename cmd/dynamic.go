@@ -77,5 +77,6 @@ func init() {
 	_ = dynamicGenerateCmd.MarkFlagRequired("role")
 
 	dynamicCmd.AddCommand(dynamicGenerateCmd)
+	dynamicCmd.GroupID = cli.GroupIDVault
 	rootCmd.AddCommand(dynamicCmd)
 }

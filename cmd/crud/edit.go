@@ -74,5 +74,6 @@ The editor is determined by the --editor flag or EDITOR environment variable (de
 
 func init() {
 	editCmd.Flags().StringVar(&EditorFlag, "editor", "", "Editor to use (overrides EDITOR env var)")
+	editCmd.GroupID = cli.GroupIDEssentials
 	cli.RootCmd.AddCommand(editCmd)
 }

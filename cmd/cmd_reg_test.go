@@ -59,6 +59,28 @@ func TestCommandRegistration(t *testing.T) {
 	}
 }
 
+func TestAllTopLevelCommandsHaveGroup(t *testing.T) {
+	validGroups := map[string]bool{}
+	for _, g := range cli.RootCmd.Groups() {
+		validGroups[g.ID] = true
+	}
+	if len(validGroups) == 0 {
+		t.Fatal("no command groups declared on root command")
+	}
+	for _, c := range rootCmd.Commands() {
+		if c.Name() == "help" || c.Name() == "completion" || c.Name() == "version" {
+			continue
+		}
+		if c.GroupID == "" {
+			t.Errorf("top-level command %q has no GroupID", c.Name())
+			continue
+		}
+		if !validGroups[c.GroupID] {
+			t.Errorf("top-level command %q has unknown GroupID %q", c.Name(), c.GroupID)
+		}
+	}
+}
+
 func TestSubcommandRegistration(t *testing.T) {
 	recipientsSubcommands := []string{"list", "add", "remove"}
 	for _, sub := range recipientsSubcommands {

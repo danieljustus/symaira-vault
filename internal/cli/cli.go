@@ -186,6 +186,29 @@ func syncToContext(ctx *CLIContext) {
 	ctx.profileFlag = ProfileFlag
 }
 
+// Command group IDs used to organize the top-level commands in --help
+// output. Every top-level command registered on RootCmd must set one of
+// these via Command.GroupID at its registration site.
+const (
+	GroupIDEssentials     = "essentials"
+	GroupIDVault          = "vault"
+	GroupIDSharingSync    = "sharing-sync"
+	GroupIDAgentsMCP      = "agents-mcp"
+	GroupIDAuthAccess     = "auth-access"
+	GroupIDAdministration = "administration"
+)
+
+// commandGroups declares the help-output groups for the root command in
+// display order.
+var commandGroups = []*cobra.Group{
+	{ID: GroupIDEssentials, Title: "Essentials:"},
+	{ID: GroupIDVault, Title: "Vault:"},
+	{ID: GroupIDSharingSync, Title: "Sharing & Sync:"},
+	{ID: GroupIDAgentsMCP, Title: "Agents & MCP:"},
+	{ID: GroupIDAuthAccess, Title: "Auth & Access:"},
+	{ID: GroupIDAdministration, Title: "Administration:"},
+}
+
 var RootCmd = &cobra.Command{
 	Use:   "symvault",
 	Short: "Symaira Vault is a Go CLI password manager",
@@ -297,6 +320,7 @@ func PrintlnQuietAware(args ...interface{}) {
 }
 
 func init() {
+	RootCmd.AddGroup(commandGroups...)
 	RootCmd.PersistentFlags().StringVar(&Vault, "vault", "~/"+configpkg.DefaultVaultSubdir, "path to the password vault")
 	VaultFlag = RootCmd.PersistentFlags().Lookup("vault")
 	RootCmd.PersistentFlags().BoolVar(&QuietMode, "quiet", false, "suppress non-error output")

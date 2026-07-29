@@ -196,6 +196,7 @@ func init() {
 	importCmd.Flags().StringVar(&ImportMapping, "mapping", "", "CSV column mapping (format: title=col1,username=col2,...)")
 	importCmd.Flags().BoolVar(&ImportQuarantine, "quarantine", false, "Import entries into quarantine/<import-id>/ for human review before agent access")
 	importCmd.Flags().StringVar(&ImportFormat, "format", "", "Import format (auto-detected from file extension when omitted)")
+	importCmd.GroupID = cli.GroupIDSharingSync
 	cli.RootCmd.AddCommand(importCmd)
 }
 

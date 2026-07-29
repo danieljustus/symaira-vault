@@ -144,5 +144,6 @@ func init() {
 	_ = templateGenerateCmd.MarkFlagRequired("type")
 
 	templateCmd.AddCommand(templateGenerateCmd)
+	templateCmd.GroupID = cli.GroupIDVault
 	rootCmd.AddCommand(templateCmd)
 }

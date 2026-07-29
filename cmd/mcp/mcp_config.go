@@ -314,7 +314,9 @@ func OutputAgentHTTPConfig(agentName, serverKey, displayName string, redact bool
 }
 
 func init() {
+	McpConfigCmd.GroupID = cli.GroupIDAgentsMCP
 	cli.RootCmd.AddCommand(McpConfigCmd)
+	mcpTokenRotateCmd.GroupID = cli.GroupIDAgentsMCP
 	cli.RootCmd.AddCommand(mcpTokenRotateCmd)
 }
 

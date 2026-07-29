@@ -56,5 +56,6 @@ For non-interactive environments (CI, scripts), use 'symvault init' instead.`,
 func init() {
 	setupCmd.Flags().BoolVar(&setupKeepOnError, "keep-on-error", false, "do not rollback vault init artifacts when subsequent steps fail")
 	setupCmd.Flags().BoolVar(&setupNoResume, "no-resume", false, "disable setup resume after abort")
+	setupCmd.GroupID = cli.GroupIDEssentials
 	cli.RootCmd.AddCommand(setupCmd)
 }

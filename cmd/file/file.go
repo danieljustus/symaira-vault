@@ -20,5 +20,6 @@ sha256, original filename and size recorded as attachment metadata.`,
 }
 
 func init() {
+	fileCmd.GroupID = cli.GroupIDVault
 	cli.RootCmd.AddCommand(fileCmd)
 }

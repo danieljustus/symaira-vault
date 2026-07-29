@@ -135,6 +135,7 @@ func init() {
 	AuthStatusCmd.Flags().BoolVar(&AuthStatusJSON, "json", false, "output auth status as JSON (deprecated: use --output=json)")
 	AuthCmd.AddCommand(AuthStatusCmd)
 	AuthCmd.AddCommand(AuthSetCmd)
+	AuthCmd.GroupID = cli.GroupIDAuthAccess
 	cli.RootCmd.AddCommand(AuthCmd)
 }
 

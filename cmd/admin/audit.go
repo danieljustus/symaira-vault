@@ -217,6 +217,7 @@ func init() {
 	AuditCmd.Flags().StringVarP(&AuditSince, "since", "s", "", "Show entries since duration (e.g. 1h, 24h, 7d)")
 	AuditCmd.Flags().BoolVar(&AuditFailed, "failed", false, "Show only failed entries")
 	AuditCmd.AddCommand(rotateKeyCmd)
+	AuditCmd.GroupID = cli.GroupIDAdministration
 	cli.RootCmd.AddCommand(AuditCmd)
 }
 
