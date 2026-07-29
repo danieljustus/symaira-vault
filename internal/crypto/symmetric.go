@@ -297,7 +297,7 @@ func parseUint32(s string) (uint32, error) {
 	if err != nil {
 		return 0, fmt.Errorf("invalid number: %q: %w", s, err)
 	}
-	return uint32(u), nil
+	return uint32(u), nil // #nosec G115 — ParseUint with bitSize 32 guarantees value fits in uint32
 }
 
 func EncryptWithKey(plaintext []byte, key []byte) ([]byte, error) {
