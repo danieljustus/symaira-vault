@@ -2,12 +2,12 @@ package cmd
 
 import (
 	"fmt"
-	cli "github.com/danieljustus/symaira-vault/internal/cli"
 	"os"
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
 
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 	"github.com/spf13/cobra"
 
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
