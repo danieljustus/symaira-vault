@@ -12,6 +12,7 @@ import (
 )
 
 func TestCmdDoctor_TextOutput(t *testing.T) {
+	rootCmd = NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
@@ -34,6 +35,7 @@ func TestCmdDoctor_TextOutput(t *testing.T) {
 }
 
 func TestCmdDoctor_JSONOutput(t *testing.T) {
+	rootCmd = NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
@@ -71,6 +73,7 @@ func TestCmdDoctor_JSONOutput(t *testing.T) {
 }
 
 func TestCmdDoctor_NoNetworkFlag(t *testing.T) {
+	rootCmd = NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
@@ -99,6 +102,7 @@ func TestCmdDoctor_FixFlag_Registered(t *testing.T) {
 }
 
 func TestCmdDoctor_FixFlag_TextOutput(t *testing.T) {
+	rootCmd = NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()

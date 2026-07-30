@@ -19,12 +19,12 @@ const requiresVaultAnnotation = cli.RequiresVaultAnnotation
 var (
 	readPasswordFunc = cli.ReadPasswordFunc
 	isTerminalFunc   = cli.IsTerminalFunc
+	vault            = cli.Vault
 )
 
-var (
-	vault     = cli.Vault
-)
-
+// rootCmd is the package-level root used by production code.
+// Tests that modify command state should use a fresh NewRootCmd() for
+// isolation.
 var rootCmd = NewRootCmd()
 
 // NewRootCmd returns a fully assembled root command tree containing all
@@ -64,7 +64,7 @@ func SetStartTime(t time.Time) {
 }
 
 func Execute() {
-	ExecuteRoot(NewRootCmd())
+	ExecuteRoot(rootCmd)
 }
 
 func ExecuteRoot(root *cobra.Command) {

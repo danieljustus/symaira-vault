@@ -71,6 +71,7 @@ func setVersionInfoForTest(t *testing.T, version string) {
 }
 
 func TestUpdateCheckCommandReportsAvailableUpdate(t *testing.T) {
+	rootCmd = NewRootCmd()
 	buf := prepareRootCommandOutput(t)
 	setVersionInfoForTest(t, "1.0.0")
 
@@ -108,6 +109,7 @@ func TestUpdateCheckCommandReportsAvailableUpdate(t *testing.T) {
 }
 
 func TestUpdateCheckCommandReportsUpToDate(t *testing.T) {
+	rootCmd = NewRootCmd()
 	buf := prepareRootCommandOutput(t)
 	setVersionInfoForTest(t, "1.0.0")
 
@@ -133,6 +135,7 @@ func TestUpdateCheckCommandReportsUpToDate(t *testing.T) {
 }
 
 func TestUpdateCheckCommandHandlesNonReleaseBuild(t *testing.T) {
+	rootCmd = NewRootCmd()
 	buf := prepareRootCommandOutput(t)
 	setVersionInfoForTest(t, "dev")
 
@@ -178,6 +181,7 @@ func TestUpdateCheckCommandReturnsCheckerError(t *testing.T) {
 }
 
 func TestUpdateCheckCommandDoesNotRequireVault(t *testing.T) {
+	rootCmd = NewRootCmd()
 	buf := prepareRootCommandOutput(t)
 	setVersionInfoForTest(t, "dev")
 	setUpdateCheckerForTest(t, &stubUpdateChecker{
@@ -221,6 +225,7 @@ func TestUpdateCheckCommandDoesNotRequireVault(t *testing.T) {
 }
 
 func TestUpdateCheckCommandJSONOutput(t *testing.T) {
+	rootCmd = NewRootCmd()
 	buf := prepareRootCommandOutput(t)
 	setVersionInfoForTest(t, "1.0.0")
 
@@ -258,6 +263,7 @@ func TestUpdateCheckCommandJSONOutput(t *testing.T) {
 }
 
 func TestUpdateCheckCommandJSONOutputNoUpdate(t *testing.T) {
+	rootCmd = NewRootCmd()
 	buf := prepareRootCommandOutput(t)
 	setVersionInfoForTest(t, "1.0.0")
 
