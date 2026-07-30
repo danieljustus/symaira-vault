@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	admin "github.com/danieljustus/symaira-vault/cmd/admin"
-	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -21,11 +20,11 @@ func TestConfigSetCommand_Basic(t *testing.T) {
 	}
 
 	resetCmdFlags()
-	cli.RootCmd.SetArgs([]string{"config", "set", "vaultDir", "/new", "--file", cfgPath})
-	defer cli.RootCmd.SetArgs(nil)
+	rootCmd.SetArgs([]string{"config", "set", "vaultDir", "/new", "--file", cfgPath})
+	defer rootCmd.SetArgs(nil)
 
 	output := captureStdout(func() {
-		if err := cli.RootCmd.Execute(); err != nil {
+		if err := rootCmd.Execute(); err != nil {
 			t.Fatalf("config set failed: %v", err)
 		}
 	})
@@ -51,10 +50,10 @@ func TestConfigSetCommand_BoolValue(t *testing.T) {
 	}
 
 	resetCmdFlags()
-	cli.RootCmd.SetArgs([]string{"config", "set", "agents.test.canWrite", "true", "--file", cfgPath})
-	defer cli.RootCmd.SetArgs(nil)
+	rootCmd.SetArgs([]string{"config", "set", "agents.test.canWrite", "true", "--file", cfgPath})
+	defer rootCmd.SetArgs(nil)
 
-	if err := cli.RootCmd.Execute(); err != nil {
+	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("config set failed: %v", err)
 	}
 
@@ -95,10 +94,10 @@ func TestConfigSetCommand_CreateNestedKey(t *testing.T) {
 	}
 
 	resetCmdFlags()
-	cli.RootCmd.SetArgs([]string{"config", "set", "agents.custom.canWrite", "true", "--file", cfgPath})
-	defer cli.RootCmd.SetArgs(nil)
+	rootCmd.SetArgs([]string{"config", "set", "agents.custom.canWrite", "true", "--file", cfgPath})
+	defer rootCmd.SetArgs(nil)
 
-	if err := cli.RootCmd.Execute(); err != nil {
+	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("config set failed: %v", err)
 	}
 
@@ -116,10 +115,10 @@ func TestConfigSetCommand_InvalidatesConfig(t *testing.T) {
 	}
 
 	resetCmdFlags()
-	cli.RootCmd.SetArgs([]string{"config", "set", "sessionTimeout", "invalid", "--file", cfgPath})
-	defer cli.RootCmd.SetArgs(nil)
+	rootCmd.SetArgs([]string{"config", "set", "sessionTimeout", "invalid", "--file", cfgPath})
+	defer rootCmd.SetArgs(nil)
 
-	err := cli.RootCmd.Execute()
+	err := rootCmd.Execute()
 	if err == nil {
 		t.Fatal("expected error for invalid sessionTimeout value")
 	}
@@ -132,10 +131,10 @@ func TestConfigSetCommand_MissingFile(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "nonexistent.yaml")
 
 	resetCmdFlags()
-	cli.RootCmd.SetArgs([]string{"config", "set", "vaultDir", "/new", "--file", cfgPath})
-	defer cli.RootCmd.SetArgs(nil)
+	rootCmd.SetArgs([]string{"config", "set", "vaultDir", "/new", "--file", cfgPath})
+	defer rootCmd.SetArgs(nil)
 
-	err := cli.RootCmd.Execute()
+	err := rootCmd.Execute()
 	if err == nil {
 		t.Fatal("expected error for missing config file")
 	}
@@ -149,11 +148,11 @@ func TestConfigGetCommand_ExistingKey(t *testing.T) {
 	}
 
 	resetCmdFlags()
-	cli.RootCmd.SetArgs([]string{"config", "get", "vaultDir", "--file", cfgPath})
-	defer cli.RootCmd.SetArgs(nil)
+	rootCmd.SetArgs([]string{"config", "get", "vaultDir", "--file", cfgPath})
+	defer rootCmd.SetArgs(nil)
 
 	output := captureStdout(func() {
-		if err := cli.RootCmd.Execute(); err != nil {
+		if err := rootCmd.Execute(); err != nil {
 			t.Fatalf("config get failed: %v", err)
 		}
 	})
@@ -171,11 +170,11 @@ func TestConfigGetCommand_NestedKey(t *testing.T) {
 	}
 
 	resetCmdFlags()
-	cli.RootCmd.SetArgs([]string{"config", "get", "agents.claude.canWrite", "--file", cfgPath})
-	defer cli.RootCmd.SetArgs(nil)
+	rootCmd.SetArgs([]string{"config", "get", "agents.claude.canWrite", "--file", cfgPath})
+	defer rootCmd.SetArgs(nil)
 
 	output := captureStdout(func() {
-		if err := cli.RootCmd.Execute(); err != nil {
+		if err := rootCmd.Execute(); err != nil {
 			t.Fatalf("config get failed: %v", err)
 		}
 	})
@@ -193,10 +192,10 @@ func TestConfigGetCommand_MissingKey(t *testing.T) {
 	}
 
 	resetCmdFlags()
-	cli.RootCmd.SetArgs([]string{"config", "get", "nonexistent.key", "--file", cfgPath})
-	defer cli.RootCmd.SetArgs(nil)
+	rootCmd.SetArgs([]string{"config", "get", "nonexistent.key", "--file", cfgPath})
+	defer rootCmd.SetArgs(nil)
 
-	err := cli.RootCmd.Execute()
+	err := rootCmd.Execute()
 	if err == nil {
 		t.Fatal("expected error for missing key")
 	}
@@ -206,10 +205,10 @@ func TestConfigGetCommand_MissingFile(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "nonexistent.yaml")
 
 	resetCmdFlags()
-	cli.RootCmd.SetArgs([]string{"config", "get", "vaultDir", "--file", cfgPath})
-	defer cli.RootCmd.SetArgs(nil)
+	rootCmd.SetArgs([]string{"config", "get", "vaultDir", "--file", cfgPath})
+	defer rootCmd.SetArgs(nil)
 
-	err := cli.RootCmd.Execute()
+	err := rootCmd.Execute()
 	if err == nil {
 		t.Fatal("expected error for missing config file")
 	}
@@ -223,11 +222,11 @@ func TestConfigListCommand(t *testing.T) {
 	}
 
 	resetCmdFlags()
-	cli.RootCmd.SetArgs([]string{"config", "list", "--file", cfgPath})
-	defer cli.RootCmd.SetArgs(nil)
+	rootCmd.SetArgs([]string{"config", "list", "--file", cfgPath})
+	defer rootCmd.SetArgs(nil)
 
 	output := captureStdout(func() {
-		if err := cli.RootCmd.Execute(); err != nil {
+		if err := rootCmd.Execute(); err != nil {
 			t.Fatalf("config list failed: %v", err)
 		}
 	})
@@ -244,10 +243,10 @@ func TestConfigListCommand_MissingFile(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "nonexistent.yaml")
 
 	resetCmdFlags()
-	cli.RootCmd.SetArgs([]string{"config", "list", "--file", cfgPath})
-	defer cli.RootCmd.SetArgs(nil)
+	rootCmd.SetArgs([]string{"config", "list", "--file", cfgPath})
+	defer rootCmd.SetArgs(nil)
 
-	err := cli.RootCmd.Execute()
+	err := rootCmd.Execute()
 	if err == nil {
 		t.Fatal("expected error for missing config file")
 	}
@@ -261,11 +260,11 @@ func TestConfigListCommand_EmptyConfig(t *testing.T) {
 	}
 
 	resetCmdFlags()
-	cli.RootCmd.SetArgs([]string{"config", "list", "--file", cfgPath})
-	defer cli.RootCmd.SetArgs(nil)
+	rootCmd.SetArgs([]string{"config", "list", "--file", cfgPath})
+	defer rootCmd.SetArgs(nil)
 
 	output := captureStdout(func() {
-		if err := cli.RootCmd.Execute(); err != nil {
+		if err := rootCmd.Execute(); err != nil {
 			t.Fatalf("config list failed: %v", err)
 		}
 	})

@@ -11,8 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	cli "github.com/danieljustus/symaira-vault/internal/cli"
-
 	admin "github.com/danieljustus/symaira-vault/cmd/admin"
 	"github.com/danieljustus/symaira-vault/internal/config"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
@@ -310,10 +308,10 @@ func TestBackupCommand(t *testing.T) {
 	archivePath := filepath.Join(t.TempDir(), "backup")
 
 	prepareRootCommandOutput(t)
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "backup", archivePath})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "backup", archivePath})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	if err := cli.RootCmd.Execute(); err != nil {
+	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 
@@ -341,10 +339,10 @@ func TestRestoreCommand(t *testing.T) {
 	restoreDir := t.TempDir()
 
 	prepareRootCommandOutput(t)
-	cli.RootCmd.SetArgs([]string{"--vault", restoreDir, "restore", archivePath})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	rootCmd.SetArgs([]string{"--vault", restoreDir, "restore", archivePath})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	if err := cli.RootCmd.Execute(); err != nil {
+	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 
@@ -360,10 +358,10 @@ func TestBackupCommand_UninitializedVault(t *testing.T) {
 	vaultDir := t.TempDir()
 
 	prepareRootCommandOutput(t)
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "backup", "/tmp/backup.tar.gz"})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "backup", "/tmp/backup.tar.gz"})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	if err := cli.RootCmd.Execute(); err == nil {
+	if err := rootCmd.Execute(); err == nil {
 		t.Fatal("expected error for uninitialized vault")
 	}
 }
@@ -375,10 +373,10 @@ func TestRestoreCommand_MissingArchive(t *testing.T) {
 	vaultDir := t.TempDir()
 
 	prepareRootCommandOutput(t)
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "restore", "/nonexistent/backup.tar.gz"})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "restore", "/nonexistent/backup.tar.gz"})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	if err := cli.RootCmd.Execute(); err == nil {
+	if err := rootCmd.Execute(); err == nil {
 		t.Fatal("expected error for missing archive")
 	}
 }
@@ -395,10 +393,10 @@ func TestRestoreCommand_CorruptArchive(t *testing.T) {
 	vaultDir := t.TempDir()
 
 	prepareRootCommandOutput(t)
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "restore", archivePath})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "restore", archivePath})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	if err := cli.RootCmd.Execute(); err == nil {
+	if err := rootCmd.Execute(); err == nil {
 		t.Fatal("expected error for corrupt archive")
 	}
 }
@@ -574,10 +572,10 @@ func TestBackupCommand_ExcludeGit(t *testing.T) {
 	archivePath := filepath.Join(t.TempDir(), "backup")
 
 	prepareRootCommandOutput(t)
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "backup", archivePath, "--exclude-git"})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "backup", archivePath, "--exclude-git"})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	if err := cli.RootCmd.Execute(); err != nil {
+	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 

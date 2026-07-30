@@ -4,8 +4,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-
-	cli "github.com/danieljustus/symaira-vault/internal/cli"
 )
 
 func TestAuthRotate_ValidatesLengthBeforeConfirmation(t *testing.T) {
@@ -26,8 +24,8 @@ func TestAuthRotate_ValidatesLengthBeforeConfirmation(t *testing.T) {
 		w.Write([]byte("short\n"))
 	}()
 
-	cli.RootCmd.SetArgs([]string{"auth", "rotate-passphrase"})
-	err = cli.RootCmd.Execute()
+	rootCmd.SetArgs([]string{"auth", "rotate-passphrase"})
+	err = rootCmd.Execute()
 	os.Stdin = oldStdin
 
 	if err == nil {

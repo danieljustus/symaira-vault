@@ -170,5 +170,4 @@ func init() {
 	profileCmd.AddCommand(profileAddCmd)
 	profileCmd.AddCommand(profileUseCmd)
 	profileCmd.GroupID = cli.GroupIDAdministration
-	rootCmd.AddCommand(profileCmd)
 }
