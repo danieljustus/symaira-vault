@@ -246,10 +246,10 @@ func TestCmdMCPConfig_HTTPMode(t *testing.T) {
 func TestCmdMCPConfig_Stdio(t *testing.T) {
 	vaultFlagReset(t)
 
-	cli.RootCmd.SetArgs([]string{"mcp-config", "myagent"})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	rootCmd.SetArgs([]string{"mcp-config", "myagent"})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	err := cli.RootCmd.Execute()
+	err := rootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -266,10 +266,10 @@ func TestCmdMCPConfig_StdioCustomVaultIncludesVaultArg(t *testing.T) {
 	vaultDir := t.TempDir()
 	vaultFlagReset(t)
 
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent"})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent"})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	err := cli.RootCmd.Execute()
+	err := rootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -290,10 +290,10 @@ func TestCmdMCPConfig_HTTP(t *testing.T) {
 		t.Fatalf("init vault: %v", err)
 	}
 
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent"})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent"})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	err := cli.RootCmd.Execute()
+	err := rootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -314,10 +314,10 @@ func TestCmdMCPConfig_HermesHTTP(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "hermes"})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "hermes"})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	err := cli.RootCmd.Execute()
+	err := rootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -331,7 +331,7 @@ func TestOutputHTTPConfig_VaultPathError(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: HOME env behavior differs")
 	}
-	// Test mcpcmd.OutputHTTPConfig directly (bypassing cli.RootCmd which has PersistentPreRun
+	// Test mcpcmd.OutputHTTPConfig directly (bypassing rootCmd which has PersistentPreRun
 	// that also calls cli.VaultPath, causing a panic before our function is reached).
 	origHome := os.Getenv("HOME")
 	origVaultEnv := os.Getenv("OPENPASS_VAULT")
@@ -370,10 +370,10 @@ func TestOutputHTTPConfig_CustomTokenFile(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent"})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent"})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	err := cli.RootCmd.Execute()
+	err := rootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -382,8 +382,8 @@ func TestOutputHTTPConfig_CustomTokenFile(t *testing.T) {
 		t.Errorf("expected deprecation message, got: %v", err)
 	}
 
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent"})
-	err = cli.RootCmd.Execute()
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent"})
+	err = rootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -402,10 +402,10 @@ func TestOutputHTTPConfig_TokenLoadError(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent"})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent"})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	err := cli.RootCmd.Execute()
+	err := rootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -423,10 +423,10 @@ func TestOutputHTTPConfig_StaleRuntimePort(t *testing.T) {
 		t.Fatalf("save runtime port: %v", err)
 	}
 
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent"})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "myagent"})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	err := cli.RootCmd.Execute()
+	err := rootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
