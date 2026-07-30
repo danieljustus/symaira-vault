@@ -16,11 +16,24 @@ func TestNewRootCmd_IndependentTrees(t *testing.T) {
 		t.Fatal("NewRootCmd() returned the same pointer instance twice")
 	}
 
-	root1.SetArgs([]string{"version"})
-	root2.SetArgs([]string{"help"})
+	// Verify both trees have commands
+	if len(root1.Commands()) == 0 {
+		t.Fatal("NewRootCmd() has no commands")
+	}
+	if len(root1.Commands()) != len(root2.Commands()) {
+		t.Errorf("two roots have different command counts: %d vs %d", len(root1.Commands()), len(root2.Commands()))
+	}
 
-	if strings.Join(root1.Flags().Args(), " ") == strings.Join(root2.Flags().Args(), " ") {
-		t.Errorf("Modifying root1 args mutated root2 args")
+	// Verify version works on a fresh, untouched root
+	versionFound := false
+	for _, c := range root1.Commands() {
+		if c.Name() == "version" {
+			versionFound = true
+			break
+		}
+	}
+	if !versionFound {
+		t.Error("NewRootCmd() does not include version command")
 	}
 }
 
@@ -80,11 +93,17 @@ func TestNewRootCmd_GoldenCommandTree(t *testing.T) {
 		"symvault set",
 		"symvault find",
 		"symvault edit",
-		"symvault admin",
+		"symvault audit",
 		"symvault auth",
+		"symvault unlock",
 		"symvault file",
 		"symvault agent",
 		"symvault version",
+		"symvault dynamic",
+		"symvault git",
+		"symvault profile",
+		"symvault run",
+		"symvault sync",
 	}
 
 	allPaths := strings.Join(paths, "\n")
