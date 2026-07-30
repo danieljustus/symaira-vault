@@ -61,7 +61,7 @@ func TestCommandRegistration(t *testing.T) {
 
 func TestAllTopLevelCommandsHaveGroup(t *testing.T) {
 	validGroups := map[string]bool{}
-	for _, g := range cli.RootCmd.Groups() {
+	for _, g := range rootCmd.Groups() {
 		validGroups[g.ID] = true
 	}
 	if len(validGroups) == 0 {

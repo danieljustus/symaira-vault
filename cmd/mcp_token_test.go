@@ -7,8 +7,6 @@ import (
 	"testing"
 	"time"
 
-	cli "github.com/danieljustus/symaira-vault/internal/cli"
-
 	mcpcmd "github.com/danieljustus/symaira-vault/cmd/mcp"
 	"github.com/danieljustus/symaira-vault/internal/config"
 	auth "github.com/danieljustus/symaira-vault/internal/mcp/auth"
@@ -47,12 +45,12 @@ func TestMCPTokenCreate_Defaults(t *testing.T) {
 	}
 
 	vaultFlagReset(t)
-	t.Cleanup(func() { resetCobraCommand(cli.RootCmd) })
+	t.Cleanup(func() { resetCobraCommand(rootCmd) })
 
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "create"})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "create"})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	err := cli.RootCmd.Execute()
+	err := rootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -76,15 +74,15 @@ func TestMCPTokenCreate_WithToolsAndAgent(t *testing.T) {
 	}
 
 	vaultFlagReset(t)
-	t.Cleanup(func() { resetCobraCommand(cli.RootCmd) })
+	t.Cleanup(func() { resetCobraCommand(rootCmd) })
 
-	cli.RootCmd.SetArgs([]string{
+	rootCmd.SetArgs([]string{
 		"--vault", vaultDir,
 		"mcp", "token", "create",
 	})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	err := cli.RootCmd.Execute()
+	err := rootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -108,15 +106,15 @@ func TestMCPTokenCreate_MultipleToolFlags(t *testing.T) {
 	}
 
 	vaultFlagReset(t)
-	t.Cleanup(func() { resetCobraCommand(cli.RootCmd) })
+	t.Cleanup(func() { resetCobraCommand(rootCmd) })
 
-	cli.RootCmd.SetArgs([]string{
+	rootCmd.SetArgs([]string{
 		"--vault", vaultDir,
 		"mcp", "token", "create",
 	})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	err := cli.RootCmd.Execute()
+	err := rootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -140,15 +138,15 @@ func TestMCPTokenCreate_WithTTL(t *testing.T) {
 	}
 
 	vaultFlagReset(t)
-	t.Cleanup(func() { resetCobraCommand(cli.RootCmd) })
+	t.Cleanup(func() { resetCobraCommand(rootCmd) })
 
-	cli.RootCmd.SetArgs([]string{
+	rootCmd.SetArgs([]string{
 		"--vault", vaultDir,
 		"mcp", "token", "create",
 	})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	err := cli.RootCmd.Execute()
+	err := rootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -175,15 +173,15 @@ func TestMCPTokenCreate_DefaultTTLFromConfig(t *testing.T) {
 	}
 
 	vaultFlagReset(t)
-	t.Cleanup(func() { resetCobraCommand(cli.RootCmd) })
+	t.Cleanup(func() { resetCobraCommand(rootCmd) })
 
-	cli.RootCmd.SetArgs([]string{
+	rootCmd.SetArgs([]string{
 		"--vault", vaultDir,
 		"mcp", "token", "create",
 	})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	err := cli.RootCmd.Execute()
+	err := rootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -207,15 +205,15 @@ func TestMCPTokenCreate_InvalidTTL(t *testing.T) {
 	}
 
 	vaultFlagReset(t)
-	t.Cleanup(func() { resetCobraCommand(cli.RootCmd) })
+	t.Cleanup(func() { resetCobraCommand(rootCmd) })
 
-	cli.RootCmd.SetArgs([]string{
+	rootCmd.SetArgs([]string{
 		"--vault", vaultDir,
 		"mcp", "token", "create",
 	})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	err := cli.RootCmd.Execute()
+	err := rootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -239,14 +237,14 @@ func TestMCPTokenCreate_VaultPathError(t *testing.T) {
 	defer func() { vault = origVault }()
 
 	vaultFlagReset(t)
-	t.Cleanup(func() { resetCobraCommand(cli.RootCmd) })
+	t.Cleanup(func() { resetCobraCommand(rootCmd) })
 
-	cli.RootCmd.SetArgs([]string{"mcp", "token", "create"})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	rootCmd.SetArgs([]string{"mcp", "token", "create"})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
 	var execErr error
 	captureStderr(func() {
-		execErr = cli.RootCmd.Execute()
+		execErr = rootCmd.Execute()
 	})
 
 	if execErr == nil {
@@ -268,12 +266,12 @@ func TestMCPTokenList_Empty(t *testing.T) {
 	}
 
 	vaultFlagReset(t)
-	t.Cleanup(func() { resetCobraCommand(cli.RootCmd) })
+	t.Cleanup(func() { resetCobraCommand(rootCmd) })
 
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "list"})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "list"})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	err := cli.RootCmd.Execute()
+	err := rootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -309,12 +307,12 @@ func TestMCPTokenList_WithTokens(t *testing.T) {
 	}
 
 	vaultFlagReset(t)
-	t.Cleanup(func() { resetCobraCommand(cli.RootCmd) })
+	t.Cleanup(func() { resetCobraCommand(rootCmd) })
 
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "list"})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "list"})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	err = cli.RootCmd.Execute()
+	err = rootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -350,12 +348,12 @@ func TestMCPTokenRevoke_Success(t *testing.T) {
 	}
 
 	vaultFlagReset(t)
-	t.Cleanup(func() { resetCobraCommand(cli.RootCmd) })
+	t.Cleanup(func() { resetCobraCommand(rootCmd) })
 
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "revoke", token.ID})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "revoke", token.ID})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	err = cli.RootCmd.Execute()
+	err = rootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -378,12 +376,12 @@ func TestMCPTokenRevoke_NotFound(t *testing.T) {
 	}
 
 	vaultFlagReset(t)
-	t.Cleanup(func() { resetCobraCommand(cli.RootCmd) })
+	t.Cleanup(func() { resetCobraCommand(rootCmd) })
 
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "revoke", "nonexistent-id"})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "revoke", "nonexistent-id"})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	err := cli.RootCmd.Execute()
+	err := rootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -419,12 +417,12 @@ func TestMCPTokenRevoke_DoubleRevoke(t *testing.T) {
 	}
 
 	vaultFlagReset(t)
-	t.Cleanup(func() { resetCobraCommand(cli.RootCmd) })
+	t.Cleanup(func() { resetCobraCommand(rootCmd) })
 
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "revoke", token.ID})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "revoke", token.ID})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	err = cli.RootCmd.Execute()
+	err = rootCmd.Execute()
 	if err == nil {
 		t.Fatal("expected deprecation error on first revoke")
 	}
@@ -432,8 +430,8 @@ func TestMCPTokenRevoke_DoubleRevoke(t *testing.T) {
 		t.Errorf("expected deprecation message on first revoke, got: %v", err)
 	}
 
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "revoke", token.ID})
-	err = cli.RootCmd.Execute()
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "revoke", token.ID})
+	err = rootCmd.Execute()
 	if err == nil {
 		t.Fatal("expected deprecation error on second revoke")
 	}
@@ -469,12 +467,12 @@ func TestMCPTokenList_RevokedToken(t *testing.T) {
 	}
 
 	vaultFlagReset(t)
-	t.Cleanup(func() { resetCobraCommand(cli.RootCmd) })
+	t.Cleanup(func() { resetCobraCommand(rootCmd) })
 
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "list"})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "list"})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	err = cli.RootCmd.Execute()
+	err = rootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -560,15 +558,15 @@ func TestMCPTokenCreate_ZeroTTL(t *testing.T) {
 	}
 
 	vaultFlagReset(t)
-	t.Cleanup(func() { resetCobraCommand(cli.RootCmd) })
+	t.Cleanup(func() { resetCobraCommand(rootCmd) })
 
-	cli.RootCmd.SetArgs([]string{
+	rootCmd.SetArgs([]string{
 		"--vault", vaultDir,
 		"mcp", "token", "create",
 	})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	err := cli.RootCmd.Execute()
+	err := rootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -610,12 +608,12 @@ func TestMCPTokenList_ExpiredTokenExcluded(t *testing.T) {
 	time.Sleep(5 * time.Millisecond)
 
 	vaultFlagReset(t)
-	t.Cleanup(func() { resetCobraCommand(cli.RootCmd) })
+	t.Cleanup(func() { resetCobraCommand(rootCmd) })
 
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "list"})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "list"})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	err = cli.RootCmd.Execute()
+	err = rootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -639,15 +637,15 @@ func TestMCPTokenCreate_PreservesInRegistry(t *testing.T) {
 	}
 
 	vaultFlagReset(t)
-	t.Cleanup(func() { resetCobraCommand(cli.RootCmd) })
+	t.Cleanup(func() { resetCobraCommand(rootCmd) })
 
-	cli.RootCmd.SetArgs([]string{
+	rootCmd.SetArgs([]string{
 		"--vault", vaultDir,
 		"mcp", "token", "create",
 	})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	err := cli.RootCmd.Execute()
+	err := rootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -670,14 +668,14 @@ func TestMCPTokenRevoke_MissingArg(t *testing.T) {
 	}
 
 	vaultFlagReset(t)
-	t.Cleanup(func() { resetCobraCommand(cli.RootCmd) })
+	t.Cleanup(func() { resetCobraCommand(rootCmd) })
 
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "revoke"})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "revoke"})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
 	var execErr error
 	captureStderr(func() {
-		execErr = cli.RootCmd.Execute()
+		execErr = rootCmd.Execute()
 	})
 
 	if execErr == nil {
@@ -716,12 +714,12 @@ func TestMCPTokenCreate_ToolsLongOutput(t *testing.T) {
 	}
 
 	vaultFlagReset(t)
-	t.Cleanup(func() { resetCobraCommand(cli.RootCmd) })
+	t.Cleanup(func() { resetCobraCommand(rootCmd) })
 
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "list"})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "list"})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	err = cli.RootCmd.Execute()
+	err = rootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -758,12 +756,12 @@ func TestMCPTokenList_HeaderFormat(t *testing.T) {
 	}
 
 	vaultFlagReset(t)
-	t.Cleanup(func() { resetCobraCommand(cli.RootCmd) })
+	t.Cleanup(func() { resetCobraCommand(rootCmd) })
 
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "list"})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "list"})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	err = cli.RootCmd.Execute()
+	err = rootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -775,7 +773,7 @@ func TestMCPTokenList_HeaderFormat(t *testing.T) {
 
 func TestMCPCmdRegistration(t *testing.T) {
 	found := false
-	for _, c := range cli.RootCmd.Commands() {
+	for _, c := range rootCmd.Commands() {
 		if c.Name() == "mcp" {
 			found = true
 			break
@@ -801,15 +799,15 @@ func TestMCPTokenCreate_NegativeDayTTL(t *testing.T) {
 	}
 
 	vaultFlagReset(t)
-	t.Cleanup(func() { resetCobraCommand(cli.RootCmd) })
+	t.Cleanup(func() { resetCobraCommand(rootCmd) })
 
-	cli.RootCmd.SetArgs([]string{
+	rootCmd.SetArgs([]string{
 		"--vault", vaultDir,
 		"mcp", "token", "create",
 	})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	err := cli.RootCmd.Execute()
+	err := rootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -835,15 +833,15 @@ func TestMCPTokenCreate_RegistryFilePermissions(t *testing.T) {
 	}
 
 	vaultFlagReset(t)
-	t.Cleanup(func() { resetCobraCommand(cli.RootCmd) })
+	t.Cleanup(func() { resetCobraCommand(rootCmd) })
 
-	cli.RootCmd.SetArgs([]string{
+	rootCmd.SetArgs([]string{
 		"--vault", vaultDir,
 		"mcp", "token", "create",
 	})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	err := cli.RootCmd.Execute()
+	err := rootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -867,15 +865,15 @@ func TestMCPTokenCreate_EmptyLabelOK(t *testing.T) {
 	}
 
 	vaultFlagReset(t)
-	t.Cleanup(func() { resetCobraCommand(cli.RootCmd) })
+	t.Cleanup(func() { resetCobraCommand(rootCmd) })
 
-	cli.RootCmd.SetArgs([]string{
+	rootCmd.SetArgs([]string{
 		"--vault", vaultDir,
 		"mcp", "token", "create",
 	})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	err := cli.RootCmd.Execute()
+	err := rootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -899,14 +897,14 @@ func TestMCPTokenRevoke_VaultPathError(t *testing.T) {
 	defer func() { vault = origVault }()
 
 	vaultFlagReset(t)
-	t.Cleanup(func() { resetCobraCommand(cli.RootCmd) })
+	t.Cleanup(func() { resetCobraCommand(rootCmd) })
 
-	cli.RootCmd.SetArgs([]string{"mcp", "token", "revoke", "some-id"})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	rootCmd.SetArgs([]string{"mcp", "token", "revoke", "some-id"})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
 	var execErr error
 	captureStderr(func() {
-		execErr = cli.RootCmd.Execute()
+		execErr = rootCmd.Execute()
 	})
 
 	if execErr == nil {
@@ -928,14 +926,14 @@ func TestMCPTokenList_VaultPathError(t *testing.T) {
 	defer func() { vault = origVault }()
 
 	vaultFlagReset(t)
-	t.Cleanup(func() { resetCobraCommand(cli.RootCmd) })
+	t.Cleanup(func() { resetCobraCommand(rootCmd) })
 
-	cli.RootCmd.SetArgs([]string{"mcp", "token", "list"})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	rootCmd.SetArgs([]string{"mcp", "token", "list"})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
 	var execErr error
 	captureStderr(func() {
-		execErr = cli.RootCmd.Execute()
+		execErr = rootCmd.Execute()
 	})
 
 	if execErr == nil {
@@ -957,15 +955,15 @@ func TestMCPTokenCreate_WithDaySuffixTTL(t *testing.T) {
 	}
 
 	vaultFlagReset(t)
-	t.Cleanup(func() { resetCobraCommand(cli.RootCmd) })
+	t.Cleanup(func() { resetCobraCommand(rootCmd) })
 
-	cli.RootCmd.SetArgs([]string{
+	rootCmd.SetArgs([]string{
 		"--vault", vaultDir,
 		"mcp", "token", "create",
 	})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	err := cli.RootCmd.Execute()
+	err := rootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -1002,12 +1000,12 @@ func TestMCPTokenList_EmptyAgentAndLabel(t *testing.T) {
 	}
 
 	vaultFlagReset(t)
-	t.Cleanup(func() { resetCobraCommand(cli.RootCmd) })
+	t.Cleanup(func() { resetCobraCommand(rootCmd) })
 
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "list"})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp", "token", "list"})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	err = cli.RootCmd.Execute()
+	err = rootCmd.Execute()
 
 	if err == nil {
 		t.Fatal("expected deprecation error")
@@ -1031,15 +1029,15 @@ func TestMCPTokenCreate_RawTokenUnique(t *testing.T) {
 
 	for i := 0; i < 3; i++ {
 		vaultFlagReset(t)
-		t.Cleanup(func() { resetCobraCommand(cli.RootCmd) })
+		t.Cleanup(func() { resetCobraCommand(rootCmd) })
 
-		cli.RootCmd.SetArgs([]string{
+		rootCmd.SetArgs([]string{
 			"--vault", vaultDir,
 			"mcp", "token", "create",
 		})
-		t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+		t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-		err := cli.RootCmd.Execute()
+		err := rootCmd.Execute()
 		if err == nil {
 			t.Fatal("expected deprecation error")
 		}

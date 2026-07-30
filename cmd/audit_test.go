@@ -9,8 +9,6 @@ import (
 	"testing"
 	"time"
 
-	cli "github.com/danieljustus/symaira-vault/internal/cli"
-
 	admin "github.com/danieljustus/symaira-vault/cmd/admin"
 	"github.com/danieljustus/symaira-vault/internal/audit"
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
@@ -323,10 +321,10 @@ func TestAuditCommand_JSON(t *testing.T) {
 	}
 
 	buf := prepareRootCommandOutput(t)
-	cli.RootCmd.SetArgs([]string{"audit", "--json"})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	rootCmd.SetArgs([]string{"audit", "--json"})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	if err := cli.RootCmd.Execute(); err != nil {
+	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 
@@ -363,10 +361,10 @@ func TestAuditCommand_Table(t *testing.T) {
 	}
 
 	buf := prepareRootCommandOutput(t)
-	cli.RootCmd.SetArgs([]string{"audit"})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	rootCmd.SetArgs([]string{"audit"})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	if err := cli.RootCmd.Execute(); err != nil {
+	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 
@@ -406,10 +404,10 @@ func TestAuditCommand_SinceFilter(t *testing.T) {
 	f.Close()
 
 	buf := prepareRootCommandOutput(t)
-	cli.RootCmd.SetArgs([]string{"audit", "--since", "10m"})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	rootCmd.SetArgs([]string{"audit", "--since", "10m"})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	if err := cli.RootCmd.Execute(); err != nil {
+	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 
@@ -451,10 +449,10 @@ func TestAuditCommand_FailedFilter(t *testing.T) {
 	f.Close()
 
 	buf := prepareRootCommandOutput(t)
-	cli.RootCmd.SetArgs([]string{"audit", "--failed"})
-	t.Cleanup(func() { cli.RootCmd.SetArgs(nil) })
+	rootCmd.SetArgs([]string{"audit", "--failed"})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
 
-	if err := cli.RootCmd.Execute(); err != nil {
+	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
 
