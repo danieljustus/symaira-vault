@@ -42,6 +42,7 @@ type getEntryOutput struct {
 	Modified string
 }
 
+//nolint:gocyclo // pre-existing complexity from inline RunE closure; refactor separately
 func newGetCmd() *cobra.Command {
 	getCmd := &cobra.Command{
 		Use:     "get <path[.field]>",
