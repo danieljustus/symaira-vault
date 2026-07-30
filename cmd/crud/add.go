@@ -38,26 +38,6 @@ var (
 	AddExpiresAt   string
 )
 
-var addCmd = &cobra.Command{
-	Use:               "add <name>",
-	Aliases:           []string{"new", "create"},
-	ValidArgsFunction: cli.EntryCompletionFunc,
-	Short:             "Add a new password entry",
-	Long: `Creates a new password entry in the vault.
-
-The entry name can use slash notation for organization (e.g., work/aws).
-Interactive mode prompts for username, password, and URL.`,
-	Example: `  symvault add github
-  symvault add work/aws
-  symvault add personal/bank
-  symvault add github-token --value "my-secret-token"
-  symvault add secure-pass --generate --length 20
-  symvault add aws-key --type api_key --value "AKIA..."
-  symvault add ssh-key --type ssh_key --usage-hint "Production server key"`,
-	Args: cobra.ExactArgs(1),
-	RunE: runAdd,
-}
-
 func runAdd(cmd *cobra.Command, args []string) error {
 	return cli.WithVaultRaw(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
 		name := args[0]
@@ -340,7 +320,27 @@ func applySecretMetaFlags(meta vaultpkg.SecretMetadata) vaultpkg.SecretMetadata 
 	return meta
 }
 
-func init() {
+func newAddCmd() *cobra.Command {
+	addCmd := &cobra.Command{
+		Use:               "add <name>",
+		Aliases:           []string{"new", "create"},
+		ValidArgsFunction: cli.EntryCompletionFunc,
+		Short:             "Add a new password entry",
+		Long: `Creates a new password entry in the vault.
+
+The entry name can use slash notation for organization (e.g., work/aws).
+Interactive mode prompts for username, password, and URL.`,
+		Example: `  symvault add github
+  symvault add work/aws
+  symvault add personal/bank
+  symvault add github-token --value "my-secret-token"
+  symvault add secure-pass --generate --length 20
+  symvault add aws-key --type api_key --value "AKIA..."
+  symvault add ssh-key --type ssh_key --usage-hint "Production server key"`,
+		Args: cobra.ExactArgs(1),
+		RunE: runAdd,
+	}
+
 	addCmd.Flags().StringVar(&AddValue, "value", "", "Password value (non-interactive, visible in process listings)")
 	addCmd.Flags().BoolVar(&AddStdinValue, "stdin-value", false, "Read password value from stdin (prevents argv leak)")
 	addCmd.Flags().BoolVar(&AddStdinTOTP, "stdin-totp-secret", false, "Read TOTP secret from stdin (prevents argv leak)")
@@ -358,5 +358,5 @@ func init() {
 	addCmd.Flags().BoolVar(&AddAutoRotate, "auto-rotate", false, "Enable automatic rotation reminder")
 	addCmd.Flags().StringVar(&AddExpiresAt, "expires-at", "", "Expiration date (RFC3339 format)")
 	addCmd.GroupID = cli.GroupIDEssentials
-	cli.RootCmd.AddCommand(addCmd)
+	return addCmd
 }

@@ -171,5 +171,4 @@ func outputAgentMCPSnippet(name, rawToken string) {
 func init() {
 	agentCmd.AddCommand(agentSetupCmd)
 	agentCmd.GroupID = cli.GroupIDAgentsMCP
-	cli.RootCmd.AddCommand(agentCmd)
 }

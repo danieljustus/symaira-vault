@@ -136,7 +136,6 @@ func init() {
 	AuthCmd.AddCommand(AuthStatusCmd)
 	AuthCmd.AddCommand(AuthSetCmd)
 	AuthCmd.GroupID = cli.GroupIDAuthAccess
-	cli.RootCmd.AddCommand(AuthCmd)
 }
 
 func loadAuthConfig() (string, *configpkg.Config, error) {

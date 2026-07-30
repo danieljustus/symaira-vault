@@ -25,5 +25,6 @@ func main() {
 	cmd.SniffAndClearEnvPassphrase()
 
 	cmd.SetVersionInfo(version, commit, date)
-	cmd.Execute()
+	rootCmd := cmd.NewRootCmd()
+	cmd.ExecuteRoot(rootCmd)
 }

@@ -157,7 +157,6 @@ func printPostInitHints(vaultDir string) {
 
 func init() {
 	initCmd.GroupID = cli.GroupIDEssentials
-	cli.RootCmd.AddCommand(initCmd)
 	initCmd.Flags().StringVar(&initAuthMethod, "auth", "ask", "unlock method for this vault (ask, passphrase, touchid)")
 }
 

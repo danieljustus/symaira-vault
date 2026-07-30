@@ -60,5 +60,4 @@ func init() {
 	// that used it while the TUI was gated. It no longer has any effect.
 	uiCmd.Flags().BoolVar(&uiExperimental, "experimental", false, "(deprecated, no longer needed)")
 	uiCmd.GroupID = cli.GroupIDEssentials
-	rootCmd.AddCommand(uiCmd)
 }

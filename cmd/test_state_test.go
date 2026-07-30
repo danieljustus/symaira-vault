@@ -96,8 +96,6 @@ func resetCobraCommandSeen(cmd *cobra.Command, seen map[*pflag.Flag]bool) {
 	cmd.SetOut(nil)
 	cmd.SetErr(nil)
 	cmd.SetIn(nil)
-	cmd.SilenceUsage = false
-	cmd.SilenceErrors = false
 
 	for _, fs := range []*pflag.FlagSet{cmd.Flags(), cmd.PersistentFlags(), cmd.LocalFlags(), cmd.InheritedFlags()} {
 		if fs != nil {

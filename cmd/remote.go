@@ -79,7 +79,6 @@ var remoteStatusCmd = &cobra.Command{
 
 func init() {
 	remoteCmd.GroupID = cli.GroupIDSharingSync
-	rootCmd.AddCommand(remoteCmd)
 	remoteCmd.AddCommand(remoteInitCmd)
 	remoteCmd.AddCommand(remoteStatusCmd)
 

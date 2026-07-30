@@ -113,7 +113,7 @@ func TestImportCommandAutoDetectCSV(t *testing.T) {
 	ImportFormat = ""
 	ImportDryRun = true
 
-	cmd := cli.RootCmd
+	cmd := newTestRootCmd()
 	cmd.SetArgs([]string{"import", csvFile})
 	err := cmd.Execute()
 	if err != nil {
@@ -150,7 +150,7 @@ func TestImportCommandExplicitFormatOverride(t *testing.T) {
 	ImportDryRun = true
 
 	// Explicit --format should override auto-detection
-	cmd := cli.RootCmd
+	cmd := newTestRootCmd()
 	cmd.SetArgs([]string{"import", "--format", "csv", csvFile})
 	err := cmd.Execute()
 	if err != nil {
@@ -175,7 +175,7 @@ func TestImportCommandUnknownExtensionNoFormat(t *testing.T) {
 	ImportFormat = ""
 	ImportDryRun = true
 
-	cmd := cli.RootCmd
+	cmd := newTestRootCmd()
 	cmd.SetArgs([]string{"import", txtFile})
 	err := cmd.Execute()
 	if err == nil {
@@ -201,7 +201,7 @@ func TestImportCommandUnsupportedFormat(t *testing.T) {
 	ImportDryRun = true
 
 	// .json auto-detects to "json" which is not a supported import format
-	cmd := cli.RootCmd
+	cmd := newTestRootCmd()
 	cmd.SetArgs([]string{"import", jsonFile})
 	err := cmd.Execute()
 	if err == nil {

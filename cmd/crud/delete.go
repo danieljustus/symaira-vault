@@ -18,58 +18,58 @@ var (
 	DeleteYes bool
 )
 
-var deleteCmd = &cobra.Command{
-	Use:     "delete <path>",
-	Aliases: []string{"rm", "remove"},
-	Short:   "Delete a password entry",
-	Example: `  # Delete an entry (with confirmation)
+func newDeleteCmd() *cobra.Command {
+	deleteCmd := &cobra.Command{
+		Use:     "delete <path>",
+		Aliases: []string{"rm", "remove"},
+		Short:   "Delete a password entry",
+		Example: `  # Delete an entry (with confirmation)
   symvault delete github
 
   # Skip confirmation
   symvault delete github --yes`,
-	Args:              cobra.ExactArgs(1),
-	ValidArgsFunction: cli.EntryCompletionFunc,
-	Annotations: map[string]string{
-		cli.JSONOutputAnnotation: "true",
-	},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		path := args[0]
-		return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
-			if !DeleteYes {
-				fmt.Fprintf(os.Stderr, "Delete %s? (y/N): ", path)
-				answer, err := bufio.NewReader(os.Stdin).ReadString('\n')
-				if err != nil && answer == "" {
-					return errorspkg.ReadFailed(err, "read confirmation")
-				}
-				if strings.ToLower(strings.TrimSpace(answer)) != "y" {
-					if cli.OutputFormat == "text" { //nolint:goconst // output format literal
-						fmt.Fprintln(os.Stderr, "Canceled")
-					} else {
-						if err := cli.PrintResult(map[string]any{"deleted": false, "path": path, "canceled": true}); err != nil {
-							return err
-						}
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: cli.EntryCompletionFunc,
+		Annotations: map[string]string{
+			cli.JSONOutputAnnotation: "true",
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path := args[0]
+			return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
+				if !DeleteYes {
+					fmt.Fprintf(os.Stderr, "Delete %s? (y/N): ", path)
+					answer, err := bufio.NewReader(os.Stdin).ReadString('\n')
+					if err != nil && answer == "" {
+						return errorspkg.ReadFailed(err, "read confirmation")
 					}
-					return nil
+					if strings.ToLower(strings.TrimSpace(answer)) != "y" {
+						if cli.OutputFormat == "text" { //nolint:goconst // output format literal
+							fmt.Fprintln(os.Stderr, "Canceled")
+						} else {
+							if err := cli.PrintResult(map[string]any{"deleted": false, "path": path, "canceled": true}); err != nil {
+								return err
+							}
+						}
+						return nil
+					}
 				}
-			}
 
-			if err := vs.DeleteEntry(path); err != nil {
-				return errorspkg.WriteFailed(err, "cannot delete entry")
-			}
-			if cli.OutputFormat == "text" {
-				cli.PrintQuietAware("Deleted: %s\n", path)
-			} else {
-				if err := cli.PrintResult(map[string]any{"deleted": true, "path": path}); err != nil {
-					return err
+				if err := vs.DeleteEntry(path); err != nil {
+					return errorspkg.WriteFailed(err, "cannot delete entry")
 				}
-			}
-			return nil
-		})
-	},
-}
+				if cli.OutputFormat == "text" {
+					cli.PrintQuietAware("Deleted: %s\n", path)
+				} else {
+					if err := cli.PrintResult(map[string]any{"deleted": true, "path": path}); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+		},
+	}
 
-func init() {
-	deleteCmd.Flags().BoolVarP(&DeleteYes, "yes", "y", false, "Skip confirmation prompt")
+	deleteCmd.Flags().BoolVarP(&DeleteYes, "yes", "y", false, "Skip deletion confirmation prompt")
 	deleteCmd.GroupID = cli.GroupIDEssentials
-	cli.RootCmd.AddCommand(deleteCmd)
+	return deleteCmd
 }

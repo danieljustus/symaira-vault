@@ -218,7 +218,6 @@ func init() {
 	AuditCmd.Flags().BoolVar(&AuditFailed, "failed", false, "Show only failed entries")
 	AuditCmd.AddCommand(rotateKeyCmd)
 	AuditCmd.GroupID = cli.GroupIDAdministration
-	cli.RootCmd.AddCommand(AuditCmd)
 }
 
 var rotateKeyCmd = &cobra.Command{
