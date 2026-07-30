@@ -31,6 +31,9 @@ var generateCmd = &cobra.Command{
 
   # Generate and store
   symvault generate --store newaccount.password`,
+	Annotations: map[string]string{
+		cli.JSONOutputAnnotation: "true",
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		password, cleanup, err := generatePassword(genLength, genSymbols)
 		if err != nil {

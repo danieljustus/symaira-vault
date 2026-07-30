@@ -39,6 +39,9 @@ var findCmd = &cobra.Command{
   # JSON output
   symvault find bank --output json`,
 	Args: cobra.ExactArgs(1),
+	Annotations: map[string]string{
+		cli.JSONOutputAnnotation: "true",
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
 			cli.MaybeAutoPull(vs.VaultDir(), v.Config)

@@ -29,6 +29,9 @@ Lines starting with # are treated as comments.`,
 	Example: `  symvault recipients list              # List all recipients
   symvault recipients add age1...       # Add a new recipient
   symvault recipients remove age1...    # Remove a recipient`,
+	Annotations: map[string]string{
+		cli.JSONOutputAnnotation: "true",
+	},
 }
 
 var recipientsListCmd = &cobra.Command{
@@ -36,6 +39,9 @@ var recipientsListCmd = &cobra.Command{
 	Short:   "List all recipients",
 	Long:    `List all recipients from the recipients.txt file.`,
 	Example: `  symvault recipients list`,
+	Annotations: map[string]string{
+		cli.JSONOutputAnnotation: "true",
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		vaultDir, err := cli.VaultPath()
 		if err != nil {

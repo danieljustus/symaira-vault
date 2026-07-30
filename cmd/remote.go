@@ -35,7 +35,8 @@ for vault synchronization. The vault must be initialized first.`,
   symvault remote init hermes@macmini --push
   symvault remote status`,
 	Annotations: map[string]string{
-		requiresVaultAnnotation: "false",
+		requiresVaultAnnotation:  "false",
+		cli.JSONOutputAnnotation: "true",
 	},
 }
 

@@ -39,6 +39,9 @@ and 'symvault device join' on the new device to join the vault.`,
 	Example: `  symvault device pair
   symvault device join ssh://user@host/path/to/vault.git <token>
   symvault device accept <token>`,
+	Annotations: map[string]string{
+		cli.JSONOutputAnnotation: "true",
+	},
 }
 
 var devicePairCmd = &cobra.Command{
@@ -314,6 +317,9 @@ Also shows recipients from recipients.txt that are not associated with
 any registered device (unmanaged recipients).`,
 	Example: `  symvault device list
   symvault device list --output json`,
+	Annotations: map[string]string{
+		cli.JSONOutputAnnotation: "true",
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		vaultDir, err := cli.VaultPath()
 		if err != nil {

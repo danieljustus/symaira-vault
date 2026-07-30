@@ -85,6 +85,7 @@ Output columns:
   symvault agent list --output json`,
 	Annotations: map[string]string{
 		cli.RequiresVaultAnnotation: "false",
+		cli.JSONOutputAnnotation:    "true",
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		vaultDir := cli.GetVaultDir()

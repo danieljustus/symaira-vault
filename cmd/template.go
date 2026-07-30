@@ -38,11 +38,17 @@ Supported template types:
 
   # K8s Secret manifest
   symvault template generate k8s-secret --name prod-secrets prod/*`,
+	Annotations: map[string]string{
+		cli.JSONOutputAnnotation: "true",
+	},
 }
 
 var templateGenerateCmd = &cobra.Command{
 	Use:   "generate [KEY=ref ...]",
 	Short: "Generate a configuration file from a template",
+	Annotations: map[string]string{
+		cli.JSONOutputAnnotation: "true",
+	},
 	Long: `Generate a configuration file from a template.
 
 Refs can be specified as positional KEY=ref arguments or via --prefix to

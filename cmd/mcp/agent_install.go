@@ -85,6 +85,10 @@ Supported agents: openclaw, claude-code, hermes, codex, opencode`,
 
   # Structured JSON output for scripting
   symvault agent install opencode --output json`,
+	Annotations: map[string]string{
+		cli.RequiresVaultAnnotation: "false",
+		cli.JSONOutputAnnotation:    "true",
+	},
 	Args: func(cmd *cobra.Command, args []string) error {
 		autoDetect, _ := cmd.Flags().GetBool("auto-detect")
 		if autoDetect {
@@ -97,9 +101,6 @@ Supported agents: openclaw, claude-code, hermes, codex, opencode`,
 			return fmt.Errorf("requires exactly 1 argument (agent name), or use --auto-detect")
 		}
 		return nil
-	},
-	Annotations: map[string]string{
-		cli.RequiresVaultAnnotation: "false",
 	},
 	RunE: agentInstallRunE,
 }

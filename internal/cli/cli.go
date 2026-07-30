@@ -32,6 +32,7 @@ var StartTime = time.Now()
 func SetStartTime(t time.Time) { StartTime = t }
 
 const RequiresVaultAnnotation = "symvault/requires-vault"
+const JSONOutputAnnotation = "symvault:json"
 
 // SessionManager abstracts session persistence operations, allowing
 // tests to substitute mock implementations and avoid global state.
@@ -233,6 +234,13 @@ Daily use:
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		if OutputFormat != "text" {
+			if !CommandSupportsJSON(cmd) {
+				return errorspkg.NewCLIError(errorspkg.ExitUsage,
+					fmt.Sprintf("output format %q is not supported by '%s' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)", OutputFormat, cmd.CommandPath()),
+					nil)
+			}
+		}
 		if !commandRequiresVault(cmd) {
 			return nil
 		}
@@ -343,4 +351,16 @@ func commandRequiresVault(cmd *cobra.Command) bool {
 		}
 	}
 	return true
+}
+
+func CommandSupportsJSON(cmd *cobra.Command) bool {
+	for current := cmd; current != nil; current = current.Parent() {
+		if current.Annotations == nil {
+			continue
+		}
+		if value, ok := current.Annotations[JSONOutputAnnotation]; ok {
+			return value == "true"
+		}
+	}
+	return false
 }

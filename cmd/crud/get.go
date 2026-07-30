@@ -63,6 +63,9 @@ var getCmd = &cobra.Command{
   symvault get github.password --profile work`,
 	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: cli.EntryCompletionFunc,
+	Annotations: map[string]string{
+		cli.JSONOutputAnnotation: "true",
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		unlockVault := cli.WithVault
 		if !cli.IsTerminalFunc(int(os.Stdin.Fd())) {
