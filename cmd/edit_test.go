@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	cli "github.com/danieljustus/symaira-vault/internal/cli"
 	crud "github.com/danieljustus/symaira-vault/cmd/crud"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 	"github.com/danieljustus/symaira-vault/internal/config"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
