@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 	crud "github.com/danieljustus/symaira-vault/cmd/crud"
 	"github.com/danieljustus/symaira-vault/internal/config"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
@@ -252,9 +253,9 @@ func TestEdit_ErrorPaths(t *testing.T) {
 			_ = os.Unsetenv("OPENPASS_VAULT")
 			_ = os.Unsetenv("OPENPASS_PASSPHRASE")
 			vault = ""
-			if vaultFlag != nil {
-				_ = vaultFlag.Value.Set("")
-				vaultFlag.Changed = false
+			if cli.VaultFlag != nil {
+				_ = cli.VaultFlag.Value.Set("")
+				cli.VaultFlag.Changed = false
 			}
 
 			vaultDir := tt.setupFunc()

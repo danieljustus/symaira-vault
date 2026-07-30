@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 	"github.com/danieljustus/symaira-vault/internal/config"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 
@@ -363,9 +364,9 @@ func TestAdd_ErrorPaths(t *testing.T) {
 			}
 
 			vault = ""
-			if vaultFlag != nil {
-				_ = vaultFlag.Value.Set("")
-				vaultFlag.Changed = false
+			if cli.VaultFlag != nil {
+				_ = cli.VaultFlag.Value.Set("")
+				cli.VaultFlag.Changed = false
 			}
 
 			rootCmd.SetArgs(tt.args)

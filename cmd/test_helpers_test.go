@@ -26,14 +26,14 @@ func vaultFlagReset(t *testing.T) {
 	t.Helper()
 	origVault := vault
 	origChanged := false
-	if vaultFlag != nil {
-		origChanged = vaultFlag.Changed
+	if cli.VaultFlag != nil {
+		origChanged = cli.VaultFlag.Changed
 	}
 	t.Cleanup(func() {
 		cli.Vault = origVault
-		if vaultFlag != nil {
-			_ = vaultFlag.Value.Set(origVault)
-			vaultFlag.Changed = origChanged
+		if cli.VaultFlag != nil {
+			_ = cli.VaultFlag.Value.Set(origVault)
+			cli.VaultFlag.Changed = origChanged
 		}
 	})
 }
@@ -41,14 +41,14 @@ func vaultFlagReset(t *testing.T) {
 func setupVaultFlag(t *testing.T, vaultDir string) func() {
 	t.Helper()
 	origVault := vault
-	origChanged := vaultFlag.Changed
-	_ = vaultFlag.Value.Set(vaultDir)
-	vaultFlag.Changed = true
+	origChanged := cli.VaultFlag.Changed
+	_ = cli.VaultFlag.Value.Set(vaultDir)
+	cli.VaultFlag.Changed = true
 	cli.Vault = vaultDir
 	return func() {
 		cli.Vault = origVault
-		_ = vaultFlag.Value.Set(origVault)
-		vaultFlag.Changed = origChanged
+		_ = cli.VaultFlag.Value.Set(origVault)
+		cli.VaultFlag.Changed = origChanged
 	}
 }
 

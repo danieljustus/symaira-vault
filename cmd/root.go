@@ -23,7 +23,6 @@ var (
 
 var (
 	vault     = cli.Vault
-	vaultFlag = cli.VaultFlag
 )
 
 var rootCmd = NewRootCmd()
