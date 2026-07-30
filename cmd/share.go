@@ -24,6 +24,9 @@ var shareCmd = &cobra.Command{
 
   # JSON output for tooling
   symvault share list --output json`,
+	Annotations: map[string]string{
+		cli.JSONOutputAnnotation: "true",
+	},
 }
 
 var shareListCmd = &cobra.Command{
@@ -38,6 +41,9 @@ Examples:
   symvault share list --to agent-b
   symvault share list --path github.password
   symvault share list --output json`,
+	Annotations: map[string]string{
+		cli.JSONOutputAnnotation: "true",
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		vDir, err := cli.VaultPath()
 		if err != nil {

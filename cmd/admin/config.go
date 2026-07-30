@@ -40,9 +40,10 @@ var configCmd = &cobra.Command{
   symvault config list
 
   # JSON output
-  symvault config validate --output json`,
+  symvault config get vaultDir --output json`,
 	Annotations: map[string]string{
 		cli.RequiresVaultAnnotation: "false",
+		cli.JSONOutputAnnotation:    "true",
 	},
 }
 
@@ -199,6 +200,7 @@ Examples:
 	ValidArgsFunction: ConfigKeyCompletionFunc,
 	Annotations: map[string]string{
 		cli.RequiresVaultAnnotation: "false",
+		cli.JSONOutputAnnotation:    "true",
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		path := resolveConfigPath(args)

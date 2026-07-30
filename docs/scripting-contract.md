@@ -52,6 +52,23 @@ Full exit code reference: [cli-exit-codes.md](cli-exit-codes.md).
 
 ### JSON output (`--output json`)
 
+The `--output json` flag is supported on the following commands:
+- `symvault admin config get`
+- `symvault delete`
+- `symvault device list`
+- `symvault find`
+- `symvault generate`
+- `symvault get`
+- `symvault list`
+- `symvault mcp agent install`
+- `symvault mcp agent list`
+- `symvault recipients`
+- `symvault remote`
+- `symvault share`
+- `symvault template generate`
+
+Passing `--output json` or `--output yaml` to any other command exits with `ExitInvalidInput` / `ExitUsage` (exit code 9) and lists the supported commands.
+
 | Condition       | stdout                              | stderr                | Exit Code      |
 | --------------- | ----------------------------------- | --------------------- | -------------- |
 | Success         | JSON object                         | Empty                 | 0              |

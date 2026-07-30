@@ -45,6 +45,8 @@ const (
 	// ExitConfigError, which signals that the on-disk configuration is
 	// malformed.
 	ExitInvalidInput ExitCode = 9
+	// ExitUsage is an alias for ExitInvalidInput for flag and usage validation errors.
+	ExitUsage ExitCode = ExitInvalidInput
 	// ExitUpdateAvailable indicates a new version is available for download.
 	ExitUpdateAvailable ExitCode = 10
 )

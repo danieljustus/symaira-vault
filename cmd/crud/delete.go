@@ -29,6 +29,9 @@ var deleteCmd = &cobra.Command{
   symvault delete github --yes`,
 	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: cli.EntryCompletionFunc,
+	Annotations: map[string]string{
+		cli.JSONOutputAnnotation: "true",
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		path := args[0]
 		return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {

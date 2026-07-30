@@ -207,3 +207,48 @@ func TestScriptingGet_JSONOutput(t *testing.T) {
 		t.Errorf("json stdout missing secret: %s", stdout)
 	}
 }
+
+func TestScriptingJSONOutput_UnsupportedCommandExitsUsage(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping slow scripting test in short mode")
+	}
+	binPath, vaultDir, env := buildAndInitVault(t)
+
+	_, stderr, exitCode := runBinResult(t, binPath, env, "--vault", vaultDir, "audit", "--output", "json")
+	if exitCode != 9 {
+		t.Errorf("unsupported command exit code = %d, want 9 (ExitInvalidInput/ExitUsage)\nstderr: %s", exitCode, stderr)
+	}
+	if !strings.Contains(stderr, "not supported") {
+		t.Errorf("stderr = %q, want error message indicating unsupported output format", stderr)
+	}
+}
+
+func TestScriptingJSONOutput_DocMatchesCode(t *testing.T) {
+	docBytes, err := os.ReadFile("../docs/scripting-contract.md")
+	if err != nil {
+		t.Fatalf("reading docs/scripting-contract.md: %v", err)
+	}
+	doc := string(docBytes)
+
+	expectedCommands := []string{
+		"admin config get",
+		"delete",
+		"device list",
+		"find",
+		"generate",
+		"get",
+		"list",
+		"mcp agent install",
+		"mcp agent list",
+		"recipients",
+		"remote",
+		"share",
+		"template generate",
+	}
+
+	for _, cmdName := range expectedCommands {
+		if !strings.Contains(doc, cmdName) {
+			t.Errorf("docs/scripting-contract.md missing documented command %q", cmdName)
+		}
+	}
+}

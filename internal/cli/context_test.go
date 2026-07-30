@@ -109,6 +109,10 @@ func TestNewTestContext_ProducesIsolatedState(t *testing.T) {
 }
 
 func TestSyncFromContext_WritesGlobals(t *testing.T) {
+	t.Cleanup(func() {
+		OutputFormat = "text"
+		QuietMode = false
+	})
 	ctx := NewCLIContext()
 	ctx.Vault = "/tmp/test-vault"
 	ctx.QuietMode = true
@@ -131,6 +135,11 @@ func TestSyncFromContext_WritesGlobals(t *testing.T) {
 }
 
 func TestSyncToContext_ReadsGlobals(t *testing.T) {
+	t.Cleanup(func() {
+		OutputFormat = "text"
+		QuietMode = false
+		Profile = ""
+	})
 	Vault = "/tmp/read-back"
 	QuietMode = true
 	OutputFormat = "json"
@@ -157,6 +166,10 @@ func TestSyncToContext_ReadsGlobals(t *testing.T) {
 }
 
 func TestExecuteWithContext_SetsActiveContext(t *testing.T) {
+	t.Cleanup(func() {
+		OutputFormat = "text"
+		ActiveContext = nil
+	})
 	ctx := NewTestContext()
 	ctx.OutputFormat = "yaml"
 
