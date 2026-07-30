@@ -25,11 +25,12 @@ var (
 	SetForce       bool
 )
 
-var setCmd = &cobra.Command{
-	Use:   "set <path[.field]>",
-	Short: "Set a password entry or field",
-	Long:  "Creates or updates a password entry. Use --value, --stdin-value, or interactive mode.",
-	Example: `  # Set a field from stdin
+func newSetCmd() *cobra.Command {
+	setCmd := &cobra.Command{
+		Use:   "set <path[.field]>",
+		Short: "Set a password entry or field",
+		Long:  "Creates or updates a password entry. Use --value, --stdin-value, or interactive mode.",
+		Example: `  # Set a field from stdin
   echo "mysecret" | symvault set github.password --stdin-value
 
   # Set a field non-interactively (visible in process listing)
@@ -37,96 +38,95 @@ var setCmd = &cobra.Command{
 
   # Set TOTP data
   symvault set github --totp-secret JBSWY3DPEHPK3PXP`,
-	Args:              cobra.ExactArgs(1),
-	ValidArgsFunction: cli.EntryCompletionFunc,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		query := args[0]
-		path := query
-		field := ""
-		if idx := strings.LastIndex(query, "."); idx > 0 {
-			path = query[:idx]
-			field = query[idx+1:]
-		}
-
-		if SetStdinValue {
-			stdinReader := bufio.NewReader(os.Stdin)
-			line, err := stdinReader.ReadString('\n')
-			if err != nil && line == "" {
-				return errorspkg.ReadFailed(err, "read --stdin-value")
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: cli.EntryCompletionFunc,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			query := args[0]
+			path := query
+			field := ""
+			if idx := strings.LastIndex(query, "."); idx > 0 {
+				path = query[:idx]
+				field = query[idx+1:]
 			}
-			SetValue = strings.TrimRight(line, "\n\r")
-		}
 
-		warnArgvExposure(SetValue, SetTOTPSecret, false)
+			if SetStdinValue {
+				stdinReader := bufio.NewReader(os.Stdin)
+				line, err := stdinReader.ReadString('\n')
+				if err != nil && line == "" {
+					return errorspkg.ReadFailed(err, "read --stdin-value")
+				}
+				SetValue = strings.TrimRight(line, "\n\r")
+			}
 
-		data := map[string]any{}
-		if SetValue != "" {
-			if field != "" {
-				data[field] = SetValue
+			warnArgvExposure(SetValue, SetTOTPSecret, false)
+
+			data := map[string]any{}
+			if SetValue != "" {
+				if field != "" {
+					data[field] = SetValue
+				} else {
+					data["password"] = SetValue
+				}
+				if !SetForce && (field == "" || field == "password") {
+					if err := cryptopkg.ValidatePasswordStrength(SetValue); err != nil {
+						return err
+					}
+				}
 			} else {
-				data["password"] = SetValue
-			}
-			if !SetForce && (field == "" || field == "password") {
-				if err := cryptopkg.ValidatePasswordStrength(SetValue); err != nil {
-					return err
+				reader := bufio.NewReader(os.Stdin)
+				if field != "" {
+					prompt := fmt.Sprintf("Enter value for %s: ", field)
+					valueBytes, err := cliinput.ReadHiddenInputFn(prompt, reader)
+					if err != nil && len(valueBytes) == 0 {
+						return errorspkg.ReadFailed(err, "read value")
+					}
+					defer cryptopkg.Wipe(valueBytes)
+					data[field] = string(valueBytes)
+				} else {
+					collected, err := cli.CollectEntryData(reader, cli.EntryFlags{
+						TOTPSecret:      SetTOTPSecret,
+						TOTPIssuer:      SetTOTPIssuer,
+						TOTPAccount:     SetTOTPAccount,
+						Force:           SetForce,
+						SkipNotes:       true,
+						SkipTOTPDetails: true,
+					})
+					if err != nil {
+						return err
+					}
+					for k, v := range collected {
+						data[k] = v
+					}
 				}
 			}
-		} else {
-			reader := bufio.NewReader(os.Stdin)
-			if field != "" {
-				prompt := fmt.Sprintf("Enter value for %s: ", field)
-				valueBytes, err := cliinput.ReadHiddenInputFn(prompt, reader)
-				if err != nil && len(valueBytes) == 0 {
-					return errorspkg.ReadFailed(err, "read value")
+
+			if SetTOTPSecret != "" {
+				totpData := map[string]any{
+					"secret": SetTOTPSecret,
 				}
-				defer cryptopkg.Wipe(valueBytes)
-				data[field] = string(valueBytes)
-			} else {
-				collected, err := cli.CollectEntryData(reader, cli.EntryFlags{
-					TOTPSecret:      SetTOTPSecret,
-					TOTPIssuer:      SetTOTPIssuer,
-					TOTPAccount:     SetTOTPAccount,
-					Force:           SetForce,
-					SkipNotes:       true,
-					SkipTOTPDetails: true,
-				})
-				if err != nil {
-					return err
+				if SetTOTPIssuer != "" {
+					totpData["issuer"] = SetTOTPIssuer
 				}
-				for k, v := range collected {
-					data[k] = v
+				if SetTOTPAccount != "" {
+					totpData["account_name"] = SetTOTPAccount
 				}
+				data["totp"] = totpData
 			}
-		}
 
-		if SetTOTPSecret != "" {
-			totpData := map[string]any{
-				"secret": SetTOTPSecret,
+			if err := cryptopkg.ValidateTOTPData(data); err != nil {
+				return err
 			}
-			if SetTOTPIssuer != "" {
-				totpData["issuer"] = SetTOTPIssuer
-			}
-			if SetTOTPAccount != "" {
-				totpData["account_name"] = SetTOTPAccount
-			}
-			data["totp"] = totpData
-		}
 
-		if err := cryptopkg.ValidateTOTPData(data); err != nil {
-			return err
-		}
+			return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
+				if err := vs.SetFields(path, data); err != nil {
+					return errorspkg.WriteFailed(err, "cannot write entry")
+				}
+				cli.PrintQuietAware("Entry saved: %s\n", path)
+				return nil
+			})
+		},
+	}
 
-		return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
-			if err := vs.SetFields(path, data); err != nil {
-				return errorspkg.WriteFailed(err, "cannot write entry")
-			}
-			cli.PrintQuietAware("Entry saved: %s\n", path)
-			return nil
-		})
-	},
-}
-
-func init() {
 	setCmd.Flags().StringVar(&SetValue, "value", "", "Value to set (non-interactive, visible in process listings)")
 	setCmd.Flags().BoolVar(&SetStdinValue, "stdin-value", false, "Read value from stdin (prevents argv leak)")
 	setCmd.Flags().StringVar(&SetTOTPSecret, "totp-secret", "", "TOTP secret key (base32 encoded, visible in process listings)")
@@ -134,5 +134,5 @@ func init() {
 	setCmd.Flags().StringVar(&SetTOTPAccount, "totp-account", "", "TOTP account name/username")
 	setCmd.Flags().BoolVar(&SetForce, "force", false, "Skip password strength validation")
 	setCmd.GroupID = cli.GroupIDEssentials
-	cli.RootCmd.AddCommand(setCmd)
+	return setCmd
 }

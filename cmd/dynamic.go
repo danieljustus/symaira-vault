@@ -78,5 +78,4 @@ func init() {
 
 	dynamicCmd.AddCommand(dynamicGenerateCmd)
 	dynamicCmd.GroupID = cli.GroupIDVault
-	rootCmd.AddCommand(dynamicCmd)
 }

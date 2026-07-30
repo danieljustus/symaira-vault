@@ -80,7 +80,6 @@ alone is ignored (default-deny). It should NOT be used on shared machines
 
 func init() {
 	AuthUnlockCmd.GroupID = cli.GroupIDAuthAccess
-	cli.RootCmd.AddCommand(AuthUnlockCmd)
 	AuthUnlockCmd.Flags().Duration("ttl", cli.DefaultSessionTTL(), "Session duration (overrides config sessionTimeout)")
 	AuthUnlockCmd.Flags().Bool("check", false, "Check if session is active (exit 0 = active, exit 1 = expired)")
 }

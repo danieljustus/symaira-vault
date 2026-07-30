@@ -1,22 +1,18 @@
 // Package cmd is the entry point for the Symaira Vault CLI.
-// It imports sub-packages so their init() functions register commands
-// with the shared RootCmd from internal/cli.
 package cmd
 
 import (
 	"time"
 
-	// Register sub-package commands via init() side effects.
-	_ "github.com/danieljustus/symaira-vault/cmd/admin"
-	_ "github.com/danieljustus/symaira-vault/cmd/auth"
-	_ "github.com/danieljustus/symaira-vault/cmd/crud"
-	_ "github.com/danieljustus/symaira-vault/cmd/file"
-	_ "github.com/danieljustus/symaira-vault/cmd/mcp"
+	"github.com/spf13/cobra"
+
+	"github.com/danieljustus/symaira-vault/cmd/admin"
+	"github.com/danieljustus/symaira-vault/cmd/auth"
+	"github.com/danieljustus/symaira-vault/cmd/crud"
+	"github.com/danieljustus/symaira-vault/cmd/file"
+	"github.com/danieljustus/symaira-vault/cmd/mcp"
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
 )
-
-// These are set via ldflags by goreleaser in main.go's var block.
-// We re-export them from cli for the main entry point.
 
 const requiresVaultAnnotation = cli.RequiresVaultAnnotation
 
@@ -30,14 +26,45 @@ var (
 	vaultFlag = cli.VaultFlag
 )
 
-var rootCmd = cli.RootCmd
+var rootCmd = NewRootCmd()
+
+// NewRootCmd returns a fully assembled root command tree containing all
+// subpackages and top-level commands without relying on init() side effects.
+func NewRootCmd() *cobra.Command {
+	root := cli.NewRootCmd()
+
+	// Add subpackage commands
+	root.AddCommand(admin.NewCommands()...)
+	root.AddCommand(auth.NewCommands()...)
+	root.AddCommand(crud.NewCommands()...)
+	root.AddCommand(file.NewCommands()...)
+	root.AddCommand(mcp.NewCommands()...)
+
+	// Add top-level commands in cmd/
+	root.AddCommand(
+		deviceCmd,
+		generateCmd,
+		policyCmd,
+		recipientsCmd,
+		remoteCmd,
+		shareCmd,
+		templateCmd,
+		uiCmd,
+	)
+
+	return root
+}
 
 func SetStartTime(t time.Time) {
 	cli.SetStartTime(t)
 }
 
 func Execute() {
-	cli.Execute()
+	ExecuteRoot(NewRootCmd())
+}
+
+func ExecuteRoot(root *cobra.Command) {
+	_ = cli.ExecuteRoot(root)
 }
 
 func SetVersionInfo(version, commit, date string) {

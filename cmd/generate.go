@@ -112,5 +112,4 @@ func init() {
 	generateCmd.Flags().BoolVar(&genQuiet, "quiet", false, "Suppress success output when using --store")
 	generateCmd.AddCommand(manpagesCmd)
 	generateCmd.GroupID = cli.GroupIDVault
-	rootCmd.AddCommand(generateCmd)
 }

@@ -42,7 +42,7 @@ func TestExport_ConfirmDecline_NoOutput(t *testing.T) {
 	t.Cleanup(func() { confirmExport = origConfirm })
 
 	stderr := captureStderr(t, func() {
-		cmd := cli.RootCmd
+		cmd := newTestRootCmd()
 		cmd.SetArgs([]string{"export", "--format", "csv", "--output", outputPath})
 		if err := cmd.Execute(); err != nil {
 			t.Fatalf("export: %v", err)
@@ -84,7 +84,7 @@ func TestExport_ConfirmAccept_WithEntries(t *testing.T) {
 
 	outputPath := filepath.Join(t.TempDir(), "export.csv")
 
-	cmd := cli.RootCmd
+	cmd := newTestRootCmd()
 	cmd.SetArgs([]string{"export", "--format", "csv", "--output", outputPath})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("export: %v", err)
@@ -130,7 +130,7 @@ func TestExport_YesFlag_SkipsPrompt(t *testing.T) {
 
 	outputPath := filepath.Join(t.TempDir(), "export.json")
 
-	cmd := cli.RootCmd
+	cmd := newTestRootCmd()
 	cmd.SetArgs([]string{"export", "--format", "json", "--output", outputPath, "--yes"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("export: %v", err)
@@ -194,7 +194,7 @@ func runExport(t *testing.T, format, outputPath string) []byte {
 	confirmExport = func(_ string, _ bool) (bool, error) { return true, nil }
 	t.Cleanup(func() { confirmExport = origConfirm })
 
-	cmd := cli.RootCmd
+	cmd := newTestRootCmd()
 	cmd.SetArgs([]string{"export", "--format", format, "--output", outputPath})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("export: %v", err)

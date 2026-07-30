@@ -20,7 +20,7 @@ func TestInit_NewVaultUsesArgon2id(t *testing.T) {
 	cli.SetCachedEnvPassphrase([]byte(passphrase))
 	t.Cleanup(cli.ClearCachedEnvPassphrase)
 
-	cmd := cli.RootCmd
+	cmd := newTestRootCmd()
 	cmd.SetArgs([]string{"init", vaultDir, "--auth", "passphrase"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("init: %v", err)

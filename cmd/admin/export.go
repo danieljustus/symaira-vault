@@ -209,7 +209,6 @@ func init() {
 	exportCmd.Flags().BoolVarP(&ExportYes, "yes", "y", false, "Skip confirmation prompt")
 	_ = exportCmd.MarkFlagRequired("format") //nolint:errcheck
 	exportCmd.GroupID = cli.GroupIDSharingSync
-	cli.RootCmd.AddCommand(exportCmd)
 }
 
 func isSupportedExportFormat(format exporter.Format) bool {

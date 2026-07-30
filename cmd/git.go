@@ -71,5 +71,4 @@ var gitCmd = &cobra.Command{
 
 func init() {
 	gitCmd.GroupID = cli.GroupIDSharingSync
-	rootCmd.AddCommand(gitCmd)
 }

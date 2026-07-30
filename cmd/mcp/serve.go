@@ -47,7 +47,6 @@ var ServeCmd = &cobra.Command{
 
 func init() {
 	ServeCmd.GroupID = cli.GroupIDAgentsMCP
-	cli.RootCmd.AddCommand(ServeCmd)
 	ServeCmd.Flags().String("agent", "", "Agent name (required for --stdio; HTTP mode resolves agents per-request via X-Symaira-Agent header)")
 	ServeCmd.Flags().Int("port", 8080, "Server port")
 	ServeCmd.Flags().Bool("stdio", false, "Enable stdio transport (for MCP)")

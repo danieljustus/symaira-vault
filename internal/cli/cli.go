@@ -210,10 +210,12 @@ var commandGroups = []*cobra.Group{
 	{ID: GroupIDAdministration, Title: "Administration:"},
 }
 
-var RootCmd = &cobra.Command{
-	Use:   "symvault",
-	Short: "Symaira Vault is a Go CLI password manager",
-	Long: `Quick Start:
+// NewRootCmd creates and returns a fresh, unpopulated root command configured with flags and handlers.
+func NewRootCmd() *cobra.Command {
+	root := &cobra.Command{
+		Use:   "symvault",
+		Short: "Symaira Vault is a Go CLI password manager",
+		Long: `Quick Start:
   symvault init            create a vault and identity
   symvault add <name>      add a credential
   symvault get <name>      retrieve a credential
@@ -231,41 +233,62 @@ Daily use:
   symvault ui              browse and edit the vault in a TUI
   symvault get <name>      print a credential
   symvault --help          full command list`,
-	SilenceUsage:  true,
-	SilenceErrors: true,
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-		if OutputFormat != "text" {
-			if !CommandSupportsJSON(cmd) {
-				return errorspkg.NewCLIError(errorspkg.ExitUsage,
-					fmt.Sprintf("output format %q is not supported by '%s' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)", OutputFormat, cmd.CommandPath()),
-					nil)
+		SilenceUsage:  true,
+		SilenceErrors: false,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if OutputFormat != "text" {
+				if !CommandSupportsJSON(cmd) {
+					return errorspkg.NewCLIError(errorspkg.ExitUsage,
+						fmt.Sprintf("output format %q is not supported by '%s' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)", OutputFormat, cmd.CommandPath()),
+						nil)
+				}
 			}
-		}
-		if !commandRequiresVault(cmd) {
+			if !commandRequiresVault(cmd) {
+				return nil
+			}
+			vDir, err := VaultPath()
+			if err != nil {
+				return err
+			}
+
+			if agentName := envutil.Getenv("SYMVAULT_AGENT", "OPENPASS_AGENT"); agentName != "" {
+				_, loadErr := agentctx.Load(agentName, vDir)
+				if loadErr != nil {
+					return errorspkg.NewCLIError(errorspkg.ExitPermissionDenied,
+						fmt.Sprintf("agent mode: %s", loadErr.Error()), loadErr)
+				}
+			}
+
 			return nil
-		}
-		vDir, err := VaultPath()
-		if err != nil {
-			return err
-		}
+		},
+	}
 
-		if agentName := envutil.Getenv("SYMVAULT_AGENT", "OPENPASS_AGENT"); agentName != "" {
-			_, loadErr := agentctx.Load(agentName, vDir)
-			if loadErr != nil {
-				return errorspkg.NewCLIError(errorspkg.ExitPermissionDenied,
-					fmt.Sprintf("agent mode: %s", loadErr.Error()), loadErr)
-			}
-		}
+	root.AddGroup(commandGroups...)
+	root.PersistentFlags().StringVar(&Vault, "vault", "~/"+configpkg.DefaultVaultSubdir, "path to the password vault")
+	VaultFlag = root.PersistentFlags().Lookup("vault")
+	root.PersistentFlags().BoolVar(&QuietMode, "quiet", false, "suppress non-error output")
+	root.PersistentFlags().StringVar(&Profile, "profile", "", "use a named vault profile")
+	ProfileFlag = root.PersistentFlags().Lookup("profile")
+	_ = root.RegisterFlagCompletionFunc("profile", ProfileCompletionFunc)
+	root.PersistentFlags().StringVar(&OutputFormat, "output", "text", "Output format (text, json, yaml)")
+	root.PersistentFlags().BoolVar(&NoPipeWarning, "no-pipe-warning", false, "suppress 'reading from non-TTY' warning when piping secrets")
+	root.PersistentFlags().StringVar(&ColorMode, "color", "auto", "When to emit ANSI color: auto, always, never")
+	root.PersistentFlags().StringVar(&ThemePreset, "theme", "", "Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)")
 
-		return nil
-	},
+	root.AddCommand(versionCmd)
+
+	return root
 }
 
-// Execute runs the CLI with the ActiveContext. If ActiveContext is nil,
-// it creates a default context. The context's state is synced into the
-// legacy package globals before and after cobra execution so that both
-// flag binding and direct globals reads stay coherent.
+var RootCmd = NewRootCmd()
+
+// Execute runs the CLI with the ActiveContext and default RootCmd.
 func Execute() {
+	_ = ExecuteRoot(RootCmd)
+}
+
+// ExecuteRoot runs the CLI with the ActiveContext using the provided root command.
+func ExecuteRoot(cmd *cobra.Command) error {
 	ctx := ActiveContext
 	if ctx == nil {
 		ctx = NewCLIContext()
@@ -284,7 +307,8 @@ func Execute() {
 	} else {
 		theme.ApplyPresetFromEnv()
 	}
-	if err := RootCmd.Execute(); err != nil {
+	err := cmd.Execute()
+	if err != nil {
 		cliout.Errorf("Error: %v", err)
 		exitCode := errorspkg.ExitCodeFromError(err)
 		if hint := errorspkg.HintForError(err); hint != "" {
@@ -306,6 +330,7 @@ func Execute() {
 	}
 
 	syncToContext(ctx)
+	return err
 }
 
 // ExecuteWithContext is the context-aware entry point for Execute.
@@ -325,20 +350,6 @@ func PrintlnQuietAware(args ...interface{}) {
 	if !QuietMode {
 		fmt.Println(args...)
 	}
-}
-
-func init() {
-	RootCmd.AddGroup(commandGroups...)
-	RootCmd.PersistentFlags().StringVar(&Vault, "vault", "~/"+configpkg.DefaultVaultSubdir, "path to the password vault")
-	VaultFlag = RootCmd.PersistentFlags().Lookup("vault")
-	RootCmd.PersistentFlags().BoolVar(&QuietMode, "quiet", false, "suppress non-error output")
-	RootCmd.PersistentFlags().StringVar(&Profile, "profile", "", "use a named vault profile")
-	ProfileFlag = RootCmd.PersistentFlags().Lookup("profile")
-	_ = RootCmd.RegisterFlagCompletionFunc("profile", ProfileCompletionFunc)
-	RootCmd.PersistentFlags().StringVar(&OutputFormat, "output", "text", "Output format (text, json, yaml)")
-	RootCmd.PersistentFlags().BoolVar(&NoPipeWarning, "no-pipe-warning", false, "suppress 'reading from non-TTY' warning when piping secrets")
-	RootCmd.PersistentFlags().StringVar(&ColorMode, "color", "auto", "When to emit ANSI color: auto, always, never")
-	RootCmd.PersistentFlags().StringVar(&ThemePreset, "theme", "", "Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)")
 }
 
 func commandRequiresVault(cmd *cobra.Command) bool {
