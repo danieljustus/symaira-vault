@@ -336,17 +336,17 @@ func TestOutputHTTPConfig_VaultPathError(t *testing.T) {
 	origHome := os.Getenv("HOME")
 	origVaultEnv := os.Getenv("OPENPASS_VAULT")
 	origVault := vault
-	origChanged := vaultFlag.Changed
+	origChanged := cli.VaultFlag.Changed
 	_ = os.Unsetenv("HOME")
 	_ = os.Unsetenv("OPENPASS_VAULT")
 	vault = "~/" + config.DefaultVaultSubdir
-	vaultFlag.Changed = false
+	cli.VaultFlag.Changed = false
 	t.Cleanup(func() {
 		_ = os.Setenv("HOME", origHome)
 		_ = os.Setenv("OPENPASS_VAULT", origVaultEnv)
 		vault = origVault
-		_ = vaultFlag.Value.Set(origVault)
-		vaultFlag.Changed = origChanged
+		_ = cli.VaultFlag.Value.Set(origVault)
+		cli.VaultFlag.Changed = origChanged
 	})
 
 	err := mcpcmd.OutputHTTPConfig("test-agent", "symvault", true, "")

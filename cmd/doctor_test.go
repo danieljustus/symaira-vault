@@ -17,12 +17,12 @@ func TestCmdDoctor_TextOutput(t *testing.T) {
 	defer setupVaultFlag(t, vaultDir)()
 
 	var buf bytes.Buffer
-	cli.RootCmd.SetOut(&buf)
-	t.Cleanup(func() { cli.RootCmd.SetOut(nil) })
+	rootCmd.SetOut(&buf)
+	t.Cleanup(func() { rootCmd.SetOut(nil) })
 
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "doctor", "--no-network"})
-	defer cli.RootCmd.SetArgs(nil)
-	_ = cli.RootCmd.Execute()
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "doctor", "--no-network"})
+	defer rootCmd.SetArgs(nil)
+	_ = rootCmd.Execute()
 
 	out := buf.String()
 	if !strings.Contains(out, "Symaira Vault Doctor") {
@@ -39,12 +39,12 @@ func TestCmdDoctor_JSONOutput(t *testing.T) {
 	defer setupVaultFlag(t, vaultDir)()
 
 	var buf bytes.Buffer
-	cli.RootCmd.SetOut(&buf)
-	t.Cleanup(func() { cli.RootCmd.SetOut(nil) })
+	rootCmd.SetOut(&buf)
+	t.Cleanup(func() { rootCmd.SetOut(nil) })
 
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "doctor", "--no-network", "--json"})
-	defer cli.RootCmd.SetArgs(nil)
-	_ = cli.RootCmd.Execute()
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "doctor", "--no-network", "--json"})
+	defer rootCmd.SetArgs(nil)
+	_ = rootCmd.Execute()
 
 	var result struct {
 		VaultDir string `json:"vault_dir"`
@@ -76,12 +76,12 @@ func TestCmdDoctor_NoNetworkFlag(t *testing.T) {
 	defer setupVaultFlag(t, vaultDir)()
 
 	var buf bytes.Buffer
-	cli.RootCmd.SetOut(&buf)
-	t.Cleanup(func() { cli.RootCmd.SetOut(nil) })
+	rootCmd.SetOut(&buf)
+	t.Cleanup(func() { rootCmd.SetOut(nil) })
 
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "doctor", "--no-network"})
-	defer cli.RootCmd.SetArgs(nil)
-	_ = cli.RootCmd.Execute()
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "doctor", "--no-network"})
+	defer rootCmd.SetArgs(nil)
+	_ = rootCmd.Execute()
 
 	if buf.Len() == 0 {
 		t.Error("expected non-empty output with --no-network flag")
@@ -104,13 +104,13 @@ func TestCmdDoctor_FixFlag_TextOutput(t *testing.T) {
 	defer setupVaultFlag(t, vaultDir)()
 
 	var buf bytes.Buffer
-	cli.RootCmd.SetOut(&buf)
-	t.Cleanup(func() { cli.RootCmd.SetOut(nil) })
+	rootCmd.SetOut(&buf)
+	t.Cleanup(func() { rootCmd.SetOut(nil) })
 
-	cli.RootCmd.SetArgs([]string{"--vault", vaultDir, "doctor", "--fix", "--no-network"})
-	defer cli.RootCmd.SetArgs(nil)
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "doctor", "--fix", "--no-network"})
+	defer rootCmd.SetArgs(nil)
 
-	err := cli.RootCmd.Execute()
+	err := rootCmd.Execute()
 	if err != nil {
 		t.Errorf("doctor --fix --no-network failed: %v", err)
 	}

@@ -79,8 +79,8 @@ func newTestVault(t *testing.T) *vaultpkg.Vault {
 	tmpDir := t.TempDir()
 	_ = os.Setenv("OPENPASS_VAULT", tmpDir)
 	_ = os.Unsetenv("OPENPASS_PASSPHRASE")
-	if vaultFlag != nil {
-		vaultFlag.Changed = false
+	if cli.VaultFlag != nil {
+		cli.VaultFlag.Changed = false
 	}
 
 	_, err := vaultpkg.InitWithPassphrase(tmpDir, []byte("test-passphrase"), config.Default())

@@ -260,12 +260,12 @@ func TestUnlockVaultWithEnvVar(t *testing.T) {
 	}
 
 	origVault := vault
-	origChanged := vaultFlag.Changed
+	origChanged := cli.VaultFlag.Changed
 	defer func() {
 		vault = origVault
-		if vaultFlag != nil {
-			_ = vaultFlag.Value.Set(origVault)
-			vaultFlag.Changed = origChanged
+		if cli.VaultFlag != nil {
+			_ = cli.VaultFlag.Value.Set(origVault)
+			cli.VaultFlag.Changed = origChanged
 		}
 	}()
 
@@ -273,8 +273,8 @@ func TestUnlockVaultWithEnvVar(t *testing.T) {
 	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
 
 	vault = vaultDir
-	if vaultFlag != nil {
-		vaultFlag.Changed = false
+	if cli.VaultFlag != nil {
+		cli.VaultFlag.Changed = false
 	}
 
 	_, err := cli.UnlockVault(vaultDir, false)
@@ -292,20 +292,20 @@ func TestUnlockVaultNoPassphrase(t *testing.T) {
 	}
 
 	origVault := vault
-	origChanged := vaultFlag.Changed
+	origChanged := cli.VaultFlag.Changed
 	defer func() {
 		vault = origVault
-		if vaultFlag != nil {
-			_ = vaultFlag.Value.Set(origVault)
-			vaultFlag.Changed = origChanged
+		if cli.VaultFlag != nil {
+			_ = cli.VaultFlag.Value.Set(origVault)
+			cli.VaultFlag.Changed = origChanged
 		}
 	}()
 
 	_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 	_ = os.Unsetenv("OPENPASS_PASSPHRASE")
 	vault = vaultDir
-	if vaultFlag != nil {
-		vaultFlag.Changed = false
+	if cli.VaultFlag != nil {
+		cli.VaultFlag.Changed = false
 	}
 
 	_, err := cli.UnlockVault(vaultDir, false)
@@ -323,12 +323,12 @@ func TestUnlockVaultWrongPassphrase(t *testing.T) {
 	}
 
 	origVault := vault
-	origChanged := vaultFlag.Changed
+	origChanged := cli.VaultFlag.Changed
 	defer func() {
 		vault = origVault
-		if vaultFlag != nil {
-			_ = vaultFlag.Value.Set(origVault)
-			vaultFlag.Changed = origChanged
+		if cli.VaultFlag != nil {
+			_ = cli.VaultFlag.Value.Set(origVault)
+			cli.VaultFlag.Changed = origChanged
 		}
 	}()
 
@@ -336,8 +336,8 @@ func TestUnlockVaultWrongPassphrase(t *testing.T) {
 	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
 
 	vault = vaultDir
-	if vaultFlag != nil {
-		vaultFlag.Changed = false
+	if cli.VaultFlag != nil {
+		cli.VaultFlag.Changed = false
 	}
 
 	_, err := cli.UnlockVault(vaultDir, false)
@@ -377,12 +377,12 @@ func TestUnlockVaultSavesToKeyring(t *testing.T) {
 	}
 
 	origVault := vault
-	origChanged := vaultFlag.Changed
+	origChanged := cli.VaultFlag.Changed
 	defer func() {
 		vault = origVault
-		if vaultFlag != nil {
-			_ = vaultFlag.Value.Set(origVault)
-			vaultFlag.Changed = origChanged
+		if cli.VaultFlag != nil {
+			_ = cli.VaultFlag.Value.Set(origVault)
+			cli.VaultFlag.Changed = origChanged
 		}
 	}()
 
@@ -390,8 +390,8 @@ func TestUnlockVaultSavesToKeyring(t *testing.T) {
 	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
 
 	vault = vaultDir
-	if vaultFlag != nil {
-		vaultFlag.Changed = false
+	if cli.VaultFlag != nil {
+		cli.VaultFlag.Changed = false
 	}
 
 	v, err := cli.UnlockVault(vaultDir, false)
@@ -409,12 +409,12 @@ func TestRecipientsCmd_Add_Success(t *testing.T) {
 	_, _ = vaultpkg.InitWithPassphrase(vaultDir, passphrase, config.Default())
 
 	origVault := vault
-	origChanged := vaultFlag.Changed
+	origChanged := cli.VaultFlag.Changed
 	defer func() {
 		vault = origVault
-		if vaultFlag != nil {
-			_ = vaultFlag.Value.Set(origVault)
-			vaultFlag.Changed = origChanged
+		if cli.VaultFlag != nil {
+			_ = cli.VaultFlag.Value.Set(origVault)
+			cli.VaultFlag.Changed = origChanged
 		}
 	}()
 
@@ -422,8 +422,8 @@ func TestRecipientsCmd_Add_Success(t *testing.T) {
 	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
 
 	vault = vaultDir
-	if vaultFlag != nil {
-		vaultFlag.Changed = false
+	if cli.VaultFlag != nil {
+		cli.VaultFlag.Changed = false
 	}
 
 	recipientsAddCmd.SetArgs([]string{"age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"})
@@ -446,12 +446,12 @@ func TestRecipientsCmd_List_WithRecipients(t *testing.T) {
 	}
 
 	origVault := vault
-	origChanged := vaultFlag.Changed
+	origChanged := cli.VaultFlag.Changed
 	defer func() {
 		vault = origVault
-		if vaultFlag != nil {
-			_ = vaultFlag.Value.Set(origVault)
-			vaultFlag.Changed = origChanged
+		if cli.VaultFlag != nil {
+			_ = cli.VaultFlag.Value.Set(origVault)
+			cli.VaultFlag.Changed = origChanged
 		}
 	}()
 
@@ -459,8 +459,8 @@ func TestRecipientsCmd_List_WithRecipients(t *testing.T) {
 	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
 
 	vault = vaultDir
-	if vaultFlag != nil {
-		vaultFlag.Changed = false
+	if cli.VaultFlag != nil {
+		cli.VaultFlag.Changed = false
 	}
 
 	err = recipientsListCmd.Execute()
@@ -483,12 +483,12 @@ func TestRecipientsCmd_Remove_Success(t *testing.T) {
 	}
 
 	origVault := vault
-	origChanged := vaultFlag.Changed
+	origChanged := cli.VaultFlag.Changed
 	defer func() {
 		vault = origVault
-		if vaultFlag != nil {
-			_ = vaultFlag.Value.Set(origVault)
-			vaultFlag.Changed = origChanged
+		if cli.VaultFlag != nil {
+			_ = cli.VaultFlag.Value.Set(origVault)
+			cli.VaultFlag.Changed = origChanged
 		}
 	}()
 
@@ -496,8 +496,8 @@ func TestRecipientsCmd_Remove_Success(t *testing.T) {
 	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
 
 	vault = vaultDir
-	if vaultFlag != nil {
-		vaultFlag.Changed = false
+	if cli.VaultFlag != nil {
+		cli.VaultFlag.Changed = false
 	}
 
 	recipientsRemoveCmd.SetArgs([]string{testRecipient, "--yes"})
@@ -516,12 +516,12 @@ func TestGenerateCmd_StoreToExistingEntry(t *testing.T) {
 	_ = vaultpkg.WriteEntry(vaultDir, "existing.pass", entry, identity)
 
 	origVault := vault
-	origChanged := vaultFlag.Changed
+	origChanged := cli.VaultFlag.Changed
 	defer func() {
 		vault = origVault
-		if vaultFlag != nil {
-			_ = vaultFlag.Value.Set(origVault)
-			vaultFlag.Changed = origChanged
+		if cli.VaultFlag != nil {
+			_ = cli.VaultFlag.Value.Set(origVault)
+			cli.VaultFlag.Changed = origChanged
 		}
 	}()
 
@@ -529,8 +529,8 @@ func TestGenerateCmd_StoreToExistingEntry(t *testing.T) {
 	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
 
 	vault = vaultDir
-	if vaultFlag != nil {
-		vaultFlag.Changed = false
+	if cli.VaultFlag != nil {
+		cli.VaultFlag.Changed = false
 	}
 
 	generateCmd.SetArgs([]string{"--store", "existing.pass", "--length", "16"})
@@ -547,12 +547,12 @@ func TestGenerateCmd_StoreNewEntry(t *testing.T) {
 	_, _ = vaultpkg.InitWithPassphrase(vaultDir, passphrase, config.Default())
 
 	origVault := vault
-	origChanged := vaultFlag.Changed
+	origChanged := cli.VaultFlag.Changed
 	defer func() {
 		vault = origVault
-		if vaultFlag != nil {
-			_ = vaultFlag.Value.Set(origVault)
-			vaultFlag.Changed = origChanged
+		if cli.VaultFlag != nil {
+			_ = cli.VaultFlag.Value.Set(origVault)
+			cli.VaultFlag.Changed = origChanged
 		}
 	}()
 
@@ -560,8 +560,8 @@ func TestGenerateCmd_StoreNewEntry(t *testing.T) {
 	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
 
 	vault = vaultDir
-	if vaultFlag != nil {
-		vaultFlag.Changed = false
+	if cli.VaultFlag != nil {
+		cli.VaultFlag.Changed = false
 	}
 
 	generateCmd.SetArgs([]string{"--store", "new.pass", "--length", "16"})
@@ -586,12 +586,12 @@ func TestOutputHTTPConfigMCP(t *testing.T) {
 	}
 
 	origVault := vault
-	origChanged := vaultFlag.Changed
+	origChanged := cli.VaultFlag.Changed
 	defer func() {
 		vault = origVault
-		if vaultFlag != nil {
-			_ = vaultFlag.Value.Set(origVault)
-			vaultFlag.Changed = origChanged
+		if cli.VaultFlag != nil {
+			_ = cli.VaultFlag.Value.Set(origVault)
+			cli.VaultFlag.Changed = origChanged
 		}
 	}()
 
@@ -599,8 +599,8 @@ func TestOutputHTTPConfigMCP(t *testing.T) {
 	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
 
 	vault = vaultDir
-	if vaultFlag != nil {
-		vaultFlag.Changed = false
+	if cli.VaultFlag != nil {
+		cli.VaultFlag.Changed = false
 	}
 
 	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "claude-code"})
@@ -624,12 +624,12 @@ func TestRunHTTPServer(t *testing.T) {
 	}
 
 	origVault := vault
-	origChanged := vaultFlag.Changed
+	origChanged := cli.VaultFlag.Changed
 	defer func() {
 		vault = origVault
-		if vaultFlag != nil {
-			_ = vaultFlag.Value.Set(origVault)
-			vaultFlag.Changed = origChanged
+		if cli.VaultFlag != nil {
+			_ = cli.VaultFlag.Value.Set(origVault)
+			cli.VaultFlag.Changed = origChanged
 		}
 	}()
 
@@ -665,12 +665,12 @@ func TestRunStdioServer(t *testing.T) {
 	}
 
 	origVault := vault
-	origChanged := vaultFlag.Changed
+	origChanged := cli.VaultFlag.Changed
 	defer func() {
 		vault = origVault
-		if vaultFlag != nil {
-			_ = vaultFlag.Value.Set(origVault)
-			vaultFlag.Changed = origChanged
+		if cli.VaultFlag != nil {
+			_ = cli.VaultFlag.Value.Set(origVault)
+			cli.VaultFlag.Changed = origChanged
 		}
 	}()
 
@@ -678,8 +678,8 @@ func TestRunStdioServer(t *testing.T) {
 	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
 
 	vault = vaultDir
-	if vaultFlag != nil {
-		vaultFlag.Changed = false
+	if cli.VaultFlag != nil {
+		cli.VaultFlag.Changed = false
 	}
 
 	v2, err := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
@@ -705,12 +705,12 @@ func TestUnlockVaultWithSymvaultEnvVar(t *testing.T) {
 	}
 
 	origVault := vault
-	origChanged := vaultFlag.Changed
+	origChanged := cli.VaultFlag.Changed
 	defer func() {
 		vault = origVault
-		if vaultFlag != nil {
-			_ = vaultFlag.Value.Set(origVault)
-			vaultFlag.Changed = origChanged
+		if cli.VaultFlag != nil {
+			_ = cli.VaultFlag.Value.Set(origVault)
+			cli.VaultFlag.Changed = origChanged
 		}
 	}()
 
@@ -718,8 +718,8 @@ func TestUnlockVaultWithSymvaultEnvVar(t *testing.T) {
 	defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
 
 	vault = vaultDir
-	if vaultFlag != nil {
-		vaultFlag.Changed = false
+	if cli.VaultFlag != nil {
+		cli.VaultFlag.Changed = false
 	}
 
 	_, err := cli.UnlockVault(vaultDir, false)
@@ -759,12 +759,12 @@ func TestUnlockVaultWrongPassphraseSymvault(t *testing.T) {
 	}
 
 	origVault := vault
-	origChanged := vaultFlag.Changed
+	origChanged := cli.VaultFlag.Changed
 	defer func() {
 		vault = origVault
-		if vaultFlag != nil {
-			_ = vaultFlag.Value.Set(origVault)
-			vaultFlag.Changed = origChanged
+		if cli.VaultFlag != nil {
+			_ = cli.VaultFlag.Value.Set(origVault)
+			cli.VaultFlag.Changed = origChanged
 		}
 	}()
 
@@ -772,8 +772,8 @@ func TestUnlockVaultWrongPassphraseSymvault(t *testing.T) {
 	defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
 
 	vault = vaultDir
-	if vaultFlag != nil {
-		vaultFlag.Changed = false
+	if cli.VaultFlag != nil {
+		cli.VaultFlag.Changed = false
 	}
 
 	_, err := cli.UnlockVault(vaultDir, false)

@@ -23,15 +23,15 @@ func resetVaultFlag(t *testing.T) {
 
 	origVault := vault
 	origChanged := false
-	if vaultFlag != nil {
-		origChanged = vaultFlag.Changed
+	if cli.VaultFlag != nil {
+		origChanged = cli.VaultFlag.Changed
 	}
 
 	t.Cleanup(func() {
 		cli.Vault = origVault
-		if vaultFlag != nil {
-			_ = vaultFlag.Value.Set(origVault)
-			vaultFlag.Changed = origChanged
+		if cli.VaultFlag != nil {
+			_ = cli.VaultFlag.Value.Set(origVault)
+			cli.VaultFlag.Changed = origChanged
 		}
 	})
 }
@@ -209,10 +209,10 @@ func TestVaultPathPrefersExplicitFlagOverEnv(t *testing.T) {
 	defer func() { _ = os.Setenv("OPENPASS_VAULT", origEnv) }()
 
 	_ = os.Setenv("OPENPASS_VAULT", "/env/vault")
-	if err := vaultFlag.Value.Set("/flag/vault"); err != nil {
+	if err := cli.VaultFlag.Value.Set("/flag/vault"); err != nil {
 		t.Fatalf("set vault flag: %v", err)
 	}
-	vaultFlag.Changed = true
+	cli.VaultFlag.Changed = true
 	cli.Vault = "/flag/vault"
 
 	path, err := cli.VaultPath()

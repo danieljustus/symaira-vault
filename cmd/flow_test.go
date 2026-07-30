@@ -70,12 +70,12 @@ func TestCmdSet(t *testing.T) {
 	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
 
 	origVault := vault
-	origChanged := vaultFlag.Changed
+	origChanged := cli.VaultFlag.Changed
 	defer func() {
 		vault = origVault
-		if vaultFlag != nil {
-			_ = vaultFlag.Value.Set(origVault)
-			vaultFlag.Changed = origChanged
+		if cli.VaultFlag != nil {
+			_ = cli.VaultFlag.Value.Set(origVault)
+			cli.VaultFlag.Changed = origChanged
 		}
 	}()
 
@@ -102,12 +102,12 @@ func TestCmdGet(t *testing.T) {
 	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
 
 	origVault := vault
-	origChanged := vaultFlag.Changed
+	origChanged := cli.VaultFlag.Changed
 	defer func() {
 		vault = origVault
-		if vaultFlag != nil {
-			_ = vaultFlag.Value.Set(origVault)
-			vaultFlag.Changed = origChanged
+		if cli.VaultFlag != nil {
+			_ = cli.VaultFlag.Value.Set(origVault)
+			cli.VaultFlag.Changed = origChanged
 		}
 	}()
 
@@ -130,12 +130,12 @@ func TestCmdList(t *testing.T) {
 	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
 
 	origVault := vault
-	origChanged := vaultFlag.Changed
+	origChanged := cli.VaultFlag.Changed
 	defer func() {
 		vault = origVault
-		if vaultFlag != nil {
-			_ = vaultFlag.Value.Set(origVault)
-			vaultFlag.Changed = origChanged
+		if cli.VaultFlag != nil {
+			_ = cli.VaultFlag.Value.Set(origVault)
+			cli.VaultFlag.Changed = origChanged
 		}
 	}()
 
@@ -158,12 +158,12 @@ func TestCmdFind(t *testing.T) {
 	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
 
 	origVault := vault
-	origChanged := vaultFlag.Changed
+	origChanged := cli.VaultFlag.Changed
 	defer func() {
 		vault = origVault
-		if vaultFlag != nil {
-			_ = vaultFlag.Value.Set(origVault)
-			vaultFlag.Changed = origChanged
+		if cli.VaultFlag != nil {
+			_ = cli.VaultFlag.Value.Set(origVault)
+			cli.VaultFlag.Changed = origChanged
 		}
 	}()
 
@@ -187,12 +187,12 @@ func TestCmdGenerate(t *testing.T) {
 	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
 
 	origVault := vault
-	origChanged := vaultFlag.Changed
+	origChanged := cli.VaultFlag.Changed
 	defer func() {
 		vault = origVault
-		if vaultFlag != nil {
-			_ = vaultFlag.Value.Set(origVault)
-			vaultFlag.Changed = origChanged
+		if cli.VaultFlag != nil {
+			_ = cli.VaultFlag.Value.Set(origVault)
+			cli.VaultFlag.Changed = origChanged
 		}
 	}()
 
@@ -215,12 +215,12 @@ func TestCmdDelete(t *testing.T) {
 	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
 
 	origVault := vault
-	origChanged := vaultFlag.Changed
+	origChanged := cli.VaultFlag.Changed
 	defer func() {
 		vault = origVault
-		if vaultFlag != nil {
-			_ = vaultFlag.Value.Set(origVault)
-			vaultFlag.Changed = origChanged
+		if cli.VaultFlag != nil {
+			_ = cli.VaultFlag.Value.Set(origVault)
+			cli.VaultFlag.Changed = origChanged
 		}
 	}()
 
@@ -257,12 +257,12 @@ func TestCmdAdd(t *testing.T) {
 	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
 
 	origVault := vault
-	origChanged := vaultFlag.Changed
+	origChanged := cli.VaultFlag.Changed
 	defer func() {
 		vault = origVault
-		if vaultFlag != nil {
-			_ = vaultFlag.Value.Set(origVault)
-			vaultFlag.Changed = origChanged
+		if cli.VaultFlag != nil {
+			_ = cli.VaultFlag.Value.Set(origVault)
+			cli.VaultFlag.Changed = origChanged
 		}
 	}()
 
@@ -293,12 +293,12 @@ func TestCmdUnlock(t *testing.T) {
 	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
 
 	origVault := vault
-	origChanged := vaultFlag.Changed
+	origChanged := cli.VaultFlag.Changed
 	defer func() {
 		vault = origVault
-		if vaultFlag != nil {
-			_ = vaultFlag.Value.Set(origVault)
-			vaultFlag.Changed = origChanged
+		if cli.VaultFlag != nil {
+			_ = cli.VaultFlag.Value.Set(origVault)
+			cli.VaultFlag.Changed = origChanged
 		}
 	}()
 
@@ -323,12 +323,12 @@ func TestCmdRecipientsAddAndRemove(t *testing.T) {
 	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
 
 	origVault := vault
-	origChanged := vaultFlag.Changed
+	origChanged := cli.VaultFlag.Changed
 	defer func() {
 		vault = origVault
-		if vaultFlag != nil {
-			_ = vaultFlag.Value.Set(origVault)
-			vaultFlag.Changed = origChanged
+		if cli.VaultFlag != nil {
+			_ = cli.VaultFlag.Value.Set(origVault)
+			cli.VaultFlag.Changed = origChanged
 		}
 	}()
 
