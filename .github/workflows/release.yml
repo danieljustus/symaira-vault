@@ -233,9 +233,13 @@ jobs:
             echo "::warning::NOTARY_API_KEY secret is not set. Skipping notarization."
             exit 0
           fi
-          echo "$NOTARY_API_KEY" > "$RUNNER_TEMP/notary-key.p8"
+          if echo "$NOTARY_API_KEY" | base64 --decode 2>/dev/null | head -1 | grep -q -- "-----BEGIN"; then
+            echo "$NOTARY_API_KEY" | base64 --decode > "$RUNNER_TEMP/notary-key.p8"
+          else
+            echo "$NOTARY_API_KEY" > "$RUNNER_TEMP/notary-key.p8"
+          fi
           for ARCH in amd64 arm64; do
-            for f in dist/*_darwin_${ARCH}/*; do
+            for f in dist/*_darwin_${ARCH}*/*; do
               if [ -f "$f" ] && file "$f" | grep -q "Mach-O"; then
                 echo "Notarizing $f..."
                 ZIP_PATH="$RUNNER_TEMP/notarize_${ARCH}.zip"
@@ -383,7 +387,11 @@ jobs:
             echo "::warning::NOTARY_API_KEY secret is not set. Skipping notarization."
             exit 0
           fi
-          echo "$NOTARY_API_KEY" > "$RUNNER_TEMP/notary-key.p8"
+          if echo "$NOTARY_API_KEY" | base64 --decode 2>/dev/null | head -1 | grep -q -- "-----BEGIN"; then
+            echo "$NOTARY_API_KEY" | base64 --decode > "$RUNNER_TEMP/notary-key.p8"
+          else
+            echo "$NOTARY_API_KEY" > "$RUNNER_TEMP/notary-key.p8"
+          fi
           echo "Submitting DMG for notarization: ${{ env.DMG_PATH }}"
           xcrun notarytool submit "${{ env.DMG_PATH }}" \
             -k "$RUNNER_TEMP/notary-key.p8" \
