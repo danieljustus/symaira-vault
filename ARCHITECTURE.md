@@ -231,6 +231,11 @@ graph LR
     audit --> audit["audit/"]
 ```
 
+**Deliberate deviation from `corekit/mcpserver`:** This repository intentionally
+does not use `github.com/danieljustus/symaira-corekit/mcpserver` for its MCP
+layer, even though ten other Symaira tools do. The deviation is a documented
+design decision, not drift — see "Key Design Decisions" below.
+
 **Agent permissions:**
 - `AllowedPaths` — Path glob patterns for entry access
 - `CanWrite` — Whether write operations are allowed
@@ -464,6 +469,46 @@ Vaults created with the older root-level entry layout are migrated to `entries/`
 3. **Passphrase never stored:** Only cached in OS keyring with TTL
 4. **Build-tagged clipboard:** `internal/clipboard/` uses `//go:build` tags to switch between real clipboard (`!test_headless`) and no-op stub (`test_headless`)
 5. **HTTP MCP token:** Auto-generated, stored at `<vault>/mcp-token`
+
+6. **Own MCP layer instead of `corekit/mcpserver` (deliberate deviation):** The MCP
+   implementation lives in `internal/mcp/` (~29k lines across `transport`,
+   `server`, `auth`, `serverbootstrap`, `install`) instead of the shared
+   `corekit/mcpserver` package used by ten other Symaira tools. This is a
+   deliberate, security-driven deviation, not code drift:
+
+   - **Streamable HTTP + SSE:** `symvault` serves MCP over HTTP
+     (`--port <n>`) with Bearer-token auth, per-request agent resolution,
+     `Origin`-header checks (CSRF), SSE responses and protocol-version
+     negotiation. `corekit/mcpserver` v0.6.0 is stdio-only (protocol
+     `2024-11-05`); replacing the transport would require extending corekit
+     first.
+   - **Transport/protocol separation:** `internal/mcp/transport/` exposes a
+     `Transport` interface (start/stop lifecycle, injectable IO for tests) and
+     `internal/mcp/server/` layers approval modes (`none`/`deny`/`prompt`→
+     `deny`), token auth, audit, secret redaction (`sanitize_output`),
+     command policy, lean mode, prompt registry and sharing on top.
+     `mcpserver` fuses transport and protocol into one fixed server without
+     hooks for these security layers.
+   - **Zero-knowledge transport hygiene:** no secret values may ever reach
+     logs, stdout or error text. The own layer routes diagnostics through
+     `internal/ui/cliout` (stdout stays pure JSON-RPC) and redacts at the
+     tool boundary; `mcpserver` forwards raw handler errors to clients
+     (`err.Error()`), so redaction would have to live entirely in handlers.
+   - **Prompt-injection defense:** tool-cap enforcement
+     (`MaxToolDefinitions`), approval flows and secure-input dialogs are
+     server-layer features that cannot be expressed in the corekit transport.
+
+   Revisit only if `corekit/mcpserver` grows HTTP/SSE support plus an
+   injectable handler/approval layer; a switch must keep the tool catalog
+   behavior byte-identical and pass the value-exposure tests.
+
+7. **Own config layer instead of `corekit/configkit` (deliberate deviation):**
+   `internal/config/` (~8k lines) is domain-specific: XDG paths plus legacy
+   migration (`.symvault`/`.openpass`), `config.yaml` (YAML), auth methods
+   (passphrase/Touch ID), session TTL, validation and agent configuration.
+   `corekit/configkit` v0.6.0 is a generic TOML loader with env-var overrides
+   and a different file layout; adopting it would be a breaking config
+   migration with no security or maintenance gain.
 
 ## Tool Addition Review
 
