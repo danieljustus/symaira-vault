@@ -279,16 +279,21 @@ jobs:
 
           echo ""
           echo "=== Per-package coverage checks for security-critical packages ==="
+          # Derived from the main coverage.out (single test pass): the default
+          # -coverpkg scopes each test binary to its own package, so filtering
+          # profile lines by full package path equals a dedicated per-package
+          # run (verified locally: crypto 87.2, session 70.9, auth 91.5,
+          # serverbootstrap 84.4 — identical; vault 85.0 vs 84.9 rounding).
+          # NOTE: filter by FULL path — "/auth/" alone would also match cmd/auth.
           PKG_COV_TMP=$(mktemp -d)
-          for PACKAGE in "./internal/crypto/..." \
-                         "./internal/session/..." \
-                         "./internal/vault/..." \
-                         "./internal/mcp/auth/..." \
-                         "./internal/mcp/serverbootstrap/..."; do
-            PKG_NAME=$(basename "${PACKAGE%/...}")
+          for PACKAGE in "internal/crypto" \
+                         "internal/session" \
+                         "internal/vault" \
+                         "internal/mcp/auth" \
+                         "internal/mcp/serverbootstrap"; do
+            PKG_NAME=$(basename "$PACKAGE")
             PKG_PROFILE="$PKG_COV_TMP/${PKG_NAME}.out"
-            go test -coverprofile="$PKG_PROFILE" -covermode=atomic -count=1 -timeout=10m \
-              -skip 'TestFlow|TestBinaryE2E|Integration' "$PACKAGE"
+            { head -1 coverage.out; grep "symaira-vault/${PACKAGE}/" coverage.out || true; } > "$PKG_PROFILE"
             PKG_COV=$(go tool cover -func="$PKG_PROFILE" | grep '^total:' | grep -oE '[0-9]+\.[0-9]+' | tail -1)
             [ -z "$PKG_COV" ] && PKG_COV=0
             case "$PKG_NAME" in
