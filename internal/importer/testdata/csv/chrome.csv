@@ -1,0 +1,6 @@
+name,url,username,password,note
+GitHub,https://github.com/login,octocat@example.com,gh-chrome-secret,Main GitHub account
+,https://mail.google.com/,user@gmail.com,gmail-chrome-secret,Google account without a name
+Company VPN,https://vpn.company.example/,vpn.user,company-vpn-secret,VPN credentials
+AWS Console,https://console.aws.amazon.com/,root@company.example,aws-admin-secret,AWS root
+GitHub,https://github.com/settings,second@example.com,gh-chrome-secret-2,Second GitHub account
