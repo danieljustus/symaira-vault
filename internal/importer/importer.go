@@ -54,6 +54,10 @@ const (
 	FormatBitwarden Format = "bitwarden"
 	FormatPass      Format = "pass"
 	FormatCSV       Format = "csv"
+	// FormatCXF is the FIDO Alliance Credential Exchange Format (CXF) — a zip
+	// archive containing a JSON document of accounts, collections and typed
+	// credentials (FIDO Proposed Standard, August 2025).
+	FormatCXF Format = "cxf"
 	// FormatApple is the Apple Passwords / iCloud Keychain CSV export
 	// (Title,URL,Username,Password,Notes,OTPAuth).
 	FormatApple Format = "apple"
@@ -76,6 +80,8 @@ func New(format Format) (Importer, error) {
 		return &passImporter{}, nil
 	case FormatCSV:
 		return &csvImporter{}, nil
+	case FormatCXF:
+		return &cxfImporter{}, nil
 	case FormatApple, FormatChrome, FormatFirefox:
 		return NewCSVProfile(format, "")
 	default:
