@@ -3,12 +3,22 @@ package crud
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
 	"github.com/danieljustus/symaira-vault/internal/secureedit"
 )
+
+// skipOnWindows aborts the test on Windows where the fake-editor shell
+// scripts cannot be executed (no POSIX shell), mirroring cmd/file/use_test.go.
+func skipOnWindows(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: fake editor relies on a POSIX shell")
+	}
+}
 
 // fakeEditor returns an OSCreateTemp and EDITOR that make secureedit write the
 // given updated JSON body to a temp file and exit successfully, mimicking a
@@ -38,6 +48,7 @@ func fakeEditor(t *testing.T, updatedJSON string) {
 }
 
 func TestEditCommand_UpdatesEntry(t *testing.T) {
+	skipOnWindows(t)
 	setupTestVault(t)
 	addTestEntry(t, "github", map[string]any{"username": "octocat", "password": "oldpass"})
 
@@ -71,6 +82,7 @@ func TestEditCommand_NotFound(t *testing.T) {
 }
 
 func TestEditCommand_EditorFailure(t *testing.T) {
+	skipOnWindows(t)
 	setupTestVault(t)
 	addTestEntry(t, "github", map[string]any{"password": "s3cret"})
 
