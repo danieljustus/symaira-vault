@@ -41,6 +41,7 @@ When --format is not specified, the format is auto-detected from the input file 
   .csv  → CSV format
   .json → JSON format
   .yaml/.yml → YAML format
+  .zip  → CXF format (FIDO Credential Exchange Format archive)
 
 CSV files are additionally header-sniffed: exports from Apple Passwords
 (iCloud Keychain), Chrome/Chromium and Firefox are recognized from their
@@ -54,6 +55,9 @@ format.`,
 
   # Auto-detect the CSV profile from the header row (Apple Passwords, Chrome, Firefox)
   symvault import passwords.csv --dry-run
+
+  # Import a FIDO Credential Exchange Format (CXF) archive (Apple Passwords, Bitwarden, Dashlane, ...)
+  symvault import export.zip --format cxf --dry-run
 
   # Explicitly specify a format (overrides auto-detection)
   symvault import bitwarden bw-export.json --dry-run
@@ -184,7 +188,7 @@ format.`,
 
 func isSupportedImportFormat(format importer.Format) bool {
 	switch format {
-	case importer.Format1Password, importer.FormatBitwarden, importer.FormatPass, importer.FormatCSV,
+	case importer.Format1Password, importer.FormatBitwarden, importer.FormatPass, importer.FormatCSV, importer.FormatCXF,
 		importer.FormatApple, importer.FormatChrome, importer.FormatFirefox:
 		return true
 	default:
@@ -255,6 +259,8 @@ func detectFormatFromExt(filename string) (importer.Format, error) {
 	switch ext {
 	case ".csv":
 		return importer.FormatCSV, nil
+	case ".zip":
+		return importer.FormatCXF, nil
 	case ".json":
 		return "json", nil
 	case ".yaml", ".yml":

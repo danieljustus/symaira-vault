@@ -160,6 +160,53 @@ imported data is treated as an untrusted prompt-injection vector while
 quarantine/provenance work is still open. Use the browser's own CSV export
 instead, as described above.
 
+## CXF
+
+The FIDO Alliance Credential Exchange Format (CXF) is a standardized format
+for exchanging credentials between providers, approved as a FIDO Proposed
+Standard in August 2025. A CXF export is a zip archive containing a single
+JSON document that describes the exported accounts, collections (folders)
+and items, with typed credentials (logins, TOTP seeds, passkeys, notes,
+credit cards, SSH keys, and more).
+
+CXF exports can be produced by:
+
+- Apple Passwords / iCloud Keychain via the macOS 26 Credential Exchange export
+- Bitwarden
+- Dashlane
+- 1Password (ecosystem support)
+
+Import a CXF archive into Symaira Vault:
+
+```bash
+symvault import export.zip --format cxf
+```
+
+`.zip` files are auto-detected as CXF when `--format` is omitted.
+
+### Supported Fields
+
+| CXF Credential | Symaira Vault Field |
+|----------------|---------------------|
+| basic-auth | username, password, url (from item scope) |
+| totp | otp (structured TOTP seed) |
+| note | notes |
+| passkey | passkey (opaque credential JSON) |
+| ssh-key | private_key (PKCS#8 PEM) |
+| credit-card | card_number, cardholder, expiry_month, expiry_year, cvc, subtype |
+
+Collection nesting is preserved: an item inside a collection imports under
+`collection/item`, with sub-collections becoming deeper path segments.
+
+### Limitations
+
+- Only plain, locally-exported CXF archives are supported; the per-part
+  encryption used by CXP (Credential Exchange Protocol) transfers does not
+  apply to local exports.
+- File and address credentials are skipped with a per-entry warning.
+- Passkeys are stored opaquely; they are preserved byte-for-byte but cannot
+  be used for WebAuthn ceremonies from Symaira Vault itself.
+
 ## Common Options
 
 | Option | Description |
