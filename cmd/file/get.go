@@ -18,15 +18,22 @@ var (
 	GetOut   string
 )
 
-var getCmd = &cobra.Command{
-	Use:   "get <path>[#field]",
-	Short: "Export a stored file attachment to disk",
-	Long: `Decodes a vault entry's attachment field back to its original binary
+// newGetCmd builds the `file get` command and registers its flags inline.
+func newGetCmd() *cobra.Command {
+	getCmd := &cobra.Command{
+		Use:   "get <path>[#field]",
+		Short: "Export a stored file attachment to disk",
+		Long: `Decodes a vault entry's attachment field back to its original binary
 content and writes it to the given output path. Use path#field, or --field,
 to select the field when an entry has more than one attachment.`,
-	Example: `  symvault file get elster/cert#cert_p12 --out ~/elster.pfx`,
-	Args:    cobra.ExactArgs(1),
-	RunE:    runFileGet,
+		Example: `  symvault file get elster/cert#cert_p12 --out ~/elster.pfx`,
+		Args:    cobra.ExactArgs(1),
+		RunE:    runFileGet,
+	}
+
+	getCmd.Flags().StringVar(&GetField, "field", "", "Data field to export (auto-detected when the entry has exactly one attachment)")
+	getCmd.Flags().StringVar(&GetOut, "out", "", "Output file path (required)")
+	return getCmd
 }
 
 func runFileGet(cmd *cobra.Command, args []string) error {
@@ -76,10 +83,4 @@ func runFileGet(cmd *cobra.Command, args []string) error {
 		cli.PrintQuietAware("Exported %s#%s to %s (%d bytes)\n", path, resolvedField, GetOut, len(content))
 		return nil
 	})
-}
-
-func init() {
-	getCmd.Flags().StringVar(&GetField, "field", "", "Data field to export (auto-detected when the entry has exactly one attachment)")
-	getCmd.Flags().StringVar(&GetOut, "out", "", "Output file path (required)")
-	fileCmd.AddCommand(getCmd)
 }

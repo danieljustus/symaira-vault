@@ -1,0 +1,5 @@
+url,username,password,httpRealm,formActionOrigin,guid,timeCreated,timeLastUsed,timePasswordChanged
+https://github.com/login,octocat@example.com,gh-firefox-secret,,https://github.com,{00000000-0000-0000-0000-000000000001},1735689600000,1735776000000,1735776000000
+https://gitlab.com/users/sign_in,dev@example.com,gitlab-firefox-secret,,https://gitlab.com,{00000000-0000-0000-0000-000000000002},1735689600000,1735776000000,1735776000000
+https://intranet.example.com/,jdoe,http-basic-secret,Example Intranet,,{00000000-0000-0000-0000-000000000003},1735689600000,1735776000000,1735776000000
+https://github.com/login,second@example.com,gh-firefox-secret-2,,https://github.com,{00000000-0000-0000-0000-000000000004},1735689600000,1735776000000,1735776000000

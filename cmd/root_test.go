@@ -226,7 +226,7 @@ func TestVaultPathPrefersExplicitFlagOverEnv(t *testing.T) {
 
 // TestExecute_Error verifies that Execute() calls cli.OsExit(1) when rootCmd.Execute() returns an error.
 func TestExecute_Error(t *testing.T) {
-	rootCmd = NewRootCmd()
+	rootCmd = newPackageRootCmd()
 	var exitCode int
 
 	// Save and restore original cli.OsExit

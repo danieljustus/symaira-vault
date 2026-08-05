@@ -16,12 +16,13 @@ import (
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 )
 
-var agentProfileCmd = &cobra.Command{
-	Use:   "profile <name>",
-	Short: "Manage agent profiles",
-	Long:  `Show, edit, and export agent profiles.`,
-	Args:  cobra.ExactArgs(1),
-	Example: `  # Show agent profile
+func newAgentProfileCmd() *cobra.Command {
+	agentProfileCmd := &cobra.Command{
+		Use:   "profile <name>",
+		Short: "Manage agent profiles",
+		Long:  `Show, edit, and export agent profiles.`,
+		Args:  cobra.ExactArgs(1),
+		Example: `  # Show agent profile
   symvault agent profile my-agent show
 
   # Show profile as JSON
@@ -32,160 +33,176 @@ var agentProfileCmd = &cobra.Command{
 
   # Export profile as YAML to stdout
   symvault agent profile my-agent export`,
+	}
+	agentProfileCmd.AddCommand(newAgentProfileShowCmd())
+	agentProfileCmd.AddCommand(newAgentProfileEditCmd())
+	agentProfileCmd.AddCommand(newAgentProfileExportCmd())
+	return agentProfileCmd
 }
 
-var agentProfileShowCmd = &cobra.Command{
-	Use:   "show",
-	Short: "Display agent profile",
-	Long:  `Display the agent profile in YAML or JSON format.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		agentName := mustGetProfileAgentName(cmd)
-		output, _ := cmd.Flags().GetString("output")
+func newAgentProfileShowCmd() *cobra.Command {
+	agentProfileShowCmd := &cobra.Command{
+		Use:   "show",
+		Short: "Display agent profile",
+		Long:  `Display the agent profile in YAML or JSON format.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			agentName := mustGetProfileAgentName(cmd)
+			output, _ := cmd.Flags().GetString("output")
 
-		profile, err := loadAgentProfile(agentName)
-		if err != nil {
-			return err
-		}
+			profile, err := loadAgentProfile(agentName)
+			if err != nil {
+				return err
+			}
 
-		switch output {
-		case "json":
-			enc := json.NewEncoder(cmd.OutOrStdout())
-			enc.SetIndent("", "  ")
-			return enc.Encode(profile)
-		default:
-			enc := yaml.NewEncoder(cmd.OutOrStdout())
+			switch output {
+			case "json":
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(profile)
+			default:
+				enc := yaml.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent(2)
+				defer func() { _ = enc.Close() }()
+				return enc.Encode(profile)
+			}
+		},
+	}
+	agentProfileShowCmd.Flags().StringP("output", "o", "yaml", "Output format (yaml, json)")
+	return agentProfileShowCmd
+}
+
+func newAgentProfileEditCmd() *cobra.Command {
+	agentProfileEditCmd := &cobra.Command{
+		Use:   "edit",
+		Short: "Edit agent profile in $EDITOR",
+		Long: `Open the agent profile in your configured editor ($EDITOR or $VISUAL).
+After saving, the profile is validated and you are prompted to apply changes.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			agentName := mustGetProfileAgentName(cmd)
+
+			editor := os.Getenv("EDITOR")
+			if editor == "" {
+				editor = os.Getenv("VISUAL")
+			}
+			if editor == "" {
+				return fmt.Errorf("neither $EDITOR nor $VISUAL is set")
+			}
+
+			vaultDir := cli.GetVaultDir()
+			configPath := filepath.Join(vaultDir, "config.yaml")
+
+			data, err := os.ReadFile(filepath.Clean(configPath))
+			if err != nil {
+				return fmt.Errorf("read config: %w", err)
+			}
+
+			tmpFile, err := os.CreateTemp("", fmt.Sprintf("symaira-agent-%s-*.yaml", agentName))
+			if err != nil {
+				return fmt.Errorf("create temp file: %w", err)
+			}
+			tmpPath := tmpFile.Name()
+			defer func() { _ = os.Remove(tmpPath) }()
+
+			section, err := extractAgentSection(data, agentName)
+			if err != nil {
+				_ = tmpFile.Close()
+				return fmt.Errorf("extract agent section: %w", err)
+			}
+
+			if _, writeErr := tmpFile.Write(section); writeErr != nil {
+				_ = tmpFile.Close()
+				return fmt.Errorf("write temp file: %w", writeErr)
+			}
+			_ = tmpFile.Close()
+
+			// #nosec G204 — editor is from user's $EDITOR/$VISUAL env var; tmpPath is a controlled temp file.
+			editorCmd := exec.Command(filepath.Clean(editor), filepath.Clean(tmpPath))
+			editorCmd.Stdin = os.Stdin
+			editorCmd.Stdout = os.Stdout
+			editorCmd.Stderr = os.Stderr
+			if runErr := editorCmd.Run(); runErr != nil {
+				return fmt.Errorf("editor exited with error: %w", runErr)
+			}
+
+			editedData, err := os.ReadFile(filepath.Clean(tmpPath))
+			if err != nil {
+				return fmt.Errorf("read edited file: %w", err)
+			}
+
+			var editedProfile configpkg.AgentProfile
+			if unmarshalErr := yaml.Unmarshal(editedData, &editedProfile); unmarshalErr != nil {
+				return fmt.Errorf("invalid YAML in edited profile: %w", unmarshalErr)
+			}
+
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Edited profile for %q:\n", agentName)
+			showProfilePreview(cmd, &editedProfile)
+
+			_, _ = fmt.Fprint(cmd.ErrOrStderr(), "\nApply changes? [y/N] ")
+			var response string
+			_, _ = fmt.Scanln(&response)
+			response = strings.TrimSpace(strings.ToLower(response))
+			if response != "y" && response != "yes" {
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "Changes discarded.")
+				return nil
+			}
+
+			cfg, err := configpkg.Load(configPath)
+			if err != nil {
+				return fmt.Errorf("load config: %w", err)
+			}
+
+			editedProfile.Name = agentName
+			if cfg.Agents == nil {
+				cfg.Agents = make(map[string]configpkg.AgentProfile)
+			}
+			cfg.Agents[agentName] = editedProfile
+
+			if err := cfg.SaveTo(configPath); err != nil {
+				return fmt.Errorf("save config: %w", err)
+			}
+
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Profile for %q updated.\n", agentName)
+			return nil
+		},
+	}
+	return agentProfileEditCmd
+}
+
+func newAgentProfileExportCmd() *cobra.Command {
+	agentProfileExportCmd := &cobra.Command{
+		Use:   "export",
+		Short: "Export agent profile as YAML",
+		Long: `Export the agent profile to stdout or to a file.
+Output is in YAML format by default.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			agentName := mustGetProfileAgentName(cmd)
+			outputPath, _ := cmd.Flags().GetString("output")
+
+			profile, err := loadAgentProfile(agentName)
+			if err != nil {
+				return err
+			}
+
+			var out *os.File
+			if outputPath != "" {
+				f, err := os.Create(filepath.Clean(outputPath))
+				if err != nil {
+					return fmt.Errorf("create output file: %w", err)
+				}
+				defer func() { _ = f.Close() }()
+				out = f
+			} else {
+				out = os.Stdout
+			}
+
+			enc := yaml.NewEncoder(out)
 			enc.SetIndent(2)
 			defer func() { _ = enc.Close() }()
 			return enc.Encode(profile)
-		}
-	},
-}
-
-var agentProfileEditCmd = &cobra.Command{
-	Use:   "edit",
-	Short: "Edit agent profile in $EDITOR",
-	Long: `Open the agent profile in your configured editor ($EDITOR or $VISUAL).
-After saving, the profile is validated and you are prompted to apply changes.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		agentName := mustGetProfileAgentName(cmd)
-
-		editor := os.Getenv("EDITOR")
-		if editor == "" {
-			editor = os.Getenv("VISUAL")
-		}
-		if editor == "" {
-			return fmt.Errorf("neither $EDITOR nor $VISUAL is set")
-		}
-
-		vaultDir := cli.GetVaultDir()
-		configPath := filepath.Join(vaultDir, "config.yaml")
-
-		data, err := os.ReadFile(filepath.Clean(configPath))
-		if err != nil {
-			return fmt.Errorf("read config: %w", err)
-		}
-
-		tmpFile, err := os.CreateTemp("", fmt.Sprintf("symaira-agent-%s-*.yaml", agentName))
-		if err != nil {
-			return fmt.Errorf("create temp file: %w", err)
-		}
-		tmpPath := tmpFile.Name()
-		defer func() { _ = os.Remove(tmpPath) }()
-
-		section, err := extractAgentSection(data, agentName)
-		if err != nil {
-			_ = tmpFile.Close()
-			return fmt.Errorf("extract agent section: %w", err)
-		}
-
-		if _, writeErr := tmpFile.Write(section); writeErr != nil {
-			_ = tmpFile.Close()
-			return fmt.Errorf("write temp file: %w", writeErr)
-		}
-		_ = tmpFile.Close()
-
-		// #nosec G204 — editor is from user's $EDITOR/$VISUAL env var; tmpPath is a controlled temp file.
-		editorCmd := exec.Command(filepath.Clean(editor), filepath.Clean(tmpPath))
-		editorCmd.Stdin = os.Stdin
-		editorCmd.Stdout = os.Stdout
-		editorCmd.Stderr = os.Stderr
-		if runErr := editorCmd.Run(); runErr != nil {
-			return fmt.Errorf("editor exited with error: %w", runErr)
-		}
-
-		editedData, err := os.ReadFile(filepath.Clean(tmpPath))
-		if err != nil {
-			return fmt.Errorf("read edited file: %w", err)
-		}
-
-		var editedProfile configpkg.AgentProfile
-		if unmarshalErr := yaml.Unmarshal(editedData, &editedProfile); unmarshalErr != nil {
-			return fmt.Errorf("invalid YAML in edited profile: %w", unmarshalErr)
-		}
-
-		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Edited profile for %q:\n", agentName)
-		showProfilePreview(cmd, &editedProfile)
-
-		_, _ = fmt.Fprint(cmd.ErrOrStderr(), "\nApply changes? [y/N] ")
-		var response string
-		_, _ = fmt.Scanln(&response)
-		response = strings.TrimSpace(strings.ToLower(response))
-		if response != "y" && response != "yes" {
-			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "Changes discarded.")
-			return nil
-		}
-
-		cfg, err := configpkg.Load(configPath)
-		if err != nil {
-			return fmt.Errorf("load config: %w", err)
-		}
-
-		editedProfile.Name = agentName
-		if cfg.Agents == nil {
-			cfg.Agents = make(map[string]configpkg.AgentProfile)
-		}
-		cfg.Agents[agentName] = editedProfile
-
-		if err := cfg.SaveTo(configPath); err != nil {
-			return fmt.Errorf("save config: %w", err)
-		}
-
-		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "Profile for %q updated.\n", agentName)
-		return nil
-	},
-}
-
-var agentProfileExportCmd = &cobra.Command{
-	Use:   "export",
-	Short: "Export agent profile as YAML",
-	Long: `Export the agent profile to stdout or to a file.
-Output is in YAML format by default.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		agentName := mustGetProfileAgentName(cmd)
-		outputPath, _ := cmd.Flags().GetString("output")
-
-		profile, err := loadAgentProfile(agentName)
-		if err != nil {
-			return err
-		}
-
-		var out *os.File
-		if outputPath != "" {
-			f, err := os.Create(filepath.Clean(outputPath))
-			if err != nil {
-				return fmt.Errorf("create output file: %w", err)
-			}
-			defer func() { _ = f.Close() }()
-			out = f
-		} else {
-			out = os.Stdout
-		}
-
-		enc := yaml.NewEncoder(out)
-		enc.SetIndent(2)
-		defer func() { _ = enc.Close() }()
-		return enc.Encode(profile)
-	},
+		},
+	}
+	agentProfileExportCmd.Flags().StringP("output", "o", "", "Output file path (default: stdout)")
+	return agentProfileExportCmd
 }
 
 func loadAgentProfile(agentName string) (*configpkg.AgentProfile, error) {
@@ -238,14 +255,4 @@ func showProfilePreview(cmd *cobra.Command, profile *configpkg.AgentProfile) {
 	enc.SetIndent(2)
 	defer func() { _ = enc.Close() }()
 	_ = enc.Encode(profile)
-}
-
-func init() {
-	agentProfileCmd.AddCommand(agentProfileShowCmd)
-	agentProfileCmd.AddCommand(agentProfileEditCmd)
-	agentProfileCmd.AddCommand(agentProfileExportCmd)
-	agentCmd.AddCommand(agentProfileCmd)
-
-	agentProfileShowCmd.Flags().StringP("output", "o", "yaml", "Output format (yaml, json)")
-	agentProfileExportCmd.Flags().StringP("output", "o", "", "Output file path (default: stdout)")
 }

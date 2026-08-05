@@ -35,10 +35,11 @@ func confirmUninstall(name string) bool {
 	return reply == "y" || reply == "yes"
 }
 
-var agentUninstallCmd = &cobra.Command{
-	Use:   "uninstall <name>",
-	Short: "Remove an agent integration",
-	Long: `Remove an agent profile, revoke all tokens, uninstall the skill file,
+func newAgentUninstallCmd() *cobra.Command {
+	agentUninstallCmd := &cobra.Command{
+		Use:   "uninstall <name>",
+		Short: "Remove an agent integration",
+		Long: `Remove an agent profile, revoke all tokens, uninstall the skill file,
 and clean up associated data.
 
 This command:
@@ -49,105 +50,102 @@ This command:
 
 Use --keep-skill to preserve the skill file and --keep-config to keep the
 agent's profile in config.yaml. Use --yes to skip the confirmation prompt.`,
-	Args: cobra.ExactArgs(1),
-	Example: `  # Interactive uninstall with confirmation
+		Args: cobra.ExactArgs(1),
+		Example: `  # Interactive uninstall with confirmation
   symvault agent uninstall hermes
 
   # Non-interactive uninstall keeping the skill file
   symvault agent uninstall claude-code --yes --keep-skill`,
-	Annotations: map[string]string{
-		cli.RequiresVaultAnnotation: "false",
-	},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		agentName := args[0]
+		Annotations: map[string]string{
+			cli.RequiresVaultAnnotation: "false",
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			agentName := args[0]
 
-		vaultDir := cli.GetVaultDir()
-		configPath := filepath.Join(vaultDir, "config.yaml")
-		cfg, err := configpkg.Load(configPath)
-		if err != nil {
-			return fmt.Errorf("load config: %w", err)
-		}
-
-		profile, hasProfile := cfg.Agents[agentName]
-		if !hasProfile {
-			return fmt.Errorf("agent %q not found in config", agentName)
-		}
-		profile.Normalize()
-
-		if !agentUninstallYes && !confirmUninstall(agentName) {
-			cliout.Warnf("Uninstall canceled.")
-			return nil
-		}
-
-		if !agentUninstallKeepConfig {
-			delete(cfg.Agents, agentName)
-			if err := cfg.SaveTo(configPath); err != nil {
-				return fmt.Errorf("save config: %w", err)
+			vaultDir := cli.GetVaultDir()
+			configPath := filepath.Join(vaultDir, "config.yaml")
+			cfg, err := configpkg.Load(configPath)
+			if err != nil {
+				return fmt.Errorf("load config: %w", err)
 			}
-			cliout.Hintf("\u2713 Profile for %q removed from config", agentName)
-		} else {
-			cliout.Warnf("\u26a0 Keeping profile for %q in config (--keep-config)", agentName)
-		}
 
-		regPath := auth.TokenRegistryFilePath(vaultDir)
-		reg := auth.NewTokenRegistry(regPath)
-		revokedCount := 0
-		if loadErr := reg.Load(); loadErr == nil {
-			for _, tok := range reg.List() {
-				if tok.AgentName == agentName && !tok.Revoked {
-					reg.Revoke(tok.ID)
-					revokedCount++
+			profile, hasProfile := cfg.Agents[agentName]
+			if !hasProfile {
+				return fmt.Errorf("agent %q not found in config", agentName)
+			}
+			profile.Normalize()
+
+			if !agentUninstallYes && !confirmUninstall(agentName) {
+				cliout.Warnf("Uninstall canceled.")
+				return nil
+			}
+
+			if !agentUninstallKeepConfig {
+				delete(cfg.Agents, agentName)
+				if err := cfg.SaveTo(configPath); err != nil {
+					return fmt.Errorf("save config: %w", err)
 				}
-			}
-			if revokedCount > 0 {
-				if saveErr := reg.Save(); saveErr != nil {
-					cliout.Warnf("\u26a0 Failed to save token registry: %v", saveErr)
-				}
-			}
-		}
-		if revokedCount > 0 {
-			cliout.Hintf("\u2713 Revoked %d token(s) for %q", revokedCount, agentName)
-		}
-
-		tokenFilePath := filepath.Join(vaultDir, "mcp-tokens", agentName+".token")
-		if _, statErr := os.Stat(tokenFilePath); statErr == nil {
-			if rmErr := os.Remove(tokenFilePath); rmErr != nil {
-				cliout.Warnf("\u26a0 Failed to remove token file %s: %v", tokenFilePath, rmErr)
+				cliout.Hintf("\u2713 Profile for %q removed from config", agentName)
 			} else {
-				cliout.Hintf("\u2713 Removed token file %s", tokenFilePath)
+				cliout.Warnf("\u26a0 Keeping profile for %q in config (--keep-config)", agentName)
 			}
-		}
 
-		if !agentUninstallKeepSkill {
-			skillPath := profile.SkillPathValue()
-			if skillPath != "" {
-				expanded := expandTilde(skillPath)
-				expanded = filepath.Clean(expanded)
-				if data, readErr := os.ReadFile(expanded); readErr == nil {
-					manifest, parseErr := agentskill.ParseManifest(data)
-					if parseErr == nil && manifest.ManagedBy == agentskill.SentinelValue {
-						if rmErr := os.Remove(expanded); rmErr != nil {
-							cliout.Warnf("\u26a0 Failed to remove skill file %s: %v", expanded, rmErr)
-						} else {
-							cliout.Hintf("\u2713 Removed skill file %s", expanded)
-						}
+			regPath := auth.TokenRegistryFilePath(vaultDir)
+			reg := auth.NewTokenRegistry(regPath)
+			revokedCount := 0
+			if loadErr := reg.Load(); loadErr == nil {
+				for _, tok := range reg.List() {
+					if tok.AgentName == agentName && !tok.Revoked {
+						reg.Revoke(tok.ID)
+						revokedCount++
+					}
+				}
+				if revokedCount > 0 {
+					if saveErr := reg.Save(); saveErr != nil {
+						cliout.Warnf("\u26a0 Failed to save token registry: %v", saveErr)
 					}
 				}
 			}
-		} else {
-			cliout.Warnf("\u26a0 Keeping skill file (--keep-skill)")
-		}
+			if revokedCount > 0 {
+				cliout.Hintf("\u2713 Revoked %d token(s) for %q", revokedCount, agentName)
+			}
 
-		fmt.Fprintf(os.Stderr, "\nAgent %q has been uninstalled.\n", agentName)
-		fmt.Fprintf(os.Stderr, "Note: MCP server entries in the agent's config file (e.g. mcp.json) must be removed manually.\n")
-		return nil
-	},
-}
+			tokenFilePath := filepath.Join(vaultDir, "mcp-tokens", agentName+".token")
+			if _, statErr := os.Stat(tokenFilePath); statErr == nil {
+				if rmErr := os.Remove(tokenFilePath); rmErr != nil {
+					cliout.Warnf("\u26a0 Failed to remove token file %s: %v", tokenFilePath, rmErr)
+				} else {
+					cliout.Hintf("\u2713 Removed token file %s", tokenFilePath)
+				}
+			}
 
-func init() {
+			if !agentUninstallKeepSkill {
+				skillPath := profile.SkillPathValue()
+				if skillPath != "" {
+					expanded := expandTilde(skillPath)
+					expanded = filepath.Clean(expanded)
+					if data, readErr := os.ReadFile(expanded); readErr == nil {
+						manifest, parseErr := agentskill.ParseManifest(data)
+						if parseErr == nil && manifest.ManagedBy == agentskill.SentinelValue {
+							if rmErr := os.Remove(expanded); rmErr != nil {
+								cliout.Warnf("\u26a0 Failed to remove skill file %s: %v", expanded, rmErr)
+							} else {
+								cliout.Hintf("\u2713 Removed skill file %s", expanded)
+							}
+						}
+					}
+				}
+			} else {
+				cliout.Warnf("\u26a0 Keeping skill file (--keep-skill)")
+			}
+
+			fmt.Fprintf(os.Stderr, "\nAgent %q has been uninstalled.\n", agentName)
+			fmt.Fprintf(os.Stderr, "Note: MCP server entries in the agent's config file (e.g. mcp.json) must be removed manually.\n")
+			return nil
+		},
+	}
 	agentUninstallCmd.Flags().BoolVar(&agentUninstallKeepSkill, "keep-skill", false, "Don't remove the skill file")
 	agentUninstallCmd.Flags().BoolVar(&agentUninstallKeepConfig, "keep-config", false, "Don't modify the agent config file")
 	agentUninstallCmd.Flags().BoolVar(&agentUninstallYes, "yes", false, "Skip confirmation prompt")
-
-	agentCmd.AddCommand(agentUninstallCmd)
+	return agentUninstallCmd
 }

@@ -210,7 +210,15 @@ func TestBitwardenImporterParse(t *testing.T) {
 	assertStringField(t, github.Data, "password", "mysecretpassword")
 	assertStringField(t, github.Data, "url", "https://github.com/login")
 	assertStringSliceField(t, github.Data, "urls", []string{"https://github.com/login", "https://github.com/"})
-	assertTOTPSecret(t, github.Data, "JBSWY3DPEHPK3PXP")
+	// The fixture's 16-character TOTP secret decodes to 10 bytes, below the
+	// 16-byte minimum enforced by crypto.ValidateTOTPSecret, so it must be
+	// skipped with a per-entry warning instead of writing an unusable secret.
+	if _, ok := github.Data["totp"]; ok {
+		t.Fatal("GitHub entry unexpectedly contains TOTP data for an invalid secret")
+	}
+	if len(github.Warnings) == 0 {
+		t.Fatal("GitHub entry should carry a TOTP warning for the invalid secret")
+	}
 
 	aws := findEntry(t, entries, "Work/AWS-Console")
 	assertStringField(t, aws.Data, "username", "admin@company.com")
@@ -284,7 +292,7 @@ func TestCSVImporterParseDefaultMapping(t *testing.T) {
 func TestCSVImporterParseCustomMapping(t *testing.T) {
 	csvData := strings.NewReader(strings.Join([]string{
 		"name,login,secret,website,comment,authenticator",
-		"Example,user@example.com,password123,https://example.com,custom notes,JBSWY3DPEHPK3PXP",
+		"Example,user@example.com,password123,https://example.com,custom notes,JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
 	}, "\n"))
 	mapping := "path=name,username=login,password=secret,url=website,notes=comment,totp.secret=authenticator"
 
@@ -304,7 +312,7 @@ func TestCSVImporterParseCustomMapping(t *testing.T) {
 	assertStringField(t, entry.Data, "password", "password123")
 	assertStringField(t, entry.Data, "url", "https://example.com")
 	assertStringField(t, entry.Data, "notes", "custom notes")
-	assertTOTPSecret(t, entry.Data, "JBSWY3DPEHPK3PXP")
+	assertTOTPSecret(t, entry.Data, "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP")
 }
 
 func TestParsePassEntry(t *testing.T) {
@@ -324,13 +332,18 @@ func TestParsePassEntry(t *testing.T) {
 				"work-aws-secret",
 				"url: https://aws.amazon.com",
 				"username: admin@company.com",
-				"otpauth://totp/Amazon?secret=JBSWY3DPEHPK3PXP&issuer=Amazon",
+				"otpauth://totp/Amazon?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=Amazon",
 			}, "\n"),
 			want: map[string]any{
 				"password": "work-aws-secret",
 				"url":      "https://aws.amazon.com",
 				"username": "admin@company.com",
-				"totp":     "otpauth://totp/Amazon?secret=JBSWY3DPEHPK3PXP&issuer=Amazon",
+				"totp": map[string]any{
+					"secret":    "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
+					"algorithm": "SHA1",
+					"digits":    float64(6),
+					"period":    float64(30),
+				},
 			},
 		},
 		{
@@ -345,11 +358,19 @@ func TestParsePassEntry(t *testing.T) {
 				"notes":    "first note line\nsecond note line",
 			},
 		},
+		{
+			name: "invalid totp uri skipped",
+			content: strings.Join([]string{
+				"secret",
+				"otpauth://totp/Example?secret=not-base32!!",
+			}, "\n"),
+			want: map[string]any{"password": "secret"},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := parsePassEntry(tt.content)
+			got, _ := parsePassEntry(tt.content)
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Fatalf("parsePassEntry() = %#v, want %#v", got, tt.want)
 			}

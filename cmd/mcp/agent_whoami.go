@@ -15,55 +15,59 @@ import (
 	auth "github.com/danieljustus/symaira-vault/internal/mcp/auth"
 )
 
-var agentWhoamiCmd = &cobra.Command{
-	Use:   "whoami",
-	Short: "Show current agent context",
-	Long: `Display information about the current agent profile.
+func newAgentWhoamiCmd() *cobra.Command {
+	agentWhoamiCmd := &cobra.Command{
+		Use:   "whoami",
+		Short: "Show current agent context",
+		Long: `Display information about the current agent profile.
 
 When the OPENPASS_AGENT environment variable is set, loads that agent's profile
 and shows name, tier, allowed paths, tools, quotas, and vault status.
 
 The --output json flag returns structured data matching the MCP symaira_whoami
 response format.`,
-	Example: `  # Show agent context
+		Example: `  # Show agent context
   OPENPASS_AGENT=my-agent symvault agent whoami
 
   # Show as JSON
   OPENPASS_AGENT=my-agent symvault agent whoami --output json`,
-	Annotations: map[string]string{
-		cli.RequiresVaultAnnotation: "false",
-	},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		agentName := os.Getenv("OPENPASS_AGENT")
-		if agentName == "" {
-			return fmt.Errorf("OPENPASS_AGENT not set. Run without agent context or set OPENPASS_AGENT=<name>")
-		}
+		Annotations: map[string]string{
+			cli.RequiresVaultAnnotation: "false",
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			agentName := os.Getenv("OPENPASS_AGENT")
+			if agentName == "" {
+				return fmt.Errorf("OPENPASS_AGENT not set. Run without agent context or set OPENPASS_AGENT=<name>")
+			}
 
-		vaultDir := cli.GetVaultDir()
-		configPath := filepath.Join(vaultDir, "config.yaml")
-		cfg, err := configpkg.Load(configPath)
-		if err != nil {
-			return fmt.Errorf("load config: %w", err)
-		}
+			vaultDir := cli.GetVaultDir()
+			configPath := filepath.Join(vaultDir, "config.yaml")
+			cfg, err := configpkg.Load(configPath)
+			if err != nil {
+				return fmt.Errorf("load config: %w", err)
+			}
 
-		profile, ok := cfg.Agents[agentName]
-		if !ok {
-			return fmt.Errorf("agent %q not found in config", agentName)
-		}
+			profile, ok := cfg.Agents[agentName]
+			if !ok {
+				return fmt.Errorf("agent %q not found in config", agentName)
+			}
 
-		info := buildWhoamiInfo(agentName, vaultDir, &profile)
+			info := buildWhoamiInfo(agentName, vaultDir, &profile)
 
-		output, _ := cmd.Flags().GetString("output")
-		switch output {
-		case "json":
-			enc := json.NewEncoder(cmd.OutOrStdout())
-			enc.SetIndent("", "  ")
-			return enc.Encode(info)
-		default:
-			printWhoamiTable(cmd, info)
-			return nil
-		}
-	},
+			output, _ := cmd.Flags().GetString("output")
+			switch output {
+			case "json":
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(info)
+			default:
+				printWhoamiTable(cmd, info)
+				return nil
+			}
+		},
+	}
+	agentWhoamiCmd.Flags().StringP("output", "o", "text", "Output format (text, json)")
+	return agentWhoamiCmd
 }
 
 type whoamiInfo struct {
@@ -184,9 +188,4 @@ func printWhoamiTable(cmd *cobra.Command, info whoamiInfo) {
 	if info.SkillPath != "" {
 		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Skill:      %s\n", info.SkillPath)
 	}
-}
-
-func init() {
-	agentWhoamiCmd.Flags().StringP("output", "o", "text", "Output format (text, json)")
-	agentCmd.AddCommand(agentWhoamiCmd)
 }

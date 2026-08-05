@@ -23,17 +23,18 @@ var (
 	startupProfileTraceFile string
 )
 
-var startupProfileCmd = &cobra.Command{
-	Use:   "startup-profile",
-	Short: "Measure and report CLI startup time",
-	Long: `Measure CLI startup time by re-executing the binary multiple times.
+func newStartupProfileCmd() *cobra.Command {
+	startupProfileCmd := &cobra.Command{
+		Use:   "startup-profile",
+		Short: "Measure and report CLI startup time",
+		Long: `Measure CLI startup time by re-executing the binary multiple times.
 
 Reports min, max, average, and p95 startup times across N iterations.
 The measurement covers Go runtime init, all init() functions, cobra
 command tree setup, flag parsing, and the PersistentPreRunE hook.
 
 Use --trace to generate a runtime/trace file analyzable with 'go tool trace'.`,
-	Example: `  # Measure startup time (default 10 iterations)
+		Example: `  # Measure startup time (default 10 iterations)
   symvault startup-profile
 
   # Measure with 50 iterations
@@ -41,17 +42,16 @@ Use --trace to generate a runtime/trace file analyzable with 'go tool trace'.`,
 
   # Generate a runtime trace for detailed analysis
   symvault startup-profile --trace startup.trace`,
-	Annotations: map[string]string{
-		cli.RequiresVaultAnnotation: "false",
-	},
-	RunE: runStartupProfile,
-}
-
-func init() {
+		Annotations: map[string]string{
+			cli.RequiresVaultAnnotation: "false",
+		},
+		RunE: runStartupProfile,
+	}
 	startupProfileCmd.Flags().IntVarP(&startupProfileCount, "count", "n", 10, "number of benchmark iterations")
 	startupProfileCmd.Flags().IntVar(&startupProfileTopN, "top", 5, "show top N slowest phases in trace breakdown")
 	startupProfileCmd.Flags().StringVar(&startupProfileTraceFile, "trace", "", "write a runtime trace file (viewable with 'go tool trace')")
 	startupProfileCmd.GroupID = cli.GroupIDAdministration
+	return startupProfileCmd
 }
 
 const envProfileChild = "SYMVAULT_STARTUP_PROFILE_CHILD"
