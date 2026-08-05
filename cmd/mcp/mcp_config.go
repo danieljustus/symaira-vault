@@ -21,36 +21,48 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 )
 
-var McpConfigCmd = &cobra.Command{
-	Use:   "mcp-config <agent>",
-	Short: "[Deprecated v4.0, removed in v4.1] Use 'symvault agent install <agent> --config-only'",
-	Long: `This command was deprecated in Symaira Vault v4.0 and will be removed in v4.1.
+// McpConfigCmd is retained for API compatibility; NewCommands() uses
+// newMcpConfigCmd() so every call gets a fresh command.
+var McpConfigCmd = newMcpConfigCmd()
+
+func newMcpConfigCmd() *cobra.Command {
+	c := &cobra.Command{
+		Use:   "mcp-config <agent>",
+		Short: "[Deprecated v4.0, removed in v4.1] Use 'symvault agent install <agent> --config-only'",
+		Long: `This command was deprecated in Symaira Vault v4.0 and will be removed in v4.1.
 
 Use 'symvault agent install <agent> --config-only' to output MCP config snippets.`,
-	Example: `  symvault agent install claude-code --config-only`,
-	Hidden:  true,
-	Args:    cobra.ArbitraryArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		cliout.Warnf("This command is deprecated in v4.0. Use: symvault agent install <agent> --config-only")
-		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
-			"This command is deprecated in v4.0. Use: symvault agent install <agent> --config-only", nil)
-	},
+		Example: `  symvault agent install claude-code --config-only`,
+		Hidden:  true,
+		Args:    cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cliout.Warnf("This command is deprecated in v4.0. Use: symvault agent install <agent> --config-only")
+			return errorspkg.NewCLIError(errorspkg.ExitNotFound,
+				"This command is deprecated in v4.0. Use: symvault agent install <agent> --config-only", nil)
+		},
+	}
+	c.GroupID = cli.GroupIDAgentsMCP
+	return c
 }
 
-var mcpTokenRotateCmd = &cobra.Command{
-	Use:   "mcp-token-rotate",
-	Short: "[Deprecated v4.0, removed in v4.1] Use 'symvault agent token <name> rotate'",
-	Long: `This command was deprecated in Symaira Vault v4.0 and will be removed in v4.1.
+func newMcpTokenRotateCmd() *cobra.Command {
+	mcpTokenRotateCmd := &cobra.Command{
+		Use:   "mcp-token-rotate",
+		Short: "[Deprecated v4.0, removed in v4.1] Use 'symvault agent token <name> rotate'",
+		Long: `This command was deprecated in Symaira Vault v4.0 and will be removed in v4.1.
 
 Token rotation is now managed per-agent via 'symvault agent token <name> rotate'.`,
-	Example: `  symvault agent token my-agent rotate`,
-	Hidden:  true,
-	Args:    cobra.ArbitraryArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		cliout.Warnf("This command is deprecated in v4.0. Use: symvault agent token <name> rotate")
-		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
-			"This command is deprecated in v4.0. Use: symvault agent token <name> rotate", nil)
-	},
+		Example: `  symvault agent token my-agent rotate`,
+		Hidden:  true,
+		Args:    cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cliout.Warnf("This command is deprecated in v4.0. Use: symvault agent token <name> rotate")
+			return errorspkg.NewCLIError(errorspkg.ExitNotFound,
+				"This command is deprecated in v4.0. Use: symvault agent token <name> rotate", nil)
+		},
+	}
+	mcpTokenRotateCmd.GroupID = cli.GroupIDAgentsMCP
+	return mcpTokenRotateCmd
 }
 
 type httpConfig struct {
@@ -311,11 +323,6 @@ func OutputAgentHTTPConfig(agentName, serverKey, displayName string, redact bool
 	enc := yaml.NewEncoder(os.Stdout)
 	defer func() { _ = enc.Close() }()
 	return enc.Encode(config)
-}
-
-func init() {
-	McpConfigCmd.GroupID = cli.GroupIDAgentsMCP
-	mcpTokenRotateCmd.GroupID = cli.GroupIDAgentsMCP
 }
 
 func OutputTokenOnly() error {

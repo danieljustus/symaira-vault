@@ -21,16 +21,24 @@ var (
 	UseTimeout time.Duration
 )
 
-var useCmd = &cobra.Command{
-	Use:   "use <path>[#field] -- <command> [args...]",
-	Short: "Run a command with a stored file attachment materialized to an ephemeral path",
-	Long: `Decodes a vault entry's attachment field back to its original binary
+// newUseCmd builds the `file use` command and registers its flags inline.
+func newUseCmd() *cobra.Command {
+	useCmd := &cobra.Command{
+		Use:   "use <path>[#field] -- <command> [args...]",
+		Short: "Run a command with a stored file attachment materialized to an ephemeral path",
+		Long: `Decodes a vault entry's attachment field back to its original binary
 content, writes it to a private ephemeral file for the lifetime of the given
 command, exposes it as $SYMVAULT_FILE_<NAME>, and shreds it afterward — the
 CLI twin of the MCP run_command "files" map.`,
-	Example: `  symvault file use elster/cert -- java -jar elstertool.jar --cert $SYMVAULT_FILE_CERT_P12`,
-	Args:    cobra.MinimumNArgs(2),
-	RunE:    runFileUse,
+		Example: `  symvault file use elster/cert -- java -jar elstertool.jar --cert $SYMVAULT_FILE_CERT_P12`,
+		Args:    cobra.MinimumNArgs(2),
+		RunE:    runFileUse,
+	}
+
+	useCmd.Flags().StringVar(&UseField, "field", "", "Data field to materialize (auto-detected when the entry has exactly one attachment)")
+	useCmd.Flags().StringVar(&UseAs, "as", "", "Name exposed as $SYMVAULT_FILE_<NAME> (defaults to the uppercased field name)")
+	useCmd.Flags().DurationVarP(&UseTimeout, "timeout", "t", 0, "Timeout for the command (e.g., 30s)")
+	return useCmd
 }
 
 func runFileUse(cmd *cobra.Command, args []string) error {
@@ -90,11 +98,4 @@ func runFileUse(cmd *cobra.Command, args []string) error {
 		}
 		return nil
 	})
-}
-
-func init() {
-	useCmd.Flags().StringVar(&UseField, "field", "", "Data field to materialize (auto-detected when the entry has exactly one attachment)")
-	useCmd.Flags().StringVar(&UseAs, "as", "", "Name exposed as $SYMVAULT_FILE_<NAME> (defaults to the uppercased field name)")
-	useCmd.Flags().DurationVarP(&UseTimeout, "timeout", "t", 0, "Timeout for the command (e.g., 30s)")
-	fileCmd.AddCommand(useCmd)
 }

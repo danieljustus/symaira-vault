@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
@@ -20,7 +21,6 @@ const (
 	bitwardenFieldURLs     = "urls"
 	bitwardenFieldNotes    = "notes"
 	bitwardenFieldTOTP     = "totp"
-	bitwardenFieldSecret   = "secret"
 )
 
 type bitwardenImporter struct{}
@@ -136,20 +136,36 @@ func bitwardenParseLogin(item bitwardenItem, folders map[string]string) Imported
 		bitwardenFieldNotes:    item.Notes,
 	}
 
+	var warnings []string
 	for _, field := range item.Fields {
 		if field.Name == "" {
+			continue
+		}
+		if strings.EqualFold(field.Name, bitwardenFieldTOTP) {
+			if field.Value != "" {
+				if totp, err := ParseTOTP(field.Value); err == nil {
+					data[bitwardenFieldTOTP] = totp
+				} else {
+					warnings = append(warnings, fmt.Sprintf("totp: %v", err))
+				}
+			}
 			continue
 		}
 		data[field.Name] = field.Value
 	}
 
 	if item.Login.TOTP != "" {
-		data[bitwardenFieldTOTP] = map[string]any{bitwardenFieldSecret: item.Login.TOTP}
+		if totp, err := ParseTOTP(item.Login.TOTP); err == nil {
+			data[bitwardenFieldTOTP] = totp
+		} else {
+			warnings = append(warnings, fmt.Sprintf("totp: %v", err))
+		}
 	}
 
 	return ImportedEntry{
-		Path: bitwardenPath(item, folders),
-		Data: data,
+		Path:     bitwardenPath(item, folders),
+		Data:     data,
+		Warnings: warnings,
 	}
 }
 

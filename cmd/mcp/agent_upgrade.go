@@ -191,10 +191,11 @@ func confirmUpgrade(agentName, targetTier string) bool {
 	return reply == "y" || reply == "yes"
 }
 
-var agentUpgradeCmd = &cobra.Command{
-	Use:   "upgrade <name>",
-	Short: "Upgrade an agent's security tier",
-	Long: `Show tier diff and upgrade an agent's security tier with interactive confirmation.
+func newAgentUpgradeCmd() *cobra.Command {
+	agentUpgradeCmd := &cobra.Command{
+		Use:   "upgrade <name>",
+		Short: "Upgrade an agent's security tier",
+		Long: `Show tier diff and upgrade an agent's security tier with interactive confirmation.
 
 The upgrade applies the named tier preset (safe, standard, or admin) to the
 agent profile, updating all capability fields. The legacy alias "read-only"
@@ -203,8 +204,8 @@ writing. Use --rotate-token to also rotate the agent's MCP token.
 
 The --reason flag is required when using --yes for non-interactive mode to ensure
 an audit trail.`,
-	Args: cobra.ExactArgs(1),
-	Example: `  # Interactive upgrade to admin tier with token rotation
+		Args: cobra.ExactArgs(1),
+		Example: `  # Interactive upgrade to admin tier with token rotation
   symvault agent upgrade hermes --tier admin --rotate-token
 
   # Dry-run: preview changes without writing
@@ -212,144 +213,141 @@ an audit trail.`,
 
   # Non-interactive upgrade with audit reason
   symvault agent upgrade opencode --tier standard --yes --reason "CI pipeline automation upgrade"`,
-	Annotations: map[string]string{
-		cli.RequiresVaultAnnotation: "false",
-	},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		agentName := args[0]
+		Annotations: map[string]string{
+			cli.RequiresVaultAnnotation: "false",
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			agentName := args[0]
 
-		if agentUpgradeTier == "" {
-			return fmt.Errorf("--tier is required (valid: safe, standard, admin)")
-		}
-		if agentUpgradeYes && agentUpgradeReason == "" {
-			return fmt.Errorf("--reason is required when using --yes")
-		}
-
-		if !agentUpgradeValidTiers[agentUpgradeTier] {
-			return fmt.Errorf("invalid tier %q: valid values are safe, standard, admin", agentUpgradeTier)
-		}
-		agentUpgradeTier = agentUpgradeTierAlias[agentUpgradeTier]
-
-		vaultDir := cli.GetVaultDir()
-		configPath := filepath.Join(vaultDir, "config.yaml")
-		cfg, err := configpkg.Load(configPath)
-		if err != nil {
-			return fmt.Errorf("load config: %w", err)
-		}
-
-		profile, hasProfile := cfg.Agents[agentName]
-		if !hasProfile {
-			return fmt.Errorf("agent %q not found in config", agentName)
-		}
-
-		currentTier := ""
-		if profile.Tier != nil {
-			currentTier = *profile.Tier
-		}
-		if currentTier == "" {
-			currentTier = "custom"
-		}
-		if currentTier == agentUpgradeTier {
-			return fmt.Errorf("agent %q is already at tier %q", agentName, agentUpgradeTier)
-		}
-
-		oldProfile := profile
-		configpkg.ApplyTierPreset(&profile, agentUpgradeTier)
-		profile.Tier = configpkg.StrPtr(agentUpgradeTier)
-		diffs := computeTierDiff(oldProfile, profile)
-
-		fmt.Fprintf(os.Stderr, "Agent:   %s\n", agentName)
-		fmt.Fprintf(os.Stderr, "Current: %s\n", currentTier)
-		fmt.Fprintf(os.Stderr, "Target:  %s\n", agentUpgradeTier)
-		if agentUpgradeReason != "" {
-			fmt.Fprintf(os.Stderr, "Reason:  %s\n", agentUpgradeReason)
-		}
-		fmt.Fprintln(os.Stderr)
-		fmt.Fprintln(os.Stderr, "Tier changes:")
-		printTierDiff(diffs)
-		fmt.Fprintln(os.Stderr)
-
-		if agentUpgradeDryRun {
-			fmt.Fprintln(os.Stderr, "[DRY-RUN] No changes written.")
-			return nil
-		}
-
-		if !agentUpgradeNoBiometric {
-			if err := requireBiometricForUpgrade(cmd.Context(), agentName, agentUpgradeTier); err != nil {
-				return err
+			if agentUpgradeTier == "" {
+				return fmt.Errorf("--tier is required (valid: safe, standard, admin)")
 			}
-		}
-
-		if !agentUpgradeYes && !confirmUpgrade(agentName, agentUpgradeTier) {
-			fmt.Fprintln(os.Stderr, "Upgrade canceled.")
-			return nil
-		}
-
-		cfg.Agents[agentName] = profile
-		if err := cfg.SaveTo(configPath); err != nil {
-			return fmt.Errorf("save config: %w", err)
-		}
-		cliout.Hintf("\u2713 Profile for %q upgraded to %q", agentName, agentUpgradeTier)
-
-		if agentUpgradeRotate {
-			regPath := auth.TokenRegistryFilePath(vaultDir)
-			reg := auth.NewTokenRegistry(regPath)
-			if loadErr := reg.Load(); loadErr != nil {
-				return fmt.Errorf("load token registry: %w", loadErr)
+			if agentUpgradeYes && agentUpgradeReason == "" {
+				return fmt.Errorf("--reason is required when using --yes")
 			}
 
-			for _, tok := range reg.List() {
-				if tok.AgentName == agentName && !tok.Revoked {
-					reg.Revoke(tok.ID)
+			if !agentUpgradeValidTiers[agentUpgradeTier] {
+				return fmt.Errorf("invalid tier %q: valid values are safe, standard, admin", agentUpgradeTier)
+			}
+			agentUpgradeTier = agentUpgradeTierAlias[agentUpgradeTier]
+
+			vaultDir := cli.GetVaultDir()
+			configPath := filepath.Join(vaultDir, "config.yaml")
+			cfg, err := configpkg.Load(configPath)
+			if err != nil {
+				return fmt.Errorf("load config: %w", err)
+			}
+
+			profile, hasProfile := cfg.Agents[agentName]
+			if !hasProfile {
+				return fmt.Errorf("agent %q not found in config", agentName)
+			}
+
+			currentTier := ""
+			if profile.Tier != nil {
+				currentTier = *profile.Tier
+			}
+			if currentTier == "" {
+				currentTier = "custom"
+			}
+			if currentTier == agentUpgradeTier {
+				return fmt.Errorf("agent %q is already at tier %q", agentName, agentUpgradeTier)
+			}
+
+			oldProfile := profile
+			configpkg.ApplyTierPreset(&profile, agentUpgradeTier)
+			profile.Tier = configpkg.StrPtr(agentUpgradeTier)
+			diffs := computeTierDiff(oldProfile, profile)
+
+			fmt.Fprintf(os.Stderr, "Agent:   %s\n", agentName)
+			fmt.Fprintf(os.Stderr, "Current: %s\n", currentTier)
+			fmt.Fprintf(os.Stderr, "Target:  %s\n", agentUpgradeTier)
+			if agentUpgradeReason != "" {
+				fmt.Fprintf(os.Stderr, "Reason:  %s\n", agentUpgradeReason)
+			}
+			fmt.Fprintln(os.Stderr)
+			fmt.Fprintln(os.Stderr, "Tier changes:")
+			printTierDiff(diffs)
+			fmt.Fprintln(os.Stderr)
+
+			if agentUpgradeDryRun {
+				fmt.Fprintln(os.Stderr, "[DRY-RUN] No changes written.")
+				return nil
+			}
+
+			if !agentUpgradeNoBiometric {
+				if err := requireBiometricForUpgrade(cmd.Context(), agentName, agentUpgradeTier); err != nil {
+					return err
 				}
 			}
 
-			newTok, rawToken, createErr := reg.Create(
-				fmt.Sprintf("upgrade-%s-%s", agentName, agentUpgradeTier),
-				[]string{"*"},
-				agentName,
-				0,
-			)
-			if createErr != nil {
-				return fmt.Errorf("create token for %q: %w", agentName, createErr)
-			}
-			if err := reg.Save(); err != nil {
-				return fmt.Errorf("save token registry: %w", err)
+			if !agentUpgradeYes && !confirmUpgrade(agentName, agentUpgradeTier) {
+				fmt.Fprintln(os.Stderr, "Upgrade canceled.")
+				return nil
 			}
 
-			tokenPath, writeErr := writeAgentTokenFile(vaultDir, agentName, rawToken)
-			if writeErr != nil {
-				return fmt.Errorf("write token file: %w", writeErr)
+			cfg.Agents[agentName] = profile
+			if err := cfg.SaveTo(configPath); err != nil {
+				return fmt.Errorf("save config: %w", err)
 			}
-			cliout.Hintf("\u2713 Token rotated: %s (id=%s)", tokenPath, newTok.ID)
-		}
+			cliout.Hintf("\u2713 Profile for %q upgraded to %q", agentName, agentUpgradeTier)
 
-		targetPath := ""
-		if profile.SkillPath != nil {
-			targetPath = *profile.SkillPath
-		}
-		if targetPath != "" {
-			expanded := expandTilde(targetPath)
-			vars := buildTemplateVars(agentName)
-			vars.ProfileTier = agentUpgradeTier
-			if err := agentskill.Refresh(agentName, expanded, vars); err != nil {
-				cliout.Warnf("\u26a0 Skill refresh: %v", err)
-			} else {
-				cliout.Hintf("\u2713 Skill refreshed at %s", expanded)
+			if agentUpgradeRotate {
+				regPath := auth.TokenRegistryFilePath(vaultDir)
+				reg := auth.NewTokenRegistry(regPath)
+				if loadErr := reg.Load(); loadErr != nil {
+					return fmt.Errorf("load token registry: %w", loadErr)
+				}
+
+				for _, tok := range reg.List() {
+					if tok.AgentName == agentName && !tok.Revoked {
+						reg.Revoke(tok.ID)
+					}
+				}
+
+				newTok, rawToken, createErr := reg.Create(
+					fmt.Sprintf("upgrade-%s-%s", agentName, agentUpgradeTier),
+					[]string{"*"},
+					agentName,
+					0,
+				)
+				if createErr != nil {
+					return fmt.Errorf("create token for %q: %w", agentName, createErr)
+				}
+				if err := reg.Save(); err != nil {
+					return fmt.Errorf("save token registry: %w", err)
+				}
+
+				tokenPath, writeErr := writeAgentTokenFile(vaultDir, agentName, rawToken)
+				if writeErr != nil {
+					return fmt.Errorf("write token file: %w", writeErr)
+				}
+				cliout.Hintf("\u2713 Token rotated: %s (id=%s)", tokenPath, newTok.ID)
 			}
-		}
 
-		return nil
-	},
-}
+			targetPath := ""
+			if profile.SkillPath != nil {
+				targetPath = *profile.SkillPath
+			}
+			if targetPath != "" {
+				expanded := expandTilde(targetPath)
+				vars := buildTemplateVars(agentName)
+				vars.ProfileTier = agentUpgradeTier
+				if err := agentskill.Refresh(agentName, expanded, vars); err != nil {
+					cliout.Warnf("\u26a0 Skill refresh: %v", err)
+				} else {
+					cliout.Hintf("\u2713 Skill refreshed at %s", expanded)
+				}
+			}
 
-func init() {
+			return nil
+		},
+	}
 	agentUpgradeCmd.Flags().StringVar(&agentUpgradeTier, "tier", "", "Target security tier (safe, standard, admin; 'read-only' accepted as alias for 'safe')")
 	agentUpgradeCmd.Flags().BoolVar(&agentUpgradeDryRun, "dry-run", false, "Show diff without applying changes")
 	agentUpgradeCmd.Flags().BoolVar(&agentUpgradeYes, "yes", false, "Non-interactive mode (requires --reason)")
 	agentUpgradeCmd.Flags().StringVar(&agentUpgradeReason, "reason", "", "Audit reason for the upgrade (required with --yes)")
 	agentUpgradeCmd.Flags().BoolVar(&agentUpgradeRotate, "rotate-token", false, "Rotate the agent's MCP token on upgrade")
 	agentUpgradeCmd.Flags().BoolVar(&agentUpgradeNoBiometric, "no-biometric", false, "Skip biometric verification (not recommended)")
-
-	agentCmd.AddCommand(agentUpgradeCmd)
+	return agentUpgradeCmd
 }

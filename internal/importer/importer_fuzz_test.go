@@ -123,13 +123,45 @@ func FuzzParsePassEntry(f *testing.F) {
 	f.Add("p\n..\n../secrets\n")
 
 	f.Fuzz(func(t *testing.T, content string) {
-		data := parsePassEntry(content)
+		data, _ := parsePassEntry(content)
 
 		if _, ok := data["password"]; !ok {
 			t.Errorf("password key missing in result")
 		}
 		if data == nil {
 			t.Errorf("parsePassEntry returned nil map")
+		}
+	})
+}
+
+// FuzzParseTOTP verifies the TOTP normalizer handles arbitrary input without
+// panic, including malformed otpauth URIs.
+func FuzzParseTOTP(f *testing.F) {
+	f.Add("JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP")
+	f.Add("otpauth://totp/Example:user@example.com?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=Example")
+	f.Add("otpauth://totp/Example?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&algorithm=SHA256&digits=8&period=60")
+	f.Add("otpauth://hotp/Example?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP")
+	f.Add("otpauth://totp/Example")
+	f.Add("otpauth://totp/Exa mple?secret=X")
+	f.Add("otpauth://totp/Example?secret=not-base32!!")
+	f.Add("otpauth://totp/Example?digits=abc")
+	f.Add("")
+	f.Add("not base32 at all")
+
+	f.Fuzz(func(t *testing.T, value string) {
+		result, err := ParseTOTP(value)
+
+		result2, err2 := ParseTOTP(value)
+		if (err == nil) != (err2 == nil) {
+			t.Errorf("deterministic error mismatch")
+		}
+		if err == nil && !reflect.DeepEqual(result, result2) {
+			t.Errorf("deterministic result mismatch")
+		}
+		if err == nil {
+			if result["secret"] == "" {
+				t.Errorf("secret empty for %q", value)
+			}
 		}
 	})
 }
