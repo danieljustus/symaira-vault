@@ -5,10 +5,12 @@ import (
 )
 
 // NewCommands returns all authentication commands for root command assembly.
+// Each call builds a fresh command tree so consecutive calls never share
+// command objects or flag state.
 func NewCommands() []*cobra.Command {
 	return []*cobra.Command{
-		AuthCmd,
-		lockCmd,
-		AuthUnlockCmd,
+		newAuthCmd(),
+		newLockCmd(),
+		newAuthUnlockCmd(),
 	}
 }
