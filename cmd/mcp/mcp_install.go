@@ -13,20 +13,23 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 )
 
-var mcpInstallCmd = &cobra.Command{
-	Use:   "install [agent]",
-	Short: "[Deprecated v4.0, removed in v4.1] Use 'symvault agent install [agent]'",
-	Long: `This command was deprecated in Symaira Vault v4.0 and will be removed in v4.1.
+func newMcpInstallCmd() *cobra.Command {
+	mcpInstallCmd := &cobra.Command{
+		Use:   "install [agent]",
+		Short: "[Deprecated v4.0, removed in v4.1] Use 'symvault agent install [agent]'",
+		Long: `This command was deprecated in Symaira Vault v4.0 and will be removed in v4.1.
 
 Use 'symvault agent install [agent]' instead to install and configure
 AI agents with proper security profiles.`,
-	Example: `  symvault agent install [agent]`,
-	Hidden:  true,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		cliout.Warnf("This command is deprecated in v4.0. Use: symvault agent install [agent]")
-		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
-			"This command is deprecated in v4.0. Use: symvault agent install [agent]", nil)
-	},
+		Example: `  symvault agent install [agent]`,
+		Hidden:  true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cliout.Warnf("This command is deprecated in v4.0. Use: symvault agent install [agent]")
+			return errorspkg.NewCLIError(errorspkg.ExitNotFound,
+				"This command is deprecated in v4.0. Use: symvault agent install [agent]", nil)
+		},
+	}
+	return mcpInstallCmd
 }
 
 func buildServerConfig(vDir, agentName string, httpMode, dryRun bool) (map[string]any, string, error) {
@@ -100,8 +103,4 @@ func buildHTTPServerConfig(vDir, agentName string, dryRun bool) (map[string]any,
 	}
 
 	return config, tokenID, nil
-}
-
-func init() {
-	mcpCmd.AddCommand(mcpInstallCmd)
 }

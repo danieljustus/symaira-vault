@@ -13,24 +13,41 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/metrics"
 )
 
-var diagCmd = &cobra.Command{
-	Use:     "diag",
-	Short:   "Diagnostic commands for Symaira Vault",
-	Example: `  symvault diag metrics`,
-	Annotations: map[string]string{
-		requiresVaultAnnotation: "false",
-	},
+func newDiagCmd() *cobra.Command {
+	diagCmd := &cobra.Command{
+		Use:     "diag",
+		Short:   "Diagnostic commands for Symaira Vault",
+		Example: `  symvault diag metrics`,
+		Annotations: map[string]string{
+			requiresVaultAnnotation: "false",
+		},
+	}
+	diagCmd.GroupID = cli.GroupIDAdministration
+	diagCmd.AddCommand(newDiagMetricsCmd())
+	return diagCmd
 }
 
-var diagMetricsCmd = &cobra.Command{
-	Use:   "metrics",
-	Short: "Print current metric values for debugging",
-	Annotations: map[string]string{
-		requiresVaultAnnotation: "false",
-	},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return printMetrics(cmd)
-	},
+// diagCmd is intentionally attached to the package-level rootCmd only:
+// NewRootCmd() does not include it, so the shipped CLI has no diag
+// command. This initializer runs after rootCmd is built (dependency
+// order) and preserves that exact tree shape.
+var _ = func() int {
+	rootCmd.AddCommand(newDiagCmd())
+	return 0
+}()
+
+func newDiagMetricsCmd() *cobra.Command {
+	diagMetricsCmd := &cobra.Command{
+		Use:   "metrics",
+		Short: "Print current metric values for debugging",
+		Annotations: map[string]string{
+			requiresVaultAnnotation: "false",
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return printMetrics(cmd)
+		},
+	}
+	return diagMetricsCmd
 }
 
 func printMetrics(cmd *cobra.Command) error {
@@ -57,10 +74,4 @@ func printMetrics(cmd *cobra.Command) error {
 
 	cmd.Print(buf.String())
 	return nil
-}
-
-func init() {
-	diagCmd.GroupID = cli.GroupIDAdministration
-	rootCmd.AddCommand(diagCmd)
-	diagCmd.AddCommand(diagMetricsCmd)
 }

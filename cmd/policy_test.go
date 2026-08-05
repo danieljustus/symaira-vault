@@ -8,7 +8,7 @@ import (
 )
 
 func TestPolicyValidateCmd_Success(t *testing.T) {
-	rootCmd = NewRootCmd()
+	rootCmd = newPackageRootCmd()
 	resetVaultState(t)
 	tmpDir := t.TempDir()
 	policyFile := filepath.Join(tmpDir, "test-policy.yaml")

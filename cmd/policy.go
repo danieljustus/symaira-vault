@@ -39,61 +39,69 @@ func safePolicyPath(policiesDir, name string) (string, error) {
 	return dest, nil
 }
 
-var policyValidateCmd = &cobra.Command{
-	Use:   "validate <file>",
-	Short: "Validate a policy file",
-	Long: `Validate a policy file for syntax and semantic errors.
+func newPolicyValidateCmd() *cobra.Command {
+	policyValidateCmd := &cobra.Command{
+		Use:   "validate <file>",
+		Short: "Validate a policy file",
+		Long: `Validate a policy file for syntax and semantic errors.
 
 Checks that the policy file has valid YAML structure, correct version,
 valid rule names, known actions, and well-formed conditions.
 
 Example:
   symvault policy validate ~/.config/symvault/policies/dev.yaml`,
-	Args: cobra.ExactArgs(1),
-	Annotations: map[string]string{
-		requiresVaultAnnotation: "false",
-	},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		path := args[0]
+		Args: cobra.ExactArgs(1),
+		Annotations: map[string]string{
+			requiresVaultAnnotation: "false",
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path := args[0]
 
-		// Expand ~ to home directory
-		if len(path) > 0 && path[0] == '~' {
-			home, err := os.UserHomeDir()
-			if err != nil {
-				return fmt.Errorf("cannot determine home directory: %w", err)
+			// Expand ~ to home directory
+			if len(path) > 0 && path[0] == '~' {
+				home, err := os.UserHomeDir()
+				if err != nil {
+					return fmt.Errorf("cannot determine home directory: %w", err)
+				}
+				path = filepath.Join(home, path[1:])
 			}
-			path = filepath.Join(home, path[1:])
-		}
 
-		p, err := policy.LoadPolicy(path)
-		if err != nil {
-			cmd.Printf("❌ Policy validation failed for %s\n", path)
-			return err
-		}
+			p, err := policy.LoadPolicy(path)
+			if err != nil {
+				cmd.Printf("❌ Policy validation failed for %s\n", path)
+				return err
+			}
 
-		cmd.Printf("✅ Policy %q is valid\n", p.Version)
-		if p.Description != "" {
-			cmd.Printf("   Description: %s\n", p.Description)
-		}
-		cmd.Printf("   Rules: %d\n", len(p.Rules))
-		for _, rule := range p.Rules {
-			cmd.Printf("   - %s (priority: %d, action: %s)\n", rule.Name, rule.Priority, rule.Action)
-		}
-		return nil
-	},
+			cmd.Printf("✅ Policy %q is valid\n", p.Version)
+			if p.Description != "" {
+				cmd.Printf("   Description: %s\n", p.Description)
+			}
+			cmd.Printf("   Rules: %d\n", len(p.Rules))
+			for _, rule := range p.Rules {
+				cmd.Printf("   - %s (priority: %d, action: %s)\n", rule.Name, rule.Priority, rule.Action)
+			}
+			return nil
+		},
+	}
+	return policyValidateCmd
 }
 
-var policyCmd = &cobra.Command{
-	Use:   "policy",
-	Short: "Manage declarative policies",
-	Long: `Manage context-aware auto-approval policies for MCP tool calls.
+// policyCmd is retained for API compatibility; NewCommands() uses
+// newPolicyCmd() so every call gets a fresh command.
+var policyCmd = newPolicyCmd()
+
+func newPolicyCmd() *cobra.Command {
+	c := &cobra.Command{
+		Use:   "policy",
+		Short: "Manage declarative policies",
+		Long: `Manage context-aware auto-approval policies for MCP tool calls.
 
 Policies are YAML files stored in the vault's "policies" directory
 (<vault>/policies). The MCP server loads policies from this same location,
 so a policy applied with "policy apply" is enforced by the server.
 They define rules for when tool calls should be allowed, denied,
 prompted, or require biometric authentication.`,
-	Example: `  # Validate a policy file before activating it
+		Example: `  # Validate a policy file before activating it
   symvault policy validate ./my-policy.yaml
 
   # Apply a policy
@@ -104,133 +112,141 @@ prompted, or require biometric authentication.`,
 
   # Remove a named policy (use the file name shown by 'policy list')
   symvault policy remove dev.yaml`,
-	Annotations: map[string]string{
-		requiresVaultAnnotation: "false",
-	},
+		Annotations: map[string]string{
+			requiresVaultAnnotation: "false",
+		},
+	}
+	c.AddCommand(newPolicyValidateCmd())
+	c.AddCommand(newPolicyApplyCmd())
+	c.AddCommand(newPolicyListCmd())
+	c.AddCommand(newPolicyRemoveCmd())
+	c.GroupID = cli.GroupIDAdministration
+	return c
 }
 
-var policyApplyCmd = &cobra.Command{
-	Use:   "apply <file>",
-	Short: "Apply a policy file to the vault",
-	Long: `Load and validate a policy file, then copy it to the vault's policies directory.
+func newPolicyApplyCmd() *cobra.Command {
+	policyApplyCmd := &cobra.Command{
+		Use:   "apply <file>",
+		Short: "Apply a policy file to the vault",
+		Long: `Load and validate a policy file, then copy it to the vault's policies directory.
 
 Example:
   symvault policy apply ~/policies/dev.yaml`,
-	Args: cobra.ExactArgs(1),
-	Annotations: map[string]string{
-		requiresVaultAnnotation: "false",
-	},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		sourcePath := args[0]
-		if len(sourcePath) > 0 && sourcePath[0] == '~' {
-			home, err := os.UserHomeDir()
-			if err != nil {
-				return fmt.Errorf("cannot determine home directory: %w", err)
+		Args: cobra.ExactArgs(1),
+		Annotations: map[string]string{
+			requiresVaultAnnotation: "false",
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			sourcePath := args[0]
+			if len(sourcePath) > 0 && sourcePath[0] == '~' {
+				home, err := os.UserHomeDir()
+				if err != nil {
+					return fmt.Errorf("cannot determine home directory: %w", err)
+				}
+				sourcePath = filepath.Join(home, sourcePath[1:])
 			}
-			sourcePath = filepath.Join(home, sourcePath[1:])
-		}
 
-		p, err := policy.LoadPolicy(sourcePath)
-		if err != nil {
-			cmd.Printf("❌ Policy validation failed for %s\n", sourcePath)
-			return err
-		}
+			p, err := policy.LoadPolicy(sourcePath)
+			if err != nil {
+				cmd.Printf("❌ Policy validation failed for %s\n", sourcePath)
+				return err
+			}
 
-		vaultDir, _ := cli.VaultPath()
-		policiesDir := policy.VaultPolicyDir(vaultDir)
+			vaultDir, _ := cli.VaultPath()
+			policiesDir := policy.VaultPolicyDir(vaultDir)
 
-		destPath, err := safePolicyPath(policiesDir, filepath.Base(sourcePath))
-		if err != nil {
-			return err
-		}
+			destPath, err := safePolicyPath(policiesDir, filepath.Base(sourcePath))
+			if err != nil {
+				return err
+			}
 
-		if mkdirErr := fsutil.SafeMkdirAll(policiesDir, 0750); mkdirErr != nil {
-			return fmt.Errorf("create policies directory: %w", mkdirErr)
-		}
+			if mkdirErr := fsutil.SafeMkdirAll(policiesDir, 0750); mkdirErr != nil {
+				return fmt.Errorf("create policies directory: %w", mkdirErr)
+			}
 
-		data, err := os.ReadFile(sourcePath) //#nosec G304 -- sourcePath is validated by LoadPolicy above
-		if err != nil {
-			return fmt.Errorf("read policy file: %w", err)
-		}
+			data, err := os.ReadFile(sourcePath) //#nosec G304 -- sourcePath is validated by LoadPolicy above
+			if err != nil {
+				return fmt.Errorf("read policy file: %w", err)
+			}
 
-		if writeErr := fsutil.SafeWriteFile(destPath, data, 0640); writeErr != nil {
-			return fmt.Errorf("write policy file: %w", writeErr)
-		}
+			if writeErr := fsutil.SafeWriteFile(destPath, data, 0640); writeErr != nil {
+				return fmt.Errorf("write policy file: %w", writeErr)
+			}
 
-		cmd.Printf("✅ Policy %q applied (%d rules)\n", p.Version, len(p.Rules))
-		return nil
-	},
+			cmd.Printf("✅ Policy %q applied (%d rules)\n", p.Version, len(p.Rules))
+			return nil
+		},
+	}
+	return policyApplyCmd
 }
 
-var policyListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List all applied policies",
-	Long:  `List all policy files in the vault's policies directory.`,
-	Annotations: map[string]string{
-		requiresVaultAnnotation: "false",
-	},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		vaultDir, _ := cli.VaultPath()
-		policiesDir := policy.VaultPolicyDir(vaultDir)
+func newPolicyListCmd() *cobra.Command {
+	policyListCmd := &cobra.Command{
+		Use:   "list",
+		Short: "List all applied policies",
+		Long:  `List all policy files in the vault's policies directory.`,
+		Annotations: map[string]string{
+			requiresVaultAnnotation: "false",
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			vaultDir, _ := cli.VaultPath()
+			policiesDir := policy.VaultPolicyDir(vaultDir)
 
-		entries, err := os.ReadDir(policiesDir)
-		if err != nil {
-			if os.IsNotExist(err) {
-				cmd.Println("No policies directory found.")
+			entries, err := os.ReadDir(policiesDir)
+			if err != nil {
+				if os.IsNotExist(err) {
+					cmd.Println("No policies directory found.")
+					return nil
+				}
+				return fmt.Errorf("read policies directory: %w", err)
+			}
+
+			if len(entries) == 0 {
+				cmd.Println("No policies applied.")
 				return nil
 			}
-			return fmt.Errorf("read policies directory: %w", err)
-		}
 
-		if len(entries) == 0 {
-			cmd.Println("No policies applied.")
-			return nil
-		}
-
-		for _, entry := range entries {
-			if entry.IsDir() {
-				continue
+			for _, entry := range entries {
+				if entry.IsDir() {
+					continue
+				}
+				cmd.Printf("  - %s\n", entry.Name())
 			}
-			cmd.Printf("  - %s\n", entry.Name())
-		}
-		return nil
-	},
+			return nil
+		},
+	}
+	return policyListCmd
 }
 
-var policyRemoveCmd = &cobra.Command{
-	Use:   "remove <name>",
-	Short: "Remove an applied policy",
-	Long:  `Remove a policy file from the vault's policies directory.`,
-	Args:  cobra.ExactArgs(1),
-	Annotations: map[string]string{
-		requiresVaultAnnotation: "false",
-	},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		vaultDir, _ := cli.VaultPath()
-		policiesDir := policy.VaultPolicyDir(vaultDir)
+func newPolicyRemoveCmd() *cobra.Command {
+	policyRemoveCmd := &cobra.Command{
+		Use:   "remove <name>",
+		Short: "Remove an applied policy",
+		Long:  `Remove a policy file from the vault's policies directory.`,
+		Args:  cobra.ExactArgs(1),
+		Annotations: map[string]string{
+			requiresVaultAnnotation: "false",
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			vaultDir, _ := cli.VaultPath()
+			policiesDir := policy.VaultPolicyDir(vaultDir)
 
-		policyPath, err := safePolicyPath(policiesDir, args[0])
-		if err != nil {
-			return err
-		}
+			policyPath, err := safePolicyPath(policiesDir, args[0])
+			if err != nil {
+				return err
+			}
 
-		if _, statErr := os.Stat(policyPath); os.IsNotExist(statErr) {
-			return fmt.Errorf("policy %q not found", args[0])
-		}
+			if _, statErr := os.Stat(policyPath); os.IsNotExist(statErr) {
+				return fmt.Errorf("policy %q not found", args[0])
+			}
 
-		if err := fsutil.SafeRemove(policyPath); err != nil {
-			return fmt.Errorf("remove policy: %w", err)
-		}
+			if err := fsutil.SafeRemove(policyPath); err != nil {
+				return fmt.Errorf("remove policy: %w", err)
+			}
 
-		cmd.Printf("✅ Policy %q removed\n", args[0])
-		return nil
-	},
-}
-
-func init() {
-	policyCmd.AddCommand(policyValidateCmd)
-	policyCmd.AddCommand(policyApplyCmd)
-	policyCmd.AddCommand(policyListCmd)
-	policyCmd.AddCommand(policyRemoveCmd)
-	policyCmd.GroupID = cli.GroupIDAdministration
+			cmd.Printf("✅ Policy %q removed\n", args[0])
+			return nil
+		},
+	}
+	return policyRemoveCmd
 }
