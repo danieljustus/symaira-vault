@@ -3,6 +3,8 @@ package auth
 import (
 	"testing"
 
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
+
 	"github.com/spf13/cobra"
 )
 
@@ -49,5 +51,74 @@ func TestNewCommands_FreshTrees(t *testing.T) {
 		if !childNames[want] {
 			t.Errorf("auth command missing child %q", want)
 		}
+	}
+}
+
+// TestNewCommands_Assembly guards the wiring contract of the assembled tree:
+// group IDs, child wiring, and per-command flags must survive constructor
+// refactors.
+func TestNewCommands_Assembly(t *testing.T) {
+	cmds := NewCommands()
+	byName := map[string]*cobra.Command{}
+	for _, c := range cmds {
+		byName[c.Name()] = c
+	}
+
+	for _, name := range []string{"auth", "lock", "unlock"} {
+		if byName[name] == nil {
+			t.Fatalf("NewCommands() missing %q", name)
+		}
+	}
+
+	if got := byName["auth"].GroupID; got != cli.GroupIDAuthAccess {
+		t.Errorf("auth GroupID = %q, want %q", got, cli.GroupIDAuthAccess)
+	}
+	if got := byName["lock"].GroupID; got != cli.GroupIDAuthAccess {
+		t.Errorf("lock GroupID = %q, want %q", got, cli.GroupIDAuthAccess)
+	}
+	if got := byName["unlock"].GroupID; got != cli.GroupIDAuthAccess {
+		t.Errorf("unlock GroupID = %q, want %q", got, cli.GroupIDAuthAccess)
+	}
+
+	status := byName["auth"].Commands()
+	if len(status) != 3 {
+		t.Fatalf("auth has %d children, want 3", len(status))
+	}
+	var statusCmd *cobra.Command
+	for _, c := range status {
+		if c.Name() == "status" {
+			statusCmd = c
+		}
+	}
+	if statusCmd == nil {
+		t.Fatal("auth missing status child")
+	}
+	if statusCmd.Flags().Lookup("json") == nil {
+		t.Error("status command missing --json flag")
+	}
+
+	unlock := byName["unlock"]
+	if unlock.Flags().Lookup("ttl") == nil {
+		t.Error("unlock command missing --ttl flag")
+	}
+	if unlock.Flags().Lookup("check") == nil {
+		t.Error("unlock command missing --check flag")
+	}
+
+	rotate := byName["auth"].Commands()
+	var rotateCmd *cobra.Command
+	for _, c := range rotate {
+		if c.Name() == "rotate-passphrase" {
+			rotateCmd = c
+		}
+	}
+	if rotateCmd == nil {
+		t.Fatal("auth missing rotate-passphrase child")
+	}
+	if rotateCmd.Flags().Lookup("reencrypt") == nil {
+		t.Error("rotate command missing --reencrypt flag")
+	}
+	if rotateCmd.Flags().Lookup("yes") == nil {
+		t.Error("rotate command missing --yes flag")
 	}
 }
