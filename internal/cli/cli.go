@@ -117,7 +117,7 @@ type CLIContext struct {
 func NewCLIContext() *CLIContext {
 	return &CLIContext{
 		Vault:        "~/" + configpkg.DefaultVaultSubdir,
-		OutputFormat: "text",
+		OutputFormat: outputFormatText,
 		ColorMode:    "auto",
 		Session:      DefaultSessionManager,
 		OsExit:       os.Exit,
@@ -129,7 +129,7 @@ func NewCLIContext() *CLIContext {
 func NewTestContext() *CLIContext {
 	return &CLIContext{
 		Vault:        "~/" + configpkg.DefaultVaultSubdir,
-		OutputFormat: "text",
+		OutputFormat: outputFormatText,
 		ColorMode:    "auto",
 		Session:      DefaultSessionManager,
 		OsExit:       os.Exit,
@@ -199,6 +199,9 @@ const (
 	GroupIDAdministration = "administration"
 )
 
+// outputFormatText is the default plain-text output format name.
+const outputFormatText = "text"
+
 // commandGroups declares the help-output groups for the root command in
 // display order.
 var commandGroups = []*cobra.Group{
@@ -236,7 +239,7 @@ Daily use:
 		SilenceUsage:  true,
 		SilenceErrors: false,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			if OutputFormat != "text" {
+			if OutputFormat != outputFormatText {
 				if !CommandSupportsJSON(cmd) {
 					return errorspkg.NewCLIError(errorspkg.ExitUsage,
 						fmt.Sprintf("output format %q is not supported by '%s' (supported commands: admin config get, delete, device list, find, generate, get, list, mcp agent install, mcp agent list, recipients, remote, share, template generate)", OutputFormat, cmd.CommandPath()),
@@ -270,7 +273,7 @@ Daily use:
 	root.PersistentFlags().StringVar(&Profile, "profile", "", "use a named vault profile")
 	ProfileFlag = root.PersistentFlags().Lookup("profile")
 	_ = root.RegisterFlagCompletionFunc("profile", ProfileCompletionFunc)
-	root.PersistentFlags().StringVar(&OutputFormat, "output", "text", "Output format (text, json, yaml)")
+	root.PersistentFlags().StringVar(&OutputFormat, "output", outputFormatText, "Output format (text, json, yaml)")
 	root.PersistentFlags().BoolVar(&NoPipeWarning, "no-pipe-warning", false, "suppress 'reading from non-TTY' warning when piping secrets")
 	root.PersistentFlags().StringVar(&ColorMode, "color", "auto", "When to emit ANSI color: auto, always, never")
 	root.PersistentFlags().StringVar(&ThemePreset, "theme", "", "Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)")
