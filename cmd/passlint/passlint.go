@@ -11,7 +11,6 @@
 package passlint
 
 import (
-	"fmt"
 	"go/ast"
 	"go/token"
 	"go/types"
@@ -149,11 +148,4 @@ func checkBinary(pass *analysis.Pass, expr *ast.BinaryExpr) {
 // NewAnalyzer returns the passlint analyzer (convenience for embedding).
 func NewAnalyzer() *analysis.Analyzer {
 	return Analyzer
-}
-
-func init() {
-	// Ensure Analyzer is properly set up.
-	if Analyzer == nil {
-		panic(fmt.Errorf("passlint: Analyzer is nil"))
-	}
 }

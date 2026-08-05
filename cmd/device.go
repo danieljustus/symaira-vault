@@ -29,25 +29,40 @@ var (
 	deviceRevokeYes   bool
 )
 
-var deviceCmd = &cobra.Command{
-	Use:   "device",
-	Short: "Manage paired devices for multi-device vault access",
-	Long: `Manage paired devices that can access this vault.
+// deviceCmd is retained for API compatibility; NewCommands() uses
+// newDeviceCmd() so every call gets a fresh command.
+var deviceCmd = newDeviceCmd()
+
+func newDeviceCmd() *cobra.Command {
+	deviceCmd := &cobra.Command{
+		Use:   "device",
+		Short: "Manage paired devices for multi-device vault access",
+		Long: `Manage paired devices that can access this vault.
 
 Use 'symvault device pair' to generate a pairing token for a new device,
 and 'symvault device join' on the new device to join the vault.`,
-	Example: `  symvault device pair
+		Example: `  symvault device pair
   symvault device join ssh://user@host/path/to/vault.git <token>
   symvault device accept <token>`,
-	Annotations: map[string]string{
-		cli.JSONOutputAnnotation: "true",
-	},
+		Annotations: map[string]string{
+			cli.JSONOutputAnnotation: "true",
+		},
+	}
+	deviceCmd.GroupID = cli.GroupIDSharingSync
+	deviceCmd.AddCommand(newDevicePairCmd())
+	deviceCmd.AddCommand(newDeviceJoinCmd())
+	deviceCmd.AddCommand(newDeviceAcceptCmd())
+	deviceCmd.AddCommand(newDeviceListCmd())
+	deviceCmd.AddCommand(newDeviceRevokeCmd())
+	deviceCmd.AddCommand(newDeviceAddCmd())
+	return deviceCmd
 }
 
-var devicePairCmd = &cobra.Command{
-	Use:   "pair",
-	Short: "Generate a pairing token for a new device",
-	Long: `Generate a pairing token that another device can use to join this vault.
+func newDevicePairCmd() *cobra.Command {
+	devicePairCmd := &cobra.Command{
+		Use:   "pair",
+		Short: "Generate a pairing token for a new device",
+		Long: `Generate a pairing token that another device can use to join this vault.
 
 This saves the pairing token and this device's public key to the vault,
 commits and pushes the token file. The joining device reads this file
@@ -56,55 +71,58 @@ to obtain this device's public key for encryption.
 IMPORTANT: After the joining device submits its public key (via 'symvault device join'),
 you must run 'symvault device accept <token>' to re-encrypt all entries
 for the new device.`,
-	Example: `  symvault device pair`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		vaultDir, err := cli.VaultPath()
-		if err != nil {
-			return err
-		}
+		Example: `  symvault device pair`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			vaultDir, err := cli.VaultPath()
+			if err != nil {
+				return err
+			}
 
-		v, err := cli.UnlockVault(vaultDir, true)
-		if err != nil {
-			return err
-		}
+			v, err := cli.UnlockVault(vaultDir, true)
+			if err != nil {
+				return err
+			}
 
-		token, err := pairing.GenerateToken()
-		if err != nil {
-			return fmt.Errorf("generate token: %w", err)
-		}
+			token, err := pairing.GenerateToken()
+			if err != nil {
+				return fmt.Errorf("generate token: %w", err)
+			}
 
-		publicKey := v.Identity.Recipient().String()
+			publicKey := v.Identity.Recipient().String()
 
-		pairingData := pairingFile{
-			Token:     string(token),
-			PublicKey: publicKey,
-			CreatedAt: time.Now().UTC(),
-		}
+			pairingData := pairingFile{
+				Token:     string(token),
+				PublicKey: publicKey,
+				CreatedAt: time.Now().UTC(),
+			}
 
-		if err := savePairingFile(vaultDir, string(token)+".json", pairingData); err != nil {
-			return fmt.Errorf("save pairing file: %w", err)
-		}
+			if err := savePairingFile(vaultDir, string(token)+".json", pairingData); err != nil {
+				return fmt.Errorf("save pairing file: %w", err)
+			}
 
-		if err := git.AutoCommitAndPush(vaultDir, fmt.Sprintf("Pairing token %s", token), v.Config.Git.AutoPush); err != nil {
-			cliout.Warnf("Warning: could not auto-commit/push: %v", err)
-		}
+			if err := git.AutoCommitAndPush(vaultDir, fmt.Sprintf("Pairing token %s", token), v.Config.Git.AutoPush); err != nil {
+				cliout.Warnf("Warning: could not auto-commit/push: %v", err)
+			}
 
-		printQuietAware("\n=== Pairing Token ===\n")
-		printQuietAware("Token: %s\n\n", token)
-		printQuietAware("This device's public key: %s\n", publicKey)
-		printQuietAware("\nOn the joining device, run:\n")
-		printQuietAware("  symvault device join <remote-url> %s\n\n", token)
-		printQuietAware("After the joining device has submitted its key, run:\n")
-		printQuietAware("  symvault device accept %s\n\n", token)
+			printQuietAware("\n=== Pairing Token ===\n")
+			printQuietAware("Token: %s\n\n", token)
+			printQuietAware("This device's public key: %s\n", publicKey)
+			printQuietAware("\nOn the joining device, run:\n")
+			printQuietAware("  symvault device join <remote-url> %s\n\n", token)
+			printQuietAware("After the joining device has submitted its key, run:\n")
+			printQuietAware("  symvault device accept %s\n\n", token)
 
-		return nil
-	},
+			return nil
+		},
+	}
+	return devicePairCmd
 }
 
-var deviceJoinCmd = &cobra.Command{
-	Use:   "join <remote-url> <token>",
-	Short: "Join an existing vault as a new device",
-	Long: `Join an existing vault from a remote git repository.
+func newDeviceJoinCmd() *cobra.Command {
+	deviceJoinCmd := &cobra.Command{
+		Use:   "join <remote-url> <token>",
+		Short: "Join an existing vault as a new device",
+		Long: `Join an existing vault from a remote git repository.
 
 Clones the vault repository, reads the pairing token file to obtain
 the existing device's public key, generates a new identity for this device,
@@ -112,307 +130,316 @@ and submits this device's public key back to the vault.
 
 After completion, the existing device must run 'symvault device accept <token>'
 to re-encrypt all entries for this new device.`,
-	Example: `  symvault device join ssh://user@host/path/to/vault.git 123456`,
-	Args:    cobra.ExactArgs(2),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		remoteURL := args[0]
-		token := strings.TrimSpace(args[1])
+		Example: `  symvault device join ssh://user@host/path/to/vault.git 123456`,
+		Args:    cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			remoteURL := args[0]
+			token := strings.TrimSpace(args[1])
 
-		if err := pairing.ValidatePairingToken(token); err != nil {
-			return fmt.Errorf("invalid pairing token: %w", err)
-		}
-
-		vaultDir, err := cli.VaultPath()
-		if err != nil {
-			return err
-		}
-
-		if vaultpkg.IsInitialized(vaultDir) {
-			return fmt.Errorf("vault already initialized at %s. Use a different --vault or remove the existing vault first", vaultDir)
-		}
-
-		cliout.Hintf("Cloning vault from %s ...", remoteURL)
-		if _, err = gogit.PlainClone(vaultDir, false, &gogit.CloneOptions{
-			URL:      remoteURL,
-			Progress: os.Stderr,
-		}); err != nil {
-			return fmt.Errorf("clone vault: %w", err)
-		}
-
-		pairingPath := filepath.Join(vaultDir, configpkg.DefaultVaultSubdir, "pairing", token+".json")
-		var pf pairingFile
-		// #nosec G304 -- pairingPath is constructed within the vault directory
-		pfData, err := vaultpkg.SafeReadFile(pairingPath)
-		if err != nil {
-			return fmt.Errorf("invalid or expired pairing token: could not read pairing file. Ensure the token is correct and the pairing device has pushed the token file: %w", err)
-		}
-		if err = json.Unmarshal(pfData, &pf); err != nil {
-			return fmt.Errorf("invalid pairing file: %w", err)
-		}
-
-		cliout.Hintf("Pairing with device (public key: %s)", truncatePubkey(pf.PublicKey))
-
-		passphrase, err := cli.ReadHiddenInput("Enter passphrase for this device (minimum 12 characters): ", nil)
-		if err != nil {
-			return fmt.Errorf("read passphrase: %w", err)
-		}
-		defer cryptopkg.Wipe(passphrase)
-		if len(passphrase) < 12 {
-			return fmt.Errorf("passphrase must be at least 12 characters")
-		}
-
-		identity, err := cryptopkg.GenerateIdentity()
-		if err != nil {
-			return fmt.Errorf("generate identity: %w", err)
-		}
-		myPubkey := identity.Recipient().String()
-
-		cfg := configpkg.Default()
-		cfg.VaultDir = vaultDir
-		cfg.Git = &configpkg.GitConfig{
-			AutoPush:         true,
-			AutoPull:         true,
-			AutoPullInterval: 10 * time.Second,
-			CommitTemplate:   "Update from Symaira Vault",
-		}
-
-		cfgPath := filepath.Join(vaultDir, "config.yaml")
-		cfgData, err := yaml.Marshal(cfg)
-		if err != nil {
-			return fmt.Errorf("marshal config: %w", err)
-		}
-		if err := os.WriteFile(cfgPath, cfgData, 0o600); err != nil {
-			return fmt.Errorf("write config: %w", err)
-		}
-
-		identityPath := filepath.Join(vaultDir, "identity.age")
-		if err := cryptopkg.SaveIdentity(identity, identityPath, passphrase, 0); err != nil {
-			return fmt.Errorf("save identity: %w", err)
-		}
-
-		recipientsPath := filepath.Join(vaultDir, "recipients.txt")
-		recipientsContent := fmt.Sprintf("# Symaira Vault vault recipients\n# Added by device join\n%s\n", pf.PublicKey)
-		if err := os.WriteFile(recipientsPath, []byte(recipientsContent), 0o600); err != nil {
-			return fmt.Errorf("write recipients: %w", err)
-		}
-
-		joinedData := joinedFile{
-			Token:     token,
-			Name:      defaultDeviceName,
-			PublicKey: myPubkey,
-			CreatedAt: time.Now().UTC(),
-		}
-		if defaultDeviceName == "" {
-			hostname, _ := os.Hostname()
-			if hostname != "" {
-				joinedData.Name = hostname
-			} else {
-				joinedData.Name = "device-" + token
+			if err := pairing.ValidatePairingToken(token); err != nil {
+				return fmt.Errorf("invalid pairing token: %w", err)
 			}
-		}
 
-		if err := savePairingFile(vaultDir, token+"-joined.json", joinedData); err != nil {
-			return fmt.Errorf("save joined file: %w", err)
-		}
+			vaultDir, err := cli.VaultPath()
+			if err != nil {
+				return err
+			}
 
-		cleanupPairingFile := filepath.Join(vaultDir, configpkg.DefaultVaultSubdir, "pairing", token+".json")
-		_ = os.Remove(cleanupPairingFile)
+			if vaultpkg.IsInitialized(vaultDir) {
+				return fmt.Errorf("vault already initialized at %s. Use a different --vault or remove the existing vault first", vaultDir)
+			}
 
-		if err := git.AutoCommitWithOptions(vaultDir, git.CommitOptions{
-			Message: fmt.Sprintf("Device join: %s (token %s)", joinedData.Name, token),
-		}); err != nil {
-			return fmt.Errorf("commit: %w", err)
-		}
+			cliout.Hintf("Cloning vault from %s ...", remoteURL)
+			if _, err = gogit.PlainClone(vaultDir, false, &gogit.CloneOptions{
+				URL:      remoteURL,
+				Progress: os.Stderr,
+			}); err != nil {
+				return fmt.Errorf("clone vault: %w", err)
+			}
 
-		cliout.Hintf("=== Join Successful ===")
-		printQuietAware("\nYour public key: %s\n", myPubkey)
-		printQuietAware("Device name: %s\n\n", joinedData.Name)
-		printQuietAware("IMPORTANT: Entries cannot be decrypted yet.\n")
-		printQuietAware("On the existing device, run:\n")
-		printQuietAware("  symvault device accept %s\n\n", token)
+			pairingPath := filepath.Join(vaultDir, configpkg.DefaultVaultSubdir, "pairing", token+".json")
+			var pf pairingFile
+			// #nosec G304 -- pairingPath is constructed within the vault directory
+			pfData, err := vaultpkg.SafeReadFile(pairingPath)
+			if err != nil {
+				return fmt.Errorf("invalid or expired pairing token: could not read pairing file. Ensure the token is correct and the pairing device has pushed the token file: %w", err)
+			}
+			if err = json.Unmarshal(pfData, &pf); err != nil {
+				return fmt.Errorf("invalid pairing file: %w", err)
+			}
 
-		if err := git.Push(vaultDir); err != nil {
-			cliout.Warnf("Warning: Could not push joined file: %v", err)
-			cliout.Hintf("Push manually with: symvault git push")
-		}
+			cliout.Hintf("Pairing with device (public key: %s)", truncatePubkey(pf.PublicKey))
 
-		return nil
-	},
+			passphrase, err := cli.ReadHiddenInput("Enter passphrase for this device (minimum 12 characters): ", nil)
+			if err != nil {
+				return fmt.Errorf("read passphrase: %w", err)
+			}
+			defer cryptopkg.Wipe(passphrase)
+			if len(passphrase) < 12 {
+				return fmt.Errorf("passphrase must be at least 12 characters")
+			}
+
+			identity, err := cryptopkg.GenerateIdentity()
+			if err != nil {
+				return fmt.Errorf("generate identity: %w", err)
+			}
+			myPubkey := identity.Recipient().String()
+
+			cfg := configpkg.Default()
+			cfg.VaultDir = vaultDir
+			cfg.Git = &configpkg.GitConfig{
+				AutoPush:         true,
+				AutoPull:         true,
+				AutoPullInterval: 10 * time.Second,
+				CommitTemplate:   "Update from Symaira Vault",
+			}
+
+			cfgPath := filepath.Join(vaultDir, "config.yaml")
+			cfgData, err := yaml.Marshal(cfg)
+			if err != nil {
+				return fmt.Errorf("marshal config: %w", err)
+			}
+			if err := os.WriteFile(cfgPath, cfgData, 0o600); err != nil {
+				return fmt.Errorf("write config: %w", err)
+			}
+
+			identityPath := filepath.Join(vaultDir, "identity.age")
+			if err := cryptopkg.SaveIdentity(identity, identityPath, passphrase, 0); err != nil {
+				return fmt.Errorf("save identity: %w", err)
+			}
+
+			recipientsPath := filepath.Join(vaultDir, "recipients.txt")
+			recipientsContent := fmt.Sprintf("# Symaira Vault vault recipients\n# Added by device join\n%s\n", pf.PublicKey)
+			if err := os.WriteFile(recipientsPath, []byte(recipientsContent), 0o600); err != nil {
+				return fmt.Errorf("write recipients: %w", err)
+			}
+
+			joinedData := joinedFile{
+				Token:     token,
+				Name:      defaultDeviceName,
+				PublicKey: myPubkey,
+				CreatedAt: time.Now().UTC(),
+			}
+			if defaultDeviceName == "" {
+				hostname, _ := os.Hostname()
+				if hostname != "" {
+					joinedData.Name = hostname
+				} else {
+					joinedData.Name = "device-" + token
+				}
+			}
+
+			if err := savePairingFile(vaultDir, token+"-joined.json", joinedData); err != nil {
+				return fmt.Errorf("save joined file: %w", err)
+			}
+
+			cleanupPairingFile := filepath.Join(vaultDir, configpkg.DefaultVaultSubdir, "pairing", token+".json")
+			_ = os.Remove(cleanupPairingFile)
+
+			if err := git.AutoCommitWithOptions(vaultDir, git.CommitOptions{
+				Message: fmt.Sprintf("Device join: %s (token %s)", joinedData.Name, token),
+			}); err != nil {
+				return fmt.Errorf("commit: %w", err)
+			}
+
+			cliout.Hintf("=== Join Successful ===")
+			printQuietAware("\nYour public key: %s\n", myPubkey)
+			printQuietAware("Device name: %s\n\n", joinedData.Name)
+			printQuietAware("IMPORTANT: Entries cannot be decrypted yet.\n")
+			printQuietAware("On the existing device, run:\n")
+			printQuietAware("  symvault device accept %s\n\n", token)
+
+			if err := git.Push(vaultDir); err != nil {
+				cliout.Warnf("Warning: Could not push joined file: %v", err)
+				cliout.Hintf("Push manually with: symvault git push")
+			}
+
+			return nil
+		},
+	}
+	deviceJoinCmd.Flags().StringVar(&defaultDeviceName, "name", "", "Name for this device (defaults to hostname)")
+	return deviceJoinCmd
 }
 
-var deviceAcceptCmd = &cobra.Command{
-	Use:   "accept <token>",
-	Short: "Accept a join request and re-encrypt entries for the new device",
-	Long: `Accept a device join request by adding the new device's public key
+func newDeviceAcceptCmd() *cobra.Command {
+	deviceAcceptCmd := &cobra.Command{
+		Use:   "accept <token>",
+		Short: "Accept a join request and re-encrypt entries for the new device",
+		Long: `Accept a device join request by adding the new device's public key
 as a recipient and re-encrypting all vault entries so the new device
 can decrypt them.`,
-	Example: `  symvault device accept 123456`,
-	Args:    cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		token := strings.TrimSpace(args[0])
+		Example: `  symvault device accept 123456`,
+		Args:    cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			token := strings.TrimSpace(args[0])
 
-		if err := pairing.ValidatePairingToken(token); err != nil {
-			return fmt.Errorf("invalid pairing token: %w", err)
-		}
+			if err := pairing.ValidatePairingToken(token); err != nil {
+				return fmt.Errorf("invalid pairing token: %w", err)
+			}
 
-		vaultDir, err := cli.VaultPath()
-		if err != nil {
-			return err
-		}
+			vaultDir, err := cli.VaultPath()
+			if err != nil {
+				return err
+			}
 
-		v, err := cli.UnlockVault(vaultDir, true)
-		if err != nil {
-			return err
-		}
+			v, err := cli.UnlockVault(vaultDir, true)
+			if err != nil {
+				return err
+			}
 
-		joinedPath := filepath.Join(vaultDir, configpkg.DefaultVaultSubdir, "pairing", token+"-joined.json")
-		var jf joinedFile
-		// #nosec G304 -- joinedPath is constructed within the vault directory
-		jfData, err := vaultpkg.SafeReadFile(joinedPath)
-		if err != nil {
-			return fmt.Errorf("no join request found for token %s. Ensure the joining device has completed 'symvault device join' and pushed: %w", token, err)
-		}
-		if err = json.Unmarshal(jfData, &jf); err != nil {
-			return fmt.Errorf("parse joined file: %w", err)
-		}
+			joinedPath := filepath.Join(vaultDir, configpkg.DefaultVaultSubdir, "pairing", token+"-joined.json")
+			var jf joinedFile
+			// #nosec G304 -- joinedPath is constructed within the vault directory
+			jfData, err := vaultpkg.SafeReadFile(joinedPath)
+			if err != nil {
+				return fmt.Errorf("no join request found for token %s. Ensure the joining device has completed 'symvault device join' and pushed: %w", token, err)
+			}
+			if err = json.Unmarshal(jfData, &jf); err != nil {
+				return fmt.Errorf("parse joined file: %w", err)
+			}
 
-		cliout.Hintf("Accepting join from device: %s (public key: %s)", jf.Name, truncatePubkey(jf.PublicKey))
+			cliout.Hintf("Accepting join from device: %s (public key: %s)", jf.Name, truncatePubkey(jf.PublicKey))
 
-		rm := vaultpkg.NewRecipientsManager(vaultDir)
-		if err = rm.AddRecipient(jf.PublicKey); err != nil {
-			return fmt.Errorf("add recipient: %w", err)
-		}
+			rm := vaultpkg.NewRecipientsManager(vaultDir)
+			if err = rm.AddRecipient(jf.PublicKey); err != nil {
+				return fmt.Errorf("add recipient: %w", err)
+			}
 
-		allRecipients, err := v.GetAllRecipientsForEncryption()
-		if err != nil {
-			return fmt.Errorf("get recipients: %w", err)
-		}
+			allRecipients, err := v.GetAllRecipientsForEncryption()
+			if err != nil {
+				return fmt.Errorf("get recipients: %w", err)
+			}
 
-		cliout.Hintf("Re-encrypting all entries for %d recipient(s)...", len(allRecipients))
-		if err := vaultpkg.ReencryptAll(vaultDir, v.Identity, allRecipients); err != nil {
-			return fmt.Errorf("re-encrypt: %w", err)
-		}
+			cliout.Hintf("Re-encrypting all entries for %d recipient(s)...", len(allRecipients))
+			if err := vaultpkg.ReencryptAll(vaultDir, v.Identity, allRecipients); err != nil {
+				return fmt.Errorf("re-encrypt: %w", err)
+			}
 
-		_ = os.Remove(joinedPath)
+			_ = os.Remove(joinedPath)
 
-		if err := git.AutoCommitAndPush(vaultDir, fmt.Sprintf("Accept device join: %s", jf.Name), v.Config.Git.AutoPush); err != nil {
-			cliout.Warnf("Warning: could not auto-commit/push: %v", err)
-		}
+			if err := git.AutoCommitAndPush(vaultDir, fmt.Sprintf("Accept device join: %s", jf.Name), v.Config.Git.AutoPush); err != nil {
+				cliout.Warnf("Warning: could not auto-commit/push: %v", err)
+			}
 
-		printQuietAware("\n=== Pairing Complete ===\n")
-		printQuietAware("Device %q can now access all vault entries.\n\n", jf.Name)
-		printQuietAware("On the joining device, run 'symvault git pull' to fetch the re-encrypted entries.\n")
+			printQuietAware("\n=== Pairing Complete ===\n")
+			printQuietAware("Device %q can now access all vault entries.\n\n", jf.Name)
+			printQuietAware("On the joining device, run 'symvault git pull' to fetch the re-encrypted entries.\n")
 
-		return nil
-	},
+			return nil
+		},
+	}
+	return deviceAcceptCmd
 }
 
-var deviceListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List all devices",
-	Long: `List all devices registered in the vault's device registry.
+func newDeviceListCmd() *cobra.Command {
+	deviceListCmd := &cobra.Command{
+		Use:   "list",
+		Short: "List all devices",
+		Long: `List all devices registered in the vault's device registry.
 
 Shows device name, public key (truncated), added date, and last seen time.
 Also shows recipients from recipients.txt that are not associated with
 any registered device (unmanaged recipients).`,
-	Example: `  symvault device list
+		Example: `  symvault device list
   symvault device list --output json`,
-	Annotations: map[string]string{
-		cli.JSONOutputAnnotation: "true",
-	},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		vaultDir, err := cli.VaultPath()
-		if err != nil {
-			return err
-		}
-
-		dm := vaultpkg.NewDeviceManager(vaultDir)
-		devices, err := dm.ListDevices()
-		if err != nil {
-			return fmt.Errorf("list devices: %w", err)
-		}
-
-		rm := vaultpkg.NewRecipientsManager(vaultDir)
-		recipientStrs, err := rm.LoadRecipientStrings()
-		if err != nil {
-			recipientStrs = nil
-		}
-
-		deviceKeys := make(map[string]bool, len(devices))
-		for _, d := range devices {
-			deviceKeys[d.PublicKey] = true
-		}
-
-		var unmanaged []string
-		for _, r := range recipientStrs {
-			if !deviceKeys[r] {
-				unmanaged = append(unmanaged, r)
+		Annotations: map[string]string{
+			cli.JSONOutputAnnotation: "true",
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			vaultDir, err := cli.VaultPath()
+			if err != nil {
+				return err
 			}
-		}
 
-		if cli.OutputFormat == "json" || cli.OutputFormat == "yaml" {
-			type deviceOutput struct {
-				Name      string `json:"name" yaml:"name"`
-				PublicKey string `json:"public_key" yaml:"public_key"`
-				AddedAt   string `json:"added_at" yaml:"added_at"`
-				LastSeen  string `json:"last_seen,omitempty" yaml:"last_seen,omitempty"`
+			dm := vaultpkg.NewDeviceManager(vaultDir)
+			devices, err := dm.ListDevices()
+			if err != nil {
+				return fmt.Errorf("list devices: %w", err)
 			}
-			devOutput := make([]deviceOutput, 0, len(devices))
+
+			rm := vaultpkg.NewRecipientsManager(vaultDir)
+			recipientStrs, err := rm.LoadRecipientStrings()
+			if err != nil {
+				recipientStrs = nil
+			}
+
+			deviceKeys := make(map[string]bool, len(devices))
 			for _, d := range devices {
-				do := deviceOutput{
-					Name:      d.Name,
-					PublicKey: d.PublicKey,
-					AddedAt:   d.AddedAt.Format(time.RFC3339),
-				}
-				if d.LastSeen != nil {
-					do.LastSeen = d.LastSeen.Format(time.RFC3339)
-				}
-				devOutput = append(devOutput, do)
+				deviceKeys[d.PublicKey] = true
 			}
-			output := map[string]interface{}{
-				"devices": devOutput,
-				"count":   len(devices),
-			}
-			if len(unmanaged) > 0 {
-				output["unmanaged_recipients"] = unmanaged
-			}
-			return cli.PrintResult(output)
-		}
 
-		// Text output
-		if len(devices) == 0 {
-			printlnQuietAware("No devices registered.")
+			var unmanaged []string
+			for _, r := range recipientStrs {
+				if !deviceKeys[r] {
+					unmanaged = append(unmanaged, r)
+				}
+			}
+
+			if cli.OutputFormat == "json" || cli.OutputFormat == "yaml" {
+				type deviceOutput struct {
+					Name      string `json:"name" yaml:"name"`
+					PublicKey string `json:"public_key" yaml:"public_key"`
+					AddedAt   string `json:"added_at" yaml:"added_at"`
+					LastSeen  string `json:"last_seen,omitempty" yaml:"last_seen,omitempty"`
+				}
+				devOutput := make([]deviceOutput, 0, len(devices))
+				for _, d := range devices {
+					do := deviceOutput{
+						Name:      d.Name,
+						PublicKey: d.PublicKey,
+						AddedAt:   d.AddedAt.Format(time.RFC3339),
+					}
+					if d.LastSeen != nil {
+						do.LastSeen = d.LastSeen.Format(time.RFC3339)
+					}
+					devOutput = append(devOutput, do)
+				}
+				output := map[string]interface{}{
+					"devices": devOutput,
+					"count":   len(devices),
+				}
+				if len(unmanaged) > 0 {
+					output["unmanaged_recipients"] = unmanaged
+				}
+				return cli.PrintResult(output)
+			}
+
+			// Text output
+			if len(devices) == 0 {
+				printlnQuietAware("No devices registered.")
+				if len(unmanaged) > 0 {
+					printlnQuietAware("\nUnmanaged recipients in recipients.txt:")
+					for _, r := range unmanaged {
+						printlnQuietAware("  " + truncatePubkey(r))
+					}
+				}
+				return nil
+			}
+
+			printQuietAware("Devices (%d):\n\n", len(devices))
+			for _, d := range devices {
+				lastSeenStr := "never"
+				if d.LastSeen != nil {
+					lastSeenStr = d.LastSeen.Format(time.RFC3339)
+				}
+				printQuietAware("  %s\n", d.Name)
+				printQuietAware("    Public Key: %s\n", truncatePubkey(d.PublicKey))
+				printQuietAware("    Added:      %s\n", d.AddedAt.Format(time.RFC3339))
+				printQuietAware("    Last Seen:  %s\n\n", lastSeenStr)
+			}
+
 			if len(unmanaged) > 0 {
-				printlnQuietAware("\nUnmanaged recipients in recipients.txt:")
+				printlnQuietAware("Unmanaged recipients in recipients.txt:")
 				for _, r := range unmanaged {
 					printlnQuietAware("  " + truncatePubkey(r))
 				}
+				printlnQuietAware("")
 			}
+
 			return nil
-		}
-
-		printQuietAware("Devices (%d):\n\n", len(devices))
-		for _, d := range devices {
-			lastSeenStr := "never"
-			if d.LastSeen != nil {
-				lastSeenStr = d.LastSeen.Format(time.RFC3339)
-			}
-			printQuietAware("  %s\n", d.Name)
-			printQuietAware("    Public Key: %s\n", truncatePubkey(d.PublicKey))
-			printQuietAware("    Added:      %s\n", d.AddedAt.Format(time.RFC3339))
-			printQuietAware("    Last Seen:  %s\n\n", lastSeenStr)
-		}
-
-		if len(unmanaged) > 0 {
-			printlnQuietAware("Unmanaged recipients in recipients.txt:")
-			for _, r := range unmanaged {
-				printlnQuietAware("  " + truncatePubkey(r))
-			}
-			printlnQuietAware("")
-		}
-
-		return nil
-	},
+		},
+	}
+	return deviceListCmd
 }
 
 var (
@@ -420,243 +447,238 @@ var (
 	deviceAddName string
 )
 
-var deviceAddCmd = &cobra.Command{
-	Use:   "add",
-	Short: "Add this device to an existing multi-device vault",
-	Long: `Add this device to an existing multi-device vault using a pairing
+func newDeviceAddCmd() *cobra.Command {
+	deviceAddCmd := &cobra.Command{
+		Use:   "add",
+		Short: "Add this device to an existing multi-device vault",
+		Long: `Add this device to an existing multi-device vault using a pairing
 token and public key obtained via QR code from the original device.
 
 This command is used on the second device after the initial setup wizard
 shows a QR code. It creates a new local vault with its own identity,
 adds the first device's public key as a recipient, and saves a pairing
 request so the first device can accept it.`,
-	Example: `  symvault device add --pair "123456:age1..."`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		if !deviceAddPair {
-			return fmt.Errorf("use 'symvault device add --pair <token:publickey>' to pair a device")
-		}
-		if len(args) < 1 {
-			return fmt.Errorf("missing pairing data. Usage: symvault device add --pair <token> or <token:publickey>")
-		}
-
-		raw := strings.TrimSpace(args[0])
-
-		vaultDir, err := cli.VaultPath()
-		if err != nil {
-			return err
-		}
-
-		if vaultpkg.IsInitialized(vaultDir) {
-			return fmt.Errorf("vault already initialized at %s. Use a different --vault or remove the existing vault first", vaultDir)
-		}
-
-		// Parse QR data: token or token:publicKey
-		var token, existingPubkey string
-		if idx := strings.Index(raw, ":"); idx > 0 {
-			token = raw[:idx]
-			existingPubkey = raw[idx+1:]
-		} else {
-			token = raw
-		}
-
-		if valErr := pairing.ValidatePairingToken(token); valErr != nil {
-			return fmt.Errorf("invalid pairing token: %w", valErr)
-		}
-
-		if !strings.HasPrefix(existingPubkey, "age1") || len(existingPubkey) < 50 {
-			return fmt.Errorf("invalid public key in pairing data: expected age1... format")
-		}
-
-		passphrase, err := cli.ReadHiddenInput("Enter passphrase for this device (minimum 12 characters): ", nil)
-		if err != nil {
-			return fmt.Errorf("read passphrase: %w", err)
-		}
-		defer cryptopkg.Wipe(passphrase)
-		if len(passphrase) < 12 {
-			return fmt.Errorf("passphrase must be at least 12 characters")
-		}
-
-		// Generate identity for this device
-		identity, err := cryptopkg.GenerateIdentity()
-		if err != nil {
-			return fmt.Errorf("generate identity: %w", err)
-		}
-
-		// Create vault directory structure
-		if mkdirErr := os.MkdirAll(filepath.Join(vaultDir, "entries"), 0o700); mkdirErr != nil {
-			return fmt.Errorf("create entries dir: %w", mkdirErr)
-		}
-
-		// Write config
-		cfg := configpkg.Default()
-		cfg.VaultDir = vaultDir
-		cfg.Git = &configpkg.GitConfig{
-			AutoPush:         true,
-			AutoPull:         true,
-			AutoPullInterval: 10 * time.Second,
-			CommitTemplate:   "Update from Symaira Vault",
-		}
-		cfgPath := filepath.Join(vaultDir, "config.yaml")
-		cfgData, err := yaml.Marshal(cfg)
-		if err != nil {
-			return fmt.Errorf("marshal config: %w", err)
-		}
-		if err := os.WriteFile(cfgPath, cfgData, 0o600); err != nil {
-			return fmt.Errorf("write config: %w", err)
-		}
-
-		// Save identity encrypted with passphrase
-		identityPath := filepath.Join(vaultDir, "identity.age")
-		if err := cryptopkg.SaveIdentity(identity, identityPath, passphrase, 0); err != nil {
-			return fmt.Errorf("save identity: %w", err)
-		}
-
-		// Write recipients.txt with existing device's public key
-		recipientsPath := filepath.Join(vaultDir, "recipients.txt")
-		recipientsContent := fmt.Sprintf("# Symaira Vault vault recipients\n# Added by device add --pair\n%s\n", existingPubkey)
-		if err := os.WriteFile(recipientsPath, []byte(recipientsContent), 0o600); err != nil {
-			return fmt.Errorf("write recipients: %w", err)
-		}
-
-		// Save joined file
-		joinedData := joinedFile{
-			Token:     token,
-			Name:      deviceAddName,
-			PublicKey: identity.Recipient().String(),
-			CreatedAt: time.Now().UTC(),
-		}
-		if deviceAddName == "" {
-			hostname, _ := os.Hostname()
-			if hostname != "" {
-				joinedData.Name = hostname
-			} else {
-				joinedData.Name = "device-" + token
+		Example: `  symvault device add --pair "123456:age1..."`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if !deviceAddPair {
+				return fmt.Errorf("use 'symvault device add --pair <token:publickey>' to pair a device")
 			}
-		}
+			if len(args) < 1 {
+				return fmt.Errorf("missing pairing data. Usage: symvault device add --pair <token> or <token:publickey>")
+			}
 
-		if err := savePairingFile(vaultDir, token+"-joined.json", joinedData); err != nil {
-			return fmt.Errorf("save joined file: %w", err)
-		}
+			raw := strings.TrimSpace(args[0])
 
-		cliout.Hintf("=== Pairing Setup Complete ===")
-		fmt.Fprintf(os.Stderr, "Your public key: %s\n", identity.Recipient().String())
-		fmt.Fprintf(os.Stderr, "Device name: %s\n\n", joinedData.Name)
-		fmt.Fprintf(os.Stderr, "IMPORTANT: Entries cannot be decrypted yet.\n")
-		fmt.Fprintf(os.Stderr, "On the original device, run:\n")
-		fmt.Fprintf(os.Stderr, "  symvault device accept %s\n\n", token)
-		fmt.Fprintf(os.Stderr, "After accepting, pull the re-encrypted entries:\n")
-		fmt.Fprintf(os.Stderr, "  symvault git pull\n")
+			vaultDir, err := cli.VaultPath()
+			if err != nil {
+				return err
+			}
 
-		return nil
-	},
+			if vaultpkg.IsInitialized(vaultDir) {
+				return fmt.Errorf("vault already initialized at %s. Use a different --vault or remove the existing vault first", vaultDir)
+			}
+
+			// Parse QR data: token or token:publicKey
+			var token, existingPubkey string
+			if idx := strings.Index(raw, ":"); idx > 0 {
+				token = raw[:idx]
+				existingPubkey = raw[idx+1:]
+			} else {
+				token = raw
+			}
+
+			if valErr := pairing.ValidatePairingToken(token); valErr != nil {
+				return fmt.Errorf("invalid pairing token: %w", valErr)
+			}
+
+			if !strings.HasPrefix(existingPubkey, "age1") || len(existingPubkey) < 50 {
+				return fmt.Errorf("invalid public key in pairing data: expected age1... format")
+			}
+
+			passphrase, err := cli.ReadHiddenInput("Enter passphrase for this device (minimum 12 characters): ", nil)
+			if err != nil {
+				return fmt.Errorf("read passphrase: %w", err)
+			}
+			defer cryptopkg.Wipe(passphrase)
+			if len(passphrase) < 12 {
+				return fmt.Errorf("passphrase must be at least 12 characters")
+			}
+
+			// Generate identity for this device
+			identity, err := cryptopkg.GenerateIdentity()
+			if err != nil {
+				return fmt.Errorf("generate identity: %w", err)
+			}
+
+			// Create vault directory structure
+			if mkdirErr := os.MkdirAll(filepath.Join(vaultDir, "entries"), 0o700); mkdirErr != nil {
+				return fmt.Errorf("create entries dir: %w", mkdirErr)
+			}
+
+			// Write config
+			cfg := configpkg.Default()
+			cfg.VaultDir = vaultDir
+			cfg.Git = &configpkg.GitConfig{
+				AutoPush:         true,
+				AutoPull:         true,
+				AutoPullInterval: 10 * time.Second,
+				CommitTemplate:   "Update from Symaira Vault",
+			}
+			cfgPath := filepath.Join(vaultDir, "config.yaml")
+			cfgData, err := yaml.Marshal(cfg)
+			if err != nil {
+				return fmt.Errorf("marshal config: %w", err)
+			}
+			if err := os.WriteFile(cfgPath, cfgData, 0o600); err != nil {
+				return fmt.Errorf("write config: %w", err)
+			}
+
+			// Save identity encrypted with passphrase
+			identityPath := filepath.Join(vaultDir, "identity.age")
+			if err := cryptopkg.SaveIdentity(identity, identityPath, passphrase, 0); err != nil {
+				return fmt.Errorf("save identity: %w", err)
+			}
+
+			// Write recipients.txt with existing device's public key
+			recipientsPath := filepath.Join(vaultDir, "recipients.txt")
+			recipientsContent := fmt.Sprintf("# Symaira Vault vault recipients\n# Added by device add --pair\n%s\n", existingPubkey)
+			if err := os.WriteFile(recipientsPath, []byte(recipientsContent), 0o600); err != nil {
+				return fmt.Errorf("write recipients: %w", err)
+			}
+
+			// Save joined file
+			joinedData := joinedFile{
+				Token:     token,
+				Name:      deviceAddName,
+				PublicKey: identity.Recipient().String(),
+				CreatedAt: time.Now().UTC(),
+			}
+			if deviceAddName == "" {
+				hostname, _ := os.Hostname()
+				if hostname != "" {
+					joinedData.Name = hostname
+				} else {
+					joinedData.Name = "device-" + token
+				}
+			}
+
+			if err := savePairingFile(vaultDir, token+"-joined.json", joinedData); err != nil {
+				return fmt.Errorf("save joined file: %w", err)
+			}
+
+			cliout.Hintf("=== Pairing Setup Complete ===")
+			fmt.Fprintf(os.Stderr, "Your public key: %s\n", identity.Recipient().String())
+			fmt.Fprintf(os.Stderr, "Device name: %s\n\n", joinedData.Name)
+			fmt.Fprintf(os.Stderr, "IMPORTANT: Entries cannot be decrypted yet.\n")
+			fmt.Fprintf(os.Stderr, "On the original device, run:\n")
+			fmt.Fprintf(os.Stderr, "  symvault device accept %s\n\n", token)
+			fmt.Fprintf(os.Stderr, "After accepting, pull the re-encrypted entries:\n")
+			fmt.Fprintf(os.Stderr, "  symvault git pull\n")
+
+			return nil
+		},
+	}
+	deviceAddCmd.Flags().BoolVar(&deviceAddPair, "pair", false, "Pair with an existing device using QR data")
+	deviceAddCmd.Flags().StringVar(&deviceAddName, "name", "", "Name for this device (defaults to hostname)")
+	return deviceAddCmd
 }
 
-var deviceRevokeCmd = &cobra.Command{
-	Use:   "revoke <name>",
-	Short: "Revoke a device and re-encrypt all entries",
-	Long: `Revoke a device's access to the vault by removing its public key
+func newDeviceRevokeCmd() *cobra.Command {
+	deviceRevokeCmd := &cobra.Command{
+		Use:   "revoke <name>",
+		Short: "Revoke a device and re-encrypt all entries",
+		Long: `Revoke a device's access to the vault by removing its public key
 from the device registry and recipients list, then re-encrypting all
 entries so the revoked device can no longer decrypt them.
 
 WARNING: This is irreversible. The revoked device will permanently lose
 access to all vault entries.`,
-	Example: `  symvault device revoke macbook
+		Example: `  symvault device revoke macbook
   symvault device revoke macbook --yes`,
-	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		deviceName := args[0]
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			deviceName := args[0]
 
-		vaultDir, err := cli.VaultPath()
-		if err != nil {
-			return err
-		}
-
-		if !vaultpkg.IsInitialized(vaultDir) {
-			return errorspkg.NewVaultNotInitialized()
-		}
-
-		v, err := cli.UnlockVault(vaultDir, true)
-		if err != nil {
-			return err
-		}
-
-		// Find the device in the registry
-		dm := vaultpkg.NewDeviceManager(vaultDir)
-		device, err := dm.GetDevice(deviceName)
-		if err != nil {
-			return fmt.Errorf("cannot look up device: %w", err)
-		}
-		if device == nil {
-			return fmt.Errorf("device %q not found in device registry", deviceName)
-		}
-
-		// Prevent revoking the current device
-		currentPubkey := v.Identity.Recipient().String()
-		if device.PublicKey == currentPubkey {
-			return fmt.Errorf("cannot revoke the current device %q (this device's identity would be lost)", deviceName)
-		}
-
-		// Confirmation prompt unless --yes is passed
-		if !deviceRevokeYes {
-			fmt.Fprintf(os.Stderr, "This will revoke device %q and re-encrypt all entries.\nContinue? [y/N]: ", deviceName)
-			answer, readErr := bufio.NewReader(os.Stdin).ReadString('\n')
-			if readErr != nil && answer == "" {
-				return fmt.Errorf("read confirmation: %w", readErr)
+			vaultDir, err := cli.VaultPath()
+			if err != nil {
+				return err
 			}
-			if strings.ToLower(strings.TrimSpace(answer)) != "y" {
-				fmt.Fprintln(os.Stderr, "Canceled")
-				return nil
+
+			if !vaultpkg.IsInitialized(vaultDir) {
+				return errorspkg.NewVaultNotInitialized()
 			}
-		}
 
-		// Remove device from registry
-		if err = dm.RemoveDevice(deviceName); err != nil {
-			return fmt.Errorf("remove device from registry: %w", err)
-		}
-
-		// Remove device's public key from recipients
-		rm := vaultpkg.NewRecipientsManager(vaultDir)
-		if err = rm.RemoveRecipient(device.PublicKey); err != nil {
-			// Not found in recipients is acceptable — may have been manually removed
-			if !errors.Is(err, vaultpkg.ErrRecipientNotFound) {
-				return fmt.Errorf("remove recipient: %w", err)
+			v, err := cli.UnlockVault(vaultDir, true)
+			if err != nil {
+				return err
 			}
-		}
 
-		// Get remaining recipients for re-encryption
-		allRecipients, err := v.GetAllRecipientsForEncryption()
-		if err != nil {
-			return fmt.Errorf("get recipients: %w", err)
-		}
+			// Find the device in the registry
+			dm := vaultpkg.NewDeviceManager(vaultDir)
+			device, err := dm.GetDevice(deviceName)
+			if err != nil {
+				return fmt.Errorf("cannot look up device: %w", err)
+			}
+			if device == nil {
+				return fmt.Errorf("device %q not found in device registry", deviceName)
+			}
 
-		// Re-encrypt all entries without the revoked device
-		cliout.Hintf("Re-encrypting all entries for %d recipient(s)...", len(allRecipients))
-		if err := vaultpkg.ReencryptAll(vaultDir, v.Identity, allRecipients); err != nil {
-			return fmt.Errorf("re-encrypt: %w", err)
-		}
+			// Prevent revoking the current device
+			currentPubkey := v.Identity.Recipient().String()
+			if device.PublicKey == currentPubkey {
+				return fmt.Errorf("cannot revoke the current device %q (this device's identity would be lost)", deviceName)
+			}
 
-		// Auto-commit and push
-		if err := git.AutoCommitAndPush(vaultDir, fmt.Sprintf("Revoke device: %s", deviceName), v.Config.Git.AutoPush); err != nil {
-			cliout.Warnf("Warning: could not auto-commit/push: %v", err)
-		}
+			// Confirmation prompt unless --yes is passed
+			if !deviceRevokeYes {
+				fmt.Fprintf(os.Stderr, "This will revoke device %q and re-encrypt all entries.\nContinue? [y/N]: ", deviceName)
+				answer, readErr := bufio.NewReader(os.Stdin).ReadString('\n')
+				if readErr != nil && answer == "" {
+					return fmt.Errorf("read confirmation: %w", readErr)
+				}
+				if strings.ToLower(strings.TrimSpace(answer)) != "y" {
+					fmt.Fprintln(os.Stderr, "Canceled")
+					return nil
+				}
+			}
 
-		printQuietAware("\nDevice %q has been revoked and all entries re-encrypted.\n", deviceName)
-		return nil
-	},
-}
+			// Remove device from registry
+			if err = dm.RemoveDevice(deviceName); err != nil {
+				return fmt.Errorf("remove device from registry: %w", err)
+			}
 
-func init() {
-	deviceCmd.GroupID = cli.GroupIDSharingSync
-	deviceCmd.AddCommand(devicePairCmd)
-	deviceCmd.AddCommand(deviceJoinCmd)
-	deviceCmd.AddCommand(deviceAcceptCmd)
-	deviceCmd.AddCommand(deviceListCmd)
-	deviceCmd.AddCommand(deviceRevokeCmd)
-	deviceCmd.AddCommand(deviceAddCmd)
-	deviceAddCmd.Flags().BoolVar(&deviceAddPair, "pair", false, "Pair with an existing device using QR data")
-	deviceAddCmd.Flags().StringVar(&deviceAddName, "name", "", "Name for this device (defaults to hostname)")
-	deviceJoinCmd.Flags().StringVar(&defaultDeviceName, "name", "", "Name for this device (defaults to hostname)")
+			// Remove device's public key from recipients
+			rm := vaultpkg.NewRecipientsManager(vaultDir)
+			if err = rm.RemoveRecipient(device.PublicKey); err != nil {
+				// Not found in recipients is acceptable — may have been manually removed
+				if !errors.Is(err, vaultpkg.ErrRecipientNotFound) {
+					return fmt.Errorf("remove recipient: %w", err)
+				}
+			}
+
+			// Get remaining recipients for re-encryption
+			allRecipients, err := v.GetAllRecipientsForEncryption()
+			if err != nil {
+				return fmt.Errorf("get recipients: %w", err)
+			}
+
+			// Re-encrypt all entries without the revoked device
+			cliout.Hintf("Re-encrypting all entries for %d recipient(s)...", len(allRecipients))
+			if err := vaultpkg.ReencryptAll(vaultDir, v.Identity, allRecipients); err != nil {
+				return fmt.Errorf("re-encrypt: %w", err)
+			}
+
+			// Auto-commit and push
+			if err := git.AutoCommitAndPush(vaultDir, fmt.Sprintf("Revoke device: %s", deviceName), v.Config.Git.AutoPush); err != nil {
+				cliout.Warnf("Warning: could not auto-commit/push: %v", err)
+			}
+
+			printQuietAware("\nDevice %q has been revoked and all entries re-encrypted.\n", deviceName)
+			return nil
+		},
+	}
 	deviceRevokeCmd.Flags().BoolVarP(&deviceRevokeYes, "yes", "y", false, "Skip confirmation prompt")
+	return deviceRevokeCmd
 }
 
 type pairingFile struct {

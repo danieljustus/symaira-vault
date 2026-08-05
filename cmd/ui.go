@@ -14,10 +14,15 @@ import (
 var uiPrintKeybindings bool
 var uiExperimental bool
 
-var uiCmd = &cobra.Command{
-	Use:   "ui",
-	Short: "Launch the interactive terminal UI",
-	Long: `Launches the interactive terminal UI for browsing and managing the vault.
+// uiCmd is retained for API compatibility; NewCommands() uses
+// newUiCmd() so every call gets a fresh command.
+var uiCmd = newUiCmd()
+
+func newUiCmd() *cobra.Command {
+	uiCmd := &cobra.Command{
+		Use:   "ui",
+		Short: "Launch the interactive terminal UI",
+		Long: `Launches the interactive terminal UI for browsing and managing the vault.
 
 Inside the TUI:
   ↑/↓ or j/k   move
@@ -29,35 +34,32 @@ Inside the TUI:
   g            generate password for selected entry
   ?            toggle full keybinding help
   q or Ctrl+C  quit`,
-	Example: `  # Launch the TUI
+		Example: `  # Launch the TUI
   symvault ui
 
   # Combined with a specific profile
   symvault ui --profile work`,
-	Args: cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		if uiPrintKeybindings {
-			tbl := cliout.NewTable("Key", "Action")
-			for _, b := range ui.Keybindings() {
-				tbl.AddRow(b.Key, b.Action)
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if uiPrintKeybindings {
+				tbl := cliout.NewTable("Key", "Action")
+				for _, b := range ui.Keybindings() {
+					tbl.AddRow(b.Key, b.Action)
+				}
+				fmt.Print(tbl.Render())
+				return nil
 			}
-			fmt.Print(tbl.Render())
-			return nil
-		}
-		return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
-			if err := ui.Run(v); err != nil {
-				return fmt.Errorf("ui failed: %w", err)
-			}
+			return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
+				if err := ui.Run(v); err != nil {
+					return fmt.Errorf("ui failed: %w", err)
+				}
 
-			return nil
-		})
-	},
-}
-
-func init() {
+				return nil
+			})
+		},
+	}
 	uiCmd.Flags().BoolVar(&uiPrintKeybindings, "print-keybindings", false, "Print the TUI keybinding reference and exit")
-	// --experimental is kept as a no-op for backward compatibility with scripts
-	// that used it while the TUI was gated. It no longer has any effect.
 	uiCmd.Flags().BoolVar(&uiExperimental, "experimental", false, "(deprecated, no longer needed)")
 	uiCmd.GroupID = cli.GroupIDEssentials
+	return uiCmd
 }

@@ -18,189 +18,229 @@ var (
 	reencryptAfterAdd bool
 )
 
-var recipientsCmd = &cobra.Command{
-	Use:   "recipients",
-	Short: "Manage vault recipients for multi-user encryption",
-	Long: `Manage recipients (public keys) that can decrypt vault entries.
+// recipientsCmd is retained for API compatibility; NewCommands() uses
+// newRecipientsCmd() so every call gets a fresh command.
+var recipientsCmd = newRecipientsCmd()
+
+func newRecipientsCmd() *cobra.Command {
+	recipientsCmd := &cobra.Command{
+		Use:   "recipients",
+		Short: "Manage vault recipients for multi-user encryption",
+		Long: `Manage recipients (public keys) that can decrypt vault entries.
 
 Recipients are stored in recipients.txt in the vault directory.
 Each line contains one public key in age format (starting with "age1").
 Lines starting with # are treated as comments.`,
-	Example: `  symvault recipients list              # List all recipients
+		Example: `  symvault recipients list              # List all recipients
   symvault recipients add age1...       # Add a new recipient
   symvault recipients remove age1...    # Remove a recipient`,
-	Annotations: map[string]string{
-		cli.JSONOutputAnnotation: "true",
-	},
+		Annotations: map[string]string{
+			cli.JSONOutputAnnotation: "true",
+		},
+	}
+	recipientsCmd.GroupID = cli.GroupIDVault
+	recipientsCmd.AddCommand(newRecipientsListCmd())
+	recipientsCmd.AddCommand(newRecipientsAddCmd())
+	recipientsCmd.AddCommand(newRecipientsRemoveCmd())
+	return recipientsCmd
 }
 
-var recipientsListCmd = &cobra.Command{
-	Use:     "list",
-	Short:   "List all recipients",
-	Long:    `List all recipients from the recipients.txt file.`,
-	Example: `  symvault recipients list`,
-	Annotations: map[string]string{
-		cli.JSONOutputAnnotation: "true",
-	},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		vaultDir, err := cli.VaultPath()
-		if err != nil {
-			return err
-		}
+// recipientsListCmd is retained for API compatibility; NewCommands() uses
+// newRecipientsListCmd() so every call gets a fresh command.
+var recipientsListCmd = newRecipientsListCmd()
 
-		if !vaultpkg.IsInitialized(vaultDir) {
-			return errorspkg.NewVaultNotInitialized()
-		}
+func newRecipientsListCmd() *cobra.Command {
+	recipientsListCmd := &cobra.Command{
+		Use:     "list",
+		Short:   "List all recipients",
+		Long:    `List all recipients from the recipients.txt file.`,
+		Example: `  symvault recipients list`,
+		Annotations: map[string]string{
+			cli.JSONOutputAnnotation: "true",
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			vaultDir, err := cli.VaultPath()
+			if err != nil {
+				return err
+			}
 
-		rm := vaultpkg.NewRecipientsManager(vaultDir)
-		recipients, err := rm.ListRecipients()
-		if err != nil {
-			return errorspkg.ReadFailed(err, "cannot list recipients")
-		}
+			if !vaultpkg.IsInitialized(vaultDir) {
+				return errorspkg.NewVaultNotInitialized()
+			}
 
-		if len(recipients) == 0 {
+			rm := vaultpkg.NewRecipientsManager(vaultDir)
+			recipients, err := rm.ListRecipients()
+			if err != nil {
+				return errorspkg.ReadFailed(err, "cannot list recipients")
+			}
+
+			if len(recipients) == 0 {
+				if cli.OutputFormat == "text" {
+					printlnQuietAware("No recipients configured.")
+					printlnQuietAware("Use 'symvault recipients add <public-key>' to add a recipient.")
+				} else {
+					if err := cli.PrintResult(map[string]interface{}{"recipients": []string{}}); err != nil {
+						return err
+					}
+				}
+				return nil
+			}
+
 			if cli.OutputFormat == "text" {
-				printlnQuietAware("No recipients configured.")
-				printlnQuietAware("Use 'symvault recipients add <public-key>' to add a recipient.")
+				printQuietAware("Recipients (%d):\n\n", len(recipients))
+				for _, r := range recipients {
+					status := "✓"
+					if !r.Valid {
+						status = "✗"
+					}
+					printlnQuietAware("  " + status + " " + r.Normalized)
+					if !r.Valid {
+						printlnQuietAware("    Error: " + r.Error)
+					}
+				}
 			} else {
-				if err := cli.PrintResult(map[string]interface{}{"recipients": []string{}}); err != nil {
+				recipientStrings := make([]string, 0, len(recipients))
+				for _, r := range recipients {
+					recipientStrings = append(recipientStrings, r.Normalized)
+				}
+				if err := cli.PrintResult(map[string]interface{}{"recipients": recipientStrings}); err != nil {
 					return err
 				}
 			}
+
 			return nil
-		}
-
-		if cli.OutputFormat == "text" {
-			printQuietAware("Recipients (%d):\n\n", len(recipients))
-			for _, r := range recipients {
-				status := "✓"
-				if !r.Valid {
-					status = "✗"
-				}
-				printlnQuietAware("  " + status + " " + r.Normalized)
-				if !r.Valid {
-					printlnQuietAware("    Error: " + r.Error)
-				}
-			}
-		} else {
-			recipientStrings := make([]string, 0, len(recipients))
-			for _, r := range recipients {
-				recipientStrings = append(recipientStrings, r.Normalized)
-			}
-			if err := cli.PrintResult(map[string]interface{}{"recipients": recipientStrings}); err != nil {
-				return err
-			}
-		}
-
-		return nil
-	},
+		},
+	}
+	return recipientsListCmd
 }
 
-var recipientsAddCmd = &cobra.Command{
-	Use:   "add <public-key>",
-	Short: "Add a recipient",
-	Long: `Add a new recipient (public key) to the vault.
+// recipientsAddCmd is retained for API compatibility; NewCommands() uses
+// newRecipientsAddCmd() so every call gets a fresh command.
+var recipientsAddCmd = newRecipientsAddCmd()
+
+func newRecipientsAddCmd() *cobra.Command {
+	recipientsAddCmd := &cobra.Command{
+		Use:   "add <public-key>",
+		Short: "Add a recipient",
+		Long: `Add a new recipient (public key) to the vault.
 
 The public key must be a valid age public key starting with "age1".
 Once added, all new entries will be encrypted for this recipient.`,
-	Example: `  symvault recipients add age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p`,
-	Args:    cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return cli.WithVaultRaw(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
-			recipient := args[0]
+		Example: `  symvault recipients add age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p`,
+		Args:    cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cli.WithVaultRaw(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
+				recipient := args[0]
 
-			rm := vaultpkg.NewRecipientsManager(v.Dir)
-			if err := rm.AddRecipient(recipient); err != nil {
-				if errors.Is(err, vaultpkg.ErrRecipientAlreadyExists) {
-					return errorspkg.AlreadyExists("recipient already exists")
+				rm := vaultpkg.NewRecipientsManager(v.Dir)
+				if err := rm.AddRecipient(recipient); err != nil {
+					if errors.Is(err, vaultpkg.ErrRecipientAlreadyExists) {
+						return errorspkg.AlreadyExists("recipient already exists")
+					}
+					if errors.Is(err, vaultpkg.ErrInvalidRecipient) {
+						return errorspkg.InvalidInput("invalid recipient: must be a valid age public key starting with 'age1'")
+					}
+					return errorspkg.WriteFailed(err, "cannot add recipient")
 				}
-				if errors.Is(err, vaultpkg.ErrInvalidRecipient) {
-					return errorspkg.InvalidInput("invalid recipient: must be a valid age public key starting with 'age1'")
-				}
-				return errorspkg.WriteFailed(err, "cannot add recipient")
-			}
 
-			if reencryptAfterAdd {
-				recipients, err := v.GetAllRecipientsForEncryption()
-				if err != nil {
-					return fmt.Errorf("get recipients: %w", err)
+				if reencryptAfterAdd {
+					recipients, err := v.GetAllRecipientsForEncryption()
+					if err != nil {
+						return fmt.Errorf("get recipients: %w", err)
+					}
+					printQuietAware("Recipient added. Re-encrypting all entries for %d recipient(s)...\n", len(recipients))
+					if err := vaultpkg.ReencryptAll(v.Dir, v.Identity, recipients); err != nil {
+						return fmt.Errorf("re-encrypt entries: %w", err)
+					}
+					printlnQuietAware("Recipient added and all entries re-encrypted successfully.")
+				} else {
+					printlnQuietAware("Recipient added successfully.")
+					printQuietAware("Note: existing entries are not yet shared with this recipient. ")
+					printlnQuietAware("Run 'symvault recipients add <key> --reencrypt' or 'symvault auth rotate' to re-encrypt existing entries.")
 				}
-				printQuietAware("Recipient added. Re-encrypting all entries for %d recipient(s)...\n", len(recipients))
-				if err := vaultpkg.ReencryptAll(v.Dir, v.Identity, recipients); err != nil {
-					return fmt.Errorf("re-encrypt entries: %w", err)
-				}
-				printlnQuietAware("Recipient added and all entries re-encrypted successfully.")
-			} else {
-				printlnQuietAware("Recipient added successfully.")
-				printQuietAware("Note: existing entries are not yet shared with this recipient. ")
-				printlnQuietAware("Run 'symvault recipients add <key> --reencrypt' or 'symvault auth rotate' to re-encrypt existing entries.")
-			}
-			return nil
-		})
-	},
+				return nil
+			})
+		},
+	}
+	recipientsAddCmd.Flags().BoolVar(&reencryptAfterAdd, "reencrypt", false, "Re-encrypt existing entries for the new recipient")
+	return recipientsAddCmd
 }
 
-var recipientsRemoveCmd = &cobra.Command{
-	Use:     "remove <public-key>",
-	Aliases: []string{"rm"},
-	Short:   "Remove a recipient",
-	Long: `Remove a recipient (public key) from the vault.
+// recipientsRemoveCmd is retained for API compatibility; NewCommands() uses
+// newRecipientsRemoveCmd() so every call gets a fresh command.
+var recipientsRemoveCmd = newRecipientsRemoveCmd()
+
+// The compat instances mirror the pre-migration singleton topology for
+// tests that execute or mutate the package-level command vars directly:
+// the compat parent carries the compat children (replacing the fresh
+// instances the constructor added), and root.go attaches the parent to
+// the package rootCmd.
+var _ = func() int {
+	for _, c := range recipientsCmd.Commands() {
+		recipientsCmd.RemoveCommand(c)
+	}
+	recipientsCmd.AddCommand(recipientsListCmd)
+	recipientsCmd.AddCommand(recipientsAddCmd)
+	recipientsCmd.AddCommand(recipientsRemoveCmd)
+	return 0
+}()
+
+func newRecipientsRemoveCmd() *cobra.Command {
+	recipientsRemoveCmd := &cobra.Command{
+		Use:     "remove <public-key>",
+		Aliases: []string{"rm"},
+		Short:   "Remove a recipient",
+		Long: `Remove a recipient (public key) from the vault.
 
 The public key must match exactly. Use 'symvault recipients list' to see current recipients.
 
 Use --yes to skip confirmation (useful for scripts).`,
-	Example: `  symvault recipients remove age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p`,
-	Args:    cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return cli.WithVaultRaw(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
-			recipient := args[0]
+		Example: `  symvault recipients remove age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p`,
+		Args:    cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cli.WithVaultRaw(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
+				recipient := args[0]
 
-			confirmed, err := confirmInteractive(fmt.Sprintf("Remove recipient %s", recipient), confirmRemove)
-			if err != nil {
-				return err
-			}
-			if !confirmed {
-				fmt.Fprintln(os.Stderr, "Canceled")
-				return nil
-			}
-
-			rm := vaultpkg.NewRecipientsManager(v.Dir)
-			if err := rm.RemoveRecipient(recipient); err != nil {
-				if errors.Is(err, vaultpkg.ErrRecipientNotFound) {
-					return errorspkg.NotFound("recipient %q not found", recipient)
-				}
-				if errors.Is(err, vaultpkg.ErrInvalidRecipient) {
-					return errorspkg.InvalidInput("invalid recipient: must be a valid age public key starting with 'age1'")
-				}
-				return errorspkg.WriteFailed(err, "cannot remove recipient")
-			}
-
-			if noReencrypt {
-				printlnQuietAware("Recipient removed successfully.")
-				printQuietAware("Warning: existing entries are still encrypted to the removed recipient. ")
-				printlnQuietAware("Run 'symvault auth rotate' to re-encrypt all entries and fully revoke access.")
-			} else {
-				recipients, err := v.GetAllRecipientsForEncryption()
+				confirmed, err := confirmInteractive(fmt.Sprintf("Remove recipient %s", recipient), confirmRemove)
 				if err != nil {
-					return fmt.Errorf("get remaining recipients: %w", err)
+					return err
 				}
-				printQuietAware("Recipient removed. Re-encrypting %d entries for %d recipient(s)...\n", 0, len(recipients))
-				if err := vaultpkg.ReencryptAll(v.Dir, v.Identity, recipients); err != nil {
-					return fmt.Errorf("re-encrypt entries: %w", err)
+				if !confirmed {
+					fmt.Fprintln(os.Stderr, "Canceled")
+					return nil
 				}
-				printlnQuietAware("Recipient removed and all entries re-encrypted successfully.")
-			}
-			return nil
-		})
-	},
-}
 
-func init() {
-	recipientsCmd.GroupID = cli.GroupIDVault
-	recipientsCmd.AddCommand(recipientsListCmd)
-	recipientsCmd.AddCommand(recipientsAddCmd)
-	recipientsCmd.AddCommand(recipientsRemoveCmd)
-	recipientsAddCmd.Flags().BoolVar(&reencryptAfterAdd, "reencrypt", false, "Re-encrypt existing entries for the new recipient")
+				rm := vaultpkg.NewRecipientsManager(v.Dir)
+				if err := rm.RemoveRecipient(recipient); err != nil {
+					if errors.Is(err, vaultpkg.ErrRecipientNotFound) {
+						return errorspkg.NotFound("recipient %q not found", recipient)
+					}
+					if errors.Is(err, vaultpkg.ErrInvalidRecipient) {
+						return errorspkg.InvalidInput("invalid recipient: must be a valid age public key starting with 'age1'")
+					}
+					return errorspkg.WriteFailed(err, "cannot remove recipient")
+				}
+
+				if noReencrypt {
+					printlnQuietAware("Recipient removed successfully.")
+					printQuietAware("Warning: existing entries are still encrypted to the removed recipient. ")
+					printlnQuietAware("Run 'symvault auth rotate' to re-encrypt all entries and fully revoke access.")
+				} else {
+					recipients, err := v.GetAllRecipientsForEncryption()
+					if err != nil {
+						return fmt.Errorf("get remaining recipients: %w", err)
+					}
+					printQuietAware("Recipient removed. Re-encrypting %d entries for %d recipient(s)...\n", 0, len(recipients))
+					if err := vaultpkg.ReencryptAll(v.Dir, v.Identity, recipients); err != nil {
+						return fmt.Errorf("re-encrypt entries: %w", err)
+					}
+					printlnQuietAware("Recipient removed and all entries re-encrypted successfully.")
+				}
+				return nil
+			})
+		},
+	}
 	recipientsRemoveCmd.Flags().BoolVarP(&confirmRemove, "yes", "y", false, "Skip confirmation prompt")
 	recipientsRemoveCmd.Flags().BoolVar(&noReencrypt, "no-reencrypt", false, "Skip re-encrypting existing entries after removal")
+	return recipientsRemoveCmd
 }

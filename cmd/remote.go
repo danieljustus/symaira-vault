@@ -23,27 +23,38 @@ var (
 	remotePushFlag bool
 )
 
-var remoteCmd = &cobra.Command{
-	Use:   "remote",
-	Short: "Manage git remote for vault sync",
-	Long: `Manage the git remote used for synchronizing the vault.
+// remoteCmd is retained for API compatibility; NewCommands() uses
+// newRemoteCmd() so every call gets a fresh command.
+var remoteCmd = newRemoteCmd()
+
+func newRemoteCmd() *cobra.Command {
+	remoteCmd := &cobra.Command{
+		Use:   "remote",
+		Short: "Manage git remote for vault sync",
+		Long: `Manage the git remote used for synchronizing the vault.
 
 Use 'symvault remote init <ssh-target>' to configure a remote git repository
 for vault synchronization. The vault must be initialized first.`,
-	Example: `  symvault remote init hermes@macmini
+		Example: `  symvault remote init hermes@macmini
   symvault remote init user@host:/custom/path.git
   symvault remote init hermes@macmini --push
   symvault remote status`,
-	Annotations: map[string]string{
-		requiresVaultAnnotation:  "false",
-		cli.JSONOutputAnnotation: "true",
-	},
+		Annotations: map[string]string{
+			requiresVaultAnnotation:  "false",
+			cli.JSONOutputAnnotation: "true",
+		},
+	}
+	remoteCmd.GroupID = cli.GroupIDSharingSync
+	remoteCmd.AddCommand(newRemoteInitCmd())
+	remoteCmd.AddCommand(newRemoteStatusCmd())
+	return remoteCmd
 }
 
-var remoteInitCmd = &cobra.Command{
-	Use:   "init <ssh-target>",
-	Short: "Initialize git remote for the vault",
-	Long: `Configure a remote git repository for vault synchronization.
+func newRemoteInitCmd() *cobra.Command {
+	remoteInitCmd := &cobra.Command{
+		Use:   "init <ssh-target>",
+		Short: "Initialize git remote for the vault",
+		Long: `Configure a remote git repository for vault synchronization.
 
 The ssh-target can be in these formats:
   user@host           - bare repo at ~/symvault-remote.git on remote
@@ -57,34 +68,32 @@ Flags:
   --push   - Push the vault to the remote after setup
 
 This command also enables git.auto_push in your Symaira Vault config.`,
-	Example: `  symvault remote init hermes@macmini
+		Example: `  symvault remote init hermes@macmini
   symvault remote init dev@server:/srv/git/symvault.git --name upstream
   symvault remote init hermes@macmini --push`,
-	Args: cobra.ExactArgs(1),
-	Annotations: map[string]string{
-		requiresVaultAnnotation: "false",
-	},
-	RunE: runRemoteInit,
-}
-
-var remoteStatusCmd = &cobra.Command{
-	Use:   "status",
-	Short: "Show remote sync configuration",
-	Long:  `Display the current git remote configuration and sync status for the vault.`,
-	Annotations: map[string]string{
-		requiresVaultAnnotation: "false",
-	},
-	RunE: runRemoteStatus,
-}
-
-func init() {
-	remoteCmd.GroupID = cli.GroupIDSharingSync
-	remoteCmd.AddCommand(remoteInitCmd)
-	remoteCmd.AddCommand(remoteStatusCmd)
-
+		Args: cobra.ExactArgs(1),
+		Annotations: map[string]string{
+			requiresVaultAnnotation: "false",
+		},
+		RunE: runRemoteInit,
+	}
 	remoteInitCmd.Flags().StringVarP(&remoteName, "name", "n", "origin", "Remote name")
 	remoteInitCmd.Flags().StringVarP(&remotePath, "path", "p", "", "Custom bare repo path on remote (default: ~/symvault-remote.git)")
 	remoteInitCmd.Flags().BoolVar(&remotePushFlag, "push", false, "Push vault to remote after setup")
+	return remoteInitCmd
+}
+
+func newRemoteStatusCmd() *cobra.Command {
+	remoteStatusCmd := &cobra.Command{
+		Use:   "status",
+		Short: "Show remote sync configuration",
+		Long:  `Display the current git remote configuration and sync status for the vault.`,
+		Annotations: map[string]string{
+			requiresVaultAnnotation: "false",
+		},
+		RunE: runRemoteStatus,
+	}
+	return remoteStatusCmd
 }
 
 func runRemoteInit(cmd *cobra.Command, args []string) error {

@@ -17,11 +17,16 @@ import (
 var syncPush bool
 var syncForce bool
 
-var syncCmd = &cobra.Command{
-	Use:   "sync",
-	Short: "Sync vault with remote (pull + optional push)",
-	Long:  "Pulls changes from the remote git repository and optionally pushes local changes.",
-	Example: `  # Pull only
+// syncCmd is retained for API compatibility; NewRootCmd() uses
+// newSyncCmd() so every call gets a fresh command.
+var syncCmd = newSyncCmd()
+
+func newSyncCmd() *cobra.Command {
+	syncCmd := &cobra.Command{
+		Use:   "sync",
+		Short: "Sync vault with remote (pull + optional push)",
+		Long:  "Pulls changes from the remote git repository and optionally pushes local changes.",
+		Example: `  # Pull only
   symvault sync
 
   # Pull and push
@@ -29,76 +34,75 @@ var syncCmd = &cobra.Command{
 
   # Force pull (reset local changes)
   symvault sync --force`,
-	Args: cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		vaultDir, err := cli.VaultPath()
-		if err != nil {
-			return err
-		}
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			vaultDir, err := cli.VaultPath()
+			if err != nil {
+				return err
+			}
 
-		if !vaultpkg.IsInitialized(vaultDir) {
-			return errorspkg.NewVaultNotInitialized()
-		}
+			if !vaultpkg.IsInitialized(vaultDir) {
+				return errorspkg.NewVaultNotInitialized()
+			}
 
-		hasRemote, _ := git.HasRemote(vaultDir, "origin")
-		if !hasRemote {
-			printlnQuietAware("No remote configured. Skipping sync.")
-			return nil
-		}
-
-		result := git.Sync(vaultDir, syncPush)
-
-		if result.Skipped {
-			printlnQuietAware("No remote configured. Skipping sync.")
-			return nil
-		}
-
-		if result.Error != nil {
-			if isOfflineErr(result.Error) {
-				printlnQuietAware("Warning: could not reach remote — offline")
+			hasRemote, _ := git.HasRemote(vaultDir, "origin")
+			if !hasRemote {
+				printlnQuietAware("No remote configured. Skipping sync.")
 				return nil
 			}
-			return fmt.Errorf("sync failed: %w", result.Error)
-		}
 
-		if result.Success {
-			printlnQuietAware("Pulled from remote")
-			if err := git.SetLastSyncTime(vaultDir); err != nil {
-				cliout.Warnf("Warning: could not record sync time: %v", err)
+			result := git.Sync(vaultDir, syncPush)
+
+			if result.Skipped {
+				printlnQuietAware("No remote configured. Skipping sync.")
+				return nil
 			}
 
-			hostname, _ := os.Hostname()
-			if err := git.ResolveConflicts(vaultDir, hostname); err != nil {
-				cliout.Warnf("Warning: conflict resolution failed: %v", err)
+			if result.Error != nil {
+				if isOfflineErr(result.Error) {
+					printlnQuietAware("Warning: could not reach remote — offline")
+					return nil
+				}
+				return fmt.Errorf("sync failed: %w", result.Error)
 			}
-		} else {
-			printlnQuietAware("Already up to date")
-		}
 
-		if result.PushDone {
-			if result.PushSuccess {
-				printlnQuietAware("Pushed to remote")
+			if result.Success {
+				printlnQuietAware("Pulled from remote")
+				if err := git.SetLastSyncTime(vaultDir); err != nil {
+					cliout.Warnf("Warning: could not record sync time: %v", err)
+				}
+
+				hostname, _ := os.Hostname()
+				if err := git.ResolveConflicts(vaultDir, hostname); err != nil {
+					cliout.Warnf("Warning: conflict resolution failed: %v", err)
+				}
 			} else {
-				printlnQuietAware("Push skipped or failed")
+				printlnQuietAware("Already up to date")
 			}
-		}
 
-		conflictFiles := findConflictFiles(vaultDir)
-		if len(conflictFiles) > 0 {
-			cliout.Warnf("Warning: %d conflict file(s) created:", len(conflictFiles))
-			for _, f := range conflictFiles {
-				cliout.Warnf("  %s", f)
+			if result.PushDone {
+				if result.PushSuccess {
+					printlnQuietAware("Pushed to remote")
+				} else {
+					printlnQuietAware("Push skipped or failed")
+				}
 			}
-		}
 
-		return nil
-	},
-}
+			conflictFiles := findConflictFiles(vaultDir)
+			if len(conflictFiles) > 0 {
+				cliout.Warnf("Warning: %d conflict file(s) created:", len(conflictFiles))
+				for _, f := range conflictFiles {
+					cliout.Warnf("  %s", f)
+				}
+			}
 
-func init() {
+			return nil
+		},
+	}
 	syncCmd.Flags().BoolVarP(&syncPush, "push", "p", false, "also push after pull")
 	syncCmd.Flags().BoolVarP(&syncForce, "force", "f", false, "force pull (reset local changes)")
 	syncCmd.GroupID = cli.GroupIDSharingSync
+	return syncCmd
 }
 
 func isOfflineErr(err error) bool {

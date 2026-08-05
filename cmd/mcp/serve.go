@@ -30,11 +30,16 @@ The server can run in HTTP mode or stdio mode.`,
 		config.LegacyVaultSubdir)
 }
 
-var ServeCmd = &cobra.Command{
-	Use:   "serve",
-	Short: "Start MCP server for agent access",
-	Long:  serveLongDescription(),
-	Example: `  # HTTP mode bound to localhost:8080
+// ServeCmd is retained for API compatibility; NewCommands() uses
+// newServeCmd() so every call gets a fresh command.
+var ServeCmd = newServeCmd()
+
+func newServeCmd() *cobra.Command {
+	ServeCmd := &cobra.Command{
+		Use:   "serve",
+		Short: "Start MCP server for agent access",
+		Long:  serveLongDescription(),
+		Example: `  # HTTP mode bound to localhost:8080
   symvault serve --bind 127.0.0.1 --port 8080
 
   # stdio mode for a single agent (called by MCP clients directly)
@@ -42,10 +47,8 @@ var ServeCmd = &cobra.Command{
 
   # Install as a system service (macOS launchd or systemd)
   symvault serve install`,
-	RunE: runServe,
-}
-
-func init() {
+		RunE: runServe,
+	}
 	ServeCmd.GroupID = cli.GroupIDAgentsMCP
 	ServeCmd.Flags().String("agent", "", "Agent name (required for --stdio; HTTP mode resolves agents per-request via X-Symaira-Agent header)")
 	ServeCmd.Flags().Int("port", 8080, "Server port")
@@ -55,4 +58,8 @@ func init() {
 	ServeCmd.Flags().String("tls-key", "", "TLS key file path (overrides config)")
 	ServeCmd.Flags().String("tls-ca", "", "CA certificate file path for mTLS client verification (enables mTLS)")
 	ServeCmd.Flags().Bool("allow-locked", false, "Allow the MCP server to start even when the vault is locked (stdio mode only)")
+	ServeCmd.AddCommand(newServeInstallCmd())
+	ServeCmd.AddCommand(newServeUninstallCmd())
+	ServeCmd.AddCommand(newServeStatusCmd())
+	return ServeCmd
 }

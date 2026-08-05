@@ -5,12 +5,14 @@ import (
 )
 
 // NewCommands returns all MCP and agent commands for root command assembly.
+// Each call builds a fresh command tree so consecutive calls never share
+// command objects or flag state.
 func NewCommands() []*cobra.Command {
 	return []*cobra.Command{
-		agentCmd,
-		McpConfigCmd,
-		mcpTokenRotateCmd,
-		mcpCmd,
-		ServeCmd,
+		newAgentCmd(),
+		newMcpConfigCmd(),
+		newMcpTokenRotateCmd(),
+		newMcpCmd(),
+		newServeCmd(),
 	}
 }
