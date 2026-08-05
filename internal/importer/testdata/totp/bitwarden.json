@@ -1,0 +1,46 @@
+{
+  "encrypted": false,
+  "folders": [],
+  "items": [
+    {
+      "id": "item-bare",
+      "type": 1,
+      "name": "Bare Secret",
+      "login": {
+        "username": "user@example.com",
+        "password": "bare-secret-password",
+        "totp": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+      }
+    },
+    {
+      "id": "item-uri",
+      "type": 1,
+      "name": "Plain URI",
+      "login": {
+        "username": "user@example.com",
+        "password": "plain-uri-password",
+        "totp": "otpauth://totp/Example:user@example.com?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=Example"
+      }
+    },
+    {
+      "id": "item-sha256",
+      "type": 1,
+      "name": "SHA256 URI",
+      "login": {
+        "username": "user@example.com",
+        "password": "sha256-uri-password",
+        "totp": "otpauth://totp/Example:user@example.com?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&algorithm=SHA256&digits=8&period=60&issuer=Example"
+      }
+    },
+    {
+      "id": "item-malformed",
+      "type": 1,
+      "name": "Malformed URI",
+      "login": {
+        "username": "user@example.com",
+        "password": "malformed-uri-password",
+        "totp": "otpauth://totp/Example:user@example.com?secret=not-a-valid-base32-secret!!&issuer=Example"
+      }
+    }
+  ]
+}

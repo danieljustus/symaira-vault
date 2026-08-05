@@ -18,14 +18,15 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 )
 
-var agentCmd = &cobra.Command{
-	Use:   "agent",
-	Short: "Manage agent profiles",
-	Long: `Configure AI agent profiles with scoped permissions, tokens, and MCP integration.
+func newAgentCmd() *cobra.Command {
+	agentCmd := &cobra.Command{
+		Use:   "agent",
+		Short: "Manage agent profiles",
+		Long: `Configure AI agent profiles with scoped permissions, tokens, and MCP integration.
 
 Use 'symvault agent setup <name>' to create a new agent with an interactive wizard
 that guides you through security tier selection, vault path scoping, and approval mode.`,
-	Example: `  # Interactive new-agent wizard
+		Example: `  # Interactive new-agent wizard
   symvault agent setup claude-code
 
   # List configured agents
@@ -33,22 +34,39 @@ that guides you through security tier selection, vault path scoping, and approva
 
   # Issue a token for an agent
   symvault agent token new claude-code`,
+	}
+	agentCmd.AddCommand(newAgentSetupCmd())
+	agentCmd.AddCommand(newAgentAuditCmd())
+	agentCmd.AddCommand(newAgentDoctorCmd())
+	agentCmd.AddCommand(newAgentInstallCmd())
+	agentCmd.AddCommand(newAgentListCmd())
+	agentCmd.AddCommand(newAgentProfileCmd())
+	agentCmd.AddCommand(newAgentSkillCmd())
+	agentCmd.AddCommand(newAgentTokenCmd())
+	agentCmd.AddCommand(newAgentUninstallCmd())
+	agentCmd.AddCommand(newAgentUpgradeCmd())
+	agentCmd.AddCommand(newAgentWhoamiCmd())
+	agentCmd.GroupID = cli.GroupIDAgentsMCP
+	return agentCmd
 }
 
-var agentSetupCmd = &cobra.Command{
-	Use:   "setup <name>",
-	Short: "[Deprecated v4.0, removed in v4.1] Use 'symvault agent install <name>'",
-	Long: `This command was deprecated in Symaira Vault v4.0 and will be removed in v4.1.
+func newAgentSetupCmd() *cobra.Command {
+	agentSetupCmd := &cobra.Command{
+		Use:   "setup <name>",
+		Short: "[Deprecated v4.0, removed in v4.1] Use 'symvault agent install <name>'",
+		Long: `This command was deprecated in Symaira Vault v4.0 and will be removed in v4.1.
 
 Use 'symvault agent install <name>' instead to create and configure
 agent profiles interactively.`,
-	Hidden: true,
-	Args:   cobra.ArbitraryArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		cliout.Warnf("This command is deprecated in v4.0. Use: symvault agent install <name>")
-		return errorspkg.NewCLIError(errorspkg.ExitNotFound,
-			"This command is deprecated in v4.0. Use: symvault agent install <name>", nil)
-	},
+		Hidden: true,
+		Args:   cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cliout.Warnf("This command is deprecated in v4.0. Use: symvault agent install <name>")
+			return errorspkg.NewCLIError(errorspkg.ExitNotFound,
+				"This command is deprecated in v4.0. Use: symvault agent install <name>", nil)
+		},
+	}
+	return agentSetupCmd
 }
 
 func promptApprovalMode(reader *bufio.Reader) string {
@@ -166,9 +184,4 @@ func outputAgentMCPSnippet(name, rawToken string) {
 	if err := enc.Encode(config); err != nil {
 		cliout.Errorf("Error encoding config: %v", err)
 	}
-}
-
-func init() {
-	agentCmd.AddCommand(agentSetupCmd)
-	agentCmd.GroupID = cli.GroupIDAgentsMCP
 }

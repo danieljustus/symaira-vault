@@ -25,15 +25,20 @@ var (
 	AuditFailed bool
 )
 
-var AuditCmd = &cobra.Command{
-	Use:   "audit",
-	Short: "View MCP audit logs",
-	Long: `View audit logs of MCP tool invocations.
+// AuditCmd is retained for API compatibility; NewCommands() uses
+// newAuditCmd() instead so every call gets a fresh command.
+var AuditCmd = newAuditCmd()
+
+func newAuditCmd() *cobra.Command {
+	auditCmd := &cobra.Command{
+		Use:   "audit",
+		Short: "View MCP audit logs",
+		Long: `View audit logs of MCP tool invocations.
 
 By default shows the last 20 entries. Use --tail to change the number of entries.
 Use --json for machine-readable output. Use --agent to filter by agent name.
 Use --since to filter by time (e.g. "1h", "24h", "7d").`,
-	Example: `  # Last 20 audit entries
+		Example: `  # Last 20 audit entries
   symvault audit
 
   # Last 100 entries, JSON format
@@ -41,23 +46,67 @@ Use --since to filter by time (e.g. "1h", "24h", "7d").`,
 
   # Failed invocations in the last day from a specific agent
   symvault audit --agent claude-code --since 24h --failed`,
-	Annotations: map[string]string{
-		cli.RequiresVaultAnnotation: "false",
-	},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		entries, err := LoadAuditEntries(AuditAgent, AuditTail)
-		if err != nil {
-			return err
-		}
+		Annotations: map[string]string{
+			cli.RequiresVaultAnnotation: "false",
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			entries, err := LoadAuditEntries(AuditAgent, AuditTail)
+			if err != nil {
+				return err
+			}
 
-		entries = FilterAuditEntries(entries, AuditSince, AuditFailed)
+			entries = FilterAuditEntries(entries, AuditSince, AuditFailed)
 
-		if cli.WantJSONOutput(auditJSON) {
-			return OutputAuditJSON(cmd, entries)
-		}
+			if cli.WantJSONOutput(auditJSON) {
+				return OutputAuditJSON(cmd, entries)
+			}
 
-		return OutputAuditTable(cmd, entries)
-	},
+			return OutputAuditTable(cmd, entries)
+		},
+	}
+
+	auditCmd.Flags().IntVarP(&AuditTail, "tail", "n", 20, "Number of entries to show")
+	auditCmd.Flags().BoolVarP(&auditJSON, "json", "j", false, "Output as JSON (deprecated: use --output=json)")
+	auditCmd.Flags().StringVarP(&AuditAgent, "agent", "a", "default", "Agent name to filter by")
+	auditCmd.Flags().StringVarP(&AuditSince, "since", "s", "", "Show entries since duration (e.g. 1h, 24h, 7d)")
+	auditCmd.Flags().BoolVar(&AuditFailed, "failed", false, "Show only failed entries")
+	auditCmd.AddCommand(newRotateKeyCmd())
+	auditCmd.AddCommand(newAuditExportCmd())
+	auditCmd.GroupID = cli.GroupIDAdministration
+	return auditCmd
+}
+
+func newRotateKeyCmd() *cobra.Command {
+	rotateKeyCmd := &cobra.Command{
+		Use:   "rotate-key",
+		Short: "Rotate the audit log HMAC key",
+		Long: `Generate a new HMAC key for audit log integrity and archive the current key.
+
+The old key is archived to a timestamped file (audit-hmac-key.rotated.YYYY-MM-DD)
+in the vault directory. A new audit log file is started with the new key.`,
+		Annotations: map[string]string{
+			cli.RequiresVaultAnnotation: "true",
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			vaultDir, err := cli.VaultPath()
+			if err != nil {
+				return err
+			}
+
+			ks := audit.NewKeystore(vaultDir, nil)
+			newKey, archivePath, err := ks.RotateKey()
+			if err != nil {
+				return fmt.Errorf("rotate HMAC key: %w", err)
+			}
+
+			cmd.Printf("HMAC key rotated successfully.\n")
+			cmd.Printf("New key: %x (first 4 bytes)\n", newKey[:4])
+			cmd.Printf("Old key archived to: %s\n", archivePath)
+			cmd.Printf("A new audit log will be started on the next audit write.\n")
+			return nil
+		},
+	}
+	return rotateKeyCmd
 }
 
 func AuditLogPath(agent string) (string, error) {
@@ -208,44 +257,4 @@ func OutputAuditTable(cmd *cobra.Command, entries []audit.LogEntry) error {
 
 	cmd.Printf("\nTotal: %d entries\n", len(entries))
 	return nil
-}
-
-func init() {
-	AuditCmd.Flags().IntVarP(&AuditTail, "tail", "n", 20, "Number of entries to show")
-	AuditCmd.Flags().BoolVarP(&auditJSON, "json", "j", false, "Output as JSON (deprecated: use --output=json)")
-	AuditCmd.Flags().StringVarP(&AuditAgent, "agent", "a", "default", "Agent name to filter by")
-	AuditCmd.Flags().StringVarP(&AuditSince, "since", "s", "", "Show entries since duration (e.g. 1h, 24h, 7d)")
-	AuditCmd.Flags().BoolVar(&AuditFailed, "failed", false, "Show only failed entries")
-	AuditCmd.AddCommand(rotateKeyCmd)
-	AuditCmd.GroupID = cli.GroupIDAdministration
-}
-
-var rotateKeyCmd = &cobra.Command{
-	Use:   "rotate-key",
-	Short: "Rotate the audit log HMAC key",
-	Long: `Generate a new HMAC key for audit log integrity and archive the current key.
-
-The old key is archived to a timestamped file (audit-hmac-key.rotated.YYYY-MM-DD)
-in the vault directory. A new audit log file is started with the new key.`,
-	Annotations: map[string]string{
-		cli.RequiresVaultAnnotation: "true",
-	},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		vaultDir, err := cli.VaultPath()
-		if err != nil {
-			return err
-		}
-
-		ks := audit.NewKeystore(vaultDir, nil)
-		newKey, archivePath, err := ks.RotateKey()
-		if err != nil {
-			return fmt.Errorf("rotate HMAC key: %w", err)
-		}
-
-		cmd.Printf("HMAC key rotated successfully.\n")
-		cmd.Printf("New key: %x (first 4 bytes)\n", newKey[:4])
-		cmd.Printf("Old key archived to: %s\n", archivePath)
-		cmd.Printf("A new audit log will be started on the next audit write.\n")
-		return nil
-	},
 }

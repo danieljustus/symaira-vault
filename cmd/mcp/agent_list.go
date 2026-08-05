@@ -67,10 +67,11 @@ func (r AgentListResult) String() string {
 	return b.String()
 }
 
-var agentListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List all configured agents",
-	Long: `Show all installed agents with their tier, token status, and skill installation status.
+func newAgentListCmd() *cobra.Command {
+	agentListCmd := &cobra.Command{
+		Use:   "list",
+		Short: "List all configured agents",
+		Long: `Show all installed agents with their tier, token status, and skill installation status.
 
 Output columns:
   AGENT      Agent profile name
@@ -78,89 +79,91 @@ Output columns:
   TOKEN      Token status from the registry (none, valid, invalid)
   SKILL      Skill file status (missing, installed, managed)
   LAST SEEN  Most recent token use timestamp`,
-	Example: `  # List all agents in a table
+		Example: `  # List all agents in a table
   symvault agent list
 
   # JSON output for programmatic use
   symvault agent list --output json`,
-	Annotations: map[string]string{
-		cli.RequiresVaultAnnotation: "false",
-		cli.JSONOutputAnnotation:    "true",
-	},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		vaultDir := cli.GetVaultDir()
+		Annotations: map[string]string{
+			cli.RequiresVaultAnnotation: "false",
+			cli.JSONOutputAnnotation:    "true",
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			vaultDir := cli.GetVaultDir()
 
-		configPath := filepath.Join(vaultDir, "config.yaml")
-		cfg, err := configpkg.Load(configPath)
-		if err != nil {
-			return fmt.Errorf("load config: %w", err)
-		}
-
-		regPath := auth.TokenRegistryFilePath(vaultDir)
-		reg := auth.NewTokenRegistry(regPath)
-		if loadErr := reg.Load(); loadErr != nil {
-			return fmt.Errorf("load token registry: %w", loadErr)
-		}
-		allTokens := reg.List()
-
-		result := AgentListResult{
-			Agents: make([]AgentListItem, 0, len(cfg.Agents)),
-		}
-
-		names := make([]string, 0, len(cfg.Agents))
-		for name := range cfg.Agents {
-			names = append(names, name)
-		}
-		sortStrings(names)
-
-		for _, name := range names {
-			profile := cfg.Agents[name]
-			profile.Normalize()
-
-			item := AgentListItem{
-				Name: name,
-				Tier: profile.TierValue(),
+			configPath := filepath.Join(vaultDir, "config.yaml")
+			cfg, err := configpkg.Load(configPath)
+			if err != nil {
+				return fmt.Errorf("load config: %w", err)
 			}
 
-			var lastSeen time.Time
-			for _, tok := range allTokens {
-				if tok.AgentName == name && !tok.Revoked && !tok.IsExpired() {
-					item.TokenID = tok.ID
-					item.TokenValid = true
-					if tok.LastUsedAt != nil && tok.LastUsedAt.After(lastSeen) {
-						lastSeen = *tok.LastUsedAt
+			regPath := auth.TokenRegistryFilePath(vaultDir)
+			reg := auth.NewTokenRegistry(regPath)
+			if loadErr := reg.Load(); loadErr != nil {
+				return fmt.Errorf("load token registry: %w", loadErr)
+			}
+			allTokens := reg.List()
+
+			result := AgentListResult{
+				Agents: make([]AgentListItem, 0, len(cfg.Agents)),
+			}
+
+			names := make([]string, 0, len(cfg.Agents))
+			for name := range cfg.Agents {
+				names = append(names, name)
+			}
+			sortStrings(names)
+
+			for _, name := range names {
+				profile := cfg.Agents[name]
+				profile.Normalize()
+
+				item := AgentListItem{
+					Name: name,
+					Tier: profile.TierValue(),
+				}
+
+				var lastSeen time.Time
+				for _, tok := range allTokens {
+					if tok.AgentName == name && !tok.Revoked && !tok.IsExpired() {
+						item.TokenID = tok.ID
+						item.TokenValid = true
+						if tok.LastUsedAt != nil && tok.LastUsedAt.After(lastSeen) {
+							lastSeen = *tok.LastUsedAt
+						}
 					}
 				}
-			}
-			if !lastSeen.IsZero() {
-				item.LastSeen = lastSeen.Format("2006-01-02 15:04")
-			}
+				if !lastSeen.IsZero() {
+					item.LastSeen = lastSeen.Format("2006-01-02 15:04")
+				}
 
-			skillPath := profile.SkillPathValue()
-			if skillPath != "" {
-				expanded := expandTilde(skillPath)
-				expanded = filepath.Clean(expanded)
-				data, readErr := os.ReadFile(expanded)
-				if readErr == nil {
-					item.SkillInstalled = true
-					if manifest, parseErr := agentskill.ParseManifest(data); parseErr == nil && manifest.ManagedBy == agentskill.SentinelValue {
-						item.SkillManaged = true
+				skillPath := profile.SkillPathValue()
+				if skillPath != "" {
+					expanded := expandTilde(skillPath)
+					expanded = filepath.Clean(expanded)
+					data, readErr := os.ReadFile(expanded)
+					if readErr == nil {
+						item.SkillInstalled = true
+						if manifest, parseErr := agentskill.ParseManifest(data); parseErr == nil && manifest.ManagedBy == agentskill.SentinelValue {
+							item.SkillManaged = true
+						}
 					}
 				}
+
+				result.Agents = append(result.Agents, item)
 			}
+			result.Count = len(result.Agents)
 
-			result.Agents = append(result.Agents, item)
-		}
-		result.Count = len(result.Agents)
-
-		switch cli.OutputFormat {
-		case "json", "yaml":
-			return cli.PrintResult(result)
-		default:
-			cmd.Print(result.String())
-			return nil
-		}
-	},
+			switch cli.OutputFormat {
+			case "json", "yaml":
+				return cli.PrintResult(result)
+			default:
+				cmd.Print(result.String())
+				return nil
+			}
+		},
+	}
+	return agentListCmd
 }
 
 func sortStrings(s []string) {
@@ -171,8 +174,4 @@ func sortStrings(s []string) {
 			}
 		}
 	}
-}
-
-func init() {
-	agentCmd.AddCommand(agentListCmd)
 }
