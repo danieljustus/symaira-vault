@@ -1,0 +1,166 @@
+{
+  "accounts": [
+    {
+      "attrs": {
+        "accountName": "TOTP Round Trip Fixture"
+      },
+      "vaults": [
+        {
+          "attrs": {
+            "name": "Personal"
+          },
+          "items": [
+            {
+              "uuid": "totp-fixture-bare",
+              "categoryUuid": "001",
+              "state": "active",
+              "title": "Bare Secret",
+              "overview": {
+                "title": "Bare Secret",
+                "urls": []
+              },
+              "details": {
+                "notesPlain": "",
+                "loginFields": [
+                  {
+                    "designation": "username",
+                    "value": "user@example.com"
+                  },
+                  {
+                    "designation": "password",
+                    "value": "bare-secret-password"
+                  }
+                ],
+                "sections": [
+                  {
+                    "title": "Security",
+                    "fields": [
+                      {
+                        "id": "totp",
+                        "k": "concealed",
+                        "n": "totp",
+                        "t": "one-time password",
+                        "v": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "uuid": "totp-fixture-uri",
+              "categoryUuid": "001",
+              "state": "active",
+              "title": "Plain URI",
+              "overview": {
+                "title": "Plain URI",
+                "urls": []
+              },
+              "details": {
+                "notesPlain": "",
+                "loginFields": [
+                  {
+                    "designation": "username",
+                    "value": "user@example.com"
+                  },
+                  {
+                    "designation": "password",
+                    "value": "plain-uri-password"
+                  }
+                ],
+                "sections": [
+                  {
+                    "title": "Security",
+                    "fields": [
+                      {
+                        "id": "totp",
+                        "k": "concealed",
+                        "n": "totp",
+                        "t": "one-time password",
+                        "v": "otpauth://totp/Example:user@example.com?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=Example"
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "uuid": "totp-fixture-sha256",
+              "categoryUuid": "001",
+              "state": "active",
+              "title": "SHA256 URI",
+              "overview": {
+                "title": "SHA256 URI",
+                "urls": []
+              },
+              "details": {
+                "notesPlain": "",
+                "loginFields": [
+                  {
+                    "designation": "username",
+                    "value": "user@example.com"
+                  },
+                  {
+                    "designation": "password",
+                    "value": "sha256-uri-password"
+                  }
+                ],
+                "sections": [
+                  {
+                    "title": "Security",
+                    "fields": [
+                      {
+                        "id": "totp",
+                        "k": "concealed",
+                        "n": "totp",
+                        "t": "one-time password",
+                        "v": "otpauth://totp/Example:user@example.com?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&algorithm=SHA256&digits=8&period=60&issuer=Example"
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "uuid": "totp-fixture-malformed",
+              "categoryUuid": "001",
+              "state": "active",
+              "title": "Malformed URI",
+              "overview": {
+                "title": "Malformed URI",
+                "urls": []
+              },
+              "details": {
+                "notesPlain": "",
+                "loginFields": [
+                  {
+                    "designation": "username",
+                    "value": "user@example.com"
+                  },
+                  {
+                    "designation": "password",
+                    "value": "malformed-uri-password"
+                  }
+                ],
+                "sections": [
+                  {
+                    "title": "Security",
+                    "fields": [
+                      {
+                        "id": "totp",
+                        "k": "concealed",
+                        "n": "totp",
+                        "t": "one-time password",
+                        "v": "otpauth://totp/Example:user@example.com?secret=not-a-valid-base32-secret!!&issuer=Example"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+sha256-uri-password
+url: https://example.com
+username: user@example.com
+otpauth://totp/Example:user@example.com?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&algorithm=SHA256&digits=8&period=60&issuer=Example

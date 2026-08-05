@@ -61,7 +61,12 @@ func (i *csvImporter) Parse(r io.Reader) ([]ImportedEntry, error) {
 				entry.Path = NormalizePath(value)
 			case "otp", "totp.secret":
 				if value != "" {
-					entry.Data["totp"] = map[string]any{"secret": value}
+					totp, err := ParseTOTP(value)
+					if err != nil {
+						entry.Warnings = append(entry.Warnings, fmt.Sprintf("totp: %v", err))
+						break
+					}
+					entry.Data["totp"] = totp
 				}
 			default:
 				entry.Data[field] = value

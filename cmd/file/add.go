@@ -29,16 +29,26 @@ var (
 	AddShred   bool
 )
 
-var addCmd = &cobra.Command{
-	Use:   "add <path>",
-	Short: "Attach a certificate/key file to a vault entry",
-	Long: `Reads a file from disk, base64-encodes it, and stores it in the named
+// newAddCmd builds the `file add` command and registers its flags inline.
+func newAddCmd() *cobra.Command {
+	addCmd := &cobra.Command{
+		Use:   "add <path>",
+		Short: "Attach a certificate/key file to a vault entry",
+		Long: `Reads a file from disk, base64-encodes it, and stores it in the named
 vault entry's field, recording sha256, original filename and size as
 attachment metadata. Creates the entry if it does not exist, or merges the
 field into an existing entry.`,
-	Example: `  symvault file add elster/cert --field cert_p12 --from ~/Downloads/elster.pfx --shred`,
-	Args:    cobra.ExactArgs(1),
-	RunE:    runFileAdd,
+		Example: `  symvault file add elster/cert --field cert_p12 --from ~/Downloads/elster.pfx --shred`,
+		Args:    cobra.ExactArgs(1),
+		RunE:    runFileAdd,
+	}
+
+	addCmd.Flags().StringVar(&AddField, "field", "", "Data field name to store the attachment under (required)")
+	addCmd.Flags().StringVar(&AddFrom, "from", "", "Path to the source file to attach (required)")
+	addCmd.Flags().StringVar(&AddType, "type", string(vaultpkg.SecretTypeCertificate), "Secret type to set on the entry if not already set")
+	addCmd.Flags().Int64Var(&AddMaxSize, "max-size", DefaultMaxAttachmentSize, "Maximum source file size in bytes")
+	addCmd.Flags().BoolVar(&AddShred, "shred", false, "Best-effort overwrite and remove the source file after a successful attach")
+	return addCmd
 }
 
 func runFileAdd(cmd *cobra.Command, args []string) error {
@@ -121,13 +131,4 @@ func runFileAdd(cmd *cobra.Command, args []string) error {
 		}
 		return nil
 	})
-}
-
-func init() {
-	addCmd.Flags().StringVar(&AddField, "field", "", "Data field name to store the attachment under (required)")
-	addCmd.Flags().StringVar(&AddFrom, "from", "", "Path to the source file to attach (required)")
-	addCmd.Flags().StringVar(&AddType, "type", string(vaultpkg.SecretTypeCertificate), "Secret type to set on the entry if not already set")
-	addCmd.Flags().Int64Var(&AddMaxSize, "max-size", DefaultMaxAttachmentSize, "Maximum source file size in bytes")
-	addCmd.Flags().BoolVar(&AddShred, "shred", false, "Best-effort overwrite and remove the source file after a successful attach")
-	fileCmd.AddCommand(addCmd)
 }

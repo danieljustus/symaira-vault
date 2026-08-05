@@ -65,9 +65,11 @@ func (i *passImporter) Parse(r io.Reader) ([]ImportedEntry, error) {
 			return err
 		}
 
+		data, warnings := parsePassEntry(content)
 		entries = append(entries, ImportedEntry{
-			Path: passEntryPath(relPath),
-			Data: parsePassEntry(content),
+			Path:     passEntryPath(relPath),
+			Data:     data,
+			Warnings: warnings,
 		})
 		return nil
 	})
@@ -102,7 +104,9 @@ func passEntryPath(relPath string) string {
 	return NormalizePath(path)
 }
 
-func parsePassEntry(content string) map[string]any {
+// parsePassEntry parses a decrypted pass entry into vault data fields and a
+// list of per-entry warnings (e.g. a TOTP value that could not be normalized).
+func parsePassEntry(content string) (map[string]any, []string) {
 	content = strings.ReplaceAll(content, "\r\n", "\n")
 	content = strings.ReplaceAll(content, "\r", "\n")
 	content = strings.TrimSuffix(content, "\n")
@@ -110,11 +114,12 @@ func parsePassEntry(content string) map[string]any {
 	lines := strings.Split(content, "\n")
 	data := map[string]any{"password": ""}
 	if len(lines) == 0 {
-		return data
+		return data, nil
 	}
 
 	data["password"] = lines[0]
 	var notes []string
+	var warnings []string
 	for _, line := range lines[1:] {
 		switch {
 		case strings.HasPrefix(line, "url: "):
@@ -122,7 +127,12 @@ func parsePassEntry(content string) map[string]any {
 		case strings.HasPrefix(line, "username: "):
 			data["username"] = strings.TrimSpace(strings.TrimPrefix(line, "username: "))
 		case strings.HasPrefix(line, "otpauth://"):
-			data["totp"] = strings.TrimSpace(line)
+			totp, err := ParseTOTP(line)
+			if err != nil {
+				warnings = append(warnings, fmt.Sprintf("totp: %v", err))
+				continue
+			}
+			data["totp"] = totp
 		default:
 			notes = append(notes, line)
 		}
@@ -131,5 +141,5 @@ func parsePassEntry(content string) map[string]any {
 	if len(notes) > 0 {
 		data["notes"] = strings.Join(notes, "\n")
 	}
-	return data
+	return data, warnings
 }
