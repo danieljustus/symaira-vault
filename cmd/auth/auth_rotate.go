@@ -121,6 +121,9 @@ Optionally re-encrypts all entries with the new passphrase.`,
 				}
 			}
 
+			if cfg.Vault == nil {
+				cfg.Vault = &configpkg.VaultConfig{}
+			}
 			cfg.Vault.LastRotated = time.Now().UTC()
 			if saveErr := cfg.SaveTo(filepath.Join(vaultDir, "config.yaml")); saveErr != nil {
 				return fmt.Errorf("save config: %w", saveErr)
