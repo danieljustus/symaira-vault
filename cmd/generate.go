@@ -19,11 +19,16 @@ var (
 	genQuiet   bool
 )
 
-var generateCmd = &cobra.Command{
-	Use:     "generate",
-	Aliases: []string{"gen"},
-	Short:   "Generate a secure password",
-	Example: `  # Generate a 20-character password
+// generateCmd is retained for API compatibility; NewCommands() uses
+// newGenerateCmd() so every call gets a fresh command.
+var generateCmd = newGenerateCmd()
+
+func newGenerateCmd() *cobra.Command {
+	c := &cobra.Command{
+		Use:     "generate",
+		Aliases: []string{"gen"},
+		Short:   "Generate a secure password",
+		Example: `  # Generate a 20-character password
   symvault generate --length 20
 
   # Include symbols
@@ -31,67 +36,76 @@ var generateCmd = &cobra.Command{
 
   # Generate and store
   symvault generate --store newaccount.password`,
-	Annotations: map[string]string{
-		cli.JSONOutputAnnotation: "true",
-	},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		password, cleanup, err := generatePassword(genLength, genSymbols)
-		if err != nil {
-			return err
-		}
-		if cleanup != nil {
-			defer cleanup()
-		}
-
-		if genStore != "" {
-			return cli.WithVaultRaw(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
-				entryPath := vaultpkg.EntryPath(v, genStore)
-				if _, err := vaultpkg.ReadEntry(v.Dir, genStore, v.Identity); err == nil {
-					if _, err := vaultpkg.MergeEntryWithRecipients(v.Dir, genStore, map[string]any{"password": password}, v.Identity); err != nil {
-						return fmt.Errorf("cannot store password: %w", err)
-					}
-				} else {
-					entry := &vaultpkg.Entry{Data: map[string]any{"password": password}, Metadata: vaultpkg.EntryMetadata{Created: time.Now().UTC(), Updated: time.Now().UTC(), Version: 0}}
-					if err := vaultpkg.WriteEntryWithRecipients(v.Dir, genStore, entry, v.Identity); err != nil {
-						return fmt.Errorf("cannot store password: %w", err)
-					}
-				}
-
-				if err := v.AutoCommitEntry(fmt.Sprintf("Generate password for %s", genStore), genStore); err != nil {
-					return fmt.Errorf("auto-commit failed: %w", err)
-				}
-
-				if cli.OutputFormat == "text" {
-					if genQuiet {
-						return nil
-					}
-					printQuietAware("Password stored at: %s\n", entryPath)
-				} else {
-					result := map[string]any{
-						"stored": true,
-						"path":   genStore,
-						"file":   entryPath,
-					}
-					if genReveal {
-						result["password"] = password
-					}
-					if err := cli.PrintResult(result); err != nil {
-						return err
-					}
-				}
-				return nil
-			})
-		}
-
-		if cli.OutputFormat == "text" {
-			printlnQuietAware(password)
-		} else {
-			if err := cli.PrintResult(map[string]interface{}{"password": password}); err != nil {
+		Annotations: map[string]string{
+			cli.JSONOutputAnnotation: "true",
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			password, cleanup, err := generatePassword(genLength, genSymbols)
+			if err != nil {
 				return err
 			}
-		}
-		return nil
-	},
+			if cleanup != nil {
+				defer cleanup()
+			}
+
+			if genStore != "" {
+				return cli.WithVaultRaw(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
+					entryPath := vaultpkg.EntryPath(v, genStore)
+					if _, err := vaultpkg.ReadEntry(v.Dir, genStore, v.Identity); err == nil {
+						if _, err := vaultpkg.MergeEntryWithRecipients(v.Dir, genStore, map[string]any{"password": password}, v.Identity); err != nil {
+							return fmt.Errorf("cannot store password: %w", err)
+						}
+					} else {
+						entry := &vaultpkg.Entry{Data: map[string]any{"password": password}, Metadata: vaultpkg.EntryMetadata{Created: time.Now().UTC(), Updated: time.Now().UTC(), Version: 0}}
+						if err := vaultpkg.WriteEntryWithRecipients(v.Dir, genStore, entry, v.Identity); err != nil {
+							return fmt.Errorf("cannot store password: %w", err)
+						}
+					}
+
+					if err := v.AutoCommitEntry(fmt.Sprintf("Generate password for %s", genStore), genStore); err != nil {
+						return fmt.Errorf("auto-commit failed: %w", err)
+					}
+
+					if cli.OutputFormat == "text" {
+						if genQuiet {
+							return nil
+						}
+						printQuietAware("Password stored at: %s\n", entryPath)
+					} else {
+						result := map[string]any{
+							"stored": true,
+							"path":   genStore,
+							"file":   entryPath,
+						}
+						if genReveal {
+							result["password"] = password
+						}
+						if err := cli.PrintResult(result); err != nil {
+							return err
+						}
+					}
+					return nil
+				})
+			}
+
+			if cli.OutputFormat == "text" {
+				printlnQuietAware(password)
+			} else {
+				if err := cli.PrintResult(map[string]interface{}{"password": password}); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	}
+	c.Flags().IntVarP(&genLength, "length", "l", 20, "Password length")
+	c.Flags().BoolVarP(&genSymbols, "symbols", "s", false, "Include symbols")
+	c.Flags().StringVar(&genStore, "store", "", "Store at path (optional)")
+	c.Flags().BoolVar(&genReveal, "reveal", false, "Include generated password in output when using --store")
+	c.Flags().BoolVar(&genQuiet, "quiet", false, "Suppress success output when using --store")
+	c.AddCommand(newManpagesCmd())
+	c.GroupID = cli.GroupIDVault
+	return c
 }
 
 func generatePassword(length int, useSymbols bool) (string, func(), error) {
@@ -102,14 +116,4 @@ func generatePassword(length int, useSymbols bool) (string, func(), error) {
 		return "", func() {}, fmt.Errorf("length must be at most %d", crypto.MaxPasswordLength)
 	}
 	return crypto.GeneratePassword(length, useSymbols)
-}
-
-func init() {
-	generateCmd.Flags().IntVarP(&genLength, "length", "l", 20, "Password length")
-	generateCmd.Flags().BoolVarP(&genSymbols, "symbols", "s", false, "Include symbols")
-	generateCmd.Flags().StringVar(&genStore, "store", "", "Store at path (optional)")
-	generateCmd.Flags().BoolVar(&genReveal, "reveal", false, "Include generated password in output when using --store")
-	generateCmd.Flags().BoolVar(&genQuiet, "quiet", false, "Suppress success output when using --store")
-	generateCmd.AddCommand(manpagesCmd)
-	generateCmd.GroupID = cli.GroupIDVault
 }

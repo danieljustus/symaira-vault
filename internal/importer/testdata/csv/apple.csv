@@ -1,0 +1,4 @@
+Title,URL,Username,Password,Notes,OTPAuth
+GitHub,https://github.com/login,octocat@example.com,gh-apple-secret,"Primary GitHub account",otpauth://totp/GitHub:octocat@example.com?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&issuer=GitHub&algorithm=SHA1&digits=6&period=30
+iCloud Mail,https://www.icloud.com/mail,user@icloud.com,icloud-mail-secret,Personal mail,
+Bank of Example,https://bank.example.com/login,jane.doe@example.com,bank-checking-2026,"Checking account, with comma",otpauth://totp/Bank%20of%20Example:jane.doe@example.com?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=Bank+of+Example

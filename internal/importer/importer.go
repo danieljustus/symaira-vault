@@ -19,6 +19,10 @@ type ImportedEntry struct {
 	// SecretMetadata carries the semantic type and hints set by the importer.
 	// When set, the import pipeline writes this metadata to the vault entry.
 	SecretMetadata *vaultpkg.SecretMetadata
+	// Warnings lists per-entry issues found while parsing (for example a TOTP
+	// value that could not be normalized). The entry is still imported, minus
+	// the offending field. Nil when the entry parsed cleanly.
+	Warnings []string
 }
 
 // Importer parses a password export format and returns imported entries.
@@ -50,6 +54,19 @@ const (
 	FormatBitwarden Format = "bitwarden"
 	FormatPass      Format = "pass"
 	FormatCSV       Format = "csv"
+	// FormatCXF is the FIDO Alliance Credential Exchange Format (CXF) — a zip
+	// archive containing a JSON document of accounts, collections and typed
+	// credentials (FIDO Proposed Standard, August 2025).
+	FormatCXF Format = "cxf"
+	// FormatApple is the Apple Passwords / iCloud Keychain CSV export
+	// (Title,URL,Username,Password,Notes,OTPAuth).
+	FormatApple Format = "apple"
+	// FormatChrome is the Chrome / Chromium browser CSV export
+	// (name,url,username,password,note).
+	FormatChrome Format = "chrome"
+	// FormatFirefox is the Firefox CSV export
+	// (url,username,password,httpRealm,formActionOrigin,guid,timeCreated,timeLastUsed,timePasswordChanged).
+	FormatFirefox Format = "firefox"
 )
 
 // New creates an Importer for the given format.
@@ -63,6 +80,10 @@ func New(format Format) (Importer, error) {
 		return &passImporter{}, nil
 	case FormatCSV:
 		return &csvImporter{}, nil
+	case FormatCXF:
+		return &cxfImporter{}, nil
+	case FormatApple, FormatChrome, FormatFirefox:
+		return NewCSVProfile(format, "")
 	default:
 		return nil, fmt.Errorf("unsupported import format: %s", format)
 	}

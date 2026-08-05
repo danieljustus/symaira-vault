@@ -64,7 +64,9 @@ type onePUXSection struct {
 
 type onePUXField struct {
 	Title string          `json:"title"`
-	Value json.RawMessage `json:"value"`
+	Name  string          `json:"n"`
+	Type  string          `json:"t"`
+	Value json.RawMessage `json:"v"`
 }
 
 type onePUXOverview struct {
@@ -110,16 +112,27 @@ func (i *onePUXImporter) Parse(r io.Reader) ([]ImportedEntry, error) {
 				}
 
 				username, password := onePUXCredentials(item.Details.LoginFields)
+				data := map[string]any{
+					"username": username,
+					"password": password,
+					"url":      onePUXPrimaryURL(item.Overview.URLs),
+					"notes":    item.Details.NotesPlain,
+					"tags":     onePUXTags(item.Overview.Tags),
+				}
+
+				var warnings []string
+				if otp, ok := onePUXTOTP(item.Details.Sections); ok {
+					if totp, err := ParseTOTP(otp); err == nil {
+						data["totp"] = totp
+					} else {
+						warnings = append(warnings, fmt.Sprintf("totp: %v", err))
+					}
+				}
+
 				entries = append(entries, ImportedEntry{
-					Path: item.Title,
-					Data: map[string]any{
-						"username": username,
-						"password": password,
-						"url":      onePUXPrimaryURL(item.Overview.URLs),
-						"notes":    item.Details.NotesPlain,
-						"tags":     onePUXTags(item.Overview.Tags),
-						"totp":     onePUXTOTP(item.Details.Sections),
-					},
+					Path:     item.Title,
+					Data:     data,
+					Warnings: warnings,
 				})
 			}
 		}
@@ -181,19 +194,29 @@ func onePUXTags(tags []string) []string {
 	return tags
 }
 
-func onePUXTOTP(sections []onePUXSection) string {
+// onePUXTOTP returns the first one-time-password value found in the item's
+// sections. The boolean reports whether a TOTP field was present at all.
+func onePUXTOTP(sections []onePUXSection) (string, bool) {
 	for _, section := range sections {
 		for _, field := range section.Fields {
-			if !strings.Contains(strings.ToLower(field.Title), "one-time password") {
+			if !onePUXFieldIsTOTP(field) {
 				continue
 			}
 
 			if otp := onePUXOTPValue(field.Value); otp != "" {
-				return otp
+				return otp, true
 			}
 		}
 	}
-	return ""
+	return "", false
+}
+
+// onePUXFieldIsTOTP reports whether a 1pux section field carries a one-time
+// password. Real exports identify the field through its type ("t") or name
+// ("n"), e.g. t="one-time password", n="totp".
+func onePUXFieldIsTOTP(f onePUXField) bool {
+	lower := strings.ToLower(f.Type + " " + f.Name + " " + f.Title)
+	return strings.Contains(lower, "one-time password") || strings.Contains(lower, "totp")
 }
 
 func onePUXOTPValue(value json.RawMessage) string {
