@@ -44,10 +44,11 @@ type InstallResult struct {
 	BackupPath    string `json:"backup_path,omitempty" yaml:"backup_path,omitempty"`
 }
 
-var agentInstallCmd = &cobra.Command{
-	Use:   "install [name]",
-	Short: "Install and configure an AI agent for Symaira Vault",
-	Long: `Unified install command that detects an AI agent, creates a security
+func newAgentInstallCmd() *cobra.Command {
+	agentInstallCmd := &cobra.Command{
+		Use:   "install [name]",
+		Short: "Install and configure an AI agent for Symaira Vault",
+		Long: `Unified install command that detects an AI agent, creates a security
 profile in config.yaml, generates a scoped access token, injects the
 MCP server configuration into the agent's config file, and installs the
 embedded skill package — all in one step.
@@ -59,7 +60,7 @@ or "admin" tiers, an interactive terminal is required to confirm the
 security implications.
 
 Supported agents: openclaw, claude-code, hermes, codex, opencode`,
-	Example: `  # Install and configure Claude Code (auto-detect)
+		Example: `  # Install and configure Claude Code (auto-detect)
   symvault agent install claude-code
 
   # Detect all installed agents and configure each
@@ -85,24 +86,33 @@ Supported agents: openclaw, claude-code, hermes, codex, opencode`,
 
   # Structured JSON output for scripting
   symvault agent install opencode --output json`,
-	Annotations: map[string]string{
-		cli.RequiresVaultAnnotation: "false",
-		cli.JSONOutputAnnotation:    "true",
-	},
-	Args: func(cmd *cobra.Command, args []string) error {
-		autoDetect, _ := cmd.Flags().GetBool("auto-detect")
-		if autoDetect {
-			if len(args) > 0 {
-				return fmt.Errorf("cannot specify an agent name with --auto-detect")
+		Annotations: map[string]string{
+			cli.RequiresVaultAnnotation: "false",
+			cli.JSONOutputAnnotation:    "true",
+		},
+		Args: func(cmd *cobra.Command, args []string) error {
+			autoDetect, _ := cmd.Flags().GetBool("auto-detect")
+			if autoDetect {
+				if len(args) > 0 {
+					return fmt.Errorf("cannot specify an agent name with --auto-detect")
+				}
+				return nil
+			}
+			if len(args) != 1 {
+				return fmt.Errorf("requires exactly 1 argument (agent name), or use --auto-detect")
 			}
 			return nil
-		}
-		if len(args) != 1 {
-			return fmt.Errorf("requires exactly 1 argument (agent name), or use --auto-detect")
-		}
-		return nil
-	},
-	RunE: agentInstallRunE,
+		},
+		RunE: agentInstallRunE,
+	}
+	agentInstallCmd.Flags().Bool("auto-detect", false, "Detect all installed agents and configure each")
+	agentInstallCmd.Flags().String("tier", "safe", "Security tier: safe (default), standard, or admin")
+	agentInstallCmd.Flags().Bool("http", false, "Use HTTP transport with auto-generated bearer token")
+	agentInstallCmd.Flags().Bool("dry-run", false, "Preview changes without applying them")
+	agentInstallCmd.Flags().Bool("skill-only", false, "Only install the skill package, skip MCP config")
+	agentInstallCmd.Flags().Bool("config-only", false, "Only inject MCP config, skip the skill")
+	agentInstallCmd.Flags().Bool("force", false, "Overwrite existing agent profile and MCP config entries")
+	return agentInstallCmd
 }
 
 func agentInstallRunE(cmd *cobra.Command, args []string) error {
@@ -482,15 +492,4 @@ func writeInstallOutput(results []InstallResult) error {
 		}
 		return nil
 	}
-}
-
-func init() {
-	agentCmd.AddCommand(agentInstallCmd)
-	agentInstallCmd.Flags().Bool("auto-detect", false, "Detect all installed agents and configure each")
-	agentInstallCmd.Flags().String("tier", "safe", "Security tier: safe (default), standard, or admin")
-	agentInstallCmd.Flags().Bool("http", false, "Use HTTP transport with auto-generated bearer token")
-	agentInstallCmd.Flags().Bool("dry-run", false, "Preview changes without applying them")
-	agentInstallCmd.Flags().Bool("skill-only", false, "Only install the skill package, skip MCP config")
-	agentInstallCmd.Flags().Bool("config-only", false, "Only inject MCP config, skip the skill")
-	agentInstallCmd.Flags().Bool("force", false, "Overwrite existing agent profile and MCP config entries")
 }

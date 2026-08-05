@@ -1,0 +1,4 @@
+malformed-uri-password
+url: https://example.com
+username: user@example.com
+otpauth://totp/Example:user@example.com?secret=not-a-valid-base32-secret!!&issuer=Example

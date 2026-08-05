@@ -24,15 +24,16 @@ type auditFlags struct {
 
 var agentAuditFlags auditFlags
 
-var agentAuditCmd = &cobra.Command{
-	Use:   "audit <name>",
-	Short: "Show audit log for an agent",
-	Long: `Display recent audit events for a specific agent.
+func newAgentAuditCmd() *cobra.Command {
+	agentAuditCmd := &cobra.Command{
+		Use:   "audit <name>",
+		Short: "Show audit log for an agent",
+		Long: `Display recent audit events for a specific agent.
 
 Reads from the agent's dedicated audit log at ~/.symvault/audit-<name>.log
 and displays entries in table or JSON format.`,
-	Args: cobra.ExactArgs(1),
-	Example: `  # Show last 50 audit entries for an agent
+		Args: cobra.ExactArgs(1),
+		Example: `  # Show last 50 audit entries for an agent
   symvault agent audit my-agent
 
   # Show entries from the last 24 hours
@@ -43,41 +44,46 @@ and displays entries in table or JSON format.`,
 
   # Show last 100 entries
   symvault agent audit my-agent --limit 100`,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		agentName := args[0]
+		RunE: func(cmd *cobra.Command, args []string) error {
+			agentName := args[0]
 
-		vaultDir := cli.GetVaultDir()
-		logPath := filepath.Join(vaultDir, fmt.Sprintf("audit-%s.log", sanitizeAgentName(agentName)))
+			vaultDir := cli.GetVaultDir()
+			logPath := filepath.Join(vaultDir, fmt.Sprintf("audit-%s.log", sanitizeAgentName(agentName)))
 
-		entries, err := ReadAuditLog(logPath, agentAuditFlags.limit)
-		if err != nil {
-			if os.IsNotExist(err) {
-				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "No audit log found for agent %q at %s\n", agentName, logPath)
+			entries, err := ReadAuditLog(logPath, agentAuditFlags.limit)
+			if err != nil {
+				if os.IsNotExist(err) {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "No audit log found for agent %q at %s\n", agentName, logPath)
+					return nil
+				}
+				return fmt.Errorf("read audit log: %w", err)
+			}
+
+			if len(entries) == 0 {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "No audit entries found for agent %q.\n", agentName)
 				return nil
 			}
-			return fmt.Errorf("read audit log: %w", err)
-		}
 
-		if len(entries) == 0 {
-			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "No audit entries found for agent %q.\n", agentName)
-			return nil
-		}
+			entries = SinceFilter(entries, agentAuditFlags.since)
 
-		entries = SinceFilter(entries, agentAuditFlags.since)
+			if len(entries) == 0 {
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "No audit entries match the filter criteria.\n")
+				return nil
+			}
 
-		if len(entries) == 0 {
-			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "No audit entries match the filter criteria.\n")
-			return nil
-		}
-
-		switch agentAuditFlags.format {
-		case "json":
-			return printAuditJSON(cmd, entries)
-		default:
-			printAuditTable(cmd, entries)
-			return nil
-		}
-	},
+			switch agentAuditFlags.format {
+			case "json":
+				return printAuditJSON(cmd, entries)
+			default:
+				printAuditTable(cmd, entries)
+				return nil
+			}
+		},
+	}
+	agentAuditCmd.Flags().StringVar(&agentAuditFlags.since, "since", "", "Show entries since duration (e.g. 24h, 7d)")
+	agentAuditCmd.Flags().StringVar(&agentAuditFlags.format, "format", "table", "Output format (table, json)")
+	agentAuditCmd.Flags().IntVar(&agentAuditFlags.limit, "limit", 50, "Maximum number of entries to show")
+	return agentAuditCmd
 }
 
 func ReadAuditLog(path string, limit int) ([]audit.LogEntry, error) {
@@ -170,11 +176,4 @@ func printAuditJSON(cmd *cobra.Command, entries []audit.LogEntry) error {
 	enc := json.NewEncoder(cmd.OutOrStdout())
 	enc.SetIndent("", "  ")
 	return enc.Encode(entries)
-}
-
-func init() {
-	agentAuditCmd.Flags().StringVar(&agentAuditFlags.since, "since", "", "Show entries since duration (e.g. 24h, 7d)")
-	agentAuditCmd.Flags().StringVar(&agentAuditFlags.format, "format", "table", "Output format (table, json)")
-	agentAuditCmd.Flags().IntVar(&agentAuditFlags.limit, "limit", 50, "Maximum number of entries to show")
-	agentCmd.AddCommand(agentAuditCmd)
 }

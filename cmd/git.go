@@ -11,64 +11,68 @@ import (
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
-var gitCmd = &cobra.Command{
-	Use:   "git <push|pull|log> [path]",
-	Short: "Git operations on vault",
-	Example: `  # Sync with the configured remote
+// gitCmd is retained for API compatibility; NewRootCmd() uses
+// newGitCmd() so every call gets a fresh command.
+var gitCmd = newGitCmd()
+
+func newGitCmd() *cobra.Command {
+	c := &cobra.Command{
+		Use:   "git <push|pull|log> [path]",
+		Short: "Git operations on vault",
+		Example: `  # Sync with the configured remote
   symvault git pull
   symvault git push
 
   # Show commit history for an entry
   symvault git log work/aws`,
-	Args: cobra.RangeArgs(1, 2),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		action := args[0]
+		Args: cobra.RangeArgs(1, 2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			action := args[0]
 
-		if action == "log" {
-			return cli.WithVaultRaw(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
-				path := ""
-				if len(args) > 1 {
-					path = args[1]
-				}
-				history, err := git.Log(v.Dir, path, 0)
-				if err != nil {
-					return fmt.Errorf("cannot get log: %w", err)
-				}
-				for _, h := range history {
-					printQuietAware("%s  %s  %s\n", h.Hash[:7], h.Date.Format("2006-01-02"), h.Message)
-					printlnQuietAware("  Author: " + h.Author)
-				}
-				return nil
-			})
-		}
-
-		vaultDir, err := cli.VaultPath()
-		if err != nil {
-			return err
-		}
-		if !vaultpkg.IsInitialized(vaultDir) {
-			return errorspkg.NewVaultNotInitialized()
-		}
-
-		switch action {
-		case "push":
-			if err := git.Push(vaultDir); err != nil {
-				return fmt.Errorf("push failed: %w", err)
+			if action == "log" {
+				return cli.WithVaultRaw(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
+					path := ""
+					if len(args) > 1 {
+						path = args[1]
+					}
+					history, err := git.Log(v.Dir, path, 0)
+					if err != nil {
+						return fmt.Errorf("cannot get log: %w", err)
+					}
+					for _, h := range history {
+						printQuietAware("%s  %s  %s\n", h.Hash[:7], h.Date.Format("2006-01-02"), h.Message)
+						printlnQuietAware("  Author: " + h.Author)
+					}
+					return nil
+				})
 			}
-			printlnQuietAware("Pushed to remote")
-		case "pull":
-			if err := git.Pull(vaultDir); err != nil {
-				return fmt.Errorf("pull failed: %w", err)
+
+			vaultDir, err := cli.VaultPath()
+			if err != nil {
+				return err
 			}
-			printlnQuietAware("Pulled from remote")
-		default:
-			return fmt.Errorf("unknown action: %s (use push, pull, or log)", action)
-		}
+			if !vaultpkg.IsInitialized(vaultDir) {
+				return errorspkg.NewVaultNotInitialized()
+			}
 
-		return nil
-	},
-}
+			switch action {
+			case "push":
+				if err := git.Push(vaultDir); err != nil {
+					return fmt.Errorf("push failed: %w", err)
+				}
+				printlnQuietAware("Pushed to remote")
+			case "pull":
+				if err := git.Pull(vaultDir); err != nil {
+					return fmt.Errorf("pull failed: %w", err)
+				}
+				printlnQuietAware("Pulled from remote")
+			default:
+				return fmt.Errorf("unknown action: %s (use push, pull, or log)", action)
+			}
 
-func init() {
-	gitCmd.GroupID = cli.GroupIDSharingSync
+			return nil
+		},
+	}
+	c.GroupID = cli.GroupIDSharingSync
+	return c
 }

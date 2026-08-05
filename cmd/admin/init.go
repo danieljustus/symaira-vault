@@ -22,11 +22,12 @@ import (
 
 var initAuthMethod string
 
-var initCmd = &cobra.Command{
-	Use:   "init [vault-dir]",
-	Short: "Initialize a new password vault",
-	Long:  "Creates a new vault directory with identity and configuration.",
-	Example: `  # Initialize default vault
+func newInitCmd() *cobra.Command {
+	initCmd := &cobra.Command{
+		Use:   "init [vault-dir]",
+		Short: "Initialize a new password vault",
+		Long:  "Creates a new vault directory with identity and configuration.",
+		Example: `  # Initialize default vault
   symvault init
 
   # Initialize with specific auth method
@@ -34,105 +35,109 @@ var initCmd = &cobra.Command{
 
   # Initialize custom vault directory
   symvault init ~/my-vault`,
-	Args: cobra.MaximumNArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		if !term.IsTerminal(int(os.Stdin.Fd())) && !cli.HasCachedEnvPassphrase() {
-			return fmt.Errorf("init requires a TTY or SYMVAULT_PASSPHRASE/OPENPASS_PASSPHRASE env var; use `symvault setup` for interactive initialization")
-		}
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if !term.IsTerminal(int(os.Stdin.Fd())) && !cli.HasCachedEnvPassphrase() {
+				return fmt.Errorf("init requires a TTY or SYMVAULT_PASSPHRASE/OPENPASS_PASSPHRASE env var; use `symvault setup` for interactive initialization")
+			}
 
-		var (
-			vaultDir string
-			err      error
-		)
-		if len(args) > 0 {
-			vaultDir, err = cli.ExpandVaultDir(args[0])
-		} else {
-			vaultDir, err = cli.VaultPath()
-		}
-		if err != nil {
-			return err
-		}
-
-		if _, statErr := os.Stat(filepath.Join(vaultDir, "config.yaml")); statErr == nil {
-			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, fmt.Sprintf("vault already initialized at %s", vaultDir), nil)
-		} else if !os.IsNotExist(statErr) {
-			return fmt.Errorf("cannot check vault directory: %w", statErr)
-		}
-
-		if mkdirErr := os.MkdirAll(vaultDir, 0o700); mkdirErr != nil {
-			return fmt.Errorf("cannot create vault directory: %w", mkdirErr)
-		}
-
-		var passphrase []byte
-		if cached := cli.ConsumeCachedEnvPassphrase(); len(cached) > 0 {
-			passphrase = cached
-		} else {
-			passphrase, err = cli.ReadHiddenInput("Enter passphrase for vault identity (minimum 12 characters): ", nil)
+			var (
+				vaultDir string
+				err      error
+			)
+			if len(args) > 0 {
+				vaultDir, err = cli.ExpandVaultDir(args[0])
+			} else {
+				vaultDir, err = cli.VaultPath()
+			}
 			if err != nil {
-				return fmt.Errorf("cannot read passphrase: %w", err)
+				return err
 			}
-		}
-		defer cryptopkg.Wipe(passphrase)
-		if len(passphrase) < 12 {
-			return fmt.Errorf("passphrase must be at least 12 characters")
-		}
-		authMethod, err := resolveInitAuthMethod(initAuthMethod)
-		if err != nil {
-			return err
-		}
 
-		cfg := config.Default()
-		cfg.VaultDir = vaultDir
-		// A non-nil Vault section is required for InitWithPassphrase to take
-		// the argon2id path (see internal/vault/vault.go); without it, new
-		// vaults would silently fall back to legacy scrypt.
-		cfg.Vault = &config.VaultConfig{
-			SearchIndex:     true,
-			AutoHealZeroKey: true,
-		}
-		if authErr := cfg.SetAuthMethod(authMethod); authErr != nil {
-			return authErr
-		}
-		cfg.DefaultAgent = "cli"
-		cfg.Agents = map[string]config.AgentProfile{
-			"cli": {
-				Name:            "cli",
-				AllowedPaths:    []string{"*"},
-				CanWrite:        config.BoolPtr(true),
-				RequireApproval: config.BoolPtr(false),
-			},
-		}
-
-		// Initialize Git config with defaults (auto-push enabled)
-		cfg.Git = &config.GitConfig{
-			AutoPush:       true,
-			CommitTemplate: "Update from Symaira Vault",
-		}
-
-		identity, err := vaultpkg.InitWithPassphrase(vaultDir, passphrase, cfg)
-		if err != nil {
-			return fmt.Errorf("cannot initialize vault: %w", err)
-		}
-
-		if err := git.Init(vaultDir); err != nil {
-			return fmt.Errorf("cannot initialize git: %w", err)
-		}
-
-		if err := git.CreateGitignore(vaultDir); err != nil {
-			return fmt.Errorf("cannot create .gitignore: %w", err)
-		}
-		if authMethod == config.AuthMethodTouchID {
-			if err := session.SaveBiometricPassphrase(context.Background(), vaultDir, passphrase); err != nil {
-				return fmt.Errorf("cannot configure Touch ID unlock: %w", err)
+			if _, statErr := os.Stat(filepath.Join(vaultDir, "config.yaml")); statErr == nil {
+				return errorspkg.NewCLIError(errorspkg.ExitGeneralError, fmt.Sprintf("vault already initialized at %s", vaultDir), nil)
+			} else if !os.IsNotExist(statErr) {
+				return fmt.Errorf("cannot check vault directory: %w", statErr)
 			}
-			cli.PrintQuietAware("Touch ID unlock enabled\n")
-		}
 
-		cli.PrintQuietAware("Vault initialized at %s\n", vaultDir)
-		cli.PrintQuietAware("Public key: %s\n", identity.Recipient().String())
-		printPostInitHints(vaultDir)
-		return nil
-	},
+			if mkdirErr := os.MkdirAll(vaultDir, 0o700); mkdirErr != nil {
+				return fmt.Errorf("cannot create vault directory: %w", mkdirErr)
+			}
+
+			var passphrase []byte
+			if cached := cli.ConsumeCachedEnvPassphrase(); len(cached) > 0 {
+				passphrase = cached
+			} else {
+				passphrase, err = cli.ReadHiddenInput("Enter passphrase for vault identity (minimum 12 characters): ", nil)
+				if err != nil {
+					return fmt.Errorf("cannot read passphrase: %w", err)
+				}
+			}
+			defer cryptopkg.Wipe(passphrase)
+			if len(passphrase) < 12 {
+				return fmt.Errorf("passphrase must be at least 12 characters")
+			}
+			authMethod, err := resolveInitAuthMethod(initAuthMethod)
+			if err != nil {
+				return err
+			}
+
+			cfg := config.Default()
+			cfg.VaultDir = vaultDir
+			// A non-nil Vault section is required for InitWithPassphrase to take
+			// the argon2id path (see internal/vault/vault.go); without it, new
+			// vaults would silently fall back to legacy scrypt.
+			cfg.Vault = &config.VaultConfig{
+				SearchIndex:     true,
+				AutoHealZeroKey: true,
+			}
+			if authErr := cfg.SetAuthMethod(authMethod); authErr != nil {
+				return authErr
+			}
+			cfg.DefaultAgent = "cli"
+			cfg.Agents = map[string]config.AgentProfile{
+				"cli": {
+					Name:            "cli",
+					AllowedPaths:    []string{"*"},
+					CanWrite:        config.BoolPtr(true),
+					RequireApproval: config.BoolPtr(false),
+				},
+			}
+
+			// Initialize Git config with defaults (auto-push enabled)
+			cfg.Git = &config.GitConfig{
+				AutoPush:       true,
+				CommitTemplate: "Update from Symaira Vault",
+			}
+
+			identity, err := vaultpkg.InitWithPassphrase(vaultDir, passphrase, cfg)
+			if err != nil {
+				return fmt.Errorf("cannot initialize vault: %w", err)
+			}
+
+			if err := git.Init(vaultDir); err != nil {
+				return fmt.Errorf("cannot initialize git: %w", err)
+			}
+
+			if err := git.CreateGitignore(vaultDir); err != nil {
+				return fmt.Errorf("cannot create .gitignore: %w", err)
+			}
+			if authMethod == config.AuthMethodTouchID {
+				if err := session.SaveBiometricPassphrase(context.Background(), vaultDir, passphrase); err != nil {
+					return fmt.Errorf("cannot configure Touch ID unlock: %w", err)
+				}
+				cli.PrintQuietAware("Touch ID unlock enabled\n")
+			}
+
+			cli.PrintQuietAware("Vault initialized at %s\n", vaultDir)
+			cli.PrintQuietAware("Public key: %s\n", identity.Recipient().String())
+			printPostInitHints(vaultDir)
+			return nil
+		},
+	}
+	initCmd.GroupID = cli.GroupIDEssentials
+	initCmd.Flags().StringVar(&initAuthMethod, "auth", "ask", "unlock method for this vault (ask, passphrase, touchid)")
+	return initCmd
 }
 
 func printPostInitHints(vaultDir string) {
@@ -153,11 +158,6 @@ func printPostInitHints(vaultDir string) {
 	cli.PrintlnQuietAware("     https://github.com/danieljustus/symaira-vault/blob/main/config.yaml.example")
 	cli.PrintlnQuietAware("")
 	cli.PrintlnQuietAware("Tip: 'symvault --help' lists all commands. Use 'symvault <cmd> --help' for details.")
-}
-
-func init() {
-	initCmd.GroupID = cli.GroupIDEssentials
-	initCmd.Flags().StringVar(&initAuthMethod, "auth", "ask", "unlock method for this vault (ask, passphrase, touchid)")
 }
 
 func resolveInitAuthMethod(method string) (string, error) {

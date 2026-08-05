@@ -21,6 +21,8 @@ func TestDetectFormatFromExt(t *testing.T) {
 	}{
 		{"csv", "export.csv", importer.FormatCSV, false},
 		{"csv with path", "/path/to/file.csv", importer.FormatCSV, false},
+		{"zip", "export.zip", importer.FormatCXF, false},
+		{"zip with path", "/path/to/export.zip", importer.FormatCXF, false},
 		{"json", "backup.json", "json", false},
 		{"json with path", "/home/user/export.json", "json", false},
 		{"yaml", "config.yaml", "yaml", false},
@@ -30,6 +32,7 @@ func TestDetectFormatFromExt(t *testing.T) {
 		{"unknown extension", "data.txt", "", true},
 		{"no extension", "data", "", true},
 		{"uppercase CSV", "export.CSV", importer.FormatCSV, false},
+		{"uppercase ZIP", "export.ZIP", importer.FormatCXF, false},
 		{"uppercase JSON", "export.JSON", "json", false},
 		{"uppercase YAML", "export.YAML", "yaml", false},
 		{"uppercase YML", "export.YML", "yaml", false},
@@ -71,6 +74,10 @@ func TestIsSupportedImportFormat(t *testing.T) {
 		{importer.Format1Password, true},
 		{importer.FormatBitwarden, true},
 		{importer.FormatPass, true},
+		{importer.FormatCXF, true},
+		{importer.FormatApple, true},
+		{importer.FormatChrome, true},
+		{importer.FormatFirefox, true},
 		{"json", false},
 		{"yaml", false},
 		{"unknown", false},
@@ -80,6 +87,43 @@ func TestIsSupportedImportFormat(t *testing.T) {
 		t.Run(string(tt.format), func(t *testing.T) {
 			if got := isSupportedImportFormat(tt.format); got != tt.want {
 				t.Errorf("isSupportedImportFormat(%q) = %v, want %v", tt.format, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSniffCSVProfile(t *testing.T) {
+	tmpDir := t.TempDir()
+	writeCSV := func(name, content string) string {
+		t.Helper()
+		p := filepath.Join(tmpDir, name)
+		if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+		return p
+	}
+
+	tests := []struct {
+		name    string
+		content string
+		want    importer.Format
+	}{
+		{"apple", "Title,URL,Username,Password,Notes,OTPAuth\nExample,https://example.com,u,p,n,otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP\n", importer.FormatApple},
+		{"chrome", "name,url,username,password,note\nExample,https://example.com,u,p,n\n", importer.FormatChrome},
+		{"firefox", "url,username,password,httpRealm,formActionOrigin,guid,timeCreated,timeLastUsed,timePasswordChanged\nhttps://example.com,u,p,,https://example.com,{00000000-0000-0000-0000-000000000001},1735689600000,1735776000000,1735776000000\n", importer.FormatFirefox},
+		{"generic", "title,username,password,url,notes\nExample,u,p,https://example.com,n\n", importer.FormatCSV},
+		{"empty file", "", importer.FormatCSV},
+		{"missing file", "", importer.FormatCSV},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(tmpDir, "does-not-exist.csv")
+			if tt.name != "missing file" {
+				path = writeCSV(tt.name+".csv", tt.content)
+			}
+			if got := sniffCSVProfile(path); got != tt.want {
+				t.Errorf("sniffCSVProfile(%q) = %q, want %q", path, got, tt.want)
 			}
 		})
 	}

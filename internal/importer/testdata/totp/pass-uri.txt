@@ -1,0 +1,4 @@
+plain-uri-password
+url: https://example.com
+username: user@example.com
+otpauth://totp/Example:user@example.com?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=Example
