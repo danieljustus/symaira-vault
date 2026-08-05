@@ -30,10 +30,11 @@ var (
 	ImportFormat       string
 )
 
-var importCmd = &cobra.Command{
-	Use:   "import <source>",
-	Short: "Import entries from another password manager",
-	Long: `Imports password entries from another password manager.
+func newImportCmd() *cobra.Command {
+	importCmd := &cobra.Command{
+		Use:   "import <source>",
+		Short: "Import entries from another password manager",
+		Long: `Imports password entries from another password manager.
 
 When --format is not specified, the format is auto-detected from the input file extension:
   .csv  → CSV format
@@ -41,7 +42,7 @@ When --format is not specified, the format is auto-detected from the input file 
   .yaml/.yml → YAML format
 
 Use --format to override auto-detection or when the file extension does not match the actual format.`,
-	Example: `  # Auto-detect format from file extension
+		Example: `  # Auto-detect format from file extension
   symvault import bw-export.json --dry-run
 
   # Explicitly specify format (overrides auto-detection)
@@ -52,143 +53,141 @@ Use --format to override auto-detection or when the file extension does not matc
 
   # Auto-detect CSV from .csv extension
   symvault import data.csv --overwrite`,
-	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		sourcePath := args[0]
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			sourcePath := args[0]
 
-		var format importer.Format
-		if ImportFormat != "" {
-			format = importer.Format(strings.ToLower(strings.TrimSpace(ImportFormat)))
-		} else {
-			var err error
-			format, err = detectFormatFromExt(sourcePath)
-			if err != nil {
-				return errorspkg.NewCLIError(errorspkg.ExitGeneralError, err.Error(), nil)
-			}
-		}
-		if !isSupportedImportFormat(format) {
-			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, fmt.Sprintf("unsupported import format: %s", format), nil)
-		}
-
-		if ImportSkipExisting && ImportOverwrite {
-			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "--skip-existing and --overwrite cannot be used together", nil)
-		}
-
-		if ImportQuarantine && ImportPrefix != "" {
-			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "--quarantine and --prefix cannot be used together", nil)
-		}
-
-		options := importer.ImportOptions{
-			DryRun:       ImportDryRun,
-			Prefix:       strings.Trim(ImportPrefix, "/"),
-			SkipExisting: ImportSkipExisting,
-			Overwrite:    ImportOverwrite,
-			Mapping:      ImportMapping,
-		}
-
-		if ImportQuarantine {
-			importID := generateImportID()
-			options.Prefix = "quarantine/" + importID
-			cli.PrintQuietAware("Quarantine import ID: %s\n", importID)
-		}
-
-		if _, err := importer.ParseMapping(options.Mapping); err != nil {
-			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "invalid CSV mapping", err)
-		}
-
-		source, err := os.Open(sourcePath) // #nosec G304 -- import source path is user-provided CLI argument
-		if err != nil {
-			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "open import source", err)
-		}
-		defer func() { _ = source.Close() }()
-
-		fi, err := source.Stat()
-		if err != nil {
-			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "stat import source", err)
-		}
-		if fi.Size() > importer.MaxImportSize {
-			return errorspkg.NewCLIError(errorspkg.ExitGeneralError,
-				fmt.Sprintf("import source exceeds maximum size of %d bytes", importer.MaxImportSize), nil)
-		}
-
-		imp, err := newImporter(format, options)
-		if err != nil {
-			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "create importer", err)
-		}
-
-		entries, err := imp.Parse(source)
-		if err != nil {
-			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "parse import source", err)
-		}
-
-		return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
-			// Batch mode: the write loop below would otherwise trigger a full
-			// decrypt/re-encrypt/persist of the search index per entry (O(N²)
-			// total). Suspend defers index maintenance; the deferred Resume
-			// performs exactly one rebuild — even when the import fails midway —
-			// and invalidates the index explicitly if that rebuild fails, so the
-			// index is never left silently stale.
-			if !options.DryRun {
-				vaultpkg.SuspendSearchIndex(v.Dir)
-				defer func() {
-					if err := vaultpkg.ResumeSearchIndex(v.Dir, v.Identity); err != nil {
-						cli.PrintQuietAware("Warning: search index rebuild failed after import; the index was invalidated and will be rebuilt on the next search: %v\n", err)
-					}
-				}()
-			}
-
-			imported, skipped := 0, 0
-			for _, entry := range entries {
-				entryPath := importEntryPath(options.Prefix, entry.Path)
-				if entryPath == "" {
-					skipped++
-					cli.PrintQuietAware("Skipped entry with empty path\n")
-					continue
-				}
-
-				exists, err := importEntryExists(vs, entryPath)
+			var format importer.Format
+			if ImportFormat != "" {
+				format = importer.Format(strings.ToLower(strings.TrimSpace(ImportFormat)))
+			} else {
+				var err error
+				format, err = detectFormatFromExt(sourcePath)
 				if err != nil {
-					return fmt.Errorf("cannot check entry: %w", err)
+					return errorspkg.NewCLIError(errorspkg.ExitGeneralError, err.Error(), nil)
 				}
-
-				if exists && options.SkipExisting {
-					skipped++
-					cli.PrintQuietAware("Skipped existing: %s\n", entryPath)
-					continue
-				}
-
-				if options.DryRun {
-					cli.PrintQuietAware("Would import: %s\n", entryPath)
-					imported++
-					continue
-				}
-
-				if exists && options.Overwrite {
-					if err := vs.DeleteEntry(entryPath); err != nil {
-						return fmt.Errorf("cannot overwrite entry: %w", err)
-					}
-				}
-
-				record := vaultpkg.WriteRecord{Action: "import"}
-				if err := vs.SetFieldsWithProvenance(entryPath, entry.Data, record); err != nil {
-					return fmt.Errorf("cannot write entry: %w", err)
-				}
-				if entry.SecretMetadata != nil {
-					if err := vs.SetSecretMetadata(entryPath, *entry.SecretMetadata); err != nil {
-						return fmt.Errorf("cannot set secret metadata: %w", err)
-					}
-				}
-				cli.PrintQuietAware("Imported: %s\n", entryPath)
-				imported++
+			}
+			if !isSupportedImportFormat(format) {
+				return errorspkg.NewCLIError(errorspkg.ExitGeneralError, fmt.Sprintf("unsupported import format: %s", format), nil)
 			}
 
-			cli.PrintQuietAware("Import summary: %d imported, %d skipped\n", imported, skipped)
-			return nil
-		})
-	},
-}
+			if ImportSkipExisting && ImportOverwrite {
+				return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "--skip-existing and --overwrite cannot be used together", nil)
+			}
 
-func init() {
+			if ImportQuarantine && ImportPrefix != "" {
+				return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "--quarantine and --prefix cannot be used together", nil)
+			}
+
+			options := importer.ImportOptions{
+				DryRun:       ImportDryRun,
+				Prefix:       strings.Trim(ImportPrefix, "/"),
+				SkipExisting: ImportSkipExisting,
+				Overwrite:    ImportOverwrite,
+				Mapping:      ImportMapping,
+			}
+
+			if ImportQuarantine {
+				importID := generateImportID()
+				options.Prefix = "quarantine/" + importID
+				cli.PrintQuietAware("Quarantine import ID: %s\n", importID)
+			}
+
+			if _, err := importer.ParseMapping(options.Mapping); err != nil {
+				return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "invalid CSV mapping", err)
+			}
+
+			source, err := os.Open(sourcePath) // #nosec G304 -- import source path is user-provided CLI argument
+			if err != nil {
+				return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "open import source", err)
+			}
+			defer func() { _ = source.Close() }()
+
+			fi, err := source.Stat()
+			if err != nil {
+				return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "stat import source", err)
+			}
+			if fi.Size() > importer.MaxImportSize {
+				return errorspkg.NewCLIError(errorspkg.ExitGeneralError,
+					fmt.Sprintf("import source exceeds maximum size of %d bytes", importer.MaxImportSize), nil)
+			}
+
+			imp, err := newImporter(format, options)
+			if err != nil {
+				return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "create importer", err)
+			}
+
+			entries, err := imp.Parse(source)
+			if err != nil {
+				return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "parse import source", err)
+			}
+
+			return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
+				// Batch mode: the write loop below would otherwise trigger a full
+				// decrypt/re-encrypt/persist of the search index per entry (O(N²)
+				// total). Suspend defers index maintenance; the deferred Resume
+				// performs exactly one rebuild — even when the import fails midway —
+				// and invalidates the index explicitly if that rebuild fails, so the
+				// index is never left silently stale.
+				if !options.DryRun {
+					vaultpkg.SuspendSearchIndex(v.Dir)
+					defer func() {
+						if err := vaultpkg.ResumeSearchIndex(v.Dir, v.Identity); err != nil {
+							cli.PrintQuietAware("Warning: search index rebuild failed after import; the index was invalidated and will be rebuilt on the next search: %v\n", err)
+						}
+					}()
+				}
+
+				imported, skipped := 0, 0
+				for _, entry := range entries {
+					entryPath := importEntryPath(options.Prefix, entry.Path)
+					if entryPath == "" {
+						skipped++
+						cli.PrintQuietAware("Skipped entry with empty path\n")
+						continue
+					}
+
+					exists, err := importEntryExists(vs, entryPath)
+					if err != nil {
+						return fmt.Errorf("cannot check entry: %w", err)
+					}
+
+					if exists && options.SkipExisting {
+						skipped++
+						cli.PrintQuietAware("Skipped existing: %s\n", entryPath)
+						continue
+					}
+
+					if options.DryRun {
+						cli.PrintQuietAware("Would import: %s\n", entryPath)
+						imported++
+						continue
+					}
+
+					if exists && options.Overwrite {
+						if err := vs.DeleteEntry(entryPath); err != nil {
+							return fmt.Errorf("cannot overwrite entry: %w", err)
+						}
+					}
+
+					record := vaultpkg.WriteRecord{Action: "import"}
+					if err := vs.SetFieldsWithProvenance(entryPath, entry.Data, record); err != nil {
+						return fmt.Errorf("cannot write entry: %w", err)
+					}
+					if entry.SecretMetadata != nil {
+						if err := vs.SetSecretMetadata(entryPath, *entry.SecretMetadata); err != nil {
+							return fmt.Errorf("cannot set secret metadata: %w", err)
+						}
+					}
+					cli.PrintQuietAware("Imported: %s\n", entryPath)
+					imported++
+				}
+
+				cli.PrintQuietAware("Import summary: %d imported, %d skipped\n", imported, skipped)
+				return nil
+			})
+		},
+	}
 	importCmd.Flags().BoolVar(&ImportDryRun, "dry-run", false, "Parse import source without writing entries")
 	importCmd.Flags().StringVar(&ImportPrefix, "prefix", "", "Prepend path to all imported entries")
 	importCmd.Flags().BoolVar(&ImportSkipExisting, "skip-existing", false, "Skip entries that already exist")
@@ -197,6 +196,8 @@ func init() {
 	importCmd.Flags().BoolVar(&ImportQuarantine, "quarantine", false, "Import entries into quarantine/<import-id>/ for human review before agent access")
 	importCmd.Flags().StringVar(&ImportFormat, "format", "", "Import format (auto-detected from file extension when omitted)")
 	importCmd.GroupID = cli.GroupIDSharingSync
+	importCmd.AddCommand(newImportReviewCmd())
+	return importCmd
 }
 
 func isSupportedImportFormat(format importer.Format) bool {
@@ -270,109 +271,114 @@ func importEntryExists(vs *cli.VaultService, entryPath string) (bool, error) {
 
 var ReviewPromoteOverwrite bool
 
-var importReviewCmd = &cobra.Command{
-	Use:   "review",
-	Short: "Review and manage quarantined imports",
+func newImportReviewCmd() *cobra.Command {
+	importReviewCmd := &cobra.Command{
+		Use:   "review",
+		Short: "Review and manage quarantined imports",
+	}
+	importReviewCmd.AddCommand(newImportReviewListCmd())
+	importReviewCmd.AddCommand(newImportReviewPromoteCmd())
+	return importReviewCmd
 }
 
-var importReviewListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List quarantined import batches",
-	Args:  cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
-			entries, err := vs.ListEntries("quarantine/")
-			if err != nil {
-				return fmt.Errorf("list quarantine: %w", err)
-			}
-			// Group by import-id (path format: quarantine/<import-id>/<rest>)
-			batches := make(map[string]int)
-			for _, e := range entries {
-				parts := strings.SplitN(strings.TrimPrefix(e, "quarantine/"), "/", 2)
-				if len(parts) > 0 && parts[0] != "" {
-					batches[parts[0]]++
+func newImportReviewListCmd() *cobra.Command {
+	importReviewListCmd := &cobra.Command{
+		Use:   "list",
+		Short: "List quarantined import batches",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
+				entries, err := vs.ListEntries("quarantine/")
+				if err != nil {
+					return fmt.Errorf("list quarantine: %w", err)
 				}
-			}
-			if len(batches) == 0 {
-				cli.PrintQuietAware("No quarantined imports found.\n")
+				// Group by import-id (path format: quarantine/<import-id>/<rest>)
+				batches := make(map[string]int)
+				for _, e := range entries {
+					parts := strings.SplitN(strings.TrimPrefix(e, "quarantine/"), "/", 2)
+					if len(parts) > 0 && parts[0] != "" {
+						batches[parts[0]]++
+					}
+				}
+				if len(batches) == 0 {
+					cli.PrintQuietAware("No quarantined imports found.\n")
+					return nil
+				}
+				ids := make([]string, 0, len(batches))
+				for id := range batches {
+					ids = append(ids, id)
+				}
+				sort.Strings(ids)
+				for _, id := range ids {
+					cli.PrintQuietAware("%s  (%d entries)\n", id, batches[id])
+				}
 				return nil
-			}
-			ids := make([]string, 0, len(batches))
-			for id := range batches {
-				ids = append(ids, id)
-			}
-			sort.Strings(ids)
-			for _, id := range ids {
-				cli.PrintQuietAware("%s  (%d entries)\n", id, batches[id])
-			}
-			return nil
-		})
-	},
+			})
+		},
+	}
+	return importReviewListCmd
 }
 
-var importReviewPromoteCmd = &cobra.Command{
-	Use:   "promote <import-id>",
-	Short: "Promote quarantined entries to their final vault paths",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		importID := args[0]
-		quarantinePrefix := "quarantine/" + importID + "/"
-		return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
-			entries, err := vs.ListEntries(quarantinePrefix)
-			if err != nil {
-				return fmt.Errorf("list quarantine batch: %w", err)
-			}
-			if len(entries) == 0 {
-				return fmt.Errorf("no quarantined entries found for import-id %q", importID)
-			}
-			hadError := false
-			for _, entryPath := range entries {
-				destPath := strings.TrimPrefix(entryPath, quarantinePrefix)
-				if destPath == "" {
-					continue
+func newImportReviewPromoteCmd() *cobra.Command {
+	importReviewPromoteCmd := &cobra.Command{
+		Use:   "promote <import-id>",
+		Short: "Promote quarantined entries to their final vault paths",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			importID := args[0]
+			quarantinePrefix := "quarantine/" + importID + "/"
+			return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
+				entries, err := vs.ListEntries(quarantinePrefix)
+				if err != nil {
+					return fmt.Errorf("list quarantine batch: %w", err)
 				}
-				// Check if destination already exists
-				exists, existsErr := importEntryExists(vs, destPath)
-				if existsErr != nil {
-					cli.PrintQuietAware("Warning: cannot check destination %s: %v\n", destPath, existsErr)
-					hadError = true
-					continue
+				if len(entries) == 0 {
+					return fmt.Errorf("no quarantined entries found for import-id %q", importID)
 				}
-				if exists && !ReviewPromoteOverwrite {
-					cli.PrintQuietAware("Warning: skipping %s — destination already exists (use --overwrite)\n", destPath)
-					hadError = true
-					continue
+				hadError := false
+				for _, entryPath := range entries {
+					destPath := strings.TrimPrefix(entryPath, quarantinePrefix)
+					if destPath == "" {
+						continue
+					}
+					// Check if destination already exists
+					exists, existsErr := importEntryExists(vs, destPath)
+					if existsErr != nil {
+						cli.PrintQuietAware("Warning: cannot check destination %s: %v\n", destPath, existsErr)
+						hadError = true
+						continue
+					}
+					if exists && !ReviewPromoteOverwrite {
+						cli.PrintQuietAware("Warning: skipping %s — destination already exists (use --overwrite)\n", destPath)
+						hadError = true
+						continue
+					}
+					// Read source entry
+					entry, readErr := vs.GetEntry(entryPath)
+					if readErr != nil {
+						cli.PrintQuietAware("Warning: failed to read %s: %v\n", entryPath, readErr)
+						hadError = true
+						continue
+					}
+					// Write to destination
+					if writeErr := vs.WriteEntry(destPath, entry); writeErr != nil {
+						cli.PrintQuietAware("Warning: failed to write %s: %v\n", destPath, writeErr)
+						hadError = true
+						continue
+					}
+					if deleteErr := vs.DeleteEntry(entryPath); deleteErr != nil {
+						cli.PrintQuietAware("Warning: failed to delete quarantine entry %s: %v\n", entryPath, deleteErr)
+						// Don't set hadError — promote succeeded
+					}
+					cli.PrintQuietAware("Promoted: %s\n", destPath)
 				}
-				// Read source entry
-				entry, readErr := vs.GetEntry(entryPath)
-				if readErr != nil {
-					cli.PrintQuietAware("Warning: failed to read %s: %v\n", entryPath, readErr)
-					hadError = true
-					continue
+				if hadError {
+					return fmt.Errorf("some entries could not be promoted")
 				}
-				// Write to destination
-				if writeErr := vs.WriteEntry(destPath, entry); writeErr != nil {
-					cli.PrintQuietAware("Warning: failed to write %s: %v\n", destPath, writeErr)
-					hadError = true
-					continue
-				}
-				if deleteErr := vs.DeleteEntry(entryPath); deleteErr != nil {
-					cli.PrintQuietAware("Warning: failed to delete quarantine entry %s: %v\n", entryPath, deleteErr)
-					// Don't set hadError — promote succeeded
-				}
-				cli.PrintQuietAware("Promoted: %s\n", destPath)
-			}
-			if hadError {
-				return fmt.Errorf("some entries could not be promoted")
-			}
-			return nil
-		})
-	},
-}
-
-func init() {
+				return nil
+			})
+		},
+	}
 	importReviewPromoteCmd.Flags().BoolVar(&ReviewPromoteOverwrite, "overwrite", false, "Overwrite existing entries at destination")
-	importReviewCmd.AddCommand(importReviewListCmd)
-	importReviewCmd.AddCommand(importReviewPromoteCmd)
-	importCmd.AddCommand(importReviewCmd)
+	return importReviewPromoteCmd
 }

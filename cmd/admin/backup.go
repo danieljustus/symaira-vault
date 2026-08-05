@@ -28,41 +28,46 @@ var (
 
 var BackupExcludeGit bool
 
-var backupCmd = &cobra.Command{
-	Use:   "backup <archive-path>",
-	Short: "Create a backup archive of the vault",
-	Long: `Create a compressed archive (.tar.gz) of the current vault.
+func newBackupCmd() *cobra.Command {
+	backupCmd := &cobra.Command{
+		Use:   "backup <archive-path>",
+		Short: "Create a backup archive of the vault",
+		Long: `Create a compressed archive (.tar.gz) of the current vault.
 
 The backup includes all vault files: identity.age, config.yaml, entries/, and mcp-token.
 Use --exclude-git to omit the .git/ directory from the backup.`,
-	Example: `  # Full backup to a tarball
+		Example: `  # Full backup to a tarball
   symvault backup ~/symvault-2026-05-17.tar.gz
 
   # Skip the Git history (smaller archive)
   symvault backup --exclude-git ~/symvault.tar.gz`,
-	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		vaultDir, err := cli.VaultPath()
-		if err != nil {
-			return err
-		}
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			vaultDir, err := cli.VaultPath()
+			if err != nil {
+				return err
+			}
 
-		if !vaultpkg.IsInitialized(vaultDir) {
-			return errorspkg.NewVaultNotInitialized()
-		}
+			if !vaultpkg.IsInitialized(vaultDir) {
+				return errorspkg.NewVaultNotInitialized()
+			}
 
-		archivePath := args[0]
-		if !strings.HasSuffix(archivePath, ".tar.gz") {
-			archivePath += ".tar.gz"
-		}
+			archivePath := args[0]
+			if !strings.HasSuffix(archivePath, ".tar.gz") {
+				archivePath += ".tar.gz"
+			}
 
-		if err := CreateBackup(vaultDir, archivePath, BackupExcludeGit); err != nil {
-			return fmt.Errorf("backup failed: %w", err)
-		}
+			if err := CreateBackup(vaultDir, archivePath, BackupExcludeGit); err != nil {
+				return fmt.Errorf("backup failed: %w", err)
+			}
 
-		cli.PrintQuietAware("Backup created: %s\n", archivePath)
-		return nil
-	},
+			cli.PrintQuietAware("Backup created: %s\n", archivePath)
+			return nil
+		},
+	}
+	backupCmd.Flags().BoolVar(&BackupExcludeGit, "exclude-git", false, "Exclude .git/ directory from backup")
+	backupCmd.GroupID = cli.GroupIDSharingSync
+	return backupCmd
 }
 
 func CreateBackup(vaultDir, archivePath string, excludeGit bool) (retErr error) {
@@ -134,42 +139,46 @@ func CreateBackup(vaultDir, archivePath string, excludeGit bool) (retErr error) 
 	})
 }
 
-var restoreCmd = &cobra.Command{
-	Use:   "restore <archive-path>",
-	Short: "Restore vault from a backup archive",
-	Long: `Restore a vault from a previously created backup archive (.tar.gz).
+func newRestoreCmd() *cobra.Command {
+	restoreCmd := &cobra.Command{
+		Use:   "restore <archive-path>",
+		Short: "Restore vault from a backup archive",
+		Long: `Restore a vault from a previously created backup archive (.tar.gz).
 
 The archive is extracted into the current vault directory. If the vault directory
 does not exist, it will be created. After extraction, the vault is verified
 to ensure all expected files are present.`,
-	Example: `  # Restore into the default vault directory
+		Example: `  # Restore into the default vault directory
   symvault restore ~/symvault-2026-05-17.tar.gz
 
   # Restore into a custom location
   symvault --vault ~/restored restore archive.tar.gz`,
-	Args: cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		vaultDir, err := cli.VaultPath()
-		if err != nil {
-			return err
-		}
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			vaultDir, err := cli.VaultPath()
+			if err != nil {
+				return err
+			}
 
-		archivePath := args[0]
-		if _, err := os.Stat(archivePath); err != nil {
-			return fmt.Errorf("archive not found: %w", err)
-		}
+			archivePath := args[0]
+			if _, err := os.Stat(archivePath); err != nil {
+				return fmt.Errorf("archive not found: %w", err)
+			}
 
-		if err := RestoreBackup(archivePath, vaultDir); err != nil {
-			return fmt.Errorf("restore failed: %w", err)
-		}
+			if err := RestoreBackup(archivePath, vaultDir); err != nil {
+				return fmt.Errorf("restore failed: %w", err)
+			}
 
-		if !vaultpkg.IsInitialized(vaultDir) {
-			return errorspkg.NewVaultNotInitialized()
-		}
+			if !vaultpkg.IsInitialized(vaultDir) {
+				return errorspkg.NewVaultNotInitialized()
+			}
 
-		cli.PrintQuietAware("Vault restored to: %s\n", vaultDir)
-		return nil
-	},
+			cli.PrintQuietAware("Vault restored to: %s\n", vaultDir)
+			return nil
+		},
+	}
+	restoreCmd.GroupID = cli.GroupIDSharingSync
+	return restoreCmd
 }
 
 func RestoreBackup(archivePath, vaultDir string) error {
@@ -313,10 +322,4 @@ func ComputeSHA256(path string) (string, error) {
 		return "", err
 	}
 	return fmt.Sprintf("%x", h.Sum(nil)), nil
-}
-
-func init() {
-	backupCmd.Flags().BoolVar(&BackupExcludeGit, "exclude-git", false, "Exclude .git/ directory from backup")
-	backupCmd.GroupID = cli.GroupIDSharingSync
-	restoreCmd.GroupID = cli.GroupIDSharingSync
 }

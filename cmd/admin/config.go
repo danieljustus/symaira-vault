@@ -20,11 +20,12 @@ var (
 	ConfigValidateFix  bool
 )
 
-var configCmd = &cobra.Command{
-	Use:   "config",
-	Short: "Manage Symaira Vault configuration",
-	Long:  `Manage Symaira Vault configuration including validation, profiles, and key-value editing.`,
-	Example: `  # Validate the default config file
+func newConfigCmd() *cobra.Command {
+	configCmd := &cobra.Command{
+		Use:   "config",
+		Short: "Manage Symaira Vault configuration",
+		Long:  `Manage Symaira Vault configuration including validation, profiles, and key-value editing.`,
+		Example: `  # Validate the default config file
   symvault config validate
 
   # Validate a specific file
@@ -41,125 +42,137 @@ var configCmd = &cobra.Command{
 
   # JSON output
   symvault config get vaultDir --output json`,
-	Annotations: map[string]string{
-		cli.RequiresVaultAnnotation: "false",
-		cli.JSONOutputAnnotation:    "true",
-	},
+		Annotations: map[string]string{
+			cli.RequiresVaultAnnotation: "false",
+			cli.JSONOutputAnnotation:    "true",
+		},
+	}
+	configCmd.AddCommand(newConfigValidateCmd())
+	configCmd.AddCommand(newConfigGetCmd())
+	configCmd.AddCommand(newConfigSetCmd())
+	configCmd.AddCommand(newConfigListCmd())
+	configCmd.GroupID = cli.GroupIDAdministration
+	return configCmd
 }
 
-var configValidateCmd = &cobra.Command{
-	Use:   "validate [path]",
-	Short: "Validate the configuration file",
-	Long: `Validate the Symaira Vault configuration file for schema errors.
+func newConfigValidateCmd() *cobra.Command {
+	configValidateCmd := &cobra.Command{
+		Use:   "validate [path]",
+		Short: "Validate the configuration file",
+		Long: `Validate the Symaira Vault configuration file for schema errors.
 
 If no path is given, validates the default config at ~/.symvault/config.yaml.
 
 When --fix is supplied, validation failures and recoverable load errors trigger
 an interactive repair flow: deterministic defaults are offered for fields that
 have safe replacements, and a manual $EDITOR session is offered as a fall-back.`,
-	Args: cobra.MaximumNArgs(1),
-	Annotations: map[string]string{
-		cli.RequiresVaultAnnotation: "false",
-	},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		var path string
-		if len(args) > 0 {
-			path = args[0]
-		} else {
-			home, err := os.UserHomeDir()
-			if err != nil {
-				return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "cannot determine home directory", err)
-			}
-			path = filepath.Join(home, configpkg.DefaultVaultSubdir, "config.yaml")
-		}
-
-		cfg, err := configpkg.Load(path)
-		jsonOut := cli.WantJSONOutput(ConfigValidateJSON)
-		if err != nil {
-			if ConfigValidateFix && cli.IsTerminalFunc(int(os.Stdin.Fd())) {
-				fixed, fixErr := cli.InteractiveFixConfig(path, err, nil, nil)
-				if fixErr != nil {
-					return errorspkg.NewCLIError(errorspkg.ExitConfigError, "config fix failed", fixErr)
+		Args: cobra.MaximumNArgs(1),
+		Annotations: map[string]string{
+			cli.RequiresVaultAnnotation: "false",
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			var path string
+			if len(args) > 0 {
+				path = args[0]
+			} else {
+				home, err := os.UserHomeDir()
+				if err != nil {
+					return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "cannot determine home directory", err)
 				}
-				if fixed != nil {
-					cli.PrintlnQuietAware("Configuration repaired successfully.")
-					cfg = fixed
+				path = filepath.Join(home, configpkg.DefaultVaultSubdir, "config.yaml")
+			}
+
+			cfg, err := configpkg.Load(path)
+			jsonOut := cli.WantJSONOutput(ConfigValidateJSON)
+			if err != nil {
+				if ConfigValidateFix && cli.IsTerminalFunc(int(os.Stdin.Fd())) {
+					fixed, fixErr := cli.InteractiveFixConfig(path, err, nil, nil)
+					if fixErr != nil {
+						return errorspkg.NewCLIError(errorspkg.ExitConfigError, "config fix failed", fixErr)
+					}
+					if fixed != nil {
+						cli.PrintlnQuietAware("Configuration repaired successfully.")
+						cfg = fixed
+						goto revalidate
+					}
+					// User edited the file in $EDITOR; reload and re-validate.
+					newCfg, reloadErr := configpkg.Load(path)
+					if reloadErr != nil {
+						return errorspkg.NewCLIError(errorspkg.ExitConfigError, "config still invalid after manual edit", reloadErr)
+					}
+					cfg = newCfg
 					goto revalidate
 				}
-				// User edited the file in $EDITOR; reload and re-validate.
-				newCfg, reloadErr := configpkg.Load(path)
-				if reloadErr != nil {
-					return errorspkg.NewCLIError(errorspkg.ExitConfigError, "config still invalid after manual edit", reloadErr)
+				if jsonOut {
+					cli.PrintJSON(map[string]interface{}{
+						"valid": false,
+						"error": err.Error(),
+					})
+					return errorspkg.NewCLIError(errorspkg.ExitConfigError, "config load failed", err)
 				}
-				cfg = newCfg
-				goto revalidate
+				return errorspkg.NewCLIError(errorspkg.ExitConfigError, fmt.Sprintf("cannot load config from %s: %v", path, err), err)
 			}
-			if jsonOut {
-				cli.PrintJSON(map[string]interface{}{
-					"valid": false,
-					"error": err.Error(),
-				})
-				return errorspkg.NewCLIError(errorspkg.ExitConfigError, "config load failed", err)
-			}
-			return errorspkg.NewCLIError(errorspkg.ExitConfigError, fmt.Sprintf("cannot load config from %s: %v", path, err), err)
-		}
 
-	revalidate:
-		if valErr := cfg.Validate(); valErr != nil {
-			if ConfigValidateFix && cli.IsTerminalFunc(int(os.Stdin.Fd())) {
-				fixed, fixErr := cli.InteractiveFixConfig(path, nil, cfg, valErr)
-				if fixErr != nil {
-					return errorspkg.NewCLIError(errorspkg.ExitConfigError, "config fix failed", fixErr)
-				}
-				if fixed != nil {
-					cli.PrintlnQuietAware("Configuration repaired successfully.")
-					cfg = fixed
-					if valErr2 := cfg.Validate(); valErr2 != nil {
-						return errorspkg.NewCLIError(errorspkg.ExitConfigError, "config still invalid after auto-fix", valErr2)
+		revalidate:
+			if valErr := cfg.Validate(); valErr != nil {
+				if ConfigValidateFix && cli.IsTerminalFunc(int(os.Stdin.Fd())) {
+					fixed, fixErr := cli.InteractiveFixConfig(path, nil, cfg, valErr)
+					if fixErr != nil {
+						return errorspkg.NewCLIError(errorspkg.ExitConfigError, "config fix failed", fixErr)
 					}
+					if fixed != nil {
+						cli.PrintlnQuietAware("Configuration repaired successfully.")
+						cfg = fixed
+						if valErr2 := cfg.Validate(); valErr2 != nil {
+							return errorspkg.NewCLIError(errorspkg.ExitConfigError, "config still invalid after auto-fix", valErr2)
+						}
+						goto ok
+					}
+					// User edited the file in $EDITOR; reload and re-validate.
+					newCfg, reloadErr := configpkg.Load(path)
+					if reloadErr != nil {
+						return errorspkg.NewCLIError(errorspkg.ExitConfigError, "config still invalid after manual edit", reloadErr)
+					}
+					if valErr2 := newCfg.Validate(); valErr2 != nil {
+						return errorspkg.NewCLIError(errorspkg.ExitConfigError, "config still invalid after manual edit", valErr2)
+					}
+					cli.PrintlnQuietAware("Configuration repaired successfully.")
+					cfg = newCfg
 					goto ok
 				}
-				// User edited the file in $EDITOR; reload and re-validate.
-				newCfg, reloadErr := configpkg.Load(path)
-				if reloadErr != nil {
-					return errorspkg.NewCLIError(errorspkg.ExitConfigError, "config still invalid after manual edit", reloadErr)
+				if jsonOut {
+					cli.PrintJSON(map[string]interface{}{
+						"valid":  false,
+						"errors": strings.Split(valErr.Error(), "\n"),
+					})
+					return errorspkg.NewCLIError(errorspkg.ExitConfigError, "config validation failed", valErr)
 				}
-				if valErr2 := newCfg.Validate(); valErr2 != nil {
-					return errorspkg.NewCLIError(errorspkg.ExitConfigError, "config still invalid after manual edit", valErr2)
+				cli.PrintlnQuietAware(fmt.Sprintf("Configuration is invalid (%s):", path))
+				for _, line := range strings.Split(valErr.Error(), "\n") {
+					if line != "" {
+						cli.PrintlnQuietAware("  ✗ " + line)
+					}
 				}
-				cli.PrintlnQuietAware("Configuration repaired successfully.")
-				cfg = newCfg
-				goto ok
-			}
-			if jsonOut {
-				cli.PrintJSON(map[string]interface{}{
-					"valid":  false,
-					"errors": strings.Split(valErr.Error(), "\n"),
-				})
 				return errorspkg.NewCLIError(errorspkg.ExitConfigError, "config validation failed", valErr)
 			}
-			cli.PrintlnQuietAware(fmt.Sprintf("Configuration is invalid (%s):", path))
-			for _, line := range strings.Split(valErr.Error(), "\n") {
-				if line != "" {
-					cli.PrintlnQuietAware("  ✗ " + line)
-				}
+
+		ok:
+
+			if jsonOut {
+				cli.PrintJSON(map[string]interface{}{
+					"valid": true,
+					"path":  path,
+				})
+				return nil
 			}
-			return errorspkg.NewCLIError(errorspkg.ExitConfigError, "config validation failed", valErr)
-		}
 
-	ok:
-
-		if jsonOut {
-			cli.PrintJSON(map[string]interface{}{
-				"valid": true,
-				"path":  path,
-			})
+			cli.PrintlnQuietAware(fmt.Sprintf("Configuration is valid (%s)", path))
 			return nil
-		}
-
-		cli.PrintlnQuietAware(fmt.Sprintf("Configuration is valid (%s)", path))
-		return nil
-	},
+		},
+	}
+	configValidateCmd.Flags().BoolVar(&ConfigValidateJSON, "json", false, "output validation result as JSON (deprecated: use --output=json)")
+	configValidateCmd.Flags().BoolVar(&ConfigValidateFix, "fix", false, "interactively repair validation errors (requires a TTY)")
+	return configValidateCmd
 }
 
 func resolveConfigPath(_ []string) string {
@@ -187,51 +200,56 @@ func ConfigKeyCompletionFunc(_ *cobra.Command, _ []string, toComplete string) ([
 	return matches, cobra.ShellCompDirectiveNoFileComp
 }
 
-var configGetCmd = &cobra.Command{
-	Use:   "get <dotted.path>",
-	Short: "Get a configuration value",
-	Long: `Get the value of a configuration key using dotted path notation.
+func newConfigGetCmd() *cobra.Command {
+	configGetCmd := &cobra.Command{
+		Use:   "get <dotted.path>",
+		Short: "Get a configuration value",
+		Long: `Get the value of a configuration key using dotted path notation.
 
 Examples:
   symvault config get vaultDir
   symvault config get agents.claude-code.canWrite
   symvault config get mcp.port`,
-	Args:              cobra.ExactArgs(1),
-	ValidArgsFunction: ConfigKeyCompletionFunc,
-	Annotations: map[string]string{
-		cli.RequiresVaultAnnotation: "false",
-		cli.JSONOutputAnnotation:    "true",
-	},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		path := resolveConfigPath(args)
-		if path == "" {
-			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "cannot determine config file path", nil)
-		}
-		key := args[0]
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: ConfigKeyCompletionFunc,
+		Annotations: map[string]string{
+			cli.RequiresVaultAnnotation: "false",
+			cli.JSONOutputAnnotation:    "true",
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path := resolveConfigPath(args)
+			if path == "" {
+				return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "cannot determine config file path", nil)
+			}
+			key := args[0]
 
-		root, err := configpkg.LoadConfigNode(path)
-		if err != nil {
-			return errorspkg.NewCLIError(errorspkg.ExitConfigError, fmt.Sprintf("cannot load config: %v", err), err)
-		}
+			root, err := configpkg.LoadConfigNode(path)
+			if err != nil {
+				return errorspkg.NewCLIError(errorspkg.ExitConfigError, fmt.Sprintf("cannot load config: %v", err), err)
+			}
 
-		node, err := configpkg.GetConfigValue(root, key)
-		if err != nil {
-			return errorspkg.NewCLIError(errorspkg.ExitConfigError, fmt.Sprintf("key %q not found", key), err)
-		}
+			node, err := configpkg.GetConfigValue(root, key)
+			if err != nil {
+				return errorspkg.NewCLIError(errorspkg.ExitConfigError, fmt.Sprintf("key %q not found", key), err)
+			}
 
-		val := configpkg.NodeToString(node)
-		if cli.OutputFormat == "json" {
-			return cli.PrintResult(map[string]string{key: val})
-		}
-		cli.PrintlnQuietAware(val)
-		return nil
-	},
+			val := configpkg.NodeToString(node)
+			if cli.OutputFormat == "json" {
+				return cli.PrintResult(map[string]string{key: val})
+			}
+			cli.PrintlnQuietAware(val)
+			return nil
+		},
+	}
+	configGetCmd.Flags().StringVar(&ConfigFile, "file", "", "path to config file (default: ~/.symvault/config.yaml)")
+	return configGetCmd
 }
 
-var configSetCmd = &cobra.Command{
-	Use:   "set <dotted.path> <value>",
-	Short: "Set a configuration value",
-	Long: `Set the value of a configuration key using dotted path notation.
+func newConfigSetCmd() *cobra.Command {
+	configSetCmd := &cobra.Command{
+		Use:   "set <dotted.path> <value>",
+		Short: "Set a configuration value",
+		Long: `Set the value of a configuration key using dotted path notation.
 The value is automatically parsed as YAML to infer types: true/false for booleans,
 numbers for integers, and quoted strings for text.
 
@@ -240,77 +258,69 @@ Examples:
   symvault config set agents.claude-code.canWrite true
   symvault config set mcp.port 9090
   symvault config set clipboard.auto_clear_duration 60`,
-	Args:              cobra.ExactArgs(2),
-	ValidArgsFunction: ConfigKeyCompletionFunc,
-	Annotations: map[string]string{
-		cli.RequiresVaultAnnotation: "false",
-	},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		path := resolveConfigPath(args)
-		if path == "" {
-			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "cannot determine config file path", nil)
-		}
-		key := args[0]
-		value := args[1]
+		Args:              cobra.ExactArgs(2),
+		ValidArgsFunction: ConfigKeyCompletionFunc,
+		Annotations: map[string]string{
+			cli.RequiresVaultAnnotation: "false",
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path := resolveConfigPath(args)
+			if path == "" {
+				return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "cannot determine config file path", nil)
+			}
+			key := args[0]
+			value := args[1]
 
-		root, err := configpkg.LoadConfigNode(path)
-		if err != nil {
-			return errorspkg.NewCLIError(errorspkg.ExitConfigError, fmt.Sprintf("cannot load config: %v", err), err)
-		}
+			root, err := configpkg.LoadConfigNode(path)
+			if err != nil {
+				return errorspkg.NewCLIError(errorspkg.ExitConfigError, fmt.Sprintf("cannot load config: %v", err), err)
+			}
 
-		if err := configpkg.SetConfigValue(root, key, value); err != nil {
-			return errorspkg.NewCLIError(errorspkg.ExitConfigError, fmt.Sprintf("cannot set %q: %v", key, err), err)
-		}
+			if err := configpkg.SetConfigValue(root, key, value); err != nil {
+				return errorspkg.NewCLIError(errorspkg.ExitConfigError, fmt.Sprintf("cannot set %q: %v", key, err), err)
+			}
 
-		if err := configpkg.SaveConfigNode(path, root); err != nil {
-			return errorspkg.NewCLIError(errorspkg.ExitConfigError, fmt.Sprintf("cannot write config: %v", err), err)
-		}
+			if err := configpkg.SaveConfigNode(path, root); err != nil {
+				return errorspkg.NewCLIError(errorspkg.ExitConfigError, fmt.Sprintf("cannot write config: %v", err), err)
+			}
 
-		if _, loadErr := configpkg.Load(path); loadErr != nil {
-			return errorspkg.NewCLIError(errorspkg.ExitConfigError, fmt.Sprintf("config is invalid after update: %v", loadErr), loadErr)
-		}
+			if _, loadErr := configpkg.Load(path); loadErr != nil {
+				return errorspkg.NewCLIError(errorspkg.ExitConfigError, fmt.Sprintf("config is invalid after update: %v", loadErr), loadErr)
+			}
 
-		cli.PrintlnQuietAware(fmt.Sprintf("Set %s = %s", key, value))
-		return nil
-	},
+			cli.PrintlnQuietAware(fmt.Sprintf("Set %s = %s", key, value))
+			return nil
+		},
+	}
+	configSetCmd.Flags().StringVar(&ConfigFile, "file", "", "path to config file (default: ~/.symvault/config.yaml)")
+	return configSetCmd
 }
 
-var configListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "Show all configuration values",
-	Long: `Display the entire Symaira Vault configuration in YAML format.
+func newConfigListCmd() *cobra.Command {
+	configListCmd := &cobra.Command{
+		Use:   "list",
+		Short: "Show all configuration values",
+		Long: `Display the entire Symaira Vault configuration in YAML format.
 
 This shows the raw config file contents as-is.`,
-	Args: cobra.NoArgs,
-	Annotations: map[string]string{
-		cli.RequiresVaultAnnotation: "false",
-	},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		path := resolveConfigPath(args)
-		if path == "" {
-			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "cannot determine config file path", nil)
-		}
+		Args: cobra.NoArgs,
+		Annotations: map[string]string{
+			cli.RequiresVaultAnnotation: "false",
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path := resolveConfigPath(args)
+			if path == "" {
+				return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "cannot determine config file path", nil)
+			}
 
-		raw, err := os.ReadFile(filepath.Clean(path))
-		if err != nil {
-			return errorspkg.NewCLIError(errorspkg.ExitConfigError, fmt.Sprintf("cannot load config: %v", err), err)
-		}
-		cli.PrintQuietAware("%s", string(raw))
-		return nil
-	},
-}
-
-func init() {
-	configValidateCmd.Flags().BoolVar(&ConfigValidateJSON, "json", false, "output validation result as JSON (deprecated: use --output=json)")
-	configValidateCmd.Flags().BoolVar(&ConfigValidateFix, "fix", false, "interactively repair validation errors (requires a TTY)")
-
-	configGetCmd.Flags().StringVar(&ConfigFile, "file", "", "path to config file (default: ~/.symvault/config.yaml)")
-	configSetCmd.Flags().StringVar(&ConfigFile, "file", "", "path to config file (default: ~/.symvault/config.yaml)")
+			raw, err := os.ReadFile(filepath.Clean(path))
+			if err != nil {
+				return errorspkg.NewCLIError(errorspkg.ExitConfigError, fmt.Sprintf("cannot load config: %v", err), err)
+			}
+			cli.PrintQuietAware("%s", string(raw))
+			return nil
+		},
+	}
 	configListCmd.Flags().StringVar(&ConfigFile, "file", "", "path to config file (default: ~/.symvault/config.yaml)")
-
-	configCmd.AddCommand(configValidateCmd)
-	configCmd.AddCommand(configGetCmd)
-	configCmd.AddCommand(configSetCmd)
-	configCmd.AddCommand(configListCmd)
-	configCmd.GroupID = cli.GroupIDAdministration
+	return configListCmd
 }
