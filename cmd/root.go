@@ -42,12 +42,13 @@ func newPackageRootCmd() *cobra.Command {
 		recipientsCmd, remoteCmd, runCmd, shareCmd, syncCmd, templateCmd, uiCmd,
 		mcp.ServeCmd,
 	}
+	compatByName := make(map[string]struct{}, len(compat))
+	for _, compatCmd := range compat {
+		compatByName[compatCmd.Name()] = struct{}{}
+	}
 	for _, c := range root.Commands() {
-		for _, compatCmd := range compat {
-			if c.Name() == compatCmd.Name() {
-				root.RemoveCommand(c)
-				break
-			}
+		if _, ok := compatByName[c.Name()]; ok {
+			root.RemoveCommand(c)
 		}
 	}
 	root.AddCommand(compat...)
