@@ -69,26 +69,11 @@ func (s *AgentsStep) Update(msg tea.Msg) (Step, tea.Cmd) {
 				s.entries[s.cursor].selected = !s.entries[s.cursor].selected
 			}
 		case keyEnter:
-			if s.cursor == len(s.entries) || s.selectedCount() == 0 {
-				// "Skip" or nothing selected.
-				s.done = true
-				return s, stepDoneCmd()
-			}
 			s.done = true
 			return s, stepDoneCmd()
 		}
 	}
 	return s, nil
-}
-
-func (s *AgentsStep) selectedCount() int {
-	n := 0
-	for _, e := range s.entries {
-		if e.selected {
-			n++
-		}
-	}
-	return n
 }
 
 func (s *AgentsStep) View() string {
