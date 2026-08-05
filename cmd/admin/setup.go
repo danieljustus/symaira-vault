@@ -15,10 +15,11 @@ import (
 var setupKeepOnError bool
 var setupNoResume bool
 
-var setupCmd = &cobra.Command{
-	Use:   "setup",
-	Short: "Interactive setup wizard for Symaira Vault",
-	Long: `Launch the interactive setup wizard to initialize or re-configure your vault.
+func newSetupCmd() *cobra.Command {
+	setupCmd := &cobra.Command{
+		Use:   "setup",
+		Short: "Interactive setup wizard for Symaira Vault",
+		Long: `Launch the interactive setup wizard to initialize or re-configure your vault.
 
 The wizard guides you through:
   • Vault directory and passphrase
@@ -31,7 +32,7 @@ The wizard guides you through:
   • Profile name
 
 For non-interactive environments (CI, scripts), use 'symvault init' instead.`,
-	Example: `  # Run the wizard (resumes from saved state if available)
+		Example: `  # Run the wizard (resumes from saved state if available)
   symvault setup
 
   # Restart from scratch
@@ -39,22 +40,21 @@ For non-interactive environments (CI, scripts), use 'symvault init' instead.`,
 
   # Keep partial vault artifacts on error for debugging
   symvault setup --keep-on-error`,
-	Annotations: map[string]string{
-		cli.RequiresVaultAnnotation: "false",
-	},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		// WIZ-15: Non-TTY guard.
-		if !term.IsTerminal(int(os.Stdin.Fd())) {
-			return fmt.Errorf("setup needs a TTY; use `symvault init` for non-interactive vault initialization")
-		}
+		Annotations: map[string]string{
+			cli.RequiresVaultAnnotation: "false",
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// WIZ-15: Non-TTY guard.
+			if !term.IsTerminal(int(os.Stdin.Fd())) {
+				return fmt.Errorf("setup needs a TTY; use `symvault init` for non-interactive vault initialization")
+			}
 
-		vaultDir := cli.GetVaultDir()
-		return wizard.Run(vaultDir, setupKeepOnError, setupNoResume)
-	},
-}
-
-func init() {
+			vaultDir := cli.GetVaultDir()
+			return wizard.Run(vaultDir, setupKeepOnError, setupNoResume)
+		},
+	}
 	setupCmd.Flags().BoolVar(&setupKeepOnError, "keep-on-error", false, "do not rollback vault init artifacts when subsequent steps fail")
 	setupCmd.Flags().BoolVar(&setupNoResume, "no-resume", false, "disable setup resume after abort")
 	setupCmd.GroupID = cli.GroupIDEssentials
+	return setupCmd
 }
