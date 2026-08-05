@@ -136,6 +136,30 @@ symvault import csv export.csv --mapping "title=path,username=user,password=pass
 
 The mapping format is a comma-separated list of `openpass_field=csv_column` pairs.
 
+### Browser Exports (Apple Passwords, Chrome, Firefox)
+
+CSV exports from Apple Passwords, Chrome/Chromium and Firefox are recognized
+automatically from their header row and mapped with built-in profiles
+(`--format apple|chrome|firefox` selects a profile explicitly).
+
+```bash
+symvault import passwords.csv --dry-run        # Apple Passwords export
+symvault import chrome-passwords.csv           # Chrome/Chromium export
+symvault import logins.csv --format firefox    # Firefox export
+```
+
+### Direct Browser Import Is Unsupported
+
+Symaira Vault does **not** read a browser's credential store directly
+(`symvault import chrome` / `symvault import firefox` is not available).
+Per the spike report in `docs/dependency-evaluations/browser-credential-extraction.md`,
+direct extraction is deferred: the Keychain-access prompt cannot be persisted
+for unsigned CLI builds (it re-appears on every run), Firefox would require a
+license-clean pure-Go NSS reimplementation under the no-CGO constraint, and
+imported data is treated as an untrusted prompt-injection vector while
+quarantine/provenance work is still open. Use the browser's own CSV export
+instead, as described above.
+
 ## Common Options
 
 | Option | Description |
