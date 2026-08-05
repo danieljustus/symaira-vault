@@ -10,6 +10,7 @@ import (
 
 type csvImporter struct {
 	mapping string
+	profile *CSVProfile
 }
 
 // NewCSV creates a CSV importer with an optional field-to-column mapping.
@@ -30,11 +31,14 @@ func (i *csvImporter) Parse(r io.Reader) ([]ImportedEntry, error) {
 	}
 
 	columnIndex := csvColumnIndex(header)
-	mapping, err := csvMapping(i.mapping)
+	mapping, err := csvMapping(i.mapping, i.profile)
 	if err != nil {
 		return nil, err
 	}
 
+	// Profile imports de-duplicate paths so every entry lands on a unique
+	// vault path (colliding entries would otherwise fail or overwrite).
+	usedPaths := make(map[string]bool)
 	var entries []ImportedEntry
 	for {
 		row, err := reader.Read()
@@ -58,7 +62,9 @@ func (i *csvImporter) Parse(r io.Reader) ([]ImportedEntry, error) {
 
 			switch field {
 			case "title", "path":
-				entry.Path = NormalizePath(value)
+				if entry.Path == "" && value != "" {
+					entry.Path = NormalizePath(value)
+				}
 			case "otp", "totp.secret":
 				if value != "" {
 					totp, err := ParseTOTP(value)
@@ -73,19 +79,35 @@ func (i *csvImporter) Parse(r io.Reader) ([]ImportedEntry, error) {
 			}
 		}
 
+		// Sources without a title column (Firefox) — and rows whose title is
+		// empty (Chrome) — derive the entry path from the URL host.
+		if entry.Path == "" && i.profile != nil && i.profile.PathFromURL {
+			if urlValue, ok := csvValue(row, columnIndex, i.profile.URLColumn); ok {
+				if host := hostFromURL(urlValue); host != "" {
+					entry.Path = NormalizePath(strings.ToLower(host))
+				}
+			}
+		}
+		if i.profile != nil {
+			entry.Path = uniquePath(usedPaths, entry.Path)
+		}
+
 		entries = append(entries, entry)
 	}
 
 	return entries, nil
 }
 
-func csvMapping(mapping string) (map[string]string, error) {
-	parsed, err := ParseMapping(mapping)
-	if err != nil {
-		return nil, fmt.Errorf("parse csv mapping: %w", err)
-	}
-	if parsed != nil {
+func csvMapping(userMapping string, profile *CSVProfile) (map[string]string, error) {
+	if userMapping != "" {
+		parsed, err := ParseMapping(userMapping)
+		if err != nil {
+			return nil, fmt.Errorf("parse csv mapping: %w", err)
+		}
 		return parsed, nil
+	}
+	if profile != nil {
+		return profile.Mapping, nil
 	}
 	return map[string]string{
 		"title":    "title",

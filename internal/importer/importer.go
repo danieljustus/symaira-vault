@@ -54,6 +54,15 @@ const (
 	FormatBitwarden Format = "bitwarden"
 	FormatPass      Format = "pass"
 	FormatCSV       Format = "csv"
+	// FormatApple is the Apple Passwords / iCloud Keychain CSV export
+	// (Title,URL,Username,Password,Notes,OTPAuth).
+	FormatApple Format = "apple"
+	// FormatChrome is the Chrome / Chromium browser CSV export
+	// (name,url,username,password,note).
+	FormatChrome Format = "chrome"
+	// FormatFirefox is the Firefox CSV export
+	// (url,username,password,httpRealm,formActionOrigin,guid,timeCreated,timeLastUsed,timePasswordChanged).
+	FormatFirefox Format = "firefox"
 )
 
 // New creates an Importer for the given format.
@@ -67,6 +76,8 @@ func New(format Format) (Importer, error) {
 		return &passImporter{}, nil
 	case FormatCSV:
 		return &csvImporter{}, nil
+	case FormatApple, FormatChrome, FormatFirefox:
+		return NewCSVProfile(format, "")
 	default:
 		return nil, fmt.Errorf("unsupported import format: %s", format)
 	}

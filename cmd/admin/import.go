@@ -2,6 +2,7 @@ package admin
 
 import (
 	"crypto/rand"
+	"encoding/csv"
 	"errors"
 	"fmt"
 	"os"
@@ -41,15 +42,24 @@ When --format is not specified, the format is auto-detected from the input file 
   .json → JSON format
   .yaml/.yml → YAML format
 
-Use --format to override auto-detection or when the file extension does not match the actual format.`,
+CSV files are additionally header-sniffed: exports from Apple Passwords
+(iCloud Keychain), Chrome/Chromium and Firefox are recognized from their
+header row and mapped with a built-in profile. Use --format apple, --format
+chrome or --format firefox to select a profile explicitly. Use --format to
+override auto-detection or when the file extension does not match the actual
+format.`,
+
 		Example: `  # Auto-detect format from file extension
   symvault import bw-export.json --dry-run
 
-  # Explicitly specify format (overrides auto-detection)
+  # Auto-detect the CSV profile from the header row (Apple Passwords, Chrome, Firefox)
+  symvault import passwords.csv --dry-run
+
+  # Explicitly specify a format (overrides auto-detection)
   symvault import bitwarden bw-export.json --dry-run
 
-  # Import 1Password CSV under a prefix, skipping entries that already exist
-  symvault import export.csv --format 1password --prefix work/ --skip-existing
+  # Import a Firefox export under a prefix, skipping entries that already exist
+  symvault import logins.csv --format firefox --prefix work/ --skip-existing
 
   # Auto-detect CSV from .csv extension
   symvault import data.csv --overwrite`,
@@ -69,6 +79,19 @@ Use --format to override auto-detection or when the file extension does not matc
 			}
 			if !isSupportedImportFormat(format) {
 				return errorspkg.NewCLIError(errorspkg.ExitGeneralError, fmt.Sprintf("unsupported import format: %s", format), nil)
+			}
+
+			// Sniff .csv files: match the header row against the built-in CSV
+			// profiles (Apple Passwords, Chrome/Chromium, Firefox) before falling
+			// back to the generic CSV mapping.
+			if format == importer.FormatCSV && ImportFormat == "" {
+				format = sniffOrKeepCSV(format, sourcePath)
+			}
+
+			// Dry-run reports the resolved format and the CSV mapping in effect,
+			// so a user can verify the profile before writing anything.
+			if err := reportDryRunImport(format); err != nil {
+				return err
 			}
 
 			if ImportSkipExisting && ImportOverwrite {
@@ -138,51 +161,10 @@ Use --format to override auto-detection or when the file extension does not matc
 					}()
 				}
 
-				imported, skipped := 0, 0
-				for _, entry := range entries {
-					entryPath := importEntryPath(options.Prefix, entry.Path)
-					if entryPath == "" {
-						skipped++
-						cli.PrintQuietAware("Skipped entry with empty path\n")
-						continue
-					}
-
-					exists, err := importEntryExists(vs, entryPath)
-					if err != nil {
-						return fmt.Errorf("cannot check entry: %w", err)
-					}
-
-					if exists && options.SkipExisting {
-						skipped++
-						cli.PrintQuietAware("Skipped existing: %s\n", entryPath)
-						continue
-					}
-
-					if options.DryRun {
-						cli.PrintQuietAware("Would import: %s\n", entryPath)
-						imported++
-						continue
-					}
-
-					if exists && options.Overwrite {
-						if err := vs.DeleteEntry(entryPath); err != nil {
-							return fmt.Errorf("cannot overwrite entry: %w", err)
-						}
-					}
-
-					record := vaultpkg.WriteRecord{Action: "import"}
-					if err := vs.SetFieldsWithProvenance(entryPath, entry.Data, record); err != nil {
-						return fmt.Errorf("cannot write entry: %w", err)
-					}
-					if entry.SecretMetadata != nil {
-						if err := vs.SetSecretMetadata(entryPath, *entry.SecretMetadata); err != nil {
-							return fmt.Errorf("cannot set secret metadata: %w", err)
-						}
-					}
-					cli.PrintQuietAware("Imported: %s\n", entryPath)
-					imported++
+				imported, skipped, err := importEntries(vs, entries, options)
+				if err != nil {
+					return err
 				}
-
 				cli.PrintQuietAware("Import summary: %d imported, %d skipped\n", imported, skipped)
 				return nil
 			})
@@ -202,11 +184,68 @@ Use --format to override auto-detection or when the file extension does not matc
 
 func isSupportedImportFormat(format importer.Format) bool {
 	switch format {
-	case importer.Format1Password, importer.FormatBitwarden, importer.FormatPass, importer.FormatCSV:
+	case importer.Format1Password, importer.FormatBitwarden, importer.FormatPass, importer.FormatCSV,
+		importer.FormatApple, importer.FormatChrome, importer.FormatFirefox:
 		return true
 	default:
 		return false
 	}
+}
+
+// reportDryRunImport prints the resolved format and, for CSV imports, the
+// field→column mapping in effect, so a user can verify the profile before
+// writing anything.
+func reportDryRunImport(format importer.Format) error {
+	if !ImportDryRun {
+		return nil
+	}
+	cli.PrintQuietAware("Import format: %s\n", format)
+	if !importer.IsCSVFormat(format) {
+		return nil
+	}
+	effective, err := importer.CSVEffectiveMapping(format, ImportMapping)
+	if err != nil {
+		return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "invalid CSV mapping", err)
+	}
+	mappingParts := make([]string, 0, len(effective))
+	for field, column := range effective {
+		mappingParts = append(mappingParts, field+"="+column)
+	}
+	sort.Strings(mappingParts)
+	cli.PrintQuietAware("CSV mapping: %s\n", strings.Join(mappingParts, ", "))
+	return nil
+}
+
+// sniffOrKeepCSV sniffs a .csv source against the built-in CSV profiles and
+// returns the detected profile format, or the original format when the header
+// matches none. It announces a detected profile on stdout.
+func sniffOrKeepCSV(format importer.Format, sourcePath string) importer.Format {
+	profile := sniffCSVProfile(sourcePath)
+	if profile == importer.FormatCSV {
+		return format
+	}
+	if p, ok := importer.CSVProfileFor(profile); ok {
+		cli.PrintQuietAware("Detected %s CSV export from header row\n", p.Name)
+	}
+	return profile
+}
+
+// sniffCSVProfile reads the header row of a CSV file and returns the
+// built-in profile it matches, or FormatCSV when no profile matches.
+func sniffCSVProfile(sourcePath string) importer.Format {
+	f, err := os.Open(sourcePath) // #nosec G304 -- import source path is user-provided CLI argument
+	if err != nil {
+		return importer.FormatCSV
+	}
+	defer func() { _ = f.Close() }()
+
+	reader := csv.NewReader(f)
+	reader.FieldsPerRecord = -1
+	header, err := reader.Read()
+	if err != nil {
+		return importer.FormatCSV
+	}
+	return importer.DetectCSVProfile(header)
 }
 
 // detectFormatFromExt derives the import format from the file extension.
@@ -226,10 +265,63 @@ func detectFormatFromExt(filename string) (importer.Format, error) {
 }
 
 func newImporter(format importer.Format, options importer.ImportOptions) (importer.Importer, error) {
-	if format == importer.FormatCSV {
-		return importer.NewCSV(options.Mapping), nil
+	if importer.IsCSVFormat(format) {
+		if format == importer.FormatCSV {
+			return importer.NewCSV(options.Mapping), nil
+		}
+		return importer.NewCSVProfile(format, options.Mapping)
 	}
 	return importer.New(format)
+}
+
+// importEntries writes the parsed entries into the vault, applying the
+// import options (prefix, skip-existing, overwrite, dry-run) per entry. It
+// returns the number of imported and skipped entries.
+func importEntries(vs *cli.VaultService, entries []importer.ImportedEntry, options importer.ImportOptions) (imported, skipped int, err error) {
+	for _, entry := range entries {
+		entryPath := importEntryPath(options.Prefix, entry.Path)
+		if entryPath == "" {
+			skipped++
+			cli.PrintQuietAware("Skipped entry with empty path\n")
+			continue
+		}
+
+		exists, err := importEntryExists(vs, entryPath)
+		if err != nil {
+			return 0, 0, fmt.Errorf("cannot check entry: %w", err)
+		}
+
+		if exists && options.SkipExisting {
+			skipped++
+			cli.PrintQuietAware("Skipped existing: %s\n", entryPath)
+			continue
+		}
+
+		if options.DryRun {
+			cli.PrintQuietAware("Would import: %s\n", entryPath)
+			imported++
+			continue
+		}
+
+		if exists && options.Overwrite {
+			if err := vs.DeleteEntry(entryPath); err != nil {
+				return 0, 0, fmt.Errorf("cannot overwrite entry: %w", err)
+			}
+		}
+
+		record := vaultpkg.WriteRecord{Action: "import"}
+		if err := vs.SetFieldsWithProvenance(entryPath, entry.Data, record); err != nil {
+			return 0, 0, fmt.Errorf("cannot write entry: %w", err)
+		}
+		if entry.SecretMetadata != nil {
+			if err := vs.SetSecretMetadata(entryPath, *entry.SecretMetadata); err != nil {
+				return 0, 0, fmt.Errorf("cannot set secret metadata: %w", err)
+			}
+		}
+		cli.PrintQuietAware("Imported: %s\n", entryPath)
+		imported++
+	}
+	return imported, skipped, nil
 }
 
 func importEntryPath(prefix, entryPath string) string {
