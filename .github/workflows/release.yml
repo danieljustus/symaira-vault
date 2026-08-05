@@ -238,6 +238,7 @@ jobs:
           else
             echo "$NOTARY_API_KEY" > "$RUNNER_TEMP/notary-key.p8"
           fi
+          chmod 600 "$RUNNER_TEMP/notary-key.p8"
           for ARCH in amd64 arm64; do
             for f in dist/*_darwin_${ARCH}*/*; do
               if [ -f "$f" ] && file "$f" | grep -q "Mach-O"; then
@@ -392,6 +393,7 @@ jobs:
           else
             echo "$NOTARY_API_KEY" > "$RUNNER_TEMP/notary-key.p8"
           fi
+          chmod 600 "$RUNNER_TEMP/notary-key.p8"
           echo "Submitting DMG for notarization: ${{ env.DMG_PATH }}"
           xcrun notarytool submit "${{ env.DMG_PATH }}" \
             -k "$RUNNER_TEMP/notary-key.p8" \
