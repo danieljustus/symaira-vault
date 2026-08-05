@@ -19,6 +19,10 @@ type ImportedEntry struct {
 	// SecretMetadata carries the semantic type and hints set by the importer.
 	// When set, the import pipeline writes this metadata to the vault entry.
 	SecretMetadata *vaultpkg.SecretMetadata
+	// Warnings lists per-entry issues found while parsing (for example a TOTP
+	// value that could not be normalized). The entry is still imported, minus
+	// the offending field. Nil when the entry parsed cleanly.
+	Warnings []string
 }
 
 // Importer parses a password export format and returns imported entries.
