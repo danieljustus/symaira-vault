@@ -17,7 +17,7 @@ import (
 var shareCmd = newShareCmd()
 
 func newShareCmd() *cobra.Command {
-	shareCmd := &cobra.Command{
+	c := &cobra.Command{
 		Use:   "share",
 		Short: "Manage secret sharing between agents",
 		Long:  "List and revoke secret share grants between MCP agents.",
@@ -33,10 +33,10 @@ func newShareCmd() *cobra.Command {
 			cli.JSONOutputAnnotation: "true",
 		},
 	}
-	shareCmd.GroupID = cli.GroupIDSharingSync
-	shareCmd.AddCommand(newShareListCmd())
-	shareCmd.AddCommand(newShareRevokeCmd())
-	return shareCmd
+	c.GroupID = cli.GroupIDSharingSync
+	c.AddCommand(newShareListCmd())
+	c.AddCommand(newShareRevokeCmd())
+	return c
 }
 
 func newShareListCmd() *cobra.Command {

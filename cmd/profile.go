@@ -21,7 +21,7 @@ var profileVaultPath string
 var profileCmd = newProfileCmd()
 
 func newProfileCmd() *cobra.Command {
-	profileCmd := &cobra.Command{
+	c := &cobra.Command{
 		Use:   "profile",
 		Short: "Manage vault profiles",
 		Long:  `Manage named vault profiles for switching between multiple vaults.`,
@@ -32,11 +32,11 @@ func newProfileCmd() *cobra.Command {
 			requiresVaultAnnotation: "false",
 		},
 	}
-	profileCmd.AddCommand(newProfileListCmd())
-	profileCmd.AddCommand(newProfileAddCmd())
-	profileCmd.AddCommand(newProfileUseCmd())
-	profileCmd.GroupID = cli.GroupIDAdministration
-	return profileCmd
+	c.AddCommand(newProfileListCmd())
+	c.AddCommand(newProfileAddCmd())
+	c.AddCommand(newProfileUseCmd())
+	c.GroupID = cli.GroupIDAdministration
+	return c
 }
 
 func newProfileListCmd() *cobra.Command {

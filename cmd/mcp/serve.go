@@ -35,7 +35,7 @@ The server can run in HTTP mode or stdio mode.`,
 var ServeCmd = newServeCmd()
 
 func newServeCmd() *cobra.Command {
-	ServeCmd := &cobra.Command{
+	c := &cobra.Command{
 		Use:   "serve",
 		Short: "Start MCP server for agent access",
 		Long:  serveLongDescription(),
@@ -49,17 +49,17 @@ func newServeCmd() *cobra.Command {
   symvault serve install`,
 		RunE: runServe,
 	}
-	ServeCmd.GroupID = cli.GroupIDAgentsMCP
-	ServeCmd.Flags().String("agent", "", "Agent name (required for --stdio; HTTP mode resolves agents per-request via X-Symaira-Agent header)")
-	ServeCmd.Flags().Int("port", 8080, "Server port")
-	ServeCmd.Flags().Bool("stdio", false, "Enable stdio transport (for MCP)")
-	ServeCmd.Flags().String("bind", "127.0.0.1", "Bind address for HTTP server")
-	ServeCmd.Flags().String("tls-cert", "", "TLS certificate file path (overrides config)")
-	ServeCmd.Flags().String("tls-key", "", "TLS key file path (overrides config)")
-	ServeCmd.Flags().String("tls-ca", "", "CA certificate file path for mTLS client verification (enables mTLS)")
-	ServeCmd.Flags().Bool("allow-locked", false, "Allow the MCP server to start even when the vault is locked (stdio mode only)")
-	ServeCmd.AddCommand(newServeInstallCmd())
-	ServeCmd.AddCommand(newServeUninstallCmd())
-	ServeCmd.AddCommand(newServeStatusCmd())
-	return ServeCmd
+	c.GroupID = cli.GroupIDAgentsMCP
+	c.Flags().String("agent", "", "Agent name (required for --stdio; HTTP mode resolves agents per-request via X-Symaira-Agent header)")
+	c.Flags().Int("port", 8080, "Server port")
+	c.Flags().Bool("stdio", false, "Enable stdio transport (for MCP)")
+	c.Flags().String("bind", "127.0.0.1", "Bind address for HTTP server")
+	c.Flags().String("tls-cert", "", "TLS certificate file path (overrides config)")
+	c.Flags().String("tls-key", "", "TLS key file path (overrides config)")
+	c.Flags().String("tls-ca", "", "CA certificate file path for mTLS client verification (enables mTLS)")
+	c.Flags().Bool("allow-locked", false, "Allow the MCP server to start even when the vault is locked (stdio mode only)")
+	c.AddCommand(newServeInstallCmd())
+	c.AddCommand(newServeUninstallCmd())
+	c.AddCommand(newServeStatusCmd())
+	return c
 }

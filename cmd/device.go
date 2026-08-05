@@ -34,7 +34,7 @@ var (
 var deviceCmd = newDeviceCmd()
 
 func newDeviceCmd() *cobra.Command {
-	deviceCmd := &cobra.Command{
+	c := &cobra.Command{
 		Use:   "device",
 		Short: "Manage paired devices for multi-device vault access",
 		Long: `Manage paired devices that can access this vault.
@@ -48,14 +48,14 @@ and 'symvault device join' on the new device to join the vault.`,
 			cli.JSONOutputAnnotation: "true",
 		},
 	}
-	deviceCmd.GroupID = cli.GroupIDSharingSync
-	deviceCmd.AddCommand(newDevicePairCmd())
-	deviceCmd.AddCommand(newDeviceJoinCmd())
-	deviceCmd.AddCommand(newDeviceAcceptCmd())
-	deviceCmd.AddCommand(newDeviceListCmd())
-	deviceCmd.AddCommand(newDeviceRevokeCmd())
-	deviceCmd.AddCommand(newDeviceAddCmd())
-	return deviceCmd
+	c.GroupID = cli.GroupIDSharingSync
+	c.AddCommand(newDevicePairCmd())
+	c.AddCommand(newDeviceJoinCmd())
+	c.AddCommand(newDeviceAcceptCmd())
+	c.AddCommand(newDeviceListCmd())
+	c.AddCommand(newDeviceRevokeCmd())
+	c.AddCommand(newDeviceAddCmd())
+	return c
 }
 
 func newDevicePairCmd() *cobra.Command {

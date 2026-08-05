@@ -15,11 +15,11 @@ var uiPrintKeybindings bool
 var uiExperimental bool
 
 // uiCmd is retained for API compatibility; NewCommands() uses
-// newUiCmd() so every call gets a fresh command.
-var uiCmd = newUiCmd()
+// newUICmd() so every call gets a fresh command.
+var uiCmd = newUICmd()
 
-func newUiCmd() *cobra.Command {
-	uiCmd := &cobra.Command{
+func newUICmd() *cobra.Command {
+	c := &cobra.Command{
 		Use:   "ui",
 		Short: "Launch the interactive terminal UI",
 		Long: `Launches the interactive terminal UI for browsing and managing the vault.
@@ -58,8 +58,8 @@ Inside the TUI:
 			})
 		},
 	}
-	uiCmd.Flags().BoolVar(&uiPrintKeybindings, "print-keybindings", false, "Print the TUI keybinding reference and exit")
-	uiCmd.Flags().BoolVar(&uiExperimental, "experimental", false, "(deprecated, no longer needed)")
-	uiCmd.GroupID = cli.GroupIDEssentials
-	return uiCmd
+	c.Flags().BoolVar(&uiPrintKeybindings, "print-keybindings", false, "Print the TUI keybinding reference and exit")
+	c.Flags().BoolVar(&uiExperimental, "experimental", false, "(deprecated, no longer needed)")
+	c.GroupID = cli.GroupIDEssentials
+	return c
 }

@@ -28,7 +28,7 @@ var (
 var runCmd = newRunCmd()
 
 func newRunCmd() *cobra.Command {
-	runCmd := &cobra.Command{
+	c := &cobra.Command{
 		Use:   "run [flags] -- <command> [args...]",
 		Short: "Run a command with secrets injected as environment variables",
 		Long:  "Executes a command with vault secrets injected as environment variables. Use --env NAME=path.field to map secrets.",
@@ -112,13 +112,13 @@ func newRunCmd() *cobra.Command {
 			})
 		},
 	}
-	runCmd.Flags().StringArrayVarP(&runEnvFlags, "env", "e", nil, "Environment variable mapping (NAME=path.field)")
-	runCmd.Flags().StringArrayVarP(&runEnvFiles, "env-file", "f", nil, "File with env variable mappings (NAME=path.field), one per line")
-	runCmd.Flags().StringArrayVar(&runPassthrough, "passthrough", nil, "Parent env var names to pass through to the child process (comma-separated)")
-	runCmd.Flags().StringVarP(&runWorkingDir, "working-dir", "C", "", "Working directory for the command")
-	runCmd.Flags().DurationVarP(&runTimeout, "timeout", "t", 0, "Timeout for the command (e.g., 30s)")
-	runCmd.GroupID = cli.GroupIDVault
-	return runCmd
+	c.Flags().StringArrayVarP(&runEnvFlags, "env", "e", nil, "Environment variable mapping (NAME=path.field)")
+	c.Flags().StringArrayVarP(&runEnvFiles, "env-file", "f", nil, "File with env variable mappings (NAME=path.field), one per line")
+	c.Flags().StringArrayVar(&runPassthrough, "passthrough", nil, "Parent env var names to pass through to the child process (comma-separated)")
+	c.Flags().StringVarP(&runWorkingDir, "working-dir", "C", "", "Working directory for the command")
+	c.Flags().DurationVarP(&runTimeout, "timeout", "t", 0, "Timeout for the command (e.g., 30s)")
+	c.GroupID = cli.GroupIDVault
+	return c
 }
 
 // parseEnvFile reads an env file and returns a map of env var names to secret references.

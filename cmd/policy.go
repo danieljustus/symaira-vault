@@ -91,7 +91,7 @@ Example:
 var policyCmd = newPolicyCmd()
 
 func newPolicyCmd() *cobra.Command {
-	policyCmd := &cobra.Command{
+	c := &cobra.Command{
 		Use:   "policy",
 		Short: "Manage declarative policies",
 		Long: `Manage context-aware auto-approval policies for MCP tool calls.
@@ -116,12 +116,12 @@ prompted, or require biometric authentication.`,
 			requiresVaultAnnotation: "false",
 		},
 	}
-	policyCmd.AddCommand(newPolicyValidateCmd())
-	policyCmd.AddCommand(newPolicyApplyCmd())
-	policyCmd.AddCommand(newPolicyListCmd())
-	policyCmd.AddCommand(newPolicyRemoveCmd())
-	policyCmd.GroupID = cli.GroupIDAdministration
-	return policyCmd
+	c.AddCommand(newPolicyValidateCmd())
+	c.AddCommand(newPolicyApplyCmd())
+	c.AddCommand(newPolicyListCmd())
+	c.AddCommand(newPolicyRemoveCmd())
+	c.GroupID = cli.GroupIDAdministration
+	return c
 }
 
 func newPolicyApplyCmd() *cobra.Command {

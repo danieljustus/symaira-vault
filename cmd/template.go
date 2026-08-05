@@ -27,7 +27,7 @@ var (
 var templateCmd = newTemplateCmd()
 
 func newTemplateCmd() *cobra.Command {
-	templateCmd := &cobra.Command{
+	c := &cobra.Command{
 		Use:   "template",
 		Short: "Generate configuration files from templates",
 		Long: `Generate configuration files from built-in or custom templates.
@@ -47,9 +47,9 @@ Supported template types:
 			cli.JSONOutputAnnotation: "true",
 		},
 	}
-	templateCmd.AddCommand(newTemplateGenerateCmd())
-	templateCmd.GroupID = cli.GroupIDVault
-	return templateCmd
+	c.AddCommand(newTemplateGenerateCmd())
+	c.GroupID = cli.GroupIDVault
+	return c
 }
 
 func newTemplateGenerateCmd() *cobra.Command {

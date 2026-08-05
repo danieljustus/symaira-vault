@@ -80,7 +80,7 @@ func NewRootCmd() *cobra.Command {
 		newShareCmd(),
 		newSyncCmd(),
 		newTemplateCmd(),
-		newUiCmd(),
+		newUICmd(),
 	)
 
 	return root

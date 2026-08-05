@@ -24,7 +24,7 @@ var (
 var generateCmd = newGenerateCmd()
 
 func newGenerateCmd() *cobra.Command {
-	generateCmd := &cobra.Command{
+	c := &cobra.Command{
 		Use:     "generate",
 		Aliases: []string{"gen"},
 		Short:   "Generate a secure password",
@@ -98,14 +98,14 @@ func newGenerateCmd() *cobra.Command {
 			return nil
 		},
 	}
-	generateCmd.Flags().IntVarP(&genLength, "length", "l", 20, "Password length")
-	generateCmd.Flags().BoolVarP(&genSymbols, "symbols", "s", false, "Include symbols")
-	generateCmd.Flags().StringVar(&genStore, "store", "", "Store at path (optional)")
-	generateCmd.Flags().BoolVar(&genReveal, "reveal", false, "Include generated password in output when using --store")
-	generateCmd.Flags().BoolVar(&genQuiet, "quiet", false, "Suppress success output when using --store")
-	generateCmd.AddCommand(newManpagesCmd())
-	generateCmd.GroupID = cli.GroupIDVault
-	return generateCmd
+	c.Flags().IntVarP(&genLength, "length", "l", 20, "Password length")
+	c.Flags().BoolVarP(&genSymbols, "symbols", "s", false, "Include symbols")
+	c.Flags().StringVar(&genStore, "store", "", "Store at path (optional)")
+	c.Flags().BoolVar(&genReveal, "reveal", false, "Include generated password in output when using --store")
+	c.Flags().BoolVar(&genQuiet, "quiet", false, "Suppress success output when using --store")
+	c.AddCommand(newManpagesCmd())
+	c.GroupID = cli.GroupIDVault
+	return c
 }
 
 func generatePassword(length int, useSymbols bool) (string, func(), error) {

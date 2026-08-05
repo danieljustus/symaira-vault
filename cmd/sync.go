@@ -22,7 +22,7 @@ var syncForce bool
 var syncCmd = newSyncCmd()
 
 func newSyncCmd() *cobra.Command {
-	syncCmd := &cobra.Command{
+	c := &cobra.Command{
 		Use:   "sync",
 		Short: "Sync vault with remote (pull + optional push)",
 		Long:  "Pulls changes from the remote git repository and optionally pushes local changes.",
@@ -99,10 +99,10 @@ func newSyncCmd() *cobra.Command {
 			return nil
 		},
 	}
-	syncCmd.Flags().BoolVarP(&syncPush, "push", "p", false, "also push after pull")
-	syncCmd.Flags().BoolVarP(&syncForce, "force", "f", false, "force pull (reset local changes)")
-	syncCmd.GroupID = cli.GroupIDSharingSync
-	return syncCmd
+	c.Flags().BoolVarP(&syncPush, "push", "p", false, "also push after pull")
+	c.Flags().BoolVarP(&syncForce, "force", "f", false, "force pull (reset local changes)")
+	c.GroupID = cli.GroupIDSharingSync
+	return c
 }
 
 func isOfflineErr(err error) bool {

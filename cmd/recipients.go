@@ -23,7 +23,7 @@ var (
 var recipientsCmd = newRecipientsCmd()
 
 func newRecipientsCmd() *cobra.Command {
-	recipientsCmd := &cobra.Command{
+	c := &cobra.Command{
 		Use:   "recipients",
 		Short: "Manage vault recipients for multi-user encryption",
 		Long: `Manage recipients (public keys) that can decrypt vault entries.
@@ -38,11 +38,11 @@ Lines starting with # are treated as comments.`,
 			cli.JSONOutputAnnotation: "true",
 		},
 	}
-	recipientsCmd.GroupID = cli.GroupIDVault
-	recipientsCmd.AddCommand(newRecipientsListCmd())
-	recipientsCmd.AddCommand(newRecipientsAddCmd())
-	recipientsCmd.AddCommand(newRecipientsRemoveCmd())
-	return recipientsCmd
+	c.GroupID = cli.GroupIDVault
+	c.AddCommand(newRecipientsListCmd())
+	c.AddCommand(newRecipientsAddCmd())
+	c.AddCommand(newRecipientsRemoveCmd())
+	return c
 }
 
 // recipientsListCmd is retained for API compatibility; NewCommands() uses
@@ -50,7 +50,7 @@ Lines starting with # are treated as comments.`,
 var recipientsListCmd = newRecipientsListCmd()
 
 func newRecipientsListCmd() *cobra.Command {
-	recipientsListCmd := &cobra.Command{
+	c := &cobra.Command{
 		Use:     "list",
 		Short:   "List all recipients",
 		Long:    `List all recipients from the recipients.txt file.`,
@@ -111,7 +111,7 @@ func newRecipientsListCmd() *cobra.Command {
 			return nil
 		},
 	}
-	return recipientsListCmd
+	return c
 }
 
 // recipientsAddCmd is retained for API compatibility; NewCommands() uses
@@ -119,7 +119,7 @@ func newRecipientsListCmd() *cobra.Command {
 var recipientsAddCmd = newRecipientsAddCmd()
 
 func newRecipientsAddCmd() *cobra.Command {
-	recipientsAddCmd := &cobra.Command{
+	c := &cobra.Command{
 		Use:   "add <public-key>",
 		Short: "Add a recipient",
 		Long: `Add a new recipient (public key) to the vault.
@@ -162,8 +162,8 @@ Once added, all new entries will be encrypted for this recipient.`,
 			})
 		},
 	}
-	recipientsAddCmd.Flags().BoolVar(&reencryptAfterAdd, "reencrypt", false, "Re-encrypt existing entries for the new recipient")
-	return recipientsAddCmd
+	c.Flags().BoolVar(&reencryptAfterAdd, "reencrypt", false, "Re-encrypt existing entries for the new recipient")
+	return c
 }
 
 // recipientsRemoveCmd is retained for API compatibility; NewCommands() uses
@@ -186,7 +186,7 @@ var _ = func() int {
 }()
 
 func newRecipientsRemoveCmd() *cobra.Command {
-	recipientsRemoveCmd := &cobra.Command{
+	c := &cobra.Command{
 		Use:     "remove <public-key>",
 		Aliases: []string{"rm"},
 		Short:   "Remove a recipient",
@@ -240,7 +240,7 @@ Use --yes to skip confirmation (useful for scripts).`,
 			})
 		},
 	}
-	recipientsRemoveCmd.Flags().BoolVarP(&confirmRemove, "yes", "y", false, "Skip confirmation prompt")
-	recipientsRemoveCmd.Flags().BoolVar(&noReencrypt, "no-reencrypt", false, "Skip re-encrypting existing entries after removal")
-	return recipientsRemoveCmd
+	c.Flags().BoolVarP(&confirmRemove, "yes", "y", false, "Skip confirmation prompt")
+	c.Flags().BoolVar(&noReencrypt, "no-reencrypt", false, "Skip re-encrypting existing entries after removal")
+	return c
 }

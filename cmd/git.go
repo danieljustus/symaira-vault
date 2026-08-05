@@ -16,7 +16,7 @@ import (
 var gitCmd = newGitCmd()
 
 func newGitCmd() *cobra.Command {
-	gitCmd := &cobra.Command{
+	c := &cobra.Command{
 		Use:   "git <push|pull|log> [path]",
 		Short: "Git operations on vault",
 		Example: `  # Sync with the configured remote
@@ -73,6 +73,6 @@ func newGitCmd() *cobra.Command {
 			return nil
 		},
 	}
-	gitCmd.GroupID = cli.GroupIDSharingSync
-	return gitCmd
+	c.GroupID = cli.GroupIDSharingSync
+	return c
 }

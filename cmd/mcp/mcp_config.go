@@ -26,7 +26,7 @@ import (
 var McpConfigCmd = newMcpConfigCmd()
 
 func newMcpConfigCmd() *cobra.Command {
-	McpConfigCmd := &cobra.Command{
+	c := &cobra.Command{
 		Use:   "mcp-config <agent>",
 		Short: "[Deprecated v4.0, removed in v4.1] Use 'symvault agent install <agent> --config-only'",
 		Long: `This command was deprecated in Symaira Vault v4.0 and will be removed in v4.1.
@@ -41,8 +41,8 @@ Use 'symvault agent install <agent> --config-only' to output MCP config snippets
 				"This command is deprecated in v4.0. Use: symvault agent install <agent> --config-only", nil)
 		},
 	}
-	McpConfigCmd.GroupID = cli.GroupIDAgentsMCP
-	return McpConfigCmd
+	c.GroupID = cli.GroupIDAgentsMCP
+	return c
 }
 
 func newMcpTokenRotateCmd() *cobra.Command {

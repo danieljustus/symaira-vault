@@ -23,7 +23,7 @@ var (
 var dynamicCmd = newDynamicCmd()
 
 func newDynamicCmd() *cobra.Command {
-	dynamicCmd := &cobra.Command{
+	c := &cobra.Command{
 		Use:   "dynamic",
 		Short: "Generate dynamic secrets with time-limited leases",
 		Long: `Generate dynamic secrets with time-limited leases for various backends.
@@ -37,9 +37,9 @@ Supported engines:
   # Short-lived AWS STS session
   symvault dynamic generate aws-sts --role arn:aws:iam::123:role/dev --ttl 15m`,
 	}
-	dynamicCmd.AddCommand(newDynamicGenerateCmd())
-	dynamicCmd.GroupID = cli.GroupIDVault
-	return dynamicCmd
+	c.AddCommand(newDynamicGenerateCmd())
+	c.GroupID = cli.GroupIDVault
+	return c
 }
 
 func newDynamicGenerateCmd() *cobra.Command {

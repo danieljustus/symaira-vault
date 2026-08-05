@@ -35,7 +35,7 @@ now available via the 'symvault agent' command family.`,
 var McpTokenCmd = newMcpTokenCmd()
 
 func newMcpTokenCmd() *cobra.Command {
-	McpTokenCmd := &cobra.Command{
+	c := &cobra.Command{
 		Use:   "token",
 		Short: "[Deprecated v4.0, removed in v4.1] Use 'symvault agent token <name>'",
 		Long: `This command was deprecated in Symaira Vault v4.0 and will be removed in v4.1.
@@ -50,10 +50,10 @@ with subcommands new, list, revoke, and rotate.`,
 				"This command is deprecated in v4.0. Use: symvault agent token <name> new/list/revoke", nil)
 		},
 	}
-	McpTokenCmd.AddCommand(newTokenCreateCmd())
-	McpTokenCmd.AddCommand(newTokenListCmd())
-	McpTokenCmd.AddCommand(newTokenRevokeCmd())
-	return McpTokenCmd
+	c.AddCommand(newTokenCreateCmd())
+	c.AddCommand(newTokenListCmd())
+	c.AddCommand(newTokenRevokeCmd())
+	return c
 }
 
 // TokenCreateCmd is retained for API compatibility; NewCommands() uses
@@ -61,7 +61,7 @@ with subcommands new, list, revoke, and rotate.`,
 var TokenCreateCmd = newTokenCreateCmd()
 
 func newTokenCreateCmd() *cobra.Command {
-	TokenCreateCmd := &cobra.Command{
+	c := &cobra.Command{
 		Use:   "create",
 		Short: "[Deprecated v4.0, removed in v4.1] Use 'symvault agent token <name> new'",
 		Long: `This command was deprecated in Symaira Vault v4.0 and will be removed in v4.1.
@@ -74,7 +74,7 @@ Create scoped tokens via 'symvault agent token <name> new'.`,
 				"This command is deprecated in v4.0. Use: symvault agent token <name> new", nil)
 		},
 	}
-	return TokenCreateCmd
+	return c
 }
 
 func newTokenListCmd() *cobra.Command {

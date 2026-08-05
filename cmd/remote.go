@@ -28,7 +28,7 @@ var (
 var remoteCmd = newRemoteCmd()
 
 func newRemoteCmd() *cobra.Command {
-	remoteCmd := &cobra.Command{
+	c := &cobra.Command{
 		Use:   "remote",
 		Short: "Manage git remote for vault sync",
 		Long: `Manage the git remote used for synchronizing the vault.
@@ -44,10 +44,10 @@ for vault synchronization. The vault must be initialized first.`,
 			cli.JSONOutputAnnotation: "true",
 		},
 	}
-	remoteCmd.GroupID = cli.GroupIDSharingSync
-	remoteCmd.AddCommand(newRemoteInitCmd())
-	remoteCmd.AddCommand(newRemoteStatusCmd())
-	return remoteCmd
+	c.GroupID = cli.GroupIDSharingSync
+	c.AddCommand(newRemoteInitCmd())
+	c.AddCommand(newRemoteStatusCmd())
+	return c
 }
 
 func newRemoteInitCmd() *cobra.Command {
