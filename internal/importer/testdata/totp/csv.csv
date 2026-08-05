@@ -1,0 +1,5 @@
+title,username,password,otp
+Bare Secret,user@example.com,bare-secret-password,JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP
+Plain URI,user@example.com,plain-uri-password,otpauth://totp/Example:user@example.com?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=Example
+SHA256 URI,user@example.com,sha256-uri-password,otpauth://totp/Example:user@example.com?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&algorithm=SHA256&digits=8&period=60&issuer=Example
+Malformed URI,user@example.com,malformed-uri-password,otpauth://totp/Example:user@example.com?secret=not-a-valid-base32-secret!!&issuer=Example
