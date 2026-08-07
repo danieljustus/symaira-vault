@@ -133,13 +133,17 @@ to <vault>/broker-ca.pem.`,
 
 // brokerEnvForRun starts an ephemeral broker for `run --broker` and returns
 // the environment variables the child process needs plus a cleanup function.
-func brokerEnvForRun(v *vaultpkg.Vault) (map[string]string, func(), error) {
+// strict and passthrough mirror the standalone broker command's --strict and
+// --passthrough flags (run exposes them as --broker-strict and
+// --broker-passthrough because --passthrough already means parent-env
+// passthrough there).
+func brokerEnvForRun(v *vaultpkg.Vault, strict bool, passthrough []string) (map[string]string, func(), error) {
 	proxy, err := brokerpkg.New(brokerpkg.Config{
 		VaultDir:    v.Dir,
 		Identity:    v.Identity,
 		AgentName:   "broker",
-		Strict:      brokerStrict,
-		Passthrough: brokerPassthrough,
+		Strict:      strict,
+		Passthrough: passthrough,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("start broker: %w", err)
