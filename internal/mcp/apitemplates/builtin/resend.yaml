@@ -1,0 +1,13 @@
+# Resend API template.
+# Auth shape: Authorization: Bearer <re_...> — https://resend.com/docs/api-reference/introduction
+# Fill the vault entry referenced by entry_ref with a "credential" field.
+base_url: https://api.resend.com
+auth_type: bearer
+entry_ref: op:///resend
+allowed_endpoints:
+  - /emails/*
+  - /domains/*
+  - /audiences/*
+allowed_methods:
+  - GET
+  - POST
