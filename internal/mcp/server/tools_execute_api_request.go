@@ -548,6 +548,9 @@ func applyURLSubstitutions(rawURL string, subs []apitemplates.Substitution, valu
 				u.RawPath = ""
 			case apitemplates.SurfaceQuery:
 				u.RawQuery = strings.ReplaceAll(u.RawQuery, sub.Placeholder, value)
+			case apitemplates.SurfaceHeader, apitemplates.SurfaceBody:
+				// Applied by the dedicated header/body helpers; the URL
+				// does not carry these surfaces.
 			}
 		}
 	}
