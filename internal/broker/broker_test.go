@@ -562,6 +562,68 @@ func TestProxy_AuditRecorded(t *testing.T) {
 	}
 }
 
+func TestProxy_FailedRequestAuditedAsFailure(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("upstream must not be reached when substitutions cannot be resolved")
+	}))
+	defer upstream.Close()
+
+	tmpl := fmt.Sprintf(`base_url: %s
+auth_type: none
+entry_ref: testapi
+substitutions:
+  - placeholder: __MISSING_FIELD__
+    field: missing_field
+    in: [path]
+allow_private: true
+`, upstream.URL)
+
+	vaultDir, identity := setupVault(t, "testapi", map[string]any{"credential": "token"}, "testapi", tmpl)
+
+	logger, err := audit.New("broker-test", vaultDir, identity)
+	if err != nil {
+		t.Fatalf("audit.New: %v", err)
+	}
+	defer logger.Close()
+
+	proxyURL, stop := startProxy(t, Config{
+		VaultDir:     vaultDir,
+		Identity:     identity,
+		AgentName:    "broker-test",
+		AuditLog:     logger,
+		AllowPrivate: true,
+	})
+	defer stop()
+
+	resp, err := newProxyClient(proxyURL).Get(upstream.URL + "/__MISSING_FIELD__")
+	if err != nil {
+		t.Fatalf("GET through proxy: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500 for unresolvable substitution", resp.StatusCode)
+	}
+	logger.Flush()
+
+	entries, err := audit.LoadAuditLogFiles("broker-test", vaultDir, 10)
+	if err != nil {
+		t.Fatalf("load audit entries: %v", err)
+	}
+	found := false
+	for _, e := range entries {
+		if e.Action != "broker_request" {
+			continue
+		}
+		found = true
+		if e.OK != false {
+			t.Errorf("audit entry ok = %v, want false for failed brokered request", e.OK)
+		}
+	}
+	if !found {
+		t.Fatal("no broker_request audit entry found")
+	}
+}
+
 func TestProxy_EnvExports(t *testing.T) {
 	p, err := New(Config{VaultDir: t.TempDir(), Identity: nil})
 	if err == nil {

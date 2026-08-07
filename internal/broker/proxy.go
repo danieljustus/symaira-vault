@@ -285,7 +285,10 @@ func (p *Proxy) serveInner(w http.ResponseWriter, r *http.Request) {
 // substitutions when a template matched, and sanitizes the response body.
 func (p *Proxy) forward(w http.ResponseWriter, r *http.Request, target string, tmpl *apitemplates.APITemplate, entryData map[string]any) {
 	host := canonicalHost(r.Host)
-	status := 0
+	// Default to a failure status so error paths below (substitution
+	// resolution, body read, request build, upstream failure) are audited
+	// as failures; the real status overwrites this on success.
+	status := http.StatusInternalServerError
 	audited := false
 	auditOnce := func(action string, ok bool, reason string) {
 		if audited {
