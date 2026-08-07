@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -101,7 +102,13 @@ to <vault>/broker-ca.pem.`,
 					fmt.Printf("Passthrough hosts (no TLS interception): %v\n", brokerPassthrough)
 				}
 
-				srv := &http.Server{Handler: proxy.Handler()}
+				srv := &http.Server{
+					Handler:           proxy.Handler(),
+					ReadHeaderTimeout: 30 * time.Second,
+					ReadTimeout:       60 * time.Second,
+					WriteTimeout:      60 * time.Second,
+					IdleTimeout:       30 * time.Second,
+				}
 				errCh := make(chan error, 1)
 				go func() { errCh <- srv.Serve(ln) }()
 
@@ -146,7 +153,13 @@ func brokerEnvForRun(v *vaultpkg.Vault) (map[string]string, func(), error) {
 		return nil, nil, fmt.Errorf("listen: %w", err)
 	}
 	proxyURL := "http://" + ln.Addr().String()
-	srv := &http.Server{Handler: proxy.Handler()}
+	srv := &http.Server{
+		Handler:           proxy.Handler(),
+		ReadHeaderTimeout: 30 * time.Second,
+		ReadTimeout:       60 * time.Second,
+		WriteTimeout:      60 * time.Second,
+		IdleTimeout:       30 * time.Second,
+	}
 	go func() { _ = srv.Serve(ln) }()
 
 	env := map[string]string{
