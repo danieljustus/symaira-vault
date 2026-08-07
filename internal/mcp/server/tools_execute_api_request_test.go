@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -127,14 +128,18 @@ func TestAPITemplateLoadAll(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadAll() error = %v", err)
 	}
-	if len(templates) != 5 {
-		t.Fatalf("LoadAll() returned %d templates, want 5", len(templates))
+	if len(templates) != 17 {
+		t.Fatalf("LoadAll() returned %d templates, want 17", len(templates))
 	}
 	names := make(map[string]bool)
 	for _, tmpl := range templates {
 		names[tmpl.Name] = true
 	}
-	for _, name := range []string{"github", "openai", "anthropic", "slack", "perplexity"} {
+	for _, name := range []string{
+		"github", "openai", "anthropic", "slack", "perplexity",
+		"gitlab", "linear", "notion", "stripe", "sentry", "cloudflare",
+		"vercel", "resend", "gemini", "openrouter", "npm", "telegram",
+	} {
 		if !names[name] {
 			t.Errorf("LoadAll() missing template %q", name)
 		}
@@ -911,5 +916,339 @@ func writeTemplateOverride(t *testing.T, vaultDir, name, content string) {
 	}
 	if err := os.WriteFile(filepath.Join(templatesDir, name+".yaml"), []byte(content), 0644); err != nil {
 		t.Fatalf("write template: %v", err)
+	}
+}
+
+// --- Substitution tests (issue #765) ---
+
+func TestHandleExecuteAPIRequest_PathSubstitution(t *testing.T) {
+	const botToken = "123456789:AA-test-bot-token"
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		wantPath := "/bot" + botToken + "/sendMessage"
+		if r.URL.Path != wantPath {
+			t.Errorf("path = %q, want %q", r.URL.Path, wantPath)
+		}
+		if auth := r.Header.Get("Authorization"); auth != "" {
+			t.Errorf("Authorization header = %q, want empty (auth_type none)", auth)
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok": true}`))
+	}))
+	defer ts.Close()
+
+	vaultDir, identity := mockVaultWithEntry(t, "telegramtest", map[string]any{
+		"credential": botToken,
+	})
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	writeTemplateOverride(t, vaultDir, "telegramtest", fmt.Sprintf(`base_url: %s/bot__BOT_TOKEN__
+auth_type: none
+entry_ref: telegramtest
+substitutions:
+  - placeholder: __BOT_TOKEN__
+    field: credential
+    in: [path]
+allowed_endpoints:
+  - /sendMessage
+allowed_methods:
+  - GET
+allow_private: true
+`, ts.URL))
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{
+			"template": "telegramtest",
+			"endpoint": "/sendMessage",
+			"method":   "GET",
+		},
+	}
+	result, err := srv.handleExecuteAPIRequest(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleExecuteAPIRequest() error = %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("handleExecuteAPIRequest() returned error: %s", result.Text)
+	}
+	var output map[string]any
+	if err := json.Unmarshal([]byte(result.Text), &output); err != nil {
+		t.Fatalf("parse result: %v", err)
+	}
+	if code, _ := output["status_code"].(float64); code != 200 {
+		t.Errorf("status_code = %v, want 200", code)
+	}
+}
+
+func TestHandleExecuteAPIRequest_BodySubstitution(t *testing.T) {
+	const bodyToken = "body-secret-token-1"
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		want := `{"chat_id": 42, "text": "` + bodyToken + `"}`
+		if string(body) != want {
+			t.Errorf("body = %q, want %q", string(body), want)
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok": true}`))
+	}))
+	defer ts.Close()
+
+	vaultDir, identity := mockVaultWithEntry(t, "bodytest", map[string]any{
+		"credential": bodyToken,
+	})
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	writeTemplateOverride(t, vaultDir, "bodytest", fmt.Sprintf(`base_url: %s
+auth_type: none
+entry_ref: bodytest
+substitutions:
+  - placeholder: __BODY_TOKEN__
+    field: credential
+    in: [body]
+allowed_endpoints:
+  - /test
+allowed_methods:
+  - POST
+allow_private: true
+`, ts.URL))
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{
+			"template": "bodytest",
+			"endpoint": "/test",
+			"method":   "POST",
+			"body":     `{"chat_id": 42, "text": "__BODY_TOKEN__"}`,
+		},
+	}
+	result, err := srv.handleExecuteAPIRequest(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleExecuteAPIRequest() error = %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("handleExecuteAPIRequest() returned error: %s", result.Text)
+	}
+}
+
+func TestHandleExecuteAPIRequest_HeaderSubstitution(t *testing.T) {
+	const gitlabToken = "glpat-test-token-123"
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("PRIVATE-TOKEN"); got != gitlabToken {
+			t.Errorf("PRIVATE-TOKEN header = %q, want %q", got, gitlabToken)
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id": 1}`))
+	}))
+	defer ts.Close()
+
+	vaultDir, identity := mockVaultWithEntry(t, "gitlabtest", map[string]any{
+		"credential": gitlabToken,
+	})
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	writeTemplateOverride(t, vaultDir, "gitlabtest", fmt.Sprintf(`base_url: %s
+auth_type: none
+entry_ref: gitlabtest
+default_headers:
+  PRIVATE-TOKEN: __GITLAB_TOKEN__
+substitutions:
+  - placeholder: __GITLAB_TOKEN__
+    field: credential
+    in: [header]
+allowed_endpoints:
+  - /test
+allowed_methods:
+  - GET
+allow_private: true
+`, ts.URL))
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{
+			"template": "gitlabtest",
+			"endpoint": "/test",
+			"method":   "GET",
+		},
+	}
+	result, err := srv.handleExecuteAPIRequest(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleExecuteAPIRequest() error = %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("handleExecuteAPIRequest() returned error: %s", result.Text)
+	}
+}
+
+func TestHandleExecuteAPIRequest_QuerySubstitution(t *testing.T) {
+	const queryToken = "query-secret-99"
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("api_key"); got != queryToken {
+			t.Errorf("api_key query param = %q, want %q", got, queryToken)
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok": true}`))
+	}))
+	defer ts.Close()
+
+	vaultDir, identity := mockVaultWithEntry(t, "querytest", map[string]any{
+		"credential": queryToken,
+	})
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	writeTemplateOverride(t, vaultDir, "querytest", fmt.Sprintf(`base_url: %s
+auth_type: none
+entry_ref: querytest
+substitutions:
+  - placeholder: __QUERY_KEY__
+    field: credential
+    in: [query]
+allowed_endpoints:
+  - /test
+allowed_methods:
+  - GET
+allow_private: true
+`, ts.URL))
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{
+			"template": "querytest",
+			"endpoint": "/test?api_key=__QUERY_KEY__",
+			"method":   "GET",
+		},
+	}
+	result, err := srv.handleExecuteAPIRequest(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleExecuteAPIRequest() error = %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("handleExecuteAPIRequest() returned error: %s", result.Text)
+	}
+}
+
+func TestHandleExecuteAPIRequest_SubstitutionValueRedactedOnError(t *testing.T) {
+	// A closed listener forces client.Do to fail; the error message embeds
+	// the request URL, which now contains the substituted token. The token
+	// must be redacted from the error returned to the agent.
+	closed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	closedURL := closed.URL
+	closed.Close()
+
+	const redactToken = "super-secret-token-xyz"
+	vaultDir, identity := mockVaultWithEntry(t, "redacttest", map[string]any{
+		"credential": redactToken,
+	})
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	writeTemplateOverride(t, vaultDir, "redacttest", fmt.Sprintf(`base_url: %s/bot__BOT_TOKEN__
+auth_type: none
+entry_ref: redacttest
+substitutions:
+  - placeholder: __BOT_TOKEN__
+    field: credential
+    in: [path]
+allowed_endpoints:
+  - /ping
+allowed_methods:
+  - GET
+allow_private: true
+`, closedURL))
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{
+			"template": "redacttest",
+			"endpoint": "/ping",
+			"method":   "GET",
+		},
+	}
+	result, err := srv.handleExecuteAPIRequest(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleExecuteAPIRequest() error = %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("handleExecuteAPIRequest() expected error result for unreachable upstream")
+	}
+	if strings.Contains(result.Text, redactToken) {
+		t.Fatalf("error text leaks substituted value: %q", result.Text)
+	}
+	if !strings.Contains(result.Text, "request failed") {
+		t.Errorf("error text = %q, want 'request failed'", result.Text)
+	}
+}
+
+func TestHandleExecuteAPIRequest_SubstitutionMissingValue(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	// Entry has no "credential" field — substitution resolution must fail
+	// closed with a clear message instead of sending the placeholder.
+	vaultDir, identity := mockVaultWithEntry(t, "missingval", map[string]any{
+		"username": "someone",
+	})
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	writeTemplateOverride(t, vaultDir, "missingval", fmt.Sprintf(`base_url: %s/bot__BOT_TOKEN__
+auth_type: none
+entry_ref: missingval
+substitutions:
+  - placeholder: __BOT_TOKEN__
+    field: credential
+    in: [path]
+allowed_endpoints:
+  - /ping
+allowed_methods:
+  - GET
+allow_private: true
+`, ts.URL))
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{
+			"template": "missingval",
+			"endpoint": "/ping",
+			"method":   "GET",
+		},
+	}
+	result, err := srv.handleExecuteAPIRequest(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handleExecuteAPIRequest() error = %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("handleExecuteAPIRequest() expected error result for missing substitution value")
+	}
+	if !strings.Contains(result.Text, "no value for placeholder") {
+		t.Errorf("result text = %q, want 'no value for placeholder'", result.Text)
 	}
 }

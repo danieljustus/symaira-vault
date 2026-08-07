@@ -1,0 +1,12 @@
+# Linear API template.
+# Auth shape: Authorization: <api key> — https://developers.linear.app/docs/api/introduction
+# Linear accepts the API key as a bare bearer-style token (no "Bearer" prefix required,
+# but the Authorization: Bearer form is also accepted).
+# Fill the vault entry referenced by entry_ref with a "credential" field.
+base_url: https://api.linear.app
+auth_type: bearer
+entry_ref: op:///linear
+allowed_endpoints:
+  - /graphql
+allowed_methods:
+  - POST

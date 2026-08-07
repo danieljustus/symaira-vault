@@ -22,7 +22,7 @@ var builtinFS embed.FS
 type AuthType string
 
 const (
-	// AuthBearer sends credentials via Authorization: Bearer <token> header.
+	// AuthBearer sends credentials via Authorization: Bearer *** header.
 	AuthBearer AuthType = "bearer"
 	// AuthBasic sends credentials via HTTP Basic Auth (base64(username:password)).
 	AuthBasic AuthType = "basic"
@@ -30,7 +30,49 @@ const (
 	AuthHeader AuthType = "header"
 	// AuthQueryParam sends credentials as a URL query parameter.
 	AuthQueryParam AuthType = "query_param"
+	// AuthNone declares that no auth header is injected; credentials are
+	// delivered exclusively through substitutions (path/query/header/body).
+	// Templates using it must declare at least one substitution.
+	AuthNone AuthType = "none"
 )
+
+// SubstitutionSurface names a request location where a substitution
+// placeholder is replaced with a credential value.
+type SubstitutionSurface string
+
+const (
+	// SurfacePath replaces placeholders in the request URL path.
+	SurfacePath SubstitutionSurface = "path"
+	// SurfaceQuery replaces placeholders in the request URL query string.
+	SurfaceQuery SubstitutionSurface = "query"
+	// SurfaceHeader replaces placeholders in request header values.
+	SurfaceHeader SubstitutionSurface = "header"
+	// SurfaceBody replaces placeholders in the request body.
+	SurfaceBody SubstitutionSurface = "body"
+)
+
+// DefaultSubstitutionSurfaces is applied when a substitution omits "in".
+// It mirrors the upstream agent-vault default of path + query.
+func DefaultSubstitutionSurfaces() []SubstitutionSurface {
+	return []SubstitutionSurface{SurfacePath, SurfaceQuery}
+}
+
+// Substitution declares a placeholder that is replaced with a credential
+// value from the vault entry before the request leaves symvault. The value
+// is resolved from the vault entry field named by Field.
+type Substitution struct {
+	// Placeholder is the literal text replaced in the request. Rules (ported
+	// from the agent-vault broker): at least 4 characters, only RFC 3986
+	// unreserved characters [A-Za-z0-9_.~-], at least one alphanumeric, and a
+	// mandatory delimiter ("__" or a non-word character) so a short
+	// placeholder cannot accidentally rewrite a legitimate URL word.
+	Placeholder string `yaml:"placeholder" json:"placeholder"`
+	// Field is the vault entry field the credential value is read from.
+	Field string `yaml:"field" json:"field"`
+	// In lists the surfaces where the placeholder is replaced. When empty,
+	// defaults to path + query.
+	In []SubstitutionSurface `yaml:"in,omitempty" json:"in,omitempty"`
+}
 
 // APITemplate defines how to authenticate and communicate with an external API.
 type APITemplate struct {
@@ -48,9 +90,41 @@ type APITemplate struct {
 	AllowedMethods []string `yaml:"allowed_methods" json:"allowed_methods"`
 	// DefaultHeaders are headers to include in every request.
 	DefaultHeaders map[string]string `yaml:"default_headers" json:"default_headers,omitempty"`
+	// Substitutions replace placeholders in the request path, query, header
+	// values or body with credential values from the vault entry.
+	Substitutions []Substitution `yaml:"substitutions,omitempty" json:"substitutions,omitempty"`
 	// AllowPrivate permits requests to private or local network destinations.
 	// It is intentionally opt-in because templates can inject vault credentials.
 	AllowPrivate bool `yaml:"allow_private" json:"allow_private,omitempty"`
+}
+
+// Validate checks the template's required fields and substitution rules.
+// Templates loaded from YAML are validated at parse time; this method lets
+// callers and tests validate constructed or modified templates.
+func (t *APITemplate) Validate() error {
+	if t.Name == "" {
+		return fmt.Errorf("template name is required")
+	}
+	if t.BaseURL == "" {
+		return fmt.Errorf("template %q: base_url is required", t.Name)
+	}
+	parsedURL, err := url.Parse(t.BaseURL)
+	if err != nil {
+		return fmt.Errorf("template %q: invalid base_url: %w", t.Name, err)
+	}
+	if IsPrivateHost(parsedURL.Host) && !t.AllowPrivate {
+		return fmt.Errorf("template %q: base_url host %q resolves to a private/internal address; set allow_private: true to override", t.Name, parsedURL.Host)
+	}
+	if t.AuthType == "" {
+		return fmt.Errorf("template %q: auth_type is required", t.Name)
+	}
+	if t.AuthType == AuthNone && len(t.Substitutions) == 0 {
+		return fmt.Errorf("template %q: auth_type \"none\" requires at least one substitution", t.Name)
+	}
+	if t.EntryRef == "" {
+		return fmt.Errorf("template %q: entry_ref is required", t.Name)
+	}
+	return validateSubstitutions(t.Name, t.Substitutions)
 }
 
 // templateFile is the on-disk representation of an APITemplate.
@@ -61,6 +135,7 @@ type templateFile struct {
 	AllowedEndpoints []string          `yaml:"allowed_endpoints"`
 	AllowedMethods   []string          `yaml:"allowed_methods"`
 	DefaultHeaders   map[string]string `yaml:"default_headers"`
+	Substitutions    []Substitution    `yaml:"substitutions,omitempty"`
 	AllowPrivate     bool              `yaml:"allow_private"`
 }
 
@@ -215,8 +290,19 @@ func parseTemplate(name string, data []byte) (*APITemplate, error) {
 	if tf.AuthType == "" {
 		return nil, fmt.Errorf("template %q: auth_type is required", name)
 	}
+	if tf.AuthType == AuthNone && len(tf.Substitutions) == 0 {
+		return nil, fmt.Errorf("template %q: auth_type \"none\" requires at least one substitution", name)
+	}
 	if tf.EntryRef == "" {
 		return nil, fmt.Errorf("template %q: entry_ref is required", name)
+	}
+	if err := validateSubstitutions(name, tf.Substitutions); err != nil {
+		return nil, err
+	}
+	for i := range tf.Substitutions {
+		if len(tf.Substitutions[i].In) == 0 {
+			tf.Substitutions[i].In = DefaultSubstitutionSurfaces()
+		}
 	}
 
 	return &APITemplate{
@@ -227,6 +313,72 @@ func parseTemplate(name string, data []byte) (*APITemplate, error) {
 		AllowedEndpoints: tf.AllowedEndpoints,
 		AllowedMethods:   tf.AllowedMethods,
 		DefaultHeaders:   tf.DefaultHeaders,
+		Substitutions:    tf.Substitutions,
 		AllowPrivate:     tf.AllowPrivate,
 	}, nil
+}
+
+// validateSubstitutions enforces the placeholder rules ported from the
+// agent-vault broker (internal/broker/broker.go): minimum 4 characters, only
+// RFC 3986 unreserved characters, at least one alphanumeric, a mandatory
+// delimiter ("__" or a non-word character) so a placeholder cannot
+// accidentally match a legitimate URL word, and no duplicate placeholders.
+func validateSubstitutions(name string, subs []Substitution) error {
+	seen := make(map[string]struct{}, len(subs))
+	for i, sub := range subs {
+		label := fmt.Sprintf("template %q: substitutions[%d]", name, i)
+		ph := sub.Placeholder
+		if ph == "" {
+			return fmt.Errorf("%s: placeholder is required", label)
+		}
+		if len(ph) < 4 {
+			return fmt.Errorf("%s: placeholder %q must be at least 4 characters long", label, ph)
+		}
+		hasAlnum := false
+		hasDelimiter := strings.Contains(ph, "__")
+		for _, r := range ph {
+			if !isUnreservedRune(r) {
+				return fmt.Errorf("%s: placeholder %q contains disallowed character %q (only RFC 3986 unreserved characters [A-Za-z0-9_.~-] are allowed)", label, ph, r)
+			}
+			if isAlnumRune(r) {
+				hasAlnum = true
+			} else if !isWordRune(r) {
+				hasDelimiter = true
+			}
+		}
+		if !hasAlnum {
+			return fmt.Errorf("%s: placeholder %q must contain at least one alphanumeric character", label, ph)
+		}
+		if !hasDelimiter {
+			return fmt.Errorf("%s: placeholder %q must contain a delimiter (\"__\" or a non-word character) so it cannot accidentally match a legitimate URL word", label, ph)
+		}
+		if _, dup := seen[ph]; dup {
+			return fmt.Errorf("%s: duplicate placeholder %q across substitutions", label, ph)
+		}
+		seen[ph] = struct{}{}
+		if sub.Field == "" {
+			return fmt.Errorf("%s: field is required for placeholder %q", label, ph)
+		}
+		for _, surface := range sub.In {
+			switch surface {
+			case SurfacePath, SurfaceQuery, SurfaceHeader, SurfaceBody:
+			default:
+				return fmt.Errorf("%s: unsupported substitution surface %q (supported: path, query, header, body)", label, surface)
+			}
+		}
+	}
+	return nil
+}
+
+func isUnreservedRune(r rune) bool {
+	return isAlnumRune(r) || r == '-' || r == '.' || r == '_' || r == '~'
+}
+
+func isAlnumRune(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')
+}
+
+// isWordRune mirrors the regexp \w class ([A-Za-z0-9_]) for the delimiter rule.
+func isWordRune(r rune) bool {
+	return isAlnumRune(r) || r == '_'
 }
