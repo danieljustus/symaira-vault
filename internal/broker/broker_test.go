@@ -546,7 +546,7 @@ func TestProxy_AuditRecorded(t *testing.T) {
 	}
 	found := false
 	for _, e := range entries {
-		if e.Action != "broker_request" {
+		if e.Action != auditActionRequest {
 			continue
 		}
 		found = true
@@ -611,7 +611,7 @@ allow_private: true
 	}
 	found := false
 	for _, e := range entries {
-		if e.Action != "broker_request" {
+		if e.Action != auditActionRequest {
 			continue
 		}
 		found = true

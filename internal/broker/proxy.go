@@ -31,6 +31,8 @@ const (
 	brokerTimeout = 60 * time.Second
 	// handshakeTimeout bounds the TLS handshake with the client.
 	handshakeTimeout = 30 * time.Second
+	// auditActionRequest is the audit action recorded for forwarded requests.
+	auditActionRequest = "broker_request"
 )
 
 // Config configures a broker Proxy.
@@ -314,7 +316,7 @@ func (p *Proxy) forward(w http.ResponseWriter, r *http.Request, target string, t
 		p.audit(host, action, ok, reason)
 	}
 	defer func() {
-		auditOnce("broker_request", status < 400, "forward")
+		auditOnce(auditActionRequest, status < 400, "forward")
 	}()
 
 	var body io.Reader
@@ -439,7 +441,7 @@ func (p *Proxy) audit(host, action string, ok bool, reason string) {
 		Reason: reason,
 		OK:     ok,
 	}
-	if tmpl := p.byHost[host]; tmpl != nil && action == "broker_request" {
+	if tmpl := p.byHost[host]; tmpl != nil && action == auditActionRequest {
 		entry.Field = tmpl.Name
 	}
 	_ = p.cfg.AuditLog.LogEntry(entry)
