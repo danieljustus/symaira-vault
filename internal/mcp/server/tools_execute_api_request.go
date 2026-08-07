@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,6 +18,7 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/mcp/apitemplates"
 	"github.com/danieljustus/symaira-vault/internal/mcp/masking"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
+	"github.com/danieljustus/symaira-vault/internal/ssrf"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
@@ -94,7 +94,7 @@ func (s *Server) handleExecuteAPIRequest(ctx context.Context, req mcp.CallToolRe
 	}
 
 	requestURL := tmpl.BaseURL + normalizedEndpoint
-	if targetErr := validateAPIURL(ctx, requestURL, tmpl.AllowPrivate, net.DefaultResolver.LookupIPAddr); targetErr != nil {
+	if targetErr := ssrf.ValidateURL(ctx, requestURL, tmpl.AllowPrivate, net.DefaultResolver.LookupIPAddr); targetErr != nil {
 		s.logAudit(ctx, "execute_api_request", fmt.Sprintf("<blocked-target:%s>", tmpl.Name), false)
 		return mcp.NewToolResultError(targetErr.Error()), nil
 	}
@@ -108,7 +108,7 @@ func (s *Server) handleExecuteAPIRequest(ctx context.Context, req mcp.CallToolRe
 	}
 
 	// Load vault entry for credentials
-	entryPath, parseErr := parseTemplateEntryRef(tmpl.EntryRef)
+	entryPath, parseErr := apitemplates.EntryRefPath(tmpl.EntryRef)
 	if parseErr != nil {
 		s.logAudit(ctx, "execute_api_request", fmt.Sprintf("<template-error:%s>", tmpl.Name), false)
 		return mcp.NewToolResultError(fmt.Sprintf("invalid entry_ref for %q: %v", tmpl.Name, parseErr)), nil
@@ -130,15 +130,15 @@ func (s *Server) handleExecuteAPIRequest(ctx context.Context, req mcp.CallToolRe
 	var substitutionValues map[string]string
 	var redactVals []string
 	if len(tmpl.Substitutions) > 0 {
-		values, redactList, subErr := resolveSubstitutionValues(tmpl, entry.Data)
+		values, redactList, subErr := apitemplates.ResolveSubstitutionValues(tmpl, entry.Data)
 		if subErr != nil {
 			s.logAudit(ctx, "execute_api_request", fmt.Sprintf("<substitution-error:%s>", tmpl.Name), false)
 			return mcp.NewToolResultError(fmt.Sprintf("cannot resolve substitutions for %q: %v", tmpl.Name, subErr)), nil
 		}
 		substitutionValues = values
 		redactVals = redactList
-		requestURL = applyURLSubstitutions(requestURL, tmpl.Substitutions, values)
-		bodyStr = applyBodySubstitutions(bodyStr, tmpl.Substitutions, values)
+		requestURL = apitemplates.ApplyURLSubstitutions(requestURL, tmpl.Substitutions, values)
+		bodyStr = apitemplates.ApplyBodySubstitutions(bodyStr, tmpl.Substitutions, values)
 	}
 
 	// Build the request
@@ -150,7 +150,7 @@ func (s *Server) handleExecuteAPIRequest(ctx context.Context, req mcp.CallToolRe
 	httpReq, reqErr := http.NewRequestWithContext(ctx, method, requestURL, requestBody)
 	if reqErr != nil {
 		s.logAudit(ctx, "execute_api_request", fmt.Sprintf("<request-build-error:%s>", tmpl.Name), false)
-		return mcp.NewToolResultError(fmt.Sprintf("cannot build request: %s", redactValues(reqErr.Error(), redactVals))), nil
+		return mcp.NewToolResultError(fmt.Sprintf("cannot build request: %s", apitemplates.RedactValues(reqErr.Error(), redactVals))), nil
 	}
 
 	// Apply default headers
@@ -178,11 +178,11 @@ func (s *Server) handleExecuteAPIRequest(ctx context.Context, req mcp.CallToolRe
 	// Apply header-surface substitutions (after agent headers, before auth so
 	// auth_type always wins on the Authorization header).
 	if len(tmpl.Substitutions) > 0 {
-		applyHeaderSubstitutions(httpReq, tmpl.Substitutions, substitutionValues)
+		apitemplates.ApplyHeaderSubstitutions(httpReq, tmpl.Substitutions, substitutionValues)
 	}
 
 	// Resolve and inject auth header
-	authErr := injectAuthHeader(httpReq, tmpl, entry.Data)
+	authErr := apitemplates.InjectAuth(httpReq, tmpl, entry.Data)
 	if authErr != nil {
 		s.logAudit(ctx, "execute_api_request", fmt.Sprintf("<auth-error:%s>", tmpl.Name), false)
 		return mcp.NewToolResultError(fmt.Sprintf("cannot resolve auth for %q: %v", tmpl.Name, authErr)), nil
@@ -194,12 +194,12 @@ func (s *Server) handleExecuteAPIRequest(ctx context.Context, req mcp.CallToolRe
 	}
 
 	// Execute request
-	client := newAPIHTTPClient(time.Duration(timeoutSec)*time.Second, tmpl.AllowPrivate)
+	client := ssrf.NewHTTPClient(time.Duration(timeoutSec)*time.Second, tmpl.AllowPrivate)
 	resp, respErr := client.Do(httpReq)
 	if respErr != nil {
 		s.logAudit(ctx, "execute_api_request", fmt.Sprintf("template=%s, endpoint=%s, method=%s, status=error",
 			tmpl.Name, normalizedEndpoint, method), false)
-		return mcp.NewToolResultError(fmt.Sprintf("request failed: %s", redactValues(respErr.Error(), redactVals))), nil
+		return mcp.NewToolResultError(fmt.Sprintf("request failed: %s", apitemplates.RedactValues(respErr.Error(), redactVals))), nil
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -265,115 +265,6 @@ func (s *Server) handleExecuteAPIRequest(ctx context.Context, req mcp.CallToolRe
 
 	return mcp.NewToolResultText(string(resultJSON)), nil
 }
-
-type apiIPResolver func(context.Context, string) ([]net.IPAddr, error)
-
-func newAPIHTTPClient(timeout time.Duration, allowPrivate bool) *http.Client {
-	return newAPIHTTPClientWithResolver(timeout, allowPrivate, net.DefaultResolver.LookupIPAddr)
-}
-
-func newAPIHTTPClientWithResolver(timeout time.Duration, allowPrivate bool, resolve apiIPResolver) *http.Client {
-	dialer := &net.Dialer{}
-	transport := &http.Transport{
-		Proxy: nil,
-		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
-			return dialAPIAddress(ctx, dialer, network, address, allowPrivate, resolve)
-		},
-	}
-	return &http.Client{
-		Timeout:   timeout,
-		Transport: transport,
-		CheckRedirect: func(req *http.Request, _ []*http.Request) error {
-			if err := validateAPIURL(req.Context(), req.URL.String(), allowPrivate, resolve); err != nil {
-				return fmt.Errorf("redirect rejected: %w", err)
-			}
-			return nil
-		},
-	}
-}
-
-func validateAPIURL(ctx context.Context, rawURL string, allowPrivate bool, resolve apiIPResolver) error {
-	if allowPrivate {
-		return nil
-	}
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return fmt.Errorf("blocked request target: invalid URL: %w", err)
-	}
-	if u.Hostname() == "" {
-		return fmt.Errorf("blocked request target: URL host is required")
-	}
-	if apitemplates.IsPrivateHost(u.Host) {
-		return fmt.Errorf("blocked request target %q: private or local network address", u.Host)
-	}
-	addresses, err := resolve(ctx, u.Hostname())
-	if err != nil {
-		return fmt.Errorf("cannot resolve request target %q: %w", u.Hostname(), err)
-	}
-	for _, address := range addresses {
-		if apitemplates.IsPrivateIP(address.IP) {
-			return fmt.Errorf("blocked request target %q: resolves to private or local network address", u.Hostname())
-		}
-	}
-	return nil
-}
-
-func dialAPIAddress(ctx context.Context, dialer *net.Dialer, network, address string, allowPrivate bool, resolve apiIPResolver) (net.Conn, error) {
-	host, port, err := net.SplitHostPort(address)
-	if err != nil {
-		return nil, fmt.Errorf("invalid request address %q: %w", address, err)
-	}
-	if allowPrivate {
-		return dialer.DialContext(ctx, network, address)
-	}
-	if apitemplates.IsPrivateHost(host) {
-		return nil, fmt.Errorf("blocked request target %q: private or local network address", host)
-	}
-	addresses, err := resolve(ctx, host)
-	if err != nil {
-		return nil, fmt.Errorf("cannot resolve request target %q: %w", host, err)
-	}
-	var lastErr error
-	for _, resolved := range addresses {
-		if apitemplates.IsPrivateIP(resolved.IP) {
-			return nil, fmt.Errorf("blocked request target %q: resolves to private or local network address", host)
-		}
-		if network == "tcp4" && resolved.IP.To4() == nil {
-			continue
-		}
-		if network == "tcp6" && resolved.IP.To4() != nil {
-			continue
-		}
-		conn, dialErr := dialer.DialContext(ctx, network, net.JoinHostPort(resolved.IP.String(), port))
-		if dialErr == nil {
-			return conn, nil
-		}
-		lastErr = dialErr
-	}
-	if lastErr != nil {
-		return nil, lastErr
-	}
-	return nil, fmt.Errorf("no usable addresses for request target %q", host)
-}
-
-func parseTemplateEntryRef(entryRef string) (string, error) {
-	ref := strings.TrimSpace(entryRef)
-	if ref == "" {
-		return "", fmt.Errorf("entry_ref is required")
-	}
-	if strings.HasPrefix(ref, "op://") {
-		entryPath, field, err := parseOpRef(ref)
-		if err != nil {
-			return "", err
-		}
-		if field != "" {
-			return "", fmt.Errorf("entry_ref must reference an entry, not a field")
-		}
-		return entryPath, nil
-	}
-	return ref, nil
-}
-
 func normalizeEndpoint(endpoint string) (string, error) {
 	trimmed := strings.TrimSpace(endpoint)
 	if trimmed == "" {
@@ -455,179 +346,6 @@ func readLimitedBody(r io.Reader, limit int) ([]byte, bool, error) {
 	}
 	return body, false, nil
 }
-
-// injectAuthHeader resolves the credential from the vault entry data and
-// injects the appropriate auth header (or query param) into the HTTP request.
-//
-//nolint:gocyclo // auth type dispatch is intentionally structured as switch
-func injectAuthHeader(httpReq *http.Request, tmpl *apitemplates.APITemplate, entryData map[string]any) error {
-	switch tmpl.AuthType {
-	case apitemplates.AuthBearer:
-		token := resolveField(entryData, "credential", "token", "password")
-		if token == "" {
-			return fmt.Errorf("no bearer token found in vault entry (expected fields: credential, token, or password)")
-		}
-		httpReq.Header.Set("Authorization", "Bearer "+token)
-
-	case apitemplates.AuthBasic:
-		username := resolveField(entryData, "username")
-		password := resolveField(entryData, "credential", "password")
-		if username == "" || password == "" {
-			return fmt.Errorf("basic auth requires username and password fields in vault entry")
-		}
-		auth := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
-		httpReq.Header.Set("Authorization", "Basic "+auth)
-
-	case apitemplates.AuthHeader:
-		// For header auth type, we look for the header name and value in entry data
-		// The convention is: header_name and header_value in the vault entry
-		headerName := resolveField(entryData, "header_name")
-		headerValue := resolveField(entryData, "header_value", "credential", "token", "password")
-		if headerName == "" || headerValue == "" {
-			return fmt.Errorf("header auth requires header_name and header_value (or credential/token/password) fields in vault entry")
-		}
-		httpReq.Header.Set(headerName, headerValue)
-
-	case apitemplates.AuthQueryParam:
-		// For query_param auth type, we look for the param name and value in entry data
-		// The convention is: param_name and param_value in the vault entry
-		paramName := resolveField(entryData, "param_name")
-		paramValue := resolveField(entryData, "param_value", "credential", "token", "password")
-		if paramName == "" || paramValue == "" {
-			return fmt.Errorf("query_param auth requires param_name and param_value (or credential/token/password) fields in vault entry")
-		}
-		q := httpReq.URL.Query()
-		q.Set(paramName, paramValue)
-		httpReq.URL.RawQuery = q.Encode()
-
-	case apitemplates.AuthNone:
-		// No auth header is injected; credentials are delivered through
-		// template substitutions (path/query/header/body).
-
-	default:
-		return fmt.Errorf("unsupported auth type: %s", tmpl.AuthType)
-	}
-
-	return nil
-}
-
-// resolveSubstitutionValues resolves every declared substitution placeholder
-// to a non-empty value from the vault entry data. It returns the values by
-// placeholder and as a flat slice for error redaction.
-func resolveSubstitutionValues(tmpl *apitemplates.APITemplate, entryData map[string]any) (map[string]string, []string, error) {
-	values := make(map[string]string, len(tmpl.Substitutions))
-	var redactVals []string
-	for _, sub := range tmpl.Substitutions {
-		value := resolveField(entryData, sub.Field)
-		if value == "" {
-			return nil, nil, fmt.Errorf("no value for placeholder %q (expected vault entry field %q)", sub.Placeholder, sub.Field)
-		}
-		values[sub.Placeholder] = value
-		redactVals = append(redactVals, value)
-	}
-	return values, redactVals, nil
-}
-
-// applyURLSubstitutions replaces path- and query-surface placeholders in the
-// request URL. Placeholders are restricted to RFC 3986 unreserved characters,
-// so the substitution cannot alter the URL scheme or host.
-func applyURLSubstitutions(rawURL string, subs []apitemplates.Substitution, values map[string]string) string {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return rawURL
-	}
-	for _, sub := range subs {
-		value, ok := values[sub.Placeholder]
-		if !ok {
-			continue
-		}
-		for _, surface := range sub.In {
-			switch surface {
-			case apitemplates.SurfacePath:
-				u.Path = strings.ReplaceAll(u.Path, sub.Placeholder, value)
-				u.RawPath = ""
-			case apitemplates.SurfaceQuery:
-				u.RawQuery = strings.ReplaceAll(u.RawQuery, sub.Placeholder, value)
-			case apitemplates.SurfaceHeader, apitemplates.SurfaceBody:
-				// Applied by the dedicated header/body helpers; the URL
-				// does not carry these surfaces.
-			}
-		}
-	}
-	return u.String()
-}
-
-// applyBodySubstitutions replaces body-surface placeholders in the request body.
-func applyBodySubstitutions(body string, subs []apitemplates.Substitution, values map[string]string) string {
-	for _, sub := range subs {
-		if !hasSubstitutionSurface(sub.In, apitemplates.SurfaceBody) {
-			continue
-		}
-		value, ok := values[sub.Placeholder]
-		if !ok {
-			continue
-		}
-		body = strings.ReplaceAll(body, sub.Placeholder, value)
-	}
-	return body
-}
-
-// applyHeaderSubstitutions replaces header-surface placeholders in the values
-// of every request header.
-func applyHeaderSubstitutions(httpReq *http.Request, subs []apitemplates.Substitution, values map[string]string) {
-	for _, sub := range subs {
-		if !hasSubstitutionSurface(sub.In, apitemplates.SurfaceHeader) {
-			continue
-		}
-		value, ok := values[sub.Placeholder]
-		if !ok {
-			continue
-		}
-		for key, vals := range httpReq.Header {
-			for i, v := range vals {
-				httpReq.Header[key][i] = strings.ReplaceAll(v, sub.Placeholder, value)
-			}
-		}
-	}
-}
-
-func hasSubstitutionSurface(surfaces []apitemplates.SubstitutionSurface, want apitemplates.SubstitutionSurface) bool {
-	for _, s := range surfaces {
-		if s == want {
-			return true
-		}
-	}
-	return false
-}
-
-// redactValues replaces every occurrence of the given secret values in msg
-// with "***" so substituted credentials never reach error messages.
-func redactValues(msg string, values []string) string {
-	for _, v := range values {
-		if v == "" {
-			continue
-		}
-		msg = strings.ReplaceAll(msg, v, "***")
-	}
-	return msg
-}
-
-// resolveField returns the first non-empty string value from the entry data
-// for the given field keys, in order.
-func resolveField(data map[string]any, keys ...string) string {
-	for _, key := range keys {
-		if v, ok := data[key]; ok {
-			if vStr, ok := v.(string); ok && vStr != "" {
-				return vStr
-			}
-		}
-	}
-	return ""
-}
-
-// matchAnyGlob checks if the given path matches any of the glob patterns.
-// Uses path.Match for single-segment matching, with multi-segment support
-// for patterns ending in /* which should match any sub-path.
 func matchAnyGlob(endpoint string, patterns []string) bool {
 	if len(patterns) == 0 {
 		return false

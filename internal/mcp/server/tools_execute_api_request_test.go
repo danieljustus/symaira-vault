@@ -5,14 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/danieljustus/symaira-vault/internal/config"
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
@@ -63,49 +61,6 @@ func TestAPITemplateLoad_Builtin(t *testing.T) {
 		})
 	}
 }
-
-func TestValidateAPIURL_RejectsResolvedPrivateAddress(t *testing.T) {
-	resolver := func(context.Context, string) ([]net.IPAddr, error) {
-		return []net.IPAddr{{IP: net.ParseIP("127.0.0.1")}}, nil
-	}
-
-	err := validateAPIURL(context.Background(), "http://public.example/secret", false, resolver)
-	if err == nil {
-		t.Fatal("validateAPIURL() expected a private-address error")
-	}
-	if !strings.Contains(err.Error(), "resolves to private") {
-		t.Fatalf("error = %v, want resolved-private explanation", err)
-	}
-}
-
-func TestAPIHTTPClient_RejectsPrivateRedirect(t *testing.T) {
-	resolver := func(context.Context, string) ([]net.IPAddr, error) {
-		return []net.IPAddr{{IP: net.ParseIP("192.168.1.10")}}, nil
-	}
-	client := newAPIHTTPClientWithResolver(time.Second, false, resolver)
-	req := httptest.NewRequest(http.MethodGet, "http://private.example/secret", nil)
-
-	err := client.CheckRedirect(req, nil)
-	if err == nil {
-		t.Fatal("CheckRedirect() expected a private-address error")
-	}
-	if !strings.Contains(err.Error(), "redirect rejected") {
-		t.Fatalf("error = %v, want redirect rejection", err)
-	}
-}
-
-func TestAPIHTTPClient_AllowsPrivateOverride(t *testing.T) {
-	resolver := func(context.Context, string) ([]net.IPAddr, error) {
-		return nil, fmt.Errorf("resolver should not be called when private access is allowed")
-	}
-	client := newAPIHTTPClientWithResolver(time.Second, true, resolver)
-	req := httptest.NewRequest(http.MethodGet, "http://localhost/secret", nil)
-
-	if err := client.CheckRedirect(req, nil); err != nil {
-		t.Fatalf("CheckRedirect() error with allow_private: %v", err)
-	}
-}
-
 func TestAPITemplateLoad_Unknown(t *testing.T) {
 	_, err := apitemplates.Load("nonexistent", "")
 	if err == nil {
@@ -199,140 +154,6 @@ func TestIsMethodAllowed(t *testing.T) {
 }
 
 // --- Auth injection tests ---
-
-func TestInjectAuthHeader_Bearer(t *testing.T) {
-	tmpl := &apitemplates.APITemplate{
-		Name:     "test",
-		BaseURL:  "https://example.com",
-		AuthType: apitemplates.AuthBearer,
-	}
-	req, _ := http.NewRequest("GET", "https://example.com/test", nil)
-	err := injectAuthHeader(req, tmpl, map[string]any{
-		"credential": "test-token-123",
-	})
-	if err != nil {
-		t.Fatalf("injectAuthHeader() error = %v", err)
-	}
-	if got := req.Header.Get("Authorization"); got != "Bearer test-token-123" {
-		t.Errorf("Authorization header = %q, want %q", got, "Bearer test-token-123")
-	}
-}
-
-func TestInjectAuthHeader_BearerFallbackFields(t *testing.T) {
-	tests := []struct {
-		name  string
-		data  map[string]any
-		token string
-	}{
-		{"credential field", map[string]any{"credential": "token-1"}, "token-1"},
-		{"token field", map[string]any{"token": "token-2"}, "token-2"},
-		{"password field", map[string]any{"password": "token-3"}, "token-3"},
-	}
-	tmpl := &apitemplates.APITemplate{
-		Name:     "test",
-		BaseURL:  "https://example.com",
-		AuthType: apitemplates.AuthBearer,
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			req, _ := http.NewRequest("GET", "https://example.com/test", nil)
-			err := injectAuthHeader(req, tmpl, tt.data)
-			if err != nil {
-				t.Fatalf("injectAuthHeader() error = %v", err)
-			}
-			want := "Bearer " + tt.token
-			if got := req.Header.Get("Authorization"); got != want {
-				t.Errorf("Authorization header = %q, want %q", got, want)
-			}
-		})
-	}
-}
-
-func TestInjectAuthHeader_BearerMissing(t *testing.T) {
-	tmpl := &apitemplates.APITemplate{
-		Name:     "test",
-		BaseURL:  "https://example.com",
-		AuthType: apitemplates.AuthBearer,
-	}
-	req, _ := http.NewRequest("GET", "https://example.com/test", nil)
-	err := injectAuthHeader(req, tmpl, map[string]any{"username": "user"})
-	if err == nil {
-		t.Fatal("injectAuthHeader() expected error for missing token, got nil")
-	}
-}
-
-func TestInjectAuthHeader_Basic(t *testing.T) {
-	tmpl := &apitemplates.APITemplate{
-		Name:     "test",
-		BaseURL:  "https://example.com",
-		AuthType: apitemplates.AuthBasic,
-	}
-	req, _ := http.NewRequest("GET", "https://example.com/test", nil)
-	err := injectAuthHeader(req, tmpl, map[string]any{
-		"username":   "testuser",
-		"credential": "testpass",
-	})
-	if err != nil {
-		t.Fatalf("injectAuthHeader() error = %v", err)
-	}
-	if got := req.Header.Get("Authorization"); got != "Basic dGVzdHVzZXI6dGVzdHBhc3M=" {
-		t.Errorf("Authorization header = %q, want %q", got, "Basic dGVzdHVzZXI6dGVzdHBhc3M=")
-	}
-}
-
-func TestInjectAuthHeader_BasicMissing(t *testing.T) {
-	tmpl := &apitemplates.APITemplate{
-		Name:     "test",
-		BaseURL:  "https://example.com",
-		AuthType: apitemplates.AuthBasic,
-	}
-	req, _ := http.NewRequest("GET", "https://example.com/test", nil)
-	err := injectAuthHeader(req, tmpl, map[string]any{"username": "user"})
-	if err == nil {
-		t.Fatal("injectAuthHeader() expected error for missing password, got nil")
-	}
-}
-
-func TestInjectAuthHeader_Header(t *testing.T) {
-	tmpl := &apitemplates.APITemplate{
-		Name:     "test",
-		BaseURL:  "https://example.com",
-		AuthType: apitemplates.AuthHeader,
-	}
-	req, _ := http.NewRequest("GET", "https://example.com/test", nil)
-	err := injectAuthHeader(req, tmpl, map[string]any{
-		"header_name":  "X-API-Key",
-		"header_value": "my-api-key-123",
-	})
-	if err != nil {
-		t.Fatalf("injectAuthHeader() error = %v", err)
-	}
-	if got := req.Header.Get("X-API-Key"); got != "my-api-key-123" {
-		t.Errorf("X-API-Key header = %q, want %q", got, "my-api-key-123")
-	}
-}
-
-func TestInjectAuthHeader_QueryParam(t *testing.T) {
-	tmpl := &apitemplates.APITemplate{
-		Name:     "test",
-		BaseURL:  "https://example.com",
-		AuthType: apitemplates.AuthQueryParam,
-	}
-	req, _ := http.NewRequest("GET", "https://example.com/test", nil)
-	err := injectAuthHeader(req, tmpl, map[string]any{
-		"param_name":  "api_key",
-		"param_value": "secret-param-val",
-	})
-	if err != nil {
-		t.Fatalf("injectAuthHeader() error = %v", err)
-	}
-	if got := req.URL.Query().Get("api_key"); got != "secret-param-val" {
-		t.Errorf("query param api_key = %q, want %q", got, "secret-param-val")
-	}
-}
-
-// --- Handler tests with mocked HTTP ---
-
 func TestHandleExecuteAPIRequest_Success(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {

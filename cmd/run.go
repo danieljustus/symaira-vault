@@ -21,6 +21,7 @@ var (
 	runPassthrough []string
 	runWorkingDir  string
 	runTimeout     time.Duration
+	runBroker      bool
 )
 
 // runCmd is retained for API compatibility; NewRootCmd() uses
@@ -85,6 +86,21 @@ func newRunCmd() *cobra.Command {
 				}
 
 				// args contains the command and its arguments (everything after --)
+				// In --broker mode an in-process egress broker proxies the
+				// child's outbound traffic; credentials are attached
+				// server-side and never enter the child environment.
+				var brokerCleanup func()
+				if runBroker {
+					brokerEnv, cleanup, brokerErr := brokerEnvForRun(v)
+					if brokerErr != nil {
+						return brokerErr
+					}
+					brokerCleanup = cleanup
+					for k, val := range brokerEnv {
+						envMap[k] = val
+					}
+				}
+
 				result, err := secrets.RunCommand(secrets.RunOptions{
 					Command:     args,
 					Env:         envMap,
@@ -92,6 +108,9 @@ func newRunCmd() *cobra.Command {
 					WorkingDir:  runWorkingDir,
 					Timeout:     runTimeout,
 				})
+				if brokerCleanup != nil {
+					brokerCleanup()
+				}
 				if err != nil {
 					return err
 				}
@@ -117,6 +136,7 @@ func newRunCmd() *cobra.Command {
 	c.Flags().StringArrayVar(&runPassthrough, "passthrough", nil, "Parent env var names to pass through to the child process (comma-separated)")
 	c.Flags().StringVarP(&runWorkingDir, "working-dir", "C", "", "Working directory for the command")
 	c.Flags().DurationVarP(&runTimeout, "timeout", "t", 0, "Timeout for the command (e.g., 30s)")
+	c.Flags().BoolVar(&runBroker, "broker", false, "Route the child's outbound traffic through the egress credential broker (credentials never enter the child environment)")
 	c.GroupID = cli.GroupIDVault
 	return c
 }
