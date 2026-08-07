@@ -371,10 +371,10 @@ jobs:
           TAG="${GITHUB_REF#refs/tags/}"
           APP_PATH="client/Symvault.xcarchive/Products/Applications/Symvault.app"
           DMG_PATH="SymairaVault_${TAG}_macos.dmg"
-          hdiutil create -volname "Symaira Vault ${TAG}" \
-            -srcfolder "$APP_PATH" \
-            -ov -format UDZO \
-            "$DMG_PATH"
+          ./scripts/create-symaira-dmg.sh \
+            "$APP_PATH" \
+            "$DMG_PATH" \
+            "Symaira Vault ${TAG}"
           echo "DMG_PATH=$DMG_PATH" >> "$GITHUB_ENV"
 
       - name: Notarize DMG
