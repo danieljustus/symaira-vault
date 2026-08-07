@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -266,6 +267,21 @@ func (p *Proxy) serveInner(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Enforce the template's allowlists before touching the vault, mirroring
+	// the MCP execute_api_request path: a request outside allowed_endpoints
+	// or allowed_methods must never receive injected credentials. Empty
+	// allowlists declare no constraint and are not enforced.
+	if len(tmpl.AllowedEndpoints) > 0 && !endpointAllowed(r.URL.Path, tmpl.AllowedEndpoints) {
+		p.audit(host, "broker_denied", false, "endpoint")
+		http.Error(w, "endpoint not allowed by template", http.StatusForbidden)
+		return
+	}
+	if len(tmpl.AllowedMethods) > 0 && !methodAllowed(r.Method, tmpl.AllowedMethods) {
+		p.audit(host, "broker_denied", false, "method")
+		http.Error(w, "method not allowed by template", http.StatusForbidden)
+		return
+	}
+
 	entryPath, parseErr := apitemplates.EntryRefPath(tmpl.EntryRef)
 	if parseErr != nil {
 		p.audit(host, "broker_denied", false, "entry_ref")
@@ -332,6 +348,12 @@ func (p *Proxy) forward(w http.ResponseWriter, r *http.Request, target string, t
 	outReq.Header.Del("Proxy-Authorization")
 
 	if tmpl != nil {
+		// Template default headers are applied before auth injection (and
+		// after the client's own headers, so the template's defaults win),
+		// mirroring the MCP execute_api_request header order.
+		for k, v := range tmpl.DefaultHeaders {
+			outReq.Header.Set(k, v)
+		}
 		if err := apitemplates.InjectAuth(outReq, tmpl, entryData); err != nil {
 			auditOnce("broker_denied", false, "auth")
 			http.Error(w, "cannot resolve auth for host", http.StatusInternalServerError)
@@ -493,4 +515,52 @@ func templateHost(baseURL string) string {
 		return ""
 	}
 	return canonicalHost(u.Host)
+}
+
+// endpointAllowed reports whether path matches any of the template's
+// allowed-endpoint globs. Semantics mirror the MCP execute_api_request path
+// (internal/mcp/server/tools_execute_api_request.go): standard path.Match
+// plus multi-segment matching for patterns ending in /*.
+func endpointAllowed(endpoint string, patterns []string) bool {
+	if len(patterns) == 0 {
+		return false
+	}
+	for _, pattern := range patterns {
+		if endpointGlobMatch(pattern, endpoint) {
+			return true
+		}
+	}
+	return false
+}
+
+// endpointGlobMatch reports whether the endpoint matches the glob pattern.
+// It uses path.Match for standard shell pattern matching, and adds
+// multi-segment support for patterns ending with /* — these match any
+// sub-path beneath the prefix.
+func endpointGlobMatch(pattern, endpoint string) bool {
+	// Try standard path.Match first (handles single-segment *).
+	if matched, err := path.Match(pattern, endpoint); err == nil && matched {
+		return true
+	}
+	// Multi-segment: patterns like /v1/* should match /v1/chat/completions.
+	if strings.HasSuffix(pattern, "/*") {
+		prefix := strings.TrimSuffix(pattern, "/*")
+		if prefix == "" || prefix == "/" {
+			// /* matches any absolute path.
+			return strings.HasPrefix(endpoint, "/")
+		}
+		return strings.HasPrefix(endpoint, prefix+"/")
+	}
+	return false
+}
+
+// methodAllowed reports whether the HTTP method is in the allowed list
+// (case-insensitive), mirroring the MCP execute_api_request path.
+func methodAllowed(method string, allowed []string) bool {
+	for _, m := range allowed {
+		if strings.EqualFold(m, method) {
+			return true
+		}
+	}
+	return false
 }
