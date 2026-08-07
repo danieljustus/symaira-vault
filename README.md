@@ -29,6 +29,8 @@ A modern, secure command-line password manager written in Go. Uses [age](https:/
 - **MCP Slash Commands**: `add-credential`, `rotate-credential`, `find-and-use`, `share-credential` — guided workflows surfaced as slash commands in Claude Code, OpenCode, Hermes
 - **Native Secure-Input Dialog**: cross-platform popups (macOS osascript, Linux zenity/kdialog, Windows Get-Credential) for collecting credentials from agents without exposing them in chat
 - **Native macOS Client**: SwiftUI app for browsing, unlocking, creating, editing, generating, copying, and deleting local vault entries
+- **Egress Credential Broker**: opt-in loopback proxy that attaches vault credentials to an agent's outbound requests server-side, without exposing them to the child process (`symvault broker`, `symvault run --broker`)
+- **MCP API Templates**: shape `execute_api_request` calls with YAML templates and built-in provider catalog (Anthropic, GitHub, OpenAI, Stripe, …), with credentials resolved from the vault at request time
 - **Cross-Platform**: macOS, Linux, Windows, FreeBSD
 
 ## Installation
@@ -167,12 +169,16 @@ Backup archives contain encrypted vault files, identity material, config, and MC
 
 ## Migration from other managers
 
-Symaira Vault can import from 1Password, Bitwarden, pass, and CSV exports:
+Symaira Vault can import from 1Password, Bitwarden, pass, CSV exports, FIDO Credential Exchange Format (CXF) archives, and browser CSV exports (Apple Passwords, Chrome, Firefox). `otpauth://` TOTP URIs in imports are normalized into structured TOTP data:
 
 ```bash
 symvault import <format> <source>
 symvault import bitwarden ~/exports/bitwarden.json
 symvault import pass ~/.password-store
+symvault import cxf ~/exports/passkeys.cxf
+symvault import apple ~/exports/apple-passwords.csv
+symvault import chrome ~/exports/chrome-passwords.csv
+symvault import firefox ~/exports/firefox-logins.csv
 ```
 
 See [docs/migration.md](docs/migration.md) for export steps, format details, and verification guidance.
@@ -199,6 +205,27 @@ symvault template generate --type docker-compose --prefix work/ --output docker-
 ```
 
 Supported template types: `env`, `docker-compose`, `k8s-secret`, `github-actions`, and `terraform`. Custom templates can be added in `$HOME/.config/symvault/templates`.
+
+## Egress credential broker
+
+`symvault broker` is an opt-in loopback MITM forward proxy that attaches vault credentials to an agent's outbound HTTPS/HTTP requests **server-side** — a brokered secret never enters the agent's process environment, argv or process listing:
+
+```bash
+# One-shot: run a child command with the broker in-process
+symvault run --broker -- gh pr create
+
+# Standalone broker on a fixed port, strict mode
+symvault broker --addr 127.0.0.1:8080 --strict
+
+# Passthrough for certificate-pinning clients
+symvault broker --passthrough corporate.internal,legacy.example.com
+```
+
+Strict mode rejects requests for hosts without a matching API template; passthrough hosts are tunneled without TLS interception. Every brokered request produces a tamper-evident audit record. See [docs/egress-broker.md](docs/egress-broker.md) for details.
+
+## MCP API templates
+
+`symvault` can call external APIs on an agent's behalf through the `execute_api_request` MCP tool. Each call is shaped by an **API template** — a small YAML file declaring the base URL, auth shape, and allowed endpoints. Built-in templates ship for Anthropic, GitHub, OpenAI, Stripe, Telegram, and more; credentials are resolved from a vault entry at request time and never enter the agent's environment, argv, logs or audit trail. See [docs/api-templates.md](docs/api-templates.md) for the catalog and custom-template guide.
 
 ## MCP Server
 
@@ -272,6 +299,8 @@ For the full configuration reference, see [docs/configuration.md](docs/configura
 - [Configuration reference](docs/configuration.md)
 - [Agent integration](docs/agent-integration.md)
 - [MCP API](docs/mcp-api.md)
+- [MCP API templates](docs/api-templates.md)
+- [Egress credential broker](docs/egress-broker.md)
 - [Audit event schema](docs/audit-schema.md)
 - [Audit retention & integrity](docs/audit-retention.md)
 - [Local secret-leak detection](docs/leak-detection.md)
