@@ -139,7 +139,10 @@ func TestAPIHTTPClient_RejectsRedirectViaRealClient(t *testing.T) {
 		}, nil
 	})
 
-	_, err := client.Get("http://public.example/start")
+	resp, err := client.Get("http://public.example/start")
+	if resp != nil && resp.Body != nil {
+		_ = resp.Body.Close()
+	}
 	if err == nil {
 		t.Fatal("client.Get() expected the redirect to be rejected")
 	}
