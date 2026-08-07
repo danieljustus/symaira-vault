@@ -16,12 +16,14 @@ import (
 )
 
 var (
-	runEnvFlags    []string
-	runEnvFiles    []string
-	runPassthrough []string
-	runWorkingDir  string
-	runTimeout     time.Duration
-	runBroker      bool
+	runEnvFlags          []string
+	runEnvFiles          []string
+	runPassthrough       []string
+	runWorkingDir        string
+	runTimeout           time.Duration
+	runBroker            bool
+	runBrokerStrict      bool
+	runBrokerPassthrough []string
 )
 
 // runCmd is retained for API compatibility; NewRootCmd() uses
@@ -32,7 +34,9 @@ func newRunCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "run [flags] -- <command> [args...]",
 		Short: "Run a command with secrets injected as environment variables",
-		Long:  "Executes a command with vault secrets injected as environment variables. Use --env NAME=path.field to map secrets.",
+		Long: `Executes a command with vault secrets injected as environment variables. Use --env NAME=path.field to map secrets.
+
+With --broker the child's outbound traffic is routed through an in-process egress credential broker, so brokered secrets never enter the child environment. The broker mode is configured with --broker-strict (reject hosts without a matching template) and --broker-passthrough (tunnel certificate-pinning hosts without TLS interception).`,
 		Example: `  # Inject AWS_SECRET_ACCESS_KEY from vault entry "work/aws.secret"
   symvault run --env AWS_SECRET_ACCESS_KEY=work/aws.secret -- aws s3 ls
 
@@ -41,6 +45,10 @@ func newRunCmd() *cobra.Command {
 
   # Pass through parent NODE_ENV and PORT to the child process
   NODE_ENV=production PORT=8080 symvault run --passthrough NODE_ENV,PORT -- npm start
+
+  # Route the child through the egress broker: strict mode, with one
+  # certificate-pinning host tunneled without TLS interception
+  symvault run --broker --broker-strict --broker-passthrough corp.internal -- ./deploy.sh
 
   # Multiple secrets, custom working dir
   symvault run \
@@ -91,7 +99,7 @@ func newRunCmd() *cobra.Command {
 				// server-side and never enter the child environment.
 				var brokerCleanup func()
 				if runBroker {
-					brokerEnv, cleanup, brokerErr := brokerEnvForRun(v)
+					brokerEnv, cleanup, brokerErr := brokerEnvForRun(v, runBrokerStrict, runBrokerPassthrough)
 					if brokerErr != nil {
 						return brokerErr
 					}
@@ -136,7 +144,9 @@ func newRunCmd() *cobra.Command {
 	c.Flags().StringArrayVar(&runPassthrough, "passthrough", nil, "Parent env var names to pass through to the child process (comma-separated)")
 	c.Flags().StringVarP(&runWorkingDir, "working-dir", "C", "", "Working directory for the command")
 	c.Flags().DurationVarP(&runTimeout, "timeout", "t", 0, "Timeout for the command (e.g., 30s)")
-	c.Flags().BoolVar(&runBroker, "broker", false, "Route the child's outbound traffic through the egress credential broker (credentials never enter the child environment)")
+	c.Flags().BoolVar(&runBroker, "broker", false, "Route the child's outbound traffic through the egress credential broker (credentials never enter the child environment); configure with --broker-strict and --broker-passthrough")
+	c.Flags().BoolVar(&runBrokerStrict, "broker-strict", false, "With --broker: reject requests to hosts without a matching template with 403")
+	c.Flags().StringSliceVar(&runBrokerPassthrough, "broker-passthrough", nil, "With --broker: hosts tunneled without TLS interception (comma-separated, domain suffixes match)")
 	c.GroupID = cli.GroupIDVault
 	return c
 }
