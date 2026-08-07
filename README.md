@@ -11,6 +11,8 @@ A modern, secure command-line password manager written in Go. Uses [age](https:/
 
 ![Symaira Vault demo](docs/assets/symvault-demo.gif)
 
+> **Status:** pre-1.0 — the CLI surface and vault format are stabilizing under [SemVer](https://semver.org/); see [CHANGELOG.md](CHANGELOG.md) for the release history.
+
 > **Safety Notice**: Symaira Vault manages sensitive secrets. Use at your own risk, keep tested backups of your vault, and verify recovery before relying on it for critical credentials.
 
 ## Features
