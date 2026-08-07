@@ -12,6 +12,7 @@ import (
 
 	"github.com/danieljustus/symaira-vault/internal/config"
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/mcp/apitemplates"
 )
 
 func TestHandleExecuteWithSecret_BasicRun(t *testing.T) {
@@ -923,7 +924,7 @@ func TestParseOpRef(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			entry, field, err := parseOpRef(tt.ref)
+			entry, field, err := apitemplates.ParseOpRef(tt.ref)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("parseOpRef() expected error, got nil")

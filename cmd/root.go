@@ -38,7 +38,7 @@ var rootCmd = newPackageRootCmd()
 func newPackageRootCmd() *cobra.Command {
 	root := NewRootCmd()
 	compat := []*cobra.Command{
-		deviceCmd, dynamicCmd, generateCmd, gitCmd, policyCmd, profileCmd,
+		brokerCmd, deviceCmd, dynamicCmd, generateCmd, gitCmd, policyCmd, profileCmd,
 		recipientsCmd, remoteCmd, runCmd, shareCmd, syncCmd, templateCmd, uiCmd,
 		mcp.ServeCmd,
 	}
@@ -69,6 +69,7 @@ func NewRootCmd() *cobra.Command {
 
 	// Add top-level commands in cmd/
 	root.AddCommand(
+		newBrokerCmd(),
 		newDeviceCmd(),
 		newDynamicCmd(),
 		newGenerateCmd(),

@@ -10,6 +10,7 @@ import (
 	"unicode"
 
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/mcp/apitemplates"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
 	"github.com/danieljustus/symaira-vault/internal/secrets"
 )
@@ -84,7 +85,7 @@ func (s *Server) handleExecuteWithSecret(ctx context.Context, req mcp.CallToolRe
 				return mcp.NewToolResultError(fmt.Sprintf("secret_refs[%d] must be a string", i)), nil
 			}
 
-			entryPath, field, parseErr := parseOpRef(ref)
+			entryPath, field, parseErr := apitemplates.ParseOpRef(ref)
 			if parseErr != nil {
 				s.logAudit(ctx, "execute_with_secret", ref, false)
 				return mcp.NewToolResultError(fmt.Sprintf("invalid secret ref %q: %v", ref, parseErr)), nil
@@ -195,31 +196,6 @@ func (s *Server) handleExecuteWithSecret(ctx context.Context, req mcp.CallToolRe
 		return nil, err
 	}
 	return mcp.NewToolResultText(string(resultJSON)), nil
-}
-
-// parseOpRef parses an op:// reference and returns the entry path and field.
-// op://vault/entry/field       -> entry="entry", field="field"
-// op://vault/nested/entry/field -> entry="nested/entry", field="field"
-// op://vault/entry             -> entry="entry", field=""
-func parseOpRef(ref string) (string, string, error) {
-	const prefix = "op://"
-	if !strings.HasPrefix(ref, prefix) {
-		return "", "", fmt.Errorf("expected op:// prefix")
-	}
-
-	parts := strings.Split(strings.TrimPrefix(ref, prefix), "/")
-	if len(parts) < 2 {
-		return "", "", fmt.Errorf("expected at least vault/entry")
-	}
-
-	// parts[0] is vault name (ignored)
-	if len(parts) == 2 {
-		return parts[1], "", nil
-	}
-
-	entryPath := strings.Join(parts[1:len(parts)-1], "/")
-	field := parts[len(parts)-1]
-	return entryPath, field, nil
 }
 
 // generateEnvVarName creates an environment variable name from the entry path
