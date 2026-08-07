@@ -309,7 +309,7 @@ substitutions:
     field: credential
     in: [path]
 allowed_endpoints:
-  - /sendMessage
+  - /*
 allowed_methods:
   - GET
 allow_private: true
@@ -630,4 +630,283 @@ func TestProxy_EnvExports(t *testing.T) {
 		t.Fatal("New() expected error for missing identity")
 	}
 	_ = p
+}
+
+func TestProxy_AllowedEndpointEnforced(t *testing.T) {
+	const token = "endpoint-token"
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer "+token {
+			t.Errorf("Authorization = %q, want Bearer %s", got, token)
+		}
+		if r.URL.Path != "/allowed/ok" {
+			t.Errorf("disallowed path reached upstream: %q", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, "allowed")
+	}))
+	defer upstream.Close()
+
+	tmpl := fmt.Sprintf(`base_url: %s
+auth_type: bearer
+entry_ref: testapi
+allowed_endpoints:
+  - /allowed/*
+allowed_methods:
+  - GET
+allow_private: true
+`, upstream.URL)
+	vaultDir, identity := setupVault(t, "testapi", map[string]any{"credential": token}, "testapi", tmpl)
+	proxyURL, stop := startProxy(t, Config{
+		VaultDir:     vaultDir,
+		Identity:     identity,
+		AgentName:    "broker-test",
+		AllowPrivate: true,
+	})
+	defer stop()
+	client := newProxyClient(proxyURL)
+
+	// Allowed endpoint: forwarded with injected credentials.
+	resp, err := client.Get(upstream.URL + "/allowed/ok")
+	if err != nil {
+		t.Fatalf("GET allowed endpoint: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != 200 || string(body) != "allowed" {
+		t.Fatalf("allowed endpoint: status = %d body = %q, want 200 allowed", resp.StatusCode, body)
+	}
+
+	// Endpoint outside the allowlist: 403, upstream never reached.
+	resp, err = client.Get(upstream.URL + "/other")
+	if err != nil {
+		t.Fatalf("GET disallowed endpoint: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("disallowed endpoint: status = %d, want 403", resp.StatusCode)
+	}
+}
+
+func TestProxy_AllowedMethodEnforced(t *testing.T) {
+	const token = "method-token"
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer "+token {
+			t.Errorf("Authorization = %q, want Bearer %s", got, token)
+		}
+		if r.Method != http.MethodGet {
+			t.Errorf("unexpected method reached upstream: %s", r.Method)
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, "get-ok")
+	}))
+	defer upstream.Close()
+
+	tmpl := fmt.Sprintf(`base_url: %s
+auth_type: bearer
+entry_ref: testapi
+allowed_endpoints:
+  - /*
+allowed_methods:
+  - GET
+allow_private: true
+`, upstream.URL)
+	vaultDir, identity := setupVault(t, "testapi", map[string]any{"credential": token}, "testapi", tmpl)
+	proxyURL, stop := startProxy(t, Config{
+		VaultDir:     vaultDir,
+		Identity:     identity,
+		AgentName:    "broker-test",
+		AllowPrivate: true,
+	})
+	defer stop()
+	client := newProxyClient(proxyURL)
+
+	// Allowed method: forwarded with injected credentials.
+	resp, err := client.Get(upstream.URL + "/any")
+	if err != nil {
+		t.Fatalf("GET through proxy: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != 200 || string(body) != "get-ok" {
+		t.Fatalf("status = %d body = %q, want 200 get-ok", resp.StatusCode, body)
+	}
+
+	// Method outside the allowlist: 403, upstream never reached.
+	req, _ := http.NewRequest(http.MethodDelete, upstream.URL+"/any", nil)
+	resp, err = client.Do(req)
+	if err != nil {
+		t.Fatalf("DELETE through proxy: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("DELETE status = %d, want 403", resp.StatusCode)
+	}
+}
+
+func TestProxy_EmptyAllowlistsNotEnforced(t *testing.T) {
+	const token = "open-token"
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer "+token {
+			t.Errorf("Authorization = %q, want Bearer %s", got, token)
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, "open-ok")
+	}))
+	defer upstream.Close()
+
+	// No allowed_endpoints/allowed_methods: every path and method keeps the
+	// pre-fix behavior (forwarded with injection).
+	tmpl := fmt.Sprintf(`base_url: %s
+auth_type: bearer
+entry_ref: testapi
+allow_private: true
+`, upstream.URL)
+	vaultDir, identity := setupVault(t, "testapi", map[string]any{"credential": token}, "testapi", tmpl)
+	proxyURL, stop := startProxy(t, Config{
+		VaultDir:     vaultDir,
+		Identity:     identity,
+		AgentName:    "broker-test",
+		AllowPrivate: true,
+	})
+	defer stop()
+
+	req, _ := http.NewRequest(http.MethodPost, upstream.URL+"/anything", nil)
+	resp, err := newProxyClient(proxyURL).Do(req)
+	if err != nil {
+		t.Fatalf("POST through proxy: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != 200 || string(body) != "open-ok" {
+		t.Fatalf("status = %d body = %q, want 200 open-ok", resp.StatusCode, body)
+	}
+}
+
+func TestProxy_DefaultHeadersApplied(t *testing.T) {
+	const token = "default-header-token"
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer "+token {
+			t.Errorf("Authorization = %q, want Bearer %s", got, token)
+		}
+		if got := r.Header.Get("X-Template-Default"); got != "template-value" {
+			t.Errorf("X-Template-Default = %q, want template-value", got)
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, "defaults-ok")
+	}))
+	defer upstream.Close()
+
+	tmpl := fmt.Sprintf(`base_url: %s
+auth_type: bearer
+entry_ref: testapi
+allowed_endpoints:
+  - /*
+allowed_methods:
+  - GET
+default_headers:
+  X-Template-Default: template-value
+allow_private: true
+`, upstream.URL)
+	vaultDir, identity := setupVault(t, "testapi", map[string]any{"credential": token}, "testapi", tmpl)
+	proxyURL, stop := startProxy(t, Config{
+		VaultDir:     vaultDir,
+		Identity:     identity,
+		AgentName:    "broker-test",
+		AllowPrivate: true,
+	})
+	defer stop()
+
+	resp, err := newProxyClient(proxyURL).Get(upstream.URL + "/with-defaults")
+	if err != nil {
+		t.Fatalf("GET through proxy: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != 200 || string(body) != "defaults-ok" {
+		t.Fatalf("status = %d body = %q, want 200 defaults-ok", resp.StatusCode, body)
+	}
+}
+
+func TestProxy_CONNECTMITM_EndpointDenied(t *testing.T) {
+	const token = "mitm-deny-token"
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("upstream must not be reached for a disallowed endpoint")
+	}))
+	defer upstream.Close()
+
+	upstreamPool := x509.NewCertPool()
+	upstreamPool.AddCert(upstream.Certificate())
+
+	tmpl := fmt.Sprintf(`base_url: %s
+auth_type: bearer
+entry_ref: testapi
+allowed_endpoints:
+  - /allowed/*
+allowed_methods:
+  - GET
+allow_private: true
+`, upstream.URL)
+	vaultDir, identity := setupVault(t, "testapi", map[string]any{"credential": token}, "testapi", tmpl)
+	proxyURL, stop := startProxy(t, Config{
+		VaultDir:     vaultDir,
+		Identity:     identity,
+		AgentName:    "broker-test",
+		UpstreamTLS:  &tls.Config{RootCAs: upstreamPool},
+		AllowPrivate: true,
+	})
+	defer stop()
+
+	// Origin-form request after CONNECT MITM is denied before any credential
+	// could be injected upstream.
+	status, body := connectAndGetStatus(t, proxyURL, upstream.URL, "/blocked")
+	if status != http.StatusForbidden {
+		t.Fatalf("status = %d body = %q, want 403", status, body)
+	}
+}
+
+// connectAndGetStatus establishes a CONNECT tunnel through the proxy,
+// performs a TLS handshake against the broker CA and issues a GET, returning
+// the response status and body (connectAndGet asserts 200 instead).
+func connectAndGetStatus(t *testing.T, proxyURL, targetURL, path string) (int, string) {
+	t.Helper()
+	pu, _ := url.Parse(proxyURL)
+	target, _ := url.Parse(targetURL)
+	hostport := target.Host
+
+	conn, err := net.Dial("tcp", pu.Host)
+	if err != nil {
+		t.Fatalf("dial proxy: %v", err)
+	}
+	defer conn.Close()
+
+	fmt.Fprintf(conn, "CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", hostport, hostport)
+	br := bufio.NewReader(conn)
+	resp, err := http.ReadResponse(br, &http.Request{Method: http.MethodConnect})
+	if err != nil {
+		t.Fatalf("read CONNECT response: %v", err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Fatalf("CONNECT status = %d, want 200", resp.StatusCode)
+	}
+
+	pool, err := brokerCAPool(t)
+	if err != nil {
+		t.Fatalf("broker CA pool: %v", err)
+	}
+	tlsConn := tls.Client(conn, &tls.Config{RootCAs: pool, ServerName: target.Hostname()})
+	if err := tlsConn.Handshake(); err != nil {
+		t.Fatalf("TLS handshake with broker: %v", err)
+	}
+	defer tlsConn.Close()
+
+	fmt.Fprintf(tlsConn, "GET %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", path, target.Host)
+	tbr := bufio.NewReader(tlsConn)
+	gresp, err := http.ReadResponse(tbr, &http.Request{Method: http.MethodGet})
+	if err != nil {
+		t.Fatalf("read GET response: %v", err)
+	}
+	body, _ := io.ReadAll(gresp.Body)
+	_ = gresp.Body.Close()
+	return gresp.StatusCode, string(body)
 }
