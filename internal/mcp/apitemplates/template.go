@@ -190,9 +190,11 @@ func LoadAll() ([]*APITemplate, error) {
 	return templates, nil
 }
 
-// loadBuiltin loads a built-in template by name.
+// loadBuiltin loads a built-in template by name. Embed paths are always
+// slash-separated regardless of the host OS, so the path is joined with "/"
+// (filepath.Join would produce backslashes on Windows and fail the lookup).
 func loadBuiltin(name string) (*APITemplate, error) {
-	data, err := builtinFS.ReadFile(filepath.Join("builtin", name+".yaml"))
+	data, err := builtinFS.ReadFile("builtin/" + name + ".yaml")
 	if err != nil {
 		return nil, fmt.Errorf("template %q not found", name)
 	}
