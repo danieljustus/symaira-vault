@@ -87,7 +87,7 @@ Run `:checkhealth symvault` to verify:
 - All secret values displayed as `***` in the UI
 - Secrets never stored in Neovim state, registers, or logs
 - Clipboard operations go through `copy_to_clipboard` MCP tool (server-side auto-clear)
-- Token read from `~/.openpass/mcp-token` each session; never cached in plugin state
+- Token read from `~/.symvault/mcp-token` each session; never cached in plugin state
 
 ## Development
 

@@ -79,8 +79,8 @@ func TestOutputAgentStdioConfig_StdoutError(t *testing.T) {
 
 func TestOutputAgentHTTPConfig_Success(t *testing.T) {
 	vaultDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()
@@ -98,7 +98,7 @@ func TestOutputAgentHTTPConfig_Success(t *testing.T) {
 	if !strings.Contains(output, "mcp_servers") {
 		t.Errorf("expected mcp_servers in output, got: %s", output)
 	}
-	if !strings.Contains(output, "env:OPENPASS_MCP_TOKEN") {
+	if !strings.Contains(output, "env:SYMVAULT_MCP_TOKEN") {
 		t.Errorf("expected redacted token in output, got: %s", output)
 	}
 }
@@ -109,7 +109,7 @@ func TestOutputAgentHTTPConfig_ResolveError(t *testing.T) {
 	}
 	origHome := os.Getenv("HOME")
 	_ = os.Unsetenv("HOME")
-	_ = os.Unsetenv("OPENPASS_VAULT")
+	_ = os.Unsetenv("SYMVAULT_VAULT")
 	defer func() { _ = os.Setenv("HOME", origHome) }()
 
 	origVault := vault
@@ -124,8 +124,8 @@ func TestOutputAgentHTTPConfig_ResolveError(t *testing.T) {
 
 func TestOutputTokenOnly_Success(t *testing.T) {
 	vaultDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()
@@ -151,7 +151,7 @@ func TestOutputTokenOnly_VaultPathError(t *testing.T) {
 	}
 	origHome := os.Getenv("HOME")
 	_ = os.Unsetenv("HOME")
-	_ = os.Unsetenv("OPENPASS_VAULT")
+	_ = os.Unsetenv("SYMVAULT_VAULT")
 	defer func() { _ = os.Setenv("HOME", origHome) }()
 
 	origVault := vault
@@ -166,8 +166,8 @@ func TestOutputTokenOnly_VaultPathError(t *testing.T) {
 
 func TestOutputTokenOnly_CustomTokenPath(t *testing.T) {
 	vaultDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()
@@ -201,8 +201,8 @@ func TestOutputTokenOnly_CustomTokenPath(t *testing.T) {
 
 func TestOutputHermesHTTPConfig_Success(t *testing.T) {
 	vaultDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()
@@ -283,8 +283,8 @@ func TestCmdMCPConfig_HTTP(t *testing.T) {
 	vaultDir := t.TempDir()
 	passphrase := []byte("correcthorsebatterystaple")
 	vaultFlagReset(t)
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	t.Cleanup(func() { _ = os.Unsetenv("OPENPASS_VAULT") })
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_VAULT") })
 
 	if _, err := vaultpkg.InitWithPassphrase(vaultDir, passphrase, config.Default()); err != nil {
 		t.Fatalf("init vault: %v", err)
@@ -334,16 +334,16 @@ func TestOutputHTTPConfig_VaultPathError(t *testing.T) {
 	// Test mcpcmd.OutputHTTPConfig directly (bypassing rootCmd which has PersistentPreRun
 	// that also calls cli.VaultPath, causing a panic before our function is reached).
 	origHome := os.Getenv("HOME")
-	origVaultEnv := os.Getenv("OPENPASS_VAULT")
+	origVaultEnv := os.Getenv("SYMVAULT_VAULT")
 	origVault := vault
 	origChanged := cli.VaultFlag.Changed
 	_ = os.Unsetenv("HOME")
-	_ = os.Unsetenv("OPENPASS_VAULT")
+	_ = os.Unsetenv("SYMVAULT_VAULT")
 	vault = "~/" + config.DefaultVaultSubdir
 	cli.VaultFlag.Changed = false
 	t.Cleanup(func() {
 		_ = os.Setenv("HOME", origHome)
-		_ = os.Setenv("OPENPASS_VAULT", origVaultEnv)
+		_ = os.Setenv("SYMVAULT_VAULT", origVaultEnv)
 		vault = origVault
 		_ = cli.VaultFlag.Value.Set(origVault)
 		cli.VaultFlag.Changed = origChanged

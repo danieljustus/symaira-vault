@@ -391,12 +391,9 @@ func TestBumpQuotaWithCounter(t *testing.T) {
 func TestIsAgentMode(t *testing.T) {
 	// Save and restore env.
 	prevPrimary := os.Getenv(envAgentPrimary)
-	prevLegacy := os.Getenv(envAgentLegacy)
 	defer os.Setenv(envAgentPrimary, prevPrimary)
-	defer os.Setenv(envAgentLegacy, prevLegacy)
 
 	_ = os.Unsetenv(envAgentPrimary)
-	_ = os.Unsetenv(envAgentLegacy)
 	if IsAgentMode() {
 		t.Error("IsAgentMode() = true, want false when env is unset")
 	}
@@ -416,12 +413,9 @@ func TestIsAgentMode(t *testing.T) {
 // TestAgentNameEmpty verifies AgentName returns empty when env is not set.
 func TestAgentNameEmpty(t *testing.T) {
 	prevPrimary := os.Getenv(envAgentPrimary)
-	prevLegacy := os.Getenv(envAgentLegacy)
 	defer os.Setenv(envAgentPrimary, prevPrimary)
-	defer os.Setenv(envAgentLegacy, prevLegacy)
 
 	_ = os.Unsetenv(envAgentPrimary)
-	_ = os.Unsetenv(envAgentLegacy)
 	if got := AgentName(); got != "" {
 		t.Fatalf("AgentName() = %q, want empty string", got)
 	}

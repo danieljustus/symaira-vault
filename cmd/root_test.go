@@ -72,16 +72,16 @@ func TestVaultPathErrorWhenHomeDirNotAvailable(t *testing.T) {
 
 	// Save original env vars and restore after test
 	origHome := os.Getenv("HOME")
-	origVault := os.Getenv("OPENPASS_VAULT")
+	origVault := os.Getenv("SYMVAULT_VAULT")
 	defer func() {
 		_ = os.Setenv("HOME", origHome)
-		_ = os.Setenv("OPENPASS_VAULT", origVault)
+		_ = os.Setenv("SYMVAULT_VAULT", origVault)
 	}()
 
 	// Clear HOME to simulate UserHomeDir failure
 	_ = os.Unsetenv("HOME")
-	// Ensure OPENPASS_VAULT is not set so we use the global vault variable
-	_ = os.Unsetenv("OPENPASS_VAULT")
+	// Ensure SYMVAULT_VAULT is not set so we use the global vault variable
+	_ = os.Unsetenv("SYMVAULT_VAULT")
 
 	// Save original vault value and restore after test
 	origVaultFlag := vault
@@ -109,16 +109,16 @@ func TestVaultPathSuccessWithTildeExpansion(t *testing.T) {
 
 	// Save original env vars and restore after test
 	origHome := os.Getenv("HOME")
-	origVault := os.Getenv("OPENPASS_VAULT")
+	origVault := os.Getenv("SYMVAULT_VAULT")
 	defer func() {
 		_ = os.Setenv("HOME", origHome)
-		_ = os.Setenv("OPENPASS_VAULT", origVault)
+		_ = os.Setenv("SYMVAULT_VAULT", origVault)
 	}()
 
 	// Set a known HOME
 	_ = os.Setenv("HOME", "/Users/testuser")
-	// Ensure OPENPASS_VAULT is not set so we use the global vault variable
-	_ = os.Unsetenv("OPENPASS_VAULT")
+	// Ensure SYMVAULT_VAULT is not set so we use the global vault variable
+	_ = os.Unsetenv("SYMVAULT_VAULT")
 
 	// Save original vault value and restore after test
 	origVaultFlag := vault
@@ -148,16 +148,16 @@ func TestVaultPathSuccessWithoutTilde(t *testing.T) {
 
 	// Save original env vars and restore after test
 	origHome := os.Getenv("HOME")
-	origVault := os.Getenv("OPENPASS_VAULT")
+	origVault := os.Getenv("SYMVAULT_VAULT")
 	defer func() {
 		_ = os.Setenv("HOME", origHome)
-		_ = os.Setenv("OPENPASS_VAULT", origVault)
+		_ = os.Setenv("SYMVAULT_VAULT", origVault)
 	}()
 
 	// Ensure HOME is set (shouldn't matter for this test)
 	_ = os.Setenv("HOME", "/Users/testuser")
-	// Ensure OPENPASS_VAULT is not set so we use the global vault variable
-	_ = os.Unsetenv("OPENPASS_VAULT")
+	// Ensure SYMVAULT_VAULT is not set so we use the global vault variable
+	_ = os.Unsetenv("SYMVAULT_VAULT")
 
 	// Save original vault value and restore after test
 	origVaultFlag := vault
@@ -184,11 +184,11 @@ func TestVaultPathUsesEnvWhenFlagUnchanged(t *testing.T) {
 	}
 	resetVaultFlag(t)
 
-	origEnv := os.Getenv("OPENPASS_VAULT")
-	defer func() { _ = os.Setenv("OPENPASS_VAULT", origEnv) }()
+	origEnv := os.Getenv("SYMVAULT_VAULT")
+	defer func() { _ = os.Setenv("SYMVAULT_VAULT", origEnv) }()
 
 	cli.Vault = "~/" + config.DefaultVaultSubdir
-	_ = os.Setenv("OPENPASS_VAULT", "/env/vault")
+	_ = os.Setenv("SYMVAULT_VAULT", "/env/vault")
 
 	path, err := cli.VaultPath()
 	if err != nil {
@@ -205,10 +205,10 @@ func TestVaultPathPrefersExplicitFlagOverEnv(t *testing.T) {
 	}
 	resetVaultFlag(t)
 
-	origEnv := os.Getenv("OPENPASS_VAULT")
-	defer func() { _ = os.Setenv("OPENPASS_VAULT", origEnv) }()
+	origEnv := os.Getenv("SYMVAULT_VAULT")
+	defer func() { _ = os.Setenv("SYMVAULT_VAULT", origEnv) }()
 
-	_ = os.Setenv("OPENPASS_VAULT", "/env/vault")
+	_ = os.Setenv("SYMVAULT_VAULT", "/env/vault")
 	if err := cli.VaultFlag.Value.Set("/flag/vault"); err != nil {
 		t.Fatalf("set vault flag: %v", err)
 	}
@@ -279,11 +279,11 @@ func TestUnlockVault_InteractivePrompt(t *testing.T) {
 	defer restoreSessionFuncs()
 
 	// Ensure no env var is set
-	origPass := os.Getenv("OPENPASS_PASSPHRASE")
-	_ = os.Unsetenv("OPENPASS_PASSPHRASE")
+	origPass := os.Getenv("SYMVAULT_PASSPHRASE")
+	_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 	defer func() {
 		if origPass != "" {
-			_ = os.Setenv("OPENPASS_PASSPHRASE", origPass)
+			_ = os.Setenv("SYMVAULT_PASSPHRASE", origPass)
 		}
 	}()
 
@@ -360,7 +360,7 @@ func TestUnlockVault_UsesConfiguredSessionTimeout(t *testing.T) {
 	}
 	defer restoreSessionFuncs()
 
-	t.Setenv("OPENPASS_PASSPHRASE", "")
+	t.Setenv("SYMVAULT_PASSPHRASE", "")
 	restoreStdin := pipeStdin(t, string(passphrase)+"\n")
 	defer restoreStdin()
 
@@ -401,7 +401,7 @@ func TestUnlockCommand_UsesConfiguredSessionTimeoutByDefault(t *testing.T) {
 	}
 	defer restoreSessionFuncs()
 
-	t.Setenv("OPENPASS_PASSPHRASE", "")
+	t.Setenv("SYMVAULT_PASSPHRASE", "")
 	restoreStdin := pipeStdin(t, string(passphrase)+"\n")
 	defer restoreStdin()
 
@@ -447,11 +447,11 @@ func TestUnlockVault_InteractivePrompt_ReadError(t *testing.T) {
 	defer setupVaultFlag(t, vaultDir)()
 
 	// Ensure no env var is set
-	origPass := os.Getenv("OPENPASS_PASSPHRASE")
-	_ = os.Unsetenv("OPENPASS_PASSPHRASE")
+	origPass := os.Getenv("SYMVAULT_PASSPHRASE")
+	_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 	defer func() {
 		if origPass != "" {
-			_ = os.Setenv("OPENPASS_PASSPHRASE", origPass)
+			_ = os.Setenv("SYMVAULT_PASSPHRASE", origPass)
 		}
 	}()
 
@@ -481,11 +481,11 @@ func TestUnlockVault_NonInteractive_NoSession(t *testing.T) {
 	defer setupVaultFlag(t, vaultDir)()
 
 	// Ensure no env var is set
-	origPass := os.Getenv("OPENPASS_PASSPHRASE")
-	_ = os.Unsetenv("OPENPASS_PASSPHRASE")
+	origPass := os.Getenv("SYMVAULT_PASSPHRASE")
+	_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 	defer func() {
 		if origPass != "" {
-			_ = os.Setenv("OPENPASS_PASSPHRASE", origPass)
+			_ = os.Setenv("SYMVAULT_PASSPHRASE", origPass)
 		}
 	}()
 
@@ -494,41 +494,6 @@ func TestUnlockVault_NonInteractive_NoSession(t *testing.T) {
 		t.Fatal("unlockVault should fail when interactive=false and no passphrase available")
 	}
 	if !strings.Contains(err.Error(), "vault locked") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-// TestUnlockVault_EnvVar verifies that unlockVault uses OPENPASS_PASSPHRASE env var.
-func TestUnlockVault_EnvVar(t *testing.T) {
-	vaultDir, passphrase := initVault(t)
-	defer setupVaultFlag(t, vaultDir)()
-
-	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
-	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
-
-	v, err := cli.UnlockVault(vaultDir, false)
-	if err != nil {
-		t.Fatalf("unlockVault with env var: %v", err)
-	}
-	if v == nil {
-		t.Fatal("unlockVault returned nil vault")
-	}
-}
-
-// TestUnlockVault_WrongPassphrase verifies that unlockVault returns an error
-// when the passphrase is incorrect.
-func TestUnlockVault_WrongPassphrase(t *testing.T) {
-	vaultDir, _ := initVault(t)
-	defer setupVaultFlag(t, vaultDir)()
-
-	_ = os.Setenv("OPENPASS_PASSPHRASE", "wrong-passphrase")
-	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
-
-	_, err := cli.UnlockVault(vaultDir, false)
-	if err == nil {
-		t.Fatal("unlockVault should fail with wrong passphrase")
-	}
-	if !strings.Contains(err.Error(), "open vault") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
@@ -545,11 +510,11 @@ func TestUnlockVault_HiddenInput(t *testing.T) {
 	cli.SessionSavePassphrase = func(string, []byte, time.Duration) error { return nil }
 	defer restoreSessionFuncs()
 
-	origPass := os.Getenv("OPENPASS_PASSPHRASE")
-	_ = os.Unsetenv("OPENPASS_PASSPHRASE")
+	origPass := os.Getenv("SYMVAULT_PASSPHRASE")
+	_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 	defer func() {
 		if origPass != "" {
-			_ = os.Setenv("OPENPASS_PASSPHRASE", origPass)
+			_ = os.Setenv("SYMVAULT_PASSPHRASE", origPass)
 		}
 	}()
 
@@ -722,15 +687,15 @@ func TestWarnPipeRead_OnceAndSilenced(t *testing.T) {
 		t.Errorf("warning fired despite --no-pipe-warning")
 	}
 
-	// Suppressed when OPENPASS_NO_PIPE_WARNING is set.
+	// Suppressed when SYMVAULT_NO_PIPE_WARNING is set.
 	cli.PipeWarningEmitted = false
 	cli.NoPipeWarning = false
-	t.Setenv("OPENPASS_NO_PIPE_WARNING", "1")
+	t.Setenv("SYMVAULT_NO_PIPE_WARNING", "1")
 	cli.WarnPipeRead("Passphrase")
 	if cli.PipeWarningEmitted {
-		t.Errorf("warning fired despite OPENPASS_NO_PIPE_WARNING")
+		t.Errorf("warning fired despite SYMVAULT_NO_PIPE_WARNING")
 	}
-	t.Setenv("OPENPASS_NO_PIPE_WARNING", "0")
+	t.Setenv("SYMVAULT_NO_PIPE_WARNING", "0")
 
 	// Suppressed in quiet mode.
 	cli.PipeWarningEmitted = false
@@ -769,14 +734,14 @@ func TestWarnEnvPassphrase_OnceAndSilenced(t *testing.T) {
 	}
 	cli.QuietMode = false
 
-	// Suppressed when OPENPASS_NO_ENV_WARNING is set.
+	// Suppressed when SYMVAULT_NO_ENV_WARNING is set.
 	cli.EnvPassphraseWarningEmitted = false
-	t.Setenv("OPENPASS_NO_ENV_WARNING", "1")
+	t.Setenv("SYMVAULT_NO_ENV_WARNING", "1")
 	cli.WarnEnvPassphrase()
 	if cli.EnvPassphraseWarningEmitted {
-		t.Errorf("warning fired despite OPENPASS_NO_ENV_WARNING")
+		t.Errorf("warning fired despite SYMVAULT_NO_ENV_WARNING")
 	}
-	t.Setenv("OPENPASS_NO_ENV_WARNING", "0")
+	t.Setenv("SYMVAULT_NO_ENV_WARNING", "0")
 
 	// Fires once when not suppressed.
 	cli.EnvPassphraseWarningEmitted = false
@@ -799,10 +764,7 @@ func TestVaultPathUsesSymvaultEnvWhenFlagUnchanged(t *testing.T) {
 
 	origEnv := os.Getenv("SYMVAULT_VAULT")
 	defer func() { _ = os.Setenv("SYMVAULT_VAULT", origEnv) }()
-	// Also save/restore OPENPASS_VAULT to avoid interference
-	origOpenpass := os.Getenv("OPENPASS_VAULT")
-	defer func() { _ = os.Setenv("OPENPASS_VAULT", origOpenpass) }()
-	_ = os.Unsetenv("OPENPASS_VAULT")
+	_ = os.Unsetenv("SYMVAULT_VAULT")
 
 	cli.Vault = "~/" + config.DefaultVaultSubdir
 	_ = os.Setenv("SYMVAULT_VAULT", "/env/symvault")
@@ -813,34 +775,6 @@ func TestVaultPathUsesSymvaultEnvWhenFlagUnchanged(t *testing.T) {
 	}
 	if path != "/env/symvault" {
 		t.Fatalf("cli.VaultPath() = %s, want /env/symvault", path)
-	}
-}
-
-// TestVaultPathSymvaultTakesPrecedenceOverOpenpass verifies that SYMVAULT_VAULT
-// takes precedence over OPENPASS_VAULT when both are set.
-func TestVaultPathSymvaultTakesPrecedenceOverOpenpass(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("skipping on windows: path format differs")
-	}
-	resetVaultFlag(t)
-
-	origSymvault := os.Getenv("SYMVAULT_VAULT")
-	origOpenpass := os.Getenv("OPENPASS_VAULT")
-	defer func() {
-		_ = os.Setenv("SYMVAULT_VAULT", origSymvault)
-		_ = os.Setenv("OPENPASS_VAULT", origOpenpass)
-	}()
-
-	cli.Vault = "~/" + config.DefaultVaultSubdir
-	_ = os.Setenv("SYMVAULT_VAULT", "/env/symvault")
-	_ = os.Setenv("OPENPASS_VAULT", "/env/openpass")
-
-	path, err := cli.VaultPath()
-	if err != nil {
-		t.Fatalf("cli.VaultPath() unexpected error = %v", err)
-	}
-	if path != "/env/symvault" {
-		t.Fatalf("cli.VaultPath() = %s, want /env/symvault (SYMVAULT_VAULT should take precedence)", path)
 	}
 }
 
@@ -856,28 +790,6 @@ func TestUnlockVault_SymvaultEnvVar(t *testing.T) {
 	v, err := cli.UnlockVault(vaultDir, false)
 	if err != nil {
 		t.Fatalf("unlockVault with SYMVAULT_PASSPHRASE env var: %v", err)
-	}
-	if v == nil {
-		t.Fatal("unlockVault returned nil vault")
-	}
-}
-
-// TestUnlockVault_SymvaultTakesPrecedenceOverOpenpass verifies that
-// SYMVAULT_PASSPHRASE takes precedence over OPENPASS_PASSPHRASE when both are set.
-func TestUnlockVault_SymvaultTakesPrecedenceOverOpenpass(t *testing.T) {
-	vaultDir, passphrase := initVault(t)
-	defer setupVaultFlag(t, vaultDir)()
-
-	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
-	_ = os.Setenv("OPENPASS_PASSPHRASE", "wrong-passphrase")
-	defer func() {
-		_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
-		_ = os.Unsetenv("OPENPASS_PASSPHRASE")
-	}()
-
-	v, err := cli.UnlockVault(vaultDir, false)
-	if err != nil {
-		t.Fatalf("unlockVault should use SYMVAULT_PASSPHRASE over OPENPASS_PASSPHRASE: %v", err)
 	}
 	if v == nil {
 		t.Fatal("unlockVault returned nil vault")
@@ -903,7 +815,7 @@ func TestUnlockVault_WrongPassphrase_SymvaultEnv(t *testing.T) {
 }
 
 // TestWarnEnvPassphrase_SymvaultNoWarning verifies that SYMVAULT_NO_ENV_WARNING
-// suppresses the env passphrase warning (alongside OPENPASS_NO_ENV_WARNING).
+// suppresses the env passphrase warning.
 func TestWarnEnvPassphrase_SymvaultNoWarning(t *testing.T) {
 	oldEmitted := cli.EnvPassphraseWarningEmitted
 	oldQuiet := cli.QuietMode

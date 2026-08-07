@@ -127,8 +127,8 @@ func TestInit_ErrorPaths(t *testing.T) {
 		cfg := config.Default()
 		_, _ = vaultpkg.InitWithPassphrase(tmpDir, []byte("test"), cfg)
 
-		_ = os.Setenv("OPENPASS_VAULT", tmpDir)
-		defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+		_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
+		defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 		cli.SetCachedEnvPassphrase([]byte("test"))
 		defer cli.SetCachedEnvPassphrase(nil)

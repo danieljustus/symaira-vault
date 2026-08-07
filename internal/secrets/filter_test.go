@@ -113,7 +113,7 @@ func TestFilterEnv_KeyOnlyMatch(t *testing.T) {
 }
 
 func TestFilterEnv_DoesNotLeakByDefault(t *testing.T) {
-	t.Setenv("OPENPASS_VAULT", "/tmp/should_not_leak")
+	t.Setenv("SYMVAULT_VAULT", "/tmp/should_not_leak")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "should_be_removed")
 	t.Setenv("API_KEY", "should_be_removed")
 
@@ -121,8 +121,8 @@ func TestFilterEnv_DoesNotLeakByDefault(t *testing.T) {
 	result := FilterEnv(wl)
 
 	for _, e := range result {
-		if strings.HasPrefix(e, "OPENPASS_VAULT=") {
-			t.Errorf("Default whitelist should not pass OPENPASS_VAULT, got: %s", e)
+		if strings.HasPrefix(e, "SYMVAULT_VAULT=") {
+			t.Errorf("Default whitelist should not pass SYMVAULT_VAULT, got: %s", e)
 		}
 		if strings.HasPrefix(e, "AWS_SECRET_ACCESS_KEY=") {
 			t.Errorf("Default whitelist should not pass AWS_SECRET_ACCESS_KEY, got: %s", e)
@@ -198,18 +198,6 @@ func TestPrepareCmd_SetsEnv(t *testing.T) {
 			// But if it DOES exist, it should be passed through.
 			continue
 		}
-	}
-}
-
-func TestPrepareCmd_NoEnvLeak(t *testing.T) {
-	t.Setenv("OPENPASS_TEST_SECRET", "should_not_leak_to_child")
-
-	cmd := exec.Command("echo", "test")
-	PrepareCmd(cmd)
-
-	envMap := envSliceToMap(cmd.Env)
-	if _, ok := envMap["OPENPASS_TEST_SECRET"]; ok {
-		t.Error("PrepareCmd leaked OPENPASS_TEST_SECRET to child process env")
 	}
 }
 
@@ -350,7 +338,6 @@ func envSliceToMap(env []string) map[string]string {
 func TestFilterEnv_DoesNotLeakSymvault(t *testing.T) {
 	t.Setenv("SYMVAULT_VAULT", "/tmp/symvault_should_not_leak")
 	t.Setenv("SYMVAULT_MCP_TOKEN", "should_be_removed")
-	t.Setenv("OPENPASS_VAULT", "/tmp/openpass_should_not_leak")
 
 	wl := DefaultWhitelist()
 	result := FilterEnv(wl)
@@ -362,17 +349,12 @@ func TestFilterEnv_DoesNotLeakSymvault(t *testing.T) {
 		if strings.HasPrefix(e, "SYMVAULT_MCP_TOKEN=") {
 			t.Errorf("Default whitelist should not pass SYMVAULT_MCP_TOKEN, got: %s", e)
 		}
-		if strings.HasPrefix(e, "OPENPASS_VAULT=") {
-			t.Errorf("Default whitelist should not pass OPENPASS_VAULT, got: %s", e)
-		}
 	}
 }
 
-func TestFilterEnv_DoesNotLeakBothPrefixes(t *testing.T) {
+func TestFilterEnv_DoesNotLeakAnySymvaultPrefix(t *testing.T) {
 	t.Setenv("SYMVAULT_VAULT", "/tmp/symvault_should_not_leak")
-	t.Setenv("OPENPASS_VAULT", "/tmp/openpass_should_not_leak")
 	t.Setenv("SYMVAULT_LOG_LEVEL", "debug")
-	t.Setenv("OPENPASS_LOG_LEVEL", "debug")
 
 	wl := DefaultWhitelist()
 	result := FilterEnv(wl)
@@ -380,9 +362,6 @@ func TestFilterEnv_DoesNotLeakBothPrefixes(t *testing.T) {
 	for _, e := range result {
 		if strings.HasPrefix(e, "SYMVAULT_") {
 			t.Errorf("Default whitelist should not pass any SYMVAULT_* var, got: %s", e)
-		}
-		if strings.HasPrefix(e, "OPENPASS_") {
-			t.Errorf("Default whitelist should not pass any OPENPASS_* var, got: %s", e)
 		}
 	}
 }
@@ -401,7 +380,7 @@ func TestPrepareCmd_NoSymvaultEnvLeak(t *testing.T) {
 
 func TestIsSensitiveName_KnownPatterns(t *testing.T) {
 	cases := []string{
-		"PASSPHRASE", "VAULT_PASSPHRASE", "OPENPASS_VAULT_PASSPHRASE",
+		"PASSPHRASE", "VAULT_PASSPHRASE", "SYMVAULT_VAULT_PASSPHRASE",
 		"PASSWORD", "DB_PASSWORD", "PASSWD",
 		"SECRET", "AWS_SECRET_ACCESS_KEY", "APP_SECRET",
 		"TOKEN", "SYMVAULT_MCP_TOKEN", "AUTH_TOKEN",

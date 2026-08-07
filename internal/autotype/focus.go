@@ -31,8 +31,7 @@ var captureActiveWindowFunc = defaultCaptureActiveWindow
 // if the platform has no detection backend (so callers in lenient mode can
 // continue and strict-mode callers can refuse).
 //
-// Strict mode is enabled by SYMVAULT_AUTOTYPE_STRICT_FOCUS=1
-// (or OPENPASS_AUTOTYPE_STRICT_FOCUS for backwards compatibility). In lenient
+// Strict mode is enabled by SYMVAULT_AUTOTYPE_STRICT_FOCUS=1. In lenient
 // mode (the default) ErrFocusUnavailable is downgraded to nil so existing
 // users see no behavior change.
 func guardActiveWindow() error {
@@ -62,8 +61,5 @@ func guardActiveWindow() error {
 
 func focusStrictMode() bool {
 	v := os.Getenv("SYMVAULT_AUTOTYPE_STRICT_FOCUS")
-	if v == "" {
-		v = os.Getenv("OPENPASS_AUTOTYPE_STRICT_FOCUS")
-	}
 	return v != "" && v != "0"
 }

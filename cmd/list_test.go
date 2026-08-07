@@ -65,8 +65,8 @@ func TestList_ErrorPaths(t *testing.T) {
 	resetVaultState(t)
 	t.Run("uninitialized vault", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		_ = os.Setenv("OPENPASS_VAULT", tmpDir)
-		defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+		_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
+		defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 		rootCmd.SetArgs([]string{"--vault", tmpDir, "list"})
 		defer rootCmd.SetArgs(nil)

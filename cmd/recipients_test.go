@@ -379,8 +379,8 @@ func TestCmdRecipientsList_WithRecipients(t *testing.T) {
 	vaultDir := t.TempDir()
 	passphrase := []byte("correcthorsebatterystaple")
 	vaultFlagReset(t)
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	t.Cleanup(func() { _ = os.Unsetenv("OPENPASS_VAULT") })
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_VAULT") })
 
 	if _, err := vaultpkg.InitWithPassphrase(vaultDir, passphrase, config.Default()); err != nil {
 		t.Fatalf("init vault: %v", err)
@@ -415,8 +415,8 @@ func TestCmdRecipientsAdd_Invalid(t *testing.T) {
 		t.Fatalf("init vault: %v", err)
 	}
 
-	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
-	t.Cleanup(func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") })
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") })
 
 	rootCmd.SetArgs([]string{"--vault", vaultDir, "recipients", "add", "not-a-valid-key"})
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
@@ -448,8 +448,8 @@ func TestCmdRecipientsAdd_Duplicate(t *testing.T) {
 		t.Fatalf("pre-add recipient: %v", err)
 	}
 
-	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
-	t.Cleanup(func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") })
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") })
 
 	rootCmd.SetArgs([]string{"--vault", vaultDir, "recipients", "add", testRecipient1})
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
@@ -476,8 +476,8 @@ func TestCmdRecipientsRemove_NotFound(t *testing.T) {
 		t.Fatalf("init vault: %v", err)
 	}
 
-	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
-	t.Cleanup(func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") })
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") })
 
 	rootCmd.SetArgs([]string{"--vault", vaultDir, "recipients", "remove", testRecipient2, "--yes"})
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
@@ -508,8 +508,8 @@ func TestCmdRecipientsRemove_Cancel(t *testing.T) {
 	confirmRemove = false
 	t.Cleanup(func() { confirmRemove = origConfirmRemove })
 
-	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
-	t.Cleanup(func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") })
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") })
 
 	oldStdin := os.Stdin
 	r, w, _ := os.Pipe()
@@ -551,8 +551,8 @@ func TestCmdRecipientsRemove_WithYesFlag(t *testing.T) {
 		t.Fatalf("add recipient: %v", err)
 	}
 
-	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
-	t.Cleanup(func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") })
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") })
 
 	rootCmd.SetArgs([]string{"--vault", vaultDir, "recipients", "remove", testRecipient1, "--yes"})
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
@@ -578,8 +578,8 @@ func TestCmdRecipientsRemove_InvalidKey(t *testing.T) {
 		t.Fatalf("init vault: %v", err)
 	}
 
-	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
-	t.Cleanup(func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") })
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") })
 
 	rootCmd.SetArgs([]string{"--vault", vaultDir, "recipients", "remove", "not-a-valid-key", "--yes"})
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
@@ -606,8 +606,8 @@ func TestCmdRecipientsAdd_UnlockError(t *testing.T) {
 		t.Fatalf("init vault: %v", err)
 	}
 
-	_ = os.Setenv("OPENPASS_PASSPHRASE", "wrong-passphrase")
-	t.Cleanup(func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") })
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", "wrong-passphrase")
+	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") })
 
 	rootCmd.SetArgs([]string{"--vault", vaultDir, "recipients", "add", testRecipient1})
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
@@ -634,8 +634,8 @@ func TestCmdRecipientsRemove_UnlockError(t *testing.T) {
 		t.Fatalf("init vault: %v", err)
 	}
 
-	_ = os.Setenv("OPENPASS_PASSPHRASE", "wrong-passphrase")
-	t.Cleanup(func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") })
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", "wrong-passphrase")
+	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") })
 
 	rootCmd.SetArgs([]string{"--vault", vaultDir, "recipients", "remove", testRecipient1, "--yes"})
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
@@ -657,8 +657,8 @@ func TestRecipients_ErrorPaths(t *testing.T) {
 	resetVaultState(t)
 	t.Run("list - uninitialized vault", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		_ = os.Setenv("OPENPASS_VAULT", tmpDir)
-		defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+		_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
+		defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 		rootCmd.SetArgs([]string{"--vault", tmpDir, "recipients", "list"})
 		defer rootCmd.SetArgs(nil)
@@ -671,11 +671,11 @@ func TestRecipients_ErrorPaths(t *testing.T) {
 
 	t.Run("add - invalid recipient", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		_ = os.Setenv("OPENPASS_VAULT", tmpDir)
-		_ = os.Setenv("OPENPASS_PASSPHRASE", "test")
+		_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
+		_ = os.Setenv("SYMVAULT_PASSPHRASE", "test")
 		defer func() {
-			_ = os.Unsetenv("OPENPASS_VAULT")
-			_ = os.Unsetenv("OPENPASS_PASSPHRASE")
+			_ = os.Unsetenv("SYMVAULT_VAULT")
+			_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 		}()
 
 		cfg := config.Default()
@@ -692,11 +692,11 @@ func TestRecipients_ErrorPaths(t *testing.T) {
 
 	t.Run("remove - invalid recipient format", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		_ = os.Setenv("OPENPASS_VAULT", tmpDir)
-		_ = os.Setenv("OPENPASS_PASSPHRASE", "test")
+		_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
+		_ = os.Setenv("SYMVAULT_PASSPHRASE", "test")
 		defer func() {
-			_ = os.Unsetenv("OPENPASS_VAULT")
-			_ = os.Unsetenv("OPENPASS_PASSPHRASE")
+			_ = os.Unsetenv("SYMVAULT_VAULT")
+			_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 		}()
 
 		cfg := config.Default()
@@ -713,17 +713,17 @@ func TestRecipients_ErrorPaths(t *testing.T) {
 
 	t.Run("remove - recipient not in list", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		_ = os.Setenv("OPENPASS_VAULT", tmpDir)
-		_ = os.Setenv("OPENPASS_PASSPHRASE", "test")
+		_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
+		_ = os.Setenv("SYMVAULT_PASSPHRASE", "test")
 		defer func() {
-			_ = os.Unsetenv("OPENPASS_VAULT")
-			_ = os.Unsetenv("OPENPASS_PASSPHRASE")
+			_ = os.Unsetenv("SYMVAULT_VAULT")
+			_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 		}()
 
 		cfg := config.Default()
 		_, _ = vaultpkg.InitWithPassphrase(tmpDir, []byte("test"), cfg)
 
-		_ = os.Setenv("OPENPASS_PASSPHRASE", "test")
+		_ = os.Setenv("SYMVAULT_PASSPHRASE", "test")
 		identity2, _ := vaultpkg.InitWithPassphrase(tmpDir+"_second", []byte("test2"), cfg)
 
 		rootCmd.SetArgs([]string{"--vault", tmpDir, "recipients", "remove", identity2.Recipient().String(), "-y"})
@@ -740,11 +740,11 @@ func TestRecipients_ListEmpty(t *testing.T) {
 	resetVaultState(t)
 
 	tmpDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", tmpDir)
-	_ = os.Setenv("OPENPASS_PASSPHRASE", "test")
+	_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", "test")
 	defer func() {
-		_ = os.Unsetenv("OPENPASS_VAULT")
-		_ = os.Unsetenv("OPENPASS_PASSPHRASE")
+		_ = os.Unsetenv("SYMVAULT_VAULT")
+		_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 	}()
 
 	cfg := config.Default()
@@ -766,11 +766,11 @@ func TestRecipients_ListInvalidRecipient(t *testing.T) {
 	resetVaultState(t)
 
 	tmpDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", tmpDir)
-	_ = os.Setenv("OPENPASS_PASSPHRASE", "test")
+	_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", "test")
 	defer func() {
-		_ = os.Unsetenv("OPENPASS_VAULT")
-		_ = os.Unsetenv("OPENPASS_PASSPHRASE")
+		_ = os.Unsetenv("SYMVAULT_VAULT")
+		_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 	}()
 
 	cfg := config.Default()
@@ -795,11 +795,11 @@ func TestRecipients_AddAlreadyExists(t *testing.T) {
 	resetVaultState(t)
 
 	tmpDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", tmpDir)
-	_ = os.Setenv("OPENPASS_PASSPHRASE", "test")
+	_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", "test")
 	defer func() {
-		_ = os.Unsetenv("OPENPASS_VAULT")
-		_ = os.Unsetenv("OPENPASS_PASSPHRASE")
+		_ = os.Unsetenv("SYMVAULT_VAULT")
+		_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 	}()
 
 	cfg := config.Default()
@@ -823,11 +823,11 @@ func TestRecipients_RemoveCancelled(t *testing.T) {
 	resetVaultState(t)
 
 	tmpDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", tmpDir)
-	_ = os.Setenv("OPENPASS_PASSPHRASE", "test")
+	_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", "test")
 	defer func() {
-		_ = os.Unsetenv("OPENPASS_VAULT")
-		_ = os.Unsetenv("OPENPASS_PASSPHRASE")
+		_ = os.Unsetenv("SYMVAULT_VAULT")
+		_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 	}()
 
 	cfg := config.Default()

@@ -47,7 +47,7 @@ func TestBinaryE2E_Flow(t *testing.T) {
 	passphrase := []byte("correct horse battery staple")
 	env := []string{
 		"GOWORK=off",
-		"OPENPASS_PASSPHRASE=" + string(passphrase),
+		"SYMVAULT_PASSPHRASE=" + string(passphrase),
 	}
 
 	initCmd := exec.Command(binPath, "init", vaultDir)
@@ -94,7 +94,7 @@ func TestBinaryE2E_Recipients(t *testing.T) {
 	passphrase := []byte("correct horse battery staple")
 	env := []string{
 		"GOWORK=off",
-		"OPENPASS_PASSPHRASE=" + string(passphrase),
+		"SYMVAULT_PASSPHRASE=" + string(passphrase),
 	}
 
 	initCmd := exec.Command(binPath, "init", vaultDir)

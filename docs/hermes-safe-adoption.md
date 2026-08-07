@@ -41,7 +41,7 @@ approves that later gate.
 Start with a dedicated Hermes profile that can inspect metadata and search only
 narrow path prefixes. Avoid `allowedPaths: ["*"]` for broad/default profiles.
 
-Example `~/.openpass/config.yaml` fragment:
+Example `~/.symvault/config.yaml` fragment:
 
 ```yaml
 agents:
@@ -169,11 +169,11 @@ Prefer stdio for a local agent integration:
 # ~/.hermes/config.yaml snippet for a future approved trial only.
 # Do not paste this into live config until the human adoption gate approves it.
 mcp_servers:
-  openpass_metadata:
+  symaira_metadata:
     command: symvault
     args:
       - --vault
-      - /path/to/openpass-agent-trial
+      - /path/to/symvault-agent-trial
       - serve
       - --stdio
       - --agent
@@ -199,16 +199,16 @@ HTTP is used, bind loopback only and use a scoped token:
 mcp:
   bind: 127.0.0.1
   port: 8090
-  httpTokenFile: /path/to/openpass-agent-trial/mcp-token
+  httpTokenFile: /path/to/symvault-agent-trial/mcp-token
 ```
 
 ```yaml
 # Hermes side, future approved trial only.
 mcp_servers:
-  openpass_metadata:
+  symaira_metadata:
     url: http://127.0.0.1:8090/mcp
     headers:
-      Authorization: env:OPENPASS_MCP_TOKEN
+      Authorization: env:SYMVAULT_MCP_TOKEN
       X-Symaira-Agent: hermes-metadata
     timeout: 60
     connect_timeout: 30
@@ -234,12 +234,12 @@ Hermes built-in tools needed to validate it.
 
 Recommended first Hermes trial surface:
 
-- Symaira Vault MCP server: `openpass_metadata`.
-- Symaira Vault MCP tools: `mcp_openpass_metadata_health`,
-  `mcp_openpass_metadata_get_auth_status`,
-  `mcp_openpass_metadata_list_entries`,
-  `mcp_openpass_metadata_find_entries`,
-  `mcp_openpass_metadata_get_entry_metadata`.
+- Symaira Vault MCP server: `symaira_metadata`.
+- Symaira Vault MCP tools: `mcp_symaira_metadata_health`,
+  `mcp_symaira_metadata_get_auth_status`,
+  `mcp_symaira_metadata_list_entries`,
+  `mcp_symaira_metadata_find_entries`,
+  `mcp_symaira_metadata_get_entry_metadata`.
 - Hermes built-in tools: no broad terminal/file/browser tools solely for the
   Symaira Vault trial unless the task specifically requires them.
 - No wildcard MCP tool exposure and no default-profile raw-secret reads.

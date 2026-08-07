@@ -116,7 +116,7 @@ func RunCommand(opts RunOptions) (*RunResult, error) {
 	}
 
 	// Start with a whitelisted env subset as base, then overlay opts.Env.
-	// This prevents leaking sensitive process env vars (API keys, OPENPASS_*, AWS_*,
+	// This prevents leaking sensitive process env vars (API keys, SYMVAULT_*, AWS_*,
 	// etc.) to child processes. Only the DefaultWhitelist vars (plus any passthrough)
 	// are passed through. Later entries override earlier ones for the same key.
 	//

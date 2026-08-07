@@ -124,7 +124,7 @@ func TestImportCommandPrefixWritesEntriesUnderPrefix(t *testing.T) {
 
 func runImportCommand(t *testing.T, passphrase string, args ...string) string {
 	t.Helper()
-	if err := os.Setenv("OPENPASS_PASSPHRASE", passphrase); err != nil {
+	if err := os.Setenv("SYMVAULT_PASSPHRASE", passphrase); err != nil {
 		t.Fatalf("set passphrase env: %v", err)
 	}
 	rootCmd.SetArgs(args)
@@ -199,7 +199,7 @@ func TestImportQuarantineMutualExclusion(t *testing.T) {
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
-	if err := os.Setenv("OPENPASS_PASSPHRASE", string(passphrase)); err != nil {
+	if err := os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase)); err != nil {
 		t.Fatalf("set passphrase env: %v", err)
 	}
 	rootCmd.SetArgs([]string{"--vault", vaultDir, "import", "--format", "csv", csvImportFixture(t), "--quarantine", "--prefix", "myprefix/"})
@@ -222,7 +222,7 @@ func TestImportQuarantinePath(t *testing.T) {
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
-	if err := os.Setenv("OPENPASS_PASSPHRASE", string(passphrase)); err != nil {
+	if err := os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase)); err != nil {
 		t.Fatalf("set passphrase env: %v", err)
 	}
 	rootCmd.SetArgs([]string{"--vault", vaultDir, "import", "--format", "csv", csvImportFixture(t), "--quarantine"})
@@ -267,7 +267,7 @@ func TestImportReviewListEmpty(t *testing.T) {
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
-	if err := os.Setenv("OPENPASS_PASSPHRASE", string(passphrase)); err != nil {
+	if err := os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase)); err != nil {
 		t.Fatalf("set passphrase env: %v", err)
 	}
 	rootCmd.SetArgs([]string{"--vault", vaultDir, "import", "review", "list"})
@@ -291,7 +291,7 @@ func TestImportReviewList(t *testing.T) {
 	defer setupVaultFlag(t, vaultDir)()
 
 	// First do a quarantine import to create an import batch
-	if err := os.Setenv("OPENPASS_PASSPHRASE", string(passphrase)); err != nil {
+	if err := os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase)); err != nil {
 		t.Fatalf("set passphrase env: %v", err)
 	}
 	rootCmd.SetArgs([]string{"--vault", vaultDir, "import", "--format", "csv", csvImportFixture(t), "--quarantine"})
@@ -317,7 +317,7 @@ func TestImportReviewList(t *testing.T) {
 	}
 
 	// Re-set passphrase (cli.UnlockVault unsets it after each use)
-	if err := os.Setenv("OPENPASS_PASSPHRASE", string(passphrase)); err != nil {
+	if err := os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase)); err != nil {
 		t.Fatalf("set passphrase env: %v", err)
 	}
 
@@ -345,7 +345,7 @@ func TestImportReviewPromote(t *testing.T) {
 	defer setupVaultFlag(t, vaultDir)()
 
 	// Quarantine import
-	if err := os.Setenv("OPENPASS_PASSPHRASE", string(passphrase)); err != nil {
+	if err := os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase)); err != nil {
 		t.Fatalf("set passphrase env: %v", err)
 	}
 	rootCmd.SetArgs([]string{"--vault", vaultDir, "import", "--format", "csv", csvImportFixture(t), "--quarantine"})
@@ -371,7 +371,7 @@ func TestImportReviewPromote(t *testing.T) {
 	}
 
 	// Re-set passphrase (cli.UnlockVault unsets it after each use)
-	if err := os.Setenv("OPENPASS_PASSPHRASE", string(passphrase)); err != nil {
+	if err := os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase)); err != nil {
 		t.Fatalf("set passphrase env: %v", err)
 	}
 
@@ -413,7 +413,7 @@ func TestImportReviewPromoteSkipsExisting(t *testing.T) {
 	defer setupVaultFlag(t, vaultDir)()
 
 	// Quarantine import
-	if err := os.Setenv("OPENPASS_PASSPHRASE", string(passphrase)); err != nil {
+	if err := os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase)); err != nil {
 		t.Fatalf("set passphrase env: %v", err)
 	}
 	rootCmd.SetArgs([]string{"--vault", vaultDir, "import", "--format", "csv", csvImportFixture(t), "--quarantine"})
@@ -448,7 +448,7 @@ func TestImportReviewPromoteSkipsExisting(t *testing.T) {
 	}
 
 	// Re-set passphrase
-	if err := os.Setenv("OPENPASS_PASSPHRASE", string(passphrase)); err != nil {
+	if err := os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase)); err != nil {
 		t.Fatalf("set passphrase env: %v", err)
 	}
 
@@ -484,7 +484,7 @@ func TestImportReviewPromoteOverwrite(t *testing.T) {
 	defer setupVaultFlag(t, vaultDir)()
 
 	// Quarantine import
-	if err := os.Setenv("OPENPASS_PASSPHRASE", string(passphrase)); err != nil {
+	if err := os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase)); err != nil {
 		t.Fatalf("set passphrase env: %v", err)
 	}
 	rootCmd.SetArgs([]string{"--vault", vaultDir, "import", "--format", "csv", csvImportFixture(t), "--quarantine"})
@@ -520,7 +520,7 @@ func TestImportReviewPromoteOverwrite(t *testing.T) {
 	}
 
 	// Re-set passphrase
-	if err := os.Setenv("OPENPASS_PASSPHRASE", string(passphrase)); err != nil {
+	if err := os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase)); err != nil {
 		t.Fatalf("set passphrase env: %v", err)
 	}
 
@@ -559,7 +559,7 @@ func TestImportReviewPromoteNotFound(t *testing.T) {
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
-	if err := os.Setenv("OPENPASS_PASSPHRASE", string(passphrase)); err != nil {
+	if err := os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase)); err != nil {
 		t.Fatalf("set passphrase env: %v", err)
 	}
 

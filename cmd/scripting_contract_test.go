@@ -34,7 +34,7 @@ func buildAndInitVault(t *testing.T) (string, string, []string) {
 	passphrase := "correct horse battery staple"
 	env := []string{
 		"GOWORK=off",
-		"OPENPASS_PASSPHRASE=" + passphrase,
+		"SYMVAULT_PASSPHRASE=" + passphrase,
 	}
 
 	initCmd := exec.Command(binPath, "init", vaultDir)
@@ -76,13 +76,13 @@ func TestScriptingGet_Locked_NoPassphrase(t *testing.T) {
 	passphrase := "correct horse battery staple"
 
 	initCmd := exec.Command(binPath, "init", vaultDir)
-	initCmd.Env = append(os.Environ(), "GOWORK=off", "OPENPASS_PASSPHRASE="+passphrase)
+	initCmd.Env = append(os.Environ(), "GOWORK=off", "SYMVAULT_PASSPHRASE="+passphrase)
 	initCmd.Stdin = strings.NewReader(passphrase + "\n")
 	if output, err := initCmd.CombinedOutput(); err != nil {
 		t.Fatalf("init: %v\n%s", err, output)
 	}
 
-	setEnv := []string{"GOWORK=off", "OPENPASS_PASSPHRASE=" + passphrase}
+	setEnv := []string{"GOWORK=off", "SYMVAULT_PASSPHRASE=" + passphrase}
 	_ = runBin(t, binPath, setEnv, "", "--vault", vaultDir, "set", "secret.key", "--value", "mysecret")
 
 	lockedEnv := []string{"GOWORK=off"}
@@ -141,7 +141,7 @@ func TestScriptingGet_NoHangOnLocked(t *testing.T) {
 	passphrase := "correct horse battery staple"
 
 	initCmd := exec.Command(binPath, "init", vaultDir)
-	initCmd.Env = append(os.Environ(), "GOWORK=off", "OPENPASS_PASSPHRASE="+passphrase)
+	initCmd.Env = append(os.Environ(), "GOWORK=off", "SYMVAULT_PASSPHRASE="+passphrase)
 	initCmd.Stdin = strings.NewReader(passphrase + "\n")
 	if output, err := initCmd.CombinedOutput(); err != nil {
 		t.Fatalf("init: %v\n%s", err, output)

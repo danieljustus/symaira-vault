@@ -80,7 +80,6 @@ Passing `--output json` or `--output yaml` to any other command exits with `Exit
 | Variable                | Purpose                                              |
 | ----------------------- | ---------------------------------------------------- |
 | `SYMVAULT_PASSPHRASE`   | Passphrase for non-interactive unlock (preferred). Requires the opt-in gate below — alone it is ignored (default-deny). |
-| `OPENPASS_PASSPHRASE`   | Alias for `SYMVAULT_PASSPHRASE` (legacy compat).    |
 | `SYMVAULT_ALLOW_ENV_PASSPHRASE` | Set to `1` to allow unlock via `SYMVAULT_PASSPHRASE` (alternatively `security.allow_env_passphrase: true` in config.yaml). |
 | `SYMVAULT_NO_ENV_WARNING` | Set to `1` to suppress env passphrase warning.     |
 | `SYMVAULT_NO_PIPE_WARNING` | Set to `1` to suppress pipe-read warning.         |

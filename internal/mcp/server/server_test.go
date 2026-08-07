@@ -844,7 +844,7 @@ func TestExecuteTool_GeneratePassword_Server(t *testing.T) {
 	}
 }
 
-func TestExecuteTool_OpenpassDelete(t *testing.T) {
+func TestExecuteTool_SymairaDelete(t *testing.T) {
 	vaultDir, identity := mockVault(t)
 	srv := newTestServerWithVault(t, config.AgentProfile{
 		Name:         "test",

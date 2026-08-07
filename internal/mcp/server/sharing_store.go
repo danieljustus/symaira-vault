@@ -15,7 +15,7 @@ import (
 
 	"filippo.io/age"
 
-	openpasscrypto "github.com/danieljustus/symaira-vault/internal/crypto"
+	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
 	"github.com/danieljustus/symaira-vault/internal/fsutil"
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 )
@@ -196,7 +196,7 @@ func (s *ShareStore) Create(fromAgent, toAgent, secretPath, secretField string, 
 
 // newHMACGrantID creates an HMAC-bound grant ID from the grant's fields.
 func newHMACGrantID(g *mcp.ShareGrant, key []byte) (string, error) {
-	fields := openpasscrypto.GrantIDFields{
+	fields := vaultcrypto.GrantIDFields{
 		FromAgent:   g.FromAgent,
 		ToAgent:     g.ToAgent,
 		SecretPath:  g.SecretPath,
@@ -204,13 +204,13 @@ func newHMACGrantID(g *mcp.ShareGrant, key []byte) (string, error) {
 		CreatedAt:   g.CreatedAt,
 	}
 
-	grantID, err := openpasscrypto.GenerateGrantID(fields, key)
+	grantID, err := vaultcrypto.GenerateGrantID(fields, key)
 	if err != nil {
 		return "", err
 	}
 
 	// Store the nonce on the grant for reference.
-	nonce, parseErr := openpasscrypto.ParseNonceFromID(grantID)
+	nonce, parseErr := vaultcrypto.ParseNonceFromID(grantID)
 	if parseErr == nil {
 		g.Nonce = nonce
 	}
@@ -362,7 +362,7 @@ func (s *ShareStore) CheckAccess(toAgent, secretPath string) (*mcp.ShareGrant, b
 	for _, g := range s.grants {
 		if g.ToAgent == toAgent && g.SecretPath == secretPath && g.Status == mcp.ShareApproved && !g.IsExpired() {
 			// Verify HMAC for cryptographically bound grants.
-			if openpasscrypto.IsHMACFormat(g.ID) {
+			if vaultcrypto.IsHMACFormat(g.ID) {
 				if len(s.signingKey) == 0 {
 					slog.Warn("cannot verify HMAC grant: signing key not configured",
 						"grant_id", g.ID, "to_agent", toAgent)
@@ -384,14 +384,14 @@ func (s *ShareStore) CheckAccess(toAgent, secretPath string) (*mcp.ShareGrant, b
 // verifyGrantHMAC returns true if the grant's HMAC ID is valid for its
 // current fields using the given key.
 func verifyGrantHMAC(g *mcp.ShareGrant, key []byte) bool {
-	fields := openpasscrypto.GrantIDFields{
+	fields := vaultcrypto.GrantIDFields{
 		FromAgent:   g.FromAgent,
 		ToAgent:     g.ToAgent,
 		SecretPath:  g.SecretPath,
 		SecretField: g.SecretField,
 		CreatedAt:   g.CreatedAt,
 	}
-	valid, err := openpasscrypto.VerifyGrantID(g.ID, fields, key)
+	valid, err := vaultcrypto.VerifyGrantID(g.ID, fields, key)
 	if err != nil {
 		return false
 	}

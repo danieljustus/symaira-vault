@@ -12,8 +12,7 @@ const (
 	AppName = "symaira-vault"
 
 	// Legacy paths (for migration detection from pre-XDG installs).
-	LegacyVaultSubdir    = ".symvault"
-	LegacyOpenpassSubdir = ".openpass"
+	LegacyVaultSubdir = ".symvault"
 
 	// XDG subdirectory names.
 	ConfigSubdir = "symaira-vault" // under $XDG_CONFIG_HOME
@@ -22,14 +21,13 @@ const (
 
 	// Prefer DefaultConfigDir(), DefaultDataDir(), or DefaultCacheDir() for
 	// new code. Kept for backward compatibility and migration detection.
-	DefaultVaultSubdir       = ".symvault"
-	LegacyDefaultVaultSubdir = ".openpass"
-	defaultConfigDir         = DefaultVaultSubdir
-	defaultConfigFile        = "config.yaml"
-	defaultAgentName         = "default"
-	defaultSessionTimeout    = 15 * time.Minute
-	AuthMethodPassphrase     = "passphrase"
-	AuthMethodTouchID        = "touchid"
+	DefaultVaultSubdir    = ".symvault"
+	defaultConfigDir      = DefaultVaultSubdir
+	defaultConfigFile     = "config.yaml"
+	defaultAgentName      = "default"
+	defaultSessionTimeout = 15 * time.Minute
+	AuthMethodPassphrase  = "passphrase"
+	AuthMethodTouchID     = "touchid"
 )
 
 // XDGConfigHome returns the XDG config directory ($XDG_CONFIG_HOME or

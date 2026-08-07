@@ -264,7 +264,6 @@ func TestAuthSet_TouchIDRejectsInvalidPassphrase(t *testing.T) {
 	defer restoreStdin()
 
 	t.Setenv("SYMVAULT_PASSPHRASE", "")
-	t.Setenv("OPENPASS_PASSPHRASE", "")
 
 	err := AuthSetCmd.RunE(AuthSetCmd, []string{"touchid"})
 	if err == nil {
@@ -277,7 +276,6 @@ func TestAuthSet_TouchIDRejectsInvalidPassphrase(t *testing.T) {
 	// passphraseForBiometricSetup unsets the env passphrase; restore it so
 	// later tests in this process keep working.
 	t.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
-	t.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
 }
 
 func TestAuthSet_InvalidMethod(t *testing.T) {

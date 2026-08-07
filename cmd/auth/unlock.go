@@ -27,7 +27,7 @@ OS keyring. This allows MCP servers to start without interactive prompts.
 
 Use --check to verify if an active session exists without prompting.
 
-Environment variable SYMVAULT_PASSPHRASE (legacy alias OPENPASS_PASSPHRASE)
+Environment variable SYMVAULT_PASSPHRASE
 can be used for non-interactive unlock in CI/CD environments, but only when
 explicitly allowed via SYMVAULT_ALLOW_ENV_PASSPHRASE=1 or
 security.allow_env_passphrase: true in config.yaml — the passphrase variable
@@ -75,7 +75,7 @@ alone is ignored (default-deny). It should NOT be used on shared machines
 			_ = v
 
 			if status := cli.SessionGetCacheStatus(); !status.Persistent {
-				return errorspkg.NewCLIError(errorspkg.ExitLocked, "session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with OPENPASS_PASSPHRASE or use a build with OS keyring support", nil)
+				return errorspkg.NewCLIError(errorspkg.ExitLocked, "session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with SYMVAULT_PASSPHRASE or use a build with OS keyring support", nil)
 			}
 
 			cliout.Hintf("Vault unlocked (session TTL: %s)", effectiveTTL)

@@ -166,7 +166,6 @@ brews:
       version_scheme 1
     install: |
       bin.install "symvault"
-      bin.install_symlink "symvault" => "openpass"
       generate_completions_from_executable(bin/"symvault", "completion")
       man1.install Dir["docs/man/*.1"]
     caveats: |
@@ -180,12 +179,9 @@ brews:
       For MCP server setup:
         symvault mcp-config <name>
 
-      The legacy openpass command remains available as a compatibility alias.
-
       Documentation: https://github.com/danieljustus/symaira-vault#readme
     test: |
       system "#{bin}/symvault", "version"
-      system "#{bin}/openpass", "version"
 
 scoops:
   - name: symvault

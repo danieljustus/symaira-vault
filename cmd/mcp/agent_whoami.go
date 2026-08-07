@@ -21,23 +21,23 @@ func newAgentWhoamiCmd() *cobra.Command {
 		Short: "Show current agent context",
 		Long: `Display information about the current agent profile.
 
-When the OPENPASS_AGENT environment variable is set, loads that agent's profile
+When the SYMVAULT_AGENT environment variable is set, loads that agent's profile
 and shows name, tier, allowed paths, tools, quotas, and vault status.
 
 The --output json flag returns structured data matching the MCP symaira_whoami
 response format.`,
 		Example: `  # Show agent context
-  OPENPASS_AGENT=my-agent symvault agent whoami
+  SYMVAULT_AGENT=my-agent symvault agent whoami
 
   # Show as JSON
-  OPENPASS_AGENT=my-agent symvault agent whoami --output json`,
+  SYMVAULT_AGENT=my-agent symvault agent whoami --output json`,
 		Annotations: map[string]string{
 			cli.RequiresVaultAnnotation: "false",
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			agentName := os.Getenv("OPENPASS_AGENT")
+			agentName := os.Getenv("SYMVAULT_AGENT")
 			if agentName == "" {
-				return fmt.Errorf("OPENPASS_AGENT not set. Run without agent context or set OPENPASS_AGENT=<name>")
+				return fmt.Errorf("SYMVAULT_AGENT not set. Run without agent context or set SYMVAULT_AGENT=<name>")
 			}
 
 			vaultDir := cli.GetVaultDir()

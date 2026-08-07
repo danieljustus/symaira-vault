@@ -38,7 +38,7 @@ func newInitCmd() *cobra.Command {
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !term.IsTerminal(int(os.Stdin.Fd())) && !cli.HasCachedEnvPassphrase() {
-				return fmt.Errorf("init requires a TTY or SYMVAULT_PASSPHRASE/OPENPASS_PASSPHRASE env var; use `symvault setup` for interactive initialization")
+				return fmt.Errorf("init requires a TTY or SYMVAULT_PASSPHRASE env var; use `symvault setup` for interactive initialization")
 			}
 
 			var (

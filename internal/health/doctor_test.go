@@ -1180,7 +1180,6 @@ func TestRunChecks_SearchIndexPersistence_NoFailureRecorded(t *testing.T) {
 
 func TestRunChecks_EnvPassphrase_Absent(t *testing.T) {
 	t.Setenv("SYMVAULT_PASSPHRASE", "")
-	t.Setenv("OPENPASS_PASSPHRASE", "")
 	dir := t.TempDir()
 	results := health.RunChecks(dir, health.Options{Only: []string{"security.env_passphrase"}, NoNetwork: true})
 	if len(results) == 0 {
@@ -1217,7 +1216,6 @@ func TestRunChecks_EnvPassphrase_UnsafeSourceFile(t *testing.T) {
 		t.Skip("Windows does not preserve the requested Unix permission bits")
 	}
 	t.Setenv("SYMVAULT_PASSPHRASE", "")
-	t.Setenv("OPENPASS_PASSPHRASE", "")
 
 	dir := t.TempDir()
 	envFile := filepath.Join(dir, ".env")
@@ -1242,7 +1240,6 @@ func TestRunChecks_EnvPassphrase_SafeSourceFile(t *testing.T) {
 		t.Skip("Windows does not preserve the requested Unix permission bits")
 	}
 	t.Setenv("SYMVAULT_PASSPHRASE", "")
-	t.Setenv("OPENPASS_PASSPHRASE", "")
 
 	dir := t.TempDir()
 	envFile := filepath.Join(dir, ".env")

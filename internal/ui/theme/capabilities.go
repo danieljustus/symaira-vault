@@ -123,9 +123,6 @@ func detectColor() ColorMode {
 
 func detectASCIIOnly() bool {
 	v := os.Getenv("SYMVAULT_ASCII")
-	if v == "" {
-		v = os.Getenv("OPENPASS_ASCII")
-	}
 	if v != "" && v != "0" && v != "false" { //nolint:goconst
 		return true
 	}

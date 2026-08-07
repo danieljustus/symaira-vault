@@ -6,13 +6,10 @@ package logging
 import (
 	"io"
 	"log/slog"
-	"os"
 	"strings"
 	"sync"
 
 	"github.com/danieljustus/symaira-corekit/logkit"
-
-	"github.com/danieljustus/symaira-vault/internal/envutil"
 )
 
 var (
@@ -26,8 +23,6 @@ var (
 // Environment variables:
 //   - SYMVAULT_LOG_LEVEL: debug, info, warn (default), error
 //   - SYMVAULT_LOG_FORMAT: text (default), json
-//   - OPENPASS_LOG_LEVEL: legacy alias for SYMVAULT_LOG_LEVEL
-//   - OPENPASS_LOG_FORMAT: legacy alias for SYMVAULT_LOG_FORMAT
 func Default() *slog.Logger {
 	initOnce.Do(func() {
 		defaultLogger = NewFromEnv()
@@ -38,23 +33,7 @@ func Default() *slog.Logger {
 // NewFromEnv creates a fresh slog.Logger from environment variables.
 // Prefer Default() for normal use to avoid creating multiple handlers.
 func NewFromEnv() *slog.Logger {
-	mapOpenPassToSymvault()
 	return logkit.NewFromEnv("symvault")
-}
-
-// mapOpenPassToSymvault maps legacy OPENPASS_* env vars to SYMVAULT_* if the
-// SYMVAULT_* vars are not set, printing deprecation warnings via envutil.
-func mapOpenPassToSymvault() {
-	if v := os.Getenv("SYMVAULT_LOG_LEVEL"); v == "" {
-		if legacy := envutil.Getenv("SYMVAULT_LOG_LEVEL", "OPENPASS_LOG_LEVEL"); legacy != "" {
-			_ = os.Setenv("SYMVAULT_LOG_LEVEL", legacy)
-		}
-	}
-	if v := os.Getenv("SYMVAULT_LOG_FORMAT"); v == "" {
-		if legacy := envutil.Getenv("SYMVAULT_LOG_FORMAT", "OPENPASS_LOG_FORMAT"); legacy != "" {
-			_ = os.Setenv("SYMVAULT_LOG_FORMAT", legacy)
-		}
-	}
 }
 
 // New creates a slog.Logger with the specified writer, level and format.

@@ -278,8 +278,8 @@ func TestSet_ErrorPaths(t *testing.T) {
 	resetVaultState(t)
 	t.Run("uninitialized vault", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		_ = os.Setenv("OPENPASS_VAULT", tmpDir)
-		defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+		_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
+		defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 		rootCmd.SetArgs([]string{"--vault", tmpDir, "set", "test.key", "--value", "val"})
 		defer rootCmd.SetArgs(nil)
@@ -295,11 +295,11 @@ func TestSet_InteractiveMode(t *testing.T) {
 	resetVaultState(t)
 
 	tmpDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", tmpDir)
-	_ = os.Setenv("OPENPASS_PASSPHRASE", "test")
+	_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", "test")
 	defer func() {
-		_ = os.Unsetenv("OPENPASS_VAULT")
-		_ = os.Unsetenv("OPENPASS_PASSPHRASE")
+		_ = os.Unsetenv("SYMVAULT_VAULT")
+		_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 	}()
 
 	cfg := config.Default()
@@ -341,11 +341,11 @@ func TestSet_InteractiveMode_Field(t *testing.T) {
 	resetVaultState(t)
 
 	tmpDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", tmpDir)
-	_ = os.Setenv("OPENPASS_PASSPHRASE", "test")
+	_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", "test")
 	defer func() {
-		_ = os.Unsetenv("OPENPASS_VAULT")
-		_ = os.Unsetenv("OPENPASS_PASSPHRASE")
+		_ = os.Unsetenv("SYMVAULT_VAULT")
+		_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 	}()
 
 	cfg := config.Default()
@@ -393,11 +393,11 @@ func TestSet_InteractiveReadErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
-			_ = os.Setenv("OPENPASS_VAULT", tmpDir)
-			_ = os.Setenv("OPENPASS_PASSPHRASE", "test")
+			_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
+			_ = os.Setenv("SYMVAULT_PASSPHRASE", "test")
 			defer func() {
-				_ = os.Unsetenv("OPENPASS_VAULT")
-				_ = os.Unsetenv("OPENPASS_PASSPHRASE")
+				_ = os.Unsetenv("SYMVAULT_VAULT")
+				_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 			}()
 
 			cfg := config.Default()

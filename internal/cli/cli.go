@@ -14,7 +14,6 @@ import (
 
 	agentctx "github.com/danieljustus/symaira-vault/internal/agentctx"
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
-	"github.com/danieljustus/symaira-vault/internal/envutil"
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 	"github.com/danieljustus/symaira-vault/internal/i18n"
 	"github.com/danieljustus/symaira-vault/internal/session"
@@ -254,7 +253,7 @@ Daily use:
 				return err
 			}
 
-			if agentName := envutil.Getenv("SYMVAULT_AGENT", "OPENPASS_AGENT"); agentName != "" {
+			if agentName := os.Getenv("SYMVAULT_AGENT"); agentName != "" {
 				_, loadErr := agentctx.Load(agentName, vDir)
 				if loadErr != nil {
 					return errorspkg.NewCLIError(errorspkg.ExitPermissionDenied,

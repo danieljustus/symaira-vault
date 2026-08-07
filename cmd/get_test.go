@@ -31,7 +31,7 @@ func TestGetAutoClearDuration(t *testing.T) {
 		origHome := os.Getenv("HOME")
 		defer func() { _ = os.Setenv("HOME", origHome) }()
 		_ = os.Unsetenv("HOME")
-		_ = os.Unsetenv("OPENPASS_VAULT")
+		_ = os.Unsetenv("SYMVAULT_VAULT")
 
 		cli.Vault = "~/" + config.DefaultVaultSubdir
 
@@ -436,7 +436,7 @@ func TestCmdGet_FieldTTY_CopyByDefaultFalsePrints(t *testing.T) {
 	oldVaultFlagChanged := cli.VaultFlag.Changed
 	cli.VaultFlag.Changed = false
 	t.Cleanup(func() { cli.VaultFlag.Changed = oldVaultFlagChanged })
-	t.Setenv("OPENPASS_VAULT", vaultDir)
+	t.Setenv("SYMVAULT_VAULT", vaultDir)
 	crud.GetAutoClearDurationFunc = func() int { return 0 }
 	t.Cleanup(func() { crud.GetAutoClearDurationFunc = crud.GetAutoClearDuration })
 	resolvedVaultDir, err := cli.VaultPath()
@@ -548,7 +548,7 @@ func TestGet_ErrorPaths(t *testing.T) {
 			name: "uninitialized vault",
 			setupFunc: func() string {
 				tmpDir := t.TempDir()
-				_ = os.Setenv("OPENPASS_VAULT", tmpDir)
+				_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
 				return tmpDir
 			},
 			args:       []string{"get", "test"},
@@ -558,10 +558,10 @@ func TestGet_ErrorPaths(t *testing.T) {
 			name: "entry not found",
 			setupFunc: func() string {
 				tmpDir := t.TempDir()
-				_ = os.Setenv("OPENPASS_VAULT", tmpDir)
+				_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
 				cfg := config.Default()
 				_, _ = vaultpkg.InitWithPassphrase(tmpDir, []byte("test"), cfg)
-				_ = os.Setenv("OPENPASS_PASSPHRASE", "test")
+				_ = os.Setenv("SYMVAULT_PASSPHRASE", "test")
 				return tmpDir
 			},
 			args:       []string{"get", "nonexistent"},
@@ -571,8 +571,8 @@ func TestGet_ErrorPaths(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_ = os.Unsetenv("OPENPASS_VAULT")
-			_ = os.Unsetenv("OPENPASS_PASSPHRASE")
+			_ = os.Unsetenv("SYMVAULT_VAULT")
+			_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 			vault = ""
 			if vaultFlag != nil {
 				_ = vaultFlag.Value.Set("")

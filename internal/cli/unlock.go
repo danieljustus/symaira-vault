@@ -12,7 +12,6 @@ import (
 
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	cryptopkg "github.com/danieljustus/symaira-vault/internal/crypto"
-	"github.com/danieljustus/symaira-vault/internal/envutil"
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
@@ -122,7 +121,7 @@ func IsEnvPassphraseAllowed(cfg *configpkg.Config) bool {
 	if cfg != nil && cfg.Security != nil && cfg.Security.AllowEnvPassphrase {
 		return true
 	}
-	v := envutil.Getenv("SYMVAULT_ALLOW_ENV_PASSPHRASE", "OPENPASS_ALLOW_ENV_PASSPHRASE")
+	v := os.Getenv("SYMVAULT_ALLOW_ENV_PASSPHRASE")
 	return v == "1" || v == "true" || v == "yes"
 }
 
@@ -138,7 +137,7 @@ func envPassphraseIgnored(cfg *configpkg.Config) bool {
 	if HasCachedEnvPassphrase() {
 		return true
 	}
-	return envutil.Getenv("SYMVAULT_PASSPHRASE", "OPENPASS_PASSPHRASE") != ""
+	return os.Getenv("SYMVAULT_PASSPHRASE") != ""
 }
 
 func resolveUnlockPassphrase(vaultDir string, interactive bool, cfg *configpkg.Config) ([]byte, bool, bool, error) {
@@ -163,7 +162,7 @@ func resolveUnlockPassphrase(vaultDir string, interactive bool, cfg *configpkg.C
 				passphrase = cached
 				passphraseFromEnv = true
 				WarnEnvPassphrase()
-			} else if p := envutil.Getenv("SYMVAULT_PASSPHRASE", "OPENPASS_PASSPHRASE"); p != "" {
+			} else if p := os.Getenv("SYMVAULT_PASSPHRASE"); p != "" {
 				passphrase = []byte(p)
 				passphraseFromEnv = true
 				WarnEnvPassphrase()

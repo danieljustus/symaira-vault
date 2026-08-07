@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	openpasscrypto "github.com/danieljustus/symaira-vault/internal/crypto"
+	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 )
 
@@ -1582,7 +1582,7 @@ func TestShareStore_InitSigningKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
-	if !openpasscrypto.IsHMACFormat(g.ID) {
+	if !vaultcrypto.IsHMACFormat(g.ID) {
 		t.Errorf("grant ID %q should be in HMAC format", g.ID)
 	}
 	if g.Nonce == "" {

@@ -8,16 +8,16 @@ func TestScreenReaderMode(t *testing.T) {
 		env  map[string]string
 		want bool
 	}{
-		{"explicit on", map[string]string{"OPENPASS_SCREEN_READER": "1"}, true},
-		{"explicit off overrides nvda", map[string]string{"OPENPASS_SCREEN_READER": "0", "NVDA_SCREEN_READER": "1"}, false},
+		{"explicit on", map[string]string{"SYMVAULT_SCREEN_READER": "1"}, true},
+		{"explicit off overrides nvda", map[string]string{"SYMVAULT_SCREEN_READER": "0", "NVDA_SCREEN_READER": "1"}, false},
 		{"nvda detected", map[string]string{"NVDA_SCREEN_READER": "1"}, true},
 		{"orca detected", map[string]string{"ORCA_RUNNING": "1"}, true},
 		{"unset / default off", map[string]string{}, false},
-		{"yes alias", map[string]string{"OPENPASS_SCREEN_READER": "yes"}, true},
+		{"yes alias", map[string]string{"SYMVAULT_SCREEN_READER": "yes"}, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			for _, k := range []string{"OPENPASS_SCREEN_READER", "NVDA_SCREEN_READER", "ORCA_RUNNING"} {
+			for _, k := range []string{"SYMVAULT_SCREEN_READER", "NVDA_SCREEN_READER", "ORCA_RUNNING"} {
 				t.Setenv(k, "")
 			}
 			for k, v := range tc.env {

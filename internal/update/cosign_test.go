@@ -187,7 +187,7 @@ func TestVerifyCosignSignature_CosignNotFound(t *testing.T) {
 
 func TestCosignIdentityRegexp_MatchesSymairaVault(t *testing.T) {
 	// The regexp must use the correct lowercase-hyphenated repo slug.
-	// Regression test for the OpenPass→Symaira rename where "Symaira Vault"
+	// Regression test for a past project-rename bug where "Symaira Vault"
 	// (with space) was left in the regexp, causing every verification to fail.
 	if strings.Contains(CosignIdentityRegexp, "Symaira Vault") {
 		t.Fatal("CosignIdentityRegexp contains 'Symaira Vault' — must use 'symaira-vault' (lowercase, hyphenated)")

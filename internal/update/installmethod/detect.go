@@ -4,8 +4,7 @@
 //
 // Detection itself is delegated to corekit's generalized installmethod
 // package; this package keeps only the vault-specific guidance text (exact
-// CLI wording, install script URL, legacy openpass→symvault migration
-// instructions).
+// CLI wording, install script URL).
 package installmethod
 
 import (
@@ -73,22 +72,5 @@ func Guidance(method InstallMethod) string {
 		return "Unable to determine installation method. Reinstall from https://github.com/danieljustus/symaira-vault/releases"
 	default:
 		return ""
-	}
-}
-
-// LegacyGuidance returns migration instructions for users moving from the
-// legacy "openpass" binary name to "symvault".
-func LegacyGuidance(method InstallMethod) string {
-	switch method {
-	case Homebrew:
-		return "Migrate via Homebrew:\n  brew update\n  brew upgrade"
-	case DirectDownload:
-		return "Migrate via quick install script:\n  curl -sSfL https://raw.githubusercontent.com/danieljustus/symaira-vault/main/scripts/install.sh | sh"
-	case GoInstall:
-		return "Migrate via Go:\n  go install github.com/danieljustus/symaira-vault@latest"
-	case PackageManager:
-		return "Migrate via your system package manager:\n  # Uninstall the old openpass package\n  # Then install the new symvault package"
-	default:
-		return Guidance(method)
 	}
 }

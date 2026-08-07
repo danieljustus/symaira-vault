@@ -74,7 +74,7 @@ func setPassEnv(t *testing.T, passphrase string) {
 	// explicitly rather than weakening the production default.
 	t.Setenv("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
 	t.Setenv("SYMVAULT_PASSPHRASE", passphrase)
-	t.Setenv("OPENPASS_PASSPHRASE", passphrase)
+	t.Setenv("SYMVAULT_PASSPHRASE", passphrase)
 }
 
 func fakeEditorWithContent(t *testing.T, content string) string {

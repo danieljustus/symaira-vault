@@ -220,7 +220,7 @@ MCP server could in principle alter them. See backlog item O-10.
 - **Mitigations:**
   - Active sessions are capped by a 15-minute TTL.
   - OS-keyring caching is used where available to avoid repeated passphrase entry and decryption.
-  - The `SYMVAULT_PASSPHRASE` (and legacy `OPENPASS_PASSPHRASE`) environment variables are cleared in memory immediately on startup.
+  - The `SYMVAULT_PASSPHRASE` environment variable is cleared in memory immediately on startup.
 
 ---
 
@@ -274,7 +274,7 @@ scale or in a context the user never intended.
   - **Off-hours** (Low) — 22:00–06:00 local time.
 - **Comprehensive audit log.** Every tool call records agent, action,
   path, transport, OK/reason, session ID, request ID, token ID. Logs
-  live at `~/.openpass/audit-<agent>.log` and never contain field values.
+  live at `~/.symvault/audit-<agent>.log` and never contain field values.
 
 **Known limitations:**
 

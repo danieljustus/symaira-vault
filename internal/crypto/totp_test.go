@@ -243,7 +243,7 @@ func TestValidateTOTPSecret_TooShort(t *testing.T) {
 }
 
 func TestValidateTOTPSecret_Exactly16Bytes(t *testing.T) {
-	data := []byte("OpenPass16Bytes!")
+	data := []byte("Symaira16Bytes!!")
 	secret := base32.StdEncoding.EncodeToString(data)
 	if err := ValidateTOTPSecret(secret); err != nil {
 		t.Errorf("ValidateTOTPSecret(%q) = %v; want nil", secret, err)

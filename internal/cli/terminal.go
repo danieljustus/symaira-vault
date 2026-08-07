@@ -10,7 +10,6 @@ import (
 	"github.com/spf13/pflag"
 	"golang.org/x/term"
 
-	"github.com/danieljustus/symaira-vault/internal/envutil"
 	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 )
 
@@ -21,7 +20,7 @@ var IsTerminalFunc func(int) bool = term.IsTerminal
 // printed in this process so we only nag once per invocation.
 var PipeWarningEmitted bool
 
-// EnvPassphraseWarningEmitted tracks whether the OPENPASS_PASSPHRASE env-var
+// EnvPassphraseWarningEmitted tracks whether the SYMVAULT_PASSPHRASE env-var
 // warning has already been printed in this process.
 var EnvPassphraseWarningEmitted bool
 
@@ -29,18 +28,18 @@ func WarnEnvPassphrase() {
 	if EnvPassphraseWarningEmitted || QuietMode {
 		return
 	}
-	if v := envutil.Getenv("SYMVAULT_NO_ENV_WARNING", "OPENPASS_NO_ENV_WARNING"); v != "" && v != "0" {
+	if v := os.Getenv("SYMVAULT_NO_ENV_WARNING"); v != "" && v != "0" {
 		return
 	}
 	EnvPassphraseWarningEmitted = true
-	cliout.Warnf("SYMVAULT_PASSPHRASE or OPENPASS_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.")
+	cliout.Warnf("SYMVAULT_PASSPHRASE is active — environment passphrases are visible in process listings and crash dumps.")
 }
 
 func WarnPipeRead(label string) {
 	if PipeWarningEmitted || QuietMode || NoPipeWarning {
 		return
 	}
-	if v := envutil.Getenv("SYMVAULT_NO_PIPE_WARNING", "OPENPASS_NO_PIPE_WARNING"); v != "" && v != "0" {
+	if v := os.Getenv("SYMVAULT_NO_PIPE_WARNING"); v != "" && v != "0" {
 		return
 	}
 	PipeWarningEmitted = true

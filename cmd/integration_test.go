@@ -17,8 +17,8 @@ import (
 func TestCmdGitPush_NoRemote(t *testing.T) {
 	vaultDir := t.TempDir()
 	vaultFlagReset(t)
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	t.Cleanup(func() { _ = os.Unsetenv("OPENPASS_VAULT") })
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_VAULT") })
 
 	if err := git.Init(vaultDir); err != nil {
 		t.Fatalf("git init: %v", err)
@@ -39,8 +39,8 @@ func TestCmdGitPush_NoRemote(t *testing.T) {
 func TestCmdGitPull_NoRemote(t *testing.T) {
 	vaultDir := t.TempDir()
 	vaultFlagReset(t)
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	t.Cleanup(func() { _ = os.Unsetenv("OPENPASS_VAULT") })
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_VAULT") })
 
 	if err := git.Init(vaultDir); err != nil {
 		t.Fatalf("git init: %v", err)
@@ -79,8 +79,8 @@ func TestCmdGitLog_Success(t *testing.T) {
 		t.Fatalf("auto commit: %v", err)
 	}
 
-	_ = os.Setenv("OPENPASS_PASSPHRASE", passphrase)
-	t.Cleanup(func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") })
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", passphrase)
+	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") })
 
 	rootCmd.SetArgs([]string{"--vault", vaultDir, "git", "log"})
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
@@ -102,8 +102,8 @@ func TestCmdGitUnknownAction(t *testing.T) {
 		t.Fatalf("init vault: %v", err)
 	}
 
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	t.Cleanup(func() { _ = os.Unsetenv("OPENPASS_VAULT") })
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_VAULT") })
 
 	rootCmd.SetArgs([]string{"--vault", vaultDir, "git", "unknown"})
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
@@ -155,7 +155,7 @@ func TestCmdUnlock_CheckExpired(t *testing.T) {
 		t.Fatalf("init vault: %v", err)
 	}
 
-	_ = os.Unsetenv("OPENPASS_PASSPHRASE")
+	_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 	t.Cleanup(func() { _ = unlockCmd.Flags().Set("check", "false") })
 
 	rootCmd.SetArgs([]string{"--vault", vaultDir, "unlock", "--check"})
@@ -208,8 +208,8 @@ func TestLock_ErrorPaths(t *testing.T) {
 	resetVaultState(t)
 	t.Run("uninitialized vault", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		_ = os.Setenv("OPENPASS_VAULT", tmpDir)
-		defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+		_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
+		defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 		rootCmd.SetArgs([]string{"--vault", tmpDir, "lock"})
 		defer rootCmd.SetArgs(nil)
@@ -225,8 +225,8 @@ func TestUnlock_ErrorPaths(t *testing.T) {
 	resetVaultState(t)
 	t.Run("uninitialized vault", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		_ = os.Setenv("OPENPASS_VAULT", tmpDir)
-		defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+		_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
+		defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 		rootCmd.SetArgs([]string{"--vault", tmpDir, "unlock"})
 		defer rootCmd.SetArgs(nil)
@@ -242,11 +242,11 @@ func TestUnlock_ErrorPaths(t *testing.T) {
 		cfg := config.Default()
 		_, _ = vaultpkg.InitWithPassphrase(tmpDir, []byte("test"), cfg)
 
-		_ = os.Setenv("OPENPASS_VAULT", tmpDir)
-		_ = os.Setenv("OPENPASS_PASSPHRASE", "wrong-password")
+		_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
+		_ = os.Setenv("SYMVAULT_PASSPHRASE", "wrong-password")
 		defer func() {
-			_ = os.Unsetenv("OPENPASS_VAULT")
-			_ = os.Unsetenv("OPENPASS_PASSPHRASE")
+			_ = os.Unsetenv("SYMVAULT_VAULT")
+			_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 		}()
 
 		rootCmd.SetArgs([]string{"--vault", tmpDir, "unlock"})

@@ -221,7 +221,6 @@ func cleanEnv() []string {
 	cleaned := make([]string, 0, len(env))
 	skipPrefixes := []string{
 		"SYMVAULT_",
-		"OPENPASS_",
 	}
 	for _, e := range env {
 		skip := false

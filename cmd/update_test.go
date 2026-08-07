@@ -192,11 +192,11 @@ func TestUpdateCheckCommandDoesNotRequireVault(t *testing.T) {
 	})
 
 	originalHome := os.Getenv("HOME")
-	originalVaultEnv := os.Getenv("OPENPASS_VAULT")
+	originalVaultEnv := os.Getenv("SYMVAULT_VAULT")
 	originalVault := vault
 	originalChanged := cli.VaultFlag.Changed
 	_ = os.Unsetenv("HOME")
-	_ = os.Unsetenv("OPENPASS_VAULT")
+	_ = os.Unsetenv("SYMVAULT_VAULT")
 	vault = "~/" + config.DefaultVaultSubdir
 	if cli.VaultFlag != nil {
 		_ = cli.VaultFlag.Value.Set(vault)
@@ -204,7 +204,7 @@ func TestUpdateCheckCommandDoesNotRequireVault(t *testing.T) {
 	}
 	t.Cleanup(func() {
 		_ = os.Setenv("HOME", originalHome)
-		_ = os.Setenv("OPENPASS_VAULT", originalVaultEnv)
+		_ = os.Setenv("SYMVAULT_VAULT", originalVaultEnv)
 		vault = originalVault
 		if cli.VaultFlag != nil {
 			_ = cli.VaultFlag.Value.Set(originalVault)

@@ -272,7 +272,7 @@ func inspectPassphraseSourceFiles(candidates []string) (foundPath string, perm o
 		_ = f.Close()
 		content := string(buf[:n])
 
-		if strings.Contains(content, "SYMVAULT_PASSPHRASE") || strings.Contains(content, "OPENPASS_PASSPHRASE") {
+		if strings.Contains(content, "SYMVAULT_PASSPHRASE") {
 			mode := info.Mode().Perm()
 			isUnsafe := (mode & 0077) != 0
 			return p, mode, isUnsafe
@@ -297,11 +297,6 @@ func checkEnvPassphrase(vaultDir string, _ Options) Result {
 	envPass := os.Getenv("SYMVAULT_PASSPHRASE")
 	if envPass != "" {
 		envVarName = "SYMVAULT_PASSPHRASE"
-	} else {
-		envPass = os.Getenv("OPENPASS_PASSPHRASE")
-		if envPass != "" {
-			envVarName = "OPENPASS_PASSPHRASE"
-		}
 	}
 
 	sourceFile, sourcePerm, hasUnsafePerm := inspectPassphraseSourceFiles(nil)

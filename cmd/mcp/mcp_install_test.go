@@ -10,7 +10,7 @@ import (
 
 func TestBuildHTTPServerConfig_DryRun(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("OPENPASS_VAULT", tmp)
+	t.Setenv("SYMVAULT_VAULT", tmp)
 	regPath := filepath.Join(tmp, "mcp-tokens.json")
 
 	// Seed an existing token so the registry file exists.
@@ -60,7 +60,7 @@ func TestBuildHTTPServerConfig_DryRun(t *testing.T) {
 
 func TestBuildHTTPServerConfig_CreatesToken(t *testing.T) {
 	tmp := t.TempDir()
-	t.Setenv("OPENPASS_VAULT", tmp)
+	t.Setenv("SYMVAULT_VAULT", tmp)
 
 	config, tokenID, err := buildHTTPServerConfig(tmp, "opencode", false)
 	if err != nil {

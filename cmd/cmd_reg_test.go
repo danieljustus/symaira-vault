@@ -269,8 +269,8 @@ func TestUnlockVaultWithEnvVar(t *testing.T) {
 		}
 	}()
 
-	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
-	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+	defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
 
 	vault = vaultDir
 	if cli.VaultFlag != nil {
@@ -302,7 +302,6 @@ func TestUnlockVaultNoPassphrase(t *testing.T) {
 	}()
 
 	_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
-	_ = os.Unsetenv("OPENPASS_PASSPHRASE")
 	vault = vaultDir
 	if cli.VaultFlag != nil {
 		cli.VaultFlag.Changed = false
@@ -332,8 +331,8 @@ func TestUnlockVaultWrongPassphrase(t *testing.T) {
 		}
 	}()
 
-	_ = os.Setenv("OPENPASS_PASSPHRASE", "wrong-passphrase")
-	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", "wrong-passphrase")
+	defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
 
 	vault = vaultDir
 	if cli.VaultFlag != nil {
@@ -346,14 +345,14 @@ func TestUnlockVaultWrongPassphrase(t *testing.T) {
 	}
 }
 
-func TestVaultPathWithEnvVarOpenpassVault(t *testing.T) {
+func TestVaultPathWithEnvVarSymvaultVault(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: path format differs")
 	}
-	origEnv := os.Getenv("OPENPASS_VAULT")
-	defer func() { _ = os.Setenv("OPENPASS_VAULT", origEnv) }()
+	origEnv := os.Getenv("SYMVAULT_VAULT")
+	defer func() { _ = os.Setenv("SYMVAULT_VAULT", origEnv) }()
 
-	_ = os.Setenv("OPENPASS_VAULT", "/test/vault")
+	_ = os.Setenv("SYMVAULT_VAULT", "/test/vault")
 
 	origVault := vault
 	defer func() { vault = origVault }()
@@ -386,8 +385,8 @@ func TestUnlockVaultSavesToKeyring(t *testing.T) {
 		}
 	}()
 
-	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
-	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+	defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
 
 	vault = vaultDir
 	if cli.VaultFlag != nil {
@@ -418,8 +417,8 @@ func TestRecipientsCmd_Add_Success(t *testing.T) {
 		}
 	}()
 
-	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
-	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+	defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
 
 	vault = vaultDir
 	if cli.VaultFlag != nil {
@@ -455,8 +454,8 @@ func TestRecipientsCmd_List_WithRecipients(t *testing.T) {
 		}
 	}()
 
-	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
-	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+	defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
 
 	vault = vaultDir
 	if cli.VaultFlag != nil {
@@ -492,8 +491,8 @@ func TestRecipientsCmd_Remove_Success(t *testing.T) {
 		}
 	}()
 
-	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
-	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+	defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
 
 	vault = vaultDir
 	if cli.VaultFlag != nil {
@@ -525,8 +524,8 @@ func TestGenerateCmd_StoreToExistingEntry(t *testing.T) {
 		}
 	}()
 
-	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
-	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+	defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
 
 	vault = vaultDir
 	if cli.VaultFlag != nil {
@@ -556,8 +555,8 @@ func TestGenerateCmd_StoreNewEntry(t *testing.T) {
 		}
 	}()
 
-	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
-	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+	defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
 
 	vault = vaultDir
 	if cli.VaultFlag != nil {
@@ -595,8 +594,8 @@ func TestOutputHTTPConfigMCP(t *testing.T) {
 		}
 	}()
 
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 	vault = vaultDir
 	if cli.VaultFlag != nil {
@@ -633,8 +632,8 @@ func TestRunHTTPServer(t *testing.T) {
 		}
 	}()
 
-	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
-	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+	defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
 
 	cli.Vault = vaultDir
 	cli.VaultFlag.Changed = true
@@ -674,8 +673,8 @@ func TestRunStdioServer(t *testing.T) {
 		}
 	}()
 
-	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
-	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+	defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
 
 	vault = vaultDir
 	if cli.VaultFlag != nil {

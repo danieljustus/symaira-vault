@@ -149,7 +149,7 @@ func TestPlistXML_RoundTrip(t *testing.T) {
 				}},
 				{Key: "EnvironmentVariables", Dict: &plistDict{
 					Entries: []plistEntry{
-						{Key: "OPENPASS_VAULT", Str: &plistString{Value: "/home/user/.symvault"}},
+						{Key: "SYMVAULT_VAULT", Str: &plistString{Value: "/home/user/.symvault"}},
 					},
 				}},
 				{Key: "RunAtLoad", Tru: &plistTrue{}},

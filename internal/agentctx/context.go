@@ -13,13 +13,11 @@ import (
 
 	"github.com/danieljustus/symaira-vault/internal/audit"
 	"github.com/danieljustus/symaira-vault/internal/config"
-	"github.com/danieljustus/symaira-vault/internal/envutil"
 	mcpErr "github.com/danieljustus/symaira-vault/internal/mcp/errors"
 )
 
 const (
 	envAgentPrimary = "SYMVAULT_AGENT"
-	envAgentLegacy  = "OPENPASS_AGENT"
 
 	tierSafe     = "safe"
 	tierStandard = "standard"
@@ -216,16 +214,16 @@ func (ctx *AgentContext) Profile() *config.AgentProfile {
 	return ctx.profile
 }
 
-// IsAgentMode returns true when the SYMVAULT_AGENT or OPENPASS_AGENT environment
-// variable is set, indicating that the CLI is running in agent (headless) mode.
+// IsAgentMode returns true when the SYMVAULT_AGENT environment variable is
+// set, indicating that the CLI is running in agent (headless) mode.
 func IsAgentMode() bool {
-	return envutil.Getenv(envAgentPrimary, envAgentLegacy) != ""
+	return os.Getenv(envAgentPrimary) != ""
 }
 
-// AgentName returns the agent name from the SYMVAULT_AGENT or OPENPASS_AGENT
-// environment variable. Returns an empty string when not running in agent mode.
+// AgentName returns the agent name from the SYMVAULT_AGENT environment
+// variable. Returns an empty string when not running in agent mode.
 func AgentName() string {
-	return envutil.Getenv(envAgentPrimary, envAgentLegacy)
+	return os.Getenv(envAgentPrimary)
 }
 
 // ---------------------------------------------------------------------------
@@ -272,7 +270,7 @@ func nextTier(current string) string {
 
 // upgradeCommand returns a CLI command hint for upgrading to the given tier.
 func upgradeCommand(tier string) string {
-	name := envutil.Getenv(envAgentPrimary, envAgentLegacy)
+	name := os.Getenv(envAgentPrimary)
 	if name == "" {
 		name = "<agent>"
 	}

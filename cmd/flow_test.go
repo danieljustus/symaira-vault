@@ -66,8 +66,8 @@ func TestCmdSet(t *testing.T) {
 	if _, err := vaultpkg.InitWithPassphrase(vaultDir, passphrase, config.Default()); err != nil {
 		t.Fatalf("init vault: %v", err)
 	}
-	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
-	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+	defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
 
 	origVault := vault
 	origChanged := cli.VaultFlag.Changed
@@ -98,8 +98,8 @@ func TestCmdGet(t *testing.T) {
 	identity, _ := vaultpkg.InitWithPassphrase(vaultDir, passphrase, config.Default())
 	entry := &vaultpkg.Entry{Data: map[string]any{"password": "secret123"}}
 	_ = vaultpkg.WriteEntry(vaultDir, "demo", entry, identity)
-	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
-	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+	defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
 
 	origVault := vault
 	origChanged := cli.VaultFlag.Changed
@@ -126,8 +126,8 @@ func TestCmdList(t *testing.T) {
 	identity, _ := vaultpkg.InitWithPassphrase(vaultDir, passphrase, config.Default())
 	entry := &vaultpkg.Entry{Data: map[string]any{"password": "secret123"}}
 	_ = vaultpkg.WriteEntry(vaultDir, "demo", entry, identity)
-	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
-	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+	defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
 
 	origVault := vault
 	origChanged := cli.VaultFlag.Changed
@@ -154,8 +154,8 @@ func TestCmdFind(t *testing.T) {
 	identity, _ := vaultpkg.InitWithPassphrase(vaultDir, passphrase, config.Default())
 	entry := &vaultpkg.Entry{Data: map[string]any{"password": "secret123"}}
 	_ = vaultpkg.WriteEntry(vaultDir, "demo", entry, identity)
-	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
-	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+	defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
 
 	origVault := vault
 	origChanged := cli.VaultFlag.Changed
@@ -183,8 +183,8 @@ func TestCmdGenerate(t *testing.T) {
 	if _, err := vaultpkg.InitWithPassphrase(vaultDir, passphrase, config.Default()); err != nil {
 		t.Fatalf("init vault: %v", err)
 	}
-	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
-	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+	defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
 
 	origVault := vault
 	origChanged := cli.VaultFlag.Changed
@@ -211,8 +211,8 @@ func TestCmdDelete(t *testing.T) {
 	identity, _ := vaultpkg.InitWithPassphrase(vaultDir, passphrase, config.Default())
 	entry := &vaultpkg.Entry{Data: map[string]any{"password": "secret"}}
 	_ = vaultpkg.WriteEntry(vaultDir, "delme", entry, identity)
-	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
-	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+	defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
 
 	origVault := vault
 	origChanged := cli.VaultFlag.Changed
@@ -253,8 +253,8 @@ func TestCmdAdd(t *testing.T) {
 	if _, err := vaultpkg.InitWithPassphrase(vaultDir, passphrase, config.Default()); err != nil {
 		t.Fatalf("init vault: %v", err)
 	}
-	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
-	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+	defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
 
 	origVault := vault
 	origChanged := cli.VaultFlag.Changed
@@ -289,8 +289,8 @@ func TestCmdUnlock(t *testing.T) {
 	if _, err := vaultpkg.InitWithPassphrase(vaultDir, passphrase, config.Default()); err != nil {
 		t.Fatalf("init vault: %v", err)
 	}
-	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
-	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+	defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
 
 	origVault := vault
 	origChanged := cli.VaultFlag.Changed
@@ -319,8 +319,8 @@ func TestCmdRecipientsAddAndRemove(t *testing.T) {
 	vaultDir := testTempDir(t)
 	passphrase := []byte("correct horse battery staple")
 	identity, _ := vaultpkg.InitWithPassphrase(vaultDir, passphrase, config.Default())
-	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
-	defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+	defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
 
 	origVault := vault
 	origChanged := cli.VaultFlag.Changed
@@ -339,7 +339,7 @@ func TestCmdRecipientsAddAndRemove(t *testing.T) {
 		t.Errorf("recipients add output unexpected: %s", output)
 	}
 
-	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
 	output = execWithStdout("--vault", vaultDir, "recipients", "remove", recipient, "-y")
 	if !strings.Contains(output, "removed") {
 		t.Errorf("recipients remove output unexpected: %s", output)

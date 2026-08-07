@@ -22,7 +22,7 @@ func TestLoadAgentProfile(t *testing.T) {
 		t.Fatalf("save config error: %v", err)
 	}
 
-	t.Setenv("OPENPASS_VAULT", vaultDir)
+	t.Setenv("SYMVAULT_VAULT", vaultDir)
 
 	profile, err := loadAgentProfile("test-agent")
 	if err != nil {
@@ -49,7 +49,7 @@ func TestLoadAgentProfile_NotFound(t *testing.T) {
 		t.Fatalf("save config error: %v", err)
 	}
 
-	t.Setenv("OPENPASS_VAULT", vaultDir)
+	t.Setenv("SYMVAULT_VAULT", vaultDir)
 
 	_, err := loadAgentProfile("nonexistent")
 	if err == nil {
@@ -60,7 +60,7 @@ func TestLoadAgentProfile_NotFound(t *testing.T) {
 func TestLoadAgentProfile_MissingConfig(t *testing.T) {
 	vaultDir := t.TempDir()
 
-	t.Setenv("OPENPASS_VAULT", vaultDir)
+	t.Setenv("SYMVAULT_VAULT", vaultDir)
 
 	_, err := loadAgentProfile("test-agent")
 	if err == nil {

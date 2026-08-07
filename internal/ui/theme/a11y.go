@@ -15,9 +15,6 @@ import "os"
 //	(unset)                    auto: check NVDA_SCREEN_READER, ORCA_RUNNING
 func ScreenReaderMode() bool {
 	v := os.Getenv("SYMVAULT_SCREEN_READER")
-	if v == "" {
-		v = os.Getenv("OPENPASS_SCREEN_READER")
-	}
 	switch v {
 	case "1", "true", "yes":
 		return true

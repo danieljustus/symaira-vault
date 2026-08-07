@@ -134,7 +134,7 @@ Use `--mapping` when your CSV headers use different names:
 symvault import csv export.csv --mapping "title=path,username=user,password=pass"
 ```
 
-The mapping format is a comma-separated list of `openpass_field=csv_column` pairs.
+The mapping format is a comma-separated list of `entry_field=csv_column` pairs.
 
 ### Browser Exports (Apple Passwords, Chrome, Firefox)
 
@@ -260,7 +260,7 @@ symvault import pass ~/.password-store
 
 ### Invalid Mapping Format
 
-CSV mappings must use comma-separated `openpass_field=csv_column` pairs:
+CSV mappings must use comma-separated `entry_field=csv_column` pairs:
 
 ```bash
 symvault import csv export.csv --mapping "title=path,username=user,password=pass"

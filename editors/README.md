@@ -18,7 +18,7 @@ All editor plugins communicate with `symvault serve` via HTTP JSON-RPC 2.0 MCP p
 Editor Plugin <-> HTTP POST 127.0.0.1:8080/mcp <-> Symaira Vault MCP Server
 ```
 
-Authentication uses the bearer token from `~/.openpass/mcp-token`.
+Authentication uses the bearer token from `~/.symvault/mcp-token`.
 
 ## Quick Start
 

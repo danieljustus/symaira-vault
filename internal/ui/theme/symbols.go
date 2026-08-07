@@ -14,7 +14,7 @@ var (
 )
 
 // ASCII fallbacks used when terminal capability detection reports ASCIIOnly
-// (LANG=C, OPENPASS_ASCII=1, or non-UTF-8 locale).
+// (LANG=C, SYMVAULT_ASCII=1, or non-UTF-8 locale).
 const (
 	asciiSuccess = "[OK]"
 	asciiWarning = "[!]"

@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
-	"github.com/danieljustus/symaira-vault/internal/envutil"
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 )
 
@@ -20,7 +19,7 @@ func VaultPath() (string, error) {
 		return p, nil
 	}
 
-	if envVault := strings.TrimSpace(envutil.Getenv("SYMVAULT_VAULT", "OPENPASS_VAULT")); envVault != "" {
+	if envVault := strings.TrimSpace(os.Getenv("SYMVAULT_VAULT")); envVault != "" {
 		p, err := ExpandVaultDir(envVault)
 		if err != nil {
 			return "", errorspkg.NewCLIError(errorspkg.ExitGeneralError, "expand vault path", err)
@@ -39,7 +38,7 @@ func VaultPath() (string, error) {
 		}
 	}
 
-	if envProfile := strings.TrimSpace(envutil.Getenv("SYMVAULT_PROFILE", "OPENPASS_PROFILE")); envProfile != "" {
+	if envProfile := strings.TrimSpace(os.Getenv("SYMVAULT_PROFILE")); envProfile != "" {
 		p, err := resolveProfileVaultDir(envProfile)
 		if err != nil {
 			return "", errorspkg.NewCLIError(errorspkg.ExitGeneralError, "resolve profile", err)
@@ -58,16 +57,6 @@ func VaultPath() (string, error) {
 	}
 
 	if isDefaultVaultFlagValue(Vault) {
-		// .openpass → .symvault migration detection (kept for backward compat).
-		home, homeErr := os.UserHomeDir()
-		if homeErr == nil {
-			legacyVault := filepath.Join(home, configpkg.LegacyDefaultVaultSubdir)
-			newVault := filepath.Join(home, configpkg.LegacyVaultSubdir)
-			if vaultExists(legacyVault) && !vaultExists(newVault) {
-				return legacyVault, nil
-			}
-		}
-
 		// .symvault → XDG: PathResolver already resolved the correct data dir
 		// based on which directories exist (legacy vs XDG).
 		if r.DataDir != "" {
@@ -85,15 +74,6 @@ func VaultPath() (string, error) {
 func isDefaultVaultFlagValue(vaultDir string) bool {
 	trimmed := strings.TrimSpace(vaultDir)
 	return trimmed == "" || trimmed == "~/"+configpkg.DefaultVaultSubdir
-}
-
-func vaultExists(vaultDir string) bool {
-	return fileExists(filepath.Join(vaultDir, "config.yaml")) || fileExists(filepath.Join(vaultDir, "identity.age"))
-}
-
-func fileExists(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && !info.IsDir()
 }
 
 func resolveProfileVaultDir(profileName string) (string, error) {

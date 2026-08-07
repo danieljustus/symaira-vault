@@ -19,7 +19,7 @@ Assume a user who:
 
 2. **Suggest the next action when one is obvious.**
    - Bad: `vault locked`
-   - Good: `Vault is locked. Run 'symvault unlock' or set OPENPASS_PASSPHRASE.`
+   - Good: `Vault is locked. Run 'symvault unlock' or set SYMVAULT_PASSPHRASE.`
 
 3. **Quote commands so they're copyable.**
    - Bad: `try symvault init first`

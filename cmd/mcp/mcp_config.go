@@ -209,7 +209,7 @@ func OutputHTTPConfig(agentName, serverName string, redact bool, tokenID string)
 
 	authValue := httpCfg.Header["Authorization"]
 	if redact {
-		authValue = "env:OPENPASS_MCP_TOKEN" //nolint:goconst // Redaction placeholder string
+		authValue = "env:SYMVAULT_MCP_TOKEN" //nolint:goconst // Redaction placeholder string
 	}
 
 	config := map[string]any{
@@ -236,7 +236,7 @@ func OutputHermesHTTPConfig(agentName, serverName string, redact bool, tokenID s
 
 	authValue := httpCfg.Header["Authorization"]
 	if redact {
-		authValue = "env:OPENPASS_MCP_TOKEN" //nolint:goconst // Redaction placeholder string
+		authValue = "env:SYMVAULT_MCP_TOKEN" //nolint:goconst // Redaction placeholder string
 	}
 
 	headers := map[string]string{
@@ -286,7 +286,7 @@ func OutputAgentStdioConfig(agentName, serverKey string) error {
 // OutputAgentHTTPConfig outputs YAML HTTP config for agent-specific formats.
 // serverKey is the key name in mcp_servers.
 // agentName is passed to symvault serve and X-Symaira-Agent header.
-// redact outputs env:OPENPASS_MCP_TOKEN instead of the actual token.
+// redact outputs env:SYMVAULT_MCP_TOKEN instead of the actual token.
 //
 // Verification: symvault mcp-config claude-code --http --format claude-code | paste into Claude Desktop config
 // Then verify: curl -H "Authorization: Bearer $(cat ~/.symvault/mcp-token)" http://127.0.0.1:8080/mcp
@@ -298,7 +298,7 @@ func OutputAgentHTTPConfig(agentName, serverKey, displayName string, redact bool
 
 	authValue := httpCfg.Header["Authorization"]
 	if redact {
-		authValue = "env:OPENPASS_MCP_TOKEN" //nolint:goconst // Redaction placeholder string
+		authValue = "env:SYMVAULT_MCP_TOKEN" //nolint:goconst // Redaction placeholder string
 	}
 
 	headers := map[string]string{

@@ -39,31 +39,6 @@ func TestLoadOrCreateTokenCreatesFile(t *testing.T) {
 	}
 }
 
-func TestLoadOrCreateTokenRespectsEnvVar(t *testing.T) {
-	t.Setenv("OPENPASS_MCP_TOKEN", "my-custom-token")
-
-	token, err := LoadOrCreateToken("/nonexistent/path")
-	if err != nil {
-		t.Fatalf("LoadOrCreateToken() error = %v", err)
-	}
-	if token != "my-custom-token" {
-		t.Fatalf("token = %q, want %q", token, "my-custom-token")
-	}
-}
-
-func TestLoadOrCreateTokenUnsetsEnvVar(t *testing.T) {
-	t.Setenv("OPENPASS_MCP_TOKEN", "my-custom-token")
-
-	_, err := LoadOrCreateToken("/nonexistent/path")
-	if err != nil {
-		t.Fatalf("LoadOrCreateToken() error = %v", err)
-	}
-
-	if os.Getenv("OPENPASS_MCP_TOKEN") != "" {
-		t.Fatalf("OPENPASS_MCP_TOKEN was not unset after reading")
-	}
-}
-
 func TestLoadOrCreateTokenFilePermissions(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: file permissions differ")
@@ -110,43 +85,6 @@ func TestLoadOrCreateToken_WhitespaceFile_GeneratesNewToken(t *testing.T) {
 	}
 }
 
-func TestLoadOrCreateToken_FileTokenIgnoresEnv(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "mcp-token")
-
-	if err := os.WriteFile(path, []byte("file-token\n"), 0o600); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
-
-	t.Setenv("OPENPASS_MCP_TOKEN", "env-token")
-
-	oldStderr := os.Stderr
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("os.Pipe() error = %v", err)
-	}
-	os.Stderr = w
-
-	token, err := LoadOrCreateToken(path)
-
-	os.Stderr = oldStderr
-	_ = w.Close()
-
-	var buf bytes.Buffer
-	_, _ = buf.ReadFrom(r)
-
-	if err != nil {
-		t.Fatalf("LoadOrCreateToken() error = %v", err)
-	}
-	if token != "file-token" {
-		t.Fatalf("token = %q, want %q", token, "file-token")
-	}
-	if !bytes.Contains(buf.Bytes(), []byte("OPENPASS_MCP_TOKEN is set")) &&
-		!bytes.Contains(buf.Bytes(), []byte("SYMVAULT_MCP_TOKEN is set")) {
-		t.Fatalf("expected stderr warning, got %q", buf.String())
-	}
-}
-
 func TestLoadOrCreateToken_RandError(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "mcp-token")
@@ -162,7 +100,7 @@ func TestLoadOrCreateToken_RandError(t *testing.T) {
 }
 
 func TestLoadOrCreateToken_WriteFileError(t *testing.T) {
-	t.Setenv("OPENPASS_MCP_TOKEN", "")
+	t.Setenv("SYMVAULT_MCP_TOKEN", "")
 	path := filepath.Join("/nonexistent-dir-symvault-test", "mcp-token")
 	_, err := LoadOrCreateToken(path)
 	if err == nil {
@@ -1406,20 +1344,6 @@ func TestLoadOrCreateTokenUnsetsEnvVar_Symvault(t *testing.T) {
 	}
 }
 
-func TestLoadOrCreateToken_SymvaultPrecedence(t *testing.T) {
-	// SYMVAULT_MCP_TOKEN should take precedence over OPENPASS_MCP_TOKEN
-	t.Setenv("SYMVAULT_MCP_TOKEN", "symvault-token")
-	t.Setenv("OPENPASS_MCP_TOKEN", "openpass-token")
-
-	token, err := LoadOrCreateToken("/nonexistent/path")
-	if err != nil {
-		t.Fatalf("LoadOrCreateToken() error = %v", err)
-	}
-	if token != "symvault-token" {
-		t.Fatalf("token = %q, want %q (SYMVAULT_ should win)", token, "symvault-token")
-	}
-}
-
 func TestLoadOrCreateToken_FileTokenIgnoresEnv_Symvault(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "mcp-token")
@@ -1451,8 +1375,7 @@ func TestLoadOrCreateToken_FileTokenIgnoresEnv_Symvault(t *testing.T) {
 	if token != "file-token" {
 		t.Fatalf("token = %q, want %q", token, "file-token")
 	}
-	if !bytes.Contains(buf.Bytes(), []byte("Warning: SYMVAULT_MCP_TOKEN")) &&
-		!bytes.Contains(buf.Bytes(), []byte("Warning: OPENPASS_MCP_TOKEN")) {
+	if !bytes.Contains(buf.Bytes(), []byte("Warning: SYMVAULT_MCP_TOKEN")) {
 		t.Fatalf("expected stderr warning, got %q", buf.String())
 	}
 }

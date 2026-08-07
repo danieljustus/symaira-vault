@@ -4,6 +4,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
@@ -12,7 +13,6 @@ import (
 
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	cryptopkg "github.com/danieljustus/symaira-vault/internal/crypto"
-	"github.com/danieljustus/symaira-vault/internal/envutil"
 	"github.com/danieljustus/symaira-vault/internal/session"
 	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
@@ -177,9 +177,9 @@ func passphraseForBiometricSetup(vaultDir string) ([]byte, error) {
 		return passphrase, nil
 	}
 
-	if envPass := envutil.Getenv("SYMVAULT_PASSPHRASE", "OPENPASS_PASSPHRASE"); envPass != "" {
+	if envPass := os.Getenv("SYMVAULT_PASSPHRASE"); envPass != "" {
 		passphrase := []byte(envPass)
-		envutil.Unsetenv("SYMVAULT_PASSPHRASE", "OPENPASS_PASSPHRASE")
+		_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 		if _, err := vaultpkg.OpenWithPassphrase(vaultDir, passphrase); err != nil {
 			return nil, fmt.Errorf("open vault: %w", err)
 		}

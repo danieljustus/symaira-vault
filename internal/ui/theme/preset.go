@@ -8,8 +8,7 @@ import (
 )
 
 // Preset names a built-in color palette. Selection happens via the
-// SYMVAULT_THEME env var (or OPENPASS_THEME for backwards compatibility)
-// or the global --theme flag (forwarded by cmd).
+// SYMVAULT_THEME env var or the global --theme flag (forwarded by cmd).
 type Preset int
 
 const (
@@ -90,13 +89,9 @@ func rebuildStyles() {
 		Bold(true)
 }
 
-// ApplyPresetFromEnv reads SYMVAULT_THEME (or OPENPASS_THEME as fallback)
-// and applies the matching preset.
+// ApplyPresetFromEnv reads SYMVAULT_THEME and applies the matching preset.
 func ApplyPresetFromEnv() {
 	v := os.Getenv("SYMVAULT_THEME")
-	if v == "" {
-		v = os.Getenv("OPENPASS_THEME")
-	}
 	if v == "" {
 		return
 	}

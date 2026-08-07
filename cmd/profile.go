@@ -145,7 +145,7 @@ func newProfileUseCmd() *cobra.Command {
 	profileUseCmd := &cobra.Command{
 		Use:   "use <name>",
 		Short: "Set the default profile",
-		Long: `Set the default profile to use when no --vault or OPENPASS_VAULT is specified.
+		Long: `Set the default profile to use when no --vault or SYMVAULT_VAULT is specified.
 
 Example:
   symvault profile use work`,

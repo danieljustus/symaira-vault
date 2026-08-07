@@ -99,7 +99,7 @@ func setupTestVault(t *testing.T) (string, []byte) {
 	t.Setenv("SYMVAULT_VAULT", vaultDir)
 	t.Setenv("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
 	t.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
-	t.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
+	t.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
 	return vaultDir, passphrase
 }
 

@@ -182,8 +182,8 @@ func TestDelete_ErrorPaths(t *testing.T) {
 	resetVaultState(t)
 	t.Run("uninitialized vault", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		_ = os.Setenv("OPENPASS_VAULT", tmpDir)
-		defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+		_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
+		defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 		rootCmd.SetArgs([]string{"--vault", tmpDir, "delete", "test"})
 		defer rootCmd.SetArgs(nil)
@@ -196,13 +196,13 @@ func TestDelete_ErrorPaths(t *testing.T) {
 
 	t.Run("delete canceled", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		_ = os.Setenv("OPENPASS_VAULT", tmpDir)
-		defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+		_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
+		defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 		cfg := config.Default()
 		_, _ = vaultpkg.InitWithPassphrase(tmpDir, []byte("test"), cfg)
-		_ = os.Setenv("OPENPASS_PASSPHRASE", "test")
-		defer func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") }()
+		_ = os.Setenv("SYMVAULT_PASSPHRASE", "test")
+		defer func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") }()
 
 		oldStdin := os.Stdin
 		r, w, _ := os.Pipe()

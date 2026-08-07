@@ -77,8 +77,8 @@ func reserveFreePortForBind(t *testing.T, bind string) int {
 func newTestVault(t *testing.T) *vaultpkg.Vault {
 	t.Helper()
 	tmpDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", tmpDir)
-	_ = os.Unsetenv("OPENPASS_PASSPHRASE")
+	_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
+	_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 	if cli.VaultFlag != nil {
 		cli.VaultFlag.Changed = false
 	}
@@ -959,8 +959,8 @@ func TestRunHTTPServer_HealthEndpoint_NonLoopback(t *testing.T) {
 func TestCmdServe_EmptyBind(t *testing.T) {
 	vaultDir := t.TempDir()
 	vaultFlagReset(t)
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	t.Cleanup(func() { _ = os.Unsetenv("OPENPASS_VAULT") })
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_VAULT") })
 
 	t.Cleanup(func() {
 		_ = mcpcmd.ServeCmd.Flags().Set("bind", "127.0.0.1")
@@ -986,8 +986,8 @@ func TestCmdServe_EmptyBind(t *testing.T) {
 func TestCmdServe_MissingAgentInStdioMode(t *testing.T) {
 	vaultDir := t.TempDir()
 	vaultFlagReset(t)
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	t.Cleanup(func() { _ = os.Unsetenv("OPENPASS_VAULT") })
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_VAULT") })
 
 	t.Cleanup(func() {
 		_ = mcpcmd.ServeCmd.Flags().Set("bind", "127.0.0.1")
@@ -1136,8 +1136,8 @@ func TestServe_ErrorPaths(t *testing.T) {
 	resetVaultState(t)
 	t.Run("uninitialized vault", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		_ = os.Setenv("OPENPASS_VAULT", tmpDir)
-		defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+		_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
+		defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 		rootCmd.SetArgs([]string{"--vault", tmpDir, "serve", "--port", "0"})
 		defer rootCmd.SetArgs(nil)
@@ -1153,11 +1153,11 @@ func TestServe_ErrorPaths(t *testing.T) {
 		cfg := config.Default()
 		_, _ = vaultpkg.InitWithPassphrase(tmpDir, []byte("test"), cfg)
 
-		_ = os.Setenv("OPENPASS_VAULT", tmpDir)
-		_ = os.Setenv("OPENPASS_PASSPHRASE", "test")
+		_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
+		_ = os.Setenv("SYMVAULT_PASSPHRASE", "test")
 		defer func() {
-			_ = os.Unsetenv("OPENPASS_VAULT")
-			_ = os.Unsetenv("OPENPASS_PASSPHRASE")
+			_ = os.Unsetenv("SYMVAULT_VAULT")
+			_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 		}()
 
 		rootCmd.SetArgs([]string{"--vault", tmpDir, "serve", "--stdio"})
@@ -1174,11 +1174,11 @@ func TestServe_ErrorPaths(t *testing.T) {
 		cfg := config.Default()
 		_, _ = vaultpkg.InitWithPassphrase(tmpDir, []byte("test"), cfg)
 
-		_ = os.Setenv("OPENPASS_VAULT", tmpDir)
-		_ = os.Setenv("OPENPASS_PASSPHRASE", "test")
+		_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
+		_ = os.Setenv("SYMVAULT_PASSPHRASE", "test")
 		defer func() {
-			_ = os.Unsetenv("OPENPASS_VAULT")
-			_ = os.Unsetenv("OPENPASS_PASSPHRASE")
+			_ = os.Unsetenv("SYMVAULT_VAULT")
+			_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 		}()
 
 		rootCmd.SetArgs([]string{"--vault", tmpDir, "serve", "--bind", ""})
@@ -1198,11 +1198,11 @@ func TestServe_HTTPSignalShutdown(t *testing.T) {
 	resetVaultState(t)
 
 	tmpDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", tmpDir)
-	_ = os.Setenv("OPENPASS_PASSPHRASE", "test")
+	_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", "test")
 	defer func() {
-		_ = os.Unsetenv("OPENPASS_VAULT")
-		_ = os.Unsetenv("OPENPASS_PASSPHRASE")
+		_ = os.Unsetenv("SYMVAULT_VAULT")
+		_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 	}()
 
 	cfg := config.Default()
@@ -1510,11 +1510,11 @@ func TestServe_StdioError(t *testing.T) {
 	resetVaultState(t)
 
 	tmpDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", tmpDir)
-	_ = os.Setenv("OPENPASS_PASSPHRASE", "test")
+	_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", "test")
 	defer func() {
-		_ = os.Unsetenv("OPENPASS_VAULT")
-		_ = os.Unsetenv("OPENPASS_PASSPHRASE")
+		_ = os.Unsetenv("SYMVAULT_VAULT")
+		_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 	}()
 
 	cfg := config.Default()

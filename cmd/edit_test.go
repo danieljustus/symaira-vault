@@ -229,7 +229,7 @@ func TestEdit_ErrorPaths(t *testing.T) {
 			name: "uninitialized vault",
 			setupFunc: func() string {
 				tmpDir := t.TempDir()
-				_ = os.Setenv("OPENPASS_VAULT", tmpDir)
+				_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
 				return tmpDir
 			},
 			errContain: "not initialized",
@@ -238,10 +238,10 @@ func TestEdit_ErrorPaths(t *testing.T) {
 			name: "entry not found",
 			setupFunc: func() string {
 				tmpDir := t.TempDir()
-				_ = os.Setenv("OPENPASS_VAULT", tmpDir)
+				_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
 				cfg := config.Default()
 				_, _ = vaultpkg.InitWithPassphrase(tmpDir, []byte("test"), cfg)
-				_ = os.Setenv("OPENPASS_PASSPHRASE", "test")
+				_ = os.Setenv("SYMVAULT_PASSPHRASE", "test")
 				return tmpDir
 			},
 			errContain: "not found",
@@ -250,8 +250,8 @@ func TestEdit_ErrorPaths(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_ = os.Unsetenv("OPENPASS_VAULT")
-			_ = os.Unsetenv("OPENPASS_PASSPHRASE")
+			_ = os.Unsetenv("SYMVAULT_VAULT")
+			_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 			vault = ""
 			if cli.VaultFlag != nil {
 				_ = cli.VaultFlag.Value.Set("")

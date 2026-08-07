@@ -189,7 +189,6 @@ func TestUnlockVaultWithTTL_EnvPassphraseSetButGateDisabled(t *testing.T) {
 
 	// Isolate from ambient environments where the gate may be enabled.
 	t.Setenv("SYMVAULT_ALLOW_ENV_PASSPHRASE", "")
-	t.Setenv("OPENPASS_ALLOW_ENV_PASSPHRASE", "")
 
 	// Env passphrase is available but the opt-in gate is NOT enabled.
 	SetCachedEnvPassphrase(append([]byte(nil), passphrase...))
@@ -223,7 +222,6 @@ func TestEnvPassphraseIgnored(t *testing.T) {
 	t.Cleanup(ClearCachedEnvPassphrase)
 	// Isolate from ambient developer/CI environments where the gate may be enabled.
 	t.Setenv("SYMVAULT_ALLOW_ENV_PASSPHRASE", "")
-	t.Setenv("OPENPASS_ALLOW_ENV_PASSPHRASE", "")
 
 	// Nothing set: not "ignored", simply absent.
 	if envPassphraseIgnored(configpkg.Default()) {

@@ -172,7 +172,7 @@ func outputAgentMCPSnippet(name, rawToken string) {
 				"command": "symvault",
 				"args":    args,
 				"env": map[string]string{
-					"OPENPASS_MCP_TOKEN": rawToken,
+					"SYMVAULT_MCP_TOKEN": rawToken,
 				},
 			},
 		},

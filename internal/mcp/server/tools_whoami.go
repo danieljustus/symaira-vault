@@ -50,7 +50,7 @@ type whoamiVault struct {
 
 type whoamiInfo struct {
 	Agent           string        `json:"agent"`
-	OpenPassVersion string        `json:"symaira_version"`
+	SymairaVersion  string        `json:"symaira_version"`
 	Profile         whoamiProfile `json:"profile"`
 	Tools           whoamiTools   `json:"tools"`
 	Quotas          whoamiQuotas  `json:"quotas"`
@@ -103,8 +103,8 @@ func (s *Server) handleWhoami(ctx context.Context, req mcp.CallToolRequest) (*mc
 	}
 
 	info := whoamiInfo{
-		Agent:           s.agent.Name,
-		OpenPassVersion: defaultServerVersion,
+		Agent:          s.agent.Name,
+		SymairaVersion: defaultServerVersion,
 		Profile: whoamiProfile{
 			Name:            s.agent.Name,
 			Tier:            tier,

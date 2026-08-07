@@ -504,7 +504,7 @@ Vaults created with the older root-level entry layout are migrated to `entries/`
 
 7. **Own config layer instead of `corekit/configkit` (deliberate deviation):**
    `internal/config/` (~8k lines) is domain-specific: XDG paths plus legacy
-   migration (`.symvault`/`.openpass`), `config.yaml` (YAML), auth methods
+   migration (`.symvault`), `config.yaml` (YAML), auth methods
    (passphrase/Touch ID), session TTL, validation and agent configuration.
    `corekit/configkit` v0.6.0 is a generic TOML loader with env-var overrides
    and a different file layout; adopting it would be a breaking config

@@ -16,7 +16,6 @@ import (
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 	updatepkg "github.com/danieljustus/symaira-vault/internal/update"
-	"github.com/danieljustus/symaira-vault/internal/update/installmethod"
 )
 
 type UpdateChecker interface {
@@ -167,13 +166,12 @@ func newUpdateCheckCmd() *cobra.Command {
 }
 
 type updateApplyJSONOutput struct {
-	Method            string `json:"method"`
-	OldVersion        string `json:"old_version"`
-	NewVersion        string `json:"new_version"`
-	BackupPath        string `json:"backup_path,omitempty"`
-	BinaryPath        string `json:"binary_path"`
-	DryRun            bool   `json:"dry_run"`
-	LegacySymlinkPath string `json:"legacy_symlink_path,omitempty"`
+	Method     string `json:"method"`
+	OldVersion string `json:"old_version"`
+	NewVersion string `json:"new_version"`
+	BackupPath string `json:"backup_path,omitempty"`
+	BinaryPath string `json:"binary_path"`
+	DryRun     bool   `json:"dry_run"`
 }
 
 type updateInfoJSONOutput struct {
@@ -181,7 +179,6 @@ type updateInfoJSONOutput struct {
 	BinaryPath          string `json:"binary_path"`
 	SelfUpdateSupported bool   `json:"self_update_supported"`
 	Guidance            string `json:"guidance"`
-	IsLegacyBinary      bool   `json:"is_legacy_binary"`
 }
 
 func newUpdateApplyCmd() *cobra.Command {
@@ -238,22 +235,11 @@ or a package manager, self-update is disabled and guidance is shown instead.`,
 				return nil
 			}
 
-			info, err := updatepkg.Info()
-			if err == nil && info.IsLegacyBinary {
-				cmd.PrintErrln("Warning: You are running the legacy 'openpass' binary.")
-				cmd.PrintErrln("This will be updated to 'symvault' and a compatibility symlink will be created.")
-				cmd.PrintErrln("Consider updating your scripts and aliases to use 'symvault' instead.")
-				cmd.PrintErrln()
-			}
-
 			applyResult, err := updatepkg.Apply(cmd.Context(), cli.AppVersion, UpdateApplyForce, false)
 			if err != nil {
 				var unsupported *updatepkg.ErrUnsupportedMethod
 				if errors.As(err, &unsupported) {
 					guidance := unsupported.Guidance
-					if info.IsLegacyBinary {
-						guidance = installmethod.LegacyGuidance(info.Method)
-					}
 					if cli.WantJSONOutput(updateApplyJSON) {
 						encoder := json.NewEncoder(cmd.OutOrStdout())
 						encoder.SetIndent("", "  ")
@@ -274,12 +260,11 @@ or a package manager, self-update is disabled and guidance is shown instead.`,
 
 			if cli.WantJSONOutput(updateApplyJSON) {
 				output := updateApplyJSONOutput{
-					Method:            string(applyResult.Method),
-					OldVersion:        applyResult.OldVersion,
-					NewVersion:        applyResult.NewVersion,
-					BackupPath:        applyResult.BackupPath,
-					BinaryPath:        applyResult.BinaryPath,
-					LegacySymlinkPath: applyResult.LegacySymlinkPath,
+					Method:     string(applyResult.Method),
+					OldVersion: applyResult.OldVersion,
+					NewVersion: applyResult.NewVersion,
+					BackupPath: applyResult.BackupPath,
+					BinaryPath: applyResult.BinaryPath,
 				}
 				encoder := json.NewEncoder(cmd.OutOrStdout())
 				encoder.SetIndent("", "  ")
@@ -299,10 +284,6 @@ or a package manager, self-update is disabled and guidance is shown instead.`,
 			cmd.Printf("Binary: %s\n", applyResult.BinaryPath)
 			if applyResult.BackupPath != "" {
 				cmd.Printf("Backup saved to: %s\n", applyResult.BackupPath)
-			}
-			if applyResult.LegacySymlinkPath != "" {
-				cmd.Printf("Legacy symlink created: %s\n", applyResult.LegacySymlinkPath)
-				cmd.Printf("You can still use 'openpass' during the transition period.\n")
 			}
 			return nil
 		},
@@ -337,7 +318,6 @@ is supported, along with upgrade guidance for the detected method.`,
 					BinaryPath:          info.BinaryPath,
 					SelfUpdateSupported: info.SelfUpdateSupported,
 					Guidance:            info.Guidance,
-					IsLegacyBinary:      info.IsLegacyBinary,
 				}
 				encoder := json.NewEncoder(cmd.OutOrStdout())
 				encoder.SetIndent("", "  ")
@@ -353,9 +333,6 @@ is supported, along with upgrade guidance for the detected method.`,
 				cmd.Println("Self-update: supported")
 			} else {
 				cmd.Println("Self-update: not supported")
-			}
-			if info.IsLegacyBinary {
-				cmd.Println("Binary: legacy (openpass)")
 			}
 			cmd.Printf("Guidance: %s\n", info.Guidance)
 			return nil

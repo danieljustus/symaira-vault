@@ -26,7 +26,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	_ = os.Unsetenv("OPENPASS_MCP_TOKEN")
+	_ = os.Unsetenv("SYMVAULT_MCP_TOKEN")
 	// Command fixtures use synthetic passphrases non-interactively. This is
 	// test-process only; production remains default-deny.
 	_ = os.Setenv("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
@@ -122,8 +122,8 @@ func resetCobraCommandSeen(cmd *cobra.Command, seen map[*pflag.Flag]bool) {
 }
 
 func resetCommandEnv() {
-	_ = os.Unsetenv("OPENPASS_VAULT")
-	_ = os.Unsetenv("OPENPASS_PASSPHRASE")
+	_ = os.Unsetenv("SYMVAULT_VAULT")
+	_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 }
 
 func parseStringSliceDefault(defValue string) []string {

@@ -332,7 +332,7 @@ func TestAdd_ErrorPaths(t *testing.T) {
 			name: "uninitialized vault",
 			setupFunc: func() {
 				tmpDir := t.TempDir()
-				_ = os.Setenv("OPENPASS_VAULT", tmpDir)
+				_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
 			},
 			args:       []string{"--vault", os.TempDir() + "/nonexistent", "add", "test"},
 			wantErr:    true,
@@ -342,10 +342,10 @@ func TestAdd_ErrorPaths(t *testing.T) {
 			name: "entry already exists",
 			setupFunc: func() {
 				tmpDir := t.TempDir()
-				_ = os.Setenv("OPENPASS_VAULT", tmpDir)
+				_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
 				cfg := config.Default()
 				identity, _ := vaultpkg.InitWithPassphrase(tmpDir, []byte("testpass"), cfg)
-				_ = os.Setenv("OPENPASS_PASSPHRASE", "testpass")
+				_ = os.Setenv("SYMVAULT_PASSPHRASE", "testpass")
 				_ = vaultpkg.WriteEntry(tmpDir, "existing", &vaultpkg.Entry{Data: map[string]any{"password": "secret"}}, identity)
 			},
 			args:       []string{"add", "existing", "--value", "new"},
@@ -356,8 +356,8 @@ func TestAdd_ErrorPaths(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_ = os.Unsetenv("OPENPASS_VAULT")
-			_ = os.Unsetenv("OPENPASS_PASSPHRASE")
+			_ = os.Unsetenv("SYMVAULT_VAULT")
+			_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 
 			if tt.setupFunc != nil {
 				tt.setupFunc()
@@ -390,11 +390,11 @@ func TestAdd_InteractiveMode(t *testing.T) {
 	resetVaultState(t)
 
 	tmpDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", tmpDir)
-	_ = os.Setenv("OPENPASS_PASSPHRASE", "test")
+	_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", "test")
 	defer func() {
-		_ = os.Unsetenv("OPENPASS_VAULT")
-		_ = os.Unsetenv("OPENPASS_PASSPHRASE")
+		_ = os.Unsetenv("SYMVAULT_VAULT")
+		_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 	}()
 
 	cfg := config.Default()
@@ -455,11 +455,11 @@ func TestAdd_InteractiveReadErrors(t *testing.T) {
 	resetVaultState(t)
 
 	tmpDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", tmpDir)
-	_ = os.Setenv("OPENPASS_PASSPHRASE", "test")
+	_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", "test")
 	defer func() {
-		_ = os.Unsetenv("OPENPASS_VAULT")
-		_ = os.Unsetenv("OPENPASS_PASSPHRASE")
+		_ = os.Unsetenv("SYMVAULT_VAULT")
+		_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 	}()
 
 	cfg := config.Default()

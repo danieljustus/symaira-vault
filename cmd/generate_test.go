@@ -91,8 +91,8 @@ func TestCmdGenerate_StoreExisting(t *testing.T) {
 	origGenLength := genLength
 	t.Cleanup(func() { genStore = origGenStore; genLength = origGenLength })
 
-	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
-	t.Cleanup(func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") })
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") })
 
 	rootCmd.SetArgs([]string{"--vault", vaultDir, "generate", "--length", "16", "--store", "existing.password"})
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
@@ -122,8 +122,8 @@ func TestCmdGenerate_StoreJSONDoesNotRevealByDefault(t *testing.T) {
 		cli.OutputFormat = "text"
 	})
 
-	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
-	t.Cleanup(func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") })
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") })
 
 	rootCmd.SetArgs([]string{"--vault", vaultDir, "generate", "--length", "16", "--store", "json.password", "--output", "json"})
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
@@ -156,8 +156,8 @@ func TestCmdGenerate_ZeroLength(t *testing.T) {
 	origGenLength := genLength
 	t.Cleanup(func() { genLength = origGenLength })
 
-	_ = os.Setenv("OPENPASS_PASSPHRASE", string(passphrase))
-	t.Cleanup(func() { _ = os.Unsetenv("OPENPASS_PASSPHRASE") })
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
+	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") })
 
 	rootCmd.SetArgs([]string{"--vault", vaultDir, "generate", "--length", "0"})
 	t.Cleanup(func() { rootCmd.SetArgs(nil) })
@@ -200,11 +200,11 @@ func TestGenerate_ErrorPaths(t *testing.T) {
 	resetVaultState(t)
 	t.Run("invalid length", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		_ = os.Setenv("OPENPASS_VAULT", tmpDir)
-		_ = os.Setenv("OPENPASS_PASSPHRASE", "test")
+		_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
+		_ = os.Setenv("SYMVAULT_PASSPHRASE", "test")
 		defer func() {
-			_ = os.Unsetenv("OPENPASS_VAULT")
-			_ = os.Unsetenv("OPENPASS_PASSPHRASE")
+			_ = os.Unsetenv("SYMVAULT_VAULT")
+			_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 		}()
 
 		cfg := config.Default()

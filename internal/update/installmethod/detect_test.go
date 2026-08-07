@@ -367,34 +367,6 @@ func TestGuidanceDefault(t *testing.T) {
 	}
 }
 
-func TestLegacyGuidance(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		method InstallMethod
-		want   string
-	}{
-		{method: Homebrew, want: "brew update"},
-		{method: DirectDownload, want: "install.sh"},
-		{method: GoInstall, want: "go install"},
-		{method: PackageManager, want: "Uninstall"},
-		{method: Unknown, want: "Unable to determine"},
-	}
-	for _, tt := range tests {
-		t.Run(string(tt.method), func(t *testing.T) {
-			got := LegacyGuidance(tt.method)
-			if got == "" {
-				t.Fatalf("LegacyGuidance(%q) = empty string", tt.method)
-			}
-			if !containsAny(got, tt.want) {
-				t.Fatalf("LegacyGuidance(%q) = %q, want it to contain %q", tt.method, got, tt.want)
-			}
-			if tt.method == Homebrew && !containsAny(got, "brew upgrade") {
-				t.Fatalf("LegacyGuidance(Homebrew) = %q, want it to mention brew upgrade", got)
-			}
-		})
-	}
-}
-
 func TestConstantsAreStrings(t *testing.T) {
 	t.Parallel()
 	if string(DirectDownload) != "direct-download" {

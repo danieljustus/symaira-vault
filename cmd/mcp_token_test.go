@@ -34,8 +34,8 @@ func TestMCPTokenCommandRegistration(t *testing.T) {
 
 func TestMCPTokenCreate_Defaults(t *testing.T) {
 	vaultDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()
@@ -63,8 +63,8 @@ func TestMCPTokenCreate_Defaults(t *testing.T) {
 //nolint:dupl
 func TestMCPTokenCreate_WithToolsAndAgent(t *testing.T) {
 	vaultDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()
@@ -95,8 +95,8 @@ func TestMCPTokenCreate_WithToolsAndAgent(t *testing.T) {
 //nolint:dupl
 func TestMCPTokenCreate_MultipleToolFlags(t *testing.T) {
 	vaultDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()
@@ -127,8 +127,8 @@ func TestMCPTokenCreate_MultipleToolFlags(t *testing.T) {
 //nolint:dupl
 func TestMCPTokenCreate_WithTTL(t *testing.T) {
 	vaultDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()
@@ -158,8 +158,8 @@ func TestMCPTokenCreate_WithTTL(t *testing.T) {
 
 func TestMCPTokenCreate_DefaultTTLFromConfig(t *testing.T) {
 	vaultDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()
@@ -194,8 +194,8 @@ func TestMCPTokenCreate_DefaultTTLFromConfig(t *testing.T) {
 //nolint:dupl
 func TestMCPTokenCreate_InvalidTTL(t *testing.T) {
 	vaultDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()
@@ -229,7 +229,7 @@ func TestMCPTokenCreate_VaultPathError(t *testing.T) {
 	}
 	origHome := os.Getenv("HOME")
 	_ = os.Unsetenv("HOME")
-	_ = os.Unsetenv("OPENPASS_VAULT")
+	_ = os.Unsetenv("SYMVAULT_VAULT")
 	defer func() { _ = os.Setenv("HOME", origHome) }()
 
 	origVault := vault
@@ -255,8 +255,8 @@ func TestMCPTokenCreate_VaultPathError(t *testing.T) {
 //nolint:dupl
 func TestMCPTokenList_Empty(t *testing.T) {
 	vaultDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()
@@ -283,8 +283,8 @@ func TestMCPTokenList_Empty(t *testing.T) {
 
 func TestMCPTokenList_WithTokens(t *testing.T) {
 	vaultDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()
@@ -324,8 +324,8 @@ func TestMCPTokenList_WithTokens(t *testing.T) {
 
 func TestMCPTokenRevoke_Success(t *testing.T) {
 	vaultDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()
@@ -365,8 +365,8 @@ func TestMCPTokenRevoke_Success(t *testing.T) {
 
 func TestMCPTokenRevoke_NotFound(t *testing.T) {
 	vaultDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()
@@ -393,8 +393,8 @@ func TestMCPTokenRevoke_NotFound(t *testing.T) {
 
 func TestMCPTokenRevoke_DoubleRevoke(t *testing.T) {
 	vaultDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()
@@ -442,8 +442,8 @@ func TestMCPTokenRevoke_DoubleRevoke(t *testing.T) {
 
 func TestMCPTokenList_RevokedToken(t *testing.T) {
 	vaultDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()
@@ -547,8 +547,8 @@ func TestResolveTokenTTL_DefaultFallback(t *testing.T) {
 //nolint:dupl
 func TestMCPTokenCreate_ZeroTTL(t *testing.T) {
 	vaultDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()
@@ -578,8 +578,8 @@ func TestMCPTokenCreate_ZeroTTL(t *testing.T) {
 
 func TestMCPTokenList_ExpiredTokenExcluded(t *testing.T) {
 	vaultDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()
@@ -626,8 +626,8 @@ func TestMCPTokenList_ExpiredTokenExcluded(t *testing.T) {
 //nolint:dupl
 func TestMCPTokenCreate_PreservesInRegistry(t *testing.T) {
 	vaultDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()
@@ -657,8 +657,8 @@ func TestMCPTokenCreate_PreservesInRegistry(t *testing.T) {
 
 func TestMCPTokenRevoke_MissingArg(t *testing.T) {
 	vaultDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()
@@ -685,8 +685,8 @@ func TestMCPTokenRevoke_MissingArg(t *testing.T) {
 
 func TestMCPTokenCreate_ToolsLongOutput(t *testing.T) {
 	vaultDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()
@@ -732,8 +732,8 @@ func TestMCPTokenCreate_ToolsLongOutput(t *testing.T) {
 //nolint:dupl
 func TestMCPTokenList_HeaderFormat(t *testing.T) {
 	vaultDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()
@@ -788,8 +788,8 @@ func TestMCPCmdRegistration(t *testing.T) {
 //nolint:dupl
 func TestMCPTokenCreate_NegativeDayTTL(t *testing.T) {
 	vaultDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()
@@ -822,8 +822,8 @@ func TestMCPTokenCreate_RegistryFilePermissions(t *testing.T) {
 		t.Skip("skipping on windows: file permissions differ")
 	}
 	vaultDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()
@@ -854,8 +854,8 @@ func TestMCPTokenCreate_RegistryFilePermissions(t *testing.T) {
 //nolint:dupl
 func TestMCPTokenCreate_EmptyLabelOK(t *testing.T) {
 	vaultDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()
@@ -889,7 +889,7 @@ func TestMCPTokenRevoke_VaultPathError(t *testing.T) {
 	}
 	origHome := os.Getenv("HOME")
 	_ = os.Unsetenv("HOME")
-	_ = os.Unsetenv("OPENPASS_VAULT")
+	_ = os.Unsetenv("SYMVAULT_VAULT")
 	defer func() { _ = os.Setenv("HOME", origHome) }()
 
 	origVault := vault
@@ -918,7 +918,7 @@ func TestMCPTokenList_VaultPathError(t *testing.T) {
 	}
 	origHome := os.Getenv("HOME")
 	_ = os.Unsetenv("HOME")
-	_ = os.Unsetenv("OPENPASS_VAULT")
+	_ = os.Unsetenv("SYMVAULT_VAULT")
 	defer func() { _ = os.Setenv("HOME", origHome) }()
 
 	origVault := vault
@@ -944,8 +944,8 @@ func TestMCPTokenList_VaultPathError(t *testing.T) {
 //nolint:dupl
 func TestMCPTokenCreate_WithDaySuffixTTL(t *testing.T) {
 	vaultDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()
@@ -976,8 +976,8 @@ func TestMCPTokenCreate_WithDaySuffixTTL(t *testing.T) {
 //nolint:dupl
 func TestMCPTokenList_EmptyAgentAndLabel(t *testing.T) {
 	vaultDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()
@@ -1017,8 +1017,8 @@ func TestMCPTokenList_EmptyAgentAndLabel(t *testing.T) {
 
 func TestMCPTokenCreate_RawTokenUnique(t *testing.T) {
 	vaultDir := t.TempDir()
-	_ = os.Setenv("OPENPASS_VAULT", vaultDir)
-	defer func() { _ = os.Unsetenv("OPENPASS_VAULT") }()
+	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
+	defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()

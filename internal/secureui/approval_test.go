@@ -211,7 +211,7 @@ func TestTruncate_EmptyString(t *testing.T) {
 }
 
 func TestPromptApproval_NoneBackend(t *testing.T) {
-	t.Setenv("OPENPASS_SECUREUI", "none")
+	t.Setenv("SYMVAULT_SECUREUI", "none")
 	_, err := PromptApproval(ApprovalRequest{Operation: "test"})
 	if err == nil || !strings.Contains(err.Error(), "no secure input backend available") {
 		t.Errorf("PromptApproval() err = %v, want ErrUnavailable", err)
@@ -219,7 +219,7 @@ func TestPromptApproval_NoneBackend(t *testing.T) {
 }
 
 func TestPromptApproval_DefaultTimeout(t *testing.T) {
-	t.Setenv("OPENPASS_SECUREUI", "gui")
+	t.Setenv("SYMVAULT_SECUREUI", "gui")
 	old := defaultRunner
 	defer func() { defaultRunner = old }()
 
@@ -245,7 +245,7 @@ func TestPromptApproval_DefaultTimeout(t *testing.T) {
 }
 
 func TestPromptApproval_Approved(t *testing.T) {
-	t.Setenv("OPENPASS_SECUREUI", "gui")
+	t.Setenv("SYMVAULT_SECUREUI", "gui")
 	old := defaultRunner
 	defer func() { defaultRunner = old }()
 
@@ -264,7 +264,7 @@ func TestPromptApproval_Approved(t *testing.T) {
 }
 
 func TestPromptApproval_Denied(t *testing.T) {
-	t.Setenv("OPENPASS_SECUREUI", "gui")
+	t.Setenv("SYMVAULT_SECUREUI", "gui")
 	old := defaultRunner
 	defer func() { defaultRunner = old }()
 
@@ -283,7 +283,7 @@ func TestPromptApproval_Denied(t *testing.T) {
 }
 
 func TestPromptApproval_Remembered(t *testing.T) {
-	t.Setenv("OPENPASS_SECUREUI", "gui")
+	t.Setenv("SYMVAULT_SECUREUI", "gui")
 	old := defaultRunner
 	defer func() { defaultRunner = old }()
 
@@ -311,7 +311,7 @@ func TestPromptApproval_EmptyResponseIsDenied(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Mock GUI runner does not work on Windows")
 	}
-	t.Setenv("OPENPASS_SECUREUI", "gui")
+	t.Setenv("SYMVAULT_SECUREUI", "gui")
 	old := defaultRunner
 	defer func() { defaultRunner = old }()
 
@@ -330,7 +330,7 @@ func TestPromptApproval_EmptyResponseIsDenied(t *testing.T) {
 }
 
 func TestPromptApproval_CustomTimeout(t *testing.T) {
-	t.Setenv("OPENPASS_SECUREUI", "gui")
+	t.Setenv("SYMVAULT_SECUREUI", "gui")
 	old := defaultRunner
 	defer func() { defaultRunner = old }()
 
@@ -357,7 +357,7 @@ func TestPromptApproval_CustomTimeout(t *testing.T) {
 }
 
 func TestPromptApproval_TTYBackend(t *testing.T) {
-	t.Setenv("OPENPASS_SECUREUI", "tty")
+	t.Setenv("SYMVAULT_SECUREUI", "tty")
 	oldOpen := openTTYDevice
 	defer func() { openTTYDevice = oldOpen }()
 	openTTYDevice = func() (ttyDevice, error) {
@@ -377,7 +377,7 @@ func TestPromptApproval_TTYBackend(t *testing.T) {
 }
 
 func TestPromptApproval_TTYBackend_Denied(t *testing.T) {
-	t.Setenv("OPENPASS_SECUREUI", "tty")
+	t.Setenv("SYMVAULT_SECUREUI", "tty")
 	oldOpen := openTTYDevice
 	defer func() { openTTYDevice = oldOpen }()
 	openTTYDevice = func() (ttyDevice, error) {
@@ -394,7 +394,7 @@ func TestPromptApproval_TTYBackend_Denied(t *testing.T) {
 }
 
 func TestPromptApproval_TTYBackend_Remember(t *testing.T) {
-	t.Setenv("OPENPASS_SECUREUI", "tty")
+	t.Setenv("SYMVAULT_SECUREUI", "tty")
 	oldOpen := openTTYDevice
 	defer func() { openTTYDevice = oldOpen }()
 	openTTYDevice = func() (ttyDevice, error) {
@@ -417,7 +417,7 @@ func TestPromptApproval_TTYBackend_Remember(t *testing.T) {
 }
 
 func TestPromptApproval_TTYBackend_NoTTY(t *testing.T) {
-	t.Setenv("OPENPASS_SECUREUI", "tty")
+	t.Setenv("SYMVAULT_SECUREUI", "tty")
 	oldOpen := openTTYDevice
 	defer func() { openTTYDevice = oldOpen }()
 	openTTYDevice = func() (ttyDevice, error) {
@@ -431,7 +431,7 @@ func TestPromptApproval_TTYBackend_NoTTY(t *testing.T) {
 }
 
 func TestPromptApproval_GUIBackend_UserCanceled(t *testing.T) {
-	t.Setenv("OPENPASS_SECUREUI", "gui")
+	t.Setenv("SYMVAULT_SECUREUI", "gui")
 	old := defaultRunner
 	defer func() { defaultRunner = old }()
 

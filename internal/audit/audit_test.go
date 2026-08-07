@@ -429,72 +429,11 @@ func TestConfigDefaults(t *testing.T) {
 	}
 }
 
-func TestConfigEnvVarMaxSizeMB(t *testing.T) {
-	t.Cleanup(ReloadConfig)
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("OPENPASS_AUDIT_MAX_SIZE_MB", "50")
-
-	ReloadConfig()
-
-	if config.MaxFileSize != 50*1024*1024 {
-		t.Fatalf("expected MaxFileSize to be 50MB from env, got %d", config.MaxFileSize)
-	}
-}
-
-func TestConfigEnvVarMaxBackups(t *testing.T) {
-	t.Cleanup(ReloadConfig)
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("OPENPASS_AUDIT_MAX_BACKUPS", "10")
-
-	ReloadConfig()
-
-	if config.MaxBackups != 10 {
-		t.Fatalf("expected MaxBackups to be 10 from env, got %d", config.MaxBackups)
-	}
-}
-
-func TestConfigEnvVarMaxAgeDays(t *testing.T) {
-	t.Cleanup(ReloadConfig)
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("OPENPASS_AUDIT_MAX_AGE_DAYS", "7")
-
-	ReloadConfig()
-
-	if config.MaxAgeDays != 7 {
-		t.Fatalf("expected MaxAgeDays to be 7 from env, got %d", config.MaxAgeDays)
-	}
-}
-
-func TestConfigEnvVarInvalidValues(t *testing.T) {
-	t.Cleanup(ReloadConfig)
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("OPENPASS_AUDIT_MAX_SIZE_MB", "invalid")
-	t.Setenv("OPENPASS_AUDIT_MAX_BACKUPS", "negative")
-	t.Setenv("OPENPASS_AUDIT_MAX_AGE_DAYS", "zero")
-
-	ReloadConfig()
-
-	// Should fall back to defaults
-	if config.MaxFileSize != 100*1024*1024 {
-		t.Fatalf("expected MaxFileSize to fallback to default, got %d", config.MaxFileSize)
-	}
-	if config.MaxBackups != 5 {
-		t.Fatalf("expected MaxBackups to fallback to default, got %d", config.MaxBackups)
-	}
-	if config.MaxAgeDays != 30 {
-		t.Fatalf("expected MaxAgeDays to fallback to default, got %d", config.MaxAgeDays)
-	}
-}
-
 func TestRotateIfNeededSizeLimit(t *testing.T) {
 	t.Cleanup(ReloadConfig)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("OPENPASS_AUDIT_MAX_SIZE_MB", "1")
+	t.Setenv("SYMVAULT_AUDIT_MAX_SIZE_MB", "1")
 
 	ReloadConfig()
 
@@ -533,7 +472,7 @@ func TestRotateIfNeededAgeLimit(t *testing.T) {
 	t.Cleanup(ReloadConfig)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("OPENPASS_AUDIT_MAX_AGE_DAYS", "0") // 0 days means immediate
+	t.Setenv("SYMVAULT_AUDIT_MAX_AGE_DAYS", "0") // 0 days means immediate
 
 	ReloadConfig()
 
@@ -565,9 +504,9 @@ func TestEnforceRetentionMaxBackups(t *testing.T) {
 	t.Cleanup(ReloadConfig)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("OPENPASS_AUDIT_MAX_SIZE_MB", "100")
-	t.Setenv("OPENPASS_AUDIT_MAX_BACKUPS", "3")
-	t.Setenv("OPENPASS_AUDIT_MAX_AGE_DAYS", "365")
+	t.Setenv("SYMVAULT_AUDIT_MAX_SIZE_MB", "100")
+	t.Setenv("SYMVAULT_AUDIT_MAX_BACKUPS", "3")
+	t.Setenv("SYMVAULT_AUDIT_MAX_AGE_DAYS", "365")
 
 	ReloadConfig()
 
@@ -606,9 +545,9 @@ func TestEnforceRetentionMaxAge(t *testing.T) {
 	t.Cleanup(ReloadConfig)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("OPENPASS_AUDIT_MAX_SIZE_MB", "100")
-	t.Setenv("OPENPASS_AUDIT_MAX_BACKUPS", "100")
-	t.Setenv("OPENPASS_AUDIT_MAX_AGE_DAYS", "0") // 0 days = delete all
+	t.Setenv("SYMVAULT_AUDIT_MAX_SIZE_MB", "100")
+	t.Setenv("SYMVAULT_AUDIT_MAX_BACKUPS", "100")
+	t.Setenv("SYMVAULT_AUDIT_MAX_AGE_DAYS", "0") // 0 days = delete all
 
 	ReloadConfig()
 
@@ -661,7 +600,7 @@ func TestEnforceRetentionPreservesNewest(t *testing.T) {
 	t.Cleanup(ReloadConfig)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("OPENPASS_AUDIT_MAX_BACKUPS", "2")
+	t.Setenv("SYMVAULT_AUDIT_MAX_BACKUPS", "2")
 
 	ReloadConfig()
 
@@ -699,7 +638,7 @@ func TestNoLogLossDuringRotation(t *testing.T) {
 	t.Cleanup(ReloadConfig)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("OPENPASS_AUDIT_MAX_SIZE_MB", "1")
+	t.Setenv("SYMVAULT_AUDIT_MAX_SIZE_MB", "1")
 
 	ReloadConfig()
 
@@ -867,7 +806,7 @@ func TestHealthCheckNeedsRotationBySize(t *testing.T) {
 	t.Cleanup(ReloadConfig)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("OPENPASS_AUDIT_MAX_SIZE_MB", "0") // Very small
+	t.Setenv("SYMVAULT_AUDIT_MAX_SIZE_MB", "0") // Very small
 
 	ReloadConfig()
 
@@ -1338,45 +1277,6 @@ func TestGetErrorsAllErrors(t *testing.T) {
 	}
 }
 
-func TestConfigEnvVarZeroMaxBackups(t *testing.T) {
-	t.Cleanup(ReloadConfig)
-	t.Setenv("OPENPASS_AUDIT_MAX_BACKUPS", "0")
-	ReloadConfig()
-
-	if config.MaxBackups != 0 {
-		t.Fatalf("MaxBackups = %d, want 0", config.MaxBackups)
-	}
-}
-
-func TestConfigEnvVarZeroMaxAgeDays(t *testing.T) {
-	t.Cleanup(ReloadConfig)
-	t.Setenv("OPENPASS_AUDIT_MAX_AGE_DAYS", "0")
-	ReloadConfig()
-
-	if config.MaxAgeDays != 0 {
-		t.Fatalf("MaxAgeDays = %d, want 0", config.MaxAgeDays)
-	}
-}
-
-func TestConfigEnvVarNegativeIgnored(t *testing.T) {
-	t.Cleanup(ReloadConfig)
-	t.Setenv("OPENPASS_AUDIT_MAX_SIZE_MB", "-10")
-	t.Setenv("OPENPASS_AUDIT_MAX_BACKUPS", "-5")
-	t.Setenv("OPENPASS_AUDIT_MAX_AGE_DAYS", "-1")
-	ReloadConfig()
-
-	// Negative values should be ignored, defaults used
-	if config.MaxFileSize != 100*1024*1024 {
-		t.Fatalf("MaxFileSize = %d, want default 100MB", config.MaxFileSize)
-	}
-	if config.MaxBackups != 5 {
-		t.Fatalf("MaxBackups = %d, want default 5", config.MaxBackups)
-	}
-	if config.MaxAgeDays != 30 {
-		t.Fatalf("MaxAgeDays = %d, want default 30", config.MaxAgeDays)
-	}
-}
-
 func TestLogEntryAllFields(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -1685,7 +1585,7 @@ func TestRotateIfNeededRenameFailure(t *testing.T) {
 	t.Cleanup(ReloadConfig)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("OPENPASS_AUDIT_MAX_SIZE_MB", "1")
+	t.Setenv("SYMVAULT_AUDIT_MAX_SIZE_MB", "1")
 
 	ReloadConfig()
 
@@ -1713,7 +1613,7 @@ func TestMaxLogSizeTrigger(t *testing.T) {
 	t.Cleanup(ReloadConfig)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("OPENPASS_AUDIT_MAX_SIZE_MB", "1")
+	t.Setenv("SYMVAULT_AUDIT_MAX_SIZE_MB", "1")
 
 	ReloadConfig()
 
@@ -1782,7 +1682,7 @@ func TestEnforceRetentionStatError(t *testing.T) {
 	t.Cleanup(ReloadConfig)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("OPENPASS_AUDIT_MAX_BACKUPS", "3")
+	t.Setenv("SYMVAULT_AUDIT_MAX_BACKUPS", "3")
 
 	ReloadConfig()
 
@@ -1820,7 +1720,7 @@ func TestEnforceRetentionRemoveError(t *testing.T) {
 	t.Cleanup(ReloadConfig)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("OPENPASS_AUDIT_MAX_BACKUPS", "0") // All files should be deleted
+	t.Setenv("SYMVAULT_AUDIT_MAX_BACKUPS", "0") // All files should be deleted
 
 	ReloadConfig()
 
@@ -1930,7 +1830,7 @@ func TestHealthCheckZeroMaxAge(t *testing.T) {
 	t.Cleanup(ReloadConfig)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("OPENPASS_AUDIT_MAX_AGE_DAYS", "0")
+	t.Setenv("SYMVAULT_AUDIT_MAX_AGE_DAYS", "0")
 
 	ReloadConfig()
 
@@ -2191,21 +2091,6 @@ func TestConfigEnvVarMaxAgeDays_Symvault(t *testing.T) {
 
 	if config.MaxAgeDays != 7 {
 		t.Fatalf("expected MaxAgeDays to be 7 from SYMVAULT env, got %d", config.MaxAgeDays)
-	}
-}
-
-func TestConfigEnvVarSymvaultPrecedence(t *testing.T) {
-	t.Cleanup(ReloadConfig)
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	// SYMVAULT_* should take precedence over OPENPASS_*
-	t.Setenv("SYMVAULT_AUDIT_MAX_SIZE_MB", "25")
-	t.Setenv("OPENPASS_AUDIT_MAX_SIZE_MB", "50")
-
-	ReloadConfig()
-
-	if config.MaxFileSize != 25*1024*1024 {
-		t.Fatalf("expected MaxFileSize to be 25MB (SYMVAULT wins), got %d", config.MaxFileSize)
 	}
 }
 

@@ -17,7 +17,6 @@ import (
 	"filippo.io/age"
 
 	"github.com/danieljustus/symaira-vault/internal/crypto"
-	"github.com/danieljustus/symaira-vault/internal/envutil"
 	"github.com/danieljustus/symaira-vault/internal/fsutil"
 	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 )
@@ -808,16 +807,16 @@ func LoadTokenSystemWithIdentity(identity *age.X25519Identity, vaultDir string, 
 }
 
 // LoadOrCreateToken reads a token from path, or generates a new one if the
-// file is missing or empty. If SYMVAULT_MCP_TOKEN or OPENPASS_MCP_TOKEN is set
-// in the environment (and no file token exists), the environment value is returned.
+// file is missing or empty. If SYMVAULT_MCP_TOKEN is set in the environment
+// (and no file token exists), the environment value is returned.
 func LoadOrCreateToken(path string) (string, error) {
 	data, err := os.ReadFile(path) //#nosec G304 -- path comes from TokenFilePath() which uses filepath.Join on vaultDir
 	if err == nil {
 		token := strings.TrimSpace(string(data))
 		if token != "" {
-			if envToken := envutil.Getenv("SYMVAULT_MCP_TOKEN", "OPENPASS_MCP_TOKEN"); envToken != "" {
-				cliout.Warnf("Warning: SYMVAULT_MCP_TOKEN or OPENPASS_MCP_TOKEN is set but file token exists at %s; using file token", path)
-				envutil.Unsetenv("SYMVAULT_MCP_TOKEN", "OPENPASS_MCP_TOKEN")
+			if envToken := os.Getenv("SYMVAULT_MCP_TOKEN"); envToken != "" {
+				cliout.Warnf("Warning: SYMVAULT_MCP_TOKEN is set but file token exists at %s; using file token", path)
+				_ = os.Unsetenv("SYMVAULT_MCP_TOKEN")
 				// #nosec G103 — intentional: unsafe.StringData aliases the Getenv
 				// backing array so Wipe can zero the only copy in memory.
 				crypto.Wipe(unsafe.Slice(unsafe.StringData(envToken), len(envToken)))
@@ -826,8 +825,8 @@ func LoadOrCreateToken(path string) (string, error) {
 		}
 	}
 
-	if envToken := envutil.Getenv("SYMVAULT_MCP_TOKEN", "OPENPASS_MCP_TOKEN"); envToken != "" {
-		envutil.Unsetenv("SYMVAULT_MCP_TOKEN", "OPENPASS_MCP_TOKEN")
+	if envToken := os.Getenv("SYMVAULT_MCP_TOKEN"); envToken != "" {
+		_ = os.Unsetenv("SYMVAULT_MCP_TOKEN")
 		// Clone the string so we can safely wipe Getenv's backing array.
 		token := string([]byte(envToken))
 		// #nosec G103 — intentional: unsafe.StringData aliases the Getenv

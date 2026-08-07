@@ -1,4 +1,4 @@
-# golangci-lint configuration for OpenPass
+# golangci-lint configuration for Symaira Vault
 # https://golangci-lint.run/usage/configuration/
 #
 # NOTE: gosec is deliberately run as a standalone CI step (not via golangci-lint)

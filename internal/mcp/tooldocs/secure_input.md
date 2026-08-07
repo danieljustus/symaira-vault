@@ -32,7 +32,7 @@ Prompt the user for sensitive data via TTY or native GUI dialog and store it wit
 - The agent never sees the value being stored
 - Requires `canWrite: true` in agent profile
 - Triggers automatic git commit (if enabled)
-- Use `OPENPASS_SECUREUI=tty|gui|none` to override the backend
+- Use `SYMVAULT_SECUREUI=tty|gui|none` to override the backend
 
 ## COMBINES WELL WITH
 - find_entries (verify credential doesn't exist yet)

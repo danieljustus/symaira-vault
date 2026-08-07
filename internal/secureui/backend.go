@@ -9,15 +9,11 @@ type backend interface {
 }
 
 // chooseBackend picks the best available backend, honoring the
-// SYMVAULT_SECUREUI environment override (or OPENPASS_SECUREUI as fallback)
-// ("tty", "gui", or "none").
+// SYMVAULT_SECUREUI environment override ("tty", "gui", or "none").
 //
 // Default order: TTY (interactive run) → GUI (HTTP server, LaunchAgent, etc.).
 func chooseBackend() backend {
 	v := os.Getenv("SYMVAULT_SECUREUI")
-	if v == "" {
-		v = os.Getenv("OPENPASS_SECUREUI")
-	}
 	switch v {
 	case "tty":
 		if b := newTTYBackend(); b != nil {
