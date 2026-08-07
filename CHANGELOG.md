@@ -14,6 +14,197 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > and [docs/commercial-boundary.md](docs/commercial-boundary.md) for the
 > current release-line policy. (Added 2026-06-10, see #384.)
 
+## [Unreleased]
+
+Changes on `main` since v0.13.0, targeting v0.14.0.
+
+### Added
+
+- **Opt-in egress credential broker** — `symvault broker` is a loopback MITM forward proxy that attaches vault credentials to an agent's outbound HTTPS/HTTP requests server-side, so a brokered secret never enters the agent's process environment, argv or process listing. `symvault run --broker` runs a child command with the broker in-process (#769).
+- **`symvault run --broker-strict` / `--broker-passthrough`** — strict mode rejects brokered requests for hosts without a matching API template with 403; passthrough mode tunnels selected hosts without TLS interception for certificate-pinning clients (#777).
+- **MCP API template substitutions** — `execute_api_request` calls are shaped by API templates (YAML) with credential substitution, and the built-in API catalog was broadened (Anthropic, GitHub, OpenAI, Stripe, Telegram, and more) (#767).
+
+### Fixed
+
+- **Broker audit failures** — failed brokered requests are now audited as failures instead of being silently dropped (#771).
+- **Template allowlist enforcement** — the broker forward path now enforces API-template allowlists for hosts, endpoints and methods (#780).
+- **Embedded template lookup** — API template lookup uses slash paths for the embed.FS built-in store (#770).
+
+### Changed
+
+- Extracted a shared audit action constant for brokered requests (#781).
+- Ignore local `docs/adopt` review artifacts.
+
+### Tests
+
+- Coverage for the API-template substitution engine (#778), SSRF error paths (#779), and command-layer CRUD paths (#768).
+
+## [v0.13.0] - 2026-08-05
+
+Import expansion, CLI constructor completion, and release-infrastructure hardening.
+
+### Added
+
+- **FIDO Credential Exchange Format (CXF) import** — import credentials from CXF archive exports (zip containing the CXF JSON document; FIDO Proposed Standard, August 2025) (#761).
+- **otpauth:// TOTP normalization** — `otpauth://` URIs in imports are normalized into structured TOTP data, including the `OTPAuth` column of Apple Passwords CSV exports (#749).
+- **Built-in CSV import profiles** — header-sniffing profiles for Apple Passwords / iCloud Keychain, Chrome / Chromium (Edge, Brave, Opera, …), and Firefox logins exports, selected with `--format apple|chrome|firefox` or auto-detected (#757).
+
+### Changed
+
+- Completed the CLI constructor migration — `NewCommands()` returns fresh command trees for root, MCP and passlint (#750, #756).
+
+### Security
+
+- Restrict notary key file permissions to 0600 in the release workflow (#748).
+
+### CI
+
+- Bump `github/codeql-action` (analyze, autobuild, init, upload-sarif) to 4.37.4 (#751, #752, #754, #755) and the go-dependencies group with 4 updates (#753).
+
+### Tests
+
+- Cover the auth lifecycle and remaining CRUD commands (#758) and the `add` paths with simplified assembly (#763); skip fake-editor tests on Windows (#762).
+
+### Docs
+
+- Research spikes for direct browser credential extraction (#759) and Apple Passwords app-to-app import / passkey portability (#760).
+
+## [v0.12.1] - 2026-07-31
+
+macOS GUI release fixes.
+
+### Fixed
+
+- Decode the base64 notary key and fix the GoReleaser v2 dist glob so the macOS release assets resolve correctly.
+- Sign and notarize the macOS GUI (SwiftUI client) release.
+
+## [v0.12.0] - 2026-07-30
+
+CLI assembly refactor, output-flag restrictions, and search-index performance.
+
+### Added
+
+- **Top-level command grouping** in `--help` output (#729).
+
+### Changed
+
+- **CLI constructor migration** — replaced `init()` command registrations with explicit constructors, making command trees testable and fresh per invocation (#731).
+
+### Fixed
+
+- **`--output json` restricted to supported commands** — JSON output is no longer silently accepted where it has no effect (#730).
+- **Argon2id parameters applied and bounded** — configured Argon2id parameters are now applied to key derivation with enforced bounds (#724).
+
+### Performance
+
+- **Search-index batch mode** — `Suspend`/`Resume` batch operations for the encrypted search index avoid per-entry write amplification (#728).
+
+### CI
+
+- Do not persist the `GITHUB_TOKEN` on checkout (#727); bump `docker/login-action` (#725) and the go-dependencies group (#726).
+
+## [v0.11.1] - 2026-07-28
+
+CLI hint fix and release prep.
+
+### Fixed
+
+- **Explicit passphrase hint** — `symvault` now prints a clear hint when `SYMVAULT_PASSPHRASE` is set but the environment passphrase opt-in gate is off (closes #714, #716).
+
+### Changed
+
+- Re-audited the deferred golang/protobuf dependency migration documentation (closes #713, #715).
+- Release preparation: macOS-native app icons, KDF migration docs, brand assets.
+
+### CI
+
+- Split CI into PR-fast and main-comprehensive workflows with `paths-ignore` for docs-only changes.
+
+## [v0.11.0] - 2026-07-24
+
+Native macOS client, file attachments, agent-facing features, and hardening.
+
+### Added
+
+- **Native macOS vault client** — SwiftUI app for browsing, unlocking, creating, editing, generating, copying, and deleting local vault entries (#661).
+- **`symvault file add/get/use`** — CLI commands for certificate/key attachments (#674).
+- **Ephemeral file injection** — `run_command` accepts a `files` map to inject temporary files without persisting them in the vault (#673).
+- **Per-entry HMAC key generation ID (kid)** — rotation-safe audit verification (#706).
+- **`symvault doctor` diagnostics** for unsafe environment passphrase unlocking (#693).
+- **Vault directory surfaced in MCP `whoami`** responses (#665).
+- **Secret consumption discoverability** — agents that only see a reference can discover whether and how the secret was consumed (#670).
+
+### Fixed
+
+- **`symvault init` uses Argon2id** for new vaults (#705).
+- **Environment passphrase unlocking is explicit opt-in** — no longer enabled implicitly (#692).
+- Update `google.golang.org/grpc` to v1.82.1 (#681).
+- Stop inferring certificate type from path for non-self-identifying values (#669).
+- Fix a test-isolation bug in `ReloadConfig` cleanup ordering (#707).
+
+### Security
+
+- **Proactive local secret-leak detection** at process and output boundaries (#702).
+- **Sensitive-named env vars rejected** even when explicitly requested (#699).
+
+### Changed
+
+- Delegate cosign/extract/install to corekit in the update command (#709).
+
+### CI
+
+- Bump actions (checkout 7.0.1, setup-go 7.0.0, codeql 4.37.3), go-dependencies group, and js-yaml 4.2.0 → 4.3.0 (#686–#691, #710).
+- Leave fuzz scheduler headroom (#3555cfa).
+- Add a GUI Release (macOS DMG) workflow job for the native SwiftUI client.
+- macOS parallel agent/test runs no longer trigger spurious Keychain dialogs (#703).
+
+### Tests
+
+- Unit tests for the `file` add/get/use CLI commands (#712).
+
+## [v0.10.1] - 2026-07-20
+
+Export hardening, git auth classification, and toolchain refresh.
+
+### Fixed
+
+- **Plaintext export hardening** — output file permissions and error propagation for `export` (#655).
+- **Git auth error classification** — push/pull auth errors are classified by precise status patterns, so users see actionable messages (#656).
+
+### Changed
+
+- Updated the golang/protobuf migration audit for #646 (#647).
+- Refreshed the Nix `vendorHash` and added a CI drift check (#659).
+- GitHub releases are now named after the tag, not "<project> <version>" (#660).
+
+### CI
+
+- Bump `golang/govulncheck-action` to 1.1.0 (#648) and the go-dependencies group with 8 updates (#649).
+
+## [v0.10.0] - 2026-07-10
+
+Version introspection, payment entries, and request hardening.
+
+### Added
+
+- **Version integration** — `versionkit` integration and a `--json` flag for machine-readable version output (#619).
+- **Payment entry type** — new `payment` secret type with deny-by-default redaction (#644).
+
+### Security
+
+- **Executable allowlists** enforced for `execute_with_secret` (#640).
+- **API template request hardening** — DNS-rebinding and private-redirection protection for template requests (#636).
+- **Bounded subprocess output capture** during secret execution (#638).
+
+### Fixed
+
+- Encrypted search-index persistence failures are now surfaced instead of silently ignored (#639).
+
+### CI
+
+- Bump `docker/*` actions (build-push 7.3.0, login 4.4.0, metadata 6.2.0, setup-buildx 4.2.0), `codeql` upload-sarif 4.37.0, and the go-dependencies group with 6 updates (#622–#627).
+- Ignore the local `symvault` build artifact (#620).
+
 ## [v0.9.0] - 2026-07-01
 
 v0.9.0 extends secret execution and adds a template engine for generating configuration files from vault secrets.
@@ -806,3 +997,11 @@ Interactive TUI, vault management, and observability release.
 [v2.8.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.1
 [v2.8.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.0
 [v0.9.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.9.0
+[Unreleased]: https://github.com/danieljustus/symaira-vault/compare/v0.13.0...HEAD
+[v0.10.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.10.0
+[v0.10.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.10.1
+[v0.11.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.11.0
+[v0.11.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.11.1
+[v0.12.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.12.0
+[v0.12.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.12.1
+[v0.13.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.13.0
