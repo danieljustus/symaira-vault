@@ -16,7 +16,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Changes on `main` since v0.13.0, targeting v0.14.0.
+Changes on `main` since v0.14.0.
+
+### Security
+
+- **js-yaml quadratic CPU consumption (GHSA-5p4m-2wfm-xmqj)** — bumped the `js-yaml` override in the editors workspace from 4.3.0 to the patched 4.3.1 (#789).
+
+### Changed
+
+- **Removed OpenPass legacy compatibility surface** — the project was renamed from OpenPass to Symaira Vault / symvault a long time ago; the rename shims kept for backwards compatibility have been removed. **This is a breaking change** for anyone still relying on the legacy names: the `OPENPASS_*` environment variable fallback, the `~/.openpass` legacy vault directory fallback, and the legacy `openpass-biometric:` Touch ID keychain service prefix are all gone. Use the `SYMVAULT_*` environment variables and the default vault path instead.
+- DMG installer: unified Symaira branding and a drag-to-Applications window (#788).
+
+### Docs
+
+- Re-audited the deferred `golang/protobuf` transitive dependency (via `groupcache`/`grpc`); status quo maintained, no upstream fix available yet (#790).
+
+## [v0.14.0] - 2026-08-07
+
+Egress credential broker, MCP API template substitutions, and broker audit hardening.
 
 ### Added
 
