@@ -1,0 +1,84 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-unlock - Unlock the vault and cache the passphrase
+
+
+.SH SYNOPSIS
+\fBsymvault unlock [flags]\fP
+
+
+.SH DESCRIPTION
+Unlock the vault by validating the passphrase and caching it in the
+OS keyring. This allows MCP servers to start without interactive prompts.
+
+.PP
+Use --check to verify if an active session exists without prompting.
+
+.PP
+Environment variable SYMVAULT_PASSPHRASE
+can be used for non-interactive unlock in CI/CD environments, but only when
+explicitly allowed via SYMVAULT_ALLOW_ENV_PASSPHRASE=1 or
+security.allow_env_passphrase: true in config.yaml — the passphrase variable
+alone is ignored (default-deny). It should NOT be used on shared machines
+(visible in process listings).
+
+
+.SH OPTIONS
+\fB--check\fP[=false]
+	Check if session is active (exit 0 = active, exit 1 = expired)
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for unlock
+
+.PP
+\fB--ttl\fP=15m0s
+	Session duration (overrides config sessionTimeout)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Unlock the vault
+  symvault unlock
+
+  # Check if session is active
+  symvault unlock --check
+
+  # Unlock with custom TTL
+  symvault unlock --ttl 30m
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault(1)\fP

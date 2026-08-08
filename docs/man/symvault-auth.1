@@ -1,0 +1,64 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-auth - Manage vault unlock authentication
+
+
+.SH SYNOPSIS
+\fBsymvault auth [flags]\fP
+
+
+.SH DESCRIPTION
+Manage vault unlock authentication
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for auth
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Check current auth status (passphrase vs Touch ID)
+  symvault auth status
+
+  # Enable Touch ID (macOS)
+  symvault auth set touchid
+
+  # Switch back to passphrase-only
+  symvault auth set passphrase
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault(1)\fP, \fBsymvault-auth-rotate-passphrase(1)\fP, \fBsymvault-auth-set(1)\fP, \fBsymvault-auth-status(1)\fP

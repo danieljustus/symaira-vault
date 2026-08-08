@@ -1,0 +1,70 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault - Symaira Vault is a Go CLI password manager
+
+
+.SH SYNOPSIS
+\fBsymvault [flags]\fP
+
+
+.SH DESCRIPTION
+Quick Start:
+  symvault init            create a vault and identity
+  symvault add       add a credential
+  symvault get       retrieve a credential
+
+.PP
+Symaira Vault is a Go CLI password manager with an interactive TUI, multi-device
+sync via Git, and an MCP server for AI-agent integration.
+
+.PP
+First-time setup:
+   1. symvault init         create a vault and identity (non-interactive)
+   2. symvault setup        same, plus guided wizard for sync/agents (TTY only)
+   3. symvault doctor       health-check and self-heal
+
+.PP
+Daily use:
+  symvault add       add a credential (interactive form)
+  symvault ui              browse and edit the vault in a TUI
+  symvault get       print a credential
+  symvault --help          full command list
+
+
+.SH OPTIONS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for symvault
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH SEE ALSO
+\fBsymvault-add(1)\fP, \fBsymvault-agent(1)\fP, \fBsymvault-audit(1)\fP, \fBsymvault-auth(1)\fP, \fBsymvault-backup(1)\fP, \fBsymvault-broker(1)\fP, \fBsymvault-config(1)\fP, \fBsymvault-delete(1)\fP, \fBsymvault-device(1)\fP, \fBsymvault-doctor(1)\fP, \fBsymvault-dynamic(1)\fP, \fBsymvault-edit(1)\fP, \fBsymvault-export(1)\fP, \fBsymvault-file(1)\fP, \fBsymvault-find(1)\fP, \fBsymvault-generate(1)\fP, \fBsymvault-get(1)\fP, \fBsymvault-git(1)\fP, \fBsymvault-import(1)\fP, \fBsymvault-init(1)\fP, \fBsymvault-list(1)\fP, \fBsymvault-lock(1)\fP, \fBsymvault-migrate(1)\fP, \fBsymvault-policy(1)\fP, \fBsymvault-profile(1)\fP, \fBsymvault-recipients(1)\fP, \fBsymvault-remote(1)\fP, \fBsymvault-restore(1)\fP, \fBsymvault-run(1)\fP, \fBsymvault-serve(1)\fP, \fBsymvault-set(1)\fP, \fBsymvault-setup(1)\fP, \fBsymvault-share(1)\fP, \fBsymvault-startup-profile(1)\fP, \fBsymvault-sync(1)\fP, \fBsymvault-template(1)\fP, \fBsymvault-ui(1)\fP, \fBsymvault-unlock(1)\fP, \fBsymvault-update(1)\fP, \fBsymvault-verify(1)\fP, \fBsymvault-version(1)\fP

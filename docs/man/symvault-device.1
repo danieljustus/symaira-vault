@@ -1,0 +1,63 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-device - Manage paired devices for multi-device vault access
+
+
+.SH SYNOPSIS
+\fBsymvault device [flags]\fP
+
+
+.SH DESCRIPTION
+Manage paired devices that can access this vault.
+
+.PP
+Use 'symvault device pair' to generate a pairing token for a new device,
+and 'symvault device join' on the new device to join the vault.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for device
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  symvault device pair
+  symvault device join ssh://user@host/path/to/vault.git <token>
+  symvault device accept <token>
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault(1)\fP, \fBsymvault-device-accept(1)\fP, \fBsymvault-device-add(1)\fP, \fBsymvault-device-join(1)\fP, \fBsymvault-device-list(1)\fP, \fBsymvault-device-pair(1)\fP, \fBsymvault-device-revoke(1)\fP

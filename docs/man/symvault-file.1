@@ -1,0 +1,61 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-file - Store, export, and consume file attachments in the vault
+
+
+.SH SYNOPSIS
+\fBsymvault file [flags]\fP
+
+
+.SH DESCRIPTION
+Store, export, and consume binary file attachments (e.g. a PKCS#12
+certificate) through vault entries. Content is base64-encoded at rest, with
+sha256, original filename and size recorded as attachment metadata.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for file
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  symvault file add elster/cert --field cert_p12 --from ~/elster.pfx --shred
+  symvault file get elster/cert#cert_p12 --out ~/elster.pfx
+  symvault file use elster/cert -- java -jar elstertool.jar --cert $SYMVAULT_FILE_CERT_P12
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault(1)\fP, \fBsymvault-file-add(1)\fP, \fBsymvault-file-get(1)\fP, \fBsymvault-file-use(1)\fP

@@ -1,0 +1,86 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-setup - Interactive setup wizard for Symaira Vault
+
+
+.SH SYNOPSIS
+\fBsymvault setup [flags]\fP
+
+
+.SH DESCRIPTION
+Launch the interactive setup wizard to initialize or re-configure your vault.
+
+.PP
+The wizard guides you through:
+  • Vault directory and passphrase
+  • Authentication method (Touch ID or passphrase)
+  • Sync strategy (local or git remote)
+  • Multi-device setup hints
+  • Additional recipients for shared access
+  • AI agent (MCP) configuration
+  • Backup recommendations
+  • Profile name
+
+.PP
+For non-interactive environments (CI, scripts), use 'symvault init' instead.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for setup
+
+.PP
+\fB--keep-on-error\fP[=false]
+	do not rollback vault init artifacts when subsequent steps fail
+
+.PP
+\fB--no-resume\fP[=false]
+	disable setup resume after abort
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Run the wizard (resumes from saved state if available)
+  symvault setup
+
+  # Restart from scratch
+  symvault setup --no-resume
+
+  # Keep partial vault artifacts on error for debugging
+  symvault setup --keep-on-error
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault(1)\fP

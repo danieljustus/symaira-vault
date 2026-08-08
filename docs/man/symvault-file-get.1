@@ -1,0 +1,67 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-file-get - Export a stored file attachment to disk
+
+
+.SH SYNOPSIS
+\fBsymvault file get [#field] [flags]\fP
+
+
+.SH DESCRIPTION
+Decodes a vault entry's attachment field back to its original binary
+content and writes it to the given output path. Use path#field, or --field,
+to select the field when an entry has more than one attachment.
+
+
+.SH OPTIONS
+\fB--field\fP=""
+	Data field to export (auto-detected when the entry has exactly one attachment)
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for get
+
+.PP
+\fB--out\fP=""
+	Output file path (required)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  symvault file get elster/cert#cert_p12 --out ~/elster.pfx
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault-file(1)\fP

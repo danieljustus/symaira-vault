@@ -1,0 +1,69 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-agent-whoami - Show current agent context
+
+
+.SH SYNOPSIS
+\fBsymvault agent whoami [flags]\fP
+
+
+.SH DESCRIPTION
+Display information about the current agent profile.
+
+.PP
+When the SYMVAULT_AGENT environment variable is set, loads that agent's profile
+and shows name, tier, allowed paths, tools, quotas, and vault status.
+
+.PP
+The --output json flag returns structured data matching the MCP symaira_whoami
+response format.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for whoami
+
+.PP
+\fB-o\fP, \fB--output\fP="text"
+	Output format (text, json)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Show agent context
+  SYMVAULT_AGENT=my-agent symvault agent whoami
+
+  # Show as JSON
+  SYMVAULT_AGENT=my-agent symvault agent whoami --output json
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault-agent(1)\fP

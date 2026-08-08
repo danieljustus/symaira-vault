@@ -1,0 +1,71 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-edit - Edit an existing password entry
+
+
+.SH SYNOPSIS
+\fBsymvault edit  [flags]\fP
+
+
+.SH DESCRIPTION
+Opens an existing password entry in your default editor for modification.
+
+.PP
+The entry is opened in JSON format. Save and exit the editor to update the entry.
+If the entry does not exist, an error is returned.
+
+.PP
+The editor is determined by the --editor flag or EDITOR environment variable (defaults to vi).
+
+
+.SH OPTIONS
+\fB--editor\fP=""
+	Editor to use (overrides EDITOR env var)
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for edit
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  symvault edit github
+  symvault edit work/aws
+  symvault edit personal/bank --editor nano
+  EDITOR=nano symvault edit personal/bank
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault(1)\fP

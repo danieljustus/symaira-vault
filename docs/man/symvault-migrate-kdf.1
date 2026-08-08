@@ -1,0 +1,81 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-migrate-kdf - Migrate the vault identity from scrypt to argon2id
+
+
+.SH SYNOPSIS
+\fBsymvault migrate kdf [flags]\fP
+
+
+.SH DESCRIPTION
+Migrate the vault identity's key derivation function from the legacy
+scrypt KDF to argon2id.
+
+.PP
+Argon2id is the industry standard for password hashing and provides stronger
+resistance against GPU-based attacks than scrypt. New vaults already use
+argon2id.
+
+.PP
+This command performs the migration itself — it does not just report status.
+Automatic migration on every unlock additionally happens when
+vault.auto_migrate_kdf: true is set in config.yaml, but by default that is
+off, so this command is the way to upgrade an existing scrypt vault.
+
+.PP
+identity.age is backed up to identity.age.bak before any change, and the new
+file is decrypt-verified before the migration is considered done. On any
+failure the original identity.age is restored automatically. Changing
+config.yaml's scrypt_work_factor alone does not perform this migration —
+only this command (or auto_migrate_kdf) re-encrypts identity.age.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for kdf
+
+.PP
+\fB-y\fP, \fB--yes\fP[=false]
+	Skip confirmation prompt
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  symvault migrate kdf
+  symvault migrate kdf --yes
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault-migrate(1)\fP

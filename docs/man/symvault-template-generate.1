@@ -1,0 +1,90 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-template-generate - Generate a configuration file from a template
+
+
+.SH SYNOPSIS
+\fBsymvault template generate [KEY=ref ...] [flags]\fP
+
+
+.SH DESCRIPTION
+Generate a configuration file from a template.
+
+.PP
+Refs can be specified as positional KEY=ref arguments or via --prefix to
+automatically select entries matching a vault path prefix. Each ref is a
+vault entry path with an optional dot-separated field (e.g. db.password).
+When --prefix is used without positional args, all matching entries are
+included with the entry basename as the key.
+
+
+.SH OPTIONS
+\fB--dry-run\fP[=false]
+	Show template with masked values
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for generate
+
+.PP
+\fB--name\fP="app"
+	Name of the resource being generated
+
+.PP
+\fB--output\fP=""
+	Output file path (optional)
+
+.PP
+\fB--prefix\fP=""
+	Vault path prefix to auto-select entries (e.g. work/)
+
+.PP
+\fB--type\fP=""
+	Template type (env, docker-compose, k8s-secret, github-actions, terraform)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Generate .env file from specific vault secrets
+  symvault template generate --type env DB_PASS=prod/db.password API_KEY=stripe.token
+
+  # Generate .env from all entries under work/
+  symvault template generate --type env --prefix work/
+
+  # Generate Kubernetes secret manifest with mixed refs
+  symvault template generate --type k8s-secret --name prod-secrets --prefix work/ DB_HOST=infra.db.host
+
+  # Dry-run to preview without real values
+  symvault template generate --type env --prefix work/ --dry-run
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault-template(1)\fP

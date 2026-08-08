@@ -1,0 +1,116 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-import - Import entries from another password manager
+
+
+.SH SYNOPSIS
+\fBsymvault import  [flags]\fP
+
+
+.SH DESCRIPTION
+Imports password entries from another password manager.
+
+.PP
+When --format is not specified, the format is auto-detected from the input file extension:
+  .csv  → CSV format
+  .json → JSON format
+  .yaml/.yml → YAML format
+  .zip  → CXF format (FIDO Credential Exchange Format archive)
+
+.PP
+CSV files are additionally header-sniffed: exports from Apple Passwords
+(iCloud Keychain), Chrome/Chromium and Firefox are recognized from their
+header row and mapped with a built-in profile. Use --format apple, --format
+chrome or --format firefox to select a profile explicitly. Use --format to
+override auto-detection or when the file extension does not match the actual
+format.
+
+
+.SH OPTIONS
+\fB--dry-run\fP[=false]
+	Parse import source without writing entries
+
+.PP
+\fB--format\fP=""
+	Import format (auto-detected from file extension when omitted)
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for import
+
+.PP
+\fB--mapping\fP=""
+	CSV column mapping (format: title=col1,username=col2,...)
+
+.PP
+\fB--overwrite\fP[=false]
+	Delete existing entries before writing
+
+.PP
+\fB--prefix\fP=""
+	Prepend path to all imported entries
+
+.PP
+\fB--quarantine\fP[=false]
+	Import entries into quarantine// for human review before agent access
+
+.PP
+\fB--skip-existing\fP[=false]
+	Skip entries that already exist
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Auto-detect format from file extension
+  symvault import bw-export.json --dry-run
+
+  # Auto-detect the CSV profile from the header row (Apple Passwords, Chrome, Firefox)
+  symvault import passwords.csv --dry-run
+
+  # Import a FIDO Credential Exchange Format (CXF) archive (Apple Passwords, Bitwarden, Dashlane, ...)
+  symvault import export.zip --format cxf --dry-run
+
+  # Explicitly specify a format (overrides auto-detection)
+  symvault import bitwarden bw-export.json --dry-run
+
+  # Import a Firefox export under a prefix, skipping entries that already exist
+  symvault import logins.csv --format firefox --prefix work/ --skip-existing
+
+  # Auto-detect CSV from .csv extension
+  symvault import data.csv --overwrite
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault(1)\fP, \fBsymvault-import-review(1)\fP

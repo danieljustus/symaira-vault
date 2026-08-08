@@ -1,0 +1,75 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-migrate-session - Upgrade a cached session from the legacy plaintext format to encrypted
+
+
+.SH SYNOPSIS
+\fBsymvault migrate session [flags]\fP
+
+
+.SH DESCRIPTION
+Upgrade a cached session from the legacy plaintext format to the
+encrypted form that uses a randomly generated wrap key.
+
+.PP
+Earlier versions of Symaira Vault stored cached passphrases in plaintext
+inside the OS keyring. The current implementation refuses to transparently
+load a legacy plaintext session; run this command once per vault to
+upgrade the cached entry.
+
+.PP
+The migration is a no-op when the session is already in the encrypted
+format. The vault directory defaults to the value of --vault (or the
+$SYMVAULT_VAULT environment variable).
+
+
+.SH OPTIONS
+\fB--dry-run\fP[=false]
+	Preview the migration without writing
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for session
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  symvault migrate session
+  symvault migrate session --vault ~/.symvault
+  symvault migrate session --dry-run
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault-migrate(1)\fP

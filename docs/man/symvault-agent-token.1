@@ -1,0 +1,67 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-agent-token - Manage tokens for an agent
+
+
+.SH SYNOPSIS
+\fBsymvault agent token  [flags]\fP
+
+
+.SH DESCRIPTION
+Create, list, revoke, and rotate scoped tokens for a specific agent.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for token
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Create a scoped token for an agent
+  symvault agent token my-agent new
+
+  # List tokens for an agent
+  symvault agent token my-agent list
+
+  # Revoke a token by ID
+  symvault agent token my-agent revoke <token-id>
+
+  # Rotate an agent's token (revoke + create new)
+  symvault agent token my-agent rotate
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault-agent(1)\fP, \fBsymvault-agent-token-list(1)\fP, \fBsymvault-agent-token-new(1)\fP, \fBsymvault-agent-token-revoke(1)\fP, \fBsymvault-agent-token-rotate(1)\fP

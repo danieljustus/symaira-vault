@@ -1,0 +1,76 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-share-list - List share grants
+
+
+.SH SYNOPSIS
+\fBsymvault share list [flags]\fP
+
+
+.SH DESCRIPTION
+List all share grants with optional filtering by status, agent, or path.
+
+.PP
+Examples:
+  symvault share list
+  symvault share list --status approved
+  symvault share list --from agent-a
+  symvault share list --to agent-b
+  symvault share list --path github.password
+  symvault share list --output json
+
+
+.SH OPTIONS
+\fB--from\fP=""
+	Filter by source agent
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for list
+
+.PP
+\fB--path\fP=""
+	Filter by secret path
+
+.PP
+\fB--status\fP=""
+	Filter by status (pending, approved, revoked, expired, rejected)
+
+.PP
+\fB--to\fP=""
+	Filter by target agent
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH SEE ALSO
+\fBsymvault-share(1)\fP
