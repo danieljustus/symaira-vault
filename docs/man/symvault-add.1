@@ -1,0 +1,131 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-add - Add a new password entry
+
+
+.SH SYNOPSIS
+\fBsymvault add  [flags]\fP
+
+
+.SH DESCRIPTION
+Creates a new password entry in the vault.
+
+.PP
+The entry name can use slash notation for organization (e.g., work/aws).
+Interactive mode prompts for username, password, and URL.
+
+
+.SH OPTIONS
+\fB--auto-rotate\fP[=false]
+	Enable automatic rotation reminder
+
+.PP
+\fB--expires-at\fP=""
+	Expiration date (RFC3339 format)
+
+.PP
+\fB--force\fP[=false]
+	Skip password strength validation
+
+.PP
+\fB--generate\fP[=false]
+	Generate a secure password (non-interactive)
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for add
+
+.PP
+\fB--length\fP=20
+	Generated password length for --generate
+
+.PP
+\fB--notes\fP=""
+	Notes (non-interactive)
+
+.PP
+\fB--stdin-totp-secret\fP[=false]
+	Read TOTP secret from stdin (prevents argv leak)
+
+.PP
+\fB--stdin-value\fP[=false]
+	Read password value from stdin (prevents argv leak)
+
+.PP
+\fB--totp-account\fP=""
+	TOTP account name/username
+
+.PP
+\fB--totp-issuer\fP=""
+	TOTP issuer/service name
+
+.PP
+\fB--totp-secret\fP=""
+	TOTP secret key (base32 encoded, visible in process listings)
+
+.PP
+\fB--type\fP=""
+	Secret type (api_key, bearer_token, basic_auth, ssh_key, password, certificate, database_url, totp_seed, custom). Auto-detected if not specified.
+
+.PP
+\fB--url\fP=""
+	URL (non-interactive)
+
+.PP
+\fB--usage-hint\fP=""
+	Usage hint for AI agents
+
+.PP
+\fB--username\fP=""
+	Username (non-interactive)
+
+.PP
+\fB--value\fP=""
+	Password value (non-interactive, visible in process listings)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  symvault add github
+  symvault add work/aws
+  symvault add personal/bank
+  symvault add github-token --value "my-secret-token"
+  symvault add secure-pass --generate --length 20
+  symvault add aws-key --type api_key --value "AKIA..."
+  symvault add ssh-key --type ssh_key --usage-hint "Production server key"
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault(1)\fP

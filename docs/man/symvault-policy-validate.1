@@ -1,0 +1,59 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-policy-validate - Validate a policy file
+
+
+.SH SYNOPSIS
+\fBsymvault policy validate  [flags]\fP
+
+
+.SH DESCRIPTION
+Validate a policy file for syntax and semantic errors.
+
+.PP
+Checks that the policy file has valid YAML structure, correct version,
+valid rule names, known actions, and well-formed conditions.
+
+.PP
+Example:
+  symvault policy validate ~/.config/symvault/policies/dev.yaml
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for validate
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH SEE ALSO
+\fBsymvault-policy(1)\fP

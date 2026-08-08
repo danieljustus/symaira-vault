@@ -1,0 +1,67 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-config-validate - Validate the configuration file
+
+
+.SH SYNOPSIS
+\fBsymvault config validate [path] [flags]\fP
+
+
+.SH DESCRIPTION
+Validate the Symaira Vault configuration file for schema errors.
+
+.PP
+If no path is given, validates the default config at ~/.symvault/config.yaml.
+
+.PP
+When --fix is supplied, validation failures and recoverable load errors trigger
+an interactive repair flow: deterministic defaults are offered for fields that
+have safe replacements, and a manual $EDITOR session is offered as a fall-back.
+
+
+.SH OPTIONS
+\fB--fix\fP[=false]
+	interactively repair validation errors (requires a TTY)
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for validate
+
+.PP
+\fB--json\fP[=false]
+	output validation result as JSON (deprecated: use --output=json)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH SEE ALSO
+\fBsymvault-config(1)\fP

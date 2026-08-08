@@ -1,0 +1,69 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-backup - Create a backup archive of the vault
+
+
+.SH SYNOPSIS
+\fBsymvault backup  [flags]\fP
+
+
+.SH DESCRIPTION
+Create a compressed archive (.tar.gz) of the current vault.
+
+.PP
+The backup includes all vault files: identity.age, config.yaml, entries/, and mcp-token.
+Use --exclude-git to omit the .git/ directory from the backup.
+
+
+.SH OPTIONS
+\fB--exclude-git\fP[=false]
+	Exclude .git/ directory from backup
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for backup
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Full backup to a tarball
+  symvault backup ~/symvault-2026-05-17.tar.gz
+
+  # Skip the Git history (smaller archive)
+  symvault backup --exclude-git ~/symvault.tar.gz
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault(1)\fP

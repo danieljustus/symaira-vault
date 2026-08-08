@@ -1,0 +1,59 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-migrate - Vault migration commands
+
+
+.SH SYNOPSIS
+\fBsymvault migrate [flags]\fP
+
+
+.SH DESCRIPTION
+Vault migration commands
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for migrate
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Pseudonymise on-disk paths (one-way)
+  symvault migrate pseudonymize --dry-run
+  symvault migrate pseudonymize
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault(1)\fP, \fBsymvault-migrate-kdf(1)\fP, \fBsymvault-migrate-pseudonymize(1)\fP, \fBsymvault-migrate-session(1)\fP, \fBsymvault-migrate-v4(1)\fP

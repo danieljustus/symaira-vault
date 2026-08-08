@@ -1,0 +1,98 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-broker - Run the egress credential broker (loopback MITM proxy)
+
+
+.SH SYNOPSIS
+\fBsymvault broker [flags]\fP
+
+
+.SH DESCRIPTION
+Run an opt-in loopback MITM forward proxy that attaches vault
+credentials to the agent's outbound HTTPS/HTTP requests server-side.
+
+.PP
+A brokered secret never enters the agent's process environment, argv or
+process listing: the child process only receives HTTPS_PROXY/HTTP_PROXY and
+the path to the broker's CA certificate. Hosts covered by an API template
+get credential injection; unmatched hosts are forwarded untouched (or
+rejected with 403 in --strict mode). Hosts in --passthrough are tunneled
+without TLS interception (escape hatch for certificate-pinning clients).
+
+.PP
+Same-machine limitation: on one host this removes the plaintext from the
+child environment, but an agent with the user's own filesystem access can
+still reach the vault. Deploy the broker on a separate host (or the agent
+in a container) for the strong guarantee.
+
+.PP
+The broker exits on SIGINT/SIGTERM. The generated CA certificate is written
+to /broker-ca.pem.
+
+
+.SH OPTIONS
+\fB--addr\fP="127.0.0.1:0"
+	Loopback listen address (0 selects an ephemeral port)
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for broker
+
+.PP
+\fB--passthrough\fP=[]
+	Hosts tunneled without TLS interception (comma-separated, domain suffixes match)
+
+.PP
+\fB--strict\fP[=false]
+	Reject requests to hosts without a matching template with 403
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Start the broker on an ephemeral loopback port
+  symvault broker
+
+  # Fixed port, strict mode (unmatched hosts get 403)
+  symvault broker --addr 127.0.0.1:8080 --strict
+
+  # Pass through hosts whose clients pin certificates
+  symvault broker --passthrough corporate.internal,legacy.example.com
+
+  # Use with a child process (env exports are printed at startup)
+  symvault run --broker -- gh pr create
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault(1)\fP

@@ -1,0 +1,58 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-config-list - Show all configuration values
+
+
+.SH SYNOPSIS
+\fBsymvault config list [flags]\fP
+
+
+.SH DESCRIPTION
+Display the entire Symaira Vault configuration in YAML format.
+
+.PP
+This shows the raw config file contents as-is.
+
+
+.SH OPTIONS
+\fB--file\fP=""
+	path to config file (default: ~/.symvault/config.yaml)
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for list
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH SEE ALSO
+\fBsymvault-config(1)\fP

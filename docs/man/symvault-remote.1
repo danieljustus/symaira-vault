@@ -1,0 +1,64 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-remote - Manage git remote for vault sync
+
+
+.SH SYNOPSIS
+\fBsymvault remote [flags]\fP
+
+
+.SH DESCRIPTION
+Manage the git remote used for synchronizing the vault.
+
+.PP
+Use 'symvault remote init \&' to configure a remote git repository
+for vault synchronization. The vault must be initialized first.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for remote
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  symvault remote init hermes@macmini
+  symvault remote init user@host:/custom/path.git
+  symvault remote init hermes@macmini --push
+  symvault remote status
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault(1)\fP, \fBsymvault-remote-init(1)\fP, \fBsymvault-remote-status(1)\fP

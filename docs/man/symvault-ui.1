@@ -1,0 +1,81 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-ui - Launch the interactive terminal UI
+
+
+.SH SYNOPSIS
+\fBsymvault ui [flags]\fP
+
+
+.SH DESCRIPTION
+Launches the interactive terminal UI for browsing and managing the vault.
+
+.PP
+Inside the TUI:
+  ↑/↓ or j/k   move
+  /            filter by name
+  t            filter by tag
+  s            cycle sort (name/updated, asc/desc)
+  e            edit selected entry in $EDITOR
+  d            delete selected entry (with confirmation)
+  g            generate password for selected entry
+  ?            toggle full keybinding help
+  q or Ctrl+C  quit
+
+
+.SH OPTIONS
+\fB--experimental\fP=false
+\[la]deprecated, no longer needed\[ra]
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for ui
+
+.PP
+\fB--print-keybindings\fP[=false]
+	Print the TUI keybinding reference and exit
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Launch the TUI
+  symvault ui
+
+  # Combined with a specific profile
+  symvault ui --profile work
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault(1)\fP

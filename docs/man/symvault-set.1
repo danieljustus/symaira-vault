@@ -1,0 +1,88 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-set - Set a password entry or field
+
+
+.SH SYNOPSIS
+\fBsymvault set  [flags]\fP
+
+
+.SH DESCRIPTION
+Creates or updates a password entry. Use --value, --stdin-value, or interactive mode.
+
+
+.SH OPTIONS
+\fB--force\fP[=false]
+	Skip password strength validation
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for set
+
+.PP
+\fB--stdin-value\fP[=false]
+	Read value from stdin (prevents argv leak)
+
+.PP
+\fB--totp-account\fP=""
+	TOTP account name/username
+
+.PP
+\fB--totp-issuer\fP=""
+	TOTP issuer/service name
+
+.PP
+\fB--totp-secret\fP=""
+	TOTP secret key (base32 encoded, visible in process listings)
+
+.PP
+\fB--value\fP=""
+	Value to set (non-interactive, visible in process listings)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Set a field from stdin
+  echo "mysecret" | symvault set github.password --stdin-value
+
+  # Set a field non-interactively (visible in process listing)
+  symvault set github.password --value "mysecret"
+
+  # Set TOTP data
+  symvault set github --totp-secret JBSWY3DPEHPK3PXP
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault(1)\fP

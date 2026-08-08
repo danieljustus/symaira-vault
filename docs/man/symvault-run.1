@@ -1,0 +1,109 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-run - Run a command with secrets injected as environment variables
+
+
+.SH SYNOPSIS
+\fBsymvault run [flags] --  [args...]\fP
+
+
+.SH DESCRIPTION
+Executes a command with vault secrets injected as environment variables. Use --env NAME=path.field to map secrets.
+
+.PP
+With --broker the child's outbound traffic is routed through an in-process egress credential broker, so brokered secrets never enter the child environment. The broker mode is configured with --broker-strict (reject hosts without a matching template) and --broker-passthrough (tunnel certificate-pinning hosts without TLS interception).
+
+
+.SH OPTIONS
+\fB--broker\fP[=false]
+	Route the child's outbound traffic through the egress credential broker (credentials never enter the child environment); configure with --broker-strict and --broker-passthrough
+
+.PP
+\fB--broker-passthrough\fP=[]
+	With --broker: hosts tunneled without TLS interception (comma-separated, domain suffixes match)
+
+.PP
+\fB--broker-strict\fP[=false]
+	With --broker: reject requests to hosts without a matching template with 403
+
+.PP
+\fB-e\fP, \fB--env\fP=[]
+	Environment variable mapping (NAME=path.field)
+
+.PP
+\fB-f\fP, \fB--env-file\fP=[]
+	File with env variable mappings (NAME=path.field), one per line
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for run
+
+.PP
+\fB--passthrough\fP=[]
+	Parent env var names to pass through to the child process (comma-separated)
+
+.PP
+\fB-t\fP, \fB--timeout\fP=0s
+	Timeout for the command (e.g., 30s)
+
+.PP
+\fB-C\fP, \fB--working-dir\fP=""
+	Working directory for the command
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Inject AWS_SECRET_ACCESS_KEY from vault entry "work/aws.secret"
+  symvault run --env AWS_SECRET_ACCESS_KEY=work/aws.secret -- aws s3 ls
+
+  # Multiple secrets from env file
+  symvault run --env-file .env.symvault -- npm run dev
+
+  # Pass through parent NODE_ENV and PORT to the child process
+  NODE_ENV=production PORT=8080 symvault run --passthrough NODE_ENV,PORT -- npm start
+
+  # Route the child through the egress broker: strict mode, with one
+  # certificate-pinning host tunneled without TLS interception
+  symvault run --broker --broker-strict --broker-passthrough corp.internal -- ./deploy.sh
+
+  # Multiple secrets, custom working dir
+  symvault run \\
+    --env DB_PASS=prod/db.password \\
+    --env API_TOKEN=stripe.token \\
+    --workdir /tmp/job -- ./deploy.sh
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault(1)\fP

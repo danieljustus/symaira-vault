@@ -1,0 +1,104 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-serve - Start MCP server for agent access
+
+
+.SH SYNOPSIS
+\fBsymvault serve [flags]\fP
+
+
+.SH DESCRIPTION
+Start an MCP server that exposes vault operations to AI agents.
+
+.PP
+Each agent must be configured in the agents section of the config file
+(default: /Users/daniel/.config/symaira-vault/config.yaml; existing installs may use the legacy
+~/.symvault/config.yaml) with specific permissions and scope restrictions.
+
+.PP
+The server can run in HTTP mode or stdio mode.
+
+
+.SH OPTIONS
+\fB--agent\fP=""
+	Agent name (required for --stdio; HTTP mode resolves agents per-request via X-Symaira-Agent header)
+
+.PP
+\fB--allow-locked\fP[=false]
+	Allow the MCP server to start even when the vault is locked (stdio mode only)
+
+.PP
+\fB--bind\fP="127.0.0.1"
+	Bind address for HTTP server
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for serve
+
+.PP
+\fB--port\fP=8080
+	Server port
+
+.PP
+\fB--stdio\fP[=false]
+	Enable stdio transport (for MCP)
+
+.PP
+\fB--tls-ca\fP=""
+	CA certificate file path for mTLS client verification (enables mTLS)
+
+.PP
+\fB--tls-cert\fP=""
+	TLS certificate file path (overrides config)
+
+.PP
+\fB--tls-key\fP=""
+	TLS key file path (overrides config)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # HTTP mode bound to localhost:8080
+  symvault serve --bind 127.0.0.1 --port 8080
+
+  # stdio mode for a single agent (called by MCP clients directly)
+  symvault serve --stdio --agent claude-code
+
+  # Install as a system service (macOS launchd or systemd)
+  symvault serve install
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault(1)\fP, \fBsymvault-serve-install(1)\fP, \fBsymvault-serve-status(1)\fP, \fBsymvault-serve-uninstall(1)\fP

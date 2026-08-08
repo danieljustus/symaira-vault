@@ -1,0 +1,66 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-restore - Restore vault from a backup archive
+
+
+.SH SYNOPSIS
+\fBsymvault restore  [flags]\fP
+
+
+.SH DESCRIPTION
+Restore a vault from a previously created backup archive (.tar.gz).
+
+.PP
+The archive is extracted into the current vault directory. If the vault directory
+does not exist, it will be created. After extraction, the vault is verified
+to ensure all expected files are present.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for restore
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Restore into the default vault directory
+  symvault restore ~/symvault-2026-05-17.tar.gz
+
+  # Restore into a custom location
+  symvault --vault ~/restored restore archive.tar.gz
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault(1)\fP

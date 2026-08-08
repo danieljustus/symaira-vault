@@ -1,0 +1,67 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-agent-profile - Manage agent profiles
+
+
+.SH SYNOPSIS
+\fBsymvault agent profile  [flags]\fP
+
+
+.SH DESCRIPTION
+Show, edit, and export agent profiles.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for profile
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Show agent profile
+  symvault agent profile my-agent show
+
+  # Show profile as JSON
+  symvault agent profile my-agent show --output json
+
+  # Edit agent profile in $EDITOR
+  symvault agent profile my-agent edit
+
+  # Export profile as YAML to stdout
+  symvault agent profile my-agent export
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault-agent(1)\fP, \fBsymvault-agent-profile-edit(1)\fP, \fBsymvault-agent-profile-export(1)\fP, \fBsymvault-agent-profile-show(1)\fP
