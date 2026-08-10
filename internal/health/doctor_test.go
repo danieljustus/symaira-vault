@@ -528,6 +528,7 @@ func TestFix_NonFixableChecks(t *testing.T) {
 		"vault.permissions":      true, // IT IS fixable
 		"git.repo":               true, // IT IS fixable
 		"git.gitignore.protects": true, // IT IS fixable
+		"vault.stale_temp_files": true, // IT IS fixable
 	}
 	// Everything else should NOT be fixable
 	for _, r := range results {
