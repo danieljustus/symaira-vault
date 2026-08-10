@@ -34,7 +34,7 @@ func DeviceIdentity(vaultDir string) string {
 // explicit parameter so tests can simulate network changes.
 func deviceIdentity(vaultDir, hostname string) string {
 	if vaultDir != "" {
-		if id, err := os.ReadFile(filepath.Join(vaultDir, deviceIDFile)); err == nil {
+		if id, err := os.ReadFile(filepath.Join(vaultDir, deviceIDFile)); err == nil { // #nosec G304 -- fixed filename under vaultDir, the trusted vault path from the caller
 			if name := NormalizeDeviceName(strings.TrimSpace(string(id))); name != "" {
 				return name
 			}
