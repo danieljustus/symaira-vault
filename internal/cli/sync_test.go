@@ -4,47 +4,56 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/danieljustus/symaira-vault/internal/git"
 )
 
 func TestIsOfflineErr_NoRouteToHost(t *testing.T) {
 	err := &testError{msg: "dial tcp: no route to host"}
-	if !isOfflineErr(err) {
-		t.Error("isOfflineErr() = false for 'no route to host', want true")
+	if !git.IsOfflineError(err) {
+		t.Error("IsOfflineError() = false for 'no route to host', want true")
 	}
 }
 
 func TestIsOfflineErr_ConnectionRefused(t *testing.T) {
 	err := &testError{msg: "dial tcp: connection refused"}
-	if !isOfflineErr(err) {
-		t.Error("isOfflineErr() = false for 'connection refused', want true")
+	if !git.IsOfflineError(err) {
+		t.Error("IsOfflineError() = false for 'connection refused', want true")
 	}
 }
 
 func TestIsOfflineErr_ConnectionTimedOut(t *testing.T) {
 	err := &testError{msg: "dial tcp: connection timed out"}
-	if !isOfflineErr(err) {
-		t.Error("isOfflineErr() = false for 'connection timed out', want true")
+	if !git.IsOfflineError(err) {
+		t.Error("IsOfflineError() = false for 'connection timed out', want true")
 	}
 }
 
 func TestIsOfflineErr_IOTimeout(t *testing.T) {
 	err := &testError{msg: "i/o timeout"}
-	if !isOfflineErr(err) {
-		t.Error("isOfflineErr() = false for 'i/o timeout', want true")
+	if !git.IsOfflineError(err) {
+		t.Error("IsOfflineError() = false for 'i/o timeout', want true")
+	}
+}
+
+func TestIsOfflineErr_SSHOperationTimedOut(t *testing.T) {
+	err := &testError{msg: "ssh: connect to host github.com port 22: Operation timed out"}
+	if !git.IsOfflineError(err) {
+		t.Error("IsOfflineError() = false for 'Operation timed out', want true")
 	}
 }
 
 func TestIsOfflineErr_NonOfflineError(t *testing.T) {
 	err := &testError{msg: "permission denied"}
-	if isOfflineErr(err) {
-		t.Error("isOfflineErr() = true for 'permission denied', want false")
+	if git.IsOfflineError(err) {
+		t.Error("IsOfflineError() = true for 'permission denied', want false")
 	}
 }
 
 func TestIsOfflineErr_EmptyMessage(t *testing.T) {
 	err := &testError{msg: ""}
-	if isOfflineErr(err) {
-		t.Error("isOfflineErr() = true for empty message, want false")
+	if git.IsOfflineError(err) {
+		t.Error("IsOfflineError() = true for empty message, want false")
 	}
 }
 

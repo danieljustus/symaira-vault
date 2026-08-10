@@ -80,7 +80,7 @@ func PullWithResult(vaultDir string) PullResult {
 		return result
 	}
 
-	if isOfflineError(pullErr) {
+	if IsOfflineError(pullErr) {
 		result.Error = &PushError{
 			Message: "network error - please check your connection",
 			Cause:   pullErr,
@@ -210,17 +210,6 @@ func ShouldAutoPull(vaultDir string, interval time.Duration) bool {
 		return true
 	}
 	return time.Since(t) > interval
-}
-
-func isOfflineError(err error) bool {
-	errStr := err.Error()
-	return strings.Contains(errStr, "connection") ||
-		strings.Contains(errStr, "timeout") ||
-		strings.Contains(errStr, "refused") ||
-		strings.Contains(errStr, "no such host") ||
-		strings.Contains(errStr, "network") ||
-		strings.Contains(errStr, "TLS") ||
-		strings.Contains(errStr, "EOF")
 }
 
 func copyFile(src, dst string) error {

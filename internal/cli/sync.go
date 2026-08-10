@@ -3,7 +3,6 @@ package cli
 import (
 	"os"
 	"path/filepath"
-	"strings"
 
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	"github.com/danieljustus/symaira-vault/internal/git"
@@ -35,7 +34,7 @@ func MaybeAutoPull(vaultDir string, cfg *configpkg.Config) {
 
 	result := git.PullWithResult(vaultDir)
 	if result.Error != nil {
-		if isOfflineErr(result.Error) {
+		if git.IsOfflineError(result.Error) {
 			return
 		}
 		return
@@ -61,14 +60,6 @@ func MaybeAutoPull(vaultDir string, cfg *configpkg.Config) {
 			cliout.Warnf("  %s", f)
 		}
 	}
-}
-
-func isOfflineErr(err error) bool {
-	msg := err.Error()
-	return strings.Contains(msg, "no route to host") ||
-		strings.Contains(msg, "connection refused") ||
-		strings.Contains(msg, "connection timed out") ||
-		strings.Contains(msg, "i/o timeout")
 }
 
 func findConflictFiles(vaultDir string) []string {
