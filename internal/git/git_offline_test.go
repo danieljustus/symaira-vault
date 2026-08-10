@@ -70,16 +70,18 @@ func TestPushWithTimeoutReturnsUnderlyingError(t *testing.T) {
 }
 
 func TestPushWithTimeoutAllowsContextCancellation(t *testing.T) {
-	cancelled := false
+	observed := make(chan struct{})
 	err := pushWithTimeout(100*time.Millisecond, func(ctx context.Context) error {
 		<-ctx.Done()
-		cancelled = true
+		close(observed)
 		return ctx.Err()
 	})
 	if err == nil || !strings.Contains(err.Error(), "timed out") {
 		t.Fatalf("expected timeout error, got: %v", err)
 	}
-	if !cancelled {
+	select {
+	case <-observed:
+	case <-time.After(2 * time.Second):
 		t.Error("expected push function to observe context cancellation")
 	}
 }

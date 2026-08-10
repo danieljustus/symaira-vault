@@ -221,10 +221,8 @@ to re-encrypt all entries for this new device.`,
 				CreatedAt: time.Now().UTC(),
 			}
 			if defaultDeviceName == "" {
-				hostname, _ := os.Hostname()
-				if hostname != "" {
-					joinedData.Name = hostname
-				} else {
+				joinedData.Name = git.DeviceIdentity(vaultDir)
+				if joinedData.Name == git.UnknownDeviceName {
 					joinedData.Name = "device-" + token
 				}
 			}
@@ -554,10 +552,8 @@ request so the first device can accept it.`,
 				CreatedAt: time.Now().UTC(),
 			}
 			if deviceAddName == "" {
-				hostname, _ := os.Hostname()
-				if hostname != "" {
-					joinedData.Name = hostname
-				} else {
+				joinedData.Name = git.DeviceIdentity(vaultDir)
+				if joinedData.Name == git.UnknownDeviceName {
 					joinedData.Name = "device-" + token
 				}
 			}

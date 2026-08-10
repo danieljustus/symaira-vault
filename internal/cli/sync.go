@@ -48,8 +48,7 @@ func MaybeAutoPull(vaultDir string, cfg *configpkg.Config) {
 		cliout.Warnf("Warning: could not record sync time: %v", err)
 	}
 
-	hostname, _ := os.Hostname()
-	if err := git.ResolveConflicts(vaultDir, hostname); err != nil {
+	if err := git.ResolveConflicts(vaultDir, git.DeviceIdentity(vaultDir)); err != nil {
 		cliout.Warnf("Warning: conflict resolution failed: %v", err)
 	}
 
