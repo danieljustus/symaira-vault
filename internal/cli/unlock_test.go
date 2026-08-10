@@ -126,6 +126,7 @@ func TestUnlockVaultWithTTLRefreshesTouchIDItemAfterBiometricUnlock(t *testing.T
 	oldSaveBiometric := SessionSaveBiometric
 	oldLoadIdentity := SessionLoadIdentity
 	oldSaveIdentity := SessionSaveIdentity
+	oldHasGUISession := SessionHasGUISession
 	t.Cleanup(func() {
 		SessionLoadPassphrase = oldLoadPassphrase
 		SessionSavePassphrase = oldSavePassphrase
@@ -133,10 +134,12 @@ func TestUnlockVaultWithTTLRefreshesTouchIDItemAfterBiometricUnlock(t *testing.T
 		SessionSaveBiometric = oldSaveBiometric
 		SessionLoadIdentity = oldLoadIdentity
 		SessionSaveIdentity = oldSaveIdentity
+		SessionHasGUISession = oldHasGUISession
 	})
 
 	SessionLoadIdentity = func(string) (string, error) { return "", errors.New("miss") }
 	SessionLoadPassphrase = func(string) ([]byte, error) { return nil, errors.New("miss") }
+	SessionHasGUISession = func() bool { return true }
 	SessionSavePassphrase = func(string, []byte, time.Duration) error { return nil }
 	SessionSaveIdentity = func(string, string, time.Duration) error { return nil }
 	SessionLoadBiometric = func(context.Context, string) ([]byte, error) {
