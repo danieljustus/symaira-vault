@@ -1014,7 +1014,7 @@ Interactive TUI, vault management, and observability release.
 [v2.8.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.1
 [v2.8.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.0
 [v0.9.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.9.0
-[Unreleased]: https://github.com/danieljustus/symaira-vault/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/danieljustus/symaira-vault/compare/v0.14.0...HEAD
 [v0.10.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.10.0
 [v0.10.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.10.1
 [v0.11.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.11.0
@@ -1022,3 +1022,4 @@ Interactive TUI, vault management, and observability release.
 [v0.12.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.12.0
 [v0.12.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.12.1
 [v0.13.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.13.0
+[v0.14.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.14.0

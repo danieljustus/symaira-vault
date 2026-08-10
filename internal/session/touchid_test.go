@@ -51,7 +51,7 @@ func TestTouchIDPassphraseStore_IsAvailable(t *testing.T) {
 }
 
 // TestTouchIDPassphraseStore_Save_CancelledContext exercises Save's
-// context-cancellation guard. It never reaches the Keychain: a cancelled
+// context-cancellation guard. It never reaches the Keychain: a canceled
 // context is checked before touchIDAvailable(), so this is safe and
 // deterministic regardless of whether the host has Touch ID hardware.
 func TestTouchIDPassphraseStore_Save_CancelledContext(t *testing.T) {
@@ -60,10 +60,10 @@ func TestTouchIDPassphraseStore_Save_CancelledContext(t *testing.T) {
 	cancel()
 	err := store.Save(ctx, "/tmp/does-not-matter", []byte("secret"))
 	if err == nil {
-		t.Fatal("Save with a cancelled context should return an error")
+		t.Fatal("Save with a canceled context should return an error")
 	}
 	if !errors.Is(err, context.Canceled) {
-		t.Errorf("Save with a cancelled context = %v, want context.Canceled", err)
+		t.Errorf("Save with a canceled context = %v, want context.Canceled", err)
 	}
 }
 
