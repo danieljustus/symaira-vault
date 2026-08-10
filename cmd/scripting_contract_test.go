@@ -35,6 +35,9 @@ func buildAndInitVault(t *testing.T) (string, string, []string) {
 	env := []string{
 		"GOWORK=off",
 		"SYMVAULT_PASSPHRASE=" + passphrase,
+		// Test binaries must never touch the developer's real OS keychain
+		// (issue #801): force the in-memory keyring in the child binary too.
+		"SYMVAULT_TEST_KEYRING=memory",
 	}
 
 	initCmd := exec.Command(binPath, "init", vaultDir)
@@ -76,16 +79,16 @@ func TestScriptingGet_Locked_NoPassphrase(t *testing.T) {
 	passphrase := "correct horse battery staple"
 
 	initCmd := exec.Command(binPath, "init", vaultDir)
-	initCmd.Env = append(os.Environ(), "GOWORK=off", "SYMVAULT_PASSPHRASE="+passphrase)
+	initCmd.Env = append(os.Environ(), "GOWORK=off", "SYMVAULT_PASSPHRASE="+passphrase, "SYMVAULT_TEST_KEYRING=memory")
 	initCmd.Stdin = strings.NewReader(passphrase + "\n")
 	if output, err := initCmd.CombinedOutput(); err != nil {
 		t.Fatalf("init: %v\n%s", err, output)
 	}
 
-	setEnv := []string{"GOWORK=off", "SYMVAULT_PASSPHRASE=" + passphrase}
+	setEnv := []string{"GOWORK=off", "SYMVAULT_PASSPHRASE=" + passphrase, "SYMVAULT_TEST_KEYRING=memory"}
 	_ = runBin(t, binPath, setEnv, "", "--vault", vaultDir, "set", "secret.key", "--value", "mysecret")
 
-	lockedEnv := []string{"GOWORK=off"}
+	lockedEnv := []string{"GOWORK=off", "SYMVAULT_TEST_KEYRING=memory"}
 	stdout, stderr, exitCode := runBinResult(t, binPath, lockedEnv, "--vault", vaultDir, "get", "secret.key", "--print")
 	if exitCode != 4 {
 		t.Errorf("locked get exit code = %d, want 4 (ExitLocked)", exitCode)
@@ -141,13 +144,13 @@ func TestScriptingGet_NoHangOnLocked(t *testing.T) {
 	passphrase := "correct horse battery staple"
 
 	initCmd := exec.Command(binPath, "init", vaultDir)
-	initCmd.Env = append(os.Environ(), "GOWORK=off", "SYMVAULT_PASSPHRASE="+passphrase)
+	initCmd.Env = append(os.Environ(), "GOWORK=off", "SYMVAULT_PASSPHRASE="+passphrase, "SYMVAULT_TEST_KEYRING=memory")
 	initCmd.Stdin = strings.NewReader(passphrase + "\n")
 	if output, err := initCmd.CombinedOutput(); err != nil {
 		t.Fatalf("init: %v\n%s", err, output)
 	}
 
-	lockedEnv := []string{"GOWORK=off"}
+	lockedEnv := []string{"GOWORK=off", "SYMVAULT_TEST_KEYRING=memory"}
 	cmd := exec.Command(binPath, "--vault", vaultDir, "get", "anything", "--print")
 	cmd.Env = append(os.Environ(), lockedEnv...)
 	cmd.Stdin = strings.NewReader("")

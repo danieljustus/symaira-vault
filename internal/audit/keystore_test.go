@@ -12,7 +12,7 @@ import (
 func TestKeystoreLoadOrCreateAndLoadBack(t *testing.T) {
 	dir := t.TempDir()
 
-	ks := NewKeystore(dir, nil)
+	ks := newTestKeystore(t, dir)
 	key, err := ks.LoadOrCreateHMACKey()
 	if err != nil {
 		t.Fatalf("LoadOrCreateHMACKey() error = %v", err)
@@ -37,7 +37,7 @@ func TestKeystoreLoadOrCreateAndLoadBack(t *testing.T) {
 func TestKeystoreLoadHMACKeyNotFound(t *testing.T) {
 	dir := t.TempDir()
 
-	ks := NewKeystore(dir, nil)
+	ks := newTestKeystore(t, dir)
 	_, err := ks.LoadHMACKey()
 	if err == nil {
 		t.Fatal("expected error for non-existent key, got nil")
@@ -47,7 +47,7 @@ func TestKeystoreLoadHMACKeyNotFound(t *testing.T) {
 func TestKeystoreRotateKey(t *testing.T) {
 	dir := t.TempDir()
 
-	ks := NewKeystore(dir, nil)
+	ks := newTestKeystore(t, dir)
 	key, err := ks.LoadOrCreateHMACKey()
 	if err != nil {
 		t.Fatalf("LoadOrCreateHMACKey() error = %v", err)
@@ -104,7 +104,7 @@ func keysOf(m map[string][]byte) []string {
 func TestKeystoreIdempotentLoadOrCreate(t *testing.T) {
 	dir := t.TempDir()
 
-	ks := NewKeystore(dir, nil)
+	ks := newTestKeystore(t, dir)
 	key1, err := ks.LoadOrCreateHMACKey()
 	if err != nil {
 		t.Fatalf("first LoadOrCreateHMACKey() error = %v", err)
@@ -136,7 +136,7 @@ func TestKeystoreWithAuditLogIntegration(t *testing.T) {
 
 	auditDir := filepath.Join(home, configpkg.DefaultVaultSubdir)
 
-	ks := NewKeystore(auditDir, nil)
+	ks := newTestKeystore(t, auditDir)
 	loaded, err := ks.LoadHMACKey()
 	if err != nil {
 		t.Fatalf("LoadHMACKey() error = %v", err)

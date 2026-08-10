@@ -40,7 +40,7 @@ func TestVerifyLogAgainstKeysStraddlesRotation(t *testing.T) {
 	_ = logger1.Close()
 
 	auditDir := filepath.Join(home, configpkg.DefaultVaultSubdir)
-	ks := NewKeystore(auditDir, nil)
+	ks := newTestKeystore(t, auditDir)
 	oldKey, err := ks.LoadHMACKey()
 	if err != nil {
 		t.Fatalf("LoadHMACKey() error = %v", err)
@@ -131,7 +131,7 @@ func TestVerifyLogAgainstKeysStraddlesRotationMissingArchiveIsUnverifiable(t *te
 	_ = logger1.Close()
 
 	auditDir := filepath.Join(home, configpkg.DefaultVaultSubdir)
-	ks := NewKeystore(auditDir, nil)
+	ks := newTestKeystore(t, auditDir)
 
 	newKey, _, err := ks.RotateKey()
 	if err != nil {
@@ -177,7 +177,7 @@ func TestVerifyLogAgainstKeysStraddlesRotationMissingArchiveIsUnverifiable(t *te
 // individually recoverable.
 func TestKeystoreRotateKeyTwiceSameDayBothRecoverable(t *testing.T) {
 	dir := t.TempDir()
-	ks := NewKeystore(dir, nil)
+	ks := newTestKeystore(t, dir)
 
 	key0, err := ks.LoadOrCreateHMACKey()
 	if err != nil {
