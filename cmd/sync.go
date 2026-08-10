@@ -59,7 +59,7 @@ func newSyncCmd() *cobra.Command {
 			}
 
 			if result.Error != nil {
-				if isOfflineErr(result.Error) {
+				if git.IsOfflineError(result.Error) {
 					printlnQuietAware("Warning: could not reach remote — offline")
 					return nil
 				}
@@ -72,8 +72,7 @@ func newSyncCmd() *cobra.Command {
 					cliout.Warnf("Warning: could not record sync time: %v", err)
 				}
 
-				hostname, _ := os.Hostname()
-				if err := git.ResolveConflicts(vaultDir, hostname); err != nil {
+				if err := git.ResolveConflicts(vaultDir, git.DeviceIdentity(vaultDir)); err != nil {
 					cliout.Warnf("Warning: conflict resolution failed: %v", err)
 				}
 			} else {
@@ -103,13 +102,6 @@ func newSyncCmd() *cobra.Command {
 	c.Flags().BoolVarP(&syncForce, "force", "f", false, "force pull (reset local changes)")
 	c.GroupID = cli.GroupIDSharingSync
 	return c
-}
-
-func isOfflineErr(err error) bool {
-	if err == nil {
-		return false
-	}
-	return err.Error() == "network error - please check your connection"
 }
 
 func findConflictFiles(vaultDir string) []string {

@@ -1755,7 +1755,7 @@ func TestUnstageProtectedRuntimeArtifactsNoHead(t *testing.T) {
 	}
 }
 
-func TestAutoCommitAndPushPushErrorNotSkipped(t *testing.T) {
+func TestAutoCommitAndPushUnreachableRemoteDoesNotFailWrite(t *testing.T) {
 	local := t.TempDir()
 	if err := Init(local); err != nil {
 		t.Fatalf("Init(local): %v", err)
@@ -1766,15 +1766,33 @@ func TestAutoCommitAndPushPushErrorNotSkipped(t *testing.T) {
 		t.Fatalf("open local: %v", err)
 	}
 
+	// Unreachable remote: connection to a closed local port is refused.
 	if _, err := repo.CreateRemote(&config.RemoteConfig{Name: "origin", URLs: []string{"http://127.0.0.1:1/repo.git"}}); err != nil {
 		t.Fatalf("CreateRemote(): %v", err)
 	}
 
 	writeFile(t, local, "f.txt", []byte("hello"))
 
-	err = AutoCommitAndPush(local, "test push", true)
-	if err == nil {
-		t.Error("AutoCommitAndPush should return error when push fails and is not skipped")
+	// The local commit is durable; an unreachable remote must not fail the
+	// vault write (push is best-effort replication off the critical path).
+	if err := AutoCommitAndPush(local, "test push", true); err != nil {
+		t.Fatalf("AutoCommitAndPush with unreachable remote should not fail the write: %v", err)
+	}
+
+	// The commit must exist locally despite the failed push.
+	ref, err := repo.Head()
+	if err != nil {
+		t.Fatalf("repo.Head(): %v", err)
+	}
+	commit, err := repo.CommitObject(ref.Hash())
+	if err != nil {
+		t.Fatalf("CommitObject(): %v", err)
+	}
+	if commit == nil {
+		t.Fatal("expected commit to be created")
+	}
+	if _, err := commit.File("f.txt"); err != nil {
+		t.Fatalf("expected f.txt in commit: %v", err)
 	}
 }
 

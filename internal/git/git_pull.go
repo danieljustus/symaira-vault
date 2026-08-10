@@ -80,7 +80,7 @@ func PullWithResult(vaultDir string) PullResult {
 		return result
 	}
 
-	if isOfflineError(pullErr) {
+	if IsOfflineError(pullErr) {
 		result.Error = &PushError{
 			Message: "network error - please check your connection",
 			Cause:   pullErr,
@@ -98,11 +98,8 @@ func PullWithResult(vaultDir string) PullResult {
 		return result
 	}
 
-	hostname, _ := os.Hostname()
-	if hostname == "" {
-		hostname = "unknown"
-	}
-	resolveErr := ResolveConflicts(vaultDir, hostname)
+	deviceName := DeviceIdentity(vaultDir)
+	resolveErr := ResolveConflicts(vaultDir, deviceName)
 	if resolveErr == nil {
 		w2, wtErr := repo.Worktree()
 		if wtErr == nil {
@@ -139,7 +136,10 @@ func Sync(vaultDir string, pushAfter bool) SyncResult {
 }
 
 // ResolveConflicts handles conflicts after a pull.
-func ResolveConflicts(vaultDir string, hostname string) error {
+func ResolveConflicts(vaultDir string, deviceName string) error {
+	// Migrate conflict files that were created under an older hostname-based
+	// name of this device so a single device does not leave duplicates behind.
+	renameConflictsForDevice(vaultDir, deviceName)
 	repo, err := openRepo(vaultDir)
 	if err != nil {
 		return nil
@@ -168,7 +168,7 @@ func ResolveConflicts(vaultDir string, hostname string) error {
 		}
 		ext := filepath.Ext(path)
 		base := strings.TrimSuffix(path, ext)
-		conflictName := fmt.Sprintf("%s.conflict-%s%s", base, hostname, ext)
+		conflictName := fmt.Sprintf("%s.conflict-%s%s", base, deviceName, ext)
 		conflictPath := filepath.Join(vaultDir, conflictName)
 		if err := copyFile(fullPath, conflictPath); err != nil {
 			return fmt.Errorf("save conflict file %s: %w", conflictName, err)
@@ -210,17 +210,6 @@ func ShouldAutoPull(vaultDir string, interval time.Duration) bool {
 		return true
 	}
 	return time.Since(t) > interval
-}
-
-func isOfflineError(err error) bool {
-	errStr := err.Error()
-	return strings.Contains(errStr, "connection") ||
-		strings.Contains(errStr, "timeout") ||
-		strings.Contains(errStr, "refused") ||
-		strings.Contains(errStr, "no such host") ||
-		strings.Contains(errStr, "network") ||
-		strings.Contains(errStr, "TLS") ||
-		strings.Contains(errStr, "EOF")
 }
 
 func copyFile(src, dst string) error {

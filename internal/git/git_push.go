@@ -1,6 +1,7 @@
 package git
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -39,9 +40,9 @@ func systemGitAvailable() bool {
 	return err == nil
 }
 
-func pushWithSystemGit(vaultDir string) error {
+func pushWithSystemGit(ctx context.Context, vaultDir string) error {
 	var stderr strings.Builder
-	cmd := exec.Command("git", "-C", vaultDir, "push", "origin", "HEAD")
+	cmd := exec.CommandContext(ctx, "git", "-C", vaultDir, "push", "origin", "HEAD")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = &stderr
 	cmd.Stdin = os.Stdin
@@ -102,7 +103,9 @@ func PushWithResult(vaultDir string) PushResult {
 	// For SSH remotes, prefer the user's system git/OpenSSH setup so that
 	// ~/.ssh/config, the SSH agent, and known_hosts behave exactly like normal git.
 	if isSSHURL(remoteURL) && systemGitAvailable() {
-		sysErr := pushWithSystemGit(vaultDir)
+		sysErr := pushWithTimeout(pushTimeout, func(ctx context.Context) error {
+			return pushWithSystemGit(ctx, vaultDir)
+		})
 		if sysErr == nil {
 			result.Success = true
 			return result
@@ -117,7 +120,9 @@ func PushWithResult(vaultDir string) PushResult {
 		return result
 	}
 
-	err = pushWithSSHAuth(repo, remoteURL)
+	err = pushWithTimeout(pushTimeout, func(context.Context) error {
+		return pushWithSSHAuth(repo, remoteURL)
+	})
 	if err == nil {
 		result.Success = true
 		return result
@@ -160,9 +165,7 @@ func classifyPushError(err error) *PushError {
 			Message: "authentication failed - please check your credentials",
 			Cause:   err,
 		}
-	case strings.Contains(errStr, "connection"),
-		strings.Contains(errStr, "timeout"),
-		strings.Contains(errStr, "refused"):
+	case IsOfflineError(err):
 		return &PushError{
 			Message: "network error - please check your connection",
 			Cause:   err,
