@@ -251,7 +251,7 @@ symvault agent install hermes --http --config-only
 
 HTTP mode binds to `127.0.0.1` by default and uses bearer token authentication. Agents can use the MCP `generate_totp` tool to get current TOTP codes without receiving the stored TOTP secret.
 
-**Scoped Token Management** (v2.2.0+): Create fine-grained access tokens for agents:
+**Scoped Token Management**: Create fine-grained access tokens for agents:
 ```bash
 symvault agent token hermes new --tools list_entries,get_entry --expires 24h
 symvault agent token list
@@ -348,7 +348,7 @@ For the full configuration reference, see [docs/configuration.md](docs/configura
 
 ## Dependencies
 
-- Go 1.26.4 or later
+- Go 1.26.5 or later
 - [filippo.io/age](https://pkg.go.dev/filippo.io/age) — encryption
 - [spf13/cobra](https://github.com/spf13/cobra) — CLI framework
 - [zalando/go-keyring](https://github.com/zalando/go-keyring) — OS keyring
