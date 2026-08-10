@@ -16,7 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Changes on `main` since v0.15.0.
+Changes on `main` since v0.15.1.
+
+## [v0.15.1] - 2026-08-10
+
+### Fixed
+
+- **macOS DMG failed Gatekeeper verification** — the v0.15.0 `.dmg` release asset was signed and uploaded but never validly notarized: the release workflow's codesign step enabled hardened runtime on the top-level `Symvault.app` bundle but not on the embedded `symvault` CLI binary inside it (`Contents/Resources/symvault`), and Apple's notary service requires hardened runtime on every executable in a bundle. Apple rejected the submission (`statusCode 4000`, "The executable does not have the hardened runtime enabled"), and because the workflow only logged a warning on notarization/stapling failure instead of failing the job, the unnotarized DMG was uploaded anyway — surfacing to users as "Apple could not verify that 'Symvault' is free of malware" on launch. Fixed by adding `--options runtime` to the embedded binary's `codesign` invocation.
 
 ## [v0.15.0] - 2026-08-10
 
@@ -1025,8 +1031,9 @@ Interactive TUI, vault management, and observability release.
 [v2.8.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.1
 [v2.8.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.0
 [v0.9.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.9.0
-[Unreleased]: https://github.com/danieljustus/symaira-vault/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/danieljustus/symaira-vault/compare/v0.15.1...HEAD
 [v0.15.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.15.0
+[v0.15.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.15.1
 [v0.10.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.10.0
 [v0.10.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.10.1
 [v0.11.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.11.0
