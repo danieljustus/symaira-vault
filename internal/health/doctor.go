@@ -6,8 +6,9 @@ import (
 )
 
 const (
-	osDarwin = "darwin"
-	osLinux  = "linux"
+	osDarwin  = "darwin"
+	osLinux   = "linux"
+	osWindows = "windows"
 
 	msgSessionNeeded  = "no active session — run `symvault unlock` first"
 	hintSessionNeeded = "run `symvault unlock` to decrypt entries for password strength analysis"
@@ -92,6 +93,7 @@ var allChecks = []checkDef{
 	{fn: checkRecipientsRecovery},
 	{fn: checkMCPTokens},
 	{fn: checkAuditLog},
+	{fn: checkAuditKeyringOrphans},
 	{fn: checkUpdateAvailable, tags: []string{"network", "slow"}},
 	{fn: checkVaultSize},
 	{fn: checkSearchIndexPersistence},

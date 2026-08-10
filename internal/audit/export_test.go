@@ -6,11 +6,30 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/zalando/go-keyring"
 )
+
+// newTestKeystore builds a Keystore for a temp audit dir and registers a
+// cleanup that deletes any OS keyring entry the test may have created for
+// it. Test binaries run against the in-memory fallback, so the delete is a
+// no-op there; it is the second line of defense for any test that
+// legitimately exercises the OS keyring path (issue #801) — a stray write
+// must never leave a permanent entry in the developer's real keychain.
+func newTestKeystore(t *testing.T, dir string) Keystore {
+	t.Helper()
+	t.Cleanup(func() {
+		if err := keyring.Delete(keyringService, keyringAccount(dir)); err != nil && !errors.Is(err, keyring.ErrNotFound) {
+			t.Logf("cleanup: delete keyring entry for %s: %v", dir, err)
+		}
+	})
+	return NewKeystore(dir, nil)
+}
 
 func writeTestLog(t *testing.T, dir string, entries []LogEntry) {
 	t.Helper()

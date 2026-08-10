@@ -37,6 +37,9 @@ func TestBetaSmokeFlow(t *testing.T) {
 		// synthetic passphrase. Production stays default-deny without this opt-in.
 		"SYMVAULT_ALLOW_ENV_PASSPHRASE=1",
 		"SYMVAULT_PASSPHRASE="+passphrase,
+		// Test binaries must never touch the developer's real OS keychain
+		// (issue #801): force the in-memory keyring in the child binary too.
+		"SYMVAULT_TEST_KEYRING=memory",
 	)
 	if output, err := initCmd.CombinedOutput(); err != nil {
 		t.Fatalf("init vault: %v\n%s", err, output)
@@ -51,6 +54,7 @@ func TestBetaSmokeFlow(t *testing.T) {
 			"GOWORK=off",
 			"SYMVAULT_ALLOW_ENV_PASSPHRASE=1",
 			"SYMVAULT_PASSPHRASE="+passphrase,
+			"SYMVAULT_TEST_KEYRING=memory",
 		)
 		output, err := cmd.Output()
 		if err != nil {

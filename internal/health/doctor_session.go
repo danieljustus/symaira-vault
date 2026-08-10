@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"time"
 
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	"github.com/danieljustus/symaira-vault/internal/session"
@@ -39,17 +38,34 @@ func checkAuthMethod(vaultDir string, _ Options) Result {
 	return r
 }
 
+// sessionKeyringProbe verifies that the OS keyring persists data end to end,
+// bypassing the session layer's in-memory fallback. It is a variable so tests
+// can inject a fake probe (e.g. one that succeeds on set but fails on get)
+// without touching the real keychain.
+var sessionKeyringProbe = session.VerifyOSKeyring
+
 func checkSessionCache(vaultDir string, _ Options) Result {
 	r := Result{ID: "session.cache", Name: "Session cache"}
 	status := session.GetCacheStatus()
-	r.Status = StatusOK
 	if status.Backend == "memory" || status.Backend == "" {
 		r.Status = StatusWarn
 		r.Message = "session cache uses in-memory backend (not persistent)"
 		r.Hint = "install a system keyring (macOS Keychain, GNOME Keyring, KWallet) for persistent sessions"
-	} else {
-		r.Message = fmt.Sprintf("backend: %s, persistent: %v", status.Backend, status.Persistent)
+		return r
 	}
+
+	// The configured backend claims the OS keyring, but configuration is not
+	// proof: verify that persistence actually works (write and read-back
+	// against the OS keyring itself, bypassing any in-memory fallback) and
+	// report the verified state.
+	if err := sessionKeyringProbe(); err != nil {
+		r.Status = StatusFail
+		r.Message = fmt.Sprintf("backend: os-keyring (configured), persistent: false — persistence check failed: %v", err)
+		r.Hint = "the OS keyring accepts writes but cannot be read back; check that the login keychain is in the keychain search list (`security list-keychains`) and unlocked"
+		return r
+	}
+	r.Status = StatusOK
+	r.Message = "backend: os-keyring, persistent: true (verified)"
 	return r
 }
 
@@ -354,64 +370,63 @@ func checkEnvPassphrase(vaultDir string, _ Options) Result {
 	return r
 }
 
-func checkSessionKeyring(vaultDir string, _ Options) Result {
+// keyringPlatform reports whether the current OS has a real OS keyring
+// backend (darwin/linux/windows). On other platforms the session cache is
+// memory-only by design, so a memory backend there is not a keyring failure.
+func keyringPlatform(goos string) bool {
+	switch goos {
+	case osDarwin, osLinux, osWindows:
+		return true
+	}
+	return false
+}
+
+// sessionKeyringResult is the decision logic behind checkSessionKeyring,
+// kept pure so unit tests can exercise every branch with injected fakes.
+//
+// backend is the backend reported by the session layer; probe verifies OS
+// keyring persistence bypassing the in-memory fallback; testEnv reports
+// whether this is a test/CI process (there the in-memory backend is forced
+// and must not be reported as a keyring failure).
+func sessionKeyringResult(backend string, probe func() error, testEnv bool) Result {
 	r := Result{ID: "session.keyring", Name: "Session keyring roundtrip"}
-	testData := "symvault-doctor-test"
 
-	saveDone := make(chan error, 1)
-	go func() {
-		saveDone <- session.SavePassphrase(vaultDir, []byte(testData), 10*time.Second)
-	}()
-	select {
-	case err := <-saveDone:
-		if err != nil {
+	if backend == session.CacheBackendMemory || backend == "" {
+		// The session layer is already running on the in-memory fallback (or
+		// this build has no OS keyring at all): a Save→Load roundtrip inside
+		// this process would be served entirely from memory and prove
+		// nothing. Surface the degraded state instead of reporting green.
+		if testEnv {
 			r.Status = StatusWarn
-			r.Message = "cannot write to keyring: " + err.Error()
-			r.Hint = "check OS keyring availability (macOS Keychain, GNOME Keyring, etc.)"
+			r.Message = "OS keyring persistence not verified in test/CI environment (in-memory backend active)"
 			return r
 		}
-	case <-time.After(5 * time.Second):
-		r.Status = StatusWarn
-		r.Message = "save to keyring timed out — keyring unavailable in this environment"
-		return r
-	}
-
-	loadDone := make(chan struct {
-		data []byte
-		err  error
-	}, 1)
-	go func() {
-		data, err := session.LoadPassphrase(vaultDir)
-		loadDone <- struct {
-			data []byte
-			err  error
-		}{data, err}
-	}()
-	var loaded []byte
-	select {
-	case res := <-loadDone:
-		if res.err != nil {
+		if keyringPlatform(runtime.GOOS) {
 			r.Status = StatusFail
-			r.Message = "keyring roundtrip failed: " + res.err.Error()
-			_ = session.ClearSession(vaultDir)
+			r.Message = "OS keyring persistence unavailable — session cache has fallen back to in-memory storage; sessions will not survive process exit"
+			r.Hint = "check that the login keychain is present and in the keychain search list (`security list-keychains`), then re-run `symvault doctor`"
 			return r
 		}
-		loaded = res.data
-	case <-time.After(5 * time.Second):
 		r.Status = StatusWarn
-		r.Message = "load from keyring timed out — keyring unavailable in this environment"
-		_ = session.ClearSession(vaultDir)
+		r.Message = "session cache uses in-memory backend (not persistent on this platform)"
+		r.Hint = "sessions on this platform do not persist across restarts"
 		return r
 	}
 
-	if string(loaded) != testData {
+	// The session layer claims the OS keyring backend: verify persistence
+	// directly against the OS keyring, bypassing any in-memory fallback, so
+	// a broken keychain (e.g. dropped from the search list) fails the check.
+	if err := probe(); err != nil {
 		r.Status = StatusFail
-		r.Message = "keyring returned corrupted data"
-		_ = session.ClearSession(vaultDir)
+		r.Message = "OS keyring persistence check failed: " + err.Error()
+		r.Hint = "writes may land in the default keychain while lookups search a list that excludes it — verify `security list-keychains` includes the login keychain and that it is unlocked"
 		return r
 	}
-	_ = session.ClearSession(vaultDir)
 	r.Status = StatusOK
-	r.Message = "keyring encrypt/decrypt roundtrip OK"
+	r.Message = "OS keyring write/read roundtrip OK (persistence verified)"
 	return r
+}
+
+func checkSessionKeyring(_ string, _ Options) Result {
+	return sessionKeyringResult(session.GetCacheStatus().Backend, sessionKeyringProbe, isTestOrCIEnv())
 }

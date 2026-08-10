@@ -5,12 +5,14 @@ package session
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"time"
 
 	"github.com/zalando/go-keyring"
 
 	"github.com/danieljustus/symaira-vault/internal/logging"
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 )
 
 // keyringTimeout bounds how long osKeyring waits for the underlying OS
@@ -131,6 +133,44 @@ func deleteWithTimeout(service, account string) error {
 	}
 }
 
+// VerifyOSKeyring performs a write→read→delete roundtrip directly against
+// the OS keyring, bypassing the in-memory fallback, and returns nil when the
+// OS keyring persists data end to end. It exists so `symvault doctor` can
+// fail its keyring checks when persistence is actually broken (e.g. the
+// login keychain dropped out of the keychain search list: writes land in the
+// default keychain, lookups search a list that excludes it) instead of a
+// Save→Load roundtrip inside the same process being silently served by the
+// in-memory fallback. The probe entry is removed again before returning. In
+// test and CI processes it never dials the real keychain and returns
+// ErrKeyringUnavailable instead.
+func VerifyOSKeyring() error {
+	if isTestOrCI() {
+		return ErrKeyringUnavailable
+	}
+
+	service := "symvault-doctor"
+	account := fmt.Sprintf("probe-%d", time.Now().UnixNano())
+	probe := "symvault-doctor-probe-value"
+
+	if err := setWithTimeout(service, account, probe); err != nil {
+		return fmt.Errorf("keyring write failed: %w", err)
+	}
+	defer func() {
+		if err := deleteWithTimeout(service, account); err != nil && !errors.Is(err, keyring.ErrNotFound) {
+			cliout.Warnf("doctor keyring probe cleanup failed for %q: %v", service+":"+account, err)
+		}
+	}()
+
+	got, err := getWithTimeout(service, account)
+	if err != nil {
+		return fmt.Errorf("keyring read-back failed: %w", err)
+	}
+	if got != probe {
+		return fmt.Errorf("keyring read-back returned unexpected data")
+	}
+	return nil
+}
+
 // isTestOrCI reports whether the process is a `go test` binary or running
 // under CI/headless automation. Mirrors internal/audit's isTestOrCI (kept
 // separate per-package to avoid a cross-package dependency for a handful of
@@ -139,7 +179,7 @@ func deleteWithTimeout(service, account string) error {
 // found for wrap-key" dialog in #682 when many test binaries/agents ran in
 // parallel against the developer's real login keychain.
 func isTestOrCI() bool {
-	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("HEADLESS") != "" {
+	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("HEADLESS") != "" || os.Getenv("SYMVAULT_TEST_KEYRING") == "memory" {
 		return true
 	}
 	for _, arg := range os.Args {
