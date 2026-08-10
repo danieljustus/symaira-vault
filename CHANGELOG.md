@@ -16,7 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Changes on `main` since v0.14.0.
+Changes on `main` since v0.15.0.
+
+## [v0.15.0] - 2026-08-10
 
 ### Security
 
@@ -27,8 +29,17 @@ Changes on `main` since v0.14.0.
 - **Removed OpenPass legacy compatibility surface** — the project was renamed from OpenPass to Symaira Vault / symvault a long time ago; the rename shims kept for backwards compatibility have been removed. **This is a breaking change** for anyone still relying on the legacy names: the `OPENPASS_*` environment variable fallback, the `~/.openpass` legacy vault directory fallback, and the legacy `openpass-biometric:` Touch ID keychain service prefix are all gone. Use the `SYMVAULT_*` environment variables and the default vault path instead.
 - DMG installer: unified Symaira branding and a drag-to-Applications window (#788).
 
+### Fixed
+
+- Corrected a misspelling (`cancelled` → `canceled`) in `internal/session/touchid_test.go` flagged by `misspell`; only visible when linting on darwin, since the file is darwin-only and CI's Lint job runs on ubuntu-latest.
+
+### Tests
+
+- Added deterministic unit tests for the real (non-mock) `touchIDPassphraseStore` `Save`/`Load`/`Delete`/`IsAvailable` entry points; `internal/session` coverage 72.1% → 76.2% (#794).
+
 ### Docs
 
+- Regenerated all `docs/man/*.1` pages for the current `symvault` command set and dropped the 114 stale `symaira-*.1` pages left over from before the rename (#795).
 - Re-audited the deferred `golang/protobuf` transitive dependency (via `groupcache`/`grpc`); status quo maintained, no upstream fix available yet (#790).
 
 ## [v0.14.0] - 2026-08-07
@@ -1014,7 +1025,8 @@ Interactive TUI, vault management, and observability release.
 [v2.8.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.1
 [v2.8.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.0
 [v0.9.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.9.0
-[Unreleased]: https://github.com/danieljustus/symaira-vault/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/danieljustus/symaira-vault/compare/v0.15.0...HEAD
+[v0.15.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.15.0
 [v0.10.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.10.0
 [v0.10.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.10.1
 [v0.11.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.11.0
