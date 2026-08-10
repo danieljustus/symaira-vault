@@ -30,12 +30,15 @@ func TestUnlockVaultWithTTL_InteractiveSkipsBiometric(t *testing.T) {
 
 	oldLoadPassphrase := SessionLoadPassphrase
 	oldLoadBiometric := SessionLoadBiometric
+	oldHasGUISession := SessionHasGUISession
 	t.Cleanup(func() {
 		SessionLoadPassphrase = oldLoadPassphrase
 		SessionLoadBiometric = oldLoadBiometric
+		SessionHasGUISession = oldHasGUISession
 	})
 
 	SessionLoadPassphrase = func(string) ([]byte, error) { return nil, errors.New("miss") }
+	SessionHasGUISession = func() bool { return false }
 
 	biometricCalled := false
 	SessionLoadBiometric = func(context.Context, string) ([]byte, error) {
@@ -43,13 +46,63 @@ func TestUnlockVaultWithTTL_InteractiveSkipsBiometric(t *testing.T) {
 		return append([]byte(nil), passphrase...), nil
 	}
 
-	// Non-interactive unlock: biometric must NOT be called.
+	// Headless non-interactive unlock: biometric must NOT be called.
 	_, _, err := UnlockVaultWithTTL(vaultDir, false, 0, false)
 	if err == nil {
 		t.Fatal("expected locked error for non-interactive unlock without session or env passphrase")
 	}
 	if biometricCalled {
-		t.Fatal("SessionLoadBiometric must not be called in non-interactive mode")
+		t.Fatal("SessionLoadBiometric must not be called without a GUI session")
+	}
+}
+
+func TestUnlockVaultWithTTL_NonInteractiveUsesBiometricInGUISession(t *testing.T) {
+	vaultDir := t.TempDir()
+	passphrase := []byte("test-passphrase")
+	cfg := configpkg.Default()
+	if err := cfg.SetAuthMethod(configpkg.AuthMethodTouchID); err != nil {
+		t.Fatalf("SetAuthMethod() error = %v", err)
+	}
+	if _, err := vaultpkg.InitWithPassphrase(vaultDir, passphrase, cfg); err != nil {
+		t.Fatalf("InitWithPassphrase() error = %v", err)
+	}
+	if err := cfg.SaveTo(filepath.Join(vaultDir, "config.yaml")); err != nil {
+		t.Fatalf("SaveTo() error = %v", err)
+	}
+
+	oldLoadIdentity := SessionLoadIdentity
+	oldLoadPassphrase := SessionLoadPassphrase
+	oldLoadBiometric := SessionLoadBiometric
+	oldSavePassphrase := SessionSavePassphrase
+	oldSaveIdentity := SessionSaveIdentity
+	oldSaveBiometric := SessionSaveBiometric
+	oldHasGUISession := SessionHasGUISession
+	t.Cleanup(func() {
+		SessionLoadIdentity = oldLoadIdentity
+		SessionLoadPassphrase = oldLoadPassphrase
+		SessionLoadBiometric = oldLoadBiometric
+		SessionSavePassphrase = oldSavePassphrase
+		SessionSaveIdentity = oldSaveIdentity
+		SessionSaveBiometric = oldSaveBiometric
+		SessionHasGUISession = oldHasGUISession
+	})
+
+	SessionLoadIdentity = func(string) (string, error) { return "", errors.New("miss") }
+	SessionLoadPassphrase = func(string) ([]byte, error) { return nil, errors.New("miss") }
+	SessionHasGUISession = func() bool { return true }
+	SessionLoadBiometric = func(context.Context, string) ([]byte, error) {
+		return append([]byte(nil), passphrase...), nil
+	}
+	SessionSavePassphrase = func(string, []byte, time.Duration) error { return nil }
+	SessionSaveIdentity = func(string, string, time.Duration) error { return nil }
+	SessionSaveBiometric = func(context.Context, string, []byte) error { return nil }
+
+	v, _, err := UnlockVaultWithTTL(vaultDir, false, 0, false)
+	if err != nil {
+		t.Fatalf("non-interactive GUI unlock error = %v", err)
+	}
+	if v == nil {
+		t.Fatal("non-interactive GUI unlock returned nil vault")
 	}
 }
 
@@ -73,6 +126,7 @@ func TestUnlockVaultWithTTLRefreshesTouchIDItemAfterBiometricUnlock(t *testing.T
 	oldSaveBiometric := SessionSaveBiometric
 	oldLoadIdentity := SessionLoadIdentity
 	oldSaveIdentity := SessionSaveIdentity
+	oldHasGUISession := SessionHasGUISession
 	t.Cleanup(func() {
 		SessionLoadPassphrase = oldLoadPassphrase
 		SessionSavePassphrase = oldSavePassphrase
@@ -80,10 +134,12 @@ func TestUnlockVaultWithTTLRefreshesTouchIDItemAfterBiometricUnlock(t *testing.T
 		SessionSaveBiometric = oldSaveBiometric
 		SessionLoadIdentity = oldLoadIdentity
 		SessionSaveIdentity = oldSaveIdentity
+		SessionHasGUISession = oldHasGUISession
 	})
 
 	SessionLoadIdentity = func(string) (string, error) { return "", errors.New("miss") }
 	SessionLoadPassphrase = func(string) ([]byte, error) { return nil, errors.New("miss") }
+	SessionHasGUISession = func() bool { return true }
 	SessionSavePassphrase = func(string, []byte, time.Duration) error { return nil }
 	SessionSaveIdentity = func(string, string, time.Duration) error { return nil }
 	SessionLoadBiometric = func(context.Context, string) ([]byte, error) {
