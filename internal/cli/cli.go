@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -90,7 +91,19 @@ var (
 	SessionGetCacheStatus func() session.CacheStatus                                          = session.GetCacheStatus
 	SessionLoadIdentity   func(vaultDir string) (string, error)                               = session.LoadIdentity
 	SessionSaveIdentity   func(vaultDir string, identity string, ttl time.Duration) error     = session.SaveIdentity
+	SessionHasGUISession  func() bool                                                         = session.HasGUISession
 )
+
+// currentCommandPath is the cobra command path of the command currently
+// executing (e.g. "symvault unlock"), set by the root PersistentPreRunE.
+// It is used to tailor lock/dead-end guidance to the command the user ran.
+var currentCommandPath string
+
+// invokedCommandIsUnlock reports whether the currently executing command
+// is `symvault unlock` (or any command whose path ends in "unlock").
+func invokedCommandIsUnlock() bool {
+	return currentCommandPath == "unlock" || strings.HasSuffix(currentCommandPath, " unlock")
+}
 
 // CLIContext groups mutable state that was previously stored as package-level
 // globals. Holding state in a context struct makes test isolation straightforward:
@@ -238,6 +251,7 @@ Daily use:
 		SilenceUsage:  true,
 		SilenceErrors: false,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			currentCommandPath = cmd.CommandPath()
 			if OutputFormat != outputFormatText {
 				if !CommandSupportsJSON(cmd) {
 					return errorspkg.NewCLIError(errorspkg.ExitUsage,
@@ -322,7 +336,11 @@ func ExecuteRoot(cmd *cobra.Command) error {
 			case errorspkg.ExitNotInitialized:
 				cliout.Hintf("Run 'symvault init' for a quick start, or 'symvault setup' for the guided wizard.")
 			case errorspkg.ExitLocked:
-				cliout.Hintf("Unlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.")
+				if invokedCommandIsUnlock() {
+					cliout.Hintf("Enable Touch ID with 'symvault auth set touchid', or for non-interactive use set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.")
+				} else {
+					cliout.Hintf("Unlock with 'symvault unlock'. For non-interactive use, set SYMVAULT_PASSPHRASE together with SYMVAULT_ALLOW_ENV_PASSPHRASE=1 (or security.allow_env_passphrase: true in config.yaml) — the passphrase variable alone is ignored.")
+				}
 			case errorspkg.ExitConfigError:
 				cliout.Hintf("Run 'symvault doctor' to diagnose and fix configuration issues.")
 			case errorspkg.ExitSuccess, errorspkg.ExitGeneralError, errorspkg.ExitPermissionDenied, errorspkg.ExitInvalidInput, errorspkg.ExitDoctorWarn, errorspkg.ExitDoctorFail, errorspkg.ExitUpdateAvailable:
