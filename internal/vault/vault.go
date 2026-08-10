@@ -487,7 +487,12 @@ func (v *Vault) AutoCommitEntry(message, path string) error {
 	if err != nil {
 		return err
 	}
-	return v.AutoCommitPaths(message, filepath.ToSlash(relPath))
+	// The entry write also rewrites manifest.age. Flush any pending (debounced)
+	// manifest updates and commit both files together so the committed tree is
+	// internally consistent and the manifest never drifts (which would trigger
+	// false tamper alarms in doctor).
+	FlushManifestUpdates()
+	return v.AutoCommitPaths(message, filepath.ToSlash(relPath), manifestAgeName)
 }
 
 func (v *Vault) AutoCommitPaths(message string, affectedPaths ...string) error {
