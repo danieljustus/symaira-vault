@@ -145,15 +145,18 @@ func resolveUnlockPassphrase(vaultDir string, interactive bool, cfg *configpkg.C
 	passphraseFromEnv := false
 	passphraseFromBiometric := false
 	if err != nil || len(passphrase) == 0 {
-		if cfg.EffectiveAuthMethod() == configpkg.AuthMethodTouchID && interactive {
+		if cfg.EffectiveAuthMethod() == configpkg.AuthMethodTouchID && SessionHasGUISession() {
+			// Touch ID is a LocalAuthentication GUI prompt, not a terminal
+			// prompt: it works without a controlling TTY, so attempt it
+			// whenever a GUI session exists — even for agents/scripts.
 			biometricCtx, biometricCancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer biometricCancel()
 			if biometricPassphrase, biometricErr := SessionLoadBiometric(biometricCtx, vaultDir); biometricErr == nil && len(biometricPassphrase) > 0 {
 				passphrase = biometricPassphrase
 				passphraseFromBiometric = true
 			}
-		} else if cfg.EffectiveAuthMethod() == configpkg.AuthMethodTouchID && !interactive {
-			cliout.Warnf("Touch ID skipped in non-interactive mode; use 'symvault unlock' or enable security.allow_env_passphrase / SYMVAULT_ALLOW_ENV_PASSPHRASE")
+		} else if cfg.EffectiveAuthMethod() == configpkg.AuthMethodTouchID && !interactive && !SessionHasGUISession() {
+			cliout.Warnf("Touch ID skipped (no GUI session); use 'symvault unlock' in a graphical session or enable security.allow_env_passphrase / SYMVAULT_ALLOW_ENV_PASSPHRASE")
 		}
 		if len(passphrase) == 0 && IsEnvPassphraseAllowed(cfg) {
 			// Check the early-cached env passphrase first (sniffed in main()
@@ -234,6 +237,11 @@ func lockedMessageForCache() string {
 	status := SessionGetCacheStatus()
 	if !status.Persistent {
 		return "vault locked: this build cannot share 'symvault unlock' sessions across processes; use 'symvault unlock', enable Touch ID, or for headless/CI set security.allow_env_passphrase: true / SYMVAULT_ALLOW_ENV_PASSPHRASE=1"
+	}
+	if invokedCommandIsUnlock() {
+		// The user already ran `symvault unlock`; pointing them back at it
+		// would be a dead end. Point at the actual fixes instead.
+		return "vault locked: enable Touch ID with 'symvault auth set touchid' (or for headless/CI set security.allow_env_passphrase: true / SYMVAULT_ALLOW_ENV_PASSPHRASE=1)"
 	}
 	return "vault locked: run 'symvault unlock' first or enable Touch ID with 'symvault auth set touchid' (for headless/CI see security.allow_env_passphrase)"
 }
