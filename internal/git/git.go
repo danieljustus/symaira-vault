@@ -64,6 +64,7 @@ const DefaultCommitTemplate = "Update from Symaira Vault"
 
 const DefaultGitignoreContent = `# Symaira Vault vault - ignore sensitive files
 identity.age
+.device-id
 *.key
 *.pem
 # Ignore Symaira Vault runtime artifacts
@@ -85,6 +86,8 @@ var protectedRuntimePaths = []string{
 	"mcp-token",
 	"mcp-tokens.json",
 	".runtime-port",
+	// Per-device identity: local only, never replicated via the remote.
+	".device-id",
 }
 
 type Commit struct {
@@ -248,8 +251,12 @@ func AutoCommitAndPushWithOptions(vaultDir string, opts CommitOptions, autoPush 
 	}
 	if autoPush {
 		result := PushWithResult(vaultDir)
-		if result.Error != nil {
-			if result.Skipped {
+		if result.Error != nil && !result.Skipped {
+			// The local commit is durable; replication to the remote is
+			// best-effort and off the critical path. An unreachable remote
+			// must not fail the vault write — pending commits are drained by
+			// a later push once the remote is reachable again.
+			if IsOfflineError(result.Error) {
 				return nil
 			}
 			return fmt.Errorf("push failed: %w", result.Error)

@@ -5,24 +5,26 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/danieljustus/symaira-vault/internal/git"
 )
 
 func TestIsOfflineErr_Nil(t *testing.T) {
-	if isOfflineErr(nil) {
+	if git.IsOfflineError(nil) {
 		t.Error("expected false for nil error")
 	}
 }
 
 func TestIsOfflineErr_NetworkError(t *testing.T) {
 	err := errors.New("network error - please check your connection")
-	if !isOfflineErr(err) {
+	if !git.IsOfflineError(err) {
 		t.Error("expected true for network error")
 	}
 }
 
 func TestIsOfflineErr_OtherError(t *testing.T) {
 	err := errors.New("some other error")
-	if isOfflineErr(err) {
+	if git.IsOfflineError(err) {
 		t.Error("expected false for non-network error")
 	}
 }
