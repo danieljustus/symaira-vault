@@ -355,9 +355,10 @@ jobs:
         run: |
           APP_PATH="client/Symvault.xcarchive/Products/Applications/Symvault.app"
           RESOURCES="$APP_PATH/Contents/Resources"
-          # Sign embedded symvault binary first (sub-executable, no hardened runtime needed)
+          # Sign embedded symvault binary first. Notarization requires hardened
+          # runtime on every executable in the bundle, not just the top-level .app.
           if [ -f "$RESOURCES/symvault" ]; then
-            codesign -s "$CODESIGN_IDENTITY" --timestamp --force "$RESOURCES/symvault"
+            codesign -s "$CODESIGN_IDENTITY" --timestamp --options runtime --force "$RESOURCES/symvault"
             echo "Signed embedded binary: $RESOURCES/symvault"
           fi
           # Sign the .app bundle with hardened runtime
