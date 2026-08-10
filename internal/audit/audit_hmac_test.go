@@ -109,7 +109,7 @@ func TestHMACTamperedEntryDetected(t *testing.T) {
 	}
 
 	auditDir := filepath.Join(home, configpkg.DefaultVaultSubdir)
-	ks := NewKeystore(auditDir, nil)
+	ks := newTestKeystore(t, auditDir)
 	key, err := ks.LoadHMACKey()
 	if err != nil {
 		t.Fatalf("LoadHMACKey() error = %v", err)
@@ -435,7 +435,7 @@ func TestHMACInsertedLegacyRecord(t *testing.T) {
 	}
 
 	auditDir := filepath.Join(home, configpkg.DefaultVaultSubdir)
-	ks := NewKeystore(auditDir, nil)
+	ks := newTestKeystore(t, auditDir)
 	key, err := ks.LoadHMACKey()
 	if err != nil {
 		t.Fatalf("LoadHMACKey() error = %v", err)
@@ -502,7 +502,7 @@ func TestHMACTrailingLegacyRecord(t *testing.T) {
 	}
 
 	auditDir := filepath.Join(home, configpkg.DefaultVaultSubdir)
-	ks := NewKeystore(auditDir, nil)
+	ks := newTestKeystore(t, auditDir)
 	key, err := ks.LoadHMACKey()
 	if err != nil {
 		t.Fatalf("LoadHMACKey() error = %v", err)

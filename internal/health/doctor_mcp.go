@@ -78,6 +78,12 @@ func checkAuditLog(vaultDir string, _ Options) Result {
 	ks := audit.NewKeystore(vaultDir, nil)
 	keys, currentKid, keyErr := audit.LoadVerificationKeys(ks)
 	if keyErr != nil {
+		if audit.IsHMACKeyNotFound(keyErr) {
+			r.Status = StatusWarn
+			r.Message = "no HMAC key exists yet — audit log entries cannot be verified"
+			r.Hint = "run `symvault audit rotate-key` to bootstrap an HMAC key"
+			return r
+		}
 		r.Status = StatusWarn
 		r.Message = fmt.Sprintf("cannot read hmac key: %v", keyErr)
 		return r

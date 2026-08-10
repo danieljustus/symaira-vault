@@ -82,8 +82,13 @@ func newRotateKeyCmd() *cobra.Command {
 		Short: "Rotate the audit log HMAC key",
 		Long: `Generate a new HMAC key for audit log integrity and archive the current key.
 
-The old key is archived to a timestamped file (audit-hmac-key.rotated.YYYY-MM-DD)
-in the vault directory. A new audit log file is started with the new key.`,
+The old key is archived to a file named after its fingerprint
+(audit-hmac-key.rotated.<fingerprint>) in the vault directory. A new audit
+log file is started with the new key.
+
+If no HMAC key exists yet, a new key is created instead (bootstrap): nothing
+is archived and the command reports that it bootstrapped rather than
+rotated.`,
 		Annotations: map[string]string{
 			cli.RequiresVaultAnnotation: "true",
 		},
@@ -99,9 +104,13 @@ in the vault directory. A new audit log file is started with the new key.`,
 				return fmt.Errorf("rotate HMAC key: %w", err)
 			}
 
-			cmd.Printf("HMAC key rotated successfully.\n")
 			cmd.Printf("New key: %x (first 4 bytes)\n", newKey[:4])
-			cmd.Printf("Old key archived to: %s\n", archivePath)
+			if archivePath == "" {
+				cmd.Printf("HMAC key bootstrapped — no previous key existed, so no archive file was written.\n")
+			} else {
+				cmd.Printf("HMAC key rotated successfully.\n")
+				cmd.Printf("Old key archived to: %s\n", archivePath)
+			}
 			cmd.Printf("A new audit log will be started on the next audit write.\n")
 			return nil
 		},

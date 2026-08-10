@@ -197,12 +197,36 @@ func (k *fallbackKeystore) LoadHMACKey() ([]byte, error) {
 // RotateKey generates a new HMAC key, archives the existing key file to a
 // backup named after the old key's fingerprint (so repeated rotations never
 // collide), and writes the new key to the key file.
+//
+// When no HMAC key exists yet, it bootstraps: a fresh key is generated and
+// stored, no archive file is written (there is nothing to archive), and the
+// returned archivePath is empty so callers can tell bootstrap from rotation.
+// A key that exists but cannot be read (corrupt data, permission problems)
+// is NOT treated as "no key" — such errors still fail the rotation.
 func (k *fallbackKeystore) RotateKey() ([]byte, string, error) {
 	keyPath := filepath.Join(k.auditDir, hmacKeyFileName)
 
 	oldKey, err := k.LoadHMACKey()
 	if err != nil {
-		return nil, "", fmt.Errorf("load existing key for rotation: %w", err)
+		if !IsHMACKeyNotFound(err) {
+			return nil, "", fmt.Errorf("load existing key for rotation: %w", err)
+		}
+
+		// No key stored yet: bootstrap a fresh one instead of rotating.
+		newKey := make([]byte, hmacKeySize)
+		if _, err := io.ReadFull(rand.Reader, newKey); err != nil {
+			return nil, "", fmt.Errorf("generate new HMAC key: %w", err)
+		}
+		if k.identity != nil {
+			if err := vaultcrypto.SaveEncryptedKey(keyPath, newKey, k.identity); err != nil {
+				return nil, "", fmt.Errorf("write encrypted HMAC key: %w", err)
+			}
+		} else {
+			if err := k.saveLocallyEncrypted(keyPath, newKey); err != nil {
+				return nil, "", fmt.Errorf("write locally-encrypted HMAC key: %w", err)
+			}
+		}
+		return newKey, "", nil
 	}
 
 	archivePath := RotateKeyArchivePath(k.auditDir, oldKey)
@@ -249,6 +273,14 @@ func (k *fallbackKeystore) LoadArchivedKeys() (map[string][]byte, error) {
 		keys[KeyFingerprint(key)] = key
 	}
 	return keys, nil
+}
+
+// IsHMACKeyNotFound reports whether err means "no HMAC key is stored yet"
+// (as opposed to a stored key that cannot be read). RotateKey uses it to
+// bootstrap when no key exists while still failing on corrupt or unreadable
+// keys. On file-based platforms not-found is a missing key file.
+func IsHMACKeyNotFound(err error) bool {
+	return errors.Is(err, os.ErrNotExist) || errors.Is(err, vaultcrypto.ErrKeyFileNotFound)
 }
 
 // NewKeystore creates a fallbackKeystore on platforms without OS keyring support.

@@ -138,8 +138,38 @@ func LoadGrantSigningKey(vaultDir string, identity *age.X25519Identity) ([]byte,
 	return hex.DecodeString(hexKey)
 }
 
+// isTestOrCI reports whether the process is a `go test` binary or running
+// under CI/headless automation. Mirrors internal/audit's isTestOrCI (kept
+// separate per-package): test processes must never reach the real OS
+// keychain, which is what produced the leftover keychain entries in #801.
+func isTestOrCI() bool {
+	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("HEADLESS") != "" || os.Getenv("SYMVAULT_TEST_KEYRING") == "memory" {
+		return true
+	}
+	for _, arg := range os.Args {
+		if len(arg) >= 6 && arg[:6] == "-test." {
+			return true
+		}
+	}
+	if len(os.Args) > 0 {
+		base := os.Args[0]
+		for i := len(base) - 1; i >= 0; i-- {
+			if base[i] == '/' || base[i] == '\\' {
+				base = base[i+1:]
+				break
+			}
+		}
+		if (len(base) >= 5 && base[len(base)-5:] == ".test") ||
+			(len(base) >= 9 && base[len(base)-9:] == ".test.exe") ||
+			base == "test" { //nolint:goconst // test-binary sentinel, mirrors internal/audit's isTestOrCI
+			return true
+		}
+	}
+	return false
+}
+
 func init() {
-	if os.Getenv("CI") != "" {
+	if isTestOrCI() {
 		grantFallbackActive = true
 		grantFallback = &memoryGrantKeyring{}
 	}

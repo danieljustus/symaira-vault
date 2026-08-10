@@ -39,18 +39,25 @@ type memoryKeyring struct {
 	store map[string]string
 }
 
+// errMemoryKeyringNotFound is returned by the in-memory fallback store when
+// no entry exists. It is a package sentinel so callers can distinguish "no
+// key stored yet" from real keyring failures even when the fallback is
+// active (test binaries, CI, or a tripped fallback) — IsHMACKeyNotFound
+// treats it the same as the OS keyring's ErrNotFound.
+var errMemoryKeyringNotFound = errors.New("audit: HMAC key not found in keyring")
+
 func (m *memoryKeyring) Get(service, account string) (string, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	if m.store == nil {
-		return "", errors.New("not found")
+		return "", errMemoryKeyringNotFound
 	}
 
 	key := service + "|" + account
 	val, ok := m.store[key]
 	if !ok {
-		return "", errors.New("not found")
+		return "", errMemoryKeyringNotFound
 	}
 	return val, nil
 }
@@ -157,28 +164,28 @@ func keyringGetWithTimeout(service, account string) (string, error) {
 	}
 }
 
-func (k *osKeystore) setWithFallback(service, account, value string) error {
+func (k *osKeystore) setWithFallback(account, value string) error {
 	if isFallbackActive() {
-		return getFallback().Set(service, account, value)
+		return getFallback().Set(keyringService, account, value)
 	}
 
-	if err := keyringSetWithTimeout(service, account, value); err != nil {
-		return getFallback().Set(service, account, value)
+	if err := keyringSetWithTimeout(keyringService, account, value); err != nil {
+		return getFallback().Set(keyringService, account, value)
 	}
 	return nil
 }
 
-func (k *osKeystore) getWithFallback(service, account string) (string, error) {
+func (k *osKeystore) getWithFallback(account string) (string, error) {
 	if isFallbackActive() {
-		return getFallback().Get(service, account)
+		return getFallback().Get(keyringService, account)
 	}
 
-	val, err := keyringGetWithTimeout(service, account)
+	val, err := keyringGetWithTimeout(keyringService, account)
 	if err != nil {
 		if errors.Is(err, keyring.ErrNotFound) {
 			return "", err
 		}
-		return getFallback().Get(service, account)
+		return getFallback().Get(keyringService, account)
 	}
 	return val, nil
 }
@@ -198,7 +205,7 @@ func (k *osKeystore) LoadOrCreateHMACKey() ([]byte, error) {
 
 	account := keyringAccount(k.auditDir)
 	hexKey := hex.EncodeToString(hmacKey)
-	if err := k.setWithFallback(keyringService, account, hexKey); err != nil {
+	if err := k.setWithFallback(account, hexKey); err != nil {
 		return nil, fmt.Errorf("store HMAC key in keyring: %w", err)
 	}
 
@@ -212,7 +219,7 @@ func (k *osKeystore) LoadOrCreateHMACKey() ([]byte, error) {
 func (k *osKeystore) LoadHMACKey() ([]byte, error) {
 	account := keyringAccount(k.auditDir)
 
-	hexKey, err := k.getWithFallback(keyringService, account)
+	hexKey, err := k.getWithFallback(account)
 	if err == nil {
 		return hex.DecodeString(hexKey)
 	}
@@ -227,7 +234,7 @@ func (k *osKeystore) LoadHMACKey() ([]byte, error) {
 	}
 
 	hexKeyStr := hex.EncodeToString(data)
-	if storeErr := k.setWithFallback(keyringService, account, hexKeyStr); storeErr == nil {
+	if storeErr := k.setWithFallback(account, hexKeyStr); storeErr == nil {
 		_ = os.Remove(keyPath)
 	}
 
@@ -238,10 +245,32 @@ func (k *osKeystore) LoadHMACKey() ([]byte, error) {
 // hex-encoded file in the audit directory (named after the old key's
 // fingerprint so repeated rotations never collide), and stores the new key
 // in the OS keyring (with memory fallback).
+//
+// When no HMAC key exists yet, it bootstraps: a fresh key is generated and
+// stored, no archive file is written (there is nothing to archive), and the
+// returned archivePath is empty so callers can tell bootstrap from rotation.
+// A key that exists but cannot be read (corrupt hex, permission problems)
+// is NOT treated as "no key" — such errors still fail the rotation.
 func (k *osKeystore) RotateKey() ([]byte, string, error) {
 	oldKey, err := k.LoadHMACKey()
 	if err != nil {
-		return nil, "", fmt.Errorf("load existing key for rotation: %w", err)
+		if !IsHMACKeyNotFound(err) {
+			return nil, "", fmt.Errorf("load existing key for rotation: %w", err)
+		}
+
+		// No key stored yet: bootstrap a fresh one instead of rotating.
+		newKey := make([]byte, hmacKeySize)
+		if _, err := io.ReadFull(rand.Reader, newKey); err != nil {
+			return nil, "", fmt.Errorf("generate new HMAC key: %w", err)
+		}
+
+		account := keyringAccount(k.auditDir)
+		hexNew := hex.EncodeToString(newKey)
+		if err := k.setWithFallback(account, hexNew); err != nil {
+			return nil, "", fmt.Errorf("store new HMAC key in keyring: %w", err)
+		}
+
+		return newKey, "", nil
 	}
 
 	archivePath := RotateKeyArchivePath(k.auditDir, oldKey)
@@ -257,7 +286,7 @@ func (k *osKeystore) RotateKey() ([]byte, string, error) {
 
 	account := keyringAccount(k.auditDir)
 	hexNew := hex.EncodeToString(newKey)
-	if err := k.setWithFallback(keyringService, account, hexNew); err != nil {
+	if err := k.setWithFallback(account, hexNew); err != nil {
 		return nil, "", fmt.Errorf("store new HMAC key in keyring: %w", err)
 	}
 
@@ -289,6 +318,15 @@ func (k *osKeystore) LoadArchivedKeys() (map[string][]byte, error) {
 	return keys, nil
 }
 
+// IsHMACKeyNotFound reports whether err means "no HMAC key is stored yet"
+// (as opposed to a stored key that cannot be read). RotateKey uses it to
+// bootstrap when no key exists while still failing on corrupt or unreadable
+// keys. On OS keyring platforms not-found is the OS keyring's ErrNotFound or
+// the in-memory fallback's sentinel.
+func IsHMACKeyNotFound(err error) bool {
+	return errors.Is(err, keyring.ErrNotFound) || errors.Is(err, errMemoryKeyringNotFound)
+}
+
 // NewKeystore creates a Keystore backed by the OS keyring.
 // The identity parameter is used by the fallback keystore for encrypting
 // keys at rest and is ignored on OS keyring platforms.
@@ -297,7 +335,7 @@ func NewKeystore(auditDir string, identity *age.X25519Identity) Keystore {
 }
 
 func isTestOrCI() bool {
-	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("HEADLESS") != "" {
+	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("HEADLESS") != "" || os.Getenv("SYMVAULT_TEST_KEYRING") == "memory" {
 		return true
 	}
 	for _, arg := range os.Args {
