@@ -1,0 +1,74 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-get - Get a password entry
+
+
+.SH SYNOPSIS
+\fBsymvault get  [flags]\fP
+
+
+.SH DESCRIPTION
+Retrieves and displays a password entry. Use path.field syntax to get specific fields.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for get
+
+.PP
+\fB-p\fP, \fB--print\fP[=false]
+	Print value to stdout instead of copying to clipboard
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Get a specific field (auto-copies to clipboard on TTY)
+  symvault get github.password
+
+  # Substring search fallback (when exact path doesn't exist)
+  symvault get git
+
+  # Explicitly print to stdout instead of clipboard
+  symvault get github.password --print
+
+  # Output as JSON
+  symvault get github --output json
+
+  # Use a specific profile
+  symvault get github.password --profile work
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault(1)\fP

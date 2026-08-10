@@ -1,0 +1,68 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-init - Initialize a new password vault
+
+
+.SH SYNOPSIS
+\fBsymvault init [vault-dir] [flags]\fP
+
+
+.SH DESCRIPTION
+Creates a new vault directory with identity and configuration.
+
+
+.SH OPTIONS
+\fB--auth\fP="ask"
+	unlock method for this vault (ask, passphrase, touchid)
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for init
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Initialize default vault
+  symvault init
+
+  # Initialize with specific auth method
+  symvault init --auth touchid
+
+  # Initialize custom vault directory
+  symvault init ~/my-vault
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault(1)\fP

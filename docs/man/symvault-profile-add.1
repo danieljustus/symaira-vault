@@ -1,0 +1,55 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-profile-add - Add a new profile
+
+
+.SH SYNOPSIS
+\fBsymvault profile add  [flags]\fP
+
+
+.SH DESCRIPTION
+Add a new vault profile with a name and vault path.
+
+.PP
+Example:
+  symvault profile add work --vault ~/.symvault-work
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for add
+
+.PP
+\fB--vault\fP=""
+	path to the vault directory (required)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+
+.SH SEE ALSO
+\fBsymvault-profile(1)\fP

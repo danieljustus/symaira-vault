@@ -1,0 +1,82 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-verify - Verify vault entry integrity against manifest
+
+
+.SH SYNOPSIS
+\fBsymvault verify [flags]\fP
+
+
+.SH DESCRIPTION
+Verify that all vault entries match their recorded manifest hashes.
+This detects tampered or corrupted entry files.
+
+.PP
+Use --rebuild to regenerate the manifest from the on-disk .age files (use
+this when entries have been added out-of-band, e.g. via git sync, and the
+manifest has not been updated). Use --rebuild-only to skip the integrity
+check and only rebuild.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for verify
+
+.PP
+\fB--rebuild\fP[=false]
+	Rebuild the manifest from on-disk entries after the integrity check
+
+.PP
+\fB--rebuild-only\fP[=false]
+	Rebuild the manifest and skip the integrity check
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Verify manifest matches on-disk entries
+  symvault verify
+
+  # Rebuild the manifest from on-disk entries (fixes "unknown" entries from sync)
+  symvault verify --rebuild
+
+  # Just rebuild, skip the integrity check
+  symvault verify --rebuild-only
+
+  # As part of a scripted health check
+  symvault verify || echo "Manifest mismatch — investigate"
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault(1)\fP

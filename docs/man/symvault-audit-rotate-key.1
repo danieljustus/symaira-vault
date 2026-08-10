@@ -1,0 +1,55 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-audit-rotate-key - Rotate the audit log HMAC key
+
+
+.SH SYNOPSIS
+\fBsymvault audit rotate-key [flags]\fP
+
+
+.SH DESCRIPTION
+Generate a new HMAC key for audit log integrity and archive the current key.
+
+.PP
+The old key is archived to a timestamped file (audit-hmac-key.rotated.YYYY-MM-DD)
+in the vault directory. A new audit log file is started with the new key.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for rotate-key
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH SEE ALSO
+\fBsymvault-audit(1)\fP

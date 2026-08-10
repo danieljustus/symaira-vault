@@ -1,0 +1,64 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-agent-token-rotate - Rotate the agent's token
+
+
+.SH SYNOPSIS
+\fBsymvault agent token rotate [flags]\fP
+
+
+.SH DESCRIPTION
+Revoke the current token for this agent and create a new one.
+The new raw token is printed exactly once.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for rotate
+
+.PP
+\fB--label\fP=""
+	Human-readable label
+
+.PP
+\fB--tools\fP=[\fI]
+	Comma-separated allowed tools, or '\fP\&' for all
+
+.PP
+\fB--ttl\fP=""
+	Token TTL (e.g. 24h, 7d); defaults to mcp.scoped_token_ttl from config
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH SEE ALSO
+\fBsymvault-agent-token(1)\fP

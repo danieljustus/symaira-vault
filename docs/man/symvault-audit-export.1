@@ -1,0 +1,102 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-audit-export - Export audit evidence for auditor or incident-response bundles
+
+
+.SH SYNOPSIS
+\fBsymvault audit export [flags]\fP
+
+
+.SH DESCRIPTION
+Export local audit evidence without exposing secret values.
+
+.PP
+Supports JSON and table output. Filter by time range, agent, and action.
+Optionally verify HMAC integrity and redact vault paths.
+
+
+.SH OPTIONS
+\fB--action\fP=""
+	Action type to filter by (e.g. get_entry, set_entry)
+
+.PP
+\fB--agent\fP=""
+	Agent name to filter by (default: all agents)
+
+.PP
+\fB--failed\fP[=false]
+	Export only failed entries
+
+.PP
+\fB--format\fP="json"
+	Output format: json or table
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for export
+
+.PP
+\fB-o\fP, \fB--output\fP=""
+	Output file path (default: stdout)
+
+.PP
+\fB--redact-paths\fP[=false]
+	Redact vault paths in exported entries
+
+.PP
+\fB--since\fP=""
+	Export entries since duration (e.g. 1h, 24h, 7d)
+
+.PP
+\fB--verify-hmac\fP[=false]
+	Verify HMAC integrity of exported entries
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Export all audit entries as JSON
+  symvault audit export --format json
+
+  # Export last 7 days to a file
+  symvault audit export --since 7d --output evidence.json
+
+  # Export with path redaction for sharing
+  symvault audit export --redact-paths --output shared-evidence.json
+
+  # Verify HMAC integrity
+  symvault audit export --verify-hmac
+
+  # Filter by agent and action
+  symvault audit export --agent claude-code --action get_entry
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault-audit(1)\fP

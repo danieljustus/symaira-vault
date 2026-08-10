@@ -1,0 +1,84 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-startup-profile - Measure and report CLI startup time
+
+
+.SH SYNOPSIS
+\fBsymvault startup-profile [flags]\fP
+
+
+.SH DESCRIPTION
+Measure CLI startup time by re-executing the binary multiple times.
+
+.PP
+Reports min, max, average, and p95 startup times across N iterations.
+The measurement covers Go runtime init, all init() functions, cobra
+command tree setup, flag parsing, and the PersistentPreRunE hook.
+
+.PP
+Use --trace to generate a runtime/trace file analyzable with 'go tool trace'.
+
+
+.SH OPTIONS
+\fB-n\fP, \fB--count\fP=10
+	number of benchmark iterations
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for startup-profile
+
+.PP
+\fB--top\fP=5
+	show top N slowest phases in trace breakdown
+
+.PP
+\fB--trace\fP=""
+	write a runtime trace file (viewable with 'go tool trace')
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Measure startup time (default 10 iterations)
+  symvault startup-profile
+
+  # Measure with 50 iterations
+  symvault startup-profile --count 50
+
+  # Generate a runtime trace for detailed analysis
+  symvault startup-profile --trace startup.trace
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault(1)\fP

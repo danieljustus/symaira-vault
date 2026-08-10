@@ -1,0 +1,62 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-git - Git operations on vault
+
+
+.SH SYNOPSIS
+\fBsymvault git  [path] [flags]\fP
+
+
+.SH DESCRIPTION
+Git operations on vault
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for git
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Sync with the configured remote
+  symvault git pull
+  symvault git push
+
+  # Show commit history for an entry
+  symvault git log work/aws
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault(1)\fP

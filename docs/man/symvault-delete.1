@@ -1,0 +1,65 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-delete - Delete a password entry
+
+
+.SH SYNOPSIS
+\fBsymvault delete  [flags]\fP
+
+
+.SH DESCRIPTION
+Delete a password entry
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for delete
+
+.PP
+\fB-y\fP, \fB--yes\fP[=false]
+	Skip deletion confirmation prompt
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Delete an entry (with confirmation)
+  symvault delete github
+
+  # Skip confirmation
+  symvault delete github --yes
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault(1)\fP

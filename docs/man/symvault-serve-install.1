@@ -1,0 +1,73 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-serve-install - Install MCP server as a background service
+
+
+.SH SYNOPSIS
+\fBsymvault serve install [flags]\fP
+
+
+.SH DESCRIPTION
+Install the Symaira Vault MCP server as a system background service.
+
+.PP
+On macOS, this creates a LaunchAgent plist in ~/Library/LaunchAgents/
+and loads it with launchctl. The service starts automatically on login
+and stays running.
+
+.PP
+On Linux, this creates a systemd user service in ~/.config/systemd/user/
+and enables it to start automatically.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for install
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Install as autostart service
+  symvault serve install
+
+  # Check status
+  symvault serve status
+
+  # Remove again
+  symvault serve uninstall
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault-serve(1)\fP

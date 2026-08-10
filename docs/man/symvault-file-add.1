@@ -1,0 +1,80 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-file-add - Attach a certificate/key file to a vault entry
+
+
+.SH SYNOPSIS
+\fBsymvault file add  [flags]\fP
+
+
+.SH DESCRIPTION
+Reads a file from disk, base64-encodes it, and stores it in the named
+vault entry's field, recording sha256, original filename and size as
+attachment metadata. Creates the entry if it does not exist, or merges the
+field into an existing entry.
+
+
+.SH OPTIONS
+\fB--field\fP=""
+	Data field name to store the attachment under (required)
+
+.PP
+\fB--from\fP=""
+	Path to the source file to attach (required)
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for add
+
+.PP
+\fB--max-size\fP=1048576
+	Maximum source file size in bytes
+
+.PP
+\fB--shred\fP[=false]
+	Best-effort overwrite and remove the source file after a successful attach
+
+.PP
+\fB--type\fP="certificate"
+	Secret type to set on the entry if not already set
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  symvault file add elster/cert --field cert_p12 --from ~/Downloads/elster.pfx --shred
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault-file(1)\fP
