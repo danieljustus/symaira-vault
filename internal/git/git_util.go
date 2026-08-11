@@ -74,8 +74,11 @@ func formatAuthor(sig object.Signature) string {
 	return fmt.Sprintf("%s <%s>", sig.Name, sig.Email)
 }
 
-func gitConfigUser(key string) string {
-	out, err := exec.Command("git", "config", "--get", key).Output()
+// gitConfigUser resolves identity from the vault repository rather than the
+// caller's working directory, so an unrelated project's local Git config
+// cannot change metadata on vault commits.
+func gitConfigUser(vaultDir, key string) string {
+	out, err := exec.Command("git", "-C", vaultDir, "config", "--get", key).Output()
 	if err != nil {
 		return ""
 	}
