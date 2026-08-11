@@ -16,7 +16,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Changes on `main` since v0.15.1.
+Changes on `main` since v0.15.2.
+
+## [v0.15.2] - 2026-08-11
+
+Git-sync, keyring and doctor reliability fixes.
+
+### Fixed
+
+- **Git-sync resilience** — auto-push is now best-effort and bounded by a 20s timeout, so a vault write never fails because the remote is unreachable; `manifest.age` is committed together with the entry on auto-commit so doctor no longer reports false tamper alarms; conflict files use a stable persisted device identity instead of the raw hostname (#806).
+- **Audit keyring fixes** — `symvault audit rotate-key` now bootstraps when no HMAC key exists yet; `symvault doctor` keyring checks verify real OS-keychain persistence instead of being masked by the in-memory fallback, and a new check purges orphaned keyring entries for removed vault directories (#807).
+- **Touch ID unlock without a TTY** — `symvault unlock` now attempts Touch ID whenever the configured auth method has a macOS GUI session, independent of TTY state (#808).
+- **Stale temp-file cleanup** — `symvault doctor` detects and (with `--fix`) removes stale atomic-write temp files in the vault directory, using a 24-hour safety threshold so in-flight writes are never touched (#809).
+- **Cross-platform build fix** — the doctor keyring probe now compiles on platforms without the OS-keyring implementation (FreeBSD, Linux/arm64, …) (#810).
+- **Vault-scoped commit identity** — `user.name`/`user.email` for vault auto-commits are resolved from the vault repository, so unrelated project-local Git configuration can no longer change vault commit metadata (#811).
+
+### Docs
+
+- Corrected the Go requirement (`go.mod` requires 1.26.5) and dropped a stale `(v2.2.0+)` qualifier that referenced the historical OpenPass release line (#797).
+- Removed the stale `release-notes.md` and in-repo `scoop/symvault.json` manifest; release notes are assembled at release time and the published Scoop channel lives in `danieljustus/scoop-bucket` (#814).
 
 ## [v0.15.1] - 2026-08-10
 
@@ -1031,7 +1049,8 @@ Interactive TUI, vault management, and observability release.
 [v2.8.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.1
 [v2.8.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.0
 [v0.9.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.9.0
-[Unreleased]: https://github.com/danieljustus/symaira-vault/compare/v0.15.1...HEAD
+[Unreleased]: https://github.com/danieljustus/symaira-vault/compare/v0.15.2...HEAD
+[v0.15.2]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.15.2
 [v0.15.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.15.0
 [v0.15.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.15.1
 [v0.10.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.10.0
