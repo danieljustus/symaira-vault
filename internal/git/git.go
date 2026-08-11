@@ -215,11 +215,11 @@ func AutoCommitWithOptions(vaultDir string, opts CommitOptions) error {
 	}
 	authorName := opts.Author
 	if authorName == "" {
-		authorName = gitConfigUser("user.name")
+		authorName = gitConfigUser(vaultDir, "user.name")
 	}
 	authorEmail := opts.Email
 	if authorEmail == "" {
-		authorEmail = gitConfigUser("user.email")
+		authorEmail = gitConfigUser(vaultDir, "user.email")
 	}
 	if authorName == "" {
 		authorName = "Symaira Vault"
