@@ -211,6 +211,17 @@ symvault agent install default --http --config-only
 | "Authentication failed" | Check SSH keys or HTTPS credentials |
 | Changes not auto-pushed | Check `auto_push: true` in `config.yaml` |
 
+**Conflict files (`<name>.conflict-<device-id><ext>`):**
+When a sync leaves the local version of a file diverged from the shared history, the
+vault keeps that local version next to the original, named after the device that
+produced it (for example `config.conflict-macbook-2.yaml`). Compare the two files,
+keep the content you want, then delete the conflict copy.
+
+A conflict copy that is byte-identical to the file it shadows carries nothing to
+merge — `symvault doctor` reports those as orphaned and `symvault doctor --fix`
+removes them. Copies whose content still differs are reported but never deleted
+automatically.
+
 **Removing accidentally tracked artifacts:**
 If sensitive runtime artifacts like `mcp-token` or `.runtime-port` were accidentally committed to your vault repository before they were added to `.gitignore`, you can remove them from the history while keeping the local files:
 

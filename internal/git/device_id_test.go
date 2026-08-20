@@ -166,3 +166,27 @@ func TestConflictMigrationLeavesOtherDevicesAlone(t *testing.T) {
 		t.Errorf("conflict file of another device should be untouched: %v", err)
 	}
 }
+
+func TestParseConflictName(t *testing.T) {
+	cases := []struct {
+		in       string
+		shadowed string
+		device   string
+		ok       bool
+	}{
+		{"config.conflict-macbook-2.yaml", "config.yaml", "macbook-2", true},
+		{"config.conflict-MacBook-2.local.yaml", "config.yaml", "MacBook-2.local", true},
+		{"a.b.conflict-mac.age", "a.b.age", "mac", true},
+		{"config.yaml", "", "", false},
+		{"manifest.age", "", "", false},
+		{".conflict-mac.age", "", "", false},       // nothing is being shadowed
+		{"config.conflict-macbook", "", "", false}, // no extension
+	}
+	for _, tc := range cases {
+		shadowed, device, ok := ParseConflictName(tc.in)
+		if ok != tc.ok || shadowed != tc.shadowed || device != tc.device {
+			t.Errorf("ParseConflictName(%q) = (%q, %q, %v), want (%q, %q, %v)",
+				tc.in, shadowed, device, ok, tc.shadowed, tc.device, tc.ok)
+		}
+	}
+}

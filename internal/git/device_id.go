@@ -68,6 +68,29 @@ func NormalizeDeviceName(name string) string {
 	return name
 }
 
+// ConflictMarker is the infix that marks a file as a conflict copy:
+// <name>.conflict-<device-id><ext>.
+const ConflictMarker = ".conflict-"
+
+// ParseConflictName splits the base name of a conflict copy into the name of
+// the file it shadows and the device identity embedded in it. It reports false
+// for names that are not conflict copies.
+//
+//	config.conflict-macbook-2.yaml -> ("config.yaml", "macbook-2", true)
+//	entries/a.b.conflict-mac.age   -> ("a.b.age", "mac", true)
+func ParseConflictName(base string) (shadowed, device string, ok bool) {
+	idx := strings.Index(base, ConflictMarker)
+	if idx <= 0 {
+		return "", "", false
+	}
+	rest := base[idx+len(ConflictMarker):]
+	dot := strings.LastIndex(rest, ".")
+	if dot <= 0 {
+		return "", "", false
+	}
+	return base[:idx] + rest[dot:], rest[:dot], true
+}
+
 // renameConflictsForDevice renames pre-existing conflict files whose embedded
 // device name normalises to the current device identity but differs from it
 // (e.g. old hostname-based names), so a single device does not leave duplicate
@@ -89,20 +112,15 @@ func renameConflictsForDevice(vaultDir, deviceName string) {
 			return nil
 		}
 		base := d.Name()
-		idx := strings.Index(base, ".conflict-")
-		if idx < 0 {
+		shadowed, embedded, ok := ParseConflictName(base)
+		if !ok {
 			return nil
 		}
-		rest := base[idx+len(".conflict-"):]
-		dot := strings.LastIndex(rest, ".")
-		if dot <= 0 {
-			return nil
-		}
-		embedded := rest[:dot]
 		if NormalizeDeviceName(embedded) != canonical || embedded == deviceName {
 			return nil
 		}
-		newBase := base[:idx] + ".conflict-" + deviceName + rest[dot:]
+		ext := filepath.Ext(shadowed)
+		newBase := strings.TrimSuffix(shadowed, ext) + ConflictMarker + deviceName + ext
 		_ = os.Rename(path, filepath.Join(filepath.Dir(path), newBase))
 		return nil
 	})

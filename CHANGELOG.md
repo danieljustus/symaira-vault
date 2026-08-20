@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Changes on `main` since v0.15.2.
 
+### Fixed
+
+- **Git-sync wrote a conflict copy on every CLI invocation** — `ResolveConflicts` copied every locally modified vault file to `<name>.conflict-<device-id><ext>` without looking at what was already there, so a vault whose auto-pull fails (and therefore never records a sync timestamp) recreated byte-identical conflict copies on `list`, `get`, `unlock`, … forever. A conflict copy is now written only when it carries information: skipped when the working-tree content equals the committed version (no divergence, so no conflict) and skipped when the conflict copy on disk already holds exactly those bytes. A file missing from the working tree no longer aborts the sweep over the remaining files.
+- **Orphaned conflict files are now detected** — `symvault doctor` reports git-sync conflict copies that are byte-identical to the file they shadow, including the hostname-named copies left next to device-id-named ones by the device-identity change (#806/#811); `symvault doctor --fix` removes them. Conflict copies whose content still differs, and copies whose original file is gone, are reported for manual review and never deleted automatically.
+
 ## [v0.15.2] - 2026-08-11
 
 Git-sync, keyring and doctor reliability fixes.
