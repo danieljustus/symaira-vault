@@ -78,6 +78,36 @@ static CFMutableDictionaryRef symaira_biometric_query(char *service_c, char *acc
 	return query;
 }
 
+// symaira_biometric_scope_to_default_keychain pins a match query to the
+// default keychain, overriding the process keychain search list.
+//
+// This is what makes the errSecDuplicateItem fallback work. A plain match
+// query resolves against the search list, which is exactly what failed in
+// the first place: when the login keychain is the default keychain but is
+// absent from the search list, the lookup misses while SecItemAdd still
+// lands in the default keychain. Retrying SecItemUpdate with such a query
+// only turns errSecDuplicateItem (-25299) into errSecItemNotFound (-25300).
+//
+// Scoping to the default keychain is safe precisely here and nowhere else:
+// this helper runs only after SecItemAdd reported the item already exists,
+// and SecItemAdd targets the default keychain — so that is provably where
+// the conflicting item lives. Search-list-wide operations (load, delete)
+// deliberately keep the default behavior so items stored in a secondary
+// keychain remain reachable.
+static void symaira_biometric_scope_to_default_keychain(CFMutableDictionaryRef query) {
+	SecKeychainRef defaultKeychain = NULL;
+	if (SecKeychainCopyDefault(&defaultKeychain) != errSecSuccess || defaultKeychain == NULL) {
+		return;
+	}
+	CFTypeRef keychains[1] = { defaultKeychain };
+	CFArrayRef searchList = CFArrayCreate(NULL, keychains, 1, &kCFTypeArrayCallBacks);
+	if (searchList != NULL) {
+		CFDictionarySetValue(query, kSecMatchSearchList, searchList);
+		CFRelease(searchList);
+	}
+	CFRelease(defaultKeychain);
+}
+
 // symaira_biometric_update replaces the data of an item that already
 // exists. Only kSecValueData is updated: the file-based login keychain
 // rejects kSecAttrAccessible on update.
@@ -86,6 +116,7 @@ static OSStatus symaira_biometric_update(char *service_c, char *account_c, CFDat
 	if (matchQuery == NULL) {
 		return errSecParam;
 	}
+	symaira_biometric_scope_to_default_keychain(matchQuery);
 
 	CFMutableDictionaryRef attributes = CFDictionaryCreateMutable(NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
 	if (attributes == NULL) {
