@@ -209,7 +209,10 @@ func writeConflictCopy(src, dst string, head *object.Commit, repoPath string) er
 	if committed, ok := committedContent(head, repoPath); ok && bytes.Equal(committed, data) {
 		return nil
 	}
-	if existing, err := os.ReadFile(dst); err == nil && bytes.Equal(existing, data) { //#nosec G304 -- conflict path derived from the same git status entry
+	// Read separately rather than in the if-init clause: gosec does not
+	// associate a //#nosec annotation with a call inside an init statement.
+	existing, err := os.ReadFile(dst) //#nosec G304 -- conflict path derived from the same git status entry
+	if err == nil && bytes.Equal(existing, data) {
 		return nil
 	}
 	return os.WriteFile(dst, data, 0o600)
