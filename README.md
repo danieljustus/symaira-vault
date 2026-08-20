@@ -89,8 +89,8 @@ For manual downloads, Linux packages, release verification (including Cosign sig
 
 The repository includes a native SwiftUI client in [`client/`](client/README.md).
 It embeds the public `symvault` runtime in the app bundle and also exposes a
-reusable `SymvaultFeature` module for Symaira Hub. No Cloud or Pro service is
-required.
+reusable `SymvaultFeature` module for Symaira Hub. No account or hosted service
+is required.
 
 ```bash
 make build

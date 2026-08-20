@@ -6,20 +6,19 @@ The public repository contains the self-hosted core, CLI, runtime behavior,
 documentation, and release artifacts that users can run independently. Public
 contributions to this repository are accepted under the repository license.
 
-Commercial hosted-service code lives outside this repository. That private Pro
-layer may provide managed hosting, tenant operations, billing, support workflows,
-cloud deployment automation, compliance operations, and monitoring.
+There is no separate Pro edition. Symaira Vault ships as one product; there is no
+private counterpart repository holding managed hosting, tenant operations,
+billing, or compliance tooling, and none is planned.
 
 ## Rules
 
 - Keep self-hosted functionality free and Apache-2.0 licensed in this repository.
 - Do not require private code to build, test, or run the public self-hosted
   product.
-- Do not copy private Pro code into the public repository.
-- Do not copy public `internal/` packages into the private Pro repository.
-- When the hosted service needs a new core capability, implement and release it
-  publicly here first, then let the private Pro repository consume the tagged
-  runtime artifact.
+- Do not add billing, tenant-management, hosted-account, or subscription code.
+- Managed hosting, SSO/SCIM, hosted RBAC, SIEM export, and compliance operations
+  are out of scope. If any of it is ever built, it must not turn this repository
+  into a feature-limited client.
 
 ## Versioning Note
 
