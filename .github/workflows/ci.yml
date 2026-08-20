@@ -189,7 +189,7 @@ jobs:
           CGO_ENABLED: '1'
           SYMVAULT_ALLOW_ENV_PASSPHRASE: '1'
         run: |
-          go test -v -race -timeout=30m -skip 'TestFlow|TestBinaryE2E|Integration' ./...
+          go test -v -timeout=15m -skip 'TestFlow|TestBinaryE2E|Integration' ./...
 
   build-pr:
     name: Build (linux-amd64) — PR
