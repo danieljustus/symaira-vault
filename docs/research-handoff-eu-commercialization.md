@@ -8,7 +8,8 @@ This document preserves the actionable findings from the local research folders:
 The original folders can be deleted once the linked GitHub issues are visible.
 This file keeps only the parts that belong in the public Apache-2.0 self-hosted core.
 Hosted service, billing, tenant operations, SSO/SCIM, hosted RBAC, SIEM export,
-and compliance operations belong to `symaira-vault-pro`.
+and compliance operations are out of scope: there is no Pro edition and no hosted
+counterpart to hand them to.
 
 ## Current Public-Core Status
 
@@ -27,15 +28,13 @@ and compliance operations belong to `symaira-vault-pro`.
 | Release hardening, checksums, signing, SBOM direction | Mostly implemented | `.goreleaser.yml`, `SECURITY.md`, `docs/distribution.md`, `docs/reproducible-builds.md` |
 | Redacted audit evidence export for self-hosted users | Open | `docs/error-tracking-strategy.md` marks audit export as future work |
 | Post-quantum transition planning | Implemented | `docs/adr/0005-post-quantum-transition-plan.md` documents the strategy, migration risks, and monitoring inputs |
-| Enterprise SSO, SCIM, hosted RBAC, SIEM, compliance UI | Out of scope here | Tracked in `symaira-vault-pro` |
+| Enterprise SSO, SCIM, hosted RBAC, SIEM, compliance UI | Out of scope | No hosted edition is planned |
 
 ## Core Decisions
 
 - Keep Symaira Vault self-hosted free and Apache-2.0 licensed.
-- Do not add Cloud Pro, billing, customer-support, tenant-management, or hosted
-  compliance code to this repo.
-- General core/runtime capabilities that Pro needs must be implemented here
-  first, released, and then consumed by Pro through versioned runtime artifacts.
+- Do not add billing, customer-support, tenant-management, or hosted compliance
+  code to this repo.
 - Public compliance work should help self-hosted users prove what the local
   tool does: encryption, no telemetry, local audit integrity, scoped MCP access,
   release verification, and operational runbooks.

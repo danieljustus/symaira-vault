@@ -1,7 +1,7 @@
 # Audit Retention & Integrity
 
-**Scope**: Public self-hosted Symaira Vault core. Cloud Pro management is
-separate (see [Cloud Pro Boundary](audit-schema.md#cloud-pro-boundary)).
+**Scope**: The self-hosted Symaira Vault core. Managed retention is out of scope
+(see [Scope Boundary](audit-schema.md#scope-boundary)).
 
 ## Retention Configuration
 

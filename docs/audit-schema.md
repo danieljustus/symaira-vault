@@ -3,9 +3,9 @@
 **Stability**: Stable for the `v0.x` release line. No breaking changes without a
 major version bump. New optional fields may be added in minor releases.
 
-**Scope**: Public self-hosted Symaira Vault core. Cloud Pro features (SIEM
-export, managed retention, compliance reporting, tenant audit storage) are
-excluded — see [Cloud Pro Boundary](#cloud-pro-boundary).
+**Scope**: The self-hosted Symaira Vault core — which is the whole product.
+Managed audit features (SIEM export, cloud retention, compliance reporting,
+tenant audit storage) are out of scope; see [Scope Boundary](#scope-boundary).
 
 ## Overview
 
@@ -270,23 +270,16 @@ The `LogEntry` schema is stable for the `v0.x` release line:
 Breaking schema changes, if ever needed, will only arrive with a `v1.0` major
 release and will be documented in the changelog.
 
-## Cloud Pro Boundary
+## Scope Boundary
 
-The public self-hosted Symaira Vault core provides local audit logging with
-HMAC integrity verification. The private Symaira Vault Pro repository extends
-audit capabilities with:
+The audit system documented here is local: structured events with HMAC integrity
+verification, stored and rotated on the user's own machine. That is the complete
+feature — there is no Pro edition, and no hosted counterpart that extends it.
 
-- **SIEM export** — Streaming audit events to external SIEM platforms
-- **Managed long-term retention** — Cloud-backed retention policies beyond local
-  rotation
-- **Compliance reporting** — Audit reports for SOC 2, ISO 27001, etc.
-- **Tenant audit storage** — Multi-tenant audit log partitioning and access
-  controls
-- **Centralized audit search** — Cross-agent, cross-vault audit event search
-
-None of these Pro features are included in the public self-hosted product. The
-local audit system documented here is fully functional and useful on its own
-for self-hosted deployments.
+Deliberately out of scope: SIEM streaming, cloud-backed long-term retention,
+compliance reporting for SOC 2 / ISO 27001, multi-tenant audit partitioning, and
+centralized cross-vault audit search. The local audit system is fully functional
+and useful on its own for self-hosted deployments.
 
 ## Related Documentation
 

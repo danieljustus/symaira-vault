@@ -322,10 +322,10 @@ ADR and on related GitHub issues.
   evidence of a planned post-quantum migration path.
 - **Upstream dependency.** The migration plan depends on upstream age and Go
   crypto developments. The project will not implement a custom crypto primitive.
-- **Pro consumption.** The private `symaira-vault-pro` repository can reference
+- ~~**Pro consumption.** The private `symaira-vault-pro` repository can reference
   this public-core ADR when answering procurement questions about the hosted
-  service's PQC readiness. Any Pro-specific PQC requirements that require core
-  changes must first be implemented here, released, and then consumed.
+  service's PQC readiness.~~ *(Obsolete as of 2026-08-20: there is no Pro
+  edition and no hosted service; this ADR covers the whole product.)*
 
 ## References
 
