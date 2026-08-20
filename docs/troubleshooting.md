@@ -245,6 +245,29 @@ git push origin main
 - Reset keychain: `symvault lock` then `symvault unlock` (re-creates entry)
 - Gatekeeper may block unsigned binaries; allow in System Preferences > Security
 
+**Touch ID setup fails with a keychain status:**
+
+`symvault auth set touchid` reports the underlying Keychain Services status.
+The most common cause is an empty user-domain keychain search list: the login
+keychain is still the default keychain, so writes land there, but lookups
+search a list that does not include it.
+
+```bash
+security list-keychains -d user   # empty output = the search list is broken
+symvault doctor                   # see the "Session keyring roundtrip" check
+```
+
+Restore the search list, then retry:
+
+```bash
+security list-keychains -d user -s ~/Library/Keychains/login.keychain-db
+```
+
+Errors naming the keychain (`keychain item already exists`, `keychain not
+found`, `keychain access requires user interaction`) are not Touch ID
+failures — the biometric hardware is fine and only `biometric authentication
+failed` refers to it.
+
 **LaunchAgent issues:**
 - Check logs: `tail -f ~/Library/Logs/symvault-mcp.log`
 - Verify plist syntax: `plutil -lint ~/Library/LaunchAgents/com.example.symvault-mcp.plist`
