@@ -61,11 +61,16 @@ func TestMaybeAutoPullWarnsWhenSetLastSyncTimeFails(t *testing.T) {
 		t.Fatalf("CreateRemote: %v", err)
 	}
 
-	gitDir := filepath.Join(localDir, ".git")
-	if err := os.Chmod(gitDir, 0o500); err != nil {
-		t.Fatalf("chmod .git read-only: %v", err)
+	// Force SetLastSyncTime's own write to fail in a way that is reliable
+	// across platforms: pre-create a directory at the exact marker path, so
+	// os.WriteFile fails with "is a directory" everywhere. A chmod'd
+	// read-only ".git" directory is not portable — Windows does not enforce
+	// POSIX directory write permissions the same way, so that approach
+	// silently no-ops there instead of failing the write.
+	markerPath := filepath.Join(localDir, ".git", "symvault-last-sync")
+	if err := os.MkdirAll(markerPath, 0o755); err != nil {
+		t.Fatalf("pre-create colliding directory: %v", err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(gitDir, 0o700) })
 
 	cfg := &configpkg.Config{Git: &configpkg.GitConfig{
 		AutoPull:         true,
