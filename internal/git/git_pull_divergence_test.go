@@ -181,11 +181,14 @@ func TestPullWithResultRealUpdateIsMarkedUpdated(t *testing.T) {
 	}
 }
 
-// TestForcePullDiscardsDirtyWorktree covers the case an ordinary pull cannot
-// handle: a dirty worktree that would otherwise block the incoming merge
-// (see TestPullWithResultDirtyUnrelatedFileWritesNoConflictCopy). ForcePull
-// must succeed anyway, and the local edit must be gone afterward.
-func TestForcePullDiscardsDirtyWorktree(t *testing.T) {
+// TestForcePullBacksUpDirtyWorktreeBeforeDiscarding covers the case an
+// ordinary pull cannot handle: a dirty worktree that would otherwise block
+// the incoming merge (see TestPullWithResultDirtyUnrelatedFileWritesNoConflictCopy).
+// ForcePull must succeed anyway, discard the local edit from config.yaml —
+// but not before preserving it as a conflict copy, since a hard reset must
+// never silently destroy vault data a user might not have realized was
+// still unpushed.
+func TestForcePullBacksUpDirtyWorktreeBeforeDiscarding(t *testing.T) {
 	localDir, remoteBareDir := remoteVaultPair(t)
 
 	writeFile(t, localDir, "config.yaml", []byte("cfg1-local-edit"))
@@ -214,13 +217,24 @@ func TestForcePullDiscardsDirtyWorktree(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(localDir, "entries", "b.age")); err != nil {
 		t.Errorf("expected entries/b.age to be pulled from remote: %v", err)
 	}
+
+	backup, err := os.ReadFile(conflictCopyPath(localDir, "config.yaml"))
+	if err != nil {
+		t.Fatalf("expected a backup copy of the discarded local edit: %v", err)
+	}
+	if string(backup) != "cfg1-local-edit" {
+		t.Errorf("backup copy content = %q, want %q", backup, "cfg1-local-edit")
+	}
 }
 
-// TestForcePullDiscardsDivergedLocalCommit covers the diverged-history case:
-// a local commit that conflicts with a remote commit on the same file. A
-// plain pull fails here (see TestPullWithResultGenuineConflictPreservesLocalVersion);
-// ForcePull must instead discard the local commit and match the remote.
-func TestForcePullDiscardsDivergedLocalCommit(t *testing.T) {
+// TestForcePullBacksUpDivergedLocalCommitBeforeDiscarding covers the
+// diverged-history case: a local commit that conflicts with a remote commit
+// on the same file. A plain pull fails here (see
+// TestPullWithResultGenuineConflictPreservesLocalVersion); ForcePull must
+// discard the local commit and match the remote, but the local version must
+// survive as a conflict copy first — this is exactly the class of data loss
+// the backup step exists to prevent.
+func TestForcePullBacksUpDivergedLocalCommitBeforeDiscarding(t *testing.T) {
 	localDir, remoteBareDir := remoteVaultPair(t)
 
 	writeFile(t, localDir, "entries/a.age", []byte("local-version"))
@@ -247,8 +261,33 @@ func TestForcePullDiscardsDivergedLocalCommit(t *testing.T) {
 		t.Errorf("entries/a.age = %q, want %q (local commit should have been discarded)", data, "remote-version")
 	}
 
-	if _, err := os.Stat(conflictCopyPath(localDir, "entries/a.age")); !os.IsNotExist(err) {
-		t.Errorf("ForcePull should not write a conflict copy, but one exists (stat error = %v)", err)
+	backup, err := os.ReadFile(conflictCopyPath(localDir, "entries/a.age"))
+	if err != nil {
+		t.Fatalf("expected a backup copy of the discarded local commit: %v", err)
+	}
+	if string(backup) != "local-version" {
+		t.Errorf("backup copy content = %q, want %q", backup, "local-version")
+	}
+}
+
+// TestForcePullSkipsBackupWhenLocalMatchesRemote guards the backup step from
+// over-reach: a clean worktree with no local-only commits has nothing to
+// protect, so ForcePull must not litter the vault with no-op backup copies.
+func TestForcePullSkipsBackupWhenLocalMatchesRemote(t *testing.T) {
+	localDir, remoteBareDir := remoteVaultPair(t)
+	pushFromFreshClone(t, remoteBareDir, "add b", func(dir string) {
+		writeFile(t, dir, "entries/b.age", []byte("new-entry"))
+	})
+
+	result := ForcePull(localDir)
+	if result.Error != nil {
+		t.Fatalf("ForcePull: unexpected error %v", result.Error)
+	}
+
+	for _, path := range []string{"entries/a.age", "config.yaml", "entries/b.age"} {
+		if _, err := os.Stat(conflictCopyPath(localDir, path)); !os.IsNotExist(err) {
+			t.Errorf("unexpected backup copy for %s (stat error = %v)", path, err)
+		}
 	}
 }
 

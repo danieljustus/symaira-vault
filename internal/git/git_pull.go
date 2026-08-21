@@ -209,6 +209,18 @@ func ForcePull(vaultDir string) PullResult {
 		return result
 	}
 
+	remoteCommit, err := repo.CommitObject(remoteRef.Hash())
+	if err != nil {
+		result.Error = &PushError{Message: "remote branch not found", Cause: err}
+		return result
+	}
+
+	backups, err := collectForceResetBackups(repo, vaultDir, preHead, remoteCommit)
+	if err != nil {
+		result.Error = &PushError{Message: "failed to inspect local changes before reset", Cause: err}
+		return result
+	}
+
 	w, err := repo.Worktree()
 	if err != nil {
 		result.Error = &PushError{Message: "could not open worktree", Cause: err}
@@ -220,11 +232,113 @@ func ForcePull(vaultDir string) PullResult {
 		return result
 	}
 
+	if err := writeForceResetBackups(vaultDir, DeviceIdentity(vaultDir), backups); err != nil {
+		result.Error = &PushError{Message: "reset succeeded but failed to back up discarded local changes", Cause: err}
+		return result
+	}
+
 	result.Success = true
 	if preHead == nil || preHead.Hash != remoteRef.Hash() {
 		result.Updated = true
 	}
 	return result
+}
+
+// backupBeforeForceReset preserves the current local version of every tracked
+// vault file a hard reset to remoteCommit is about to discard or overwrite —
+// both a local commit the remote never received (compared against preHead)
+// and a worktree edit that was never committed. It reuses the same
+// conflict-copy mechanism and naming as an ordinary failed pull (see
+// resolveDivergedConflicts), so ForcePull discards git history but never
+// silently destroys unrecoverable vault data: anything that actually differs
+// from the post-reset content survives as a
+// "<name>.conflict-<device-id>.<ext>" copy the user can recover by hand.
+// forceResetBackup is a snapshot of one file's local content, captured
+// before a hard reset discards it, together with the repo-relative path it
+// belongs to.
+type forceResetBackup struct {
+	path string
+	data []byte
+}
+
+// collectForceResetBackups reads the current local content of every tracked
+// vault file remoteCommit is about to discard or overwrite — both a local
+// commit the remote never received (compared against preHead) and a
+// worktree edit that was never committed — skipping any file whose content
+// already matches the post-reset state. It must run *before* the hard
+// reset: go-git's HardReset removes every worktree file that is not part of
+// the target tree, tracked or not, so a conflict copy written before
+// resetting would just be deleted again by the same call.
+func collectForceResetBackups(repo *gogit.Repository, vaultDir string, preHead, remoteCommit *object.Commit) ([]forceResetBackup, error) {
+	paths := make(map[string]bool)
+	if preHead != nil {
+		changed, err := changedPaths(preHead, remoteCommit)
+		if err != nil {
+			return nil, err
+		}
+		for _, p := range changed {
+			paths[p] = true
+		}
+	}
+
+	w, err := repo.Worktree()
+	if err != nil {
+		return nil, err
+	}
+	status, err := w.Status()
+	if err != nil {
+		return nil, err
+	}
+	for path, fileStatus := range status {
+		if fileStatus.Staging != gogit.Unmodified || fileStatus.Worktree == gogit.Unmodified {
+			continue
+		}
+		paths[path] = true
+	}
+
+	var backups []forceResetBackup
+	for path := range paths {
+		if !isConflictCandidatePath(path) {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(vaultDir, path)) //#nosec G304 -- path derived from git status/diff inside the vault dir
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, err
+		}
+		if committed, ok := committedContent(remoteCommit, path); ok && bytes.Equal(committed, data) {
+			continue
+		}
+		backups = append(backups, forceResetBackup{path: path, data: data})
+	}
+	return backups, nil
+}
+
+// writeForceResetBackups writes the snapshots collected by
+// collectForceResetBackups as conflict copies. Must run *after* the hard
+// reset has completed (see collectForceResetBackups). Skips a copy whose
+// destination already holds identical bytes, the same idempotency rule
+// writeConflictCopy applies for an ordinary failed pull.
+func writeForceResetBackups(vaultDir, deviceName string, backups []forceResetBackup) error {
+	if len(backups) == 0 {
+		return nil
+	}
+	renameConflictsForDevice(vaultDir, deviceName)
+	for _, b := range backups {
+		ext := filepath.Ext(b.path)
+		base := strings.TrimSuffix(b.path, ext)
+		conflictName := base + ConflictMarker + deviceName + ext
+		conflictPath := filepath.Join(vaultDir, conflictName)
+		if existing, err := os.ReadFile(conflictPath); err == nil && bytes.Equal(existing, b.data) { //#nosec G304 -- conflict path derived from the same candidate path
+			continue
+		}
+		if err := os.WriteFile(conflictPath, b.data, 0o600); err != nil {
+			return fmt.Errorf("save conflict file %s: %w", conflictName, err)
+		}
+	}
+	return nil
 }
 
 // classifyPullFailure turns a pull error into a short, actionable cause. A
