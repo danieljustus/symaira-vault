@@ -33,10 +33,15 @@ func MaybeAutoPull(vaultDir string, cfg *configpkg.Config) {
 	}
 
 	result := git.PullWithResult(vaultDir)
+
+	// Record the attempt regardless of outcome: ShouldAutoPull throttles how
+	// often a pull is attempted, not whether it succeeded. Recording only on
+	// success left a failing pull retried on every single CLI invocation.
+	if err := git.SetLastSyncTime(vaultDir); err != nil {
+		cliout.Warnf("Warning: could not record sync time: %v", err)
+	}
+
 	if result.Error != nil {
-		if git.IsOfflineError(result.Error) {
-			return
-		}
 		return
 	}
 
@@ -44,12 +49,10 @@ func MaybeAutoPull(vaultDir string, cfg *configpkg.Config) {
 		return
 	}
 
-	if err := git.SetLastSyncTime(vaultDir); err != nil {
-		cliout.Warnf("Warning: could not record sync time: %v", err)
-	}
-
-	if err := git.ResolveConflicts(vaultDir, git.DeviceIdentity(vaultDir)); err != nil {
-		cliout.Warnf("Warning: conflict resolution failed: %v", err)
+	if result.Updated {
+		if err := git.ResolveConflicts(vaultDir, git.DeviceIdentity(vaultDir)); err != nil {
+			cliout.Warnf("Warning: conflict resolution failed: %v", err)
+		}
 	}
 
 	conflictFiles := findConflictFiles(vaultDir)
