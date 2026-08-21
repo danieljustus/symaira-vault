@@ -16,7 +16,7 @@ import (
 )
 
 func pullWithSSHAuth(w *gogit.Worktree, remoteURL string) error {
-	opts := &gogit.PullOptions{RemoteName: "origin"}
+	opts := &gogit.PullOptions{RemoteName: originRemoteName}
 	if isSSHURL(remoteURL) {
 		auth, err := getSSHAuth()
 		if err == nil {
@@ -24,6 +24,17 @@ func pullWithSSHAuth(w *gogit.Worktree, remoteURL string) error {
 		}
 	}
 	return w.Pull(opts)
+}
+
+func fetchWithSSHAuth(repo *gogit.Repository, remoteURL string) error {
+	opts := &gogit.FetchOptions{RemoteName: originRemoteName}
+	if isSSHURL(remoteURL) {
+		auth, err := getSSHAuth()
+		if err == nil {
+			opts.Auth = auth
+		}
+	}
+	return repo.Fetch(opts)
 }
 
 func Pull(vaultDir string) error {
@@ -52,13 +63,13 @@ func PullWithResult(vaultDir string) PullResult {
 
 	remotes, listErr := repo.Remotes()
 	if listErr != nil {
-		result.Error = &PushError{Message: "failed to list remotes", Cause: listErr}
+		result.Error = &PushError{Message: errFailedListRemotes, Cause: listErr}
 		return result
 	}
 
 	var originRemote *gogit.Remote
 	for _, r := range remotes {
-		if r.Config().Name == "origin" {
+		if r.Config().Name == originRemoteName {
 			originRemote = r
 			result.HasRemote = true
 			if len(r.Config().URLs) > 0 {
@@ -97,7 +108,7 @@ func PullWithResult(vaultDir string) PullResult {
 
 	if IsOfflineError(pullErr) {
 		result.Error = &PushError{
-			Message: "network error - please check your connection",
+			Message: errNetworkMessage,
 			Cause:   pullErr,
 		}
 		return result
@@ -114,7 +125,7 @@ func PullWithResult(vaultDir string) PullResult {
 	}
 
 	deviceName := DeviceIdentity(vaultDir)
-	resolveErr := resolveDivergedConflicts(repo, vaultDir, deviceName, preHead, "origin")
+	resolveErr := resolveDivergedConflicts(repo, vaultDir, deviceName, preHead, originRemoteName)
 	if resolveErr == nil {
 		w2, wtErr := repo.Worktree()
 		if wtErr == nil {
@@ -135,6 +146,87 @@ func PullWithResult(vaultDir string) PullResult {
 	return result
 }
 
+// ForcePull fetches from origin and hard-resets the local branch to match the
+// fetched remote-tracking branch, discarding any local commits and
+// uncommitted working-tree changes. Unlike PullWithResult it never attempts a
+// merge, so a diverged history or a dirty worktree cannot make it fail the
+// way an ordinary pull does.
+func ForcePull(vaultDir string) PullResult {
+	result := PullResult{Success: false, Skipped: false}
+
+	repo, err := openRepo(vaultDir)
+	if err != nil {
+		result.Skipped = true
+		return result
+	}
+
+	remotes, listErr := repo.Remotes()
+	if listErr != nil {
+		result.Error = &PushError{Message: errFailedListRemotes, Cause: listErr}
+		return result
+	}
+
+	var originRemote *gogit.Remote
+	for _, r := range remotes {
+		if r.Config().Name == originRemoteName {
+			originRemote = r
+			result.HasRemote = true
+			if len(r.Config().URLs) > 0 {
+				result.RemoteURL = r.Config().URLs[0]
+			}
+			break
+		}
+	}
+	if originRemote == nil {
+		result.Skipped = true
+		return result
+	}
+
+	preHead := headCommit(repo)
+
+	fetchErr := fetchWithSSHAuth(repo, originRemote.Config().URLs[0])
+	if fetchErr != nil && !errors.Is(fetchErr, gogit.NoErrAlreadyUpToDate) {
+		if IsOfflineError(fetchErr) {
+			result.Error = &PushError{
+				Message: errNetworkMessage,
+				Cause:   fetchErr,
+			}
+			return result
+		}
+		result.Error = &PushError{Message: "fetch failed", Cause: fetchErr}
+		return result
+	}
+
+	head, err := repo.Head()
+	if err != nil || !head.Name().IsBranch() {
+		result.Error = &PushError{Message: "could not resolve local branch", Cause: err}
+		return result
+	}
+
+	remoteRef, err := repo.Reference(plumbing.NewRemoteReferenceName(originRemoteName, head.Name().Short()), true)
+	if err != nil {
+		result.Error = &PushError{Message: "remote branch not found", Cause: err}
+		return result
+	}
+
+	w, err := repo.Worktree()
+	if err != nil {
+		result.Error = &PushError{Message: "could not open worktree", Cause: err}
+		return result
+	}
+
+	if err := w.Reset(&gogit.ResetOptions{Commit: remoteRef.Hash(), Mode: gogit.HardReset}); err != nil {
+		result.Error = &PushError{Message: "reset failed", Cause: err}
+		return result
+	}
+
+	result.Success = true
+	if preHead == nil || preHead.Hash != remoteRef.Hash() {
+		result.Updated = true
+	}
+	return result
+}
+
 // classifyPullFailure turns a pull error into a short, actionable cause. A
 // dirty worktree or a diverged history are not by themselves proof of a
 // merge conflict (see resolveDivergedConflicts) — this only labels *why*
@@ -150,10 +242,15 @@ func classifyPullFailure(err error) string {
 	}
 }
 
-// Sync performs a pull followed by an optional push.
-func Sync(vaultDir string, pushAfter bool) SyncResult {
+// Sync performs a pull followed by an optional push. When force is true, the
+// pull is a ForcePull that discards local changes instead of merging.
+func Sync(vaultDir string, pushAfter bool, force bool) SyncResult {
+	pull := PullWithResult
+	if force {
+		pull = ForcePull
+	}
 	result := SyncResult{
-		PullResult:  PullWithResult(vaultDir),
+		PullResult:  pull(vaultDir),
 		PushDone:    false,
 		PushSuccess: false,
 	}

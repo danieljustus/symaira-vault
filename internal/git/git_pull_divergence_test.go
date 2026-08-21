@@ -180,3 +180,121 @@ func TestPullWithResultRealUpdateIsMarkedUpdated(t *testing.T) {
 		t.Errorf("Updated=false for a pull that fast-forwarded new commits")
 	}
 }
+
+// TestForcePullDiscardsDirtyWorktree covers the case an ordinary pull cannot
+// handle: a dirty worktree that would otherwise block the incoming merge
+// (see TestPullWithResultDirtyUnrelatedFileWritesNoConflictCopy). ForcePull
+// must succeed anyway, and the local edit must be gone afterward.
+func TestForcePullDiscardsDirtyWorktree(t *testing.T) {
+	localDir, remoteBareDir := remoteVaultPair(t)
+
+	writeFile(t, localDir, "config.yaml", []byte("cfg1-local-edit"))
+	pushFromFreshClone(t, remoteBareDir, "add b", func(dir string) {
+		writeFile(t, dir, "entries/b.age", []byte("new-entry"))
+	})
+
+	result := ForcePull(localDir)
+	if result.Error != nil {
+		t.Fatalf("ForcePull: unexpected error %v", result.Error)
+	}
+	if !result.Success {
+		t.Errorf("Success=false, want true")
+	}
+	if !result.Updated {
+		t.Errorf("Updated=false, want true (remote had a new commit)")
+	}
+
+	data, err := os.ReadFile(filepath.Join(localDir, "config.yaml"))
+	if err != nil {
+		t.Fatalf("read config.yaml: %v", err)
+	}
+	if string(data) != "cfg1" {
+		t.Errorf("config.yaml = %q, want %q (local edit should have been discarded)", data, "cfg1")
+	}
+	if _, err := os.Stat(filepath.Join(localDir, "entries", "b.age")); err != nil {
+		t.Errorf("expected entries/b.age to be pulled from remote: %v", err)
+	}
+}
+
+// TestForcePullDiscardsDivergedLocalCommit covers the diverged-history case:
+// a local commit that conflicts with a remote commit on the same file. A
+// plain pull fails here (see TestPullWithResultGenuineConflictPreservesLocalVersion);
+// ForcePull must instead discard the local commit and match the remote.
+func TestForcePullDiscardsDivergedLocalCommit(t *testing.T) {
+	localDir, remoteBareDir := remoteVaultPair(t)
+
+	writeFile(t, localDir, "entries/a.age", []byte("local-version"))
+	if err := AutoCommit(localDir, "local edit"); err != nil {
+		t.Fatalf("AutoCommit local: %v", err)
+	}
+	pushFromFreshClone(t, remoteBareDir, "remote edit", func(dir string) {
+		writeFile(t, dir, "entries/a.age", []byte("remote-version"))
+	})
+
+	result := ForcePull(localDir)
+	if result.Error != nil {
+		t.Fatalf("ForcePull: unexpected error %v", result.Error)
+	}
+	if !result.Success {
+		t.Errorf("Success=false, want true")
+	}
+
+	data, err := os.ReadFile(filepath.Join(localDir, "entries", "a.age"))
+	if err != nil {
+		t.Fatalf("read entries/a.age: %v", err)
+	}
+	if string(data) != "remote-version" {
+		t.Errorf("entries/a.age = %q, want %q (local commit should have been discarded)", data, "remote-version")
+	}
+
+	if _, err := os.Stat(conflictCopyPath(localDir, "entries/a.age")); !os.IsNotExist(err) {
+		t.Errorf("ForcePull should not write a conflict copy, but one exists (stat error = %v)", err)
+	}
+}
+
+// TestForcePullNoopIsNotMarkedUpdated mirrors
+// TestPullWithResultNoopSuccessIsNotMarkedUpdated for the force path.
+func TestForcePullNoopIsNotMarkedUpdated(t *testing.T) {
+	localDir, _ := remoteVaultPair(t)
+
+	result := ForcePull(localDir)
+	if result.Error != nil {
+		t.Fatalf("ForcePull: unexpected error %v", result.Error)
+	}
+	if !result.Success {
+		t.Fatalf("expected Success=true for an already-up-to-date force pull")
+	}
+	if result.Updated {
+		t.Errorf("Updated=true for a force pull that fetched nothing new")
+	}
+}
+
+// TestSyncForceUsesForcePull is the integration point cmd/sync.go relies on:
+// Sync(vaultDir, pushAfter, force=true) must route through ForcePull rather
+// than the merging PullWithResult, so --force actually resets local changes
+// instead of silently behaving like a plain sync (issue found in review of
+// PR #834).
+func TestSyncForceUsesForcePull(t *testing.T) {
+	localDir, remoteBareDir := remoteVaultPair(t)
+
+	writeFile(t, localDir, "entries/a.age", []byte("local-version"))
+	if err := AutoCommit(localDir, "local edit"); err != nil {
+		t.Fatalf("AutoCommit local: %v", err)
+	}
+	pushFromFreshClone(t, remoteBareDir, "remote edit", func(dir string) {
+		writeFile(t, dir, "entries/a.age", []byte("remote-version"))
+	})
+
+	result := Sync(localDir, false, true)
+	if result.Error != nil {
+		t.Fatalf("Sync: unexpected error %v", result.Error)
+	}
+
+	data, err := os.ReadFile(filepath.Join(localDir, "entries", "a.age"))
+	if err != nil {
+		t.Fatalf("read entries/a.age: %v", err)
+	}
+	if string(data) != "remote-version" {
+		t.Errorf("entries/a.age = %q, want %q (Sync with force=true should discard local commit)", data, "remote-version")
+	}
+}
