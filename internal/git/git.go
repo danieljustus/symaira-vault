@@ -41,6 +41,11 @@ type PullResult struct {
 	Error     error
 	RemoteURL string
 	Success   bool
+	// Updated is true only when the pull actually merged new commits from
+	// the remote. Success is also true for a no-op "already up to date"
+	// pull, but nothing was fetched in that case, so there is nothing a
+	// post-pull conflict sweep could meaningfully find.
+	Updated   bool
 	Skipped   bool
 	HasRemote bool
 	Conflicts []string

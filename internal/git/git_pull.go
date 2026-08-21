@@ -11,6 +11,7 @@ import (
 	"time"
 
 	gogit "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
@@ -72,8 +73,19 @@ func PullWithResult(vaultDir string) PullResult {
 		return result
 	}
 
+	// Captured before the pull attempt: a failed pull can still advance the
+	// local branch ref as a side effect of go-git's internal fetch-then-merge
+	// sequence (Pull moves HEAD before Reset checks for unstaged changes), so
+	// HEAD read after the fact is not a reliable "before" snapshot.
+	preHead := headCommit(repo)
+
 	pullErr := pullWithSSHAuth(w, originRemote.Config().URLs[0])
-	if pullErr == nil || errors.Is(pullErr, gogit.NoErrAlreadyUpToDate) {
+	if pullErr == nil {
+		result.Success = true
+		result.Updated = true
+		return result
+	}
+	if errors.Is(pullErr, gogit.NoErrAlreadyUpToDate) {
 		result.Success = true
 		return result
 	}
@@ -102,7 +114,7 @@ func PullWithResult(vaultDir string) PullResult {
 	}
 
 	deviceName := DeviceIdentity(vaultDir)
-	resolveErr := ResolveConflicts(vaultDir, deviceName)
+	resolveErr := resolveDivergedConflicts(repo, vaultDir, deviceName, preHead, "origin")
 	if resolveErr == nil {
 		w2, wtErr := repo.Worktree()
 		if wtErr == nil {
@@ -117,10 +129,25 @@ func PullWithResult(vaultDir string) PullResult {
 	}
 
 	result.Error = &PushError{
-		Message: "pull failed",
+		Message: classifyPullFailure(pullErr),
 		Cause:   pullErr,
 	}
 	return result
+}
+
+// classifyPullFailure turns a pull error into a short, actionable cause. A
+// dirty worktree or a diverged history are not by themselves proof of a
+// merge conflict (see resolveDivergedConflicts) — this only labels *why*
+// the pull itself could not proceed.
+func classifyPullFailure(err error) string {
+	switch {
+	case errors.Is(err, gogit.ErrNonFastForwardUpdate):
+		return "pull failed: local and remote history have diverged"
+	case errors.Is(err, gogit.ErrUnstagedChanges), errors.Is(err, gogit.ErrWorktreeNotClean):
+		return "pull failed: local changes would be overwritten by the incoming update"
+	default:
+		return "pull failed"
+	}
 }
 
 // Sync performs a pull followed by an optional push.
@@ -160,25 +187,127 @@ func ResolveConflicts(vaultDir string, deviceName string) error {
 		if fileStatus.Staging != gogit.Unmodified || fileStatus.Worktree == gogit.Unmodified {
 			continue
 		}
-		if !strings.HasSuffix(path, ".age") && path != "config.yaml" {
-			continue
-		}
-		if strings.Contains(path, ConflictMarker) {
-			continue
-		}
-		fullPath := filepath.Join(vaultDir, path)
-		if path == "identity.age" || isProtectedRuntimePath(path) {
-			continue
-		}
-		ext := filepath.Ext(path)
-		base := strings.TrimSuffix(path, ext)
-		conflictName := base + ConflictMarker + deviceName + ext
-		conflictPath := filepath.Join(vaultDir, conflictName)
-		if err := writeConflictCopy(fullPath, conflictPath, head, path); err != nil {
-			return fmt.Errorf("save conflict file %s: %w", conflictName, err)
+		if err := preserveConflictCandidate(vaultDir, deviceName, path, head); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+// isConflictCandidatePath reports whether path is one this package ever
+// snapshots as a conflict copy: a tracked vault entry or config.yaml, never
+// an already-written conflict copy or a protected runtime file.
+func isConflictCandidatePath(path string) bool {
+	if !strings.HasSuffix(path, ".age") && path != "config.yaml" {
+		return false
+	}
+	if strings.Contains(path, ConflictMarker) {
+		return false
+	}
+	if path == "identity.age" || isProtectedRuntimePath(path) {
+		return false
+	}
+	return true
+}
+
+// preserveConflictCandidate writes a conflict copy for path, comparing its
+// current on-disk content against baseline to decide whether it actually
+// diverged (see writeConflictCopy). Non-candidate paths are silently skipped.
+func preserveConflictCandidate(vaultDir, deviceName, path string, baseline *object.Commit) error {
+	if !isConflictCandidatePath(path) {
+		return nil
+	}
+	fullPath := filepath.Join(vaultDir, path)
+	ext := filepath.Ext(path)
+	base := strings.TrimSuffix(path, ext)
+	conflictName := base + ConflictMarker + deviceName + ext
+	conflictPath := filepath.Join(vaultDir, conflictName)
+	if err := writeConflictCopy(fullPath, conflictPath, baseline, path); err != nil {
+		return fmt.Errorf("save conflict file %s: %w", conflictName, err)
+	}
+	return nil
+}
+
+// resolveDivergedConflicts is the failure-path counterpart to ResolveConflicts:
+// it only preserves a file when the fetched remote tip genuinely changed that
+// path since the two histories' common ancestor. A file that merely happens
+// to be dirty in the worktree — but that the remote never touched — is left
+// alone even though the pull failed, because that dirt did not cause the
+// failure and is not a conflict (see issue #831).
+//
+// go-git's own fetch step, run internally by Pull before it attempts any
+// merge, updates the "<remoteName>/<branch>" remote-tracking ref regardless
+// of whether the merge itself succeeds — that is what makes this comparison
+// possible without a second network round trip. preHead must be the local
+// HEAD captured *before* Pull was called: a failed pull can still advance
+// the local branch ref as a side effect (Pull moves HEAD before Reset checks
+// for unstaged changes), so HEAD read after the fact cannot serve as the
+// "before" snapshot.
+func resolveDivergedConflicts(repo *gogit.Repository, vaultDir, deviceName string, preHead *object.Commit, remoteName string) error {
+	renameConflictsForDevice(vaultDir, deviceName)
+
+	if preHead == nil {
+		return nil
+	}
+	head, err := repo.Head()
+	if err != nil || !head.Name().IsBranch() {
+		return nil
+	}
+	remoteRef, err := repo.Reference(plumbing.NewRemoteReferenceName(remoteName, head.Name().Short()), true)
+	if err != nil {
+		return nil
+	}
+	remoteHead, err := repo.CommitObject(remoteRef.Hash())
+	if err != nil || remoteHead.Hash == preHead.Hash {
+		return nil
+	}
+
+	ancestor := preHead
+	if bases, mbErr := preHead.MergeBase(remoteHead); mbErr == nil && len(bases) > 0 {
+		ancestor = bases[0]
+	}
+
+	changed, err := changedPaths(ancestor, remoteHead)
+	if err != nil {
+		return err
+	}
+	for _, path := range changed {
+		if err := preserveConflictCandidate(vaultDir, deviceName, path, ancestor); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// changedPaths returns the file paths whose content differs between two
+// commits' trees, deduplicated (a rename touches both a From and a To entry).
+func changedPaths(from, to *object.Commit) ([]string, error) {
+	fromTree, err := from.Tree()
+	if err != nil {
+		return nil, err
+	}
+	toTree, err := to.Tree()
+	if err != nil {
+		return nil, err
+	}
+	changes, err := fromTree.Diff(toTree)
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[string]bool, len(changes))
+	paths := make([]string, 0, len(changes))
+	for _, ch := range changes {
+		name := ch.To.Name
+		if name == "" {
+			name = ch.From.Name
+		}
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		paths = append(paths, name)
+	}
+	return paths, nil
 }
 
 // writeConflictCopy preserves the working-tree content of src as a conflict

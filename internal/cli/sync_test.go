@@ -4,7 +4,12 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	gogit "github.com/go-git/go-git/v5"
+	gogitconfig "github.com/go-git/go-git/v5/config"
+
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	"github.com/danieljustus/symaira-vault/internal/git"
 )
 
@@ -130,6 +135,107 @@ func TestFindConflictFiles_NestedConflicts(t *testing.T) {
 	if got != want {
 		t.Errorf("conflict file = %q, want %q", got, want)
 	}
+}
+
+// TestMaybeAutoPullRecordsAttemptOnFailure is the regression test for
+// acceptance criterion 4 of #831: a failed pull must still record enough
+// state that the next invocation does not repeat the identical pull attempt.
+// Before the fix, MaybeAutoPull returned on any pull error before ever
+// calling SetLastSyncTime, so ShouldAutoPull kept firing on every command.
+func TestMaybeAutoPullRecordsAttemptOnFailure(t *testing.T) {
+	localDir, remoteBareDir := autoPullVaultPair(t)
+	_ = remoteBareDir
+
+	cfg := &configpkg.Config{Git: &configpkg.GitConfig{
+		AutoPull:         true,
+		AutoPullInterval: time.Hour,
+	}}
+
+	if git.ShouldAutoPull(localDir, time.Hour) != true {
+		t.Fatalf("expected ShouldAutoPull to be true before any attempt")
+	}
+
+	MaybeAutoPull(localDir, cfg)
+
+	lastSync, err := git.LastSyncTime(localDir)
+	if err != nil {
+		t.Fatalf("LastSyncTime: %v", err)
+	}
+	if lastSync.IsZero() {
+		t.Fatal("SetLastSyncTime was not recorded although the pull attempt completed (with a failure)")
+	}
+	if git.ShouldAutoPull(localDir, time.Hour) {
+		t.Error("ShouldAutoPull is still true immediately after a failed attempt — the retry loop is not fixed")
+	}
+}
+
+// autoPullVaultPair builds a local vault clone whose next pull is guaranteed
+// to fail with a non-fast-forward error: the local and remote histories have
+// independently committed different content for the same tracked file.
+func autoPullVaultPair(t *testing.T) (localDir, remoteBareDir string) {
+	t.Helper()
+	remoteBareDir = t.TempDir()
+	if _, err := gogit.PlainInit(remoteBareDir, true); err != nil {
+		t.Fatalf("PlainInit bare remote: %v", err)
+	}
+
+	seedDir := t.TempDir()
+	if err := git.Init(seedDir); err != nil {
+		t.Fatalf("Init seed: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(seedDir, "entries"), 0o700); err != nil {
+		t.Fatalf("mkdir entries: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(seedDir, "entries", "a.age"), []byte("v1"), 0o600); err != nil {
+		t.Fatalf("write seed entry: %v", err)
+	}
+	if err := git.AutoCommit(seedDir, "initial"); err != nil {
+		t.Fatalf("AutoCommit seed: %v", err)
+	}
+	seedRepo, err := gogit.PlainOpen(seedDir)
+	if err != nil {
+		t.Fatalf("PlainOpen seed: %v", err)
+	}
+	if _, err := seedRepo.CreateRemote(&gogitconfig.RemoteConfig{
+		Name: "origin",
+		URLs: []string{remoteBareDir},
+	}); err != nil {
+		t.Fatalf("CreateRemote: %v", err)
+	}
+	if err := seedRepo.Push(&gogit.PushOptions{RemoteName: "origin"}); err != nil {
+		t.Fatalf("push seed: %v", err)
+	}
+
+	localDir = t.TempDir()
+	if _, err := gogit.PlainClone(localDir, false, &gogit.CloneOptions{URL: remoteBareDir}); err != nil {
+		t.Fatalf("PlainClone local: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(localDir, "entries", "a.age"), []byte("local-version"), 0o600); err != nil {
+		t.Fatalf("write local entry: %v", err)
+	}
+	if err := git.AutoCommit(localDir, "local edit"); err != nil {
+		t.Fatalf("AutoCommit local: %v", err)
+	}
+
+	otherDir := t.TempDir()
+	if _, err := gogit.PlainClone(otherDir, false, &gogit.CloneOptions{URL: remoteBareDir}); err != nil {
+		t.Fatalf("PlainClone other device: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(otherDir, "entries", "a.age"), []byte("remote-version"), 0o600); err != nil {
+		t.Fatalf("write remote entry: %v", err)
+	}
+	if err := git.AutoCommit(otherDir, "remote edit"); err != nil {
+		t.Fatalf("AutoCommit other device: %v", err)
+	}
+	otherRepo, err := gogit.PlainOpen(otherDir)
+	if err != nil {
+		t.Fatalf("PlainOpen other device: %v", err)
+	}
+	if err := otherRepo.Push(&gogit.PushOptions{RemoteName: "origin"}); err != nil {
+		t.Fatalf("push other device: %v", err)
+	}
+
+	return localDir, remoteBareDir
 }
 
 // testError is a simple error implementation for testing

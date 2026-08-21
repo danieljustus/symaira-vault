@@ -67,11 +67,13 @@ func newSyncCmd() *cobra.Command {
 			}
 
 			if result.Success {
-				printlnQuietAware("Pulled from remote")
 				if err := git.SetLastSyncTime(vaultDir); err != nil {
 					cliout.Warnf("Warning: could not record sync time: %v", err)
 				}
+			}
 
+			if result.Updated {
+				printlnQuietAware("Pulled from remote")
 				if err := git.ResolveConflicts(vaultDir, git.DeviceIdentity(vaultDir)); err != nil {
 					cliout.Warnf("Warning: conflict resolution failed: %v", err)
 				}
