@@ -457,6 +457,8 @@ func preserveConflictCandidate(vaultDir, deviceName, path string, baseline *obje
 // the local branch ref as a side effect (Pull moves HEAD before Reset checks
 // for unstaged changes), so HEAD read after the fact cannot serve as the
 // "before" snapshot.
+//
+//nolint:unparam // remoteName is an explicit dependency of this comparison, not a constant to inline: tests pass it directly
 func resolveDivergedConflicts(repo *gogit.Repository, vaultDir, deviceName string, preHead *object.Commit, remoteName string) error {
 	renameConflictsForDevice(vaultDir, deviceName)
 
