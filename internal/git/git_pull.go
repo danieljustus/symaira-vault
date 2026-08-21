@@ -331,7 +331,10 @@ func writeForceResetBackups(vaultDir, deviceName string, backups []forceResetBac
 		base := strings.TrimSuffix(b.path, ext)
 		conflictName := base + ConflictMarker + deviceName + ext
 		conflictPath := filepath.Join(vaultDir, conflictName)
-		if existing, err := os.ReadFile(conflictPath); err == nil && bytes.Equal(existing, b.data) { //#nosec G304 -- conflict path derived from the same candidate path
+		// Read separately rather than in the if-init clause: gosec does not
+		// associate a //#nosec annotation with a call inside an init statement.
+		existing, err := os.ReadFile(conflictPath) //#nosec G304 -- conflict path derived from the same candidate path
+		if err == nil && bytes.Equal(existing, b.data) {
 			continue
 		}
 		if err := os.WriteFile(conflictPath, b.data, 0o600); err != nil {
