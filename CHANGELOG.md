@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Changes on `main` since v0.15.2.
 
+### Fixed
+
+- **Touch ID keychain errors name the real cause** — `symvault auth set touchid` no longer fails with `errSecDuplicateItem` when the login keychain is the default keychain but missing from the keychain search list: the store falls back to `SecItemUpdate` on the existing item. Keychain statuses that have nothing to do with biometrics (`-25299`, `-25294`, `-25308`, ...) now map to dedicated errors with an actionable hint instead of being reported as "biometric authentication failed", and the search-list class points at `symvault doctor`, whose "Session keyring roundtrip" check already diagnoses it.
+
 ## [v0.15.2] - 2026-08-11
 
 Git-sync, keyring and doctor reliability fixes.
