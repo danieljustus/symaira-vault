@@ -16,7 +16,7 @@ import (
 )
 
 func pullWithSSHAuth(w *gogit.Worktree, remoteURL string) error {
-	opts := &gogit.PullOptions{RemoteName: "origin"}
+	opts := &gogit.PullOptions{RemoteName: originRemoteName}
 	if isSSHURL(remoteURL) {
 		auth, err := getSSHAuth()
 		if err == nil {
@@ -24,6 +24,17 @@ func pullWithSSHAuth(w *gogit.Worktree, remoteURL string) error {
 		}
 	}
 	return w.Pull(opts)
+}
+
+func fetchWithSSHAuth(repo *gogit.Repository, remoteURL string) error {
+	opts := &gogit.FetchOptions{RemoteName: originRemoteName}
+	if isSSHURL(remoteURL) {
+		auth, err := getSSHAuth()
+		if err == nil {
+			opts.Auth = auth
+		}
+	}
+	return repo.Fetch(opts)
 }
 
 func Pull(vaultDir string) error {
@@ -52,13 +63,13 @@ func PullWithResult(vaultDir string) PullResult {
 
 	remotes, listErr := repo.Remotes()
 	if listErr != nil {
-		result.Error = &PushError{Message: "failed to list remotes", Cause: listErr}
+		result.Error = &PushError{Message: errFailedListRemotes, Cause: listErr}
 		return result
 	}
 
 	var originRemote *gogit.Remote
 	for _, r := range remotes {
-		if r.Config().Name == "origin" {
+		if r.Config().Name == originRemoteName {
 			originRemote = r
 			result.HasRemote = true
 			if len(r.Config().URLs) > 0 {
@@ -97,7 +108,7 @@ func PullWithResult(vaultDir string) PullResult {
 
 	if IsOfflineError(pullErr) {
 		result.Error = &PushError{
-			Message: "network error - please check your connection",
+			Message: errNetworkMessage,
 			Cause:   pullErr,
 		}
 		return result
@@ -114,7 +125,7 @@ func PullWithResult(vaultDir string) PullResult {
 	}
 
 	deviceName := DeviceIdentity(vaultDir)
-	resolveErr := resolveDivergedConflicts(repo, vaultDir, deviceName, preHead, "origin")
+	resolveErr := resolveDivergedConflicts(repo, vaultDir, deviceName, preHead, originRemoteName)
 	if resolveErr == nil {
 		w2, wtErr := repo.Worktree()
 		if wtErr == nil {
@@ -135,6 +146,204 @@ func PullWithResult(vaultDir string) PullResult {
 	return result
 }
 
+// ForcePull fetches from origin and hard-resets the local branch to match the
+// fetched remote-tracking branch, discarding any local commits and
+// uncommitted working-tree changes. Unlike PullWithResult it never attempts a
+// merge, so a diverged history or a dirty worktree cannot make it fail the
+// way an ordinary pull does.
+func ForcePull(vaultDir string) PullResult {
+	result := PullResult{Success: false, Skipped: false}
+
+	repo, err := openRepo(vaultDir)
+	if err != nil {
+		result.Skipped = true
+		return result
+	}
+
+	remotes, listErr := repo.Remotes()
+	if listErr != nil {
+		result.Error = &PushError{Message: errFailedListRemotes, Cause: listErr}
+		return result
+	}
+
+	var originRemote *gogit.Remote
+	for _, r := range remotes {
+		if r.Config().Name == originRemoteName {
+			originRemote = r
+			result.HasRemote = true
+			if len(r.Config().URLs) > 0 {
+				result.RemoteURL = r.Config().URLs[0]
+			}
+			break
+		}
+	}
+	if originRemote == nil {
+		result.Skipped = true
+		return result
+	}
+
+	preHead := headCommit(repo)
+
+	fetchErr := fetchWithSSHAuth(repo, originRemote.Config().URLs[0])
+	if fetchErr != nil && !errors.Is(fetchErr, gogit.NoErrAlreadyUpToDate) {
+		if IsOfflineError(fetchErr) {
+			result.Error = &PushError{
+				Message: errNetworkMessage,
+				Cause:   fetchErr,
+			}
+			return result
+		}
+		result.Error = &PushError{Message: "fetch failed", Cause: fetchErr}
+		return result
+	}
+
+	head, err := repo.Head()
+	if err != nil || !head.Name().IsBranch() {
+		result.Error = &PushError{Message: "could not resolve local branch", Cause: err}
+		return result
+	}
+
+	remoteRef, err := repo.Reference(plumbing.NewRemoteReferenceName(originRemoteName, head.Name().Short()), true)
+	if err != nil {
+		result.Error = &PushError{Message: "remote branch not found", Cause: err}
+		return result
+	}
+
+	remoteCommit, err := repo.CommitObject(remoteRef.Hash())
+	if err != nil {
+		result.Error = &PushError{Message: "remote branch not found", Cause: err}
+		return result
+	}
+
+	backups, err := collectForceResetBackups(repo, vaultDir, preHead, remoteCommit)
+	if err != nil {
+		result.Error = &PushError{Message: "failed to inspect local changes before reset", Cause: err}
+		return result
+	}
+
+	w, err := repo.Worktree()
+	if err != nil {
+		result.Error = &PushError{Message: "could not open worktree", Cause: err}
+		return result
+	}
+
+	if err := w.Reset(&gogit.ResetOptions{Commit: remoteRef.Hash(), Mode: gogit.HardReset}); err != nil {
+		result.Error = &PushError{Message: "reset failed", Cause: err}
+		return result
+	}
+
+	if err := writeForceResetBackups(vaultDir, DeviceIdentity(vaultDir), backups); err != nil {
+		result.Error = &PushError{Message: "reset succeeded but failed to back up discarded local changes", Cause: err}
+		return result
+	}
+
+	result.Success = true
+	if preHead == nil || preHead.Hash != remoteRef.Hash() {
+		result.Updated = true
+	}
+	return result
+}
+
+// backupBeforeForceReset preserves the current local version of every tracked
+// vault file a hard reset to remoteCommit is about to discard or overwrite —
+// both a local commit the remote never received (compared against preHead)
+// and a worktree edit that was never committed. It reuses the same
+// conflict-copy mechanism and naming as an ordinary failed pull (see
+// resolveDivergedConflicts), so ForcePull discards git history but never
+// silently destroys unrecoverable vault data: anything that actually differs
+// from the post-reset content survives as a
+// "<name>.conflict-<device-id>.<ext>" copy the user can recover by hand.
+// forceResetBackup is a snapshot of one file's local content, captured
+// before a hard reset discards it, together with the repo-relative path it
+// belongs to.
+type forceResetBackup struct {
+	path string
+	data []byte
+}
+
+// collectForceResetBackups reads the current local content of every tracked
+// vault file remoteCommit is about to discard or overwrite — both a local
+// commit the remote never received (compared against preHead) and a
+// worktree edit that was never committed — skipping any file whose content
+// already matches the post-reset state. It must run *before* the hard
+// reset: go-git's HardReset removes every worktree file that is not part of
+// the target tree, tracked or not, so a conflict copy written before
+// resetting would just be deleted again by the same call.
+func collectForceResetBackups(repo *gogit.Repository, vaultDir string, preHead, remoteCommit *object.Commit) ([]forceResetBackup, error) {
+	paths := make(map[string]bool)
+	if preHead != nil {
+		changed, err := changedPaths(preHead, remoteCommit)
+		if err != nil {
+			return nil, err
+		}
+		for _, p := range changed {
+			paths[p] = true
+		}
+	}
+
+	w, err := repo.Worktree()
+	if err != nil {
+		return nil, err
+	}
+	status, err := w.Status()
+	if err != nil {
+		return nil, err
+	}
+	for path, fileStatus := range status {
+		if fileStatus.Staging != gogit.Unmodified || fileStatus.Worktree == gogit.Unmodified {
+			continue
+		}
+		paths[path] = true
+	}
+
+	var backups []forceResetBackup
+	for path := range paths {
+		if !isConflictCandidatePath(path) {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(vaultDir, path)) //#nosec G304 -- path derived from git status/diff inside the vault dir
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, err
+		}
+		if committed, ok := committedContent(remoteCommit, path); ok && bytes.Equal(committed, data) {
+			continue
+		}
+		backups = append(backups, forceResetBackup{path: path, data: data})
+	}
+	return backups, nil
+}
+
+// writeForceResetBackups writes the snapshots collected by
+// collectForceResetBackups as conflict copies. Must run *after* the hard
+// reset has completed (see collectForceResetBackups). Skips a copy whose
+// destination already holds identical bytes, the same idempotency rule
+// writeConflictCopy applies for an ordinary failed pull.
+func writeForceResetBackups(vaultDir, deviceName string, backups []forceResetBackup) error {
+	if len(backups) == 0 {
+		return nil
+	}
+	renameConflictsForDevice(vaultDir, deviceName)
+	for _, b := range backups {
+		ext := filepath.Ext(b.path)
+		base := strings.TrimSuffix(b.path, ext)
+		conflictName := base + ConflictMarker + deviceName + ext
+		conflictPath := filepath.Join(vaultDir, conflictName)
+		// Read separately rather than in the if-init clause: gosec does not
+		// associate a //#nosec annotation with a call inside an init statement.
+		existing, err := os.ReadFile(conflictPath) //#nosec G304 -- conflict path derived from the same candidate path
+		if err == nil && bytes.Equal(existing, b.data) {
+			continue
+		}
+		if err := os.WriteFile(conflictPath, b.data, 0o600); err != nil {
+			return fmt.Errorf("save conflict file %s: %w", conflictName, err)
+		}
+	}
+	return nil
+}
+
 // classifyPullFailure turns a pull error into a short, actionable cause. A
 // dirty worktree or a diverged history are not by themselves proof of a
 // merge conflict (see resolveDivergedConflicts) — this only labels *why*
@@ -150,10 +359,15 @@ func classifyPullFailure(err error) string {
 	}
 }
 
-// Sync performs a pull followed by an optional push.
-func Sync(vaultDir string, pushAfter bool) SyncResult {
+// Sync performs a pull followed by an optional push. When force is true, the
+// pull is a ForcePull that discards local changes instead of merging.
+func Sync(vaultDir string, pushAfter bool, force bool) SyncResult {
+	pull := PullWithResult
+	if force {
+		pull = ForcePull
+	}
 	result := SyncResult{
-		PullResult:  PullWithResult(vaultDir),
+		PullResult:  pull(vaultDir),
 		PushDone:    false,
 		PushSuccess: false,
 	}

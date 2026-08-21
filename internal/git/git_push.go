@@ -53,7 +53,7 @@ func pushWithSystemGit(ctx context.Context, vaultDir string) error {
 }
 
 func pushWithSSHAuth(repo *gogit.Repository, remoteURL string) error {
-	opts := &gogit.PushOptions{RemoteName: "origin"}
+	opts := &gogit.PushOptions{RemoteName: originRemoteName}
 	if isSSHURL(remoteURL) {
 		auth, err := getSSHAuth()
 		if err != nil {
@@ -76,13 +76,13 @@ func PushWithResult(vaultDir string) PushResult {
 
 	remotes, err := repo.Remotes()
 	if err != nil {
-		result.Error = &PushError{Message: "failed to list remotes", Cause: err}
+		result.Error = &PushError{Message: errFailedListRemotes, Cause: err}
 		return result
 	}
 
 	var originRemote *gogit.Remote
 	for _, r := range remotes {
-		if r.Config().Name == "origin" {
+		if r.Config().Name == originRemoteName {
 			originRemote = r
 			result.HasRemote = true
 			if len(r.Config().URLs) > 0 {
@@ -167,7 +167,7 @@ func classifyPushError(err error) *PushError {
 		}
 	case IsOfflineError(err):
 		return &PushError{
-			Message: "network error - please check your connection",
+			Message: errNetworkMessage,
 			Cause:   err,
 		}
 	default:

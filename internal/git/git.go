@@ -12,6 +12,12 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
+const (
+	originRemoteName     = "origin"
+	errFailedListRemotes = "failed to list remotes"
+	errNetworkMessage    = "network error - please check your connection"
+)
+
 // PushError represents an error that occurred during push
 type PushError struct {
 	Cause   error

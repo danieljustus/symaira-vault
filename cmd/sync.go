@@ -51,7 +51,7 @@ func newSyncCmd() *cobra.Command {
 				return nil
 			}
 
-			result := git.Sync(vaultDir, syncPush)
+			result := git.Sync(vaultDir, syncPush, syncForce)
 
 			if result.Skipped {
 				printlnQuietAware("No remote configured. Skipping sync.")
