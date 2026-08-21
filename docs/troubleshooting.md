@@ -211,6 +211,17 @@ symvault agent install default --http --config-only
 | "Authentication failed" | Check SSH keys or HTTPS credentials |
 | Changes not auto-pushed | Check `auto_push: true` in `config.yaml` |
 
+**Conflict files (`<name>.conflict-<device-id><ext>`):**
+When a sync leaves the local version of a file diverged from the shared history, the
+vault keeps that local version next to the original, named after the device that
+produced it (for example `config.conflict-macbook-2.yaml`). Compare the two files,
+keep the content you want, then delete the conflict copy.
+
+A conflict copy that is byte-identical to the file it shadows carries nothing to
+merge — `symvault doctor` reports those as orphaned and `symvault doctor --fix`
+removes them. Copies whose content still differs are reported but never deleted
+automatically.
+
 **Removing accidentally tracked artifacts:**
 If sensitive runtime artifacts like `mcp-token` or `.runtime-port` were accidentally committed to your vault repository before they were added to `.gitignore`, you can remove them from the history while keeping the local files:
 
@@ -244,6 +255,29 @@ git push origin main
 - If passphrase caching fails, check Keychain Access app for "Symaira Vault" entries
 - Reset keychain: `symvault lock` then `symvault unlock` (re-creates entry)
 - Gatekeeper may block unsigned binaries; allow in System Preferences > Security
+
+**Touch ID setup fails with a keychain status:**
+
+`symvault auth set touchid` reports the underlying Keychain Services status.
+The most common cause is an empty user-domain keychain search list: the login
+keychain is still the default keychain, so writes land there, but lookups
+search a list that does not include it.
+
+```bash
+security list-keychains -d user   # empty output = the search list is broken
+symvault doctor                   # see the "Session keyring roundtrip" check
+```
+
+Restore the search list, then retry:
+
+```bash
+security list-keychains -d user -s ~/Library/Keychains/login.keychain-db
+```
+
+Errors naming the keychain (`keychain item already exists`, `keychain not
+found`, `keychain access requires user interaction`) are not Touch ID
+failures — the biometric hardware is fine and only `biometric authentication
+failed` refers to it.
 
 **LaunchAgent issues:**
 - Check logs: `tail -f ~/Library/Logs/symvault-mcp.log`

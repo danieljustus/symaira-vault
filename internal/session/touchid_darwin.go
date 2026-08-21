@@ -78,6 +78,59 @@ static CFMutableDictionaryRef symaira_biometric_query(char *service_c, char *acc
 	return query;
 }
 
+// symaira_biometric_scope_to_default_keychain pins a match query to the
+// default keychain, overriding the process keychain search list.
+//
+// This is what makes the errSecDuplicateItem fallback work. A plain match
+// query resolves against the search list, which is exactly what failed in
+// the first place: when the login keychain is the default keychain but is
+// absent from the search list, the lookup misses while SecItemAdd still
+// lands in the default keychain. Retrying SecItemUpdate with such a query
+// only turns errSecDuplicateItem (-25299) into errSecItemNotFound (-25300).
+//
+// Scoping to the default keychain is safe precisely here and nowhere else:
+// this helper runs only after SecItemAdd reported the item already exists,
+// and SecItemAdd targets the default keychain — so that is provably where
+// the conflicting item lives. Search-list-wide operations (load, delete)
+// deliberately keep the default behavior so items stored in a secondary
+// keychain remain reachable.
+static void symaira_biometric_scope_to_default_keychain(CFMutableDictionaryRef query) {
+	SecKeychainRef defaultKeychain = NULL;
+	if (SecKeychainCopyDefault(&defaultKeychain) != errSecSuccess || defaultKeychain == NULL) {
+		return;
+	}
+	CFTypeRef keychains[1] = { defaultKeychain };
+	CFArrayRef searchList = CFArrayCreate(NULL, keychains, 1, &kCFTypeArrayCallBacks);
+	if (searchList != NULL) {
+		CFDictionarySetValue(query, kSecMatchSearchList, searchList);
+		CFRelease(searchList);
+	}
+	CFRelease(defaultKeychain);
+}
+
+// symaira_biometric_update replaces the data of an item that already
+// exists. Only kSecValueData is updated: the file-based login keychain
+// rejects kSecAttrAccessible on update.
+static OSStatus symaira_biometric_update(char *service_c, char *account_c, CFDataRef data) {
+	CFMutableDictionaryRef matchQuery = symaira_biometric_query(service_c, account_c);
+	if (matchQuery == NULL) {
+		return errSecParam;
+	}
+	symaira_biometric_scope_to_default_keychain(matchQuery);
+
+	CFMutableDictionaryRef attributes = CFDictionaryCreateMutable(NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+	if (attributes == NULL) {
+		CFRelease(matchQuery);
+		return errSecAllocate;
+	}
+	CFDictionarySetValue(attributes, kSecValueData, data);
+
+	OSStatus status = SecItemUpdate(matchQuery, attributes);
+	CFRelease(attributes);
+	CFRelease(matchQuery);
+	return status;
+}
+
 int touch_id_store_passphrase(char *service_c, char *account_c, char *passphrase_c) {
 	CFMutableDictionaryRef query = symaira_biometric_query(service_c, account_c);
 	if (query == NULL) {
@@ -96,8 +149,18 @@ int touch_id_store_passphrase(char *service_c, char *account_c, char *passphrase
 	CFDictionarySetValue(query, kSecValueData, data);
 
 	OSStatus status = SecItemAdd(query, NULL);
-	CFRelease(data);
 	CFRelease(query);
+
+	// The delete above can silently miss while the add still lands on the
+	// default keychain: that happens when the login keychain is the default
+	// keychain but is not in the keychain search list, so SecItemDelete has
+	// nothing to search. Update the existing item in place instead of
+	// failing with errSecDuplicateItem.
+	if (status == errSecDuplicateItem) {
+		status = symaira_biometric_update(service_c, account_c, data);
+	}
+
+	CFRelease(data);
 	return (int)status;
 }
 
@@ -211,17 +274,11 @@ import "C"
 import (
 	"context"
 	"errors"
-	"fmt"
 	"unsafe"
 )
 
 var errTouchIDNotAvailable = errors.New("touch id not available")
 var errTouchIDFailed = errors.New("touch id authentication failed")
-
-const (
-	errSecSuccess      = 0
-	errSecItemNotFound = -25300
-)
 
 func touchIDAvailable() bool {
 	return C.touch_id_available() == 1
@@ -286,10 +343,7 @@ func (t *touchIDPassphraseStore) Save(ctx context.Context, vaultDir string, pass
 	defer C.free(unsafe.Pointer(account))
 	defer C.free(unsafe.Pointer(secret))
 
-	if status := int(C.touch_id_store_passphrase(service, account, secret)); status != errSecSuccess {
-		return fmt.Errorf("%w: keychain status %d", ErrBiometricFailed, status)
-	}
-	return nil
+	return keychainStatusError(int(C.touch_id_store_passphrase(service, account, secret)))
 }
 
 func (t *touchIDPassphraseStore) Load(ctx context.Context, vaultDir string) ([]byte, error) {
@@ -316,8 +370,8 @@ func (t *touchIDPassphraseStore) loadFromService(serviceName string) ([]byte, er
 	if status == errSecItemNotFound {
 		return nil, ErrBiometricNotConfigured
 	}
-	if status != errSecSuccess {
-		return nil, fmt.Errorf("%w: keychain status %d", ErrBiometricFailed, status)
+	if err := keychainStatusError(status); err != nil {
+		return nil, err
 	}
 	goStr := C.GoString(out)
 	// Wipe the C string memory before freeing
@@ -337,10 +391,7 @@ func (t *touchIDPassphraseStore) deleteFromService(serviceName string) error {
 	defer C.free(unsafe.Pointer(service))
 	defer C.free(unsafe.Pointer(account))
 
-	if status := int(C.touch_id_delete_passphrase(service, account)); status != errSecSuccess {
-		return fmt.Errorf("%w: keychain status %d", ErrBiometricFailed, status)
-	}
-	return nil
+	return keychainStatusError(int(C.touch_id_delete_passphrase(service, account)))
 }
 
 func init() {
