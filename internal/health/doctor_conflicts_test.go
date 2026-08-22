@@ -3,6 +3,7 @@ package health
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -152,6 +153,9 @@ func TestCheckVaultOrphanedConflictFilesUnreadableDir(t *testing.T) {
 	})
 
 	t.Run("UnreadableSubdir", func(t *testing.T) {
+		if runtime.GOOS == osWindows {
+			t.Skip("POSIX permission bits do not restrict access on Windows")
+		}
 		vaultDir := t.TempDir()
 		unreadable := filepath.Join(vaultDir, "locked")
 		if err := os.Mkdir(unreadable, 0o700); err != nil {
@@ -173,6 +177,9 @@ func TestCheckVaultOrphanedConflictFilesUnreadableDir(t *testing.T) {
 }
 
 func TestCheckVaultOrphanedConflictFilesUnreadableConflictFile(t *testing.T) {
+	if runtime.GOOS == osWindows {
+		t.Skip("POSIX permission bits do not restrict access on Windows")
+	}
 	vaultDir := t.TempDir()
 	writeConflictTestFile(t, filepath.Join(vaultDir, "secret.yaml"), "local")
 	conflictPath := filepath.Join(vaultDir, "secret.conflict-macbook-2.yaml")
@@ -257,6 +264,9 @@ func TestCheckVaultOrphanedConflictFilesFixDataLossGuard(t *testing.T) {
 
 func TestCheckVaultOrphanedConflictFilesFixErrors(t *testing.T) {
 	t.Run("RescanFails", func(t *testing.T) {
+		if runtime.GOOS == osWindows {
+			t.Skip("POSIX permission bits do not restrict access on Windows")
+		}
 		vaultDir := t.TempDir()
 		writeConflictTestFile(t, filepath.Join(vaultDir, "config.yaml"), "vault: 1")
 		writeConflictTestFile(t, filepath.Join(vaultDir, "config.conflict-macbook-1.yaml"), "vault: 1")
@@ -282,6 +292,9 @@ func TestCheckVaultOrphanedConflictFilesFixErrors(t *testing.T) {
 	})
 
 	t.Run("RemoveFailsPermissionDenied", func(t *testing.T) {
+		if runtime.GOOS == osWindows {
+			t.Skip("POSIX permission bits do not restrict access on Windows")
+		}
 		vaultDir := t.TempDir()
 		subDir := filepath.Join(vaultDir, "sub")
 		writeConflictTestFile(t, filepath.Join(subDir, "config.yaml"), "vault: 1")

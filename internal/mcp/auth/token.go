@@ -630,6 +630,7 @@ func (r *TokenRegistry) cleanupOnce() {
 // function is called.
 func (r *TokenRegistry) StartFileWatcher(ctx context.Context, interval time.Duration) func() {
 	stopCh := make(chan struct{})
+	doneCh := make(chan struct{})
 
 	var lastInfo os.FileInfo
 	fi, err := os.Stat(r.path)
@@ -638,6 +639,7 @@ func (r *TokenRegistry) StartFileWatcher(ctx context.Context, interval time.Dura
 	}
 
 	go func() {
+		defer close(doneCh)
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -661,7 +663,10 @@ func (r *TokenRegistry) StartFileWatcher(ctx context.Context, interval time.Dura
 		}
 	}()
 
-	stopFn := func() { close(stopCh) }
+	stopFn := func() {
+		close(stopCh)
+		<-doneCh
+	}
 	r.mu.Lock()
 	r.watchStopFn = stopFn
 	r.mu.Unlock()
@@ -798,7 +803,13 @@ func LoadTokenSystemWithIdentity(identity *age.X25519Identity, vaultDir string, 
 						"         Then revoke the legacy token: symvault mcp token revoke %s",
 					id, id)
 				if rmErr := fsutil.SafeRemove(legacyPath); rmErr != nil {
-					cliout.Warnf("failed to remove legacy token file %s after migration: %v", legacyPath, rmErr)
+					// Tolerate ENOENT: a concurrent process may have removed
+					// the legacy token file first (e.g. another server instance
+					// performing the same migration). The migration outcome is
+					// identical — the credential now lives in the registry.
+					if !os.IsNotExist(rmErr) {
+						cliout.Warnf("failed to remove legacy token file %s after migration: %v", legacyPath, rmErr)
+					}
 				}
 			}
 		}
