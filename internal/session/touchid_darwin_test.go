@@ -4,8 +4,10 @@ package session
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
+	"time"
 )
 
 func TestTouchIDAuthenticator_IsAvailable(t *testing.T) {
@@ -21,6 +23,33 @@ func TestTouchIDAuthenticator_Authenticate(t *testing.T) {
 	err := auth.Authenticate(context.Background(), "test")
 	if err == nil {
 		t.Log("TouchID auth succeeded (unexpected in test environment)")
+	}
+}
+
+func TestTouchIDAuthenticator_Authenticate_CancelledContext(t *testing.T) {
+	auth := newTouchIDAuthenticator()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := auth.Authenticate(ctx, "test")
+	if err == nil {
+		t.Fatal("Authenticate with canceled context should return error")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("Authenticate with canceled context = %v, want context.Canceled", err)
+	}
+}
+
+func TestTouchIDAuthenticator_Authenticate_Timeout(t *testing.T) {
+	auth := newTouchIDAuthenticator()
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Nanosecond)
+	defer cancel()
+	time.Sleep(time.Millisecond)
+	err := auth.Authenticate(ctx, "test")
+	if err == nil {
+		t.Fatal("Authenticate with expired timeout should return error")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("Authenticate with expired timeout = %v, want context.DeadlineExceeded", err)
 	}
 }
 
