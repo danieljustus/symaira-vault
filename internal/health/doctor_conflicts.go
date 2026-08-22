@@ -42,10 +42,7 @@ func findConflictCopies(vaultDir string) ([]conflictFile, error) {
 		if !ok {
 			return nil
 		}
-		rel, relErr := filepath.Rel(vaultDir, path)
-		if relErr != nil {
-			rel = d.Name()
-		}
+		rel, _ := filepath.Rel(vaultDir, path)
 		found = append(found, conflictFile{
 			path:      path,
 			rel:       rel,
