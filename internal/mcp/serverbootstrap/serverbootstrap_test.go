@@ -95,6 +95,13 @@ func newTestHTTPClient() *http.Client {
 	}
 }
 
+func isTLSEnabled(v *vaultpkg.Vault) bool {
+	if v != nil && v.Config != nil && v.Config.MCP != nil && v.Config.MCP.AllowInsecureBind {
+		return strings.TrimSpace(v.Config.MCP.TLSCertFile) != "" && strings.TrimSpace(v.Config.MCP.TLSKeyFile) != ""
+	}
+	return true
+}
+
 //nolint:unparam // bind varies across build tags (metrics build uses "0.0.0.0")
 func runHTTPServerAsync(ctx context.Context, t *testing.T, bind string, port int, v *vaultpkg.Vault, factory func(*vaultpkg.Vault, string, string) (*server.Server, error)) func() {
 	t.Helper()
@@ -127,18 +134,54 @@ func runHTTPServerAsync(ctx context.Context, t *testing.T, bind string, port int
 		}
 	}()
 
-	healthURL := "http://" + net.JoinHostPort(bind, strconv.Itoa(port)) + "/health"
-	client := &http.Client{Timeout: 500 * time.Millisecond}
+	pollBind := bind
+	if pollBind == "0.0.0.0" {
+		pollBind = "127.0.0.1"
+	}
+	scheme := "http"
+	var tlsClientConfig *tls.Config
+	if isTLSEnabled(v) {
+		scheme = "https"
+		tlsClientConfig = &tls.Config{
+			InsecureSkipVerify: true, //nolint:gosec // Test helper polling local test server
+		}
+		if v != nil && v.Config != nil && v.Config.MCP != nil {
+			certFile := strings.TrimSpace(v.Config.MCP.TLSCertFile)
+			keyFile := strings.TrimSpace(v.Config.MCP.TLSKeyFile)
+			if certFile != "" && keyFile != "" {
+				if cert, err := tls.LoadX509KeyPair(certFile, keyFile); err == nil {
+					tlsClientConfig.Certificates = []tls.Certificate{cert}
+				}
+			}
+		}
+	}
+
+	healthURL := fmt.Sprintf("%s://%s/health", scheme, net.JoinHostPort(pollBind, strconv.Itoa(port)))
+	client := &http.Client{
+		Timeout: 500 * time.Millisecond,
+		Transport: &http.Transport{
+			TLSClientConfig: tlsClientConfig,
+		},
+	}
+	ready := false
+	var lastErr error
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		resp, err := client.Get(healthURL) //nolint:noctx
 		if err == nil {
 			_ = resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
+				ready = true
 				break
 			}
+			lastErr = fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		} else {
+			lastErr = err
 		}
 		time.Sleep(25 * time.Millisecond)
+	}
+	if !ready {
+		t.Fatalf("HTTP server at %s failed to become ready within deadline: %v", healthURL, lastErr)
 	}
 
 	return wg.Wait
@@ -573,6 +616,7 @@ func TestRunHTTPServer_CustomConfig(t *testing.T) {
 	}
 
 	v.Config.MCP = &config.MCPConfig{
+		AllowInsecureBind:   true,
 		HTTPTokenFile:       customTokenPath,
 		RateLimit:           120,
 		ReadHeaderTimeout:   3 * time.Second,
@@ -1089,31 +1133,19 @@ func TestRunHTTPServer_OAuthClientPersistenceAcrossRestart(t *testing.T) {
 	cancel1()
 	wait1()
 
+	cfg2 := config.Default()
+	cfg2.MCP = &config.MCPConfig{AllowInsecureBind: true}
 	v2 := &vaultpkg.Vault{
 		Dir:    v.Dir,
-		Config: config.Default(),
+		Config: cfg2,
 	}
 
-	listener, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
-	if err != nil {
-		t.Fatalf("re-listen: %v", err)
-	}
 	ctx2, cancel2 := context.WithCancel(context.Background())
-	defer cancel2()
-	go func() {
-		_ = RunHTTPServerOnListener(ctx2, listener, v2, v2.Dir, "dev", server.New)
+	waitForServer2 := runHTTPServerAsync(ctx2, t, "127.0.0.1", port, v2, server.New)
+	defer func() {
+		cancel2()
+		waitForServer2()
 	}()
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) {
-		resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/health", port))
-		if err == nil {
-			_ = resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				break
-			}
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
 
 	authURL := fmt.Sprintf("http://127.0.0.1:%d/mcp/oauth/authorize?response_type=code&client_id=%s&redirect_uri=%s&code_challenge=abc123&code_challenge_method=S256&state=test",
 		port, clientID, url.QueryEscape("http://127.0.0.1:9999/callback"))
@@ -1401,4 +1433,80 @@ func TestRunHTTPServer_MTLS(t *testing.T) {
 			t.Error("expected error with wrong client cert, got nil")
 		}
 	})
+}
+
+func TestIsTLSEnabled(t *testing.T) {
+	tests := []struct {
+		name string
+		v    *vaultpkg.Vault
+		want bool
+	}{
+		{
+			name: "nil vault",
+			v:    nil,
+			want: true,
+		},
+		{
+			name: "nil config",
+			v:    &vaultpkg.Vault{},
+			want: true,
+		},
+		{
+			name: "nil MCP config",
+			v:    &vaultpkg.Vault{Config: &config.Config{}},
+			want: true,
+		},
+		{
+			name: "insecure bind allowed without certs",
+			v: &vaultpkg.Vault{
+				Config: &config.Config{
+					MCP: &config.MCPConfig{AllowInsecureBind: true},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "insecure bind allowed with certs",
+			v: &vaultpkg.Vault{
+				Config: &config.Config{
+					MCP: &config.MCPConfig{
+						AllowInsecureBind: true,
+						TLSCertFile:       "/path/to/cert.pem",
+						TLSKeyFile:        "/path/to/key.pem",
+					},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "insecure bind disabled without certs",
+			v: &vaultpkg.Vault{
+				Config: &config.Config{
+					MCP: &config.MCPConfig{AllowInsecureBind: false},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "insecure bind disabled with certs",
+			v: &vaultpkg.Vault{
+				Config: &config.Config{
+					MCP: &config.MCPConfig{
+						AllowInsecureBind: false,
+						TLSCertFile:       "/path/to/cert.pem",
+						TLSKeyFile:        "/path/to/key.pem",
+					},
+				},
+			},
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isTLSEnabled(tt.v); got != tt.want {
+				t.Errorf("isTLSEnabled() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }
