@@ -16,7 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-None yet.
+### Dependencies
+- Bumped `corekit` from `v0.9.1` to `v0.11.0` (pulls in latest audit/security improvements from the corekit module).
+- Bumped `appkit` from `0.4.0` to `0.10.0` in `client/Package.swift` (latest Swift Package release, includes `CLIRunnerError` plaintext-redaction security fix).
+
+### Documentation
+- Documented the deliberate audit-chain deviation from `corekit/auditkit` in `ARCHITECTURE.md` §8.
+- Added `.github/CONTRIBUTING.md` for project contribution guidelines.
 
 ## [v0.16.0] - 2026-08-24
 
