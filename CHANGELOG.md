@@ -18,6 +18,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 None yet.
 
+## [v0.16.0] - 2026-08-24
+
+Secret verification, attachment handling and plaintext-exposure auditing (#854).
+
+### Added
+
+- **Metadata flags on `get`** — `get --length`, `get --digest` (SHA-256, first 12 hex chars) and `get --metadata` (JSON `{length, sha256_12}`) let scripts and agents verify stored secrets without ever printing plaintext. The flags are mutually exclusive with each other and with `--print`.
+- **Plaintext-exposure auditing** — `get --print` now emits an `expose_plaintext` audit entry (vault path, field name, hashed argv — never raw argv), so incident response can answer "was this value ever printed?". A new `CountPlaintextExposures` query helper summarizes exposure history.
+
+### Fixed
+
+- **Chunked attachment reads** — `file get` and `file use` recognize `chunked-v1:` manifests on attachment fields, resolve each listed `<field>_NNNN` chunk from the same entry, concatenate them in order and decode the result. Previously the manifest string itself was fed to the base64 decoder (`illegal base64 data at input byte 7`).
+- **Empty sensitive values are rejected** — `set` and `add` refuse empty values on sensitive fields (`password`, `token`, `secret`, `key`, …) with a non-zero exit unless `--allow-empty` is passed; interactive confirm prompts fail loudly on empty or mismatched retyped input instead of storing silently.
+
 ## [v0.15.5] - 2026-08-22
 
 Changes on `main` since v0.15.4.
@@ -1059,10 +1073,13 @@ Interactive TUI, vault management, and observability release.
 [v2.8.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.1
 [v2.8.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v2.8.0
 [v0.9.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.9.0
-[Unreleased]: https://github.com/danieljustus/symaira-vault/compare/v0.15.2...HEAD
+[Unreleased]: https://github.com/danieljustus/symaira-vault/compare/v0.15.5...HEAD
 [v0.15.2]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.15.2
 [v0.15.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.15.0
 [v0.15.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.15.1
+[v0.15.3]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.15.3
+[v0.15.4]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.15.4
+[v0.15.5]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.15.5
 [v0.10.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.10.0
 [v0.10.1]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.10.1
 [v0.11.0]: https://github.com/danieljustus/symaira-vault/releases/tag/v0.11.0

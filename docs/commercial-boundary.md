@@ -25,7 +25,8 @@ billing, or compliance tooling, and none is planned.
 The current Symaira Vault release line is `v0.x`. Historical OpenPass releases
 such as `v4.0.0` remain part of the old release history and must not be treated
 as the current Symaira Vault release target. The next planned core milestone is
-`v0.16.0`.
+tracked in the repository issue tracker; `v0.16.0` shipped as the first release
+after the v0.15.x line.
 
 ## Related
 
