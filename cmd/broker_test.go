@@ -196,14 +196,26 @@ func TestBrokerEnvForRun(t *testing.T) {
 
 	// The cleanup function stops the listener.
 	cleanup()
+	// A dial that succeeds right after cleanup can be a backlog connection
+	// whose TCP handshake completed before Close; require the port to stay
+	// closed across a short grace period instead of failing on the first
+	// stray accept.
 	proxyURL, parseErr := url.Parse(env["HTTPS_PROXY"])
 	if parseErr != nil {
 		t.Fatalf("parse proxy URL: %v", parseErr)
 	}
-	conn, dialErr := net.DialTimeout("tcp", proxyURL.Host, 500*time.Millisecond)
-	if dialErr == nil {
-		_ = conn.Close()
-		t.Error("proxy listener still accepting connections after cleanup()")
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		conn, dialErr := net.DialTimeout("tcp", proxyURL.Host, 500*time.Millisecond)
+		if dialErr == nil {
+			_ = conn.Close()
+			t.Error("proxy listener still accepting connections after cleanup()")
+			break
+		}
+		if time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }
 

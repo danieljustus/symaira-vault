@@ -174,5 +174,12 @@ func brokerEnvForRun(v *vaultpkg.Vault, strict bool, passthrough []string) (map[
 		"REQUESTS_CA_BUNDLE":  caPath,
 		"NO_PROXY":            "127.0.0.1,localhost",
 	}
-	return env, func() { _ = srv.Close() }, nil
+	return env, func() {
+		_ = srv.Close()
+		// srv.Close only closes the listener once the Serve goroutine hands it
+		// back; closing it explicitly removes the window where a connection
+		// that completed its TCP handshake in the accept backlog is still
+		// delivered to a listener that tests expect to be gone.
+		_ = ln.Close()
+	}, nil
 }
