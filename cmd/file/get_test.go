@@ -122,6 +122,11 @@ func TestRunFileGet_EntryNotFound(t *testing.T) {
 	}
 }
 
+// writeChunkedTestEntry writes an entry with chunked fields. field is kept as a
+// parameter even though current tests only exercise one field name, so future
+// multi-field cases can reuse the helper.
+//
+//nolint:unparam
 func writeChunkedTestEntry(t *testing.T, path, field string, data map[string]any, info *vaultpkg.AttachmentInfo) {
 	t.Helper()
 	err := cli.WithVaultRaw(func(_ *vaultpkg.Vault, vs *cli.VaultService) error {

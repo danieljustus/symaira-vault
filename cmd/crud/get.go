@@ -361,7 +361,7 @@ func emitExposureAudit(vaultDir string, identity *age.X25519Identity, path, fiel
 		cliout.Warnf("Warning: audit log open failed: %v", err)
 		return
 	}
-	defer auditLog.Close()
+	defer func() { _ = auditLog.Close() }() //nolint:errcheck // best-effort close; audit failures must not fail get
 
 	entry := audit.LogEntry{
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
