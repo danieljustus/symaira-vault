@@ -19,11 +19,57 @@ import (
 var (
 	SetValue       string
 	SetStdinValue  bool
+	SetAllowEmpty  bool
 	SetTOTPSecret  string
 	SetTOTPIssuer  string
 	SetTOTPAccount string
 	SetForce       bool
 )
+
+// isSensitiveField reports whether fieldName contains any sensitive substring:
+// "password", "token", "secret", "key", "passwd", or "pwd" (case-insensitive).
+func isSensitiveField(fieldName string) bool {
+	lower := strings.ToLower(fieldName)
+	for _, sub := range []string{"password", "token", "secret", "key", "passwd", "pwd"} {
+		if strings.Contains(lower, sub) {
+			return true
+		}
+	}
+	return false
+}
+
+// readConfirmedFieldValue prompts for a hidden field value and, for sensitive
+// fields, requires a non-empty confirmation that matches. Empty sensitive
+// values are rejected unless --allow-empty is set.
+func readConfirmedFieldValue(reader *bufio.Reader, field string) (string, error) {
+	prompt := fmt.Sprintf("Enter value for %s: ", field)
+	valueBytes, err := cliinput.ReadHiddenInputFn(prompt, reader)
+	if err != nil && len(valueBytes) == 0 {
+		return "", errorspkg.ReadFailed(err, "read value")
+	}
+	defer cryptopkg.Wipe(valueBytes)
+
+	if isSensitiveField(field) {
+		if len(valueBytes) == 0 && !SetAllowEmpty {
+			return "", errorspkg.NewCLIError(errorspkg.ExitInvalidInput, fmt.Sprintf("cannot set empty value for sensitive field %q (use --allow-empty to override)", field), nil)
+		}
+		if len(valueBytes) > 0 {
+			confirmPrompt := fmt.Sprintf("Confirm value for %s: ", field)
+			confirmBytes, err := cliinput.ReadHiddenInputFn(confirmPrompt, reader)
+			if err != nil && len(confirmBytes) == 0 {
+				return "", errorspkg.ReadFailed(err, "read confirmation")
+			}
+			defer cryptopkg.Wipe(confirmBytes)
+			if len(confirmBytes) == 0 {
+				return "", errorspkg.NewCLIError(errorspkg.ExitInvalidInput, "confirmation cannot be empty", nil)
+			}
+			if string(confirmBytes) != string(valueBytes) {
+				return "", errorspkg.NewCLIError(errorspkg.ExitInvalidInput, "values do not match", nil)
+			}
+		}
+	}
+	return string(valueBytes), nil
+}
 
 func newSetCmd() *cobra.Command {
 	setCmd := &cobra.Command{
@@ -49,6 +95,11 @@ func newSetCmd() *cobra.Command {
 				field = query[idx+1:]
 			}
 
+			targetField := field
+			if targetField == "" {
+				targetField = "password"
+			}
+
 			if SetStdinValue {
 				stdinReader := bufio.NewReader(os.Stdin)
 				line, err := stdinReader.ReadString('\n')
@@ -61,13 +112,14 @@ func newSetCmd() *cobra.Command {
 			warnArgvExposure(SetValue, SetTOTPSecret, false)
 
 			data := map[string]any{}
-			if SetValue != "" {
-				if field != "" {
-					data[field] = SetValue
-				} else {
-					data["password"] = SetValue
+			isExplicitValue := cmd.Flags().Changed("value") || SetStdinValue
+
+			if isExplicitValue {
+				if SetValue == "" && isSensitiveField(targetField) && !SetAllowEmpty {
+					return errorspkg.NewCLIError(errorspkg.ExitInvalidInput, fmt.Sprintf("cannot set empty value for sensitive field %q (use --allow-empty to override)", targetField), nil)
 				}
-				if !SetForce && (field == "" || field == "password") {
+				data[targetField] = SetValue
+				if !SetForce && (targetField == "password") && SetValue != "" {
 					if err := cryptopkg.ValidatePasswordStrength(SetValue); err != nil {
 						return err
 					}
@@ -75,13 +127,11 @@ func newSetCmd() *cobra.Command {
 			} else {
 				reader := bufio.NewReader(os.Stdin)
 				if field != "" {
-					prompt := fmt.Sprintf("Enter value for %s: ", field)
-					valueBytes, err := cliinput.ReadHiddenInputFn(prompt, reader)
-					if err != nil && len(valueBytes) == 0 {
-						return errorspkg.ReadFailed(err, "read value")
+					valueStr, err := readConfirmedFieldValue(reader, field)
+					if err != nil {
+						return err
 					}
-					defer cryptopkg.Wipe(valueBytes)
-					data[field] = string(valueBytes)
+					data[field] = valueStr
 				} else {
 					collected, err := cli.CollectEntryData(reader, cli.EntryFlags{
 						TOTPSecret:      SetTOTPSecret,
@@ -129,6 +179,7 @@ func newSetCmd() *cobra.Command {
 
 	setCmd.Flags().StringVar(&SetValue, "value", "", "Value to set (non-interactive, visible in process listings)")
 	setCmd.Flags().BoolVar(&SetStdinValue, "stdin-value", false, "Read value from stdin (prevents argv leak)")
+	setCmd.Flags().BoolVar(&SetAllowEmpty, "allow-empty", false, "Allow setting empty values on sensitive fields")
 	setCmd.Flags().StringVar(&SetTOTPSecret, "totp-secret", "", "TOTP secret key (base32 encoded, visible in process listings)")
 	setCmd.Flags().StringVar(&SetTOTPIssuer, "totp-issuer", "", "TOTP issuer/service name")
 	setCmd.Flags().StringVar(&SetTOTPAccount, "totp-account", "", "TOTP account name/username")

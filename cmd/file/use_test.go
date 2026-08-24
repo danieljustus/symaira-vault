@@ -1,10 +1,13 @@
 package file
 
 import (
+	"encoding/base64"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
+
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func resetUseFlags(t *testing.T) {
@@ -95,5 +98,41 @@ func TestRunFileUse_EntryNotFound(t *testing.T) {
 	args := []string{"does/not-exist#field", "true"}
 	if err := runFileUse(nil, args); err == nil {
 		t.Fatal("expected error for missing entry, got nil")
+	}
+}
+
+func TestRunFileUse_ChunkedV1(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: relies on a POSIX shell")
+	}
+	setupTestVault(t)
+	content := []byte("chunked-v1-test-bytes-for-use")
+	fullB64 := base64.StdEncoding.EncodeToString(content)
+	splitIdx := len(fullB64) / 2
+	chunk0 := fullB64[:splitIdx]
+	chunk1 := fullB64[splitIdx:]
+
+	path := "apple-developer/certificate-p12"
+	field := "cert_p12"
+	data := map[string]any{
+		field:               "chunked-v1:cert_p12_b64_0000,cert_p12_b64_0001",
+		"cert_p12_b64_0000": chunk0,
+		"cert_p12_b64_0001": chunk1,
+	}
+	info := &vaultpkg.AttachmentInfo{
+		Filename: "certificate.p12",
+		Size:     int64(len(content)),
+		SHA256:   vaultpkg.HashAttachmentSHA256(content),
+	}
+	writeChunkedTestEntry(t, path, field, data, info)
+
+	resetUseFlags(t)
+	UseField = ""
+	UseAs = ""
+	UseTimeout = 5 * time.Second
+
+	args := []string{path + "#" + field, "sh", "-c", `test "$(cat "$SYMVAULT_FILE_CERT_P12")" = "chunked-v1-test-bytes-for-use"`}
+	if err := runFileUse(nil, args); err != nil {
+		t.Fatalf("runFileUse with chunked attachment: %v", err)
 	}
 }

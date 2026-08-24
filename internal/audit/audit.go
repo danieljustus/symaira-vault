@@ -134,6 +134,9 @@ type ErrorInfo struct {
 	OK        bool   `json:"ok"`
 }
 
+// ActionExposePlaintext is the audit action recorded when secret plaintext is printed to stdout.
+const ActionExposePlaintext = "expose_plaintext"
+
 type LogEntry struct {
 	Timestamp   string `json:"ts"`
 	Agent       string `json:"agent"`
@@ -152,7 +155,24 @@ type LogEntry struct {
 	SessionID   string `json:"sess_id,omitempty"`
 	Kid         string `json:"kid,omitempty"`
 	HMAC        string `json:"hmac,omitempty"`
+	ArgvHash    string `json:"argv_hash,omitempty"`
 	OK          bool   `json:"ok"`
+}
+
+// CountPlaintextExposures counts how many times the entry at entryPath has been
+// exposed in plaintext across all audit log files for the agent in auditDir.
+func CountPlaintextExposures(agent string, auditDir string, entryPath string) (int, error) {
+	entries, err := LoadAuditLogFiles(agent, auditDir, 0)
+	if err != nil {
+		return 0, err
+	}
+	count := 0
+	for _, e := range entries {
+		if e.Action == ActionExposePlaintext && e.Path == entryPath {
+			count++
+		}
+	}
+	return count, nil
 }
 
 // VerifyResult reports the outcome of audit log integrity verification.

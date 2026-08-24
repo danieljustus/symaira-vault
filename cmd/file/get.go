@@ -1,8 +1,6 @@
 package file
 
 import (
-	"encoding/base64"
-	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -56,18 +54,9 @@ func runFileGet(cmd *cobra.Command, args []string) error {
 			return resolveErr
 		}
 
-		raw, ok := entry.Data[resolvedField]
-		if !ok {
-			return errorspkg.NewCLIError(errorspkg.ExitNotFound, fmt.Sprintf("field %q not found in entry %q", resolvedField, path), nil)
-		}
-		encoded, ok := raw.(string)
-		if !ok {
-			return errorspkg.NewCLIError(errorspkg.ExitGeneralError, fmt.Sprintf("field %q is not string-encoded content", resolvedField), nil)
-		}
-
-		content, decErr := base64.StdEncoding.DecodeString(encoded)
+		content, decErr := decodeAttachmentContent(entry, resolvedField)
 		if decErr != nil {
-			return errorspkg.Wrap(errorspkg.ExitGeneralError, errorspkg.ErrKindNone, decErr, "decode attachment content")
+			return decErr
 		}
 
 		if attachment != nil {

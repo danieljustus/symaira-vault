@@ -32,6 +32,7 @@ var (
 	AddTOTPIssuer  string
 	AddTOTPAccount string
 	AddForce       bool
+	AddAllowEmpty  bool
 	AddType        string
 	AddUsageHint   string
 	AddAutoRotate  bool
@@ -52,7 +53,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 
 		warnArgvExposure(AddValue, AddTOTPSecret, AddStdinTOTP)
 
-		data, secretMeta, cleanup, err := buildEntryData(name)
+		data, secretMeta, cleanup, err := buildEntryData(cmd, name)
 		if err != nil {
 			return err
 		}
@@ -151,7 +152,7 @@ func warnArgvExposure(value string, totpSecret string, stdinTOTP bool) {
 // It handles five paths: explicit --value, --generate, interactive form,
 // non-interactive stdin, and defaults.
 // The returned cleanup function must be called after the entry is persisted.
-func buildEntryData(name string) (map[string]any, vaultpkg.SecretMetadata, func(), error) {
+func buildEntryData(cmd *cobra.Command, name string) (map[string]any, vaultpkg.SecretMetadata, func(), error) {
 	data := map[string]any{}
 	var secretMeta vaultpkg.SecretMetadata
 	var cleanup func()
@@ -161,13 +162,16 @@ func buildEntryData(name string) (map[string]any, vaultpkg.SecretMetadata, func(
 	}
 
 	switch {
-	case AddValue != "":
+	case AddValue != "" || AddStdinValue || (cmd != nil && cmd.Flags().Changed("value")):
 		if AddType == "" {
 			AddType = string(vaultpkg.InferSecretType(name, "", AddValue, ""))
 		}
 		fieldName := vaultpkg.PrimaryFieldForType(vaultpkg.SecretTypeFromString(AddType))
+		if AddValue == "" && isSensitiveField(fieldName) && !AddAllowEmpty {
+			return nil, secretMeta, nil, errorspkg.NewCLIError(errorspkg.ExitInvalidInput, fmt.Sprintf("cannot set empty value for sensitive field %q (use --allow-empty to override)", fieldName), nil)
+		}
 		data[fieldName] = AddValue
-		if !AddForce {
+		if !AddForce && AddValue != "" {
 			if err := cryptopkg.ValidatePasswordStrength(AddValue); err != nil {
 				return nil, secretMeta, nil, err
 			}
@@ -353,6 +357,7 @@ Interactive mode prompts for username, password, and URL.`,
 	addCmd.Flags().StringVar(&AddTOTPIssuer, "totp-issuer", "", "TOTP issuer/service name")
 	addCmd.Flags().StringVar(&AddTOTPAccount, "totp-account", "", "TOTP account name/username")
 	addCmd.Flags().BoolVar(&AddForce, "force", false, "Skip password strength validation")
+	addCmd.Flags().BoolVar(&AddAllowEmpty, "allow-empty", false, "Allow empty value for sensitive fields")
 	addCmd.Flags().StringVar(&AddType, "type", "", "Secret type (api_key, bearer_token, basic_auth, ssh_key, password, certificate, database_url, totp_seed, custom). Auto-detected if not specified.")
 	addCmd.Flags().StringVar(&AddUsageHint, "usage-hint", "", "Usage hint for AI agents")
 	addCmd.Flags().BoolVar(&AddAutoRotate, "auto-rotate", false, "Enable automatic rotation reminder")

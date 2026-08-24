@@ -1,8 +1,10 @@
 package file
 
 import (
+	"encoding/base64"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
@@ -48,4 +50,80 @@ func resolveAttachmentField(entry *vaultpkg.Entry, explicitField string) (field 
 	sort.Strings(names)
 	return "", nil, errorspkg.NewCLIError(errorspkg.ExitInvalidInput,
 		fmt.Sprintf("entry has multiple attachment fields (%s); specify --field", strings.Join(names, ", ")), nil)
+}
+
+// decodeAttachmentContent extracts and decodes binary attachment content from an entry's field.
+// If the stored value is a "chunked-v1:" manifest, the chunks listed are resolved from
+// the same entry's Data map, concatenated in order, and decoded from base64.
+func decodeAttachmentContent(entry *vaultpkg.Entry, resolvedField string) ([]byte, error) {
+	raw, ok := entry.Data[resolvedField]
+	if !ok {
+		if entry.Path != "" {
+			return nil, errorspkg.NewCLIError(errorspkg.ExitNotFound, fmt.Sprintf("field %q not found in entry %q", resolvedField, entry.Path), nil)
+		}
+		return nil, errorspkg.NewCLIError(errorspkg.ExitNotFound, fmt.Sprintf("field %q not found in entry", resolvedField), nil)
+	}
+	encoded, ok := raw.(string)
+	if !ok {
+		return nil, errorspkg.NewCLIError(errorspkg.ExitGeneralError, fmt.Sprintf("field %q is not string-encoded content", resolvedField), nil)
+	}
+
+	if strings.HasPrefix(encoded, "chunked-v1:") {
+		manifest := strings.TrimPrefix(encoded, "chunked-v1:")
+		if manifest == "" {
+			return nil, errorspkg.NewCLIError(errorspkg.ExitGeneralError, fmt.Sprintf("invalid chunk manifest in field %q: no chunks specified", resolvedField), nil)
+		}
+		chunkNames := strings.Split(manifest, ",")
+
+		for _, countKey := range []string{resolvedField + "_chunk_count", "chunk_count"} {
+			if countRaw, ok := entry.Data[countKey]; ok {
+				var expectedCount int
+				switch v := countRaw.(type) {
+				case int:
+					expectedCount = v
+				case int64:
+					expectedCount = int(v)
+				case float64:
+					expectedCount = int(v)
+				case string:
+					if p, err := strconv.Atoi(v); err == nil {
+						expectedCount = p
+					}
+				}
+				if expectedCount > 0 && expectedCount != len(chunkNames) {
+					return nil, errorspkg.NewCLIError(errorspkg.ExitGeneralError,
+						fmt.Sprintf("chunk count mismatch for field %q: manifest lists %d chunks, entry specifies %d", resolvedField, len(chunkNames), expectedCount), nil)
+				}
+			}
+		}
+
+		var sb strings.Builder
+		for _, chunkName := range chunkNames {
+			chunkName = strings.TrimSpace(chunkName)
+			if chunkName == "" {
+				return nil, errorspkg.NewCLIError(errorspkg.ExitGeneralError, fmt.Sprintf("invalid chunk manifest in field %q: empty chunk name", resolvedField), nil)
+			}
+			chunkRaw, ok := entry.Data[chunkName]
+			if !ok {
+				return nil, errorspkg.NewCLIError(errorspkg.ExitNotFound, fmt.Sprintf("chunk field %q not found in entry", chunkName), nil)
+			}
+			chunkStr, ok := chunkRaw.(string)
+			if !ok {
+				return nil, errorspkg.NewCLIError(errorspkg.ExitGeneralError, fmt.Sprintf("chunk field %q is not string-encoded content", chunkName), nil)
+			}
+			sb.WriteString(chunkStr)
+		}
+
+		content, decErr := base64.StdEncoding.DecodeString(sb.String())
+		if decErr != nil {
+			return nil, errorspkg.Wrap(errorspkg.ExitGeneralError, errorspkg.ErrKindNone, decErr, "decode attachment content")
+		}
+		return content, nil
+	}
+
+	content, decErr := base64.StdEncoding.DecodeString(encoded)
+	if decErr != nil {
+		return nil, errorspkg.Wrap(errorspkg.ExitGeneralError, errorspkg.ErrKindNone, decErr, "decode attachment content")
+	}
+	return content, nil
 }
