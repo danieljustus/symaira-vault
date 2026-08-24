@@ -2251,3 +2251,64 @@ func TestHealthCheckNeedsRotationBySize_Symvault(t *testing.T) {
 		t.Fatal("expected NeedsRotation=true for oversized file")
 	}
 }
+
+func TestCountPlaintextExposures(t *testing.T) {
+	auditDir := t.TempDir()
+	logger, err := New("symvault", auditDir, nil)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	_ = logger.LogEntry(LogEntry{
+		Action:   ActionExposePlaintext,
+		Path:     "prod/database",
+		Field:    "password",
+		ArgvHash: "0123456789abcdef",
+		OK:       true,
+	})
+	_ = logger.LogEntry(LogEntry{
+		Action:   ActionExposePlaintext,
+		Path:     "prod/database",
+		Field:    "password",
+		ArgvHash: "0123456789abcdef",
+		OK:       true,
+	})
+	_ = logger.LogEntry(LogEntry{
+		Action: "read",
+		Path:   "prod/database",
+		Field:  "password",
+		OK:     true,
+	})
+	_ = logger.LogEntry(LogEntry{
+		Action:   ActionExposePlaintext,
+		Path:     "other/secret",
+		Field:    "key",
+		ArgvHash: "0123456789abcdef",
+		OK:       true,
+	})
+	_ = logger.Close()
+
+	count, err := CountPlaintextExposures("symvault", auditDir, "prod/database")
+	if err != nil {
+		t.Fatalf("CountPlaintextExposures error: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("CountPlaintextExposures = %d, want 2", count)
+	}
+
+	countOther, err := CountPlaintextExposures("symvault", auditDir, "other/secret")
+	if err != nil {
+		t.Fatalf("CountPlaintextExposures error: %v", err)
+	}
+	if countOther != 1 {
+		t.Errorf("CountPlaintextExposures = %d, want 1", countOther)
+	}
+
+	countNone, err := CountPlaintextExposures("symvault", auditDir, "nonexistent")
+	if err != nil {
+		t.Fatalf("CountPlaintextExposures error: %v", err)
+	}
+	if countNone != 0 {
+		t.Errorf("CountPlaintextExposures = %d, want 0", countNone)
+	}
+}

@@ -13,8 +13,10 @@ import (
 
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
 
+	"filippo.io/age"
 	"github.com/spf13/cobra"
 
+	"github.com/danieljustus/symaira-vault/internal/audit"
 	clipboardapp "github.com/danieljustus/symaira-vault/internal/clipboard"
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
@@ -197,6 +199,9 @@ func newGetCmd() *cobra.Command {
 					// 5. Config override: clipboard.copyByDefault=false restores old behavior
 
 					if cli.OutputFormat != "text" {
+						if GetPrint {
+							emitExposureAudit(vs.VaultDir(), v.Identity, path, field)
+						}
 						if printErr := cli.PrintResult(strValue); printErr != nil {
 							return printErr
 						}
@@ -247,6 +252,9 @@ func newGetCmd() *cobra.Command {
 						return nil
 					}
 
+					if GetPrint {
+						emitExposureAudit(vs.VaultDir(), v.Identity, path, field)
+					}
 					cli.PrintlnQuietAware(strValue)
 					return nil
 				}
@@ -292,6 +300,10 @@ func newGetCmd() *cobra.Command {
 					return nil
 				}
 
+				if GetPrint {
+					emitExposureAudit(vs.VaultDir(), v.Identity, path, "")
+				}
+
 				cli.PrintQuietAware("Path: %s\n", render.ForTerminal(taint.Wrap(path, taint.Provenance{Source: "cli.path"})))
 				cli.PrintQuietAware("Modified: %s\n", entry.Metadata.Updated.Format("2006-01-02 15:04"))
 				cli.PrintlnQuietAware()
@@ -334,6 +346,34 @@ func newGetCmd() *cobra.Command {
 	getCmd.Flags().BoolVar(&GetMetadata, "metadata", false, "Print JSON metadata (length and sha256_12) of the value only")
 	getCmd.GroupID = cli.GroupIDEssentials
 	return getCmd
+}
+
+func emitExposureAudit(vaultDir string, identity *age.X25519Identity, path, field string) {
+	if vaultDir == "" {
+		return
+	}
+	rawArgv := strings.Join(os.Args, " ")
+	h := sha256.Sum256([]byte(rawArgv))
+	argvHash := hex.EncodeToString(h[:])[:16]
+
+	auditLog, err := audit.New("symvault", vaultDir, identity)
+	if err != nil {
+		cliout.Warnf("Warning: audit log open failed: %v", err)
+		return
+	}
+	defer auditLog.Close()
+
+	entry := audit.LogEntry{
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		Action:    audit.ActionExposePlaintext,
+		Path:      path,
+		Field:     field,
+		ArgvHash:  argvHash,
+		OK:        true,
+	}
+	if err := auditLog.LogEntry(entry); err != nil {
+		cliout.Warnf("Warning: audit log write failed: %v", err)
+	}
 }
 
 func GetAutoClearDuration() int {

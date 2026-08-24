@@ -5,9 +5,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
+	"github.com/danieljustus/symaira-vault/internal/audit"
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
 )
 
@@ -234,6 +236,80 @@ func TestGetCommand_MetadataFlags_RequireField(t *testing.T) {
 		err := cmd.Execute()
 		if err == nil {
 			t.Errorf("Execute(service/api %s) = nil, want error requiring field", flag)
+		}
+	}
+}
+
+func TestGetCommand_ExposePlaintextAudit(t *testing.T) {
+	setupTestVault(t)
+	resetGetCmdFlags(t)
+	secret := "secret-to-be-exposed-123"
+	addTestEntry(t, "prod/database", map[string]any{"password": secret})
+
+	cmd := newGetCmd()
+	cmd.SetArgs([]string{"prod/database.password", "--print"})
+	out := captureStdout(t, func() {
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("Execute() error = %v", err)
+		}
+	})
+
+	if !strings.Contains(out, secret) {
+		t.Fatalf("output %q does not contain secret %q", out, secret)
+	}
+
+	vaultDir := cli.Vault
+	entries, err := audit.LoadAuditLogFiles("symvault", vaultDir, 0)
+	if err != nil {
+		t.Fatalf("LoadAuditLogFiles: %v", err)
+	}
+
+	var exposeEntries []audit.LogEntry
+	for _, e := range entries {
+		if e.Action == audit.ActionExposePlaintext {
+			exposeEntries = append(exposeEntries, e)
+		}
+	}
+
+	if len(exposeEntries) != 1 {
+		t.Fatalf("expected 1 expose_plaintext audit entry, found %d (all entries: %+v)", len(exposeEntries), entries)
+	}
+
+	entry := exposeEntries[0]
+	if entry.Path != "prod/database" {
+		t.Errorf("audit entry Path = %q, want prod/database", entry.Path)
+	}
+	if entry.Field != "password" {
+		t.Errorf("audit entry Field = %q, want password", entry.Field)
+	}
+	if !entry.OK {
+		t.Errorf("audit entry OK = %v, want true", entry.OK)
+	}
+	if len(entry.ArgvHash) != 16 {
+		t.Errorf("audit entry ArgvHash length = %d (%q), want 16 hex chars", len(entry.ArgvHash), entry.ArgvHash)
+	}
+	rawArgv := strings.Join(os.Args, " ")
+	if entry.ArgvHash == rawArgv {
+		t.Errorf("audit entry ArgvHash leaked raw argv %q", entry.ArgvHash)
+	}
+}
+
+func TestGetCommand_NoExposeAuditWhenNotPrinted(t *testing.T) {
+	setupTestVault(t)
+	resetGetCmdFlags(t)
+	addTestEntry(t, "prod/database", map[string]any{"password": "secretpassword"})
+
+	cmd := newGetCmd()
+	cmd.SetArgs([]string{"prod/database.password", "--length"})
+	_ = captureStdout(t, func() {
+		_ = cmd.Execute()
+	})
+
+	vaultDir := cli.Vault
+	entries, _ := audit.LoadAuditLogFiles("symvault", vaultDir, 0)
+	for _, e := range entries {
+		if e.Action == audit.ActionExposePlaintext {
+			t.Errorf("found unexpected expose_plaintext audit entry when --print was not used: %+v", e)
 		}
 	}
 }
