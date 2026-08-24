@@ -38,6 +38,39 @@ func isSensitiveField(fieldName string) bool {
 	return false
 }
 
+// readConfirmedFieldValue prompts for a hidden field value and, for sensitive
+// fields, requires a non-empty confirmation that matches. Empty sensitive
+// values are rejected unless --allow-empty is set.
+func readConfirmedFieldValue(reader *bufio.Reader, field string) (string, error) {
+	prompt := fmt.Sprintf("Enter value for %s: ", field)
+	valueBytes, err := cliinput.ReadHiddenInputFn(prompt, reader)
+	if err != nil && len(valueBytes) == 0 {
+		return "", errorspkg.ReadFailed(err, "read value")
+	}
+	defer cryptopkg.Wipe(valueBytes)
+
+	if isSensitiveField(field) {
+		if len(valueBytes) == 0 && !SetAllowEmpty {
+			return "", errorspkg.NewCLIError(errorspkg.ExitInvalidInput, fmt.Sprintf("cannot set empty value for sensitive field %q (use --allow-empty to override)", field), nil)
+		}
+		if len(valueBytes) > 0 {
+			confirmPrompt := fmt.Sprintf("Confirm value for %s: ", field)
+			confirmBytes, err := cliinput.ReadHiddenInputFn(confirmPrompt, reader)
+			if err != nil && len(confirmBytes) == 0 {
+				return "", errorspkg.ReadFailed(err, "read confirmation")
+			}
+			defer cryptopkg.Wipe(confirmBytes)
+			if len(confirmBytes) == 0 {
+				return "", errorspkg.NewCLIError(errorspkg.ExitInvalidInput, "confirmation cannot be empty", nil)
+			}
+			if string(confirmBytes) != string(valueBytes) {
+				return "", errorspkg.NewCLIError(errorspkg.ExitInvalidInput, "values do not match", nil)
+			}
+		}
+	}
+	return string(valueBytes), nil
+}
+
 func newSetCmd() *cobra.Command {
 	setCmd := &cobra.Command{
 		Use:   "set <path[.field]>",
@@ -94,32 +127,9 @@ func newSetCmd() *cobra.Command {
 			} else {
 				reader := bufio.NewReader(os.Stdin)
 				if field != "" {
-					prompt := fmt.Sprintf("Enter value for %s: ", field)
-					valueBytes, err := cliinput.ReadHiddenInputFn(prompt, reader)
-					if err != nil && len(valueBytes) == 0 {
-						return errorspkg.ReadFailed(err, "read value")
-					}
-					defer cryptopkg.Wipe(valueBytes)
-					valueStr := string(valueBytes)
-
-					if isSensitiveField(field) {
-						if len(valueBytes) == 0 && !SetAllowEmpty {
-							return errorspkg.NewCLIError(errorspkg.ExitInvalidInput, fmt.Sprintf("cannot set empty value for sensitive field %q (use --allow-empty to override)", field), nil)
-						}
-						if len(valueBytes) > 0 {
-							confirmPrompt := fmt.Sprintf("Confirm value for %s: ", field)
-							confirmBytes, err := cliinput.ReadHiddenInputFn(confirmPrompt, reader)
-							if err != nil && len(confirmBytes) == 0 {
-								return errorspkg.ReadFailed(err, "read confirmation")
-							}
-							defer cryptopkg.Wipe(confirmBytes)
-							if len(confirmBytes) == 0 {
-								return errorspkg.NewCLIError(errorspkg.ExitInvalidInput, "confirmation cannot be empty", nil)
-							}
-							if string(confirmBytes) != valueStr {
-								return errorspkg.NewCLIError(errorspkg.ExitInvalidInput, "values do not match", nil)
-							}
-						}
+					valueStr, err := readConfirmedFieldValue(reader, field)
+					if err != nil {
+						return err
 					}
 					data[field] = valueStr
 				} else {
