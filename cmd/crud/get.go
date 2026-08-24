@@ -1,6 +1,9 @@
 package crud
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -24,6 +27,9 @@ import (
 
 var (
 	GetPrint                 bool
+	GetLength                bool
+	GetDigest                bool
+	GetMetadata              bool
 	GetClipboard             = clipboardapp.DefaultClipboard
 	GetAutoClearDurationFunc = GetAutoClearDuration
 	StartAutoClear           = clipboardapp.StartAutoClear
@@ -69,6 +75,23 @@ func newGetCmd() *cobra.Command {
 			cli.JSONOutputAnnotation: "true",
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			flagsCount := 0
+			if GetPrint {
+				flagsCount++
+			}
+			if GetLength {
+				flagsCount++
+			}
+			if GetDigest {
+				flagsCount++
+			}
+			if GetMetadata {
+				flagsCount++
+			}
+			if flagsCount > 1 {
+				return errorspkg.NewCLIError(errorspkg.ExitInvalidInput, "--print, --length, --digest, and --metadata are mutually exclusive", nil)
+			}
+
 			unlockVault := cli.WithVault
 			if !cli.IsTerminalFunc(int(os.Stdin.Fd())) {
 				unlockVault = cli.WithVaultForScripting
@@ -87,6 +110,10 @@ func newGetCmd() *cobra.Command {
 						path = candidatePath
 						field = candidateField
 					}
+				}
+
+				if (GetLength || GetDigest || GetMetadata) && field == "" {
+					return errorspkg.NewCLIError(errorspkg.ExitInvalidInput, "field is required for --length, --digest, or --metadata", nil)
 				}
 
 				value, err := vs.GetField(path, field)
@@ -136,6 +163,31 @@ func newGetCmd() *cobra.Command {
 
 				if field != "" {
 					strValue := fmt.Sprintf("%v", value)
+
+					if GetLength {
+						cli.PrintlnQuietAware(fmt.Sprintf("%d", len(strValue)))
+						return nil
+					}
+					if GetDigest {
+						h := sha256.Sum256([]byte(strValue))
+						hexStr := hex.EncodeToString(h[:])
+						cli.PrintlnQuietAware(fmt.Sprintf("sha256:%s", hexStr[:12]))
+						return nil
+					}
+					if GetMetadata {
+						h := sha256.Sum256([]byte(strValue))
+						hexStr := hex.EncodeToString(h[:])
+						type metaOut struct {
+							Length   int    `json:"length"`
+							SHA25612 string `json:"sha256_12"`
+						}
+						metaBytes, _ := json.Marshal(metaOut{
+							Length:   len(strValue),
+							SHA25612: hexStr[:12],
+						})
+						cli.PrintlnQuietAware(string(metaBytes))
+						return nil
+					}
 
 					// Determine if we should copy to clipboard:
 					// 1. --output json: never clipboard, always print as JSON
@@ -277,6 +329,9 @@ func newGetCmd() *cobra.Command {
 	}
 
 	getCmd.Flags().BoolVarP(&GetPrint, "print", "p", false, "Print value to stdout instead of copying to clipboard")
+	getCmd.Flags().BoolVar(&GetLength, "length", false, "Print byte length of the stored string value only")
+	getCmd.Flags().BoolVar(&GetDigest, "digest", false, "Print sha256 digest (first 12 hex chars) of the value only")
+	getCmd.Flags().BoolVar(&GetMetadata, "metadata", false, "Print JSON metadata (length and sha256_12) of the value only")
 	getCmd.GroupID = cli.GroupIDEssentials
 	return getCmd
 }
