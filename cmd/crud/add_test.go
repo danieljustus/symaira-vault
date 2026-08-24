@@ -3,6 +3,7 @@ package crud
 import (
 	"io"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/danieljustus/symaira-vault/internal/vault"
@@ -16,20 +17,20 @@ func resetAddFlags(t *testing.T) {
 		length                              int
 		username, url, notes                string
 		totpSecret, totpIssuer, totpAccount string
-		force                               bool
+		force, allowEmpty                   bool
 		typ, usageHint, expiresAt           string
 		autoRotate                          bool
 	}{
 		AddValue, AddStdinValue, AddStdinTOTP, AddGenerate,
 		AddLength, AddUsername, AddURL, AddNotes,
 		AddTOTPSecret, AddTOTPIssuer, AddTOTPAccount,
-		AddForce, AddType, AddUsageHint, AddExpiresAt, AddAutoRotate,
+		AddForce, AddAllowEmpty, AddType, AddUsageHint, AddExpiresAt, AddAutoRotate,
 	}
 	t.Cleanup(func() {
 		AddValue, AddStdinValue, AddStdinTOTP, AddGenerate = old.value, old.stdinValue, old.stdinTOTP, old.generate
 		AddLength, AddUsername, AddURL, AddNotes = old.length, old.username, old.url, old.notes
 		AddTOTPSecret, AddTOTPIssuer, AddTOTPAccount = old.totpSecret, old.totpIssuer, old.totpAccount
-		AddForce, AddType, AddUsageHint, AddExpiresAt, AddAutoRotate = old.force, old.typ, old.usageHint, old.expiresAt, old.autoRotate
+		AddForce, AddAllowEmpty, AddType, AddUsageHint, AddExpiresAt, AddAutoRotate = old.force, old.allowEmpty, old.typ, old.usageHint, old.expiresAt, old.autoRotate
 	})
 }
 
@@ -171,6 +172,40 @@ func TestReadStdinValues_AcceptsEOFWithData(t *testing.T) {
 			}
 			if AddTOTPSecret != tt.wantTOTP {
 				t.Errorf("AddTOTPSecret = %q, want %q", AddTOTPSecret, tt.wantTOTP)
+			}
+		})
+	}
+}
+
+func TestAddCommand_EmptySensitiveValues(t *testing.T) {
+	setupTestVault(t)
+
+	tests := []struct {
+		name       string
+		args       []string
+		allowEmpty bool
+		wantErr    bool
+	}{
+		{name: "add empty password no-allow", args: []string{"account1", "--value", ""}, allowEmpty: false, wantErr: true},
+		{name: "add empty password allow", args: []string{"account2", "--value", ""}, allowEmpty: true, wantErr: false},
+		{name: "add non-empty password no-allow", args: []string{"account3", "--value", "ValidPass123!"}, allowEmpty: false, wantErr: false},
+		{name: "add empty token type no-allow", args: []string{"account4", "--type", "bearer_token", "--value", ""}, allowEmpty: false, wantErr: true},
+		{name: "add empty token type allow", args: []string{"account5", "--type", "bearer_token", "--value", ""}, allowEmpty: true, wantErr: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resetAddFlags(t)
+			cmd := newAddCmd()
+			args := append([]string{}, tt.args...)
+			if tt.allowEmpty {
+				args = append(args, "--allow-empty")
+			}
+			cmd.SetArgs(args)
+			cmd.SetOut(&strings.Builder{})
+			err := cmd.Execute()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("add %v returned err = %v, wantErr = %v", args, err, tt.wantErr)
 			}
 		})
 	}
