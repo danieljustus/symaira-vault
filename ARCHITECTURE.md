@@ -510,6 +510,62 @@ Vaults created with the older root-level entry layout are migrated to `entries/`
    and a different file layout; adopting it would be a breaking config
    migration with no security or maintenance gain.
 
+8. **Own audit chain instead of `corekit/auditkit` (deliberate deviation):**
+   `internal/audit/` (~7k lines across `audit.go`, `export.go`, `keystore.go`,
+   `keystore_fallback.go`, `keystore_os.go`) implements an HMAC-based audit
+   chain instead of reusing the shared `corekit/auditkit` package used by two
+   other Symaira tools (`symbrain`, `symguard`). This is a deliberate,
+   security-driven deviation, not code drift:
+
+   - **HMAC chain with keyed integrity:** Each `LogEntry` carries a
+     `computeHMACWith(mac, prevHMAC, entry)` — `HMAC-SHA256(key,
+     prevHMAC || canonicalJSON(entry))` — producing a per-entry `kid`
+     and a chained HMAC that links every entry to the previous one.
+     `auditkit`'s `HashEntry`/`VerifyChain` uses a keyless SHA-256
+     chain: entries are tamper-evident only if an attacker cannot write
+     to the log at all; a forged entry is indistinguishable from a
+     legitimate one once the keyless chain is broken.
+   - **Key rotation with archival:** `internal/audit/keystore.go`
+     (`Keystore.LoadOrCreateHMACKey`, `RotateKey`, `LoadArchivedKeys`)
+     supports rotating the HMAC key out to an archived file with a
+     fingerprint suffix, and `VerifyLogAgainstKeys` verifies a log that
+     straddles a rotation by looking up each entry's `kid` directly.
+     The own chain also detects **chain-reset attacks**: an entry
+     written with an empty HMAC after the chain has already started is
+     classified as `Tampered` (`audit.go:911`), not as legacy.
+     `auditkit` has no equivalent — its `Sink` offers rotation of log
+     files but no HMAC-key rotation, no `kid` tagging, and no
+     chain-reset detection.
+   - **Chain-anchor checkpoint:** `auditkit` provides `ChainAnchor`,
+     `WriteCheckpoint`, `VerifyAnchor` to persist a trusted checkpoint
+     after N entries, but Vault's chain does not currently persist
+     checkpoints; the per-entry HMAC + key rotation is sufficient for
+     the threat model (single-user, local vault) and avoids the
+     complexity of an anchor-verification code path that no consumer
+     has exercised.
+   - **Redaction and export policy:** `internal/audit/export.go`
+     implements `RedactPath`, `ExportAuditLog`, `StreamExportAuditLog`,
+     and `ExportOptions` with `RedactPaths`, `VerifyHMAC`, and
+     `FailedOnly`. The shared `auditkit` JSONL `Sink` is a write-only
+     sink with no export/retention/redaction layer; Vault's export
+     and redaction policy lives in `internal/audit/` and is specific to
+     this tool's entry-path semantics.
+
+   `docs/repo-konsolidierung.md` §9 records the triple-audit
+   consolidation (brain 1,751 / guard 483 / room 12k → `corekit/auditkit`)
+   as complete for `symbrain` and `symguard`; Vault's audit layer was
+   consciously left out because the HMAC variant is the stronger
+   design and the migration to `auditkit` would silently regress
+   tamper-detection and key-rotation capabilities.
+
+   Revisit only if `corekit/auditkit` grows HMAC-keyed chains with `kid`-
+   tagged rotation and chain-reset detection, or if the ecosystem
+   standardizes on a single audit implementation that supports both
+   hash-chain and HMAC modes behind a shared interface. A switch must
+   preserve the chain-reset attack detector and the key-rotation
+   archival path; the `audit-schema.md` and `audit-retention.md`
+   documented behavior must remain byte-compatible.
+
 ## Tool Addition Review
 
 Symaira Vault caps the MCP tool registry at `MaxToolDefinitions` (34, defined in `internal/mcp/server/tool_registry.go`). Each tool is a potential prompt injection vector — an attacker-controlled agent can exploit any exposed tool. The cap forces deliberate tradeoffs: every new tool must displace another or justify raising the limit.
