@@ -28,28 +28,57 @@ func searchWorkers(cfg *configpkg.Config) int {
 }
 
 func newFindCmd() *cobra.Command {
+	var urlFilter string
+
 	findCmd := &cobra.Command{
-		Use:               "find <query>",
+		Use:               "find [query]",
 		Aliases:           []string{"search"},
 		ValidArgsFunction: cli.EntryCompletionFunc,
 		Short:             "Search for entries",
-		Long:              `Searches entry paths and contents for the given query.`,
+		Long:              `Searches entry paths and contents for the given query, or matches entries by URL/host.`,
 		Example: `  # Search for entries containing "bank"
   symvault find bank
 
+  # Search for entries matching a URL or host
+  symvault find --url https://github.com/login
+  symvault find --url github.com
+
   # JSON output
-  symvault find bank --output json`,
-		Args: cobra.ExactArgs(1),
+  symvault find bank --output json
+  symvault find --url github.com --output json`,
+		Args: func(cmd *cobra.Command, args []string) error {
+			if urlFilter == "" && len(args) == 0 {
+				return fmt.Errorf("accepts 1 arg(s), received 0")
+			}
+			if len(args) > 1 {
+				return fmt.Errorf("accepts at most 1 arg(s), received %d", len(args))
+			}
+			return nil
+		},
 		Annotations: map[string]string{
 			cli.JSONOutputAnnotation: "true",
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if urlFilter != "" {
+				if err := vaultpkg.ValidateURL(urlFilter); err != nil {
+					return errorspkg.InvalidInput("invalid url %q: %v", urlFilter, err)
+				}
+			}
+
 			return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
 				cli.MaybeAutoPull(vs.VaultDir(), v.Config)
 				cfg := v.Config
 				workers := searchWorkers(cfg)
 
-				matches, err := vs.FindEntries(args[0], vaultpkg.FindOptions{MaxWorkers: workers})
+				query := ""
+				if len(args) > 0 {
+					query = args[0]
+				}
+
+				matches, err := vs.FindEntries(query, vaultpkg.FindOptions{
+					MaxWorkers: workers,
+					URLFilter:  urlFilter,
+				})
 				if err != nil {
 					return errorspkg.ReadFailed(err, "search failed")
 				}
@@ -87,6 +116,7 @@ func newFindCmd() *cobra.Command {
 		},
 	}
 
+	findCmd.Flags().StringVar(&urlFilter, "url", "", "Search entries matching a URL or host")
 	findCmd.GroupID = cli.GroupIDEssentials
 	return findCmd
 }

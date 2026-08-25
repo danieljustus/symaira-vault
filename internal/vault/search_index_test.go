@@ -930,3 +930,169 @@ func TestFindFallbackWhenIndexUnavailable(t *testing.T) {
 		}
 	}
 }
+
+func TestEncryptedIndex_MatchHost(t *testing.T) {
+	searchIndexStore.invalidateAll()
+	t.Cleanup(searchIndexStore.invalidateAll)
+
+	vaultDir := t.TempDir()
+	identity := testutil.TempIdentity(t)
+
+	mustWriteEntry(t, vaultDir, identity, "work/github", map[string]interface{}{
+		"url":      "https://github.com/login",
+		"username": "octocat",
+	})
+	mustWriteEntry(t, vaultDir, identity, "work/gitlab", map[string]interface{}{
+		"url":      "http://gitlab.internal:8080/auth",
+		"username": "gituser",
+	})
+	mustWriteEntry(t, vaultDir, identity, "personal/multi", map[string]interface{}{
+		"url": []any{
+			"https://apple.com",
+			"https://icloud.com:443",
+		},
+		"username": "appleuser",
+	})
+	mustWriteEntry(t, vaultDir, identity, "local/dev", map[string]interface{}{
+		"url":      "http://localhost:3000/app",
+		"username": "devuser",
+	})
+
+	idx := &EncryptedIndex{}
+	if err := idx.Build(vaultDir, identity); err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	tests := []struct {
+		query    string
+		wantPath string
+		wantFind bool
+	}{
+		{"github.com", "work/github", true},
+		{"HTTPS://GITHUB.COM:443/profile", "work/github", true},
+		{"http://github.com", "work/github", true},
+		{"http://gitlab.internal:8080", "work/gitlab", true},
+		{"gitlab.internal:8080", "work/gitlab", true},
+		{"gitlab.internal", "", false}, // different port
+		{"apple.com", "personal/multi", true},
+		{"icloud.com", "personal/multi", true},
+		{"https://icloud.com", "personal/multi", true},
+		{"localhost:3000", "local/dev", true},
+		{"localhost:8080", "", false},
+		{"nonexistent.org", "", false},
+	}
+
+	candidates := []string{"work/github", "work/gitlab", "personal/multi", "local/dev"}
+	for _, tc := range tests {
+		matches, err := idx.MatchHost(vaultDir, identity, candidates, tc.query)
+		if err != nil {
+			t.Errorf("MatchHost(%q) unexpected error: %v", tc.query, err)
+			continue
+		}
+		if tc.wantFind {
+			if _, ok := matches[tc.wantPath]; !ok {
+				t.Errorf("MatchHost(%q) did not find %s; matches: %v", tc.query, tc.wantPath, matches)
+			}
+		} else {
+			if len(matches) > 0 {
+				t.Errorf("MatchHost(%q) expected 0 matches, got %v", tc.query, matches)
+			}
+		}
+	}
+}
+
+func TestEncryptedIndex_MatchHostIncremental(t *testing.T) {
+	searchIndexStore.invalidateAll()
+	t.Cleanup(searchIndexStore.invalidateAll)
+
+	vaultDir := t.TempDir()
+	identity := testutil.TempIdentity(t)
+
+	mustWriteEntry(t, vaultDir, identity, "work/srv", map[string]interface{}{
+		"url":      "https://original-host.com",
+		"username": "user1",
+	})
+
+	idx := searchIndexForVault(vaultDir)
+	if err := idx.Build(vaultDir, identity); err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	matches, err := idx.MatchHost(vaultDir, identity, []string{"work/srv"}, "original-host.com")
+	if err != nil || len(matches) != 1 {
+		t.Fatalf("MatchHost(original-host.com) = %v, err: %v", matches, err)
+	}
+
+	// Update the entry with a new URL
+	mustWriteEntry(t, vaultDir, identity, "work/srv", map[string]interface{}{
+		"url":      "https://updated-host.com",
+		"username": "user1",
+	})
+
+	// Old host must no longer match
+	matchesOld, err := idx.MatchHost(vaultDir, identity, []string{"work/srv"}, "original-host.com")
+	if err != nil || len(matchesOld) != 0 {
+		t.Fatalf("MatchHost(original-host.com) after update = %v (expected empty)", matchesOld)
+	}
+
+	// New host must match
+	matchesNew, err := idx.MatchHost(vaultDir, identity, []string{"work/srv"}, "updated-host.com")
+	if err != nil || len(matchesNew) != 1 {
+		t.Fatalf("MatchHost(updated-host.com) after update = %v, want [work/srv]", matchesNew)
+	}
+
+	// Delete the entry
+	idx.RemoveEntry("work/srv", identity)
+
+	matchesDeleted, err := idx.MatchHost(vaultDir, identity, []string{"work/srv"}, "updated-host.com")
+	if err != nil || len(matchesDeleted) != 0 {
+		t.Fatalf("MatchHost(updated-host.com) after delete = %v (expected empty)", matchesDeleted)
+	}
+}
+
+func TestEncryptedIndex_NoServiceLeakageOnDisk(t *testing.T) {
+	searchIndexStore.invalidateAll()
+	t.Cleanup(searchIndexStore.invalidateAll)
+
+	vaultDir := t.TempDir()
+	identity := testutil.TempIdentity(t)
+
+	const secretServiceHost = "topsecret-financial-portal-99.example.com"
+	const secretServiceName = "topsecret-financial-portal-99"
+
+	mustWriteEntry(t, vaultDir, identity, "banking/portal", map[string]interface{}{
+		"url":      "https://" + secretServiceHost + "/login",
+		"username": "secretuser",
+		"password": "secretpassword",
+	})
+
+	if err := searchIndexForVault(vaultDir).Build(vaultDir, identity); err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	// Read all files in the vault directory and ensure plaintext service name does not appear anywhere
+	err := filepath.Walk(vaultDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+
+		raw, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+
+		if bytes.Contains(raw, []byte(secretServiceHost)) {
+			t.Errorf("plaintext service host %q leaked into vault file %s", secretServiceHost, path)
+		}
+		if bytes.Contains(raw, []byte(secretServiceName)) {
+			t.Errorf("plaintext service name %q leaked into vault file %s", secretServiceName, path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Walk vault dir: %v", err)
+	}
+}
