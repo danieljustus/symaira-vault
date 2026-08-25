@@ -116,12 +116,12 @@ func OpenVaultWithPassphrase(vaultDir string, passphrase string) (string, error)
 
 // EntryDataBridge is the JSON-serializable representation of a vault entry.
 type EntryDataBridge struct {
-	Path        string            `json:"path"`
-	Data        map[string]any    `json:"data"`
-	Metadata    map[string]string `json:"metadata,omitempty"`
-	Version     int               `json:"version"`
-	UpdatedAt   string            `json:"updated_at,omitempty"`
-	UpdatedBy   string            `json:"updated_by,omitempty"`
+	Path      string            `json:"path"`
+	Data      map[string]any    `json:"data"`
+	Metadata  map[string]string `json:"metadata,omitempty"`
+	Version   int               `json:"version"`
+	UpdatedAt string            `json:"updated_at,omitempty"`
+	UpdatedBy string            `json:"updated_by,omitempty"`
 }
 
 // ReadEntryJSON reads and decrypts an entry from vaultDir, returning it as a JSON string.
