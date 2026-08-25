@@ -16,11 +16,22 @@ import (
 	agentctx "github.com/danieljustus/symaira-vault/internal/agentctx"
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	"github.com/danieljustus/symaira-vault/internal/git"
 	"github.com/danieljustus/symaira-vault/internal/i18n"
+	"github.com/danieljustus/symaira-vault/internal/metrics"
 	"github.com/danieljustus/symaira-vault/internal/session"
 	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 	"github.com/danieljustus/symaira-vault/internal/ui/theme"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
+
+func init() {
+	configpkg.SetWarnFunc(func(msg string) {
+		cliout.Warnf("%s", msg)
+	})
+	vaultpkg.SetDefaultGitSyncer(git.NewSyncer())
+	vaultpkg.SetMetricsHooks(metrics.RecordVaultOperationDuration, metrics.RecordVaultEntryCount)
+}
 
 var OsExit = os.Exit
 

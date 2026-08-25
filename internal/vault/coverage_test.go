@@ -516,15 +516,49 @@ func TestOpenCreatesGitignore(t *testing.T) {
 	gitDir := filepath.Join(vaultDir, ".git")
 	os.MkdirAll(gitDir, 0o700)
 
+	created := false
+	mock := &mockGitSyncerFn{
+		createGitignore: func(dir string) error {
+			created = true
+			return os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("identity.age\n"), 0o600)
+		},
+	}
+	SetDefaultGitSyncer(mock)
+	t.Cleanup(func() {
+		SetDefaultGitSyncer(nil)
+	})
+
 	_, err := Open(vaultDir, identity)
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
 	}
 
+	if !created {
+		t.Errorf("GitSyncer.CreateGitignore was not called")
+	}
 	gitignorePath := filepath.Join(vaultDir, ".gitignore")
 	if _, statErr := os.Stat(gitignorePath); statErr != nil {
 		t.Errorf(".gitignore not created: %v", statErr)
 	}
+}
+
+type mockGitSyncerFn struct {
+	createGitignore func(dir string) error
+	autoCommit      func(dir string, opts GitCommitOptions, autoPush bool) error
+}
+
+func (m *mockGitSyncerFn) CreateGitignore(dir string) error {
+	if m.createGitignore != nil {
+		return m.createGitignore(dir)
+	}
+	return nil
+}
+
+func (m *mockGitSyncerFn) AutoCommitAndPushWithOptions(dir string, opts GitCommitOptions, autoPush bool) error {
+	if m.autoCommit != nil {
+		return m.autoCommit(dir, opts, autoPush)
+	}
+	return nil
 }
 
 func TestGetEntryMetadataFileNotFound(t *testing.T) {

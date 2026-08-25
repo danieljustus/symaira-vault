@@ -165,7 +165,6 @@ import (
 	"golang.org/x/exp/slices"
 
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
-	"github.com/danieljustus/symaira-vault/internal/metrics"
 )
 
 type Match struct {
@@ -238,7 +237,7 @@ func List(vaultDir string, prefix string, identity *age.X25519Identity) ([]strin
 	// Check cache when listing the entire vault (prefix == "").
 	if prefix == "" {
 		if cached := listCacheFor(vaultDir).cachedList(vaultDir); cached != nil {
-			metrics.RecordVaultOperationDuration("list_cached", 0)
+			recordDuration("list_cached", 0)
 			return cached, nil
 		}
 	}
@@ -275,8 +274,8 @@ func List(vaultDir string, prefix string, identity *age.X25519Identity) ([]strin
 		paths = append(paths, path)
 	}
 	sort.Strings(paths)
-	metrics.RecordVaultOperationDuration("list", time.Since(start))
-	metrics.RecordVaultEntryCount(vaultDir, len(paths))
+	recordDuration("list", time.Since(start))
+	recordCount(vaultDir, len(paths))
 
 	if prefix == "" {
 		listCacheFor(vaultDir).storeListCache(vaultDir, paths)
@@ -304,7 +303,7 @@ func listPseudonymizedWithIdentity(vaultDir, prefix string, identity *age.X25519
 	// Check cache for full-vault listings (prefix == "").
 	if prefix == "" {
 		if paths := listCacheFor(vaultDir).cachedPseudonymizedList(vaultDir, identity); paths != nil {
-			metrics.RecordVaultOperationDuration("list_pseudonymized_cached", 0)
+			recordDuration("list_pseudonymized_cached", 0)
 			return paths, nil
 		}
 	}
@@ -332,8 +331,8 @@ func listPseudonymizedWithIdentity(vaultDir, prefix string, identity *age.X25519
 	}
 
 	if len(filePaths) == 0 {
-		metrics.RecordVaultOperationDuration("list_pseudonymized", time.Since(start))
-		metrics.RecordVaultEntryCount(vaultDir, 0)
+		recordDuration("list_pseudonymized", time.Since(start))
+		recordCount(vaultDir, 0)
 		if prefix == "" {
 			listCacheFor(vaultDir).storePseudonymizedListCache(vaultDir, identity, nil, nil)
 		}
@@ -426,8 +425,8 @@ func listPseudonymizedWithIdentity(vaultDir, prefix string, identity *age.X25519
 		listCacheFor(vaultDir).storePseudonymizedListCache(vaultDir, identity, paths, cachedEntries)
 	}
 
-	metrics.RecordVaultOperationDuration("list_pseudonymized", time.Since(start))
-	metrics.RecordVaultEntryCount(vaultDir, len(paths))
+	recordDuration("list_pseudonymized", time.Since(start))
+	recordCount(vaultDir, len(paths))
 	return paths, nil
 }
 
@@ -548,7 +547,7 @@ func listViaManifest(vaultDir string, identity *age.X25519Identity) []string {
 		paths = append(paths, path)
 	}
 	sort.Strings(paths)
-	metrics.RecordVaultEntryCount(vaultDir, len(paths))
+	recordCount(vaultDir, len(paths))
 	return paths
 }
 
@@ -628,7 +627,7 @@ func FindWithOptions(vaultDir string, query string, opts FindOptions, identity *
 func findWithOptionsIdentity(vaultDir string, query string, opts FindOptions, identity *age.X25519Identity) ([]Match, error) {
 	start := time.Now()
 	defer func() {
-		metrics.RecordVaultOperationDuration("search", time.Since(start))
+		recordDuration("search", time.Since(start))
 	}()
 
 	paths, err := List(vaultDir, "", identity)

@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"sync/atomic"
 	"time"
-
-	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 )
 
 var clipboardPrintByDefaultWarningEmitted atomic.Bool
@@ -335,7 +333,7 @@ func mergeGitConfig(raw *GitConfig, sf map[string]bool) *GitConfig {
 func mergeMCPConfig(raw *MCPConfig, sf, oaf, ppf map[string]bool) *MCPConfig {
 	defaults := defaultMCPConfig()
 	if raw.ApprovalRequired {
-		cliout.Warnf("approval_required is deprecated and will be removed in a future version")
+		warnf("approval_required is deprecated and will be removed in a future version")
 	}
 	if sf["port"] {
 		defaults.Port = raw.Port
@@ -436,7 +434,7 @@ func mergeClipboardConfig(raw *ClipboardConfig, sf map[string]bool) *ClipboardCo
 		defaults.CopyByDefault = raw.CopyByDefault
 	} else if sf["printByDefault"] {
 		if !clipboardPrintByDefaultWarningEmitted.Swap(true) {
-			cliout.Warnf("clipboard.printByDefault is deprecated; use clipboard.copyByDefault instead")
+			warnf("clipboard.printByDefault is deprecated; use clipboard.copyByDefault instead")
 		}
 		defaults.CopyByDefault = raw.PrintByDefault
 	}
