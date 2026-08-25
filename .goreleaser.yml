@@ -76,6 +76,28 @@ builds:
       - -X main.builtBy=goreleaser
     mod_timestamp: "{{ .CommitTimestamp }}"
 
+# macOS code signing and notarization
+# Requires Apple Developer ID (Team ID: M4744F3TAA) and App Store Connect API keys.
+# Kept commented out until repository secrets are configured in GitHub Actions:
+# - APPLE_DEVELOPER_ID_CERTIFICATE
+# - APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD
+# - APPLE_API_KEY_ID
+# - APPLE_API_ISSUER_ID
+# - APPLE_API_KEY_BASE64
+# (See docs/macos-notarization.md)
+#
+# notarize:
+#   macos:
+#     - enabled: true
+#       sign:
+#         certificate: "{{ .Env.APPLE_DEVELOPER_ID_CERTIFICATE }}"
+#         password: "{{ .Env.APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD }}"
+#       issuer_id: "{{ .Env.APPLE_API_ISSUER_ID }}"
+#       key_id: "{{ .Env.APPLE_API_KEY_ID }}"
+#       key: "{{ .Env.APPLE_API_KEY_BASE64 }}"
+#       wait: true
+#       timeout: 20m
+
 archives:
   - id: symvault
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
