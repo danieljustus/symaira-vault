@@ -91,3 +91,15 @@ docker/caddy/config/
 .github/audit/
 .omo/run-continuation/
 .omo/notepads/
+
+# --- Symaira internal working artifacts (never published; see root AGENTS.md) ---
+.github/app-test/
+.github/admin/
+.github/branch-protection/
+**/docs/adopt/
+**/docs/teardown/
+**/docs/planned/
+**/docs/intern/
+**/docs/roadmap.md
+PLANUNG.md
+ARCHITEKTUR.md
