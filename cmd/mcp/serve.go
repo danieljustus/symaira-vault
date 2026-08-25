@@ -100,7 +100,7 @@ func newServeCmd() *cobra.Command {
   # Install as a system service (macOS launchd or systemd)
   symvault serve install`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Fprintln(cmd.ErrOrStderr(), "Warning: 'symvault serve' is deprecated, use 'symvault mcp' instead.")
+			_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "Warning: 'symvault serve' is deprecated, use 'symvault mcp' instead.")
 			return runServe(cmd, args)
 		},
 	}

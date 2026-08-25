@@ -13,7 +13,7 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 )
 
-func newMcpInstallCmd() *cobra.Command {
+func newMcpInstallCmd() *cobra.Command { //nolint:unused // kept for API compatibility with the removed v4.0 mcp group
 	mcpInstallCmd := &cobra.Command{
 		Use:   "install [agent]",
 		Short: "[Deprecated v4.0, removed in v4.1] Use 'symvault agent install [agent]'",
