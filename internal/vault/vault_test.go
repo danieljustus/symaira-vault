@@ -322,6 +322,28 @@ func TestCollectFieldMatches(t *testing.T) {
 	}
 }
 
+type mockGitSyncer struct {
+	createGitignoreCalled bool
+	autoCommitCalled      bool
+	lastVaultDir          string
+	lastOpts              GitCommitOptions
+	lastAutoPush          bool
+}
+
+func (m *mockGitSyncer) CreateGitignore(vaultDir string) error {
+	m.createGitignoreCalled = true
+	m.lastVaultDir = vaultDir
+	return nil
+}
+
+func (m *mockGitSyncer) AutoCommitAndPushWithOptions(vaultDir string, opts GitCommitOptions, autoPush bool) error {
+	m.autoCommitCalled = true
+	m.lastVaultDir = vaultDir
+	m.lastOpts = opts
+	m.lastAutoPush = autoPush
+	return nil
+}
+
 func TestAutoCommitCreatesGitCommit(t *testing.T) {
 	vaultDir := t.TempDir()
 	identity := testutil.TempIdentity(t)
@@ -336,13 +358,25 @@ func TestAutoCommitCreatesGitCommit(t *testing.T) {
 		t.Fatalf("Init() error = %v", err)
 	}
 
+	mock := &mockGitSyncer{}
 	v, err := Open(vaultDir, identity)
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
 	}
+	v.GitSyncer = mock
+	v.Config.Git.AutoPush = false
 
 	if err := v.AutoCommit("test commit"); err != nil {
 		t.Fatalf("AutoCommit() error = %v", err)
+	}
+	if !mock.autoCommitCalled {
+		t.Fatal("expected AutoCommitAndPushWithOptions to be called")
+	}
+	if mock.lastOpts.Message != "test commit" {
+		t.Fatalf("expected message %q, got %q", "test commit", mock.lastOpts.Message)
+	}
+	if mock.lastAutoPush != false {
+		t.Fatalf("expected autoPush false, got %v", mock.lastAutoPush)
 	}
 }
 
@@ -369,13 +403,21 @@ func TestAutoCommitUsesTemplate(t *testing.T) {
 		t.Fatalf("Init() error = %v", err)
 	}
 
+	mock := &mockGitSyncer{}
 	v, err := Open(vaultDir, identity)
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
 	}
+	v.GitSyncer = mock
 
 	if err := v.AutoCommit(""); err != nil {
 		t.Fatalf("AutoCommit() error = %v", err)
+	}
+	if !mock.autoCommitCalled {
+		t.Fatal("expected AutoCommitAndPushWithOptions to be called")
+	}
+	if mock.lastOpts.Message != "Custom template message" {
+		t.Fatalf("expected message %q, got %q", "Custom template message", mock.lastOpts.Message)
 	}
 }
 
@@ -393,13 +435,55 @@ func TestAutoCommitWithAutoPush(t *testing.T) {
 		t.Fatalf("Init() error = %v", err)
 	}
 
+	mock := &mockGitSyncer{}
 	v, err := Open(vaultDir, identity)
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
 	}
+	v.GitSyncer = mock
 
 	if err := v.AutoCommit("test with push"); err != nil {
 		t.Fatalf("AutoCommit() error = %v", err)
+	}
+	if !mock.autoCommitCalled {
+		t.Fatal("expected AutoCommitAndPushWithOptions to be called")
+	}
+	if mock.lastAutoPush != true {
+		t.Fatalf("expected autoPush true, got %v", mock.lastAutoPush)
+	}
+}
+
+func TestDefaultGitSyncerAndOpenGitignore(t *testing.T) {
+	vaultDir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(vaultDir, ".git"), 0o700); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+	identity := testutil.TempIdentity(t)
+	cfg := config.Default()
+	cfg.VaultDir = vaultDir
+	if err := Init(vaultDir, identity, cfg); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	mock := &mockGitSyncer{}
+	SetDefaultGitSyncer(mock)
+	t.Cleanup(func() {
+		SetDefaultGitSyncer(nil)
+	})
+
+	v, err := Open(vaultDir, identity)
+	if err != nil {
+		t.Fatalf("Open() error = %v", err)
+	}
+	if !mock.createGitignoreCalled {
+		t.Fatal("expected CreateGitignore to be called on Open when .git exists")
+	}
+
+	if err := v.AutoCommit("via default syncer"); err != nil {
+		t.Fatalf("AutoCommit error = %v", err)
+	}
+	if !mock.autoCommitCalled || mock.lastOpts.Message != "via default syncer" {
+		t.Fatalf("expected default syncer auto-commit, got %+v", mock.lastOpts)
 	}
 }
 

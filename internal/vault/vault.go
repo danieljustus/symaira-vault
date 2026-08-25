@@ -13,7 +13,6 @@ import (
 	vaultconfig "github.com/danieljustus/symaira-vault/internal/config"
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
 	"github.com/danieljustus/symaira-vault/internal/fsutil"
-	"github.com/danieljustus/symaira-vault/internal/git"
 )
 
 const vaultFormatVersion2 = 2
@@ -47,7 +46,8 @@ type Vault struct {
 	// warning.
 	HealedFromZeroKey bool
 
-	Cache *VaultCache
+	Cache     *VaultCache
+	GitSyncer GitSyncer
 
 	searchIdentity atomic.Pointer[age.X25519Identity]
 }
@@ -143,11 +143,6 @@ func Open(vaultDir string, identity *age.X25519Identity) (*Vault, error) {
 	} else if unknown, oobErr := DetectOutOfBandEntries(vaultDir, identity, cfg); oobErr == nil && len(unknown) > 0 {
 		_ = RebuildManifest(vaultDir, identity) // best-effort
 	}
-	if _, err := os.Stat(filepath.Join(vaultDir, ".git")); err == nil {
-		if err := git.CreateGitignore(vaultDir); err != nil {
-			return nil, fmt.Errorf("update gitignore: %w", err)
-		}
-	}
 	cache := NewVaultCache(VaultCacheConfig{})
 	if cfg != nil && cfg.Vault != nil {
 		if cfg.Vault.ConfigCacheEntries > 0 {
@@ -159,6 +154,13 @@ func Open(vaultDir string, identity *age.X25519Identity) (*Vault, error) {
 	}
 	v := &Vault{Dir: vaultDir, Identity: identity, Config: cfg, Cache: cache}
 	v.searchIdentity.Store(identity)
+	if syncer := v.getGitSyncer(); syncer != nil {
+		if _, err := os.Stat(filepath.Join(vaultDir, ".git")); err == nil {
+			if err := syncer.CreateGitignore(vaultDir); err != nil {
+				return nil, fmt.Errorf("update gitignore: %w", err)
+			}
+		}
+	}
 	registerVaultCache(vaultDir, cache)
 	v.WarmSearchIndex()
 	return v, nil
@@ -499,6 +501,10 @@ func (v *Vault) AutoCommitPaths(message string, affectedPaths ...string) error {
 	if v == nil {
 		return errors.New("vault is nil")
 	}
+	syncer := v.getGitSyncer()
+	if syncer == nil {
+		return nil
+	}
 	commitMessage := message
 	autoPush := false
 	if v.Config != nil && v.Config.Git != nil {
@@ -510,7 +516,7 @@ func (v *Vault) AutoCommitPaths(message string, affectedPaths ...string) error {
 	if commitMessage == "" {
 		commitMessage = "Update from Symaira Vault"
 	}
-	return git.AutoCommitAndPushWithOptions(v.Dir, git.CommitOptions{
+	return syncer.AutoCommitAndPushWithOptions(v.Dir, GitCommitOptions{
 		Message:       commitMessage,
 		AffectedPaths: affectedPaths,
 	}, autoPush)

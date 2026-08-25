@@ -1,4 +1,4 @@
-package vault
+package git_test
 
 import (
 	"os"
@@ -8,9 +8,17 @@ import (
 
 	gogit "github.com/go-git/go-git/v5"
 
+	"github.com/danieljustus/symaira-vault/internal/config"
 	"github.com/danieljustus/symaira-vault/internal/git"
 	"github.com/danieljustus/symaira-vault/internal/testutil"
+	"github.com/danieljustus/symaira-vault/internal/vault"
 )
+
+func testConfig(vaultDir string) *config.Config {
+	cfg := config.Default()
+	cfg.VaultDir = vaultDir
+	return cfg
+}
 
 // TestAutoCommitEntryCommitsManifestWithEntry verifies that an entry write +
 // auto-commit captures both the entry and manifest.age in the same commit, so
@@ -23,16 +31,21 @@ func TestAutoCommitEntryCommitsManifestWithEntry(t *testing.T) {
 	}
 	vaultDir := t.TempDir()
 	id := testutil.TempIdentity(t)
-	if _, err := InitWithPassphrase(vaultDir, []byte("test-passphrase"), testConfig(vaultDir)); err != nil {
+	if _, err := vault.InitWithPassphrase(vaultDir, []byte("test-passphrase"), testConfig(vaultDir)); err != nil {
 		t.Fatalf("init: %v", err)
 	}
 	if err := git.Init(vaultDir); err != nil {
 		t.Fatalf("git init: %v", err)
 	}
-	v := &Vault{Dir: vaultDir, Identity: id, Config: testConfig(vaultDir)}
+	v := &vault.Vault{
+		Dir:       vaultDir,
+		Identity:  id,
+		Config:    testConfig(vaultDir),
+		GitSyncer: git.NewSyncer(),
+	}
 
 	// Entry write + auto-commit (the real write path used by CRUD commands).
-	if err := WriteEntry(vaultDir, "alpha", &Entry{Data: map[string]any{"user": "alice"}}, id); err != nil {
+	if err := vault.WriteEntry(vaultDir, "alpha", &vault.Entry{Data: map[string]any{"user": "alice"}}, id); err != nil {
 		t.Fatalf("write entry: %v", err)
 	}
 	if err := v.AutoCommitEntry("Update alpha", "alpha"); err != nil {
@@ -56,7 +69,7 @@ func TestAutoCommitEntryCommitsManifestWithEntry(t *testing.T) {
 	if _, err := commit.File("entries/alpha.age"); err != nil {
 		t.Fatalf("commit missing entries/alpha.age: %v", err)
 	}
-	manifestFile, err := commit.File(manifestFileName)
+	manifestFile, err := commit.File("manifest.age")
 	if err != nil {
 		t.Fatalf("commit missing manifest.age: %v", err)
 	}
@@ -66,7 +79,7 @@ func TestAutoCommitEntryCommitsManifestWithEntry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read committed manifest: %v", err)
 	}
-	diskManifest, err := os.ReadFile(filepath.Join(vaultDir, manifestFileName))
+	diskManifest, err := os.ReadFile(filepath.Join(vaultDir, "manifest.age"))
 	if err != nil {
 		t.Fatalf("read manifest on disk: %v", err)
 	}
@@ -85,7 +98,7 @@ func TestAutoCommitEntryCommitsManifestWithEntry(t *testing.T) {
 	}
 	// Note: status.File() would insert a fake Untracked entry for clean files,
 	// so check the map directly.
-	if fs, ok := status[manifestFileName]; ok && (fs.Worktree != gogit.Unmodified || fs.Staging != gogit.Unmodified) {
+	if fs, ok := status["manifest.age"]; ok && (fs.Worktree != gogit.Unmodified || fs.Staging != gogit.Unmodified) {
 		t.Errorf("manifest.age dirty after auto-commit: %+v", fs)
 	}
 	if fs, ok := status["entries/alpha.age"]; ok && fs.Worktree != gogit.Unmodified {
@@ -93,7 +106,7 @@ func TestAutoCommitEntryCommitsManifestWithEntry(t *testing.T) {
 	}
 
 	// A doctor-style integrity check must not flag the written entry as tampered.
-	result, err := VerifyManifestIntegrity(vaultDir, id)
+	result, err := vault.VerifyManifestIntegrity(vaultDir, id)
 	if err != nil {
 		t.Fatalf("VerifyManifestIntegrity: %v", err)
 	}

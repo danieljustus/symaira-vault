@@ -1,7 +1,6 @@
 package vault
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,12 +9,9 @@ import (
 	"time"
 
 	"filippo.io/age"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
 
 	vaultconfig "github.com/danieljustus/symaira-vault/internal/config"
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
-	"github.com/danieljustus/symaira-vault/internal/metrics"
 	"github.com/danieljustus/symaira-vault/internal/vault/taint"
 )
 
@@ -55,44 +51,33 @@ func ReadEntry(vaultDir, path string, identity *age.X25519Identity) (*Entry, err
 	if identity == nil {
 		return nil, errors.New("nil identity")
 	}
-	_, span := metrics.StartSpan(context.Background(), "vault.ReadEntry",
-		attribute.String("operation", "read"),
-		attribute.String("vault.entry.path", metrics.HashEntryPath(path)),
-	)
-	defer span.End()
 	if err := validateEntryPath(vaultDir, path); err != nil {
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 	cfg, err := loadVaultConfig(vaultDir)
 	if err != nil {
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 	filePath := entryStoragePath(vaultDir, path, identity, cfg)
 	raw, err := SafeReadFile(filePath)
 	if os.IsNotExist(err) && canUseLegacyEntryPath(path) {
 		if legacyErr := validateLegacyEntryPath(vaultDir, path); legacyErr != nil {
-			span.SetStatus(codes.Error, legacyErr.Error())
 			return nil, legacyErr
 		}
 		raw, err = SafeReadFile(legacyEntryFilePath(vaultDir, path))
 	}
 	if err != nil {
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 	start := time.Now()
 	plaintext, err := vaultcrypto.Decrypt(raw, identity)
-	metrics.RecordVaultOperationDuration("decrypt", time.Since(start))
+	recordDuration("decrypt", time.Since(start))
 	if err != nil {
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 	var entry Entry
 	if err := json.Unmarshal(plaintext, &entry); err != nil {
 		vaultcrypto.Wipe(plaintext)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 	vaultcrypto.Wipe(plaintext)
@@ -108,20 +93,12 @@ func readEntryInner(vaultDir, path string, identity *age.X25519Identity, pseudoK
 		return nil, errors.New("nil identity")
 	}
 
-	_, span := metrics.StartSpan(context.Background(), "vault.ReadEntry",
-		attribute.String("operation", "read"),
-		attribute.String("vault.entry.path", metrics.HashEntryPath(path)),
-	)
-	defer span.End()
-
 	if err := validateEntryPath(vaultDir, path); err != nil {
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 
 	cfg, err := loadVaultConfig(vaultDir)
 	if err != nil {
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 
@@ -134,27 +111,23 @@ func readEntryInner(vaultDir, path string, identity *age.X25519Identity, pseudoK
 	raw, err := SafeReadFile(filePath)
 	if os.IsNotExist(err) && canUseLegacyEntryPath(path) {
 		if legacyErr := validateLegacyEntryPath(vaultDir, path); legacyErr != nil {
-			span.SetStatus(codes.Error, legacyErr.Error())
 			return nil, legacyErr
 		}
 		raw, err = SafeReadFile(legacyEntryFilePath(vaultDir, path))
 	}
 	if err != nil {
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 
 	start := time.Now()
 	plaintext, err := vaultcrypto.Decrypt(raw, identity)
-	metrics.RecordVaultOperationDuration("decrypt", time.Since(start))
+	recordDuration("decrypt", time.Since(start))
 	if err != nil {
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 	var entry Entry
 	if err := json.Unmarshal(plaintext, &entry); err != nil {
 		vaultcrypto.Wipe(plaintext)
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 	vaultcrypto.Wipe(plaintext)
@@ -226,7 +199,7 @@ func writeEntryLocked(vaultDir, path string, entry *Entry, identity *age.X25519I
 	defer vaultcrypto.Wipe(plaintext)
 	start := time.Now()
 	ciphertext, err := vaultcrypto.Encrypt(plaintext, identity.Recipient())
-	metrics.RecordVaultOperationDuration("encrypt", time.Since(start))
+	recordDuration("encrypt", time.Since(start))
 	if err != nil {
 		return nil, err
 	}
@@ -248,23 +221,15 @@ func WriteEntry(vaultDir, path string, entry *Entry, identity *age.X25519Identit
 	if identity == nil {
 		return errors.New("nil identity")
 	}
-	_, span := metrics.StartSpan(context.Background(), "vault.WriteEntry",
-		attribute.String("operation", "write"),
-		attribute.String("vault.entry.path", metrics.HashEntryPath(path)),
-	)
-	defer span.End()
 	if err := validateEntryPath(vaultDir, path); err != nil {
-		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 	cfg, err := loadVaultConfig(vaultDir)
 	if err != nil {
-		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 	lockFile, err := AcquireWriteLock(vaultDir, 0)
 	if err != nil {
-		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 	defer func() {
@@ -274,7 +239,6 @@ func WriteEntry(vaultDir, path string, entry *Entry, identity *age.X25519Identit
 	}()
 	ciphertext, err := writeEntryLocked(vaultDir, path, entry, identity, cfg)
 	if err != nil {
-		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 	queueManifestUpdate(vaultDir, path, ciphertext, identity)
@@ -283,36 +247,25 @@ func WriteEntry(vaultDir, path string, entry *Entry, identity *age.X25519Identit
 	}
 	FlushManifestUpdates()
 	if err := ReleaseLock(lockFile); err != nil {
-		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 	lockFile = nil
-	if err := searchIndexForVault(vaultDir).UpdateEntry(vaultDir, path, identity); err != nil {
-		span.SetStatus(codes.Error, err.Error())
-	}
+	_ = searchIndexForVault(vaultDir).UpdateEntry(vaultDir, path, identity)
 	listCacheFor(vaultDir).Invalidate()
 	return nil
 }
 
 // DeleteEntry removes an entry from the vault
 func DeleteEntry(vaultDir, path string, identity *age.X25519Identity) error {
-	_, span := metrics.StartSpan(context.Background(), "vault.DeleteEntry",
-		attribute.String("operation", "delete"),
-		attribute.String("vault.entry.path", metrics.HashEntryPath(path)),
-	)
-	defer span.End()
 	if err := validateEntryPath(vaultDir, path); err != nil {
-		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 	cfg, err := loadVaultConfig(vaultDir)
 	if err != nil {
-		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 	lockFile, err := AcquireWriteLock(vaultDir, 0)
 	if err != nil {
-		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 	defer func() {
@@ -323,15 +276,12 @@ func DeleteEntry(vaultDir, path string, identity *age.X25519Identity) error {
 	filePath := entryStoragePath(vaultDir, path, identity, cfg)
 	if err := SafeRemove(filePath); err != nil {
 		if !os.IsNotExist(err) || !canUseLegacyEntryPath(path) {
-			span.SetStatus(codes.Error, err.Error())
 			return err
 		}
 		if legacyErr := validateLegacyEntryPath(vaultDir, path); legacyErr != nil {
-			span.SetStatus(codes.Error, legacyErr.Error())
 			return legacyErr
 		}
 		if err := SafeRemove(legacyEntryFilePath(vaultDir, path)); err != nil {
-			span.SetStatus(codes.Error, err.Error())
 			return err
 		}
 		queueManifestRemove(vaultDir, path, identity)
@@ -340,7 +290,6 @@ func DeleteEntry(vaultDir, path string, identity *age.X25519Identity) error {
 		}
 		FlushManifestUpdates()
 		if err := ReleaseLock(lockFile); err != nil {
-			span.SetStatus(codes.Error, err.Error())
 			return err
 		}
 		lockFile = nil
@@ -350,11 +299,9 @@ func DeleteEntry(vaultDir, path string, identity *age.X25519Identity) error {
 	}
 	if canUseLegacyEntryPath(path) {
 		if legacyErr := validateLegacyEntryPath(vaultDir, path); legacyErr != nil {
-			span.SetStatus(codes.Error, legacyErr.Error())
 			return legacyErr
 		}
 		if err := SafeRemove(legacyEntryFilePath(vaultDir, path)); err != nil && !os.IsNotExist(err) {
-			span.SetStatus(codes.Error, err.Error())
 			return err
 		}
 	}
@@ -364,7 +311,6 @@ func DeleteEntry(vaultDir, path string, identity *age.X25519Identity) error {
 	}
 	FlushManifestUpdates()
 	if err := ReleaseLock(lockFile); err != nil {
-		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 	lockFile = nil
@@ -375,14 +321,8 @@ func DeleteEntry(vaultDir, path string, identity *age.X25519Identity) error {
 
 // MergeEntry merges partial data into an existing entry.
 func MergeEntry(vaultDir, path string, partialData map[string]any, identity *age.X25519Identity) (*Entry, error) {
-	_, span := metrics.StartSpan(context.Background(), "vault.MergeEntry",
-		attribute.String("operation", "merge"),
-		attribute.String("vault.entry.path", metrics.HashEntryPath(path)),
-	)
-	defer span.End()
 	lockFile, err := AcquireWriteLock(vaultDir, 0)
 	if err != nil {
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 	defer func() {
@@ -392,7 +332,6 @@ func MergeEntry(vaultDir, path string, partialData map[string]any, identity *age
 	}()
 	entry, err := ReadEntry(vaultDir, path, identity)
 	if err != nil {
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 	if entry.Data == nil {
@@ -401,23 +340,18 @@ func MergeEntry(vaultDir, path string, partialData map[string]any, identity *age
 	mergeMaps(entry.Data, partialData)
 	cfg, err := loadVaultConfig(vaultDir)
 	if err != nil {
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 	ciphertext, err := writeEntryLocked(vaultDir, path, entry, identity, cfg)
 	if err != nil {
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 	if err := ReleaseLock(lockFile); err != nil {
-		span.SetStatus(codes.Error, err.Error())
 		return nil, err
 	}
 	lockFile = nil
 	queueManifestUpdate(vaultDir, path, ciphertext, identity)
-	if err := searchIndexForVault(vaultDir).UpdateEntry(vaultDir, path, identity); err != nil {
-		span.SetStatus(codes.Error, err.Error())
-	}
+	_ = searchIndexForVault(vaultDir).UpdateEntry(vaultDir, path, identity)
 	listCacheFor(vaultDir).Invalidate()
 	return ReadEntry(vaultDir, path, identity)
 }
@@ -446,7 +380,7 @@ func GetEntryMetadata(vaultDir, path string, identity *age.X25519Identity) (*Ent
 	}
 	start := time.Now()
 	plaintext, err := vaultcrypto.Decrypt(raw, identity)
-	metrics.RecordVaultOperationDuration("decrypt", time.Since(start))
+	recordDuration("decrypt", time.Since(start))
 	if err != nil {
 		return nil, err
 	}

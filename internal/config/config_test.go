@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -3630,5 +3631,28 @@ func TestValidate_Argon2idParamsBounds(t *testing.T) {
 				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestSetWarnFunc(t *testing.T) {
+	var captured []string
+	SetWarnFunc(func(msg string) {
+		captured = append(captured, msg)
+	})
+	t.Cleanup(func() {
+		SetWarnFunc(func(msg string) {
+			fmt.Fprintln(os.Stderr, msg)
+		})
+	})
+
+	warnf("test warning %d", 42)
+	if len(captured) != 1 || captured[0] != "test warning 42" {
+		t.Fatalf("expected captured warning 'test warning 42', got %v", captured)
+	}
+
+	SetWarnFunc(nil)
+	warnf("suppressed warning")
+	if len(captured) != 1 {
+		t.Fatalf("expected nil warnFunc to suppress warning, got %v", captured)
 	}
 }
