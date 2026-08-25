@@ -34,11 +34,11 @@ func ValidateURL(raw string) error {
 	}
 	_, err := NormalizeHost(trimmed)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrInvalidURL, err)
+		return fmt.Errorf("%w: %w", ErrInvalidURL, err)
 	}
 	_, err = NormalizeURL(trimmed)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrInvalidURL, err)
+		return fmt.Errorf("%w: %w", ErrInvalidURL, err)
 	}
 	return nil
 }
@@ -70,7 +70,7 @@ func NormalizeURL(raw string) (string, error) {
 
 	u, err := url.Parse(rawWithScheme)
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", ErrInvalidURL, err)
+		return "", fmt.Errorf("%w: %w", ErrInvalidURL, err)
 	}
 
 	if u.Host == "" {
@@ -80,7 +80,7 @@ func NormalizeURL(raw string) (string, error) {
 	scheme := strings.ToLower(u.Scheme)
 	normHost, err := normalizeHostPort(u.Host, scheme)
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", ErrInvalidURL, err)
+		return "", fmt.Errorf("%w: %w", ErrInvalidURL, err)
 	}
 
 	u.Scheme = scheme
@@ -109,7 +109,7 @@ func NormalizeHost(raw string) (string, error) {
 	if strings.Contains(rawWithScheme, "://") {
 		u, err := url.Parse(rawWithScheme)
 		if err != nil {
-			return "", fmt.Errorf("%w: %v", ErrInvalidURL, err)
+			return "", fmt.Errorf("%w: %w", ErrInvalidURL, err)
 		}
 		if u.Host == "" {
 			return "", fmt.Errorf("%w: missing host", ErrInvalidURL)
@@ -126,7 +126,7 @@ func NormalizeHost(raw string) (string, error) {
 
 	u, err := url.Parse(rawWithScheme)
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", ErrInvalidURL, err)
+		return "", fmt.Errorf("%w: %w", ErrInvalidURL, err)
 	}
 	if u.Host == "" {
 		return "", fmt.Errorf("%w: missing host", ErrInvalidURL)
