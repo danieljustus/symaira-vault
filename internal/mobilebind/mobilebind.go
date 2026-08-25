@@ -182,8 +182,8 @@ func VerifyManifestIntegrity(vaultDir string, identityStr string) (bool, error) 
 		return false, fmt.Errorf("validate identity: %w", err)
 	}
 	manifestPath := filepath.Join(vaultDir, "manifest.age")
-	if _, err := os.Stat(manifestPath); err != nil {
-		return false, fmt.Errorf("manifest not found: %w", err)
+	if _, statErr := os.Stat(manifestPath); statErr != nil {
+		return false, fmt.Errorf("manifest not found: %w", statErr)
 	}
 	res, err := vault.VerifyManifestIntegrity(vaultDir, id)
 	if err != nil {
