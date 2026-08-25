@@ -626,6 +626,7 @@ func FindWithOptions(vaultDir string, query string, opts FindOptions, identity *
 	return findWithOptionsIdentity(vaultDir, query, opts, identity)
 }
 
+//nolint:gocyclo // Search orchestration: listing, filtering, decryption, ranking
 func findWithOptionsIdentity(vaultDir string, query string, opts FindOptions, identity *age.X25519Identity) ([]Match, error) {
 	start := time.Now()
 	defer func() {
@@ -883,7 +884,7 @@ func filterPathsUsingHostIndex(vaultDir string, candidates []string, targetHost 
 
 	idx := searchIndexForVault(vaultDir)
 	if !idx.Covers(vaultDir, identity) {
-		if err := idx.loadFromDisk(vaultDir, identity); err != nil || !idx.Covers(vaultDir, identity) {
+		if loadErr := idx.loadFromDisk(vaultDir, identity); loadErr != nil || !idx.Covers(vaultDir, identity) {
 			if err := idx.Build(vaultDir, identity); err != nil {
 				return scanCandidatesForHost(vaultDir, candidates, normHost, identity), nil
 			}
