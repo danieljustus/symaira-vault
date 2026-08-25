@@ -353,7 +353,7 @@ jobs:
       - name: Code sign .app and embedded binary
         if: steps.signing.outputs.signed == 'true'
         run: |
-          APP_PATH="client/Symvault.xcarchive/Products/Applications/Symvault.app"
+          APP_PATH="client/Symvault.xcarchive/Products/Applications/Symaira Vault.app"
           RESOURCES="$APP_PATH/Contents/Resources"
           # Sign embedded symvault binary first. Notarization requires hardened
           # runtime on every executable in the bundle, not just the top-level .app.
@@ -370,8 +370,8 @@ jobs:
       - name: Create DMG
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
-          APP_PATH="client/Symvault.xcarchive/Products/Applications/Symvault.app"
-          DMG_PATH="SymairaVault_${TAG}_macos.dmg"
+          APP_PATH="client/Symvault.xcarchive/Products/Applications/Symaira Vault.app"
+          DMG_PATH="Symaira-Vault-${TAG}-macos.dmg"
           ./scripts/create-symaira-dmg.sh \
             "$APP_PATH" \
             "$DMG_PATH" \
@@ -406,7 +406,7 @@ jobs:
       - name: Staple notarization ticket
         if: steps.signing.outputs.signed == 'true'
         run: |
-          APP_PATH="client/Symvault.xcarchive/Products/Applications/Symvault.app"
+          APP_PATH="client/Symvault.xcarchive/Products/Applications/Symaira Vault.app"
           xcrun stapler staple "$APP_PATH" || echo "::warning::Stapling .app failed"
           xcrun stapler staple "${{ env.DMG_PATH }}" || echo "::warning::Stapling .dmg failed"
 
