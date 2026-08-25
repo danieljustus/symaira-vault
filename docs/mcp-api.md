@@ -95,7 +95,7 @@ curl -H "Authorization: Bearer $(cat ~/.symvault/mcp-token)" \
 Stdio mode does not use HTTP authentication. The agent is identified via the `--agent` flag:
 
 ```bash
-symvault serve --stdio --agent claude-code
+symvault mcp --stdio --agent claude-code
 ```
 
 The agent name must match a profile in the vault configuration.
@@ -298,7 +298,7 @@ With this configuration, `opencode mcp auth symvault` will:
 **Start the server**:
 
 ```bash
-symvault serve --stdio --agent <profile-name>
+symvault mcp --stdio --agent <profile-name>
 ```
 
 **Generate configuration**:
@@ -319,7 +319,7 @@ symvault agent install <agent-name> --config-only
 **Start the server**:
 
 ```bash
-symvault serve --port 8080 --agent <profile-name>
+symvault mcp --port 8080 --agent <profile-name>
 ```
 
 **Generate configuration** (token redacted by default):
@@ -1756,10 +1756,10 @@ curl -s -X POST "$BASE_URL/mcp" \
 
 ```bash
 # Start the server
-symvault serve --stdio --agent claude-code
+symvault mcp --stdio --agent claude-code
 
 # Send MCP request (via stdin)
-echo '{"tool": "list_entries", "arguments": {}}' | symvault serve --stdio --agent claude-code
+echo '{"tool": "list_entries", "arguments": {}}' | symvault mcp --stdio --agent claude-code
 
 # Or with a proper MCP client
 # The MCP client handles the JSON-RPC framing

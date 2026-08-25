@@ -164,7 +164,7 @@ func writeAgentTokenFile(vaultDir, name, rawToken string) (string, error) {
 }
 
 func outputAgentMCPSnippet(name, rawToken string) {
-	args := []string{"serve", "--stdio", "--agent", name}
+	args := []string{"mcp", "--stdio", "--agent", name}
 
 	config := map[string]any{
 		"mcpServers": map[string]any{

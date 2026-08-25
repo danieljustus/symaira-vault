@@ -2,11 +2,11 @@
 .TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
 
 .SH NAME
-symvault-serve-uninstall - Remove the MCP server background service
+symvault-mcp-uninstall - Remove the MCP server background service
 
 
 .SH SYNOPSIS
-\fBsymvault serve uninstall [flags]\fP
+\fBsymvault mcp uninstall [flags]\fP
 
 
 .SH DESCRIPTION
@@ -28,6 +28,10 @@ the service file.
 .SH OPTIONS INHERITED FROM PARENT COMMANDS
 \fB--color\fP="auto"
 	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--json\fP[=false]
+	Output format shorthand for --output json; overrides --output when both are specified
 
 .PP
 \fB--no-pipe-warning\fP[=false]
@@ -55,4 +59,4 @@ the service file.
 
 
 .SH SEE ALSO
-\fBsymvault-serve(1)\fP
+\fBsymvault-mcp(1)\fP

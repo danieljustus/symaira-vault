@@ -13,8 +13,14 @@ symvault-audit-rotate-key - Rotate the audit log HMAC key
 Generate a new HMAC key for audit log integrity and archive the current key.
 
 .PP
-The old key is archived to a timestamped file (audit-hmac-key.rotated.YYYY-MM-DD)
-in the vault directory. A new audit log file is started with the new key.
+The old key is archived to a file named after its fingerprint
+(audit-hmac-key.rotated.) in the vault directory. A new audit
+log file is started with the new key.
+
+.PP
+If no HMAC key exists yet, a new key is created instead (bootstrap): nothing
+is archived and the command reports that it bootstrapped rather than
+rotated.
 
 
 .SH OPTIONS
@@ -25,6 +31,10 @@ in the vault directory. A new audit log file is started with the new key.
 .SH OPTIONS INHERITED FROM PARENT COMMANDS
 \fB--color\fP="auto"
 	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--json\fP[=false]
+	Output format shorthand for --output json; overrides --output when both are specified
 
 .PP
 \fB--no-pipe-warning\fP[=false]

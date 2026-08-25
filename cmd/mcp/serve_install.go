@@ -28,13 +28,13 @@ and stays running.
 On Linux, this creates a systemd user service in ~/.config/systemd/user/
 and enables it to start automatically.`,
 		Example: `  # Install as autostart service
-  symvault serve install
+  symvault mcp install
 
   # Check status
-  symvault serve status
+  symvault mcp status
 
   # Remove again
-  symvault serve uninstall`,
+  symvault mcp uninstall`,
 		RunE: runServeInstall,
 	}
 	return serveInstallCmd

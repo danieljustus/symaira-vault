@@ -14,8 +14,20 @@ Retrieves and displays a password entry. Use path.field syntax to get specific f
 
 
 .SH OPTIONS
+\fB--digest\fP[=false]
+	Print sha256 digest (first 12 hex chars) of the value only
+
+.PP
 \fB-h\fP, \fB--help\fP[=false]
 	help for get
+
+.PP
+\fB--length\fP[=false]
+	Print byte length of the stored string value only
+
+.PP
+\fB--metadata\fP[=false]
+	Print JSON metadata (length and sha256_12) of the value only
 
 .PP
 \fB-p\fP, \fB--print\fP[=false]
@@ -25,6 +37,10 @@ Retrieves and displays a password entry. Use path.field syntax to get specific f
 .SH OPTIONS INHERITED FROM PARENT COMMANDS
 \fB--color\fP="auto"
 	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--json\fP[=false]
+	Output format shorthand for --output json; overrides --output when both are specified
 
 .PP
 \fB--no-pipe-warning\fP[=false]

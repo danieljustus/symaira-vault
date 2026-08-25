@@ -18,6 +18,10 @@ Interactive mode prompts for username, password, and URL.
 
 
 .SH OPTIONS
+\fB--allow-empty\fP[=false]
+	Allow empty value for sensitive fields
+
+.PP
 \fB--auto-rotate\fP[=false]
 	Enable automatic rotation reminder
 
@@ -89,6 +93,10 @@ Interactive mode prompts for username, password, and URL.
 .SH OPTIONS INHERITED FROM PARENT COMMANDS
 \fB--color\fP="auto"
 	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--json\fP[=false]
+	Output format shorthand for --output json; overrides --output when both are specified
 
 .PP
 \fB--no-pipe-warning\fP[=false]

@@ -12,7 +12,7 @@ IDE and editor integrations for Symaira Vault secret manager.
 
 ## Architecture
 
-All editor plugins communicate with `symvault serve` via HTTP JSON-RPC 2.0 MCP protocol:
+All editor plugins communicate with `symvault mcp` via HTTP JSON-RPC 2.0 MCP protocol:
 
 ```
 Editor Plugin <-> HTTP POST 127.0.0.1:8080/mcp <-> Symaira Vault MCP Server
@@ -37,7 +37,7 @@ Authentication uses the bearer token from `~/.symvault/mcp-token`.
 
 3. Start MCP server:
    ```bash
-   symvault serve --port 8080
+   symvault mcp --port 8080
    ```
 
 ### VS Code

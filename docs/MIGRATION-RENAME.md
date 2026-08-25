@@ -163,7 +163,7 @@ alias openpass='symvault'
 
 ### 7. Update systemd / launchd services (if applicable)
 
-If you run `symvault serve` as a background service, update the service files:
+If you run `symvault mcp` as a background service, update the service files:
 
 ```bash
 # macOS (launchd)

@@ -14,6 +14,10 @@ Creates or updates a password entry. Use --value, --stdin-value, or interactive 
 
 
 .SH OPTIONS
+\fB--allow-empty\fP[=false]
+	Allow setting empty values on sensitive fields
+
+.PP
 \fB--force\fP[=false]
 	Skip password strength validation
 
@@ -45,6 +49,10 @@ Creates or updates a password entry. Use --value, --stdin-value, or interactive 
 .SH OPTIONS INHERITED FROM PARENT COMMANDS
 \fB--color\fP="auto"
 	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--json\fP[=false]
+	Output format shorthand for --output json; overrides --output when both are specified
 
 .PP
 \fB--no-pipe-warning\fP[=false]

@@ -136,7 +136,7 @@ All log output is written to `os.Stderr` to keep `stdout` clean for stdio MCP tr
 
 **Example:**
 ```bash
-SYMVAULT_LOG_LEVEL=debug SYMVAULT_LOG_FORMAT=json symvault serve --stdio
+SYMVAULT_LOG_LEVEL=debug SYMVAULT_LOG_FORMAT=json symvault mcp --stdio
 ```
 
 ## Profiles

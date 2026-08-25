@@ -58,7 +58,7 @@ export class MCPStatusBar {
     } else {
       this.statusBarItem.text = "$(shield-x) Symaira Vault";
       this.statusBarItem.backgroundColor = new vscode.ThemeColor("statusBarItem.errorBackground");
-      this.statusBarItem.tooltip = "Symaira Vault MCP server is unreachable. Check that 'symvault serve' is running.";
+      this.statusBarItem.tooltip = "Symaira Vault MCP server is unreachable. Check that 'symvault mcp' is running.";
     }
   }
 

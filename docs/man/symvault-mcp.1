@@ -2,11 +2,11 @@
 .TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
 
 .SH NAME
-symvault-serve - Start MCP server for agent access
+symvault-mcp - Start MCP server for agent access
 
 
 .SH SYNOPSIS
-\fBsymvault serve [flags]\fP
+\fBsymvault mcp [flags]\fP
 
 
 .SH DESCRIPTION
@@ -18,7 +18,7 @@ Each agent must be configured in the agents section of the config file
 ~/.symvault/config.yaml) with specific permissions and scope restrictions.
 
 .PP
-The server can run in HTTP mode or stdio mode.
+The server can run in stdio mode or HTTP mode.
 
 
 .SH OPTIONS
@@ -35,7 +35,7 @@ The server can run in HTTP mode or stdio mode.
 
 .PP
 \fB-h\fP, \fB--help\fP[=false]
-	help for serve
+	help for mcp
 
 .PP
 \fB--port\fP=8080
@@ -61,6 +61,10 @@ The server can run in HTTP mode or stdio mode.
 .SH OPTIONS INHERITED FROM PARENT COMMANDS
 \fB--color\fP="auto"
 	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--json\fP[=false]
+	Output format shorthand for --output json; overrides --output when both are specified
 
 .PP
 \fB--no-pipe-warning\fP[=false]
@@ -89,16 +93,16 @@ The server can run in HTTP mode or stdio mode.
 
 .SH EXAMPLE
 .EX
-  # HTTP mode bound to localhost:8080
-  symvault serve --bind 127.0.0.1 --port 8080
+  # stdio mode for a single agent (called by MCP clients directly, canonical)
+  symvault mcp --stdio --agent claude-code
 
-  # stdio mode for a single agent (called by MCP clients directly)
-  symvault serve --stdio --agent claude-code
+  # HTTP mode bound to localhost:8080
+  symvault mcp --bind 127.0.0.1 --port 8080
 
   # Install as a system service (macOS launchd or systemd)
-  symvault serve install
+  symvault mcp install
 .EE
 
 
 .SH SEE ALSO
-\fBsymvault(1)\fP, \fBsymvault-serve-install(1)\fP, \fBsymvault-serve-status(1)\fP, \fBsymvault-serve-uninstall(1)\fP
+\fBsymvault(1)\fP, \fBsymvault-mcp-install(1)\fP, \fBsymvault-mcp-status(1)\fP, \fBsymvault-mcp-uninstall(1)\fP

@@ -40,6 +40,7 @@ var versionCmd = &cobra.Command{
   symvault version --json`,
 	Annotations: map[string]string{
 		RequiresVaultAnnotation: "false",
+		JSONOutputAnnotation:    "true",
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		flagJSON, _ := cmd.Flags().GetBool("json")
@@ -53,6 +54,5 @@ var versionCmd = &cobra.Command{
 }
 
 func init() {
-	versionCmd.Flags().Bool("json", false, "Emit version as machine-readable JSON")
 	RootCmd.AddCommand(versionCmd)
 }

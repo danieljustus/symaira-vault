@@ -197,7 +197,7 @@ func checkMCPServer(vaultDir string, _ Options) Result {
 	if err != nil {
 		r.Status = StatusWarn
 		r.Message = "MCP server not reachable at " + url
-		r.Hint = "start the server with `symvault serve --port " + strconv.Itoa(port) + "`"
+		r.Hint = "start the server with `symvault mcp --port " + strconv.Itoa(port) + "`"
 		return r
 	}
 	_ = resp.Body.Close()
@@ -214,7 +214,7 @@ func checkMCPServer(vaultDir string, _ Options) Result {
 		r.Message += ", token present"
 	} else {
 		r.Message += ", no token file"
-		r.Hint = "generate an MCP token with `symvault mcp token create`"
+		r.Hint = "generate an MCP token with `symvault agent token <name> new`"
 	}
 	return r
 }

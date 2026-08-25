@@ -92,9 +92,7 @@ func PrintJSON(v interface{}) {
 	}
 }
 
-var jsonDeprecationWarned = false
-
-func WantJSONOutput(legacyJSON bool) bool {
+func WantJSONOutput(flagJSON bool) bool {
 	format := formatText
 	if OutputFormatFn != nil {
 		format = OutputFormatFn()
@@ -102,11 +100,7 @@ func WantJSONOutput(legacyJSON bool) bool {
 	if format == "json" {
 		return true
 	}
-	if legacyJSON {
-		if !jsonDeprecationWarned {
-			jsonDeprecationWarned = true
-			cliout.Warnf("Note: --json is deprecated; prefer --output=json (works on all commands).")
-		}
+	if flagJSON {
 		return true
 	}
 	return false

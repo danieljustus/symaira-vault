@@ -323,7 +323,7 @@ Run the MCP HTTP server behind a TLS proxy:
 docker run -d --name symvault \
   -v "$HOME/.symvault:/home/symvault/.symvault" \
   -p 8080:8080 \
-  ghcr.io/danieljustus/symvault serve --port 8080
+  ghcr.io/danieljustus/symvault mcp --port 8080
 ```
 
 ### Remote Gateway Deployment

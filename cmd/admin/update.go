@@ -101,6 +101,7 @@ func newUpdateCheckCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 		Annotations: map[string]string{
 			cli.RequiresVaultAnnotation: "false",
+			cli.JSONOutputAnnotation:    "true",
 		},
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -192,6 +193,7 @@ or a package manager, self-update is disabled and guidance is shown instead.`,
 		Args: cobra.NoArgs,
 		Annotations: map[string]string{
 			cli.RequiresVaultAnnotation: "false",
+			cli.JSONOutputAnnotation:    "true",
 		},
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -303,6 +305,7 @@ is supported, along with upgrade guidance for the detected method.`,
 		Args: cobra.NoArgs,
 		Annotations: map[string]string{
 			cli.RequiresVaultAnnotation: "false",
+			cli.JSONOutputAnnotation:    "true",
 		},
 		SilenceUsage:  true,
 		SilenceErrors: true,

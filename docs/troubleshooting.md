@@ -21,7 +21,7 @@ Before diving into detailed diagnostics, try these common solutions:
 
 | Issue | Quick Fix |
 |-------|-----------|
-| Agent can't connect | Restart the MCP server: `symvault serve --stdio --agent default` |
+| Agent can't connect | Restart the MCP server: `symvault mcp --stdio --agent default` |
 | Permission denied | Check agent profile in `~/.symvault/config.yaml` |
 | Vault locked | Run `symvault unlock` and enter your passphrase |
 | Slow response | Check if vault has too many entries; consider organizing into subdirectories |
@@ -32,7 +32,7 @@ Before diving into detailed diagnostics, try these common solutions:
 ```bash
 symvault lock          # Clear cached passphrase
 symvault unlock        # Re-authenticate
-symvault serve --stdio --agent default  # Restart MCP server
+symvault mcp --stdio --agent default  # Restart MCP server
 ```
 
 ---
@@ -125,10 +125,10 @@ If `identity.age` is lost, **there is no recovery**. The identity file is the pr
 1. **Verify MCP server is running:**
    ```bash
    # For stdio mode
-   symvault serve --stdio --agent default
+   symvault mcp --stdio --agent default
    
    # For HTTP mode
-   symvault serve --port 8080
+   symvault mcp --port 8080
    ```
 
 2. **Check HTTP server health:**
@@ -158,7 +158,7 @@ If `identity.age` is lost, **there is no recovery**. The identity file is the pr
 | "Agent not recognized" | Verify agent name in `--agent` flag matches `config.yaml` profile |
 | "Invalid bearer token" | Regenerate token: `symvault agent install <agent> --http --config-only` |
 | "Connection refused" | Ensure server is running on correct port; check firewall |
-| "Port already in use" | Use different port: `symvault serve --port 8081` |
+| "Port already in use" | Use different port: `symvault mcp --port 8081` |
 | Stdio mode hangs | Ensure no other process is reading from stdin |
 | HTTP mode timeout | Check if vault is unlocked; server needs unlocked vault |
 
@@ -499,7 +499,7 @@ If the `mcp-token` file is accidentally deleted, the MCP HTTP server will regene
 1. Stop the MCP server if running:
    ```bash
    # If running in background
-   pkill -f "symvault serve"
+   pkill -f "symvault mcp"
    ```
 
 2. Remove the old token file (if partially corrupted):
@@ -509,7 +509,7 @@ If the `mcp-token` file is accidentally deleted, the MCP HTTP server will regene
 
 3. Restart the server to generate a new token:
    ```bash
-   symvault serve --port 8080
+   symvault mcp --port 8080
    ```
 
 4. Retrieve the new token:
@@ -541,13 +541,13 @@ For production environments requiring continuous availability:
 cp ~/.symvault/mcp-token ~/.symvault/mcp-token.backup
 
 # 2. Stop the server gracefully
-pkill -f "symvault serve"
+pkill -f "symvault mcp"
 
 # 3. Remove the old token
 rm ~/.symvault/mcp-token
 
 # 4. Start the server (generates new token)
-symvault serve --port 8080 &
+symvault mcp --port 8080 &
 
 # 5. Wait for server to be ready
 sleep 2
@@ -600,7 +600,7 @@ cp ~/.symvault/mcp-token ~/backups/symvault/
 
 5. **Use Stdio Mode for Local Agents**: Stdio mode doesn't require token management:
    ```bash
-   symvault serve --stdio --agent claude-code
+   symvault mcp --stdio --agent claude-code
    ```
 
 ---
@@ -614,7 +614,7 @@ Symaira Vault uses Go's standard `log/slog` package for structured logging. All 
 Set the environment variable before running any Symaira Vault command:
 
 ```bash
-SYMVAULT_LOG_LEVEL=debug symvault serve --stdio --agent claude-code
+SYMVAULT_LOG_LEVEL=debug symvault mcp --stdio --agent claude-code
 ```
 
 Available levels (from most to least verbose):
@@ -628,7 +628,7 @@ Available levels (from most to least verbose):
 For machine-readable output (e.g., when piping to log aggregation):
 
 ```bash
-SYMVAULT_LOG_LEVEL=info SYMVAULT_LOG_FORMAT=json symvault serve --http
+SYMVAULT_LOG_LEVEL=info SYMVAULT_LOG_FORMAT=json symvault mcp --port 8080
 ```
 
 ### Common Log Messages
