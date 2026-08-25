@@ -1,13 +1,13 @@
-# Symaira Vault (symvault)
+# Symaira Vault
 
 [![CI](https://github.com/danieljustus/symaira-vault/actions/workflows/ci.yml/badge.svg)](https://github.com/danieljustus/symaira-vault/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/danieljustus/symaira-vault)](https://github.com/danieljustus/symaira-vault/releases/latest)
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![License](https://img.shields.io/github/license/danieljustus/symaira-vault)](https://opensource.org/licenses/Apache-2.0)
 [![Go Reference](https://pkg.go.dev/badge/github.com/danieljustus/symaira-vault.svg)](https://pkg.go.dev/github.com/danieljustus/symaira-vault)
 
 ![Symaira Vault hero](docs/assets/symvault-hero.png)
 
-A modern, secure command-line password manager written in Go. Uses [age](https://age-encryption.org/) for encryption with built-in MCP server support for AI agent integration.
+A modern, secure command-line password manager (`symvault`) written in Go. Uses [age](https://age-encryption.org/) for encryption with built-in MCP server support for AI agent integration.
 
 ![Symaira Vault demo](docs/assets/symvault-demo.gif)
 
@@ -99,7 +99,9 @@ xcodegen generate
 xcodebuild -project Symvault.xcodeproj -scheme Symvault -scmProvider system build
 ```
 
-## Quick Start
+## Usage
+
+### Quick start
 
 ```bash
 # Initialize vault
@@ -167,23 +169,7 @@ symvault restore ~/backups/symvault-20260427.tar.gz
 
 Backup archives contain encrypted vault files, identity material, config, and MCP tokens. Protect them like the vault itself and test restore before relying on backups.
 
-## Migration from other managers
-
-Symaira Vault can import from 1Password, Bitwarden, pass, CSV exports, FIDO Credential Exchange Format (CXF) archives, and browser CSV exports (Apple Passwords, Chrome, Firefox). `otpauth://` TOTP URIs in imports are normalized into structured TOTP data:
-
-```bash
-symvault import <format> <source>
-symvault import bitwarden ~/exports/bitwarden.json
-symvault import pass ~/.password-store
-symvault import cxf ~/exports/passkeys.cxf
-symvault import apple ~/exports/apple-passwords.csv
-symvault import chrome ~/exports/chrome-passwords.csv
-symvault import firefox ~/exports/firefox-logins.csv
-```
-
-See [docs/migration.md](docs/migration.md) for export steps, format details, and verification guidance.
-
-## Configuration templates
+### Configuration templates
 
 Generate configuration files from vault secrets without exposing values in shell history or intermediate files. Templates support positional `KEY=ref` arguments and the `--prefix` flag to auto-select every entry under a vault path.
 
@@ -206,28 +192,25 @@ symvault template generate --type docker-compose --prefix work/ --output docker-
 
 Supported template types: `env`, `docker-compose`, `k8s-secret`, `github-actions`, and `terraform`. Custom templates can be added in `$HOME/.config/symvault/templates`.
 
-## Egress credential broker
+### Migration from other managers
 
-`symvault broker` is an opt-in loopback MITM forward proxy that attaches vault credentials to an agent's outbound HTTPS/HTTP requests **server-side** — a brokered secret never enters the agent's process environment, argv or process listing:
+Symaira Vault can import from 1Password, Bitwarden, pass, CSV exports, FIDO Credential Exchange Format (CXF) archives, and browser CSV exports (Apple Passwords, Chrome, Firefox). `otpauth://` TOTP URIs in imports are normalized into structured TOTP data:
 
 ```bash
-# One-shot: run a child command with the broker in-process
-symvault run --broker -- gh pr create
-
-# Standalone broker on a fixed port, strict mode
-symvault broker --addr 127.0.0.1:8080 --strict
-
-# Passthrough for certificate-pinning clients
-symvault broker --passthrough corporate.internal,legacy.example.com
+symvault import <format> <source>
+symvault import bitwarden ~/exports/bitwarden.json
+symvault import pass ~/.password-store
+symvault import cxf ~/exports/passkeys.cxf
+symvault import apple ~/exports/apple-passwords.csv
+symvault import chrome ~/exports/chrome-passwords.csv
+symvault import firefox ~/exports/firefox-logins.csv
 ```
 
-Strict mode rejects requests for hosts without a matching API template; passthrough hosts are tunneled without TLS interception. Every brokered request produces a tamper-evident audit record. See [docs/egress-broker.md](docs/egress-broker.md) for details.
+See [docs/migration.md](docs/migration.md) for export steps, format details, and verification guidance.
 
-## MCP API templates
+## MCP & Agent Integration
 
-`symvault` can call external APIs on an agent's behalf through the `execute_api_request` MCP tool. Each call is shaped by an **API template** — a small YAML file declaring the base URL, auth shape, and allowed endpoints. Built-in templates ship for Anthropic, GitHub, OpenAI, Stripe, Telegram, and more; credentials are resolved from a vault entry at request time and never enter the agent's environment, argv, logs or audit trail. See [docs/api-templates.md](docs/api-templates.md) for the catalog and custom-template guide.
-
-## MCP Server
+### MCP Server
 
 Symaira Vault exposes an MCP server for AI agent integration:
 
@@ -259,6 +242,35 @@ symvault agent token hermes revoke <token-id>
 ```
 
 For detailed agent setup, profiles, token management, and observability, see [docs/agent-integration.md](docs/agent-integration.md).
+
+### MCP API templates
+
+`symvault` can call external APIs on an agent's behalf through the `execute_api_request` MCP tool. Each call is shaped by an **API template** — a small YAML file declaring the base URL, auth shape, and allowed endpoints. Built-in templates ship for Anthropic, GitHub, OpenAI, Stripe, Telegram, and more; credentials are resolved from a vault entry at request time and never enter the agent's environment, argv, logs or audit trail. See [docs/api-templates.md](docs/api-templates.md) for the catalog and custom-template guide.
+
+### Egress credential broker
+
+`symvault broker` is an opt-in loopback MITM forward proxy that attaches vault credentials to an agent's outbound HTTPS/HTTP requests **server-side** — a brokered secret never enters the agent's process environment, argv or process listing:
+
+```bash
+# One-shot: run a child command with the broker in-process
+symvault run --broker -- gh pr create
+
+# Standalone broker on a fixed port, strict mode
+symvault broker --addr 127.0.0.1:8080 --strict
+
+# Passthrough for certificate-pinning clients
+symvault broker --passthrough corporate.internal,legacy.example.com
+```
+
+Strict mode rejects requests for hosts without a matching API template; passthrough hosts are tunneled without TLS interception. Every brokered request produces a tamper-evident audit record. See [docs/egress-broker.md](docs/egress-broker.md) for details.
+
+## Ecosystem
+
+Symaira Vault (`symvault`) serves as the credential management and secret-resolution layer for the Symaira tool suite:
+
+- **AI Agents & MCP Clients**: Connect directly to `symvault` via the Model Context Protocol (`symvault serve`), using tools such as `get_entry`, `execute_with_secret`, `execute_api_request`, and `generate_totp` with scoped access tokens and tamper-evident audit logging.
+- **Symaira Hub & Desktop Clients**: Integrate vault functionality via `SymvaultKit` and `SymvaultFeature` to manage and unlock local vaults with native macOS security and biometrics.
+- **CLI & Automation Workflows**: Resolve secrets dynamically across shell scripts and pipelines via `symvault run` (environment injection), `symvault broker` (transparent egress credential proxying), or `symvault template` (configuration file generation).
 
 ## Configuration
 

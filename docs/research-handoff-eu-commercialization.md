@@ -8,7 +8,7 @@ This document preserves the actionable findings from the local research folders:
 The original folders can be deleted once the linked GitHub issues are visible.
 This file keeps only the parts that belong in the public Apache-2.0 self-hosted core.
 Hosted service, billing, tenant operations, SSO/SCIM, hosted RBAC, SIEM export,
-and compliance operations are out of scope: there is no Pro edition and no hosted
+and compliance operations are out of scope: there is no commercial edition and no hosted
 counterpart to hand them to.
 
 ## Current Public-Core Status
@@ -50,13 +50,13 @@ counterpart to hand them to.
    German/EU regulated buyers will ask for a documented post-quantum transition
    plan before long-term procurement decisions. The plan now exists at
    `docs/adr/0005-post-quantum-transition-plan.md`.
-4. Hardware-backed unlock and FIDO2/WebAuthn are enterprise-relevant, but hosted
-   MFA enforcement belongs to Pro. Public core may later evaluate local
-   hardware-key unlock without creating paid gates.
-5. The old OpenPass commercialization advice is now partially obsolete: the repo
-   has been renamed and substantially hardened, and Pro has its own private
-   service layer. The still-useful part is the positioning around AI-agent
-   credentials and local-first trust.
+4. Hardware-backed unlock and FIDO2/WebAuthn remain enterprise-relevant. Symaira
+   Vault may evaluate local hardware-key unlock (e.g. YubiKey/FIDO2) for the
+   self-hosted tool without introducing hosted MFA services or paid tiers.
+5. The old OpenPass commercialization advice is obsolete: the project is focused
+   entirely on the single Apache-2.0 open-source product without a hosted
+   counterpart. The lasting takeaway is the strong positioning around AI-agent
+   credentials, local-first trust, and zero-telemetry operational security.
 
 ## GitHub Tracking
 
