@@ -217,7 +217,7 @@ echo "Token backed up to $BACKUP_DIR/mcp-token.$TIMESTAMP"
 
 # 3. Stop server
 echo "=== Stopping Server ==="
-pkill -f "symvault serve" || true
+pkill -f "symvault mcp" || true
 sleep 2
 
 # 4. Remove old token
@@ -226,7 +226,7 @@ rm -f "$VAULT_DIR/mcp-token"
 
 # 5. Start server (generates new token)
 echo "=== Starting Server ==="
-nohup symvault serve --port $SERVER_PORT > "$VAULT_DIR/mcp-server.log" 2>&1 &
+nohup symvault mcp --port $SERVER_PORT > "$VAULT_DIR/mcp-server.log" 2>&1 &
 sleep 3
 
 # 6. Verify health
@@ -265,13 +265,13 @@ echo "ACTION REQUIRED: Update all agent configurations with new token"
 3. If no backup, regenerate:
    ```bash
    # Stop server
-   pkill -f "symvault serve"
+   pkill -f "symvault mcp"
    
    # Remove corrupted/missing token
    rm -f ~/.symvault/mcp-token
    
    # Restart (auto-generates new token)
-   symvault serve --port 8080
+   symvault mcp --port 8080
    
    # Get new token
    cat ~/.symvault/mcp-token
@@ -292,7 +292,7 @@ FILE_COUNT=$(find ~/.symvault/entries -name "*.age" | wc -l)
 
 # 3. Compare
 echo "Listed entries: $ENTRY_COUNT, Files: $FILE_COUNT"
-symvault serve --port 8080
+symvault mcp --port 8080
 ```
 
 ### Prevention Checklist
@@ -515,7 +515,7 @@ If `identity.age` is lost, **there is no recovery**. The identity is the private
 | 2 | Unlock vault | `symvault unlock` succeeds |
 | 3 | Verify entries | `symvault list` returns expected entries |
 | 4 | Test entry retrieval | `symvault get <entry>` returns password |
-| 5 | Verify MCP server | `symvault serve --stdio --agent default` starts |
+| 5 | Verify MCP server | `symvault mcp --stdio --agent default` starts |
 
 ### Backup Rotation
 
@@ -558,9 +558,9 @@ if ! curl -sf "$HEALTH_URL" > /dev/null 2>&1; then
     echo "Symaira Vault MCP server is down on $(hostname)" | mail -s "Symaira Vault Alert" "$ALERT_EMAIL"
     
     # Attempt automatic recovery
-    pkill -f "symvault serve"
+    pkill -f "symvault mcp"
     sleep 2
-    nohup symvault serve --port 8080 > /dev/null 2>&1 &
+    nohup symvault mcp --port 8080 > /dev/null 2>&1 &
 fi
 ```
 
@@ -618,7 +618,7 @@ curl -s -X POST http://127.0.0.1:8080/mcp \
        allowedPaths: ["*"]
    
    # MCP server must use same name
-   symvault serve --agent my-agent
+   symvault mcp --agent my-agent
    ```
 
 3. Check profile permissions:
@@ -642,8 +642,8 @@ agents:
 EOF
 
 # Restart server
-pkill -f "symvault serve"
-symvault serve --port 8080
+pkill -f "symvault mcp"
+symvault mcp --port 8080
 ```
 
 **Scenario 2: Incorrect Permissions**
@@ -660,8 +660,8 @@ cp ~/.symvault/config.yaml ~/.symvault/config.yaml.bak
 symvault --vault ~/.symvault list
 
 # Restart server
-pkill -f "symvault serve"
-symvault serve --port 8080
+pkill -f "symvault mcp"
+symvault mcp --port 8080
 ```
 
 **Scenario 3: Path Restriction Too Strict**
@@ -749,14 +749,14 @@ symvault serve --port 8080
 
 ```bash
 # 1. Stop accepting new connections
-pkill -f "symvault serve"
+pkill -f "symvault mcp"
 
 # 2. Verify shutdown
-if ! pgrep -f "symvault serve" > /dev/null; then
+if ! pgrep -f "symvault mcp" > /dev/null; then
     echo "MCP server stopped successfully"
 else
     echo "Failed to stop server, forcing..."
-    pkill -9 -f "symvault serve"
+    pkill -9 -f "symvault mcp"
 fi
 
 # 3. Verify no orphaned processes
@@ -768,7 +768,7 @@ ps aux | grep symvault
 ```bash
 # Stdio server stops when parent process disconnects
 # To force stop a background stdio server:
-pkill -f "symvault serve --stdio"
+pkill -f "symvault mcp --stdio"
 ```
 
 #### Emergency Lockdown
@@ -782,7 +782,7 @@ If security incident suspected:
 echo "=== SYMVAULT EMERGENCY LOCKDOWN ==="
 
 # 1. Stop MCP server
-pkill -f "symvault serve"
+pkill -f "symvault mcp"
 echo "[1/4] MCP server stopped"
 
 # 2. Lock vault
@@ -818,7 +818,7 @@ symvault list
 
 # 2. Generate new token (if rotated)
 rm -f ~/.symvault/mcp-token
-symvault serve --port 8080 &
+symvault mcp --port 8080 &
 sleep 2
 NEW_TOKEN=$(cat ~/.symvault/mcp-token)
 
@@ -856,13 +856,13 @@ If token compromise suspected:
 # Immediate actions (within 5 minutes)
 
 # 1. Stop server
-pkill -f "symvault serve"
+pkill -f "symvault mcp"
 
 # 2. Backup and remove compromised token
 mv ~/.symvault/mcp-token ~/.symvault/mcp-token.compromised.$(date +%Y%m%d_%H%M%S)
 
 # 3. Start server with new token
-symvault serve --port 8080 &
+symvault mcp --port 8080 &
 
 # 4. Verify new token generated
 cat ~/.symvault/mcp-token

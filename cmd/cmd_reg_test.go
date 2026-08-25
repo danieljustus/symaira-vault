@@ -31,6 +31,7 @@ func TestCommandRegistration(t *testing.T) {
 		"init",
 		"list",
 		"lock",
+		"mcp",
 		"mcp-config",
 		"migrate",
 		"policy",
@@ -146,6 +147,20 @@ func TestSubcommandRegistration(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("device subcommand %q not registered", sub)
+		}
+	}
+
+	mcpSubcommands := []string{"install", "uninstall", "status"}
+	for _, sub := range mcpSubcommands {
+		found := false
+		for _, c := range mcpcmd.McpCmd.Commands() {
+			if c.Name() == sub {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("mcp subcommand %q not registered", sub)
 		}
 	}
 

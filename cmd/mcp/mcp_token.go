@@ -5,30 +5,11 @@ import (
 	"strings"
 	"time"
 
-	cli "github.com/danieljustus/symaira-vault/internal/cli"
-
 	"github.com/spf13/cobra"
 
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 )
-
-func newMcpCmd() *cobra.Command {
-	mcpCmd := &cobra.Command{
-		Use:   "mcp",
-		Short: "[Deprecated v4.0] MCP server commands — use 'symvault agent' instead",
-		Long: `MCP management commands have been replaced by the agent command group.
-
-All MCP server functionality (install, configure, token management) is
-now available via the 'symvault agent' command family.`,
-		Example: `  symvault agent install claude-code`,
-		Hidden:  true,
-	}
-	mcpCmd.GroupID = cli.GroupIDAgentsMCP
-	mcpCmd.AddCommand(newMcpInstallCmd())
-	mcpCmd.AddCommand(newMcpTokenCmd())
-	return mcpCmd
-}
 
 // McpTokenCmd is retained for API compatibility; NewCommands() uses
 // newMcpTokenCmd() so every call gets a fresh command.

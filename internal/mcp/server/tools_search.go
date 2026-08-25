@@ -30,7 +30,7 @@ var cliAlternatives = map[string]string{
 	"generate_totp":      "symvault get <path> --totp",
 	"copy_to_clipboard":  "symvault get <path>.password --clip",
 	"autotype":           "symvault get <path>.password --autotype",
-	"health":             "symvault serve --stdio (health is automatic)",
+	"health":             "symvault mcp --stdio (health is automatic)",
 	"run_command":        "symvault run --env KEY=path.field -- <command>",
 }
 

@@ -9,7 +9,7 @@ Browse, search, copy, and insert secrets from your (Symaira Vault) vault without
 - **Symaira Vault CLI** installed and configured (`brew install symvault` or see [installation docs](https://github.com/danieljustus/symaira-vault#installation))
 - **Neovim** >= 0.7
 - **[plenary.nvim](https://github.com/nvim-lua/plenary.nvim)** — required for HTTP requests
-- **Symaira Vault MCP server** running: `symvault serve --port 8080`
+- **Symaira Vault MCP server** running: `symvault mcp --port 8080`
 
 ## Installation
 

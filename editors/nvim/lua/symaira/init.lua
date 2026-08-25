@@ -21,7 +21,7 @@ local function setup_curl_helpers()
       if response.exit ~= 0 then
         callback(
           string.format(
-            "HTTP %d: %s (connection refused? Is 'symvault serve' running?)",
+            "HTTP %d: %s (connection refused? Is 'symvault mcp' running?)",
             response.status,
             response.exit
           ),
@@ -58,7 +58,7 @@ local function setup_curl_helpers()
       if response.exit ~= 0 then
         callback(
           string.format(
-            "HTTP %d: Connection failed. Is 'symvault serve' running?",
+            "HTTP %d: Connection failed. Is 'symvault mcp' running?",
             response.status
           ),
           nil

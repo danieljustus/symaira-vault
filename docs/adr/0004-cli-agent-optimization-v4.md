@@ -137,7 +137,7 @@ Agent-driven callers can branch on exit code without parsing stderr.
 | 7 | Inject MCP server entry into agent config | restore backup on error |
 | 8 | Copy embedded skill package to agent's skill dir | restore + delete token on error |
 | 9 | Persist token to OS keyring (fallback: file with 0600) | rollback profile if fails |
-| 10 | Smoke test: spawn `symvault serve --stdio --agent <name>`, call `tools/list`, expect `openpass_whoami` | warn-only, don't rollback (transport quirks happen) |
+| 10 | Smoke test: spawn `symvault mcp --stdio --agent <name>`, call `tools/list`, expect `openpass_whoami` | warn-only, don't rollback (transport quirks happen) |
 | 11 | Print structured summary | — |
 
 ### 2.2 Per-agent paths

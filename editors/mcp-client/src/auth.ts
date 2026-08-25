@@ -22,7 +22,7 @@ export function readToken(vaultPath?: string): string {
 
   if (!fs.existsSync(tokenPath)) {
     throw new SymairaAuthError(
-      `MCP token not found at ${tokenPath}. Run 'symvault serve' to generate one.`
+      `MCP token not found at ${tokenPath}. Run 'symvault mcp' to generate one.`
     );
   }
 

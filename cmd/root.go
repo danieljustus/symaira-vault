@@ -40,7 +40,7 @@ func newPackageRootCmd() *cobra.Command {
 	compat := []*cobra.Command{
 		brokerCmd, deviceCmd, dynamicCmd, generateCmd, gitCmd, policyCmd, profileCmd,
 		recipientsCmd, remoteCmd, runCmd, shareCmd, syncCmd, templateCmd, uiCmd,
-		mcp.ServeCmd,
+		mcp.ServeCmd, mcp.McpCmd,
 	}
 	compatByName := make(map[string]struct{}, len(compat))
 	for _, compatCmd := range compat {

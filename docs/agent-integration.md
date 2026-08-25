@@ -252,7 +252,7 @@ symvault --vault ~/.symvault agent install openclaw --http --config-only
 HTTP mode requires a running Symaira Vault server:
 
 ```bash
-symvault --vault ~/.symvault serve --port 8090
+symvault --vault ~/.symvault mcp --port 8090
 ```
 
 By default, the HTTP server starts with a self-signed TLS certificate auto-generated
@@ -261,7 +261,7 @@ on first run. The certificate is stored in the vault directory as `mcp-cert.pem`
 `mcp.tls_key_file` in `config.yaml` or pass `--tls-cert` and `--tls-key` flags:
 
 ```bash
-symvault serve --tls-cert /path/to/cert.pem --tls-key /path/to/key.pem
+symvault mcp --tls-cert /path/to/cert.pem --tls-key /path/to/key.pem
 ```
 
 To run without TLS, set `mcp.allow_insecure_bind: true` in `config.yaml`. This
@@ -287,7 +287,7 @@ and port as needed:
     <string>/usr/local/bin/symvault</string>
     <string>--vault</string>
     <string>/Users/USER/.symvault</string>
-    <string>serve</string>
+    <string>mcp</string>
     <string>--port</string>
     <string>8090</string>
   </array>

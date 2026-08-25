@@ -218,10 +218,10 @@ Symaira Vault exposes an MCP server for AI agent integration:
 
 ```bash
 # Stdio mode (recommended for local agents)
-symvault serve --stdio --agent claude-code
+symvault mcp --stdio --agent claude-code
 
 # HTTP mode
-symvault serve --port 8080
+symvault mcp --port 8080
 ```
 
 Use `symvault agent install` to generate ready-to-paste client config:
@@ -268,7 +268,7 @@ Strict mode rejects requests for hosts without a matching API template; passthro
 
 Symaira Vault (`symvault`) serves as the credential management and secret-resolution layer for the Symaira tool suite:
 
-- **AI Agents & MCP Clients**: Connect directly to `symvault` via the Model Context Protocol (`symvault serve`), using tools such as `get_entry`, `execute_with_secret`, `execute_api_request`, and `generate_totp` with scoped access tokens and tamper-evident audit logging.
+- **AI Agents & MCP Clients**: Connect directly to `symvault` via the Model Context Protocol (`symvault mcp`), using tools such as `get_entry`, `execute_with_secret`, `execute_api_request`, and `generate_totp` with scoped access tokens and tamper-evident audit logging.
 - **Symaira Hub & Desktop Clients**: Integrate vault functionality via `SymvaultKit` and `SymvaultFeature` to manage and unlock local vaults with native macOS security and biometrics.
 - **CLI & Automation Workflows**: Resolve secrets dynamically across shell scripts and pipelines via `symvault run` (environment injection), `symvault broker` (transparent egress credential proxying), or `symvault template` (configuration file generation).
 

@@ -154,7 +154,7 @@ adoption pattern) and review the [`hermes-safe-adoption.md`](docs/hermes-safe-ad
 **Security recommendations for HTTP mode:**
 - Never expose the MCP server port to the network
 - Use `approvalMode: deny` or `approvalMode: prompt` for untrusted agents
-- **Cleartext tokens on loopback**: When TLS is disabled (the default for loopback), bearer tokens are transmitted in cleartext over the loopback interface. While loopback traffic is generally safe from remote attackers, other local processes with sufficient privileges can sniff loopback traffic. For highest security, enable TLS or use stdio mode (`symvault serve --stdio`).
+- **Cleartext tokens on loopback**: When TLS is disabled (the default for loopback), bearer tokens are transmitted in cleartext over the loopback interface. While loopback traffic is generally safe from remote attackers, other local processes with sufficient privileges can sniff loopback traffic. For highest security, enable TLS or use stdio mode (`symvault mcp --stdio`).
 
 #### Metrics Endpoint
 
@@ -425,7 +425,7 @@ OS-managed buffers.
 - **Minimize session TTL**: Set `sessionTimeout: 0` in `config.yaml` to disable
   session caching entirely. This forces passphrase entry on every operation,
   eliminating the keyring as a persistence vector.
-- **Use stdio MCP mode**: The `symvault serve --stdio` mode avoids D-Bus entirely
+- **Use stdio MCP mode**: The `symvault mcp --stdio` mode avoids D-Bus entirely
   for MCP transport, reducing the keyring's attack surface to the unlock path.
 - **Prefer passphrase-only unlock**: Set `authMethod: passphrase` to avoid
   biometric keychain items that may have different access control properties.

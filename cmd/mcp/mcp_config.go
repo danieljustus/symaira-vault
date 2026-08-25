@@ -127,7 +127,7 @@ func stdioArgs(agentName string) []string {
 	if err == nil && shouldIncludeVaultArg(vDir) {
 		args = append(args, "--vault", vDir)
 	}
-	args = append(args, "serve", "--stdio", "--agent", agentName)
+	args = append(args, "mcp", "--stdio", "--agent", agentName)
 	return args
 }
 
@@ -142,7 +142,7 @@ func shouldIncludeVaultArg(vDir string) bool {
 func ResolveHTTPPort(vaultDir string, bind string, configuredPort int) (int, error) {
 	if port, ok := cli.LoadRuntimePort(vaultDir); ok {
 		if err := CheckRuntimePortHealth(bind, port); err != nil {
-			return 0, fmt.Errorf("stale runtime port %d from %s: %w; remove %s or restart 'symvault serve'", port, filepath.Join(vaultDir, cli.RuntimePortFileName), err, filepath.Join(vaultDir, cli.RuntimePortFileName))
+			return 0, fmt.Errorf("stale runtime port %d from %s: %w; remove %s or restart 'symvault mcp'", port, filepath.Join(vaultDir, cli.RuntimePortFileName), err, filepath.Join(vaultDir, cli.RuntimePortFileName))
 		}
 		return port, nil
 	}
@@ -264,7 +264,7 @@ func OutputHermesHTTPConfig(agentName, serverName string, redact bool, tokenID s
 
 // OutputAgentStdioConfig outputs YAML stdio config for agent-specific formats.
 // serverKey is the key name in mcp_servers (e.g., "claude_code", "codex").
-// agentName is passed to symvault serve (e.g., "claude-code", "codex").
+// agentName is passed to symvault mcp (e.g., "claude-code", "codex").
 //
 // Verification: symvault mcp-config claude-code --format claude-code | paste into Claude Desktop config
 func OutputAgentStdioConfig(agentName, serverKey string) error {
@@ -285,7 +285,7 @@ func OutputAgentStdioConfig(agentName, serverKey string) error {
 
 // OutputAgentHTTPConfig outputs YAML HTTP config for agent-specific formats.
 // serverKey is the key name in mcp_servers.
-// agentName is passed to symvault serve and X-Symaira-Agent header.
+// agentName is passed to symvault mcp and X-Symaira-Agent header.
 // redact outputs env:SYMVAULT_MCP_TOKEN instead of the actual token.
 //
 // Verification: symvault mcp-config claude-code --http --format claude-code | paste into Claude Desktop config

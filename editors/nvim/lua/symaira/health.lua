@@ -28,7 +28,7 @@ function M.check()
   if token then
     ok("MCP token found at ~/.symvault/mcp-token")
   else
-    error("MCP token not found. Run 'symvault serve' to generate one.")
+    error("MCP token not found. Run 'symvault mcp' to generate one.")
   end
 
   -- Check config

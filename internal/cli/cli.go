@@ -124,6 +124,7 @@ type CLIContext struct {
 	Vault         string
 	QuietMode     bool
 	OutputFormat  string
+	JSONOutput    bool
 	NoPipeWarning bool
 	ColorMode     string
 	ThemePreset   string
@@ -171,6 +172,7 @@ var QuietMode bool
 var Profile string
 var ProfileFlag *pflag.Flag
 var OutputFormat string
+var JSONOutput bool
 var NoPipeWarning bool
 var ColorMode string
 var ThemePreset string
@@ -188,6 +190,7 @@ func syncFromContext(ctx *CLIContext) {
 	QuietMode = ctx.QuietMode
 	Profile = ctx.Profile
 	OutputFormat = ctx.OutputFormat
+	JSONOutput = ctx.JSONOutput
 	NoPipeWarning = ctx.NoPipeWarning
 	ColorMode = ctx.ColorMode
 	ThemePreset = ctx.ThemePreset
@@ -203,6 +206,7 @@ func syncToContext(ctx *CLIContext) {
 	ctx.QuietMode = QuietMode
 	ctx.Profile = Profile
 	ctx.OutputFormat = OutputFormat
+	ctx.JSONOutput = JSONOutput
 	ctx.NoPipeWarning = NoPipeWarning
 	ctx.ColorMode = ColorMode
 	ctx.ThemePreset = ThemePreset
@@ -263,6 +267,9 @@ Daily use:
 		SilenceErrors: false,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			currentCommandPath = cmd.CommandPath()
+			if JSONOutput {
+				OutputFormat = "json"
+			}
 			if OutputFormat != outputFormatText {
 				if !CommandSupportsJSON(cmd) {
 					return errorspkg.NewCLIError(errorspkg.ExitUsage,
@@ -298,6 +305,7 @@ Daily use:
 	ProfileFlag = root.PersistentFlags().Lookup("profile")
 	_ = root.RegisterFlagCompletionFunc("profile", ProfileCompletionFunc)
 	root.PersistentFlags().StringVar(&OutputFormat, "output", outputFormatText, "Output format (text, json, yaml)")
+	root.PersistentFlags().BoolVar(&JSONOutput, "json", false, "Output format shorthand for --output json; overrides --output when both are specified")
 	root.PersistentFlags().BoolVar(&NoPipeWarning, "no-pipe-warning", false, "suppress 'reading from non-TTY' warning when piping secrets")
 	root.PersistentFlags().StringVar(&ColorMode, "color", "auto", "When to emit ANSI color: auto, always, never")
 	root.PersistentFlags().StringVar(&ThemePreset, "theme", "", "Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)")
