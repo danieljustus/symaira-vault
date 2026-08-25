@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-git/go-billy/v5/osfs"
 	gogit "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/cache"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/storage/filesystem"
-	"github.com/go-git/go-billy/v5/osfs"
 )
 
 func TestProbeSeparateGitDir(t *testing.T) {
