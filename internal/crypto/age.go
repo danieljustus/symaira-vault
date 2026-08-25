@@ -308,7 +308,7 @@ func PublicKeyFingerprint(pubkey string) string {
 	}
 	sum := sha256.Sum256([]byte(pubkey))
 	hexStr := strings.ToUpper(hex.EncodeToString(sum[:16]))
-	var groups []string
+	groups := make([]string, 0, len(hexStr)/4)
 	for i := 0; i < len(hexStr); i += 4 {
 		groups = append(groups, hexStr[i:i+4])
 	}
