@@ -5,6 +5,8 @@ package crypto
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -291,4 +293,38 @@ func ParseRecipients(recipientStrs []string) ([]*age.X25519Recipient, error) {
 	}
 
 	return recipients, nil
+}
+
+// PublicKeyFingerprint computes a deterministic human-verifiable fingerprint
+// for an age public key string (or recipient string).
+// It computes the SHA-256 digest of the trimmed public key string, takes the first
+// 16 bytes (128 bits), and formats them as 8 space-separated 4-character hex groups
+// in uppercase (e.g. "AB12 CD34 EF56 7890 1234 5678 9ABC DEF0").
+// If pubkey is empty, it returns an empty string.
+func PublicKeyFingerprint(pubkey string) string {
+	pubkey = strings.TrimSpace(pubkey)
+	if pubkey == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(pubkey))
+	hexStr := strings.ToUpper(hex.EncodeToString(sum[:16]))
+	groups := make([]string, 0, len(hexStr)/4)
+	for i := 0; i < len(hexStr); i += 4 {
+		groups = append(groups, hexStr[i:i+4])
+	}
+	return strings.Join(groups, " ")
+}
+
+// Fingerprint is an alias for PublicKeyFingerprint.
+func Fingerprint(pubkey string) string {
+	return PublicKeyFingerprint(pubkey)
+}
+
+// FingerprintRecipient computes the deterministic fingerprint for an age.X25519Recipient.
+// Returns an empty string if recipient is nil.
+func FingerprintRecipient(recipient *age.X25519Recipient) string {
+	if recipient == nil {
+		return ""
+	}
+	return PublicKeyFingerprint(recipient.String())
 }

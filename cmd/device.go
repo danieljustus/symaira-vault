@@ -100,13 +100,14 @@ for the new device.`,
 				return fmt.Errorf("save pairing file: %w", err)
 			}
 
-			if err := git.AutoCommitAndPush(vaultDir, fmt.Sprintf("Pairing token %s", token), v.Config.Git.AutoPush); err != nil {
+			if err := git.AutoCommitAndPush(vaultDir, fmt.Sprintf("Pairing token %s", token), gitAutoPush(v)); err != nil {
 				cliout.Warnf("Warning: could not auto-commit/push: %v", err)
 			}
 
 			printQuietAware("\n=== Pairing Token ===\n")
 			printQuietAware("Token: %s\n\n", token)
 			printQuietAware("This device's public key: %s\n", publicKey)
+			printQuietAware("Key fingerprint:          %s (SHA-256)\n", cryptopkg.PublicKeyFingerprint(publicKey))
 			printQuietAware("\nOn the joining device, run:\n")
 			printQuietAware("  symvault device join <remote-url> %s\n\n", token)
 			printQuietAware("After the joining device has submitted its key, run:\n")
@@ -241,8 +242,10 @@ to re-encrypt all entries for this new device.`,
 			}
 
 			cliout.Hintf("=== Join Successful ===")
-			printQuietAware("\nYour public key: %s\n", myPubkey)
-			printQuietAware("Device name: %s\n\n", joinedData.Name)
+			printQuietAware("\nDevice name:     %s\n", joinedData.Name)
+			printQuietAware("Key type:        age X25519\n")
+			printQuietAware("Your public key: %s\n", myPubkey)
+			printQuietAware("Key fingerprint: %s (SHA-256)\n\n", cryptopkg.PublicKeyFingerprint(myPubkey))
 			printQuietAware("IMPORTANT: Entries cannot be decrypted yet.\n")
 			printQuietAware("On the existing device, run:\n")
 			printQuietAware("  symvault device accept %s\n\n", token)
@@ -296,6 +299,14 @@ can decrypt them.`,
 				return fmt.Errorf("parse joined file: %w", err)
 			}
 
+			fp := cryptopkg.PublicKeyFingerprint(jf.PublicKey)
+
+			printQuietAware("\n=== Joining Device Request ===\n")
+			printQuietAware("Device name:     %s\n", jf.Name)
+			printQuietAware("Key type:        age X25519\n")
+			printQuietAware("Public key:      %s\n", jf.PublicKey)
+			printQuietAware("Key fingerprint: %s (SHA-256)\n\n", fp)
+
 			cliout.Hintf("Accepting join from device: %s (public key: %s)", jf.Name, truncatePubkey(jf.PublicKey))
 
 			rm := vaultpkg.NewRecipientsManager(vaultDir)
@@ -315,7 +326,7 @@ can decrypt them.`,
 
 			_ = os.Remove(joinedPath)
 
-			if err := git.AutoCommitAndPush(vaultDir, fmt.Sprintf("Accept device join: %s", jf.Name), v.Config.Git.AutoPush); err != nil {
+			if err := git.AutoCommitAndPush(vaultDir, fmt.Sprintf("Accept device join: %s", jf.Name), gitAutoPush(v)); err != nil {
 				cliout.Warnf("Warning: could not auto-commit/push: %v", err)
 			}
 
@@ -563,8 +574,10 @@ request so the first device can accept it.`,
 			}
 
 			cliout.Hintf("=== Pairing Setup Complete ===")
+			fmt.Fprintf(os.Stderr, "Device name:     %s\n", joinedData.Name)
+			fmt.Fprintf(os.Stderr, "Key type:        age X25519\n")
 			fmt.Fprintf(os.Stderr, "Your public key: %s\n", identity.Recipient().String())
-			fmt.Fprintf(os.Stderr, "Device name: %s\n\n", joinedData.Name)
+			fmt.Fprintf(os.Stderr, "Key fingerprint: %s (SHA-256)\n\n", cryptopkg.PublicKeyFingerprint(identity.Recipient().String()))
 			fmt.Fprintf(os.Stderr, "IMPORTANT: Entries cannot be decrypted yet.\n")
 			fmt.Fprintf(os.Stderr, "On the original device, run:\n")
 			fmt.Fprintf(os.Stderr, "  symvault device accept %s\n\n", token)
@@ -665,7 +678,7 @@ access to all vault entries.`,
 			}
 
 			// Auto-commit and push
-			if err := git.AutoCommitAndPush(vaultDir, fmt.Sprintf("Revoke device: %s", deviceName), v.Config.Git.AutoPush); err != nil {
+			if err := git.AutoCommitAndPush(vaultDir, fmt.Sprintf("Revoke device: %s", deviceName), gitAutoPush(v)); err != nil {
 				cliout.Warnf("Warning: could not auto-commit/push: %v", err)
 			}
 
@@ -714,4 +727,11 @@ func truncatePubkey(pubkey string) string {
 		return pubkey[:16] + "..."
 	}
 	return pubkey
+}
+
+func gitAutoPush(v *vaultpkg.Vault) bool {
+	if v != nil && v.Config != nil && v.Config.Git != nil {
+		return v.Config.Git.AutoPush
+	}
+	return false
 }

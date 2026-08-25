@@ -745,3 +745,94 @@ func bytesEqual(a, b []byte) bool {
 	}
 	return true
 }
+
+func TestPublicKeyFingerprint(t *testing.T) {
+	t.Run("empty string returns empty", func(t *testing.T) {
+		if got := PublicKeyFingerprint(""); got != "" {
+			t.Errorf("PublicKeyFingerprint(\"\") = %q, want empty", got)
+		}
+		if got := PublicKeyFingerprint("   \n\t  "); got != "" {
+			t.Errorf("PublicKeyFingerprint(whitespace) = %q, want empty", got)
+		}
+	})
+
+	t.Run("nil recipient returns empty", func(t *testing.T) {
+		if got := FingerprintRecipient(nil); got != "" {
+			t.Errorf("FingerprintRecipient(nil) = %q, want empty", got)
+		}
+	})
+
+	t.Run("determinism - same key produces same fingerprint", func(t *testing.T) {
+		key := "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
+		fp1 := PublicKeyFingerprint(key)
+		fp2 := PublicKeyFingerprint(key)
+		fp3 := Fingerprint(key)
+		if fp1 == "" {
+			t.Fatal("fingerprint should not be empty")
+		}
+		if fp1 != fp2 {
+			t.Errorf("expected deterministic fingerprint, got %q and %q", fp1, fp2)
+		}
+		if fp1 != fp3 {
+			t.Errorf("Fingerprint alias produced %q, want %q", fp3, fp1)
+		}
+
+		// Trimming whitespace
+		fpWithSpaces := PublicKeyFingerprint("  " + key + "\n")
+		if fpWithSpaces != fp1 {
+			t.Errorf("fingerprint with whitespace = %q, want %q", fpWithSpaces, fp1)
+		}
+	})
+
+	t.Run("distinct keys produce distinct fingerprints", func(t *testing.T) {
+		key1 := "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
+		key2 := "age1savzx9za5xg4fvwkeq788v50esvs3ccn9sscdxevw2fev9xdyeps8z9z65"
+
+		fp1 := PublicKeyFingerprint(key1)
+		fp2 := PublicKeyFingerprint(key2)
+		if fp1 == fp2 {
+			t.Errorf("distinct keys produced same fingerprint: %q", fp1)
+		}
+	})
+
+	t.Run("format is 8 groups of 4 uppercase hex characters", func(t *testing.T) {
+		key := "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
+		fp := PublicKeyFingerprint(key)
+
+		// Expected length: 8 groups * 4 chars + 7 spaces = 39 chars
+		if len(fp) != 39 {
+			t.Errorf("expected length 39, got %d for %q", len(fp), fp)
+		}
+
+		groups := strings.Split(fp, " ")
+		if len(groups) != 8 {
+			t.Fatalf("expected 8 groups, got %d", len(groups))
+		}
+		for i, g := range groups {
+			if len(g) != 4 {
+				t.Errorf("group %d length = %d, want 4 (%q)", i, len(g), g)
+			}
+			for _, ch := range g {
+				if !((ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'F')) {
+					t.Errorf("group %d contains non-hex char: %c in %q", i, ch, g)
+				}
+			}
+		}
+	})
+
+	t.Run("FingerprintRecipient matches PublicKeyFingerprint", func(t *testing.T) {
+		id, err := GenerateIdentity()
+		if err != nil {
+			t.Fatalf("GenerateIdentity: %v", err)
+		}
+		recipient := id.Recipient()
+		fpFromRecipient := FingerprintRecipient(recipient)
+		fpFromString := PublicKeyFingerprint(recipient.String())
+		if fpFromRecipient == "" {
+			t.Fatal("FingerprintRecipient returned empty")
+		}
+		if fpFromRecipient != fpFromString {
+			t.Errorf("FingerprintRecipient = %q, want %q", fpFromRecipient, fpFromString)
+		}
+	})
+}
