@@ -1,6 +1,6 @@
 name: Symvault
 options:
-  bundleIdPrefix: dev.symaira
+  bundleIdPrefix: com.symaira
   deploymentTarget:
     macOS: "14.0"
   xcodeVersion: "16.0"
@@ -32,8 +32,8 @@ targets:
       path: Symvault.entitlements
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: dev.symaira.Symvault
-        PRODUCT_NAME: Symvault
+        PRODUCT_BUNDLE_IDENTIFIER: com.symaira.vault
+        PRODUCT_NAME: Symaira Vault
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGN_STYLE: Manual
         ENABLE_HARDENED_RUNTIME: true
