@@ -6,11 +6,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	mcpcmd "github.com/danieljustus/symaira-vault/cmd/mcp"
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
 	"github.com/danieljustus/symaira-vault/internal/config"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
-	"github.com/spf13/cobra"
 )
 
 func TestMcpCanonicalRegistration(t *testing.T) {
