@@ -322,12 +322,19 @@ Negative or accepted:
 7. Approval device (D6).
 8. Everything else only on concrete demand.
 
-Note that symaira-appkit declares no iOS platform
-(`symaira-vibecoder/client/project.yml`: "appkit declares no iOS platform yet;
-do NOT add appkit products to the iOS targets"), while the workspace `AGENTS.md`
-forbids hand-rolled per-tool client apps. Step 3 therefore depends on extending
-symaira-appkit to iOS. A second consumer for that work already exists in
-`Symvibe-iOS`.
+Step 3 consumes symaira-appkit, as the workspace `AGENTS.md` requires — it
+forbids hand-rolled per-tool client apps. appkit already declares
+`platforms: [.macOS(.v14), .iOS(.v17)]` and its CI builds the package against
+the iOS Simulator SDK, so the platform itself is not the obstacle.
+
+What is missing is per-product clarity. `SymairaCLIRunner` is wrapped entirely
+in `#if os(macOS)`, so on iOS it compiles to an empty module, and
+`SymairaToolKit`, `SymairaDaemonKit`, and `SymairaIngestContract` depend on it —
+they link on iOS with nothing behind them. `SymairaTheme` and `SymairaKeychain`
+are genuinely iOS-capable. The instruction in
+`symaira-vibecoder/client/project.yml` ("appkit declares no iOS platform yet; do
+NOT add appkit products to the iOS targets") is stale on the first clause and
+over-broad on the second. Tracked in danieljustus/symaira-appkit#110.
 
 ## Open Questions
 
