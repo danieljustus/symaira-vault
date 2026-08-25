@@ -885,7 +885,7 @@ func filterPathsUsingHostIndex(vaultDir string, candidates []string, targetHost 
 	idx := searchIndexForVault(vaultDir)
 	if !idx.Covers(vaultDir, identity) {
 		if loadErr := idx.loadFromDisk(vaultDir, identity); loadErr != nil || !idx.Covers(vaultDir, identity) {
-			if err := idx.Build(vaultDir, identity); err != nil {
+			if buildErr := idx.Build(vaultDir, identity); buildErr != nil {
 				return scanCandidatesForHost(vaultDir, candidates, normHost, identity), nil
 			}
 		}
