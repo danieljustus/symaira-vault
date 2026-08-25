@@ -180,6 +180,21 @@ symvault profile add work --vault ~/.symvault-work
 symvault profile use work
 ```
 
+## Entry Format & Conventions
+
+Vault entry data is stored as a flexible map of key-value pairs (`map[string]any`). While keys are free-form, several well-known keys follow standard conventions across CLI commands, MCP integrations, and client extensions.
+
+### Well-Known Field: `url`
+
+The `url` key associates credentials with web services, domains, or internal network endpoints. It is used by `symvault find --url <value>` and platform integrations (such as iOS AutoFill, ADR 0006 D4) to match stored credentials to requested services.
+
+- **Validation**: URLs must be non-empty, contain no illegal whitespace or control characters, and resolve to a valid hostname or IP address.
+- **Scheme Defaulting**: If a scheme is omitted (e.g. `github.com` or `gitlab.company.internal/login`), `https://` is assumed by default.
+- **Host Lowercasing**: Hostnames are case-insensitive and normalized to lowercase (e.g. `GITHUB.COM` is stored and indexed as `github.com`).
+- **Port Handling**: Default protocol ports (`80` for `http`/`ws`, `443` for `https`/`wss`, `22` for `ssh`/`sftp`, `21` for `ftp`) are stripped during normalization (e.g. `https://github.com:443` normalizes to `github.com`). Non-standard ports (e.g. `http://localhost:3000`, `https://example.com:8443`) are preserved in host matching.
+- **Same-Host Matching**: Service lookups match against the normalized host representation, allowing scheme-insensitive and port-normalized queries to find corresponding entries.
+- **Encrypted Index**: Host mappings are indexed within the vault's encrypted search index (`.search-index`), preventing unencrypted plaintext leakage of service names on disk.
+
 ## Validation
 
 Symaira Vault validates your configuration file on load. You can also manually validate it:

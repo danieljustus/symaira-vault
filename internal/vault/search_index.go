@@ -167,6 +167,10 @@ type indexDoc struct {
 	// every token in the index. May be nil in indices written before this
 	// field existed; it is rebuilt lazily on the first incremental update.
 	PathTokens map[string][]string `json:"pt,omitempty"`
+	// HostIndex maps normalized host → entry paths containing that host in their url field.
+	HostIndex map[string]map[string]struct{} `json:"hi,omitempty"`
+	// PathHosts is the reverse of HostIndex: entry path → deduplicated normalized hosts.
+	PathHosts map[string][]string `json:"ph,omitempty"`
 	// EntryCount is the number of entries in the vault when the index was built.
 	// Used for stale detection — if the count differs, the index is rebuilt.
 	EntryCount int `json:"c,omitempty"`
@@ -306,6 +310,8 @@ func (idx *EncryptedIndex) buildIndex(vaultDir string, identity *age.X25519Ident
 		Values:     make(map[string][]string, len(paths)),
 		TokenIndex: make(map[string]map[string]struct{}),
 		PathTokens: make(map[string][]string, len(paths)),
+		HostIndex:  make(map[string]map[string]struct{}),
+		PathHosts:  make(map[string][]string, len(paths)),
 		EntryCount: len(paths),
 	}
 
@@ -323,6 +329,7 @@ func (idx *EncryptedIndex) buildIndex(vaultDir string, identity *age.X25519Ident
 		i      int
 		path   string
 		values []string
+		hosts  []string
 	}
 
 	jobs := make(chan indexJob, len(paths))
@@ -354,7 +361,8 @@ func (idx *EncryptedIndex) buildIndex(vaultDir string, identity *age.X25519Ident
 				var values []string
 				collectStringValues(&values, entry.Data)
 				sort.Strings(values)
-				results <- indexResult{i: job.i, path: job.path, values: values}
+				hosts := ExtractHostsFromData(entry.Data)
+				results <- indexResult{i: job.i, path: job.path, values: values, hosts: hosts}
 			}
 		}()
 	}
@@ -375,12 +383,13 @@ func (idx *EncryptedIndex) buildIndex(vaultDir string, identity *age.X25519Ident
 	}
 
 	for _, result := range collected {
-		if len(result.values) == 0 {
-			continue
+		if len(result.values) > 0 {
+			doc.Values[result.path] = result.values
+			addToTokenIndex(doc.TokenIndex, doc.PathTokens, result.values, result.path)
 		}
-
-		doc.Values[result.path] = result.values
-		addToTokenIndex(doc.TokenIndex, doc.PathTokens, result.values, result.path)
+		if len(result.hosts) > 0 {
+			addToHostIndex(doc.HostIndex, doc.PathHosts, result.hosts, result.path)
+		}
 	}
 
 	// Refuse to commit an index that covers zero entries when the vault
@@ -389,7 +398,7 @@ func (idx *EncryptedIndex) buildIndex(vaultDir string, identity *age.X25519Ident
 	// silently look empty. Returning an error lets callers fall back to
 	// the full decrypt path (or surface the problem to the user) instead
 	// of producing misleading "no matches" results.
-	if len(paths) > 0 && len(doc.Values) == 0 {
+	if len(paths) > 0 && len(doc.Values) == 0 && len(doc.HostIndex) == 0 {
 		return ErrIndexBuildEmpty
 	}
 
@@ -514,6 +523,82 @@ func (idx *EncryptedIndex) MatchEntries(vaultDir string, identity *age.X25519Ide
 	return matching, nil
 }
 
+// MatchHost decrypts the index and returns the subset of entry paths whose
+// "url" field matches the target URL or host (normalized). If candidates is
+// non-empty, only candidates that match are returned; if candidates is empty,
+// all matching paths in the vault index are returned.
+func (idx *EncryptedIndex) MatchHost(vaultDir string, identity *age.X25519Identity, candidates []string, targetHostOrURL string) (map[string]struct{}, error) {
+	if targetHostOrURL == "" {
+		return nil, nil
+	}
+
+	targetHost, err := NormalizeHost(targetHostOrURL)
+	if err != nil {
+		return nil, err
+	}
+
+	idx.mu.RLock()
+	ct := idx.ciphertext
+	idHash := idx.idHash
+	storedSalt := idx.salt
+	storedDir := idx.vaultDir
+	idx.mu.RUnlock()
+
+	if ct == nil {
+		return nil, nil
+	}
+
+	currentHash := sha256.Sum256([]byte(identity.Recipient().String()))
+	if currentHash != idHash {
+		return nil, errors.New("identity changed")
+	}
+	if canonicalVaultDir(storedDir) != canonicalVaultDir(vaultDir) {
+		return nil, errors.New("vault directory changed")
+	}
+
+	key := deriveIndexKey(identity, storedSalt)
+	defer vaultcrypto.Wipe(key)
+
+	plaintext, err := vaultcrypto.DecryptWithKey(ct, key)
+	if err != nil {
+		return nil, err
+	}
+	defer vaultcrypto.Wipe(plaintext)
+
+	var doc indexDoc
+	if err := json.Unmarshal(plaintext, &doc); err != nil {
+		return nil, err
+	}
+
+	if doc.HostIndex == nil {
+		return make(map[string]struct{}), nil
+	}
+
+	paths, found := doc.HostIndex[targetHost]
+	if !found || len(paths) == 0 {
+		return make(map[string]struct{}), nil
+	}
+
+	matching := make(map[string]struct{}, len(paths))
+	if len(candidates) > 0 {
+		candSet := make(map[string]struct{}, len(candidates))
+		for _, c := range candidates {
+			candSet[c] = struct{}{}
+		}
+		for path := range paths {
+			if _, ok := candSet[path]; ok {
+				matching[path] = struct{}{}
+			}
+		}
+	} else {
+		for path := range paths {
+			matching[path] = struct{}{}
+		}
+	}
+
+	return matching, nil
+}
+
 // IsBuilt returns true if the index has been built (ciphertext exists).
 func (idx *EncryptedIndex) IsBuilt() bool {
 	idx.mu.RLock()
@@ -599,9 +684,14 @@ func (idx *EncryptedIndex) UpdateEntry(vaultDir, path string, identity *age.X255
 	if doc.TokenIndex == nil {
 		doc.TokenIndex = make(map[string]map[string]struct{})
 	}
+	if doc.HostIndex == nil {
+		doc.HostIndex = make(map[string]map[string]struct{})
+	}
 	ensurePathTokens(&doc)
+	ensurePathHosts(&doc)
 
 	removeFromTokenIndex(doc.TokenIndex, doc.PathTokens, path)
+	removeFromHostIndex(doc.HostIndex, doc.PathHosts, path)
 	delete(doc.Values, path)
 
 	entry, readErr := ReadEntry(vaultDir, path, identity)
@@ -611,6 +701,10 @@ func (idx *EncryptedIndex) UpdateEntry(vaultDir, path string, identity *age.X255
 		if len(values) > 0 {
 			doc.Values[path] = values
 			addToTokenIndex(doc.TokenIndex, doc.PathTokens, values, path)
+		}
+		hosts := ExtractHostsFromData(entry.Data)
+		if len(hosts) > 0 {
+			addToHostIndex(doc.HostIndex, doc.PathHosts, hosts, path)
 		}
 	}
 
@@ -689,6 +783,10 @@ func (idx *EncryptedIndex) RemoveEntry(path string, identity *age.X25519Identity
 	if doc.TokenIndex != nil {
 		ensurePathTokens(&doc)
 		removeFromTokenIndex(doc.TokenIndex, doc.PathTokens, path)
+	}
+	if doc.HostIndex != nil {
+		ensurePathHosts(&doc)
+		removeFromHostIndex(doc.HostIndex, doc.PathHosts, path)
 	}
 	// A delete removes exactly one vault entry; keep the persisted entry count
 	// in step so the on-disk index stays valid (not flagged stale) on reload.
@@ -999,4 +1097,59 @@ func removeFromTokenIndex(ti map[string]map[string]struct{}, pt map[string][]str
 		}
 	}
 	delete(pt, path)
+}
+
+// addToHostIndex associates entry path with normalized hosts in doc.HostIndex and doc.PathHosts.
+func addToHostIndex(hi map[string]map[string]struct{}, ph map[string][]string, hosts []string, path string) {
+	if len(hosts) == 0 {
+		return
+	}
+	for _, host := range hosts {
+		if hi[host] == nil {
+			hi[host] = make(map[string]struct{})
+		}
+		hi[host][path] = struct{}{}
+	}
+	if ph != nil {
+		ph[path] = hosts
+	}
+}
+
+// removeFromHostIndex removes all references to path from doc.HostIndex using doc.PathHosts.
+func removeFromHostIndex(hi map[string]map[string]struct{}, ph map[string][]string, path string) {
+	hosts, ok := ph[path]
+	if !ok {
+		return
+	}
+	for _, host := range hosts {
+		paths, found := hi[host]
+		if !found {
+			continue
+		}
+		delete(paths, path)
+		if len(paths) == 0 {
+			delete(hi, host)
+		}
+	}
+	delete(ph, path)
+}
+
+// ensurePathHosts lazily rebuilds the reverse path→hosts map from HostIndex
+// for index documents written before PathHosts existed.
+func ensurePathHosts(doc *indexDoc) {
+	if doc.PathHosts != nil || doc.HostIndex == nil {
+		if doc.HostIndex == nil {
+			doc.HostIndex = make(map[string]map[string]struct{})
+		}
+		if doc.PathHosts == nil {
+			doc.PathHosts = make(map[string][]string)
+		}
+		return
+	}
+	doc.PathHosts = make(map[string][]string)
+	for host, paths := range doc.HostIndex {
+		for path := range paths {
+			doc.PathHosts[path] = append(doc.PathHosts[path], host)
+		}
+	}
 }

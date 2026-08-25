@@ -609,6 +609,15 @@ func (v *Vault) FindWithOptions(query string, opts FindOptions) ([]Match, error)
 	return findWithOptionsIdentity(v.Dir, query, opts, v.Identity)
 }
 
+// FindByURL searches this vault's entries matching the specified URL or host.
+func (v *Vault) FindByURL(targetURL string, opts FindOptions) ([]Match, error) {
+	if v == nil {
+		return nil, errors.New("vault is nil")
+	}
+	opts.URLFilter = targetURL
+	return findWithOptionsIdentity(v.Dir, "", opts, v.Identity)
+}
+
 // ReadEntry reads a single entry from this vault using the vault's identity.
 func (v *Vault) ReadEntry(path string) (*Entry, error) {
 	if v == nil {

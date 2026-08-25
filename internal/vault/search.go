@@ -595,6 +595,8 @@ type FindOptions struct {
 	// agent could probe the existence of a value in a redacted field via
 	// substring search (SEC-002).
 	RedactFieldPatterns []string
+	// URLFilter, if non-empty, matches entries by normalized host against their "url" field.
+	URLFilter string
 }
 
 // isRedactedField checks if a field name matches any redaction pattern.
@@ -624,6 +626,7 @@ func FindWithOptions(vaultDir string, query string, opts FindOptions, identity *
 	return findWithOptionsIdentity(vaultDir, query, opts, identity)
 }
 
+//nolint:gocyclo // Search orchestration: listing, filtering, decryption, ranking
 func findWithOptionsIdentity(vaultDir string, query string, opts FindOptions, identity *age.X25519Identity) ([]Match, error) {
 	start := time.Now()
 	defer func() {
@@ -637,6 +640,34 @@ func findWithOptionsIdentity(vaultDir string, query string, opts FindOptions, id
 
 	if identity == nil {
 		return nil, fmt.Errorf("no search identity available")
+	}
+
+	if opts.URLFilter != "" {
+		normHost, err := NormalizeHost(opts.URLFilter)
+		if err != nil {
+			return nil, fmt.Errorf("invalid url filter %q: %w", opts.URLFilter, err)
+		}
+
+		urlPaths, err := filterPathsUsingHostIndex(vaultDir, paths, normHost, identity)
+		if err != nil {
+			return nil, err
+		}
+
+		if query == "" {
+			var urlMatches []Match
+			for _, path := range urlPaths {
+				if opts.ScopeFilter != nil && !opts.ScopeFilter(path) {
+					continue
+				}
+				urlMatches = append(urlMatches, Match{Path: path, Fields: []string{"url"}})
+			}
+			sort.Slice(urlMatches, func(i, j int) bool {
+				return urlMatches[i].Path < urlMatches[j].Path
+			})
+			return urlMatches, nil
+		}
+
+		paths = urlPaths
 	}
 
 	needle := strings.ToLower(query)
@@ -836,6 +867,72 @@ func filterPathsUsingIndex(vaultDir string, candidates []string, needle string, 
 		result = append(result, path)
 	}
 	return result
+}
+
+// filterPathsUsingHostIndex uses the encrypted search index to find entries whose
+// "url" field matches the target host. Falls back to scanning candidate entries on
+// missing/stale index or decryption error.
+func filterPathsUsingHostIndex(vaultDir string, candidates []string, targetHost string, identity *age.X25519Identity) ([]string, error) {
+	if identity == nil {
+		return candidates, fmt.Errorf("no search identity available")
+	}
+
+	normHost, err := NormalizeHost(targetHost)
+	if err != nil {
+		return nil, err
+	}
+
+	idx := searchIndexForVault(vaultDir)
+	if !idx.Covers(vaultDir, identity) {
+		if loadErr := idx.loadFromDisk(vaultDir, identity); loadErr != nil || !idx.Covers(vaultDir, identity) {
+			if buildErr := idx.Build(vaultDir, identity); buildErr != nil {
+				return scanCandidatesForHost(vaultDir, candidates, normHost, identity), nil
+			}
+		}
+	}
+
+	matching, err := idx.MatchHost(vaultDir, identity, candidates, normHost)
+	if err != nil {
+		if buildErr := idx.Build(vaultDir, identity); buildErr != nil {
+			return scanCandidatesForHost(vaultDir, candidates, normHost, identity), nil
+		}
+		matching, err = idx.MatchHost(vaultDir, identity, candidates, normHost)
+		if err != nil {
+			return scanCandidatesForHost(vaultDir, candidates, normHost, identity), nil
+		}
+	}
+
+	if len(matching) == 0 {
+		return nil, nil
+	}
+
+	result := make([]string, 0, len(matching))
+	for path := range matching {
+		result = append(result, path)
+	}
+	sort.Strings(result)
+	return result, nil
+}
+
+// scanCandidatesForHost is the fallback for filterPathsUsingHostIndex when the index
+// is unavailable or fails to decrypt. It decrypts candidate entries to inspect their url fields.
+func scanCandidatesForHost(vaultDir string, candidates []string, targetHost string, identity *age.X25519Identity) []string {
+	var matching []string
+	for _, path := range candidates {
+		entry, err := ReadEntry(vaultDir, path, identity)
+		if err != nil {
+			continue
+		}
+		hosts := ExtractHostsFromData(entry.Data)
+		for _, h := range hosts {
+			if h == targetHost {
+				matching = append(matching, path)
+				break
+			}
+		}
+	}
+	sort.Strings(matching)
+	return matching
 }
 
 // collectStringValues recursively collects string values from a map.

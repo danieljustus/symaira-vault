@@ -806,3 +806,86 @@ func TestIsSensitiveCacheField_DenylistDeprecated(t *testing.T) {
 		}
 	}
 }
+
+func TestFindWithOptions_URLFilter(t *testing.T) {
+	vaultDir := t.TempDir()
+	id := testutil.TempIdentity(t)
+
+	mustWriteEntry(t, vaultDir, id, "work/github", map[string]interface{}{
+		"url":      "https://github.com/login",
+		"username": "alice",
+	})
+	mustWriteEntry(t, vaultDir, id, "personal/github", map[string]interface{}{
+		"url":      "http://github.com",
+		"username": "alice_personal",
+	})
+	mustWriteEntry(t, vaultDir, id, "work/gitlab", map[string]interface{}{
+		"url":      "https://gitlab.com",
+		"username": "alice_gitlab",
+	})
+
+	t.Run("match host by bare domain", func(t *testing.T) {
+		matches, err := FindWithOptions(vaultDir, "", FindOptions{URLFilter: "github.com"}, id)
+		if err != nil {
+			t.Fatalf("FindWithOptions() error = %v", err)
+		}
+		if len(matches) != 2 {
+			t.Fatalf("FindWithOptions() returned %d matches, want 2", len(matches))
+		}
+		if matches[0].Path != "personal/github" || matches[1].Path != "work/github" {
+			t.Errorf("matches = %v, want [personal/github, work/github]", matches)
+		}
+		if len(matches[0].Fields) != 1 || matches[0].Fields[0] != "url" {
+			t.Errorf("matches[0].Fields = %v, want [url]", matches[0].Fields)
+		}
+	})
+
+	t.Run("match host by full URL with path", func(t *testing.T) {
+		matches, err := FindWithOptions(vaultDir, "", FindOptions{URLFilter: "https://github.com/another/path"}, id)
+		if err != nil {
+			t.Fatalf("FindWithOptions() error = %v", err)
+		}
+		if len(matches) != 2 {
+			t.Fatalf("FindWithOptions() returned %d matches, want 2", len(matches))
+		}
+	})
+
+	t.Run("match with query filter", func(t *testing.T) {
+		matches, err := FindWithOptions(vaultDir, "personal", FindOptions{URLFilter: "github.com"}, id)
+		if err != nil {
+			t.Fatalf("FindWithOptions() error = %v", err)
+		}
+		if len(matches) != 1 || matches[0].Path != "personal/github" {
+			t.Fatalf("FindWithOptions(personal, github.com) = %v, want [personal/github]", matches)
+		}
+	})
+
+	t.Run("invalid url filter returns error", func(t *testing.T) {
+		_, err := FindWithOptions(vaultDir, "", FindOptions{URLFilter: "invalid::url"}, id)
+		if err == nil {
+			t.Fatal("FindWithOptions(invalid url) expected error, got nil")
+		}
+	})
+}
+
+func TestVault_FindByURL(t *testing.T) {
+	vaultDir := t.TempDir()
+	id := testutil.TempIdentity(t)
+
+	mustWriteEntry(t, vaultDir, id, "site/app", map[string]interface{}{
+		"url": "https://myapp.internal:8080/dashboard",
+	})
+
+	v := &Vault{
+		Dir:      vaultDir,
+		Identity: id,
+	}
+
+	matches, err := v.FindByURL("http://myapp.internal:8080", FindOptions{})
+	if err != nil {
+		t.Fatalf("FindByURL() error = %v", err)
+	}
+	if len(matches) != 1 || matches[0].Path != "site/app" {
+		t.Fatalf("FindByURL() = %v, want [site/app]", matches)
+	}
+}

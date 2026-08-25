@@ -17,6 +17,10 @@ Searches entry paths and contents for the given query.
 \fB-h\fP, \fB--help\fP[=false]
 	help for find
 
+.PP
+\fB--url\fP=""
+	Search entries matching a URL or host
+
 
 .SH OPTIONS INHERITED FROM PARENT COMMANDS
 \fB--color\fP="auto"
@@ -52,8 +56,13 @@ Searches entry paths and contents for the given query.
   # Search for entries containing "bank"
   symvault find bank
 
+  # Search for entries matching a URL or host
+  symvault find --url https://github.com/login
+  symvault find --url github.com
+
   # JSON output
   symvault find bank --output json
+  symvault find --url github.com --output json
 .EE
 
 
