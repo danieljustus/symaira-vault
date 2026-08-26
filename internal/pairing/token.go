@@ -1,15 +1,91 @@
 // Package pairing provides device pairing token generation and management.
+//
+// # Transport-independent pairing handshake
+//
+// The pairing exchange is deliberately separated from any transport. The
+// exchange consists of two JSON artifacts that any channel can carry — a git
+// remote, a synced folder (iCloud Drive), or a QR / manual copy exchange:
+//
+//  1. The existing device writes <token>.json (PairingFile) containing its
+//     public key and shares the file with the joining device.
+//  2. The joining device reads the file, generates its own keypair, and
+//     writes <token>-response.json (JoinResponse) containing its public key
+//     back to the same channel. In the git flow this artifact is written as
+//     <token>-joined.json inside the vault; the two names are aliases for
+//     the same response format so both transports interoperate.
+//  3. The existing device runs `device accept <token>`, which reads either
+//     name, re-encrypts all entries for the new recipient, and removes the
+//     artifacts.
+//
+// Nothing in this package performs I/O on a transport: callers decide how
+// the files travel. See cmd/device.go for the git-based wiring and ADR 0006
+// (D1) for the mobile rationale.
 package pairing
 
 import (
 	"crypto/rand"
 	"encoding/base32"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
 	"unicode"
 )
+
+// PairingFile is the invitation artifact written by the existing device
+// (`device pair`). Any transport that can deliver this file to the joining
+// device is sufficient; no git remote is required.
+type PairingFile struct {
+	Token     string    `json:"token"`
+	PublicKey string    `json:"public_key"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// JoinResponse is the response artifact written by the joining device
+// after it has read the PairingFile and generated its own identity.
+// On the git transport it is stored as `<token>-joined.json`; other
+// transports may use `<token>-response.json`. Both names are accepted by
+// `device accept`.
+type JoinResponse struct {
+	Token     string    `json:"token"`
+	Name      string    `json:"name"`
+	PublicKey string    `json:"public_key"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// ResponseFilenames returns the canonical filenames under which the join
+// response may be found for a token, in lookup order.
+func ResponseFilenames(token string) []string {
+	return []string{token + "-joined.json", token + "-response.json"}
+}
+
+// MarshalPairingFile serializes a PairingFile for exchange over any channel.
+func MarshalPairingFile(pf PairingFile) ([]byte, error) {
+	b, err := json.MarshalIndent(pf, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal pairing file: %w", err)
+	}
+	return b, nil
+}
+
+// ParsePairingFile parses an invitation artifact received over any channel.
+func ParsePairingFile(data []byte) (PairingFile, error) {
+	var pf PairingFile
+	if err := json.Unmarshal(data, &pf); err != nil {
+		return PairingFile{}, fmt.Errorf("parse pairing file: %w", err)
+	}
+	return pf, nil
+}
+
+// ParseJoinResponse parses a response artifact received over any channel.
+func ParseJoinResponse(data []byte) (JoinResponse, error) {
+	var jr JoinResponse
+	if err := json.Unmarshal(data, &jr); err != nil {
+		return JoinResponse{}, fmt.Errorf("parse join response: %w", err)
+	}
+	return jr, nil
+}
 
 // TokenTTL is the time-to-live for pairing tokens. Exported for testing.
 var TokenTTL = 5 * time.Minute
