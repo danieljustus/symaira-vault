@@ -17,6 +17,10 @@ type GitCommitOptions struct {
 type GitSyncer interface {
 	CreateGitignore(vaultDir string) error
 	AutoCommitAndPushWithOptions(vaultDir string, opts GitCommitOptions, autoPush bool) error
+	// EnsureGitOutside relocates the git repository out of the synced vault
+	// folder (used when the vault is replicated by a filesystem sync engine such
+	// as iCloud Drive, so the .git history is never synced).
+	EnsureGitOutside(vaultDir string) error
 }
 
 var (

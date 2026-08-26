@@ -90,7 +90,47 @@ mcp:
 | `argon2id_memory` | Argon2id memory cost parameter in KiB (default: 65536, floor: 19456, ceiling: 2097152) |
 | `argon2id_threads` | Argon2id parallelism parameter (default: 4, floor: 1, ceiling: 16) |
 
-## Authentication
+## Sync Config Options (filesystem sync / iCloud Drive)
+
+Symaira Vault supports replicating a vault across devices through a filesystem
+sync engine (currently iCloud Drive) instead of the built-in git backend. The
+Go CLI writes a plain vault directory, so an iCloud container path simply works
+as the vault directory — no Apple framework integration is required. This is
+what makes the vault usable from the CLI and the clients without operating any
+service (ADR 0006, D3/F4).
+
+Enable it with a `sync` block in the vault-specific config:
+
+```yaml
+# <vault>/config.yaml
+sync:
+  method: icloud-drive   # or "git" (default)
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `sync.method` | `git` | Replication backend: `git` (default, in-tree `.git`) or `icloud-drive` (filesystem sync engine) |
+
+Behavior when `method: icloud-drive`:
+
+- **`.git` stays out of the synced folder.** The git repository is relocated to
+  a local-only directory (derived from `XDG_DATA_HOME`), so the sync engine never
+  replicates git internals. This reuses the separate-git-directory support from
+  #863; the CLI remains the source of truth.
+- **Manifest verification on load.** `VerifyManifestIntegrity` and
+  `DetectOutOfBandEntries` run when the vault is opened. Out-of-band entries
+  (`.age` files present on disk but not in the manifest) are surfaced via
+  `Vault.SyncReport` rather than silently rebuilt, so the user can inspect
+  changes made directly in the synced folder.
+- **Deterministic conflict resolution.** When two devices edit the same entry,
+  the higher `EntryMetadata.Version` wins (last-writer-wins). The losing copy
+  is preserved as a conflict copy (`<name>.conflict-<timestamp>.age`) so no
+  data is ever lost.
+- **Keep `.git` out of the synced folder** is the only requirement; the macOS
+  and iOS clients consume the same vault directory. Non-Apple platforms continue
+  to use the git path.
+
+CloudKit is intentionally not used.
 
 Use `symvault auth status` to inspect the current unlock method and session
 cache backend. Use `symvault auth set touchid` on macOS to enable Touch ID

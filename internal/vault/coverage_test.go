@@ -561,6 +561,10 @@ func (m *mockGitSyncerFn) AutoCommitAndPushWithOptions(dir string, opts GitCommi
 	return nil
 }
 
+func (m *mockGitSyncerFn) EnsureGitOutside(dir string) error {
+	return nil
+}
+
 func TestGetEntryMetadataFileNotFound(t *testing.T) {
 	vaultDir := t.TempDir()
 	id := testutil.TempIdentity(t)

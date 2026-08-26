@@ -288,6 +288,12 @@ func mergeVaultConfig(raw *VaultConfig, sf map[string]bool, rawAuthMethod string
 	if sf["format_version"] {
 		defaults.FormatVersion = raw.FormatVersion
 	}
+	if raw.Sync != nil {
+		// The sync block selects the vault replication backend (git or a
+		// filesystem sync engine such as iCloud Drive). Propagate it
+		// verbatim; EffectiveMethod() validates and defaults the value.
+		defaults.Sync = raw.Sync
+	}
 	if sf["argon2id_time"] {
 		defaults.Argon2idTime = raw.Argon2idTime
 	}

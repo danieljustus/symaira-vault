@@ -7,8 +7,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/go-git/go-billy/v5/osfs"
 	gogit "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/cache"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/storage/filesystem"
 )
 
 var errStopIter = errors.New("stop iteration")
@@ -57,11 +60,22 @@ func openRepo(vaultDir string) (*gogit.Repository, error) {
 	if vaultDir == "" {
 		return nil, fmt.Errorf("empty vault dir")
 	}
-	repo, err := gogit.PlainOpen(vaultDir)
-	if err != nil {
-		return nil, err
+	// Fast path: a normal in-tree .git repository.
+	if repo, err := gogit.PlainOpen(vaultDir); err == nil {
+		return repo, nil
 	}
-	return repo, nil
+	// Filesystem-synced vaults (e.g. iCloud Drive) keep the .git directory
+	// outside the synced folder so it is never replicated. Open it through the
+	// deterministic external path with an explicit worktree; this requires no
+	// .git file inside the vault.
+	if IsGitExternal(vaultDir) {
+		ext := ExternalGitDirPath(vaultDir)
+		storage := filesystem.NewStorage(osfs.New(ext), cache.NewObjectLRUDefault())
+		if repo, err := gogit.Open(storage, osfs.New(vaultDir)); err == nil {
+			return repo, nil
+		}
+	}
+	return nil, gogit.ErrRepositoryNotExists
 }
 
 func formatAuthor(sig object.Signature) string {

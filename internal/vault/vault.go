@@ -32,6 +32,48 @@ func validateVaultDir(vaultDir string) error {
 	return nil
 }
 
+// isFilesystemSync reports whether cfg selects filesystem-based replication
+// (e.g. iCloud Drive) rather than git. Such vaults keep the .git directory
+// outside the synced folder and surface manifest verification on load.
+func isFilesystemSync(cfg *vaultconfig.Config) bool {
+	if cfg == nil || cfg.Vault == nil {
+		return false
+	}
+	return cfg.Vault.Sync.IsFilesystemSync()
+}
+
+// verifySyncedVault runs manifest integrity verification and out-of-band entry
+// detection for a filesystem-synced vault and returns a report. It reuses the
+// existing vault guards (VerifyManifestIntegrity / DetectOutOfBandEntries) and
+// never forks them. Verification errors are recorded in the report rather than
+// aborting the open: the caller decides how to surface them.
+func verifySyncedVault(vaultDir string, identity *age.X25519Identity, cfg *vaultconfig.Config) *SyncLoadReport {
+	report := &SyncLoadReport{Method: vaultconfig.SyncMethodGit}
+	if cfg != nil && cfg.Vault != nil && cfg.Vault.Sync != nil {
+		report.Method = cfg.Vault.Sync.EffectiveMethod()
+	}
+	if _, err := os.Stat(filepath.Join(vaultDir, manifestFileName)); err != nil {
+		if os.IsNotExist(err) {
+			return report
+		}
+		report.VerifyError = err.Error()
+		return report
+	}
+	verify, err := VerifyManifestIntegrity(vaultDir, identity)
+	if err != nil {
+		report.VerifyError = err.Error()
+		return report
+	}
+	report.Verify = verify
+	oob, err := DetectOutOfBandEntries(vaultDir, identity, cfg)
+	if err != nil {
+		report.VerifyError = err.Error()
+		return report
+	}
+	report.OutOfBand = oob
+	return report
+}
+
 type Vault struct {
 	Identity       *age.X25519Identity
 	Config         *vaultconfig.Config
@@ -49,7 +91,29 @@ type Vault struct {
 	Cache     *VaultCache
 	GitSyncer GitSyncer
 
+	// SyncReport summarizes manifest verification and out-of-band entry
+	// detection performed when the vault was opened. It is populated for
+	// filesystem-synced vaults (e.g. iCloud Drive) so the CLI / client can
+	// surface out-of-band changes to the user instead of silently swallowing
+	// them. It is nil for git-backed vaults or when no manifest exists yet.
+	SyncReport *SyncLoadReport
+
 	searchIdentity atomic.Pointer[age.X25519Identity]
+}
+
+// SyncLoadReport holds the integrity/out-of-band state discovered when a synced
+// vault is opened.
+type SyncLoadReport struct {
+	// Method is the effective sync method (e.g. config.SyncMethodICloudDrive).
+	Method string
+	// Verify is the result of VerifyManifestIntegrity, or nil if no manifest
+	// exists or verification failed.
+	Verify *ManifestVerifyResult
+	// OutOfBand lists .age files present on disk but not tracked by the manifest.
+	OutOfBand []string
+	// VerifyError records a non-fatal error encountered while verifying (the
+	// vault is still opened; the error is surfaced rather than swallowed).
+	VerifyError string
 }
 
 // WarmSearchIndex triggers a background build of the encrypted search index.
@@ -124,6 +188,15 @@ func Open(vaultDir string, identity *age.X25519Identity) (*Vault, error) {
 	// Flush any pending manifest updates before checking consistency.
 	FlushManifestUpdates()
 
+	// For filesystem-synced vaults (e.g. iCloud Drive) capture integrity and
+	// out-of-band state on load and surface it to the caller instead of
+	// silently rebuilding. The consistency block below may still rebuild the
+	// manifest, but the captured report is preserved.
+	var syncReport *SyncLoadReport
+	if isFilesystemSync(cfg) {
+		syncReport = verifySyncedVault(vaultDir, identity, cfg)
+	}
+
 	// Check manifest consistency: rebuild if missing, stale (config generation
 	// counter > manifest generation counter), or if the entries directory has
 	// .age files the manifest does not know about (typical after a git pull
@@ -152,13 +225,27 @@ func Open(vaultDir string, identity *age.X25519Identity) (*Vault, error) {
 			cache.SetListCacheTTL(cfg.Vault.ListingCacheTTL)
 		}
 	}
-	v := &Vault{Dir: vaultDir, Identity: identity, Config: cfg, Cache: cache}
+	v := &Vault{Dir: vaultDir, Identity: identity, Config: cfg, Cache: cache, SyncReport: syncReport}
 	v.searchIdentity.Store(identity)
 	if syncer := v.getGitSyncer(); syncer != nil {
+		if isFilesystemSync(cfg) {
+			// Keep the .git directory out of the synced folder so iCloud Drive
+			// does not replicate git internals.
+			if err := syncer.EnsureGitOutside(vaultDir); err != nil {
+				return nil, fmt.Errorf("relocate git outside synced folder: %w", err)
+			}
+		}
 		if _, err := os.Stat(filepath.Join(vaultDir, ".git")); err == nil {
 			if err := syncer.CreateGitignore(vaultDir); err != nil {
 				return nil, fmt.Errorf("update gitignore: %w", err)
 			}
+		}
+		// Resolve conflicting edits on the same logical entry deterministically
+		// (last-writer-wins by EntryMetadata.Version) and preserve the loser as
+		// a conflict copy so no data is ever lost. Required for two-device
+		// filesystem-sync edits to converge without clobbering entries.
+		if err := reconcileEntryConflicts(vaultDir, identity); err != nil {
+			return nil, fmt.Errorf("reconcile sync conflicts: %w", err)
 		}
 	}
 	registerVaultCache(vaultDir, cache)
