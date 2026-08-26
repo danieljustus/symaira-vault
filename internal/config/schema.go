@@ -26,6 +26,51 @@ type VaultConfig struct {
 	Argon2idThreads    int           `yaml:"argon2id_threads,omitempty"`
 	ListingCacheTTL    time.Duration `yaml:"listing_cache_ttl,omitempty"`
 	ManifestGeneration int           `yaml:"manifest_generation,omitempty"`
+	// Sync configures how the vault directory is replicated between devices.
+	// When Method is a filesystem-based sync (e.g. SyncMethodICloudDrive), the
+	// vault relies on an external sync engine (iCloud Drive) instead of git,
+	// the git repository is kept outside the synced folder, and manifest
+	// verification is surfaced on load.
+	Sync *SyncConfig `yaml:"sync,omitempty"`
+}
+
+// Sync methods supported by VaultConfig.Sync.Method.
+const (
+	// SyncMethodGit is the default: the vault is replicated with the built-in
+	// git backend, and the .git directory lives inside the vault folder.
+	SyncMethodGit = "git"
+	// SyncMethodICloudDrive keeps the vault inside an iCloud container and
+	// relies on iCloud Drive for replication. The .git directory is kept
+	// outside the synced folder and manifest verification is surfaced on load.
+	SyncMethodICloudDrive = "icloud-drive"
+)
+
+// SyncConfig holds vault replication configuration.
+type SyncConfig struct {
+	// Method selects the replication backend: SyncMethodGit (default) or
+	// SyncMethodICloudDrive. An empty Method is treated as SyncMethodGit.
+	Method string `yaml:"method,omitempty"`
+}
+
+// EffectiveMethod returns the sync method, defaulting to SyncMethodGit when
+// unset or unknown.
+func (s *SyncConfig) EffectiveMethod() string {
+	if s == nil || s.Method == "" {
+		return SyncMethodGit
+	}
+	switch s.Method {
+	case SyncMethodGit, SyncMethodICloudDrive:
+		return s.Method
+	default:
+		return SyncMethodGit
+	}
+}
+
+// IsFilesystemSync reports whether the vault is replicated by a filesystem sync
+// engine (e.g. iCloud Drive) rather than git. Such vaults must keep the .git
+// directory outside the synced folder and surface manifest verification.
+func (s *SyncConfig) IsFilesystemSync() bool {
+	return s != nil && s.EffectiveMethod() == SyncMethodICloudDrive
 }
 
 // GitConfig holds git-related configuration for automatic commits and pushes.

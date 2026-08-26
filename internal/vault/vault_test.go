@@ -344,6 +344,11 @@ func (m *mockGitSyncer) AutoCommitAndPushWithOptions(vaultDir string, opts GitCo
 	return nil
 }
 
+// EnsureGitOutside satisfies the GitSyncer interface for the mock.
+func (m *mockGitSyncer) EnsureGitOutside(vaultDir string) error {
+	return nil
+}
+
 func TestAutoCommitCreatesGitCommit(t *testing.T) {
 	vaultDir := t.TempDir()
 	identity := testutil.TempIdentity(t)

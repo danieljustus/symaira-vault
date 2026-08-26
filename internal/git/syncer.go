@@ -27,3 +27,8 @@ func (s *Syncer) AutoCommitAndPushWithOptions(vaultDir string, opts vault.GitCom
 		AffectedPaths: opts.AffectedPaths,
 	}, autoPush)
 }
+
+// EnsureGitOutside relocates the git repository out of the synced vault folder.
+func (s *Syncer) EnsureGitOutside(vaultDir string) error {
+	return EnsureGitOutside(vaultDir)
+}

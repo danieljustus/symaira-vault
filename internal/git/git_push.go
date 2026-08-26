@@ -102,7 +102,9 @@ func PushWithResult(vaultDir string) PushResult {
 
 	// For SSH remotes, prefer the user's system git/OpenSSH setup so that
 	// ~/.ssh/config, the SSH agent, and known_hosts behave exactly like normal git.
-	if isSSHURL(remoteURL) && systemGitAvailable() {
+	// External (out-of-tree) git repositories have no .git in the vault, so
+	// system git cannot find them; fall back to go-git's native SSH transport.
+	if isSSHURL(remoteURL) && systemGitAvailable() && !IsGitExternal(vaultDir) {
 		sysErr := pushWithTimeout(pushTimeout, func(ctx context.Context) error {
 			return pushWithSystemGit(ctx, vaultDir)
 		})
