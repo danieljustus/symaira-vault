@@ -113,6 +113,211 @@ func TestDeviceAccept_DisplaysFingerprintAndAccepts(t *testing.T) {
 	}
 }
 
+// ===== Transport-independent pairing handshake (#867) =====
+
+func TestDeviceJoin_PairingFile_FullFlow(t *testing.T) {
+	vaultDir, passphrase := initVault(t)
+	_ = vaultDir
+	setPassEnv(t, string(passphrase)) // not used by join; join reads the passphrase from stdin
+	vaultFlagReset(t)
+
+	token, err := pairing.GenerateToken()
+	if err != nil {
+		t.Fatalf("generate token: %v", err)
+	}
+
+	existingIdentity, err := cryptopkg.GenerateIdentity()
+	if err != nil {
+		t.Fatalf("generate existing identity: %v", err)
+	}
+	pf := pairing.PairingFile{
+		Token:     string(token),
+		PublicKey: existingIdentity.Recipient().String(),
+		CreatedAt: time.Now().UTC(),
+	}
+	pfBytes, err := json.MarshalIndent(pf, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal pairing file: %v", err)
+	}
+	pairingFilePath := filepath.Join(t.TempDir(), "pairing-invite.json")
+	if err := os.WriteFile(pairingFilePath, pfBytes, 0o600); err != nil {
+		t.Fatalf("write pairing file: %v", err)
+	}
+
+	joinDir := t.TempDir()
+
+	restore := pipeStdin(t, "test-passphrase-for-joined-device\n")
+	t.Cleanup(restore)
+
+	rootCmd.SetArgs([]string{"--vault", joinDir, "device", "join", "--name", "file-phone",
+		"--pairing-file", pairingFilePath, string(token)})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+
+	var execErr error
+	output := captureStdout(func() {
+		execErr = rootCmd.Execute()
+	})
+
+	if execErr != nil {
+		t.Fatalf("device join --pairing-file execute failed: %v", execErr)
+	}
+
+	// Response artifact must exist under the -response.json name and carry
+	// the joining device's public key.
+	respPath := filepath.Join(joinDir, configpkg.DefaultVaultSubdir, "pairing", string(token)+"-response.json")
+	respData, err := os.ReadFile(respPath)
+	if err != nil {
+		t.Fatalf("response artifact missing at %s: %v", respPath, err)
+	}
+	var resp pairing.JoinResponse
+	if err := json.Unmarshal(respData, &resp); err != nil {
+		t.Fatalf("parse response artifact: %v", err)
+	}
+	if !strings.HasPrefix(resp.PublicKey, "age1") {
+		t.Errorf("unexpected public key in response: %q", resp.PublicKey)
+	}
+	if resp.Name != "file-phone" {
+		t.Errorf("expected device name file-phone, got %q", resp.Name)
+	}
+	if !strings.Contains(output, "Response artifact written to:") {
+		t.Errorf("output missing response artifact path hint: %q", output)
+	}
+	if strings.Contains(output, "Cloning vault from") {
+		t.Errorf("file flow must not clone a git remote: %q", output)
+	}
+
+	// recipients.txt must contain the existing device's public key.
+	recipData, err := os.ReadFile(filepath.Join(joinDir, "recipients.txt"))
+	if err != nil {
+		t.Fatalf("read recipients.txt: %v", err)
+	}
+	if !strings.Contains(string(recipData), pf.PublicKey) {
+		t.Errorf("recipients.txt missing existing public key %s", pf.PublicKey)
+	}
+}
+
+func TestDeviceJoin_PairingFile_TokenMismatchRejected(t *testing.T) {
+	vaultDir, passphrase := initVault(t)
+	_ = vaultDir
+	setPassEnv(t, string(passphrase))
+	vaultFlagReset(t)
+
+	token, err := pairing.GenerateToken()
+	if err != nil {
+		t.Fatalf("generate token: %v", err)
+	}
+	otherToken, err := pairing.GenerateToken()
+	if err != nil {
+		t.Fatalf("generate other token: %v", err)
+	}
+
+	existingIdentity, err := cryptopkg.GenerateIdentity()
+	if err != nil {
+		t.Fatalf("generate existing identity: %v", err)
+	}
+	pf := pairing.PairingFile{
+		Token:     string(otherToken),
+		PublicKey: existingIdentity.Recipient().String(),
+		CreatedAt: time.Now().UTC(),
+	}
+	pfBytes, err := json.MarshalIndent(pf, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal pairing file: %v", err)
+	}
+	pairingFilePath := filepath.Join(t.TempDir(), "pairing-invite.json")
+	if err := os.WriteFile(pairingFilePath, pfBytes, 0o600); err != nil {
+		t.Fatalf("write pairing file: %v", err)
+	}
+
+	joinDir := t.TempDir()
+
+	rootCmd.SetArgs([]string{"--vault", joinDir, "device", "join",
+		"--pairing-file", pairingFilePath, string(token)})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+
+	var execErr error
+	captureStderr(func() {
+		execErr = rootCmd.Execute()
+	})
+
+	if execErr == nil {
+		t.Fatal("expected error for mismatched tokens")
+	}
+	if !strings.Contains(execErr.Error(), "does not match") {
+		t.Errorf("unexpected error message: %v", execErr)
+	}
+}
+
+func TestDeviceAccept_AcceptsResponseArtefact(t *testing.T) {
+	vaultDir, passphrase := initVault(t)
+	setPassEnv(t, string(passphrase))
+	vaultFlagReset(t)
+
+	joiningIdentity, err := cryptopkg.GenerateIdentity()
+	if err != nil {
+		t.Fatalf("generate joining identity: %v", err)
+	}
+	joiningPubkey := joiningIdentity.Recipient().String()
+
+	token, err := pairing.GenerateToken()
+	if err != nil {
+		t.Fatalf("generate token: %v", err)
+	}
+
+	jr := joinedFile{
+		Token:     string(token),
+		Name:      "response-phone",
+		PublicKey: joiningPubkey,
+		CreatedAt: time.Now().UTC(),
+	}
+	pairingDir := filepath.Join(vaultDir, configpkg.DefaultVaultSubdir, "pairing")
+	if err := os.MkdirAll(pairingDir, 0o700); err != nil {
+		t.Fatalf("mkdir pairing dir: %v", err)
+	}
+	jrBytes, err := json.MarshalIndent(jr, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal join response: %v", err)
+	}
+	respPath := filepath.Join(pairingDir, string(token)+"-response.json")
+	if err := os.WriteFile(respPath, jrBytes, 0o600); err != nil {
+		t.Fatalf("write join response: %v", err)
+	}
+
+	rootCmd.SetArgs([]string{"--vault", vaultDir, "device", "accept", string(token)})
+	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+
+	var execErr error
+	output := captureStdout(func() {
+		execErr = rootCmd.Execute()
+	})
+
+	if execErr != nil {
+		t.Fatalf("device accept (response artifact) failed: %v", execErr)
+	}
+	if !strings.Contains(output, `Device "response-phone" can now access all vault entries.`) {
+		t.Errorf("output missing device grant confirmation: %q", output)
+	}
+
+	rm := vaultpkg.NewRecipientsManager(vaultDir)
+	recipients, err := rm.LoadRecipientStrings()
+	if err != nil {
+		t.Fatalf("load recipients: %v", err)
+	}
+	found := false
+	for _, r := range recipients {
+		if r == joiningPubkey {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("joining public key %s not found in recipients list %v", joiningPubkey, recipients)
+	}
+	if _, err := os.Stat(respPath); !os.IsNotExist(err) {
+		t.Errorf("response artifact still exists at %s", respPath)
+	}
+}
+
 func TestDevicePair_DisplaysFingerprint(t *testing.T) {
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))

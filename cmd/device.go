@@ -27,6 +27,7 @@ import (
 var (
 	defaultDeviceName string
 	deviceRevokeYes   bool
+	joinPairingFile   string
 )
 
 // deviceCmd is retained for API compatibility; NewCommands() uses
@@ -110,6 +111,9 @@ for the new device.`,
 			printQuietAware("Key fingerprint:          %s (SHA-256)\n", cryptopkg.PublicKeyFingerprint(publicKey))
 			printQuietAware("\nOn the joining device, run:\n")
 			printQuietAware("  symvault device join <remote-url> %s\n\n", token)
+			printQuietAware("Without a git remote, share %s by any channel and run:\n",
+				filepath.Join(configpkg.DefaultVaultSubdir, "pairing", string(token)+".json"))
+			printQuietAware("  symvault device join --pairing-file <path-to-token.json> %s\n\n", token)
 			printQuietAware("After the joining device has submitted its key, run:\n")
 			printQuietAware("  symvault device accept %s\n\n", token)
 
@@ -117,6 +121,106 @@ for the new device.`,
 		},
 	}
 	return devicePairCmd
+}
+
+// resolveJoinPairing validates command-line arguments and returns the pairing
+// token plus, for the --pairing-file transport, the parsed invitation.
+func resolveJoinPairing(pairingFilePath string, args []string) (string, pairing.PairingFile, error) {
+	if pairingFilePath != "" {
+		if len(args) != 1 {
+			return "", pairing.PairingFile{}, fmt.Errorf("with --pairing-file, pass only the pairing token: 'device join --pairing-file <path> <token>'")
+		}
+		token := strings.TrimSpace(args[0])
+		if valErr := pairing.ValidatePairingToken(token); valErr != nil {
+			return "", pairing.PairingFile{}, fmt.Errorf("invalid pairing token: %w", valErr)
+		}
+		// #nosec G304 -- path comes from the operator's own command line
+		pfData, readErr := os.ReadFile(pairingFilePath)
+		if readErr != nil {
+			return "", pairing.PairingFile{}, fmt.Errorf("read pairing file: %w", readErr)
+		}
+		pf, parseErr := pairing.ParsePairingFile(pfData)
+		if parseErr != nil {
+			return "", pairing.PairingFile{}, parseErr
+		}
+		if pf.Token != "" && pf.Token != token {
+			return "", pairing.PairingFile{}, fmt.Errorf("pairing file token %q does not match the given token %q", pf.Token, token)
+		}
+		if pf.PublicKey == "" || !strings.HasPrefix(pf.PublicKey, "age1") {
+			return "", pairing.PairingFile{}, fmt.Errorf("invalid pairing file: missing or malformed public_key")
+		}
+		return token, pf, nil
+	}
+
+	if len(args) != 2 {
+		return "", pairing.PairingFile{}, fmt.Errorf("accepts between 1 and 2 arg(s), received %d — either '<remote-url> <token>' or '--pairing-file <path> <token>'", len(args))
+	}
+	token := strings.TrimSpace(args[1])
+	if valErr := pairing.ValidatePairingToken(token); valErr != nil {
+		return "", pairing.PairingFile{}, fmt.Errorf("invalid pairing token: %w", valErr)
+	}
+	return token, pairing.PairingFile{}, nil
+}
+
+// loadGitPairingFile reads the invitation written by 'device pair' from the
+// cloned vault on the git transport.
+func loadGitPairingFile(vaultDir, token string) (pairing.PairingFile, error) {
+	pairingPath := filepath.Join(vaultDir, configpkg.DefaultVaultSubdir, "pairing", token+".json")
+	// #nosec G304 -- pairingPath is constructed within the vault directory
+	pfData, err := vaultpkg.SafeReadFile(pairingPath)
+	if err != nil {
+		return pairing.PairingFile{}, fmt.Errorf("invalid or expired pairing token: could not read pairing file. Ensure the token is correct and the pairing device has pushed the token file: %w", err)
+	}
+	var pf pairingFile
+	if err := json.Unmarshal(pfData, &pf); err != nil {
+		return pairing.PairingFile{}, fmt.Errorf("invalid pairing file: %w", err)
+	}
+	return pairing.PairingFile{
+		Token:     pf.Token,
+		PublicKey: pf.PublicKey,
+		CreatedAt: pf.CreatedAt,
+	}, nil
+}
+
+// setupJoinedDevice writes the joining device's local vault files — config,
+// encrypted identity, and the recipients list — and returns its public key.
+func setupJoinedDevice(vaultDir, existingPubkey string, passphrase []byte) (string, error) {
+	identity, err := cryptopkg.GenerateIdentity()
+	if err != nil {
+		return "", fmt.Errorf("generate identity: %w", err)
+	}
+	myPubkey := identity.Recipient().String()
+
+	cfg := configpkg.Default()
+	cfg.VaultDir = vaultDir
+	cfg.Git = &configpkg.GitConfig{
+		AutoPush:         true,
+		AutoPull:         true,
+		AutoPullInterval: 10 * time.Second,
+		CommitTemplate:   "Update from Symaira Vault",
+	}
+
+	cfgPath := filepath.Join(vaultDir, "config.yaml")
+	cfgData, err := yaml.Marshal(cfg)
+	if err != nil {
+		return "", fmt.Errorf("marshal config: %w", err)
+	}
+	if err := os.WriteFile(cfgPath, cfgData, 0o600); err != nil {
+		return "", fmt.Errorf("write config: %w", err)
+	}
+
+	identityPath := filepath.Join(vaultDir, "identity.age")
+	if err := cryptopkg.SaveIdentity(identity, identityPath, passphrase, 0); err != nil {
+		return "", fmt.Errorf("save identity: %w", err)
+	}
+
+	recipientsPath := filepath.Join(vaultDir, "recipients.txt")
+	recipientsContent := fmt.Sprintf("# Symaira Vault vault recipients\n# Added by device join\n%s\n", existingPubkey)
+	if err := os.WriteFile(recipientsPath, []byte(recipientsContent), 0o600); err != nil {
+		return "", fmt.Errorf("write recipients: %w", err)
+	}
+
+	return myPubkey, nil
 }
 
 func newDeviceJoinCmd() *cobra.Command {
@@ -130,15 +234,21 @@ the existing device's public key, generates a new identity for this device,
 and submits this device's public key back to the vault.
 
 After completion, the existing device must run 'symvault device accept <token>'
-to re-encrypt all entries for this new device.`,
-		Example: `  symvault device join ssh://user@host/path/to/vault.git 123456`,
-		Args:    cobra.ExactArgs(2),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			remoteURL := args[0]
-			token := strings.TrimSpace(args[1])
+to re-encrypt all entries for this new device.
 
-			if err := pairing.ValidatePairingToken(token); err != nil {
-				return fmt.Errorf("invalid pairing token: %w", err)
+To join without a git remote, pass the invitation artifact directly with
+--pairing-file. The file is the <token>.json written by 'symvault device pair'
+on the existing device; it can travel over any channel (synced folder, AirDrop,
+manual copy). The response artifact is then left in the local vault directory
+as <token>-response.json for delivery back to the existing device by any
+means; 'symvault device accept' accepts both <token>-joined.json (git flow)
+and <token>-response.json (file flow).`,
+		Example: `  symvault device join ssh://user@host/path/to/vault.git 123456
+  symvault device join --pairing-file ~/Downloads/ABCD1234.json`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			token, pairingPF, err := resolveJoinPairing(joinPairingFile, args)
+			if err != nil {
+				return err
 			}
 
 			vaultDir, err := cli.VaultPath()
@@ -150,26 +260,23 @@ to re-encrypt all entries for this new device.`,
 				return fmt.Errorf("vault already initialized at %s. Use a different --vault or remove the existing vault first", vaultDir)
 			}
 
-			cliout.Hintf("Cloning vault from %s ...", remoteURL)
-			if _, err = gogit.PlainClone(vaultDir, false, &gogit.CloneOptions{
-				URL:      remoteURL,
-				Progress: os.Stderr,
-			}); err != nil {
-				return fmt.Errorf("clone vault: %w", err)
+			if joinPairingFile != "" {
+				cliout.Hintf("Pairing without git transport using %s", joinPairingFile)
+			} else {
+				cliout.Hintf("Cloning vault from %s ...", args[0])
+				if _, err = gogit.PlainClone(vaultDir, false, &gogit.CloneOptions{
+					URL:      args[0],
+					Progress: os.Stderr,
+				}); err != nil {
+					return fmt.Errorf("clone vault: %w", err)
+				}
+				pairingPF, err = loadGitPairingFile(vaultDir, token)
+				if err != nil {
+					return err
+				}
 			}
 
-			pairingPath := filepath.Join(vaultDir, configpkg.DefaultVaultSubdir, "pairing", token+".json")
-			var pf pairingFile
-			// #nosec G304 -- pairingPath is constructed within the vault directory
-			pfData, err := vaultpkg.SafeReadFile(pairingPath)
-			if err != nil {
-				return fmt.Errorf("invalid or expired pairing token: could not read pairing file. Ensure the token is correct and the pairing device has pushed the token file: %w", err)
-			}
-			if err = json.Unmarshal(pfData, &pf); err != nil {
-				return fmt.Errorf("invalid pairing file: %w", err)
-			}
-
-			cliout.Hintf("Pairing with device (public key: %s)", truncatePubkey(pf.PublicKey))
+			cliout.Hintf("Pairing with device (public key: %s)", truncatePubkey(pairingPF.PublicKey))
 
 			passphrase, err := cli.ReadHiddenInput("Enter passphrase for this device (minimum 12 characters): ", nil)
 			if err != nil {
@@ -180,39 +287,9 @@ to re-encrypt all entries for this new device.`,
 				return fmt.Errorf("passphrase must be at least 12 characters")
 			}
 
-			identity, err := cryptopkg.GenerateIdentity()
+			myPubkey, err := setupJoinedDevice(vaultDir, pairingPF.PublicKey, passphrase)
 			if err != nil {
-				return fmt.Errorf("generate identity: %w", err)
-			}
-			myPubkey := identity.Recipient().String()
-
-			cfg := configpkg.Default()
-			cfg.VaultDir = vaultDir
-			cfg.Git = &configpkg.GitConfig{
-				AutoPush:         true,
-				AutoPull:         true,
-				AutoPullInterval: 10 * time.Second,
-				CommitTemplate:   "Update from Symaira Vault",
-			}
-
-			cfgPath := filepath.Join(vaultDir, "config.yaml")
-			cfgData, err := yaml.Marshal(cfg)
-			if err != nil {
-				return fmt.Errorf("marshal config: %w", err)
-			}
-			if err := os.WriteFile(cfgPath, cfgData, 0o600); err != nil {
-				return fmt.Errorf("write config: %w", err)
-			}
-
-			identityPath := filepath.Join(vaultDir, "identity.age")
-			if err := cryptopkg.SaveIdentity(identity, identityPath, passphrase, 0); err != nil {
-				return fmt.Errorf("save identity: %w", err)
-			}
-
-			recipientsPath := filepath.Join(vaultDir, "recipients.txt")
-			recipientsContent := fmt.Sprintf("# Symaira Vault vault recipients\n# Added by device join\n%s\n", pf.PublicKey)
-			if err := os.WriteFile(recipientsPath, []byte(recipientsContent), 0o600); err != nil {
-				return fmt.Errorf("write recipients: %w", err)
+				return err
 			}
 
 			joinedData := joinedFile{
@@ -228,8 +305,19 @@ to re-encrypt all entries for this new device.`,
 				}
 			}
 
-			if err := savePairingFile(vaultDir, token+"-joined.json", joinedData); err != nil {
+			responseFilename := token + "-joined.json"
+			if joinPairingFile != "" {
+				// File-transport flow: leave a self-describing response artifact
+				// in the local vault directory. It is not committed to git; the
+				// operator delivers it back to the existing device out of band.
+				responseFilename = token + "-response.json"
+			}
+			if err := savePairingFile(vaultDir, responseFilename, joinedData); err != nil {
 				return fmt.Errorf("save joined file: %w", err)
+			}
+			if joinPairingFile != "" {
+				printQuietAware("\nResponse artifact written to: %s\n",
+					filepath.Join(vaultDir, configpkg.DefaultVaultSubdir, "pairing", responseFilename))
 			}
 
 			cleanupPairingFile := filepath.Join(vaultDir, configpkg.DefaultVaultSubdir, "pairing", token+".json")
@@ -250,15 +338,18 @@ to re-encrypt all entries for this new device.`,
 			printQuietAware("On the existing device, run:\n")
 			printQuietAware("  symvault device accept %s\n\n", token)
 
-			if err := git.Push(vaultDir); err != nil {
-				cliout.Warnf("Warning: Could not push joined file: %v", err)
-				cliout.Hintf("Push manually with: symvault git push")
+			if joinPairingFile == "" {
+				if err := git.Push(vaultDir); err != nil {
+					cliout.Warnf("Warning: Could not push joined file: %v", err)
+					cliout.Hintf("Push manually with: symvault git push")
+				}
 			}
 
 			return nil
 		},
 	}
 	deviceJoinCmd.Flags().StringVar(&defaultDeviceName, "name", "", "Name for this device (defaults to hostname)")
+	deviceJoinCmd.Flags().StringVar(&joinPairingFile, "pairing-file", "", "Join without a git remote: path to the <token>.json invitation artifact produced by 'device pair'")
 	return deviceJoinCmd
 }
 
@@ -288,15 +379,29 @@ can decrypt them.`,
 				return err
 			}
 
-			joinedPath := filepath.Join(vaultDir, configpkg.DefaultVaultSubdir, "pairing", token+"-joined.json")
-			var jf joinedFile
-			// #nosec G304 -- joinedPath is constructed within the vault directory
-			jfData, err := vaultpkg.SafeReadFile(joinedPath)
-			if err != nil {
-				return fmt.Errorf("no join request found for token %s. Ensure the joining device has completed 'symvault device join' and pushed: %w", token, err)
+			// The join response may arrive under either canonical name:
+			// <token>-joined.json (git transport) or <token>-response.json
+			// (transport-independent flow). Both carry the same format.
+			var (
+				jf        joinedFile
+				jfData    []byte
+				foundName string
+			)
+			for _, name := range pairing.ResponseFilenames(token) {
+				candidatePath := filepath.Join(vaultDir, configpkg.DefaultVaultSubdir, "pairing", name)
+				// #nosec G304 -- candidatePath is constructed within the vault directory
+				data, readErr := vaultpkg.SafeReadFile(candidatePath)
+				if readErr == nil {
+					jfData = data
+					foundName = name
+					break
+				}
+			}
+			if jfData == nil {
+				return fmt.Errorf("no join request found for token %s. Ensure the joining device has completed 'symvault device join' and the response artifact (%s-joined.json or %s-response.json) is present in the vault", token, token, token)
 			}
 			if err = json.Unmarshal(jfData, &jf); err != nil {
-				return fmt.Errorf("parse joined file: %w", err)
+				return fmt.Errorf("parse joined file %s: %w", foundName, err)
 			}
 
 			fp := cryptopkg.PublicKeyFingerprint(jf.PublicKey)
@@ -324,7 +429,8 @@ can decrypt them.`,
 				return fmt.Errorf("re-encrypt: %w", err)
 			}
 
-			_ = os.Remove(joinedPath)
+			// Remove the response artifact under whichever name it was found.
+			_ = os.Remove(filepath.Join(vaultDir, configpkg.DefaultVaultSubdir, "pairing", foundName))
 
 			if err := git.AutoCommitAndPush(vaultDir, fmt.Sprintf("Accept device join: %s", jf.Name), gitAutoPush(v)); err != nil {
 				cliout.Warnf("Warning: could not auto-commit/push: %v", err)

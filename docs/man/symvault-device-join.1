@@ -21,6 +21,15 @@ and submits this device's public key back to the vault.
 After completion, the existing device must run 'symvault device accept \&'
 to re-encrypt all entries for this new device.
 
+.PP
+To join without a git remote, pass the invitation artifact directly with
+--pairing-file. The file is the \&.json written by 'symvault device pair'
+on the existing device; it can travel over any channel (synced folder, AirDrop,
+manual copy). The response artifact is then left in the local vault directory
+as -response.json for delivery back to the existing device by any
+means; 'symvault device accept' accepts both -joined.json (git flow)
+and -response.json (file flow).
+
 
 .SH OPTIONS
 \fB-h\fP, \fB--help\fP[=false]
@@ -29,6 +38,10 @@ to re-encrypt all entries for this new device.
 .PP
 \fB--name\fP=""
 	Name for this device (defaults to hostname)
+
+.PP
+\fB--pairing-file\fP=""
+	Join without a git remote: path to the \&.json invitation artifact produced by 'device pair'
 
 
 .SH OPTIONS INHERITED FROM PARENT COMMANDS
@@ -67,6 +80,7 @@ to re-encrypt all entries for this new device.
 .SH EXAMPLE
 .EX
   symvault device join ssh://user@host/path/to/vault.git 123456
+  symvault device join --pairing-file ~/Downloads/ABCD1234.json
 .EE
 
 
