@@ -6,6 +6,77 @@ import (
 	"time"
 )
 
+// ===== Transport-independent pairing artifacts (#867) =====
+
+func TestResponseFilenames(t *testing.T) {
+	got := ResponseFilenames("ABC123")
+	want := []string{"ABC123-joined.json", "ABC123-response.json"}
+	if len(got) != len(want) {
+		t.Fatalf("expected %d names, got %d", len(want), len(got))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("name[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestMarshalAndParsePairingFile(t *testing.T) {
+	pf := PairingFile{
+		Token:     "ABC123",
+		PublicKey: "age1example",
+		CreatedAt: time.Date(2026, 8, 26, 0, 0, 0, 0, time.UTC),
+	}
+	data, err := MarshalPairingFile(pf)
+	if err != nil {
+		t.Fatalf("MarshalPairingFile error: %v", err)
+	}
+	if !strings.Contains(string(data), `"public_key": "age1example"`) {
+		t.Errorf("serialized artifact missing public_key field: %s", data)
+	}
+	parsed, err := ParsePairingFile(data)
+	if err != nil {
+		t.Fatalf("ParsePairingFile error: %v", err)
+	}
+	if parsed.Token != pf.Token || parsed.PublicKey != pf.PublicKey || !parsed.CreatedAt.Equal(pf.CreatedAt) {
+		t.Errorf("round-trip mismatch: %+v != %+v", parsed, pf)
+	}
+}
+
+func TestParsePairingFile_InvalidJSON(t *testing.T) {
+	if _, err := ParsePairingFile([]byte("{not json")); err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+func TestParseJoinResponse(t *testing.T) {
+	jr := JoinResponse{
+		Token:     "ABC123",
+		Name:      "phone",
+		PublicKey: "age1joined",
+		CreatedAt: time.Date(2026, 8, 26, 0, 0, 0, 0, time.UTC),
+	}
+	data, err := MarshalPairingFile(PairingFile{Token: jr.Token, PublicKey: jr.PublicKey, CreatedAt: jr.CreatedAt})
+	_ = data
+	_ = err
+	// JoinResponse uses the same JSON shape; parse a hand-built body to keep
+	// the two formats independently verified.
+	body := []byte(`{"token":"ABC123","name":"phone","public_key":"age1joined","created_at":"2026-08-26T00:00:00Z"}`)
+	parsed, err := ParseJoinResponse(body)
+	if err != nil {
+		t.Fatalf("ParseJoinResponse error: %v", err)
+	}
+	if parsed.Token != jr.Token || parsed.Name != jr.Name || parsed.PublicKey != jr.PublicKey {
+		t.Errorf("round-trip mismatch: %+v != %+v", parsed, jr)
+	}
+}
+
+func TestParseJoinResponse_InvalidJSON(t *testing.T) {
+	if _, err := ParseJoinResponse([]byte("[1,2,3]")); err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
 func TestNewTokenStore(t *testing.T) {
 	ts := NewTokenStore()
 	if ts == nil {
