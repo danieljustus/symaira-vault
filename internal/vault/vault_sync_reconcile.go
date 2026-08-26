@@ -26,26 +26,22 @@ func entryFileStem(name string) string {
 
 // higherVersion returns the candidate with the higher EntryMetadata.Version,
 // breaking ties deterministically by the most recent Updated timestamp and
-// then by the lexicographically smaller path, so the outcome never depends on
-// directory ordering. It mirrors sync.WinnerByVersion without importing the
-// sync package (which would create an import cycle).
-func higherVersion(aPath string, a EntryMetadata, bPath string, b EntryMetadata) (winPath string, winMeta EntryMetadata, losPath string, losMeta EntryMetadata) {
+// versionAfter reports whether a should win over b in the deterministic
+// last-writer-wins policy: higher EntryMetadata.Version wins, then the more
+// recently Updated timestamp, then the lexicographically larger path as a
+// stable tiebreak so the outcome never depends on directory ordering. It
+// mirrors sync.WinnerByVersion without importing the sync package (which would
+// create an import cycle).
+func versionAfter(a EntryMetadata, aPath string, b EntryMetadata, bPath string) bool {
 	if a.Version != b.Version {
-		if a.Version > b.Version {
-			return aPath, a, bPath, b
-		}
-		return bPath, b, aPath, a
+		return a.Version > b.Version
 	}
 	if !a.Updated.Equal(b.Updated) {
-		if a.Updated.After(b.Updated) {
-			return aPath, a, bPath, b
-		}
-		return bPath, b, aPath, a
+		return a.Updated.After(b.Updated)
 	}
-	if aPath <= bPath {
-		return aPath, a, bPath, b
-	}
-	return bPath, b, aPath, a
+	// Equal version and timestamp: keep the larger logical path as winner so
+	// the comparison is order-independent and never relies on map iteration.
+	return aPath >= bPath
 }
 
 // reconcileEntryConflicts resolves concurrent edits to the same logical entry
@@ -86,15 +82,19 @@ func reconcileEntryConflicts(vaultDir string, identity *age.X25519Identity) erro
 		if len(cands) < 2 {
 			continue
 		}
-		winPath, winMeta, losPath, losMeta := cands[0].path, cands[0].meta, cands[1].path, cands[1].meta
+		winner := cands[0]
 		losers := []cand{cands[1]}
 		for _, l := range cands[2:] {
-			wp, wm, lp, lm := higherVersion(winPath, winMeta, l.path, l.meta)
-			winPath, winMeta, losPath, losMeta = wp, wm, lp, lm
-			losers = append(losers, cand{path: losPath, meta: losMeta})
+			if versionAfter(l.meta, l.path, winner.meta, winner.path) {
+				// l beats the current winner: demote the winner to a loser.
+				losers = append(losers, winner)
+				winner = l
+			} else {
+				losers = append(losers, l)
+			}
 		}
 		for _, l := range losers {
-			if l.path == winPath {
+			if l.path == winner.path {
 				continue
 			}
 			if _, perr := preserveConflictCopy(l.path); perr != nil {
