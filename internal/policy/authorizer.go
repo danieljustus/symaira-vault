@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/danieljustus/symaira-vault/internal/approval"
 	"github.com/danieljustus/symaira-vault/internal/audit"
 	"github.com/danieljustus/symaira-vault/internal/authguard"
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
@@ -65,6 +66,16 @@ func WithShareStore(store ShareStore) AuthorizerOption {
 	}
 }
 
+// WithApprovalQueue attaches a pending-approval queue. When set and
+// ApprovalMode is "prompt", write requests that need approval are enqueued
+// and the agent call blocks until an approval device decides — instead of
+// degrading to an instant deny. A nil queue preserves the deny behavior.
+func WithApprovalQueue(queue *approval.Queue) AuthorizerOption {
+	return func(a *authorizerImpl) {
+		a.approvalQueue = queue
+	}
+}
+
 // ShareStore defines the interface for share access checking.
 type ShareStore interface {
 	CheckAccess(agentName, path string) (*mcp.ShareGrant, bool)
@@ -72,10 +83,11 @@ type ShareStore interface {
 
 // authorizerImpl implements the Authorizer interface.
 type authorizerImpl struct {
-	config       AuthorizerConfig
-	policyEngine *Engine
-	auditLog     *audit.Logger
-	shareStore   ShareStore
+	config        AuthorizerConfig
+	policyEngine  *Engine
+	auditLog      *audit.Logger
+	shareStore    ShareStore
+	approvalQueue *approval.Queue
 }
 
 // NewAuthorizer creates a new Authorizer with the given configuration and options.
@@ -121,6 +133,12 @@ func (a *authorizerImpl) Authorize(ctx context.Context, path string, write bool,
 	}
 
 	if write && a.RequiresApproval() && !approved {
+		// Approval mode "prompt" with an enrolled approval device: enqueue
+		// and block until the human decides. Mode "deny" (or no device)
+		// keeps the instant-deny behavior.
+		if a.config.ApprovalMode == "prompt" && a.approvalQueue != nil {
+			return a.promptApproval(ctx, path)
+		}
 		a.logAudit(ctx, "approval_required", path, false)
 		metrics.RecordAuthDenial("approval_required", a.config.AgentName)
 		return fmt.Errorf("write to %q requires approval", path)
@@ -131,6 +149,46 @@ func (a *authorizerImpl) Authorize(ctx context.Context, path string, write bool,
 		metrics.RecordApproval(a.config.AgentName, "granted")
 	}
 	return nil
+}
+
+// promptApproval enqueues a pending approval request and waits for the
+// approval device's decision, the request expiry, or the caller context.
+// Every outcome is written to the audit chain.
+func (a *authorizerImpl) promptApproval(ctx context.Context, path string) error {
+	id, err := a.approvalQueue.Enqueue(approval.Request{
+		AgentName: a.config.AgentName,
+		Path:      path,
+		Write:     true,
+		Reason:    "agent write requires approval",
+	})
+	if err != nil {
+		a.logAudit(ctx, "approval_required", path, false)
+		metrics.RecordAuthDenial("approval_required", a.config.AgentName)
+		return fmt.Errorf("write to %q requires approval (queue unavailable)", path)
+	}
+	a.logAudit(ctx, "approval_prompted", path, false)
+
+	outcome, err := a.approvalQueue.Wait(ctx, id)
+	if err != nil {
+		// Context deadline/cancel while waiting: audit as unresolved.
+		a.logAudit(ctx, "approval_timeout", path, false)
+		metrics.RecordAuthDenial("approval_timeout", a.config.AgentName)
+		return fmt.Errorf("write to %q: approval wait interrupted: %w", path, err)
+	}
+	switch outcome.Status {
+	case approval.StatusApproved:
+		a.logAudit(ctx, "approval_granted", path, true)
+		metrics.RecordApproval(a.config.AgentName, "device")
+		return nil
+	case approval.StatusDenied:
+		a.logAudit(ctx, "approval_denied", path, false)
+		metrics.RecordAuthDenial("approval_denied", a.config.AgentName)
+		return fmt.Errorf("write to %q denied by approval device", path)
+	default: // expired
+		a.logAudit(ctx, "approval_expired", path, false)
+		metrics.RecordAuthDenial("approval_expired", a.config.AgentName)
+		return fmt.Errorf("write to %q: approval request expired", path)
+	}
 }
 
 func (a *authorizerImpl) checkPolicy(ctx context.Context, path, actionType string) error {
