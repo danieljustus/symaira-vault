@@ -10,6 +10,7 @@ import (
 	"github.com/danieljustus/symaira-vault/cmd/auth"
 	"github.com/danieljustus/symaira-vault/cmd/crud"
 	"github.com/danieljustus/symaira-vault/cmd/file"
+	intakecmd "github.com/danieljustus/symaira-vault/cmd/intake"
 	"github.com/danieljustus/symaira-vault/cmd/mcp"
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
 )
@@ -65,6 +66,7 @@ func NewRootCmd() *cobra.Command {
 	root.AddCommand(auth.NewCommands()...)
 	root.AddCommand(crud.NewCommands()...)
 	root.AddCommand(file.NewCommands()...)
+	root.AddCommand(intakecmd.NewCommands()...)
 	root.AddCommand(mcp.NewCommands()...)
 
 	// Add top-level commands in cmd/
