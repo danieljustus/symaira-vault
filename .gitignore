@@ -47,6 +47,8 @@ mcp-token
 # Build artifacts
 dist/
 coverage/
+.build/
+.gobind/
 vault_coverage.html
 coverage.html
 *.html
