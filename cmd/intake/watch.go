@@ -86,6 +86,8 @@ func newIntakeWatchDisableCmd() *cobra.Command {
 			if runtime.GOOS != "darwin" {
 				return errorspkg.NewCLIError(errorspkg.ExitInvalidInput, "LaunchAgent disable is only supported on macOS", nil)
 			}
+			// #nosec G204 -- plist is the fixed per-user LaunchAgent path
+			// derived from $HOME; no user-controlled input.
 			_ = exec.Command("/bin/launchctl", "unload", plist).Run()
 			if err := os.Remove(plist); err != nil {
 				return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "remove LaunchAgent plist", err)
@@ -185,5 +187,7 @@ func notifyLocal(title, message string) {
 		return
 	}
 	script := fmt.Sprintf("display notification %q with title %q", message, title)
+	// #nosec G204 -- the script is constructed from our own status strings
+	// (import id, entry count); no user input reaches it.
 	_ = exec.Command("/usr/bin/osascript", "-e", script).Run()
 }

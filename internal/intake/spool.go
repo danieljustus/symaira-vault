@@ -23,6 +23,8 @@ func NewSpool() (*Spool, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create intake spool: %w", err)
 	}
+	// #nosec G302 -- 0700 is the correct mode for a private directory
+	// (gosec's 0600 rule targets regular files).
 	if err := os.Chmod(dir, 0o700); err != nil {
 		_ = os.RemoveAll(dir)
 		return nil, fmt.Errorf("secure intake spool: %w", err)
