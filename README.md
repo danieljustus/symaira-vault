@@ -55,8 +55,8 @@ brew install symvault
 
 **Scoop:**
 ```powershell
-scoop bucket add symvault https://github.com/danieljustus/scoop-bucket
-scoop install symvault
+scoop bucket add symaira https://github.com/danieljustus/scoop-bucket
+scoop install symaira/symvault
 ```
 
 **Nix (Flake):**

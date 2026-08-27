@@ -67,11 +67,14 @@ New users can install `symvault` directly.
 #### Scoop (Windows)
 
 ```powershell
+# Add the dedicated Symaira bucket (once)
+scoop bucket add symaira https://github.com/danieljustus/scoop-bucket
+
 # Uninstall old
 scoop uninstall openpass
 
 # Install new
-scoop install symvault
+scoop install symaira/symvault
 ```
 
 #### Go install
