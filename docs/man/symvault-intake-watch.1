@@ -1,0 +1,104 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-intake-watch - Watch a folder for new credential files and stage quarantined batches
+
+
+.SH SYNOPSIS
+\fBsymvault intake watch  [flags]\fP
+
+
+.SH DESCRIPTION
+Watches a user-selected folder for new credential material (screenshots,
+exports, certificate files, backup codes) and stages each pickup as a
+quarantined review batch under quarantine//. The watcher is
+deliberately conservative:
+.IP \(bu 2
+Files are only picked up after their size and mtime stabilized (debounce);
+partial downloads and files still being written are skipped.
+.IP \(bu 2
+Sources are never deleted, never moved, and never auto-promoted. Review
+and promotion happen through \fBimport review promote\fR\&.
+.IP \(bu 2
+Already-staged files are remembered across polls (ledger), so the same
+file is not intaked twice.
+
+.PP
+Run with --once for a single scan (cron/LaunchAgent friendly). For an
+always-on watcher, run without --once and stop it with Ctrl-C (SIGINT) or
+SIGTERM; to pause, stop the process and restart it later. To disable, remove
+the LaunchAgent entry or stop invoking the command.
+
+.PP
+Example LaunchAgent plist (adjust paths):
+  ~/Library/LaunchAgents/com.symaira.vault-intake.plist
+  ProgramArguments: [ /usr/local/bin/symvault, intake, watch, /path/to/folder, --once ]
+  StartInterval: 300
+
+
+.SH OPTIONS
+\fB--debounce\fP=5s
+	Require files to be stable for this long before pickup
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for watch
+
+.PP
+\fB--interval\fP=10s
+	Poll interval (always-on mode)
+
+.PP
+\fB--json\fP[=false]
+	Emit machine-readable JSON per scan
+
+.PP
+\fB--once\fP[=false]
+	Run a single scan and exit
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # One scan, stage anything new (cron-friendly)
+  symvault intake watch ~/Downloads/intake --once
+
+  # Machine-readable single scan
+  symvault intake watch ~/Downloads/intake --once --json
+
+  # Always-on watcher with a 15s poll interval
+  symvault intake watch ~/Downloads/intake --interval 15s
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault-intake(1)\fP, \fBsymvault-intake-watch-disable(1)\fP
