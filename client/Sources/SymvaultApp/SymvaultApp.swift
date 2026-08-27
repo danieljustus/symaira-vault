@@ -3,6 +3,8 @@ import SymvaultFeature
 
 @main
 struct SymvaultApp: App {
+  @NSApplicationDelegateAdaptor(IntakeAppDelegate.self) private var appDelegate
+
   var body: some Scene {
     WindowGroup("Symaira Vault") {
       SymvaultModuleView()
@@ -11,6 +13,14 @@ struct SymvaultApp: App {
     .defaultSize(width: 1120, height: 760)
     .windowStyle(.titleBar)
     .windowToolbarStyle(.unified)
+    .commands {
+      CommandGroup(after: .newItem) {
+        Button("Credential-Dateien aufnehmen …") {
+          NotificationCenter.default.post(name: IntakeAppDelegate.openFilesNotification, object: [URL]())
+        }
+        .keyboardShortcut("i", modifiers: [.command, .shift])
+      }
+    }
 
     Settings {
       VStack(spacing: 10) {

@@ -34,10 +34,9 @@
   public struct VaultClient: Sendable {
     public static let expectedSchemaVersion = 1
 
-    private let runner: CLIRunner
-    private let locator: BinaryLocator
+    let runner: CLIRunner
+    let locator: BinaryLocator
     private let tool: SymairaTool
-
     public init(userOverride: URL? = nil, timeout: Double = 30) {
       runner = CLIRunner(defaultTimeout: timeout)
       locator = BinaryLocator(userOverride: userOverride)
@@ -183,14 +182,14 @@
       return password
     }
 
-    private func executable() throws -> URL {
+    func executable() throws -> URL {
       guard let located = locator.locate(tool.binaryName) else {
         throw VaultClientError.binaryNotFound
       }
       return located.url
     }
 
-    private func arguments(profile: String?, command: [String]) -> [String] {
+    func arguments(profile: String?, command: [String]) -> [String] {
       var result = ["--color", "never"]
       if let profile = profile?.trimmingCharacters(in: .whitespacesAndNewlines), !profile.isEmpty {
         result += ["--profile", profile]

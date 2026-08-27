@@ -43,6 +43,25 @@ targets:
         INFOPLIST_KEY_CFBundleName: Symaira Vault
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    info:
+      path: Symvault-Info.plist
+      properties:
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Credential Intake
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - public.plain-text
+              - public.json
+              - public.data
+              - net.daringfireball.markdown
+              - public.jpeg
+              - public.png
+              - com.adobe.pdf
+              - public.certificate
+              - public.x509-certificate
+              - com.apple.pkcs12
+            CFBundleTypeIconFiles: []
     postBuildScripts:
       - name: Embed symvault Engine
         script: |
