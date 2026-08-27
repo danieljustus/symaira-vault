@@ -5,6 +5,7 @@ let package = Package(
     name: "SymvaultClient",
     platforms: [
         .macOS(.v14),
+        .iOS(.v17),
     ],
     products: [
         .library(name: "SymvaultKit", targets: ["SymvaultKit"]),
@@ -14,11 +15,16 @@ let package = Package(
         .package(url: "https://github.com/danieljustus/symaira-appkit.git", exact: "0.10.0"),
     ],
     targets: [
+        .binaryTarget(
+            name: "Vaultcore",
+            path: ".build/mobilecore/Vaultcore.xcframework"
+        ),
         .target(
             name: "SymvaultKit",
             dependencies: [
                 .product(name: "SymairaCLIRunner", package: "symaira-appkit"),
                 .product(name: "SymairaToolKit", package: "symaira-appkit"),
+                .target(name: "Vaultcore"),
             ]
         ),
         .target(
