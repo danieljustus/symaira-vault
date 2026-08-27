@@ -17,6 +17,8 @@
     @Environment(VaultStore.self) private var store
     @State private var editorContext: EntryEditorContext?
     @State private var showDeleteConfirmation = false
+    @State private var showIntake = false
+    @State private var intakeStore = IntakeStore()
 
     var body: some View {
       @Bindable var store = store
@@ -91,6 +93,13 @@
             .help("Neues Secret anlegen")
 
             Button {
+              showIntake = true
+            } label: {
+              Label("Aufnehmen", systemImage: "tray.and.arrow.down")
+            }
+            .help("Credential-Dateien aufnehmen (Intake)")
+
+            Button {
               Task { await store.refresh() }
             } label: {
               if store.isBusy {
@@ -112,12 +121,24 @@
         }
       }
       .navigationSplitViewStyle(.balanced)
+      .onReceive(NotificationCenter.default.publisher(for: IntakeAppDelegate.openFilesNotification)) { note in
+        let urls = (note.object as? [URL]) ?? []
+        if !urls.isEmpty {
+          intakeStore.addFiles(urls)
+        }
+        showIntake = true
+      }
       .onChange(of: store.selectedPath) { _, path in
         Task { await store.load(path: path) }
       }
       .sheet(item: $editorContext) { context in
         EntryEditorView(context: context)
           .environment(store)
+      }
+      .sheet(isPresented: $showIntake) {
+        IntakeView()
+          .environment(intakeStore)
+          .frame(minWidth: 640, minHeight: 520)
       }
       .confirmationDialog(
         "„\(store.selectedPath ?? "Secret")“ wirklich löschen?",
