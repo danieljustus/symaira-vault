@@ -47,7 +47,7 @@ func WriteBatch(v Vault, results []FileResult, opts BatchOptions) (string, []str
 	var written []string
 	for i := range results {
 		r := &results[i]
-		if r.Status != "ok" || r.spoolPath == "" {
+		if r.Status != StatusOK || r.spoolPath == "" {
 			continue
 		}
 		bytes, err := os.ReadFile(r.spoolPath) // #nosec G304 -- staged spool copy created by intake
@@ -64,7 +64,7 @@ func WriteBatch(v Vault, results []FileResult, opts BatchOptions) (string, []str
 			return "", nil, err
 		}
 		if exists {
-			r.Status = "skipped"
+			r.Status = StatusSkipped
 			r.Reason = "quarantine entry already exists: " + entryPath
 			continue
 		}
@@ -76,14 +76,14 @@ func WriteBatch(v Vault, results []FileResult, opts BatchOptions) (string, []str
 			return "", nil, err
 		}
 		if len(dupes) > 0 {
-			r.Status = "skipped"
+			r.Status = StatusSkipped
 			r.Reason = "duplicate source hash already quarantined"
 			r.Duplicates = dupes
 			continue
 		}
 
 		if opts.DryRun {
-			r.Status = "ok"
+			r.Status = StatusOK
 			continue
 		}
 

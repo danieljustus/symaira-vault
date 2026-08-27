@@ -6,6 +6,13 @@ import (
 	"path/filepath"
 )
 
+// Status values used in FileResult.Status.
+const (
+	StatusOK      = "ok"
+	StatusSkipped = "skipped"
+	StatusError   = "error"
+)
+
 // ProcessFile validates, stages, sniffs and parses one source file. On
 // success the result carries provenance, sanitized suggestions and internal
 // raw suggestions plus the staged copy for the later batch write. Errors are
@@ -17,11 +24,11 @@ func ProcessFile(spool *Spool, sourcePath string, opts Options) (FileResult, err
 	stagePath, prov, err := spool.Stage(sourcePath, opts.MaxFileSize)
 	if err != nil {
 		if isRejectError(err) {
-			res.Status = "skipped"
+			res.Status = StatusSkipped
 			res.Reason = err.Error()
 			return res, nil
 		}
-		res.Status = "error"
+		res.Status = StatusError
 		res.Reason = err.Error()
 		return res, nil
 	}
@@ -30,7 +37,7 @@ func ProcessFile(spool *Spool, sourcePath string, opts Options) (FileResult, err
 
 	data, err := os.ReadFile(stagePath) // #nosec G304 -- staged spool copy created by intake
 	if err != nil {
-		res.Status = "error"
+		res.Status = StatusError
 		res.Reason = fmt.Sprintf("read staged copy: %v", err)
 		return res, nil
 	}
@@ -42,11 +49,25 @@ func ProcessFile(spool *Spool, sourcePath string, opts Options) (FileResult, err
 	prov.SourceType = st
 
 	raw := Parse(data, st, prov.SourceName)
+
+	// An on-device OCR text pass replaces the suggestion source for image/PDF
+	// material: the recognized lines become structured field suggestions
+	// while the exact source bytes remain the attachment.
+	if (st == SourceTypeImage || st == SourceTypePDF) && opts.OCRText != "" {
+		ocrData, err := os.ReadFile(opts.OCRText) // #nosec G304 -- explicit --ocr-text path supplied by the caller
+		if err != nil {
+			res.Status = StatusError
+			res.Reason = fmt.Sprintf("read OCR text: %v", err)
+			return res, nil
+		}
+		raw = Parse(ocrData, SourceTypeText, prov.SourceName)
+	}
+
 	res.raw = raw
 	for _, sug := range raw {
 		res.Suggestions = append(res.Suggestions, sug.Sanitize())
 	}
-	res.Status = "ok"
+	res.Status = StatusOK
 	return res, nil
 }
 
@@ -82,7 +103,7 @@ func ProcessFiles(spool *Spool, paths []string, opts Options) ([]FileResult, err
 			if total > opts.MaxBatchSize {
 				res = FileResult{
 					File:   p,
-					Status: "skipped",
+					Status: StatusSkipped,
 					Reason: fmt.Sprintf("batch exceeds the %d byte total limit", opts.MaxBatchSize),
 				}
 			}

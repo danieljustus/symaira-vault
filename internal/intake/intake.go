@@ -110,6 +110,11 @@ type Options struct {
 	MaxFileSize  int64
 	MaxBatchSize int64
 	MaxFiles     int
+	// OCRText optionally points at a text file produced by an on-device OCR
+	// pass (e.g. the macOS client's Vision integration). For image/PDF
+	// sources its content is parsed into field suggestions while the exact
+	// source bytes remain the attachment.
+	OCRText string
 }
 
 // DefaultOptions returns the standard limits.

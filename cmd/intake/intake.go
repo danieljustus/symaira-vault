@@ -27,6 +27,7 @@ var (
 	intakeBatchLimit int64
 	intakeFileLimit  int
 	intakeMoveTrash  bool
+	intakeOCRText    string
 )
 
 // NewCommands returns the intake command tree.
@@ -73,6 +74,7 @@ and only after the quarantine entry was written and verified.`,
 	cmd.Flags().Int64Var(&intakeBatchLimit, "batch-limit", intake.DefaultMaxBatchSize, "Maximum total bytes per intake run")
 	cmd.Flags().IntVar(&intakeFileLimit, "max-files", intake.DefaultMaxFiles, "Maximum number of files per intake run")
 	cmd.Flags().BoolVar(&intakeMoveTrash, "move-to-trash", false, "Move verified source files to the macOS Trash after the quarantine entry is written (macOS only)")
+	cmd.Flags().StringVar(&intakeOCRText, "ocr-text", "", "Path to a text file with on-device OCR results; its lines become suggestions for image/PDF sources (macOS client integration)")
 	cmd.GroupID = cli.GroupIDSharingSync
 	return cmd
 }
@@ -87,6 +89,7 @@ func runIntake(cmd *cobra.Command, args []string) error {
 		MaxFileSize:  intake.DefaultMaxFileSize,
 		MaxBatchSize: intakeBatchLimit,
 		MaxFiles:     intakeFileLimit,
+		OCRText:      intakeOCRText,
 	}
 
 	spool, err := intake.NewSpool()
