@@ -20,6 +20,10 @@ import (
 func ExternalGitDirPath(vaultDir string) string {
 	if dir := config.XDGDataHome(); dir != "" {
 		key := strings.ReplaceAll(filepath.Clean(vaultDir), string(filepath.Separator), "_")
+		// Windows drive letters (and any other colon in the path) are not
+		// valid in directory names; strip them so the derived key is usable
+		// as a directory component on every platform.
+		key = strings.ReplaceAll(key, ":", "_")
 		key = strings.TrimPrefix(key, "_")
 		return filepath.Join(dir, "symaira-vault-git", key+".git")
 	}
