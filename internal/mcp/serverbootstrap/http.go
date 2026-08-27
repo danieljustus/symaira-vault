@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/danieljustus/symaira-vault/internal/approval"
 	auth "github.com/danieljustus/symaira-vault/internal/mcp/auth"
 	mcpserver "github.com/danieljustus/symaira-vault/internal/mcp/server"
 	transport "github.com/danieljustus/symaira-vault/internal/mcp/transport"
@@ -32,21 +33,42 @@ var bufferPool = sync.Pool{
 	},
 }
 
+// serverOptions carries optional extensions for the HTTP server.
+type serverOptions struct {
+	approvalHandler http.Handler
+}
+
+// HTTPServerOption configures an optional extension of the HTTP server.
+type HTTPServerOption func(*serverOptions)
+
+// WithApprovalAPI mounts the device-approval transport (internal/approval)
+// under /api/v1/approvals on the MCP HTTP server, so an enrolled approval
+// device can list pending agent requests and approve/deny them.
+func WithApprovalAPI(handler http.Handler) HTTPServerOption {
+	return func(o *serverOptions) {
+		o.approvalHandler = handler
+	}
+}
+
 // RunHTTPServer starts the HTTP MCP server.
-func RunHTTPServer(ctx context.Context, bind string, port int, v *vaultpkg.Vault, vaultDir string, version string, factory func(*vaultpkg.Vault, string, string) (*mcpserver.Server, error)) error {
+func RunHTTPServer(ctx context.Context, bind string, port int, v *vaultpkg.Vault, vaultDir string, version string, factory func(*vaultpkg.Vault, string, string) (*mcpserver.Server, error), opts ...HTTPServerOption) error {
 	addr := net.JoinHostPort(bind, strconv.Itoa(port))
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
 	}
-	return RunHTTPServerOnListener(ctx, listener, v, vaultDir, version, factory)
+	return RunHTTPServerOnListener(ctx, listener, v, vaultDir, version, factory, opts...)
 }
 
 // RunHTTPServerOnListener starts the HTTP MCP server on an already-bound listener.
 // Tests and embedders can use this to bind :0 safely without a find-free-port race.
 //
 //nolint:gocyclo // Complex server initialization: auth, middleware, metrics, graceful shutdown
-func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaultpkg.Vault, vaultDir string, version string, factory func(*vaultpkg.Vault, string, string) (*mcpserver.Server, error)) error {
+func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaultpkg.Vault, vaultDir string, version string, factory func(*vaultpkg.Vault, string, string) (*mcpserver.Server, error), opts ...HTTPServerOption) error {
+	var options serverOptions
+	for _, opt := range opts {
+		opt(&options)
+	}
 	bind, port := listenerAddress(listener)
 	otlpEndpoint := ""
 	if v != nil && v.Config != nil && v.Config.MCP != nil {
@@ -258,6 +280,13 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 		mcpChain = auth.RateLimiterMiddleware(rateLimiter, mcpChain)
 	}
 	mux.Handle("/mcp", mcpChain)
+
+	// Device approval transport (optional): mounted when an approval queue
+	// and device-token validator are wired in by the caller.
+	if options.approvalHandler != nil {
+		mux.Handle(approval.PathApprovals, options.approvalHandler)
+		mux.Handle(approval.PathApprovalAction, options.approvalHandler)
+	}
 
 	timeouts := resolveServerTimeouts(v)
 	shutdownTimeout := timeouts.shutdown

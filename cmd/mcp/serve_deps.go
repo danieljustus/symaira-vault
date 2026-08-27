@@ -16,20 +16,41 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/danieljustus/symaira-vault/internal/approval"
 	"github.com/danieljustus/symaira-vault/internal/config"
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 	server "github.com/danieljustus/symaira-vault/internal/mcp/server"
 	"github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap"
+	"github.com/danieljustus/symaira-vault/internal/pairing"
 	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
-var RunStdioServerFunc = func(ctx context.Context, vault *vaultpkg.Vault, agentName string) error {
-	return serverbootstrap.RunStdioServer(ctx, vault, agentName, server.New)
+// newServerWithApproval builds an MCP server and attaches the shared
+// approval queue, so approval mode "prompt" blocks on a device decision.
+func newServerWithApproval(v *vaultpkg.Vault, agentName, transport string) (*server.Server, error) {
+	srv, err := server.New(v, agentName, transport)
+	if err != nil {
+		return nil, err
+	}
+	srv.AttachApprovalQueue(ApprovalQueue)
+	return srv, nil
 }
+
+var RunStdioServerFunc = func(ctx context.Context, vault *vaultpkg.Vault, agentName string) error {
+	return serverbootstrap.RunStdioServer(ctx, vault, agentName, newServerWithApproval)
+}
+
+// ApprovalQueue is the shared pending-approval queue for the serve process.
+// It backs approval mode "prompt" (authorizer blocks until a paired device
+// decides) and is exposed to devices via the /api/v1/approvals transport.
+var ApprovalQueue = approval.NewQueue()
+
 var RunHTTPServerFunc = func(ctx context.Context, bind string, port int, vault *vaultpkg.Vault) error {
 	vaultDir, _ := cli.VaultPath()
-	return serverbootstrap.RunHTTPServer(ctx, bind, port, vault, vaultDir, Version, server.New)
+	approvalHandler := approval.NewHTTPHandler(ApprovalQueue, approval.NewPairingTokenValidator(pairing.NewTokenStore()))
+	return serverbootstrap.RunHTTPServer(ctx, bind, port, vault, vaultDir, Version, newServerWithApproval,
+		serverbootstrap.WithApprovalAPI(approvalHandler))
 }
 var FindAvailablePortFunc = cli.FindAvailablePort
 

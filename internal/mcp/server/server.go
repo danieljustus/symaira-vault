@@ -85,6 +85,9 @@ type Server struct {
 	tools        []toolDefinition // per-instance tool set, populated from global registry
 
 	authorizer policy.Authorizer
+	// authorizerConfig is retained so an approval queue can be attached
+	// after construction (AttachApprovalQueue).
+	authorizerConfig policy.AuthorizerConfig
 
 	approvalCache      *approvalCache
 	approvalKeyCounter atomic.Int64
@@ -223,6 +226,7 @@ func New(v *vault.Vault, agentName string, transport string) (*Server, error) {
 		}(),
 		RedactFields: agent.RedactFields,
 	}
+	srv.authorizerConfig = authorizerConfig
 	srv.authorizer = policy.NewAuthorizer(authorizerConfig,
 		policy.WithPolicyEngine(policyEngine),
 		policy.WithAuditLog(auditLog),
