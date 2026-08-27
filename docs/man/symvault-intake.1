@@ -1,0 +1,109 @@
+.nh
+.TH "SYMVAULT" "1" "Aug 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-intake - Review-gated credential intake from loose files
+
+
+.SH SYNOPSIS
+\fBsymvault intake  [flags]\fP
+
+
+.SH DESCRIPTION
+Validates loose credential material (text files, .env exports, JSON,
+screenshots, certificate/key files, backup-code images) and stages it as a
+quarantined review batch under quarantine// for human review
+before any agent can read it.
+
+.PP
+Sources are validated (regular files only, stable size/mtime, per-file and
+batch limits), copied atomically into a private spool, content-sniffed (never
+trusting extensions), and parsed into field/attachment suggestions. The
+exact source bytes are stored as an encrypted attachment with SHA-256, size
+and source-type provenance. Nothing is written to normal vault paths.
+
+.PP
+Promote a batch after review:
+  symvault intake review promote    (alias of import review promote)
+
+.PP
+Source files are never deleted unless --move-to-trash is given (macOS only)
+and only after the quarantine entry was written and verified.
+
+
+.SH OPTIONS
+\fB--batch-limit\fP=33554432
+	Maximum total bytes per intake run
+
+.PP
+\fB--dry-run\fP[=false]
+	Validate and report without writing anything
+
+.PP
+\fB-h\fP, \fB--help\fP[=false]
+	help for intake
+
+.PP
+\fB--json\fP[=false]
+	Emit machine-readable JSON (metadata only, never secret values)
+
+.PP
+\fB--max-files\fP=100
+	Maximum number of files per intake run
+
+.PP
+\fB--move-to-trash\fP[=false]
+	Move verified source files to the macOS Trash after the quarantine entry is written (macOS only)
+
+.PP
+\fB--ocr-text\fP=""
+	Path to a text file with on-device OCR results; its lines become suggestions for image/PDF sources (macOS client integration)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  # Dry-run: validate, sniff and show suggestions without writing
+  symvault intake ~/Downloads/creds.env ~/Downloads/backup.png --dry-run
+
+  # Machine-readable dry-run (metadata only, never secret values)
+  symvault intake ~/Downloads/token.json --dry-run --json
+
+  # Stage a review batch and print the import id
+  symvault intake ~/Downloads/elster.p12 ~/Downloads/recovery-codes.png
+
+  # Promote the reviewed batch into normal vault paths
+  symvault import review promote intake-20260827-1a2b3c4d
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault(1)\fP, \fBsymvault-intake-watch(1)\fP

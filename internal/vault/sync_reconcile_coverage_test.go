@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/danieljustus/symaira-vault/internal/testutil"
 )
 
 func TestEntryFileStem(t *testing.T) {
@@ -114,5 +116,76 @@ func TestPreserveConflictCopyUnwritableTargetDir(t *testing.T) {
 
 	if _, err := preserveConflictCopy(src); err == nil {
 		t.Fatal("unwritable target directory should fail")
+	}
+}
+
+// writeConflictCopy duplicates an existing entry file under a sync-conflict
+// name so the reconciler sees two files for one logical entry.
+func writeConflictCopy(t *testing.T, vaultDir, stem, suffix string) string {
+	t.Helper()
+	src := filepath.Join(vaultDir, entriesDirName, stem+entryExtAge)
+	data, err := os.ReadFile(src) // #nosec G304 -- test fixture path built by us
+	if err != nil {
+		t.Fatalf("read entry for conflict copy: %v", err)
+	}
+	dst := filepath.Join(vaultDir, entriesDirName, stem+".conflict-"+suffix+entryExtAge)
+	if err := os.WriteFile(dst, data, 0o600); err != nil {
+		t.Fatalf("write conflict copy: %v", err)
+	}
+	return dst
+}
+
+func TestReconcileEntryConflictsPreservesLosers(t *testing.T) {
+	vaultDir := t.TempDir()
+	identity := testutil.TempIdentity(t)
+
+	// Group 1: one entry with two concurrent copies (three candidates total,
+	// so the versionAfter comparison loop runs).
+	mustWriteEntryCoverage(t, vaultDir, identity, "login.example", map[string]interface{}{"username": "alice"})
+	conflictA := writeConflictCopy(t, vaultDir, "login.example", "20260826T101500")
+	conflictB := writeConflictCopy(t, vaultDir, "login.example", "20260826T101501")
+
+	// Group 2: undecryptable garbage — candidates that cannot be read must be
+	// left untouched instead of dropped.
+	garbageStem := "broken.entry"
+	garbagePath := filepath.Join(vaultDir, entriesDirName, garbageStem+entryExtAge)
+	for _, p := range []string{
+		garbagePath,
+		filepath.Join(vaultDir, entriesDirName, garbageStem+".conflict-20260826T101500"+entryExtAge),
+	} {
+		if err := os.WriteFile(p, []byte("not an age file"), 0o600); err != nil {
+			t.Fatalf("write garbage entry: %v", err)
+		}
+	}
+
+	// Group 3: a single-file entry — nothing to reconcile.
+	mustWriteEntryCoverage(t, vaultDir, identity, "solo.entry", map[string]interface{}{"username": "bob"})
+
+	if err := reconcileEntryConflicts(vaultDir, identity); err != nil {
+		t.Fatalf("reconcileEntryConflicts() error = %v", err)
+	}
+
+	// Both original conflict copies must still exist (lossless), and the two
+	// losing candidates must each have been preserved as an additional
+	// conflict copy.
+	for _, p := range []string{conflictA, conflictB, garbagePath} {
+		if _, err := os.Lstat(p); err != nil {
+			t.Fatalf("original file %s must be preserved: %v", p, err)
+		}
+	}
+	matches, err := filepath.Glob(filepath.Join(vaultDir, entriesDirName, "login.example.conflict-*"+entryExtAge))
+	if err != nil {
+		t.Fatalf("glob conflict copies: %v", err)
+	}
+	if len(matches) < 4 {
+		t.Fatalf("got %d login.example conflict files, want >= 4 (2 originals + 2 preserved losers)", len(matches))
+	}
+}
+
+func TestReconcileEntryConflictsNoEntries(t *testing.T) {
+	vaultDir := t.TempDir()
+	identity := testutil.TempIdentity(t)
+	if err := reconcileEntryConflicts(vaultDir, identity); err != nil {
+		t.Fatalf("reconcileEntryConflicts() on empty vault = %v, want nil", err)
 	}
 }

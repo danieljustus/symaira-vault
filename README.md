@@ -28,6 +28,7 @@ A modern, secure command-line password manager (`symvault`) written in Go. Uses 
 - **MCP Server**: stdio and HTTP for AI agent integration with scoped token management
 - **MCP Slash Commands**: `add-credential`, `rotate-credential`, `find-and-use`, `share-credential` — guided workflows surfaced as slash commands in Claude Code, OpenCode, Hermes
 - **Native Secure-Input Dialog**: cross-platform popups (macOS osascript, Linux zenity/kdialog, Windows Get-Credential) for collecting credentials from agents without exposing them in chat
+- **Review-Gated Credential Intake**: stage loose credential files (`.env` exports, screenshots, certificates) into an encrypted quarantine for human review before anything enters the vault (`symvault intake`, `symvault intake watch`)
 - **Native macOS Client**: SwiftUI app for browsing, unlocking, creating, editing, generating, copying, and deleting local vault entries
 - **Egress Credential Broker**: opt-in loopback proxy that attaches vault credentials to an agent's outbound requests server-side, without exposing them to the child process (`symvault broker`, `symvault run --broker`)
 - **MCP API Templates**: shape `execute_api_request` calls with YAML templates and built-in provider catalog (Anthropic, GitHub, OpenAI, Stripe, …), with credentials resolved from the vault at request time
@@ -165,7 +166,17 @@ cat input.json | symvault run --env API_KEY=api.kimi-key -- node process.js
 # Backup/Restore
 symvault backup ~/backups/symvault-$(date +%Y%m%d).tar.gz
 symvault restore ~/backups/symvault-20260427.tar.gz
+
+# Review-gated intake of loose credential files (never writes normal vault paths)
+symvault intake ~/Downloads/creds.env --dry-run        # validate + suggest, nothing stored
+symvault intake ~/Downloads/creds.env                  # stage into quarantine/<import-id>/
+symvault import review promote <import-id>             # promote after human review
+
+# Watch a folder (e.g. Downloads) and quarantine new credential files automatically
+symvault intake watch ~/Downloads --once               # single scan, cron/LaunchAgent friendly
 ```
+
+Intake sources are content-sniffed, copied into a private spool, and stored as an encrypted quarantine batch with SHA-256 provenance. Nothing enters normal vault paths and no agent can read the batch before you promote it.
 
 Backup archives contain encrypted vault files, identity material, config, and MCP tokens. Protect them like the vault itself and test restore before relying on backups.
 
