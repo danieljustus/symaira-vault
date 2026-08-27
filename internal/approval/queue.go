@@ -276,7 +276,7 @@ func (q *Queue) Close() {
 	q.poke()
 }
 
-// Notify returns a channel that is signalled whenever the queue state
+// Notify returns a channel that is signaled whenever the queue state
 // changes (new request, decision, expiry). Used by transports to push
 // updates to approval devices.
 func (q *Queue) Notify() <-chan struct{} { return q.notifier }
