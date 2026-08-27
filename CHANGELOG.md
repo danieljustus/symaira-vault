@@ -14,6 +14,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > and [docs/commercial-boundary.md](docs/commercial-boundary.md) for the
 > current release-line policy. (Added 2026-06-10, see #384.)
 
+## [v0.20.0]
+
+### Features
+- Read-only iOS client (`SymvaultIOS`): unlocks an enrolled device identity and browses vault entries, mirroring the SymBrainMobile precedent. Talks to the embedded `Vaultcore` XCFramework (a gomobile bind of `pkg/mobilebind`) instead of shelling out to the `symvault` binary, because iOS cannot spawn subprocesses. Enrolment and Face ID unlock use the Keychain bound to `ThisDeviceOnly`. (#910, #868)
+
+### Dependencies
+- Bumped `corekit` from `v0.9.1` to `v0.11.0` (pulls in latest audit/security improvements from the corekit module).
+- Bumped `appkit` from `0.4.0` to `0.10.0` in `client/Package.swift` (latest Swift Package release, includes `CLIRunnerError` plaintext-redaction security fix).
+
 ## [Unreleased]
 
 ### Dependencies
