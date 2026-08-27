@@ -76,6 +76,7 @@ and only after the quarantine entry was written and verified.`,
 	cmd.Flags().BoolVar(&intakeMoveTrash, "move-to-trash", false, "Move verified source files to the macOS Trash after the quarantine entry is written (macOS only)")
 	cmd.Flags().StringVar(&intakeOCRText, "ocr-text", "", "Path to a text file with on-device OCR results; its lines become suggestions for image/PDF sources (macOS client integration)")
 	cmd.GroupID = cli.GroupIDSharingSync
+	cmd.AddCommand(newIntakeWatchCmd())
 	return cmd
 }
 
