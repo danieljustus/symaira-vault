@@ -57,19 +57,16 @@ enum DeviceIdentityStore {
     }
 
     static func accessControl() throws -> SecAccessControl {
-        // Test hook: allows tests to simulate ACL creation failures without
-        // relying on host biometric configuration.
-        if let override = accessControlOverride {
-            return try override()
-        }
-
         // ThisDeviceOnly + biometric-required: the identity never leaves the
         // device and can only be read after a local biometric prompt.
         var error: Unmanaged<CFError>?
         let flags: SecAccessControlCreateFlags = [.biometryCurrentSet]
-        guard let ac = SecAccessControlCreateWithFlags(kCFAllocatorDefault,
-                                                      kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly,
-                                                      flags, &error) else {
+        let create = accessControlFactory ?? { flags, error in
+            SecAccessControlCreateWithFlags(kCFAllocatorDefault,
+                                            kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly,
+                                            flags, error)
+        }
+        guard let ac = create(flags, &error) else {
             let underlying = error?.takeRetainedValue() as Error? ?? NSError(domain: "DeviceIdentityStore", code: Int(errSecParam), userInfo: nil)
             throw NSError(domain: "DeviceIdentityStore",
                           code: Int(errSecParam),
@@ -79,6 +76,6 @@ enum DeviceIdentityStore {
         return ac
     }
 
-    // Test-only override for ACL creation. Nil in production.
-    static var accessControlOverride: (() throws -> SecAccessControl)?
+    // Test hook for deterministic ACL-creation failures. Nil in production.
+    static var accessControlFactory: ((SecAccessControlCreateFlags, UnsafeMutablePointer<Unmanaged<CFError>?>?) -> SecAccessControl?)?
 }
