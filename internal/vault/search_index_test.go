@@ -3,14 +3,17 @@ package vault
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"filippo.io/age"
 
+	vaultconfig "github.com/danieljustus/symaira-vault/internal/config"
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
 	"github.com/danieljustus/symaira-vault/internal/testutil"
 )
@@ -1094,5 +1097,296 @@ func TestEncryptedIndex_NoServiceLeakageOnDisk(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("Walk vault dir: %v", err)
+	}
+}
+
+func TestSearchIndexCache_CacheHit(t *testing.T) {
+	searchIndexStore.invalidateAll()
+	t.Cleanup(searchIndexStore.invalidateAll)
+
+	vaultDir := t.TempDir()
+	identity := testutil.TempIdentity(t)
+
+	cfg := vaultconfig.Default()
+	cfg.VaultDir = vaultDir
+	cfg.Vault = &vaultconfig.VaultConfig{SearchIndexCache: true}
+	if err := cfg.SaveTo(filepath.Join(vaultDir, "config.yaml")); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	mustWriteEntry(t, vaultDir, identity, "github.com/user", map[string]interface{}{
+		"username": "alice",
+		"password": "s3cr3t",
+	})
+	mustWriteEntry(t, vaultDir, identity, "personal/email", map[string]interface{}{
+		"email": "bob@example.com",
+	})
+
+	idx := searchIndexForVault(vaultDir)
+	if err := idx.Build(vaultDir, identity); err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	results1, err := idx.MatchEntries(vaultDir, identity, []string{"github.com/user"}, "alice")
+	if err != nil {
+		t.Fatalf("MatchEntries() error = %v", err)
+	}
+	if len(results1) != 1 {
+		t.Fatalf("MatchEntries('alice') = %d results, want 1", len(results1))
+	}
+
+	idx.mu.RLock()
+	cached := idx.docValid && idx.doc != nil
+	idx.mu.RUnlock()
+	if !cached {
+		t.Fatal("expected doc cache to be populated after first MatchEntries")
+	}
+
+	results2, err := idx.MatchEntries(vaultDir, identity, []string{"personal/email"}, "bob")
+	if err != nil {
+		t.Fatalf("MatchEntries() error = %v", err)
+	}
+	if len(results2) != 1 {
+		t.Fatalf("MatchEntries('bob') = %d results, want 1", len(results2))
+	}
+}
+
+func TestSearchIndexCache_ClearMemoryWipesPlaintext(t *testing.T) {
+	searchIndexStore.invalidateAll()
+	t.Cleanup(searchIndexStore.invalidateAll)
+
+	vaultDir := t.TempDir()
+	identity := testutil.TempIdentity(t)
+
+	cfg := vaultconfig.Default()
+	cfg.VaultDir = vaultDir
+	cfg.Vault = &vaultconfig.VaultConfig{SearchIndexCache: true}
+	if err := cfg.SaveTo(filepath.Join(vaultDir, "config.yaml")); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	mustWriteEntry(t, vaultDir, identity, "test/entry", map[string]interface{}{"key": "value"})
+
+	idx := searchIndexForVault(vaultDir)
+	if err := idx.Build(vaultDir, identity); err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	idx.mu.RLock()
+	wasValid := idx.docValid
+	idx.mu.RUnlock()
+	if !wasValid {
+		t.Fatal("expected docValid to be true after Build with cache enabled")
+	}
+
+	idx.ClearMemory()
+
+	idx.mu.RLock()
+	nowValid := idx.docValid
+	hasDoc := idx.doc != nil
+	idx.mu.RUnlock()
+	if nowValid {
+		t.Error("ClearMemory() should set docValid = false")
+	}
+	if hasDoc {
+		t.Error("ClearMemory() should set doc = nil")
+	}
+	if idx.IsBuilt() {
+		t.Error("ClearMemory() should clear IsBuilt() state")
+	}
+}
+
+func TestSearchIndexCache_InvalidateWipesPlaintext(t *testing.T) {
+	searchIndexStore.invalidateAll()
+	t.Cleanup(searchIndexStore.invalidateAll)
+
+	vaultDir := t.TempDir()
+	identity := testutil.TempIdentity(t)
+
+	cfg := vaultconfig.Default()
+	cfg.VaultDir = vaultDir
+	cfg.Vault = &vaultconfig.VaultConfig{SearchIndexCache: true}
+	if err := cfg.SaveTo(filepath.Join(vaultDir, "config.yaml")); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	mustWriteEntry(t, vaultDir, identity, "test/entry", map[string]interface{}{"key": "value"})
+
+	idx := searchIndexForVault(vaultDir)
+	if err := idx.Build(vaultDir, identity); err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	idx.mu.RLock()
+	wasValid := idx.docValid
+	idx.mu.RUnlock()
+	if !wasValid {
+		t.Fatal("expected docValid to be true after Build with cache enabled")
+	}
+
+	idx.Invalidate()
+
+	idx.mu.RLock()
+	nowValid := idx.docValid
+	hasDoc := idx.doc != nil
+	idx.mu.RUnlock()
+	if nowValid {
+		t.Error("Invalidate() should set docValid = false")
+	}
+	if hasDoc {
+		t.Error("Invalidate() should set doc = nil")
+	}
+	if _, err := os.Stat(indexFilePath(vaultDir)); !os.IsNotExist(err) {
+		t.Error("Invalidate() should remove the on-disk index file")
+	}
+}
+
+func TestSearchIndexCache_CiphertextOnlyDefault(t *testing.T) {
+	searchIndexStore.invalidateAll()
+	t.Cleanup(searchIndexStore.invalidateAll)
+
+	vaultDir := t.TempDir()
+	identity := testutil.TempIdentity(t)
+
+	cfg := vaultconfig.Default()
+	cfg.VaultDir = vaultDir
+	if err := cfg.SaveTo(filepath.Join(vaultDir, "config.yaml")); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	mustWriteEntry(t, vaultDir, identity, "test/entry", map[string]interface{}{"key": "value"})
+
+	idx := searchIndexForVault(vaultDir)
+	if err := idx.Build(vaultDir, identity); err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	idx.mu.RLock()
+	cached := idx.docValid && idx.doc != nil
+	idx.mu.RUnlock()
+	if cached {
+		t.Error("doc cache must not be populated when SearchIndexCache is not enabled")
+	}
+
+	results, err := idx.MatchEntries(vaultDir, identity, []string{"test/entry"}, "value")
+	if err != nil {
+		t.Fatalf("MatchEntries() error = %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("MatchEntries('value') = %d results, want 1", len(results))
+	}
+}
+
+func TestSearchIndexCache_ConcurrentAccess(t *testing.T) {
+	searchIndexStore.invalidateAll()
+	t.Cleanup(searchIndexStore.invalidateAll)
+
+	vaultDir := t.TempDir()
+	identity := testutil.TempIdentity(t)
+
+	cfg := vaultconfig.Default()
+	cfg.VaultDir = vaultDir
+	cfg.Vault = &vaultconfig.VaultConfig{SearchIndexCache: true}
+	if err := cfg.SaveTo(filepath.Join(vaultDir, "config.yaml")); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	for i := 0; i < 50; i++ {
+		path := fmt.Sprintf("service-%d/entry-%05d", i/10, i)
+		mustWriteEntry(t, vaultDir, identity, path, map[string]interface{}{
+			"username": fmt.Sprintf("user-%05d", i),
+			"password": fmt.Sprintf("pass-%05d", i),
+		})
+	}
+
+	idx := searchIndexForVault(vaultDir)
+	if err := idx.Build(vaultDir, identity); err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	var wg sync.WaitGroup
+	errCh := make(chan error, 20)
+
+	for w := 0; w < 4; w++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			for i := 0; i < 25; i++ {
+				path := fmt.Sprintf("service-%d/entry-%05d", i/10, i)
+				if err := idx.UpdateEntry(vaultDir, path, identity); err != nil {
+					errCh <- fmt.Errorf("worker %d UpdateEntry(%s): %w", workerID, path, err)
+					return
+				}
+				_, err := idx.MatchEntries(vaultDir, identity, []string{path}, fmt.Sprintf("pass-%05d", i))
+				if err != nil {
+					errCh <- fmt.Errorf("worker %d MatchEntries(%s): %w", workerID, path, err)
+					return
+				}
+			}
+		}(w)
+	}
+
+	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		t.Error(err)
+	}
+
+	results, err := idx.MatchEntries(vaultDir, identity, []string{"service-0/entry-00000"}, "pass-00000")
+	if err != nil {
+		t.Fatalf("MatchEntries() error = %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("MatchEntries('pass-00000') = %d results, want 1", len(results))
+	}
+}
+
+func TestSearchIndexCache_DebouncedPersistence(t *testing.T) {
+	searchIndexStore.invalidateAll()
+	t.Cleanup(searchIndexStore.invalidateAll)
+
+	vaultDir := t.TempDir()
+	identity := testutil.TempIdentity(t)
+
+	cfg := vaultconfig.Default()
+	cfg.VaultDir = vaultDir
+	cfg.Vault = &vaultconfig.VaultConfig{SearchIndexCache: true}
+	if err := cfg.SaveTo(filepath.Join(vaultDir, "config.yaml")); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	mustWriteEntry(t, vaultDir, identity, "a/entry", map[string]interface{}{"key": "a"})
+	mustWriteEntry(t, vaultDir, identity, "b/entry", map[string]interface{}{"key": "b"})
+
+	idx := searchIndexForVault(vaultDir)
+	if err := idx.Build(vaultDir, identity); err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	for _, p := range []string{"a/entry", "b/entry", "a/entry"} {
+		if err := idx.UpdateEntry(vaultDir, p, identity); err != nil {
+			t.Fatalf("UpdateEntry(%s) error = %v", p, err)
+		}
+	}
+
+	results, err := idx.MatchEntries(vaultDir, identity, []string{"a/entry"}, "a")
+	if err != nil {
+		t.Fatalf("MatchEntries() error = %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("MatchEntries('a') = %d results, want 1", len(results))
+	}
+
+	freshIdx := &EncryptedIndex{}
+	if err := freshIdx.loadFromDisk(vaultDir, identity); err != nil {
+		t.Fatalf("loadFromDisk() error = %v", err)
+	}
+	freshResults, err := freshIdx.MatchEntries(vaultDir, identity, []string{"a/entry"}, "a")
+	if err != nil {
+		t.Fatalf("freshIdx.MatchEntries() error = %v", err)
+	}
+	if len(freshResults) != 1 {
+		t.Fatalf("freshIdx.MatchEntries('a') = %d results, want 1", len(freshResults))
 	}
 }

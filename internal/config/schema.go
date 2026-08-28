@@ -14,6 +14,7 @@ type VaultConfig struct {
 	LegacyMode         *bool         `yaml:"legacy_mode,omitempty"`
 	SearchIndex        bool          `yaml:"search_index,omitempty"`
 	SearchWorkers      int           `yaml:"search_workers,omitempty"`
+	SearchIndexCache   bool          `yaml:"search_index_cache,omitempty"`
 	ConfigCacheEntries int           `yaml:"config_cache_entries,omitempty"`
 	PseudonymizePaths  bool          `yaml:"pseudonymize_paths,omitempty"`
 	ScryptWorkFactor   int           `yaml:"scrypt_work_factor,omitempty"`
@@ -306,6 +307,9 @@ func MergeFromVault(dst *VaultConfig, src VaultConfig) {
 	}
 	if src.SearchWorkers > 0 {
 		dst.SearchWorkers = src.SearchWorkers
+	}
+	if src.SearchIndexCache {
+		dst.SearchIndexCache = true
 	}
 	if src.PseudonymizePaths {
 		dst.PseudonymizePaths = true

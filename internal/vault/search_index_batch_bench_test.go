@@ -2,20 +2,29 @@ package vault
 
 import (
 	"fmt"
+	"path/filepath"
 	"testing"
+
+	vaultconfig "github.com/danieljustus/symaira-vault/internal/config"
 )
 
 // BenchmarkEncryptedIndexUpdateEntry_1kEntries measures the cost of a single
 // incremental UpdateEntry on a 1k-entry vault: each call decrypts, re-marshals,
 // re-encrypts, and re-persists the whole index document.
 func BenchmarkEncryptedIndexUpdateEntry_1kEntries(b *testing.B) {
-	benchmarkIndexUpdateEntry(b, 1000)
+	benchmarkIndexUpdateEntry(b, 1000, false)
+}
+
+// BenchmarkEncryptedIndexUpdateEntryCached_1kEntries measures the same write
+// with the opt-in decrypted index cache enabled.
+func BenchmarkEncryptedIndexUpdateEntryCached_1kEntries(b *testing.B) {
+	benchmarkIndexUpdateEntry(b, 1000, true)
 }
 
 // BenchmarkEncryptedIndexUpdateEntry_2kEntries measures the per-write cost on
 // a 2k-entry vault, showing the O(N) growth that makes bulk imports O(N²).
 func BenchmarkEncryptedIndexUpdateEntry_2kEntries(b *testing.B) {
-	benchmarkIndexUpdateEntry(b, 2000)
+	benchmarkIndexUpdateEntry(b, 2000, false)
 }
 
 // BenchmarkEncryptedIndexBatchUpdate_1kEntries_100Writes measures a batch of
@@ -38,10 +47,18 @@ func BenchmarkEncryptedIndexRemoveEntry_2kEntries(b *testing.B) {
 	benchmarkIndexRemoveEntry(b, 2000)
 }
 
-func benchmarkIndexUpdateEntry(b *testing.B, numEntries int) {
+func benchmarkIndexUpdateEntry(b *testing.B, numEntries int, cacheEnabled bool) {
 	vaultDir := b.TempDir()
 	identity := generateTestIdentity(b)
 	createTestEntries(b, vaultDir, identity, numEntries)
+	if cacheEnabled {
+		cfg := vaultconfig.Default()
+		cfg.VaultDir = vaultDir
+		cfg.Vault = &vaultconfig.VaultConfig{SearchIndexCache: true}
+		if err := cfg.SaveTo(filepath.Join(vaultDir, "config.yaml")); err != nil {
+			b.Fatalf("save cache config: %v", err)
+		}
+	}
 
 	idx := &EncryptedIndex{}
 	if err := idx.Build(vaultDir, identity); err != nil {
