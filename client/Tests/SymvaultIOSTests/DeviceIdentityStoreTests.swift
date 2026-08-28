@@ -27,10 +27,13 @@ import Testing
     }
     defer { DeviceIdentityStore.accessControlOverride = nil }
 
-    #expect {
+    do {
         try DeviceIdentityStore.save("test-identity")
-    } throws: { error in
-        let nsError = error as NSError
-        return nsError.domain == "Test" && nsError.code == Int(errSecParam)
+        Issue.record("expected DeviceIdentityStore.save to throw")
+    } catch let error as NSError {
+        #expect(error.domain == "Test")
+        #expect(error.code == Int(errSecParam))
+    } catch {
+        Issue.record("expected NSError, got \(error)")
     }
 }
