@@ -6,13 +6,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
 
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
+	"github.com/danieljustus/symaira-vault/internal/ssrf"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
@@ -25,6 +28,8 @@ const (
 	perplexityMaxTokens        = 2048
 	perplexityAPIKeyEntry      = "perplexity"
 )
+
+var newPerplexityHTTPClient = ssrf.NewHTTPClient
 
 type perplexityRateLimiter struct {
 	mu      sync.Mutex
@@ -120,6 +125,14 @@ func (s *Server) getPerplexityBaseURL() string {
 	return perplexityDefaultBaseURL
 }
 
+func (s *Server) getPerplexityAllowPrivate() bool {
+	if s.vault != nil && s.vault.Config != nil && s.vault.Config.MCP != nil &&
+		s.vault.Config.MCP.Perplexity != nil {
+		return s.vault.Config.MCP.Perplexity.AllowPrivate
+	}
+	return false
+}
+
 func (s *Server) getPerplexityRateLimit() int {
 	if s.vault != nil && s.vault.Config != nil && s.vault.Config.MCP != nil &&
 		s.vault.Config.MCP.Perplexity != nil && s.vault.Config.MCP.Perplexity.RateLimitPerMin > 0 {
@@ -128,10 +141,23 @@ func (s *Server) getPerplexityRateLimit() int {
 	return perplexityDefaultRateLimit
 }
 
-func (s *Server) callPerplexityChat(ctx context.Context, apiKey, baseURL, model string, messages []perplexityMessage) (*perplexityChatResponse, error) {
+func (s *Server) callPerplexityChat(ctx context.Context, apiKey, baseURL, model string, messages []perplexityMessage, allowPrivate bool) (*perplexityChatResponse, error) {
 	rateLimit := s.getPerplexityRateLimit()
 	if !globalPerplexityRL.Allow(rateLimit) {
 		return nil, fmt.Errorf("perplexity rate limit exceeded: max %d requests per minute", rateLimit)
+	}
+
+	// Validate the resolved BaseURL before constructing any Authorization
+	// header or sending a request. This is the SSRF-hardened entry point.
+	parsedURL, err := url.Parse(baseURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid perplexity base URL: %w", err)
+	}
+	if parsedURL.Scheme != "https" {
+		return nil, fmt.Errorf("perplexity base URL must use HTTPS, got %q", parsedURL.Scheme)
+	}
+	if targetErr := ssrf.ValidateURL(ctx, baseURL, allowPrivate, net.DefaultResolver.LookupIPAddr); targetErr != nil {
+		return nil, targetErr
 	}
 
 	reqBody := perplexityChatRequest{
@@ -153,7 +179,7 @@ func (s *Server) callPerplexityChat(ctx context.Context, apiKey, baseURL, model 
 	httpReq.Header.Set("Authorization", "Bearer "+apiKey)
 	httpReq.Header.Set("Accept", "application/json")
 
-	client := &http.Client{Timeout: perplexityDefaultTimeout * time.Second}
+	client := newPerplexityHTTPClient(time.Duration(perplexityDefaultTimeout)*time.Second, allowPrivate)
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("perplexity API call failed: %w", err)
@@ -191,13 +217,14 @@ func (s *Server) handlePerplexitySearch(ctx context.Context, req mcp.CallToolReq
 	}
 
 	baseURL := s.getPerplexityBaseURL()
+	allowPrivate := s.getPerplexityAllowPrivate()
 
 	messages := []perplexityMessage{
 		{Role: "system", Content: "You are a search assistant. Synthesize search results for the user's query. Provide accurate, up-to-date information with citations where applicable. Be concise and direct."},
 		{Role: "user", Content: query},
 	}
 
-	resp, apiErr := s.callPerplexityChat(ctx, apiKey, baseURL, perplexityDefaultModel, messages)
+	resp, apiErr := s.callPerplexityChat(ctx, apiKey, baseURL, perplexityDefaultModel, messages, allowPrivate)
 	if apiErr != nil {
 		s.logAudit(ctx, "perplexity_search", fmt.Sprintf("query=%q, error=%v", query, apiErr), false)
 		metrics.RecordMCPRequest("perplexity_search", s.agent.Name, "error", 0)
@@ -244,6 +271,7 @@ func (s *Server) handlePerplexityAsk(ctx context.Context, req mcp.CallToolReques
 	}
 
 	baseURL := s.getPerplexityBaseURL()
+	allowPrivate := s.getPerplexityAllowPrivate()
 	contextEntries := req.GetString("context", "")
 
 	systemPrompt := "You are a helpful AI assistant. Answer the user's question clearly and accurately. Provide citations for your answers where applicable."
@@ -263,7 +291,7 @@ func (s *Server) handlePerplexityAsk(ctx context.Context, req mcp.CallToolReques
 		{Role: "user", Content: userMessage},
 	}
 
-	resp, apiErr := s.callPerplexityChat(ctx, apiKey, baseURL, perplexityDefaultModel, messages)
+	resp, apiErr := s.callPerplexityChat(ctx, apiKey, baseURL, perplexityDefaultModel, messages, allowPrivate)
 	if apiErr != nil {
 		s.logAudit(ctx, "perplexity_ask", fmt.Sprintf("question=%q, error=%v", question, apiErr), false)
 		metrics.RecordMCPRequest("perplexity_ask", s.agent.Name, "error", 0)
