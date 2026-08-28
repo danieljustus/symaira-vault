@@ -9,7 +9,7 @@ import Testing
     let underlying = NSError(domain: "TestACL", code: 42,
                              userInfo: [NSLocalizedDescriptionKey: "simulated ACL failure"])
     DeviceIdentityStore.accessControlFactory = { _, error in
-        error?.pointee = Unmanaged.passRetained(underlying as CFError)
+        error?.pointee = Unmanaged.passRetained(underlying as! CFError)
         return nil
     }
     defer { DeviceIdentityStore.accessControlFactory = nil }
@@ -29,7 +29,7 @@ import Testing
     DeviceIdentityStore.accessControlFactory = { _, error in
         let failure = NSError(domain: "Test", code: Int(errSecParam),
                               userInfo: [NSLocalizedDescriptionKey: "Simulated ACL failure"])
-        error?.pointee = Unmanaged.passRetained(failure as CFError)
+        error?.pointee = Unmanaged.passRetained(failure as! CFError)
         return nil
     }
     defer { DeviceIdentityStore.accessControlFactory = nil }
