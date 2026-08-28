@@ -66,6 +66,7 @@ func (c *Config) SaveTo(path string) error {
 			LegacyMode:         c.Vault.LegacyMode,
 			SearchIndex:        c.Vault.SearchIndex,
 			SearchWorkers:      c.Vault.SearchWorkers,
+			SearchIndexCache:   c.Vault.SearchIndexCache,
 			ConfigCacheEntries: c.Vault.ConfigCacheEntries,
 			PseudonymizePaths:  c.Vault.PseudonymizePaths,
 			ScryptWorkFactor:   c.Vault.ScryptWorkFactor,

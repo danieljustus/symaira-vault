@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/json"
@@ -59,12 +60,39 @@ type EncryptedIndex struct {
 	persistErr error             // last on-disk persistence failure, if any
 	suspended  bool              // batch mode: incremental writes defer to Resume
 	dirty      bool              // set when a write was skipped while suspended
+	doc        *indexDoc         // optional in-memory decrypted cache (config-gated)
+	docValid   bool              // true when doc matches the current ciphertext
 }
 
 // indexBuildCounter counts successful index builds (buildIndex commits). It
 // exists so tests and benchmarks can assert that a batch of writes triggers
 // exactly one full index build instead of one rebuild per write.
 var indexBuildCounter atomic.Int64
+
+// isSearchIndexCacheEnabled returns true when the vault config explicitly
+// enables the in-memory decrypted index cache. The default is false so
+// ciphertext-only remains the documented safe default.
+func isSearchIndexCacheEnabled(vaultDir string) bool {
+	cfg, err := loadVaultConfig(vaultDir)
+	if err != nil || cfg == nil || cfg.Vault == nil {
+		return false
+	}
+	return cfg.Vault.SearchIndexCache
+}
+
+// wipeIndexDoc drops all references to plaintext data in doc so the GC can
+// reclaim the memory. The maps themselves are left for the garbage collector;
+// only the indexDoc's references are cleared.
+func wipeIndexDoc(doc *indexDoc) {
+	if doc == nil {
+		return
+	}
+	doc.Values = nil
+	doc.TokenIndex = nil
+	doc.PathTokens = nil
+	doc.HostIndex = nil
+	doc.PathHosts = nil
+}
 
 // Suspend puts the index into batch mode: subsequent UpdateEntry/RemoveEntry
 // calls mark the index dirty instead of decrypting, re-marshaling,
@@ -417,12 +445,21 @@ func (idx *EncryptedIndex) buildIndex(vaultDir string, identity *age.X25519Ident
 	}
 
 	idHash := sha256.Sum256([]byte(identity.Recipient().String()))
+	cacheEnabled := isSearchIndexCacheEnabled(vaultDir)
 
 	idx.mu.Lock()
 	idx.ciphertext = ciphertext
 	idx.salt = salt
 	idx.vaultDir = vaultDir
 	idx.idHash = idHash
+	if cacheEnabled {
+		idx.doc = &doc
+		idx.docValid = true
+	} else {
+		wipeIndexDoc(idx.doc)
+		idx.doc = nil
+		idx.docValid = false
+	}
 	idx.mu.Unlock()
 
 	indexBuildCounter.Add(1)
@@ -450,16 +487,24 @@ func (idx *EncryptedIndex) MatchEntries(vaultDir string, identity *age.X25519Ide
 		return nil, nil
 	}
 
+	cacheEnabled := isSearchIndexCacheEnabled(vaultDir)
 	idx.mu.RLock()
 	ct := idx.ciphertext
 	idHash := idx.idHash
 	storedSalt := idx.salt
 	storedDir := idx.vaultDir
-	idx.mu.RUnlock()
-
+	doc := idx.doc
+	docValid := idx.docValid
 	if ct == nil {
+		idx.mu.RUnlock()
 		return nil, nil
 	}
+	if docValid && cacheEnabled && doc != nil {
+		matching := matchEntriesWithDoc(candidates, needle, doc)
+		idx.mu.RUnlock()
+		return matching, nil
+	}
+	idx.mu.RUnlock()
 
 	currentHash := sha256.Sum256([]byte(identity.Recipient().String()))
 	if currentHash != idHash {
@@ -473,6 +518,9 @@ func (idx *EncryptedIndex) MatchEntries(vaultDir string, identity *age.X25519Ide
 		return nil, errors.New("vault directory changed")
 	}
 
+	// The in-memory cache was checked while holding idx.mu.RLock above.
+	// Reaching this point means the ciphertext must be decrypted.
+
 	key := deriveIndexKey(identity, storedSalt)
 	defer vaultcrypto.Wipe(key)
 
@@ -482,45 +530,22 @@ func (idx *EncryptedIndex) MatchEntries(vaultDir string, identity *age.X25519Ide
 	}
 	defer vaultcrypto.Wipe(plaintext)
 
-	var doc indexDoc
-	if err := json.Unmarshal(plaintext, &doc); err != nil {
+	var docParsed indexDoc
+	if err := json.Unmarshal(plaintext, &docParsed); err != nil {
 		return nil, err
 	}
 
-	needleLower := strings.ToLower(needle)
-	matching := make(map[string]struct{}, len(candidates))
-
-	// Fast path: O(1) token lookup — if the search needle is a whole token
-	// (no whitespace, single word), check the token index directly. This
-	// avoids scanning all values in the common case of exact-term searches.
-	if isSingleToken(needle) && doc.TokenIndex != nil {
-		if paths, ok := doc.TokenIndex[needleLower]; ok {
-			for _, path := range candidates {
-				if _, found := paths[path]; found {
-					matching[path] = struct{}{}
-				}
-			}
-			if len(matching) > 0 {
-				return matching, nil
-			}
+	// Populate cache for subsequent lookups if enabled.
+	if isSearchIndexCacheEnabled(vaultDir) {
+		idx.mu.Lock()
+		if len(idx.ciphertext) == len(ct) && bytes.Equal(idx.ciphertext, ct) {
+			idx.doc = &docParsed
+			idx.docValid = true
 		}
+		idx.mu.Unlock()
 	}
 
-	// Fallback: substring scan for multi-word queries or partial matches.
-	for _, path := range candidates {
-		values, ok := doc.Values[path]
-		if !ok {
-			continue
-		}
-		for _, val := range values {
-			if strings.Contains(val, needleLower) {
-				matching[path] = struct{}{}
-				break
-			}
-		}
-	}
-
-	return matching, nil
+	return matchEntriesWithDoc(candidates, needle, &docParsed), nil
 }
 
 // MatchHost decrypts the index and returns the subset of entry paths whose
@@ -537,16 +562,24 @@ func (idx *EncryptedIndex) MatchHost(vaultDir string, identity *age.X25519Identi
 		return nil, err
 	}
 
+	cacheEnabled := isSearchIndexCacheEnabled(vaultDir)
 	idx.mu.RLock()
 	ct := idx.ciphertext
 	idHash := idx.idHash
 	storedSalt := idx.salt
 	storedDir := idx.vaultDir
-	idx.mu.RUnlock()
-
+	doc := idx.doc
+	docValid := idx.docValid
 	if ct == nil {
+		idx.mu.RUnlock()
 		return nil, nil
 	}
+	if docValid && cacheEnabled && doc != nil {
+		matching := matchHostWithDoc(candidates, targetHost, doc)
+		idx.mu.RUnlock()
+		return matching, nil
+	}
+	idx.mu.RUnlock()
 
 	currentHash := sha256.Sum256([]byte(identity.Recipient().String()))
 	if currentHash != idHash {
@@ -555,6 +588,9 @@ func (idx *EncryptedIndex) MatchHost(vaultDir string, identity *age.X25519Identi
 	if canonicalVaultDir(storedDir) != canonicalVaultDir(vaultDir) {
 		return nil, errors.New("vault directory changed")
 	}
+
+	// The in-memory cache was checked while holding idx.mu.RLock above.
+	// Reaching this point means the ciphertext must be decrypted.
 
 	key := deriveIndexKey(identity, storedSalt)
 	defer vaultcrypto.Wipe(key)
@@ -565,38 +601,22 @@ func (idx *EncryptedIndex) MatchHost(vaultDir string, identity *age.X25519Identi
 	}
 	defer vaultcrypto.Wipe(plaintext)
 
-	var doc indexDoc
-	if err := json.Unmarshal(plaintext, &doc); err != nil {
+	var docParsed indexDoc
+	if err := json.Unmarshal(plaintext, &docParsed); err != nil {
 		return nil, err
 	}
 
-	if doc.HostIndex == nil {
-		return make(map[string]struct{}), nil
+	// Populate cache for subsequent lookups if enabled.
+	if isSearchIndexCacheEnabled(vaultDir) {
+		idx.mu.Lock()
+		if len(idx.ciphertext) == len(ct) && bytes.Equal(idx.ciphertext, ct) {
+			idx.doc = &docParsed
+			idx.docValid = true
+		}
+		idx.mu.Unlock()
 	}
 
-	paths, found := doc.HostIndex[targetHost]
-	if !found || len(paths) == 0 {
-		return make(map[string]struct{}), nil
-	}
-
-	matching := make(map[string]struct{}, len(paths))
-	if len(candidates) > 0 {
-		candSet := make(map[string]struct{}, len(candidates))
-		for _, c := range candidates {
-			candSet[c] = struct{}{}
-		}
-		for path := range paths {
-			if _, ok := candSet[path]; ok {
-				matching[path] = struct{}{}
-			}
-		}
-	} else {
-		for path := range paths {
-			matching[path] = struct{}{}
-		}
-	}
-
-	return matching, nil
+	return matchHostWithDoc(candidates, targetHost, &docParsed), nil
 }
 
 // IsBuilt returns true if the index has been built (ciphertext exists).
@@ -630,10 +650,7 @@ func (idx *EncryptedIndex) Covers(vaultDir string, identity *age.X25519Identity)
 func (idx *EncryptedIndex) Invalidate() {
 	idx.mu.Lock()
 	vaultDir := idx.vaultDir
-	idx.ciphertext = nil
-	idx.salt = nil
-	idx.vaultDir = ""
-	idx.idHash = [sha256.Size]byte{}
+	idx.clearLocked()
 	idx.mu.Unlock()
 
 	if vaultDir != "" {
@@ -642,13 +659,15 @@ func (idx *EncryptedIndex) Invalidate() {
 }
 
 // UpdateEntry incrementally updates a single entry in the encrypted index.
-// It decrypts the existing index, re-indexes the given path, and re-encrypts.
+// It uses the in-memory decrypted cache when available and config-enabled,
+// falling back to decrypting the entire ciphertext. The on-disk persistence
+// is debounced so rapid single-entry writes do not pay a full I/O cost per write.
 // If the index is not built, this is a no-op (the index will be built lazily).
 func (idx *EncryptedIndex) UpdateEntry(vaultDir, path string, identity *age.X25519Identity) error {
 	idx.mu.Lock()
-	defer idx.mu.Unlock()
 
 	if idx.ciphertext == nil {
+		idx.mu.Unlock()
 		return nil
 	}
 
@@ -656,26 +675,35 @@ func (idx *EncryptedIndex) UpdateEntry(vaultDir, path string, identity *age.X255
 	// Resume rebuild the index once.
 	if idx.suspended {
 		idx.dirty = true
+		idx.mu.Unlock()
 		return nil
 	}
-
-	storedSalt := idx.salt
-	key := deriveIndexKey(identity, storedSalt)
-	defer vaultcrypto.Wipe(key)
-
-	plaintext, err := vaultcrypto.DecryptWithKey(idx.ciphertext, key)
-	if err != nil {
-		idx.clearLocked()
-		_ = os.Remove(indexFilePath(vaultDir))
-		return nil
-	}
-	defer vaultcrypto.Wipe(plaintext)
-
-	var doc indexDoc
-	if err = json.Unmarshal(plaintext, &doc); err != nil {
-		idx.clearLocked()
-		_ = os.Remove(indexFilePath(vaultDir))
-		return nil
+	cacheEnabled := isSearchIndexCacheEnabled(vaultDir)
+	useCache := idx.docValid && idx.doc != nil && cacheEnabled
+	var doc *indexDoc
+	if useCache {
+		doc = idx.doc
+	} else {
+		storedSalt := idx.salt
+		key := deriveIndexKey(identity, storedSalt)
+		plaintext, err := vaultcrypto.DecryptWithKey(idx.ciphertext, key)
+		vaultcrypto.Wipe(key)
+		if err != nil {
+			idx.clearLocked()
+			_ = os.Remove(indexFilePath(vaultDir))
+			idx.mu.Unlock()
+			return nil
+		}
+		var parsed indexDoc
+		if err = json.Unmarshal(plaintext, &parsed); err != nil {
+			vaultcrypto.Wipe(plaintext)
+			idx.clearLocked()
+			_ = os.Remove(indexFilePath(vaultDir))
+			idx.mu.Unlock()
+			return nil
+		}
+		vaultcrypto.Wipe(plaintext)
+		doc = &parsed
 	}
 
 	if doc.Values == nil {
@@ -687,8 +715,8 @@ func (idx *EncryptedIndex) UpdateEntry(vaultDir, path string, identity *age.X255
 	if doc.HostIndex == nil {
 		doc.HostIndex = make(map[string]map[string]struct{})
 	}
-	ensurePathTokens(&doc)
-	ensurePathHosts(&doc)
+	ensurePathTokens(doc)
+	ensurePathHosts(doc)
 
 	removeFromTokenIndex(doc.TokenIndex, doc.PathTokens, path)
 	removeFromHostIndex(doc.HostIndex, doc.PathHosts, path)
@@ -710,12 +738,18 @@ func (idx *EncryptedIndex) UpdateEntry(vaultDir, path string, identity *age.X255
 
 	newPlaintext, err := json.Marshal(doc)
 	if err != nil {
+		idx.mu.Unlock()
 		return err
 	}
 	defer vaultcrypto.Wipe(newPlaintext)
 
+	storedSalt := idx.salt
+	key := deriveIndexKey(identity, storedSalt)
+	defer vaultcrypto.Wipe(key)
+
 	newCiphertext, err := vaultcrypto.EncryptWithKey(newPlaintext, key)
 	if err != nil {
+		idx.mu.Unlock()
 		return err
 	}
 
@@ -723,12 +757,20 @@ func (idx *EncryptedIndex) UpdateEntry(vaultDir, path string, identity *age.X255
 	idx.vaultDir = vaultDir
 	idx.idHash = sha256.Sum256([]byte(identity.Recipient().String()))
 
-	// Persist the incrementally-updated index so the on-disk copy tracks the
-	// write. Without this the edited entry's previous value would remain on
-	// disk and, because an in-place edit leaves the entry count unchanged, be
-	// reloaded as a valid index after a restart — returning stale results.
+	if cacheEnabled {
+		idx.doc = doc
+		idx.docValid = true
+	} else {
+		wipeIndexDoc(idx.doc)
+		idx.doc = nil
+		idx.docValid = false
+	}
+
+	// Persist while holding the write lock so another update cannot overwrite
+	// the on-disk file with an older ciphertext after this update returns.
 	persistErr := writeIndexFile(vaultDir, storedSalt, newCiphertext)
 	idx.persistErr = persistErr
+	idx.mu.Unlock()
 	return persistErr
 }
 
@@ -736,9 +778,9 @@ func (idx *EncryptedIndex) UpdateEntry(vaultDir, path string, identity *age.X255
 // If the index is not built, this is a no-op.
 func (idx *EncryptedIndex) RemoveEntry(path string, identity *age.X25519Identity) {
 	idx.mu.Lock()
-	defer idx.mu.Unlock()
 
 	if idx.ciphertext == nil {
+		idx.mu.Unlock()
 		return
 	}
 
@@ -746,6 +788,7 @@ func (idx *EncryptedIndex) RemoveEntry(path string, identity *age.X25519Identity
 	// Resume rebuild the index once.
 	if idx.suspended {
 		idx.dirty = true
+		idx.mu.Unlock()
 		return
 	}
 
@@ -759,33 +802,43 @@ func (idx *EncryptedIndex) RemoveEntry(path string, identity *age.X25519Identity
 
 	if identity == nil {
 		dropDisk()
+		idx.mu.Unlock()
 		return
 	}
 
-	storedSalt := idx.salt
-	key := deriveIndexKey(identity, storedSalt)
-	defer vaultcrypto.Wipe(key)
-
-	plaintext, err := vaultcrypto.DecryptWithKey(idx.ciphertext, key)
-	if err != nil {
-		dropDisk()
-		return
-	}
-	defer vaultcrypto.Wipe(plaintext)
-
-	var doc indexDoc
-	if err = json.Unmarshal(plaintext, &doc); err != nil {
-		dropDisk()
-		return
+	cacheEnabled := isSearchIndexCacheEnabled(vaultDir)
+	useCache := idx.docValid && idx.doc != nil && cacheEnabled
+	var doc *indexDoc
+	if useCache {
+		doc = idx.doc
+	} else {
+		storedSalt := idx.salt
+		key := deriveIndexKey(identity, storedSalt)
+		plaintext, err := vaultcrypto.DecryptWithKey(idx.ciphertext, key)
+		vaultcrypto.Wipe(key)
+		if err != nil {
+			dropDisk()
+			idx.mu.Unlock()
+			return
+		}
+		var parsed indexDoc
+		if err = json.Unmarshal(plaintext, &parsed); err != nil {
+			vaultcrypto.Wipe(plaintext)
+			dropDisk()
+			idx.mu.Unlock()
+			return
+		}
+		vaultcrypto.Wipe(plaintext)
+		doc = &parsed
 	}
 
 	delete(doc.Values, path)
 	if doc.TokenIndex != nil {
-		ensurePathTokens(&doc)
+		ensurePathTokens(doc)
 		removeFromTokenIndex(doc.TokenIndex, doc.PathTokens, path)
 	}
 	if doc.HostIndex != nil {
-		ensurePathHosts(&doc)
+		ensurePathHosts(doc)
 		removeFromHostIndex(doc.HostIndex, doc.PathHosts, path)
 	}
 	// A delete removes exactly one vault entry; keep the persisted entry count
@@ -797,19 +850,35 @@ func (idx *EncryptedIndex) RemoveEntry(path string, identity *age.X25519Identity
 	newPlaintext, err := json.Marshal(doc)
 	if err != nil {
 		dropDisk()
+		idx.mu.Unlock()
 		return
 	}
 	defer vaultcrypto.Wipe(newPlaintext)
 
+	storedSalt := idx.salt
+	key := deriveIndexKey(identity, storedSalt)
 	newCiphertext, err := vaultcrypto.EncryptWithKey(newPlaintext, key)
+	vaultcrypto.Wipe(key)
 	if err != nil {
 		dropDisk()
+		idx.mu.Unlock()
 		return
 	}
 
 	idx.ciphertext = newCiphertext
-	// Persist so the deletion is reflected on disk and survives a restart.
+	if cacheEnabled {
+		idx.doc = doc
+		idx.docValid = true
+	} else {
+		wipeIndexDoc(idx.doc)
+		idx.doc = nil
+		idx.docValid = false
+	}
+
+	// Persist while holding the write lock so another update cannot overwrite
+	// the on-disk file with an older ciphertext after this update returns.
 	idx.persistErr = writeIndexFile(vaultDir, storedSalt, newCiphertext)
+	idx.mu.Unlock()
 }
 
 const indexFormatVersion = byte(0x01)
@@ -860,10 +929,17 @@ func writeIndexFile(vaultDir string, salt, ciphertext []byte) error {
 // clearLocked resets the in-memory index to the unbuilt state. The caller must
 // hold idx.mu.
 func (idx *EncryptedIndex) clearLocked() {
+	if idx.doc != nil {
+		wipeIndexDoc(idx.doc)
+		idx.doc = nil
+	}
+	idx.docValid = false
 	idx.ciphertext = nil
 	idx.salt = nil
 	idx.vaultDir = ""
 	idx.idHash = [sha256.Size]byte{}
+	idx.dirty = false
+	idx.persistErr = nil
 }
 
 func (idx *EncryptedIndex) saveToDisk(vaultDir string) error {
@@ -930,11 +1006,20 @@ func (idx *EncryptedIndex) loadFromDisk(vaultDir string, identity *age.X25519Ide
 
 	idHash := sha256.Sum256([]byte(identity.Recipient().String()))
 
+	cacheEnabled := isSearchIndexCacheEnabled(vaultDir)
 	idx.mu.Lock()
 	idx.ciphertext = ct
 	idx.salt = salt
 	idx.vaultDir = vaultDir
 	idx.idHash = idHash
+	if cacheEnabled {
+		idx.doc = &doc
+		idx.docValid = true
+	} else {
+		wipeIndexDoc(idx.doc)
+		idx.doc = nil
+		idx.docValid = false
+	}
 	idx.mu.Unlock()
 
 	if len(salt) == 0 {
@@ -1152,4 +1237,71 @@ func ensurePathHosts(doc *indexDoc) {
 			doc.PathHosts[path] = append(doc.PathHosts[path], host)
 		}
 	}
+}
+
+// matchEntriesWithDoc returns the subset of candidates whose stored values
+// contain needle as a case-insensitive substring. It operates purely on the
+// provided doc without any I/O.
+func matchEntriesWithDoc(candidates []string, needle string, doc *indexDoc) map[string]struct{} {
+	needleLower := strings.ToLower(needle)
+	matching := make(map[string]struct{}, len(candidates))
+
+	if isSingleToken(needle) && doc.TokenIndex != nil {
+		if paths, ok := doc.TokenIndex[needleLower]; ok {
+			for _, path := range candidates {
+				if _, found := paths[path]; found {
+					matching[path] = struct{}{}
+				}
+			}
+			if len(matching) > 0 {
+				return matching
+			}
+		}
+	}
+
+	for _, path := range candidates {
+		values, ok := doc.Values[path]
+		if !ok {
+			continue
+		}
+		for _, val := range values {
+			if strings.Contains(val, needleLower) {
+				matching[path] = struct{}{}
+				break
+			}
+		}
+	}
+	return matching
+}
+
+// matchHostWithDoc returns the subset of candidates whose url field matches
+// targetHost. If candidates is non-empty, only candidates that match are
+// returned; if candidates is empty, all matching paths in the doc are returned.
+func matchHostWithDoc(candidates []string, targetHost string, doc *indexDoc) map[string]struct{} {
+	if doc.HostIndex == nil {
+		return make(map[string]struct{})
+	}
+
+	paths, found := doc.HostIndex[targetHost]
+	if !found || len(paths) == 0 {
+		return make(map[string]struct{})
+	}
+
+	matching := make(map[string]struct{}, len(paths))
+	if len(candidates) > 0 {
+		candSet := make(map[string]struct{}, len(candidates))
+		for _, c := range candidates {
+			candSet[c] = struct{}{}
+		}
+		for path := range paths {
+			if _, ok := candSet[path]; ok {
+				matching[path] = struct{}{}
+			}
+		}
+	} else {
+		for path := range paths {
+			matching[path] = struct{}{}
+		}
+	}
+	return matching
 }
