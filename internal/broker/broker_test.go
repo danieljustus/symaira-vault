@@ -169,6 +169,33 @@ func TestCA_LeafForIPHost(t *testing.T) {
 	}
 }
 
+func TestCA_LeafForHostSweepsExpiredEntries(t *testing.T) {
+	ca, err := NewCA()
+	if err != nil {
+		t.Fatalf("NewCA: %v", err)
+	}
+	now := time.Now()
+	ca.now = func() time.Time { return now }
+
+	if _, err := ca.LeafForHost("expired.example.com"); err != nil {
+		t.Fatalf("LeafForHost: %v", err)
+	}
+	if len(ca.leaves) != 1 {
+		t.Fatalf("leaf cache size = %d, want 1", len(ca.leaves))
+	}
+
+	now = now.Add(leafTTL + time.Second)
+	if _, err := ca.LeafForHost("fresh.example.com"); err != nil {
+		t.Fatalf("LeafForHost after expiry: %v", err)
+	}
+	if _, ok := ca.leaves["expired.example.com"]; ok {
+		t.Fatal("expired leaf remained in cache after an insertion")
+	}
+	if len(ca.leaves) != 1 {
+		t.Fatalf("leaf cache size after sweep = %d, want 1", len(ca.leaves))
+	}
+}
+
 func TestProxy_PlainHTTPInjection(t *testing.T) {
 	const token = "broker-token-1"
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

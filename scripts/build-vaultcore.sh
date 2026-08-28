@@ -12,7 +12,7 @@
 # Usage: scripts/build-vaultcore.sh
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
 if [[ -z "${DEVELOPER_DIR:-}" && -d /Applications/Xcode-beta.app ]]; then
@@ -28,5 +28,6 @@ if [[ -d "$FRAMEWORK" ]]; then
 fi
 
 mkdir -p "$OUT_DIR"
+GOFLAGS=-mod=mod go run golang.org/x/mobile/cmd/gomobile init
 GOFLAGS=-mod=mod go run golang.org/x/mobile/cmd/gomobile bind -target=ios -o "$FRAMEWORK" ./pkg/mobilebind
 echo "Built $FRAMEWORK"
