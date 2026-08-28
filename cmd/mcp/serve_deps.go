@@ -46,7 +46,9 @@ var RunStdioServerFunc = func(ctx context.Context, vault *vaultpkg.Vault, agentN
 // decides) and is exposed to devices via the /api/v1/approvals transport.
 var ApprovalQueue = approval.NewQueue()
 
-var RunHTTPServerFunc = func(ctx context.Context, bind string, port int, vault *vaultpkg.Vault) error {
+// RunHTTPServerWithApproval starts the HTTP server with the device approval
+// transport mounted alongside the MCP endpoints.
+func RunHTTPServerWithApproval(ctx context.Context, bind string, port int, vault *vaultpkg.Vault) error {
 	vaultDir, _ := cli.VaultPath()
 	sessionStore, err := NewDeviceSessionStoreFunc(vaultDir)
 	if err != nil {
@@ -57,6 +59,8 @@ var RunHTTPServerFunc = func(ctx context.Context, bind string, port int, vault *
 	return serverbootstrap.RunHTTPServer(ctx, bind, port, vault, vaultDir, Version, newServerWithApproval,
 		serverbootstrap.WithApprovalAPI(approvalHandler))
 }
+
+var RunHTTPServerFunc = RunHTTPServerWithApproval
 
 var NewDeviceSessionStoreFunc = func(vaultDir string) (*pairing.DeviceSessionStore, error) {
 	return pairing.NewDeviceSessionStore(vaultDir)

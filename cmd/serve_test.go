@@ -1573,19 +1573,13 @@ func TestRunHTTPServerFunc_ApprovalDeviceSession(t *testing.T) {
 	origQueue := mcpcmd.ApprovalQueue
 	mcpcmd.ApprovalQueue = approval.NewQueue()
 	defer func() { mcpcmd.ApprovalQueue = origQueue }()
-
-	origHTTP := mcpcmd.RunHTTPServerFunc
-	mcpcmd.RunHTTPServerFunc = func(ctx context.Context, bind string, gotPort int, v *vaultpkg.Vault) error {
-		vaultDir, _ := cli.VaultPath()
-		sessionStore, err := mcpcmd.NewDeviceSessionStoreFunc(vaultDir)
-		if err != nil {
-			return fmt.Errorf("load device session store: %w", err)
-		}
-		_ = sessionStore.StartCleanup(ctx, 15*time.Minute)
-		approvalHandler := approval.NewHTTPHandler(mcpcmd.ApprovalQueue, approval.NewPairingTokenValidator(sessionStore))
-		return serverbootstrap.RunHTTPServer(ctx, bind, gotPort, v, vaultDir, cli.AppVersion, mcpcmd.NewServerWithApproval,
-			serverbootstrap.WithApprovalAPI(approvalHandler))
+	origStoreFactory := mcpcmd.NewDeviceSessionStoreFunc
+	mcpcmd.NewDeviceSessionStoreFunc = func(string) (*pairing.DeviceSessionStore, error) {
+		return store, nil
 	}
+	defer func() { mcpcmd.NewDeviceSessionStoreFunc = origStoreFactory }()
+	origHTTP := mcpcmd.RunHTTPServerFunc
+	mcpcmd.RunHTTPServerFunc = mcpcmd.RunHTTPServerWithApproval
 	defer func() { mcpcmd.RunHTTPServerFunc = origHTTP }()
 
 	port := findFreePort(t)
