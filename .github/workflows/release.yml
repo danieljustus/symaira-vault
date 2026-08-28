@@ -329,6 +329,13 @@ jobs:
           go-version: '1.26.6'
           cache: true
 
+      - name: Build Vaultcore XCFramework (for iOS target)
+        run: |
+          # The SymvaultIOS app target consumes Vaultcore.xcframework
+          # (a gomobile bind of pkg/mobilebind). It is git-ignored and must
+          # be generated before xcodebuild resolves the SPM package graph.
+          bash scripts/build-vaultcore.sh
+
       - name: Build symvault binary (for embedding)
         run: go build -o symvault .
 
