@@ -28,5 +28,6 @@ if [[ -d "$FRAMEWORK" ]]; then
 fi
 
 mkdir -p "$OUT_DIR"
+GOFLAGS=-mod=mod go run golang.org/x/mobile/cmd/gomobile init
 GOFLAGS=-mod=mod go run golang.org/x/mobile/cmd/gomobile bind -target=ios -o "$FRAMEWORK" ./pkg/mobilebind
 echo "Built $FRAMEWORK"
