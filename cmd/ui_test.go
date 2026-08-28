@@ -5,6 +5,7 @@ import (
 )
 
 func TestUICommandExperimentalFlagRegisteredAsNoOp(t *testing.T) {
+	uiCmd, _, _ := NewRootCmd().Find([]string{"ui"})
 	flag := uiCmd.Flags().Lookup("experimental")
 	if flag == nil {
 		t.Fatal("expected --experimental flag to be registered on uiCmd")
@@ -17,6 +18,7 @@ func TestUICommandExperimentalFlagRegisteredAsNoOp(t *testing.T) {
 func TestUICommandLaunchWithoutExperimental(t *testing.T) {
 	// The ui command no longer requires --experimental. With no vault set up,
 	// it will fail during vault loading rather than at the experimental gate.
+	uiCmd, _, _ := NewRootCmd().Find([]string{"ui"})
 	flag := uiCmd.Flags().Lookup("experimental")
 	if flag == nil {
 		t.Fatal("expected --experimental flag to be registered on uiCmd")

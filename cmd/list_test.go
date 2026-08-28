@@ -47,14 +47,15 @@ func TestCmdList_Alias(t *testing.T) {
 }
 
 func TestCmdList_Uninitialized(t *testing.T) {
+	root := NewRootCmd()
 	resetCmdFlags()
 	t.Cleanup(resetCmdFlags)
 	vaultDir := t.TempDir()
 	defer setupVaultFlag(t, vaultDir)()
 	stderr := captureStderr(func() {
-		rootCmd.SetArgs([]string{"--vault", vaultDir, "list"})
-		_ = rootCmd.Execute()
-		rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", vaultDir, "list"})
+		_ = root.Execute()
+		root.SetArgs(nil)
 	})
 	if !strings.Contains(stderr, "vault not initialized") && !strings.Contains(stderr, "Error") {
 		t.Errorf("expected vault not initialized, got: %s", stderr)
@@ -62,16 +63,17 @@ func TestCmdList_Uninitialized(t *testing.T) {
 }
 
 func TestList_ErrorPaths(t *testing.T) {
+	root := NewRootCmd()
 	resetVaultState(t)
 	t.Run("uninitialized vault", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
 		defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
-		rootCmd.SetArgs([]string{"--vault", tmpDir, "list"})
-		defer rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", tmpDir, "list"})
+		defer root.SetArgs(nil)
 
-		err := rootCmd.Execute()
+		err := root.Execute()
 		if err == nil || !strings.Contains(err.Error(), "not initialized") {
 			t.Errorf("expected 'not initialized' error, got: %v", err)
 		}

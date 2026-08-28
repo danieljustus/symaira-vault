@@ -8,7 +8,7 @@ import (
 )
 
 func TestPolicyValidateCmd_Success(t *testing.T) {
-	rootCmd = newPackageRootCmd()
+	root := NewRootCmd()
 	resetVaultState(t)
 	tmpDir := t.TempDir()
 	policyFile := filepath.Join(tmpDir, "test-policy.yaml")
@@ -28,13 +28,13 @@ rules:
 	}
 
 	var out strings.Builder
-	rootCmd.SetOut(&out)
-	rootCmd.SetErr(&out)
-	rootCmd.SetArgs([]string{"policy", "validate", policyFile})
-	defer rootCmd.SetArgs(nil)
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{"policy", "validate", policyFile})
+	defer root.SetArgs(nil)
 
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("ExecuteRoot(root) error = %v", err)
 	}
 
 	output := out.String()
@@ -44,6 +44,7 @@ rules:
 }
 
 func TestPolicyValidateCmd_Invalid(t *testing.T) {
+	root := NewRootCmd()
 	resetVaultState(t)
 	tmpDir := t.TempDir()
 	policyFile := filepath.Join(tmpDir, "invalid-policy.yaml")
@@ -59,14 +60,14 @@ rules:
 	}
 
 	var out strings.Builder
-	rootCmd.SetOut(&out)
-	rootCmd.SetErr(&out)
-	rootCmd.SetArgs([]string{"policy", "validate", policyFile})
-	defer rootCmd.SetArgs(nil)
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{"policy", "validate", policyFile})
+	defer root.SetArgs(nil)
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil {
-		t.Fatal("Execute() expected error, got nil")
+		t.Fatal("ExecuteRoot(root) expected error, got nil")
 	}
 }
 
@@ -122,6 +123,7 @@ rules:
 `
 
 func TestPolicyRemoveCmd_RejectsTraversal(t *testing.T) {
+	root := NewRootCmd()
 	resetVaultState(t)
 	vaultDir := t.TempDir()
 	restore := setupVaultFlag(t, vaultDir)
@@ -134,12 +136,12 @@ func TestPolicyRemoveCmd_RejectsTraversal(t *testing.T) {
 	}
 
 	var out strings.Builder
-	rootCmd.SetOut(&out)
-	rootCmd.SetErr(&out)
-	rootCmd.SetArgs([]string{"policy", "remove", "../identity.age"})
-	defer rootCmd.SetArgs(nil)
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{"policy", "remove", "../identity.age"})
+	defer root.SetArgs(nil)
 
-	if err := rootCmd.Execute(); err == nil {
+	if err := root.Execute(); err == nil {
 		t.Fatal("policy remove with traversal name: expected error, got nil")
 	}
 	if _, err := os.Stat(sentinel); err != nil {
@@ -148,6 +150,7 @@ func TestPolicyRemoveCmd_RejectsTraversal(t *testing.T) {
 }
 
 func TestPolicyApplyCmd_RejectsSymlinkDest(t *testing.T) {
+	root := NewRootCmd()
 	resetVaultState(t)
 	vaultDir := t.TempDir()
 	restore := setupVaultFlag(t, vaultDir)
@@ -175,12 +178,12 @@ func TestPolicyApplyCmd_RejectsSymlinkDest(t *testing.T) {
 	}
 
 	var out strings.Builder
-	rootCmd.SetOut(&out)
-	rootCmd.SetErr(&out)
-	rootCmd.SetArgs([]string{"policy", "apply", src})
-	defer rootCmd.SetArgs(nil)
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{"policy", "apply", src})
+	defer root.SetArgs(nil)
 
-	if err := rootCmd.Execute(); err == nil {
+	if err := root.Execute(); err == nil {
 		t.Fatal("policy apply over a symlink: expected error, got nil")
 	}
 	data, err := os.ReadFile(outside)
@@ -193,6 +196,7 @@ func TestPolicyApplyCmd_RejectsSymlinkDest(t *testing.T) {
 }
 
 func TestPolicyApplyRemoveCmd_RoundTrip(t *testing.T) {
+	root := NewRootCmd()
 	resetVaultState(t)
 	vaultDir := t.TempDir()
 	restore := setupVaultFlag(t, vaultDir)
@@ -204,11 +208,11 @@ func TestPolicyApplyRemoveCmd_RoundTrip(t *testing.T) {
 	}
 
 	var out strings.Builder
-	rootCmd.SetOut(&out)
-	rootCmd.SetErr(&out)
-	rootCmd.SetArgs([]string{"policy", "apply", src})
-	defer rootCmd.SetArgs(nil)
-	if err := rootCmd.Execute(); err != nil {
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{"policy", "apply", src})
+	defer root.SetArgs(nil)
+	if err := root.Execute(); err != nil {
 		t.Fatalf("policy apply: %v", err)
 	}
 
@@ -217,8 +221,8 @@ func TestPolicyApplyRemoveCmd_RoundTrip(t *testing.T) {
 		t.Fatalf("applied policy missing: %v", err)
 	}
 
-	rootCmd.SetArgs([]string{"policy", "remove", "dev.yaml"})
-	if err := rootCmd.Execute(); err != nil {
+	root.SetArgs([]string{"policy", "remove", "dev.yaml"})
+	if err := root.Execute(); err != nil {
 		t.Fatalf("policy remove: %v", err)
 	}
 	if _, err := os.Stat(applied); !os.IsNotExist(err) {

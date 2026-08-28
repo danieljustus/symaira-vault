@@ -18,10 +18,6 @@ var (
 	dynamicTTL    time.Duration
 )
 
-// dynamicCmd is retained for API compatibility; NewCommands() uses
-// newDynamicCmd() so every call gets a fresh command.
-var dynamicCmd = newDynamicCmd()
-
 func newDynamicCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "dynamic",

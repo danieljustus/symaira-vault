@@ -4,6 +4,7 @@ import Security
 /// Keychain storage for the device identity on iOS. The master identity is
 /// stored with `ThisDeviceOnly` accessibility (no iCloud sync) and a biometric
 /// ACL so it can only be read after a successful Face ID / Touch ID prompt.
+@MainActor
 enum DeviceIdentityStore {
     static let service = "com.symaira.vault.deviceIdentity"
     static let account = "masterIdentity"
@@ -15,7 +16,7 @@ enum DeviceIdentityStore {
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
             kSecValueData as String: data,
-            kSecAttrAccessControl as String: Self.accessControl(),
+            kSecAttrAccessControl as String: try Self.accessControl(),
         ]
         SecItemDelete(query as CFDictionary)
         let status = SecItemAdd(query as CFDictionary, nil)
@@ -55,14 +56,29 @@ enum DeviceIdentityStore {
         SecItemDelete(query as CFDictionary)
     }
 
-    private static func accessControl() -> SecAccessControl {
+    static func accessControl() throws -> SecAccessControl {
+        // Test hook: allows tests to simulate ACL creation failures without
+        // relying on host biometric configuration.
+        if let override = accessControlOverride {
+            return try override()
+        }
+
         // ThisDeviceOnly + biometric-required: the identity never leaves the
         // device and can only be read after a local biometric prompt.
         var error: Unmanaged<CFError>?
-        let flags: SecAccessControlCreateFlags = [.biometryCurrentSet, .privateKeyUsage]
-        let ac = SecAccessControlCreateWithFlags(kCFAllocatorDefault,
-                                                  kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly,
-                                                  flags, &error)
-        return ac!
+        let flags: SecAccessControlCreateFlags = [.biometryCurrentSet]
+        guard let ac = SecAccessControlCreateWithFlags(kCFAllocatorDefault,
+                                                      kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly,
+                                                      flags, &error) else {
+            let underlying = error?.takeRetainedValue() as Error? ?? NSError(domain: "DeviceIdentityStore", code: Int(errSecParam), userInfo: nil)
+            throw NSError(domain: "DeviceIdentityStore",
+                          code: Int(errSecParam),
+                          userInfo: [NSLocalizedDescriptionKey: "Biometric access control could not be created. Please set a device passcode and enrol Face ID or Touch ID. (\(underlying.localizedDescription))",
+                                     NSUnderlyingErrorKey: underlying])
+        }
+        return ac
     }
+
+    // Test-only override for ACL creation. Nil in production.
+    static var accessControlOverride: (() throws -> SecAccessControl)?
 }

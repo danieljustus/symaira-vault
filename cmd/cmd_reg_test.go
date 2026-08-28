@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	admin "github.com/danieljustus/symaira-vault/cmd/admin"
-	mcpcmd "github.com/danieljustus/symaira-vault/cmd/mcp"
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
 	"github.com/danieljustus/symaira-vault/internal/config"
 	server "github.com/danieljustus/symaira-vault/internal/mcp/server"
@@ -18,6 +17,7 @@ import (
 )
 
 func TestCommandRegistration(t *testing.T) {
+	root := NewRootCmd()
 	commands := []string{
 		"add",
 		"delete",
@@ -48,7 +48,7 @@ func TestCommandRegistration(t *testing.T) {
 
 	for _, cmd := range commands {
 		found := false
-		for _, c := range rootCmd.Commands() {
+		for _, c := range root.Commands() {
 			if c.Name() == cmd {
 				found = true
 				break
@@ -61,14 +61,15 @@ func TestCommandRegistration(t *testing.T) {
 }
 
 func TestAllTopLevelCommandsHaveGroup(t *testing.T) {
+	root := NewRootCmd()
 	validGroups := map[string]bool{}
-	for _, g := range rootCmd.Groups() {
+	for _, g := range root.Groups() {
 		validGroups[g.ID] = true
 	}
 	if len(validGroups) == 0 {
 		t.Fatal("no command groups declared on root command")
 	}
-	for _, c := range rootCmd.Commands() {
+	for _, c := range root.Commands() {
 		if c.Name() == "help" || c.Name() == "completion" || c.Name() == "version" {
 			continue
 		}
@@ -83,9 +84,11 @@ func TestAllTopLevelCommandsHaveGroup(t *testing.T) {
 }
 
 func TestSubcommandRegistration(t *testing.T) {
+	root := NewRootCmd()
 	recipientsSubcommands := []string{"list", "add", "remove"}
 	for _, sub := range recipientsSubcommands {
 		found := false
+		recipientsCmd, _, _ := NewRootCmd().Find([]string{"recipients"})
 		for _, c := range recipientsCmd.Commands() {
 			if c.Name() == sub {
 				found = true
@@ -112,7 +115,7 @@ func TestSubcommandRegistration(t *testing.T) {
 	}
 
 	found := false
-	for _, c := range rootCmd.Commands() {
+	for _, c := range root.Commands() {
 		if c.Name() == "git" {
 			found = true
 			break
@@ -125,6 +128,7 @@ func TestSubcommandRegistration(t *testing.T) {
 	remoteSubcommands := []string{"init", "status"}
 	for _, sub := range remoteSubcommands {
 		found := false
+		remoteCmd, _, _ := NewRootCmd().Find([]string{"remote"})
 		for _, c := range remoteCmd.Commands() {
 			if c.Name() == sub {
 				found = true
@@ -139,6 +143,7 @@ func TestSubcommandRegistration(t *testing.T) {
 	deviceSubcommands := []string{"pair", "join", "accept", "list", "revoke"}
 	for _, sub := range deviceSubcommands {
 		found := false
+		deviceCmd, _, _ := NewRootCmd().Find([]string{"device"})
 		for _, c := range deviceCmd.Commands() {
 			if c.Name() == sub {
 				found = true
@@ -153,7 +158,8 @@ func TestSubcommandRegistration(t *testing.T) {
 	mcpSubcommands := []string{"install", "uninstall", "status"}
 	for _, sub := range mcpSubcommands {
 		found := false
-		for _, c := range mcpcmd.McpCmd.Commands() {
+		mcpCmd, _, _ := root.Find([]string{"mcp"})
+		for _, c := range mcpCmd.Commands() {
 			if c.Name() == sub {
 				found = true
 				break
@@ -167,7 +173,8 @@ func TestSubcommandRegistration(t *testing.T) {
 	serveSubcommands := []string{"install", "uninstall", "status"}
 	for _, sub := range serveSubcommands {
 		found := false
-		for _, c := range mcpcmd.ServeCmd.Commands() {
+		serveCmd, _, _ := root.Find([]string{"serve"})
+		for _, c := range serveCmd.Commands() {
 			if c.Name() == sub {
 				found = true
 				break
@@ -195,6 +202,7 @@ func TestSubcommandRegistration(t *testing.T) {
 	dynamicSubcommands := []string{"generate"}
 	for _, sub := range dynamicSubcommands {
 		found := false
+		dynamicCmd, _, _ := NewRootCmd().Find([]string{"dynamic"})
 		for _, c := range dynamicCmd.Commands() {
 			if c.Name() == sub {
 				found = true
@@ -209,6 +217,7 @@ func TestSubcommandRegistration(t *testing.T) {
 	templateSubcommands := []string{"generate"}
 	for _, sub := range templateSubcommands {
 		found := false
+		templateCmd, _, _ := NewRootCmd().Find([]string{"template"})
 		for _, c := range templateCmd.Commands() {
 			if c.Name() == sub {
 				found = true
@@ -223,6 +232,7 @@ func TestSubcommandRegistration(t *testing.T) {
 	policySubcommands := []string{"validate", "apply", "list", "remove"}
 	for _, sub := range policySubcommands {
 		found := false
+		policyCmd, _, _ := NewRootCmd().Find([]string{"policy"})
 		for _, c := range policyCmd.Commands() {
 			if c.Name() == sub {
 				found = true
@@ -440,6 +450,7 @@ func TestRecipientsCmd_Add_Success(t *testing.T) {
 		cli.VaultFlag.Changed = false
 	}
 
+	recipientsAddCmd, _, _ := NewRootCmd().Find([]string{"recipients", "add"})
 	recipientsAddCmd.SetArgs([]string{"age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"})
 
 	err := recipientsAddCmd.Execute()
@@ -477,6 +488,7 @@ func TestRecipientsCmd_List_WithRecipients(t *testing.T) {
 		cli.VaultFlag.Changed = false
 	}
 
+	recipientsListCmd, _, _ := NewRootCmd().Find([]string{"recipients", "list"})
 	err = recipientsListCmd.Execute()
 	if err != nil {
 		t.Errorf("recipients list failed: %v", err)
@@ -514,6 +526,7 @@ func TestRecipientsCmd_Remove_Success(t *testing.T) {
 		cli.VaultFlag.Changed = false
 	}
 
+	recipientsRemoveCmd, _, _ := NewRootCmd().Find([]string{"recipients", "remove"})
 	recipientsRemoveCmd.SetArgs([]string{testRecipient, "--yes"})
 
 	err = recipientsRemoveCmd.Execute()
@@ -523,6 +536,7 @@ func TestRecipientsCmd_Remove_Success(t *testing.T) {
 }
 
 func TestGenerateCmd_StoreToExistingEntry(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir := t.TempDir()
 	passphrase := []byte("test-passphrase")
 	identity, _ := vaultpkg.InitWithPassphrase(vaultDir, passphrase, config.Default())
@@ -547,6 +561,7 @@ func TestGenerateCmd_StoreToExistingEntry(t *testing.T) {
 		cli.VaultFlag.Changed = false
 	}
 
+	generateCmd, _, _ := root.Find([]string{"generate"})
 	generateCmd.SetArgs([]string{"--store", "existing.pass", "--length", "16"})
 
 	err := generateCmd.Execute()
@@ -556,6 +571,7 @@ func TestGenerateCmd_StoreToExistingEntry(t *testing.T) {
 }
 
 func TestGenerateCmd_StoreNewEntry(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir := t.TempDir()
 	passphrase := []byte("test-passphrase")
 	_, _ = vaultpkg.InitWithPassphrase(vaultDir, passphrase, config.Default())
@@ -578,6 +594,7 @@ func TestGenerateCmd_StoreNewEntry(t *testing.T) {
 		cli.VaultFlag.Changed = false
 	}
 
+	generateCmd, _, _ := root.Find([]string{"generate"})
 	generateCmd.SetArgs([]string{"--store", "new.pass", "--length", "16"})
 
 	err := generateCmd.Execute()
@@ -587,6 +604,7 @@ func TestGenerateCmd_StoreNewEntry(t *testing.T) {
 }
 
 func TestOutputHTTPConfigMCP(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir := t.TempDir()
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()
@@ -617,10 +635,10 @@ func TestOutputHTTPConfigMCP(t *testing.T) {
 		cli.VaultFlag.Changed = false
 	}
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "mcp-config", "claude-code"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "mcp-config", "claude-code"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil {
 		t.Fatal("expected deprecation error")
 	}

@@ -211,3 +211,76 @@ func TestCloseExpiresPending(t *testing.T) {
 		t.Fatalf("enqueue after close err = %v", err)
 	}
 }
+
+func TestWaitSelfEnforcesShortTTL(t *testing.T) {
+	q := NewQueueWithTTL(100 * time.Millisecond)
+	id, _ := q.Enqueue(Request{AgentName: "a", Path: "p", Write: true})
+
+	done := make(chan Outcome, 1)
+	go func() {
+		out, err := q.Wait(context.Background(), id)
+		if err != nil {
+			done <- Outcome{Status: StatusExpired}
+			return
+		}
+		done <- out
+	}()
+
+	select {
+	case got := <-done:
+		if got.Status != StatusExpired {
+			t.Fatalf("waiter outcome = %s", got.Status)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("waiter did not self-enforce expiry")
+	}
+	e, err := q.Get(id)
+	if err != nil || e.Status != StatusExpired {
+		t.Fatalf("entry = %+v err %v", e, err)
+	}
+}
+
+func TestWaitSelfEnforcesPerDeviceFailedAttempts(t *testing.T) {
+	q := NewQueueWithTTL(time.Hour)
+	id, _ := q.Enqueue(Request{AgentName: "a", Path: "p", Write: true})
+
+	// device-A waits and should get approved.
+	doneA := make(chan Outcome, 1)
+	go func() {
+		out, _ := q.Wait(context.Background(), id)
+		doneA <- out
+	}()
+
+	// device-B waits on a different request.
+	idB, _ := q.Enqueue(Request{AgentName: "b", Path: "q", Write: true})
+	doneB := make(chan Outcome, 1)
+	go func() {
+		out, _ := q.Wait(context.Background(), idB)
+		doneB <- out
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	if _, err := q.Approve(id, "device-A"); err != nil {
+		t.Fatalf("approve: %v", err)
+	}
+	select {
+	case got := <-doneA:
+		if got.Status != StatusApproved {
+			t.Fatalf("device-A outcome = %s", got.Status)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("device-A not woken")
+	}
+
+	if _, err := q.Deny(idB, "device-B"); err != nil {
+		t.Fatalf("deny: %v", err)
+	}
+	select {
+	case got := <-doneB:
+		if got.Status != StatusDenied {
+			t.Fatalf("device-B outcome = %s", got.Status)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("device-B not woken")
+	}
+}

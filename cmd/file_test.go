@@ -77,17 +77,18 @@ func TestCmdFile_GetAutoDetectsSoleAttachment(t *testing.T) {
 }
 
 func TestCmdFile_AddSizeLimitRejected(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
 	src := writeTestAttachment(t, make([]byte, 200))
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "file", "add", "toobig/cert",
+	root.SetArgs([]string{"--vault", vaultDir, "file", "add", "toobig/cert",
 		"--field", "cert_p12", "--from", src, "--max-size", "100"})
-	defer rootCmd.SetArgs(nil)
+	defer root.SetArgs(nil)
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil {
 		t.Fatal("expected size-limit error, got nil")
 	}
@@ -96,22 +97,23 @@ func TestCmdFile_AddSizeLimitRejected(t *testing.T) {
 	}
 
 	// Nothing should have been written to the vault.
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "file", "get", "toobig/cert", "--out", filepath.Join(t.TempDir(), "x")})
-	getErr := rootCmd.Execute()
-	rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"--vault", vaultDir, "file", "get", "toobig/cert", "--out", filepath.Join(t.TempDir(), "x")})
+	getErr := root.Execute()
+	root.SetArgs(nil)
 	if getErr == nil {
 		t.Error("expected entry to not exist after rejected add, but get succeeded")
 	}
 }
 
 func TestCmdFile_AddMissingRequiredFlags(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "file", "add", "svc/cert", "--from", "/nonexistent"})
-	defer rootCmd.SetArgs(nil)
-	if err := rootCmd.Execute(); err == nil || !strings.Contains(err.Error(), "--field is required") {
+	root.SetArgs([]string{"--vault", vaultDir, "file", "add", "svc/cert", "--from", "/nonexistent"})
+	defer root.SetArgs(nil)
+	if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "--field is required") {
 		t.Errorf("expected '--field is required' error, got: %v", err)
 	}
 }
@@ -155,18 +157,20 @@ func TestCmdFile_UseCustomAsName(t *testing.T) {
 }
 
 func TestCmdFile_UseMissingCommandArg(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "file", "use", "elster/cert"})
-	defer rootCmd.SetArgs(nil)
-	if err := rootCmd.Execute(); err == nil {
+	root.SetArgs([]string{"--vault", vaultDir, "file", "use", "elster/cert"})
+	defer root.SetArgs(nil)
+	if err := root.Execute(); err == nil {
 		t.Error("expected error when no command is given after path, got nil")
 	}
 }
 
 func TestCmdFile_GetAmbiguousAttachmentsRequiresField(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
@@ -176,9 +180,9 @@ func TestCmdFile_GetAmbiguousAttachmentsRequiresField(t *testing.T) {
 	execWithStdout("--vault", vaultDir, "file", "add", "multi/certs", "--field", "cert_a", "--from", src1)
 	execWithStdout("--vault", vaultDir, "file", "add", "multi/certs", "--field", "cert_b", "--from", src2)
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "file", "get", "multi/certs", "--out", filepath.Join(t.TempDir(), "x")})
-	defer rootCmd.SetArgs(nil)
-	err := rootCmd.Execute()
+	root.SetArgs([]string{"--vault", vaultDir, "file", "get", "multi/certs", "--out", filepath.Join(t.TempDir(), "x")})
+	defer root.SetArgs(nil)
+	err := root.Execute()
 	if err == nil || !strings.Contains(err.Error(), "multiple attachment fields") {
 		t.Errorf("expected 'multiple attachment fields' error, got: %v", err)
 	}

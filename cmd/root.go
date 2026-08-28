@@ -24,37 +24,8 @@ var (
 )
 
 // rootCmd is the package-level root used by production code.
-// Tests that modify command state should use a fresh NewRootCmd() for
-// isolation.
-var rootCmd = newPackageRootCmd()
-
-// newPackageRootCmd builds the package-level root tree: a fresh
-// NewRootCmd() tree whose top-level commands are replaced by the
-// package-level compat instances (deviceCmd, generateCmd, mcp.ServeCmd,
-// ...). This mirrors the pre-migration singleton topology for tests that
-// execute or mutate package-level command vars directly (for example
-// recipientsAddCmd.Execute() or resets of mcpcmd.ServeCmd flags): the
-// executed commands are the same objects the tests mutate. Fresh
-// NewRootCmd() calls are unaffected and remain fully independent trees.
-func newPackageRootCmd() *cobra.Command {
-	root := NewRootCmd()
-	compat := []*cobra.Command{
-		brokerCmd, deviceCmd, dynamicCmd, generateCmd, gitCmd, policyCmd, profileCmd,
-		recipientsCmd, remoteCmd, runCmd, shareCmd, syncCmd, templateCmd, uiCmd,
-		mcp.ServeCmd, mcp.McpCmd,
-	}
-	compatByName := make(map[string]struct{}, len(compat))
-	for _, compatCmd := range compat {
-		compatByName[compatCmd.Name()] = struct{}{}
-	}
-	for _, c := range root.Commands() {
-		if _, ok := compatByName[c.Name()]; ok {
-			root.RemoveCommand(c)
-		}
-	}
-	root.AddCommand(compat...)
-	return root
-}
+// Tests should use fresh NewRootCmd() instances for isolation.
+var rootCmd = NewRootCmd()
 
 // NewRootCmd returns a fully assembled root command tree containing all
 // subpackages and top-level commands without relying on init() side effects.

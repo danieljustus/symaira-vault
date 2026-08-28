@@ -15,6 +15,7 @@ import (
 )
 
 func TestDeviceAccept_DisplaysFingerprintAndAccepts(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	vaultFlagReset(t)
@@ -55,12 +56,12 @@ func TestDeviceAccept_DisplaysFingerprintAndAccepts(t *testing.T) {
 		t.Fatalf("write joined file: %v", err)
 	}
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "device", "accept", string(token)})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "device", "accept", string(token)})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	var execErr error
 	output := captureStdout(func() {
-		execErr = rootCmd.Execute()
+		execErr = root.Execute()
 	})
 
 	if execErr != nil {
@@ -116,6 +117,7 @@ func TestDeviceAccept_DisplaysFingerprintAndAccepts(t *testing.T) {
 // ===== Transport-independent pairing handshake (#867) =====
 
 func TestDeviceJoin_PairingFile_FullFlow(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	_ = vaultDir
 	setPassEnv(t, string(passphrase)) // not used by join; join reads the passphrase from stdin
@@ -149,13 +151,13 @@ func TestDeviceJoin_PairingFile_FullFlow(t *testing.T) {
 	restore := pipeStdin(t, "test-passphrase-for-joined-device\n")
 	t.Cleanup(restore)
 
-	rootCmd.SetArgs([]string{"--vault", joinDir, "device", "join", "--name", "file-phone",
+	root.SetArgs([]string{"--vault", joinDir, "device", "join", "--name", "file-phone",
 		"--pairing-file", pairingFilePath, string(token)})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	var execErr error
 	output := captureStdout(func() {
-		execErr = rootCmd.Execute()
+		execErr = root.Execute()
 	})
 
 	if execErr != nil {
@@ -197,6 +199,7 @@ func TestDeviceJoin_PairingFile_FullFlow(t *testing.T) {
 }
 
 func TestDeviceJoin_PairingFile_TokenMismatchRejected(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	_ = vaultDir
 	setPassEnv(t, string(passphrase))
@@ -231,13 +234,13 @@ func TestDeviceJoin_PairingFile_TokenMismatchRejected(t *testing.T) {
 
 	joinDir := t.TempDir()
 
-	rootCmd.SetArgs([]string{"--vault", joinDir, "device", "join",
+	root.SetArgs([]string{"--vault", joinDir, "device", "join",
 		"--pairing-file", pairingFilePath, string(token)})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	var execErr error
 	captureStderr(func() {
-		execErr = rootCmd.Execute()
+		execErr = root.Execute()
 	})
 
 	if execErr == nil {
@@ -249,6 +252,7 @@ func TestDeviceJoin_PairingFile_TokenMismatchRejected(t *testing.T) {
 }
 
 func TestDeviceAccept_AcceptsResponseArtefact(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	vaultFlagReset(t)
@@ -283,12 +287,12 @@ func TestDeviceAccept_AcceptsResponseArtefact(t *testing.T) {
 		t.Fatalf("write join response: %v", err)
 	}
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "device", "accept", string(token)})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "device", "accept", string(token)})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	var execErr error
 	output := captureStdout(func() {
-		execErr = rootCmd.Execute()
+		execErr = root.Execute()
 	})
 
 	if execErr != nil {
@@ -319,16 +323,17 @@ func TestDeviceAccept_AcceptsResponseArtefact(t *testing.T) {
 }
 
 func TestDevicePair_DisplaysFingerprint(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	vaultFlagReset(t)
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "device", "pair"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "device", "pair"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	var execErr error
 	output := captureStdout(func() {
-		execErr = rootCmd.Execute()
+		execErr = root.Execute()
 	})
 
 	if execErr != nil {
@@ -353,16 +358,17 @@ func TestDevicePair_DisplaysFingerprint(t *testing.T) {
 }
 
 func TestDeviceAccept_InvalidToken(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	vaultFlagReset(t)
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "device", "accept", "invalid/token"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "device", "accept", "invalid/token"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	var execErr error
 	captureStderr(func() {
-		execErr = rootCmd.Execute()
+		execErr = root.Execute()
 	})
 
 	if execErr == nil {
@@ -374,6 +380,7 @@ func TestDeviceAccept_InvalidToken(t *testing.T) {
 }
 
 func TestDeviceAccept_NoJoinRequest(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	vaultFlagReset(t)
@@ -383,12 +390,12 @@ func TestDeviceAccept_NoJoinRequest(t *testing.T) {
 		t.Fatalf("generate token: %v", err)
 	}
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "device", "accept", string(token)})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "device", "accept", string(token)})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	var execErr error
 	captureStderr(func() {
-		execErr = rootCmd.Execute()
+		execErr = root.Execute()
 	})
 
 	if execErr == nil {
@@ -400,6 +407,7 @@ func TestDeviceAccept_NoJoinRequest(t *testing.T) {
 }
 
 func TestDeviceAccept_CorruptJoinedFile(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	vaultFlagReset(t)
@@ -418,12 +426,12 @@ func TestDeviceAccept_CorruptJoinedFile(t *testing.T) {
 		t.Fatalf("write joined file: %v", err)
 	}
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "device", "accept", string(token)})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "device", "accept", string(token)})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	var execErr error
 	captureStderr(func() {
-		execErr = rootCmd.Execute()
+		execErr = root.Execute()
 	})
 
 	if execErr == nil {
@@ -435,6 +443,7 @@ func TestDeviceAccept_CorruptJoinedFile(t *testing.T) {
 }
 
 func TestDeviceAccept_DefaultDeviceName(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	vaultFlagReset(t)
@@ -471,12 +480,12 @@ func TestDeviceAccept_DefaultDeviceName(t *testing.T) {
 		t.Fatalf("write joined file: %v", err)
 	}
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "device", "accept", string(token)})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "device", "accept", string(token)})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	var execErr error
 	output := captureStdout(func() {
-		execErr = rootCmd.Execute()
+		execErr = root.Execute()
 	})
 
 	if execErr != nil {
@@ -492,6 +501,7 @@ func TestDeviceAccept_DefaultDeviceName(t *testing.T) {
 }
 
 func TestDeviceAdd_DisplaysFingerprint(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir := t.TempDir()
 	vaultFlagReset(t)
 
@@ -509,12 +519,12 @@ func TestDeviceAdd_DisplaysFingerprint(t *testing.T) {
 	cleanupStdin := pipeStdin(t, "test-device-passphrase-123\n")
 	t.Cleanup(cleanupStdin)
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "device", "add", "--pair", string(token) + ":" + existingPubkey, "--name", "added-device"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "device", "add", "--pair", string(token) + ":" + existingPubkey, "--name", "added-device"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	var execErr error
 	output := captureStderr(func() {
-		execErr = rootCmd.Execute()
+		execErr = root.Execute()
 	})
 
 	if execErr != nil {
