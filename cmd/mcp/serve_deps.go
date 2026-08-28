@@ -62,9 +62,7 @@ func RunHTTPServerWithApproval(ctx context.Context, bind string, port int, vault
 
 var RunHTTPServerFunc = RunHTTPServerWithApproval
 
-var NewDeviceSessionStoreFunc = func(vaultDir string) (*pairing.DeviceSessionStore, error) {
-	return pairing.NewDeviceSessionStore(vaultDir)
-}
+var NewDeviceSessionStoreFunc = pairing.NewDeviceSessionStore
 var FindAvailablePortFunc = cli.FindAvailablePort
 
 // IsLocalhostBind returns true if bind refers to the loopback interface
