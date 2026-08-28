@@ -10,6 +10,7 @@ let package = Package(
     products: [
         .library(name: "SymvaultKit", targets: ["SymvaultKit"]),
         .library(name: "SymvaultFeature", targets: ["SymvaultFeature"]),
+        .library(name: "SymvaultIOS", targets: ["SymvaultIOS"]),
     ],
     dependencies: [
         .package(url: "https://github.com/danieljustus/symaira-appkit.git", exact: "0.10.0"),
@@ -37,6 +38,24 @@ let package = Package(
         .testTarget(
             name: "SymvaultKitTests",
             dependencies: ["SymvaultKit"]
+        ),
+        .target(
+            name: "SymvaultIOS",
+            dependencies: [],
+            path: "Sources/SymvaultIOS",
+            exclude: [
+                "EnrollView.swift",
+                "EntryDetailView.swift",
+                "EntryListView.swift",
+                "MobileVaultCore.swift",
+                "SymvaultApp.swift",
+                "UnlockView.swift",
+                "VaultStore.swift",
+            ]
+        ),
+        .testTarget(
+            name: "SymvaultIOSTests",
+            dependencies: ["SymvaultIOS"]
         ),
     ]
 )
