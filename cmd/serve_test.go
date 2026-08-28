@@ -1571,6 +1571,8 @@ func TestRunHTTPServerFunc_ApprovalDeviceSession(t *testing.T) {
 	resetVaultState(t)
 
 	tmpDir := t.TempDir()
+	restoreVaultFlag := setupVaultFlag(t, tmpDir)
+	defer restoreVaultFlag()
 	_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
 	_ = os.Setenv("SYMVAULT_PASSPHRASE", "test")
 	defer func() {
