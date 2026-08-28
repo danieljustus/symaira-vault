@@ -62,6 +62,7 @@ type EncryptedIndex struct {
 	dirty      bool              // set when a write was skipped while suspended
 	doc        *indexDoc         // optional in-memory decrypted cache (config-gated)
 	docValid   bool              // true when doc matches the current ciphertext
+	generation uint64            // increments when writes/invalidation supersede a build
 }
 
 // indexBuildCounter counts successful index builds (buildIndex commits). It
@@ -202,6 +203,9 @@ type indexDoc struct {
 	// EntryCount is the number of entries in the vault when the index was built.
 	// Used for stale detection — if the count differs, the index is rebuilt.
 	EntryCount int `json:"c,omitempty"`
+	// Paths tracks every entry path, including entries without string values.
+	// It keeps EntryCount correct for incremental additions and removals.
+	Paths map[string]struct{} `json:"p,omitempty"`
 	// Salt is the random salt for HKDF-based index key derivation.
 	// Empty for legacy indices (pre-v0.4.1) that used raw SHA-256 keying.
 	Salt []byte `json:"s,omitempty"`
@@ -323,6 +327,10 @@ func (idx *EncryptedIndex) BuildMemoryOnly(vaultDir string, identity *age.X25519
 // When persist is true the encrypted index is saved to disk; when false only
 // the in-memory state is updated.
 func (idx *EncryptedIndex) buildIndex(vaultDir string, identity *age.X25519Identity, persist bool) error {
+	idx.mu.RLock()
+	buildGeneration := idx.generation
+	idx.mu.RUnlock()
+
 	// Invalidate the list cache to ensure we see entries written after the
 	// last list — writes create files in subdirectories which do not update
 	// the parent entries/ directory mtime, so the mtime-based cache check
@@ -341,6 +349,10 @@ func (idx *EncryptedIndex) buildIndex(vaultDir string, identity *age.X25519Ident
 		HostIndex:  make(map[string]map[string]struct{}),
 		PathHosts:  make(map[string][]string, len(paths)),
 		EntryCount: len(paths),
+		Paths:      make(map[string]struct{}, len(paths)),
+	}
+	for _, path := range paths {
+		doc.Paths[path] = struct{}{}
 	}
 
 	salt := make([]byte, indexSaltLen)
@@ -448,6 +460,10 @@ func (idx *EncryptedIndex) buildIndex(vaultDir string, identity *age.X25519Ident
 	cacheEnabled := isSearchIndexCacheEnabled(vaultDir)
 
 	idx.mu.Lock()
+	if idx.generation != buildGeneration {
+		idx.mu.Unlock()
+		return nil
+	}
 	idx.ciphertext = ciphertext
 	idx.salt = salt
 	idx.vaultDir = vaultDir
@@ -486,8 +502,12 @@ func (idx *EncryptedIndex) MatchEntries(vaultDir string, identity *age.X25519Ide
 	if len(candidates) == 0 || needle == "" {
 		return nil, nil
 	}
+	if identity == nil {
+		return nil, vaultcrypto.ErrNilIdentity
+	}
 
 	cacheEnabled := isSearchIndexCacheEnabled(vaultDir)
+	currentHash := sha256.Sum256([]byte(identity.Recipient().String()))
 	idx.mu.RLock()
 	ct := idx.ciphertext
 	idHash := idx.idHash
@@ -499,24 +519,22 @@ func (idx *EncryptedIndex) MatchEntries(vaultDir string, identity *age.X25519Ide
 		idx.mu.RUnlock()
 		return nil, nil
 	}
+	if currentHash != idHash {
+		idx.mu.RUnlock()
+		return nil, errors.New("identity changed")
+	}
+	// The index is a single shared slot. Reject a lookup against a different
+	// vault directory before using the cached document.
+	if canonicalVaultDir(storedDir) != canonicalVaultDir(vaultDir) {
+		idx.mu.RUnlock()
+		return nil, errors.New("vault directory changed")
+	}
 	if docValid && cacheEnabled && doc != nil {
 		matching := matchEntriesWithDoc(candidates, needle, doc)
 		idx.mu.RUnlock()
 		return matching, nil
 	}
 	idx.mu.RUnlock()
-
-	currentHash := sha256.Sum256([]byte(identity.Recipient().String()))
-	if currentHash != idHash {
-		return nil, errors.New("identity changed")
-	}
-	// The index is a single shared slot. Reject a lookup against a different
-	// vault directory even when the identity matches — otherwise a second vault
-	// opened with the same identity would filter its candidates against the
-	// first vault's index and return incomplete or incorrect results.
-	if canonicalVaultDir(storedDir) != canonicalVaultDir(vaultDir) {
-		return nil, errors.New("vault directory changed")
-	}
 
 	// The in-memory cache was checked while holding idx.mu.RLock above.
 	// Reaching this point means the ciphertext must be decrypted.
@@ -556,6 +574,9 @@ func (idx *EncryptedIndex) MatchHost(vaultDir string, identity *age.X25519Identi
 	if targetHostOrURL == "" {
 		return nil, nil
 	}
+	if identity == nil {
+		return nil, vaultcrypto.ErrNilIdentity
+	}
 
 	targetHost, err := NormalizeHost(targetHostOrURL)
 	if err != nil {
@@ -563,6 +584,7 @@ func (idx *EncryptedIndex) MatchHost(vaultDir string, identity *age.X25519Identi
 	}
 
 	cacheEnabled := isSearchIndexCacheEnabled(vaultDir)
+	currentHash := sha256.Sum256([]byte(identity.Recipient().String()))
 	idx.mu.RLock()
 	ct := idx.ciphertext
 	idHash := idx.idHash
@@ -574,20 +596,20 @@ func (idx *EncryptedIndex) MatchHost(vaultDir string, identity *age.X25519Identi
 		idx.mu.RUnlock()
 		return nil, nil
 	}
+	if currentHash != idHash {
+		idx.mu.RUnlock()
+		return nil, errors.New("identity changed")
+	}
+	if canonicalVaultDir(storedDir) != canonicalVaultDir(vaultDir) {
+		idx.mu.RUnlock()
+		return nil, errors.New("vault directory changed")
+	}
 	if docValid && cacheEnabled && doc != nil {
 		matching := matchHostWithDoc(candidates, targetHost, doc)
 		idx.mu.RUnlock()
 		return matching, nil
 	}
 	idx.mu.RUnlock()
-
-	currentHash := sha256.Sum256([]byte(identity.Recipient().String()))
-	if currentHash != idHash {
-		return nil, errors.New("identity changed")
-	}
-	if canonicalVaultDir(storedDir) != canonicalVaultDir(vaultDir) {
-		return nil, errors.New("vault directory changed")
-	}
 
 	// The in-memory cache was checked while holding idx.mu.RLock above.
 	// Reaching this point means the ciphertext must be decrypted.
@@ -670,6 +692,7 @@ func (idx *EncryptedIndex) UpdateEntry(vaultDir, path string, identity *age.X255
 		idx.mu.Unlock()
 		return nil
 	}
+	idx.generation++
 
 	// Batch mode: skip the per-write decrypt/re-encrypt/persist cycle and let
 	// Resume rebuild the index once.
@@ -709,6 +732,11 @@ func (idx *EncryptedIndex) UpdateEntry(vaultDir, path string, identity *age.X255
 	if doc.Values == nil {
 		doc.Values = make(map[string][]string)
 	}
+	ensureDocPaths(doc)
+	if _, exists := doc.Paths[path]; !exists {
+		doc.EntryCount++
+	}
+	doc.Paths[path] = struct{}{}
 	if doc.TokenIndex == nil {
 		doc.TokenIndex = make(map[string]map[string]struct{})
 	}
@@ -783,6 +811,7 @@ func (idx *EncryptedIndex) RemoveEntry(path string, identity *age.X25519Identity
 		idx.mu.Unlock()
 		return
 	}
+	idx.generation++
 
 	// Batch mode: skip the per-write decrypt/re-encrypt/persist cycle and let
 	// Resume rebuild the index once.
@@ -832,6 +861,13 @@ func (idx *EncryptedIndex) RemoveEntry(path string, identity *age.X25519Identity
 		doc = &parsed
 	}
 
+	ensureDocPaths(doc)
+	if _, exists := doc.Paths[path]; exists {
+		delete(doc.Paths, path)
+		if doc.EntryCount > 0 {
+			doc.EntryCount--
+		}
+	}
 	delete(doc.Values, path)
 	if doc.TokenIndex != nil {
 		ensurePathTokens(doc)
@@ -841,12 +877,6 @@ func (idx *EncryptedIndex) RemoveEntry(path string, identity *age.X25519Identity
 		ensurePathHosts(doc)
 		removeFromHostIndex(doc.HostIndex, doc.PathHosts, path)
 	}
-	// A delete removes exactly one vault entry; keep the persisted entry count
-	// in step so the on-disk index stays valid (not flagged stale) on reload.
-	if doc.EntryCount > 0 {
-		doc.EntryCount--
-	}
-
 	newPlaintext, err := json.Marshal(doc)
 	if err != nil {
 		dropDisk()
@@ -929,6 +959,7 @@ func writeIndexFile(vaultDir string, salt, ciphertext []byte) error {
 // clearLocked resets the in-memory index to the unbuilt state. The caller must
 // hold idx.mu.
 func (idx *EncryptedIndex) clearLocked() {
+	idx.generation++
 	if idx.doc != nil {
 		wipeIndexDoc(idx.doc)
 		idx.doc = nil
@@ -949,6 +980,34 @@ func (idx *EncryptedIndex) saveToDisk(vaultDir string) error {
 	idx.mu.RUnlock()
 
 	return writeIndexFile(vaultDir, storedSalt, ct)
+}
+
+// ensureDocPaths reconstructs path membership for an index written before the
+// explicit path set was introduced. Newer documents load this set directly.
+func ensureDocPaths(doc *indexDoc) {
+	if doc.Paths != nil {
+		return
+	}
+	doc.Paths = make(map[string]struct{}, len(doc.Values)+len(doc.PathTokens)+len(doc.PathHosts))
+	for path := range doc.Values {
+		doc.Paths[path] = struct{}{}
+	}
+	for path := range doc.PathTokens {
+		doc.Paths[path] = struct{}{}
+	}
+	for path := range doc.PathHosts {
+		doc.Paths[path] = struct{}{}
+	}
+}
+
+func ensureDocPathsFromList(doc *indexDoc, paths []string) {
+	if doc.Paths != nil {
+		return
+	}
+	doc.Paths = make(map[string]struct{}, len(paths))
+	for _, path := range paths {
+		doc.Paths[path] = struct{}{}
+	}
 }
 
 func (idx *EncryptedIndex) loadFromDisk(vaultDir string, identity *age.X25519Identity) error {
@@ -1003,6 +1062,7 @@ func (idx *EncryptedIndex) loadFromDisk(vaultDir string, identity *age.X25519Ide
 		_ = os.Remove(indexPath)
 		return errors.New("stale index")
 	}
+	ensureDocPathsFromList(&doc, paths)
 
 	idHash := sha256.Sum256([]byte(identity.Recipient().String()))
 
@@ -1047,6 +1107,13 @@ func (idx *EncryptedIndex) ClearMemory() {
 	idx.mu.Lock()
 	idx.clearLocked()
 	idx.mu.Unlock()
+}
+
+// ClearSearchIndexMemory clears the decrypted and encrypted index state for a
+// vault without deleting the persisted encrypted index. It is used when a
+// session is locked so cached plaintext does not survive the lock operation.
+func ClearSearchIndexMemory(vaultDir string) {
+	searchIndexForVault(vaultDir).ClearMemory()
 }
 
 // collectStringValues recursively extracts lowercase string values from entry

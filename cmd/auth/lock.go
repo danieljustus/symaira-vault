@@ -32,6 +32,7 @@ func newLockCmd() *cobra.Command {
 			if err := session.ClearSession(vaultDir); err != nil {
 				return errorspkg.NewCLIError(errorspkg.ExitGeneralError, "cannot clear session", err)
 			}
+			vaultpkg.ClearSearchIndexMemory(vaultDir)
 
 			fmt.Fprintln(os.Stderr, "Vault locked")
 			return nil
