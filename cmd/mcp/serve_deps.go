@@ -5,14 +5,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
+	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
-
-	"net"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -48,9 +48,18 @@ var ApprovalQueue = approval.NewQueue()
 
 var RunHTTPServerFunc = func(ctx context.Context, bind string, port int, vault *vaultpkg.Vault) error {
 	vaultDir, _ := cli.VaultPath()
-	approvalHandler := approval.NewHTTPHandler(ApprovalQueue, approval.NewPairingTokenValidator(pairing.NewTokenStore()))
+	sessionStore, err := NewDeviceSessionStoreFunc(vaultDir)
+	if err != nil {
+		return fmt.Errorf("load device session store: %w", err)
+	}
+	_ = sessionStore.StartCleanup(ctx, 15*time.Minute)
+	approvalHandler := approval.NewHTTPHandler(ApprovalQueue, approval.NewPairingTokenValidator(sessionStore))
 	return serverbootstrap.RunHTTPServer(ctx, bind, port, vault, vaultDir, Version, newServerWithApproval,
 		serverbootstrap.WithApprovalAPI(approvalHandler))
+}
+
+var NewDeviceSessionStoreFunc = func(vaultDir string) (*pairing.DeviceSessionStore, error) {
+	return pairing.NewDeviceSessionStore(vaultDir)
 }
 var FindAvailablePortFunc = cli.FindAvailablePort
 
@@ -183,6 +192,8 @@ func runServe(cmd *cobra.Command, args []string) error {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	reaperStop := ApprovalQueue.StartReaper(ctx, 15*time.Second)
+	defer reaperStop()
 	sigCh := make(chan os.Signal, 1)
 	ServeSignalNotify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	go func() {

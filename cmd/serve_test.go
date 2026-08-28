@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -17,7 +18,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/danieljustus/symaira-vault/internal/approval"
 	"github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/pairing"
 
 	mcpcmd "github.com/danieljustus/symaira-vault/cmd/mcp"
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
@@ -1538,5 +1541,202 @@ func TestServe_StdioError(t *testing.T) {
 	err := rootCmd.Execute()
 	if err == nil || !strings.Contains(err.Error(), "mock stdio error") {
 		t.Errorf("expected mock stdio error, got: %v", err)
+	}
+}
+
+func TestRunHTTPServerFunc_ApprovalDeviceSession(t *testing.T) {
+	resetVaultState(t)
+
+	tmpDir := t.TempDir()
+	_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", "test")
+	defer func() {
+		_ = os.Unsetenv("SYMVAULT_VAULT")
+		_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
+	}()
+
+	cfg := config.Default()
+	_, _ = vaultpkg.InitWithPassphrase(tmpDir, []byte("test"), cfg)
+
+	// Shared store and queue for the test.
+	store, err := pairing.NewDeviceSessionStore(tmpDir)
+	if err != nil {
+		t.Fatalf("NewDeviceSessionStore: %v", err)
+	}
+	enrolledToken, err := store.Enroll("device-1", "age1testpublickey")
+	if err != nil {
+		t.Fatalf("Enroll: %v", err)
+	}
+	// Persist so RunHTTPServerFunc can load it if it creates its own instance.
+	_ = store.Save()
+
+	origQueue := mcpcmd.ApprovalQueue
+	mcpcmd.ApprovalQueue = approval.NewQueue()
+	defer func() { mcpcmd.ApprovalQueue = origQueue }()
+
+	origHTTP := mcpcmd.RunHTTPServerFunc
+	mcpcmd.RunHTTPServerFunc = func(ctx context.Context, bind string, gotPort int, v *vaultpkg.Vault) error {
+		vaultDir, _ := cli.VaultPath()
+		sessionStore, err := mcpcmd.NewDeviceSessionStoreFunc(vaultDir)
+		if err != nil {
+			return fmt.Errorf("load device session store: %w", err)
+		}
+		_ = sessionStore.StartCleanup(ctx, 15*time.Minute)
+		approvalHandler := approval.NewHTTPHandler(mcpcmd.ApprovalQueue, approval.NewPairingTokenValidator(sessionStore))
+		return serverbootstrap.RunHTTPServer(ctx, bind, gotPort, v, vaultDir, cli.AppVersion, mcpcmd.NewServerWithApproval,
+			serverbootstrap.WithApprovalAPI(approvalHandler))
+	}
+	defer func() { mcpcmd.RunHTTPServerFunc = origHTTP }()
+
+	port := findFreePort(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		v, err := vaultpkg.OpenWithPassphrase(tmpDir, []byte("test"))
+		if err != nil {
+			t.Logf("open vault: %v", err)
+			return
+		}
+		if v.Config.MCP == nil {
+			v.Config.MCP = &config.MCPConfig{}
+		}
+		v.Config.MCP.AllowInsecureBind = true
+		if err := mcpcmd.RunHTTPServerFunc(ctx, "127.0.0.1", port, v); err != nil {
+			t.Logf("RunHTTPServerFunc: %v", err)
+		}
+	}()
+
+	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+	client := newTestHTTPClient()
+	for i := 0; i < 50; i++ {
+		conn, err := net.DialTimeout("tcp", addr, 100*time.Millisecond)
+		if err == nil {
+			_ = conn.Close()
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	for i := 0; i < 20; i++ {
+		resp, err := client.Get("http://" + addr + "/health")
+		if err == nil {
+			_ = resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				break
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	baseURL := "http://" + addr
+
+	// Enqueue a pending approval.
+	reqID, err := mcpcmd.ApprovalQueue.Enqueue(approval.Request{
+		AgentName: "test-agent",
+		Path:      "work/secret",
+		Write:     true,
+		Reason:    "test",
+	})
+	if err != nil {
+		t.Fatalf("Enqueue: %v", err)
+	}
+
+	// Unknown device gets 401.
+	unknownReq, _ := http.NewRequest(http.MethodGet, baseURL+approval.PathApprovals, nil)
+	unknownReq.Header.Set("Authorization", "Bearer bogus-token")
+	unknownResp, err := client.Do(unknownReq)
+	if err != nil {
+		t.Fatalf("unknown device request: %v", err)
+	}
+	defer func() { _ = unknownResp.Body.Close() }()
+	if unknownResp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("unknown device status = %d, want 401", unknownResp.StatusCode)
+	}
+
+	// Enrolled device can list pending.
+	listReq, _ := http.NewRequest(http.MethodGet, baseURL+approval.PathApprovals, nil)
+	listReq.Header.Set("Authorization", "Bearer "+enrolledToken)
+	listResp, err := client.Do(listReq)
+	if err != nil {
+		t.Fatalf("list request: %v", err)
+	}
+	defer func() { _ = listResp.Body.Close() }()
+	if listResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(listResp.Body)
+		t.Fatalf("list status = %d, body %s", listResp.StatusCode, string(body))
+	}
+	var listBody struct {
+		Requests []approval.Entry `json:"requests"`
+	}
+	if err := json.NewDecoder(listResp.Body).Decode(&listBody); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	if len(listBody.Requests) != 1 || listBody.Requests[0].ID != reqID {
+		t.Fatalf("list = %+v", listBody.Requests)
+	}
+
+	// Enrolled device can approve.
+	approveReq, _ := http.NewRequest(http.MethodPost, baseURL+approval.PathApprovalAction+reqID+"/approve", nil)
+	approveReq.Header.Set("Authorization", "Bearer "+enrolledToken)
+	approveResp, err := client.Do(approveReq)
+	if err != nil {
+		t.Fatalf("approve request: %v", err)
+	}
+	defer func() { _ = approveResp.Body.Close() }()
+	if approveResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(approveResp.Body)
+		t.Fatalf("approve status = %d, body %s", approveResp.StatusCode, string(body))
+	}
+
+	// Revoke device and verify 401.
+	store.Revoke("device-1")
+	_ = store.Save()
+
+	revokedReq, _ := http.NewRequest(http.MethodGet, baseURL+approval.PathApprovals, nil)
+	revokedReq.Header.Set("Authorization", "Bearer "+enrolledToken)
+	revokedResp, err := client.Do(revokedReq)
+	if err != nil {
+		t.Fatalf("revoked request: %v", err)
+	}
+	defer func() { _ = revokedResp.Body.Close() }()
+	if revokedResp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("revoked device status = %d, want 401", revokedResp.StatusCode)
+	}
+
+	// Per-device failed attempts: device-2 should not be affected by
+	// device-1's failures (if any). We verify this by enrolling device-2
+	// after device-1 was revoked and confirming it can still list.
+	device2Token, err := store.Enroll("device-2", "age1device2key")
+	if err != nil {
+		t.Fatalf("Enroll device-2: %v", err)
+	}
+	_ = store.Save()
+
+	// Drive a few invalid attempts against device-2's token to populate
+	// its failure counter without touching device-1.
+	for i := 0; i < 3; i++ {
+		failReq, _ := http.NewRequest(http.MethodGet, baseURL+approval.PathApprovals, nil)
+		failReq.Header.Set("Authorization", "Bearer "+device2Token+"x")
+		failResp, err := client.Do(failReq)
+		if err != nil {
+			t.Fatalf("fail request: %v", err)
+		}
+		_ = failResp.Body.Close()
+	}
+
+	// Device-2's valid token still works despite invalid attempts.
+	list2Req, _ := http.NewRequest(http.MethodGet, baseURL+approval.PathApprovals, nil)
+	list2Req.Header.Set("Authorization", "Bearer "+device2Token)
+	list2Resp, err := client.Do(list2Req)
+	if err != nil {
+		t.Fatalf("device-2 list request: %v", err)
+	}
+	defer func() { _ = list2Resp.Body.Close() }()
+	if list2Resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(list2Resp.Body)
+		t.Errorf("device-2 list status = %d, body %s", list2Resp.StatusCode, string(body))
 	}
 }
