@@ -10,8 +10,6 @@ import (
 	"errors"
 	"net/http"
 	"strings"
-
-	"github.com/danieljustus/symaira-vault/internal/pairing"
 )
 
 // HTTP paths served by the approval transport.
@@ -32,7 +30,8 @@ type HTTPHandler struct {
 }
 
 // NewHTTPHandler creates the approval API handler. tokens validates device
-// pairing tokens (nil disables the device auth gate for tests/embedders).
+// pairing tokens (nil disables the device auth gate, causing all requests
+// to receive 401 Unauthorized).
 func NewHTTPHandler(queue *Queue, tokens tokenValidator) *HTTPHandler {
 	return &HTTPHandler{queue: queue, tokens: tokens}
 }
@@ -54,7 +53,7 @@ func (h *HTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // id, or an empty string when unauthorized.
 func (h *HTTPHandler) deviceFromRequest(r *http.Request) string {
 	if h.tokens == nil {
-		return "test-device"
+		return ""
 	}
 	authz := r.Header.Get("Authorization")
 	token := strings.TrimPrefix(authz, "Bearer ")
@@ -129,17 +128,7 @@ func writeApprovalError(w http.ResponseWriter, status int, message string) {
 	writeApprovalJSON(w, status, map[string]any{"error": message})
 }
 
-// pairingTokenStore adapts *pairing.TokenStore to tokenValidator.
-type pairingTokenStore struct{ store *pairing.TokenStore }
-
-// NewPairingTokenValidator wraps a pairing token store as a validator.
-func NewPairingTokenValidator(store *pairing.TokenStore) tokenValidator {
-	if store == nil {
-		return nil
-	}
-	return &pairingTokenStore{store: store}
-}
-
-func (p *pairingTokenStore) Validate(token string) (string, bool) {
-	return p.store.Validate(token)
+// NewPairingTokenValidator returns v unchanged if non-nil, or nil if v is nil.
+func NewPairingTokenValidator(v tokenValidator) tokenValidator {
+	return v
 }
