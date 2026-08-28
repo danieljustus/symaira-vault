@@ -30,6 +30,13 @@ struct EnrollView: View {
             }
             .buttonStyle(.borderedProminent)
             .disabled(enrolling || store.isBusy)
+            if let error = store.error {
+                Text(error)
+                    .font(.callout)
+                    .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 360)
+            }
         }
         .padding(40)
         .onChange(of: store.isEnrolled) { _, _ in enrolling = false }
