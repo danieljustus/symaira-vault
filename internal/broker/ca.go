@@ -31,7 +31,7 @@ const (
 
 // CA is an ephemeral leaf-signing certificate authority. It generates a
 // self-signed CA on start and mints per-host leaf certificates with a bounded
-// TTL, cached in an LRU map keyed by hostname.
+// TTL. Expired cached leaves are swept whenever a new leaf is inserted.
 type CA struct {
 	mu     sync.Mutex
 	caCert *x509.Certificate
@@ -90,15 +90,27 @@ func (c *CA) LeafForHost(host string) (*tls.Certificate, error) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if entry, ok := c.leaves[host]; ok && c.now().Before(entry.exp) {
+	now := c.now()
+	if entry, ok := c.leaves[host]; ok && now.Before(entry.exp) {
 		return entry.cert, nil
 	}
+	c.sweepExpiredLocked(now)
 	cert, err := c.mintLeaf(host)
 	if err != nil {
 		return nil, err
 	}
-	c.leaves[host] = leafEntry{cert: cert, exp: c.now().Add(leafTTL)}
+	c.leaves[host] = leafEntry{cert: cert, exp: now.Add(leafTTL)}
 	return cert, nil
+}
+
+// sweepExpiredLocked releases expired leaves and their private keys. The
+// caller must hold c.mu.
+func (c *CA) sweepExpiredLocked(now time.Time) {
+	for host, entry := range c.leaves {
+		if !now.Before(entry.exp) {
+			delete(c.leaves, host)
+		}
+	}
 }
 
 // CertPEM returns the CA certificate in PEM form, for export via
