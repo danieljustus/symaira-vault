@@ -4,6 +4,7 @@ import Testing
 
 @testable import SymvaultIOS
 
+@MainActor
 @Test func accessControlThrowsWhenBiometryUnavailable() throws {
     // On systems without enrolled biometrics, SecAccessControlCreateWithFlags
     // returns nil and populates an error. The wrapper must throw rather than
@@ -18,6 +19,7 @@ import Testing
     }
 }
 
+@MainActor
 @Test func savePropagatesAccessControlError() throws {
     DeviceIdentityStore.accessControlOverride = {
         throw NSError(domain: "Test", code: Int(errSecParam),

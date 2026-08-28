@@ -4,6 +4,7 @@ import Security
 /// Keychain storage for the device identity on iOS. The master identity is
 /// stored with `ThisDeviceOnly` accessibility (no iCloud sync) and a biometric
 /// ACL so it can only be read after a successful Face ID / Touch ID prompt.
+@MainActor
 enum DeviceIdentityStore {
     static let service = "com.symaira.vault.deviceIdentity"
     static let account = "masterIdentity"
