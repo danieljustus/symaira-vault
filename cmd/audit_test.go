@@ -15,12 +15,10 @@ import (
 )
 
 func TestAuditLogPath(t *testing.T) {
+	origHome := os.Getenv("HOME")
 	home := t.TempDir()
 	_ = os.Setenv("HOME", home)
-	defer func() {
-		h, _ := os.UserHomeDir()
-		_ = os.Setenv("HOME", h)
-	}()
+	defer func() { _ = os.Setenv("HOME", origHome) }()
 
 	path, err := admin.AuditLogPath("default")
 	if err != nil {
@@ -57,12 +55,10 @@ func TestAuditLogPath_NoHomeDir(t *testing.T) {
 }
 
 func TestLoadAuditEntries(t *testing.T) {
+	origHome := os.Getenv("HOME")
 	home := t.TempDir()
 	_ = os.Setenv("HOME", home)
-	defer func() {
-		h, _ := os.UserHomeDir()
-		_ = os.Setenv("HOME", h)
-	}()
+	defer func() { _ = os.Setenv("HOME", origHome) }()
 
 	auditDir := filepath.Join(home, configpkg.DefaultVaultSubdir)
 	if err := os.MkdirAll(auditDir, 0o700); err != nil {
@@ -95,12 +91,10 @@ func TestLoadAuditEntries(t *testing.T) {
 }
 
 func TestLoadAuditEntries_MissingFile(t *testing.T) {
+	origHome := os.Getenv("HOME")
 	home := t.TempDir()
 	_ = os.Setenv("HOME", home)
-	defer func() {
-		h, _ := os.UserHomeDir()
-		_ = os.Setenv("HOME", h)
-	}()
+	defer func() { _ = os.Setenv("HOME", origHome) }()
 
 	entries, err := admin.LoadAuditEntries("nonexistent", 10)
 	if err != nil {
@@ -112,12 +106,10 @@ func TestLoadAuditEntries_MissingFile(t *testing.T) {
 }
 
 func TestLoadAuditEntries_Limit(t *testing.T) {
+	origHome := os.Getenv("HOME")
 	home := t.TempDir()
 	_ = os.Setenv("HOME", home)
-	defer func() {
-		h, _ := os.UserHomeDir()
-		_ = os.Setenv("HOME", h)
-	}()
+	defer func() { _ = os.Setenv("HOME", origHome) }()
 
 	auditDir := filepath.Join(home, configpkg.DefaultVaultSubdir)
 	if err := os.MkdirAll(auditDir, 0o700); err != nil {
@@ -302,12 +294,10 @@ func TestAuditCommand_JSON(t *testing.T) {
 	resetCommandTestState()
 	t.Cleanup(resetCommandTestState)
 
+	origHome := os.Getenv("HOME")
 	home := t.TempDir()
 	_ = os.Setenv("HOME", home)
-	defer func() {
-		h, _ := os.UserHomeDir()
-		_ = os.Setenv("HOME", h)
-	}()
+	defer func() { _ = os.Setenv("HOME", origHome) }()
 
 	auditDir := filepath.Join(home, configpkg.DefaultVaultSubdir)
 	if err := os.MkdirAll(auditDir, 0o700); err != nil {
@@ -343,12 +333,10 @@ func TestAuditCommand_Table(t *testing.T) {
 	resetCommandTestState()
 	t.Cleanup(resetCommandTestState)
 
+	origHome := os.Getenv("HOME")
 	home := t.TempDir()
 	_ = os.Setenv("HOME", home)
-	defer func() {
-		h, _ := os.UserHomeDir()
-		_ = os.Setenv("HOME", h)
-	}()
+	defer func() { _ = os.Setenv("HOME", origHome) }()
 
 	auditDir := filepath.Join(home, configpkg.DefaultVaultSubdir)
 	if err := os.MkdirAll(auditDir, 0o700); err != nil {
@@ -381,12 +369,10 @@ func TestAuditCommand_SinceFilter(t *testing.T) {
 	resetCommandTestState()
 	t.Cleanup(resetCommandTestState)
 
+	origHome := os.Getenv("HOME")
 	home := t.TempDir()
 	_ = os.Setenv("HOME", home)
-	defer func() {
-		h, _ := os.UserHomeDir()
-		_ = os.Setenv("HOME", h)
-	}()
+	defer func() { _ = os.Setenv("HOME", origHome) }()
 
 	auditDir := filepath.Join(home, configpkg.DefaultVaultSubdir)
 	if err := os.MkdirAll(auditDir, 0o700); err != nil {
@@ -428,12 +414,10 @@ func TestAuditCommand_FailedFilter(t *testing.T) {
 	resetCommandTestState()
 	t.Cleanup(resetCommandTestState)
 
+	origHome := os.Getenv("HOME")
 	home := t.TempDir()
 	_ = os.Setenv("HOME", home)
-	defer func() {
-		h, _ := os.UserHomeDir()
-		_ = os.Setenv("HOME", h)
-	}()
+	defer func() { _ = os.Setenv("HOME", origHome) }()
 
 	auditDir := filepath.Join(home, configpkg.DefaultVaultSubdir)
 	if err := os.MkdirAll(auditDir, 0o700); err != nil {
