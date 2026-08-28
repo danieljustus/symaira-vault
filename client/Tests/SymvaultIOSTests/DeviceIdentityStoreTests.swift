@@ -29,7 +29,8 @@ import Testing
 
     #expect {
         try DeviceIdentityStore.save("test-identity")
-    } throws: { (error: NSError) in
-        error.domain == "DeviceIdentityStore" && error.code == Int(errSecParam)
+    } throws: { error in
+        let nsError = error as NSError
+        return nsError.domain == "DeviceIdentityStore" && nsError.code == Int(errSecParam)
     }
 }
