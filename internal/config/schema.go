@@ -95,6 +95,7 @@ type PerplexityConfig struct {
 	APIKey          string `yaml:"api_key,omitempty"`
 	BaseURL         string `yaml:"base_url,omitempty"`
 	RateLimitPerMin int    `yaml:"rate_limit_per_min,omitempty"`
+	AllowPrivate    bool   `yaml:"allow_private,omitempty"`
 }
 
 // MCPConfig holds MCP server-related configuration for AI agent integration.
@@ -437,6 +438,9 @@ func MergeFromMCP(dst *MCPConfig, src MCPConfig) {
 		}
 		if src.Perplexity.RateLimitPerMin > 0 {
 			dst.Perplexity.RateLimitPerMin = src.Perplexity.RateLimitPerMin
+		}
+		if src.Perplexity.AllowPrivate {
+			dst.Perplexity.AllowPrivate = true
 		}
 	}
 }

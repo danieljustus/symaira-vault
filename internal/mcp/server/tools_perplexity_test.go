@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -13,11 +14,12 @@ import (
 
 	"github.com/danieljustus/symaira-vault/internal/config"
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/ssrf"
 )
 
 func newTestPerplexityServer(t *testing.T, searchResponse bool) *httptest.Server {
 	t.Helper()
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			t.Errorf("method = %q, want POST", r.Method)
 		}
@@ -86,9 +88,16 @@ func TestHandlePerplexitySearch_Success(t *testing.T) {
 			Perplexity: &config.PerplexityConfig{
 				BaseURL:         ts.URL,
 				RateLimitPerMin: 100,
+				AllowPrivate:    true,
 			},
 		},
 	}
+
+	origNewHTTPClient := newPerplexityHTTPClient
+	newPerplexityHTTPClient = func(timeout time.Duration, allowPrivate bool) *http.Client {
+		return ssrf.NewHTTPClientWithTLSConfig(timeout, allowPrivate, &tls.Config{InsecureSkipVerify: true})
+	}
+	t.Cleanup(func() { newPerplexityHTTPClient = origNewHTTPClient })
 
 	globalPerplexityRL = &perplexityRateLimiter{}
 
@@ -223,9 +232,16 @@ func TestHandlePerplexitySearch_APIKeyFromConfig(t *testing.T) {
 				APIKey:          "test-perplexity-key",
 				BaseURL:         ts.URL,
 				RateLimitPerMin: 100,
+				AllowPrivate:    true,
 			},
 		},
 	}
+
+	origNewHTTPClient := newPerplexityHTTPClient
+	newPerplexityHTTPClient = func(timeout time.Duration, allowPrivate bool) *http.Client {
+		return ssrf.NewHTTPClientWithTLSConfig(timeout, allowPrivate, &tls.Config{InsecureSkipVerify: true})
+	}
+	t.Cleanup(func() { newPerplexityHTTPClient = origNewHTTPClient })
 
 	globalPerplexityRL = &perplexityRateLimiter{}
 
@@ -275,9 +291,16 @@ func TestHandlePerplexityAsk_Success(t *testing.T) {
 			Perplexity: &config.PerplexityConfig{
 				BaseURL:         ts.URL,
 				RateLimitPerMin: 100,
+				AllowPrivate:    true,
 			},
 		},
 	}
+
+	origNewHTTPClient := newPerplexityHTTPClient
+	newPerplexityHTTPClient = func(timeout time.Duration, allowPrivate bool) *http.Client {
+		return ssrf.NewHTTPClientWithTLSConfig(timeout, allowPrivate, &tls.Config{InsecureSkipVerify: true})
+	}
+	t.Cleanup(func() { newPerplexityHTTPClient = origNewHTTPClient })
 
 	globalPerplexityRL = &perplexityRateLimiter{}
 
@@ -336,9 +359,16 @@ func TestHandlePerplexityAsk_WithContext(t *testing.T) {
 			Perplexity: &config.PerplexityConfig{
 				BaseURL:         ts.URL,
 				RateLimitPerMin: 100,
+				AllowPrivate:    true,
 			},
 		},
 	}
+
+	origNewHTTPClient := newPerplexityHTTPClient
+	newPerplexityHTTPClient = func(timeout time.Duration, allowPrivate bool) *http.Client {
+		return ssrf.NewHTTPClientWithTLSConfig(timeout, allowPrivate, &tls.Config{InsecureSkipVerify: true})
+	}
+	t.Cleanup(func() { newPerplexityHTTPClient = origNewHTTPClient })
 
 	globalPerplexityRL = &perplexityRateLimiter{}
 
@@ -606,9 +636,16 @@ func TestPerplexitySearch_RateLimited(t *testing.T) {
 			Perplexity: &config.PerplexityConfig{
 				BaseURL:         ts.URL,
 				RateLimitPerMin: 1,
+				AllowPrivate:    true,
 			},
 		},
 	}
+
+	origNewHTTPClient := newPerplexityHTTPClient
+	newPerplexityHTTPClient = func(timeout time.Duration, allowPrivate bool) *http.Client {
+		return ssrf.NewHTTPClientWithTLSConfig(timeout, allowPrivate, &tls.Config{InsecureSkipVerify: true})
+	}
+	t.Cleanup(func() { newPerplexityHTTPClient = origNewHTTPClient })
 
 	globalPerplexityRL = &perplexityRateLimiter{}
 
@@ -645,7 +682,7 @@ func TestPerplexitySearch_RateLimited(t *testing.T) {
 }
 
 func TestPerplexityAPIError(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		_, _ = w.Write([]byte(`{"error": "invalid_api_key"}`))
 	}))
@@ -666,9 +703,16 @@ func TestPerplexityAPIError(t *testing.T) {
 			Perplexity: &config.PerplexityConfig{
 				BaseURL:         ts.URL,
 				RateLimitPerMin: 100,
+				AllowPrivate:    true,
 			},
 		},
 	}
+
+	origNewHTTPClient := newPerplexityHTTPClient
+	newPerplexityHTTPClient = func(timeout time.Duration, allowPrivate bool) *http.Client {
+		return ssrf.NewHTTPClientWithTLSConfig(timeout, allowPrivate, &tls.Config{InsecureSkipVerify: true})
+	}
+	t.Cleanup(func() { newPerplexityHTTPClient = origNewHTTPClient })
 
 	globalPerplexityRL = &perplexityRateLimiter{}
 
@@ -688,5 +732,246 @@ func TestPerplexityAPIError(t *testing.T) {
 	}
 	if !strings.Contains(result.Text, "401") && !strings.Contains(result.Text, "Unauthorized") {
 		t.Errorf("error = %q, want to contain error details", result.Text)
+	}
+}
+
+func TestHandlePerplexitySearch_PlainHTTPRejected(t *testing.T) {
+	called := make(chan struct{}, 1)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case called <- struct{}{}:
+		default:
+		}
+	}))
+	defer ts.Close()
+
+	vaultDir, identity := mockVaultWithEntry(t, "perplexity", map[string]any{
+		"credential": "test-perplexity-key",
+	})
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:         "test",
+		AllowedPaths: []string{"*"},
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+	srv.vault.Config = &config.Config{
+		MCP: &config.MCPConfig{
+			Perplexity: &config.PerplexityConfig{
+				BaseURL:         ts.URL,
+				RateLimitPerMin: 100,
+			},
+		},
+	}
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{"query": "test"},
+	}
+
+	result, err := srv.handlePerplexitySearch(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handlePerplexitySearch() error = %v", err)
+	}
+	if result == nil {
+		t.Fatal("handlePerplexitySearch() returned nil result")
+	}
+	if !result.IsError {
+		t.Fatal("handlePerplexitySearch() expected error for plain HTTP BaseURL")
+	}
+	if !strings.Contains(result.Text, "HTTPS") {
+		t.Errorf("error = %q, want to contain 'HTTPS'", result.Text)
+	}
+
+	select {
+	case <-called:
+		t.Fatal("HTTP server was called for rejected plain HTTP BaseURL — credential may have been attached before rejection")
+	default:
+	}
+}
+
+func TestHandlePerplexitySearch_LoopbackBlocked(t *testing.T) {
+	called := make(chan struct{}, 1)
+	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case called <- struct{}{}:
+		default:
+		}
+	}))
+	defer ts.Close()
+
+	vaultDir, identity := mockVaultWithEntry(t, "perplexity", map[string]any{
+		"credential": "test-perplexity-key",
+	})
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:         "test",
+		AllowedPaths: []string{"*"},
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+	srv.vault.Config = &config.Config{
+		MCP: &config.MCPConfig{
+			Perplexity: &config.PerplexityConfig{
+				BaseURL:         ts.URL,
+				RateLimitPerMin: 100,
+			},
+		},
+	}
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{"query": "test"},
+	}
+
+	result, err := srv.handlePerplexitySearch(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handlePerplexitySearch() error = %v", err)
+	}
+	if result == nil {
+		t.Fatal("handlePerplexitySearch() returned nil result")
+	}
+	if !result.IsError {
+		t.Fatal("handlePerplexitySearch() expected error for loopback BaseURL")
+	}
+	if !strings.Contains(result.Text, "private or local network address") {
+		t.Errorf("error = %q, want to contain 'private or local network address'", result.Text)
+	}
+
+	select {
+	case <-called:
+		t.Fatal("HTTP server was called for rejected loopback BaseURL — credential may have been attached before rejection")
+	default:
+	}
+}
+
+func TestHandlePerplexitySearch_PrivateWithOptInAllowed(t *testing.T) {
+	ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":    "test-chat-id",
+			"model": "sonar-pro",
+			"choices": []map[string]any{
+				{
+					"index":         0,
+					"finish_reason": "stop",
+					"message": map[string]any{
+						"role":    "assistant",
+						"content": "The capital of France is Paris.",
+					},
+				},
+			},
+			"citations": []string{},
+			"usage": map[string]any{
+				"prompt_tokens":     50,
+				"completion_tokens": 100,
+				"total_tokens":      150,
+			},
+		})
+	}))
+	defer ts.Close()
+
+	vaultDir, identity := mockVaultWithEntry(t, "perplexity", map[string]any{
+		"credential": "test-perplexity-key",
+	})
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:         "test",
+		AllowedPaths: []string{"*"},
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+	srv.vault.Config = &config.Config{
+		MCP: &config.MCPConfig{
+			Perplexity: &config.PerplexityConfig{
+				BaseURL:         ts.URL,
+				RateLimitPerMin: 100,
+				AllowPrivate:    true,
+			},
+		},
+	}
+
+	origNewHTTPClient := newPerplexityHTTPClient
+	newPerplexityHTTPClient = func(timeout time.Duration, allowPrivate bool) *http.Client {
+		return ssrf.NewHTTPClientWithTLSConfig(timeout, allowPrivate, &tls.Config{InsecureSkipVerify: true})
+	}
+	t.Cleanup(func() { newPerplexityHTTPClient = origNewHTTPClient })
+
+	globalPerplexityRL = &perplexityRateLimiter{}
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{"query": "What is the capital of France?"},
+	}
+
+	result, err := srv.handlePerplexitySearch(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handlePerplexitySearch() error = %v", err)
+	}
+	if result == nil {
+		t.Fatal("handlePerplexitySearch() returned nil result")
+	}
+	if result.IsError {
+		t.Fatalf("handlePerplexitySearch() returned error with allow_private: %s", result.Text)
+	}
+
+	var output perplexitySearchResult
+	if err := json.Unmarshal([]byte(result.Text), &output); err != nil {
+		t.Fatalf("parse result: %v", err)
+	}
+	if output.Answer == "" {
+		t.Error("answer should not be empty")
+	}
+}
+
+func TestHandlePerplexityAsk_PlainHTTPRejected(t *testing.T) {
+	called := make(chan struct{}, 1)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case called <- struct{}{}:
+		default:
+		}
+	}))
+	defer ts.Close()
+
+	vaultDir, identity := mockVaultWithEntry(t, "perplexity", map[string]any{
+		"credential": "test-perplexity-key",
+	})
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:         "test",
+		AllowedPaths: []string{"*"},
+		CanWrite:     config.BoolPtr(false),
+		ApprovalMode: config.StrPtr("none"),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+	srv.vault.Config = &config.Config{
+		MCP: &config.MCPConfig{
+			Perplexity: &config.PerplexityConfig{
+				BaseURL:         ts.URL,
+				RateLimitPerMin: 100,
+			},
+		},
+	}
+
+	req := mcp.CallToolRequest{
+		Arguments: map[string]any{"question": "test"},
+	}
+
+	result, err := srv.handlePerplexityAsk(context.Background(), req)
+	if err != nil {
+		t.Fatalf("handlePerplexityAsk() error = %v", err)
+	}
+	if result == nil {
+		t.Fatal("handlePerplexityAsk() returned nil result")
+	}
+	if !result.IsError {
+		t.Fatal("handlePerplexityAsk() expected error for plain HTTP BaseURL")
+	}
+	if !strings.Contains(result.Text, "HTTPS") {
+		t.Errorf("error = %q, want to contain 'HTTPS'", result.Text)
+	}
+
+	select {
+	case <-called:
+		t.Fatal("HTTP server was called for rejected plain HTTP BaseURL — credential may have been attached before rejection")
+	default:
 	}
 }
