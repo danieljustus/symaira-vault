@@ -1390,3 +1390,60 @@ func TestSearchIndexCache_DebouncedPersistence(t *testing.T) {
 		t.Fatalf("freshIdx.MatchEntries('a') = %d results, want 1", len(freshResults))
 	}
 }
+
+func TestSearchIndexCache_ValidatesIdentityBeforeCacheHit(t *testing.T) {
+	searchIndexStore.invalidateAll()
+	t.Cleanup(searchIndexStore.invalidateAll)
+
+	vaultDir := t.TempDir()
+	identity := testutil.TempIdentity(t)
+	otherIdentity := testutil.TempIdentity(t)
+	cfg := vaultconfig.Default()
+	cfg.VaultDir = vaultDir
+	cfg.Vault = &vaultconfig.VaultConfig{SearchIndexCache: true}
+	if err := cfg.SaveTo(filepath.Join(vaultDir, "config.yaml")); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	mustWriteEntry(t, vaultDir, identity, "entry", map[string]interface{}{"value": "secret"})
+
+	idx := searchIndexForVault(vaultDir)
+	if err := idx.Build(vaultDir, identity); err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	if _, err := idx.MatchEntries(vaultDir, otherIdentity, []string{"entry"}, "secret"); err == nil {
+		t.Fatal("MatchEntries with a different identity returned cached results")
+	}
+}
+
+func TestSearchIndexCache_IncrementalAddUpdatesEntryCount(t *testing.T) {
+	searchIndexStore.invalidateAll()
+	t.Cleanup(searchIndexStore.invalidateAll)
+
+	vaultDir := t.TempDir()
+	identity := testutil.TempIdentity(t)
+	cfg := vaultconfig.Default()
+	cfg.VaultDir = vaultDir
+	cfg.Vault = &vaultconfig.VaultConfig{SearchIndexCache: true}
+	if err := cfg.SaveTo(filepath.Join(vaultDir, "config.yaml")); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+	mustWriteEntry(t, vaultDir, identity, "first", map[string]interface{}{"value": "one"})
+
+	idx := searchIndexForVault(vaultDir)
+	if err := idx.Build(vaultDir, identity); err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	mustWriteEntry(t, vaultDir, identity, "second", map[string]interface{}{"value": "two"})
+
+	freshIdx := &EncryptedIndex{}
+	if err := freshIdx.loadFromDisk(vaultDir, identity); err != nil {
+		t.Fatalf("loadFromDisk() error = %v", err)
+	}
+	doc := decryptIndexDocForTest(t, freshIdx, identity)
+	if doc.EntryCount != 2 {
+		t.Fatalf("persisted EntryCount = %d, want 2", doc.EntryCount)
+	}
+	if _, ok := doc.Paths["second"]; !ok {
+		t.Fatal("persisted path set does not contain the added entry")
+	}
+}

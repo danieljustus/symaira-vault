@@ -289,6 +289,12 @@ Global config lives in the XDG config directory: `$XDG_CONFIG_HOME/symaira-vault
 
 For the full configuration reference, see [docs/configuration.md](docs/configuration.md).
 
+The optional `vault.search_index_cache` setting keeps a decrypted search index
+in memory during an unlocked session to speed up repeated searches and
+incremental writes. It is disabled by default: leave it disabled when
+ciphertext-only memory residency is the safer operational choice. Locking the
+vault clears the in-memory index; the persisted index remains encrypted.
+
 ### Environment Variables
 
 - `SYMVAULT_VAULT` — Path to vault directory (default: `$XDG_DATA_HOME/symaira-vault`, i.e. `~/.local/share/symaira-vault`; legacy installs use `~/.symvault`)

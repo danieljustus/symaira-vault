@@ -65,6 +65,7 @@ func KnownConfigKeys() []string {
 		"vault.authMethod",
 		"vault.useTouchID",
 		"vault.search_workers",
+		"vault.search_index_cache",
 		"vault.pseudonymize_paths",
 		"vault.scrypt_work_factor",
 		"vault.auto_migrate_kdf",
