@@ -660,8 +660,8 @@ func (idx *EncryptedIndex) Invalidate() {
 
 // UpdateEntry incrementally updates a single entry in the encrypted index.
 // It uses the in-memory decrypted cache when available and config-enabled,
-// falling back to decrypting the entire ciphertext. The on-disk persistence
-// is debounced so rapid single-entry writes do not pay a full I/O cost per write.
+// falling back to decrypting the entire ciphertext. On-disk persistence stays
+// synchronous so a successful return guarantees restart visibility.
 // If the index is not built, this is a no-op (the index will be built lazily).
 func (idx *EncryptedIndex) UpdateEntry(vaultDir, path string, identity *age.X25519Identity) error {
 	idx.mu.Lock()
