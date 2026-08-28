@@ -26,10 +26,6 @@ var (
 	runBrokerPassthrough []string
 )
 
-// runCmd is retained for API compatibility; NewRootCmd() uses
-// newRunCmd() so every call gets a fresh command.
-var runCmd = newRunCmd()
-
 func newRunCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "run [flags] -- <command> [args...]",

@@ -30,10 +30,6 @@ var (
 	joinPairingFile   string
 )
 
-// deviceCmd is retained for API compatibility; NewCommands() uses
-// newDeviceCmd() so every call gets a fresh command.
-var deviceCmd = newDeviceCmd()
-
 func newDeviceCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "device",

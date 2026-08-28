@@ -26,10 +26,6 @@ var (
 // BrokerSignalNotify is a seam for tests; production uses signal.Notify.
 var BrokerSignalNotify = signal.Notify
 
-// brokerCmd is retained for API compatibility; NewRootCmd() uses
-// newBrokerCmd() so every call gets a fresh command.
-var brokerCmd = newBrokerCmd()
-
 func newBrokerCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "broker",

@@ -226,7 +226,7 @@ func TestVaultPathPrefersExplicitFlagOverEnv(t *testing.T) {
 
 // TestExecute_Error verifies that Execute() calls cli.OsExit(1) when rootCmd.Execute() returns an error.
 func TestExecute_Error(t *testing.T) {
-	rootCmd = newPackageRootCmd()
+	root := NewRootCmd()
 	var exitCode int
 
 	// Save and restore original cli.OsExit
@@ -247,23 +247,23 @@ func TestExecute_Error(t *testing.T) {
 	}()
 
 	// Save and restore rootCmd args and settings
-	origArgs := rootCmd.Args
-	origSilenceUsage := rootCmd.SilenceUsage
-	origSilenceErrors := rootCmd.SilenceErrors
-	rootCmd.SilenceUsage = true
-	rootCmd.SilenceErrors = true
-	rootCmd.SetArgs([]string{"__nonexistent_subcommand__"})
+	origArgs := root.Args
+	origSilenceUsage := root.SilenceUsage
+	origSilenceErrors := root.SilenceErrors
+	root.SilenceUsage = true
+	root.SilenceErrors = true
+	root.SetArgs([]string{"__nonexistent_subcommand__"})
 	defer func() {
-		rootCmd.Args = origArgs
-		rootCmd.SilenceUsage = origSilenceUsage
-		rootCmd.SilenceErrors = origSilenceErrors
-		rootCmd.SetArgs(nil)
+		root.Args = origArgs
+		root.SilenceUsage = origSilenceUsage
+		root.SilenceErrors = origSilenceErrors
+		root.SetArgs(nil)
 	}()
 
-	Execute()
+	ExecuteRoot(root)
 
 	if exitCode != 1 {
-		t.Errorf("Execute() called cli.OsExit(%d), want cli.OsExit(1)", exitCode)
+		t.Errorf("ExecuteRoot(root) called cli.OsExit(%d), want cli.OsExit(1)", exitCode)
 	}
 }
 
@@ -380,6 +380,7 @@ func TestUnlockVault_UsesConfiguredSessionTimeout(t *testing.T) {
 }
 
 func TestUnlockCommand_UsesConfiguredSessionTimeoutByDefault(t *testing.T) {
+	root := NewRootCmd()
 	resetVaultFlag(t)
 
 	vaultDir := t.TempDir()
@@ -422,12 +423,12 @@ func TestUnlockCommand_UsesConfiguredSessionTimeoutByDefault(t *testing.T) {
 		checkFlag.Changed = origCheckChanged
 	})
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "unlock"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "unlock"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	var execErr error
 	output := captureStderr(func() {
-		execErr = rootCmd.Execute()
+		execErr = root.Execute()
 	})
 	if execErr != nil {
 		t.Fatalf("unlock command: %v", execErr)

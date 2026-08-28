@@ -18,10 +18,6 @@ var (
 	reencryptAfterAdd bool
 )
 
-// recipientsCmd is retained for API compatibility; NewCommands() uses
-// newRecipientsCmd() so every call gets a fresh command.
-var recipientsCmd = newRecipientsCmd()
-
 func newRecipientsCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "recipients",
@@ -44,10 +40,6 @@ Lines starting with # are treated as comments.`,
 	c.AddCommand(newRecipientsRemoveCmd())
 	return c
 }
-
-// recipientsListCmd is retained for API compatibility; NewCommands() uses
-// newRecipientsListCmd() so every call gets a fresh command.
-var recipientsListCmd = newRecipientsListCmd()
 
 func newRecipientsListCmd() *cobra.Command {
 	c := &cobra.Command{
@@ -114,10 +106,6 @@ func newRecipientsListCmd() *cobra.Command {
 	return c
 }
 
-// recipientsAddCmd is retained for API compatibility; NewCommands() uses
-// newRecipientsAddCmd() so every call gets a fresh command.
-var recipientsAddCmd = newRecipientsAddCmd()
-
 func newRecipientsAddCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "add <public-key>",
@@ -165,25 +153,6 @@ Once added, all new entries will be encrypted for this recipient.`,
 	c.Flags().BoolVar(&reencryptAfterAdd, "reencrypt", false, "Re-encrypt existing entries for the new recipient")
 	return c
 }
-
-// recipientsRemoveCmd is retained for API compatibility; NewCommands() uses
-// newRecipientsRemoveCmd() so every call gets a fresh command.
-var recipientsRemoveCmd = newRecipientsRemoveCmd()
-
-// The compat instances mirror the pre-migration singleton topology for
-// tests that execute or mutate the package-level command vars directly:
-// the compat parent carries the compat children (replacing the fresh
-// instances the constructor added), and root.go attaches the parent to
-// the package rootCmd.
-var _ = func() int {
-	for _, c := range recipientsCmd.Commands() {
-		recipientsCmd.RemoveCommand(c)
-	}
-	recipientsCmd.AddCommand(recipientsListCmd)
-	recipientsCmd.AddCommand(recipientsAddCmd)
-	recipientsCmd.AddCommand(recipientsRemoveCmd)
-	return 0
-}()
 
 func newRecipientsRemoveCmd() *cobra.Command {
 	c := &cobra.Command{

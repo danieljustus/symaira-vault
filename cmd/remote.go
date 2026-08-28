@@ -23,10 +23,6 @@ var (
 	remotePushFlag bool
 )
 
-// remoteCmd is retained for API compatibility; NewCommands() uses
-// newRemoteCmd() so every call gets a fresh command.
-var remoteCmd = newRemoteCmd()
-
 func newRemoteCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "remote",

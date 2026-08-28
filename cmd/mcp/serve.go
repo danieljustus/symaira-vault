@@ -46,10 +46,6 @@ The server can run in HTTP mode or stdio mode.`,
 		config.LegacyVaultSubdir)
 }
 
-// McpCmd is retained for API compatibility; NewCommands() uses
-// newMcpCmd() so every call gets a fresh command.
-var McpCmd = newMcpCmd()
-
 func newMcpCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "mcp",
@@ -80,10 +76,6 @@ func newMcpCmd() *cobra.Command {
 	c.AddCommand(newMcpTokenCmd())
 	return c
 }
-
-// ServeCmd is retained for API compatibility; NewCommands() uses
-// newServeCmd() so every call gets a fresh command.
-var ServeCmd = newServeCmd()
 
 func newServeCmd() *cobra.Command {
 	c := &cobra.Command{

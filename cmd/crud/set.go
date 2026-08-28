@@ -26,6 +26,12 @@ var (
 	SetForce       bool
 )
 
+var inputHandler = cliinput.New(cliinput.Deps{
+	ReadHidden: cli.ReadHiddenInput,
+	Generate:   cli.GeneratePassword,
+	IsTerminal: cli.IsTerminalFunc,
+})
+
 // isSensitiveField reports whether fieldName contains any sensitive substring:
 // "password", "token", "secret", "key", "passwd", or "pwd" (case-insensitive).
 func isSensitiveField(fieldName string) bool {
@@ -43,7 +49,7 @@ func isSensitiveField(fieldName string) bool {
 // values are rejected unless --allow-empty is set.
 func readConfirmedFieldValue(reader *bufio.Reader, field string) (string, error) {
 	prompt := fmt.Sprintf("Enter value for %s: ", field)
-	valueBytes, err := cliinput.ReadHiddenInputFn(prompt, reader)
+	valueBytes, err := inputHandler.ReadHidden(prompt, reader)
 	if err != nil && len(valueBytes) == 0 {
 		return "", errorspkg.ReadFailed(err, "read value")
 	}
@@ -55,7 +61,7 @@ func readConfirmedFieldValue(reader *bufio.Reader, field string) (string, error)
 		}
 		if len(valueBytes) > 0 {
 			confirmPrompt := fmt.Sprintf("Confirm value for %s: ", field)
-			confirmBytes, err := cliinput.ReadHiddenInputFn(confirmPrompt, reader)
+			confirmBytes, err := inputHandler.ReadHidden(confirmPrompt, reader)
 			if err != nil && len(confirmBytes) == 0 {
 				return "", errorspkg.ReadFailed(err, "read confirmation")
 			}

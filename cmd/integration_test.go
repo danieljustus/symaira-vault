@@ -15,6 +15,7 @@ import (
 )
 
 func TestCmdGitPush_NoRemote(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir := t.TempDir()
 	vaultFlagReset(t)
 	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
@@ -24,11 +25,11 @@ func TestCmdGitPush_NoRemote(t *testing.T) {
 		t.Fatalf("git init: %v", err)
 	}
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "git", "push"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "git", "push"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	output := captureStdout(func() {
-		_ = rootCmd.Execute()
+		_ = root.Execute()
 	})
 
 	if !strings.Contains(output, "Pushed") {
@@ -37,6 +38,7 @@ func TestCmdGitPush_NoRemote(t *testing.T) {
 }
 
 func TestCmdGitPull_NoRemote(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir := t.TempDir()
 	vaultFlagReset(t)
 	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
@@ -46,11 +48,11 @@ func TestCmdGitPull_NoRemote(t *testing.T) {
 		t.Fatalf("git init: %v", err)
 	}
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "git", "pull"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "git", "pull"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	output := captureStdout(func() {
-		_ = rootCmd.Execute()
+		_ = root.Execute()
 	})
 
 	if !strings.Contains(output, "Pulled") {
@@ -59,6 +61,7 @@ func TestCmdGitPull_NoRemote(t *testing.T) {
 }
 
 func TestCmdGitLog_Success(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir := t.TempDir()
 	passphrase := []byte("correcthorsebatterystaple")
 	vaultFlagReset(t)
@@ -82,11 +85,11 @@ func TestCmdGitLog_Success(t *testing.T) {
 	_ = os.Setenv("SYMVAULT_PASSPHRASE", passphrase)
 	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") })
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "git", "log"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "git", "log"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	output := captureStdout(func() {
-		_ = rootCmd.Execute()
+		_ = root.Execute()
 	})
 
 	if len(strings.TrimSpace(output)) == 0 {
@@ -95,6 +98,7 @@ func TestCmdGitLog_Success(t *testing.T) {
 }
 
 func TestCmdGitUnknownAction(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir := t.TempDir()
 	passphrase := []byte("correcthorsebatterystaple")
 	vaultFlagReset(t)
@@ -105,12 +109,12 @@ func TestCmdGitUnknownAction(t *testing.T) {
 	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
 	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_VAULT") })
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "git", "unknown"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "git", "unknown"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	var execErr error
 	captureStderr(func() {
-		execErr = rootCmd.Execute()
+		execErr = root.Execute()
 	})
 
 	if execErr == nil {
@@ -122,6 +126,7 @@ func TestCmdGitUnknownAction(t *testing.T) {
 }
 
 func TestCmdLock_Success(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir := t.TempDir()
 	passphrase := []byte("correcthorsebatterystaple")
 	vaultFlagReset(t)
@@ -134,11 +139,11 @@ func TestCmdLock_Success(t *testing.T) {
 		t.Skipf("keyring unavailable: %v", err)
 	}
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "lock"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "lock"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	output := captureStderr(func() {
-		_ = rootCmd.Execute()
+		_ = root.Execute()
 	})
 
 	if !strings.Contains(output, "Vault locked") {
@@ -147,6 +152,7 @@ func TestCmdLock_Success(t *testing.T) {
 }
 
 func TestCmdUnlock_CheckExpired(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir := t.TempDir()
 	passphrase := []byte("correcthorsebatterystaple")
 	vaultFlagReset(t)
@@ -158,12 +164,12 @@ func TestCmdUnlock_CheckExpired(t *testing.T) {
 	_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 	t.Cleanup(func() { _ = unlockCmd.Flags().Set("check", "false") })
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "unlock", "--check"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "unlock", "--check"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	var execErr error
 	captureStderr(func() {
-		execErr = rootCmd.Execute()
+		execErr = root.Execute()
 	})
 
 	if execErr == nil {
@@ -175,6 +181,7 @@ func TestCmdUnlock_CheckExpired(t *testing.T) {
 }
 
 func TestCmdUnlock_CheckActive(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir := t.TempDir()
 	passphrase := []byte("correcthorsebatterystaple")
 	vaultFlagReset(t)
@@ -192,11 +199,11 @@ func TestCmdUnlock_CheckActive(t *testing.T) {
 		_ = session.ClearSession(vaultDir)
 	})
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "unlock", "--check"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "unlock", "--check"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	output := captureStderr(func() {
-		_ = rootCmd.Execute()
+		_ = root.Execute()
 	})
 
 	if !strings.Contains(output, "Session active") {
@@ -205,16 +212,17 @@ func TestCmdUnlock_CheckActive(t *testing.T) {
 }
 
 func TestLock_ErrorPaths(t *testing.T) {
+	root := NewRootCmd()
 	resetVaultState(t)
 	t.Run("uninitialized vault", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
 		defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
-		rootCmd.SetArgs([]string{"--vault", tmpDir, "lock"})
-		defer rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", tmpDir, "lock"})
+		defer root.SetArgs(nil)
 
-		err := rootCmd.Execute()
+		err := root.Execute()
 		if err == nil || !strings.Contains(err.Error(), "not initialized") {
 			t.Errorf("expected 'not initialized' error, got: %v", err)
 		}
@@ -222,16 +230,17 @@ func TestLock_ErrorPaths(t *testing.T) {
 }
 
 func TestUnlock_ErrorPaths(t *testing.T) {
+	root := NewRootCmd()
 	resetVaultState(t)
 	t.Run("uninitialized vault", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
 		defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
-		rootCmd.SetArgs([]string{"--vault", tmpDir, "unlock"})
-		defer rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", tmpDir, "unlock"})
+		defer root.SetArgs(nil)
 
-		err := rootCmd.Execute()
+		err := root.Execute()
 		if err == nil || !strings.Contains(err.Error(), "not initialized") {
 			t.Errorf("expected 'not initialized' error, got: %v", err)
 		}
@@ -249,10 +258,10 @@ func TestUnlock_ErrorPaths(t *testing.T) {
 			_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 		}()
 
-		rootCmd.SetArgs([]string{"--vault", tmpDir, "unlock"})
-		defer rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", tmpDir, "unlock"})
+		defer root.SetArgs(nil)
 
-		err := rootCmd.Execute()
+		err := root.Execute()
 		if err == nil {
 			t.Error("expected error for wrong passphrase")
 		}

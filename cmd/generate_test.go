@@ -73,6 +73,7 @@ func TestGeneratePassword_WithSymbols(t *testing.T) {
 }
 
 func TestCmdGenerate_StoreExisting(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir := t.TempDir()
 	passphrase := []byte("correcthorsebatterystaple")
 	vaultFlagReset(t)
@@ -94,11 +95,11 @@ func TestCmdGenerate_StoreExisting(t *testing.T) {
 	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
 	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") })
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "generate", "--length", "16", "--store", "existing.password"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "generate", "--length", "16", "--store", "existing.password"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	output := captureStdout(func() {
-		_ = rootCmd.Execute()
+		_ = root.Execute()
 	})
 
 	if !strings.Contains(output, "Password stored at") {
@@ -107,6 +108,7 @@ func TestCmdGenerate_StoreExisting(t *testing.T) {
 }
 
 func TestCmdGenerate_StoreJSONDoesNotRevealByDefault(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir := t.TempDir()
 	passphrase := []byte("correcthorsebatterystaple")
 	vaultFlagReset(t)
@@ -125,11 +127,11 @@ func TestCmdGenerate_StoreJSONDoesNotRevealByDefault(t *testing.T) {
 	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
 	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") })
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "generate", "--length", "16", "--store", "json.password", "--output", "json"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "generate", "--length", "16", "--store", "json.password", "--output", "json"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	output := captureStdout(func() {
-		_ = rootCmd.Execute()
+		_ = root.Execute()
 	})
 
 	var result map[string]any
@@ -145,6 +147,7 @@ func TestCmdGenerate_StoreJSONDoesNotRevealByDefault(t *testing.T) {
 }
 
 func TestCmdGenerate_ZeroLength(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir := t.TempDir()
 	passphrase := []byte("correcthorsebatterystaple")
 	vaultFlagReset(t)
@@ -159,12 +162,12 @@ func TestCmdGenerate_ZeroLength(t *testing.T) {
 	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
 	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") })
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "generate", "--length", "0"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "generate", "--length", "0"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	var execErr error
 	captureStderr(func() {
-		execErr = rootCmd.Execute()
+		execErr = root.Execute()
 	})
 
 	if execErr == nil {
@@ -173,6 +176,7 @@ func TestCmdGenerate_ZeroLength(t *testing.T) {
 }
 
 func TestCmdGenerate_NoStore(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir := t.TempDir()
 	vaultFlagReset(t)
 
@@ -184,11 +188,11 @@ func TestCmdGenerate_NoStore(t *testing.T) {
 	origGenLength := genLength
 	t.Cleanup(func() { genStore = origGenStore; genLength = origGenLength })
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "generate", "--length", "12"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "generate", "--length", "12"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	output := captureStdout(func() {
-		_ = rootCmd.Execute()
+		_ = root.Execute()
 	})
 
 	if len(strings.TrimSpace(output)) != 12 {
@@ -197,6 +201,7 @@ func TestCmdGenerate_NoStore(t *testing.T) {
 }
 
 func TestGenerate_ErrorPaths(t *testing.T) {
+	root := NewRootCmd()
 	resetVaultState(t)
 	t.Run("invalid length", func(t *testing.T) {
 		tmpDir := t.TempDir()
@@ -210,10 +215,10 @@ func TestGenerate_ErrorPaths(t *testing.T) {
 		cfg := config.Default()
 		_, _ = vaultpkg.InitWithPassphrase(tmpDir, []byte("test"), cfg)
 
-		rootCmd.SetArgs([]string{"--vault", tmpDir, "generate", "--length", "0"})
-		defer rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", tmpDir, "generate", "--length", "0"})
+		defer root.SetArgs(nil)
 
-		err := rootCmd.Execute()
+		err := root.Execute()
 		if err == nil {
 			t.Error("expected error for zero length")
 		}

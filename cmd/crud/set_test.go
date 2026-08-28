@@ -187,14 +187,16 @@ func TestSetInteractivePrompt_RetypeMatch(t *testing.T) {
 	setupTestVault(t)
 	resetSetFlags(t)
 
-	oldHiddenInputFn := cliinput.ReadHiddenInputFn
-	defer func() { cliinput.ReadHiddenInputFn = oldHiddenInputFn }()
+	oldHandler := inputHandler
+	t.Cleanup(func() { inputHandler = oldHandler })
 
 	calls := 0
-	cliinput.ReadHiddenInputFn = func(prompt string, reader *bufio.Reader) ([]byte, error) {
-		calls++
-		return []byte("secretinput"), nil
-	}
+	inputHandler = cliinput.New(cliinput.Deps{
+		ReadHidden: func(prompt string, reader *bufio.Reader) ([]byte, error) {
+			calls++
+			return []byte("secretinput"), nil
+		},
+	})
 
 	cmd := newSetCmd()
 	cmd.SetArgs([]string{"service.password"})
@@ -215,17 +217,19 @@ func TestSetInteractivePrompt_RetypeMismatch(t *testing.T) {
 	setupTestVault(t)
 	resetSetFlags(t)
 
-	oldHiddenInputFn := cliinput.ReadHiddenInputFn
-	defer func() { cliinput.ReadHiddenInputFn = oldHiddenInputFn }()
+	oldHandler := inputHandler
+	t.Cleanup(func() { inputHandler = oldHandler })
 
 	call := 0
-	cliinput.ReadHiddenInputFn = func(prompt string, reader *bufio.Reader) ([]byte, error) {
-		call++
-		if call == 1 {
-			return []byte("secretinput1"), nil
-		}
-		return []byte("secretinput2"), nil
-	}
+	inputHandler = cliinput.New(cliinput.Deps{
+		ReadHidden: func(prompt string, reader *bufio.Reader) ([]byte, error) {
+			call++
+			if call == 1 {
+				return []byte("secretinput1"), nil
+			}
+			return []byte("secretinput2"), nil
+		},
+	})
 
 	cmd := newSetCmd()
 	cmd.SetArgs([]string{"service.password"})
@@ -240,12 +244,14 @@ func TestSetInteractivePrompt_EmptySensitiveRejected(t *testing.T) {
 	setupTestVault(t)
 	resetSetFlags(t)
 
-	oldHiddenInputFn := cliinput.ReadHiddenInputFn
-	defer func() { cliinput.ReadHiddenInputFn = oldHiddenInputFn }()
+	oldHandler := inputHandler
+	t.Cleanup(func() { inputHandler = oldHandler })
 
-	cliinput.ReadHiddenInputFn = func(prompt string, reader *bufio.Reader) ([]byte, error) {
-		return []byte(""), nil
-	}
+	inputHandler = cliinput.New(cliinput.Deps{
+		ReadHidden: func(prompt string, reader *bufio.Reader) ([]byte, error) {
+			return []byte(""), nil
+		},
+	})
 
 	cmd := newSetCmd()
 	cmd.SetArgs([]string{"service.password"})

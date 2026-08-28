@@ -12,10 +12,6 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/vault/taint"
 )
 
-// shareCmd is retained for API compatibility; NewRootCmd() uses
-// newShareCmd() so every call gets a fresh command.
-var shareCmd = newShareCmd()
-
 func newShareCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "share",

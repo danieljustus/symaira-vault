@@ -12,10 +12,24 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 )
 
-var ReadHiddenInputFn func(prompt string, reader *bufio.Reader) ([]byte, error)
-var GeneratePasswordFn func(length int, useSymbols bool) (string, func(), error)
-var IsTerminalFn func(fd int) bool
+// Deps holds the external dependencies required by input handlers.
+type Deps struct {
+	ReadHidden func(prompt string, reader *bufio.Reader) ([]byte, error)
+	Generate   func(length int, useSymbols bool) (string, func(), error)
+	IsTerminal func(fd int) bool
+}
 
+// Handler collects interactive input using explicit dependencies.
+type Handler struct {
+	deps Deps
+}
+
+// New creates a Handler bound to the provided dependencies.
+func New(deps Deps) *Handler {
+	return &Handler{deps: deps}
+}
+
+// EntryFlags controls which fields are collected interactively.
 type EntryFlags struct {
 	Username        string
 	Password        string
@@ -31,27 +45,28 @@ type EntryFlags struct {
 	SkipTOTPDetails bool
 }
 
-func CollectEntryData(reader *bufio.Reader, flags EntryFlags) (map[string]any, error) {
+// CollectEntryData interactively collects entry fields from the reader.
+func (h *Handler) CollectEntryData(reader *bufio.Reader, flags EntryFlags) (map[string]any, error) {
 	data := map[string]any{}
 
-	if err := collectUsername(data, reader, flags); err != nil {
+	if err := h.collectUsername(data, reader, flags); err != nil {
 		return nil, err
 	}
-	if err := collectPassword(data, reader, flags); err != nil {
+	if err := h.collectPassword(data, reader, flags); err != nil {
 		return nil, err
 	}
-	if err := collectURL(data, reader, flags); err != nil {
+	if err := h.collectURL(data, reader, flags); err != nil {
 		return nil, err
 	}
-	collectNotes(data, reader, flags)
-	if err := collectTOTP(data, reader, flags); err != nil {
+	h.collectNotes(data, reader, flags)
+	if err := h.collectTOTP(data, reader, flags); err != nil {
 		return nil, err
 	}
 
 	return data, nil
 }
 
-func collectUsername(data map[string]any, reader *bufio.Reader, flags EntryFlags) error {
+func (h *Handler) collectUsername(data map[string]any, reader *bufio.Reader, flags EntryFlags) error {
 	if flags.Username != "" {
 		data["username"] = flags.Username
 	}
@@ -69,7 +84,7 @@ func collectUsername(data map[string]any, reader *bufio.Reader, flags EntryFlags
 	return nil
 }
 
-func collectPassword(data map[string]any, reader *bufio.Reader, flags EntryFlags) error {
+func (h *Handler) collectPassword(data map[string]any, reader *bufio.Reader, flags EntryFlags) error {
 	switch {
 	case flags.Password != "":
 		data["password"] = flags.Password
@@ -79,7 +94,7 @@ func collectPassword(data map[string]any, reader *bufio.Reader, flags EntryFlags
 			}
 		}
 	case flags.Generate:
-		password, cleanup, err := GeneratePasswordFn(flags.Length, true)
+		password, cleanup, err := h.deps.Generate(flags.Length, true)
 		if err != nil {
 			return fmt.Errorf("generate password: %w", err)
 		}
@@ -88,7 +103,7 @@ func collectPassword(data map[string]any, reader *bufio.Reader, flags EntryFlags
 		}
 		data["password"] = password
 	case reader != nil:
-		password, err := ReadHiddenInputFn("Password: ", reader)
+		password, err := h.deps.ReadHidden("Password: ", reader)
 		if err != nil && len(password) == 0 {
 			return fmt.Errorf("read password: %w", err)
 		}
@@ -96,7 +111,7 @@ func collectPassword(data map[string]any, reader *bufio.Reader, flags EntryFlags
 		if len(password) > 0 {
 			data["password"] = string(password)
 			if !flags.Force {
-				if err := confirmWeakPassword(string(password)); err != nil {
+				if err := h.confirmWeakPassword(string(password)); err != nil {
 					return err
 				}
 			}
@@ -105,7 +120,7 @@ func collectPassword(data map[string]any, reader *bufio.Reader, flags EntryFlags
 	return nil
 }
 
-func collectURL(data map[string]any, reader *bufio.Reader, flags EntryFlags) error {
+func (h *Handler) collectURL(data map[string]any, reader *bufio.Reader, flags EntryFlags) error {
 	if flags.URL != "" {
 		data["url"] = flags.URL
 	} else if reader != nil {
@@ -122,7 +137,7 @@ func collectURL(data map[string]any, reader *bufio.Reader, flags EntryFlags) err
 	return nil
 }
 
-func collectNotes(data map[string]any, reader *bufio.Reader, flags EntryFlags) {
+func (h *Handler) collectNotes(data map[string]any, reader *bufio.Reader, flags EntryFlags) {
 	if flags.Notes != "" {
 		data["notes"] = flags.Notes
 	} else if reader != nil && !flags.SkipNotes {
@@ -145,7 +160,7 @@ func collectNotes(data map[string]any, reader *bufio.Reader, flags EntryFlags) {
 	}
 }
 
-func collectTOTP(data map[string]any, reader *bufio.Reader, flags EntryFlags) error {
+func (h *Handler) collectTOTP(data map[string]any, reader *bufio.Reader, flags EntryFlags) error {
 	if flags.TOTPSecret != "" {
 		totpData := map[string]any{
 			"secret": flags.TOTPSecret,
@@ -209,7 +224,8 @@ func collectTOTP(data map[string]any, reader *bufio.Reader, flags EntryFlags) er
 	return nil
 }
 
-func ConfirmInteractive(prompt string, force bool) (bool, error) {
+// ConfirmInteractive prompts the user for a y/N confirmation.
+func (h *Handler) ConfirmInteractive(prompt string, force bool) (bool, error) {
 	if force {
 		return true, nil
 	}
@@ -224,15 +240,20 @@ func ConfirmInteractive(prompt string, force bool) (bool, error) {
 	return true, nil
 }
 
-func confirmWeakPassword(password string) error {
+// ReadHidden reads hidden input using the configured ReadHidden dependency.
+func (h *Handler) ReadHidden(prompt string, reader *bufio.Reader) ([]byte, error) {
+	return h.deps.ReadHidden(prompt, reader)
+}
+
+func (h *Handler) confirmWeakPassword(password string) error {
 	s := cryptopkg.AssessPasswordStrength(password)
 	if !s.Weak {
 		return nil
 	}
 
 	cliout.Warnf("Warning: %s", s.Message)
-	if IsTerminalFn != nil && IsTerminalFn(int(os.Stdin.Fd())) {
-		ok, err := ConfirmInteractive("Use this password anyway?", false)
+	if h.deps.IsTerminal != nil && h.deps.IsTerminal(int(os.Stdin.Fd())) {
+		ok, err := h.ConfirmInteractive("Use this password anyway?", false)
 		if err != nil {
 			return err
 		}
