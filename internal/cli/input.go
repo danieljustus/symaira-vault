@@ -8,13 +8,18 @@ import (
 
 type EntryFlags = cliinput.EntryFlags
 
-var CollectEntryData = cliinput.CollectEntryData
-var ConfirmInteractive = cliinput.ConfirmInteractive
+var defaultInput = cliinput.New(cliinput.Deps{
+	ReadHidden: ReadHiddenInput,
+	Generate:   GeneratePassword,
+	IsTerminal: IsTerminalFunc,
+})
 
-func init() {
-	cliinput.ReadHiddenInputFn = ReadHiddenInput
-	cliinput.GeneratePasswordFn = GeneratePassword
-	cliinput.IsTerminalFn = IsTerminalFunc
+var CollectEntryData = func(reader *bufio.Reader, flags EntryFlags) (map[string]any, error) {
+	return defaultInput.CollectEntryData(reader, flags)
+}
+
+var ConfirmInteractive = func(prompt string, force bool) (bool, error) {
+	return defaultInput.ConfirmInteractive(prompt, force)
 }
 
 func ReadEntryData(reader *bufio.Reader, flags EntryFlags) (map[string]any, error) {
