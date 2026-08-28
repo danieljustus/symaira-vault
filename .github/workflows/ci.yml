@@ -290,7 +290,7 @@ jobs:
 
       - name: Set up Node.js
         if: steps.path-check.outputs.run == 'true'
-        uses: actions/setup-node@8a11b07d232399e3e36e9d36b2324e20f1974fc1 # v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '20'
           cache: 'npm'
