@@ -7,6 +7,7 @@ import (
 )
 
 func TestAuthRotate_ValidatesLengthBeforeConfirmation(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	defer setupVaultFlag(t, vaultDir)()
 
@@ -24,8 +25,8 @@ func TestAuthRotate_ValidatesLengthBeforeConfirmation(t *testing.T) {
 		w.Write([]byte("short\n"))
 	}()
 
-	rootCmd.SetArgs([]string{"auth", "rotate-passphrase"})
-	err = rootCmd.Execute()
+	root.SetArgs([]string{"auth", "rotate-passphrase"})
+	err = root.Execute()
 	os.Stdin = oldStdin
 
 	if err == nil {

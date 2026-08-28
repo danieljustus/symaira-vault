@@ -11,10 +11,6 @@ import (
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
-// gitCmd is retained for API compatibility; NewRootCmd() uses
-// newGitCmd() so every call gets a fresh command.
-var gitCmd = newGitCmd()
-
 func newGitCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "git <push|pull|log> [path]",

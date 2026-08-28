@@ -22,10 +22,6 @@ var (
 	templatePrefix string
 )
 
-// templateCmd is retained for API compatibility; NewCommands() uses
-// newTemplateCmd() so every call gets a fresh command.
-var templateCmd = newTemplateCmd()
-
 func newTemplateCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "template",

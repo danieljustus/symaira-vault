@@ -17,10 +17,6 @@ import (
 var syncPush bool
 var syncForce bool
 
-// syncCmd is retained for API compatibility; NewRootCmd() uses
-// newSyncCmd() so every call gets a fresh command.
-var syncCmd = newSyncCmd()
-
 func newSyncCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "sync",

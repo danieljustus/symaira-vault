@@ -19,10 +19,6 @@ var (
 	genQuiet   bool
 )
 
-// generateCmd is retained for API compatibility; NewCommands() uses
-// newGenerateCmd() so every call gets a fresh command.
-var generateCmd = newGenerateCmd()
-
 func newGenerateCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:     "generate",

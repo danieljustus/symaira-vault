@@ -14,17 +14,18 @@ import (
 )
 
 func TestInitCommand_HiddenPassphrase(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir := t.TempDir()
 	passphrase := []byte("test-hidden-passphrase")
 
 	cli.SetCachedEnvPassphrase(passphrase)
 	defer cli.SetCachedEnvPassphrase(nil)
 
-	rootCmd.SetArgs([]string{"init", vaultDir})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"init", vaultDir})
+	defer root.SetArgs(nil)
 
 	output := captureStdout(func() {
-		if err := rootCmd.Execute(); err != nil {
+		if err := root.Execute(); err != nil {
 			t.Fatalf("init command failed: %v", err)
 		}
 	})
@@ -55,17 +56,18 @@ func TestInitCommand_HiddenPassphrase(t *testing.T) {
 }
 
 func TestCmdInit_Success(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir := t.TempDir()
 	vaultFlagReset(t)
 
 	cli.SetCachedEnvPassphrase([]byte("supersecretpassphrase123"))
 	defer cli.SetCachedEnvPassphrase(nil)
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "init"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "init"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	output := captureStdout(func() {
-		_ = rootCmd.Execute()
+		_ = root.Execute()
 	})
 
 	if !strings.Contains(output, "Vault initialized") {
@@ -74,6 +76,7 @@ func TestCmdInit_Success(t *testing.T) {
 }
 
 func TestCmdInit_AlreadyInitialized(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir := t.TempDir()
 	vaultFlagReset(t)
 
@@ -84,12 +87,12 @@ func TestCmdInit_AlreadyInitialized(t *testing.T) {
 	cli.SetCachedEnvPassphrase([]byte("supersecretpassphrase123"))
 	defer cli.SetCachedEnvPassphrase(nil)
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "init"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "init"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	var execErr error
 	captureStderr(func() {
-		execErr = rootCmd.Execute()
+		execErr = root.Execute()
 	})
 
 	if execErr == nil {
@@ -101,18 +104,19 @@ func TestCmdInit_AlreadyInitialized(t *testing.T) {
 }
 
 func TestCmdInit_ShortPassphrase(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir := t.TempDir()
 	vaultFlagReset(t)
 
 	cli.SetCachedEnvPassphrase([]byte("short"))
 	defer cli.SetCachedEnvPassphrase(nil)
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "init"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "init"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	var execErr error
 	captureStderr(func() {
-		execErr = rootCmd.Execute()
+		execErr = root.Execute()
 	})
 
 	if execErr == nil {
@@ -121,6 +125,7 @@ func TestCmdInit_ShortPassphrase(t *testing.T) {
 }
 
 func TestInit_ErrorPaths(t *testing.T) {
+	root := NewRootCmd()
 	resetVaultState(t)
 	t.Run("already initialized", func(t *testing.T) {
 		tmpDir := t.TempDir()
@@ -133,10 +138,10 @@ func TestInit_ErrorPaths(t *testing.T) {
 		cli.SetCachedEnvPassphrase([]byte("test"))
 		defer cli.SetCachedEnvPassphrase(nil)
 
-		rootCmd.SetArgs([]string{"--vault", tmpDir, "init"})
-		defer rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", tmpDir, "init"})
+		defer root.SetArgs(nil)
 
-		err := rootCmd.Execute()
+		err := root.Execute()
 		if err == nil || !strings.Contains(err.Error(), "already initialized") {
 			t.Errorf("expected 'already initialized' error, got: %v", err)
 		}

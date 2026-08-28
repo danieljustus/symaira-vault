@@ -19,14 +19,15 @@ const (
 )
 
 func TestRecipientsListCmd_VaultNotInitialized(t *testing.T) {
+	root := NewRootCmd()
 	resetVaultState(t)
 	vaultDir := t.TempDir()
 	buf := &bytes.Buffer{}
-	rootCmd.SetOut(buf)
-	rootCmd.SetErr(buf)
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "recipients", "list"})
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"--vault", vaultDir, "recipients", "list"})
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil {
 		t.Error("expected error for vault not initialized")
 	}
@@ -36,28 +37,30 @@ func TestRecipientsListCmd_VaultNotInitialized(t *testing.T) {
 }
 
 func TestRecipientsAddCmd_VaultNotInitialized(t *testing.T) {
+	root := NewRootCmd()
 	resetVaultState(t)
 	vaultDir := t.TempDir()
 	buf := &bytes.Buffer{}
-	rootCmd.SetOut(buf)
-	rootCmd.SetErr(buf)
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "recipients", "add", testRecipient1})
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"--vault", vaultDir, "recipients", "add", testRecipient1})
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil {
 		t.Error("expected error for vault not initialized")
 	}
 }
 
 func TestRecipientsRemoveCmd_VaultNotInitialized(t *testing.T) {
+	root := NewRootCmd()
 	resetVaultState(t)
 	vaultDir := t.TempDir()
 	buf := &bytes.Buffer{}
-	rootCmd.SetOut(buf)
-	rootCmd.SetErr(buf)
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "recipients", "remove", testRecipient1})
+	root.SetOut(buf)
+	root.SetErr(buf)
+	root.SetArgs([]string{"--vault", vaultDir, "recipients", "remove", testRecipient1})
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil {
 		t.Error("expected error for vault not initialized")
 	}
@@ -376,6 +379,7 @@ func TestRecipientsRemove_CorrectOne_Integration(t *testing.T) {
 }
 
 func TestCmdRecipientsList_WithRecipients(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir := t.TempDir()
 	passphrase := []byte("correcthorsebatterystaple")
 	vaultFlagReset(t)
@@ -391,11 +395,11 @@ func TestCmdRecipientsList_WithRecipients(t *testing.T) {
 		t.Fatalf("add recipient: %v", err)
 	}
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "recipients", "list"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "recipients", "list"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	output := captureStdout(func() {
-		_ = rootCmd.Execute()
+		_ = root.Execute()
 	})
 
 	if !strings.Contains(output, "Recipients") {
@@ -407,6 +411,7 @@ func TestCmdRecipientsList_WithRecipients(t *testing.T) {
 }
 
 func TestCmdRecipientsAdd_Invalid(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir := t.TempDir()
 	passphrase := []byte("correcthorsebatterystaple")
 	vaultFlagReset(t)
@@ -418,12 +423,12 @@ func TestCmdRecipientsAdd_Invalid(t *testing.T) {
 	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
 	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") })
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "recipients", "add", "not-a-valid-key"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "recipients", "add", "not-a-valid-key"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	var execErr error
 	captureStderr(func() {
-		execErr = rootCmd.Execute()
+		execErr = root.Execute()
 	})
 
 	if execErr == nil {
@@ -435,6 +440,7 @@ func TestCmdRecipientsAdd_Invalid(t *testing.T) {
 }
 
 func TestCmdRecipientsAdd_Duplicate(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir := t.TempDir()
 	passphrase := []byte("correcthorsebatterystaple")
 	vaultFlagReset(t)
@@ -451,12 +457,12 @@ func TestCmdRecipientsAdd_Duplicate(t *testing.T) {
 	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
 	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") })
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "recipients", "add", testRecipient1})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "recipients", "add", testRecipient1})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	var execErr error
 	captureStderr(func() {
-		execErr = rootCmd.Execute()
+		execErr = root.Execute()
 	})
 
 	if execErr == nil {
@@ -468,6 +474,7 @@ func TestCmdRecipientsAdd_Duplicate(t *testing.T) {
 }
 
 func TestCmdRecipientsRemove_NotFound(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir := t.TempDir()
 	passphrase := []byte("correcthorsebatterystaple")
 	vaultFlagReset(t)
@@ -479,12 +486,12 @@ func TestCmdRecipientsRemove_NotFound(t *testing.T) {
 	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
 	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") })
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "recipients", "remove", testRecipient2, "--yes"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "recipients", "remove", testRecipient2, "--yes"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	var execErr error
 	captureStderr(func() {
-		execErr = rootCmd.Execute()
+		execErr = root.Execute()
 	})
 
 	if execErr == nil {
@@ -496,6 +503,7 @@ func TestCmdRecipientsRemove_NotFound(t *testing.T) {
 }
 
 func TestCmdRecipientsRemove_Cancel(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir := t.TempDir()
 	passphrase := []byte("correcthorsebatterystaple")
 	vaultFlagReset(t)
@@ -521,12 +529,12 @@ func TestCmdRecipientsRemove_Cancel(t *testing.T) {
 		_ = r.Close()
 	})
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "recipients", "remove", testRecipient1})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "recipients", "remove", testRecipient1})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	var execErr error
 	output := captureStderr(func() {
-		execErr = rootCmd.Execute()
+		execErr = root.Execute()
 	})
 
 	if execErr != nil {
@@ -538,6 +546,7 @@ func TestCmdRecipientsRemove_Cancel(t *testing.T) {
 }
 
 func TestCmdRecipientsRemove_WithYesFlag(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir := t.TempDir()
 	passphrase := []byte("correcthorsebatterystaple")
 	vaultFlagReset(t)
@@ -554,11 +563,11 @@ func TestCmdRecipientsRemove_WithYesFlag(t *testing.T) {
 	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
 	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") })
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "recipients", "remove", testRecipient1, "--yes"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "recipients", "remove", testRecipient1, "--yes"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	output := captureStdout(func() {
-		_ = rootCmd.Execute()
+		_ = root.Execute()
 	})
 
 	if !strings.Contains(output, "Recipient removed") {
@@ -570,6 +579,7 @@ func TestCmdRecipientsRemove_WithYesFlag(t *testing.T) {
 }
 
 func TestCmdRecipientsRemove_InvalidKey(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir := t.TempDir()
 	passphrase := []byte("correcthorsebatterystaple")
 	vaultFlagReset(t)
@@ -581,12 +591,12 @@ func TestCmdRecipientsRemove_InvalidKey(t *testing.T) {
 	_ = os.Setenv("SYMVAULT_PASSPHRASE", string(passphrase))
 	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") })
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "recipients", "remove", "not-a-valid-key", "--yes"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "recipients", "remove", "not-a-valid-key", "--yes"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	var execErr error
 	captureStderr(func() {
-		execErr = rootCmd.Execute()
+		execErr = root.Execute()
 	})
 
 	if execErr == nil {
@@ -598,6 +608,7 @@ func TestCmdRecipientsRemove_InvalidKey(t *testing.T) {
 }
 
 func TestCmdRecipientsAdd_UnlockError(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir := t.TempDir()
 	passphrase := []byte("correcthorsebatterystaple")
 	vaultFlagReset(t)
@@ -609,12 +620,12 @@ func TestCmdRecipientsAdd_UnlockError(t *testing.T) {
 	_ = os.Setenv("SYMVAULT_PASSPHRASE", "wrong-passphrase")
 	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") })
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "recipients", "add", testRecipient1})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "recipients", "add", testRecipient1})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	var execErr error
 	captureStderr(func() {
-		execErr = rootCmd.Execute()
+		execErr = root.Execute()
 	})
 
 	if execErr == nil {
@@ -626,6 +637,7 @@ func TestCmdRecipientsAdd_UnlockError(t *testing.T) {
 }
 
 func TestCmdRecipientsRemove_UnlockError(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir := t.TempDir()
 	passphrase := []byte("correcthorsebatterystaple")
 	vaultFlagReset(t)
@@ -637,12 +649,12 @@ func TestCmdRecipientsRemove_UnlockError(t *testing.T) {
 	_ = os.Setenv("SYMVAULT_PASSPHRASE", "wrong-passphrase")
 	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_PASSPHRASE") })
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "recipients", "remove", testRecipient1, "--yes"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "recipients", "remove", testRecipient1, "--yes"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	var execErr error
 	captureStderr(func() {
-		execErr = rootCmd.Execute()
+		execErr = root.Execute()
 	})
 
 	if execErr == nil {
@@ -654,16 +666,17 @@ func TestCmdRecipientsRemove_UnlockError(t *testing.T) {
 }
 
 func TestRecipients_ErrorPaths(t *testing.T) {
+	root := NewRootCmd()
 	resetVaultState(t)
 	t.Run("list - uninitialized vault", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
 		defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
-		rootCmd.SetArgs([]string{"--vault", tmpDir, "recipients", "list"})
-		defer rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", tmpDir, "recipients", "list"})
+		defer root.SetArgs(nil)
 
-		err := rootCmd.Execute()
+		err := root.Execute()
 		if err == nil || !strings.Contains(err.Error(), "not initialized") {
 			t.Errorf("expected 'not initialized' error, got: %v", err)
 		}
@@ -681,10 +694,10 @@ func TestRecipients_ErrorPaths(t *testing.T) {
 		cfg := config.Default()
 		_, _ = vaultpkg.InitWithPassphrase(tmpDir, []byte("test"), cfg)
 
-		rootCmd.SetArgs([]string{"--vault", tmpDir, "recipients", "add", "invalid-key"})
-		defer rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", tmpDir, "recipients", "add", "invalid-key"})
+		defer root.SetArgs(nil)
 
-		err := rootCmd.Execute()
+		err := root.Execute()
 		if err == nil || !strings.Contains(err.Error(), "invalid") {
 			t.Errorf("expected 'invalid' error, got: %v", err)
 		}
@@ -702,10 +715,10 @@ func TestRecipients_ErrorPaths(t *testing.T) {
 		cfg := config.Default()
 		_, _ = vaultpkg.InitWithPassphrase(tmpDir, []byte("test"), cfg)
 
-		rootCmd.SetArgs([]string{"--vault", tmpDir, "recipients", "remove", "not-age1-key", "-y"})
-		defer rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", tmpDir, "recipients", "remove", "not-age1-key", "-y"})
+		defer root.SetArgs(nil)
 
-		err := rootCmd.Execute()
+		err := root.Execute()
 		if err == nil || !strings.Contains(err.Error(), "invalid") {
 			t.Errorf("expected 'invalid' error, got: %v", err)
 		}
@@ -726,10 +739,10 @@ func TestRecipients_ErrorPaths(t *testing.T) {
 		_ = os.Setenv("SYMVAULT_PASSPHRASE", "test")
 		identity2, _ := vaultpkg.InitWithPassphrase(tmpDir+"_second", []byte("test2"), cfg)
 
-		rootCmd.SetArgs([]string{"--vault", tmpDir, "recipients", "remove", identity2.Recipient().String(), "-y"})
-		defer rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", tmpDir, "recipients", "remove", identity2.Recipient().String(), "-y"})
+		defer root.SetArgs(nil)
 
-		err := rootCmd.Execute()
+		err := root.Execute()
 		if err == nil || !strings.Contains(err.Error(), "not found") {
 			t.Errorf("expected 'not found' error, got: %v", err)
 		}
@@ -737,6 +750,7 @@ func TestRecipients_ErrorPaths(t *testing.T) {
 }
 
 func TestRecipients_ListEmpty(t *testing.T) {
+	root := NewRootCmd()
 	resetVaultState(t)
 
 	tmpDir := t.TempDir()
@@ -750,11 +764,11 @@ func TestRecipients_ListEmpty(t *testing.T) {
 	cfg := config.Default()
 	_, _ = vaultpkg.InitWithPassphrase(tmpDir, []byte("test"), cfg)
 
-	rootCmd.SetArgs([]string{"--vault", tmpDir, "recipients", "list"})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"--vault", tmpDir, "recipients", "list"})
+	defer root.SetArgs(nil)
 
 	output := captureStdout(func() {
-		_ = rootCmd.Execute()
+		_ = root.Execute()
 	})
 
 	if !strings.Contains(output, "No recipients configured") {
@@ -763,6 +777,7 @@ func TestRecipients_ListEmpty(t *testing.T) {
 }
 
 func TestRecipients_ListInvalidRecipient(t *testing.T) {
+	root := NewRootCmd()
 	resetVaultState(t)
 
 	tmpDir := t.TempDir()
@@ -779,11 +794,11 @@ func TestRecipients_ListInvalidRecipient(t *testing.T) {
 	// Write an invalid recipient directly to recipients.txt
 	_ = os.WriteFile(tmpDir+"/recipients.txt", []byte("invalid-key\n"), 0o600)
 
-	rootCmd.SetArgs([]string{"--vault", tmpDir, "recipients", "list"})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"--vault", tmpDir, "recipients", "list"})
+	defer root.SetArgs(nil)
 
 	output := captureStdout(func() {
-		_ = rootCmd.Execute()
+		_ = root.Execute()
 	})
 
 	if !strings.Contains(output, "invalid key format") {
@@ -792,6 +807,7 @@ func TestRecipients_ListInvalidRecipient(t *testing.T) {
 }
 
 func TestRecipients_AddAlreadyExists(t *testing.T) {
+	root := NewRootCmd()
 	resetVaultState(t)
 
 	tmpDir := t.TempDir()
@@ -810,16 +826,17 @@ func TestRecipients_AddAlreadyExists(t *testing.T) {
 	_ = vaultpkg.NewRecipientsManager(tmpDir).AddRecipient(recipient)
 
 	// Try to add again via CLI
-	rootCmd.SetArgs([]string{"--vault", tmpDir, "recipients", "add", recipient})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"--vault", tmpDir, "recipients", "add", recipient})
+	defer root.SetArgs(nil)
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil || !strings.Contains(err.Error(), "already exists") {
 		t.Errorf("expected 'already exists' error, got: %v", err)
 	}
 }
 
 func TestRecipients_RemoveCancelled(t *testing.T) {
+	root := NewRootCmd()
 	resetVaultState(t)
 
 	tmpDir := t.TempDir()
@@ -841,10 +858,10 @@ func TestRecipients_RemoveCancelled(t *testing.T) {
 	_, _ = w.WriteString("n\n")
 	_ = w.Close()
 
-	rootCmd.SetArgs([]string{"--vault", tmpDir, "recipients", "remove", recipient})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"--vault", tmpDir, "recipients", "remove", recipient})
+	defer root.SetArgs(nil)
 
-	_ = rootCmd.Execute()
+	_ = root.Execute()
 	os.Stdin = oldStdin
 	_ = r.Close()
 }

@@ -18,6 +18,8 @@ import (
 	"gopkg.in/yaml.v3"
 
 	updatepkg "github.com/danieljustus/symaira-vault/internal/update"
+
+	"github.com/spf13/cobra"
 )
 
 type stubUpdateChecker struct {
@@ -38,15 +40,15 @@ func (s *stubUpdateChecker) CheckWithForce(_ context.Context, currentVersion str
 	return s.result, s.err
 }
 
-func prepareRootCommandOutput(t *testing.T) *bytes.Buffer {
+func prepareRootCommandOutput(t *testing.T, root *cobra.Command) *bytes.Buffer {
 	t.Helper()
 
 	resetCommandTestState()
 	t.Cleanup(resetCommandTestState)
 
 	buf := new(bytes.Buffer)
-	rootCmd.SetOut(buf)
-	rootCmd.SetErr(buf)
+	root.SetOut(buf)
+	root.SetErr(buf)
 	return buf
 }
 
@@ -71,8 +73,8 @@ func setVersionInfoForTest(t *testing.T, version string) {
 }
 
 func TestUpdateCheckCommandReportsAvailableUpdate(t *testing.T) {
-	rootCmd = newPackageRootCmd()
-	buf := prepareRootCommandOutput(t)
+	root := NewRootCmd()
+	buf := prepareRootCommandOutput(t, root)
 	setVersionInfoForTest(t, "1.0.0")
 
 	checker := &stubUpdateChecker{
@@ -86,12 +88,12 @@ func TestUpdateCheckCommandReportsAvailableUpdate(t *testing.T) {
 	}
 	setUpdateCheckerForTest(t, checker)
 
-	rootCmd.SetArgs([]string{"update", "check"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"update", "check"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil {
-		t.Fatal("expected Execute() to return an error for update available")
+		t.Fatal("expected ExecuteRoot(root) to return an error for update available")
 	}
 
 	got := buf.String()
@@ -109,8 +111,8 @@ func TestUpdateCheckCommandReportsAvailableUpdate(t *testing.T) {
 }
 
 func TestUpdateCheckCommandReportsUpToDate(t *testing.T) {
-	rootCmd = newPackageRootCmd()
-	buf := prepareRootCommandOutput(t)
+	root := NewRootCmd()
+	buf := prepareRootCommandOutput(t, root)
 	setVersionInfoForTest(t, "1.0.0")
 
 	setUpdateCheckerForTest(t, &stubUpdateChecker{
@@ -121,11 +123,11 @@ func TestUpdateCheckCommandReportsUpToDate(t *testing.T) {
 		},
 	})
 
-	rootCmd.SetArgs([]string{"update", "check"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"update", "check"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("ExecuteRoot(root) error = %v", err)
 	}
 
 	got := buf.String()
@@ -135,8 +137,8 @@ func TestUpdateCheckCommandReportsUpToDate(t *testing.T) {
 }
 
 func TestUpdateCheckCommandHandlesNonReleaseBuild(t *testing.T) {
-	rootCmd = newPackageRootCmd()
-	buf := prepareRootCommandOutput(t)
+	root := NewRootCmd()
+	buf := prepareRootCommandOutput(t, root)
 	setVersionInfoForTest(t, "dev")
 
 	checker := &stubUpdateChecker{
@@ -147,11 +149,11 @@ func TestUpdateCheckCommandHandlesNonReleaseBuild(t *testing.T) {
 	}
 	setUpdateCheckerForTest(t, checker)
 
-	rootCmd.SetArgs([]string{"update", "check"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"update", "check"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("ExecuteRoot(root) error = %v", err)
 	}
 
 	got := buf.String()
@@ -164,16 +166,17 @@ func TestUpdateCheckCommandHandlesNonReleaseBuild(t *testing.T) {
 }
 
 func TestUpdateCheckCommandReturnsCheckerError(t *testing.T) {
-	prepareRootCommandOutput(t)
+	root := NewRootCmd()
+	prepareRootCommandOutput(t, root)
 	setVersionInfoForTest(t, "1.0.0")
 	setUpdateCheckerForTest(t, &stubUpdateChecker{err: errors.New("boom")})
 
-	rootCmd.SetArgs([]string{"update", "check"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"update", "check"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil {
-		t.Fatal("expected Execute() to return an error")
+		t.Fatal("expected ExecuteRoot(root) to return an error")
 	}
 	if !strings.Contains(err.Error(), "check for updates: boom") {
 		t.Fatalf("unexpected error: %v", err)
@@ -181,8 +184,8 @@ func TestUpdateCheckCommandReturnsCheckerError(t *testing.T) {
 }
 
 func TestUpdateCheckCommandDoesNotRequireVault(t *testing.T) {
-	rootCmd = newPackageRootCmd()
-	buf := prepareRootCommandOutput(t)
+	root := NewRootCmd()
+	buf := prepareRootCommandOutput(t, root)
 	setVersionInfoForTest(t, "dev")
 	setUpdateCheckerForTest(t, &stubUpdateChecker{
 		result: &updatepkg.Result{
@@ -212,11 +215,11 @@ func TestUpdateCheckCommandDoesNotRequireVault(t *testing.T) {
 		}
 	})
 
-	rootCmd.SetArgs([]string{"update", "check"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"update", "check"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("ExecuteRoot(root) error = %v", err)
 	}
 
 	if !strings.Contains(buf.String(), "stable release builds") {
@@ -225,8 +228,8 @@ func TestUpdateCheckCommandDoesNotRequireVault(t *testing.T) {
 }
 
 func TestUpdateCheckCommandJSONOutput(t *testing.T) {
-	rootCmd = newPackageRootCmd()
-	buf := prepareRootCommandOutput(t)
+	root := NewRootCmd()
+	buf := prepareRootCommandOutput(t, root)
 	setVersionInfoForTest(t, "1.0.0")
 
 	checker := &stubUpdateChecker{
@@ -240,12 +243,12 @@ func TestUpdateCheckCommandJSONOutput(t *testing.T) {
 	}
 	setUpdateCheckerForTest(t, checker)
 
-	rootCmd.SetArgs([]string{"update", "check", "--json"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"update", "check", "--json"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil {
-		t.Fatal("expected Execute() to return an error for update available with --json")
+		t.Fatal("expected ExecuteRoot(root) to return an error for update available with --json")
 	}
 
 	got := buf.String()
@@ -263,8 +266,8 @@ func TestUpdateCheckCommandJSONOutput(t *testing.T) {
 }
 
 func TestUpdateCheckCommandJSONOutputNoUpdate(t *testing.T) {
-	rootCmd = newPackageRootCmd()
-	buf := prepareRootCommandOutput(t)
+	root := NewRootCmd()
+	buf := prepareRootCommandOutput(t, root)
 	setVersionInfoForTest(t, "1.0.0")
 
 	checker := &stubUpdateChecker{
@@ -276,11 +279,11 @@ func TestUpdateCheckCommandJSONOutputNoUpdate(t *testing.T) {
 	}
 	setUpdateCheckerForTest(t, checker)
 
-	rootCmd.SetArgs([]string{"update", "check", "--json"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"update", "check", "--json"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("ExecuteRoot(root) error = %v", err)
 	}
 
 	got := buf.String()
@@ -297,7 +300,8 @@ func TestUpdateCheckCommandJSONOutputNoUpdate(t *testing.T) {
 }
 
 func TestUpdateCheckCommandQuietModeUpdateAvailable(t *testing.T) {
-	buf := prepareRootCommandOutput(t)
+	root := NewRootCmd()
+	buf := prepareRootCommandOutput(t, root)
 	setVersionInfoForTest(t, "1.0.0")
 
 	checker := &stubUpdateChecker{
@@ -314,12 +318,12 @@ func TestUpdateCheckCommandQuietModeUpdateAvailable(t *testing.T) {
 	admin.UpdateCheckCmd.SilenceUsage = true
 	admin.UpdateCheckCmd.SilenceErrors = true
 
-	rootCmd.SetArgs([]string{"update", "check", "--quiet"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"update", "check", "--quiet"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil {
-		t.Fatal("expected Execute() to return an error for update available with --quiet")
+		t.Fatal("expected ExecuteRoot(root) to return an error for update available with --quiet")
 	}
 
 	got := buf.String()
@@ -329,7 +333,8 @@ func TestUpdateCheckCommandQuietModeUpdateAvailable(t *testing.T) {
 }
 
 func TestUpdateCheckCommandQuietModeNoUpdate(t *testing.T) {
-	buf := prepareRootCommandOutput(t)
+	root := NewRootCmd()
+	buf := prepareRootCommandOutput(t, root)
 	setVersionInfoForTest(t, "1.0.0")
 
 	checker := &stubUpdateChecker{
@@ -341,11 +346,11 @@ func TestUpdateCheckCommandQuietModeNoUpdate(t *testing.T) {
 	}
 	setUpdateCheckerForTest(t, checker)
 
-	rootCmd.SetArgs([]string{"update", "check", "--quiet"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"update", "check", "--quiet"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("ExecuteRoot(root) error = %v", err)
 	}
 
 	got := buf.String()
@@ -355,7 +360,8 @@ func TestUpdateCheckCommandQuietModeNoUpdate(t *testing.T) {
 }
 
 func TestUpdateCheckCommandForceFlag(t *testing.T) {
-	prepareRootCommandOutput(t)
+	root := NewRootCmd()
+	prepareRootCommandOutput(t, root)
 	setVersionInfoForTest(t, "1.0.0")
 
 	checker := &stubUpdateChecker{
@@ -367,11 +373,11 @@ func TestUpdateCheckCommandForceFlag(t *testing.T) {
 	}
 	setUpdateCheckerForTest(t, checker)
 
-	rootCmd.SetArgs([]string{"update", "check", "--force"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"update", "check", "--force"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("ExecuteRoot(root) error = %v", err)
 	}
 
 	if !checker.forceUsed {

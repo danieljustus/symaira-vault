@@ -13,6 +13,7 @@ import (
 )
 
 func TestConfigSetCommand_Basic(t *testing.T) {
+	root := NewRootCmd()
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(cfgPath, []byte("vaultDir: /old\n"), 0o600); err != nil {
@@ -20,11 +21,11 @@ func TestConfigSetCommand_Basic(t *testing.T) {
 	}
 
 	resetCmdFlags()
-	rootCmd.SetArgs([]string{"config", "set", "vaultDir", "/new", "--file", cfgPath})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"config", "set", "vaultDir", "/new", "--file", cfgPath})
+	defer root.SetArgs(nil)
 
 	output := captureStdout(func() {
-		if err := rootCmd.Execute(); err != nil {
+		if err := root.Execute(); err != nil {
 			t.Fatalf("config set failed: %v", err)
 		}
 	})
@@ -43,6 +44,7 @@ func TestConfigSetCommand_Basic(t *testing.T) {
 }
 
 func TestConfigSetCommand_BoolValue(t *testing.T) {
+	root := NewRootCmd()
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(cfgPath, []byte("agents:\n  test:\n    canWrite: false\n"), 0o600); err != nil {
@@ -50,10 +52,10 @@ func TestConfigSetCommand_BoolValue(t *testing.T) {
 	}
 
 	resetCmdFlags()
-	rootCmd.SetArgs([]string{"config", "set", "agents.test.canWrite", "true", "--file", cfgPath})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"config", "set", "agents.test.canWrite", "true", "--file", cfgPath})
+	defer root.SetArgs(nil)
 
-	if err := rootCmd.Execute(); err != nil {
+	if err := root.Execute(); err != nil {
 		t.Fatalf("config set failed: %v", err)
 	}
 
@@ -87,6 +89,7 @@ func TestConfigSetCommand_BoolValue(t *testing.T) {
 }
 
 func TestConfigSetCommand_CreateNestedKey(t *testing.T) {
+	root := NewRootCmd()
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(cfgPath, []byte("{}\n"), 0o600); err != nil {
@@ -94,10 +97,10 @@ func TestConfigSetCommand_CreateNestedKey(t *testing.T) {
 	}
 
 	resetCmdFlags()
-	rootCmd.SetArgs([]string{"config", "set", "agents.custom.canWrite", "true", "--file", cfgPath})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"config", "set", "agents.custom.canWrite", "true", "--file", cfgPath})
+	defer root.SetArgs(nil)
 
-	if err := rootCmd.Execute(); err != nil {
+	if err := root.Execute(); err != nil {
 		t.Fatalf("config set failed: %v", err)
 	}
 
@@ -108,6 +111,7 @@ func TestConfigSetCommand_CreateNestedKey(t *testing.T) {
 }
 
 func TestConfigSetCommand_InvalidatesConfig(t *testing.T) {
+	root := NewRootCmd()
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(cfgPath, []byte("vaultDir: /test\nsessionTimeout: 15m\n"), 0o600); err != nil {
@@ -115,10 +119,10 @@ func TestConfigSetCommand_InvalidatesConfig(t *testing.T) {
 	}
 
 	resetCmdFlags()
-	rootCmd.SetArgs([]string{"config", "set", "sessionTimeout", "invalid", "--file", cfgPath})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"config", "set", "sessionTimeout", "invalid", "--file", cfgPath})
+	defer root.SetArgs(nil)
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil {
 		t.Fatal("expected error for invalid sessionTimeout value")
 	}
@@ -128,19 +132,21 @@ func TestConfigSetCommand_InvalidatesConfig(t *testing.T) {
 }
 
 func TestConfigSetCommand_MissingFile(t *testing.T) {
+	root := NewRootCmd()
 	cfgPath := filepath.Join(t.TempDir(), "nonexistent.yaml")
 
 	resetCmdFlags()
-	rootCmd.SetArgs([]string{"config", "set", "vaultDir", "/new", "--file", cfgPath})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"config", "set", "vaultDir", "/new", "--file", cfgPath})
+	defer root.SetArgs(nil)
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil {
 		t.Fatal("expected error for missing config file")
 	}
 }
 
 func TestConfigGetCommand_ExistingKey(t *testing.T) {
+	root := NewRootCmd()
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(cfgPath, []byte("vaultDir: /my/vault\n"), 0o600); err != nil {
@@ -148,11 +154,11 @@ func TestConfigGetCommand_ExistingKey(t *testing.T) {
 	}
 
 	resetCmdFlags()
-	rootCmd.SetArgs([]string{"config", "get", "vaultDir", "--file", cfgPath})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"config", "get", "vaultDir", "--file", cfgPath})
+	defer root.SetArgs(nil)
 
 	output := captureStdout(func() {
-		if err := rootCmd.Execute(); err != nil {
+		if err := root.Execute(); err != nil {
 			t.Fatalf("config get failed: %v", err)
 		}
 	})
@@ -163,6 +169,7 @@ func TestConfigGetCommand_ExistingKey(t *testing.T) {
 }
 
 func TestConfigGetCommand_NestedKey(t *testing.T) {
+	root := NewRootCmd()
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(cfgPath, []byte("agents:\n  claude:\n    canWrite: true\n"), 0o600); err != nil {
@@ -170,11 +177,11 @@ func TestConfigGetCommand_NestedKey(t *testing.T) {
 	}
 
 	resetCmdFlags()
-	rootCmd.SetArgs([]string{"config", "get", "agents.claude.canWrite", "--file", cfgPath})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"config", "get", "agents.claude.canWrite", "--file", cfgPath})
+	defer root.SetArgs(nil)
 
 	output := captureStdout(func() {
-		if err := rootCmd.Execute(); err != nil {
+		if err := root.Execute(); err != nil {
 			t.Fatalf("config get failed: %v", err)
 		}
 	})
@@ -185,6 +192,7 @@ func TestConfigGetCommand_NestedKey(t *testing.T) {
 }
 
 func TestConfigGetCommand_MissingKey(t *testing.T) {
+	root := NewRootCmd()
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(cfgPath, []byte("vaultDir: /test\n"), 0o600); err != nil {
@@ -192,29 +200,31 @@ func TestConfigGetCommand_MissingKey(t *testing.T) {
 	}
 
 	resetCmdFlags()
-	rootCmd.SetArgs([]string{"config", "get", "nonexistent.key", "--file", cfgPath})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"config", "get", "nonexistent.key", "--file", cfgPath})
+	defer root.SetArgs(nil)
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil {
 		t.Fatal("expected error for missing key")
 	}
 }
 
 func TestConfigGetCommand_MissingFile(t *testing.T) {
+	root := NewRootCmd()
 	cfgPath := filepath.Join(t.TempDir(), "nonexistent.yaml")
 
 	resetCmdFlags()
-	rootCmd.SetArgs([]string{"config", "get", "vaultDir", "--file", cfgPath})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"config", "get", "vaultDir", "--file", cfgPath})
+	defer root.SetArgs(nil)
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil {
 		t.Fatal("expected error for missing config file")
 	}
 }
 
 func TestConfigListCommand(t *testing.T) {
+	root := NewRootCmd()
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(cfgPath, []byte("vaultDir: /test\nagents:\n  a:\n    canWrite: true\n"), 0o600); err != nil {
@@ -222,11 +232,11 @@ func TestConfigListCommand(t *testing.T) {
 	}
 
 	resetCmdFlags()
-	rootCmd.SetArgs([]string{"config", "list", "--file", cfgPath})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"config", "list", "--file", cfgPath})
+	defer root.SetArgs(nil)
 
 	output := captureStdout(func() {
-		if err := rootCmd.Execute(); err != nil {
+		if err := root.Execute(); err != nil {
 			t.Fatalf("config list failed: %v", err)
 		}
 	})
@@ -240,19 +250,21 @@ func TestConfigListCommand(t *testing.T) {
 }
 
 func TestConfigListCommand_MissingFile(t *testing.T) {
+	root := NewRootCmd()
 	cfgPath := filepath.Join(t.TempDir(), "nonexistent.yaml")
 
 	resetCmdFlags()
-	rootCmd.SetArgs([]string{"config", "list", "--file", cfgPath})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"config", "list", "--file", cfgPath})
+	defer root.SetArgs(nil)
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil {
 		t.Fatal("expected error for missing config file")
 	}
 }
 
 func TestConfigListCommand_EmptyConfig(t *testing.T) {
+	root := NewRootCmd()
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(cfgPath, []byte("{}\n"), 0o600); err != nil {
@@ -260,11 +272,11 @@ func TestConfigListCommand_EmptyConfig(t *testing.T) {
 	}
 
 	resetCmdFlags()
-	rootCmd.SetArgs([]string{"config", "list", "--file", cfgPath})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"config", "list", "--file", cfgPath})
+	defer root.SetArgs(nil)
 
 	output := captureStdout(func() {
-		if err := rootCmd.Execute(); err != nil {
+		if err := root.Execute(); err != nil {
 			t.Fatalf("config list failed: %v", err)
 		}
 	})

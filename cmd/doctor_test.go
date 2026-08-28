@@ -12,18 +12,18 @@ import (
 )
 
 func TestCmdDoctor_TextOutput(t *testing.T) {
-	rootCmd = newPackageRootCmd()
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
 	var buf bytes.Buffer
-	rootCmd.SetOut(&buf)
-	t.Cleanup(func() { rootCmd.SetOut(nil) })
+	root.SetOut(&buf)
+	t.Cleanup(func() { root.SetOut(nil) })
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "doctor", "--no-network"})
-	defer rootCmd.SetArgs(nil)
-	_ = rootCmd.Execute()
+	root.SetArgs([]string{"--vault", vaultDir, "doctor", "--no-network"})
+	defer root.SetArgs(nil)
+	_ = root.Execute()
 
 	out := buf.String()
 	if !strings.Contains(out, "Symaira Vault Doctor") {
@@ -35,18 +35,18 @@ func TestCmdDoctor_TextOutput(t *testing.T) {
 }
 
 func TestCmdDoctor_JSONOutput(t *testing.T) {
-	rootCmd = newPackageRootCmd()
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
 	var buf bytes.Buffer
-	rootCmd.SetOut(&buf)
-	t.Cleanup(func() { rootCmd.SetOut(nil) })
+	root.SetOut(&buf)
+	t.Cleanup(func() { root.SetOut(nil) })
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "doctor", "--no-network", "--json"})
-	defer rootCmd.SetArgs(nil)
-	_ = rootCmd.Execute()
+	root.SetArgs([]string{"--vault", vaultDir, "doctor", "--no-network", "--json"})
+	defer root.SetArgs(nil)
+	_ = root.Execute()
 
 	var result struct {
 		VaultDir string `json:"vault_dir"`
@@ -73,18 +73,18 @@ func TestCmdDoctor_JSONOutput(t *testing.T) {
 }
 
 func TestCmdDoctor_NoNetworkFlag(t *testing.T) {
-	rootCmd = newPackageRootCmd()
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
 	var buf bytes.Buffer
-	rootCmd.SetOut(&buf)
-	t.Cleanup(func() { rootCmd.SetOut(nil) })
+	root.SetOut(&buf)
+	t.Cleanup(func() { root.SetOut(nil) })
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "doctor", "--no-network"})
-	defer rootCmd.SetArgs(nil)
-	_ = rootCmd.Execute()
+	root.SetArgs([]string{"--vault", vaultDir, "doctor", "--no-network"})
+	defer root.SetArgs(nil)
+	_ = root.Execute()
 
 	if buf.Len() == 0 {
 		t.Error("expected non-empty output with --no-network flag")
@@ -102,19 +102,19 @@ func TestCmdDoctor_FixFlag_Registered(t *testing.T) {
 }
 
 func TestCmdDoctor_FixFlag_TextOutput(t *testing.T) {
-	rootCmd = newPackageRootCmd()
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
 	var buf bytes.Buffer
-	rootCmd.SetOut(&buf)
-	t.Cleanup(func() { rootCmd.SetOut(nil) })
+	root.SetOut(&buf)
+	t.Cleanup(func() { root.SetOut(nil) })
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "doctor", "--fix", "--no-network"})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"--vault", vaultDir, "doctor", "--fix", "--no-network"})
+	defer root.SetArgs(nil)
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err != nil {
 		t.Errorf("doctor --fix --no-network failed: %v", err)
 	}

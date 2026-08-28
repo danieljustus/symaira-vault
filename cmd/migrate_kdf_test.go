@@ -81,10 +81,11 @@ func writeStdinPipe(t *testing.T, lines ...string) {
 
 func runMigrateKDF(t *testing.T, vaultDir string) (stdout string, execErr error) {
 	t.Helper()
+	root := NewRootCmd()
 	stdout = captureStdout(func() {
-		rootCmd.SetArgs([]string{"--vault", vaultDir, "migrate", "kdf"})
-		execErr = rootCmd.Execute()
-		rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", vaultDir, "migrate", "kdf"})
+		execErr = root.Execute()
+		root.SetArgs(nil)
 	})
 	return stdout, execErr
 }

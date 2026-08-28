@@ -16,10 +16,6 @@ import (
 
 var profileVaultPath string
 
-// profileCmd is retained for API compatibility; NewRootCmd() uses
-// newProfileCmd() so every call gets a fresh command.
-var profileCmd = newProfileCmd()
-
 func newProfileCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "profile",

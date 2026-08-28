@@ -15,6 +15,7 @@ import (
 )
 
 func TestScriptingGet_TTYDetection_InProcess(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
 	entry := &vaultpkg.Entry{Data: map[string]any{"password": "tty-test-pass"}}
@@ -49,9 +50,9 @@ func TestScriptingGet_TTYDetection_InProcess(t *testing.T) {
 		var stdout string
 		captureStderr(func() {
 			stdout = captureStdout(func() {
-				rootCmd.SetArgs([]string{"--vault", vaultDir, "get", "tty-entry.password"})
-				_ = rootCmd.Execute()
-				rootCmd.SetArgs(nil)
+				root.SetArgs([]string{"--vault", vaultDir, "get", "tty-entry.password"})
+				_ = root.Execute()
+				root.SetArgs(nil)
 			})
 		})
 		if stdout != "" {

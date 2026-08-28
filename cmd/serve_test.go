@@ -756,6 +756,7 @@ func TestRunHTTPServer_HandleMessageError(t *testing.T) {
 }
 
 func TestServeCommand_StdioOnlyDoesNotStartHTTP(t *testing.T) {
+	root := NewRootCmd()
 	resetCommandTestState()
 	t.Cleanup(resetCommandTestState)
 
@@ -778,10 +779,10 @@ func TestServeCommand_StdioOnlyDoesNotStartHTTP(t *testing.T) {
 	}
 	mcpcmd.ServeSignalNotify = func(_ chan<- os.Signal, _ ...os.Signal) {}
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "serve", "--stdio", "--agent", "default"})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"--vault", vaultDir, "serve", "--stdio", "--agent", "default"})
+	defer root.SetArgs(nil)
 
-	if err := rootCmd.Execute(); err != nil {
+	if err := root.Execute(); err != nil {
 		t.Fatalf("serve command failed: %v", err)
 	}
 	if !stdioStarted {
@@ -810,6 +811,7 @@ func setupServeCommandTest(t *testing.T) (vaultDir string, cleanup func()) {
 }
 
 func TestServeCommand_ActiveSessionUsesNonInteractiveUnlock(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, cleanup := setupServeCommandTest(t)
 	defer cleanup()
 
@@ -822,10 +824,10 @@ func TestServeCommand_ActiveSessionUsesNonInteractiveUnlock(t *testing.T) {
 		return &vaultpkg.Vault{}, nil
 	}
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "serve", "--port", "18080"})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"--vault", vaultDir, "serve", "--port", "18080"})
+	defer root.SetArgs(nil)
 
-	if err := rootCmd.Execute(); err != nil {
+	if err := root.Execute(); err != nil {
 		t.Fatalf("serve command failed: %v", err)
 	}
 
@@ -838,6 +840,7 @@ func TestServeCommand_ActiveSessionUsesNonInteractiveUnlock(t *testing.T) {
 }
 
 func TestServeCommand_ExpiredSessionUsesInteractiveUnlock(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, cleanup := setupServeCommandTest(t)
 	defer cleanup()
 
@@ -850,10 +853,10 @@ func TestServeCommand_ExpiredSessionUsesInteractiveUnlock(t *testing.T) {
 		return nil, nil
 	}
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "serve", "--port", "18081"})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"--vault", vaultDir, "serve", "--port", "18081"})
+	defer root.SetArgs(nil)
 
-	if err := rootCmd.Execute(); err != nil {
+	if err := root.Execute(); err != nil {
 		t.Fatalf("serve command failed: %v", err)
 	}
 
@@ -866,6 +869,7 @@ func TestServeCommand_ExpiredSessionUsesInteractiveUnlock(t *testing.T) {
 }
 
 func TestServeCommand_ActiveSessionFallbackToInteractive(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, cleanup := setupServeCommandTest(t)
 	defer cleanup()
 
@@ -881,10 +885,10 @@ func TestServeCommand_ActiveSessionFallbackToInteractive(t *testing.T) {
 		return nil, nil
 	}
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "serve", "--port", "18082"})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"--vault", vaultDir, "serve", "--port", "18082"})
+	defer root.SetArgs(nil)
 
-	if err := rootCmd.Execute(); err != nil {
+	if err := root.Execute(); err != nil {
 		t.Fatalf("serve command failed: %v", err)
 	}
 
@@ -960,22 +964,24 @@ func TestRunHTTPServer_HealthEndpoint_NonLoopback(t *testing.T) {
 }
 
 func TestCmdServe_EmptyBind(t *testing.T) {
+	root := NewRootCmd()
+	serveCmd, _, _ := root.Find([]string{"serve"})
 	vaultDir := t.TempDir()
 	vaultFlagReset(t)
 	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
 	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_VAULT") })
 
 	t.Cleanup(func() {
-		_ = mcpcmd.ServeCmd.Flags().Set("bind", "127.0.0.1")
-		_ = mcpcmd.ServeCmd.Flags().Set("stdio", "false")
+		_ = serveCmd.Flags().Set("bind", "127.0.0.1")
+		_ = serveCmd.Flags().Set("stdio", "false")
 	})
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "serve", "--bind", ""})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "serve", "--bind", ""})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	var execErr error
 	captureStderr(func() {
-		execErr = rootCmd.Execute()
+		execErr = root.Execute()
 	})
 
 	if execErr == nil {
@@ -987,24 +993,26 @@ func TestCmdServe_EmptyBind(t *testing.T) {
 }
 
 func TestCmdServe_MissingAgentInStdioMode(t *testing.T) {
+	root := NewRootCmd()
+	serveCmd, _, _ := root.Find([]string{"serve"})
 	vaultDir := t.TempDir()
 	vaultFlagReset(t)
 	_ = os.Setenv("SYMVAULT_VAULT", vaultDir)
 	t.Cleanup(func() { _ = os.Unsetenv("SYMVAULT_VAULT") })
 
 	t.Cleanup(func() {
-		_ = mcpcmd.ServeCmd.Flags().Set("bind", "127.0.0.1")
-		_ = mcpcmd.ServeCmd.Flags().Set("stdio", "false")
-		_ = mcpcmd.ServeCmd.Flags().Set("agent", "")
+		_ = serveCmd.Flags().Set("bind", "127.0.0.1")
+		_ = serveCmd.Flags().Set("stdio", "false")
+		_ = serveCmd.Flags().Set("agent", "")
 	})
-	_ = mcpcmd.ServeCmd.Flags().Set("agent", "")
+	_ = serveCmd.Flags().Set("agent", "")
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "serve", "--bind", "127.0.0.1", "--stdio"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "serve", "--bind", "127.0.0.1", "--stdio"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	var execErr error
 	captureStderr(func() {
-		execErr = rootCmd.Execute()
+		execErr = root.Execute()
 	})
 
 	if execErr == nil {
@@ -1016,6 +1024,8 @@ func TestCmdServe_MissingAgentInStdioMode(t *testing.T) {
 }
 
 func TestServe_RunE_HTTPWithAgent(t *testing.T) {
+	root := NewRootCmd()
+	serveCmd, _, _ := root.Find([]string{"serve"})
 	vaultDir := t.TempDir()
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()
@@ -1078,18 +1088,18 @@ func TestServe_RunE_HTTPWithAgent(t *testing.T) {
 	t.Cleanup(func() { mcpcmd.RunHTTPServerFunc = origHTTP })
 
 	t.Cleanup(func() {
-		_ = mcpcmd.ServeCmd.Flags().Set("bind", "127.0.0.1")
-		_ = mcpcmd.ServeCmd.Flags().Set("stdio", "false")
-		_ = mcpcmd.ServeCmd.Flags().Set("agent", "")
+		_ = serveCmd.Flags().Set("bind", "127.0.0.1")
+		_ = serveCmd.Flags().Set("stdio", "false")
+		_ = serveCmd.Flags().Set("agent", "")
 	})
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "serve", "--agent", "test-agent", "--port", fmt.Sprintf("%d", port)})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "serve", "--agent", "test-agent", "--port", fmt.Sprintf("%d", port)})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		_ = rootCmd.Execute()
+		_ = root.Execute()
 	}()
 
 	select {
@@ -1113,18 +1123,20 @@ func TestServe_RunE_HTTPWithAgent(t *testing.T) {
 }
 
 func TestCmdServe_UninitializedVault(t *testing.T) {
+	root := NewRootCmd()
+	serveCmd, _, _ := root.Find([]string{"serve"})
 	vaultDir := t.TempDir()
 	vaultFlagReset(t)
 
-	_ = mcpcmd.ServeCmd.Flags().Set("bind", "127.0.0.1")
-	_ = mcpcmd.ServeCmd.Flags().Set("stdio", "false")
+	_ = serveCmd.Flags().Set("bind", "127.0.0.1")
+	_ = serveCmd.Flags().Set("stdio", "false")
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "serve", "--bind", "127.0.0.1"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	root.SetArgs([]string{"--vault", vaultDir, "serve", "--bind", "127.0.0.1"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
 	var execErr error
 	captureStderr(func() {
-		execErr = rootCmd.Execute()
+		execErr = root.Execute()
 	})
 
 	if execErr == nil {
@@ -1136,16 +1148,17 @@ func TestCmdServe_UninitializedVault(t *testing.T) {
 }
 
 func TestServe_ErrorPaths(t *testing.T) {
+	root := NewRootCmd()
 	resetVaultState(t)
 	t.Run("uninitialized vault", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
 		defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
-		rootCmd.SetArgs([]string{"--vault", tmpDir, "serve", "--port", "0"})
-		defer rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", tmpDir, "serve", "--port", "0"})
+		defer root.SetArgs(nil)
 
-		err := rootCmd.Execute()
+		err := root.Execute()
 		if err == nil || !strings.Contains(err.Error(), "not initialized") {
 			t.Errorf("expected 'not initialized' error, got: %v", err)
 		}
@@ -1163,10 +1176,10 @@ func TestServe_ErrorPaths(t *testing.T) {
 			_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 		}()
 
-		rootCmd.SetArgs([]string{"--vault", tmpDir, "serve", "--stdio"})
-		defer rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", tmpDir, "serve", "--stdio"})
+		defer root.SetArgs(nil)
 
-		err := rootCmd.Execute()
+		err := root.Execute()
 		if err == nil || !strings.Contains(err.Error(), "--agent is required") {
 			t.Errorf("expected '--agent is required' error, got: %v", err)
 		}
@@ -1184,10 +1197,10 @@ func TestServe_ErrorPaths(t *testing.T) {
 			_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
 		}()
 
-		rootCmd.SetArgs([]string{"--vault", tmpDir, "serve", "--bind", ""})
-		defer rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", tmpDir, "serve", "--bind", ""})
+		defer root.SetArgs(nil)
 
-		err := rootCmd.Execute()
+		err := root.Execute()
 		if err == nil || !strings.Contains(err.Error(), "bind") {
 			t.Errorf("expected bind error, got: %v", err)
 		}
@@ -1195,6 +1208,8 @@ func TestServe_ErrorPaths(t *testing.T) {
 }
 
 func TestServe_HTTPSignalShutdown(t *testing.T) {
+	root := NewRootCmd()
+	serveCmd, _, _ := root.Find([]string{"serve"})
 	if testing.Short() {
 		t.Skip("skipping slow integration server test in short mode")
 	}
@@ -1211,8 +1226,8 @@ func TestServe_HTTPSignalShutdown(t *testing.T) {
 	cfg := config.Default()
 	_, _ = vaultpkg.InitWithPassphrase(tmpDir, []byte("test"), cfg)
 
-	_ = mcpcmd.ServeCmd.Flags().Set("bind", "127.0.0.1")
-	_ = mcpcmd.ServeCmd.Flags().Set("stdio", "false")
+	_ = serveCmd.Flags().Set("bind", "127.0.0.1")
+	_ = serveCmd.Flags().Set("stdio", "false")
 
 	port := findFreePort(t)
 
@@ -1225,12 +1240,12 @@ func TestServe_HTTPSignalShutdown(t *testing.T) {
 		}()
 	}
 
-	rootCmd.SetArgs([]string{"--vault", tmpDir, "serve", "--port", fmt.Sprintf("%d", port)})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"--vault", tmpDir, "serve", "--port", fmt.Sprintf("%d", port)})
+	defer root.SetArgs(nil)
 
 	done := make(chan struct{})
 	go func() {
-		_ = rootCmd.Execute()
+		_ = root.Execute()
 		close(done)
 	}()
 
@@ -1267,6 +1282,8 @@ func TestIsLocalhostBind(t *testing.T) {
 }
 
 func TestCmdServe_NonLoopbackWarning(t *testing.T) {
+	root := NewRootCmd()
+	serveCmd, _, _ := root.Find([]string{"serve"})
 	vaultDir := t.TempDir()
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()
@@ -1306,21 +1323,21 @@ func TestCmdServe_NonLoopbackWarning(t *testing.T) {
 	}
 	defer func() { mcpcmd.RunHTTPServerFunc = origHTTP }()
 
-	_ = mcpcmd.ServeCmd.Flags().Set("stdio", "false")
-	_ = mcpcmd.ServeCmd.Flags().Set("agent", "")
-	_ = mcpcmd.ServeCmd.Flags().Set("port", fmt.Sprintf("%d", port))
-	_ = mcpcmd.ServeCmd.Flags().Set("bind", "0.0.0.0")
+	_ = serveCmd.Flags().Set("stdio", "false")
+	_ = serveCmd.Flags().Set("agent", "")
+	_ = serveCmd.Flags().Set("port", fmt.Sprintf("%d", port))
+	_ = serveCmd.Flags().Set("bind", "0.0.0.0")
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "serve", "--bind", "0.0.0.0", "--port", fmt.Sprintf("%d", port)})
+	root.SetArgs([]string{"--vault", vaultDir, "serve", "--bind", "0.0.0.0", "--port", fmt.Sprintf("%d", port)})
 	t.Cleanup(func() {
-		rootCmd.SetArgs(nil)
-		_ = mcpcmd.ServeCmd.Flags().Set("bind", "127.0.0.1")
+		root.SetArgs(nil)
+		_ = serveCmd.Flags().Set("bind", "127.0.0.1")
 	})
 
 	done := make(chan struct{})
 	stderr := captureStderr(func() {
 		go func() {
-			_ = rootCmd.Execute()
+			_ = root.Execute()
 			close(done)
 		}()
 		sigCh := <-serveSignals
@@ -1340,6 +1357,8 @@ func TestCmdServe_NonLoopbackWarning(t *testing.T) {
 }
 
 func TestCmdServe_TLSFlagsOverride(t *testing.T) {
+	root := NewRootCmd()
+	serveCmd, _, _ := root.Find([]string{"serve"})
 	vaultDir := t.TempDir()
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()
@@ -1380,11 +1399,11 @@ func TestCmdServe_TLSFlagsOverride(t *testing.T) {
 	defer func() { mcpcmd.RunHTTPServerFunc = origHTTP }()
 
 	const port = 18182
-	_ = mcpcmd.ServeCmd.Flags().Set("stdio", "false")
-	_ = mcpcmd.ServeCmd.Flags().Set("agent", "")
-	_ = mcpcmd.ServeCmd.Flags().Set("port", fmt.Sprintf("%d", port))
+	_ = serveCmd.Flags().Set("stdio", "false")
+	_ = serveCmd.Flags().Set("agent", "")
+	_ = serveCmd.Flags().Set("port", fmt.Sprintf("%d", port))
 
-	rootCmd.SetArgs([]string{
+	root.SetArgs([]string{
 		"--vault", vaultDir,
 		"serve",
 		"--bind", "127.0.0.1",
@@ -1393,15 +1412,15 @@ func TestCmdServe_TLSFlagsOverride(t *testing.T) {
 		"--tls-key", "/path/to/key.pem",
 	})
 	t.Cleanup(func() {
-		rootCmd.SetArgs(nil)
-		_ = mcpcmd.ServeCmd.Flags().Set("bind", "127.0.0.1")
-		_ = mcpcmd.ServeCmd.Flags().Set("tls-cert", "")
-		_ = mcpcmd.ServeCmd.Flags().Set("tls-key", "")
+		root.SetArgs(nil)
+		_ = serveCmd.Flags().Set("bind", "127.0.0.1")
+		_ = serveCmd.Flags().Set("tls-cert", "")
+		_ = serveCmd.Flags().Set("tls-key", "")
 	})
 
 	done := make(chan struct{})
 	go func() {
-		_ = rootCmd.Execute()
+		_ = root.Execute()
 		close(done)
 	}()
 
@@ -1425,6 +1444,8 @@ func TestCmdServe_TLSFlagsOverride(t *testing.T) {
 }
 
 func TestCmdServe_TLSFlagsOnlyCert(t *testing.T) {
+	root := NewRootCmd()
+	serveCmd, _, _ := root.Find([]string{"serve"})
 	vaultDir := t.TempDir()
 	identity := testutil.TempIdentity(t)
 	cfg := config.Default()
@@ -1465,12 +1486,12 @@ func TestCmdServe_TLSFlagsOnlyCert(t *testing.T) {
 	defer func() { mcpcmd.RunHTTPServerFunc = origHTTP }()
 
 	const port = 18183
-	_ = mcpcmd.ServeCmd.Flags().Set("stdio", "false")
-	_ = mcpcmd.ServeCmd.Flags().Set("agent", "")
-	_ = mcpcmd.ServeCmd.Flags().Set("port", fmt.Sprintf("%d", port))
+	_ = serveCmd.Flags().Set("stdio", "false")
+	_ = serveCmd.Flags().Set("agent", "")
+	_ = serveCmd.Flags().Set("port", fmt.Sprintf("%d", port))
 
 	// Only set --tls-cert, leave --tls-key as default
-	rootCmd.SetArgs([]string{
+	root.SetArgs([]string{
 		"--vault", vaultDir,
 		"serve",
 		"--bind", "127.0.0.1",
@@ -1478,15 +1499,15 @@ func TestCmdServe_TLSFlagsOnlyCert(t *testing.T) {
 		"--tls-cert", "/path/to/cert.pem",
 	})
 	t.Cleanup(func() {
-		rootCmd.SetArgs(nil)
-		_ = mcpcmd.ServeCmd.Flags().Set("bind", "127.0.0.1")
-		_ = mcpcmd.ServeCmd.Flags().Set("tls-cert", "")
-		_ = mcpcmd.ServeCmd.Flags().Set("tls-key", "")
+		root.SetArgs(nil)
+		_ = serveCmd.Flags().Set("bind", "127.0.0.1")
+		_ = serveCmd.Flags().Set("tls-cert", "")
+		_ = serveCmd.Flags().Set("tls-key", "")
 	})
 
 	done := make(chan struct{})
 	go func() {
-		_ = rootCmd.Execute()
+		_ = root.Execute()
 		close(done)
 	}()
 
@@ -1510,6 +1531,8 @@ func TestCmdServe_TLSFlagsOnlyCert(t *testing.T) {
 }
 
 func TestServe_StdioError(t *testing.T) {
+	root := NewRootCmd()
+	serveCmd, _, _ := root.Find([]string{"serve"})
 	resetVaultState(t)
 
 	tmpDir := t.TempDir()
@@ -1523,9 +1546,9 @@ func TestServe_StdioError(t *testing.T) {
 	cfg := config.Default()
 	_, _ = vaultpkg.InitWithPassphrase(tmpDir, []byte("test"), cfg)
 
-	_ = mcpcmd.ServeCmd.Flags().Set("bind", "127.0.0.1")
-	_ = mcpcmd.ServeCmd.Flags().Set("stdio", "false")
-	_ = mcpcmd.ServeCmd.Flags().Set("agent", "")
+	_ = serveCmd.Flags().Set("bind", "127.0.0.1")
+	_ = serveCmd.Flags().Set("stdio", "false")
+	_ = serveCmd.Flags().Set("agent", "")
 
 	port := findFreePort(t)
 
@@ -1535,10 +1558,10 @@ func TestServe_StdioError(t *testing.T) {
 	}
 	defer func() { mcpcmd.RunStdioServerFunc = origRunStdio }()
 
-	rootCmd.SetArgs([]string{"--vault", tmpDir, "serve", "--stdio", "--agent", "test-agent", "--port", fmt.Sprintf("%d", port)})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"--vault", tmpDir, "serve", "--stdio", "--agent", "test-agent", "--port", fmt.Sprintf("%d", port)})
+	defer root.SetArgs(nil)
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil || !strings.Contains(err.Error(), "mock stdio error") {
 		t.Errorf("expected mock stdio error, got: %v", err)
 	}
@@ -1548,6 +1571,8 @@ func TestRunHTTPServerFunc_ApprovalDeviceSession(t *testing.T) {
 	resetVaultState(t)
 
 	tmpDir := t.TempDir()
+	restoreVaultFlag := setupVaultFlag(t, tmpDir)
+	defer restoreVaultFlag()
 	_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
 	_ = os.Setenv("SYMVAULT_PASSPHRASE", "test")
 	defer func() {
@@ -1599,6 +1624,7 @@ func TestRunHTTPServerFunc_ApprovalDeviceSession(t *testing.T) {
 			v.Config.MCP = &config.MCPConfig{}
 		}
 		v.Config.MCP.AllowInsecureBind = true
+		v.Config.MCP.HTTPTokenFile = filepath.Join(tmpDir, "mcp-token")
 		if err := mcpcmd.RunHTTPServerFunc(ctx, "127.0.0.1", port, v); err != nil {
 			t.Logf("RunHTTPServerFunc: %v", err)
 		}

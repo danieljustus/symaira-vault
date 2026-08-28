@@ -14,10 +14,6 @@ import (
 var uiPrintKeybindings bool
 var uiExperimental bool
 
-// uiCmd is retained for API compatibility; NewCommands() uses
-// newUICmd() so every call gets a fresh command.
-var uiCmd = newUICmd()
-
 func newUICmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "ui",
