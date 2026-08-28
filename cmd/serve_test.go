@@ -1622,6 +1622,7 @@ func TestRunHTTPServerFunc_ApprovalDeviceSession(t *testing.T) {
 			v.Config.MCP = &config.MCPConfig{}
 		}
 		v.Config.MCP.AllowInsecureBind = true
+		v.Config.MCP.HTTPTokenFile = filepath.Join(tmpDir, "mcp-token")
 		if err := mcpcmd.RunHTTPServerFunc(ctx, "127.0.0.1", port, v); err != nil {
 			t.Logf("RunHTTPServerFunc: %v", err)
 		}
