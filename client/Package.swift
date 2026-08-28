@@ -25,7 +25,7 @@ let package = Package(
             dependencies: [
                 .product(name: "SymairaCLIRunner", package: "symaira-appkit"),
                 .product(name: "SymairaToolKit", package: "symaira-appkit"),
-                .target(name: "Vaultcore"),
+                .target(name: "Vaultcore", condition: .when(platforms: [.iOS])),
             ]
         ),
         .target(
