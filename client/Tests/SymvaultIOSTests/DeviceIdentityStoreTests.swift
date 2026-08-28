@@ -31,6 +31,6 @@ import Testing
         try DeviceIdentityStore.save("test-identity")
     } throws: { error in
         let nsError = error as NSError
-        return nsError.domain == "DeviceIdentityStore" && nsError.code == Int(errSecParam)
+        return nsError.domain == "Test" && nsError.code == Int(errSecParam)
     }
 }
