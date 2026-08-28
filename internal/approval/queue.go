@@ -67,6 +67,8 @@ const DefaultTTL = 5 * time.Minute
 
 // Queue is a thread-safe pending-approval store. Decisions wake waiting
 // agents; expired requests are reaped lazily on access and by ReapExpired.
+// Wait self-enforces Entry.ExpiresAt with its own timer so waiters unblock
+// without external polling.
 type Queue struct {
 	mu       sync.Mutex
 	entries  map[string]*Entry
@@ -196,6 +198,8 @@ func (q *Queue) decide(id string, status Status, decidedBy string) (Outcome, err
 
 // Wait blocks until the request is decided, expires, the context is done, or
 // the queue closes. It returns the outcome (StatusExpired on expiry).
+// Wait self-enforces Entry.ExpiresAt with its own timer so waiters unblock
+// without external polling.
 func (q *Queue) Wait(ctx context.Context, id string) (Outcome, error) {
 	ch := make(chan Outcome, 1)
 	q.mu.Lock()
@@ -219,24 +223,74 @@ func (q *Queue) Wait(ctx context.Context, id string) (Outcome, error) {
 	q.waiters[id] = append(q.waiters[id], ch)
 	q.mu.Unlock()
 
+	// Self-enforce expiry: if the entry is still pending, arm a timer that
+	// fires at ExpiresAt and marks the entry expired without requiring
+	// an external reaper poll.
+	expiryTimer := time.AfterFunc(max(0, time.Until(e.ExpiresAt)), func() {
+		q.mu.Lock()
+		defer q.mu.Unlock()
+		if e.Status == StatusPending && time.Now().After(e.ExpiresAt) {
+			e.Status = StatusExpired
+			e.DecidedAt = e.ExpiresAt
+			out := Outcome{ID: id, Status: StatusExpired, DecidedAt: e.ExpiresAt}
+			q.wakeLocked(id, out)
+			q.poke()
+		}
+	})
+
 	select {
 	case out := <-ch:
+		expiryTimer.Stop()
 		return out, nil
 	case <-ctx.Done():
 		q.mu.Lock()
 		q.removeWaiterLocked(id, ch)
 		q.mu.Unlock()
+		expiryTimer.Stop()
 		return Outcome{}, ctx.Err()
 	}
 }
 
 // ReapExpired marks expired pending requests and wakes their waiters. It
 // returns the number of requests expired. Called periodically by the
-// transport layer.
+// transport layer or the background reaper ticker.
 func (q *Queue) ReapExpired() int {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	return q.reapLocked()
+}
+
+// StartReaper launches a background goroutine that periodically calls
+// ReapExpired. It returns a stop function that cancels the goroutine.
+// The reaper is bounded by the queue's lifetime: call the stop function
+// when the server shuts down.
+func (q *Queue) StartReaper(ctx context.Context, interval time.Duration) func() {
+	if interval <= 0 {
+		interval = 15 * time.Second
+	}
+	stopCh := make(chan struct{})
+	doneCh := make(chan struct{})
+	go func() {
+		defer close(doneCh)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				q.ReapExpired()
+			case <-stopCh:
+				q.ReapExpired()
+				return
+			case <-ctx.Done():
+				q.ReapExpired()
+				return
+			}
+		}
+	}()
+	return func() {
+		close(stopCh)
+		<-doneCh
+	}
 }
 
 func (q *Queue) reapLocked() int {
@@ -248,6 +302,8 @@ func (q *Queue) reapLocked() int {
 			e.DecidedAt = e.ExpiresAt
 			out := Outcome{ID: id, Status: StatusExpired, DecidedAt: e.ExpiresAt}
 			q.wakeLocked(id, out)
+			expired++
+		} else if e.Status == StatusExpired {
 			expired++
 		}
 	}
@@ -328,4 +384,11 @@ func randomID() (string, error) {
 		return "", fmt.Errorf("generate approval id: %w", err)
 	}
 	return "apr-" + hex.EncodeToString(buf), nil
+}
+
+func max(a, b time.Duration) time.Duration {
+	if a > b {
+		return a
+	}
+	return b
 }
