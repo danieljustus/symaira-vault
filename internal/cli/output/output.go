@@ -12,27 +12,45 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 )
 
-var QuietModeFn func() bool
-var OutputFormatFn func() string
+// Deps holds the external dependencies required by output handlers.
+type Deps struct {
+	Quiet  func() bool
+	Format func() string
+}
 
+// Handler formats and prints output using explicit dependencies.
+type Handler struct {
+	deps Deps
+}
+
+// New creates a Handler bound to the provided dependencies.
+func New(deps Deps) *Handler {
+	return &Handler{deps: deps}
+}
+
+// Printer is the interface for format-specific output.
 type Printer interface {
 	Print(v interface{}) error
 }
 
-type TextPrinter struct{}
+type textPrinter struct {
+	deps Deps
+}
 
-func (p TextPrinter) Print(v interface{}) error {
-	if QuietModeFn != nil && QuietModeFn() {
+func (p textPrinter) Print(v interface{}) error {
+	if p.deps.Quiet() {
 		return nil
 	}
 	fmt.Println(v)
 	return nil
 }
 
-type JSONPrinter struct{}
+type jsonPrinter struct {
+	deps Deps
+}
 
-func (p JSONPrinter) Print(v interface{}) error {
-	if QuietModeFn != nil && QuietModeFn() {
+func (p jsonPrinter) Print(v interface{}) error {
+	if p.deps.Quiet() {
 		return nil
 	}
 	enc := json.NewEncoder(os.Stdout)
@@ -40,10 +58,12 @@ func (p JSONPrinter) Print(v interface{}) error {
 	return enc.Encode(v)
 }
 
-type YAMLPrinter struct{}
+type yamlPrinter struct {
+	deps Deps
+}
 
-func (p YAMLPrinter) Print(v interface{}) error {
-	if QuietModeFn != nil && QuietModeFn() {
+func (p yamlPrinter) Print(v interface{}) error {
+	if p.deps.Quiet() {
 		return nil
 	}
 	out, err := yaml.Marshal(v)
@@ -56,33 +76,36 @@ func (p YAMLPrinter) Print(v interface{}) error {
 
 const formatText = "text"
 
-func NewPrinter(format string) (Printer, error) {
+// NewPrinter returns a Printer for the requested format.
+func (h *Handler) NewPrinter(format string) (Printer, error) {
 	switch format {
 	case formatText, "":
-		return TextPrinter{}, nil
+		return textPrinter{deps: h.deps}, nil
 	case "json":
-		return JSONPrinter{}, nil
+		return jsonPrinter{deps: h.deps}, nil
 	case "yaml":
-		return YAMLPrinter{}, nil
+		return yamlPrinter{deps: h.deps}, nil
 	default:
 		return nil, fmt.Errorf("unknown output format: %q (valid: text, json, yaml)", format)
 	}
 }
 
-func PrintResult(v interface{}) error {
+// PrintResult formats and prints v using the configured output format.
+func (h *Handler) PrintResult(v interface{}) error {
 	format := formatText
-	if OutputFormatFn != nil {
-		format = OutputFormatFn()
+	if h.deps.Format != nil {
+		format = h.deps.Format()
 	}
-	printer, err := NewPrinter(format)
+	printer, err := h.NewPrinter(format)
 	if err != nil {
 		return err
 	}
 	return printer.Print(v)
 }
 
-func PrintJSON(v interface{}) {
-	if QuietModeFn != nil && QuietModeFn() {
+// PrintJSON encodes v as JSON to stdout, respecting quiet mode.
+func (h *Handler) PrintJSON(v interface{}) {
+	if h.deps.Quiet != nil && h.deps.Quiet() {
 		return
 	}
 	enc := json.NewEncoder(os.Stdout)
@@ -92,10 +115,11 @@ func PrintJSON(v interface{}) {
 	}
 }
 
-func WantJSONOutput(flagJSON bool) bool {
+// WantJSONOutput reports whether JSON output is requested.
+func (h *Handler) WantJSONOutput(flagJSON bool) bool {
 	format := formatText
-	if OutputFormatFn != nil {
-		format = OutputFormatFn()
+	if h.deps.Format != nil {
+		format = h.deps.Format()
 	}
 	if format == "json" {
 		return true
