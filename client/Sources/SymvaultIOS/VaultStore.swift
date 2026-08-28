@@ -36,6 +36,7 @@ final class VaultStore: ObservableObject {
 
     func enroll() async {
         isBusy = true
+        error = nil
         defer { isBusy = false }
         do {
             let identity = try MobileVaultCore(vaultDirectory: vaultDirectory).generateIdentity()
