@@ -36,14 +36,15 @@ func TestCmdRun_SecretInjection(t *testing.T) {
 }
 
 func TestCmdRun_MissingSecretRef(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "run", "--env", "FOO=missing.value", "--", "echo", "hello"})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"--vault", vaultDir, "run", "--env", "FOO=missing.value", "--", "echo", "hello"})
+	defer root.SetArgs(nil)
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil {
 		t.Error("expected error for missing secret ref, got nil")
 	} else {
@@ -55,14 +56,15 @@ func TestCmdRun_MissingSecretRef(t *testing.T) {
 }
 
 func TestCmdRun_Timeout(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "run", "--timeout", "100ms", "--", "sleep", "10"})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"--vault", vaultDir, "run", "--timeout", "100ms", "--", "sleep", "10"})
+	defer root.SetArgs(nil)
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil {
 		t.Error("expected timeout error, got nil")
 	} else {
@@ -120,14 +122,15 @@ func TestCmdRun_MultipleEnvFlags(t *testing.T) {
 }
 
 func TestCmdRun_NonZeroExit(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "run", "--", "sh", "-c", "exit 42"})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"--vault", vaultDir, "run", "--", "sh", "-c", "exit 42"})
+	defer root.SetArgs(nil)
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil {
 		t.Error("expected non-zero exit error, got nil")
 	} else {
@@ -139,15 +142,16 @@ func TestCmdRun_NonZeroExit(t *testing.T) {
 }
 
 func TestCmdRun_UninitializedVault(t *testing.T) {
+	root := NewRootCmd()
 	resetCmdFlags()
 	t.Cleanup(resetCmdFlags)
 	vaultDir := t.TempDir()
 	defer setupVaultFlag(t, vaultDir)()
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "run", "--", "echo", "hello"})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"--vault", vaultDir, "run", "--", "echo", "hello"})
+	defer root.SetArgs(nil)
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil {
 		t.Error("expected error for uninitialized vault, got nil")
 	} else {
@@ -159,6 +163,7 @@ func TestCmdRun_UninitializedVault(t *testing.T) {
 }
 
 func TestCmdRun_TooManyEnvironmentVariables(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
 
@@ -170,15 +175,15 @@ func TestCmdRun_TooManyEnvironmentVariables(t *testing.T) {
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "run",
+	root.SetArgs([]string{"--vault", vaultDir, "run",
 		"--env", "A=a.key", "--env", "B=b.key", "--env", "C=c.key",
 		"--env", "D=d.key", "--env", "E=e.key", "--env", "F=f.key",
 		"--env", "G=g.key", "--env", "H=h.key", "--env", "I=i.key",
 		"--env", "J=j.key",
 		"--", "sh", "-c", "echo ALL_SET"})
-	defer rootCmd.SetArgs(nil)
+	defer root.SetArgs(nil)
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -199,6 +204,7 @@ func TestCmdRun_EnvWithBareRef(t *testing.T) {
 }
 
 func TestCmdRun_StdoutStderrPassthrough(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
@@ -207,9 +213,9 @@ func TestCmdRun_StdoutStderrPassthrough(t *testing.T) {
 
 	stdout = captureStdout(func() {
 		stderr = captureStderr(func() {
-			rootCmd.SetArgs([]string{"--vault", vaultDir, "run", "--", "sh", "-c", "echo stdout; echo stderr >&2"})
-			_ = rootCmd.Execute()
-			rootCmd.SetArgs(nil)
+			root.SetArgs([]string{"--vault", vaultDir, "run", "--", "sh", "-c", "echo stdout; echo stderr >&2"})
+			_ = root.Execute()
+			root.SetArgs(nil)
 		})
 	})
 
@@ -222,28 +228,30 @@ func TestCmdRun_StdoutStderrPassthrough(t *testing.T) {
 }
 
 func TestCmdRun_NoArgsError(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "run"})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"--vault", vaultDir, "run"})
+	defer root.SetArgs(nil)
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil {
 		t.Error("expected error when no command provided, got nil")
 	}
 }
 
 func TestCmdRun_InvalidEnvFormat(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "run", "--env", "NOEQUALSIGN", "--", "echo", "hello"})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"--vault", vaultDir, "run", "--env", "NOEQUALSIGN", "--", "echo", "hello"})
+	defer root.SetArgs(nil)
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil {
 		t.Error("expected error for invalid --env format, got nil")
 	} else {
@@ -320,14 +328,15 @@ func TestCmdRun_EnvFileWithComments(t *testing.T) {
 }
 
 func TestCmdRun_EnvFileNotFound(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "run", "--env-file", "/nonexistent/.env.symvault", "--", "echo", "hello"})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"--vault", vaultDir, "run", "--env-file", "/nonexistent/.env.symvault", "--", "echo", "hello"})
+	defer root.SetArgs(nil)
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil {
 		t.Error("expected error for missing env file, got nil")
 	} else {
@@ -339,6 +348,7 @@ func TestCmdRun_EnvFileNotFound(t *testing.T) {
 }
 
 func TestCmdRun_EnvFileInvalidFormat(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
@@ -348,10 +358,10 @@ func TestCmdRun_EnvFileInvalidFormat(t *testing.T) {
 		t.Fatalf("write env file: %v", err)
 	}
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "run", "--env-file", envFile, "--", "echo", "hello"})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"--vault", vaultDir, "run", "--env-file", envFile, "--", "echo", "hello"})
+	defer root.SetArgs(nil)
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil {
 		t.Error("expected error for invalid env file format, got nil")
 	} else {
@@ -363,6 +373,7 @@ func TestCmdRun_EnvFileInvalidFormat(t *testing.T) {
 }
 
 func TestCmdRun_EnvFileDuplicateVar(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
 	entry := &vaultpkg.Entry{Data: map[string]any{"password": "dup_test"}}
@@ -375,13 +386,13 @@ func TestCmdRun_EnvFileDuplicateVar(t *testing.T) {
 		t.Fatalf("write env file: %v", err)
 	}
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "run",
+	root.SetArgs([]string{"--vault", vaultDir, "run",
 		"--env", "DB_PASS=db.password",
 		"--env-file", envFile,
 		"--", "echo", "hello"})
-	defer rootCmd.SetArgs(nil)
+	defer root.SetArgs(nil)
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil {
 		t.Error("expected error for duplicate env var, got nil")
 	} else {
@@ -482,6 +493,7 @@ func TestParseEnvFile_VeryLongLine(t *testing.T) {
 }
 
 func TestCmdRun_EnvFileMissingSecret(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
@@ -491,10 +503,10 @@ func TestCmdRun_EnvFileMissingSecret(t *testing.T) {
 		t.Fatalf("write env file: %v", err)
 	}
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "run", "--env-file", envFile, "--", "echo", "hello"})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"--vault", vaultDir, "run", "--env-file", envFile, "--", "echo", "hello"})
+	defer root.SetArgs(nil)
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil {
 		t.Error("expected error for missing secret in env file, got nil")
 	} else {

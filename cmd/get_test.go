@@ -209,6 +209,7 @@ func TestCmdGet_WholeEntry(t *testing.T) {
 }
 
 func TestCmdGet_FieldNotFound(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
 	entry := &vaultpkg.Entry{Data: map[string]any{"password": "mypass"}}
@@ -216,9 +217,9 @@ func TestCmdGet_FieldNotFound(t *testing.T) {
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 	stderr := captureStderr(func() {
-		rootCmd.SetArgs([]string{"--vault", vaultDir, "get", "getfield.nofield"})
-		_ = rootCmd.Execute()
-		rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", vaultDir, "get", "getfield.nofield"})
+		_ = root.Execute()
+		root.SetArgs(nil)
 	})
 	if !strings.Contains(stderr, "field not found") && !strings.Contains(stderr, "Error") {
 		t.Errorf("expected field not found, got: %s", stderr)
@@ -226,13 +227,14 @@ func TestCmdGet_FieldNotFound(t *testing.T) {
 }
 
 func TestCmdGet_NotFound(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 	stderr := captureStderr(func() {
-		rootCmd.SetArgs([]string{"--vault", vaultDir, "get", "ghost-entry"})
-		_ = rootCmd.Execute()
-		rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", vaultDir, "get", "ghost-entry"})
+		_ = root.Execute()
+		root.SetArgs(nil)
 	})
 	if !strings.Contains(stderr, "not found") && !strings.Contains(stderr, "Error") {
 		t.Errorf("expected entry not found, got: %s", stderr)
@@ -240,6 +242,7 @@ func TestCmdGet_NotFound(t *testing.T) {
 }
 
 func TestCmdGet_FuzzyMultipleMatches(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
 	e := &vaultpkg.Entry{Data: map[string]any{"password": "p"}}
@@ -249,9 +252,9 @@ func TestCmdGet_FuzzyMultipleMatches(t *testing.T) {
 	defer setupVaultFlag(t, vaultDir)()
 	allOutput := captureStdout(func() {
 		captureStderr(func() {
-			rootCmd.SetArgs([]string{"--vault", vaultDir, "get", "work"})
-			_ = rootCmd.Execute()
-			rootCmd.SetArgs(nil)
+			root.SetArgs([]string{"--vault", vaultDir, "get", "work"})
+			_ = root.Execute()
+			root.SetArgs(nil)
 		})
 	})
 	_ = allOutput
@@ -278,14 +281,15 @@ func TestCmdGet_TOTP(t *testing.T) {
 }
 
 func TestCmdGet_Uninitialized(t *testing.T) {
+	root := NewRootCmd()
 	resetCmdFlags()
 	t.Cleanup(resetCmdFlags)
 	vaultDir := t.TempDir()
 	defer setupVaultFlag(t, vaultDir)()
 	stderr := captureStderr(func() {
-		rootCmd.SetArgs([]string{"--vault", vaultDir, "get", "x"})
-		_ = rootCmd.Execute()
-		rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", vaultDir, "get", "x"})
+		_ = root.Execute()
+		root.SetArgs(nil)
 	})
 	if !strings.Contains(stderr, "vault not initialized") && !strings.Contains(stderr, "Error") {
 		t.Errorf("expected vault not initialized, got: %s", stderr)
@@ -306,6 +310,7 @@ func TestCmdGet_FuzzySingleMatch(t *testing.T) {
 }
 
 func TestCmdGet_TOTPDisplay(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
 	entry := &vaultpkg.Entry{
@@ -319,10 +324,10 @@ func TestCmdGet_TOTPDisplay(t *testing.T) {
 	_ = vaultpkg.WriteEntry(vaultDir, "totp-display", entry, identity.Identity)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "get", "totp-display"})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"--vault", vaultDir, "get", "totp-display"})
+	defer root.SetArgs(nil)
 	out := captureStderr(func() {
-		_ = rootCmd.Execute()
+		_ = root.Execute()
 	})
 	if !strings.Contains(out, "TOTP Code") {
 		t.Errorf("expected TOTP Code in output, got: %s", out)
@@ -333,6 +338,7 @@ func TestCmdGet_TOTPDisplay(t *testing.T) {
 }
 
 func TestCmdGet_FieldTTY_DefaultClipboard(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	if err := os.WriteFile(filepath.Join(vaultDir, "config.yaml"), []byte("clipboard:\n  auto_clear_duration: 0\n"), 0o600); err != nil {
 		t.Fatalf("disable clipboard auto-clear: %v", err)
@@ -355,9 +361,9 @@ func TestCmdGet_FieldTTY_DefaultClipboard(t *testing.T) {
 	var execErr error
 	stderr := captureStderr(func() {
 		stdout = captureStdout(func() {
-			rootCmd.SetArgs([]string{"--vault", vaultDir, "get", "clip-entry.password"})
-			execErr = rootCmd.Execute()
-			rootCmd.SetArgs(nil)
+			root.SetArgs([]string{"--vault", vaultDir, "get", "clip-entry.password"})
+			execErr = root.Execute()
+			root.SetArgs(nil)
 		})
 	})
 	if execErr != nil {
@@ -376,6 +382,7 @@ func TestCmdGet_FieldTTY_DefaultClipboard(t *testing.T) {
 }
 
 func TestCmdGet_FieldTTY_AutoClearRunsBeforeReturn(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	if err := os.WriteFile(filepath.Join(vaultDir, "config.yaml"), []byte("clipboard:\n  auto_clear_duration: 1\n"), 0o600); err != nil {
 		t.Fatalf("enable clipboard auto-clear: %v", err)
@@ -407,9 +414,9 @@ func TestCmdGet_FieldTTY_AutoClearRunsBeforeReturn(t *testing.T) {
 	var execErr error
 	captureStderr(func() {
 		captureStdout(func() {
-			rootCmd.SetArgs([]string{"--vault", vaultDir, "get", "clear-entry.password"})
-			execErr = rootCmd.Execute()
-			rootCmd.SetArgs(nil)
+			root.SetArgs([]string{"--vault", vaultDir, "get", "clear-entry.password"})
+			execErr = root.Execute()
+			root.SetArgs(nil)
 		})
 	})
 	if execErr != nil {
@@ -537,6 +544,7 @@ func TestCmdGet_TOTPGenerationError(t *testing.T) {
 }
 
 func TestGet_ErrorPaths(t *testing.T) {
+	root := NewRootCmd()
 	resetVaultState(t)
 	tests := []struct {
 		setupFunc  func() string
@@ -581,10 +589,10 @@ func TestGet_ErrorPaths(t *testing.T) {
 
 			vaultDir := tt.setupFunc()
 
-			rootCmd.SetArgs(append([]string{"--vault", vaultDir}, tt.args...))
-			defer rootCmd.SetArgs(nil)
+			root.SetArgs(append([]string{"--vault", vaultDir}, tt.args...))
+			defer root.SetArgs(nil)
 
-			err := rootCmd.Execute()
+			err := root.Execute()
 			if err == nil {
 				t.Errorf("expected error, got nil")
 			} else if !strings.Contains(err.Error(), tt.errContain) {

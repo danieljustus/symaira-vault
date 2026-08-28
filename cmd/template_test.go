@@ -89,14 +89,15 @@ func TestCmdTemplateGenerate_PrefixWithPositionalOverride(t *testing.T) {
 }
 
 func TestCmdTemplateGenerate_NoRefsError(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "template", "generate", "--type", "env"})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"--vault", vaultDir, "template", "generate", "--type", "env"})
+	defer root.SetArgs(nil)
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil {
 		t.Error("expected error for no refs, got nil")
 	} else {
@@ -108,15 +109,16 @@ func TestCmdTemplateGenerate_NoRefsError(t *testing.T) {
 }
 
 func TestCmdTemplateGenerate_InvalidRefFormat(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "template", "generate", "--type", "env",
+	root.SetArgs([]string{"--vault", vaultDir, "template", "generate", "--type", "env",
 		"NOEQUALSIGN"})
-	defer rootCmd.SetArgs(nil)
+	defer root.SetArgs(nil)
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil {
 		t.Error("expected error for invalid ref format, got nil")
 	} else {
@@ -146,6 +148,7 @@ func TestCmdTemplateGenerate_DryRun(t *testing.T) {
 }
 
 func TestCmdTemplateGenerate_OutputFile(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
 	entry := &vaultpkg.Entry{Data: map[string]any{"password": "filetest"}}
@@ -154,11 +157,11 @@ func TestCmdTemplateGenerate_OutputFile(t *testing.T) {
 	defer setupVaultFlag(t, vaultDir)()
 
 	outFile := filepath.Join(t.TempDir(), "output.env")
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "template", "generate", "--type", "env",
+	root.SetArgs([]string{"--vault", vaultDir, "template", "generate", "--type", "env",
 		"--output", outFile, "DB_PASS=db.password"})
-	defer rootCmd.SetArgs(nil)
+	defer root.SetArgs(nil)
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -173,15 +176,16 @@ func TestCmdTemplateGenerate_OutputFile(t *testing.T) {
 }
 
 func TestCmdTemplateGenerate_EmptyKeyInRef(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "template", "generate", "--type", "env",
+	root.SetArgs([]string{"--vault", vaultDir, "template", "generate", "--type", "env",
 		"=db.password"})
-	defer rootCmd.SetArgs(nil)
+	defer root.SetArgs(nil)
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil {
 		t.Error("expected error for empty key in ref, got nil")
 	} else {
@@ -192,15 +196,16 @@ func TestCmdTemplateGenerate_EmptyKeyInRef(t *testing.T) {
 }
 
 func TestCmdTemplateGenerate_EmptyRefInRef(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "template", "generate", "--type", "env",
+	root.SetArgs([]string{"--vault", vaultDir, "template", "generate", "--type", "env",
 		"DB_PASS="})
-	defer rootCmd.SetArgs(nil)
+	defer root.SetArgs(nil)
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil {
 		t.Error("expected error for empty ref in positional arg, got nil")
 	} else {
@@ -211,6 +216,7 @@ func TestCmdTemplateGenerate_EmptyRefInRef(t *testing.T) {
 }
 
 func TestCmdTemplateGenerate_InvalidTemplateType(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
 	entry := &vaultpkg.Entry{Data: map[string]any{"password": "s3cret"}}
@@ -218,11 +224,11 @@ func TestCmdTemplateGenerate_InvalidTemplateType(t *testing.T) {
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "template", "generate", "--type", "nonexistent",
+	root.SetArgs([]string{"--vault", vaultDir, "template", "generate", "--type", "nonexistent",
 		"DB_PASS=db.password"})
-	defer rootCmd.SetArgs(nil)
+	defer root.SetArgs(nil)
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil {
 		t.Error("expected error for invalid template type, got nil")
 	} else {
@@ -233,6 +239,7 @@ func TestCmdTemplateGenerate_InvalidTemplateType(t *testing.T) {
 }
 
 func TestCmdTemplateGenerate_OutputFilePermissionError(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
 	entry := &vaultpkg.Entry{Data: map[string]any{"password": "permtest"}}
@@ -240,11 +247,11 @@ func TestCmdTemplateGenerate_OutputFilePermissionError(t *testing.T) {
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "template", "generate", "--type", "env",
+	root.SetArgs([]string{"--vault", vaultDir, "template", "generate", "--type", "env",
 		"--output", "/nonexistent/dir/output.env", "DB_PASS=db.password"})
-	defer rootCmd.SetArgs(nil)
+	defer root.SetArgs(nil)
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil {
 		t.Error("expected error for unwritable output path, got nil")
 	} else {
@@ -255,6 +262,7 @@ func TestCmdTemplateGenerate_OutputFilePermissionError(t *testing.T) {
 }
 
 func TestCmdTemplateGenerate_JSONOutputWithFile(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
 	entry := &vaultpkg.Entry{Data: map[string]any{"password": "json_out_test"}}
@@ -267,10 +275,10 @@ func TestCmdTemplateGenerate_JSONOutputWithFile(t *testing.T) {
 
 	outFile := filepath.Join(t.TempDir(), "output.env")
 	stdout := captureStdout(func() {
-		rootCmd.SetArgs([]string{"--vault", vaultDir, "template", "generate", "--type", "env",
+		root.SetArgs([]string{"--vault", vaultDir, "template", "generate", "--type", "env",
 			"--output", outFile, "DB_PASS=db.password"})
-		_ = rootCmd.Execute()
-		rootCmd.SetArgs(nil)
+		_ = root.Execute()
+		root.SetArgs(nil)
 	})
 
 	fileContent, readErr := os.ReadFile(outFile)
@@ -286,6 +294,7 @@ func TestCmdTemplateGenerate_JSONOutputWithFile(t *testing.T) {
 }
 
 func TestCmdTemplateGenerate_PrefixReadError(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
 	entry := &vaultpkg.Entry{Data: map[string]any{"token": "good_token"}}
@@ -299,11 +308,11 @@ func TestCmdTemplateGenerate_PrefixReadError(t *testing.T) {
 		t.Fatalf("write bad entry file: %v", err)
 	}
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "template", "generate", "--type", "env",
+	root.SetArgs([]string{"--vault", vaultDir, "template", "generate", "--type", "env",
 		"--prefix", "work/"})
-	defer rootCmd.SetArgs(nil)
+	defer root.SetArgs(nil)
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	if err == nil {
 		t.Error("expected error for unreadable entry in prefix, got nil")
 	} else {

@@ -9,13 +9,14 @@ import (
 )
 
 func TestCmdFind_NoMatches(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 	stderr := captureStderr(func() {
-		rootCmd.SetArgs([]string{"--vault", vaultDir, "find", "nomatch_xyz_abc"})
-		_ = rootCmd.Execute()
-		rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", vaultDir, "find", "nomatch_xyz_abc"})
+		_ = root.Execute()
+		root.SetArgs(nil)
 	})
 	if !strings.Contains(stderr, "No matches") {
 		t.Errorf("expected No matches, got: %s", stderr)
@@ -49,14 +50,15 @@ func TestCmdFind_SearchAlias(t *testing.T) {
 }
 
 func TestCmdFind_Uninitialized(t *testing.T) {
+	root := NewRootCmd()
 	resetCmdFlags()
 	t.Cleanup(resetCmdFlags)
 	vaultDir := t.TempDir()
 	defer setupVaultFlag(t, vaultDir)()
 	stderr := captureStderr(func() {
-		rootCmd.SetArgs([]string{"--vault", vaultDir, "find", "x"})
-		_ = rootCmd.Execute()
-		rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", vaultDir, "find", "x"})
+		_ = root.Execute()
+		root.SetArgs(nil)
 	})
 	if !strings.Contains(stderr, "vault not initialized") && !strings.Contains(stderr, "Error") {
 		t.Errorf("expected vault not initialized, got: %s", stderr)
@@ -64,16 +66,17 @@ func TestCmdFind_Uninitialized(t *testing.T) {
 }
 
 func TestFind_ErrorPaths(t *testing.T) {
+	root := NewRootCmd()
 	resetVaultState(t)
 	t.Run("uninitialized vault", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
 		defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
-		rootCmd.SetArgs([]string{"--vault", tmpDir, "find", "test"})
-		defer rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", tmpDir, "find", "test"})
+		defer root.SetArgs(nil)
 
-		err := rootCmd.Execute()
+		err := root.Execute()
 		if err == nil || !strings.Contains(err.Error(), "not initialized") {
 			t.Errorf("expected 'not initialized' error, got: %v", err)
 		}

@@ -34,13 +34,14 @@ func TestCmdEdit_Success(t *testing.T) {
 }
 
 func TestCmdEdit_NotFound(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 	stderr := captureStderr(func() {
-		rootCmd.SetArgs([]string{"--vault", vaultDir, "edit", "ghost"})
-		_ = rootCmd.Execute()
-		rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", vaultDir, "edit", "ghost"})
+		_ = root.Execute()
+		root.SetArgs(nil)
 	})
 	if !strings.Contains(stderr, "not found") && !strings.Contains(stderr, "Error") {
 		t.Errorf("expected not found, got: %s", stderr)
@@ -48,6 +49,7 @@ func TestCmdEdit_NotFound(t *testing.T) {
 }
 
 func TestCmdEdit_EditorNotFound(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
 	entry := &vaultpkg.Entry{Data: map[string]any{"password": "x"}}
@@ -58,9 +60,9 @@ func TestCmdEdit_EditorNotFound(t *testing.T) {
 	_ = os.Setenv("EDITOR", "nonexistent_editor_xyz_abc")
 	defer func() { _ = os.Setenv("EDITOR", origEditor) }()
 	stderr := captureStderr(func() {
-		rootCmd.SetArgs([]string{"--vault", vaultDir, "edit", "ed-nf"})
-		_ = rootCmd.Execute()
-		rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", vaultDir, "edit", "ed-nf"})
+		_ = root.Execute()
+		root.SetArgs(nil)
 	})
 	if !strings.Contains(stderr, "not found") && !strings.Contains(stderr, "Error") {
 		t.Errorf("expected editor not found error, got: %s", stderr)
@@ -69,6 +71,7 @@ func TestCmdEdit_EditorNotFound(t *testing.T) {
 
 //nolint:dupl // test coverage helper with similar structure to invalid JSON test
 func TestCmdEdit_EmptyFile(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
 	entry := &vaultpkg.Entry{Data: map[string]any{"password": "x"}}
@@ -79,9 +82,9 @@ func TestCmdEdit_EmptyFile(t *testing.T) {
 	_ = os.Setenv("EDITOR", fakeEditorEmpty(t))
 	defer func() { _ = os.Setenv("EDITOR", origEditor) }()
 	stderr := captureStderr(func() {
-		rootCmd.SetArgs([]string{"--vault", vaultDir, "edit", "empty-edit"})
-		_ = rootCmd.Execute()
-		rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", vaultDir, "edit", "empty-edit"})
+		_ = root.Execute()
+		root.SetArgs(nil)
 	})
 	if !strings.Contains(stderr, "empty") && !strings.Contains(stderr, "Error") {
 		t.Errorf("expected empty file error, got: %s", stderr)
@@ -90,6 +93,7 @@ func TestCmdEdit_EmptyFile(t *testing.T) {
 
 //nolint:dupl // test coverage helper with similar structure to empty file test
 func TestCmdEdit_InvalidJSON(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
 	entry := &vaultpkg.Entry{Data: map[string]any{"password": "x"}}
@@ -100,9 +104,9 @@ func TestCmdEdit_InvalidJSON(t *testing.T) {
 	_ = os.Setenv("EDITOR", fakeEditorInvalid(t))
 	defer func() { _ = os.Setenv("EDITOR", origEditor) }()
 	stderr := captureStderr(func() {
-		rootCmd.SetArgs([]string{"--vault", vaultDir, "edit", "bad-json"})
-		_ = rootCmd.Execute()
-		rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", vaultDir, "edit", "bad-json"})
+		_ = root.Execute()
+		root.SetArgs(nil)
 	})
 	if !strings.Contains(stderr, "invalid JSON") && !strings.Contains(stderr, "Error") {
 		t.Errorf("expected invalid JSON error, got: %s", stderr)
@@ -110,6 +114,7 @@ func TestCmdEdit_InvalidJSON(t *testing.T) {
 }
 
 func TestCmdEdit_EditorRunError(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
 	entry := &vaultpkg.Entry{Data: map[string]any{"password": "x"}}
@@ -123,9 +128,9 @@ func TestCmdEdit_EditorRunError(t *testing.T) {
 	defer func() { _ = os.Setenv("EDITOR", origEditor) }()
 
 	stderr := captureStderr(func() {
-		rootCmd.SetArgs([]string{"--vault", vaultDir, "edit", "edit-err"})
-		_ = rootCmd.Execute()
-		rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", vaultDir, "edit", "edit-err"})
+		_ = root.Execute()
+		root.SetArgs(nil)
 	})
 	if !strings.Contains(stderr, "editor failed") {
 		t.Errorf("expected 'editor failed' in stderr: %s", stderr)
@@ -133,14 +138,15 @@ func TestCmdEdit_EditorRunError(t *testing.T) {
 }
 
 func TestCmdEdit_Uninitialized(t *testing.T) {
+	root := NewRootCmd()
 	resetCmdFlags()
 	t.Cleanup(resetCmdFlags)
 	vaultDir := t.TempDir()
 	defer setupVaultFlag(t, vaultDir)()
 	stderr := captureStderr(func() {
-		rootCmd.SetArgs([]string{"--vault", vaultDir, "edit", "x"})
-		_ = rootCmd.Execute()
-		rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", vaultDir, "edit", "x"})
+		_ = root.Execute()
+		root.SetArgs(nil)
 	})
 	if !strings.Contains(stderr, "vault not initialized") && !strings.Contains(stderr, "Error") {
 		t.Errorf("expected vault not initialized, got: %s", stderr)
@@ -219,6 +225,7 @@ func TestCmdEdit_AutoCommitError(t *testing.T) {
 }
 
 func TestEdit_ErrorPaths(t *testing.T) {
+	root := NewRootCmd()
 	resetVaultState(t)
 	tests := []struct {
 		name       string
@@ -260,10 +267,10 @@ func TestEdit_ErrorPaths(t *testing.T) {
 
 			vaultDir := tt.setupFunc()
 
-			rootCmd.SetArgs([]string{"--vault", vaultDir, "edit", "nonexistent"})
-			defer rootCmd.SetArgs(nil)
+			root.SetArgs([]string{"--vault", vaultDir, "edit", "nonexistent"})
+			defer root.SetArgs(nil)
 
-			err := rootCmd.Execute()
+			err := root.Execute()
 			if err == nil {
 				t.Errorf("expected error, got nil")
 			} else if !strings.Contains(err.Error(), tt.errContain) {

@@ -295,6 +295,7 @@ func TestComputeSHA256_MissingFile(t *testing.T) {
 }
 
 func TestBackupCommand(t *testing.T) {
+	root := NewRootCmd()
 	resetCommandTestState()
 	t.Cleanup(resetCommandTestState)
 
@@ -307,12 +308,12 @@ func TestBackupCommand(t *testing.T) {
 
 	archivePath := filepath.Join(t.TempDir(), "backup")
 
-	prepareRootCommandOutput(t)
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "backup", archivePath})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	prepareRootCommandOutput(t, root)
+	root.SetArgs([]string{"--vault", vaultDir, "backup", archivePath})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("ExecuteRoot(root) error = %v", err)
 	}
 
 	if _, err := os.Stat(archivePath + ".tar.gz"); err != nil {
@@ -321,6 +322,7 @@ func TestBackupCommand(t *testing.T) {
 }
 
 func TestRestoreCommand(t *testing.T) {
+	root := NewRootCmd()
 	resetCommandTestState()
 	t.Cleanup(resetCommandTestState)
 
@@ -338,12 +340,12 @@ func TestRestoreCommand(t *testing.T) {
 
 	restoreDir := t.TempDir()
 
-	prepareRootCommandOutput(t)
-	rootCmd.SetArgs([]string{"--vault", restoreDir, "restore", archivePath})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	prepareRootCommandOutput(t, root)
+	root.SetArgs([]string{"--vault", restoreDir, "restore", archivePath})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("ExecuteRoot(root) error = %v", err)
 	}
 
 	if _, err := os.Stat(filepath.Join(restoreDir, "identity.age")); err != nil {
@@ -352,36 +354,39 @@ func TestRestoreCommand(t *testing.T) {
 }
 
 func TestBackupCommand_UninitializedVault(t *testing.T) {
+	root := NewRootCmd()
 	resetCommandTestState()
 	t.Cleanup(resetCommandTestState)
 
 	vaultDir := t.TempDir()
 
-	prepareRootCommandOutput(t)
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "backup", "/tmp/backup.tar.gz"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	prepareRootCommandOutput(t, root)
+	root.SetArgs([]string{"--vault", vaultDir, "backup", "/tmp/backup.tar.gz"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
-	if err := rootCmd.Execute(); err == nil {
+	if err := root.Execute(); err == nil {
 		t.Fatal("expected error for uninitialized vault")
 	}
 }
 
 func TestRestoreCommand_MissingArchive(t *testing.T) {
+	root := NewRootCmd()
 	resetCommandTestState()
 	t.Cleanup(resetCommandTestState)
 
 	vaultDir := t.TempDir()
 
-	prepareRootCommandOutput(t)
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "restore", "/nonexistent/backup.tar.gz"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	prepareRootCommandOutput(t, root)
+	root.SetArgs([]string{"--vault", vaultDir, "restore", "/nonexistent/backup.tar.gz"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
-	if err := rootCmd.Execute(); err == nil {
+	if err := root.Execute(); err == nil {
 		t.Fatal("expected error for missing archive")
 	}
 }
 
 func TestRestoreCommand_CorruptArchive(t *testing.T) {
+	root := NewRootCmd()
 	resetCommandTestState()
 	t.Cleanup(resetCommandTestState)
 
@@ -392,11 +397,11 @@ func TestRestoreCommand_CorruptArchive(t *testing.T) {
 
 	vaultDir := t.TempDir()
 
-	prepareRootCommandOutput(t)
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "restore", archivePath})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	prepareRootCommandOutput(t, root)
+	root.SetArgs([]string{"--vault", vaultDir, "restore", archivePath})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
-	if err := rootCmd.Execute(); err == nil {
+	if err := root.Execute(); err == nil {
 		t.Fatal("expected error for corrupt archive")
 	}
 }
@@ -551,6 +556,7 @@ func TestRestoreBackup_ModeClamping(t *testing.T) {
 }
 
 func TestBackupCommand_ExcludeGit(t *testing.T) {
+	root := NewRootCmd()
 	resetCommandTestState()
 	t.Cleanup(resetCommandTestState)
 
@@ -571,12 +577,12 @@ func TestBackupCommand_ExcludeGit(t *testing.T) {
 
 	archivePath := filepath.Join(t.TempDir(), "backup")
 
-	prepareRootCommandOutput(t)
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "backup", archivePath, "--exclude-git"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	prepareRootCommandOutput(t, root)
+	root.SetArgs([]string{"--vault", vaultDir, "backup", archivePath, "--exclude-git"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("ExecuteRoot(root) error = %v", err)
 	}
 
 	if _, err := os.Stat(archivePath + ".tar.gz"); err != nil {

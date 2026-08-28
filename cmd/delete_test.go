@@ -15,6 +15,7 @@ import (
 )
 
 func TestCmdDelete_Cancel(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
 	entry := &vaultpkg.Entry{Data: map[string]any{"password": "keep"}}
@@ -27,9 +28,9 @@ func TestCmdDelete_Cancel(t *testing.T) {
 	_, _ = w.WriteString("n\n")
 	_ = w.Close()
 	stderr := captureStderr(func() {
-		rootCmd.SetArgs([]string{"--vault", vaultDir, "delete", "keep-me"})
-		_ = rootCmd.Execute()
-		rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", vaultDir, "delete", "keep-me"})
+		_ = root.Execute()
+		root.SetArgs(nil)
 	})
 	os.Stdin = oldStdin
 	_ = r.Close()
@@ -39,6 +40,7 @@ func TestCmdDelete_Cancel(t *testing.T) {
 }
 
 func TestCmdDelete_StdinError(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
 	entry := &vaultpkg.Entry{Data: map[string]any{"password": "keep"}}
@@ -48,9 +50,9 @@ func TestCmdDelete_StdinError(t *testing.T) {
 	restore := pipeStdin(t, "")
 	defer restore()
 	stderr := captureStderr(func() {
-		rootCmd.SetArgs([]string{"--vault", vaultDir, "delete", "keep-me"})
-		_ = rootCmd.Execute()
-		rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", vaultDir, "delete", "keep-me"})
+		_ = root.Execute()
+		root.SetArgs(nil)
 	})
 	if !strings.Contains(stderr, "read confirmation") {
 		t.Errorf("expected read confirmation error, got: %s", stderr)
@@ -59,6 +61,7 @@ func TestCmdDelete_StdinError(t *testing.T) {
 }
 
 func TestCmdDelete_NotFound(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
@@ -68,9 +71,9 @@ func TestCmdDelete_NotFound(t *testing.T) {
 	_, _ = w.WriteString("y\n")
 	_ = w.Close()
 	stderr := captureStderr(func() {
-		rootCmd.SetArgs([]string{"--vault", vaultDir, "delete", "ghost"})
-		_ = rootCmd.Execute()
-		rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", vaultDir, "delete", "ghost"})
+		_ = root.Execute()
+		root.SetArgs(nil)
 	})
 	os.Stdin = oldStdin
 	_ = r.Close()
@@ -80,6 +83,7 @@ func TestCmdDelete_NotFound(t *testing.T) {
 }
 
 func TestCmdDelete_YesJSON(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
 	entry := &vaultpkg.Entry{Data: map[string]any{"password": "secret"}}
@@ -92,9 +96,9 @@ func TestCmdDelete_YesJSON(t *testing.T) {
 	})
 
 	output := captureStdout(func() {
-		rootCmd.SetArgs([]string{"--vault", vaultDir, "delete", "delete-json", "--yes", "--output", "json"})
-		_ = rootCmd.Execute()
-		rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", vaultDir, "delete", "delete-json", "--yes", "--output", "json"})
+		_ = root.Execute()
+		root.SetArgs(nil)
 	})
 
 	var result map[string]any
@@ -107,6 +111,7 @@ func TestCmdDelete_YesJSON(t *testing.T) {
 }
 
 func TestCmdDelete_Uninitialized(t *testing.T) {
+	root := NewRootCmd()
 	resetCmdFlags()
 	t.Cleanup(resetCmdFlags)
 	vaultDir := t.TempDir()
@@ -114,9 +119,9 @@ func TestCmdDelete_Uninitialized(t *testing.T) {
 	restore := pipeStdin(t, "y\n")
 	defer restore()
 	stderr := captureStderr(func() {
-		rootCmd.SetArgs([]string{"--vault", vaultDir, "delete", "x"})
-		_ = rootCmd.Execute()
-		rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", vaultDir, "delete", "x"})
+		_ = root.Execute()
+		root.SetArgs(nil)
 	})
 	if !strings.Contains(stderr, "vault not initialized") && !strings.Contains(stderr, "Error") {
 		t.Errorf("expected vault not initialized, got: %s", stderr)
@@ -124,6 +129,7 @@ func TestCmdDelete_Uninitialized(t *testing.T) {
 }
 
 func TestCmdDelete_EmptyConfirm(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	identity, _ := vaultpkg.OpenWithPassphrase(vaultDir, passphrase)
 	entry := &vaultpkg.Entry{Data: map[string]any{"password": "x"}}
@@ -135,9 +141,9 @@ func TestCmdDelete_EmptyConfirm(t *testing.T) {
 	os.Stdin = r
 	_ = w.Close()
 	captureStderr(func() {
-		rootCmd.SetArgs([]string{"--vault", vaultDir, "delete", "del-empty"})
-		_ = rootCmd.Execute()
-		rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", vaultDir, "delete", "del-empty"})
+		_ = root.Execute()
+		root.SetArgs(nil)
 	})
 	os.Stdin = oldStdin
 	_ = r.Close()
@@ -145,6 +151,7 @@ func TestCmdDelete_EmptyConfirm(t *testing.T) {
 }
 
 func TestCmdDelete_AutoCommitError(t *testing.T) {
+	root := NewRootCmd()
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: stderr capture not reliable")
 	}
@@ -166,9 +173,9 @@ func TestCmdDelete_AutoCommitError(t *testing.T) {
 	_ = w.Close()
 
 	stderr := captureStderr(func() {
-		rootCmd.SetArgs([]string{"--vault", vaultDir, "delete", "autocommit-del"})
-		_ = rootCmd.Execute()
-		rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", vaultDir, "delete", "autocommit-del"})
+		_ = root.Execute()
+		root.SetArgs(nil)
 	})
 	os.Stdin = oldStdin
 	_ = r.Close()
@@ -179,16 +186,17 @@ func TestCmdDelete_AutoCommitError(t *testing.T) {
 }
 
 func TestDelete_ErrorPaths(t *testing.T) {
+	root := NewRootCmd()
 	resetVaultState(t)
 	t.Run("uninitialized vault", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
 		defer func() { _ = os.Unsetenv("SYMVAULT_VAULT") }()
 
-		rootCmd.SetArgs([]string{"--vault", tmpDir, "delete", "test"})
-		defer rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", tmpDir, "delete", "test"})
+		defer root.SetArgs(nil)
 
-		err := rootCmd.Execute()
+		err := root.Execute()
 		if err == nil || !strings.Contains(err.Error(), "not initialized") {
 			t.Errorf("expected 'not initialized' error, got: %v", err)
 		}
@@ -210,10 +218,10 @@ func TestDelete_ErrorPaths(t *testing.T) {
 		_, _ = w.WriteString("n\n")
 		_ = w.Close()
 
-		rootCmd.SetArgs([]string{"--vault", tmpDir, "delete", "nonexistent"})
-		defer rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", tmpDir, "delete", "nonexistent"})
+		defer root.SetArgs(nil)
 
-		_ = rootCmd.Execute()
+		_ = root.Execute()
 		os.Stdin = oldStdin
 		_ = r.Close()
 	})

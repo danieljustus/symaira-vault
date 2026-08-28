@@ -86,10 +86,6 @@ Example:
 	return policyValidateCmd
 }
 
-// policyCmd is retained for API compatibility; NewCommands() uses
-// newPolicyCmd() so every call gets a fresh command.
-var policyCmd = newPolicyCmd()
-
 func newPolicyCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "policy",

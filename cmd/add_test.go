@@ -14,6 +14,7 @@ import (
 )
 
 func TestAddCommand_HiddenPassword(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
@@ -21,11 +22,11 @@ func TestAddCommand_HiddenPassword(t *testing.T) {
 	restore := pipeStdin(t, "myuser\nsecret-password\n\n\n\n")
 	defer restore()
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "add", "test-entry"})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"--vault", vaultDir, "add", "test-entry"})
+	defer root.SetArgs(nil)
 
 	output := captureStdout(func() {
-		if err := rootCmd.Execute(); err != nil {
+		if err := root.Execute(); err != nil {
 			t.Fatalf("add command failed: %v", err)
 		}
 	})
@@ -36,15 +37,16 @@ func TestAddCommand_HiddenPassword(t *testing.T) {
 }
 
 func TestAddCommand_InvalidTOTPSecretRejected(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
 	stderr := captureStderr(func() {
-		rootCmd.SetArgs([]string{"--vault", vaultDir, "add", "bad-totp-entry",
+		root.SetArgs([]string{"--vault", vaultDir, "add", "bad-totp-entry",
 			"--value", "StrongP@ssw0rd123", "--totp-secret", "not-valid-base32!!!"})
-		_ = rootCmd.Execute()
-		rootCmd.SetArgs(nil)
+		_ = root.Execute()
+		root.SetArgs(nil)
 	})
 
 	if !strings.Contains(stderr, "TOTP secret must be Base32-encoded") {
@@ -80,15 +82,16 @@ func TestAddCommand_TOTPSecretWithSpacesAccepted(t *testing.T) {
 }
 
 func TestAddCommand_GenerateWithLength(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "add", "generated-entry", "--generate", "--length", "24"})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"--vault", vaultDir, "add", "generated-entry", "--generate", "--length", "24"})
+	defer root.SetArgs(nil)
 
 	output := captureStdout(func() {
-		if err := rootCmd.Execute(); err != nil {
+		if err := root.Execute(); err != nil {
 			t.Fatalf("add command failed: %v", err)
 		}
 	})
@@ -114,16 +117,17 @@ func TestAddCommand_GenerateWithLength(t *testing.T) {
 }
 
 func TestCmdAdd_Interactive(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 	restore := pipeStdin(t, "myuser\nStrongP@ssw0rd123\n")
 	defer restore()
 	output := captureStdout(func() {
-		rootCmd.SetArgs([]string{"--vault", vaultDir, "add", "interactive-entry",
+		root.SetArgs([]string{"--vault", vaultDir, "add", "interactive-entry",
 			"--url", "https://example.com", "--notes", "some notes", "--totp-secret", "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"})
-		_ = rootCmd.Execute()
-		rootCmd.SetArgs(nil)
+		_ = root.Execute()
+		root.SetArgs(nil)
 	})
 	if !strings.Contains(output, "Entry created") {
 		t.Errorf("expected Entry created, got: %s", output)
@@ -131,15 +135,16 @@ func TestCmdAdd_Interactive(t *testing.T) {
 }
 
 func TestCmdAdd_InteractiveStdinError(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 	restore := pipeStdin(t, "myuser\n")
 	defer restore()
 	stderr := captureStderr(func() {
-		rootCmd.SetArgs([]string{"--vault", vaultDir, "add", "add-stdin-err"})
-		_ = rootCmd.Execute()
-		rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", vaultDir, "add", "add-stdin-err"})
+		_ = root.Execute()
+		root.SetArgs(nil)
 	})
 	if !strings.Contains(stderr, "read password") {
 		t.Errorf("expected read password error, got: %s", stderr)
@@ -179,14 +184,15 @@ func TestCmdAdd_WithTOTPFlags(t *testing.T) {
 }
 
 func TestCmdAdd_Uninitialized(t *testing.T) {
+	root := NewRootCmd()
 	resetCmdFlags()
 	t.Cleanup(resetCmdFlags)
 	vaultDir := t.TempDir()
 	defer setupVaultFlag(t, vaultDir)()
 	stderr := captureStderr(func() {
-		rootCmd.SetArgs([]string{"--vault", vaultDir, "add", "x", "--value", "v"})
-		_ = rootCmd.Execute()
-		rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", vaultDir, "add", "x", "--value", "v"})
+		_ = root.Execute()
+		root.SetArgs(nil)
 	})
 	if !strings.Contains(stderr, "vault not initialized") && !strings.Contains(stderr, "Error") {
 		t.Errorf("expected vault not initialized error, got: %s", stderr)
@@ -194,6 +200,7 @@ func TestCmdAdd_Uninitialized(t *testing.T) {
 }
 
 func TestCmdAdd_AlreadyExists(t *testing.T) {
+	root := NewRootCmd()
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: LockFileEx access violation in AcquireWriteLock")
 	}
@@ -204,9 +211,9 @@ func TestCmdAdd_AlreadyExists(t *testing.T) {
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 	stderr := captureStderr(func() {
-		rootCmd.SetArgs([]string{"--vault", vaultDir, "add", "exists", "--value", "v"})
-		_ = rootCmd.Execute()
-		rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", vaultDir, "add", "exists", "--value", "v"})
+		_ = root.Execute()
+		root.SetArgs(nil)
 	})
 	if !strings.Contains(stderr, "already exists") && !strings.Contains(stderr, "Error") {
 		t.Errorf("expected already exists error, got: %s", stderr)
@@ -225,17 +232,18 @@ func TestCmdAdd_Notes(t *testing.T) {
 }
 
 func TestCmdAdd_InteractiveFull(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 	restore := pipeStdin(t, "myuser\nStrongP@ssw0rd123\n")
 	defer restore()
 	output := captureStdout(func() {
-		rootCmd.SetArgs([]string{"--vault", vaultDir, "add", "full-interactive",
+		root.SetArgs([]string{"--vault", vaultDir, "add", "full-interactive",
 			"--url", "https://example.com", "--notes", "important notes",
 			"--totp-secret", "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", "--totp-issuer", "GitHub", "--totp-account", "alice"})
-		_ = rootCmd.Execute()
-		rootCmd.SetArgs(nil)
+		_ = root.Execute()
+		root.SetArgs(nil)
 	})
 	if !strings.Contains(output, "Entry created") {
 		t.Errorf("expected Entry created, got: %s", output)
@@ -273,16 +281,17 @@ func TestCmdAdd_InteractiveFull(t *testing.T) {
 }
 
 func TestCmdAdd_InteractiveURLPrompt(t *testing.T) {
+	root := NewRootCmd()
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
 	defer setupVaultFlag(t, vaultDir)()
 	restore := pipeStdin(t, "testuser\nStrongP@ssw0rd123\n")
 	defer restore()
 	output := captureStdout(func() {
-		rootCmd.SetArgs([]string{"--vault", vaultDir, "add", "url-prompt-entry",
+		root.SetArgs([]string{"--vault", vaultDir, "add", "url-prompt-entry",
 			"--url", "https://mysite.com", "--totp-secret", "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"})
-		_ = rootCmd.Execute()
-		rootCmd.SetArgs(nil)
+		_ = root.Execute()
+		root.SetArgs(nil)
 	})
 	if !strings.Contains(output, "Entry created") {
 		t.Errorf("expected Entry created, got: %s", output)
@@ -301,6 +310,7 @@ func TestCmdAdd_InteractiveURLPrompt(t *testing.T) {
 }
 
 func TestCmdAdd_AutoCommitError(t *testing.T) {
+	root := NewRootCmd()
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: stderr capture not reliable")
 	}
@@ -310,9 +320,9 @@ func TestCmdAdd_AutoCommitError(t *testing.T) {
 	defer setupVaultFlag(t, vaultDir)()
 
 	stderr := captureStderr(func() {
-		rootCmd.SetArgs([]string{"--vault", vaultDir, "add", "autocommit-add", "--value", "StrongP@ssw0rd123"})
-		_ = rootCmd.Execute()
-		rootCmd.SetArgs(nil)
+		root.SetArgs([]string{"--vault", vaultDir, "add", "autocommit-add", "--value", "StrongP@ssw0rd123"})
+		_ = root.Execute()
+		root.SetArgs(nil)
 	})
 	if !strings.Contains(stderr, "auto-commit failed") {
 		t.Errorf("expected auto-commit warning in stderr: %s", stderr)
@@ -320,6 +330,7 @@ func TestCmdAdd_AutoCommitError(t *testing.T) {
 }
 
 func TestAdd_ErrorPaths(t *testing.T) {
+	root := NewRootCmd()
 	resetVaultState(t)
 	tests := []struct {
 		setupFunc  func()
@@ -369,10 +380,10 @@ func TestAdd_ErrorPaths(t *testing.T) {
 				cli.VaultFlag.Changed = false
 			}
 
-			rootCmd.SetArgs(tt.args)
-			defer rootCmd.SetArgs(nil)
+			root.SetArgs(tt.args)
+			defer root.SetArgs(nil)
 
-			err := rootCmd.Execute()
+			err := root.Execute()
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("expected error, got nil")
@@ -387,6 +398,7 @@ func TestAdd_ErrorPaths(t *testing.T) {
 }
 
 func TestAdd_InteractiveMode(t *testing.T) {
+	root := NewRootCmd()
 	resetVaultState(t)
 
 	tmpDir := t.TempDir()
@@ -436,11 +448,11 @@ func TestAdd_InteractiveMode(t *testing.T) {
 		_ = w.Close()
 	}()
 
-	rootCmd.SetArgs([]string{"--vault", tmpDir, "add", "interactive-test"})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"--vault", tmpDir, "add", "interactive-test"})
+	defer root.SetArgs(nil)
 
 	output := captureStdout(func() {
-		_ = rootCmd.Execute()
+		_ = root.Execute()
 	})
 
 	os.Stdin = oldStdin
@@ -452,6 +464,7 @@ func TestAdd_InteractiveMode(t *testing.T) {
 }
 
 func TestAdd_InteractiveReadErrors(t *testing.T) {
+	root := NewRootCmd()
 	resetVaultState(t)
 
 	tmpDir := t.TempDir()
@@ -473,10 +486,10 @@ func TestAdd_InteractiveReadErrors(t *testing.T) {
 	os.Stdin = r
 	_ = w.Close()
 
-	rootCmd.SetArgs([]string{"--vault", tmpDir, "add", "test"})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"--vault", tmpDir, "add", "test"})
+	defer root.SetArgs(nil)
 
-	err := rootCmd.Execute()
+	err := root.Execute()
 	os.Stdin = oldStdin
 	_ = r.Close()
 

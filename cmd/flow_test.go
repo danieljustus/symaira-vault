@@ -49,10 +49,11 @@ func captureStderr(fn func()) string {
 }
 
 func execWithStdout(args ...string) string {
-	rootCmd.SetArgs(args)
-	defer rootCmd.SetArgs(nil)
+	root := NewRootCmd()
+	root.SetArgs(args)
+	defer root.SetArgs(nil)
 	return captureStdout(func() {
-		_ = rootCmd.Execute()
+		_ = root.Execute()
 	})
 }
 
@@ -203,6 +204,7 @@ func TestCmdGenerate(t *testing.T) {
 }
 
 func TestCmdDelete(t *testing.T) {
+	root := NewRootCmd()
 	if testing.Short() {
 		t.Skip("skipping slow CLI flow test in short mode")
 	}
@@ -230,10 +232,10 @@ func TestCmdDelete(t *testing.T) {
 	_, _ = w.WriteString("y\n")
 	_ = w.Close()
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "delete", "delme"})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"--vault", vaultDir, "delete", "delme"})
+	defer root.SetArgs(nil)
 	output := captureStdout(func() {
-		_ = rootCmd.Execute()
+		_ = root.Execute()
 	})
 	os.Stdin = oldStdin
 	_ = r.Close()
@@ -273,6 +275,7 @@ func TestCmdAdd(t *testing.T) {
 }
 
 func TestCmdUnlock(t *testing.T) {
+	root := NewRootCmd()
 	if testing.Short() {
 		t.Skip("skipping slow CLI flow test in short mode")
 	}
@@ -302,10 +305,10 @@ func TestCmdUnlock(t *testing.T) {
 		}
 	}()
 
-	rootCmd.SetArgs([]string{"--vault", vaultDir, "unlock"})
-	defer rootCmd.SetArgs(nil)
+	root.SetArgs([]string{"--vault", vaultDir, "unlock"})
+	defer root.SetArgs(nil)
 	output := captureStderr(func() {
-		_ = rootCmd.Execute()
+		_ = root.Execute()
 	})
 	if !strings.Contains(output, "unlocked") && !strings.Contains(output, "Unlock") {
 		t.Errorf("unlock output unexpected: %s", output)

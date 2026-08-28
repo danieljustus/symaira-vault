@@ -298,6 +298,7 @@ func TestOutputAuditTable_Empty(t *testing.T) {
 }
 
 func TestAuditCommand_JSON(t *testing.T) {
+	root := NewRootCmd()
 	resetCommandTestState()
 	t.Cleanup(resetCommandTestState)
 
@@ -320,12 +321,12 @@ func TestAuditCommand_JSON(t *testing.T) {
 		t.Fatalf("write log: %v", err)
 	}
 
-	buf := prepareRootCommandOutput(t)
-	rootCmd.SetArgs([]string{"audit", "--json"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	buf := prepareRootCommandOutput(t, root)
+	root.SetArgs([]string{"audit", "--json"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("ExecuteRoot(root) error = %v", err)
 	}
 
 	var result []audit.LogEntry
@@ -338,6 +339,7 @@ func TestAuditCommand_JSON(t *testing.T) {
 }
 
 func TestAuditCommand_Table(t *testing.T) {
+	root := NewRootCmd()
 	resetCommandTestState()
 	t.Cleanup(resetCommandTestState)
 
@@ -360,12 +362,12 @@ func TestAuditCommand_Table(t *testing.T) {
 		t.Fatalf("write log: %v", err)
 	}
 
-	buf := prepareRootCommandOutput(t)
-	rootCmd.SetArgs([]string{"audit"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	buf := prepareRootCommandOutput(t, root)
+	root.SetArgs([]string{"audit"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("ExecuteRoot(root) error = %v", err)
 	}
 
 	output := buf.String()
@@ -375,6 +377,7 @@ func TestAuditCommand_Table(t *testing.T) {
 }
 
 func TestAuditCommand_SinceFilter(t *testing.T) {
+	root := NewRootCmd()
 	resetCommandTestState()
 	t.Cleanup(resetCommandTestState)
 
@@ -403,12 +406,12 @@ func TestAuditCommand_SinceFilter(t *testing.T) {
 	}
 	f.Close()
 
-	buf := prepareRootCommandOutput(t)
-	rootCmd.SetArgs([]string{"audit", "--since", "10m"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	buf := prepareRootCommandOutput(t, root)
+	root.SetArgs([]string{"audit", "--since", "10m"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("ExecuteRoot(root) error = %v", err)
 	}
 
 	output := buf.String()
@@ -421,6 +424,7 @@ func TestAuditCommand_SinceFilter(t *testing.T) {
 }
 
 func TestAuditCommand_FailedFilter(t *testing.T) {
+	root := NewRootCmd()
 	resetCommandTestState()
 	t.Cleanup(resetCommandTestState)
 
@@ -448,12 +452,12 @@ func TestAuditCommand_FailedFilter(t *testing.T) {
 	}
 	f.Close()
 
-	buf := prepareRootCommandOutput(t)
-	rootCmd.SetArgs([]string{"audit", "--failed"})
-	t.Cleanup(func() { rootCmd.SetArgs(nil) })
+	buf := prepareRootCommandOutput(t, root)
+	root.SetArgs([]string{"audit", "--failed"})
+	t.Cleanup(func() { root.SetArgs(nil) })
 
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("ExecuteRoot(root) error = %v", err)
 	}
 
 	output := buf.String()
