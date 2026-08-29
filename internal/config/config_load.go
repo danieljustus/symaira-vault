@@ -25,11 +25,12 @@ func validateConfigPath(path string) error {
 func Default() *Config {
 	r := NewPathResolver()
 	return &Config{
-		VaultDir:       r.DataDir,
-		DefaultAgent:   defaultAgentName,
-		SessionTimeout: defaultSessionTimeout,
-		AuthMethod:     AuthMethodPassphrase,
-		Agents:         builtinAgentProfiles(),
+		VaultDir:           r.DataDir,
+		DefaultAgent:       defaultAgentName,
+		SessionTimeout:     defaultSessionTimeout,
+		SessionMaxLifetime: defaultSessionMaxLifetime,
+		AuthMethod:         AuthMethodPassphrase,
+		Agents:             builtinAgentProfiles(),
 	}
 }
 

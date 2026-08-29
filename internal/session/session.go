@@ -67,11 +67,12 @@ import (
 )
 
 const (
-	sessionAccount  = "session"
-	identityAccount = "identity"
-	wrapKeyAccount  = "wrap-key"
-	wrapKeyLen      = 32
-	aesGCMNonceLen  = 12
+	sessionAccount     = "session"
+	identityAccount    = "identity"
+	wrapKeyAccount     = "wrap-key"
+	wrapKeyLen         = 32
+	aesGCMNonceLen     = 12
+	defaultMaxLifetime = 8 * time.Hour
 )
 
 const (
@@ -122,6 +123,7 @@ type storedSession struct {
 	EncryptedPassphrase string          `json:"encrypted_passphrase,omitempty"`
 	Nonce               string          `json:"nonce,omitempty"`
 	TTL                 int64           `json:"ttl_ns"`
+	MaxLifetime         int64           `json:"max_lifetime_ns,omitempty"`
 }
 
 type storedIdentity struct {
@@ -130,6 +132,24 @@ type storedIdentity struct {
 	EncryptedIdentity string    `json:"encrypted_identity"`
 	Nonce             string    `json:"nonce"`
 	TTL               int64     `json:"ttl_ns"`
+	MaxLifetime       int64     `json:"max_lifetime_ns,omitempty"`
+}
+
+func effectiveMaxLifetime(maxLifetime int64) time.Duration {
+	if maxLifetime > 0 {
+		return time.Duration(maxLifetime)
+	}
+	return defaultMaxLifetime
+}
+
+func cacheExpired(savedAt, lastAccess time.Time, ttl, maxLifetime int64, now time.Time) bool {
+	if ttl <= 0 || savedAt.IsZero() {
+		return true
+	}
+	if lastAccess.IsZero() {
+		lastAccess = savedAt
+	}
+	return now.Sub(lastAccess) > time.Duration(ttl) || now.Sub(savedAt) > effectiveMaxLifetime(maxLifetime)
 }
 
 func generateWrapKey() ([]byte, error) {
@@ -284,6 +304,12 @@ func decryptPassphrase(encB64, nonceB64 string, key []byte) ([]byte, error) {
 // (creating the wrap key if it does not exist) and stores the encrypted
 // payload in the configured KeyringBackend.
 func (m *Manager) SavePassphrase(vaultDir string, passphrase []byte, ttl time.Duration) error {
+	return m.SavePassphraseWithMaxLifetime(vaultDir, passphrase, ttl, defaultMaxLifetime)
+}
+
+// SavePassphraseWithMaxLifetime stores an encrypted passphrase with both an
+// idle timeout and an absolute lifetime.
+func (m *Manager) SavePassphraseWithMaxLifetime(vaultDir string, passphrase []byte, ttl, maxLifetime time.Duration) error {
 	now := time.Now().UTC()
 	wrapKey, err := m.getOrCreateWrapKey(vaultDir)
 	if err != nil {
@@ -299,6 +325,7 @@ func (m *Manager) SavePassphrase(vaultDir string, passphrase []byte, ttl time.Du
 		SavedAt:             now,
 		LastAccess:          now,
 		TTL:                 int64(ttl),
+		MaxLifetime:         int64(maxLifetime),
 	})
 	if err != nil {
 		return fmt.Errorf("marshal session: %w", err)
@@ -328,6 +355,7 @@ func (m *Manager) LoadPassphrase(vaultDir string) ([]byte, error) {
 		return nil, fmt.Errorf("decode session: %w", unmarshalErr)
 	}
 
+	now := time.Now().UTC()
 	if sess.TTL <= 0 {
 		metrics.RecordSessionCacheEvent("miss")
 		return nil, fmt.Errorf("session expired for vault %s: TTL is zero or negative", sanitizeVaultDir(vaultDir))
@@ -337,10 +365,10 @@ func (m *Manager) LoadPassphrase(vaultDir string) ([]byte, error) {
 	if lastActivity.IsZero() {
 		lastActivity = sess.SavedAt
 	}
-	if time.Since(lastActivity) > time.Duration(sess.TTL) {
+	if cacheExpired(sess.SavedAt, sess.LastAccess, sess.TTL, sess.MaxLifetime, now) {
 		_ = m.ClearSession(vaultDir)
 		metrics.RecordSessionCacheEvent("miss")
-		return nil, fmt.Errorf("session expired for vault %s: last activity %v exceeded TTL %v", sanitizeVaultDir(vaultDir), lastActivity.Format(time.RFC3339), time.Duration(sess.TTL))
+		return nil, fmt.Errorf("session expired for vault %s: last activity %v exceeded TTL %v or maximum lifetime %v", sanitizeVaultDir(vaultDir), lastActivity.Format(time.RFC3339), time.Duration(sess.TTL), effectiveMaxLifetime(sess.MaxLifetime))
 	}
 
 	if len(sess.Passphrase) > 0 {
@@ -365,7 +393,7 @@ func (m *Manager) LoadPassphrase(vaultDir string) ([]byte, error) {
 		return nil, fmt.Errorf("decrypt session: %w", err)
 	}
 
-	sess.LastAccess = time.Now().UTC()
+	sess.LastAccess = now
 	payload, marshalErr := json.Marshal(sess)
 	if marshalErr != nil {
 		metrics.RecordSessionCacheEvent("hit")
@@ -409,6 +437,9 @@ func (m *Manager) MigrateSession(vaultDir string) (bool, error) {
 	}
 	sess.EncryptedPassphrase = enc
 	sess.Nonce = nonce
+	if sess.MaxLifetime <= 0 {
+		sess.MaxLifetime = int64(defaultMaxLifetime)
+	}
 	crypto.Wipe(sess.Passphrase)
 	sess.Passphrase = nil
 	payload, err := json.Marshal(sess)
@@ -461,7 +492,27 @@ func (m *Manager) ClearSession(vaultDir string) error {
 }
 
 func (m *Manager) SaveIdentity(vaultDir string, identity string, ttl time.Duration) error {
+	return m.SaveIdentityWithMaxLifetime(vaultDir, identity, ttl, defaultMaxLifetime)
+}
+
+// SaveIdentityWithMaxLifetime stores an encrypted identity using the same
+// absolute lifetime as the associated passphrase session.
+func (m *Manager) SaveIdentityWithMaxLifetime(vaultDir string, identity string, ttl, maxLifetime time.Duration) error {
 	now := time.Now().UTC()
+	savedAt := now
+	ttlNs := int64(ttl)
+	maxLifetimeNs := int64(maxLifetime)
+	if sess, found, err := m.loadStoredSession(vaultDir); err == nil && found {
+		if !sess.SavedAt.IsZero() {
+			savedAt = sess.SavedAt
+		}
+		if sess.TTL > 0 {
+			ttlNs = sess.TTL
+		}
+		if sess.MaxLifetime > 0 {
+			maxLifetimeNs = sess.MaxLifetime
+		}
+	}
 	wrapKey, err := m.getOrCreateWrapKey(vaultDir)
 	if err != nil {
 		return fmt.Errorf("wrap key: %w", err)
@@ -473,9 +524,10 @@ func (m *Manager) SaveIdentity(vaultDir string, identity string, ttl time.Durati
 	payload, err := json.Marshal(storedIdentity{
 		EncryptedIdentity: enc,
 		Nonce:             nonce,
-		SavedAt:           now,
+		SavedAt:           savedAt,
 		LastAccess:        now,
-		TTL:               int64(ttl),
+		TTL:               ttlNs,
+		MaxLifetime:       maxLifetimeNs,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal identity: %w", err)
@@ -486,7 +538,32 @@ func (m *Manager) SaveIdentity(vaultDir string, identity string, ttl time.Durati
 	return nil
 }
 
+func (m *Manager) loadStoredSession(vaultDir string) (storedSession, bool, error) {
+	raw, err := m.keyring.Get(keyFor(serviceNameForVault(vaultDir), sessionAccount))
+	if err != nil {
+		if errors.Is(err, ErrKeyringNotFound) {
+			return storedSession{}, false, nil
+		}
+		return storedSession{}, true, fmt.Errorf("load session metadata: %w", err)
+	}
+	var sess storedSession
+	if err := json.Unmarshal([]byte(raw), &sess); err != nil {
+		return storedSession{}, true, fmt.Errorf("decode session metadata: %w", err)
+	}
+	return sess, true, nil
+}
+
 func (m *Manager) LoadIdentity(vaultDir string) (string, error) {
+	return m.loadIdentity(vaultDir, true)
+}
+
+// PeekIdentity loads the cached identity without updating either cache entry.
+// It is intended for health checks and other read-only probes.
+func (m *Manager) PeekIdentity(vaultDir string) (string, error) {
+	return m.loadIdentity(vaultDir, false)
+}
+
+func (m *Manager) loadIdentity(vaultDir string, renew bool) (string, error) {
 	raw, err := m.keyring.Get(keyFor(serviceNameForVault(vaultDir), identityAccount))
 	if err != nil {
 		return "", fmt.Errorf("load identity: %w", err)
@@ -497,17 +574,34 @@ func (m *Manager) LoadIdentity(vaultDir string) (string, error) {
 		return "", fmt.Errorf("decode identity: %w", unmarshalErr)
 	}
 
-	if ident.TTL <= 0 {
+	sess, sessionFound, sessionErr := m.loadStoredSession(vaultDir)
+	if sessionErr != nil {
+		return "", sessionErr
+	}
+	savedAt := ident.SavedAt
+	lastAccess := ident.LastAccess
+	ttl := ident.TTL
+	maxLifetime := ident.MaxLifetime
+	if sessionFound {
+		savedAt = sess.SavedAt
+		lastAccess = sess.LastAccess
+		ttl = sess.TTL
+		maxLifetime = sess.MaxLifetime
+	}
+	if ttl <= 0 {
 		return "", fmt.Errorf("identity cache expired for vault %s: TTL is zero or negative", sanitizeVaultDir(vaultDir))
 	}
 
-	lastActivity := ident.LastAccess
+	lastActivity := lastAccess
 	if lastActivity.IsZero() {
-		lastActivity = ident.SavedAt
+		lastActivity = savedAt
 	}
-	if time.Since(lastActivity) > time.Duration(ident.TTL) {
-		_ = m.ClearIdentity(vaultDir)
-		return "", fmt.Errorf("identity cache expired for vault %s: last activity %v exceeded TTL %v", sanitizeVaultDir(vaultDir), lastActivity.Format(time.RFC3339), time.Duration(ident.TTL))
+	now := time.Now().UTC()
+	if cacheExpired(savedAt, lastAccess, ttl, maxLifetime, now) {
+		if renew {
+			_ = m.ClearSession(vaultDir)
+		}
+		return "", fmt.Errorf("identity cache expired for vault %s: last activity %v exceeded TTL %v or maximum lifetime %v", sanitizeVaultDir(vaultDir), lastActivity.Format(time.RFC3339), time.Duration(ttl), effectiveMaxLifetime(maxLifetime))
 	}
 
 	wrapKey, wrapErr := m.loadWrapKey(vaultDir)
@@ -521,13 +615,23 @@ func (m *Manager) LoadIdentity(vaultDir string) (string, error) {
 	identityStr := string(identityBytes)
 	crypto.Wipe(identityBytes)
 
-	ident.LastAccess = time.Now().UTC()
+	if !renew {
+		return identityStr, nil
+	}
+
+	ident.LastAccess = now
 	payload, marshalErr := json.Marshal(ident)
 	if marshalErr != nil {
 		return identityStr, nil
 	}
 	if updateErr := m.keyring.Set(keyFor(serviceNameForVault(vaultDir), identityAccount), string(payload)); updateErr != nil {
 		return identityStr, nil
+	}
+	if sessionFound {
+		sess.LastAccess = now
+		if sessionPayload, sessionMarshalErr := json.Marshal(sess); sessionMarshalErr == nil {
+			_ = m.keyring.Set(keyFor(serviceNameForVault(vaultDir), sessionAccount), string(sessionPayload))
+		}
 	}
 
 	return identityStr, nil
@@ -554,15 +658,43 @@ func (m *Manager) IsSessionExpired(vaultDir string) bool {
 		return true
 	}
 
-	if sess.TTL <= 0 {
+	return cacheExpired(sess.SavedAt, sess.LastAccess, sess.TTL, sess.MaxLifetime, time.Now().UTC())
+}
+
+// IsIdentityExpired reports whether the cached age identity is missing,
+// unusable, or past its TTL. Unlike LoadIdentity it neither decrypts the
+// entry nor refreshes its last-access timestamp, so callers can probe the
+// cache without extending its lifetime.
+func (m *Manager) IsIdentityExpired(vaultDir string) bool {
+	raw, err := m.keyring.Get(keyFor(serviceNameForVault(vaultDir), identityAccount))
+	if err != nil {
 		return true
 	}
 
-	lastActivity := sess.LastAccess
-	if lastActivity.IsZero() {
-		lastActivity = sess.SavedAt
+	var ident storedIdentity
+	if err := json.Unmarshal([]byte(raw), &ident); err != nil {
+		return true
 	}
-	return time.Since(lastActivity) > time.Duration(sess.TTL)
+
+	if ident.TTL <= 0 || ident.EncryptedIdentity == "" || ident.Nonce == "" {
+		return true
+	}
+
+	sess, sessionFound, sessionErr := m.loadStoredSession(vaultDir)
+	if sessionErr != nil {
+		return true
+	}
+	savedAt := ident.SavedAt
+	lastAccess := ident.LastAccess
+	ttl := ident.TTL
+	maxLifetime := ident.MaxLifetime
+	if sessionFound {
+		savedAt = sess.SavedAt
+		lastAccess = sess.LastAccess
+		ttl = sess.TTL
+		maxLifetime = sess.MaxLifetime
+	}
+	return cacheExpired(savedAt, lastAccess, ttl, maxLifetime, time.Now().UTC())
 }
 
 func (m *Manager) LoadPassphraseWithTouchID(ctx context.Context, vaultDir string) ([]byte, error) {
@@ -596,6 +728,10 @@ func SavePassphrase(vaultDir string, passphrase []byte, ttl time.Duration) error
 	return defaultManager.SavePassphrase(vaultDir, passphrase, ttl)
 }
 
+func SavePassphraseWithMaxLifetime(vaultDir string, passphrase []byte, ttl, maxLifetime time.Duration) error {
+	return defaultManager.SavePassphraseWithMaxLifetime(vaultDir, passphrase, ttl, maxLifetime)
+}
+
 func LoadPassphrase(vaultDir string) ([]byte, error) {
 	return defaultManager.LoadPassphrase(vaultDir)
 }
@@ -612,8 +748,20 @@ func SaveIdentity(vaultDir string, identity string, ttl time.Duration) error {
 	return defaultManager.SaveIdentity(vaultDir, identity, ttl)
 }
 
+func SaveIdentityWithMaxLifetime(vaultDir string, identity string, ttl, maxLifetime time.Duration) error {
+	return defaultManager.SaveIdentityWithMaxLifetime(vaultDir, identity, ttl, maxLifetime)
+}
+
 func LoadIdentity(vaultDir string) (string, error) {
 	return defaultManager.LoadIdentity(vaultDir)
+}
+
+func PeekIdentity(vaultDir string) (string, error) {
+	return defaultManager.PeekIdentity(vaultDir)
+}
+
+func IsIdentityExpired(vaultDir string) bool {
+	return defaultManager.IsIdentityExpired(vaultDir)
 }
 
 func ClearIdentity(vaultDir string) error {

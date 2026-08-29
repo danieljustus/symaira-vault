@@ -230,6 +230,9 @@
     "SessionTimeout": {
       "type": "integer"
     },
+    "SessionMaxLifetime": {
+      "type": "integer"
+    },
     "AuthMethod": {
       "type": "string"
     },
@@ -269,6 +272,7 @@
     "VaultDir",
     "DefaultAgent",
     "SessionTimeout",
+    "SessionMaxLifetime",
     "AuthMethod",
     "UseTouchID",
     "Profiles",

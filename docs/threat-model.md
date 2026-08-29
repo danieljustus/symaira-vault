@@ -218,7 +218,9 @@ MCP server could in principle alter them. See backlog item O-10.
 - **Go GC Copies:** Because Go's garbage collector manages allocations, it may copy or move slices in memory during compaction. Go does not currently guarantee single-copy semantics.
 - **Practical Impact:** Temporary copies of the passphrase created by the Go runtime may persist in process memory until overwritten or until the process exits. This is not remotely exploitable under normal circumstances (requiring root-level memory dump capabilities).
 - **Mitigations:**
-  - Active sessions are capped by a 15-minute TTL.
+  - **Active sessions use a 15-minute idle TTL and an 8-hour absolute maximum
+    lifetime by default.** Activity refreshes both cache entries together but
+    cannot extend the absolute limit.
   - OS-keyring caching is used where available to avoid repeated passphrase entry and decryption.
   - The `SYMVAULT_PASSPHRASE` environment variable is cleared in memory immediately on startup.
 

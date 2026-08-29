@@ -72,7 +72,8 @@ symvault mcp --stdio --agent default  # Restart MCP server
 
 **Session caching issues:**
 - If `symvault unlock` works but MCP server still reports locked, the session cache may have expired
-- Default TTL is 15 minutes; extend with: `symvault unlock --ttl 30m`
+- Default idle TTL is 15 minutes; extend with: `symvault unlock --ttl 30m`
+- The absolute session lifetime defaults to 8 hours and is configured with `sessionMaxLifetime`
 - Clear cache and retry: `symvault lock && symvault unlock`
 
 ---

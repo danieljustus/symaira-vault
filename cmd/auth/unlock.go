@@ -60,7 +60,12 @@ alone is ignored (default-deny). It should NOT be used on shared machines
 			}
 
 			if check {
-				if cli.SessionIsExpired(vaultDir) {
+				// A cached age identity opens the vault without prompting
+				// just as a cached passphrase does, so it counts as an
+				// active session. Looking only at the passphrase entry
+				// reported "locked" for a vault every other command could
+				// read.
+				if cli.SessionIsExpired(vaultDir) && cli.SessionIdentityIsExpired(vaultDir) {
 					cmd.SilenceUsage = true
 					return errorspkg.NewCLIError(errorspkg.ExitLocked, "no active session", errorspkg.ErrVaultLocked)
 				}
@@ -68,7 +73,7 @@ alone is ignored (default-deny). It should NOT be used on shared machines
 				return nil
 			}
 
-			v, effectiveTTL, err := cli.UnlockVaultWithTTL(vaultDir, true, ttlOverride, true)
+			v, effectiveTTL, err := cli.UnlockVaultForSession(vaultDir, true, ttlOverride)
 			if err != nil {
 				return err
 			}

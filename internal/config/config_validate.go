@@ -131,6 +131,10 @@ func (c *Config) Validate() error {
 		errs = errors.Join(errs, errors.New("sessionTimeout: must be greater than 0 (default: 15m, configure sessionTimeout in config.yaml)"))
 	}
 
+	if c.SessionMaxLifetime <= 0 {
+		errs = errors.Join(errs, errors.New("sessionMaxLifetime: must be greater than 0 (default: 8h, configure sessionMaxLifetime in config.yaml)"))
+	}
+
 	if c.AuthMethod != "" {
 		if _, err := NormalizeAuthMethod(c.AuthMethod); err != nil {
 			errs = errors.Join(errs, err)

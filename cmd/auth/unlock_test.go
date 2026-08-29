@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
@@ -147,6 +148,58 @@ func TestUnlock_CheckNoSession(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "no active session") {
 		t.Errorf("error = %v, want no-active-session message", err)
+	}
+	var cliErr *errorspkg.CLIError
+	if !errors.As(err, &cliErr) {
+		t.Fatalf("error = %T, want *errorspkg.CLIError", err)
+	}
+	if cliErr.Code != errorspkg.ExitLocked {
+		t.Errorf("exit code = %d, want %d", cliErr.Code, errorspkg.ExitLocked)
+	}
+}
+
+// A cached age identity opens the vault without prompting exactly as a
+// cached passphrase does. Reporting "no active session" for it sent the
+// macOS app back to its unlock screen after every successful unlock.
+func TestUnlock_CheckAcceptsCachedIdentity(t *testing.T) {
+	vaultDir, _ := setupTestVault(t)
+	swapSessionManager(t, &testKeyring{store: map[string]string{}}, true)
+	if err := session.SaveIdentity(vaultDir, "AGE-SECRET-KEY-TEST", 30*time.Minute); err != nil {
+		t.Fatalf("save identity: %v", err)
+	}
+
+	cmd := newAuthUnlockCmd()
+	if err := cmd.Flags().Set("check", "true"); err != nil {
+		t.Fatalf("set check flag: %v", err)
+	}
+
+	stderr := captureStderr(t, func() {
+		if err := cmd.RunE(cmd, nil); err != nil {
+			t.Fatalf("unlock --check error = %v", err)
+		}
+	})
+	if !strings.Contains(stderr, "Session active") {
+		t.Errorf("stderr = %q, want session-active message", stderr)
+	}
+}
+
+// An expired identity must not keep the vault looking unlocked.
+func TestUnlock_CheckRejectsExpiredIdentity(t *testing.T) {
+	vaultDir, _ := setupTestVault(t)
+	swapSessionManager(t, &testKeyring{store: map[string]string{}}, true)
+	if err := session.SaveIdentity(vaultDir, "AGE-SECRET-KEY-TEST", time.Millisecond); err != nil {
+		t.Fatalf("save identity: %v", err)
+	}
+	time.Sleep(10 * time.Millisecond)
+
+	cmd := newAuthUnlockCmd()
+	if err := cmd.Flags().Set("check", "true"); err != nil {
+		t.Fatalf("set check flag: %v", err)
+	}
+
+	err := cmd.RunE(cmd, nil)
+	if err == nil {
+		t.Fatal("unlock --check error = nil, want locked error")
 	}
 	var cliErr *errorspkg.CLIError
 	if !errors.As(err, &cliErr) {

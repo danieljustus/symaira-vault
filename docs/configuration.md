@@ -26,6 +26,9 @@ defaultAgent: default
 # Session timeout for OS keyring cache (default: 15m)
 sessionTimeout: 15m
 
+# Absolute maximum lifetime for a cached session (default: 8h)
+sessionMaxLifetime: 8h
+
 # Unlock method: passphrase or touchid
 authMethod: passphrase
 
@@ -67,6 +70,7 @@ mcp:
 | `vaultDir` | `~/.symvault` | Default vault directory |
 | `defaultAgent` | `default` | Default MCP agent profile |
 | `sessionTimeout` | `15m` | OS keyring cache TTL |
+| `sessionMaxLifetime` | `8h` | Absolute maximum lifetime of an OS keyring session |
 | `authMethod` | `passphrase` | Unlock method: `passphrase` or macOS `touchid` |
 
 ## Agent Profile Options
@@ -257,6 +261,7 @@ The following rules are checked:
 |------|-------------|
 | `vaultDir` | Must not be empty |
 | `sessionTimeout` | Must be greater than 0 |
+| `sessionMaxLifetime` | Must be greater than 0 |
 | `defaultAgent` | Must reference an agent that exists in `agents` |
 | `agents.*.approvalMode` | Must be one of: `none`, `deny`, `prompt`, `auto` |
 | `agents.*.allowedPaths` | Each path must be a valid glob pattern |
