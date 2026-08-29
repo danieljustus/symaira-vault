@@ -16,10 +16,10 @@ import (
 )
 
 const (
-	defaultSessionTimeout     = 15 * time.Minute
-	defaultSessionMaxLifetime = 8 * time.Hour
-	defaultAuditMaxMB         = 100
-	defaultApprovalMode       = "deny"
+	defaultSessionTimeout = 15 * time.Minute
+
+	defaultAuditMaxMB   = 100
+	defaultApprovalMode = "deny"
 )
 
 func checkVaultInitialized(vaultDir string, _ Options) Result {
@@ -96,10 +96,6 @@ func fixConfigValidation(cfgPath string) error {
 	// Fix 1: sessionTimeout <= 0 → restore default
 	if cfg.SessionTimeout <= 0 {
 		cfg.SessionTimeout = defaultSessionTimeout
-		fixed = true
-	}
-	if cfg.SessionMaxLifetime <= 0 {
-		cfg.SessionMaxLifetime = defaultSessionMaxLifetime
 		fixed = true
 	}
 
