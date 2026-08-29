@@ -25,6 +25,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- The macOS app could no longer unlock the vault: entering the passphrase and
+  pressing "Entsperren" appeared to do nothing while the CLI kept working.
+  `symvault unlock` short-circuited on the cached age identity and returned
+  "Vault unlocked" without ever rewriting the session entry. Since the identity
+  entry is renewed by every vault command and the session entry only when the
+  passphrase is actually loaded, the session aged out permanently — and the
+  app's `unlock --check` probe reported a locked vault forever, sending it
+  straight back to the unlock screen.
+  - `symvault unlock` now re-verifies the passphrase (or Touch ID) and always
+    rewrites the session instead of taking the cached-identity shortcut. As a
+    side effect it no longer reports success for a wrong passphrase, and a
+    non-interactive `unlock` with no credential available now fails with
+    `ExitLocked` instead of exiting 0.
+  - `symvault unlock --check` now treats a valid cached identity as an active
+    session, matching the vault every other command can already read.
+  - The macOS app no longer returns to the unlock screen without a message when
+    a reported-successful unlock leaves no active session.
+
 ### Dependencies
 - Bumped `corekit` from `v0.9.1` to `v0.11.0` (pulls in latest audit/security improvements from the corekit module).
 - Bumped `appkit` from `0.4.0` to `0.10.0` in `client/Package.swift` (latest Swift Package release, includes `CLIRunnerError` plaintext-redaction security fix).

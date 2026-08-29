@@ -23,23 +23,45 @@ func UnlockVault(vaultDir string, interactive bool) (*vaultpkg.Vault, error) {
 }
 
 func UnlockVaultWithTTL(vaultDir string, interactive bool, ttlOverride time.Duration, cacheEnvPassphrase bool) (*vaultpkg.Vault, time.Duration, error) {
+	return unlockVault(vaultDir, interactive, ttlOverride, cacheEnvPassphrase, true)
+}
+
+// UnlockVaultForSession backs the explicit `symvault unlock` command. It
+// deliberately skips the cached-identity shortcut: the passphrase (or Touch
+// ID) is verified again and the session entry is rewritten, so a successful
+// `unlock` always leaves behind the session that `unlock --check` and other
+// processes look for.
+//
+// Taking the shortcut here is what made the GUI unusable: the identity entry
+// is renewed by every vault command, while the session entry is only renewed
+// when the passphrase is actually loaded. Once the session aged out, `unlock`
+// still reported success from the cached identity without recreating it, so
+// `unlock --check` reported a locked vault forever and the app bounced
+// straight back to its unlock screen.
+func UnlockVaultForSession(vaultDir string, interactive bool, ttlOverride time.Duration) (*vaultpkg.Vault, time.Duration, error) {
+	return unlockVault(vaultDir, interactive, ttlOverride, true, false)
+}
+
+func unlockVault(vaultDir string, interactive bool, ttlOverride time.Duration, cacheEnvPassphrase, useIdentityCache bool) (*vaultpkg.Vault, time.Duration, error) {
 	cfg, err := resolveConfig(vaultDir, interactive)
 	if err != nil {
 		return nil, 0, errorspkg.NewCLIError(errorspkg.ExitConfigError, "configuration is invalid", err)
 	}
 
-	if cachedIdentity, cacheErr := SessionLoadIdentity(vaultDir); cacheErr == nil && cachedIdentity != "" {
-		if identity, parseErr := age.ParseX25519Identity(cachedIdentity); parseErr == nil {
-			v, openErr := vaultpkg.OpenWithCachedIdentity(vaultDir, identity)
-			if openErr == nil {
-				metrics.RecordIdentityCacheEvent("hit")
-				ttl := ConfiguredSessionTTL(v, ttlOverride)
-				return v, ttl, nil
+	if useIdentityCache {
+		if cachedIdentity, cacheErr := SessionLoadIdentity(vaultDir); cacheErr == nil && cachedIdentity != "" {
+			if identity, parseErr := age.ParseX25519Identity(cachedIdentity); parseErr == nil {
+				v, openErr := vaultpkg.OpenWithCachedIdentity(vaultDir, identity)
+				if openErr == nil {
+					metrics.RecordIdentityCacheEvent("hit")
+					ttl := ConfiguredSessionTTL(v, ttlOverride)
+					return v, ttl, nil
+				}
 			}
+			metrics.RecordIdentityCacheEvent("miss")
+		} else {
+			metrics.RecordIdentityCacheEvent("miss")
 		}
-		metrics.RecordIdentityCacheEvent("miss")
-	} else {
-		metrics.RecordIdentityCacheEvent("miss")
 	}
 
 	passphrase, passphraseFromEnv, _, err := resolveUnlockPassphrase(vaultDir, interactive, cfg)

@@ -130,6 +130,15 @@
         try await client.unlock(passphrase: passphrase, ttl: ttl, profile: activeProfile)
         isBusy = false
         await refresh()
+        if availability != .ready, errorMessage == nil {
+          // The runtime reported a successful unlock but the follow-up
+          // session check still says locked. Never fall back to the unlock
+          // screen without a reason — that reads as "the button does
+          // nothing".
+          errorMessage =
+            "symvault meldet ein erfolgreiches Entsperren, aber es besteht danach keine aktive Sitzung. "
+            + "Aktualisiere die Runtime (brew upgrade symvault) und prüfe 'symvault unlock' im Terminal."
+        }
         return availability == .ready
       } catch {
         isBusy = false

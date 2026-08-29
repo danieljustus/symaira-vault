@@ -565,6 +565,32 @@ func (m *Manager) IsSessionExpired(vaultDir string) bool {
 	return time.Since(lastActivity) > time.Duration(sess.TTL)
 }
 
+// IsIdentityExpired reports whether the cached age identity is missing,
+// unusable, or past its TTL. Unlike LoadIdentity it neither decrypts the
+// entry nor refreshes its last-access timestamp, so callers can probe the
+// cache without extending its lifetime.
+func (m *Manager) IsIdentityExpired(vaultDir string) bool {
+	raw, err := m.keyring.Get(keyFor(serviceNameForVault(vaultDir), identityAccount))
+	if err != nil {
+		return true
+	}
+
+	var ident storedIdentity
+	if err := json.Unmarshal([]byte(raw), &ident); err != nil {
+		return true
+	}
+
+	if ident.TTL <= 0 || ident.EncryptedIdentity == "" || ident.Nonce == "" {
+		return true
+	}
+
+	lastActivity := ident.LastAccess
+	if lastActivity.IsZero() {
+		lastActivity = ident.SavedAt
+	}
+	return time.Since(lastActivity) > time.Duration(ident.TTL)
+}
+
 func (m *Manager) LoadPassphraseWithTouchID(ctx context.Context, vaultDir string) ([]byte, error) {
 	return LoadBiometricPassphrase(ctx, vaultDir)
 }
@@ -614,6 +640,10 @@ func SaveIdentity(vaultDir string, identity string, ttl time.Duration) error {
 
 func LoadIdentity(vaultDir string) (string, error) {
 	return defaultManager.LoadIdentity(vaultDir)
+}
+
+func IsIdentityExpired(vaultDir string) bool {
+	return defaultManager.IsIdentityExpired(vaultDir)
 }
 
 func ClearIdentity(vaultDir string) error {
