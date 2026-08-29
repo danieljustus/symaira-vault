@@ -94,16 +94,18 @@ var DefaultSessionManager SessionManager = defaultSessionManager{}
 // They delegate to the session package directly. Prefer injecting
 // a SessionManager via CLIContext in new code.
 var (
-	SessionLoadPassphrase    func(vaultDir string) ([]byte, error)                               = session.LoadPassphrase
-	SessionSavePassphrase    func(vaultDir string, passphrase []byte, ttl time.Duration) error   = session.SavePassphrase
-	SessionIsExpired         func(vaultDir string) bool                                          = session.IsSessionExpired
-	SessionLoadBiometric     func(ctx context.Context, vaultDir string) ([]byte, error)          = session.LoadBiometricPassphrase
-	SessionSaveBiometric     func(ctx context.Context, vaultDir string, passphrase []byte) error = session.SaveBiometricPassphrase
-	SessionGetCacheStatus    func() session.CacheStatus                                          = session.GetCacheStatus
-	SessionLoadIdentity      func(vaultDir string) (string, error)                               = session.LoadIdentity
-	SessionSaveIdentity      func(vaultDir string, identity string, ttl time.Duration) error     = session.SaveIdentity
-	SessionIdentityIsExpired func(vaultDir string) bool                                          = session.IsIdentityExpired
-	SessionHasGUISession     func() bool                                                         = session.HasGUISession
+	SessionLoadPassphrase                func(vaultDir string) ([]byte, error)                                          = session.LoadPassphrase
+	SessionSavePassphrase                func(vaultDir string, passphrase []byte, ttl time.Duration) error              = session.SavePassphrase
+	SessionSavePassphraseWithMaxLifetime func(vaultDir string, passphrase []byte, ttl, maxLifetime time.Duration) error = session.SavePassphraseWithMaxLifetime
+	SessionIsExpired                     func(vaultDir string) bool                                                     = session.IsSessionExpired
+	SessionLoadBiometric                 func(ctx context.Context, vaultDir string) ([]byte, error)                     = session.LoadBiometricPassphrase
+	SessionSaveBiometric                 func(ctx context.Context, vaultDir string, passphrase []byte) error            = session.SaveBiometricPassphrase
+	SessionGetCacheStatus                func() session.CacheStatus                                                     = session.GetCacheStatus
+	SessionLoadIdentity                  func(vaultDir string) (string, error)                                          = session.LoadIdentity
+	SessionSaveIdentity                  func(vaultDir string, identity string, ttl time.Duration) error                = session.SaveIdentity
+	SessionSaveIdentityWithMaxLifetime   func(vaultDir string, identity string, ttl, maxLifetime time.Duration) error   = session.SaveIdentityWithMaxLifetime
+	SessionIdentityIsExpired             func(vaultDir string) bool                                                     = session.IsIdentityExpired
+	SessionHasGUISession                 func() bool                                                                    = session.HasGUISession
 )
 
 // currentCommandPath is the cobra command path of the command currently

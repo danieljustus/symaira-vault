@@ -36,12 +36,13 @@ func (c *Config) SaveTo(path string) error {
 	authMethod := c.EffectiveAuthMethod()
 
 	raw := Config{
-		VaultDir:       c.VaultDir,
-		DefaultAgent:   c.DefaultAgent,
-		SessionTimeout: c.SessionTimeout,
-		AuthMethod:     authMethod,
-		DefaultProfile: c.DefaultProfile,
-		Agents:         make(map[string]AgentProfile, len(c.Agents)),
+		VaultDir:           c.VaultDir,
+		DefaultAgent:       c.DefaultAgent,
+		SessionTimeout:     c.SessionTimeout,
+		SessionMaxLifetime: c.SessionMaxLifetime,
+		AuthMethod:         authMethod,
+		DefaultProfile:     c.DefaultProfile,
+		Agents:             make(map[string]AgentProfile, len(c.Agents)),
 	}
 
 	if c.UseTouchID != nil && *c.UseTouchID {

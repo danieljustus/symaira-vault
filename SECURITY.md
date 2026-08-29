@@ -425,6 +425,8 @@ OS-managed buffers.
 - **Minimize session TTL**: Set `sessionTimeout: 0` in `config.yaml` to disable
   session caching entirely. This forces passphrase entry on every operation,
   eliminating the keyring as a persistence vector.
+- **Bound active sessions**: `sessionMaxLifetime` defaults to 8 hours. It limits
+  the total lifetime of a cached session even when the idle timeout is refreshed.
 - **Use stdio MCP mode**: The `symvault mcp --stdio` mode avoids D-Bus entirely
   for MCP transport, reducing the keyring's attack surface to the unlock path.
 - **Prefer passphrase-only unlock**: Set `authMethod: passphrase` to avoid

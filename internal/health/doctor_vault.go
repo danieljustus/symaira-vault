@@ -16,9 +16,10 @@ import (
 )
 
 const (
-	defaultSessionTimeout = 15 * time.Minute
-	defaultAuditMaxMB     = 100
-	defaultApprovalMode   = "deny"
+	defaultSessionTimeout     = 15 * time.Minute
+	defaultSessionMaxLifetime = 8 * time.Hour
+	defaultAuditMaxMB         = 100
+	defaultApprovalMode       = "deny"
 )
 
 func checkVaultInitialized(vaultDir string, _ Options) Result {
@@ -95,6 +96,10 @@ func fixConfigValidation(cfgPath string) error {
 	// Fix 1: sessionTimeout <= 0 → restore default
 	if cfg.SessionTimeout <= 0 {
 		cfg.SessionTimeout = defaultSessionTimeout
+		fixed = true
+	}
+	if cfg.SessionMaxLifetime <= 0 {
+		cfg.SessionMaxLifetime = defaultSessionMaxLifetime
 		fixed = true
 	}
 
@@ -283,7 +288,7 @@ func checkManifestIntegrity(vaultDir string, _ Options) Result {
 // session keyring for the given vault directory. Returns nil when no valid
 // cached identity is available.
 func loadIdentityForVault(vaultDir string) (*age.X25519Identity, error) {
-	cached, err := session.LoadIdentity(vaultDir)
+	cached, err := session.PeekIdentity(vaultDir)
 	if err != nil {
 		return nil, err
 	}

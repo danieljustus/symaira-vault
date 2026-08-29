@@ -78,13 +78,14 @@ func unlockVault(vaultDir string, interactive bool, ttlOverride time.Duration, c
 	}
 
 	ttl := ConfiguredSessionTTL(v, ttlOverride)
+	maxLifetime := ConfiguredSessionMaxLifetime(v)
 
 	if !passphraseFromEnv || cacheEnvPassphrase {
-		if err := SessionSavePassphrase(vaultDir, passphrase, ttl); err != nil {
+		if err := saveSessionPassphrase(vaultDir, passphrase, ttl, maxLifetime); err != nil {
 			return nil, 0, errorspkg.NewCLIError(errorspkg.ExitGeneralError, "save session", err)
 		}
 		if v != nil && v.Identity != nil {
-			_ = SessionSaveIdentity(vaultDir, v.Identity.String(), ttl)
+			_ = saveSessionIdentity(vaultDir, v.Identity.String(), ttl, maxLifetime)
 		}
 	}
 	if cfg.EffectiveAuthMethod() == configpkg.AuthMethodTouchID && (!passphraseFromEnv || cacheEnvPassphrase) {
@@ -280,4 +281,25 @@ func ConfiguredSessionTTL(v *vaultpkg.Vault, override time.Duration) time.Durati
 		return v.Config.SessionTimeout
 	}
 	return DefaultSessionTTL()
+}
+
+func ConfiguredSessionMaxLifetime(v *vaultpkg.Vault) time.Duration {
+	if v != nil && v.Config != nil && v.Config.SessionMaxLifetime > 0 {
+		return v.Config.SessionMaxLifetime
+	}
+	return configpkg.Default().SessionMaxLifetime
+}
+
+func saveSessionPassphrase(vaultDir string, passphrase []byte, ttl, maxLifetime time.Duration) error {
+	if maxLifetime == configpkg.Default().SessionMaxLifetime {
+		return SessionSavePassphrase(vaultDir, passphrase, ttl)
+	}
+	return SessionSavePassphraseWithMaxLifetime(vaultDir, passphrase, ttl, maxLifetime)
+}
+
+func saveSessionIdentity(vaultDir, identity string, ttl, maxLifetime time.Duration) error {
+	if maxLifetime == configpkg.Default().SessionMaxLifetime {
+		return SessionSaveIdentity(vaultDir, identity, ttl)
+	}
+	return SessionSaveIdentityWithMaxLifetime(vaultDir, identity, ttl, maxLifetime)
 }

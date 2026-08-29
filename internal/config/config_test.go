@@ -169,9 +169,10 @@ func TestSaveWritesToDefaultConfigPath(t *testing.T) {
 	home := setTestHome(t)
 
 	cfg := &Config{
-		VaultDir:       filepath.Join(home, DefaultVaultSubdir),
-		DefaultAgent:   "default",
-		SessionTimeout: defaultSessionTimeout,
+		VaultDir:           filepath.Join(home, DefaultVaultSubdir),
+		DefaultAgent:       "default",
+		SessionTimeout:     defaultSessionTimeout,
+		SessionMaxLifetime: defaultSessionMaxLifetime,
 		Agents: map[string]AgentProfile{
 			"default": {
 				Name:         "default",
@@ -313,9 +314,10 @@ func TestSaveWritesRedactFields(t *testing.T) {
 	home := setTestHome(t)
 
 	cfg := &Config{
-		VaultDir:       filepath.Join(home, DefaultVaultSubdir),
-		DefaultAgent:   "default",
-		SessionTimeout: defaultSessionTimeout,
+		VaultDir:           filepath.Join(home, DefaultVaultSubdir),
+		DefaultAgent:       "default",
+		SessionTimeout:     defaultSessionTimeout,
+		SessionMaxLifetime: defaultSessionMaxLifetime,
 		Agents: map[string]AgentProfile{
 			"restricted": {
 				Name:         "restricted",
@@ -456,9 +458,10 @@ func TestSaveWithAllConfigSections(t *testing.T) {
 	home := setTestHome(t)
 
 	cfg := &Config{
-		VaultDir:       filepath.Join(home, DefaultVaultSubdir),
-		DefaultAgent:   "default",
-		SessionTimeout: defaultSessionTimeout,
+		VaultDir:           filepath.Join(home, DefaultVaultSubdir),
+		DefaultAgent:       "default",
+		SessionTimeout:     defaultSessionTimeout,
+		SessionMaxLifetime: defaultSessionMaxLifetime,
 		Agents: map[string]AgentProfile{
 			"default": {
 				Name:         "default",
@@ -546,9 +549,10 @@ func TestSaveLoadRoundTrip_PreservesAllFields(t *testing.T) {
 	home := setTestHome(t)
 
 	cfg := &Config{
-		VaultDir:       filepath.Join(home, DefaultVaultSubdir),
-		DefaultAgent:   "test-agent",
-		SessionTimeout: defaultSessionTimeout,
+		VaultDir:           filepath.Join(home, DefaultVaultSubdir),
+		DefaultAgent:       "test-agent",
+		SessionTimeout:     defaultSessionTimeout,
+		SessionMaxLifetime: defaultSessionMaxLifetime,
 		Agents: map[string]AgentProfile{
 			"test-agent": {
 				Name:            "test-agent",
@@ -1082,10 +1086,11 @@ func TestSave_PermissionDeniedOnReadOnlyDir(t *testing.T) {
 	t.Setenv("HOME", home)
 
 	cfg := &Config{
-		VaultDir:       filepath.Join(readonlyDir, DefaultVaultSubdir),
-		DefaultAgent:   "default",
-		SessionTimeout: defaultSessionTimeout,
-		Agents:         builtinAgentProfiles(),
+		VaultDir:           filepath.Join(readonlyDir, DefaultVaultSubdir),
+		DefaultAgent:       "default",
+		SessionTimeout:     defaultSessionTimeout,
+		SessionMaxLifetime: defaultSessionMaxLifetime,
+		Agents:             builtinAgentProfiles(),
 	}
 
 	err := cfg.Save()
@@ -1111,10 +1116,11 @@ func TestSave_FilePermissionDenied(t *testing.T) {
 	}
 
 	cfg := &Config{
-		VaultDir:       readonlyDir,
-		DefaultAgent:   "default",
-		SessionTimeout: defaultSessionTimeout,
-		Agents:         builtinAgentProfiles(),
+		VaultDir:           readonlyDir,
+		DefaultAgent:       "default",
+		SessionTimeout:     defaultSessionTimeout,
+		SessionMaxLifetime: defaultSessionMaxLifetime,
+		Agents:             builtinAgentProfiles(),
 	}
 
 	err := cfg.Save()
@@ -2729,13 +2735,14 @@ func TestRoundTrip_AllFieldsSet(t *testing.T) {
 	home := setTestHome(t)
 
 	cfg := &Config{
-		VaultDir:       filepath.Join(home, DefaultVaultSubdir),
-		DefaultAgent:   "test-agent",
-		SessionTimeout: 10 * time.Minute,
-		AuthMethod:     "touchid",
-		UseTouchID:     bptr(true),
-		EnvAllowlist:   []string{"HOME", "PATH"},
-		DefaultProfile: "work",
+		VaultDir:           filepath.Join(home, DefaultVaultSubdir),
+		DefaultAgent:       "test-agent",
+		SessionTimeout:     10 * time.Minute,
+		SessionMaxLifetime: defaultSessionMaxLifetime,
+		AuthMethod:         "touchid",
+		UseTouchID:         bptr(true),
+		EnvAllowlist:       []string{"HOME", "PATH"},
+		DefaultProfile:     "work",
 		Profiles: map[string]*Profile{
 			"work": {VaultPath: "~/.symvault-work"},
 		},
@@ -3029,9 +3036,10 @@ func TestRoundTrip_DefaultsApplied(t *testing.T) {
 
 	// Minimal config - all defaults should apply
 	cfg := &Config{
-		VaultDir:       filepath.Join(home, DefaultVaultSubdir),
-		DefaultAgent:   "default",
-		SessionTimeout: defaultSessionTimeout,
+		VaultDir:           filepath.Join(home, DefaultVaultSubdir),
+		DefaultAgent:       "default",
+		SessionTimeout:     defaultSessionTimeout,
+		SessionMaxLifetime: defaultSessionMaxLifetime,
 		Agents: map[string]AgentProfile{
 			"default": newDefaultAgentProfile("default"),
 		},
@@ -3063,10 +3071,11 @@ func TestRoundTrip_ExplicitZeroValues(t *testing.T) {
 
 	// Config with explicitly set zero values
 	cfg := &Config{
-		VaultDir:       filepath.Join(home, DefaultVaultSubdir),
-		DefaultAgent:   "default",
-		SessionTimeout: defaultSessionTimeout,
-		AuthMethod:     "passphrase",
+		VaultDir:           filepath.Join(home, DefaultVaultSubdir),
+		DefaultAgent:       "default",
+		SessionTimeout:     defaultSessionTimeout,
+		SessionMaxLifetime: defaultSessionMaxLifetime,
+		AuthMethod:         "passphrase",
 		Agents: map[string]AgentProfile{
 			"default": {
 				Name:             "default",

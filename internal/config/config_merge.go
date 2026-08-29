@@ -64,6 +64,9 @@ func mergeTopLevel(cfg *Config, raw Config) {
 	if raw.SessionTimeout > 0 {
 		cfg.SessionTimeout = raw.SessionTimeout
 	}
+	if raw.SessionMaxLifetime > 0 {
+		cfg.SessionMaxLifetime = raw.SessionMaxLifetime
+	}
 	if raw.AuthMethod != "" {
 		authMethod, err := NormalizeAuthMethod(raw.AuthMethod)
 		if err == nil {

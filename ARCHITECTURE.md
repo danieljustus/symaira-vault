@@ -155,11 +155,16 @@ sequenceDiagram
         CLI->>User: Enter passphrase
         User->>CLI: passphrase
         CLI->>Session: SavePassphrase(vaultDir, passphrase, TTL)
-        Session->>Keyring: Set(vaultDir, passphrase, TTL)
+        Session->>Keyring: Set(vaultDir, passphrase, idle TTL, max lifetime)
     end
 ```
 
-**Default TTL:** 15 minutes
+**Default idle TTL:** 15 minutes
+
+**Default maximum lifetime:** 8 hours. Identity and passphrase cache entries
+share the session entry's `SavedAt`, `LastAccess`, idle TTL, and maximum lifetime
+so repeated activity cannot extend a cached session indefinitely. Read-only
+probes such as health checks do not refresh either entry.
 
 ### `internal/config/` — Configuration
 

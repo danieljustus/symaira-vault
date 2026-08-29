@@ -21,13 +21,14 @@ const (
 
 	// Prefer DefaultConfigDir(), DefaultDataDir(), or DefaultCacheDir() for
 	// new code. Kept for backward compatibility and migration detection.
-	DefaultVaultSubdir    = ".symvault"
-	defaultConfigDir      = DefaultVaultSubdir
-	defaultConfigFile     = "config.yaml"
-	defaultAgentName      = "default"
-	defaultSessionTimeout = 15 * time.Minute
-	AuthMethodPassphrase  = "passphrase"
-	AuthMethodTouchID     = "touchid"
+	DefaultVaultSubdir        = ".symvault"
+	defaultConfigDir          = DefaultVaultSubdir
+	defaultConfigFile         = "config.yaml"
+	defaultAgentName          = "default"
+	defaultSessionTimeout     = 15 * time.Minute
+	defaultSessionMaxLifetime = 8 * time.Hour
+	AuthMethodPassphrase      = "passphrase"
+	AuthMethodTouchID         = "touchid"
 )
 
 // XDGConfigHome returns the XDG config directory ($XDG_CONFIG_HOME or
@@ -92,26 +93,27 @@ type CustomPattern struct {
 }
 
 type Config struct {
-	Agents          map[string]AgentProfile  `yaml:"agents,omitempty"`
-	Vault           *VaultConfig             `yaml:"vault,omitempty"`
-	Git             *GitConfig               `yaml:"git,omitempty"`
-	MCP             *MCPConfig               `yaml:"mcp,omitempty"`
-	Update          *UpdateConfig            `yaml:"update,omitempty"`
-	Clipboard       *ClipboardConfig         `yaml:"clipboard,omitempty"`
-	Audit           *AuditConfig             `yaml:"audit,omitempty"`
-	Logging         *LoggingConfig           `yaml:"logging,omitempty"`
-	Security        *SecurityConfig          `yaml:"security,omitempty"`
-	VaultDir        string                   `yaml:"vaultDir,omitempty"`
-	DefaultAgent    string                   `yaml:"defaultAgent,omitempty"`
-	SessionTimeout  time.Duration            `yaml:"sessionTimeout,omitempty"`
-	AuthMethod      string                   `yaml:"authMethod,omitempty"`
-	UseTouchID      *bool                    `yaml:"useTouchID,omitempty"`
-	Profiles        map[string]*Profile      `yaml:"profiles,omitempty"`
-	DefaultProfile  string                   `yaml:"defaultProfile,omitempty"`
-	EnvAllowlist    []string                 `yaml:"envAllowlist,omitempty"`
-	EnvWhitelist    []string                 `yaml:"envWhitelist,omitempty"`
-	ScanPatterns    []CustomPattern          `yaml:"scan_patterns,omitempty"`
-	PaymentPolicies map[string]PaymentPolicy `yaml:"paymentPolicies,omitempty"`
+	Agents             map[string]AgentProfile  `yaml:"agents,omitempty"`
+	Vault              *VaultConfig             `yaml:"vault,omitempty"`
+	Git                *GitConfig               `yaml:"git,omitempty"`
+	MCP                *MCPConfig               `yaml:"mcp,omitempty"`
+	Update             *UpdateConfig            `yaml:"update,omitempty"`
+	Clipboard          *ClipboardConfig         `yaml:"clipboard,omitempty"`
+	Audit              *AuditConfig             `yaml:"audit,omitempty"`
+	Logging            *LoggingConfig           `yaml:"logging,omitempty"`
+	Security           *SecurityConfig          `yaml:"security,omitempty"`
+	VaultDir           string                   `yaml:"vaultDir,omitempty"`
+	DefaultAgent       string                   `yaml:"defaultAgent,omitempty"`
+	SessionTimeout     time.Duration            `yaml:"sessionTimeout,omitempty"`
+	SessionMaxLifetime time.Duration            `yaml:"sessionMaxLifetime,omitempty"`
+	AuthMethod         string                   `yaml:"authMethod,omitempty"`
+	UseTouchID         *bool                    `yaml:"useTouchID,omitempty"`
+	Profiles           map[string]*Profile      `yaml:"profiles,omitempty"`
+	DefaultProfile     string                   `yaml:"defaultProfile,omitempty"`
+	EnvAllowlist       []string                 `yaml:"envAllowlist,omitempty"`
+	EnvWhitelist       []string                 `yaml:"envWhitelist,omitempty"`
+	ScanPatterns       []CustomPattern          `yaml:"scan_patterns,omitempty"`
+	PaymentPolicies    map[string]PaymentPolicy `yaml:"paymentPolicies,omitempty"`
 }
 
 // PaymentMaxAmount defines per-transaction and per-day spending limits.
