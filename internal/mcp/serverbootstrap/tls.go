@@ -127,7 +127,7 @@ func CertFingerprint(vaultDir string) (string, error) {
 	if certFile == "" {
 		return "", fmt.Errorf("no TLS certificate available for vault directory")
 	}
-	pemBytes, err := os.ReadFile(certFile)
+	pemBytes, err := os.ReadFile(certFile) // #nosec G304 -- certFile is EnsureTLSCert's own fixed filename under vaultDir, same security domain
 	if err != nil {
 		return "", fmt.Errorf("read TLS certificate: %w", err)
 	}

@@ -127,7 +127,7 @@ func mintApprovalEnrollCode(vaultDir string, port int) (code string, expiresAt t
 	if err != nil {
 		return "", time.Time{}, "", fmt.Errorf("ensure TLS certificate: %w", err)
 	}
-	pemBytes, err := os.ReadFile(certFile)
+	pemBytes, err := os.ReadFile(certFile) // #nosec G304 -- certFile is EnsureTLSCert's own fixed filename under vaultDir, same security domain
 	if err != nil {
 		return "", time.Time{}, "", fmt.Errorf("read TLS certificate: %w", err)
 	}
