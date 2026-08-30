@@ -44,10 +44,12 @@ let package = Package(
             dependencies: [],
             path: "Sources/SymvaultIOS",
             exclude: [
+                "ApprovalsListView.swift",
                 "EnrollView.swift",
                 "EntryDetailView.swift",
                 "EntryListView.swift",
                 "MobileVaultCore.swift",
+                "PairingScanView.swift",
                 "SymvaultApp.swift",
                 "UnlockView.swift",
                 "VaultStore.swift",

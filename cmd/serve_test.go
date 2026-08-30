@@ -1588,7 +1588,7 @@ func TestRunHTTPServerFunc_ApprovalDeviceSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDeviceSessionStore: %v", err)
 	}
-	enrolledToken, err := store.Enroll("device-1", "age1testpublickey")
+	enrolledToken, err := store.Enroll("device-1", "Test Device One", "age1testpublickey")
 	if err != nil {
 		t.Fatalf("Enroll: %v", err)
 	}
@@ -1729,7 +1729,7 @@ func TestRunHTTPServerFunc_ApprovalDeviceSession(t *testing.T) {
 	// Per-device failed attempts: device-2 should not be affected by
 	// device-1's failures (if any). We verify this by enrolling device-2
 	// after device-1 was revoked and confirming it can still list.
-	device2Token, err := store.Enroll("device-2", "age1device2key")
+	device2Token, err := store.Enroll("device-2", "Test Device Two", "age1device2key")
 	if err != nil {
 		t.Fatalf("Enroll device-2: %v", err)
 	}

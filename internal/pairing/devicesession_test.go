@@ -13,7 +13,7 @@ func TestDeviceSessionStore_EnrollAndValidate(t *testing.T) {
 		t.Fatalf("NewDeviceSessionStore: %v", err)
 	}
 
-	token, err := store.Enroll("device-1", "age1pubkey")
+	token, err := store.Enroll("device-1", "Device One", "age1pubkey")
 	if err != nil {
 		t.Fatalf("Enroll: %v", err)
 	}
@@ -33,7 +33,7 @@ func TestDeviceSessionStore_PersistsAcrossLoad(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDeviceSessionStore: %v", err)
 	}
-	token, err := store.Enroll("device-1", "age1pubkey")
+	token, err := store.Enroll("device-1", "Device One", "age1pubkey")
 	if err != nil {
 		t.Fatalf("Enroll: %v", err)
 	}
@@ -55,7 +55,7 @@ func TestDeviceSessionStore_Revoke(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDeviceSessionStore: %v", err)
 	}
-	token, err := store.Enroll("device-1", "age1pubkey")
+	token, err := store.Enroll("device-1", "Device One", "age1pubkey")
 	if err != nil {
 		t.Fatalf("Enroll: %v", err)
 	}
@@ -92,7 +92,7 @@ func TestDeviceSessionStore_PerDeviceFailedAttempts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDeviceSessionStore: %v", err)
 	}
-	token, err := store.Enroll("device-1", "age1pubkey")
+	token, err := store.Enroll("device-1", "Device One", "age1pubkey")
 	if err != nil {
 		t.Fatalf("Enroll: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestDeviceSessionStore_PerDeviceFailedAttempts(t *testing.T) {
 	// by expiring the session. We can't easily do that without waiting,
 	// so instead we test per-device cooldown by creating a second device
 	// and verifying that failures on one device don't affect the other.
-	token2, err := store.Enroll("device-2", "age1pubkey2")
+	token2, err := store.Enroll("device-2", "Device Two", "age1pubkey2")
 	if err != nil {
 		t.Fatalf("Enroll device-2: %v", err)
 	}
@@ -139,7 +139,7 @@ func TestDeviceSessionStore_ExpiredSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDeviceSessionStore: %v", err)
 	}
-	token, err := store.Enroll("device-1", "age1pubkey")
+	token, err := store.Enroll("device-1", "Device One", "age1pubkey")
 	if err != nil {
 		t.Fatalf("Enroll: %v", err)
 	}
@@ -161,7 +161,7 @@ func TestDeviceSessionStore_CleanupExpired(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDeviceSessionStore: %v", err)
 	}
-	token, err := store.Enroll("device-1", "age1pubkey")
+	token, err := store.Enroll("device-1", "Device One", "age1pubkey")
 	if err != nil {
 		t.Fatalf("Enroll: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestDeviceSessionStore_NoVaultDir(t *testing.T) {
 	if store == nil {
 		t.Fatal("nil store for empty dir")
 	}
-	token, err := store.Enroll("device-1", "age1pubkey")
+	token, err := store.Enroll("device-1", "Device One", "age1pubkey")
 	if err != nil {
 		t.Fatalf("Enroll: %v", err)
 	}
@@ -202,7 +202,7 @@ func TestDeviceSessionStore_StartCleanup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDeviceSessionStore: %v", err)
 	}
-	_, err = store.Enroll("device-1", "age1pubkey")
+	_, err = store.Enroll("device-1", "Device One", "age1pubkey")
 	if err != nil {
 		t.Fatalf("Enroll: %v", err)
 	}
@@ -221,6 +221,66 @@ func TestDeviceSessionStore_StartCleanup(t *testing.T) {
 // contextWithCancel is a test-local helper to avoid importing context in
 // _test.go when not needed by other tests.
 func contextWithCancel() context.Context {
-	ctx, _ := context.WithCancel(context.Background())
-	return ctx
+	return context.Background()
+}
+
+func TestDeviceSessionStore_NameRoundTripsAcrossLoad(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewDeviceSessionStore(dir)
+	if err != nil {
+		t.Fatalf("NewDeviceSessionStore: %v", err)
+	}
+	token, err := store.Enroll("device-1", "Daniel's iPhone", "")
+	if err != nil {
+		t.Fatalf("Enroll: %v", err)
+	}
+
+	store2, err := NewDeviceSessionStore(dir)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	sessions := store2.List()
+	found := false
+	for _, s := range sessions {
+		if s.Token == token {
+			found = true
+			if s.Name != "Daniel's iPhone" {
+				t.Fatalf("Name = %q, want %q", s.Name, "Daniel's iPhone")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("enrolled session not found after reload")
+	}
+}
+
+func TestDeviceSessionStore_List(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewDeviceSessionStore(dir)
+	if err != nil {
+		t.Fatalf("NewDeviceSessionStore: %v", err)
+	}
+
+	if got := store.List(); len(got) != 0 {
+		t.Fatalf("List on empty store = %d entries, want 0", len(got))
+	}
+
+	if _, err := store.Enroll("device-1", "Device One", "age1pubkey"); err != nil {
+		t.Fatalf("Enroll device-1: %v", err)
+	}
+	if _, err := store.Enroll("device-2", "Device Two", "age1pubkey2"); err != nil {
+		t.Fatalf("Enroll device-2: %v", err)
+	}
+
+	sessions := store.List()
+	if len(sessions) != 2 {
+		t.Fatalf("List = %d entries, want 2", len(sessions))
+	}
+	names := map[string]bool{}
+	for _, s := range sessions {
+		names[s.DeviceID] = true
+	}
+	if !names["device-1"] || !names["device-2"] {
+		t.Fatalf("List missing expected device IDs: %+v", sessions)
+	}
 }

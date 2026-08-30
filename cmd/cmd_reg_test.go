@@ -140,7 +140,7 @@ func TestSubcommandRegistration(t *testing.T) {
 		}
 	}
 
-	deviceSubcommands := []string{"pair", "join", "accept", "list", "revoke"}
+	deviceSubcommands := []string{"pair", "join", "accept", "list", "revoke", "approval-pair", "approval-list", "approval-revoke"}
 	for _, sub := range deviceSubcommands {
 		found := false
 		deviceCmd, _, _ := NewRootCmd().Find([]string{"device"})

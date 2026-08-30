@@ -35,11 +35,31 @@ var bufferPool = sync.Pool{
 
 // serverOptions carries optional extensions for the HTTP server.
 type serverOptions struct {
-	approvalHandler http.Handler
+	approvalHandler         http.Handler
+	deviceEnrollHandler     http.Handler
+	deviceEnrollCodeHandler http.Handler
 }
 
 // HTTPServerOption configures an optional extension of the HTTP server.
 type HTTPServerOption func(*serverOptions)
+
+// WithDeviceEnrollAPI mounts the device-enrollment transport
+// (internal/approval) under /api/v1/devices/enroll, letting a device
+// exchange a pairing code for a long-lived approval-device bearer token.
+func WithDeviceEnrollAPI(handler http.Handler) HTTPServerOption {
+	return func(o *serverOptions) {
+		o.deviceEnrollHandler = handler
+	}
+}
+
+// WithDeviceEnrollCodeAPI mounts the localhost-only pairing-code minting
+// endpoint under /api/v1/devices/enroll-code, used by
+// "symvault device approval-pair" to obtain a code for the pairing QR code.
+func WithDeviceEnrollCodeAPI(handler http.Handler) HTTPServerOption {
+	return func(o *serverOptions) {
+		o.deviceEnrollCodeHandler = handler
+	}
+}
 
 // WithApprovalAPI mounts the device-approval transport (internal/approval)
 // under /api/v1/approvals on the MCP HTTP server, so an enrolled approval
@@ -288,6 +308,15 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 		mux.Handle(approval.PathApprovalAction, options.approvalHandler)
 	}
 
+	// Device enrollment transport (optional): lets a device exchange a
+	// pairing code for an approval-device bearer token.
+	if options.deviceEnrollHandler != nil {
+		mux.Handle(approval.PathDeviceEnroll, options.deviceEnrollHandler)
+	}
+	if options.deviceEnrollCodeHandler != nil {
+		mux.Handle(approval.PathDeviceEnrollCode, options.deviceEnrollCodeHandler)
+	}
+
 	timeouts := resolveServerTimeouts(v)
 	shutdownTimeout := timeouts.shutdown
 
@@ -315,7 +344,7 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 	}
 
 	if !allowInsecure && (tlsCert == "" || tlsKey == "") {
-		autoCert, autoKey, autoErr := ensureTLSCert(vaultDir)
+		autoCert, autoKey, autoErr := EnsureTLSCert(vaultDir)
 		if autoErr != nil {
 			cliout.Warnf("could not generate self-signed TLS certificate for MCP server: %v", autoErr)
 		}

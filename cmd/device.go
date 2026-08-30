@@ -52,6 +52,9 @@ and 'symvault device join' on the new device to join the vault.`,
 	c.AddCommand(newDeviceListCmd())
 	c.AddCommand(newDeviceRevokeCmd())
 	c.AddCommand(newDeviceAddCmd())
+	c.AddCommand(newDeviceApprovalPairCmd())
+	c.AddCommand(newDeviceApprovalListCmd())
+	c.AddCommand(newDeviceApprovalRevokeCmd())
 	return c
 }
 

@@ -19,6 +19,7 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/approval"
 	"github.com/danieljustus/symaira-vault/internal/config"
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	mcputil "github.com/danieljustus/symaira-vault/internal/mcp"
 	server "github.com/danieljustus/symaira-vault/internal/mcp/server"
 	"github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap"
 	"github.com/danieljustus/symaira-vault/internal/pairing"
@@ -46,8 +47,14 @@ var RunStdioServerFunc = func(ctx context.Context, vault *vaultpkg.Vault, agentN
 // decides) and is exposed to devices via the /api/v1/approvals transport.
 var ApprovalQueue = approval.NewQueue()
 
+// EnrollCodes is the shared short-lived pairing-code store for the serve
+// process. "symvault device approval-pair" mints a code through the
+// localhost-only enroll-code endpoint; a device redeems it via the public
+// enroll endpoint to become an approval device.
+var EnrollCodes = pairing.NewTokenStore()
+
 // RunHTTPServerWithApproval starts the HTTP server with the device approval
-// transport mounted alongside the MCP endpoints.
+// and enrollment transports mounted alongside the MCP endpoints.
 func RunHTTPServerWithApproval(ctx context.Context, bind string, port int, vault *vaultpkg.Vault) error {
 	vaultDir, _ := cli.VaultPath()
 	sessionStore, err := NewDeviceSessionStoreFunc(vaultDir)
@@ -56,8 +63,22 @@ func RunHTTPServerWithApproval(ctx context.Context, bind string, port int, vault
 	}
 	_ = sessionStore.StartCleanup(ctx, 15*time.Minute)
 	approvalHandler := approval.NewHTTPHandler(ApprovalQueue, approval.NewPairingTokenValidator(sessionStore))
+
+	// The fingerprint is computed once at server startup (the cert is cached
+	// to disk and only regenerated if deleted) and handed to every minted
+	// pairing code, so a phone that scans the QR pins to the exact cert this
+	// server is presenting.
+	fingerprint, fpErr := serverbootstrap.CertFingerprint(vaultDir)
+	if fpErr != nil {
+		cliout.Warnf("could not compute TLS certificate fingerprint; device pairing is disabled: %v", fpErr)
+	}
+	enrollCodeHandler := approval.NewEnrollCodeHTTPHandler(EnrollCodes, fingerprint, mcputil.IsLoopbackHost)
+	enrollHandler := approval.NewEnrollHTTPHandler(EnrollCodes, sessionStore)
+
 	return serverbootstrap.RunHTTPServer(ctx, bind, port, vault, vaultDir, Version, newServerWithApproval,
-		serverbootstrap.WithApprovalAPI(approvalHandler))
+		serverbootstrap.WithApprovalAPI(approvalHandler),
+		serverbootstrap.WithDeviceEnrollAPI(enrollHandler),
+		serverbootstrap.WithDeviceEnrollCodeAPI(enrollCodeHandler))
 }
 
 var RunHTTPServerFunc = RunHTTPServerWithApproval
