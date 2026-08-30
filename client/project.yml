@@ -89,6 +89,8 @@ targets:
         product: SymvaultFeature
       - sdk: LocalAuthentication.framework
       - sdk: Security.framework
+      - sdk: VisionKit.framework
+      - sdk: CryptoKit.framework
     sources:
       - path: Sources/SymvaultIOS
     entitlements:
@@ -103,5 +105,8 @@ targets:
         INFOPLIST_KEY_CFBundleName: Symaira Vault
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: NO
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+        INFOPLIST_KEY_NSCameraUsageDescription: "Symaira Vault uses the camera to scan a pairing QR code shown on your Mac."
+        INFOPLIST_KEY_NSFaceIDUsageDescription: "Symaira Vault uses Face ID to unlock your device identity and to confirm approval decisions."
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Symaira Vault connects to your Mac on the local network to pair as an approval device and to check for pending approval requests."
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_HARDENED_RUNTIME: NO

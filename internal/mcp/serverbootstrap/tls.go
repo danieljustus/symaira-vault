@@ -5,8 +5,10 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/hex"
 	"encoding/pem"
 	"fmt"
 	"math/big"
@@ -25,12 +27,12 @@ const (
 	autoKeyFile = "mcp-server.key"
 )
 
-// ensureTLSCert returns the paths to a usable TLS certificate and key for the
+// EnsureTLSCert returns the paths to a usable TLS certificate and key for the
 // MCP HTTP server. If the vault directory already contains a cached cert+key
 // pair they are reused; otherwise a new self-signed certificate is generated
 // for loopback addresses (127.0.0.1, ::1, localhost). Returns empty strings
 // when vaultDir is empty.
-func ensureTLSCert(vaultDir string) (certFile, keyFile string, err error) {
+func EnsureTLSCert(vaultDir string) (certFile, keyFile string, err error) {
 	if vaultDir == "" {
 		return "", "", nil
 	}
@@ -109,4 +111,34 @@ func generateSelfSignedCert(certFile, keyFile string) error {
 func fileExists(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && !info.IsDir()
+}
+
+// CertFingerprint returns the hex-encoded SHA-256 fingerprint of the MCP
+// server's current leaf certificate, generating one via EnsureTLSCert first
+// if none is cached yet. Callers that hand this fingerprint to a device for
+// certificate pinning (see internal/approval device enrollment) must treat
+// it as the entire trust story for that pairing: any mismatch on the
+// receiving end must fail closed.
+func CertFingerprint(vaultDir string) (string, error) {
+	certFile, _, err := EnsureTLSCert(vaultDir)
+	if err != nil {
+		return "", fmt.Errorf("ensure TLS certificate: %w", err)
+	}
+	if certFile == "" {
+		return "", fmt.Errorf("no TLS certificate available for vault directory")
+	}
+	pemBytes, err := os.ReadFile(certFile) // #nosec G304 -- certFile is EnsureTLSCert's own fixed filename under vaultDir, same security domain
+	if err != nil {
+		return "", fmt.Errorf("read TLS certificate: %w", err)
+	}
+	block, _ := pem.Decode(pemBytes)
+	if block == nil {
+		return "", fmt.Errorf("decode TLS certificate PEM")
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return "", fmt.Errorf("parse TLS certificate: %w", err)
+	}
+	sum := sha256.Sum256(cert.Raw)
+	return hex.EncodeToString(sum[:]), nil
 }

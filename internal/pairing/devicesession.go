@@ -34,6 +34,7 @@ const (
 type DeviceSession struct {
 	Token     string    `json:"token"`
 	DeviceID  string    `json:"device_id"`
+	Name      string    `json:"name,omitempty"`
 	PublicKey string    `json:"public_key"`
 	CreatedAt time.Time `json:"created_at"`
 	ExpiresAt time.Time `json:"expires_at"`
@@ -78,8 +79,8 @@ func NewDeviceSessionStore(vaultDir string) (*DeviceSessionStore, error) {
 }
 
 // Enroll creates a new long-lived session token for deviceID with the given
-// publicKey. The token is returned and persisted.
-func (s *DeviceSessionStore) Enroll(deviceID, publicKey string) (string, error) {
+// human-readable name and publicKey. The token is returned and persisted.
+func (s *DeviceSessionStore) Enroll(deviceID, name, publicKey string) (string, error) {
 	token, err := GenerateSessionToken()
 	if err != nil {
 		return "", fmt.Errorf("generate session token: %w", err)
@@ -88,6 +89,7 @@ func (s *DeviceSessionStore) Enroll(deviceID, publicKey string) (string, error) 
 	session := &DeviceSession{
 		Token:     token.String(),
 		DeviceID:  deviceID,
+		Name:      name,
 		PublicKey: publicKey,
 		CreatedAt: now,
 		ExpiresAt: now.Add(DefaultSessionTTL),
@@ -100,6 +102,19 @@ func (s *DeviceSessionStore) Enroll(deviceID, publicKey string) (string, error) 
 		return "", fmt.Errorf("persist device session: %w", err)
 	}
 	return token.String(), nil
+}
+
+// List returns a snapshot of every session in the store, including revoked
+// and expired ones, for display in a device-management UI. Callers that only
+// want live sessions should filter on Revoked and ExpiresAt themselves.
+func (s *DeviceSessionStore) List() []DeviceSession {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]DeviceSession, 0, len(s.sessions))
+	for _, session := range s.sessions {
+		out = append(out, *session)
+	}
+	return out
 }
 
 // Validate checks a session token and returns the deviceID if the session
