@@ -40,7 +40,7 @@ func UpdateCacheTTL() time.Duration {
 
 var UpdateCheckerFactory = func() UpdateChecker {
 	checker := updatepkg.NewChecker(nil)
-	checker.Cache = updatepkg.NewCacheWithTTL("", UpdateCacheTTL())
+	checker.CacheTTL = UpdateCacheTTL()
 	return checker
 }
 

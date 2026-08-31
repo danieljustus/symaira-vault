@@ -60,7 +60,7 @@ func TestChecker_FetchWithTLSError(t *testing.T) {
 
 	checker := NewChecker(nil)
 	checker.LatestReleaseURL = server.URL
-	checker.Cache = nil
+	checker.CacheTTL = 0
 
 	_, err := checker.Check(context.Background(), "1.0.0")
 	if err == nil {

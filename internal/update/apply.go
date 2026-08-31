@@ -1,3 +1,4 @@
+// Package update provides functionality for checking and applying Symaira Vault updates.
 package update
 
 import (
@@ -7,7 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/danieljustus/symaira-corekit/updatecheck/extract"
+	corekitupdateapply "github.com/danieljustus/symaira-corekit/updatecheck/updateapply"
 
 	"github.com/danieljustus/symaira-vault/internal/update/installmethod"
 )
@@ -19,9 +20,12 @@ type ApplyResult struct {
 	Method     installmethod.InstallMethod `json:"method"`
 	OldVersion string                      `json:"old_version"`
 	NewVersion string                      `json:"new_version"`
-	BackupPath string                      `json:"backup_path,omitempty"`
-	BinaryPath string                      `json:"binary_path"`
-	DryRun     bool                        `json:"dry_run"`
+	// BackupPath is retained for output compatibility. Corekit removes its
+	// temporary backup after a successful atomic swap, so completed updates do
+	// not expose a persistent backup path.
+	BackupPath string `json:"backup_path,omitempty"`
+	BinaryPath string `json:"binary_path"`
+	DryRun     bool   `json:"dry_run"`
 }
 
 // ErrUnsupportedMethod indicates self-update is not available for the
@@ -51,10 +55,28 @@ func getBinaryPath() (string, error) {
 	return p, nil
 }
 
-// Apply performs a self-update: downloads, verifies, and replaces the
-// current binary. If force is true, the update check cache is bypassed.
-// If dryRun is true, all steps except the final binary replacement are
-// performed — useful for previewing what would happen.
+func binaryFileName() string {
+	if runtime.GOOS == "windows" {
+		return binaryName + ".exe"
+	}
+	return binaryName
+}
+
+func newCorekitApplier() *corekitupdateapply.Applier {
+	cfg := cosignConfig()
+	applier := corekitupdateapply.NewApplier()
+	applier.CheckInstallMethod = true
+	applier.BinaryName = binaryName
+	applier.CosignConfig = &cfg
+	applier.ExtractBinary = binaryFileName()
+	return applier
+}
+
+// Apply performs a self-update through corekit's download, checksum, Cosign,
+// archive extraction and atomic swap pipeline. Vault retains the release-line
+// filtering, metrics and installation guidance around that shared pipeline.
+// If dryRun is true, the complete apply pipeline runs against a temporary copy
+// of the current binary and the installed binary is left untouched.
 func Apply(ctx context.Context, currentVersion string, force, dryRun bool) (*ApplyResult, error) {
 	binaryPath, err := getBinaryPath()
 	if err != nil {
@@ -79,7 +101,7 @@ func Apply(ctx context.Context, currentVersion string, force, dryRun bool) (*App
 		return nil, fmt.Errorf("check for updates: %w", err)
 	}
 
-	if !result.UpdateAvailable {
+	if !result.UpdateAvailable || result.release == nil {
 		return &ApplyResult{
 			Method:     method,
 			OldVersion: currentVersion,
@@ -89,100 +111,46 @@ func Apply(ctx context.Context, currentVersion string, force, dryRun bool) (*App
 		}, nil
 	}
 
-	archiveData, err := DownloadArchive(ctx, result.LatestVersion, runtime.GOOS, runtime.GOARCH)
-	if err != nil {
-		return nil, fmt.Errorf("download update: %w", err)
-	}
-
-	checksums, err := FetchChecksums(ctx, result.LatestVersion)
-	if err != nil {
-		return nil, fmt.Errorf("fetch checksums: %w", err)
-	}
-
-	// Verify the cosign signature on the checksums file before trusting its
-	// SHA256 hashes. This ensures the checksums were published by the
-	// Symaira Vault release workflow and haven't been tampered with.
-	sig, err := FetchCosignSignature(ctx, result.LatestVersion)
-	if err != nil {
-		return nil, fmt.Errorf("fetch cosign signature: %w", err)
-	}
-
-	cert, err := FetchCosignCertificate(ctx, result.LatestVersion)
-	if err != nil {
-		return nil, fmt.Errorf("fetch cosign certificate: %w", err)
-	}
-
-	if cosignErr := VerifyCosignSignature([]byte(checksums), sig, cert); cosignErr != nil {
-		return nil, fmt.Errorf("cosign verification failed: %w", cosignErr)
-	}
-
-	an := archiveName(result.LatestVersion, runtime.GOOS, runtime.GOARCH)
-	if verifyErr := VerifyChecksum(archiveData, checksums, an); verifyErr != nil {
-		return nil, fmt.Errorf("verify checksum: %w", verifyErr)
-	}
-
-	newBinaryData, err := extractBinaryFromArchive(archiveData)
-	if err != nil {
-		return nil, fmt.Errorf("extract binary from archive: %w", err)
-	}
-
+	targetPath := binaryPath
+	var dryRunDir string
 	if dryRun {
-		return &ApplyResult{
-			Method:     method,
-			OldVersion: currentVersion,
-			NewVersion: result.LatestVersion,
-			BinaryPath: binaryPath,
-			DryRun:     true,
-		}, nil
+		dryRunDir, err = os.MkdirTemp("", "symvault-update-dry-run-*")
+		if err != nil {
+			return nil, fmt.Errorf("create dry-run directory: %w", err)
+		}
+		defer func() { _ = os.RemoveAll(dryRunDir) }()
+
+		targetPath = filepath.Join(dryRunDir, binaryFileName())
+		currentBinary, readErr := os.ReadFile(binaryPath) // #nosec G304 -- path comes from os.Executable, never user input
+		if readErr != nil {
+			return nil, fmt.Errorf("read current binary for dry-run: %w", readErr)
+		}
+		mode := os.FileMode(0o755)
+		if info, statErr := os.Stat(binaryPath); statErr == nil {
+			mode = info.Mode().Perm()
+		}
+		if writeErr := os.WriteFile(targetPath, currentBinary, mode); writeErr != nil { // #nosec G703 -- targetPath is generated inside MkdirTemp
+			return nil, fmt.Errorf("seed dry-run binary: %w", writeErr)
+		}
 	}
 
-	if err := Replace(binaryPath, newBinaryData); err != nil {
-		return nil, fmt.Errorf("replace binary: %w", err)
+	applier := newCorekitApplier()
+	if dryRun {
+		// The temporary copy is intentionally outside the installed location;
+		// Vault already performed the user-facing install-method check above.
+		applier.CheckInstallMethod = false
+	}
+	if err := applier.Apply(ctx, result.release, targetPath); err != nil {
+		return nil, fmt.Errorf("apply update: %w", err)
 	}
 
-	bp := binaryPath + backupSuffix
-	if runtime.GOOS == windowsOS {
-		bp = binaryPath + windowsBackupSuffix
-	}
-
-	applyResult := &ApplyResult{
+	return &ApplyResult{
 		Method:     method,
 		OldVersion: currentVersion,
 		NewVersion: result.LatestVersion,
-		BackupPath: bp,
 		BinaryPath: binaryPath,
-	}
-
-	return applyResult, nil
-}
-
-func extractBinaryFromArchive(archiveData []byte) ([]byte, error) {
-	tmpDir, err := os.MkdirTemp("", "symvault-update-*")
-	if err != nil {
-		return nil, fmt.Errorf("create temp directory: %w", err)
-	}
-	defer func() { _ = os.RemoveAll(tmpDir) }()
-
-	binName := binaryName
-	if runtime.GOOS == windowsOS {
-		binName += ".exe"
-	}
-
-	var extractedPath string
-	if runtime.GOOS == windowsOS {
-		extractedPath, err = extract.ExtractZip(archiveData, tmpDir, binName)
-	} else {
-		extractedPath, err = extract.ExtractTarGz(archiveData, tmpDir, binName)
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	data, err := os.ReadFile(filepath.Clean(extractedPath))
-	if err != nil {
-		return nil, fmt.Errorf("read extracted binary: %w", err)
-	}
-	return data, nil
+		DryRun:     dryRun,
+	}, nil
 }
 
 // Info detects the installation method and returns details about it.

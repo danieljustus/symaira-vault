@@ -3,8 +3,18 @@ package update
 import (
 	"context"
 	"net/http"
+	"sync"
 
 	corekitcosign "github.com/danieljustus/symaira-corekit/updatecheck/cosign"
+)
+
+// DefaultDownloadBaseURL is the release asset base URL used by Vault's
+// repository-specific Cosign configuration.
+var DefaultDownloadBaseURL = "https://github.com/danieljustus/symaira-vault/releases/download"
+
+var (
+	testHTTPClient httpDoer
+	mu             sync.Mutex
 )
 
 // CosignIdentityRegexp is the certificate identity regexp passed to
@@ -32,10 +42,16 @@ func (d doerRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	return d.doer.Do(req)
 }
 
-// cosignHTTPClient adapts checksumsClient() (test-injectable, TLS-1.3-pinned
-// by default) into the *http.Client shape corekitcosign.Config expects.
+// cosignHTTPClient adapts the test-injectable HTTP client into the *http.Client
+// shape corekitcosign.Config expects. Production leaves the field nil so
+// corekit owns the hardened default client.
 func cosignHTTPClient() *http.Client {
-	doer := checksumsClient()
+	mu.Lock()
+	doer := testHTTPClient
+	mu.Unlock()
+	if doer == nil {
+		return nil
+	}
 	if hc, ok := doer.(*http.Client); ok {
 		return hc
 	}
@@ -43,13 +59,16 @@ func cosignHTTPClient() *http.Client {
 }
 
 func cosignConfig() corekitcosign.Config {
-	return corekitcosign.Config{
+	cfg := corekitcosign.Config{
 		Repo:            "danieljustus/symaira-vault",
 		BinaryName:      binaryName,
 		DownloadBaseURL: DefaultDownloadBaseURL,
 		IdentityRegexp:  CosignIdentityRegexp,
-		HTTPClient:      cosignHTTPClient(),
 	}
+	if client := cosignHTTPClient(); client != nil {
+		cfg.HTTPClient = client
+	}
+	return cfg
 }
 
 // FetchCosignSignature downloads the cosign signature file for the release
