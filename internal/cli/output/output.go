@@ -41,6 +41,8 @@ func (p textPrinter) Print(v interface{}) error {
 	if p.deps.Quiet() {
 		return nil
 	}
+	// This is explicit user-facing CLI output, not application logging.
+	// CodeQL: exclude
 	fmt.Println(v)
 	return nil
 }
