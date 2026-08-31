@@ -11,7 +11,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    MARKETING_VERSION: "0.11.0"
+    MARKETING_VERSION: "1.0"
     CURRENT_PROJECT_VERSION: "1"
 
 packages:
@@ -79,7 +79,7 @@ targets:
         runOnlyWhenInstalling: false
         basedOnDependencyAnalysis: false
 
-  SymvaultIOS:
+  SymvaultIOSApp:
     type: application
     platform: iOS
     deploymentTarget:
@@ -99,8 +99,9 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.symaira.vault.ios
         PRODUCT_NAME: Symaira Vault
-        CODE_SIGN_STYLE: Manual
-        GENERATE_INFOPLIST_FILE: YES
+        DEVELOPMENT_TEAM: M4744F3TAA
+        CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_KEY_CFBundleDisplayName: Symaira Vault
         INFOPLIST_KEY_CFBundleName: Symaira Vault
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: NO
@@ -110,3 +111,26 @@ targets:
         INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Symaira Vault connects to your Mac on the local network to pair as an approval device and to check for pending approval requests."
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_HARDENED_RUNTIME: NO
+    info:
+      path: SymvaultIOS-Info.plist
+      properties:
+        CFBundleDisplayName: $(PRODUCT_NAME)
+        CFBundleIconName: AppIcon
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSCameraUsageDescription: "Symaira Vault uses the camera to scan a pairing QR code shown on your Mac."
+        NSFaceIDUsageDescription: "Symaira Vault uses Face ID to unlock your device identity and to confirm approval decisions."
+        NSLocalNetworkUsageDescription: "Symaira Vault connects to your Mac on the local network to pair as an approval device and to check for pending approval requests."
+        UIApplicationSupportsIndirectInputEvents: true
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+
+schemes:
+  SymvaultIOSApp:
+    build:
+      targets:
+        SymvaultIOSApp: all

@@ -4,3 +4,7 @@ DerivedData/
 Symvault.xcodeproj/
 Package.resolved
 Symvault-Info.plist
+SymvaultIOS-Info.plist
+
+# Local TestFlight archives and exports
+.build/testflight/
