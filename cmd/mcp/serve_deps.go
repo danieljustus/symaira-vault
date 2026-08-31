@@ -272,8 +272,10 @@ func runServe(cmd *cobra.Command, args []string) error {
 		}
 	case err := <-errCh:
 		cancel()
+		wg.Wait()
 		return err
 	case <-ctx.Done():
+		wg.Wait()
 		if vDir, err := cli.VaultPath(); err == nil {
 			_ = cli.ClearRuntimePort(vDir)
 		}
