@@ -3,7 +3,6 @@ package update
 import (
 	"context"
 	"errors"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -199,74 +198,27 @@ func TestApply_EmptyVersion(t *testing.T) {
 	}
 }
 
-func TestExtractBinaryFromArchive_TarGz(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("tar.gz is not used on windows")
+func TestNewCorekitApplierConfig(t *testing.T) {
+	applier := newCorekitApplier()
+	if applier == nil {
+		t.Fatal("newCorekitApplier() returned nil")
 	}
-
-	archive := buildTestTarGz(map[string]string{
-		"symvault": "binary-content-here",
-	}, false)
-
-	data, err := extractBinaryFromArchive(archive)
-	if err != nil {
-		t.Fatalf("extractBinaryFromArchive() error = %v", err)
+	if !applier.CheckInstallMethod {
+		t.Fatal("CheckInstallMethod = false, want true")
 	}
-	if string(data) != "binary-content-here" {
-		t.Errorf("got content %q, want %q", string(data), "binary-content-here")
+	if applier.BinaryName != binaryName {
+		t.Fatalf("BinaryName = %q, want %q", applier.BinaryName, binaryName)
 	}
-}
-
-func TestExtractBinaryFromArchive_TarGz_Nested(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("tar.gz is not used on windows")
+	if applier.ExtractBinary != binaryFileName() {
+		t.Fatalf("ExtractBinary = %q, want %q", applier.ExtractBinary, binaryFileName())
 	}
-
-	// Archive with the binary nested in a subdirectory, mimicking the
-	// GoReleaser layout: symvault_<version>_<os>_<arch>/symvault
-	archive := buildTestTarGz(map[string]string{
-		"symvault_1.0.0_darwin_arm64/symvault": "nested-binary",
-		"symvault_1.0.0_darwin_arm64/LICENSE":  "MIT",
-	}, true)
-
-	data, err := extractBinaryFromArchive(archive)
-	if err != nil {
-		t.Fatalf("extractBinaryFromArchive() error = %v", err)
+	if applier.CosignConfig == nil {
+		t.Fatal("CosignConfig = nil, want repository-specific verification config")
 	}
-	if string(data) != "nested-binary" {
-		t.Errorf("got content %q, want %q", string(data), "nested-binary")
+	if applier.CosignConfig.Repo != "danieljustus/symaira-vault" {
+		t.Fatalf("CosignConfig.Repo = %q, want repository slug", applier.CosignConfig.Repo)
 	}
-}
-
-func TestExtractBinaryFromArchive_InvalidData(t *testing.T) {
-	_, err := extractBinaryFromArchive([]byte("not-an-archive"))
-	if err == nil {
-		t.Fatal("expected error with invalid archive data")
-	}
-}
-
-func TestExtractBinaryFromArchive_EmptyData(t *testing.T) {
-	_, err := extractBinaryFromArchive([]byte{})
-	if err == nil {
-		t.Fatal("expected error with empty archive data")
-	}
-}
-
-func TestExtractBinaryFromArchive_NoBinary(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("tar.gz is not used on windows")
-	}
-
-	archive := buildTestTarGz(map[string]string{
-		"README.md": "# Symaira Vault",
-		"LICENSE":   "MIT",
-	}, false)
-
-	_, err := extractBinaryFromArchive(archive)
-	if err == nil {
-		t.Fatal("expected ErrBinaryNotFound")
-	}
-	if !strings.Contains(err.Error(), "not found") {
-		t.Errorf("error = %q, want it to contain 'not found'", err.Error())
+	if applier.CosignConfig.IdentityRegexp != CosignIdentityRegexp {
+		t.Fatal("CosignConfig.IdentityRegexp does not use the Vault release identity")
 	}
 }

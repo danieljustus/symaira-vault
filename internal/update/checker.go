@@ -2,7 +2,6 @@ package update
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -29,30 +28,24 @@ import (
 // current policy.
 const DefaultLatestReleaseURL = "https://api.github.com/repos/danieljustus/symaira-vault/releases/latest"
 
-// newSecureClient returns an HTTP client with TLS 1.3 minimum version.
-func newSecureClient() *http.Client {
-	return &http.Client{
-		Timeout: 3 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				MinVersion: tls.VersionTLS13,
-			},
-		},
-	}
-}
+// DefaultCacheTTL is the shared update-check cache lifetime.
+const DefaultCacheTTL = updatecheck.DefaultCacheTTL
 
+// httpDoer keeps the checker testable while production uses corekit's hardened
+// HTTP client implementation.
 type httpDoer interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
-// Checker checks for application updates via GitHub releases, delegating
-// the network fetch to corekit's updatecheck.Checker while preserving
-// vault-specific file-based caching and metrics.
+// Checker adapts corekit's release checker to Vault's release-line filtering
+// and metrics/output contract.
 type Checker struct {
 	HTTPClient       httpDoer
 	LatestReleaseURL string
-	Cache            *Cache
-	corekit          *updatecheck.Checker
+	CacheTTL         time.Duration
+	CachePath        string
+
+	corekit *updatecheck.Checker
 }
 
 type Result struct {
@@ -61,6 +54,8 @@ type Result struct {
 	ReleaseURL      string
 	Checkable       bool
 	UpdateAvailable bool
+
+	release *updatecheck.Release
 }
 
 type stableVersion struct {
@@ -77,12 +72,18 @@ func NewChecker(client httpDoer) *Checker {
 	return &Checker{
 		HTTPClient:       client,
 		LatestReleaseURL: DefaultLatestReleaseURL,
-		Cache:            NewCache(),
+		CacheTTL:         DefaultCacheTTL,
+		CachePath:        updatecheck.DefaultCachePath("danieljustus", "symaira-vault"),
 	}
 }
 
-// syncCorekit ensures the inner corekit Checker is created and reflects
-// the vault Checker's current HTTPClient and LatestReleaseURL settings.
+// newSecureClient returns corekit's hardened HTTP client for release metadata.
+func newSecureClient() *http.Client {
+	return updatecheck.NewSecureClient()
+}
+
+// syncCorekit ensures the inner corekit checker reflects the Vault adapter's
+// endpoint and cache settings before every check.
 func (c *Checker) syncCorekit() {
 	if c.corekit == nil {
 		c.corekit = updatecheck.NewChecker("danieljustus", "symaira-vault")
@@ -95,6 +96,8 @@ func (c *Checker) syncCorekit() {
 		url = DefaultLatestReleaseURL
 	}
 	c.corekit.LatestReleaseURL = url
+	c.corekit.CacheTTL = c.CacheTTL
+	c.corekit.CachePath = c.CachePath
 }
 
 func (c *Checker) Check(ctx context.Context, currentVersion string) (*Result, error) {
@@ -107,35 +110,6 @@ func (c *Checker) CheckWithForce(ctx context.Context, currentVersion string, for
 		return &Result{CurrentVersion: strings.TrimSpace(currentVersion)}, nil
 	}
 
-	// File cache check — avoids network round-trip when a recent result
-	// is already persisted on disk.
-	if !force && c.Cache != nil {
-		if entry, err := c.Cache.Load(); err == nil && entry != nil {
-			latest, cacheOk := parseStableVersion(entry.LatestVersion)
-			if cacheOk {
-				updateAvailable := compareStableVersions(current, latest) < 0
-				if current.major == 0 && latest.major > 0 {
-					updateAvailable = false
-				}
-				result := &Result{
-					CurrentVersion:  current.String(),
-					LatestVersion:   latest.String(),
-					ReleaseURL:      entry.ReleaseURL,
-					Checkable:       true,
-					UpdateAvailable: updateAvailable,
-				}
-				if result.UpdateAvailable {
-					metrics.RecordUpdateCheck("update_available")
-				} else {
-					metrics.RecordUpdateCheck("up_to_date")
-				}
-				metrics.RecordUpdateCheck("cache_hit")
-				return result, nil
-			}
-		}
-	}
-
-	// Delegate the GitHub API fetch to corekit.
 	c.syncCorekit()
 	release, err := c.corekit.CheckWithForce(ctx, currentVersion, force)
 	if err != nil {
@@ -143,34 +117,16 @@ func (c *Checker) CheckWithForce(ctx context.Context, currentVersion string, for
 		return nil, err
 	}
 
-	var result *Result
-	if release != nil {
-		result = &Result{
-			CurrentVersion:  current.String(),
-			LatestVersion:   strings.TrimPrefix(release.TagName, "v"),
-			ReleaseURL:      release.HTMLURL,
-			Checkable:       true,
-			UpdateAvailable: true,
-		}
-	} else {
-		// Corekit returns nil when the current version is already
-		// up-to-date (or when the version is cross-series). In both
-		// cases there is no newer version to report.
-		result = &Result{
-			CurrentVersion:  current.String(),
-			LatestVersion:   current.String(),
-			ReleaseURL:      "",
-			Checkable:       true,
-			UpdateAvailable: false,
-		}
+	result := &Result{
+		CurrentVersion:  current.String(),
+		LatestVersion:   current.String(),
+		Checkable:       true,
+		UpdateAvailable: release != nil,
+		release:         release,
 	}
-
-	if c.Cache != nil {
-		_ = c.Cache.Save(&CacheEntry{
-			Timestamp:     time.Now(),
-			LatestVersion: result.LatestVersion,
-			ReleaseURL:    result.ReleaseURL,
-		})
+	if release != nil {
+		result.LatestVersion = strings.TrimPrefix(release.TagName, "v")
+		result.ReleaseURL = release.HTMLURL
 	}
 
 	if result.UpdateAvailable {

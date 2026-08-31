@@ -2,13 +2,18 @@ package update
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/danieljustus/symaira-corekit/updatecheck"
 )
 
 type stubHTTPDoer struct {
@@ -17,6 +22,21 @@ type stubHTTPDoer struct {
 
 func (s stubHTTPDoer) Do(req *http.Request) (*http.Response, error) {
 	return s.do(req)
+}
+
+func writeCorekitCache(t *testing.T, path string, timestamp time.Time, release *updatecheck.Release) {
+	t.Helper()
+	payload := struct {
+		Timestamp time.Time            `json:"timestamp"`
+		Release   *updatecheck.Release `json:"release"`
+	}{Timestamp: timestamp, Release: release}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal corekit cache: %v", err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write corekit cache: %v", err)
+	}
 }
 
 func TestCheckerSkipsNonReleaseVersions(t *testing.T) {
@@ -48,7 +68,7 @@ func TestCheckerReportsAvailableUpdate(t *testing.T) {
 
 	checker := NewChecker(server.Client())
 	checker.LatestReleaseURL = server.URL
-	checker.Cache = nil
+	checker.CacheTTL = 0
 
 	result, err := checker.Check(context.Background(), "1.0.0")
 	if err != nil {
@@ -77,7 +97,7 @@ func TestCheckerReportsUpToDate(t *testing.T) {
 
 	checker := NewChecker(server.Client())
 	checker.LatestReleaseURL = server.URL
-	checker.Cache = nil
+	checker.CacheTTL = 0
 
 	result, err := checker.Check(context.Background(), "v1.10.0")
 	if err != nil {
@@ -100,7 +120,7 @@ func TestCheckerFiltersHistoricalVersions(t *testing.T) {
 
 	checker := NewChecker(server.Client())
 	checker.LatestReleaseURL = server.URL
-	checker.Cache = nil
+	checker.CacheTTL = 0
 
 	result, err := checker.Check(context.Background(), "0.4.0")
 	if err != nil {
@@ -120,7 +140,7 @@ func TestCheckerRejectsInvalidLatestTag(t *testing.T) {
 
 	checker := NewChecker(server.Client())
 	checker.LatestReleaseURL = server.URL
-	checker.Cache = nil
+	checker.CacheTTL = 0
 
 	_, err := checker.Check(context.Background(), "1.0.0")
 	if err == nil {
@@ -139,7 +159,7 @@ func TestCheckerReturnsHTTPError(t *testing.T) {
 
 	checker := NewChecker(server.Client())
 	checker.LatestReleaseURL = server.URL
-	checker.Cache = nil
+	checker.CacheTTL = 0
 
 	_, err := checker.Check(context.Background(), "1.0.0")
 	if err == nil {
@@ -159,7 +179,7 @@ func TestCheckerReturnsDecodeError(t *testing.T) {
 
 	checker := NewChecker(server.Client())
 	checker.LatestReleaseURL = server.URL
-	checker.Cache = nil
+	checker.CacheTTL = 0
 
 	_, err := checker.Check(context.Background(), "1.0.0")
 	if err == nil {
@@ -183,7 +203,7 @@ func TestCheckerReturnsTimeoutError(t *testing.T) {
 
 	checker := NewChecker(client)
 	checker.LatestReleaseURL = server.URL
-	checker.Cache = nil
+	checker.CacheTTL = 0
 
 	_, err := checker.Check(context.Background(), "1.0.0")
 	if err == nil {
@@ -211,12 +231,10 @@ func TestCompareStableVersions(t *testing.T) {
 
 func TestCheckerUsesCache(t *testing.T) {
 	tmpDir := t.TempDir()
-	cache := NewCacheWithTTL(tmpDir+"/update-cache.json", 24*time.Hour)
-
-	_ = cache.Save(&CacheEntry{
-		Timestamp:     time.Now(),
-		LatestVersion: "1.5.0",
-		ReleaseURL:    "https://example.com/v1.5.0",
+	cachePath := filepath.Join(tmpDir, "update-cache.json")
+	writeCorekitCache(t, cachePath, time.Now(), &updatecheck.Release{
+		TagName: "v1.5.0",
+		HTMLURL: "https://example.com/v1.5.0",
 	})
 
 	requestCount := 0
@@ -229,7 +247,8 @@ func TestCheckerUsesCache(t *testing.T) {
 
 	checker := NewChecker(server.Client())
 	checker.LatestReleaseURL = server.URL
-	checker.Cache = cache
+	checker.CachePath = cachePath
+	checker.CacheTTL = 24 * time.Hour
 
 	result, err := checker.Check(context.Background(), "1.0.0")
 	if err != nil {
@@ -248,12 +267,10 @@ func TestCheckerUsesCache(t *testing.T) {
 
 func TestCheckerForceBypassesCache(t *testing.T) {
 	tmpDir := t.TempDir()
-	cache := NewCacheWithTTL(tmpDir+"/update-cache.json", 24*time.Hour)
-
-	_ = cache.Save(&CacheEntry{
-		Timestamp:     time.Now(),
-		LatestVersion: "1.5.0",
-		ReleaseURL:    "https://example.com/v1.5.0",
+	cachePath := filepath.Join(tmpDir, "update-cache.json")
+	writeCorekitCache(t, cachePath, time.Now(), &updatecheck.Release{
+		TagName: "v1.5.0",
+		HTMLURL: "https://example.com/v1.5.0",
 	})
 
 	requestCount := 0
@@ -266,7 +283,8 @@ func TestCheckerForceBypassesCache(t *testing.T) {
 
 	checker := NewChecker(server.Client())
 	checker.LatestReleaseURL = server.URL
-	checker.Cache = cache
+	checker.CachePath = cachePath
+	checker.CacheTTL = 24 * time.Hour
 
 	result, err := checker.CheckWithForce(context.Background(), "1.0.0", true)
 	if err != nil {
@@ -282,8 +300,7 @@ func TestCheckerForceBypassesCache(t *testing.T) {
 
 func TestCheckerSavesToCache(t *testing.T) {
 	tmpDir := t.TempDir()
-	cachePath := tmpDir + "/update-cache.json"
-	cache := NewCacheWithTTL(cachePath, 24*time.Hour)
+	cachePath := filepath.Join(tmpDir, "update-cache.json")
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -293,29 +310,35 @@ func TestCheckerSavesToCache(t *testing.T) {
 
 	checker := NewChecker(server.Client())
 	checker.LatestReleaseURL = server.URL
-	checker.Cache = cache
+	checker.CachePath = cachePath
+	checker.CacheTTL = 24 * time.Hour
 
 	_, err := checker.Check(context.Background(), "1.0.0")
 	if err != nil {
 		t.Fatalf("Check() error = %v", err)
 	}
 
-	loaded, err := cache.Load()
+	data, err := os.ReadFile(cachePath)
 	if err != nil {
-		t.Fatalf("Load() error = %v", err)
+		t.Fatalf("read cache error = %v", err)
 	}
-	if loaded == nil {
+	var cached struct {
+		Release *updatecheck.Release `json:"release"`
+	}
+	if err := json.Unmarshal(data, &cached); err != nil {
+		t.Fatalf("decode cache error = %v", err)
+	}
+	if cached.Release == nil {
 		t.Fatal("expected cache to be saved")
 	}
-	if loaded.LatestVersion != "1.2.0" {
-		t.Fatalf("cached LatestVersion = %q, want %q", loaded.LatestVersion, "1.2.0")
+	if cached.Release.TagName != "v1.2.0" {
+		t.Fatalf("cached TagName = %q, want %q", cached.Release.TagName, "v1.2.0")
 	}
-	if loaded.ReleaseURL != "https://example.com/v1.2.0" {
-		t.Fatalf("cached ReleaseURL = %q, want %q", loaded.ReleaseURL, "https://example.com/v1.2.0")
+	if cached.Release.HTMLURL != "https://example.com/v1.2.0" {
+		t.Fatalf("cached HTMLURL = %q, want %q", cached.Release.HTMLURL, "https://example.com/v1.2.0")
 	}
 }
-
-func TestCheckerNilCache(t *testing.T) {
+func TestCheckerCacheDisabled(t *testing.T) {
 	requestCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestCount++
@@ -326,14 +349,14 @@ func TestCheckerNilCache(t *testing.T) {
 
 	checker := NewChecker(server.Client())
 	checker.LatestReleaseURL = server.URL
-	checker.Cache = nil
+	checker.CacheTTL = 0
 
 	result, err := checker.Check(context.Background(), "1.0.0")
 	if err != nil {
 		t.Fatalf("Check() error = %v", err)
 	}
 	if requestCount != 1 {
-		t.Fatalf("expected 1 HTTP request with nil cache, got %d", requestCount)
+		t.Fatalf("expected 1 HTTP request with cache disabled, got %d", requestCount)
 	}
 	if result.LatestVersion != "1.2.0" {
 		t.Fatalf("LatestVersion = %q, want %q", result.LatestVersion, "1.2.0")
@@ -349,7 +372,7 @@ func TestCheckerRejectsDraftRelease(t *testing.T) {
 
 	checker := NewChecker(server.Client())
 	checker.LatestReleaseURL = server.URL
-	checker.Cache = nil
+	checker.CacheTTL = 0
 
 	_, err := checker.Check(context.Background(), "0.9.0")
 	if err == nil {
@@ -369,7 +392,7 @@ func TestCheckerRejectsPrerelease(t *testing.T) {
 
 	checker := NewChecker(server.Client())
 	checker.LatestReleaseURL = server.URL
-	checker.Cache = nil
+	checker.CacheTTL = 0
 
 	_, err := checker.Check(context.Background(), "0.9.0")
 	if err == nil {
@@ -389,7 +412,7 @@ func TestCheckerRejectsEmptyTagName(t *testing.T) {
 
 	checker := NewChecker(server.Client())
 	checker.LatestReleaseURL = server.URL
-	checker.Cache = nil
+	checker.CacheTTL = 0
 
 	_, err := checker.Check(context.Background(), "1.0.0")
 	if err == nil {
@@ -410,7 +433,7 @@ func TestCheckerRateLimitExceeded(t *testing.T) {
 
 	checker := NewChecker(server.Client())
 	checker.LatestReleaseURL = server.URL
-	checker.Cache = nil
+	checker.CacheTTL = 0
 
 	_, err := checker.Check(context.Background(), "1.0.0")
 	if err == nil {
@@ -423,12 +446,10 @@ func TestCheckerRateLimitExceeded(t *testing.T) {
 
 func TestCheckerCacheUnparseableVersion(t *testing.T) {
 	tmpDir := t.TempDir()
-	cache := NewCacheWithTTL(tmpDir+"/update-cache.json", 24*time.Hour)
-
-	_ = cache.Save(&CacheEntry{
-		Timestamp:     time.Now(),
-		LatestVersion: "not-a-version",
-		ReleaseURL:    "https://example.com/v1.0.0",
+	cachePath := filepath.Join(tmpDir, "update-cache.json")
+	writeCorekitCache(t, cachePath, time.Now(), &updatecheck.Release{
+		TagName: "not-a-version",
+		HTMLURL: "https://example.com/v1.0.0",
 	})
 
 	requestCount := 0
@@ -441,7 +462,8 @@ func TestCheckerCacheUnparseableVersion(t *testing.T) {
 
 	checker := NewChecker(server.Client())
 	checker.LatestReleaseURL = server.URL
-	checker.Cache = cache
+	checker.CachePath = cachePath
+	checker.CacheTTL = 24 * time.Hour
 
 	result, err := checker.Check(context.Background(), "1.0.0")
 	if err != nil {
@@ -454,7 +476,6 @@ func TestCheckerCacheUnparseableVersion(t *testing.T) {
 		t.Fatalf("LatestVersion = %q, want %q", result.LatestVersion, "1.5.0")
 	}
 }
-
 func TestNewCheckerWithNilClient(t *testing.T) {
 	checker := NewChecker(nil)
 	if checker == nil {
@@ -463,8 +484,11 @@ func TestNewCheckerWithNilClient(t *testing.T) {
 	if checker.HTTPClient == nil {
 		t.Fatal("NewChecker(nil) should have non-nil HTTPClient")
 	}
-	if checker.Cache == nil {
-		t.Fatal("NewChecker(nil) should have non-nil Cache")
+	if checker.CachePath == "" {
+		t.Fatal("NewChecker(nil) should have a cache path")
+	}
+	if checker.CacheTTL != DefaultCacheTTL {
+		t.Fatalf("NewChecker(nil) CacheTTL = %v, want %v", checker.CacheTTL, DefaultCacheTTL)
 	}
 	if checker.LatestReleaseURL == "" {
 		t.Fatal("NewChecker(nil) should have non-empty LatestReleaseURL")
@@ -480,7 +504,7 @@ func TestCheckerURLTrimming(t *testing.T) {
 
 	checker := NewChecker(server.Client())
 	checker.LatestReleaseURL = "  " + server.URL + "  "
-	checker.Cache = nil
+	checker.CacheTTL = 0
 
 	result, err := checker.Check(context.Background(), "1.0.0")
 	if err != nil {
@@ -499,7 +523,7 @@ func TestCheckerReturnsHTTP404(t *testing.T) {
 
 	checker := NewChecker(server.Client())
 	checker.LatestReleaseURL = server.URL
-	checker.Cache = nil
+	checker.CacheTTL = 0
 
 	_, err := checker.Check(context.Background(), "1.0.0")
 	if err == nil {
@@ -517,7 +541,7 @@ func TestCheckerReturnsNetworkError(t *testing.T) {
 		},
 	})
 	checker.LatestReleaseURL = "http://localhost:1"
-	checker.Cache = nil
+	checker.CacheTTL = 0
 
 	_, err := checker.Check(context.Background(), "1.0.0")
 	if err == nil {
@@ -543,7 +567,7 @@ func TestCheckerEmptyLatestReleaseURLFallback(t *testing.T) {
 		},
 	})
 	checker.LatestReleaseURL = ""
-	checker.Cache = nil
+	checker.CacheTTL = 0
 
 	_, err := checker.Check(context.Background(), "1.0.0")
 	if err != nil {
