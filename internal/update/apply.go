@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 
@@ -13,7 +14,10 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/update/installmethod"
 )
 
-const binaryName = "symvault"
+const (
+	binaryName = "symvault"
+	windowsOS  = "windows"
+)
 
 // ApplyResult contains details about a completed self-update.
 type ApplyResult struct {
@@ -56,10 +60,22 @@ func getBinaryPath() (string, error) {
 }
 
 func binaryFileName() string {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == windowsOS {
 		return binaryName + ".exe"
 	}
 	return binaryName
+}
+
+// verifyBinary runs the installed binary with the version subcommand. Corekit
+// invokes this after the atomic swap and restores the previous binary when
+// validation fails.
+func verifyBinary(binaryPath string) error {
+	cmd := exec.Command(binaryPath, "version")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("verify %q version: %w (output: %s)", binaryPath, err, string(output))
+	}
+	return nil
 }
 
 func newCorekitApplier() *corekitupdateapply.Applier {
@@ -69,6 +85,7 @@ func newCorekitApplier() *corekitupdateapply.Applier {
 	applier.BinaryName = binaryName
 	applier.CosignConfig = &cfg
 	applier.ExtractBinary = binaryFileName()
+	applier.ValidateBinary = verifyBinary
 	return applier
 }
 

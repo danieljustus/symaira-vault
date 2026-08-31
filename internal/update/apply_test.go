@@ -3,6 +3,9 @@ package update
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -198,6 +201,36 @@ func TestApply_EmptyVersion(t *testing.T) {
 	}
 }
 
+func TestVerifyBinary(t *testing.T) {
+	if runtime.GOOS == windowsOS {
+		t.Skip("skipping: shell script binaries are not supported on windows")
+	}
+
+	path := filepath.Join(t.TempDir(), "symvault")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\nprintf '%s\\n' symvault-test\n"), 0o755); err != nil { //nolint:gosec
+		t.Fatalf("write test binary: %v", err)
+	}
+
+	if err := verifyBinary(path); err != nil {
+		t.Fatalf("verifyBinary() error = %v", err)
+	}
+}
+
+func TestVerifyBinary_Failure(t *testing.T) {
+	if runtime.GOOS == windowsOS {
+		t.Skip("skipping: shell script binaries are not supported on windows")
+	}
+
+	path := filepath.Join(t.TempDir(), "symvault")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil { //nolint:gosec
+		t.Fatalf("write test binary: %v", err)
+	}
+
+	if err := verifyBinary(path); err == nil {
+		t.Fatal("verifyBinary() error = nil, want command failure")
+	}
+}
+
 func TestNewCorekitApplierConfig(t *testing.T) {
 	applier := newCorekitApplier()
 	if applier == nil {
@@ -209,8 +242,17 @@ func TestNewCorekitApplierConfig(t *testing.T) {
 	if applier.BinaryName != binaryName {
 		t.Fatalf("BinaryName = %q, want %q", applier.BinaryName, binaryName)
 	}
+	if applier.CosignConfig == nil {
+		t.Fatal("CosignConfig = nil, want release artifact configuration")
+	}
+	if applier.CosignConfig.BinaryName != releaseArtifactName {
+		t.Fatalf("CosignConfig.BinaryName = %q, want %q", applier.CosignConfig.BinaryName, releaseArtifactName)
+	}
 	if applier.ExtractBinary != binaryFileName() {
 		t.Fatalf("ExtractBinary = %q, want %q", applier.ExtractBinary, binaryFileName())
+	}
+	if applier.ValidateBinary == nil {
+		t.Fatal("ValidateBinary = nil, want post-swap executable validation")
 	}
 	if applier.CosignConfig == nil {
 		t.Fatal("CosignConfig = nil, want repository-specific verification config")
