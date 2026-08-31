@@ -121,7 +121,7 @@ func Apply(ctx context.Context, currentVersion string, force, dryRun bool) (*App
 		defer func() { _ = os.RemoveAll(dryRunDir) }()
 
 		targetPath = filepath.Join(dryRunDir, binaryFileName())
-		currentBinary, readErr := os.ReadFile(binaryPath) //nolint:gosec // path comes from os.Executable
+		currentBinary, readErr := os.ReadFile(binaryPath) // #nosec G304 -- path comes from os.Executable, never user input
 		if readErr != nil {
 			return nil, fmt.Errorf("read current binary for dry-run: %w", readErr)
 		}
@@ -129,7 +129,7 @@ func Apply(ctx context.Context, currentVersion string, force, dryRun bool) (*App
 		if info, statErr := os.Stat(binaryPath); statErr == nil {
 			mode = info.Mode().Perm()
 		}
-		if writeErr := os.WriteFile(targetPath, currentBinary, mode); writeErr != nil {
+		if writeErr := os.WriteFile(targetPath, currentBinary, mode); writeErr != nil { // #nosec G703 -- targetPath is generated inside MkdirTemp
 			return nil, fmt.Errorf("seed dry-run binary: %w", writeErr)
 		}
 	}
