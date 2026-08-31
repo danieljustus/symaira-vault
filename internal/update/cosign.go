@@ -12,6 +12,10 @@ import (
 // repository-specific Cosign configuration.
 var DefaultDownloadBaseURL = "https://github.com/danieljustus/symaira-vault/releases/download"
 
+// releaseArtifactName is the GoReleaser project name used in checksums and
+// Cosign artifact filenames. It differs from the installed CLI binary name.
+const releaseArtifactName = "symaira-vault"
+
 var (
 	testHTTPClient httpDoer
 	mu             sync.Mutex
@@ -61,7 +65,7 @@ func cosignHTTPClient() *http.Client {
 func cosignConfig() corekitcosign.Config {
 	cfg := corekitcosign.Config{
 		Repo:            "danieljustus/symaira-vault",
-		BinaryName:      binaryName,
+		BinaryName:      releaseArtifactName,
 		DownloadBaseURL: DefaultDownloadBaseURL,
 		IdentityRegexp:  CosignIdentityRegexp,
 	}

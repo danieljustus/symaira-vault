@@ -14,6 +14,10 @@ func TestFetchCosignSignature_Success(t *testing.T) {
 	mu.Lock()
 	testHTTPClient = stubHTTPDoer{
 		do: func(req *http.Request) (*http.Response, error) {
+			wantPath := "/danieljustus/symaira-vault/releases/download/v0.5.0/symaira-vault_0.5.0_checksums.txt.sig"
+			if req.URL.Path != wantPath {
+				t.Errorf("request path = %q, want %q", req.URL.Path, wantPath)
+			}
 			return &http.Response{
 				StatusCode: http.StatusOK,
 				Body:       io.NopCloser(strings.NewReader(string(expectedBody))),
@@ -93,6 +97,10 @@ func TestFetchCosignCertificate_Success(t *testing.T) {
 	mu.Lock()
 	testHTTPClient = stubHTTPDoer{
 		do: func(req *http.Request) (*http.Response, error) {
+			wantPath := "/danieljustus/symaira-vault/releases/download/v0.5.0/symaira-vault_0.5.0_checksums.txt.pem"
+			if req.URL.Path != wantPath {
+				t.Errorf("request path = %q, want %q", req.URL.Path, wantPath)
+			}
 			return &http.Response{
 				StatusCode: http.StatusOK,
 				Body:       io.NopCloser(strings.NewReader(string(expectedBody))),
