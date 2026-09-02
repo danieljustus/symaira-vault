@@ -25,6 +25,12 @@ const (
 	autoCertFile = "mcp-server.crt"
 	// autoKeyFile is the filename for the auto-generated TLS private key in the vault directory.
 	autoKeyFile = "mcp-server.key"
+	// enrollSecretFile is the filename for the random secret that proves
+	// vault-directory ownership when minting an approval-device pairing
+	// code (see EnsureEnrollSecret).
+	enrollSecretFile = "mcp-server.enroll-secret" // #nosec G101 -- filename, not a credential
+	// enrollSecretSize is the size in bytes of the generated enroll secret.
+	enrollSecretSize = 32
 )
 
 // EnsureTLSCert returns the paths to a usable TLS certificate and key for the
@@ -141,4 +147,35 @@ func CertFingerprint(vaultDir string) (string, error) {
 	}
 	sum := sha256.Sum256(cert.Raw)
 	return hex.EncodeToString(sum[:]), nil
+}
+
+// EnsureEnrollSecret returns a random secret cached at
+// "<vaultDir>/mcp-server.enroll-secret" (0600, generated on first use),
+// proof of possession of which stands in for proof of vault-directory
+// ownership: only whoever can already read the 0600 vault directory (the
+// same trust domain as the TLS private key and age identities) can read
+// this file. It is used to authenticate "symvault device approval-pair"'s
+// request to mint a pairing code, so a local process without vault-directory
+// access cannot self-enroll as an approval device merely by reaching the
+// server's loopback listener. Returns nil for an empty vaultDir.
+func EnsureEnrollSecret(vaultDir string) ([]byte, error) {
+	if vaultDir == "" {
+		return nil, nil
+	}
+	path := filepath.Join(vaultDir, enrollSecretFile)
+	existing, err := os.ReadFile(path) // #nosec G304 -- path is this function's own fixed filename under vaultDir
+	if err == nil {
+		return existing, nil
+	}
+	if !os.IsNotExist(err) {
+		return nil, fmt.Errorf("read enroll secret: %w", err)
+	}
+	secret := make([]byte, enrollSecretSize)
+	if _, err := rand.Read(secret); err != nil {
+		return nil, fmt.Errorf("generate enroll secret: %w", err)
+	}
+	if err := fsutil.SafeWriteFile(path, secret, 0o600); err != nil {
+		return nil, fmt.Errorf("write enroll secret: %w", err)
+	}
+	return secret, nil
 }

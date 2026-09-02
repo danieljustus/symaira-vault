@@ -49,8 +49,12 @@ func TestMintApprovalEnrollCode_RoundTrip(t *testing.T) {
 		t.Fatalf("LoadX509KeyPair: %v", err)
 	}
 
+	secret, err := serverbootstrap.EnsureEnrollSecret(dir)
+	if err != nil {
+		t.Fatalf("EnsureEnrollSecret: %v", err)
+	}
 	codes := pairing.NewTokenStore()
-	handler := approval.NewEnrollCodeHTTPHandler(codes, "fp-test", func(string) bool { return true })
+	handler := approval.NewEnrollCodeHTTPHandler(codes, "fp-test", func(string) bool { return true }, secret)
 
 	srv := httptest.NewUnstartedServer(handler)
 	srv.TLS = &tls.Config{Certificates: []tls.Certificate{cert}}
@@ -90,8 +94,12 @@ func TestMintApprovalEnrollCode_RejectsUntrustedServer(t *testing.T) {
 	// Deliberately do NOT create a cert in dir before starting the test
 	// server with its own self-generated (different) certificate, so the
 	// pinned client should refuse to trust it.
+	secret, err := serverbootstrap.EnsureEnrollSecret(dir)
+	if err != nil {
+		t.Fatalf("EnsureEnrollSecret: %v", err)
+	}
 	codes := pairing.NewTokenStore()
-	handler := approval.NewEnrollCodeHTTPHandler(codes, "fp-test", func(string) bool { return true })
+	handler := approval.NewEnrollCodeHTTPHandler(codes, "fp-test", func(string) bool { return true }, secret)
 
 	srv := httptest.NewTLSServer(handler)
 	defer srv.Close()

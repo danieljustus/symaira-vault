@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/danieljustus/symaira-vault/internal/pairing"
 )
@@ -13,9 +14,19 @@ import (
 func alwaysLoopback(string) bool { return true }
 func neverLoopback(string) bool  { return false }
 
+var testEnrollSecret = []byte("test-enroll-secret-32-bytes-long")
+
+// setValidEnrollProof attaches a proof computed against testEnrollSecret for
+// the current time, as a real "symvault device approval-pair" caller would.
+func setValidEnrollProof(req *http.Request) {
+	now := time.Now().UTC()
+	req.Header.Set(HeaderEnrollTimestamp, now.Format(time.RFC3339))
+	req.Header.Set(HeaderEnrollProof, EnrollProof(testEnrollSecret, now))
+}
+
 func TestEnrollCodeHTTPHandler_RejectsNonLoopback(t *testing.T) {
 	codes := pairing.NewTokenStore()
-	h := NewEnrollCodeHTTPHandler(codes, "fp-1", neverLoopback)
+	h := NewEnrollCodeHTTPHandler(codes, "fp-1", neverLoopback, testEnrollSecret)
 
 	req := httptest.NewRequest(http.MethodPost, PathDeviceEnrollCode, nil)
 	req.RemoteAddr = "203.0.113.5:1234"
@@ -27,12 +38,61 @@ func TestEnrollCodeHTTPHandler_RejectsNonLoopback(t *testing.T) {
 	}
 }
 
-func TestEnrollCodeHTTPHandler_RejectsWithoutFingerprint(t *testing.T) {
+func TestEnrollCodeHTTPHandler_RejectsWithoutProof(t *testing.T) {
 	codes := pairing.NewTokenStore()
-	h := NewEnrollCodeHTTPHandler(codes, "", alwaysLoopback)
+	h := NewEnrollCodeHTTPHandler(codes, "fp-1", alwaysLoopback, testEnrollSecret)
 
 	req := httptest.NewRequest(http.MethodPost, PathDeviceEnrollCode, nil)
 	req.RemoteAddr = "127.0.0.1:1234"
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401 (unproven request from loopback must still be rejected)", rec.Code)
+	}
+}
+
+func TestEnrollCodeHTTPHandler_RejectsWrongProof(t *testing.T) {
+	codes := pairing.NewTokenStore()
+	h := NewEnrollCodeHTTPHandler(codes, "fp-1", alwaysLoopback, testEnrollSecret)
+
+	req := httptest.NewRequest(http.MethodPost, PathDeviceEnrollCode, nil)
+	req.RemoteAddr = "127.0.0.1:1234"
+	now := time.Now().UTC()
+	req.Header.Set(HeaderEnrollTimestamp, now.Format(time.RFC3339))
+	req.Header.Set(HeaderEnrollProof, EnrollProof([]byte("wrong-secret"), now))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+}
+
+func TestEnrollCodeHTTPHandler_RejectsStaleProof(t *testing.T) {
+	codes := pairing.NewTokenStore()
+	h := NewEnrollCodeHTTPHandler(codes, "fp-1", alwaysLoopback, testEnrollSecret)
+
+	req := httptest.NewRequest(http.MethodPost, PathDeviceEnrollCode, nil)
+	req.RemoteAddr = "127.0.0.1:1234"
+	stale := time.Now().UTC().Add(-time.Hour)
+	req.Header.Set(HeaderEnrollTimestamp, stale.Format(time.RFC3339))
+	req.Header.Set(HeaderEnrollProof, EnrollProof(testEnrollSecret, stale))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401 for a proof outside the freshness window", rec.Code)
+	}
+}
+
+func TestEnrollCodeHTTPHandler_RejectsWithoutFingerprint(t *testing.T) {
+	codes := pairing.NewTokenStore()
+	h := NewEnrollCodeHTTPHandler(codes, "", alwaysLoopback, testEnrollSecret)
+
+	req := httptest.NewRequest(http.MethodPost, PathDeviceEnrollCode, nil)
+	req.RemoteAddr = "127.0.0.1:1234"
+	setValidEnrollProof(req)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 
@@ -43,7 +103,7 @@ func TestEnrollCodeHTTPHandler_RejectsWithoutFingerprint(t *testing.T) {
 
 func TestEnrollCodeHTTPHandler_RejectsNonPost(t *testing.T) {
 	codes := pairing.NewTokenStore()
-	h := NewEnrollCodeHTTPHandler(codes, "fp-1", alwaysLoopback)
+	h := NewEnrollCodeHTTPHandler(codes, "fp-1", alwaysLoopback, testEnrollSecret)
 
 	req := httptest.NewRequest(http.MethodGet, PathDeviceEnrollCode, nil)
 	req.RemoteAddr = "127.0.0.1:1234"
@@ -57,10 +117,11 @@ func TestEnrollCodeHTTPHandler_RejectsNonPost(t *testing.T) {
 
 func TestEnrollCodeHTTPHandler_MintsCode(t *testing.T) {
 	codes := pairing.NewTokenStore()
-	h := NewEnrollCodeHTTPHandler(codes, "fp-1", alwaysLoopback)
+	h := NewEnrollCodeHTTPHandler(codes, "fp-1", alwaysLoopback, testEnrollSecret)
 
 	req := httptest.NewRequest(http.MethodPost, PathDeviceEnrollCode, nil)
 	req.RemoteAddr = "127.0.0.1:1234"
+	setValidEnrollProof(req)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 
