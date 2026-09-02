@@ -9,6 +9,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base32"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/mcp/auth"
 )
 
 const (
@@ -30,9 +32,12 @@ const (
 	SessionFailedAttemptCooldown = 30 * time.Second
 )
 
-// DeviceSession represents an enrolled device session token.
+// DeviceSession represents an enrolled device session token. The bearer
+// token itself is never persisted — only its SHA-256 hash, keyed identically
+// to internal/mcp/auth's scoped-token registry, plus Prefix (the first few
+// characters of the raw token) for display in "approval-list".
 type DeviceSession struct {
-	Token     string    `json:"token"`
+	Prefix    string    `json:"prefix"`
 	DeviceID  string    `json:"device_id"`
 	Name      string    `json:"name,omitempty"`
 	PublicKey string    `json:"public_key"`
@@ -52,7 +57,7 @@ type deviceFailure struct {
 type DeviceSessionStore struct {
 	path     string
 	mu       sync.RWMutex
-	sessions map[string]*DeviceSession // token -> session
+	sessions map[string]*DeviceSession // sha256Hex(token) -> session
 	failures map[string]deviceFailure  // deviceID -> failure state
 	mtime    time.Time                 // mtime of path as of the last load/save
 }
@@ -80,15 +85,18 @@ func NewDeviceSessionStore(vaultDir string) (*DeviceSessionStore, error) {
 }
 
 // Enroll creates a new long-lived session token for deviceID with the given
-// human-readable name and publicKey. The token is returned and persisted.
+// human-readable name and publicKey. The raw token is returned to the caller
+// and never persisted — only its hash (see hashToken) is stored.
 func (s *DeviceSessionStore) Enroll(deviceID, name, publicKey string) (string, error) {
 	token, err := GenerateSessionToken()
 	if err != nil {
 		return "", fmt.Errorf("generate session token: %w", err)
 	}
+	rawToken := token.String()
+	hash := hashToken(rawToken)
 	now := time.Now().UTC()
 	session := &DeviceSession{
-		Token:     token.String(),
+		Prefix:    tokenPrefix(rawToken),
 		DeviceID:  deviceID,
 		Name:      name,
 		PublicKey: publicKey,
@@ -96,13 +104,13 @@ func (s *DeviceSessionStore) Enroll(deviceID, name, publicKey string) (string, e
 		ExpiresAt: now.Add(DefaultSessionTTL),
 	}
 	s.mu.Lock()
-	s.sessions[token.String()] = session
+	s.sessions[hash] = session
 	s.mu.Unlock()
 	if err := s.save(); err != nil {
-		delete(s.sessions, token.String())
+		delete(s.sessions, hash)
 		return "", fmt.Errorf("persist device session: %w", err)
 	}
-	return token.String(), nil
+	return rawToken, nil
 }
 
 // List returns a snapshot of every session in the store, including revoked
@@ -127,7 +135,7 @@ func (s *DeviceSessionStore) Validate(token string) (string, bool) {
 
 	s.mergeRevocationsFromDisk()
 
-	session, ok := s.sessions[token]
+	session, ok := s.sessions[hashToken(token)]
 	if !ok {
 		return "", false
 	}
@@ -160,7 +168,7 @@ func (s *DeviceSessionStore) RecordFailure(token string) {
 
 	s.mergeRevocationsFromDisk()
 
-	session, ok := s.sessions[token]
+	session, ok := s.sessions[hashToken(token)]
 	if !ok {
 		return
 	}
@@ -279,13 +287,37 @@ func (s *DeviceSessionStore) load() error {
 		}
 		return err
 	}
-	var sessions map[string]*DeviceSession
-	if err := json.Unmarshal(data, &sessions); err != nil {
+	var raw map[string]*DeviceSession
+	if err := json.Unmarshal(data, &raw); err != nil {
 		return fmt.Errorf("parse device sessions: %w", err)
+	}
+
+	// Migrate legacy entries keyed by the raw bearer token (from before
+	// tokens were hashed at rest) to hash-keyed entries. A legacy key is the
+	// base32 session token itself, which never looks like a SHA-256 hex
+	// digest.
+	migrated := false
+	sessions := make(map[string]*DeviceSession, len(raw))
+	for key, session := range raw {
+		if session == nil {
+			continue
+		}
+		if looksLikeSHA256Hex(key) {
+			sessions[key] = session
+			continue
+		}
+		if session.Prefix == "" {
+			session.Prefix = tokenPrefix(key)
+		}
+		sessions[hashToken(key)] = session
+		migrated = true
 	}
 	s.sessions = sessions
 	if info, statErr := os.Stat(s.path); statErr == nil {
 		s.mtime = info.ModTime()
+	}
+	if migrated {
+		return s.save()
 	}
 	return nil
 }
@@ -361,3 +393,46 @@ func GenerateSessionToken() (Token, error) {
 	token := base32.HexEncoding.WithPadding(base32.NoPadding).EncodeToString(b)
 	return Token(token), nil
 }
+
+// tokenPrefixLen is how many characters of the raw token are kept as the
+// display-only Prefix, matching internal/mcp/auth.TokenData's Prefix
+// convention (see TokenRegistry.Create).
+const tokenPrefixLen = 4
+
+// hashToken returns the storage key for rawToken: the same SHA-256 hex
+// scheme internal/mcp/auth's scoped-token registry stores its own bearer
+// tokens under, so a leaked backup or vault-dir read yields no usable
+// credential — only whoever presents the matching raw token again can be
+// looked up.
+func hashToken(rawToken string) string {
+	return auth.SHA256Hex(rawToken)
+}
+
+// tokenPrefix returns the short, non-secret display prefix stored alongside
+// a hashed session so "approval-list" can show which device is which
+// without ever persisting the usable token.
+func tokenPrefix(rawToken string) string {
+	if len(rawToken) <= tokenPrefixLen {
+		return rawToken
+	}
+	return rawToken[:tokenPrefixLen]
+}
+
+// looksLikeSHA256Hex reports whether s has the shape of a lowercase
+// hex-encoded SHA-256 digest (64 hex characters), used to distinguish
+// already-hashed storage keys from legacy keys that are still the raw
+// base32 session token itself (see (*DeviceSessionStore).load).
+func looksLikeSHA256Hex(s string) bool {
+	if len(s) != hex.EncodedLen(sha256DigestSize) {
+		return false
+	}
+	for _, r := range s {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// sha256DigestSize is the size in bytes of a SHA-256 digest.
+const sha256DigestSize = 32
