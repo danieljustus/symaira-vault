@@ -13,6 +13,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	mcpcmd "github.com/danieljustus/symaira-vault/cmd/mcp"
 	"github.com/danieljustus/symaira-vault/internal/approval"
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
@@ -62,9 +63,12 @@ fingerprint rather than trusting a certificate authority.`,
 				return errorspkg.NewVaultNotInitialized()
 			}
 
-			port, ok := cli.LoadRuntimePort(vaultDir)
+			port, bind, ok := cli.LoadRuntimeServer(vaultDir)
 			if !ok {
 				return fmt.Errorf("could not find the running server's port — is 'symvault serve' running?")
+			}
+			if bind != "" && mcpcmd.IsLocalhostBind(bind) {
+				return fmt.Errorf("'symvault serve' is bound to %s (loopback-only) — a phone on the LAN cannot reach it. Restart the server with --bind 0.0.0.0 (all interfaces) or --bind <lan-ip>, then run 'approval-pair' again", bind)
 			}
 
 			host := strings.TrimSpace(approvalPairHost)

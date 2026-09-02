@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"net"
 	"os"
 	"path/filepath"
@@ -59,7 +60,7 @@ func TestFindAvailablePort_PreferredOccupied_FallsBack(t *testing.T) {
 func TestSaveAndLoadRuntimePort(t *testing.T) {
 	dir := t.TempDir()
 
-	if err := SaveRuntimePort(dir, 9090); err != nil {
+	if err := SaveRuntimePort(dir, "127.0.0.1", 9090); err != nil {
 		t.Fatalf("SaveRuntimePort() error = %v", err)
 	}
 
@@ -103,7 +104,7 @@ func TestLoadRuntimePort_InvalidContent(t *testing.T) {
 func TestClearRuntimePort(t *testing.T) {
 	dir := t.TempDir()
 
-	if err := SaveRuntimePort(dir, 8080); err != nil {
+	if err := SaveRuntimePort(dir, "127.0.0.1", 8080); err != nil {
 		t.Fatalf("SaveRuntimePort() error = %v", err)
 	}
 
@@ -128,7 +129,7 @@ func TestClearRuntimePort_NoFile(t *testing.T) {
 
 func TestResolvePort_RuntimePortTakesPrecedence(t *testing.T) {
 	dir := t.TempDir()
-	if err := SaveRuntimePort(dir, 7777); err != nil {
+	if err := SaveRuntimePort(dir, "127.0.0.1", 7777); err != nil {
 		t.Fatalf("SaveRuntimePort() error = %v", err)
 	}
 
@@ -160,7 +161,7 @@ func TestSaveRuntimePort_PathTraversalPrevention(t *testing.T) {
 	dir := t.TempDir()
 
 	// Attempt to write outside the vault dir
-	err := SaveRuntimePort(dir+"/subdir/../../etc", 8080)
+	err := SaveRuntimePort(dir+"/subdir/../../etc", "127.0.0.1", 8080)
 	if err == nil {
 		t.Error("SaveRuntimePort() should reject path traversal, got nil")
 	}
@@ -184,7 +185,7 @@ func TestSaveRuntimePort_SecurityBits(t *testing.T) {
 	}
 	dir := t.TempDir()
 
-	if err := SaveRuntimePort(dir, 8080); err != nil {
+	if err := SaveRuntimePort(dir, "127.0.0.1", 8080); err != nil {
 		t.Fatalf("SaveRuntimePort() error = %v", err)
 	}
 
@@ -230,7 +231,7 @@ func TestSaveRuntimePort_DirCreation(t *testing.T) {
 	dir := t.TempDir()
 	subDir := filepath.Join(dir, "sub", "dir")
 
-	err := SaveRuntimePort(subDir, 8080)
+	err := SaveRuntimePort(subDir, "127.0.0.1", 8080)
 	// Should fail because the subdirectory doesn't exist
 	if err == nil {
 		t.Error("SaveRuntimePort() should fail for non-existent subdirectory")
@@ -258,7 +259,7 @@ func TestRuntimePortRoundTrip(t *testing.T) {
 	ports := []int{1, 80, 443, 8080, 30000, 65535}
 
 	for _, p := range ports {
-		if err := SaveRuntimePort(dir, p); err != nil {
+		if err := SaveRuntimePort(dir, "127.0.0.1", p); err != nil {
 			t.Fatalf("SaveRuntimePort(%d) error = %v", p, err)
 		}
 
@@ -275,7 +276,7 @@ func TestRuntimePortRoundTrip(t *testing.T) {
 func TestSaveRuntimePort_PortFileContent(t *testing.T) {
 	dir := t.TempDir()
 
-	if err := SaveRuntimePort(dir, 9999); err != nil {
+	if err := SaveRuntimePort(dir, "127.0.0.1", 9999); err != nil {
 		t.Fatalf("SaveRuntimePort() error = %v", err)
 	}
 
@@ -285,9 +286,52 @@ func TestSaveRuntimePort_PortFileContent(t *testing.T) {
 		t.Fatalf("read port file: %v", err)
 	}
 
-	expected := strconv.Itoa(9999)
-	if string(data) != expected {
-		t.Errorf("port file content = %q, want %q", string(data), expected)
+	var rf runtimePortFile
+	if err := json.Unmarshal(data, &rf); err != nil {
+		t.Fatalf("port file content = %q, want valid JSON: %v", string(data), err)
+	}
+	if rf.Port != 9999 {
+		t.Errorf("port file port = %d, want 9999", rf.Port)
+	}
+	if rf.Bind != "127.0.0.1" {
+		t.Errorf("port file bind = %q, want 127.0.0.1", rf.Bind)
+	}
+}
+
+func TestLoadRuntimeServer_LegacyPlainIntegerFormat(t *testing.T) {
+	dir := t.TempDir()
+	portFile := filepath.Join(dir, RuntimePortFileName)
+	if err := os.WriteFile(portFile, []byte("8080"), 0600); err != nil {
+		t.Fatalf("write legacy port file: %v", err)
+	}
+
+	port, bind, ok := LoadRuntimeServer(dir)
+	if !ok {
+		t.Fatal("LoadRuntimeServer() returned false for a legacy plain-integer file")
+	}
+	if port != 8080 {
+		t.Errorf("port = %d, want 8080", port)
+	}
+	if bind != "" {
+		t.Errorf("bind = %q, want empty for a legacy file with no bind info", bind)
+	}
+}
+
+func TestLoadRuntimeServer_ReturnsBind(t *testing.T) {
+	dir := t.TempDir()
+	if err := SaveRuntimePort(dir, "0.0.0.0", 8443); err != nil {
+		t.Fatalf("SaveRuntimePort() error = %v", err)
+	}
+
+	port, bind, ok := LoadRuntimeServer(dir)
+	if !ok {
+		t.Fatal("LoadRuntimeServer() returned false")
+	}
+	if port != 8443 {
+		t.Errorf("port = %d, want 8443", port)
+	}
+	if bind != "0.0.0.0" {
+		t.Errorf("bind = %q, want 0.0.0.0", bind)
 	}
 }
 
@@ -347,7 +391,7 @@ func TestLoadRuntimePort_EmptyFile(t *testing.T) {
 func TestClearRuntimePort_Idempotent(t *testing.T) {
 	dir := t.TempDir()
 
-	if err := SaveRuntimePort(dir, 8080); err != nil {
+	if err := SaveRuntimePort(dir, "127.0.0.1", 8080); err != nil {
 		t.Fatalf("SaveRuntimePort() error = %v", err)
 	}
 
