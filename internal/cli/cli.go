@@ -230,7 +230,10 @@ const (
 )
 
 // outputFormatText is the default plain-text output format name.
-const outputFormatText = "text"
+const (
+	outputFormatText = "text"
+	outputFormatJSON = "json"
+)
 
 // commandGroups declares the help-output groups for the root command in
 // display order.
@@ -271,7 +274,7 @@ Daily use:
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			currentCommandPath = cmd.CommandPath()
 			if JSONOutput {
-				OutputFormat = "json"
+				OutputFormat = outputFormatJSON
 			}
 			if OutputFormat != outputFormatText {
 				if !CommandSupportsJSON(cmd) {
