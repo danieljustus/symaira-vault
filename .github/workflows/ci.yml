@@ -67,6 +67,8 @@ jobs:
           cache: true
 
       - name: Run OSV Scanner
+        id: osv_scan
+        continue-on-error: true
         uses: google/osv-scanner-action/osv-scanner-action@6e4298ebc4db23e847df9b2e2de2939d6f066c67 # v2.5.1
         with:
           scan-args: >-
@@ -81,6 +83,28 @@ jobs:
         uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4
         with:
           sarif_file: osv-results.sarif
+
+      # osv-scanner-action's process exit code has been observed to be
+      # nonzero even when every finding is explicitly ignored via
+      # osv-scanner.toml and the uploaded SARIF (the actual GitHub Security
+      # tab signal) contains zero results, so the job's pass/fail is decided
+      # from the SARIF content itself rather than the raw scanner exit code.
+      - name: Fail on unignored OSV findings
+        if: always()
+        run: |
+          if [ ! -f osv-results.sarif ]; then
+            echo "osv-results.sarif was not produced; treating as a scanner failure."
+            exit 1
+          fi
+          count=$(jq '[.runs[].results[]?] | length' osv-results.sarif)
+          echo "Findings remaining after osv-scanner.toml ignores: $count"
+          if [ "$count" -gt 0 ]; then
+            jq -r '.runs[].results[]? | "\(.ruleId): \(.message.text)"' osv-results.sarif
+            exit 1
+          fi
+          if [ "${{ steps.osv_scan.outcome }}" != "success" ]; then
+            echo "Note: OSV Scanner's own exit code (${{ steps.osv_scan.outcome }}) was non-zero, but the uploaded SARIF has zero findings after ignores; not failing the job on that alone."
+          fi
 
   lint:
     name: Lint
