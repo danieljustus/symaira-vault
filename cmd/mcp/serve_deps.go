@@ -62,7 +62,7 @@ func RunHTTPServerWithApproval(ctx context.Context, bind string, port int, vault
 		return fmt.Errorf("load device session store: %w", err)
 	}
 	_ = sessionStore.StartCleanup(ctx, 15*time.Minute)
-	approvalHandler := approval.NewHTTPHandler(ApprovalQueue, approval.NewPairingTokenValidator(sessionStore))
+	approvalHandler := approval.NewHTTPHandler(ApprovalQueue, sessionStore)
 
 	// The fingerprint is computed once at server startup (the cert is cached
 	// to disk and only regenerated if deleted) and handed to every minted
@@ -72,7 +72,11 @@ func RunHTTPServerWithApproval(ctx context.Context, bind string, port int, vault
 	if fpErr != nil {
 		cliout.Warnf("could not compute TLS certificate fingerprint; device pairing is disabled: %v", fpErr)
 	}
-	enrollCodeHandler := approval.NewEnrollCodeHTTPHandler(EnrollCodes, fingerprint, mcputil.IsLoopbackHost)
+	enrollSecret, esErr := serverbootstrap.EnsureEnrollSecret(vaultDir)
+	if esErr != nil {
+		cliout.Warnf("could not set up vault-ownership proof secret; device pairing is disabled: %v", esErr)
+	}
+	enrollCodeHandler := approval.NewEnrollCodeHTTPHandler(EnrollCodes, fingerprint, mcputil.IsLoopbackHost, enrollSecret)
 	enrollHandler := approval.NewEnrollHTTPHandler(EnrollCodes, sessionStore)
 
 	return serverbootstrap.RunHTTPServer(ctx, bind, port, vault, vaultDir, Version, newServerWithApproval,
@@ -245,7 +249,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 		if !isPreferred {
 			cliout.Warnf("Port %d is in use, using port %d instead", port, actualPort)
 		}
-		if err := cli.SaveRuntimePort(vaultDir, actualPort); err != nil {
+		if err := cli.SaveRuntimePort(vaultDir, bind, actualPort); err != nil {
 			cliout.Warnf("Warning: could not save runtime port: %v", err)
 		}
 		cliout.Hintf("MCP server listening on %s:%d", bind, actualPort)
