@@ -107,6 +107,7 @@ var allChecks = []checkDef{
 	{fn: checkClipboardBackend},
 	{fn: checkDaemonStatus},
 	{fn: checkMCPServer, tags: []string{"network"}},
+	{fn: checkMCPApprovalTLS},
 	{fn: checkDynamicSecretEngines},
 	{fn: checkMCPAgents},
 	{fn: checkSecureUI},
