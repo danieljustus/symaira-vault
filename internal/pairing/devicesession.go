@@ -292,20 +292,21 @@ func (s *DeviceSessionStore) save() error {
 	return nil
 }
 
-// mergeRevocationsFromDisk re-reads the on-disk store when it is newer than
-// the last load/save this instance observed, and applies any revocation
-// found there onto the in-memory copy. Revocation only ever moves from false
-// to true here, so a concurrent writer (typically the "approval-revoke" CLI,
-// which opens its own store instance against the same file) can never have
-// its revocation silently undone by this instance's next save. Callers must
-// hold s.mu for writing. Returns whether any in-memory session was newly
-// marked revoked.
+// mergeRevocationsFromDisk re-reads the on-disk store and applies any
+// revocation found there onto the in-memory copy. It must not use the file's
+// modification time as a read guard: filesystems with coarse timestamps can
+// replace the same-size JSON file without advancing its observed mtime.
+// Revocation only ever moves from false to true here, so a concurrent writer
+// (typically the "approval-revoke" CLI, which opens its own store instance
+// against the same file) can never have its revocation silently undone by
+// this instance's next save. Callers must hold s.mu for writing. Returns
+// whether any in-memory session was newly marked revoked.
 func (s *DeviceSessionStore) mergeRevocationsFromDisk() bool {
 	if s.path == "" {
 		return false
 	}
 	info, err := os.Stat(s.path)
-	if err != nil || !info.ModTime().After(s.mtime) {
+	if err != nil {
 		return false
 	}
 	data, err := os.ReadFile(s.path)
