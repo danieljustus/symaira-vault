@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/danieljustus/symaira-vault/internal/fsutil"
+	"github.com/danieljustus/symaira-vault/internal/ui/cliout"
 )
 
 const (
@@ -31,13 +32,20 @@ const (
 	enrollSecretFile = "mcp-server.enroll-secret" // #nosec G101 -- filename, not a credential
 	// enrollSecretSize is the size in bytes of the generated enroll secret.
 	enrollSecretSize = 32
+	// CertRenewalWindow is how long before a cached certificate's expiry
+	// EnsureTLSCert regenerates it, so operators have advance warning before
+	// paired approval devices (and any other pinned client) stop connecting.
+	CertRenewalWindow = 30 * 24 * time.Hour
 )
 
 // EnsureTLSCert returns the paths to a usable TLS certificate and key for the
 // MCP HTTP server. If the vault directory already contains a cached cert+key
-// pair they are reused; otherwise a new self-signed certificate is generated
-// for loopback addresses (127.0.0.1, ::1, localhost). Returns empty strings
-// when vaultDir is empty.
+// pair, and that certificate is not expired or within CertRenewalWindow of
+// expiring, it is reused; otherwise a new self-signed certificate is
+// generated for loopback addresses (127.0.0.1, ::1, localhost). Regenerating
+// invalidates every device that pinned the previous certificate's
+// fingerprint (see internal/approval device enrollment) — those devices
+// must be re-paired. Returns empty strings when vaultDir is empty.
 func EnsureTLSCert(vaultDir string) (certFile, keyFile string, err error) {
 	if vaultDir == "" {
 		return "", "", nil
@@ -46,13 +54,47 @@ func EnsureTLSCert(vaultDir string) (certFile, keyFile string, err error) {
 	keyFile = filepath.Join(vaultDir, autoKeyFile)
 
 	if fileExists(certFile) && fileExists(keyFile) {
-		return certFile, keyFile, nil
+		nearExpiry, checkErr := certNearExpiry(certFile, CertRenewalWindow)
+		if checkErr != nil {
+			return "", "", fmt.Errorf("check cached TLS certificate: %w", checkErr)
+		}
+		if !nearExpiry {
+			return certFile, keyFile, nil
+		}
+		cliout.Warnf("cached MCP TLS certificate is expired or expires within %d days; regenerating — every paired approval device must be re-paired, since its pinned certificate fingerprint will no longer match", int(CertRenewalWindow.Hours()/24))
 	}
 
 	if err := generateSelfSignedCert(certFile, keyFile); err != nil {
 		return "", "", fmt.Errorf("generate self-signed TLS certificate: %w", err)
 	}
 	return certFile, keyFile, nil
+}
+
+// certNearExpiry reports whether the certificate at certFile is already
+// expired or will expire within window.
+func certNearExpiry(certFile string, window time.Duration) (bool, error) {
+	cert, err := loadCertificate(certFile)
+	if err != nil {
+		return false, err
+	}
+	return !time.Now().Add(window).Before(cert.NotAfter), nil
+}
+
+// loadCertificate reads and parses the PEM-encoded certificate at certFile.
+func loadCertificate(certFile string) (*x509.Certificate, error) {
+	pemBytes, err := os.ReadFile(certFile) // #nosec G304 -- certFile is EnsureTLSCert's own fixed filename under vaultDir
+	if err != nil {
+		return nil, fmt.Errorf("read TLS certificate: %w", err)
+	}
+	block, _ := pem.Decode(pemBytes)
+	if block == nil {
+		return nil, fmt.Errorf("decode TLS certificate PEM")
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("parse TLS certificate: %w", err)
+	}
+	return cert, nil
 }
 
 // generateSelfSignedCert creates a self-signed ECDSA P-256 certificate valid for
@@ -133,20 +175,32 @@ func CertFingerprint(vaultDir string) (string, error) {
 	if certFile == "" {
 		return "", fmt.Errorf("no TLS certificate available for vault directory")
 	}
-	pemBytes, err := os.ReadFile(certFile) // #nosec G304 -- certFile is EnsureTLSCert's own fixed filename under vaultDir, same security domain
+	cert, err := loadCertificate(certFile)
 	if err != nil {
-		return "", fmt.Errorf("read TLS certificate: %w", err)
-	}
-	block, _ := pem.Decode(pemBytes)
-	if block == nil {
-		return "", fmt.Errorf("decode TLS certificate PEM")
-	}
-	cert, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		return "", fmt.Errorf("parse TLS certificate: %w", err)
+		return "", err
 	}
 	sum := sha256.Sum256(cert.Raw)
 	return hex.EncodeToString(sum[:]), nil
+}
+
+// CertStatus reports whether a cached MCP TLS certificate exists for
+// vaultDir and, if so, its expiry time. Unlike EnsureTLSCert, it never
+// generates a certificate — this is the read-only status check
+// "symvault doctor" uses; callers that need a certificate to exist should
+// call EnsureTLSCert instead. Returns exists=false for an empty vaultDir.
+func CertStatus(vaultDir string) (exists bool, expiry time.Time, err error) {
+	if vaultDir == "" {
+		return false, time.Time{}, nil
+	}
+	certFile := filepath.Join(vaultDir, autoCertFile)
+	if !fileExists(certFile) {
+		return false, time.Time{}, nil
+	}
+	cert, err := loadCertificate(certFile)
+	if err != nil {
+		return true, time.Time{}, err
+	}
+	return true, cert.NotAfter, nil
 }
 
 // EnsureEnrollSecret returns a random secret cached at
