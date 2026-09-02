@@ -148,7 +148,6 @@ struct ApprovalDeviceClient: @unchecked Sendable {
         request.httpBody = try encoder.encode([
             "code": payload.code,
             "device_name": deviceName,
-            "public_key": "",
         ])
 
         let (data, response) = try await transportFactory(payload.fingerprint).send(request)

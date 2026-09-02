@@ -13,6 +13,8 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/audit"
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	auth "github.com/danieljustus/symaira-vault/internal/mcp/auth"
+	"github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap"
+	"github.com/danieljustus/symaira-vault/internal/pairing"
 	"github.com/danieljustus/symaira-vault/internal/update"
 )
 
@@ -217,6 +219,67 @@ func checkMCPServer(vaultDir string, _ Options) Result {
 		r.Hint = "generate an MCP token with `symvault agent token <name> new`"
 	}
 	return r
+}
+
+func checkMCPApprovalTLS(vaultDir string, _ Options) Result {
+	r := Result{ID: "mcp.approval.tls", Name: "Approval-device TLS certificate"}
+
+	exists, expiry, err := serverbootstrap.CertStatus(vaultDir)
+	if err != nil {
+		r.Status = StatusWarn
+		r.Message = "cannot read MCP TLS certificate: " + err.Error()
+		return r
+	}
+
+	active, expiredDevices, revoked, sessErr := approvalDeviceCounts(vaultDir)
+	deviceSummary := fmt.Sprintf("%d approval device(s) active, %d expired, %d revoked", active, expiredDevices, revoked)
+	if sessErr != nil {
+		deviceSummary = "approval devices: cannot load (" + sessErr.Error() + ")"
+	}
+
+	if !exists {
+		r.Status = StatusOK
+		r.Message = "no TLS certificate generated yet (server not started); " + deviceSummary
+		return r
+	}
+
+	daysLeft := int(time.Until(expiry).Hours() / 24)
+	reissueHint := "it regenerates automatically the next time the server starts; every paired approval device must be re-paired afterward"
+	switch {
+	case time.Now().After(expiry):
+		r.Status = StatusWarn
+		r.Message = fmt.Sprintf("cert expired %s; %s", expiry.Format("2006-01-02"), deviceSummary)
+		r.Hint = reissueHint
+	case time.Until(expiry) <= serverbootstrap.CertRenewalWindow:
+		r.Status = StatusWarn
+		r.Message = fmt.Sprintf("cert expires %s (%d day(s)); %s", expiry.Format("2006-01-02"), daysLeft, deviceSummary)
+		r.Hint = reissueHint
+	default:
+		r.Status = StatusOK
+		r.Message = fmt.Sprintf("cert expires %s (%d days); %s", expiry.Format("2006-01-02"), daysLeft, deviceSummary)
+	}
+	return r
+}
+
+// approvalDeviceCounts summarizes the approval-device session store by
+// status, for checkMCPApprovalTLS.
+func approvalDeviceCounts(vaultDir string) (active, expired, revoked int, err error) {
+	store, err := pairing.NewDeviceSessionStore(vaultDir)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	now := time.Now()
+	for _, s := range store.List() {
+		switch {
+		case s.Revoked:
+			revoked++
+		case now.After(s.ExpiresAt):
+			expired++
+		default:
+			active++
+		}
+	}
+	return active, expired, revoked, nil
 }
 
 func checkDynamicSecretEngines(vaultDir string, _ Options) Result {
