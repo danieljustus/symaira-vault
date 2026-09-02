@@ -249,7 +249,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 		if !isPreferred {
 			cliout.Warnf("Port %d is in use, using port %d instead", port, actualPort)
 		}
-		if err := cli.SaveRuntimePort(vaultDir, actualPort); err != nil {
+		if err := cli.SaveRuntimePort(vaultDir, bind, actualPort); err != nil {
 			cliout.Warnf("Warning: could not save runtime port: %v", err)
 		}
 		cliout.Hintf("MCP server listening on %s:%d", bind, actualPort)

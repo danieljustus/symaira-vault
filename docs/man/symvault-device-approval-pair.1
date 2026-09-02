@@ -1,0 +1,76 @@
+.nh
+.TH "SYMVAULT" "1" "Sep 2026" "Symaira Vault" "Symaira Vault Manual"
+
+.SH NAME
+symvault-device-approval-pair - Pair a phone as an approval device for agent credential requests
+
+
+.SH SYNOPSIS
+\fBsymvault device approval-pair [flags]\fP
+
+
+.SH DESCRIPTION
+Generate a QR code a phone can scan to become an approval device: a
+device that can approve or deny agent write requests when approval mode is
+"prompt". This is unrelated to 'symvault device pair', which pairs a
+second computer for vault-content sync and re-encrypts every entry —
+approval-pair only grants the ability to approve/deny agent requests and
+never touches vault encryption or entry content.
+
+.PP
+Requires 'symvault serve' to already be running with TLS (the default),
+since the phone pins its connection to the server's certificate
+fingerprint rather than trusting a certificate authority.
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for approval-pair
+
+.PP
+\fB--host\fP=""
+	LAN address the phone should connect to (auto-detected when omitted)
+
+
+.SH OPTIONS INHERITED FROM PARENT COMMANDS
+\fB--color\fP="auto"
+	When to emit ANSI color: auto, always, never
+
+.PP
+\fB--json\fP[=false]
+	Output format shorthand for --output json; overrides --output when both are specified
+
+.PP
+\fB--no-pipe-warning\fP[=false]
+	suppress 'reading from non-TTY' warning when piping secrets
+
+.PP
+\fB--output\fP="text"
+	Output format (text, json, yaml)
+
+.PP
+\fB--profile\fP=""
+	use a named vault profile
+
+.PP
+\fB--quiet\fP[=false]
+	suppress non-error output
+
+.PP
+\fB--theme\fP=""
+	Color preset: default, highcontrast, colorblind (or SYMVAULT_THEME)
+
+.PP
+\fB--vault\fP="~/.symvault"
+	path to the password vault
+
+
+.SH EXAMPLE
+.EX
+  symvault device approval-pair
+  symvault device approval-pair --host 192.168.1.42
+.EE
+
+
+.SH SEE ALSO
+\fBsymvault-device(1)\fP

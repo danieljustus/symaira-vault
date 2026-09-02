@@ -6,9 +6,11 @@ import (
 	"net"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/danieljustus/symaira-vault/internal/approval"
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 	"github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap"
 	"github.com/danieljustus/symaira-vault/internal/pairing"
 )
@@ -119,5 +121,53 @@ func TestMintApprovalEnrollCode_RejectsUntrustedServer(t *testing.T) {
 
 	if _, _, _, err := mintApprovalEnrollCode(dir, port); err == nil {
 		t.Fatal("expected an error connecting to a server presenting an untrusted certificate")
+	}
+}
+
+// TestApprovalPair_RefusesLoopbackOnlyBind covers the issue's core
+// acceptance criterion: running "approval-pair" against a server bound to
+// 127.0.0.1 (the default) must produce a clear, actionable error instead of
+// a QR code a phone can never reach. This is checked before any network
+// call, so no server needs to actually be listening.
+func TestApprovalPair_RefusesLoopbackOnlyBind(t *testing.T) {
+	vaultDir, passphrase := initVault(t)
+	setPassEnv(t, string(passphrase))
+	defer setupVaultFlag(t, vaultDir)()
+
+	if err := cli.SaveRuntimePort(vaultDir, "127.0.0.1", 8443); err != nil {
+		t.Fatalf("SaveRuntimePort: %v", err)
+	}
+
+	cmd := newDeviceApprovalPairCmd()
+	err := cmd.RunE(cmd, nil)
+	if err == nil {
+		t.Fatal("expected an error for a loopback-only bind, got nil")
+	}
+	if !strings.Contains(err.Error(), "loopback-only") || !strings.Contains(err.Error(), "--bind") {
+		t.Fatalf("error = %q, want it to explain the loopback-only bind and suggest --bind", err.Error())
+	}
+}
+
+// TestApprovalPair_AllowsNonLoopbackBind is the negative case: a server
+// bound to a real interface must not be refused by the loopback check (the
+// command still fails past that point in this test, since no server is
+// actually listening on the recorded port — but that failure must not be
+// the loopback-only error).
+func TestApprovalPair_AllowsNonLoopbackBind(t *testing.T) {
+	vaultDir, passphrase := initVault(t)
+	setPassEnv(t, string(passphrase))
+	defer setupVaultFlag(t, vaultDir)()
+
+	if err := cli.SaveRuntimePort(vaultDir, "0.0.0.0", 8443); err != nil {
+		t.Fatalf("SaveRuntimePort: %v", err)
+	}
+
+	cmd := newDeviceApprovalPairCmd()
+	err := cmd.RunE(cmd, nil)
+	if err == nil {
+		t.Fatal("expected an error since no server is actually listening, got nil")
+	}
+	if strings.Contains(err.Error(), "loopback-only") {
+		t.Fatalf("error = %q, should not be the loopback-only refusal for a non-loopback bind", err.Error())
 	}
 }

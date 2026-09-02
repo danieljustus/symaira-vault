@@ -74,7 +74,7 @@ func TestCheckRuntimePortHealth_IPv6Bind(t *testing.T) {
 func TestResolveHTTPPort_RuntimePortHealthy(t *testing.T) {
 	tmpDir := t.TempDir()
 	port := startTestHealthServer(t, http.StatusOK)
-	if err := cli.SaveRuntimePort(tmpDir, port); err != nil {
+	if err := cli.SaveRuntimePort(tmpDir, "127.0.0.1", port); err != nil {
 		t.Fatalf("cli.SaveRuntimePort failed: %v", err)
 	}
 	resolved, err := ResolveHTTPPort(tmpDir, "127.0.0.1", 8080)
@@ -91,7 +91,7 @@ func TestResolveHTTPPort_RuntimePortStale(t *testing.T) {
 	l, _ := net.Listen("tcp", "127.0.0.1:0")
 	port := l.Addr().(*net.TCPAddr).Port
 	_ = l.Close()
-	if err := cli.SaveRuntimePort(tmpDir, port); err != nil {
+	if err := cli.SaveRuntimePort(tmpDir, "127.0.0.1", port); err != nil {
 		t.Fatalf("cli.SaveRuntimePort failed: %v", err)
 	}
 	_, err := ResolveHTTPPort(tmpDir, "127.0.0.1", 8080)
