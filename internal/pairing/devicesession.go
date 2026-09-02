@@ -21,16 +21,8 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/mcp/auth"
 )
 
-const (
-	// DefaultSessionTTL is the default TTL for enrolled device sessions.
-	DefaultSessionTTL = 90 * 24 * time.Hour // 90 days
-	// MaxSessionFailedAttempts is the number of failed validation attempts
-	// allowed per device before a cooldown is applied.
-	MaxSessionFailedAttempts = 5
-	// SessionFailedAttemptCooldown is how long a device's attempts are
-	// rejected after MaxSessionFailedAttempts failures.
-	SessionFailedAttemptCooldown = 30 * time.Second
-)
+// DefaultSessionTTL is the default TTL for enrolled device sessions.
+const DefaultSessionTTL = 90 * 24 * time.Hour // 90 days
 
 // DeviceSession represents an enrolled device session token. The bearer
 // token itself is never persisted — only its SHA-256 hash, keyed identically
@@ -46,19 +38,12 @@ type DeviceSession struct {
 	Revoked   bool      `json:"revoked"`
 }
 
-// deviceFailure tracks failed validation attempts for a single device.
-type deviceFailure struct {
-	Count         int
-	CooldownUntil time.Time
-}
-
 // DeviceSessionStore holds long-lived device session tokens on disk.
 // It is safe for concurrent use.
 type DeviceSessionStore struct {
 	path     string
 	mu       sync.RWMutex
 	sessions map[string]*DeviceSession // sha256Hex(token) -> session
-	failures map[string]deviceFailure  // deviceID -> failure state
 	mtime    time.Time                 // mtime of path as of the last load/save
 }
 
@@ -69,14 +54,12 @@ func NewDeviceSessionStore(vaultDir string) (*DeviceSessionStore, error) {
 	if vaultDir == "" {
 		return &DeviceSessionStore{
 			sessions: make(map[string]*DeviceSession),
-			failures: make(map[string]deviceFailure),
 		}, nil
 	}
 	path := filepath.Join(vaultDir, config.DefaultVaultSubdir, "device-sessions.json")
 	s := &DeviceSessionStore{
 		path:     path,
 		sessions: make(map[string]*DeviceSession),
-		failures: make(map[string]deviceFailure),
 	}
 	if err := s.load(); err != nil {
 		return nil, fmt.Errorf("load device session store: %w", err)
@@ -105,9 +88,12 @@ func (s *DeviceSessionStore) Enroll(deviceID, name, publicKey string) (string, e
 	}
 	s.mu.Lock()
 	s.sessions[hash] = session
-	s.mu.Unlock()
-	if err := s.save(); err != nil {
+	err = s.save()
+	if err != nil {
 		delete(s.sessions, hash)
+	}
+	s.mu.Unlock()
+	if err != nil {
 		return "", fmt.Errorf("persist device session: %w", err)
 	}
 	return rawToken, nil
@@ -127,8 +113,7 @@ func (s *DeviceSessionStore) List() []DeviceSession {
 }
 
 // Validate checks a session token and returns the deviceID if the session
-// is valid (not revoked, not expired, device not in cooldown).
-// Successful validation resets the device's failure counter.
+// is valid (not revoked, not expired).
 func (s *DeviceSessionStore) Validate(token string) (string, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -146,39 +131,7 @@ func (s *DeviceSessionStore) Validate(token string) (string, bool) {
 		return "", false
 	}
 
-	f, hasFailures := s.failures[session.DeviceID]
-	if hasFailures && time.Now().Before(f.CooldownUntil) {
-		return "", false
-	}
-	if hasFailures && time.Now().After(f.CooldownUntil) {
-		delete(s.failures, session.DeviceID)
-	}
-
-	s.failures[session.DeviceID] = deviceFailure{}
 	return session.DeviceID, true
-}
-
-// RecordFailure records a validation failure for the device associated with
-// the token. If the token is unknown, no failure is recorded (unknown-token
-// brute-force is bounded by the store's file-read path and the validator's
-// caller).
-func (s *DeviceSessionStore) RecordFailure(token string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.mergeRevocationsFromDisk()
-
-	session, ok := s.sessions[hashToken(token)]
-	if !ok {
-		return
-	}
-	f := s.failures[session.DeviceID]
-	f.Count++
-	if f.Count >= MaxSessionFailedAttempts {
-		f.CooldownUntil = time.Now().Add(SessionFailedAttemptCooldown)
-	}
-	s.failures[session.DeviceID] = f
-	_ = s.save()
 }
 
 // Revoke revokes all sessions for deviceID.
@@ -212,8 +165,7 @@ func (s *DeviceSessionStore) RevokeAll() {
 	_ = s.save()
 }
 
-// CleanupExpired removes expired sessions and resets stale device failure
-// counters.
+// CleanupExpired removes expired sessions.
 func (s *DeviceSessionStore) CleanupExpired() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -224,12 +176,6 @@ func (s *DeviceSessionStore) CleanupExpired() {
 	for token, session := range s.sessions {
 		if now.After(session.ExpiresAt) {
 			delete(s.sessions, token)
-			changed = true
-		}
-	}
-	for deviceID, f := range s.failures {
-		if f.Count >= MaxSessionFailedAttempts && now.After(f.CooldownUntil) {
-			delete(s.failures, deviceID)
 			changed = true
 		}
 	}

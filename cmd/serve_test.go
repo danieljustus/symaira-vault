@@ -1726,17 +1726,16 @@ func TestRunHTTPServerFunc_ApprovalDeviceSession(t *testing.T) {
 		t.Errorf("revoked device status = %d, want 401", revokedResp.StatusCode)
 	}
 
-	// Per-device failed attempts: device-2 should not be affected by
-	// device-1's failures (if any). We verify this by enrolling device-2
-	// after device-1 was revoked and confirming it can still list.
+	// device-2 is unaffected by device-1's revocation: verify it can still
+	// enroll and list after device-1 was revoked.
 	device2Token, err := store.Enroll("device-2", "Test Device Two", "age1device2key")
 	if err != nil {
 		t.Fatalf("Enroll device-2: %v", err)
 	}
 	_ = store.Save()
 
-	// Drive a few invalid attempts against device-2's token to populate
-	// its failure counter without touching device-1.
+	// A few invalid-token attempts against device-2's near-miss token must
+	// not affect device-2's own valid token.
 	for i := 0; i < 3; i++ {
 		failReq, _ := http.NewRequest(http.MethodGet, baseURL+approval.PathApprovals, nil)
 		failReq.Header.Set("Authorization", "Bearer "+device2Token+"x")
@@ -1758,5 +1757,118 @@ func TestRunHTTPServerFunc_ApprovalDeviceSession(t *testing.T) {
 	if list2Resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(list2Resp.Body)
 		t.Errorf("device-2 list status = %d, body %s", list2Resp.StatusCode, string(body))
+	}
+}
+
+// TestRunHTTPServerFunc_ApprovalRoutesAreRateLimited confirms the approval
+// and device-enroll routes share the same per-client-IP rate limiter as
+// /mcp, rather than being reachable at an unbounded rate. Rate limiting is
+// the outermost middleware layer, so it must trigger before the routes'
+// own auth checks — this test drives PathApprovals unauthenticated and
+// still expects 429 once the (deliberately tiny) limit is exceeded.
+func TestRunHTTPServerFunc_ApprovalRoutesAreRateLimited(t *testing.T) {
+	resetVaultState(t)
+
+	tmpDir := t.TempDir()
+	restoreVaultFlag := setupVaultFlag(t, tmpDir)
+	defer restoreVaultFlag()
+	_ = os.Setenv("SYMVAULT_VAULT", tmpDir)
+	_ = os.Setenv("SYMVAULT_PASSPHRASE", "test")
+	defer func() {
+		_ = os.Unsetenv("SYMVAULT_VAULT")
+		_ = os.Unsetenv("SYMVAULT_PASSPHRASE")
+	}()
+
+	cfg := config.Default()
+	_, _ = vaultpkg.InitWithPassphrase(tmpDir, []byte("test"), cfg)
+
+	store, err := pairing.NewDeviceSessionStore(tmpDir)
+	if err != nil {
+		t.Fatalf("NewDeviceSessionStore: %v", err)
+	}
+
+	origQueue := mcpcmd.ApprovalQueue
+	mcpcmd.ApprovalQueue = approval.NewQueue()
+	defer func() { mcpcmd.ApprovalQueue = origQueue }()
+	origStoreFactory := mcpcmd.NewDeviceSessionStoreFunc
+	mcpcmd.NewDeviceSessionStoreFunc = func(string) (*pairing.DeviceSessionStore, error) {
+		return store, nil
+	}
+	defer func() { mcpcmd.NewDeviceSessionStoreFunc = origStoreFactory }()
+	origHTTP := mcpcmd.RunHTTPServerFunc
+	mcpcmd.RunHTTPServerFunc = mcpcmd.RunHTTPServerWithApproval
+	defer func() { mcpcmd.RunHTTPServerFunc = origHTTP }()
+
+	port := findFreePort(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		v, err := vaultpkg.OpenWithPassphrase(tmpDir, []byte("test"))
+		if err != nil {
+			t.Logf("open vault: %v", err)
+			return
+		}
+		if v.Config.MCP == nil {
+			v.Config.MCP = &config.MCPConfig{}
+		}
+		v.Config.MCP.AllowInsecureBind = true
+		v.Config.MCP.HTTPTokenFile = filepath.Join(tmpDir, "mcp-token")
+		v.Config.MCP.RateLimit = 1 // one request per minute
+		if err := mcpcmd.RunHTTPServerFunc(ctx, "127.0.0.1", port, v); err != nil {
+			t.Logf("RunHTTPServerFunc: %v", err)
+		}
+	}()
+
+	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+	client := newTestHTTPClient()
+	for i := 0; i < 50; i++ {
+		conn, err := net.DialTimeout("tcp", addr, 100*time.Millisecond)
+		if err == nil {
+			_ = conn.Close()
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	for i := 0; i < 20; i++ {
+		resp, err := client.Get("http://" + addr + "/health")
+		if err == nil {
+			_ = resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				break
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	baseURL := "http://" + addr
+
+	get := func() int {
+		req, _ := http.NewRequest(http.MethodGet, baseURL+approval.PathApprovals, nil)
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		return resp.StatusCode
+	}
+
+	first := get()
+	if first == http.StatusTooManyRequests {
+		t.Fatal("first request was already rate-limited; the limiter is not scoped to this test's client")
+	}
+
+	var sawRateLimited bool
+	for i := 0; i < 5; i++ {
+		if get() == http.StatusTooManyRequests {
+			sawRateLimited = true
+			break
+		}
+	}
+	if !sawRateLimited {
+		t.Fatal("expected a 429 after exceeding the rate limit on the approval route, never saw one")
 	}
 }

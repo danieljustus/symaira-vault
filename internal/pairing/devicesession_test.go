@@ -3,8 +3,12 @@ package pairing
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -251,6 +255,50 @@ func TestDeviceSessionStore_MigratesLegacyRawTokenKeys(t *testing.T) {
 	}
 }
 
+// skipIfRoot skips permission-based failure-injection tests when running as
+// root, since root bypasses the write-permission checks these tests rely on.
+func skipIfRoot(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS != "windows" && os.Geteuid() == 0 {
+		t.Skip("skipping permission-based test: running as root")
+	}
+}
+
+// TestDeviceSessionStore_EnrollRollbackIsRaceFree exercises Enroll's
+// save-failure rollback (delete(s.sessions, hash) on a failed save)
+// concurrently with readers, under `go test -race`. Making every save fail
+// forces every concurrent Enroll call down the rollback path, so a
+// regression back to mutating s.sessions outside the lock would be caught
+// as a data race here.
+func TestDeviceSessionStore_EnrollRollbackIsRaceFree(t *testing.T) {
+	skipIfRoot(t)
+	dir := t.TempDir()
+	store, err := NewDeviceSessionStore(dir)
+	if err != nil {
+		t.Fatalf("NewDeviceSessionStore: %v", err)
+	}
+
+	sessionsDir := filepath.Dir(store.path)
+	if err := os.Chmod(sessionsDir, 0o500); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(sessionsDir, 0o700) })
+
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(2)
+		go func(i int) {
+			defer wg.Done()
+			_, _ = store.Enroll(fmt.Sprintf("device-%d", i), "", "")
+		}(i)
+		go func() {
+			defer wg.Done()
+			_ = store.List()
+		}()
+	}
+	wg.Wait()
+}
+
 func TestDeviceSessionStore_UnknownToken(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewDeviceSessionStore(dir)
@@ -261,53 +309,6 @@ func TestDeviceSessionStore_UnknownToken(t *testing.T) {
 	deviceID, ok := store.Validate("unknown-token")
 	if ok || deviceID != "" {
 		t.Fatalf("unknown Validate = %q, %v", deviceID, ok)
-	}
-}
-
-func TestDeviceSessionStore_PerDeviceFailedAttempts(t *testing.T) {
-	dir := t.TempDir()
-	store, err := NewDeviceSessionStore(dir)
-	if err != nil {
-		t.Fatalf("NewDeviceSessionStore: %v", err)
-	}
-	token, err := store.Enroll("device-1", "Device One", "age1pubkey")
-	if err != nil {
-		t.Fatalf("Enroll: %v", err)
-	}
-
-	// Drive max failed attempts with wrong tokens for device-1's session.
-	// Because the token is unknown, RecordFailure won't find the session
-	// and won't increment the counter. We verify that a valid token still
-	// works after unknown-token noise.
-	for i := 0; i < MaxSessionFailedAttempts+2; i++ {
-		store.Validate("bogus-" + string(rune(i)))
-	}
-	deviceID, ok := store.Validate(token)
-	if !ok || deviceID != "device-1" {
-		t.Fatalf("valid token after noise = %q, %v", deviceID, ok)
-	}
-
-	// Now drive failures using the valid token but wrong validation path
-	// by expiring the session. We can't easily do that without waiting,
-	// so instead we test per-device cooldown by creating a second device
-	// and verifying that failures on one device don't affect the other.
-	token2, err := store.Enroll("device-2", "Device Two", "age1pubkey2")
-	if err != nil {
-		t.Fatalf("Enroll device-2: %v", err)
-	}
-
-	// Simulate device-1 hitting cooldown by directly manipulating.
-	store.mu.Lock()
-	store.failures["device-1"] = deviceFailure{
-		Count:         MaxSessionFailedAttempts,
-		CooldownUntil: time.Now().Add(time.Hour),
-	}
-	store.mu.Unlock()
-
-	// device-2 should still validate fine.
-	deviceID, ok = store.Validate(token2)
-	if !ok || deviceID != "device-2" {
-		t.Fatalf("device-2 Validate after device-1 cooldown = %q, %v", deviceID, ok)
 	}
 }
 
