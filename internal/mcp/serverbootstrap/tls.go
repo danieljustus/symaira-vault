@@ -28,7 +28,7 @@ const (
 	// enrollSecretFile is the filename for the random secret that proves
 	// vault-directory ownership when minting an approval-device pairing
 	// code (see EnsureEnrollSecret).
-	enrollSecretFile = "mcp-server.enroll-secret"
+	enrollSecretFile = "mcp-server.enroll-secret" // #nosec G101 -- filename, not a credential
 	// enrollSecretSize is the size in bytes of the generated enroll secret.
 	enrollSecretSize = 32
 )
@@ -163,9 +163,11 @@ func EnsureEnrollSecret(vaultDir string) ([]byte, error) {
 		return nil, nil
 	}
 	path := filepath.Join(vaultDir, enrollSecretFile)
-	if secret, err := os.ReadFile(path); err == nil { // #nosec G304 -- path is this function's own fixed filename under vaultDir
-		return secret, nil
-	} else if !os.IsNotExist(err) {
+	existing, err := os.ReadFile(path) // #nosec G304 -- path is this function's own fixed filename under vaultDir
+	if err == nil {
+		return existing, nil
+	}
+	if !os.IsNotExist(err) {
 		return nil, fmt.Errorf("read enroll secret: %w", err)
 	}
 	secret := make([]byte, enrollSecretSize)
