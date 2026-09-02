@@ -2,20 +2,29 @@
 .TH "SYMVAULT" "1" "Sep 2026" "Symaira Vault" "Symaira Vault Manual"
 
 .SH NAME
-symvault-import-review-list - List quarantined import batches
+symvault-device-approval-revoke - Revoke an approval device's ability to approve/deny requests
 
 
 .SH SYNOPSIS
-\fBsymvault import review list [flags]\fP
+\fBsymvault device approval-revoke  [flags]\fP
 
 
 .SH DESCRIPTION
-List quarantined import batches
+Revoke a device enrolled via 'symvault device approval-pair', so it can
+no longer approve or deny agent credential requests. This does NOT
+re-encrypt or otherwise affect vault entries — it only invalidates that
+device's approval-decision bearer token. For revoking a vault-content sync
+device instead, use 'symvault device revoke \&' (a different, more
+destructive command that re-encrypts every entry).
 
 
 .SH OPTIONS
 \fB-h\fP, \fB--help\fP[=false]
-	help for list
+	help for approval-revoke
+
+.PP
+\fB-y\fP, \fB--yes\fP[=false]
+	Skip confirmation prompt
 
 
 .SH OPTIONS INHERITED FROM PARENT COMMANDS
@@ -51,5 +60,12 @@ List quarantined import batches
 	path to the password vault
 
 
+.SH EXAMPLE
+.EX
+  symvault device approval-list
+  symvault device approval-revoke dev-abc123
+.EE
+
+
 .SH SEE ALSO
-\fBsymvault-import-review(1)\fP
+\fBsymvault-device(1)\fP
