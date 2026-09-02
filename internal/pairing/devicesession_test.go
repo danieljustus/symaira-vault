@@ -73,6 +73,62 @@ func TestDeviceSessionStore_Revoke(t *testing.T) {
 	}
 }
 
+func TestDeviceSessionStore_RevokeByOtherInstanceTakesEffect(t *testing.T) {
+	dir := t.TempDir()
+	server, err := NewDeviceSessionStore(dir)
+	if err != nil {
+		t.Fatalf("NewDeviceSessionStore: %v", err)
+	}
+	token, err := server.Enroll("device-1", "Device One", "age1pubkey")
+	if err != nil {
+		t.Fatalf("Enroll: %v", err)
+	}
+
+	// A separate instance, as the "approval-revoke" CLI opens against the
+	// same vault directory while a long-lived "serve" process holds its own.
+	cli, err := NewDeviceSessionStore(dir)
+	if err != nil {
+		t.Fatalf("NewDeviceSessionStore (cli): %v", err)
+	}
+	cli.Revoke("device-1")
+
+	// The long-lived instance must see the revocation without a restart.
+	if deviceID, ok := server.Validate(token); ok {
+		t.Fatalf("revoked token still validated by other instance: deviceID=%q", deviceID)
+	}
+
+	// A later save by the long-lived instance (e.g. a cleanup tick) must not
+	// clobber the revocation back to unrevoked.
+	server.CleanupExpired()
+	reload, err := NewDeviceSessionStore(dir)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	sessions := reload.List()
+	if len(sessions) != 1 || !sessions[0].Revoked {
+		t.Fatalf("sessions after cleanup tick = %+v, want single revoked session", sessions)
+	}
+}
+
+func TestDeviceSessionStore_CleanupExpired_NoOpDoesNotRewriteFile(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewDeviceSessionStore(dir)
+	if err != nil {
+		t.Fatalf("NewDeviceSessionStore: %v", err)
+	}
+	if _, err := store.Enroll("device-1", "Device One", "age1pubkey"); err != nil {
+		t.Fatalf("Enroll: %v", err)
+	}
+
+	before := store.mtime
+	time.Sleep(10 * time.Millisecond)
+	store.CleanupExpired()
+
+	if !store.mtime.Equal(before) {
+		t.Fatalf("CleanupExpired rewrote the file with nothing to clean up: mtime %v -> %v", before, store.mtime)
+	}
+}
+
 func TestDeviceSessionStore_UnknownToken(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewDeviceSessionStore(dir)
