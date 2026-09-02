@@ -43,6 +43,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     session, matching the vault every other command can already read.
   - The macOS app no longer returns to the unlock screen without a message when
     a reported-successful unlock leaves no active session.
+- `symvault device approval-pair` now refuses with an actionable error
+  instead of producing a QR code that can never connect, when
+  `symvault serve`/`symvault mcp` is bound to loopback only (the default).
+  The runtime port file now also records the server's bind address so this
+  can be checked; existing plain-integer runtime port files are read
+  without a bind address, so this check is skipped rather than false-flagged
+  until the server is restarted.
 
 ### Dependencies
 - Bumped `corekit` from `v0.9.1` to `v0.11.0` (pulls in latest audit/security improvements from the corekit module).
@@ -51,6 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 - Documented the deliberate audit-chain deviation from `corekit/auditkit` in `ARCHITECTURE.md` §8.
 - Added `.github/CONTRIBUTING.md` for project contribution guidelines.
+- Added [docs/approval-devices.md](docs/approval-devices.md): pairing, revocation, TLS fingerprint pinning, and LAN exposure implications for the approval-device feature (`symvault device approval-pair`/`approval-list`/`approval-revoke`), which previously had no end-to-end documentation. README and the configuration reference now link to it; man pages for the three commands were generated.
 
 ## [v0.16.0] - 2026-08-24
 

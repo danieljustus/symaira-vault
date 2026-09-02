@@ -302,19 +302,33 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 	mux.Handle("/mcp", mcpChain)
 
 	// Device approval transport (optional): mounted when an approval queue
-	// and device-token validator are wired in by the caller.
+	// and device-token validator are wired in by the caller. Rate-limited
+	// the same way as /mcp, since these routes are LAN-reachable like /mcp
+	// and accept a bearer token an attacker could try to brute-force.
 	if options.approvalHandler != nil {
-		mux.Handle(approval.PathApprovals, options.approvalHandler)
-		mux.Handle(approval.PathApprovalAction, options.approvalHandler)
+		approvalChain := options.approvalHandler
+		if rateLimiter != nil {
+			approvalChain = auth.RateLimiterMiddleware(rateLimiter, approvalChain)
+		}
+		mux.Handle(approval.PathApprovals, approvalChain)
+		mux.Handle(approval.PathApprovalAction, approvalChain)
 	}
 
 	// Device enrollment transport (optional): lets a device exchange a
 	// pairing code for an approval-device bearer token.
 	if options.deviceEnrollHandler != nil {
-		mux.Handle(approval.PathDeviceEnroll, options.deviceEnrollHandler)
+		enrollChain := options.deviceEnrollHandler
+		if rateLimiter != nil {
+			enrollChain = auth.RateLimiterMiddleware(rateLimiter, enrollChain)
+		}
+		mux.Handle(approval.PathDeviceEnroll, enrollChain)
 	}
 	if options.deviceEnrollCodeHandler != nil {
-		mux.Handle(approval.PathDeviceEnrollCode, options.deviceEnrollCodeHandler)
+		enrollCodeChain := options.deviceEnrollCodeHandler
+		if rateLimiter != nil {
+			enrollCodeChain = auth.RateLimiterMiddleware(rateLimiter, enrollCodeChain)
+		}
+		mux.Handle(approval.PathDeviceEnrollCode, enrollCodeChain)
 	}
 
 	timeouts := resolveServerTimeouts(v)
