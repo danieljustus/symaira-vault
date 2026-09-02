@@ -54,6 +54,7 @@ type DeviceSessionStore struct {
 	mu       sync.RWMutex
 	sessions map[string]*DeviceSession // token -> session
 	failures map[string]deviceFailure  // deviceID -> failure state
+	mtime    time.Time                 // mtime of path as of the last load/save
 }
 
 // NewDeviceSessionStore loads the device session store from vaultDir.
@@ -124,6 +125,8 @@ func (s *DeviceSessionStore) Validate(token string) (string, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	s.mergeRevocationsFromDisk()
+
 	session, ok := s.sessions[token]
 	if !ok {
 		return "", false
@@ -155,6 +158,8 @@ func (s *DeviceSessionStore) RecordFailure(token string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	s.mergeRevocationsFromDisk()
+
 	session, ok := s.sessions[token]
 	if !ok {
 		return
@@ -173,7 +178,7 @@ func (s *DeviceSessionStore) Revoke(deviceID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	changed := false
+	changed := s.mergeRevocationsFromDisk()
 	for _, session := range s.sessions {
 		if session.DeviceID == deviceID && !session.Revoked {
 			session.Revoked = true
@@ -190,6 +195,7 @@ func (s *DeviceSessionStore) RevokeAll() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	s.mergeRevocationsFromDisk()
 	for _, session := range s.sessions {
 		if !session.Revoked {
 			session.Revoked = true
@@ -204,18 +210,24 @@ func (s *DeviceSessionStore) CleanupExpired() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	changed := s.mergeRevocationsFromDisk()
+
 	now := time.Now()
 	for token, session := range s.sessions {
 		if now.After(session.ExpiresAt) {
 			delete(s.sessions, token)
+			changed = true
 		}
 	}
 	for deviceID, f := range s.failures {
 		if f.Count >= MaxSessionFailedAttempts && now.After(f.CooldownUntil) {
 			delete(s.failures, deviceID)
+			changed = true
 		}
 	}
-	_ = s.save()
+	if changed {
+		_ = s.save()
+	}
 }
 
 // Save persists the store to disk.
@@ -272,6 +284,9 @@ func (s *DeviceSessionStore) load() error {
 		return fmt.Errorf("parse device sessions: %w", err)
 	}
 	s.sessions = sessions
+	if info, statErr := os.Stat(s.path); statErr == nil {
+		s.mtime = info.ModTime()
+	}
 	return nil
 }
 
@@ -290,7 +305,51 @@ func (s *DeviceSessionStore) save() error {
 	if err := os.WriteFile(tmp, data, 0o600); err != nil {
 		return err
 	}
-	return os.Rename(tmp, s.path)
+	if err := os.Rename(tmp, s.path); err != nil {
+		return err
+	}
+	if info, statErr := os.Stat(s.path); statErr == nil {
+		s.mtime = info.ModTime()
+	}
+	return nil
+}
+
+// mergeRevocationsFromDisk re-reads the on-disk store when it is newer than
+// the last load/save this instance observed, and applies any revocation
+// found there onto the in-memory copy. Revocation only ever moves from false
+// to true here, so a concurrent writer (typically the "approval-revoke" CLI,
+// which opens its own store instance against the same file) can never have
+// its revocation silently undone by this instance's next save. Callers must
+// hold s.mu for writing. Returns whether any in-memory session was newly
+// marked revoked.
+func (s *DeviceSessionStore) mergeRevocationsFromDisk() bool {
+	if s.path == "" {
+		return false
+	}
+	info, err := os.Stat(s.path)
+	if err != nil || !info.ModTime().After(s.mtime) {
+		return false
+	}
+	data, err := os.ReadFile(s.path)
+	if err != nil {
+		return false
+	}
+	var onDisk map[string]*DeviceSession
+	if err := json.Unmarshal(data, &onDisk); err != nil {
+		return false
+	}
+	changed := false
+	for token, diskSession := range onDisk {
+		if diskSession == nil || !diskSession.Revoked {
+			continue
+		}
+		if mem, ok := s.sessions[token]; ok && !mem.Revoked {
+			mem.Revoked = true
+			changed = true
+		}
+	}
+	s.mtime = info.ModTime()
+	return changed
 }
 
 // GenerateSessionToken creates a high-entropy session token.

@@ -185,6 +185,81 @@ func TestEnrollHTTPHandler_Success(t *testing.T) {
 	}
 }
 
+func TestEnrollHTTPHandler_RevocationTakesEffectAcrossStoreInstances(t *testing.T) {
+	dir := t.TempDir()
+	codes := pairing.NewTokenStore()
+	sessions, err := pairing.NewDeviceSessionStore(dir)
+	if err != nil {
+		t.Fatalf("NewDeviceSessionStore: %v", err)
+	}
+	h := NewEnrollHTTPHandler(codes, sessions)
+
+	token, err := pairing.GenerateToken()
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+	if err := codes.Store(token, ""); err != nil {
+		t.Fatalf("Store: %v", err)
+	}
+
+	body, _ := json.Marshal(map[string]string{"code": token.String(), "device_name": "Daniel's iPhone"})
+	req := httptest.NewRequest(http.MethodPost, PathDeviceEnroll, bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		Token    string `json:"token"`
+		DeviceID string `json:"device_id"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	// Sanity: the server's own long-lived store instance accepts the token
+	// immediately after enrolment, as "symvault serve" would.
+	if deviceID, ok := sessions.Validate(resp.Token); !ok || deviceID != resp.DeviceID {
+		t.Fatalf("issued token did not validate before revoke: deviceID=%q ok=%v", deviceID, ok)
+	}
+
+	// A second, independent store instance is exactly what
+	// "symvault device approval-revoke" opens: its own process, its own
+	// DeviceSessionStore, pointed at the same vault directory.
+	revoker, err := pairing.NewDeviceSessionStore(dir)
+	if err != nil {
+		t.Fatalf("NewDeviceSessionStore (revoker): %v", err)
+	}
+	revoker.Revoke(resp.DeviceID)
+
+	// The server's original, still-running store instance must reject the
+	// token without needing a restart.
+	if deviceID, ok := sessions.Validate(resp.Token); ok {
+		t.Fatalf("revoked token still validated: deviceID=%q", deviceID)
+	}
+
+	// The revocation on disk must survive the server's own store persisting
+	// state again (e.g. a cleanup tick), rather than being clobbered back to
+	// unrevoked by the server's stale in-memory copy.
+	sessions.CleanupExpired()
+	onDisk, err := pairing.NewDeviceSessionStore(dir)
+	if err != nil {
+		t.Fatalf("NewDeviceSessionStore (reload): %v", err)
+	}
+	found := false
+	for _, s := range onDisk.List() {
+		if s.DeviceID == resp.DeviceID {
+			found = true
+			if !s.Revoked {
+				t.Fatalf("device %q not revoked on disk after cleanup tick", resp.DeviceID)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("device %q not found on disk after cleanup tick", resp.DeviceID)
+	}
+}
+
 func TestEnrollHTTPHandler_CodeIsSingleUse(t *testing.T) {
 	codes := pairing.NewTokenStore()
 	sessions, err := pairing.NewDeviceSessionStore("")
