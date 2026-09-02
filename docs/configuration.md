@@ -80,7 +80,7 @@ mcp:
 | `allowedPaths` | Path patterns the agent can access (prefix patterns, `*` for all) |
 | `canWrite` | Whether the agent can create/update/delete entries |
 | `canManageConfig` | Whether the agent can change Symaira Vault auth/config settings via MCP |
-| `approvalMode` | `none` (allow all), `deny` (reject writes), `prompt` (degrades to deny in MCP) |
+| `approvalMode` | `none` (allow all), `deny` (reject writes), `prompt` (degrades to deny with no approval device enrolled; blocks on a paired phone's decision once one is — see [Approval devices](approval-devices.md)) |
 
 ## Vault Config Options
 

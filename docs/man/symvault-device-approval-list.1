@@ -2,20 +2,24 @@
 .TH "SYMVAULT" "1" "Sep 2026" "Symaira Vault" "Symaira Vault Manual"
 
 .SH NAME
-symvault-import-review-list - List quarantined import batches
+symvault-device-approval-list - List devices enrolled as approval devices
 
 
 .SH SYNOPSIS
-\fBsymvault import review list [flags]\fP
+\fBsymvault device approval-list [flags]\fP
 
 
 .SH DESCRIPTION
-List quarantined import batches
+List devices that can approve or deny agent credential requests
+(enrolled via 'symvault device approval-pair'). This is a different device
+registry from 'symvault device list', which shows vault-content sync
+devices — an approval device cannot decrypt vault entries, it can only
+approve or deny agent requests.
 
 
 .SH OPTIONS
 \fB-h\fP, \fB--help\fP[=false]
-	help for list
+	help for approval-list
 
 
 .SH OPTIONS INHERITED FROM PARENT COMMANDS
@@ -52,4 +56,4 @@ List quarantined import batches
 
 
 .SH SEE ALSO
-\fBsymvault-import-review(1)\fP
+\fBsymvault-device(1)\fP

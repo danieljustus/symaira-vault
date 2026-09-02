@@ -426,7 +426,7 @@ func TestOutputHTTPConfig_StaleRuntimePort(t *testing.T) {
 	vaultDir, _ := initVault(t)
 	vaultFlagReset(t)
 
-	if err := cli.SaveRuntimePort(vaultDir, 1); err != nil {
+	if err := cli.SaveRuntimePort(vaultDir, "127.0.0.1", 1); err != nil {
 		t.Fatalf("save runtime port: %v", err)
 	}
 
