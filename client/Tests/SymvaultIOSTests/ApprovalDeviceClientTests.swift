@@ -113,3 +113,31 @@ private func jsonResponse(_ status: Int, _ body: [String: Any]) -> (Data, HTTPUR
     #expect(transport.requests[1].url?.absoluteString == "https://127.0.0.1:1/api/v1/approvals/apr-1/deny")
     #expect(transport.requests[0].httpMethod == "POST")
 }
+
+@Test func sessionCacheReusesTheSameSessionForTheSameFingerprint() async {
+    let cache = URLSessionCache()
+
+    let first = await cache.session(for: "fp-1")
+    let second = await cache.session(for: "fp-1")
+
+    #expect(first === second)
+}
+
+@Test func sessionCacheCreatesDistinctSessionsForDifferentFingerprints() async {
+    let cache = URLSessionCache()
+
+    let first = await cache.session(for: "fp-1")
+    let second = await cache.session(for: "fp-2")
+
+    #expect(first !== second)
+}
+
+@Test func sessionCacheInvalidateAllDropsCachedSessions() async {
+    let cache = URLSessionCache()
+
+    let first = await cache.session(for: "fp-1")
+    await cache.invalidateAll()
+    let second = await cache.session(for: "fp-1")
+
+    #expect(first !== second)
+}

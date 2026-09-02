@@ -79,16 +79,46 @@ protocol ApprovalTransport: Sendable {
     func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse)
 }
 
-/// Production transport: a pinned URLSession per call, since each call may
-/// target a different fingerprint (enrollment happens before a session
-/// exists) and URLSessionDelegate is fixed at session-creation time.
-struct URLSessionApprovalTransport: ApprovalTransport {
-    let fingerprint: String
+/// Caches one pinned URLSession per certificate fingerprint. The approvals
+/// screen polls every few seconds against the same paired server, and
+/// creating a fresh ephemeral URLSession (and paying a fresh TLS handshake)
+/// for every single request wastes battery and radio time; this lets
+/// repeated calls against the same fingerprint reuse one connection. A
+/// dictionary rather than a single slot because enrollment mints a session
+/// for a not-yet-trusted fingerprint before the paired one is in use.
+actor URLSessionCache {
+    static let shared = URLSessionCache()
 
-    func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+    private var sessions: [String: URLSession] = [:]
+
+    func session(for fingerprint: String) -> URLSession {
+        if let existing = sessions[fingerprint] {
+            return existing
+        }
         let delegate = PinnedSessionDelegate(expectedFingerprint: fingerprint)
         let session = URLSession(configuration: .ephemeral, delegate: delegate, delegateQueue: nil)
-        defer { session.finishTasksAndInvalidate() }
+        sessions[fingerprint] = session
+        return session
+    }
+
+    /// Invalidates and drops every cached session, e.g. when re-pairing
+    /// means a previously cached fingerprint should no longer be trusted.
+    func invalidateAll() {
+        for session in sessions.values {
+            session.finishTasksAndInvalidate()
+        }
+        sessions.removeAll()
+    }
+}
+
+/// Production transport: a pinned URLSession reused per fingerprint via
+/// URLSessionCache, rather than a fresh one per call.
+struct URLSessionApprovalTransport: ApprovalTransport {
+    let fingerprint: String
+    var cache: URLSessionCache = .shared
+
+    func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        let session = await cache.session(for: fingerprint)
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw ApprovalClientError.invalidResponse
