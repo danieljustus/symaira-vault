@@ -208,7 +208,7 @@ approve or deny agent requests.`,
 				printQuietAware("No approval devices enrolled.\n")
 				return nil
 			}
-			printQuietAware("%-24s %-24s %-20s %-20s %s\n", "DEVICE ID", "NAME", "ENROLLED", "EXPIRES", "STATUS")
+			printQuietAware("%-24s %-6s %-24s %-20s %-20s %s\n", "DEVICE ID", "TOKEN", "NAME", "ENROLLED", "EXPIRES", "STATUS")
 			for _, s := range sessions {
 				status := "active"
 				switch {
@@ -221,8 +221,8 @@ approve or deny agent requests.`,
 				if name == "" {
 					name = "(unnamed)"
 				}
-				printQuietAware("%-24s %-24s %-20s %-20s %s\n",
-					s.DeviceID, name, s.CreatedAt.Format("2006-01-02 15:04"), s.ExpiresAt.Format("2006-01-02 15:04"), status)
+				printQuietAware("%-24s %-6s %-24s %-20s %-20s %s\n",
+					s.DeviceID, s.Prefix+"…", name, s.CreatedAt.Format("2006-01-02 15:04"), s.ExpiresAt.Format("2006-01-02 15:04"), status)
 			}
 			return nil
 		},

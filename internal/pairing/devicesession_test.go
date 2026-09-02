@@ -2,6 +2,9 @@ package pairing
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -129,6 +132,125 @@ func TestDeviceSessionStore_CleanupExpired_NoOpDoesNotRewriteFile(t *testing.T) 
 	}
 }
 
+func TestDeviceSessionStore_PersistedFileContainsOnlyHashedValues(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewDeviceSessionStore(dir)
+	if err != nil {
+		t.Fatalf("NewDeviceSessionStore: %v", err)
+	}
+	token, err := store.Enroll("device-1", "Device One", "age1pubkey")
+	if err != nil {
+		t.Fatalf("Enroll: %v", err)
+	}
+
+	data, err := os.ReadFile(store.path)
+	if err != nil {
+		t.Fatalf("read persisted file: %v", err)
+	}
+	raw := string(data)
+	if strings.Contains(raw, token) {
+		t.Fatalf("persisted file contains the raw token: %s", raw)
+	}
+
+	var onDisk map[string]json.RawMessage
+	if err := json.Unmarshal(data, &onDisk); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(onDisk) != 1 {
+		t.Fatalf("expected exactly one persisted session, got %d", len(onDisk))
+	}
+	for key := range onDisk {
+		if !looksLikeSHA256Hex(key) {
+			t.Fatalf("persisted key %q does not look like a SHA-256 hex digest", key)
+		}
+	}
+
+	// Every value's own fields must not carry a usable token either.
+	for _, entry := range onDisk {
+		var fields map[string]any
+		if err := json.Unmarshal(entry, &fields); err != nil {
+			t.Fatalf("unmarshal entry: %v", err)
+		}
+		if _, hasToken := fields["token"]; hasToken {
+			t.Fatalf("persisted entry still has a raw 'token' field: %v", fields)
+		}
+		prefix, _ := fields["prefix"].(string)
+		if prefix == "" || prefix == token {
+			t.Fatalf("prefix = %q, want a short non-empty prefix distinct from the full token", prefix)
+		}
+	}
+}
+
+func TestDeviceSessionStore_MigratesLegacyRawTokenKeys(t *testing.T) {
+	dir := t.TempDir()
+
+	// Write a pre-migration file exactly as the old code would have: keyed
+	// by the raw token, with a "token" field carrying the same value.
+	legacyToken := "LEGACY0123456789ABCDEFGHJKMNPQRS"
+	legacy := map[string]map[string]any{
+		legacyToken: {
+			"token":      legacyToken,
+			"device_id":  "device-legacy",
+			"name":       "Old Phone",
+			"public_key": "",
+			"created_at": time.Now().UTC().Format(time.RFC3339),
+			"expires_at": time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339),
+			"revoked":    false,
+		},
+	}
+	data, err := json.MarshalIndent(legacy, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal legacy fixture: %v", err)
+	}
+
+	// Create a store once to learn its real on-disk path, then overwrite
+	// that exact file with the legacy fixture before reloading.
+	bootstrap, err := NewDeviceSessionStore(dir)
+	if err != nil {
+		t.Fatalf("NewDeviceSessionStore (bootstrap): %v", err)
+	}
+	path := bootstrap.path
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write legacy fixture: %v", err)
+	}
+
+	store, err := NewDeviceSessionStore(dir)
+	if err != nil {
+		t.Fatalf("NewDeviceSessionStore: %v", err)
+	}
+
+	// The legacy raw token must still validate after migration.
+	deviceID, ok := store.Validate(legacyToken)
+	if !ok || deviceID != "device-legacy" {
+		t.Fatalf("Validate(legacyToken) = %q, %v, want device-legacy, true", deviceID, ok)
+	}
+
+	// The on-disk file must now be rewritten hash-keyed, with no raw token
+	// anywhere in it.
+	migratedData, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read migrated file: %v", err)
+	}
+	if strings.Contains(string(migratedData), legacyToken) {
+		t.Fatalf("migrated file still contains the raw legacy token: %s", migratedData)
+	}
+	var onDisk map[string]json.RawMessage
+	if err := json.Unmarshal(migratedData, &onDisk); err != nil {
+		t.Fatalf("unmarshal migrated file: %v", err)
+	}
+	if len(onDisk) != 1 {
+		t.Fatalf("expected exactly one migrated session, got %d", len(onDisk))
+	}
+	for key := range onDisk {
+		if !looksLikeSHA256Hex(key) {
+			t.Fatalf("migrated key %q does not look like a SHA-256 hex digest", key)
+		}
+		if key != hashToken(legacyToken) {
+			t.Fatalf("migrated key = %q, want %q", key, hashToken(legacyToken))
+		}
+	}
+}
+
 func TestDeviceSessionStore_UnknownToken(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewDeviceSessionStore(dir)
@@ -202,7 +324,7 @@ func TestDeviceSessionStore_ExpiredSession(t *testing.T) {
 
 	// Manually expire the session.
 	store.mu.Lock()
-	store.sessions[token].ExpiresAt = time.Now().Add(-time.Hour)
+	store.sessions[hashToken(token)].ExpiresAt = time.Now().Add(-time.Hour)
 	store.mu.Unlock()
 
 	deviceID, ok := store.Validate(token)
@@ -223,7 +345,7 @@ func TestDeviceSessionStore_CleanupExpired(t *testing.T) {
 	}
 
 	store.mu.Lock()
-	store.sessions[token].ExpiresAt = time.Now().Add(-time.Hour)
+	store.sessions[hashToken(token)].ExpiresAt = time.Now().Add(-time.Hour)
 	store.mu.Unlock()
 
 	store.CleanupExpired()
@@ -286,7 +408,7 @@ func TestDeviceSessionStore_NameRoundTripsAcrossLoad(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDeviceSessionStore: %v", err)
 	}
-	token, err := store.Enroll("device-1", "Daniel's iPhone", "")
+	_, err = store.Enroll("device-1", "Daniel's iPhone", "")
 	if err != nil {
 		t.Fatalf("Enroll: %v", err)
 	}
@@ -298,7 +420,7 @@ func TestDeviceSessionStore_NameRoundTripsAcrossLoad(t *testing.T) {
 	sessions := store2.List()
 	found := false
 	for _, s := range sessions {
-		if s.Token == token {
+		if s.DeviceID == "device-1" {
 			found = true
 			if s.Name != "Daniel's iPhone" {
 				t.Fatalf("Name = %q, want %q", s.Name, "Daniel's iPhone")

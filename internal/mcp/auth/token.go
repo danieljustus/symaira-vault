@@ -712,6 +712,15 @@ func GenerateTokenID() string {
 
 // sha256Hex returns the lowercase hex-encoded SHA-256 digest of s.
 func sha256Hex(s string) string {
+	return SHA256Hex(s)
+}
+
+// SHA256Hex returns the lowercase hex-encoded SHA-256 digest of s. It is the
+// hashing scheme this package's own bearer/refresh tokens are stored under
+// (see TokenData.Hash), exported so other on-disk bearer-token stores (e.g.
+// internal/pairing's device sessions) can use the same scheme instead of
+// growing a second one.
+func SHA256Hex(s string) string {
 	h := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(h[:])
 }
