@@ -32,6 +32,7 @@ A modern, secure command-line password manager (`symvault`) written in Go. Uses 
 - **Native macOS Client**: SwiftUI app for browsing, unlocking, creating, editing, generating, copying, and deleting local vault entries
 - **Egress Credential Broker**: opt-in loopback proxy that attaches vault credentials to an agent's outbound requests server-side, without exposing them to the child process (`symvault broker`, `symvault run --broker`)
 - **MCP API Templates**: shape `execute_api_request` calls with YAML templates and built-in provider catalog (Anthropic, GitHub, OpenAI, Stripe, …), with credentials resolved from the vault at request time
+- **Approval Devices**: pair a phone to approve or deny an agent's write requests in real time (`symvault device approval-pair`), the human-in-the-loop behind `approvalMode: prompt`
 - **Cross-Platform**: macOS, Linux, Windows, FreeBSD
 
 ## Installation
@@ -326,6 +327,7 @@ vault clears the in-memory index; the persisted index remains encrypted.
 ## Documentation
 
 - [Configuration reference](docs/configuration.md)
+- [Approval devices](docs/approval-devices.md)
 - [Agent integration](docs/agent-integration.md)
 - [MCP API](docs/mcp-api.md)
 - [MCP API templates](docs/api-templates.md)
