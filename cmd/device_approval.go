@@ -142,8 +142,22 @@ func mintApprovalEnrollCode(vaultDir string, port int) (code string, expiresAt t
 		},
 	}
 
+	secret, err := serverbootstrap.EnsureEnrollSecret(vaultDir)
+	if err != nil {
+		return "", time.Time{}, "", fmt.Errorf("ensure vault-ownership proof secret: %w", err)
+	}
+	now := time.Now().UTC()
+
 	url := fmt.Sprintf("https://127.0.0.1:%d%s", port, approval.PathDeviceEnrollCode)
-	resp, err := client.Post(url, "application/json", bytes.NewReader(nil))
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(nil))
+	if err != nil {
+		return "", time.Time{}, "", fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(approval.HeaderEnrollTimestamp, now.Format(time.RFC3339))
+	req.Header.Set(approval.HeaderEnrollProof, approval.EnrollProof(secret, now))
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", time.Time{}, "", fmt.Errorf("call %s (is 'symvault serve' running with TLS?): %w", approval.PathDeviceEnrollCode, err)
 	}

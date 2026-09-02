@@ -72,7 +72,11 @@ func RunHTTPServerWithApproval(ctx context.Context, bind string, port int, vault
 	if fpErr != nil {
 		cliout.Warnf("could not compute TLS certificate fingerprint; device pairing is disabled: %v", fpErr)
 	}
-	enrollCodeHandler := approval.NewEnrollCodeHTTPHandler(EnrollCodes, fingerprint, mcputil.IsLoopbackHost)
+	enrollSecret, esErr := serverbootstrap.EnsureEnrollSecret(vaultDir)
+	if esErr != nil {
+		cliout.Warnf("could not set up vault-ownership proof secret; device pairing is disabled: %v", esErr)
+	}
+	enrollCodeHandler := approval.NewEnrollCodeHTTPHandler(EnrollCodes, fingerprint, mcputil.IsLoopbackHost, enrollSecret)
 	enrollHandler := approval.NewEnrollHTTPHandler(EnrollCodes, sessionStore)
 
 	return serverbootstrap.RunHTTPServer(ctx, bind, port, vault, vaultDir, Version, newServerWithApproval,
