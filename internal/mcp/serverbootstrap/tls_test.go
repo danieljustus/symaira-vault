@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -250,6 +251,9 @@ func TestEnsureEnrollSecret_DistinctPerVaultDir(t *testing.T) {
 }
 
 func TestEnsureEnrollSecret_FilePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not expose POSIX file permission bits")
+	}
 	dir := t.TempDir()
 	if _, err := EnsureEnrollSecret(dir); err != nil {
 		t.Fatalf("EnsureEnrollSecret: %v", err)
