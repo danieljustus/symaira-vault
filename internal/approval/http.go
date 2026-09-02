@@ -30,8 +30,9 @@ type HTTPHandler struct {
 }
 
 // NewHTTPHandler creates the approval API handler. tokens validates device
-// pairing tokens (nil disables the device auth gate, causing all requests
-// to receive 401 Unauthorized).
+// pairing tokens; every request requires a valid one, so a nil tokens value
+// fails every request closed with 401 Unauthorized rather than bypassing
+// the check.
 func NewHTTPHandler(queue *Queue, tokens tokenValidator) *HTTPHandler {
 	return &HTTPHandler{queue: queue, tokens: tokens}
 }
@@ -126,9 +127,4 @@ func writeApprovalJSON(w http.ResponseWriter, status int, payload any) {
 
 func writeApprovalError(w http.ResponseWriter, status int, message string) {
 	writeApprovalJSON(w, status, map[string]any{"error": message})
-}
-
-// NewPairingTokenValidator returns v unchanged if non-nil, or nil if v is nil.
-func NewPairingTokenValidator(v tokenValidator) tokenValidator {
-	return v
 }

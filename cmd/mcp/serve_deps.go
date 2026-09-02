@@ -62,7 +62,7 @@ func RunHTTPServerWithApproval(ctx context.Context, bind string, port int, vault
 		return fmt.Errorf("load device session store: %w", err)
 	}
 	_ = sessionStore.StartCleanup(ctx, 15*time.Minute)
-	approvalHandler := approval.NewHTTPHandler(ApprovalQueue, approval.NewPairingTokenValidator(sessionStore))
+	approvalHandler := approval.NewHTTPHandler(ApprovalQueue, sessionStore)
 
 	// The fingerprint is computed once at server startup (the cert is cached
 	// to disk and only regenerated if deleted) and handed to every minted
