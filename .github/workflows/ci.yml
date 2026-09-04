@@ -187,6 +187,11 @@ jobs:
           fi
           echo "PASS: flake.nix vendorHash matches the current go.mod/go.sum tree"
 
+      - name: Build and run Nix flake
+        run: |
+          nix --extra-experimental-features 'nix-command flakes' build .#
+          nix --extra-experimental-features 'nix-command flakes' run .# -- version
+
   # ── PR-fast jobs ─────────────────────────────────────────────────────────
 
   test-pr:
