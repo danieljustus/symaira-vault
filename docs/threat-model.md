@@ -161,9 +161,10 @@ binary at runtime.
   hash lookup for scoped tokens — neither path is timing-attackable.
 - **127.0.0.1 binding by default.** HTTP transport binds to loopback unless
   the operator opts into a non-loopback address via TLS-required mode.
-- **Token rotation.** `mcp-token-rotate` CLI command supports zero-downtime
-  rotation. Revocation is tracked in the token registry and consulted on
-  every request.
+- **Per-agent token rotation.** `symvault agent token rotate <name>` revokes
+  every active scoped token for that agent and mints one replacement token,
+  shown exactly once. Revocation is tracked in the token registry and checked
+  on every request.
 - **Refresh-token flow.** Long-lived bearer tokens are discouraged in favor
   of short-lived access tokens with refresh tokens (`token.go`
   `RefreshToken*`).

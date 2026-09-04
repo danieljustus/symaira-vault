@@ -803,13 +803,13 @@ func LoadTokenSystemWithIdentity(identity *age.X25519Identity, vaultDir string, 
 			// so the next restart can retry.
 			if saveErr := reg.Save(); saveErr == nil {
 				// Loud, one-time warning: the legacy token was migrated with
-				// wildcard tool scope. Operators should rotate it via
-				// `symvault mcp token create` with an explicit allow-list and
+				// wildcard tool scope. Operators should replace it via
+				// `symvault agent token new` with an explicit allow-list and
 				// then revoke the legacy entry.
 				cliout.Warnf(
 					"WARNING: legacy MCP token migrated to scoped registry with wildcard (*) tool access (id=%s).\n"+
-						"         To restrict scope, run: symvault mcp token create --label <name> --tools <list>\n"+
-						"         Then revoke the legacy token: symvault mcp token revoke %s",
+						"         To restrict scope, run: symvault agent token new <agent> --label <label> --tools <list>\n"+
+						"         Then revoke the legacy token: symvault agent token revoke legacy %s",
 					id, id)
 				if rmErr := fsutil.SafeRemove(legacyPath); rmErr != nil {
 					// Tolerate ENOENT: a concurrent process may have removed

@@ -53,9 +53,9 @@ token in config:
 symvault --vault ~/.symvault agent install hermes --config-only
 ```
 
-Add the output under `mcp_servers` in `~/.hermes/config.yaml` only after the
-human adoption gate approves a live Hermes config change, then restart Hermes or
-reload MCP tools from Hermes. Verify the connection:
+Run the command only after the human adoption gate approves a live Hermes config
+change. It writes the `mcp_servers` entry in `~/.hermes/config.yaml`; review that
+entry, then restart Hermes or reload its MCP tools. Verify the connection:
 
 ```bash
 hermes mcp test symvault
@@ -317,13 +317,13 @@ Create fine-grained access tokens with restricted tool access and optional expir
 
 ```bash
 # Create a token limited to specific tools
-symvault agent token hermes new --tools list_entries,get_entry --expires 24h
+symvault agent token new hermes --tools list_entries,get_entry --ttl 24h
 
-# List all active tokens
-symvault agent token list
+# List this agent's tokens
+symvault agent token list hermes
 
 # Revoke a token
-symvault agent token hermes revoke <token-id>
+symvault agent token revoke hermes <token-id>
 ```
 
 Scoped tokens are stored with SHA-256 hashing and can be restricted to specific MCP tools
@@ -334,29 +334,33 @@ and time windows. This is safer than the global bearer token for multi-agent set
 If you suspect your MCP token has been compromised, rotate it:
 
 ```bash
-symvault agent token hermes rotate
+symvault agent token rotate hermes
 ```
 
-This invalidates the old token and generates a new one. Update any agent configurations
-with the new token.
+This revokes every active token for the named agent and generates one replacement.
+Update the agent configuration with the new token.
 
 ### Safer Token Export
 
-When generating MCP configurations that might be displayed in terminals or committed
-to version control, use the `--redact` flag:
+Normal HTTP setup creates a scoped token, stores it in a private per-agent token
+file, and writes the detected client's MCP configuration without printing the raw
+token:
 
 ```bash
 symvault agent install claude-code --http --config-only
 ```
 
-This outputs `env:SYMVAULT_MCP_TOKEN` instead of the actual token. Agents using
-redacted configs must have `SYMVAULT_MCP_TOKEN` set in their environment.
+The command reports the token ID and affected paths only. This is safer than
+copying a bearer token through terminal output or a committed configuration file.
 
-For automated scripts that need the raw token:
+If you explicitly need the raw token for manual configuration:
 
 ```bash
-TOKEN=$(symvault agent token <agent> new --tools list_entries --expires 24h --json | jq -r .token)
+symvault agent token new <agent> --tools list_entries --ttl 24h
 ```
+
+The raw token is shown once. Copy it directly to the intended client; do not log,
+commit, or paste it into chat.
 
 ## OAuth Dynamic Client Registration
 

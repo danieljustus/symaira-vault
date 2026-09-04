@@ -18,21 +18,21 @@ import (
 
 func newAgentProfileCmd() *cobra.Command {
 	agentProfileCmd := &cobra.Command{
-		Use:   "profile <name>",
+		Use:   "profile",
 		Short: "Manage agent profiles",
 		Long:  `Show, edit, and export agent profiles.`,
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.NoArgs,
 		Example: `  # Show agent profile
-  symvault agent profile my-agent show
+  symvault agent profile show my-agent
 
   # Show profile as JSON
-  symvault agent profile my-agent show --output json
+  symvault agent profile show my-agent --output json
 
   # Edit agent profile in $EDITOR
-  symvault agent profile my-agent edit
+  symvault agent profile edit my-agent
 
   # Export profile as YAML to stdout
-  symvault agent profile my-agent export`,
+  symvault agent profile export my-agent`,
 	}
 	agentProfileCmd.AddCommand(newAgentProfileShowCmd())
 	agentProfileCmd.AddCommand(newAgentProfileEditCmd())
@@ -42,11 +42,12 @@ func newAgentProfileCmd() *cobra.Command {
 
 func newAgentProfileShowCmd() *cobra.Command {
 	agentProfileShowCmd := &cobra.Command{
-		Use:   "show",
+		Use:   "show <name>",
 		Short: "Display agent profile",
 		Long:  `Display the agent profile in YAML or JSON format.`,
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			agentName := mustGetProfileAgentName(cmd)
+			agentName := args[0]
 			output, _ := cmd.Flags().GetString("output")
 
 			profile, err := loadAgentProfile(agentName)
@@ -73,12 +74,13 @@ func newAgentProfileShowCmd() *cobra.Command {
 
 func newAgentProfileEditCmd() *cobra.Command {
 	agentProfileEditCmd := &cobra.Command{
-		Use:   "edit",
+		Use:   "edit <name>",
 		Short: "Edit agent profile in $EDITOR",
 		Long: `Open the agent profile in your configured editor ($EDITOR or $VISUAL).
 After saving, the profile is validated and you are prompted to apply changes.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			agentName := mustGetProfileAgentName(cmd)
+			agentName := args[0]
 
 			editor := os.Getenv("EDITOR")
 			if editor == "" {
@@ -170,12 +172,13 @@ After saving, the profile is validated and you are prompted to apply changes.`,
 
 func newAgentProfileExportCmd() *cobra.Command {
 	agentProfileExportCmd := &cobra.Command{
-		Use:   "export",
+		Use:   "export <name>",
 		Short: "Export agent profile as YAML",
 		Long: `Export the agent profile to stdout or to a file.
 Output is in YAML format by default.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			agentName := mustGetProfileAgentName(cmd)
+			agentName := args[0]
 			outputPath, _ := cmd.Flags().GetString("output")
 
 			profile, err := loadAgentProfile(agentName)
@@ -218,17 +221,6 @@ func loadAgentProfile(agentName string) (*configpkg.AgentProfile, error) {
 	}
 	profile.Name = agentName
 	return &profile, nil
-}
-
-func mustGetProfileAgentName(cmd *cobra.Command) string {
-	parent := cmd.Parent()
-	if parent != nil {
-		parentArgs := parent.Flags().Args()
-		if len(parentArgs) > 0 {
-			return parentArgs[0]
-		}
-	}
-	return "unknown"
 }
 
 func extractAgentSection(data []byte, agentName string) ([]byte, error) {

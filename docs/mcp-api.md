@@ -322,16 +322,19 @@ symvault agent install <agent-name> --config-only
 symvault mcp --port 8080 --agent <profile-name>
 ```
 
-**Generate configuration** (token redacted by default):
+**Install HTTP configuration**:
 
 ```bash
 symvault agent install <agent-name> --http --config-only
 ```
 
-**Include token in output**:
+The installer writes a scoped token to private per-agent storage and updates the
+detected client configuration without printing the raw token.
+
+**Create a token for manual configuration** (shown once):
 
 ```bash
-symvault agent token <agent-name> new --tools list_entries,get_entry --expires 24h
+symvault agent token new <agent-name> --tools list_entries,get_entry --ttl 24h
 ```
 
 ---

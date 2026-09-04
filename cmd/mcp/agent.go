@@ -24,10 +24,10 @@ func newAgentCmd() *cobra.Command {
 		Short: "Manage agent profiles",
 		Long: `Configure AI agent profiles with scoped permissions, tokens, and MCP integration.
 
-Use 'symvault agent setup <name>' to create a new agent with an interactive wizard
-that guides you through security tier selection, vault path scoping, and approval mode.`,
-		Example: `  # Interactive new-agent wizard
-  symvault agent setup claude-code
+Use 'symvault agent install <name>' to create a security profile, scoped token,
+MCP configuration, and agent skill package.`,
+		Example: `  # Install and configure an agent
+  symvault agent install claude-code
 
   # List configured agents
   symvault agent list

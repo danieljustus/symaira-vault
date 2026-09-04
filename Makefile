@@ -223,7 +223,7 @@ docs-check:
 		fi; \
 	done; \
 	for pattern in "symvault mcp-config" "symvault mcp token" "symvault mcp-token-rotate"; do \
-		if grep -r "$$pattern" README.md docs \
+		if grep -r "$$pattern" README.md SECURITY.md .goreleaser.yml docs homebrew internal/agentskill \
 			--exclude="migration-v3-to-v4.md" \
 			--exclude="MIGRATION-RENAME.md" \
 			--exclude-dir=adr \
@@ -236,6 +236,27 @@ docs-check:
 			errors=$$((errors + 1)); \
 		fi; \
 	done; \
+	for pattern in 'symvault agent token [^[:space:]`]+ (new|list|revoke|rotate)' 'symvault agent profile [^[:space:]`]+ (show|edit|export)'; do \
+		if grep -rE "$$pattern" README.md SECURITY.md .goreleaser.yml docs homebrew internal/agentskill \
+			--exclude-dir=man \
+			--exclude-dir=dist \
+			--exclude-dir=coverage \
+			--exclude-dir=node_modules 2>/dev/null; then \
+			echo "Found agent argument before its action; use action-first command order: $$pattern"; \
+			errors=$$((errors + 1)); \
+		fi; \
+	done; \
+	if grep -rE 'symvault agent token new [^[:space:]`]+ .*--expires' README.md SECURITY.md docs homebrew internal/agentskill \
+		--exclude="migration-v3-to-v4.md" \
+		--exclude-dir=adr \
+		--exclude-dir=man \
+		--exclude-dir=skills \
+		--exclude-dir=dist \
+		--exclude-dir=coverage \
+		--exclude-dir=node_modules 2>/dev/null; then \
+		echo "Found deprecated --expires flag on agent token command; use --ttl"; \
+		errors=$$((errors + 1)); \
+	fi; \
 	for tool in "openpass_list" "openpass_get" "openpass_generate" "openpass_health"; do \
 		if grep -rE "\b$$tool\b" README.md docs homebrew .gitignore --exclude-dir=dist --exclude-dir=coverage --exclude-dir=node_modules 2>/dev/null; then \
 			echo "Found deprecated tool name: $$tool"; \

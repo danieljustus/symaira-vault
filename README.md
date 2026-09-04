@@ -236,7 +236,7 @@ symvault mcp --stdio --agent claude-code
 symvault mcp --port 8080
 ```
 
-Use `symvault agent install` to generate ready-to-paste client config:
+Use `symvault agent install` to write the detected client's MCP configuration:
 
 ```bash
 symvault agent install claude-code --config-only
@@ -248,9 +248,9 @@ HTTP mode binds to `127.0.0.1` by default and uses bearer token authentication. 
 
 **Scoped Token Management**: Create fine-grained access tokens for agents:
 ```bash
-symvault agent token hermes new --tools list_entries,get_entry --expires 24h
-symvault agent token list
-symvault agent token hermes revoke <token-id>
+symvault agent token new hermes --tools list_entries,get_entry --ttl 24h
+symvault agent token list hermes
+symvault agent token revoke hermes <token-id>
 ```
 
 For detailed agent setup, profiles, token management, and observability, see [docs/agent-integration.md](docs/agent-integration.md).

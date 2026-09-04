@@ -10,7 +10,7 @@ class Symvault < Formula
   version "{{ .Version }}"
   sha256 "{{ .Checksum }}"
 
-  license "MIT"
+  license "Apache-2.0"
 
   depends_on "go" => :build
 
@@ -41,7 +41,7 @@ class Symvault < Formula
         symvault get github.com/username # Retrieve it
 
       For MCP server setup:
-        symvault mcp-config <name>
+        symvault agent install <name> --config-only
 
       Documentation: https://github.com/danieljustus/symaira-vault#readme
     EOS

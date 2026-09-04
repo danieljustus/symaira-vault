@@ -64,7 +64,7 @@ symvault get github.com/username
 symvault generate
 
 # Set up MCP server for AI agents
-symvault mcp-config claude-code
+symvault agent install claude-code --config-only
 ```
 
 ## Documentation

@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -111,4 +112,121 @@ func TestResolveTokenTTL_EmptyDefault(t *testing.T) {
 	if d.Hours() != 24 {
 		t.Errorf("duration = %v hours, want 24", d.Hours())
 	}
+}
+
+func TestAgentTokenCommandRoutesAgentName(t *testing.T) {
+	vaultDir := t.TempDir()
+	t.Setenv("SYMVAULT_VAULT", vaultDir)
+
+	output, err := os.CreateTemp(t.TempDir(), "agent-token-output")
+	if err != nil {
+		t.Fatalf("create output file: %v", err)
+	}
+	originalStdout := os.Stdout
+	os.Stdout = output
+	t.Cleanup(func() {
+		os.Stdout = originalStdout
+		_ = output.Close()
+	})
+
+	cmd := newAgentCmd()
+	cmd.SetArgs([]string{"token", "new", "hermes", "--tools", "list_entries", "--ttl", "1h"})
+	if err := cmd.Execute(); err != nil {
+		os.Stdout = originalStdout
+		t.Fatalf("execute token command: %v", err)
+	}
+	os.Stdout = originalStdout
+	if err := output.Close(); err != nil {
+		t.Fatalf("close output file: %v", err)
+	}
+
+	reg := auth.NewTokenRegistry(auth.TokenRegistryFilePath(vaultDir))
+	if err := reg.Load(); err != nil {
+		t.Fatalf("load registry: %v", err)
+	}
+	for _, token := range reg.List() {
+		if token.AgentName == "hermes" {
+			return
+		}
+	}
+	t.Fatalf("token command did not persist a token for agent %q", "hermes")
+}
+
+func TestAgentTokenSubcommandsUseActionFirstArguments(t *testing.T) {
+	cmd := newAgentTokenCmd()
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "new", args: []string{"new", "hermes"}},
+		{name: "list", args: []string{"list", "hermes"}},
+		{name: "revoke", args: []string{"revoke", "hermes", "token-id"}},
+		{name: "rotate", args: []string{"rotate", "hermes"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			found, args, err := cmd.Find(tt.args)
+			if err != nil {
+				t.Fatalf("find %s: %v", tt.name, err)
+			}
+			if found.Name() != tt.name {
+				t.Fatalf("found command = %q, want %q", found.Name(), tt.name)
+			}
+			if err := found.Args(found, args); err != nil {
+				t.Fatalf("validate %s args %v: %v", tt.name, args, err)
+			}
+		})
+	}
+
+	found, args, err := cmd.Find([]string{"hermes", "new"})
+	if err != nil {
+		t.Fatalf("find legacy ordering: %v", err)
+	}
+	if found != cmd {
+		t.Fatalf("legacy ordering unexpectedly selected %q", found.Name())
+	}
+	if err := found.Args(found, args); err == nil {
+		t.Fatal("legacy name-first ordering should fail instead of silently using the wrong agent")
+	}
+}
+
+func TestAgentTokenRevokeRequiresMatchingAgent(t *testing.T) {
+	vaultDir := t.TempDir()
+	t.Setenv("SYMVAULT_VAULT", vaultDir)
+	reg := auth.NewTokenRegistry(auth.TokenRegistryFilePath(vaultDir))
+	token, _, err := reg.Create("test", []string{"list_entries"}, "hermes", 0)
+	if err != nil {
+		t.Fatalf("create token: %v", err)
+	}
+	if err := reg.Save(); err != nil {
+		t.Fatalf("save token: %v", err)
+	}
+
+	cmd := newAgentTokenRevokeCmd()
+	if err := cmd.RunE(cmd, []string{"other-agent", token.ID}); err == nil {
+		t.Fatal("revoke accepted a token owned by another agent")
+	}
+	assertAgentTokenRevoked(t, vaultDir, token.ID, false)
+
+	if err := cmd.RunE(cmd, []string{"hermes", token.ID}); err != nil {
+		t.Fatalf("revoke matching token: %v", err)
+	}
+	assertAgentTokenRevoked(t, vaultDir, token.ID, true)
+}
+
+func assertAgentTokenRevoked(t *testing.T, vaultDir, tokenID string, want bool) {
+	t.Helper()
+	reg := auth.NewTokenRegistry(auth.TokenRegistryFilePath(vaultDir))
+	if err := reg.Load(); err != nil {
+		t.Fatalf("load token registry: %v", err)
+	}
+	for _, token := range reg.List() {
+		if token.ID == tokenID {
+			if token.Revoked != want {
+				t.Fatalf("token revoked = %v, want %v", token.Revoked, want)
+			}
+			return
+		}
+	}
+	t.Fatalf("token %q not found", tokenID)
 }

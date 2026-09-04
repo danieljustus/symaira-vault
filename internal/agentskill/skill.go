@@ -221,7 +221,7 @@ This skill was exported by Symaira Vault v%s.
 
 1. Place %[3]s in your agent's skill directory.
 2. Create a scoped access token:
-   symvault mcp token create --agent %[1]s --tools list,get --expires 90d
+   symvault agent token new %[1]s --tools list_entries,get_entry --ttl 90d
 3. Restart your agent.
 
 ## Verification

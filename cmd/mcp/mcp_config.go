@@ -48,17 +48,17 @@ Use 'symvault agent install <agent> --config-only' to output MCP config snippets
 func newMcpTokenRotateCmd() *cobra.Command {
 	mcpTokenRotateCmd := &cobra.Command{
 		Use:   "mcp-token-rotate",
-		Short: "[Deprecated v4.0, removed in v4.1] Use 'symvault agent token <name> rotate'",
+		Short: "[Deprecated v4.0, removed in v4.1] Use 'symvault agent token rotate <name>'",
 		Long: `This command was deprecated in Symaira Vault v4.0 and will be removed in v4.1.
 
-Token rotation is now managed per-agent via 'symvault agent token <name> rotate'.`,
-		Example: `  symvault agent token my-agent rotate`,
+Token rotation is now managed per-agent via 'symvault agent token rotate <name>'.`,
+		Example: `  symvault agent token rotate my-agent`,
 		Hidden:  true,
 		Args:    cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cliout.Warnf("This command is deprecated in v4.0. Use: symvault agent token <name> rotate")
+			cliout.Warnf("This command is deprecated in v4.0. Use: symvault agent token rotate <name>")
 			return errorspkg.NewCLIError(errorspkg.ExitNotFound,
-				"This command is deprecated in v4.0. Use: symvault agent token <name> rotate", nil)
+				"This command is deprecated in v4.0. Use: symvault agent token rotate <name>", nil)
 		},
 	}
 	mcpTokenRotateCmd.GroupID = cli.GroupIDAgentsMCP
@@ -96,7 +96,7 @@ func resolveHTTPConfig(agentName string, tokenID string) (*httpConfig, error) {
 
 	var token string
 	if tokenID != "" {
-		return nil, fmt.Errorf("token %q cannot be used for config generation because scoped token raw values are only shown at creation time; create a fresh token with 'symvault agent token %s new'", tokenID, agentName)
+		return nil, fmt.Errorf("token %q cannot be used for config generation because scoped token raw values are only shown at creation time; create a fresh token with 'symvault agent token new %s'", tokenID, agentName)
 	}
 
 	tokenPath := filepath.Join(vDir, "mcp-token")
@@ -266,7 +266,7 @@ func OutputHermesHTTPConfig(agentName, serverName string, redact bool, tokenID s
 // serverKey is the key name in mcp_servers (e.g., "claude_code", "codex").
 // agentName is passed to symvault mcp (e.g., "claude-code", "codex").
 //
-// Verification: symvault mcp-config claude-code --format claude-code | paste into Claude Desktop config
+// Legacy formatter retained for callers that need an agent-specific YAML snippet.
 func OutputAgentStdioConfig(agentName, serverKey string) error {
 	config := map[string]any{
 		"mcp_servers": map[string]any{
@@ -288,8 +288,7 @@ func OutputAgentStdioConfig(agentName, serverKey string) error {
 // agentName is passed to symvault mcp and X-Symaira-Agent header.
 // redact outputs env:SYMVAULT_MCP_TOKEN instead of the actual token.
 //
-// Verification: symvault mcp-config claude-code --http --format claude-code | paste into Claude Desktop config
-// Then verify: curl -H "Authorization: Bearer $(cat ~/.symvault/mcp-token)" http://127.0.0.1:8080/mcp
+// Legacy formatter retained for callers that need an agent-specific HTTP snippet.
 func OutputAgentHTTPConfig(agentName, serverKey, displayName string, redact bool, tokenID string) error {
 	httpCfg, err := resolveHTTPConfig(agentName, tokenID)
 	if err != nil {
