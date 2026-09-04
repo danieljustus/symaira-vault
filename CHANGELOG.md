@@ -26,6 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- MCP HTTP startup no longer fails intermittently with `bad file descriptor`
+  while migrating a legacy token. The shared Unix `SafeRemove` helper closed
+  its validated descriptor twice, allowing the second close to hit an audit
+  log that had reused the descriptor under concurrent load (#972).
 - Agent token and profile subcommands now use executable action-first syntax
   (`symvault agent token new|list|revoke|rotate <name>` and
   `symvault agent profile show|edit|export <name>`). The previous name-first
@@ -58,7 +62,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   until the server is restarted.
 
 ### Dependencies
-- Bumped `corekit` from `v0.9.1` to `v0.11.0` (pulls in latest audit/security improvements from the corekit module).
+- Bumped `corekit` from `v0.16.3` to the verified post-`v0.17.0` fix at
+  `f3d3eb79b9b1`, which closes Unix `SafeRemove` descriptors exactly once.
 - Bumped `appkit` from `0.4.0` to `0.10.0` in `client/Package.swift` (latest Swift Package release, includes `CLIRunnerError` plaintext-redaction security fix).
 
 ### Documentation
