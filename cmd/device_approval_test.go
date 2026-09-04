@@ -5,12 +5,16 @@ import (
 	"encoding/json"
 	"net"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/danieljustus/symaira-vault/internal/approval"
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
+	"github.com/danieljustus/symaira-vault/internal/config"
 	"github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap"
 	"github.com/danieljustus/symaira-vault/internal/pairing"
 )
@@ -170,4 +174,320 @@ func TestApprovalPair_AllowsNonLoopbackBind(t *testing.T) {
 	if strings.Contains(err.Error(), "loopback-only") {
 		t.Fatalf("error = %q, should not be the loopback-only refusal for a non-loopback bind", err.Error())
 	}
+}
+
+func TestApprovalList_Empty(t *testing.T) {
+	resetVaultState(t)
+	vaultDir := t.TempDir()
+	defer setupVaultFlag(t, vaultDir)()
+
+	cmd := newDeviceApprovalListCmd()
+	var runErr error
+	output := captureStdout(func() {
+		runErr = cmd.RunE(cmd, nil)
+	})
+	if runErr != nil {
+		t.Fatalf("approval-list: %v", runErr)
+	}
+	if output != "No approval devices enrolled.\n" {
+		t.Fatalf("approval-list output = %q, want empty-state message", output)
+	}
+}
+
+func TestApprovalList_RendersSessionStates(t *testing.T) {
+	resetVaultState(t)
+	vaultDir := t.TempDir()
+	defer setupVaultFlag(t, vaultDir)()
+
+	now := time.Now().UTC()
+	writeApprovalDeviceSessions(t, vaultDir, map[string]*pairing.DeviceSession{
+		strings.Repeat("a", 64): {
+			Prefix:    "ACT1",
+			DeviceID:  "device-one",
+			Name:      "Phone",
+			CreatedAt: now.Add(-time.Hour),
+			ExpiresAt: now.Add(time.Hour),
+		},
+		strings.Repeat("b", 64): {
+			Prefix:    "REV1",
+			DeviceID:  "device-two",
+			CreatedAt: now.Add(-2 * time.Hour),
+			ExpiresAt: now.Add(time.Hour),
+			Revoked:   true,
+		},
+		strings.Repeat("c", 64): {
+			Prefix:    "EXP1",
+			DeviceID:  "device-three",
+			Name:      "OldPhone",
+			CreatedAt: now.Add(-2 * time.Hour),
+			ExpiresAt: now.Add(-time.Hour),
+		},
+	})
+
+	cmd := newDeviceApprovalListCmd()
+	var runErr error
+	output := captureStdout(func() {
+		runErr = cmd.RunE(cmd, nil)
+	})
+	if runErr != nil {
+		t.Fatalf("approval-list: %v", runErr)
+	}
+	if !strings.Contains(output, "DEVICE ID") || !strings.Contains(output, "TOKEN") || !strings.Contains(output, "STATUS") {
+		t.Fatalf("approval-list output missing header: %q", output)
+	}
+	assertApprovalListLine(t, output, "device-one", "ACT1…", "Phone", "active")
+	assertApprovalListLine(t, output, "device-two", "REV1…", "(unnamed)", "revoked")
+	assertApprovalListLine(t, output, "device-three", "EXP1…", "OldPhone", "expired")
+}
+
+func TestApprovalCommands_ReportStoreLoadErrors(t *testing.T) {
+	tests := []struct {
+		name string
+		run  func() error
+	}{
+		{name: "list", run: func() error {
+			cmd := newDeviceApprovalListCmd()
+			return cmd.RunE(cmd, nil)
+		}},
+		{name: "revoke", run: func() error {
+			cmd := newDeviceApprovalRevokeCmd()
+			return cmd.RunE(cmd, []string{"dev-one"})
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resetVaultState(t)
+			vaultDir := t.TempDir()
+			defer setupVaultFlag(t, vaultDir)()
+			writeApprovalDeviceStoreBytes(t, vaultDir, []byte("{not-json"))
+
+			err := tt.run()
+			if err == nil || !strings.Contains(err.Error(), "load approval device store") {
+				t.Fatalf("error = %v, want approval device store load error", err)
+			}
+		})
+	}
+}
+
+func TestApprovalCommands_ReportVaultPathErrors(t *testing.T) {
+	resetVaultState(t)
+	for _, key := range []string{"HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH"} {
+		t.Setenv(key, "")
+	}
+	originalVault := cli.Vault
+	originalChanged := cli.VaultFlag.Changed
+	if err := cli.VaultFlag.Value.Set("~/approval-test"); err != nil {
+		t.Fatalf("set vault flag: %v", err)
+	}
+	cli.VaultFlag.Changed = true
+	t.Cleanup(func() {
+		_ = cli.VaultFlag.Value.Set(originalVault)
+		cli.VaultFlag.Changed = originalChanged
+	})
+
+	tests := []struct {
+		name string
+		run  func() error
+	}{
+		{name: "list", run: func() error {
+			cmd := newDeviceApprovalListCmd()
+			return cmd.RunE(cmd, nil)
+		}},
+		{name: "revoke", run: func() error {
+			cmd := newDeviceApprovalRevokeCmd()
+			return cmd.RunE(cmd, []string{"dev-one"})
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.run()
+			if err == nil || !strings.Contains(err.Error(), "expand vault path") {
+				t.Fatalf("error = %v, want vault path expansion error", err)
+			}
+		})
+	}
+}
+
+func TestApprovalRevoke_UnknownDevice(t *testing.T) {
+	resetVaultState(t)
+	vaultDir := t.TempDir()
+	defer setupVaultFlag(t, vaultDir)()
+
+	cmd := newDeviceApprovalRevokeCmd()
+	err := cmd.RunE(cmd, []string{"missing-device"})
+	if err == nil || !strings.Contains(err.Error(), `approval device "missing-device" not found`) {
+		t.Fatalf("error = %v, want unknown-device error", err)
+	}
+}
+
+func TestApprovalRevoke_CancelledPreservesSession(t *testing.T) {
+	resetVaultState(t)
+	vaultDir := t.TempDir()
+	defer setupVaultFlag(t, vaultDir)()
+	token := enrollApprovalDevice(t, vaultDir, "dev-cancel", "Phone")
+
+	cmd := newDeviceApprovalRevokeCmd()
+	var runErr error
+	stderr := captureStderr(func() {
+		runErr = withApprovalStdin(t, "n\n", func() error {
+			return cmd.RunE(cmd, []string{"dev-cancel"})
+		})
+	})
+	if runErr != nil {
+		t.Fatalf("approval-revoke cancellation: %v", runErr)
+	}
+	if !strings.Contains(stderr, "Canceled") {
+		t.Fatalf("stderr = %q, want cancellation message", stderr)
+	}
+	assertApprovalTokenValid(t, vaultDir, token, "dev-cancel", true)
+}
+
+func TestApprovalRevoke_PersistsRevocation(t *testing.T) {
+	tests := []struct {
+		name  string
+		yes   bool
+		input string
+	}{
+		{name: "yes flag", yes: true},
+		{name: "confirmed prompt", input: "y\n"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resetVaultState(t)
+			vaultDir := t.TempDir()
+			defer setupVaultFlag(t, vaultDir)()
+			token := enrollApprovalDevice(t, vaultDir, "dev-revoke", "Phone")
+
+			cmd := newDeviceApprovalRevokeCmd()
+			if tt.yes {
+				if err := cmd.Flags().Set("yes", "true"); err != nil {
+					t.Fatalf("set --yes: %v", err)
+				}
+			}
+			var runErr error
+			output := captureStdout(func() {
+				if tt.input == "" {
+					runErr = cmd.RunE(cmd, []string{"dev-revoke"})
+					return
+				}
+				runErr = withApprovalStdin(t, tt.input, func() error {
+					return cmd.RunE(cmd, []string{"dev-revoke"})
+				})
+			})
+			if runErr != nil {
+				t.Fatalf("approval-revoke: %v", runErr)
+			}
+			if !strings.Contains(output, `Approval device "dev-revoke" revoked.`) {
+				t.Fatalf("stdout = %q, want revocation confirmation", output)
+			}
+			assertApprovalTokenValid(t, vaultDir, token, "dev-revoke", false)
+		})
+	}
+}
+
+func TestApprovalRevoke_ReportsSaveError(t *testing.T) {
+	resetVaultState(t)
+	vaultDir := t.TempDir()
+	defer setupVaultFlag(t, vaultDir)()
+	_ = enrollApprovalDevice(t, vaultDir, "dev-save-error", "Phone")
+
+	tmpPath := filepath.Join(vaultDir, config.DefaultVaultSubdir, "device-sessions.json.tmp")
+	if err := os.Mkdir(tmpPath, 0o700); err != nil {
+		t.Fatalf("create blocking temp directory: %v", err)
+	}
+
+	cmd := newDeviceApprovalRevokeCmd()
+	if err := cmd.Flags().Set("yes", "true"); err != nil {
+		t.Fatalf("set --yes: %v", err)
+	}
+	err := cmd.RunE(cmd, []string{"dev-save-error"})
+	if err == nil || !strings.Contains(err.Error(), "save approval device store") {
+		t.Fatalf("error = %v, want save error", err)
+	}
+}
+
+func writeApprovalDeviceSessions(t *testing.T, vaultDir string, sessions map[string]*pairing.DeviceSession) {
+	t.Helper()
+	data, err := json.Marshal(sessions)
+	if err != nil {
+		t.Fatalf("marshal approval sessions: %v", err)
+	}
+	writeApprovalDeviceStoreBytes(t, vaultDir, data)
+}
+
+func writeApprovalDeviceStoreBytes(t *testing.T, vaultDir string, data []byte) {
+	t.Helper()
+	dir := filepath.Join(vaultDir, config.DefaultVaultSubdir)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("create approval store directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "device-sessions.json"), data, 0o600); err != nil {
+		t.Fatalf("write approval store: %v", err)
+	}
+}
+
+func assertApprovalListLine(t *testing.T, output, deviceID string, wants ...string) {
+	t.Helper()
+	for _, line := range strings.Split(output, "\n") {
+		if !strings.Contains(line, deviceID) {
+			continue
+		}
+		for _, want := range wants {
+			if !strings.Contains(line, want) {
+				t.Fatalf("line for %s = %q, want %q", deviceID, line, want)
+			}
+		}
+		return
+	}
+	t.Fatalf("approval-list output has no line for %s: %q", deviceID, output)
+}
+
+func enrollApprovalDevice(t *testing.T, vaultDir, deviceID, name string) string {
+	t.Helper()
+	store, err := pairing.NewDeviceSessionStore(vaultDir)
+	if err != nil {
+		t.Fatalf("new approval device store: %v", err)
+	}
+	token, err := store.Enroll(deviceID, name, "age1-test-public-key")
+	if err != nil {
+		t.Fatalf("enroll approval device: %v", err)
+	}
+	return token
+}
+
+func assertApprovalTokenValid(t *testing.T, vaultDir, token, wantDeviceID string, wantValid bool) {
+	t.Helper()
+	store, err := pairing.NewDeviceSessionStore(vaultDir)
+	if err != nil {
+		t.Fatalf("reload approval device store: %v", err)
+	}
+	deviceID, valid := store.Validate(token)
+	if valid != wantValid {
+		t.Fatalf("Validate(%q) valid = %v, want %v", wantDeviceID, valid, wantValid)
+	}
+	if wantValid && deviceID != wantDeviceID {
+		t.Fatalf("Validate device ID = %q, want %q", deviceID, wantDeviceID)
+	}
+	if !wantValid && deviceID != "" {
+		t.Fatalf("revoked token returned device ID %q", deviceID)
+	}
+}
+
+func withApprovalStdin(t *testing.T, input string, fn func() error) error {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "stdin")
+	if err := os.WriteFile(path, []byte(input), 0o600); err != nil {
+		t.Fatalf("write stdin fixture: %v", err)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("open stdin fixture: %v", err)
+	}
+	defer func() { _ = f.Close() }()
+	originalStdin := os.Stdin
+	os.Stdin = f
+	defer func() { os.Stdin = originalStdin }()
+	return fn()
 }
