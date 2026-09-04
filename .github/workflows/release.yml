@@ -179,9 +179,8 @@ jobs:
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
           if [ -z "${CERTIFICATE_P12:-}" ]; then
-            echo "::warning::CERTIFICATE_P12 secret is not set. Building unsigned."
-            echo "signed=false" >> "$GITHUB_OUTPUT"
-            exit 0
+            echo "::error::CERTIFICATE_P12 secret is required for release signing."
+            exit 1
           fi
           echo "signed=true" >> "$GITHUB_OUTPUT"
           KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
@@ -230,8 +229,8 @@ jobs:
           NOTARY_API_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
         run: |
           if [ -z "${NOTARY_API_KEY:-}" ]; then
-            echo "::warning::NOTARY_API_KEY secret is not set. Skipping notarization."
-            exit 0
+            echo "::error::NOTARY_API_KEY secret is required for release notarization."
+            exit 1
           fi
           if echo "$NOTARY_API_KEY" | base64 --decode 2>/dev/null | head -1 | grep -q -- "-----BEGIN"; then
             echo "$NOTARY_API_KEY" | base64 --decode > "$RUNNER_TEMP/notary-key.p8"
@@ -240,7 +239,7 @@ jobs:
           fi
           chmod 600 "$RUNNER_TEMP/notary-key.p8"
           for ARCH in amd64 arm64; do
-            for f in dist/*_darwin_${ARCH}*/*; do
+            for f in dist/*_darwin_"${ARCH}"*/*; do
               if [ -f "$f" ] && file "$f" | grep -q "Mach-O"; then
                 echo "Notarizing $f..."
                 ZIP_PATH="$RUNNER_TEMP/notarize_${ARCH}.zip"
@@ -295,9 +294,8 @@ jobs:
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
           if [ -z "${CERTIFICATE_P12:-}" ]; then
-            echo "::warning::CERTIFICATE_P12 secret is not set. Building unsigned."
-            echo "signed=false" >> "$GITHUB_OUTPUT"
-            exit 0
+            echo "::error::CERTIFICATE_P12 secret is required for GUI release signing."
+            exit 1
           fi
           echo "signed=true" >> "$GITHUB_OUTPUT"
           KEYCHAIN_PATH="$RUNNER_TEMP/signing.keychain-db"
@@ -371,8 +369,42 @@ jobs:
           # Sign the .app bundle with hardened runtime
           codesign -s "$CODESIGN_IDENTITY" --timestamp --options runtime --force "$APP_PATH"
           echo "Signed .app bundle: $APP_PATH"
-          # Verify
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
           codesign -dvvv "$APP_PATH" 2>&1 | head -5
+
+      - name: Notarize and staple macOS app
+        if: steps.signing.outputs.signed == 'true'
+        env:
+          NOTARY_API_KEY: ${{ secrets.NOTARY_API_KEY }}
+          NOTARY_API_ISSUER: ${{ secrets.NOTARY_API_ISSUER }}
+          NOTARY_API_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NOTARY_API_KEY:-}" ]; then
+            echo "::error::NOTARY_API_KEY secret is required for GUI release notarization."
+            exit 1
+          fi
+          KEY_PATH="$RUNNER_TEMP/notary-key.p8"
+          ZIP_PATH="$RUNNER_TEMP/Symaira-Vault-app-notarization.zip"
+          cleanup() { rm -f "$KEY_PATH" "$ZIP_PATH"; }
+          trap cleanup EXIT
+          if echo "$NOTARY_API_KEY" | base64 --decode 2>/dev/null | head -1 | grep -q -- "-----BEGIN"; then
+            echo "$NOTARY_API_KEY" | base64 --decode > "$KEY_PATH"
+          else
+            echo "$NOTARY_API_KEY" > "$KEY_PATH"
+          fi
+          chmod 600 "$KEY_PATH"
+          APP_PATH="client/Symvault.xcarchive/Products/Applications/Symaira Vault.app"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ZIP_PATH"
+          xcrun notarytool submit "$ZIP_PATH" \
+            --key "$KEY_PATH" \
+            --key-id "$NOTARY_API_KEY_ID" \
+            --issuer "$NOTARY_API_ISSUER" \
+            --wait
+          xcrun stapler staple "$APP_PATH"
+          xcrun stapler validate "$APP_PATH"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          spctl --assess --type execute --verbose=4 "$APP_PATH"
 
       - name: Create DMG
         run: |
@@ -385,6 +417,12 @@ jobs:
             "Symaira Vault ${TAG}"
           echo "DMG_PATH=$DMG_PATH" >> "$GITHUB_ENV"
 
+      - name: Code sign DMG
+        if: steps.signing.outputs.signed == 'true'
+        run: |
+          codesign --sign "$CODESIGN_IDENTITY" --timestamp --force "${{ env.DMG_PATH }}"
+          codesign --verify --strict --verbose=2 "${{ env.DMG_PATH }}"
+
       - name: Notarize DMG
         if: steps.signing.outputs.signed == 'true'
         env:
@@ -393,8 +431,8 @@ jobs:
           NOTARY_API_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
         run: |
           if [ -z "${NOTARY_API_KEY:-}" ]; then
-            echo "::warning::NOTARY_API_KEY secret is not set. Skipping notarization."
-            exit 0
+            echo "::error::NOTARY_API_KEY secret is required for GUI release notarization."
+            exit 1
           fi
           if echo "$NOTARY_API_KEY" | base64 --decode 2>/dev/null | head -1 | grep -q -- "-----BEGIN"; then
             echo "$NOTARY_API_KEY" | base64 --decode > "$RUNNER_TEMP/notary-key.p8"
@@ -410,12 +448,13 @@ jobs:
             --wait
           rm -f "$RUNNER_TEMP/notary-key.p8"
 
-      - name: Staple notarization ticket
+      - name: Staple and Gatekeeper-verify DMG
         if: steps.signing.outputs.signed == 'true'
         run: |
-          APP_PATH="client/Symvault.xcarchive/Products/Applications/Symaira Vault.app"
-          xcrun stapler staple "$APP_PATH" || echo "::warning::Stapling .app failed"
-          xcrun stapler staple "${{ env.DMG_PATH }}" || echo "::warning::Stapling .dmg failed"
+          xcrun stapler staple "${{ env.DMG_PATH }}"
+          xcrun stapler validate "${{ env.DMG_PATH }}"
+          codesign --verify --strict --verbose=2 "${{ env.DMG_PATH }}"
+          spctl --assess --type open --context context:primary-signature --verbose=4 "${{ env.DMG_PATH }}"
 
       - name: Upload DMG to release
         run: |
@@ -659,7 +698,6 @@ jobs:
 
       - name: Fetch Homebrew formula
         run: |
-          TAG="${{ steps.tag.outputs.tag }}"
           curl -fsSL "https://raw.githubusercontent.com/danieljustus/homebrew-tap/main/Formula/symvault.rb" -o symvault.rb
 
       - name: Verify formula exists and has correct version
