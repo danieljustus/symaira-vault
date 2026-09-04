@@ -26,6 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Agent token and profile subcommands now use executable action-first syntax
+  (`symvault agent token new|list|revoke|rotate <name>` and
+  `symvault agent profile show|edit|export <name>`). The previous name-first
+  examples could not reach Cobra subcommands, while action-first calls silently
+  operated on agent `unknown`. Release, Homebrew, security, migration, generated
+  skill, health, and man-page guidance now matches the working CLI.
 - The macOS app could no longer unlock the vault: entering the passphrase and
   pressing "Entsperren" appeared to do nothing while the CLI kept working.
   `symvault unlock` short-circuited on the cached age identity and returned
@@ -473,7 +479,7 @@ preview, then `symvault migrate v4` to apply.
 - **`symvault agent doctor <name>` / `--all`** — end-to-end diagnostic for one
   or all agent integrations; detects skill drift via hash comparison.
 - **`symvault agent list`** — installed agents with tier, token status, last-seen.
-- **`symvault agent token <name> new|list|revoke|rotate`** — token management
+- **`symvault agent token new|list|revoke|rotate <name>`** — token management
   per agent.
 - **`symvault agent audit <name>` / `audit self`** — per-agent audit log with
   `--since` and `--format table|json`.

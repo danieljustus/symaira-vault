@@ -13,8 +13,8 @@ symvault-agent - Manage agent profiles
 Configure AI agent profiles with scoped permissions, tokens, and MCP integration.
 
 .PP
-Use 'symvault agent setup \&' to create a new agent with an interactive wizard
-that guides you through security tier selection, vault path scoping, and approval mode.
+Use 'symvault agent install \&' to create a security profile, scoped token,
+MCP configuration, and agent skill package.
 
 
 .SH OPTIONS
@@ -57,8 +57,8 @@ that guides you through security tier selection, vault path scoping, and approva
 
 .SH EXAMPLE
 .EX
-  # Interactive new-agent wizard
-  symvault agent setup claude-code
+  # Install and configure an agent
+  symvault agent install claude-code
 
   # List configured agents
   symvault agent list

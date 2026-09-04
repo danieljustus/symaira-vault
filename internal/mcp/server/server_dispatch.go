@@ -200,10 +200,10 @@ func (s *Server) validateToolAccess(ctx context.Context, def toolDefinition, nam
 		span.SetStatus(codes.Error, "tool registry drift")
 		metrics.RecordMCPRequest(name, agentName, "error", time.Since(start))
 		s.logAudit(ctx, "tool_registry_drift", name, false)
-		return callToolResultPayload(toolError(
-			"tool registry has changed since this token was issued — " +
-				"re-issue the token with 'symvault mcp token create'",
-		))
+		return callToolResultPayload(toolError(fmt.Sprintf(
+			"tool registry has changed since this token was issued — "+
+				"re-issue the token with 'symvault agent token new %s'", agentName,
+		)))
 	}
 
 	if entryPath != "" {

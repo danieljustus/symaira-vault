@@ -187,10 +187,10 @@ Replace these old commands in your scripts and documentation:
 | `symvault mcp install <name>` | `symvault agent install <name>` |
 | `symvault mcp install --auto-detect` | `symvault agent install --auto-detect` |
 | `symvault mcp-config <agent>` | `symvault agent install <agent> --config-only` |
-| `symvault mcp token create` | `symvault agent token <name> new` |
-| `symvault mcp token list` | `symvault agent token list` |
-| `symvault mcp token revoke` | `symvault agent token revoke` |
-| `symvault mcp-token-rotate` | `symvault agent token <name> rotate` |
+| `symvault mcp token create` | `symvault agent token new <name>` |
+| `symvault mcp token list` | `symvault agent token list <name>` |
+| `symvault mcp token revoke` | `symvault agent token revoke <name> <token-id>` |
+| `symvault mcp-token-rotate` | `symvault agent token rotate <name>` |
 
 Deprecation stubs are in place for v4.0. Calling any of the old commands prints
 the replacement and exits with code 2. The stubs will be removed in v4.1.
@@ -207,10 +207,10 @@ The full mapping of deprecated commands to their v4.0 replacements:
 | `symvault mcp install <name>` | `symvault agent install <name>` | Same flags: `--tier`, `--http`, `--force` |
 | `symvault mcp install --auto-detect` | `symvault agent install --auto-detect` | Detects all installed agents |
 | `symvault mcp-config <agent>` | `symvault agent install <agent> --config-only` | MCP config only, no skill |
-| `symvault mcp token create` | `symvault agent token <name> new` | Scope and expiry flags unchanged |
-| `symvault mcp token list` | `symvault agent token list` | Output unchanged |
-| `symvault mcp token revoke <id>` | `symvault agent token revoke <id>` | Output unchanged |
-| `symvault mcp-token-rotate` | `symvault agent token <name> rotate` | Output unchanged |
+| `symvault mcp token create` | `symvault agent token new <name>` | Scope and TTL flags remain available |
+| `symvault mcp token list` | `symvault agent token list <name>` | Listing is now agent-scoped |
+| `symvault mcp token revoke <id>` | `symvault agent token revoke <name> <id>` | Revocation verifies token ownership |
+| `symvault mcp-token-rotate` | `symvault agent token rotate <name>` | Rotation is now agent-scoped |
 | `symvault mcp` (any subcommand) | Folded into `symvault agent` | See rows above |
 
 ### New commands in v4.0
@@ -325,7 +325,7 @@ symvault mcp token create --agent hermes --tools list_entries --expires 24h
 
 # After
 symvault agent install hermes
-symvault agent token hermes new --tools list_entries --expires 24h
+symvault agent token new hermes --tools list_entries --ttl 24h
 ```
 
 ### Configuration management (GitOps)

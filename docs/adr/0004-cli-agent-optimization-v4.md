@@ -88,8 +88,8 @@ symvault serve                         # MCP server (unchanged)
 | `symvault mcp install <agent>` | `symvault agent install <agent>` | stub, exit 2 | removed |
 | `symvault mcp install --auto-detect` | `symvault agent install --auto-detect` | stub, exit 2 | removed |
 | `symvault mcp token create` | `symvault agent token new <name>` | stub, exit 2 | removed |
-| `symvault mcp token list` | `symvault agent token list` | stub, exit 2 | removed |
-| `symvault mcp token revoke` | `symvault agent token revoke` | stub, exit 2 | removed |
+| `symvault mcp token list` | `symvault agent token list <name>` | stub, exit 2 | removed |
+| `symvault mcp token revoke` | `symvault agent token revoke <name> <token-id>` | stub, exit 2 | removed |
 | `symvault mcp-token-rotate` | `symvault agent token rotate <name>` | stub, exit 2 | removed |
 | `symvault agent setup <name>` | `symvault agent install <name>` (tier override) | stub, exit 2 | removed |
 | `symvault mcp` (subcommand tree) | folded into `symvault agent` | stub on each subcommand, exit 2 | removed |

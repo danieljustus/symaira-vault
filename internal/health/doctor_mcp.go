@@ -54,7 +54,7 @@ func checkMCPTokens(vaultDir string, _ Options) Result {
 			parts = append(parts, fmt.Sprintf("%d expired/revoked", expired))
 		}
 		r.Message = strings.Join(parts, ", ")
-		r.Hint = "rotate old tokens with `symvault mcp-token-rotate`"
+		r.Hint = "rotate old tokens per agent with `symvault agent token rotate <name>`"
 	} else {
 		r.Status = StatusOK
 		r.Message = fmt.Sprintf("%d active token(s), all within rotation policy", active)
@@ -216,7 +216,7 @@ func checkMCPServer(vaultDir string, _ Options) Result {
 		r.Message += ", token present"
 	} else {
 		r.Message += ", no token file"
-		r.Hint = "generate an MCP token with `symvault agent token <name> new`"
+		r.Hint = "generate an MCP token with `symvault agent token new <name>`"
 	}
 	return r
 }
@@ -331,7 +331,7 @@ func checkMCPAgents(vaultDir string, _ Options) Result {
 	} else {
 		r.Status = StatusOK
 		r.Message = "no AI agent MCP configs found"
-		r.Hint = "run `symvault mcp-config <agent>` to generate config"
+		r.Hint = "run `symvault agent install <agent> --config-only` to install MCP config"
 	}
 	return r
 }

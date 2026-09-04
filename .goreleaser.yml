@@ -199,7 +199,7 @@ brews:
         symvault get github.com/username # Retrieve it
 
       For MCP server setup:
-        symvault mcp-config <name>
+        symvault agent install <name> --config-only
 
       Documentation: https://github.com/danieljustus/symaira-vault#readme
     test: |

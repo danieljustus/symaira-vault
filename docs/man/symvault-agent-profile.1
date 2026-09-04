@@ -6,7 +6,7 @@ symvault-agent-profile - Manage agent profiles
 
 
 .SH SYNOPSIS
-\fBsymvault agent profile  [flags]\fP
+\fBsymvault agent profile [flags]\fP
 
 
 .SH DESCRIPTION
@@ -54,16 +54,16 @@ Show, edit, and export agent profiles.
 .SH EXAMPLE
 .EX
   # Show agent profile
-  symvault agent profile my-agent show
+  symvault agent profile show my-agent
 
   # Show profile as JSON
-  symvault agent profile my-agent show --output json
+  symvault agent profile show my-agent --output json
 
   # Edit agent profile in $EDITOR
-  symvault agent profile my-agent edit
+  symvault agent profile edit my-agent
 
   # Export profile as YAML to stdout
-  symvault agent profile my-agent export
+  symvault agent profile export my-agent
 .EE
 
 

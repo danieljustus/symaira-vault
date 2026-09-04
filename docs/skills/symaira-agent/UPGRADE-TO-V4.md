@@ -163,7 +163,7 @@ For each agent that comes back with warnings or errors:
 - **Missing MCP config entry** — re-inject:
   `symvault agent install <name> --config-only`
 - **Token invalid / expired** — rotate:
-  `symvault agent token <name> rotate`
+  `symvault agent token rotate <name>`
 - **Profile classified `custom` but user wants a preset** — explicit upgrade:
   `symvault agent upgrade <name> --tier <safe|standard|admin>` (interactive)
 
@@ -184,10 +184,10 @@ commands. Show the user any matches and propose replacements before editing.
 | `symvault mcp install <name>` | `symvault agent install <name>` |
 | `symvault mcp install --auto-detect` | `symvault agent install --auto-detect` |
 | `symvault mcp-config <agent>` | `symvault agent install <agent> --config-only` |
-| `symvault mcp token create …` | `symvault agent token <name> new …` |
-| `symvault mcp token list` | `symvault agent token list` |
-| `symvault mcp token revoke <id>` | `symvault agent token revoke <id>` |
-| `symvault mcp-token-rotate` | `symvault agent token <name> rotate` |
+| `symvault mcp token create …` | `symvault agent token new <name> …` |
+| `symvault mcp token list` | `symvault agent token list <name>` |
+| `symvault mcp token revoke <id>` | `symvault agent token revoke <name> <id>` |
+| `symvault mcp-token-rotate` | `symvault agent token rotate <name>` |
 
 For CI/automation scripts that upgrade tiers, add `--reason` (now required
 with `--yes`):

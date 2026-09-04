@@ -662,6 +662,7 @@ func TestExport(t *testing.T) {
 	tr := tar.NewReader(gr)
 
 	var foundFiles []string
+	var installContent []byte
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
@@ -680,6 +681,9 @@ func TestExport(t *testing.T) {
 		}
 		if len(content) == 0 {
 			t.Errorf("tar entry %s is empty", hdr.Name)
+		}
+		if hdr.Name == "INSTALL.md" {
+			installContent = append([]byte(nil), content...)
 		}
 	}
 
@@ -703,6 +707,9 @@ func TestExport(t *testing.T) {
 	}
 	if !hasInstall {
 		t.Errorf("tar archive missing INSTALL.md; found: %v", foundFiles)
+	}
+	if !bytes.Contains(installContent, []byte("symvault agent token new hermes --tools list_entries,get_entry --ttl 90d")) {
+		t.Errorf("INSTALL.md does not contain the supported scoped-token command: %q", installContent)
 	}
 }
 

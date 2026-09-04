@@ -14,21 +14,21 @@ import (
 
 func newAgentTokenCmd() *cobra.Command {
 	agentTokenCmd := &cobra.Command{
-		Use:   "token <name>",
+		Use:   "token",
 		Short: "Manage tokens for an agent",
 		Long:  `Create, list, revoke, and rotate scoped tokens for a specific agent.`,
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.NoArgs,
 		Example: `  # Create a scoped token for an agent
-  symvault agent token my-agent new
+  symvault agent token new my-agent
 
   # List tokens for an agent
-  symvault agent token my-agent list
+  symvault agent token list my-agent
 
   # Revoke a token by ID
-  symvault agent token my-agent revoke <token-id>
+  symvault agent token revoke my-agent <token-id>
 
   # Rotate an agent's token (revoke + create new)
-  symvault agent token my-agent rotate`,
+  symvault agent token rotate my-agent`,
 	}
 	agentTokenCmd.AddCommand(newAgentTokenNewCmd())
 	agentTokenCmd.AddCommand(newAgentTokenListCmd())
@@ -39,14 +39,15 @@ func newAgentTokenCmd() *cobra.Command {
 
 func newAgentTokenNewCmd() *cobra.Command {
 	agentTokenNewCmd := &cobra.Command{
-		Use:   "new",
+		Use:   "new <name>",
 		Short: "Create a new scoped token for the agent",
 		Long: `Create a new scoped MCP token associated with the named agent.
 
 The raw token is printed exactly once — copy it immediately. It cannot be
 retrieved later.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			agentName := mustGetAgentName(cmd)
+			agentName := args[0]
 			tools, _ := cmd.Flags().GetStringSlice("tools")
 			ttlStr, _ := cmd.Flags().GetString("ttl")
 			label, _ := cmd.Flags().GetString("label")
@@ -109,11 +110,12 @@ retrieved later.`,
 
 func newAgentTokenListCmd() *cobra.Command {
 	agentTokenListCmd := &cobra.Command{
-		Use:   "list",
+		Use:   "list <name>",
 		Short: "List tokens for this agent",
 		Long:  `List all scoped tokens associated with the given agent name.`,
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			agentName := mustGetAgentName(cmd)
+			agentName := args[0]
 
 			vDir, err := cli.VaultPath()
 			if err != nil {
@@ -176,12 +178,13 @@ func newAgentTokenListCmd() *cobra.Command {
 
 func newAgentTokenRevokeCmd() *cobra.Command {
 	agentTokenRevokeCmd := &cobra.Command{
-		Use:   "revoke <token-id>",
+		Use:   "revoke <name> <token-id>",
 		Short: "Revoke a scoped token",
 		Long:  `Revoke a scoped token by its ID. Revoked tokens are immediately invalidated.`,
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			tokenID := args[0]
+			agentName := args[0]
+			tokenID := args[1]
 
 			vDir, err := cli.VaultPath()
 			if err != nil {
@@ -194,7 +197,14 @@ func newAgentTokenRevokeCmd() *cobra.Command {
 				return fmt.Errorf("load token registry: %w", err)
 			}
 
-			if !reg.Revoke(tokenID) {
+			var owned bool
+			for _, token := range reg.List() {
+				if token.ID == tokenID && token.AgentName == agentName {
+					owned = true
+					break
+				}
+			}
+			if !owned || !reg.Revoke(tokenID) {
 				return fmt.Errorf("token %q not found or already revoked", tokenID)
 			}
 
@@ -211,12 +221,13 @@ func newAgentTokenRevokeCmd() *cobra.Command {
 
 func newAgentTokenRotateCmd() *cobra.Command {
 	agentTokenRotateCmd := &cobra.Command{
-		Use:   "rotate",
+		Use:   "rotate <name>",
 		Short: "Rotate the agent's token",
 		Long: `Revoke the current token for this agent and create a new one.
 The new raw token is printed exactly once.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			agentName := mustGetAgentName(cmd)
+			agentName := args[0]
 			tools, _ := cmd.Flags().GetStringSlice("tools")
 			ttlStr, _ := cmd.Flags().GetString("ttl")
 			label, _ := cmd.Flags().GetString("label")
@@ -279,15 +290,4 @@ The new raw token is printed exactly once.`,
 	agentTokenRotateCmd.Flags().String("ttl", "", "Token TTL (e.g. 24h, 7d); defaults to mcp.scoped_token_ttl from config")
 	agentTokenRotateCmd.Flags().String("label", "", "Human-readable label")
 	return agentTokenRotateCmd
-}
-
-func mustGetAgentName(cmd *cobra.Command) string {
-	parent := cmd.Parent()
-	if parent != nil {
-		parentArgs := parent.Flags().Args()
-		if len(parentArgs) > 0 {
-			return parentArgs[0]
-		}
-	}
-	return "unknown"
 }

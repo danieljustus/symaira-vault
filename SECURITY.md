@@ -171,31 +171,37 @@ mcp:
 
 Setting `metrics_auth_required: false` allows anonymous access to `/metrics` when bound to non-local addresses. Only disable this if you have other access controls (e.g., firewall rules or reverse-proxy auth) in place.
 
-#### Token Rotation
+#### Scoped Token Rotation
 
-Bearer tokens can be rotated using the `mcp-token-rotate` command:
-
-```bash
-symvault mcp-token-rotate
-```
-
-This invalidates the previous token and generates a new one. Any MCP clients using the old token will need to be updated with the new token.
-
-#### Safer Token Export
-
-When generating MCP configurations that may be displayed in terminals or committed to version control, use the `--redact` flag:
+Use a separate scoped token for each HTTP agent and rotate it by agent name:
 
 ```bash
-symvault mcp-config claude-code --http --redact
+symvault agent token rotate <agent>
 ```
 
-This outputs `env:SYMVAULT_MCP_TOKEN` instead of the actual token value. Clients using redacted configs must set the `SYMVAULT_MCP_TOKEN` environment variable.
+This revokes every active scoped token for that agent and prints the replacement
+raw token exactly once. Update the agent's configuration immediately, and do not
+put the token in shell history, logs, source control, or chat.
 
-For scripts that need the raw token:
+#### Safe Agent Setup and Explicit Token Export
+
+Normal HTTP setup creates a scoped token, stores it in a private per-agent token
+file, and updates the detected client configuration without printing the raw
+token:
 
 ```bash
-symvault mcp-config <agent> --token-only
+symvault agent install claude-code --http --config-only
 ```
+
+The command reports only the token ID and affected paths. If you explicitly need
+a new raw token for manual configuration, create it directly:
+
+```bash
+symvault agent token new <agent> --tools list_entries --ttl 24h
+```
+
+The raw token is shown exactly once. Copy it directly to the intended client;
+do not capture it in shell history, logs, source control, or chat.
 
 ### Multi-User Vaults and MCP
 
