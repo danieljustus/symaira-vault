@@ -34,6 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   carries the Apache-2.0 license metadata, and is exercised end to end in CI.
   Previously it failed during non-hermetic host-oriented tests and pointed
   `nix run` at a nonexistent executable (#974).
+- macOS releases now notarize and staple the app before packaging it, then
+  Developer-ID-sign, notarize, staple, and Gatekeeper-assess the DMG itself.
+  Missing signing credentials and failed stapling are release failures rather
+  than warning-only unsigned artifacts (#976).
 - Agent token and profile subcommands now use executable action-first syntax
   (`symvault agent token new|list|revoke|rotate <name>` and
   `symvault agent profile show|edit|export <name>`). The previous name-first
