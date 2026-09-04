@@ -15,10 +15,16 @@
       in
       {
         packages.default = pkgs.buildGoModule {
-          pname = "symaira";
+          pname = "symvault";
           version = self.version or "dev";
 
           src = ./.;
+          subPackages = [ "." ];
+
+          # The canonical CI suite already runs before this package gate. The
+          # tests are intentionally host-oriented (`/bin/echo`, Git/SSH, TTYs)
+          # and cannot run inside Nix's pure build sandbox.
+          doCheck = false;
 
           # Resolved via `go mod vendor; nix hash path --sri vendor/`
           vendorHash = "sha256-/cTuiackYtJZlnN68ZmlrYbQzXy+XE45bwslO2wN8dM=";
@@ -35,13 +41,17 @@
             "-X main.date=unknown"
           ];
 
+          postInstall = ''
+            mv "$out/bin/symaira-vault" "$out/bin/symvault"
+          '';
+
           meta = with pkgs.lib; {
             description = "Modern CLI password manager with age encryption";
             homepage = "https://github.com/danieljustus/symaira-vault";
-            license = licenses.mit;
+            license = licenses.asl20;
             maintainers = [ ];
             platforms = platforms.linux ++ platforms.darwin;
-            mainProgram = "symaira";
+            mainProgram = "symvault";
           };
         };
 

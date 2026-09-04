@@ -30,6 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   while migrating a legacy token. The shared Unix `SafeRemove` helper closed
   its validated descriptor twice, allowing the second close to hit an audit
   log that had reused the descriptor under concurrent load (#972).
+- The advertised Nix flake now builds and runs `symvault`, pins its inputs,
+  carries the Apache-2.0 license metadata, and is exercised end to end in CI.
+  Previously it failed during non-hermetic host-oriented tests and pointed
+  `nix run` at a nonexistent executable (#974).
 - Agent token and profile subcommands now use executable action-first syntax
   (`symvault agent token new|list|revoke|rotate <name>` and
   `symvault agent profile show|edit|export <name>`). The previous name-first
