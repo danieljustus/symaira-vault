@@ -48,6 +48,7 @@ mcp-token
 dist/
 coverage/
 .build/
+/target/
 .gobind/
 vault_coverage.html
 coverage.html
