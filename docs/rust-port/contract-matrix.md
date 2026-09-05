@@ -7,7 +7,7 @@ compilation is not evidence. The Go oracle is commit `caadd5e` / release
 
 | ID | Seam | Fixture / input | Go oracle | Expected contract | Rust evidence | Platforms | Compare | Status |
 |---|---|---|---|---|---|---|---|---|
-| CLI-001 | Version | `version`, `version --json`, `--version` | Go binary | exact exit/stdout/stderr and schema | `symvault-cli` black-box | all | bytes | TODO |
+| CLI-001 | Version | `version`, output variants, extra args, `--version` | Go binary | exact exit/stdout/stderr and schema | `symvault-cli/tests/version.rs` + staged differential suite | macOS/Linux/Windows | bytes | PASS |
 | CLI-002 | Command tree | every visible/hidden command | `cmd.NewRootCmd()` generator | paths, aliases, groups, arity, annotations | inventory drift test | all | semantic + bytes | TODO |
 | CLI-003 | Flags | local/inherited flags and defaults | Cobra generator | names, shorthands, types, defaults, required/conflicts | inventory drift test | all | semantic | TODO |
 | CLI-004 | Help/completions/manpages | all commands, four shells, man tree | Go generators | stable content and executable completions | snapshots + shell checks | all | bytes/declared normalization | TODO |

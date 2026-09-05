@@ -64,10 +64,11 @@ passes. The measured Go baseline is in
 ## Implementation progress
 
 - `RUST-001` passed: the 131-command Go contract fixture and neutral differential harness are executable in CI.
-- `RUST-002` is locally green: the pinned Rust workspace and byte-exact
-  `version` slice passes all ten Go↔Rust cases plus format, Clippy, nextest,
-  doctest, feature, coverage, audit, and deny gates. Native CI remains the
-  completion gate.
+- `RUST-002` passed: the pinned Rust workspace and byte-exact `version` slice
+  passes all ten Go↔Rust cases plus format, Clippy, nextest, doctest, feature,
+  coverage, audit, deny, and native macOS/Windows CI gates.
+- `RUST-003` is ready: pure error, secret-reference, redaction, policy, quota,
+  password, TOTP, and type contracts are the next vertical slices.
 
 The tiny release-built version slice measured 577,104 bytes, 2,277,376 bytes
 maximum RSS in one sample, and 2.576 ms startup p95 over 120 runs after 20

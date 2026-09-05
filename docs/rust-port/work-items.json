@@ -18,7 +18,7 @@
     {
       "id": "RUST-002",
       "title": "Initialize Rust workspace and byte-exact version slice",
-      "status": "in_progress",
+      "status": "passed",
       "depends_on": ["RUST-001"],
       "contract_rows": ["CLI-001"],
       "acceptance": ["cargo fmt --all --check", "cargo clippy --workspace --all-targets --all-features -- -D warnings", "cargo nextest run --workspace --all-features", "cargo test --workspace --doc --all-features"]
@@ -26,7 +26,7 @@
     {
       "id": "RUST-003",
       "title": "Port pure core contracts",
-      "status": "blocked",
+      "status": "ready",
       "depends_on": ["RUST-002"],
       "contract_rows": ["CLI-005", "CRYPTO-005"],
       "acceptance": ["cargo nextest run -p symvault-core", "cargo +nightly miri test -p symvault-core"]
