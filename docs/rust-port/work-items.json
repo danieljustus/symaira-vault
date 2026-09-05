@@ -18,7 +18,7 @@
     {
       "id": "RUST-002",
       "title": "Initialize Rust workspace and byte-exact version slice",
-      "status": "ready",
+      "status": "in_progress",
       "depends_on": ["RUST-001"],
       "contract_rows": ["CLI-001"],
       "acceptance": ["cargo fmt --all --check", "cargo clippy --workspace --all-targets --all-features -- -D warnings", "cargo nextest run --workspace --all-features", "cargo test --workspace --doc --all-features"]

@@ -59,6 +59,21 @@ passes. The measured Go baseline is in
 - [`implementation-plan.md`](implementation-plan.md) — ordered, reversible execution plan.
 - [`work-items.json`](work-items.json) — machine-readable dependency graph for autonomous execution.
 - [`baseline-20260905.json`](baseline-20260905.json) — measured Go reference metrics.
+- [`value-signal-version-20260905.json`](value-signal-version-20260905.json) — non-representative first-slice measurements.
+
+## Implementation progress
+
+- `RUST-001` passed: the 131-command Go contract fixture and neutral differential harness are executable in CI.
+- `RUST-002` is locally green: the pinned Rust workspace and byte-exact
+  `version` slice passes all ten Go↔Rust cases plus format, Clippy, nextest,
+  doctest, feature, coverage, audit, and deny gates. Native CI remains the
+  completion gate.
+
+The tiny release-built version slice measured 577,104 bytes, 2,277,376 bytes
+maximum RSS in one sample, and 2.576 ms startup p95 over 120 runs after 20
+warmups on macOS arm64. These numbers are promising but deliberately marked
+non-representative; they do not justify product cutover before representative
+crypto/storage/MCP slices pass.
 
 ## Execution rule
 

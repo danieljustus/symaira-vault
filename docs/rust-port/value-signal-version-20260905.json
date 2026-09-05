@@ -1,0 +1,35 @@
+{
+  "comparison": {
+    "binary_size_improvement": 0.9734504309502067,
+    "rss_improvement": 0.8876313662085691,
+    "startup_p95_ratio": 0.30844760565195034
+  },
+  "go_baseline": {
+    "binary_bytes": 21736850,
+    "max_rss_bytes_single_sample": 20267008,
+    "startup_p95_ms": 8.350958
+  },
+  "measurement": {
+    "build": "SYMVAULT_VERSION=dev cargo build --release -p symvault-cli --bin symvault --locked",
+    "rss": "/usr/bin/time -l ./target/release/symvault version",
+    "startup": "20 warmups followed by 120 subprocess runs measured with time.perf_counter_ns"
+  },
+  "platform": {
+    "arch": "arm64",
+    "os": "darwin"
+  },
+  "representative": false,
+  "rust": {
+    "binary_bytes": 577104,
+    "max_rss_bytes_single_sample": 2277376,
+    "startup_max_ms": 2.895083,
+    "startup_median_ms": 2.151208,
+    "startup_min_ms": 1.883292,
+    "startup_p95_ms": 2.575833,
+    "startup_runs": 120,
+    "toolchain": "1.98.0",
+    "warmups": 20
+  },
+  "schema_version": 1,
+  "slice": "version"
+}

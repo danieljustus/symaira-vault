@@ -87,6 +87,24 @@
       "compare_files": true
     },
     {
+      "id": "version-subcommand-flag-unsupported",
+      "stage": "version",
+      "args": ["version", "--version"],
+      "timeout_ms": 10000,
+      "stdout_mode": "console_text",
+      "stderr_mode": "console_text",
+      "compare_files": true
+    },
+    {
+      "id": "version-flag-after-separator",
+      "stage": "version",
+      "args": ["version", "--", "--version"],
+      "timeout_ms": 10000,
+      "stdout_mode": "bytes",
+      "stderr_mode": "bytes",
+      "compare_files": true
+    },
+    {
       "id": "version-invalid-output",
       "stage": "version",
       "args": ["version", "--output", "wat"],
