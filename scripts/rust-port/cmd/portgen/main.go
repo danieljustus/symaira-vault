@@ -10,11 +10,13 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	vaultcmd "github.com/danieljustus/symaira-vault/cmd"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 )
 
 type document struct {
@@ -112,10 +114,10 @@ func main() {
 		fmt.Printf("PASS command-tree fixture (%d commands)\n", len(generated.Commands))
 		return
 	}
-	if err := os.MkdirAll(filepath.Dir(*output), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(*output), 0o750); err != nil {
 		fatal("create fixture directory: %v", err)
 	}
-	if err := os.WriteFile(*output, content, 0o644); err != nil {
+	if err := os.WriteFile(*output, content, 0o600); err != nil {
 		fatal("write fixture: %v", err)
 	}
 	fmt.Printf("WROTE %s (%d commands)\n", *output, len(generated.Commands))
@@ -141,15 +143,15 @@ func collectCommands(current *cobra.Command, commands *[]commandSpec) {
 		Path:               current.CommandPath(),
 		Name:               current.Name(),
 		Use:                current.Use,
-		Short:              current.Short,
-		Long:               current.Long,
-		Example:            current.Example,
+		Short:              normalizeText(current.Short),
+		Long:               normalizeText(current.Long),
+		Example:            normalizeText(current.Example),
 		Aliases:            cloneStrings(current.Aliases),
 		SuggestFor:         cloneStrings(current.SuggestFor),
 		ValidArgs:          cloneStrings(current.ValidArgs),
 		ArgAliases:         cloneStrings(current.ArgAliases),
 		Hidden:             current.Hidden,
-		Deprecated:         current.Deprecated,
+		Deprecated:         normalizeText(current.Deprecated),
 		GroupID:            current.GroupID,
 		Annotations:        cloneStringMap(current.Annotations),
 		DisableFlagParsing: current.DisableFlagParsing,
@@ -192,9 +194,9 @@ func collectFlags(set *pflag.FlagSet) []flagSpec {
 		flags = append(flags, flagSpec{
 			Name:                item.Name,
 			Shorthand:           item.Shorthand,
-			Usage:               item.Usage,
+			Usage:               normalizeText(item.Usage),
 			Type:                item.Value.Type(),
-			Default:             item.DefValue,
+			Default:             normalizeText(item.DefValue),
 			NoOptDefault:        item.NoOptDefVal,
 			Hidden:              item.Hidden,
 			Deprecated:          item.Deprecated,
@@ -206,6 +208,11 @@ func collectFlags(set *pflag.FlagSet) []flagSpec {
 	return flags
 }
 
+func normalizeText(value string) string {
+	configPath := filepath.Join(configpkg.DefaultConfigDir(), "config.yaml")
+	return strings.ReplaceAll(value, configPath, "<CONFIG>/config.yaml")
+}
+
 func marshalDocument(value document) ([]byte, error) {
 	content, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
@@ -215,7 +222,7 @@ func marshalDocument(value document) ([]byte, error) {
 }
 
 func readDocument(path string) (document, error) {
-	content, err := os.ReadFile(path)
+	content, err := os.ReadFile(path) // #nosec G304 -- explicit operator-selected fixture path
 	if err != nil {
 		return document{}, err
 	}

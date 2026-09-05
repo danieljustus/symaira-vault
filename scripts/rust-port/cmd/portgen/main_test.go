@@ -37,6 +37,9 @@ func TestBuildDocumentCapturesCriticalContracts(t *testing.T) {
 	if !ok || !serve.Hidden {
 		t.Fatalf("hidden serve alias not captured: %#v", serve)
 	}
+	if !bytes.Contains([]byte(serve.Long), []byte("<CONFIG>/config.yaml")) {
+		t.Fatalf("host-specific config path was not normalized: %q", serve.Long)
+	}
 	root := byPath["symvault"]
 	if !hasFlag(root.PersistentFlags, "vault") || !hasFlag(root.PersistentFlags, "output") {
 		t.Fatalf("root persistent flags incomplete: %#v", root.PersistentFlags)

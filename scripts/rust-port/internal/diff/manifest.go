@@ -23,31 +23,31 @@ type ManifestEntry struct {
 }
 
 func buildManifest(root string) ([]ManifestEntry, error) {
+	rootHandle, err := os.OpenRoot(root)
+	if err != nil {
+		return nil, err
+	}
 	entries := make([]ManifestEntry, 0)
-	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
+	walkErr := fs.WalkDir(rootHandle.FS(), ".", func(path string, entry fs.DirEntry, entryErr error) error {
+		if entryErr != nil {
+			return entryErr
 		}
-		if path == root {
+		if path == "." {
 			return nil
 		}
 
-		info, err := os.Lstat(path)
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(root, path)
+		info, err := entry.Info()
 		if err != nil {
 			return err
 		}
 		item := ManifestEntry{
-			Path: filepath.ToSlash(rel),
+			Path: path,
 			Mode: uint32(info.Mode().Perm()),
 		}
 		switch {
 		case info.Mode()&os.ModeSymlink != 0:
 			item.Type = "symlink"
-			item.LinkTarget, err = os.Readlink(path)
+			item.LinkTarget, err = rootHandle.Readlink(path)
 			if err != nil {
 				return err
 			}
@@ -62,7 +62,7 @@ func buildManifest(root string) ([]ManifestEntry, error) {
 		case info.Mode().IsRegular():
 			item.Type = "file"
 			item.Size = info.Size()
-			file, openErr := os.Open(path)
+			file, openErr := rootHandle.Open(path)
 			if openErr != nil {
 				return openErr
 			}
@@ -82,8 +82,12 @@ func buildManifest(root string) ([]ManifestEntry, error) {
 		entries = append(entries, item)
 		return nil
 	})
-	if err != nil {
-		return nil, err
+	closeErr := rootHandle.Close()
+	if walkErr != nil {
+		return nil, walkErr
+	}
+	if closeErr != nil {
+		return nil, closeErr
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Path < entries[j].Path })
 	return entries, nil

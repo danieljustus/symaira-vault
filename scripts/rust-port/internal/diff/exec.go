@@ -69,7 +69,7 @@ func Run(binary string, testCase Case) (Result, error) {
 		"${TMPDIR}":    tmp,
 	}
 	args := replaceAll(testCase.Args, replacements)
-	command := exec.Command(absoluteBinary, args...)
+	command := exec.Command(absoluteBinary, args...) // #nosec G204 -- explicit harness operand, never derived from fixture output
 	configureProcessTree(command)
 	command.Dir = workspace
 	if testCase.WorkingDir != "" {
