@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "caadd5e",
+    "release": "v0.22.1"
+  },
+  "cases": [
+    {
+      "id": "version-text",
+      "stage": "version",
+      "args": ["version"],
+      "timeout_ms": 10000,
+      "stdout_mode": "bytes",
+      "stderr_mode": "bytes",
+      "compare_files": true
+    },
+    {
+      "id": "version-json",
+      "stage": "version",
+      "args": ["version", "--json"],
+      "timeout_ms": 10000,
+      "stdout_mode": "bytes",
+      "stderr_mode": "bytes",
+      "compare_files": true
+    },
+    {
+      "id": "root-help",
+      "stage": "full-cli",
+      "args": ["--help"],
+      "timeout_ms": 10000,
+      "stdout_mode": "console_text",
+      "stderr_mode": "console_text",
+      "compare_files": true
+    },
+    {
+      "id": "hidden-serve-help",
+      "stage": "full-cli",
+      "args": ["serve", "--help"],
+      "timeout_ms": 10000,
+      "stdout_mode": "console_text",
+      "stderr_mode": "console_text",
+      "compare_files": true
+    },
+    {
+      "id": "version-extra-argument",
+      "stage": "version",
+      "args": ["version", "extra"],
+      "timeout_ms": 10000,
+      "stdout_mode": "bytes",
+      "stderr_mode": "bytes",
+      "compare_files": true
+    },
+    {
+      "id": "version-yaml-remains-text",
+      "stage": "version",
+      "args": ["version", "--output", "yaml"],
+      "timeout_ms": 10000,
+      "stdout_mode": "bytes",
+      "stderr_mode": "bytes",
+      "compare_files": true
+    },
+    {
+      "id": "version-output-json",
+      "stage": "version",
+      "args": ["version", "--output", "json"],
+      "timeout_ms": 10000,
+      "stdout_mode": "bytes",
+      "stderr_mode": "bytes",
+      "compare_files": true
+    },
+    {
+      "id": "version-uppercase-json-remains-text",
+      "stage": "version",
+      "args": ["version", "--output", "JSON"],
+      "timeout_ms": 10000,
+      "stdout_mode": "bytes",
+      "stderr_mode": "bytes",
+      "compare_files": true
+    },
+    {
+      "id": "version-flag-unsupported",
+      "stage": "version",
+      "args": ["--version"],
+      "timeout_ms": 10000,
+      "stdout_mode": "console_text",
+      "stderr_mode": "console_text",
+      "compare_files": true
+    },
+    {
+      "id": "version-invalid-output",
+      "stage": "version",
+      "args": ["version", "--output", "wat"],
+      "timeout_ms": 10000,
+      "stdout_mode": "console_text",
+      "stderr_mode": "console_text",
+      "compare_files": true
+    },
+    {
+      "id": "unknown-command",
+      "stage": "full-cli",
+      "args": ["definitely-not-a-command"],
+      "timeout_ms": 10000,
+      "stdout_mode": "console_text",
+      "stderr_mode": "console_text",
+      "compare_files": true
+    }
+  ]
+}

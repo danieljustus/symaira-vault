@@ -1,10 +1,11 @@
-.PHONY: all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages help docs-check
+.PHONY: all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages port-fixtures-generate port-fixtures-check differential-go-selftest port-contract help docs-check
 
 # Variables
 BINARY_NAME := symvault
 GO := go
 GOFLAGS := -v
 GOLANGCI_LINT_VERSION := v2.11.4
+GO_TOOLCHAIN ?= go1.26.6
 COVERAGE_DIR := coverage
 COVERAGE_FILE := $(COVERAGE_DIR)/coverage.out
 COVERAGE_HTML := $(COVERAGE_DIR)/coverage.html
@@ -150,6 +151,29 @@ manpages: build
 	@mkdir -p docs/man
 	./$(BINARY_NAME) generate manpages docs/man
 
+# Go-oracle fixtures and neutral black-box harness for the staged Rust port.
+PORT_ORACLE_COMMIT ?= $(shell git rev-parse --short HEAD)
+PORT_ORACLE_RELEASE ?= v0.22.1
+PORT_CLI_FIXTURE := testdata/port/cli/command-tree.json
+PORT_CLI_CASES := testdata/port/cli/cases.json
+
+port-fixtures-generate:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/portgen \
+		--output $(PORT_CLI_FIXTURE) \
+		--oracle-commit $(PORT_ORACLE_COMMIT) \
+		--oracle-release $(PORT_ORACLE_RELEASE)
+
+port-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/portgen \
+		--check --output $(PORT_CLI_FIXTURE)
+
+differential-go-selftest:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(MAKE) build
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/diffharness \
+		--left ./$(BINARY_NAME) --right ./$(BINARY_NAME) --cases $(PORT_CLI_CASES)
+
+port-contract: port-fixtures-check differential-go-selftest
+
 # Install dependencies
 deps:
 	$(GO) mod download
@@ -182,6 +206,10 @@ help:
 	@echo "  deps               - Download and tidy dependencies"
 	@echo "  completions        - Generate shell completions"
 	@echo "  manpages           - Generate manual pages"
+	@echo "  port-fixtures-generate - Regenerate frozen Go-oracle CLI fixtures"
+	@echo "  port-fixtures-check    - Verify Go-oracle CLI fixtures have not drifted"
+	@echo "  differential-go-selftest - Compare the Go oracle with itself in isolated sandboxes"
+	@echo "  port-contract      - Run all Rust-port contract preparation gates"
 	@echo "  docs-check         - Check documentation for deprecated terms and incorrect syntax"
 	@echo "  editors-build      - Build all editor plugins (VS Code, Cursor, Neovim)"
 	@echo "  editors-test       - Test all editor plugins"

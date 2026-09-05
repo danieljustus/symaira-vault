@@ -192,6 +192,24 @@ jobs:
           nix --extra-experimental-features 'nix-command flakes' build .#
           nix --extra-experimental-features 'nix-command flakes' run .# -- version
 
+  port-contract:
+    name: Rust port contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Verify frozen Go oracle and differential harness
+        run: make port-contract
+
   # ── PR-fast jobs ─────────────────────────────────────────────────────────
 
   test-pr:
@@ -650,6 +668,7 @@ jobs:
       - integration-test
       - smoke-test
       - flake-vendorhash
+      - port-contract
       - macos-vaultcore
       - ubuntu-editors
     steps:
@@ -659,6 +678,7 @@ jobs:
           RES_DEPENDENCY_SCAN: ${{ needs.dependency-scan.result }}
           RES_LINT: ${{ needs.lint.result }}
           RES_FLAKE_VENDORHASH: ${{ needs.flake-vendorhash.result }}
+          RES_PORT_CONTRACT: ${{ needs.port-contract.result }}
           RES_TEST_PR: ${{ needs.test-pr.result }}
           RES_BUILD_PR: ${{ needs.build-pr.result }}
           RES_TEST: ${{ needs.test.result }}
@@ -685,6 +705,7 @@ jobs:
           check "$RES_DEPENDENCY_SCAN"  dependency-scan
           check "$RES_LINT"             lint
           check "$RES_FLAKE_VENDORHASH" flake-vendorhash
+          check "$RES_PORT_CONTRACT"    port-contract
 
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             check "$RES_TEST_PR"   test-pr

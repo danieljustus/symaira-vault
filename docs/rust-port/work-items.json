@@ -1,0 +1,131 @@
+{
+  "schema_version": 1,
+  "execution_policy": {
+    "order": "topological_then_array",
+    "status_values": ["ready", "blocked", "in_progress", "passed", "stopped"],
+    "advance_rule": "Only start a ready item whose dependencies are passed. After passing an item, mark newly unblocked direct successors ready.",
+    "stop_rule": "Stop on any unexplained parity mismatch, security regression, or failed value gate. Keep Go production."
+  },
+  "items": [
+    {
+      "id": "RUST-001",
+      "title": "Freeze Go oracle and neutral differential harness",
+      "status": "passed",
+      "depends_on": [],
+      "contract_rows": ["CLI-002", "CLI-003", "CLI-005", "STORE-001"],
+      "acceptance": ["make port-fixtures-check", "make differential-go-selftest", "GOTOOLCHAIN=go1.26.6 make test-fast"]
+    },
+    {
+      "id": "RUST-002",
+      "title": "Initialize Rust workspace and byte-exact version slice",
+      "status": "ready",
+      "depends_on": ["RUST-001"],
+      "contract_rows": ["CLI-001"],
+      "acceptance": ["cargo fmt --all --check", "cargo clippy --workspace --all-targets --all-features -- -D warnings", "cargo nextest run --workspace --all-features", "cargo test --workspace --doc --all-features"]
+    },
+    {
+      "id": "RUST-003",
+      "title": "Port pure core contracts",
+      "status": "blocked",
+      "depends_on": ["RUST-002"],
+      "contract_rows": ["CLI-005", "CRYPTO-005"],
+      "acceptance": ["cargo nextest run -p symvault-core", "cargo +nightly miri test -p symvault-core"]
+    },
+    {
+      "id": "RUST-004",
+      "title": "Prove age and KDF interoperability",
+      "status": "blocked",
+      "depends_on": ["RUST-003"],
+      "contract_rows": ["CRYPTO-001", "CRYPTO-002", "CRYPTO-003", "CRYPTO-004"],
+      "acceptance": ["make crypto-differential", "cargo nextest run -p symvault-crypto", "cargo +nightly fuzz run age_envelope"]
+    },
+    {
+      "id": "RUST-005",
+      "title": "Port storage read paths and writes",
+      "status": "blocked",
+      "depends_on": ["RUST-004"],
+      "contract_rows": ["STORE-001", "STORE-002", "STORE-003", "STORE-004", "STORE-005"],
+      "acceptance": ["make store-differential", "cargo nextest run -p symvault-store"]
+    },
+    {
+      "id": "RUST-006",
+      "title": "Port keyed audit chain and rotation",
+      "status": "blocked",
+      "depends_on": ["RUST-005"],
+      "contract_rows": ["AUDIT-001", "AUDIT-002"],
+      "acceptance": ["make audit-differential", "cargo nextest run -p symvault-store audit"]
+    },
+    {
+      "id": "RUST-007",
+      "title": "Port config, session, and native platform adapters",
+      "status": "blocked",
+      "depends_on": ["RUST-005"],
+      "contract_rows": ["CFG-001", "CFG-002", "CFG-003", "SESSION-001", "SESSION-002", "SESSION-003", "PLATFORM-001", "PLATFORM-002"],
+      "acceptance": ["make config-session-differential", "cargo nextest run -p symvault-platform"]
+    },
+    {
+      "id": "RUST-008",
+      "title": "Port git, reconciliation, import/export, and intake",
+      "status": "blocked",
+      "depends_on": ["RUST-005"],
+      "contract_rows": ["GIT-001", "GIT-002", "GIT-003", "IO-001", "IO-002", "IO-003"],
+      "acceptance": ["make sync-io-differential", "cargo nextest run -p symvault-sync"]
+    },
+    {
+      "id": "RUST-009",
+      "title": "Port complete non-MCP CLI and TUI",
+      "status": "blocked",
+      "depends_on": ["RUST-006", "RUST-007", "RUST-008"],
+      "contract_rows": ["CLI-002", "CLI-003", "CLI-004", "CLI-005", "CLI-006", "CLI-007"],
+      "acceptance": ["make cli-differential", "cargo nextest run -p symvault-cli"]
+    },
+    {
+      "id": "RUST-010",
+      "title": "Port all MCP stdio tools and framing",
+      "status": "blocked",
+      "depends_on": ["RUST-006", "RUST-007", "RUST-008"],
+      "contract_rows": ["MCP-001", "MCP-002", "MCP-003", "MCP-004"],
+      "acceptance": ["make mcp-differential", "cargo nextest run -p symvault-mcp", "cargo +nightly fuzz run mcp_frame"]
+    },
+    {
+      "id": "RUST-011",
+      "title": "Port MCP HTTP/SSE, OAuth, broker, and execution",
+      "status": "blocked",
+      "depends_on": ["RUST-010"],
+      "contract_rows": ["HTTP-001", "HTTP-002", "HTTP-003", "HTTP-004", "BROKER-001", "BROKER-002"],
+      "acceptance": ["make http-oauth-broker-differential", "cargo nextest run -p symvault-mcp"]
+    },
+    {
+      "id": "RUST-012",
+      "title": "Replace gomobile bridge with Rust Swift bridge",
+      "status": "blocked",
+      "depends_on": ["RUST-006", "RUST-007"],
+      "contract_rows": ["FFI-001", "FFI-002"],
+      "acceptance": ["make ffi-contract", "swift test --package-path client", "scripts/build-vaultcore.sh"]
+    },
+    {
+      "id": "RUST-013",
+      "title": "Run value gate and ship dual-binary prerelease",
+      "status": "blocked",
+      "depends_on": ["RUST-009", "RUST-011", "RUST-012"],
+      "contract_rows": ["DIST-001", "DIST-002", "DIST-003", "DIST-004", "DIST-005", "VALUE-001"],
+      "acceptance": ["make rust-full-gate", "make release-contract", "go run ./scripts/rust-port/cmd/valuegate --check"]
+    },
+    {
+      "id": "RUST-014",
+      "title": "Stable Rust cutover with Go fallback",
+      "status": "blocked",
+      "depends_on": ["RUST-013"],
+      "contract_rows": ["DIST-001", "DIST-002", "DIST-003", "DIST-004", "DIST-005"],
+      "acceptance": ["all contract matrix rows PASS", "native release smoke green", "public artifact readback green", "rollback exercise green"]
+    },
+    {
+      "id": "RUST-015",
+      "title": "Remove Go backend after one stable Rust release",
+      "status": "blocked",
+      "depends_on": ["RUST-014"],
+      "contract_rows": [],
+      "acceptance": ["zero tracked backend .go files", "Rust full gate green", "Swift/editor gates green", "immutable dual-binary rollback release verified"]
+    }
+  ]
+}

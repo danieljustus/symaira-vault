@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "reference": {
+    "commit": "caadd5e",
+    "release": "v0.22.1",
+    "go_toolchain": "go1.26.6",
+    "rust_toolchain_available": "rustc 1.98.0",
+    "repository_state": "clean before measurement"
+  },
+  "platform": {
+    "os": "darwin",
+    "arch": "arm64",
+    "logical_cpus": 12
+  },
+  "source": {
+    "go_files_total": 782,
+    "go_lines_total": 191021,
+    "production_files": 424,
+    "production_lines": 73407,
+    "test_files": 358,
+    "test_lines": 117614,
+    "test_functions": 4387,
+    "benchmark_functions": 55,
+    "fuzz_targets": 12
+  },
+  "commands": {
+    "warm_release_style_build": {
+      "command": "GOTOOLCHAIN=go1.26.6 make build",
+      "wall_seconds": 0.96,
+      "exit_code": 0
+    },
+    "fast_test_suite": {
+      "command": "GOTOOLCHAIN=go1.26.6 make test-fast",
+      "wall_seconds": 72.74,
+      "exit_code": 0
+    }
+  },
+  "binary": {
+    "path": "./symvault",
+    "bytes": 21736850,
+    "version_stdout": "symvault v0.22.1\n",
+    "max_rss_bytes_single_sample": 20267008,
+    "startup_profile": {
+      "command": "./symvault startup-profile --count 100",
+      "runs": 100,
+      "successes": 100,
+      "min_ms": 6.033625,
+      "average_ms": 6.973951,
+      "p95_ms": 8.350958,
+      "p99_ms": 8.611625,
+      "max_ms": 13.841125
+    }
+  },
+  "measurement_notes": [
+    "The build uses the repository Makefile's stripped ldflags and the pinned Go 1.26.6 toolchain.",
+    "The build timing is a warm-cache measurement; cold-cache timing must be captured separately before final value comparison.",
+    "RSS is one /usr/bin/time -l sample and must be repeated statistically for the cutover gate.",
+    "Rust comparisons must use release artifacts on the same machine and identical fixtures; debug builds are invalid comparisons."
+  ],
+  "value_gate": {
+    "minimum_binary_or_rss_improvement": 0.2,
+    "maximum_startup_or_command_p95_regression": 0.1,
+    "security_and_contract_parity_required": true
+  }
+}
