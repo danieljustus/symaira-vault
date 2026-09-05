@@ -6,3 +6,10 @@ CLAUDE.md export-ignore
 # cross-platform test failures (Windows CRLF conversion).
 *.tmpl text eol=lf
 *.golden text eol=lf
+*.go text eol=lf
+*.rs text eol=lf
+Cargo.toml text eol=lf
+Cargo.lock text eol=lf
+rust-toolchain.toml text eol=lf
+deny.toml text eol=lf
+testdata/port/** text eol=lf

@@ -12,6 +12,7 @@ on:
       - 'v*'
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
   schedule:
     - cron: '0 6 * * 1'
 
@@ -191,6 +192,82 @@ jobs:
         run: |
           nix --extra-experimental-features 'nix-command flakes' build .#
           nix --extra-experimental-features 'nix-command flakes' run .# -- version
+
+  port-contract:
+    name: Rust port contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Verify frozen Go oracle and differential harness
+        run: make port-contract
+
+  rust:
+    name: Rust
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt,llvm-tools-preview
+
+      - name: Install Rust verification tools
+        uses: taiki-e/install-action@7b8d4719ee4aaa279bdf55df38dacb9ebfe12a6c # v2.87.6
+        with:
+          tool: cargo-nextest@0.9.143,cargo-deny@0.20.2,cargo-audit@0.22.2,cargo-hack@0.6.45,cargo-llvm-cov@0.9.0
+          fallback: none
+
+      - name: Run Rust gates and Go differential contract
+        run: make rust-gates
+
+  rust-native:
+    name: Rust native (${{ matrix.os }})
+    if: github.event_name != 'pull_request'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+      - name: Check and lint
+        run: |
+          cargo check --workspace --all-targets --all-features --locked
+          cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+      - name: Test including doctests
+        run: |
+          cargo test --workspace --all-features --locked
+          cargo test --workspace --doc --all-features --locked
 
   # ── PR-fast jobs ─────────────────────────────────────────────────────────
 
@@ -650,6 +727,9 @@ jobs:
       - integration-test
       - smoke-test
       - flake-vendorhash
+      - port-contract
+      - rust
+      - rust-native
       - macos-vaultcore
       - ubuntu-editors
     steps:
@@ -659,6 +739,9 @@ jobs:
           RES_DEPENDENCY_SCAN: ${{ needs.dependency-scan.result }}
           RES_LINT: ${{ needs.lint.result }}
           RES_FLAKE_VENDORHASH: ${{ needs.flake-vendorhash.result }}
+          RES_PORT_CONTRACT: ${{ needs.port-contract.result }}
+          RES_RUST: ${{ needs.rust.result }}
+          RES_RUST_NATIVE: ${{ needs.rust-native.result }}
           RES_TEST_PR: ${{ needs.test-pr.result }}
           RES_BUILD_PR: ${{ needs.build-pr.result }}
           RES_TEST: ${{ needs.test.result }}
@@ -685,6 +768,9 @@ jobs:
           check "$RES_DEPENDENCY_SCAN"  dependency-scan
           check "$RES_LINT"             lint
           check "$RES_FLAKE_VENDORHASH" flake-vendorhash
+          check "$RES_PORT_CONTRACT"    port-contract
+          check "$RES_RUST"             rust
+          check "$RES_RUST_NATIVE"      rust-native
 
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             check "$RES_TEST_PR"   test-pr
