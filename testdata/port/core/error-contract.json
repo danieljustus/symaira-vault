@@ -1,0 +1,392 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "caadd5e",
+    "release": "v0.22.1"
+  },
+  "exit_codes": [
+    {
+      "name": "success",
+      "value": 0
+    },
+    {
+      "name": "general",
+      "value": 1
+    },
+    {
+      "name": "not_found",
+      "value": 2
+    },
+    {
+      "name": "not_initialized",
+      "value": 3
+    },
+    {
+      "name": "locked",
+      "value": 4
+    },
+    {
+      "name": "permission_denied",
+      "value": 5
+    },
+    {
+      "name": "config",
+      "value": 6
+    },
+    {
+      "name": "doctor_warn",
+      "value": 7
+    },
+    {
+      "name": "doctor_fail",
+      "value": 8
+    },
+    {
+      "name": "invalid_input",
+      "value": 9
+    },
+    {
+      "name": "usage",
+      "value": 9
+    },
+    {
+      "name": "update_available",
+      "value": 10
+    }
+  ],
+  "error_kinds": [
+    {
+      "name": "none",
+      "value": 0
+    },
+    {
+      "name": "not_found",
+      "value": 1
+    },
+    {
+      "name": "field_not_found",
+      "value": 2
+    },
+    {
+      "name": "read_failed",
+      "value": 3
+    },
+    {
+      "name": "write_failed",
+      "value": 4
+    }
+  ],
+  "cases": [
+    {
+      "name": "new",
+      "code": 4,
+      "kind": 0,
+      "message": "vault locked",
+      "cause_kind": "other",
+      "cause_message": "passphrase missing",
+      "error": "vault locked: passphrase missing",
+      "formatted": "vault locked: passphrase missing",
+      "effective_exit_code": 4,
+      "is_not_found": false,
+      "is_write_error": false
+    },
+    {
+      "name": "not_found",
+      "code": 2,
+      "kind": 1,
+      "message": "entry \"github\" not found",
+      "cause_kind": "entry_not_found",
+      "cause_message": "entry not found",
+      "hint": "Try: symvault list to browse entries, or symvault find \u003cterm\u003e to search by keyword.",
+      "error": "entry \"github\" not found: entry not found",
+      "formatted": "entry \"github\" not found: entry not found\nHint: Try: symvault list to browse entries, or symvault find \u003cterm\u003e to search by keyword.",
+      "effective_exit_code": 2,
+      "is_not_found": true,
+      "is_write_error": false
+    },
+    {
+      "name": "field_not_found",
+      "code": 2,
+      "kind": 2,
+      "message": "field \"token\" missing",
+      "error": "field \"token\" missing",
+      "formatted": "field \"token\" missing",
+      "effective_exit_code": 2,
+      "is_not_found": true,
+      "is_write_error": false
+    },
+    {
+      "name": "read_failed",
+      "code": 1,
+      "kind": 3,
+      "message": "cannot read entry",
+      "cause_kind": "other",
+      "cause_message": "disk read",
+      "error": "cannot read entry: disk read",
+      "formatted": "cannot read entry: disk read",
+      "effective_exit_code": 1,
+      "is_not_found": false,
+      "is_write_error": false
+    },
+    {
+      "name": "read_failed_nil",
+      "code": 1,
+      "kind": 3,
+      "message": "cannot read entry without cause",
+      "error": "cannot read entry without cause",
+      "formatted": "cannot read entry without cause",
+      "effective_exit_code": 1,
+      "is_not_found": false,
+      "is_write_error": false
+    },
+    {
+      "name": "write_failed",
+      "code": 1,
+      "kind": 4,
+      "message": "cannot write entry",
+      "cause_kind": "other",
+      "cause_message": "disk full",
+      "error": "cannot write entry: disk full",
+      "formatted": "cannot write entry: disk full",
+      "effective_exit_code": 1,
+      "is_not_found": false,
+      "is_write_error": true
+    },
+    {
+      "name": "write_failed_nil",
+      "code": 1,
+      "kind": 4,
+      "message": "cannot write entry without cause",
+      "error": "cannot write entry without cause",
+      "formatted": "cannot write entry without cause",
+      "effective_exit_code": 1,
+      "is_not_found": false,
+      "is_write_error": true
+    },
+    {
+      "name": "not_initialized",
+      "code": 3,
+      "kind": 0,
+      "message": "vault not initialized at /vault",
+      "cause_kind": "vault_not_initialized",
+      "cause_message": "vault not initialized",
+      "hint": "Run: symvault init to initialize a new vault.",
+      "error": "vault not initialized at /vault",
+      "formatted": "vault not initialized at /vault\nHint: Run: symvault init to initialize a new vault.",
+      "effective_exit_code": 3,
+      "is_not_found": false,
+      "is_write_error": false
+    },
+    {
+      "name": "new_vault_not_initialized",
+      "code": 3,
+      "kind": 0,
+      "message": "vault not initialized. Run 'symvault init' first",
+      "cause_kind": "vault_not_initialized",
+      "cause_message": "vault not initialized",
+      "error": "vault not initialized. Run 'symvault init' first",
+      "formatted": "vault not initialized. Run 'symvault init' first",
+      "effective_exit_code": 3,
+      "is_not_found": false,
+      "is_write_error": false
+    },
+    {
+      "name": "locked",
+      "code": 4,
+      "kind": 0,
+      "message": "session expired",
+      "cause_kind": "vault_locked",
+      "cause_message": "vault locked",
+      "hint": "Run: symvault unlock to unlock the vault, or set a passphrase via 'symvault auth set passphrase'.",
+      "error": "session expired: vault locked",
+      "formatted": "session expired: vault locked\nHint: Run: symvault unlock to unlock the vault, or set a passphrase via 'symvault auth set passphrase'.",
+      "effective_exit_code": 4,
+      "is_not_found": false,
+      "is_write_error": false
+    },
+    {
+      "name": "permission_denied",
+      "code": 5,
+      "kind": 0,
+      "message": "agent cannot write",
+      "cause_kind": "permission_denied",
+      "cause_message": "permission denied",
+      "error": "agent cannot write: permission denied",
+      "formatted": "agent cannot write: permission denied",
+      "effective_exit_code": 5,
+      "is_not_found": false,
+      "is_write_error": false
+    },
+    {
+      "name": "invalid_input",
+      "code": 9,
+      "kind": 0,
+      "message": "length must be positive",
+      "error": "length must be positive",
+      "formatted": "length must be positive",
+      "effective_exit_code": 9,
+      "is_not_found": false,
+      "is_write_error": false
+    },
+    {
+      "name": "config_error",
+      "code": 6,
+      "kind": 0,
+      "message": "config value is invalid",
+      "error": "config value is invalid",
+      "formatted": "config value is invalid",
+      "effective_exit_code": 6,
+      "is_not_found": false,
+      "is_write_error": false
+    },
+    {
+      "name": "internal",
+      "code": 1,
+      "kind": 0,
+      "message": "unexpected state",
+      "error": "unexpected state",
+      "formatted": "unexpected state",
+      "effective_exit_code": 1,
+      "is_not_found": false,
+      "is_write_error": false
+    },
+    {
+      "name": "already_exists",
+      "code": 1,
+      "kind": 0,
+      "message": "entry already exists",
+      "error": "entry already exists",
+      "formatted": "entry already exists",
+      "effective_exit_code": 1,
+      "is_not_found": false,
+      "is_write_error": false
+    },
+    {
+      "name": "custom_hint",
+      "code": 1,
+      "kind": 0,
+      "message": "operation failed",
+      "hint": "Run symvault doctor",
+      "error": "operation failed",
+      "formatted": "operation failed\nHint: Run symvault doctor",
+      "effective_exit_code": 1,
+      "is_not_found": false,
+      "is_write_error": false
+    },
+    {
+      "name": "sentinel_priority",
+      "code": 1,
+      "kind": 0,
+      "message": "locked wrapper",
+      "cause_kind": "vault_locked",
+      "cause_message": "outer: vault locked",
+      "error": "locked wrapper: outer: vault locked",
+      "formatted": "locked wrapper: outer: vault locked",
+      "effective_exit_code": 4,
+      "is_not_found": false,
+      "is_write_error": false
+    }
+  ],
+  "exit_resolutions": [
+    {
+      "name": "nil",
+      "code": 0
+    },
+    {
+      "name": "plain",
+      "code": 1
+    },
+    {
+      "name": "entry_not_found",
+      "code": 2
+    },
+    {
+      "name": "vault_not_initialized",
+      "code": 3
+    },
+    {
+      "name": "vault_locked",
+      "code": 4
+    },
+    {
+      "name": "permission_denied",
+      "code": 5
+    }
+  ],
+  "corekit_mappings": [
+    {
+      "vault": 0,
+      "corekit": 0
+    },
+    {
+      "vault": 1,
+      "corekit": 1
+    },
+    {
+      "vault": 2,
+      "corekit": 5
+    },
+    {
+      "vault": 3,
+      "corekit": 1
+    },
+    {
+      "vault": 4,
+      "corekit": 1
+    },
+    {
+      "vault": 5,
+      "corekit": 4
+    },
+    {
+      "vault": 6,
+      "corekit": 9
+    },
+    {
+      "vault": 7,
+      "corekit": 1
+    },
+    {
+      "vault": 8,
+      "corekit": 1
+    },
+    {
+      "vault": 9,
+      "corekit": 2
+    },
+    {
+      "vault": 10,
+      "corekit": 1
+    }
+  ],
+  "corekit_reverse_mappings": [
+    {
+      "vault": 0,
+      "corekit": 0
+    },
+    {
+      "vault": 1,
+      "corekit": 1
+    },
+    {
+      "vault": 9,
+      "corekit": 2
+    },
+    {
+      "vault": 5,
+      "corekit": 4
+    },
+    {
+      "vault": 2,
+      "corekit": 5
+    },
+    {
+      "vault": 6,
+      "corekit": 9
+    },
+    {
+      "vault": 1,
+      "corekit": 42
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-.PHONY: all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages port-fixtures-generate port-fixtures-check differential-go-selftest port-contract rust-build rust-check rust-lint rust-test rust-features rust-coverage rust-security rust-version-contract rust-gates help docs-check
+.PHONY: all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check differential-go-selftest port-contract rust-build rust-check rust-lint rust-test rust-features rust-coverage rust-security rust-version-contract rust-gates help docs-check
 
 # Variables
 BINARY_NAME := symvault
@@ -157,6 +157,7 @@ PORT_ORACLE_COMMIT ?= $(shell git rev-parse --short HEAD)
 PORT_ORACLE_RELEASE ?= v0.22.1
 PORT_CLI_FIXTURE := testdata/port/cli/command-tree.json
 PORT_CLI_CASES := testdata/port/cli/cases.json
+PORT_ERROR_FIXTURE := testdata/port/core/error-contract.json
 PORT_GO_BINARY := target/port/symvault-go
 RUST_BINARY := target/debug/symvault
 PORT_CONTRACT_VERSION ?= v0.0.0-port
@@ -171,12 +172,22 @@ port-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/portgen \
 		--check --output $(PORT_CLI_FIXTURE)
 
+core-fixtures-generate:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/coregen \
+		--output $(PORT_ERROR_FIXTURE) \
+		--oracle-commit $(PORT_ORACLE_COMMIT) \
+		--oracle-release $(PORT_ORACLE_RELEASE)
+
+core-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/coregen \
+		--check --output $(PORT_ERROR_FIXTURE)
+
 differential-go-selftest:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(MAKE) build
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/diffharness \
 		--left ./$(BINARY_NAME) --right ./$(BINARY_NAME) --cases $(PORT_CLI_CASES)
 
-port-contract: port-fixtures-check differential-go-selftest
+port-contract: port-fixtures-check core-fixtures-check differential-go-selftest
 
 rust-build:
 	$(CARGO) build --workspace --locked
@@ -253,6 +264,8 @@ help:
 	@echo "  manpages           - Generate manual pages"
 	@echo "  port-fixtures-generate - Regenerate frozen Go-oracle CLI fixtures"
 	@echo "  port-fixtures-check    - Verify Go-oracle CLI fixtures have not drifted"
+	@echo "  core-fixtures-generate - Regenerate frozen Go-oracle core fixtures"
+	@echo "  core-fixtures-check    - Verify Go-oracle core fixtures have not drifted"
 	@echo "  differential-go-selftest - Compare the Go oracle with itself in isolated sandboxes"
 	@echo "  port-contract      - Run all Rust-port contract preparation gates"
 	@echo "  rust-build         - Build the staged Rust workspace"

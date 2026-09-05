@@ -67,8 +67,10 @@ passes. The measured Go baseline is in
 - `RUST-002` passed: the pinned Rust workspace and byte-exact `version` slice
   passes all ten Go↔Rust cases plus format, Clippy, nextest, doctest, feature,
   coverage, audit, deny, and native macOS/Windows CI gates.
-- `RUST-003` is ready: pure error, secret-reference, redaction, policy, quota,
-  password, TOTP, and type contracts are the next vertical slices.
+- `RUST-003` is in progress: the Go-generated error taxonomy sub-slice is green
+  for codes, kinds, constructors, nested sentinel precedence, formatting,
+  hints, and both corekit mapping directions. Secret references, redaction,
+  policy, quotas, password/TOTP, and type inference remain in this work item.
 
 The tiny release-built version slice measured 577,104 bytes, 2,277,376 bytes
 maximum RSS in one sample, and 2.576 ms startup p95 over 120 runs after 20

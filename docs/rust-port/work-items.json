@@ -26,7 +26,7 @@
     {
       "id": "RUST-003",
       "title": "Port pure core contracts",
-      "status": "ready",
+      "status": "in_progress",
       "depends_on": ["RUST-002"],
       "contract_rows": ["CLI-005", "CRYPTO-005"],
       "acceptance": ["cargo nextest run -p symvault-core", "cargo +nightly miri test -p symvault-core"]
