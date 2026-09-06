@@ -13,6 +13,7 @@ import (
 	corekitexitcodes "github.com/danieljustus/symaira-corekit/exitcodes"
 
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
+	maskingpkg "github.com/danieljustus/symaira-vault/internal/mcp/masking"
 	redactpkg "github.com/danieljustus/symaira-vault/internal/redact"
 	templatepkg "github.com/danieljustus/symaira-vault/internal/template"
 	taintpkg "github.com/danieljustus/symaira-vault/internal/vault/taint"
@@ -356,6 +357,9 @@ type redactConstants struct {
 	Marker                string  `json:"marker"`
 	BlockedText           string  `json:"blocked_text"`
 	MinExactValueLen      int     `json:"min_exact_value_len"`
+	MaxExactValueCount    int     `json:"max_exact_value_count"`
+	MaxExactMatchSpans    int     `json:"max_exact_match_spans"`
+	MaxExactScanWork      int64   `json:"max_exact_scan_work"`
 	MinTokenLen           int     `json:"min_token_len"`
 	MinEntropyBitsPerChar float64 `json:"min_entropy_bits_per_char"`
 }
@@ -431,6 +435,71 @@ func buildRedactFixture(meta oracle) redactFixture {
 			input:   "first: first-secret-token, second: second-secret-key",
 		},
 		{
+			name:    "overlap_short_first",
+			secrets: []string{"short", "short-with-sensitive-suffix"},
+			input:   "overlap=short-with-sensitive-suffix standalone=short",
+		},
+		{
+			name:    "overlap_long_first",
+			secrets: []string{"short-with-sensitive-suffix", "short"},
+			input:   "overlap=short-with-sensitive-suffix standalone=short",
+		},
+		{
+			name:    "equal_partial_short_first",
+			secrets: []string{"abcd", "bcde"},
+			input:   "abcde",
+		},
+		{
+			name:    "equal_partial_long_first",
+			secrets: []string{"bcde", "abcd"},
+			input:   "abcde",
+		},
+		{
+			name:    "unequal_partial",
+			secrets: []string{"abcdef", "defgh"},
+			input:   "abcdefgh",
+		},
+		{
+			name:    "unequal_partial_reverse",
+			secrets: []string{"defgh", "abcdef"},
+			input:   "abcdefgh",
+		},
+		{
+			name:    "containment",
+			secrets: []string{"secret-value", "cret-val"},
+			input:   "prefix secret-value suffix",
+		},
+		{
+			name:    "containment_reverse",
+			secrets: []string{"cret-val", "secret-value"},
+			input:   "prefix secret-value suffix",
+		},
+		{
+			name:    "adjacent_nonoverlap",
+			secrets: []string{"abcd", "efgh"},
+			input:   "abcdefgh",
+		},
+		{
+			name:    "repeated_occurrences",
+			secrets: []string{"abcd"},
+			input:   "abcd--abcd",
+		},
+		{
+			name:    "duplicates",
+			secrets: []string{"abcd", "abcd", "bcde"},
+			input:   "abcde abcd",
+		},
+		{
+			name:    "utf8_surrounding_text",
+			secrets: []string{"sëcret", "ëcret"},
+			input:   "🔐sëcret🚀",
+		},
+		{
+			name:    "self_overlap",
+			secrets: []string{"abab"},
+			input:   "ababab",
+		},
+		{
 			name:    "short_and_empty_ignored",
 			secrets: []string{"", "a", "ab", "abc"},
 			input:   "ab is short and empty is nothing",
@@ -449,11 +518,13 @@ func buildRedactFixture(meta oracle) redactFixture {
 
 	exactCases := make([]exactValueCase, 0, len(exactInputs))
 	for _, tc := range exactInputs {
-		d := redactpkg.NewExactValueDetector(tc.secrets)
-		redacted, count, err := d.Redact(tc.input)
-		if err != nil {
-			panic(fmt.Sprintf("exact value detector failed unexpectedly: %v", err))
+		values := make([]string, 0, len(tc.secrets))
+		for _, value := range tc.secrets {
+			if len(value) >= 4 {
+				values = append(values, value)
+			}
 		}
+		redacted, count := maskingpkg.RedactKnownSecrets(tc.input, values, redactpkg.Marker)
 		exactCases = append(exactCases, exactValueCase{
 			Name:             tc.name,
 			Secrets:          tc.secrets,
@@ -681,9 +752,12 @@ func buildRedactFixture(meta oracle) redactFixture {
 		Constants: redactConstants{
 			Marker:                redactpkg.Marker,
 			BlockedText:           "[REDACTED: output withheld]",
-			MinExactValueLen:      4,
-			MinTokenLen:           20,
-			MinEntropyBitsPerChar: 4.85,
+			MinExactValueLen:      redactpkg.MinExactValueLen,
+			MaxExactValueCount:    redactpkg.MaxExactValueCount,
+			MaxExactMatchSpans:    redactpkg.MaxExactMatchSpans,
+			MaxExactScanWork:      redactpkg.MaxExactScanWork,
+			MinTokenLen:           redactpkg.MinTokenLen,
+			MinEntropyBitsPerChar: redactpkg.MinEntropyBitsPerChar,
 		},
 		ExactValueCases: exactCases,
 		EntropyCases:    entropyCases,

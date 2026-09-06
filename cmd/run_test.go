@@ -10,6 +10,18 @@ import (
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
+func assertRunOutputRedacted(t *testing.T, output string, secrets ...string) {
+	t.Helper()
+	for _, secret := range secrets {
+		if strings.Contains(output, secret) {
+			t.Fatalf("stdout leaked known secret %q: %q", secret, output)
+		}
+	}
+	if !strings.Contains(output, "***") {
+		t.Fatalf("stdout = %q, want redaction marker", output)
+	}
+}
+
 func TestCmdRun_Basic(t *testing.T) {
 	vaultDir, passphrase := initVault(t)
 	setPassEnv(t, string(passphrase))
@@ -30,9 +42,7 @@ func TestCmdRun_SecretInjection(t *testing.T) {
 	defer setupVaultFlag(t, vaultDir)()
 
 	out := execWithStdout("--vault", vaultDir, "run", "--env", "API_KEY=github.api_key", "--", "sh", "-c", "echo $API_KEY")
-	if !strings.Contains(out, "secret123") {
-		t.Errorf("expected 'secret123' in stdout, got: %q", out)
-	}
+	assertRunOutputRedacted(t, out, "secret123")
 }
 
 func TestCmdRun_MissingSecretRef(t *testing.T) {
@@ -113,12 +123,7 @@ func TestCmdRun_MultipleEnvFlags(t *testing.T) {
 		"--env", "TOKEN=svc1.token",
 		"--env", "SECRET=svc2.secret",
 		"--", "sh", "-c", "echo TOKEN=$TOKEN SECRET=$SECRET")
-	if !strings.Contains(out, "TOKEN=tok1") {
-		t.Errorf("expected TOKEN=tok1 in stdout, got: %q", out)
-	}
-	if !strings.Contains(out, "SECRET=sec1") {
-		t.Errorf("expected SECRET=sec1 in stdout, got: %q", out)
-	}
+	assertRunOutputRedacted(t, out, "tok1", "sec1")
 }
 
 func TestCmdRun_NonZeroExit(t *testing.T) {
@@ -198,9 +203,7 @@ func TestCmdRun_EnvWithBareRef(t *testing.T) {
 	defer setupVaultFlag(t, vaultDir)()
 
 	out := execWithStdout("--vault", vaultDir, "run", "--env", "DB_PASSWORD=db.password", "--", "sh", "-c", "echo $DB_PASSWORD")
-	if !strings.Contains(out, "thepass") {
-		t.Errorf("expected 'thepass' in stdout, got: %q", out)
-	}
+	assertRunOutputRedacted(t, out, "thepass")
 }
 
 func TestCmdRun_StdoutStderrPassthrough(t *testing.T) {
@@ -276,9 +279,7 @@ func TestCmdRun_EnvFile(t *testing.T) {
 	}
 
 	out := execWithStdout("--vault", vaultDir, "run", "--env-file", envFile, "--", "sh", "-c", "echo $DB_PASS")
-	if !strings.Contains(out, "filesecret") {
-		t.Errorf("expected 'filesecret' in stdout, got: %q", out)
-	}
+	assertRunOutputRedacted(t, out, "filesecret")
 }
 
 func TestCmdRun_EnvFileMultiple(t *testing.T) {
@@ -299,12 +300,7 @@ func TestCmdRun_EnvFileMultiple(t *testing.T) {
 
 	out := execWithStdout("--vault", vaultDir, "run", "--env-file", envFile, "--",
 		"sh", "-c", "echo TOKEN=$TOKEN SECRET=$SECRET")
-	if !strings.Contains(out, "TOKEN=tok_from_file") {
-		t.Errorf("expected TOKEN=tok_from_file in stdout, got: %q", out)
-	}
-	if !strings.Contains(out, "SECRET=sec_from_file") {
-		t.Errorf("expected SECRET=sec_from_file in stdout, got: %q", out)
-	}
+	assertRunOutputRedacted(t, out, "tok_from_file", "sec_from_file")
 }
 
 func TestCmdRun_EnvFileWithComments(t *testing.T) {
@@ -322,9 +318,7 @@ func TestCmdRun_EnvFileWithComments(t *testing.T) {
 	}
 
 	out := execWithStdout("--vault", vaultDir, "run", "--env-file", envFile, "--", "sh", "-c", "echo $DB_PASS")
-	if !strings.Contains(out, "comment_test") {
-		t.Errorf("expected 'comment_test' in stdout, got: %q", out)
-	}
+	assertRunOutputRedacted(t, out, "comment_test")
 }
 
 func TestCmdRun_EnvFileNotFound(t *testing.T) {
@@ -418,9 +412,7 @@ func TestCmdRun_EnvFileEmptyLines(t *testing.T) {
 	}
 
 	out := execWithStdout("--vault", vaultDir, "run", "--env-file", envFile, "--", "sh", "-c", "echo $DB_PASS")
-	if !strings.Contains(out, "empty_lines_test") {
-		t.Errorf("expected 'empty_lines_test' in stdout, got: %q", out)
-	}
+	assertRunOutputRedacted(t, out, "empty_lines_test")
 }
 
 func TestParseEnvFile(t *testing.T) {

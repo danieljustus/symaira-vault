@@ -132,8 +132,8 @@ func TestCmdFile_UseInvokesCommandWithMaterializedPath(t *testing.T) {
 
 	out := execWithStdout("--vault", vaultDir, "file", "use", "elster/cert", "--",
 		"sh", "-c", "cat \"$SYMVAULT_FILE_CERT_P12\"")
-	if !strings.Contains(out, string(content)) {
-		t.Errorf("expected materialized file content %q in stdout, got: %q", content, out)
+	if strings.Contains(out, string(content)) || !strings.Contains(out, "***") {
+		t.Errorf("stdout = %q, want materialized file content redacted", out)
 	}
 }
 
@@ -151,8 +151,8 @@ func TestCmdFile_UseCustomAsName(t *testing.T) {
 
 	out := execWithStdout("--vault", vaultDir, "file", "use", "elster/cert", "--as", "MYCERT", "--",
 		"sh", "-c", "cat \"$SYMVAULT_FILE_MYCERT\"")
-	if !strings.Contains(out, string(content)) {
-		t.Errorf("expected materialized file content %q in stdout, got: %q", content, out)
+	if strings.Contains(out, string(content)) || !strings.Contains(out, "***") {
+		t.Errorf("stdout = %q, want materialized file content redacted", out)
 	}
 }
 

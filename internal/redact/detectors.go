@@ -10,11 +10,24 @@ import (
 // carry little value as a secret in the first place.
 const minExactValueLen = 4
 
+// MinExactValueLen is the public contract value for exact detector filtering.
+const MinExactValueLen = minExactValueLen
+
+// MaxExactValueCount is the maximum number of distinct exact values retained.
+const MaxExactValueCount = masking.MaxKnownSecretValues
+
+// MaxExactMatchSpans is the maximum number of exact match spans retained.
+const MaxExactMatchSpans = masking.MaxKnownSecretSpans
+
+// MaxExactScanWork is the maximum number of exact-value byte comparisons.
+const MaxExactScanWork = masking.MaxKnownSecretScanWork
+
 // exactValueDetector matches literal occurrences of a fixed set of known
 // values (e.g. currently-unlocked vault secret values) and replaces them
 // with Marker. It never logs or returns the values themselves.
 type exactValueDetector struct {
-	values []string
+	values     []string
+	overflowed bool
 }
 
 // NewExactValueDetector returns a ConfidenceHigh Detector that redacts every
@@ -22,26 +35,45 @@ type exactValueDetector struct {
 // shorter than minExactValueLen are ignored (never treated as matchable)
 // to avoid mass false positives.
 func NewExactValueDetector(values []string) Detector {
-	filtered := make([]string, 0, len(values))
+	filtered := make([]string, 0, minInt(len(values), MaxExactValueCount))
+	seen := make(map[string]struct{}, minInt(len(values), MaxExactValueCount))
+	overflowed := false
 	for _, v := range values {
-		if len(v) >= minExactValueLen {
-			filtered = append(filtered, v)
+		if len(v) < minExactValueLen {
+			continue
 		}
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		if len(filtered) >= MaxExactValueCount {
+			overflowed = true
+			break
+		}
+		seen[v] = struct{}{}
+		filtered = append(filtered, v)
 	}
-	return &exactValueDetector{values: filtered}
+	return &exactValueDetector{values: filtered, overflowed: overflowed}
 }
 
 func (d *exactValueDetector) Name() string           { return "exact_value" }
 func (d *exactValueDetector) Confidence() Confidence { return ConfidenceHigh }
 
+// Redact replaces every merged overlapping span selected from the original
+// text. The canonical span algorithm lives in masking so production known
+// secret sanitization and this detector cannot diverge.
 func (d *exactValueDetector) Redact(text string) (string, int, error) {
-	total := 0
-	for _, v := range d.values {
-		var n int
-		text, n = replaceAllValue(text, v)
-		total += n
+	if d.overflowed && text != "" {
+		return Marker, 1, nil
 	}
-	return text, total, nil
+	redacted, count := masking.RedactKnownSecrets(text, d.values, Marker)
+	return redacted, count, nil
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // patternDetector matches explicit credential-shaped patterns (API key

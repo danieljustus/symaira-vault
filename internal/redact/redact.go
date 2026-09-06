@@ -17,10 +17,7 @@
 //     display.
 package redact
 
-import (
-	"fmt"
-	"strings"
-)
+import "fmt"
 
 // Marker is the stable, non-reversible string substituted for every
 // detected secret. It intentionally carries no information about the
@@ -203,19 +200,4 @@ func (s *Scanner) emitAudit(e AuditEvent) {
 	if s.Audit != nil {
 		s.Audit(e)
 	}
-}
-
-// replaceAllValue replaces every non-overlapping occurrence of value in text
-// with Marker and returns the result plus the number of replacements. It is
-// a thin wrapper over strings.Count/Replace kept here so every detector in
-// this package redacts consistently.
-func replaceAllValue(text, value string) (string, int) {
-	if value == "" {
-		return text, 0
-	}
-	n := strings.Count(text, value)
-	if n == 0 {
-		return text, 0
-	}
-	return strings.ReplaceAll(text, value, Marker), n
 }

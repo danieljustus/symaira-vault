@@ -13,6 +13,7 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/config"
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 	"github.com/danieljustus/symaira-vault/internal/mcp/apitemplates"
+	"github.com/danieljustus/symaira-vault/internal/mcp/masking"
 )
 
 func TestHandleExecuteWithSecret_BasicRun(t *testing.T) {
@@ -1203,5 +1204,52 @@ func TestHandleExecuteWithSecret_ExecutableAllowlist_PathQualified_Allowed(t *te
 	}
 	if result.IsError {
 		t.Fatalf("handleExecuteWithSecret() returned error: %s", result.Text)
+	}
+}
+
+func TestRedactSecrets_RedactsFullArgument(t *testing.T) {
+	const secret = "full-argument-secret"
+	got := redactSecrets([]string{"echo", "plain", secret}, map[string]string{"TOKEN": secret})
+	want := []string{"echo", "plain", "[REDACTED]"}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("redactSecrets() = %v, want %v", got, want)
+	}
+}
+
+func TestRedactSecrets_RedactsEmbeddedSecret(t *testing.T) {
+	const secret = "embedded-secret"
+	got := redactSecrets([]string{"echo", "prefix-" + secret + "-suffix", "unchanged"}, map[string]string{"TOKEN": secret})
+	want := []string{"echo", "prefix-[REDACTED]-suffix", "unchanged"}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("redactSecrets() = %v, want %v", got, want)
+	}
+}
+
+func TestRedactSecrets_OverlappingValuesAreOrderIndependent(t *testing.T) {
+	first := make(map[string]string)
+	first["short"] = "abc"
+	first["long"] = "bcdef"
+	second := make(map[string]string)
+	second["long"] = "bcdef"
+	second["short"] = "abc"
+
+	command := []string{"echo", "prefix-abcdef-suffix"}
+	want := []string{"echo", "prefix-[REDACTED]-suffix"}
+	for name, secrets := range map[string]map[string]string{"first insertion order": first, "second insertion order": second} {
+		t.Run(name, func(t *testing.T) {
+			got := redactSecrets(command, secrets)
+			if fmt.Sprint(got) != fmt.Sprint(want) {
+				t.Fatalf("redactSecrets() = %v, want %v", got, want)
+			}
+		})
+	}
+}
+
+func TestRedactSecrets_OverflowMasksWholeArgument(t *testing.T) {
+	command := []string{"echo", strings.Repeat("x", masking.MaxKnownSecretSpans+1), "tail"}
+	got := redactSecrets(command, map[string]string{"TOKEN": "x"})
+	want := []string{"echo", "[REDACTED]", "tail"}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("redactSecrets() = %v, want %v", got, want)
 	}
 }

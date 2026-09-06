@@ -1,6 +1,7 @@
 package file
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"strings"
@@ -68,10 +69,12 @@ func runFileUse(cmd *cobra.Command, args []string) error {
 			name = strings.ToUpper(resolvedField)
 		}
 
+		files := map[string]string{name: string(content)}
 		result, runErr := secrets.RunCommand(secrets.RunOptions{
-			Command: command,
-			Files:   map[string]string{name: string(content)},
-			Timeout: UseTimeout,
+			Command:      command,
+			Files:        files,
+			Timeout:      UseTimeout,
+			KnownSecrets: attachmentKnownSecrets(name, content),
 		})
 		if runErr != nil {
 			return runErr
@@ -88,4 +91,11 @@ func runFileUse(cmd *cobra.Command, args []string) error {
 		}
 		return nil
 	})
+}
+
+func attachmentKnownSecrets(name string, content []byte) map[string]string {
+	return map[string]string{
+		name + ":content": string(content),
+		name + ":base64":  base64.StdEncoding.EncodeToString(content),
+	}
 }

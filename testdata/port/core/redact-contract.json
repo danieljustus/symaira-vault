@@ -8,6 +8,9 @@
     "marker": "[REDACTED]",
     "blocked_text": "[REDACTED: output withheld]",
     "min_exact_value_len": 4,
+    "max_exact_value_count": 1024,
+    "max_exact_match_spans": 4096,
+    "max_exact_scan_work": 67108864,
     "min_token_len": 20,
     "min_entropy_bits_per_char": 4.85
   },
@@ -39,6 +42,135 @@
       "input": "first: first-secret-token, second: second-secret-key",
       "expected_redacted": "first: [REDACTED], second: [REDACTED]",
       "expected_count": 2
+    },
+    {
+      "name": "overlap_short_first",
+      "secrets": [
+        "short",
+        "short-with-sensitive-suffix"
+      ],
+      "input": "overlap=short-with-sensitive-suffix standalone=short",
+      "expected_redacted": "overlap=[REDACTED] standalone=[REDACTED]",
+      "expected_count": 2
+    },
+    {
+      "name": "overlap_long_first",
+      "secrets": [
+        "short-with-sensitive-suffix",
+        "short"
+      ],
+      "input": "overlap=short-with-sensitive-suffix standalone=short",
+      "expected_redacted": "overlap=[REDACTED] standalone=[REDACTED]",
+      "expected_count": 2
+    },
+    {
+      "name": "equal_partial_short_first",
+      "secrets": [
+        "abcd",
+        "bcde"
+      ],
+      "input": "abcde",
+      "expected_redacted": "[REDACTED]",
+      "expected_count": 1
+    },
+    {
+      "name": "equal_partial_long_first",
+      "secrets": [
+        "bcde",
+        "abcd"
+      ],
+      "input": "abcde",
+      "expected_redacted": "[REDACTED]",
+      "expected_count": 1
+    },
+    {
+      "name": "unequal_partial",
+      "secrets": [
+        "abcdef",
+        "defgh"
+      ],
+      "input": "abcdefgh",
+      "expected_redacted": "[REDACTED]",
+      "expected_count": 1
+    },
+    {
+      "name": "unequal_partial_reverse",
+      "secrets": [
+        "defgh",
+        "abcdef"
+      ],
+      "input": "abcdefgh",
+      "expected_redacted": "[REDACTED]",
+      "expected_count": 1
+    },
+    {
+      "name": "containment",
+      "secrets": [
+        "secret-value",
+        "cret-val"
+      ],
+      "input": "prefix secret-value suffix",
+      "expected_redacted": "prefix [REDACTED] suffix",
+      "expected_count": 1
+    },
+    {
+      "name": "containment_reverse",
+      "secrets": [
+        "cret-val",
+        "secret-value"
+      ],
+      "input": "prefix secret-value suffix",
+      "expected_redacted": "prefix [REDACTED] suffix",
+      "expected_count": 1
+    },
+    {
+      "name": "adjacent_nonoverlap",
+      "secrets": [
+        "abcd",
+        "efgh"
+      ],
+      "input": "abcdefgh",
+      "expected_redacted": "[REDACTED][REDACTED]",
+      "expected_count": 2
+    },
+    {
+      "name": "repeated_occurrences",
+      "secrets": [
+        "abcd"
+      ],
+      "input": "abcd--abcd",
+      "expected_redacted": "[REDACTED]--[REDACTED]",
+      "expected_count": 2
+    },
+    {
+      "name": "duplicates",
+      "secrets": [
+        "abcd",
+        "abcd",
+        "bcde"
+      ],
+      "input": "abcde abcd",
+      "expected_redacted": "[REDACTED] [REDACTED]",
+      "expected_count": 2
+    },
+    {
+      "name": "utf8_surrounding_text",
+      "secrets": [
+        "sëcret",
+        "ëcret"
+      ],
+      "input": "🔐sëcret🚀",
+      "expected_redacted": "🔐[REDACTED]🚀",
+      "expected_count": 1
+    },
+    {
+      "name": "self_overlap",
+      "secrets": [
+        "abab"
+      ],
+      "input": "ababab",
+      "expected_redacted": "[REDACTED]ab",
+      "expected_count": 1
     },
     {
       "name": "short_and_empty_ignored",
