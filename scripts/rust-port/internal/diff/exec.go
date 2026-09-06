@@ -1,6 +1,7 @@
 package diff
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -23,8 +25,10 @@ type Result struct {
 	SandboxRoot string
 }
 
+const processWaitDelay = 2 * time.Second
+
 // Run executes binary in a fresh HOME/XDG/workspace sandbox.
-func Run(binary string, testCase Case) (Result, error) {
+func Run(binary string, testCase Case) (result Result, err error) {
 	absoluteBinary, err := filepath.Abs(binary)
 	if err != nil {
 		return Result{}, fmt.Errorf("resolve binary: %w", err)
@@ -69,8 +73,9 @@ func Run(binary string, testCase Case) (Result, error) {
 		"${TMPDIR}":    tmp,
 	}
 	args := replaceAll(testCase.Args, replacements)
-	command := exec.Command(absoluteBinary, args...) // #nosec G204 -- explicit harness operand, never derived from fixture output
-	configureProcessTree(command)
+	ctx, cancel := context.WithTimeout(context.Background(), testCase.timeout())
+	defer cancel()
+	command := exec.CommandContext(ctx, absoluteBinary, args...) // #nosec G204 -- explicit harness operand, never derived from fixture output
 	command.Dir = workspace
 	if testCase.WorkingDir != "" {
 		command.Dir, err = safeWorkspacePath(workspace, replace(testCase.WorkingDir, replacements))
@@ -87,49 +92,105 @@ func Run(binary string, testCase Case) (Result, error) {
 	stderr := newLimitedBuffer()
 	command.Stdout = stdout
 	command.Stderr = stderr
+	// WaitDelay bounds os/exec's internal pipe-copy wait when a descendant
+	// retains an inherited stdout or stderr handle after this process exits.
+	command.WaitDelay = processWaitDelay
+
+	tree, treeErr := processTreeFactory(command)
+	if treeErr != nil {
+		return Result{}, fmt.Errorf("create process tree: %w", treeErr)
+	}
+
+	var cancelMu sync.Mutex
+	var cancelOnce sync.Once
+	var treeCancelAttempted bool
+	var treeCancelEffective bool
+	var treeCancelErr error
+	command.Cancel = func() error {
+		cancelOnce.Do(func() {
+			effective, killErr := tree.Kill()
+			cancelMu.Lock()
+			treeCancelAttempted = true
+			treeCancelEffective = effective
+			treeCancelErr = killErr
+			cancelMu.Unlock()
+		})
+		cancelMu.Lock()
+		defer cancelMu.Unlock()
+		if treeCancelErr != nil {
+			return treeCancelErr
+		}
+		if !treeCancelEffective {
+			// Tell os/exec that the process tree was already gone. This
+			// prevents a late context deadline from becoming a spurious
+			// process error while still allowing WaitDelay to surface
+			// inherited-pipe cleanup honestly.
+			return os.ErrProcessDone
+		}
+		return nil
+	}
+	defer func() {
+		if closeErr := tree.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close process tree: %w", closeErr))
+		}
+	}()
 
 	if startErr := command.Start(); startErr != nil {
 		return Result{}, fmt.Errorf("start %s: %w", absoluteBinary, startErr)
 	}
-	waitDone := make(chan error, 1)
-	go func() { waitDone <- command.Wait() }()
-
-	var waitErr error
-	timedOut := false
-	timer := time.NewTimer(testCase.timeout())
-	select {
-	case waitErr = <-waitDone:
-		timer.Stop()
-	case <-timer.C:
-		timedOut = true
-		killErr := killProcessTree(command)
-		select {
-		case waitErr = <-waitDone:
-		case <-time.After(2 * time.Second):
-			_ = command.Process.Kill()
-			return Result{}, fmt.Errorf("process did not exit within 2s after timeout")
-		}
-		if killErr != nil {
-			return Result{}, fmt.Errorf("terminate timed-out process tree: %w", killErr)
-		}
+	// The Windows process tree starts this command suspended. Assign resumes
+	// its primary thread only after job membership is established.
+	if assignErr := tree.Assign(); assignErr != nil {
+		// Assignment can fail while the Windows process is still suspended and
+		// outside the job. Do not rely on CommandContext's WaitDelay fallback
+		// for this lifecycle failure.
+		cleanupErr := cleanupAssignmentFailure(command, cancel, command.Cancel, func() (bool, error) {
+			cancelMu.Lock()
+			defer cancelMu.Unlock()
+			return treeCancelEffective, treeCancelErr
+		})
+		return Result{}, errors.Join(fmt.Errorf("assign process to tree: %w", assignErr), cleanupErr)
 	}
 
+	// CommandContext owns the cancellation watcher. Wait must remain
+	// synchronous so os/exec can apply WaitDelay and finish all I/O cleanup
+	// before Run returns.
+	waitErr := command.Wait()
+	cancelMu.Lock()
+	treeCancellationAttempted := treeCancelAttempted
+	treeCancellationEffective := treeCancelEffective
+	treeCancellationErr := treeCancelErr
+	cancelMu.Unlock()
+	deadlineExceeded := errors.Is(ctx.Err(), context.DeadlineExceeded)
+	timedOut := commandTimedOut(ctx, treeCancellationEffective)
+	treeCancellationIneffective := treeCancellationAttempted &&
+		!treeCancellationEffective &&
+		treeCancellationErr == nil
+	waitCleanupErr := classifyWaitError(
+		waitErr,
+		timedOut,
+		command.ProcessState != nil && command.ProcessState.Success(),
+		deadlineExceeded,
+		treeCancellationIneffective,
+		command.ProcessState != nil && command.ProcessState.Exited(),
+	)
+	if waitCleanupErr != nil {
+		return Result{}, errors.Join(waitCleanupErr, wrapTreeCancellationError("terminate process tree", treeCancellationErr))
+	}
 	exitCode := 0
 	if waitErr != nil {
 		var exitErr *exec.ExitError
 		if errors.As(waitErr, &exitErr) {
 			exitCode = exitErr.ExitCode()
-		} else {
-			return Result{}, fmt.Errorf("wait for process: %w", waitErr)
 		}
 	}
 	if stdout.Truncated() || stderr.Truncated() {
 		return Result{}, fmt.Errorf("captured process output exceeded %d bytes per stream", maxCapturedStreamBytes)
 	}
 	signal := terminationSignal(command.ProcessState)
-	files, err := buildManifest(root)
-	if err != nil {
-		return Result{}, fmt.Errorf("manifest sandbox: %w", err)
+	files, manifestErr := buildManifest(root)
+	if manifestErr != nil {
+		return Result{}, fmt.Errorf("manifest sandbox: %w", manifestErr)
 	}
 	return Result{
 		ExitCode:    exitCode,
@@ -139,7 +200,71 @@ func Run(binary string, testCase Case) (Result, error) {
 		Stderr:      append([]byte(nil), stderr.Bytes()...),
 		Files:       files,
 		SandboxRoot: root,
-	}, nil
+	}, wrapTreeCancellationError("terminate process tree", treeCancellationErr)
+}
+
+func commandTimedOut(ctx context.Context, effective bool) bool {
+	return effective && errors.Is(ctx.Err(), context.DeadlineExceeded)
+}
+
+func cleanupAssignmentFailure(command *exec.Cmd, cancel context.CancelFunc, cancelCommand func() error, cancellationState func() (effective bool, treeErr error)) error {
+	// Kill the tree first, then explicitly kill the direct process when the
+	// tree operation was ineffective. This handles an unassigned suspended
+	// Windows child without waiting for os/exec's WaitDelay fallback.
+	_ = cancelCommand()
+	treeCancellationEffective, treeCancellationErr := cancellationState()
+
+	var directKillErr error
+	if !treeCancellationEffective {
+		if command.Process == nil {
+			directKillErr = errors.New("directly kill process after tree cancellation: process is nil")
+		} else if killErr := command.Process.Kill(); killErr != nil && !errors.Is(killErr, os.ErrProcessDone) {
+			directKillErr = fmt.Errorf("directly kill process after ineffective tree cancellation: %w", killErr)
+		}
+	}
+	cancel()
+	waitErr := command.Wait()
+	var waitCleanupErr error
+	if waitErr != nil {
+		waitCleanupErr = fmt.Errorf("wait for process after assignment failure: %w", waitErr)
+	}
+	return errors.Join(
+		wrapTreeCancellationError("terminate process tree after assignment failure", treeCancellationErr),
+		directKillErr,
+		waitCleanupErr,
+	)
+}
+
+func wrapTreeCancellationError(prefix string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("%s: %w", prefix, err)
+}
+
+func classifyWaitError(waitErr error, timedOut, naturalExit, deadlineExceeded, treeCancellationIneffective, processExited bool) error {
+	if waitErr == nil {
+		return nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(waitErr, &exitErr) {
+		return nil
+	}
+	if isAlreadyGoneWaitDelayError(waitErr, deadlineExceeded, treeCancellationIneffective, processExited) {
+		waitErr = exec.ErrWaitDelay
+	}
+	if timedOut &&
+		(errors.Is(waitErr, context.Canceled) ||
+			errors.Is(waitErr, context.DeadlineExceeded) ||
+			errors.Is(waitErr, exec.ErrWaitDelay)) {
+		return nil
+	}
+	if naturalExit &&
+		(errors.Is(waitErr, context.Canceled) ||
+			errors.Is(waitErr, context.DeadlineExceeded)) {
+		return nil
+	}
+	return fmt.Errorf("wait for process: %w", waitErr)
 }
 
 func isolatedEnv(home, tmp, runtimeDir, state string, extra map[string]string, replacements map[string]string) ([]string, error) {

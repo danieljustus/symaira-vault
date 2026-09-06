@@ -5,6 +5,7 @@ package diff
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -65,5 +66,66 @@ func TestRunTimeoutKillsDescendantProcessGroup(t *testing.T) {
 			t.Fatalf("descendant process %d survived group termination: %v", pid, err)
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestUnixProcessTreeLifecycle(t *testing.T) {
+	cmd := exec.Command("true")
+	tree, err := newProcessTree(cmd)
+	if err != nil {
+		t.Fatalf("newProcessTree: %v", err)
+	}
+	if err := tree.Assign(); err != nil {
+		t.Fatalf("tree.Assign: %v", err)
+	}
+	if err := tree.Close(); err != nil {
+		t.Fatalf("tree.Close: %v", err)
+	}
+}
+
+func TestUnixProcessTreeKillReportsEffectiveAndAlreadyGone(t *testing.T) {
+	activeCmd := exec.Command("sleep", "30")
+	activeTree, err := newProcessTree(activeCmd)
+	if err != nil {
+		t.Fatalf("newProcessTree active: %v", err)
+	}
+	if err := activeCmd.Start(); err != nil {
+		t.Fatalf("activeCmd.Start: %v", err)
+	}
+	if err := activeTree.Assign(); err != nil {
+		t.Fatalf("activeTree.Assign: %v", err)
+	}
+	effective, err := activeTree.Kill()
+	if err != nil {
+		t.Fatalf("activeTree.Kill: %v", err)
+	}
+	if !effective {
+		t.Fatal("activeTree.Kill reported no effective termination")
+	}
+	_ = activeCmd.Wait()
+	if err := activeTree.Close(); err != nil {
+		t.Fatalf("activeTree.Close: %v", err)
+	}
+
+	goneCmd := exec.Command("true")
+	goneTree, err := newProcessTree(goneCmd)
+	if err != nil {
+		t.Fatalf("newProcessTree gone: %v", err)
+	}
+	if err := goneCmd.Start(); err != nil {
+		t.Fatalf("goneCmd.Start: %v", err)
+	}
+	if err := goneTree.Assign(); err != nil {
+		t.Fatalf("goneTree.Assign: %v", err)
+	}
+	if err := goneCmd.Wait(); err != nil {
+		t.Fatalf("goneCmd.Wait: %v", err)
+	}
+	effective, err = goneTree.Kill()
+	if err != nil {
+		t.Fatalf("goneTree.Kill: %v", err)
+	}
+	if effective {
+		t.Fatal("goneTree.Kill reported effective termination after natural exit")
 	}
 }
