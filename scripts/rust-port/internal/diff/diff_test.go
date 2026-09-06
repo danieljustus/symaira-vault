@@ -113,7 +113,7 @@ func TestRunNormalExit(t *testing.T) {
 	if result.ExitCode != 0 {
 		t.Fatalf("exit code = %d, want 0", result.ExitCode)
 	}
-	if got := string(result.Stdout); got != "ok\nPASS\n" {
+	if got := string(result.Stdout); got != "ok\n" {
 		t.Fatalf("stdout = %q, want helper output", got)
 	}
 }
@@ -531,6 +531,7 @@ func helperProcess() {
 	path := os.Getenv("PORT_OUTPUT")
 	_ = os.WriteFile(path, []byte("deterministic\n"), 0o600)
 	_, _ = os.Stdout.WriteString("ok\n")
+	os.Exit(0)
 }
 
 func contains(value, needle string) bool {
