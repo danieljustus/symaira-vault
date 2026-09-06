@@ -297,6 +297,31 @@ jobs:
         run: |
           go test -v -timeout=15m -skip 'TestFlow|TestBinaryE2E|Integration' ./...
 
+  windows-process-tree:
+    name: Process tree (Windows) — PR
+    if: github.event_name == 'pull_request'
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.6'
+          cache: true
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Run Windows process-tree regression
+        run: >-
+          go test -v -timeout=5m
+          -run "TestCommandTimedOutRequiresEffectiveTreeCancellation|TestRunNaturalNonzeroExitIsNotTimedOut|TestRunDeadlineWithoutEffectiveTreeCancellationPreservesNaturalExit|TestRunPreservesWaitDelayWhenTreeIsAlreadyGone|TestRunAssignmentFailureCleansUpSynchronously|TestRunAssignmentFailureKillsUnassignedSuspendedProcess|TestWindowsClassifyAlreadyGoneWaitDelayEINVAL|TestRunTimeoutKillsDescendantJobObject|TestRunTimeoutWaitsForInheritedPipeCleanup|TestWindowsProcessTreeLifecycleAndErrors|TestWindowsProcessTreeKillReportsActiveJob|TestWindowsProcessTreeKillReportsEmptyJob"
+          ./scripts/rust-port/internal/diff
+
   build-pr:
     name: Build (linux-amd64) — PR
     if: github.event_name == 'pull_request'
@@ -708,8 +733,8 @@ jobs:
   #
   # Uses if: always() so that skipped main-only jobs (fuzz, integration-test,
   # smoke-test, the full test/build matrices) don't block the PR gate.
-  # On PR: test-pr + build-pr must pass. On main: test + build + fuzz +
-  # integration-test + smoke-test must pass.
+  # On PR: test-pr + windows-process-tree + build-pr must pass. On main:
+  # test + build + fuzz + integration-test + smoke-test must pass.
 
   ci-gate:
     name: CI Success
@@ -720,6 +745,7 @@ jobs:
       - dependency-scan
       - lint
       - test-pr
+      - windows-process-tree
       - test
       - fuzz
       - build-pr
@@ -743,6 +769,7 @@ jobs:
           RES_RUST: ${{ needs.rust.result }}
           RES_RUST_NATIVE: ${{ needs.rust-native.result }}
           RES_TEST_PR: ${{ needs.test-pr.result }}
+          RES_WINDOWS_PROCESS_TREE: ${{ needs.windows-process-tree.result }}
           RES_BUILD_PR: ${{ needs.build-pr.result }}
           RES_TEST: ${{ needs.test.result }}
           RES_FUZZ: ${{ needs.fuzz.result }}
@@ -774,6 +801,7 @@ jobs:
 
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             check "$RES_TEST_PR"   test-pr
+            check "$RES_WINDOWS_PROCESS_TREE" windows-process-tree
             check "$RES_BUILD_PR"  build-pr
             # Main-only jobs: must be ok (skipped/success), must not have failed
             check "$RES_TEST"             test
