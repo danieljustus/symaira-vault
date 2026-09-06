@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/danieljustus/symaira-vault/internal/audit"
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/internal/mcp/apitemplates"
 	"github.com/danieljustus/symaira-vault/internal/vault"
 )
 
@@ -361,9 +363,34 @@ allow_private: true
 	}
 }
 
+func TestRedactKnownValues_OverlapOrderIndependent(t *testing.T) {
+	cases := []struct {
+		name  string
+		data  map[string]any
+		input string
+		want  string
+	}{
+		{name: "containment", data: map[string]any{"a": "secret-value", "b": "cret-val"}, input: "prefix secret-value suffix", want: "prefix *** suffix"},
+		{name: "containment_reverse", data: map[string]any{"a": "cret-val", "b": "secret-value"}, input: "prefix secret-value suffix", want: "prefix *** suffix"},
+		{name: "equal_partial", data: map[string]any{"a": "abcd", "b": "bcde"}, input: "abcde", want: "***"},
+		{name: "equal_partial_reverse", data: map[string]any{"a": "bcde", "b": "abcd"}, input: "abcde", want: "***"},
+		{name: "unequal_partial", data: map[string]any{"a": "abcdef", "b": "defgh"}, input: "abcdefgh", want: "***"},
+		{name: "unequal_partial_reverse", data: map[string]any{"a": "defgh", "b": "abcdef"}, input: "abcdefgh", want: "***"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			values := apitemplates.CollectRedactionValues(apitemplates.AuthNone, tc.data)
+			if got := redactKnownValues(tc.input, values); got != tc.want {
+				t.Fatalf("redactKnownValues() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestProxy_ResponseSanitized(t *testing.T) {
 	const token = "known-secret-value-77"
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Credential-Echo", token)
 		_, _ = io.WriteString(w, `{"echo": "`+token+`"}`)
 	}))
 	defer upstream.Close()
@@ -388,6 +415,123 @@ func TestProxy_ResponseSanitized(t *testing.T) {
 	}
 	if !strings.Contains(string(body), "***") {
 		t.Errorf("response body = %q, want redacted marker", body)
+	}
+	if got := resp.Header.Get("X-Credential-Echo"); strings.Contains(got, token) || !strings.Contains(got, "***") {
+		t.Fatalf("response header was not redacted: %q", got)
+	}
+}
+
+func TestRedactKnownValues_WireFormats(t *testing.T) {
+	basicWire := base64.StdEncoding.EncodeToString([]byte("api-user:password with spaces"))
+	basicValues := apitemplates.CollectAuthRedactionValues(apitemplates.AuthBasic, map[string]any{
+		"username": "api-user",
+		"password": "password with spaces",
+	})
+	if got := redactKnownValues("echo="+basicWire, basicValues); strings.Contains(got, basicWire) {
+		t.Fatalf("Basic wire value leaked: %q", got)
+	}
+
+	const queryValue = "secret with / and ?"
+	queryWire := url.QueryEscape(queryValue)
+	queryValues := apitemplates.CollectAuthRedactionValues(apitemplates.AuthQueryParam, map[string]any{
+		"param_value": queryValue,
+	})
+	if got := redactKnownValues("echo="+queryWire, queryValues); strings.Contains(got, queryWire) {
+		t.Fatalf("query wire value leaked: %q", got)
+	}
+}
+
+func TestProxy_ResponseSanitized_OverlappingKnownValues(t *testing.T) {
+	const longValue = "abcdef"
+	const overlappingValue = "defgh"
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "response="+longValue+overlappingValue)
+	}))
+	defer upstream.Close()
+
+	vaultDir, identity := setupVault(t, "testapi", map[string]any{
+		"credential": longValue,
+		"secondary":  overlappingValue,
+	}, "testapi", bearerTemplate(upstream.URL))
+	proxyURL, stop := startProxy(t, Config{
+		VaultDir:     vaultDir,
+		Identity:     identity,
+		AgentName:    "broker-test",
+		AllowPrivate: true,
+	})
+	defer stop()
+
+	resp, err := newProxyClient(proxyURL).Get(upstream.URL + "/overlap")
+	if err != nil {
+		t.Fatalf("GET through proxy: %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	got := string(body)
+	for _, value := range []string{longValue, overlappingValue, longValue + overlappingValue} {
+		if strings.Contains(got, value) {
+			t.Fatalf("response body leaks overlapping credential %q: %q", value, got)
+		}
+	}
+	if !strings.Contains(got, "***") {
+		t.Fatalf("response body = %q, want redacted marker", got)
+	}
+}
+
+func TestProxy_ErrorRedactsOverlappingSubstitutionValues(t *testing.T) {
+	const firstValue = "abcdef"
+	const secondValue = "defgh"
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("closed upstream must not receive the request")
+	}))
+	upstreamURL := upstream.URL
+	upstream.Close()
+
+	templateBody := fmt.Sprintf(`base_url: %s
+auth_type: none
+entry_ref: errorapi
+substitutions:
+  - placeholder: __ONE__
+    field: first
+    in: [path]
+  - placeholder: __TWO__
+    field: second
+    in: [path]
+allowed_endpoints:
+  - /*
+allowed_methods:
+  - GET
+allow_private: true
+`, upstreamURL)
+	vaultDir, identity := setupVault(t, "errorapi", map[string]any{
+		"first":  firstValue,
+		"second": secondValue,
+	}, "errorapi", templateBody)
+	proxyURL, stop := startProxy(t, Config{
+		VaultDir:     vaultDir,
+		Identity:     identity,
+		AgentName:    "broker-test",
+		AllowPrivate: true,
+	})
+	defer stop()
+
+	resp, err := newProxyClient(proxyURL).Get(upstreamURL + "/__ONE____TWO__")
+	if err != nil {
+		t.Fatalf("GET through proxy: %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	got := string(body)
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Fatalf("status = %d, want %d; body = %q", resp.StatusCode, http.StatusBadGateway, got)
+	}
+	for _, value := range []string{firstValue, secondValue, firstValue + secondValue} {
+		if strings.Contains(got, value) {
+			t.Fatalf("error body leaks substituted credential %q: %q", value, got)
+		}
+	}
+	if !strings.Contains(got, "***") {
+		t.Fatalf("error body = %q, want redacted marker", got)
 	}
 }
 
@@ -936,4 +1080,94 @@ func connectAndGetStatus(t *testing.T, proxyURL, targetURL, path string) (int, s
 	body, _ := io.ReadAll(gresp.Body)
 	_ = gresp.Body.Close()
 	return gresp.StatusCode, string(body)
+}
+
+func TestProxy_ResponseMasksKnownPatternPrefixAndSuffix(t *testing.T) {
+	secret := "fixture@example.invalid|nonsecret-tail"
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "prefix="+secret+" suffix")
+	}))
+	defer upstream.Close()
+
+	vaultDir, identity := setupVault(t, "testapi", map[string]any{"credential": secret}, "testapi", bearerTemplate(upstream.URL))
+	proxyURL, stop := startProxy(t, Config{
+		VaultDir:     vaultDir,
+		Identity:     identity,
+		AgentName:    "broker-test",
+		AllowPrivate: true,
+	})
+	defer stop()
+
+	resp, err := newProxyClient(proxyURL).Get(upstream.URL + "/prefix")
+	if err != nil {
+		t.Fatalf("GET through proxy: %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	got := string(body)
+	if strings.Contains(got, "fixture@example.invalid") || strings.Contains(got, "nonsecret-tail") {
+		t.Fatalf("response leaks known secret or suffix: %q", got)
+	}
+	if !strings.Contains(got, "***") {
+		t.Fatalf("response body = %q, want redaction marker", got)
+	}
+}
+
+type queryAuthErrorTransport struct{}
+
+func (queryAuthErrorTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return nil, fmt.Errorf("synthetic upstream error for %s", req.URL.String())
+}
+
+func TestProxy_ErrorRedactsQueryAuthValueAndSuffix(t *testing.T) {
+	authValue := "fixture@example.invalid|broker-query-auth-suffix"
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("closed upstream must not receive the request")
+	}))
+	upstreamURL := upstream.URL
+	upstream.Close()
+
+	templateBody := fmt.Sprintf(`base_url: %s
+auth_type: query_param
+entry_ref: queryerror
+allowed_endpoints:
+  - /*
+allowed_methods:
+  - GET
+allow_private: true
+`, upstreamURL)
+	vaultDir, identity := setupVault(t, "queryerror", map[string]any{
+		"param_name":  "access_token",
+		"param_value": authValue,
+	}, "queryerror", templateBody)
+	p, err := New(Config{
+		VaultDir:     vaultDir,
+		Identity:     identity,
+		AgentName:    "broker-test",
+		AllowPrivate: true,
+	})
+	if err != nil {
+		t.Fatalf("broker.New: %v", err)
+	}
+	p.client.Transport = queryAuthErrorTransport{}
+	proxy := httptest.NewServer(p.Handler())
+	defer proxy.Close()
+	proxyURL := proxy.URL
+
+	resp, err := newProxyClient(proxyURL).Get(upstreamURL + "/ping")
+	if err != nil {
+		t.Fatalf("GET through proxy: %v", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	got := string(body)
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Fatalf("status = %d, want %d; body = %q", resp.StatusCode, http.StatusBadGateway, got)
+	}
+	if strings.Contains(got, authValue) || strings.Contains(got, "broker-query-auth-suffix") {
+		t.Fatalf("broker error leaks query auth value or suffix: %q", got)
+	}
+	if !strings.Contains(got, "***") {
+		t.Fatalf("broker error body = %q, want redacted marker", got)
+	}
 }

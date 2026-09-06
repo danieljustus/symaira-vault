@@ -56,6 +56,7 @@ With --broker the child's outbound traffic is routed through an in-process egres
 			return cli.WithVault(func(v *vaultpkg.Vault, vs *cli.VaultService) error {
 				// Parse --env flags: each is "ENV_NAME=path.field"
 				envMap := make(map[string]string)
+				knownSecrets := make(map[string]string)
 				for _, envFlag := range runEnvFlags {
 					parts := strings.SplitN(envFlag, "=", 2)
 					if len(parts) != 2 {
@@ -69,6 +70,7 @@ With --broker the child's outbound traffic is routed through an in-process egres
 						return resolveErr
 					}
 					envMap[envName] = value
+					knownSecrets[envName] = value
 				}
 
 				// Parse --env-file flags: each file contains "ENV_NAME=path.field" lines
@@ -86,6 +88,7 @@ With --broker the child's outbound traffic is routed through an in-process egres
 							return resolveErr
 						}
 						envMap[envName] = value
+						knownSecrets[envName] = value
 					}
 				}
 
@@ -106,11 +109,12 @@ With --broker the child's outbound traffic is routed through an in-process egres
 				}
 
 				result, err := secrets.RunCommand(secrets.RunOptions{
-					Command:     args,
-					Env:         envMap,
-					Passthrough: runPassthrough,
-					WorkingDir:  runWorkingDir,
-					Timeout:     runTimeout,
+					Command:      args,
+					Env:          envMap,
+					Passthrough:  runPassthrough,
+					WorkingDir:   runWorkingDir,
+					Timeout:      runTimeout,
+					KnownSecrets: knownSecrets,
 				})
 				if brokerCleanup != nil {
 					brokerCleanup()

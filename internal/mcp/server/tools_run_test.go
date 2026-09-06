@@ -870,6 +870,30 @@ func TestHandleRunCommand_FileInjection_Base64Encoding(t *testing.T) {
 	}
 }
 
+func TestResolveRunCommandFiles_Base64KeepsSourceAndContentForRedaction(t *testing.T) {
+	binaryContent := []byte{0x50, 0x4b, 0x03, 0x04, 0x00, 0xff, 0x10}
+	encoded := base64.StdEncoding.EncodeToString(binaryContent)
+	vaultDir, identity := mockVaultWithEntry(t, "elster/org-zertifikat", map[string]any{"pfx": encoded})
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:         "test",
+		AllowedPaths: []string{"*"},
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	resolved, known, _, toolErr, err := srv.resolveRunCommandFiles(context.Background(), map[string]any{
+		"CERT": map[string]any{"ref": "elster/org-zertifikat.pfx", "encoding": "base64"},
+	})
+	if err != nil || toolErr != nil {
+		t.Fatalf("resolveRunCommandFiles() error = %v, toolErr = %v", err, toolErr)
+	}
+	if resolved["CERT"] != string(binaryContent) {
+		t.Fatal("resolved file content does not match decoded bytes")
+	}
+	if known["CERT:source"] != encoded || known["CERT:content"] != string(binaryContent) {
+		t.Fatal("known secrets must retain both encoded source and decoded content")
+	}
+}
+
 func TestHandleRunCommand_FileInjection_BadBase64(t *testing.T) {
 	vaultDir, identity := mockVaultWithEntry(t, "elster/org-zertifikat", map[string]any{
 		"pfx": "not-valid-base64!!!",
@@ -1036,6 +1060,22 @@ func TestHandleRunCommand_FileInjection_ExecutableDenied(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "not in agent allowlist") {
 		t.Fatalf("error = %v, want 'not in agent allowlist'", err)
+	}
+}
+
+func TestBuildRunCommandAuditPathRedactsKnownSecrets(t *testing.T) {
+	const secret = "audit-command-secret"
+	got := buildRunCommandAuditPath(
+		[]string{"echo", secret},
+		[]string{"TOKEN"},
+		[]string{"CERT:op://vault/cert/value"},
+		map[string]string{"TOKEN": secret},
+	)
+	if strings.Contains(got, secret) {
+		t.Fatalf("audit path leaks known secret: %q", got)
+	}
+	if !strings.Contains(got, "echo ***, env=[TOKEN], files=[CERT:op://vault/cert/value]") {
+		t.Fatalf("audit path = %q, want redacted command with metadata", got)
 	}
 }
 

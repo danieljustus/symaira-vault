@@ -5,8 +5,8 @@ use std::sync::{Arc, Mutex};
 use serde::Deserialize;
 use symvault_core::redact::{
     AuditEvent, BLOCKED_TEXT, Detector, EntropyDetector, ExactValueDetector, MARKER,
-    MIN_ENTROPY_BITS_PER_CHAR, MIN_EXACT_VALUE_LEN, MIN_TOKEN_LEN, ScanOptions, Scanner, is_truthy,
-    shannon_entropy,
+    MAX_EXACT_MATCH_SPANS, MAX_EXACT_SCAN_WORK, MAX_EXACT_VALUE_COUNT, MIN_ENTROPY_BITS_PER_CHAR,
+    MIN_EXACT_VALUE_LEN, MIN_TOKEN_LEN, ScanOptions, Scanner, is_truthy, shannon_entropy,
 };
 
 #[derive(Debug, Deserialize)]
@@ -24,6 +24,9 @@ struct Constants {
     marker: String,
     blocked_text: String,
     min_exact_value_len: usize,
+    max_exact_value_count: usize,
+    max_exact_match_spans: usize,
+    max_exact_scan_work: usize,
     min_token_len: usize,
     min_entropy_bits_per_char: f64,
 }
@@ -99,6 +102,9 @@ fn constants_match_go_oracle() {
     assert_eq!(fix.constants.marker, MARKER);
     assert_eq!(fix.constants.blocked_text, BLOCKED_TEXT);
     assert_eq!(fix.constants.min_exact_value_len, MIN_EXACT_VALUE_LEN);
+    assert_eq!(fix.constants.max_exact_value_count, MAX_EXACT_VALUE_COUNT);
+    assert_eq!(fix.constants.max_exact_match_spans, MAX_EXACT_MATCH_SPANS);
+    assert_eq!(fix.constants.max_exact_scan_work, MAX_EXACT_SCAN_WORK);
     assert_eq!(fix.constants.min_token_len, MIN_TOKEN_LEN);
     assert!((fix.constants.min_entropy_bits_per_char - MIN_ENTROPY_BITS_PER_CHAR).abs() < 1e-9);
 }
@@ -233,6 +239,22 @@ fn scanner_cases_match_go_oracle() {
                 tc.name
             );
         }
+    }
+}
+
+#[test]
+fn property_exact_value_overlap_order_independence() {
+    let short = "short";
+    let long = "short-with-sensitive-suffix";
+    let input = format!("overlap={long} standalone={short}");
+    let expected = format!("overlap={MARKER} standalone={MARKER}");
+
+    for secrets in [[short, long], [long, short]] {
+        let detector = ExactValueDetector::new(secrets);
+        let (redacted, count) = detector.redact(&input).expect("redact");
+        assert_eq!(redacted, expected);
+        assert_eq!(count, 2);
+        assert!(!redacted.contains("sensitive-suffix"));
     }
 }
 

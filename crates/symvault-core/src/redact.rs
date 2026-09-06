@@ -2,7 +2,9 @@
 
 //! Secret redaction core: detectors, Shannon entropy heuristic, and fail-closed scanner.
 
-use core::fmt;
+use core::{cmp::Reverse, fmt};
+use std::collections::HashSet;
+
 use serde::{Deserialize, Serialize};
 
 /// Marker substituted for detected secret values.
@@ -16,6 +18,17 @@ pub const ENV_STRICT_MODE: &str = "SYMVAULT_REDACT_STRICT_MODE";
 
 /// Minimum length for a literal exact-value detector match.
 pub const MIN_EXACT_VALUE_LEN: usize = 4;
+
+/// Maximum number of distinct exact values retained by one detector.
+pub const MAX_EXACT_VALUE_COUNT: usize = 1024;
+
+/// Maximum number of exact match spans retained by one detector.
+pub const MAX_EXACT_MATCH_SPANS: usize = 4096;
+
+/// Maximum number of exact-value byte comparisons per detector invocation.
+/// The 64 MiB budget supports normal 16 MiB outputs with a small number of
+/// values while bounding CPU for large outputs and many non-matching values.
+pub const MAX_EXACT_SCAN_WORK: usize = 64 * 1024 * 1024;
 
 /// Minimum token length for the entropy heuristic detector.
 pub const MIN_TOKEN_LEN: usize = 20;
@@ -83,28 +96,45 @@ pub trait Detector: Send + Sync {
 /// Detector matching literal occurrences of known secrets.
 pub struct ExactValueDetector {
     values: Vec<String>,
+    overflowed: bool,
 }
 
 impl ExactValueDetector {
     /// Creates a new `ExactValueDetector`, filtering out secrets shorter than `MIN_EXACT_VALUE_LEN`.
+    /// Values are stably deduplicated and processed longest-first so overlapping
+    /// secrets cannot expose a suffix of the longer value.
     #[must_use]
     pub fn new<I, S>(values: I) -> Self
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
     {
-        let filtered = values
-            .into_iter()
-            .filter_map(|s| {
-                let s = s.as_ref();
-                if s.len() >= MIN_EXACT_VALUE_LEN {
-                    Some(s.to_string())
-                } else {
-                    None
-                }
-            })
-            .collect();
-        Self { values: filtered }
+        let mut seen = HashSet::new();
+        let mut filtered = Vec::new();
+        let mut overflowed = false;
+        for value in values {
+            let value = value.as_ref();
+            if value.len() < MIN_EXACT_VALUE_LEN {
+                continue;
+            }
+            if seen.contains(value) {
+                continue;
+            }
+            if filtered.len() >= MAX_EXACT_VALUE_COUNT {
+                overflowed = true;
+                break;
+            }
+            let owned = value.to_string();
+            seen.insert(owned.clone());
+            filtered.push(owned);
+        }
+        // Stable sorting preserves caller order for equal-length values,
+        // making the tie-break deterministic.
+        filtered.sort_by_key(|value| Reverse(value.len()));
+        Self {
+            values: filtered,
+            overflowed,
+        }
     }
 }
 
@@ -128,26 +158,100 @@ impl Detector for ExactValueDetector {
     }
 
     fn redact(&self, text: &str) -> Result<(String, usize), RedactError> {
-        let mut current = text.to_string();
-        let mut total = 0;
-        for v in &self.values {
-            let (next, count) = replace_all_value(&current, v);
-            current = next;
-            total += count;
+        if self.overflowed && !text.is_empty() {
+            return Ok((MARKER.to_string(), 1));
         }
-        Ok((current, total))
+        match redact_exact_values(text, &self.values, MAX_EXACT_SCAN_WORK) {
+            Some(result) => Ok(result),
+            None => Ok((MARKER.to_string(), 1)),
+        }
     }
 }
 
-fn replace_all_value(text: &str, value: &str) -> (String, usize) {
-    if value.is_empty() {
-        return (text.to_string(), 0);
+fn redact_exact_values(
+    text: &str,
+    values: &[String],
+    mut scan_work: usize,
+) -> Option<(String, usize)> {
+    if text.is_empty() {
+        return Some((text.to_string(), 0));
     }
-    let count = text.matches(value).count();
-    if count == 0 {
-        return (text.to_string(), 0);
+
+    // Find matches against the original text before replacing anything. Each
+    // value uses left-to-right, non-overlapping occurrence discovery. Thus
+    // self-overlapping occurrences such as "abab" in "ababab" select the
+    // first occurrence and then resume after its end.
+    let mut ranges = Vec::new();
+    for value in values {
+        let Some(max_start) = text.len().checked_sub(value.len()) else {
+            continue;
+        };
+        let mut search_start = 0;
+        while search_start <= max_start {
+            let mut matched = true;
+            for offset in 0..value.len() {
+                if scan_work == 0 {
+                    return None;
+                }
+                scan_work -= 1;
+                let index = search_start.checked_add(offset)?;
+                if text.as_bytes()[index] != value.as_bytes()[offset] {
+                    matched = false;
+                    break;
+                }
+            }
+            if matched {
+                let end = search_start.checked_add(value.len())?;
+                if ranges.len() >= MAX_EXACT_MATCH_SPANS {
+                    return None;
+                }
+                ranges.push(ExactMatchRange {
+                    start: search_start,
+                    end,
+                });
+                search_start = end;
+            } else {
+                search_start = search_start.checked_add(1)?;
+            }
+        }
     }
-    (text.replace(value, MARKER), count)
+    if ranges.is_empty() {
+        return Some((text.to_string(), 0));
+    }
+
+    // Merge overlaps, but keep merely adjacent spans separate. Sorting by
+    // byte offsets preserves UTF-8 boundaries because every match came from a
+    // valid string search and is therefore aligned to the original text.
+    ranges.sort_by_key(|range| (range.start, range.end));
+    let mut merged = Vec::with_capacity(ranges.len());
+    for candidate in ranges {
+        if merged
+            .last()
+            .is_none_or(|previous: &ExactMatchRange| candidate.start >= previous.end)
+        {
+            merged.push(candidate);
+        } else if let Some(previous) = merged.last_mut() {
+            previous.end = previous.end.max(candidate.end);
+        }
+    }
+
+    // Do not calculate an expanded capacity: marker replacement can overflow
+    // that arithmetic for attacker-controlled sizes. String grows safely.
+    let mut out = String::with_capacity(text.len());
+    let mut last_end = 0;
+    for span in &merged {
+        out.push_str(&text[last_end..span.start]);
+        out.push_str(MARKER);
+        last_end = span.end;
+    }
+    out.push_str(&text[last_end..]);
+    Some((out, merged.len()))
+}
+
+#[derive(Clone, Copy)]
+struct ExactMatchRange {
+    start: usize,
+    end: usize,
 }
 
 /// Conservative Shannon entropy heuristic detector for random secret tokens.
@@ -474,6 +578,170 @@ mod tests {
         let (out, count) = d.redact("abc is short").expect("redact");
         assert_eq!(count, 0);
         assert_eq!(out, "abc is short");
+    }
+
+    #[test]
+    fn exact_value_detector_prefers_longest_overlap_independent_of_order() {
+        let short = "short";
+        let long = "short-with-sensitive-suffix";
+        let input = format!("overlap={long} standalone={short}");
+        let want = format!("overlap={MARKER} standalone={MARKER}");
+
+        for values in [[short, long], [long, short]] {
+            let d = ExactValueDetector::new(values);
+            let (out, count) = d.redact(&input).expect("redact");
+            assert_eq!(count, 2);
+            assert_eq!(out, want);
+        }
+    }
+
+    #[test]
+    fn exact_value_detector_deduplicates_replacement_counts() {
+        let d = ExactValueDetector::new(["short", "short", "short-with-sensitive-suffix"]);
+        let (out, count) = d
+            .redact("short-with-sensitive-suffix short")
+            .expect("redact");
+        assert_eq!(count, 2);
+        assert_eq!(out, format!("{MARKER} {MARKER}"));
+    }
+
+    #[test]
+    fn exact_value_detector_overlap_semantics() {
+        let cases = [
+            (
+                "equal_partial_short_first",
+                ["abcd", "bcde"],
+                "abcde",
+                MARKER,
+                1,
+            ),
+            (
+                "equal_partial_long_first",
+                ["bcde", "abcd"],
+                "abcde",
+                MARKER,
+                1,
+            ),
+            (
+                "unequal_partial",
+                ["abcdef", "defgh"],
+                "abcdefgh",
+                MARKER,
+                1,
+            ),
+            (
+                "containment",
+                ["secret-value", "cret-val"],
+                "prefix secret-value suffix",
+                "prefix [REDACTED] suffix",
+                1,
+            ),
+            (
+                "adjacent_nonoverlap",
+                ["abcd", "efgh"],
+                "abcdefgh",
+                "[REDACTED][REDACTED]",
+                2,
+            ),
+            (
+                "repeated_occurrences",
+                ["abcd", "efgh"],
+                "abcd--abcd",
+                "[REDACTED]--[REDACTED]",
+                2,
+            ),
+            (
+                "duplicates",
+                ["abcd", "abcd"],
+                "abcd abcd",
+                "[REDACTED] [REDACTED]",
+                2,
+            ),
+            (
+                "utf8_surrounding_text",
+                ["sëcret", "ëcret"],
+                "🔐sëcret🚀",
+                "🔐[REDACTED]🚀",
+                1,
+            ),
+            (
+                "self_overlap",
+                ["abab", "zzzz"],
+                "ababab",
+                "[REDACTED]ab",
+                1,
+            ),
+        ];
+
+        for (name, values, input, expected, expected_count) in cases {
+            let (out, count) = ExactValueDetector::new(values)
+                .redact(input)
+                .expect("redact");
+            assert_eq!(out, expected, "case {name}");
+            assert_eq!(count, expected_count, "case {name}");
+        }
+    }
+
+    #[test]
+    fn exact_value_detector_value_overflow_fails_closed() {
+        let values: Vec<String> = (0..=MAX_EXACT_VALUE_COUNT)
+            .map(|i| format!("secret-{i:04}"))
+            .collect();
+        let (out, count) = ExactValueDetector::new(values)
+            .redact("ordinary output")
+            .expect("redact");
+        assert_eq!(out, MARKER);
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn exact_value_detector_span_overflow_fails_closed() {
+        let input = "abcd ".repeat(MAX_EXACT_MATCH_SPANS + 1);
+        let (out, count) = ExactValueDetector::new(["abcd"])
+            .redact(&input)
+            .expect("redact");
+        assert_eq!(out, MARKER);
+        assert_eq!(count, 1);
+        assert!(!out.contains("abcd"));
+    }
+
+    #[test]
+    fn exact_value_scan_work_boundary_is_deterministic() {
+        let values = vec!["z".to_string()];
+        let (out, count) = redact_exact_values("aaaa", &values, 4).expect("near-bound scan");
+        assert_eq!(out, "aaaa");
+        assert_eq!(count, 0);
+        assert!(redact_exact_values("aaaa", &values, 3).is_none());
+    }
+
+    #[cfg_attr(
+        miri,
+        ignore = "64 MiB CPU-bound stress scan exceeds the Miri execution budget"
+    )]
+    #[test]
+    fn exact_value_scan_work_huge_text_many_values_fails_closed() {
+        let input = "x".repeat(1 << 20);
+        let values: Vec<String> = (0..MAX_EXACT_VALUE_COUNT)
+            .map(|i| format!("not-present-{i:04}"))
+            .collect();
+        let (out, count) = ExactValueDetector::new(values)
+            .redact(&input)
+            .expect("redact");
+        assert_eq!(out, MARKER);
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn exact_value_scan_work_arithmetic_is_safe() {
+        let values = vec!["z".to_string()];
+        let (out, count) = redact_exact_values("aaaa", &values, usize::MAX).expect("max budget");
+        assert_eq!(out, "aaaa");
+        assert_eq!(count, 0);
+        let long_value = vec!["zzzzz".to_string()];
+        let (out, count) =
+            redact_exact_values("aaaa", &long_value, usize::MAX).expect("long value");
+        assert_eq!(out, "aaaa");
+        assert_eq!(count, 0);
     }
 
     #[test]

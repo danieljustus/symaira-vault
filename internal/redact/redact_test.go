@@ -2,6 +2,7 @@ package redact
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -47,6 +48,38 @@ func TestExactValueDetector_IgnoresEmptyAndShortValues(t *testing.T) {
 	}
 	if got != "ab is short and empty is nothing" {
 		t.Fatalf("text should be unchanged, got %q", got)
+	}
+}
+
+func TestExactValueDetector_OverlapSemantics(t *testing.T) {
+	cases := []struct {
+		name   string
+		values []string
+		input  string
+		want   string
+		count  int
+	}{
+		{name: "equal_partial_short_first", values: []string{"abcd", "bcde"}, input: "abcde", want: Marker, count: 1},
+		{name: "equal_partial_long_first", values: []string{"bcde", "abcd"}, input: "abcde", want: Marker, count: 1},
+		{name: "unequal_partial", values: []string{"abcdef", "defgh"}, input: "abcdefgh", want: Marker, count: 1},
+		{name: "containment", values: []string{"secret-value", "cret-val"}, input: "prefix secret-value suffix", want: "prefix " + Marker + " suffix", count: 1},
+		{name: "adjacent_nonoverlap", values: []string{"abcd", "efgh"}, input: "abcdefgh", want: Marker + Marker, count: 2},
+		{name: "repeated_occurrences", values: []string{"abcd"}, input: "abcd--abcd", want: Marker + "--" + Marker, count: 2},
+		{name: "duplicates", values: []string{"abcd", "abcd", "bcde"}, input: "abcde abcd", want: Marker + " " + Marker, count: 2},
+		{name: "utf8_surrounding_text", values: []string{"sëcret", "ëcret"}, input: "🔐sëcret🚀", want: "🔐" + Marker + "🚀", count: 1},
+		{name: "self_overlap", values: []string{"abab"}, input: "ababab", want: Marker + "ab", count: 1},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, count, err := NewExactValueDetector(tc.values).Redact(tc.input)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.want || count != tc.count {
+				t.Fatalf("got (%q, %d), want (%q, %d)", got, count, tc.want, tc.count)
+			}
+		})
 	}
 }
 
@@ -113,6 +146,43 @@ func TestScanner_MultilineAndTruncatedOutput(t *testing.T) {
 	}
 }
 
+func TestExactValueDetector_OverlappingValuesPreferLongest(t *testing.T) {
+	short := "short"
+	long := "short-with-sensitive-suffix"
+	input := "overlap=" + long + " standalone=" + short
+	want := "overlap=" + Marker + " standalone=" + Marker
+
+	for _, values := range [][]string{{short, long}, {long, short}} {
+		d := NewExactValueDetector(values)
+		got, n, err := d.Redact(input)
+		if err != nil {
+			t.Fatalf("values %v: unexpected error: %v", values, err)
+		}
+		if n != 2 {
+			t.Fatalf("values %v: want 2 replacements, got %d", values, n)
+		}
+		if got != want {
+			t.Fatalf("values %v: got %q, want %q", values, got, want)
+		}
+	}
+}
+
+// Replacement counts are non-overlapping matches after stable de-duplication;
+// duplicate configured values do not increase the count.
+func TestExactValueDetector_DeduplicatesReplacementCounts(t *testing.T) {
+	d := NewExactValueDetector([]string{"short", "short", "short-with-sensitive-suffix"})
+	got, n, err := d.Redact("short-with-sensitive-suffix short")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n != 2 {
+		t.Fatalf("want 2 replacements, got %d", n)
+	}
+	if got != Marker+" "+Marker {
+		t.Fatalf("got %q, want %q", got, Marker+" "+Marker)
+	}
+}
+
 type erroringDetector struct{}
 
 func (erroringDetector) Name() string           { return "erroring" }
@@ -146,5 +216,23 @@ func TestScanner_NoDetectors_ReturnsTextUnchanged(t *testing.T) {
 	}
 	if res.Blocked {
 		t.Fatalf("should not be blocked")
+	}
+}
+
+func TestExactValueDetector_ValueOverflowFailsClosed(t *testing.T) {
+	values := make([]string, MaxExactValueCount+1)
+	for i := range values {
+		values[i] = fmt.Sprintf("secret-%04d", i)
+	}
+
+	got, count, err := NewExactValueDetector(values).Redact("ordinary output")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != Marker || count != 1 {
+		t.Fatalf("overflow result = (%q, %d), want (%q, 1)", got, count, Marker)
+	}
+	if strings.Contains(got, "secret-") {
+		t.Fatalf("overflow result leaked a retained value: %q", got)
 	}
 }

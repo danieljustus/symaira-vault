@@ -1,7 +1,11 @@
 package apitemplates
 
 import (
+	"encoding/base64"
 	"net/http"
+	"net/url"
+	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -162,5 +166,63 @@ func TestInjectAuth_Unsupported(t *testing.T) {
 	err := InjectAuth(req, tmpl, nil)
 	if err == nil {
 		t.Fatal("InjectAuth() expected error for unsupported auth type, got nil")
+	}
+}
+
+func TestCollectAuthRedactionValues_IsStableAndDeduplicated(t *testing.T) {
+	got := CollectAuthRedactionValues(AuthHeader, map[string]any{
+		"param_value":  "same",
+		"header_value": "header-secret",
+		"username":     "same",
+		"password":     "password-secret",
+		"token":        "token-secret",
+		"credential":   "same",
+	}, []string{"password-secret", "substitution-secret", "substitution-secret"})
+	want := []string{"same", "token-secret", "password-secret", "header-secret", "substitution-secret"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("CollectAuthRedactionValues() = %v, want %v", got, want)
+	}
+}
+
+func TestCollectAuthRedactionValues_IncludesBasicWireValue(t *testing.T) {
+	values := CollectAuthRedactionValues(AuthBasic, map[string]any{
+		"username": "api-user",
+		"password": "password with spaces",
+	})
+	wireValue := base64.StdEncoding.EncodeToString([]byte("api-user:password with spaces"))
+	if !slices.Contains(values, wireValue) {
+		t.Fatal("redaction values omit Basic wire value")
+	}
+}
+
+func TestCollectAuthRedactionValues_IncludesEncodedURLValues(t *testing.T) {
+	const value = "secret with / and ?"
+	values := CollectAuthRedactionValues(AuthQueryParam, map[string]any{"param_value": value}, []string{value})
+	for _, wireValue := range []string{url.QueryEscape(value), url.PathEscape(value), (&url.URL{Path: value}).EscapedPath()} {
+		if !slices.Contains(values, wireValue) {
+			t.Fatalf("redaction values omit encoded wire value %q", wireValue)
+		}
+	}
+}
+
+func TestCollectRedactionValues_RecursesDeterministically(t *testing.T) {
+	pointerSecret := "pointer-secret"
+	cycle := map[string]any{"value": "cycle-secret"}
+	cycle["self"] = cycle
+	entryData := map[string]any{
+		"nested": map[string]any{
+			"z": []any{"slice-secret", map[string]string{"key": "map-secret"}},
+			"a": "first-secret",
+		},
+		"strings": []string{"second-secret"},
+		"typed":   []map[string]any{{"value": "typed-secret"}},
+		"array":   [1]string{"array-secret"},
+		"pointer": &pointerSecret,
+		"cycle":   cycle,
+	}
+	got := CollectRedactionValues(AuthNone, entryData)
+	want := []string{"array-secret", "cycle-secret", "first-secret", "slice-secret", "map-secret", "pointer-secret", "second-secret", "typed-secret"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("CollectRedactionValues() = %v, want %v", got, want)
 	}
 }

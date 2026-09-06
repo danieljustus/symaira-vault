@@ -5,6 +5,7 @@ package masking
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -327,18 +328,155 @@ func (s *Sanitizer) Sanitize(text string, opts MaskOptions) string {
 	return b.String()
 }
 
-// SanitizeWithKnownSecrets replaces known secret values in text with masks.
-// This is used when you already know the secret values (e.g., from resolved env vars).
-func SanitizeWithKnownSecrets(text string, secrets map[string]string, mask string) string {
+// MaxKnownSecretValues bounds the number of distinct values retained for
+// one exact-redaction operation. Overflow is fail-closed.
+const MaxKnownSecretValues = 1024
+
+// MaxKnownSecretSpans bounds the number of match spans retained for one
+// exact-redaction operation. Overflow is fail-closed.
+const MaxKnownSecretSpans = 4096
+
+// MaxKnownSecretScanWork bounds exact matching by the number of byte
+// comparisons performed for one operation. The 64 MiB budget keeps a normal
+// 16 MiB output with a small number of values usable while preventing a large
+// output multiplied by many non-matching values from consuming unbounded CPU.
+const MaxKnownSecretScanWork int64 = 64 * 1024 * 1024
+
+// knownSecretSpan is a byte range in the original input text.
+type knownSecretSpan struct {
+	start int
+	end   int
+}
+
+// RedactKnownSecrets scans the original text for all non-empty literal values
+// and replaces their merged spans with mask. Values are stably deduplicated
+// and matched longest-first before replacement, so replacement order cannot
+// expose an overlapping suffix.
+//
+// The returned count is the number of merged redacted spans. If the distinct
+// value, retained-span, or byte-comparison budget is exceeded, the entire
+// output is replaced by mask and the count is 1, denoting one withheld output
+// rather than a span count. The bounds avoid retaining or allocating unbounded
+// match state or spending unbounded CPU while preserving exact matches as
+// short as one byte.
+func RedactKnownSecrets(text string, values []string, mask string) (string, int) {
+	return redactKnownSecretsWithBudget(text, values, mask, MaxKnownSecretScanWork)
+}
+
+func redactKnownSecretsWithBudget(text string, values []string, mask string, scanWork int64) (string, int) {
 	if mask == "" {
 		mask = "***"
 	}
-	result := text
-	for _, value := range secrets {
+	if text == "" {
+		return text, 0
+	}
+	if scanWork < 0 {
+		return mask, 1
+	}
+
+	seen := make(map[string]struct{}, minInt(len(values), MaxKnownSecretValues))
+	unique := make([]string, 0, minInt(len(values), MaxKnownSecretValues))
+	for _, value := range values {
 		if value == "" {
 			continue
 		}
-		result = strings.ReplaceAll(result, value, mask)
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		if len(unique) >= MaxKnownSecretValues {
+			return mask, 1
+		}
+		seen[value] = struct{}{}
+		unique = append(unique, value)
 	}
+	// Match longer values first so Go and Rust consume the same deterministic
+	// scan budget when overlapping values are supplied in different orders.
+	sort.SliceStable(unique, func(i, j int) bool {
+		return len(unique[i]) > len(unique[j])
+	})
+
+	spans := make([]knownSecretSpan, 0, minInt(len(unique), MaxKnownSecretSpans))
+	for _, value := range unique {
+		if len(value) > len(text) {
+			continue
+		}
+		maxStart := len(text) - len(value)
+		for searchStart := 0; searchStart <= maxStart; {
+			matched := true
+			for offset := 0; offset < len(value); offset++ {
+				if scanWork <= 0 {
+					return mask, 1
+				}
+				scanWork--
+				if text[searchStart+offset] != value[offset] {
+					matched = false
+					break
+				}
+			}
+			if matched {
+				end := searchStart + len(value)
+				if len(spans) >= MaxKnownSecretSpans {
+					return mask, 1
+				}
+				spans = append(spans, knownSecretSpan{start: searchStart, end: end})
+				searchStart = end
+			} else {
+				searchStart++
+			}
+		}
+	}
+	if len(spans) == 0 {
+		return text, 0
+	}
+
+	sort.Slice(spans, func(i, j int) bool {
+		if spans[i].start != spans[j].start {
+			return spans[i].start < spans[j].start
+		}
+		return spans[i].end < spans[j].end
+	})
+	merged := make([]knownSecretSpan, 0, len(spans))
+	for _, candidate := range spans {
+		if len(merged) == 0 || candidate.start >= merged[len(merged)-1].end {
+			merged = append(merged, candidate)
+			continue
+		}
+		if candidate.end > merged[len(merged)-1].end {
+			merged[len(merged)-1].end = candidate.end
+		}
+	}
+
+	var out strings.Builder
+	lastEnd := 0
+	for _, span := range merged {
+		out.WriteString(text[lastEnd:span.start])
+		out.WriteString(mask)
+		lastEnd = span.end
+	}
+	out.WriteString(text[lastEnd:])
+	return out.String(), len(merged)
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// SanitizeWithKnownSecrets replaces known secret values in text with masks.
+// This is used when you already know the secret values (e.g., from resolved env vars).
+func SanitizeWithKnownSecrets(text string, secrets map[string]string, mask string) string {
+	keys := make([]string, 0, len(secrets))
+	for key := range secrets {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	values := make([]string, 0, len(keys))
+	for _, key := range keys {
+		values = append(values, secrets[key])
+	}
+	result, _ := RedactKnownSecrets(text, values, mask)
 	return result
 }
