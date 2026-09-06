@@ -5,6 +5,8 @@
 use serde::Serialize;
 
 pub mod error;
+pub mod redact;
+pub mod secret_ref;
 
 /// Public binary and protocol tool name.
 pub const TOOL_NAME: &str = "symvault";

@@ -1,0 +1,504 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "caadd5e",
+    "release": "v0.22.1"
+  },
+  "constants": {
+    "marker": "[REDACTED]",
+    "blocked_text": "[REDACTED: output withheld]",
+    "min_exact_value_len": 4,
+    "min_token_len": 20,
+    "min_entropy_bits_per_char": 4.85
+  },
+  "exact_value_cases": [
+    {
+      "name": "single_secret",
+      "secrets": [
+        "sup3r-s3cret-value-xyz"
+      ],
+      "input": "the password is sup3r-s3cret-value-xyz and that's it",
+      "expected_redacted": "the password is [REDACTED] and that's it",
+      "expected_count": 1
+    },
+    {
+      "name": "repeat_secret",
+      "secrets": [
+        "sup3r-s3cret-value-xyz"
+      ],
+      "input": "token=sup3r-s3cret-value-xyz and repeat sup3r-s3cret-value-xyz end",
+      "expected_redacted": "token=[REDACTED] and repeat [REDACTED] end",
+      "expected_count": 2
+    },
+    {
+      "name": "multiple_secrets",
+      "secrets": [
+        "first-secret-token",
+        "second-secret-key"
+      ],
+      "input": "first: first-secret-token, second: second-secret-key",
+      "expected_redacted": "first: [REDACTED], second: [REDACTED]",
+      "expected_count": 2
+    },
+    {
+      "name": "short_and_empty_ignored",
+      "secrets": [
+        "",
+        "a",
+        "ab",
+        "abc"
+      ],
+      "input": "ab is short and empty is nothing",
+      "expected_redacted": "ab is short and empty is nothing",
+      "expected_count": 0
+    },
+    {
+      "name": "no_match",
+      "secrets": [
+        "absent-secret-token"
+      ],
+      "input": "clean text without secrets",
+      "expected_redacted": "clean text without secrets",
+      "expected_count": 0
+    },
+    {
+      "name": "empty_input",
+      "secrets": [
+        "any-secret-token"
+      ],
+      "input": "",
+      "expected_redacted": "",
+      "expected_count": 0
+    }
+  ],
+  "entropy_cases": [
+    {
+      "name": "high_entropy_token",
+      "input": "config value: kQ7#zM2$pL9@rT4!vX8\u0026wY6^bN3*cJ1~ end",
+      "expected_redacted": "config value: [REDACTED] end",
+      "expected_count": 1
+    },
+    {
+      "name": "ordinary_prose",
+      "input": "This is a perfectly ordinary sentence about deploying the release pipeline on Friday afternoon.",
+      "expected_redacted": "This is a perfectly ordinary sentence about deploying the release pipeline on Friday afternoon.",
+      "expected_count": 0
+    },
+    {
+      "name": "short_token",
+      "input": "short=aB3$kZ9",
+      "expected_redacted": "short=aB3$kZ9",
+      "expected_count": 0
+    },
+    {
+      "name": "uuid_v4",
+      "input": "request_id=f47ac10b-58cc-4372-a567-0e02b2c3d479",
+      "expected_redacted": "request_id=f47ac10b-58cc-4372-a567-0e02b2c3d479",
+      "expected_count": 0
+    },
+    {
+      "name": "sha256_hash",
+      "input": "checksum=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "expected_redacted": "checksum=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "expected_count": 0
+    },
+    {
+      "name": "base64_payload",
+      "input": "payload=VGhpcyBpcyBqdXN0IGEgcGxhaW4gRW5nbGlzaCBzZW50ZW5jZSBlbmNvZGVkIGFzIGJhc2U2NA==",
+      "expected_redacted": "[REDACTED]",
+      "expected_count": 1
+    },
+    {
+      "name": "long_numeric_identifier",
+      "input": "order_id=12345678901234567890123456789012",
+      "expected_redacted": "order_id=12345678901234567890123456789012",
+      "expected_count": 0
+    },
+    {
+      "name": "empty_input",
+      "input": "",
+      "expected_redacted": "",
+      "expected_count": 0
+    }
+  ],
+  "scanner_cases": [
+    {
+      "name": "no_detectors",
+      "detectors": [],
+      "strict": false,
+      "input": "hello world",
+      "expected_text": "hello world",
+      "expected_blocked": false,
+      "findings": [],
+      "audit_events": []
+    },
+    {
+      "name": "exact_non_strict",
+      "detectors": [
+        "exact_value"
+      ],
+      "secrets": [
+        "redactmesoftvalue1"
+      ],
+      "strict": false,
+      "correlation_id": "corr-2",
+      "channel": "test.stdout",
+      "input": "output containing redactmesoftvalue1 here, and more text after",
+      "expected_text": "output containing [REDACTED] here, and more text after",
+      "expected_blocked": false,
+      "findings": [
+        {
+          "detector": "exact_value",
+          "confidence": "high",
+          "count": 1
+        }
+      ],
+      "audit_events": [
+        {
+          "detector": "exact_value",
+          "channel": "test.stdout",
+          "confidence": "high",
+          "redacted_count": 1,
+          "blocked": false,
+          "correlation_id": "corr-2"
+        }
+      ]
+    },
+    {
+      "name": "exact_strict",
+      "detectors": [
+        "exact_value"
+      ],
+      "secrets": [
+        "blockmehardvalue1"
+      ],
+      "strict": true,
+      "correlation_id": "corr-1",
+      "channel": "test.stdout",
+      "input": "output containing blockmehardvalue1 here",
+      "expected_text": "[REDACTED: output withheld]",
+      "expected_blocked": true,
+      "findings": [
+        {
+          "detector": "exact_value",
+          "confidence": "high",
+          "count": 1
+        }
+      ],
+      "audit_events": [
+        {
+          "detector": "exact_value",
+          "channel": "test.stdout",
+          "confidence": "high",
+          "redacted_count": 1,
+          "blocked": true,
+          "correlation_id": "corr-1"
+        }
+      ]
+    },
+    {
+      "name": "entropy_non_strict",
+      "detectors": [
+        "entropy_heuristic"
+      ],
+      "strict": false,
+      "correlation_id": "corr-3",
+      "channel": "test.channel",
+      "input": "value: kQ7#zM2$pL9@rT4!vX8\u0026wY6^bN3*cJ1~ end",
+      "expected_text": "value: [REDACTED] end",
+      "expected_blocked": false,
+      "findings": [
+        {
+          "detector": "entropy_heuristic",
+          "confidence": "low",
+          "count": 1
+        }
+      ],
+      "audit_events": [
+        {
+          "detector": "entropy_heuristic",
+          "channel": "test.channel",
+          "confidence": "low",
+          "redacted_count": 1,
+          "blocked": false,
+          "correlation_id": "corr-3"
+        }
+      ]
+    },
+    {
+      "name": "entropy_strict",
+      "detectors": [
+        "entropy_heuristic"
+      ],
+      "strict": true,
+      "correlation_id": "corr-4",
+      "channel": "test.channel",
+      "input": "value: kQ7#zM2$pL9@rT4!vX8\u0026wY6^bN3*cJ1~ end",
+      "expected_text": "value: [REDACTED] end",
+      "expected_blocked": false,
+      "findings": [
+        {
+          "detector": "entropy_heuristic",
+          "confidence": "low",
+          "count": 1
+        }
+      ],
+      "audit_events": [
+        {
+          "detector": "entropy_heuristic",
+          "channel": "test.channel",
+          "confidence": "low",
+          "redacted_count": 1,
+          "blocked": false,
+          "correlation_id": "corr-4"
+        }
+      ]
+    },
+    {
+      "name": "both_non_strict",
+      "detectors": [
+        "exact_value",
+        "entropy_heuristic"
+      ],
+      "secrets": [
+        "mysecretpassword"
+      ],
+      "strict": false,
+      "correlation_id": "corr-5",
+      "channel": "test.stdout",
+      "input": "pass: mysecretpassword, blob: kQ7#zM2$pL9@rT4!vX8\u0026wY6^bN3*cJ1~",
+      "expected_text": "pass: [REDACTED], blob: [REDACTED]",
+      "expected_blocked": false,
+      "findings": [
+        {
+          "detector": "exact_value",
+          "confidence": "high",
+          "count": 1
+        },
+        {
+          "detector": "entropy_heuristic",
+          "confidence": "low",
+          "count": 1
+        }
+      ],
+      "audit_events": [
+        {
+          "detector": "exact_value",
+          "channel": "test.stdout",
+          "confidence": "high",
+          "redacted_count": 1,
+          "blocked": false,
+          "correlation_id": "corr-5"
+        },
+        {
+          "detector": "entropy_heuristic",
+          "channel": "test.stdout",
+          "confidence": "low",
+          "redacted_count": 1,
+          "blocked": false,
+          "correlation_id": "corr-5"
+        }
+      ]
+    },
+    {
+      "name": "both_strict",
+      "detectors": [
+        "exact_value",
+        "entropy_heuristic"
+      ],
+      "secrets": [
+        "mysecretpassword"
+      ],
+      "strict": true,
+      "correlation_id": "corr-6",
+      "channel": "test.stdout",
+      "input": "pass: mysecretpassword, blob: kQ7#zM2$pL9@rT4!vX8\u0026wY6^bN3*cJ1~",
+      "expected_text": "[REDACTED: output withheld]",
+      "expected_blocked": true,
+      "findings": [
+        {
+          "detector": "exact_value",
+          "confidence": "high",
+          "count": 1
+        },
+        {
+          "detector": "entropy_heuristic",
+          "confidence": "low",
+          "count": 1
+        }
+      ],
+      "audit_events": [
+        {
+          "detector": "exact_value",
+          "channel": "test.stdout",
+          "confidence": "high",
+          "redacted_count": 1,
+          "blocked": true,
+          "correlation_id": "corr-6"
+        },
+        {
+          "detector": "entropy_heuristic",
+          "channel": "test.stdout",
+          "confidence": "low",
+          "redacted_count": 1,
+          "blocked": true,
+          "correlation_id": "corr-6"
+        }
+      ]
+    },
+    {
+      "name": "json_structure",
+      "detectors": [
+        "exact_value"
+      ],
+      "secrets": [
+        "topsecretvalue1"
+      ],
+      "strict": false,
+      "input": "{\"stdout\":\"login ok, token=topsecretvalue1\",\"exit_code\":0}",
+      "expected_text": "{\"stdout\":\"login ok, token=[REDACTED]\",\"exit_code\":0}",
+      "expected_blocked": false,
+      "findings": [
+        {
+          "detector": "exact_value",
+          "confidence": "high",
+          "count": 1
+        }
+      ],
+      "audit_events": [
+        {
+          "detector": "exact_value",
+          "channel": "",
+          "confidence": "high",
+          "redacted_count": 1,
+          "blocked": false,
+          "correlation_id": ""
+        }
+      ]
+    },
+    {
+      "name": "multiline",
+      "detectors": [
+        "exact_value"
+      ],
+      "secrets": [
+        "multilinesecretval"
+      ],
+      "strict": false,
+      "input": "line one\nline two multilinesecretval\nline three (truncat",
+      "expected_text": "line one\nline two [REDACTED]\nline three (truncat",
+      "expected_blocked": false,
+      "findings": [
+        {
+          "detector": "exact_value",
+          "confidence": "high",
+          "count": 1
+        }
+      ],
+      "audit_events": [
+        {
+          "detector": "exact_value",
+          "channel": "",
+          "confidence": "high",
+          "redacted_count": 1,
+          "blocked": false,
+          "correlation_id": ""
+        }
+      ]
+    },
+    {
+      "name": "no_matches",
+      "detectors": [
+        "exact_value",
+        "entropy_heuristic"
+      ],
+      "secrets": [
+        "absentpassword"
+      ],
+      "strict": true,
+      "input": "normal text with no secrets",
+      "expected_text": "normal text with no secrets",
+      "expected_blocked": false,
+      "findings": [],
+      "audit_events": []
+    }
+  ],
+  "truthy_cases": [
+    {
+      "input": "1",
+      "expected": true
+    },
+    {
+      "input": "t",
+      "expected": true
+    },
+    {
+      "input": "T",
+      "expected": true
+    },
+    {
+      "input": "true",
+      "expected": true
+    },
+    {
+      "input": "TRUE",
+      "expected": true
+    },
+    {
+      "input": "True",
+      "expected": true
+    },
+    {
+      "input": "yes",
+      "expected": true
+    },
+    {
+      "input": "YES",
+      "expected": true
+    },
+    {
+      "input": "Yes",
+      "expected": true
+    },
+    {
+      "input": "on",
+      "expected": true
+    },
+    {
+      "input": "ON",
+      "expected": true
+    },
+    {
+      "input": "On",
+      "expected": true
+    },
+    {
+      "input": "",
+      "expected": false
+    },
+    {
+      "input": "0",
+      "expected": false
+    },
+    {
+      "input": "false",
+      "expected": false
+    },
+    {
+      "input": "no",
+      "expected": false
+    },
+    {
+      "input": "off",
+      "expected": false
+    },
+    {
+      "input": "random",
+      "expected": false
+    },
+    {
+      "input": "TRUE ",
+      "expected": false
+    }
+  ]
+}

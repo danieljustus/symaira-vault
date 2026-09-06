@@ -153,11 +153,13 @@ manpages: build
 	./$(BINARY_NAME) generate manpages docs/man
 
 # Go-oracle fixtures and neutral black-box harness for the staged Rust port.
-PORT_ORACLE_COMMIT ?= $(shell git rev-parse --short HEAD)
+PORT_ORACLE_COMMIT ?= caadd5e
 PORT_ORACLE_RELEASE ?= v0.22.1
 PORT_CLI_FIXTURE := testdata/port/cli/command-tree.json
 PORT_CLI_CASES := testdata/port/cli/cases.json
 PORT_ERROR_FIXTURE := testdata/port/core/error-contract.json
+PORT_SECRET_REF_FIXTURE := testdata/port/core/secret-ref-contract.json
+PORT_REDACT_FIXTURE := testdata/port/core/redact-contract.json
 PORT_GO_BINARY := target/port/symvault-go
 RUST_BINARY := target/debug/symvault
 PORT_CONTRACT_VERSION ?= v0.0.0-port
@@ -174,13 +176,18 @@ port-fixtures-check:
 
 core-fixtures-generate:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/coregen \
-		--output $(PORT_ERROR_FIXTURE) \
+		--error-output $(PORT_ERROR_FIXTURE) \
+		--secret-ref-output $(PORT_SECRET_REF_FIXTURE) \
+		--redact-output $(PORT_REDACT_FIXTURE) \
 		--oracle-commit $(PORT_ORACLE_COMMIT) \
 		--oracle-release $(PORT_ORACLE_RELEASE)
 
 core-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/coregen \
-		--check --output $(PORT_ERROR_FIXTURE)
+		--check \
+		--error-output $(PORT_ERROR_FIXTURE) \
+		--secret-ref-output $(PORT_SECRET_REF_FIXTURE) \
+		--redact-output $(PORT_REDACT_FIXTURE)
 
 differential-go-selftest:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(MAKE) build
