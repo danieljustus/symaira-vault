@@ -10,6 +10,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/danieljustus/symaira-vault/internal/mcp/masking"
 	"github.com/danieljustus/symaira-vault/internal/redact"
 )
 
@@ -51,6 +52,10 @@ type RunOptions struct {
 	// timeout kill. Keys must be safe identifiers ([A-Za-z0-9_]+): they become
 	// both an env var suffix and a filename.
 	Files map[string]string
+	// KnownSecrets contains resolved secret values that must be redacted from
+	// captured output before generic credential-pattern masking. It is optional
+	// for callers that do not have known secret context.
+	KnownSecrets map[string]string
 }
 
 // boundedBuffer captures up to max bytes of written data while still reporting
@@ -169,19 +174,11 @@ func RunCommand(opts RunOptions) (*RunResult, error) {
 		RejectedEnvVars: rejected,
 	}
 
-	// Redact explicit credential-shaped patterns out of the captured
-	// output before it can leave the process boundary — this is the
-	// output-scanning redaction core (#695), pattern-detection layer.
-	// RunCommand is a general-purpose executor (opts.Env is arbitrary
-	// caller-supplied values, not necessarily secret material — see the
-	// TestRunCommand_EnvOverlay-style callers), so it does not have
-	// enough context to safely exact-match opts.Env as "known secrets";
-	// that exact-value redaction happens one layer up, in
-	// internal/mcp/server (sanitizeKnownSecretValues /
-	// sanitizeRunOutput), where the caller knows which resolved values
-	// are actual vault secrets. This pattern-only pass is defense in
-	// depth that composes with, not replaces, that layer.
-	redactResult(result)
+	// Redact known values before credential-shaped patterns. A generic pattern
+	// can match only a provider-shaped prefix of a longer known value, leaving
+	// the suffix exposed before the outer MCP sanitizer can exact-match it.
+	// The pattern-only behavior remains available when KnownSecrets is empty.
+	redactResult(result, opts.KnownSecrets)
 
 	if runErr != nil {
 		var exitErr *exec.ExitError
@@ -199,22 +196,36 @@ func RunCommand(opts RunOptions) (*RunResult, error) {
 	return result, nil
 }
 
-// redactResult scans result.Stdout and result.Stderr for explicit
-// credential-shaped patterns (see internal/redact), replacing any match
-// with the stable redact.Marker in place. It fails closed: if scanning
-// itself errors, the affected field is replaced with a fixed "withheld"
-// marker rather than left unredacted.
-func redactResult(result *RunResult) {
-	scanner := redact.NewScanner(redact.NewPatternDetector())
+// redactResult scans result.Stdout and result.Stderr for known values and
+// explicit credential-shaped patterns (see internal/redact), replacing any
+// match with the stable redact.Marker in place. Known values are deliberately
+// the first pass so generic patterns cannot destroy the original span.
+// It fails closed: if scanning itself errors, the affected field is replaced
+// with a fixed "withheld" marker rather than left unredacted.
+func redactResult(result *RunResult, knownSecrets map[string]string) {
+	keys := make([]string, 0, len(knownSecrets))
+	for key := range knownSecrets {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	values := make([]string, 0, len(keys))
+	for _, key := range keys {
+		values = append(values, knownSecrets[key])
+	}
+	redactOutput := func(text string) string {
+		// Preserve the runner's existing "***" marker for known values while
+		// ensuring generic patterns see the original only after exact masking.
+		knownSanitized, _ := masking.RedactKnownSecrets(text, values, "***")
+		patternScanner := redact.NewScanner(redact.NewPatternDetector())
+		result, _ := patternScanner.Scan(knownSanitized, redact.ScanOptions{})
+		return result.Text
+	}
 
 	// Result.Text is always safe to use regardless of the returned error —
 	// on a detector failure it is a fixed "withheld" marker, never the raw
 	// text (fail-closed).
-	stdoutRes, _ := scanner.Scan(result.Stdout, redact.ScanOptions{})
-	result.Stdout = stdoutRes.Text
-
-	stderrRes, _ := scanner.Scan(result.Stderr, redact.ScanOptions{})
-	result.Stderr = stderrRes.Text
+	result.Stdout = redactOutput(result.Stdout)
+	result.Stderr = redactOutput(result.Stderr)
 }
 
 // isSafeFileName reports whether name is safe to use both as an environment

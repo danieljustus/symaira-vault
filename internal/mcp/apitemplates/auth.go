@@ -5,7 +5,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"reflect"
+	"sort"
 	"strings"
+
+	"github.com/danieljustus/symaira-vault/internal/mcp/masking"
 )
 
 // ResolveField returns the first non-empty string value from the entry data
@@ -75,6 +79,135 @@ func InjectAuth(httpReq *http.Request, tmpl *APITemplate, entryData map[string]a
 	}
 
 	return nil
+}
+
+// CollectAuthRedactionValues returns the string values that InjectAuth can
+// place in a request. Field order is fixed and duplicates are removed, so the
+// result is deterministic and safe to use for exact-first error redaction.
+// Additional values are typically substitution values already resolved for the
+// same request; they are included in stable input order and deduplicated too.
+func CollectAuthRedactionValues(authType AuthType, entryData map[string]any, additional ...[]string) []string {
+	fields := []string{"credential", "token", "password", "username", "header_value", "param_value"}
+	values := make([]string, 0, len(fields))
+	seen := make(map[string]struct{}, len(fields))
+	appendValue := func(value string) {
+		if value == "" {
+			return
+		}
+		if _, ok := seen[value]; ok {
+			return
+		}
+		seen[value] = struct{}{}
+		values = append(values, value)
+	}
+	for _, field := range fields {
+		if value, ok := entryData[field].(string); ok {
+			appendValue(value)
+		}
+	}
+	if authType == AuthBasic {
+		username := ResolveField(entryData, "username")
+		password := ResolveField(entryData, "credential", "password")
+		if username != "" && password != "" {
+			appendValue(base64.StdEncoding.EncodeToString([]byte(username + ":" + password)))
+		}
+	}
+	if authType == AuthQueryParam {
+		appendValue(url.QueryEscape(ResolveField(entryData, "param_value", "credential", "token", "password")))
+	}
+	for _, extraValues := range additional {
+		for _, value := range extraValues {
+			appendValue(value)
+			appendValue(url.QueryEscape(value))
+			appendValue(url.PathEscape(value))
+			appendValue((&url.URL{Path: value}).EscapedPath())
+		}
+	}
+	return values
+}
+
+// CollectRedactionValues returns auth wire values plus every string stored in
+// the resolved entry. Responses and transport errors can echo fields beyond
+// the credential used for injection.
+func CollectRedactionValues(authType AuthType, entryData map[string]any, additional ...[]string) []string {
+	values := CollectAuthRedactionValues(authType, entryData, additional...)
+	seen := make(map[string]struct{}, len(values)+len(entryData))
+	for _, value := range values {
+		seen[value] = struct{}{}
+	}
+
+	appendValue := func(value string) {
+		if value == "" {
+			return
+		}
+		if _, exists := seen[value]; exists {
+			return
+		}
+		seen[value] = struct{}{}
+		values = append(values, value)
+	}
+	type visit struct {
+		kind reflect.Kind
+		ptr  uintptr
+	}
+	visited := make(map[visit]struct{})
+	var walk func(reflect.Value)
+	walk = func(value reflect.Value) {
+		if !value.IsValid() {
+			return
+		}
+		for value.Kind() == reflect.Interface || value.Kind() == reflect.Pointer {
+			if value.IsNil() {
+				return
+			}
+			if value.Kind() == reflect.Pointer {
+				key := visit{kind: value.Kind(), ptr: value.Pointer()}
+				if _, exists := visited[key]; exists {
+					return
+				}
+				visited[key] = struct{}{}
+			}
+			value = value.Elem()
+		}
+		switch value.Kind() {
+		case reflect.String:
+			appendValue(value.String())
+		case reflect.Map:
+			if value.IsNil() || value.Type().Key().Kind() != reflect.String {
+				return
+			}
+			key := visit{kind: value.Kind(), ptr: value.Pointer()}
+			if _, exists := visited[key]; exists {
+				return
+			}
+			visited[key] = struct{}{}
+			keys := value.MapKeys()
+			sort.Slice(keys, func(i, j int) bool { return keys[i].String() < keys[j].String() })
+			for _, mapKey := range keys {
+				walk(value.MapIndex(mapKey))
+			}
+		case reflect.Slice:
+			if value.IsNil() {
+				return
+			}
+			key := visit{kind: value.Kind(), ptr: value.Pointer()}
+			if _, exists := visited[key]; exists {
+				return
+			}
+			visited[key] = struct{}{}
+			for i := 0; i < value.Len(); i++ {
+				walk(value.Index(i))
+			}
+		case reflect.Array:
+			for i := 0; i < value.Len(); i++ {
+				walk(value.Index(i))
+			}
+		default:
+			return
+		}
+	}
+	walk(reflect.ValueOf(entryData))
+	return values
 }
 
 // ResolveSubstitutionValues resolves every declared substitution placeholder
@@ -214,11 +347,6 @@ func EntryRefPath(entryRef string) (string, error) {
 // RedactValues replaces every occurrence of the given secret values in msg
 // with "***" so substituted credentials never reach error messages.
 func RedactValues(msg string, values []string) string {
-	for _, v := range values {
-		if v == "" {
-			continue
-		}
-		msg = strings.ReplaceAll(msg, v, "***")
-	}
-	return msg
+	redacted, _ := masking.RedactKnownSecrets(msg, values, "***")
+	return redacted
 }

@@ -320,15 +320,21 @@ func (p *Proxy) forward(w http.ResponseWriter, r *http.Request, target string, t
 	}()
 
 	var body io.Reader
-	var redactVals []string
+	authType := apitemplates.AuthNone
+	if tmpl != nil {
+		authType = tmpl.AuthType
+	}
+	redactVals := apitemplates.CollectRedactionValues(authType, entryData)
 	var values map[string]string
 	if tmpl != nil && len(tmpl.Substitutions) > 0 {
 		var subErr error
-		values, redactVals, subErr = apitemplates.ResolveSubstitutionValues(tmpl, entryData)
+		var substitutionRedactVals []string
+		values, substitutionRedactVals, subErr = apitemplates.ResolveSubstitutionValues(tmpl, entryData)
 		if subErr != nil {
 			http.Error(w, "cannot resolve substitutions for host", http.StatusInternalServerError)
 			return
 		}
+		redactVals = apitemplates.CollectRedactionValues(authType, entryData, substitutionRedactVals)
 		target = apitemplates.ApplyURLSubstitutions(target, tmpl.Substitutions, values)
 		raw, readErr := io.ReadAll(io.LimitReader(r.Body, maxBrokerResponseBytes+1))
 		if readErr != nil {
@@ -381,14 +387,14 @@ func (p *Proxy) forward(w http.ResponseWriter, r *http.Request, target string, t
 	}
 	bodyText := string(raw)
 
-	// Sanitize: pattern-based detection plus known credential values.
+	// Redact known credential values on the original response before generic
+	// pattern masking. A generic pattern can match only a provider-shaped
+	// prefix of a longer known value, leaving its suffix exposed.
+	bodyText = redactKnownValues(bodyText, redactVals)
 	sanitizer := masking.NewSanitizer()
 	bodyText = sanitizer.Sanitize(bodyText, masking.MaskOptions{CustomMask: "***"})
-	if entryData != nil {
-		bodyText = redactKnownValues(bodyText, entryData)
-	}
 
-	copyHeaders(w.Header(), resp.Header)
+	copySanitizedResponseHeaders(w.Header(), resp.Header, redactVals)
 	w.Header().Del("Content-Length")
 	w.WriteHeader(status)
 	_, _ = io.WriteString(w, bodyText)
@@ -459,13 +465,24 @@ func copyHeaders(dst, src http.Header) {
 	}
 }
 
-func redactKnownValues(text string, entryData map[string]any) string {
-	for _, v := range entryData {
-		if vStr, ok := v.(string); ok && vStr != "" {
-			text = strings.ReplaceAll(text, vStr, "***")
+func copySanitizedResponseHeaders(dst, src http.Header, redactVals []string) {
+	sanitizer := masking.NewSanitizer()
+	for key, values := range src {
+		switch strings.ToLower(key) {
+		case "connection", "proxy-connection", "keep-alive", "transfer-encoding", "upgrade", "te":
+			continue
+		}
+		for _, value := range values {
+			value = apitemplates.RedactValues(value, redactVals)
+			value = sanitizer.Sanitize(value, masking.MaskOptions{CustomMask: "***"})
+			dst.Add(key, value)
 		}
 	}
-	return text
+}
+
+func redactKnownValues(text string, values []string) string {
+	redacted, _ := masking.RedactKnownSecrets(text, values, "***")
+	return redacted
 }
 
 // loadTemplates resolves the full catalog: embedded built-ins (with vault-local

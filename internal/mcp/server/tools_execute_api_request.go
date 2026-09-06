@@ -128,7 +128,7 @@ func (s *Server) handleExecuteAPIRequest(ctx context.Context, req mcp.CallToolRe
 	// entry. Values never enter logs or audit entries; any error message that
 	// could carry a substituted value is redacted below.
 	var substitutionValues map[string]string
-	var redactVals []string
+	redactVals := apitemplates.CollectRedactionValues(tmpl.AuthType, entry.Data)
 	if len(tmpl.Substitutions) > 0 {
 		values, redactList, subErr := apitemplates.ResolveSubstitutionValues(tmpl, entry.Data)
 		if subErr != nil {
@@ -136,7 +136,7 @@ func (s *Server) handleExecuteAPIRequest(ctx context.Context, req mcp.CallToolRe
 			return mcp.NewToolResultError(fmt.Sprintf("cannot resolve substitutions for %q: %v", tmpl.Name, subErr)), nil
 		}
 		substitutionValues = values
-		redactVals = redactList
+		redactVals = apitemplates.CollectRedactionValues(tmpl.AuthType, entry.Data, redactList)
 		requestURL = apitemplates.ApplyURLSubstitutions(requestURL, tmpl.Substitutions, values)
 		bodyStr = apitemplates.ApplyBodySubstitutions(bodyStr, tmpl.Substitutions, values)
 	}
@@ -213,24 +213,17 @@ func (s *Server) handleExecuteAPIRequest(ctx context.Context, req mcp.CallToolRe
 	// Sanitize response body: pattern-based detection + known-value masking
 	respText := string(respBody)
 
-	// Step 1: Pattern-based sanitization (detects ghp_xxx, sk-xxx, AKIAxxx, etc.)
+	// Step 1: Known-value sanitization on the original response. This must
+	// happen before generic pattern masking: a pattern may match only a
+	// provider-shaped prefix of a longer known secret, leaving its suffix
+	// exposed and making the exact value unmatchable.
 	sanitizer := masking.NewSanitizer()
-	patternSanitized := sanitizer.Sanitize(respText, masking.MaskOptions{CustomMask: "***"})
-
-	// Step 2: Known-value sanitization (vault entry data as known secrets)
-	resolvedSecrets := make(map[string]string)
-	for k, v := range entry.Data {
-		if vStr, ok := v.(string); ok {
-			resolvedSecrets[k] = vStr
-		}
+	sanitizeResponseValue := func(value string) string {
+		knownSanitized := apitemplates.RedactValues(value, redactVals)
+		return sanitizer.Sanitize(knownSanitized, masking.MaskOptions{CustomMask: "***"})
 	}
-	sanitizedBody := s.sanitizeKnownSecretValues(patternSanitized, resolvedSecrets)
-
-	// Audit log if any secrets were stripped
-	if sanitizedBody != respText {
-		s.logAudit(ctx, "execute_api_request", fmt.Sprintf("template=%s, endpoint=%s, method=%s, status=%d, sanitized=true",
-			tmpl.Name, normalizedEndpoint, method, resp.StatusCode), true)
-	}
+	sanitizedBody := sanitizeResponseValue(respText)
+	responseSanitized := sanitizedBody != respText
 
 	// Collect response headers (safe subset)
 	safeHeaders := make(map[string]string)
@@ -241,11 +234,19 @@ func (s *Server) handleExecuteAPIRequest(ctx context.Context, req mcp.CallToolRe
 			lower == "proxy-authenticate" || lower == "proxy-authorization" {
 			continue
 		}
-		safeHeaders[k] = resp.Header.Get(k)
+		rawValue := resp.Header.Get(k)
+		safeHeaders[k] = sanitizeResponseValue(rawValue)
+		responseSanitized = responseSanitized || safeHeaders[k] != rawValue
+	}
+
+	// Audit log if any secrets were stripped from the response body or headers.
+	if responseSanitized {
+		s.logAudit(ctx, "execute_api_request", fmt.Sprintf("template=%s, endpoint=%s, method=%s, status=%d, sanitized=true",
+			tmpl.Name, normalizedEndpoint, method, resp.StatusCode), true)
 	}
 
 	// Determine content type
-	contentType := resp.Header.Get("Content-Type")
+	contentType := sanitizeResponseValue(resp.Header.Get("Content-Type"))
 
 	// Audit log: template + endpoint + method + status code only
 	auditMsg := fmt.Sprintf("template=%s, endpoint=%s, method=%s, status=%d",

@@ -2,6 +2,8 @@ package file
 
 import (
 	"encoding/base64"
+	"io"
+	"os"
 	"runtime"
 	"strings"
 	"testing"
@@ -9,6 +11,30 @@ import (
 
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
+
+func captureUseStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	original := os.Stdout
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	os.Stdout = writer
+	defer func() { os.Stdout = original }()
+
+	fn()
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close stdout writer: %v", err)
+	}
+	output, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("read stdout: %v", err)
+	}
+	if err := reader.Close(); err != nil {
+		t.Fatalf("close stdout reader: %v", err)
+	}
+	return string(output)
+}
 
 func resetUseFlags(t *testing.T) {
 	t.Helper()
@@ -32,8 +58,13 @@ func TestRunFileUse_MaterializesAttachmentForCommand(t *testing.T) {
 	UseTimeout = 5 * time.Second
 
 	args := []string{"elster/cert#cert_p12", "sh", "-c", `cat "$SYMVAULT_FILE_CERT_P12"`}
-	if err := runFileUse(nil, args); err != nil {
-		t.Fatalf("runFileUse: %v", err)
+	output := captureUseStdout(t, func() {
+		if err := runFileUse(nil, args); err != nil {
+			t.Fatalf("runFileUse: %v", err)
+		}
+	})
+	if strings.Contains(output, string(content)) || !strings.Contains(output, "***") {
+		t.Fatalf("stdout = %q, want attachment content redacted", output)
 	}
 }
 
@@ -98,6 +129,17 @@ func TestRunFileUse_EntryNotFound(t *testing.T) {
 	args := []string{"does/not-exist#field", "true"}
 	if err := runFileUse(nil, args); err == nil {
 		t.Fatal("expected error for missing entry, got nil")
+	}
+}
+
+func TestAttachmentKnownSecretsIncludesContentAndCanonicalBase64(t *testing.T) {
+	content := []byte("binary attachment content")
+	got := attachmentKnownSecrets("CERT", content)
+	if got["CERT:content"] != string(content) {
+		t.Fatal("known secrets omit decoded attachment content")
+	}
+	if got["CERT:base64"] != base64.StdEncoding.EncodeToString(content) {
+		t.Fatal("known secrets omit canonical base64 attachment content")
 	}
 }
 

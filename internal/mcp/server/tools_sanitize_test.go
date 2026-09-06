@@ -116,6 +116,65 @@ func TestSanitizeRunOutput(t *testing.T) {
 	}
 }
 
+func TestSanitizeRunOutput_KnownSecretOverlapsAreFullyRedacted(t *testing.T) {
+	server := setupTestServer(t)
+	short := "short"
+	long := "short-with-sensitive-suffix"
+	inputs := []struct {
+		name   string
+		values []string
+	}{
+		{name: "short_first", values: []string{short, long}},
+		{name: "long_first", values: []string{long, short}},
+	}
+
+	for _, tc := range inputs {
+		t.Run(tc.name, func(t *testing.T) {
+			resolvedEnv := map[string]string{
+				"FIRST":  tc.values[0],
+				"SECOND": tc.values[1],
+			}
+			stdout := "prefix=" + long + " suffix=" + short
+			got, _ := server.sanitizeRunOutput(context.Background(), stdout, "", resolvedEnv)
+			if got != "prefix=*** suffix=***" {
+				t.Fatalf("sanitizeRunOutput() = %q, want %q", got, "prefix=*** suffix=***")
+			}
+			if strings.Contains(got, "sensitive-suffix") || strings.Contains(got, long) || strings.Contains(got, short) {
+				t.Fatalf("overlapping secret leaked: %q", got)
+			}
+		})
+	}
+}
+
+func TestSanitizeRunOutput_KnownSecretPartialOverlapsAreFullyRedacted(t *testing.T) {
+	server := setupTestServer(t)
+	cases := []struct {
+		name   string
+		values []string
+		input  string
+	}{
+		{name: "equal_first", values: []string{"abcd", "bcde"}, input: "abcde"},
+		{name: "equal_second", values: []string{"bcde", "abcd"}, input: "abcde"},
+		{name: "unequal_first", values: []string{"abcdef", "defgh"}, input: "abcdefgh"},
+		{name: "unequal_second", values: []string{"defgh", "abcdef"}, input: "abcdefgh"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resolvedEnv := map[string]string{"FIRST": tc.values[0], "SECOND": tc.values[1]}
+			got, _ := server.sanitizeRunOutput(context.Background(), "value="+tc.input, "", resolvedEnv)
+			if got != "value=***" {
+				t.Fatalf("sanitizeRunOutput() = %q, want %q", got, "value=***")
+			}
+			for _, value := range tc.values {
+				if strings.Contains(got, value) {
+					t.Fatalf("overlapping secret %q leaked: %q", value, got)
+				}
+			}
+		})
+	}
+}
+
 func TestSanitizeRunOutputNoSecrets(t *testing.T) {
 	server := setupTestServer(t)
 

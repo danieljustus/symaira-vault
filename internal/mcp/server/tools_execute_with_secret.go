@@ -11,6 +11,7 @@ import (
 
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
 	"github.com/danieljustus/symaira-vault/internal/mcp/apitemplates"
+	"github.com/danieljustus/symaira-vault/internal/mcp/masking"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
 	"github.com/danieljustus/symaira-vault/internal/secrets"
 )
@@ -157,10 +158,11 @@ func (s *Server) handleExecuteWithSecret(ctx context.Context, req mcp.CallToolRe
 	workingDir := req.GetString("working_dir", "")
 
 	result, runErr := secrets.RunCommand(secrets.RunOptions{
-		Command:    command,
-		Env:        resolvedEnv,
-		WorkingDir: workingDir,
-		Timeout:    time.Duration(timeoutSeconds) * time.Second,
+		Command:      command,
+		Env:          resolvedEnv,
+		WorkingDir:   workingDir,
+		Timeout:      time.Duration(timeoutSeconds) * time.Second,
+		KnownSecrets: secretEnv,
 	})
 
 	exitCode := 0
@@ -253,15 +255,29 @@ func mapKeys(m map[string]string) []string {
 }
 
 func redactSecrets(command []string, secretEnv map[string]string) []string {
+	keys := make([]string, 0, len(secretEnv))
+	for key := range secretEnv {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	values := make([]string, 0, len(keys))
+	seen := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		value := secretEnv[key]
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		values = append(values, value)
+	}
+
 	redacted := make([]string, len(command))
 	for i, arg := range command {
-		redacted[i] = arg
-		for _, secret := range secretEnv {
-			if arg == secret {
-				redacted[i] = "[REDACTED]"
-				break
-			}
-		}
+		redacted[i], _ = masking.RedactKnownSecrets(arg, values, "[REDACTED]")
 	}
 	return redacted
 }

@@ -1,6 +1,7 @@
 package masking
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -278,6 +279,44 @@ func TestSanitizeWithKnownSecrets(t *testing.T) {
 	}
 }
 
+func TestRedactKnownSecrets_OverlapOrderIndependent(t *testing.T) {
+	cases := []struct {
+		name   string
+		values []string
+		input  string
+		want   string
+		count  int
+	}{
+		{name: "containment", values: []string{"secret-value", "cret-val"}, input: "prefix secret-value suffix", want: "prefix *** suffix", count: 1},
+		{name: "containment_reverse", values: []string{"cret-val", "secret-value"}, input: "prefix secret-value suffix", want: "prefix *** suffix", count: 1},
+		{name: "equal_partial", values: []string{"abcd", "bcde"}, input: "abcde", want: "***", count: 1},
+		{name: "equal_partial_reverse", values: []string{"bcde", "abcd"}, input: "abcde", want: "***", count: 1},
+		{name: "unequal_partial", values: []string{"abcdef", "defgh"}, input: "abcdefgh", want: "***", count: 1},
+		{name: "unequal_partial_reverse", values: []string{"defgh", "abcdef"}, input: "abcdefgh", want: "***", count: 1},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, count := RedactKnownSecrets(tc.input, tc.values, "***")
+			if got != tc.want || count != tc.count {
+				t.Fatalf("RedactKnownSecrets() = (%q, %d), want (%q, %d)", got, count, tc.want, tc.count)
+			}
+			for _, value := range tc.values {
+				if strings.Contains(got, value) {
+					t.Fatalf("overlapping secret %q leaked in %q", value, got)
+				}
+			}
+		})
+	}
+}
+
+func TestSanitizeWithKnownSecrets_PreservesShortKnownValues(t *testing.T) {
+	got := SanitizeWithKnownSecrets("x a y", map[string]string{"SHORT": "a"}, "***")
+	if got != "x *** y" {
+		t.Fatalf("SanitizeWithKnownSecrets() = %q, want %q", got, "x *** y")
+	}
+}
+
 func TestSanitizePerformance(t *testing.T) {
 	sanitizer := NewSanitizer()
 	var text strings.Builder
@@ -528,5 +567,75 @@ func TestValidatorIntegration(t *testing.T) {
 		if m.PatternName == "iban" {
 			t.Errorf("expected no IBAN match for invalid country code, got %q", m.Value)
 		}
+	}
+}
+
+func TestRedactKnownSecrets_DuplicateHeavyValuesAreBounded(t *testing.T) {
+	values := make([]string, 100_000)
+	for i := range values {
+		values[i] = "q"
+	}
+
+	got, count := RedactKnownSecrets("prefix q suffix", values, "***")
+	if got != "prefix *** suffix" || count != 1 {
+		t.Fatalf("RedactKnownSecrets() = (%q, %d), want (%q, 1)", got, count, "prefix *** suffix")
+	}
+}
+
+func TestRedactKnownSecrets_SpanOverflowFailsClosed(t *testing.T) {
+	input := strings.Repeat("x", MaxKnownSecretSpans+1)
+	got, count := RedactKnownSecrets(input, []string{"x"}, "***")
+	if got != "***" || count != 1 {
+		t.Fatalf("overflow result = (%q, %d), want (***, 1)", got, count)
+	}
+	if strings.Contains(got, "x") {
+		t.Fatalf("overflow result leaked exact value: %q", got)
+	}
+}
+
+func TestRedactKnownSecrets_16MiBOneByteSecretFailsClosed(t *testing.T) {
+	input := strings.Repeat("z", 16<<20)
+	got, count := RedactKnownSecrets(input, []string{"z"}, "***")
+	if got != "***" || count != 1 {
+		t.Fatalf("16 MiB result = (%q, %d), want (***, 1)", got, count)
+	}
+}
+
+func TestRedactKnownSecrets_ScanWorkBoundary(t *testing.T) {
+	input := strings.Repeat("a", 32)
+
+	got, count := redactKnownSecretsWithBudget(input, []string{"z"}, "***", int64(len(input)))
+	if got != input || count != 0 {
+		t.Fatalf("near-bound result = (%q, %d), want unchanged input and zero matches", got, count)
+	}
+
+	got, count = redactKnownSecretsWithBudget(input, []string{"z"}, "***", int64(len(input)-1))
+	if got != "***" || count != 1 {
+		t.Fatalf("over-bound result = (%q, %d), want (***, 1)", got, count)
+	}
+}
+
+func TestRedactKnownSecrets_HugeTextManyValuesFailsClosed(t *testing.T) {
+	input := strings.Repeat("x", 16<<20)
+	values := make([]string, MaxKnownSecretValues)
+	for i := range values {
+		values[i] = fmt.Sprintf("not-present-%04d", i)
+	}
+
+	got, count := RedactKnownSecrets(input, values, "***")
+	if got != "***" || count != 1 {
+		t.Fatalf("huge scan result = (%q, %d), want (***, 1)", got, count)
+	}
+}
+
+func TestRedactKnownSecrets_ScanWorkArithmeticIsSafe(t *testing.T) {
+	got, count := redactKnownSecretsWithBudget("aaaa", []string{"z"}, "***", int64(1<<63-1))
+	if got != "aaaa" || count != 0 {
+		t.Fatalf("max-budget result = (%q, %d), want unchanged input and zero matches", got, count)
+	}
+
+	got, count = redactKnownSecretsWithBudget("aaaa", []string{"zzzzz"}, "***", int64(1<<63-1))
+	if got != "aaaa" || count != 0 {
+		t.Fatalf("long-value result = (%q, %d), want unchanged input and zero matches", got, count)
 	}
 }

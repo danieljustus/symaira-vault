@@ -333,6 +333,29 @@ func TestRedactValues(t *testing.T) {
 	}
 }
 
+func TestRedactValues_OverlapOrderIndependent(t *testing.T) {
+	cases := []struct {
+		name   string
+		values []string
+		input  string
+		want   string
+	}{
+		{name: "containment", values: []string{"secret-value", "cret-val"}, input: "prefix secret-value suffix", want: "prefix *** suffix"},
+		{name: "containment_reverse", values: []string{"cret-val", "secret-value"}, input: "prefix secret-value suffix", want: "prefix *** suffix"},
+		{name: "equal_partial", values: []string{"abcd", "bcde"}, input: "abcde", want: "***"},
+		{name: "equal_partial_reverse", values: []string{"bcde", "abcd"}, input: "abcde", want: "***"},
+		{name: "unequal_partial", values: []string{"abcdef", "defgh"}, input: "abcdefgh", want: "***"},
+		{name: "unequal_partial_reverse", values: []string{"defgh", "abcdef"}, input: "abcdefgh", want: "***"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := RedactValues(tc.input, tc.values); got != tc.want {
+				t.Fatalf("RedactValues() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestRedactValues_EmptyValueSkip(t *testing.T) {
 	msg := "token=sekret msg unchanged"
 	got := RedactValues(msg, []string{"", "", "sekret"})

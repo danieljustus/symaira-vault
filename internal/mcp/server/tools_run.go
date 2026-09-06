@@ -10,6 +10,7 @@ import (
 	"time"
 
 	mcp "github.com/danieljustus/symaira-vault/internal/mcp"
+	"github.com/danieljustus/symaira-vault/internal/mcp/masking"
 	"github.com/danieljustus/symaira-vault/internal/metrics"
 	secrets "github.com/danieljustus/symaira-vault/internal/secrets"
 )
@@ -84,7 +85,7 @@ func (s *Server) handleRunCommand(ctx context.Context, req mcp.CallToolRequest) 
 		return mcp.NewToolResultError(fmt.Sprintf("env contains denied keys: %s", strings.Join(denied, ", "))), nil
 	}
 
-	resolvedFiles, fileAudit, filesToolErr, filesErr := s.resolveRunCommandFiles(ctx, req.Arguments["files"])
+	resolvedFiles, fileKnownSecrets, fileAudit, filesToolErr, filesErr := s.resolveRunCommandFiles(ctx, req.Arguments["files"])
 	if filesErr != nil {
 		return nil, filesErr
 	}
@@ -100,31 +101,25 @@ func (s *Server) handleRunCommand(ctx context.Context, req mcp.CallToolRequest) 
 
 	workingDir := req.GetString("working_dir", "")
 
-	auditPath := strings.Join(command, " ")
-	if len(envNames) > 0 {
-		auditPath += ", env=[" + strings.Join(envNames, ", ") + "]"
-	}
-	if len(fileAudit) > 0 {
-		auditPath += ", files=[" + strings.Join(fileAudit, ", ") + "]"
-	}
-
 	// knownSecrets is the union of resolved env and file values, used only to
 	// redact known secret content out of command output/errors — RunOptions.Env
 	// and RunOptions.Files stay separate so files are never set as env vars.
-	knownSecrets := make(map[string]string, len(resolvedEnv)+len(resolvedFiles))
+	knownSecrets := make(map[string]string, len(resolvedEnv)+len(fileKnownSecrets))
 	for k, v := range resolvedEnv {
 		knownSecrets[k] = v
 	}
-	for k, v := range resolvedFiles {
+	for k, v := range fileKnownSecrets {
 		knownSecrets[k] = v
 	}
+	auditPath := buildRunCommandAuditPath(command, envNames, fileAudit, knownSecrets)
 
 	result, err := secrets.RunCommand(secrets.RunOptions{
-		Command:    command,
-		Env:        resolvedEnv,
-		Files:      resolvedFiles,
-		WorkingDir: workingDir,
-		Timeout:    time.Duration(timeoutSeconds) * time.Second,
+		Command:      command,
+		Env:          resolvedEnv,
+		Files:        resolvedFiles,
+		WorkingDir:   workingDir,
+		Timeout:      time.Duration(timeoutSeconds) * time.Second,
+		KnownSecrets: knownSecrets,
 	})
 
 	if err != nil {
@@ -154,6 +149,17 @@ func (s *Server) handleRunCommand(ctx context.Context, req mcp.CallToolRequest) 
 	return mcp.NewToolResultText(string(resultJSON)), nil
 }
 
+func buildRunCommandAuditPath(command, envNames, fileAudit []string, knownSecrets map[string]string) string {
+	auditPath := masking.SanitizeWithKnownSecrets(strings.Join(command, " "), knownSecrets, "***")
+	if len(envNames) > 0 {
+		auditPath += ", env=[" + strings.Join(envNames, ", ") + "]"
+	}
+	if len(fileAudit) > 0 {
+		auditPath += ", files=[" + strings.Join(fileAudit, ", ") + "]"
+	}
+	return auditPath
+}
+
 // resolveRunCommandFiles parses and resolves handleRunCommand's "files"
 // argument into plaintext content ready for ephemeral materialization,
 // mirroring the "env" map's per-ref scope check and resolution. resolvedFiles
@@ -168,51 +174,54 @@ func (s *Server) handleRunCommand(ctx context.Context, req mcp.CallToolRequest) 
 // unresolvable ref) the caller should return as-is; err is a hard access
 // denial the caller should propagate as a JSON-RPC error, matching how the
 // rest of handleRunCommand distinguishes the two.
-func (s *Server) resolveRunCommandFiles(ctx context.Context, filesRaw any) (resolvedFiles map[string]string, fileAudit []string, toolErr *mcp.CallToolResult, err error) {
+func (s *Server) resolveRunCommandFiles(ctx context.Context, filesRaw any) (resolvedFiles, knownSecrets map[string]string, fileAudit []string, toolErr *mcp.CallToolResult, err error) {
 	resolvedFiles = make(map[string]string)
+	knownSecrets = make(map[string]string)
 	if filesRaw == nil {
-		return resolvedFiles, nil, nil, nil
+		return resolvedFiles, knownSecrets, nil, nil, nil
 	}
 
 	filesMap, ok := filesRaw.(map[string]any)
 	if !ok {
 		s.logAudit(ctx, "run_command", "<invalid>", false)
-		return nil, nil, mcp.NewToolResultError("argument \"files\" must be an object"), nil
+		return nil, nil, nil, mcp.NewToolResultError("argument \"files\" must be an object"), nil
 	}
 
 	for name, specRaw := range filesMap {
 		ref, encoding, specErr := parseFileSpec(specRaw)
 		if specErr != nil {
-			return nil, nil, mcp.NewToolResultError(fmt.Sprintf("files.%s: %v", name, specErr)), nil
+			return nil, nil, nil, mcp.NewToolResultError(fmt.Sprintf("files.%s: %v", name, specErr)), nil
 		}
 
 		path := extractPathFromRef(ref)
 		if !s.checkScope(path) {
 			s.logAudit(ctx, "run_command", path, false)
 			metrics.RecordAuthDenial("scope_denied", s.agent.Name)
-			return nil, nil, nil, fmt.Errorf("access denied: secret ref path %q outside allowed scope", path)
+			return nil, nil, nil, nil, fmt.Errorf("access denied: secret ref path %q outside allowed scope", path)
 		}
 
 		value, resolveErr := secrets.ResolveSecretRef(s.vault, ref)
 		if resolveErr != nil {
-			return nil, nil, mcp.NewToolResultError(fmt.Sprintf("cannot resolve secret ref %q: %v", ref, resolveErr)), nil
+			return nil, nil, nil, mcp.NewToolResultError(fmt.Sprintf("cannot resolve secret ref %q: %v", ref, resolveErr)), nil
 		}
+		knownSecrets[name+":source"] = value
 
 		content := value
 		if encoding == "base64" {
 			decoded, decErr := base64.StdEncoding.DecodeString(value)
 			if decErr != nil {
-				return nil, nil, mcp.NewToolResultError(fmt.Sprintf("files.%s: cannot base64-decode resolved value", name)), nil
+				return nil, nil, nil, mcp.NewToolResultError(fmt.Sprintf("files.%s: cannot base64-decode resolved value", name)), nil
 			}
 			content = string(decoded)
 		}
 
 		resolvedFiles[name] = content
+		knownSecrets[name+":content"] = content
 		fileAudit = append(fileAudit, name+":"+ref)
 	}
 	sort.Strings(fileAudit)
 
-	return resolvedFiles, fileAudit, nil, nil
+	return resolvedFiles, knownSecrets, fileAudit, nil, nil
 }
 
 // extractPathFromRef returns the entry path portion of a secret reference.

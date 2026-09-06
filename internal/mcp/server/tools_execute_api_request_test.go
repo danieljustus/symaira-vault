@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -221,6 +222,67 @@ allow_private: true
 	ct, _ := output["content_type"].(string)
 	if ct != "application/json" {
 		t.Errorf("content_type = %q, want application/json", ct)
+	}
+}
+
+func TestHandleExecuteAPIRequest_ErrorRedactsOverlappingSubstitutionValues(t *testing.T) {
+	const firstValue = "abcdef"
+	const secondValue = "defgh"
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("closed upstream must not receive the request")
+	}))
+	upstreamURL := upstream.URL
+	upstream.Close()
+
+	vaultDir, identity := mockVaultWithEntry(t, "errorapi", map[string]any{
+		"first":  firstValue,
+		"second": secondValue,
+	})
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+
+	writeTemplateOverride(t, vaultDir, "errorapi", fmt.Sprintf(`base_url: %s
+auth_type: none
+entry_ref: errorapi
+substitutions:
+  - placeholder: __ONE__
+    field: first
+    in: [path]
+  - placeholder: __TWO__
+    field: second
+    in: [path]
+allowed_endpoints:
+  - /*
+allowed_methods:
+  - GET
+allow_private: true
+`, upstreamURL))
+
+	result, err := srv.handleExecuteAPIRequest(context.Background(), mcp.CallToolRequest{
+		Arguments: map[string]any{
+			"template": "errorapi",
+			"endpoint": "/__ONE____TWO__",
+			"method":   "GET",
+		},
+	})
+	if err != nil {
+		t.Fatalf("handleExecuteAPIRequest() error = %v", err)
+	}
+	if !result.IsError {
+		t.Fatalf("handleExecuteAPIRequest() expected error result, got %s", result.Text)
+	}
+	for _, value := range []string{firstValue, secondValue, firstValue + secondValue} {
+		if strings.Contains(result.Text, value) {
+			t.Fatalf("error result leaks substituted credential %q: %q", value, result.Text)
+		}
+	}
+	if !strings.Contains(result.Text, "***") {
+		t.Fatalf("error result = %q, want redacted marker", result.Text)
 	}
 }
 
@@ -548,6 +610,51 @@ allow_private: true
 				}
 			}
 		})
+	}
+}
+
+func TestHandleExecuteAPIRequest_ResponseRedactsBasicWireValue(t *testing.T) {
+	const username = "api-user"
+	const password = "password with spaces"
+	wireValue := base64.StdEncoding.EncodeToString([]byte(username + ":" + password))
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("X-Credential-Echo", wireValue)
+		w.Header().Set("Content-Type", wireValue)
+		_, _ = io.WriteString(w, wireValue)
+	}))
+	defer upstream.Close()
+
+	vaultDir, identity := mockVaultWithEntry(t, "basic-response-test", map[string]any{
+		"username": username,
+		"password": password,
+	})
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+	writeTemplateOverride(t, vaultDir, "basic-response-test", fmt.Sprintf(`base_url: %s
+auth_type: basic
+entry_ref: basic-response-test
+allowed_endpoints:
+  - /*
+allowed_methods:
+  - GET
+allow_private: true
+`, upstream.URL))
+
+	result, err := srv.handleExecuteAPIRequest(context.Background(), mcp.CallToolRequest{Arguments: map[string]any{
+		"template": "basic-response-test",
+		"endpoint": "/test",
+		"method":   "GET",
+	}})
+	if err != nil || result.IsError {
+		t.Fatalf("handleExecuteAPIRequest() error = %v, result = %+v", err, result)
+	}
+	if strings.Contains(result.Text, wireValue) || !strings.Contains(result.Text, "***") {
+		t.Fatalf("response body was not wire-redacted: %q", result.Text)
 	}
 }
 
@@ -1071,5 +1178,99 @@ allow_private: true
 	}
 	if !strings.Contains(result.Text, "no value for placeholder") {
 		t.Errorf("result text = %q, want 'no value for placeholder'", result.Text)
+	}
+}
+
+func TestHandleExecuteAPIRequest_ResponseMasksKnownPatternPrefixAndSuffix(t *testing.T) {
+	secret := "fixture@example.invalid|nonsecret-tail"
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "prefix="+secret+" suffix")
+	}))
+	defer upstream.Close()
+
+	vaultDir, identity := mockVaultWithEntry(t, "prefixapi", map[string]any{"credential": secret})
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+	writeTemplateOverride(t, vaultDir, "prefixapi", fmt.Sprintf(`base_url: %s
+auth_type: bearer
+entry_ref: prefixapi
+allowed_endpoints:
+  - /*
+allowed_methods:
+  - GET
+allow_private: true
+`, upstream.URL))
+
+	result, err := srv.handleExecuteAPIRequest(context.Background(), mcp.CallToolRequest{Arguments: map[string]any{
+		"template": "prefixapi",
+		"endpoint": "/response",
+		"method":   "GET",
+	}})
+	if err != nil {
+		t.Fatalf("handleExecuteAPIRequest() error = %v", err)
+	}
+	var output map[string]any
+	if err := json.Unmarshal([]byte(result.Text), &output); err != nil {
+		t.Fatalf("parse result: %v", err)
+	}
+	body, _ := output["body"].(string)
+	if strings.Contains(body, "fixture@example.invalid") || strings.Contains(body, "nonsecret-tail") {
+		t.Fatalf("response leaks known secret or suffix: %q", body)
+	}
+	if !strings.Contains(body, "***") {
+		t.Fatalf("body = %q, want redaction marker", body)
+	}
+}
+
+func TestHandleExecuteAPIRequest_ErrorRedactsQueryAuthValueAndSuffix(t *testing.T) {
+	authValue := "fixture@example.invalid|query-auth-suffix"
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("closed upstream must not receive the request")
+	}))
+	closedURL := upstream.URL
+	upstream.Close()
+
+	vaultDir, identity := mockVaultWithEntry(t, "queryerror", map[string]any{
+		"param_name":  "access_token",
+		"param_value": authValue,
+	})
+	srv := newTestServerWithVault(t, config.AgentProfile{
+		Name:           "test",
+		AllowedPaths:   []string{"*"},
+		CanRunCommands: config.BoolPtr(true),
+		ApprovalMode:   config.StrPtr("none"),
+	}, "stdio", vaultDir)
+	srv.vault.Identity = identity
+	writeTemplateOverride(t, vaultDir, "queryerror", fmt.Sprintf(`base_url: %s
+auth_type: query_param
+entry_ref: queryerror
+allowed_endpoints:
+  - /*
+allowed_methods:
+  - GET
+allow_private: true
+`, closedURL))
+
+	result, err := srv.handleExecuteAPIRequest(context.Background(), mcp.CallToolRequest{Arguments: map[string]any{
+		"template": "queryerror",
+		"endpoint": "/ping",
+		"method":   "GET",
+	}})
+	if err != nil {
+		t.Fatalf("handleExecuteAPIRequest() error = %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("handleExecuteAPIRequest() expected request error result")
+	}
+	if strings.Contains(result.Text, authValue) || strings.Contains(result.Text, "query-auth-suffix") {
+		t.Fatalf("request error leaks query auth value or suffix: %q", result.Text)
+	}
+	if !strings.Contains(result.Text, "request failed") {
+		t.Fatalf("error text = %q, want request failed", result.Text)
 	}
 }

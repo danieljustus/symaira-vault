@@ -33,6 +33,14 @@ affected output is withheld entirely (replaced with a fixed
 scanner bug can cause you to see less output than expected; it cannot cause
 an unscanned value to slip through.
 
+Exact-value redaction also has explicit memory and CPU bounds: one operation
+retains at most 1,024 distinct values and 4,096 match spans, and performs at
+most 64 MiB of byte comparisons. Values are deduplicated before scanning, and
+exact values remain matchable even when they are only one byte long. If any
+bound would be exceeded, the entire output is replaced by the fixed redaction
+marker. In that fail-closed case the reported count is `1`, meaning one
+withheld output rather than a count of individual spans.
+
 ## What this explicitly does not protect against
 
 This is a **process-boundary output filter**, not a general secrets-leak
@@ -66,6 +74,17 @@ prevention system. In particular, it does **not**:
 By default, a detection is **redacted**: the matched text is replaced with
 `[REDACTED]` in place, and the rest of the output (with the match removed)
 is still delivered. This is the "detect and warn" behavior.
+
+For exact-value detections, configured values are stably de-duplicated, then
+all non-overlapping occurrences of each value are found in the original text.
+The resulting byte ranges are sorted and overlapping ranges are merged into one
+redacted span; merely adjacent ranges remain separate. A value contained in a
+longer match is therefore not counted separately, while a shorter value outside
+the longer match is still redacted. Replacement count is the number of merged
+spans, so partial overlaps are counted once regardless of caller order. For a
+value that overlaps with itself, occurrence discovery is left-to-right and
+resumes at the end of the selected occurrence (for example, `abab` in `ababab`
+selects the first `abab`); the same range merge rules then apply across values.
 
 An opt-in **strict mode** changes this for high-confidence detections only:
 when a **high-confidence** match (exact-value or pattern-match tier) fires

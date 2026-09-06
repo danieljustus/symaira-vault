@@ -37,6 +37,13 @@ const (
 	minEntropyBitsPerChar = 4.85
 )
 
+// MinTokenLen and MinEntropyBitsPerChar are the public contract values used
+// by the Go↔Rust redaction fixture generator.
+const (
+	MinTokenLen           = minTokenLen
+	MinEntropyBitsPerChar = minEntropyBitsPerChar
+)
+
 // entropyTokenChars is the set of characters treated as part of a
 // candidate token. It intentionally excludes common separators — space,
 // hyphen, colon, comma, and '/' — so that, e.g., a hyphen-delimited UUID

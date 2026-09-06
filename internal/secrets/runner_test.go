@@ -567,3 +567,26 @@ func TestRunCommand_RedactsCredentialShapedPatternFromOutput(t *testing.T) {
 		t.Fatalf("pattern-shaped secret leaked into Stdout: %q", result.Stdout)
 	}
 }
+
+func TestRunCommand_KnownSecretMasksPatternPrefixAndSuffix(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: relies on sh")
+	}
+	secret := "fixture@example.invalid|nonsecret-tail"
+	result, err := RunCommand(RunOptions{
+		Command: []string{"sh", "-c", `printf '%s' "$KNOWN"`},
+		Env: map[string]string{
+			"KNOWN": secret,
+		},
+		KnownSecrets: map[string]string{"KNOWN": secret},
+	})
+	if err != nil {
+		t.Fatalf("RunCommand() unexpected error: %v", err)
+	}
+	if strings.Contains(result.Stdout, "fixture@example.invalid") || strings.Contains(result.Stdout, "nonsecret-tail") {
+		t.Fatalf("known secret or suffix leaked: %q", result.Stdout)
+	}
+	if !strings.Contains(result.Stdout, "***") {
+		t.Fatalf("stdout = %q, want redaction marker", result.Stdout)
+	}
+}
