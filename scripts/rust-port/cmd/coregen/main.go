@@ -343,13 +343,13 @@ func buildSecretRefFixture(meta oracle) secretRefFixture {
 // ---------------------------------------------------------------------------
 
 type redactFixture struct {
-	SchemaVersion   int                `json:"schema_version"`
-	Oracle          oracle             `json:"oracle"`
-	Constants       redactConstants    `json:"constants"`
-	ExactValueCases []exactValueCase   `json:"exact_value_cases"`
-	EntropyCases    []entropyCase      `json:"entropy_cases"`
-	ScannerCases    []scannerCase      `json:"scanner_cases"`
-	TruthyCases     []truthyCase       `json:"truthy_cases"`
+	SchemaVersion   int              `json:"schema_version"`
+	Oracle          oracle           `json:"oracle"`
+	Constants       redactConstants  `json:"constants"`
+	ExactValueCases []exactValueCase `json:"exact_value_cases"`
+	EntropyCases    []entropyCase    `json:"entropy_cases"`
+	ScannerCases    []scannerCase    `json:"scanner_cases"`
+	TruthyCases     []truthyCase     `json:"truthy_cases"`
 }
 
 type redactConstants struct {
