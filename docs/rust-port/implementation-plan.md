@@ -95,7 +95,9 @@ Rust gates pass on macOS, Linux, and Windows.
 
 ### Task 3: Port pure core contracts
 
-**Objective:** Move deterministic logic without I/O into `symvault-core`.
+**Objective:** Move deterministic logic without I/O into `symvault-core`, with
+all evaluation clocks, request context, and mutable transition state supplied
+explicitly by the caller.
 
 **Files:**
 - Create/modify: `crates/symvault-core/src/{error,secret_ref,redact,policy,quota,password,totp,types}.rs`
@@ -104,14 +106,52 @@ Rust gates pass on macOS, Linux, and Windows.
 
 **Steps:**
 1. Freeze exit taxonomy, secret-reference parsing, redaction, policy/tier rules,
-   quotas, type inference, password policies, and fixed-clock TOTP vectors.
-2. Add failing Rust fixture/property tests per module.
-3. Implement explicit enums/newtypes; use `secrecy`/`zeroize` for secret-bearing values.
-4. Fuzz parsers and path/reference normalization.
-5. Run core Rust gates and focused Go oracle tests.
+   pure quota/rate-limit transitions, type inference, password policies, and
+   fixed-clock TOTP vectors in the contract rows, including `POLICY-001` and
+   `QUOTA-001`. For `POLICY-001`, exercise only pure `Engine.Evaluate` branches
+   with an explicit `EvalContext`; exclude its `RateLimiter` and `AuditLogFunc`
+   side effects. Keep YAML field-presence/config override handling in `CFG-002`
+   under `RUST-007`, and keep approval/MCP filtering and call-time enforcement
+   for `RUST-010` through the relevant MCP rows. Keep the persisted quota adapter
+   and registry wrapper cases in the later `QUOTA-002` row owned by `RUST-007`.
+2. Before generating any `QUOTA-001` fixture or porting its Rust code, add the
+   narrow production-compatible Go oracle seam required by the row:
+   `internal/policy.TransitionRateLimit(state RateLimitState, limits RateLimitLimits,
+   now time.Time, event RateLimitEvent) -> (nextState RateLimitState,
+   result RateLimitResult)`. Keep it pure over a language-neutral in-memory
+   state carrying `tokens`, `capacity`, `refillRate`, `lastRefill`, `dailyCount`,
+   `dailyWindowStart`, and `maxPerDay`; the existing `AgentRateLimiter` wrapper
+   supplies `time.Now()` and locking without widening the pure seam. The helper
+   covers only explicit `set_limits` and `allow` events and returns the next
+   bucket state plus the allow/result value.
+3. Make the `QUOTA-001` fixture generator call that real production helper with
+   explicit timestamps and events. It must not duplicate transition logic or
+   mutate private limiter fields. Keep `.quotas.json` persistence, OS locking,
+   and the `AgentRateLimiter` registry wrapper fixture layer out of Task 3;
+   those cases belong to `QUOTA-002` under `RUST-007`.
+4. Keep the pure boundary explicit: `POLICY-001` uses `Engine.Evaluate` only
+   for pure branches with a complete `EvalContext` supplied explicitly; its
+   `RateLimiter` and `AuditLogFunc` side effects are excluded. Tier evaluation
+   applies deterministic presets with exact values/copy behavior; YAML
+   field-presence/config override belongs to `CFG-002`/`RUST-007`; rate-limit
+   code advances an in-memory state machine from an explicit clock and state in
+   `QUOTA-001`, while persistence and registry behavior remain in `QUOTA-002`.
+5. Keep these integrations out of Task 3: policy YAML/filesystem loading,
+   runtime context plus git/env discovery, approval queues, MCP tool filtering/
+   call-time enforcement, and policy audit/enforcement wiring. YAML precedence
+   is implemented at `RUST-007`; approval and MCP enforcement are implemented
+   later in `RUST-010` through `MCP-002`/`MCP-003`; the audit chain itself is
+   covered by `RUST-006`. Platform adapters are implemented at their later
+   boundary.
+6. Add failing Rust fixture/property tests per module, using only generated
+   JSON vectors and isolated deterministic inputs.
+7. Implement explicit enums/newtypes; use `secrecy`/`zeroize` for secret-bearing values.
+8. Fuzz parsers and path/reference normalization.
+9. Run core Rust gates and focused Go oracle tests.
 
-**Expected:** CLI-independent core contracts pass without Tokio, clap, HTTP,
-keyring, git, or TUI dependencies.
+**Expected:** `symvault-core` passes the `RUST-003` contract rows without Tokio,
+clap, HTTP, filesystem, keyring, git, approval, MCP, or TUI dependencies;
+subsequent adapter work consumes the same pure contracts without widening them.
 
 ### Task 4: Prove age and KDF interoperability
 
@@ -173,23 +213,30 @@ and vice versa.
 
 ### Task 7: Port configuration and platform session adapters
 
-**Objective:** Preserve unlock/session behavior and OS integrations behind injected traits.
+**Objective:** Preserve unlock/session behavior, persisted quotas, and OS integrations behind injected traits.
 
 **Files:**
 - Extend: `symvault-core` config types
 - Create: `crates/symvault-platform/`
-- Create: `testdata/port/config/`, `testdata/port/session/`
+- Create: `testdata/port/config/`, `testdata/port/session/`, `testdata/port/quotas/`
 
 **Steps:**
 1. Freeze YAML defaults/precedence/legacy paths and exact writer behavior.
 2. Port config parsing/validation without UI dependencies.
 3. Define full side-effect traits for keyring, clock, Touch ID, clipboard,
-   autotype, secure UI, notifications, and daemon lifecycle.
+   autotype, secure UI, notifications, daemon lifecycle, and quota storage.
 4. Port memory/injected implementations first; then explicit native backends.
-5. Verify service/account names, session idle/max TTL, non-refreshing probes,
+5. After `RUST-005` storage foundations, port the `QUOTA-002` filesystem-backed
+   adapter: `.quotas.json` schema and 0700/0600 modes, `New`/`Increment`/`Check`/
+   `Reset`/`Close`, closed/malformed/I/O errors, durable writes, Unix `flock`,
+   Windows `LockFileEx`, and same-process/cross-process concurrency. Add the
+   separate public-wrapper fixtures for `AgentRateLimiter` unknown-agent,
+   `HasLimits`, per-agent isolation, and `Cleanup`; do not duplicate the
+   `QUOTA-001` transition helper.
+6. Verify service/account names, session idle/max TTL, non-refreshing probes,
    unavailable/cancel behavior, and no secret exposure.
 
-**Expected:** native smoke tests pass without weakening headless behavior.
+**Expected:** native smoke tests and the `QUOTA-002` filesystem/wrapper fixtures pass without weakening headless behavior.
 
 ### Task 8: Port git, reconciliation, import/export, and intake
 
@@ -242,7 +289,10 @@ and vice versa.
 2. Spike `rmcp` 3.2.0 against raw line/framed behavior; keep it only behind a
    compatibility adapter and only if all required hooks exist.
 3. Port initialize/list/call, notifications, cancellation, bounds, aliases,
-   scope enforcement, approval, redaction, and structured content.
+   scope enforcement, approval queues, policy-driven MCP tool filtering and
+   call-time enforcement, redaction, and structured content. This is the
+   `POLICY-001` integration owner for the `MCP-002`/`MCP-003` rows; include the
+   policy audit/enforcement wiring here rather than in the pure core slice.
 4. Add raw-byte differential cases, property tests, and fuzzing.
 5. Assert stderr-only diagnostics and scan all outputs for generated fixture secrets.
 

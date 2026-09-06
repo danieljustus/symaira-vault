@@ -66,12 +66,12 @@ architecture crates.
 
 | Crate | Responsibility | Initial source seams |
 |---|---|---|
-| `symvault-core` | Domain types, error taxonomy, policy, quotas, redaction, secret references, deterministic generators | `internal/errors`, `policy`, `quotas`, `redact`, `secrets`, pure parts of `vault` |
+| `symvault-core` | Domain types, error taxonomy, pure policy/tier evaluation, in-memory quota/rate-limit transitions, redaction, secret references, deterministic generators | `internal/errors`, pure parts of `internal/policy`, `internal/config/presets.go`, `internal/policy/ratelimit.go`, `internal/redact`, `internal/template.ParseRef`, `internal/vault/taint`, and reference-facing types in `internal/secrets`; not policy loading/context discovery, filesystem-backed `internal/quotas`, template filesystem loading/secret resolution/command execution, approval queues, MCP tool filtering/call-time enforcement, or platform adapters |
 | `symvault-crypto` | age interoperability, X25519 identities, scrypt/argon2id envelope, TOTP, zeroization | `internal/crypto`, crypto parts of `session` and `mobilebind` |
 | `symvault-store` | Entry layout, manifests, recipients, encrypted index, atomic filesystem, audit chain | `internal/vault`, `audit`, `fsutil` |
 | `symvault-sync` | git repository adapter, remotes, reconciliation, backup/restore, import/export/intake | `internal/git`, `vault/sync`, `importer`, `exporter`, `intake` |
-| `symvault-platform` | keyrings, Touch ID, clipboard, autotype, notifications, secure UI, daemon | `session`, `clipboard`, `autotype`, `secureui`, `notify`, `daemon` |
-| `symvault-mcp` | protocol models, registry, auth, stdio, HTTP/SSE, OAuth, approval, broker adapters | `internal/mcp`, `approval`, `authguard`, `broker`, `dynamicsecret` |
+| `symvault-platform` | keyrings, Touch ID, clipboard, autotype, notifications, secure UI, daemon, filesystem-backed quota adapter | `session`, `clipboard`, `autotype`, `secureui`, `notify`, `daemon`, `internal/quotas` |
+| `symvault-mcp` | protocol models, registry, auth, stdio, HTTP/SSE, OAuth, approval queues, MCP tool filtering/call-time enforcement, broker adapters | `internal/mcp`, `approval`, `authguard`, `broker`, `dynamicsecret` |
 | `symvault-cli` | clap command tree, output rendering, TUI composition, process exit mapping | `cmd`, `internal/cli`, `internal/ui`, binary entrypoint |
 | `symvault-ffi` | narrow JSON/string/byte API for Swift/iOS and XCFramework packaging | `pkg/mobilebind`, `internal/mobilebind` |
 
@@ -128,6 +128,45 @@ oracle commit. Real vaults, host keychains, and developer configuration are
 never read. Random ciphertext is compared by cross-decryption and parsed age
 semantics, not byte equality; deterministic headers, schemas, manifests, JSON,
 and command output use byte equality unless the contract matrix says otherwise.
+
+The policy mapping is intentionally narrower than the current Go `Engine` surface:
+`POLICY-001` uses `Engine.Evaluate` only for pure branches with a complete,
+explicit `EvalContext`. Its `RateLimiter` and `AuditLogFunc` callbacks must be
+excluded from that slice because they introduce side effects. YAML
+field-presence/config override handling remains `CFG-002` under `RUST-007`;
+approval queues and MCP tool filtering/call-time enforcement belong to the MCP
+work in `RUST-010`, through the relevant `MCP-002`/`MCP-003` rows. Rate-limit
+transitions are split between pure `QUOTA-001` and persistent/registry
+`QUOTA-002` under `RUST-007`; audit/enforcement wiring is deferred to the later
+MCP integration while the audit-chain contract itself remains with `RUST-006`.
+
+The filesystem-backed quota counter belongs to `symvault-platform`, not
+`symvault-core`, because `.quotas.json` paths, file modes, durable writes, and
+Unix/Windows process locking are side effects of the host platform. `RUST-007`
+already depends on `RUST-005` storage foundations, so it is the later owner of
+`QUOTA-002` after those foundations are available. Its fixture layer also owns
+the `AgentRateLimiter` registry wrapper cases; `QUOTA-001` remains only the pure
+single-bucket transition seam.
+
+### Deterministic oracle seams
+
+Before generating or porting any `QUOTA-001` fixture, add a narrow,
+production-compatible seam in the Go oracle. The intended shape is a pure
+`internal/policy.TransitionRateLimit(state RateLimitState, limits RateLimitLimits,
+now time.Time, event RateLimitEvent) -> (nextState RateLimitState,
+result RateLimitResult)` helper: it accepts a language-neutral in-memory state,
+explicit limits, an explicit timestamp, and an event such as `set_limits` or
+`allow`, then returns the next state and the allow/result value. The state must
+explicitly carry `tokens`, `capacity`, `refillRate`, `lastRefill`, `dailyCount`,
+`dailyWindowStart`, and `maxPerDay`, rather than hiding them behind `time.Now`.
+
+`AgentRateLimiter` keeps its existing public methods and runtime behavior, but
+those registry semantics are not part of `QUOTA-001`. The later `QUOTA-002`
+fixture layer covers unknown-agent behavior, `HasLimits`, per-agent isolation,
+and `Cleanup` through the public wrapper methods. The `QUOTA-001` generator
+must call the real pure helper with explicit timestamps and events; it must not
+copy transition logic or mutate private limiter fields. Filesystem-backed quota
+persistence and locking are specified only by `QUOTA-002`.
 
 ## 8. Security gates
 

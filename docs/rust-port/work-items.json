@@ -28,8 +28,8 @@
       "title": "Port pure core contracts",
       "status": "in_progress",
       "depends_on": ["RUST-002"],
-      "contract_rows": ["CLI-005", "CRYPTO-005"],
-      "acceptance": ["cargo nextest run -p symvault-core", "cargo +nightly miri test -p symvault-core"]
+      "contract_rows": ["CLI-005", "CRYPTO-005", "POLICY-001", "QUOTA-001"],
+      "acceptance": ["POLICY-001 Engine.Evaluate coverage is limited to pure branches with an explicit EvalContext; RateLimiter and AuditLogFunc side effects are excluded", "QUOTA-001 production-compatible Go transition seam before fixture generation or Rust porting", "QUOTA-001 fixture generator calls internal/policy.TransitionRateLimit with explicit timestamps and events; no copied logic or private-field mutation", "cargo nextest run -p symvault-core", "cargo +nightly miri test -p symvault-core"]
     },
     {
       "id": "RUST-004",
@@ -60,8 +60,8 @@
       "title": "Port config, session, and native platform adapters",
       "status": "blocked",
       "depends_on": ["RUST-005"],
-      "contract_rows": ["CFG-001", "CFG-002", "CFG-003", "SESSION-001", "SESSION-002", "SESSION-003", "PLATFORM-001", "PLATFORM-002"],
-      "acceptance": ["make config-session-differential", "cargo nextest run -p symvault-platform"]
+      "contract_rows": ["CFG-001", "CFG-002", "CFG-003", "SESSION-001", "SESSION-002", "SESSION-003", "PLATFORM-001", "PLATFORM-002", "QUOTA-002"],
+      "acceptance": ["make config-session-differential", "CFG-002 YAML field-presence/config override handling remains in RUST-007", "QUOTA-002 .quotas.json filesystem adapter and public AgentRateLimiter wrapper fixtures after RUST-005 storage foundations", "Unix flock and Windows LockFileEx concurrency/error evidence", "cargo nextest run -p symvault-platform"]
     },
     {
       "id": "RUST-008",
@@ -85,7 +85,7 @@
       "status": "blocked",
       "depends_on": ["RUST-006", "RUST-007", "RUST-008"],
       "contract_rows": ["MCP-001", "MCP-002", "MCP-003", "MCP-004"],
-      "acceptance": ["make mcp-differential", "cargo nextest run -p symvault-mcp", "cargo +nightly fuzz run mcp_frame"]
+      "acceptance": ["make mcp-differential", "POLICY-001 approval queues and MCP tool filtering/call-time enforcement integrate through MCP-002/MCP-003, including policy audit/enforcement wiring", "cargo nextest run -p symvault-mcp", "cargo +nightly fuzz run mcp_frame"]
     },
     {
       "id": "RUST-011",

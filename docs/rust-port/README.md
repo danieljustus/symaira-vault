@@ -69,8 +69,11 @@ passes. The measured Go baseline is in
   coverage, audit, deny, and native macOS/Windows CI gates.
 - `RUST-003` is in progress: error taxonomy, secret-reference parsing, and
   secret redaction sub-slices are green against Go oracle fixtures, Miri,
-  and property tests. Policy, quotas, password/TOTP, and type inference
-  remain in this work item before closing RUST-003.
+  and property tests. Policy and pure quota/rate-limit bucket transitions
+  (`QUOTA-001`), password/TOTP, and type inference remain in this work item
+  before closing RUST-003. Only the pure bucket transitions are in its quota
+  scope; persistent `.quotas.json` storage, registry behavior, and process
+  locking belong to `QUOTA-002` under `RUST-007`.
 
 The tiny release-built version slice measured 577,104 bytes, 2,277,376 bytes
 maximum RSS in one sample, and 2.576 ms startup p95 over 120 runs after 20
