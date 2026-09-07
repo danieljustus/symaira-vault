@@ -116,7 +116,7 @@ func prepareReencryptCandidate(entriesPath, path string, walked os.FileInfo) (*r
 		raw:      data,
 		mode:     openedInfo.Mode().Perm(),
 		mtime:    openedInfo.ModTime(),
-		platform: &unixReencryptCandidate{parent: parent, parentInfo: parentInfo, parentPath: parentPath, name: name, dev: uint64(stat.Dev), ino: stat.Ino},
+		platform: &unixReencryptCandidate{parent: parent, parentInfo: parentInfo, parentPath: parentPath, name: name, dev: uint64(stat.Dev), ino: stat.Ino}, //nolint:unconvert // Stat_t.Dev is signed on Darwin.
 	}, nil
 }
 
@@ -247,7 +247,7 @@ func stageReencryptFile(candidate *reencryptCandidate, ciphertext []byte) (*reen
 	}
 	item := &reencryptStaged{
 		candidate: candidate,
-		platform:  &unixReencryptStaged{parent: c.parent, tempName: tempName, stagedDev: uint64(stat.Dev), stagedIno: stat.Ino},
+		platform:  &unixReencryptStaged{parent: c.parent, tempName: tempName, stagedDev: uint64(stat.Dev), stagedIno: stat.Ino}, //nolint:unconvert // Stat_t.Dev is signed on Darwin.
 	}
 	if err := recordReencryptStage(item, ciphertext); err != nil {
 		_ = unix.Unlinkat(int(c.parent.Fd()), tempName, 0)
@@ -261,7 +261,7 @@ func statAtNoFollow(parent *os.File, name string) (dev, ino uint64, mode uint32,
 	if err := unix.Fstatat(int(parent.Fd()), name, &stat, unix.AT_SYMLINK_NOFOLLOW); err != nil {
 		return 0, 0, 0, err
 	}
-	return uint64(stat.Dev), stat.Ino, uint32(stat.Mode), nil
+	return uint64(stat.Dev), stat.Ino, uint32(stat.Mode), nil //nolint:unconvert // Stat_t.Dev is signed on Darwin.
 }
 
 func verifyReencryptParent(c *unixReencryptCandidate) error {
