@@ -202,7 +202,7 @@ func verifyReencryptDigest(path, want string) (bool, error) {
 	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
 		return false, fmt.Errorf("re-encryption artifact target is not a regular file")
 	}
-	data, err := os.ReadFile(path)
+	data, err := readReencryptArtifactNoFollow(path)
 	if err != nil {
 		return false, err
 	}

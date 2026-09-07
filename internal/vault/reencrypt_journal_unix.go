@@ -4,6 +4,7 @@ package vault
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -11,7 +12,7 @@ import (
 )
 
 func syncReencryptDirectory(path string) error {
-	file, err := os.Open(path)
+	file, err := os.Open(path) // #nosec G304 -- validated internal vault directory used only for fsync.
 	if err != nil {
 		return err
 	}
@@ -20,6 +21,32 @@ func syncReencryptDirectory(path string) error {
 		return err
 	}
 	return file.Close()
+}
+
+func readReencryptArtifactNoFollow(path string) ([]byte, error) {
+	fd, err := unix.Open(path, unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return nil, err
+	}
+	file := os.NewFile(uintptr(fd), path)
+	info, err := file.Stat()
+	if err != nil {
+		_ = file.Close()
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		_ = file.Close()
+		return nil, fmt.Errorf("re-encryption artifact target is not a regular file")
+	}
+	data, readErr := io.ReadAll(file)
+	closeErr := file.Close()
+	if readErr != nil {
+		return nil, readErr
+	}
+	if closeErr != nil {
+		return nil, closeErr
+	}
+	return data, nil
 }
 
 func reencryptArtifactPaths(item *reencryptStaged) (string, string) {

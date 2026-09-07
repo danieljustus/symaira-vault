@@ -21,7 +21,7 @@ type unixReencryptCandidate struct {
 	parentInfo os.FileInfo
 	parentPath string
 	name       string
-	dev        uint64
+	dev        string
 	ino        uint64
 }
 
@@ -29,7 +29,7 @@ type unixReencryptStaged struct {
 	parent     *os.File
 	tempName   string
 	backupName string
-	stagedDev  uint64
+	stagedDev  string
 	stagedIno  uint64
 }
 
@@ -116,7 +116,7 @@ func prepareReencryptCandidate(entriesPath, path string, walked os.FileInfo) (*r
 		raw:      data,
 		mode:     openedInfo.Mode().Perm(),
 		mtime:    openedInfo.ModTime(),
-		platform: &unixReencryptCandidate{parent: parent, parentInfo: parentInfo, parentPath: parentPath, name: name, dev: uint64(stat.Dev), ino: stat.Ino}, //nolint:unconvert // Stat_t.Dev is signed on Darwin.
+		platform: &unixReencryptCandidate{parent: parent, parentInfo: parentInfo, parentPath: parentPath, name: name, dev: fmt.Sprint(stat.Dev), ino: stat.Ino},
 	}, nil
 }
 
@@ -247,7 +247,7 @@ func stageReencryptFile(candidate *reencryptCandidate, ciphertext []byte) (*reen
 	}
 	item := &reencryptStaged{
 		candidate: candidate,
-		platform:  &unixReencryptStaged{parent: c.parent, tempName: tempName, stagedDev: uint64(stat.Dev), stagedIno: stat.Ino}, //nolint:unconvert // Stat_t.Dev is signed on Darwin.
+		platform:  &unixReencryptStaged{parent: c.parent, tempName: tempName, stagedDev: fmt.Sprint(stat.Dev), stagedIno: stat.Ino},
 	}
 	if err := recordReencryptStage(item, ciphertext); err != nil {
 		_ = unix.Unlinkat(int(c.parent.Fd()), tempName, 0)
@@ -256,12 +256,12 @@ func stageReencryptFile(candidate *reencryptCandidate, ciphertext []byte) (*reen
 	return item, nil
 }
 
-func statAtNoFollow(parent *os.File, name string) (dev, ino uint64, mode uint32, err error) {
+func statAtNoFollow(parent *os.File, name string) (dev string, ino uint64, mode uint32, err error) {
 	var stat unix.Stat_t
 	if err := unix.Fstatat(int(parent.Fd()), name, &stat, unix.AT_SYMLINK_NOFOLLOW); err != nil {
-		return 0, 0, 0, err
+		return "", 0, 0, err
 	}
-	return uint64(stat.Dev), stat.Ino, uint32(stat.Mode), nil //nolint:unconvert // Stat_t.Dev is signed on Darwin.
+	return fmt.Sprint(stat.Dev), stat.Ino, uint32(stat.Mode), nil //nolint:unconvert // Stat_t.Mode differs across Unix targets.
 }
 
 func verifyReencryptParent(c *unixReencryptCandidate) error {

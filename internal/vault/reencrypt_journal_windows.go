@@ -4,6 +4,7 @@ package vault
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 )
@@ -13,6 +14,22 @@ import (
 // journal remains the recovery authority if Windows loses power between those
 // operations.
 func syncReencryptDirectory(_ string) error { return nil }
+
+func readReencryptArtifactNoFollow(path string) ([]byte, error) {
+	file, _, err := openWindowsRegular(path)
+	if err != nil {
+		return nil, err
+	}
+	data, readErr := io.ReadAll(file)
+	closeErr := file.Close()
+	if readErr != nil {
+		return nil, readErr
+	}
+	if closeErr != nil {
+		return nil, closeErr
+	}
+	return data, nil
+}
 
 func reencryptArtifactPaths(item *reencryptStaged) (string, string) {
 	staged, ok := item.platform.(*windowsReencryptStaged)
