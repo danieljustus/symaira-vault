@@ -3,13 +3,10 @@ package policy
 import (
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"time"
 )
-
-var pathMatch = path.Match
 
 // Engine evaluates policies against evaluation contexts.
 type Engine struct {
@@ -151,62 +148,54 @@ func matchString(pattern, value string) bool {
 }
 
 //nolint:gocyclo // complexity inherent to glob-style path matching logic
-func matchPath(pattern, path string) bool {
-	if pattern == "" {
-		return true
-	}
-	if pattern == "*" {
+func matchPath(pattern, value string) bool {
+	if pattern == "" || pattern == "*" {
 		return true
 	}
 
-	cleanPath := filepath.ToSlash(filepath.Clean(path))
+	// filepath.Clean and filepath.Match deliberately use the current target's
+	// separator. In particular, converting backslashes globally would change a
+	// literal/escape on Unix and a separator on Windows.
+	if strings.HasPrefix(pattern, "~/") {
+		home, err := os.UserHomeDir()
+		if err == nil && home != "" {
+			pattern = filepath.Join(home, pattern[2:])
+		}
+	}
+	cleanPath := filepath.Clean(value)
 	if cleanPath == "." {
 		cleanPath = ""
 	}
 
-	// Exact match
 	if pattern == cleanPath {
 		return true
 	}
-
-	matched, err := pathMatch(pattern, cleanPath)
+	matched, err := filepath.Match(pattern, cleanPath)
 	if err == nil && matched {
 		return true
 	}
 
-	// Prefix match for directory patterns ending with "/" or "/**" (recursive)
-	if strings.HasSuffix(pattern, "/**") {
-		prefix := strings.TrimSuffix(pattern, "/**")
-		prefix = strings.TrimSuffix(prefix, "/")
-		if prefix != "" && (cleanPath == prefix || strings.HasPrefix(cleanPath, prefix+"/")) {
+	separator := string(filepath.Separator)
+	// The recursive directory suffix is a policy extension over filepath.Match:
+	// it means this directory and every descendant.
+	if strings.HasSuffix(pattern, separator+"**") {
+		prefix := strings.TrimSuffix(pattern, separator+"**")
+		prefix = strings.TrimSuffix(prefix, separator)
+		if prefix != "" && (cleanPath == prefix || strings.HasPrefix(cleanPath, prefix+separator)) {
 			return true
 		}
 	}
-
-	// Prefix match for plain directory patterns ending with "/"
-	if strings.HasSuffix(pattern, "/") {
-		prefix := strings.TrimSuffix(pattern, "/")
-		if prefix != "" && (cleanPath == prefix || strings.HasPrefix(cleanPath, prefix+"/")) {
+	if strings.HasSuffix(pattern, separator) {
+		prefix := strings.TrimSuffix(pattern, separator)
+		if prefix != "" && (cleanPath == prefix || strings.HasPrefix(cleanPath, prefix+separator)) {
 			return true
 		}
 	}
-
-	// For plain paths without wildcards, also match as directory prefix
-	if !strings.Contains(pattern, "*") {
-		if cleanPath == pattern || strings.HasPrefix(cleanPath, pattern+"/") {
+	if !strings.ContainsAny(pattern, "*?[") {
+		if cleanPath == pattern || strings.HasPrefix(cleanPath, pattern+separator) {
 			return true
 		}
 	}
-
-	// Expand home directory if needed
-	if strings.HasPrefix(pattern, "~/") {
-		home, err := os.UserHomeDir()
-		if err == nil && home != "" {
-			expandedPattern := filepath.ToSlash(filepath.Join(home, pattern[2:]))
-			return matchPath(expandedPattern, cleanPath)
-		}
-	}
-
 	return false
 }
 

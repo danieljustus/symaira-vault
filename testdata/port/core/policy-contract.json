@@ -1,0 +1,1026 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "caadd5e",
+    "release": "v0.22.1",
+    "source_files": [
+      "internal/config/config.go",
+      "internal/config/presets.go",
+      "internal/policy/engine.go",
+      "internal/policy/types.go"
+    ],
+    "source_digest": "c285d8da0d20535e465fb6922e4ce87dabe581133c642d1a1a66e2dc37f4858b",
+    "generator_digest": "c7598c412f5e0cddbb485c832a405cf72d3f1ffe50c541fc4cfb37abe68fc478"
+  },
+  "validation_cases": [
+    {
+      "name": "valid_minimal",
+      "policy": {
+        "version": "1.0",
+        "rules": [
+          {
+            "name": "allow reads",
+            "conditions": {
+              "action": "read"
+            },
+            "action": "allow"
+          }
+        ]
+      },
+      "valid": true
+    },
+    {
+      "name": "missing_version",
+      "policy": {
+        "version": "",
+        "rules": [
+          {
+            "name": "allow reads",
+            "conditions": {
+              "action": "read"
+            },
+            "action": "allow"
+          }
+        ]
+      },
+      "valid": false,
+      "error": "policy version is required"
+    },
+    {
+      "name": "no_rules",
+      "policy": {
+        "version": "1.0",
+        "rules": []
+      },
+      "valid": false,
+      "error": "policy must contain at least one rule"
+    },
+    {
+      "name": "missing_rule_name",
+      "policy": {
+        "version": "1.0",
+        "rules": [
+          {
+            "name": "",
+            "conditions": {},
+            "action": "allow"
+          }
+        ]
+      },
+      "valid": false,
+      "error": "rule at index 0: name is required"
+    },
+    {
+      "name": "invalid_action",
+      "policy": {
+        "version": "1.0",
+        "rules": [
+          {
+            "name": "bad action",
+            "conditions": {},
+            "action": "invalid"
+          }
+        ]
+      },
+      "valid": false,
+      "error": "rule \"bad action\": invalid action \"invalid\" (valid: allow, deny, prompt, require_biometry)"
+    },
+    {
+      "name": "duplicate_rule_names",
+      "policy": {
+        "version": "1.0",
+        "rules": [
+          {
+            "name": "same",
+            "conditions": {},
+            "action": "allow"
+          },
+          {
+            "name": "same",
+            "conditions": {},
+            "action": "deny"
+          }
+        ]
+      },
+      "valid": false,
+      "error": "rule \"same\" at index 1: duplicate name (first seen at index 0)"
+    },
+    {
+      "name": "invalid_time",
+      "policy": {
+        "version": "1.0",
+        "rules": [
+          {
+            "name": "bad time",
+            "conditions": {
+              "time_of_day": {
+                "start": "25:00",
+                "end": "17:00"
+              }
+            },
+            "action": "allow"
+          }
+        ]
+      },
+      "valid": false,
+      "error": "rule \"bad time\": invalid time_of_day: invalid start time \"25:00\": parsing time \"25:00\": hour out of range"
+    },
+    {
+      "name": "invalid_action_type",
+      "policy": {
+        "version": "1.0",
+        "rules": [
+          {
+            "name": "bad type",
+            "conditions": {
+              "action": "execute"
+            },
+            "action": "allow"
+          }
+        ]
+      },
+      "valid": false,
+      "error": "rule \"bad type\": invalid action type \"execute\""
+    }
+  ],
+  "time_range_cases": [
+    {
+      "name": "normal_inside",
+      "range": {
+        "start": "09:00",
+        "end": "17:00"
+      },
+      "now": "2024-01-01T12:00:00Z",
+      "valid": true,
+      "matches": true
+    },
+    {
+      "name": "normal_at_start",
+      "range": {
+        "start": "09:00",
+        "end": "17:00"
+      },
+      "now": "2024-01-01T09:00:00Z",
+      "valid": true,
+      "matches": true
+    },
+    {
+      "name": "normal_at_end",
+      "range": {
+        "start": "09:00",
+        "end": "17:00"
+      },
+      "now": "2024-01-01T17:00:00Z",
+      "valid": true,
+      "matches": false
+    },
+    {
+      "name": "normal_before",
+      "range": {
+        "start": "09:00",
+        "end": "17:00"
+      },
+      "now": "2024-01-01T08:59:59Z",
+      "valid": true,
+      "matches": false
+    },
+    {
+      "name": "wrap_evening",
+      "range": {
+        "start": "22:00",
+        "end": "06:00"
+      },
+      "now": "2024-01-01T23:00:00Z",
+      "valid": true,
+      "matches": true
+    },
+    {
+      "name": "wrap_morning",
+      "range": {
+        "start": "22:00",
+        "end": "06:00"
+      },
+      "now": "2024-01-01T05:59:59Z",
+      "valid": true,
+      "matches": true
+    },
+    {
+      "name": "wrap_at_end",
+      "range": {
+        "start": "22:00",
+        "end": "06:00"
+      },
+      "now": "2024-01-01T06:00:00Z",
+      "valid": true,
+      "matches": false
+    },
+    {
+      "name": "equal_range",
+      "range": {
+        "start": "12:00",
+        "end": "12:00"
+      },
+      "now": "2024-01-01T03:00:00Z",
+      "valid": true,
+      "matches": true
+    },
+    {
+      "name": "invalid_start",
+      "range": {
+        "start": "25:00",
+        "end": "17:00"
+      },
+      "now": "2024-01-01T12:00:00Z",
+      "valid": false,
+      "matches": false
+    },
+    {
+      "name": "invalid_end",
+      "range": {
+        "start": "09:00",
+        "end": "invalid"
+      },
+      "now": "2024-01-01T12:00:00Z",
+      "valid": false,
+      "matches": false
+    }
+  ],
+  "evaluation_policy": {
+    "version": "1.0",
+    "rules": [
+      {
+        "name": "allow openclaw dev",
+        "priority": 100,
+        "conditions": {
+          "agent_id": "openclaw",
+          "tags": [
+            "dev"
+          ]
+        },
+        "action": "allow"
+      },
+      {
+        "name": "allow project child",
+        "priority": 95,
+        "conditions": {
+          "path": "/fixture/home/dev/*"
+        },
+        "action": "allow"
+      },
+      {
+        "name": "allow project recursive",
+        "priority": 94,
+        "conditions": {
+          "path": "/fixture/home/project/**"
+        },
+        "action": "allow"
+      },
+      {
+        "name": "allow working tree",
+        "priority": 93,
+        "conditions": {
+          "working_dir": "/fixture/repo"
+        },
+        "action": "allow"
+      },
+      {
+        "name": "allow ci read",
+        "priority": 92,
+        "conditions": {
+          "env_vars": {
+            "CI": "true"
+          },
+          "action": "read"
+        },
+        "action": "allow"
+      },
+      {
+        "name": "allow safe tool",
+        "priority": 91,
+        "conditions": {
+          "allowed_tools": [
+            "list_entries",
+            "get_entry"
+          ]
+        },
+        "action": "allow"
+      },
+      {
+        "name": "biometry at night",
+        "priority": 80,
+        "conditions": {
+          "time_of_day": {
+            "start": "22:00",
+            "end": "06:00"
+          }
+        },
+        "action": "require_biometry"
+      },
+      {
+        "name": "prompt production",
+        "priority": 70,
+        "conditions": {
+          "tags": [
+            "prod"
+          ]
+        },
+        "action": "prompt"
+      },
+      {
+        "name": "allow limited secrets",
+        "priority": 60,
+        "conditions": {
+          "agent_id": "limited",
+          "max_secrets": 3
+        },
+        "action": "allow"
+      },
+      {
+        "name": "deny all",
+        "conditions": {
+          "agent_id": "*"
+        },
+        "action": "deny"
+      }
+    ]
+  },
+  "evaluation_cases": [
+    {
+      "name": "agent_tags_match",
+      "rule_name": "allow openclaw dev",
+      "context": {
+        "agent_id": "openclaw",
+        "tags": [
+          "dev"
+        ],
+        "tool_name": "blocked",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "allow",
+        "rule_name": "allow openclaw dev",
+        "matched": true
+      }
+    },
+    {
+      "name": "agent_tags_rejects_tag",
+      "rule_name": "allow openclaw dev",
+      "context": {
+        "agent_id": "openclaw",
+        "tags": [
+          "prod"
+        ],
+        "tool_name": "blocked",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "deny",
+        "rule_name": "",
+        "matched": false
+      }
+    },
+    {
+      "name": "path_child_match",
+      "rule_name": "allow project child",
+      "context": {
+        "path": "/fixture/home/dev/secret",
+        "tool_name": "blocked",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "allow",
+        "rule_name": "allow project child",
+        "matched": true
+      }
+    },
+    {
+      "name": "path_child_rejects_grandchild",
+      "rule_name": "allow project child",
+      "context": {
+        "path": "/fixture/home/dev/project/secret",
+        "tool_name": "blocked",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "deny",
+        "rule_name": "",
+        "matched": false
+      }
+    },
+    {
+      "name": "path_recursive_match",
+      "rule_name": "allow project recursive",
+      "context": {
+        "path": "/fixture/home/project/a/b/secret",
+        "tool_name": "blocked",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "allow",
+        "rule_name": "allow project recursive",
+        "matched": true
+      }
+    },
+    {
+      "name": "path_recursive_rejects_child",
+      "rule_name": "allow project recursive",
+      "context": {
+        "path": "/fixture/home/dev/secret",
+        "tool_name": "blocked",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "deny",
+        "rule_name": "",
+        "matched": false
+      }
+    },
+    {
+      "name": "working_dir_match",
+      "rule_name": "allow working tree",
+      "context": {
+        "working_dir": "/fixture/repo/src",
+        "tool_name": "blocked",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "allow",
+        "rule_name": "allow working tree",
+        "matched": true
+      }
+    },
+    {
+      "name": "working_dir_rejects_sibling",
+      "rule_name": "allow working tree",
+      "context": {
+        "working_dir": "/fixture/other",
+        "tool_name": "blocked",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "deny",
+        "rule_name": "",
+        "matched": false
+      }
+    },
+    {
+      "name": "env_action_match",
+      "rule_name": "allow ci read",
+      "context": {
+        "env_vars": {
+          "CI": "true"
+        },
+        "action_type": "read",
+        "tool_name": "blocked",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "allow",
+        "rule_name": "allow ci read",
+        "matched": true
+      }
+    },
+    {
+      "name": "env_rejects_value",
+      "rule_name": "allow ci read",
+      "context": {
+        "env_vars": {
+          "CI": "false"
+        },
+        "action_type": "read",
+        "tool_name": "blocked",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "deny",
+        "rule_name": "",
+        "matched": false
+      }
+    },
+    {
+      "name": "action_rejects_value",
+      "rule_name": "allow ci read",
+      "context": {
+        "env_vars": {
+          "CI": "true"
+        },
+        "action_type": "write",
+        "tool_name": "blocked",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "deny",
+        "rule_name": "",
+        "matched": false
+      }
+    },
+    {
+      "name": "allowed_tool_match",
+      "rule_name": "allow safe tool",
+      "context": {
+        "tool_name": "get_entry",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "allow",
+        "rule_name": "allow safe tool",
+        "matched": true
+      }
+    },
+    {
+      "name": "allowed_tool_rejects_name",
+      "rule_name": "allow safe tool",
+      "context": {
+        "tool_name": "delete_entry",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "deny",
+        "rule_name": "",
+        "matched": false
+      }
+    },
+    {
+      "name": "allowed_tool_empty_name",
+      "rule_name": "allow safe tool",
+      "context": {
+        "tool_name": "",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "allow",
+        "rule_name": "allow safe tool",
+        "matched": true
+      }
+    },
+    {
+      "name": "biometry_night_match",
+      "rule_name": "biometry at night",
+      "context": {
+        "tool_name": "blocked",
+        "now": "2024-01-01T23:00:00Z"
+      },
+      "expected": {
+        "action": "require_biometry",
+        "rule_name": "biometry at night",
+        "matched": true
+      }
+    },
+    {
+      "name": "biometry_day_reject",
+      "rule_name": "biometry at night",
+      "context": {
+        "tool_name": "blocked",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "deny",
+        "rule_name": "",
+        "matched": false
+      }
+    },
+    {
+      "name": "prompt_prod_match",
+      "rule_name": "prompt production",
+      "context": {
+        "tags": [
+          "prod"
+        ],
+        "tool_name": "blocked",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "prompt",
+        "rule_name": "prompt production",
+        "matched": true
+      }
+    },
+    {
+      "name": "prompt_nonprod_reject",
+      "rule_name": "prompt production",
+      "context": {
+        "tags": [
+          "dev"
+        ],
+        "tool_name": "blocked",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "deny",
+        "rule_name": "",
+        "matched": false
+      }
+    },
+    {
+      "name": "limited_below_secret_limit",
+      "rule_name": "allow limited secrets",
+      "context": {
+        "agent_id": "limited",
+        "tool_name": "blocked",
+        "now": "2024-01-01T12:00:00Z",
+        "secrets_accessed": 2
+      },
+      "expected": {
+        "action": "allow",
+        "rule_name": "allow limited secrets",
+        "matched": true
+      }
+    },
+    {
+      "name": "limited_at_secret_limit",
+      "rule_name": "allow limited secrets",
+      "context": {
+        "agent_id": "limited",
+        "tool_name": "blocked",
+        "now": "2024-01-01T12:00:00Z",
+        "secrets_accessed": 3
+      },
+      "expected": {
+        "action": "deny",
+        "rule_name": "",
+        "matched": false
+      }
+    },
+    {
+      "name": "default_deny",
+      "rule_name": "deny all",
+      "context": {
+        "agent_id": "unknown",
+        "tool_name": "blocked",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "deny",
+        "rule_name": "deny all",
+        "matched": true
+      }
+    }
+  ],
+  "interaction_policy": {
+    "version": "1.0",
+    "rules": [
+      {
+        "name": "priority deny",
+        "priority": 100,
+        "conditions": {
+          "agent_id": "priority-agent"
+        },
+        "action": "deny"
+      },
+      {
+        "name": "low priority allow",
+        "priority": 10,
+        "conditions": {
+          "agent_id": "allowed-agent"
+        },
+        "action": "allow"
+      },
+      {
+        "name": "equal priority first",
+        "priority": 50,
+        "conditions": {
+          "agent_id": "stable-agent"
+        },
+        "action": "allow"
+      },
+      {
+        "name": "equal priority second",
+        "priority": 50,
+        "conditions": {
+          "agent_id": "stable-agent"
+        },
+        "action": "deny"
+      },
+      {
+        "name": "default deny",
+        "conditions": {
+          "agent_id": "*"
+        },
+        "action": "deny"
+      }
+    ]
+  },
+  "interaction_cases": [
+    {
+      "name": "higher_priority_wins",
+      "rule_name": "priority deny",
+      "context": {
+        "agent_id": "priority-agent",
+        "tool_name": "fixture",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "deny",
+        "rule_name": "priority deny",
+        "matched": true
+      }
+    },
+    {
+      "name": "lower_priority_allow_beats_default",
+      "rule_name": "low priority allow",
+      "context": {
+        "agent_id": "allowed-agent",
+        "tool_name": "fixture",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "allow",
+        "rule_name": "low priority allow",
+        "matched": true
+      }
+    },
+    {
+      "name": "equal_priority_preserves_source_order",
+      "rule_name": "equal priority first",
+      "context": {
+        "agent_id": "stable-agent",
+        "tool_name": "fixture",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "allow",
+        "rule_name": "equal priority first",
+        "matched": true
+      }
+    },
+    {
+      "name": "default_deny_after_nonmatch",
+      "rule_name": "default deny",
+      "context": {
+        "agent_id": "other-agent",
+        "tool_name": "fixture",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "deny",
+        "rule_name": "default deny",
+        "matched": true
+      }
+    }
+  ],
+  "path_cases": [
+    {
+      "name": "unicode_star",
+      "pattern": "fixture/café/*",
+      "path": "fixture/café/秘密",
+      "matches": true
+    },
+    {
+      "name": "unicode_question_is_one_rune",
+      "pattern": "fixture/?",
+      "path": "fixture/é",
+      "matches": true
+    },
+    {
+      "name": "unicode_class",
+      "pattern": "fixture/[α-γ]",
+      "path": "fixture/β",
+      "matches": true
+    },
+    {
+      "name": "star_does_not_cross_separator",
+      "pattern": "fixture/*",
+      "path": "fixture/nested/file",
+      "matches": false
+    },
+    {
+      "name": "clean_dotdot",
+      "pattern": "fixture/café/*",
+      "path": "fixture/other/../café/file",
+      "matches": true
+    },
+    {
+      "name": "native_separator",
+      "pattern": "fixture/*",
+      "path": "fixture/child",
+      "matches": true
+    },
+    {
+      "name": "slash_backslash_are_not_globally_normalized",
+      "pattern": "fixture/*",
+      "path": "fixture\\child",
+      "matches": false
+    }
+  ],
+  "empty_engine_cases": [
+    {
+      "name": "empty_engine_default_result",
+      "rule_name": "",
+      "context": {
+        "agent_id": "empty-engine",
+        "tool_name": "blocked",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "deny",
+        "rule_name": "",
+        "matched": false
+      }
+    }
+  ],
+  "tier_preset_cases": [
+    {
+      "tier": "read-only",
+      "found": true,
+      "preset": {
+        "name": "",
+        "approval_mode": "deny",
+        "allowed_paths": [],
+        "can_write": false,
+        "can_run_commands": false,
+        "can_manage_config": false,
+        "can_use_clipboard": false,
+        "can_use_autotype": false,
+        "can_read_values": false,
+        "expose_value_tools": false,
+        "auto_unseal": false,
+        "require_approval": false
+      },
+      "apply_input": {
+        "name": "fixture-agent",
+        "allowed_paths": [
+          "personal/*",
+          "work/*"
+        ],
+        "allowed_executables": [
+          "custom"
+        ]
+      },
+      "apply_expected": {
+        "name": "fixture-agent",
+        "approval_mode": "deny",
+        "allowed_paths": [
+          "personal/*",
+          "work/*"
+        ],
+        "can_write": false,
+        "can_run_commands": false,
+        "can_manage_config": false,
+        "can_use_clipboard": false,
+        "can_use_autotype": false,
+        "can_read_values": false,
+        "expose_value_tools": false,
+        "auto_unseal": false,
+        "require_approval": false,
+        "allowed_executables": [
+          "custom"
+        ]
+      }
+    },
+    {
+      "tier": "standard",
+      "found": true,
+      "preset": {
+        "name": "",
+        "approval_mode": "prompt",
+        "allowed_paths": [],
+        "can_write": false,
+        "can_run_commands": false,
+        "can_manage_config": false,
+        "can_use_clipboard": true,
+        "can_use_autotype": true,
+        "can_read_values": true,
+        "expose_value_tools": false,
+        "auto_unseal": false,
+        "require_approval": true,
+        "allowed_executables": [
+          "curl",
+          "git",
+          "terraform",
+          "npm",
+          "node",
+          "python",
+          "python3",
+          "docker",
+          "kubectl"
+        ]
+      },
+      "apply_input": {
+        "name": "fixture-agent",
+        "allowed_paths": [
+          "personal/*",
+          "work/*"
+        ],
+        "allowed_executables": [
+          "custom"
+        ]
+      },
+      "apply_expected": {
+        "name": "fixture-agent",
+        "approval_mode": "prompt",
+        "allowed_paths": [
+          "personal/*",
+          "work/*"
+        ],
+        "can_write": false,
+        "can_run_commands": false,
+        "can_manage_config": false,
+        "can_use_clipboard": true,
+        "can_use_autotype": true,
+        "can_read_values": true,
+        "expose_value_tools": false,
+        "auto_unseal": false,
+        "require_approval": true,
+        "allowed_executables": [
+          "curl",
+          "git",
+          "terraform",
+          "npm",
+          "node",
+          "python",
+          "python3",
+          "docker",
+          "kubectl"
+        ]
+      }
+    },
+    {
+      "tier": "admin",
+      "found": true,
+      "preset": {
+        "name": "",
+        "approval_mode": "prompt",
+        "allowed_paths": [],
+        "can_write": true,
+        "can_run_commands": true,
+        "can_manage_config": true,
+        "can_use_clipboard": true,
+        "can_use_autotype": true,
+        "can_read_values": true,
+        "expose_value_tools": true,
+        "auto_unseal": true,
+        "require_approval": true
+      },
+      "apply_input": {
+        "name": "fixture-agent",
+        "allowed_paths": [
+          "personal/*",
+          "work/*"
+        ],
+        "allowed_executables": [
+          "custom"
+        ]
+      },
+      "apply_expected": {
+        "name": "fixture-agent",
+        "approval_mode": "prompt",
+        "allowed_paths": [
+          "personal/*",
+          "work/*"
+        ],
+        "can_write": true,
+        "can_run_commands": true,
+        "can_manage_config": true,
+        "can_use_clipboard": true,
+        "can_use_autotype": true,
+        "can_read_values": true,
+        "expose_value_tools": true,
+        "auto_unseal": true,
+        "require_approval": true,
+        "allowed_executables": [
+          "custom"
+        ]
+      }
+    },
+    {
+      "tier": "unknown",
+      "found": false,
+      "preset": {
+        "name": "",
+        "allowed_paths": []
+      },
+      "apply_input": {
+        "name": "fixture-agent",
+        "allowed_paths": [
+          "personal/*",
+          "work/*"
+        ],
+        "allowed_executables": [
+          "custom"
+        ]
+      },
+      "apply_expected": {
+        "name": "fixture-agent",
+        "allowed_paths": [
+          "personal/*",
+          "work/*"
+        ],
+        "allowed_executables": [
+          "custom"
+        ]
+      }
+    }
+  ],
+  "tier_copy_cases": [
+    {
+      "tier": "standard",
+      "mutated_can_write": false,
+      "second_can_write": false
+    },
+    {
+      "tier": "admin",
+      "mutated_can_write": false,
+      "second_can_write": true
+    }
+  ]
+}

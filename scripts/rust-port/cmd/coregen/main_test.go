@@ -9,6 +9,40 @@ import (
 	"testing"
 )
 
+func TestResolveOracleRejectsTamperedMetadata(t *testing.T) {
+	if _, err := resolveOracle(true, "tampered", pinnedOracleRelease); err == nil {
+		t.Fatal("expected tampered commit rejection")
+	}
+	if _, err := resolveOracle(true, pinnedOracleCommit, "v0.0.0"); err == nil {
+		t.Fatal("expected tampered release rejection")
+	}
+	got, err := resolveOracle(true, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Commit != pinnedOracleCommit || got.Release != pinnedOracleRelease {
+		t.Fatalf("check metadata = %#v", got)
+	}
+}
+
+func TestCoreCheckRejectsCryptoProvenanceDrift(t *testing.T) {
+	fixture := buildCryptoFixture(oracle{Commit: "test", Release: "v0.0.0"})
+	expected, err := marshalJSON(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{fixture.Oracle.SourceDigest, fixture.Oracle.GeneratorDigest} {
+		tampered := bytes.Replace(expected, []byte(field), []byte(strings.Repeat("0", len(field))), 1)
+		path := filepath.Join(t.TempDir(), "fixture.json")
+		if err := os.WriteFile(path, tampered, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := checkFixture(path, expected); err == nil {
+			t.Fatalf("check accepted tampered provenance field %q", field)
+		}
+	}
+}
+
 func TestBuildErrorFixtureIsDeterministic(t *testing.T) {
 	meta := oracle{Commit: "test", Release: "v0.0.0"}
 	first, err := marshalJSON(buildErrorFixture(meta))
@@ -52,6 +86,62 @@ func TestBuildRedactFixtureIsDeterministic(t *testing.T) {
 	if !bytes.Equal(first, second) {
 		t.Fatal("redact fixture generation is not deterministic")
 	}
+}
+
+func TestBuildCryptoFixtureIsDeterministicAndCoversBoundaries(t *testing.T) {
+	fixture := buildCryptoFixture(oracle{Commit: "test", Release: "v0.0.0"})
+	if len(fixture.Oracle.SourceFiles) != 2 || fixture.Oracle.SourceDigest == "" || fixture.Oracle.GeneratorDigest == "" {
+		t.Fatalf("crypto fixture provenance missing: %#v", fixture.Oracle)
+	}
+	first, err := marshalJSON(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := marshalJSON(buildCryptoFixture(oracle{Commit: "test", Release: "v0.0.0"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(first, second) {
+		t.Fatal("password/TOTP fixture generation is not deterministic")
+	}
+	if len(fixture.PasswordCases) < 5 || len(fixture.StrengthCases) < 5 || len(fixture.TOTPCases) < 5 {
+		t.Fatalf("crypto fixture coverage is too small: passwords=%d strengths=%d totp=%d", len(fixture.PasswordCases), len(fixture.StrengthCases), len(fixture.TOTPCases))
+	}
+	for _, tc := range fixture.PasswordCases {
+		if tc.Expected != "" && tc.Error != "" {
+			t.Fatalf("password case %q has both result and error", tc.Name)
+		}
+	}
+
+	strengthByName := make(map[string]strengthCase, len(fixture.StrengthCases))
+	for _, tc := range fixture.StrengthCases {
+		strengthByName[tc.Name] = tc
+	}
+	for _, name := range []string{"unicode_decimal_digits_across_scripts", "unicode_decimal_digits"} {
+		tc, ok := strengthByName[name]
+		if !ok {
+			t.Fatalf("missing Unicode decimal-digit fixture case %q", name)
+		}
+		if containsString(tc.Missing, "digits") {
+			t.Fatalf("Go oracle classified decimal digits as missing in %q", name)
+		}
+	}
+	nonDecimal, ok := strengthByName["unicode_non_decimal_numerics"]
+	if !ok {
+		t.Fatal("missing Unicode non-decimal numeric fixture case")
+	}
+	if !containsString(nonDecimal.Missing, "digits") {
+		t.Fatal("Go oracle classified non-decimal numerics as decimal digits")
+	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestBuildFixtureCoversStableTaxonomy(t *testing.T) {

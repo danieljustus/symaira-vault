@@ -67,13 +67,14 @@ passes. The measured Go baseline is in
 - `RUST-002` passed: the pinned Rust workspace and byte-exact `version` slice
   passes all ten Go↔Rust cases plus format, Clippy, nextest, doctest, feature,
   coverage, audit, deny, and native macOS/Windows CI gates.
-- `RUST-003` is in progress: error taxonomy, secret-reference parsing, and
-  secret redaction sub-slices are green against Go oracle fixtures, Miri,
-  and property tests. Policy and pure quota/rate-limit bucket transitions
-  (`QUOTA-001`), password/TOTP, and type inference remain in this work item
-  before closing RUST-003. Only the pure bucket transitions are in its quota
-  scope; persistent `.quotas.json` storage, registry behavior, and process
-  locking belong to `QUOTA-002` under `RUST-007`.
+- `RUST-003` passed: error taxonomy, secret-reference parsing, redaction,
+  password/TOTP (`CRYPTO-005`), pure policy/tier evaluation (`POLICY-001`),
+  and pure quota transitions (`QUOTA-001`) pass Go-generated fixtures,
+  property tests, Clippy, Miri, and supply-chain gates. `CLI-005` remains
+  intentionally incomplete at the binary boundary until `RUST-009`; this
+  work item establishes only its reusable core taxonomy. Persistent
+  `.quotas.json` storage, registry behavior, and process locking remain in
+  `QUOTA-002` under `RUST-007`. `RUST-004` is now ready.
 
 The tiny release-built version slice measured 577,104 bytes, 2,277,376 bytes
 maximum RSS in one sample, and 2.576 ms startup p95 over 120 runs after 20
