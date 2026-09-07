@@ -1,4 +1,4 @@
-.PHONY: all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check differential-go-selftest port-contract rust-build rust-check rust-lint rust-test rust-features rust-coverage rust-security rust-version-contract rust-gates help docs-check
+.PHONY: all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check differential-go-selftest port-contract rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-gates help docs-check
 
 # Variables
 BINARY_NAME := symvault
@@ -235,6 +235,9 @@ rust-test:
 	$(CARGO) nextest run --workspace --all-features --locked
 	$(CARGO) test --workspace --doc --all-features --locked
 
+rust-miri:
+	$(CARGO) +nightly miri test -p symvault-core --locked
+
 rust-features:
 	$(CARGO) hack check --workspace --each-feature --no-dev-deps --locked
 
@@ -257,6 +260,7 @@ rust-gates:
 	$(MAKE) rust-lint
 	$(MAKE) rust-check
 	$(MAKE) rust-test
+	$(MAKE) rust-miri
 	$(MAKE) rust-features
 	$(MAKE) rust-coverage
 	$(MAKE) rust-security
@@ -308,6 +312,7 @@ help:
 	@echo "  rust-check         - Check all Rust targets and features"
 	@echo "  rust-lint          - Run rustfmt and Clippy with warnings denied"
 	@echo "  rust-test          - Run Rust nextest and doctests"
+	@echo "  rust-miri          - Run symvault-core tests under Miri"
 	@echo "  rust-features      - Check each Rust feature independently"
 	@echo "  rust-coverage      - Measure Rust workspace coverage"
 	@echo "  rust-security      - Run Rust advisory and dependency-policy gates"
