@@ -1,0 +1,27 @@
+# The fuzz crate is an independent Cargo workspace, so it does not inherit
+# the repository-level deny.toml automatically. Keep this policy identical to
+# ../deny.toml: fuzz dependencies must use the same registry and licenses.
+[graph]
+all-features = true
+
+[advisories]
+unmaintained = "workspace"
+
+[licenses]
+confidence-threshold = 0.8
+allow = [
+  "Apache-2.0",
+  "BSD-3-Clause",
+  "MIT",
+  "NCSA",
+  "Unicode-3.0",
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
