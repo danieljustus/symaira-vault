@@ -95,9 +95,14 @@ func ValidateTOTPData(data map[string]any) error {
 	return nil
 }
 
-// GenerateTOTP generates a TOTP code from the given secret and configuration
-// This is a standard TOTP implementation per RFC 6238
+// GenerateTOTP generates a TOTP code from the current system time.
 func GenerateTOTP(secret string, algorithm string, digits int, period int) (*TOTPCode, error) {
+	return GenerateTOTPAt(secret, algorithm, digits, period, time.Now())
+}
+
+// GenerateTOTPAt is the explicit-clock seam used by deterministic callers and
+// the language-neutral Rust-port fixture generator.
+func GenerateTOTPAt(secret string, algorithm string, digits int, period int, now time.Time) (*TOTPCode, error) {
 	if err := ValidateTOTPParams(algorithm, digits, period); err != nil {
 		return nil, err
 	}
@@ -126,8 +131,7 @@ func GenerateTOTP(secret string, algorithm string, digits int, period int) (*TOT
 		}
 	}
 
-	// Get current time and calculate time step
-	now := time.Now()
+	// The explicit clock is supplied by GenerateTOTP or the fixture generator.
 	unixTime := now.Unix()
 	if unixTime < 0 {
 		return nil, fmt.Errorf("system time is before Unix epoch")

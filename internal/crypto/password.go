@@ -18,7 +18,14 @@ const MaxPasswordLength = 1024
 // be called to zero and release the underlying mlock'd memory when the password
 // is no longer needed.
 func GeneratePassword(length int, useSymbols bool) (string, func(), error) {
-	return generatePasswordWithReader(length, useSymbols, rand.Reader)
+	return GeneratePasswordWithReader(length, useSymbols, rand.Reader)
+}
+
+// GeneratePasswordWithReader is the deterministic-reader seam used by the
+// language-neutral Rust-port fixture generator. Production callers should use
+// GeneratePassword, which supplies crypto/rand.Reader.
+func GeneratePasswordWithReader(length int, useSymbols bool, reader io.Reader) (string, func(), error) {
+	return generatePasswordWithReader(length, useSymbols, reader)
 }
 
 func generatePasswordWithReader(length int, useSymbols bool, reader io.Reader) (string, func(), error) {

@@ -54,6 +54,29 @@ func TestBuildRedactFixtureIsDeterministic(t *testing.T) {
 	}
 }
 
+func TestBuildCryptoFixtureIsDeterministicAndCoversBoundaries(t *testing.T) {
+	fixture := buildCryptoFixture(oracle{Commit: "test", Release: "v0.0.0"})
+	first, err := marshalJSON(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := marshalJSON(buildCryptoFixture(oracle{Commit: "test", Release: "v0.0.0"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(first, second) {
+		t.Fatal("password/TOTP fixture generation is not deterministic")
+	}
+	if len(fixture.PasswordCases) < 5 || len(fixture.StrengthCases) < 5 || len(fixture.TOTPCases) < 5 {
+		t.Fatalf("crypto fixture coverage is too small: passwords=%d strengths=%d totp=%d", len(fixture.PasswordCases), len(fixture.StrengthCases), len(fixture.TOTPCases))
+	}
+	for _, tc := range fixture.PasswordCases {
+		if tc.Expected != "" && tc.Error != "" {
+			t.Fatalf("password case %q has both result and error", tc.Name)
+		}
+	}
+}
+
 func TestBuildFixtureCoversStableTaxonomy(t *testing.T) {
 	fixture := buildErrorFixture(oracle{Commit: "test", Release: "test"})
 	wantExitCodes := []namedInt{

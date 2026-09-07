@@ -784,7 +784,8 @@ func main() {
 	errorOutput := flag.String("error-output", "", "error fixture path")
 	secretRefOutput := flag.String("secret-ref-output", "", "secret ref fixture path")
 	redactOutput := flag.String("redact-output", "", "redact fixture path")
-	kind := flag.String("kind", "all", "fixture kind to generate or check: all, error, secret_ref, redact")
+	cryptoOutput := flag.String("crypto-output", "", "password/TOTP fixture path")
+	kind := flag.String("kind", "all", "fixture kind to generate or check: all, error, secret_ref, redact, crypto")
 	check := flag.Bool("check", false, "fail if the fixture differs")
 	commit := flag.String("oracle-commit", "", "Go oracle commit for a new fixture")
 	release := flag.String("oracle-release", "", "Go oracle release for a new fixture")
@@ -803,6 +804,9 @@ func main() {
 	if *redactOutput == "" {
 		*redactOutput = "testdata/port/core/redact-contract.json"
 	}
+	if *cryptoOutput == "" {
+		*cryptoOutput = "testdata/port/core/password-totp-contract.json"
+	}
 
 	meta := oracle{Commit: *commit, Release: *release}
 	if *check || meta.Commit == "" || meta.Release == "" {
@@ -818,6 +822,7 @@ func main() {
 	runError := *kind == "all" || *kind == "error"
 	runSecretRef := *kind == "all" || *kind == "secret_ref"
 	runRedact := *kind == "all" || *kind == "redact"
+	runCrypto := *kind == "all" || *kind == "crypto"
 
 	if runError {
 		processFixture(*errorOutput, *check, "error-contract", func() ([]byte, int, error) {
@@ -840,6 +845,14 @@ func main() {
 			f := buildRedactFixture(meta)
 			b, err := marshalJSON(f)
 			return b, len(f.ExactValueCases) + len(f.EntropyCases) + len(f.ScannerCases), err
+		})
+	}
+
+	if runCrypto {
+		processFixture(*cryptoOutput, *check, "password-totp-contract", func() ([]byte, int, error) {
+			f := buildCryptoFixture(meta)
+			b, err := marshalJSON(f)
+			return b, len(f.PasswordCases) + len(f.StrengthCases) + len(f.TOTPSecretCases) + len(f.TOTPParamCases) + len(f.TOTPCases), err
 		})
 	}
 }
