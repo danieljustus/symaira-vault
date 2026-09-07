@@ -634,9 +634,9 @@ func toGoPolicy(input fixturePolicy) *policypkg.Policy {
 	for _, rule := range input.Rules {
 		conditions := policypkg.Conditions{
 			AgentID:      rule.Conditions.AgentID,
-			Path:         rule.Conditions.Path,
+			Path:         filepath.FromSlash(rule.Conditions.Path),
 			Tags:         append([]string(nil), rule.Conditions.Tags...),
-			WorkingDir:   rule.Conditions.WorkingDir,
+			WorkingDir:   filepath.FromSlash(rule.Conditions.WorkingDir),
 			EnvVars:      cloneMap(rule.Conditions.EnvVars),
 			ActionType:   rule.Conditions.ActionType,
 			AllowedTools: append([]string(nil), rule.Conditions.AllowedTools...),
@@ -662,9 +662,9 @@ func toGoContext(input fixtureContext) policypkg.EvalContext {
 	}
 	return policypkg.EvalContext{
 		AgentID:         input.AgentID,
-		Path:            input.Path,
+		Path:            filepath.FromSlash(input.Path),
 		Tags:            append([]string(nil), input.Tags...),
-		WorkingDir:      input.WorkingDir,
+		WorkingDir:      filepath.FromSlash(input.WorkingDir),
 		EnvVars:         cloneMap(input.EnvVars),
 		ActionType:      input.ActionType,
 		ToolName:        input.ToolName,
