@@ -42,7 +42,7 @@
     {
       "id": "RUST-005",
       "title": "Port storage read paths and writes",
-      "status": "ready",
+      "status": "in_progress",
       "depends_on": ["RUST-004"],
       "contract_rows": ["STORE-001", "STORE-002", "STORE-003", "STORE-004", "STORE-005"],
       "acceptance": ["make store-differential", "cargo nextest run -p symvault-store"]

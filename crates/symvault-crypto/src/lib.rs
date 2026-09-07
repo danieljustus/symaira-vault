@@ -24,6 +24,7 @@ use chacha20poly1305::{
     aead::{Aead, KeyInit},
 };
 use hkdf::Hkdf;
+use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -160,6 +161,22 @@ pub fn parse_recipient(value: &str) -> Result<Recipient, CryptoError> {
 #[must_use]
 pub fn recipient_string(identity: &Identity) -> String {
     identity.0.to_public().to_string()
+}
+
+/// Returns the deterministic storage name used when path pseudonymization is enabled.
+/// The private identity string never leaves this function.
+#[must_use]
+pub fn pseudonymize_path(identity: &Identity, path: &str) -> String {
+    let identity_string = identity.0.to_string();
+    let identity_digest = Sha256::digest(identity_string.expose_secret().as_bytes());
+    let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(&identity_digest)
+        .expect("HMAC-SHA256 accepts every key length");
+    mac.update(path.as_bytes());
+    mac.finalize()
+        .into_bytes()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 /// Computes the Go-compatible SHA-256/128 uppercase grouped fingerprint.
 #[must_use]
