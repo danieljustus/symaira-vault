@@ -181,6 +181,10 @@ fn fixed_clock_totp_matches_go_fixture() {
             assert_eq!(generated.code, case.code, "case {}", case.name);
             assert_eq!(generated.expires_at, case.expires_at, "case {}", case.name);
             assert_eq!(generated.period, case.result_period, "case {}", case.name);
+        } else if case.name == "empty_decoded_secret" {
+            let error = result.unwrap_err().to_string();
+            assert_eq!(error, case.error, "case {}", case.name);
+            assert!(!error.contains(&case.secret), "secret leaked in error");
         } else if case.name == "invalid_secret" {
             let error = result.unwrap_err().to_string();
             assert!(
@@ -190,12 +194,9 @@ fn fixed_clock_totp_matches_go_fixture() {
             );
             assert!(!error.contains(&case.secret), "secret leaked in error");
         } else {
-            assert_eq!(
-                result.unwrap_err().to_string(),
-                case.error,
-                "case {}",
-                case.name
-            );
+            let error = result.unwrap_err().to_string();
+            assert_eq!(error, case.error, "case {}", case.name);
+            assert!(!error.contains(&case.secret), "secret leaked in error");
         }
     }
 }

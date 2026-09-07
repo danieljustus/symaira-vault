@@ -206,6 +206,7 @@ func buildCryptoFixture(meta oracle) cryptoFixture {
 		{"custom_period", "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", "SHA1", 6, 60, 2000000001},
 		{"negative_clock", "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", "SHA1", 6, 30, -1},
 		{"invalid_secret", "not-valid-base32!!!", "SHA1", 6, 30, 0},
+		{"empty_decoded_secret", "A", "SHA1", 6, 30, 0},
 		{"invalid_params", "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", "MD5", 6, 30, 0},
 	}
 	totpCases := make([]totpCase, 0, len(totpInputs))

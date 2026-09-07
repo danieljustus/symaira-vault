@@ -38,6 +38,10 @@ func ValidateTOTPSecret(secret string) error {
 		}
 	}
 
+	if len(decoded) == 0 {
+		return fmt.Errorf("TOTP secret must be Base32-encoded (spaces allowed)")
+	}
+
 	if len(decoded) < 16 {
 		return fmt.Errorf("TOTP secret too short: minimum 16 bytes required (26 base32 characters)")
 	}
@@ -129,6 +133,10 @@ func GenerateTOTPAt(secret string, algorithm string, digits int, period int, now
 		if err != nil {
 			return nil, fmt.Errorf("invalid TOTP secret: %w", err)
 		}
+	}
+
+	if len(key) == 0 {
+		return nil, fmt.Errorf("invalid TOTP secret")
 	}
 
 	// The explicit clock is supplied by GenerateTOTP or the fixture generator.
