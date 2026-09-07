@@ -642,3 +642,22 @@ func FuzzParseArgon2idParams(f *testing.F) {
 		}
 	})
 }
+
+func FuzzDecryptAgeEnvelope(f *testing.F) {
+	identity, err := age.ParseX25519Identity("AGE-SECRET-KEY-1HS3YTK69EJH0ZYM8ANNNDWQMPT7ZMLPYGTMC47F5T4EDJ5N7EYMQ4L5CDL")
+	if err != nil {
+		f.Fatalf("parse fuzz identity: %v", err)
+	}
+
+	for _, seed := range [][]byte{
+		[]byte("age-encryption.org/v1\\n"),
+		[]byte("not an age envelope"),
+		[]byte{},
+	} {
+		f.Add(seed)
+	}
+
+	f.Fuzz(func(t *testing.T, ciphertext []byte) {
+		_, _ = Decrypt(ciphertext, identity)
+	})
+}

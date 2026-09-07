@@ -232,6 +232,7 @@ crypto-differential:
 
 crypto-fuzz-smoke:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test -run '^$$' -fuzz=FuzzParseArgon2idParams -fuzztime=1s -timeout=30s ./internal/crypto
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test -run '^$$' -fuzz=FuzzDecryptAgeEnvelope -fuzztime=1s -timeout=30s ./internal/crypto
 
 port-contract: port-fixtures-check core-fixtures-check policy-fixtures-check differential-go-selftest crypto-differential
 
@@ -253,7 +254,9 @@ rust-miri:
 	CARGO_TARGET_DIR=$(MIRI_TARGET_DIR) $(CARGO) +$(MIRI_TOOLCHAIN) miri test -p symvault-core --locked
 
 rust-features:
-	$(CARGO) hack check --workspace --each-feature --no-dev-deps --locked
+	# Keep the committed lockfile usable while checking every feature combination.
+	# cargo-hack mutates manifests for --no-dev-deps, which requires a different lockfile.
+	$(CARGO) hack check --workspace --each-feature --locked
 
 rust-coverage:
 	$(CARGO) llvm-cov nextest --workspace --all-features --locked --summary-only
