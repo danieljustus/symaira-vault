@@ -115,6 +115,31 @@ func ReencryptAll(vaultDir string, identity *age.X25519Identity, recipients []*a
 	return nil
 }
 
+// ReencryptBytes decrypts one age envelope and encrypts its plaintext for the
+// supplied recipients. It is the side-effect-free primitive used by
+// ReencryptAll and by the cross-language corpus generator; it never writes a
+// vault file or updates a manifest.
+func ReencryptBytes(raw []byte, identity *age.X25519Identity, recipients []*age.X25519Recipient) ([]byte, error) {
+	if identity == nil {
+		return nil, vaultcrypto.ErrNilIdentity
+	}
+	if len(recipients) == 0 {
+		return nil, fmt.Errorf("no recipients provided for re-encryption")
+	}
+
+	plaintext, err := vaultcrypto.Decrypt(raw, identity)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt: %w", err)
+	}
+	defer vaultcrypto.Wipe(plaintext)
+
+	ciphertext, err := vaultcrypto.EncryptWithRecipients(plaintext, recipients...)
+	if err != nil {
+		return nil, fmt.Errorf("encrypt: %w", err)
+	}
+	return ciphertext, nil
+}
+
 // reencryptFile decrypts a single .age file with the identity and re-encrypts
 // it with all recipients using an atomic write.
 func reencryptFile(path string, identity *age.X25519Identity, recipients []*age.X25519Recipient) error {
@@ -124,15 +149,9 @@ func reencryptFile(path string, identity *age.X25519Identity, recipients []*age.
 		return fmt.Errorf("read file: %w", err)
 	}
 
-	plaintext, err := vaultcrypto.Decrypt(raw, identity)
+	ciphertext, err := ReencryptBytes(raw, identity, recipients)
 	if err != nil {
-		return fmt.Errorf("decrypt: %w", err)
-	}
-	defer vaultcrypto.Wipe(plaintext)
-
-	ciphertext, err := vaultcrypto.EncryptWithRecipients(plaintext, recipients...)
-	if err != nil {
-		return fmt.Errorf("encrypt: %w", err)
+		return err
 	}
 
 	if err := fsutil.AtomicWriteFile(path, ciphertext, 0o600); err != nil {

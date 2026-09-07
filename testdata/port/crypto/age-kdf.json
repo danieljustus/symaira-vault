@@ -16,7 +16,7 @@
       "scripts/rust-port/cmd/cryptogen/main.go",
       "scripts/rust-port/cmd/cryptoverify/main.go"
     ],
-    "generator_digest": "c062140ef1ac6491c1056ed0448d3a6f8de8f0dba4ba84441e22309a9047ebfb"
+    "generator_digest": "b5dea6caee51f2443b803e92c643cdd58ec82141107a6de73a9fc4f87a90c010"
   },
   "identities": [
     {
@@ -42,7 +42,7 @@
     {
       "name": "two_recipients",
       "plaintext": "safe Rust/Go age interoperability vector — two recipients",
-      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBlRlZ1S3pIcUY1MWlKYmhKajRNa2J3RWJHeGVFdkJZN0ZxeUtURjZGbDNNClV1SkZZWUFpVXM2aDVKbEx5RlNHL1Q3ZTZvMERMZlQ3OHlXa1ZXdUJSSWMKLT4gWDI1NTE5IFdzaHV1UGFWaWNrclUwaDIvMDUxNUtkUE9VQ3F5Y2FlSE41N0VWUlBld3MKK1ExakxhOTNXSnhaUlVGNjFUY3pUR0h2RVhuZUlubW1KbzlHZlhTQUtJNAotLS0gUzVTT01uelpPTWpSak9iNi96WXc2eVRlZzJJMlhhelB5L0ZXMHQyTHBvSQqRz2Q/mZL8hQxaMnU+gvpCrVeJ51prs7ZT+3Gtg4SRapCa8NwRIjJ7Z/M5RF3uHjSv4R2L+5OfqM4RArzYkRX3eAVTzNWk3uo4CH84hHOKf5Trh8pA3GEqOKKk",
+      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBtdHdPQ2RZUmx0OEEwd1NVam9JbUsrM1VpSFZDcUZaU3BVUE1aNWZxcUhZCkR0L3Y4MGY5eUF5U2dmV21BWDNvRURUamd1MVR2YVhzTnFEMVZZUG5NRVkKLT4gWDI1NTE5IHVrSzVNRVNobVVHTjQ2d0k2dUl0VWhqK0c3cDUvWnk3VXA5RFhNeHZYR0EKdnBodU1ZUmJlVjJvRzZjNzJBbjZTL2k0US9yVFlMaDY2OEYrNkwrMFVodwotLS0gcjd2MWcxZG0xUWM3UGhWbFhzT0lnTUd1V3VDL0wxVDRsS1BsOEIwN1pBSQpRFz/p+qwu5oFi0Vcu26P/fUMxK+aWrfHT2Ovj2XwvdOvac3Vt87+125gRc6fn7hHkx6jAyUGWk6Nzv0O5YT/mUx1yzod4saasHad2SqsUZY3ss7nWm0eBCdTI",
       "recipients": [
         "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y",
         "age1wxknyar29luhmltc320wnllzxd7n0cjvldxqjunyh9u3l4gpd3kq9r4lgr"
@@ -51,7 +51,7 @@
     {
       "name": "three_recipients",
       "plaintext": "safe Rust/Go age interoperability vector — three recipients",
-      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBKL1hpL0RNM0VENHkwWkFac3FmQUxoN2VDdDJyOGVQRnN2N0lNVW1zK1VNCklPTjlFbmRwZUphUEdGKzI2cDBVWnEwSkpPcmE1ZTM3WVN4M2dMOWx5OFUKLT4gWDI1NTE5IFFablMzUDdieEtaZTJTdXdXZFdRUzBhanEwUndxZy9qSUhJRXV0THd0blUKcEhQcGIzNHVKZUxvSnVaek9WOU1kZ3RXOWc0QVQyeDMrRzJzbDZNaGU4TQotPiBYMjU1MTkgRFJHYTdmT29XR3d6SndZMlNnbmdIVE1Pc1lncC9CMSt1OXZaWlFaR0JHMAp4blp5ek9EWlI2NmhDMUFTWXZwbitjbCtveTIrdVRRckhUYk1WWGJ3R280Ci0tLSBXeVFzdGR5ODdxbGxYekxUTTJQWjhHWEFSMkJkOHFhYUdWdHU2aGNvdzFvCsTzQBJxjPB9/1/v7iG4uvCghWf73hxMPklE2ykwW534q6qa/J40YM+VJzqZtV3zqMLF6p1hZ4e7MYKHw3Tx32nwwfl9JJjfJrtGjPqgDrFmwDgBlGgy0zNUc8+UJg==",
+      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBzOTkrWnh4c2N2VzBkMzV1Q3cvWDNlWTh0SS9zcnlrVjJTK0U5Mm1uVGljCnRaMW5PdUh2SVJQUndtSGh0eENwd3ZnYWlDVXhLSXI2emE3RkMzUHpuN1UKLT4gWDI1NTE5IEhFMlh3WkRYdSthR1JGaDNoL1ROMEY4bjIvY0lIbG9LODE4NDBlclpPbW8KeVhobDY3WVBhNUJORndSQmhsRlBDN3d4S0VxOHpJMkNqazVNSEZnOFJqMAotPiBYMjU1MTkgdkppNzZFU2xxcXZaSnJlSUdaV2FYNHV3TTZjQ0pidktra21TVmkvMWgxawpCV2R0aEtsdW5jaTNqMDJMNUQ0bjEweTU4OVpuQTZsZHNEdEJxSXh1SFVrCi0tLSA0Q1ZKUmFXZGZ2U3JJVTVqWkVaSWV2eGE5NjV5VXlhZFozZTRnbkJiclNJCvq1kYbxvCNqHNrVK7kffVmpshDP0nIyn+6w1LpNQtLpXd+EsbAwMdm+jcjG83hAxoX5vM7wCCj+2QTsSNpqJASaKLZa1kX4+hXMqQgj/f3cT4vG4SiAXUcC4gisJg==",
       "recipients": [
         "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y",
         "age1wxknyar29luhmltc320wnllzxd7n0cjvldxqjunyh9u3l4gpd3kq9r4lgr",
@@ -63,14 +63,14 @@
     {
       "name": "legacy_work_factor_12",
       "plaintext": "legacy scrypt envelope",
-      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdCBCU2phNUNOZ3dhb2NyTmtXVmRURW93IDEyClJoNjE3eTk2N0R1aXNJTlZDZlhGQTNsT3VIMkx5ejFvSUFtNkkzenZTc1EKLS0tIFhRQ0hVUEtOTEhEek03MU5tNzU1QUxrVkRTSk5pVmlUdTRXN2V3NDczMXMKqDs4J13nE7rgx3hTpJnSyFT5kZn41IgRj6QEs6yojSM2B/3/fGs8I4fNJzaNh2UEle6fI0B6"
+      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdCBabTY2dUNSNkVwSndEUGJpaHlicnFBIDEyCk1Pd1M2YUNIZUxpdG9tMlRtek50RkxUc2lPV3hhcEpEeERGRk5WMGtTZm8KLS0tIDhzMlhYK3RNWjBhNU16YlpLL3JxSUllR0lrVEpXQ1pZWGF0U3FqZjFBZlEK34T6gFo83XRdGzpxchyv1nvba09vqOLtDjjVJEigHj9NwmTVYA29LC4+qrhRk/A0LvnLta/C"
     }
   ],
   "argon2id_cases": [
     {
       "name": "current_tiny_fixture_params",
       "plaintext": "current argon2id envelope",
-      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIGw4dzVYMjNLQXVkTGFtMFdwaUl0SHcgdD0xLG09MzIscD0xCjV5eGVtYmhKU1l0TTZCczRtRnhnbm9RK3N5RGRoUUFvS0owMyt1aDhYL1NIOHArbnBRb292b3grQUpFCi0tLSBhaFBSNHE5RnlnWGM3cXNkdUt1MnFkbmlmUVc5UkZ0b3ViYXpITFFPdWY4ClgV2yN2Cg+Y+Vu1WORTGHB2x5A1PqjbtueNQmrquLNS7CSJS1f4nwZfb3nxkMdR4MuFExSmPhwGJw==",
+      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIENGRjNRaFMwbTlCSW9MMDNwVkdsZ2cgdD0xLG09MzIscD0xCjdleldoLzl6MXpvUlRON25Ra0lQUzJRVE9aT3ZEU0dLNGFZb2NuY3R2bzhsL0dySnJjTEpxcmE5WlJzCi0tLSBLaUJ0WWFOdW9CVThQWmt2NzZMVm1UNndtbzg1enJBUzdiSE8rRUU3d2lFCsrvCX6YniEJ6PQY4GwG7HFUaZdUbTM100RkrIFh2267oqFDt014nP+eYOmfFQmOiwS6M81jEzoMhg==",
       "params": {
         "Time": 1,
         "Memory": 32,
@@ -81,8 +81,44 @@
   "zero_key_cases": [
     {
       "name": "historical_zero_key_length_23",
-      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIDE3UWI5UzVMa2FRRG9scm9qajJKNmcgdD0xLG09MzIscD0xCkFBazNjREdLVEZ6ajA3QjY5UURjUThtU2R6TmNFUnlqK2xSYlRybXdiS1dXVVNPZjdWMGlxMHlzMWxrCi0tLSA3eTJPQ1NzTzRkZUh4RTBGcU8zRUl3SUVpQm12eG1IbE16T0ZXb1RPeTk0CoisFlCHfu8FG11TkwOOAivZ+WQOcIX5Dq4NjsfC5NQn5+FXy4ZfkEXOhOgVZFDWpiJuwXu8Vbw5a2ZGDZHElRZLhLA35Ocdwn/1EVYkzw2qEwduKjMFE/8b2PZC4E2gISuXXl3LMThRnQY=",
+      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIGZwTHo4MXVRS0JNZHdyNndISWJQZ3cgdD0xLG09MzIscD0xCk1RSzNuY2UxQnFTUHdXWE9VQjQ3Vnc3cjlVWldZY0x4YXJPeDBNSXZpSkVUVEkzUEoydVh6OE5maWR3Ci0tLSBlZitUdkttNy9JeXg4V3BraFNlMVpqZzhqTGNnaGsrdjBINTBqQnJxeDhJCgwCzXjE29ZjmMbnlbZfNsSBed/cveLT5pPBEMJ+urRFlPBksaREOVEGf+DkAHYwZYLYSlDe+DnrlrD8LXJhYbqWTXZmdwVjAkf/rEqriTUfjcMbE6lul5sDchPvdRv6i/YgJ6thA5CbaxE=",
       "passphrase_length": 23
+    }
+  ],
+  "reencrypt_cases": [
+    {
+      "name": "add_recipient",
+      "plaintext": "re-encryption add recipient",
+      "source_identity": "AGE-SECRET-KEY-1HS3YTK69EJH0ZYM8ANNNDWQMPT7ZMLPYGTMC47F5T4EDJ5N7EYMQ4L5CDL",
+      "source_ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSB5Wms0TTJBb2luRlN6OG5TRldTYXl5Vk9tZHJIOWp0SGxZT0NpaFZ4Y1ZnClNMZmRpSXRua3JGRXdvQXptTEhUZE1qMnBKNXdrV0pjYmJxWmhaZEFVK3MKLS0tIFZaL2VLcE1QTmpqa09YbUQ1aXJrbUczRDlHVzhOU0VHalhUYjh3Y0ZFMkUKBznc8JNMB7my6WPQdu1n3L9JriOLrYLypJbm3V9BtUAQdm1Wwe9qOJZV0AU/us40H0JnI+9cVV4mC6U=",
+      "source_recipients": [
+        "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y"
+      ],
+      "reencrypted_ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBkZW1NS2ZkVHB5ZGtEdWVJZHcyK1FicEZHck1YUDFLem10bCtaMUlpaHpJCnUzMVBublgrZjNnVHRYaUpoN2xLVHNhVnV0WEhwblN3cG5mU3owS3dwQ1kKLT4gWDI1NTE5IHl0M3J4bW1jcWppU2VCc0dwYnZBR1ZRdHF5NXNlRk5uN2FqMUM5S3lqU3MKZjFIZzRrNEtHVDdBTWlSRVRXRkFsNENtUHFLZjFUNjdoRzBqZk9Sc29kawotLS0gVEVKT3R1YmYwTkhDWWFMUkxuR2MwSEpYZVBETG41OHd1ZTlKTHlJeVZzQQrVmKJZiRsRtLlk26CoBhu69tMi//WmFroMOBnBIB/BhM76qGUevC3atNH2VManGNgkq5sWLrQNbPuE9g==",
+      "recipients": [
+        "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y",
+        "age1wxknyar29luhmltc320wnllzxd7n0cjvldxqjunyh9u3l4gpd3kq9r4lgr"
+      ],
+      "removed_recipient": "age1mrfjwn5r0v9zrvgv73fc5880svsky436wp2ygvw6lts5hx8xwavs6vmkcy",
+      "removed_identity": "AGE-SECRET-KEY-15KR576PHDPLRQS08427S6X2G492S6GTVELZ6WHN8AKMWW90T0HES2KQ597"
+    },
+    {
+      "name": "remove_recipient",
+      "plaintext": "re-encryption remove recipient",
+      "source_identity": "AGE-SECRET-KEY-1HS3YTK69EJH0ZYM8ANNNDWQMPT7ZMLPYGTMC47F5T4EDJ5N7EYMQ4L5CDL",
+      "source_ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBEbHI3K0RGeXkrQVpKdWFpU2o4cjlVMnlzeDljclN3QjEvNlkrNzJzMmswCk9lQ2hpSUlncklhMVBHZ2lrb2M3cVR1R0lkS0lXV3BRV0JveHZyUUxKbjQKLT4gWDI1NTE5IFkyOEgwd1dNOU5uelpnY2RUU0FteHN5Um5zSlpDVU1nWXdydUxVZzUrdzgKOWlXRDVvZVZXVzVwamdObHBENlV6bEN0WnZpRUplZkhMeTgzRDNxMURvRQotPiBYMjU1MTkgTytqZ1QvdDRZZm5sZEZtUUsyRk1GK1dOa0k5UHlWRTBWSnF4SUdUMDhtawp4M3lKdlltZUw3R0tFelBpOUpJNEtqRWtUU3ZnYTRkUStEZ2ZpVStoRTRVCi0tLSBodlZLWkhtZFJ4ZzdnWG9JbG5WWkVjeVo2dHdwR2FycHd1N3QvWDNpWjZZCtgMYM6ezO/6TlhkA0qBLrb9SnRk19p1rPXUlTs12bCmEcPA1m/pzyizg+x8cv+rSujeK48SGUQ5ldhS6Qrl",
+      "source_recipients": [
+        "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y",
+        "age1wxknyar29luhmltc320wnllzxd7n0cjvldxqjunyh9u3l4gpd3kq9r4lgr",
+        "age1mrfjwn5r0v9zrvgv73fc5880svsky436wp2ygvw6lts5hx8xwavs6vmkcy"
+      ],
+      "reencrypted_ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBXaFRUL2RnOUljb3VLRlNZeGk5eGUyZG9xenR4RXhTcEFNOHBsc2t0Z0RnCnVQSnJKaEwvbEpJaEhtRmFXNWNVeVRhcGluekp4UkFRU2xEOGNMTlFWZjgKLT4gWDI1NTE5IGw2N2E0aHNlSDlrRitONGN4VnVJL2hFcmQzRUdIK2tMSDFNL2Y3blZqRDgKUVFUbWtOVDZBejNxRUh6SzRCRkttNHZEMmhZNzNoVDNHN3dNQ2thZG55YwotLS0gd2w1YTNhbW1JU2gwWG1qZmNGYThCckdOQThDN2cvTm5IQVh1M3VzK3RENApMeTfktQoirEbvl1iSVA3WOAxB0qKuAXQZgokuUGBebd+G+aUsrunTtggPGketgoSCEaXjNkhpyHdHD7NHIQ==",
+      "recipients": [
+        "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y",
+        "age1wxknyar29luhmltc320wnllzxd7n0cjvldxqjunyh9u3l4gpd3kq9r4lgr"
+      ],
+      "removed_recipient": "age1mrfjwn5r0v9zrvgv73fc5880svsky436wp2ygvw6lts5hx8xwavs6vmkcy",
+      "removed_identity": "AGE-SECRET-KEY-15KR576PHDPLRQS08427S6X2G492S6GTVELZ6WHN8AKMWW90T0HES2KQ597"
     }
   ],
   "malformed_cases": [
@@ -189,19 +225,19 @@
     {
       "name": "age_wrong_identity",
       "kind": "age",
-      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBlRlZ1S3pIcUY1MWlKYmhKajRNa2J3RWJHeGVFdkJZN0ZxeUtURjZGbDNNClV1SkZZWUFpVXM2aDVKbEx5RlNHL1Q3ZTZvMERMZlQ3OHlXa1ZXdUJSSWMKLT4gWDI1NTE5IFdzaHV1UGFWaWNrclUwaDIvMDUxNUtkUE9VQ3F5Y2FlSE41N0VWUlBld3MKK1ExakxhOTNXSnhaUlVGNjFUY3pUR0h2RVhuZUlubW1KbzlHZlhTQUtJNAotLS0gUzVTT01uelpPTWpSak9iNi96WXc2eVRlZzJJMlhhelB5L0ZXMHQyTHBvSQqRz2Q/mZL8hQxaMnU+gvpCrVeJ51prs7ZT+3Gtg4SRapCa8NwRIjJ7Z/M5RF3uHjSv4R2L+5OfqM4RArzYkRX3eAVTzNWk3uo4CH84hHOKf5Trh8pA3GEqOKKk",
+      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBtdHdPQ2RZUmx0OEEwd1NVam9JbUsrM1VpSFZDcUZaU3BVUE1aNWZxcUhZCkR0L3Y4MGY5eUF5U2dmV21BWDNvRURUamd1MVR2YVhzTnFEMVZZUG5NRVkKLT4gWDI1NTE5IHVrSzVNRVNobVVHTjQ2d0k2dUl0VWhqK0c3cDUvWnk3VXA5RFhNeHZYR0EKdnBodU1ZUmJlVjJvRzZjNzJBbjZTL2k0US9yVFlMaDY2OEYrNkwrMFVodwotLS0gcjd2MWcxZG0xUWM3UGhWbFhzT0lnTUd1V3VDL0wxVDRsS1BsOEIwN1pBSQpRFz/p+qwu5oFi0Vcu26P/fUMxK+aWrfHT2Ovj2XwvdOvac3Vt87+125gRc6fn7hHkx6jAyUGWk6Nzv0O5YT/mUx1yzod4saasHad2SqsUZY3ss7nWm0eBCdTI",
       "expected_class": "wrong_passphrase_or_key"
     },
     {
       "name": "scrypt_wrong_passphrase",
       "kind": "scrypt",
-      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdCBCU2phNUNOZ3dhb2NyTmtXVmRURW93IDEyClJoNjE3eTk2N0R1aXNJTlZDZlhGQTNsT3VIMkx5ejFvSUFtNkkzenZTc1EKLS0tIFhRQ0hVUEtOTEhEek03MU5tNzU1QUxrVkRTSk5pVmlUdTRXN2V3NDczMXMKqDs4J13nE7rgx3hTpJnSyFT5kZn41IgRj6QEs6yojSM2B/3/fGs8I4fNJzaNh2UEle6fI0B6",
+      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdCBabTY2dUNSNkVwSndEUGJpaHlicnFBIDEyCk1Pd1M2YUNIZUxpdG9tMlRtek50RkxUc2lPV3hhcEpEeERGRk5WMGtTZm8KLS0tIDhzMlhYK3RNWjBhNU16YlpLL3JxSUllR0lrVEpXQ1pZWGF0U3FqZjFBZlEK34T6gFo83XRdGzpxchyv1nvba09vqOLtDjjVJEigHj9NwmTVYA29LC4+qrhRk/A0LvnLta/C",
       "expected_class": "wrong_passphrase_or_key"
     },
     {
       "name": "argon2id_wrong_passphrase",
       "kind": "argon2id",
-      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIGw4dzVYMjNLQXVkTGFtMFdwaUl0SHcgdD0xLG09MzIscD0xCjV5eGVtYmhKU1l0TTZCczRtRnhnbm9RK3N5RGRoUUFvS0owMyt1aDhYL1NIOHArbnBRb292b3grQUpFCi0tLSBhaFBSNHE5RnlnWGM3cXNkdUt1MnFkbmlmUVc5UkZ0b3ViYXpITFFPdWY4ClgV2yN2Cg+Y+Vu1WORTGHB2x5A1PqjbtueNQmrquLNS7CSJS1f4nwZfb3nxkMdR4MuFExSmPhwGJw==",
+      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIENGRjNRaFMwbTlCSW9MMDNwVkdsZ2cgdD0xLG09MzIscD0xCjdleldoLzl6MXpvUlRON25Ra0lQUzJRVE9aT3ZEU0dLNGFZb2NuY3R2bzhsL0dySnJjTEpxcmE5WlJzCi0tLSBLaUJ0WWFOdW9CVThQWmt2NzZMVm1UNndtbzg1enJBUzdiSE8rRUU3d2lFCsrvCX6YniEJ6PQY4GwG7HFUaZdUbTM100RkrIFh2267oqFDt014nP+eYOmfFQmOiwS6M81jEzoMhg==",
       "expected_class": "wrong_passphrase_or_key"
     }
   ],

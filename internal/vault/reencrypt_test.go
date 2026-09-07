@@ -237,3 +237,38 @@ func TestReencryptFile_SingleFile(t *testing.T) {
 		t.Errorf("Data[secret] = %v, want value123", got.Data["secret"])
 	}
 }
+
+func TestReencryptBytes_CrossLanguageSeam(t *testing.T) {
+	vaultDir := t.TempDir()
+	identity1 := testutil.TempIdentity(t)
+	identity2 := testutil.TempIdentity(t)
+	removed := testutil.TempIdentity(t)
+	plaintext := []byte("side-effect-free re-encryption seam")
+	source, err := vaultcrypto.EncryptWithRecipients(plaintext, identity1.Recipient())
+	if err != nil {
+		t.Fatalf("encrypt source: %v", err)
+	}
+	got, err := ReencryptBytes(source, identity1, []*age.X25519Recipient{
+		identity1.Recipient(),
+		identity2.Recipient(),
+	})
+	if err != nil {
+		t.Fatalf("ReencryptBytes: %v", err)
+	}
+	for _, identity := range []*age.X25519Identity{identity1, identity2} {
+		decrypted, err := vaultcrypto.Decrypt(got, identity)
+		if err != nil || string(decrypted) != string(plaintext) {
+			t.Errorf("retained identity decrypt = %q, %v; want %q", decrypted, err, plaintext)
+		}
+	}
+	if _, err := vaultcrypto.Decrypt(got, removed); err == nil {
+		t.Fatal("removed identity decrypted re-encrypted content")
+	}
+	entries, err := os.ReadDir(vaultDir)
+	if err != nil {
+		t.Fatalf("read seam vault directory: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("ReencryptBytes wrote %d files", len(entries))
+	}
+}

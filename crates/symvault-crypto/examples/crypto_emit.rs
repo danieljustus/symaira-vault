@@ -20,6 +20,21 @@ fn main() {
         ],
     )
     .expect("age encryption");
+    let original = encrypt(
+        b"Rust re-encrypts age for Go",
+        &[parse_recipient(&symvault_crypto::recipient_string(&first)).unwrap()],
+    )
+    .expect("original encryption");
+    let reencrypted = symvault_crypto::reencrypt(
+        &original,
+        &first,
+        &[
+            parse_recipient(&symvault_crypto::recipient_string(&first)).unwrap(),
+            parse_recipient("age1wxknyar29luhmltc320wnllzxd7n0cjvldxqjunyh9u3l4gpd3kq9r4lgr")
+                .unwrap(),
+        ],
+    )
+    .expect("re-encryption");
     let scrypt =
         encrypt_scrypt(b"Rust encrypts scrypt for Go", &passphrase, 12).expect("scrypt encryption");
     let argon = encrypt_argon2id(
@@ -33,6 +48,7 @@ fn main() {
     )
     .expect("argon2id encryption");
     println!("age={}", STANDARD.encode(age));
+    println!("reencrypt={}", STANDARD.encode(reencrypted));
     println!("scrypt={}", STANDARD.encode(scrypt));
     println!("argon2id={}", STANDARD.encode(argon));
 }

@@ -35,6 +35,12 @@ const MAX_ARGON2_TIME: u32 = 16;
 const MAX_ARGON2_MEMORY: u32 = 2_097_152;
 const MAX_ARGON2_THREADS: u32 = 16;
 const MAX_SCRYPT_WORK_FACTOR: u8 = 22;
+/// Maximum historical zero-key passphrase length accepted for recovery.
+///
+/// The legacy bug produced a short, fixed-size all-zero passphrase. Bounding
+/// this input before constructing the zero-filled buffer prevents an attacker
+/// from turning recovery into an unbounded allocation or Argon2 workload.
+pub const MAX_ZERO_KEY_PASSPHRASE_LEN: usize = 1024;
 
 /// Stable failure classifications. Messages never contain a passphrase or plaintext.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -192,6 +198,23 @@ fn encrypt_to_recipients(
         .finish()
         .map_err(|_| CryptoError::new(FailureClass::InvalidInput, "cannot finish encryption"))?;
     Ok(output)
+}
+
+/// Re-encrypts an age envelope without exposing its plaintext to callers.
+///
+/// The input is decrypted with `identity`, then encrypted for exactly the
+/// supplied X25519 recipients. This is the pure counterpart of Go's
+/// `vault.ReencryptAll` per-file operation; it performs no filesystem writes.
+pub fn reencrypt(
+    ciphertext: &[u8],
+    identity: &Identity,
+    recipients: &[Recipient],
+) -> Result<Vec<u8>, CryptoError> {
+    let plaintext = decrypt(ciphertext, identity)?;
+    let result = encrypt(&plaintext, recipients);
+    let mut plaintext = plaintext;
+    plaintext.zeroize();
+    result
 }
 
 /// Encrypts a non-empty entry for one or more X25519 recipients.
@@ -529,12 +552,52 @@ pub fn classify_zero_key_candidate(raw: &[u8]) -> FailureClass {
     }
 }
 
+fn validate_recovered_identity(identity: &Identity) -> Result<(), CryptoError> {
+    let public = recipient_string(identity);
+    if public.is_empty() || parse_recipient(&public).map(|r| r.to_string()) != Ok(public.clone()) {
+        return Err(CryptoError::new(
+            FailureClass::ZeroKeyCandidate,
+            "zero-key recovery failed",
+        ));
+    }
+    let computed = fingerprint(&public);
+    let valid_fingerprint = computed.len() == 8 * 4 + 7
+        && computed.split(' ').all(|group| {
+            group.len() == 4
+                && group
+                    .bytes()
+                    .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_lowercase())
+        });
+    if !valid_fingerprint {
+        return Err(CryptoError::new(
+            FailureClass::ZeroKeyCandidate,
+            "zero-key recovery failed",
+        ));
+    }
+    Ok(())
+}
+
+fn parse_recovered_identity(plaintext: &mut Vec<u8>) -> Result<Identity, CryptoError> {
+    let result = (|| {
+        let value = std::str::from_utf8(plaintext).map_err(|_| {
+            CryptoError::new(FailureClass::ZeroKeyCandidate, "zero-key recovery failed")
+        })?;
+        let identity = parse_identity(value.trim()).map_err(|_| {
+            CryptoError::new(FailureClass::ZeroKeyCandidate, "zero-key recovery failed")
+        })?;
+        validate_recovered_identity(&identity)?;
+        Ok(identity)
+    })();
+    plaintext.zeroize();
+    result
+}
+
 /// Recovers an identity from the historical Argon2id zero-key envelope.
 pub fn recover_zero_key_identity(
     raw: &[u8],
     passphrase_len: usize,
 ) -> Result<Identity, CryptoError> {
-    if passphrase_len == 0 {
+    if passphrase_len == 0 || passphrase_len > MAX_ZERO_KEY_PASSPHRASE_LEN {
         return Err(CryptoError::new(
             FailureClass::InvalidInput,
             "zero-key length is invalid",
@@ -550,14 +613,15 @@ pub fn recover_zero_key_identity(
             CryptoError::new(FailureClass::ZeroKeyCandidate, "zero-key recovery failed")
         })?;
     let mut plaintext = Vec::new();
-    reader.read_to_end(&mut plaintext).map_err(|_| {
-        CryptoError::new(FailureClass::ZeroKeyCandidate, "zero-key recovery failed")
-    })?;
-    let value = std::str::from_utf8(&plaintext).map_err(|_| {
-        CryptoError::new(FailureClass::ZeroKeyCandidate, "zero-key recovery failed")
-    })?;
-    parse_identity(value.trim())
-        .map_err(|_| CryptoError::new(FailureClass::ZeroKeyCandidate, "zero-key recovery failed"))
+    if reader.read_to_end(&mut plaintext).is_err() {
+        plaintext.zeroize();
+        return Err(CryptoError::new(
+            FailureClass::ZeroKeyCandidate,
+            "zero-key recovery failed",
+        ));
+    }
+    drop(reader);
+    parse_recovered_identity(&mut plaintext)
 }
 
 #[cfg(test)]
@@ -585,7 +649,7 @@ mod tests {
     const ORACLE_SOURCE_DIGEST: &str =
         "cc99e5efc05aeb3d1dacff8499fa82748f200669f99121b04f512151c44f1d84";
     const ORACLE_GENERATOR_DIGEST: &str =
-        "c062140ef1ac6491c1056ed0448d3a6f8de8f0dba4ba84441e22309a9047ebfb";
+        "b5dea6caee51f2443b803e92c643cdd58ec82141107a6de73a9fc4f87a90c010";
 
     #[derive(serde::Deserialize)]
     struct OracleFixture {
@@ -596,6 +660,7 @@ mod tests {
         scrypt_cases: Vec<OracleEnvelope>,
         argon2id_cases: Vec<OracleEnvelope>,
         zero_key_cases: Vec<OracleZeroKey>,
+        reencrypt_cases: Vec<OracleReencrypt>,
         malformed_cases: Vec<OracleMalformed>,
         limit_cases: Vec<OracleLimit>,
         wrong_passphrase_cases: Vec<OracleWrongPassphrase>,
@@ -665,6 +730,19 @@ mod tests {
         input: String,
         format: String,
         needs_migration: bool,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct OracleReencrypt {
+        name: String,
+        plaintext: String,
+        source_identity: String,
+        source_ciphertext: String,
+        source_recipients: Vec<String>,
+        reencrypted_ciphertext: String,
+        recipients: Vec<String>,
+        removed_recipient: String,
+        removed_identity: String,
     }
 
     fn load_fixture() -> (String, OracleFixture) {
@@ -748,6 +826,11 @@ mod tests {
         assert_names(
             &fixture.zero_key_cases,
             &["historical_zero_key_length_23"],
+            |v| &v.name,
+        )?;
+        assert_names(
+            &fixture.reencrypt_cases,
+            &["add_recipient", "remove_recipient"],
             |v| &v.name,
         )?;
         assert_names(
@@ -969,6 +1052,120 @@ mod tests {
         tampered["oracle"]["source_digest"] = serde_json::Value::String("0".repeat(64));
         let tampered_fixture: OracleFixture = serde_json::from_value(tampered).unwrap();
         assert!(validate_fixture(&tampered_fixture).is_err());
+    }
+
+    #[cfg(not(miri))]
+    #[test]
+    fn reencrypt_vectors_prove_add_remove_and_zero_key_safety() {
+        let (_, fixture) = load_fixture();
+        validate_fixture(&fixture).unwrap();
+        for case in &fixture.reencrypt_cases {
+            let source = base64::engine::general_purpose::STANDARD
+                .decode(&case.source_ciphertext)
+                .unwrap();
+            let go_output = base64::engine::general_purpose::STANDARD
+                .decode(&case.reencrypted_ciphertext)
+                .unwrap();
+            let source_identity = parse_identity(&case.source_identity).unwrap();
+            let mut source_recipients = Vec::new();
+            let mut source_seen = HashSet::new();
+            for recipient in &case.source_recipients {
+                assert!(source_seen.insert(recipient));
+                source_recipients.push(parse_recipient(recipient).unwrap());
+            }
+            assert!(!source_recipients.is_empty());
+            let mut retained = Vec::new();
+            let mut retained_seen = HashSet::new();
+            for recipient in &case.recipients {
+                assert!(retained_seen.insert(recipient));
+                retained.push(parse_recipient(recipient).unwrap());
+            }
+            assert!(!retained.is_empty());
+            assert!(!retained_seen.contains(&case.removed_recipient));
+            let removed_identity = parse_identity(&case.removed_identity).unwrap();
+            assert_eq!(recipient_string(&removed_identity), case.removed_recipient);
+            for identity_case in &fixture.identities {
+                if case.source_recipients.contains(&identity_case.recipient) {
+                    let identity = parse_identity(&identity_case.identity).unwrap();
+                    assert_eq!(
+                        decrypt(&source, &identity).unwrap(),
+                        case.plaintext.as_bytes()
+                    );
+                }
+                if case.recipients.contains(&identity_case.recipient) {
+                    let identity = parse_identity(&identity_case.identity).unwrap();
+                    assert_eq!(
+                        decrypt(&go_output, &identity).unwrap(),
+                        case.plaintext.as_bytes()
+                    );
+                }
+            }
+            if case.source_recipients.contains(&case.removed_recipient) {
+                assert_eq!(
+                    decrypt(&source, &removed_identity).unwrap(),
+                    case.plaintext.as_bytes()
+                );
+            }
+            assert_eq!(
+                decrypt(&go_output, &removed_identity).unwrap_err().class(),
+                FailureClass::WrongPassphraseOrKey
+            );
+            let rust_output = reencrypt(&source, &source_identity, &retained).unwrap();
+            for identity_case in &fixture.identities {
+                if case.recipients.contains(&identity_case.recipient) {
+                    let identity = parse_identity(&identity_case.identity).unwrap();
+                    assert_eq!(
+                        decrypt(&rust_output, &identity).unwrap(),
+                        case.plaintext.as_bytes()
+                    );
+                }
+            }
+            assert_eq!(
+                decrypt(&rust_output, &removed_identity)
+                    .unwrap_err()
+                    .class(),
+                FailureClass::WrongPassphraseOrKey
+            );
+        }
+        let zero = &fixture.zero_key_cases[0];
+        let zero_ciphertext = base64::engine::general_purpose::STANDARD
+            .decode(&zero.ciphertext)
+            .unwrap();
+        assert_eq!(
+            recover_zero_key_identity(&zero_ciphertext, 0)
+                .unwrap_err()
+                .class(),
+            FailureClass::InvalidInput
+        );
+        assert_eq!(
+            recover_zero_key_identity(&zero_ciphertext, MAX_ZERO_KEY_PASSPHRASE_LEN + 1)
+                .unwrap_err()
+                .class(),
+            FailureClass::InvalidInput
+        );
+        assert_eq!(
+            recover_zero_key_identity(&zero_ciphertext, zero.passphrase_length + 1)
+                .unwrap_err()
+                .class(),
+            FailureClass::ZeroKeyCandidate
+        );
+        let zeros = SecretBytes::new(&vec![0; zero.passphrase_length]);
+        let malformed_identity = encrypt_argon2id(
+            b"not an age identity",
+            &zeros,
+            Argon2idParams {
+                time: 1,
+                memory_kib: 32,
+                threads: 1,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            recover_zero_key_identity(&malformed_identity, zero.passphrase_length)
+                .unwrap_err()
+                .class(),
+            FailureClass::ZeroKeyCandidate
+        );
     }
 
     #[test]

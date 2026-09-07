@@ -41,11 +41,29 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	id2, err := age.ParseX25519Identity("AGE-SECRET-KEY-18HD87KNMWKY3RW97YR2PYU6HGWDZXAGW6JF74LNNHUA6A8K5ZF9QTWUTK3")
+	if err != nil {
+		panic(err)
+	}
+	id3, err := age.ParseX25519Identity("AGE-SECRET-KEY-15KR576PHDPLRQS08427S6X2G492S6GTVELZ6WHN8AKMWW90T0HES2KQ597")
+	if err != nil {
+		panic(err)
+	}
 	passphrase := []byte("rust-interop-fixture-passphrase-v1")
 	ageCipher := decode(values, "age")
 	plain, err := cryptopkg.Decrypt(ageCipher, id)
 	if err != nil || string(plain) != "Rust encrypts age for Go" {
 		panic("Go could not decrypt Rust age vector")
+	}
+	reencryptCipher := decode(values, "reencrypt")
+	for _, retained := range []*age.X25519Identity{id, id2} {
+		plain, err = cryptopkg.Decrypt(reencryptCipher, retained)
+		if err != nil || string(plain) != "Rust re-encrypts age for Go" {
+			panic("Go could not decrypt Rust re-encryption vector for retained recipient")
+		}
+	}
+	if _, err = cryptopkg.Decrypt(reencryptCipher, id3); err == nil {
+		panic("Go decrypted Rust re-encryption vector for removed recipient")
 	}
 	scryptCipher := decode(values, "scrypt")
 	plain, err = cryptopkg.DecryptWithPassphrase(scryptCipher, append([]byte(nil), passphrase...))

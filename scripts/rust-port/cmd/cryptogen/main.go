@@ -20,6 +20,7 @@ import (
 	"filippo.io/age"
 
 	cryptopkg "github.com/danieljustus/symaira-vault/internal/crypto"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 const (
@@ -80,6 +81,7 @@ type fixture struct {
 	ScryptCases          []envelopeCase        `json:"scrypt_cases"`
 	Argon2idCases        []envelopeCase        `json:"argon2id_cases"`
 	ZeroKeyCases         []zeroKeyCase         `json:"zero_key_cases"`
+	ReencryptCases       []reencryptCase       `json:"reencrypt_cases"`
 	MalformedCases       []malformedCase       `json:"malformed_cases"`
 	LimitCases           []limitCase           `json:"limit_cases"`
 	WrongPassphraseCases []wrongPassphraseCase `json:"wrong_passphrase_cases"`
@@ -117,6 +119,17 @@ type zeroKeyCase struct {
 	Name             string `json:"name"`
 	Ciphertext       string `json:"ciphertext"`
 	PassphraseLength int    `json:"passphrase_length"`
+}
+type reencryptCase struct {
+	Name                  string   `json:"name"`
+	Plaintext             string   `json:"plaintext"`
+	SourceIdentity        string   `json:"source_identity"`
+	SourceCiphertext      string   `json:"source_ciphertext"`
+	SourceRecipients      []string `json:"source_recipients"`
+	ReencryptedCiphertext string   `json:"reencrypted_ciphertext"`
+	Recipients            []string `json:"recipients"`
+	RemovedRecipient      string   `json:"removed_recipient"`
+	RemovedIdentity       string   `json:"removed_identity"`
 }
 type malformedCase struct {
 	Name          string `json:"name"`
@@ -259,6 +272,31 @@ func build(root string) (fixture, error) {
 		return fixture{}, err
 	}
 
+	addPlaintext := "re-encryption add recipient"
+	addSource, err := cryptopkg.EncryptWithRecipients([]byte(addPlaintext), parsed[0].Recipient())
+	if err != nil {
+		return fixture{}, err
+	}
+	addRecipients := []*age.X25519Recipient{parsed[0].Recipient(), parsed[1].Recipient()}
+	addReencrypted, err := vaultpkg.ReencryptBytes(addSource, parsed[0], addRecipients)
+	if err != nil {
+		return fixture{}, err
+	}
+	removePlaintext := "re-encryption remove recipient"
+	removeSourceRecipients := []*age.X25519Recipient{parsed[0].Recipient(), parsed[1].Recipient(), parsed[2].Recipient()}
+	removeSource, err := cryptopkg.EncryptWithRecipients([]byte(removePlaintext), removeSourceRecipients...)
+	if err != nil {
+		return fixture{}, err
+	}
+	removeRecipients := []*age.X25519Recipient{parsed[0].Recipient(), parsed[1].Recipient()}
+	removeReencrypted, err := vaultpkg.ReencryptBytes(removeSource, parsed[0], removeRecipients)
+	if err != nil {
+		return fixture{}, err
+	}
+	reencryptCases := []reencryptCase{
+		{Name: "add_recipient", Plaintext: addPlaintext, SourceIdentity: ids[0].Identity, SourceCiphertext: b64(addSource), SourceRecipients: []string{ids[0].Recipient}, ReencryptedCiphertext: b64(addReencrypted), Recipients: []string{ids[0].Recipient, ids[1].Recipient}, RemovedRecipient: ids[2].Recipient, RemovedIdentity: ids[2].Identity},
+		{Name: "remove_recipient", Plaintext: removePlaintext, SourceIdentity: ids[0].Identity, SourceCiphertext: b64(removeSource), SourceRecipients: []string{ids[0].Recipient, ids[1].Recipient, ids[2].Recipient}, ReencryptedCiphertext: b64(removeReencrypted), Recipients: []string{ids[0].Recipient, ids[1].Recipient}, RemovedRecipient: ids[2].Recipient, RemovedIdentity: ids[2].Identity},
+	}
 	return fixture{
 		SchemaVersion: 1,
 		Oracle:        meta,
@@ -269,9 +307,10 @@ func build(root string) (fixture, error) {
 			{Name: "two_recipients", Plaintext: twoPlaintext, Ciphertext: b64(two), Recipients: []string{ids[0].Recipient, ids[1].Recipient}},
 			{Name: "three_recipients", Plaintext: threePlaintext, Ciphertext: b64(three), Recipients: []string{ids[0].Recipient, ids[1].Recipient, ids[2].Recipient}},
 		},
-		ScryptCases:   []envelopeCase{{Name: "legacy_work_factor_12", Plaintext: "legacy scrypt envelope", Ciphertext: b64(scrypt)}},
-		Argon2idCases: []envelopeCase{{Name: "current_tiny_fixture_params", Plaintext: "current argon2id envelope", Ciphertext: b64(argon), Params: &argonParams}},
-		ZeroKeyCases:  []zeroKeyCase{{Name: "historical_zero_key_length_23", Ciphertext: b64(zero), PassphraseLength: 23}},
+		ScryptCases:    []envelopeCase{{Name: "legacy_work_factor_12", Plaintext: "legacy scrypt envelope", Ciphertext: b64(scrypt)}},
+		Argon2idCases:  []envelopeCase{{Name: "current_tiny_fixture_params", Plaintext: "current argon2id envelope", Ciphertext: b64(argon), Params: &argonParams}},
+		ZeroKeyCases:   []zeroKeyCase{{Name: "historical_zero_key_length_23", Ciphertext: b64(zero), PassphraseLength: 23}},
+		ReencryptCases: reencryptCases,
 		MalformedCases: []malformedCase{
 			{Name: "empty", Input: "", ExpectedClass: "malformed_envelope"},
 			{Name: "not_age", Input: "not an age envelope\n", ExpectedClass: "malformed_envelope"},
@@ -496,6 +535,59 @@ func verify(root, path string) error {
 		plain, decryptErr := cryptopkg.DecryptWithPassphraseArgon2id(cipher, []byte(passphrase))
 		if decryptErr != nil || string(plain) != tc.Plaintext {
 			return fmt.Errorf("argon2id vector %q failed production verification", tc.Name)
+		}
+	}
+	for _, tc := range got.ReencryptCases {
+		source, err := base64.StdEncoding.DecodeString(tc.SourceCiphertext)
+		if err != nil {
+			return err
+		}
+		stored, err := base64.StdEncoding.DecodeString(tc.ReencryptedCiphertext)
+		if err != nil {
+			return err
+		}
+		sourceIdentity, err := age.ParseX25519Identity(tc.SourceIdentity)
+		if err != nil {
+			return fmt.Errorf("re-encryption vector %q has invalid source identity: %w", tc.Name, err)
+		}
+		recipients, err := cryptopkg.ParseRecipients(tc.Recipients)
+		if err != nil {
+			return fmt.Errorf("re-encryption vector %q has invalid recipients: %w", tc.Name, err)
+		}
+		seen := make(map[string]struct{}, len(tc.Recipients))
+		for _, recipient := range tc.Recipients {
+			if _, ok := seen[recipient]; ok {
+				return fmt.Errorf("re-encryption vector %q does not have exact unique recipients", tc.Name)
+			}
+			seen[recipient] = struct{}{}
+		}
+		if len(recipients) < 2 {
+			return fmt.Errorf("re-encryption vector %q needs multiple recipients", tc.Name)
+		}
+		if _, ok := seen[tc.RemovedRecipient]; ok {
+			return fmt.Errorf("re-encryption vector %q removed recipient is retained", tc.Name)
+		}
+		regenerated, err := vaultpkg.ReencryptBytes(source, sourceIdentity, recipients)
+		if err != nil {
+			return fmt.Errorf("re-encryption vector %q failed production seam: %w", tc.Name, err)
+		}
+		for _, ciphertext := range [][]byte{stored, regenerated} {
+			plain, err := cryptopkg.Decrypt(ciphertext, sourceIdentity)
+			if err != nil || string(plain) != tc.Plaintext {
+				return fmt.Errorf("re-encryption vector %q failed retained source verification", tc.Name)
+			}
+			cryptopkg.Wipe(plain)
+		}
+		removed, err := cryptopkg.ValidateRecipient(tc.RemovedRecipient)
+		if err != nil {
+			return fmt.Errorf("re-encryption vector %q has invalid removed recipient: %w", tc.Name, err)
+		}
+		removedIdentity, err := age.ParseX25519Identity(tc.RemovedIdentity)
+		if err != nil || removed.String() != removedIdentity.Recipient().String() {
+			return fmt.Errorf("re-encryption vector %q removed identity does not match recipient", tc.Name)
+		}
+		if _, err := cryptopkg.Decrypt(stored, removedIdentity); err == nil {
+			return fmt.Errorf("re-encryption vector %q removed recipient still decrypts", tc.Name)
 		}
 	}
 	for _, tc := range got.ZeroKeyCases {
