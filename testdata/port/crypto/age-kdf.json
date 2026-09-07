@@ -16,7 +16,7 @@
       "scripts/rust-port/cmd/cryptogen/main.go",
       "scripts/rust-port/cmd/cryptoverify/main.go"
     ],
-    "generator_digest": "b5dea6caee51f2443b803e92c643cdd58ec82141107a6de73a9fc4f87a90c010"
+    "generator_digest": "fb436d4df39aa7ca674fd184305e2dc6825dd7d60cc044a1ea37178c82523043"
   },
   "identities": [
     {

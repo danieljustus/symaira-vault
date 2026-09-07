@@ -14,12 +14,11 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
-)
 
-import (
 	"filippo.io/age"
 
 	cryptopkg "github.com/danieljustus/symaira-vault/internal/crypto"
+
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
@@ -476,32 +475,20 @@ func migrationNames(v []migrationCase) []string {
 	return r
 }
 
-func verify(root, path string) error {
-	data, err := os.ReadFile(path) // #nosec G304 -- the path is the explicit fixture selected by the generator.
-	if err != nil {
-		return err
-	}
-	var got fixture
-	if err = json.Unmarshal(data, &got); err != nil {
-		return fmt.Errorf("decode fixture: %w", err)
-	}
-	expected, err := authoritativeOracle(root)
-	if err != nil {
-		return err
-	}
-	if err := validateFixture(got, expected); err != nil {
-		return err
-	}
-
-	identities := make(map[string]*age.X25519Identity, len(got.Identities))
-	for _, tc := range got.Identities {
+func verifyIdentities(cases []identityCase) (map[string]*age.X25519Identity, error) {
+	identities := make(map[string]*age.X25519Identity, len(cases))
+	for _, tc := range cases {
 		id, parseErr := age.ParseX25519Identity(tc.Identity)
 		if parseErr != nil || id.Recipient().String() != tc.Recipient || cryptopkg.Fingerprint(tc.Recipient) != tc.Fingerprint {
-			return fmt.Errorf("identity vector %q failed production verification", tc.Name)
+			return nil, fmt.Errorf("identity vector %q failed production verification", tc.Name)
 		}
 		identities[tc.Recipient] = id
 	}
-	for _, tc := range got.AgeCases {
+	return identities, nil
+}
+
+func verifyEnvelopeCases(value fixture, identities map[string]*age.X25519Identity) error {
+	for _, tc := range value.AgeCases {
 		cipher, decodeErr := base64.StdEncoding.DecodeString(tc.Ciphertext)
 		if decodeErr != nil {
 			return fmt.Errorf("age vector %q: %w", tc.Name, decodeErr)
@@ -517,7 +504,7 @@ func verify(root, path string) error {
 			}
 		}
 	}
-	for _, tc := range got.ScryptCases {
+	for _, tc := range value.ScryptCases {
 		cipher, decodeErr := base64.StdEncoding.DecodeString(tc.Ciphertext)
 		if decodeErr != nil {
 			return decodeErr
@@ -527,7 +514,7 @@ func verify(root, path string) error {
 			return fmt.Errorf("scrypt vector %q failed production verification", tc.Name)
 		}
 	}
-	for _, tc := range got.Argon2idCases {
+	for _, tc := range value.Argon2idCases {
 		cipher, decodeErr := base64.StdEncoding.DecodeString(tc.Ciphertext)
 		if decodeErr != nil {
 			return decodeErr
@@ -537,7 +524,20 @@ func verify(root, path string) error {
 			return fmt.Errorf("argon2id vector %q failed production verification", tc.Name)
 		}
 	}
-	for _, tc := range got.ReencryptCases {
+	for _, tc := range value.ZeroKeyCases {
+		cipher, decodeErr := base64.StdEncoding.DecodeString(tc.Ciphertext)
+		if decodeErr != nil {
+			return decodeErr
+		}
+		if _, recoverErr := cryptopkg.RecoverZeroKeyIdentity(cipher, tc.PassphraseLength); recoverErr != nil {
+			return fmt.Errorf("zero-key vector %q failed production verification", tc.Name)
+		}
+	}
+	return nil
+}
+
+func verifyReencryptCases(cases []reencryptCase) error {
+	for _, tc := range cases {
 		source, err := base64.StdEncoding.DecodeString(tc.SourceCiphertext)
 		if err != nil {
 			return err
@@ -572,8 +572,8 @@ func verify(root, path string) error {
 			return fmt.Errorf("re-encryption vector %q failed production seam: %w", tc.Name, err)
 		}
 		for _, ciphertext := range [][]byte{stored, regenerated} {
-			plain, err := cryptopkg.Decrypt(ciphertext, sourceIdentity)
-			if err != nil || string(plain) != tc.Plaintext {
+			plain, decryptErr := cryptopkg.Decrypt(ciphertext, sourceIdentity)
+			if decryptErr != nil || string(plain) != tc.Plaintext {
 				return fmt.Errorf("re-encryption vector %q failed retained source verification", tc.Name)
 			}
 			cryptopkg.Wipe(plain)
@@ -590,21 +590,16 @@ func verify(root, path string) error {
 			return fmt.Errorf("re-encryption vector %q removed recipient still decrypts", tc.Name)
 		}
 	}
-	for _, tc := range got.ZeroKeyCases {
-		cipher, decodeErr := base64.StdEncoding.DecodeString(tc.Ciphertext)
-		if decodeErr != nil {
-			return decodeErr
-		}
-		if _, recoverErr := cryptopkg.RecoverZeroKeyIdentity(cipher, tc.PassphraseLength); recoverErr != nil {
-			return fmt.Errorf("zero-key vector %q failed production verification", tc.Name)
-		}
-	}
-	for _, tc := range got.MalformedCases {
-		if _, decryptErr := cryptopkg.Decrypt([]byte(tc.Input), identities[got.Identities[0].Recipient]); decryptErr == nil {
+	return nil
+}
+
+func verifyNegativeCases(value fixture, identities map[string]*age.X25519Identity) error {
+	for _, tc := range value.MalformedCases {
+		if _, decryptErr := cryptopkg.Decrypt([]byte(tc.Input), identities[value.Identities[0].Recipient]); decryptErr == nil {
 			return fmt.Errorf("malformed vector %q was accepted by production", tc.Name)
 		}
 	}
-	for _, tc := range got.WrongPassphraseCases {
+	for _, tc := range value.WrongPassphraseCases {
 		cipher, decodeErr := base64.StdEncoding.DecodeString(tc.Ciphertext)
 		if decodeErr != nil {
 			return decodeErr
@@ -612,7 +607,10 @@ func verify(root, path string) error {
 		var decryptErr error
 		switch tc.Kind {
 		case "age":
-			decryptErr = func() error { _, err := cryptopkg.Decrypt(cipher, identities[got.Identities[2].Recipient]); return err }()
+			decryptErr = func() error {
+				_, err := cryptopkg.Decrypt(cipher, identities[value.Identities[2].Recipient])
+				return err
+			}()
 		case "scrypt":
 			_, decryptErr = cryptopkg.DecryptWithPassphrase(cipher, []byte("wrong-passphrase"))
 		case "argon2id":
@@ -625,6 +623,35 @@ func verify(root, path string) error {
 		}
 	}
 	return nil
+}
+
+func verify(root, path string) error {
+	data, err := os.ReadFile(path) // #nosec G304 -- the path is the explicit fixture selected by the generator.
+	if err != nil {
+		return err
+	}
+	var got fixture
+	if err = json.Unmarshal(data, &got); err != nil {
+		return fmt.Errorf("decode fixture: %w", err)
+	}
+	expected, err := authoritativeOracle(root)
+	if err != nil {
+		return err
+	}
+	if validationErr := validateFixture(got, expected); validationErr != nil {
+		return validationErr
+	}
+	identities, err := verifyIdentities(got.Identities)
+	if err != nil {
+		return err
+	}
+	if err := verifyEnvelopeCases(got, identities); err != nil {
+		return err
+	}
+	if err := verifyReencryptCases(got.ReencryptCases); err != nil {
+		return err
+	}
+	return verifyNegativeCases(got, identities)
 }
 
 func main() {
