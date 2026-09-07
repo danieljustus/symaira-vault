@@ -651,23 +651,28 @@ func verifyReencryptCases(cases []reencryptCase) error {
 	return nil
 }
 
-func buildReencryptAllCase(name string, source, added, removed *age.X25519Identity, sourceIncludesRemoved bool) (reencryptAllCase, error) {
+func buildReencryptAllCase(name string, source, added, removed *age.X25519Identity, sourceIncludesRemoved bool) (result reencryptAllCase, err error) {
 	dir, err := os.MkdirTemp("", "symvault-cryptogen-reencrypt-all-")
 	if err != nil {
 		return reencryptAllCase{}, err
 	}
-	defer os.RemoveAll(dir)
+	defer func() {
+		if cleanupErr := os.RemoveAll(dir); cleanupErr != nil && err == nil {
+			result = reencryptAllCase{}
+			err = fmt.Errorf("remove temporary filesystem fixture: %w", cleanupErr)
+		}
+	}()
 
 	cfg := vaultconfig.Default()
 	cfg.VaultDir = dir
-	if err := vaultpkg.Init(dir, source, cfg); err != nil {
-		return reencryptAllCase{}, fmt.Errorf("init filesystem fixture: %w", err)
+	if initErr := vaultpkg.Init(dir, source, cfg); initErr != nil {
+		return reencryptAllCase{}, fmt.Errorf("init filesystem fixture: %w", initErr)
 	}
 	paths := []string{"alpha/entry", "nested/beta"}
 	values := []string{"filesystem re-encryption alpha", "filesystem re-encryption beta"}
 	for i, path := range paths {
-		if err := vaultpkg.WriteEntry(dir, path, &vaultpkg.Entry{Data: map[string]any{"value": values[i]}}, source); err != nil {
-			return reencryptAllCase{}, fmt.Errorf("write filesystem fixture %s: %w", path, err)
+		if writeErr := vaultpkg.WriteEntry(dir, path, &vaultpkg.Entry{Data: map[string]any{"value": values[i]}}, source); writeErr != nil {
+			return reencryptAllCase{}, fmt.Errorf("write filesystem fixture %s: %w", path, writeErr)
 		}
 	}
 	sourceRecipients := []*age.X25519Recipient{source.Recipient()}
@@ -716,8 +721,8 @@ func buildReencryptAllCase(name string, source, added, removed *age.X25519Identi
 		plaintexts[path] = plain
 	}
 	retained := []*age.X25519Recipient{source.Recipient(), added.Recipient()}
-	if err := vaultpkg.ReencryptAll(dir, source, retained); err != nil {
-		return reencryptAllCase{}, fmt.Errorf("ReencryptAll filesystem fixture: %w", err)
+	if reencryptErr := vaultpkg.ReencryptAll(dir, source, retained); reencryptErr != nil {
+		return reencryptAllCase{}, fmt.Errorf("ReencryptAll filesystem fixture: %w", reencryptErr)
 	}
 	after, err := snapshotManifest(dir, source)
 	if err != nil {

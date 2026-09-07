@@ -690,7 +690,7 @@ mod tests {
     const ORACLE_SOURCE_DIGEST: &str =
         "cc99e5efc05aeb3d1dacff8499fa82748f200669f99121b04f512151c44f1d84";
     const ORACLE_GENERATOR_DIGEST: &str =
-        "176a9e52860fbbca71a01ea023d22fdcb35f22871bbc14edf5870a781ad71d5e";
+        "00e7fadd1f8f6ba6dbcf488730e9cf888a46fa7f7dbe1194725ed932206d2095";
 
     #[derive(serde::Deserialize)]
     struct OracleFixture {

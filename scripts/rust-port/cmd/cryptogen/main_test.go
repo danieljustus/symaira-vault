@@ -59,7 +59,7 @@ func TestVerifyRejectsTamperedAuthoritativeMetadata(t *testing.T) {
 		{"commit", func(v *fixture) { v.Oracle.Commit = "tampered" }},
 		{"release", func(v *fixture) { v.Oracle.Release = "v0.0.0" }},
 		{"source_digest", func(v *fixture) { v.Oracle.SourceDigest = "0" + v.Oracle.SourceDigest[1:] }},
-		{"generator_digest", func(v *fixture) { v.Oracle.GeneratorDigest = "0" + v.Oracle.GeneratorDigest[1:] }},
+		{"generator_digest", func(v *fixture) { v.Oracle.GeneratorDigest = "x" + v.Oracle.GeneratorDigest[1:] }},
 		{"source_files", func(v *fixture) { v.Oracle.SourceFiles[0] = "internal/crypto/interop.go" }},
 		{"generator_files", func(v *fixture) { v.Oracle.GeneratorFiles[0] = "internal/crypto/age.go" }},
 	}

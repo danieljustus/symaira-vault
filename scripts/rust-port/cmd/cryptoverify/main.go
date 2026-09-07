@@ -16,6 +16,10 @@ import (
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
+type verificationError string
+
+func (e verificationError) Error() string { return string(e) }
+
 func main() {
 	if len(os.Args) != 2 {
 		fmt.Fprintln(os.Stderr, "usage: cryptoverify <rust-output>")
@@ -71,40 +75,8 @@ func main() {
 
 	// Exercise the Rust ciphertext through the real filesystem orchestration,
 	// using only an isolated temporary vault and never a production path.
-	fixtureDir, err := os.MkdirTemp("", "symvault-cryptoverify-reencrypt-all-")
-	if err != nil {
+	if err = verifyFilesystemReencrypt(values, id, id2, id3); err != nil {
 		panic(err)
-	}
-	defer os.RemoveAll(fixtureDir)
-	cfg := vaultconfig.Default()
-	cfg.VaultDir = fixtureDir
-	if err := vaultpkg.Init(fixtureDir, id, cfg); err != nil {
-		panic(err)
-	}
-	entryPath := filepath.Join(fixtureDir, "entries", "rust", "entry.age")
-	if err := os.MkdirAll(filepath.Dir(entryPath), 0o700); err != nil {
-		panic(err)
-	}
-	if err := os.WriteFile(entryPath, decode(values, "reencrypt_entry"), 0o600); err != nil {
-		panic(err)
-	}
-	for _, retained := range []*age.X25519Identity{id, id2} {
-		entry, err := vaultpkg.ReadEntry(fixtureDir, "rust/entry", retained)
-		if err != nil || entry.Data["secret"] != "Rust filesystem entry" {
-			panic("Go could not read Rust filesystem re-encryption fixture")
-		}
-	}
-	if err := vaultpkg.ReencryptAll(fixtureDir, id, []*age.X25519Recipient{id.Recipient(), id3.Recipient()}); err != nil {
-		panic(err)
-	}
-	for _, retained := range []*age.X25519Identity{id, id3} {
-		entry, err := vaultpkg.ReadEntry(fixtureDir, "rust/entry", retained)
-		if err != nil || entry.Data["secret"] != "Rust filesystem entry" {
-			panic("Go ReencryptAll rejected Rust filesystem fixture")
-		}
-	}
-	if _, err := vaultpkg.ReadEntry(fixtureDir, "rust/entry", id2); err == nil {
-		panic("Go ReencryptAll retained removed Rust recipient")
 	}
 
 	scryptCipher := decode(values, "scrypt")
@@ -118,6 +90,50 @@ func main() {
 		panic("Go could not decrypt Rust argon2id vector")
 	}
 	fmt.Println("PASS Rust encrypt -> Go decrypt (age, scrypt, argon2id, filesystem ReencryptAll)")
+}
+
+func verifyFilesystemReencrypt(values map[string]string, id, id2, id3 *age.X25519Identity) (err error) {
+	fixtureDir, err := os.MkdirTemp("", "symvault-cryptoverify-reencrypt-all-")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if cleanupErr := os.RemoveAll(fixtureDir); cleanupErr != nil && err == nil {
+			err = fmt.Errorf("remove temporary filesystem fixture: %w", cleanupErr)
+		}
+	}()
+
+	cfg := vaultconfig.Default()
+	cfg.VaultDir = fixtureDir
+	if initErr := vaultpkg.Init(fixtureDir, id, cfg); initErr != nil {
+		return initErr
+	}
+	entryPath := filepath.Join(fixtureDir, "entries", "rust", "entry.age")
+	if mkdirErr := os.MkdirAll(filepath.Dir(entryPath), 0o700); mkdirErr != nil {
+		return mkdirErr
+	}
+	if writeErr := os.WriteFile(entryPath, decode(values, "reencrypt_entry"), 0o600); writeErr != nil {
+		return writeErr
+	}
+	for _, retained := range []*age.X25519Identity{id, id2} {
+		entry, readErr := vaultpkg.ReadEntry(fixtureDir, "rust/entry", retained)
+		if readErr != nil || entry.Data["secret"] != "Rust filesystem entry" {
+			return verificationError("Go could not read Rust filesystem re-encryption fixture")
+		}
+	}
+	if reencryptErr := vaultpkg.ReencryptAll(fixtureDir, id, []*age.X25519Recipient{id.Recipient(), id3.Recipient()}); reencryptErr != nil {
+		return reencryptErr
+	}
+	for _, retained := range []*age.X25519Identity{id, id3} {
+		entry, readErr := vaultpkg.ReadEntry(fixtureDir, "rust/entry", retained)
+		if readErr != nil || entry.Data["secret"] != "Rust filesystem entry" {
+			return verificationError("Go ReencryptAll rejected Rust filesystem fixture")
+		}
+	}
+	if _, readErr := vaultpkg.ReadEntry(fixtureDir, "rust/entry", id2); readErr == nil {
+		return verificationError("Go ReencryptAll retained removed Rust recipient")
+	}
+	return nil
 }
 
 func closeFile(file *os.File) {
