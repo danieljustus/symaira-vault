@@ -1,0 +1,27 @@
+[package]
+name = "symvault-crypto"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+age = { version = "=0.12.1", default-features = false }
+age-core = { version = "=0.12.0", default-features = false }
+argon2 = { version = "=0.5.3", default-features = false, features = ["alloc", "zeroize"] }
+getrandom = "=0.3.3"
+base64 = "=0.22.1"
+chacha20poly1305 = { version = "=0.10.1", default-features = false }
+hkdf = "=0.12.4"
+sha2 = "=0.10.9"
+zeroize = { version = "=1.8.2", features = ["alloc", "derive"] }
+
+[dev-dependencies]
+proptest = "=1.9.0"
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+
+[features]
+default = []

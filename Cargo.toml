@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/symvault-cli", "crates/symvault-core"]
+members = ["crates/symvault-cli", "crates/symvault-core", "crates/symvault-crypto"]
 resolver = "3"
 
 [workspace.package]
