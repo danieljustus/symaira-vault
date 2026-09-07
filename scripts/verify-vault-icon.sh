@@ -105,7 +105,14 @@ verify_bundle() {
   fi
   [ -f "$plist" ] || fail "built app Info.plist missing: $plist"
   [ -f "$assets" ] || fail "compiled asset catalog missing: $assets"
-  info="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' "$plist" 2>/dev/null || true)"
+  info=""
+  for plist_key in \
+    ':CFBundleIconName' \
+    ':CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName' \
+    ':CFBundleIcons~ipad:CFBundlePrimaryIcon:CFBundleIconName'; do
+    info="$(/usr/libexec/PlistBuddy -c "Print $plist_key" "$plist" 2>/dev/null || true)"
+    [ "$info" = 'AppIcon' ] && break
+  done
   [ "$info" = 'AppIcon' ] || fail "built bundle does not select AppIcon (got: ${info:-missing})"
   assetutil --info "$assets" >"${TMPDIR:-/tmp}/symaira-vault-assets.$$.json" 2>/dev/null || fail "asset catalog inspection failed: $assets"
   grep -q 'AppIcon' "${TMPDIR:-/tmp}/symaira-vault-assets.$$.json" || fail "compiled asset catalog has no AppIcon rendition: $assets"

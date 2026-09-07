@@ -357,7 +357,7 @@ jobs:
   macos-vaultcore:
     name: Vaultcore (macOS)
     if: github.event_name == 'pull_request'
-    runs-on: macos-latest
+    runs-on: macos-26
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -376,6 +376,17 @@ jobs:
             echo "run=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Require Xcode 26 or newer for native icon builds
+        if: steps.path-check.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          XCODE_MAJOR="$(xcodebuild -version | awk '$1 == "Xcode" { split($2, v, "."); print v[1]; exit }')"
+          if [ -z "$XCODE_MAJOR" ] || [ "$XCODE_MAJOR" -lt 26 ]; then
+            echo "::error::Icon Composer .icon builds require Xcode 26 or newer (found: ${XCODE_MAJOR:-unknown})"
+            exit 1
+          fi
+
       - name: Set up Go
         if: steps.path-check.outputs.run == 'true'
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -386,6 +397,44 @@ jobs:
       - name: Build Vaultcore framework
         if: steps.path-check.outputs.run == 'true'
         run: scripts/build-vaultcore.sh
+
+      - name: Install XcodeGen
+        if: steps.path-check.outputs.run == 'true'
+        run: brew install xcodegen
+
+      - name: Build native Vault apps and verify icons
+        if: steps.path-check.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          go build -o symvault .
+          xcodegen --spec client/project.yml --project client
+          scripts/verify-vault-icon.sh --source-only
+
+          MACOS_ARCHIVE="$RUNNER_TEMP/Symvault.xcarchive"
+          xcodebuild -project client/Symvault.xcodeproj \
+            -scheme Symvault \
+            -configuration Release \
+            -archivePath "$MACOS_ARCHIVE" \
+            archive \
+            CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Manual \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+          scripts/verify-vault-icon.sh --bundle \
+            "$MACOS_ARCHIVE/Products/Applications/Symaira Vault.app"
+
+          IOS_DERIVED_DATA="$RUNNER_TEMP/SymvaultIOSDerivedData"
+          xcodebuild -project client/Symvault.xcodeproj \
+            -scheme SymvaultIOSApp \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$IOS_DERIVED_DATA" \
+            build \
+            CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Manual \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+          scripts/verify-vault-icon.sh --bundle \
+            "$IOS_DERIVED_DATA/Build/Products/Release-iphonesimulator/Symaira Vault.app"
 
       - name: Swift build
         if: steps.path-check.outputs.run == 'true'

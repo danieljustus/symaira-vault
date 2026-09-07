@@ -4,7 +4,7 @@ options:
   deploymentTarget:
     macOS: "14.0"
     iOS: "17.0"
-  xcodeVersion: "16.0"
+  xcodeVersion: "26.0"
   generateEmptyDirectories: false
   groupSortPosition: top
   # Icon Composer bundles are file wrappers; do not recurse into icon.json/assets.
