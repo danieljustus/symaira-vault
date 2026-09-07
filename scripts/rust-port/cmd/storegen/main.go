@@ -20,8 +20,9 @@ import (
 )
 
 const (
-	oracleCommit  = "caadd5e"
-	oracleRelease = "v0.22.1"
+	maxArchiveBytes int64 = 64 << 20
+	oracleCommit          = "caadd5e"
+	oracleRelease         = "v0.22.1"
 )
 
 var sourceFiles = []string{
@@ -207,9 +208,9 @@ func digest(root string, names []string, pinned bool) (string, error) {
 		var data []byte
 		var err error
 		if pinned {
-			data, err = exec.Command("git", "-C", root, "show", oracleCommit+":"+name).Output()
+			data, err = exec.Command("git", "-C", root, "show", oracleCommit+":"+name).Output() // #nosec G204 -- executable is fixed git; name is from the compile-time oracle file list
 		} else {
-			data, err = os.ReadFile(filepath.Join(root, name))
+			data, err = os.ReadFile(filepath.Join(root, name)) // #nosec G304 -- name is from the compile-time oracle file list
 		}
 		if err != nil {
 			return "", fmt.Errorf("digest %s: %w", name, err)
@@ -237,7 +238,7 @@ func extractOracleTree(root string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	cmd := exec.Command("git", "-C", root, "archive", "--format=tar", oracleCommit)
+	cmd := exec.Command("git", "-C", root, "archive", "--format=tar", oracleCommit) // #nosec G204 -- executable and commit are fixed; root is the selected oracle repository
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return "", err
@@ -272,11 +273,17 @@ func extractOracleTree(root string) (string, error) {
 			if e = os.MkdirAll(filepath.Dir(out), 0750); e != nil {
 				return "", e
 			}
-			f, e := os.OpenFile(out, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode))
+			if hdr.Mode < 0 || hdr.Mode > int64(^uint32(0)) {
+				return "", fmt.Errorf("invalid archive mode %d", hdr.Mode)
+			}
+			f, e := os.OpenFile(out, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(uint32(hdr.Mode))) // #nosec G304 -- cleaned archive names cannot escape the controlled tree
 			if e != nil {
 				return "", e
 			}
-			_, e = io.Copy(f, tr)
+			n, e := io.Copy(f, io.LimitReader(tr, maxArchiveBytes+1))
+			if e == nil && n > maxArchiveBytes {
+				e = fmt.Errorf("archive exceeds %d bytes", maxArchiveBytes)
+			}
 			ce := f.Close()
 			if e != nil {
 				return "", e
@@ -461,7 +468,7 @@ func build(root string) (fixture, error) {
 	return fixture{1, meta, []vaultFixture{fresh, legacy}, []malformedCase{{"empty", "", "malformed/empty"}, {"not_age", "not an age envelope\n", "malformed/not_age"}, {"bad_stanza", "age-encryption.org/v1\n-> bad\n--- header end\n", "malformed/bad_stanza"}}}, nil
 }
 func verify(root, path string) error {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- path is the explicit generated fixture path supplied by the caller
 	if err != nil {
 		return err
 	}
