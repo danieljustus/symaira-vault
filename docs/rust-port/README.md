@@ -78,7 +78,7 @@ passes. The measured Go baseline is in
   provenance, age/X25519, legacy scrypt, current Argon2id, bounded zero-key
   recovery, and filesystem-level recipient add/remove re-encryption pass in
   both Go→Rust and Rust→Go directions. Strict omission/tamper checks, pinned
-  Miri, and bounded Go/Rust fuzz gates are integrated. `RUST-005` is ready.
+  Miri, and bounded Go/Rust fuzz gates are integrated. `RUST-005` is in progress.
 
 The tiny release-built version slice measured 577,104 bytes, 2,277,376 bytes
 maximum RSS in one sample, and 2.576 ms startup p95 over 120 runs after 20
