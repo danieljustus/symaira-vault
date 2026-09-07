@@ -33,12 +33,11 @@ const KEY_BYTES: usize = 32;
 const ARGON2ID_SALT_BYTES: usize = 16;
 /// Maximum Argon2id budget accepted from an untrusted envelope.
 ///
-/// This product budget is deliberately below the historical Go ceiling while
-/// remaining compatible with the current Go interoperability vectors: t=10,
-/// m=1 GiB, p=8 is the largest valid envelope covered by that contract.
-const MAX_ARGON2_TIME: u32 = 10;
-const MAX_ARGON2_MEMORY: u32 = 1_048_576;
-const MAX_ARGON2_THREADS: u32 = 8;
+/// These maxima are the current Go interoperability contract. Tests validate
+/// them through parsing only; no test derives a KDF at these budgets.
+const MAX_ARGON2_TIME: u32 = 16;
+const MAX_ARGON2_MEMORY: u32 = 2_097_152;
+const MAX_ARGON2_THREADS: u32 = 16;
 const MAX_ARGON2ID_PARAMS_BYTES: usize = 64;
 const MAX_ARGON2ID_PARAM_PARTS: usize = 3;
 const ARGON2ID_SALT_B64_BYTES: usize = 22;
@@ -810,7 +809,7 @@ mod tests {
     const ORACLE_SOURCE_DIGEST: &str =
         "cc99e5efc05aeb3d1dacff8499fa82748f200669f99121b04f512151c44f1d84";
     const ORACLE_GENERATOR_DIGEST: &str =
-        "00e7fadd1f8f6ba6dbcf488730e9cf888a46fa7f7dbe1194725ed932206d2095";
+        "01b123349d0451585c49d02d784cedce98404b54337480bc106e52405be4cbf5";
 
     #[derive(serde::Deserialize)]
     struct OracleFixture {
@@ -862,6 +861,9 @@ mod tests {
         name: String,
         ciphertext: String,
         passphrase_length: usize,
+        expected_recipient: String,
+        expected_fingerprint: String,
+        expected_class: String,
     }
     #[derive(serde::Deserialize)]
     struct OracleMalformed {
@@ -1019,7 +1021,12 @@ mod tests {
         )?;
         assert_names(
             &fixture.zero_key_cases,
-            &["historical_zero_key_length_23"],
+            &[
+                "historical_zero_key_length_23",
+                "zero_key_length_exact_max",
+                "zero_key_length_over_max",
+                "zero_key_wrong_authority",
+            ],
             |v| &v.name,
         )?;
         assert_names(
@@ -1096,6 +1103,19 @@ mod tests {
             if item.recipients.len() < 2 || item.ciphertext.is_empty() || item.plaintext.is_empty()
             {
                 return Err(format!("incomplete age case {}", item.name));
+            }
+        }
+        for item in &fixture.zero_key_cases {
+            if item.ciphertext.is_empty()
+                || item.passphrase_length == 0
+                || item.expected_recipient.is_empty()
+                || item.expected_fingerprint.is_empty()
+                || !matches!(
+                    item.expected_class.as_str(),
+                    "ok" | "invalid_input" | "zero_key_candidate"
+                )
+            {
+                return Err(format!("incomplete zero-key case {}", item.name));
             }
         }
         Ok(())
@@ -1197,18 +1217,35 @@ mod tests {
             let ciphertext = base64::engine::general_purpose::STANDARD
                 .decode(&case.ciphertext)
                 .unwrap();
-            let recovered = recover_zero_key_identity(
+            let result = recover_zero_key_identity(
                 &ciphertext,
                 case.passphrase_length,
-                ZeroKeyAuthority::recipient(&fixture.identities[0].recipient),
-            )
-            .unwrap();
-            assert_eq!(
-                recipient_string(&recovered),
-                fixture.identities[0].recipient,
-                "{}",
-                case.name
+                ZeroKeyAuthority::both(&case.expected_recipient, &case.expected_fingerprint),
             );
+            match case.expected_class.as_str() {
+                "ok" => {
+                    let recovered = result.unwrap();
+                    assert_eq!(
+                        recipient_string(&recovered),
+                        case.expected_recipient,
+                        "{}",
+                        case.name
+                    );
+                }
+                "invalid_input" => assert_eq!(
+                    result.unwrap_err().class(),
+                    FailureClass::InvalidInput,
+                    "{}",
+                    case.name
+                ),
+                "zero_key_candidate" => assert_eq!(
+                    result.unwrap_err().class(),
+                    FailureClass::ZeroKeyCandidate,
+                    "{}",
+                    case.name
+                ),
+                other => panic!("unknown zero-key class {other}"),
+            }
         }
         for case in &fixture.malformed_cases {
             let result = decrypt(case.input.as_bytes(), &identities[0]);
@@ -1597,14 +1634,14 @@ mod tests {
         for value in [
             format!("t={MAX_ARGON2_TIME},m=32,p=1"),
             format!("t=1,m={MAX_ARGON2_MEMORY},p=1"),
-            format!("t=1,m=32,p={MAX_ARGON2_THREADS}"),
+            format!("t=1,m=64,p={MAX_ARGON2_THREADS}"),
         ] {
             assert!(parse_argon2id_params(&value).is_ok(), "{value}");
         }
         for value in [
             format!("t={},m=32,p=1", MAX_ARGON2_TIME + 1),
             format!("t=1,m={},p=1", MAX_ARGON2_MEMORY + 1),
-            format!("t=1,m=32,p={}", MAX_ARGON2_THREADS + 1),
+            format!("t=1,m=64,p={}", MAX_ARGON2_THREADS + 1),
         ] {
             assert_eq!(
                 parse_argon2id_params(&value).unwrap_err().class(),

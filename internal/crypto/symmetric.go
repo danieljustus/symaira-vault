@@ -155,22 +155,121 @@ func (id *argon2idIdentity) Unwrap(stanzas []*age.Stanza) ([]byte, error) {
 	return nil, errors.New("argon2id: no matching stanza found")
 }
 
+// MaxZeroKeyPassphraseLen bounds the historical zero-key recovery hint before
+// it can allocate a zero-filled buffer or enter Argon2id.
+const MaxZeroKeyPassphraseLen = 1024
+
+// Zero-key recovery errors are deliberately fixed and contain no decrypted
+// identity, recipient, or age parser details.
+var (
+	ErrZeroKeyAuthority     = errors.New("zero-key authority is invalid")
+	ErrZeroKeyPassphraseLen = errors.New("zero-key length is invalid")
+	ErrZeroKeyRecovery      = errors.New("zero-key recovery failed")
+)
+
+// ZeroKeyAuthority is the caller-owned public contract used to authorize a
+// recovered identity. At least one field must be supplied independently of the
+// encrypted envelope. When both are supplied they must describe the same
+// canonical recipient.
+type ZeroKeyAuthority struct {
+	ExpectedRecipient   string
+	ExpectedFingerprint string
+}
+
+// NewZeroKeyAuthority constructs an authority from an expected recipient and
+// optional Go-compatible fingerprint. The values must come from outside the
+// encrypted identity envelope.
+func NewZeroKeyAuthority(expectedRecipient, expectedFingerprint string) ZeroKeyAuthority {
+	return ZeroKeyAuthority{
+		ExpectedRecipient:   expectedRecipient,
+		ExpectedFingerprint: expectedFingerprint,
+	}
+}
+
+// ZeroKeyAuthorityForRecipient constructs recipient-only authority.
+func ZeroKeyAuthorityForRecipient(expectedRecipient string) ZeroKeyAuthority {
+	return NewZeroKeyAuthority(expectedRecipient, "")
+}
+
+// ZeroKeyAuthorityForFingerprint constructs fingerprint-only authority.
+func ZeroKeyAuthorityForFingerprint(expectedFingerprint string) ZeroKeyAuthority {
+	return NewZeroKeyAuthority("", expectedFingerprint)
+}
+
+func validPublicKeyFingerprint(value string) bool {
+	if len(value) != 39 {
+		return false
+	}
+	groups := strings.Split(value, " ")
+	if len(groups) != 8 {
+		return false
+	}
+	for _, group := range groups {
+		if len(group) != 4 {
+			return false
+		}
+		for _, b := range []byte(group) {
+			if !((b >= '0' && b <= '9') || (b >= 'A' && b <= 'F')) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func validateZeroKeyAuthority(authority ZeroKeyAuthority) error {
+	expectedRecipient := strings.TrimSpace(authority.ExpectedRecipient)
+	expectedFingerprint := authority.ExpectedFingerprint
+	if expectedRecipient == "" && expectedFingerprint == "" {
+		return ErrZeroKeyAuthority
+	}
+	if expectedRecipient != "" {
+		recipient, err := ValidateRecipient(expectedRecipient)
+		if err != nil || recipient.String() != expectedRecipient {
+			return ErrZeroKeyAuthority
+		}
+		if expectedFingerprint != "" &&
+			(!validPublicKeyFingerprint(expectedFingerprint) || Fingerprint(expectedRecipient) != expectedFingerprint) {
+			return ErrZeroKeyAuthority
+		}
+		return nil
+	}
+	if !validPublicKeyFingerprint(expectedFingerprint) {
+		return ErrZeroKeyAuthority
+	}
+	return nil
+}
+
+func validateRecoveredZeroKeyIdentity(identity *age.X25519Identity, authority ZeroKeyAuthority) error {
+	if identity == nil {
+		return ErrZeroKeyRecovery
+	}
+	public := identity.Recipient().String()
+	recipient, err := ValidateRecipient(public)
+	if err != nil || recipient.String() != public || !validPublicKeyFingerprint(Fingerprint(public)) {
+		return ErrZeroKeyRecovery
+	}
+	if expected := strings.TrimSpace(authority.ExpectedRecipient); expected != "" && expected != public {
+		return ErrZeroKeyRecovery
+	}
+	if expected := authority.ExpectedFingerprint; expected != "" && expected != Fingerprint(public) {
+		return ErrZeroKeyRecovery
+	}
+	return nil
+}
+
 // zeroKeyArgon2idIdentity is an age.Identity that derives the wrap key from
 // Argon2id(zeros[n], salt, params) instead of from a real passphrase. It is
 // the recovery counterpart to argon2idIdentity for files wrapped under the
-// pre-#476 zero-key bug: any passphrase-shaped input of length n produced
-// the same wrap key, so the only thing the wrap key depends on is n.
-//
-// The recovered identity's public key MUST be verified against an
-// independent source of truth (e.g. recipients.txt) before being trusted.
-// See RecoverZeroKeyIdentity for the documented entry point.
+// pre-#476 zero-key bug. The recovered identity is checked against the
+// caller-supplied authority by RecoverZeroKeyIdentity.
 type zeroKeyArgon2idIdentity struct {
 	n int
 }
 
 func (z *zeroKeyArgon2idIdentity) Unwrap(stanzas []*age.Stanza) ([]byte, error) {
-	if z.n <= 0 {
-		return nil, errors.New("zero-key recovery: n must be > 0")
+	if z.n <= 0 || z.n > MaxZeroKeyPassphraseLen {
+		return nil, ErrZeroKeyPassphraseLen
 	}
 	zeros := make([]byte, z.n)
 	defer Wipe(zeros)
@@ -217,35 +316,32 @@ func (z *zeroKeyArgon2idIdentity) Unwrap(stanzas []*age.Stanza) ([]byte, error) 
 }
 
 // RecoverZeroKeyIdentity attempts to decrypt an age file (typically
-// identity.age) that was wrapped under the pre-#476 zero-key bug, where the
-// argon2id wrap key was derived from Argon2id(zeros[n], salt, params) and n
-// was the length of the user's passphrase. As a consequence, any input of
-// length n produced the same wrap key, so a vault written under the bug can
-// be recovered if we still know the right n.
-//
-// The returned identity's public key MUST be verified against an independent
-// source of truth (for example, a recipients.txt entry) before being trusted:
-// the zero-key unwrap succeeds for any length-n input, so the passphrase
-// alone is not a proof of correctness.
-//
-// n must be > 0. A non-argon2id file, or one whose zero-key derivation does
-// not decrypt, yields an error.
-func RecoverZeroKeyIdentity(raw []byte, n int) (*age.X25519Identity, error) {
-	if n <= 0 {
-		return nil, errors.New("zero-key recovery: n must be > 0")
+// identity.age) that was wrapped under the pre-#476 zero-key bug. The
+// passphrase length is only an unwrap hint; the caller must provide an
+// independent public authority and the recovered recipient must match it.
+// Authority and length are validated before the zero-filled allocation or KDF.
+func RecoverZeroKeyIdentity(raw []byte, n int, authority ZeroKeyAuthority) (*age.X25519Identity, error) {
+	if err := validateZeroKeyAuthority(authority); err != nil {
+		return nil, err
+	}
+	if n <= 0 || n > MaxZeroKeyPassphraseLen {
+		return nil, ErrZeroKeyPassphraseLen
 	}
 	r, err := age.Decrypt(bytes.NewReader(raw), &zeroKeyArgon2idIdentity{n: n})
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrDecryptionFailed, err)
+		return nil, fmt.Errorf("%w: %w", ErrZeroKeyRecovery, ErrDecryptionFailed)
 	}
 	plaintext, err := io.ReadAll(r)
 	if err != nil {
-		return nil, fmt.Errorf("read decrypted data: %w", err)
+		return nil, ErrZeroKeyRecovery
 	}
 	defer Wipe(plaintext)
 	parsed, err := age.ParseX25519Identity(strings.TrimSpace(string(plaintext)))
 	if err != nil {
-		return nil, fmt.Errorf("parse identity: %w", err)
+		return nil, ErrZeroKeyRecovery
+	}
+	if err := validateRecoveredZeroKeyIdentity(parsed, authority); err != nil {
+		return nil, err
 	}
 	return parsed, nil
 }

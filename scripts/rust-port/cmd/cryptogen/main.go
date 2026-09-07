@@ -48,7 +48,7 @@ var (
 	requiredAgeNames       = []string{"two_recipients", "three_recipients"}
 	requiredScryptNames    = []string{"legacy_work_factor_12"}
 	requiredArgonNames     = []string{"current_tiny_fixture_params"}
-	requiredZeroNames      = []string{"historical_zero_key_length_23"}
+	requiredZeroNames      = []string{"historical_zero_key_length_23", "zero_key_length_exact_max", "zero_key_length_over_max", "zero_key_wrong_authority"}
 	requiredMalformedNames = []string{"empty", "not_age", "bad_stanza"}
 	requiredLimitNames     = []string{
 		"scrypt_work_factor_zero",
@@ -119,9 +119,12 @@ type envelopeCase struct {
 	Params     *cryptopkg.Argon2idParams `json:"params,omitempty"`
 }
 type zeroKeyCase struct {
-	Name             string `json:"name"`
-	Ciphertext       string `json:"ciphertext"`
-	PassphraseLength int    `json:"passphrase_length"`
+	Name                string `json:"name"`
+	Ciphertext          string `json:"ciphertext"`
+	PassphraseLength    int    `json:"passphrase_length"`
+	ExpectedRecipient   string `json:"expected_recipient"`
+	ExpectedFingerprint string `json:"expected_fingerprint"`
+	ExpectedClass       string `json:"expected_class"`
 }
 type reencryptCase struct {
 	Name                  string   `json:"name"`
@@ -299,6 +302,10 @@ func build(root string) (fixture, error) {
 	if err != nil {
 		return fixture{}, err
 	}
+	zeroMax, err := cryptopkg.EncryptZeroKeyFixture(parsed[0], cryptopkg.MaxZeroKeyPassphraseLen, argonParams)
+	if err != nil {
+		return fixture{}, err
+	}
 
 	addPlaintext := "re-encryption add recipient"
 	addSource, err := cryptopkg.EncryptWithRecipients([]byte(addPlaintext), parsed[0].Recipient())
@@ -343,9 +350,14 @@ func build(root string) (fixture, error) {
 			{Name: "two_recipients", Plaintext: twoPlaintext, Ciphertext: b64(two), Recipients: []string{ids[0].Recipient, ids[1].Recipient}},
 			{Name: "three_recipients", Plaintext: threePlaintext, Ciphertext: b64(three), Recipients: []string{ids[0].Recipient, ids[1].Recipient, ids[2].Recipient}},
 		},
-		ScryptCases:       []envelopeCase{{Name: "legacy_work_factor_12", Plaintext: "legacy scrypt envelope", Ciphertext: b64(scrypt)}},
-		Argon2idCases:     []envelopeCase{{Name: "current_tiny_fixture_params", Plaintext: "current argon2id envelope", Ciphertext: b64(argon), Params: &argonParams}},
-		ZeroKeyCases:      []zeroKeyCase{{Name: "historical_zero_key_length_23", Ciphertext: b64(zero), PassphraseLength: 23}},
+		ScryptCases:   []envelopeCase{{Name: "legacy_work_factor_12", Plaintext: "legacy scrypt envelope", Ciphertext: b64(scrypt)}},
+		Argon2idCases: []envelopeCase{{Name: "current_tiny_fixture_params", Plaintext: "current argon2id envelope", Ciphertext: b64(argon), Params: &argonParams}},
+		ZeroKeyCases: []zeroKeyCase{
+			{Name: "historical_zero_key_length_23", Ciphertext: b64(zero), PassphraseLength: 23, ExpectedRecipient: ids[0].Recipient, ExpectedFingerprint: ids[0].Fingerprint, ExpectedClass: "ok"},
+			{Name: "zero_key_length_exact_max", Ciphertext: b64(zeroMax), PassphraseLength: cryptopkg.MaxZeroKeyPassphraseLen, ExpectedRecipient: ids[0].Recipient, ExpectedFingerprint: ids[0].Fingerprint, ExpectedClass: "ok"},
+			{Name: "zero_key_length_over_max", Ciphertext: b64(zero), PassphraseLength: cryptopkg.MaxZeroKeyPassphraseLen + 1, ExpectedRecipient: ids[0].Recipient, ExpectedFingerprint: ids[0].Fingerprint, ExpectedClass: "invalid_input"},
+			{Name: "zero_key_wrong_authority", Ciphertext: b64(zero), PassphraseLength: 23, ExpectedRecipient: ids[1].Recipient, ExpectedFingerprint: ids[1].Fingerprint, ExpectedClass: "zero_key_candidate"},
+		},
 		ReencryptCases:    reencryptCases,
 		ReencryptAllCases: []reencryptAllCase{filesystemAdd, filesystemRemove},
 		MalformedCases: []malformedCase{
@@ -422,6 +434,14 @@ func validateFixture(value fixture, expected oracle) error {
 	for _, tc := range value.AgeCases {
 		if len(tc.Recipients) < 2 || tc.Plaintext == "" || tc.Ciphertext == "" {
 			return fmt.Errorf("age case %q is incomplete", tc.Name)
+		}
+	}
+	for _, tc := range value.ZeroKeyCases {
+		if tc.Ciphertext == "" || tc.PassphraseLength <= 0 || tc.ExpectedRecipient == "" || tc.ExpectedFingerprint == "" {
+			return fmt.Errorf("zero-key case %q is incomplete", tc.Name)
+		}
+		if tc.ExpectedClass != "ok" && tc.ExpectedClass != "invalid_input" && tc.ExpectedClass != "zero_key_candidate" {
+			return fmt.Errorf("zero-key case %q has unexpected class %q", tc.Name, tc.ExpectedClass)
 		}
 	}
 	for _, tc := range value.MalformedCases {
@@ -584,8 +604,21 @@ func verifyEnvelopeCases(value fixture, identities map[string]*age.X25519Identit
 		if decodeErr != nil {
 			return decodeErr
 		}
-		if _, recoverErr := cryptopkg.RecoverZeroKeyIdentity(cipher, tc.PassphraseLength); recoverErr != nil {
-			return fmt.Errorf("zero-key vector %q failed production verification", tc.Name)
+		authority := cryptopkg.NewZeroKeyAuthority(tc.ExpectedRecipient, tc.ExpectedFingerprint)
+		_, recoverErr := cryptopkg.RecoverZeroKeyIdentity(cipher, tc.PassphraseLength, authority)
+		switch tc.ExpectedClass {
+		case "ok":
+			if recoverErr != nil {
+				return fmt.Errorf("zero-key vector %q failed production verification", tc.Name)
+			}
+		case "invalid_input":
+			if !errors.Is(recoverErr, cryptopkg.ErrZeroKeyPassphraseLen) && !errors.Is(recoverErr, cryptopkg.ErrZeroKeyAuthority) {
+				return fmt.Errorf("zero-key vector %q accepted invalid input: %v", tc.Name, recoverErr)
+			}
+		case "zero_key_candidate":
+			if !errors.Is(recoverErr, cryptopkg.ErrZeroKeyRecovery) {
+				return fmt.Errorf("zero-key vector %q accepted wrong authority: %v", tc.Name, recoverErr)
+			}
 		}
 	}
 	return nil

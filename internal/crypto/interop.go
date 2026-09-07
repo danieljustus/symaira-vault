@@ -2,7 +2,6 @@ package crypto
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 
 	"filippo.io/age"
@@ -16,8 +15,8 @@ func EncryptZeroKeyFixture(id *age.X25519Identity, passphraseLength int, params 
 	if id == nil {
 		return nil, ErrNilIdentity
 	}
-	if passphraseLength <= 0 {
-		return nil, errors.New("passphrase length must be positive")
+	if passphraseLength <= 0 || passphraseLength > MaxZeroKeyPassphraseLen {
+		return nil, ErrZeroKeyPassphraseLen
 	}
 	zeros := make([]byte, passphraseLength)
 	defer Wipe(zeros)
