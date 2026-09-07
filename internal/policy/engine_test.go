@@ -588,8 +588,8 @@ func TestMatchPath(t *testing.T) {
 		{"~/dev/*", filepath.Join(home, "dev", "project", "sub"), false},
 		{"~/dev/**", filepath.Join(home, "dev", "project", "sub"), true},
 		{"~/exact/path", filepath.Join(home, "exact", "path"), true},
-		{"prefix/", filepath.Join("prefix", "sub"), true},
-		{"prefix/*", filepath.Join("prefix", "sub"), true},
+		{filepath.Join("prefix", "") + string(filepath.Separator), filepath.Join("prefix", "sub"), true},
+		{filepath.Join("prefix", "*"), filepath.Join("prefix", "sub"), true},
 	}
 
 	for _, tt := range tests {

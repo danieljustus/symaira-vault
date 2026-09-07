@@ -261,10 +261,7 @@ jobs:
         run: rustup toolchain install nightly-2026-09-03 --profile minimal --component rust-src
 
       - name: Install pinned cargo-fuzz
-        uses: taiki-e/install-action@7b8d4719ee4aaa279bdf55df38dacb9ebfe12a6c # v2.87.6
-        with:
-          tool: cargo-fuzz@0.13.2
-          fallback: none
+        run: cargo install cargo-fuzz --version 0.13.2 --locked
 
       - name: Run bounded main/scheduled Rust fuzz pass
         run: make rust-fuzz
@@ -540,6 +537,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
