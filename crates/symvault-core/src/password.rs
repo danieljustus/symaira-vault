@@ -171,7 +171,7 @@ pub fn assess_password_strength(password: &str) -> PasswordStrength {
             has_lower = true;
         } else if character.is_uppercase() {
             has_upper = true;
-        } else if character.is_numeric() {
+        } else if character.is_number_decimal_digit() {
             has_digit = true;
         } else if character.is_ascii_punctuation()
             || character.is_punctuation()

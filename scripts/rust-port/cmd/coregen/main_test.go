@@ -75,6 +75,36 @@ func TestBuildCryptoFixtureIsDeterministicAndCoversBoundaries(t *testing.T) {
 			t.Fatalf("password case %q has both result and error", tc.Name)
 		}
 	}
+
+	strengthByName := make(map[string]strengthCase, len(fixture.StrengthCases))
+	for _, tc := range fixture.StrengthCases {
+		strengthByName[tc.Name] = tc
+	}
+	for _, name := range []string{"unicode_decimal_digits_across_scripts", "unicode_decimal_digits"} {
+		tc, ok := strengthByName[name]
+		if !ok {
+			t.Fatalf("missing Unicode decimal-digit fixture case %q", name)
+		}
+		if containsString(tc.Missing, "digits") {
+			t.Fatalf("Go oracle classified decimal digits as missing in %q", name)
+		}
+	}
+	nonDecimal, ok := strengthByName["unicode_non_decimal_numerics"]
+	if !ok {
+		t.Fatal("missing Unicode non-decimal numeric fixture case")
+	}
+	if !containsString(nonDecimal.Missing, "digits") {
+		t.Fatal("Go oracle classified non-decimal numerics as decimal digits")
+	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestBuildFixtureCoversStableTaxonomy(t *testing.T) {

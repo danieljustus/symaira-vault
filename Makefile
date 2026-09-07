@@ -160,6 +160,7 @@ PORT_CLI_CASES := testdata/port/cli/cases.json
 PORT_ERROR_FIXTURE := testdata/port/core/error-contract.json
 PORT_SECRET_REF_FIXTURE := testdata/port/core/secret-ref-contract.json
 PORT_REDACT_FIXTURE := testdata/port/core/redact-contract.json
+PORT_CRYPTO_FIXTURE := testdata/port/core/password-totp-contract.json
 PORT_QUOTA_FIXTURE := testdata/port/core/quota-contract.json
 PORT_POLICY_FIXTURE := testdata/port/core/policy-contract.json
 PORT_GO_BINARY := target/port/symvault-go
@@ -191,6 +192,7 @@ core-fixtures-generate: quota-fixtures-generate
 		--error-output $(PORT_ERROR_FIXTURE) \
 		--secret-ref-output $(PORT_SECRET_REF_FIXTURE) \
 		--redact-output $(PORT_REDACT_FIXTURE) \
+		--crypto-output $(PORT_CRYPTO_FIXTURE) \
 		--oracle-commit $(PORT_ORACLE_COMMIT) \
 		--oracle-release $(PORT_ORACLE_RELEASE)
 
@@ -199,7 +201,8 @@ core-fixtures-check: quota-fixtures-check
 		--check \
 		--error-output $(PORT_ERROR_FIXTURE) \
 		--secret-ref-output $(PORT_SECRET_REF_FIXTURE) \
-		--redact-output $(PORT_REDACT_FIXTURE)
+		--redact-output $(PORT_REDACT_FIXTURE) \
+		--crypto-output $(PORT_CRYPTO_FIXTURE)
 
 policy-fixtures-generate:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/policygen \

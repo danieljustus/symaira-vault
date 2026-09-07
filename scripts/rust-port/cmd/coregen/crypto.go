@@ -118,6 +118,9 @@ func buildCryptoFixture(meta oracle) cryptoFixture {
 		{"unicode_strong", "HelloW0rld!日本語テスト"},
 		{"unicode_symbol", "Abcdefghi1😀"},
 		{"short_non_latin", "日本語テスト"},
+		{"unicode_decimal_digits_across_scripts", "Aa١१১๑１xyz!!!"},
+		{"unicode_non_decimal_numerics", "Aabcdef½²①xyz!!!"},
+		{"unicode_decimal_digits", "Aa१२３４５xyz!!!"},
 		{"non_latin_low_entropy", "あいうえおあいうえお"},
 		{"exact_length_mixed", "Abcdefghi1"},
 	}

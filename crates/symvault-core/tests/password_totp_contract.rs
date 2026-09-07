@@ -208,3 +208,29 @@ fn public_strength_validator_preserves_error_contract() {
     );
     assert!(password::validate_password_strength("StrongP@ssw0rd123").is_ok());
 }
+
+#[test]
+fn unicode_digit_property_matches_go_nd_classification() {
+    let decimal_digits = ['١', '१', '১', '๑', '１', '𝟠'];
+    let non_decimal_numerics = ['Ⅷ', '½', '²', '①'];
+
+    for character in decimal_digits {
+        let input = format!("Aaabcdef{character}!!!");
+        let result = password::assess_password_strength(&input);
+        assert!(
+            !result.missing.iter().any(|missing| missing == "digits"),
+            "decimal digit U+{:04X} was not classified as a digit",
+            character as u32
+        );
+    }
+
+    for character in non_decimal_numerics {
+        let input = format!("Aaabcdef{character}!!!");
+        let result = password::assess_password_strength(&input);
+        assert!(
+            result.missing.iter().any(|missing| missing == "digits"),
+            "non-decimal numeric U+{:04X} was classified as a digit",
+            character as u32
+        );
+    }
+}
