@@ -7,9 +7,9 @@ pub struct RateLimitState {
     pub capacity: f64,
     pub refill_rate: f64,
     pub last_refill_unix_nanos: i64,
-    pub daily_count: i32,
+    pub daily_count: i64,
     pub daily_window_start_unix_nanos: i64,
-    pub max_per_day: i32,
+    pub max_per_day: i64,
 }
 
 impl Default for RateLimitState {
@@ -29,8 +29,8 @@ impl Default for RateLimitState {
 /// The limits applied by a `set_limits` event.
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Serialize)]
 pub struct RateLimitLimits {
-    pub max_per_hour: i32,
-    pub max_per_day: i32,
+    pub max_per_hour: i64,
+    pub max_per_day: i64,
 }
 
 /// A supported pure bucket transition event.
@@ -58,7 +58,7 @@ pub fn transition_rate_limit(
     event: RateLimitEvent,
 ) -> (RateLimitState, RateLimitResult) {
     if event == RateLimitEvent::SetLimits {
-        let hour = f64::from(limits.max_per_hour);
+        let hour = limits.max_per_hour as f64;
         return (
             RateLimitState {
                 tokens: hour,

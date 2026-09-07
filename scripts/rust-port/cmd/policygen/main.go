@@ -18,6 +18,11 @@ import (
 	policypkg "github.com/danieljustus/symaira-vault/internal/policy"
 )
 
+const (
+	pinnedOracleCommit  = "caadd5e"
+	pinnedOracleRelease = "v0.22.1"
+)
+
 var productionSources = []string{
 	"internal/config/config.go",
 	"internal/config/presets.go",
@@ -563,6 +568,22 @@ func cloneMap(input map[string]string) map[string]string {
 	return output
 }
 
+func resolveOracle(check bool, commit, release string) (oracle, error) {
+	if commit != "" && commit != pinnedOracleCommit {
+		return oracle{}, fmt.Errorf("oracle commit %q is not the pinned commit %q", commit, pinnedOracleCommit)
+	}
+	if release != "" && release != pinnedOracleRelease {
+		return oracle{}, fmt.Errorf("oracle release %q is not the pinned release %q", release, pinnedOracleRelease)
+	}
+	if check {
+		return oracle{Commit: pinnedOracleCommit, Release: pinnedOracleRelease}, nil
+	}
+	if commit == "" || release == "" {
+		return oracle{}, fmt.Errorf("--oracle-commit and --oracle-release are required when generating a new fixture")
+	}
+	return oracle{Commit: commit, Release: release}, nil
+}
+
 func main() {
 	output := flag.String("output", "testdata/port/core/policy-contract.json", "policy fixture path")
 	check := flag.Bool("check", false, "fail if the fixture differs")
@@ -570,16 +591,11 @@ func main() {
 	release := flag.String("oracle-release", "", "Go oracle release for a new fixture")
 	flag.Parse()
 
-	if *check || *commit == "" || *release == "" {
-		if existing, err := readFixture(*output); err == nil {
-			*commit = existing.Oracle.Commit
-			*release = existing.Oracle.Release
-		}
+	meta, err := resolveOracle(*check, *commit, *release)
+	if err != nil {
+		fatal("resolve oracle metadata: %v", err)
 	}
-	if *commit == "" || *release == "" {
-		fatal("--oracle-commit and --oracle-release are required when generating a new fixture")
-	}
-	fixture, err := buildPolicyFixture(*commit, *release)
+	fixture, err := buildPolicyFixture(meta.Commit, meta.Release)
 	if err != nil {
 		fatal("build policy fixture: %v", err)
 	}
@@ -588,12 +604,8 @@ func main() {
 		fatal("marshal policy fixture: %v", err)
 	}
 	if *check {
-		existing, err := os.ReadFile(*output) // #nosec G304 -- explicit operator-selected fixture
-		if err != nil {
-			fatal("read policy fixture: %v", err)
-		}
-		if !bytes.Equal(existing, content) {
-			fatal("policy fixture (%s) is stale; run make policy-fixtures-generate", *output)
+		if err := checkFixture(*output, content); err != nil {
+			fatal("%v", err)
 		}
 		fmt.Printf("PASS policy fixture (%d validation, %d evaluation, %d empty-engine, %d tier cases)\n", len(fixture.ValidationCases), len(fixture.EvaluationCases), len(fixture.EmptyEngineCases), len(fixture.TierPresetCases))
 		return
@@ -605,6 +617,17 @@ func main() {
 		fatal("write policy fixture: %v", err)
 	}
 	fmt.Printf("WROTE %s\n", *output)
+}
+
+func checkFixture(path string, expected []byte) error {
+	existing, err := os.ReadFile(path) // #nosec G304 -- explicit operator-selected fixture
+	if err != nil {
+		return fmt.Errorf("read policy fixture: %w", err)
+	}
+	if !bytes.Equal(existing, expected) {
+		return fmt.Errorf("policy fixture (%s) is stale; run make policy-fixtures-generate", path)
+	}
+	return nil
 }
 
 func readFixture(path string) (policyFixture, error) {

@@ -10,7 +10,7 @@
       "internal/policy/types.go"
     ],
     "source_digest": "5ebd3c6c7cea06ef57840b31ce73f890309213261b543f413f320ff3961f6ef9",
-    "generator_digest": "6525bc18958884d16bcb662fa747f5d1a334910a33432074149060ec8c35ff17"
+    "generator_digest": "ac0a73b424294a1515b7d5c5a928f818cf53721814efc9d42c65fb09947b8e3e"
   },
   "validation_cases": [
     {

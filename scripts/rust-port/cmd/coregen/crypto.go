@@ -2,8 +2,15 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/base32"
 	"encoding/base64"
+	"encoding/hex"
+	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -68,7 +75,53 @@ type totpCase struct {
 	Error        string `json:"error,omitempty"`
 }
 
+var cryptoProductionSources = []string{
+	"internal/crypto/password.go",
+	"internal/crypto/totp.go",
+}
+
+func cryptoOracle(meta oracle) oracle {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		panic("locate crypto generator")
+	}
+	root := filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", ".."))
+	sources := append([]string(nil), cryptoProductionSources...)
+	sort.Strings(sources)
+	sourceDigest, err := digestCryptoFiles(root, sources)
+	if err != nil {
+		panic(fmt.Sprintf("hash crypto sources: %v", err))
+	}
+	generatorDigest, err := digestCryptoFiles(root, []string{
+		"scripts/rust-port/cmd/coregen/main.go",
+		"scripts/rust-port/cmd/coregen/crypto.go",
+	})
+	if err != nil {
+		panic(fmt.Sprintf("hash crypto generators: %v", err))
+	}
+	meta.SourceFiles = sources
+	meta.SourceDigest = sourceDigest
+	meta.GeneratorDigest = generatorDigest
+	return meta
+}
+
+func digestCryptoFiles(root string, files []string) (string, error) {
+	hash := sha256.New()
+	for _, name := range files {
+		content, err := os.ReadFile(filepath.Join(root, name)) // #nosec G304 -- fixed inputs
+		if err != nil {
+			return "", err
+		}
+		_, _ = hash.Write([]byte(name))
+		_, _ = hash.Write([]byte{0})
+		_, _ = hash.Write(content)
+		_, _ = hash.Write([]byte{0})
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
 func buildCryptoFixture(meta oracle) cryptoFixture {
+	meta = cryptoOracle(meta)
 	passwordInputs := []struct {
 		name       string
 		length     int

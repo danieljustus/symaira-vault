@@ -19,9 +19,17 @@ import (
 	taintpkg "github.com/danieljustus/symaira-vault/internal/vault/taint"
 )
 
+const (
+	pinnedOracleCommit  = "caadd5e"
+	pinnedOracleRelease = "v0.22.1"
+)
+
 type oracle struct {
-	Commit  string `json:"commit"`
-	Release string `json:"release"`
+	Commit          string   `json:"commit"`
+	Release         string   `json:"release"`
+	SourceFiles     []string `json:"source_files,omitempty"`
+	SourceDigest    string   `json:"source_digest,omitempty"`
+	GeneratorDigest string   `json:"generator_digest,omitempty"`
 }
 
 type headerOnly struct {
@@ -779,6 +787,22 @@ func evaluateTruthy(v string) bool {
 // Main / CLI entry point
 // ---------------------------------------------------------------------------
 
+func resolveOracle(check bool, commit, release string) (oracle, error) {
+	if commit != "" && commit != pinnedOracleCommit {
+		return oracle{}, fmt.Errorf("oracle commit %q is not the pinned commit %q", commit, pinnedOracleCommit)
+	}
+	if release != "" && release != pinnedOracleRelease {
+		return oracle{}, fmt.Errorf("oracle release %q is not the pinned release %q", release, pinnedOracleRelease)
+	}
+	if check {
+		return oracle{Commit: pinnedOracleCommit, Release: pinnedOracleRelease}, nil
+	}
+	if commit == "" || release == "" {
+		return oracle{}, fmt.Errorf("--oracle-commit and --oracle-release are required when generating a new fixture")
+	}
+	return oracle{Commit: commit, Release: release}, nil
+}
+
 func main() {
 	output := flag.String("output", "", "legacy single fixture path")
 	errorOutput := flag.String("error-output", "", "error fixture path")
@@ -808,15 +832,9 @@ func main() {
 		*cryptoOutput = "testdata/port/core/password-totp-contract.json"
 	}
 
-	meta := oracle{Commit: *commit, Release: *release}
-	if *check || meta.Commit == "" || meta.Release == "" {
-		existing, err := readHeader(*errorOutput)
-		if err == nil {
-			meta = existing.Oracle
-		}
-	}
-	if meta.Commit == "" || meta.Release == "" {
-		fatal("--oracle-commit and --oracle-release are required when generating a new fixture")
+	meta, err := resolveOracle(*check, *commit, *release)
+	if err != nil {
+		fatal("resolve oracle metadata: %v", err)
 	}
 
 	runError := *kind == "all" || *kind == "error"
@@ -864,12 +882,8 @@ func processFixture(path string, check bool, label string, gen func() ([]byte, i
 	}
 
 	if check {
-		existing, err := os.ReadFile(path) // #nosec G304 -- explicit operator-selected fixture path
-		if err != nil {
-			fatal("read %s fixture (%s): %v", label, path, err)
-		}
-		if !bytes.Equal(existing, content) {
-			fatal("%s fixture (%s) is stale; run make core-fixtures-generate", label, path)
+		if err := checkFixture(path, content); err != nil {
+			fatal("%s", err)
 		}
 		fmt.Printf("PASS %s fixture (%d cases)\n", label, count)
 		return
@@ -890,6 +904,17 @@ func marshalJSON(value any) ([]byte, error) {
 		return nil, err
 	}
 	return append(content, '\n'), nil
+}
+
+func checkFixture(path string, expected []byte) error {
+	existing, err := os.ReadFile(path) // #nosec G304 -- explicit operator-selected fixture path
+	if err != nil {
+		return fmt.Errorf("read core fixture (%s): %w", path, err)
+	}
+	if !bytes.Equal(existing, expected) {
+		return fmt.Errorf("core fixture (%s) is stale; run make core-fixtures-generate", path)
+	}
+	return nil
 }
 
 func readHeader(path string) (headerOnly, error) {

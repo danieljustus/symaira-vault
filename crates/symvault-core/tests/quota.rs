@@ -8,7 +8,17 @@ use symvault_core::quota::{
 #[derive(Debug, Deserialize)]
 struct Fixture {
     schema_version: u8,
+    oracle: Oracle,
     cases: Vec<QuotaCase>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Oracle {
+    commit: String,
+    release: String,
+    source_files: Vec<String>,
+    source_digest: String,
+    generator_digest: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -70,10 +80,23 @@ fn assert_state(actual: RateLimitState, expected: RateLimitState, case: &str, st
 }
 
 #[test]
+fn fixture_has_pinned_provenance() {
+    let fixture = fixture();
+    assert_eq!(fixture.oracle.commit, "caadd5e");
+    assert_eq!(fixture.oracle.release, "v0.22.1");
+    assert_eq!(
+        fixture.oracle.source_files,
+        ["internal/policy/ratelimit_transition.go"]
+    );
+    assert_eq!(fixture.oracle.source_digest.len(), 64);
+    assert_eq!(fixture.oracle.generator_digest.len(), 64);
+}
+
+#[test]
 fn generated_go_vectors_match_every_rust_transition() {
     let fixture = fixture();
     assert_eq!(fixture.schema_version, 1);
-    assert_eq!(fixture.cases.len(), 5);
+    assert_eq!(fixture.cases.len(), 7);
 
     for case in fixture.cases {
         let mut state = case.initial_state;
@@ -111,6 +134,8 @@ fn fixture_includes_each_boundary_family() {
             "capacity_clamp",
             "rejection",
             "boundaries",
+            "negative_hour_limit",
+            "negative_day_limit",
         ]
     );
 }
@@ -126,13 +151,20 @@ fn assert_quota_invariants(state: RateLimitState) {
         "tokens must remain finite: {state:?}"
     );
     assert!(
-        state.capacity.is_finite() && state.capacity >= 0.0,
-        "capacity must be finite and non-negative: {state:?}"
+        state.capacity.is_finite(),
+        "capacity must be finite: {state:?}"
     );
-    assert!(
-        state.tokens >= -EPSILON,
-        "tokens must remain non-negative: {state:?}"
-    );
+    if state.capacity >= 0.0 {
+        assert!(
+            state.tokens >= -EPSILON,
+            "tokens must remain non-negative: {state:?}"
+        );
+    } else {
+        assert!(
+            state.tokens <= state.capacity + EPSILON,
+            "negative Go limit classification must remain at or below capacity: {state:?}"
+        );
+    }
     assert!(
         state.tokens <= state.capacity + EPSILON,
         "tokens must remain capped: {state:?}"
@@ -148,8 +180,32 @@ fn assert_quota_invariants(state: RateLimitState) {
 }
 
 #[test]
+fn negative_limits_match_go_oracle_classification() {
+    let fixture = fixture();
+    let hour = fixture
+        .cases
+        .iter()
+        .find(|case| case.name == "negative_hour_limit")
+        .expect("negative hour case");
+    assert_eq!(hour.limits.max_per_hour, -1);
+    assert_eq!(hour.limits.max_per_day, 0);
+    assert_eq!(hour.transitions[0].state.capacity, -1.0);
+    assert!(!hour.transitions[1].result.allowed);
+
+    let day = fixture
+        .cases
+        .iter()
+        .find(|case| case.name == "negative_day_limit")
+        .expect("negative day case");
+    assert_eq!(day.limits.max_per_day, -1);
+    assert!(day.transitions[1].result.allowed);
+    assert!(!day.transitions[2].result.allowed);
+    assert_eq!(day.transitions[2].state.daily_count, 0);
+}
+
+#[test]
 fn bounded_generated_transitions_preserve_quota_properties() {
-    let capacities = [0_u32, 1, 2];
+    let capacities = [0_i64, 1, 2];
     let refill_rates = [0.0, 1.0 / 3_600.0, 10.0];
     let timestamps = [
         BASE_TIME - 1,
@@ -168,14 +224,14 @@ fn bounded_generated_transitions_preserve_quota_properties() {
 
     for capacity in capacities {
         for token_step in 0..=capacity * 2 {
-            let tokens = f64::from(token_step) / 2.0;
+            let tokens = token_step as f64 / 2.0;
             for refill_rate in refill_rates {
                 for (last_refill, daily_window_start) in timestamp_pairs {
                     for daily_count in 0..=3 {
                         for max_per_day in 0..=3 {
                             let state = RateLimitState {
                                 tokens,
-                                capacity: f64::from(capacity),
+                                capacity: capacity as f64,
                                 refill_rate,
                                 last_refill_unix_nanos: last_refill,
                                 daily_count,
@@ -184,7 +240,7 @@ fn bounded_generated_transitions_preserve_quota_properties() {
                             };
                             for max_per_hour in capacities {
                                 let limits = RateLimitLimits {
-                                    max_per_hour: max_per_hour as i32,
+                                    max_per_hour,
                                     max_per_day,
                                 };
                                 for now in timestamps {

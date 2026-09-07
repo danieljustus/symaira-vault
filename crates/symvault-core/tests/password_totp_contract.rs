@@ -7,11 +7,21 @@ use symvault_core::{password, totp};
 #[derive(Debug, Deserialize)]
 struct Fixture {
     schema_version: u8,
+    oracle: Oracle,
     password_cases: Vec<PasswordCase>,
     strength_cases: Vec<StrengthCase>,
     totp_secret_cases: Vec<TotpSecretCase>,
     totp_param_cases: Vec<TotpParamCase>,
     totp_cases: Vec<TotpCase>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Oracle {
+    commit: String,
+    release: String,
+    source_files: Vec<String>,
+    source_digest: String,
+    generator_digest: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -82,6 +92,19 @@ fn fixture() -> Fixture {
     const CONTENT: &[u8] =
         include_bytes!("../../../testdata/port/core/password-totp-contract.json");
     serde_json::from_slice(CONTENT).expect("decode Go-generated password/TOTP fixture")
+}
+
+#[test]
+fn fixture_has_pinned_provenance() {
+    let fixture = fixture();
+    assert_eq!(fixture.oracle.commit, "caadd5e");
+    assert_eq!(fixture.oracle.release, "v0.22.1");
+    assert_eq!(
+        fixture.oracle.source_files,
+        ["internal/crypto/password.go", "internal/crypto/totp.go"]
+    );
+    assert_eq!(fixture.oracle.source_digest.len(), 64);
+    assert_eq!(fixture.oracle.generator_digest.len(), 64);
 }
 
 #[test]

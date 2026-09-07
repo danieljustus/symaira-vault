@@ -2,7 +2,12 @@
   "schema_version": 1,
   "oracle": {
     "commit": "caadd5e",
-    "release": "v0.22.1"
+    "release": "v0.22.1",
+    "source_files": [
+      "internal/policy/ratelimit_transition.go"
+    ],
+    "source_digest": "847cbe991b2193f6de6a0361f09839ae27edcdb23fb49cd9a4e1a369d994af75",
+    "generator_digest": "9791154c0a07f4e8244a7fe27f94d68f4787e3c6b5923a217798f55ba2e9f553"
   },
   "cases": [
     {
@@ -487,6 +492,150 @@
           },
           "result": {
             "allowed": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "negative_hour_limit",
+      "initial_state": {
+        "tokens": 0,
+        "capacity": 0,
+        "refill_rate": 0,
+        "last_refill_unix_nanos": 1700000000000000000,
+        "daily_count": 0,
+        "daily_window_start_unix_nanos": 1700000000000000000,
+        "max_per_day": 0
+      },
+      "limits": {
+        "max_per_hour": -1,
+        "max_per_day": 0
+      },
+      "transitions": [
+        {
+          "event": {
+            "kind": "set_limits",
+            "at_unix_nanos": 1700000000000000000
+          },
+          "state": {
+            "tokens": -1,
+            "capacity": -1,
+            "refill_rate": -0.0002777777777777778,
+            "last_refill_unix_nanos": 1700000000000000000,
+            "daily_count": 0,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": 0
+          },
+          "result": {
+            "allowed": false
+          }
+        },
+        {
+          "event": {
+            "kind": "allow",
+            "at_unix_nanos": 1700000000000000000
+          },
+          "state": {
+            "tokens": -1,
+            "capacity": -1,
+            "refill_rate": -0.0002777777777777778,
+            "last_refill_unix_nanos": 1700000000000000000,
+            "daily_count": 0,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": 0
+          },
+          "result": {
+            "allowed": false
+          }
+        },
+        {
+          "event": {
+            "kind": "allow",
+            "at_unix_nanos": 1700000000000000000
+          },
+          "state": {
+            "tokens": -1,
+            "capacity": -1,
+            "refill_rate": -0.0002777777777777778,
+            "last_refill_unix_nanos": 1700000000000000000,
+            "daily_count": 0,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": 0
+          },
+          "result": {
+            "allowed": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "negative_day_limit",
+      "initial_state": {
+        "tokens": 0,
+        "capacity": 0,
+        "refill_rate": 0,
+        "last_refill_unix_nanos": 1700000000000000000,
+        "daily_count": 0,
+        "daily_window_start_unix_nanos": 1700000000000000000,
+        "max_per_day": 0
+      },
+      "limits": {
+        "max_per_hour": 1,
+        "max_per_day": -1
+      },
+      "transitions": [
+        {
+          "event": {
+            "kind": "set_limits",
+            "at_unix_nanos": 1700000000000000000
+          },
+          "state": {
+            "tokens": 1,
+            "capacity": 1,
+            "refill_rate": 0.0002777777777777778,
+            "last_refill_unix_nanos": 1700000000000000000,
+            "daily_count": 0,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": -1
+          },
+          "result": {
+            "allowed": false
+          }
+        },
+        {
+          "event": {
+            "kind": "allow",
+            "at_unix_nanos": 1700000000000000000
+          },
+          "state": {
+            "tokens": 0,
+            "capacity": 1,
+            "refill_rate": 0.0002777777777777778,
+            "last_refill_unix_nanos": 1700000000000000000,
+            "daily_count": 0,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": -1
+          },
+          "result": {
+            "allowed": true
+          }
+        },
+        {
+          "event": {
+            "kind": "allow",
+            "at_unix_nanos": 1700000000000000000
+          },
+          "state": {
+            "tokens": 0,
+            "capacity": 1,
+            "refill_rate": 0.0002777777777777778,
+            "last_refill_unix_nanos": 1700000000000000000,
+            "daily_count": 0,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": -1
+          },
+          "result": {
+            "allowed": false
           }
         }
       ]

@@ -3,9 +3,27 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestResolveOracleRejectsTamperedMetadata(t *testing.T) {
+	if _, err := resolveOracle(true, "tampered", pinnedOracleRelease); err == nil {
+		t.Fatal("expected tampered commit rejection")
+	}
+	if _, err := resolveOracle(true, pinnedOracleCommit, "v0.0.0"); err == nil {
+		t.Fatal("expected tampered release rejection")
+	}
+	got, err := resolveOracle(true, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Commit != pinnedOracleCommit || got.Release != pinnedOracleRelease {
+		t.Fatalf("check metadata = %#v", got)
+	}
+}
 
 func TestBuildPolicyFixtureIsDeterministic(t *testing.T) {
 	first, err := buildPolicyFixture("test", "v0.0.0")
@@ -73,6 +91,27 @@ func TestPolicyFixtureEvaluationCoverageIsIsolated(t *testing.T) {
 		}
 		if item.Name != "allowed_tool_empty_name" && item.Context.ToolName == "" {
 			t.Fatalf("evaluation case %q relies on an implicit empty tool name", item.Name)
+		}
+	}
+}
+
+func TestPolicyCheckRejectsProvenanceDrift(t *testing.T) {
+	fixture, err := buildPolicyFixture("test", "v0.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected, err := marshalJSON(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{fixture.Oracle.SourceDigest, fixture.Oracle.GeneratorDigest} {
+		tampered := bytes.Replace(expected, []byte(field), []byte(strings.Repeat("0", len(field))), 1)
+		path := filepath.Join(t.TempDir(), "fixture.json")
+		if err := os.WriteFile(path, tampered, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := checkFixture(path, expected); err == nil {
+			t.Fatalf("check accepted tampered provenance field %q", field)
 		}
 	}
 }
