@@ -34,15 +34,15 @@
     {
       "id": "RUST-004",
       "title": "Prove age and KDF interoperability",
-      "status": "passed",
+      "status": "in_progress",
       "depends_on": ["RUST-003"],
       "contract_rows": ["CRYPTO-001", "CRYPTO-002", "CRYPTO-003", "CRYPTO-004"],
-      "acceptance": ["make crypto-differential", "cargo nextest run -p symvault-crypto", "bounded Go FuzzParseArgon2idParams smoke", "pinned nightly Miri pure tests"]
+      "acceptance": ["make crypto-differential", "cargo nextest run -p symvault-crypto", "cargo +nightly fuzz run age_envelope"]
     },
     {
       "id": "RUST-005",
       "title": "Port storage read paths and writes",
-      "status": "ready",
+      "status": "blocked",
       "depends_on": ["RUST-004"],
       "contract_rows": ["STORE-001", "STORE-002", "STORE-003", "STORE-004", "STORE-005"],
       "acceptance": ["make store-differential", "cargo nextest run -p symvault-store"]

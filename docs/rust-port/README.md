@@ -74,10 +74,11 @@ passes. The measured Go baseline is in
   intentionally incomplete at the binary boundary until `RUST-009`; this
   work item establishes only its reusable core taxonomy. Persistent
   `.quotas.json` storage, registry behavior, and process locking remain in
-  `QUOTA-002` under `RUST-007`. `RUST-004` passed: age/X25519, legacy scrypt,
-  current Argon2id, zero-key recovery, and multi-recipient retention/removal
-  are verified by Go-generated fixtures, Rust property tests, and both
-  cross-language encryption directions. `RUST-005` is now ready.
+  `QUOTA-002` under `RUST-007`. `RUST-004` is in progress: basic Go↔Rust age,
+  scrypt, and Argon2id directions are green, but authoritative oracle
+  provenance, complete fixed-vector/negative coverage, true cross-language
+  recipient add/remove re-encryption, zero-key hardening, and CI-integrated
+  age-envelope fuzzing remain before `CRYPTO-001` through `CRYPTO-004` pass.
 
 The tiny release-built version slice measured 577,104 bytes, 2,277,376 bytes
 maximum RSS in one sample, and 2.576 ms startup p95 over 120 runs after 20
