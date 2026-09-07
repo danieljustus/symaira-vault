@@ -31,9 +31,14 @@ const ARGON2ID_TAG: &str = "argon2id";
 const ARGON2ID_LABEL: &[u8] = b"symvault-argon2id-v1";
 const KEY_BYTES: usize = 32;
 const ARGON2ID_SALT_BYTES: usize = 16;
-const MAX_ARGON2_TIME: u32 = 16;
-const MAX_ARGON2_MEMORY: u32 = 2_097_152;
-const MAX_ARGON2_THREADS: u32 = 16;
+/// Maximum Argon2id budget accepted from an untrusted envelope.
+///
+/// This product budget is deliberately below the historical Go ceiling while
+/// remaining compatible with the current Go interoperability vectors: t=10,
+/// m=1 GiB, p=8 is the largest valid envelope covered by that contract.
+const MAX_ARGON2_TIME: u32 = 10;
+const MAX_ARGON2_MEMORY: u32 = 1_048_576;
+const MAX_ARGON2_THREADS: u32 = 8;
 const MAX_ARGON2ID_PARAMS_BYTES: usize = 64;
 const MAX_ARGON2ID_PARAM_PARTS: usize = 3;
 const ARGON2ID_SALT_B64_BYTES: usize = 22;
@@ -443,15 +448,18 @@ impl age::Identity for ArgonIdentity {
         let Ok(cipher) = ChaCha20Poly1305::new_from_slice(key.as_bytes()) else {
             return Some(Err(age::DecryptError::InvalidHeader));
         };
-        let Ok(plain) = cipher.decrypt(Nonce::from_slice(&stanza.body[..12]), &stanza.body[12..])
+        let Ok(mut plain) =
+            cipher.decrypt(Nonce::from_slice(&stanza.body[..12]), &stanza.body[12..])
         else {
             return Some(Err(age::DecryptError::DecryptionFailed));
         };
         if plain.len() != 16 {
+            plain.zeroize();
             return Some(Err(age::DecryptError::DecryptionFailed));
         }
         let mut file_key = [0u8; 16];
         file_key.copy_from_slice(&plain);
+        plain.zeroize();
         Some(Ok(FileKey::new(Box::new(file_key))))
     }
 }
@@ -593,7 +601,105 @@ pub fn classify_zero_key_candidate(raw: &[u8]) -> FailureClass {
     }
 }
 
-fn validate_recovered_identity(identity: &Identity) -> Result<(), CryptoError> {
+/// Independent public authority used to validate a recovered zero-key identity.
+///
+/// At least one value must come from outside the encrypted plaintext. A
+/// recipient contract is preferred; a fingerprint can be used when that is the
+/// authority available to the caller. Supplying both values additionally checks
+/// that the contract is internally consistent.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ZeroKeyAuthority<'a> {
+    recipient: Option<&'a str>,
+    fingerprint: Option<&'a str>,
+}
+
+impl<'a> ZeroKeyAuthority<'a> {
+    /// Uses a canonical age recipient as the independent authority.
+    #[must_use]
+    pub const fn recipient(value: &'a str) -> Self {
+        Self {
+            recipient: Some(value),
+            fingerprint: None,
+        }
+    }
+
+    /// Uses a Go-compatible fingerprint as the independent authority.
+    #[must_use]
+    pub const fn fingerprint(value: &'a str) -> Self {
+        Self {
+            recipient: None,
+            fingerprint: Some(value),
+        }
+    }
+
+    /// Requires both an expected recipient and its independent fingerprint.
+    #[must_use]
+    pub const fn both(recipient: &'a str, fingerprint: &'a str) -> Self {
+        Self {
+            recipient: Some(recipient),
+            fingerprint: Some(fingerprint),
+        }
+    }
+}
+
+fn valid_fingerprint(value: &str) -> bool {
+    value.len() == 8 * 4 + 7
+        && value.split(' ').all(|group| {
+            group.len() == 4
+                && group
+                    .bytes()
+                    .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_lowercase())
+        })
+}
+
+fn validate_zero_key_authority(authority: ZeroKeyAuthority<'_>) -> Result<(), CryptoError> {
+    let Some(value) = authority.recipient.or(authority.fingerprint) else {
+        return Err(CryptoError::new(
+            FailureClass::InvalidInput,
+            "zero-key authority is missing",
+        ));
+    };
+    if value.trim().is_empty() {
+        return Err(CryptoError::new(
+            FailureClass::InvalidInput,
+            "zero-key authority is invalid",
+        ));
+    }
+    if let Some(expected_recipient) = authority.recipient {
+        let expected_recipient = expected_recipient.trim();
+        let parsed = parse_recipient(expected_recipient).map_err(|_| {
+            CryptoError::new(FailureClass::InvalidInput, "zero-key authority is invalid")
+        })?;
+        if parsed.to_string() != expected_recipient {
+            return Err(CryptoError::new(
+                FailureClass::InvalidInput,
+                "zero-key authority is invalid",
+            ));
+        }
+        if let Some(expected_fingerprint) = authority.fingerprint
+            && (!valid_fingerprint(expected_fingerprint)
+                || fingerprint(expected_recipient) != expected_fingerprint)
+        {
+            return Err(CryptoError::new(
+                FailureClass::InvalidInput,
+                "zero-key authority is invalid",
+            ));
+        }
+    } else if let Some(expected_fingerprint) = authority.fingerprint
+        && !valid_fingerprint(expected_fingerprint)
+    {
+        return Err(CryptoError::new(
+            FailureClass::InvalidInput,
+            "zero-key authority is invalid",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_recovered_identity(
+    identity: &Identity,
+    authority: ZeroKeyAuthority<'_>,
+) -> Result<(), CryptoError> {
     let public = recipient_string(identity);
     if public.is_empty() || parse_recipient(&public).map(|r| r.to_string()) != Ok(public.clone()) {
         return Err(CryptoError::new(
@@ -602,14 +708,19 @@ fn validate_recovered_identity(identity: &Identity) -> Result<(), CryptoError> {
         ));
     }
     let computed = fingerprint(&public);
-    let valid_fingerprint = computed.len() == 8 * 4 + 7
-        && computed.split(' ').all(|group| {
-            group.len() == 4
-                && group
-                    .bytes()
-                    .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_lowercase())
-        });
-    if !valid_fingerprint {
+    if !valid_fingerprint(&computed) {
+        return Err(CryptoError::new(
+            FailureClass::ZeroKeyCandidate,
+            "zero-key recovery failed",
+        ));
+    }
+    if authority
+        .recipient
+        .is_some_and(|expected| expected.trim() != public)
+        || authority
+            .fingerprint
+            .is_some_and(|expected| expected != computed)
+    {
         return Err(CryptoError::new(
             FailureClass::ZeroKeyCandidate,
             "zero-key recovery failed",
@@ -618,7 +729,10 @@ fn validate_recovered_identity(identity: &Identity) -> Result<(), CryptoError> {
     Ok(())
 }
 
-fn parse_recovered_identity(plaintext: &mut Vec<u8>) -> Result<Identity, CryptoError> {
+fn parse_recovered_identity(
+    plaintext: &mut Vec<u8>,
+    authority: ZeroKeyAuthority<'_>,
+) -> Result<Identity, CryptoError> {
     let result = (|| {
         let value = std::str::from_utf8(plaintext).map_err(|_| {
             CryptoError::new(FailureClass::ZeroKeyCandidate, "zero-key recovery failed")
@@ -626,7 +740,7 @@ fn parse_recovered_identity(plaintext: &mut Vec<u8>) -> Result<Identity, CryptoE
         let identity = parse_identity(value.trim()).map_err(|_| {
             CryptoError::new(FailureClass::ZeroKeyCandidate, "zero-key recovery failed")
         })?;
-        validate_recovered_identity(&identity)?;
+        validate_recovered_identity(&identity, authority)?;
         Ok(identity)
     })();
     plaintext.zeroize();
@@ -634,10 +748,16 @@ fn parse_recovered_identity(plaintext: &mut Vec<u8>) -> Result<Identity, CryptoE
 }
 
 /// Recovers an identity from the historical Argon2id zero-key envelope.
+///
+/// The zero-key bug makes the passphrase length an unwrap hint, not proof of
+/// identity. The caller must supply an independent recipient and/or fingerprint
+/// contract; a self-consistent identity decrypted from `raw` is not sufficient.
 pub fn recover_zero_key_identity(
     raw: &[u8],
     passphrase_len: usize,
+    authority: ZeroKeyAuthority<'_>,
 ) -> Result<Identity, CryptoError> {
+    validate_zero_key_authority(authority)?;
     if passphrase_len == 0 || passphrase_len > MAX_ZERO_KEY_PASSPHRASE_LEN {
         return Err(CryptoError::new(
             FailureClass::InvalidInput,
@@ -662,7 +782,7 @@ pub fn recover_zero_key_identity(
         ));
     }
     drop(reader);
-    parse_recovered_identity(&mut plaintext)
+    parse_recovered_identity(&mut plaintext, authority)
 }
 
 #[cfg(test)]
@@ -988,6 +1108,7 @@ mod tests {
             .collect()
     }
 
+    #[cfg(not(miri))]
     #[test]
     fn x25519_and_fingerprint_vectors_are_all_consumed() {
         let (_, fixture) = load_fixture();
@@ -1076,7 +1197,12 @@ mod tests {
             let ciphertext = base64::engine::general_purpose::STANDARD
                 .decode(&case.ciphertext)
                 .unwrap();
-            let recovered = recover_zero_key_identity(&ciphertext, case.passphrase_length).unwrap();
+            let recovered = recover_zero_key_identity(
+                &ciphertext,
+                case.passphrase_length,
+                ZeroKeyAuthority::recipient(&fixture.identities[0].recipient),
+            )
+            .unwrap();
             assert_eq!(
                 recipient_string(&recovered),
                 fixture.identities[0].recipient,
@@ -1152,6 +1278,7 @@ mod tests {
         }
     }
 
+    #[cfg(not(miri))]
     #[test]
     fn fixture_validation_rejects_omission_and_tampered_provenance() {
         let (raw, fixture) = load_fixture();
@@ -1330,21 +1457,43 @@ mod tests {
             .decode(&zero.ciphertext)
             .unwrap();
         assert_eq!(
-            recover_zero_key_identity(&zero_ciphertext, 0)
-                .unwrap_err()
-                .class(),
+            recover_zero_key_identity(
+                &zero_ciphertext,
+                0,
+                ZeroKeyAuthority::recipient(&fixture.identities[0].recipient),
+            )
+            .unwrap_err()
+            .class(),
             FailureClass::InvalidInput
         );
         assert_eq!(
-            recover_zero_key_identity(&zero_ciphertext, MAX_ZERO_KEY_PASSPHRASE_LEN + 1)
-                .unwrap_err()
-                .class(),
+            recover_zero_key_identity(
+                &zero_ciphertext,
+                MAX_ZERO_KEY_PASSPHRASE_LEN + 1,
+                ZeroKeyAuthority::recipient(&fixture.identities[0].recipient),
+            )
+            .unwrap_err()
+            .class(),
             FailureClass::InvalidInput
         );
         assert_eq!(
-            recover_zero_key_identity(&zero_ciphertext, zero.passphrase_length + 1)
-                .unwrap_err()
-                .class(),
+            recover_zero_key_identity(
+                &zero_ciphertext,
+                MAX_ZERO_KEY_PASSPHRASE_LEN,
+                ZeroKeyAuthority::recipient(&fixture.identities[0].recipient),
+            )
+            .unwrap_err()
+            .class(),
+            FailureClass::ZeroKeyCandidate
+        );
+        assert_eq!(
+            recover_zero_key_identity(
+                &zero_ciphertext,
+                zero.passphrase_length + 1,
+                ZeroKeyAuthority::recipient(&fixture.identities[0].recipient),
+            )
+            .unwrap_err()
+            .class(),
             FailureClass::ZeroKeyCandidate
         );
         let zeros = SecretBytes::new(&vec![0; zero.passphrase_length]);
@@ -1359,9 +1508,13 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            recover_zero_key_identity(&malformed_identity, zero.passphrase_length)
-                .unwrap_err()
-                .class(),
+            recover_zero_key_identity(
+                &malformed_identity,
+                zero.passphrase_length,
+                ZeroKeyAuthority::recipient(&fixture.identities[0].recipient),
+            )
+            .unwrap_err()
+            .class(),
             FailureClass::ZeroKeyCandidate
         );
     }
@@ -1386,10 +1539,79 @@ mod tests {
     }
 
     #[test]
+    fn zero_key_recovery_requires_independent_authority() {
+        let expected = parse_identity(ID).unwrap();
+        let attacker = parse_identity(ID2).unwrap();
+        let zeros = SecretBytes::new(&[0; 23]);
+        let ciphertext = encrypt_argon2id(
+            ID2.as_bytes(),
+            &zeros,
+            Argon2idParams {
+                time: 1,
+                memory_kib: 32,
+                threads: 1,
+            },
+        )
+        .unwrap();
+        let error = recover_zero_key_identity(
+            &ciphertext,
+            23,
+            ZeroKeyAuthority::recipient(&recipient_string(&expected)),
+        )
+        .unwrap_err();
+        assert_eq!(error.class(), FailureClass::ZeroKeyCandidate);
+        assert_eq!(error.to_string(), "zero-key recovery failed");
+        assert!(!format!("{error:?}").contains(ID2));
+
+        let expected_fingerprint = fingerprint(&recipient_string(&expected));
+        let recovered = recover_zero_key_identity(
+            &ciphertext,
+            23,
+            ZeroKeyAuthority::fingerprint(&fingerprint(&recipient_string(&attacker))),
+        )
+        .unwrap();
+        assert_eq!(recipient_string(&recovered), recipient_string(&attacker));
+        assert_ne!(
+            expected_fingerprint,
+            fingerprint(&recipient_string(&recovered))
+        );
+
+        let invalid_authority = recover_zero_key_identity(
+            &ciphertext,
+            23,
+            ZeroKeyAuthority::both(&recipient_string(&expected), "not a fingerprint"),
+        )
+        .unwrap_err();
+        assert_eq!(invalid_authority.class(), FailureClass::InvalidInput);
+    }
+
+    #[test]
     fn secret_formatting_is_redacted() {
         let secret = SecretBytes::new(b"do-not-print");
         assert_eq!(format!("{secret:?}"), "<redacted>");
         assert_eq!(format!("{secret}"), "<redacted>");
+    }
+
+    #[test]
+    fn argon2id_limits_accept_exact_budget_and_reject_over_limit() {
+        for value in [
+            format!("t={MAX_ARGON2_TIME},m=32,p=1"),
+            format!("t=1,m={MAX_ARGON2_MEMORY},p=1"),
+            format!("t=1,m=32,p={MAX_ARGON2_THREADS}"),
+        ] {
+            assert!(parse_argon2id_params(&value).is_ok(), "{value}");
+        }
+        for value in [
+            format!("t={},m=32,p=1", MAX_ARGON2_TIME + 1),
+            format!("t=1,m={},p=1", MAX_ARGON2_MEMORY + 1),
+            format!("t=1,m=32,p={}", MAX_ARGON2_THREADS + 1),
+        ] {
+            assert_eq!(
+                parse_argon2id_params(&value).unwrap_err().class(),
+                FailureClass::ParameterBounds,
+                "{value}"
+            );
+        }
     }
 
     #[test]
