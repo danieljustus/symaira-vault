@@ -19,7 +19,7 @@ func main() {
 		os.Exit(2)
 	}
 	values := map[string]string{}
-	file, err := os.Open(os.Args[1])
+	file, err := os.Open(os.Args[1]) // #nosec G703 -- this local verifier reads only the explicitly selected fixture.
 	if err != nil {
 		panic(err)
 	}

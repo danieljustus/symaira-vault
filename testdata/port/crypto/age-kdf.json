@@ -12,7 +12,7 @@
       "internal/vault/reencrypt.go"
     ],
     "source_digest": "07df36059bfda5b2f3b61441fdc1d54ac312536870427a7f10b3d1cfb4b2c157",
-    "generator_digest": "e110f57f3c46dde0597291b252b40ad4f5e94af7f91ec26f5e497ecfdfd65a84"
+    "generator_digest": "9e2fb7efe405bedd71a069c63da73702bce725456e8b051471ecc78cdb52e1a8"
   },
   "identities": [
     {
@@ -38,7 +38,7 @@
     {
       "name": "two_recipients",
       "plaintext": "safe Rust/Go age interoperability vector — no production data",
-      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSByRXVwU1Uwb3FmVjJLckZ6cnVua0RBbC9aUjB4eUFVZmhtN29yUGk3a0FnClcxc1paRVA5ZG5RYlJaa2VBekw5YTVPTUJVSU93MWViaWp5ZTRWc1RDYlkKLT4gWDI1NTE5IFRteXR1SlpoaURIQlhzVUw2UFlyekVGMml4cFRKOWduTWtScit3VTZyRzgKNEI2M2czNEV3S0QraTJPVCtRbE5HM01YQkdydjF0Q01BZzdmTVVMMjV6YwotLS0gbjZiaVhZbGJ5MFIwRktsb3dLVlIyb0k0L0h6Z0NyRXlCVHVOcVc1Vi81ZwqVNhgAejigDohG2b6JGy1rlECF8L2IKgklLihcwqaomAI0GC9mm/KQCDsUQzxFxLqLmM5k3wyitTMMc3yBlp5NBaMt72eNji/QUwfKYVs5gOaZK5EslukIO+xTWRqsaA==",
+      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBpeHhCQ0QybUVOdTBFZU1HQkZTcjB2aThlcFFkUG5FZzIrb1BmUEhqdFZvCnlNM1pVT0orWU5YZUZWTWROdnI5d3dSdDJyU29hb1gxSHcyKzIvT3lwZlEKLT4gWDI1NTE5IEZYNnBPTWpQR2VUOHRGQm9pekpxVkRtVHpPbGZwUDR0UkFMWkJMNURCRWcKcGt1c0dJbVZsbWZlbE5Id3RsOHBUalpQSlFMTnNYSWZCbFo0Z0EwYjV0NAotLS0gZFNSVzkra284UGl2VXk3TXB3MU5vTjlySUxrbDRub01oTTJLN1dXSmh2VQoT98NGg6nVuZMYfGvx0VBXM5lXO1n+bVYYPC0S5g7BYPyBJOCDedZtm+2mZ2EmBt89L+0QbAE4/OXAAeopO+go830cu5kZrXbCZFCEBlgf3LZ4+P4phN/01uCIKV7ZaA==",
       "recipients": [
         "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y",
         "age1wxknyar29luhmltc320wnllzxd7n0cjvldxqjunyh9u3l4gpd3kq9r4lgr"
@@ -49,14 +49,14 @@
     {
       "name": "legacy_work_factor_12",
       "plaintext": "legacy scrypt envelope",
-      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdCBYQ3ozeEw0Y2hhUE9uUlI1dk95UTl3IDEyCkNjWkcyRG44ZWk3VjN2RDBsWlE1S2Mvbk83YW9ZdHQzWk1OdHlvcGF2RFkKLS0tIHR1Qk5HRldtMmwyNkxTVlVyeHgyK1RsaVNyWkJmc1B3QTAzc1BCMXpacGMK1KzYGvP7h8SJX5Zbw8brIgjkym2AEQp0TlsKUN0Ob7dAdTo6CxEH28Fg3jSMcQtRQ1O3VKyC"
+      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdCBEb3B3SGs3eVAwclZZNUkxL2lsajFBIDEyCk1FKzd5T01GcklQanRBdHJhRUNvanQwL0RmcmdoNk53WXZtMG1LcXFLTk0KLS0tIFppc3dtUGQzOEFiK1daVFp1cm5rZDN0dXNMaENCOWNCYjN0Y205OU4yMmMKkj4gl13P2o90JaNDoGKmMD1ndsCZNn7zfMD873A0RyK8m4jlAH9mjOwW7qEr2jgI5VJd9I+I"
     }
   ],
   "argon2id_cases": [
     {
       "name": "current_tiny_fixture_params",
       "plaintext": "current argon2id envelope",
-      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIFRsY1Rhdzc0WHNkRmNOaXk3eWFnS1EgdD0xLG09MzIscD0xCjhDSmhGbG9SOFArS09DS1NHS2hoR20xQWg5LzFGaWhjQURMZzNNcDlPZXIxNlA3Z1FwQS9hNGsrd3RJCi0tLSBWT1piWGhhYzRsc0ZqYzMyRDlsMGVBa1BBZUx1cTV3a3hJSjBkUU1UQlA4ClIzokTHVIXQLmDa0BkiCVwVRubbk5IGKL809TRP9mGcHb2uoAJOwt8syigSo4FMxZKyt0mbsjR96A==",
+      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIDE4ZFdxUlRGZ0NieEZDNlBrT3N4MHcgdD0xLG09MzIscD0xCjFZbHZReG8rVURCdVdrV2h2K2ZTdkw3c25iNmlUUVN2L0ZKYmdzOFVaMWlUSEpzMnZOcWZpVWZQZENzCi0tLSBkMkU2RVlDYjVGOHc1MlQ2c0dXcFk0SCt3OW1IU3ptM01CM0ZwQ2d6YnY0CtmGqXc9qSYrGWT89mC2Pddql5EsJuOg7IEH6K0+OHDprCJSD2JvSTlX9qVqIKI7TItQyaYXzi2JmA==",
       "params": {
         "Time": 1,
         "Memory": 32,
@@ -67,7 +67,7 @@
   "zero_key_cases": [
     {
       "name": "historical_zero_key_length_23",
-      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIEpobEdFV3VRUk1QOHNwMnFpdGVyS1EgdD0xLG09MzIscD0xCkQ0T2JpK21WSEpUSTZnVG9hS0ZjcFBYZTkwS1FLbDhkMXkyNDRTLyt0L2ZabU9QMEI5REtqSG1Sb0NvCi0tLSAvWmpvaCt3RXM0Q01HazQxcUxMdXdXeUFESEVvWVgybHVIcnVLTjkvOGhFCmk74YEsX2i3y+MFfs4MUWg4o6Z8ygqud+8Dj9uiTtNJ/x4rqLdWHdGZzqMxP/ZO4akCc42Xh/pUsRMyptt0ZDkLxi7BYoto3OrWiAjqDSe6divZ8yWAf6BuK1iRfMU28oQhy5ZsL1otMr8=",
+      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIEcrbWE0eUR0ZWNCVnFDamFWMGt4T3cgdD0xLG09MzIscD0xCmduYUE3QUhweFRBNEJzWllpd0VNRWFMcjFZNmQ0OEFXdkRkdExtWDB4bkszUVV4cnVqcmF1enlCM3MwCi0tLSA2K3JUUWVEcW4ydEZrS3FjM0YvMEMwaGtJeGhyZ1JLVGlqUkFTUFJoK25RCtVKJ7Lmob2IOjGf6OEJezQ/b9c2O4Arqa06FNXHpHzJksLses0xUhWuT3NHDtURTnL+H0PV14AzdW3nQ+DGz/lly7SN+5+UVL97AxHETvlYAUJjs4p2lBE+Ai9gTra55es3IfTad9rdIfo=",
       "passphrase_length": 23
     }
   ],

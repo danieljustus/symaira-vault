@@ -21,7 +21,7 @@ import (
 const (
 	oracleCommit  = "caadd5e"
 	oracleRelease = "v0.22.1"
-	passphrase    = "rust-interop-fixture-passphrase-v1"
+	passphrase    = "rust-interop-fixture-passphrase-v1" // #nosec G101 -- deterministic non-secret fixture input.
 	sourceRoot    = "internal/crypto"
 )
 
@@ -84,7 +84,7 @@ func digestFiles(root string, names []string) (string, error) {
 	sort.Strings(sorted)
 	h := sha256.New()
 	for _, name := range sorted {
-		data, err := os.ReadFile(filepath.Join(root, name))
+		data, err := os.ReadFile(filepath.Join(root, name)) // #nosec G304 -- source names are fixed by the generator.
 		if err != nil {
 			return "", err
 		}
@@ -167,7 +167,7 @@ func build(root string) (fixture, error) {
 }
 
 func verify(root, path string) error {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- the path is the explicit fixture selected by the generator.
 	if err != nil {
 		return err
 	}
