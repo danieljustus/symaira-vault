@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"golang.org/x/sys/unix"
 )
@@ -100,31 +99,11 @@ func recoverReencryptArtifacts(vaultDir string, journal *reencryptJournal) error
 	return syncReencryptDirectory(vaultDir)
 }
 
-func cleanupUnjournaledReencryptArtifacts(vaultDir string, journal *reencryptJournal) error {
-	known := make(map[string]bool)
-	for _, entry := range journal.Entries {
-		if entry.Temp != "" {
-			known[entry.Temp] = true
-		}
-		if entry.Backup != "" {
-			known[entry.Backup] = true
-		}
-	}
-	return filepath.Walk(entriesDir(vaultDir), func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() || !strings.Contains(info.Name(), ".reencrypt-") || known[path] {
-			return nil
-		}
-		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
-			return fmt.Errorf("unsafe unjournaled re-encryption artifact %q", path)
-		}
-		if err := unix.Unlink(path); err != nil && !os.IsNotExist(err) {
-			return err
-		}
-		return syncReencryptDirectory(filepath.Dir(path))
-	})
+func cleanupUnjournaledReencryptArtifacts(_ string, _ *reencryptJournal) error {
+	// A filename is not authority to distinguish an abandoned transaction
+	// artifact from a legitimate user entry. Journaled artifacts are removed
+	// by recoverReencryptArtifacts; unknown files must be preserved.
+	return nil
 }
 
 func validateReencryptJournalPath(vaultDir, path string) error {
