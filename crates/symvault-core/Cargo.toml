@@ -14,6 +14,7 @@ getrandom = "=0.3.3"
 hmac = "=0.12.1"
 serde.workspace = true
 serde_json.workspace = true
+symaira-core-version.workspace = true
 sha1 = "=0.10.6"
 sha2 = "=0.10.9"
 unicode_categories = "=0.1.1"

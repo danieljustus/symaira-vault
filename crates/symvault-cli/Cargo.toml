@@ -14,3 +14,4 @@ path = "src/main.rs"
 [dependencies]
 clap.workspace = true
 symvault-core.workspace = true
+symaira-core-version.workspace = true

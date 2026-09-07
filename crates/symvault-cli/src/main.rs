@@ -7,7 +7,8 @@ use std::{
 };
 
 use clap::{Args, Parser, Subcommand};
-use symvault_core::{render_version_json, render_version_text};
+use symaira_core_version::new as new_version;
+use symvault_core::TOOL_NAME;
 
 const VERSION: &str = match option_env!("SYMVAULT_VERSION") {
     Some(version) => version,
@@ -87,15 +88,14 @@ fn has_unescaped_version_flag(args: &[OsString]) -> bool {
 }
 
 fn write_version(output_format: &str, json: bool) -> ExitCode {
-    let rendered = if json || output_format == "json" {
-        match render_version_json(VERSION) {
-            Ok(output) => output,
-            Err(_) => return ExitCode::from(1),
-        }
+    let info = new_version(TOOL_NAME, VERSION, 1);
+    let mut stdout = io::stdout().lock();
+    let result = if json || output_format == "json" {
+        info.write(&mut stdout).map_err(|_| ())
     } else {
-        render_version_text(VERSION)
+        writeln!(stdout, "{info}").map_err(|_| ())
     };
-    if io::stdout().write_all(rendered.as_bytes()).is_err() {
+    if result.is_err() {
         return ExitCode::from(1);
     }
     ExitCode::SUCCESS
