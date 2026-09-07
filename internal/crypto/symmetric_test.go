@@ -652,7 +652,7 @@ func FuzzDecryptAgeEnvelope(f *testing.F) {
 	for _, seed := range [][]byte{
 		[]byte("age-encryption.org/v1\\n"),
 		[]byte("not an age envelope"),
-		[]byte{},
+		{},
 	} {
 		f.Add(seed)
 	}

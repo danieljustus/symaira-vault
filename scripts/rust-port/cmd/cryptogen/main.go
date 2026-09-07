@@ -14,6 +14,7 @@ import (
 	"sort"
 
 	"filippo.io/age"
+
 	cryptopkg "github.com/danieljustus/symaira-vault/internal/crypto"
 )
 
@@ -171,7 +172,7 @@ func verify(root, path string) error {
 		return err
 	}
 	var got fixture
-	if err := json.Unmarshal(data, &got); err != nil {
+	if err = json.Unmarshal(data, &got); err != nil {
 		return fmt.Errorf("decode fixture: %w", err)
 	}
 	expected, err := build(root)

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"filippo.io/age"
+
 	cryptopkg "github.com/danieljustus/symaira-vault/internal/crypto"
 )
 
@@ -22,17 +23,18 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	defer file.Close()
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		parts := strings.SplitN(scanner.Text(), "=", 2)
 		if len(parts) != 2 {
+			closeFile(file)
 			fmt.Fprintln(os.Stderr, "invalid vector line")
 			os.Exit(1)
 		}
 		values[parts[0]] = parts[1]
 	}
-	if err := scanner.Err(); err != nil {
+	closeFile(file)
+	if err = scanner.Err(); err != nil {
 		panic(err)
 	}
 	id, err := age.ParseX25519Identity("AGE-SECRET-KEY-1HS3YTK69EJH0ZYM8ANNNDWQMPT7ZMLPYGTMC47F5T4EDJ5N7EYMQ4L5CDL")
@@ -57,6 +59,13 @@ func main() {
 	}
 	fmt.Println("PASS Rust encrypt -> Go decrypt (age, scrypt, argon2id)")
 }
+
+func closeFile(file *os.File) {
+	if err := file.Close(); err != nil {
+		panic(err)
+	}
+}
+
 func decode(values map[string]string, key string) []byte {
 	raw, ok := values[key]
 	if !ok {
