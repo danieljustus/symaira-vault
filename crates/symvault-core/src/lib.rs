@@ -2,7 +2,7 @@
 
 //! Language-neutral domain contracts for the staged Symaira Vault Rust port.
 
-use serde::Serialize;
+use symaira_core_version::new as new_version;
 
 pub mod error;
 pub mod password;
@@ -16,14 +16,6 @@ pub mod totp;
 /// Public binary and protocol tool name.
 pub const TOOL_NAME: &str = "symvault";
 
-/// Stable machine-readable version schema.
-#[derive(Debug, Serialize)]
-struct VersionDocument<'a> {
-    tool: &'static str,
-    version: &'a str,
-    schema_version: u8,
-}
-
 /// Renders the exact plain-text version contract.
 ///
 /// ```
@@ -31,7 +23,7 @@ struct VersionDocument<'a> {
 /// ```
 #[must_use]
 pub fn render_version_text(version: &str) -> String {
-    format!("{TOOL_NAME} {version}\n")
+    format!("{}\n", new_version(TOOL_NAME, version, 1))
 }
 
 /// Renders the exact schema-v1 JSON version contract.
@@ -40,12 +32,8 @@ pub fn render_version_text(version: &str) -> String {
 ///
 /// Returns an error only when JSON serialization fails.
 pub fn render_version_json(version: &str) -> Result<String, serde_json::Error> {
-    let document = VersionDocument {
-        tool: TOOL_NAME,
-        version,
-        schema_version: 1,
-    };
-    let mut output = serde_json::to_string(&document)?;
+    let mut output = String::from_utf8(new_version(TOOL_NAME, version, 1).json()?.to_vec())
+        .expect("serde_json always returns UTF-8");
     output.push('\n');
     Ok(output)
 }
