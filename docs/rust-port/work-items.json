@@ -34,7 +34,7 @@
     {
       "id": "RUST-004",
       "title": "Prove age and KDF interoperability",
-      "status": "ready",
+      "status": "in_progress",
       "depends_on": ["RUST-003"],
       "contract_rows": ["CRYPTO-001", "CRYPTO-002", "CRYPTO-003", "CRYPTO-004"],
       "acceptance": ["make crypto-differential", "cargo nextest run -p symvault-crypto", "cargo +nightly fuzz run age_envelope"]

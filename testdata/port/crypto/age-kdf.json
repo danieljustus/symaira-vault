@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "caadd5e",
+    "release": "v0.22.1",
+    "source_files": [
+      "internal/crypto/age.go",
+      "internal/crypto/argon2id.go",
+      "internal/crypto/keygen.go",
+      "internal/crypto/symmetric.go",
+      "internal/crypto/interop.go",
+      "internal/vault/reencrypt.go"
+    ],
+    "source_digest": "07df36059bfda5b2f3b61441fdc1d54ac312536870427a7f10b3d1cfb4b2c157",
+    "generator_digest": "9e2fb7efe405bedd71a069c63da73702bce725456e8b051471ecc78cdb52e1a8"
+  },
+  "identities": [
+    {
+      "name": "fixed_1",
+      "identity": "AGE-SECRET-KEY-1HS3YTK69EJH0ZYM8ANNNDWQMPT7ZMLPYGTMC47F5T4EDJ5N7EYMQ4L5CDL",
+      "recipient": "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y",
+      "fingerprint": "9DC3 A8A0 74CE 0E8A E871 8B96 246D 238B"
+    },
+    {
+      "name": "fixed_2",
+      "identity": "AGE-SECRET-KEY-18HD87KNMWKY3RW97YR2PYU6HGWDZXAGW6JF74LNNHUA6A8K5ZF9QTWUTK3",
+      "recipient": "age1wxknyar29luhmltc320wnllzxd7n0cjvldxqjunyh9u3l4gpd3kq9r4lgr",
+      "fingerprint": "F0E9 391C BACE 82B8 FBB0 20BF 299A BD6F"
+    },
+    {
+      "name": "fixed_3",
+      "identity": "AGE-SECRET-KEY-15KR576PHDPLRQS08427S6X2G492S6GTVELZ6WHN8AKMWW90T0HES2KQ597",
+      "recipient": "age1mrfjwn5r0v9zrvgv73fc5880svsky436wp2ygvw6lts5hx8xwavs6vmkcy",
+      "fingerprint": "1CCA B8D6 58D0 1292 08E2 986C ED65 3CE4"
+    }
+  ],
+  "age_cases": [
+    {
+      "name": "two_recipients",
+      "plaintext": "safe Rust/Go age interoperability vector — no production data",
+      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBpeHhCQ0QybUVOdTBFZU1HQkZTcjB2aThlcFFkUG5FZzIrb1BmUEhqdFZvCnlNM1pVT0orWU5YZUZWTWROdnI5d3dSdDJyU29hb1gxSHcyKzIvT3lwZlEKLT4gWDI1NTE5IEZYNnBPTWpQR2VUOHRGQm9pekpxVkRtVHpPbGZwUDR0UkFMWkJMNURCRWcKcGt1c0dJbVZsbWZlbE5Id3RsOHBUalpQSlFMTnNYSWZCbFo0Z0EwYjV0NAotLS0gZFNSVzkra284UGl2VXk3TXB3MU5vTjlySUxrbDRub01oTTJLN1dXSmh2VQoT98NGg6nVuZMYfGvx0VBXM5lXO1n+bVYYPC0S5g7BYPyBJOCDedZtm+2mZ2EmBt89L+0QbAE4/OXAAeopO+go830cu5kZrXbCZFCEBlgf3LZ4+P4phN/01uCIKV7ZaA==",
+      "recipients": [
+        "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y",
+        "age1wxknyar29luhmltc320wnllzxd7n0cjvldxqjunyh9u3l4gpd3kq9r4lgr"
+      ]
+    }
+  ],
+  "scrypt_cases": [
+    {
+      "name": "legacy_work_factor_12",
+      "plaintext": "legacy scrypt envelope",
+      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdCBEb3B3SGs3eVAwclZZNUkxL2lsajFBIDEyCk1FKzd5T01GcklQanRBdHJhRUNvanQwL0RmcmdoNk53WXZtMG1LcXFLTk0KLS0tIFppc3dtUGQzOEFiK1daVFp1cm5rZDN0dXNMaENCOWNCYjN0Y205OU4yMmMKkj4gl13P2o90JaNDoGKmMD1ndsCZNn7zfMD873A0RyK8m4jlAH9mjOwW7qEr2jgI5VJd9I+I"
+    }
+  ],
+  "argon2id_cases": [
+    {
+      "name": "current_tiny_fixture_params",
+      "plaintext": "current argon2id envelope",
+      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIDE4ZFdxUlRGZ0NieEZDNlBrT3N4MHcgdD0xLG09MzIscD0xCjFZbHZReG8rVURCdVdrV2h2K2ZTdkw3c25iNmlUUVN2L0ZKYmdzOFVaMWlUSEpzMnZOcWZpVWZQZENzCi0tLSBkMkU2RVlDYjVGOHc1MlQ2c0dXcFk0SCt3OW1IU3ptM01CM0ZwQ2d6YnY0CtmGqXc9qSYrGWT89mC2Pddql5EsJuOg7IEH6K0+OHDprCJSD2JvSTlX9qVqIKI7TItQyaYXzi2JmA==",
+      "params": {
+        "Time": 1,
+        "Memory": 32,
+        "Threads": 1
+      }
+    }
+  ],
+  "zero_key_cases": [
+    {
+      "name": "historical_zero_key_length_23",
+      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIEcrbWE0eUR0ZWNCVnFDamFWMGt4T3cgdD0xLG09MzIscD0xCmduYUE3QUhweFRBNEJzWllpd0VNRWFMcjFZNmQ0OEFXdkRkdExtWDB4bkszUVV4cnVqcmF1enlCM3MwCi0tLSA2K3JUUWVEcW4ydEZrS3FjM0YvMEMwaGtJeGhyZ1JLVGlqUkFTUFJoK25RCtVKJ7Lmob2IOjGf6OEJezQ/b9c2O4Arqa06FNXHpHzJksLses0xUhWuT3NHDtURTnL+H0PV14AzdW3nQ+DGz/lly7SN+5+UVL97AxHETvlYAUJjs4p2lBE+Ai9gTra55es3IfTad9rdIfo=",
+      "passphrase_length": 23
+    }
+  ],
+  "malformed_cases": [
+    {
+      "name": "empty",
+      "input": ""
+    },
+    {
+      "name": "not_age",
+      "input": "not an age envelope\n"
+    },
+    {
+      "name": "bad_stanza",
+      "input": "age-encryption.org/v1\n-\u003e argon2id bad\n!!!\n--- header end\n"
+    }
+  ]
+}

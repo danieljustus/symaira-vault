@@ -1,4 +1,4 @@
-.PHONY: all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check differential-go-selftest port-contract rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-gates help docs-check
+.PHONY: all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-gates help docs-check
 
 # Variables
 BINARY_NAME := symvault
@@ -221,7 +221,20 @@ differential-go-selftest:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/diffharness \
 		--left ./$(BINARY_NAME) --right ./$(BINARY_NAME) --cases $(PORT_CLI_CASES)
 
-port-contract: port-fixtures-check core-fixtures-check policy-fixtures-check differential-go-selftest
+crypto-differential:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/cryptogen \
+		--check --output testdata/port/crypto/age-kdf.json
+	$(CARGO) test -p symvault-crypto --all-features --locked
+	@mkdir -p target/crypto
+	$(CARGO) run -p symvault-crypto --example crypto_emit --locked > target/crypto/rust-output.txt
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/cryptoverify target/crypto/rust-output.txt
+	$(MAKE) crypto-fuzz-smoke
+
+crypto-fuzz-smoke:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test -run '^$$' -fuzz=FuzzParseArgon2idParams -fuzztime=1s -timeout=30s ./internal/crypto
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test -run '^$$' -fuzz=FuzzDecryptAgeEnvelope -fuzztime=1s -timeout=30s ./internal/crypto
+
+port-contract: port-fixtures-check core-fixtures-check policy-fixtures-check differential-go-selftest crypto-differential
 
 rust-build:
 	$(CARGO) build --workspace --locked
@@ -241,7 +254,9 @@ rust-miri:
 	CARGO_TARGET_DIR=$(MIRI_TARGET_DIR) $(CARGO) +$(MIRI_TOOLCHAIN) miri test -p symvault-core --locked
 
 rust-features:
-	$(CARGO) hack check --workspace --each-feature --no-dev-deps --locked
+	# Keep the committed lockfile usable while checking every feature combination.
+	# cargo-hack mutates manifests for --no-dev-deps, which requires a different lockfile.
+	$(CARGO) hack check --workspace --each-feature --locked
 
 rust-coverage:
 	$(CARGO) llvm-cov nextest --workspace --all-features --locked --summary-only
@@ -309,6 +324,8 @@ help:
 	@echo "  policy-fixtures-generate - Regenerate frozen Go-oracle policy/tier fixtures"
 	@echo "  policy-fixtures-check    - Verify Go-oracle policy/tier fixtures have not drifted"
 	@echo "  differential-go-selftest - Compare the Go oracle with itself in isolated sandboxes"
+	@echo "  crypto-differential - Verify Go↔Rust age and KDF cross-decryption"
+	@echo "  crypto-fuzz-smoke - Run the bounded Argon2id parser fuzz smoke"
 	@echo "  port-contract      - Run all Rust-port contract preparation gates"
 	@echo "  rust-build         - Build the staged Rust workspace"
 	@echo "  rust-check         - Check all Rust targets and features"
