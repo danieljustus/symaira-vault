@@ -5,6 +5,7 @@
 use serde::Serialize;
 
 pub mod error;
+pub mod quota;
 pub mod redact;
 pub mod secret_ref;
 

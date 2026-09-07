@@ -1,4 +1,4 @@
-.PHONY: all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check differential-go-selftest port-contract rust-build rust-check rust-lint rust-test rust-features rust-coverage rust-security rust-version-contract rust-gates help docs-check
+.PHONY: all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check differential-go-selftest port-contract rust-build rust-check rust-lint rust-test rust-features rust-coverage rust-security rust-version-contract rust-gates help docs-check
 
 # Variables
 BINARY_NAME := symvault
@@ -160,6 +160,7 @@ PORT_CLI_CASES := testdata/port/cli/cases.json
 PORT_ERROR_FIXTURE := testdata/port/core/error-contract.json
 PORT_SECRET_REF_FIXTURE := testdata/port/core/secret-ref-contract.json
 PORT_REDACT_FIXTURE := testdata/port/core/redact-contract.json
+PORT_QUOTA_FIXTURE := testdata/port/core/quota-contract.json
 PORT_GO_BINARY := target/port/symvault-go
 RUST_BINARY := target/debug/symvault
 PORT_CONTRACT_VERSION ?= v0.0.0-port
@@ -174,7 +175,17 @@ port-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/portgen \
 		--check --output $(PORT_CLI_FIXTURE)
 
-core-fixtures-generate:
+quota-fixtures-generate:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/quotagen \
+		--output $(PORT_QUOTA_FIXTURE) \
+		--oracle-commit $(PORT_ORACLE_COMMIT) \
+		--oracle-release $(PORT_ORACLE_RELEASE)
+
+quota-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/quotagen \
+		--check --output $(PORT_QUOTA_FIXTURE)
+
+core-fixtures-generate: quota-fixtures-generate
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/coregen \
 		--error-output $(PORT_ERROR_FIXTURE) \
 		--secret-ref-output $(PORT_SECRET_REF_FIXTURE) \
@@ -182,7 +193,7 @@ core-fixtures-generate:
 		--oracle-commit $(PORT_ORACLE_COMMIT) \
 		--oracle-release $(PORT_ORACLE_RELEASE)
 
-core-fixtures-check:
+core-fixtures-check: quota-fixtures-check
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/coregen \
 		--check \
 		--error-output $(PORT_ERROR_FIXTURE) \
@@ -273,6 +284,8 @@ help:
 	@echo "  port-fixtures-check    - Verify Go-oracle CLI fixtures have not drifted"
 	@echo "  core-fixtures-generate - Regenerate frozen Go-oracle core fixtures"
 	@echo "  core-fixtures-check    - Verify Go-oracle core fixtures have not drifted"
+	@echo "  quota-fixtures-generate - Regenerate pure quota transition vectors"
+	@echo "  quota-fixtures-check    - Verify pure quota transition vectors have not drifted"
 	@echo "  differential-go-selftest - Compare the Go oracle with itself in isolated sandboxes"
 	@echo "  port-contract      - Run all Rust-port contract preparation gates"
 	@echo "  rust-build         - Build the staged Rust workspace"
