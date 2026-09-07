@@ -1,21 +1,23 @@
 #![deny(unsafe_code)]
 
-//! Read-only access to the Symaira Vault filesystem format.
+//! Access to the Symaira Vault filesystem format.
 //!
-//! This slice intentionally has no mutation API. It can open both the current
-//! `entries/` layout and pre-migration top-level `.age` entries, list logical
-//! names, and decrypt individual JSON entries using `symvault-crypto`.
+//! The store can open both the current `entries/` layout and pre-migration
+//! top-level `.age` entries, list logical names, decrypt individual JSON
+//! entries, and atomically create fresh-layout entries. Replacement, delete,
+//! migration, and manifest updates remain separate port slices.
 
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt, fs,
-    io::{self, Read},
+    io::{self, Read, Write},
     path::{Component, Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
 };
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use symvault_crypto::{Identity, decrypt, parse_recipient};
+use symvault_crypto::{Identity, decrypt, encrypt, parse_recipient, recipient_string};
 use thiserror::Error;
 use walkdir::WalkDir;
 use zeroize::Zeroize;
@@ -50,6 +52,8 @@ pub enum StoreError {
     NotRegularFile(PathBuf),
     #[error("failed to read {path}: {source}")]
     Read { path: PathBuf, source: io::Error },
+    #[error("failed to write {path}: {source}")]
+    Write { path: PathBuf, source: io::Error },
     #[error("invalid vault config: {0}")]
     Config(String),
     #[error("invalid entry {path}: {detail}")]
@@ -391,6 +395,57 @@ impl Store {
         Err(StoreError::EntryNotFound(path.to_owned()))
     }
 
+    /// Writes a new encrypted entry to the current `entries/` layout.
+    ///
+    /// This first write slice intentionally refuses replacement, path
+    /// pseudonymization, and implicit directory creation. Those operations
+    /// remain separate STORE-003 work so this method cannot silently claim
+    /// parity for unimplemented atomic-update semantics.
+    pub fn write_new_entry(
+        &self,
+        path: &str,
+        entry: &Entry,
+        identity: &Identity,
+    ) -> Result<(), StoreError> {
+        validate_entry_path(path)?;
+        if self.config.pseudonymize_paths {
+            return Err(StoreError::Config(
+                "new-entry writes do not yet support pseudonymized paths".into(),
+            ));
+        }
+        let entries_root = self.root.join(ENTRIES_DIR);
+        ensure_directory(&entries_root)?;
+        let relative = Path::new(path);
+        let parent = relative.parent().unwrap_or_else(|| Path::new(""));
+        let parent_path = entries_root.join(parent);
+        ensure_directory(&parent_path)?;
+        let file_name = relative
+            .file_name()
+            .ok_or_else(|| StoreError::InvalidEntryPath(path.to_owned()))?;
+        let target = parent_path.join(format!(
+            "{}{}",
+            file_name.to_string_lossy(),
+            ENTRY_EXTENSION
+        ));
+        if regular_exists(&target)? {
+            return Err(StoreError::Config(
+                "entry replacement is not part of the new-entry slice".into(),
+            ));
+        }
+
+        let mut plaintext = serde_json::to_vec(entry).map_err(|error| StoreError::Entry {
+            path: path.to_owned(),
+            detail: error.to_string(),
+        })?;
+        let recipient = parse_recipient(&recipient_string(identity))
+            .map_err(|error| StoreError::Decryption(error.to_string()))?;
+        let ciphertext = encrypt(&plaintext, &[recipient])
+            .map_err(|error| StoreError::Decryption(error.to_string()))?;
+        plaintext.zeroize();
+        atomic_create(&target, &ciphertext)?;
+        Ok(())
+    }
+
     /// Returns only the metadata portion of an entry after decryption.
     pub fn get_metadata(
         &self,
@@ -698,6 +753,90 @@ fn validate_entry_path(path: &str) -> Result<(), StoreError> {
 
 fn can_use_legacy_path(path: &str) -> bool {
     path != "identity" && path != ENTRIES_DIR && !path.starts_with("entries/")
+}
+
+fn set_private_permissions(file: &fs::File) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        file.set_permissions(fs::Permissions::from_mode(0o600))?;
+    }
+    Ok(())
+}
+
+fn atomic_create(target: &Path, bytes: &[u8]) -> Result<(), StoreError> {
+    static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
+    let parent = target.parent().ok_or_else(|| StoreError::Write {
+        path: target.to_path_buf(),
+        source: io::Error::new(io::ErrorKind::InvalidInput, "entry has no parent directory"),
+    })?;
+    let file_name = target
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| StoreError::Write {
+            path: target.to_path_buf(),
+            source: io::Error::new(io::ErrorKind::InvalidInput, "entry filename is not UTF-8"),
+        })?;
+
+    for _ in 0..32 {
+        let sequence = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let temporary = parent.join(format!(
+            ".{file_name}.tmp-{}-{sequence}",
+            std::process::id()
+        ));
+        let mut file = match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)
+        {
+            Ok(file) => file,
+            Err(source) if source.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(source) => {
+                return Err(StoreError::Write {
+                    path: target.to_path_buf(),
+                    source,
+                });
+            }
+        };
+        set_private_permissions(&file).map_err(|source| StoreError::Write {
+            path: target.to_path_buf(),
+            source,
+        })?;
+
+        let result = (|| {
+            file.write_all(bytes).map_err(|source| StoreError::Write {
+                path: target.to_path_buf(),
+                source,
+            })?;
+            file.sync_all().map_err(|source| StoreError::Write {
+                path: target.to_path_buf(),
+                source,
+            })?;
+            fs::hard_link(&temporary, target).map_err(|source| {
+                if source.kind() == io::ErrorKind::AlreadyExists {
+                    StoreError::Config(
+                        "entry replacement is not part of the new-entry slice".into(),
+                    )
+                } else {
+                    StoreError::Write {
+                        path: target.to_path_buf(),
+                        source,
+                    }
+                }
+            })?;
+            Ok(())
+        })();
+        let _ = fs::remove_file(&temporary);
+        return result;
+    }
+
+    Err(StoreError::Write {
+        path: target.to_path_buf(),
+        source: io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "could not allocate a unique temporary entry path",
+        ),
+    })
 }
 
 fn ensure_directory(path: &Path) -> Result<(), StoreError> {

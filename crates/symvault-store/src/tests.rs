@@ -1,4 +1,4 @@
-use std::{fs, path::Path};
+use std::{collections::BTreeMap, fs, path::Path};
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde::Deserialize;
@@ -384,6 +384,86 @@ fn fresh_and_legacy_layouts_open_list_and_get_every_entry() {
     }
 }
 
+#[test]
+fn fresh_layout_writes_a_new_entry_atomically_and_reads_it_back() {
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    materialize(root, &value.vaults[0]);
+    let store = Store::open(root, &identity).unwrap();
+    let mut data = BTreeMap::new();
+    data.insert(
+        "token".to_owned(),
+        serde_json::Value::String("write-slice-secret".to_owned()),
+    );
+    let entry = Entry {
+        path: "written".to_owned(),
+        data,
+        ..Entry::default()
+    };
+
+    store.write_new_entry("written", &entry, &identity).unwrap();
+    assert_eq!(store.get("written", &identity).unwrap(), entry);
+    assert!(root.join("entries/written.age").is_file());
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            fs::metadata(root.join("entries/written.age"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+    }
+    assert!(!fs::read_dir(root.join("entries")).unwrap().any(|item| {
+        item.unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".written.age.tmp-")
+    }));
+
+    let error = store
+        .write_new_entry("written", &entry, &identity)
+        .unwrap_err();
+    assert!(matches!(error, StoreError::Config(message) if message.contains("replacement")));
+}
+
+#[test]
+fn fresh_layout_write_rejects_pseudonymized_paths() {
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    materialize(root, &value.vaults[0]);
+    fs::write(
+        root.join(CONFIG_FILE),
+        b"vault:\n  pseudonymize_paths: true\n",
+    )
+    .unwrap();
+    let store = Store::open(root, &identity).unwrap();
+    let error = store
+        .write_new_entry("written", &Entry::default(), &identity)
+        .unwrap_err();
+    assert!(matches!(error, StoreError::Config(message) if message.contains("pseudonymized")));
+}
+
+#[test]
+fn fresh_layout_write_rejects_invalid_paths_before_touching_disk() {
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    materialize(root, &value.vaults[0]);
+    let store = Store::open(root, &identity).unwrap();
+    let error = store
+        .write_new_entry("../written", &Entry::default(), &identity)
+        .unwrap_err();
+    assert!(matches!(error, StoreError::InvalidEntryPath(_)));
+    assert!(!root.join("written.age").exists());
+}
 #[test]
 fn malformed_encrypted_vectors_are_rejected() {
     let (_, value) = fixture();
