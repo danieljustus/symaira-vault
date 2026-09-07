@@ -503,16 +503,36 @@ func TestRecoverZeroKeyIdentity(t *testing.T) {
 	}
 	const n = 17
 	raw := wrapIdentityUnderZeroKey(t, identity, n)
+	authority := ZeroKeyAuthorityForRecipient(identity.Recipient().String())
 
-	recovered, err := RecoverZeroKeyIdentity(raw, n)
+	recovered, err := RecoverZeroKeyIdentity(raw, n, authority)
 	if err != nil {
 		t.Fatalf("RecoverZeroKeyIdentity: %v", err)
 	}
 	if recovered.String() != identity.String() {
-		t.Fatalf("recovered identity mismatch:\n got = %q\nwant = %q", recovered.String(), identity.String())
+		t.Fatalf("recovered identity mismatch: got %q, want %q", recovered.String(), identity.String())
 	}
 	if !bytes.Contains(raw, []byte("-> argon2id")) {
 		t.Fatal("test setup: ciphertext should be argon2id-formatted")
+	}
+}
+
+func TestRecoverZeroKeyIdentityRequiresAuthorityAndBounds(t *testing.T) {
+	identity, err := GenerateIdentity()
+	if err != nil {
+		t.Fatalf("GenerateIdentity: %v", err)
+	}
+	raw := wrapIdentityUnderZeroKey(t, identity, 17)
+	good := ZeroKeyAuthorityForRecipient(identity.Recipient().String())
+
+	if _, err := RecoverZeroKeyIdentity(raw, 17, ZeroKeyAuthority{}); !errors.Is(err, ErrZeroKeyAuthority) {
+		t.Fatalf("missing authority error = %v, want ErrZeroKeyAuthority", err)
+	}
+	if _, err := RecoverZeroKeyIdentity(raw, MaxZeroKeyPassphraseLen+1, good); !errors.Is(err, ErrZeroKeyPassphraseLen) {
+		t.Fatalf("over-bound length error = %v, want ErrZeroKeyPassphraseLen", err)
+	}
+	if _, err := RecoverZeroKeyIdentity(raw, 17, ZeroKeyAuthorityForRecipient("age1wxknyar29luhmltc320wnllzxd7n0cjvldxqjunyh9u3l4gpd3kq9r4lgr")); !errors.Is(err, ErrZeroKeyRecovery) {
+		t.Fatalf("wrong authority error = %v, want ErrZeroKeyRecovery", err)
 	}
 }
 
@@ -523,37 +543,37 @@ func TestRecoverZeroKeyIdentityWrongLength(t *testing.T) {
 	}
 	const correctN = 17
 	raw := wrapIdentityUnderZeroKey(t, identity, correctN)
+	authority := ZeroKeyAuthorityForRecipient(identity.Recipient().String())
 
-	if _, err := RecoverZeroKeyIdentity(raw, correctN+1); err == nil {
+	if _, err := RecoverZeroKeyIdentity(raw, correctN+1, authority); err == nil {
 		t.Fatal("expected error recovering with wrong length n")
 	}
-	if _, err := RecoverZeroKeyIdentity(raw, correctN-1); err == nil {
+	if _, err := RecoverZeroKeyIdentity(raw, correctN-1, authority); err == nil {
 		t.Fatal("expected error recovering with wrong length n (shorter)")
 	}
 }
 
 func TestRecoverZeroKeyIdentityRejectsNonArgon2id(t *testing.T) {
 	const n = 8
+	authority := ZeroKeyAuthorityForRecipient("age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y")
 	scryptWrapped := []byte("-> scrypt AAAA\nbody-bytes")
-	if _, err := RecoverZeroKeyIdentity(scryptWrapped, n); err == nil {
+	if _, err := RecoverZeroKeyIdentity(scryptWrapped, n, authority); err == nil {
 		t.Fatal("expected error recovering a non-argon2id file")
 	}
 }
 
 func TestRecoverZeroKeyIdentityRejectsZeroLength(t *testing.T) {
-	if _, err := RecoverZeroKeyIdentity([]byte("-> argon2id t=1,m=64,p=1\nAAAA"), 0); err == nil {
+	authority := ZeroKeyAuthorityForRecipient("age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y")
+	if _, err := RecoverZeroKeyIdentity([]byte("-> argon2id t=1,m=64,p=1\nAAAA"), 0, authority); err == nil {
 		t.Fatal("expected error for n = 0")
 	}
-	if _, err := RecoverZeroKeyIdentity([]byte("-> argon2id t=1,m=64,p=1\nAAAA"), -1); err == nil {
+	if _, err := RecoverZeroKeyIdentity([]byte("-> argon2id t=1,m=64,p=1\nAAAA"), -1, authority); err == nil {
 		t.Fatal("expected error for negative n")
 	}
 }
 
 func TestArgon2idParams_UpperBounds(t *testing.T) {
 	t.Parallel()
-
-	pass := []byte("passphrase")
-	salt := []byte("0123456789abcdef")
 
 	tests := []struct {
 		name    string
@@ -573,7 +593,7 @@ func TestArgon2idParams_UpperBounds(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := Argon2idDeriveKey(pass, salt, tt.params)
+			err := validateArgon2idParams(tt.params)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Argon2idDeriveKey() error = %v, wantErr %v", err, tt.wantErr)
 			}

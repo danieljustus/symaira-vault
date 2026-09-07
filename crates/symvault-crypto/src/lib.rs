@@ -31,10 +31,23 @@ const ARGON2ID_TAG: &str = "argon2id";
 const ARGON2ID_LABEL: &[u8] = b"symvault-argon2id-v1";
 const KEY_BYTES: usize = 32;
 const ARGON2ID_SALT_BYTES: usize = 16;
+/// Maximum Argon2id budget accepted from an untrusted envelope.
+///
+/// These maxima are the current Go interoperability contract. Tests validate
+/// them through parsing only; no test derives a KDF at these budgets.
 const MAX_ARGON2_TIME: u32 = 16;
 const MAX_ARGON2_MEMORY: u32 = 2_097_152;
 const MAX_ARGON2_THREADS: u32 = 16;
+const MAX_ARGON2ID_PARAMS_BYTES: usize = 64;
+const MAX_ARGON2ID_PARAM_PARTS: usize = 3;
+const ARGON2ID_SALT_B64_BYTES: usize = 22;
 const MAX_SCRYPT_WORK_FACTOR: u8 = 22;
+/// Maximum historical zero-key passphrase length accepted for recovery.
+///
+/// The legacy bug produced a short, fixed-size all-zero passphrase. Bounding
+/// this input before constructing the zero-filled buffer prevents an attacker
+/// from turning recovery into an unbounded allocation or Argon2 workload.
+pub const MAX_ZERO_KEY_PASSPHRASE_LEN: usize = 1024;
 
 /// Stable failure classifications. Messages never contain a passphrase or plaintext.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -194,6 +207,23 @@ fn encrypt_to_recipients(
     Ok(output)
 }
 
+/// Re-encrypts an age envelope without exposing its plaintext to callers.
+///
+/// The input is decrypted with `identity`, then encrypted for exactly the
+/// supplied X25519 recipients. This is the pure counterpart of Go's
+/// `vault.ReencryptAll` per-file operation; it performs no filesystem writes.
+pub fn reencrypt(
+    ciphertext: &[u8],
+    identity: &Identity,
+    recipients: &[Recipient],
+) -> Result<Vec<u8>, CryptoError> {
+    let plaintext = decrypt(ciphertext, identity)?;
+    let result = encrypt(&plaintext, recipients);
+    let mut plaintext = plaintext;
+    plaintext.zeroize();
+    result
+}
+
 /// Encrypts a non-empty entry for one or more X25519 recipients.
 pub fn encrypt(plaintext: &[u8], recipients: &[Recipient]) -> Result<Vec<u8>, CryptoError> {
     encrypt_to_recipients(
@@ -225,7 +255,7 @@ pub fn encrypt_scrypt(
     passphrase: &SecretBytes,
     work_factor: u8,
 ) -> Result<Vec<u8>, CryptoError> {
-    if !(1..64).contains(&work_factor) {
+    if !(1..=MAX_SCRYPT_WORK_FACTOR).contains(&work_factor) {
         return Err(CryptoError::new(
             FailureClass::ParameterBounds,
             "scrypt work factor out of bounds",
@@ -399,6 +429,9 @@ impl age::Identity for ArgonIdentity {
         let [salt, encoded] = stanza.args.as_slice() else {
             return Some(Err(age::DecryptError::InvalidHeader));
         };
+        if salt.len() != ARGON2ID_SALT_B64_BYTES {
+            return Some(Err(age::DecryptError::InvalidHeader));
+        }
         let Ok(salt) = STANDARD_NO_PAD.decode(salt) else {
             return Some(Err(age::DecryptError::InvalidHeader));
         };
@@ -414,49 +447,87 @@ impl age::Identity for ArgonIdentity {
         let Ok(cipher) = ChaCha20Poly1305::new_from_slice(key.as_bytes()) else {
             return Some(Err(age::DecryptError::InvalidHeader));
         };
-        let Ok(plain) = cipher.decrypt(Nonce::from_slice(&stanza.body[..12]), &stanza.body[12..])
+        let Ok(mut plain) =
+            cipher.decrypt(Nonce::from_slice(&stanza.body[..12]), &stanza.body[12..])
         else {
             return Some(Err(age::DecryptError::DecryptionFailed));
         };
         if plain.len() != 16 {
+            plain.zeroize();
             return Some(Err(age::DecryptError::DecryptionFailed));
         }
         let mut file_key = [0u8; 16];
         file_key.copy_from_slice(&plain);
+        plain.zeroize();
         Some(Ok(FileKey::new(Box::new(file_key))))
     }
 }
 
-fn parse_params(value: &str) -> Result<Argon2idParams, CryptoError> {
+/// Parses the bounded `t=<time>,m=<memory>,p=<threads>` Argon2id stanza value.
+///
+/// This parser is intentionally strict because the value comes from an untrusted
+/// age header. It rejects oversized values, duplicate/unknown fields, and more
+/// than the three expected fields before any KDF work is attempted.
+pub fn parse_argon2id_params(value: &str) -> Result<Argon2idParams, CryptoError> {
+    if value.len() > MAX_ARGON2ID_PARAMS_BYTES {
+        return Err(CryptoError::new(
+            FailureClass::MalformedEnvelope,
+            "malformed argon2id parameters",
+        ));
+    }
     let mut result = Argon2idParams {
         time: 0,
         memory_kib: 0,
         threads: 0,
     };
-    for part in value.split(',') {
+    let mut seen = 0u8;
+    for (index, part) in value.split(',').enumerate() {
+        if index >= MAX_ARGON2ID_PARAM_PARTS {
+            return Err(CryptoError::new(
+                FailureClass::MalformedEnvelope,
+                "malformed argon2id parameters",
+            ));
+        }
         let (key, number) = part.split_once('=').ok_or(CryptoError::new(
             FailureClass::MalformedEnvelope,
             "malformed argon2id parameters",
         ))?;
-        let parsed: u32 = number.parse().map_err(|_| {
-            CryptoError::new(
-                FailureClass::MalformedEnvelope,
-                "malformed argon2id parameters",
-            )
-        })?;
-        match key {
-            "t" => result.time = parsed,
-            "m" => result.memory_kib = parsed,
-            "p" => result.threads = parsed,
+        let (bit, slot) = match key {
+            "t" => (1, &mut result.time),
+            "m" => (2, &mut result.memory_kib),
+            "p" => (4, &mut result.threads),
             _ => {
                 return Err(CryptoError::new(
                     FailureClass::MalformedEnvelope,
                     "malformed argon2id parameters",
                 ));
             }
+        };
+        if seen & bit != 0 {
+            return Err(CryptoError::new(
+                FailureClass::MalformedEnvelope,
+                "malformed argon2id parameters",
+            ));
         }
+        *slot = number.parse().map_err(|_| {
+            CryptoError::new(
+                FailureClass::MalformedEnvelope,
+                "malformed argon2id parameters",
+            )
+        })?;
+        seen |= bit;
+    }
+    if seen != (1 | 2 | 4) {
+        return Err(CryptoError::new(
+            FailureClass::MalformedEnvelope,
+            "malformed argon2id parameters",
+        ));
     }
     result.validate()
+}
+
+fn parse_params(value: &str) -> Result<Argon2idParams, CryptoError> {
+    parse_argon2id_params(value)
 }
 
 /// Encrypts with the Symaira Vault Argon2id age recipient stanza.
@@ -529,12 +600,164 @@ pub fn classify_zero_key_candidate(raw: &[u8]) -> FailureClass {
     }
 }
 
+/// Independent public authority used to validate a recovered zero-key identity.
+///
+/// At least one value must come from outside the encrypted plaintext. A
+/// recipient contract is preferred; a fingerprint can be used when that is the
+/// authority available to the caller. Supplying both values additionally checks
+/// that the contract is internally consistent.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ZeroKeyAuthority<'a> {
+    recipient: Option<&'a str>,
+    fingerprint: Option<&'a str>,
+}
+
+impl<'a> ZeroKeyAuthority<'a> {
+    /// Uses a canonical age recipient as the independent authority.
+    #[must_use]
+    pub const fn recipient(value: &'a str) -> Self {
+        Self {
+            recipient: Some(value),
+            fingerprint: None,
+        }
+    }
+
+    /// Uses a Go-compatible fingerprint as the independent authority.
+    #[must_use]
+    pub const fn fingerprint(value: &'a str) -> Self {
+        Self {
+            recipient: None,
+            fingerprint: Some(value),
+        }
+    }
+
+    /// Requires both an expected recipient and its independent fingerprint.
+    #[must_use]
+    pub const fn both(recipient: &'a str, fingerprint: &'a str) -> Self {
+        Self {
+            recipient: Some(recipient),
+            fingerprint: Some(fingerprint),
+        }
+    }
+}
+
+fn valid_fingerprint(value: &str) -> bool {
+    value.len() == 8 * 4 + 7
+        && value.split(' ').all(|group| {
+            group.len() == 4
+                && group
+                    .bytes()
+                    .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_lowercase())
+        })
+}
+
+fn validate_zero_key_authority(authority: ZeroKeyAuthority<'_>) -> Result<(), CryptoError> {
+    let Some(value) = authority.recipient.or(authority.fingerprint) else {
+        return Err(CryptoError::new(
+            FailureClass::InvalidInput,
+            "zero-key authority is missing",
+        ));
+    };
+    if value.trim().is_empty() {
+        return Err(CryptoError::new(
+            FailureClass::InvalidInput,
+            "zero-key authority is invalid",
+        ));
+    }
+    if let Some(expected_recipient) = authority.recipient {
+        let expected_recipient = expected_recipient.trim();
+        let parsed = parse_recipient(expected_recipient).map_err(|_| {
+            CryptoError::new(FailureClass::InvalidInput, "zero-key authority is invalid")
+        })?;
+        if parsed.to_string() != expected_recipient {
+            return Err(CryptoError::new(
+                FailureClass::InvalidInput,
+                "zero-key authority is invalid",
+            ));
+        }
+        if let Some(expected_fingerprint) = authority.fingerprint
+            && (!valid_fingerprint(expected_fingerprint)
+                || fingerprint(expected_recipient) != expected_fingerprint)
+        {
+            return Err(CryptoError::new(
+                FailureClass::InvalidInput,
+                "zero-key authority is invalid",
+            ));
+        }
+    } else if let Some(expected_fingerprint) = authority.fingerprint
+        && !valid_fingerprint(expected_fingerprint)
+    {
+        return Err(CryptoError::new(
+            FailureClass::InvalidInput,
+            "zero-key authority is invalid",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_recovered_identity(
+    identity: &Identity,
+    authority: ZeroKeyAuthority<'_>,
+) -> Result<(), CryptoError> {
+    let public = recipient_string(identity);
+    if public.is_empty() || parse_recipient(&public).map(|r| r.to_string()) != Ok(public.clone()) {
+        return Err(CryptoError::new(
+            FailureClass::ZeroKeyCandidate,
+            "zero-key recovery failed",
+        ));
+    }
+    let computed = fingerprint(&public);
+    if !valid_fingerprint(&computed) {
+        return Err(CryptoError::new(
+            FailureClass::ZeroKeyCandidate,
+            "zero-key recovery failed",
+        ));
+    }
+    if authority
+        .recipient
+        .is_some_and(|expected| expected.trim() != public)
+        || authority
+            .fingerprint
+            .is_some_and(|expected| expected != computed)
+    {
+        return Err(CryptoError::new(
+            FailureClass::ZeroKeyCandidate,
+            "zero-key recovery failed",
+        ));
+    }
+    Ok(())
+}
+
+fn parse_recovered_identity(
+    plaintext: &mut Vec<u8>,
+    authority: ZeroKeyAuthority<'_>,
+) -> Result<Identity, CryptoError> {
+    let result = (|| {
+        let value = std::str::from_utf8(plaintext).map_err(|_| {
+            CryptoError::new(FailureClass::ZeroKeyCandidate, "zero-key recovery failed")
+        })?;
+        let identity = parse_identity(value.trim()).map_err(|_| {
+            CryptoError::new(FailureClass::ZeroKeyCandidate, "zero-key recovery failed")
+        })?;
+        validate_recovered_identity(&identity, authority)?;
+        Ok(identity)
+    })();
+    plaintext.zeroize();
+    result
+}
+
 /// Recovers an identity from the historical Argon2id zero-key envelope.
+///
+/// The zero-key bug makes the passphrase length an unwrap hint, not proof of
+/// identity. The caller must supply an independent recipient and/or fingerprint
+/// contract; a self-consistent identity decrypted from `raw` is not sufficient.
 pub fn recover_zero_key_identity(
     raw: &[u8],
     passphrase_len: usize,
+    authority: ZeroKeyAuthority<'_>,
 ) -> Result<Identity, CryptoError> {
-    if passphrase_len == 0 {
+    validate_zero_key_authority(authority)?;
+    if passphrase_len == 0 || passphrase_len > MAX_ZERO_KEY_PASSPHRASE_LEN {
         return Err(CryptoError::new(
             FailureClass::InvalidInput,
             "zero-key length is invalid",
@@ -550,36 +773,791 @@ pub fn recover_zero_key_identity(
             CryptoError::new(FailureClass::ZeroKeyCandidate, "zero-key recovery failed")
         })?;
     let mut plaintext = Vec::new();
-    reader.read_to_end(&mut plaintext).map_err(|_| {
-        CryptoError::new(FailureClass::ZeroKeyCandidate, "zero-key recovery failed")
-    })?;
-    let value = std::str::from_utf8(&plaintext).map_err(|_| {
-        CryptoError::new(FailureClass::ZeroKeyCandidate, "zero-key recovery failed")
-    })?;
-    parse_identity(value.trim())
-        .map_err(|_| CryptoError::new(FailureClass::ZeroKeyCandidate, "zero-key recovery failed"))
+    if reader.read_to_end(&mut plaintext).is_err() {
+        plaintext.zeroize();
+        return Err(CryptoError::new(
+            FailureClass::ZeroKeyCandidate,
+            "zero-key recovery failed",
+        ));
+    }
+    drop(reader);
+    parse_recovered_identity(&mut plaintext, authority)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use proptest::prelude::*;
+
     const ID: &str = "AGE-SECRET-KEY-1HS3YTK69EJH0ZYM8ANNNDWQMPT7ZMLPYGTMC47F5T4EDJ5N7EYMQ4L5CDL";
     const ID2: &str = "AGE-SECRET-KEY-18HD87KNMWKY3RW97YR2PYU6HGWDZXAGW6JF74LNNHUA6A8K5ZF9QTWUTK3";
+    const ID3: &str = "AGE-SECRET-KEY-15KR576PHDPLRQS08427S6X2G492S6GTVELZ6WHN8AKMWW90T0HES2KQ597";
+    const ORACLE_COMMIT: &str = "caadd5e";
+    const ORACLE_RELEASE: &str = "v0.22.1";
+    const ORACLE_SOURCE_FILES: &[&str] = &[
+        "internal/crypto/age.go",
+        "internal/crypto/argon2id.go",
+        "internal/crypto/keygen.go",
+        "internal/crypto/symmetric.go",
+        "internal/vault/reencrypt.go",
+    ];
+    const ORACLE_GENERATOR_FILES: &[&str] = &[
+        "internal/crypto/interop.go",
+        "scripts/rust-port/cmd/cryptogen/main.go",
+        "scripts/rust-port/cmd/cryptoverify/main.go",
+    ];
+    const ORACLE_SOURCE_DIGEST: &str =
+        "cc99e5efc05aeb3d1dacff8499fa82748f200669f99121b04f512151c44f1d84";
+    const ORACLE_GENERATOR_DIGEST: &str =
+        "ca4bbd74bb522310093157aaed280121be2b1a0aa003af5ee7ac5cd8cc224623";
 
+    #[derive(serde::Deserialize)]
+    struct OracleFixture {
+        schema_version: u8,
+        oracle: OracleMeta,
+        identities: Vec<OracleIdentity>,
+        age_cases: Vec<OracleAgeCase>,
+        scrypt_cases: Vec<OracleEnvelope>,
+        argon2id_cases: Vec<OracleEnvelope>,
+        zero_key_cases: Vec<OracleZeroKey>,
+        reencrypt_cases: Vec<OracleReencrypt>,
+        reencrypt_all_cases: Vec<OracleReencryptAll>,
+        malformed_cases: Vec<OracleMalformed>,
+        limit_cases: Vec<OracleLimit>,
+        wrong_passphrase_cases: Vec<OracleWrongPassphrase>,
+        migration_cases: Vec<OracleMigration>,
+    }
+    #[derive(serde::Deserialize)]
+    struct OracleMeta {
+        commit: String,
+        release: String,
+        source_files: Vec<String>,
+        source_digest: String,
+        generator_files: Vec<String>,
+        generator_digest: String,
+    }
+    #[derive(serde::Deserialize)]
+    struct OracleIdentity {
+        name: String,
+        identity: String,
+        recipient: String,
+        fingerprint: String,
+    }
+    #[derive(serde::Deserialize)]
+    struct OracleAgeCase {
+        name: String,
+        plaintext: String,
+        ciphertext: String,
+        recipients: Vec<String>,
+    }
+    #[derive(serde::Deserialize)]
+    struct OracleEnvelope {
+        name: String,
+        plaintext: String,
+        ciphertext: String,
+    }
+    #[derive(serde::Deserialize)]
+    struct OracleZeroKey {
+        name: String,
+        ciphertext: String,
+        passphrase_length: usize,
+        expected_recipient: String,
+        expected_fingerprint: String,
+        expected_class: String,
+    }
+    #[derive(serde::Deserialize)]
+    struct OracleMalformed {
+        name: String,
+        input: String,
+        expected_class: String,
+    }
+    #[derive(serde::Deserialize)]
+    struct OracleLimit {
+        name: String,
+        kind: String,
+        work_factor: u8,
+        time: u32,
+        memory: u32,
+        threads: u8,
+        expected_class: String,
+    }
+    #[derive(serde::Deserialize)]
+    struct OracleWrongPassphrase {
+        name: String,
+        kind: String,
+        ciphertext: String,
+        expected_class: String,
+    }
+    #[derive(serde::Deserialize)]
+    struct OracleMigration {
+        name: String,
+        input: String,
+        format: String,
+        needs_migration: bool,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct OracleReencrypt {
+        name: String,
+        plaintext: String,
+        source_identity: String,
+        source_ciphertext: String,
+        source_recipients: Vec<String>,
+        reencrypted_ciphertext: String,
+        recipients: Vec<String>,
+        removed_recipient: String,
+        removed_identity: String,
+    }
+    #[derive(serde::Deserialize)]
+    struct OracleReencryptAll {
+        name: String,
+        source_identity: String,
+        source_recipients: Vec<String>,
+        recipients: Vec<String>,
+        removed_recipient: String,
+        removed_identity: String,
+        before_manifest: OracleManifest,
+        after_manifest: OracleManifest,
+        files: Vec<OracleReencryptFile>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct OracleManifest {
+        entries: Vec<OracleManifestEntry>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct OracleManifestEntry {
+        path: String,
+        sha256: String,
+        size: i64,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct OracleReencryptFile {
+        path: String,
+        plaintext: String,
+        before_ciphertext: String,
+        after_ciphertext: String,
+    }
+
+    fn load_fixture() -> (String, OracleFixture) {
+        let raw = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../testdata/port/crypto/age-kdf.json"
+        ))
+        .expect("Go crypto fixture");
+        let fixture: OracleFixture = serde_json::from_str(&raw).expect("valid Go crypto fixture");
+        (raw, fixture)
+    }
+
+    fn assert_names<T>(
+        actual: &[T],
+        expected: &[&str],
+        name: impl Fn(&T) -> &str,
+    ) -> Result<(), String> {
+        if actual.len() != expected.len() {
+            return Err(format!(
+                "case cardinality {}, want {}",
+                actual.len(),
+                expected.len()
+            ));
+        }
+        for (item, expected_name) in actual.iter().zip(expected) {
+            if name(item) != *expected_name {
+                return Err(format!(
+                    "case name/order changed: got {}, want {expected_name}",
+                    name(item)
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_fixture(fixture: &OracleFixture) -> Result<(), String> {
+        if fixture.schema_version != 1 {
+            return Err("schema version changed".to_owned());
+        }
+        if fixture.oracle.commit != ORACLE_COMMIT || fixture.oracle.release != ORACLE_RELEASE {
+            return Err("oracle commit/release changed".to_owned());
+        }
+        if fixture.oracle.source_digest != ORACLE_SOURCE_DIGEST
+            || fixture.oracle.generator_digest != ORACLE_GENERATOR_DIGEST
+        {
+            return Err("oracle digest changed".to_owned());
+        }
+        let source_files: Vec<&str> = fixture
+            .oracle
+            .source_files
+            .iter()
+            .map(String::as_str)
+            .collect();
+        let generator_files: Vec<&str> = fixture
+            .oracle
+            .generator_files
+            .iter()
+            .map(String::as_str)
+            .collect();
+        if source_files != ORACLE_SOURCE_FILES || generator_files != ORACLE_GENERATOR_FILES {
+            return Err("oracle file provenance changed".to_owned());
+        }
+        assert_names(
+            &fixture.identities,
+            &["fixed_1", "fixed_2", "fixed_3"],
+            |v| &v.name,
+        )?;
+        assert_names(
+            &fixture.age_cases,
+            &["two_recipients", "three_recipients"],
+            |v| &v.name,
+        )?;
+        assert_names(&fixture.scrypt_cases, &["legacy_work_factor_12"], |v| {
+            &v.name
+        })?;
+        assert_names(
+            &fixture.argon2id_cases,
+            &["current_tiny_fixture_params"],
+            |v| &v.name,
+        )?;
+        assert_names(
+            &fixture.zero_key_cases,
+            &[
+                "historical_zero_key_length_23",
+                "zero_key_length_exact_max",
+                "zero_key_length_over_max",
+                "zero_key_wrong_authority",
+            ],
+            |v| &v.name,
+        )?;
+        assert_names(
+            &fixture.reencrypt_cases,
+            &["add_recipient", "remove_recipient"],
+            |v| &v.name,
+        )?;
+        assert_names(
+            &fixture.reencrypt_all_cases,
+            &["filesystem_add_recipient", "filesystem_remove_recipient"],
+            |v| &v.name,
+        )?;
+        for item in &fixture.reencrypt_all_cases {
+            if item.source_identity.is_empty()
+                || item.source_recipients.is_empty()
+                || item.recipients.len() < 2
+                || item.files.is_empty()
+                || item.before_manifest.entries.len() != item.files.len()
+                || item.after_manifest.entries.len() != item.files.len()
+            {
+                return Err(format!(
+                    "incomplete filesystem re-encryption case {}",
+                    item.name
+                ));
+            }
+            for file in &item.files {
+                if file.path.is_empty()
+                    || file.plaintext.is_empty()
+                    || file.before_ciphertext.is_empty()
+                    || file.after_ciphertext.is_empty()
+                {
+                    return Err(format!(
+                        "incomplete filesystem re-encryption file {}",
+                        file.path
+                    ));
+                }
+            }
+        }
+        assert_names(
+            &fixture.malformed_cases,
+            &["empty", "not_age", "bad_stanza"],
+            |v| &v.name,
+        )?;
+        assert_names(
+            &fixture.limit_cases,
+            &[
+                "scrypt_work_factor_zero",
+                "scrypt_work_factor_above_max",
+                "argon2_time_zero",
+                "argon2_time_above_max",
+                "argon2_memory_zero",
+                "argon2_memory_above_max",
+                "argon2_threads_zero",
+                "argon2_threads_above_max",
+                "argon2_memory_below_threads",
+            ],
+            |v| &v.name,
+        )?;
+        assert_names(
+            &fixture.wrong_passphrase_cases,
+            &[
+                "age_wrong_identity",
+                "scrypt_wrong_passphrase",
+                "argon2id_wrong_passphrase",
+            ],
+            |v| &v.name,
+        )?;
+        assert_names(
+            &fixture.migration_cases,
+            &["legacy_scrypt", "current_argon2id", "unknown_envelope"],
+            |v| &v.name,
+        )?;
+        for item in &fixture.age_cases {
+            if item.recipients.len() < 2 || item.ciphertext.is_empty() || item.plaintext.is_empty()
+            {
+                return Err(format!("incomplete age case {}", item.name));
+            }
+        }
+        for item in &fixture.zero_key_cases {
+            if item.ciphertext.is_empty()
+                || item.passphrase_length == 0
+                || item.expected_recipient.is_empty()
+                || item.expected_fingerprint.is_empty()
+                || !matches!(
+                    item.expected_class.as_str(),
+                    "ok" | "invalid_input" | "zero_key_candidate"
+                )
+            {
+                return Err(format!("incomplete zero-key case {}", item.name));
+            }
+        }
+        Ok(())
+    }
+
+    fn sha256_hex(value: &[u8]) -> String {
+        Sha256::digest(value)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect()
+    }
+
+    #[cfg(not(miri))]
     #[test]
-    fn x25519_and_fingerprint_match_go_shape() {
-        let id = parse_identity(ID).unwrap();
+    fn x25519_and_fingerprint_vectors_are_all_consumed() {
+        let (_, fixture) = load_fixture();
+        validate_fixture(&fixture).unwrap();
+        let expected = [
+            (
+                ID,
+                "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y",
+                "9DC3 A8A0 74CE 0E8A E871 8B96 246D 238B",
+            ),
+            (
+                ID2,
+                "age1wxknyar29luhmltc320wnllzxd7n0cjvldxqjunyh9u3l4gpd3kq9r4lgr",
+                "F0E9 391C BACE 82B8 FBB0 20BF 299A BD6F",
+            ),
+            (
+                ID3,
+                "age1mrfjwn5r0v9zrvgv73fc5880svsky436wp2ygvw6lts5hx8xwavs6vmkcy",
+                "1CCA B8D6 58D0 1292 08E2 986C ED65 3CE4",
+            ),
+        ];
+        for (item, (identity, recipient, fingerprint_value)) in
+            fixture.identities.iter().zip(expected)
+        {
+            let parsed = parse_identity(&item.identity).unwrap();
+            assert_eq!(item.identity, identity);
+            assert_eq!(recipient_string(&parsed), recipient);
+            assert_eq!(item.recipient, recipient);
+            assert_eq!(fingerprint(&item.recipient), fingerprint_value);
+            assert_eq!(item.fingerprint, fingerprint_value);
+        }
+    }
+
+    #[cfg(not(miri))]
+    #[test]
+    fn go_vectors_consume_every_positive_negative_and_migration_case() {
+        let (_, fixture) = load_fixture();
+        validate_fixture(&fixture).unwrap();
+        let identities: Vec<Identity> = fixture
+            .identities
+            .iter()
+            .map(|item| parse_identity(&item.identity).unwrap())
+            .collect();
+        for case in &fixture.age_cases {
+            let ciphertext = base64::engine::general_purpose::STANDARD
+                .decode(&case.ciphertext)
+                .unwrap();
+            for recipient in &case.recipients {
+                let index = fixture
+                    .identities
+                    .iter()
+                    .position(|item| &item.recipient == recipient)
+                    .unwrap();
+                assert_eq!(
+                    decrypt(&ciphertext, &identities[index]).unwrap(),
+                    case.plaintext.as_bytes(),
+                    "{}",
+                    case.name
+                );
+            }
+        }
+        let passphrase = SecretBytes::new(b"rust-interop-fixture-passphrase-v1");
+        for case in &fixture.scrypt_cases {
+            let ciphertext = base64::engine::general_purpose::STANDARD
+                .decode(&case.ciphertext)
+                .unwrap();
+            assert_eq!(
+                decrypt_scrypt(&ciphertext, &passphrase).unwrap(),
+                case.plaintext.as_bytes(),
+                "{}",
+                case.name
+            );
+        }
+        for case in &fixture.argon2id_cases {
+            let ciphertext = base64::engine::general_purpose::STANDARD
+                .decode(&case.ciphertext)
+                .unwrap();
+            assert_eq!(
+                decrypt_argon2id(&ciphertext, &passphrase).unwrap(),
+                case.plaintext.as_bytes(),
+                "{}",
+                case.name
+            );
+        }
+        for case in &fixture.zero_key_cases {
+            let ciphertext = base64::engine::general_purpose::STANDARD
+                .decode(&case.ciphertext)
+                .unwrap();
+            let result = recover_zero_key_identity(
+                &ciphertext,
+                case.passphrase_length,
+                ZeroKeyAuthority::both(&case.expected_recipient, &case.expected_fingerprint),
+            );
+            match case.expected_class.as_str() {
+                "ok" => {
+                    let recovered = result.unwrap();
+                    assert_eq!(
+                        recipient_string(&recovered),
+                        case.expected_recipient,
+                        "{}",
+                        case.name
+                    );
+                }
+                "invalid_input" => assert_eq!(
+                    result.unwrap_err().class(),
+                    FailureClass::InvalidInput,
+                    "{}",
+                    case.name
+                ),
+                "zero_key_candidate" => assert_eq!(
+                    result.unwrap_err().class(),
+                    FailureClass::ZeroKeyCandidate,
+                    "{}",
+                    case.name
+                ),
+                other => panic!("unknown zero-key class {other}"),
+            }
+        }
+        for case in &fixture.malformed_cases {
+            let result = decrypt(case.input.as_bytes(), &identities[0]);
+            assert_eq!(
+                result.unwrap_err().class(),
+                FailureClass::MalformedEnvelope,
+                "{}",
+                case.name
+            );
+            assert_eq!(case.expected_class, "malformed_envelope");
+        }
+        for case in &fixture.limit_cases {
+            let result = if case.kind == "scrypt" {
+                encrypt_scrypt(b"limit", &passphrase, case.work_factor)
+            } else {
+                encrypt_argon2id(
+                    b"limit",
+                    &passphrase,
+                    Argon2idParams {
+                        time: case.time,
+                        memory_kib: case.memory,
+                        threads: u32::from(case.threads),
+                    },
+                )
+            };
+            assert_eq!(
+                result.unwrap_err().class(),
+                FailureClass::ParameterBounds,
+                "{}",
+                case.name
+            );
+            assert_eq!(case.expected_class, "parameter_bounds");
+        }
+        for case in &fixture.wrong_passphrase_cases {
+            let ciphertext = base64::engine::general_purpose::STANDARD
+                .decode(&case.ciphertext)
+                .unwrap();
+            let result = match case.kind.as_str() {
+                "age" => decrypt(&ciphertext, &identities[2]),
+                "scrypt" => decrypt_scrypt(&ciphertext, &SecretBytes::new(b"wrong-passphrase")),
+                "argon2id" => decrypt_argon2id(&ciphertext, &SecretBytes::new(b"wrong-passphrase")),
+                other => panic!("unknown wrong-passphrase case kind {other}"),
+            };
+            assert_eq!(
+                result.unwrap_err().class(),
+                FailureClass::WrongPassphraseOrKey,
+                "{}",
+                case.name
+            );
+            assert_eq!(case.expected_class, "wrong_passphrase_or_key");
+        }
+        for case in &fixture.migration_cases {
+            let format = detect_envelope(case.input.as_bytes());
+            let expected_format = match case.format.as_str() {
+                "scrypt" => EnvelopeFormat::Scrypt,
+                "argon2id" => EnvelopeFormat::Argon2id,
+                "unknown" => EnvelopeFormat::Unknown,
+                other => panic!("unknown migration format {other}"),
+            };
+            assert_eq!(format, expected_format, "{}", case.name);
+            assert_eq!(
+                needs_kdf_migration(case.input.as_bytes()),
+                case.needs_migration,
+                "{}",
+                case.name
+            );
+        }
+    }
+
+    #[cfg(not(miri))]
+    #[test]
+    fn fixture_validation_rejects_omission_and_tampered_provenance() {
+        let (raw, fixture) = load_fixture();
+        validate_fixture(&fixture).unwrap();
+        for key in [
+            "identities",
+            "age_cases",
+            "scrypt_cases",
+            "argon2id_cases",
+            "zero_key_cases",
+            "reencrypt_cases",
+            "reencrypt_all_cases",
+            "malformed_cases",
+            "limit_cases",
+            "wrong_passphrase_cases",
+            "migration_cases",
+        ] {
+            let mut omitted: serde_json::Value = serde_json::from_str(&raw).unwrap();
+            omitted[key].as_array_mut().unwrap().pop();
+            let omitted_fixture: OracleFixture = serde_json::from_value(omitted).unwrap();
+            assert!(validate_fixture(&omitted_fixture).is_err(), "{key}");
+        }
+        for key in ["reencrypt_cases", "reencrypt_all_cases"] {
+            let mut tampered: serde_json::Value = serde_json::from_str(&raw).unwrap();
+            tampered[key][0]["name"] = serde_json::Value::String("tampered".to_owned());
+            let tampered_fixture: OracleFixture = serde_json::from_value(tampered).unwrap();
+            assert!(validate_fixture(&tampered_fixture).is_err(), "{key}");
+        }
+        for key in ["source_digest", "generator_digest"] {
+            let mut tampered: serde_json::Value = serde_json::from_str(&raw).unwrap();
+            tampered["oracle"][key] = serde_json::Value::String("0".repeat(64));
+            let tampered_fixture: OracleFixture = serde_json::from_value(tampered).unwrap();
+            assert!(validate_fixture(&tampered_fixture).is_err(), "{key}");
+        }
+    }
+
+    #[cfg(not(miri))]
+    #[test]
+    fn reencrypt_vectors_prove_add_remove_and_zero_key_safety() {
+        let (_, fixture) = load_fixture();
+        validate_fixture(&fixture).unwrap();
+        for case in &fixture.reencrypt_cases {
+            let source = base64::engine::general_purpose::STANDARD
+                .decode(&case.source_ciphertext)
+                .unwrap();
+            let go_output = base64::engine::general_purpose::STANDARD
+                .decode(&case.reencrypted_ciphertext)
+                .unwrap();
+            let source_identity = parse_identity(&case.source_identity).unwrap();
+            let mut source_recipients = Vec::new();
+            let mut source_seen = HashSet::new();
+            for recipient in &case.source_recipients {
+                assert!(source_seen.insert(recipient));
+                source_recipients.push(parse_recipient(recipient).unwrap());
+            }
+            assert!(!source_recipients.is_empty());
+            let mut retained = Vec::new();
+            let mut retained_seen = HashSet::new();
+            for recipient in &case.recipients {
+                assert!(retained_seen.insert(recipient));
+                retained.push(parse_recipient(recipient).unwrap());
+            }
+            assert!(!retained.is_empty());
+            assert!(!retained_seen.contains(&case.removed_recipient));
+            let removed_identity = parse_identity(&case.removed_identity).unwrap();
+            assert_eq!(recipient_string(&removed_identity), case.removed_recipient);
+            for identity_case in &fixture.identities {
+                if case.source_recipients.contains(&identity_case.recipient) {
+                    let identity = parse_identity(&identity_case.identity).unwrap();
+                    assert_eq!(
+                        decrypt(&source, &identity).unwrap(),
+                        case.plaintext.as_bytes()
+                    );
+                }
+                if case.recipients.contains(&identity_case.recipient) {
+                    let identity = parse_identity(&identity_case.identity).unwrap();
+                    assert_eq!(
+                        decrypt(&go_output, &identity).unwrap(),
+                        case.plaintext.as_bytes()
+                    );
+                }
+            }
+            if case.source_recipients.contains(&case.removed_recipient) {
+                assert_eq!(
+                    decrypt(&source, &removed_identity).unwrap(),
+                    case.plaintext.as_bytes()
+                );
+            }
+            assert_eq!(
+                decrypt(&go_output, &removed_identity).unwrap_err().class(),
+                FailureClass::WrongPassphraseOrKey
+            );
+            let rust_output = reencrypt(&source, &source_identity, &retained).unwrap();
+            for identity_case in &fixture.identities {
+                if case.recipients.contains(&identity_case.recipient) {
+                    let identity = parse_identity(&identity_case.identity).unwrap();
+                    assert_eq!(
+                        decrypt(&rust_output, &identity).unwrap(),
+                        case.plaintext.as_bytes()
+                    );
+                }
+            }
+            assert_eq!(
+                decrypt(&rust_output, &removed_identity)
+                    .unwrap_err()
+                    .class(),
+                FailureClass::WrongPassphraseOrKey
+            );
+        }
+        for case in &fixture.reencrypt_all_cases {
+            let source = parse_identity(&case.source_identity).unwrap();
+            let removed_identity = parse_identity(&case.removed_identity).unwrap();
+            assert_eq!(recipient_string(&removed_identity), case.removed_recipient);
+            let retained: Vec<Recipient> = case
+                .recipients
+                .iter()
+                .map(|recipient| parse_recipient(recipient).unwrap())
+                .collect();
+            assert!(retained.len() >= 2);
+            let before_manifest: std::collections::HashMap<_, _> = case
+                .before_manifest
+                .entries
+                .iter()
+                .map(|entry| (&entry.path, entry))
+                .collect();
+            let after_manifest: std::collections::HashMap<_, _> = case
+                .after_manifest
+                .entries
+                .iter()
+                .map(|entry| (&entry.path, entry))
+                .collect();
+            let root = std::env::temp_dir().join(format!(
+                "symvault-crypto-reencrypt-all-{}",
+                std::process::id()
+            ));
+            let entries_root = root.join("entries");
+            std::fs::create_dir_all(&entries_root).unwrap();
+            for file in &case.files {
+                let plaintext = base64::engine::general_purpose::STANDARD
+                    .decode(&file.plaintext)
+                    .unwrap();
+                let before = base64::engine::general_purpose::STANDARD
+                    .decode(&file.before_ciphertext)
+                    .unwrap();
+                let after = base64::engine::general_purpose::STANDARD
+                    .decode(&file.after_ciphertext)
+                    .unwrap();
+                assert_eq!(decrypt(&before, &source).unwrap(), plaintext);
+                for identity_case in &fixture.identities {
+                    if case.recipients.contains(&identity_case.recipient) {
+                        let identity = parse_identity(&identity_case.identity).unwrap();
+                        assert_eq!(decrypt(&after, &identity).unwrap(), plaintext);
+                    }
+                }
+                assert_eq!(
+                    decrypt(&after, &removed_identity).unwrap_err().class(),
+                    FailureClass::WrongPassphraseOrKey
+                );
+                let before_entry = before_manifest.get(&file.path).unwrap();
+                let after_entry = after_manifest.get(&file.path).unwrap();
+                assert_eq!(before_entry.size, before.len() as i64);
+                assert_eq!(after_entry.size, after.len() as i64);
+                assert_eq!(before_entry.sha256, sha256_hex(&before));
+                assert_eq!(after_entry.sha256, sha256_hex(&after));
+                let path = entries_root.join(format!("{}.age", file.path));
+                if let Some(parent) = path.parent() {
+                    std::fs::create_dir_all(parent).unwrap();
+                }
+                std::fs::write(&path, &after).unwrap();
+                assert_eq!(std::fs::read(&path).unwrap(), after);
+            }
+            std::fs::remove_dir_all(&root).unwrap();
+            let _ = retained;
+        }
+
+        let zero = &fixture.zero_key_cases[0];
+        let zero_ciphertext = base64::engine::general_purpose::STANDARD
+            .decode(&zero.ciphertext)
+            .unwrap();
         assert_eq!(
-            recipient_string(&id),
-            "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y"
+            recover_zero_key_identity(
+                &zero_ciphertext,
+                0,
+                ZeroKeyAuthority::recipient(&fixture.identities[0].recipient),
+            )
+            .unwrap_err()
+            .class(),
+            FailureClass::InvalidInput
         );
         assert_eq!(
-            fingerprint(&recipient_string(&id)),
-            "9DC3 A8A0 74CE 0E8A E871 8B96 246D 238B"
+            recover_zero_key_identity(
+                &zero_ciphertext,
+                MAX_ZERO_KEY_PASSPHRASE_LEN + 1,
+                ZeroKeyAuthority::recipient(&fixture.identities[0].recipient),
+            )
+            .unwrap_err()
+            .class(),
+            FailureClass::InvalidInput
+        );
+        assert_eq!(
+            recover_zero_key_identity(
+                &zero_ciphertext,
+                MAX_ZERO_KEY_PASSPHRASE_LEN,
+                ZeroKeyAuthority::recipient(&fixture.identities[0].recipient),
+            )
+            .unwrap_err()
+            .class(),
+            FailureClass::ZeroKeyCandidate
+        );
+        assert_eq!(
+            recover_zero_key_identity(
+                &zero_ciphertext,
+                zero.passphrase_length + 1,
+                ZeroKeyAuthority::recipient(&fixture.identities[0].recipient),
+            )
+            .unwrap_err()
+            .class(),
+            FailureClass::ZeroKeyCandidate
+        );
+        let zeros = SecretBytes::new(&vec![0; zero.passphrase_length]);
+        let malformed_identity = encrypt_argon2id(
+            b"not an age identity",
+            &zeros,
+            Argon2idParams {
+                time: 1,
+                memory_kib: 32,
+                threads: 1,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            recover_zero_key_identity(
+                &malformed_identity,
+                zero.passphrase_length,
+                ZeroKeyAuthority::recipient(&fixture.identities[0].recipient),
+            )
+            .unwrap_err()
+            .class(),
+            FailureClass::ZeroKeyCandidate
         );
     }
-    #[cfg(not(miri))]
+
     #[test]
     fn multi_recipient_retention_and_removal() {
         let one = parse_identity(ID).unwrap();
@@ -598,170 +1576,110 @@ mod tests {
             FailureClass::WrongPassphraseOrKey
         );
     }
+
+    #[test]
+    fn zero_key_recovery_requires_independent_authority() {
+        let expected = parse_identity(ID).unwrap();
+        let attacker = parse_identity(ID2).unwrap();
+        let zeros = SecretBytes::new(&[0; 23]);
+        let ciphertext = encrypt_argon2id(
+            ID2.as_bytes(),
+            &zeros,
+            Argon2idParams {
+                time: 1,
+                memory_kib: 32,
+                threads: 1,
+            },
+        )
+        .unwrap();
+        let error = recover_zero_key_identity(
+            &ciphertext,
+            23,
+            ZeroKeyAuthority::recipient(&recipient_string(&expected)),
+        )
+        .unwrap_err();
+        assert_eq!(error.class(), FailureClass::ZeroKeyCandidate);
+        assert_eq!(error.to_string(), "zero-key recovery failed");
+        assert!(!format!("{error:?}").contains(ID2));
+
+        let expected_fingerprint = fingerprint(&recipient_string(&expected));
+        let recovered = recover_zero_key_identity(
+            &ciphertext,
+            23,
+            ZeroKeyAuthority::fingerprint(&fingerprint(&recipient_string(&attacker))),
+        )
+        .unwrap();
+        assert_eq!(recipient_string(&recovered), recipient_string(&attacker));
+        assert_ne!(
+            expected_fingerprint,
+            fingerprint(&recipient_string(&recovered))
+        );
+
+        let invalid_authority = recover_zero_key_identity(
+            &ciphertext,
+            23,
+            ZeroKeyAuthority::both(&recipient_string(&expected), "not a fingerprint"),
+        )
+        .unwrap_err();
+        assert_eq!(invalid_authority.class(), FailureClass::InvalidInput);
+    }
+
     #[test]
     fn secret_formatting_is_redacted() {
         let secret = SecretBytes::new(b"do-not-print");
         assert_eq!(format!("{secret:?}"), "<redacted>");
         assert_eq!(format!("{secret}"), "<redacted>");
     }
-    #[cfg(not(miri))]
+
     #[test]
-    fn argon2_roundtrip_and_bounds() {
-        let pass = SecretBytes::new(b"fixture-passphrase");
-        let params = Argon2idParams {
-            time: 1,
-            memory_kib: 32,
-            threads: 1,
-        };
-        let cipher = encrypt_argon2id(b"value", &pass, params).unwrap();
-        assert_eq!(decrypt_argon2id(&cipher, &pass).unwrap(), b"value");
-        assert_eq!(
-            encrypt_argon2id(b"value", &pass, Argon2idParams { time: 17, ..params })
-                .unwrap_err()
-                .class(),
-            FailureClass::ParameterBounds
-        );
-    }
-    #[derive(serde::Deserialize)]
-    struct OracleFixture {
-        schema_version: u8,
-        oracle: OracleMeta,
-        identities: Vec<OracleIdentity>,
-        age_cases: Vec<OracleAgeCase>,
-        scrypt_cases: Vec<OracleEnvelope>,
-        argon2id_cases: Vec<OracleEnvelope>,
-        zero_key_cases: Vec<OracleZeroKey>,
-    }
-    #[derive(serde::Deserialize)]
-    struct OracleZeroKey {
-        ciphertext: String,
-        passphrase_length: usize,
-    }
-    #[derive(serde::Deserialize)]
-    struct OracleMeta {
-        source_digest: String,
-        generator_digest: String,
-    }
-    #[derive(serde::Deserialize)]
-    struct OracleIdentity {
-        identity: String,
-        recipient: String,
-        fingerprint: String,
-    }
-    #[derive(serde::Deserialize)]
-    struct OracleAgeCase {
-        plaintext: String,
-        ciphertext: String,
-    }
-    #[derive(serde::Deserialize)]
-    struct OracleEnvelope {
-        plaintext: String,
-        ciphertext: String,
+    fn argon2id_limits_accept_exact_budget_and_reject_over_limit() {
+        for value in [
+            format!("t={MAX_ARGON2_TIME},m=32,p=1"),
+            format!("t=1,m={MAX_ARGON2_MEMORY},p=1"),
+            format!("t=1,m=64,p={MAX_ARGON2_THREADS}"),
+        ] {
+            assert!(parse_argon2id_params(&value).is_ok(), "{value}");
+        }
+        for value in [
+            format!("t={},m=32,p=1", MAX_ARGON2_TIME + 1),
+            format!("t=1,m={},p=1", MAX_ARGON2_MEMORY + 1),
+            format!("t=1,m=64,p={}", MAX_ARGON2_THREADS + 1),
+        ] {
+            assert_eq!(
+                parse_argon2id_params(&value).unwrap_err().class(),
+                FailureClass::ParameterBounds,
+                "{value}"
+            );
+        }
     }
 
-    #[cfg(not(miri))]
     #[test]
-    fn go_generated_vectors_decrypt_in_rust_and_provenance_is_present() {
-        let raw = std::fs::read_to_string(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../testdata/port/crypto/age-kdf.json"
-        ))
-        .expect("Go crypto fixture");
-        let fixture: OracleFixture = serde_json::from_str(&raw).expect("valid Go crypto fixture");
-        assert_eq!(fixture.schema_version, 1);
-        assert_eq!(fixture.oracle.source_digest.len(), 64);
-        assert_eq!(fixture.oracle.generator_digest.len(), 64);
-        let identity = parse_identity(&fixture.identities[0].identity).unwrap();
-        assert_eq!(recipient_string(&identity), fixture.identities[0].recipient);
+    fn argon2id_parameter_parser_rejects_ambiguous_and_oversized_values() {
         assert_eq!(
-            fingerprint(&fixture.identities[0].recipient),
-            fixture.identities[0].fingerprint
+            parse_argon2id_params("t=1,m=32,p=1").unwrap(),
+            Argon2idParams {
+                time: 1,
+                memory_kib: 32,
+                threads: 1,
+            }
         );
-        let age_case = &fixture.age_cases[0];
-        let ciphertext = base64::engine::general_purpose::STANDARD
-            .decode(&age_case.ciphertext)
-            .unwrap();
+        for value in [
+            "t=1,t=1,m=32,p=1",
+            "t=1,m=32,p=1,extra=1",
+            "t=1,m=32",
+            "t=1,m=32,p=1,",
+        ] {
+            assert_eq!(
+                parse_argon2id_params(value).unwrap_err().class(),
+                FailureClass::MalformedEnvelope,
+                "{value}"
+            );
+        }
+        let oversized = format!("t=1,m=32,p=1,{}", "x".repeat(MAX_ARGON2ID_PARAMS_BYTES));
         assert_eq!(
-            decrypt(&ciphertext, &identity).unwrap(),
-            age_case.plaintext.as_bytes()
-        );
-        let zero = &fixture.zero_key_cases[0];
-        let zero_ciphertext = base64::engine::general_purpose::STANDARD
-            .decode(&zero.ciphertext)
-            .unwrap();
-        let recovered =
-            recover_zero_key_identity(&zero_ciphertext, zero.passphrase_length).unwrap();
-        assert_eq!(
-            recipient_string(&recovered),
-            fixture.identities[0].recipient
-        );
-        let passphrase = SecretBytes::new(b"rust-interop-fixture-passphrase-v1");
-        let scrypt = &fixture.scrypt_cases[0];
-        let ciphertext = base64::engine::general_purpose::STANDARD
-            .decode(&scrypt.ciphertext)
-            .unwrap();
-        assert_eq!(
-            decrypt_scrypt(&ciphertext, &passphrase).unwrap(),
-            scrypt.plaintext.as_bytes()
-        );
-        let argon = &fixture.argon2id_cases[0];
-        let ciphertext = base64::engine::general_purpose::STANDARD
-            .decode(&argon.ciphertext)
-            .unwrap();
-        assert_eq!(
-            decrypt_argon2id(&ciphertext, &passphrase).unwrap(),
-            argon.plaintext.as_bytes()
-        );
-        let wrong = SecretBytes::new(b"wrong-passphrase");
-        assert_eq!(
-            decrypt_scrypt(
-                &base64::engine::general_purpose::STANDARD
-                    .decode(&scrypt.ciphertext)
-                    .unwrap(),
-                &wrong
-            )
-            .unwrap_err()
-            .class(),
-            FailureClass::WrongPassphraseOrKey
-        );
-        assert_eq!(
-            decrypt_argon2id(
-                &base64::engine::general_purpose::STANDARD
-                    .decode(&argon.ciphertext)
-                    .unwrap(),
-                &wrong
-            )
-            .unwrap_err()
-            .class(),
-            FailureClass::WrongPassphraseOrKey
-        );
-        assert_eq!(
-            decrypt(b"not an age envelope", &identity)
-                .unwrap_err()
-                .class(),
+            parse_argon2id_params(&oversized).unwrap_err().class(),
             FailureClass::MalformedEnvelope
         );
-        let mut tampered = raw.clone();
-        tampered = tampered.replacen(&fixture.oracle.source_digest, &"0".repeat(64), 1);
-        assert_ne!(tampered, raw, "fixture tamper must be observable");
-    }
-
-    #[test]
-    fn kdf_migration_and_malformed_classifications_are_stable() {
-        assert_eq!(
-            detect_envelope(b"-> scrypt abc 12\n"),
-            EnvelopeFormat::Scrypt
-        );
-        assert!(needs_kdf_migration(b"-> scrypt abc 12\n"));
-        assert_eq!(
-            detect_envelope(b"-> argon2id abc t=1,m=32,p=1\n"),
-            EnvelopeFormat::Argon2id
-        );
-        assert_eq!(
-            classify_zero_key_candidate(b"-> argon2id abc t=1,m=32,p=1\n"),
-            FailureClass::ZeroKeyCandidate
-        );
-        assert_eq!(detect_envelope(b"garbage"), EnvelopeFormat::Unknown);
     }
 
     #[cfg(not(miri))]

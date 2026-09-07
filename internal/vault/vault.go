@@ -1,10 +1,13 @@
 package vault
 
 import (
+	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 
 	"filippo.io/age"
@@ -171,6 +174,9 @@ func Open(vaultDir string, identity *age.X25519Identity) (*Vault, error) {
 	if err := validateVaultDir(vaultDir); err != nil {
 		return nil, err
 	}
+	if err := recoverReencryptJournal(vaultDir, identity); err != nil {
+		return nil, fmt.Errorf("recover re-encryption: %w", err)
+	}
 	cfg, err := vaultconfig.Load(filepath.Join(vaultDir, "config.yaml"))
 	if err != nil {
 		return nil, fmt.Errorf("load config: %w", err)
@@ -336,21 +342,79 @@ func OpenWithPassphrase(vaultDir string, passphrase []byte) (*Vault, error) {
 // recovery error so the caller sees the original load failure and the file
 // stays untouched.
 func tryHealZeroKeyIdentity(vaultDir, identityPath string, raw, passphrase []byte) (*age.X25519Identity, bool, error) {
-	recovered, recErr := vaultcrypto.RecoverZeroKeyIdentity(raw, len(passphrase))
-	if recErr != nil {
-		return nil, false, recErr
+	// recipients.txt is the local trust boundary for this legacy recovery path.
+	// Read and validate it before any zero-key KDF: the envelope is never allowed
+	// to choose its own expected identity. A missing, empty, malformed, or
+	// symlinked file fails closed.
+	authorities, recipientsSnapshot, err := trustedZeroKeyAuthorities(vaultDir)
+	if err != nil {
+		return nil, false, err
 	}
-	verified, verifyErr := verifyRecoveryAgainstRecipients(vaultDir, recovered)
-	if verifyErr != nil {
-		return nil, false, fmt.Errorf("verify recovery: %w", verifyErr)
+	var recovered *age.X25519Identity
+	for _, authority := range authorities {
+		candidate, recoverErr := vaultcrypto.RecoverZeroKeyIdentity(raw, len(passphrase), authority)
+		if recoverErr == nil {
+			recovered = candidate
+			break
+		}
 	}
-	if !verified {
-		return nil, false, errors.New("recovered identity not present in recipients.txt; refusing to silently re-key the vault")
+	if recovered == nil {
+		return nil, false, vaultcrypto.ErrZeroKeyRecovery
 	}
-	if err := rewriteIdentityAtomic(identityPath, recovered, cloneBytes(passphrase), vaultcrypto.DefaultArgon2idParams()); err != nil {
+
+	// Do not heal if the trust file or encrypted identity changed while the
+	// recovery KDF was running. This closes the common mutable-file race and
+	// keeps the authority snapshot tied to the bytes being rewritten.
+	currentRecipients, readErr := SafeReadFile(NewRecipientsManager(vaultDir).RecipientsFilePath())
+	if readErr != nil || !bytes.Equal(currentRecipients, recipientsSnapshot) {
+		return nil, false, errors.New("zero-key recovery authority changed; refusing to re-key the vault")
+	}
+	if err := rewriteIdentityAtomicExpected(identityPath, raw, recovered, cloneBytes(passphrase), vaultcrypto.DefaultArgon2idParams()); err != nil {
 		return nil, false, fmt.Errorf("atomic rewrite of healed identity: %w", err)
 	}
 	return recovered, true, nil
+}
+
+func trustedZeroKeyAuthorities(vaultDir string) ([]vaultcrypto.ZeroKeyAuthority, []byte, error) {
+	rm := NewRecipientsManager(vaultDir)
+	path := rm.RecipientsFilePath()
+	snapshot, err := SafeReadFile(path)
+	if err != nil {
+		return nil, nil, errors.New("zero-key recovery requires a trusted recipients.txt")
+	}
+	// Validate the exact bytes we snapshotted rather than reopening the path.
+	// This keeps the authority set tied to the file whose bytes are checked
+	// again immediately before the identity rewrite.
+	recipients := make([]*age.X25519Recipient, 0, 8)
+	scanner := bufio.NewScanner(bytes.NewReader(snapshot))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		recipient, parseErr := vaultcrypto.ValidateRecipient(line)
+		if parseErr != nil {
+			return nil, nil, errors.New("zero-key recovery requires valid recipients.txt authority")
+		}
+		recipients = append(recipients, recipient)
+	}
+	if scanner.Err() != nil || len(recipients) == 0 {
+		return nil, nil, errors.New("zero-key recovery requires valid recipients.txt authority")
+	}
+	authorities := make([]vaultcrypto.ZeroKeyAuthority, 0, len(recipients))
+	seen := make(map[string]struct{}, len(recipients))
+	for _, recipient := range recipients {
+		value := recipient.String()
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		authorities = append(authorities, vaultcrypto.NewZeroKeyAuthority(value, vaultcrypto.Fingerprint(value)))
+	}
+	if len(authorities) == 0 {
+		return nil, nil, errors.New("zero-key recovery requires valid recipients.txt authority")
+	}
+	return authorities, snapshot, nil
 }
 
 // MigrateKDF re-encrypts the vault identity from scrypt to argon2id. The
@@ -409,10 +473,17 @@ func resolveArgon2idParams(cfg *vaultconfig.Config) vaultcrypto.Argon2idParams {
 // returned. This is the shared safety primitive used by both the scrypt→argon2id
 // KDF migration and the pre-#476 zero-key identity heal.
 func rewriteIdentityAtomic(identityPath string, identity *age.X25519Identity, passphrase []byte, params vaultcrypto.Argon2idParams) error {
+	return rewriteIdentityAtomicExpected(identityPath, nil, identity, passphrase, params)
+}
+
+func rewriteIdentityAtomicExpected(identityPath string, expected []byte, identity *age.X25519Identity, passphrase []byte, params vaultcrypto.Argon2idParams) error {
 	backupPath := identityPath + ".bak"
 	original, readErr := os.ReadFile(identityPath) // #nosec G304 — fixed filename under validated vaultDir
 	if readErr != nil {
 		return fmt.Errorf("read original identity: %w", readErr)
+	}
+	if expected != nil && !bytes.Equal(original, expected) {
+		return errors.New("identity changed during zero-key recovery; refusing to re-key the vault")
 	}
 	if err := fsutil.AtomicWriteFile(backupPath, original, 0o600); err != nil {
 		return fmt.Errorf("write backup: %w", err)
@@ -426,30 +497,6 @@ func rewriteIdentityAtomic(identityPath string, identity *age.X25519Identity, pa
 		return fmt.Errorf("verify new identity: %w", err)
 	}
 	return nil
-}
-
-// verifyRecoveryAgainstRecipients returns true when the public key derived
-// from the recovered identity appears in vaultDir/recipients.txt. It returns
-// (false, nil) when recipients.txt is absent — recovery is rejected in that
-// case because there is no independent source of truth to compare against,
-// which would otherwise allow a wrong-length passphrase to silently re-key
-// the vault to a typo's length-equivalent identity.
-func verifyRecoveryAgainstRecipients(vaultDir string, identity *age.X25519Identity) (bool, error) {
-	rm := NewRecipientsManager(vaultDir)
-	if !rm.RecipientsFileExists() {
-		return false, nil
-	}
-	recipients, err := rm.LoadRecipients()
-	if err != nil {
-		return false, fmt.Errorf("load recipients: %w", err)
-	}
-	pubKey := identity.Recipient().String()
-	for _, r := range recipients {
-		if r.String() == pubKey {
-			return true, nil
-		}
-	}
-	return false, nil
 }
 
 // restoreIdentityBackup puts the original identity bytes back in place after a

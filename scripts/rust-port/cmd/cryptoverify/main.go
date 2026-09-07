@@ -6,12 +6,19 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"filippo.io/age"
 
+	vaultconfig "github.com/danieljustus/symaira-vault/internal/config"
 	cryptopkg "github.com/danieljustus/symaira-vault/internal/crypto"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
+
+type verificationError string
+
+func (e verificationError) Error() string { return string(e) }
 
 func main() {
 	if len(os.Args) != 2 {
@@ -41,12 +48,37 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	id2, err := age.ParseX25519Identity("AGE-SECRET-KEY-18HD87KNMWKY3RW97YR2PYU6HGWDZXAGW6JF74LNNHUA6A8K5ZF9QTWUTK3")
+	if err != nil {
+		panic(err)
+	}
+	id3, err := age.ParseX25519Identity("AGE-SECRET-KEY-15KR576PHDPLRQS08427S6X2G492S6GTVELZ6WHN8AKMWW90T0HES2KQ597")
+	if err != nil {
+		panic(err)
+	}
 	passphrase := []byte("rust-interop-fixture-passphrase-v1")
 	ageCipher := decode(values, "age")
 	plain, err := cryptopkg.Decrypt(ageCipher, id)
 	if err != nil || string(plain) != "Rust encrypts age for Go" {
 		panic("Go could not decrypt Rust age vector")
 	}
+	reencryptCipher := decode(values, "reencrypt")
+	for _, retained := range []*age.X25519Identity{id, id2} {
+		plain, err = cryptopkg.Decrypt(reencryptCipher, retained)
+		if err != nil || string(plain) != "Rust re-encrypts age for Go" {
+			panic("Go could not decrypt Rust re-encryption vector for retained recipient")
+		}
+	}
+	if _, err = cryptopkg.Decrypt(reencryptCipher, id3); err == nil {
+		panic("Go decrypted Rust re-encryption vector for removed recipient")
+	}
+
+	// Exercise the Rust ciphertext through the real filesystem orchestration,
+	// using only an isolated temporary vault and never a production path.
+	if err = verifyFilesystemReencrypt(values, id, id2, id3); err != nil {
+		panic(err)
+	}
+
 	scryptCipher := decode(values, "scrypt")
 	plain, err = cryptopkg.DecryptWithPassphrase(scryptCipher, append([]byte(nil), passphrase...))
 	if err != nil || string(plain) != "Rust encrypts scrypt for Go" {
@@ -57,7 +89,51 @@ func main() {
 	if err != nil || string(plain) != "Rust encrypts argon2id for Go" {
 		panic("Go could not decrypt Rust argon2id vector")
 	}
-	fmt.Println("PASS Rust encrypt -> Go decrypt (age, scrypt, argon2id)")
+	fmt.Println("PASS Rust encrypt -> Go decrypt (age, scrypt, argon2id, filesystem ReencryptAll)")
+}
+
+func verifyFilesystemReencrypt(values map[string]string, id, id2, id3 *age.X25519Identity) (err error) {
+	fixtureDir, err := os.MkdirTemp("", "symvault-cryptoverify-reencrypt-all-")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if cleanupErr := os.RemoveAll(fixtureDir); cleanupErr != nil && err == nil {
+			err = fmt.Errorf("remove temporary filesystem fixture: %w", cleanupErr)
+		}
+	}()
+
+	cfg := vaultconfig.Default()
+	cfg.VaultDir = fixtureDir
+	if initErr := vaultpkg.Init(fixtureDir, id, cfg); initErr != nil {
+		return initErr
+	}
+	entryPath := filepath.Join(fixtureDir, "entries", "rust", "entry.age")
+	if mkdirErr := os.MkdirAll(filepath.Dir(entryPath), 0o700); mkdirErr != nil {
+		return mkdirErr
+	}
+	if writeErr := os.WriteFile(entryPath, decode(values, "reencrypt_entry"), 0o600); writeErr != nil {
+		return writeErr
+	}
+	for _, retained := range []*age.X25519Identity{id, id2} {
+		entry, readErr := vaultpkg.ReadEntry(fixtureDir, "rust/entry", retained)
+		if readErr != nil || entry.Data["secret"] != "Rust filesystem entry" {
+			return verificationError("Go could not read Rust filesystem re-encryption fixture")
+		}
+	}
+	if reencryptErr := vaultpkg.ReencryptAll(fixtureDir, id, []*age.X25519Recipient{id.Recipient(), id3.Recipient()}); reencryptErr != nil {
+		return reencryptErr
+	}
+	for _, retained := range []*age.X25519Identity{id, id3} {
+		entry, readErr := vaultpkg.ReadEntry(fixtureDir, "rust/entry", retained)
+		if readErr != nil || entry.Data["secret"] != "Rust filesystem entry" {
+			return verificationError("Go ReencryptAll rejected Rust filesystem fixture")
+		}
+	}
+	if _, readErr := vaultpkg.ReadEntry(fixtureDir, "rust/entry", id2); readErr == nil {
+		return verificationError("Go ReencryptAll retained removed Rust recipient")
+	}
+	return nil
 }
 
 func closeFile(file *os.File) {

@@ -1,10 +1,15 @@
 package vault
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"filippo.io/age"
 
@@ -236,4 +241,360 @@ func TestReencryptFile_SingleFile(t *testing.T) {
 	if got.Data["secret"] != "value123" {
 		t.Errorf("Data[secret] = %v, want value123", got.Data["secret"])
 	}
+}
+
+func TestReencryptBytes_CrossLanguageSeam(t *testing.T) {
+	vaultDir := t.TempDir()
+	identity1 := testutil.TempIdentity(t)
+	identity2 := testutil.TempIdentity(t)
+	removed := testutil.TempIdentity(t)
+	plaintext := []byte("side-effect-free re-encryption seam")
+	source, err := vaultcrypto.EncryptWithRecipients(plaintext, identity1.Recipient())
+	if err != nil {
+		t.Fatalf("encrypt source: %v", err)
+	}
+	got, err := ReencryptBytes(source, identity1, []*age.X25519Recipient{
+		identity1.Recipient(),
+		identity2.Recipient(),
+	})
+	if err != nil {
+		t.Fatalf("ReencryptBytes: %v", err)
+	}
+	for _, identity := range []*age.X25519Identity{identity1, identity2} {
+		decrypted, err := vaultcrypto.Decrypt(got, identity)
+		if err != nil || string(decrypted) != string(plaintext) {
+			t.Errorf("retained identity decrypt = %q, %v; want %q", decrypted, err, plaintext)
+		}
+	}
+	if _, err := vaultcrypto.Decrypt(got, removed); err == nil {
+		t.Fatal("removed identity decrypted re-encrypted content")
+	}
+	entries, err := os.ReadDir(vaultDir)
+	if err != nil {
+		t.Fatalf("read seam vault directory: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("ReencryptBytes wrote %d files", len(entries))
+	}
+}
+
+func TestReencryptAll_SymlinkEntryRejected(t *testing.T) {
+	vaultDir, identity := initTestVault(t)
+	outside := filepath.Join(t.TempDir(), "outside.age")
+	if err := os.WriteFile(outside, []byte("outside bytes"), 0o600); err != nil {
+		t.Fatalf("write outside file: %v", err)
+	}
+	link := filepath.Join(entriesDir(vaultDir), "symlink.age")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if err := ReencryptAll(vaultDir, identity, []*age.X25519Recipient{testutil.TempIdentity(t).Recipient()}); err == nil {
+		t.Fatal("ReencryptAll accepted symlink entry")
+	}
+	got, err := os.ReadFile(outside)
+	if err != nil {
+		t.Fatalf("read outside file: %v", err)
+	}
+	if string(got) != "outside bytes" {
+		t.Fatalf("outside file changed to %q", got)
+	}
+}
+
+func TestReencryptAll_RollsBackOnStagingFailure(t *testing.T) {
+	vaultDir, identity := initTestVault(t)
+	writeReencryptTestEntries(t, vaultDir, identity)
+	before := snapshotReencryptTestFiles(t, vaultDir)
+	restoreReencryptHooks(t)
+	calls := 0
+	original := reencryptStage
+	reencryptStage = func(candidate *reencryptCandidate, ciphertext []byte) (*reencryptStaged, error) {
+		calls++
+		if calls == 2 {
+			return nil, errors.New("injected staging failure")
+		}
+		return original(candidate, ciphertext)
+	}
+	if err := ReencryptAll(vaultDir, identity, []*age.X25519Recipient{testutil.TempIdentity(t).Recipient()}); err == nil {
+		t.Fatal("ReencryptAll accepted injected staging failure")
+	}
+	assertReencryptTestFilesUnchanged(t, vaultDir, before)
+	assertNoReencryptTemps(t, entriesDir(vaultDir))
+}
+
+func TestReencryptAll_RollsBackOnCommitFailure(t *testing.T) {
+	vaultDir, identity := initTestVault(t)
+	writeReencryptTestEntries(t, vaultDir, identity)
+	before := snapshotReencryptTestFiles(t, vaultDir)
+	restoreReencryptHooks(t)
+	calls := 0
+	original := reencryptCommit
+	reencryptCommit = func(item *reencryptStaged) error {
+		calls++
+		if calls == 2 {
+			return errors.New("injected commit failure")
+		}
+		return original(item)
+	}
+	if err := ReencryptAll(vaultDir, identity, []*age.X25519Recipient{testutil.TempIdentity(t).Recipient()}); err == nil {
+		t.Fatal("ReencryptAll accepted injected commit failure")
+	}
+	assertReencryptTestFilesUnchanged(t, vaultDir, before)
+	assertNoReencryptTemps(t, entriesDir(vaultDir))
+}
+
+func TestReencryptAll_RollsBackOnManifestFailure(t *testing.T) {
+	vaultDir, identity := initTestVault(t)
+	writeReencryptTestEntries(t, vaultDir, identity)
+	before := snapshotReencryptTestFiles(t, vaultDir)
+	restoreReencryptHooks(t)
+	reencryptRebuildManifest = func(string, *age.X25519Identity) error {
+		return errors.New("injected manifest failure")
+	}
+	if err := ReencryptAll(vaultDir, identity, []*age.X25519Recipient{testutil.TempIdentity(t).Recipient()}); err == nil {
+		t.Fatal("ReencryptAll accepted injected manifest failure")
+	}
+	assertReencryptTestFilesUnchanged(t, vaultDir, before)
+	assertNoReencryptTemps(t, entriesDir(vaultDir))
+}
+
+func TestReencryptAll_PreservesModesAndManifestHashes(t *testing.T) {
+	vaultDir, identity := initTestVault(t)
+	writeReencryptTestEntries(t, vaultDir, identity)
+	onePath := filepath.Join(entriesDir(vaultDir), "one.age")
+	if err := os.Chmod(onePath, 0o640); err != nil {
+		t.Fatalf("chmod entry: %v", err)
+	}
+	newIdentity := testutil.TempIdentity(t)
+	if err := ReencryptAll(vaultDir, identity, []*age.X25519Recipient{newIdentity.Recipient()}); err != nil {
+		t.Fatalf("ReencryptAll: %v", err)
+	}
+	if info, err := os.Stat(onePath); err != nil {
+		t.Fatalf("stat entry: %v", err)
+	} else if info.Mode().Perm() != 0o640 {
+		t.Errorf("entry mode = %o, want 640", info.Mode().Perm())
+	}
+	manifest, err := LoadManifest(vaultDir, identity)
+	if err != nil {
+		t.Fatalf("LoadManifest: %v", err)
+	}
+	for _, name := range []string{"one", "two"} {
+		data, err := os.ReadFile(filepath.Join(entriesDir(vaultDir), name+entryExtAge))
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		hash := sha256.Sum256(data)
+		if got, want := manifest.Entries[name].SHA256, hex.EncodeToString(hash[:]); got != want {
+			t.Errorf("manifest hash for %s = %q, want %q", name, got, want)
+		}
+	}
+}
+
+func TestReencryptAll_FinalReplacementDetected(t *testing.T) {
+	vaultDir, identity := initTestVault(t)
+	writeReencryptTestEntries(t, vaultDir, identity)
+	restoreReencryptHooks(t)
+	original := reencryptCommit
+	replaced := false
+	reencryptCommit = func(item *reencryptStaged) error {
+		if !replaced {
+			replaced = true
+			path := item.candidate.path
+			if err := os.Rename(path, path+".raced-original"); err != nil {
+				return err
+			}
+			if err := os.WriteFile(path, []byte("replacement"), 0o600); err != nil {
+				return err
+			}
+		}
+		return original(item)
+	}
+	if err := ReencryptAll(vaultDir, identity, []*age.X25519Recipient{testutil.TempIdentity(t).Recipient()}); err == nil {
+		t.Fatal("ReencryptAll accepted final-name replacement race")
+	}
+	if _, err := os.Stat(filepath.Join(entriesDir(vaultDir), "one.age.raced-original")); err != nil {
+		t.Fatalf("original raced file missing: %v", err)
+	}
+}
+
+func restoreReencryptHooks(t *testing.T) {
+	t.Helper()
+	stage, commit, rollback, cleanup, rebuild := reencryptStage, reencryptCommit, reencryptRollback, reencryptCleanup, reencryptRebuildManifest
+	t.Cleanup(func() {
+		reencryptStage, reencryptCommit, reencryptRollback, reencryptCleanup, reencryptRebuildManifest = stage, commit, rollback, cleanup, rebuild
+	})
+}
+
+func writeReencryptTestEntries(t *testing.T, vaultDir string, identity *age.X25519Identity) {
+	t.Helper()
+	for name, value := range map[string]string{"one": "first", "two": "second"} {
+		if err := WriteEntry(vaultDir, name, &Entry{Data: map[string]any{"value": value}}, identity); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	FlushManifestUpdates()
+}
+
+func snapshotReencryptTestFiles(t *testing.T, vaultDir string) map[string][]byte {
+	t.Helper()
+	result := make(map[string][]byte)
+	for _, name := range []string{"one.age", "two.age", manifestFileName} {
+		path := filepath.Join(vaultDir, name)
+		if name != manifestFileName {
+			path = filepath.Join(entriesDir(vaultDir), name)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("snapshot %s: %v", name, err)
+		}
+		result[name] = data
+	}
+	return result
+}
+
+func assertReencryptTestFilesUnchanged(t *testing.T, vaultDir string, before map[string][]byte) {
+	t.Helper()
+	for name, want := range before {
+		path := filepath.Join(vaultDir, name)
+		if name != manifestFileName {
+			path = filepath.Join(entriesDir(vaultDir), name)
+		}
+		got, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read rollback file %s: %v", name, err)
+		}
+		if !bytes.Equal(got, want) {
+			t.Errorf("rollback changed %s", name)
+		}
+	}
+}
+
+func assertNoReencryptTemps(t *testing.T, root string) {
+	t.Helper()
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if strings.Contains(info.Name(), ".reencrypt-") {
+			t.Errorf("temporary/backup file left behind: %s", path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk for temporary files: %v", err)
+	}
+}
+
+func TestReencryptAll_RecoversJournalAfterCrashPhases(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		installed bool
+	}{
+		{name: "after-install", installed: true},
+		{name: "after-backup", installed: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			vaultDir, identity := initTestVault(t)
+			if err := WriteEntry(vaultDir, "one", &Entry{Data: map[string]any{"value": "old"}}, identity); err != nil {
+				t.Fatalf("write entry: %v", err)
+			}
+			FlushManifestUpdates()
+			path := filepath.Join(entriesDir(vaultDir), "one.age")
+			oldRaw, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read original: %v", err)
+			}
+			newRaw, err := ReencryptBytes(oldRaw, identity, []*age.X25519Recipient{identity.Recipient()})
+			if err != nil {
+				t.Fatalf("prepare replacement: %v", err)
+			}
+			backup := path + ".reencrypt-backup-crash"
+			if err := os.Rename(path, backup); err != nil {
+				t.Fatalf("move original: %v", err)
+			}
+			if tc.installed {
+				if err := os.WriteFile(path, newRaw, 0o600); err != nil {
+					t.Fatalf("install replacement: %v", err)
+				}
+			}
+			sum := sha256.Sum256(newRaw)
+			journal := &reencryptJournal{Version: 1, Entries: []reencryptJournalEntry{{
+				Path: path, Backup: backup, Digest: hex.EncodeToString(sum[:]), Installed: tc.installed,
+			}}}
+			if err := journal.persist(vaultDir); err != nil {
+				t.Fatalf("persist crash journal: %v", err)
+			}
+
+			if _, err := Open(vaultDir, identity); err != nil {
+				t.Fatalf("Open recovery: %v", err)
+			}
+			if _, err := os.Stat(reencryptJournalPath(vaultDir)); !os.IsNotExist(err) {
+				t.Fatalf("journal remains after recovery: %v", err)
+			}
+			if _, err := os.Stat(backup); !os.IsNotExist(err) {
+				t.Fatalf("old ciphertext backup remains after recovery: %v", err)
+			}
+			got, err := ReadEntry(vaultDir, "one", identity)
+			if err != nil {
+				t.Fatalf("read recovered entry: %v", err)
+			}
+			want := "old"
+			if got.Data["value"] != want {
+				t.Fatalf("recovered value = %v, want %q", got.Data["value"], want)
+			}
+		})
+	}
+}
+
+func TestReencryptAll_LockBlocksConcurrentWriter(t *testing.T) {
+	vaultDir, identity := initTestVault(t)
+	writeReencryptTestEntries(t, vaultDir, identity)
+	newIdentity := testutil.TempIdentity(t)
+	restoreReencryptHooks(t)
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	original := reencryptCommit
+	first := true
+	reencryptCommit = func(item *reencryptStaged) error {
+		if first {
+			first = false
+			close(entered)
+			<-release
+		}
+		return original(item)
+	}
+
+	reencryptDone := make(chan error, 1)
+	go func() {
+		reencryptDone <- ReencryptAll(vaultDir, identity, []*age.X25519Recipient{identity.Recipient(), newIdentity.Recipient()})
+	}()
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("ReencryptAll did not reach commit")
+	}
+
+	writerDone := make(chan error, 1)
+	go func() {
+		writerDone <- WriteEntry(vaultDir, "one", &Entry{Data: map[string]any{"value": "writer"}}, identity)
+	}()
+	select {
+	case err := <-writerDone:
+		t.Fatalf("concurrent writer completed while re-encryption held lock: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(release)
+	if err := <-reencryptDone; err != nil {
+		t.Fatalf("ReencryptAll: %v", err)
+	}
+	if err := <-writerDone; err != nil {
+		t.Fatalf("WriteEntry after re-encryption: %v", err)
+	}
+	got, err := ReadEntry(vaultDir, "one", identity)
+	if err != nil {
+		t.Fatalf("read final entry: %v", err)
+	}
+	if got.Data["value"] != "writer" {
+		t.Fatalf("final value = %v, want writer update", got.Data["value"])
+	}
+	assertNoReencryptTemps(t, entriesDir(vaultDir))
 }

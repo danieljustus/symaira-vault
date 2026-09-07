@@ -1,4 +1,4 @@
-.PHONY: all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-gates help docs-check
+.PHONY: all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates help docs-check
 
 # Variables
 BINARY_NAME := symvault
@@ -9,6 +9,16 @@ GOLANGCI_LINT_VERSION := v2.11.4
 GO_TOOLCHAIN ?= go1.26.6
 MIRI_TOOLCHAIN := nightly-2026-09-03
 MIRI_TARGET_DIR := target/miri-2026-09-03
+RUST_FUZZ_TOOLCHAIN := nightly-2026-09-03
+RUST_FUZZ_RUNS ?= 128
+RUST_FUZZ_MAX_TOTAL_TIME ?= 10
+RUST_FUZZ_MAX_LEN ?= 4096
+RUST_FUZZ_TIMEOUT ?= 5
+RUST_FUZZ_RSS_LIMIT_MB ?= 512
+RUST_FUZZ_DIR := fuzz
+RUST_FUZZ_MANIFEST := $(RUST_FUZZ_DIR)/Cargo.toml
+RUST_FUZZ_LOCK := $(RUST_FUZZ_DIR)/Cargo.lock
+RUST_FUZZ_DENY := $(RUST_FUZZ_DIR)/deny.toml
 COVERAGE_DIR := coverage
 COVERAGE_FILE := $(COVERAGE_DIR)/coverage.out
 COVERAGE_HTML := $(COVERAGE_DIR)/coverage.html
@@ -231,8 +241,41 @@ crypto-differential:
 	$(MAKE) crypto-fuzz-smoke
 
 crypto-fuzz-smoke:
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test -run '^$$' -fuzz=FuzzParseArgon2idParams -fuzztime=1s -timeout=30s ./internal/crypto
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test -run '^$$' -fuzz=FuzzDecryptAgeEnvelope -fuzztime=1s -timeout=30s ./internal/crypto
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test -run '^$$' -fuzz=FuzzParseArgon2idParams -fuzztime=3s -timeout=30s ./internal/crypto
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test -run '^$$' -fuzz=FuzzDecryptAgeEnvelope -fuzztime=3s -timeout=30s ./internal/crypto
+
+# Verify the independent fuzz workspace has a present, consistent lockfile.
+# cargo-fuzz 0.13.2 has no --locked flag; the locked Cargo check validates
+# checksums before the run, and the hash guard rejects any lockfile mutation.
+rust-fuzz-lock:
+	@set -eu; \
+	test -f "$(RUST_FUZZ_MANIFEST)" || { echo "Missing $(RUST_FUZZ_MANIFEST)" >&2; exit 1; }; \
+	test -f "$(RUST_FUZZ_LOCK)" || { echo "Missing $(RUST_FUZZ_LOCK)" >&2; exit 1; }; \
+	test -f "$(RUST_FUZZ_DENY)" || { echo "Missing $(RUST_FUZZ_DENY)" >&2; exit 1; }; \
+	$(CARGO) metadata --manifest-path "$(RUST_FUZZ_MANIFEST)" --locked --format-version 1 --no-deps >/dev/null; \
+	$(CARGO) check --manifest-path "$(RUST_FUZZ_MANIFEST)" --locked; \
+	echo "Fuzz manifest and lockfile are present and locked."
+
+# Bounded PR smoke; the corpus is copied because libFuzzer may add files to it.
+rust-fuzz-smoke: rust-fuzz-lock
+	@set -eu; \
+	corpus="$$(mktemp -d)"; \
+	runs_arg=""; \
+	lock_before="$$(shasum -a 256 "$(RUST_FUZZ_LOCK)")"; \
+	if [ -n "$(RUST_FUZZ_RUNS)" ]; then runs_arg="-runs=$(RUST_FUZZ_RUNS)"; fi; \
+	trap 'rm -rf "$$corpus"' EXIT; \
+	cp -R "$(RUST_FUZZ_DIR)/corpus/age_envelope/." "$$corpus/"; \
+	CARGOFLAGS=--locked $(CARGO) +$(RUST_FUZZ_TOOLCHAIN) fuzz run --fuzz-dir "$(RUST_FUZZ_DIR)" --sanitizer none age_envelope "$$corpus" -- \
+		$$runs_arg -max_total_time=$(RUST_FUZZ_MAX_TOTAL_TIME) \
+		-max_len=$(RUST_FUZZ_MAX_LEN) -timeout=$(RUST_FUZZ_TIMEOUT) \
+		-rss_limit_mb=$(RUST_FUZZ_RSS_LIMIT_MB) -seed=992 -verbosity=0 \
+		-print_final_stats=1 -dict="$(CURDIR)/$(RUST_FUZZ_DIR)/dictionaries/age_envelope.dict"; \
+	lock_after="$$(shasum -a 256 "$(RUST_FUZZ_LOCK)")"; \
+	test "$$lock_before" = "$$lock_after" || { echo "Fuzz run modified $(RUST_FUZZ_LOCK)" >&2; exit 1; }
+
+# Main/scheduled coverage run; still has a hard wall-clock bound.
+rust-fuzz:
+	$(MAKE) rust-fuzz-smoke RUST_FUZZ_RUNS= RUST_FUZZ_MAX_TOTAL_TIME=60
 
 port-contract: port-fixtures-check core-fixtures-check policy-fixtures-check differential-go-selftest crypto-differential
 
@@ -262,8 +305,10 @@ rust-coverage:
 	$(CARGO) llvm-cov nextest --workspace --all-features --locked --summary-only
 
 rust-security:
-	$(CARGO) audit
-	$(CARGO) deny check
+	$(CARGO) audit --file Cargo.lock
+	$(CARGO) deny --locked check
+	$(CARGO) audit --file $(RUST_FUZZ_LOCK)
+	$(CARGO) deny --manifest-path $(RUST_FUZZ_MANIFEST) --config $(RUST_FUZZ_DENY) --locked check
 
 rust-version-contract:
 	@mkdir -p target/port
@@ -277,10 +322,11 @@ rust-gates:
 	$(MAKE) rust-lint
 	$(MAKE) rust-check
 	$(MAKE) rust-test
+	$(MAKE) rust-security
+	$(MAKE) rust-fuzz-smoke
 	$(MAKE) rust-miri
 	$(MAKE) rust-features
 	$(MAKE) rust-coverage
-	$(MAKE) rust-security
 	$(MAKE) rust-version-contract
 
 # Install dependencies
@@ -326,6 +372,8 @@ help:
 	@echo "  differential-go-selftest - Compare the Go oracle with itself in isolated sandboxes"
 	@echo "  crypto-differential - Verify Go↔Rust age and KDF cross-decryption"
 	@echo "  crypto-fuzz-smoke - Run the bounded Argon2id parser fuzz smoke"
+	@echo "  rust-fuzz-smoke   - Run the deterministic bounded Rust age/KDF fuzz smoke"
+	@echo "  rust-fuzz         - Run the bounded main/scheduled Rust age/KDF fuzz pass"
 	@echo "  port-contract      - Run all Rust-port contract preparation gates"
 	@echo "  rust-build         - Build the staged Rust workspace"
 	@echo "  rust-check         - Check all Rust targets and features"
@@ -335,6 +383,7 @@ help:
 	@echo "  rust-features      - Check each Rust feature independently"
 	@echo "  rust-coverage      - Measure Rust workspace coverage"
 	@echo "  rust-security      - Run Rust advisory and dependency-policy gates"
+	@echo "  rust-fuzz-lock     - Verify the independent fuzz manifest and lockfile"
 	@echo "  rust-version-contract - Compare Go and Rust version slices"
 	@echo "  rust-gates         - Run every staged Rust gate"
 	@echo "  docs-check         - Check documentation for deprecated terms and incorrect syntax"

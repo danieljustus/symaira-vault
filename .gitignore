@@ -49,6 +49,8 @@ dist/
 coverage/
 .build/
 /target/
+fuzz/artifacts/
+fuzz/target/
 .gobind/
 vault_coverage.html
 coverage.html
