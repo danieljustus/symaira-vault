@@ -59,6 +59,24 @@ func TestBuildPolicyFixtureCoversPureBranches(t *testing.T) {
 	}
 }
 
+func TestPolicyFixtureEvaluationCoverageIsIsolated(t *testing.T) {
+	fixture, err := buildPolicyFixture("test", "v0.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateEvaluationCoverage(fixture.EvaluationPolicy, fixture.EvaluationCases, fixture.EmptyEngineCases); err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range fixture.EvaluationCases {
+		if item.RuleName == "" {
+			t.Fatalf("evaluation case %q has no isolated rule", item.Name)
+		}
+		if item.Name != "allowed_tool_empty_name" && item.Context.ToolName == "" {
+			t.Fatalf("evaluation case %q relies on an implicit empty tool name", item.Name)
+		}
+	}
+}
+
 func TestPolicyFixtureDriftNegativeControl(t *testing.T) {
 	fixture, err := buildPolicyFixture("test", "v0.0.0")
 	if err != nil {

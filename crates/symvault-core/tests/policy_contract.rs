@@ -12,6 +12,7 @@ struct Fixture {
     time_range_cases: Vec<TimeRangeCase>,
     evaluation_policy: Policy,
     evaluation_cases: Vec<EvaluationCase>,
+    empty_engine_cases: Vec<EvaluationCase>,
     tier_preset_cases: Vec<TierPresetCase>,
     tier_copy_cases: Vec<TierCopyCase>,
 }
@@ -46,6 +47,7 @@ struct TimeRangeCase {
 #[derive(Debug, Deserialize)]
 struct EvaluationCase {
     name: String,
+    rule_name: String,
     context: FixtureContext,
     expected: FixtureResult,
 }
@@ -175,9 +177,20 @@ fn time_range_cases_match_go_oracle() {
 #[test]
 fn evaluation_cases_match_go_oracle() {
     let fixture = fixture();
-    let engine = Engine::new([&fixture.evaluation_policy]);
-    for case in fixture.evaluation_cases {
-        let actual = engine.evaluate(to_context(case.context));
+    for case in &fixture.evaluation_cases {
+        let rule = fixture
+            .evaluation_policy
+            .rules
+            .iter()
+            .find(|rule| rule.name == case.rule_name)
+            .unwrap_or_else(|| panic!("missing isolated rule {}", case.rule_name));
+        let isolated_policy = Policy {
+            version: fixture.evaluation_policy.version.clone(),
+            description: fixture.evaluation_policy.description.clone(),
+            rules: vec![rule.clone()],
+        };
+        let engine = Engine::new([&isolated_policy]);
+        let actual = engine.evaluate(to_context(&case.context));
         assert_eq!(
             actual.action.as_str(),
             case.expected.action,
@@ -195,6 +208,146 @@ fn evaluation_cases_match_go_oracle() {
             case.name
         );
     }
+}
+
+#[test]
+fn empty_engine_cases_match_genuine_default_result() {
+    let fixture = fixture();
+    for case in &fixture.empty_engine_cases {
+        let engine = Engine::new(std::iter::empty::<&Policy>());
+        let actual = engine.evaluate(to_context(&case.context));
+        assert_eq!(
+            actual.action.as_str(),
+            case.expected.action,
+            "case {} action",
+            case.name
+        );
+        assert_eq!(
+            actual.rule_name, case.expected.rule_name,
+            "case {} rule",
+            case.name
+        );
+        assert_eq!(
+            actual.matched, case.expected.matched,
+            "case {} matched",
+            case.name
+        );
+    }
+}
+
+#[test]
+fn evaluation_fixture_covers_each_rule_action_and_branch() {
+    let fixture = fixture();
+    let required_rules = [
+        "allow openclaw dev",
+        "allow project child",
+        "allow project recursive",
+        "allow working tree",
+        "allow ci read",
+        "allow safe tool",
+        "biometry at night",
+        "prompt production",
+        "allow limited secrets",
+        "deny all",
+    ];
+    assert_eq!(fixture.evaluation_policy.rules.len(), required_rules.len());
+    for name in required_rules {
+        assert!(
+            fixture
+                .evaluation_policy
+                .rules
+                .iter()
+                .any(|rule| rule.name == name),
+            "missing evaluation rule {name}"
+        );
+        assert!(
+            fixture
+                .evaluation_cases
+                .iter()
+                .any(|case| case.rule_name == name
+                    && case.expected.rule_name == name
+                    && case.expected.matched),
+            "rule {name} lacks an isolated positive case"
+        );
+    }
+    for action in ["allow", "deny", "prompt", "require_biometry"] {
+        assert!(
+            fixture
+                .evaluation_policy
+                .rules
+                .iter()
+                .any(|rule| rule.action.as_str() == action),
+            "action {action} is not covered"
+        );
+    }
+    let required_cases = [
+        "agent_tags_match",
+        "agent_tags_rejects_tag",
+        "path_child_match",
+        "path_child_rejects_grandchild",
+        "path_recursive_match",
+        "path_recursive_rejects_child",
+        "working_dir_match",
+        "working_dir_rejects_sibling",
+        "env_action_match",
+        "env_rejects_value",
+        "action_rejects_value",
+        "allowed_tool_match",
+        "allowed_tool_rejects_name",
+        "allowed_tool_empty_name",
+        "biometry_night_match",
+        "biometry_day_reject",
+        "prompt_prod_match",
+        "prompt_nonprod_reject",
+        "limited_below_secret_limit",
+        "limited_at_secret_limit",
+        "default_deny",
+    ];
+    for name in required_cases {
+        assert!(
+            fixture
+                .evaluation_cases
+                .iter()
+                .any(|case| case.name == name),
+            "missing branch case {name}"
+        );
+    }
+    let rejected_cases = [
+        "agent_tags_rejects_tag",
+        "path_child_rejects_grandchild",
+        "path_recursive_rejects_child",
+        "working_dir_rejects_sibling",
+        "env_rejects_value",
+        "action_rejects_value",
+        "allowed_tool_rejects_name",
+        "biometry_day_reject",
+        "prompt_nonprod_reject",
+        "limited_at_secret_limit",
+    ];
+    for name in rejected_cases {
+        let case = fixture
+            .evaluation_cases
+            .iter()
+            .find(|case| case.name == name)
+            .expect("required rejected case");
+        assert_eq!(case.expected.action, "deny", "case {name} action");
+        assert!(case.expected.rule_name.is_empty(), "case {name} rule");
+        assert!(!case.expected.matched, "case {name} matched unexpectedly");
+    }
+    let empty_tool = fixture
+        .evaluation_cases
+        .iter()
+        .find(|case| case.name == "allowed_tool_empty_name")
+        .expect("explicit empty tool case");
+    assert_eq!(empty_tool.context.tool_name, "");
+    assert_eq!(empty_tool.expected.rule_name, "allow safe tool");
+    assert!(empty_tool.expected.matched);
+    assert_eq!(empty_tool.expected.action, "allow");
+    assert_eq!(fixture.empty_engine_cases.len(), 1);
+    let empty = &fixture.empty_engine_cases[0].expected;
+    assert_eq!(empty.action, "deny");
+    assert!(empty.rule_name.is_empty());
+    assert!(!empty.matched);
 }
 
 #[test]
@@ -234,15 +387,15 @@ fn get_preset_field_mutation_matches_copy_contract() {
     }
 }
 
-fn to_context(context: FixtureContext) -> EvalContext {
+fn to_context(context: &FixtureContext) -> EvalContext {
     EvalContext {
-        agent_id: context.agent_id,
-        path: context.path,
-        tags: context.tags,
-        working_dir: context.working_dir,
-        env_vars: context.env_vars,
-        action_type: context.action_type,
-        tool_name: context.tool_name,
+        agent_id: context.agent_id.clone(),
+        path: context.path.clone(),
+        tags: context.tags.clone(),
+        working_dir: context.working_dir.clone(),
+        env_vars: context.env_vars.clone(),
+        action_type: context.action_type.clone(),
+        tool_name: context.tool_name.clone(),
         now: UtcTime::parse_rfc3339(&context.now).expect("fixture UTC timestamp"),
         secrets_accessed: context.secrets_accessed,
     }

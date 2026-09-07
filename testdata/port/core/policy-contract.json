@@ -10,7 +10,7 @@
       "internal/policy/types.go"
     ],
     "source_digest": "5ebd3c6c7cea06ef57840b31ce73f890309213261b543f413f320ff3961f6ef9",
-    "generator_digest": "8fd36cac71832a137b76173b492a6f9e6f11b0234cdcb684d5cbd93bceb87f7a"
+    "generator_digest": "6525bc18958884d16bcb662fa747f5d1a334910a33432074149060ec8c35ff17"
   },
   "validation_cases": [
     {
@@ -346,12 +346,14 @@
   },
   "evaluation_cases": [
     {
-      "name": "priority_and_tags",
+      "name": "agent_tags_match",
+      "rule_name": "allow openclaw dev",
       "context": {
         "agent_id": "openclaw",
         "tags": [
           "dev"
         ],
+        "tool_name": "blocked",
         "now": "2024-01-01T12:00:00Z"
       },
       "expected": {
@@ -361,9 +363,28 @@
       }
     },
     {
-      "name": "path_single_segment",
+      "name": "agent_tags_rejects_tag",
+      "rule_name": "allow openclaw dev",
+      "context": {
+        "agent_id": "openclaw",
+        "tags": [
+          "prod"
+        ],
+        "tool_name": "blocked",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "deny",
+        "rule_name": "",
+        "matched": false
+      }
+    },
+    {
+      "name": "path_child_match",
+      "rule_name": "allow project child",
       "context": {
         "path": "/fixture/home/dev/secret",
+        "tool_name": "blocked",
         "now": "2024-01-01T12:00:00Z"
       },
       "expected": {
@@ -373,21 +394,25 @@
       }
     },
     {
-      "name": "path_single_segment_rejects_grandchild",
+      "name": "path_child_rejects_grandchild",
+      "rule_name": "allow project child",
       "context": {
         "path": "/fixture/home/dev/project/secret",
+        "tool_name": "blocked",
         "now": "2024-01-01T12:00:00Z"
       },
       "expected": {
-        "action": "allow",
-        "rule_name": "allow safe tool",
-        "matched": true
+        "action": "deny",
+        "rule_name": "",
+        "matched": false
       }
     },
     {
-      "name": "path_recursive",
+      "name": "path_recursive_match",
+      "rule_name": "allow project recursive",
       "context": {
         "path": "/fixture/home/project/a/b/secret",
+        "tool_name": "blocked",
         "now": "2024-01-01T12:00:00Z"
       },
       "expected": {
@@ -397,9 +422,25 @@
       }
     },
     {
-      "name": "working_dir_prefix",
+      "name": "path_recursive_rejects_child",
+      "rule_name": "allow project recursive",
+      "context": {
+        "path": "/fixture/home/dev/secret",
+        "tool_name": "blocked",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "deny",
+        "rule_name": "",
+        "matched": false
+      }
+    },
+    {
+      "name": "working_dir_match",
+      "rule_name": "allow working tree",
       "context": {
         "working_dir": "/fixture/repo/src",
+        "tool_name": "blocked",
         "now": "2024-01-01T12:00:00Z"
       },
       "expected": {
@@ -409,12 +450,28 @@
       }
     },
     {
-      "name": "matching_env_and_action",
+      "name": "working_dir_rejects_sibling",
+      "rule_name": "allow working tree",
+      "context": {
+        "working_dir": "/fixture/other",
+        "tool_name": "blocked",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "deny",
+        "rule_name": "",
+        "matched": false
+      }
+    },
+    {
+      "name": "env_action_match",
+      "rule_name": "allow ci read",
       "context": {
         "env_vars": {
           "CI": "true"
         },
         "action_type": "read",
+        "tool_name": "blocked",
         "now": "2024-01-01T12:00:00Z"
       },
       "expected": {
@@ -424,22 +481,42 @@
       }
     },
     {
-      "name": "wrong_env",
+      "name": "env_rejects_value",
+      "rule_name": "allow ci read",
       "context": {
         "env_vars": {
           "CI": "false"
         },
         "action_type": "read",
+        "tool_name": "blocked",
         "now": "2024-01-01T12:00:00Z"
       },
       "expected": {
-        "action": "allow",
-        "rule_name": "allow safe tool",
-        "matched": true
+        "action": "deny",
+        "rule_name": "",
+        "matched": false
       }
     },
     {
-      "name": "allowed_tool",
+      "name": "action_rejects_value",
+      "rule_name": "allow ci read",
+      "context": {
+        "env_vars": {
+          "CI": "true"
+        },
+        "action_type": "write",
+        "tool_name": "blocked",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "deny",
+        "rule_name": "",
+        "matched": false
+      }
+    },
+    {
+      "name": "allowed_tool_match",
+      "rule_name": "allow safe tool",
       "context": {
         "tool_name": "get_entry",
         "now": "2024-01-01T12:00:00Z"
@@ -451,9 +528,125 @@
       }
     },
     {
-      "name": "disallowed_tool",
+      "name": "allowed_tool_rejects_name",
+      "rule_name": "allow safe tool",
       "context": {
         "tool_name": "delete_entry",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "deny",
+        "rule_name": "",
+        "matched": false
+      }
+    },
+    {
+      "name": "allowed_tool_empty_name",
+      "rule_name": "allow safe tool",
+      "context": {
+        "tool_name": "",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "allow",
+        "rule_name": "allow safe tool",
+        "matched": true
+      }
+    },
+    {
+      "name": "biometry_night_match",
+      "rule_name": "biometry at night",
+      "context": {
+        "tool_name": "blocked",
+        "now": "2024-01-01T23:00:00Z"
+      },
+      "expected": {
+        "action": "require_biometry",
+        "rule_name": "biometry at night",
+        "matched": true
+      }
+    },
+    {
+      "name": "biometry_day_reject",
+      "rule_name": "biometry at night",
+      "context": {
+        "tool_name": "blocked",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "deny",
+        "rule_name": "",
+        "matched": false
+      }
+    },
+    {
+      "name": "prompt_prod_match",
+      "rule_name": "prompt production",
+      "context": {
+        "tags": [
+          "prod"
+        ],
+        "tool_name": "blocked",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "prompt",
+        "rule_name": "prompt production",
+        "matched": true
+      }
+    },
+    {
+      "name": "prompt_nonprod_reject",
+      "rule_name": "prompt production",
+      "context": {
+        "tags": [
+          "dev"
+        ],
+        "tool_name": "blocked",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "deny",
+        "rule_name": "",
+        "matched": false
+      }
+    },
+    {
+      "name": "limited_below_secret_limit",
+      "rule_name": "allow limited secrets",
+      "context": {
+        "agent_id": "limited",
+        "tool_name": "blocked",
+        "now": "2024-01-01T12:00:00Z",
+        "secrets_accessed": 2
+      },
+      "expected": {
+        "action": "allow",
+        "rule_name": "allow limited secrets",
+        "matched": true
+      }
+    },
+    {
+      "name": "limited_at_secret_limit",
+      "rule_name": "allow limited secrets",
+      "context": {
+        "agent_id": "limited",
+        "tool_name": "blocked",
+        "now": "2024-01-01T12:00:00Z",
+        "secrets_accessed": 3
+      },
+      "expected": {
+        "action": "deny",
+        "rule_name": "",
+        "matched": false
+      }
+    },
+    {
+      "name": "default_deny",
+      "rule_name": "deny all",
+      "context": {
+        "agent_id": "unknown",
+        "tool_name": "blocked",
         "now": "2024-01-01T12:00:00Z"
       },
       "expected": {
@@ -461,91 +654,21 @@
         "rule_name": "deny all",
         "matched": true
       }
-    },
+    }
+  ],
+  "empty_engine_cases": [
     {
-      "name": "night_wrap_range",
+      "name": "empty_engine_default_result",
+      "rule_name": "",
       "context": {
-        "now": "2024-01-01T23:00:00Z"
-      },
-      "expected": {
-        "action": "allow",
-        "rule_name": "allow safe tool",
-        "matched": true
-      }
-    },
-    {
-      "name": "daytime_not_night",
-      "context": {
+        "agent_id": "empty-engine",
+        "tool_name": "blocked",
         "now": "2024-01-01T12:00:00Z"
       },
       "expected": {
-        "action": "allow",
-        "rule_name": "allow safe tool",
-        "matched": true
-      }
-    },
-    {
-      "name": "production_tag",
-      "context": {
-        "tags": [
-          "prod"
-        ],
-        "now": "2024-01-01T12:00:00Z"
-      },
-      "expected": {
-        "action": "allow",
-        "rule_name": "allow safe tool",
-        "matched": true
-      }
-    },
-    {
-      "name": "limited_below_secret_limit",
-      "context": {
-        "agent_id": "limited",
-        "now": "2024-01-01T12:00:00Z",
-        "secrets_accessed": 2
-      },
-      "expected": {
-        "action": "allow",
-        "rule_name": "allow safe tool",
-        "matched": true
-      }
-    },
-    {
-      "name": "limited_at_secret_limit",
-      "context": {
-        "agent_id": "limited",
-        "now": "2024-01-01T12:00:00Z",
-        "secrets_accessed": 3
-      },
-      "expected": {
-        "action": "allow",
-        "rule_name": "allow safe tool",
-        "matched": true
-      }
-    },
-    {
-      "name": "default_deny",
-      "context": {
-        "agent_id": "unknown",
-        "now": "2024-01-01T12:00:00Z"
-      },
-      "expected": {
-        "action": "allow",
-        "rule_name": "allow safe tool",
-        "matched": true
-      }
-    },
-    {
-      "name": "empty_engine_shape",
-      "context": {
-        "agent_id": "unknown",
-        "now": "2024-01-01T12:00:00Z"
-      },
-      "expected": {
-        "action": "allow",
-        "rule_name": "allow safe tool",
-        "matched": true
+        "action": "deny",
+        "rule_name": "",
+        "matched": false
       }
     }
   ],

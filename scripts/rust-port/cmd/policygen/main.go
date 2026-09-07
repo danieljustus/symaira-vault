@@ -40,6 +40,7 @@ type policyFixture struct {
 	TimeRangeCases   []timeRangeCase  `json:"time_range_cases"`
 	EvaluationPolicy fixturePolicy    `json:"evaluation_policy"`
 	EvaluationCases  []evaluationCase `json:"evaluation_cases"`
+	EmptyEngineCases []evaluationCase `json:"empty_engine_cases"`
 	TierPresetCases  []tierPresetCase `json:"tier_preset_cases"`
 	TierCopyCases    []tierCopyCase   `json:"tier_copy_cases"`
 }
@@ -91,6 +92,7 @@ type timeRangeCase struct {
 
 type evaluationCase struct {
 	Name     string         `json:"name"`
+	RuleName string         `json:"rule_name"`
 	Context  fixtureContext `json:"context"`
 	Expected fixtureResult  `json:"expected"`
 }
@@ -102,7 +104,7 @@ type fixtureContext struct {
 	WorkingDir      string            `json:"working_dir,omitempty"`
 	EnvVars         map[string]string `json:"env_vars,omitempty"`
 	ActionType      string            `json:"action_type,omitempty"`
-	ToolName        string            `json:"tool_name,omitempty"`
+	ToolName        string            `json:"tool_name"`
 	Now             string            `json:"now"`
 	SecretsAccessed int               `json:"secrets_accessed,omitempty"`
 }
@@ -153,16 +155,21 @@ func buildPolicyFixture(commit, release string) (policyFixture, error) {
 		return policyFixture{}, err
 	}
 
-	return policyFixture{
+	fixture := policyFixture{
 		SchemaVersion:    1,
 		Oracle:           meta,
 		ValidationCases:  buildValidationCases(),
 		TimeRangeCases:   buildTimeRangeCases(),
 		EvaluationPolicy: evaluationPolicyFixture(),
 		EvaluationCases:  buildEvaluationCases(),
+		EmptyEngineCases: buildEmptyEngineCases(),
 		TierPresetCases:  buildTierPresetCases(),
 		TierCopyCases:    buildTierCopyCases(),
-	}, nil
+	}
+	if err := validateEvaluationCoverage(fixture.EvaluationPolicy, fixture.EvaluationCases, fixture.EmptyEngineCases); err != nil {
+		return policyFixture{}, err
+	}
+	return fixture, nil
 }
 
 func buildOracle(root, commit, release string) (oracle, error) {
@@ -297,40 +304,144 @@ func evaluationPolicyFixture() fixturePolicy {
 
 func buildEvaluationCases() []evaluationCase {
 	policy := evaluationPolicyFixture()
-	cases := []struct {
-		name string
-		ctx  fixtureContext
-	}{
-		{"priority_and_tags", fixtureContext{AgentID: "openclaw", Tags: []string{"dev"}, Now: "2024-01-01T12:00:00Z"}},
-		{"path_single_segment", fixtureContext{Path: "/fixture/home/dev/secret", Now: "2024-01-01T12:00:00Z"}},
-		{"path_single_segment_rejects_grandchild", fixtureContext{Path: "/fixture/home/dev/project/secret", Now: "2024-01-01T12:00:00Z"}},
-		{"path_recursive", fixtureContext{Path: "/fixture/home/project/a/b/secret", Now: "2024-01-01T12:00:00Z"}},
-		{"working_dir_prefix", fixtureContext{WorkingDir: "/fixture/repo/src", Now: "2024-01-01T12:00:00Z"}},
-		{"matching_env_and_action", fixtureContext{EnvVars: map[string]string{"CI": "true"}, ActionType: "read", Now: "2024-01-01T12:00:00Z"}},
-		{"wrong_env", fixtureContext{EnvVars: map[string]string{"CI": "false"}, ActionType: "read", Now: "2024-01-01T12:00:00Z"}},
-		{"allowed_tool", fixtureContext{ToolName: "get_entry", Now: "2024-01-01T12:00:00Z"}},
-		{"disallowed_tool", fixtureContext{ToolName: "delete_entry", Now: "2024-01-01T12:00:00Z"}},
-		{"night_wrap_range", fixtureContext{Now: "2024-01-01T23:00:00Z"}},
-		{"daytime_not_night", fixtureContext{Now: "2024-01-01T12:00:00Z"}},
-		{"production_tag", fixtureContext{Tags: []string{"prod"}, Now: "2024-01-01T12:00:00Z"}},
-		{"limited_below_secret_limit", fixtureContext{AgentID: "limited", SecretsAccessed: 2, Now: "2024-01-01T12:00:00Z"}},
-		{"limited_at_secret_limit", fixtureContext{AgentID: "limited", SecretsAccessed: 3, Now: "2024-01-01T12:00:00Z"}},
-		{"default_deny", fixtureContext{AgentID: "unknown", Now: "2024-01-01T12:00:00Z"}},
-		{"empty_engine_shape", fixtureContext{AgentID: "unknown", Now: "2024-01-01T12:00:00Z"}},
+	type evaluationInput struct {
+		name, rule string
+		ctx        fixtureContext
+	}
+	cases := []evaluationInput{
+		{"agent_tags_match", "allow openclaw dev", fixtureContext{AgentID: "openclaw", Tags: []string{"dev"}, ToolName: "blocked", Now: "2024-01-01T12:00:00Z"}},
+		{"agent_tags_rejects_tag", "allow openclaw dev", fixtureContext{AgentID: "openclaw", Tags: []string{"prod"}, ToolName: "blocked", Now: "2024-01-01T12:00:00Z"}},
+		{"path_child_match", "allow project child", fixtureContext{Path: "/fixture/home/dev/secret", ToolName: "blocked", Now: "2024-01-01T12:00:00Z"}},
+		{"path_child_rejects_grandchild", "allow project child", fixtureContext{Path: "/fixture/home/dev/project/secret", ToolName: "blocked", Now: "2024-01-01T12:00:00Z"}},
+		{"path_recursive_match", "allow project recursive", fixtureContext{Path: "/fixture/home/project/a/b/secret", ToolName: "blocked", Now: "2024-01-01T12:00:00Z"}},
+		{"path_recursive_rejects_child", "allow project recursive", fixtureContext{Path: "/fixture/home/dev/secret", ToolName: "blocked", Now: "2024-01-01T12:00:00Z"}},
+		{"working_dir_match", "allow working tree", fixtureContext{WorkingDir: "/fixture/repo/src", ToolName: "blocked", Now: "2024-01-01T12:00:00Z"}},
+		{"working_dir_rejects_sibling", "allow working tree", fixtureContext{WorkingDir: "/fixture/other", ToolName: "blocked", Now: "2024-01-01T12:00:00Z"}},
+		{"env_action_match", "allow ci read", fixtureContext{EnvVars: map[string]string{"CI": "true"}, ActionType: "read", ToolName: "blocked", Now: "2024-01-01T12:00:00Z"}},
+		{"env_rejects_value", "allow ci read", fixtureContext{EnvVars: map[string]string{"CI": "false"}, ActionType: "read", ToolName: "blocked", Now: "2024-01-01T12:00:00Z"}},
+		{"action_rejects_value", "allow ci read", fixtureContext{EnvVars: map[string]string{"CI": "true"}, ActionType: "write", ToolName: "blocked", Now: "2024-01-01T12:00:00Z"}},
+		{"allowed_tool_match", "allow safe tool", fixtureContext{ToolName: "get_entry", Now: "2024-01-01T12:00:00Z"}},
+		{"allowed_tool_rejects_name", "allow safe tool", fixtureContext{ToolName: "delete_entry", Now: "2024-01-01T12:00:00Z"}},
+		{"allowed_tool_empty_name", "allow safe tool", fixtureContext{ToolName: "", Now: "2024-01-01T12:00:00Z"}},
+		{"biometry_night_match", "biometry at night", fixtureContext{ToolName: "blocked", Now: "2024-01-01T23:00:00Z"}},
+		{"biometry_day_reject", "biometry at night", fixtureContext{ToolName: "blocked", Now: "2024-01-01T12:00:00Z"}},
+		{"prompt_prod_match", "prompt production", fixtureContext{Tags: []string{"prod"}, ToolName: "blocked", Now: "2024-01-01T12:00:00Z"}},
+		{"prompt_nonprod_reject", "prompt production", fixtureContext{Tags: []string{"dev"}, ToolName: "blocked", Now: "2024-01-01T12:00:00Z"}},
+		{"limited_below_secret_limit", "allow limited secrets", fixtureContext{AgentID: "limited", ToolName: "blocked", SecretsAccessed: 2, Now: "2024-01-01T12:00:00Z"}},
+		{"limited_at_secret_limit", "allow limited secrets", fixtureContext{AgentID: "limited", ToolName: "blocked", SecretsAccessed: 3, Now: "2024-01-01T12:00:00Z"}},
+		{"default_deny", "deny all", fixtureContext{AgentID: "unknown", ToolName: "blocked", Now: "2024-01-01T12:00:00Z"}},
 	}
 	result := make([]evaluationCase, 0, len(cases))
-	goPolicy := toGoPolicy(policy)
-	engine := policypkg.NewEngine([]*policypkg.Policy{goPolicy})
 	for _, item := range cases {
-		ctx := toGoContext(item.ctx)
-		got := engine.Evaluate(ctx)
+		rule := findFixtureRule(policy, item.rule)
+		isolatedPolicy := fixturePolicy{Version: policy.Version, Rules: []fixtureRule{rule}}
+		engine := policypkg.NewEngine([]*policypkg.Policy{toGoPolicy(isolatedPolicy)})
+		got := engine.Evaluate(toGoContext(item.ctx))
 		result = append(result, evaluationCase{
 			Name:     item.name,
+			RuleName: item.rule,
 			Context:  item.ctx,
 			Expected: fixtureResult{Action: got.Action.String(), RuleName: got.RuleName, Matched: got.Matched},
 		})
 	}
 	return result
+}
+
+func buildEmptyEngineCases() []evaluationCase {
+	ctx := fixtureContext{AgentID: "empty-engine", ToolName: "blocked", Now: "2024-01-01T12:00:00Z"}
+	engine := policypkg.NewEngine(nil)
+	got := engine.Evaluate(toGoContext(ctx))
+	return []evaluationCase{{
+		Name:     "empty_engine_default_result",
+		RuleName: "",
+		Context:  ctx,
+		Expected: fixtureResult{Action: got.Action.String(), RuleName: got.RuleName, Matched: got.Matched},
+	}}
+}
+
+func findFixtureRule(policy fixturePolicy, name string) fixtureRule {
+	for _, rule := range policy.Rules {
+		if rule.Name == name {
+			return rule
+		}
+	}
+	panic(fmt.Sprintf("evaluation fixture rule %q not found", name))
+}
+
+func validateEvaluationCoverage(policy fixturePolicy, cases, emptyCases []evaluationCase) error {
+	requiredRules := map[string]string{
+		"allow openclaw dev":      "agent_tags_match",
+		"allow project child":     "path_child_match",
+		"allow project recursive": "path_recursive_match",
+		"allow working tree":      "working_dir_match",
+		"allow ci read":           "env_action_match",
+		"allow safe tool":         "allowed_tool_match",
+		"biometry at night":       "biometry_night_match",
+		"prompt production":       "prompt_prod_match",
+		"allow limited secrets":   "limited_below_secret_limit",
+		"deny all":                "default_deny",
+	}
+	if len(policy.Rules) != len(requiredRules) {
+		return fmt.Errorf("evaluation policy has %d rules, want %d", len(policy.Rules), len(requiredRules))
+	}
+	for _, rule := range policy.Rules {
+		if _, ok := requiredRules[rule.Name]; !ok {
+			return fmt.Errorf("unexpected evaluation rule %q", rule.Name)
+		}
+	}
+	byName := make(map[string]evaluationCase, len(cases))
+	for _, item := range cases {
+		if _, exists := byName[item.Name]; exists {
+			return fmt.Errorf("duplicate evaluation case %q", item.Name)
+		}
+		byName[item.Name] = item
+	}
+	for ruleName, caseName := range requiredRules {
+		item, ok := byName[caseName]
+		if !ok || item.RuleName != ruleName || !item.Expected.Matched || item.Expected.RuleName != ruleName {
+			return fmt.Errorf("rule %q is not positively covered by isolated case %q", ruleName, caseName)
+		}
+	}
+	requiredCases := []string{
+		"agent_tags_match", "agent_tags_rejects_tag", "path_child_match", "path_child_rejects_grandchild",
+		"path_recursive_match", "path_recursive_rejects_child", "working_dir_match", "working_dir_rejects_sibling",
+		"env_action_match", "env_rejects_value", "action_rejects_value", "allowed_tool_match",
+		"allowed_tool_rejects_name", "allowed_tool_empty_name", "biometry_night_match", "biometry_day_reject",
+		"prompt_prod_match", "prompt_nonprod_reject", "limited_below_secret_limit", "limited_at_secret_limit", "default_deny",
+	}
+	for _, name := range requiredCases {
+		if _, ok := byName[name]; !ok {
+			return fmt.Errorf("missing branch coverage case %q", name)
+		}
+	}
+	rejectedCases := []string{
+		"agent_tags_rejects_tag", "path_child_rejects_grandchild", "path_recursive_rejects_child",
+		"working_dir_rejects_sibling", "env_rejects_value", "action_rejects_value",
+		"allowed_tool_rejects_name", "biometry_day_reject", "prompt_nonprod_reject", "limited_at_secret_limit",
+	}
+	for _, name := range rejectedCases {
+		item := byName[name]
+		if item.Expected.Matched || item.Expected.Action != "deny" || item.Expected.RuleName != "" {
+			return fmt.Errorf("branch case %q does not assert isolated default deny", name)
+		}
+	}
+	emptyTool := byName["allowed_tool_empty_name"]
+	if !emptyTool.Expected.Matched || emptyTool.Expected.RuleName != "allow safe tool" {
+		return fmt.Errorf("empty allowed-tool case does not assert the explicit empty-name branch")
+	}
+	actions := make(map[string]bool)
+	for _, rule := range policy.Rules {
+		actions[rule.Action] = true
+	}
+	for _, action := range []string{"allow", "deny", "prompt", "require_biometry"} {
+		if !actions[action] {
+			return fmt.Errorf("action %q is not represented by evaluation policy", action)
+		}
+	}
+	if len(emptyCases) != 1 || emptyCases[0].Expected.Action != "deny" || emptyCases[0].Expected.RuleName != "" || emptyCases[0].Expected.Matched {
+		return fmt.Errorf("empty engine case must assert the genuine default deny result")
+	}
+	return nil
 }
 
 func buildTierPresetCases() []tierPresetCase {
@@ -484,7 +595,7 @@ func main() {
 		if !bytes.Equal(existing, content) {
 			fatal("policy fixture (%s) is stale; run make policy-fixtures-generate", *output)
 		}
-		fmt.Printf("PASS policy fixture (%d validation, %d evaluation, %d tier cases)\n", len(fixture.ValidationCases), len(fixture.EvaluationCases), len(fixture.TierPresetCases))
+		fmt.Printf("PASS policy fixture (%d validation, %d evaluation, %d empty-engine, %d tier cases)\n", len(fixture.ValidationCases), len(fixture.EvaluationCases), len(fixture.EmptyEngineCases), len(fixture.TierPresetCases))
 		return
 	}
 	if err := os.MkdirAll(filepath.Dir(*output), 0o750); err != nil {
