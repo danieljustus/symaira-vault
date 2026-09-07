@@ -252,14 +252,14 @@ func extractOracleTree(root string) (string, error) {
 			break
 		}
 		if e != nil {
-			cmd.Wait()
-			os.RemoveAll(dir)
+			_ = cmd.Wait()
+			_ = os.RemoveAll(dir)
 			return "", e
 		}
 		name := filepath.Clean(hdr.Name)
 		if name == "." || strings.HasPrefix(name, ".."+string(filepath.Separator)) {
-			cmd.Wait()
-			os.RemoveAll(dir)
+			_ = cmd.Wait()
+			_ = os.RemoveAll(dir)
 			return "", errors.New("unsafe oracle archive path")
 		}
 		out := filepath.Join(dir, name)
@@ -287,7 +287,7 @@ func extractOracleTree(root string) (string, error) {
 		}
 	}
 	if err = cmd.Wait(); err != nil {
-		os.RemoveAll(dir)
+		_ = os.RemoveAll(dir)
 		return "", fmt.Errorf("git archive: %w", err)
 	}
 	return dir, nil
@@ -297,7 +297,7 @@ func runOracle(root string, legacy bool) (vaultFixture, error) {
 	if err != nil {
 		return vaultFixture{}, err
 	}
-	defer os.RemoveAll(tree)
+	defer func() { _ = os.RemoveAll(tree) }()
 	mainPath := filepath.Join(tree, "cmd", "storeoracle", "main.go")
 	if err = os.MkdirAll(filepath.Dir(mainPath), 0750); err != nil {
 		return vaultFixture{}, err
@@ -349,64 +349,15 @@ func migrationFilesPreserved(x vaultFixture) bool {
 }
 
 func validate(v fixture, expected oracle) error {
-	if v.SchemaVersion != 1 || v.Oracle.Commit != expected.Commit || v.Oracle.Release != expected.Release || v.Oracle.SourceDigest != expected.SourceDigest || v.Oracle.GeneratorDigest != expected.GeneratorDigest || len(v.Oracle.SourceFiles) != len(sourceFiles) || len(v.Oracle.GeneratorFiles) != len(generatorFiles) {
-		return errors.New("store fixture provenance changed")
+	if err := validateProvenance(v, expected); err != nil {
+		return err
 	}
 	if len(v.Vaults) != 2 {
 		return fmt.Errorf("vault cardinality %d, want 2", len(v.Vaults))
 	}
 	for i, x := range v.Vaults {
-		if x.Name != requiredVaults[i] || x.Layout != requiredVaults[i] || len(x.Entries) != len(requiredEntries) {
-			return fmt.Errorf("vault %d identity/cardinality changed: name=%q layout=%q entries=%d files=%d before=%d after=%d data_preserved=%v marker=%q", i, x.Name, x.Layout, len(x.Entries), len(x.Files), len(x.Migration.Before.Files), len(x.Migration.After.Files), x.Migration.DataPreserved, x.Migration.Marker)
-		}
-		if len(x.Files) != 9 || len(x.Migration.Before.Files) != 8 || len(x.Migration.After.Files) != 9 {
-			return fmt.Errorf("%s file cardinality changed", x.Name)
-		}
-		wantDirs := []string{"entries", "entries/nested"}
-		if x.Name == "legacy" {
-			wantDirs = []string{"entries", "entries/nested", "nested"}
-		}
-		gotDirs := make([]string, 0, len(x.Directories))
-		for _, directory := range x.Directories {
-			gotDirs = append(gotDirs, directory.Path)
-		}
-		if !reflect.DeepEqual(gotDirs, wantDirs) {
-			return fmt.Errorf("%s directory path array changed", x.Name)
-		}
-		beforeDirs := []string{"entries", "entries/nested"}
-		if x.Name == "legacy" {
-			beforeDirs = []string{"nested"}
-		}
-		gotBeforeDirs := make([]string, 0, len(x.Migration.Before.Directories))
-		for _, directory := range x.Migration.Before.Directories {
-			gotBeforeDirs = append(gotBeforeDirs, directory.Path)
-		}
-		if !reflect.DeepEqual(gotBeforeDirs, beforeDirs) {
-			return fmt.Errorf("%s pre-migration directory path array changed", x.Name)
-		}
-		wantAfter := []string{".lock", ".symvault-migrated", "config.yaml", "entries/full.age", "entries/minimal.age", "entries/nested/large.age", "identity.age", "manifest.age", "recipients.txt"}
-		gotAfter := make([]string, 0, len(x.Files))
-		for _, file := range x.Files {
-			gotAfter = append(gotAfter, file.Path)
-		}
-		if !reflect.DeepEqual(gotAfter, wantAfter) {
-			return fmt.Errorf("%s file path array changed", x.Name)
-		}
-		if len(x.Files) == 0 || len(x.Migration.Before.Files) == 0 || len(x.Migration.After.Files) == 0 || !x.Migration.DataPreserved || !migrationFilesPreserved(x) || x.Migration.Marker != ".symvault-migrated" {
-			return fmt.Errorf("%s migration evidence incomplete", x.Name)
-		}
-		for j, e := range x.Entries {
-			if e.Name != requiredEntries[j] || e.Path == "" || e.StoragePath == "" || len(e.Expected) == 0 || e.ExpectedJSON == "" || len(e.BeforeExpected) == 0 || e.BeforeJSON == "" {
-				return fmt.Errorf("incomplete %s entry %d", x.Name, j)
-			}
-		}
-		if len(x.TypeVectors) != len(requiredTypeVectors) {
-			return fmt.Errorf("%s type vector cardinality changed", x.Name)
-		}
-		for i, vector := range x.TypeVectors {
-			if vector.Name != requiredTypeVectors[i] || vector.Expected == "" {
-				return fmt.Errorf("incomplete %s type vector %d", x.Name, i)
-			}
+		if err := validateVault(i, x); err != nil {
+			return err
 		}
 	}
 	if len(v.Malformed) != 3 || v.Malformed[0].Name != "empty" || v.Malformed[1].Name != "not_age" || v.Malformed[2].Name != "bad_stanza" {
@@ -414,6 +365,86 @@ func validate(v fixture, expected oracle) error {
 	}
 	return nil
 }
+
+func validateProvenance(v fixture, expected oracle) error {
+	if v.SchemaVersion != 1 || v.Oracle.Commit != expected.Commit || v.Oracle.Release != expected.Release || v.Oracle.SourceDigest != expected.SourceDigest || v.Oracle.GeneratorDigest != expected.GeneratorDigest || len(v.Oracle.SourceFiles) != len(sourceFiles) || len(v.Oracle.GeneratorFiles) != len(generatorFiles) {
+		return errors.New("store fixture provenance changed")
+	}
+	return nil
+}
+
+func validateVault(i int, x vaultFixture) error {
+	if x.Name != requiredVaults[i] || x.Layout != requiredVaults[i] || len(x.Entries) != len(requiredEntries) {
+		return fmt.Errorf("vault %d identity/cardinality changed: name=%q layout=%q entries=%d files=%d before=%d after=%d data_preserved=%v marker=%q", i, x.Name, x.Layout, len(x.Entries), len(x.Files), len(x.Migration.Before.Files), len(x.Migration.After.Files), x.Migration.DataPreserved, x.Migration.Marker)
+	}
+	if len(x.Files) != 9 || len(x.Migration.Before.Files) != 8 || len(x.Migration.After.Files) != 9 {
+		return fmt.Errorf("%s file cardinality changed", x.Name)
+	}
+	if err := validateVaultDirectories(x); err != nil {
+		return err
+	}
+	if err := validateVaultFiles(x); err != nil {
+		return err
+	}
+	return validateVaultEntries(x)
+}
+
+func validateVaultDirectories(x vaultFixture) error {
+	wantDirs := []string{"entries", "entries/nested"}
+	beforeDirs := []string{"entries", "entries/nested"}
+	if x.Name == "legacy" {
+		wantDirs = []string{"entries", "entries/nested", "nested"}
+		beforeDirs = []string{"nested"}
+	}
+	gotDirs := make([]string, 0, len(x.Directories))
+	for _, directory := range x.Directories {
+		gotDirs = append(gotDirs, directory.Path)
+	}
+	if !reflect.DeepEqual(gotDirs, wantDirs) {
+		return fmt.Errorf("%s directory path array changed", x.Name)
+	}
+	gotBeforeDirs := make([]string, 0, len(x.Migration.Before.Directories))
+	for _, directory := range x.Migration.Before.Directories {
+		gotBeforeDirs = append(gotBeforeDirs, directory.Path)
+	}
+	if !reflect.DeepEqual(gotBeforeDirs, beforeDirs) {
+		return fmt.Errorf("%s pre-migration directory path array changed", x.Name)
+	}
+	return nil
+}
+
+func validateVaultFiles(x vaultFixture) error {
+	wantAfter := []string{".lock", ".symvault-migrated", "config.yaml", "entries/full.age", "entries/minimal.age", "entries/nested/large.age", "identity.age", "manifest.age", "recipients.txt"}
+	gotAfter := make([]string, 0, len(x.Files))
+	for _, file := range x.Files {
+		gotAfter = append(gotAfter, file.Path)
+	}
+	if !reflect.DeepEqual(gotAfter, wantAfter) {
+		return fmt.Errorf("%s file path array changed", x.Name)
+	}
+	if len(x.Files) == 0 || len(x.Migration.Before.Files) == 0 || len(x.Migration.After.Files) == 0 || !x.Migration.DataPreserved || !migrationFilesPreserved(x) || x.Migration.Marker != ".symvault-migrated" {
+		return fmt.Errorf("%s migration evidence incomplete", x.Name)
+	}
+	return nil
+}
+
+func validateVaultEntries(x vaultFixture) error {
+	for j, e := range x.Entries {
+		if e.Name != requiredEntries[j] || e.Path == "" || e.StoragePath == "" || len(e.Expected) == 0 || e.ExpectedJSON == "" || len(e.BeforeExpected) == 0 || e.BeforeJSON == "" {
+			return fmt.Errorf("incomplete %s entry %d", x.Name, j)
+		}
+	}
+	if len(x.TypeVectors) != len(requiredTypeVectors) {
+		return fmt.Errorf("%s type vector cardinality changed", x.Name)
+	}
+	for i, vector := range x.TypeVectors {
+		if vector.Name != requiredTypeVectors[i] || vector.Expected == "" {
+			return fmt.Errorf("incomplete %s type vector %d", x.Name, i)
+		}
+	}
+	return nil
+}
+
 func build(root string) (fixture, error) {
 	meta, err := authoritative(root)
 	if err != nil {
