@@ -418,7 +418,8 @@ jobs:
             archive \
             CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Manual \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES
           scripts/verify-vault-icon.sh --bundle \
             "$MACOS_ARCHIVE/Products/Applications/Symaira Vault.app"
 
@@ -432,7 +433,8 @@ jobs:
             build \
             CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Manual \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES
           scripts/verify-vault-icon.sh --bundle \
             "$IOS_DERIVED_DATA/Build/Products/Release-iphonesimulator/Symaira Vault.app"
 
