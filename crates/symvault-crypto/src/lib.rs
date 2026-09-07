@@ -809,7 +809,7 @@ mod tests {
     const ORACLE_SOURCE_DIGEST: &str =
         "cc99e5efc05aeb3d1dacff8499fa82748f200669f99121b04f512151c44f1d84";
     const ORACLE_GENERATOR_DIGEST: &str =
-        "01b123349d0451585c49d02d784cedce98404b54337480bc106e52405be4cbf5";
+        "ca4bbd74bb522310093157aaed280121be2b1a0aa003af5ee7ac5cd8cc224623";
 
     #[derive(serde::Deserialize)]
     struct OracleFixture {
@@ -1344,10 +1344,12 @@ mod tests {
             let tampered_fixture: OracleFixture = serde_json::from_value(tampered).unwrap();
             assert!(validate_fixture(&tampered_fixture).is_err(), "{key}");
         }
-        let mut tampered: serde_json::Value = serde_json::from_str(&raw).unwrap();
-        tampered["oracle"]["source_digest"] = serde_json::Value::String("0".repeat(64));
-        let tampered_fixture: OracleFixture = serde_json::from_value(tampered).unwrap();
-        assert!(validate_fixture(&tampered_fixture).is_err());
+        for key in ["source_digest", "generator_digest"] {
+            let mut tampered: serde_json::Value = serde_json::from_str(&raw).unwrap();
+            tampered["oracle"][key] = serde_json::Value::String("0".repeat(64));
+            let tampered_fixture: OracleFixture = serde_json::from_value(tampered).unwrap();
+            assert!(validate_fixture(&tampered_fixture).is_err(), "{key}");
+        }
     }
 
     #[cfg(not(miri))]

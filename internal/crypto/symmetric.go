@@ -209,7 +209,7 @@ func validPublicKeyFingerprint(value string) bool {
 			return false
 		}
 		for _, b := range []byte(group) {
-			if !((b >= '0' && b <= '9') || (b >= 'A' && b <= 'F')) {
+			if (b < '0' || b > '9') && (b < 'A' || b > 'F') {
 				return false
 			}
 		}
@@ -228,9 +228,10 @@ func validateZeroKeyAuthority(authority ZeroKeyAuthority) error {
 		if err != nil || recipient.String() != expectedRecipient {
 			return ErrZeroKeyAuthority
 		}
-		if expectedFingerprint != "" &&
-			(!validPublicKeyFingerprint(expectedFingerprint) || Fingerprint(expectedRecipient) != expectedFingerprint) {
-			return ErrZeroKeyAuthority
+		if expectedFingerprint != "" {
+			if !validPublicKeyFingerprint(expectedFingerprint) || Fingerprint(expectedRecipient) != expectedFingerprint {
+				return ErrZeroKeyAuthority
+			}
 		}
 		return nil
 	}

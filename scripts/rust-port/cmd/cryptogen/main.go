@@ -401,6 +401,18 @@ func exactNames(got []string, want []string) error {
 	return nil
 }
 
+func validateZeroKeyCases(cases []zeroKeyCase) error {
+	for _, tc := range cases {
+		if tc.Ciphertext == "" || tc.PassphraseLength <= 0 || tc.ExpectedRecipient == "" || tc.ExpectedFingerprint == "" {
+			return fmt.Errorf("zero-key case %q is incomplete", tc.Name)
+		}
+		if tc.ExpectedClass != "ok" && tc.ExpectedClass != "invalid_input" && tc.ExpectedClass != "zero_key_candidate" {
+			return fmt.Errorf("zero-key case %q has unexpected class %q", tc.Name, tc.ExpectedClass)
+		}
+	}
+	return nil
+}
+
 func validateFixture(value fixture, expected oracle) error {
 	if value.SchemaVersion != 1 {
 		return fmt.Errorf("unsupported schema_version %d", value.SchemaVersion)
@@ -436,13 +448,8 @@ func validateFixture(value fixture, expected oracle) error {
 			return fmt.Errorf("age case %q is incomplete", tc.Name)
 		}
 	}
-	for _, tc := range value.ZeroKeyCases {
-		if tc.Ciphertext == "" || tc.PassphraseLength <= 0 || tc.ExpectedRecipient == "" || tc.ExpectedFingerprint == "" {
-			return fmt.Errorf("zero-key case %q is incomplete", tc.Name)
-		}
-		if tc.ExpectedClass != "ok" && tc.ExpectedClass != "invalid_input" && tc.ExpectedClass != "zero_key_candidate" {
-			return fmt.Errorf("zero-key case %q has unexpected class %q", tc.Name, tc.ExpectedClass)
-		}
+	if err := validateZeroKeyCases(value.ZeroKeyCases); err != nil {
+		return err
 	}
 	for _, tc := range value.MalformedCases {
 		if tc.ExpectedClass != "malformed_envelope" {
@@ -613,11 +620,11 @@ func verifyEnvelopeCases(value fixture, identities map[string]*age.X25519Identit
 			}
 		case "invalid_input":
 			if !errors.Is(recoverErr, cryptopkg.ErrZeroKeyPassphraseLen) && !errors.Is(recoverErr, cryptopkg.ErrZeroKeyAuthority) {
-				return fmt.Errorf("zero-key vector %q accepted invalid input: %v", tc.Name, recoverErr)
+				return fmt.Errorf("zero-key vector %q accepted invalid input: %w", tc.Name, recoverErr)
 			}
 		case "zero_key_candidate":
 			if !errors.Is(recoverErr, cryptopkg.ErrZeroKeyRecovery) {
-				return fmt.Errorf("zero-key vector %q accepted wrong authority: %v", tc.Name, recoverErr)
+				return fmt.Errorf("zero-key vector %q accepted wrong authority: %w", tc.Name, recoverErr)
 			}
 		}
 	}
