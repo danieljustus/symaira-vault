@@ -276,7 +276,7 @@ jobs:
 
   gui-release:
     name: GUI Release (macOS App DMG)
-    runs-on: macos-15
+    runs-on: xcode-27
     needs: [release]
     environment: release
     steps:
@@ -311,6 +311,16 @@ jobs:
           echo "CODESIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
           echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
 
+      - name: Require Xcode 26 or newer for Icon Composer builds
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          XCODE_MAJOR="$(xcodebuild -version | awk '$1 == "Xcode" { split($2, v, "."); print v[1]; exit }')"
+          if [ -z "$XCODE_MAJOR" ] || [ "$XCODE_MAJOR" -lt 26 ]; then
+            echo "::error::Icon Composer .icon builds require Xcode 26 or newer (found: ${XCODE_MAJOR:-unknown})"
+            exit 1
+          fi
+
       - name: Set up Git auth for private SPM dependencies
         env:
           APP_TOKEN: ${{ secrets.SYMAIRA_APPKIT_GITHUB_TOKEN }}
@@ -343,6 +353,9 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen --spec client/project.yml --project client
 
+      - name: Verify approved Vault icon source
+        run: scripts/verify-vault-icon.sh --source-only
+
       - name: Build macOS app (unsigned)
         run: |
           cd client
@@ -354,6 +367,26 @@ jobs:
             CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Manual \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
+
+      - name: Verify compiled macOS Vault icon
+        run: |
+          scripts/verify-vault-icon.sh --bundle "client/Symvault.xcarchive/Products/Applications/Symaira Vault.app"
+
+      - name: Build iOS app (unsigned simulator)
+        run: |
+          set -euo pipefail
+          DERIVED_DATA="$RUNNER_TEMP/SymvaultIOSDerivedData"
+          xcodebuild -project client/Symvault.xcodeproj \
+            -scheme SymvaultIOSApp \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$DERIVED_DATA" \
+            build \
+            CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Manual \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+          scripts/verify-vault-icon.sh --bundle "$DERIVED_DATA/Build/Products/Release-iphonesimulator/Symaira Vault.app"
 
       - name: Code sign .app and embedded binary
         if: steps.signing.outputs.signed == 'true'
@@ -414,7 +447,9 @@ jobs:
           ./scripts/create-symaira-dmg.sh \
             "$APP_PATH" \
             "$DMG_PATH" \
-            "Symaira Vault ${TAG}"
+            "Symaira Vault ${TAG}" \
+            "assets/branding/symaira-dmg-background.png" \
+            "assets/branding/symaira-vault.icns"
           echo "DMG_PATH=$DMG_PATH" >> "$GITHUB_ENV"
 
       - name: Code sign DMG

@@ -2,10 +2,10 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: $0 <app-path> <dmg-path> [volume-name] [background-png]" >&2
+  echo "Usage: $0 <app-path> <dmg-path> [volume-name] [background-png] [volume-icon-icns]" >&2
 }
 
-if [ "$#" -lt 2 ] || [ "$#" -gt 4 ]; then
+if [ "$#" -lt 2 ] || [ "$#" -gt 5 ]; then
   usage
   exit 2
 fi
@@ -19,6 +19,7 @@ if [ ! -f "$DEFAULT_BACKGROUND" ]; then
   DEFAULT_BACKGROUND="${SCRIPT_DIR}/../assets/branding/symaira-dmg-background.png"
 fi
 BACKGROUND_PATH="${4:-$DEFAULT_BACKGROUND}"
+VOLUME_ICON="${5:-}"
 
 if [ ! -d "$APP_PATH" ]; then
   echo "error: app bundle not found: $APP_PATH" >&2
@@ -26,6 +27,10 @@ if [ ! -d "$APP_PATH" ]; then
 fi
 if [ ! -f "$BACKGROUND_PATH" ]; then
   echo "error: DMG background not found: $BACKGROUND_PATH" >&2
+  exit 1
+fi
+if [ -n "$VOLUME_ICON" ] && [ ! -f "$VOLUME_ICON" ]; then
+  echo "error: DMG volume icon not found: $VOLUME_ICON" >&2
   exit 1
 fi
 
@@ -67,6 +72,15 @@ MOUNT_DIR="$(printf '%s\n' "$ATTACH_OUTPUT" | awk -F '\t' '/^\/dev\// && $3 ~ /^
 if [ -z "$DEVICE" ] || [ -z "$MOUNT_DIR" ]; then
   echo "error: could not determine mounted DMG device or volume path" >&2
   exit 1
+fi
+if [ -n "$VOLUME_ICON" ]; then
+  cp "$VOLUME_ICON" "$MOUNT_DIR/.VolumeIcon.icns"
+  SETFILE="$(xcrun -f SetFile 2>/dev/null || true)"
+  [ -n "$SETFILE" ] && [ -x "$SETFILE" ] || {
+    echo "error: SetFile is required to apply the DMG volume icon" >&2
+    exit 1
+  }
+  "$SETFILE" -a C "$MOUNT_DIR"
 fi
 
 APP_FILE="$(basename "$APP_PATH")"
