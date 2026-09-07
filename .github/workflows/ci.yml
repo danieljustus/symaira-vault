@@ -231,16 +231,39 @@ jobs:
         run: rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt,llvm-tools-preview
 
       - name: Install pinned nightly Miri toolchain
-        run: rustup toolchain install nightly-2026-09-03 --profile minimal --component miri
+        run: rustup toolchain install nightly-2026-09-03 --profile minimal --component miri,rust-src
 
       - name: Install Rust verification tools
         uses: taiki-e/install-action@7b8d4719ee4aaa279bdf55df38dacb9ebfe12a6c # v2.87.6
         with:
-          tool: cargo-nextest@0.9.143,cargo-deny@0.20.2,cargo-audit@0.22.2,cargo-hack@0.6.45,cargo-llvm-cov@0.9.0
+          tool: cargo-nextest@0.9.143,cargo-deny@0.20.2,cargo-audit@0.22.2,cargo-hack@0.6.45,cargo-llvm-cov@0.9.0,cargo-fuzz@0.13.2
           fallback: none
 
       - name: Run Rust gates and Go differential contract
         run: make rust-gates
+
+  rust-fuzz:
+    name: Rust fuzz (main/schedule)
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    needs: [rust]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pinned Rust fuzz toolchain
+        run: rustup toolchain install nightly-2026-09-03 --profile minimal --component rust-src
+
+      - name: Install pinned cargo-fuzz
+        uses: taiki-e/install-action@7b8d4719ee4aaa279bdf55df38dacb9ebfe12a6c # v2.87.6
+        with:
+          tool: cargo-fuzz@0.13.2
+          fallback: none
+
+      - name: Run bounded main/scheduled Rust fuzz pass
+        run: make rust-fuzz
 
   rust-native:
     name: Rust native (${{ matrix.os }})
@@ -785,8 +808,8 @@ jobs:
 
   # ── Gate ─────────────────────────────────────────────────────────────────
   #
-  # Uses if: always() so that skipped main-only jobs (fuzz, integration-test,
-  # smoke-test, the full test/build matrices) don't block the PR gate.
+  # Uses if: always() so that skipped main-only jobs (Go fuzz, Rust fuzz,
+  # integration-test, smoke-test, the full test/build matrices) don't block the PR gate.
   # On PR: test-pr + windows-process-tree + build-pr must pass. On main:
   # test + build + fuzz + integration-test + smoke-test must pass.
 
@@ -809,6 +832,7 @@ jobs:
       - flake-vendorhash
       - port-contract
       - rust
+      - rust-fuzz
       - rust-native
       - macos-vaultcore
       - ubuntu-editors
@@ -821,6 +845,7 @@ jobs:
           RES_FLAKE_VENDORHASH: ${{ needs.flake-vendorhash.result }}
           RES_PORT_CONTRACT: ${{ needs.port-contract.result }}
           RES_RUST: ${{ needs.rust.result }}
+          RES_RUST_FUZZ: ${{ needs.rust-fuzz.result }}
           RES_RUST_NATIVE: ${{ needs.rust-native.result }}
           RES_TEST_PR: ${{ needs.test-pr.result }}
           RES_WINDOWS_PROCESS_TREE: ${{ needs.windows-process-tree.result }}
@@ -851,6 +876,7 @@ jobs:
           check "$RES_FLAKE_VENDORHASH" flake-vendorhash
           check "$RES_PORT_CONTRACT"    port-contract
           check "$RES_RUST"             rust
+          check "$RES_RUST_FUZZ"        rust-fuzz
           check "$RES_RUST_NATIVE"      rust-native
 
           if [ "${{ github.event_name }}" = "pull_request" ]; then

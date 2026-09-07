@@ -1,0 +1,24 @@
+[package]
+name = "symvault-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+license = "Apache-2.0"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+resolver = "2"
+
+[dependencies]
+base64 = "=0.22.1"
+libfuzzer-sys = "=0.4.9"
+symvault-crypto = { path = "../crates/symvault-crypto", version = "=0.0.0" }
+
+[[bin]]
+name = "age_envelope"
+path = "fuzz_targets/age_envelope.rs"
+test = false
+doc = false
+bench = false

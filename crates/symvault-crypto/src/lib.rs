@@ -34,6 +34,9 @@ const ARGON2ID_SALT_BYTES: usize = 16;
 const MAX_ARGON2_TIME: u32 = 16;
 const MAX_ARGON2_MEMORY: u32 = 2_097_152;
 const MAX_ARGON2_THREADS: u32 = 16;
+const MAX_ARGON2ID_PARAMS_BYTES: usize = 64;
+const MAX_ARGON2ID_PARAM_PARTS: usize = 3;
+const ARGON2ID_SALT_B64_BYTES: usize = 22;
 const MAX_SCRYPT_WORK_FACTOR: u8 = 22;
 /// Maximum historical zero-key passphrase length accepted for recovery.
 ///
@@ -422,6 +425,9 @@ impl age::Identity for ArgonIdentity {
         let [salt, encoded] = stanza.args.as_slice() else {
             return Some(Err(age::DecryptError::InvalidHeader));
         };
+        if salt.len() != ARGON2ID_SALT_B64_BYTES {
+            return Some(Err(age::DecryptError::InvalidHeader));
+        }
         let Ok(salt) = STANDARD_NO_PAD.decode(salt) else {
             return Some(Err(age::DecryptError::InvalidHeader));
         };
@@ -450,36 +456,71 @@ impl age::Identity for ArgonIdentity {
     }
 }
 
-fn parse_params(value: &str) -> Result<Argon2idParams, CryptoError> {
+/// Parses the bounded `t=<time>,m=<memory>,p=<threads>` Argon2id stanza value.
+///
+/// This parser is intentionally strict because the value comes from an untrusted
+/// age header. It rejects oversized values, duplicate/unknown fields, and more
+/// than the three expected fields before any KDF work is attempted.
+pub fn parse_argon2id_params(value: &str) -> Result<Argon2idParams, CryptoError> {
+    if value.len() > MAX_ARGON2ID_PARAMS_BYTES {
+        return Err(CryptoError::new(
+            FailureClass::MalformedEnvelope,
+            "malformed argon2id parameters",
+        ));
+    }
     let mut result = Argon2idParams {
         time: 0,
         memory_kib: 0,
         threads: 0,
     };
-    for part in value.split(',') {
+    let mut seen = 0u8;
+    for (index, part) in value.split(',').enumerate() {
+        if index >= MAX_ARGON2ID_PARAM_PARTS {
+            return Err(CryptoError::new(
+                FailureClass::MalformedEnvelope,
+                "malformed argon2id parameters",
+            ));
+        }
         let (key, number) = part.split_once('=').ok_or(CryptoError::new(
             FailureClass::MalformedEnvelope,
             "malformed argon2id parameters",
         ))?;
-        let parsed: u32 = number.parse().map_err(|_| {
-            CryptoError::new(
-                FailureClass::MalformedEnvelope,
-                "malformed argon2id parameters",
-            )
-        })?;
-        match key {
-            "t" => result.time = parsed,
-            "m" => result.memory_kib = parsed,
-            "p" => result.threads = parsed,
+        let (bit, slot) = match key {
+            "t" => (1, &mut result.time),
+            "m" => (2, &mut result.memory_kib),
+            "p" => (4, &mut result.threads),
             _ => {
                 return Err(CryptoError::new(
                     FailureClass::MalformedEnvelope,
                     "malformed argon2id parameters",
                 ));
             }
+        };
+        if seen & bit != 0 {
+            return Err(CryptoError::new(
+                FailureClass::MalformedEnvelope,
+                "malformed argon2id parameters",
+            ));
         }
+        *slot = number.parse().map_err(|_| {
+            CryptoError::new(
+                FailureClass::MalformedEnvelope,
+                "malformed argon2id parameters",
+            )
+        })?;
+        seen |= bit;
+    }
+    if seen != (1 | 2 | 4) {
+        return Err(CryptoError::new(
+            FailureClass::MalformedEnvelope,
+            "malformed argon2id parameters",
+        ));
     }
     result.validate()
+}
+
+fn parse_params(value: &str) -> Result<Argon2idParams, CryptoError> {
+    parse_argon2id_params(value)
 }
 
 /// Encrypts with the Symaira Vault Argon2id age recipient stanza.
@@ -1192,6 +1233,35 @@ mod tests {
         let secret = SecretBytes::new(b"do-not-print");
         assert_eq!(format!("{secret:?}"), "<redacted>");
         assert_eq!(format!("{secret}"), "<redacted>");
+    }
+
+    #[test]
+    fn argon2id_parameter_parser_rejects_ambiguous_and_oversized_values() {
+        assert_eq!(
+            parse_argon2id_params("t=1,m=32,p=1").unwrap(),
+            Argon2idParams {
+                time: 1,
+                memory_kib: 32,
+                threads: 1,
+            }
+        );
+        for value in [
+            "t=1,t=1,m=32,p=1",
+            "t=1,m=32,p=1,extra=1",
+            "t=1,m=32",
+            "t=1,m=32,p=1,",
+        ] {
+            assert_eq!(
+                parse_argon2id_params(value).unwrap_err().class(),
+                FailureClass::MalformedEnvelope,
+                "{value}"
+            );
+        }
+        let oversized = format!("t=1,m=32,p=1,{}", "x".repeat(MAX_ARGON2ID_PARAMS_BYTES));
+        assert_eq!(
+            parse_argon2id_params(&oversized).unwrap_err().class(),
+            FailureClass::MalformedEnvelope
+        );
     }
 
     #[cfg(not(miri))]
