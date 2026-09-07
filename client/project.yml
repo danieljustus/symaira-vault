@@ -7,6 +7,10 @@ options:
   xcodeVersion: "16.0"
   generateEmptyDirectories: false
   groupSortPosition: top
+  # Icon Composer bundles are file wrappers; do not recurse into icon.json/assets.
+  fileTypes:
+    "icon":
+      file: true
 
 settings:
   base:
@@ -29,6 +33,12 @@ targets:
         product: SymvaultFeature
     sources:
       - path: Sources/SymvaultApp
+      - path: AppIcon.icon
+    preBuildScripts:
+      - name: Verify approved Vault icon
+        script: |
+          "${SRCROOT}/../scripts/verify-vault-icon.sh" --source-only
+        basedOnDependencyAnalysis: false
     entitlements:
       path: Symvault.entitlements
     settings:
@@ -42,6 +52,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: Symaira Vault
         INFOPLIST_KEY_CFBundleName: Symaira Vault
+        INFOPLIST_KEY_CFBundleIconName: AppIcon
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     info:
@@ -93,6 +104,12 @@ targets:
       - sdk: CryptoKit.framework
     sources:
       - path: Sources/SymvaultIOS
+      - path: AppIcon.icon
+    preBuildScripts:
+      - name: Verify approved Vault icon
+        script: |
+          "${SRCROOT}/../scripts/verify-vault-icon.sh" --source-only
+        basedOnDependencyAnalysis: false
     entitlements:
       path: SymvaultIOS.entitlements
     settings:

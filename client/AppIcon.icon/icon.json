@@ -1,0 +1,86 @@
+{
+  "features": [
+    "refractivity",
+    "specular-location"
+  ],
+  "fill": "automatic",
+  "groups": [
+    {
+      "name": "Vault \u2014 Vordergrund",
+      "layers": [
+        {
+          "name": "Vault \u2014 Vordergrund",
+          "image-name": "signet.png",
+          "glass": false,
+          "fill-specializations": [
+            {
+              "value": {
+                "solid": "extended-srgb:0.08627,0.47059,0.42353,1.0"
+              }
+            },
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "extended-srgb:0.26275,0.72549,0.63922,1.0"
+              }
+            },
+            {
+              "appearance": "tinted",
+              "value": {
+                "solid": "gray:0.86,1"
+              }
+            }
+          ]
+        }
+      ],
+      "lighting": "individual",
+      "specular": false,
+      "specular-highlight-placement": "inside",
+      "refractivity": {
+        "enabled": false,
+        "strength": 0,
+        "depth": 0
+      },
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.16
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0
+      }
+    },
+    {
+      "name": "Original Symaira S \u2014 hinter Signet freigestellt",
+      "layers": [
+        {
+          "name": "Original Symaira S",
+          "image-name": "S.png",
+          "glass": true,
+          "fill": {
+            "automatic-gradient": "extended-srgb:0.80392,0.74902,0.66275,1.0"
+          }
+        }
+      ],
+      "lighting": "individual",
+      "specular": true,
+      "specular-highlight-placement": "inside",
+      "refractivity": {
+        "enabled": true,
+        "strength": 0.15,
+        "depth": 0.24
+      },
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.25
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0
+      }
+    }
+  ],
+  "supported-platforms": {
+    "squares": "shared"
+  }
+}
