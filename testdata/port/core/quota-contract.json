@@ -7,7 +7,7 @@
       "internal/policy/ratelimit_transition.go"
     ],
     "source_digest": "847cbe991b2193f6de6a0361f09839ae27edcdb23fb49cd9a4e1a369d994af75",
-    "generator_digest": "9791154c0a07f4e8244a7fe27f94d68f4787e3c6b5923a217798f55ba2e9f553"
+    "generator_digest": "eb4e4dfe9bc38c4465e280fd5149120d7ef478b862184d11d8dba78bcc13c420"
   },
   "cases": [
     {

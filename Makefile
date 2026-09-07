@@ -8,6 +8,7 @@ GOFLAGS := -v
 GOLANGCI_LINT_VERSION := v2.11.4
 GO_TOOLCHAIN ?= go1.26.6
 MIRI_TOOLCHAIN := nightly-2026-09-03
+MIRI_TARGET_DIR := target/miri-2026-09-03
 COVERAGE_DIR := coverage
 COVERAGE_FILE := $(COVERAGE_DIR)/coverage.out
 COVERAGE_HTML := $(COVERAGE_DIR)/coverage.html
@@ -237,7 +238,7 @@ rust-test:
 	$(CARGO) test --workspace --doc --all-features --locked
 
 rust-miri:
-	$(CARGO) +$(MIRI_TOOLCHAIN) miri test -p symvault-core --locked
+	CARGO_TARGET_DIR=$(MIRI_TARGET_DIR) $(CARGO) +$(MIRI_TOOLCHAIN) miri test -p symvault-core --locked
 
 rust-features:
 	$(CARGO) hack check --workspace --each-feature --no-dev-deps --locked

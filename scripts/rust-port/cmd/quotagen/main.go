@@ -33,11 +33,6 @@ type oracle struct {
 	GeneratorDigest string   `json:"generator_digest"`
 }
 
-type header struct {
-	SchemaVersion int    `json:"schema_version"`
-	Oracle        oracle `json:"oracle"`
-}
-
 type quotaFixture struct {
 	SchemaVersion int         `json:"schema_version"`
 	Oracle        oracle      `json:"oracle"`
@@ -249,21 +244,6 @@ func checkFixture(path string, expected []byte) error {
 		return fmt.Errorf("quota fixture is stale; run make quota-fixtures-generate")
 	}
 	return nil
-}
-
-func readHeader(path string) (header, error) {
-	content, err := os.ReadFile(path) // #nosec G304 -- explicit fixture path
-	if err != nil {
-		return header{}, err
-	}
-	var value header
-	if err := json.Unmarshal(content, &value); err != nil {
-		return header{}, err
-	}
-	if value.SchemaVersion != 1 {
-		return header{}, fmt.Errorf("unsupported schema_version %d", value.SchemaVersion)
-	}
-	return value, nil
 }
 
 func process(path string, check bool, meta oracle) {

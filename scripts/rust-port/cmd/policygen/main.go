@@ -746,21 +746,6 @@ func checkFixture(path string, expected []byte) error {
 	return nil
 }
 
-func readFixture(path string) (policyFixture, error) {
-	content, err := os.ReadFile(path) // #nosec G304 -- explicit operator-selected fixture
-	if err != nil {
-		return policyFixture{}, err
-	}
-	var fixture policyFixture
-	if err := json.Unmarshal(content, &fixture); err != nil {
-		return policyFixture{}, err
-	}
-	if fixture.SchemaVersion != 1 {
-		return policyFixture{}, fmt.Errorf("unsupported schema_version %d", fixture.SchemaVersion)
-	}
-	return fixture, nil
-}
-
 func marshalJSON(value any) ([]byte, error) {
 	content, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
