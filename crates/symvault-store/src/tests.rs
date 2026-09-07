@@ -37,6 +37,30 @@ struct VaultVector {
     directories: Vec<DirVector>,
     entries: Vec<EntryVector>,
     presence: Presence,
+    migration: MigrationVector,
+    type_vectors: Vec<TypeVector>,
+}
+#[derive(Debug, Deserialize)]
+struct TypeVector {
+    name: String,
+    value: String,
+    path: Option<String>,
+    field: Option<String>,
+    explicit: Option<String>,
+    expected: String,
+}
+#[derive(Debug, Deserialize)]
+struct MigrationVector {
+    before: TreeVector,
+    after: TreeVector,
+    marker: String,
+    marker_sha256: String,
+    data_preserved: bool,
+}
+#[derive(Debug, Deserialize)]
+struct TreeVector {
+    files: Vec<FileVector>,
+    directories: Vec<DirVector>,
 }
 #[derive(Debug, Deserialize)]
 struct FileVector {
@@ -57,6 +81,9 @@ struct EntryVector {
     path: String,
     storage_path: String,
     expected: serde_json::Value,
+    expected_json: String,
+    before_expected: serde_json::Value,
+    before_json: String,
 }
 #[derive(Debug, Deserialize)]
 struct Malformed {
@@ -101,7 +128,7 @@ fn validate_fixture(value: &Fixture) -> Result<(), String> {
     }
     for (vault, expected_layout) in value.vaults.iter().zip(["fresh", "legacy"]) {
         if vault.layout != expected_layout
-            || vault.files.len() != 8
+            || vault.files.len() != 9
             || vault.entries.len() != 3
             || vault.directories.is_empty()
         {
@@ -110,12 +137,91 @@ fn validate_fixture(value: &Fixture) -> Result<(), String> {
         if !vault.presence.config || !vault.presence.identity || !vault.presence.recipients {
             return Err(format!("{} presence incomplete", vault.name));
         }
-        let names: Vec<_> = vault
+        if vault.migration.marker != ".symvault-migrated"
+            || vault.migration.marker_sha256 != sha256_hex(b"")
+            || !vault.migration.data_preserved
+            || vault.migration.before.files.is_empty()
+            || vault.migration.after.files.is_empty()
+        {
+            return Err(format!("{} migration evidence incomplete", vault.name));
+        }
+        let before_semantic: BTreeMap<_, _> = vault
+            .migration
+            .before
+            .files
+            .iter()
+            .map(|file| (file.path.trim_start_matches("entries/"), &file.sha256))
+            .collect();
+        let after_semantic: BTreeMap<_, _> = vault
+            .migration
+            .after
+            .files
+            .iter()
+            .filter(|file| file.path != ".symvault-migrated")
+            .map(|file| (file.path.trim_start_matches("entries/"), &file.sha256))
+            .collect();
+        if before_semantic != after_semantic {
+            return Err(format!("{} migration changed file content", vault.name));
+        }
+        for entry in &vault.entries {
+            if entry.before_expected != entry.expected || entry.before_json != entry.expected_json {
+                return Err(format!(
+                    "{} entry {} changed during migration",
+                    vault.name, entry.name
+                ));
+            }
+            if entry.expected_json.is_empty() || entry.before_json.is_empty() {
+                return Err(format!(
+                    "{} entry {} lacks exact JSON bytes",
+                    vault.name, entry.name
+                ));
+            }
+        }
+        if vault.type_vectors.len() != 25 {
+            return Err(format!("{} type vector cardinality changed", vault.name));
+        }
+        let type_names: Vec<_> = vault
+            .type_vectors
+            .iter()
+            .map(|vector| vector.name.as_str())
+            .collect();
+        if type_names
+            != [
+                "empty",
+                "ssh",
+                "certificate",
+                "database",
+                "github_pat",
+                "github_fine_grained",
+                "github_malformed",
+                "aws",
+                "aws_malformed",
+                "totp",
+                "totp_malformed",
+                "jwt",
+                "jwt_malformed",
+                "basic",
+                "basic_malformed",
+                "generic_api_key",
+                "generic_malformed",
+                "password",
+                "explicit_custom",
+                "explicit_payment",
+                "unknown_explicit",
+                "path_seed",
+                "field_certificate",
+                "field_connection_string",
+                "path_api_key",
+            ]
+        {
+            return Err(format!("{} type vector names changed", vault.name));
+        }
+        let entry_names: Vec<_> = vault
             .entries
             .iter()
             .map(|entry| entry.name.as_str())
             .collect();
-        if names != ["minimal", "full", "nested/large"] {
+        if entry_names != ["minimal", "full", "nested/large"] {
             return Err(format!("{} entry names changed", vault.name));
         }
         for file in &vault.files {
@@ -142,11 +248,16 @@ fn validate_fixture(value: &Fixture) -> Result<(), String> {
 }
 
 fn materialize(root: &Path, vault: &VaultVector) {
-    for dir in &vault.directories {
+    let tree = if vault.layout == "legacy" {
+        &vault.migration.before
+    } else {
+        &vault.migration.after
+    };
+    for dir in &tree.directories {
         fs::create_dir_all(root.join(&dir.path)).unwrap();
         set_mode(&root.join(&dir.path), dir.mode);
     }
-    for file in &vault.files {
+    for file in &tree.files {
         let path = root.join(&file.path);
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).unwrap();
@@ -193,13 +304,8 @@ fn fresh_and_legacy_layouts_open_list_and_get_every_entry() {
     validate_fixture(&value).unwrap();
     let identity = parse_identity(IDENTITY).unwrap();
     for vault_vector in &value.vaults {
-        let root = std::env::temp_dir().join(format!(
-            "symvault-store-{}-{}",
-            std::process::id(),
-            vault_vector.name
-        ));
-        let _ = fs::remove_dir_all(&root);
-        fs::create_dir_all(&root).unwrap();
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().to_path_buf();
         materialize(&root, vault_vector);
         let store = Store::open(&root, &identity).unwrap();
         assert_eq!(
@@ -218,30 +324,63 @@ fn fresh_and_legacy_layouts_open_list_and_get_every_entry() {
         );
         for vector in &vault_vector.entries {
             let expected: Entry = serde_json::from_value(vector.expected.clone()).unwrap();
-            let storage_path = root.join(&vector.storage_path);
+            let storage_path = if vault_vector.layout == "legacy" {
+                root.join(format!("{}.age", vector.path))
+            } else {
+                root.join(&vector.storage_path)
+            };
             assert!(storage_path.is_file(), "missing {}", vector.storage_path);
             let got = store.get(&vector.path, &identity).unwrap();
             assert_eq!(got, expected, "{} {}", vault_vector.name, vector.name);
+            assert_eq!(
+                serde_json::to_vec(&got).unwrap(),
+                vector.expected_json.as_bytes(),
+                "serialized JSON {} {}",
+                vault_vector.name,
+                vector.name
+            );
+            let debug = format!("{got:?}");
+            for value in got.data.values() {
+                if let serde_json::Value::String(value) = value {
+                    assert!(!debug.contains(value), "debug leaked entry value");
+                }
+            }
             assert_eq!(
                 store.get_metadata(&vector.path, &identity).unwrap(),
                 expected.metadata
             );
         }
+        let expected_tree = if vault_vector.layout == "legacy" {
+            &vault_vector.migration.before
+        } else {
+            &vault_vector.migration.after
+        };
         let files = store.files().unwrap();
         assert_eq!(
             files.len(),
-            vault_vector.files.len() + vault_vector.directories.len()
+            expected_tree.files.len() + expected_tree.directories.len()
         );
-        for file in &vault_vector.files {
+        for file in &expected_tree.files {
             let got = files
                 .iter()
                 .find(|candidate| candidate.path == file.path)
                 .unwrap();
+            assert_eq!(got.kind, FileKind::Regular, "kind {}", file.path);
+            #[cfg(unix)]
             assert_eq!(got.mode, file.mode, "mode {}", file.path);
             assert_eq!(got.size, file.size as u64, "size {}", file.path);
             assert_eq!(got.sha256, file.sha256, "hash {}", file.path);
         }
-        fs::remove_dir_all(root).unwrap();
+        for directory in &expected_tree.directories {
+            let got = files
+                .iter()
+                .find(|candidate| candidate.path == directory.path)
+                .unwrap();
+            assert_eq!(got.kind, FileKind::Directory, "kind {}", directory.path);
+            #[cfg(unix)]
+            assert_eq!(got.mode, directory.mode, "mode {}", directory.path);
+            assert_eq!(got.sha256, sha256_hex(b""), "hash {}", directory.path);
+        }
     }
 }
 
@@ -249,6 +388,11 @@ fn fresh_and_legacy_layouts_open_list_and_get_every_entry() {
 fn malformed_encrypted_vectors_are_rejected() {
     let (_, value) = fixture();
     let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().to_path_buf();
+    materialize(&root, &value.vaults[0]);
+    let malformed_root = root.join("entries/malformed");
+    fs::create_dir_all(&malformed_root).unwrap();
     for case in &value.malformed_cases {
         let error = symvault_crypto::decrypt(case.input.as_bytes(), &identity).unwrap_err();
         assert_eq!(
@@ -257,7 +401,54 @@ fn malformed_encrypted_vectors_are_rejected() {
             "{}",
             case.name
         );
+        fs::write(
+            malformed_root.join(format!("{}.age", case.name)),
+            case.input.as_bytes(),
+        )
+        .unwrap();
     }
+    let store = Store::open(&root, &identity).unwrap();
+    let listed = store.list(&identity).unwrap();
+    for case in &value.malformed_cases {
+        let path = format!("malformed/{}", case.name);
+        assert!(listed.contains(&path), "missing {path} from list");
+        assert!(matches!(
+            store.get(&path, &identity),
+            Err(StoreError::Decryption(_))
+        ));
+    }
+}
+
+#[test]
+fn bounded_reads_reject_oversized_config_and_entry() {
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let config_temp = tempfile::tempdir().unwrap();
+    let config_root = config_temp.path();
+    materialize(config_root, &value.vaults[0]);
+    fs::write(
+        config_root.join(CONFIG_FILE),
+        vec![b'x'; (MAX_FILE_BYTES + 1) as usize],
+    )
+    .unwrap();
+    assert!(matches!(
+        Store::open(config_root, &identity),
+        Err(StoreError::Limit { .. })
+    ));
+
+    let entry_temp = tempfile::tempdir().unwrap();
+    let entry_root = entry_temp.path();
+    materialize(entry_root, &value.vaults[0]);
+    fs::write(
+        entry_root.join("entries/minimal.age"),
+        vec![b'x'; (MAX_FILE_BYTES + 1) as usize],
+    )
+    .unwrap();
+    let store = Store::open(entry_root, &identity).unwrap();
+    assert!(matches!(
+        store.get("minimal", &identity),
+        Err(StoreError::Limit { .. })
+    ));
 }
 
 #[test]
@@ -274,9 +465,8 @@ fn path_validation_and_symlink_reads_fail_closed() {
     }
     let (_, value) = fixture();
     let identity = parse_identity(IDENTITY).unwrap();
-    let root = std::env::temp_dir().join(format!("symvault-store-symlink-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&root);
-    fs::create_dir_all(&root).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().to_path_buf();
     materialize(&root, &value.vaults[0]);
     #[cfg(unix)]
     {
@@ -290,11 +480,24 @@ fn path_validation_and_symlink_reads_fail_closed() {
             Err(StoreError::Symlink(_))
         ));
     }
-    let _ = fs::remove_dir_all(root);
 }
 
 #[test]
 fn type_inference_matches_read_only_entry_contract() {
+    let (_, value) = fixture();
+    for vector in &value.vaults[0].type_vectors {
+        let got = if vector.path.is_some() || vector.field.is_some() || vector.explicit.is_some() {
+            infer_secret_type(
+                vector.path.as_deref().unwrap_or_default(),
+                vector.field.as_deref().unwrap_or_default(),
+                &vector.value,
+                vector.explicit.as_deref(),
+            )
+        } else {
+            detect_secret_type(&vector.value)
+        };
+        assert_eq!(got.as_str(), vector.expected, "{}", vector.name);
+    }
     assert_eq!(
         infer_secret_type("service/api-key", "", "ordinary", None),
         SecretType::ApiKey
@@ -321,9 +524,8 @@ fn type_inference_matches_read_only_entry_contract() {
 fn file_manifest_is_sorted_and_contains_metadata() {
     let (_, value) = fixture();
     let identity = parse_identity(IDENTITY).unwrap();
-    let root = std::env::temp_dir().join(format!("symvault-store-manifest-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&root);
-    fs::create_dir_all(&root).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().to_path_buf();
     materialize(&root, &value.vaults[0]);
     let store = Store::open(&root, &identity).unwrap();
     let files = store.files().unwrap();
@@ -331,6 +533,6 @@ fn file_manifest_is_sorted_and_contains_metadata() {
     let mut sorted = paths.clone();
     sorted.sort_unstable();
     assert_eq!(paths, sorted);
+    #[cfg(unix)]
     assert!(files.iter().all(|file| file.mode > 0));
-    fs::remove_dir_all(root).unwrap();
 }

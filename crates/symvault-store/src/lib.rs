@@ -8,7 +8,8 @@
 
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs, io,
+    fmt, fs,
+    io::{self, Read},
     path::{Component, Path, PathBuf},
 };
 
@@ -25,6 +26,14 @@ const IDENTITY_FILE: &str = "identity.age";
 const RECIPIENTS_FILE: &str = "recipients.txt";
 const MANIFEST_FILE: &str = "manifest.age";
 const ENTRY_EXTENSION: &str = ".age";
+
+/// Read and parse limits are deliberately explicit. They cap allocation before
+/// decryption and reject pathological JSON structures after parsing.
+pub const MAX_FILE_BYTES: u64 = 16 * 1024 * 1024;
+pub const MAX_ENTRY_FIELDS: usize = 1024;
+pub const MAX_ENTRY_DEPTH: usize = 32;
+pub const MAX_VALUE_BYTES: usize = 1024 * 1024;
+pub const MAX_ARRAY_ITEMS: usize = 1024;
 
 /// Errors returned by the read-only store.
 #[derive(Debug, Error)]
@@ -51,6 +60,10 @@ pub enum StoreError {
     InvalidEntryPath(String),
     #[error("entry ciphertext is invalid: {0}")]
     Decryption(String),
+    #[error("vault resource exceeds {limit} bytes: {path}")]
+    Limit { path: PathBuf, limit: u64 },
+    #[error("entry value exceeds the supported structure limits: {0}")]
+    ValueLimit(String),
 }
 
 /// Which on-disk entry namespace was observed.
@@ -113,21 +126,111 @@ pub enum FileKind {
     Regular,
 }
 
-/// A decrypted vault entry. Its JSON field names match the Go model.
-#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+/// A decrypted vault entry. Its JSON field names and omission rules match the Go model.
+#[derive(Clone, Default, Deserialize, Eq, PartialEq)]
 pub struct Entry {
-    #[serde(default, skip_serializing_if = "String::is_empty")]
+    #[serde(default)]
     pub path: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_null_map")]
     pub data: BTreeMap<String, serde_json::Value>,
-    #[serde(rename = "meta", default)]
+    #[serde(
+        rename = "meta",
+        default,
+        deserialize_with = "deserialize_null_default"
+    )]
     pub metadata: EntryMetadata,
-    #[serde(rename = "secret_meta", default)]
+    #[serde(
+        rename = "secret_meta",
+        default,
+        deserialize_with = "deserialize_null_default"
+    )]
     pub secret_metadata: SecretMetadata,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_null_i32")]
     pub classification: i32,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[serde(default, deserialize_with = "deserialize_null_bool")]
     pub canary: bool,
+}
+
+impl fmt::Debug for Entry {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("Entry")
+            .field("path", &self.path)
+            .field("fields", &self.data.keys().collect::<Vec<_>>())
+            .field("metadata", &self.metadata)
+            .field("secret_type", &self.secret_metadata.secret_type)
+            .field("auto_rotate", &self.secret_metadata.auto_rotate)
+            .field("has_expiration", &self.secret_metadata.expires_at.is_some())
+            .field("classification", &self.classification)
+            .field("canary", &self.canary)
+            .finish()
+    }
+}
+
+impl Serialize for Entry {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut fields = 3;
+        if !self.path.is_empty() {
+            fields += 1;
+        }
+        if self.classification != 0 {
+            fields += 1;
+        }
+        if self.canary {
+            fields += 1;
+        }
+        let mut state = serializer.serialize_struct("Entry", fields)?;
+        if !self.path.is_empty() {
+            state.serialize_field("path", &self.path)?;
+        }
+        state.serialize_field("data", &self.data)?;
+        state.serialize_field("meta", &self.metadata)?;
+        // Go's encoding/json does not omit a non-pointer struct, even with
+        // `omitempty`, so secret_meta is present for every Entry.
+        state.serialize_field("secret_meta", &self.secret_metadata)?;
+        if self.classification != 0 {
+            state.serialize_field("classification", &self.classification)?;
+        }
+        if self.canary {
+            state.serialize_field("canary", &self.canary)?;
+        }
+        state.end()
+    }
+}
+
+fn deserialize_null_map<'de, D>(
+    deserializer: D,
+) -> Result<BTreeMap<String, serde_json::Value>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(
+        Option::<BTreeMap<String, serde_json::Value>>::deserialize(deserializer)?
+            .unwrap_or_default(),
+    )
+}
+fn deserialize_null_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de> + Default,
+{
+    Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
+}
+fn deserialize_null_i32<'de, D>(deserializer: D) -> Result<i32, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(Option::<i32>::deserialize(deserializer)?.unwrap_or_default())
+}
+fn deserialize_null_bool<'de, D>(deserializer: D) -> Result<bool, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(Option::<bool>::deserialize(deserializer)?.unwrap_or_default())
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -160,7 +263,7 @@ pub struct SecretMetadata {
     pub secret_type: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub usage_hint: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub auto_rotate: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub expires_at: Option<String>,
@@ -190,7 +293,14 @@ pub struct Store {
 impl Store {
     /// Opens an existing vault without changing any filesystem state.
     pub fn open(root: impl AsRef<Path>, _identity: &Identity) -> Result<Self, StoreError> {
-        let root = root.as_ref().to_path_buf();
+        let requested_root = root.as_ref();
+        reject_symlink(requested_root)?;
+        let root = requested_root
+            .canonicalize()
+            .map_err(|source| StoreError::Read {
+                path: requested_root.to_path_buf(),
+                source,
+            })?;
         ensure_directory(&root)?;
         reject_symlink(&root)?;
         let config_path = root.join(CONFIG_FILE);
@@ -380,12 +490,68 @@ impl Store {
         let mut plaintext =
             decrypt(&raw, identity).map_err(|error| StoreError::Decryption(error.to_string()))?;
         raw.zeroize();
-        let result = serde_json::from_slice(&plaintext).map_err(|error| StoreError::Entry {
-            path: candidate.logical.clone(),
-            detail: error.to_string(),
-        });
+        let result = serde_json::from_slice(&plaintext)
+            .map_err(|error| StoreError::Entry {
+                path: candidate.logical.clone(),
+                detail: error.to_string(),
+            })
+            .and_then(|entry: Entry| validate_entry_values(&entry).map(|()| entry));
         plaintext.zeroize();
         result
+    }
+}
+
+fn validate_entry_values(entry: &Entry) -> Result<(), StoreError> {
+    if entry.data.len() > MAX_ENTRY_FIELDS {
+        return Err(StoreError::ValueLimit("too many top-level fields".into()));
+    }
+    let mut fields = 0usize;
+    for (key, value) in &entry.data {
+        if key.len() > MAX_VALUE_BYTES {
+            return Err(StoreError::ValueLimit("field name too large".into()));
+        }
+        validate_json_value(value, 1, &mut fields)?;
+    }
+    Ok(())
+}
+
+fn validate_json_value(
+    value: &serde_json::Value,
+    depth: usize,
+    fields: &mut usize,
+) -> Result<(), StoreError> {
+    if depth > MAX_ENTRY_DEPTH {
+        return Err(StoreError::ValueLimit(
+            "maximum nesting depth exceeded".into(),
+        ));
+    }
+    match value {
+        serde_json::Value::String(value) if value.len() > MAX_VALUE_BYTES => {
+            Err(StoreError::ValueLimit("string value too large".into()))
+        }
+        serde_json::Value::Array(values) => {
+            if values.len() > MAX_ARRAY_ITEMS {
+                return Err(StoreError::ValueLimit("array has too many items".into()));
+            }
+            for value in values {
+                validate_json_value(value, depth + 1, fields)?;
+            }
+            Ok(())
+        }
+        serde_json::Value::Object(values) => {
+            *fields = fields.saturating_add(values.len());
+            if *fields > MAX_ENTRY_FIELDS {
+                return Err(StoreError::ValueLimit("too many fields".into()));
+            }
+            for (key, value) in values {
+                if key.len() > MAX_VALUE_BYTES {
+                    return Err(StoreError::ValueLimit("field name too large".into()));
+                }
+                validate_json_value(value, depth + 1, fields)?;
+            }
+            Ok(())
+        }
+        _ => Ok(()),
     }
 }
 
@@ -411,7 +577,7 @@ impl Candidate {
 
 fn parse_config(bytes: &[u8]) -> Result<VaultConfig, StoreError> {
     let raw: RawConfig =
-        serde_yaml::from_slice(bytes).map_err(|error| StoreError::Config(error.to_string()))?;
+        serde_yaml_ng::from_slice(bytes).map_err(|error| StoreError::Config(error.to_string()))?;
     let mut config = raw.vault.unwrap_or_default();
     if config.path.is_empty() {
         config.path = raw.vault_dir;
@@ -535,7 +701,11 @@ fn can_use_legacy_path(path: &str) -> bool {
 }
 
 fn ensure_directory(path: &Path) -> Result<(), StoreError> {
-    let metadata = fs::metadata(path).map_err(|source| StoreError::Read {
+    let file = open_directory_nofollow(path).map_err(|source| StoreError::Read {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    let metadata = file.metadata().map_err(|source| StoreError::Read {
         path: path.to_path_buf(),
         source,
     })?;
@@ -546,25 +716,27 @@ fn ensure_directory(path: &Path) -> Result<(), StoreError> {
 }
 
 fn ensure_regular_file(path: &Path, required: bool) -> Result<bool, StoreError> {
-    match fs::symlink_metadata(path) {
-        Ok(metadata) => {
-            if metadata.file_type().is_symlink() {
-                return Err(StoreError::Symlink(path.to_path_buf()));
-            }
-            if !metadata.is_file() {
-                return Err(StoreError::NotRegularFile(path.to_path_buf()));
-            }
-            Ok(true)
-        }
-        Err(source) if source.kind() == io::ErrorKind::NotFound && !required => Ok(false),
+    let file = match open_nofollow(path) {
+        Ok(file) => file,
+        Err(source) if source.kind() == io::ErrorKind::NotFound && !required => return Ok(false),
         Err(source) if source.kind() == io::ErrorKind::NotFound => {
-            Err(StoreError::MissingFile(path.to_path_buf()))
+            return Err(StoreError::MissingFile(path.to_path_buf()));
         }
-        Err(source) => Err(StoreError::Read {
-            path: path.to_path_buf(),
-            source,
-        }),
+        Err(source) => {
+            return Err(StoreError::Read {
+                path: path.to_path_buf(),
+                source,
+            });
+        }
+    };
+    let metadata = file.metadata().map_err(|source| StoreError::Read {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    if !metadata.is_file() {
+        return Err(StoreError::NotRegularFile(path.to_path_buf()));
     }
+    Ok(true)
 }
 
 fn regular_exists(path: &Path) -> Result<bool, StoreError> {
@@ -572,25 +744,136 @@ fn regular_exists(path: &Path) -> Result<bool, StoreError> {
 }
 
 fn reject_symlink(path: &Path) -> Result<(), StoreError> {
-    if fs::symlink_metadata(path)
-        .map_err(|source| StoreError::Read {
+    // Kept as a cheap diagnostic for callers; all actual reads use the same
+    // descriptor-based no-follow open below, so there is no check/use split.
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            Err(StoreError::Symlink(path.to_path_buf()))
+        }
+        Ok(_) => Ok(()),
+        Err(source) => Err(StoreError::Read {
             path: path.to_path_buf(),
             source,
-        })?
-        .file_type()
-        .is_symlink()
-    {
-        return Err(StoreError::Symlink(path.to_path_buf()));
+        }),
     }
-    Ok(())
 }
 
 fn read_regular(path: &Path) -> Result<Vec<u8>, StoreError> {
-    ensure_regular_file(path, true)?;
-    fs::read(path).map_err(|source| StoreError::Read {
+    let file = open_nofollow(path).map_err(|source| StoreError::Read {
         path: path.to_path_buf(),
         source,
-    })
+    })?;
+    let metadata = file.metadata().map_err(|source| StoreError::Read {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    if !metadata.is_file() {
+        return Err(StoreError::NotRegularFile(path.to_path_buf()));
+    }
+    let size = metadata.len();
+    if size > MAX_FILE_BYTES {
+        return Err(StoreError::Limit {
+            path: path.to_path_buf(),
+            limit: MAX_FILE_BYTES,
+        });
+    }
+    let mut bytes = Vec::with_capacity(size as usize);
+    file.take(MAX_FILE_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|source| StoreError::Read {
+            path: path.to_path_buf(),
+            source,
+        })?;
+    if bytes.len() as u64 > MAX_FILE_BYTES {
+        return Err(StoreError::Limit {
+            path: path.to_path_buf(),
+            limit: MAX_FILE_BYTES,
+        });
+    }
+    Ok(bytes)
+}
+
+#[cfg(unix)]
+fn open_nofollow(path: &Path) -> io::Result<fs::File> {
+    open_nofollow_kind(path, false)
+}
+
+#[cfg(unix)]
+fn open_directory_nofollow(path: &Path) -> io::Result<fs::File> {
+    open_nofollow_kind(path, true)
+}
+
+#[cfg(unix)]
+fn open_nofollow_kind(path: &Path, final_directory: bool) -> io::Result<fs::File> {
+    use rustix::fs::{CWD, Mode, OFlags, openat};
+    let mut components = path.components().peekable();
+    let mut dir = if path.is_absolute() {
+        openat(
+            CWD,
+            "/",
+            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW,
+            Mode::empty(),
+        )?
+    } else {
+        openat(
+            CWD,
+            ".",
+            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW,
+            Mode::empty(),
+        )?
+    };
+    let mut last = None;
+    while let Some(component) = components.next() {
+        let name = match component {
+            Component::RootDir | Component::CurDir => continue,
+            Component::Normal(name) => name,
+            Component::ParentDir | Component::Prefix(_) => {
+                return Err(io::Error::new(io::ErrorKind::InvalidInput, "unsafe path"));
+            }
+        };
+        let is_last = components.peek().is_none();
+        let flags = if is_last && final_directory {
+            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW
+        } else if is_last {
+            OFlags::RDONLY | OFlags::NOFOLLOW
+        } else {
+            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW
+        };
+        let opened = openat(&dir, name, flags, Mode::empty())?;
+        if is_last {
+            last = Some(opened);
+        } else {
+            dir = opened;
+        }
+    }
+    last.map(fs::File::from)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "empty path"))
+}
+
+#[cfg(windows)]
+fn open_nofollow(path: &Path) -> io::Result<fs::File> {
+    use std::os::windows::fs::OpenOptionsExt;
+    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+    fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS)
+        .open(path)
+}
+
+#[cfg(windows)]
+fn open_directory_nofollow(path: &Path) -> io::Result<fs::File> {
+    open_nofollow(path)
+}
+
+#[cfg(not(any(unix, windows)))]
+fn open_nofollow(path: &Path) -> io::Result<fs::File> {
+    fs::OpenOptions::new().read(true).open(path)
+}
+
+#[cfg(not(any(unix, windows)))]
+fn open_directory_nofollow(path: &Path) -> io::Result<fs::File> {
+    open_nofollow(path)
 }
 
 #[cfg(unix)]
@@ -625,31 +908,53 @@ pub enum SecretType {
     Certificate,
     DatabaseUrl,
     TotpSeed,
+    Payment,
+    Custom,
 }
 
-/// Infers a type using the Go precedence: explicit, value, path, field, password.
-#[must_use]
-pub fn infer_secret_type(
-    path: &str,
-    field: &str,
-    value: &str,
-    explicit: Option<&str>,
-) -> SecretType {
-    if let Some(explicit) = explicit.filter(|value| !value.is_empty()) {
-        return parse_secret_type(explicit);
+impl SecretType {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ApiKey => "api_key",
+            Self::BearerToken => "bearer_token",
+            Self::BasicAuth => "basic_auth",
+            Self::SshKey => "ssh_key",
+            Self::Password => "password",
+            Self::Certificate => "certificate",
+            Self::DatabaseUrl => "database_url",
+            Self::TotpSeed => "totp_seed",
+            Self::Payment => "payment",
+            Self::Custom => "custom",
+        }
     }
+}
+
+fn ascii_alnum(value: &str) -> bool {
+    value
+        .chars()
+        .all(|character| character.is_ascii_alphanumeric())
+}
+
+#[must_use]
+pub fn detect_secret_type(value: &str) -> SecretType {
     let value = value.trim();
-    if value.starts_with("-----BEGIN RSA PRIVATE KEY-----")
-        || value.starts_with("-----BEGIN EC PRIVATE KEY-----")
-        || value.starts_with("-----BEGIN OPENSSH PRIVATE KEY-----")
-        || value.starts_with("-----BEGIN DSA PRIVATE KEY-----")
+    if value.is_empty() {
+        return SecretType::Password;
+    }
+    let upper = value.to_ascii_uppercase();
+    if [
+        "-----BEGIN RSA PRIVATE KEY-----",
+        "-----BEGIN EC PRIVATE KEY-----",
+        "-----BEGIN OPENSSH PRIVATE KEY-----",
+        "-----BEGIN DSA PRIVATE KEY-----",
+    ]
+    .iter()
+    .any(|prefix| upper.starts_with(prefix))
     {
         return SecretType::SshKey;
     }
-    if value
-        .to_ascii_uppercase()
-        .starts_with("-----BEGIN CERTIFICATE-----")
-    {
+    if upper.starts_with("-----BEGIN CERTIFICATE-----") {
         return SecretType::Certificate;
     }
     if [
@@ -667,55 +972,116 @@ pub fn infer_secret_type(
     {
         return SecretType::DatabaseUrl;
     }
-    if value.starts_with("ghp_")
-        || value.starts_with("gho_")
-        || value.starts_with("ghs_")
-        || value.starts_with("ghr_")
-        || value.starts_with("github_pat_")
-        || value.split('.').count() == 3
-    {
+    let github = ["ghp_", "gho_", "ghs_", "ghr_"].iter().any(|prefix| {
+        value
+            .strip_prefix(prefix)
+            .is_some_and(|suffix| suffix.len() == 36 && ascii_alnum(suffix))
+    }) || value
+        .strip_prefix("github_pat_")
+        .and_then(|suffix| suffix.split_once('_'))
+        .is_some_and(|(first, second)| {
+            first.len() == 22 && second.len() == 59 && ascii_alnum(first) && ascii_alnum(second)
+        });
+    if github {
         return SecretType::BearerToken;
     }
-    if value.starts_with("AKIA") && value.len() == 20 {
+    if value.starts_with("AKIA")
+        && value.len() == 20
+        && value[4..]
+            .chars()
+            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
+    {
         return SecretType::ApiKey;
     }
     if value.len() >= 16
         && value
             .chars()
-            .all(|character| character.is_ascii_uppercase() || character.is_ascii_digit())
-        && value
-            .chars()
-            .all(|character| !matches!(character, '0' | '1' | '8' | '9'))
+            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
+        && value.chars().all(|c| !matches!(c, '0' | '1' | '8' | '9'))
     {
         return SecretType::TotpSeed;
     }
-    if value.contains(':') && !value.contains("//") {
+    let jwt_parts: Vec<_> = value.split('.').collect();
+    if jwt_parts.len() == 3
+        && jwt_parts.iter().all(|part| {
+            !part.is_empty()
+                && part
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        })
+    {
+        return SecretType::BearerToken;
+    }
+    let basic_parts: Vec<_> = value.split(':').collect();
+    if basic_parts.len() == 2 && basic_parts.iter().all(|part| !part.is_empty()) {
         return SecretType::BasicAuth;
     }
-    let path_or_field = format!(
-        "{} {}",
-        path.to_ascii_lowercase(),
-        field.to_ascii_lowercase()
-    );
-    if path_or_field.contains("api-key")
-        || path_or_field.contains("apikey")
-        || field.eq_ignore_ascii_case("api_key")
+    if value.len() >= 32
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
     {
         return SecretType::ApiKey;
     }
-    if path_or_field.contains("token") || field.eq_ignore_ascii_case("access_token") {
-        return SecretType::BearerToken;
-    }
-    if path_or_field.contains("ssh") || field.eq_ignore_ascii_case("private_key") {
-        return SecretType::SshKey;
-    }
-    if path_or_field.contains("database")
-        || path_or_field.contains("/db")
-        || field.eq_ignore_ascii_case("database_url")
-    {
-        return SecretType::DatabaseUrl;
-    }
     SecretType::Password
+}
+
+#[must_use]
+pub fn detect_type_from_path(path: &str) -> Option<SecretType> {
+    for part in path.to_ascii_lowercase().split('/') {
+        if matches!(part, "api-key" | "apikey") {
+            return Some(SecretType::ApiKey);
+        }
+        for segment in part.split('-') {
+            let kind = match segment {
+                "apikey" => Some(SecretType::ApiKey),
+                "token" => Some(SecretType::BearerToken),
+                "ssh" => Some(SecretType::SshKey),
+                "seed" | "mnemonic" => Some(SecretType::TotpSeed),
+                "database" | "db" => Some(SecretType::DatabaseUrl),
+                "password" | "pass" => Some(SecretType::Password),
+                _ => None,
+            };
+            if kind.is_some() {
+                return kind;
+            }
+        }
+    }
+    None
+}
+
+#[must_use]
+pub fn detect_type_from_field_name(field: &str) -> Option<SecretType> {
+    Some(match field.trim().to_ascii_lowercase().as_str() {
+        "api_key" | "apikey" => SecretType::ApiKey,
+        "token" | "access_token" | "bearer_token" => SecretType::BearerToken,
+        "seed_phrase" | "mnemonic" => SecretType::TotpSeed,
+        "private_key" | "ssh_key" => SecretType::SshKey,
+        "database_url" | "connection_string" => SecretType::DatabaseUrl,
+        "cert_pem" | "certificate" => SecretType::Certificate,
+        _ => return None,
+    })
+}
+
+/// Infers a type using the Go precedence: explicit, value, path, field, password.
+#[must_use]
+pub fn infer_secret_type(
+    path: &str,
+    field: &str,
+    value: &str,
+    explicit: Option<&str>,
+) -> SecretType {
+    if let Some(explicit) = explicit.filter(|value| !value.is_empty()) {
+        return parse_secret_type(explicit);
+    }
+    let detected = detect_secret_type(value);
+    if detected != SecretType::Password {
+        return detected;
+    }
+    if let Some(detected) = detect_type_from_path(path) {
+        return detected;
+    }
+    detect_type_from_field_name(field).unwrap_or(SecretType::Password)
 }
 
 fn parse_secret_type(value: &str) -> SecretType {
@@ -724,10 +1090,13 @@ fn parse_secret_type(value: &str) -> SecretType {
         "bearer_token" => SecretType::BearerToken,
         "basic_auth" => SecretType::BasicAuth,
         "ssh_key" => SecretType::SshKey,
+        "password" => SecretType::Password,
         "certificate" => SecretType::Certificate,
         "database_url" => SecretType::DatabaseUrl,
         "totp_seed" => SecretType::TotpSeed,
-        _ => SecretType::Password,
+        "payment" => SecretType::Payment,
+        "custom" => SecretType::Custom,
+        _ => SecretType::Custom,
     }
 }
 
