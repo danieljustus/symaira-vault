@@ -87,6 +87,11 @@ func startManifestWorker() {
 				return
 			}
 
+			lockFile, lockErr := AcquireWriteLock(vaultDir, 0)
+			if lockErr != nil {
+				return
+			}
+			defer func() { _ = ReleaseLock(lockFile) }()
 			m, err := LoadManifest(vaultDir, pv.identity)
 			if err != nil {
 				if !os.IsNotExist(err) {

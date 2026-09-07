@@ -245,10 +245,15 @@ func stageReencryptFile(candidate *reencryptCandidate, ciphertext []byte) (*reen
 		_ = unix.Unlinkat(int(c.parent.Fd()), tempName, 0)
 		return nil, err
 	}
-	return &reencryptStaged{
+	item := &reencryptStaged{
 		candidate: candidate,
 		platform:  &unixReencryptStaged{parent: c.parent, tempName: tempName, stagedDev: uint64(stat.Dev), stagedIno: stat.Ino},
-	}, nil
+	}
+	if err := recordReencryptStage(item, ciphertext); err != nil {
+		_ = unix.Unlinkat(int(c.parent.Fd()), tempName, 0)
+		return nil, err
+	}
+	return item, nil
 }
 
 func statAtNoFollow(parent *os.File, name string) (dev, ino uint64, mode uint32, err error) {
@@ -308,17 +313,40 @@ func commitReencryptFile(item *reencryptStaged) error {
 	if backupName == "" {
 		return fmt.Errorf("could not allocate backup file")
 	}
+	staged.backupName = backupName
+	if err := recordReencryptBackup(item); err != nil {
+		staged.backupName = ""
+		return fmt.Errorf("record original backup: %w", err)
+	}
 	if err := unix.Renameat(int(c.parent.Fd()), c.name, int(c.parent.Fd()), backupName); err != nil {
 		return fmt.Errorf("move original to backup: %w", err)
 	}
-	staged.backupName = backupName
-	if err := unix.Renameat(int(c.parent.Fd()), staged.tempName, int(c.parent.Fd()), c.name); err != nil {
-		_ = unix.Renameat(int(c.parent.Fd()), backupName, int(c.parent.Fd()), c.name)
+	if err := syncReencryptDirectory(filepath.Dir(item.candidate.path)); err != nil {
+		if restoreErr := unix.Renameat(int(c.parent.Fd()), backupName, int(c.parent.Fd()), c.name); restoreErr != nil {
+			return fmt.Errorf("sync backup directory: %w (restore: %w)", err, restoreErr)
+		}
 		staged.backupName = ""
+		return fmt.Errorf("sync backup directory: %w", err)
+	}
+	if err := unix.Renameat(int(c.parent.Fd()), staged.tempName, int(c.parent.Fd()), c.name); err != nil {
+		restoreErr := unix.Renameat(int(c.parent.Fd()), backupName, int(c.parent.Fd()), c.name)
+		if restoreErr == nil {
+			restoreErr = syncReencryptDirectory(filepath.Dir(item.candidate.path))
+		}
+		staged.backupName = ""
+		if restoreErr != nil {
+			return fmt.Errorf("install staged file: %w (restore: %w)", err, restoreErr)
+		}
 		return fmt.Errorf("install staged file: %w", err)
 	}
 	staged.tempName = ""
 	item.committed = true
+	if err := recordReencryptInstalled(item); err != nil {
+		return fmt.Errorf("record installed file: %w", err)
+	}
+	if err := syncReencryptDirectory(filepath.Dir(item.candidate.path)); err != nil {
+		return fmt.Errorf("sync target directory: %w", err)
+	}
 	if err := verifyReencryptParent(c); err != nil {
 		if rollbackErr := rollbackReencryptFile(item); rollbackErr != nil {
 			return fmt.Errorf("verify target directory: %w (rollback: %w)", err, rollbackErr)
@@ -353,6 +381,9 @@ func rollbackReencryptFile(item *reencryptStaged) error {
 	if err := unix.Renameat(int(c.parent.Fd()), staged.backupName, int(c.parent.Fd()), c.name); err != nil {
 		return fmt.Errorf("restore original target: %w", err)
 	}
+	if err := syncReencryptDirectory(filepath.Dir(item.candidate.path)); err != nil {
+		return fmt.Errorf("sync restored target directory: %w", err)
+	}
 	staged.backupName = ""
 	item.committed = false
 	return nil
@@ -378,14 +409,19 @@ func cleanupReencryptFile(item *reencryptStaged) error {
 	if staged.tempName != "" {
 		if err := unix.Unlinkat(int(c.parent.Fd()), staged.tempName, 0); err != nil {
 			recordReencryptCleanupError(&firstErr, err)
+		} else {
+			staged.tempName = ""
 		}
-		staged.tempName = ""
 	}
 	if staged.backupName != "" {
 		if err := unix.Unlinkat(int(c.parent.Fd()), staged.backupName, 0); err != nil {
 			recordReencryptCleanupError(&firstErr, err)
+		} else {
+			staged.backupName = ""
 		}
-		staged.backupName = ""
+	}
+	if err := syncReencryptDirectory(filepath.Dir(item.candidate.path)); err != nil && firstErr == nil {
+		firstErr = err
 	}
 	return firstErr
 }

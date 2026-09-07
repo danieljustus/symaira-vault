@@ -3,11 +3,11 @@ package vault
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"filippo.io/age"
@@ -20,12 +20,15 @@ import (
 // the read-only preflight. platform contains an open parent directory on Unix
 // and the equivalent checked path state on Windows.
 type reencryptCandidate struct {
-	path     string
-	logical  string
-	raw      []byte
-	mode     os.FileMode
-	mtime    time.Time
-	platform any
+	path            string
+	logical         string
+	raw             []byte
+	mode            os.FileMode
+	mtime           time.Time
+	platform        any
+	journal         *reencryptJournal
+	journalVaultDir string
+	digest          string
 }
 
 type reencryptStaged struct {
@@ -45,16 +48,39 @@ var (
 	reencryptRebuildManifest = rebuildManifestStrict
 )
 
-// ReencryptAll rotates every regular .age entry transactionally. All entries
-// are securely read, decrypted, and staged before the first target is changed.
-// Any commit or manifest failure restores every changed entry and the manifest
-// byte-for-byte, then removes all temporary files and backups.
-func ReencryptAll(vaultDir string, identity *age.X25519Identity, recipients []*age.X25519Recipient) error {
+// ReencryptAll rotates every regular .age entry transactionally. The vault
+// write lock covers discovery, staging, commit, manifest replacement, and
+// cleanup, so SafeWriteFile writers cannot overwrite a newer ciphertext.
+// A durable journal makes a crash recoverable before the next vault operation.
+//
+//nolint:gocyclo // Transactional recovery intentionally keeps all failure phases together.
+func ReencryptAll(vaultDir string, identity *age.X25519Identity, recipients []*age.X25519Recipient) (retErr error) {
 	if identity == nil {
 		return vaultcrypto.ErrNilIdentity
 	}
 	if len(recipients) == 0 {
 		return fmt.Errorf("no recipients provided for re-encryption")
+	}
+	vaultDir, err := filepath.Abs(vaultDir)
+	if err != nil {
+		return fmt.Errorf("resolve vault directory: %w", err)
+	}
+	// Drain deferred manifest writes before taking the lock. The worker also
+	// uses this lock, so no stale SafeWriteFile can overtake the transaction.
+	FlushManifestUpdates()
+
+	lockFile, err := AcquireWriteLock(vaultDir, 0)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if releaseErr := ReleaseLock(lockFile); releaseErr != nil {
+			retErr = errors.Join(retErr, fmt.Errorf("release vault write lock: %w", releaseErr))
+		}
+	}()
+
+	if recoveryErr := recoverReencryptJournalLocked(vaultDir, identity); recoveryErr != nil {
+		return fmt.Errorf("recover prior re-encryption: %w", recoveryErr)
 	}
 
 	candidates, err := collectReencryptCandidates(entriesDir(vaultDir))
@@ -70,6 +96,12 @@ func ReencryptAll(vaultDir string, identity *age.X25519Identity, recipients []*a
 	if err != nil {
 		return fmt.Errorf("snapshot manifest: %w", err)
 	}
+
+	journal := newReencryptJournal(vaultDir, candidates)
+	if err := journal.persist(vaultDir); err != nil {
+		return fmt.Errorf("start re-encryption journal: %w", err)
+	}
+	journalActive := true
 
 	staged := make([]*reencryptStaged, 0, len(candidates))
 	cleanup := func() error {
@@ -93,8 +125,19 @@ func ReencryptAll(vaultDir string, identity *age.X25519Identity, recipients []*a
 		if err := restoreReencryptManifest(vaultDir, manifestBackup); err != nil && rollbackErr == nil {
 			rollbackErr = err
 		}
-		if err := cleanup(); err != nil && rollbackErr == nil {
+		if err := syncReencryptDirectory(vaultDir); err != nil && rollbackErr == nil {
 			rollbackErr = err
+		}
+		cleanupErr := cleanup()
+		if cleanupErr != nil && rollbackErr == nil {
+			rollbackErr = cleanupErr
+		}
+		if rollbackErr == nil && journalActive {
+			if err := journal.remove(vaultDir); err != nil {
+				rollbackErr = err
+			} else {
+				journalActive = false
+			}
 		}
 		if rollbackErr != nil {
 			return fmt.Errorf("%w (rollback: %w)", operationErr, rollbackErr)
@@ -102,7 +145,7 @@ func ReencryptAll(vaultDir string, identity *age.X25519Identity, recipients []*a
 		return operationErr
 	}
 
-	// Encrypt and stage every replacement before any rename occurs.
+	// Encrypt and stage every replacement before any target is changed.
 	for _, candidate := range candidates {
 		ciphertext, err := ReencryptBytes(candidate.raw, identity, recipients)
 		if err != nil {
@@ -128,7 +171,13 @@ func ReencryptAll(vaultDir string, identity *age.X25519Identity, recipients []*a
 	}
 
 	if err := cleanup(); err != nil {
-		return fmt.Errorf("cleanup re-encryption files: %w", err)
+		return fmt.Errorf("cleanup re-encryption files: %w (journal retained for recovery)", err)
+	}
+	if journalActive {
+		if err := journal.remove(vaultDir); err != nil {
+			return fmt.Errorf("remove re-encryption journal: %w", err)
+		}
+		journalActive = false
 	}
 	return nil
 }
@@ -171,7 +220,8 @@ func collectReencryptCandidates(entriesPath string) ([]*reencryptCandidate, erro
 		if !info.Mode().IsRegular() {
 			return fmt.Errorf("unsafe special-file entry %q", path)
 		}
-		if !strings.EqualFold(filepath.Ext(info.Name()), entryExtAge) {
+		// The on-disk format is canonical: only lowercase .age is an entry.
+		if filepath.Ext(info.Name()) != entryExtAge {
 			return nil
 		}
 		candidate, err := prepareReencryptCandidate(entriesPath, path, info)

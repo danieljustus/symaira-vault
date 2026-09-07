@@ -175,7 +175,12 @@ func stageReencryptFile(candidate *reencryptCandidate, ciphertext []byte) (*reen
 		_ = os.Remove(tempPath)
 		return nil, err
 	}
-	return &reencryptStaged{candidate: candidate, platform: &windowsReencryptStaged{tempPath: tempPath}}, nil
+	item := &reencryptStaged{candidate: candidate, platform: &windowsReencryptStaged{tempPath: tempPath}}
+	if err := recordReencryptStage(item, ciphertext); err != nil {
+		_ = os.Remove(tempPath)
+		return nil, err
+	}
+	return item, nil
 }
 
 func verifyWindowsReencryptParent(c *windowsReencryptCandidate) error {
@@ -219,6 +224,10 @@ func commitReencryptFile(item *reencryptStaged) error {
 		}
 		staged.backupPath = fmt.Sprintf("%s.%d", c.path+".reencrypt-backup", i)
 	}
+	if err := recordReencryptBackup(item); err != nil {
+		staged.backupPath = ""
+		return fmt.Errorf("record original backup: %w", err)
+	}
 	if err := os.Rename(c.path, staged.backupPath); err != nil {
 		return fmt.Errorf("move original to backup: %w", err)
 	}
@@ -229,6 +238,9 @@ func commitReencryptFile(item *reencryptStaged) error {
 	}
 	staged.tempPath = ""
 	item.committed = true
+	if err := recordReencryptInstalled(item); err != nil {
+		return fmt.Errorf("record installed file: %w", err)
+	}
 	if err := verifyWindowsReencryptParent(c); err != nil {
 		if rollbackErr := rollbackReencryptFile(item); rollbackErr != nil {
 			return fmt.Errorf("verify target directory: %w (rollback: %v)", err, rollbackErr)
@@ -239,14 +251,30 @@ func commitReencryptFile(item *reencryptStaged) error {
 }
 
 func rollbackReencryptFile(item *reencryptStaged) error {
+	c := item.candidate.platform.(*windowsReencryptCandidate)
 	staged := item.platform.(*windowsReencryptStaged)
 	if staged.backupPath == "" {
 		return nil
 	}
-	if err := os.Remove(item.candidate.path); err != nil {
+	if err := verifyWindowsReencryptParent(c); err != nil {
+		return fmt.Errorf("verify rollback directory: %w", err)
+	}
+	matches, err := verifyReencryptDigest(c.path, item.candidate.digest)
+	if err != nil {
+		return fmt.Errorf("verify installed target: %w", err)
+	}
+	if !matches {
+		return fmt.Errorf("installed target changed during rollback")
+	}
+	if exists, err := reencryptRegularExists(staged.backupPath); err != nil {
+		return err
+	} else if !exists {
+		return fmt.Errorf("original backup disappeared during rollback")
+	}
+	if err := os.Remove(c.path); err != nil {
 		return fmt.Errorf("remove installed target: %w", err)
 	}
-	if err := os.Rename(staged.backupPath, item.candidate.path); err != nil {
+	if err := os.Rename(staged.backupPath, c.path); err != nil {
 		return fmt.Errorf("restore original target: %w", err)
 	}
 	staged.backupPath = ""
@@ -257,16 +285,20 @@ func rollbackReencryptFile(item *reencryptStaged) error {
 func cleanupReencryptFile(item *reencryptStaged) error {
 	staged := item.platform.(*windowsReencryptStaged)
 	var firstErr error
-	for _, path := range []string{staged.tempPath, staged.backupPath} {
-		if path == "" {
-			continue
-		}
-		if err := os.Remove(path); err != nil && !os.IsNotExist(err) && firstErr == nil {
+	if staged.tempPath != "" {
+		if err := os.Remove(staged.tempPath); err != nil && !os.IsNotExist(err) {
 			firstErr = err
+		} else {
+			staged.tempPath = ""
 		}
 	}
-	staged.tempPath = ""
-	staged.backupPath = ""
+	if staged.backupPath != "" {
+		if err := os.Remove(staged.backupPath); err != nil && !os.IsNotExist(err) && firstErr == nil {
+			firstErr = err
+		} else if err == nil || os.IsNotExist(err) {
+			staged.backupPath = ""
+		}
+	}
 	return firstErr
 }
 

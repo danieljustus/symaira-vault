@@ -174,6 +174,9 @@ func Open(vaultDir string, identity *age.X25519Identity) (*Vault, error) {
 	if err := validateVaultDir(vaultDir); err != nil {
 		return nil, err
 	}
+	if err := recoverReencryptJournal(vaultDir, identity); err != nil {
+		return nil, fmt.Errorf("recover re-encryption: %w", err)
+	}
 	cfg, err := vaultconfig.Load(filepath.Join(vaultDir, "config.yaml"))
 	if err != nil {
 		return nil, fmt.Errorf("load config: %w", err)

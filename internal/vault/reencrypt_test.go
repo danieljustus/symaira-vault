@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"filippo.io/age"
 
@@ -481,4 +482,119 @@ func assertNoReencryptTemps(t *testing.T, root string) {
 	if err != nil {
 		t.Fatalf("walk for temporary files: %v", err)
 	}
+}
+
+func TestReencryptAll_RecoversJournalAfterCrashPhases(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		installed bool
+	}{
+		{name: "after-install", installed: true},
+		{name: "after-backup", installed: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			vaultDir, identity := initTestVault(t)
+			if err := WriteEntry(vaultDir, "one", &Entry{Data: map[string]any{"value": "old"}}, identity); err != nil {
+				t.Fatalf("write entry: %v", err)
+			}
+			FlushManifestUpdates()
+			path := filepath.Join(entriesDir(vaultDir), "one.age")
+			oldRaw, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read original: %v", err)
+			}
+			newRaw, err := ReencryptBytes(oldRaw, identity, []*age.X25519Recipient{identity.Recipient()})
+			if err != nil {
+				t.Fatalf("prepare replacement: %v", err)
+			}
+			backup := path + ".reencrypt-backup-crash"
+			if err := os.Rename(path, backup); err != nil {
+				t.Fatalf("move original: %v", err)
+			}
+			if tc.installed {
+				if err := os.WriteFile(path, newRaw, 0o600); err != nil {
+					t.Fatalf("install replacement: %v", err)
+				}
+			}
+			sum := sha256.Sum256(newRaw)
+			journal := &reencryptJournal{Version: 1, Entries: []reencryptJournalEntry{{
+				Path: path, Backup: backup, Digest: hex.EncodeToString(sum[:]), Installed: tc.installed,
+			}}}
+			if err := journal.persist(vaultDir); err != nil {
+				t.Fatalf("persist crash journal: %v", err)
+			}
+
+			if _, err := Open(vaultDir, identity); err != nil {
+				t.Fatalf("Open recovery: %v", err)
+			}
+			if _, err := os.Stat(reencryptJournalPath(vaultDir)); !os.IsNotExist(err) {
+				t.Fatalf("journal remains after recovery: %v", err)
+			}
+			if _, err := os.Stat(backup); !os.IsNotExist(err) {
+				t.Fatalf("old ciphertext backup remains after recovery: %v", err)
+			}
+			got, err := ReadEntry(vaultDir, "one", identity)
+			if err != nil {
+				t.Fatalf("read recovered entry: %v", err)
+			}
+			want := "old"
+			if got.Data["value"] != want {
+				t.Fatalf("recovered value = %v, want %q", got.Data["value"], want)
+			}
+		})
+	}
+}
+
+func TestReencryptAll_LockBlocksConcurrentWriter(t *testing.T) {
+	vaultDir, identity := initTestVault(t)
+	writeReencryptTestEntries(t, vaultDir, identity)
+	newIdentity := testutil.TempIdentity(t)
+	restoreReencryptHooks(t)
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	original := reencryptCommit
+	first := true
+	reencryptCommit = func(item *reencryptStaged) error {
+		if first {
+			first = false
+			close(entered)
+			<-release
+		}
+		return original(item)
+	}
+
+	reencryptDone := make(chan error, 1)
+	go func() {
+		reencryptDone <- ReencryptAll(vaultDir, identity, []*age.X25519Recipient{identity.Recipient(), newIdentity.Recipient()})
+	}()
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("ReencryptAll did not reach commit")
+	}
+
+	writerDone := make(chan error, 1)
+	go func() {
+		writerDone <- WriteEntry(vaultDir, "one", &Entry{Data: map[string]any{"value": "writer"}}, identity)
+	}()
+	select {
+	case err := <-writerDone:
+		t.Fatalf("concurrent writer completed while re-encryption held lock: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(release)
+	if err := <-reencryptDone; err != nil {
+		t.Fatalf("ReencryptAll: %v", err)
+	}
+	if err := <-writerDone; err != nil {
+		t.Fatalf("WriteEntry after re-encryption: %v", err)
+	}
+	got, err := ReadEntry(vaultDir, "one", identity)
+	if err != nil {
+		t.Fatalf("read final entry: %v", err)
+	}
+	if got.Data["value"] != "writer" {
+		t.Fatalf("final value = %v, want writer update", got.Data["value"])
+	}
+	assertNoReencryptTemps(t, entriesDir(vaultDir))
 }

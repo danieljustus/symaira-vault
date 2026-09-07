@@ -107,6 +107,11 @@ func writeManifest(vaultDir string, m *Manifest, identity *age.X25519Identity) e
 // UpdateManifestEntry loads the manifest (or creates a new one), adds or
 // updates the entry for the given logical path, and writes it back.
 func UpdateManifestEntry(vaultDir, path string, ciphertext []byte, identity *age.X25519Identity) error {
+	lockFile, err := AcquireWriteLock(vaultDir, 0)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = ReleaseLock(lockFile) }()
 	m, err := LoadManifest(vaultDir, identity)
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -134,6 +139,11 @@ func UpdateManifestEntry(vaultDir, path string, ciphertext []byte, identity *age
 // RemoveManifestEntry removes an entry from the manifest. If the manifest
 // does not exist, this is a no-op.
 func RemoveManifestEntry(vaultDir, path string, identity *age.X25519Identity) error {
+	lockFile, err := AcquireWriteLock(vaultDir, 0)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = ReleaseLock(lockFile) }()
 	m, err := LoadManifest(vaultDir, identity)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -250,9 +260,17 @@ func DetectOutOfBandEntries(vaultDir string, identity *age.X25519Identity, cfg *
 }
 
 // RebuildManifest walks all .age entry files in the vault and regenerates the
-// manifest from scratch. It is used for crash recovery when the manifest may be
-// stale due to deferred updates that did not complete before an unclean shutdown.
+// manifest from scratch. It acquires the same write lock as entry writers.
 func RebuildManifest(vaultDir string, identity *age.X25519Identity) error {
+	lockFile, err := AcquireWriteLock(vaultDir, 0)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = ReleaseLock(lockFile) }()
+	return rebuildManifestUnlocked(vaultDir, identity)
+}
+
+func rebuildManifestUnlocked(vaultDir string, identity *age.X25519Identity) error {
 	m := &Manifest{
 		Version: 1,
 		Created: time.Now().UTC(),
