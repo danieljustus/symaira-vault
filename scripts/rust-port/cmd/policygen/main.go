@@ -39,15 +39,18 @@ type oracle struct {
 }
 
 type policyFixture struct {
-	SchemaVersion    int              `json:"schema_version"`
-	Oracle           oracle           `json:"oracle"`
-	ValidationCases  []validationCase `json:"validation_cases"`
-	TimeRangeCases   []timeRangeCase  `json:"time_range_cases"`
-	EvaluationPolicy fixturePolicy    `json:"evaluation_policy"`
-	EvaluationCases  []evaluationCase `json:"evaluation_cases"`
-	EmptyEngineCases []evaluationCase `json:"empty_engine_cases"`
-	TierPresetCases  []tierPresetCase `json:"tier_preset_cases"`
-	TierCopyCases    []tierCopyCase   `json:"tier_copy_cases"`
+	SchemaVersion     int              `json:"schema_version"`
+	Oracle            oracle           `json:"oracle"`
+	ValidationCases   []validationCase `json:"validation_cases"`
+	TimeRangeCases    []timeRangeCase  `json:"time_range_cases"`
+	EvaluationPolicy  fixturePolicy    `json:"evaluation_policy"`
+	EvaluationCases   []evaluationCase `json:"evaluation_cases"`
+	InteractionPolicy fixturePolicy    `json:"interaction_policy"`
+	InteractionCases  []evaluationCase `json:"interaction_cases"`
+	PathCases         []pathCase       `json:"path_cases"`
+	EmptyEngineCases  []evaluationCase `json:"empty_engine_cases"`
+	TierPresetCases   []tierPresetCase `json:"tier_preset_cases"`
+	TierCopyCases     []tierCopyCase   `json:"tier_copy_cases"`
 }
 
 type validationCase struct {
@@ -100,6 +103,13 @@ type evaluationCase struct {
 	RuleName string         `json:"rule_name"`
 	Context  fixtureContext `json:"context"`
 	Expected fixtureResult  `json:"expected"`
+}
+
+type pathCase struct {
+	Name    string `json:"name"`
+	Pattern string `json:"pattern"`
+	Path    string `json:"path"`
+	Matches bool   `json:"matches"`
 }
 
 type fixtureContext struct {
@@ -161,17 +171,23 @@ func buildPolicyFixture(commit, release string) (policyFixture, error) {
 	}
 
 	fixture := policyFixture{
-		SchemaVersion:    1,
-		Oracle:           meta,
-		ValidationCases:  buildValidationCases(),
-		TimeRangeCases:   buildTimeRangeCases(),
-		EvaluationPolicy: evaluationPolicyFixture(),
-		EvaluationCases:  buildEvaluationCases(),
-		EmptyEngineCases: buildEmptyEngineCases(),
-		TierPresetCases:  buildTierPresetCases(),
-		TierCopyCases:    buildTierCopyCases(),
+		SchemaVersion:     1,
+		Oracle:            meta,
+		ValidationCases:   buildValidationCases(),
+		TimeRangeCases:    buildTimeRangeCases(),
+		EvaluationPolicy:  evaluationPolicyFixture(),
+		EvaluationCases:   buildEvaluationCases(),
+		InteractionPolicy: interactionPolicyFixture(),
+		InteractionCases:  buildInteractionCases(),
+		PathCases:         buildPathCases(),
+		EmptyEngineCases:  buildEmptyEngineCases(),
+		TierPresetCases:   buildTierPresetCases(),
+		TierCopyCases:     buildTierCopyCases(),
 	}
 	if err := validateEvaluationCoverage(fixture.EvaluationPolicy, fixture.EvaluationCases, fixture.EmptyEngineCases); err != nil {
+		return policyFixture{}, err
+	}
+	if err := validateInteractionCoverage(fixture.InteractionPolicy, fixture.InteractionCases); err != nil {
 		return policyFixture{}, err
 	}
 	return fixture, nil
@@ -348,6 +364,106 @@ func buildEvaluationCases() []evaluationCase {
 			Context:  item.ctx,
 			Expected: fixtureResult{Action: got.Action.String(), RuleName: got.RuleName, Matched: got.Matched},
 		})
+	}
+	return result
+}
+
+func interactionPolicyFixture() fixturePolicy {
+	return fixturePolicy{
+		Version: "1.0",
+		Rules: []fixtureRule{
+			{Name: "priority deny", Priority: 100, Action: "deny", Conditions: fixtureConditions{AgentID: "priority-agent"}},
+			{Name: "low priority allow", Priority: 10, Action: "allow", Conditions: fixtureConditions{AgentID: "allowed-agent"}},
+			{Name: "equal priority first", Priority: 50, Action: "allow", Conditions: fixtureConditions{AgentID: "stable-agent"}},
+			{Name: "equal priority second", Priority: 50, Action: "deny", Conditions: fixtureConditions{AgentID: "stable-agent"}},
+			{Name: "default deny", Priority: 0, Action: "deny", Conditions: fixtureConditions{AgentID: "*"}},
+		},
+	}
+}
+
+func buildInteractionCases() []evaluationCase {
+	policy := interactionPolicyFixture()
+	inputs := []struct {
+		name, rule string
+		ctx        fixtureContext
+	}{
+		{"higher_priority_wins", "priority deny", fixtureContext{AgentID: "priority-agent", ToolName: "fixture", Now: "2024-01-01T12:00:00Z"}},
+		{"lower_priority_allow_beats_default", "low priority allow", fixtureContext{AgentID: "allowed-agent", ToolName: "fixture", Now: "2024-01-01T12:00:00Z"}},
+		{"equal_priority_preserves_source_order", "equal priority first", fixtureContext{AgentID: "stable-agent", ToolName: "fixture", Now: "2024-01-01T12:00:00Z"}},
+		{"default_deny_after_nonmatch", "default deny", fixtureContext{AgentID: "other-agent", ToolName: "fixture", Now: "2024-01-01T12:00:00Z"}},
+	}
+	engine := policypkg.NewEngine([]*policypkg.Policy{toGoPolicy(policy)})
+	result := make([]evaluationCase, 0, len(inputs))
+	for _, item := range inputs {
+		got := engine.Evaluate(toGoContext(item.ctx))
+		result = append(result, evaluationCase{
+			Name:     item.name,
+			RuleName: item.rule,
+			Context:  item.ctx,
+			Expected: fixtureResult{Action: got.Action.String(), RuleName: got.RuleName, Matched: got.Matched},
+		})
+	}
+	return result
+}
+
+func validateInteractionCoverage(policy fixturePolicy, cases []evaluationCase) error {
+	if len(policy.Rules) != 5 || len(cases) != 4 {
+		return fmt.Errorf("interaction fixture has %d rules and %d cases, want 5 rules and 4 cases", len(policy.Rules), len(cases))
+	}
+	byName := make(map[string]evaluationCase, len(cases))
+	for _, item := range cases {
+		if _, exists := byName[item.Name]; exists {
+			return fmt.Errorf("duplicate interaction case %q", item.Name)
+		}
+		byName[item.Name] = item
+	}
+	checks := map[string]string{
+		"higher_priority_wins":                  "priority deny",
+		"lower_priority_allow_beats_default":    "low priority allow",
+		"equal_priority_preserves_source_order": "equal priority first",
+		"default_deny_after_nonmatch":           "default deny",
+	}
+	for caseName, ruleName := range checks {
+		item, ok := byName[caseName]
+		if !ok || item.RuleName != ruleName || !item.Expected.Matched || item.Expected.RuleName != ruleName {
+			return fmt.Errorf("interaction case %q does not select %q", caseName, ruleName)
+		}
+	}
+	if byName["higher_priority_wins"].Expected.Action != "deny" {
+		return fmt.Errorf("higher priority interaction does not deny")
+	}
+	if byName["lower_priority_allow_beats_default"].Expected.Action != "allow" {
+		return fmt.Errorf("lower priority interaction does not beat default deny")
+	}
+	if byName["equal_priority_preserves_source_order"].Expected.Action != "allow" {
+		return fmt.Errorf("equal priority interaction did not preserve first rule")
+	}
+	if byName["default_deny_after_nonmatch"].Expected.Action != "deny" {
+		return fmt.Errorf("default deny interaction does not deny")
+	}
+	return nil
+}
+
+func buildPathCases() []pathCase {
+	inputs := []struct {
+		name, pattern, path string
+	}{
+		{"unicode_star", filepath.Join("fixture", "café", "*"), filepath.Join("fixture", "café", "秘密")},
+		{"unicode_question_is_one_rune", filepath.Join("fixture", "?"), filepath.Join("fixture", "é")},
+		{"unicode_class", filepath.Join("fixture", "[α-γ]"), filepath.Join("fixture", "β")},
+		{"star_does_not_cross_separator", filepath.Join("fixture", "*"), filepath.Join("fixture", "nested", "file")},
+		{"clean_dotdot", filepath.Join("fixture", "café", "*"), "fixture" + string(filepath.Separator) + "other" + string(filepath.Separator) + ".." + string(filepath.Separator) + "café" + string(filepath.Separator) + "file"},
+		{"native_separator", filepath.Join("fixture", "*"), filepath.Join("fixture", "child")},
+		{"slash_backslash_are_not_globally_normalized", "fixture/*", `fixture\child`},
+	}
+	result := make([]pathCase, 0, len(inputs))
+	for _, input := range inputs {
+		policy := &policypkg.Policy{Version: "1.0", Rules: []policypkg.Rule{{
+			Name: "path fixture", Action: policypkg.ActionAllow,
+			Conditions: policypkg.Conditions{Path: input.pattern},
+		}}}
+		got := policypkg.NewEngine([]*policypkg.Policy{policy}).Evaluate(policypkg.EvalContext{Path: input.path})
+		result = append(result, pathCase{Name: input.name, Pattern: input.pattern, Path: input.path, Matches: got.Matched})
 	}
 	return result
 }
@@ -607,7 +723,7 @@ func main() {
 		if err := checkFixture(*output, content); err != nil {
 			fatal("%v", err)
 		}
-		fmt.Printf("PASS policy fixture (%d validation, %d evaluation, %d empty-engine, %d tier cases)\n", len(fixture.ValidationCases), len(fixture.EvaluationCases), len(fixture.EmptyEngineCases), len(fixture.TierPresetCases))
+		fmt.Printf("PASS policy fixture (%d validation, %d evaluation, %d interaction, %d path, %d empty-engine, %d tier cases)\n", len(fixture.ValidationCases), len(fixture.EvaluationCases), len(fixture.InteractionCases), len(fixture.PathCases), len(fixture.EmptyEngineCases), len(fixture.TierPresetCases))
 		return
 	}
 	if err := os.MkdirAll(filepath.Dir(*output), 0o750); err != nil {

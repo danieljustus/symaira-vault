@@ -61,6 +61,12 @@ func TestBuildPolicyFixtureCoversPureBranches(t *testing.T) {
 	if len(fixture.EvaluationCases) < 15 {
 		t.Fatalf("evaluation cases = %d, want at least 15", len(fixture.EvaluationCases))
 	}
+	if len(fixture.InteractionCases) != 4 {
+		t.Fatalf("interaction cases = %d, want 4", len(fixture.InteractionCases))
+	}
+	if len(fixture.PathCases) < 7 {
+		t.Fatalf("path cases = %d, want at least 7", len(fixture.PathCases))
+	}
 	if len(fixture.TierPresetCases) != 4 {
 		t.Fatalf("tier preset cases = %d, want 4", len(fixture.TierPresetCases))
 	}
@@ -113,6 +119,36 @@ func TestPolicyCheckRejectsProvenanceDrift(t *testing.T) {
 		if err := checkFixture(path, expected); err == nil {
 			t.Fatalf("check accepted tampered provenance field %q", field)
 		}
+	}
+}
+
+func TestPolicyFixtureFullInteractionsUseProductionResults(t *testing.T) {
+	fixture, err := buildPolicyFixture("test", "v0.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validateInteractionCoverage(fixture.InteractionPolicy, fixture.InteractionCases); err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range fixture.InteractionCases {
+		if item.Expected.RuleName == "" || !item.Expected.Matched {
+			t.Fatalf("interaction case %q did not match a rule: %#v", item.Name, item.Expected)
+		}
+	}
+}
+
+func TestPolicyFixturePathCasesUseProductionResults(t *testing.T) {
+	fixture, err := buildPolicyFixture("test", "v0.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var positive, negative bool
+	for _, item := range fixture.PathCases {
+		positive = positive || item.Matches
+		negative = negative || !item.Matches
+	}
+	if !positive || !negative {
+		t.Fatalf("path cases do not cover both outcomes: positive=%v negative=%v", positive, negative)
 	}
 }
 

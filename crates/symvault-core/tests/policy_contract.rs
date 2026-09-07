@@ -12,6 +12,9 @@ struct Fixture {
     time_range_cases: Vec<TimeRangeCase>,
     evaluation_policy: Policy,
     evaluation_cases: Vec<EvaluationCase>,
+    interaction_policy: Policy,
+    interaction_cases: Vec<EvaluationCase>,
+    path_cases: Vec<PathCase>,
     empty_engine_cases: Vec<EvaluationCase>,
     tier_preset_cases: Vec<TierPresetCase>,
     tier_copy_cases: Vec<TierCopyCase>,
@@ -50,6 +53,14 @@ struct EvaluationCase {
     rule_name: String,
     context: FixtureContext,
     expected: FixtureResult,
+}
+
+#[derive(Debug, Deserialize)]
+struct PathCase {
+    name: String,
+    pattern: String,
+    path: String,
+    matches: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -206,6 +217,66 @@ fn evaluation_cases_match_go_oracle() {
             actual.matched, case.expected.matched,
             "case {} matched",
             case.name
+        );
+    }
+}
+
+#[test]
+fn full_policy_interactions_match_go_oracle() {
+    let fixture = fixture();
+    let engine = Engine::new([&fixture.interaction_policy]);
+    for case in &fixture.interaction_cases {
+        let actual = engine.evaluate(to_context(&case.context));
+        assert_eq!(
+            actual.action.as_str(),
+            case.expected.action,
+            "case {} action",
+            case.name
+        );
+        assert_eq!(
+            actual.rule_name, case.expected.rule_name,
+            "case {} rule",
+            case.name
+        );
+        assert_eq!(
+            actual.matched, case.expected.matched,
+            "case {} matched",
+            case.name
+        );
+    }
+    let equal_priority = fixture
+        .interaction_cases
+        .iter()
+        .find(|case| case.name == "equal_priority_preserves_source_order")
+        .expect("equal-priority interaction case");
+    assert_eq!(equal_priority.expected.rule_name, "equal priority first");
+    assert_eq!(equal_priority.expected.action, "allow");
+}
+
+#[test]
+fn path_cases_match_go_oracle() {
+    for case in &fixture().path_cases {
+        let policy = Policy {
+            version: "1.0".to_owned(),
+            description: String::new(),
+            rules: vec![symvault_core::policy::Rule {
+                name: "path fixture".to_owned(),
+                priority: 0,
+                conditions: symvault_core::policy::Conditions {
+                    path: case.pattern.clone(),
+                    ..Default::default()
+                },
+                action: symvault_core::policy::Action::Allow,
+            }],
+        };
+        let actual = Engine::new([&policy]).evaluate(EvalContext {
+            path: case.path.clone(),
+            ..Default::default()
+        });
+        assert_eq!(
+            actual.matched, case.matches,
+            "case {} ({:?} vs {:?})",
+            case.name, case.pattern, case.path
         );
     }
 }

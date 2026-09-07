@@ -9,8 +9,8 @@
       "internal/policy/engine.go",
       "internal/policy/types.go"
     ],
-    "source_digest": "5ebd3c6c7cea06ef57840b31ce73f890309213261b543f413f320ff3961f6ef9",
-    "generator_digest": "ac0a73b424294a1515b7d5c5a928f818cf53721814efc9d42c65fb09947b8e3e"
+    "source_digest": "c285d8da0d20535e465fb6922e4ce87dabe581133c642d1a1a66e2dc37f4858b",
+    "generator_digest": "8b865ba0f0140ddfb6675491bb9e0012796354f083a7493a6ddcf1e35e095e1f"
   },
   "validation_cases": [
     {
@@ -654,6 +654,152 @@
         "rule_name": "deny all",
         "matched": true
       }
+    }
+  ],
+  "interaction_policy": {
+    "version": "1.0",
+    "rules": [
+      {
+        "name": "priority deny",
+        "priority": 100,
+        "conditions": {
+          "agent_id": "priority-agent"
+        },
+        "action": "deny"
+      },
+      {
+        "name": "low priority allow",
+        "priority": 10,
+        "conditions": {
+          "agent_id": "allowed-agent"
+        },
+        "action": "allow"
+      },
+      {
+        "name": "equal priority first",
+        "priority": 50,
+        "conditions": {
+          "agent_id": "stable-agent"
+        },
+        "action": "allow"
+      },
+      {
+        "name": "equal priority second",
+        "priority": 50,
+        "conditions": {
+          "agent_id": "stable-agent"
+        },
+        "action": "deny"
+      },
+      {
+        "name": "default deny",
+        "conditions": {
+          "agent_id": "*"
+        },
+        "action": "deny"
+      }
+    ]
+  },
+  "interaction_cases": [
+    {
+      "name": "higher_priority_wins",
+      "rule_name": "priority deny",
+      "context": {
+        "agent_id": "priority-agent",
+        "tool_name": "fixture",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "deny",
+        "rule_name": "priority deny",
+        "matched": true
+      }
+    },
+    {
+      "name": "lower_priority_allow_beats_default",
+      "rule_name": "low priority allow",
+      "context": {
+        "agent_id": "allowed-agent",
+        "tool_name": "fixture",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "allow",
+        "rule_name": "low priority allow",
+        "matched": true
+      }
+    },
+    {
+      "name": "equal_priority_preserves_source_order",
+      "rule_name": "equal priority first",
+      "context": {
+        "agent_id": "stable-agent",
+        "tool_name": "fixture",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "allow",
+        "rule_name": "equal priority first",
+        "matched": true
+      }
+    },
+    {
+      "name": "default_deny_after_nonmatch",
+      "rule_name": "default deny",
+      "context": {
+        "agent_id": "other-agent",
+        "tool_name": "fixture",
+        "now": "2024-01-01T12:00:00Z"
+      },
+      "expected": {
+        "action": "deny",
+        "rule_name": "default deny",
+        "matched": true
+      }
+    }
+  ],
+  "path_cases": [
+    {
+      "name": "unicode_star",
+      "pattern": "fixture/café/*",
+      "path": "fixture/café/秘密",
+      "matches": true
+    },
+    {
+      "name": "unicode_question_is_one_rune",
+      "pattern": "fixture/?",
+      "path": "fixture/é",
+      "matches": true
+    },
+    {
+      "name": "unicode_class",
+      "pattern": "fixture/[α-γ]",
+      "path": "fixture/β",
+      "matches": true
+    },
+    {
+      "name": "star_does_not_cross_separator",
+      "pattern": "fixture/*",
+      "path": "fixture/nested/file",
+      "matches": false
+    },
+    {
+      "name": "clean_dotdot",
+      "pattern": "fixture/café/*",
+      "path": "fixture/other/../café/file",
+      "matches": true
+    },
+    {
+      "name": "native_separator",
+      "pattern": "fixture/*",
+      "path": "fixture/child",
+      "matches": true
+    },
+    {
+      "name": "slash_backslash_are_not_globally_normalized",
+      "pattern": "fixture/*",
+      "path": "fixture\\child",
+      "matches": false
     }
   ],
   "empty_engine_cases": [

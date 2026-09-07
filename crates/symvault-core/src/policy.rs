@@ -497,27 +497,46 @@ fn match_allowed_tool(allowed: &[String], tool_name: &str) -> bool {
     allowed.is_empty() || tool_name.is_empty() || allowed.iter().any(|tool| tool == tool_name)
 }
 
+fn path_separator() -> char {
+    if cfg!(windows) { '\\' } else { '/' }
+}
+
+fn is_path_separator(character: char) -> bool {
+    if cfg!(windows) {
+        character == '/' || character == '\\'
+    } else {
+        character == '/'
+    }
+}
+
 fn clean_path(value: &str) -> String {
-    let absolute = value.starts_with('/') || value.starts_with('\\');
-    let mut parts = Vec::new();
-    for part in value.replace('\\', "/").split('/') {
-        match part {
-            "" | "." => {}
-            ".." => {
-                if parts.last().is_some_and(|last| *last != "..") {
-                    parts.pop();
-                } else if !absolute {
-                    parts.push("..".to_owned());
-                }
+    let separator = path_separator();
+    let absolute = value.chars().next().is_some_and(is_path_separator);
+    let mut parts: Vec<String> = Vec::new();
+    let mut current = String::new();
+    let push_part = |part: &str, parts: &mut Vec<String>| match part {
+        "" | "." => {}
+        ".." => {
+            if parts.last().is_some_and(|last| last != "..") {
+                parts.pop();
+            } else if !absolute {
+                parts.push("..".to_owned());
             }
-            other => parts.push(other.to_owned()),
+        }
+        other => parts.push(other.to_owned()),
+    };
+    for character in value.chars() {
+        if is_path_separator(character) {
+            push_part(&current, &mut parts);
+            current.clear();
+        } else {
+            current.push(character);
         }
     }
-    let joined = parts.join("/");
+    push_part(&current, &mut parts);
+    let joined = parts.join(&separator.to_string());
     if absolute {
-        format!("/{joined}")
-    } else if joined.is_empty() {
-        String::new()
+        format!("{separator}{joined}")
     } else {
         joined
     }
@@ -532,31 +551,123 @@ fn match_path(pattern: &str, value: &str) -> bool {
     if pattern == clean || glob_match(pattern, &clean) {
         return true;
     }
-    if let Some(prefix) = pattern.strip_suffix("/**") {
-        let prefix = prefix.trim_end_matches('/');
-        if !prefix.is_empty() && (clean == prefix || clean.starts_with(&format!("{prefix}/"))) {
+    let separator = path_separator().to_string();
+    if let Some(prefix) = pattern.strip_suffix(&format!("{separator}**")) {
+        let prefix = prefix.trim_end_matches(path_separator());
+        if !prefix.is_empty()
+            && (clean == prefix || clean.starts_with(&format!("{prefix}{separator}")))
+        {
             return true;
         }
     }
-    if pattern.ends_with('/') {
-        let prefix = pattern.trim_end_matches('/');
-        if !prefix.is_empty() && (clean == prefix || clean.starts_with(&format!("{prefix}/"))) {
+    if pattern.ends_with(path_separator()) {
+        let prefix = pattern.trim_end_matches(path_separator());
+        if !prefix.is_empty()
+            && (clean == prefix || clean.starts_with(&format!("{prefix}{separator}")))
+        {
             return true;
         }
     }
-    !pattern.contains('*') && (clean == pattern || clean.starts_with(&format!("{pattern}/")))
+    !pattern.chars().any(|character| "*?[".contains(character))
+        && (clean == pattern || clean.starts_with(&format!("{pattern}{separator}")))
+}
+
+#[derive(Clone, Debug)]
+enum GlobToken {
+    Star,
+    Any,
+    Literal(char),
+    Class {
+        negated: bool,
+        ranges: Vec<(char, char)>,
+    },
 }
 
 fn glob_match(pattern: &str, value: &str) -> bool {
-    let pattern = pattern.as_bytes();
-    let value = value.as_bytes();
+    let Some(tokens) = parse_glob(pattern) else {
+        return false;
+    };
+    let value: Vec<char> = value.chars().collect();
     let mut memo = HashMap::new();
-    glob_match_at(pattern, value, 0, 0, &mut memo)
+    glob_match_at(&tokens, &value, 0, 0, &mut memo)
+}
+
+fn parse_glob(pattern: &str) -> Option<Vec<GlobToken>> {
+    let characters: Vec<char> = pattern.chars().collect();
+    let mut tokens = Vec::new();
+    let mut index = 0;
+    while index < characters.len() {
+        match characters[index] {
+            '*' => {
+                tokens.push(GlobToken::Star);
+                index += 1;
+            }
+            '?' => {
+                tokens.push(GlobToken::Any);
+                index += 1;
+            }
+            '[' => {
+                let (token, next) = parse_class(&characters, index)?;
+                tokens.push(token);
+                index = next;
+            }
+            '\\' if !cfg!(windows) => {
+                index += 1;
+                tokens.push(GlobToken::Literal(*characters.get(index)?));
+                index += 1;
+            }
+            literal => {
+                tokens.push(GlobToken::Literal(literal));
+                index += 1;
+            }
+        }
+    }
+    Some(tokens)
+}
+
+fn parse_class(characters: &[char], start: usize) -> Option<(GlobToken, usize)> {
+    let mut index = start + 1;
+    let negated = characters
+        .get(index)
+        .is_some_and(|character| *character == '^');
+    if negated {
+        index += 1;
+    }
+    let mut ranges = Vec::new();
+    while index < characters.len() {
+        if characters[index] == ']' && !ranges.is_empty() {
+            return Some((GlobToken::Class { negated, ranges }, index + 1));
+        }
+        let low = class_character(characters, &mut index)?;
+        let high = if characters.get(index) == Some(&'-') {
+            index += 1;
+            class_character(characters, &mut index)?
+        } else {
+            low
+        };
+        ranges.push((low, high));
+    }
+    None
+}
+
+fn class_character(characters: &[char], index: &mut usize) -> Option<char> {
+    let character = *characters.get(*index)?;
+    if character == '\\' && !cfg!(windows) {
+        *index += 1;
+        let escaped = *characters.get(*index)?;
+        *index += 1;
+        return Some(escaped);
+    }
+    if character == '-' || character == ']' {
+        return None;
+    }
+    *index += 1;
+    Some(character)
 }
 
 fn glob_match_at(
-    pattern: &[u8],
-    value: &[u8],
+    pattern: &[GlobToken],
+    value: &[char],
     pattern_index: usize,
     value_index: usize,
     memo: &mut HashMap<(usize, usize), bool>,
@@ -564,77 +675,42 @@ fn glob_match_at(
     if let Some(result) = memo.get(&(pattern_index, value_index)) {
         return *result;
     }
-    let result = if pattern_index == pattern.len() {
-        value_index == value.len()
-    } else {
-        match pattern[pattern_index] {
-            b'*' => {
-                glob_match_at(pattern, value, pattern_index + 1, value_index, memo)
-                    || (value_index < value.len()
-                        && value[value_index] != b'/'
-                        && glob_match_at(pattern, value, pattern_index, value_index + 1, memo))
-            }
-            b'?' => {
-                value_index < value.len()
-                    && value[value_index] != b'/'
+    let result = match pattern.get(pattern_index) {
+        None => value_index == value.len(),
+        Some(GlobToken::Star) => {
+            glob_match_at(pattern, value, pattern_index + 1, value_index, memo)
+                || value.get(value_index).is_some_and(|character| {
+                    *character != path_separator()
+                        && glob_match_at(pattern, value, pattern_index, value_index + 1, memo)
+                })
+        }
+        Some(GlobToken::Any) => value.get(value_index).is_some_and(|character| {
+            *character != path_separator()
+                && glob_match_at(pattern, value, pattern_index + 1, value_index + 1, memo)
+        }),
+        Some(GlobToken::Literal(expected)) => {
+            value
+                .get(value_index)
+                .is_some_and(|actual| actual == expected)
+                && glob_match_at(pattern, value, pattern_index + 1, value_index + 1, memo)
+        }
+        Some(GlobToken::Class { negated, ranges }) => {
+            value.get(value_index).is_some_and(|actual| {
+                let matched = ranges
+                    .iter()
+                    .any(|(low, high)| low <= actual && actual <= high);
+                (if *negated { !matched } else { matched })
                     && glob_match_at(pattern, value, pattern_index + 1, value_index + 1, memo)
-            }
-            b'[' => match_class(pattern, value, pattern_index, value_index, memo),
-            b'\\' => {
-                pattern_index + 1 < pattern.len()
-                    && value_index < value.len()
-                    && pattern[pattern_index + 1] == value[value_index]
-                    && glob_match_at(pattern, value, pattern_index + 2, value_index + 1, memo)
-            }
-            literal => {
-                value_index < value.len()
-                    && literal == value[value_index]
-                    && glob_match_at(pattern, value, pattern_index + 1, value_index + 1, memo)
-            }
+            })
         }
     };
     memo.insert((pattern_index, value_index), result);
     result
 }
 
-fn match_class(
-    pattern: &[u8],
-    value: &[u8],
-    pattern_index: usize,
-    value_index: usize,
-    memo: &mut HashMap<(usize, usize), bool>,
-) -> bool {
-    if value_index >= value.len() {
-        return false;
-    }
-    let mut index = pattern_index + 1;
-    let negated = pattern
-        .get(index)
-        .is_some_and(|byte| *byte == b'!' || *byte == b'^');
-    if negated {
-        index += 1;
-    }
-    let mut matched = false;
-    while index < pattern.len() && pattern[index] != b']' {
-        let first = pattern[index];
-        if index + 2 < pattern.len() && pattern[index + 1] == b'-' && pattern[index + 2] != b']' {
-            matched |= first <= value[value_index] && value[value_index] <= pattern[index + 2];
-            index += 3;
-        } else {
-            matched |= first == value[value_index];
-            index += 1;
-        }
-    }
-    if index >= pattern.len() || value[value_index] == b'/' {
-        return false;
-    }
-    let matched = if negated { !matched } else { matched };
-    matched && glob_match_at(pattern, value, index + 1, value_index + 1, memo)
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{TimeRange, UtcTime};
+    use super::{TimeRange, UtcTime, match_path};
 
     #[test]
     fn equal_time_range_matches_all_times() {
@@ -653,5 +729,19 @@ mod tests {
             end: "09:00".into(),
         };
         assert!(!range.contains(UtcTime::default()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_path_matching_preserves_backslash_semantics() {
+        assert!(!match_path("fixture/*", r"fixture\child"));
+        assert!(match_path(r"fixture\*", "fixture*"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_path_matching_uses_backslash_as_separator() {
+        assert!(match_path(r"fixture\*", r"fixture\child"));
+        assert!(!match_path("fixture/*", r"fixture\child"));
     }
 }
