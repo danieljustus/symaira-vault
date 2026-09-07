@@ -69,6 +69,16 @@ func TestGenerateTOTP_InvalidSecret(t *testing.T) {
 	}
 }
 
+func TestGenerateTOTP_EmptyDecodedSecret(t *testing.T) {
+	_, err := GenerateTOTPAt("A", "SHA1", 6, 30, time.Unix(0, 0).UTC())
+	if err == nil {
+		t.Fatal("expected error for empty decoded secret")
+	}
+	if got, want := err.Error(), "invalid TOTP secret"; got != want {
+		t.Errorf("error = %q, want %q", got, want)
+	}
+}
+
 func TestGenerateTOTP_SecretWithSpaces(t *testing.T) {
 	// Many authenticator apps display secrets with spaces
 	secret := "GEZD GNBV GY3T QOJQ GEZD GNBV GY3T QOJQ"
@@ -236,7 +246,7 @@ func TestValidateTOTPSecret_TooShort(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for too-short secret")
 	}
-	want := "TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+	want := "TOTP secret must be Base32-encoded (spaces allowed)"
 	if err.Error() != want {
 		t.Errorf("error = %q, want %q", err.Error(), want)
 	}

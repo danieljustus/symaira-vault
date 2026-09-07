@@ -153,6 +153,12 @@ explicitly by the caller.
 clap, HTTP, filesystem, keyring, git, approval, MCP, or TUI dependencies;
 subsequent adapter work consumes the same pure contracts without widening them.
 
+**Completed:** The pure-core slice passes for `CRYPTO-005`, `POLICY-001`, and
+`QUOTA-001`, including Go-generated fixtures, deterministic property coverage,
+and integrated Miri. The reusable error taxonomy is also ported, but the full
+binary-facing `CLI-005` row remains `TODO` until `RUST-009` exercises invalid
+argument, configuration, authentication, not-found, and leakage behavior.
+
 ### Task 4: Prove age and KDF interoperability
 
 **Objective:** Port credential cryptography before any Rust storage writes.

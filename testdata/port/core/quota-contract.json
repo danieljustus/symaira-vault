@@ -1,0 +1,644 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "caadd5e",
+    "release": "v0.22.1",
+    "source_files": [
+      "internal/policy/ratelimit_transition.go"
+    ],
+    "source_digest": "847cbe991b2193f6de6a0361f09839ae27edcdb23fb49cd9a4e1a369d994af75",
+    "generator_digest": "eb4e4dfe9bc38c4465e280fd5149120d7ef478b862184d11d8dba78bcc13c420"
+  },
+  "cases": [
+    {
+      "name": "refill_fractional",
+      "initial_state": {
+        "tokens": 0,
+        "capacity": 0,
+        "refill_rate": 0,
+        "last_refill_unix_nanos": 1700000000000000000,
+        "daily_count": 0,
+        "daily_window_start_unix_nanos": 1700000000000000000,
+        "max_per_day": 0
+      },
+      "limits": {
+        "max_per_hour": 4,
+        "max_per_day": 0
+      },
+      "transitions": [
+        {
+          "event": {
+            "kind": "set_limits",
+            "at_unix_nanos": 1700000000000000000
+          },
+          "state": {
+            "tokens": 4,
+            "capacity": 4,
+            "refill_rate": 0.0011111111111111111,
+            "last_refill_unix_nanos": 1700000000000000000,
+            "daily_count": 0,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": 0
+          },
+          "result": {
+            "allowed": false
+          }
+        },
+        {
+          "event": {
+            "kind": "allow",
+            "at_unix_nanos": 1700000000000000000
+          },
+          "state": {
+            "tokens": 3,
+            "capacity": 4,
+            "refill_rate": 0.0011111111111111111,
+            "last_refill_unix_nanos": 1700000000000000000,
+            "daily_count": 0,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": 0
+          },
+          "result": {
+            "allowed": true
+          }
+        },
+        {
+          "event": {
+            "kind": "allow",
+            "at_unix_nanos": 1700000000000000000
+          },
+          "state": {
+            "tokens": 2,
+            "capacity": 4,
+            "refill_rate": 0.0011111111111111111,
+            "last_refill_unix_nanos": 1700000000000000000,
+            "daily_count": 0,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": 0
+          },
+          "result": {
+            "allowed": true
+          }
+        },
+        {
+          "event": {
+            "kind": "allow",
+            "at_unix_nanos": 1700000000000000000
+          },
+          "state": {
+            "tokens": 1,
+            "capacity": 4,
+            "refill_rate": 0.0011111111111111111,
+            "last_refill_unix_nanos": 1700000000000000000,
+            "daily_count": 0,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": 0
+          },
+          "result": {
+            "allowed": true
+          }
+        },
+        {
+          "event": {
+            "kind": "allow",
+            "at_unix_nanos": 1700000000000000000
+          },
+          "state": {
+            "tokens": 0,
+            "capacity": 4,
+            "refill_rate": 0.0011111111111111111,
+            "last_refill_unix_nanos": 1700000000000000000,
+            "daily_count": 0,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": 0
+          },
+          "result": {
+            "allowed": true
+          }
+        },
+        {
+          "event": {
+            "kind": "allow",
+            "at_unix_nanos": 1700001800000000000
+          },
+          "state": {
+            "tokens": 1,
+            "capacity": 4,
+            "refill_rate": 0.0011111111111111111,
+            "last_refill_unix_nanos": 1700001800000000000,
+            "daily_count": 0,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": 0
+          },
+          "result": {
+            "allowed": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "daily_rollover",
+      "initial_state": {
+        "tokens": 0,
+        "capacity": 0,
+        "refill_rate": 0,
+        "last_refill_unix_nanos": 1700000000000000000,
+        "daily_count": 0,
+        "daily_window_start_unix_nanos": 1700000000000000000,
+        "max_per_day": 0
+      },
+      "limits": {
+        "max_per_hour": 10,
+        "max_per_day": 2
+      },
+      "transitions": [
+        {
+          "event": {
+            "kind": "set_limits",
+            "at_unix_nanos": 1700000000000000000
+          },
+          "state": {
+            "tokens": 10,
+            "capacity": 10,
+            "refill_rate": 0.002777777777777778,
+            "last_refill_unix_nanos": 1700000000000000000,
+            "daily_count": 0,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": 2
+          },
+          "result": {
+            "allowed": false
+          }
+        },
+        {
+          "event": {
+            "kind": "allow",
+            "at_unix_nanos": 1700000000000000000
+          },
+          "state": {
+            "tokens": 9,
+            "capacity": 10,
+            "refill_rate": 0.002777777777777778,
+            "last_refill_unix_nanos": 1700000000000000000,
+            "daily_count": 1,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": 2
+          },
+          "result": {
+            "allowed": true
+          }
+        },
+        {
+          "event": {
+            "kind": "allow",
+            "at_unix_nanos": 1700000000000000000
+          },
+          "state": {
+            "tokens": 8,
+            "capacity": 10,
+            "refill_rate": 0.002777777777777778,
+            "last_refill_unix_nanos": 1700000000000000000,
+            "daily_count": 2,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": 2
+          },
+          "result": {
+            "allowed": true
+          }
+        },
+        {
+          "event": {
+            "kind": "allow",
+            "at_unix_nanos": 1700000000000000000
+          },
+          "state": {
+            "tokens": 8,
+            "capacity": 10,
+            "refill_rate": 0.002777777777777778,
+            "last_refill_unix_nanos": 1700000000000000000,
+            "daily_count": 2,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": 2
+          },
+          "result": {
+            "allowed": false
+          }
+        },
+        {
+          "event": {
+            "kind": "allow",
+            "at_unix_nanos": 1700086400000000000
+          },
+          "state": {
+            "tokens": 9,
+            "capacity": 10,
+            "refill_rate": 0.002777777777777778,
+            "last_refill_unix_nanos": 1700086400000000000,
+            "daily_count": 1,
+            "daily_window_start_unix_nanos": 1700086400000000000,
+            "max_per_day": 2
+          },
+          "result": {
+            "allowed": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "capacity_clamp",
+      "initial_state": {
+        "tokens": 0,
+        "capacity": 0,
+        "refill_rate": 0,
+        "last_refill_unix_nanos": 1700000000000000000,
+        "daily_count": 0,
+        "daily_window_start_unix_nanos": 1700000000000000000,
+        "max_per_day": 0
+      },
+      "limits": {
+        "max_per_hour": 2,
+        "max_per_day": 0
+      },
+      "transitions": [
+        {
+          "event": {
+            "kind": "set_limits",
+            "at_unix_nanos": 1700000000000000000
+          },
+          "state": {
+            "tokens": 2,
+            "capacity": 2,
+            "refill_rate": 0.0005555555555555556,
+            "last_refill_unix_nanos": 1700000000000000000,
+            "daily_count": 0,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": 0
+          },
+          "result": {
+            "allowed": false
+          }
+        },
+        {
+          "event": {
+            "kind": "allow",
+            "at_unix_nanos": 1700000000000000000
+          },
+          "state": {
+            "tokens": 1,
+            "capacity": 2,
+            "refill_rate": 0.0005555555555555556,
+            "last_refill_unix_nanos": 1700000000000000000,
+            "daily_count": 0,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": 0
+          },
+          "result": {
+            "allowed": true
+          }
+        },
+        {
+          "event": {
+            "kind": "allow",
+            "at_unix_nanos": 1700007200000000000
+          },
+          "state": {
+            "tokens": 1,
+            "capacity": 2,
+            "refill_rate": 0.0005555555555555556,
+            "last_refill_unix_nanos": 1700007200000000000,
+            "daily_count": 0,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": 0
+          },
+          "result": {
+            "allowed": true
+          }
+        },
+        {
+          "event": {
+            "kind": "allow",
+            "at_unix_nanos": 1700007200000000000
+          },
+          "state": {
+            "tokens": 0,
+            "capacity": 2,
+            "refill_rate": 0.0005555555555555556,
+            "last_refill_unix_nanos": 1700007200000000000,
+            "daily_count": 0,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": 0
+          },
+          "result": {
+            "allowed": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "rejection",
+      "initial_state": {
+        "tokens": 0,
+        "capacity": 0,
+        "refill_rate": 0,
+        "last_refill_unix_nanos": 1700000000000000000,
+        "daily_count": 0,
+        "daily_window_start_unix_nanos": 1700000000000000000,
+        "max_per_day": 0
+      },
+      "limits": {
+        "max_per_hour": 1,
+        "max_per_day": 1
+      },
+      "transitions": [
+        {
+          "event": {
+            "kind": "set_limits",
+            "at_unix_nanos": 1700000000000000000
+          },
+          "state": {
+            "tokens": 1,
+            "capacity": 1,
+            "refill_rate": 0.0002777777777777778,
+            "last_refill_unix_nanos": 1700000000000000000,
+            "daily_count": 0,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": 1
+          },
+          "result": {
+            "allowed": false
+          }
+        },
+        {
+          "event": {
+            "kind": "allow",
+            "at_unix_nanos": 1700000000000000000
+          },
+          "state": {
+            "tokens": 0,
+            "capacity": 1,
+            "refill_rate": 0.0002777777777777778,
+            "last_refill_unix_nanos": 1700000000000000000,
+            "daily_count": 1,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": 1
+          },
+          "result": {
+            "allowed": true
+          }
+        },
+        {
+          "event": {
+            "kind": "allow",
+            "at_unix_nanos": 1700000000000000000
+          },
+          "state": {
+            "tokens": 0,
+            "capacity": 1,
+            "refill_rate": 0.0002777777777777778,
+            "last_refill_unix_nanos": 1700000000000000000,
+            "daily_count": 1,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": 1
+          },
+          "result": {
+            "allowed": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "boundaries",
+      "initial_state": {
+        "tokens": 0,
+        "capacity": 0,
+        "refill_rate": 0,
+        "last_refill_unix_nanos": 1700000000000000000,
+        "daily_count": 0,
+        "daily_window_start_unix_nanos": 1700000000000000000,
+        "max_per_day": 0
+      },
+      "limits": {
+        "max_per_hour": 1,
+        "max_per_day": 0
+      },
+      "transitions": [
+        {
+          "event": {
+            "kind": "set_limits",
+            "at_unix_nanos": 1700000000000000000
+          },
+          "state": {
+            "tokens": 1,
+            "capacity": 1,
+            "refill_rate": 0.0002777777777777778,
+            "last_refill_unix_nanos": 1700000000000000000,
+            "daily_count": 0,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": 0
+          },
+          "result": {
+            "allowed": false
+          }
+        },
+        {
+          "event": {
+            "kind": "allow",
+            "at_unix_nanos": 1700000000000000000
+          },
+          "state": {
+            "tokens": 0,
+            "capacity": 1,
+            "refill_rate": 0.0002777777777777778,
+            "last_refill_unix_nanos": 1700000000000000000,
+            "daily_count": 0,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": 0
+          },
+          "result": {
+            "allowed": true
+          }
+        },
+        {
+          "event": {
+            "kind": "allow",
+            "at_unix_nanos": 1700003599000000000
+          },
+          "state": {
+            "tokens": 0.9997222222222222,
+            "capacity": 1,
+            "refill_rate": 0.0002777777777777778,
+            "last_refill_unix_nanos": 1700003599000000000,
+            "daily_count": 0,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": 0
+          },
+          "result": {
+            "allowed": false
+          }
+        },
+        {
+          "event": {
+            "kind": "allow",
+            "at_unix_nanos": 1700003600000000000
+          },
+          "state": {
+            "tokens": 0,
+            "capacity": 1,
+            "refill_rate": 0.0002777777777777778,
+            "last_refill_unix_nanos": 1700003600000000000,
+            "daily_count": 0,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": 0
+          },
+          "result": {
+            "allowed": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "negative_hour_limit",
+      "initial_state": {
+        "tokens": 0,
+        "capacity": 0,
+        "refill_rate": 0,
+        "last_refill_unix_nanos": 1700000000000000000,
+        "daily_count": 0,
+        "daily_window_start_unix_nanos": 1700000000000000000,
+        "max_per_day": 0
+      },
+      "limits": {
+        "max_per_hour": -1,
+        "max_per_day": 0
+      },
+      "transitions": [
+        {
+          "event": {
+            "kind": "set_limits",
+            "at_unix_nanos": 1700000000000000000
+          },
+          "state": {
+            "tokens": -1,
+            "capacity": -1,
+            "refill_rate": -0.0002777777777777778,
+            "last_refill_unix_nanos": 1700000000000000000,
+            "daily_count": 0,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": 0
+          },
+          "result": {
+            "allowed": false
+          }
+        },
+        {
+          "event": {
+            "kind": "allow",
+            "at_unix_nanos": 1700000000000000000
+          },
+          "state": {
+            "tokens": -1,
+            "capacity": -1,
+            "refill_rate": -0.0002777777777777778,
+            "last_refill_unix_nanos": 1700000000000000000,
+            "daily_count": 0,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": 0
+          },
+          "result": {
+            "allowed": false
+          }
+        },
+        {
+          "event": {
+            "kind": "allow",
+            "at_unix_nanos": 1700000000000000000
+          },
+          "state": {
+            "tokens": -1,
+            "capacity": -1,
+            "refill_rate": -0.0002777777777777778,
+            "last_refill_unix_nanos": 1700000000000000000,
+            "daily_count": 0,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": 0
+          },
+          "result": {
+            "allowed": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "negative_day_limit",
+      "initial_state": {
+        "tokens": 0,
+        "capacity": 0,
+        "refill_rate": 0,
+        "last_refill_unix_nanos": 1700000000000000000,
+        "daily_count": 0,
+        "daily_window_start_unix_nanos": 1700000000000000000,
+        "max_per_day": 0
+      },
+      "limits": {
+        "max_per_hour": 1,
+        "max_per_day": -1
+      },
+      "transitions": [
+        {
+          "event": {
+            "kind": "set_limits",
+            "at_unix_nanos": 1700000000000000000
+          },
+          "state": {
+            "tokens": 1,
+            "capacity": 1,
+            "refill_rate": 0.0002777777777777778,
+            "last_refill_unix_nanos": 1700000000000000000,
+            "daily_count": 0,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": -1
+          },
+          "result": {
+            "allowed": false
+          }
+        },
+        {
+          "event": {
+            "kind": "allow",
+            "at_unix_nanos": 1700000000000000000
+          },
+          "state": {
+            "tokens": 0,
+            "capacity": 1,
+            "refill_rate": 0.0002777777777777778,
+            "last_refill_unix_nanos": 1700000000000000000,
+            "daily_count": 0,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": -1
+          },
+          "result": {
+            "allowed": true
+          }
+        },
+        {
+          "event": {
+            "kind": "allow",
+            "at_unix_nanos": 1700000000000000000
+          },
+          "state": {
+            "tokens": 0,
+            "capacity": 1,
+            "refill_rate": 0.0002777777777777778,
+            "last_refill_unix_nanos": 1700000000000000000,
+            "daily_count": 0,
+            "daily_window_start_unix_nanos": 1700000000000000000,
+            "max_per_day": -1
+          },
+          "result": {
+            "allowed": false
+          }
+        }
+      ]
+    }
+  ]
+}
