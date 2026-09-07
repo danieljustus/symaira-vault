@@ -225,7 +225,7 @@ pub fn encrypt_scrypt(
     passphrase: &SecretBytes,
     work_factor: u8,
 ) -> Result<Vec<u8>, CryptoError> {
-    if !(1..64).contains(&work_factor) {
+    if !(1..=MAX_SCRYPT_WORK_FACTOR).contains(&work_factor) {
         return Err(CryptoError::new(
             FailureClass::ParameterBounds,
             "scrypt work factor out of bounds",
@@ -564,22 +564,413 @@ pub fn recover_zero_key_identity(
 mod tests {
     use super::*;
     use proptest::prelude::*;
+
     const ID: &str = "AGE-SECRET-KEY-1HS3YTK69EJH0ZYM8ANNNDWQMPT7ZMLPYGTMC47F5T4EDJ5N7EYMQ4L5CDL";
     const ID2: &str = "AGE-SECRET-KEY-18HD87KNMWKY3RW97YR2PYU6HGWDZXAGW6JF74LNNHUA6A8K5ZF9QTWUTK3";
+    const ID3: &str = "AGE-SECRET-KEY-15KR576PHDPLRQS08427S6X2G492S6GTVELZ6WHN8AKMWW90T0HES2KQ597";
+    const ORACLE_COMMIT: &str = "caadd5e";
+    const ORACLE_RELEASE: &str = "v0.22.1";
+    const ORACLE_SOURCE_FILES: &[&str] = &[
+        "internal/crypto/age.go",
+        "internal/crypto/argon2id.go",
+        "internal/crypto/keygen.go",
+        "internal/crypto/symmetric.go",
+        "internal/vault/reencrypt.go",
+    ];
+    const ORACLE_GENERATOR_FILES: &[&str] = &[
+        "internal/crypto/interop.go",
+        "scripts/rust-port/cmd/cryptogen/main.go",
+        "scripts/rust-port/cmd/cryptoverify/main.go",
+    ];
+    const ORACLE_SOURCE_DIGEST: &str =
+        "cc99e5efc05aeb3d1dacff8499fa82748f200669f99121b04f512151c44f1d84";
+    const ORACLE_GENERATOR_DIGEST: &str =
+        "c062140ef1ac6491c1056ed0448d3a6f8de8f0dba4ba84441e22309a9047ebfb";
+
+    #[derive(serde::Deserialize)]
+    struct OracleFixture {
+        schema_version: u8,
+        oracle: OracleMeta,
+        identities: Vec<OracleIdentity>,
+        age_cases: Vec<OracleAgeCase>,
+        scrypt_cases: Vec<OracleEnvelope>,
+        argon2id_cases: Vec<OracleEnvelope>,
+        zero_key_cases: Vec<OracleZeroKey>,
+        malformed_cases: Vec<OracleMalformed>,
+        limit_cases: Vec<OracleLimit>,
+        wrong_passphrase_cases: Vec<OracleWrongPassphrase>,
+        migration_cases: Vec<OracleMigration>,
+    }
+    #[derive(serde::Deserialize)]
+    struct OracleMeta {
+        commit: String,
+        release: String,
+        source_files: Vec<String>,
+        source_digest: String,
+        generator_files: Vec<String>,
+        generator_digest: String,
+    }
+    #[derive(serde::Deserialize)]
+    struct OracleIdentity {
+        name: String,
+        identity: String,
+        recipient: String,
+        fingerprint: String,
+    }
+    #[derive(serde::Deserialize)]
+    struct OracleAgeCase {
+        name: String,
+        plaintext: String,
+        ciphertext: String,
+        recipients: Vec<String>,
+    }
+    #[derive(serde::Deserialize)]
+    struct OracleEnvelope {
+        name: String,
+        plaintext: String,
+        ciphertext: String,
+    }
+    #[derive(serde::Deserialize)]
+    struct OracleZeroKey {
+        name: String,
+        ciphertext: String,
+        passphrase_length: usize,
+    }
+    #[derive(serde::Deserialize)]
+    struct OracleMalformed {
+        name: String,
+        input: String,
+        expected_class: String,
+    }
+    #[derive(serde::Deserialize)]
+    struct OracleLimit {
+        name: String,
+        kind: String,
+        work_factor: u8,
+        time: u32,
+        memory: u32,
+        threads: u8,
+        expected_class: String,
+    }
+    #[derive(serde::Deserialize)]
+    struct OracleWrongPassphrase {
+        name: String,
+        kind: String,
+        ciphertext: String,
+        expected_class: String,
+    }
+    #[derive(serde::Deserialize)]
+    struct OracleMigration {
+        name: String,
+        input: String,
+        format: String,
+        needs_migration: bool,
+    }
+
+    fn load_fixture() -> (String, OracleFixture) {
+        let raw = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../testdata/port/crypto/age-kdf.json"
+        ))
+        .expect("Go crypto fixture");
+        let fixture: OracleFixture = serde_json::from_str(&raw).expect("valid Go crypto fixture");
+        (raw, fixture)
+    }
+
+    fn assert_names<T>(
+        actual: &[T],
+        expected: &[&str],
+        name: impl Fn(&T) -> &str,
+    ) -> Result<(), String> {
+        if actual.len() != expected.len() {
+            return Err(format!(
+                "case cardinality {}, want {}",
+                actual.len(),
+                expected.len()
+            ));
+        }
+        for (item, expected_name) in actual.iter().zip(expected) {
+            if name(item) != *expected_name {
+                return Err(format!(
+                    "case name/order changed: got {}, want {expected_name}",
+                    name(item)
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_fixture(fixture: &OracleFixture) -> Result<(), String> {
+        if fixture.schema_version != 1 {
+            return Err("schema version changed".to_owned());
+        }
+        if fixture.oracle.commit != ORACLE_COMMIT || fixture.oracle.release != ORACLE_RELEASE {
+            return Err("oracle commit/release changed".to_owned());
+        }
+        if fixture.oracle.source_digest != ORACLE_SOURCE_DIGEST
+            || fixture.oracle.generator_digest != ORACLE_GENERATOR_DIGEST
+        {
+            return Err("oracle digest changed".to_owned());
+        }
+        let source_files: Vec<&str> = fixture
+            .oracle
+            .source_files
+            .iter()
+            .map(String::as_str)
+            .collect();
+        let generator_files: Vec<&str> = fixture
+            .oracle
+            .generator_files
+            .iter()
+            .map(String::as_str)
+            .collect();
+        if source_files != ORACLE_SOURCE_FILES || generator_files != ORACLE_GENERATOR_FILES {
+            return Err("oracle file provenance changed".to_owned());
+        }
+        assert_names(
+            &fixture.identities,
+            &["fixed_1", "fixed_2", "fixed_3"],
+            |v| &v.name,
+        )?;
+        assert_names(
+            &fixture.age_cases,
+            &["two_recipients", "three_recipients"],
+            |v| &v.name,
+        )?;
+        assert_names(&fixture.scrypt_cases, &["legacy_work_factor_12"], |v| {
+            &v.name
+        })?;
+        assert_names(
+            &fixture.argon2id_cases,
+            &["current_tiny_fixture_params"],
+            |v| &v.name,
+        )?;
+        assert_names(
+            &fixture.zero_key_cases,
+            &["historical_zero_key_length_23"],
+            |v| &v.name,
+        )?;
+        assert_names(
+            &fixture.malformed_cases,
+            &["empty", "not_age", "bad_stanza"],
+            |v| &v.name,
+        )?;
+        assert_names(
+            &fixture.limit_cases,
+            &[
+                "scrypt_work_factor_zero",
+                "scrypt_work_factor_above_max",
+                "argon2_time_zero",
+                "argon2_time_above_max",
+                "argon2_memory_zero",
+                "argon2_memory_above_max",
+                "argon2_threads_zero",
+                "argon2_threads_above_max",
+                "argon2_memory_below_threads",
+            ],
+            |v| &v.name,
+        )?;
+        assert_names(
+            &fixture.wrong_passphrase_cases,
+            &[
+                "age_wrong_identity",
+                "scrypt_wrong_passphrase",
+                "argon2id_wrong_passphrase",
+            ],
+            |v| &v.name,
+        )?;
+        assert_names(
+            &fixture.migration_cases,
+            &["legacy_scrypt", "current_argon2id", "unknown_envelope"],
+            |v| &v.name,
+        )?;
+        for item in &fixture.age_cases {
+            if item.recipients.len() < 2 || item.ciphertext.is_empty() || item.plaintext.is_empty()
+            {
+                return Err(format!("incomplete age case {}", item.name));
+            }
+        }
+        Ok(())
+    }
 
     #[test]
-    fn x25519_and_fingerprint_match_go_shape() {
-        let id = parse_identity(ID).unwrap();
-        assert_eq!(
-            recipient_string(&id),
-            "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y"
-        );
-        assert_eq!(
-            fingerprint(&recipient_string(&id)),
-            "9DC3 A8A0 74CE 0E8A E871 8B96 246D 238B"
-        );
+    fn x25519_and_fingerprint_vectors_are_all_consumed() {
+        let (_, fixture) = load_fixture();
+        validate_fixture(&fixture).unwrap();
+        let expected = [
+            (
+                ID,
+                "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y",
+                "9DC3 A8A0 74CE 0E8A E871 8B96 246D 238B",
+            ),
+            (
+                ID2,
+                "age1wxknyar29luhmltc320wnllzxd7n0cjvldxqjunyh9u3l4gpd3kq9r4lgr",
+                "F0E9 391C BACE 82B8 FBB0 20BF 299A BD6F",
+            ),
+            (
+                ID3,
+                "age1mrfjwn5r0v9zrvgv73fc5880svsky436wp2ygvw6lts5hx8xwavs6vmkcy",
+                "1CCA B8D6 58D0 1292 08E2 986C ED65 3CE4",
+            ),
+        ];
+        for (item, (identity, recipient, fingerprint_value)) in
+            fixture.identities.iter().zip(expected)
+        {
+            let parsed = parse_identity(&item.identity).unwrap();
+            assert_eq!(item.identity, identity);
+            assert_eq!(recipient_string(&parsed), recipient);
+            assert_eq!(item.recipient, recipient);
+            assert_eq!(fingerprint(&item.recipient), fingerprint_value);
+            assert_eq!(item.fingerprint, fingerprint_value);
+        }
     }
+
     #[cfg(not(miri))]
+    #[test]
+    fn go_vectors_consume_every_positive_negative_and_migration_case() {
+        let (_, fixture) = load_fixture();
+        validate_fixture(&fixture).unwrap();
+        let identities: Vec<Identity> = fixture
+            .identities
+            .iter()
+            .map(|item| parse_identity(&item.identity).unwrap())
+            .collect();
+        for case in &fixture.age_cases {
+            let ciphertext = base64::engine::general_purpose::STANDARD
+                .decode(&case.ciphertext)
+                .unwrap();
+            for recipient in &case.recipients {
+                let index = fixture
+                    .identities
+                    .iter()
+                    .position(|item| &item.recipient == recipient)
+                    .unwrap();
+                assert_eq!(
+                    decrypt(&ciphertext, &identities[index]).unwrap(),
+                    case.plaintext.as_bytes(),
+                    "{}",
+                    case.name
+                );
+            }
+        }
+        let passphrase = SecretBytes::new(b"rust-interop-fixture-passphrase-v1");
+        for case in &fixture.scrypt_cases {
+            let ciphertext = base64::engine::general_purpose::STANDARD
+                .decode(&case.ciphertext)
+                .unwrap();
+            assert_eq!(
+                decrypt_scrypt(&ciphertext, &passphrase).unwrap(),
+                case.plaintext.as_bytes(),
+                "{}",
+                case.name
+            );
+        }
+        for case in &fixture.argon2id_cases {
+            let ciphertext = base64::engine::general_purpose::STANDARD
+                .decode(&case.ciphertext)
+                .unwrap();
+            assert_eq!(
+                decrypt_argon2id(&ciphertext, &passphrase).unwrap(),
+                case.plaintext.as_bytes(),
+                "{}",
+                case.name
+            );
+        }
+        for case in &fixture.zero_key_cases {
+            let ciphertext = base64::engine::general_purpose::STANDARD
+                .decode(&case.ciphertext)
+                .unwrap();
+            let recovered = recover_zero_key_identity(&ciphertext, case.passphrase_length).unwrap();
+            assert_eq!(
+                recipient_string(&recovered),
+                fixture.identities[0].recipient,
+                "{}",
+                case.name
+            );
+        }
+        for case in &fixture.malformed_cases {
+            let result = decrypt(case.input.as_bytes(), &identities[0]);
+            assert_eq!(
+                result.unwrap_err().class(),
+                FailureClass::MalformedEnvelope,
+                "{}",
+                case.name
+            );
+            assert_eq!(case.expected_class, "malformed_envelope");
+        }
+        for case in &fixture.limit_cases {
+            let result = if case.kind == "scrypt" {
+                encrypt_scrypt(b"limit", &passphrase, case.work_factor)
+            } else {
+                encrypt_argon2id(
+                    b"limit",
+                    &passphrase,
+                    Argon2idParams {
+                        time: case.time,
+                        memory_kib: case.memory,
+                        threads: u32::from(case.threads),
+                    },
+                )
+            };
+            assert_eq!(
+                result.unwrap_err().class(),
+                FailureClass::ParameterBounds,
+                "{}",
+                case.name
+            );
+            assert_eq!(case.expected_class, "parameter_bounds");
+        }
+        for case in &fixture.wrong_passphrase_cases {
+            let ciphertext = base64::engine::general_purpose::STANDARD
+                .decode(&case.ciphertext)
+                .unwrap();
+            let result = match case.kind.as_str() {
+                "age" => decrypt(&ciphertext, &identities[2]),
+                "scrypt" => decrypt_scrypt(&ciphertext, &SecretBytes::new(b"wrong-passphrase")),
+                "argon2id" => decrypt_argon2id(&ciphertext, &SecretBytes::new(b"wrong-passphrase")),
+                other => panic!("unknown wrong-passphrase case kind {other}"),
+            };
+            assert_eq!(
+                result.unwrap_err().class(),
+                FailureClass::WrongPassphraseOrKey,
+                "{}",
+                case.name
+            );
+            assert_eq!(case.expected_class, "wrong_passphrase_or_key");
+        }
+        for case in &fixture.migration_cases {
+            let format = detect_envelope(case.input.as_bytes());
+            let expected_format = match case.format.as_str() {
+                "scrypt" => EnvelopeFormat::Scrypt,
+                "argon2id" => EnvelopeFormat::Argon2id,
+                "unknown" => EnvelopeFormat::Unknown,
+                other => panic!("unknown migration format {other}"),
+            };
+            assert_eq!(format, expected_format, "{}", case.name);
+            assert_eq!(
+                needs_kdf_migration(case.input.as_bytes()),
+                case.needs_migration,
+                "{}",
+                case.name
+            );
+        }
+    }
+
+    #[test]
+    fn fixture_validation_rejects_omission_and_tampered_provenance() {
+        let (raw, fixture) = load_fixture();
+        validate_fixture(&fixture).unwrap();
+        let mut omitted: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        omitted["identities"].as_array_mut().unwrap().pop();
+        let omitted_fixture: OracleFixture = serde_json::from_value(omitted).unwrap();
+        assert!(validate_fixture(&omitted_fixture).is_err());
+        let mut tampered: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        tampered["oracle"]["source_digest"] = serde_json::Value::String("0".repeat(64));
+        let tampered_fixture: OracleFixture = serde_json::from_value(tampered).unwrap();
+        assert!(validate_fixture(&tampered_fixture).is_err());
+    }
+
     #[test]
     fn multi_recipient_retention_and_removal() {
         let one = parse_identity(ID).unwrap();
@@ -598,170 +989,12 @@ mod tests {
             FailureClass::WrongPassphraseOrKey
         );
     }
+
     #[test]
     fn secret_formatting_is_redacted() {
         let secret = SecretBytes::new(b"do-not-print");
         assert_eq!(format!("{secret:?}"), "<redacted>");
         assert_eq!(format!("{secret}"), "<redacted>");
-    }
-    #[cfg(not(miri))]
-    #[test]
-    fn argon2_roundtrip_and_bounds() {
-        let pass = SecretBytes::new(b"fixture-passphrase");
-        let params = Argon2idParams {
-            time: 1,
-            memory_kib: 32,
-            threads: 1,
-        };
-        let cipher = encrypt_argon2id(b"value", &pass, params).unwrap();
-        assert_eq!(decrypt_argon2id(&cipher, &pass).unwrap(), b"value");
-        assert_eq!(
-            encrypt_argon2id(b"value", &pass, Argon2idParams { time: 17, ..params })
-                .unwrap_err()
-                .class(),
-            FailureClass::ParameterBounds
-        );
-    }
-    #[derive(serde::Deserialize)]
-    struct OracleFixture {
-        schema_version: u8,
-        oracle: OracleMeta,
-        identities: Vec<OracleIdentity>,
-        age_cases: Vec<OracleAgeCase>,
-        scrypt_cases: Vec<OracleEnvelope>,
-        argon2id_cases: Vec<OracleEnvelope>,
-        zero_key_cases: Vec<OracleZeroKey>,
-    }
-    #[derive(serde::Deserialize)]
-    struct OracleZeroKey {
-        ciphertext: String,
-        passphrase_length: usize,
-    }
-    #[derive(serde::Deserialize)]
-    struct OracleMeta {
-        source_digest: String,
-        generator_digest: String,
-    }
-    #[derive(serde::Deserialize)]
-    struct OracleIdentity {
-        identity: String,
-        recipient: String,
-        fingerprint: String,
-    }
-    #[derive(serde::Deserialize)]
-    struct OracleAgeCase {
-        plaintext: String,
-        ciphertext: String,
-    }
-    #[derive(serde::Deserialize)]
-    struct OracleEnvelope {
-        plaintext: String,
-        ciphertext: String,
-    }
-
-    #[cfg(not(miri))]
-    #[test]
-    fn go_generated_vectors_decrypt_in_rust_and_provenance_is_present() {
-        let raw = std::fs::read_to_string(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../testdata/port/crypto/age-kdf.json"
-        ))
-        .expect("Go crypto fixture");
-        let fixture: OracleFixture = serde_json::from_str(&raw).expect("valid Go crypto fixture");
-        assert_eq!(fixture.schema_version, 1);
-        assert_eq!(fixture.oracle.source_digest.len(), 64);
-        assert_eq!(fixture.oracle.generator_digest.len(), 64);
-        let identity = parse_identity(&fixture.identities[0].identity).unwrap();
-        assert_eq!(recipient_string(&identity), fixture.identities[0].recipient);
-        assert_eq!(
-            fingerprint(&fixture.identities[0].recipient),
-            fixture.identities[0].fingerprint
-        );
-        let age_case = &fixture.age_cases[0];
-        let ciphertext = base64::engine::general_purpose::STANDARD
-            .decode(&age_case.ciphertext)
-            .unwrap();
-        assert_eq!(
-            decrypt(&ciphertext, &identity).unwrap(),
-            age_case.plaintext.as_bytes()
-        );
-        let zero = &fixture.zero_key_cases[0];
-        let zero_ciphertext = base64::engine::general_purpose::STANDARD
-            .decode(&zero.ciphertext)
-            .unwrap();
-        let recovered =
-            recover_zero_key_identity(&zero_ciphertext, zero.passphrase_length).unwrap();
-        assert_eq!(
-            recipient_string(&recovered),
-            fixture.identities[0].recipient
-        );
-        let passphrase = SecretBytes::new(b"rust-interop-fixture-passphrase-v1");
-        let scrypt = &fixture.scrypt_cases[0];
-        let ciphertext = base64::engine::general_purpose::STANDARD
-            .decode(&scrypt.ciphertext)
-            .unwrap();
-        assert_eq!(
-            decrypt_scrypt(&ciphertext, &passphrase).unwrap(),
-            scrypt.plaintext.as_bytes()
-        );
-        let argon = &fixture.argon2id_cases[0];
-        let ciphertext = base64::engine::general_purpose::STANDARD
-            .decode(&argon.ciphertext)
-            .unwrap();
-        assert_eq!(
-            decrypt_argon2id(&ciphertext, &passphrase).unwrap(),
-            argon.plaintext.as_bytes()
-        );
-        let wrong = SecretBytes::new(b"wrong-passphrase");
-        assert_eq!(
-            decrypt_scrypt(
-                &base64::engine::general_purpose::STANDARD
-                    .decode(&scrypt.ciphertext)
-                    .unwrap(),
-                &wrong
-            )
-            .unwrap_err()
-            .class(),
-            FailureClass::WrongPassphraseOrKey
-        );
-        assert_eq!(
-            decrypt_argon2id(
-                &base64::engine::general_purpose::STANDARD
-                    .decode(&argon.ciphertext)
-                    .unwrap(),
-                &wrong
-            )
-            .unwrap_err()
-            .class(),
-            FailureClass::WrongPassphraseOrKey
-        );
-        assert_eq!(
-            decrypt(b"not an age envelope", &identity)
-                .unwrap_err()
-                .class(),
-            FailureClass::MalformedEnvelope
-        );
-        let mut tampered = raw.clone();
-        tampered = tampered.replacen(&fixture.oracle.source_digest, &"0".repeat(64), 1);
-        assert_ne!(tampered, raw, "fixture tamper must be observable");
-    }
-
-    #[test]
-    fn kdf_migration_and_malformed_classifications_are_stable() {
-        assert_eq!(
-            detect_envelope(b"-> scrypt abc 12\n"),
-            EnvelopeFormat::Scrypt
-        );
-        assert!(needs_kdf_migration(b"-> scrypt abc 12\n"));
-        assert_eq!(
-            detect_envelope(b"-> argon2id abc t=1,m=32,p=1\n"),
-            EnvelopeFormat::Argon2id
-        );
-        assert_eq!(
-            classify_zero_key_candidate(b"-> argon2id abc t=1,m=32,p=1\n"),
-            FailureClass::ZeroKeyCandidate
-        );
-        assert_eq!(detect_envelope(b"garbage"), EnvelopeFormat::Unknown);
     }
 
     #[cfg(not(miri))]

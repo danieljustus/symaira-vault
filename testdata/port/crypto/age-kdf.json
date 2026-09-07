@@ -8,11 +8,15 @@
       "internal/crypto/argon2id.go",
       "internal/crypto/keygen.go",
       "internal/crypto/symmetric.go",
-      "internal/crypto/interop.go",
       "internal/vault/reencrypt.go"
     ],
-    "source_digest": "07df36059bfda5b2f3b61441fdc1d54ac312536870427a7f10b3d1cfb4b2c157",
-    "generator_digest": "9e2fb7efe405bedd71a069c63da73702bce725456e8b051471ecc78cdb52e1a8"
+    "source_digest": "cc99e5efc05aeb3d1dacff8499fa82748f200669f99121b04f512151c44f1d84",
+    "generator_files": [
+      "internal/crypto/interop.go",
+      "scripts/rust-port/cmd/cryptogen/main.go",
+      "scripts/rust-port/cmd/cryptoverify/main.go"
+    ],
+    "generator_digest": "c062140ef1ac6491c1056ed0448d3a6f8de8f0dba4ba84441e22309a9047ebfb"
   },
   "identities": [
     {
@@ -37,11 +41,21 @@
   "age_cases": [
     {
       "name": "two_recipients",
-      "plaintext": "safe Rust/Go age interoperability vector — no production data",
-      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBpeHhCQ0QybUVOdTBFZU1HQkZTcjB2aThlcFFkUG5FZzIrb1BmUEhqdFZvCnlNM1pVT0orWU5YZUZWTWROdnI5d3dSdDJyU29hb1gxSHcyKzIvT3lwZlEKLT4gWDI1NTE5IEZYNnBPTWpQR2VUOHRGQm9pekpxVkRtVHpPbGZwUDR0UkFMWkJMNURCRWcKcGt1c0dJbVZsbWZlbE5Id3RsOHBUalpQSlFMTnNYSWZCbFo0Z0EwYjV0NAotLS0gZFNSVzkra284UGl2VXk3TXB3MU5vTjlySUxrbDRub01oTTJLN1dXSmh2VQoT98NGg6nVuZMYfGvx0VBXM5lXO1n+bVYYPC0S5g7BYPyBJOCDedZtm+2mZ2EmBt89L+0QbAE4/OXAAeopO+go830cu5kZrXbCZFCEBlgf3LZ4+P4phN/01uCIKV7ZaA==",
+      "plaintext": "safe Rust/Go age interoperability vector — two recipients",
+      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBlRlZ1S3pIcUY1MWlKYmhKajRNa2J3RWJHeGVFdkJZN0ZxeUtURjZGbDNNClV1SkZZWUFpVXM2aDVKbEx5RlNHL1Q3ZTZvMERMZlQ3OHlXa1ZXdUJSSWMKLT4gWDI1NTE5IFdzaHV1UGFWaWNrclUwaDIvMDUxNUtkUE9VQ3F5Y2FlSE41N0VWUlBld3MKK1ExakxhOTNXSnhaUlVGNjFUY3pUR0h2RVhuZUlubW1KbzlHZlhTQUtJNAotLS0gUzVTT01uelpPTWpSak9iNi96WXc2eVRlZzJJMlhhelB5L0ZXMHQyTHBvSQqRz2Q/mZL8hQxaMnU+gvpCrVeJ51prs7ZT+3Gtg4SRapCa8NwRIjJ7Z/M5RF3uHjSv4R2L+5OfqM4RArzYkRX3eAVTzNWk3uo4CH84hHOKf5Trh8pA3GEqOKKk",
       "recipients": [
         "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y",
         "age1wxknyar29luhmltc320wnllzxd7n0cjvldxqjunyh9u3l4gpd3kq9r4lgr"
+      ]
+    },
+    {
+      "name": "three_recipients",
+      "plaintext": "safe Rust/Go age interoperability vector — three recipients",
+      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBKL1hpL0RNM0VENHkwWkFac3FmQUxoN2VDdDJyOGVQRnN2N0lNVW1zK1VNCklPTjlFbmRwZUphUEdGKzI2cDBVWnEwSkpPcmE1ZTM3WVN4M2dMOWx5OFUKLT4gWDI1NTE5IFFablMzUDdieEtaZTJTdXdXZFdRUzBhanEwUndxZy9qSUhJRXV0THd0blUKcEhQcGIzNHVKZUxvSnVaek9WOU1kZ3RXOWc0QVQyeDMrRzJzbDZNaGU4TQotPiBYMjU1MTkgRFJHYTdmT29XR3d6SndZMlNnbmdIVE1Pc1lncC9CMSt1OXZaWlFaR0JHMAp4blp5ek9EWlI2NmhDMUFTWXZwbitjbCtveTIrdVRRckhUYk1WWGJ3R280Ci0tLSBXeVFzdGR5ODdxbGxYekxUTTJQWjhHWEFSMkJkOHFhYUdWdHU2aGNvdzFvCsTzQBJxjPB9/1/v7iG4uvCghWf73hxMPklE2ykwW534q6qa/J40YM+VJzqZtV3zqMLF6p1hZ4e7MYKHw3Tx32nwwfl9JJjfJrtGjPqgDrFmwDgBlGgy0zNUc8+UJg==",
+      "recipients": [
+        "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y",
+        "age1wxknyar29luhmltc320wnllzxd7n0cjvldxqjunyh9u3l4gpd3kq9r4lgr",
+        "age1mrfjwn5r0v9zrvgv73fc5880svsky436wp2ygvw6lts5hx8xwavs6vmkcy"
       ]
     }
   ],
@@ -49,14 +63,14 @@
     {
       "name": "legacy_work_factor_12",
       "plaintext": "legacy scrypt envelope",
-      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdCBEb3B3SGs3eVAwclZZNUkxL2lsajFBIDEyCk1FKzd5T01GcklQanRBdHJhRUNvanQwL0RmcmdoNk53WXZtMG1LcXFLTk0KLS0tIFppc3dtUGQzOEFiK1daVFp1cm5rZDN0dXNMaENCOWNCYjN0Y205OU4yMmMKkj4gl13P2o90JaNDoGKmMD1ndsCZNn7zfMD873A0RyK8m4jlAH9mjOwW7qEr2jgI5VJd9I+I"
+      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdCBCU2phNUNOZ3dhb2NyTmtXVmRURW93IDEyClJoNjE3eTk2N0R1aXNJTlZDZlhGQTNsT3VIMkx5ejFvSUFtNkkzenZTc1EKLS0tIFhRQ0hVUEtOTEhEek03MU5tNzU1QUxrVkRTSk5pVmlUdTRXN2V3NDczMXMKqDs4J13nE7rgx3hTpJnSyFT5kZn41IgRj6QEs6yojSM2B/3/fGs8I4fNJzaNh2UEle6fI0B6"
     }
   ],
   "argon2id_cases": [
     {
       "name": "current_tiny_fixture_params",
       "plaintext": "current argon2id envelope",
-      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIDE4ZFdxUlRGZ0NieEZDNlBrT3N4MHcgdD0xLG09MzIscD0xCjFZbHZReG8rVURCdVdrV2h2K2ZTdkw3c25iNmlUUVN2L0ZKYmdzOFVaMWlUSEpzMnZOcWZpVWZQZENzCi0tLSBkMkU2RVlDYjVGOHc1MlQ2c0dXcFk0SCt3OW1IU3ptM01CM0ZwQ2d6YnY0CtmGqXc9qSYrGWT89mC2Pddql5EsJuOg7IEH6K0+OHDprCJSD2JvSTlX9qVqIKI7TItQyaYXzi2JmA==",
+      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIGw4dzVYMjNLQXVkTGFtMFdwaUl0SHcgdD0xLG09MzIscD0xCjV5eGVtYmhKU1l0TTZCczRtRnhnbm9RK3N5RGRoUUFvS0owMyt1aDhYL1NIOHArbnBRb292b3grQUpFCi0tLSBhaFBSNHE5RnlnWGM3cXNkdUt1MnFkbmlmUVc5UkZ0b3ViYXpITFFPdWY4ClgV2yN2Cg+Y+Vu1WORTGHB2x5A1PqjbtueNQmrquLNS7CSJS1f4nwZfb3nxkMdR4MuFExSmPhwGJw==",
       "params": {
         "Time": 1,
         "Memory": 32,
@@ -67,22 +81,148 @@
   "zero_key_cases": [
     {
       "name": "historical_zero_key_length_23",
-      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIEcrbWE0eUR0ZWNCVnFDamFWMGt4T3cgdD0xLG09MzIscD0xCmduYUE3QUhweFRBNEJzWllpd0VNRWFMcjFZNmQ0OEFXdkRkdExtWDB4bkszUVV4cnVqcmF1enlCM3MwCi0tLSA2K3JUUWVEcW4ydEZrS3FjM0YvMEMwaGtJeGhyZ1JLVGlqUkFTUFJoK25RCtVKJ7Lmob2IOjGf6OEJezQ/b9c2O4Arqa06FNXHpHzJksLses0xUhWuT3NHDtURTnL+H0PV14AzdW3nQ+DGz/lly7SN+5+UVL97AxHETvlYAUJjs4p2lBE+Ai9gTra55es3IfTad9rdIfo=",
+      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIDE3UWI5UzVMa2FRRG9scm9qajJKNmcgdD0xLG09MzIscD0xCkFBazNjREdLVEZ6ajA3QjY5UURjUThtU2R6TmNFUnlqK2xSYlRybXdiS1dXVVNPZjdWMGlxMHlzMWxrCi0tLSA3eTJPQ1NzTzRkZUh4RTBGcU8zRUl3SUVpQm12eG1IbE16T0ZXb1RPeTk0CoisFlCHfu8FG11TkwOOAivZ+WQOcIX5Dq4NjsfC5NQn5+FXy4ZfkEXOhOgVZFDWpiJuwXu8Vbw5a2ZGDZHElRZLhLA35Ocdwn/1EVYkzw2qEwduKjMFE/8b2PZC4E2gISuXXl3LMThRnQY=",
       "passphrase_length": 23
     }
   ],
   "malformed_cases": [
     {
       "name": "empty",
-      "input": ""
+      "input": "",
+      "expected_class": "malformed_envelope"
     },
     {
       "name": "not_age",
-      "input": "not an age envelope\n"
+      "input": "not an age envelope\n",
+      "expected_class": "malformed_envelope"
     },
     {
       "name": "bad_stanza",
-      "input": "age-encryption.org/v1\n-\u003e argon2id bad\n!!!\n--- header end\n"
+      "input": "age-encryption.org/v1\n-\u003e argon2id bad\n!!!\n--- header end\n",
+      "expected_class": "malformed_envelope"
+    }
+  ],
+  "limit_cases": [
+    {
+      "name": "scrypt_work_factor_zero",
+      "kind": "scrypt",
+      "work_factor": 0,
+      "time": 0,
+      "memory": 0,
+      "threads": 0,
+      "expected_class": "parameter_bounds"
+    },
+    {
+      "name": "scrypt_work_factor_above_max",
+      "kind": "scrypt",
+      "work_factor": 23,
+      "time": 0,
+      "memory": 0,
+      "threads": 0,
+      "expected_class": "parameter_bounds"
+    },
+    {
+      "name": "argon2_time_zero",
+      "kind": "argon2id",
+      "work_factor": 0,
+      "time": 0,
+      "memory": 32,
+      "threads": 1,
+      "expected_class": "parameter_bounds"
+    },
+    {
+      "name": "argon2_time_above_max",
+      "kind": "argon2id",
+      "work_factor": 0,
+      "time": 17,
+      "memory": 32,
+      "threads": 1,
+      "expected_class": "parameter_bounds"
+    },
+    {
+      "name": "argon2_memory_zero",
+      "kind": "argon2id",
+      "work_factor": 0,
+      "time": 1,
+      "memory": 0,
+      "threads": 1,
+      "expected_class": "parameter_bounds"
+    },
+    {
+      "name": "argon2_memory_above_max",
+      "kind": "argon2id",
+      "work_factor": 0,
+      "time": 1,
+      "memory": 2097153,
+      "threads": 1,
+      "expected_class": "parameter_bounds"
+    },
+    {
+      "name": "argon2_threads_zero",
+      "kind": "argon2id",
+      "work_factor": 0,
+      "time": 1,
+      "memory": 32,
+      "threads": 0,
+      "expected_class": "parameter_bounds"
+    },
+    {
+      "name": "argon2_threads_above_max",
+      "kind": "argon2id",
+      "work_factor": 0,
+      "time": 1,
+      "memory": 64,
+      "threads": 17,
+      "expected_class": "parameter_bounds"
+    },
+    {
+      "name": "argon2_memory_below_threads",
+      "kind": "argon2id",
+      "work_factor": 0,
+      "time": 1,
+      "memory": 4,
+      "threads": 2,
+      "expected_class": "parameter_bounds"
+    }
+  ],
+  "wrong_passphrase_cases": [
+    {
+      "name": "age_wrong_identity",
+      "kind": "age",
+      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBlRlZ1S3pIcUY1MWlKYmhKajRNa2J3RWJHeGVFdkJZN0ZxeUtURjZGbDNNClV1SkZZWUFpVXM2aDVKbEx5RlNHL1Q3ZTZvMERMZlQ3OHlXa1ZXdUJSSWMKLT4gWDI1NTE5IFdzaHV1UGFWaWNrclUwaDIvMDUxNUtkUE9VQ3F5Y2FlSE41N0VWUlBld3MKK1ExakxhOTNXSnhaUlVGNjFUY3pUR0h2RVhuZUlubW1KbzlHZlhTQUtJNAotLS0gUzVTT01uelpPTWpSak9iNi96WXc2eVRlZzJJMlhhelB5L0ZXMHQyTHBvSQqRz2Q/mZL8hQxaMnU+gvpCrVeJ51prs7ZT+3Gtg4SRapCa8NwRIjJ7Z/M5RF3uHjSv4R2L+5OfqM4RArzYkRX3eAVTzNWk3uo4CH84hHOKf5Trh8pA3GEqOKKk",
+      "expected_class": "wrong_passphrase_or_key"
+    },
+    {
+      "name": "scrypt_wrong_passphrase",
+      "kind": "scrypt",
+      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IHNjcnlwdCBCU2phNUNOZ3dhb2NyTmtXVmRURW93IDEyClJoNjE3eTk2N0R1aXNJTlZDZlhGQTNsT3VIMkx5ejFvSUFtNkkzenZTc1EKLS0tIFhRQ0hVUEtOTEhEek03MU5tNzU1QUxrVkRTSk5pVmlUdTRXN2V3NDczMXMKqDs4J13nE7rgx3hTpJnSyFT5kZn41IgRj6QEs6yojSM2B/3/fGs8I4fNJzaNh2UEle6fI0B6",
+      "expected_class": "wrong_passphrase_or_key"
+    },
+    {
+      "name": "argon2id_wrong_passphrase",
+      "kind": "argon2id",
+      "ciphertext": "YWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IGFyZ29uMmlkIGw4dzVYMjNLQXVkTGFtMFdwaUl0SHcgdD0xLG09MzIscD0xCjV5eGVtYmhKU1l0TTZCczRtRnhnbm9RK3N5RGRoUUFvS0owMyt1aDhYL1NIOHArbnBRb292b3grQUpFCi0tLSBhaFBSNHE5RnlnWGM3cXNkdUt1MnFkbmlmUVc5UkZ0b3ViYXpITFFPdWY4ClgV2yN2Cg+Y+Vu1WORTGHB2x5A1PqjbtueNQmrquLNS7CSJS1f4nwZfb3nxkMdR4MuFExSmPhwGJw==",
+      "expected_class": "wrong_passphrase_or_key"
+    }
+  ],
+  "migration_cases": [
+    {
+      "name": "legacy_scrypt",
+      "input": "age-encryption.org/v1\n-\u003e scrypt abc 12\n--- header end\n",
+      "format": "scrypt",
+      "needs_migration": true
+    },
+    {
+      "name": "current_argon2id",
+      "input": "age-encryption.org/v1\n-\u003e argon2id abc t=1,m=32,p=1\n--- header end\n",
+      "format": "argon2id",
+      "needs_migration": false
+    },
+    {
+      "name": "unknown_envelope",
+      "input": "not an age envelope\n",
+      "format": "unknown",
+      "needs_migration": false
     }
   ]
 }
