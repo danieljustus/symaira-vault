@@ -690,7 +690,7 @@ mod tests {
     const ORACLE_SOURCE_DIGEST: &str =
         "cc99e5efc05aeb3d1dacff8499fa82748f200669f99121b04f512151c44f1d84";
     const ORACLE_GENERATOR_DIGEST: &str =
-        "fb436d4df39aa7ca674fd184305e2dc6825dd7d60cc044a1ea37178c82523043";
+        "176a9e52860fbbca71a01ea023d22fdcb35f22871bbc14edf5870a781ad71d5e";
 
     #[derive(serde::Deserialize)]
     struct OracleFixture {
@@ -702,6 +702,7 @@ mod tests {
         argon2id_cases: Vec<OracleEnvelope>,
         zero_key_cases: Vec<OracleZeroKey>,
         reencrypt_cases: Vec<OracleReencrypt>,
+        reencrypt_all_cases: Vec<OracleReencryptAll>,
         malformed_cases: Vec<OracleMalformed>,
         limit_cases: Vec<OracleLimit>,
         wrong_passphrase_cases: Vec<OracleWrongPassphrase>,
@@ -784,6 +785,38 @@ mod tests {
         recipients: Vec<String>,
         removed_recipient: String,
         removed_identity: String,
+    }
+    #[derive(serde::Deserialize)]
+    struct OracleReencryptAll {
+        name: String,
+        source_identity: String,
+        source_recipients: Vec<String>,
+        recipients: Vec<String>,
+        removed_recipient: String,
+        removed_identity: String,
+        before_manifest: OracleManifest,
+        after_manifest: OracleManifest,
+        files: Vec<OracleReencryptFile>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct OracleManifest {
+        entries: Vec<OracleManifestEntry>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct OracleManifestEntry {
+        path: String,
+        sha256: String,
+        size: i64,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct OracleReencryptFile {
+        path: String,
+        plaintext: String,
+        before_ciphertext: String,
+        after_ciphertext: String,
     }
 
     fn load_fixture() -> (String, OracleFixture) {
@@ -875,6 +908,37 @@ mod tests {
             |v| &v.name,
         )?;
         assert_names(
+            &fixture.reencrypt_all_cases,
+            &["filesystem_add_recipient", "filesystem_remove_recipient"],
+            |v| &v.name,
+        )?;
+        for item in &fixture.reencrypt_all_cases {
+            if item.source_identity.is_empty()
+                || item.source_recipients.is_empty()
+                || item.recipients.len() < 2
+                || item.files.is_empty()
+                || item.before_manifest.entries.len() != item.files.len()
+                || item.after_manifest.entries.len() != item.files.len()
+            {
+                return Err(format!(
+                    "incomplete filesystem re-encryption case {}",
+                    item.name
+                ));
+            }
+            for file in &item.files {
+                if file.path.is_empty()
+                    || file.plaintext.is_empty()
+                    || file.before_ciphertext.is_empty()
+                    || file.after_ciphertext.is_empty()
+                {
+                    return Err(format!(
+                        "incomplete filesystem re-encryption file {}",
+                        file.path
+                    ));
+                }
+            }
+        }
+        assert_names(
             &fixture.malformed_cases,
             &["empty", "not_age", "bad_stanza"],
             |v| &v.name,
@@ -915,6 +979,13 @@ mod tests {
             }
         }
         Ok(())
+    }
+
+    fn sha256_hex(value: &[u8]) -> String {
+        Sha256::digest(value)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect()
     }
 
     #[test]
@@ -1085,10 +1156,30 @@ mod tests {
     fn fixture_validation_rejects_omission_and_tampered_provenance() {
         let (raw, fixture) = load_fixture();
         validate_fixture(&fixture).unwrap();
-        let mut omitted: serde_json::Value = serde_json::from_str(&raw).unwrap();
-        omitted["identities"].as_array_mut().unwrap().pop();
-        let omitted_fixture: OracleFixture = serde_json::from_value(omitted).unwrap();
-        assert!(validate_fixture(&omitted_fixture).is_err());
+        for key in [
+            "identities",
+            "age_cases",
+            "scrypt_cases",
+            "argon2id_cases",
+            "zero_key_cases",
+            "reencrypt_cases",
+            "reencrypt_all_cases",
+            "malformed_cases",
+            "limit_cases",
+            "wrong_passphrase_cases",
+            "migration_cases",
+        ] {
+            let mut omitted: serde_json::Value = serde_json::from_str(&raw).unwrap();
+            omitted[key].as_array_mut().unwrap().pop();
+            let omitted_fixture: OracleFixture = serde_json::from_value(omitted).unwrap();
+            assert!(validate_fixture(&omitted_fixture).is_err(), "{key}");
+        }
+        for key in ["reencrypt_cases", "reencrypt_all_cases"] {
+            let mut tampered: serde_json::Value = serde_json::from_str(&raw).unwrap();
+            tampered[key][0]["name"] = serde_json::Value::String("tampered".to_owned());
+            let tampered_fixture: OracleFixture = serde_json::from_value(tampered).unwrap();
+            assert!(validate_fixture(&tampered_fixture).is_err(), "{key}");
+        }
         let mut tampered: serde_json::Value = serde_json::from_str(&raw).unwrap();
         tampered["oracle"]["source_digest"] = serde_json::Value::String("0".repeat(64));
         let tampered_fixture: OracleFixture = serde_json::from_value(tampered).unwrap();
@@ -1168,6 +1259,72 @@ mod tests {
                 FailureClass::WrongPassphraseOrKey
             );
         }
+        for case in &fixture.reencrypt_all_cases {
+            let source = parse_identity(&case.source_identity).unwrap();
+            let removed_identity = parse_identity(&case.removed_identity).unwrap();
+            assert_eq!(recipient_string(&removed_identity), case.removed_recipient);
+            let retained: Vec<Recipient> = case
+                .recipients
+                .iter()
+                .map(|recipient| parse_recipient(recipient).unwrap())
+                .collect();
+            assert!(retained.len() >= 2);
+            let before_manifest: std::collections::HashMap<_, _> = case
+                .before_manifest
+                .entries
+                .iter()
+                .map(|entry| (&entry.path, entry))
+                .collect();
+            let after_manifest: std::collections::HashMap<_, _> = case
+                .after_manifest
+                .entries
+                .iter()
+                .map(|entry| (&entry.path, entry))
+                .collect();
+            let root = std::env::temp_dir().join(format!(
+                "symvault-crypto-reencrypt-all-{}",
+                std::process::id()
+            ));
+            let entries_root = root.join("entries");
+            std::fs::create_dir_all(&entries_root).unwrap();
+            for file in &case.files {
+                let plaintext = base64::engine::general_purpose::STANDARD
+                    .decode(&file.plaintext)
+                    .unwrap();
+                let before = base64::engine::general_purpose::STANDARD
+                    .decode(&file.before_ciphertext)
+                    .unwrap();
+                let after = base64::engine::general_purpose::STANDARD
+                    .decode(&file.after_ciphertext)
+                    .unwrap();
+                assert_eq!(decrypt(&before, &source).unwrap(), plaintext);
+                for identity_case in &fixture.identities {
+                    if case.recipients.contains(&identity_case.recipient) {
+                        let identity = parse_identity(&identity_case.identity).unwrap();
+                        assert_eq!(decrypt(&after, &identity).unwrap(), plaintext);
+                    }
+                }
+                assert_eq!(
+                    decrypt(&after, &removed_identity).unwrap_err().class(),
+                    FailureClass::WrongPassphraseOrKey
+                );
+                let before_entry = before_manifest.get(&file.path).unwrap();
+                let after_entry = after_manifest.get(&file.path).unwrap();
+                assert_eq!(before_entry.size, before.len() as i64);
+                assert_eq!(after_entry.size, after.len() as i64);
+                assert_eq!(before_entry.sha256, sha256_hex(&before));
+                assert_eq!(after_entry.sha256, sha256_hex(&after));
+                let path = entries_root.join(format!("{}.age", file.path));
+                if let Some(parent) = path.parent() {
+                    std::fs::create_dir_all(parent).unwrap();
+                }
+                std::fs::write(&path, &after).unwrap();
+                assert_eq!(std::fs::read(&path).unwrap(), after);
+            }
+            std::fs::remove_dir_all(&root).unwrap();
+            let _ = retained;
+        }
+
         let zero = &fixture.zero_key_cases[0];
         let zero_ciphertext = base64::engine::general_purpose::STANDARD
             .decode(&zero.ciphertext)

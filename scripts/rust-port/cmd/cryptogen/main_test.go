@@ -103,3 +103,38 @@ func TestVerifyRejectsOmittedRequiredCases(t *testing.T) {
 		})
 	}
 }
+
+func TestVerifyRejectsOmittedOrTamperedReencryptFamilies(t *testing.T) {
+	root := rootDir()
+	value, err := build(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name   string
+		mutate func(*fixture)
+	}{
+		{"reencrypt", func(v *fixture) { v.ReencryptCases = v.ReencryptCases[:1] }},
+		{"reencrypt_all", func(v *fixture) { v.ReencryptAllCases = v.ReencryptAllCases[:1] }},
+		{"reencrypt_tamper", func(v *fixture) { v.ReencryptCases[0].Name = "tampered" }},
+		{"reencrypt_all_tamper", func(v *fixture) { v.ReencryptAllCases[0].Name = "tampered" }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			mutated := value
+			tc.mutate(&mutated)
+			if err := verify(root, writeFixtureForTest(t, mutated)); err == nil {
+				t.Fatal("verify accepted omitted or tampered re-encryption family")
+			}
+		})
+	}
+}
+
+func TestVerifyReencryptCasesRejectsEmpty(t *testing.T) {
+	if err := verifyReencryptCases(nil); err == nil {
+		t.Fatal("verifyReencryptCases accepted empty input")
+	}
+	if err := verifyReencryptAllCases(nil, nil); err == nil {
+		t.Fatal("verifyReencryptAllCases accepted empty input")
+	}
+}

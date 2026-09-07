@@ -17,6 +17,7 @@ import (
 
 	"filippo.io/age"
 
+	vaultconfig "github.com/danieljustus/symaira-vault/internal/config"
 	cryptopkg "github.com/danieljustus/symaira-vault/internal/crypto"
 
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
@@ -70,6 +71,8 @@ var (
 		"current_argon2id",
 		"unknown_envelope",
 	}
+	requiredReencryptNames    = []string{"add_recipient", "remove_recipient"}
+	requiredReencryptAllNames = []string{"filesystem_add_recipient", "filesystem_remove_recipient"}
 )
 
 type fixture struct {
@@ -81,6 +84,7 @@ type fixture struct {
 	Argon2idCases        []envelopeCase        `json:"argon2id_cases"`
 	ZeroKeyCases         []zeroKeyCase         `json:"zero_key_cases"`
 	ReencryptCases       []reencryptCase       `json:"reencrypt_cases"`
+	ReencryptAllCases    []reencryptAllCase    `json:"reencrypt_all_cases"`
 	MalformedCases       []malformedCase       `json:"malformed_cases"`
 	LimitCases           []limitCase           `json:"limit_cases"`
 	WrongPassphraseCases []wrongPassphraseCase `json:"wrong_passphrase_cases"`
@@ -129,6 +133,31 @@ type reencryptCase struct {
 	Recipients            []string `json:"recipients"`
 	RemovedRecipient      string   `json:"removed_recipient"`
 	RemovedIdentity       string   `json:"removed_identity"`
+}
+type reencryptAllCase struct {
+	Name             string                 `json:"name"`
+	SourceIdentity   string                 `json:"source_identity"`
+	SourceRecipients []string               `json:"source_recipients"`
+	Recipients       []string               `json:"recipients"`
+	RemovedRecipient string                 `json:"removed_recipient"`
+	RemovedIdentity  string                 `json:"removed_identity"`
+	BeforeManifest   manifestSnapshot       `json:"before_manifest"`
+	AfterManifest    manifestSnapshot       `json:"after_manifest"`
+	Files            []reencryptFileFixture `json:"files"`
+}
+type reencryptFileFixture struct {
+	Path             string `json:"path"`
+	Plaintext        string `json:"plaintext"`
+	BeforeCiphertext string `json:"before_ciphertext"`
+	AfterCiphertext  string `json:"after_ciphertext"`
+}
+type manifestSnapshot struct {
+	Entries []manifestEntryFixture `json:"entries"`
+}
+type manifestEntryFixture struct {
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256"`
+	Size   int64  `json:"size"`
 }
 type malformedCase struct {
 	Name          string `json:"name"`
@@ -296,6 +325,14 @@ func build(root string) (fixture, error) {
 		{Name: "add_recipient", Plaintext: addPlaintext, SourceIdentity: ids[0].Identity, SourceCiphertext: b64(addSource), SourceRecipients: []string{ids[0].Recipient}, ReencryptedCiphertext: b64(addReencrypted), Recipients: []string{ids[0].Recipient, ids[1].Recipient}, RemovedRecipient: ids[2].Recipient, RemovedIdentity: ids[2].Identity},
 		{Name: "remove_recipient", Plaintext: removePlaintext, SourceIdentity: ids[0].Identity, SourceCiphertext: b64(removeSource), SourceRecipients: []string{ids[0].Recipient, ids[1].Recipient, ids[2].Recipient}, ReencryptedCiphertext: b64(removeReencrypted), Recipients: []string{ids[0].Recipient, ids[1].Recipient}, RemovedRecipient: ids[2].Recipient, RemovedIdentity: ids[2].Identity},
 	}
+	filesystemAdd, err := buildReencryptAllCase("filesystem_add_recipient", parsed[0], parsed[1], parsed[2], false)
+	if err != nil {
+		return fixture{}, err
+	}
+	filesystemRemove, err := buildReencryptAllCase("filesystem_remove_recipient", parsed[0], parsed[1], parsed[2], true)
+	if err != nil {
+		return fixture{}, err
+	}
 	return fixture{
 		SchemaVersion: 1,
 		Oracle:        meta,
@@ -306,10 +343,11 @@ func build(root string) (fixture, error) {
 			{Name: "two_recipients", Plaintext: twoPlaintext, Ciphertext: b64(two), Recipients: []string{ids[0].Recipient, ids[1].Recipient}},
 			{Name: "three_recipients", Plaintext: threePlaintext, Ciphertext: b64(three), Recipients: []string{ids[0].Recipient, ids[1].Recipient, ids[2].Recipient}},
 		},
-		ScryptCases:    []envelopeCase{{Name: "legacy_work_factor_12", Plaintext: "legacy scrypt envelope", Ciphertext: b64(scrypt)}},
-		Argon2idCases:  []envelopeCase{{Name: "current_tiny_fixture_params", Plaintext: "current argon2id envelope", Ciphertext: b64(argon), Params: &argonParams}},
-		ZeroKeyCases:   []zeroKeyCase{{Name: "historical_zero_key_length_23", Ciphertext: b64(zero), PassphraseLength: 23}},
-		ReencryptCases: reencryptCases,
+		ScryptCases:       []envelopeCase{{Name: "legacy_work_factor_12", Plaintext: "legacy scrypt envelope", Ciphertext: b64(scrypt)}},
+		Argon2idCases:     []envelopeCase{{Name: "current_tiny_fixture_params", Plaintext: "current argon2id envelope", Ciphertext: b64(argon), Params: &argonParams}},
+		ZeroKeyCases:      []zeroKeyCase{{Name: "historical_zero_key_length_23", Ciphertext: b64(zero), PassphraseLength: 23}},
+		ReencryptCases:    reencryptCases,
+		ReencryptAllCases: []reencryptAllCase{filesystemAdd, filesystemRemove},
 		MalformedCases: []malformedCase{
 			{Name: "empty", Input: "", ExpectedClass: "malformed_envelope"},
 			{Name: "not_age", Input: "not an age envelope\n", ExpectedClass: "malformed_envelope"},
@@ -373,6 +411,8 @@ func validateFixture(value fixture, expected oracle) error {
 		{limitNames(value.LimitCases), requiredLimitNames},
 		{wrongNames(value.WrongPassphraseCases), requiredWrongPassphraseNames},
 		{migrationNames(value.MigrationCases), requiredMigrationNames},
+		{reencryptNames(value.ReencryptCases), requiredReencryptNames},
+		{reencryptAllNames(value.ReencryptAllCases), requiredReencryptAllNames},
 	}
 	for _, group := range groups {
 		if err := exactNames(group.got, group.want); err != nil {
@@ -475,6 +515,21 @@ func migrationNames(v []migrationCase) []string {
 	return r
 }
 
+func reencryptNames(v []reencryptCase) []string {
+	r := make([]string, len(v))
+	for i := range v {
+		r[i] = v[i].Name
+	}
+	return r
+}
+func reencryptAllNames(v []reencryptAllCase) []string {
+	r := make([]string, len(v))
+	for i := range v {
+		r[i] = v[i].Name
+	}
+	return r
+}
+
 func verifyIdentities(cases []identityCase) (map[string]*age.X25519Identity, error) {
 	identities := make(map[string]*age.X25519Identity, len(cases))
 	for _, tc := range cases {
@@ -537,6 +592,9 @@ func verifyEnvelopeCases(value fixture, identities map[string]*age.X25519Identit
 }
 
 func verifyReencryptCases(cases []reencryptCase) error {
+	if len(cases) == 0 {
+		return errors.New("re-encryption cases are empty")
+	}
 	for _, tc := range cases {
 		source, err := base64.StdEncoding.DecodeString(tc.SourceCiphertext)
 		if err != nil {
@@ -588,6 +646,216 @@ func verifyReencryptCases(cases []reencryptCase) error {
 		}
 		if _, err := cryptopkg.Decrypt(stored, removedIdentity); err == nil {
 			return fmt.Errorf("re-encryption vector %q removed recipient still decrypts", tc.Name)
+		}
+	}
+	return nil
+}
+
+func buildReencryptAllCase(name string, source, added, removed *age.X25519Identity, sourceIncludesRemoved bool) (reencryptAllCase, error) {
+	dir, err := os.MkdirTemp("", "symvault-cryptogen-reencrypt-all-")
+	if err != nil {
+		return reencryptAllCase{}, err
+	}
+	defer os.RemoveAll(dir)
+
+	cfg := vaultconfig.Default()
+	cfg.VaultDir = dir
+	if err := vaultpkg.Init(dir, source, cfg); err != nil {
+		return reencryptAllCase{}, fmt.Errorf("init filesystem fixture: %w", err)
+	}
+	paths := []string{"alpha/entry", "nested/beta"}
+	values := []string{"filesystem re-encryption alpha", "filesystem re-encryption beta"}
+	for i, path := range paths {
+		if err := vaultpkg.WriteEntry(dir, path, &vaultpkg.Entry{Data: map[string]any{"value": values[i]}}, source); err != nil {
+			return reencryptAllCase{}, fmt.Errorf("write filesystem fixture %s: %w", path, err)
+		}
+	}
+	sourceRecipients := []*age.X25519Recipient{source.Recipient()}
+	if sourceIncludesRemoved {
+		sourceRecipients = append(sourceRecipients, added.Recipient(), removed.Recipient())
+		for _, path := range paths {
+			filePath := filepath.Join(dir, "entries", filepath.FromSlash(path)+".age")
+			raw, readErr := os.ReadFile(filePath) // #nosec G304 -- path is generated inside an isolated temp vault.
+			if readErr != nil {
+				return reencryptAllCase{}, readErr
+			}
+			plain, decryptErr := cryptopkg.Decrypt(raw, source)
+			if decryptErr != nil {
+				return reencryptAllCase{}, decryptErr
+			}
+			rewritten, encryptErr := cryptopkg.EncryptWithRecipients(plain, sourceRecipients...)
+			cryptopkg.Wipe(plain)
+			if encryptErr != nil {
+				return reencryptAllCase{}, encryptErr
+			}
+			if writeErr := os.WriteFile(filePath, rewritten, 0o600); writeErr != nil {
+				return reencryptAllCase{}, writeErr
+			}
+			if updateErr := vaultpkg.UpdateManifestEntry(dir, path, rewritten, source); updateErr != nil {
+				return reencryptAllCase{}, updateErr
+			}
+		}
+	}
+	before, err := snapshotManifest(dir, source)
+	if err != nil {
+		return reencryptAllCase{}, fmt.Errorf("capture before manifest: %w", err)
+	}
+	beforeFiles := make(map[string][]byte, len(paths))
+	plaintexts := make(map[string][]byte, len(paths))
+	for _, path := range paths {
+		filePath := filepath.Join(dir, "entries", filepath.FromSlash(path)+".age")
+		raw, readErr := os.ReadFile(filePath) // #nosec G304 -- path is generated inside an isolated temp vault.
+		if readErr != nil {
+			return reencryptAllCase{}, readErr
+		}
+		plain, decryptErr := cryptopkg.Decrypt(raw, source)
+		if decryptErr != nil {
+			return reencryptAllCase{}, decryptErr
+		}
+		beforeFiles[path] = raw
+		plaintexts[path] = plain
+	}
+	retained := []*age.X25519Recipient{source.Recipient(), added.Recipient()}
+	if err := vaultpkg.ReencryptAll(dir, source, retained); err != nil {
+		return reencryptAllCase{}, fmt.Errorf("ReencryptAll filesystem fixture: %w", err)
+	}
+	after, err := snapshotManifest(dir, source)
+	if err != nil {
+		return reencryptAllCase{}, fmt.Errorf("capture after manifest: %w", err)
+	}
+	files := make([]reencryptFileFixture, 0, len(paths))
+	for _, path := range paths {
+		filePath := filepath.Join(dir, "entries", filepath.FromSlash(path)+".age")
+		afterRaw, readErr := os.ReadFile(filePath) // #nosec G304 -- path is generated inside an isolated temp vault.
+		if readErr != nil {
+			return reencryptAllCase{}, readErr
+		}
+		for _, identity := range []*age.X25519Identity{source, added} {
+			plain, decryptErr := cryptopkg.Decrypt(afterRaw, identity)
+			if decryptErr != nil || string(plain) != string(plaintexts[path]) {
+				return reencryptAllCase{}, fmt.Errorf("retained recipient cannot decrypt %s", path)
+			}
+			cryptopkg.Wipe(plain)
+		}
+		if _, decryptErr := cryptopkg.Decrypt(afterRaw, removed); decryptErr == nil {
+			return reencryptAllCase{}, fmt.Errorf("removed recipient decrypts %s", path)
+		}
+		files = append(files, reencryptFileFixture{
+			Path:             path,
+			Plaintext:        b64(plaintexts[path]),
+			BeforeCiphertext: b64(beforeFiles[path]),
+			AfterCiphertext:  b64(afterRaw),
+		})
+		cryptopkg.Wipe(plaintexts[path])
+	}
+	toStrings := func(values []*age.X25519Recipient) []string {
+		result := make([]string, len(values))
+		for i, value := range values {
+			result[i] = value.String()
+		}
+		return result
+	}
+	return reencryptAllCase{
+		Name:             name,
+		SourceIdentity:   source.String(),
+		SourceRecipients: toStrings(sourceRecipients),
+		Recipients:       toStrings(retained),
+		RemovedRecipient: removed.Recipient().String(),
+		RemovedIdentity:  removed.String(),
+		BeforeManifest:   before,
+		AfterManifest:    after,
+		Files:            files,
+	}, nil
+}
+
+func snapshotManifest(vaultDir string, identity *age.X25519Identity) (manifestSnapshot, error) {
+	manifest, err := vaultpkg.LoadManifest(vaultDir, identity)
+	if err != nil {
+		return manifestSnapshot{}, err
+	}
+	paths := make([]string, 0, len(manifest.Entries))
+	for path := range manifest.Entries {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	entries := make([]manifestEntryFixture, 0, len(paths))
+	for _, path := range paths {
+		entry := manifest.Entries[path]
+		entries = append(entries, manifestEntryFixture{Path: path, SHA256: entry.SHA256, Size: entry.Size})
+	}
+	return manifestSnapshot{Entries: entries}, nil
+}
+
+func verifyReencryptAllCases(cases []reencryptAllCase, identities map[string]*age.X25519Identity) error {
+	if len(cases) == 0 {
+		return errors.New("filesystem re-encryption cases are empty")
+	}
+	for _, tc := range cases {
+		if tc.Name == "" || len(tc.Files) == 0 || len(tc.Recipients) < 2 {
+			return fmt.Errorf("filesystem re-encryption case %q is incomplete", tc.Name)
+		}
+		source, err := age.ParseX25519Identity(tc.SourceIdentity)
+		if err != nil {
+			return fmt.Errorf("filesystem re-encryption case %q has invalid source identity: %w", tc.Name, err)
+		}
+		retained, err := cryptopkg.ParseRecipients(tc.Recipients)
+		if err != nil {
+			return err
+		}
+		removedIdentity, err := age.ParseX25519Identity(tc.RemovedIdentity)
+		if err != nil || removedIdentity.Recipient().String() != tc.RemovedRecipient {
+			return fmt.Errorf("filesystem re-encryption case %q removed identity mismatch", tc.Name)
+		}
+		manifestEntries := func(snapshot manifestSnapshot) map[string]manifestEntryFixture {
+			result := make(map[string]manifestEntryFixture, len(snapshot.Entries))
+			for _, entry := range snapshot.Entries {
+				result[entry.Path] = entry
+			}
+			return result
+		}
+		beforeManifest := manifestEntries(tc.BeforeManifest)
+		afterManifest := manifestEntries(tc.AfterManifest)
+		if len(beforeManifest) != len(tc.Files) || len(afterManifest) != len(tc.Files) {
+			return fmt.Errorf("filesystem re-encryption case %q manifest cardinality mismatch", tc.Name)
+		}
+		for _, file := range tc.Files {
+			before, err := base64.StdEncoding.DecodeString(file.BeforeCiphertext)
+			if err != nil {
+				return err
+			}
+			after, err := base64.StdEncoding.DecodeString(file.AfterCiphertext)
+			if err != nil {
+				return err
+			}
+			plaintext, err := base64.StdEncoding.DecodeString(file.Plaintext)
+			if err != nil {
+				return err
+			}
+			if got, err := cryptopkg.Decrypt(before, source); err != nil || string(got) != string(plaintext) {
+				return fmt.Errorf("filesystem re-encryption case %q source failed for %s", tc.Name, file.Path)
+			}
+			for _, recipient := range retained {
+				identity := identities[recipient.String()]
+				if identity == nil {
+					return fmt.Errorf("filesystem re-encryption case %q references unknown retained recipient", tc.Name)
+				}
+				if got, err := cryptopkg.Decrypt(after, identity); err != nil || string(got) != string(plaintext) {
+					return fmt.Errorf("filesystem re-encryption case %q retained failed for %s", tc.Name, file.Path)
+				}
+			}
+			if _, err := cryptopkg.Decrypt(after, removedIdentity); err == nil {
+				return fmt.Errorf("filesystem re-encryption case %q removed recipient still decrypts %s", tc.Name, file.Path)
+			}
+			hash := sha256.Sum256(after)
+			afterEntry, ok := afterManifest[file.Path]
+			if !ok || afterEntry.SHA256 != hex.EncodeToString(hash[:]) || afterEntry.Size != int64(len(after)) {
+				return fmt.Errorf("filesystem re-encryption case %q after manifest mismatch for %s", tc.Name, file.Path)
+			}
+			beforeHash := sha256.Sum256(before)
+			beforeEntry, ok := beforeManifest[file.Path]
+			if !ok || beforeEntry.SHA256 != hex.EncodeToString(beforeHash[:]) || beforeEntry.Size != int64(len(before)) {
+				return fmt.Errorf("filesystem re-encryption case %q before manifest mismatch for %s", tc.Name, file.Path)
+			}
 		}
 	}
 	return nil
@@ -649,6 +917,9 @@ func verify(root, path string) error {
 		return err
 	}
 	if err := verifyReencryptCases(got.ReencryptCases); err != nil {
+		return err
+	}
+	if err := verifyReencryptAllCases(got.ReencryptAllCases, identities); err != nil {
 		return err
 	}
 	return verifyNegativeCases(got, identities)

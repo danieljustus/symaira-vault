@@ -6,11 +6,14 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"filippo.io/age"
 
+	vaultconfig "github.com/danieljustus/symaira-vault/internal/config"
 	cryptopkg "github.com/danieljustus/symaira-vault/internal/crypto"
+	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func main() {
@@ -65,6 +68,45 @@ func main() {
 	if _, err = cryptopkg.Decrypt(reencryptCipher, id3); err == nil {
 		panic("Go decrypted Rust re-encryption vector for removed recipient")
 	}
+
+	// Exercise the Rust ciphertext through the real filesystem orchestration,
+	// using only an isolated temporary vault and never a production path.
+	fixtureDir, err := os.MkdirTemp("", "symvault-cryptoverify-reencrypt-all-")
+	if err != nil {
+		panic(err)
+	}
+	defer os.RemoveAll(fixtureDir)
+	cfg := vaultconfig.Default()
+	cfg.VaultDir = fixtureDir
+	if err := vaultpkg.Init(fixtureDir, id, cfg); err != nil {
+		panic(err)
+	}
+	entryPath := filepath.Join(fixtureDir, "entries", "rust", "entry.age")
+	if err := os.MkdirAll(filepath.Dir(entryPath), 0o700); err != nil {
+		panic(err)
+	}
+	if err := os.WriteFile(entryPath, decode(values, "reencrypt_entry"), 0o600); err != nil {
+		panic(err)
+	}
+	for _, retained := range []*age.X25519Identity{id, id2} {
+		entry, err := vaultpkg.ReadEntry(fixtureDir, "rust/entry", retained)
+		if err != nil || entry.Data["secret"] != "Rust filesystem entry" {
+			panic("Go could not read Rust filesystem re-encryption fixture")
+		}
+	}
+	if err := vaultpkg.ReencryptAll(fixtureDir, id, []*age.X25519Recipient{id.Recipient(), id3.Recipient()}); err != nil {
+		panic(err)
+	}
+	for _, retained := range []*age.X25519Identity{id, id3} {
+		entry, err := vaultpkg.ReadEntry(fixtureDir, "rust/entry", retained)
+		if err != nil || entry.Data["secret"] != "Rust filesystem entry" {
+			panic("Go ReencryptAll rejected Rust filesystem fixture")
+		}
+	}
+	if _, err := vaultpkg.ReadEntry(fixtureDir, "rust/entry", id2); err == nil {
+		panic("Go ReencryptAll retained removed Rust recipient")
+	}
+
 	scryptCipher := decode(values, "scrypt")
 	plain, err = cryptopkg.DecryptWithPassphrase(scryptCipher, append([]byte(nil), passphrase...))
 	if err != nil || string(plain) != "Rust encrypts scrypt for Go" {
@@ -75,7 +117,7 @@ func main() {
 	if err != nil || string(plain) != "Rust encrypts argon2id for Go" {
 		panic("Go could not decrypt Rust argon2id vector")
 	}
-	fmt.Println("PASS Rust encrypt -> Go decrypt (age, scrypt, argon2id)")
+	fmt.Println("PASS Rust encrypt -> Go decrypt (age, scrypt, argon2id, filesystem ReencryptAll)")
 }
 
 func closeFile(file *os.File) {
