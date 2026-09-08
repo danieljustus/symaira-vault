@@ -183,8 +183,10 @@ func extract(root string) (string, error) {
 		return "", e
 	}
 	ap := archive.Name()
-	archive.Close()
-	defer os.Remove(ap)
+	defer func() { _ = os.Remove(ap) }()
+	if e = archive.Close(); e != nil {
+		return "", fmt.Errorf("close oracle archive: %w", e)
+	}
 	if e = exec.Command("git", "-C", root, "archive", "--format=tar", "--output="+ap, oracleCommit).Run(); e != nil {
 		return "", e
 	}
@@ -192,7 +194,7 @@ func extract(root string) (string, error) {
 	if e != nil {
 		return "", e
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	tr := tar.NewReader(f)
 	for {
 		h, e := tr.Next()
@@ -207,9 +209,10 @@ func extract(root string) (string, error) {
 			return "", errors.New("unsafe oracle path")
 		}
 		out := filepath.Join(dir, name)
-		if h.Typeflag == tar.TypeDir {
+		switch h.Typeflag {
+		case tar.TypeDir:
 			e = os.MkdirAll(out, 0750)
-		} else if h.Typeflag == tar.TypeReg {
+		case tar.TypeReg:
 			e = os.MkdirAll(filepath.Dir(out), 0750)
 			if e == nil {
 				data := make([]byte, h.Size)
@@ -231,7 +234,7 @@ func runOracle(root string) ([]Case, error) {
 	if e != nil {
 		return nil, e
 	}
-	defer os.RemoveAll(tree)
+	defer func() { _ = os.RemoveAll(tree) }()
 	p := filepath.Join(tree, "cmd", "syncoracle", "main.go")
 	if e = os.MkdirAll(filepath.Dir(p), 0750); e != nil {
 		return nil, e
@@ -288,8 +291,14 @@ func sameJSON(a, b json.RawMessage) bool {
 	if json.Unmarshal(a, &x) != nil || json.Unmarshal(b, &y) != nil {
 		return false
 	}
-	ax, _ := json.Marshal(x)
-	by, _ := json.Marshal(y)
+	ax, err := json.Marshal(x)
+	if err != nil {
+		return false
+	}
+	by, err := json.Marshal(y)
+	if err != nil {
+		return false
+	}
 	return bytes.Equal(ax, by)
 }
 func validate(root, path string) error {

@@ -173,8 +173,9 @@ func buildConfigCases(root string) []configCase {
 		snapshot := snapshotConfig(cfg, root)
 		item.Expected = &snapshot
 		savedPath := filepath.Join(root, input.name, "saved.yaml")
-		if err := cfg.SaveTo(savedPath); err != nil {
-			panic(fmt.Errorf("save %s: %w", input.name, err))
+		saveErr := cfg.SaveTo(savedPath)
+		if saveErr != nil {
+			panic(fmt.Errorf("save %s: %w", input.name, saveErr))
 		}
 		saved, err := os.ReadFile(savedPath)
 		if err != nil {
@@ -289,7 +290,7 @@ func main() {
 	if err != nil {
 		fatal("temporary root: %v", err)
 	}
-	defer os.RemoveAll(tmp)
+	defer func() { _ = os.RemoveAll(tmp) }()
 	oldHome, oldConfig, oldData, oldCache := os.Getenv("HOME"), os.Getenv("XDG_CONFIG_HOME"), os.Getenv("XDG_DATA_HOME"), os.Getenv("XDG_CACHE_HOME")
 	defer func() {
 		_ = os.Setenv("HOME", oldHome)

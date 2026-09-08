@@ -210,7 +210,15 @@ func buildAuditFixture(root string) (auditFixture, error) {
 	truncatedHMAC[2] = auditEntryLineFromMap(truncated)
 	inserted := append([]json.RawMessage{entries[0], auditEntryLine(LogEntry{Timestamp: "2026-01-01T00:00:01Z", Agent: "fixture-agent", Action: "inserted", OK: true})}, entries[1:]...)
 	wrongKey := VerifyLogBytesWithKids(entries, map[string][]byte{KeyFingerprint(oldKey): []byte("audit-fixture-bad-key-0000000000"), KeyFingerprint(newKey): newKey}, KeyFingerprint(newKey))
-	negatives := []auditNegativeCase{makeCase("mutation", mutated), makeCase("reorder", reordered), makeCase("truncated_hmac", truncatedHMAC), makeCase("insertion", inserted), makeCase("reset_after_chain", append(append(append([]json.RawMessage(nil), entries[:2]...), legacy), entries[2:]...)), {Name: "key_mismatch", Lines: entries, Valid: wrongKey.Valid, Total: wrongKey.Total, Verified: wrongKey.Verified, Legacy: wrongKey.Legacy, Tampered: wrongKey.Tampered, Unverifiable: wrongKey.Unverifiable, FirstBadIndex: wrongKey.FirstBadIdx}}
+	negatives := make([]auditNegativeCase, 0, 7)
+	negatives = append(negatives,
+		makeCase("mutation", mutated),
+		makeCase("reorder", reordered),
+		makeCase("truncated_hmac", truncatedHMAC),
+		makeCase("insertion", inserted),
+		makeCase("reset_after_chain", append(append(append([]json.RawMessage(nil), entries[:2]...), legacy), entries[2:]...)),
+		auditNegativeCase{Name: "key_mismatch", Lines: entries, Valid: wrongKey.Valid, Total: wrongKey.Total, Verified: wrongKey.Verified, Legacy: wrongKey.Legacy, Tampered: wrongKey.Tampered, Unverifiable: wrongKey.Unverifiable, FirstBadIndex: wrongKey.FirstBadIdx},
+	)
 	endTruncated := append([]json.RawMessage(nil), entries[:len(entries)-1]...)
 	negatives = append(negatives, makeCase("end_truncation_is_undetectable", endTruncated))
 	return auditFixture{SchemaVersion: 1, Oracle: oracle, Keys: keys, Entries: entries, Legacy: legacy, Negatives: negatives, Export: auditExportFixture{Action: "set", FailedOnly: true, RedactedPath: RedactPath("safe/password"), Total: 1}, Rotation: auditRotationFixture{ArchivePrefix: "audit-hmac-key.rotated.", ArchiveKid: KeyFingerprint(oldKey), Bootstrap: true}}, nil

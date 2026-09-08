@@ -120,7 +120,7 @@ func buildSessionFixture(meta oracle) sessionFixture {
 	}
 	value, err := manager.LoadPassphrase(v)
 	if err != nil || string(value) != "fixture-secret" {
-		panic(fmt.Errorf("session round trip: %v", err))
+		panic(fmt.Errorf("session round trip: %w", err))
 	}
 	cases = append(cases, sessionCase{Name: "encrypted_round_trip", Operations: []string{"save_passphrase", "load_passphrase"}, Expected: "fixture-secret"})
 
@@ -200,7 +200,10 @@ func buildQuotaFixture(meta oracle, root string) quotaFixture {
 		panic(err)
 	}
 	_, _ = q.Increment("after_reset")
-	q.Close()
+	closeErr := q.Close()
+	if closeErr != nil {
+		panic(fmt.Errorf("close quota counter: %w", closeErr))
+	}
 	closedOK, closedCurrent := q.Check("after_reset", 10)
 	info, err := os.Stat(filepath.Join(dir, ".quotas.json"))
 	if err != nil {
@@ -328,7 +331,7 @@ func main() {
 	if err != nil {
 		fatal("temp root: %v", err)
 	}
-	defer os.RemoveAll(tmp)
+	defer func() { _ = os.RemoveAll(tmp) }()
 	sessionContent := marshal(buildSessionFixture(meta))
 	quotaContent := marshal(buildQuotaFixture(meta, tmp))
 	if err := writeOrCheck(*outputSession, sessionContent, *check); err != nil {
