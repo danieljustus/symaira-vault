@@ -404,25 +404,7 @@ func WriteEntryWithRecipients(vaultDir, path string, entry *Entry, identity *age
 		return err
 	}
 	now := time.Now().UTC()
-	copyEntry := cloneEntry(entry)
-	if copyEntry.Metadata.Created.IsZero() {
-		copyEntry.Metadata.Created = now
-	}
-	copyEntry.Metadata.Updated = now
-	copyEntry.Metadata.Version++
-	if copyEntry.Data == nil {
-		copyEntry.Data = map[string]any{}
-	}
-	if copyEntry.PendingWrite != nil {
-		record := *copyEntry.PendingWrite
-		record.Timestamp = now
-		copyEntry.Metadata.WriteHistory = append(copyEntry.Metadata.WriteHistory, record)
-		copyEntry.PendingWrite = nil
-	}
-
-	if isPseudonymizeEnabled(cfg) {
-		copyEntry.Path = path
-	}
+	copyEntry := PrepareEntryForWrite(entry, now, path, isPseudonymizeEnabled(cfg))
 
 	plaintext, err := json.Marshal(copyEntry)
 	if err != nil {

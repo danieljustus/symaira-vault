@@ -24,6 +24,9 @@ use zeroize::{Zeroize, Zeroizing};
 /// Keyed JSONL audit logging, verification, rotation, and export.
 pub mod audit;
 
+/// Pure fixed-clock write metadata preparation.
+pub mod metadata;
+
 const ENTRIES_DIR: &str = "entries";
 const CONFIG_FILE: &str = "config.yaml";
 const IDENTITY_FILE: &str = "identity.age";
