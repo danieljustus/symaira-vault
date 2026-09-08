@@ -544,7 +544,7 @@ fn path_validation_and_symlink_reads_fail_closed() {
         assert!(validate_entry_path(path).is_err(), "accepted {path:?}");
     }
     let (_, value) = fixture();
-    let identity = parse_identity(IDENTITY).unwrap();
+    let _identity = parse_identity(IDENTITY).unwrap();
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().to_path_buf();
     materialize(&root, &value.vaults[0]);
@@ -556,7 +556,7 @@ fn path_validation_and_symlink_reads_fail_closed() {
         )
         .unwrap();
         assert!(matches!(
-            Store::open(&root, &identity),
+            Store::open(&root, &_identity),
             Err(StoreError::Symlink(_))
         ));
     }
