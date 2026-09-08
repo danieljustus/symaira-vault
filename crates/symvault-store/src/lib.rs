@@ -1440,10 +1440,12 @@ impl Store {
         pending: Option<&WriteRecord>,
     ) -> Result<(), StoreError> {
         validate_entry_path(path)?;
-        let stored = metadata::prepare_entry(entry, now, path, pseudonymize, pending)
-            .map_err(|detail| StoreError::Entry {
-                path: path.to_owned(),
-                detail,
+        let stored =
+            metadata::prepare_entry(entry, now, path, pseudonymize, pending).map_err(|detail| {
+                StoreError::Entry {
+                    path: path.to_owned(),
+                    detail,
+                }
             })?;
         validate_entry_values(&stored)?;
         let target = self.fresh_entry_path(path)?;
@@ -1816,19 +1818,35 @@ struct EmptyIndexValue {}
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 struct IndexDocument {
-    #[serde(
-        rename = "v",
-        default,
-        deserialize_with = "deserialize_null_generic"
-    )]
+    #[serde(rename = "v", default, deserialize_with = "deserialize_null_generic")]
     values: BTreeMap<String, Vec<String>>,
-    #[serde(rename = "ti", default, deserialize_with = "deserialize_null_generic", skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(
+        rename = "ti",
+        default,
+        deserialize_with = "deserialize_null_generic",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
     token_index: BTreeMap<String, BTreeMap<String, EmptyIndexValue>>,
-    #[serde(rename = "pt", default, deserialize_with = "deserialize_null_generic", skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(
+        rename = "pt",
+        default,
+        deserialize_with = "deserialize_null_generic",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
     path_tokens: BTreeMap<String, Vec<String>>,
-    #[serde(rename = "hi", default, deserialize_with = "deserialize_null_generic", skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(
+        rename = "hi",
+        default,
+        deserialize_with = "deserialize_null_generic",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
     host_index: BTreeMap<String, BTreeMap<String, EmptyIndexValue>>,
-    #[serde(rename = "ph", default, deserialize_with = "deserialize_null_generic", skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(
+        rename = "ph",
+        default,
+        deserialize_with = "deserialize_null_generic",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
     path_hosts: BTreeMap<String, Vec<String>>,
     #[serde(
         rename = "c",
@@ -1837,9 +1855,20 @@ struct IndexDocument {
         skip_serializing_if = "is_zero"
     )]
     entry_count: usize,
-    #[serde(rename = "p", default, deserialize_with = "deserialize_null_generic", skip_serializing_if = "BTreeMap::is_empty")]
+    #[serde(
+        rename = "p",
+        default,
+        deserialize_with = "deserialize_null_generic",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
     paths: BTreeMap<String, EmptyIndexValue>,
-    #[serde(rename = "s", default, deserialize_with = "deserialize_index_salt", serialize_with = "serialize_index_salt", skip_serializing_if = "Vec::is_empty")]
+    #[serde(
+        rename = "s",
+        default,
+        deserialize_with = "deserialize_index_salt",
+        serialize_with = "serialize_index_salt",
+        skip_serializing_if = "Vec::is_empty"
+    )]
     salt: Vec<u8>,
 }
 

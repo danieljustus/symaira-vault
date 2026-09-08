@@ -962,3 +962,36 @@ fn concurrent_same_target_fresh_writes_have_one_winner_and_no_temp_leak() {
             })
     );
 }
+
+#[test]
+fn go_index_salt_string_is_not_accepted_by_old_rust_schema() {
+    #[allow(dead_code)]
+    #[derive(serde::Deserialize)]
+    struct OldRustIndexDocument {
+        #[serde(rename = "v")]
+        values: std::collections::BTreeMap<String, Vec<String>>,
+        #[serde(rename = "c")]
+        entry_count: usize,
+        #[serde(rename = "p")]
+        paths: std::collections::BTreeMap<String, EmptyIndexValue>,
+        #[serde(rename = "s", default)]
+        salt: Vec<u8>,
+    }
+
+    let go_document = r#"{
+        "v":{"go-doc":["go-rust-accepted"]},
+        "c":1,
+        "p":{"go-doc":{}},
+        "s":"AQIDBAUGBwgJCgsMDQ4PEA=="
+    }"#;
+    let old_result = serde_json::from_str::<OldRustIndexDocument>(go_document);
+    assert!(
+        old_result.is_err(),
+        "old Rust Vec<u8> salt schema accepted Go base64 string"
+    );
+    let current = serde_json::from_str::<IndexDocument>(go_document).expect("current Go schema");
+    assert_eq!(current.salt, (1u8..=16).collect::<Vec<_>>());
+    assert_eq!(current.entry_count, 1);
+    assert_eq!(current.values["go-doc"], vec!["go-rust-accepted"]);
+    assert!(current.paths.contains_key("go-doc"));
+}
