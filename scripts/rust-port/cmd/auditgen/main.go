@@ -173,7 +173,7 @@ func fixedEntries() []auditpkg.LogEntry {
 	}
 }
 
-func buildFixture(root string) (fixture, error) {
+func buildFixture(root string) (built fixture, retErr error) {
 	meta, err := authoritativeOracle(root)
 	if err != nil {
 		return fixture{}, err
@@ -187,9 +187,13 @@ func buildFixture(root string) (fixture, error) {
 	if err != nil {
 		return fixture{}, fmt.Errorf("create isolated audit directory: %w", err)
 	}
-	defer os.RemoveAll(dir) // #nosec G304 -- dir is the generator's private temporary directory.
+	defer func() { // #nosec G304 -- dir is the generator's private temporary directory.
+		if removeErr := os.RemoveAll(dir); removeErr != nil && retErr == nil {
+			retErr = fmt.Errorf("remove isolated audit directory: %w", removeErr)
+		}
+	}()
 
-	if err := os.WriteFile(filepath.Join(dir, "audit-hmac-key"), key, 0o600); err != nil {
+	if err = os.WriteFile(filepath.Join(dir, "audit-hmac-key"), key, 0o600); err != nil {
 		return fixture{}, fmt.Errorf("seed fixture HMAC key: %w", err)
 	}
 
@@ -200,25 +204,25 @@ func buildFixture(root string) (fixture, error) {
 		return fixture{}, fmt.Errorf("open production audit logger: %w", err)
 	}
 	for _, entry := range fixedEntries() {
-		if err := logger.LogEntry(entry); err != nil {
+		if err = logger.LogEntry(entry); err != nil {
 			_ = logger.Close()
 			restoreConfig()
 			return fixture{}, fmt.Errorf("write production audit entry: %w", err)
 		}
 	}
-	if err := logger.Close(); err != nil {
+	if err = logger.Close(); err != nil {
 		restoreConfig()
 		return fixture{}, fmt.Errorf("close production audit logger: %w", err)
 	}
 	restoreConfig()
 
 	logPath := filepath.Join(dir, "audit-"+fixtureAgent+".log")
-	result, err := auditpkg.VerifyLog(logPath, key)
+	verification, err := auditpkg.VerifyLog(logPath, key)
 	if err != nil {
 		return fixture{}, fmt.Errorf("verify generated audit chain: %w", err)
 	}
-	if !result.Valid || result.Total != len(fixedEntries()) || result.Verified != len(fixedEntries()) || result.Tampered != 0 || result.Legacy != 0 || result.FirstBadIdx != -1 {
-		return fixture{}, fmt.Errorf("generated audit chain did not verify: %+v", result)
+	if !verification.Valid || verification.Total != len(fixedEntries()) || verification.Verified != len(fixedEntries()) || verification.Tampered != 0 || verification.Legacy != 0 || verification.FirstBadIdx != -1 {
+		return fixture{}, fmt.Errorf("generated audit chain did not verify: %+v", verification)
 	}
 
 	data, err := os.ReadFile(logPath) // #nosec G304 -- logPath is inside the generator's private temp directory.
@@ -232,14 +236,14 @@ func buildFixture(root string) (fixture, error) {
 			continue
 		}
 		var entry auditpkg.LogEntry
-		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+		if err = json.Unmarshal([]byte(line), &entry); err != nil {
 			return fixture{}, fmt.Errorf("decode generated entry %d: %w", i, err)
 		}
 		storedHMAC := entry.HMAC
 		entry.HMAC = ""
-		canonical, err := json.Marshal(entry)
-		if err != nil {
-			return fixture{}, fmt.Errorf("marshal canonical entry %d: %w", i, err)
+		canonical, marshalErr := json.Marshal(entry)
+		if marshalErr != nil {
+			return fixture{}, fmt.Errorf("marshal canonical entry %d: %w", i, marshalErr)
 		}
 		entries = append(entries, entryVector{
 			Entry:         entry,
@@ -330,10 +334,10 @@ func checkFixture(root, path string) error {
 		return fmt.Errorf("read audit fixture: %w", err)
 	}
 	var actual fixture
-	if err := json.Unmarshal(data, &actual); err != nil {
+	if err = json.Unmarshal(data, &actual); err != nil {
 		return fmt.Errorf("decode audit fixture: %w", err)
 	}
-	if err := validateFixture(actual, expected.Oracle); err != nil {
+	if err = validateFixture(actual, expected.Oracle); err != nil {
 		return err
 	}
 	expectedBytes, err := marshalFixture(expected)

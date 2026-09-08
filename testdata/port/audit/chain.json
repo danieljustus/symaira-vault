@@ -13,7 +13,7 @@
       "scripts/rust-port/cmd/auditgen/main.go",
       "scripts/rust-port/cmd/auditgen/main_test.go"
     ],
-    "generator_digest": "660d273325a57422b7a45d9f8a1c577f8e15cf882712d39130710606b8d9ee77"
+    "generator_digest": "53e9f6695b5672b6222c741489ea038b0ddca0f9658cdf602633ee341cff2908"
   },
   "key_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
   "entries": [
