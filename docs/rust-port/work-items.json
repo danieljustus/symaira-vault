@@ -53,7 +53,7 @@
       "status": "in_progress",
       "depends_on": ["RUST-005"],
       "contract_rows": ["AUDIT-001", "AUDIT-002"],
-      "acceptance": ["make audit-differential", "cargo nextest run -p symvault-store --test audit", "cargo clippy -p symvault-store --all-targets --all-features -- -D warnings"]
+      "acceptance": ["make audit-differential (repeat twice from clean target/audit outputs)", "cargo test -p symvault-store --test audit --locked", "cargo clippy -p symvault-store --all-targets --all-features -- -D warnings", "CI and native supported-platform evidence before marking passed"]
     },
     {
       "id": "RUST-007",

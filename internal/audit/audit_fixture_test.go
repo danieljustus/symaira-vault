@@ -24,6 +24,8 @@ var auditOracleSources = []string{
 	"internal/audit/audit.go",
 	"internal/audit/export.go",
 	"internal/audit/keystore.go",
+	"internal/audit/keystore_fallback.go",
+	"internal/audit/keystore_os.go",
 }
 
 var auditGeneratorSources = []string{"internal/audit/audit_fixture_test.go"}

@@ -2,7 +2,9 @@
 
 `TODO` means the contract is identified but does not yet have a language-neutral
 fixture and Rust parity test. `PASS` requires an executable test in CI; prose or
-compilation is not evidence. The Go oracle is commit `caadd5e` / release
+compilation is not evidence. Platform-scoped `PASS` rows also require native
+runtime evidence for each claimed platform; a host-only run is not platform
+coverage. The Go oracle is commit `caadd5e` / release
 `v0.22.1` until deliberately advanced before the first implementation PR. The
 `AUDIT-001`/`AUDIT-002` vectors deliberately advance only their production-Go
 oracle to commit `a57f565a`; all other rows retain the baseline oracle.
@@ -32,8 +34,8 @@ oracle to commit `a57f565a`; all other rows retain the baseline oracle.
 | STORE-003 | safe filesystem | symlink/traversal/read-only/partial write | Go fs/vault | fail closed, atomicity, modes, cleanup | adversarial tests | all | side effects | PASS |
 | STORE-004 | manifests | valid/tampered/out-of-band entries | Go manifest code | exact verification and diagnostics | fixture suite | all/iOS | bytes + semantic | PASS |
 | STORE-005 | encrypted search index | build/load/stale/corrupt/concurrent | Go vault | no plaintext on disk; matching and invalidation parity | index fixtures | all | side effects + semantic | PASS |
-| AUDIT-001 | HMAC chain | fixed key/clock/event corpus | Go audit | canonical JSON, HMAC chain, `kid`, reset detection | byte vectors | all | bytes | PASS — `make audit-differential` + Rust mutation tests |
-| AUDIT-002 | key rotation/export | pre/post-rotation logs | Go audit | archive naming, verification, redaction, filters | fixture suite | all | bytes + metadata | PASS — `make audit-differential` + Rust rotation/export tests |
+| AUDIT-001 | HMAC chain | fixed key/clock/event corpus | Go audit | canonical JSON, HMAC chain, `kid`, reset detection | byte vectors; local macOS differential only; CI/native matrix pending | all | bytes | in_progress |
+| AUDIT-002 | key rotation/export | pre/post-rotation logs | Go audit | archive naming, verification, redaction, filters | fixture suite; local macOS differential only; CI/native matrix pending | all | bytes + metadata | in_progress |
 | SESSION-001 | cache | save/load/touch/expiry/revoke | Go session | idle/max TTL and non-refreshing probes | fake-clock tests | all | semantic | TODO |
 | SESSION-002 | OS keyring | memory backend + native smoke | Go session | service/account names, binary payload, unavailable behavior | injected + native tests | native OS | semantic | TODO |
 | SESSION-003 | Touch ID | available/unavailable/cancel/failure | Go Darwin bridge | prompts, fallback, no passphrase exposure | adapter + signed-app smoke | macOS | semantic | TODO |
@@ -64,6 +66,8 @@ oracle to commit `a57f565a`; all other rows retain the baseline oracle.
 | DIST-005 | rollback | Rust-written copied vault | frozen Go fallback | Go opens and mutates safely after rollback | release harness | all | semantic + hashes | TODO |
 | VALUE-001 | value gate | representative release builds | measured Go baseline | >=20% size or RSS gain; <=10% p95 regression | paired benchmark JSON | macOS arm64 + CI sample | measured | TODO |
 
+> RUST-006 local executable evidence: `make audit-differential` passed twice from clean `target/audit` outputs on macOS, plus the focused Rust audit test (canonicalization, mutation/reorder/reset negatives, rotation, count/age retention, export ordering, filtering, and redaction) and deny-warnings Clippy checks. The fixture is generated through the production Go audit package and is provenance-bound to Go commit `a57f565a`, including both build-tagged keystore implementations. This local run does not establish CI or native Linux/Windows/FreeBSD evidence, so `AUDIT-001` and `AUDIT-002` remain `in_progress` and make no platform-wide `PASS` claim.
+>
 > RUST-007 local executable evidence: `cargo test -p symvault-core -p symvault-platform`, deny-warnings Clippy, `GOWORK=off go test ./internal/config ./internal/session ./internal/quotas ./scripts/rust-port/cmd/quotagen`, and the Go quota fixture check passed in this worktree. This does not promote CFG/SESSION/PLATFORM/QUOTA-002 to `PASS`: native OS keyring/UI/daemon evidence and CI fixture integration remain required.
 >
 > RUST-005 executable evidence in this worktree was run on macOS. Linux, Windows, FreeBSD, and iOS-native evidence remains outside this run; the shared Rust paths avoid OS-specific APIs, while native filesystem gates must still run on those targets before a platform-specific release claim.

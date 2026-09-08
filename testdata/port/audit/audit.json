@@ -5,13 +5,15 @@
     "source_files": [
       "internal/audit/audit.go",
       "internal/audit/export.go",
-      "internal/audit/keystore.go"
+      "internal/audit/keystore.go",
+      "internal/audit/keystore_fallback.go",
+      "internal/audit/keystore_os.go"
     ],
-    "source_digest": "a9dde68f9a781a4398c0bc6093424cf2387ec9fffc4358c7858ab0b9f5213ec3",
+    "source_digest": "d388edbc68c356245a5a8e95b06fef3641e74ec8db9017ee903775eb9857ee57",
     "generator_files": [
       "internal/audit/audit_fixture_test.go"
     ],
-    "generator_digest": "922e187f12feb0cddcfdf65caa8d4517d4ae1790cc19507a7dea70b150a4de58"
+    "generator_digest": "635f097bb3b500fb6d39a15a7bd5a9525aaa7198adf21d12d745cf01d2053640"
   },
   "keys": [
     {

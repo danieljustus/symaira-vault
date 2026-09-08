@@ -598,8 +598,15 @@ impl Logger {
         }
         rotated.sort_by_key(|(_, modified)| *modified);
         let delete_count = rotated.len().saturating_sub(self.rotation.max_backups);
-        for (path, _) in rotated.into_iter().take(delete_count) {
-            let _ = fs::remove_file(path);
+        let now = SystemTime::now();
+        for (index, (path, modified)) in rotated.into_iter().enumerate() {
+            let too_old = self
+                .rotation
+                .max_age
+                .is_some_and(|age| now.duration_since(modified).unwrap_or_default() >= age);
+            if index < delete_count || too_old {
+                let _ = fs::remove_file(path);
+            }
         }
         Ok(())
     }
@@ -731,7 +738,15 @@ pub fn export_directory(
             paths.push(item.path());
         }
     }
-    paths.sort_by_key(|path| path.file_name().map(|name| name.to_os_string()));
+    // Rotated files precede the live file so verification continues across
+    // the archive boundary instead of resetting at the current log.
+    paths.sort_by_key(|path| {
+        let name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or_default();
+        (name == current, name.to_owned())
+    });
 
     let mut entries = Vec::new();
     let mut sources = Vec::new();

@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, fs};
+use std::{collections::BTreeMap, fs, time::UNIX_EPOCH};
 
 use serde::Deserialize;
 use symvault_store::audit::{
@@ -304,4 +304,97 @@ fn file_rotation_preserves_the_hmac_chain_across_archive_boundary() {
     let result = verify_jsonl(&bytes, &keys, keys.keys().next().unwrap());
     assert!(result.valid);
     assert_eq!(result.verified, 2);
+}
+
+#[test]
+fn export_verifies_rotated_file_before_current_file() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("audit-agent.log");
+    let key_bytes = b"audit-fixture-old-key-0000000000";
+    let key = AuditKey::new(key_bytes).unwrap();
+    let kid = key_fingerprint(key_bytes);
+    let mut logger = Logger::open(
+        &path,
+        key,
+        RotationConfig {
+            max_file_size: u64::MAX,
+            max_backups: 5,
+            max_age: None,
+        },
+    )
+    .unwrap();
+    logger
+        .append(symvault_store::audit::LogEntry {
+            timestamp: "2026-01-01T00:00:00Z".into(),
+            agent: "agent".into(),
+            action: "before".into(),
+            ok: true,
+            ..Default::default()
+        })
+        .unwrap();
+    logger
+        .rotate_at(UNIX_EPOCH + std::time::Duration::from_secs(1_767_225_600))
+        .unwrap();
+    logger
+        .append(symvault_store::audit::LogEntry {
+            timestamp: "2026-01-01T00:00:01Z".into(),
+            agent: "agent".into(),
+            action: "after".into(),
+            ok: true,
+            ..Default::default()
+        })
+        .unwrap();
+    drop(logger);
+
+    let mut keys = BTreeMap::new();
+    keys.insert(kid.clone(), AuditKey::new(key_bytes).unwrap());
+    let exported = export_directory(
+        temp.path(),
+        "agent",
+        &ExportOptions {
+            verify_hmac: true,
+            ..Default::default()
+        },
+        &keys,
+        &kid,
+    )
+    .unwrap();
+    assert_eq!(exported.entries.len(), 2);
+    assert_eq!(exported.entries[0].entry.action, "before");
+    assert_eq!(exported.entries[1].entry.action, "after");
+    assert_eq!(exported.entries[0].verify_status, "verified");
+    assert_eq!(exported.entries[1].verify_status, "verified");
+}
+
+#[test]
+fn log_rotation_enforces_max_age_retention() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("audit-agent.log");
+    let key = AuditKey::new(b"audit-fixture-old-key-0000000000").unwrap();
+    let mut logger = Logger::open(
+        &path,
+        key,
+        RotationConfig {
+            max_file_size: u64::MAX,
+            max_backups: 5,
+            max_age: Some(std::time::Duration::ZERO),
+        },
+    )
+    .unwrap();
+    logger
+        .append(symvault_store::audit::LogEntry {
+            timestamp: "2026-01-01T00:00:00Z".into(),
+            agent: "agent".into(),
+            action: "before".into(),
+            ok: true,
+            ..Default::default()
+        })
+        .unwrap();
+    logger.rotate_at(UNIX_EPOCH).unwrap();
+    let rotated = fs::read_dir(temp.path())
+        .unwrap()
+        .filter_map(Result::ok)
+        .filter(|item| item.file_name().to_string_lossy().contains(".rotated."))
+        .count();
+    assert_eq!(rotated, 0);
 }
