@@ -238,46 +238,78 @@ func extractOracleTree(root string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	cmd := exec.Command("git", "-C", root, "archive", "--format=tar", oracleCommit) // #nosec G204 -- executable and commit are fixed; root is the selected oracle repository
-	stdout, err := cmd.StdoutPipe()
+	keepDir := false
+	defer func() {
+		if !keepDir {
+			_ = os.RemoveAll(dir)
+		}
+	}()
+
+	// Do not stream git archive through StdoutPipe. On Windows, a Git-for-
+	// Windows descendant can inherit that pipe and keep it open after the tar
+	// end marker. The reader then reaches EOF while cmd.Wait blocks forever.
+	// A file-backed archive gives os/exec a normal command lifecycle and lets us
+	// enforce the archive bound before allocating or extracting its contents.
+	archiveFile, err := os.CreateTemp("", "symvault-store-archive-*.tar")
 	if err != nil {
 		return "", err
 	}
-	if err = cmd.Start(); err != nil {
+	archivePath := archiveFile.Name()
+	if err = archiveFile.Close(); err != nil {
+		_ = os.Remove(archivePath)
 		return "", err
 	}
-	tr := tar.NewReader(stdout)
+	defer func() { _ = os.Remove(archivePath) }() // #nosec G104 -- best-effort cleanup of a private temporary file
+
+	cmd := exec.Command("git", "-C", root, "archive", "--format=tar", "--output="+archivePath, oracleCommit) // #nosec G204 -- executable, output format and commit are fixed; root is the selected oracle repository
+	if err = cmd.Run(); err != nil {
+		return "", fmt.Errorf("git archive: %w", err)
+	}
+	info, err := os.Stat(archivePath) // #nosec G304 -- path is the private temporary archive created above
+	if err != nil {
+		return "", err
+	}
+	if info.Size() > maxArchiveBytes {
+		return "", fmt.Errorf("archive exceeds %d bytes", maxArchiveBytes)
+	}
+	archive, err := os.Open(archivePath) // #nosec G304 -- path is the private temporary archive created above
+	if err != nil {
+		return "", err
+	}
+	tr := tar.NewReader(archive)
 	for {
 		hdr, e := tr.Next()
 		if errors.Is(e, io.EOF) {
 			break
 		}
 		if e != nil {
-			_ = cmd.Wait()
-			_ = os.RemoveAll(dir)
+			_ = archive.Close()
 			return "", e
 		}
 		name := filepath.Clean(hdr.Name)
 		if name == "." || strings.HasPrefix(name, ".."+string(filepath.Separator)) {
-			_ = cmd.Wait()
-			_ = os.RemoveAll(dir)
+			_ = archive.Close()
 			return "", errors.New("unsafe oracle archive path")
 		}
 		out := filepath.Join(dir, name)
 		switch hdr.Typeflag {
 		case tar.TypeDir:
 			if e = os.MkdirAll(out, 0750); e != nil {
+				_ = archive.Close()
 				return "", e
 			}
 		case tar.TypeReg:
 			if e = os.MkdirAll(filepath.Dir(out), 0750); e != nil {
+				_ = archive.Close()
 				return "", e
 			}
 			if hdr.Mode < 0 || hdr.Mode > int64(^uint32(0)) {
+				_ = archive.Close()
 				return "", fmt.Errorf("invalid archive mode %d", hdr.Mode)
 			}
 			f, e := os.OpenFile(out, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(uint32(hdr.Mode))) // #nosec G304 -- cleaned archive names cannot escape the controlled tree
 			if e != nil {
+				_ = archive.Close()
 				return "", e
 			}
 			n, e := io.Copy(f, io.LimitReader(tr, maxArchiveBytes+1))
@@ -286,17 +318,19 @@ func extractOracleTree(root string) (string, error) {
 			}
 			ce := f.Close()
 			if e != nil {
+				_ = archive.Close()
 				return "", e
 			}
 			if ce != nil {
+				_ = archive.Close()
 				return "", ce
 			}
 		}
 	}
-	if err = cmd.Wait(); err != nil {
-		_ = os.RemoveAll(dir)
-		return "", fmt.Errorf("git archive: %w", err)
+	if err = archive.Close(); err != nil {
+		return "", err
 	}
+	keepDir = true
 	return dir, nil
 }
 func runOracle(root string, legacy bool) (vaultFixture, error) {

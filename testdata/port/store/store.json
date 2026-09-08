@@ -22,7 +22,7 @@
       "scripts/rust-port/cmd/storegen/main.go",
       "scripts/rust-port/cmd/storegen/main_test.go"
     ],
-    "generator_digest": "488ed9f9c945c34780d6a9123e8dce3024331865944ed755940fd8f37bf16d5b"
+    "generator_digest": "b02655cd1619f035648b313556ae9cf6c91471d838b67663741e436e1a58c412"
   },
   "vaults": [
     {
