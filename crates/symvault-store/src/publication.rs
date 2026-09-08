@@ -15,7 +15,7 @@ use super::StoreError;
 pub(super) fn replace(target: &Path, bytes: &[u8], parent: &fs::File) -> Result<(), StoreError> {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let name = basename(target)?;
-    replace_using_names(
+    replace_using_names_with_ops(
         target,
         bytes,
         parent,
@@ -26,7 +26,38 @@ pub(super) fn replace(target: &Path, bytes: &[u8], parent: &fs::File) -> Result<
                 COUNTER.fetch_add(1, Ordering::Relaxed)
             )
         }),
+        &production_ops(),
     )
+}
+
+type CreateTemp<'a> = Box<dyn Fn(&fs::File, &Path, &str) -> io::Result<fs::File> + 'a>;
+type WriteAll<'a> = Box<dyn Fn(&mut fs::File, &[u8]) -> io::Result<()> + 'a>;
+type SyncFile<'a> = Box<dyn Fn(&fs::File) -> io::Result<()> + 'a>;
+type ValidateTarget<'a> = Box<dyn Fn(&fs::File, &Path) -> Result<(), StoreError> + 'a>;
+type Publish<'a> = Box<dyn Fn(&fs::File, &Path, &str) -> io::Result<()> + 'a>;
+type CleanupTemp<'a> = Box<dyn Fn(&fs::File, &Path, &str) -> io::Result<()> + 'a>;
+type SyncParent<'a> = Box<dyn Fn(&fs::File) -> io::Result<()> + 'a>;
+
+struct PublicationOps<'a> {
+    create_temp: CreateTemp<'a>,
+    write_all: WriteAll<'a>,
+    sync_file: SyncFile<'a>,
+    validate_target: ValidateTarget<'a>,
+    publish: Publish<'a>,
+    cleanup_temp: CleanupTemp<'a>,
+    sync_parent: SyncParent<'a>,
+}
+
+fn production_ops() -> PublicationOps<'static> {
+    PublicationOps {
+        create_temp: Box::new(create_temp),
+        write_all: Box::new(|file, bytes| file.write_all(bytes)),
+        sync_file: Box::new(|file| file.sync_all()),
+        validate_target: Box::new(validate_target),
+        publish: Box::new(publish),
+        cleanup_temp: Box::new(cleanup_temp),
+        sync_parent: Box::new(sync_parent),
+    }
 }
 
 fn basename(target: &Path) -> Result<&str, StoreError> {
@@ -72,37 +103,47 @@ fn validate_target(_parent: &fs::File, target: &Path) -> Result<(), StoreError> 
     }
 }
 
+#[cfg(test)]
 fn replace_using_names(
     target: &Path,
     bytes: &[u8],
     parent: &fs::File,
     names: impl IntoIterator<Item = String>,
 ) -> Result<(), StoreError> {
-    validate_target(parent, target)?;
+    replace_using_names_with_ops(target, bytes, parent, names, &production_ops())
+}
+
+fn replace_using_names_with_ops(
+    target: &Path,
+    bytes: &[u8],
+    parent: &fs::File,
+    names: impl IntoIterator<Item = String>,
+    ops: &PublicationOps<'_>,
+) -> Result<(), StoreError> {
+    (ops.validate_target)(parent, target)?;
     for temporary in names {
         // Never clean up a name until exclusive creation succeeds: a collision
         // belongs to another writer, including when all retries are exhausted.
-        let mut file = match create_temp(parent, target, &temporary) {
+        let mut file = match (ops.create_temp)(parent, target, &temporary) {
             Ok(file) => file,
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
             Err(error) => return Err(write_error(target, error)),
         };
         let result = (|| {
             super::set_private_permissions(&file).map_err(|error| write_error(target, error))?;
-            file.write_all(bytes)
-                .map_err(|error| write_error(target, error))?;
-            file.sync_all()
-                .map_err(|error| write_error(target, error))?;
+            (ops.write_all)(&mut file, bytes).map_err(|error| write_error(target, error))?;
+            (ops.sync_file)(&file).map_err(|error| write_error(target, error))?;
             // No generic POSIX operation atomically asserts a target's type
             // while replacing it. This rejects special targets observed now,
             // but does not claim protection against a hostile final-name swap.
-            validate_target(parent, target)?;
-            publish(parent, target, &temporary).map_err(|error| write_error(target, error))?;
-            sync_parent(parent).map_err(|error| write_error(target, error))
+            (ops.validate_target)(parent, target)?;
+            (ops.publish)(parent, target, &temporary)
+                .map_err(|error| write_error(target, error))?;
+            (ops.sync_parent)(parent).map_err(|error| write_error(target, error))
         })();
         drop(file);
-        let cleanup = cleanup_temp(parent, target, &temporary)
-            .and_then(|()| sync_parent(parent))
+        let cleanup = (ops.cleanup_temp)(parent, target, &temporary)
+            .and_then(|()| (ops.sync_parent)(parent))
             .map_err(|error| write_error(target, error));
         return result.and(cleanup);
     }
@@ -257,6 +298,118 @@ mod tests {
         );
         assert_eq!(fs::read_dir(&moved).unwrap().count(), 1);
         assert_eq!(fs::read_dir(&outside).unwrap().count(), 1);
+    }
+
+    fn fault_ops(
+        sync_file_fail: bool,
+        publish_fail: bool,
+        cleanup_fail: bool,
+        parent_fail_call: Option<usize>,
+    ) -> PublicationOps<'static> {
+        use std::{cell::Cell, rc::Rc};
+        let parent_calls = Rc::new(Cell::new(0));
+        let parent_calls_hook = Rc::clone(&parent_calls);
+        let cleanup_state = Rc::new(Cell::new(cleanup_fail));
+        let cleanup_hook = Rc::clone(&cleanup_state);
+        PublicationOps {
+            create_temp: Box::new(create_temp),
+            write_all: Box::new(|file, bytes| file.write_all(bytes)),
+            sync_file: Box::new(move |file| {
+                if sync_file_fail {
+                    Err(io::Error::other("injected file sync"))
+                } else {
+                    file.sync_all()
+                }
+            }),
+            validate_target: Box::new(validate_target),
+            publish: Box::new(move |parent, target, temporary| {
+                if publish_fail {
+                    Err(io::Error::other("injected publish"))
+                } else {
+                    publish(parent, target, temporary)
+                }
+            }),
+            cleanup_temp: Box::new(move |parent, target, temporary| {
+                cleanup_temp(parent, target, temporary)?;
+                if cleanup_hook.replace(false) {
+                    Err(io::Error::other("injected cleanup"))
+                } else {
+                    Ok(())
+                }
+            }),
+            sync_parent: Box::new(move |parent| {
+                let call = parent_calls_hook.get() + 1;
+                parent_calls_hook.set(call);
+                if parent_fail_call == Some(call) {
+                    Err(io::Error::other("injected parent sync"))
+                } else {
+                    sync_parent(parent)
+                }
+            }),
+        }
+    }
+
+    #[test]
+    fn injected_prepublication_failure_preserves_old_target_and_cleans_owned_temp() {
+        let dir = tempdir();
+        let parent = super::super::ensure_directory(dir.path()).unwrap();
+        let target = dir.path().join("entry.age");
+        fs::write(&target, b"old").unwrap();
+        let error = replace_using_names_with_ops(
+            &target,
+            b"new",
+            &parent,
+            ["owned".to_owned()],
+            &fault_ops(true, false, false, None),
+        )
+        .unwrap_err();
+        assert!(
+            matches!(error, StoreError::Write { source, .. } if source.to_string() == "injected file sync")
+        );
+        assert_eq!(fs::read(&target).unwrap(), b"old");
+        assert!(!dir.path().join("owned").exists());
+    }
+
+    #[test]
+    fn injected_post_rename_fsync_failure_returns_error_and_keeps_new_target() {
+        let dir = tempdir();
+        let parent = super::super::ensure_directory(dir.path()).unwrap();
+        let target = dir.path().join("entry.age");
+        fs::write(&target, b"old").unwrap();
+        let error = replace_using_names_with_ops(
+            &target,
+            b"new",
+            &parent,
+            ["owned".to_owned()],
+            &fault_ops(false, false, false, Some(1)),
+        )
+        .unwrap_err();
+        assert!(
+            matches!(error, StoreError::Write { source, .. } if source.to_string() == "injected parent sync")
+        );
+        assert_eq!(fs::read(&target).unwrap(), b"new");
+        assert!(!dir.path().join("owned").exists());
+    }
+
+    #[test]
+    fn injected_cleanup_failure_does_not_erase_primary_error() {
+        let dir = tempdir();
+        let parent = super::super::ensure_directory(dir.path()).unwrap();
+        let target = dir.path().join("entry.age");
+        fs::write(&target, b"old").unwrap();
+        let error = replace_using_names_with_ops(
+            &target,
+            b"new",
+            &parent,
+            ["owned".to_owned()],
+            &fault_ops(false, true, true, None),
+        )
+        .unwrap_err();
+        assert!(
+            matches!(error, StoreError::Write { source, .. } if source.to_string() == "injected publish")
+        );
+        assert_eq!(fs::read(&target).unwrap(), b"old");
+        assert!(!dir.path().join("owned").exists());
     }
 
     #[cfg(unix)]
