@@ -1,4 +1,4 @@
-.PHONY: all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates help docs-check
+.PHONY: all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates help docs-check
 
 # Variables
 BINARY_NAME := symvault
@@ -318,7 +318,13 @@ rust-version-contract:
 		--left ./$(PORT_GO_BINARY) --right ./$(RUST_BINARY) \
 		--cases $(PORT_CLI_CASES) --stage version
 
+store-reopen-fixture:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/storereopen --generate --fixture testdata/port/store/reopen.json
+
 store-differential:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/storereopen --fixture testdata/port/store/reopen.json
+	$(CARGO) build -p symvault-store --example store-reopen --locked
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/storereopen --run --fixture testdata/port/store/reopen.json --rust-binary target/debug/examples/store-reopen
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/storegen --check --output testdata/port/store/store.json
 	$(CARGO) test -p symvault-store --locked
 
@@ -376,7 +382,8 @@ help:
 	@echo "  differential-go-selftest - Compare the Go oracle with itself in isolated sandboxes"
 	@echo "  crypto-differential - Verify Go↔Rust age and KDF cross-decryption"
 	@echo "  crypto-fuzz-smoke - Run the bounded Argon2id parser fuzz smoke"
-	@echo "  store-differential - Verify Go-generated read-only vault fixtures against Rust"
+	@echo "  store-reopen-fixture  - Generate the deterministic Go↔Rust reopen fixture"
+	@echo "  store-differential - Verify Go↔Rust storage reopen and read-only fixtures"
 	@echo "  rust-fuzz-smoke   - Run the deterministic bounded Rust age/KDF fuzz smoke"
 	@echo "  rust-fuzz         - Run the bounded main/scheduled Rust age/KDF fuzz pass"
 	@echo "  port-contract      - Run all Rust-port contract preparation gates"

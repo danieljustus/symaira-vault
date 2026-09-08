@@ -237,11 +237,15 @@ where
     Ok(Option::<bool>::deserialize(deserializer)?.unwrap_or_default())
 }
 
-#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+fn go_zero_time() -> String {
+    "0001-01-01T00:00:00Z".into()
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct EntryMetadata {
-    #[serde(default)]
+    #[serde(default = "go_zero_time")]
     pub created: String,
-    #[serde(default)]
+    #[serde(default = "go_zero_time")]
     pub updated: String,
     #[serde(default)]
     pub version: i64,
@@ -249,6 +253,18 @@ pub struct EntryMetadata {
     pub tags: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub write_history: Vec<WriteRecord>,
+}
+
+impl Default for EntryMetadata {
+    fn default() -> Self {
+        Self {
+            created: "0001-01-01T00:00:00Z".into(),
+            updated: "0001-01-01T00:00:00Z".into(),
+            version: 0,
+            tags: Vec::new(),
+            write_history: Vec::new(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
