@@ -1423,15 +1423,28 @@ impl Store {
         entry: &Entry,
         identity: &Identity,
     ) -> Result<(), StoreError> {
+        // Preserve the historical writer contract: write_entry did not stamp
+        // wall-clock metadata. Callers that need Go-compatible stamping use
+        // write_entry_at with an explicit clock.
+        self.write_entry_at(path, entry, identity, "0001-01-01T00:00:00Z", false, None)
+    }
+
+    /// Writes an entry after applying metadata with an explicit clock seam.
+    pub fn write_entry_at(
+        &self,
+        path: &str,
+        entry: &Entry,
+        identity: &Identity,
+        now: &str,
+        pseudonymize: bool,
+        pending: Option<&WriteRecord>,
+    ) -> Result<(), StoreError> {
         validate_entry_path(path)?;
-        let mut stored = entry.clone();
-        stored.metadata.version = stored.metadata.version.saturating_add(1);
-        if stored.metadata.created.is_empty() {
-            stored.metadata.created = go_zero_time();
-        }
-        if stored.metadata.updated.is_empty() {
-            stored.metadata.updated = go_zero_time();
-        }
+        let stored = metadata::prepare_entry(entry, now, path, pseudonymize, pending)
+            .map_err(|detail| StoreError::Entry {
+                path: path.to_owned(),
+                detail,
+            })?;
         validate_entry_values(&stored)?;
         let target = self.fresh_entry_path(path)?;
         let parent = target
