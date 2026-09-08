@@ -3,7 +3,8 @@
 use serde::Deserialize;
 use std::time::Duration;
 use symvault_platform::{
-    Autotype, Clipboard, Daemon, Notifier, PlatformErrorKind, SecureUi, UnavailablePlatform,
+    Autotype, Clipboard, Daemon, Notifier, PlatformErrorKind, SecureUi, TouchId,
+    UnavailablePlatform,
 };
 
 #[derive(Debug, Deserialize)]
@@ -85,6 +86,14 @@ fn unavailable_native_boundaries_fail_closed() {
     assert_eq!(
         native
             .approve("delete", Duration::from_secs(1))
+            .unwrap_err()
+            .kind,
+        PlatformErrorKind::Unavailable
+    );
+    assert!(!native.is_available());
+    assert_eq!(
+        native
+            .authenticate("unlock", Duration::from_secs(1))
             .unwrap_err()
             .kind,
         PlatformErrorKind::Unavailable

@@ -50,6 +50,12 @@ pub trait SecureUi: Send + Sync {
     ) -> Result<Vec<u8>, PlatformError>;
     fn approve(&self, operation: &str, timeout: Duration) -> Result<bool, PlatformError>;
 }
+/// Biometric authentication is an authorization boundary. Implementations
+/// return only the decision and never expose a passphrase or key material.
+pub trait TouchId: Send + Sync {
+    fn is_available(&self) -> bool;
+    fn authenticate(&self, reason: &str, timeout: Duration) -> Result<(), PlatformError>;
+}
 pub trait Daemon: Send + Sync {
     fn install(&self) -> Result<(), PlatformError>;
     fn uninstall(&self) -> Result<(), PlatformError>;
@@ -86,6 +92,14 @@ impl SecureUi for UnavailablePlatform {
     }
     fn approve(&self, _: &str, _: Duration) -> Result<bool, PlatformError> {
         Err(PlatformError::unavailable("secure UI backend unavailable"))
+    }
+}
+impl TouchId for UnavailablePlatform {
+    fn is_available(&self) -> bool {
+        false
+    }
+    fn authenticate(&self, _: &str, _: Duration) -> Result<(), PlatformError> {
+        Err(PlatformError::unavailable("touch id backend unavailable"))
     }
 }
 impl Daemon for UnavailablePlatform {

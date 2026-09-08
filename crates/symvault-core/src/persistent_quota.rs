@@ -42,13 +42,44 @@ pub trait QuotaPlatform: Send + Sync {
 }
 #[derive(Default)]
 pub struct NativeQuotaPlatform;
+
+#[cfg(unix)]
+fn native_lock(file: &File) -> Result<(), QuotaError> {
+    file.lock_exclusive()
+        .map_err(|e| QuotaError::Lock(e.to_string()))
+}
+#[cfg(windows)]
+fn native_lock(file: &File) -> Result<(), QuotaError> {
+    // fs4's Windows backend calls LockFileEx with an exclusive whole-file
+    // range; keep this branch explicit so cross-target compilation covers the
+    // production Windows locking path rather than a Unix fallback.
+    file.lock_exclusive()
+        .map_err(|e| QuotaError::Lock(e.to_string()))
+}
+#[cfg(not(any(unix, windows)))]
+fn native_lock(_: &File) -> Result<(), QuotaError> {
+    Err(QuotaError::Lock("native file locking unavailable".into()))
+}
+
+#[cfg(unix)]
+fn native_unlock(file: &File) -> Result<(), QuotaError> {
+    file.unlock().map_err(|e| QuotaError::Lock(e.to_string()))
+}
+#[cfg(windows)]
+fn native_unlock(file: &File) -> Result<(), QuotaError> {
+    file.unlock().map_err(|e| QuotaError::Lock(e.to_string()))
+}
+#[cfg(not(any(unix, windows)))]
+fn native_unlock(_: &File) -> Result<(), QuotaError> {
+    Err(QuotaError::Lock("native file locking unavailable".into()))
+}
+
 impl QuotaPlatform for NativeQuotaPlatform {
     fn lock(&self, file: &File) -> Result<(), QuotaError> {
-        file.lock_exclusive()
-            .map_err(|e| QuotaError::Lock(e.to_string()))
+        native_lock(file)
     }
     fn unlock(&self, file: &File) -> Result<(), QuotaError> {
-        file.unlock().map_err(|e| QuotaError::Lock(e.to_string()))
+        native_unlock(file)
     }
     fn read(&self, file: &mut File, path: &Path) -> Result<Vec<u8>, QuotaError> {
         file.seek(SeekFrom::Start(0))

@@ -119,6 +119,8 @@ fn persistent_quota_fixture_matches_public_rust_wrapper() {
         assert_eq!(dir_mode, expected.dir_mode);
         assert_eq!(file_mode, expected.file_mode);
     }
+    #[cfg(not(unix))]
+    let _ = (expected.dir_mode, expected.file_mode);
     let _ = fs::remove_dir_all(dir);
 }
 

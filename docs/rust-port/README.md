@@ -79,6 +79,14 @@ passes. The measured Go baseline is in
   recovery, and filesystem-level recipient add/remove re-encryption pass in
   both Go→Rust and Rust→Go directions. Strict omission/tamper checks, pinned
   Miri, and bounded Go/Rust fuzz gates are integrated. `RUST-005` is in progress.
+- `RUST-007` remains blocked but now has a real macOS adapter slice: Keychain
+  access uses the pinned `keyring` Apple backend, Touch ID uses a
+  LocalAuthentication JXA boundary, clipboard/autotype/notifications use
+  stdin-fed native helpers, and daemon installation renders an escaped launchd
+  plist. Tests keep all native side effects injected or non-interactive; no
+  real keychain, pasteboard, GUI, or LaunchAgents directory is touched. The
+  local macOS gate passes; native keychain/auth prompts, GUI permissions,
+  launchd lifecycle, and Windows `LockFileEx` runtime evidence remain pending.
 
 The tiny release-built version slice measured 577,104 bytes, 2,277,376 bytes
 maximum RSS in one sample, and 2.576 ms startup p95 over 120 runs after 20

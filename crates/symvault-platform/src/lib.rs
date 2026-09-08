@@ -1,6 +1,11 @@
 //! Platform seam crate. Native implementations belong here, not in core.
-//! The current snapshot exports the reviewed fail-closed boundary only; native
-//! smoke tests are intentionally not claimed on unsupported hosts.
+#![deny(unsafe_code)]
+
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(target_os = "macos")]
+pub use macos::{MacOsDaemon, MacOsKeyring, MacOsPlatform, MacOsTouchId};
+
 pub use symvault_core::persistent_quota::{
     NativeQuotaPlatform, QUOTA_FILE_NAME, QuotaCounter, QuotaError, QuotaPlatform,
 };
