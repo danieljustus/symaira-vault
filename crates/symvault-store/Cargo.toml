@@ -8,6 +8,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+base64 = "=0.22.1"
 serde.workspace = true
 serde_json.workspace = true
 serde_yaml_ng = "=0.10.0"

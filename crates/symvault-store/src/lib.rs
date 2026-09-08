@@ -1816,14 +1816,67 @@ struct EmptyIndexValue {}
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 struct IndexDocument {
-    #[serde(rename = "v")]
+    #[serde(
+        rename = "v",
+        default,
+        deserialize_with = "deserialize_null_generic"
+    )]
     values: BTreeMap<String, Vec<String>>,
-    #[serde(rename = "c")]
+    #[serde(rename = "ti", default, deserialize_with = "deserialize_null_generic", skip_serializing_if = "BTreeMap::is_empty")]
+    token_index: BTreeMap<String, BTreeMap<String, EmptyIndexValue>>,
+    #[serde(rename = "pt", default, deserialize_with = "deserialize_null_generic", skip_serializing_if = "BTreeMap::is_empty")]
+    path_tokens: BTreeMap<String, Vec<String>>,
+    #[serde(rename = "hi", default, deserialize_with = "deserialize_null_generic", skip_serializing_if = "BTreeMap::is_empty")]
+    host_index: BTreeMap<String, BTreeMap<String, EmptyIndexValue>>,
+    #[serde(rename = "ph", default, deserialize_with = "deserialize_null_generic", skip_serializing_if = "BTreeMap::is_empty")]
+    path_hosts: BTreeMap<String, Vec<String>>,
+    #[serde(
+        rename = "c",
+        default,
+        deserialize_with = "deserialize_null_generic",
+        skip_serializing_if = "is_zero"
+    )]
     entry_count: usize,
-    #[serde(rename = "p", default)]
+    #[serde(rename = "p", default, deserialize_with = "deserialize_null_generic", skip_serializing_if = "BTreeMap::is_empty")]
     paths: BTreeMap<String, EmptyIndexValue>,
-    #[serde(rename = "s", default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(rename = "s", default, deserialize_with = "deserialize_index_salt", serialize_with = "serialize_index_salt", skip_serializing_if = "Vec::is_empty")]
     salt: Vec<u8>,
+}
+
+fn is_zero(value: &usize) -> bool {
+    *value == 0
+}
+
+fn deserialize_null_generic<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de> + Default,
+{
+    Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
+}
+
+fn deserialize_index_salt<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let encoded = Option::<String>::deserialize(deserializer)?;
+    encoded
+        .map(|value| {
+            use base64::Engine;
+            base64::engine::general_purpose::STANDARD
+                .decode(value)
+                .map_err(serde::de::Error::custom)
+        })
+        .transpose()
+        .map(|value| value.unwrap_or_default())
+}
+
+fn serialize_index_salt<S>(salt: &[u8], serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    use base64::Engine;
+    serializer.serialize_str(&base64::engine::general_purpose::STANDARD.encode(salt))
 }
 
 impl SearchIndex {
