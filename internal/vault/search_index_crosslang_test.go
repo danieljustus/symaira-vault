@@ -1,30 +1,36 @@
 package vault
 
 import (
-	"bytes"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
+
+	"filippo.io/age"
+	"golang.org/x/crypto/chacha20poly1305"
+	"golang.org/x/crypto/hkdf"
 
 	vaultconfig "github.com/danieljustus/symaira-vault/internal/config"
 	"github.com/danieljustus/symaira-vault/internal/testutil"
 )
 
 var searchIndexAdapterBuild struct {
-	sync.Once
 	path string
 	err  error
 }
 
 func searchIndexAdapter(t testing.TB) string {
 	t.Helper()
-	searchIndexAdapterBuild.Do(func() {
+	searchIndexAdapterBuildOnce.Do(func() {
 		_, file, _, ok := runtime.Caller(0)
 		if !ok {
 			searchIndexAdapterBuild.err = fmt.Errorf("runtime.Caller failed")
@@ -36,13 +42,9 @@ func searchIndexAdapter(t testing.TB) string {
 			searchIndexAdapterBuild.err = err
 			return
 		}
-		cmd := exec.Command("cargo", "build", "-p", "symvault-store", "--example", "search-index-adapter")
-		cmd.Dir = repo
-		cmd.Env = append(os.Environ(), "CARGO_TARGET_DIR="+target)
-		var stderr bytes.Buffer
-		cmd.Stderr = &stderr
-		if output, err := cmd.Output(); err != nil {
-			searchIndexAdapterBuild.err = fmt.Errorf("cargo build: %w: %s\n%s", err, stderr.Bytes(), output)
+		output, err := runSearchIndexCommand(repo, target, "cargo", "build", "-p", "symvault-store", "--example", "search-index-adapter")
+		if err != nil {
+			searchIndexAdapterBuild.err = fmt.Errorf("cargo build: %w: %s", err, output)
 			return
 		}
 		searchIndexAdapterBuild.path = filepath.Join(target, "debug", "examples", "search-index-adapter")
@@ -53,22 +55,53 @@ func searchIndexAdapter(t testing.TB) string {
 	return searchIndexAdapterBuild.path
 }
 
+var searchIndexAdapterBuildOnce = new(sync.Once)
+
+func runSearchIndexAdapterExpectError(t testing.TB, binary, root, identity, action, caseID string, extra ...string) {
+	t.Helper()
+	output, err := runSearchIndexCommand(root, "", binary, append([]string{"--action", action, "--root", root, "--identity", identity, "--case-id", caseID}, extra...)...)
+	if err == nil {
+		t.Fatalf("adapter %s unexpectedly succeeded", caseID)
+	}
+	if strings.Contains(err.Error(), "deadline exceeded") || strings.Contains(err.Error(), "WaitDelay") {
+		t.Fatalf("adapter %s was not a bounded loader rejection: %v", caseID, err)
+	}
+	if !strings.Contains(output, caseID+": search index missing or rejected") {
+		t.Fatalf("adapter %s error = %q, want explicit rejection diagnostic", caseID, output)
+	}
+}
+
 func runSearchIndexAdapter(t testing.TB, binary, root, identity, action string, extra ...string) map[string]any {
 	t.Helper()
-	args := []string{"--action", action, "--root", root, "--identity", identity}
-	args = append(args, extra...)
-	cmd := exec.Command(binary, args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	output, err := cmd.Output()
+	result, err := runSearchIndexCommand(root, "", binary, append([]string{"--action", action, "--root", root, "--identity", identity}, extra...)...)
 	if err != nil {
-		t.Fatalf("adapter %s: %v\nstderr=%s", action, err, stderr.String())
+		t.Fatalf("adapter %s: %v\nstderr=%s", action, err, result)
 	}
-	var result map[string]any
-	if err := json.Unmarshal(output, &result); err != nil {
-		t.Fatalf("adapter %s output %q: %v", action, output, err)
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
+		t.Fatalf("adapter %s output %q: %v", action, result, err)
 	}
-	return result
+	return parsed
+}
+
+func publicKeyDerivedIndexCiphertext(t testing.TB, identity *age.X25519Identity, salt []byte) []byte {
+	t.Helper()
+	key := make([]byte, chacha20poly1305.KeySize)
+	kdf := hkdf.New(sha256.New, []byte(identity.Recipient().String()), salt, []byte("symvault-search-index-v1"))
+	if _, err := io.ReadFull(kdf, key); err != nil {
+		t.Fatal(err)
+	}
+	cipher, err := chacha20poly1305.New(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nonce := make([]byte, cipher.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		t.Fatal(err)
+	}
+	plaintext := []byte(`{"v":{"go-doc":["go-rust-accepted"]},"c":1,"s":"` + base64.StdEncoding.EncodeToString(salt) + `"}`)
+	encrypted := cipher.Seal(nil, nonce, plaintext, nil)
+	return append(append(append([]byte{1}, salt...), nonce...), encrypted...)
 }
 
 func TestEncryptedIndexGoRustLiveAcceptance(t *testing.T) {
@@ -135,26 +168,50 @@ func TestEncryptedIndexGoRustLiveAcceptance(t *testing.T) {
 		t.Fatalf("Go matches = %v, want rust-doc", goMatches)
 	}
 
-	// Case wrong_identity_rejected: a valid index must not be accepted by a
-	// different identity, even though the vault layout is otherwise valid.
+	// Keep both the Go and Rust loader negatives. Recreate the fixture after
+	// each rejection because both implementations fail closed by deleting it.
 	wrong := testutil.TempIdentity(t)
-	wrongLoaded := &EncryptedIndex{}
-	if err := wrongLoaded.loadFromDisk(rustRoot, wrong); err == nil {
-		t.Fatal("wrong identity unexpectedly loaded encrypted index")
-	}
-
-	// Case tampered_ciphertext_rejected: authenticated corruption must fail the
-	// explicit loader rather than becoming an empty successful search.
 	raw, err := os.ReadFile(indexFilePath(goRoot))
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw[len(raw)-1] ^= 1
+	if err := (&EncryptedIndex{}).loadFromDisk(goRoot, wrong); err == nil {
+		t.Fatal("go_wrong_identity_rejected: Go loader unexpectedly accepted")
+	}
 	if err := os.WriteFile(indexFilePath(goRoot), raw, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	tampered := &EncryptedIndex{}
-	if err := tampered.loadFromDisk(goRoot, goIdentity); err == nil {
-		t.Fatal("tampered ciphertext unexpectedly loaded")
+	runSearchIndexAdapterExpectError(t, adapter, goRoot, wrong.String(), "load-search", "rust_wrong_identity_rejected", "--query", "go-rust-accepted")
+	if err := os.WriteFile(indexFilePath(goRoot), raw, 0o600); err != nil {
+		t.Fatal(err)
 	}
+
+	tamperedRaw := append([]byte(nil), raw...)
+	tamperedRaw[len(tamperedRaw)-1] ^= 1
+	if err := os.WriteFile(indexFilePath(goRoot), tamperedRaw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := (&EncryptedIndex{}).loadFromDisk(goRoot, goIdentity); err == nil {
+		t.Fatal("go_tampered_ciphertext_rejected: Go loader unexpectedly accepted")
+	}
+	if err := os.WriteFile(indexFilePath(goRoot), tamperedRaw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runSearchIndexAdapterExpectError(t, adapter, goRoot, goIdentity.String(), "load-search", "rust_tampered_ciphertext_rejected", "--query", "go-rust-accepted")
+
+	// Case public_key_derived_ciphertext_rejected: a malicious fixture made
+	// with the recipient public bytes (rather than the private identity) must
+	// fail both loaders even when its decrypted JSON shape is otherwise valid.
+	publicSalt := []byte("public-derived-16")
+	publicDerived := publicKeyDerivedIndexCiphertext(t, goIdentity, publicSalt)
+	if err := os.WriteFile(indexFilePath(goRoot), publicDerived, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := (&EncryptedIndex{}).loadFromDisk(goRoot, goIdentity); err == nil {
+		t.Fatal("go_public_key_derived_ciphertext_rejected: Go loader unexpectedly accepted")
+	}
+	if err := os.WriteFile(indexFilePath(goRoot), publicDerived, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runSearchIndexAdapterExpectError(t, adapter, goRoot, goIdentity.String(), "load-search", "rust_public_key_derived_ciphertext_rejected", "--query", "go-rust-accepted")
 }
