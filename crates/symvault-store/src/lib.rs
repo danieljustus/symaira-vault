@@ -19,6 +19,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use symvault_crypto::{Identity, decrypt, encrypt, parse_recipient, recipient_string};
 use thiserror::Error;
+#[cfg(not(unix))]
 use walkdir::WalkDir;
 use zeroize::{Zeroize, Zeroizing};
 
@@ -374,8 +375,28 @@ impl Store {
         reject_symlink(&root)?;
         let config_path = root.join(CONFIG_FILE);
         let identity_path = root.join(IDENTITY_FILE);
-        ensure_regular_file(&config_path, true)?;
-        ensure_regular_file(&identity_path, true)?;
+        #[cfg(unix)]
+        let (config_exists, identity_exists, recipients) = (
+            rooted::regular_exists_at(&root_cap, Path::new(CONFIG_FILE), &config_path)?,
+            rooted::regular_exists_at(&root_cap, Path::new(IDENTITY_FILE), &identity_path)?,
+            rooted::regular_exists_at(
+                &root_cap,
+                Path::new(RECIPIENTS_FILE),
+                &root.join(RECIPIENTS_FILE),
+            )?,
+        );
+        #[cfg(not(unix))]
+        let (config_exists, identity_exists, recipients) = (
+            ensure_regular_file(&config_path, false)?,
+            ensure_regular_file(&identity_path, false)?,
+            regular_exists(&root.join(RECIPIENTS_FILE))?,
+        );
+        if !config_exists {
+            return Err(StoreError::MissingFile(config_path));
+        }
+        if !identity_exists {
+            return Err(StoreError::MissingFile(identity_path));
+        }
         #[cfg(unix)]
         let config_bytes = rooted::read(&root_cap, Path::new(CONFIG_FILE), &config_path)?;
         #[cfg(not(unix))]
@@ -384,8 +405,11 @@ impl Store {
         let presence = Presence {
             config: true,
             identity: true,
-            recipients: regular_exists(&root.join(RECIPIENTS_FILE))?,
+            recipients,
         };
+        #[cfg(unix)]
+        let layout = detect_layout_rooted(&root_cap, &root)?;
+        #[cfg(not(unix))]
         let layout = detect_layout(&root)?;
         Ok(Self {
             root,
@@ -1003,6 +1027,34 @@ fn parse_config(bytes: &[u8]) -> Result<VaultConfig, StoreError> {
     Ok(config)
 }
 
+#[cfg(unix)]
+fn detect_layout_rooted(root_cap: &fs::File, root: &Path) -> Result<Layout, StoreError> {
+    let entries = rooted::walk(root_cap, root)?;
+    let fresh = entries.iter().any(|item| {
+        item.regular
+            && item.relative.starts_with(Path::new(ENTRIES_DIR))
+            && item
+                .relative
+                .file_name()
+                .is_some_and(|name| name.to_string_lossy().ends_with(ENTRY_EXTENSION))
+    });
+    let legacy = entries.iter().any(|item| {
+        item.regular
+            && !item.relative.starts_with(Path::new(ENTRIES_DIR))
+            && item.relative.file_name().is_some_and(|name| {
+                let name = name.to_string_lossy();
+                name.ends_with(ENTRY_EXTENSION) && name != IDENTITY_FILE && name != MANIFEST_FILE
+            })
+    });
+    Ok(match (fresh, legacy) {
+        (true, true) => Layout::Mixed,
+        (true, false) => Layout::Fresh,
+        (false, true) => Layout::Legacy,
+        (false, false) => Layout::Fresh,
+    })
+}
+
+#[cfg(not(unix))]
 fn detect_layout(root: &Path) -> Result<Layout, StoreError> {
     let fresh = root.join(ENTRIES_DIR).is_dir()
         && entry_candidates(root)?
@@ -1019,6 +1071,7 @@ fn detect_layout(root: &Path) -> Result<Layout, StoreError> {
     })
 }
 
+#[cfg(not(unix))]
 fn entry_candidates(root: &Path) -> Result<Vec<Candidate>, StoreError> {
     let mut result = Vec::new();
     let entries_root = root.join(ENTRIES_DIR);
@@ -1333,6 +1386,7 @@ fn ensure_directory(path: &Path) -> Result<fs::File, StoreError> {
     Ok(file)
 }
 
+#[cfg(not(unix))]
 fn ensure_regular_file(path: &Path, required: bool) -> Result<bool, StoreError> {
     let file = match open_nofollow(path) {
         Ok(file) => file,
@@ -1357,6 +1411,7 @@ fn ensure_regular_file(path: &Path, required: bool) -> Result<bool, StoreError> 
     Ok(true)
 }
 
+#[cfg(not(unix))]
 fn regular_exists(path: &Path) -> Result<bool, StoreError> {
     ensure_regular_file(path, false)
 }
@@ -1414,11 +1469,6 @@ fn read_open_regular(file: fs::File, path: &Path) -> Result<Vec<u8>, StoreError>
         });
     }
     Ok(bytes)
-}
-
-#[cfg(unix)]
-fn open_nofollow(path: &Path) -> io::Result<fs::File> {
-    open_nofollow_kind(path, false)
 }
 
 #[cfg(unix)]
@@ -2134,6 +2184,9 @@ impl Store {
                 continue;
             }
             let bytes = self.read_candidate_bytes(&candidate)?;
+            #[cfg(unix)]
+            let metadata = rooted::metadata(&self.root_cap, &candidate.relative, &candidate.path)?;
+            #[cfg(not(unix))]
             let metadata = fs::metadata(&candidate.path).map_err(|source| StoreError::Read {
                 path: candidate.path.clone(),
                 source,
