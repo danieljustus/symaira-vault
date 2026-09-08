@@ -9,6 +9,7 @@ GOLANGCI_LINT_VERSION := v2.11.4
 GO_TOOLCHAIN ?= go1.26.6
 MIRI_TOOLCHAIN := nightly-2026-09-03
 MIRI_TARGET_DIR := target/miri-2026-09-03
+MIRI_FLAGS := -Zmiri-disable-isolation
 RUST_FUZZ_TOOLCHAIN := nightly-2026-09-03
 RUST_FUZZ_RUNS ?= 128
 RUST_FUZZ_MAX_TOTAL_TIME ?= 10
@@ -329,7 +330,7 @@ rust-test:
 	$(CARGO) test --workspace --doc --all-features --locked
 
 rust-miri:
-	CARGO_TARGET_DIR=$(MIRI_TARGET_DIR) $(CARGO) +$(MIRI_TOOLCHAIN) miri test -p symvault-core --locked
+	MIRIFLAGS=$(MIRI_FLAGS) CARGO_TARGET_DIR=$(MIRI_TARGET_DIR) $(CARGO) +$(MIRI_TOOLCHAIN) miri test -p symvault-core --locked
 
 rust-features:
 	# Keep the committed lockfile usable while checking every feature combination.

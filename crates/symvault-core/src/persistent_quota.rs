@@ -263,6 +263,7 @@ impl<P: QuotaPlatform> QuotaCounter<P> {
 mod tests {
     use super::*;
     #[test]
+    #[cfg_attr(miri, ignore = "uses native filesystem locking unsupported by Miri")]
     fn persisted_layout_and_modes() {
         let dir = std::env::temp_dir().join(format!("symvault-quota-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
@@ -276,6 +277,7 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
     }
     #[test]
+    #[cfg_attr(miri, ignore = "uses native filesystem locking unsupported by Miri")]
     fn concurrent_updates_are_not_lost() {
         let dir =
             std::env::temp_dir().join(format!("symvault-quota-concurrent-{}", std::process::id()));
