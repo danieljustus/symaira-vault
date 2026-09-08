@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "caadd5e",
+    "release": "v0.22.1"
+  },
+  "cases": [
+    {
+      "name": "go_to_rust_read",
+      "path": "go-created",
+      "storage_path": "entries/go-created.age",
+      "read_direction": "go_write_rust_read"
+    },
+    {
+      "name": "rust_to_go_read",
+      "path": "rust-created",
+      "entry": {
+        "path": "rust-created",
+        "data": {
+          "token": "rust-fixture-token",
+          "enabled": true
+        },
+        "meta": {},
+        "secret_meta": {}
+      },
+      "storage_path": "entries/rust-created.age",
+      "read_direction": "rust_write_go_read"
+    }
+  ]
+}
