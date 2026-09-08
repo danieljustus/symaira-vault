@@ -39,7 +39,16 @@ fn git_lifecycle_matches_local_bare_remote_contract() {
     let remote = t.path().join("remote.git");
     let local = t.path().join("local");
     let other = t.path().join("other");
-    git(t.path(), &["init", "--bare", remote.to_str().unwrap()]);
+    git(
+        t.path(),
+        &[
+            "-c",
+            "init.defaultBranch=master",
+            "init",
+            "--bare",
+            remote.to_str().unwrap(),
+        ],
+    );
     let repo = GitRepository::init(&local).unwrap();
     repo.add_remote("origin", remote.to_str().unwrap()).unwrap();
     fs::write(local.join("identity.age"), b"private").unwrap();
