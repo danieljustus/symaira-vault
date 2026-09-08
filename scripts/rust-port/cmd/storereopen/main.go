@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 
 	"filippo.io/age"
 
@@ -101,24 +102,56 @@ func validateFixture(value fixture) error {
 	return nil
 }
 
+func confinedFixturePath(path string) (string, error) {
+	clean := filepath.Clean(path)
+	if filepath.IsAbs(clean) {
+		return "", errors.New("fixture path must be relative")
+	}
+	root, err := filepath.Abs("testdata/port/store")
+	if err != nil {
+		return "", err
+	}
+	absolute, err := filepath.Abs(clean)
+	if err != nil {
+		return "", err
+	}
+	relative, err := filepath.Rel(root, absolute)
+	if err != nil {
+		return "", err
+	}
+	if relative == "." || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return "", errors.New("fixture path escapes testdata/port/store")
+	}
+	return absolute, nil
+}
+
 func writeFixture(path string) error {
-	value := defaultFixture()
-	if err := validateFixture(value); err != nil {
+	safePath, err := confinedFixturePath(path)
+	if err != nil {
 		return err
+	}
+	value := defaultFixture()
+	if validateErr := validateFixture(value); validateErr != nil {
+		return validateErr
 	}
 	data, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
 		return err
 	}
 	data = append(data, '\n')
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+	if err := os.MkdirAll(filepath.Dir(safePath), 0o750); err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o600)
+	return os.WriteFile(safePath, data, 0o600)
 }
 
 func readFixture(path string) (fixture, error) {
-	data, err := os.ReadFile(path)
+	safePath, err := confinedFixturePath(path)
+	if err != nil {
+		return fixture{}, err
+	}
+	// #nosec G304 -- confinedFixturePath restricts reads to the contract fixture tree.
+	data, err := os.ReadFile(safePath)
 	if err != nil {
 		return fixture{}, err
 	}
