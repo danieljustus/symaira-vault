@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "081db728c695ad2b9572e73c6fb63fd0f34bf100",
+    "commit": "fe098b917a72125207bc711915f8daa791d1658f",
     "release": "unreleased",
     "source_files": [
       "internal/vault/entry.go",
@@ -13,7 +13,7 @@
     "generator_files": [
       "scripts/rust-port/cmd/storemetagen/main.go"
     ],
-    "generator_digest": "9101fbd93dd28097d12f8cf9301d16ac87469ad5dea83f563361de2ddb05c8cf"
+    "generator_digest": "ebefabecc53ab58f1d834dc7752812a1dcd84b9f67d060661d2f1af24cde43a1"
   },
   "vectors": [
     {
@@ -28,6 +28,11 @@
           "version": 0
         },
         "secret_meta": {}
+      },
+      "pending_write": {
+        "timestamp": "0001-01-01T00:00:00Z",
+        "field": "token",
+        "action": "set"
       },
       "path": "logical/secret",
       "pseudonymize": true,
@@ -108,6 +113,60 @@
         "secret_meta": {}
       },
       "expected_json": "{\"path\":\"logical/existing\",\"data\":{\"x\":\"y\"},\"meta\":{\"created\":\"2026-09-08T09:11:12.123456789Z\",\"updated\":\"2026-09-08T10:11:12.123456789Z\",\"version\":3},\"secret_meta\":{}}"
+    },
+    {
+      "name": "offset_clock",
+      "input": {
+        "data": {
+          "x": "y"
+        },
+        "meta": {
+          "created": "0001-01-01T00:00:00Z",
+          "updated": "0001-01-01T00:00:00Z",
+          "version": 3
+        },
+        "secret_meta": {}
+      },
+      "path": "logical/offset",
+      "pseudonymize": false,
+      "now": "2026-09-08T10:11:12.123456789+01:30",
+      "expected": {
+        "data": {
+          "x": "y"
+        },
+        "meta": {
+          "created": "2026-09-08T08:41:12.123456789Z",
+          "updated": "2026-09-08T08:41:12.123456789Z",
+          "version": 4
+        },
+        "secret_meta": {}
+      },
+      "expected_json": "{\"data\":{\"x\":\"y\"},\"meta\":{\"created\":\"2026-09-08T08:41:12.123456789Z\",\"updated\":\"2026-09-08T08:41:12.123456789Z\",\"version\":4},\"secret_meta\":{}}"
+    },
+    {
+      "name": "version_overflow",
+      "input": {
+        "data": null,
+        "meta": {
+          "created": "0001-01-01T00:00:00Z",
+          "updated": "0001-01-01T00:00:00Z",
+          "version": 9223372036854775807
+        },
+        "secret_meta": {}
+      },
+      "path": "",
+      "pseudonymize": false,
+      "now": "2026-09-08T10:11:12.123456789Z",
+      "expected": {
+        "data": {},
+        "meta": {
+          "created": "2026-09-08T10:11:12.123456789Z",
+          "updated": "2026-09-08T10:11:12.123456789Z",
+          "version": -9223372036854775808
+        },
+        "secret_meta": {}
+      },
+      "expected_json": "{\"data\":{},\"meta\":{\"created\":\"2026-09-08T10:11:12.123456789Z\",\"updated\":\"2026-09-08T10:11:12.123456789Z\",\"version\":-9223372036854775808},\"secret_meta\":{}}"
     }
   ]
 }
