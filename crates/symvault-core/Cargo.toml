@@ -10,12 +10,16 @@ publish = false
 [dependencies]
 base32 = "=0.5.1"
 base64 = "=0.22.1"
+chacha20poly1305 = { version = "=0.10.1", default-features = false, features = ["alloc"] }
+thiserror = "=2.0.18"
 getrandom = "=0.3.3"
 hmac = "=0.12.1"
 serde.workspace = true
 serde_json.workspace = true
+serde_yaml_ng = "=0.10.0"
 symaira-core-version.workspace = true
 sha1 = "=0.10.6"
 sha2 = "=0.10.9"
 unicode_categories = "=0.1.1"
 zeroize = { version = "=1.8.2", features = ["alloc"] }
+fs4 = { version = "=0.13.1", features = ["sync"] }

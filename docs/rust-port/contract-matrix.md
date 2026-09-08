@@ -64,6 +64,8 @@ oracle to commit `a57f565a`; all other rows retain the baseline oracle.
 | DIST-005 | rollback | Rust-written copied vault | frozen Go fallback | Go opens and mutates safely after rollback | release harness | all | semantic + hashes | TODO |
 | VALUE-001 | value gate | representative release builds | measured Go baseline | >=20% size or RSS gain; <=10% p95 regression | paired benchmark JSON | macOS arm64 + CI sample | measured | TODO |
 
+> RUST-007 local executable evidence: `cargo test -p symvault-core -p symvault-platform`, deny-warnings Clippy, `GOWORK=off go test ./internal/config ./internal/session ./internal/quotas ./scripts/rust-port/cmd/quotagen`, and the Go quota fixture check passed in this worktree. This does not promote CFG/SESSION/PLATFORM/QUOTA-002 to `PASS`: native OS keyring/UI/daemon evidence and CI fixture integration remain required.
+>
 > RUST-005 executable evidence in this worktree was run on macOS. Linux, Windows, FreeBSD, and iOS-native evidence remains outside this run; the shared Rust paths avoid OS-specific APIs, while native filesystem gates must still run on those targets before a platform-specific release claim.
 
 ## Rules
