@@ -19,7 +19,7 @@ use sha2::{Digest, Sha256};
 use symvault_crypto::{Identity, decrypt, encrypt, parse_recipient, recipient_string};
 use thiserror::Error;
 use walkdir::WalkDir;
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 /// Keyed JSONL audit logging, verification, rotation, and export.
 pub mod audit;
@@ -426,42 +426,64 @@ impl Store {
         identity: &Identity,
     ) -> Result<(), StoreError> {
         validate_entry_path(path)?;
-        if self.config.pseudonymize_paths {
-            return Err(StoreError::Config(
-                "new-entry writes do not yet support pseudonymized paths".into(),
-            ));
-        }
         let entries_root = self.root.join(ENTRIES_DIR);
-        ensure_directory(&entries_root)?;
-        let relative = Path::new(path);
-        let parent = relative.parent().unwrap_or_else(|| Path::new(""));
-        let parent_path = entries_root.join(parent);
-        ensure_directory(&parent_path)?;
-        let file_name = relative
-            .file_name()
-            .ok_or_else(|| StoreError::InvalidEntryPath(path.to_owned()))?;
-        let target = parent_path.join(format!(
-            "{}{}",
-            file_name.to_string_lossy(),
-            ENTRY_EXTENSION
-        ));
+        let _entries_cap = ensure_directory(&entries_root)?;
+
+        // Resolve and retain the destination directory capability before any
+        // bytes are encrypted. Publication must not reopen a path after an
+        // ancestor has been replaced.
+        let target = if self.config.pseudonymize_paths {
+            let name = symvault_crypto::pseudonymize_path(identity, path);
+            entries_root
+                .join(&name[..2])
+                .join(format!("{name}{ENTRY_EXTENSION}"))
+        } else {
+            let relative = Path::new(path);
+            let parent = relative.parent().unwrap_or_else(|| Path::new(""));
+            let parent_path = entries_root.join(parent);
+            let file_name = relative
+                .file_name()
+                .ok_or_else(|| StoreError::InvalidEntryPath(path.to_owned()))?;
+            parent_path.join(format!(
+                "{}{}",
+                file_name.to_string_lossy(),
+                ENTRY_EXTENSION
+            ))
+        };
+        let parent_path = target
+            .parent()
+            .ok_or_else(|| StoreError::UnsafePath(path.to_owned()))?;
+        let parent_cap = ensure_directory_recursive(parent_path)?;
         if regular_exists(&target)? {
             return Err(StoreError::Config(
                 "entry replacement is not part of the new-entry slice".into(),
             ));
         }
 
-        let mut plaintext = serde_json::to_vec(entry).map_err(|error| StoreError::Entry {
-            path: path.to_owned(),
-            detail: error.to_string(),
-        })?;
-        let recipient = parse_recipient(&recipient_string(identity))
+        let mut stored = entry.clone();
+        if self.config.pseudonymize_paths {
+            stored.path = path.to_owned();
+        }
+        let plaintext =
+            Zeroizing::new(
+                serde_json::to_vec(&stored).map_err(|error| StoreError::Entry {
+                    path: path.to_owned(),
+                    detail: error.to_string(),
+                })?,
+            );
+        let mut recipient_strings = self.recipients()?;
+        recipient_strings.insert(0, recipient_string(identity));
+        let mut seen = BTreeSet::new();
+        let recipients = recipient_strings
+            .into_iter()
+            .filter(|value| seen.insert(value.clone()))
+            .map(|value| {
+                parse_recipient(&value).map_err(|error| StoreError::Config(error.to_string()))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let ciphertext = encrypt(&plaintext, &recipients)
             .map_err(|error| StoreError::Decryption(error.to_string()))?;
-        let ciphertext = encrypt(&plaintext, &[recipient])
-            .map_err(|error| StoreError::Decryption(error.to_string()))?;
-        plaintext.zeroize();
-        atomic_create(&target, &ciphertext)?;
-        Ok(())
+        atomic_create(&target, &ciphertext, &parent_cap)
     }
 
     /// Returns only the metadata portion of an entry after decryption.
@@ -541,7 +563,10 @@ impl Store {
             });
         } else {
             result.push(Candidate {
-                path: self.root.join(ENTRIES_DIR).join(path).with_extension("age"),
+                path: self
+                    .root
+                    .join(ENTRIES_DIR)
+                    .join(format!("{path}{ENTRY_EXTENSION}")),
                 logical: path.to_owned(),
             });
         }
@@ -782,82 +807,124 @@ fn set_private_permissions(_file: &fs::File) -> io::Result<()> {
     Ok(())
 }
 
-fn atomic_create(target: &Path, bytes: &[u8]) -> Result<(), StoreError> {
+fn atomic_create(target: &Path, bytes: &[u8], parent: &fs::File) -> Result<(), StoreError> {
     static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
-    let parent = target.parent().ok_or_else(|| StoreError::Write {
-        path: target.to_path_buf(),
-        source: io::Error::new(io::ErrorKind::InvalidInput, "entry has no parent directory"),
-    })?;
-    let file_name = target
+    let name = target
         .file_name()
-        .and_then(|name| name.to_str())
+        .and_then(|value| value.to_str())
         .ok_or_else(|| StoreError::Write {
             path: target.to_path_buf(),
             source: io::Error::new(io::ErrorKind::InvalidInput, "entry filename is not UTF-8"),
         })?;
 
-    for _ in 0..32 {
-        let sequence = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
-        let temporary = parent.join(format!(
-            ".{file_name}.tmp-{}-{sequence}",
-            std::process::id()
-        ));
-        let mut file = match fs::OpenOptions::new()
+    #[cfg(unix)]
+    {
+        use rustix::fs::{AtFlags, Mode, OFlags, fsync, linkat, openat, unlinkat};
+        for _ in 0..32 {
+            let temporary = format!(
+                ".{name}.tmp-{}-{}",
+                std::process::id(),
+                TEMP_COUNTER.fetch_add(1, Ordering::Relaxed)
+            );
+            let mut file = match openat(
+                parent,
+                temporary.as_str(),
+                OFlags::WRONLY | OFlags::CREATE | OFlags::EXCL,
+                Mode::from_raw_mode(0o600),
+            ) {
+                Ok(file) => fs::File::from(file),
+                Err(source) if source.kind() == io::ErrorKind::AlreadyExists => continue,
+                Err(source) => {
+                    return Err(StoreError::Write {
+                        path: target.to_path_buf(),
+                        source: source.into(),
+                    });
+                }
+            };
+            let result = (|| {
+                file.write_all(bytes).map_err(|source| StoreError::Write {
+                    path: target.to_path_buf(),
+                    source,
+                })?;
+                fsync(&file).map_err(|source| StoreError::Write {
+                    path: target.to_path_buf(),
+                    source: source.into(),
+                })?;
+                linkat(parent, temporary.as_str(), parent, name, AtFlags::empty()).map_err(
+                    |source| {
+                        if source.kind() == io::ErrorKind::AlreadyExists {
+                            StoreError::Config(
+                                "entry replacement is not part of the new-entry slice".into(),
+                            )
+                        } else {
+                            StoreError::Write {
+                                path: target.to_path_buf(),
+                                source: source.into(),
+                            }
+                        }
+                    },
+                )?;
+                fsync(parent).map_err(|source| StoreError::Write {
+                    path: target.to_path_buf(),
+                    source: source.into(),
+                })?;
+                Ok(())
+            })();
+            drop(file);
+            let _ = unlinkat(parent, temporary.as_str(), AtFlags::empty());
+            let cleanup = fsync(parent).map_err(|source| StoreError::Write {
+                path: target.to_path_buf(),
+                source: source.into(),
+            });
+            return result.and(cleanup.map(|_| ()));
+        }
+        Err(StoreError::Write {
+            path: target.to_path_buf(),
+            source: io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "could not allocate a unique temporary entry path",
+            ),
+        })
+    }
+
+    #[cfg(not(unix))]
+    {
+        // Windows publication remains explicitly unproven; retain the existing
+        // path-based implementation until native handle-relative replacement is
+        // specified and tested. The Unix security contract does not carry over.
+        let _ = parent;
+        let temporary = target.with_file_name(format!(".{name}.tmp-{}", std::process::id()));
+        let mut file = fs::OpenOptions::new()
             .write(true)
             .create_new(true)
             .open(&temporary)
-        {
-            Ok(file) => file,
-            Err(source) if source.kind() == io::ErrorKind::AlreadyExists => continue,
-            Err(source) => {
-                return Err(StoreError::Write {
-                    path: target.to_path_buf(),
-                    source,
-                });
-            }
-        };
+            .map_err(|source| StoreError::Write {
+                path: target.to_path_buf(),
+                source,
+            })?;
         set_private_permissions(&file).map_err(|source| StoreError::Write {
             path: target.to_path_buf(),
             source,
         })?;
-
-        let result = (|| {
-            file.write_all(bytes).map_err(|source| StoreError::Write {
-                path: target.to_path_buf(),
-                source,
-            })?;
-            file.sync_all().map_err(|source| StoreError::Write {
-                path: target.to_path_buf(),
-                source,
-            })?;
-            fs::hard_link(&temporary, target).map_err(|source| {
-                if source.kind() == io::ErrorKind::AlreadyExists {
-                    StoreError::Config(
-                        "entry replacement is not part of the new-entry slice".into(),
-                    )
-                } else {
-                    StoreError::Write {
-                        path: target.to_path_buf(),
-                        source,
-                    }
-                }
-            })?;
-            Ok(())
-        })();
+        file.write_all(bytes).map_err(|source| StoreError::Write {
+            path: target.to_path_buf(),
+            source,
+        })?;
+        file.sync_all().map_err(|source| StoreError::Write {
+            path: target.to_path_buf(),
+            source,
+        })?;
+        drop(file);
+        let result = fs::hard_link(&temporary, target).map_err(|source| StoreError::Write {
+            path: target.to_path_buf(),
+            source,
+        });
         let _ = fs::remove_file(&temporary);
-        return result;
+        result
     }
-
-    Err(StoreError::Write {
-        path: target.to_path_buf(),
-        source: io::Error::new(
-            io::ErrorKind::AlreadyExists,
-            "could not allocate a unique temporary entry path",
-        ),
-    })
 }
 
-fn ensure_directory(path: &Path) -> Result<(), StoreError> {
+fn ensure_directory(path: &Path) -> Result<fs::File, StoreError> {
     let file = open_directory_nofollow(path).map_err(|source| StoreError::Read {
         path: path.to_path_buf(),
         source,
@@ -869,7 +936,7 @@ fn ensure_directory(path: &Path) -> Result<(), StoreError> {
     if !metadata.is_dir() {
         return Err(StoreError::RootNotDirectory(path.to_path_buf()));
     }
-    Ok(())
+    Ok(file)
 }
 
 fn ensure_regular_file(path: &Path, required: bool) -> Result<bool, StoreError> {
@@ -1537,28 +1604,88 @@ impl Store {
     }
 }
 
-fn ensure_directory_recursive(path: &Path) -> Result<(), StoreError> {
-    let mut current = PathBuf::new();
-    for component in path.components() {
-        match component {
-            Component::RootDir => current.push(Path::new("/")),
-            Component::Normal(name) => {
-                current.push(name);
-                if !current.exists() {
-                    fs::create_dir(&current).map_err(|source| StoreError::Write {
-                        path: current.clone(),
-                        source,
+fn ensure_directory_recursive(path: &Path) -> Result<fs::File, StoreError> {
+    #[cfg(unix)]
+    {
+        use rustix::fs::{CWD, Mode, OFlags, mkdirat, openat};
+        use std::os::fd::AsFd;
+        let mut dir = if path.is_absolute() {
+            openat(
+                CWD,
+                "/",
+                OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW,
+                Mode::empty(),
+            )
+        } else {
+            openat(
+                CWD,
+                ".",
+                OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW,
+                Mode::empty(),
+            )
+        }
+        .map_err(|source| StoreError::Write {
+            path: path.to_path_buf(),
+            source: source.into(),
+        })?;
+        for component in path.components() {
+            let name = match component {
+                Component::RootDir | Component::CurDir => continue,
+                Component::Normal(name) => name,
+                Component::ParentDir | Component::Prefix(_) => {
+                    return Err(StoreError::UnsafePath(path.display().to_string()));
+                }
+            };
+            match openat(
+                &dir,
+                name,
+                OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW,
+                Mode::empty(),
+            ) {
+                Ok(next) => dir = next,
+                Err(source) if source.kind() == io::ErrorKind::NotFound => {
+                    match mkdirat(&dir, name, Mode::from_raw_mode(0o700)) {
+                        Ok(()) => {}
+                        Err(source) if source.kind() == io::ErrorKind::AlreadyExists => {}
+                        Err(source) => {
+                            return Err(StoreError::Write {
+                                path: path.to_path_buf(),
+                                source: source.into(),
+                            });
+                        }
+                    }
+                    // Another creator may have won mkdirat; either way reopen
+                    // the component relative to the retained parent capability.
+                    dir = openat(
+                        &dir,
+                        name,
+                        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW,
+                        Mode::empty(),
+                    )
+                    .map_err(|source| StoreError::Write {
+                        path: path.to_path_buf(),
+                        source: source.into(),
                     })?;
                 }
-                ensure_directory(&current)?;
-            }
-            Component::CurDir => {}
-            Component::ParentDir | Component::Prefix(_) => {
-                return Err(StoreError::UnsafePath(path.display().to_string()));
+                Err(source) => {
+                    return Err(StoreError::Write {
+                        path: path.to_path_buf(),
+                        source: source.into(),
+                    });
+                }
             }
         }
+        let _ = dir.as_fd();
+        Ok(fs::File::from(dir))
     }
-    Ok(())
+    #[cfg(not(unix))]
+    {
+        fs::create_dir_all(path).map_err(|source| StoreError::Write {
+            path: path.to_path_buf(),
+            source: source.into(),
+        })?;
+        ensure_directory(path)
+    }
 }
 
 fn atomic_replace(target: &Path, bytes: &[u8]) -> Result<(), StoreError> {

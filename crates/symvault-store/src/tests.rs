@@ -597,7 +597,7 @@ fn fresh_layout_writes_a_new_entry_atomically_and_reads_it_back() {
 }
 
 #[test]
-fn fresh_layout_write_rejects_pseudonymized_paths() {
+fn fresh_layout_write_supports_pseudonymized_nested_and_dotted_paths() {
     let (_, value) = fixture();
     let identity = parse_identity(IDENTITY).unwrap();
     let temp = tempfile::tempdir().unwrap();
@@ -609,10 +609,53 @@ fn fresh_layout_write_rejects_pseudonymized_paths() {
     )
     .unwrap();
     let store = Store::open(root, &identity).unwrap();
-    let error = store
-        .write_new_entry("written", &Entry::default(), &identity)
-        .unwrap_err();
-    assert!(matches!(error, StoreError::Config(message) if message.contains("pseudonymized")));
+    let entry = Entry {
+        data: BTreeMap::from([(
+            "token".to_owned(),
+            serde_json::Value::String("pseudonymized-secret".to_owned()),
+        )]),
+        ..Entry::default()
+    };
+    store
+        .write_new_entry("nested.name/written.v1", &entry, &identity)
+        .unwrap();
+    let got = store.get("nested.name/written.v1", &identity).unwrap();
+    assert_eq!(got.path, "nested.name/written.v1");
+    assert_eq!(got.data, entry.data);
+    assert!(!root.join("entries/nested.name").exists());
+    let hash = symvault_crypto::pseudonymize_path(&identity, "nested.name/written.v1");
+    assert!(
+        root.join(format!("entries/{}/{}.age", &hash[..2], hash))
+            .is_file()
+    );
+}
+
+#[test]
+fn fresh_layout_write_uses_all_configured_recipients_and_preserves_dots() {
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let other = parse_identity(
+        "AGE-SECRET-KEY-18HD87KNMWKY3RW97YR2PYU6HGWDZXAGW6JF74LNNHUA6A8K5ZF9QTWUTK3",
+    )
+    .unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    materialize(root, &value.vaults[0]);
+    fs::write(
+        root.join(RECIPIENTS_FILE),
+        format!("{}\n", recipient_string(&other)),
+    )
+    .unwrap();
+    let store = Store::open(root, &identity).unwrap();
+    let entry = Entry::default();
+    store
+        .write_new_entry("service.v1", &entry, &identity)
+        .unwrap();
+    let ciphertext = fs::read(root.join("entries/service.v1.age")).unwrap();
+    assert_eq!(
+        symvault_crypto::decrypt(&ciphertext, &other).unwrap(),
+        serde_json::to_vec(&entry).unwrap()
+    );
 }
 
 #[test]
@@ -780,4 +823,80 @@ fn file_manifest_is_sorted_and_contains_metadata() {
     assert_eq!(paths, sorted);
     #[cfg(unix)]
     assert!(files.iter().all(|file| file.mode > 0));
+}
+
+#[cfg(unix)]
+#[test]
+fn atomic_create_holds_parent_capability_across_ancestor_replacement() {
+    use std::os::unix::fs::symlink;
+
+    let root = tempfile::tempdir().unwrap();
+    let checked = root.path().join("checked");
+    let outside = root.path().join("outside");
+    fs::create_dir(&checked).unwrap();
+    fs::create_dir(&outside).unwrap();
+    fs::write(outside.join("sentinel"), b"must stay unchanged").unwrap();
+
+    let parent = ensure_directory_recursive(&checked.canonicalize().unwrap()).unwrap();
+    fs::rename(&checked, root.path().join("actual")).unwrap();
+    symlink(&outside, &checked).unwrap();
+
+    let target = checked.join("published.age");
+    atomic_create(&target, b"published only in retained directory", &parent).unwrap();
+    assert_eq!(
+        fs::read(outside.join("sentinel")).unwrap(),
+        b"must stay unchanged"
+    );
+    assert_eq!(
+        fs::read(root.path().join("actual/published.age")).unwrap(),
+        b"published only in retained directory"
+    );
+    assert!(!outside.join("published.age").exists());
+
+    fs::write(
+        root.path().join("actual/collision.age"),
+        b"collision sentinel",
+    )
+    .unwrap();
+    let collision = root.path().join("checked/collision.age");
+    let error = atomic_create(&collision, b"replacement", &parent).unwrap_err();
+    assert!(matches!(error, StoreError::Config(message) if message.contains("replacement")));
+    assert_eq!(
+        fs::read(root.path().join("actual/collision.age")).unwrap(),
+        b"collision sentinel"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn concurrent_capability_publication_creates_all_entries_without_temp_leaks() {
+    use std::thread;
+
+    let root = tempfile::tempdir().unwrap();
+    let root_path = root.path().canonicalize().unwrap();
+    let parent_path = root_path.join("entries/shared/deep");
+    let mut workers = Vec::new();
+    for index in 0..8 {
+        let parent_path = parent_path.clone();
+        workers.push(thread::spawn(move || {
+            let parent = ensure_directory_recursive(&parent_path).unwrap();
+            let target = parent_path.join(format!("entry-{index}.age"));
+            atomic_create(&target, format!("payload-{index}").as_bytes(), &parent).unwrap();
+        }));
+    }
+    for worker in workers {
+        worker.join().unwrap();
+    }
+    for index in 0..8 {
+        assert_eq!(
+            fs::read(parent_path.join(format!("entry-{index}.age"))).unwrap(),
+            format!("payload-{index}").as_bytes()
+        );
+    }
+    assert!(!fs::read_dir(&parent_path).unwrap().any(|item| {
+        item.unwrap()
+            .file_name()
+            .to_string_lossy()
+            .contains(".tmp-")
+    }));
 }
