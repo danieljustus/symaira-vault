@@ -154,3 +154,68 @@ fn entry_and_manifest_mutations_retain_opened_root_after_path_replacement() {
         assert_eq!(fs::read_dir(&outside).unwrap().count(), 2);
     }
 }
+
+#[test]
+fn manifest_rebuild_reads_mtime_from_retained_root() {
+    use std::time::{Duration, SystemTime};
+
+    let temp = tempfile::tempdir_in(std::env::temp_dir().canonicalize().unwrap()).unwrap();
+    let root = temp.path().join("vault");
+    let moved = temp.path().join("moved");
+    let outside = temp.path().join("outside");
+    fs::create_dir_all(root.join("entries")).unwrap();
+    fs::create_dir(&outside).unwrap();
+    fs::write(
+        root.join("config.yaml"),
+        b"vault:\n  pseudonymize_paths: false\n",
+    )
+    .unwrap();
+    fs::write(root.join("identity.age"), b"presence fixture").unwrap();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let store = Store::open(&root, &identity).unwrap();
+    store
+        .write_entry_at(
+            "observed",
+            &Entry::default(),
+            &identity,
+            "2026-09-08T10:11:12Z",
+            false,
+            None,
+        )
+        .unwrap();
+
+    let retained_time = SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_001);
+    let outsider_time = SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_002);
+    fs::File::open(root.join("entries/observed.age"))
+        .unwrap()
+        .set_modified(retained_time)
+        .unwrap();
+    fs::create_dir_all(outside.join("entries")).unwrap();
+    fs::write(outside.join("config.yaml"), b"vault: invalid\n").unwrap();
+    fs::write(outside.join("identity.age"), b"outsider identity").unwrap();
+    fs::write(outside.join("entries/observed.age"), b"outsider bytes").unwrap();
+    fs::File::open(outside.join("entries/observed.age"))
+        .unwrap()
+        .set_modified(outsider_time)
+        .unwrap();
+
+    fs::rename(&root, &moved).unwrap();
+    symlink(&outside, &root).unwrap();
+    let rebuilt = store.rebuild_manifest(&identity).unwrap();
+    let expected = time::OffsetDateTime::from(retained_time)
+        .to_offset(time::UtcOffset::UTC)
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap();
+    assert_eq!(rebuilt.entries["observed"].mtime, expected);
+    assert_ne!(
+        rebuilt.entries["observed"].mtime,
+        time::OffsetDateTime::from(outsider_time)
+            .to_offset(time::UtcOffset::UTC)
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap()
+    );
+    assert_eq!(
+        fs::read(outside.join("entries/observed.age")).unwrap(),
+        b"outsider bytes"
+    );
+}
