@@ -1,4 +1,4 @@
-.PHONY: all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates help docs-check
+.PHONY: all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates help docs-check
 
 # Variables
 BINARY_NAME := symvault
@@ -328,7 +328,20 @@ store-differential:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/storegen --check --output testdata/port/store/store.json
 	$(CARGO) test -p symvault-store --locked
 
-rust-gates: store-differential
+audit-fixtures-generate:
+	UPDATE_AUDIT_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/audit -run '^TestAuditFixture$$' -count=1
+
+audit-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/audit -run '^TestAuditFixture$$' -count=1
+
+audit-differential: audit-fixtures-check
+	$(CARGO) test -p symvault-store --test audit --locked
+	@mkdir -p target/audit
+	@rm -f target/audit/rust-output.jsonl
+	$(CARGO) run -p symvault-store --example audit-emit --locked -- target/audit/rust-output.jsonl >/dev/null
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/auditverify target/audit/rust-output.jsonl
+
+rust-gates: store-differential audit-differential
 	$(MAKE) rust-lint
 	$(MAKE) rust-check
 	$(MAKE) rust-test
@@ -384,6 +397,9 @@ help:
 	@echo "  crypto-fuzz-smoke - Run the bounded Argon2id parser fuzz smoke"
 	@echo "  store-reopen-fixture  - Generate the deterministic Go↔Rust reopen fixture"
 	@echo "  store-differential - Verify Go↔Rust storage reopen and read-only fixtures"
+	@echo "  audit-fixtures-generate - Generate the production-Go audit fixture"
+	@echo "  audit-fixtures-check - Verify audit fixture provenance and drift"
+	@echo "  audit-differential - Verify Go↔Rust audit chain, rotation, and export"
 	@echo "  rust-fuzz-smoke   - Run the deterministic bounded Rust age/KDF fuzz smoke"
 	@echo "  rust-fuzz         - Run the bounded main/scheduled Rust age/KDF fuzz pass"
 	@echo "  port-contract      - Run all Rust-port contract preparation gates"

@@ -3,7 +3,9 @@
 `TODO` means the contract is identified but does not yet have a language-neutral
 fixture and Rust parity test. `PASS` requires an executable test in CI; prose or
 compilation is not evidence. The Go oracle is commit `caadd5e` / release
-`v0.22.1` until deliberately advanced before the first implementation PR.
+`v0.22.1` until deliberately advanced before the first implementation PR. The
+`AUDIT-001`/`AUDIT-002` vectors deliberately advance only their production-Go
+oracle to commit `a57f565a`; all other rows retain the baseline oracle.
 
 | ID | Seam | Fixture / input | Go oracle | Expected contract | Rust evidence | Platforms | Compare | Status |
 |---|---|---|---|---|---|---|---|---|
@@ -30,8 +32,8 @@ compilation is not evidence. The Go oracle is commit `caadd5e` / release
 | STORE-003 | safe filesystem | symlink/traversal/read-only/partial write | Go fs/vault | fail closed, atomicity, modes, cleanup | adversarial tests | all | side effects | PASS |
 | STORE-004 | manifests | valid/tampered/out-of-band entries | Go manifest code | exact verification and diagnostics | fixture suite | all/iOS | bytes + semantic | PASS |
 | STORE-005 | encrypted search index | build/load/stale/corrupt/concurrent | Go vault | no plaintext on disk; matching and invalidation parity | index fixtures | all | side effects + semantic | PASS |
-| AUDIT-001 | HMAC chain | fixed key/clock/event corpus | Go audit | canonical JSON, HMAC chain, `kid`, reset detection | byte vectors | all | bytes | TODO |
-| AUDIT-002 | key rotation/export | pre/post-rotation logs | Go audit | archive naming, verification, redaction, filters | fixture suite | all | bytes + metadata | TODO |
+| AUDIT-001 | HMAC chain | fixed key/clock/event corpus | Go audit | canonical JSON, HMAC chain, `kid`, reset detection | byte vectors | all | bytes | PASS — `make audit-differential` + Rust mutation tests |
+| AUDIT-002 | key rotation/export | pre/post-rotation logs | Go audit | archive naming, verification, redaction, filters | fixture suite | all | bytes + metadata | PASS — `make audit-differential` + Rust rotation/export tests |
 | SESSION-001 | cache | save/load/touch/expiry/revoke | Go session | idle/max TTL and non-refreshing probes | fake-clock tests | all | semantic | TODO |
 | SESSION-002 | OS keyring | memory backend + native smoke | Go session | service/account names, binary payload, unavailable behavior | injected + native tests | native OS | semantic | TODO |
 | SESSION-003 | Touch ID | available/unavailable/cancel/failure | Go Darwin bridge | prompts, fallback, no passphrase exposure | adapter + signed-app smoke | macOS | semantic | TODO |

@@ -1,0 +1,442 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "a57f565a",
+    "source_files": [
+      "internal/audit/audit.go",
+      "internal/audit/export.go",
+      "internal/audit/keystore.go"
+    ],
+    "source_digest": "a9dde68f9a781a4398c0bc6093424cf2387ec9fffc4358c7858ab0b9f5213ec3",
+    "generator_files": [
+      "internal/audit/audit_fixture_test.go"
+    ],
+    "generator_digest": "922e187f12feb0cddcfdf65caa8d4517d4ae1790cc19507a7dea70b150a4de58"
+  },
+  "keys": [
+    {
+      "name": "old",
+      "key_hex": "61756469742d666978747572652d6f6c642d6b65792d30303030303030303030",
+      "kid": "9fd316ee"
+    },
+    {
+      "name": "new",
+      "key_hex": "61756469742d666978747572652d6e65772d6b65792d30303030303030303030",
+      "kid": "13b58631"
+    }
+  ],
+  "entries": [
+    {
+      "ts": "2026-01-01T00:00:01Z",
+      "agent": "fixture-agent",
+      "action": "get",
+      "path": "safe/password",
+      "kid": "9fd316ee",
+      "hmac": "59f1ff0347b342981f5938dd9980be49bba06d3e8f1431d6302ce5dc076d9894",
+      "ok": true
+    },
+    {
+      "ts": "2026-01-01T00:00:02Z",
+      "agent": "fixture-agent",
+      "action": "set",
+      "path": "safe/password",
+      "reason": "write_denied",
+      "kid": "9fd316ee",
+      "hmac": "42e1ebf63bdb3ecd156a37c1edb2ab0e52693f03f0a6f1742cee5cf43adef063",
+      "ok": false
+    },
+    {
+      "ts": "2026-01-01T00:00:03Z",
+      "agent": "fixture-agent",
+      "action": "list",
+      "path": "safe/",
+      "kid": "13b58631",
+      "hmac": "41890b877ee218c21dc11161404e64f062ecb984306dbf010b3006a388ffb0db",
+      "argv_hash": "deadbeef",
+      "ok": true
+    },
+    {
+      "ts": "2026-01-01T00:00:04Z",
+      "agent": "fixture-agent",
+      "action": "delete",
+      "path": "safe/password",
+      "kid": "13b58631",
+      "hmac": "352eacc10a91e7d7b86295acfa6720cc5ee7e151c4220129c14c5ad062e911cf",
+      "ok": true
+    }
+  ],
+  "legacy": {
+    "ts": "2026-01-01T00:00:00Z",
+    "agent": "fixture-agent",
+    "action": "legacy",
+    "path": "before-chain",
+    "ok": true
+  },
+  "negative_cases": [
+    {
+      "name": "mutation",
+      "lines": [
+        {
+          "ts": "2026-01-01T00:00:01Z",
+          "agent": "fixture-agent",
+          "action": "get",
+          "path": "safe/password",
+          "kid": "9fd316ee",
+          "hmac": "59f1ff0347b342981f5938dd9980be49bba06d3e8f1431d6302ce5dc076d9894",
+          "ok": true
+        },
+        {
+          "action": "tampered",
+          "agent": "fixture-agent",
+          "hmac": "42e1ebf63bdb3ecd156a37c1edb2ab0e52693f03f0a6f1742cee5cf43adef063",
+          "kid": "9fd316ee",
+          "ok": false,
+          "path": "safe/password",
+          "reason": "write_denied",
+          "ts": "2026-01-01T00:00:02Z"
+        },
+        {
+          "ts": "2026-01-01T00:00:03Z",
+          "agent": "fixture-agent",
+          "action": "list",
+          "path": "safe/",
+          "kid": "13b58631",
+          "hmac": "41890b877ee218c21dc11161404e64f062ecb984306dbf010b3006a388ffb0db",
+          "argv_hash": "deadbeef",
+          "ok": true
+        },
+        {
+          "ts": "2026-01-01T00:00:04Z",
+          "agent": "fixture-agent",
+          "action": "delete",
+          "path": "safe/password",
+          "kid": "13b58631",
+          "hmac": "352eacc10a91e7d7b86295acfa6720cc5ee7e151c4220129c14c5ad062e911cf",
+          "ok": true
+        }
+      ],
+      "valid": false,
+      "total": 4,
+      "verified": 3,
+      "legacy": 0,
+      "tampered": 1,
+      "unverifiable": 0,
+      "first_bad_index": 1
+    },
+    {
+      "name": "reorder",
+      "lines": [
+        {
+          "ts": "2026-01-01T00:00:02Z",
+          "agent": "fixture-agent",
+          "action": "set",
+          "path": "safe/password",
+          "reason": "write_denied",
+          "kid": "9fd316ee",
+          "hmac": "42e1ebf63bdb3ecd156a37c1edb2ab0e52693f03f0a6f1742cee5cf43adef063",
+          "ok": false
+        },
+        {
+          "ts": "2026-01-01T00:00:01Z",
+          "agent": "fixture-agent",
+          "action": "get",
+          "path": "safe/password",
+          "kid": "9fd316ee",
+          "hmac": "59f1ff0347b342981f5938dd9980be49bba06d3e8f1431d6302ce5dc076d9894",
+          "ok": true
+        },
+        {
+          "ts": "2026-01-01T00:00:03Z",
+          "agent": "fixture-agent",
+          "action": "list",
+          "path": "safe/",
+          "kid": "13b58631",
+          "hmac": "41890b877ee218c21dc11161404e64f062ecb984306dbf010b3006a388ffb0db",
+          "argv_hash": "deadbeef",
+          "ok": true
+        },
+        {
+          "ts": "2026-01-01T00:00:04Z",
+          "agent": "fixture-agent",
+          "action": "delete",
+          "path": "safe/password",
+          "kid": "13b58631",
+          "hmac": "352eacc10a91e7d7b86295acfa6720cc5ee7e151c4220129c14c5ad062e911cf",
+          "ok": true
+        }
+      ],
+      "valid": false,
+      "total": 4,
+      "verified": 1,
+      "legacy": 0,
+      "tampered": 3,
+      "unverifiable": 0,
+      "first_bad_index": 0
+    },
+    {
+      "name": "truncated_hmac",
+      "lines": [
+        {
+          "ts": "2026-01-01T00:00:01Z",
+          "agent": "fixture-agent",
+          "action": "get",
+          "path": "safe/password",
+          "kid": "9fd316ee",
+          "hmac": "59f1ff0347b342981f5938dd9980be49bba06d3e8f1431d6302ce5dc076d9894",
+          "ok": true
+        },
+        {
+          "ts": "2026-01-01T00:00:02Z",
+          "agent": "fixture-agent",
+          "action": "set",
+          "path": "safe/password",
+          "reason": "write_denied",
+          "kid": "9fd316ee",
+          "hmac": "42e1ebf63bdb3ecd156a37c1edb2ab0e52693f03f0a6f1742cee5cf43adef063",
+          "ok": false
+        },
+        {
+          "action": "list",
+          "agent": "fixture-agent",
+          "argv_hash": "deadbeef",
+          "hmac": "41890b877ee218c21dc11161404e64f062ecb984306dbf010b3006a388ffb0d",
+          "kid": "13b58631",
+          "ok": true,
+          "path": "safe/",
+          "ts": "2026-01-01T00:00:03Z"
+        },
+        {
+          "ts": "2026-01-01T00:00:04Z",
+          "agent": "fixture-agent",
+          "action": "delete",
+          "path": "safe/password",
+          "kid": "13b58631",
+          "hmac": "352eacc10a91e7d7b86295acfa6720cc5ee7e151c4220129c14c5ad062e911cf",
+          "ok": true
+        }
+      ],
+      "valid": false,
+      "total": 4,
+      "verified": 2,
+      "legacy": 0,
+      "tampered": 2,
+      "unverifiable": 0,
+      "first_bad_index": 2
+    },
+    {
+      "name": "insertion",
+      "lines": [
+        {
+          "ts": "2026-01-01T00:00:01Z",
+          "agent": "fixture-agent",
+          "action": "get",
+          "path": "safe/password",
+          "kid": "9fd316ee",
+          "hmac": "59f1ff0347b342981f5938dd9980be49bba06d3e8f1431d6302ce5dc076d9894",
+          "ok": true
+        },
+        {
+          "ts": "2026-01-01T00:00:01Z",
+          "agent": "fixture-agent",
+          "action": "inserted",
+          "ok": true
+        },
+        {
+          "ts": "2026-01-01T00:00:02Z",
+          "agent": "fixture-agent",
+          "action": "set",
+          "path": "safe/password",
+          "reason": "write_denied",
+          "kid": "9fd316ee",
+          "hmac": "42e1ebf63bdb3ecd156a37c1edb2ab0e52693f03f0a6f1742cee5cf43adef063",
+          "ok": false
+        },
+        {
+          "ts": "2026-01-01T00:00:03Z",
+          "agent": "fixture-agent",
+          "action": "list",
+          "path": "safe/",
+          "kid": "13b58631",
+          "hmac": "41890b877ee218c21dc11161404e64f062ecb984306dbf010b3006a388ffb0db",
+          "argv_hash": "deadbeef",
+          "ok": true
+        },
+        {
+          "ts": "2026-01-01T00:00:04Z",
+          "agent": "fixture-agent",
+          "action": "delete",
+          "path": "safe/password",
+          "kid": "13b58631",
+          "hmac": "352eacc10a91e7d7b86295acfa6720cc5ee7e151c4220129c14c5ad062e911cf",
+          "ok": true
+        }
+      ],
+      "valid": false,
+      "total": 5,
+      "verified": 4,
+      "legacy": 0,
+      "tampered": 1,
+      "unverifiable": 0,
+      "first_bad_index": 1
+    },
+    {
+      "name": "reset_after_chain",
+      "lines": [
+        {
+          "ts": "2026-01-01T00:00:01Z",
+          "agent": "fixture-agent",
+          "action": "get",
+          "path": "safe/password",
+          "kid": "9fd316ee",
+          "hmac": "59f1ff0347b342981f5938dd9980be49bba06d3e8f1431d6302ce5dc076d9894",
+          "ok": true
+        },
+        {
+          "ts": "2026-01-01T00:00:02Z",
+          "agent": "fixture-agent",
+          "action": "set",
+          "path": "safe/password",
+          "reason": "write_denied",
+          "kid": "9fd316ee",
+          "hmac": "42e1ebf63bdb3ecd156a37c1edb2ab0e52693f03f0a6f1742cee5cf43adef063",
+          "ok": false
+        },
+        {
+          "ts": "2026-01-01T00:00:00Z",
+          "agent": "fixture-agent",
+          "action": "legacy",
+          "path": "before-chain",
+          "ok": true
+        },
+        {
+          "ts": "2026-01-01T00:00:03Z",
+          "agent": "fixture-agent",
+          "action": "list",
+          "path": "safe/",
+          "kid": "13b58631",
+          "hmac": "41890b877ee218c21dc11161404e64f062ecb984306dbf010b3006a388ffb0db",
+          "argv_hash": "deadbeef",
+          "ok": true
+        },
+        {
+          "ts": "2026-01-01T00:00:04Z",
+          "agent": "fixture-agent",
+          "action": "delete",
+          "path": "safe/password",
+          "kid": "13b58631",
+          "hmac": "352eacc10a91e7d7b86295acfa6720cc5ee7e151c4220129c14c5ad062e911cf",
+          "ok": true
+        }
+      ],
+      "valid": false,
+      "total": 5,
+      "verified": 4,
+      "legacy": 0,
+      "tampered": 1,
+      "unverifiable": 0,
+      "first_bad_index": 2
+    },
+    {
+      "name": "key_mismatch",
+      "lines": [
+        {
+          "ts": "2026-01-01T00:00:01Z",
+          "agent": "fixture-agent",
+          "action": "get",
+          "path": "safe/password",
+          "kid": "9fd316ee",
+          "hmac": "59f1ff0347b342981f5938dd9980be49bba06d3e8f1431d6302ce5dc076d9894",
+          "ok": true
+        },
+        {
+          "ts": "2026-01-01T00:00:02Z",
+          "agent": "fixture-agent",
+          "action": "set",
+          "path": "safe/password",
+          "reason": "write_denied",
+          "kid": "9fd316ee",
+          "hmac": "42e1ebf63bdb3ecd156a37c1edb2ab0e52693f03f0a6f1742cee5cf43adef063",
+          "ok": false
+        },
+        {
+          "ts": "2026-01-01T00:00:03Z",
+          "agent": "fixture-agent",
+          "action": "list",
+          "path": "safe/",
+          "kid": "13b58631",
+          "hmac": "41890b877ee218c21dc11161404e64f062ecb984306dbf010b3006a388ffb0db",
+          "argv_hash": "deadbeef",
+          "ok": true
+        },
+        {
+          "ts": "2026-01-01T00:00:04Z",
+          "agent": "fixture-agent",
+          "action": "delete",
+          "path": "safe/password",
+          "kid": "13b58631",
+          "hmac": "352eacc10a91e7d7b86295acfa6720cc5ee7e151c4220129c14c5ad062e911cf",
+          "ok": true
+        }
+      ],
+      "valid": false,
+      "total": 4,
+      "verified": 2,
+      "legacy": 0,
+      "tampered": 2,
+      "unverifiable": 0,
+      "first_bad_index": 0
+    },
+    {
+      "name": "end_truncation_is_undetectable",
+      "lines": [
+        {
+          "ts": "2026-01-01T00:00:01Z",
+          "agent": "fixture-agent",
+          "action": "get",
+          "path": "safe/password",
+          "kid": "9fd316ee",
+          "hmac": "59f1ff0347b342981f5938dd9980be49bba06d3e8f1431d6302ce5dc076d9894",
+          "ok": true
+        },
+        {
+          "ts": "2026-01-01T00:00:02Z",
+          "agent": "fixture-agent",
+          "action": "set",
+          "path": "safe/password",
+          "reason": "write_denied",
+          "kid": "9fd316ee",
+          "hmac": "42e1ebf63bdb3ecd156a37c1edb2ab0e52693f03f0a6f1742cee5cf43adef063",
+          "ok": false
+        },
+        {
+          "ts": "2026-01-01T00:00:03Z",
+          "agent": "fixture-agent",
+          "action": "list",
+          "path": "safe/",
+          "kid": "13b58631",
+          "hmac": "41890b877ee218c21dc11161404e64f062ecb984306dbf010b3006a388ffb0db",
+          "argv_hash": "deadbeef",
+          "ok": true
+        }
+      ],
+      "valid": true,
+      "total": 3,
+      "verified": 3,
+      "legacy": 0,
+      "tampered": 0,
+      "unverifiable": 0,
+      "first_bad_index": -1
+    }
+  ],
+  "export": {
+    "action": "set",
+    "failed_only": true,
+    "redacted_path": "redacted:24a1e7b8755b",
+    "total": 1
+  },
+  "rotation": {
+    "archive_prefix": "audit-hmac-key.rotated.",
+    "archive_kid": "9fd316ee",
+    "bootstrap": true
+  }
+}

@@ -21,6 +21,9 @@ use thiserror::Error;
 use walkdir::WalkDir;
 use zeroize::Zeroize;
 
+/// Keyed JSONL audit logging, verification, rotation, and export.
+pub mod audit;
+
 const ENTRIES_DIR: &str = "entries";
 const CONFIG_FILE: &str = "config.yaml";
 const IDENTITY_FILE: &str = "identity.age";

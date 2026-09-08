@@ -1692,6 +1692,7 @@ version = "0.0.0"
 dependencies = [
  "base64",
  "getrandom 0.3.3",
+ "hmac",
  "rustix",
  "serde",
  "serde_json",

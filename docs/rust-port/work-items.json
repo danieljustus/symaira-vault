@@ -50,10 +50,10 @@
     {
       "id": "RUST-006",
       "title": "Port keyed audit chain and rotation",
-      "status": "blocked",
+      "status": "in_progress",
       "depends_on": ["RUST-005"],
       "contract_rows": ["AUDIT-001", "AUDIT-002"],
-      "acceptance": ["make audit-differential", "cargo nextest run -p symvault-store audit"]
+      "acceptance": ["make audit-differential", "cargo nextest run -p symvault-store --test audit", "cargo clippy -p symvault-store --all-targets --all-features -- -D warnings"]
     },
     {
       "id": "RUST-007",
