@@ -70,6 +70,7 @@ impl GitRepository {
         let repo = Self { root };
         if !repo.root.join(".git").exists() {
             repo.command(&["init", "--quiet"])?;
+            repo.command(&["symbolic-ref", "HEAD", "refs/heads/master"])?;
             repo.command(&["config", "user.name", "Symaira Vault"])?;
             repo.command(&["config", "user.email", "symvault@example.com"])?;
         }
@@ -215,11 +216,18 @@ impl GitRepository {
                     ..Default::default()
                 }
             }
-            Err(e) => PullResult {
-                remote_url,
-                error: Some(e.to_string()),
-                ..Default::default()
-            },
+            Err(e) => {
+                // `git pull --no-rebase` may leave conflict markers and an
+                // in-progress merge behind. go-git returns the pull error
+                // without rewriting the local tip, so abort the failed merge
+                // before exposing the result to callers.
+                let _ = self.command(&["merge", "--abort"]);
+                PullResult {
+                    remote_url,
+                    error: Some(e.to_string()),
+                    ..Default::default()
+                }
+            }
         }
     }
     fn transfer(&self, name: &str, push: bool) -> PushResult {

@@ -332,7 +332,7 @@ fn go_generated_sync_fixture_is_provenance_bound_and_scope_honest() {
     }
     assert!(fixture.scope["native_watcher"].contains("unproven"));
     assert!(fixture.scope["pass_import"].contains("unproven"));
-    assert!(fixture.scope["candidate_gaps"].contains("GIT-002"));
+    assert!(fixture.scope["candidate_gaps"].contains("IO-003"));
 }
 
 #[test]

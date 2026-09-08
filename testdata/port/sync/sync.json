@@ -79,7 +79,7 @@
     "generator_files": [
       "scripts/rust-port/cmd/syncgen/main.go"
     ],
-    "generator_digest": "68d6a819decb2489c1b57b29d7efa878134e93489ca9e3b5d7577e6c516ce910"
+    "generator_digest": "7de342dbc5ed806812c8f23d90b54b166a154942520b59bf588eb3c2e1f921f5"
   },
   "cases": [
     {
@@ -100,11 +100,18 @@
       "id": "GIT-002-local-bare",
       "seam": "GIT-002",
       "input": {
-        "local_bytes": "one",
-        "remote": "origin"
+        "branch": "master",
+        "entry": "entry.age",
+        "first_bytes": "one",
+        "first_commit": "first",
+        "local_bytes": "local",
+        "local_commit": "local",
+        "remote": "origin",
+        "remote_bytes": "remote",
+        "remote_commit": "remote"
       },
       "expected": {
-        "final_sha256": "7692c3ad3540bb803c020b3aee66cd8887123234ea0c6e7143c0add73ff431ed",
+        "final_sha256": "25bf8e1a2393f1108d37029b3df5593236c755742ec93465bbafa9b290bddcf6",
         "pull_error": "push failed: pull failed: local and remote history have diverged: non-fast-forward update",
         "pull_has_remote": true,
         "pull_skipped": false,
@@ -308,8 +315,8 @@
   ],
   "scope": {
     "archive_bytes": "not a byte contract; compare member manifest and restore result",
-    "candidate_gaps": "GIT-002 divergent-pull parity and IO-003 native watcher remain unproven",
-    "native_watcher": "unproven; polling/process evidence is portable only",
+    "candidate_gaps": "IO-003 native watcher remains unproven; pinned Go production Watcher is polling-only",
+    "native_watcher": "unproven; pinned Go production Watcher is polling-only; no native event backend to execute",
     "pass_import": "unproven; production path requires external gpg"
   }
 }
