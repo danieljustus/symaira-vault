@@ -1,0 +1,21 @@
+{
+  "commit": "3f079ca27478a6d53b004db09aec72eddb23a655",
+  "target": "macOS arm64",
+  "workspace_tests_passed": 201,
+  "workspace_clippy_exit": 0,
+  "go_vault_tests_exit": 0,
+  "root_observation_review": "deleg_ea80cb4a PASS bounded scope",
+  "source_sha256": {
+    "crates/symvault-store/src/lib.rs": "036e9fa134a854ce55b130bdf8b5aa095068822bfd26883579b350e86c5516cd",
+    "crates/symvault-store/src/rooted.rs": "0b291461d3a4b82b45bd8b63d0398daac465a40500acb1ab42a50336651b59c1",
+    "crates/symvault-store/src/publication.rs": "3d88f9ad43fcd5aab55cd541975c6233d4baaf0f3541bc9eafffe6837c0a0869",
+    "crates/symvault-store/src/tests.rs": "17ae3caafeaec3af7f7a5cbb3d9a80630fa9596e308d3588679ac2831c848b35",
+    "crates/symvault-store/tests/root_mutation.rs": "3cd1370c3e3a87778902a315a6d0c8abb7e8540fe8efd61c27416c779ae733ea"
+  },
+  "remaining": [
+    "native storage CI execution",
+    "same-open-file bytes/metadata consistency during replacement",
+    "cross-process manifest writer semantics",
+    "remaining migration contracts"
+  ]
+}
