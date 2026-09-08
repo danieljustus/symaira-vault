@@ -574,8 +574,8 @@ pub fn decrypt_index(
 }
 
 fn derive_index_key(identity: &Identity, salt: &[u8]) -> Vec<u8> {
-    let identity_bytes = recipient_string(identity);
-    let identity_bytes = identity_bytes.as_bytes();
+    let identity_string = identity.0.to_string();
+    let identity_bytes = identity_string.expose_secret().as_bytes();
     if salt.is_empty() {
         return Sha256::digest(identity_bytes).to_vec();
     }
