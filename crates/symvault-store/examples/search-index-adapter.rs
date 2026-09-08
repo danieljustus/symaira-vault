@@ -19,6 +19,11 @@ fn run() -> Result<(), String> {
     let args: Vec<_> = env::args().collect();
     let action = arg(&args, "--action")?;
     let root = PathBuf::from(arg(&args, "--root")?);
+    let case_id = args
+        .windows(2)
+        .find(|pair| pair[0] == "--case-id")
+        .map(|pair| pair[1].as_str())
+        .unwrap_or("adapter");
     let identity = parse_identity(&arg(&args, "--identity")?).map_err(|error| error.to_string())?;
     let store = Store::open(&root, &identity).map_err(|error| error.to_string())?;
 
@@ -30,7 +35,7 @@ fn run() -> Result<(), String> {
         "load-search" => {
             let mut index = SearchIndex::load(&store, &identity)
                 .map_err(|error| error.to_string())?
-                .ok_or_else(|| "search index missing or rejected".to_owned())?;
+                .ok_or_else(|| format!("{case_id}: search index missing or rejected"))?;
             let candidates = store.list(&identity).map_err(|error| error.to_string())?;
             let matches = index
                 .search(&candidates, &arg(&args, "--query")?)
