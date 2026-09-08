@@ -900,3 +900,65 @@ fn concurrent_capability_publication_creates_all_entries_without_temp_leaks() {
             .contains(".tmp-")
     }));
 }
+
+#[test]
+fn malformed_recipient_does_not_create_destination_directories() {
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    materialize(root, &value.vaults[0]);
+    fs::write(root.join(RECIPIENTS_FILE), b"not-an-age-recipient\n").unwrap();
+    let store = Store::open(root, &identity).unwrap();
+    assert!(matches!(
+        store.write_new_entry("new/deep/entry", &Entry::default(), &identity),
+        Err(StoreError::Config(_))
+    ));
+    assert!(!root.join("entries/new").exists());
+}
+
+#[test]
+fn concurrent_same_target_fresh_writes_have_one_winner_and_no_temp_leak() {
+    use std::sync::Arc;
+    use std::thread;
+
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &value.vaults[0]);
+    let store = Arc::new(Store::open(temp.path(), &identity).unwrap());
+    let mut workers = Vec::new();
+    for index in 0..8 {
+        let store = Arc::clone(&store);
+        let identity = parse_identity(IDENTITY).unwrap();
+        workers.push(thread::spawn(move || {
+            let entry = Entry {
+                data: BTreeMap::from([(
+                    "winner".to_owned(),
+                    serde_json::Value::String(format!("payload-{index}")),
+                )]),
+                ..Entry::default()
+            };
+            store.write_new_entry("same-target", &entry, &identity)
+        }));
+    }
+    let results: Vec<_> = workers
+        .into_iter()
+        .map(|worker| worker.join().unwrap())
+        .collect();
+    assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+    assert_eq!(results.iter().filter(|result| result.is_err()).count(), 7);
+    let stored = store.get("same-target", &identity).unwrap();
+    let payload = stored.data["winner"].as_str().unwrap();
+    assert!(payload.starts_with("payload-"));
+    assert!(
+        !fs::read_dir(temp.path().join("entries"))
+            .unwrap()
+            .any(|item| {
+                item.unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .contains(".tmp-")
+            })
+    );
+}

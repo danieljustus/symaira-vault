@@ -427,11 +427,8 @@ impl Store {
     ) -> Result<(), StoreError> {
         validate_entry_path(path)?;
         let entries_root = self.root.join(ENTRIES_DIR);
-        let _entries_cap = ensure_directory(&entries_root)?;
-
-        // Resolve and retain the destination directory capability before any
-        // bytes are encrypted. Publication must not reopen a path after an
-        // ancestor has been replaced.
+        // Resolve and prepare all potentially fallible content before creating
+        // directories, so invalid configuration has no filesystem side effect.
         let target = if self.config.pseudonymize_paths {
             let name = symvault_crypto::pseudonymize_path(identity, path);
             entries_root
@@ -450,16 +447,6 @@ impl Store {
                 ENTRY_EXTENSION
             ))
         };
-        let parent_path = target
-            .parent()
-            .ok_or_else(|| StoreError::UnsafePath(path.to_owned()))?;
-        let parent_cap = ensure_directory_recursive(parent_path)?;
-        if regular_exists(&target)? {
-            return Err(StoreError::Config(
-                "entry replacement is not part of the new-entry slice".into(),
-            ));
-        }
-
         let mut stored = entry.clone();
         if self.config.pseudonymize_paths {
             stored.path = path.to_owned();
@@ -483,6 +470,17 @@ impl Store {
             .collect::<Result<Vec<_>, _>>()?;
         let ciphertext = encrypt(&plaintext, &recipients)
             .map_err(|error| StoreError::Decryption(error.to_string()))?;
+
+        let parent_path = target
+            .parent()
+            .ok_or_else(|| StoreError::UnsafePath(path.to_owned()))?;
+        let _entries_cap = ensure_directory(&entries_root)?;
+        let parent_cap = ensure_directory_recursive(parent_path)?;
+        if regular_exists(&target)? {
+            return Err(StoreError::Config(
+                "entry replacement is not part of the new-entry slice".into(),
+            ));
+        }
         atomic_create(&target, &ciphertext, &parent_cap)
     }
 
@@ -889,38 +887,68 @@ fn atomic_create(target: &Path, bytes: &[u8], parent: &fs::File) -> Result<(), S
 
     #[cfg(not(unix))]
     {
-        // Windows publication remains explicitly unproven; retain the existing
-        // path-based implementation until native handle-relative replacement is
-        // specified and tested. The Unix security contract does not carry over.
         let _ = parent;
-        let temporary = target.with_file_name(format!(".{name}.tmp-{}", std::process::id()));
-        let mut file = fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temporary)
-            .map_err(|source| StoreError::Write {
-                path: target.to_path_buf(),
-                source,
-            })?;
-        set_private_permissions(&file).map_err(|source| StoreError::Write {
+        // Windows publication remains explicitly unproven; retain the path-based
+        // implementation and its old retry/error taxonomy until native tests exist.
+        let parent_path = target.parent().ok_or_else(|| StoreError::Write {
             path: target.to_path_buf(),
-            source,
+            source: io::Error::new(io::ErrorKind::InvalidInput, "entry has no parent directory"),
         })?;
-        file.write_all(bytes).map_err(|source| StoreError::Write {
+        for _ in 0..32 {
+            let sequence = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+            let temporary =
+                parent_path.join(format!(".{name}.tmp-{}-{sequence}", std::process::id()));
+            let mut file = match fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&temporary)
+            {
+                Ok(file) => file,
+                Err(source) if source.kind() == io::ErrorKind::AlreadyExists => continue,
+                Err(source) => {
+                    return Err(StoreError::Write {
+                        path: target.to_path_buf(),
+                        source,
+                    });
+                }
+            };
+            let result = (|| {
+                set_private_permissions(&file).map_err(|source| StoreError::Write {
+                    path: target.to_path_buf(),
+                    source,
+                })?;
+                file.write_all(bytes).map_err(|source| StoreError::Write {
+                    path: target.to_path_buf(),
+                    source,
+                })?;
+                file.sync_all().map_err(|source| StoreError::Write {
+                    path: target.to_path_buf(),
+                    source,
+                })?;
+                drop(file);
+                fs::hard_link(&temporary, target).map_err(|source| {
+                    if source.kind() == io::ErrorKind::AlreadyExists {
+                        StoreError::Config(
+                            "entry replacement is not part of the new-entry slice".into(),
+                        )
+                    } else {
+                        StoreError::Write {
+                            path: target.to_path_buf(),
+                            source,
+                        }
+                    }
+                })
+            })();
+            let _ = fs::remove_file(&temporary);
+            return result;
+        }
+        Err(StoreError::Write {
             path: target.to_path_buf(),
-            source,
-        })?;
-        file.sync_all().map_err(|source| StoreError::Write {
-            path: target.to_path_buf(),
-            source,
-        })?;
-        drop(file);
-        let result = fs::hard_link(&temporary, target).map_err(|source| StoreError::Write {
-            path: target.to_path_buf(),
-            source,
-        });
-        let _ = fs::remove_file(&temporary);
-        result
+            source: io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "could not allocate a unique temporary entry path",
+            ),
+        })
     }
 }
 
@@ -1607,7 +1635,7 @@ impl Store {
 fn ensure_directory_recursive(path: &Path) -> Result<fs::File, StoreError> {
     #[cfg(unix)]
     {
-        use rustix::fs::{CWD, Mode, OFlags, mkdirat, openat};
+        use rustix::fs::{CWD, Mode, OFlags, fsync, mkdirat, openat};
         use std::os::fd::AsFd;
         let mut dir = if path.is_absolute() {
             openat(
@@ -1644,15 +1672,23 @@ fn ensure_directory_recursive(path: &Path) -> Result<fs::File, StoreError> {
             ) {
                 Ok(next) => dir = next,
                 Err(source) if source.kind() == io::ErrorKind::NotFound => {
-                    match mkdirat(&dir, name, Mode::from_raw_mode(0o700)) {
-                        Ok(()) => {}
-                        Err(source) if source.kind() == io::ErrorKind::AlreadyExists => {}
+                    let created = match mkdirat(&dir, name, Mode::from_raw_mode(0o700)) {
+                        Ok(()) => true,
+                        Err(source) if source.kind() == io::ErrorKind::AlreadyExists => false,
                         Err(source) => {
                             return Err(StoreError::Write {
                                 path: path.to_path_buf(),
                                 source: source.into(),
                             });
                         }
+                    };
+                    if created {
+                        // Persist the new directory entry before descending;
+                        // the retained parent capability is the publication root.
+                        fsync(&dir).map_err(|source| StoreError::Write {
+                            path: path.to_path_buf(),
+                            source: source.into(),
+                        })?;
                     }
                     // Another creator may have won mkdirat; either way reopen
                     // the component relative to the retained parent capability.
@@ -1682,7 +1718,7 @@ fn ensure_directory_recursive(path: &Path) -> Result<fs::File, StoreError> {
     {
         fs::create_dir_all(path).map_err(|source| StoreError::Write {
             path: path.to_path_buf(),
-            source: source.into(),
+            source,
         })?;
         ensure_directory(path)
     }
