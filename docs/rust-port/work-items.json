@@ -66,10 +66,10 @@
     {
       "id": "RUST-008",
       "title": "Port git, reconciliation, import/export, and intake",
-      "status": "blocked",
+      "status": "in_progress",
       "depends_on": ["RUST-005"],
       "contract_rows": ["GIT-001", "GIT-002", "GIT-003", "IO-001", "IO-002", "IO-003"],
-      "acceptance": ["make sync-io-differential", "cargo nextest run -p symvault-sync"]
+      "acceptance": ["make sync-io-differential", "cargo test -p symvault-sync --all-features --locked"]
     },
     {
       "id": "RUST-009",

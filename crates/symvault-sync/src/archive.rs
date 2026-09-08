@@ -112,7 +112,7 @@ pub fn backup(
                 directory: true,
                 mode: mode(&meta),
                 size: 0,
-                sha256: digest(&[]),
+                sha256: String::new(),
             });
         } else {
             if meta.len() > MAX_ARCHIVE_FILE {
@@ -203,7 +203,7 @@ pub fn restore(
                 directory: true,
                 mode: entry.header().mode()?,
                 size: 0,
-                sha256: digest(&[]),
+                sha256: String::new(),
             });
             continue;
         }

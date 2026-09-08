@@ -1,4 +1,4 @@
-.PHONY: all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates help docs-check
+.PHONY: all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check sync-io-differential differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates help docs-check
 
 # Variables
 BINARY_NAME := symvault
@@ -175,6 +175,7 @@ PORT_REDACT_FIXTURE := testdata/port/core/redact-contract.json
 PORT_CRYPTO_FIXTURE := testdata/port/core/password-totp-contract.json
 PORT_QUOTA_FIXTURE := testdata/port/core/quota-contract.json
 PORT_POLICY_FIXTURE := testdata/port/core/policy-contract.json
+PORT_SYNC_FIXTURE := testdata/port/sync/sync.json
 PORT_GO_BINARY := target/port/symvault-go
 RUST_BINARY := target/debug/symvault
 PORT_CONTRACT_VERSION ?= v0.0.0-port
@@ -221,6 +222,10 @@ policy-fixtures-generate:
 		--output $(PORT_POLICY_FIXTURE) \
 		--oracle-commit $(PORT_ORACLE_COMMIT) \
 		--oracle-release $(PORT_ORACLE_RELEASE)
+
+sync-io-differential:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/syncgen --check --output $(PORT_SYNC_FIXTURE)
+	$(CARGO) test -p symvault-sync --all-features --locked
 
 policy-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/policygen \
@@ -277,7 +282,7 @@ rust-fuzz-smoke: rust-fuzz-lock
 rust-fuzz:
 	$(MAKE) rust-fuzz-smoke RUST_FUZZ_RUNS= RUST_FUZZ_MAX_TOTAL_TIME=60
 
-port-contract: port-fixtures-check core-fixtures-check policy-fixtures-check differential-go-selftest crypto-differential
+port-contract: port-fixtures-check core-fixtures-check policy-fixtures-check sync-io-differential differential-go-selftest crypto-differential
 
 rust-build:
 	$(CARGO) build --workspace --locked
@@ -392,6 +397,7 @@ help:
 	@echo "  quota-fixtures-check    - Verify pure quota transition vectors have not drifted"
 	@echo "  policy-fixtures-generate - Regenerate frozen Go-oracle policy/tier fixtures"
 	@echo "  policy-fixtures-check    - Verify Go-oracle policy/tier fixtures have not drifted"
+	@echo "  sync-io-differential - Verify Go-generated sync/import/archive/intake contracts"
 	@echo "  differential-go-selftest - Compare the Go oracle with itself in isolated sandboxes"
 	@echo "  crypto-differential - Verify Go↔Rust age and KDF cross-decryption"
 	@echo "  crypto-fuzz-smoke - Run the bounded Argon2id parser fuzz smoke"

@@ -6,7 +6,7 @@ use std::{
 };
 use thiserror::Error;
 
-pub const DEFAULT_GITIGNORE: &str = "# Symaira Vault sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n.DS_Store\nThumbs.db\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n";
+pub const DEFAULT_GITIGNORE: &str = "# Symaira Vault vault - ignore sensitive files\nidentity.age\n.device-id\n*.key\n*.pem\n# Ignore Symaira Vault runtime artifacts\nmcp-token\nmcp-tokens.json\n.runtime-port\n# Ignore OS files\n.DS_Store\nThumbs.db\n# Ignore IDE files\n.idea/\n.vscode/\n*.swp\n*.swo\n*~\n";
 
 #[derive(Debug, Error)]
 pub enum GitError {

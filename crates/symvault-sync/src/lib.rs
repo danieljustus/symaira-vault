@@ -5,6 +5,7 @@
 //! deterministic, adapter-friendly Rust building blocks for the RUST-008 slice.
 
 pub mod archive;
+pub mod export;
 pub mod git;
 pub mod importer;
 pub mod intake;

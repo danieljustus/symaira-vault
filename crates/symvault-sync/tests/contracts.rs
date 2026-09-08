@@ -1,5 +1,8 @@
+use base64::Engine;
 use flate2::{Compression, write::GzEncoder};
-use serde_json::json;
+use serde::Deserialize;
+use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
@@ -51,6 +54,9 @@ fn git_lifecycle_matches_local_bare_remote_contract() {
         .unwrap();
     assert!(c.is_some());
     assert_eq!(repo.log(10).unwrap()[0].message, "first");
+    let fixture = sync_fixture();
+    let expected = sync_case(&fixture, "GIT-001-local");
+    assert_eq!(expected.expected["status"], "");
     assert!(
         repo.status()
             .unwrap()
@@ -257,56 +263,242 @@ fn quarantine_is_review_gated_and_dry_run_has_no_side_effect() {
     assert_eq!(sink.calls.len(), 1);
 }
 
+#[derive(Debug, Deserialize)]
+struct SyncFixture {
+    schema_version: u32,
+    oracle: SyncOracle,
+    cases: Vec<SyncCase>,
+    scope: BTreeMap<String, String>,
+}
+#[derive(Debug, Deserialize)]
+struct SyncOracle {
+    commit: String,
+    release: String,
+    source_files: Vec<String>,
+    source_digest: String,
+    generator_files: Vec<String>,
+    generator_digest: String,
+}
+#[derive(Debug, Deserialize)]
+struct SyncCase {
+    id: String,
+    seam: String,
+    input: Value,
+    expected: Value,
+}
+
+fn sync_fixture() -> SyncFixture {
+    serde_json::from_str(include_str!("../../../testdata/port/sync/sync.json")).unwrap()
+}
+
+fn sync_case<'a>(fixture: &'a SyncFixture, id: &str) -> &'a SyncCase {
+    fixture.cases.iter().find(|case| case.id == id).unwrap()
+}
+
 #[test]
-fn go_oracle_fixture_covers_import_and_sniff_contracts() {
-    let oracle: serde_json::Value =
-        serde_json::from_str(include_str!("../testdata/go-oracle.json")).unwrap();
-    assert_eq!(oracle[0]["value"], "Work/Example-Name-");
+fn go_generated_sync_fixture_is_provenance_bound_and_scope_honest() {
+    let fixture = sync_fixture();
+    assert_eq!(fixture.schema_version, 1);
+    assert_eq!(fixture.oracle.commit, "caadd5e");
+    assert_eq!(fixture.oracle.release, "v0.22.1");
+    assert!(!fixture.oracle.source_files.is_empty());
+    assert!(fixture.oracle.source_files.iter().all(|path| {
+        path.starts_with("internal/git/")
+            || path.starts_with("internal/vault/")
+            || path.starts_with("internal/importer/")
+            || path.starts_with("internal/exporter/")
+            || path.starts_with("internal/intake/")
+            || path.starts_with("cmd/admin/")
+    }));
+    assert_eq!(fixture.oracle.source_digest.len(), 64);
     assert_eq!(
-        importer::normalize_path(" /Work/Example Name../ "),
-        oracle[0]["value"]
+        fixture.oracle.generator_files,
+        ["scripts/rust-port/cmd/syncgen/main.go"]
     );
-    let csv = b"title,username,password,url\nExample,fixture-user,fixture-pass,https://example.test\nExample,second-user,second-pass,https://example.test\n";
-    let csv_entries = importer::parse(importer::Format::Csv, csv).unwrap();
-    assert_eq!(csv_entries.len(), 2);
-    assert_eq!(
-        csv_entries[0].path,
-        oracle[2]["value"]["entries"][0]["Path"].as_str().unwrap()
-    );
-    assert_eq!(
-        csv_entries[1].path,
-        oracle[2]["value"]["entries"][1]["Path"].as_str().unwrap()
-    );
-    let bw = serde_json::to_vec(&json!({
-        "folders": [{"id": "f", "name": "Work"}],
-        "items": [{"type": 1, "name": "Login", "folderId": "f", "notes": "fixture-note",
-            "login": {"username": "fixture-user", "password": "fixture-pass",
-                "uris": [{"uri": "https://example.test"}]}}]
-    }))
-    .unwrap();
-    let bw_entries = importer::parse_bitwarden(&bw).unwrap();
-    assert_eq!(
-        bw_entries[0].path,
-        oracle[3]["value"]["entries"][0]["Path"].as_str().unwrap()
-    );
-    assert_eq!(
-        bw_entries[0].data["username"],
-        oracle[3]["value"]["entries"][0]["Data"]["username"]
-    );
-    for (name, data, expected) in [
-        (
-            "fixture.bin",
-            b"USERNAME=fixture-user\nPASSWORD=fixture-pass\n".as_slice(),
-            "env",
-        ),
-        (
-            "fixture.bin",
-            b"{\"username\":\"fixture-user\"}".as_slice(),
-            "json",
-        ),
-        ("fixture.bin", &[0, 1, 2, 3][..], "other"),
+    assert_eq!(fixture.oracle.generator_digest.len(), 64);
+    assert!(fixture.cases.iter().all(|case| !case.seam.is_empty()));
+    let ids: BTreeSet<_> = fixture.cases.iter().map(|case| case.id.as_str()).collect();
+    assert_eq!(ids.len(), 7);
+    for id in [
+        "GIT-001-local",
+        "GIT-002-local-bare",
+        "GIT-003-conflict",
+        "IO-001-imports",
+        "IO-002-export",
+        "IO-002-archive",
+        "IO-003-portable-intake",
     ] {
-        let observed = format!("{:?}", intake::source_type(name, data)).to_ascii_lowercase();
-        assert_eq!(observed, expected);
+        assert!(ids.contains(id), "missing generated case {id}");
+    }
+    assert!(fixture.scope["native_watcher"].contains("unproven"));
+    assert!(fixture.scope["pass_import"].contains("unproven"));
+    assert!(fixture.scope["candidate_gaps"].contains("GIT-002"));
+}
+
+#[test]
+fn go_generated_import_export_and_intake_cases_match_rust() {
+    let fixture = sync_fixture();
+    let imports = sync_case(&fixture, "IO-001-imports");
+    let decode = |name: &str| {
+        base64::engine::general_purpose::STANDARD
+            .decode(imports.input[name].as_str().unwrap())
+            .unwrap()
+    };
+    for (format, name) in [
+        (importer::Format::Csv, "csv"),
+        (importer::Format::Bitwarden, "bitwarden"),
+        (importer::Format::OnePassword, "onepux"),
+    ] {
+        let got = importer::parse(format, &decode(name)).unwrap();
+        assert_eq!(serde_json::to_value(got).unwrap(), imports.expected[name]);
+    }
+    assert_eq!(
+        imports.expected["pass_adapter"],
+        "not exercised: requires external gpg"
+    );
+
+    let export_case = sync_case(&fixture, "IO-002-export");
+    let entries = vec![
+        symvault_sync::export::ExportEntry {
+            path: "Example".into(),
+            data: BTreeMap::from([
+                ("password".into(), Value::String("fixture-pass".into())),
+                ("url".into(), Value::String("https://example.test".into())),
+                ("username".into(), Value::String("fixture-user".into())),
+            ]),
+        },
+        symvault_sync::export::ExportEntry {
+            path: "Other".into(),
+            data: BTreeMap::from([
+                ("notes".into(), Value::String("fixture-note".into())),
+                ("password".into(), Value::String("second-pass".into())),
+            ]),
+        },
+    ];
+    let mut json_bytes = Vec::new();
+    symvault_sync::export::json(&mut json_bytes, &entries).unwrap();
+    assert_eq!(
+        base64::engine::general_purpose::STANDARD.encode(json_bytes),
+        export_case.expected["json_b64"]
+    );
+    let mut csv_bytes = Vec::new();
+    symvault_sync::export::csv(&mut csv_bytes, &entries).unwrap();
+    assert_eq!(
+        base64::engine::general_purpose::STANDARD.encode(csv_bytes),
+        export_case.expected["csv_b64"]
+    );
+
+    let intake_case = sync_case(&fixture, "IO-003-portable-intake");
+    let dir = tempdir().unwrap();
+    let source = dir.path().join(intake_case.input["name"].as_str().unwrap());
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(intake_case.input["data_b64"].as_str().unwrap())
+        .unwrap();
+    fs::write(&source, &bytes).unwrap();
+    let spool = intake::Spool::new(dir.path().join("spool")).unwrap();
+    let result = intake::process(&spool, &source, &intake::Options::default());
+    let provenance = result.provenance.as_ref().unwrap();
+    let suggestions: Vec<Value> = result
+        .suggestions
+        .iter()
+        .map(|suggestion| {
+            json!({
+                "path": suggestion.path,
+                "field": suggestion.field,
+                "confidence": suggestion.confidence,
+                "attachment": suggestion.attachment,
+            })
+        })
+        .collect();
+    let observed = json!({
+        "status": result.status,
+        "provenance": {
+            "source_name": provenance.source_name,
+            "source_type": format!("{:?}", provenance.source_type).to_ascii_lowercase(),
+            "size": provenance.size,
+            "sha256": provenance.sha256,
+        },
+        "suggestions": suggestions,
+        "source_unchanged": fs::read(&source).unwrap() == bytes,
+        "native_watcher": "unproven",
+    });
+    assert_eq!(observed, intake_case.expected);
+}
+
+#[test]
+fn go_generated_git_reconcile_and_archive_cases_match_rust_projections() {
+    let fixture = sync_fixture();
+
+    let git_case = sync_case(&fixture, "GIT-001-local");
+    let gitignore_hash = Sha256::digest(symvault_sync::git::DEFAULT_GITIGNORE)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    assert_eq!(git_case.expected["gitignore_sha256"], gitignore_hash);
+
+    let reconcile_case = sync_case(&fixture, "GIT-003-conflict");
+    let output = reconcile(&ReconcileInput {
+        base: BTreeMap::from([("item".into(), b"base".to_vec())]),
+        local: BTreeMap::from([("item".into(), b"winner".to_vec())]),
+        remote: BTreeMap::from([("item".into(), b"loser-bytes".to_vec())]),
+    });
+    assert_eq!(
+        output.files["item.conflict-remote"],
+        reconcile_case.expected["conflict_bytes"]
+            .as_str()
+            .unwrap()
+            .as_bytes()
+    );
+    assert_eq!(
+        reconcile_case.expected["source_bytes"],
+        String::from_utf8_lossy(&output.files["item.conflict-remote"]).to_string()
+    );
+
+    let archive_case = sync_case(&fixture, "IO-002-archive");
+    let dir = tempdir().unwrap();
+    let source = dir.path().join("source");
+    fs::create_dir(&source).unwrap();
+    fs::create_dir(source.join("entries")).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(source.join("entries"), fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    fs::write(source.join("identity.age"), b"identity").unwrap();
+    fs::write(source.join("config.yaml"), b"vault_dir: fixture\n").unwrap();
+    fs::write(source.join("entries/item.age"), b"ciphertext").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        for file in [
+            source.join("identity.age"),
+            source.join("config.yaml"),
+            source.join("entries/item.age"),
+        ] {
+            fs::set_permissions(file, fs::Permissions::from_mode(0o600)).unwrap();
+        }
+    }
+    let archive_path = dir.path().join("backup.tar.gz");
+    let manifest = archive::backup(&source, &archive_path, false).unwrap();
+    for expected in archive_case.expected["archive_members"].as_array().unwrap() {
+        let actual = manifest
+            .iter()
+            .find(|entry| entry.path == expected["path"].as_str().unwrap())
+            .unwrap();
+        assert_eq!(actual.mode, expected["mode"].as_u64().unwrap() as u32);
+        assert_eq!(actual.size, expected["size"].as_u64().unwrap());
+        assert_eq!(actual.sha256, expected["sha256"].as_str().unwrap());
+    }
+    let destination = dir.path().join("restored");
+    let restored = archive::restore(&archive_path, &destination, false).unwrap();
+    for expected in archive_case.expected["restored_files"].as_array().unwrap() {
+        let actual = restored
+            .iter()
+            .find(|entry| entry.path == expected["path"].as_str().unwrap())
+            .unwrap();
+        assert!(!actual.directory);
+        assert_eq!(actual.mode, expected["mode"].as_u64().unwrap() as u32);
+        assert_eq!(actual.size, expected["size"].as_u64().unwrap());
+        assert_eq!(actual.sha256, expected["sha256"].as_str().unwrap());
     }
 }

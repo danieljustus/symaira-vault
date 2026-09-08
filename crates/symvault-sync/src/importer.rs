@@ -25,7 +25,10 @@ pub enum ImportError {
 pub struct ImportedEntry {
     pub path: String,
     pub data: BTreeMap<String, Value>,
-    pub warnings: Vec<String>,
+    /// Go's production importer leaves this slice nil when no warnings exist;
+    /// preserve that wire-level `null` rather than normalizing it to `[]`.
+    pub warnings: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub secret_type: Option<String>,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -106,7 +109,7 @@ pub fn parse_csv(
         });
         let mut path = String::new();
         let mut data = BTreeMap::new();
-        let warnings = Vec::new();
+        let warnings = None;
         for (field, col) in map {
             let val = get(&col);
             if val.is_empty() {
@@ -219,7 +222,7 @@ pub fn parse_bitwarden(bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportError> 
             &item.name,
         ));
         let mut d = BTreeMap::new();
-        let warnings = Vec::new();
+        let warnings = None;
         if item.kind == 1 {
             d.insert("username".into(), Value::String(item.login.username));
             d.insert("password".into(), Value::String(item.login.password));
@@ -370,7 +373,7 @@ pub fn parse_1pux(bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportError> {
                     continue;
                 }
                 let mut d = BTreeMap::new();
-                let w = Vec::new();
+                let w = None;
                 d.insert(
                     "username".into(),
                     Value::String(
@@ -421,7 +424,7 @@ pub fn parse_1pux(bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportError> {
                     }
                 }
                 out.push(ImportedEntry {
-                    path: normalize_path(&i.title),
+                    path: i.title,
                     data: d,
                     warnings: w,
                     secret_type: None,
@@ -455,7 +458,7 @@ pub fn parse_pass_entry(path: &Path, content: &str) -> ImportedEntry {
     ImportedEntry {
         path: normalize_path(path.to_string_lossy().trim_end_matches(".gpg")),
         data: d,
-        warnings: Vec::new(),
+        warnings: None,
         secret_type: None,
     }
 }
