@@ -272,8 +272,173 @@ fn set_mode(path: &Path, mode: u32) {
     use std::os::unix::fs::PermissionsExt;
     fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap();
 }
+
 #[cfg(not(unix))]
 fn set_mode(_path: &Path, _mode: u32) {}
+
+#[test]
+fn manifest_verification_reports_valid_tampered_missing_and_unknown() {
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &value.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    let clean = store.verify_manifest(&identity).unwrap();
+    assert_eq!(clean.ok, 3);
+    assert!(clean.missing.is_empty());
+    assert!(clean.tampered.is_empty());
+    assert!(clean.unknown.is_empty());
+
+    fs::remove_file(temp.path().join("entries/minimal.age")).unwrap();
+    fs::write(temp.path().join("entries/full.age"), b"tampered").unwrap();
+    fs::write(temp.path().join("entries/unknown.age"), b"unknown").unwrap();
+    let result = store.verify_manifest(&identity).unwrap();
+    assert_eq!(result.missing, vec!["minimal"]);
+    assert_eq!(result.tampered, vec!["full"]);
+    assert_eq!(result.unknown, vec!["unknown.age"]);
+}
+
+#[test]
+fn legacy_migration_moves_ciphertext_and_is_idempotent() {
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &value.vaults[1]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    assert_eq!(store.layout(), Layout::Legacy);
+    store.migrate_legacy().unwrap();
+    store.migrate_legacy().unwrap();
+    assert!(temp.path().join(".symvault-migrated").is_file());
+    assert_eq!(
+        store.list(&identity).unwrap(),
+        vec!["full", "minimal", "nested/large"]
+    );
+    for entry in &value.vaults[1].entries {
+        assert!(temp.path().join(&entry.storage_path).is_file());
+        assert_eq!(
+            store.get(&entry.path, &identity).unwrap(),
+            serde_json::from_value::<Entry>(entry.expected.clone()).unwrap()
+        );
+    }
+}
+
+#[test]
+fn replacement_is_atomic_and_never_follows_symlink_targets() {
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &value.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    let mut data = BTreeMap::new();
+    data.insert("token".into(), serde_json::Value::String("old".into()));
+    let entry = Entry {
+        path: "replace".into(),
+        data,
+        ..Entry::default()
+    };
+    store.write_entry("replace", &entry, &identity).unwrap();
+    let mut updated = entry.clone();
+    updated
+        .data
+        .insert("token".into(), serde_json::Value::String("new".into()));
+    let expected = {
+        let mut value = updated.clone();
+        value.metadata.version = 1;
+        value
+    };
+    store.write_entry("replace", &updated, &identity).unwrap();
+    assert_eq!(store.get("replace", &identity).unwrap(), expected);
+    assert!(
+        !fs::read_dir(temp.path().join("entries"))
+            .unwrap()
+            .any(|item| {
+                item.unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .contains(".tmp-")
+            })
+    );
+    #[cfg(unix)]
+    {
+        let outside = tempfile::tempdir().unwrap();
+        let target = outside.path().join("outside");
+        fs::write(&target, b"must stay").unwrap();
+        fs::remove_file(temp.path().join("entries/replace.age")).unwrap();
+        std::os::unix::fs::symlink(&target, temp.path().join("entries/replace.age")).unwrap();
+        assert!(matches!(
+            store.write_entry("replace", &updated, &identity),
+            Err(StoreError::Symlink(_))
+        ));
+        assert_eq!(fs::read(&target).unwrap(), b"must stay");
+    }
+}
+
+#[test]
+fn encrypted_search_index_matches_case_insensitive_nested_values_and_invalidates() {
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &value.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    let mut index = SearchIndex::build(&store, &identity).unwrap();
+    let candidates = store.list(&identity).unwrap();
+    assert_eq!(
+        index
+            .search(&candidates, "FIXTURE-USER")
+            .unwrap()
+            .into_iter()
+            .collect::<Vec<_>>(),
+        vec!["minimal"]
+    );
+    assert_eq!(
+        index
+            .search(&candidates, "DEEP-FIXTURE")
+            .unwrap()
+            .into_iter()
+            .collect::<Vec<_>>(),
+        vec!["nested/large"]
+    );
+    let raw = fs::read(temp.path().join(".search-index")).unwrap();
+    assert!(!String::from_utf8_lossy(&raw).contains("fixture-user"));
+    let mut loaded = SearchIndex::load(&store, &identity).unwrap().unwrap();
+    assert_eq!(
+        loaded
+            .search(&candidates, "fixture-full-user")
+            .unwrap()
+            .into_iter()
+            .collect::<Vec<_>>(),
+        vec!["full"]
+    );
+    loaded.invalidate().unwrap();
+    assert!(!temp.path().join(".search-index").exists());
+}
+
+#[test]
+fn stale_or_corrupt_search_index_is_discarded() {
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &value.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    let _ = SearchIndex::build(&store, &identity).unwrap();
+    fs::write(temp.path().join(".search-index"), b"corrupt").unwrap();
+    assert!(SearchIndex::load(&store, &identity).unwrap().is_none());
+    let mut data = BTreeMap::new();
+    data.insert("value".into(), serde_json::Value::String("new".into()));
+    store
+        .write_entry(
+            "new",
+            &Entry {
+                data,
+                ..Entry::default()
+            },
+            &identity,
+        )
+        .unwrap();
+    let _ = SearchIndex::build(&store, &identity).unwrap();
+    fs::remove_file(temp.path().join("entries/new.age")).unwrap();
+    assert!(SearchIndex::load(&store, &identity).unwrap().is_none());
+}
 
 #[test]
 fn fixture_has_authoritative_provenance_and_exact_cardinality() {
