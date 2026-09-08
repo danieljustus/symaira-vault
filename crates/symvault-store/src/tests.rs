@@ -344,6 +344,7 @@ fn replacement_is_atomic_and_never_follows_symlink_targets() {
     let expected = {
         let mut value = updated.clone();
         value.metadata.version = 1;
+        value.classification = 2;
         value
     };
     store.write_entry("replace", &updated, &identity).unwrap();
@@ -809,6 +810,50 @@ fn type_inference_matches_read_only_entry_contract() {
 }
 
 #[test]
+fn single_recipient_writer_infers_go_classification_from_string_values() {
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let (_, fixture) = fixture();
+    materialize(temp.path(), &fixture.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    let cases = [
+        ("password", "ordinary", 2),
+        ("api", concat!("AKIA", "1234567890123456"), 3),
+        ("bearer", "header.payload.signature", 3),
+        ("basic", "user:password", 3),
+        ("database", "postgres://user:password@example", 3),
+        ("ssh", concat!("-----BEGIN RSA ", "PRIVATE KEY-----"), 4),
+        ("certificate", "-----BEGIN CERTIFICATE-----", 4),
+        ("totp", "JBSWY3DPEHPK3PXP", 4),
+    ];
+    for (name, value, expected) in cases {
+        let entry = Entry {
+            data: BTreeMap::from([(
+                "value".to_owned(),
+                serde_json::Value::String(value.to_owned()),
+            )]),
+            ..Entry::default()
+        };
+        let path = format!("classification/{name}");
+        store
+            .write_entry_at(
+                &path,
+                &entry,
+                &identity,
+                "2026-09-08T10:11:12Z",
+                false,
+                None,
+            )
+            .unwrap();
+        assert_eq!(
+            store.get(&path, &identity).unwrap().classification,
+            expected,
+            "classification for {name}"
+        );
+    }
+}
+
+#[test]
 fn file_manifest_is_sorted_and_contains_metadata() {
     let (_, value) = fixture();
     let identity = parse_identity(IDENTITY).unwrap();
@@ -994,4 +1039,348 @@ fn go_index_salt_string_is_not_accepted_by_old_rust_schema() {
     assert_eq!(current.entry_count, 1);
     assert_eq!(current.values["go-doc"], vec!["go-rust-accepted"]);
     assert!(current.paths.contains_key("go-doc"));
+}
+
+#[test]
+fn persisted_rust_metadata_matches_all_go_writer_vectors() {
+    #[derive(Deserialize)]
+    struct MetadataFixture {
+        vectors: Vec<MetadataVector>,
+    }
+    #[derive(Deserialize)]
+    struct MetadataVector {
+        name: String,
+        input: Entry,
+        pending_write: Option<WriteRecord>,
+        path: String,
+        pseudonymize: bool,
+        now: String,
+        expected: Entry,
+        expected_json: String,
+    }
+
+    let raw = include_str!("../../../testdata/port/store/metadata.json");
+    let metadata_fixture: MetadataFixture = serde_json::from_str(raw).unwrap();
+    assert_eq!(metadata_fixture.vectors.len(), 8);
+    let case_ids: Vec<_> = metadata_fixture
+        .vectors
+        .iter()
+        .map(|vector| vector.name.as_str())
+        .collect();
+    assert_eq!(
+        case_ids,
+        [
+            "created_zero_pending",
+            "nil_data_existing_version",
+            "created_nonzero",
+            "offset_clock",
+            "created_zero_offset",
+            "created_zero_walltime_offset",
+            "created_near_zero_nonzero",
+            "version_overflow",
+        ]
+    );
+
+    let (_, store_fixture) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &store_fixture.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+
+    for vector in metadata_fixture.vectors {
+        // The overflow oracle intentionally has no logical path because it is
+        // a pure metadata case; give it a valid publication path here without
+        // changing the metadata input or expected wire bytes.
+        let path = if vector.path.is_empty() {
+            "metadata/version-overflow"
+        } else {
+            vector.path.as_str()
+        };
+        store
+            .write_entry_at(
+                path,
+                &vector.input,
+                &identity,
+                &vector.now,
+                vector.pseudonymize,
+                vector.pending_write.as_ref(),
+            )
+            .unwrap_or_else(|error| panic!("{}: {error}", vector.name));
+        let persisted = store
+            .get(path, &identity)
+            .unwrap_or_else(|error| panic!("{}: {error}", vector.name));
+        assert_eq!(
+            persisted.metadata, vector.expected.metadata,
+            "{}",
+            vector.name
+        );
+        let mut expected = vector.expected.clone();
+        assert_eq!(
+            serde_json::to_string(&expected).unwrap(),
+            vector.expected_json
+        );
+        expected.classification = infer_classification(&expected);
+        assert_eq!(
+            serde_json::to_string(&persisted).unwrap(),
+            serde_json::to_string(&expected).unwrap(),
+            "persisted wire output for {}",
+            vector.name
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn root_acquisition_rejects_replaced_root_before_parsing_invalid_config() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
+
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("vault");
+    let moved = temp.path().join("moved");
+    let replacement = temp.path().join("replacement");
+    fs::create_dir(&root).unwrap();
+    fs::create_dir(&replacement).unwrap();
+    fs::write(
+        root.join("config.yaml"),
+        b"vault:\n  pseudonymize_paths: false\n",
+    )
+    .unwrap();
+    fs::write(root.join("identity.age"), b"presence fixture").unwrap();
+    let canonical_root = root.canonicalize().unwrap();
+    let hook_ran = Arc::new(AtomicBool::new(false));
+    let error = Store::open_with_root_acquisition(&root, {
+        let root = root.clone();
+        let canonical_root = canonical_root.clone();
+        let moved = moved.clone();
+        let replacement = replacement.clone();
+        let hook_ran = hook_ran.clone();
+        move |canonical| {
+            assert_eq!(canonical, canonical_root);
+            fs::rename(&root, &moved).unwrap();
+            fs::rename(&replacement, &root).unwrap();
+            fs::write(root.join("config.yaml"), b"vault: invalid\n").unwrap();
+            fs::write(root.join("identity.age"), b"outsider identity").unwrap();
+            hook_ran.store(true, Ordering::SeqCst);
+        }
+    })
+    .unwrap_err();
+    assert!(hook_ran.load(Ordering::SeqCst));
+    assert!(matches!(error, StoreError::RootChanged(path) if path == root));
+    assert!(moved.join("config.yaml").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn read_list_verify_and_files_use_the_retained_root_capability() {
+    let (_, fixture) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("vault");
+    let moved = temp.path().join("moved");
+    fs::create_dir(&root).unwrap();
+    materialize(&root, &fixture.vaults[0]);
+    let store = Store::open(&root, &identity).unwrap();
+
+    fs::rename(&root, &moved).unwrap();
+    fs::create_dir(&root).unwrap();
+    fs::write(root.join(CONFIG_FILE), b"vault: invalid\n").unwrap();
+    fs::write(root.join(IDENTITY_FILE), b"replacement identity").unwrap();
+
+    assert_eq!(
+        store.get("minimal", &identity).unwrap(),
+        serde_json::from_value::<Entry>(fixture.vaults[0].entries[0].expected.clone()).unwrap()
+    );
+    let verification = store.verify_manifest(&identity).unwrap();
+    assert_eq!(verification.ok, 3);
+    assert!(verification.missing.is_empty());
+    assert!(verification.tampered.is_empty());
+    assert!(
+        store
+            .list(&identity)
+            .unwrap()
+            .contains(&"minimal".to_owned())
+    );
+    assert!(
+        store
+            .files()
+            .unwrap()
+            .iter()
+            .any(|file| file.path == "entries/minimal.age")
+    );
+    assert!(moved.join("entries/minimal.age").is_file());
+}
+
+#[test]
+fn manifest_verification_ignores_size_mismatch_like_go() {
+    let (_, fixture) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &fixture.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    let mut manifest = store.load_manifest(&identity).unwrap();
+    manifest.entries.get_mut("minimal").unwrap().size += 1;
+    store.write_manifest(&manifest, &identity).unwrap();
+
+    let result = store.verify_manifest(&identity).unwrap();
+    assert_eq!(result.ok, 3);
+    assert!(result.tampered.is_empty());
+}
+
+#[cfg(unix)]
+#[test]
+fn manifest_preserves_existing_zero_created_and_crosses_i32_generation_boundary() {
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir(root.join("entries")).unwrap();
+    fs::write(
+        root.join(CONFIG_FILE),
+        b"vault:\n  pseudonymize_paths: false\n",
+    )
+    .unwrap();
+    fs::write(root.join(IDENTITY_FILE), b"presence fixture").unwrap();
+    let store = Store::open(root, &identity).unwrap();
+    store
+        .write_manifest(
+            &Manifest {
+                version: 0,
+                generation: i64::from(i32::MAX),
+                created: go_zero_time(),
+                updated: go_zero_time(),
+                entries: BTreeMap::new(),
+            },
+            &identity,
+        )
+        .unwrap();
+    store
+        .update_manifest_entry("crossing", b"ciphertext", &identity)
+        .unwrap();
+    let after_update = store.load_manifest(&identity).unwrap();
+    assert_eq!(after_update.version, 1);
+    assert_eq!(after_update.generation, i64::from(i32::MAX) + 1);
+    assert_eq!(after_update.created, go_zero_time());
+    assert!(!after_update.updated.is_empty());
+    assert!(!after_update.entries["crossing"].mtime.is_empty());
+    store.remove_manifest_entry("crossing", &identity).unwrap();
+    let after_remove = store.load_manifest(&identity).unwrap();
+    assert_eq!(after_remove.generation, i64::from(i32::MAX) + 2);
+    assert_eq!(after_remove.created, go_zero_time());
+}
+
+#[test]
+fn concurrent_manifest_updates_preserve_every_record() {
+    use std::sync::Arc;
+
+    let (_, fixture) = fixture();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &fixture.vaults[0]);
+    let identity = parse_identity(IDENTITY).unwrap();
+    let store = Arc::new(Store::open(temp.path(), &identity).unwrap());
+    let mut workers = Vec::new();
+    for index in 0..8 {
+        let store = Arc::clone(&store);
+        workers.push(std::thread::spawn(move || {
+            let identity = parse_identity(IDENTITY).unwrap();
+            store.update_manifest_entry(&format!("concurrent/{index}"), b"ciphertext", &identity)
+        }));
+    }
+    for worker in workers {
+        worker.join().unwrap().unwrap();
+    }
+
+    let manifest = store.load_manifest(&identity).unwrap();
+    assert_eq!(manifest.entries.len(), 11);
+    for index in 0..8 {
+        assert!(
+            manifest
+                .entries
+                .contains_key(&format!("concurrent/{index}"))
+        );
+    }
+}
+
+#[test]
+fn metadata_clock_requires_rfc3339_and_preserves_semantic_go_zero() {
+    let identity = parse_identity(IDENTITY).unwrap();
+    let (_, fixture) = fixture();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &fixture.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    let entry = Entry::default();
+    let zero = go_zero_time();
+    store
+        .write_entry_at("clock-zero", &entry, &identity, &zero, false, None)
+        .unwrap();
+    assert_eq!(
+        store.get("clock-zero", &identity).unwrap().metadata.created,
+        zero
+    );
+    let malformed = "2026-09-08T10:11:12Zgarbage";
+    assert!(
+        store
+            .write_entry_at("clock-malformed", &entry, &identity, malformed, false, None)
+            .is_err()
+    );
+}
+
+#[test]
+fn write_entry_at_config_layout_remains_authoritative_for_conflicting_flags() {
+    let (_, fixture) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    for (config_pseudo, override_pseudo) in [(false, true), (true, false)] {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        materialize(root, &fixture.vaults[0]);
+        fs::write(
+            root.join(CONFIG_FILE),
+            format!(
+                "vault:
+  pseudonymize_paths: {}
+",
+                config_pseudo
+            ),
+        )
+        .unwrap();
+        let store = Store::open(root, &identity).unwrap();
+        let path = format!("override/{}", config_pseudo);
+        store
+            .write_entry_at(
+                &path,
+                &Entry::default(),
+                &identity,
+                "2026-09-08T10:11:12Z",
+                override_pseudo,
+                None,
+            )
+            .unwrap();
+        let hash = symvault_crypto::pseudonymize_path(&identity, &path);
+        let configured_file = if config_pseudo {
+            root.join(format!("entries/{}/{}.age", &hash[..2], hash))
+        } else {
+            root.join(format!("entries/{}.age", path))
+        };
+        assert!(configured_file.is_file());
+        if config_pseudo {
+            assert!(!root.join(format!("entries/{}.age", path)).exists());
+        } else {
+            assert!(
+                !root
+                    .join(format!("entries/{}/{}.age", &hash[..2], hash))
+                    .exists()
+            );
+        }
+        let got = store.get(&path, &identity).unwrap();
+        assert_eq!(got.path, path);
+        assert!(store.list(&identity).unwrap().contains(&path));
+        let manifest = store.load_manifest(&identity).unwrap();
+        assert!(manifest.entries.contains_key(&path));
+        store.delete_entry_with_identity(&path, &identity).unwrap();
+        assert!(!store.entry_exists(&path, &identity).unwrap());
+        assert!(!store.list(&identity).unwrap().contains(&path));
+        let after = store.load_manifest(&identity).unwrap();
+        assert!(!after.entries.contains_key(&path));
+    }
 }

@@ -15,6 +15,7 @@ serde_yaml_ng = "=0.10.0"
 sha2 = "=0.10.9"
 hmac = "=0.12.1"
 getrandom = "=0.3.3"
+fs4 = { version = "=0.13.1", features = ["sync"] }
 rustix = { version = "=1.1.4", features = ["fs"] }
 symvault-crypto = { path = "../symvault-crypto", version = "=0.0.0" }
 thiserror = "=1.0.69"
