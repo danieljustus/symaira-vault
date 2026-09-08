@@ -1476,3 +1476,37 @@ fn fresh_scan_is_unbounded_but_legacy_scan_keeps_walkdir_depth_64() {
     let legacy = Store::open(legacy_temp.path(), &identity).unwrap();
     assert!(legacy.list(&identity).unwrap().is_empty());
 }
+
+#[cfg(unix)]
+#[test]
+fn rooted_walk_depth_matches_walkdir_at_exact_boundaries() {
+    let temp = tempfile::tempdir().unwrap();
+    fs::create_dir_all(temp.path().join("a/b/c")).unwrap();
+    for relative in ["root.age", "a/one.age", "a/b/two.age", "a/b/c/three.age"] {
+        fs::write(temp.path().join(relative), b"fixture").unwrap();
+    }
+    let root = fs::File::open(temp.path()).unwrap();
+    for depth in 0..=4 {
+        let mut expected = walkdir::WalkDir::new(temp.path())
+            .max_depth(depth)
+            .into_iter()
+            .map(Result::unwrap)
+            .filter(|entry| entry.depth() > 0)
+            .map(|entry| {
+                entry
+                    .path()
+                    .strip_prefix(temp.path())
+                    .unwrap()
+                    .to_path_buf()
+            })
+            .collect::<Vec<_>>();
+        let mut actual = rooted::walk_with_max_depth(&root, temp.path(), Some(depth))
+            .unwrap()
+            .into_iter()
+            .map(|entry| entry.relative)
+            .collect::<Vec<_>>();
+        expected.sort();
+        actual.sort();
+        assert_eq!(actual, expected, "depth {depth}");
+    }
+}

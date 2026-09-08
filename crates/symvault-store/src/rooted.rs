@@ -138,6 +138,9 @@ fn walk_directory(
     depth: usize,
     max_depth: Option<usize>,
 ) -> Result<(), StoreError> {
+    if max_depth.is_some_and(|limit| depth >= limit) {
+        return Ok(());
+    }
     for name in read_directory_names(directory, display)? {
         let relative = prefix.join(&name);
         let entry_display = display.join(&relative);
@@ -154,7 +157,7 @@ fn walk_directory(
                     relative: relative.clone(),
                     regular: false,
                 });
-                if max_depth.is_some_and(|limit| depth >= limit) {
+                if max_depth.is_some_and(|limit| depth + 1 >= limit) {
                     continue;
                 }
                 let child = rustix::fs::openat(
