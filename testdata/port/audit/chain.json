@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "caadd5e",
+    "release": "v0.22.1",
+    "source_files": [
+      "internal/audit/audit.go",
+      "internal/audit/audit_hmac_test.go",
+      "internal/audit/keystore.go"
+    ],
+    "source_digest": "f1bac365a1a1ddc445530ea28794dd7a7331923a3eb463c7e299faf77e3af557",
+    "generator_files": [
+      "scripts/rust-port/cmd/auditgen/main.go",
+      "scripts/rust-port/cmd/auditgen/main_test.go"
+    ],
+    "generator_digest": "53e9f6695b5672b6222c741489ea038b0ddca0f9658cdf602633ee341cff2908"
+  },
+  "key_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "entries": [
+    {
+      "entry": {
+        "ts": "2024-01-15T10:30:00Z",
+        "agent": "fixture-agent",
+        "action": "get",
+        "path": "secret/api-key",
+        "field": "password",
+        "transport": "stdio",
+        "dur_ms": 17,
+        "kid": "630dcd29",
+        "ok": true
+      },
+      "canonical_json": "{\"ts\":\"2024-01-15T10:30:00Z\",\"agent\":\"fixture-agent\",\"action\":\"get\",\"path\":\"secret/api-key\",\"field\":\"password\",\"transport\":\"stdio\",\"dur_ms\":17,\"kid\":\"630dcd29\",\"ok\":true}",
+      "hmac": "a11dfff65e057ded5b934170889a8ce15fbd6b0d3c9c18d84496750fae0eead8",
+      "line": "{\"ts\":\"2024-01-15T10:30:00Z\",\"agent\":\"fixture-agent\",\"action\":\"get\",\"path\":\"secret/api-key\",\"field\":\"password\",\"transport\":\"stdio\",\"dur_ms\":17,\"kid\":\"630dcd29\",\"hmac\":\"a11dfff65e057ded5b934170889a8ce15fbd6b0d3c9c18d84496750fae0eead8\",\"ok\":true}"
+    },
+    {
+      "entry": {
+        "ts": "2024-01-15T10:30:01Z",
+        "agent": "fixture-agent",
+        "action": "set",
+        "path": "secret/api-key",
+        "field": "password",
+        "transport": "http",
+        "reason": "write_denied",
+        "share_id": "share-1",
+        "from_agent": "fixture-agent",
+        "to_agent": "other-agent",
+        "share_action": "share_request",
+        "token_id": "tok_1",
+        "req_id": "req_1",
+        "sess_id": "sess_1",
+        "kid": "630dcd29",
+        "ok": false
+      },
+      "canonical_json": "{\"ts\":\"2024-01-15T10:30:01Z\",\"agent\":\"fixture-agent\",\"action\":\"set\",\"path\":\"secret/api-key\",\"field\":\"password\",\"transport\":\"http\",\"reason\":\"write_denied\",\"share_id\":\"share-1\",\"from_agent\":\"fixture-agent\",\"to_agent\":\"other-agent\",\"share_action\":\"share_request\",\"token_id\":\"tok_1\",\"req_id\":\"req_1\",\"sess_id\":\"sess_1\",\"kid\":\"630dcd29\",\"ok\":false}",
+      "hmac": "40dcac220e13c866c458af8ed96987574cf52a3ed726f5850d45c573186a514a",
+      "line": "{\"ts\":\"2024-01-15T10:30:01Z\",\"agent\":\"fixture-agent\",\"action\":\"set\",\"path\":\"secret/api-key\",\"field\":\"password\",\"transport\":\"http\",\"reason\":\"write_denied\",\"share_id\":\"share-1\",\"from_agent\":\"fixture-agent\",\"to_agent\":\"other-agent\",\"share_action\":\"share_request\",\"token_id\":\"tok_1\",\"req_id\":\"req_1\",\"sess_id\":\"sess_1\",\"kid\":\"630dcd29\",\"hmac\":\"40dcac220e13c866c458af8ed96987574cf52a3ed726f5850d45c573186a514a\",\"ok\":false}"
+    },
+    {
+      "entry": {
+        "ts": "2024-01-15T10:30:02Z",
+        "agent": "fixture-agent",
+        "action": "list",
+        "kid": "630dcd29",
+        "argv_hash": "argv-hash",
+        "ok": true
+      },
+      "canonical_json": "{\"ts\":\"2024-01-15T10:30:02Z\",\"agent\":\"fixture-agent\",\"action\":\"list\",\"kid\":\"630dcd29\",\"argv_hash\":\"argv-hash\",\"ok\":true}",
+      "hmac": "3409b71d5a49c3ff6a989a9575d943aec39728180627166dd7c56615dccc8327",
+      "line": "{\"ts\":\"2024-01-15T10:30:02Z\",\"agent\":\"fixture-agent\",\"action\":\"list\",\"kid\":\"630dcd29\",\"hmac\":\"3409b71d5a49c3ff6a989a9575d943aec39728180627166dd7c56615dccc8327\",\"argv_hash\":\"argv-hash\",\"ok\":true}"
+    }
+  ]
+}
