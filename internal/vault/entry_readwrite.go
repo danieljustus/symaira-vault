@@ -173,25 +173,8 @@ func classifySecretType(t SecretType) taint.Classification {
 
 func writeEntryLocked(vaultDir, path string, entry *Entry, identity *age.X25519Identity, cfg *vaultconfig.Config) ([]byte, error) {
 	now := time.Now().UTC()
-	copyEntry := cloneEntry(entry)
-	if copyEntry.Metadata.Created.IsZero() {
-		copyEntry.Metadata.Created = now
-	}
-	copyEntry.Metadata.Updated = now
-	copyEntry.Metadata.Version++
-	if copyEntry.Data == nil {
-		copyEntry.Data = map[string]any{}
-	}
-	if copyEntry.PendingWrite != nil {
-		record := *copyEntry.PendingWrite
-		record.Timestamp = now
-		copyEntry.Metadata.WriteHistory = append(copyEntry.Metadata.WriteHistory, record)
-		copyEntry.PendingWrite = nil
-	}
+	copyEntry := PrepareEntryForWrite(entry, now, path, isPseudonymizeEnabled(cfg))
 	copyEntry.Classification = InferClassification(copyEntry)
-	if isPseudonymizeEnabled(cfg) {
-		copyEntry.Path = path
-	}
 	plaintext, err := json.Marshal(copyEntry)
 	if err != nil {
 		return nil, err
