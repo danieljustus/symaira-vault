@@ -376,32 +376,37 @@ impl Store {
         let config_path = root.join(CONFIG_FILE);
         let identity_path = root.join(IDENTITY_FILE);
         #[cfg(unix)]
-        let (config_exists, identity_exists, recipients) = (
-            rooted::regular_exists_at(&root_cap, Path::new(CONFIG_FILE), &config_path)?,
-            rooted::regular_exists_at(&root_cap, Path::new(IDENTITY_FILE), &identity_path)?,
-            rooted::regular_exists_at(
-                &root_cap,
-                Path::new(RECIPIENTS_FILE),
-                &root.join(RECIPIENTS_FILE),
-            )?,
-        );
+        let config_exists =
+            rooted::regular_exists_at(&root_cap, Path::new(CONFIG_FILE), &config_path)?;
         #[cfg(not(unix))]
-        let (config_exists, identity_exists, recipients) = (
-            ensure_regular_file(&config_path, false)?,
-            ensure_regular_file(&identity_path, false)?,
-            regular_exists(&root.join(RECIPIENTS_FILE))?,
-        );
+        let config_exists = ensure_regular_file(&config_path, false)?;
         if !config_exists {
             return Err(StoreError::MissingFile(config_path));
         }
+
+        #[cfg(unix)]
+        let identity_exists =
+            rooted::regular_exists_at(&root_cap, Path::new(IDENTITY_FILE), &identity_path)?;
+        #[cfg(not(unix))]
+        let identity_exists = ensure_regular_file(&identity_path, false)?;
         if !identity_exists {
             return Err(StoreError::MissingFile(identity_path));
         }
+
         #[cfg(unix)]
         let config_bytes = rooted::read(&root_cap, Path::new(CONFIG_FILE), &config_path)?;
         #[cfg(not(unix))]
         let config_bytes = read_regular(&config_path)?;
         let config = parse_config(&config_bytes)?;
+
+        #[cfg(unix)]
+        let recipients = rooted::regular_exists_at(
+            &root_cap,
+            Path::new(RECIPIENTS_FILE),
+            &root.join(RECIPIENTS_FILE),
+        )?;
+        #[cfg(not(unix))]
+        let recipients = regular_exists(&root.join(RECIPIENTS_FILE))?;
         let presence = Presence {
             config: true,
             identity: true,
@@ -587,39 +592,58 @@ impl Store {
         #[cfg(unix)]
         {
             let mut result = Vec::new();
-            for item in rooted::walk(&self.root_cap, &self.root)? {
-                if !item.regular {
-                    continue;
+            let fresh_entries = match rooted::walk_from(
+                &self.root_cap,
+                Path::new(ENTRIES_DIR),
+                &self.root.join(ENTRIES_DIR),
+                None,
+            ) {
+                Ok(entries) => entries,
+                Err(StoreError::Read { source, .. })
+                    if source.kind() == io::ErrorKind::NotFound =>
+                {
+                    Vec::new()
                 }
-                let relative = item.relative;
-                let name = relative
-                    .file_name()
-                    .and_then(|value| value.to_str())
-                    .unwrap_or_default();
-                if !name.ends_with(ENTRY_EXTENSION) {
-                    continue;
+                Err(error) => return Err(error),
+            };
+            let legacy_entries = rooted::walk_with_max_depth(&self.root_cap, &self.root, Some(64))?;
+            for (entries, fresh) in [(fresh_entries, true), (legacy_entries, false)] {
+                for item in entries {
+                    if !item.regular {
+                        continue;
+                    }
+                    let relative = item.relative;
+                    let name = relative
+                        .file_name()
+                        .and_then(|value| value.to_str())
+                        .unwrap_or_default();
+                    if !name.ends_with(ENTRY_EXTENSION) {
+                        continue;
+                    }
+                    if !fresh && matches!(name, IDENTITY_FILE | MANIFEST_FILE) {
+                        continue;
+                    }
+                    if fresh != relative.starts_with(Path::new(ENTRIES_DIR)) {
+                        continue;
+                    }
+                    let logical = if fresh {
+                        relative
+                            .strip_prefix(ENTRIES_DIR)
+                            .map_err(|_| StoreError::UnsafePath(relative.display().to_string()))?
+                            .to_string_lossy()
+                            .replace(std::path::MAIN_SEPARATOR, "/")
+                    } else {
+                        relative
+                            .to_string_lossy()
+                            .replace(std::path::MAIN_SEPARATOR, "/")
+                    };
+                    result.push(Candidate {
+                        path: self.root.join(&relative),
+                        relative,
+                        logical: logical.trim_end_matches(ENTRY_EXTENSION).to_owned(),
+                        fresh,
+                    });
                 }
-                let fresh = relative.starts_with(ENTRIES_DIR);
-                if !fresh && matches!(name, IDENTITY_FILE | MANIFEST_FILE) {
-                    continue;
-                }
-                let logical = if fresh {
-                    relative
-                        .strip_prefix(ENTRIES_DIR)
-                        .map_err(|_| StoreError::UnsafePath(relative.display().to_string()))?
-                        .to_string_lossy()
-                        .replace(std::path::MAIN_SEPARATOR, "/")
-                } else {
-                    relative
-                        .to_string_lossy()
-                        .replace(std::path::MAIN_SEPARATOR, "/")
-                };
-                result.push(Candidate {
-                    path: self.root.join(&relative),
-                    relative,
-                    logical: logical.trim_end_matches(ENTRY_EXTENSION).to_owned(),
-                    fresh,
-                });
             }
             result.sort_by(|a, b| a.logical.cmp(&b.logical).then_with(|| a.path.cmp(&b.path)));
             Ok(result)
@@ -1029,8 +1053,20 @@ fn parse_config(bytes: &[u8]) -> Result<VaultConfig, StoreError> {
 
 #[cfg(unix)]
 fn detect_layout_rooted(root_cap: &fs::File, root: &Path) -> Result<Layout, StoreError> {
-    let entries = rooted::walk(root_cap, root)?;
-    let fresh = entries.iter().any(|item| {
+    let fresh_entries = match rooted::walk_from(
+        root_cap,
+        Path::new(ENTRIES_DIR),
+        &root.join(ENTRIES_DIR),
+        None,
+    ) {
+        Ok(entries) => entries,
+        Err(StoreError::Read { source, .. }) if source.kind() == io::ErrorKind::NotFound => {
+            Vec::new()
+        }
+        Err(error) => return Err(error),
+    };
+    let legacy_entries = rooted::walk_with_max_depth(root_cap, root, Some(64))?;
+    let fresh = fresh_entries.iter().any(|item| {
         item.regular
             && item.relative.starts_with(Path::new(ENTRIES_DIR))
             && item
@@ -1038,7 +1074,7 @@ fn detect_layout_rooted(root_cap: &fs::File, root: &Path) -> Result<Layout, Stor
                 .file_name()
                 .is_some_and(|name| name.to_string_lossy().ends_with(ENTRY_EXTENSION))
     });
-    let legacy = entries.iter().any(|item| {
+    let legacy = legacy_entries.iter().any(|item| {
         item.regular
             && !item.relative.starts_with(Path::new(ENTRIES_DIR))
             && item.relative.file_name().is_some_and(|name| {

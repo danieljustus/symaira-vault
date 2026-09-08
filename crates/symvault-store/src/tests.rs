@@ -1384,3 +1384,95 @@ fn write_entry_at_config_layout_remains_authoritative_for_conflicting_flags() {
         assert!(!after.entries.contains_key(&path));
     }
 }
+
+#[test]
+fn open_preserves_legacy_validation_error_order() {
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    fs::write(root.join(IDENTITY_FILE), b"identity").unwrap();
+    fs::write(
+        root.join(RECIPIENTS_FILE),
+        b"invalid recipient
+",
+    )
+    .unwrap();
+    let error = Store::open(root, &identity).unwrap_err();
+    assert!(
+        matches!(error, StoreError::MissingFile(path) if path == root.canonicalize().unwrap().join(CONFIG_FILE))
+    );
+    fs::write(
+        root.join(CONFIG_FILE),
+        b"vault: invalid
+",
+    )
+    .unwrap();
+    fs::remove_file(root.join(IDENTITY_FILE)).unwrap();
+    let error = Store::open(root, &identity).unwrap_err();
+    assert!(
+        matches!(error, StoreError::MissingFile(path) if path == root.canonicalize().unwrap().join(IDENTITY_FILE))
+    );
+    fs::write(root.join(IDENTITY_FILE), b"identity").unwrap();
+    let error = Store::open(root, &identity).unwrap_err();
+    assert!(matches!(error, StoreError::Config(_)));
+}
+
+#[cfg(unix)]
+#[test]
+fn fresh_scan_is_unbounded_but_legacy_scan_keeps_walkdir_depth_64() {
+    let identity = parse_identity(IDENTITY).unwrap();
+    let deep = (0..65).map(|_| "deep").collect::<Vec<_>>().join("/");
+    let path = format!("{deep}/entry");
+    let fresh_temp = tempfile::tempdir().unwrap();
+    fs::create_dir(fresh_temp.path().join("entries")).unwrap();
+    fs::write(
+        fresh_temp.path().join(CONFIG_FILE),
+        b"vault: {}
+",
+    )
+    .unwrap();
+    fs::write(fresh_temp.path().join(IDENTITY_FILE), b"identity").unwrap();
+    let fresh = Store::open(fresh_temp.path(), &identity).unwrap();
+    fresh
+        .write_new_entry(&path, &Entry::default(), &identity)
+        .unwrap();
+    fs::create_dir(fresh_temp.path().join("entries2")).unwrap();
+    fs::copy(
+        fresh_temp
+            .path()
+            .join("entries")
+            .join(&path)
+            .with_extension("age"),
+        fresh_temp.path().join("entries2/foo.age"),
+    )
+    .unwrap();
+    assert_eq!(
+        fresh.list(&identity).unwrap(),
+        vec![path.clone(), "entries2/foo".to_owned()]
+    );
+    let legacy_temp = tempfile::tempdir().unwrap();
+    fs::create_dir(legacy_temp.path().join("entries")).unwrap();
+    fs::write(
+        legacy_temp.path().join(CONFIG_FILE),
+        b"vault: {}
+",
+    )
+    .unwrap();
+    fs::write(legacy_temp.path().join(IDENTITY_FILE), b"identity").unwrap();
+    let source = Store::open(legacy_temp.path(), &identity).unwrap();
+    source
+        .write_new_entry(&path, &Entry::default(), &identity)
+        .unwrap();
+    let source_path = legacy_temp
+        .path()
+        .join("entries")
+        .join(&path)
+        .with_extension("age");
+    let legacy_path = legacy_temp.path().join(&path).with_extension("age");
+    fs::create_dir_all(legacy_path.parent().unwrap()).unwrap();
+    fs::rename(source_path, &legacy_path).unwrap();
+    fs::remove_dir_all(legacy_temp.path().join("entries")).unwrap();
+    fs::create_dir(legacy_temp.path().join("entries")).unwrap();
+    let legacy = Store::open(legacy_temp.path(), &identity).unwrap();
+    assert!(legacy.list(&identity).unwrap().is_empty());
+}

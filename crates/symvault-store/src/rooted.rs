@@ -97,9 +97,36 @@ pub(super) fn open_lock(root: &fs::File, display: &Path) -> Result<fs::File, Sto
     Ok(fs::File::from(file))
 }
 
-pub(super) fn walk(root: &fs::File, display: &Path) -> Result<Vec<RootedEntry>, StoreError> {
+pub(super) fn walk_from(
+    root: &fs::File,
+    relative: &Path,
+    display: &Path,
+    max_depth: Option<usize>,
+) -> Result<Vec<RootedEntry>, StoreError> {
+    let directory = directory(root, relative, display, false)?;
     let mut entries = Vec::new();
-    walk_directory(root, Path::new(""), display, &mut entries)?;
+    walk_directory(
+        &directory,
+        relative,
+        display,
+        &mut entries,
+        relative.components().count(),
+        max_depth,
+    )?;
+    Ok(entries)
+}
+
+pub(super) fn walk(root: &fs::File, display: &Path) -> Result<Vec<RootedEntry>, StoreError> {
+    walk_with_max_depth(root, display, None)
+}
+
+pub(super) fn walk_with_max_depth(
+    root: &fs::File,
+    display: &Path,
+    max_depth: Option<usize>,
+) -> Result<Vec<RootedEntry>, StoreError> {
+    let mut entries = Vec::new();
+    walk_directory(root, Path::new(""), display, &mut entries, 0, max_depth)?;
     Ok(entries)
 }
 
@@ -108,6 +135,8 @@ fn walk_directory(
     prefix: &Path,
     display: &Path,
     entries: &mut Vec<RootedEntry>,
+    depth: usize,
+    max_depth: Option<usize>,
 ) -> Result<(), StoreError> {
     for name in read_directory_names(directory, display)? {
         let relative = prefix.join(&name);
@@ -125,6 +154,9 @@ fn walk_directory(
                     relative: relative.clone(),
                     regular: false,
                 });
+                if max_depth.is_some_and(|limit| depth >= limit) {
+                    continue;
+                }
                 let child = rustix::fs::openat(
                     directory,
                     &name,
@@ -137,7 +169,14 @@ fn walk_directory(
                     path: entry_display,
                     source: source.into(),
                 })?;
-                walk_directory(&fs::File::from(child), &relative, display, entries)?;
+                walk_directory(
+                    &fs::File::from(child),
+                    &relative,
+                    display,
+                    entries,
+                    depth + 1,
+                    max_depth,
+                )?;
             }
             FileType::RegularFile => entries.push(RootedEntry {
                 relative,
