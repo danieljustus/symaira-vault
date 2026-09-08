@@ -771,11 +771,11 @@ fn can_use_legacy_path(path: &str) -> bool {
     path != "identity" && path != ENTRIES_DIR && !path.starts_with("entries/")
 }
 
-fn set_private_permissions(file: &fs::File) -> io::Result<()> {
+fn set_private_permissions(_file: &fs::File) -> io::Result<()> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        file.set_permissions(fs::Permissions::from_mode(0o600))?;
+        _file.set_permissions(fs::Permissions::from_mode(0o600))?;
     }
     Ok(())
 }
