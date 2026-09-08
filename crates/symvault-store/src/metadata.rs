@@ -20,7 +20,18 @@ pub fn prepare_entry(
         .format(&time::format_description::well_known::Rfc3339)
         .map_err(|error| format!("format RFC3339 clock: {error}"))?;
     let mut prepared = entry.clone();
-    if prepared.metadata.created == "0001-01-01T00:00:00Z" {
+    let zero = time::OffsetDateTime::parse(
+        "0001-01-01T00:00:00Z",
+        &time::format_description::well_known::Rfc3339,
+    )
+    .expect("fixed Go zero time");
+    let created_is_zero = time::OffsetDateTime::parse(
+        &prepared.metadata.created,
+        &time::format_description::well_known::Rfc3339,
+    )
+    .map(|created| created.unix_timestamp_nanos() == zero.unix_timestamp_nanos())
+    .unwrap_or(false);
+    if created_is_zero {
         prepared.metadata.created = now.clone();
     }
     prepared.metadata.updated = now.clone();
@@ -88,7 +99,7 @@ mod tests {
         assert_eq!(fixture.oracle.source_digest.len(), 64);
         assert_eq!(fixture.oracle.generator_files.len(), 1);
         assert_eq!(fixture.oracle.generator_digest.len(), 64);
-        assert_eq!(fixture.vectors.len(), 5);
+        assert_eq!(fixture.vectors.len(), 8);
         let names: Vec<_> = fixture
             .vectors
             .iter()
@@ -101,6 +112,9 @@ mod tests {
                 "nil_data_existing_version",
                 "created_nonzero",
                 "offset_clock",
+                "created_zero_offset",
+                "created_zero_walltime_offset",
+                "created_near_zero_nonzero",
                 "version_overflow"
             ]
         );
