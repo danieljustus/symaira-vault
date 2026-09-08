@@ -1691,6 +1691,7 @@ name = "symvault-store"
 version = "0.0.0"
 dependencies = [
  "base64",
+ "hmac",
  "rustix",
  "serde",
  "serde_json",
