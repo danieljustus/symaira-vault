@@ -107,8 +107,17 @@ func buildOracle(root string, commit string, release string) (oracle, error) {
 
 func digestFiles(root string, names []string) (string, error) {
 	h := sha256.New()
+	repository, err := os.OpenRoot(root)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = repository.Close() }()
 	for _, name := range names {
-		content, err := os.ReadFile(filepath.Join(root, name))
+		cleanName, err := safeRelativePath(name)
+		if err != nil {
+			return "", fmt.Errorf("digest %s: %w", name, err)
+		}
+		content, err := repository.ReadFile(cleanName)
 		if err != nil {
 			return "", err
 		}
@@ -125,7 +134,76 @@ func repositoryRoot() (string, error) {
 	if !ok {
 		return "", fmt.Errorf("locate config generator")
 	}
-	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", "..")), nil
+	return canonicalDir(filepath.Join(filepath.Dir(file), "..", "..", "..", ".."))
+}
+
+func canonicalDir(path string) (string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	clean := filepath.Clean(abs)
+	info, err := os.Stat(clean)
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("%s is not a directory", clean)
+	}
+	resolved, err := filepath.EvalSymlinks(clean)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Abs(resolved)
+}
+
+func safeRelativePath(path string) (string, error) {
+	if path == "" || strings.IndexByte(path, 0) >= 0 || filepath.IsAbs(path) || filepath.VolumeName(path) != "" {
+		return "", fmt.Errorf("path must be a non-empty relative path")
+	}
+	if runtime.GOOS != "windows" && strings.ContainsRune(path, '\\') {
+		return "", fmt.Errorf("path contains an unsupported separator")
+	}
+	clean := filepath.Clean(filepath.FromSlash(path))
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("path escapes its root")
+	}
+	return clean, nil
+}
+
+func fixturePath(root, requested string) (string, error) {
+	base := filepath.Join(root, "testdata", "port")
+	var candidate string
+	if filepath.IsAbs(requested) {
+		candidate = filepath.Clean(requested)
+	} else {
+		relative, err := safeRelativePath(requested)
+		if err != nil {
+			return "", err
+		}
+		candidate = filepath.Join(root, relative)
+	}
+	relative, err := filepath.Rel(base, candidate)
+	if err != nil {
+		return "", err
+	}
+	return safeRelativePath(relative)
+}
+
+func boundedPath(root, relative string) (string, error) {
+	root, err := canonicalDir(root)
+	if err != nil {
+		return "", err
+	}
+	relative, err = safeRelativePath(relative)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, relative), nil
+}
+
+func openFixtureRoot(root string) (*os.Root, error) {
+	return os.OpenRoot(filepath.Join(root, "testdata", "port"))
 }
 
 func resolveOracle(check bool, commit, release string) (string, string, error) {
@@ -145,6 +223,11 @@ func resolveOracle(check bool, commit, release string) (string, string, error) {
 }
 
 func buildConfigCases(root string) []configCase {
+	repository, err := os.OpenRoot(root)
+	if err != nil {
+		panic(err)
+	}
+	defer func() { _ = repository.Close() }()
 	inputs := []struct{ name, text string }{
 		{"defaults", ""},
 		{"explicit_presence", "vaultDir: /fixture/vault\ndefaultAgent: custom\nsessionTimeout: 30m\nsessionMaxLifetime: 2h\nauthMethod: touchid\nuseTouchID: false\nagents:\n  custom:\n    canWrite: true\n    canRunCommands: true\n    exposeValueTools: false\n    requireApproval: true\n    approvalMode: prompt\n    allowedPaths: [work/*]\nmcp:\n  port: 9090\n  bind: 0.0.0.0\n"},
@@ -156,11 +239,15 @@ func buildConfigCases(root string) []configCase {
 
 	result := make([]configCase, 0, len(inputs))
 	for _, input := range inputs {
-		path := filepath.Join(root, input.name, "config.yaml")
-		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		relativePath := filepath.Join(input.name, "config.yaml")
+		path, err := boundedPath(root, relativePath)
+		if err != nil {
 			panic(err)
 		}
-		if err := os.WriteFile(path, []byte(input.text), 0o600); err != nil {
+		if err = repository.MkdirAll(filepath.Dir(relativePath), 0o700); err != nil {
+			panic(err)
+		}
+		if err = repository.WriteFile(relativePath, []byte(input.text), 0o600); err != nil {
 			panic(err)
 		}
 		cfg, err := configpkg.Load(path)
@@ -172,12 +259,16 @@ func buildConfigCases(root string) []configCase {
 		}
 		snapshot := snapshotConfig(cfg, root)
 		item.Expected = &snapshot
-		savedPath := filepath.Join(root, input.name, "saved.yaml")
+		savedRelativePath := filepath.Join(input.name, "saved.yaml")
+		savedPath, err := boundedPath(root, savedRelativePath)
+		if err != nil {
+			panic(err)
+		}
 		saveErr := cfg.SaveTo(savedPath)
 		if saveErr != nil {
 			panic(fmt.Errorf("save %s: %w", input.name, saveErr))
 		}
-		saved, err := os.ReadFile(savedPath)
+		saved, err := repository.ReadFile(savedRelativePath)
 		if err != nil {
 			panic(err)
 		}
@@ -286,6 +377,19 @@ func main() {
 	if err != nil {
 		fatal("build provenance: %v", err)
 	}
+	fixtures, err := openFixtureRoot(root)
+	if err != nil {
+		fatal("open fixture root: %v", err)
+	}
+	defer func() { _ = fixtures.Close() }()
+	configPath, err := fixturePath(root, *configOutput)
+	if err != nil {
+		fatal("configuration fixture path: %v", err)
+	}
+	platformPath, err := fixturePath(root, *platformOutput)
+	if err != nil {
+		fatal("platform fixture path: %v", err)
+	}
 	tmp, err := os.MkdirTemp("", "symvault-config-fixture-")
 	if err != nil {
 		fatal("temporary root: %v", err)
@@ -306,10 +410,10 @@ func main() {
 	platform := fixture{SchemaVersion: 1, Oracle: meta, PlatformCases: buildPlatformCases()}
 	configContent := marshalFixture(value)
 	platformContent := marshalFixture(platform)
-	if err := writeOrCheck(*configOutput, configContent, *check); err != nil {
+	if err := writeOrCheck(fixtures, configPath, configContent, *check); err != nil {
 		fatal("configuration fixture: %v", err)
 	}
-	if err := writeOrCheck(*platformOutput, platformContent, *check); err != nil {
+	if err := writeOrCheck(fixtures, platformPath, platformContent, *check); err != nil {
 		fatal("platform fixture: %v", err)
 	}
 	if *check {
@@ -319,9 +423,14 @@ func main() {
 	}
 }
 
-func writeOrCheck(path string, expected []byte, check bool) error {
+func writeOrCheck(fixtures *os.Root, path string, expected []byte, check bool) error {
+	var err error
+	path, err = safeRelativePath(path)
+	if err != nil {
+		return err
+	}
 	if check {
-		existing, err := os.ReadFile(path)
+		existing, err := fixtures.ReadFile(path)
 		if err != nil {
 			return fmt.Errorf("read %s: %w", path, err)
 		}
@@ -330,10 +439,12 @@ func writeOrCheck(path string, expected []byte, check bool) error {
 		}
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-		return err
+	if dir := filepath.Dir(path); dir != "." {
+		if err := fixtures.MkdirAll(dir, 0o750); err != nil {
+			return err
+		}
 	}
-	return os.WriteFile(path, expected, 0o600)
+	return fixtures.WriteFile(path, expected, 0o600)
 }
 
 func fatal(format string, args ...any) {

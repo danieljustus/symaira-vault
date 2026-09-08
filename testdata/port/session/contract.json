@@ -14,7 +14,7 @@
       "internal/session/session.go"
     ],
     "source_digest": "33f86cbaef82a82e020a1eedf4d8bfedcf84a17caa23655a622aebeccc985131",
-    "generator_digest": "7e76ae28522ab1591258ccfb1f9b3fb12638327ed2bc874e23c7f67a5cb10643",
+    "generator_digest": "f858cb9f4bfd31238eb4769ac8e7e0c1302da39576d436e999d73fd350f52f1c",
     "goos": "darwin"
   },
   "cases": [

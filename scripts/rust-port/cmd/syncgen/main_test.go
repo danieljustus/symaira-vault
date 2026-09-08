@@ -3,8 +3,21 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"path/filepath"
 	"testing"
 )
+
+func TestFixturePathIsBounded(t *testing.T) {
+	root := rootDir()
+	if got, err := fixturePath(root, "testdata/port/sync/sync.json"); err != nil || got != filepath.Join("sync", "sync.json") {
+		t.Fatalf("fixture path = %q, %v", got, err)
+	}
+	for _, path := range []string{"../outside.json", "testdata/port/../outside.json", filepath.Join(root, "outside.json")} {
+		if _, err := fixturePath(root, path); err == nil {
+			t.Fatalf("fixture path %q unexpectedly accepted", path)
+		}
+	}
+}
 
 func TestPinnedSyncOracleIsRepeatable(t *testing.T) {
 	first, err := runOracle(rootDir())

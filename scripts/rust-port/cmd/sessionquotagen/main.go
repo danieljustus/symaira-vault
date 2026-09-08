@@ -186,7 +186,12 @@ func buildQuotaFixture(meta oracle, root string) quotaFixture {
 	if second != 2 || other != 1 {
 		panic(fmt.Errorf("quota increments = %d,%d", second, other))
 	}
-	raw, err := os.ReadFile(filepath.Join(dir, ".quotas.json"))
+	repository, err := os.OpenRoot(root)
+	if err != nil {
+		panic(err)
+	}
+	defer func() { _ = repository.Close() }()
+	raw, err := repository.ReadFile(filepath.Join("quota", ".quotas.json"))
 	if err != nil {
 		panic(err)
 	}
@@ -195,7 +200,7 @@ func buildQuotaFixture(meta oracle, root string) quotaFixture {
 		panic(fmt.Errorf("quota check = %v,%d", ok, current))
 	}
 	q.Reset()
-	rawReset, err := os.ReadFile(filepath.Join(dir, ".quotas.json"))
+	rawReset, err := repository.ReadFile(filepath.Join("quota", ".quotas.json"))
 	if err != nil {
 		panic(err)
 	}
@@ -205,11 +210,11 @@ func buildQuotaFixture(meta oracle, root string) quotaFixture {
 		panic(fmt.Errorf("close quota counter: %w", closeErr))
 	}
 	closedOK, closedCurrent := q.Check("after_reset", 10)
-	info, err := os.Stat(filepath.Join(dir, ".quotas.json"))
+	info, err := repository.Stat(filepath.Join("quota", ".quotas.json"))
 	if err != nil {
 		panic(err)
 	}
-	dirInfo, err := os.Stat(dir)
+	dirInfo, err := repository.Stat("quota")
 	if err != nil {
 		panic(err)
 	}
@@ -253,8 +258,17 @@ func buildOracle(root, commit, release string) (oracle, error) {
 }
 func digestFiles(root string, names []string) (string, error) {
 	h := sha256.New()
+	repository, err := os.OpenRoot(root)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = repository.Close() }()
 	for _, name := range names {
-		b, err := os.ReadFile(filepath.Join(root, name))
+		cleanName, err := safeRelativePath(name)
+		if err != nil {
+			return "", fmt.Errorf("digest %s: %w", name, err)
+		}
+		b, err := repository.ReadFile(cleanName)
 		if err != nil {
 			return "", err
 		}
@@ -270,7 +284,68 @@ func repositoryRoot() string {
 	if !ok {
 		panic("locate generator")
 	}
-	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", ".."))
+	root, err := canonicalDir(filepath.Join(filepath.Dir(file), "..", "..", "..", ".."))
+	if err != nil {
+		panic(fmt.Errorf("locate repository root: %w", err))
+	}
+	return root
+}
+
+func canonicalDir(path string) (string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	clean := filepath.Clean(abs)
+	info, err := os.Stat(clean)
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("%s is not a directory", clean)
+	}
+	resolved, err := filepath.EvalSymlinks(clean)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Abs(resolved)
+}
+
+func safeRelativePath(path string) (string, error) {
+	if path == "" || strings.IndexByte(path, 0) >= 0 || filepath.IsAbs(path) || filepath.VolumeName(path) != "" {
+		return "", fmt.Errorf("path must be a non-empty relative path")
+	}
+	if runtime.GOOS != "windows" && strings.ContainsRune(path, '\\') {
+		return "", fmt.Errorf("path contains an unsupported separator")
+	}
+	clean := filepath.Clean(filepath.FromSlash(path))
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("path escapes its root")
+	}
+	return clean, nil
+}
+
+func fixturePath(root, requested string) (string, error) {
+	base := filepath.Join(root, "testdata", "port")
+	var candidate string
+	if filepath.IsAbs(requested) {
+		candidate = filepath.Clean(requested)
+	} else {
+		relative, err := safeRelativePath(requested)
+		if err != nil {
+			return "", err
+		}
+		candidate = filepath.Join(root, relative)
+	}
+	relative, err := filepath.Rel(base, candidate)
+	if err != nil {
+		return "", err
+	}
+	return safeRelativePath(relative)
+}
+
+func openFixtureRoot(root string) (*os.Root, error) {
+	return os.OpenRoot(filepath.Join(root, "testdata", "port"))
 }
 func resolve(check bool, commit, release string) (string, string, error) {
 	if commit != "" && commit != pinnedOracleCommit {
@@ -294,9 +369,14 @@ func marshal(v any) []byte {
 	}
 	return append(b, '\n')
 }
-func writeOrCheck(path string, content []byte, check bool) error {
+func writeOrCheck(fixtures *os.Root, path string, content []byte, check bool) error {
+	var err error
+	path, err = safeRelativePath(path)
+	if err != nil {
+		return err
+	}
 	if check {
-		existing, err := os.ReadFile(path)
+		existing, err := fixtures.ReadFile(path)
 		if err != nil {
 			return err
 		}
@@ -305,10 +385,12 @@ func writeOrCheck(path string, content []byte, check bool) error {
 		}
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-		return err
+	if dir := filepath.Dir(path); dir != "." {
+		if err := fixtures.MkdirAll(dir, 0o750); err != nil {
+			return err
+		}
 	}
-	return os.WriteFile(path, content, 0o600)
+	return fixtures.WriteFile(path, content, 0o600)
 }
 
 func main() {
@@ -327,6 +409,19 @@ func main() {
 	if err != nil {
 		fatal("provenance: %v", err)
 	}
+	fixtures, err := openFixtureRoot(root)
+	if err != nil {
+		fatal("open fixture root: %v", err)
+	}
+	defer func() { _ = fixtures.Close() }()
+	sessionPath, err := fixturePath(root, *outputSession)
+	if err != nil {
+		fatal("session fixture path: %v", err)
+	}
+	quotaPath, err := fixturePath(root, *outputQuota)
+	if err != nil {
+		fatal("quota fixture path: %v", err)
+	}
 	tmp, err := os.MkdirTemp("", "symvault-session-quota-")
 	if err != nil {
 		fatal("temp root: %v", err)
@@ -334,10 +429,10 @@ func main() {
 	defer func() { _ = os.RemoveAll(tmp) }()
 	sessionContent := marshal(buildSessionFixture(meta))
 	quotaContent := marshal(buildQuotaFixture(meta, tmp))
-	if err := writeOrCheck(*outputSession, sessionContent, *check); err != nil {
+	if err := writeOrCheck(fixtures, sessionPath, sessionContent, *check); err != nil {
 		fatal("session fixture: %v", err)
 	}
-	if err := writeOrCheck(*outputQuota, quotaContent, *check); err != nil {
+	if err := writeOrCheck(fixtures, quotaPath, quotaContent, *check); err != nil {
 		fatal("quota fixture: %v", err)
 	}
 	if *check {

@@ -114,12 +114,165 @@ func rootDir() string {
 	if !ok {
 		panic("locate syncgen")
 	}
-	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", ".."))
+	root, err := canonicalDir(filepath.Join(filepath.Dir(file), "..", "..", "..", ".."))
+	if err != nil {
+		panic(fmt.Errorf("locate repository root: %w", err))
+	}
+	return root
 }
+
+func canonicalDir(path string) (string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	clean := filepath.Clean(abs)
+	info, err := os.Stat(clean)
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("%s is not a directory", clean)
+	}
+	resolved, err := filepath.EvalSymlinks(clean)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Abs(resolved)
+}
+
+func safeRelativePath(path string) (string, error) {
+	if path == "" || strings.IndexByte(path, 0) >= 0 || filepath.IsAbs(path) || filepath.VolumeName(path) != "" {
+		return "", fmt.Errorf("path must be a non-empty relative path")
+	}
+	if runtime.GOOS != "windows" && strings.ContainsRune(path, '\\') {
+		return "", fmt.Errorf("path contains an unsupported separator")
+	}
+	clean := filepath.Clean(filepath.FromSlash(path))
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("path escapes its root")
+	}
+	return clean, nil
+}
+
+func fixturePath(root, requested string) (string, error) {
+	base := filepath.Join(root, "testdata", "port")
+	var candidate string
+	if filepath.IsAbs(requested) {
+		candidate = filepath.Clean(requested)
+	} else {
+		relative, err := safeRelativePath(requested)
+		if err != nil {
+			return "", err
+		}
+		candidate = filepath.Join(root, relative)
+	}
+	relative, err := filepath.Rel(base, candidate)
+	if err != nil {
+		return "", err
+	}
+	return safeRelativePath(relative)
+}
+
+func openFixtureRoot(root string) (*os.Root, error) {
+	return os.OpenRoot(filepath.Join(root, "testdata", "port"))
+}
+
+func trustedGitExecutable() (string, error) {
+	path, err := exec.LookPath("git")
+	if err != nil {
+		return "", fmt.Errorf("locate git: %w", err)
+	}
+	path = filepath.Clean(path)
+	if !filepath.IsAbs(path) {
+		return "", fmt.Errorf("git executable path is not absolute")
+	}
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return "", fmt.Errorf("resolve git executable: %w", err)
+	}
+	resolved, err = filepath.Abs(resolved)
+	if err != nil {
+		return "", err
+	}
+	base := strings.ToLower(filepath.Base(resolved))
+	if base != "git" && base != "git.exe" {
+		return "", fmt.Errorf("unexpected git executable %q", base)
+	}
+	info, err := os.Stat(resolved)
+	if err != nil {
+		return "", err
+	}
+	if info.IsDir() {
+		return "", fmt.Errorf("git executable is a directory")
+	}
+	return resolved, nil
+}
+
+func newGitCommand(root string) (*exec.Cmd, error) {
+	root, err := canonicalDir(root)
+	if err != nil {
+		return nil, fmt.Errorf("validate repository root: %w", err)
+	}
+	git, err := trustedGitExecutable()
+	if err != nil {
+		return nil, err
+	}
+	cmd := exec.Command("git")
+	if cmd.Err != nil {
+		return nil, cmd.Err
+	}
+	cmd.Path = git
+	cmd.Dir = root
+	cmd.Args = []string{git}
+	return cmd, nil
+}
+
+func gitLsTree(root, dir string) ([]byte, error) {
+	dir, err := safeRelativePath(dir)
+	if err != nil {
+		return nil, fmt.Errorf("unsafe source root %q: %w", dir, err)
+	}
+	cmd, err := newGitCommand(root)
+	if err != nil {
+		return nil, err
+	}
+	cmd.Args = append(cmd.Args, "ls-tree", "-r", "--name-only", oracleCommit, "--", filepath.ToSlash(dir))
+	return cmd.Output()
+}
+
+func gitShow(root, name string) ([]byte, error) {
+	name, err := safeRelativePath(name)
+	if err != nil {
+		return nil, fmt.Errorf("unsafe source path %q: %w", name, err)
+	}
+	cmd, err := newGitCommand(root)
+	if err != nil {
+		return nil, err
+	}
+	cmd.Args = append(cmd.Args, "show", oracleCommit+":"+filepath.ToSlash(name))
+	return cmd.Output()
+}
+
+func gitArchive(root string, output io.Writer) error {
+	cmd, err := newGitCommand(root)
+	if err != nil {
+		return err
+	}
+	cmd.Args = append(cmd.Args, "archive", "--format=tar", oracleCommit)
+	cmd.Stdout = output
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("git archive: %w: %s", err, stderr.String())
+	}
+	return nil
+}
+
 func sourceFiles(root string) ([]string, error) {
 	var files []string
 	for _, dir := range sourceRoots {
-		out, e := exec.Command("git", "-C", root, "ls-tree", "-r", "--name-only", oracleCommit, "--", dir).Output()
+		out, e := gitLsTree(root, dir)
 		if e != nil {
 			return nil, e
 		}
@@ -134,13 +287,26 @@ func sourceFiles(root string) ([]string, error) {
 }
 func digest(root string, names []string, pinned bool) (string, error) {
 	h := sha256.New()
+	var repository *os.Root
+	if !pinned {
+		var err error
+		repository, err = os.OpenRoot(root)
+		if err != nil {
+			return "", err
+		}
+		defer func() { _ = repository.Close() }()
+	}
 	for _, name := range names {
 		var data []byte
 		var e error
 		if pinned {
-			data, e = exec.Command("git", "-C", root, "show", oracleCommit+":"+name).Output()
+			data, e = gitShow(root, name)
 		} else {
-			data, e = os.ReadFile(filepath.Join(root, name))
+			cleanName, err := safeRelativePath(name)
+			if err != nil {
+				return "", fmt.Errorf("digest %s: %w", name, err)
+			}
+			data, e = repository.ReadFile(cleanName)
 		}
 		if e != nil {
 			return "", fmt.Errorf("digest %s: %w", name, e)
@@ -183,19 +349,17 @@ func extract(root string) (string, error) {
 		return "", e
 	}
 	ap := archive.Name()
-	defer func() { _ = os.Remove(ap) }()
-	if e = archive.Close(); e != nil {
-		return "", fmt.Errorf("close oracle archive: %w", e)
-	}
-	if e = exec.Command("git", "-C", root, "archive", "--format=tar", "--output="+ap, oracleCommit).Run(); e != nil {
+	defer func() {
+		_ = archive.Close()
+		_ = os.Remove(ap)
+	}()
+	if e = gitArchive(root, archive); e != nil {
 		return "", e
 	}
-	f, e := os.Open(ap)
-	if e != nil {
-		return "", e
+	if _, e = archive.Seek(0, io.SeekStart); e != nil {
+		return "", fmt.Errorf("rewind oracle archive: %w", e)
 	}
-	defer func() { _ = f.Close() }()
-	tr := tar.NewReader(f)
+	tr := tar.NewReader(archive)
 	for {
 		h, e := tr.Next()
 		if errors.Is(e, io.EOF) {
@@ -204,9 +368,9 @@ func extract(root string) (string, error) {
 		if e != nil {
 			return "", e
 		}
-		name := filepath.Clean(h.Name)
-		if name == "." || strings.HasPrefix(name, ".."+string(filepath.Separator)) {
-			return "", errors.New("unsafe oracle path")
+		name, err := safeRelativePath(h.Name)
+		if err != nil {
+			return "", fmt.Errorf("unsafe oracle path %q: %w", h.Name, err)
 		}
 		out := filepath.Join(dir, name)
 		switch h.Typeflag {
@@ -265,8 +429,12 @@ func runOracle(root string) ([]Case, error) {
 	}
 	return cases, nil
 }
-func load(path string) (Fixture, error) {
-	b, e := os.ReadFile(path)
+func load(fixtures *os.Root, path string) (Fixture, error) {
+	path, e := safeRelativePath(path)
+	if e != nil {
+		return Fixture{}, e
+	}
+	b, e := fixtures.ReadFile(path)
 	if e != nil {
 		return Fixture{}, e
 	}
@@ -301,8 +469,8 @@ func sameJSON(a, b json.RawMessage) bool {
 	}
 	return bytes.Equal(ax, by)
 }
-func validate(root, path string) error {
-	f, e := load(path)
+func validate(root string, fixtures *os.Root, path string) error {
+	f, e := load(fixtures, path)
 	if e != nil {
 		return e
 	}
@@ -330,17 +498,52 @@ func validate(root, path string) error {
 	}
 	return nil
 }
+
+func writeFixture(fixtures *os.Root, path string, data []byte, check bool) error {
+	path, err := safeRelativePath(path)
+	if err != nil {
+		return err
+	}
+	if check {
+		existing, err := fixtures.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(existing, data) {
+			return fmt.Errorf("%s is stale; regenerate from the pinned Go oracle", path)
+		}
+		return nil
+	}
+	if dir := filepath.Dir(path); dir != "." {
+		if err := fixtures.MkdirAll(dir, 0750); err != nil {
+			return err
+		}
+	}
+	return fixtures.WriteFile(path, data, 0600)
+}
+
 func main() {
 	output := flag.String("output", "testdata/port/sync/sync.json", "fixture path")
 	check := flag.Bool("check", false, "verify provenance and execute the detached oracle")
 	flag.Parse()
 	root := rootDir()
+	fixtures, err := openFixtureRoot(root)
+	if err != nil {
+		panic(err)
+	}
+	outputPath, err := fixturePath(root, *output)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "FAIL sync fixture path:", err)
+		os.Exit(1)
+	}
 	if *check {
-		if e := validate(root, *output); e != nil {
+		if e := validate(root, fixtures, outputPath); e != nil {
 			fmt.Fprintln(os.Stderr, "FAIL sync fixture:", e)
+			_ = fixtures.Close()
 			os.Exit(1)
 		}
 		fmt.Println("PASS Go sync oracle fixture (7 cases; candidate gaps remain explicitly unproven)")
+		_ = fixtures.Close()
 		return
 	}
 	meta, e := metadata(root)
@@ -357,11 +560,9 @@ func main() {
 		panic(e)
 	}
 	data = append(data, '\n')
-	if e = os.MkdirAll(filepath.Dir(*output), 0750); e != nil {
+	if e = writeFixture(fixtures, outputPath, data, false); e != nil {
 		panic(e)
 	}
-	if e = os.WriteFile(*output, data, 0600); e != nil {
-		panic(e)
-	}
+	_ = fixtures.Close()
 	fmt.Println("WROTE", *output)
 }
