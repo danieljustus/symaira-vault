@@ -89,15 +89,8 @@ func digest(root string, files []string) (string, error) {
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
-func gitOutput(root string) (string, error) {
-	cmd := exec.Command("git", "rev-parse", "HEAD")
-	cmd.Dir = root
-	out, err := cmd.Output()
-	return string(bytes.TrimSpace(out)), err
-}
-
 func verifySourcesAtCommit(root, commit string) error {
-	cmd := exec.Command("git", "archive", "HEAD")
+	cmd := exec.Command("git", "archive", commit)
 	cmd.Dir = root
 	archive, err := cmd.Output()
 	if err != nil {
@@ -142,10 +135,6 @@ func verifySourcesAtCommit(root, commit string) error {
 func makeFixture(root, commit, release string) (fixture, error) {
 	if commit == "" || release == "" {
 		return fixture{}, errors.New("oracle commit and release are required")
-	}
-	actualCommit, err := gitOutput(root)
-	if err != nil || actualCommit != commit {
-		return fixture{}, fmt.Errorf("oracle commit %q is not repository HEAD %q", commit, actualCommit)
 	}
 	if err := verifySourcesAtCommit(root, commit); err != nil {
 		return fixture{}, err
