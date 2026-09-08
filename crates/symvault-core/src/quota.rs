@@ -103,6 +103,89 @@ pub fn transition_rate_limit(
     (next, RateLimitResult { allowed: true })
 }
 
+/// Public registry wrapper matching the Go `AgentRateLimiter` surface.
+///
+/// Unknown agents are intentionally unlimited. Configured agents use the same
+/// pure transition function as `transition_rate_limit`; the wrapper only owns
+/// registry lookup, locking, and the wall-clock adapter.
+pub struct AgentRateLimiter {
+    buckets: std::sync::Mutex<std::collections::BTreeMap<String, RateLimitState>>,
+}
+
+impl Default for AgentRateLimiter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl AgentRateLimiter {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            buckets: std::sync::Mutex::new(std::collections::BTreeMap::new()),
+        }
+    }
+
+    pub fn set_limits(&self, agent_id: impl Into<String>, max_per_hour: i64, max_per_day: i64) {
+        let now = unix_now_nanos();
+        let (state, _) = transition_rate_limit(
+            RateLimitState::default(),
+            RateLimitLimits {
+                max_per_hour,
+                max_per_day,
+            },
+            now,
+            RateLimitEvent::SetLimits,
+        );
+        if let Ok(mut buckets) = self.buckets.lock() {
+            buckets.insert(agent_id.into(), state);
+        }
+    }
+
+    #[must_use]
+    pub fn allow(&self, agent_id: &str) -> bool {
+        let Ok(mut buckets) = self.buckets.lock() else {
+            return false;
+        };
+        let Some(state) = buckets.get_mut(agent_id) else {
+            return true;
+        };
+        let (next, result) = transition_rate_limit(
+            *state,
+            RateLimitLimits {
+                max_per_hour: 0,
+                max_per_day: 0,
+            },
+            unix_now_nanos(),
+            RateLimitEvent::Allow,
+        );
+        *state = next;
+        result.allowed
+    }
+
+    #[must_use]
+    pub fn has_limits(&self, agent_id: &str) -> bool {
+        self.buckets
+            .lock()
+            .map(|buckets| buckets.contains_key(agent_id))
+            .unwrap_or(false)
+    }
+
+    pub fn cleanup(&self) {
+        if let Ok(mut buckets) = self.buckets.lock() {
+            buckets.clear();
+        }
+    }
+}
+
+fn unix_now_nanos() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .and_then(|duration| i64::try_from(duration.as_nanos()).ok())
+        .unwrap_or(i64::MAX)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{RateLimitEvent, RateLimitLimits, RateLimitState, transition_rate_limit};

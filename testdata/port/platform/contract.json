@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "caadd5e",
+    "release": "v0.22.1",
+    "source_files": [
+      "internal/clipboard/clipboard.go",
+      "internal/config/config.go",
+      "internal/config/config_load.go",
+      "internal/config/config_merge.go",
+      "internal/config/config_save.go",
+      "internal/config/config_validate.go",
+      "internal/config/paths.go",
+      "internal/config/presets.go",
+      "internal/secureui/secureui.go"
+    ],
+    "source_digest": "61d28fbc7a37dda4b38e720c897e709712192a595fcdf80a72ee64e081c29f68",
+    "generator_digest": "b96f35923d4bf3d21baa0d13062f3296767c113a398908ef4eb59e9293a2c3d7"
+  },
+  "cases": null,
+  "platform_cases": [
+    {
+      "name": "format_description_path_field",
+      "input": "description+path+field",
+      "expected": "A description\n\nEntry: entry\nField: password",
+      "native_evidence": "injected-only; native secure UI unavailable to this fixture"
+    },
+    {
+      "name": "format_description_only",
+      "input": "description",
+      "expected": "A description",
+      "native_evidence": "injected-only; native secure UI unavailable to this fixture"
+    },
+    {
+      "name": "clipboard_verify_unchanged",
+      "input": "expected_absent=secret/current_matches=false",
+      "expected": "ok",
+      "native_evidence": "injected-only; clipboard OS backend not exercised"
+    },
+    {
+      "name": "clipboard_verify_unchanged",
+      "input": "expected_absent=secret/current_matches=true",
+      "expected": "error",
+      "error_class": "not_cleared",
+      "native_evidence": "injected-only; clipboard OS backend not exercised"
+    }
+  ]
+}

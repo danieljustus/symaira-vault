@@ -5,6 +5,7 @@ pub use symvault_core::persistent_quota::{
     NativeQuotaPlatform, QUOTA_FILE_NAME, QuotaCounter, QuotaError, QuotaPlatform,
 };
 pub use symvault_core::platform::*;
+pub use symvault_core::quota::AgentRateLimiter;
 pub use symvault_core::session::{
     Clock, Keyring, MemoryKeyring, NativeKeyring, SessionError, SessionManager, SystemClock,
 };

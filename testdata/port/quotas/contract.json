@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "caadd5e",
+    "release": "v0.22.1",
+    "source_files": [
+      "internal/policy/ratelimit.go",
+      "internal/policy/ratelimit_transition.go",
+      "internal/quotas/counter.go",
+      "internal/quotas/lock_unix.go",
+      "internal/quotas/lock_windows.go",
+      "internal/session/keyring.go",
+      "internal/session/memory_keyring.go",
+      "internal/session/session.go"
+    ],
+    "source_digest": "33f86cbaef82a82e020a1eedf4d8bfedcf84a17caa23655a622aebeccc985131",
+    "generator_digest": "e6c4f73831c372f7e971514529a543702e7725669408140282f09eb7eb50bec9",
+    "goos": "darwin"
+  },
+  "cases": [
+    {
+      "name": "persistent_counter",
+      "operations": [
+        "new",
+        "increment",
+        "check",
+        "reset",
+        "close"
+      ],
+      "counts": {
+        "read_entry": 2,
+        "write_entry": 1
+      },
+      "after_reset": {
+        "after_reset": 1
+      },
+      "raw_after_write": "{\"counters\":{\"read_entry\":2,\"write_entry\":1}}",
+      "raw_after_reset": "{\"counters\":{}}",
+      "dir_mode": 448,
+      "file_mode": 384,
+      "closed_check": [
+        0,
+        0
+      ]
+    }
+  ],
+  "wrapper_cases": [
+    {
+      "name": "public_registry",
+      "unknown_before": true,
+      "has_after_set": true,
+      "first_allow": true,
+      "second_allow": false,
+      "other_agent_allow": true,
+      "has_after_cleanup": false
+    }
+  ]
+}

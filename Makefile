@@ -1,4 +1,4 @@
-.PHONY: all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check sync-io-differential differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates help docs-check
+.PHONY: all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check rust-007-fixtures-generate rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates help docs-check
 
 # Variables
 BINARY_NAME := symvault
@@ -176,6 +176,10 @@ PORT_CRYPTO_FIXTURE := testdata/port/core/password-totp-contract.json
 PORT_QUOTA_FIXTURE := testdata/port/core/quota-contract.json
 PORT_POLICY_FIXTURE := testdata/port/core/policy-contract.json
 PORT_SYNC_FIXTURE := testdata/port/sync/sync.json
+PORT_CONFIG_FIXTURE := testdata/port/config/contract.json
+PORT_SESSION_FIXTURE := testdata/port/session/contract.json
+PORT_PLATFORM_FIXTURE := testdata/port/platform/contract.json
+PORT_PERSISTENT_QUOTA_FIXTURE := testdata/port/quotas/contract.json
 PORT_GO_BINARY := target/port/symvault-go
 RUST_BINARY := target/debug/symvault
 PORT_CONTRACT_VERSION ?= v0.0.0-port
@@ -230,6 +234,32 @@ sync-io-differential:
 policy-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/policygen \
 		--check --output $(PORT_POLICY_FIXTURE)
+
+rust-007-fixtures-generate:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/configgen \
+		--config-output $(PORT_CONFIG_FIXTURE) \
+		--platform-output $(PORT_PLATFORM_FIXTURE) \
+		--oracle-commit $(PORT_ORACLE_COMMIT) \
+		--oracle-release $(PORT_ORACLE_RELEASE)
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/sessionquotagen \
+		--session-output $(PORT_SESSION_FIXTURE) \
+		--quota-output $(PORT_PERSISTENT_QUOTA_FIXTURE) \
+		--oracle-commit $(PORT_ORACLE_COMMIT) \
+		--oracle-release $(PORT_ORACLE_RELEASE)
+
+rust-007-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/configgen \
+		--check --config-output $(PORT_CONFIG_FIXTURE) \
+		--platform-output $(PORT_PLATFORM_FIXTURE)
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/sessionquotagen \
+		--check --session-output $(PORT_SESSION_FIXTURE) \
+		--quota-output $(PORT_PERSISTENT_QUOTA_FIXTURE)
+
+rust-007-differential: rust-007-fixtures-check
+	$(CARGO) test -p symvault-core --test config_session_contract --all-features --locked
+	$(CARGO) test -p symvault-platform --test platform_contract --test quota_platform_contract --all-features --locked
+
+config-session-differential: rust-007-differential
 
 differential-go-selftest:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(MAKE) build
@@ -409,6 +439,7 @@ help:
 	@echo "  rust-fuzz-smoke   - Run the deterministic bounded Rust age/KDF fuzz smoke"
 	@echo "  rust-fuzz         - Run the bounded main/scheduled Rust age/KDF fuzz pass"
 	@echo "  port-contract      - Run all Rust-port contract preparation gates"
+	@echo "  rust-007-differential - Check Go-derived config/session/quota/platform contracts"
 	@echo "  rust-build         - Build the staged Rust workspace"
 	@echo "  rust-check         - Check all Rust targets and features"
 	@echo "  rust-lint          - Run rustfmt and Clippy with warnings denied"

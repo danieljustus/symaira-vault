@@ -1,9 +1,9 @@
 //! Session cache contracts with injected keyring and clock boundaries.
-use base64::{Engine, engine::general_purpose::STANDARD as B64};
-use chacha20poly1305::{
-    ChaCha20Poly1305, Key, Nonce,
+use aes_gcm::{
+    Aes256Gcm, Key, Nonce,
     aead::{Aead, KeyInit},
 };
+use base64::{Engine, engine::general_purpose::STANDARD as B64};
 use getrandom::fill;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -273,7 +273,7 @@ impl SessionManager {
     }
     fn encrypt(&self, vault: &str, value: &[u8]) -> Result<(String, String), SessionError> {
         let key = self.wrap_key(vault, true)?;
-        let cipher = ChaCha20Poly1305::new(Key::from_slice(&key));
+        let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key));
         let mut nonce = [0; 12];
         fill(&mut nonce).map_err(|e| SessionError::Crypto(e.to_string()))?;
         let encrypted = cipher
@@ -283,7 +283,7 @@ impl SessionManager {
     }
     fn decrypt(&self, vault: &str, encrypted: &str, nonce: &str) -> Result<Vec<u8>, SessionError> {
         let key = self.wrap_key(vault, false)?;
-        let cipher = ChaCha20Poly1305::new(Key::from_slice(&key));
+        let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&key));
         let payload = B64
             .decode(encrypted)
             .map_err(|e| SessionError::Malformed(e.to_string()))?;

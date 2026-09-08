@@ -362,6 +362,7 @@ impl Config {
             .map_err(|error| ConfigError::Parse(error.to_string()))?;
         let root = mapping(&value)?;
         let mut config = Self::default();
+        let mut auth_method_explicit = false;
         if let Some(v) = scalar(root, "vaultDir") {
             config.vault_dir = string(v, "vaultDir")?;
         }
@@ -382,9 +383,15 @@ impl Config {
         }
         if let Some(v) = scalar(root, "authMethod") {
             config.auth_method = AuthMethod::parse(&string(v, "authMethod")?)?;
+            auth_method_explicit = true;
         }
         if let Some(v) = scalar(root, "useTouchID") {
             config.use_touch_id = Some(boolean(v, "useTouchID")?);
+        }
+        if auth_method_explicit {
+            config.use_touch_id = Some(config.auth_method == AuthMethod::Touchid);
+        } else if config.use_touch_id.is_none() {
+            config.use_touch_id = Some(false);
         }
         if let Some(v) = root.get(key("agents")) {
             merge_agents(&mut config, v)?;
@@ -414,7 +421,7 @@ impl Config {
         config
             .agents
             .entry(config.default_agent.clone())
-            .or_insert_with(AgentProfile::deny_all);
+            .or_insert_with(AgentProfile::default);
         Ok(config)
     }
 
@@ -425,7 +432,7 @@ impl Config {
             out.push_str("agents:\n");
             for (name, profile) in &self.agents {
                 out.push_str(&format!("    {}:\n", yaml_scalar(name)?));
-                write_agent(&mut out, profile)?;
+                write_agent(&mut out, name, profile)?;
             }
         }
         if let Some(vault) = &self.vault {
@@ -468,8 +475,11 @@ impl Config {
             "authMethod: {}\n",
             self.effective_auth_method().as_str()
         ));
-        if let Some(use_touch_id) = self.use_touch_id {
-            out.push_str(&format!("useTouchID: {use_touch_id}\n"));
+        if self.use_touch_id.is_some() {
+            out.push_str(&format!(
+                "useTouchID: {}\n",
+                self.effective_auth_method() == AuthMethod::Touchid
+            ));
         }
         Ok(out.into_bytes())
     }
@@ -604,7 +614,10 @@ fn merge_agents(config: &mut Config, value: &serde_yaml_ng::Value) -> Result<(),
             .agents
             .get(name)
             .cloned()
-            .unwrap_or_else(AgentProfile::deny_all);
+            .unwrap_or_else(AgentProfile::default);
+        if !fields.contains_key(key("tier")) && !fields.contains_key(key("exposeValueTools")) {
+            profile.expose_value_tools = true;
+        }
         if let Some(v) = fields.get(key("tier")) {
             profile.tier = Some(string(v, "tier")?);
         }
@@ -822,7 +835,7 @@ fn yaml_scalar(value: &str) -> Result<String, ConfigError> {
         .map(|v| v.trim_end().to_owned())
         .map_err(|e| ConfigError::Serialize(e.to_string()))
 }
-fn write_agent(out: &mut String, p: &AgentProfile) -> Result<(), ConfigError> {
+fn write_agent(out: &mut String, name: &str, p: &AgentProfile) -> Result<(), ConfigError> {
     if let Some(v) = &p.approval_mode {
         out.push_str(&format!("        approvalMode: {}\n", yaml_scalar(v)?));
     }
@@ -838,13 +851,26 @@ fn write_agent(out: &mut String, p: &AgentProfile) -> Result<(), ConfigError> {
             out.push_str(&format!("            - {}\n", yaml_scalar(v)?));
         }
     }
-    for (k, v) in [
-        ("canWrite", p.can_write),
-        ("canRunCommands", p.can_run_commands),
-        ("exposeValueTools", p.expose_value_tools),
-        ("autoUnseal", p.auto_unseal),
-    ] {
-        out.push_str(&format!("        {k}: {v}\n"));
+    let builtin = matches!(
+        name,
+        "default" | "claude-code" | "codex" | "hermes" | "openclaw" | "opencode"
+    );
+    out.push_str(&format!("        canWrite: {}\n", p.can_write));
+    if builtin || p.can_run_commands {
+        out.push_str(&format!("        canRunCommands: {}\n", p.can_run_commands));
+    }
+    out.push_str(&format!(
+        "        exposeValueTools: {}\n",
+        p.expose_value_tools
+    ));
+    if p.require_approval || p.approval_mode.as_deref() == Some("none") {
+        out.push_str(&format!(
+            "        requireApproval: {}\n",
+            p.require_approval
+        ));
+    }
+    if builtin {
+        out.push_str(&format!("        autoUnseal: {}\n", p.auto_unseal));
     }
     if !p.skill_path.is_empty() {
         out.push_str(&format!(
@@ -894,15 +920,29 @@ fn write_git(out: &mut String, v: &GitConfig) -> Result<(), ConfigError> {
 }
 fn write_mcp(out: &mut String, v: &McpConfig) -> Result<(), ConfigError> {
     out.push_str("mcp:\n");
-    if v.port != 0 {
-        out.push_str(&format!("    port: {}\n", v.port));
-    }
-    if !v.bind.is_empty() {
-        out.push_str(&format!("    bind: {}\n", yaml_scalar(&v.bind)?));
-    }
+    out.push_str(&format!("    port: {}\n", v.port));
+    out.push_str(&format!("    bind: {}\n", yaml_scalar(&v.bind)?));
     if v.stdio {
         out.push_str("    stdio: true\n");
     }
+    out.push_str(&format!(
+        "    httpTokenFile: {}\n",
+        yaml_scalar(&v.http_token_file)?
+    ));
+    for (key, value) in [
+        ("read_header_timeout", v.read_header_timeout),
+        ("read_timeout", v.read_timeout),
+        ("write_timeout", v.write_timeout),
+        ("shutdown_timeout", v.shutdown_timeout),
+        ("approval_timeout", v.approval_timeout),
+    ] {
+        out.push_str(&format!("    {key}: {}\n", format_duration(value)));
+    }
+    out.push_str(&format!("    rate_limit: {}\n", v.rate_limit));
+    out.push_str(&format!(
+        "    metrics_auth_required: {}\n",
+        v.metrics_auth_required
+    ));
     Ok(())
 }
 fn write_update(out: &mut String, v: &UpdateConfig) -> Result<(), ConfigError> {

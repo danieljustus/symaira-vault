@@ -242,7 +242,11 @@ and vice versa.
 6. Verify service/account names, session idle/max TTL, non-refreshing probes,
    unavailable/cancel behavior, and no secret exposure.
 
-**Expected:** native smoke tests and the `QUOTA-002` filesystem/wrapper fixtures pass without weakening headless behavior.
+**Expected:** the Go-derived config/session/quota fixtures and injected platform
+contract tests pass locally. Native keyring, Touch ID, clipboard/autotype, secure
+UI, notification, daemon, and Windows `LockFileEx` evidence remains a blocker;
+these boundaries stay fail-closed and the `RUST-007` item remains blocked until
+native jobs execute.
 
 ### Task 8: Port git, reconciliation, import/export, and intake
 
