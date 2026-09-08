@@ -5,9 +5,15 @@
     "release": "v0.22.1",
     "source_files": [
       "internal/audit/audit.go",
-      "internal/audit/audit_hmac_test.go"
+      "internal/audit/audit_hmac_test.go",
+      "internal/audit/keystore.go"
     ],
-    "generator": "Go internal/audit canonicalJSON and computeHMAC"
+    "source_digest": "f1bac365a1a1ddc445530ea28794dd7a7331923a3eb463c7e299faf77e3af557",
+    "generator_files": [
+      "scripts/rust-port/cmd/auditgen/main.go",
+      "scripts/rust-port/cmd/auditgen/main_test.go"
+    ],
+    "generator_digest": "660d273325a57422b7a45d9f8a1c577f8e15cf882712d39130710606b8d9ee77"
   },
   "key_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
   "entries": [

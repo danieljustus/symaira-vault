@@ -24,7 +24,9 @@ struct Oracle {
     commit: String,
     release: String,
     source_files: Vec<String>,
-    generator: String,
+    source_digest: String,
+    generator_files: Vec<String>,
+    generator_digest: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -67,13 +69,19 @@ fn pinned_go_fixture_covers_canonical_bytes_and_deterministic_append() {
         fixture.oracle.source_files,
         [
             "internal/audit/audit.go",
-            "internal/audit/audit_hmac_test.go"
+            "internal/audit/audit_hmac_test.go",
+            "internal/audit/keystore.go"
         ]
     );
     assert_eq!(
-        fixture.oracle.generator,
-        "Go internal/audit canonicalJSON and computeHMAC"
+        fixture.oracle.generator_files,
+        [
+            "scripts/rust-port/cmd/auditgen/main.go",
+            "scripts/rust-port/cmd/auditgen/main_test.go"
+        ]
     );
+    assert_eq!(fixture.oracle.source_digest.len(), 64);
+    assert_eq!(fixture.oracle.generator_digest.len(), 64);
 
     let key = key_from_hex(&fixture.key_hex);
     assert_eq!(key.len(), 32);
