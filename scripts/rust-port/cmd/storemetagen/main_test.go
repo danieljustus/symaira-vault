@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	vault "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 const testCommit = "fe098b917a72125207bc711915f8daa791d1658f"
@@ -51,10 +53,14 @@ func TestFixtureKeepsPendingWriteOutsideEntryWireInput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if value.Vectors[0].PendingWrite == nil || value.Vectors[0].Input.PendingWrite == nil {
+	var input vault.Entry
+	if err := json.Unmarshal(value.Vectors[0].Input, &input); err != nil {
+		t.Fatal(err)
+	}
+	if value.Vectors[0].PendingWrite == nil {
 		t.Fatal("pending write was not retained in the generator model")
 	}
-	wire, err := json.Marshal(value.Vectors[0].Input)
+	wire, err := json.Marshal(input)
 	if err != nil {
 		t.Fatal(err)
 	}

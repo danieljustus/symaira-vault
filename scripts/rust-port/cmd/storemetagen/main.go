@@ -42,7 +42,7 @@ type oracle struct {
 }
 type vector struct {
 	Name         string             `json:"name"`
-	Input        vault.Entry        `json:"input"`
+	Input        json.RawMessage    `json:"input"`
 	PendingWrite *vault.WriteRecord `json:"pending_write,omitempty"`
 	Path         string             `json:"path"`
 	Pseudonymize bool               `json:"pseudonymize"`
@@ -170,6 +170,21 @@ func makeFixture(root, commit, release string) (fixture, error) {
 	if err != nil {
 		return fixture{}, err
 	}
+	zeroOffset, err := time.Parse(time.RFC3339Nano, "0001-01-01T00:00:00+00:00")
+	if err != nil {
+		return fixture{}, err
+	}
+	zeroWalltime, err := time.Parse(time.RFC3339Nano, "0001-01-01T01:00:00+01:00")
+	if err != nil {
+		return fixture{}, err
+	}
+	nearZero, err := time.Parse(time.RFC3339Nano, "0001-01-01T00:00:00.000000001Z")
+	if err != nil {
+		return fixture{}, err
+	}
+	zeroOffsetEntry := vault.Entry{Data: map[string]any{"x": "y"}, Metadata: vault.EntryMetadata{Created: zeroOffset, Version: 4}}
+	zeroWalltimeEntry := vault.Entry{Data: map[string]any{"x": "y"}, Metadata: vault.EntryMetadata{Created: zeroWalltime, Version: 5}}
+	nearZeroEntry := vault.Entry{Data: map[string]any{"x": "y"}, Metadata: vault.EntryMetadata{Created: nearZero, Version: 6}}
 	offsetEntry := vault.Entry{Data: map[string]any{"x": "y"}, Metadata: vault.EntryMetadata{Version: 3}}
 	overflow := vault.Entry{Metadata: vault.EntryMetadata{Version: int(^uint(0) >> 1)}}
 	cases := []struct {
@@ -177,13 +192,17 @@ func makeFixture(root, commit, release string) (fixture, error) {
 		now                 time.Time
 		pseudo              bool
 		input               vault.Entry
+		inputCreated        string
 		pending             *vault.WriteRecord
 	}{
-		{"created_zero_pending", "logical/secret", fixedNow, now, true, input, pending},
-		{"nil_data_existing_version", "logical/empty", fixedNow, now, false, zero, nil},
-		{"created_nonzero", "logical/existing", fixedNow, now, true, existing, nil},
-		{"offset_clock", "logical/offset", "2026-09-08T10:11:12.123456789+01:30", offsetNow, false, offsetEntry, nil},
-		{"version_overflow", "", fixedNow, now, false, overflow, nil},
+		{"created_zero_pending", "logical/secret", fixedNow, now, true, input, "", pending},
+		{"nil_data_existing_version", "logical/empty", fixedNow, now, false, zero, "", nil},
+		{"created_nonzero", "logical/existing", fixedNow, now, true, existing, "", nil},
+		{"offset_clock", "logical/offset", "2026-09-08T10:11:12.123456789+01:30", offsetNow, false, offsetEntry, "", nil},
+		{"created_zero_offset", "logical/zero-offset", fixedNow, now, false, zeroOffsetEntry, "0001-01-01T00:00:00+00:00", nil},
+		{"created_zero_walltime_offset", "logical/zero-walltime", fixedNow, now, false, zeroWalltimeEntry, "", nil},
+		{"created_near_zero_nonzero", "logical/near-zero", fixedNow, now, false, nearZeroEntry, "", nil},
+		{"version_overflow", "", fixedNow, now, false, overflow, "", nil},
 	}
 	vectors := make([]vector, 0, len(cases))
 	for _, item := range cases {
@@ -192,7 +211,19 @@ func makeFixture(root, commit, release string) (fixture, error) {
 		if err != nil {
 			return fixture{}, err
 		}
-		vectors = append(vectors, vector{item.name, item.input, item.pending, item.path, item.pseudo, item.nowText, raw, string(raw)})
+		inputRaw, err := json.Marshal(item.input)
+		if err != nil {
+			return fixture{}, err
+		}
+		if item.inputCreated != "" {
+			old := []byte(`"created":"0001-01-01T00:00:00Z"`)
+			new := []byte(`"created":"` + item.inputCreated + `"`)
+			if bytes.Count(inputRaw, old) != 1 {
+				return fixture{}, errors.New("zero-offset input timestamp was not canonical Go output")
+			}
+			inputRaw = bytes.Replace(inputRaw, old, new, 1)
+		}
+		vectors = append(vectors, vector{item.name, inputRaw, item.pending, item.path, item.pseudo, item.nowText, raw, string(raw)})
 	}
 	return fixture{1, oracle{commit, release, sourceFiles, sourceDigest, generatorFiles, generatorDigest}, vectors}, nil
 }
