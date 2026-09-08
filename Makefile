@@ -370,10 +370,10 @@ audit-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/audit -run '^TestAuditFixture$$' -count=1
 
 audit-differential: audit-fixtures-check
+	@set -eu; rm -rf target/audit; mkdir -p target/audit
 	$(CARGO) test -p symvault-store --test audit --locked
-	@mkdir -p target/audit
-	@rm -f target/audit/rust-output.jsonl
 	$(CARGO) run -p symvault-store --example audit-emit --locked -- target/audit/rust-output.jsonl >/dev/null
+	@test -s target/audit/rust-output.jsonl
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/auditverify target/audit/rust-output.jsonl
 
 rust-gates: store-differential audit-differential
