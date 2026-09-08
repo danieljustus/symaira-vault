@@ -330,11 +330,10 @@ mod tests {
                 }
             }),
             cleanup_temp: Box::new(move |parent, target, temporary| {
-                cleanup_temp(parent, target, temporary)?;
                 if cleanup_hook.replace(false) {
                     Err(io::Error::other("injected cleanup"))
                 } else {
-                    Ok(())
+                    cleanup_temp(parent, target, temporary)
                 }
             }),
             sync_parent: Box::new(move |parent| {
@@ -409,6 +408,29 @@ mod tests {
             matches!(error, StoreError::Write { source, .. } if source.to_string() == "injected publish")
         );
         assert_eq!(fs::read(&target).unwrap(), b"old");
+        // An unlink failure cannot promise cleanup: retain the owned temporary
+        // bytes while preserving the original publication error.
+        assert_eq!(fs::read(dir.path().join("owned")).unwrap(), b"new");
+    }
+
+    #[test]
+    fn injected_final_sync_failure_returns_error_after_successful_cleanup() {
+        let dir = tempdir();
+        let parent = super::super::ensure_directory(dir.path()).unwrap();
+        let target = dir.path().join("entry.age");
+        fs::write(&target, b"old").unwrap();
+        let error = replace_using_names_with_ops(
+            &target,
+            b"new",
+            &parent,
+            ["owned".to_owned()],
+            &fault_ops(false, false, false, Some(2)),
+        )
+        .unwrap_err();
+        assert!(
+            matches!(error, StoreError::Write { source, .. } if source.to_string() == "injected parent sync")
+        );
+        assert_eq!(fs::read(&target).unwrap(), b"new");
         assert!(!dir.path().join("owned").exists());
     }
 
