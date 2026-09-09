@@ -1,4 +1,4 @@
-.PHONY: all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates help docs-check
+.PHONY: all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check rust-007-fixtures-generate rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates help docs-check
 
 # Variables
 BINARY_NAME := symvault
@@ -9,6 +9,7 @@ GOLANGCI_LINT_VERSION := v2.11.4
 GO_TOOLCHAIN ?= go1.26.6
 MIRI_TOOLCHAIN := nightly-2026-09-03
 MIRI_TARGET_DIR := target/miri-2026-09-03
+MIRI_FLAGS := -Zmiri-disable-isolation
 RUST_FUZZ_TOOLCHAIN := nightly-2026-09-03
 RUST_FUZZ_RUNS ?= 128
 RUST_FUZZ_MAX_TOTAL_TIME ?= 10
@@ -175,6 +176,11 @@ PORT_REDACT_FIXTURE := testdata/port/core/redact-contract.json
 PORT_CRYPTO_FIXTURE := testdata/port/core/password-totp-contract.json
 PORT_QUOTA_FIXTURE := testdata/port/core/quota-contract.json
 PORT_POLICY_FIXTURE := testdata/port/core/policy-contract.json
+PORT_SYNC_FIXTURE := testdata/port/sync/sync.json
+PORT_CONFIG_FIXTURE := testdata/port/config/contract.json
+PORT_SESSION_FIXTURE := testdata/port/session/contract.json
+PORT_PLATFORM_FIXTURE := testdata/port/platform/contract.json
+PORT_PERSISTENT_QUOTA_FIXTURE := testdata/port/quotas/contract.json
 PORT_GO_BINARY := target/port/symvault-go
 RUST_BINARY := target/debug/symvault
 PORT_CONTRACT_VERSION ?= v0.0.0-port
@@ -222,9 +228,39 @@ policy-fixtures-generate:
 		--oracle-commit $(PORT_ORACLE_COMMIT) \
 		--oracle-release $(PORT_ORACLE_RELEASE)
 
+sync-io-differential:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/syncgen --check --output $(PORT_SYNC_FIXTURE)
+	$(CARGO) test -p symvault-sync --all-features --locked
+
 policy-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/policygen \
 		--check --output $(PORT_POLICY_FIXTURE)
+
+rust-007-fixtures-generate:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/configgen \
+		--config-output $(PORT_CONFIG_FIXTURE) \
+		--platform-output $(PORT_PLATFORM_FIXTURE) \
+		--oracle-commit $(PORT_ORACLE_COMMIT) \
+		--oracle-release $(PORT_ORACLE_RELEASE)
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/sessionquotagen \
+		--session-output $(PORT_SESSION_FIXTURE) \
+		--quota-output $(PORT_PERSISTENT_QUOTA_FIXTURE) \
+		--oracle-commit $(PORT_ORACLE_COMMIT) \
+		--oracle-release $(PORT_ORACLE_RELEASE)
+
+rust-007-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/configgen \
+		--check --config-output $(PORT_CONFIG_FIXTURE) \
+		--platform-output $(PORT_PLATFORM_FIXTURE)
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/sessionquotagen \
+		--check --session-output $(PORT_SESSION_FIXTURE) \
+		--quota-output $(PORT_PERSISTENT_QUOTA_FIXTURE)
+
+rust-007-differential: rust-007-fixtures-check
+	$(CARGO) test -p symvault-core --test config_session_contract --all-features --locked
+	$(CARGO) test -p symvault-platform --test platform_contract --test quota_platform_contract --all-features --locked
+
+config-session-differential: rust-007-differential
 
 differential-go-selftest:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(MAKE) build
@@ -277,7 +313,7 @@ rust-fuzz-smoke: rust-fuzz-lock
 rust-fuzz:
 	$(MAKE) rust-fuzz-smoke RUST_FUZZ_RUNS= RUST_FUZZ_MAX_TOTAL_TIME=60
 
-port-contract: port-fixtures-check core-fixtures-check policy-fixtures-check differential-go-selftest crypto-differential
+port-contract: port-fixtures-check core-fixtures-check policy-fixtures-check sync-io-differential differential-go-selftest crypto-differential
 
 rust-build:
 	$(CARGO) build --workspace --locked
@@ -294,7 +330,7 @@ rust-test:
 	$(CARGO) test --workspace --doc --all-features --locked
 
 rust-miri:
-	CARGO_TARGET_DIR=$(MIRI_TARGET_DIR) $(CARGO) +$(MIRI_TOOLCHAIN) miri test -p symvault-core --locked
+	MIRIFLAGS=$(MIRI_FLAGS) CARGO_TARGET_DIR=$(MIRI_TARGET_DIR) $(CARGO) +$(MIRI_TOOLCHAIN) miri test -p symvault-core --locked
 
 rust-features:
 	# Keep the committed lockfile usable while checking every feature combination.
@@ -328,7 +364,20 @@ store-differential:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/storegen --check --output testdata/port/store/store.json
 	$(CARGO) test -p symvault-store --locked
 
-rust-gates: store-differential
+audit-fixtures-generate:
+	UPDATE_AUDIT_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/audit -run '^TestAuditFixture$$' -count=1
+
+audit-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/audit -run '^TestAuditFixture$$' -count=1
+
+audit-differential: audit-fixtures-check
+	@set -eu; rm -rf target/audit; mkdir -p target/audit
+	$(CARGO) test -p symvault-store --test audit --locked
+	$(CARGO) run -p symvault-store --example audit-emit --locked -- target/audit/rust-output.jsonl >/dev/null
+	@test -s target/audit/rust-output.jsonl
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/auditverify target/audit/rust-output.jsonl
+
+rust-gates: store-differential audit-differential
 	$(MAKE) rust-lint
 	$(MAKE) rust-check
 	$(MAKE) rust-test
@@ -379,14 +428,19 @@ help:
 	@echo "  quota-fixtures-check    - Verify pure quota transition vectors have not drifted"
 	@echo "  policy-fixtures-generate - Regenerate frozen Go-oracle policy/tier fixtures"
 	@echo "  policy-fixtures-check    - Verify Go-oracle policy/tier fixtures have not drifted"
+	@echo "  sync-io-differential - Verify Go-generated sync/import/archive/intake contracts"
 	@echo "  differential-go-selftest - Compare the Go oracle with itself in isolated sandboxes"
 	@echo "  crypto-differential - Verify Go↔Rust age and KDF cross-decryption"
 	@echo "  crypto-fuzz-smoke - Run the bounded Argon2id parser fuzz smoke"
 	@echo "  store-reopen-fixture  - Generate the deterministic Go↔Rust reopen fixture"
 	@echo "  store-differential - Verify Go↔Rust storage reopen and read-only fixtures"
+	@echo "  audit-fixtures-generate - Generate the production-Go audit fixture"
+	@echo "  audit-fixtures-check - Verify audit fixture provenance and drift"
+	@echo "  audit-differential - Verify Go↔Rust audit chain, rotation, and export"
 	@echo "  rust-fuzz-smoke   - Run the deterministic bounded Rust age/KDF fuzz smoke"
 	@echo "  rust-fuzz         - Run the bounded main/scheduled Rust age/KDF fuzz pass"
 	@echo "  port-contract      - Run all Rust-port contract preparation gates"
+	@echo "  rust-007-differential - Check Go-derived config/session/quota/platform contracts"
 	@echo "  rust-build         - Build the staged Rust workspace"
 	@echo "  rust-check         - Check all Rust targets and features"
 	@echo "  rust-lint          - Run rustfmt and Clippy with warnings denied"

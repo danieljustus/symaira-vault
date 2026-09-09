@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "base_commit": "e912fcacc9bb4500b579f62a4cc034c0e3ab9859",
+  "branch": "migration/store-writer-resume-20260908",
+  "state": "historical_diagnostic_snapshot_not_current_acceptance",
+  "superseded_by": "storage-recovery-verification.json",
+  "provenance_note": "Preserved historical hashes and observations identify an earlier dirty snapshot. They must not be compared as current-source assertions or rewritten to certify later code. Current verification is recorded separately.",
+  "coordinator_ledger_worktree": "../resume-ledger-20260908",
+  "issue": "https://github.com/danieljustus/symaira-vault/issues/1019",
+  "source_sha256": {
+    "crates/symvault-store/src/lib.rs": "bb8cd8127811ddee428e2c2b754ac81eb37c962490ccc68e0674277476f346d7",
+    "crates/symvault-store/src/tests.rs": "8bc2e5e35989063d80660861873bf2ccb98d9405df6dd12d91f2265aeb8d663c",
+    "crates/symvault-store/src/rooted.rs": "bb021a9141f367ff69542503c5c5414f84bb2a4b0836d9351a91a66b97bf27e7",
+    "crates/symvault-store/tests/root_mutation.rs": "6979f3d53fe9db47feaa54a616d96d451bff58890d7167b06e3a54e58a9813dd",
+    "crates/symvault-store/src/publication.rs": "f8e5e0be08eacd772efb10b39ccd54207aba7b29f9e0965229914c28b0a4a5c3"
+  },
+  "environment": {
+    "GOTOOLCHAIN": "go1.26.6",
+    "GOWORK": "off",
+    "rust": "1.98.0",
+    "host": "macOS arm64",
+    "CARGO_TARGET_DIR": "/Users/daniel/Dev/Symaira Dev/symaira-vault/.worktrees/rust-integration/target",
+    "disk_available_last_check": "6.0 GiB; avoid additional build caches"
+  },
+  "latest_local_verification": [
+    {"command": "cargo test -p symvault-store --all-targets --all-features -- --test-threads=8", "exit_code": 0, "scope": "after acquisition delta: 31 unit, 7 audit, 1 defaults, 2 root-mutation tests passed; native/Windows GNU strict Clippy and fmt also rerun successfully"},
+    {"command": "cargo test -p symvault-store --all-features", "exit_code": 0, "results": "30 unit, 7 audit, 1 entry-default and 2 root-mutation integration tests passed; includes fresh/legacy deletion after root replacement and special-target rejection"},
+    {"command": "cargo test --workspace --all-targets --all-features", "exit_code": 0},
+    {"command": "cargo clippy --workspace --all-targets --all-features -- -D warnings", "exit_code": 0},
+    {"command": "go test ./internal/vault -count=1 -timeout=5m", "exit_code": 0},
+    {"command": "cargo fmt --all --check", "exit_code": 0},
+    {"command": "cargo clippy -p symvault-store --all-targets --all-features -- -D warnings", "exit_code": 0},
+    {"command": "cargo clippy -p symvault-store --all-targets --all-features --target x86_64-pc-windows-gnu -- -D warnings", "exit_code": 0, "scope": "cross-compilation only"},
+    {"command": "go test ./internal/vault -run '^(TestEntryWriterGoRustLiveAcceptance|TestEncryptedIndexGoRustLiveAcceptance|TestSearchIndexCommandTimeoutIsBounded)$' -count=1 -v", "exit_code": 0, "scope": "ten actual Go/Rust writer cases plus live index and timeout; raw unknown candidates checked in both layouts"}
+  ],
+  "earlier_verification_before_publication_helper": [
+    "cargo test --workspace --all-targets --all-features: passed",
+    "cargo clippy --workspace --all-targets --all-features -- -D warnings: passed",
+    "go test ./internal/vault -count=1 -timeout=5m: passed",
+    "metadata generator check at oracle fe098b917a72125207bc711915f8daa791d1658f: passed 8 vectors"
+  ],
+  "review": {
+    "recipient_path_slice": "independent bounded approval; raw-candidate regression added and rerun afterward",
+    "publication_helper": "deleg_b0b5ef39 completed: no blocking native Unix finding; four tests and native Clippy passed; Windows compilation only; cleanup/fsync failure injection gap remains",
+    "unix_entry_root_retention": "deleg_3fd01da7 completed: post-acquisition Unix write/delete confinement approved narrowly; all four source hashes independently rechecked by coordinator. Unconditional confinement remains blocked by root acquisition sequence. No full Store confinement or parity approval.",
+    "root_acquisition_design": "deleg_9c933c5d completed: pathname API cannot authenticate pre-acquisition identity; retained handle is authoritative after acquisition. Optional dev/ino comparison detects snapshot-to-open replacement only.",
+    "root_acquisition_implementation": "Revised delta 3969f544664cf8bdf0069369ce56f423ae7c6c783481ca7ccbd613cd338a1691 inspected and applied by coordinator; global-hook and misleading marker defects repaired before integration. Worker made unauthorized local commit 3d8d7f9857e923785a7b05da7b9971d4457fc4c2; commit not cherry-picked. Final bounded review pending deleg_39090a20 / sa-0-6c3fd04f."
+  },
+  "remaining": [
+    "Snapshot-to-acquired-handle dev/ino mismatch detection implemented and locally verified, final review pending. Not authentication of pre-snapshot path identity. Other read/list/index/migration paths require separate evidence",
+    "Native Windows reparse-point, replacement and durability evidence; Linux/FreeBSD/iOS native storage coverage",
+    "Manifest partial-success/error policy, timestamps, generation, locking and transactional behavior versus Go",
+    "Go single-recipient classification and cache/index side effects",
+    "Public manifest key validation and metadata-only explicit pseudonymize override contract",
+    "All later CLI/MCP/HTTP/FFI/value/release/rollback gates remain open; no publication or Go deletion authorized by this checkpoint"
+  ],
+  "next_action": "Consume final bounded acquisition review deleg_39090a20; recheck hashes and reconcile authoritative ledger/matrix. Broader workspace/Go gates recorded above predate acquisition delta; focused native and Windows compile gates reran on it. Logical pseudonymized deletion and manifest bookkeeping remain unapproved. Coordinator remains uncommitted; no full migration completion claimed."
+}

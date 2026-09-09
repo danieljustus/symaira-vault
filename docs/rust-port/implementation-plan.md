@@ -242,7 +242,15 @@ and vice versa.
 6. Verify service/account names, session idle/max TTL, non-refreshing probes,
    unavailable/cancel behavior, and no secret exposure.
 
-**Expected:** native smoke tests and the `QUOTA-002` filesystem/wrapper fixtures pass without weakening headless behavior.
+**Expected:** the Go-derived config/session/quota fixtures and injected platform
+contract tests pass locally. The macOS native adapter slice now compiles and
+runs non-interactive capability, escaping, LocalAuthentication availability,
+and launchd plist tests. It deliberately does not access the real keychain,
+pasteboard, GUI, or LaunchAgents directory. Native keychain round trips,
+Touch ID authentication prompts, clipboard/autotype permission behavior, GUI
+secure input/notification delivery, launchd lifecycle, and Windows
+`LockFileEx` runtime/error evidence remain blockers; the `RUST-007` item stays
+blocked until those native jobs execute.
 
 ### Task 8: Port git, reconciliation, import/export, and intake
 

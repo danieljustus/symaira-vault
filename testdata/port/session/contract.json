@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "caadd5e",
+    "release": "v0.22.1",
+    "source_files": [
+      "internal/policy/ratelimit.go",
+      "internal/policy/ratelimit_transition.go",
+      "internal/quotas/counter.go",
+      "internal/quotas/lock_unix.go",
+      "internal/quotas/lock_windows.go",
+      "internal/session/keyring.go",
+      "internal/session/memory_keyring.go",
+      "internal/session/session.go"
+    ],
+    "source_digest": "33f86cbaef82a82e020a1eedf4d8bfedcf84a17caa23655a622aebeccc985131",
+    "generator_digest": "7e76ae28522ab1591258ccfb1f9b3fb12638327ed2bc874e23c7f67a5cb10643",
+    "goos": "darwin"
+  },
+  "cases": [
+    {
+      "name": "missing",
+      "operations": [
+        "load_passphrase"
+      ],
+      "expected": "error",
+      "error_class": "not_found"
+    },
+    {
+      "name": "encrypted_round_trip",
+      "operations": [
+        "save_passphrase",
+        "load_passphrase"
+      ],
+      "expected": "fixture-secret"
+    },
+    {
+      "name": "legacy_plaintext",
+      "operations": [
+        "load_passphrase"
+      ],
+      "expected": "error",
+      "error_class": "legacy_plaintext"
+    },
+    {
+      "name": "expired",
+      "operations": [
+        "load_passphrase"
+      ],
+      "expected": "error",
+      "error_class": "expired"
+    },
+    {
+      "name": "malformed",
+      "operations": [
+        "load_passphrase"
+      ],
+      "expected": "error",
+      "error_class": "malformed"
+    }
+  ]
+}

@@ -1,0 +1,69 @@
+name: Rust storage differential
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, 'migration/**']
+    paths:
+      - '.github/workflows/rust-store.yml'
+      - 'crates/symvault-store/**'
+      - 'crates/symvault-crypto/**'
+      - 'internal/vault/**'
+      - 'testdata/port/store/**'
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+      - 'go.mod'
+      - 'go.sum'
+  schedule:
+    - cron: '45 6 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOTOOLCHAIN: go1.26.6
+  GOWORK: 'off'
+  RUSTUP_TOOLCHAIN: 1.98.0
+
+jobs:
+  storage-native:
+    name: Storage differential (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Set up pinned Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.6'
+          cache: true
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.98.0 --profile minimal --component clippy,rustfmt
+      - name: Test native storage and publication
+        run: |
+          set -euo pipefail
+          export CARGO_TARGET_DIR="$GITHUB_WORKSPACE/target"
+          cargo fmt --manifest-path "$GITHUB_WORKSPACE/Cargo.toml" --all --check
+          cargo test --manifest-path "$GITHUB_WORKSPACE/Cargo.toml" -p symvault-store --all-targets --all-features --locked
+          cargo clippy --manifest-path "$GITHUB_WORKSPACE/Cargo.toml" -p symvault-store --all-targets --all-features --locked -- -D warnings
+      - name: Compare live Go and Rust writers, manifests and indexes
+        run: |
+          set -euo pipefail
+          export CARGO_TARGET_DIR="$GITHUB_WORKSPACE/target"
+          go test ./internal/vault -run '^(TestEntryWriterGoRustLiveAcceptance|TestManifestSequenceGoRustDifferential|TestManifestSequenceJSONTransportControls|TestEncryptedIndexGoRustLiveAcceptance)$' -count=1 -timeout=15m -json > storage-differential.jsonl
+          python3 -c 'import json; rows=[json.loads(line) for line in open("storage-differential.jsonl")]; expected={"TestEntryWriterGoRustLiveAcceptance","TestManifestSequenceGoRustDifferential","TestManifestSequenceJSONTransportControls","TestEncryptedIndexGoRustLiveAcceptance"}; passed={r.get("Test") for r in rows if r.get("Action")=="pass" and "/" not in r.get("Test", "")}; assert expected <= passed, (expected-passed); assert not any(r.get("Action")=="skip" and r.get("Test") in expected for r in rows); print("Verified all four live contract tests executed")'

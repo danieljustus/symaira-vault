@@ -547,7 +547,86 @@ fn parse_params(value: &str) -> Result<Argon2idParams, CryptoError> {
     parse_argon2id_params(value)
 }
 
-/// Encrypts with the Symaira Vault Argon2id age recipient stanza.
+/// Encrypts plaintext with the key derivation used by the encrypted search index.
+///
+/// The identity remains inside this function; callers never receive key material.
+pub fn encrypt_index(
+    plaintext: &[u8],
+    identity: &Identity,
+    salt: &[u8],
+) -> Result<Vec<u8>, CryptoError> {
+    let mut key = derive_index_key(identity, salt);
+    let result = encrypt_with_key(plaintext, &key);
+    key.zeroize();
+    result
+}
+
+/// Decrypts ciphertext produced by [`encrypt_index`].
+pub fn decrypt_index(
+    ciphertext: &[u8],
+    identity: &Identity,
+    salt: &[u8],
+) -> Result<Vec<u8>, CryptoError> {
+    let mut key = derive_index_key(identity, salt);
+    let result = decrypt_with_key(ciphertext, &key);
+    key.zeroize();
+    result
+}
+
+fn derive_index_key(identity: &Identity, salt: &[u8]) -> Vec<u8> {
+    let identity_string = identity.0.to_string();
+    let identity_bytes = identity_string.expose_secret().as_bytes();
+    if salt.is_empty() {
+        return Sha256::digest(identity_bytes).to_vec();
+    }
+    let hkdf = Hkdf::<Sha256>::new(Some(salt), identity_bytes);
+    let mut key = vec![0u8; KEY_BYTES];
+    hkdf.expand(b"symvault-search-index-v1", &mut key)
+        .expect("HKDF-SHA256 output length is valid");
+    key
+}
+
+fn encrypt_with_key(plaintext: &[u8], key: &[u8]) -> Result<Vec<u8>, CryptoError> {
+    if plaintext.is_empty() || key.len() != KEY_BYTES {
+        return Err(CryptoError::new(
+            FailureClass::InvalidInput,
+            "invalid index input",
+        ));
+    }
+    let cipher = ChaCha20Poly1305::new_from_slice(key)
+        .map_err(|_| CryptoError::new(FailureClass::InvalidInput, "invalid index key"))?;
+    let mut nonce = [0u8; 12];
+    getrandom::fill(&mut nonce)
+        .map_err(|_| CryptoError::new(FailureClass::InvalidInput, "cannot generate index nonce"))?;
+    let mut result = nonce.to_vec();
+    result.extend(
+        cipher
+            .encrypt(Nonce::from_slice(&nonce), plaintext)
+            .map_err(|_| CryptoError::new(FailureClass::InvalidInput, "cannot encrypt index"))?,
+    );
+    Ok(result)
+}
+
+fn decrypt_with_key(ciphertext: &[u8], key: &[u8]) -> Result<Vec<u8>, CryptoError> {
+    if ciphertext.len() < 12 || key.len() != KEY_BYTES {
+        return Err(CryptoError::new(
+            FailureClass::MalformedEnvelope,
+            "invalid index ciphertext",
+        ));
+    }
+    let cipher = ChaCha20Poly1305::new_from_slice(key)
+        .map_err(|_| CryptoError::new(FailureClass::InvalidInput, "invalid index key"))?;
+    cipher
+        .decrypt(Nonce::from_slice(&ciphertext[..12]), &ciphertext[12..])
+        .map_err(|_| {
+            CryptoError::new(
+                FailureClass::WrongPassphraseOrKey,
+                "index decryption failed",
+            )
+        })
+}
+
+/// Encrypts using the Symaira Vault Argon2id age recipient stanza.
 pub fn encrypt_argon2id(
     plaintext: &[u8],
     passphrase: &SecretBytes,

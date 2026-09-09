@@ -272,8 +272,208 @@ fn set_mode(path: &Path, mode: u32) {
     use std::os::unix::fs::PermissionsExt;
     fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap();
 }
+
 #[cfg(not(unix))]
 fn set_mode(_path: &Path, _mode: u32) {}
+
+#[test]
+fn manifest_verification_reports_valid_tampered_missing_and_unknown() {
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &value.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    let clean = store.verify_manifest(&identity).unwrap();
+    assert_eq!(clean.ok, 3);
+    assert!(clean.missing.is_empty());
+    assert!(clean.tampered.is_empty());
+    assert!(clean.unknown.is_empty());
+
+    fs::remove_file(temp.path().join("entries/minimal.age")).unwrap();
+    fs::write(temp.path().join("entries/full.age"), b"tampered").unwrap();
+    fs::write(temp.path().join("entries/unknown.age"), b"unknown").unwrap();
+    let result = store.verify_manifest(&identity).unwrap();
+    assert_eq!(result.missing, vec!["minimal"]);
+    assert_eq!(result.tampered, vec!["full"]);
+    assert_eq!(result.unknown, vec!["unknown.age"]);
+}
+
+#[test]
+fn legacy_migration_moves_ciphertext_and_is_idempotent() {
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &value.vaults[1]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    assert_eq!(store.layout(), Layout::Legacy);
+    store.migrate_legacy().unwrap();
+    store.migrate_legacy().unwrap();
+    assert!(temp.path().join(".symvault-migrated").is_file());
+    assert_eq!(
+        store.list(&identity).unwrap(),
+        vec!["full", "minimal", "nested/large"]
+    );
+    for entry in &value.vaults[1].entries {
+        assert!(temp.path().join(&entry.storage_path).is_file());
+        assert_eq!(
+            store.get(&entry.path, &identity).unwrap(),
+            serde_json::from_value::<Entry>(entry.expected.clone()).unwrap()
+        );
+    }
+}
+
+#[test]
+fn replacement_is_atomic_and_never_follows_symlink_targets() {
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &value.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    let mut data = BTreeMap::new();
+    data.insert("token".into(), serde_json::Value::String("old".into()));
+    let entry = Entry {
+        path: "replace".into(),
+        data,
+        ..Entry::default()
+    };
+    store.write_entry("replace", &entry, &identity).unwrap();
+    let mut updated = entry.clone();
+    updated
+        .data
+        .insert("token".into(), serde_json::Value::String("new".into()));
+    let expected = {
+        let mut value = updated.clone();
+        value.metadata.version = 1;
+        value.classification = 2;
+        value
+    };
+    store.write_entry("replace", &updated, &identity).unwrap();
+    assert_eq!(store.get("replace", &identity).unwrap(), expected);
+    assert!(
+        !fs::read_dir(temp.path().join("entries"))
+            .unwrap()
+            .any(|item| {
+                item.unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .contains(".tmp-")
+            })
+    );
+    #[cfg(unix)]
+    {
+        let outside = tempfile::tempdir().unwrap();
+        let target = outside.path().join("outside");
+        fs::write(&target, b"must stay").unwrap();
+        fs::remove_file(temp.path().join("entries/replace.age")).unwrap();
+        std::os::unix::fs::symlink(&target, temp.path().join("entries/replace.age")).unwrap();
+        assert!(matches!(
+            store.write_entry("replace", &updated, &identity),
+            Err(StoreError::Symlink(_))
+        ));
+        assert_eq!(fs::read(&target).unwrap(), b"must stay");
+    }
+}
+
+#[test]
+fn remove_path_rejects_targets_outside_root() {
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &value.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    let target = outside.path().join("sentinel");
+    fs::write(&target, b"must stay").unwrap();
+
+    assert!(matches!(
+        store.remove_path(&target),
+        Err(StoreError::UnsafePath(_))
+    ));
+    assert_eq!(fs::read(&target).unwrap(), b"must stay");
+}
+
+#[test]
+fn write_lock_preserves_existing_contents() {
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &value.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    let path = temp.path().join(LOCK_FILE);
+    fs::write(&path, b"existing lock contents").unwrap();
+
+    for _ in 0..2 {
+        store.with_write_lock(|_| Ok(())).unwrap();
+        assert_eq!(fs::read(&path).unwrap(), b"existing lock contents");
+    }
+}
+
+#[test]
+fn encrypted_search_index_matches_case_insensitive_nested_values_and_invalidates() {
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &value.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    let mut index = SearchIndex::build(&store, &identity).unwrap();
+    let candidates = store.list(&identity).unwrap();
+    assert_eq!(
+        index
+            .search(&candidates, "FIXTURE-USER")
+            .unwrap()
+            .into_iter()
+            .collect::<Vec<_>>(),
+        vec!["minimal"]
+    );
+    assert_eq!(
+        index
+            .search(&candidates, "DEEP-FIXTURE")
+            .unwrap()
+            .into_iter()
+            .collect::<Vec<_>>(),
+        vec!["nested/large"]
+    );
+    let raw = fs::read(temp.path().join(".search-index")).unwrap();
+    assert!(!String::from_utf8_lossy(&raw).contains("fixture-user"));
+    let mut loaded = SearchIndex::load(&store, &identity).unwrap().unwrap();
+    assert_eq!(
+        loaded
+            .search(&candidates, "fixture-full-user")
+            .unwrap()
+            .into_iter()
+            .collect::<Vec<_>>(),
+        vec!["full"]
+    );
+    loaded.invalidate().unwrap();
+    assert!(!temp.path().join(".search-index").exists());
+}
+
+#[test]
+fn stale_or_corrupt_search_index_is_discarded() {
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &value.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    let _ = SearchIndex::build(&store, &identity).unwrap();
+    fs::write(temp.path().join(".search-index"), b"corrupt").unwrap();
+    assert!(SearchIndex::load(&store, &identity).unwrap().is_none());
+    let mut data = BTreeMap::new();
+    data.insert("value".into(), serde_json::Value::String("new".into()));
+    store
+        .write_entry(
+            "new",
+            &Entry {
+                data,
+                ..Entry::default()
+            },
+            &identity,
+        )
+        .unwrap();
+    let _ = SearchIndex::build(&store, &identity).unwrap();
+    fs::remove_file(temp.path().join("entries/new.age")).unwrap();
+    assert!(SearchIndex::load(&store, &identity).unwrap().is_none());
+}
 
 #[test]
 fn fixture_has_authoritative_provenance_and_exact_cardinality() {
@@ -432,7 +632,7 @@ fn fresh_layout_writes_a_new_entry_atomically_and_reads_it_back() {
 }
 
 #[test]
-fn fresh_layout_write_rejects_pseudonymized_paths() {
+fn fresh_layout_write_supports_pseudonymized_nested_and_dotted_paths() {
     let (_, value) = fixture();
     let identity = parse_identity(IDENTITY).unwrap();
     let temp = tempfile::tempdir().unwrap();
@@ -444,10 +644,53 @@ fn fresh_layout_write_rejects_pseudonymized_paths() {
     )
     .unwrap();
     let store = Store::open(root, &identity).unwrap();
-    let error = store
-        .write_new_entry("written", &Entry::default(), &identity)
-        .unwrap_err();
-    assert!(matches!(error, StoreError::Config(message) if message.contains("pseudonymized")));
+    let entry = Entry {
+        data: BTreeMap::from([(
+            "token".to_owned(),
+            serde_json::Value::String("pseudonymized-secret".to_owned()),
+        )]),
+        ..Entry::default()
+    };
+    store
+        .write_new_entry("nested.name/written.v1", &entry, &identity)
+        .unwrap();
+    let got = store.get("nested.name/written.v1", &identity).unwrap();
+    assert_eq!(got.path, "nested.name/written.v1");
+    assert_eq!(got.data, entry.data);
+    assert!(!root.join("entries/nested.name").exists());
+    let hash = symvault_crypto::pseudonymize_path(&identity, "nested.name/written.v1");
+    assert!(
+        root.join(format!("entries/{}/{}.age", &hash[..2], hash))
+            .is_file()
+    );
+}
+
+#[test]
+fn fresh_layout_write_uses_all_configured_recipients_and_preserves_dots() {
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let other = parse_identity(
+        "AGE-SECRET-KEY-18HD87KNMWKY3RW97YR2PYU6HGWDZXAGW6JF74LNNHUA6A8K5ZF9QTWUTK3",
+    )
+    .unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    materialize(root, &value.vaults[0]);
+    fs::write(
+        root.join(RECIPIENTS_FILE),
+        format!("{}\n", recipient_string(&other)),
+    )
+    .unwrap();
+    let store = Store::open(root, &identity).unwrap();
+    let entry = Entry::default();
+    store
+        .write_new_entry("service.v1", &entry, &identity)
+        .unwrap();
+    let ciphertext = fs::read(root.join("entries/service.v1.age")).unwrap();
+    assert_eq!(
+        symvault_crypto::decrypt(&ciphertext, &other).unwrap(),
+        serde_json::to_vec(&entry).unwrap()
+    );
 }
 
 #[test]
@@ -601,6 +844,50 @@ fn type_inference_matches_read_only_entry_contract() {
 }
 
 #[test]
+fn single_recipient_writer_infers_go_classification_from_string_values() {
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let (_, fixture) = fixture();
+    materialize(temp.path(), &fixture.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    let cases = [
+        ("password", "ordinary", 2),
+        ("api", concat!("AKIA", "1234567890123456"), 3),
+        ("bearer", "header.payload.signature", 3),
+        ("basic", "user:password", 3),
+        ("database", "postgres://user:password@example", 3),
+        ("ssh", concat!("-----BEGIN RSA ", "PRIVATE KEY-----"), 4),
+        ("certificate", "-----BEGIN CERTIFICATE-----", 4),
+        ("totp", "JBSWY3DPEHPK3PXP", 4),
+    ];
+    for (name, value, expected) in cases {
+        let entry = Entry {
+            data: BTreeMap::from([(
+                "value".to_owned(),
+                serde_json::Value::String(value.to_owned()),
+            )]),
+            ..Entry::default()
+        };
+        let path = format!("classification/{name}");
+        store
+            .write_entry_at(
+                &path,
+                &entry,
+                &identity,
+                "2026-09-08T10:11:12Z",
+                false,
+                None,
+            )
+            .unwrap();
+        assert_eq!(
+            store.get(&path, &identity).unwrap().classification,
+            expected,
+            "classification for {name}"
+        );
+    }
+}
+
+#[test]
 fn file_manifest_is_sorted_and_contains_metadata() {
     let (_, value) = fixture();
     let identity = parse_identity(IDENTITY).unwrap();
@@ -615,4 +902,645 @@ fn file_manifest_is_sorted_and_contains_metadata() {
     assert_eq!(paths, sorted);
     #[cfg(unix)]
     assert!(files.iter().all(|file| file.mode > 0));
+}
+
+#[cfg(unix)]
+#[test]
+fn atomic_create_holds_parent_capability_across_ancestor_replacement() {
+    use std::os::unix::fs::symlink;
+
+    let root = tempfile::tempdir().unwrap();
+    let checked = root.path().join("checked");
+    let outside = root.path().join("outside");
+    fs::create_dir(&checked).unwrap();
+    fs::create_dir(&outside).unwrap();
+    fs::write(outside.join("sentinel"), b"must stay unchanged").unwrap();
+
+    let parent = ensure_directory_recursive(&checked.canonicalize().unwrap()).unwrap();
+    fs::rename(&checked, root.path().join("actual")).unwrap();
+    symlink(&outside, &checked).unwrap();
+
+    let target = checked.join("published.age");
+    atomic_create(&target, b"published only in retained directory", &parent).unwrap();
+    assert_eq!(
+        fs::read(outside.join("sentinel")).unwrap(),
+        b"must stay unchanged"
+    );
+    assert_eq!(
+        fs::read(root.path().join("actual/published.age")).unwrap(),
+        b"published only in retained directory"
+    );
+    assert!(!outside.join("published.age").exists());
+
+    fs::write(
+        root.path().join("actual/collision.age"),
+        b"collision sentinel",
+    )
+    .unwrap();
+    let collision = root.path().join("checked/collision.age");
+    let error = atomic_create(&collision, b"replacement", &parent).unwrap_err();
+    assert!(matches!(error, StoreError::Config(message) if message.contains("replacement")));
+    assert_eq!(
+        fs::read(root.path().join("actual/collision.age")).unwrap(),
+        b"collision sentinel"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn concurrent_capability_publication_creates_all_entries_without_temp_leaks() {
+    use std::thread;
+
+    let root = tempfile::tempdir().unwrap();
+    let root_path = root.path().canonicalize().unwrap();
+    let parent_path = root_path.join("entries/shared/deep");
+    let mut workers = Vec::new();
+    for index in 0..8 {
+        let parent_path = parent_path.clone();
+        workers.push(thread::spawn(move || {
+            let parent = ensure_directory_recursive(&parent_path).unwrap();
+            let target = parent_path.join(format!("entry-{index}.age"));
+            atomic_create(&target, format!("payload-{index}").as_bytes(), &parent).unwrap();
+        }));
+    }
+    for worker in workers {
+        worker.join().unwrap();
+    }
+    for index in 0..8 {
+        assert_eq!(
+            fs::read(parent_path.join(format!("entry-{index}.age"))).unwrap(),
+            format!("payload-{index}").as_bytes()
+        );
+    }
+    assert!(!fs::read_dir(&parent_path).unwrap().any(|item| {
+        item.unwrap()
+            .file_name()
+            .to_string_lossy()
+            .contains(".tmp-")
+    }));
+}
+
+#[test]
+fn malformed_recipient_does_not_create_destination_directories() {
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    materialize(root, &value.vaults[0]);
+    fs::write(root.join(RECIPIENTS_FILE), b"not-an-age-recipient\n").unwrap();
+    let store = Store::open(root, &identity).unwrap();
+    assert!(matches!(
+        store.write_new_entry("new/deep/entry", &Entry::default(), &identity),
+        Err(StoreError::Config(_))
+    ));
+    assert!(!root.join("entries/new").exists());
+}
+
+#[test]
+fn concurrent_same_target_fresh_writes_have_one_winner_and_no_temp_leak() {
+    use std::sync::Arc;
+    use std::thread;
+
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &value.vaults[0]);
+    let store = Arc::new(Store::open(temp.path(), &identity).unwrap());
+    let mut workers = Vec::new();
+    for index in 0..8 {
+        let store = Arc::clone(&store);
+        let identity = parse_identity(IDENTITY).unwrap();
+        workers.push(thread::spawn(move || {
+            let entry = Entry {
+                data: BTreeMap::from([(
+                    "winner".to_owned(),
+                    serde_json::Value::String(format!("payload-{index}")),
+                )]),
+                ..Entry::default()
+            };
+            store.write_new_entry("same-target", &entry, &identity)
+        }));
+    }
+    let results: Vec<_> = workers
+        .into_iter()
+        .map(|worker| worker.join().unwrap())
+        .collect();
+    assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+    assert_eq!(results.iter().filter(|result| result.is_err()).count(), 7);
+    let stored = store.get("same-target", &identity).unwrap();
+    let payload = stored.data["winner"].as_str().unwrap();
+    assert!(payload.starts_with("payload-"));
+    assert!(
+        !fs::read_dir(temp.path().join("entries"))
+            .unwrap()
+            .any(|item| {
+                item.unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .contains(".tmp-")
+            })
+    );
+}
+
+#[test]
+fn go_index_salt_string_is_not_accepted_by_old_rust_schema() {
+    #[allow(dead_code)]
+    #[derive(serde::Deserialize)]
+    struct OldRustIndexDocument {
+        #[serde(rename = "v")]
+        values: std::collections::BTreeMap<String, Vec<String>>,
+        #[serde(rename = "c")]
+        entry_count: usize,
+        #[serde(rename = "p")]
+        paths: std::collections::BTreeMap<String, EmptyIndexValue>,
+        #[serde(rename = "s", default)]
+        salt: Vec<u8>,
+    }
+
+    let go_document = r#"{
+        "v":{"go-doc":["go-rust-accepted"]},
+        "c":1,
+        "p":{"go-doc":{}},
+        "s":"AQIDBAUGBwgJCgsMDQ4PEA=="
+    }"#;
+    let old_result = serde_json::from_str::<OldRustIndexDocument>(go_document);
+    assert!(
+        old_result.is_err(),
+        "old Rust Vec<u8> salt schema accepted Go base64 string"
+    );
+    let current = serde_json::from_str::<IndexDocument>(go_document).expect("current Go schema");
+    assert_eq!(current.salt, (1u8..=16).collect::<Vec<_>>());
+    assert_eq!(current.entry_count, 1);
+    assert_eq!(current.values["go-doc"], vec!["go-rust-accepted"]);
+    assert!(current.paths.contains_key("go-doc"));
+}
+
+#[test]
+fn persisted_rust_metadata_matches_all_go_writer_vectors() {
+    #[derive(Deserialize)]
+    struct MetadataFixture {
+        vectors: Vec<MetadataVector>,
+    }
+    #[derive(Deserialize)]
+    struct MetadataVector {
+        name: String,
+        input: Entry,
+        pending_write: Option<WriteRecord>,
+        path: String,
+        pseudonymize: bool,
+        now: String,
+        expected: Entry,
+        expected_json: String,
+    }
+
+    let raw = include_str!("../../../testdata/port/store/metadata.json");
+    let metadata_fixture: MetadataFixture = serde_json::from_str(raw).unwrap();
+    assert_eq!(metadata_fixture.vectors.len(), 8);
+    let case_ids: Vec<_> = metadata_fixture
+        .vectors
+        .iter()
+        .map(|vector| vector.name.as_str())
+        .collect();
+    assert_eq!(
+        case_ids,
+        [
+            "created_zero_pending",
+            "nil_data_existing_version",
+            "created_nonzero",
+            "offset_clock",
+            "created_zero_offset",
+            "created_zero_walltime_offset",
+            "created_near_zero_nonzero",
+            "version_overflow",
+        ]
+    );
+
+    let (_, store_fixture) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &store_fixture.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+
+    for vector in metadata_fixture.vectors {
+        // The overflow oracle intentionally has no logical path because it is
+        // a pure metadata case; give it a valid publication path here without
+        // changing the metadata input or expected wire bytes.
+        let path = if vector.path.is_empty() {
+            "metadata/version-overflow"
+        } else {
+            vector.path.as_str()
+        };
+        store
+            .write_entry_at(
+                path,
+                &vector.input,
+                &identity,
+                &vector.now,
+                vector.pseudonymize,
+                vector.pending_write.as_ref(),
+            )
+            .unwrap_or_else(|error| panic!("{}: {error}", vector.name));
+        let persisted = store
+            .get(path, &identity)
+            .unwrap_or_else(|error| panic!("{}: {error}", vector.name));
+        assert_eq!(
+            persisted.metadata, vector.expected.metadata,
+            "{}",
+            vector.name
+        );
+        let mut expected = vector.expected.clone();
+        assert_eq!(
+            serde_json::to_string(&expected).unwrap(),
+            vector.expected_json
+        );
+        expected.classification = infer_classification(&expected);
+        assert_eq!(
+            serde_json::to_string(&persisted).unwrap(),
+            serde_json::to_string(&expected).unwrap(),
+            "persisted wire output for {}",
+            vector.name
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn root_acquisition_rejects_replaced_root_before_parsing_invalid_config() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
+
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("vault");
+    let moved = temp.path().join("moved");
+    let replacement = temp.path().join("replacement");
+    fs::create_dir(&root).unwrap();
+    fs::create_dir(&replacement).unwrap();
+    fs::write(
+        root.join("config.yaml"),
+        b"vault:\n  pseudonymize_paths: false\n",
+    )
+    .unwrap();
+    fs::write(root.join("identity.age"), b"presence fixture").unwrap();
+    let canonical_root = root.canonicalize().unwrap();
+    let hook_ran = Arc::new(AtomicBool::new(false));
+    let error = Store::open_with_root_acquisition(&root, {
+        let root = root.clone();
+        let canonical_root = canonical_root.clone();
+        let moved = moved.clone();
+        let replacement = replacement.clone();
+        let hook_ran = hook_ran.clone();
+        move |canonical| {
+            assert_eq!(canonical, canonical_root);
+            fs::rename(&root, &moved).unwrap();
+            fs::rename(&replacement, &root).unwrap();
+            fs::write(root.join("config.yaml"), b"vault: invalid\n").unwrap();
+            fs::write(root.join("identity.age"), b"outsider identity").unwrap();
+            hook_ran.store(true, Ordering::SeqCst);
+        }
+    })
+    .unwrap_err();
+    assert!(hook_ran.load(Ordering::SeqCst));
+    assert!(matches!(error, StoreError::RootChanged(path) if path == root));
+    assert!(moved.join("config.yaml").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn read_list_verify_and_files_use_the_retained_root_capability() {
+    let (_, fixture) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("vault");
+    let moved = temp.path().join("moved");
+    fs::create_dir(&root).unwrap();
+    materialize(&root, &fixture.vaults[0]);
+    let store = Store::open(&root, &identity).unwrap();
+
+    fs::rename(&root, &moved).unwrap();
+    fs::create_dir(&root).unwrap();
+    fs::write(root.join(CONFIG_FILE), b"vault: invalid\n").unwrap();
+    fs::write(root.join(IDENTITY_FILE), b"replacement identity").unwrap();
+
+    assert_eq!(
+        store.get("minimal", &identity).unwrap(),
+        serde_json::from_value::<Entry>(fixture.vaults[0].entries[0].expected.clone()).unwrap()
+    );
+    let verification = store.verify_manifest(&identity).unwrap();
+    assert_eq!(verification.ok, 3);
+    assert!(verification.missing.is_empty());
+    assert!(verification.tampered.is_empty());
+    assert!(
+        store
+            .list(&identity)
+            .unwrap()
+            .contains(&"minimal".to_owned())
+    );
+    assert!(
+        store
+            .files()
+            .unwrap()
+            .iter()
+            .any(|file| file.path == "entries/minimal.age")
+    );
+    assert!(moved.join("entries/minimal.age").is_file());
+}
+
+#[test]
+fn manifest_verification_ignores_size_mismatch_like_go() {
+    let (_, fixture) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &fixture.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    let mut manifest = store.load_manifest(&identity).unwrap();
+    manifest.entries.get_mut("minimal").unwrap().size += 1;
+    store.write_manifest(&manifest, &identity).unwrap();
+
+    let result = store.verify_manifest(&identity).unwrap();
+    assert_eq!(result.ok, 3);
+    assert!(result.tampered.is_empty());
+}
+
+#[cfg(unix)]
+#[test]
+fn manifest_preserves_existing_zero_created_and_crosses_i32_generation_boundary() {
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    fs::create_dir(root.join("entries")).unwrap();
+    fs::write(
+        root.join(CONFIG_FILE),
+        b"vault:\n  pseudonymize_paths: false\n",
+    )
+    .unwrap();
+    fs::write(root.join(IDENTITY_FILE), b"presence fixture").unwrap();
+    let store = Store::open(root, &identity).unwrap();
+    store
+        .write_manifest(
+            &Manifest {
+                version: 0,
+                generation: i64::from(i32::MAX),
+                created: go_zero_time(),
+                updated: go_zero_time(),
+                entries: BTreeMap::new(),
+            },
+            &identity,
+        )
+        .unwrap();
+    store
+        .update_manifest_entry("crossing", b"ciphertext", &identity)
+        .unwrap();
+    let after_update = store.load_manifest(&identity).unwrap();
+    assert_eq!(after_update.version, 1);
+    assert_eq!(after_update.generation, i64::from(i32::MAX) + 1);
+    assert_eq!(after_update.created, go_zero_time());
+    assert!(!after_update.updated.is_empty());
+    assert!(!after_update.entries["crossing"].mtime.is_empty());
+    store.remove_manifest_entry("crossing", &identity).unwrap();
+    let after_remove = store.load_manifest(&identity).unwrap();
+    assert_eq!(after_remove.generation, i64::from(i32::MAX) + 2);
+    assert_eq!(after_remove.created, go_zero_time());
+}
+
+#[test]
+fn concurrent_manifest_updates_preserve_every_record() {
+    use std::sync::Arc;
+
+    let (_, fixture) = fixture();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &fixture.vaults[0]);
+    let identity = parse_identity(IDENTITY).unwrap();
+    let store = Arc::new(Store::open(temp.path(), &identity).unwrap());
+    let mut workers = Vec::new();
+    for index in 0..8 {
+        let store = Arc::clone(&store);
+        workers.push(std::thread::spawn(move || {
+            let identity = parse_identity(IDENTITY).unwrap();
+            store.update_manifest_entry(&format!("concurrent/{index}"), b"ciphertext", &identity)
+        }));
+    }
+    for worker in workers {
+        worker.join().unwrap().unwrap();
+    }
+
+    let manifest = store.load_manifest(&identity).unwrap();
+    assert_eq!(manifest.entries.len(), 11);
+    for index in 0..8 {
+        assert!(
+            manifest
+                .entries
+                .contains_key(&format!("concurrent/{index}"))
+        );
+    }
+}
+
+#[test]
+fn metadata_clock_requires_rfc3339_and_preserves_semantic_go_zero() {
+    let identity = parse_identity(IDENTITY).unwrap();
+    let (_, fixture) = fixture();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &fixture.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    let entry = Entry::default();
+    let zero = go_zero_time();
+    store
+        .write_entry_at("clock-zero", &entry, &identity, &zero, false, None)
+        .unwrap();
+    assert_eq!(
+        store.get("clock-zero", &identity).unwrap().metadata.created,
+        zero
+    );
+    let malformed = "2026-09-08T10:11:12Zgarbage";
+    assert!(
+        store
+            .write_entry_at("clock-malformed", &entry, &identity, malformed, false, None)
+            .is_err()
+    );
+}
+
+#[test]
+fn write_entry_at_config_layout_remains_authoritative_for_conflicting_flags() {
+    let (_, fixture) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    for (config_pseudo, override_pseudo) in [(false, true), (true, false)] {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        materialize(root, &fixture.vaults[0]);
+        fs::write(
+            root.join(CONFIG_FILE),
+            format!(
+                "vault:
+  pseudonymize_paths: {}
+",
+                config_pseudo
+            ),
+        )
+        .unwrap();
+        let store = Store::open(root, &identity).unwrap();
+        let path = format!("override/{}", config_pseudo);
+        store
+            .write_entry_at(
+                &path,
+                &Entry::default(),
+                &identity,
+                "2026-09-08T10:11:12Z",
+                override_pseudo,
+                None,
+            )
+            .unwrap();
+        let hash = symvault_crypto::pseudonymize_path(&identity, &path);
+        let configured_file = if config_pseudo {
+            root.join(format!("entries/{}/{}.age", &hash[..2], hash))
+        } else {
+            root.join(format!("entries/{}.age", path))
+        };
+        assert!(configured_file.is_file());
+        if config_pseudo {
+            assert!(!root.join(format!("entries/{}.age", path)).exists());
+        } else {
+            assert!(
+                !root
+                    .join(format!("entries/{}/{}.age", &hash[..2], hash))
+                    .exists()
+            );
+        }
+        let got = store.get(&path, &identity).unwrap();
+        assert_eq!(got.path, path);
+        assert!(store.list(&identity).unwrap().contains(&path));
+        let manifest = store.load_manifest(&identity).unwrap();
+        assert!(manifest.entries.contains_key(&path));
+        store.delete_entry_with_identity(&path, &identity).unwrap();
+        assert!(!store.entry_exists(&path, &identity).unwrap());
+        assert!(!store.list(&identity).unwrap().contains(&path));
+        let after = store.load_manifest(&identity).unwrap();
+        assert!(!after.entries.contains_key(&path));
+    }
+}
+
+#[test]
+fn open_preserves_legacy_validation_error_order() {
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    fs::write(root.join(IDENTITY_FILE), b"identity").unwrap();
+    fs::write(
+        root.join(RECIPIENTS_FILE),
+        b"invalid recipient
+",
+    )
+    .unwrap();
+    let error = Store::open(root, &identity).unwrap_err();
+    assert!(
+        matches!(error, StoreError::MissingFile(path) if path == root.canonicalize().unwrap().join(CONFIG_FILE))
+    );
+    fs::write(
+        root.join(CONFIG_FILE),
+        b"vault: invalid
+",
+    )
+    .unwrap();
+    fs::remove_file(root.join(IDENTITY_FILE)).unwrap();
+    let error = Store::open(root, &identity).unwrap_err();
+    assert!(
+        matches!(error, StoreError::MissingFile(path) if path == root.canonicalize().unwrap().join(IDENTITY_FILE))
+    );
+    fs::write(root.join(IDENTITY_FILE), b"identity").unwrap();
+    let error = Store::open(root, &identity).unwrap_err();
+    assert!(matches!(error, StoreError::Config(_)));
+}
+
+#[cfg(unix)]
+#[test]
+fn fresh_scan_is_unbounded_but_legacy_scan_keeps_walkdir_depth_64() {
+    let identity = parse_identity(IDENTITY).unwrap();
+    let deep = (0..65).map(|_| "deep").collect::<Vec<_>>().join("/");
+    let path = format!("{deep}/entry");
+    let fresh_temp = tempfile::tempdir().unwrap();
+    fs::create_dir(fresh_temp.path().join("entries")).unwrap();
+    fs::write(
+        fresh_temp.path().join(CONFIG_FILE),
+        b"vault: {}
+",
+    )
+    .unwrap();
+    fs::write(fresh_temp.path().join(IDENTITY_FILE), b"identity").unwrap();
+    let fresh = Store::open(fresh_temp.path(), &identity).unwrap();
+    fresh
+        .write_new_entry(&path, &Entry::default(), &identity)
+        .unwrap();
+    fs::create_dir(fresh_temp.path().join("entries2")).unwrap();
+    fs::copy(
+        fresh_temp
+            .path()
+            .join("entries")
+            .join(&path)
+            .with_extension("age"),
+        fresh_temp.path().join("entries2/foo.age"),
+    )
+    .unwrap();
+    assert_eq!(
+        fresh.list(&identity).unwrap(),
+        vec![path.clone(), "entries2/foo".to_owned()]
+    );
+    let legacy_temp = tempfile::tempdir().unwrap();
+    fs::create_dir(legacy_temp.path().join("entries")).unwrap();
+    fs::write(
+        legacy_temp.path().join(CONFIG_FILE),
+        b"vault: {}
+",
+    )
+    .unwrap();
+    fs::write(legacy_temp.path().join(IDENTITY_FILE), b"identity").unwrap();
+    let source = Store::open(legacy_temp.path(), &identity).unwrap();
+    source
+        .write_new_entry(&path, &Entry::default(), &identity)
+        .unwrap();
+    let source_path = legacy_temp
+        .path()
+        .join("entries")
+        .join(&path)
+        .with_extension("age");
+    let legacy_path = legacy_temp.path().join(&path).with_extension("age");
+    fs::create_dir_all(legacy_path.parent().unwrap()).unwrap();
+    fs::rename(source_path, &legacy_path).unwrap();
+    fs::remove_dir_all(legacy_temp.path().join("entries")).unwrap();
+    fs::create_dir(legacy_temp.path().join("entries")).unwrap();
+    let legacy = Store::open(legacy_temp.path(), &identity).unwrap();
+    assert!(legacy.list(&identity).unwrap().is_empty());
+}
+
+#[cfg(unix)]
+#[test]
+fn rooted_walk_depth_matches_walkdir_at_exact_boundaries() {
+    let temp = tempfile::tempdir().unwrap();
+    fs::create_dir_all(temp.path().join("a/b/c")).unwrap();
+    for relative in ["root.age", "a/one.age", "a/b/two.age", "a/b/c/three.age"] {
+        fs::write(temp.path().join(relative), b"fixture").unwrap();
+    }
+    let root = fs::File::open(temp.path()).unwrap();
+    for depth in 0..=4 {
+        let mut expected = walkdir::WalkDir::new(temp.path())
+            .max_depth(depth)
+            .into_iter()
+            .map(Result::unwrap)
+            .filter(|entry| entry.depth() > 0)
+            .map(|entry| {
+                entry
+                    .path()
+                    .strip_prefix(temp.path())
+                    .unwrap()
+                    .to_path_buf()
+            })
+            .collect::<Vec<_>>();
+        let mut actual = rooted::walk_with_max_depth(&root, temp.path(), Some(depth))
+            .unwrap()
+            .into_iter()
+            .map(|entry| entry.relative)
+            .collect::<Vec<_>>();
+        expected.sort();
+        actual.sort();
+        assert_eq!(actual, expected, "depth {depth}");
+    }
 }
