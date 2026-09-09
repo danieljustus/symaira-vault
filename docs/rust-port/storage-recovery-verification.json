@@ -1,0 +1,64 @@
+{
+  "base": "e912fcacc9bb4500b579f62a4cc034c0e3ab9859",
+  "state": "dirty diagnostic candidate; no native release acceptance",
+  "target": "darwin/arm64",
+  "cargo_target": "/Users/daniel/Dev/Symaira Dev/symaira-vault/.worktrees/storage-recovery-verified/target",
+  "source_sha256": {
+    "crates/symvault-store/src/lib.rs": "07e0d30bd2ce5baef92d9f0ef79785edcfb93002e841641e109c1afad4e1a37c",
+    "crates/symvault-store/src/tests.rs": "dab0d5023b398c09e417d82f58e9ee0d473467722cf482597403b04ee2b5f45a",
+    "crates/symvault-store/src/rooted.rs": "72b7c114a57dbc7d7b38cc4aae3f2f340efa19012f99717461934a5716a38fd8",
+    "crates/symvault-store/src/publication.rs": "f8e5e0be08eacd772efb10b39ccd54207aba7b29f9e0965229914c28b0a4a5c3",
+    "crates/symvault-store/tests/root_mutation.rs": "6979f3d53fe9db47feaa54a616d96d451bff58890d7167b06e3a54e58a9813dd",
+    "internal/vault/entry_writer_crosslang_test.go": "6df70ad251f73b2acb121aa9f5366b11dc4cd12454aee8554f31363be98bb3ae",
+    "internal/vault/manifest_sequence_crosslang_test.go": "893ca8514538fd480dcdbb960eae40911eaac943ce5920d3994be1301a69548a"
+  },
+  "workspace_test_counts": {
+    "passed": 193,
+    "failed": 0,
+    "ignored": 0
+  },
+  "gates": {
+    "workspace_all_targets_all_features_tests": 0,
+    "workspace_strict_clippy": 0,
+    "go_internal_vault_count1": 0,
+    "cargo_fmt_all_check": 0,
+    "live_writer_manifest_index_transport_controls": 0
+  },
+  "logs_sha256": {
+    "workspace-tests": "74a0de4e8c6f9875158cecf56bb9412a64f3aeaea77e83127d2132130b1be423",
+    "workspace-clippy": "ae1fcd8e27cc316173a4821e8b76da650b42928d8d0ff44744288b4aacd278b1",
+    "go-vault": "e7f3301d4d99ef814723d5b7d30c0a7bf3be14df0f200c9a3826413556821ab6"
+  },
+  "remaining": [
+    "independent bounded review passed; full migration gates remain open",
+    "native non-macOS storage evidence",
+    "fault injection and complete contract reconciliation",
+    "downstream migration implementation and cutover gates"
+  ],
+  "review": {
+    "verdict": "PASS bounded macOS arm64 storage slice",
+    "delegation": "deleg_cf3474d2",
+    "scope": "reviewed source hash snapshot only; not migration completion",
+    "remaining": [
+      "native Windows/Linux/FreeBSD/iOS evidence",
+      "complete read/list/index/migration confinement",
+      "publication cleanup/fsync fault injection",
+      "cross-process writer contract",
+      "downstream migration gates"
+    ]
+  },
+  "post_review_delta": {
+    "change": "split literal test-only credential-format strings with concat!; runtime bytes unchanged",
+    "source_sha256": {
+      "crates/symvault-store/src/tests.rs": "73ba2ab169d31cf691149bc5f2072af2f733998c94126eab1ce1f911b7b69fa6"
+    },
+    "verification": {
+      "focused_classification_test": {
+        "passed": 1,
+        "failed": 0
+      },
+      "cargo_fmt_all_check": 0,
+      "git_diff_check": 0
+    }
+  }
+}

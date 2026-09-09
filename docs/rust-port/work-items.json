@@ -42,7 +42,7 @@
     {
       "id": "RUST-005",
       "title": "Port storage read paths and writes",
-      "status": "passed",
+      "status": "in_progress",
       "depends_on": ["RUST-004"],
       "contract_rows": ["STORE-001", "STORE-002", "STORE-003", "STORE-004", "STORE-005"],
       "acceptance": ["make store-differential", "cargo nextest run -p symvault-store"]
@@ -50,7 +50,7 @@
     {
       "id": "RUST-006",
       "title": "Port keyed audit chain and rotation",
-      "status": "in_progress",
+      "status": "blocked",
       "depends_on": ["RUST-005"],
       "contract_rows": ["AUDIT-001", "AUDIT-002"],
       "acceptance": ["make audit-differential (repeat twice from clean target/audit outputs)", "cargo test -p symvault-store --test audit --locked", "cargo clippy -p symvault-store --all-targets --all-features -- -D warnings", "native CI audit-differential matrix runs on Ubuntu, macOS, and Windows with Go 1.26.6 and Rust 1.98.0", "FreeBSD and other native-platform evidence remains blocked until a native runner executes; cross-compilation does not count"]
@@ -66,7 +66,7 @@
     {
       "id": "RUST-008",
       "title": "Port git, reconciliation, import/export, and intake",
-      "status": "in_progress",
+      "status": "blocked",
       "depends_on": ["RUST-005"],
       "contract_rows": ["GIT-001", "GIT-002", "GIT-003", "IO-001", "IO-002", "IO-003"],
       "acceptance": ["make sync-io-differential", "cargo test -p symvault-sync --all-features --locked"]
