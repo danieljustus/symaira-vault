@@ -2,7 +2,7 @@
 
 Native SwiftUI client for the public, self-hosted `symvault` runtime. The
 client is split into `SymvaultKit` (CLI contract) and `SymvaultFeature`
-(reusable UI) so the same feature can be embedded in Symaira Hub.
+(reusable UI). Under [PB-2026-09-09](../docs/product-boundaries.md), normal credential management moves to Brain. This app remains supported until replacement and security/rollback gates pass; Symaira Hub is not a target.
 
 ## Build
 
