@@ -37,7 +37,7 @@ func searchIndexAdapter(t testing.TB) string {
 			return
 		}
 		repo := filepath.Clean(filepath.Join(filepath.Dir(file), "../.."))
-		target := filepath.Join(repo, ".worktrees", "rust-integration", "target")
+		target := filepath.Join(repo, "target", "search-index-adapter")
 		if err := os.MkdirAll(target, 0o700); err != nil {
 			searchIndexAdapterBuild.err = err
 			return
