@@ -63,17 +63,25 @@ func repoRoot() (string, error) {
 	}
 	return filepath.Clean(filepath.Join(filepath.Dir(file), "../../../../")), nil
 }
-func readConfined(root, name string) ([]byte, error) {
+func readConfined(root, name string) (data []byte, err error) {
 	base, err := os.OpenRoot(root)
 	if err != nil {
 		return nil, err
 	}
-	defer base.Close()
+	defer func() {
+		if closeErr := base.Close(); err == nil && closeErr != nil {
+			err = closeErr
+		}
+	}()
 	file, err := base.Open(name)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() {
+		if closeErr := file.Close(); err == nil && closeErr != nil {
+			err = closeErr
+		}
+	}()
 	return io.ReadAll(file)
 }
 
@@ -84,8 +92,12 @@ func digest(root string, files []string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("read %s: %w", name, err)
 		}
-		fmt.Fprintf(h, "%s\x00", name)
-		h.Write(data)
+		if _, err := io.WriteString(h, name+"\x00"); err != nil {
+			return "", fmt.Errorf("write %s digest prefix: %w", name, err)
+		}
+		if _, err := h.Write(data); err != nil {
+			return "", fmt.Errorf("write %s digest data: %w", name, err)
+		}
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
