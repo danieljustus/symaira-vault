@@ -187,7 +187,8 @@ func extract(root string) (string, error) {
 	if e = archive.Close(); e != nil {
 		return "", fmt.Errorf("close oracle archive: %w", e)
 	}
-	if e = exec.Command("git", "-C", root, "archive", "--format=tar", "--output="+ap, oracleCommit).Run(); e != nil { // #nosec G204 -- fixed git subcommand archives the pinned oracle commit.
+	// #nosec G204 -- fixed git subcommand archives the pinned oracle commit.
+	if e = exec.Command("git", "-C", root, "archive", "--format=tar", "--output="+ap, oracleCommit).Run(); e != nil {
 		return "", e
 	}
 	f, e := os.Open(ap) // #nosec G304 -- ap is created by os.CreateTemp immediately above.
