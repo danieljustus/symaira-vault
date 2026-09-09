@@ -117,7 +117,10 @@ func CreateBackup(vaultDir, archivePath string, excludeGit bool) (retErr error) 
 		if err != nil {
 			return err
 		}
-		header.Name = relPath
+		// Tar member names are slash-separated on every platform. filepath.Rel
+		// returns backslashes on Windows, which archive/tar treats as unsafe
+		// paths during restore.
+		header.Name = filepath.ToSlash(relPath)
 
 		if err := tw.WriteHeader(header); err != nil {
 			return err
