@@ -506,6 +506,7 @@ impl Store {
         }
         #[cfg(not(unix))]
         {
+            let _ = relative;
             match fs::remove_file(target) {
                 Ok(()) => Ok(true),
                 Err(source) if source.kind() == io::ErrorKind::NotFound => Ok(false),
@@ -526,6 +527,7 @@ impl Store {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(false)
             .open(&path)
             .map_err(|source| StoreError::Write {
                 path: path.clone(),
@@ -2431,7 +2433,8 @@ pub struct SearchIndex {
     ciphertext: Vec<u8>,
     doc: Option<IndexDocument>,
     root: PathBuf,
-    root_cap: Option<std::sync::Arc<fs::File>>,
+    // Retain the directory handle on every platform; invalidation uses it on Unix.
+    _root_cap: Option<std::sync::Arc<fs::File>>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -2569,7 +2572,7 @@ impl SearchIndex {
             ciphertext: encrypted,
             doc: Some(document),
             root: store.root.clone(),
-            root_cap: Some(std::sync::Arc::clone(&store.root_cap)),
+            _root_cap: Some(std::sync::Arc::clone(&store.root_cap)),
         })
     }
 
@@ -2611,7 +2614,7 @@ impl SearchIndex {
             ciphertext,
             doc: Some(document),
             root: store.root.clone(),
-            root_cap: Some(std::sync::Arc::clone(&store.root_cap)),
+            _root_cap: Some(std::sync::Arc::clone(&store.root_cap)),
         }))
     }
 
@@ -2654,7 +2657,7 @@ impl SearchIndex {
         }
         let path = self.root.join(".search-index");
         #[cfg(unix)]
-        if let Some(root_cap) = &self.root_cap {
+        if let Some(root_cap) = &self._root_cap {
             rooted::remove(root_cap, Path::new(".search-index"), &path)?;
             return Ok(());
         }
