@@ -186,7 +186,7 @@ func buildQuotaFixture(meta oracle, root string) quotaFixture {
 	if second != 2 || other != 1 {
 		panic(fmt.Errorf("quota increments = %d,%d", second, other))
 	}
-	raw, err := os.ReadFile(filepath.Join(dir, ".quotas.json"))
+	raw, err := os.ReadFile(filepath.Join(dir, ".quotas.json")) // #nosec G304 -- dir is a generator-owned temporary directory.
 	if err != nil {
 		panic(err)
 	}
@@ -195,7 +195,7 @@ func buildQuotaFixture(meta oracle, root string) quotaFixture {
 		panic(fmt.Errorf("quota check = %v,%d", ok, current))
 	}
 	q.Reset()
-	rawReset, err := os.ReadFile(filepath.Join(dir, ".quotas.json"))
+	rawReset, err := os.ReadFile(filepath.Join(dir, ".quotas.json")) // #nosec G304 -- dir is a generator-owned temporary directory.
 	if err != nil {
 		panic(err)
 	}
@@ -254,7 +254,7 @@ func buildOracle(root, commit, release string) (oracle, error) {
 func digestFiles(root string, names []string) (string, error) {
 	h := sha256.New()
 	for _, name := range names {
-		b, err := os.ReadFile(filepath.Join(root, name))
+		b, err := os.ReadFile(filepath.Join(root, name)) // #nosec G304 -- names are the generator's fixed production-source list.
 		if err != nil {
 			return "", err
 		}
@@ -296,7 +296,7 @@ func marshal(v any) []byte {
 }
 func writeOrCheck(path string, content []byte, check bool) error {
 	if check {
-		existing, err := os.ReadFile(path)
+		existing, err := os.ReadFile(path) // #nosec G304 -- path is an explicit fixture output selected by the generator caller.
 		if err != nil {
 			return err
 		}

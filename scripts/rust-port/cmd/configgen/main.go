@@ -108,7 +108,7 @@ func buildOracle(root string, commit string, release string) (oracle, error) {
 func digestFiles(root string, names []string) (string, error) {
 	h := sha256.New()
 	for _, name := range names {
-		content, err := os.ReadFile(filepath.Join(root, name))
+		content, err := os.ReadFile(filepath.Join(root, name)) // #nosec G304 -- names are the generator's fixed production-source list.
 		if err != nil {
 			return "", err
 		}
@@ -177,7 +177,7 @@ func buildConfigCases(root string) []configCase {
 		if saveErr != nil {
 			panic(fmt.Errorf("save %s: %w", input.name, saveErr))
 		}
-		saved, err := os.ReadFile(savedPath)
+		saved, err := os.ReadFile(savedPath) // #nosec G304 -- savedPath is created in the generator-owned fixture directory.
 		if err != nil {
 			panic(err)
 		}
@@ -321,7 +321,7 @@ func main() {
 
 func writeOrCheck(path string, expected []byte, check bool) error {
 	if check {
-		existing, err := os.ReadFile(path)
+		existing, err := os.ReadFile(path) // #nosec G304 -- path is an explicit fixture output selected by the generator caller.
 		if err != nil {
 			return fmt.Errorf("read %s: %w", path, err)
 		}

@@ -119,7 +119,7 @@ func rootDir() string {
 func sourceFiles(root string) ([]string, error) {
 	var files []string
 	for _, dir := range sourceRoots {
-		out, e := exec.Command("git", "-C", root, "ls-tree", "-r", "--name-only", oracleCommit, "--", dir).Output()
+		out, e := exec.Command("git", "-C", root, "ls-tree", "-r", "--name-only", oracleCommit, "--", dir).Output() // #nosec G204 -- fixed git subcommand; root and directory are controlled fixture inputs.
 		if e != nil {
 			return nil, e
 		}
@@ -138,9 +138,9 @@ func digest(root string, names []string, pinned bool) (string, error) {
 		var data []byte
 		var e error
 		if pinned {
-			data, e = exec.Command("git", "-C", root, "show", oracleCommit+":"+name).Output()
+			data, e = exec.Command("git", "-C", root, "show", oracleCommit+":"+name).Output() // #nosec G204 -- fixed git subcommand reads the pinned oracle tree.
 		} else {
-			data, e = os.ReadFile(filepath.Join(root, name))
+			data, e = os.ReadFile(filepath.Join(root, name)) // #nosec G304 -- names come from the pinned oracle tree and root is the checked-out repository.
 		}
 		if e != nil {
 			return "", fmt.Errorf("digest %s: %w", name, e)
@@ -187,10 +187,10 @@ func extract(root string) (string, error) {
 	if e = archive.Close(); e != nil {
 		return "", fmt.Errorf("close oracle archive: %w", e)
 	}
-	if e = exec.Command("git", "-C", root, "archive", "--format=tar", "--output="+ap, oracleCommit).Run(); e != nil {
+	if e = exec.Command("git", "-C", root, "archive", "--format=tar", "--output="+ap, oracleCommit).Run(); e != nil { // #nosec G204 -- fixed git subcommand archives the pinned oracle commit.
 		return "", e
 	}
-	f, e := os.Open(ap)
+	f, e := os.Open(ap) // #nosec G304 -- ap is created by os.CreateTemp immediately above.
 	if e != nil {
 		return "", e
 	}
@@ -266,7 +266,7 @@ func runOracle(root string) ([]Case, error) {
 	return cases, nil
 }
 func load(path string) (Fixture, error) {
-	b, e := os.ReadFile(path)
+	b, e := os.ReadFile(path) // #nosec G304 -- path is an explicit fixture output selected by the generator caller.
 	if e != nil {
 		return Fixture{}, e
 	}
