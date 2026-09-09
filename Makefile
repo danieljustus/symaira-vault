@@ -7,6 +7,8 @@ CARGO := cargo
 GOFLAGS := -v
 GOLANGCI_LINT_VERSION := v2.11.4
 GO_TOOLCHAIN ?= go1.26.6
+# Keep harness binary paths aligned with Cargo's externally provided target dir.
+CARGO_TARGET_DIR ?= target
 MIRI_TOOLCHAIN := nightly-2026-09-03
 MIRI_TARGET_DIR := target/miri-2026-09-03
 MIRI_FLAGS := -Zmiri-disable-isolation
@@ -182,7 +184,7 @@ PORT_SESSION_FIXTURE := testdata/port/session/contract.json
 PORT_PLATFORM_FIXTURE := testdata/port/platform/contract.json
 PORT_PERSISTENT_QUOTA_FIXTURE := testdata/port/quotas/contract.json
 PORT_GO_BINARY := target/port/symvault-go
-RUST_BINARY := target/debug/symvault
+RUST_BINARY := $(CARGO_TARGET_DIR)/debug/symvault
 PORT_CONTRACT_VERSION ?= v0.0.0-port
 
 port-fixtures-generate:
@@ -330,7 +332,7 @@ rust-test:
 	$(CARGO) test --workspace --doc --all-features --locked
 
 rust-miri:
-	MIRIFLAGS=$(MIRI_FLAGS) CARGO_TARGET_DIR=$(MIRI_TARGET_DIR) $(CARGO) +$(MIRI_TOOLCHAIN) miri test -p symvault-core --locked
+	MIRIFLAGS=$(MIRI_FLAGS) CARGO_TARGET_DIR="$(MIRI_TARGET_DIR)" $(CARGO) +$(MIRI_TOOLCHAIN) miri test -p symvault-core --locked
 
 rust-features:
 	# Keep the committed lockfile usable while checking every feature combination.
@@ -360,7 +362,7 @@ store-reopen-fixture:
 store-differential:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/storereopen --fixture testdata/port/store/reopen.json
 	$(CARGO) build -p symvault-store --example store-reopen --locked
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/storereopen --run --fixture testdata/port/store/reopen.json --rust-binary target/debug/examples/store-reopen
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/storereopen --run --fixture testdata/port/store/reopen.json --rust-binary "$(CARGO_TARGET_DIR)/debug/examples/store-reopen"
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/storegen --check --output testdata/port/store/store.json
 	$(CARGO) test -p symvault-store --locked
 
