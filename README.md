@@ -1,5 +1,7 @@
 # Symaira Vault
 
+> **Accepted product direction — implementation pending:** The independent symvault CLI/service and repository remain. Brain GUI/CLI become the normal integrated credential-management entrypoints. The separate management app remains transitional and is retired only after verified replacement, secure input/approval, data migration and rollback. This is not a removal of the credential service or a requirement to install Brain for CLI use. See [PB-2026-09-09](docs/product-boundaries.md).
+
 [![CI](https://github.com/danieljustus/symaira-vault/actions/workflows/ci.yml/badge.svg)](https://github.com/danieljustus/symaira-vault/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/danieljustus/symaira-vault)](https://github.com/danieljustus/symaira-vault/releases/latest)
 [![License](https://img.shields.io/github/license/danieljustus/symaira-vault)](https://opensource.org/licenses/Apache-2.0)
@@ -91,8 +93,10 @@ For manual downloads, Linux packages, release verification (including Cosign sig
 
 The repository includes a native SwiftUI client in [`client/`](client/README.md).
 It embeds the public `symvault` runtime in the app bundle and also exposes a
-reusable `SymvaultFeature` module for Symaira Hub. No account or hosted service
-is required.
+reusable `SymvaultFeature` module. The accepted target moves normal management
+to Brain, not the retired Symaira Hub. This client remains transitional until
+the replacement and security/migration gates in [PB-2026-09-09](docs/product-boundaries.md)
+pass. No account or hosted service is required.
 
 ```bash
 make build
@@ -281,7 +285,7 @@ Strict mode rejects requests for hosts without a matching API template; passthro
 Symaira Vault (`symvault`) serves as the credential management and secret-resolution layer for the Symaira tool suite:
 
 - **AI Agents & MCP Clients**: Connect directly to `symvault` via the Model Context Protocol (`symvault mcp`), using tools such as `get_entry`, `execute_with_secret`, `execute_api_request`, and `generate_totp` with scoped access tokens and tamper-evident audit logging.
-- **Symaira Hub & Desktop Clients**: Integrate vault functionality via `SymvaultKit` and `SymvaultFeature` to manage and unlock local vaults with native macOS security and biometrics.
+- **Brain management UI (accepted target)**: Integrate human credential management through the separate service, preserving native secure input, authorization and biometrics. The existing client remains supported until replacement is verified; Desktop is not a second credential-management product.
 - **CLI & Automation Workflows**: Resolve secrets dynamically across shell scripts and pipelines via `symvault run` (environment injection), `symvault broker` (transparent egress credential proxying), or `symvault template` (configuration file generation).
 
 ## Configuration
