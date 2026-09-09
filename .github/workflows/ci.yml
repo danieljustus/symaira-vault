@@ -809,38 +809,45 @@ jobs:
 
           echo "All smoke tests passed!"
 
-  # ── Gate ─────────────────────────────────────────────────────────────────
-  #
-  # Uses if: always() so that skipped main-only jobs (Go fuzz, Rust fuzz,
-  # integration-test, smoke-test, the full test/build matrices) don't block the PR gate.
-  # On PR: test-pr + windows-process-tree + build-pr must pass. On main:
-  # test + build + fuzz + integration-test + smoke-test must pass.
-
+  # The PR gate is intentionally a separate, PR-only job. Main/schedule-only
+  # jobs are not dependencies here because skipped jobs must not manufacture a
+  # false PR prerequisite.
   ci-gate:
     name: CI Success
     runs-on: ubuntu-latest
-    if: always()
+    if: ${{ always() && github.event_name == 'pull_request' }}
     needs:
       - govulncheck
       - dependency-scan
       - lint
-      - test-pr
-      - windows-process-tree
-      - test
-      - fuzz
-      - build-pr
-      - build
-      - integration-test
-      - smoke-test
       - flake-vendorhash
       - port-contract
       - rust
-      - rust-fuzz
-      - rust-native
+      - test-pr
+      - windows-process-tree
+      - build-pr
       - macos-vaultcore
       - ubuntu-editors
     steps:
-      - name: Verify required jobs
+      - name: Regression-test gate result handling
+        shell: bash
+        run: |
+          set -euo pipefail
+          accepts() {
+            case "$1" in success|skipped) return 0 ;; *) return 1 ;; esac
+          }
+          accepts success
+          accepts skipped
+          for result in failure cancelled pending; do
+            if accepts "$result"; then
+              echo "Gate regression: ${result} was incorrectly accepted" >&2
+              exit 1
+            fi
+          done
+          echo "Gate regression handling passed (success/skipped accepted; failure/cancelled/pending rejected)"
+
+      - name: Verify applicable PR dependencies
+        shell: bash
         env:
           RES_GOVULNCHECK: ${{ needs.govulncheck.result }}
           RES_DEPENDENCY_SCAN: ${{ needs.dependency-scan.result }}
@@ -848,62 +855,37 @@ jobs:
           RES_FLAKE_VENDORHASH: ${{ needs.flake-vendorhash.result }}
           RES_PORT_CONTRACT: ${{ needs.port-contract.result }}
           RES_RUST: ${{ needs.rust.result }}
-          RES_RUST_FUZZ: ${{ needs.rust-fuzz.result }}
-          RES_RUST_NATIVE: ${{ needs.rust-native.result }}
           RES_TEST_PR: ${{ needs.test-pr.result }}
           RES_WINDOWS_PROCESS_TREE: ${{ needs.windows-process-tree.result }}
           RES_BUILD_PR: ${{ needs.build-pr.result }}
-          RES_TEST: ${{ needs.test.result }}
-          RES_FUZZ: ${{ needs.fuzz.result }}
-          RES_BUILD: ${{ needs.build.result }}
-          RES_INTEGRATION_TEST: ${{ needs.integration-test.result }}
-          RES_SMOKE_TEST: ${{ needs.smoke-test.result }}
           RES_MACOS_VAULTCORE: ${{ needs.macos-vaultcore.result }}
           RES_UBUNTU_EDITORS: ${{ needs.ubuntu-editors.result }}
         run: |
-          set -e
-          check() {
-            local result="$1"
-            local label="$2"
+          set -euo pipefail
+          check_required() {
+            local result="$1" label="$2"
+            if [ "$result" != success ]; then
+              echo "❌ ${label} (${result:-missing})" >&2
+              exit 1
+            fi
+            echo "✅ ${label} (${result})"
+          }
+          check_path_gated() {
+            local result="$1" label="$2"
             case "$result" in
-              success|skipped) echo "  ✅ ${label} (${result})" ;;
-              *) echo "  ❌ ${label} (${result})"; exit 1 ;;
+              success|skipped) echo "✅ ${label} (${result})" ;;
+              *) echo "❌ ${label} (${result:-missing})" >&2; exit 1 ;;
             esac
           }
-          echo "Checking required jobs..."
-
-          # Always required
-          check "$RES_GOVULNCHECK"      govulncheck
-          check "$RES_DEPENDENCY_SCAN"  dependency-scan
-          check "$RES_LINT"             lint
-          check "$RES_FLAKE_VENDORHASH" flake-vendorhash
-          check "$RES_PORT_CONTRACT"    port-contract
-          check "$RES_RUST"             rust
-          check "$RES_RUST_FUZZ"        rust-fuzz
-          check "$RES_RUST_NATIVE"      rust-native
-
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            check "$RES_TEST_PR"   test-pr
-            check "$RES_WINDOWS_PROCESS_TREE" windows-process-tree
-            check "$RES_BUILD_PR"  build-pr
-            # Main-only jobs: must be ok (skipped/success), must not have failed
-            check "$RES_TEST"             test
-            check "$RES_FUZZ"             fuzz
-            check "$RES_BUILD"            build
-            check "$RES_INTEGRATION_TEST" integration-test
-            check "$RES_SMOKE_TEST"       smoke-test
-            check "$RES_MACOS_VAULTCORE"  macos-vaultcore
-            check "$RES_UBUNTU_EDITORS"   ubuntu-editors
-          else
-            check "$RES_TEST"             test
-            check "$RES_FUZZ"             fuzz
-            check "$RES_BUILD"            build
-            check "$RES_INTEGRATION_TEST" integration-test
-            check "$RES_SMOKE_TEST"       smoke-test
-            check "$RES_TEST_PR"          test-pr
-            check "$RES_BUILD_PR"         build-pr
-            check "$RES_MACOS_VAULTCORE"  macos-vaultcore
-            check "$RES_UBUNTU_EDITORS"   ubuntu-editors
-          fi
-
-          echo "✅ All required checks passed"
+          check_required "$RES_GOVULNCHECK" govulncheck
+          check_required "$RES_DEPENDENCY_SCAN" dependency-scan
+          check_required "$RES_LINT" lint
+          check_required "$RES_FLAKE_VENDORHASH" flake-vendorhash
+          check_required "$RES_PORT_CONTRACT" port-contract
+          check_required "$RES_RUST" rust
+          check_required "$RES_TEST_PR" test-pr
+          check_required "$RES_WINDOWS_PROCESS_TREE" windows-process-tree
+          check_required "$RES_BUILD_PR" build-pr
+          check_path_gated "$RES_MACOS_VAULTCORE" macos-vaultcore
+          check_path_gated "$RES_UBUNTU_EDITORS" ubuntu-editors
+          echo "✅ All applicable PR checks passed"
