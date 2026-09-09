@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"filippo.io/age"
 	"golang.org/x/crypto/chacha20poly1305"
@@ -42,7 +43,11 @@ func searchIndexAdapter(t testing.TB) string {
 			searchIndexAdapterBuild.err = err
 			return
 		}
-		output, err := runSearchIndexCommand(repo, target, "cargo", "build", "-p", "symvault-store", "--example", "search-index-adapter")
+		// A cold Cargo build is intentionally allowed more time than the adapter
+		// operations themselves. The latter use runSearchIndexCommand's bounded
+		// two-minute timeout; applying it to dependency compilation makes the
+		// differential test depend on a warm cache rather than adapter behavior.
+		output, err := runSearchIndexCommandWithTimeout(5*time.Minute, repo, target, "cargo", "build", "-p", "symvault-store", "--example", "search-index-adapter")
 		if err != nil {
 			searchIndexAdapterBuild.err = fmt.Errorf("cargo build: %w: %s", err, output)
 			return
