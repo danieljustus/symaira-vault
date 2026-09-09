@@ -32,13 +32,15 @@ Executed on **macOS arm64**, Go `1.26.6`, Rust `1.98.0`, with `GOWORK=off`:
 | `make rust-fuzz-smoke rust-miri rust-features rust-coverage rust-version-contract` | PASS | Pinned fuzz smoke, Miri, feature combinations, coverage summary, and all 10 version differential cases. |
 | `golangci-lint run --new-from-rev=origin/main` | PASS: 0 issues | No candidate-introduced Go lint finding. |
 | `go run github.com/securego/gosec/v2/cmd/gosec@v2.22.0 -exclude-generated -exclude-dir=testdata ./...` | PASS: 0 issues | CI-pinned Go SAST version; resolved `google.golang.org/grpc` is `v1.83.2`. |
+| [Rust storage differential #34369625689](https://github.com/danieljustus/symaira-vault/actions/runs/34369625689) | PASS | Native Ubuntu, macOS, and Windows Go↔Rust storage/publication and live writer/manifest/index checks for PR #1027 head `7ea1cbfb1d1d6350eb7dcbc30545d34dbbda506c`; the preceding source commit is `542175e09d40c2f06a0e1ab2cd0fb412fd8db50b`. |
+| [Rust audit differential #34369681055](https://github.com/danieljustus/symaira-vault/actions/runs/34369681055) | PASS | Native Ubuntu, macOS, and Windows audit-differential workflow for the same PR head. |
 
 The current local `golangci-lint run` and locally installed gosec `2.29.0` report pre-existing whole-repository findings outside this candidate. They are not treated as new migration regressions; CI uses pinned `gosec v2.22.0` and remains the authoritative protected gate.
 
 ## Deliberate non-claims and blockers
 
-- `RUST-005` remains **in_progress** in `work-items.json`. The above proves bounded macOS storage behavior; it does not prove all read/list/index/legacy-migration paths, cross-process writer behavior, or full transactionality on every supported platform.
-- Native Windows, Linux, FreeBSD, and iOS runtime evidence is still required. `.github/workflows/rust-store.yml` schedules native Ubuntu/macOS/Windows storage differentials after a push; cross-compilation does not substitute for them.
+- `RUST-005` remains **in_progress** in `work-items.json`. The above proves bounded native Ubuntu/macOS/Windows storage behavior; it does not prove all read/list/index/legacy-migration paths, cross-process writer behavior, or full transactionality on every supported platform.
+- Native Ubuntu, macOS, and Windows storage/audit evidence is recorded above. FreeBSD and iOS runtime evidence is still required for rows that claim those platforms; cross-compilation does not substitute for it.
 - RUST-006 audit, RUST-007 platform/config/session, RUST-008 sync/import/export/intake, and all CLI/MCP/HTTP/FFI/distribution/cutover work remain at their ledger states. Do not promote their matrix rows from the presence of a compiled crate or a fixture projection.
 - The existing Go fallback is mandatory. Reproducible rollback is: start from pinned `origin/main` `81210de2720ee000fa26adda4da4080daae01677`, build the Go CLI with Go 1.26.6, and operate a copy of a Rust-written test vault only after the future `DIST-005` compatibility gate passes. No Go deletion, release, tag, deployment, or productive-store migration is authorized by this checkpoint.
 
@@ -47,4 +49,4 @@ The current local `golangci-lint run` and locally installed gosec `2.29.0` repor
 - Work only from a clean, named candidate branch; retain the Go reference and use the checked-in fixture generators rather than copied behavior.
 - Record each native CI run against its exact head SHA before changing matrix status. A configured workflow is not evidence of execution.
 - Preserve any re-discovered parallel worktrees/branches and the checkpoint object above. Do not reset, clean, delete, or bulk-commit them.
-- **Conclusion at this checkpoint:** `STABILER TEILSTAND, MIGRATION NOCH OFFEN`. The storage/index candidate is suitable as a behavior-preserving module-move input only after its native CI matrix passes; it is not release-, cutover-, or consolidation-ready.
+- **Conclusion at this checkpoint:** `STABILER TEILSTAND, MIGRATION NOCH OFFEN`. The storage/index candidate has native Ubuntu/macOS/Windows evidence and is a bounded behavior-preserving module-move input; it is not release-, cutover-, or consolidation-ready while the listed RUST-005 and later-slice gaps remain.
