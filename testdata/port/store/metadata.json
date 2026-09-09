@@ -1,0 +1,259 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "fe098b917a72125207bc711915f8daa791d1658f",
+    "release": "unreleased",
+    "source_files": [
+      "internal/vault/entry.go",
+      "internal/vault/entry_readwrite.go",
+      "internal/vault/recipients.go",
+      "internal/vault/entry_metadata.go"
+    ],
+    "source_digest": "1d510965cd9127338a34e89c41635dfee1f3da4e6fb4918faaf05f6503365159",
+    "generator_files": [
+      "scripts/rust-port/cmd/storemetagen/main.go"
+    ],
+    "generator_digest": "bd1bd55b50f3d2fe5aa615a509f42d3ba5103d1e0b4e4d7b48ae19d81dd8c838"
+  },
+  "vectors": [
+    {
+      "name": "created_zero_pending",
+      "input": {
+        "data": {
+          "token": "fixture-token"
+        },
+        "meta": {
+          "created": "0001-01-01T00:00:00Z",
+          "updated": "0001-01-01T00:00:00Z",
+          "version": 0
+        },
+        "secret_meta": {}
+      },
+      "pending_write": {
+        "timestamp": "0001-01-01T00:00:00Z",
+        "field": "token",
+        "action": "set"
+      },
+      "path": "logical/secret",
+      "pseudonymize": true,
+      "now": "2026-09-08T10:11:12.123456789Z",
+      "expected": {
+        "path": "logical/secret",
+        "data": {
+          "token": "fixture-token"
+        },
+        "meta": {
+          "created": "2026-09-08T10:11:12.123456789Z",
+          "updated": "2026-09-08T10:11:12.123456789Z",
+          "version": 1,
+          "write_history": [
+            {
+              "timestamp": "2026-09-08T10:11:12.123456789Z",
+              "field": "token",
+              "action": "set"
+            }
+          ]
+        },
+        "secret_meta": {}
+      },
+      "expected_json": "{\"path\":\"logical/secret\",\"data\":{\"token\":\"fixture-token\"},\"meta\":{\"created\":\"2026-09-08T10:11:12.123456789Z\",\"updated\":\"2026-09-08T10:11:12.123456789Z\",\"version\":1,\"write_history\":[{\"timestamp\":\"2026-09-08T10:11:12.123456789Z\",\"field\":\"token\",\"action\":\"set\"}]},\"secret_meta\":{}}"
+    },
+    {
+      "name": "nil_data_existing_version",
+      "input": {
+        "data": null,
+        "meta": {
+          "created": "0001-01-01T00:00:00Z",
+          "updated": "0001-01-01T00:00:00Z",
+          "version": 7
+        },
+        "secret_meta": {}
+      },
+      "path": "logical/empty",
+      "pseudonymize": false,
+      "now": "2026-09-08T10:11:12.123456789Z",
+      "expected": {
+        "data": {},
+        "meta": {
+          "created": "2026-09-08T10:11:12.123456789Z",
+          "updated": "2026-09-08T10:11:12.123456789Z",
+          "version": 8
+        },
+        "secret_meta": {}
+      },
+      "expected_json": "{\"data\":{},\"meta\":{\"created\":\"2026-09-08T10:11:12.123456789Z\",\"updated\":\"2026-09-08T10:11:12.123456789Z\",\"version\":8},\"secret_meta\":{}}"
+    },
+    {
+      "name": "created_nonzero",
+      "input": {
+        "path": "old",
+        "data": {
+          "x": "y"
+        },
+        "meta": {
+          "created": "2026-09-08T09:11:12.123456789Z",
+          "updated": "0001-01-01T00:00:00Z",
+          "version": 2
+        },
+        "secret_meta": {}
+      },
+      "path": "logical/existing",
+      "pseudonymize": true,
+      "now": "2026-09-08T10:11:12.123456789Z",
+      "expected": {
+        "path": "logical/existing",
+        "data": {
+          "x": "y"
+        },
+        "meta": {
+          "created": "2026-09-08T09:11:12.123456789Z",
+          "updated": "2026-09-08T10:11:12.123456789Z",
+          "version": 3
+        },
+        "secret_meta": {}
+      },
+      "expected_json": "{\"path\":\"logical/existing\",\"data\":{\"x\":\"y\"},\"meta\":{\"created\":\"2026-09-08T09:11:12.123456789Z\",\"updated\":\"2026-09-08T10:11:12.123456789Z\",\"version\":3},\"secret_meta\":{}}"
+    },
+    {
+      "name": "offset_clock",
+      "input": {
+        "data": {
+          "x": "y"
+        },
+        "meta": {
+          "created": "0001-01-01T00:00:00Z",
+          "updated": "0001-01-01T00:00:00Z",
+          "version": 3
+        },
+        "secret_meta": {}
+      },
+      "path": "logical/offset",
+      "pseudonymize": false,
+      "now": "2026-09-08T10:11:12.123456789+01:30",
+      "expected": {
+        "data": {
+          "x": "y"
+        },
+        "meta": {
+          "created": "2026-09-08T08:41:12.123456789Z",
+          "updated": "2026-09-08T08:41:12.123456789Z",
+          "version": 4
+        },
+        "secret_meta": {}
+      },
+      "expected_json": "{\"data\":{\"x\":\"y\"},\"meta\":{\"created\":\"2026-09-08T08:41:12.123456789Z\",\"updated\":\"2026-09-08T08:41:12.123456789Z\",\"version\":4},\"secret_meta\":{}}"
+    },
+    {
+      "name": "created_zero_offset",
+      "input": {
+        "data": {
+          "x": "y"
+        },
+        "meta": {
+          "created": "0001-01-01T00:00:00+00:00",
+          "updated": "0001-01-01T00:00:00Z",
+          "version": 4
+        },
+        "secret_meta": {}
+      },
+      "path": "logical/zero-offset",
+      "pseudonymize": false,
+      "now": "2026-09-08T10:11:12.123456789Z",
+      "expected": {
+        "data": {
+          "x": "y"
+        },
+        "meta": {
+          "created": "2026-09-08T10:11:12.123456789Z",
+          "updated": "2026-09-08T10:11:12.123456789Z",
+          "version": 5
+        },
+        "secret_meta": {}
+      },
+      "expected_json": "{\"data\":{\"x\":\"y\"},\"meta\":{\"created\":\"2026-09-08T10:11:12.123456789Z\",\"updated\":\"2026-09-08T10:11:12.123456789Z\",\"version\":5},\"secret_meta\":{}}"
+    },
+    {
+      "name": "created_zero_walltime_offset",
+      "input": {
+        "data": {
+          "x": "y"
+        },
+        "meta": {
+          "created": "0001-01-01T01:00:00+01:00",
+          "updated": "0001-01-01T00:00:00Z",
+          "version": 5
+        },
+        "secret_meta": {}
+      },
+      "path": "logical/zero-walltime",
+      "pseudonymize": false,
+      "now": "2026-09-08T10:11:12.123456789Z",
+      "expected": {
+        "data": {
+          "x": "y"
+        },
+        "meta": {
+          "created": "2026-09-08T10:11:12.123456789Z",
+          "updated": "2026-09-08T10:11:12.123456789Z",
+          "version": 6
+        },
+        "secret_meta": {}
+      },
+      "expected_json": "{\"data\":{\"x\":\"y\"},\"meta\":{\"created\":\"2026-09-08T10:11:12.123456789Z\",\"updated\":\"2026-09-08T10:11:12.123456789Z\",\"version\":6},\"secret_meta\":{}}"
+    },
+    {
+      "name": "created_near_zero_nonzero",
+      "input": {
+        "data": {
+          "x": "y"
+        },
+        "meta": {
+          "created": "0001-01-01T00:00:00.000000001Z",
+          "updated": "0001-01-01T00:00:00Z",
+          "version": 6
+        },
+        "secret_meta": {}
+      },
+      "path": "logical/near-zero",
+      "pseudonymize": false,
+      "now": "2026-09-08T10:11:12.123456789Z",
+      "expected": {
+        "data": {
+          "x": "y"
+        },
+        "meta": {
+          "created": "0001-01-01T00:00:00.000000001Z",
+          "updated": "2026-09-08T10:11:12.123456789Z",
+          "version": 7
+        },
+        "secret_meta": {}
+      },
+      "expected_json": "{\"data\":{\"x\":\"y\"},\"meta\":{\"created\":\"0001-01-01T00:00:00.000000001Z\",\"updated\":\"2026-09-08T10:11:12.123456789Z\",\"version\":7},\"secret_meta\":{}}"
+    },
+    {
+      "name": "version_overflow",
+      "input": {
+        "data": null,
+        "meta": {
+          "created": "0001-01-01T00:00:00Z",
+          "updated": "0001-01-01T00:00:00Z",
+          "version": 9223372036854775807
+        },
+        "secret_meta": {}
+      },
+      "path": "",
+      "pseudonymize": false,
+      "now": "2026-09-08T10:11:12.123456789Z",
+      "expected": {
+        "data": {},
+        "meta": {
+          "created": "2026-09-08T10:11:12.123456789Z",
+          "updated": "2026-09-08T10:11:12.123456789Z",
+          "version": -9223372036854775808
+        },
+        "secret_meta": {}
+      },
+      "expected_json": "{\"data\":{},\"meta\":{\"created\":\"2026-09-08T10:11:12.123456789Z\",\"updated\":\"2026-09-08T10:11:12.123456789Z\",\"version\":-9223372036854775808},\"secret_meta\":{}}"
+    }
+  ]
+}

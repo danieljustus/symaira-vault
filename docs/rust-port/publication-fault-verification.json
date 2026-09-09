@@ -1,0 +1,17 @@
+{
+  "commit": "76e7f3f33580294f72de14c1672c61f6524dc9b8",
+  "target": "macOS arm64",
+  "scope": "bounded publication helper fault handling, not native cross-platform migration acceptance",
+  "tests_passed": 52,
+  "clippy_exit": 0,
+  "review": "deleg_e667c67d PASS",
+  "publication_sha256": "3d88f9ad43fcd5aab55cd541975c6233d4baaf0f3541bc9eafffe6837c0a0869",
+  "covered": [
+    "file sync before rename preserves old target and cleans owned temp",
+    "parent sync after rename returns error while new target remains",
+    "unlink failure retains owned temp and preserves primary error",
+    "final parent sync after cleanup returns error",
+    "collision sentinel remains untouched"
+  ],
+  "log_sha256": "eba4e2e9000c3fdabc0a08367d88a27ff72148e0a34a5dc9261223ac2b1a9371"
+}

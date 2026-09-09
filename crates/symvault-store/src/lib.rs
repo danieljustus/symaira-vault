@@ -14,15 +14,25 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
+use fs4::fs_std::FileExt;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use symvault_crypto::{Identity, decrypt, encrypt, parse_recipient, recipient_string};
 use thiserror::Error;
+#[cfg(not(unix))]
 use walkdir::WalkDir;
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 /// Keyed JSONL audit logging, verification, rotation, and export.
 pub mod audit;
+
+/// Pure fixed-clock write metadata preparation.
+pub mod metadata;
+
+mod publication;
+
+#[cfg(unix)]
+mod rooted;
 
 const ENTRIES_DIR: &str = "entries";
 const CONFIG_FILE: &str = "config.yaml";
@@ -30,6 +40,7 @@ const IDENTITY_FILE: &str = "identity.age";
 const RECIPIENTS_FILE: &str = "recipients.txt";
 const MANIFEST_FILE: &str = "manifest.age";
 const ENTRY_EXTENSION: &str = ".age";
+const LOCK_FILE: &str = ".lock";
 
 /// Read and parse limits are deliberately explicit. They cap allocation before
 /// decryption and reject pathological JSON structures after parsing.
@@ -44,6 +55,8 @@ pub const MAX_ARRAY_ITEMS: usize = 1024;
 pub enum StoreError {
     #[error("vault root is not a directory: {0}")]
     RootNotDirectory(PathBuf),
+    #[error("vault root changed while it was being acquired: {0}")]
+    RootChanged(PathBuf),
     #[error("required vault file is missing: {0}")]
     MissingFile(PathBuf),
     #[error("vault path is unsafe: {0}")]
@@ -243,6 +256,26 @@ fn go_zero_time() -> String {
     "0001-01-01T00:00:00Z".into()
 }
 
+fn utc_now_string(path: &Path) -> Result<String, StoreError> {
+    time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Rfc3339)
+        .map_err(|source| StoreError::Read {
+            path: path.to_path_buf(),
+            source: io::Error::other(source.to_string()),
+        })
+}
+
+fn system_time_string(path: &Path, value: std::time::SystemTime) -> Result<String, StoreError> {
+    let value = time::OffsetDateTime::from(value);
+    value
+        .to_offset(time::UtcOffset::UTC)
+        .format(&time::format_description::well_known::Rfc3339)
+        .map_err(|source| StoreError::Read {
+            path: path.to_path_buf(),
+            source: io::Error::other(source.to_string()),
+        })
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct EntryMetadata {
     #[serde(default = "go_zero_time")]
@@ -307,6 +340,7 @@ pub struct AttachmentInfo {
 #[derive(Clone, Debug)]
 pub struct Store {
     root: PathBuf,
+    root_cap: std::sync::Arc<fs::File>,
     layout: Layout,
     config: VaultConfig,
     presence: Presence,
@@ -315,30 +349,76 @@ pub struct Store {
 impl Store {
     /// Opens an existing vault without changing any filesystem state.
     pub fn open(root: impl AsRef<Path>, _identity: &Identity) -> Result<Self, StoreError> {
+        Self::open_with_root_acquisition(root, |_: &Path| {})
+    }
+
+    fn open_with_root_acquisition(
+        root: impl AsRef<Path>,
+        acquire_hook: impl FnOnce(&Path),
+    ) -> Result<Self, StoreError> {
         let requested_root = root.as_ref();
         reject_symlink(requested_root)?;
+        #[cfg(unix)]
+        let root_snapshot = root_identity(requested_root)?;
         let root = requested_root
             .canonicalize()
             .map_err(|source| StoreError::Read {
                 path: requested_root.to_path_buf(),
                 source,
             })?;
-        ensure_directory(&root)?;
+        acquire_hook(&root);
+        let root_cap = std::sync::Arc::new(ensure_directory(&root)?);
+        #[cfg(unix)]
+        if root_identity_from_file(&root_cap)? != root_snapshot {
+            return Err(StoreError::RootChanged(requested_root.to_path_buf()));
+        }
         reject_symlink(&root)?;
         let config_path = root.join(CONFIG_FILE);
         let identity_path = root.join(IDENTITY_FILE);
-        ensure_regular_file(&config_path, true)?;
-        ensure_regular_file(&identity_path, true)?;
+        #[cfg(unix)]
+        let config_exists =
+            rooted::regular_exists_at(&root_cap, Path::new(CONFIG_FILE), &config_path)?;
+        #[cfg(not(unix))]
+        let config_exists = ensure_regular_file(&config_path, false)?;
+        if !config_exists {
+            return Err(StoreError::MissingFile(config_path));
+        }
+
+        #[cfg(unix)]
+        let identity_exists =
+            rooted::regular_exists_at(&root_cap, Path::new(IDENTITY_FILE), &identity_path)?;
+        #[cfg(not(unix))]
+        let identity_exists = ensure_regular_file(&identity_path, false)?;
+        if !identity_exists {
+            return Err(StoreError::MissingFile(identity_path));
+        }
+
+        #[cfg(unix)]
+        let config_bytes = rooted::read(&root_cap, Path::new(CONFIG_FILE), &config_path)?;
+        #[cfg(not(unix))]
         let config_bytes = read_regular(&config_path)?;
         let config = parse_config(&config_bytes)?;
+
+        #[cfg(unix)]
+        let recipients = rooted::regular_exists_at(
+            &root_cap,
+            Path::new(RECIPIENTS_FILE),
+            &root.join(RECIPIENTS_FILE),
+        )?;
+        #[cfg(not(unix))]
+        let recipients = regular_exists(&root.join(RECIPIENTS_FILE))?;
         let presence = Presence {
             config: true,
             identity: true,
-            recipients: regular_exists(&root.join(RECIPIENTS_FILE))?,
+            recipients,
         };
+        #[cfg(unix)]
+        let layout = detect_layout_rooted(&root_cap, &root)?;
+        #[cfg(not(unix))]
         let layout = detect_layout(&root)?;
         Ok(Self {
             root,
+            root_cap,
             layout,
             config,
             presence,
@@ -348,6 +428,249 @@ impl Store {
     #[must_use]
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    fn read_root_file(&self, name: &str) -> Result<Vec<u8>, StoreError> {
+        #[cfg(unix)]
+        {
+            rooted::read(&self.root_cap, Path::new(name), &self.root.join(name))
+        }
+        #[cfg(not(unix))]
+        {
+            read_regular(&self.root.join(name))
+        }
+    }
+
+    fn relative_path(&self, target: &Path) -> Result<PathBuf, StoreError> {
+        target
+            .strip_prefix(&self.root)
+            .map(Path::to_path_buf)
+            .map_err(|_| StoreError::UnsafePath(target.display().to_string()))
+    }
+
+    fn regular_exists_path(&self, target: &Path) -> Result<bool, StoreError> {
+        #[cfg(unix)]
+        {
+            let relative = self.relative_path(target)?;
+            let parent = rooted::directory(
+                &self.root_cap,
+                relative.parent().unwrap_or(Path::new("")),
+                target,
+                false,
+            );
+            match parent {
+                Ok(parent) => rooted::regular_exists(&parent, target),
+                Err(StoreError::Read { source, .. })
+                    if source.kind() == io::ErrorKind::NotFound =>
+                {
+                    Ok(false)
+                }
+                Err(error) => Err(error),
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            regular_exists(target)
+        }
+    }
+
+    fn read_path(&self, target: &Path) -> Result<Vec<u8>, StoreError> {
+        #[cfg(unix)]
+        {
+            let relative = self.relative_path(target)?;
+            self.read_relative_path(&relative, target)
+        }
+        #[cfg(not(unix))]
+        {
+            read_regular(target)
+        }
+    }
+
+    fn read_relative_path(&self, relative: &Path, display: &Path) -> Result<Vec<u8>, StoreError> {
+        #[cfg(unix)]
+        {
+            rooted::read(&self.root_cap, relative, display)
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = relative;
+            read_regular(display)
+        }
+    }
+
+    fn remove_path(&self, target: &Path) -> Result<bool, StoreError> {
+        let relative = self.relative_path(target)?;
+        #[cfg(unix)]
+        {
+            rooted::remove(&self.root_cap, &relative, target)
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = relative;
+            match fs::remove_file(target) {
+                Ok(()) => Ok(true),
+                Err(source) if source.kind() == io::ErrorKind::NotFound => Ok(false),
+                Err(source) => Err(StoreError::Write {
+                    path: target.to_path_buf(),
+                    source,
+                }),
+            }
+        }
+    }
+
+    fn acquire_write_lock(&self) -> Result<fs::File, StoreError> {
+        let path = self.root.join(LOCK_FILE);
+        #[cfg(unix)]
+        let file = rooted::open_lock(&self.root_cap, &path)?;
+        #[cfg(not(unix))]
+        let file = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&path)
+            .map_err(|source| StoreError::Write {
+                path: path.clone(),
+                source,
+            })?;
+        set_private_permissions(&file).map_err(|source| StoreError::Write {
+            path: path.clone(),
+            source,
+        })?;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+        loop {
+            match file.try_lock_exclusive() {
+                Ok(true) => return Ok(file),
+                Ok(false) if std::time::Instant::now() < deadline => {
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+                Ok(false) => {
+                    return Err(StoreError::Write {
+                        path,
+                        source: io::Error::new(
+                            io::ErrorKind::TimedOut,
+                            "vault is currently locked by another process, try again in a moment",
+                        ),
+                    });
+                }
+                Err(source)
+                    if source.kind() == io::ErrorKind::WouldBlock
+                        && std::time::Instant::now() < deadline =>
+                {
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+                Err(source) if source.kind() == io::ErrorKind::WouldBlock => {
+                    return Err(StoreError::Write {
+                        path,
+                        source: io::Error::new(
+                            io::ErrorKind::TimedOut,
+                            "vault is currently locked by another process, try again in a moment",
+                        ),
+                    });
+                }
+                Err(source) => return Err(StoreError::Write { path, source }),
+            }
+        }
+    }
+
+    fn with_write_lock<T>(
+        &self,
+        operation: impl FnOnce(&Self) -> Result<T, StoreError>,
+    ) -> Result<T, StoreError> {
+        let lock = self.acquire_write_lock()?;
+        let result = operation(self);
+        let unlock = lock.unlock();
+        match (result, unlock) {
+            (Err(error), _) => Err(error),
+            (Ok(value), Ok(())) => Ok(value),
+            (Ok(_), Err(source)) => Err(StoreError::Write {
+                path: self.root.join(LOCK_FILE),
+                source,
+            }),
+        }
+    }
+
+    fn entry_candidates(&self) -> Result<Vec<Candidate>, StoreError> {
+        #[cfg(unix)]
+        {
+            let mut result = Vec::new();
+            let fresh_entries = match rooted::walk_from(
+                &self.root_cap,
+                Path::new(ENTRIES_DIR),
+                &self.root.join(ENTRIES_DIR),
+                None,
+            ) {
+                Ok(entries) => entries,
+                Err(StoreError::Read { source, .. })
+                    if source.kind() == io::ErrorKind::NotFound =>
+                {
+                    Vec::new()
+                }
+                Err(error) => return Err(error),
+            };
+            let legacy_entries = rooted::walk_with_max_depth(&self.root_cap, &self.root, Some(64))?;
+            for (entries, fresh) in [(fresh_entries, true), (legacy_entries, false)] {
+                for item in entries {
+                    if !item.regular {
+                        continue;
+                    }
+                    let relative = item.relative;
+                    let name = relative
+                        .file_name()
+                        .and_then(|value| value.to_str())
+                        .unwrap_or_default();
+                    if !name.ends_with(ENTRY_EXTENSION) {
+                        continue;
+                    }
+                    if !fresh && matches!(name, IDENTITY_FILE | MANIFEST_FILE) {
+                        continue;
+                    }
+                    if fresh != relative.starts_with(Path::new(ENTRIES_DIR)) {
+                        continue;
+                    }
+                    let logical = if fresh {
+                        relative
+                            .strip_prefix(ENTRIES_DIR)
+                            .map_err(|_| StoreError::UnsafePath(relative.display().to_string()))?
+                            .to_string_lossy()
+                            .replace(std::path::MAIN_SEPARATOR, "/")
+                    } else {
+                        relative
+                            .to_string_lossy()
+                            .replace(std::path::MAIN_SEPARATOR, "/")
+                    };
+                    result.push(Candidate {
+                        path: self.root.join(&relative),
+                        relative,
+                        logical: logical.trim_end_matches(ENTRY_EXTENSION).to_owned(),
+                        fresh,
+                    });
+                }
+            }
+            result.sort_by(|a, b| a.logical.cmp(&b.logical).then_with(|| a.path.cmp(&b.path)));
+            Ok(result)
+        }
+        #[cfg(not(unix))]
+        {
+            entry_candidates(&self.root)
+        }
+    }
+
+    fn entry_parent_cap(&self, target: &Path) -> Result<fs::File, StoreError> {
+        let relative = target
+            .strip_prefix(&self.root)
+            .map_err(|_| StoreError::UnsafePath(target.display().to_string()))?;
+        let parent = relative
+            .parent()
+            .ok_or_else(|| StoreError::UnsafePath(target.display().to_string()))?;
+        #[cfg(unix)]
+        {
+            rooted::directory(&self.root_cap, parent, target, true)
+        }
+        #[cfg(not(unix))]
+        {
+            ensure_directory_recursive(&self.root.join(parent))
+        }
     }
 
     #[must_use]
@@ -367,11 +690,14 @@ impl Store {
 
     /// Returns normalized public recipients, preserving file order.
     pub fn recipients(&self) -> Result<Vec<String>, StoreError> {
-        let path = self.root.join(RECIPIENTS_FILE);
-        if !self.presence.recipients {
-            return Ok(Vec::new());
-        }
-        let text = String::from_utf8(read_regular(&path)?)
+        let bytes = match self.read_root_file(RECIPIENTS_FILE) {
+            Ok(bytes) => bytes,
+            Err(StoreError::Read { source, .. }) if source.kind() == io::ErrorKind::NotFound => {
+                return Ok(Vec::new());
+            }
+            Err(error) => return Err(error),
+        };
+        let text = String::from_utf8(bytes)
             .map_err(|_| StoreError::Config("recipients.txt is not UTF-8".into()))?;
         text.lines()
             .map(str::trim)
@@ -387,8 +713,8 @@ impl Store {
     /// Lists logical entry paths in deterministic lexical order.
     pub fn list(&self, identity: &Identity) -> Result<Vec<String>, StoreError> {
         let mut paths = BTreeSet::new();
-        for candidate in entry_candidates(&self.root)? {
-            let logical = candidate.logical_path(&self.root);
+        for candidate in self.entry_candidates()? {
+            let logical = candidate.logical.clone();
             if self.config.pseudonymize_paths {
                 let entry = self.read_candidate(&candidate, identity)?;
                 if !entry.path.is_empty() {
@@ -406,7 +732,7 @@ impl Store {
         validate_entry_path(path)?;
         let candidates = self.candidates_for(path, identity)?;
         for candidate in candidates {
-            if regular_exists(&candidate.path)? {
+            if self.regular_exists_path(&candidate.path)? {
                 return self.read_candidate(&candidate, identity);
             }
         }
@@ -426,42 +752,67 @@ impl Store {
         identity: &Identity,
     ) -> Result<(), StoreError> {
         validate_entry_path(path)?;
-        if self.config.pseudonymize_paths {
-            return Err(StoreError::Config(
-                "new-entry writes do not yet support pseudonymized paths".into(),
-            ));
-        }
         let entries_root = self.root.join(ENTRIES_DIR);
-        ensure_directory(&entries_root)?;
-        let relative = Path::new(path);
-        let parent = relative.parent().unwrap_or_else(|| Path::new(""));
-        let parent_path = entries_root.join(parent);
-        ensure_directory(&parent_path)?;
-        let file_name = relative
-            .file_name()
-            .ok_or_else(|| StoreError::InvalidEntryPath(path.to_owned()))?;
-        let target = parent_path.join(format!(
-            "{}{}",
-            file_name.to_string_lossy(),
-            ENTRY_EXTENSION
-        ));
-        if regular_exists(&target)? {
+        // Resolve and prepare all potentially fallible content before creating
+        // directories, so invalid configuration has no filesystem side effect.
+        let target = if self.config.pseudonymize_paths {
+            let name = symvault_crypto::pseudonymize_path(identity, path);
+            entries_root
+                .join(&name[..2])
+                .join(format!("{name}{ENTRY_EXTENSION}"))
+        } else {
+            let relative = Path::new(path);
+            let parent = relative.parent().unwrap_or_else(|| Path::new(""));
+            let parent_path = entries_root.join(parent);
+            let file_name = relative
+                .file_name()
+                .ok_or_else(|| StoreError::InvalidEntryPath(path.to_owned()))?;
+            parent_path.join(format!(
+                "{}{}",
+                file_name.to_string_lossy(),
+                ENTRY_EXTENSION
+            ))
+        };
+        let mut stored = entry.clone();
+        if self.config.pseudonymize_paths {
+            stored.path = path.to_owned();
+        }
+        let plaintext =
+            Zeroizing::new(
+                serde_json::to_vec(&stored).map_err(|error| StoreError::Entry {
+                    path: path.to_owned(),
+                    detail: error.to_string(),
+                })?,
+            );
+        let mut recipient_strings = self.recipients()?;
+        recipient_strings.insert(0, recipient_string(identity));
+        let mut seen = BTreeSet::new();
+        let recipients = recipient_strings
+            .into_iter()
+            .filter(|value| seen.insert(value.clone()))
+            .map(|value| {
+                parse_recipient(&value).map_err(|error| StoreError::Config(error.to_string()))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let ciphertext = encrypt(&plaintext, &recipients)
+            .map_err(|error| StoreError::Decryption(error.to_string()))?;
+
+        #[cfg(unix)]
+        let _entries_cap =
+            rooted::directory(&self.root_cap, Path::new(ENTRIES_DIR), &entries_root, false)?;
+        #[cfg(not(unix))]
+        let _entries_cap = ensure_directory(&entries_root)?;
+        let parent_cap = self.entry_parent_cap(&target)?;
+        #[cfg(unix)]
+        let exists = rooted::regular_exists(&parent_cap, &target)?;
+        #[cfg(not(unix))]
+        let exists = regular_exists(&target)?;
+        if exists {
             return Err(StoreError::Config(
                 "entry replacement is not part of the new-entry slice".into(),
             ));
         }
-
-        let mut plaintext = serde_json::to_vec(entry).map_err(|error| StoreError::Entry {
-            path: path.to_owned(),
-            detail: error.to_string(),
-        })?;
-        let recipient = parse_recipient(&recipient_string(identity))
-            .map_err(|error| StoreError::Decryption(error.to_string()))?;
-        let ciphertext = encrypt(&plaintext, &[recipient])
-            .map_err(|error| StoreError::Decryption(error.to_string()))?;
-        plaintext.zeroize();
-        atomic_create(&target, &ciphertext)?;
-        Ok(())
+        atomic_create(&target, &ciphertext, &parent_cap)
     }
 
     /// Returns only the metadata portion of an entry after decryption.
@@ -476,6 +827,16 @@ impl Store {
     /// Returns a sorted recursive manifest of the vault tree.
     pub fn files(&self) -> Result<Vec<FileInfo>, StoreError> {
         let mut result = Vec::new();
+        #[cfg(unix)]
+        for item in rooted::walk(&self.root_cap, &self.root)? {
+            let metadata = rooted::metadata(
+                &self.root_cap,
+                &item.relative,
+                &self.root.join(&item.relative),
+            )?;
+            result.push(self.file_info(&item.relative, metadata)?);
+        }
+        #[cfg(not(unix))]
         for item in WalkDir::new(&self.root).follow_links(false) {
             let item = item.map_err(|error| StoreError::Read {
                 path: self.root.clone(),
@@ -484,43 +845,47 @@ impl Store {
             if item.path() == self.root {
                 continue;
             }
-            let rel = item
+            let relative = item
                 .path()
                 .strip_prefix(&self.root)
                 .map_err(|_| StoreError::UnsafePath(item.path().display().to_string()))?;
-            let rel = rel
-                .to_string_lossy()
-                .replace(std::path::MAIN_SEPARATOR, "/");
             let metadata =
                 fs::symlink_metadata(item.path()).map_err(|source| StoreError::Read {
-                    path: item.path().to_path_buf(),
+                    path: self.root.join(relative),
                     source,
                 })?;
-            if metadata.file_type().is_symlink() {
-                return Err(StoreError::Symlink(item.path().to_path_buf()));
-            }
-            let kind = if metadata.is_dir() {
-                FileKind::Directory
-            } else if metadata.is_file() {
-                FileKind::Regular
-            } else {
-                return Err(StoreError::NotRegularFile(item.path().to_path_buf()));
-            };
-            let bytes = if kind == FileKind::Regular {
-                read_regular(item.path())?
-            } else {
-                Vec::new()
-            };
-            result.push(FileInfo {
-                path: rel,
-                kind,
-                mode: mode_bits(&metadata),
-                size: metadata.len(),
-                sha256: sha256_hex(&bytes),
-            });
+            result.push(self.file_info(relative, metadata)?);
         }
         result.sort_by(|a, b| a.path.cmp(&b.path));
         Ok(result)
+    }
+
+    fn file_info(&self, relative: &Path, metadata: fs::Metadata) -> Result<FileInfo, StoreError> {
+        let display = self.root.join(relative);
+        if metadata.file_type().is_symlink() {
+            return Err(StoreError::Symlink(display));
+        }
+        let kind = if metadata.is_dir() {
+            FileKind::Directory
+        } else if metadata.is_file() {
+            FileKind::Regular
+        } else {
+            return Err(StoreError::NotRegularFile(display));
+        };
+        let bytes = if kind == FileKind::Regular {
+            self.read_relative_path(relative, &self.root.join(relative))?
+        } else {
+            Vec::new()
+        };
+        Ok(FileInfo {
+            path: relative
+                .to_string_lossy()
+                .replace(std::path::MAIN_SEPARATOR, "/"),
+            kind,
+            mode: mode_bits(&metadata),
+            size: metadata.len(),
+            sha256: sha256_hex(&bytes),
+        })
     }
 
     fn candidates_for(
@@ -531,24 +896,31 @@ impl Store {
         let mut result = Vec::new();
         if self.config.pseudonymize_paths {
             let name = symvault_crypto::pseudonymize_path(identity, path);
+            let relative = PathBuf::from(ENTRIES_DIR)
+                .join(&name[..2])
+                .join(format!("{name}{ENTRY_EXTENSION}"));
             result.push(Candidate {
-                path: self
-                    .root
-                    .join(ENTRIES_DIR)
-                    .join(&name[..2])
-                    .join(format!("{name}{ENTRY_EXTENSION}")),
+                path: self.root.join(&relative),
+                relative,
                 logical: path.to_owned(),
+                fresh: true,
             });
         } else {
+            let relative = PathBuf::from(ENTRIES_DIR).join(format!("{path}{ENTRY_EXTENSION}"));
             result.push(Candidate {
-                path: self.root.join(ENTRIES_DIR).join(path).with_extension("age"),
+                path: self.root.join(&relative),
+                relative,
                 logical: path.to_owned(),
+                fresh: true,
             });
         }
         if can_use_legacy_path(path) {
+            let relative = PathBuf::from(format!("{path}{ENTRY_EXTENSION}"));
             result.push(Candidate {
-                path: self.root.join(format!("{path}{ENTRY_EXTENSION}")),
+                path: self.root.join(&relative),
+                relative,
                 logical: path.to_owned(),
+                fresh: false,
             });
         }
         Ok(result)
@@ -559,7 +931,7 @@ impl Store {
         candidate: &Candidate,
         identity: &Identity,
     ) -> Result<Entry, StoreError> {
-        let mut raw = read_regular(&candidate.path)?;
+        let mut raw = self.read_candidate_bytes(candidate)?;
         let mut plaintext =
             decrypt(&raw, identity).map_err(|error| StoreError::Decryption(error.to_string()))?;
         raw.zeroize();
@@ -571,6 +943,17 @@ impl Store {
             .and_then(|entry: Entry| validate_entry_values(&entry).map(|()| entry));
         plaintext.zeroize();
         result
+    }
+
+    fn read_candidate_bytes(&self, candidate: &Candidate) -> Result<Vec<u8>, StoreError> {
+        #[cfg(unix)]
+        {
+            rooted::read(&self.root_cap, &candidate.relative, &candidate.path)
+        }
+        #[cfg(not(unix))]
+        {
+            read_regular(&candidate.path)
+        }
     }
 }
 
@@ -586,6 +969,30 @@ fn validate_entry_values(entry: &Entry) -> Result<(), StoreError> {
         validate_json_value(value, 1, &mut fields)?;
     }
     Ok(())
+}
+
+// These numeric values are the wire values of Go's taint.Classification.
+fn classify_secret_type(secret_type: SecretType) -> i32 {
+    match secret_type {
+        SecretType::SshKey | SecretType::Certificate | SecretType::TotpSeed => 4,
+        SecretType::ApiKey
+        | SecretType::BearerToken
+        | SecretType::BasicAuth
+        | SecretType::DatabaseUrl => 3,
+        SecretType::Password | SecretType::Payment | SecretType::Custom => 2,
+    }
+}
+
+fn infer_classification(entry: &Entry) -> i32 {
+    entry
+        .data
+        .values()
+        .fold(entry.classification, |current, value| {
+            let serde_json::Value::String(value) = value else {
+                return current;
+            };
+            current.max(classify_secret_type(detect_secret_type(value)))
+        })
 }
 
 fn validate_json_value(
@@ -631,21 +1038,9 @@ fn validate_json_value(
 #[derive(Clone, Debug)]
 struct Candidate {
     path: PathBuf,
+    relative: PathBuf,
     logical: String,
-}
-
-impl Candidate {
-    fn logical_path(&self, root: &Path) -> String {
-        let rel = self.path.strip_prefix(root).unwrap_or(&self.path);
-        let value = rel
-            .to_string_lossy()
-            .replace(std::path::MAIN_SEPARATOR, "/");
-        value
-            .strip_prefix("entries/")
-            .unwrap_or(&value)
-            .trim_end_matches(ENTRY_EXTENSION)
-            .to_owned()
-    }
+    fresh: bool,
 }
 
 fn parse_config(bytes: &[u8]) -> Result<VaultConfig, StoreError> {
@@ -658,6 +1053,46 @@ fn parse_config(bytes: &[u8]) -> Result<VaultConfig, StoreError> {
     Ok(config)
 }
 
+#[cfg(unix)]
+fn detect_layout_rooted(root_cap: &fs::File, root: &Path) -> Result<Layout, StoreError> {
+    let fresh_entries = match rooted::walk_from(
+        root_cap,
+        Path::new(ENTRIES_DIR),
+        &root.join(ENTRIES_DIR),
+        None,
+    ) {
+        Ok(entries) => entries,
+        Err(StoreError::Read { source, .. }) if source.kind() == io::ErrorKind::NotFound => {
+            Vec::new()
+        }
+        Err(error) => return Err(error),
+    };
+    let legacy_entries = rooted::walk_with_max_depth(root_cap, root, Some(64))?;
+    let fresh = fresh_entries.iter().any(|item| {
+        item.regular
+            && item.relative.starts_with(Path::new(ENTRIES_DIR))
+            && item
+                .relative
+                .file_name()
+                .is_some_and(|name| name.to_string_lossy().ends_with(ENTRY_EXTENSION))
+    });
+    let legacy = legacy_entries.iter().any(|item| {
+        item.regular
+            && !item.relative.starts_with(Path::new(ENTRIES_DIR))
+            && item.relative.file_name().is_some_and(|name| {
+                let name = name.to_string_lossy();
+                name.ends_with(ENTRY_EXTENSION) && name != IDENTITY_FILE && name != MANIFEST_FILE
+            })
+    });
+    Ok(match (fresh, legacy) {
+        (true, true) => Layout::Mixed,
+        (true, false) => Layout::Fresh,
+        (false, true) => Layout::Legacy,
+        (false, false) => Layout::Fresh,
+    })
+}
+
+#[cfg(not(unix))]
 fn detect_layout(root: &Path) -> Result<Layout, StoreError> {
     let fresh = root.join(ENTRIES_DIR).is_dir()
         && entry_candidates(root)?
@@ -674,6 +1109,7 @@ fn detect_layout(root: &Path) -> Result<Layout, StoreError> {
     })
 }
 
+#[cfg(not(unix))]
 fn entry_candidates(root: &Path) -> Result<Vec<Candidate>, StoreError> {
     let mut result = Vec::new();
     let entries_root = root.join(ENTRIES_DIR);
@@ -703,7 +1139,9 @@ fn entry_candidates(root: &Path) -> Result<Vec<Candidate>, StoreError> {
                     .to_owned();
                 result.push(Candidate {
                     path: item.path().to_path_buf(),
+                    relative: PathBuf::from(ENTRIES_DIR).join(rel),
                     logical,
+                    fresh: true,
                 });
             }
         }
@@ -736,7 +1174,9 @@ fn entry_candidates(root: &Path) -> Result<Vec<Candidate>, StoreError> {
                 .to_owned();
             result.push(Candidate {
                 path: item.path().to_path_buf(),
+                relative: rel.to_path_buf(),
                 logical,
+                fresh: false,
             });
         }
     }
@@ -782,82 +1222,194 @@ fn set_private_permissions(_file: &fs::File) -> io::Result<()> {
     Ok(())
 }
 
-fn atomic_create(target: &Path, bytes: &[u8]) -> Result<(), StoreError> {
+fn atomic_create(target: &Path, bytes: &[u8], parent: &fs::File) -> Result<(), StoreError> {
     static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
-    let parent = target.parent().ok_or_else(|| StoreError::Write {
-        path: target.to_path_buf(),
-        source: io::Error::new(io::ErrorKind::InvalidInput, "entry has no parent directory"),
-    })?;
-    let file_name = target
+    let name = target
         .file_name()
-        .and_then(|name| name.to_str())
+        .and_then(|value| value.to_str())
         .ok_or_else(|| StoreError::Write {
             path: target.to_path_buf(),
             source: io::Error::new(io::ErrorKind::InvalidInput, "entry filename is not UTF-8"),
         })?;
 
-    for _ in 0..32 {
-        let sequence = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
-        let temporary = parent.join(format!(
-            ".{file_name}.tmp-{}-{sequence}",
-            std::process::id()
-        ));
-        let mut file = match fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temporary)
-        {
-            Ok(file) => file,
-            Err(source) if source.kind() == io::ErrorKind::AlreadyExists => continue,
-            Err(source) => {
-                return Err(StoreError::Write {
+    #[cfg(unix)]
+    {
+        use rustix::fs::{AtFlags, Mode, OFlags, fsync, linkat, openat, unlinkat};
+        for _ in 0..32 {
+            let temporary = format!(
+                ".{name}.tmp-{}-{}",
+                std::process::id(),
+                TEMP_COUNTER.fetch_add(1, Ordering::Relaxed)
+            );
+            let mut file = match openat(
+                parent,
+                temporary.as_str(),
+                OFlags::WRONLY | OFlags::CREATE | OFlags::EXCL,
+                Mode::from_raw_mode(0o600),
+            ) {
+                Ok(file) => fs::File::from(file),
+                Err(source) if source.kind() == io::ErrorKind::AlreadyExists => continue,
+                Err(source) => {
+                    return Err(StoreError::Write {
+                        path: target.to_path_buf(),
+                        source: source.into(),
+                    });
+                }
+            };
+            let result = (|| {
+                file.write_all(bytes).map_err(|source| StoreError::Write {
                     path: target.to_path_buf(),
                     source,
-                });
-            }
-        };
-        set_private_permissions(&file).map_err(|source| StoreError::Write {
+                })?;
+                fsync(&file).map_err(|source| StoreError::Write {
+                    path: target.to_path_buf(),
+                    source: source.into(),
+                })?;
+                linkat(parent, temporary.as_str(), parent, name, AtFlags::empty()).map_err(
+                    |source| {
+                        if source.kind() == io::ErrorKind::AlreadyExists {
+                            StoreError::Config(
+                                "entry replacement is not part of the new-entry slice".into(),
+                            )
+                        } else {
+                            StoreError::Write {
+                                path: target.to_path_buf(),
+                                source: source.into(),
+                            }
+                        }
+                    },
+                )?;
+                fsync(parent).map_err(|source| StoreError::Write {
+                    path: target.to_path_buf(),
+                    source: source.into(),
+                })?;
+                Ok(())
+            })();
+            drop(file);
+            let _ = unlinkat(parent, temporary.as_str(), AtFlags::empty());
+            let cleanup = fsync(parent).map_err(|source| StoreError::Write {
+                path: target.to_path_buf(),
+                source: source.into(),
+            });
+            return result.and(cleanup.map(|_| ()));
+        }
+        Err(StoreError::Write {
             path: target.to_path_buf(),
-            source,
-        })?;
-
-        let result = (|| {
-            file.write_all(bytes).map_err(|source| StoreError::Write {
-                path: target.to_path_buf(),
-                source,
-            })?;
-            file.sync_all().map_err(|source| StoreError::Write {
-                path: target.to_path_buf(),
-                source,
-            })?;
-            fs::hard_link(&temporary, target).map_err(|source| {
-                if source.kind() == io::ErrorKind::AlreadyExists {
-                    StoreError::Config(
-                        "entry replacement is not part of the new-entry slice".into(),
-                    )
-                } else {
-                    StoreError::Write {
-                        path: target.to_path_buf(),
-                        source,
-                    }
-                }
-            })?;
-            Ok(())
-        })();
-        let _ = fs::remove_file(&temporary);
-        return result;
+            source: io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "could not allocate a unique temporary entry path",
+            ),
+        })
     }
 
-    Err(StoreError::Write {
-        path: target.to_path_buf(),
-        source: io::Error::new(
-            io::ErrorKind::AlreadyExists,
-            "could not allocate a unique temporary entry path",
-        ),
+    #[cfg(not(unix))]
+    {
+        let _ = parent;
+        // Windows publication remains explicitly unproven; retain the path-based
+        // implementation and its old retry/error taxonomy until native tests exist.
+        let parent_path = target.parent().ok_or_else(|| StoreError::Write {
+            path: target.to_path_buf(),
+            source: io::Error::new(io::ErrorKind::InvalidInput, "entry has no parent directory"),
+        })?;
+        for _ in 0..32 {
+            let sequence = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+            let temporary =
+                parent_path.join(format!(".{name}.tmp-{}-{sequence}", std::process::id()));
+            let mut file = match fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&temporary)
+            {
+                Ok(file) => file,
+                Err(source) if source.kind() == io::ErrorKind::AlreadyExists => continue,
+                Err(source) => {
+                    return Err(StoreError::Write {
+                        path: target.to_path_buf(),
+                        source,
+                    });
+                }
+            };
+            let result = (|| {
+                set_private_permissions(&file).map_err(|source| StoreError::Write {
+                    path: target.to_path_buf(),
+                    source,
+                })?;
+                file.write_all(bytes).map_err(|source| StoreError::Write {
+                    path: target.to_path_buf(),
+                    source,
+                })?;
+                file.sync_all().map_err(|source| StoreError::Write {
+                    path: target.to_path_buf(),
+                    source,
+                })?;
+                drop(file);
+                fs::hard_link(&temporary, target).map_err(|source| {
+                    if source.kind() == io::ErrorKind::AlreadyExists {
+                        StoreError::Config(
+                            "entry replacement is not part of the new-entry slice".into(),
+                        )
+                    } else {
+                        StoreError::Write {
+                            path: target.to_path_buf(),
+                            source,
+                        }
+                    }
+                })
+            })();
+            let _ = fs::remove_file(&temporary);
+            return result;
+        }
+        Err(StoreError::Write {
+            path: target.to_path_buf(),
+            source: io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "could not allocate a unique temporary entry path",
+            ),
+        })
+    }
+}
+
+#[cfg(unix)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct RootIdentity {
+    device: u64,
+    inode: u64,
+}
+
+#[cfg(unix)]
+fn root_identity(path: &Path) -> Result<RootIdentity, StoreError> {
+    use std::os::unix::fs::MetadataExt;
+    let metadata = fs::symlink_metadata(path).map_err(|source| StoreError::Read {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    if metadata.file_type().is_symlink() {
+        return Err(StoreError::Symlink(path.to_path_buf()));
+    }
+    if !metadata.is_dir() {
+        return Err(StoreError::RootNotDirectory(path.to_path_buf()));
+    }
+    Ok(RootIdentity {
+        device: metadata.dev(),
+        inode: metadata.ino(),
     })
 }
 
-fn ensure_directory(path: &Path) -> Result<(), StoreError> {
+#[cfg(unix)]
+fn root_identity_from_file(file: &fs::File) -> Result<RootIdentity, StoreError> {
+    use std::os::unix::fs::MetadataExt;
+    file.metadata()
+        .map(|metadata| RootIdentity {
+            device: metadata.dev(),
+            inode: metadata.ino(),
+        })
+        .map_err(|source| StoreError::Read {
+            path: PathBuf::from("<acquired vault root>"),
+            source,
+        })
+}
+
+fn ensure_directory(path: &Path) -> Result<fs::File, StoreError> {
     let file = open_directory_nofollow(path).map_err(|source| StoreError::Read {
         path: path.to_path_buf(),
         source,
@@ -869,9 +1421,10 @@ fn ensure_directory(path: &Path) -> Result<(), StoreError> {
     if !metadata.is_dir() {
         return Err(StoreError::RootNotDirectory(path.to_path_buf()));
     }
-    Ok(())
+    Ok(file)
 }
 
+#[cfg(not(unix))]
 fn ensure_regular_file(path: &Path, required: bool) -> Result<bool, StoreError> {
     let file = match open_nofollow(path) {
         Ok(file) => file,
@@ -896,6 +1449,7 @@ fn ensure_regular_file(path: &Path, required: bool) -> Result<bool, StoreError> 
     Ok(true)
 }
 
+#[cfg(not(unix))]
 fn regular_exists(path: &Path) -> Result<bool, StoreError> {
     ensure_regular_file(path, false)
 }
@@ -915,11 +1469,16 @@ fn reject_symlink(path: &Path) -> Result<(), StoreError> {
     }
 }
 
+#[cfg(not(unix))]
 fn read_regular(path: &Path) -> Result<Vec<u8>, StoreError> {
     let file = open_nofollow(path).map_err(|source| StoreError::Read {
         path: path.to_path_buf(),
         source,
     })?;
+    read_open_regular(file, path)
+}
+
+fn read_open_regular(file: fs::File, path: &Path) -> Result<Vec<u8>, StoreError> {
     let metadata = file.metadata().map_err(|source| StoreError::Read {
         path: path.to_path_buf(),
         source,
@@ -948,11 +1507,6 @@ fn read_regular(path: &Path) -> Result<Vec<u8>, StoreError> {
         });
     }
     Ok(bytes)
-}
-
-#[cfg(unix)]
-fn open_nofollow(path: &Path) -> io::Result<fs::File> {
-    open_nofollow_kind(path, false)
 }
 
 #[cfg(unix)]
@@ -1268,8 +1822,8 @@ pub struct ManifestEntry {
 /// The encrypted manifest format used by the Go vault.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Manifest {
-    pub version: i32,
-    pub generation: i32,
+    pub version: i64,
+    pub generation: i64,
     pub created: String,
     pub updated: String,
     pub entries: BTreeMap<String, ManifestEntry>,
@@ -1289,30 +1843,51 @@ impl Store {
     /// their ciphertext. Existing fresh files win; a marker makes the operation
     /// idempotent. No plaintext is ever loaded during migration.
     pub fn migrate_legacy(&self) -> Result<(), StoreError> {
-        let entries = entry_candidates(&self.root)?;
+        let entries = self.entry_candidates()?;
         let fresh_root = self.root.join(ENTRIES_DIR);
+        #[cfg(unix)]
+        rooted::directory(&self.root_cap, Path::new(ENTRIES_DIR), &fresh_root, true)?;
+        #[cfg(not(unix))]
         ensure_directory_recursive(&fresh_root)?;
         for candidate in entries {
-            if candidate.path.starts_with(&fresh_root) {
+            if candidate.fresh {
                 continue;
             }
-            let destination = fresh_root.join(format!("{}{}", candidate.logical, ENTRY_EXTENSION));
-            let parent = destination
-                .parent()
-                .ok_or_else(|| StoreError::UnsafePath(candidate.logical.clone()))?;
-            ensure_directory_recursive(parent)?;
-            if regular_exists(&destination)? {
+            let destination_relative = PathBuf::from(ENTRIES_DIR)
+                .join(format!("{}{}", candidate.logical, ENTRY_EXTENSION));
+            let destination = self.root.join(&destination_relative);
+            if self.regular_exists_path(&destination)? {
                 continue;
             }
-            reject_symlink(&candidate.path)?;
-            fs::rename(&candidate.path, &destination).map_err(|source| StoreError::Write {
-                path: destination.clone(),
-                source,
-            })?;
+            #[cfg(unix)]
+            {
+                if !rooted::regular_exists_at(&self.root_cap, &candidate.relative, &candidate.path)?
+                {
+                    continue;
+                }
+                rooted::rename(
+                    &self.root_cap,
+                    &candidate.relative,
+                    &destination_relative,
+                    &destination,
+                )?;
+            }
+            #[cfg(not(unix))]
+            {
+                reject_symlink(&candidate.path)?;
+                let parent = destination
+                    .parent()
+                    .ok_or_else(|| StoreError::UnsafePath(candidate.logical.clone()))?;
+                ensure_directory_recursive(parent)?;
+                fs::rename(&candidate.path, &destination).map_err(|source| StoreError::Write {
+                    path: destination.clone(),
+                    source,
+                })?;
+            }
         }
         let marker = self.root.join(".symvault-migrated");
-        if !regular_exists(&marker)? {
-            atomic_replace(&marker, &[])?;
+        if !self.regular_exists_path(&marker)? {
+            publication::replace(&marker, &[], &self.root_cap)?;
         }
         Ok(())
     }
@@ -1325,67 +1900,245 @@ impl Store {
         entry: &Entry,
         identity: &Identity,
     ) -> Result<(), StoreError> {
+        // Preserve the historical writer contract: write_entry did not stamp
+        // wall-clock metadata. Callers that need Go-compatible stamping use
+        // write_entry_at with an explicit clock.
+        self.write_entry_at(path, entry, identity, "0001-01-01T00:00:00Z", false, None)
+    }
+
+    /// Writes an entry after applying metadata with an explicit clock seam.
+    pub fn write_entry_at(
+        &self,
+        path: &str,
+        entry: &Entry,
+        identity: &Identity,
+        now: &str,
+        pseudonymize: bool,
+        pending: Option<&WriteRecord>,
+    ) -> Result<(), StoreError> {
         validate_entry_path(path)?;
-        let mut stored = entry.clone();
-        stored.metadata.version = stored.metadata.version.saturating_add(1);
-        if stored.metadata.created.is_empty() {
-            stored.metadata.created = go_zero_time();
-        }
-        if stored.metadata.updated.is_empty() {
-            stored.metadata.updated = go_zero_time();
-        }
-        validate_entry_values(&stored)?;
-        let target = self.fresh_entry_path(path)?;
-        let parent = target
-            .parent()
-            .ok_or_else(|| StoreError::UnsafePath(path.to_owned()))?;
-        ensure_directory_recursive(parent)?;
-        let mut plaintext = serde_json::to_vec(&stored).map_err(|error| StoreError::Entry {
+        let stored = metadata::prepare_entry(
+            entry,
+            now,
+            path,
+            pseudonymize || self.config.pseudonymize_paths,
+            pending,
+        )
+        .map_err(|detail| StoreError::Entry {
             path: path.to_owned(),
-            detail: error.to_string(),
+            detail,
         })?;
+        let mut stored = stored;
+        stored.classification = infer_classification(&stored);
+        // Keep the single-recipient entry seam distinct from Go's
+        // WriteEntryWithRecipients. Manifests use all configured recipients.
         let recipient = parse_recipient(&recipient_string(identity))
             .map_err(|error| StoreError::Decryption(error.to_string()))?;
-        let encrypted = encrypt(&plaintext, &[recipient])
+        self.publish_prepared_entry(path, &stored, identity, &[recipient])
+    }
+
+    /// Applies Go metadata preparation and encrypts for every configured
+    /// recipient, corresponding to `WriteEntryWithRecipients` with a clock seam.
+    /// Entry publication and manifest update remain separate operations.
+    pub fn write_entry_with_recipients_at(
+        &self,
+        path: &str,
+        entry: &Entry,
+        identity: &Identity,
+        now: &str,
+        pending: Option<&WriteRecord>,
+    ) -> Result<(), StoreError> {
+        validate_entry_path(path)?;
+        let recipients = self.encryption_recipients(identity)?;
+        let stored =
+            metadata::prepare_entry(entry, now, path, self.config.pseudonymize_paths, pending)
+                .map_err(|detail| StoreError::Entry {
+                    path: path.to_owned(),
+                    detail,
+                })?;
+        self.publish_prepared_entry(path, &stored, identity, &recipients)
+    }
+
+    fn publish_prepared_entry(
+        &self,
+        path: &str,
+        entry: &Entry,
+        identity: &Identity,
+        recipients: &[symvault_crypto::Recipient],
+    ) -> Result<(), StoreError> {
+        validate_entry_values(entry)?;
+        let plaintext =
+            Zeroizing::new(
+                serde_json::to_vec(entry).map_err(|error| StoreError::Entry {
+                    path: path.to_owned(),
+                    detail: error.to_string(),
+                })?,
+            );
+        let encrypted = encrypt(&plaintext, recipients)
             .map_err(|error| StoreError::Decryption(error.to_string()))?;
-        plaintext.zeroize();
-        atomic_replace(&target, &encrypted)?;
-        self.update_manifest_entry(path, &encrypted, identity)
+        let target = self.configured_entry_path(path, identity)?;
+        let parent_cap = self.entry_parent_cap(&target)?;
+        publication::replace(&target, &encrypted, &parent_cap)?;
+        // Go publishes the primary entry first and intentionally discards
+        // queued manifest failures from this high-level mutation.
+        let _ = self.update_manifest_entry(path, &encrypted, identity);
+        Ok(())
     }
 
     /// Deletes a fresh entry. Missing entries are reported as `EntryNotFound`;
     /// symlinks and non-regular targets are never followed.
     pub fn delete_entry(&self, path: &str) -> Result<(), StoreError> {
+        self.delete_entry_at(path, None)
+    }
+
+    /// Deletes the configured entry path, including pseudonymized layouts.
+    /// Manifest bookkeeping is best-effort after the primary unlink, matching
+    /// the high-level Go mutation contract.
+    pub fn delete_entry_with_identity(
+        &self,
+        path: &str,
+        identity: &Identity,
+    ) -> Result<(), StoreError> {
+        self.delete_entry_at(path, Some(identity))
+    }
+
+    /// Reports whether the configured identity-derived entry exists.
+    pub fn entry_exists(&self, path: &str, identity: &Identity) -> Result<bool, StoreError> {
+        let target = self.configured_entry_path(path, identity)?;
+        #[cfg(unix)]
+        {
+            let relative = target
+                .strip_prefix(&self.root)
+                .map_err(|_| StoreError::UnsafePath(target.display().to_string()))?;
+            let parent = rooted::directory(
+                &self.root_cap,
+                relative.parent().unwrap_or(Path::new("")),
+                &target,
+                false,
+            );
+            match parent {
+                Ok(parent) => rooted::regular_exists(&parent, &target),
+                Err(StoreError::Read { source, .. })
+                    if source.kind() == io::ErrorKind::NotFound =>
+                {
+                    Ok(false)
+                }
+                Err(error) => Err(error),
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            regular_exists(&target)
+        }
+    }
+
+    fn delete_entry_at(&self, path: &str, identity: Option<&Identity>) -> Result<(), StoreError> {
         validate_entry_path(path)?;
-        let fresh = self.fresh_entry_path(path)?;
-        let target = if regular_exists(&fresh)? {
-            fresh
-        } else if can_use_legacy_path(path) {
-            let legacy = self.root.join(format!("{path}{ENTRY_EXTENSION}"));
-            if regular_exists(&legacy)? {
-                legacy
+        let configured = identity.map(|identity| self.configured_entry_path(path, identity));
+        #[cfg(unix)]
+        {
+            let fresh_path = match configured {
+                Some(path) => path?,
+                None => self
+                    .root
+                    .join(ENTRIES_DIR)
+                    .join(format!("{path}{ENTRY_EXTENSION}")),
+            };
+            let fresh = fresh_path
+                .strip_prefix(&self.root)
+                .map_err(|_| StoreError::UnsafePath(fresh_path.display().to_string()))?;
+            if rooted::remove(&self.root_cap, fresh, &self.root.join(fresh))? {
+                if let Some(identity) = identity {
+                    let _ = self.remove_manifest_entry(path, identity);
+                }
+                return Ok(());
+            }
+            if can_use_legacy_path(path) {
+                let legacy = PathBuf::from(format!("{path}{ENTRY_EXTENSION}"));
+                if rooted::remove(&self.root_cap, &legacy, &self.root.join(&legacy))? {
+                    if let Some(identity) = identity {
+                        let _ = self.remove_manifest_entry(path, identity);
+                    }
+                    return Ok(());
+                }
+            }
+            Err(StoreError::EntryNotFound(path.to_owned()))
+        }
+        #[cfg(not(unix))]
+        {
+            let fresh = match configured {
+                Some(path) => path?,
+                None => self.fresh_entry_path(path)?,
+            };
+            let target = if regular_exists(&fresh)? {
+                fresh
+            } else if can_use_legacy_path(path) {
+                let legacy = self.root.join(format!("{path}{ENTRY_EXTENSION}"));
+                if regular_exists(&legacy)? {
+                    legacy
+                } else {
+                    return Err(StoreError::EntryNotFound(path.to_owned()));
+                }
             } else {
                 return Err(StoreError::EntryNotFound(path.to_owned()));
+            };
+            fs::remove_file(&target).map_err(|source| StoreError::Write {
+                path: target,
+                source,
+            })?;
+            if let Some(identity) = identity {
+                let _ = self.remove_manifest_entry(path, identity);
             }
-        } else {
-            return Err(StoreError::EntryNotFound(path.to_owned()));
-        };
-        fs::remove_file(&target).map_err(|source| StoreError::Write {
-            path: target,
-            source,
-        })?;
-        Ok(())
+            Ok(())
+        }
     }
 
     fn fresh_entry_path(&self, path: &str) -> Result<PathBuf, StoreError> {
-        let target = self.root.join(ENTRIES_DIR).join(path).with_extension("age");
-        Ok(target)
+        validate_entry_path(path)?;
+        Ok(self
+            .root
+            .join(ENTRIES_DIR)
+            .join(format!("{path}{ENTRY_EXTENSION}")))
+    }
+
+    fn configured_entry_path(
+        &self,
+        path: &str,
+        identity: &Identity,
+    ) -> Result<PathBuf, StoreError> {
+        validate_entry_path(path)?;
+        if self.config.pseudonymize_paths {
+            let name = symvault_crypto::pseudonymize_path(identity, path);
+            Ok(self
+                .root
+                .join(ENTRIES_DIR)
+                .join(&name[..2])
+                .join(format!("{name}{ENTRY_EXTENSION}")))
+        } else {
+            self.fresh_entry_path(path)
+        }
+    }
+
+    fn encryption_recipients(
+        &self,
+        identity: &Identity,
+    ) -> Result<Vec<symvault_crypto::Recipient>, StoreError> {
+        let mut values = self.recipients()?;
+        values.insert(0, recipient_string(identity));
+        let mut seen = BTreeSet::new();
+        values
+            .into_iter()
+            .filter(|value| seen.insert(value.clone()))
+            .map(|value| {
+                parse_recipient(&value).map_err(|error| StoreError::Config(error.to_string()))
+            })
+            .collect()
     }
 
     /// Loads and decrypts the manifest. A missing manifest is distinguished
     /// from malformed or unauthentic ciphertext.
     pub fn load_manifest(&self, identity: &Identity) -> Result<Manifest, StoreError> {
-        let mut raw = read_regular(&self.root.join(MANIFEST_FILE))?;
+        let mut raw = self.read_root_file(MANIFEST_FILE)?;
         let mut plaintext =
             decrypt(&raw, identity).map_err(|error| StoreError::Decryption(error.to_string()))?;
         raw.zeroize();
@@ -1406,12 +2159,18 @@ impl Store {
         let mut result = ManifestVerifyResult::default();
         let mut expected = BTreeSet::new();
         for (logical, metadata) in &manifest.entries {
-            let target = self.fresh_entry_path(logical)?;
-            expected.insert(target.clone());
-            match read_regular(&target) {
+            let target = self.configured_entry_path(logical, identity)?;
+            let target_relative = self.relative_path(&target)?;
+            expected.insert(
+                target_relative
+                    .strip_prefix(ENTRIES_DIR)
+                    .unwrap_or(&target_relative)
+                    .to_string_lossy()
+                    .into_owned(),
+            );
+            match self.read_path(&target) {
                 Ok(bytes) => {
-                    if sha256_hex(&bytes) == metadata.sha256 && bytes.len() as i64 == metadata.size
-                    {
+                    if sha256_hex(&bytes) == metadata.sha256 {
                         result.ok += 1;
                     } else {
                         result.tampered.push(logical.clone());
@@ -1425,20 +2184,18 @@ impl Store {
                 Err(error) => return Err(error),
             }
         }
-        let entries_root = self.root.join(ENTRIES_DIR);
-        if entries_root.is_dir() {
-            for candidate in entry_candidates(&self.root)? {
-                if candidate.path.starts_with(&entries_root) && !expected.contains(&candidate.path)
-                {
-                    result.unknown.push(
-                        candidate
-                            .path
-                            .strip_prefix(&entries_root)
-                            .unwrap_or(&candidate.path)
-                            .to_string_lossy()
-                            .into_owned(),
-                    );
-                }
+        for candidate in self.entry_candidates()? {
+            if !candidate.fresh {
+                continue;
+            }
+            let storage = candidate
+                .relative
+                .strip_prefix(ENTRIES_DIR)
+                .unwrap_or(&candidate.relative)
+                .to_string_lossy()
+                .into_owned();
+            if !expected.contains(&storage) {
+                result.unknown.push(storage);
             }
         }
         result.missing.sort();
@@ -1449,6 +2206,10 @@ impl Store {
 
     /// Rebuilds the manifest from regular fresh-layout entry files.
     pub fn rebuild_manifest(&self, identity: &Identity) -> Result<Manifest, StoreError> {
+        self.with_write_lock(|store| store.rebuild_manifest_unlocked(identity))
+    }
+
+    fn rebuild_manifest_unlocked(&self, identity: &Identity) -> Result<Manifest, StoreError> {
         let mut manifest = Manifest {
             version: 1,
             generation: 0,
@@ -1456,11 +2217,14 @@ impl Store {
             updated: go_zero_time(),
             entries: BTreeMap::new(),
         };
-        for candidate in entry_candidates(&self.root)? {
-            if !candidate.path.starts_with(self.root.join(ENTRIES_DIR)) {
+        for candidate in self.entry_candidates()? {
+            if !candidate.fresh {
                 continue;
             }
-            let bytes = read_regular(&candidate.path)?;
+            let bytes = self.read_candidate_bytes(&candidate)?;
+            #[cfg(unix)]
+            let metadata = rooted::metadata(&self.root_cap, &candidate.relative, &candidate.path)?;
+            #[cfg(not(unix))]
             let metadata = fs::metadata(&candidate.path).map_err(|source| StoreError::Read {
                 path: candidate.path.clone(),
                 source,
@@ -1470,7 +2234,13 @@ impl Store {
                 ManifestEntry {
                     sha256: sha256_hex(&bytes),
                     size: bytes.len() as i64,
-                    mtime: go_zero_time(),
+                    mtime: system_time_string(
+                        &candidate.path,
+                        metadata.modified().map_err(|source| StoreError::Read {
+                            path: candidate.path.clone(),
+                            source,
+                        })?,
+                    )?,
                 },
             );
             let _ = metadata;
@@ -1487,13 +2257,24 @@ impl Store {
         identity: &Identity,
     ) -> Result<(), StoreError> {
         validate_entry_path(path)?;
+        self.with_write_lock(|store| {
+            store.update_manifest_entry_unlocked(path, ciphertext, identity)
+        })
+    }
+
+    fn update_manifest_entry_unlocked(
+        &self,
+        path: &str,
+        ciphertext: &[u8],
+        identity: &Identity,
+    ) -> Result<(), StoreError> {
         let mut manifest = match self.load_manifest(identity) {
             Ok(value) => value,
             Err(StoreError::Read { source, .. }) if source.kind() == io::ErrorKind::NotFound => {
                 Manifest {
                     version: 1,
                     generation: 0,
-                    created: go_zero_time(),
+                    created: utc_now_string(&self.root)?,
                     updated: go_zero_time(),
                     entries: BTreeMap::new(),
                 }
@@ -1505,15 +2286,24 @@ impl Store {
             ManifestEntry {
                 sha256: sha256_hex(ciphertext),
                 size: ciphertext.len() as i64,
-                mtime: go_zero_time(),
+                mtime: utc_now_string(&self.root)?,
             },
         );
-        manifest.generation = manifest.generation.saturating_add(1);
+        manifest.generation = manifest.generation.wrapping_add(1);
         self.write_manifest(&manifest, identity)
     }
 
     /// Removes one manifest record. Missing manifests are a no-op.
     pub fn remove_manifest_entry(&self, path: &str, identity: &Identity) -> Result<(), StoreError> {
+        validate_entry_path(path)?;
+        self.with_write_lock(|store| store.remove_manifest_entry_unlocked(path, identity))
+    }
+
+    fn remove_manifest_entry_unlocked(
+        &self,
+        path: &str,
+        identity: &Identity,
+    ) -> Result<(), StoreError> {
         let mut manifest = match self.load_manifest(identity) {
             Ok(value) => value,
             Err(StoreError::Read { source, .. }) if source.kind() == io::ErrorKind::NotFound => {
@@ -1522,104 +2312,117 @@ impl Store {
             Err(error) => return Err(error),
         };
         manifest.entries.remove(path);
+        manifest.generation = manifest.generation.wrapping_add(1);
         self.write_manifest(&manifest, identity)
     }
 
     fn write_manifest(&self, manifest: &Manifest, identity: &Identity) -> Result<(), StoreError> {
-        let mut plaintext =
-            serde_json::to_vec(manifest).map_err(|error| StoreError::Config(error.to_string()))?;
-        let recipient = parse_recipient(&recipient_string(identity))
+        let mut manifest = manifest.clone();
+        if manifest.version == 0 {
+            manifest.version = 1;
+        }
+        manifest.updated = utc_now_string(&self.root)?;
+        let recipients = self.encryption_recipients(identity)?;
+        let plaintext = Zeroizing::new(
+            serde_json::to_vec(&manifest).map_err(|error| StoreError::Config(error.to_string()))?,
+        );
+        let ciphertext = encrypt(&plaintext, &recipients)
             .map_err(|error| StoreError::Decryption(error.to_string()))?;
-        let ciphertext = encrypt(&plaintext, &[recipient])
-            .map_err(|error| StoreError::Decryption(error.to_string()))?;
-        plaintext.zeroize();
-        atomic_replace(&self.root.join(MANIFEST_FILE), &ciphertext)
+        publication::replace(&self.root.join(MANIFEST_FILE), &ciphertext, &self.root_cap)
     }
 }
 
-fn ensure_directory_recursive(path: &Path) -> Result<(), StoreError> {
-    let mut current = PathBuf::new();
-    for component in path.components() {
-        match component {
-            Component::RootDir => current.push(Path::new("/")),
-            Component::Normal(name) => {
-                current.push(name);
-                if !current.exists() {
-                    fs::create_dir(&current).map_err(|source| StoreError::Write {
-                        path: current.clone(),
-                        source,
+#[cfg(any(not(unix), test))]
+fn ensure_directory_recursive(path: &Path) -> Result<fs::File, StoreError> {
+    #[cfg(unix)]
+    {
+        use rustix::fs::{CWD, Mode, OFlags, fsync, mkdirat, openat};
+        use std::os::fd::AsFd;
+        let mut dir = if path.is_absolute() {
+            openat(
+                CWD,
+                "/",
+                OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW,
+                Mode::empty(),
+            )
+        } else {
+            openat(
+                CWD,
+                ".",
+                OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW,
+                Mode::empty(),
+            )
+        }
+        .map_err(|source| StoreError::Write {
+            path: path.to_path_buf(),
+            source: source.into(),
+        })?;
+        for component in path.components() {
+            let name = match component {
+                Component::RootDir | Component::CurDir => continue,
+                Component::Normal(name) => name,
+                Component::ParentDir | Component::Prefix(_) => {
+                    return Err(StoreError::UnsafePath(path.display().to_string()));
+                }
+            };
+            match openat(
+                &dir,
+                name,
+                OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW,
+                Mode::empty(),
+            ) {
+                Ok(next) => dir = next,
+                Err(source) if source.kind() == io::ErrorKind::NotFound => {
+                    let created = match mkdirat(&dir, name, Mode::from_raw_mode(0o700)) {
+                        Ok(()) => true,
+                        Err(source) if source.kind() == io::ErrorKind::AlreadyExists => false,
+                        Err(source) => {
+                            return Err(StoreError::Write {
+                                path: path.to_path_buf(),
+                                source: source.into(),
+                            });
+                        }
+                    };
+                    if created {
+                        // Persist the new directory entry before descending;
+                        // the retained parent capability is the publication root.
+                        fsync(&dir).map_err(|source| StoreError::Write {
+                            path: path.to_path_buf(),
+                            source: source.into(),
+                        })?;
+                    }
+                    // Another creator may have won mkdirat; either way reopen
+                    // the component relative to the retained parent capability.
+                    dir = openat(
+                        &dir,
+                        name,
+                        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW,
+                        Mode::empty(),
+                    )
+                    .map_err(|source| StoreError::Write {
+                        path: path.to_path_buf(),
+                        source: source.into(),
                     })?;
                 }
-                ensure_directory(&current)?;
+                Err(source) => {
+                    return Err(StoreError::Write {
+                        path: path.to_path_buf(),
+                        source: source.into(),
+                    });
+                }
             }
-            Component::CurDir => {}
-            Component::ParentDir | Component::Prefix(_) => {
-                return Err(StoreError::UnsafePath(path.display().to_string()));
-            }
         }
+        let _ = dir.as_fd();
+        Ok(fs::File::from(dir))
     }
-    Ok(())
-}
-
-fn atomic_replace(target: &Path, bytes: &[u8]) -> Result<(), StoreError> {
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let parent = target
-        .parent()
-        .ok_or_else(|| StoreError::UnsafePath(target.display().to_string()))?;
-    ensure_directory(parent)?;
-    let name = target
-        .file_name()
-        .and_then(|value| value.to_str())
-        .ok_or_else(|| StoreError::UnsafePath(target.display().to_string()))?;
-    match fs::symlink_metadata(target) {
-        Ok(metadata) if metadata.file_type().is_symlink() => {
-            return Err(StoreError::Symlink(target.to_path_buf()));
-        }
-        _ => {}
+    #[cfg(not(unix))]
+    {
+        fs::create_dir_all(path).map_err(|source| StoreError::Write {
+            path: path.to_path_buf(),
+            source,
+        })?;
+        ensure_directory(path)
     }
-    for _ in 0..32 {
-        let temporary = parent.join(format!(
-            ".{name}.tmp-{}-{}",
-            std::process::id(),
-            COUNTER.fetch_add(1, Ordering::Relaxed)
-        ));
-        let result = (|| {
-            let mut file = fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&temporary)
-                .map_err(|source| StoreError::Write {
-                    path: target.to_path_buf(),
-                    source,
-                })?;
-            set_private_permissions(&file).map_err(|source| StoreError::Write {
-                path: target.to_path_buf(),
-                source,
-            })?;
-            file.write_all(bytes).map_err(|source| StoreError::Write {
-                path: target.to_path_buf(),
-                source,
-            })?;
-            file.sync_all().map_err(|source| StoreError::Write {
-                path: target.to_path_buf(),
-                source,
-            })?;
-            drop(file);
-            fs::rename(&temporary, target).map_err(|source| StoreError::Write {
-                path: target.to_path_buf(),
-                source,
-            })
-        })();
-        let _ = fs::remove_file(&temporary);
-        if !matches!(&result, Err(StoreError::Write { source, .. }) if source.kind() == io::ErrorKind::AlreadyExists)
-        {
-            return result;
-        }
-    }
-    Err(StoreError::Write {
-        path: target.to_path_buf(),
-        source: io::Error::new(io::ErrorKind::AlreadyExists, "temporary name exhausted"),
-    })
 }
 
 /// An encrypted, persistent search index. Only encrypted bytes are retained on
@@ -1630,6 +2433,8 @@ pub struct SearchIndex {
     ciphertext: Vec<u8>,
     doc: Option<IndexDocument>,
     root: PathBuf,
+    // Retain the directory handle on every platform; invalidation uses it on Unix.
+    _root_cap: Option<std::sync::Arc<fs::File>>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -1637,14 +2442,94 @@ struct EmptyIndexValue {}
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 struct IndexDocument {
-    #[serde(rename = "v")]
+    #[serde(rename = "v", default, deserialize_with = "deserialize_null_generic")]
     values: BTreeMap<String, Vec<String>>,
-    #[serde(rename = "c")]
+    #[serde(
+        rename = "ti",
+        default,
+        deserialize_with = "deserialize_null_generic",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    token_index: BTreeMap<String, BTreeMap<String, EmptyIndexValue>>,
+    #[serde(
+        rename = "pt",
+        default,
+        deserialize_with = "deserialize_null_generic",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    path_tokens: BTreeMap<String, Vec<String>>,
+    #[serde(
+        rename = "hi",
+        default,
+        deserialize_with = "deserialize_null_generic",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    host_index: BTreeMap<String, BTreeMap<String, EmptyIndexValue>>,
+    #[serde(
+        rename = "ph",
+        default,
+        deserialize_with = "deserialize_null_generic",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    path_hosts: BTreeMap<String, Vec<String>>,
+    #[serde(
+        rename = "c",
+        default,
+        deserialize_with = "deserialize_null_generic",
+        skip_serializing_if = "is_zero"
+    )]
     entry_count: usize,
-    #[serde(rename = "p", default)]
+    #[serde(
+        rename = "p",
+        default,
+        deserialize_with = "deserialize_null_generic",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
     paths: BTreeMap<String, EmptyIndexValue>,
-    #[serde(rename = "s", default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(
+        rename = "s",
+        default,
+        deserialize_with = "deserialize_index_salt",
+        serialize_with = "serialize_index_salt",
+        skip_serializing_if = "Vec::is_empty"
+    )]
     salt: Vec<u8>,
+}
+
+fn is_zero(value: &usize) -> bool {
+    *value == 0
+}
+
+fn deserialize_null_generic<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de> + Default,
+{
+    Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
+}
+
+fn deserialize_index_salt<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let encoded = Option::<String>::deserialize(deserializer)?;
+    encoded
+        .map(|value| {
+            use base64::Engine;
+            base64::engine::general_purpose::STANDARD
+                .decode(value)
+                .map_err(serde::de::Error::custom)
+        })
+        .transpose()
+        .map(|value| value.unwrap_or_default())
+}
+
+fn serialize_index_salt<S>(salt: &[u8], serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    use base64::Engine;
+    serializer.serialize_str(&base64::engine::general_purpose::STANDARD.encode(salt))
 }
 
 impl SearchIndex {
@@ -1681,19 +2566,20 @@ impl SearchIndex {
         let mut bytes = vec![1u8];
         bytes.extend_from_slice(&salt);
         bytes.extend_from_slice(&encrypted);
-        atomic_replace(&store.root.join(".search-index"), &bytes)?;
+        publication::replace(&store.root.join(".search-index"), &bytes, &store.root_cap)?;
         Ok(Self {
             salt,
             ciphertext: encrypted,
             doc: Some(document),
             root: store.root.clone(),
+            _root_cap: Some(std::sync::Arc::clone(&store.root_cap)),
         })
     }
 
     /// Loads a current or legacy encrypted index, rejecting stale indexes.
     pub fn load(store: &Store, identity: &Identity) -> Result<Option<Self>, StoreError> {
         let path = store.root.join(".search-index");
-        let raw = match read_regular(&path) {
+        let raw = match store.read_path(&path) {
             Ok(value) => value,
             Err(StoreError::Read { source, .. }) if source.kind() == io::ErrorKind::NotFound => {
                 return Ok(None);
@@ -1708,19 +2594,19 @@ impl SearchIndex {
         let plaintext = match symvault_crypto::decrypt_index(&ciphertext, identity, &salt) {
             Ok(value) => value,
             Err(_) => {
-                let _ = fs::remove_file(&path);
+                let _ = store.remove_path(&path);
                 return Ok(None);
             }
         };
         let document: IndexDocument = match serde_json::from_slice(&plaintext) {
             Ok(value) => value,
             Err(_) => {
-                let _ = fs::remove_file(&path);
+                let _ = store.remove_path(&path);
                 return Ok(None);
             }
         };
         if document.entry_count != store.list(identity)?.len() {
-            let _ = fs::remove_file(&path);
+            let _ = store.remove_path(&path);
             return Ok(None);
         }
         Ok(Some(Self {
@@ -1728,6 +2614,7 @@ impl SearchIndex {
             ciphertext,
             doc: Some(document),
             root: store.root.clone(),
+            _root_cap: Some(std::sync::Arc::clone(&store.root_cap)),
         }))
     }
 
@@ -1768,13 +2655,16 @@ impl SearchIndex {
         if self.root.as_os_str().is_empty() {
             return Ok(());
         }
-        match fs::remove_file(self.root.join(".search-index")) {
+        let path = self.root.join(".search-index");
+        #[cfg(unix)]
+        if let Some(root_cap) = &self._root_cap {
+            rooted::remove(root_cap, Path::new(".search-index"), &path)?;
+            return Ok(());
+        }
+        match fs::remove_file(&path) {
             Ok(()) => Ok(()),
             Err(source) if source.kind() == io::ErrorKind::NotFound => Ok(()),
-            Err(source) => Err(StoreError::Write {
-                path: self.root.join(".search-index"),
-                source,
-            }),
+            Err(source) => Err(StoreError::Write { path, source }),
         }
     }
 }

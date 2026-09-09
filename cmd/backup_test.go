@@ -34,6 +34,60 @@ func TestCreateBackup(t *testing.T) {
 	}
 }
 
+func TestCreateBackup_NormalizesTarMemberSeparators(t *testing.T) {
+	vaultDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(vaultDir, "entries"), 0o700); err != nil {
+		t.Fatalf("mkdir entries: %v", err)
+	}
+	for name, content := range map[string]string{
+		"identity.age":     "identity",
+		"config.yaml":      "vault_dir: fixture\n",
+		"entries/item.age": "ciphertext",
+	} {
+		path := filepath.Join(vaultDir, filepath.FromSlash(name))
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	archivePath := filepath.Join(t.TempDir(), "backup.tar.gz")
+	if err := admin.CreateBackup(vaultDir, archivePath, false); err != nil {
+		t.Fatalf("admin.CreateBackup() error = %v", err)
+	}
+
+	f, err := os.Open(archivePath)
+	if err != nil {
+		t.Fatalf("open archive: %v", err)
+	}
+	defer f.Close()
+	gr, err := gzip.NewReader(f)
+	if err != nil {
+		t.Fatalf("gzip reader: %v", err)
+	}
+	defer gr.Close()
+
+	tr := tar.NewReader(gr)
+	foundEntry := false
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("read tar: %v", err)
+		}
+		if strings.Contains(header.Name, "\\") {
+			t.Fatalf("tar member uses a backslash: %q", header.Name)
+		}
+		if header.Name == "entries/item.age" {
+			foundEntry = true
+		}
+	}
+	if !foundEntry {
+		t.Fatal("tar archive is missing entries/item.age")
+	}
+}
+
 func TestCreateBackup_ArchiveMode0600(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping on windows: file mode behavior differs")
