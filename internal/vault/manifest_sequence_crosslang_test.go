@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"filippo.io/age"
+
 	"github.com/danieljustus/symaira-vault/internal/config"
 	vaultcrypto "github.com/danieljustus/symaira-vault/internal/crypto"
 	"github.com/danieljustus/symaira-vault/internal/testutil"
