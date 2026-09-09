@@ -375,6 +375,40 @@ fn replacement_is_atomic_and_never_follows_symlink_targets() {
 }
 
 #[test]
+fn remove_path_rejects_targets_outside_root() {
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &value.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    let target = outside.path().join("sentinel");
+    fs::write(&target, b"must stay").unwrap();
+
+    assert!(matches!(
+        store.remove_path(&target),
+        Err(StoreError::UnsafePath(_))
+    ));
+    assert_eq!(fs::read(&target).unwrap(), b"must stay");
+}
+
+#[test]
+fn write_lock_preserves_existing_contents() {
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &value.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    let path = temp.path().join(LOCK_FILE);
+    fs::write(&path, b"existing lock contents").unwrap();
+
+    for _ in 0..2 {
+        store.with_write_lock(|_| Ok(())).unwrap();
+        assert_eq!(fs::read(&path).unwrap(), b"existing lock contents");
+    }
+}
+
+#[test]
 fn encrypted_search_index_matches_case_insensitive_nested_values_and_invalidates() {
     let (_, value) = fixture();
     let identity = parse_identity(IDENTITY).unwrap();
