@@ -1,0 +1,322 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "caadd5e",
+    "release": "v0.22.1",
+    "source_files": [
+      "cmd/admin/audit.go",
+      "cmd/admin/audit_export.go",
+      "cmd/admin/backup.go",
+      "cmd/admin/commands.go",
+      "cmd/admin/config.go",
+      "cmd/admin/doctor.go",
+      "cmd/admin/export.go",
+      "cmd/admin/import.go",
+      "cmd/admin/init.go",
+      "cmd/admin/migrate.go",
+      "cmd/admin/migrate_session.go",
+      "cmd/admin/setup.go",
+      "cmd/admin/startup_profile.go",
+      "cmd/admin/update.go",
+      "cmd/admin/verify.go",
+      "internal/exporter/csv.go",
+      "internal/exporter/exporter.go",
+      "internal/exporter/json.go",
+      "internal/git/device_id.go",
+      "internal/git/git.go",
+      "internal/git/git_offline.go",
+      "internal/git/git_pull.go",
+      "internal/git/git_push.go",
+      "internal/git/git_remote.go",
+      "internal/git/git_staging.go",
+      "internal/git/git_util.go",
+      "internal/git/separate_gitdir.go",
+      "internal/git/syncer.go",
+      "internal/importer/bitwarden.go",
+      "internal/importer/csv.go",
+      "internal/importer/csv_profiles.go",
+      "internal/importer/cxf.go",
+      "internal/importer/importer.go",
+      "internal/importer/onepux.go",
+      "internal/importer/pass.go",
+      "internal/importer/totp.go",
+      "internal/intake/intake.go",
+      "internal/intake/parse.go",
+      "internal/intake/process.go",
+      "internal/intake/quarantine.go",
+      "internal/intake/sniff.go",
+      "internal/intake/spool.go",
+      "internal/intake/watch.go",
+      "internal/vault/backup_codes.go",
+      "internal/vault/cache.go",
+      "internal/vault/devices.go",
+      "internal/vault/entry.go",
+      "internal/vault/entry_canary.go",
+      "internal/vault/entry_readwrite.go",
+      "internal/vault/entry_validate.go",
+      "internal/vault/git.go",
+      "internal/vault/lock_unix.go",
+      "internal/vault/lock_windows.go",
+      "internal/vault/manifest.go",
+      "internal/vault/manifest_updater.go",
+      "internal/vault/metrics.go",
+      "internal/vault/payment.go",
+      "internal/vault/recipients.go",
+      "internal/vault/reencrypt.go",
+      "internal/vault/search.go",
+      "internal/vault/search_index.go",
+      "internal/vault/service.go",
+      "internal/vault/symlink_harden.go",
+      "internal/vault/symlink_harden_windows.go",
+      "internal/vault/sync/sync.go",
+      "internal/vault/taint/taint.go",
+      "internal/vault/types.go",
+      "internal/vault/url.go",
+      "internal/vault/vault.go",
+      "internal/vault/vault_sync_reconcile.go"
+    ],
+    "source_digest": "b58a46f4eac25e1910bccddd8f2cf6b1d581e1e588874eda9a0b04474f7c0f14",
+    "generator_files": [
+      "scripts/rust-port/cmd/syncgen/main.go"
+    ],
+    "generator_digest": "a5eb58810c15196442cf67f2ca7731eea1d0f204d92f3eea74edba4e5d3fec35"
+  },
+  "cases": [
+    {
+      "id": "GIT-001-local",
+      "seam": "GIT-001",
+      "input": {
+        "author": "Fixture",
+        "message": "fixture commit"
+      },
+      "expected": {
+        "commit_author": "Fixture",
+        "commit_message": "fixture commit",
+        "gitignore_sha256": "2b50a7082245c81c8540ee494fcd8062821cabdc7707c1add8cbf7d4a34c824e",
+        "status": ""
+      }
+    },
+    {
+      "id": "GIT-002-local-bare",
+      "seam": "GIT-002",
+      "input": {
+        "branch": "master",
+        "entry": "entry.age",
+        "first_bytes": "one",
+        "first_commit": "first",
+        "local_bytes": "local",
+        "local_commit": "local",
+        "remote": "origin",
+        "remote_bytes": "remote",
+        "remote_commit": "remote"
+      },
+      "expected": {
+        "final_sha256": "25bf8e1a2393f1108d37029b3df5593236c755742ec93465bbafa9b290bddcf6",
+        "pull_error": "push failed: pull failed: local and remote history have diverged: non-fast-forward update",
+        "pull_has_remote": true,
+        "pull_skipped": false,
+        "pull_success": false,
+        "pull_updated": false,
+        "push_has_remote": true,
+        "push_skipped": false,
+        "push_success": true,
+        "remote_url_present": true
+      }
+    },
+    {
+      "id": "GIT-003-conflict",
+      "seam": "GIT-003",
+      "input": {
+        "loser_version": 1,
+        "winner_version": 2
+      },
+      "expected": {
+        "conflict_bytes": "loser-bytes",
+        "loser_version": 1,
+        "source_bytes": "loser-bytes",
+        "winner_version": 2
+      }
+    },
+    {
+      "id": "IO-001-imports",
+      "seam": "IO-001",
+      "input": {
+        "bitwarden": "eyJmb2xkZXJzIjpbeyJpZCI6ImYiLCJuYW1lIjoiV29yayJ9XSwiaXRlbXMiOlt7InR5cGUiOjEsIm5hbWUiOiJMb2dpbiIsImZvbGRlcklkIjoiZiIsIm5vdGVzIjoiZml4dHVyZS1ub3RlIiwibG9naW4iOnsidXNlcm5hbWUiOiJmaXh0dXJlLXVzZXIiLCJwYXNzd29yZCI6ImZpeHR1cmUtcGFzcyIsInVyaXMiOlt7InVyaSI6Imh0dHBzOi8vZXhhbXBsZS50ZXN0In1dfX1dfQ==",
+        "csv": "dGl0bGUsdXNlcm5hbWUscGFzc3dvcmQsdXJsCkV4YW1wbGUsZml4dHVyZS11c2VyLGZpeHR1cmUtcGFzcyxodHRwczovL2V4YW1wbGUudGVzdAo=",
+        "onepux": "UEsDBBQACAAIAAAAIewAAAAAAAAAAAAAAAALAAkAZXhwb3J0Lmpzb25VVAUAAQAAAABsjrFOxDAQRH8FTW24o/UHUFHQIAqUYhUvYXUbO7LXyaHI/458oUAIbTOa2XmaHTSOqUYr8O87Vqr6I8V4PtRIxlPKX69VAjzO50c4mJgyPN5Svtw9p0kiHAIbiRb4HdqtJ2ENByRwkSmSSYrwqIVzpJnhsJLWDvqQq9XM9z1Cc38bC5WypRz+afQIbXCIybi8KEn8lXYTzSGtnFfhrY+rWY9VNSs8Ps2W4k8nvtK8KD8YF7sBjab+hy3lC4bWhtt9BwAA//9QSwcI8dyq/8YAAAA0AQAAUEsBAhQAFAAIAAgAAAAh7PHcqv/GAAAANAEAAAsACQAAAAAAAAAAAAAAAAAAAGV4cG9ydC5qc29uVVQFAAEAAAAAUEsFBgAAAAABAAEAQgAAAAgBAAAAAA=="
+      },
+      "expected": {
+        "bitwarden": [
+          {
+            "path": "Work/Login",
+            "data": {
+              "notes": "fixture-note",
+              "password": "fixture-pass",
+              "url": "https://example.test",
+              "urls": [
+                "https://example.test"
+              ],
+              "username": "fixture-user"
+            },
+            "warnings": null
+          }
+        ],
+        "csv": [
+          {
+            "path": "Example",
+            "data": {
+              "password": "fixture-pass",
+              "url": "https://example.test",
+              "username": "fixture-user"
+            },
+            "warnings": null
+          }
+        ],
+        "onepux": [
+          {
+            "path": "Work Login",
+            "data": {
+              "notes": "fixture-note",
+              "password": "fixture-pass",
+              "tags": [
+                "work"
+              ],
+              "url": "https://example.test",
+              "username": "fixture-user"
+            },
+            "warnings": null
+          }
+        ],
+        "pass_adapter": "not exercised: requires external gpg"
+      }
+    },
+    {
+      "id": "IO-002-export",
+      "seam": "IO-002",
+      "input": {
+        "entries": [
+          {
+            "path": "Example",
+            "data": {
+              "password": "fixture-pass",
+              "url": "https://example.test",
+              "username": "fixture-user"
+            }
+          },
+          {
+            "path": "Other",
+            "data": {
+              "notes": "fixture-note",
+              "password": "second-pass"
+            }
+          }
+        ]
+      },
+      "expected": {
+        "csv_b64": "cGF0aCxub3RlcyxwYXNzd29yZCx1cmwsdXNlcm5hbWUKRXhhbXBsZSwsZml4dHVyZS1wYXNzLGh0dHBzOi8vZXhhbXBsZS50ZXN0LGZpeHR1cmUtdXNlcgpPdGhlcixmaXh0dXJlLW5vdGUsc2Vjb25kLXBhc3MsLAo=",
+        "json_b64": "WwogIHsKICAgICJkYXRhIjogewogICAgICAicGFzc3dvcmQiOiAiZml4dHVyZS1wYXNzIiwKICAgICAgInVybCI6ICJodHRwczovL2V4YW1wbGUudGVzdCIsCiAgICAgICJ1c2VybmFtZSI6ICJmaXh0dXJlLXVzZXIiCiAgICB9LAogICAgInBhdGgiOiAiRXhhbXBsZSIKICB9LAogIHsKICAgICJkYXRhIjogewogICAgICAibm90ZXMiOiAiZml4dHVyZS1ub3RlIiwKICAgICAgInBhc3N3b3JkIjogInNlY29uZC1wYXNzIgogICAgfSwKICAgICJwYXRoIjogIk90aGVyIgogIH0KXQo="
+      }
+    },
+    {
+      "id": "IO-002-archive",
+      "seam": "IO-002",
+      "input": {
+        "exclude_git": false
+      },
+      "expected": {
+        "archive_members": [
+          {
+            "path": "config.yaml",
+            "mode": 384,
+            "size": 19,
+            "sha256": "db3fa9549a36b81aaec2a55f25b6eb1e36adac03081ae5d9f8926b359ca76595",
+            "data": "dmF1bHRfZGlyOiBmaXh0dXJlCg=="
+          },
+          {
+            "path": "entries",
+            "mode": 448,
+            "size": 0,
+            "sha256": ""
+          },
+          {
+            "path": "entries/item.age",
+            "mode": 384,
+            "size": 10,
+            "sha256": "305531dcc50ebca31cf1d5b31e9fc76ed51f66b3b6dd5a030c6539ae6532f979",
+            "data": "Y2lwaGVydGV4dA=="
+          },
+          {
+            "path": "identity.age",
+            "mode": 384,
+            "size": 8,
+            "sha256": "689f6a627384c7dcb2dcc1487e540223e77bdf9dcd0d8be8a326eda65b0ce9a4",
+            "data": "aWRlbnRpdHk="
+          }
+        ],
+        "restored_files": [
+          {
+            "path": "config.yaml",
+            "mode": 384,
+            "size": 19,
+            "sha256": "db3fa9549a36b81aaec2a55f25b6eb1e36adac03081ae5d9f8926b359ca76595",
+            "data": "dmF1bHRfZGlyOiBmaXh0dXJlCg=="
+          },
+          {
+            "path": "entries/item.age",
+            "mode": 384,
+            "size": 10,
+            "sha256": "305531dcc50ebca31cf1d5b31e9fc76ed51f66b3b6dd5a030c6539ae6532f979",
+            "data": "Y2lwaGVydGV4dA=="
+          },
+          {
+            "path": "identity.age",
+            "mode": 384,
+            "size": 8,
+            "sha256": "689f6a627384c7dcb2dcc1487e540223e77bdf9dcd0d8be8a326eda65b0ce9a4",
+            "data": "aWRlbnRpdHk="
+          }
+        ]
+      }
+    },
+    {
+      "id": "IO-003-portable-intake",
+      "seam": "IO-003",
+      "input": {
+        "data_b64": "VVNFUk5BTUU9Zml4dHVyZS11c2VyClBBU1NXT1JEPWZpeHR1cmUtcGFzcwo=",
+        "mtime_unix": 1700000000,
+        "name": "credentials.env"
+      },
+      "expected": {
+        "native_watcher": "unproven",
+        "provenance": {
+          "source_name": "credentials.env",
+          "source_type": "env",
+          "size": 44,
+          "sha256": "871405d7478495d1d766c95b8fd8497121ccf5963cd81bab297a5541602c67f1"
+        },
+        "source_unchanged": true,
+        "status": "ok",
+        "suggestions": [
+          {
+            "attachment": false,
+            "confidence": 0.95,
+            "field": "username",
+            "path": "credentials"
+          },
+          {
+            "attachment": false,
+            "confidence": 0.95,
+            "field": "password",
+            "path": "credentials"
+          }
+        ]
+      }
+    }
+  ],
+  "scope": {
+    "archive_bytes": "not a byte contract; compare member manifest and restore result",
+    "candidate_gaps": "IO-003 native watcher remains unproven; pinned Go production Watcher is polling-only",
+    "native_watcher": "unproven; pinned Go production Watcher is polling-only; no native event backend to execute",
+    "pass_import": "unproven; production path requires external gpg"
+  }
+}

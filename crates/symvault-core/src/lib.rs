@@ -4,12 +4,16 @@
 
 use symaira_core_version::new as new_version;
 
+pub mod config;
 pub mod error;
 pub mod password;
+pub mod persistent_quota;
+pub mod platform;
 pub mod policy;
 pub mod quota;
 pub mod redact;
 pub mod secret_ref;
+pub mod session;
 pub mod tier;
 pub mod totp;
 

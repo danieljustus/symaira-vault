@@ -2,10 +2,9 @@
 
 //! Access to the Symaira Vault filesystem format.
 //!
-//! The store can open both the current `entries/` layout and pre-migration
-//! top-level `.age` entries, list logical names, decrypt individual JSON
-//! entries, and atomically create fresh-layout entries. Replacement, delete,
-//! migration, and manifest updates remain separate port slices.
+//! The store opens current, legacy, and mixed vault layouts, lists logical
+//! names, decrypts JSON entries, and performs safe atomic writes, migration,
+//! manifest verification, and encrypted search-index persistence.
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -21,6 +20,9 @@ use symvault_crypto::{Identity, decrypt, encrypt, parse_recipient, recipient_str
 use thiserror::Error;
 use walkdir::WalkDir;
 use zeroize::Zeroize;
+
+/// Keyed JSONL audit logging, verification, rotation, and export.
+pub mod audit;
 
 const ENTRIES_DIR: &str = "entries";
 const CONFIG_FILE: &str = "config.yaml";
@@ -1252,6 +1254,541 @@ fn parse_secret_type(value: &str) -> SecretType {
         "payment" => SecretType::Payment,
         "custom" => SecretType::Custom,
         _ => SecretType::Custom,
+    }
+}
+
+/// Integrity metadata for one encrypted entry in `manifest.age`.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ManifestEntry {
+    pub sha256: String,
+    pub size: i64,
+    pub mtime: String,
+}
+
+/// The encrypted manifest format used by the Go vault.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub struct Manifest {
+    pub version: i32,
+    pub generation: i32,
+    pub created: String,
+    pub updated: String,
+    pub entries: BTreeMap<String, ManifestEntry>,
+}
+
+/// The four independent outcomes of manifest verification.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ManifestVerifyResult {
+    pub missing: Vec<String>,
+    pub tampered: Vec<String>,
+    pub unknown: Vec<String>,
+    pub ok: usize,
+}
+
+impl Store {
+    /// Moves legacy top-level `.age` entries into `entries/` without changing
+    /// their ciphertext. Existing fresh files win; a marker makes the operation
+    /// idempotent. No plaintext is ever loaded during migration.
+    pub fn migrate_legacy(&self) -> Result<(), StoreError> {
+        let entries = entry_candidates(&self.root)?;
+        let fresh_root = self.root.join(ENTRIES_DIR);
+        ensure_directory_recursive(&fresh_root)?;
+        for candidate in entries {
+            if candidate.path.starts_with(&fresh_root) {
+                continue;
+            }
+            let destination = fresh_root.join(format!("{}{}", candidate.logical, ENTRY_EXTENSION));
+            let parent = destination
+                .parent()
+                .ok_or_else(|| StoreError::UnsafePath(candidate.logical.clone()))?;
+            ensure_directory_recursive(parent)?;
+            if regular_exists(&destination)? {
+                continue;
+            }
+            reject_symlink(&candidate.path)?;
+            fs::rename(&candidate.path, &destination).map_err(|source| StoreError::Write {
+                path: destination.clone(),
+                source,
+            })?;
+        }
+        let marker = self.root.join(".symvault-migrated");
+        if !regular_exists(&marker)? {
+            atomic_replace(&marker, &[])?;
+        }
+        Ok(())
+    }
+
+    /// Replaces or creates an entry using a same-directory temporary file and
+    /// rename. The old ciphertext remains intact if encryption or writing fails.
+    pub fn write_entry(
+        &self,
+        path: &str,
+        entry: &Entry,
+        identity: &Identity,
+    ) -> Result<(), StoreError> {
+        validate_entry_path(path)?;
+        let mut stored = entry.clone();
+        stored.metadata.version = stored.metadata.version.saturating_add(1);
+        if stored.metadata.created.is_empty() {
+            stored.metadata.created = go_zero_time();
+        }
+        if stored.metadata.updated.is_empty() {
+            stored.metadata.updated = go_zero_time();
+        }
+        validate_entry_values(&stored)?;
+        let target = self.fresh_entry_path(path)?;
+        let parent = target
+            .parent()
+            .ok_or_else(|| StoreError::UnsafePath(path.to_owned()))?;
+        ensure_directory_recursive(parent)?;
+        let mut plaintext = serde_json::to_vec(&stored).map_err(|error| StoreError::Entry {
+            path: path.to_owned(),
+            detail: error.to_string(),
+        })?;
+        let recipient = parse_recipient(&recipient_string(identity))
+            .map_err(|error| StoreError::Decryption(error.to_string()))?;
+        let encrypted = encrypt(&plaintext, &[recipient])
+            .map_err(|error| StoreError::Decryption(error.to_string()))?;
+        plaintext.zeroize();
+        atomic_replace(&target, &encrypted)?;
+        self.update_manifest_entry(path, &encrypted, identity)
+    }
+
+    /// Deletes a fresh entry. Missing entries are reported as `EntryNotFound`;
+    /// symlinks and non-regular targets are never followed.
+    pub fn delete_entry(&self, path: &str) -> Result<(), StoreError> {
+        validate_entry_path(path)?;
+        let fresh = self.fresh_entry_path(path)?;
+        let target = if regular_exists(&fresh)? {
+            fresh
+        } else if can_use_legacy_path(path) {
+            let legacy = self.root.join(format!("{path}{ENTRY_EXTENSION}"));
+            if regular_exists(&legacy)? {
+                legacy
+            } else {
+                return Err(StoreError::EntryNotFound(path.to_owned()));
+            }
+        } else {
+            return Err(StoreError::EntryNotFound(path.to_owned()));
+        };
+        fs::remove_file(&target).map_err(|source| StoreError::Write {
+            path: target,
+            source,
+        })?;
+        Ok(())
+    }
+
+    fn fresh_entry_path(&self, path: &str) -> Result<PathBuf, StoreError> {
+        let target = self.root.join(ENTRIES_DIR).join(path).with_extension("age");
+        Ok(target)
+    }
+
+    /// Loads and decrypts the manifest. A missing manifest is distinguished
+    /// from malformed or unauthentic ciphertext.
+    pub fn load_manifest(&self, identity: &Identity) -> Result<Manifest, StoreError> {
+        let mut raw = read_regular(&self.root.join(MANIFEST_FILE))?;
+        let mut plaintext =
+            decrypt(&raw, identity).map_err(|error| StoreError::Decryption(error.to_string()))?;
+        raw.zeroize();
+        let result = serde_json::from_slice::<Manifest>(&plaintext)
+            .map_err(|error| StoreError::Config(error.to_string()));
+        plaintext.zeroize();
+        let mut manifest: Manifest = result?;
+        if manifest.entries.is_empty() {
+            manifest.entries = BTreeMap::new();
+        }
+        Ok(manifest)
+    }
+
+    /// Verifies manifest entries and reports missing, tampered, and unknown
+    /// files separately, matching the Go diagnostic shape.
+    pub fn verify_manifest(&self, identity: &Identity) -> Result<ManifestVerifyResult, StoreError> {
+        let manifest = self.load_manifest(identity)?;
+        let mut result = ManifestVerifyResult::default();
+        let mut expected = BTreeSet::new();
+        for (logical, metadata) in &manifest.entries {
+            let target = self.fresh_entry_path(logical)?;
+            expected.insert(target.clone());
+            match read_regular(&target) {
+                Ok(bytes) => {
+                    if sha256_hex(&bytes) == metadata.sha256 && bytes.len() as i64 == metadata.size
+                    {
+                        result.ok += 1;
+                    } else {
+                        result.tampered.push(logical.clone());
+                    }
+                }
+                Err(StoreError::Read { source, .. })
+                    if source.kind() == io::ErrorKind::NotFound =>
+                {
+                    result.missing.push(logical.clone());
+                }
+                Err(error) => return Err(error),
+            }
+        }
+        let entries_root = self.root.join(ENTRIES_DIR);
+        if entries_root.is_dir() {
+            for candidate in entry_candidates(&self.root)? {
+                if candidate.path.starts_with(&entries_root) && !expected.contains(&candidate.path)
+                {
+                    result.unknown.push(
+                        candidate
+                            .path
+                            .strip_prefix(&entries_root)
+                            .unwrap_or(&candidate.path)
+                            .to_string_lossy()
+                            .into_owned(),
+                    );
+                }
+            }
+        }
+        result.missing.sort();
+        result.tampered.sort();
+        result.unknown.sort();
+        Ok(result)
+    }
+
+    /// Rebuilds the manifest from regular fresh-layout entry files.
+    pub fn rebuild_manifest(&self, identity: &Identity) -> Result<Manifest, StoreError> {
+        let mut manifest = Manifest {
+            version: 1,
+            generation: 0,
+            created: go_zero_time(),
+            updated: go_zero_time(),
+            entries: BTreeMap::new(),
+        };
+        for candidate in entry_candidates(&self.root)? {
+            if !candidate.path.starts_with(self.root.join(ENTRIES_DIR)) {
+                continue;
+            }
+            let bytes = read_regular(&candidate.path)?;
+            let metadata = fs::metadata(&candidate.path).map_err(|source| StoreError::Read {
+                path: candidate.path.clone(),
+                source,
+            })?;
+            manifest.entries.insert(
+                candidate.logical.clone(),
+                ManifestEntry {
+                    sha256: sha256_hex(&bytes),
+                    size: bytes.len() as i64,
+                    mtime: go_zero_time(),
+                },
+            );
+            let _ = metadata;
+        }
+        self.write_manifest(&manifest, identity)?;
+        Ok(manifest)
+    }
+
+    /// Updates one manifest record after a successful entry write.
+    pub fn update_manifest_entry(
+        &self,
+        path: &str,
+        ciphertext: &[u8],
+        identity: &Identity,
+    ) -> Result<(), StoreError> {
+        validate_entry_path(path)?;
+        let mut manifest = match self.load_manifest(identity) {
+            Ok(value) => value,
+            Err(StoreError::Read { source, .. }) if source.kind() == io::ErrorKind::NotFound => {
+                Manifest {
+                    version: 1,
+                    generation: 0,
+                    created: go_zero_time(),
+                    updated: go_zero_time(),
+                    entries: BTreeMap::new(),
+                }
+            }
+            Err(error) => return Err(error),
+        };
+        manifest.entries.insert(
+            path.to_owned(),
+            ManifestEntry {
+                sha256: sha256_hex(ciphertext),
+                size: ciphertext.len() as i64,
+                mtime: go_zero_time(),
+            },
+        );
+        manifest.generation = manifest.generation.saturating_add(1);
+        self.write_manifest(&manifest, identity)
+    }
+
+    /// Removes one manifest record. Missing manifests are a no-op.
+    pub fn remove_manifest_entry(&self, path: &str, identity: &Identity) -> Result<(), StoreError> {
+        let mut manifest = match self.load_manifest(identity) {
+            Ok(value) => value,
+            Err(StoreError::Read { source, .. }) if source.kind() == io::ErrorKind::NotFound => {
+                return Ok(());
+            }
+            Err(error) => return Err(error),
+        };
+        manifest.entries.remove(path);
+        self.write_manifest(&manifest, identity)
+    }
+
+    fn write_manifest(&self, manifest: &Manifest, identity: &Identity) -> Result<(), StoreError> {
+        let mut plaintext =
+            serde_json::to_vec(manifest).map_err(|error| StoreError::Config(error.to_string()))?;
+        let recipient = parse_recipient(&recipient_string(identity))
+            .map_err(|error| StoreError::Decryption(error.to_string()))?;
+        let ciphertext = encrypt(&plaintext, &[recipient])
+            .map_err(|error| StoreError::Decryption(error.to_string()))?;
+        plaintext.zeroize();
+        atomic_replace(&self.root.join(MANIFEST_FILE), &ciphertext)
+    }
+}
+
+fn ensure_directory_recursive(path: &Path) -> Result<(), StoreError> {
+    let mut current = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::RootDir => current.push(Path::new("/")),
+            Component::Normal(name) => {
+                current.push(name);
+                if !current.exists() {
+                    fs::create_dir(&current).map_err(|source| StoreError::Write {
+                        path: current.clone(),
+                        source,
+                    })?;
+                }
+                ensure_directory(&current)?;
+            }
+            Component::CurDir => {}
+            Component::ParentDir | Component::Prefix(_) => {
+                return Err(StoreError::UnsafePath(path.display().to_string()));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn atomic_replace(target: &Path, bytes: &[u8]) -> Result<(), StoreError> {
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let parent = target
+        .parent()
+        .ok_or_else(|| StoreError::UnsafePath(target.display().to_string()))?;
+    ensure_directory(parent)?;
+    let name = target
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| StoreError::UnsafePath(target.display().to_string()))?;
+    match fs::symlink_metadata(target) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            return Err(StoreError::Symlink(target.to_path_buf()));
+        }
+        _ => {}
+    }
+    for _ in 0..32 {
+        let temporary = parent.join(format!(
+            ".{name}.tmp-{}-{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        let result = (|| {
+            let mut file = fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&temporary)
+                .map_err(|source| StoreError::Write {
+                    path: target.to_path_buf(),
+                    source,
+                })?;
+            set_private_permissions(&file).map_err(|source| StoreError::Write {
+                path: target.to_path_buf(),
+                source,
+            })?;
+            file.write_all(bytes).map_err(|source| StoreError::Write {
+                path: target.to_path_buf(),
+                source,
+            })?;
+            file.sync_all().map_err(|source| StoreError::Write {
+                path: target.to_path_buf(),
+                source,
+            })?;
+            drop(file);
+            fs::rename(&temporary, target).map_err(|source| StoreError::Write {
+                path: target.to_path_buf(),
+                source,
+            })
+        })();
+        let _ = fs::remove_file(&temporary);
+        if !matches!(&result, Err(StoreError::Write { source, .. }) if source.kind() == io::ErrorKind::AlreadyExists)
+        {
+            return result;
+        }
+    }
+    Err(StoreError::Write {
+        path: target.to_path_buf(),
+        source: io::Error::new(io::ErrorKind::AlreadyExists, "temporary name exhausted"),
+    })
+}
+
+/// An encrypted, persistent search index. Only encrypted bytes are retained on
+/// disk; plaintext is held transiently while a query is executed.
+#[derive(Debug, Default)]
+pub struct SearchIndex {
+    salt: Vec<u8>,
+    ciphertext: Vec<u8>,
+    doc: Option<IndexDocument>,
+    root: PathBuf,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+struct EmptyIndexValue {}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+struct IndexDocument {
+    #[serde(rename = "v")]
+    values: BTreeMap<String, Vec<String>>,
+    #[serde(rename = "c")]
+    entry_count: usize,
+    #[serde(rename = "p", default)]
+    paths: BTreeMap<String, EmptyIndexValue>,
+    #[serde(rename = "s", default, skip_serializing_if = "Vec::is_empty")]
+    salt: Vec<u8>,
+}
+
+impl SearchIndex {
+    /// Builds and persists an encrypted index from every decryptable entry.
+    pub fn build(store: &Store, identity: &Identity) -> Result<Self, StoreError> {
+        let paths = store.list(identity)?;
+        let mut document = IndexDocument {
+            entry_count: paths.len(),
+            ..Default::default()
+        };
+        for path in &paths {
+            document.paths.insert(path.clone(), EmptyIndexValue {});
+            if let Ok(entry) = store.get(path, identity) {
+                let mut values = Vec::new();
+                for value in entry.data.values() {
+                    collect_index_strings(&mut values, value);
+                }
+                values.sort();
+                if !values.is_empty() {
+                    document.values.insert(path.clone(), values);
+                }
+            }
+        }
+        let mut salt = vec![0u8; 16];
+        getrandom::fill(&mut salt).map_err(|source| StoreError::Write {
+            path: store.root.join(".search-index"),
+            source: io::Error::other(source.to_string()),
+        })?;
+        document.salt = salt.clone();
+        let plaintext =
+            serde_json::to_vec(&document).map_err(|error| StoreError::Config(error.to_string()))?;
+        let encrypted = symvault_crypto::encrypt_index(&plaintext, identity, &salt)
+            .map_err(|error| StoreError::Decryption(error.to_string()))?;
+        let mut bytes = vec![1u8];
+        bytes.extend_from_slice(&salt);
+        bytes.extend_from_slice(&encrypted);
+        atomic_replace(&store.root.join(".search-index"), &bytes)?;
+        Ok(Self {
+            salt,
+            ciphertext: encrypted,
+            doc: Some(document),
+            root: store.root.clone(),
+        })
+    }
+
+    /// Loads a current or legacy encrypted index, rejecting stale indexes.
+    pub fn load(store: &Store, identity: &Identity) -> Result<Option<Self>, StoreError> {
+        let path = store.root.join(".search-index");
+        let raw = match read_regular(&path) {
+            Ok(value) => value,
+            Err(StoreError::Read { source, .. }) if source.kind() == io::ErrorKind::NotFound => {
+                return Ok(None);
+            }
+            Err(error) => return Err(error),
+        };
+        let (salt, ciphertext) = if raw.first() == Some(&1) && raw.len() > 18 {
+            (raw[1..17].to_vec(), raw[17..].to_vec())
+        } else {
+            (Vec::new(), raw)
+        };
+        let plaintext = match symvault_crypto::decrypt_index(&ciphertext, identity, &salt) {
+            Ok(value) => value,
+            Err(_) => {
+                let _ = fs::remove_file(&path);
+                return Ok(None);
+            }
+        };
+        let document: IndexDocument = match serde_json::from_slice(&plaintext) {
+            Ok(value) => value,
+            Err(_) => {
+                let _ = fs::remove_file(&path);
+                return Ok(None);
+            }
+        };
+        if document.entry_count != store.list(identity)?.len() {
+            let _ = fs::remove_file(&path);
+            return Ok(None);
+        }
+        Ok(Some(Self {
+            salt,
+            ciphertext,
+            doc: Some(document),
+            root: store.root.clone(),
+        }))
+    }
+
+    /// Returns matching logical paths for a case-insensitive substring query.
+    pub fn search(
+        &mut self,
+        candidates: &[String],
+        needle: &str,
+    ) -> Result<BTreeSet<String>, StoreError> {
+        if needle.is_empty() {
+            return Ok(BTreeSet::new());
+        }
+        if self.doc.is_none() {
+            let identity_error = StoreError::Config("search index is not loaded".into());
+            return Err(identity_error);
+        }
+        let query = needle.to_lowercase();
+        let allowed: BTreeSet<_> = candidates.iter().cloned().collect();
+        Ok(self
+            .doc
+            .as_ref()
+            .expect("checked above")
+            .values
+            .iter()
+            .filter(|(path, values)| {
+                allowed.contains(*path) && values.iter().any(|value| value.contains(&query))
+            })
+            .map(|(path, _)| path.clone())
+            .collect())
+    }
+
+    /// Removes the persisted index and all transient plaintext.
+    pub fn invalidate(&mut self) -> Result<(), StoreError> {
+        self.doc = None;
+        self.salt.clear();
+        self.ciphertext.zeroize();
+        self.ciphertext.clear();
+        if self.root.as_os_str().is_empty() {
+            return Ok(());
+        }
+        match fs::remove_file(self.root.join(".search-index")) {
+            Ok(()) => Ok(()),
+            Err(source) if source.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(source) => Err(StoreError::Write {
+                path: self.root.join(".search-index"),
+                source,
+            }),
+        }
+    }
+}
+
+fn collect_index_strings(values: &mut Vec<String>, value: &serde_json::Value) {
+    match value {
+        serde_json::Value::String(value) if !value.is_empty() => values.push(value.to_lowercase()),
+        serde_json::Value::Array(values_array) => values_array
+            .iter()
+            .for_each(|value| collect_index_strings(values, value)),
+        serde_json::Value::Object(object) => object
+            .values()
+            .for_each(|value| collect_index_strings(values, value)),
+        _ => {}
     }
 }
 

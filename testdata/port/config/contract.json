@@ -1,0 +1,367 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "caadd5e",
+    "release": "v0.22.1",
+    "source_files": [
+      "internal/clipboard/clipboard.go",
+      "internal/config/config.go",
+      "internal/config/config_load.go",
+      "internal/config/config_merge.go",
+      "internal/config/config_save.go",
+      "internal/config/config_validate.go",
+      "internal/config/paths.go",
+      "internal/config/presets.go",
+      "internal/secureui/secureui.go"
+    ],
+    "source_digest": "61d28fbc7a37dda4b38e720c897e709712192a595fcdf80a72ee64e081c29f68",
+    "generator_digest": "d01604c3811f0279a0b65d9c6356ea432acd11c78d4332cba3eb60e3603dc485"
+  },
+  "cases": [
+    {
+      "name": "defaults",
+      "input": "",
+      "expected": {
+        "vault_dir": "/fixture/root/data/symaira-vault",
+        "default_agent": "default",
+        "session_timeout_ns": 900000000000,
+        "session_max_lifetime_ns": 28800000000000,
+        "auth_method": "passphrase",
+        "use_touch_id": false,
+        "agents": {
+          "claude-code": {
+            "approval_mode": "deny",
+            "allowed_paths": null,
+            "can_write": true,
+            "can_run_commands": true,
+            "expose_value_tools": true,
+            "auto_unseal": false,
+            "require_approval": false,
+            "skill_path": "~/.claude/skills/symvault/SKILL.md"
+          },
+          "codex": {
+            "approval_mode": "deny",
+            "allowed_paths": null,
+            "can_write": false,
+            "can_run_commands": true,
+            "expose_value_tools": true,
+            "auto_unseal": false,
+            "require_approval": false,
+            "skill_path": "~/.codex/skills/symvault/AGENTS.md"
+          },
+          "default": {
+            "approval_mode": "deny",
+            "allowed_paths": null,
+            "can_write": false,
+            "can_run_commands": false,
+            "expose_value_tools": true,
+            "auto_unseal": false,
+            "require_approval": false,
+            "skill_path": ""
+          },
+          "hermes": {
+            "approval_mode": "deny",
+            "allowed_paths": null,
+            "can_write": true,
+            "can_run_commands": true,
+            "expose_value_tools": true,
+            "auto_unseal": false,
+            "require_approval": false,
+            "skill_path": "~/.hermes/skills/symvault/SKILL.md"
+          },
+          "openclaw": {
+            "approval_mode": "deny",
+            "allowed_paths": null,
+            "can_write": true,
+            "can_run_commands": true,
+            "expose_value_tools": true,
+            "auto_unseal": false,
+            "require_approval": false,
+            "skill_path": "~/.openclaw/skills/symvault/SKILL.md"
+          },
+          "opencode": {
+            "approval_mode": "deny",
+            "allowed_paths": null,
+            "can_write": false,
+            "can_run_commands": true,
+            "expose_value_tools": true,
+            "auto_unseal": false,
+            "require_approval": false,
+            "skill_path": "~/.opencode/skills/symvault/SKILL.md"
+          }
+        }
+      },
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/root/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\n"
+    },
+    {
+      "name": "explicit_presence",
+      "input": "vaultDir: /fixture/vault\ndefaultAgent: custom\nsessionTimeout: 30m\nsessionMaxLifetime: 2h\nauthMethod: touchid\nuseTouchID: false\nagents:\n  custom:\n    canWrite: true\n    canRunCommands: true\n    exposeValueTools: false\n    requireApproval: true\n    approvalMode: prompt\n    allowedPaths: [work/*]\nmcp:\n  port: 9090\n  bind: 0.0.0.0\n",
+      "expected": {
+        "vault_dir": "/fixture/vault",
+        "default_agent": "custom",
+        "session_timeout_ns": 1800000000000,
+        "session_max_lifetime_ns": 7200000000000,
+        "auth_method": "touchid",
+        "use_touch_id": true,
+        "agents": {
+          "claude-code": {
+            "approval_mode": "deny",
+            "allowed_paths": null,
+            "can_write": true,
+            "can_run_commands": true,
+            "expose_value_tools": true,
+            "auto_unseal": false,
+            "require_approval": false,
+            "skill_path": "~/.claude/skills/symvault/SKILL.md"
+          },
+          "codex": {
+            "approval_mode": "deny",
+            "allowed_paths": null,
+            "can_write": false,
+            "can_run_commands": true,
+            "expose_value_tools": true,
+            "auto_unseal": false,
+            "require_approval": false,
+            "skill_path": "~/.codex/skills/symvault/AGENTS.md"
+          },
+          "custom": {
+            "approval_mode": "prompt",
+            "allowed_paths": [
+              "work/*"
+            ],
+            "can_write": true,
+            "can_run_commands": true,
+            "expose_value_tools": false,
+            "auto_unseal": false,
+            "require_approval": true,
+            "skill_path": ""
+          },
+          "default": {
+            "approval_mode": "deny",
+            "allowed_paths": null,
+            "can_write": false,
+            "can_run_commands": false,
+            "expose_value_tools": true,
+            "auto_unseal": false,
+            "require_approval": false,
+            "skill_path": ""
+          },
+          "hermes": {
+            "approval_mode": "deny",
+            "allowed_paths": null,
+            "can_write": true,
+            "can_run_commands": true,
+            "expose_value_tools": true,
+            "auto_unseal": false,
+            "require_approval": false,
+            "skill_path": "~/.hermes/skills/symvault/SKILL.md"
+          },
+          "openclaw": {
+            "approval_mode": "deny",
+            "allowed_paths": null,
+            "can_write": true,
+            "can_run_commands": true,
+            "expose_value_tools": true,
+            "auto_unseal": false,
+            "require_approval": false,
+            "skill_path": "~/.openclaw/skills/symvault/SKILL.md"
+          },
+          "opencode": {
+            "approval_mode": "deny",
+            "allowed_paths": null,
+            "can_write": false,
+            "can_run_commands": true,
+            "expose_value_tools": true,
+            "auto_unseal": false,
+            "require_approval": false,
+            "skill_path": "~/.opencode/skills/symvault/SKILL.md"
+          }
+        },
+        "mcp_port": 9090,
+        "mcp_bind": "0.0.0.0"
+      },
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    custom:\n        approvalMode: prompt\n        allowedPaths:\n            - work/*\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: false\n        requireApproval: true\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nmcp:\n    port: 9090\n    bind: 0.0.0.0\n    httpTokenFile: auto\n    read_header_timeout: 5s\n    read_timeout: 10s\n    write_timeout: 10s\n    shutdown_timeout: 5s\n    approval_timeout: 30s\n    rate_limit: 60\n    metrics_auth_required: true\nvaultDir: /fixture/vault\ndefaultAgent: custom\nsessionTimeout: 30m0s\nsessionMaxLifetime: 2h0m0s\nauthMethod: touchid\nuseTouchID: true\n"
+    },
+    {
+      "name": "field_presence_override",
+      "input": "authMethod: passphrase\nuseTouchID: true\nagents:\n  custom:\n    canWrite: false\n    requireApproval: false\n",
+      "expected": {
+        "vault_dir": "/fixture/root/data/symaira-vault",
+        "default_agent": "default",
+        "session_timeout_ns": 900000000000,
+        "session_max_lifetime_ns": 28800000000000,
+        "auth_method": "passphrase",
+        "use_touch_id": false,
+        "agents": {
+          "claude-code": {
+            "approval_mode": "deny",
+            "allowed_paths": null,
+            "can_write": true,
+            "can_run_commands": true,
+            "expose_value_tools": true,
+            "auto_unseal": false,
+            "require_approval": false,
+            "skill_path": "~/.claude/skills/symvault/SKILL.md"
+          },
+          "codex": {
+            "approval_mode": "deny",
+            "allowed_paths": null,
+            "can_write": false,
+            "can_run_commands": true,
+            "expose_value_tools": true,
+            "auto_unseal": false,
+            "require_approval": false,
+            "skill_path": "~/.codex/skills/symvault/AGENTS.md"
+          },
+          "custom": {
+            "approval_mode": "none",
+            "allowed_paths": null,
+            "can_write": false,
+            "can_run_commands": false,
+            "expose_value_tools": true,
+            "auto_unseal": false,
+            "require_approval": false,
+            "skill_path": ""
+          },
+          "default": {
+            "approval_mode": "deny",
+            "allowed_paths": null,
+            "can_write": false,
+            "can_run_commands": false,
+            "expose_value_tools": true,
+            "auto_unseal": false,
+            "require_approval": false,
+            "skill_path": ""
+          },
+          "hermes": {
+            "approval_mode": "deny",
+            "allowed_paths": null,
+            "can_write": true,
+            "can_run_commands": true,
+            "expose_value_tools": true,
+            "auto_unseal": false,
+            "require_approval": false,
+            "skill_path": "~/.hermes/skills/symvault/SKILL.md"
+          },
+          "openclaw": {
+            "approval_mode": "deny",
+            "allowed_paths": null,
+            "can_write": true,
+            "can_run_commands": true,
+            "expose_value_tools": true,
+            "auto_unseal": false,
+            "require_approval": false,
+            "skill_path": "~/.openclaw/skills/symvault/SKILL.md"
+          },
+          "opencode": {
+            "approval_mode": "deny",
+            "allowed_paths": null,
+            "can_write": false,
+            "can_run_commands": true,
+            "expose_value_tools": true,
+            "auto_unseal": false,
+            "require_approval": false,
+            "skill_path": "~/.opencode/skills/symvault/SKILL.md"
+          }
+        }
+      },
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    custom:\n        approvalMode: none\n        canWrite: false\n        exposeValueTools: true\n        requireApproval: false\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/root/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+    },
+    {
+      "name": "unknown_fields_ignored",
+      "input": "unknownTopLevel: ignored\nagents:\n  custom:\n    unknownAgentField: ignored\n    canWrite: true\n",
+      "expected": {
+        "vault_dir": "/fixture/root/data/symaira-vault",
+        "default_agent": "default",
+        "session_timeout_ns": 900000000000,
+        "session_max_lifetime_ns": 28800000000000,
+        "auth_method": "passphrase",
+        "use_touch_id": false,
+        "agents": {
+          "claude-code": {
+            "approval_mode": "deny",
+            "allowed_paths": null,
+            "can_write": true,
+            "can_run_commands": true,
+            "expose_value_tools": true,
+            "auto_unseal": false,
+            "require_approval": false,
+            "skill_path": "~/.claude/skills/symvault/SKILL.md"
+          },
+          "codex": {
+            "approval_mode": "deny",
+            "allowed_paths": null,
+            "can_write": false,
+            "can_run_commands": true,
+            "expose_value_tools": true,
+            "auto_unseal": false,
+            "require_approval": false,
+            "skill_path": "~/.codex/skills/symvault/AGENTS.md"
+          },
+          "custom": {
+            "approval_mode": "",
+            "allowed_paths": null,
+            "can_write": true,
+            "can_run_commands": false,
+            "expose_value_tools": true,
+            "auto_unseal": false,
+            "require_approval": false,
+            "skill_path": ""
+          },
+          "default": {
+            "approval_mode": "deny",
+            "allowed_paths": null,
+            "can_write": false,
+            "can_run_commands": false,
+            "expose_value_tools": true,
+            "auto_unseal": false,
+            "require_approval": false,
+            "skill_path": ""
+          },
+          "hermes": {
+            "approval_mode": "deny",
+            "allowed_paths": null,
+            "can_write": true,
+            "can_run_commands": true,
+            "expose_value_tools": true,
+            "auto_unseal": false,
+            "require_approval": false,
+            "skill_path": "~/.hermes/skills/symvault/SKILL.md"
+          },
+          "openclaw": {
+            "approval_mode": "deny",
+            "allowed_paths": null,
+            "can_write": true,
+            "can_run_commands": true,
+            "expose_value_tools": true,
+            "auto_unseal": false,
+            "require_approval": false,
+            "skill_path": "~/.openclaw/skills/symvault/SKILL.md"
+          },
+          "opencode": {
+            "approval_mode": "deny",
+            "allowed_paths": null,
+            "can_write": false,
+            "can_run_commands": true,
+            "expose_value_tools": true,
+            "auto_unseal": false,
+            "require_approval": false,
+            "skill_path": "~/.opencode/skills/symvault/SKILL.md"
+          }
+        }
+      },
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    custom:\n        canWrite: true\n        exposeValueTools: true\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/root/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n"
+    },
+    {
+      "name": "invalid_empty_bind",
+      "input": "mcp:\n  bind: \"\"\n",
+      "error": "mcp.bind must not be empty"
+    },
+    {
+      "name": "invalid_duration",
+      "input": "sessionTimeout: not-a-duration\n",
+      "error": "yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `not-a-d...` into time.Duration"
+    }
+  ],
+  "platform_cases": null
+}

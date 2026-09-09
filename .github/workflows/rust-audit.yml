@@ -1,0 +1,101 @@
+name: Rust audit differential
+
+on:
+  push:
+    branches: [ main ]
+    # This workflow deliberately has an explicit allowlist rather than inheriting
+    # ci.yml's docs-only paths-ignore. Audit contract edits must execute the
+    # differential gate instead of producing an untested claim.
+    paths:
+      - '.github/workflows/rust-audit.yml'
+      - '.github/workflows/ci.yml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'go.mod'
+      - 'go.sum'
+      - 'rust-toolchain.toml'
+      - 'Makefile'
+      - 'crates/symvault-store/Cargo.toml'
+      - 'crates/symvault-store/src/audit.rs'
+      - 'crates/symvault-store/tests/audit.rs'
+      - 'crates/symvault-store/examples/audit-emit.rs'
+      - 'internal/audit/**'
+      - 'scripts/rust-port/cmd/auditverify/**'
+      - 'testdata/port/audit/**'
+      - 'docs/rust-port/contract-matrix.md'
+      - 'docs/rust-port/work-items.json'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/rust-audit.yml'
+      - '.github/workflows/ci.yml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'go.mod'
+      - 'go.sum'
+      - 'rust-toolchain.toml'
+      - 'Makefile'
+      - 'crates/symvault-store/Cargo.toml'
+      - 'crates/symvault-store/src/audit.rs'
+      - 'crates/symvault-store/tests/audit.rs'
+      - 'crates/symvault-store/examples/audit-emit.rs'
+      - 'internal/audit/**'
+      - 'scripts/rust-port/cmd/auditverify/**'
+      - 'testdata/port/audit/**'
+      - 'docs/rust-port/contract-matrix.md'
+      - 'docs/rust-port/work-items.json'
+  workflow_dispatch:
+  schedule:
+    - cron: '30 6 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOTOOLCHAIN: go1.26.6
+  RUSTUP_TOOLCHAIN: 1.98.0
+
+jobs:
+  audit-native:
+    name: Audit differential (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      # FreeBSD and other targets are intentionally absent: no native runner
+      # evidence exists for them, and cross-compilation is not runtime proof.
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up pinned Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.6'
+          cache: true
+
+      - name: Install pinned Rust toolchain
+        shell: bash
+        run: rustup toolchain install 1.98.0 --profile minimal
+
+      - name: Verify toolchain identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(go env GOVERSION)" = "go1.26.6"
+          test "$(rustc --version | awk '{print $2}')" = "1.98.0"
+
+      - name: Run clean audit differential
+        shell: bash
+        run: |
+          set -euo pipefail
+          make audit-differential
+          test -s target/audit/rust-output.jsonl

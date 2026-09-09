@@ -12,6 +12,7 @@ allow = [
   "MIT",
   "NCSA",
   "Unicode-3.0",
+  "Zlib",
 ]
 
 [bans]
