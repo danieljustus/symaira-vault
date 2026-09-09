@@ -1,33 +1,50 @@
-# Migration resumption checkpoint
+# Rust migration handover — 2026-09-09
 
-## Active revision and ownership
+## Candidate and provenance
 
-- Active verification candidate: branch `migration/storage-recovery-verified`, worktree `.worktrees/storage-recovery-verified`. The original `.worktrees/store-writer-resume-20260908` WIP is preserved unchanged.
-- Base: `e912fcacc9bb4500b579f62a4cc034c0e3ab9859` plus uncommitted changes. Root checkout is preserved.
-- `work-items.json` and `contract-matrix.md` now incorporate the reopened storage statuses from `.worktrees/resume-ledger-20260908`; that worktree retains historical investigation notes, not a competing queue.
-- Tracking: https://github.com/danieljustus/symaira-vault/issues/1019
-- Historical command history: [resumption-evidence.json](resumption-evidence.json). Fresh candidate source hashes and gate results: [storage-recovery-verification.json](storage-recovery-verification.json). Historical evidence does not certify changed source.
+- **Integration candidate before this handover document:** `542175e09d40c2f06a0e1ab2cd0fb412fd8db50b`; it is based on `origin/main` `81210de2720ee000fa26adda4da4080daae01677`.
+- The candidate reconciles the reviewed storage-recovery sequence from stale PR [#1020](https://github.com/danieljustus/symaira-vault/pull/1020) and the clean current-main search-index sequence from draft PR [#1025](https://github.com/danieljustus/symaira-vault/pull/1025). Neither source PR is itself claimed as merged by this document.
+- The original local `47562eda7610db7d6f854f219023f6b97d90f503` is only a source reference for index-wire behavior. Its direct application conflicts with current main; the candidate uses the complete #1025 acceptance sequence instead.
+- During reconstruction a separate checkpoint object (`43010ab28d4fb0448e0b2f3250390d6268dcaa55`) containing other parallel WIP was observed. Its local ref was subsequently absent from the original checkout; do not assume it remains reachable. It is not an input to this candidate and any recovered contents must be reconciled independently, not replayed blindly.
+- Product contract PB-2026-09-09 revision 2 was used as an operational constraint: Vault remains standalone-first; no product, repository, module, Swift, release, or deployment migration is included. The local product-boundary commit `d3df9ee9de4ccecf4f6146993414a41f0d2d0e23` was not asserted to be on `main` and was not modified here.
 
-## Verified bounded implementation
+## Integrated bounded scope
 
-Configured recipients, dotted/nested paths, pseudonymized storage, and eight persisted Go metadata vectors have executable coverage. Single-recipient entry encryption remains distinct from all-recipient entry encryption; manifests use configured recipients.
+The candidate restores and tests the currently commissioned **RUST-005 storage slice**: persisted entry metadata, configured-recipient write behavior, rooted publication/deletion with fault paths, manifest sequencing, deterministic reopen handling, and encrypted search-index wire parity. Relevant public Go consumers remain `internal/vault/entry_readwrite.go`, `manifest.go`, `manifest_updater.go`, and `search.go`; the Rust implementation boundary is `crates/symvault-store` with test-only adapters under `crates/symvault-store/examples/`.
 
-Independent final review `deleg_39090a20` approved the bounded Unix root-acquisition race detector and post-acquisition entry write/delete confinement. The detector compares a no-follow metadata snapshot's device/inode with the opened handle before config parsing. It does not authenticate pathname identity before the snapshot. Replacement holds the parent capability through exclusive temp creation, rename, cleanup and fsync; deletion uses root-relative traversal and unlink. Deterministic regressions cover replacement roots and rejected special targets.
+Data ownership remains the existing vault filesystem: encrypted entry files, manifest metadata, and encrypted search indexes. No productive vault was opened or migrated during verification; all contract tests create isolated temporary roots. There is no new public Rust CLI/MCP/HTTP entry point. The shipped Go CLI/service remains the executable reference and rollback implementation.
 
-After integration, the coordinator reran the full Rust workspace all-target/all-feature tests, strict workspace Clippy, Go `internal/vault` tests, formatting and diff checks successfully. Store tests also passed with eight test threads. Windows GNU strict Clippy establishes compilation only, not native runtime behavior.
+Native helpers and permissions remain outside this slice: `crates/symvault-platform`, macOS keychain/UI/clipboard/LaunchAgent behavior, Windows locking/reparse semantics, and the Swift `client/` bridge are not migrated or changed. This keeps the current boundary compatible with later Brain integration without enlarging MCP privileges or moving master keys.
 
-## Open scope and next task
+## Verification at the candidate source
 
-`RUST-005` remains `in_progress`; its dependent audit/platform/sync and later work remain blocked in the task DAG. Existing implementations are preserved, not discarded.
+Executed on **macOS arm64**, Go `1.26.6`, Rust `1.98.0`, with `GOWORK=off`:
 
-The recovered **RUST-005-MANIFEST-SEQUENCE** implementation now passes the live Go/Rust comparator on macOS: ten cases in both configured layouts, including missing/malformed manifests and integer boundaries. The live writer and encrypted-index acceptance tests also pass. The config-authoritative layout regression passes with conflicting request flags. Fresh workspace tests pass (193 tests, no failures or ignored tests), strict workspace Clippy passes, and Go `internal/vault` tests pass. These are dirty-snapshot diagnostic results, not release acceptance. Next: finish independent final review, address any actual findings, and execute remaining platform/fault-injection gates before promoting RUST-005.
+| Command | Result | Evidence scope |
+| --- | --- | --- |
+| `go test -v -timeout=15m -skip 'TestFlow|TestBinaryE2E|Integration' ./...` | PASS | Go CLI, MCP/error handling, filesystem and process-lifecycle suites; no productive vault paths used. |
+| `go test ./internal/vault -run '^(TestEntryWriterGoRustLiveAcceptance|TestManifestSequenceGoRustDifferential|TestManifestSequenceJSONTransportControls|TestEncryptedIndexGoRustLiveAcceptance)$' -count=1 -timeout=20m -v` | PASS | Live Go↔Rust writer, manifest, transport-control, and encrypted-index contracts. |
+| `go test ./cmd -run '^(TestCmdRun_BrokerWiring|TestCmdRun_WorkingDir)$' -count=1 -v` and `go test ./cmd/crud -run '^TestEditCommand_UpdatesEntry$' -count=1 -v` | PASS | Nested CLI/process output and safe temporary-filesystem behavior. |
+| `cargo test -p symvault-store --all-targets --all-features --locked` | PASS | Rust store unit, audit, root-mutation, and adapter targets. |
+| `cargo nextest run --workspace --all-features --locked` | PASS: 203 tests | Workspace implementation suite. |
+| `make port-contract` | PASS | Frozen Go fixture generation, command/tree and core/crypto differential checks, bounded fuzz smoke. |
+| `make rust-security` | PASS | `cargo audit` plus both workspace and fuzz `cargo deny` checks; duplicate-license warnings were non-fatal. |
+| `make rust-fuzz-smoke rust-miri rust-features rust-coverage rust-version-contract` | PASS | Pinned fuzz smoke, Miri, feature combinations, coverage summary, and all 10 version differential cases. |
+| `golangci-lint run --new-from-rev=origin/main` | PASS: 0 issues | No candidate-introduced Go lint finding. |
+| `go run github.com/securego/gosec/v2/cmd/gosec@v2.22.0 -exclude-generated -exclude-dir=testdata ./...` | PASS: 0 issues | CI-pinned Go SAST version; resolved `google.golang.org/grpc` is `v1.83.2`. |
 
-Reference paths: `internal/vault/entry_readwrite.go`, `manifest.go`, `manifest_updater.go`; Rust `publish_prepared_entry`, `delete_entry`, and manifest helpers in `crates/symvault-store/src/lib.rs`.
+The current local `golangci-lint run` and locally installed gosec `2.29.0` report pre-existing whole-repository findings outside this candidate. They are not treated as new migration regressions; CI uses pinned `gosec v2.22.0` and remains the authoritative protected gate.
 
-Remaining non-claims: complete cross-platform read/list/index/legacy-migration confinement; cross-process writer and cleanup/fsync fault-injection coverage; native Windows, Linux, FreeBSD and iOS evidence; downstream CLI/MCP/HTTP/FFI/value/package/rollback gates. Pseudonymized deletion and manifest bookkeeping have bounded live macOS differential coverage, not a transactionality guarantee: the Go high-level writer deliberately tolerates certain bookkeeping failures. Do not remove Go or publish a release.
+## Deliberate non-claims and blockers
 
-## Recovery discipline
+- `RUST-005` remains **in_progress** in `work-items.json`. The above proves bounded macOS storage behavior; it does not prove all read/list/index/legacy-migration paths, cross-process writer behavior, or full transactionality on every supported platform.
+- Native Windows, Linux, FreeBSD, and iOS runtime evidence is still required. `.github/workflows/rust-store.yml` schedules native Ubuntu/macOS/Windows storage differentials after a push; cross-compilation does not substitute for them.
+- RUST-006 audit, RUST-007 platform/config/session, RUST-008 sync/import/export/intake, and all CLI/MCP/HTTP/FFI/distribution/cutover work remain at their ledger states. Do not promote their matrix rows from the presence of a compiled crate or a fixture projection.
+- The existing Go fallback is mandatory. Reproducible rollback is: start from pinned `origin/main` `81210de2720ee000fa26adda4da4080daae01677`, build the Go CLI with Go 1.26.6, and operate a copy of a Rust-written test vault only after the future `DIST-005` compatibility gate passes. No Go deletion, release, tag, deployment, or productive-store migration is authorized by this checkpoint.
 
-Rejected wrong-base artifacts `b02f1a93` and `3e7c8a8` were not integrated. Acquisition worker commit `3d8d7f9857e923785a7b05da7b9971d4457fc4c2` was created contrary to its no-commit instruction; the coordinator did not cherry-pick it, and integrated only the inspected revised delta. Coordinator changes remain uncommitted.
+## Handover operating notes
 
-Use `GOTOOLCHAIN=go1.26.6`, `GOWORK=off`, and an explicit `CARGO_TARGET_DIR` pointing to `.worktrees/storage-recovery-verified/target`. Pass the absolute candidate Cargo manifest path; never inherit a different worker's target directory. Verify current branches, source hashes and tests before continuing; recorded results are not native evidence for other targets.
+- Work only from a clean, named candidate branch; retain the Go reference and use the checked-in fixture generators rather than copied behavior.
+- Record each native CI run against its exact head SHA before changing matrix status. A configured workflow is not evidence of execution.
+- Preserve any re-discovered parallel worktrees/branches and the checkpoint object above. Do not reset, clean, delete, or bulk-commit them.
+- **Conclusion at this checkpoint:** `STABILER TEILSTAND, MIGRATION NOCH OFFEN`. The storage/index candidate is suitable as a behavior-preserving module-move input only after its native CI matrix passes; it is not release-, cutover-, or consolidation-ready.
