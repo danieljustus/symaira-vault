@@ -29,6 +29,20 @@ var searchIndexAdapterBuild struct {
 	err  error
 }
 
+func cargoTargetDir(repo string) string {
+	target := os.Getenv("CARGO_TARGET_DIR")
+	if target == "" {
+		return filepath.Join(repo, "target")
+	}
+	if !filepath.IsAbs(target) {
+		// Cargo resolves a relative CARGO_TARGET_DIR from its working directory
+		// (repo below); make the adapter path absolute before invoking it from
+		// the Go package test process.
+		return filepath.Join(repo, target)
+	}
+	return target
+}
+
 func searchIndexAdapter(t testing.TB) string {
 	t.Helper()
 	searchIndexAdapterBuildOnce.Do(func() {
@@ -38,7 +52,7 @@ func searchIndexAdapter(t testing.TB) string {
 			return
 		}
 		repo := filepath.Clean(filepath.Join(filepath.Dir(file), "../.."))
-		target := filepath.Join(repo, "target", "search-index-adapter")
+		target := cargoTargetDir(repo)
 		if err := os.MkdirAll(target, 0o700); err != nil {
 			searchIndexAdapterBuild.err = err
 			return
@@ -61,6 +75,24 @@ func searchIndexAdapter(t testing.TB) string {
 }
 
 var searchIndexAdapterBuildOnce = new(sync.Once)
+
+func TestCargoTargetDirResolution(t *testing.T) {
+	repo := filepath.Join(string(filepath.Separator)+"tmp", "vault repo")
+	for _, tc := range []struct {
+		name, env, want string
+	}{
+		{name: "unset", want: filepath.Join(repo, "target")},
+		{name: "relative", env: filepath.Join("external", "target dir"), want: filepath.Join(repo, "external", "target dir")},
+		{name: "absolute with spaces", env: filepath.Join(string(filepath.Separator)+"tmp", "external target dir"), want: filepath.Join(string(filepath.Separator)+"tmp", "external target dir")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("CARGO_TARGET_DIR", tc.env)
+			if got := cargoTargetDir(repo); got != tc.want {
+				t.Fatalf("cargoTargetDir(%q) = %q, want %q", tc.env, got, tc.want)
+			}
+		})
+	}
+}
 
 func runSearchIndexAdapterExpectError(t testing.TB, binary, root, identity, action, caseID string, extra ...string) {
 	t.Helper()

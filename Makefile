@@ -9,6 +9,8 @@ GOLANGCI_LINT_VERSION := v2.11.4
 GO_TOOLCHAIN ?= go1.26.6
 # Keep harness binary paths aligned with Cargo's externally provided target dir.
 CARGO_TARGET_DIR ?= target
+# Cargo must receive command-line overrides through the environment too.
+export CARGO_TARGET_DIR
 MIRI_TOOLCHAIN := nightly-2026-09-03
 MIRI_TARGET_DIR := target/miri-2026-09-03
 MIRI_FLAGS := -Zmiri-disable-isolation
@@ -353,7 +355,7 @@ rust-version-contract:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) build -ldflags "-s -w -X main.version=$(PORT_CONTRACT_VERSION) -X main.commit=none -X main.date=unknown" -o $(PORT_GO_BINARY) .
 	SYMVAULT_VERSION=$(PORT_CONTRACT_VERSION) $(CARGO) build -p symvault-cli --bin symvault --locked
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/diffharness \
-		--left ./$(PORT_GO_BINARY) --right ./$(RUST_BINARY) \
+		--left "$(PORT_GO_BINARY)" --right "$(RUST_BINARY)" \
 		--cases $(PORT_CLI_CASES) --stage version
 
 store-reopen-fixture:
