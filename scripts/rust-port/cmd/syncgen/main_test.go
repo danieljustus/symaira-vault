@@ -3,10 +3,18 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"runtime"
 	"testing"
 )
 
 func TestPinnedSyncOracleIsRepeatable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// The frozen v0.22.1 Go oracle writes filepath-native tar member names
+		// and its restore path rejects those backslashes. Current backup output
+		// is covered by TestCreateBackup_NormalizesTarMemberSeparators; do not
+		// pretend the historical oracle has Windows parity it never had.
+		t.Skip("frozen Go oracle archive case is not portable on Windows")
+	}
 	first, err := runOracle(rootDir())
 	if err != nil {
 		t.Fatalf("first pinned oracle run: %v", err)
