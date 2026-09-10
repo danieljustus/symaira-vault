@@ -1,6 +1,6 @@
 # Symaira product and execution boundaries
 
-**Contract ID: PB-2026-09-09. Revision: 2 (Scope → Brain; Cockpit-only naming). Status: accepted target architecture; implementation pending.**
+**Contract ID: PB-2026-09-09. Revision: 3 (Browse source-intake sequencing). Status: accepted target architecture; implementation pending.**
 
 This decision governs product ownership, optional modules, credential UI, distribution and migration gates. It does not claim that code has moved or a replacement UI has shipped. Existing commands, data formats and supported releases remain valid until their explicit cutovers.
 
@@ -23,7 +23,7 @@ A human-facing UI and an agent-facing API may coexist in any product. Data owner
 
 ## 2. Browse, Operate and Scope belong to Brain
 
-**Browse remains actively developed.** Its target source/release ownership is Brain, as an optional web module. Static fetch, browser engines, sessions, human handoff, extraction and automation retain explicit internal boundaries. Do not retire Browse merely because a harness includes browser tools. Keep the current Browse repository and `symbrowse` distribution operational until the replacement and compatibility gates pass.
+**Browse remains actively developed.** Its target source/release ownership is Brain, as an optional web module. Static fetch, browser engines, sessions, human handoff, extraction and automation retain explicit internal boundaries. Do not retire Browse merely because a harness includes browser tools. The migration proceeds in sequenced stages, mirroring the Operate/Scope pattern: a pinned-commit source intake into `symaira-brain/browse/` first, as an independently-buildable, non-consumer-wired receiving package (see `browse/SOURCE_PROVENANCE.md`) — this intake step alone satisfies none of the gates in §8 below and is not a cutover. Only after intake, and only once every §8 gate is separately verified, does the current Browse repository, its `symbrowse` distribution, Homebrew tap entry and `go install` path retire in favor of the Brain-hosted copy. Until then, the current Browse repository and `symbrowse` distribution remain the operational, supported route.
 
 **Operate is retained as an optional Brain module.** Its target source ownership moves from Cockpit to Brain. This decision supersedes the earlier proposal to discontinue Operate's generic driver development. It does not require replacing its implementation with Cua Driver, nor forbids a later evidence-backed backend adapter. External computer-use tools remain valid alternatives; no mandatory Hermes or Cua dependency is introduced.
 
@@ -88,6 +88,8 @@ Harness changes must be previewable, backed up, idempotent and restricted to sel
 Disabling/uninstalling a module stops its workers and revokes relevant grants; it does not delete credentials, documents, browser profiles or recovery material by default. Updates and rollback preserve data and ownership.
 
 ## 8. Cutover gates and non-goals
+
+A module's source-code intake into Brain (see §2) is preparatory and satisfies none of the gates below by itself; do not treat intake as cutover-readiness.
 
 A docs-only update records this target; it does not complete any cutover. Avoid coupling a source/repository move with unverified backend, protocol, storage and identifier changes in one step.
 
