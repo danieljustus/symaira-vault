@@ -13,9 +13,10 @@ import (
 )
 
 const (
-	migrationMarker    = ".migrated"
-	migrationStateFile = ".migration-state.json"
-	migrationBackupDir = ".migration-backup"
+	migrationMarker        = ".migrated"
+	migrationStateFile     = ".migration-state.json"
+	migrationBackupDir     = ".migration-backup"
+	migrationKindDirectory = "directory"
 )
 
 // MigrationItem describes one source/destination pair without exposing data.
@@ -100,7 +101,7 @@ func appendMigrationItems(plan *MigrationPlan, base, rel, dst string) error {
 		return fmt.Errorf("refusing symlink: %s", rel)
 	}
 	if info.IsDir() {
-		plan.Items = append(plan.Items, MigrationItem{Source: src, Destination: dst, Kind: "directory"})
+		plan.Items = append(plan.Items, MigrationItem{Source: src, Destination: dst, Kind: migrationKindDirectory})
 		return filepath.WalkDir(src, func(path string, entry fs.DirEntry, walkErr error) error {
 			if walkErr != nil {
 				return walkErr
@@ -119,7 +120,7 @@ func appendMigrationItems(plan *MigrationPlan, base, rel, dst string) error {
 			kind := "file"
 			var size int64
 			if entry.IsDir() {
-				kind = "directory"
+				kind = migrationKindDirectory
 			} else {
 				fi, err := entry.Info()
 				if err != nil {
@@ -186,7 +187,7 @@ func MigrateLegacyToXDG() (bool, error) {
 		if !isTopLevelMigrationItem(plan.Items, item) {
 			continue
 		}
-		if item.Kind == "directory" {
+		if item.Kind == migrationKindDirectory {
 			if _, err := os.Lstat(item.Destination); err == nil {
 				return false, fmt.Errorf("destination collision: %s", item.Destination)
 			}
@@ -222,7 +223,7 @@ func MigrateLegacyToXDG() (bool, error) {
 
 func isTopLevelMigrationItem(items []MigrationItem, candidate MigrationItem) bool {
 	for _, item := range items {
-		if item.Kind == "directory" && item.Source != candidate.Source && strings.HasPrefix(candidate.Source, item.Source+string(filepath.Separator)) {
+		if item.Kind == migrationKindDirectory && item.Source != candidate.Source && strings.HasPrefix(candidate.Source, item.Source+string(filepath.Separator)) {
 			return false
 		}
 	}
@@ -271,17 +272,17 @@ func copyEntry(src, dst string) error {
 		return fmt.Errorf("refusing symlink: %s", src)
 	}
 	if info.IsDir() {
-		if err := os.MkdirAll(dst, 0o700); err != nil {
-			return err
+		if mkdirErr := os.MkdirAll(dst, 0o700); mkdirErr != nil {
+			return mkdirErr
 		}
 		_ = os.Chmod(dst, 0o700)
-		entries, err := os.ReadDir(src)
-		if err != nil {
-			return err
+		entries, readErr := os.ReadDir(src)
+		if readErr != nil {
+			return readErr
 		}
 		for _, e := range entries {
-			if err := copyEntry(filepath.Join(src, e.Name()), filepath.Join(dst, e.Name())); err != nil {
-				return err
+			if copyErr := copyEntry(filepath.Join(src, e.Name()), filepath.Join(dst, e.Name())); copyErr != nil {
+				return copyErr
 			}
 		}
 		return nil
@@ -290,11 +291,11 @@ func copyEntry(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
-		return err
+	if mkdirErr := os.MkdirAll(filepath.Dir(dst), 0o700); mkdirErr != nil {
+		return mkdirErr
 	}
-	if err := os.WriteFile(dst, data, 0o600); err != nil {
-		return err
+	if writeErr := os.WriteFile(dst, data, 0o600); writeErr != nil {
+		return writeErr
 	}
 	_ = os.Chmod(dst, 0o600)
 	got, err := os.ReadFile(dst)
@@ -304,7 +305,7 @@ func copyEntry(src, dst string) error {
 	return nil
 }
 
-func writeJSONAtomic(path string, value any, mode os.FileMode) error {
+func writeJSONAtomic(path string, value any, mode os.FileMode) (returnErr error) {
 	var data []byte
 	var err error
 	if b, ok := value.([]byte); ok {
@@ -320,21 +321,29 @@ func writeJSONAtomic(path string, value any, mode os.FileMode) error {
 		return err
 	}
 	name := tmp.Name()
-	defer os.Remove(name)
+	defer func() {
+		if removeErr := os.Remove(name); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) && returnErr == nil {
+			returnErr = fmt.Errorf("remove temporary migration state: %w", removeErr)
+		}
+	}()
 	if err := tmp.Chmod(mode); err != nil {
-		tmp.Close()
-		return err
+		return closeMigrationTemp(tmp, err)
 	}
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return err
+		return closeMigrationTemp(tmp, err)
 	}
 	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return err
+		return closeMigrationTemp(tmp, err)
 	}
 	if err := tmp.Close(); err != nil {
 		return err
 	}
 	return os.Rename(name, path)
+}
+
+func closeMigrationTemp(tmp *os.File, operationErr error) error {
+	if closeErr := tmp.Close(); closeErr != nil {
+		return fmt.Errorf("%w; close temporary migration state: %w", operationErr, closeErr)
+	}
+	return operationErr
 }
