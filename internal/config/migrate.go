@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -380,77 +379,7 @@ func migrationPhase(phase string) error {
 }
 
 func copyEntry(src, dst string) error {
-	info, err := os.Lstat(src)
-	if err != nil {
-		return err
-	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("refusing symlink: %s", src)
-	}
-	if info.IsDir() {
-		if err := fsutil.SafeMkdirAll(filepath.Dir(dst), 0o700); err != nil {
-			return err
-		}
-		// Destination directories are created exclusively. Never merge into an
-		// existing directory: doing so would make ownership and recovery
-		// ambiguous, and would reintroduce a check-then-use race.
-		if err := os.Mkdir(dst, 0o700); err != nil {
-			return err
-		}
-		entries, err := os.ReadDir(src)
-		if err != nil {
-			return err
-		}
-		for _, e := range entries {
-			if err := copyEntry(filepath.Join(src, e.Name()), filepath.Join(dst, e.Name())); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
-
-	// Open the source with O_NOFOLLOW on Unix, then read from that descriptor.
-	// This closes the Lstat-to-ReadFile symlink race at the source boundary.
-	file, err := openMigrationSource(src)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	openedInfo, err := file.Stat()
-	if err != nil {
-		return err
-	}
-	if !openedInfo.Mode().IsRegular() {
-		return fmt.Errorf("refusing non-regular source: %s", src)
-	}
-	data, err := io.ReadAll(io.LimitReader(file, maxMigrationBytes+1))
-	if err != nil {
-		return err
-	}
-	if int64(len(data)) > maxMigrationBytes {
-		return fmt.Errorf("source exceeds migration size limit: %s", src)
-	}
-	// O_EXCL makes the destination decision atomic: a concurrent creator or
-	// symlink is an error, never an overwrite or traversal.
-	if err := fsutil.SafeMkdirAll(filepath.Dir(dst), 0o700); err != nil {
-		return err
-	}
-	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		return err
-	}
-	written, writeErr := out.Write(data)
-	closeErr := out.Close()
-	if writeErr != nil {
-		return writeErr
-	}
-	if closeErr != nil {
-		return closeErr
-	}
-	if written != len(data) {
-		return io.ErrShortWrite
-	}
-	return nil
+	return secureCopyEntry(src, dst)
 }
 
 func writeJSONAtomic(path string, value any) (returnErr error) {
