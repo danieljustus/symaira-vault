@@ -45,6 +45,24 @@ func TestApprovalTLSCertFileRejectsMTLSWithoutLocalClientIdentity(t *testing.T) 
 	}
 }
 
+func TestApprovalTLSCertFilePrefersRunningMTLSState(t *testing.T) {
+	dir := t.TempDir()
+	customCert := filepath.Join(t.TempDir(), "running-server.crt")
+	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte("mcp:\n  mtls_enabled: true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := cli.SaveRuntimeTLSCert(dir, customCert, false); err != nil {
+		t.Fatal(err)
+	}
+	got, err := approvalTLSCertFile(dir)
+	if err != nil {
+		t.Fatalf("approvalTLSCertFile() error = %v, want runtime state to win", err)
+	}
+	if got != customCert {
+		t.Fatalf("approvalTLSCertFile() = %q, want runtime certificate %q", got, customCert)
+	}
+}
+
 func TestApprovalTLSCertFileUsesRunningServerOverride(t *testing.T) {
 	dir := t.TempDir()
 	customCert := filepath.Join(t.TempDir(), "flag-server.crt")

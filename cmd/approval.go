@@ -174,16 +174,19 @@ func approvalAPIRequest(method, path string, result any) error {
 // Configured certificate/key pairs take precedence over the vault-generated
 // pair, matching serverbootstrap's effective TLS configuration.
 func approvalTLSCertFile(vaultDir string) (string, error) {
-	cfg, err := configpkg.Load(filepath.Join(vaultDir, "config.yaml"))
-	if err == nil && cfg != nil && cfg.MCP != nil {
-		if cfg.MCP.MTLSEnabled || cli.RuntimeTLSClientAuthRequired(vaultDir) {
-			return "", fmt.Errorf("approval CLI cannot connect while MCP.mtls_enabled=true because no local approval client certificate is configured; use an enrolled approval device instead")
-		}
-	}
-	// The running server publishes its effective certificate because --tls-cert
-	// and --tls-key are process-local overrides and need not be in config.yaml.
+	// The running server publishes its effective TLS settings. Treat this
+	// process-local record as authoritative: config.yaml may describe a later
+	// or earlier server configuration, while the CLI must match the listener it
+	// is actually contacting.
 	if cert, ok := cli.LoadRuntimeTLSCert(vaultDir); ok {
+		if cli.RuntimeTLSClientAuthRequired(vaultDir) {
+			return "", fmt.Errorf("approval CLI cannot connect while the running MCP server requires mTLS because no local approval client certificate is configured; use an enrolled approval device instead")
+		}
 		return cert, nil
+	}
+	cfg, err := configpkg.Load(filepath.Join(vaultDir, "config.yaml"))
+	if err == nil && cfg != nil && cfg.MCP != nil && cfg.MCP.MTLSEnabled {
+		return "", fmt.Errorf("approval CLI cannot connect while MCP.mtls_enabled=true because no local approval client certificate is configured; use an enrolled approval device instead")
 	}
 	if cfg != nil && cfg.MCP != nil {
 		cert := strings.TrimSpace(cfg.MCP.TLSCertFile)

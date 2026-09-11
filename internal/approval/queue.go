@@ -72,10 +72,15 @@ const DefaultTTL = 5 * time.Minute
 type Queue struct {
 	mu       sync.Mutex
 	entries  map[string]*Entry
-	waiters  map[string][]chan Outcome
+	waiters  map[string][]chan waitResult
 	ttl      time.Duration
 	closed   bool
 	notifier chan struct{}
+}
+
+type waitResult struct {
+	outcome Outcome
+	err     error
 }
 
 // NewQueue creates a queue with the default TTL.
@@ -88,7 +93,7 @@ func NewQueueWithTTL(ttl time.Duration) *Queue {
 	}
 	return &Queue{
 		entries:  map[string]*Entry{},
-		waiters:  map[string][]chan Outcome{},
+		waiters:  map[string][]chan waitResult{},
 		ttl:      ttl,
 		notifier: make(chan struct{}, 1),
 	}
@@ -191,7 +196,7 @@ func (q *Queue) decide(id string, status Status, decidedBy string) (Outcome, err
 	e.DecidedAt = now
 	e.DecidedBy = decidedBy
 	out := Outcome{ID: id, Status: status, DecidedAt: now, DecidedBy: decidedBy}
-	q.wakeLocked(id, out)
+	q.wakeLocked(id, waitResult{outcome: out})
 	q.poke()
 	return out, nil
 }
@@ -201,7 +206,7 @@ func (q *Queue) decide(id string, status Status, decidedBy string) (Outcome, err
 // Wait self-enforces Entry.ExpiresAt with its own timer so waiters unblock
 // without external polling.
 func (q *Queue) Wait(ctx context.Context, id string) (Outcome, error) {
-	ch := make(chan Outcome, 1)
+	ch := make(chan waitResult, 1)
 	q.mu.Lock()
 	if q.closed {
 		q.mu.Unlock()
@@ -233,15 +238,15 @@ func (q *Queue) Wait(ctx context.Context, id string) (Outcome, error) {
 			e.Status = StatusExpired
 			e.DecidedAt = e.ExpiresAt
 			out := Outcome{ID: id, Status: StatusExpired, DecidedAt: e.ExpiresAt}
-			q.wakeLocked(id, out)
+			q.wakeLocked(id, waitResult{outcome: out})
 			q.poke()
 		}
 	})
 
 	select {
-	case out := <-ch:
+	case result := <-ch:
 		expiryTimer.Stop()
-		return out, nil
+		return result.outcome, result.err
 	case <-ctx.Done():
 		q.mu.Lock()
 		q.removeWaiterLocked(id, ch)
@@ -301,7 +306,7 @@ func (q *Queue) reapLocked() int {
 			e.Status = StatusExpired
 			e.DecidedAt = e.ExpiresAt
 			out := Outcome{ID: id, Status: StatusExpired, DecidedAt: e.ExpiresAt}
-			q.wakeLocked(id, out)
+			q.wakeLocked(id, waitResult{outcome: out})
 			expired++
 		} else if e.Status == StatusExpired {
 			expired++
@@ -326,7 +331,7 @@ func (q *Queue) Close() {
 		if e.Status == StatusPending {
 			e.Status = StatusExpired
 			e.DecidedAt = time.Now().UTC()
-			q.wakeLocked(id, Outcome{ID: id, Status: StatusExpired, DecidedAt: e.DecidedAt})
+			q.wakeLocked(id, waitResult{outcome: Outcome{ID: id, Status: StatusExpired, DecidedAt: e.DecidedAt}, err: ErrClosed})
 		}
 	}
 	q.poke()
@@ -337,17 +342,17 @@ func (q *Queue) Close() {
 // updates to approval devices.
 func (q *Queue) Notify() <-chan struct{} { return q.notifier }
 
-func (q *Queue) wakeLocked(id string, out Outcome) {
+func (q *Queue) wakeLocked(id string, result waitResult) {
 	for _, ch := range q.waiters[id] {
 		select {
-		case ch <- out:
+		case ch <- result:
 		default:
 		}
 	}
 	q.waiters[id] = nil
 }
 
-func (q *Queue) removeWaiterLocked(id string, ch chan Outcome) {
+func (q *Queue) removeWaiterLocked(id string, ch chan waitResult) {
 	ws := q.waiters[id]
 	for i, w := range ws {
 		if w == ch {
