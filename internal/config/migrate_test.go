@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -253,5 +254,86 @@ func assertDirExists(t *testing.T, path string) {
 	}
 	if !info.IsDir() {
 		t.Errorf("%s is a file, want a directory", path)
+	}
+}
+
+func TestPreviewLegacyToXDG_IsNonMutatingAndComplete(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "cfg"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "data"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, "cache"))
+	legacy := filepath.Join(home, LegacyVaultSubdir)
+	writeTestFile(t, filepath.Join(legacy, "config.yaml"), "secret: value")
+	writeTestFile(t, filepath.Join(legacy, "vault", "identity.age"), "identity")
+	before, _ := os.ReadDir(home)
+	plan, err := PreviewLegacyToXDG()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !plan.NeedsMigration || len(plan.Items) != 3 {
+		t.Fatalf("plan = %+v, want migration with 3 items", plan)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".migration-state.json")); !os.IsNotExist(err) {
+		t.Fatal("preview created state")
+	}
+	after, _ := os.ReadDir(home)
+	if len(before) != len(after) {
+		t.Fatal("preview mutated HOME")
+	}
+}
+
+func TestMigrateLegacyToXDG_InterruptionRecovery(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "cfg"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "data"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, "cache"))
+	legacy := filepath.Join(home, LegacyVaultSubdir)
+	writeTestFile(t, filepath.Join(legacy, "config.yaml"), "stable")
+	calls := 0
+	MigrationPhaseHook = func(phase string) error {
+		if phase == "published" {
+			calls++
+			if calls == 1 {
+				return errors.New("injected interruption")
+			}
+		}
+		return nil
+	}
+	t.Cleanup(func() { MigrationPhaseHook = nil })
+	if _, err := MigrateLegacyToXDG(); err == nil {
+		t.Fatal("interrupted migration succeeded")
+	}
+	if _, err := os.Stat(filepath.Join(legacy, migrationStateFile)); err != nil {
+		t.Fatalf("state marker missing: %v", err)
+	}
+	MigrationPhaseHook = nil
+	migrated, err := MigrateLegacyToXDG()
+	if err != nil || !migrated {
+		t.Fatalf("recovery rerun = %v, %v", migrated, err)
+	}
+	assertFileContent(t, filepath.Join(home, "cfg", "symaira-vault", "config.yaml"), "stable")
+	assertFileExists(t, filepath.Join(legacy, migrationMarker))
+}
+
+func TestMigrateLegacyToXDG_RejectsSymlinkSource(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "cfg"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "data"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, "cache"))
+	legacy := filepath.Join(home, LegacyVaultSubdir)
+	if err := os.MkdirAll(legacy, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(home, "outside"), filepath.Join(legacy, "vault")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := MigrateLegacyToXDG(); err == nil {
+		t.Fatal("symlink source was accepted")
+	}
+	if _, err := os.Stat(filepath.Join(home, "data")); !os.IsNotExist(err) {
+		t.Fatal("symlink rejection created destination")
 	}
 }
