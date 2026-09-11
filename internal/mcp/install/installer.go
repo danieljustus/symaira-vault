@@ -47,6 +47,9 @@ func Install(opts InstallOptions) (*Result, error) {
 	}
 
 	rw, err := GetReaderWriter(opts.Format)
+	if tomlRW, ok := rw.(*TOMLConfigRW); ok {
+		tomlRW.SetManagedEntry(rootKeyOrDefault(opts.RootKey, def.RootKey), serverKeyOrDefault(opts.ServerKey, def.ServerKey))
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -56,14 +59,8 @@ func Install(opts InstallOptions) (*Result, error) {
 		return nil, err
 	}
 
-	rootKey := opts.RootKey
-	if rootKey == "" {
-		rootKey = def.RootKey
-	}
-	serverKey := opts.ServerKey
-	if serverKey == "" {
-		serverKey = def.ServerKey
-	}
+	rootKey := rootKeyOrDefault(opts.RootKey, def.RootKey)
+	serverKey := serverKeyOrDefault(opts.ServerKey, def.ServerKey)
 
 	updatedConfig, changed := InjectServerConfig(existingConfig, rootKey, serverKey, opts.ServerConfig)
 
@@ -101,6 +98,20 @@ func Install(opts InstallOptions) (*Result, error) {
 	}
 
 	return result, nil
+}
+
+func rootKeyOrDefault(value, fallback string) string {
+	if value != "" {
+		return value
+	}
+	return fallback
+}
+
+func serverKeyOrDefault(value, fallback string) string {
+	if value != "" {
+		return value
+	}
+	return fallback
 }
 
 // BackupConfig creates a backup of the existing config file before modification.

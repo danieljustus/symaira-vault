@@ -592,3 +592,184 @@ func TestPreviewConfig(t *testing.T) {
 		}
 	})
 }
+
+func TestTOMLInstallPreservesUnmanagedContent(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "config.toml")
+	original := `# Keep this comment.
+[editor]
+# Preserve arrays, inline tables, strings, booleans, and numbers.
+plugins = ["one", "two"]
+options = {theme = "dark", retries = 3}
+name = "a=b # not a comment"
+enabled = true
+count = 7
+
+[mcp.symvault]
+# The managed table may be reformatted.
+url = "http://old.example/mcp"
+
+[mcp.other]
+# This section must remain byte-for-byte unchanged.
+command = "other"
+args = ["--keep", "value"]
+`
+	if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Install(InstallOptions{
+		AgentType: AgentOpenCode, Format: FormatTOML, ConfigPath: path,
+		ServerConfig: map[string]any{"url": "http://new.example/mcp", "enabled": true},
+	})
+	if err != nil {
+		t.Fatalf("install error: %v", err)
+	}
+	if !result.WasUpdated {
+		t.Fatal("expected existing config to be updated")
+	}
+	updated, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(updated)
+	for _, want := range []string{
+		"# Keep this comment.", "plugins = [\"one\", \"two\"]",
+		`options = {theme = "dark", retries = 3}`, `name = "a=b # not a comment"`,
+		"enabled = true\ncount = 7", "[mcp.other]", "# This section must remain byte-for-byte unchanged.",
+		`args = ["--keep", "value"]`, "url = 'http://new.example/mcp'",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("updated TOML missing %q:\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, "http://old.example/mcp") {
+		t.Fatal("old managed value survived")
+	}
+	otherStart := strings.Index(text, "[mcp.other]")
+	originalOtherStart := strings.Index(original, "[mcp.other]")
+	if otherStart < 0 || originalOtherStart < 0 || text[otherStart:] != original[originalOtherStart:] {
+		t.Fatal("unmanaged section changed")
+	}
+	second, err := Install(InstallOptions{
+		AgentType: AgentOpenCode, Format: FormatTOML, ConfigPath: path,
+		ServerConfig: map[string]any{"url": "http://new.example/mcp", "enabled": true},
+	})
+	if err != nil {
+		t.Fatalf("second install error: %v", err)
+	}
+	if !second.WasUnchanged {
+		t.Fatal("expected repeated install to be idempotent")
+	}
+	repeated, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(repeated) != text {
+		t.Fatal("repeated install changed file bytes")
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("permissions = %o, want 600", got)
+	}
+}
+
+func TestTOMLReadRejectsMalformedWithoutOverwrite(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "config.toml")
+	original := []byte("[mcp.symvault\nurl = \"broken\"\n")
+	if err := os.WriteFile(path, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Install(InstallOptions{
+		AgentType: AgentOpenCode, Format: FormatTOML, ConfigPath: path,
+		ServerConfig: map[string]any{"url": "http://new.example/mcp"},
+	})
+	if err == nil {
+		t.Fatal("expected malformed TOML error")
+	}
+	got, readErr := os.ReadFile(path)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(got) != string(original) {
+		t.Fatalf("malformed config was overwritten: %q", got)
+	}
+}
+
+func TestTOMLManagedHeaderVariants(t *testing.T) {
+	tests := []struct {
+		name     string
+		original string
+		want     string
+		wantErr  bool
+	}{
+		{
+			name:     "trailing comment",
+			original: "[mcp.symvault] # managed by symvault\nurl = \"old\"\n[mcp.other]\nkeep = true\n",
+			want:     "[mcp.symvault]\nurl = 'new'\n[mcp.other]\nkeep = true\n",
+		},
+		{
+			name:     "quoted dotted header",
+			original: "[\"mcp\".\"symvault\"] # quoted\nurl = \"old\"\n[mcp.other]\nkeep = true\n",
+			want:     "[mcp.symvault]\nurl = 'new'\n[mcp.other]\nkeep = true\n",
+		},
+		{
+			name:     "array of tables",
+			original: "[[mcp.symvault]]\nurl = \"old\"\n",
+			wantErr:  true,
+		},
+		{
+			name:     "inline managed table",
+			original: "mcp = { symvault = { url = \"old\" }, other = { keep = true } }\n",
+			wantErr:  true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.toml")
+			before := []byte(tt.original)
+			if err := os.WriteFile(path, before, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			_, err := Install(InstallOptions{AgentType: AgentOpenCode, Format: FormatTOML, ConfigPath: path, ServerConfig: map[string]any{"url": "new"}})
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("error = %v, wantErr %v", err, tt.wantErr)
+			}
+			got, readErr := os.ReadFile(path)
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			if tt.wantErr {
+				if string(got) != string(before) {
+					t.Fatalf("unsafe syntax changed original: %q", got)
+				}
+			} else if string(got) != tt.want {
+				t.Fatalf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTOMLPreservesCRLFAndNoFinalNewline(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	original := "# keep\r\n[mcp.symvault] # comment\r\nurl = \"old\""
+	if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Install(InstallOptions{AgentType: AgentOpenCode, Format: FormatTOML, ConfigPath: path, ServerConfig: map[string]any{"url": "new"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "# keep\r\n[mcp.symvault]\r\nurl = 'new'"
+	if string(got) != want {
+		t.Fatalf("got bytes %q, want %q", got, want)
+	}
+}
