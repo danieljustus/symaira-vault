@@ -196,21 +196,22 @@ func MigrateLegacyToXDG() (bool, error) {
 		if !isTopLevelMigrationItem(plan.Items, item) {
 			continue
 		}
-		// Journal ownership before copying. A recursive copy can fail after
-		// creating a partial destination; recovery must then know it owns it.
-		state.Published = append(state.Published, item.Destination)
-		if err := writeJSONAtomic(statePath, state); err != nil {
-			return false, err
-		}
-		if err := migrationPhase("published"); err != nil {
-			return false, err
-		}
 		if err := validateMigrationDestination(item.Destination, plan); err != nil {
 			return false, err
 		}
 		if _, err := os.Lstat(item.Destination); err == nil {
 			return false, fmt.Errorf("destination collision: %s", item.Destination)
 		} else if !errors.Is(err, os.ErrNotExist) {
+			return false, err
+		}
+		// Journal only after confirming the destination is absent. A recursive copy
+		// can fail after creating a partial destination; recovery must then know it
+		// owns that new destination, but never a pre-existing user destination.
+		state.Published = append(state.Published, item.Destination)
+		if err := writeJSONAtomic(statePath, state); err != nil {
+			return false, err
+		}
+		if err := migrationPhase("published"); err != nil {
 			return false, err
 		}
 		if err := copyEntry(item.Source, item.Destination); err != nil {

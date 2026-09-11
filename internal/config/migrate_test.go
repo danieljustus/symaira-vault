@@ -317,6 +317,28 @@ func TestMigrateLegacyToXDG_InterruptionRecovery(t *testing.T) {
 	assertFileExists(t, filepath.Join(legacy, migrationMarker))
 }
 
+func TestMigrateLegacyToXDG_CollisionPreservesExistingDestination(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "cfg"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "data"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, "cache"))
+	legacy := filepath.Join(home, LegacyVaultSubdir)
+	writeTestFile(t, filepath.Join(legacy, "config.yaml"), "legacy")
+	destination := filepath.Join(home, "cfg", ConfigSubdir, "config.yaml")
+	writeTestFile(t, destination, "user data")
+
+	if _, err := MigrateLegacyToXDG(); err == nil {
+		t.Fatal("migration accepted an existing destination")
+	}
+	assertFileContent(t, destination, "user data")
+
+	if _, err := MigrateLegacyToXDG(); err == nil {
+		t.Fatal("retry accepted an existing destination")
+	}
+	assertFileContent(t, destination, "user data")
+}
+
 func TestMigrateLegacyToXDG_RejectsSymlinkSource(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
