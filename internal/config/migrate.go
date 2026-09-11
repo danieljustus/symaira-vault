@@ -245,7 +245,7 @@ func RecoverLegacyToXDGMigration() error {
 		return err
 	}
 	statePath := filepath.Join(home, LegacyVaultSubdir, migrationStateFile)
-	data, err := os.ReadFile(statePath)
+	data, err := os.ReadFile(statePath) // #nosec G304 -- statePath is the fixed migration journal below the legacy vault directory.
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil
@@ -363,7 +363,10 @@ func copyEntry(src, dst string) error {
 		if mkdirErr := os.MkdirAll(dst, 0o700); mkdirErr != nil {
 			return mkdirErr
 		}
-		_ = os.Chmod(dst, 0o700)
+		// #nosec G302 -- owner-only directories require execute/search permission.
+		if chmodErr := os.Chmod(dst, 0o700); chmodErr != nil {
+			return fmt.Errorf("set migration directory permissions: %w", chmodErr)
+		}
 		entries, readErr := os.ReadDir(src)
 		if readErr != nil {
 			return readErr
@@ -375,7 +378,7 @@ func copyEntry(src, dst string) error {
 		}
 		return nil
 	}
-	data, err := os.ReadFile(src)
+	data, err := os.ReadFile(src) // #nosec G304 -- src is an enumerated legacy migration path and symlinks are rejected before copying.
 	if err != nil {
 		return err
 	}
@@ -385,8 +388,10 @@ func copyEntry(src, dst string) error {
 	if writeErr := os.WriteFile(dst, data, 0o600); writeErr != nil {
 		return writeErr
 	}
-	_ = os.Chmod(dst, 0o600)
-	got, err := os.ReadFile(dst)
+	if chmodErr := os.Chmod(dst, 0o600); chmodErr != nil {
+		return fmt.Errorf("set migration file permissions: %w", chmodErr)
+	}
+	got, err := os.ReadFile(dst) // #nosec G304 -- dst is a validated XDG migration destination written immediately above.
 	if err != nil || !bytes.Equal(got, data) {
 		return fmt.Errorf("verification failed for %s", dst)
 	}
