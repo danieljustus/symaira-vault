@@ -129,7 +129,7 @@ func approvalAPIRequest(method, path string, result any) error {
 	if err != nil {
 		return fmt.Errorf("load server TLS certificate: %w", err)
 	}
-	pemBytes, err := os.ReadFile(certFile)
+	pemBytes, err := os.ReadFile(certFile) // #nosec G304 -- serverbootstrap reads the same configured certificate; bytes are parsed locally and never emitted.
 	if err != nil {
 		return fmt.Errorf("read server TLS certificate: %w", err)
 	}
