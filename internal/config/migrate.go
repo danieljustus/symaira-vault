@@ -1,15 +1,17 @@
 package config
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/danieljustus/symaira-vault/internal/fsutil"
 )
 
 const (
@@ -17,6 +19,8 @@ const (
 	migrationStateFile     = ".migration-state.json"
 	migrationBackupDir     = ".migration-backup"
 	migrationKindDirectory = "directory"
+	maxMigrationItems      = 100_000
+	maxMigrationBytes      = 1 << 30
 )
 
 // MigrationItem describes one source/destination pair without exposing data.
@@ -32,6 +36,7 @@ type MigrationPlan struct {
 	LegacyDir      string          `json:"legacy_dir"`
 	Items          []MigrationItem `json:"items"`
 	NeedsMigration bool            `json:"needs_migration"`
+	totalBytes     int64
 }
 
 type migrationState struct {
@@ -102,7 +107,9 @@ func appendMigrationItems(plan *MigrationPlan, base, rel, dst string) error {
 		return fmt.Errorf("refusing symlink: %s", rel)
 	}
 	if info.IsDir() {
-		plan.Items = append(plan.Items, MigrationItem{Source: src, Destination: dst, Kind: migrationKindDirectory})
+		if err := addMigrationItem(plan, MigrationItem{Source: src, Destination: dst, Kind: migrationKindDirectory}); err != nil {
+			return err
+		}
 		return filepath.WalkDir(src, func(path string, entry fs.DirEntry, walkErr error) error {
 			if walkErr != nil {
 				return walkErr
@@ -129,7 +136,9 @@ func appendMigrationItems(plan *MigrationPlan, base, rel, dst string) error {
 				}
 				size = fi.Size()
 			}
-			plan.Items = append(plan.Items, MigrationItem{Source: path, Destination: target, Kind: kind, Bytes: size})
+			if err := addMigrationItem(plan, MigrationItem{Source: path, Destination: target, Kind: kind, Bytes: size}); err != nil {
+				return err
+			}
 			return nil
 		})
 	}
@@ -137,10 +146,22 @@ func appendMigrationItems(plan *MigrationPlan, base, rel, dst string) error {
 }
 
 func appendFileItem(plan *MigrationPlan, src, dst string, info os.FileInfo) error {
-	return func() error {
-		plan.Items = append(plan.Items, MigrationItem{Source: src, Destination: dst, Kind: "file", Bytes: info.Size()})
-		return nil
-	}()
+	return addMigrationItem(plan, MigrationItem{Source: src, Destination: dst, Kind: "file", Bytes: info.Size()})
+}
+
+func addMigrationItem(plan *MigrationPlan, item MigrationItem) error {
+	if len(plan.Items) >= maxMigrationItems {
+		return fmt.Errorf("migration exceeds item limit (%d)", maxMigrationItems)
+	}
+	if item.Bytes < 0 || item.Bytes > maxMigrationBytes {
+		return fmt.Errorf("migration file exceeds size limit: %s", item.Source)
+	}
+	if item.Bytes > maxMigrationBytes-plan.totalBytes {
+		return fmt.Errorf("migration exceeds size limit (%d bytes)", maxMigrationBytes)
+	}
+	plan.Items = append(plan.Items, item)
+	plan.totalBytes += item.Bytes
+	return nil
 }
 
 // MigrateLegacyToXDG performs a verified, recoverable migration. Source data is retained.
@@ -166,7 +187,7 @@ func MigrateLegacyToXDG() (bool, error) {
 		return false, fmt.Errorf("create backup: %w", err)
 	}
 	for _, item := range plan.Items {
-		if item.Source == filepath.Join(plan.LegacyDir, migrationMarker) {
+		if !isTopLevelMigrationItem(plan.Items, item) {
 			continue
 		}
 		rel, _ := filepath.Rel(plan.LegacyDir, item.Source)
@@ -203,6 +224,9 @@ func MigrateLegacyToXDG() (bool, error) {
 			return false, fmt.Errorf("destination collision: %s", item.Destination)
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return false, err
+		}
+		if err := fsutil.SafeMkdirAll(filepath.Dir(item.Destination), 0o700); err != nil {
+			return false, fmt.Errorf("create destination parent: %w", err)
 		}
 		// Journal only after confirming the destination is absent. A recursive copy
 		// can fail after creating a partial destination; recovery must then know it
@@ -283,6 +307,9 @@ func RecoverLegacyToXDGMigration() error {
 			return err
 		}
 	}
+	if err := os.RemoveAll(state.BackupDir); err != nil {
+		return fmt.Errorf("remove migration backup: %w", err)
+	}
 	return os.Remove(statePath)
 }
 
@@ -361,40 +388,67 @@ func copyEntry(src, dst string) error {
 		return fmt.Errorf("refusing symlink: %s", src)
 	}
 	if info.IsDir() {
-		if mkdirErr := os.MkdirAll(dst, 0o700); mkdirErr != nil {
-			return mkdirErr
+		if err := fsutil.SafeMkdirAll(filepath.Dir(dst), 0o700); err != nil {
+			return err
 		}
-		// #nosec G302 -- owner-only directories require execute/search permission.
-		if chmodErr := os.Chmod(dst, 0o700); chmodErr != nil {
-			return fmt.Errorf("set migration directory permissions: %w", chmodErr)
+		// Destination directories are created exclusively. Never merge into an
+		// existing directory: doing so would make ownership and recovery
+		// ambiguous, and would reintroduce a check-then-use race.
+		if err := os.Mkdir(dst, 0o700); err != nil {
+			return err
 		}
-		entries, readErr := os.ReadDir(src)
-		if readErr != nil {
-			return readErr
+		entries, err := os.ReadDir(src)
+		if err != nil {
+			return err
 		}
 		for _, e := range entries {
-			if copyErr := copyEntry(filepath.Join(src, e.Name()), filepath.Join(dst, e.Name())); copyErr != nil {
-				return copyErr
+			if err := copyEntry(filepath.Join(src, e.Name()), filepath.Join(dst, e.Name())); err != nil {
+				return err
 			}
 		}
 		return nil
 	}
-	data, err := os.ReadFile(src) // #nosec G304 -- src is an enumerated legacy migration path and symlinks are rejected before copying.
+
+	// Open the source with O_NOFOLLOW on Unix, then read from that descriptor.
+	// This closes the Lstat-to-ReadFile symlink race at the source boundary.
+	file, err := openMigrationSource(src)
 	if err != nil {
 		return err
 	}
-	if mkdirErr := os.MkdirAll(filepath.Dir(dst), 0o700); mkdirErr != nil {
-		return mkdirErr
+	defer file.Close()
+	openedInfo, err := file.Stat()
+	if err != nil {
+		return err
 	}
-	if writeErr := os.WriteFile(dst, data, 0o600); writeErr != nil {
+	if !openedInfo.Mode().IsRegular() {
+		return fmt.Errorf("refusing non-regular source: %s", src)
+	}
+	data, err := io.ReadAll(io.LimitReader(file, maxMigrationBytes+1))
+	if err != nil {
+		return err
+	}
+	if int64(len(data)) > maxMigrationBytes {
+		return fmt.Errorf("source exceeds migration size limit: %s", src)
+	}
+	// O_EXCL makes the destination decision atomic: a concurrent creator or
+	// symlink is an error, never an overwrite or traversal.
+	if err := fsutil.SafeMkdirAll(filepath.Dir(dst), 0o700); err != nil {
+		return err
+	}
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
+	written, writeErr := out.Write(data)
+	closeErr := out.Close()
+	if writeErr != nil {
 		return writeErr
 	}
-	if chmodErr := os.Chmod(dst, 0o600); chmodErr != nil {
-		return fmt.Errorf("set migration file permissions: %w", chmodErr)
+	if closeErr != nil {
+		return closeErr
 	}
-	got, err := os.ReadFile(dst) // #nosec G304 -- dst is a validated XDG migration destination written immediately above.
-	if err != nil || !bytes.Equal(got, data) {
-		return fmt.Errorf("verification failed for %s", dst)
+	if written != len(data) {
+		return io.ErrShortWrite
 	}
 	return nil
 }
