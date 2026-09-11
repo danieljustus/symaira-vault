@@ -203,17 +203,6 @@ func replaceManagedTOML(original []byte, rootKey, serverKey string, data map[str
 	return []byte(sb.String()), nil
 }
 
-// parseTOML parses a TOML string into a nested map for compatibility with
-// existing package users. Invalid input is represented as an empty map; file
-// reads use toml.Unmarshal and return the parse error.
-func parseTOML(input string) map[string]any {
-	var result map[string]any
-	if err := toml.Unmarshal([]byte(input), &result); err != nil || result == nil {
-		return make(map[string]any)
-	}
-	return result
-}
-
 // renderTOML renders a nested Go map as TOML.
 func renderTOML(data map[string]any, _ int) string {
 	out, err := toml.Marshal(data)
