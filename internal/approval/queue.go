@@ -28,29 +28,29 @@ const (
 
 // Request describes one pending approval.
 type Request struct {
-	AgentName string
-	Path      string
-	Write     bool
-	Reason    string
-	CreatedAt time.Time
-	ExpiresAt time.Time
+	AgentName string    `json:"agent_name"`
+	Path      string    `json:"path"`
+	Write     bool      `json:"write"`
+	Reason    string    `json:"reason"`
+	CreatedAt time.Time `json:"created_at"`
+	ExpiresAt time.Time `json:"expires_at"`
 }
 
 // Entry is a request plus its current state.
 type Entry struct {
 	Request
-	ID        string
-	Status    Status
-	DecidedAt time.Time
-	DecidedBy string
+	ID        string    `json:"id"`
+	Status    Status    `json:"status"`
+	DecidedAt time.Time `json:"decided_at,omitempty"`
+	DecidedBy string    `json:"decided_by,omitempty"`
 }
 
 // Outcome is the result of waiting on a request.
 type Outcome struct {
-	ID        string
-	Status    Status
-	DecidedAt time.Time
-	DecidedBy string
+	ID        string    `json:"id"`
+	Status    Status    `json:"status"`
+	DecidedAt time.Time `json:"decided_at,omitempty"`
+	DecidedBy string    `json:"decided_by,omitempty"`
 }
 
 // ErrNotFound is returned when no request with the id exists.

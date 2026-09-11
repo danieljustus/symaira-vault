@@ -81,6 +81,7 @@ func RunHTTPServerWithApproval(ctx context.Context, bind string, port int, vault
 
 	return serverbootstrap.RunHTTPServer(ctx, bind, port, vault, vaultDir, Version, newServerWithApproval,
 		serverbootstrap.WithApprovalAPI(approvalHandler),
+		serverbootstrap.WithLocalApprovalAPI(approval.NewLocalHTTPHandler(ApprovalQueue, enrollSecret, mcputil.IsLoopbackHost)),
 		serverbootstrap.WithDeviceEnrollAPI(enrollHandler),
 		serverbootstrap.WithDeviceEnrollCodeAPI(enrollCodeHandler))
 }
