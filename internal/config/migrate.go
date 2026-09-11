@@ -186,7 +186,7 @@ func MigrateLegacyToXDG() (bool, error) {
 			state.Planned = append(state.Planned, item.Destination)
 		}
 	}
-	if err := writeJSONAtomic(statePath, state, 0o600); err != nil {
+	if err := writeJSONAtomic(statePath, state); err != nil {
 		return false, err
 	}
 	if err := migrationPhase("state-published"); err != nil {
@@ -199,7 +199,7 @@ func MigrateLegacyToXDG() (bool, error) {
 		// Journal ownership before copying. A recursive copy can fail after
 		// creating a partial destination; recovery must then know it owns it.
 		state.Published = append(state.Published, item.Destination)
-		if err := writeJSONAtomic(statePath, state, 0o600); err != nil {
+		if err := writeJSONAtomic(statePath, state); err != nil {
 			return false, err
 		}
 		if err := migrationPhase("published"); err != nil {
@@ -220,7 +220,7 @@ func MigrateLegacyToXDG() (bool, error) {
 	if err := migrationPhase("verified"); err != nil {
 		return false, err
 	}
-	if err := writeJSONAtomic(filepath.Join(plan.LegacyDir, migrationMarker), []byte("migration complete\n"), 0o600); err != nil {
+	if err := writeJSONAtomic(filepath.Join(plan.LegacyDir, migrationMarker), []byte("migration complete\n")); err != nil {
 		return false, err
 	}
 	if err := os.Remove(statePath); err != nil {
@@ -393,7 +393,7 @@ func copyEntry(src, dst string) error {
 	return nil
 }
 
-func writeJSONAtomic(path string, value any, mode os.FileMode) (returnErr error) {
+func writeJSONAtomic(path string, value any) (returnErr error) {
 	var data []byte
 	var err error
 	if b, ok := value.([]byte); ok {
@@ -414,7 +414,7 @@ func writeJSONAtomic(path string, value any, mode os.FileMode) (returnErr error)
 			returnErr = fmt.Errorf("remove temporary migration state: %w", removeErr)
 		}
 	}()
-	if err := tmp.Chmod(mode); err != nil {
+	if err := tmp.Chmod(0o600); err != nil {
 		return closeMigrationTemp(tmp, err)
 	}
 	if _, err := tmp.Write(data); err != nil {

@@ -351,7 +351,7 @@ func TestMigrateLegacyToXDG_RecoveryRejectsTamperedDestination(t *testing.T) {
 		t.Fatal(err)
 	}
 	state := migrationState{Version: 1, BackupDir: backup, Published: []string{filepath.Join(home, "unrelated")}}
-	if err := writeJSONAtomic(filepath.Join(legacy, migrationStateFile), state, 0o600); err != nil {
+	if err := writeJSONAtomic(filepath.Join(legacy, migrationStateFile), state); err != nil {
 		t.Fatal(err)
 	}
 	unrelated := filepath.Join(home, "unrelated")
