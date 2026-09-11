@@ -176,9 +176,16 @@ func approvalAPIRequest(method, path string, result any) error {
 func approvalTLSCertFile(vaultDir string) (string, error) {
 	cfg, err := configpkg.Load(filepath.Join(vaultDir, "config.yaml"))
 	if err == nil && cfg != nil && cfg.MCP != nil {
-		if cfg.MCP.MTLSEnabled {
+		if cfg.MCP.MTLSEnabled || cli.RuntimeTLSClientAuthRequired(vaultDir) {
 			return "", fmt.Errorf("approval CLI cannot connect while MCP.mtls_enabled=true because no local approval client certificate is configured; use an enrolled approval device instead")
 		}
+	}
+	// The running server publishes its effective certificate because --tls-cert
+	// and --tls-key are process-local overrides and need not be in config.yaml.
+	if cert, ok := cli.LoadRuntimeTLSCert(vaultDir); ok {
+		return cert, nil
+	}
+	if cfg != nil && cfg.MCP != nil {
 		cert := strings.TrimSpace(cfg.MCP.TLSCertFile)
 		key := strings.TrimSpace(cfg.MCP.TLSKeyFile)
 		if cert != "" && key != "" {

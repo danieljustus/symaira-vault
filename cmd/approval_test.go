@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	cli "github.com/danieljustus/symaira-vault/internal/cli"
 )
 
 func TestApprovalTLSCertFileUsesConfiguredCertificate(t *testing.T) {
@@ -40,5 +42,23 @@ func TestApprovalTLSCertFileRejectsMTLSWithoutLocalClientIdentity(t *testing.T) 
 	const want = "approval CLI cannot connect while MCP.mtls_enabled=true because no local approval client certificate is configured; use an enrolled approval device instead"
 	if got := err.Error(); got != want {
 		t.Fatalf("approvalTLSCertFile() error = %q, want %q", got, want)
+	}
+}
+
+func TestApprovalTLSCertFileUsesRunningServerOverride(t *testing.T) {
+	dir := t.TempDir()
+	customCert := filepath.Join(t.TempDir(), "flag-server.crt")
+	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte("mcp:\n  tls_cert_file: config.crt\n  tls_key_file: config.key\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := cli.SaveRuntimeTLSCert(dir, customCert); err != nil {
+		t.Fatal(err)
+	}
+	got, err := approvalTLSCertFile(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != customCert {
+		t.Fatalf("approvalTLSCertFile() = %q, want runtime override %q", got, customCert)
 	}
 }

@@ -10,7 +10,10 @@ import (
 	"strings"
 )
 
-const RuntimePortFileName = ".runtime-port"
+const (
+	RuntimePortFileName = ".runtime-port"
+	RuntimeTLSFileName  = ".runtime-tls-cert"
+)
 
 // runtimePortFile is the on-disk shape written by SaveRuntimePort. Bind is
 // omitted by callers that don't have a bind address to record.
@@ -83,6 +86,72 @@ func LoadRuntimeServer(vaultDir string) (port int, bind string, ok bool) {
 		return 0, "", false
 	}
 	return p, "", true
+}
+
+// SaveRuntimeTLSCert records the certificate path used by the running HTTP
+// server. It is intentionally separate from the port file: the server may use
+// a command-line certificate override that is not persisted in config.yaml.
+// The file is private to the vault directory and contains no key material.
+func SaveRuntimeTLSCert(vaultDir, certFile string, clientAuthRequired ...bool) error {
+	cleanDir := filepath.Clean(vaultDir)
+	path := filepath.Join(cleanDir, RuntimeTLSFileName)
+	if !strings.HasPrefix(filepath.Clean(path), cleanDir+string(filepath.Separator)) {
+		return fmt.Errorf("invalid TLS certificate file path: outside vault directory")
+	}
+	if strings.TrimSpace(certFile) == "" {
+		return fmt.Errorf("TLS certificate file path must not be empty")
+	}
+	data, err := json.Marshal(struct {
+		Certificate        string `json:"certificate"`
+		ClientAuthRequired bool   `json:"client_auth_required,omitempty"`
+	}{Certificate: certFile, ClientAuthRequired: len(clientAuthRequired) > 0 && clientAuthRequired[0]})
+	if err != nil {
+		return fmt.Errorf("marshal runtime TLS certificate file: %w", err)
+	}
+	return os.WriteFile(path, data, 0600)
+}
+
+// LoadRuntimeTLSCert returns the certificate path recorded by the running
+// server, if any. Invalid or missing records are treated as unavailable.
+func LoadRuntimeTLSCert(vaultDir string) (string, bool) {
+	cleanDir := filepath.Clean(vaultDir)
+	path := filepath.Join(cleanDir, RuntimeTLSFileName)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", false
+	}
+	var record struct {
+		Certificate        string `json:"certificate"`
+		ClientAuthRequired bool   `json:"client_auth_required"`
+	}
+	if err := json.Unmarshal(data, &record); err != nil || strings.TrimSpace(record.Certificate) == "" {
+		return "", false
+	}
+	return strings.TrimSpace(record.Certificate), true
+}
+
+// RuntimeTLSClientAuthRequired reports whether the running server requires
+// a client certificate for its TLS connection.
+func RuntimeTLSClientAuthRequired(vaultDir string) bool {
+	cleanDir := filepath.Clean(vaultDir)
+	data, err := os.ReadFile(filepath.Join(cleanDir, RuntimeTLSFileName))
+	if err != nil {
+		return false
+	}
+	var record struct {
+		ClientAuthRequired bool `json:"client_auth_required"`
+	}
+	return json.Unmarshal(data, &record) == nil && record.ClientAuthRequired
+}
+
+// ClearRuntimeTLSCert removes the running server's certificate record.
+func ClearRuntimeTLSCert(vaultDir string) error {
+	cleanDir := filepath.Clean(vaultDir)
+	path := filepath.Join(cleanDir, RuntimeTLSFileName)
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 // LoadRuntimePort returns the persisted port, discarding the bind address.

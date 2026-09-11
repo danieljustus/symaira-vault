@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
@@ -207,6 +208,26 @@ func runServe(cmd *cobra.Command, args []string) error {
 			vault.Config.MCP.MTLSEnabled = true
 		}
 	}
+	// Publish the effective custom certificate for local approval CLI clients.
+	// CLI flag overrides live only in this process and are not persisted to
+	// config.yaml; the private runtime record is the discovery contract.
+	_ = cli.ClearRuntimeTLSCert(vaultDir)
+	if !stdioFlag && vault != nil && vault.Config != nil && vault.Config.MCP != nil {
+		effectiveCert := strings.TrimSpace(vault.Config.MCP.TLSCertFile)
+		effectiveKey := strings.TrimSpace(vault.Config.MCP.TLSKeyFile)
+		if effectiveCert != "" && effectiveKey != "" {
+			// Resolve relative paths while the server's process working directory
+			// is still in effect; the CLI may run from a different directory.
+			runtimeCert, absErr := filepath.Abs(effectiveCert)
+			if absErr != nil {
+				runtimeCert = effectiveCert
+			}
+			if saveErr := cli.SaveRuntimeTLSCert(vaultDir, runtimeCert, vault.Config.MCP.MTLSEnabled); saveErr != nil {
+				cliout.Warnf("Warning: could not save runtime TLS certificate: %v", saveErr)
+			}
+		}
+	}
+
 	if !stdioFlag && vault != nil && vault.Config != nil && vault.Config.MCP != nil && vault.Config.MCP.AllowInsecureBind {
 		cliout.Warnf("MCP.allow_insecure_bind is enabled. Bearer tokens will travel in cleartext and are vulnerable to loopback sniffing by local processes.")
 		confirmed, confirmErr := confirmServeInsecure()
@@ -283,6 +304,7 @@ func runServe(cmd *cobra.Command, args []string) error {
 		wg.Wait()
 		if vDir, err := cli.VaultPath(); err == nil {
 			_ = cli.ClearRuntimePort(vDir)
+			_ = cli.ClearRuntimeTLSCert(vDir)
 		}
 		return nil
 	}
