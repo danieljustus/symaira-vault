@@ -38,6 +38,7 @@ type migrationState struct {
 	Version   int      `json:"version"`
 	BackupDir string   `json:"backup_dir"`
 	Published []string `json:"published"`
+	Planned   []string `json:"planned"`
 }
 
 // MigrationPhaseHook is used by tests to inject an interruption between phases.
@@ -177,6 +178,14 @@ func MigrateLegacyToXDG() (bool, error) {
 		return false, err
 	}
 	state := migrationState{Version: 1, BackupDir: backup}
+	for _, item := range plan.Items {
+		if isTopLevelMigrationItem(plan.Items, item) {
+			if err := validateMigrationDestination(item.Destination, plan); err != nil {
+				return false, err
+			}
+			state.Planned = append(state.Planned, item.Destination)
+		}
+	}
 	if err := writeJSONAtomic(statePath, state, 0o600); err != nil {
 		return false, err
 	}
@@ -187,25 +196,24 @@ func MigrateLegacyToXDG() (bool, error) {
 		if !isTopLevelMigrationItem(plan.Items, item) {
 			continue
 		}
-		if item.Kind == migrationKindDirectory {
-			if _, err := os.Lstat(item.Destination); err == nil {
-				return false, fmt.Errorf("destination collision: %s", item.Destination)
-			}
-			if err := copyEntry(item.Source, item.Destination); err != nil {
-				return false, err
-			}
-		} else if _, err := os.Lstat(item.Destination); errors.Is(err, os.ErrNotExist) {
-			if err := copyEntry(item.Source, item.Destination); err != nil {
-				return false, err
-			}
-		} else {
-			return false, fmt.Errorf("destination collision: %s", item.Destination)
-		}
+		// Journal ownership before copying. A recursive copy can fail after
+		// creating a partial destination; recovery must then know it owns it.
 		state.Published = append(state.Published, item.Destination)
 		if err := writeJSONAtomic(statePath, state, 0o600); err != nil {
 			return false, err
 		}
 		if err := migrationPhase("published"); err != nil {
+			return false, err
+		}
+		if err := validateMigrationDestination(item.Destination, plan); err != nil {
+			return false, err
+		}
+		if _, err := os.Lstat(item.Destination); err == nil {
+			return false, fmt.Errorf("destination collision: %s", item.Destination)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return false, err
+		}
+		if err := copyEntry(item.Source, item.Destination); err != nil {
 			return false, err
 		}
 	}
@@ -248,12 +256,92 @@ func RecoverLegacyToXDGMigration() error {
 	if err := json.Unmarshal(data, &state); err != nil {
 		return fmt.Errorf("invalid migration state: %w", err)
 	}
+	plan, planErr := PreviewLegacyToXDG()
+	if planErr != nil {
+		return fmt.Errorf("inspect migration plan: %w", planErr)
+	}
+	if !plan.NeedsMigration || state.Version != 1 || filepath.Clean(state.BackupDir) != filepath.Join(plan.LegacyDir, migrationBackupDir) {
+		return errors.New("refusing recovery for stale or invalid migration state")
+	}
+	expected := make(map[string]bool, len(plan.Items))
+	for _, item := range plan.Items {
+		if isTopLevelMigrationItem(plan.Items, item) {
+			expected[item.Destination] = true
+		}
+	}
+	for _, path := range state.Published {
+		if !expected[path] {
+			return fmt.Errorf("refusing recovery of unexpected destination: %s", path)
+		}
+		if err := validateMigrationDestination(path, plan); err != nil {
+			return err
+		}
+	}
 	for i := len(state.Published) - 1; i >= 0; i-- {
 		if err := os.RemoveAll(state.Published[i]); err != nil {
 			return err
 		}
 	}
 	return os.Remove(statePath)
+}
+
+func validateMigrationDestination(path string, plan MigrationPlan) error {
+	clean := filepath.Clean(path)
+	allowed := false
+	for _, item := range plan.Items {
+		if isTopLevelMigrationItem(plan.Items, item) && filepath.Clean(item.Destination) == clean {
+			allowed = true
+			break
+		}
+	}
+	if !allowed || !filepath.IsAbs(clean) {
+		return fmt.Errorf("refusing unsafe migration destination: %s", path)
+	}
+	for _, root := range []string{DefaultConfigDir(), DefaultDataDir(), DefaultCacheDir()} {
+		root = filepath.Clean(root)
+		rel, err := filepath.Rel(root, clean)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			continue
+		}
+		if err := rejectSymlinkComponents(root, clean); err != nil {
+			return err
+		}
+		return nil
+	}
+	return fmt.Errorf("refusing destination outside XDG roots: %s", path)
+}
+
+func rejectSymlinkComponents(root, path string) error {
+	root = filepath.Clean(root)
+	// Check the configured XDG home and the application directory below it;
+	// system ancestors such as macOS's /var symlink are outside our root.
+	if parent := filepath.Dir(root); filepath.Base(parent) != "." {
+		if info, err := os.Lstat(parent); err == nil && info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("refusing symlink XDG root: %s", parent)
+		}
+	}
+	if info, err := os.Lstat(root); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("refusing symlink XDG root: %s", root)
+	}
+	rel, _ := filepath.Rel(root, filepath.Clean(path))
+	cur := root
+	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+		if part == "." || part == "" {
+			continue
+		}
+		cur = filepath.Join(cur, part)
+		info, err := os.Lstat(cur)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("refusing symlink destination component: %s", cur)
+		}
+	}
+	return nil
 }
 
 func migrationPhase(phase string) error {

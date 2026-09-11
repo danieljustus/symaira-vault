@@ -337,3 +337,83 @@ func TestMigrateLegacyToXDG_RejectsSymlinkSource(t *testing.T) {
 		t.Fatal("symlink rejection created destination")
 	}
 }
+
+func TestMigrateLegacyToXDG_RecoveryRejectsTamperedDestination(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "cfg"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "data"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, "cache"))
+	legacy := filepath.Join(home, LegacyVaultSubdir)
+	writeTestFile(t, filepath.Join(legacy, "config.yaml"), "stable")
+	backup := filepath.Join(legacy, migrationBackupDir)
+	if err := os.MkdirAll(backup, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	state := migrationState{Version: 1, BackupDir: backup, Published: []string{filepath.Join(home, "unrelated")}}
+	if err := writeJSONAtomic(filepath.Join(legacy, migrationStateFile), state, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	unrelated := filepath.Join(home, "unrelated")
+	writeTestFile(t, filepath.Join(unrelated, "keep"), "user data")
+	if err := RecoverLegacyToXDGMigration(); err == nil {
+		t.Fatal("tampered recovery state was accepted")
+	}
+	assertFileContent(t, filepath.Join(unrelated, "keep"), "user data")
+}
+
+func TestMigrateLegacyToXDG_RecoveryRejectsSymlinkRoot(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "cfg-link"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "data"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, "cache"))
+	legacy := filepath.Join(home, LegacyVaultSubdir)
+	writeTestFile(t, filepath.Join(legacy, "config.yaml"), "stable")
+	outside := filepath.Join(home, "outside")
+	if err := os.MkdirAll(outside, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(home, "cfg-link")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := MigrateLegacyToXDG(); err == nil {
+		t.Fatal("symlink XDG root was accepted")
+	}
+	if _, err := os.Stat(filepath.Join(outside, "symaira-vault")); !os.IsNotExist(err) {
+		t.Fatal("symlink target was modified")
+	}
+}
+
+func TestMigrateLegacyToXDG_RecoveryRemovesPartialCopy(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "cfg"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "data"))
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(home, "cache"))
+	legacy := filepath.Join(home, LegacyVaultSubdir)
+	writeTestFile(t, filepath.Join(legacy, "vault", "identity.age"), "identity")
+	interrupted := false
+	MigrationPhaseHook = func(phase string) error {
+		if phase == "published" && !interrupted {
+			interrupted = true
+			dst := filepath.Join(home, "data", DataSubdir, "vault")
+			writeTestFile(t, filepath.Join(dst, "partial"), "partial")
+			return errors.New("injected copy crash")
+		}
+		return nil
+	}
+	t.Cleanup(func() { MigrationPhaseHook = nil })
+	if _, err := MigrateLegacyToXDG(); err == nil {
+		t.Fatal("interrupted migration succeeded")
+	}
+	MigrationPhaseHook = nil
+	migrated, err := MigrateLegacyToXDG()
+	if err != nil || !migrated {
+		t.Fatalf("recovery rerun = %v, %v", migrated, err)
+	}
+	assertFileContent(t, filepath.Join(home, "data", DataSubdir, "vault", "identity.age"), "identity")
+	if _, err := os.Stat(filepath.Join(home, "data", DataSubdir, "vault", "partial")); !os.IsNotExist(err) {
+		t.Fatal("partial copy survived recovery")
+	}
+}
