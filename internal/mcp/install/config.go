@@ -6,7 +6,10 @@ import (
 	"os"
 	"strings"
 
+	"github.com/pelletier/go-toml/v2"
 	"gopkg.in/yaml.v3"
+
+	"github.com/danieljustus/symaira-vault/internal/fsutil"
 )
 
 // ConfigReaderWriter handles serialization and deserialization of agent configs.
@@ -92,123 +95,132 @@ func (y YAMLConfigRW) Write(path string, data map[string]any) error {
 	return nil
 }
 
-// TOMLConfigRW reads and writes TOML config files using a simple line-based
-// parser that handles the section structure needed for MCP server configuration
-// (e.g. [mcp_servers.symvault]).
-type TOMLConfigRW struct{}
+// TOMLConfigRW reads and writes TOML config files while retaining the original
+// document for preservation-safe managed-entry updates.
+type TOMLConfigRW struct {
+	original  []byte
+	rootKey   string
+	serverKey string
+}
 
-// Read reads a TOML config file. Only top-level string key-value pairs and
-// section blocks are parsed; inline tables and arrays are returned as raw strings.
-func (t TOMLConfigRW) Read(path string) (map[string]any, error) {
-	data, err := os.ReadFile(path) // #nosec G304
+// SetManagedEntry identifies the table that the installer owns.
+func (t *TOMLConfigRW) SetManagedEntry(rootKey, serverKey string) {
+	t.rootKey, t.serverKey = rootKey, serverKey
+}
+
+// Read reads and validates a TOML config file. If the file does not exist, it
+// returns an empty map and Write will create a valid TOML document.
+func (t *TOMLConfigRW) Read(path string) (map[string]any, error) {
+	data, err := os.ReadFile(path) // #nosec G304 -- path is validated by caller
 	if err != nil {
 		if os.IsNotExist(err) {
+			t.original = nil
 			return make(map[string]any), nil
 		}
 		return nil, fmt.Errorf("read TOML config %q: %w", path, err)
 	}
-	return parseTOML(string(data)), nil
+	var result map[string]any
+	if err := toml.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("parse TOML config %q: %w", path, err)
+	}
+	t.original = append(t.original[:0], data...)
+	if result == nil {
+		result = make(map[string]any)
+	}
+	return result, nil
 }
 
-// Write writes data to a TOML config file with 0o600 permissions.
-// The data map is expected to contain nested maps representing sections.
-func (t TOMLConfigRW) Write(path string, data map[string]any) error {
-	out := renderTOML(data, 0)
-	if err := os.WriteFile(path, []byte(out), 0o600); err != nil {
+// Write writes data to a TOML config file with 0600 permissions. Existing
+// documents are updated by replacing only the managed table, retaining all
+// unrelated bytes (including comments and formatting).
+func (t *TOMLConfigRW) Write(path string, data map[string]any) error {
+	var out []byte
+	var err error
+	if len(t.original) > 0 && t.rootKey != "" && t.serverKey != "" {
+		out, err = replaceManagedTOML(t.original, t.rootKey, t.serverKey, data)
+	} else {
+		out, err = toml.Marshal(data)
+	}
+	if err != nil {
+		return fmt.Errorf("marshal TOML config: %w", err)
+	}
+	if err := fsutil.AtomicWriteFile(path, out, 0o600); err != nil {
 		return fmt.Errorf("write TOML config %q: %w", path, err)
 	}
 	return nil
 }
 
-// parseTOML parses a TOML string into a nested map. It handles top-level keys
-// and [section] / [section.subsection] headers.
-func parseTOML(input string) map[string]any {
-	result := make(map[string]any)
-	current := result
-	var sectionPath []string
-
-	for _, line := range strings.Split(input, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			continue
-		}
-
-		// Section header: [section] or [section.sub]
-		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
-			sectionPath = strings.Split(trimmed[1:len(trimmed)-1], ".")
-			current = result
-			for _, part := range sectionPath {
-				part = strings.TrimSpace(part)
-				if m, ok := current[part].(map[string]any); ok {
-					current = m
-				} else {
-					m := make(map[string]any)
-					current[part] = m
-					current = m
-				}
-			}
-			continue
-		}
-
-		// Key = value
-		if idx := strings.Index(trimmed, "="); idx > 0 {
-			key := strings.TrimSpace(trimmed[:idx])
-			value := strings.TrimSpace(trimmed[idx+1:])
-			current[key] = parseTOMLValue(value)
+func replaceManagedTOML(original []byte, rootKey, serverKey string, data map[string]any) ([]byte, error) {
+	root, ok := data[rootKey].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("TOML root %q is not a table", rootKey)
+	}
+	server, ok := root[serverKey].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("TOML server %q is not a table", serverKey)
+	}
+	encoded, err := toml.Marshal(server)
+	if err != nil {
+		return nil, err
+	}
+	header := "[" + rootKey + "." + serverKey + "]\n"
+	replacement := append([]byte(header), encoded...)
+	lines := strings.SplitAfter(string(original), "\n")
+	start, end := -1, -1
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(strings.TrimSuffix(line, "\n"))
+		if trimmed == header[:len(header)-1] {
+			start = i
+			break
 		}
 	}
+	if start < 0 {
+		separator := []byte("\n")
+		if len(original) == 0 || original[len(original)-1] == '\n' {
+			separator = nil
+		}
+		return append(append(append([]byte{}, original...), separator...), replacement...), nil
+	}
+	managedPrefix := "[" + rootKey + "." + serverKey + "."
+	for i := start + 1; i < len(lines); i++ {
+		trimmed := strings.TrimSpace(strings.TrimSuffix(lines[i], "\n"))
+		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") && !strings.HasPrefix(trimmed, managedPrefix) {
+			end = i
+			break
+		}
+	}
+	if end < 0 {
+		end = len(lines)
+	}
+	var sb strings.Builder
+	for _, line := range lines[:start] {
+		sb.WriteString(line)
+	}
+	sb.Write(replacement)
+	for _, line := range lines[end:] {
+		sb.WriteString(line)
+	}
+	return []byte(sb.String()), nil
+}
 
+// parseTOML parses a TOML string into a nested map for compatibility with
+// existing package users. Invalid input is represented as an empty map; file
+// reads use toml.Unmarshal and return the parse error.
+func parseTOML(input string) map[string]any {
+	var result map[string]any
+	if err := toml.Unmarshal([]byte(input), &result); err != nil || result == nil {
+		return make(map[string]any)
+	}
 	return result
 }
 
-// parseTOMLValue parses a TOML value string into a Go value.
-func parseTOMLValue(value string) any {
-	if value == "" {
+// renderTOML renders a nested Go map as TOML.
+func renderTOML(data map[string]any, _ int) string {
+	out, err := toml.Marshal(data)
+	if err != nil {
 		return ""
 	}
-	switch {
-	case value == "true":
-		return true
-	case value == "false":
-		return false
-	case strings.HasPrefix(value, `"`) && strings.HasSuffix(value, `"`):
-		return value[1 : len(value)-1]
-	case strings.HasPrefix(value, "'") && strings.HasSuffix(value, "'"):
-		return value[1 : len(value)-1]
-	case strings.HasPrefix(value, "[") && strings.HasSuffix(value, "]"):
-		// Inline array - return as raw string for simplicity
-		return value
-	default:
-		// Try number
-		return value
-	}
-}
-
-// renderTOML renders a nested Go map as TOML. depth controls indentation (0 for top-level).
-func renderTOML(data map[string]any, depth int) string {
-	var sb strings.Builder
-	prefix := strings.Repeat("  ", depth)
-
-	for k, v := range data {
-		switch val := v.(type) {
-		case map[string]any:
-			if depth == 0 {
-				fmt.Fprintf(&sb, "\n[%s]\n", k)
-			} else {
-				fmt.Fprintf(&sb, "%s[%s]\n", prefix, k)
-			}
-			sb.WriteString(renderTOML(val, depth+1))
-		case string:
-			fmt.Fprintf(&sb, "%s%s = %q\n", prefix, k, val)
-		case bool:
-			fmt.Fprintf(&sb, "%s%s = %v\n", prefix, k, val)
-		case int, int64, float64:
-			fmt.Fprintf(&sb, "%s%s = %v\n", prefix, k, val)
-		default:
-			fmt.Fprintf(&sb, "%s%s = %q\n", prefix, k, fmt.Sprintf("%v", val))
-		}
-	}
-	return sb.String()
+	return string(out)
 }
 
 // GetReaderWriter returns the appropriate reader/writer for the given format.
@@ -219,7 +231,7 @@ func GetReaderWriter(format ConfigFormat) (ConfigReaderWriter, error) {
 	case FormatYAML:
 		return YAMLConfigRW{}, nil
 	case FormatTOML:
-		return TOMLConfigRW{}, nil
+		return &TOMLConfigRW{}, nil
 	default:
 		return nil, fmt.Errorf("unsupported config format %q", format)
 	}
