@@ -23,3 +23,10 @@ ID, resulting status, decision timestamp, and server-side attribution. No
 secret values are returned. The CLI endpoint is reachable only over a
 loopback connection and requires proof of ownership of the local vault
 directory. The server remains authoritative for queue state and decisions.
+
+## mTLS
+
+The local CLI deliberately does not weaken MCP mTLS. If
+`MCP.mtls_enabled=true`, it stops before connecting because no local approval
+client-certificate contract exists yet. Use an enrolled approval device for
+that configuration; secure local client identity support is tracked in #1041.

@@ -25,3 +25,20 @@ func TestApprovalTLSCertFileUsesConfiguredCertificate(t *testing.T) {
 		t.Fatalf("generated certificate exists despite configured certificate: %v", err)
 	}
 }
+
+func TestApprovalTLSCertFileRejectsMTLSWithoutLocalClientIdentity(t *testing.T) {
+	dir := t.TempDir()
+	config := "mcp:\n  mtls_enabled: true\n"
+	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte(config), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := approvalTLSCertFile(dir)
+	if err == nil {
+		t.Fatal("approvalTLSCertFile() error = nil, want mTLS configuration error")
+	}
+	const want = "approval CLI cannot connect while MCP.mtls_enabled=true because no local approval client certificate is configured; use an enrolled approval device instead"
+	if got := err.Error(); got != want {
+		t.Fatalf("approvalTLSCertFile() error = %q, want %q", got, want)
+	}
+}
