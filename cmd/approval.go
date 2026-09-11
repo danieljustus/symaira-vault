@@ -151,7 +151,7 @@ func approvalAPIRequest(method, path string, result any) error {
 	if err != nil {
 		return fmt.Errorf("connect to local approval server: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		var apiErr struct {
 			Error string `json:"error"`
