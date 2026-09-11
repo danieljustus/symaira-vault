@@ -116,7 +116,7 @@ func SaveRuntimeTLSCert(vaultDir, certFile string, clientAuthRequired ...bool) e
 func LoadRuntimeTLSCert(vaultDir string) (string, bool) {
 	cleanDir := filepath.Clean(vaultDir)
 	path := filepath.Join(cleanDir, RuntimeTLSFileName)
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- fixed runtime metadata filename below the selected vault directory; the record holds no key material.
 	if err != nil {
 		return "", false
 	}
@@ -134,7 +134,7 @@ func LoadRuntimeTLSCert(vaultDir string) (string, bool) {
 // a client certificate for its TLS connection.
 func RuntimeTLSClientAuthRequired(vaultDir string) bool {
 	cleanDir := filepath.Clean(vaultDir)
-	data, err := os.ReadFile(filepath.Join(cleanDir, RuntimeTLSFileName))
+	data, err := os.ReadFile(filepath.Join(cleanDir, RuntimeTLSFileName)) // #nosec G304 -- fixed runtime metadata filename below the selected vault directory; the record holds no key material.
 	if err != nil {
 		return false
 	}
