@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -139,7 +140,7 @@ func approvalAPIRequest(method, path string, result any) error {
 		return fmt.Errorf("load vault-ownership proof secret: %w", err)
 	}
 	now := time.Now().UTC()
-	req, err := http.NewRequest(method, fmt.Sprintf("https://%s:%d%s", bind, port, path), nil)
+	req, err := http.NewRequest(method, fmt.Sprintf("https://%s%s", net.JoinHostPort(bind, fmt.Sprint(port)), path), nil)
 	if err != nil {
 		return fmt.Errorf("build approval request: %w", err)
 	}
