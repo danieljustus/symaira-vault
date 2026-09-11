@@ -9,8 +9,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-
-	"github.com/danieljustus/symaira-vault/internal/fsutil"
 )
 
 const (
@@ -182,8 +180,10 @@ func MigrateLegacyToXDG() (bool, error) {
 		return false, err
 	}
 	backup := filepath.Join(plan.LegacyDir, migrationBackupDir)
-	if err := os.MkdirAll(backup, 0o700); err != nil {
+	if backupFD, err := secureMkdirOpen(backup, 0o700); err != nil {
 		return false, fmt.Errorf("create backup: %w", err)
+	} else {
+		_ = closeMigrationFD(backupFD)
 	}
 	for _, item := range plan.Items {
 		if !isTopLevelMigrationItem(plan.Items, item) {
@@ -224,8 +224,10 @@ func MigrateLegacyToXDG() (bool, error) {
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return false, err
 		}
-		if err := fsutil.SafeMkdirAll(filepath.Dir(item.Destination), 0o700); err != nil {
+		if parentFD, err := secureMkdirOpen(filepath.Dir(item.Destination), 0o700); err != nil {
 			return false, fmt.Errorf("create destination parent: %w", err)
+		} else {
+			_ = closeMigrationFD(parentFD)
 		}
 		// Journal only after confirming the destination is absent. A recursive copy
 		// can fail after creating a partial destination; recovery must then know it
@@ -247,7 +249,7 @@ func MigrateLegacyToXDG() (bool, error) {
 	if err := writeJSONAtomic(filepath.Join(plan.LegacyDir, migrationMarker), []byte("migration complete\n")); err != nil {
 		return false, err
 	}
-	if err := os.Remove(statePath); err != nil {
+	if err := secureRemovePath(statePath); err != nil {
 		return false, fmt.Errorf("remove migration state: %w", err)
 	}
 	return true, nil
@@ -269,7 +271,7 @@ func RecoverLegacyToXDGMigration() error {
 		return err
 	}
 	statePath := filepath.Join(home, LegacyVaultSubdir, migrationStateFile)
-	data, err := os.ReadFile(statePath) // #nosec G304 -- statePath is the fixed migration journal below the legacy vault directory.
+	data, err := secureReadFile(statePath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil
@@ -302,14 +304,14 @@ func RecoverLegacyToXDGMigration() error {
 		}
 	}
 	for i := len(state.Published) - 1; i >= 0; i-- {
-		if err := os.RemoveAll(state.Published[i]); err != nil {
+		if err := secureRemovePath(state.Published[i]); err != nil {
 			return err
 		}
 	}
-	if err := os.RemoveAll(state.BackupDir); err != nil {
+	if err := secureRemovePath(state.BackupDir); err != nil {
 		return fmt.Errorf("remove migration backup: %w", err)
 	}
-	return os.Remove(statePath)
+	return secureRemovePath(statePath)
 }
 
 func validateMigrationDestination(path string, plan MigrationPlan) error {
@@ -382,7 +384,7 @@ func copyEntry(src, dst string) error {
 	return secureCopyEntry(src, dst)
 }
 
-func writeJSONAtomic(path string, value any) (returnErr error) {
+func writeJSONAtomic(path string, value any) error {
 	var data []byte
 	var err error
 	if b, ok := value.([]byte); ok {
@@ -393,34 +395,5 @@ func writeJSONAtomic(path string, value any) (returnErr error) {
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".migration-tmp-")
-	if err != nil {
-		return err
-	}
-	name := tmp.Name()
-	defer func() {
-		if removeErr := os.Remove(name); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) && returnErr == nil {
-			returnErr = fmt.Errorf("remove temporary migration state: %w", removeErr)
-		}
-	}()
-	if err := tmp.Chmod(0o600); err != nil {
-		return closeMigrationTemp(tmp, err)
-	}
-	if _, err := tmp.Write(data); err != nil {
-		return closeMigrationTemp(tmp, err)
-	}
-	if err := tmp.Sync(); err != nil {
-		return closeMigrationTemp(tmp, err)
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(name, path)
-}
-
-func closeMigrationTemp(tmp *os.File, operationErr error) error {
-	if closeErr := tmp.Close(); closeErr != nil {
-		return fmt.Errorf("%w; close temporary migration state: %w", operationErr, closeErr)
-	}
-	return operationErr
+	return secureWriteJSONAtomic(path, data)
 }
