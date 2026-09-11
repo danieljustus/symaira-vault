@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	mcpcmd "github.com/danieljustus/symaira-vault/cmd/mcp"
 	"github.com/danieljustus/symaira-vault/internal/approval"
 	cli "github.com/danieljustus/symaira-vault/internal/cli"
+	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	errorspkg "github.com/danieljustus/symaira-vault/internal/errors"
 	"github.com/danieljustus/symaira-vault/internal/mcp/serverbootstrap"
 	vaultpkg "github.com/danieljustus/symaira-vault/internal/vault"
@@ -123,7 +125,7 @@ func approvalAPIRequest(method, path string, result any) error {
 	if !mcpcmd.IsLocalhostBind(bind) {
 		return fmt.Errorf("approval CLI requires a server bound to loopback; running server is bound to %q", bind)
 	}
-	certFile, _, err := serverbootstrap.EnsureTLSCert(vaultDir)
+	certFile, err := approvalTLSCertFile(vaultDir)
 	if err != nil {
 		return fmt.Errorf("load server TLS certificate: %w", err)
 	}
@@ -166,4 +168,23 @@ func approvalAPIRequest(method, path string, result any) error {
 		return fmt.Errorf("decode approval response: %w", err)
 	}
 	return nil
+}
+
+// approvalTLSCertFile returns the certificate used by the running HTTP server.
+// Configured certificate/key pairs take precedence over the vault-generated
+// pair, matching serverbootstrap's effective TLS configuration.
+func approvalTLSCertFile(vaultDir string) (string, error) {
+	cfg, err := configpkg.Load(filepath.Join(vaultDir, "config.yaml"))
+	if err == nil && cfg != nil && cfg.MCP != nil {
+		cert := strings.TrimSpace(cfg.MCP.TLSCertFile)
+		key := strings.TrimSpace(cfg.MCP.TLSKeyFile)
+		if cert != "" && key != "" {
+			return cert, nil
+		}
+	}
+	cert, _, ensureErr := serverbootstrap.EnsureTLSCert(vaultDir)
+	if ensureErr != nil {
+		return "", ensureErr
+	}
+	return cert, nil
 }
