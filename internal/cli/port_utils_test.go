@@ -430,12 +430,14 @@ func TestRuntimeTLSCertRoundTripAndPermissions(t *testing.T) {
 	if !ok || got != cert {
 		t.Fatalf("LoadRuntimeTLSCert() = %q, %v; want %q, true", got, ok, cert)
 	}
-	info, err := os.Stat(filepath.Join(dir, RuntimeTLSFileName))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if mode := info.Mode().Perm(); mode != 0o600 {
-		t.Errorf("runtime TLS record permissions = %o, want 600", mode)
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(filepath.Join(dir, RuntimeTLSFileName))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if mode := info.Mode().Perm(); mode != 0o600 {
+			t.Errorf("runtime TLS record permissions = %o, want 600", mode)
+		}
 	}
 	if err := ClearRuntimeTLSCert(dir); err != nil {
 		t.Fatalf("ClearRuntimeTLSCert() error = %v", err)
