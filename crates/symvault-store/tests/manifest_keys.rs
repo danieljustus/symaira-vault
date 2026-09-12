@@ -59,7 +59,12 @@ fn fixture() -> Fixture {
         ])
         .output()
         .unwrap();
-    assert!(names.status.success());
+    assert!(
+        names.status.success(),
+        "git ls-tree failed: status={:?}, stderr={}",
+        names.status,
+        String::from_utf8_lossy(&names.stderr)
+    );
     let mut hash = Sha256::new();
     for name in std::str::from_utf8(&names.stdout).unwrap().lines() {
         if name.ends_with("_test.go")
