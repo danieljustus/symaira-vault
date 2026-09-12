@@ -906,6 +906,61 @@ fn file_manifest_is_sorted_and_contains_metadata() {
 
 #[cfg(unix)]
 #[test]
+fn file_manifest_replacement_after_traversal_uses_opened_metadata() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &value.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    let relative = Path::new("replacement-race");
+    let path = store.root.join(relative);
+    let replacement = temp.path().join("replacement");
+    fs::write(&path, b"old").unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+    let observed = rooted::metadata(&store.root_cap, relative, &path).unwrap();
+
+    // Reproduce the boundary between files()' metadata lookup and file_info()'s
+    // read, without a scheduler-dependent race or a fabricated oracle fixture.
+    let replacement_bytes = b"replacement with a different size and mode";
+    fs::write(&replacement, replacement_bytes).unwrap();
+    fs::set_permissions(&replacement, fs::Permissions::from_mode(0o640)).unwrap();
+    fs::rename(&replacement, &path).unwrap();
+    let info = store.file_info(relative, observed).unwrap();
+    assert_eq!(info.path, "replacement-race");
+    assert_eq!(info.kind, FileKind::Regular);
+    assert_eq!(info.sha256, sha256_hex(replacement_bytes));
+    assert_eq!(info.size, replacement_bytes.len() as u64);
+    assert_eq!(info.mode, 0o640);
+}
+
+#[cfg(unix)]
+#[test]
+fn file_manifest_replacement_after_open_keeps_bytes_and_metadata_together() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("entry");
+    let replacement = temp.path().join("replacement");
+    let original_bytes = b"opened original";
+    fs::write(&path, original_bytes).unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o640)).unwrap();
+    let opened = fs::File::open(&path).unwrap();
+
+    fs::write(&replacement, b"new").unwrap();
+    fs::set_permissions(&replacement, fs::Permissions::from_mode(0o600)).unwrap();
+    fs::rename(&replacement, &path).unwrap();
+    let (bytes, metadata) = read_open_regular_with_metadata(opened, &path).unwrap();
+    assert_eq!(bytes, original_bytes);
+    assert_eq!(sha256_hex(&bytes), sha256_hex(original_bytes));
+    assert_eq!(metadata.len(), original_bytes.len() as u64);
+    assert_eq!(mode_bits(&metadata), 0o640);
+    assert_eq!(fs::read(&path).unwrap(), b"new");
+}
+
+#[cfg(unix)]
+#[test]
 fn atomic_create_holds_parent_capability_across_ancestor_replacement() {
     use std::os::unix::fs::symlink;
 

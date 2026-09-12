@@ -392,6 +392,14 @@ pub(super) fn read(
     relative: &Path,
     display: &Path,
 ) -> Result<Vec<u8>, StoreError> {
+    read_with_metadata(root, relative, display).map(|(bytes, _)| bytes)
+}
+
+pub(super) fn read_with_metadata(
+    root: &fs::File,
+    relative: &Path,
+    display: &Path,
+) -> Result<(Vec<u8>, fs::Metadata), StoreError> {
     use rustix::fs::{Mode, OFlags, openat};
     validate_relative(relative)?;
     let name = relative
@@ -413,5 +421,5 @@ pub(super) fn read(
         path: display.to_path_buf(),
         source: source.into(),
     })?;
-    super::read_open_regular(fs::File::from(file), display)
+    super::read_open_regular_with_metadata(fs::File::from(file), display)
 }

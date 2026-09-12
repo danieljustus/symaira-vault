@@ -486,6 +486,7 @@ impl Store {
         }
     }
 
+    #[cfg(unix)]
     fn read_relative_path(&self, relative: &Path, display: &Path) -> Result<Vec<u8>, StoreError> {
         #[cfg(unix)]
         {
@@ -860,7 +861,11 @@ impl Store {
         Ok(result)
     }
 
-    fn file_info(&self, relative: &Path, metadata: fs::Metadata) -> Result<FileInfo, StoreError> {
+    fn file_info(
+        &self,
+        relative: &Path,
+        mut metadata: fs::Metadata,
+    ) -> Result<FileInfo, StoreError> {
         let display = self.root.join(relative);
         if metadata.file_type().is_symlink() {
             return Err(StoreError::Symlink(display));
@@ -873,7 +878,15 @@ impl Store {
             return Err(StoreError::NotRegularFile(display));
         };
         let bytes = if kind == FileKind::Regular {
-            self.read_relative_path(relative, &self.root.join(relative))?
+            // The path may have been replaced since traversal. Publish the
+            // metadata of the same opened regular file that supplied the bytes.
+            #[cfg(unix)]
+            let (bytes, opened_metadata) =
+                rooted::read_with_metadata(&self.root_cap, relative, &display)?;
+            #[cfg(not(unix))]
+            let (bytes, opened_metadata) = read_regular_with_metadata(&display)?;
+            metadata = opened_metadata;
+            bytes
         } else {
             Vec::new()
         };
@@ -1471,14 +1484,22 @@ fn reject_symlink(path: &Path) -> Result<(), StoreError> {
 
 #[cfg(not(unix))]
 fn read_regular(path: &Path) -> Result<Vec<u8>, StoreError> {
+    read_regular_with_metadata(path).map(|(bytes, _)| bytes)
+}
+
+#[cfg(not(unix))]
+fn read_regular_with_metadata(path: &Path) -> Result<(Vec<u8>, fs::Metadata), StoreError> {
     let file = open_nofollow(path).map_err(|source| StoreError::Read {
         path: path.to_path_buf(),
         source,
     })?;
-    read_open_regular(file, path)
+    read_open_regular_with_metadata(file, path)
 }
 
-fn read_open_regular(file: fs::File, path: &Path) -> Result<Vec<u8>, StoreError> {
+fn read_open_regular_with_metadata(
+    file: fs::File,
+    path: &Path,
+) -> Result<(Vec<u8>, fs::Metadata), StoreError> {
     let metadata = file.metadata().map_err(|source| StoreError::Read {
         path: path.to_path_buf(),
         source,
@@ -1506,7 +1527,7 @@ fn read_open_regular(file: fs::File, path: &Path) -> Result<Vec<u8>, StoreError>
             limit: MAX_FILE_BYTES,
         });
     }
-    Ok(bytes)
+    Ok((bytes, metadata))
 }
 
 #[cfg(unix)]
@@ -2250,13 +2271,14 @@ impl Store {
     }
 
     /// Updates one manifest record after a successful entry write.
+    /// Like Go's UpdateManifestEntry, this treats `path` as a verbatim map key;
+    /// entry filesystem operations validate their paths separately.
     pub fn update_manifest_entry(
         &self,
         path: &str,
         ciphertext: &[u8],
         identity: &Identity,
     ) -> Result<(), StoreError> {
-        validate_entry_path(path)?;
         self.with_write_lock(|store| {
             store.update_manifest_entry_unlocked(path, ciphertext, identity)
         })
@@ -2294,8 +2316,8 @@ impl Store {
     }
 
     /// Removes one manifest record. Missing manifests are a no-op.
+    /// The key is used verbatim, including empty or non-filesystem strings.
     pub fn remove_manifest_entry(&self, path: &str, identity: &Identity) -> Result<(), StoreError> {
-        validate_entry_path(path)?;
         self.with_write_lock(|store| store.remove_manifest_entry_unlocked(path, identity))
     }
 
