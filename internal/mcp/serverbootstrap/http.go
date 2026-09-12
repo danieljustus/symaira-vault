@@ -384,6 +384,9 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 		}
 	}
 	tlsEnabled := tlsCert != "" && tlsKey != ""
+	if err := validateTLSSettings(tlsEnabled, mtlsEnabled, allowInsecure, tlsCAFile); err != nil {
+		return err
+	}
 
 	if !tlsEnabled && !allowInsecure {
 		return fmt.Errorf("refusing to serve MCP without TLS on bind %q: "+
@@ -422,7 +425,7 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 
 	var serveErr error
 	if tlsEnabled {
-		if mtlsEnabled && tlsCAFile != "" {
+		if mtlsEnabled {
 			caCert, readErr := os.ReadFile(tlsCAFile)
 			if readErr != nil {
 				return fmt.Errorf("read client CA certificate: %w", readErr)
@@ -465,4 +468,17 @@ func listenerAddress(listener net.Listener) (string, int) {
 		return host, 0
 	}
 	return host, port
+}
+
+func validateTLSSettings(tlsEnabled, mtlsEnabled, allowInsecure bool, clientCAFile string) error {
+	if mtlsEnabled && allowInsecure {
+		return fmt.Errorf("refusing MCP.allow_insecure_bind=true with MCP.mtls_enabled=true: mTLS requires TLS")
+	}
+	if mtlsEnabled && !tlsEnabled {
+		return fmt.Errorf("refusing MCP.mtls_enabled=true without a server TLS certificate and key")
+	}
+	if mtlsEnabled && strings.TrimSpace(clientCAFile) == "" {
+		return fmt.Errorf("refusing MCP.mtls_enabled=true without MCP.tls_client_ca_file; client verification must remain enabled")
+	}
+	return nil
 }

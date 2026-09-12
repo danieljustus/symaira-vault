@@ -125,6 +125,8 @@ type MCPConfig struct {
 	TLSCertFile         string            `yaml:"tls_cert_file,omitempty"`
 	TLSKeyFile          string            `yaml:"tls_key_file,omitempty"`
 	TLSClientCAFile     string            `yaml:"tls_client_ca_file,omitempty"`
+	ApprovalTLSCertFile string            `yaml:"approval_tls_cert_file,omitempty"`
+	ApprovalTLSKeyFile  string            `yaml:"approval_tls_key_file,omitempty"`
 	MTLSEnabled         bool              `yaml:"mtls_enabled,omitempty"`
 	AllowInsecureBind   bool              `yaml:"allow_insecure_bind,omitempty"`
 	OAuth               *OAuthConfig      `yaml:"oauth,omitempty"`

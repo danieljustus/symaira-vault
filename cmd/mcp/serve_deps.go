@@ -222,7 +222,16 @@ func runServe(cmd *cobra.Command, args []string) error {
 			if absErr != nil {
 				runtimeCert = effectiveCert
 			}
-			if saveErr := cli.SaveRuntimeTLSCert(vaultDir, runtimeCert, vault.Config.MCP.MTLSEnabled); saveErr != nil {
+			resolve := func(path string) string {
+				if path == "" {
+					return ""
+				}
+				if r, err := filepath.Abs(path); err == nil {
+					return r
+				}
+				return path
+			}
+			if saveErr := cli.SaveRuntimeTLSConfig(vaultDir, runtimeCert, resolve(strings.TrimSpace(vault.Config.MCP.TLSClientCAFile)), resolve(strings.TrimSpace(vault.Config.MCP.ApprovalTLSCertFile)), resolve(strings.TrimSpace(vault.Config.MCP.ApprovalTLSKeyFile)), vault.Config.MCP.MTLSEnabled); saveErr != nil {
 				cliout.Warnf("Warning: could not save runtime TLS certificate: %v", saveErr)
 			}
 		}

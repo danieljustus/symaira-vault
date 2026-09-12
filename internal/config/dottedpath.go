@@ -101,6 +101,8 @@ func KnownConfigKeys() []string {
 		"mcp.tls_cert_file",
 		"mcp.tls_key_file",
 		"mcp.tls_client_ca_file",
+		"mcp.approval_tls_cert_file",
+		"mcp.approval_tls_key_file",
 		"mcp.mtls_enabled",
 		"mcp.allow_insecure_bind",
 

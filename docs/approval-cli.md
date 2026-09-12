@@ -26,7 +26,23 @@ directory. The server remains authoritative for queue state and decisions.
 
 ## mTLS
 
-The local CLI deliberately does not weaken MCP mTLS. If
-`MCP.mtls_enabled=true`, it stops before connecting because no local approval
-client-certificate contract exists yet. Use an enrolled approval device for
-that configuration; secure local client identity support is tracked in #1041.
+The local CLI never downgrades MCP mTLS. Configure a dedicated approval client
+identity, signed by the existing server client CA, alongside the server TLS
+files:
+
+```yaml
+mcp:
+  mtls_enabled: true
+  tls_cert_file: /path/server.crt
+  tls_key_file: /path/server.key
+  tls_client_ca_file: /path/client-ca.crt
+  approval_tls_cert_file: /path/approval-client.crt
+  approval_tls_key_file: /path/approval-client.key
+```
+
+The approval certificate/key are client-only and must not reuse the server key.
+Missing, malformed, or revoked identities fail closed. Rotate or revoke the
+client certificate in the existing CA and restart `symvault serve`; the server
+loads the CA at startup and does not hot-reload it. `allow_insecure_bind` cannot
+be combined with mTLS. Runtime TLS metadata is authoritative for CLI flag
+overrides and is path-only; it contains no key material.

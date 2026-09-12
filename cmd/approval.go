@@ -148,7 +148,32 @@ func approvalAPIRequest(method, path string, result any) error {
 	}
 	req.Header.Set(approval.HeaderEnrollTimestamp, now.Format(time.RFC3339))
 	req.Header.Set(approval.HeaderEnrollProof, approval.EnrollProof(secret, now))
-	client := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}}}
+	tlsConfig := &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}
+	clientCertFile, clientKeyFile := "", ""
+	if runtimeTLS, ok := cli.LoadRuntimeTLSConfig(vaultDir); ok && runtimeTLS.ClientAuthRequired {
+		clientCertFile, clientKeyFile = runtimeTLS.ClientCertificate, runtimeTLS.ClientKey
+	} else if cfg, loadErr := configpkg.Load(filepath.Join(vaultDir, "config.yaml")); loadErr == nil && cfg != nil && cfg.MCP != nil && cfg.MCP.MTLSEnabled {
+		clientCertFile, clientKeyFile = strings.TrimSpace(cfg.MCP.ApprovalTLSCertFile), strings.TrimSpace(cfg.MCP.ApprovalTLSKeyFile)
+	}
+	if clientCertFile != "" || clientKeyFile != "" {
+		if clientCertFile == "" || clientKeyFile == "" {
+			return fmt.Errorf("approval CLI cannot connect while the running MCP server requires mTLS because the dedicated local approval client certificate and key must both be configured")
+		}
+		if filepath.Clean(clientKeyFile) == filepath.Clean(strings.TrimSpace(func() string {
+			if cfg, e := configpkg.Load(filepath.Join(vaultDir, "config.yaml")); e == nil && cfg != nil && cfg.MCP != nil {
+				return cfg.MCP.TLSKeyFile
+			}
+			return ""
+		}())) {
+			return fmt.Errorf("approval CLI refuses to reuse the MCP server private key as the approval client key")
+		}
+		clientCert, loadErr := tls.LoadX509KeyPair(clientCertFile, clientKeyFile)
+		if loadErr != nil {
+			return fmt.Errorf("load local approval client identity: %w", loadErr)
+		}
+		tlsConfig.Certificates = []tls.Certificate{clientCert}
+	}
+	client := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{TLSClientConfig: tlsConfig}}
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("connect to local approval server: %w", err)
@@ -189,6 +214,9 @@ func approvalTLSCertFile(vaultDir string) (string, error) {
 		return "", fmt.Errorf("approval CLI cannot connect while MCP.mtls_enabled=true because no local approval client certificate is configured; use an enrolled approval device instead")
 	}
 	if cfg != nil && cfg.MCP != nil {
+		if cfg.MCP.MTLSEnabled && (strings.TrimSpace(cfg.MCP.ApprovalTLSCertFile) == "" || strings.TrimSpace(cfg.MCP.ApprovalTLSKeyFile) == "") {
+			return "", fmt.Errorf("approval CLI cannot connect while MCP.mtls_enabled=true because no dedicated local approval client certificate is configured; configure MCP.approval_tls_cert_file and MCP.approval_tls_key_file")
+		}
 		cert := strings.TrimSpace(cfg.MCP.TLSCertFile)
 		key := strings.TrimSpace(cfg.MCP.TLSKeyFile)
 		if cert != "" && key != "" {

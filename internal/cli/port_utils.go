@@ -93,6 +93,12 @@ func LoadRuntimeServer(vaultDir string) (port int, bind string, ok bool) {
 // a command-line certificate override that is not persisted in config.yaml.
 // The file is private to the vault directory and contains no key material.
 func SaveRuntimeTLSCert(vaultDir, certFile string, clientAuthRequired ...bool) error {
+	authRequired := len(clientAuthRequired) > 0 && clientAuthRequired[0]
+	return SaveRuntimeTLSConfig(vaultDir, certFile, "", "", "", authRequired)
+}
+
+// SaveRuntimeTLSConfig records effective TLS paths; it never stores key material.
+func SaveRuntimeTLSConfig(vaultDir, certFile, clientCAFile, clientCertFile, clientKeyFile string, clientAuthRequired bool) error {
 	cleanDir := filepath.Clean(vaultDir)
 	path := filepath.Join(cleanDir, RuntimeTLSFileName)
 	if !strings.HasPrefix(filepath.Clean(path), cleanDir+string(filepath.Separator)) {
@@ -103,8 +109,11 @@ func SaveRuntimeTLSCert(vaultDir, certFile string, clientAuthRequired ...bool) e
 	}
 	data, err := json.Marshal(struct {
 		Certificate        string `json:"certificate"`
+		ClientCAFile       string `json:"client_ca_file,omitempty"`
+		ClientCertificate  string `json:"client_certificate,omitempty"`
+		ClientKey          string `json:"client_key,omitempty"`
 		ClientAuthRequired bool   `json:"client_auth_required,omitempty"`
-	}{Certificate: certFile, ClientAuthRequired: len(clientAuthRequired) > 0 && clientAuthRequired[0]})
+	}{Certificate: certFile, ClientCAFile: clientCAFile, ClientCertificate: clientCertFile, ClientKey: clientKeyFile, ClientAuthRequired: clientAuthRequired})
 	if err != nil {
 		return fmt.Errorf("marshal runtime TLS certificate file: %w", err)
 	}
@@ -113,35 +122,41 @@ func SaveRuntimeTLSCert(vaultDir, certFile string, clientAuthRequired ...bool) e
 
 // LoadRuntimeTLSCert returns the certificate path recorded by the running
 // server, if any. Invalid or missing records are treated as unavailable.
-func LoadRuntimeTLSCert(vaultDir string) (string, bool) {
+type RuntimeTLSConfig struct {
+	Certificate, ClientCAFile, ClientCertificate, ClientKey string
+	ClientAuthRequired                                      bool
+}
+
+func LoadRuntimeTLSConfig(vaultDir string) (RuntimeTLSConfig, bool) {
 	cleanDir := filepath.Clean(vaultDir)
 	path := filepath.Join(cleanDir, RuntimeTLSFileName)
 	data, err := os.ReadFile(path) // #nosec G304 -- fixed runtime metadata filename below the selected vault directory; the record holds no key material.
 	if err != nil {
-		return "", false
+		return RuntimeTLSConfig{}, false
 	}
 	var record struct {
 		Certificate        string `json:"certificate"`
+		ClientCAFile       string `json:"client_ca_file"`
+		ClientCertificate  string `json:"client_certificate"`
+		ClientKey          string `json:"client_key"`
 		ClientAuthRequired bool   `json:"client_auth_required"`
 	}
 	if err := json.Unmarshal(data, &record); err != nil || strings.TrimSpace(record.Certificate) == "" {
-		return "", false
+		return RuntimeTLSConfig{}, false
 	}
-	return strings.TrimSpace(record.Certificate), true
+	return RuntimeTLSConfig{strings.TrimSpace(record.Certificate), strings.TrimSpace(record.ClientCAFile), strings.TrimSpace(record.ClientCertificate), strings.TrimSpace(record.ClientKey), record.ClientAuthRequired}, true
+}
+
+func LoadRuntimeTLSCert(vaultDir string) (string, bool) {
+	cfg, ok := LoadRuntimeTLSConfig(vaultDir)
+	return cfg.Certificate, ok
 }
 
 // RuntimeTLSClientAuthRequired reports whether the running server requires
 // a client certificate for its TLS connection.
 func RuntimeTLSClientAuthRequired(vaultDir string) bool {
-	cleanDir := filepath.Clean(vaultDir)
-	data, err := os.ReadFile(filepath.Join(cleanDir, RuntimeTLSFileName)) // #nosec G304 -- fixed runtime metadata filename below the selected vault directory; the record holds no key material.
-	if err != nil {
-		return false
-	}
-	var record struct {
-		ClientAuthRequired bool `json:"client_auth_required"`
-	}
-	return json.Unmarshal(data, &record) == nil && record.ClientAuthRequired
+	cfg, ok := LoadRuntimeTLSConfig(vaultDir)
+	return ok && cfg.ClientAuthRequired
 }
 
 // ClearRuntimeTLSCert removes the running server's certificate record.
