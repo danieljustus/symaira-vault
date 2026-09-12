@@ -76,13 +76,13 @@ func sourceDigest(root string) (string, error) {
 		if strings.HasSuffix(name, "_test.go") || (!strings.HasSuffix(name, ".go") && name != "go.mod" && name != "go.sum") {
 			continue
 		}
-		cmd = exec.Command("git", "show", revision+":"+name)
+		cmd = exec.Command("git", "show", revision+":"+name) // #nosec G204 -- revision is pinned and name comes only from git ls-tree
 		cmd.Dir = root
 		pinned, err := cmd.Output()
 		if err != nil {
 			return "", err
 		}
-		current, err := os.ReadFile(filepath.Join(root, name))
+		current, err := os.ReadFile(filepath.Join(root, name)) // #nosec G304 -- name is a tracked production path from git ls-tree
 		if err != nil {
 			return "", err
 		}
@@ -151,7 +151,7 @@ func build(root string) (fixture, error) {
 	if err != nil {
 		return f, err
 	}
-	src, err := os.ReadFile(filepath.Join(root, generator))
+	src, err := os.ReadFile(filepath.Join(root, generator)) // #nosec G304 -- generator is a compile-time constant within the repository
 	if err != nil {
 		return f, err
 	}
@@ -246,7 +246,7 @@ func run() error {
 		}
 		return check(got, data)
 	}
-	return os.WriteFile(*output, data, 0644)
+	return os.WriteFile(*output, data, 0644) // #nosec G306 -- generated fixture is non-sensitive repository data
 }
 func main() {
 	if err := run(); err != nil {
