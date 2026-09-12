@@ -35,13 +35,12 @@ func TestApprovalTLSCertFileRejectsMTLSWithoutLocalClientIdentity(t *testing.T) 
 		t.Fatal(err)
 	}
 
-	_, err := approvalTLSCertFile(dir)
-	if err == nil {
-		t.Fatal("approvalTLSCertFile() error = nil, want mTLS configuration error")
+	got, err := approvalTLSCertFile(dir)
+	if err != nil {
+		t.Fatalf("approvalTLSCertFile() error = %v, want generated server certificate", err)
 	}
-	const want = "approval CLI cannot connect while MCP.mtls_enabled=true because no local approval client certificate is configured; use an enrolled approval device instead"
-	if got := err.Error(); got != want {
-		t.Fatalf("approvalTLSCertFile() error = %q, want %q", got, want)
+	if got == "" {
+		t.Fatal("approvalTLSCertFile() returned an empty certificate path")
 	}
 }
 

@@ -436,7 +436,7 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 			}
 			cert, loadErr := tls.LoadX509KeyPair(tlsCert, tlsKey)
 			if loadErr != nil {
-				return fmt.Errorf("load server TLS key pair: %w", loadErr)
+				return fmt.Errorf("load server TLS key pair failed")
 			}
 			tlsConfig := &tls.Config{
 				Certificates: []tls.Certificate{cert},

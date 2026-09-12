@@ -120,8 +120,7 @@ func SaveRuntimeTLSConfig(vaultDir, certFile, clientCAFile, clientCertFile, clie
 	return os.WriteFile(path, data, 0600)
 }
 
-// LoadRuntimeTLSCert returns the certificate path recorded by the running
-// server, if any. Invalid or missing records are treated as unavailable.
+// RuntimeTLSConfig contains the effective TLS paths recorded by the running server.
 type RuntimeTLSConfig struct {
 	Certificate, ClientCAFile, ClientCertificate, ClientKey string
 	ClientAuthRequired                                      bool

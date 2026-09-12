@@ -370,6 +370,8 @@ func MergeFromGit(dst *GitConfig, src GitConfig) {
 }
 
 // MergeFromMCP overwrites dst's zero-value fields with src's non-zero values.
+//
+//nolint:gocyclo // configuration fields are merged explicitly for presence semantics
 func MergeFromMCP(dst *MCPConfig, src MCPConfig) {
 	if src.Port > 0 {
 		dst.Port = src.Port
@@ -418,6 +420,12 @@ func MergeFromMCP(dst *MCPConfig, src MCPConfig) {
 	}
 	if src.TLSClientCAFile != "" {
 		dst.TLSClientCAFile = src.TLSClientCAFile
+	}
+	if src.ApprovalTLSCertFile != "" {
+		dst.ApprovalTLSCertFile = src.ApprovalTLSCertFile
+	}
+	if src.ApprovalTLSKeyFile != "" {
+		dst.ApprovalTLSKeyFile = src.ApprovalTLSKeyFile
 	}
 	if src.MTLSEnabled {
 		dst.MTLSEnabled = true
