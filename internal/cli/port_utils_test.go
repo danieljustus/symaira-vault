@@ -419,3 +419,38 @@ func TestLoadRuntimePort_LargePort(t *testing.T) {
 		t.Errorf("port = %d, want 65535", port)
 	}
 }
+
+func TestRuntimeTLSCertRoundTripAndPermissions(t *testing.T) {
+	dir := t.TempDir()
+	cert := filepath.Join(t.TempDir(), "custom.crt")
+	if err := SaveRuntimeTLSCert(dir, cert); err != nil {
+		t.Fatalf("SaveRuntimeTLSCert() error = %v", err)
+	}
+	got, ok := LoadRuntimeTLSCert(dir)
+	if !ok || got != cert {
+		t.Fatalf("LoadRuntimeTLSCert() = %q, %v; want %q, true", got, ok, cert)
+	}
+	info, err := os.Stat(filepath.Join(dir, RuntimeTLSFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mode := info.Mode().Perm(); mode != 0o600 {
+		t.Errorf("runtime TLS record permissions = %o, want 600", mode)
+	}
+	if err := ClearRuntimeTLSCert(dir); err != nil {
+		t.Fatalf("ClearRuntimeTLSCert() error = %v", err)
+	}
+	if _, ok := LoadRuntimeTLSCert(dir); ok {
+		t.Fatal("LoadRuntimeTLSCert() returned true after clear")
+	}
+}
+
+func TestLoadRuntimeTLSCertRejectsMalformedRecord(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, RuntimeTLSFileName), []byte(`{"certificate":""}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if cert, ok := LoadRuntimeTLSCert(dir); ok || cert != "" {
+		t.Fatalf("LoadRuntimeTLSCert() = %q, %v for empty record", cert, ok)
+	}
+}

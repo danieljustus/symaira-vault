@@ -2024,6 +2024,162 @@
       ]
     },
     {
+      "path": "symvault approval",
+      "name": "approval",
+      "use": "approval",
+      "short": "List and decide pending agent approval requests",
+      "long": "Inspect the pending approval queue owned by the running local server.\n\nDecisions are sent to the server over its loopback-only, vault-directory\nownership-authenticated API. This command does not act as or create an\napproval device and never displays secret values.",
+      "example": "  symvault approval list\n  symvault approval list --json\n  symvault approval decide apr-0123456789ab --approve",
+      "hidden": false,
+      "group_id": "agents-mcp",
+      "annotations": {
+        "symvault:json": "true"
+      },
+      "disable_flag_parsing": false,
+      "traverse_children": false,
+      "runnable": false,
+      "has_subcommands": true,
+      "local_flags": [
+        {
+          "name": "help",
+          "shorthand": "h",
+          "usage": "help for approval",
+          "type": "bool",
+          "default": "false",
+          "no_opt_default": "true",
+          "hidden": false,
+          "annotations": {
+            "cobra_annotation_flag_set_by_cobra": [
+              "true"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "path": "symvault approval decide",
+      "name": "decide",
+      "use": "decide \u003crequest-id\u003e",
+      "short": "Approve or deny a pending approval request",
+      "example": "  symvault approval decide apr-0123456789ab --approve",
+      "hidden": false,
+      "disable_flag_parsing": false,
+      "traverse_children": false,
+      "runnable": true,
+      "has_subcommands": false,
+      "argument_count_probes": [
+        {
+          "count": 0,
+          "accepted": false,
+          "error": "accepts 1 arg(s), received 0"
+        },
+        {
+          "count": 1,
+          "accepted": true
+        },
+        {
+          "count": 2,
+          "accepted": false,
+          "error": "accepts 1 arg(s), received 2"
+        },
+        {
+          "count": 3,
+          "accepted": false,
+          "error": "accepts 1 arg(s), received 3"
+        },
+        {
+          "count": 4,
+          "accepted": false,
+          "error": "accepts 1 arg(s), received 4"
+        },
+        {
+          "count": 5,
+          "accepted": false,
+          "error": "accepts 1 arg(s), received 5"
+        },
+        {
+          "count": 6,
+          "accepted": false,
+          "error": "accepts 1 arg(s), received 6"
+        },
+        {
+          "count": 7,
+          "accepted": false,
+          "error": "accepts 1 arg(s), received 7"
+        },
+        {
+          "count": 8,
+          "accepted": false,
+          "error": "accepts 1 arg(s), received 8"
+        },
+        {
+          "count": 9,
+          "accepted": false,
+          "error": "accepts 1 arg(s), received 9"
+        }
+      ],
+      "local_flags": [
+        {
+          "name": "approve",
+          "usage": "Approve the request",
+          "type": "bool",
+          "default": "false",
+          "no_opt_default": "true",
+          "hidden": false
+        },
+        {
+          "name": "deny",
+          "usage": "Deny the request",
+          "type": "bool",
+          "default": "false",
+          "no_opt_default": "true",
+          "hidden": false
+        },
+        {
+          "name": "help",
+          "shorthand": "h",
+          "usage": "help for decide",
+          "type": "bool",
+          "default": "false",
+          "no_opt_default": "true",
+          "hidden": false,
+          "annotations": {
+            "cobra_annotation_flag_set_by_cobra": [
+              "true"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "path": "symvault approval list",
+      "name": "list",
+      "use": "list",
+      "short": "List pending approval requests",
+      "example": "  symvault approval list --output json",
+      "hidden": false,
+      "disable_flag_parsing": false,
+      "traverse_children": false,
+      "runnable": true,
+      "has_subcommands": false,
+      "local_flags": [
+        {
+          "name": "help",
+          "shorthand": "h",
+          "usage": "help for list",
+          "type": "bool",
+          "default": "false",
+          "no_opt_default": "true",
+          "hidden": false,
+          "annotations": {
+            "cobra_annotation_flag_set_by_cobra": [
+              "true"
+            ]
+          }
+        }
+      ]
+    },
+    {
       "path": "symvault audit",
       "name": "audit",
       "use": "audit",

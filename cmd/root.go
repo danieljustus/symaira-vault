@@ -42,6 +42,7 @@ func NewRootCmd() *cobra.Command {
 
 	// Add top-level commands in cmd/
 	root.AddCommand(
+		newApprovalCmd(),
 		newBrokerCmd(),
 		newDeviceCmd(),
 		newDynamicCmd(),
