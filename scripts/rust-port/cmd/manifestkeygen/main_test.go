@@ -3,11 +3,13 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"filippo.io/age"
-	vault "github.com/danieljustus/symaira-vault/internal/vault"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"filippo.io/age"
+
+	vault "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 func TestManifestKeyProductionFixture(t *testing.T) {

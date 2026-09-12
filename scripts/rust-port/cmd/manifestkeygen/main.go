@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"filippo.io/age"
+
 	vault "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
@@ -54,7 +55,10 @@ type fixture struct {
 }
 
 func repoRoot() string {
-	_, file, _, _ := runtime.Caller(0)
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		panic("runtime.Caller failed")
+	}
 	return filepath.Clean(filepath.Join(filepath.Dir(file), "../../../.."))
 }
 
@@ -69,7 +73,7 @@ func sourceDigest(root string) (string, error) {
 	}
 	h := sha256.New()
 	for _, name := range strings.Fields(string(names)) {
-		if strings.HasSuffix(name, "_test.go") || !(strings.HasSuffix(name, ".go") || name == "go.mod" || name == "go.sum") {
+		if strings.HasSuffix(name, "_test.go") || (!strings.HasSuffix(name, ".go") && name != "go.mod" && name != "go.sum") {
 			continue
 		}
 		cmd = exec.Command("git", "show", revision+":"+name)
@@ -106,9 +110,9 @@ func capture(root string, id *age.X25519Identity, opErr error, created *string) 
 		s.Exists = true
 		s.Version = m.Version
 		s.Generation = m.Generation
-		info, err := os.Stat(filepath.Join(root, "manifest.age"))
-		if err != nil {
-			return s, err
+		info, statErr := os.Stat(filepath.Join(root, "manifest.age"))
+		if statErr != nil {
+			return s, statErr
 		}
 		s.Mode = uint32(info.Mode().Perm())
 		s.TimesValid = !m.Created.IsZero() && !m.Updated.IsZero() && !m.Created.After(m.Updated)
@@ -162,27 +166,31 @@ func build(root string) (fixture, error) {
 		for _, c := range cases {
 			v := vector{Name: c.name, Input: json.RawMessage(c.input), Pseudonymize: pseudo}
 			err = func() error {
-				dir, err := os.MkdirTemp("", "manifest-key-fixture-")
-				if err != nil {
-					return err
+				dir, mkErr := os.MkdirTemp("", "manifest-key-fixture-")
+				if mkErr != nil {
+					return mkErr
 				}
-				defer os.RemoveAll(dir)
-				id, err := age.GenerateX25519Identity()
-				if err != nil {
-					return err
+				defer func() {
+					if removeErr := os.RemoveAll(dir); removeErr != nil {
+						panic(removeErr)
+					}
+				}()
+				id, idErr := age.GenerateX25519Identity()
+				if idErr != nil {
+					return idErr
 				}
 				// These are fixture inputs, not expected output. Manifest APIs only require
 				// the root; the same inert identity marker lets Rust open the isolated tree.
 				for name, data := range map[string]string{"config.yaml": fmt.Sprintf("vault:\n  pseudonymize_paths: %t\n", pseudo), "identity.age": "inert fixture marker"} {
-					if err := os.WriteFile(filepath.Join(dir, name), []byte(data), 0600); err != nil {
-						return err
+					if writeErr := os.WriteFile(filepath.Join(dir, name), []byte(data), 0600); writeErr != nil {
+						return writeErr
 					}
 				}
 				var input struct {
 					Path string `json:"path"`
 				}
-				if err := json.Unmarshal(v.Input, &input); err != nil {
-					return err
+				if unmarshalErr := json.Unmarshal(v.Input, &input); unmarshalErr != nil {
+					return unmarshalErr
 				}
 				created := ""
 				operations := []func() error{
@@ -192,9 +200,9 @@ func build(root string) (fixture, error) {
 					func() error { return vault.RemoveManifestEntry(dir, input.Path, id) },
 				}
 				for _, op := range operations {
-					s, err := capture(dir, id, op(), &created)
-					if err != nil {
-						return err
+					s, captureErr := capture(dir, id, op(), &created)
+					if captureErr != nil {
+						return captureErr
 					}
 					v.Steps = append(v.Steps, s)
 				}
