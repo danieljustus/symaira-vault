@@ -2250,13 +2250,14 @@ impl Store {
     }
 
     /// Updates one manifest record after a successful entry write.
+    /// Like Go's UpdateManifestEntry, this treats `path` as a verbatim map key;
+    /// entry filesystem operations validate their paths separately.
     pub fn update_manifest_entry(
         &self,
         path: &str,
         ciphertext: &[u8],
         identity: &Identity,
     ) -> Result<(), StoreError> {
-        validate_entry_path(path)?;
         self.with_write_lock(|store| {
             store.update_manifest_entry_unlocked(path, ciphertext, identity)
         })
@@ -2294,8 +2295,8 @@ impl Store {
     }
 
     /// Removes one manifest record. Missing manifests are a no-op.
+    /// The key is used verbatim, including empty or non-filesystem strings.
     pub fn remove_manifest_entry(&self, path: &str, identity: &Identity) -> Result<(), StoreError> {
-        validate_entry_path(path)?;
         self.with_write_lock(|store| store.remove_manifest_entry_unlocked(path, identity))
     }
 

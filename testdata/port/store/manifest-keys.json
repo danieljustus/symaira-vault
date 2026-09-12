@@ -1,0 +1,1317 @@
+{
+  "revision": "88a9ca41e668f381c6319ed26fe922d8cc22e980",
+  "go_version": "go1.26.6",
+  "source_digest": "e8b445acbab3120c6199d74fd2a91927b36ab89491f1505f34150b8dce790dfd",
+  "generator_digest": "4aa35646eeb5afa31f7687461bd2208848ffefadeea1e770b9cff8adede115b4",
+  "payload": "synthetic-manifest-value",
+  "vectors": [
+    {
+      "name": "omitted",
+      "input": {},
+      "pseudonymize": false,
+      "steps": [
+        {
+          "error": "",
+          "exists": false,
+          "version": 0,
+          "generation": 0,
+          "entries": {},
+          "mode": 0,
+          "times_valid": false,
+          "created_preserved": false,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 1,
+          "entries": {
+            "": {
+              "sha256": "594baf83ad99210e6ff33f85a79ab129dc6ca244df0d3356d2c9d8d6e7eb5588",
+              "size": 24
+            }
+          },
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 2,
+          "entries": {
+            "": {
+              "sha256": "594baf83ad99210e6ff33f85a79ab129dc6ca244df0d3356d2c9d8d6e7eb5588",
+              "size": 24
+            }
+          },
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 3,
+          "entries": {},
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "empty",
+      "input": {
+        "path": ""
+      },
+      "pseudonymize": false,
+      "steps": [
+        {
+          "error": "",
+          "exists": false,
+          "version": 0,
+          "generation": 0,
+          "entries": {},
+          "mode": 0,
+          "times_valid": false,
+          "created_preserved": false,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 1,
+          "entries": {
+            "": {
+              "sha256": "594baf83ad99210e6ff33f85a79ab129dc6ca244df0d3356d2c9d8d6e7eb5588",
+              "size": 24
+            }
+          },
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 2,
+          "entries": {
+            "": {
+              "sha256": "594baf83ad99210e6ff33f85a79ab129dc6ca244df0d3356d2c9d8d6e7eb5588",
+              "size": 24
+            }
+          },
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 3,
+          "entries": {},
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ordinary",
+      "input": {
+        "path": "nested.name/key.v1"
+      },
+      "pseudonymize": false,
+      "steps": [
+        {
+          "error": "",
+          "exists": false,
+          "version": 0,
+          "generation": 0,
+          "entries": {},
+          "mode": 0,
+          "times_valid": false,
+          "created_preserved": false,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 1,
+          "entries": {
+            "nested.name/key.v1": {
+              "sha256": "594baf83ad99210e6ff33f85a79ab129dc6ca244df0d3356d2c9d8d6e7eb5588",
+              "size": 24
+            }
+          },
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 2,
+          "entries": {
+            "nested.name/key.v1": {
+              "sha256": "594baf83ad99210e6ff33f85a79ab129dc6ca244df0d3356d2c9d8d6e7eb5588",
+              "size": 24
+            }
+          },
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 3,
+          "entries": {},
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "traversal",
+      "input": {
+        "path": "../outside"
+      },
+      "pseudonymize": false,
+      "steps": [
+        {
+          "error": "",
+          "exists": false,
+          "version": 0,
+          "generation": 0,
+          "entries": {},
+          "mode": 0,
+          "times_valid": false,
+          "created_preserved": false,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 1,
+          "entries": {
+            "../outside": {
+              "sha256": "594baf83ad99210e6ff33f85a79ab129dc6ca244df0d3356d2c9d8d6e7eb5588",
+              "size": 24
+            }
+          },
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 2,
+          "entries": {
+            "../outside": {
+              "sha256": "594baf83ad99210e6ff33f85a79ab129dc6ca244df0d3356d2c9d8d6e7eb5588",
+              "size": 24
+            }
+          },
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 3,
+          "entries": {},
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dot",
+      "input": {
+        "path": "."
+      },
+      "pseudonymize": false,
+      "steps": [
+        {
+          "error": "",
+          "exists": false,
+          "version": 0,
+          "generation": 0,
+          "entries": {},
+          "mode": 0,
+          "times_valid": false,
+          "created_preserved": false,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 1,
+          "entries": {
+            ".": {
+              "sha256": "594baf83ad99210e6ff33f85a79ab129dc6ca244df0d3356d2c9d8d6e7eb5588",
+              "size": 24
+            }
+          },
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 2,
+          "entries": {
+            ".": {
+              "sha256": "594baf83ad99210e6ff33f85a79ab129dc6ca244df0d3356d2c9d8d6e7eb5588",
+              "size": 24
+            }
+          },
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 3,
+          "entries": {},
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "absolute",
+      "input": {
+        "path": "/outside"
+      },
+      "pseudonymize": false,
+      "steps": [
+        {
+          "error": "",
+          "exists": false,
+          "version": 0,
+          "generation": 0,
+          "entries": {},
+          "mode": 0,
+          "times_valid": false,
+          "created_preserved": false,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 1,
+          "entries": {
+            "/outside": {
+              "sha256": "594baf83ad99210e6ff33f85a79ab129dc6ca244df0d3356d2c9d8d6e7eb5588",
+              "size": 24
+            }
+          },
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 2,
+          "entries": {
+            "/outside": {
+              "sha256": "594baf83ad99210e6ff33f85a79ab129dc6ca244df0d3356d2c9d8d6e7eb5588",
+              "size": 24
+            }
+          },
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 3,
+          "entries": {},
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "spelling",
+      "input": {
+        "path": " spaced//key\\leaf "
+      },
+      "pseudonymize": false,
+      "steps": [
+        {
+          "error": "",
+          "exists": false,
+          "version": 0,
+          "generation": 0,
+          "entries": {},
+          "mode": 0,
+          "times_valid": false,
+          "created_preserved": false,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 1,
+          "entries": {
+            " spaced//key\\leaf ": {
+              "sha256": "594baf83ad99210e6ff33f85a79ab129dc6ca244df0d3356d2c9d8d6e7eb5588",
+              "size": 24
+            }
+          },
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 2,
+          "entries": {
+            " spaced//key\\leaf ": {
+              "sha256": "594baf83ad99210e6ff33f85a79ab129dc6ca244df0d3356d2c9d8d6e7eb5588",
+              "size": 24
+            }
+          },
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 3,
+          "entries": {},
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "nul",
+      "input": {
+        "path": "nul\u0000key"
+      },
+      "pseudonymize": false,
+      "steps": [
+        {
+          "error": "",
+          "exists": false,
+          "version": 0,
+          "generation": 0,
+          "entries": {},
+          "mode": 0,
+          "times_valid": false,
+          "created_preserved": false,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 1,
+          "entries": {
+            "nul\u0000key": {
+              "sha256": "594baf83ad99210e6ff33f85a79ab129dc6ca244df0d3356d2c9d8d6e7eb5588",
+              "size": 24
+            }
+          },
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 2,
+          "entries": {
+            "nul\u0000key": {
+              "sha256": "594baf83ad99210e6ff33f85a79ab129dc6ca244df0d3356d2c9d8d6e7eb5588",
+              "size": 24
+            }
+          },
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 3,
+          "entries": {},
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "omitted",
+      "input": {},
+      "pseudonymize": true,
+      "steps": [
+        {
+          "error": "",
+          "exists": false,
+          "version": 0,
+          "generation": 0,
+          "entries": {},
+          "mode": 0,
+          "times_valid": false,
+          "created_preserved": false,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 1,
+          "entries": {
+            "": {
+              "sha256": "594baf83ad99210e6ff33f85a79ab129dc6ca244df0d3356d2c9d8d6e7eb5588",
+              "size": 24
+            }
+          },
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 2,
+          "entries": {
+            "": {
+              "sha256": "594baf83ad99210e6ff33f85a79ab129dc6ca244df0d3356d2c9d8d6e7eb5588",
+              "size": 24
+            }
+          },
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 3,
+          "entries": {},
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "empty",
+      "input": {
+        "path": ""
+      },
+      "pseudonymize": true,
+      "steps": [
+        {
+          "error": "",
+          "exists": false,
+          "version": 0,
+          "generation": 0,
+          "entries": {},
+          "mode": 0,
+          "times_valid": false,
+          "created_preserved": false,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 1,
+          "entries": {
+            "": {
+              "sha256": "594baf83ad99210e6ff33f85a79ab129dc6ca244df0d3356d2c9d8d6e7eb5588",
+              "size": 24
+            }
+          },
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 2,
+          "entries": {
+            "": {
+              "sha256": "594baf83ad99210e6ff33f85a79ab129dc6ca244df0d3356d2c9d8d6e7eb5588",
+              "size": 24
+            }
+          },
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 3,
+          "entries": {},
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ordinary",
+      "input": {
+        "path": "nested.name/key.v1"
+      },
+      "pseudonymize": true,
+      "steps": [
+        {
+          "error": "",
+          "exists": false,
+          "version": 0,
+          "generation": 0,
+          "entries": {},
+          "mode": 0,
+          "times_valid": false,
+          "created_preserved": false,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 1,
+          "entries": {
+            "nested.name/key.v1": {
+              "sha256": "594baf83ad99210e6ff33f85a79ab129dc6ca244df0d3356d2c9d8d6e7eb5588",
+              "size": 24
+            }
+          },
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 2,
+          "entries": {
+            "nested.name/key.v1": {
+              "sha256": "594baf83ad99210e6ff33f85a79ab129dc6ca244df0d3356d2c9d8d6e7eb5588",
+              "size": 24
+            }
+          },
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 3,
+          "entries": {},
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "traversal",
+      "input": {
+        "path": "../outside"
+      },
+      "pseudonymize": true,
+      "steps": [
+        {
+          "error": "",
+          "exists": false,
+          "version": 0,
+          "generation": 0,
+          "entries": {},
+          "mode": 0,
+          "times_valid": false,
+          "created_preserved": false,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 1,
+          "entries": {
+            "../outside": {
+              "sha256": "594baf83ad99210e6ff33f85a79ab129dc6ca244df0d3356d2c9d8d6e7eb5588",
+              "size": 24
+            }
+          },
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 2,
+          "entries": {
+            "../outside": {
+              "sha256": "594baf83ad99210e6ff33f85a79ab129dc6ca244df0d3356d2c9d8d6e7eb5588",
+              "size": 24
+            }
+          },
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 3,
+          "entries": {},
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dot",
+      "input": {
+        "path": "."
+      },
+      "pseudonymize": true,
+      "steps": [
+        {
+          "error": "",
+          "exists": false,
+          "version": 0,
+          "generation": 0,
+          "entries": {},
+          "mode": 0,
+          "times_valid": false,
+          "created_preserved": false,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 1,
+          "entries": {
+            ".": {
+              "sha256": "594baf83ad99210e6ff33f85a79ab129dc6ca244df0d3356d2c9d8d6e7eb5588",
+              "size": 24
+            }
+          },
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 2,
+          "entries": {
+            ".": {
+              "sha256": "594baf83ad99210e6ff33f85a79ab129dc6ca244df0d3356d2c9d8d6e7eb5588",
+              "size": 24
+            }
+          },
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 3,
+          "entries": {},
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "absolute",
+      "input": {
+        "path": "/outside"
+      },
+      "pseudonymize": true,
+      "steps": [
+        {
+          "error": "",
+          "exists": false,
+          "version": 0,
+          "generation": 0,
+          "entries": {},
+          "mode": 0,
+          "times_valid": false,
+          "created_preserved": false,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 1,
+          "entries": {
+            "/outside": {
+              "sha256": "594baf83ad99210e6ff33f85a79ab129dc6ca244df0d3356d2c9d8d6e7eb5588",
+              "size": 24
+            }
+          },
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 2,
+          "entries": {
+            "/outside": {
+              "sha256": "594baf83ad99210e6ff33f85a79ab129dc6ca244df0d3356d2c9d8d6e7eb5588",
+              "size": 24
+            }
+          },
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 3,
+          "entries": {},
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "spelling",
+      "input": {
+        "path": " spaced//key\\leaf "
+      },
+      "pseudonymize": true,
+      "steps": [
+        {
+          "error": "",
+          "exists": false,
+          "version": 0,
+          "generation": 0,
+          "entries": {},
+          "mode": 0,
+          "times_valid": false,
+          "created_preserved": false,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 1,
+          "entries": {
+            " spaced//key\\leaf ": {
+              "sha256": "594baf83ad99210e6ff33f85a79ab129dc6ca244df0d3356d2c9d8d6e7eb5588",
+              "size": 24
+            }
+          },
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 2,
+          "entries": {
+            " spaced//key\\leaf ": {
+              "sha256": "594baf83ad99210e6ff33f85a79ab129dc6ca244df0d3356d2c9d8d6e7eb5588",
+              "size": 24
+            }
+          },
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 3,
+          "entries": {},
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "nul",
+      "input": {
+        "path": "nul\u0000key"
+      },
+      "pseudonymize": true,
+      "steps": [
+        {
+          "error": "",
+          "exists": false,
+          "version": 0,
+          "generation": 0,
+          "entries": {},
+          "mode": 0,
+          "times_valid": false,
+          "created_preserved": false,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 1,
+          "entries": {
+            "nul\u0000key": {
+              "sha256": "594baf83ad99210e6ff33f85a79ab129dc6ca244df0d3356d2c9d8d6e7eb5588",
+              "size": 24
+            }
+          },
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 2,
+          "entries": {
+            "nul\u0000key": {
+              "sha256": "594baf83ad99210e6ff33f85a79ab129dc6ca244df0d3356d2c9d8d6e7eb5588",
+              "size": 24
+            }
+          },
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        },
+        {
+          "error": "",
+          "exists": true,
+          "version": 1,
+          "generation": 3,
+          "entries": {},
+          "mode": 384,
+          "times_valid": true,
+          "created_preserved": true,
+          "files": [
+            ".lock",
+            "config.yaml",
+            "identity.age",
+            "manifest.age"
+          ]
+        }
+      ]
+    }
+  ]
+}
