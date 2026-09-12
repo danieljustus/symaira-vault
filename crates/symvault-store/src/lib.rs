@@ -486,6 +486,7 @@ impl Store {
         }
     }
 
+    #[cfg(unix)]
     fn read_relative_path(&self, relative: &Path, display: &Path) -> Result<Vec<u8>, StoreError> {
         #[cfg(unix)]
         {
