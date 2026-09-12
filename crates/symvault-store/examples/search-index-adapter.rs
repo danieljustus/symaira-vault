@@ -28,6 +28,50 @@ fn run() -> Result<(), String> {
     let store = Store::open(&root, &identity).map_err(|error| error.to_string())?;
 
     match action.as_str() {
+        "build-observation" => {
+            let result = match SearchIndex::build(&store, &identity) {
+                Ok(mut index) => {
+                    let candidates = store.list(&identity).map_err(|error| error.to_string())?;
+                    let matches = index
+                        .search(&candidates, "MARKER")
+                        .map_err(|error| error.to_string())?;
+                    let cross_line_matches = index
+                        .search(&candidates, "FIRST\nSYNTHETIC")
+                        .map_err(|error| error.to_string())?;
+                    let padded_matches = index
+                        .search(&candidates, " FIRST ")
+                        .map_err(|error| error.to_string())?;
+                    let mut loaded = SearchIndex::load(&store, &identity)
+                        .map_err(|error| error.to_string())?
+                        .ok_or("built index was not loadable")?;
+                    let loaded_matches = loaded
+                        .search(&candidates, "MARKER")
+                        .map_err(|error| error.to_string())?;
+                    let loaded_cross_line_matches = loaded
+                        .search(&candidates, "FIRST\nSYNTHETIC")
+                        .map_err(|error| error.to_string())?;
+                    let loaded_padded_matches = loaded
+                        .search(&candidates, " FIRST ")
+                        .map_err(|error| error.to_string())?;
+                    serde_json::json!({
+                        "accepted": true, "error": "", "matches": matches,
+                        "loaded_matches": loaded_matches,
+                        "cross_line_matches": cross_line_matches,
+                        "loaded_cross_line_matches": loaded_cross_line_matches,
+                        "padded_matches": padded_matches,
+                        "loaded_padded_matches": loaded_padded_matches,
+                    })
+                }
+                Err(error) => serde_json::json!({
+                    "accepted": false, "error": error.to_string(), "matches": null,
+                    "loaded_matches": null, "cross_line_matches": null,
+                    "loaded_cross_line_matches": null, "padded_matches": null,
+                    "loaded_padded_matches": null,
+                }),
+            };
+            serde_json::to_writer(std::io::stdout(), &result).map_err(|error| error.to_string())?;
+            println!();
+        }
         "build" => {
             SearchIndex::build(&store, &identity).map_err(|error| error.to_string())?;
             println!("{{\"case_id\":\"rust_build_index\"}}");

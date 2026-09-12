@@ -79,6 +79,8 @@ pub enum StoreError {
     InvalidEntryPath(String),
     #[error("entry ciphertext is invalid: {0}")]
     Decryption(String),
+    #[error("search index build produced no entries")]
+    SearchIndexBuildEmpty,
     #[error("vault resource exceeds {limit} bytes: {path}")]
     Limit { path: PathBuf, limit: u64 },
     #[error("entry value exceeds the supported structure limits: {0}")]
@@ -2556,6 +2558,8 @@ where
 
 impl SearchIndex {
     /// Builds and persists an encrypted index from every decryptable entry.
+    /// Rejects a nonempty vault with no searchable values, preserving any
+    /// existing index. An empty vault can still produce a valid empty index.
     pub fn build(store: &Store, identity: &Identity) -> Result<Self, StoreError> {
         let paths = store.list(identity)?;
         let mut document = IndexDocument {
@@ -2566,14 +2570,19 @@ impl SearchIndex {
             document.paths.insert(path.clone(), EmptyIndexValue {});
             if let Ok(entry) = store.get(path, identity) {
                 let mut values = Vec::new();
-                for value in entry.data.values() {
-                    collect_index_strings(&mut values, value);
+                for (field, value) in &entry.data {
+                    collect_index_strings(&mut values, field, value);
                 }
                 values.sort();
                 if !values.is_empty() {
                     document.values.insert(path.clone(), values);
                 }
             }
+        }
+        // Go's buildIndex rejects this before publishing. Host extraction only
+        // accepts nonempty strings, which are already included in values here.
+        if !paths.is_empty() && document.values.is_empty() {
+            return Err(StoreError::SearchIndexBuildEmpty);
         }
         let mut salt = vec![0u8; 16];
         getrandom::fill(&mut salt).map_err(|source| StoreError::Write {
@@ -2691,15 +2700,20 @@ impl SearchIndex {
     }
 }
 
-fn collect_index_strings(values: &mut Vec<String>, value: &serde_json::Value) {
+fn collect_index_strings(values: &mut Vec<String>, field: &str, value: &serde_json::Value) {
     match value {
+        serde_json::Value::String(value) if field == "backup_codes" => value
+            .split('\n')
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .for_each(|value| values.push(value.to_lowercase())),
         serde_json::Value::String(value) if !value.is_empty() => values.push(value.to_lowercase()),
         serde_json::Value::Array(values_array) => values_array
             .iter()
-            .for_each(|value| collect_index_strings(values, value)),
+            .for_each(|value| collect_index_strings(values, "", value)),
         serde_json::Value::Object(object) => object
             .values()
-            .for_each(|value| collect_index_strings(values, value)),
+            .for_each(|value| collect_index_strings(values, "", value)),
         _ => {}
     }
 }

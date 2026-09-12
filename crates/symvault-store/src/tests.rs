@@ -449,6 +449,74 @@ fn encrypted_search_index_matches_case_insensitive_nested_values_and_invalidates
 }
 
 #[test]
+fn search_index_rejects_nonempty_vault_without_searchable_values() {
+    // The live Go oracle in search_index_empty_crosslang_test.go exercises the
+    // same build boundary, including omitted/null/empty values and disk state.
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &value.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    for path in store.list(&identity).unwrap() {
+        store.delete_entry_with_identity(&path, &identity).unwrap();
+    }
+    SearchIndex::build(&store, &identity).unwrap();
+    let index_path = temp.path().join(".search-index");
+    let prior = fs::read(&index_path).unwrap();
+    for data in [
+        serde_json::json!({}),
+        serde_json::json!({"value": null}),
+        serde_json::json!({"value": ""}),
+        serde_json::json!({"value": [42, true, null, {"nested": ""}]}),
+    ] {
+        store
+            .write_entry(
+                "empty",
+                &Entry {
+                    data: serde_json::from_value(data).unwrap(),
+                    ..Entry::default()
+                },
+                &identity,
+            )
+            .unwrap();
+        for existing in [false, true] {
+            if existing {
+                fs::write(&index_path, &prior).unwrap();
+            } else if index_path.exists() {
+                fs::remove_file(&index_path).unwrap();
+            }
+            let error = SearchIndex::build(&store, &identity).unwrap_err();
+            assert_eq!(error.to_string(), "search index build produced no entries");
+            if existing {
+                assert_eq!(fs::read(&index_path).unwrap(), prior);
+            } else {
+                assert!(!index_path.exists());
+            }
+        }
+    }
+    // One nonempty nested string admits a mixed vault; entries without strings
+    // still count toward freshness, so the resulting index must reload.
+    store
+        .write_entry(
+            "searchable",
+            &Entry {
+                data: serde_json::from_value(serde_json::json!({"nested": ["Synthetic Marker"]}))
+                    .unwrap(),
+                ..Entry::default()
+            },
+            &identity,
+        )
+        .unwrap();
+    let mut built = SearchIndex::build(&store, &identity).unwrap();
+    let candidates = store.list(&identity).unwrap();
+    assert_eq!(candidates.len(), 2);
+    let expected = BTreeSet::from(["searchable".to_string()]);
+    assert_eq!(built.search(&candidates, "MARKER").unwrap(), expected);
+    let mut loaded = SearchIndex::load(&store, &identity).unwrap().unwrap();
+    assert_eq!(loaded.search(&candidates, "MARKER").unwrap(), expected);
+}
+
+#[test]
 fn stale_or_corrupt_search_index_is_discarded() {
     let (_, value) = fixture();
     let identity = parse_identity(IDENTITY).unwrap();
