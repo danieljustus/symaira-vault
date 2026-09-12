@@ -122,7 +122,6 @@ fn entry_and_manifest_mutations_retain_opened_root_after_path_replacement() {
         store
             .write_entry_with_recipients_at(path, &entry, &identity, "2026-09-08T10:12:12Z", None)
             .unwrap();
-        assert_eq!(store.get(path, &identity).unwrap().classification, 2);
         store
             .write_entry_at(path, &entry, &identity, "2026-09-08T10:13:12Z", false, None)
             .unwrap();

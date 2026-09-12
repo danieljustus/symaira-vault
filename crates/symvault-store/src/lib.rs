@@ -1971,13 +1971,12 @@ impl Store {
     ) -> Result<(), StoreError> {
         validate_entry_path(path)?;
         let recipients = self.encryption_recipients(identity)?;
-        let mut stored =
+        let stored =
             metadata::prepare_entry(entry, now, path, self.config.pseudonymize_paths, pending)
                 .map_err(|detail| StoreError::Entry {
                     path: path.to_owned(),
                     detail,
                 })?;
-        stored.classification = infer_classification(&stored);
         self.publish_prepared_entry(path, &stored, identity, &recipients)
     }
 
