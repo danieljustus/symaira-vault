@@ -51,7 +51,7 @@ fn fixture() -> Fixture {
             "ls-tree",
             "-r",
             "--name-only",
-            &format!("{REVISION}^{{tree}}"),
+            REVISION,
             "--",
             "internal",
             "go.mod",
