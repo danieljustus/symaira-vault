@@ -258,6 +258,9 @@ func assertDirExists(t *testing.T, path string) {
 }
 
 func TestPreviewLegacyToXDG_IsNonMutatingAndComplete(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: HOME env behavior differs")
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "cfg"))
@@ -284,6 +287,9 @@ func TestPreviewLegacyToXDG_IsNonMutatingAndComplete(t *testing.T) {
 }
 
 func TestMigrateLegacyToXDG_InterruptionRecovery(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: HOME env behavior differs")
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "cfg"))
@@ -318,6 +324,9 @@ func TestMigrateLegacyToXDG_InterruptionRecovery(t *testing.T) {
 }
 
 func TestMigrateLegacyToXDG_CollisionPreservesExistingDestination(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: HOME env behavior differs")
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "cfg"))
@@ -340,6 +349,9 @@ func TestMigrateLegacyToXDG_CollisionPreservesExistingDestination(t *testing.T) 
 }
 
 func TestMigrateLegacyToXDG_RejectsSymlinkSource(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: HOME env behavior differs")
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "cfg"))
@@ -361,6 +373,9 @@ func TestMigrateLegacyToXDG_RejectsSymlinkSource(t *testing.T) {
 }
 
 func TestMigrateLegacyToXDG_RecoveryRejectsTamperedDestination(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: HOME env behavior differs")
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "cfg"))
@@ -385,6 +400,9 @@ func TestMigrateLegacyToXDG_RecoveryRejectsTamperedDestination(t *testing.T) {
 }
 
 func TestMigrateLegacyToXDG_RecoveryRejectsSymlinkRoot(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: HOME env behavior differs")
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "cfg-link"))
@@ -408,6 +426,9 @@ func TestMigrateLegacyToXDG_RecoveryRejectsSymlinkRoot(t *testing.T) {
 }
 
 func TestMigrateLegacyToXDG_RecoveryRemovesPartialCopy(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows: HOME env behavior differs")
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "cfg"))
