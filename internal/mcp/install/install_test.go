@@ -668,12 +668,14 @@ args = ["--keep", "value"]
 	if string(repeated) != text {
 		t.Fatal("repeated install changed file bytes")
 	}
-	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := info.Mode().Perm(); got != 0o600 {
-		t.Fatalf("permissions = %o, want 600", got)
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := info.Mode().Perm(); got != 0o600 {
+			t.Fatalf("permissions = %o, want 600", got)
+		}
 	}
 }
 
