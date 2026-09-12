@@ -38,7 +38,7 @@ var TierPresets = map[TierPreset]AgentProfile{
 		ApprovalMode:       StrPtr("prompt"),
 		RequireApproval:    BoolPtr(true),
 		AllowedPaths:       []string{},
-		AllowedExecutables: []string{"curl", "git", "terraform", "npm", "node", "python", "python3", "docker", "kubectl"},
+		AllowedExecutables: []string{"curl", SyncMethodGit, "terraform", "npm", "node", "python", "python3", "docker", "kubectl"},
 	},
 	TierAdmin: {
 		CanWrite:         BoolPtr(true),

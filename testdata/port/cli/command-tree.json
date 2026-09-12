@@ -6277,6 +6277,89 @@
       ]
     },
     {
+      "path": "symvault migrate paths",
+      "name": "paths",
+      "use": "paths",
+      "short": "Preview the legacy path migration without writing",
+      "long": "Preview the migration from the legacy ~/.symvault layout to the\nXDG config, data, and cache directories. This command never writes,\nmodifies, or removes files.",
+      "example": "  symvault migrate paths\n  symvault migrate xdg",
+      "aliases": [
+        "xdg"
+      ],
+      "hidden": false,
+      "disable_flag_parsing": false,
+      "traverse_children": false,
+      "runnable": true,
+      "has_subcommands": false,
+      "argument_count_probes": [
+        {
+          "count": 0,
+          "accepted": true
+        },
+        {
+          "count": 1,
+          "accepted": false,
+          "error": "unknown command \"arg-1\" for \"symvault migrate paths\""
+        },
+        {
+          "count": 2,
+          "accepted": false,
+          "error": "unknown command \"arg-1\" for \"symvault migrate paths\""
+        },
+        {
+          "count": 3,
+          "accepted": false,
+          "error": "unknown command \"arg-1\" for \"symvault migrate paths\""
+        },
+        {
+          "count": 4,
+          "accepted": false,
+          "error": "unknown command \"arg-1\" for \"symvault migrate paths\""
+        },
+        {
+          "count": 5,
+          "accepted": false,
+          "error": "unknown command \"arg-1\" for \"symvault migrate paths\""
+        },
+        {
+          "count": 6,
+          "accepted": false,
+          "error": "unknown command \"arg-1\" for \"symvault migrate paths\""
+        },
+        {
+          "count": 7,
+          "accepted": false,
+          "error": "unknown command \"arg-1\" for \"symvault migrate paths\""
+        },
+        {
+          "count": 8,
+          "accepted": false,
+          "error": "unknown command \"arg-1\" for \"symvault migrate paths\""
+        },
+        {
+          "count": 9,
+          "accepted": false,
+          "error": "unknown command \"arg-1\" for \"symvault migrate paths\""
+        }
+      ],
+      "local_flags": [
+        {
+          "name": "help",
+          "shorthand": "h",
+          "usage": "help for paths",
+          "type": "bool",
+          "default": "false",
+          "no_opt_default": "true",
+          "hidden": false,
+          "annotations": {
+            "cobra_annotation_flag_set_by_cobra": [
+              "true"
+            ]
+          }
+        }
+      ]
+    },
+    {
       "path": "symvault migrate pseudonymize",
       "name": "pseudonymize",
       "use": "pseudonymize",

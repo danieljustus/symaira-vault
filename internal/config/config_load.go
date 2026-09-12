@@ -234,7 +234,7 @@ func loadSectionFields(doc *yaml.Node) map[string]map[string]bool {
 	if root.Kind != yaml.MappingNode {
 		return nil
 	}
-	sections := []string{"vault", "git", "mcp", "update", "clipboard", "audit", "logging", "security"}
+	sections := []string{configSectionVault, SyncMethodGit, configSectionMCP, "update", "clipboard", configSectionAudit, "logging", "security"}
 	result := make(map[string]map[string]bool)
 	for i := 0; i < len(root.Content)-1; i += 2 {
 		key := root.Content[i].Value
@@ -247,7 +247,7 @@ func loadSectionFields(doc *yaml.Node) map[string]map[string]bool {
 						fieldKey := secNode.Content[j].Value
 						fields[fieldKey] = true
 						switch {
-						case fieldKey == "oauth" && sec == "mcp":
+						case fieldKey == "oauth" && sec == configSectionMCP:
 							oAuthNode := secNode.Content[j+1]
 							if oAuthNode.Kind == yaml.MappingNode {
 								oAuthFields := make(map[string]bool)
@@ -256,7 +256,7 @@ func loadSectionFields(doc *yaml.Node) map[string]map[string]bool {
 								}
 								result["mcp_oauth"] = oAuthFields
 							}
-						case fieldKey == "perplexity" && sec == "mcp":
+						case fieldKey == "perplexity" && sec == configSectionMCP:
 							perpNode := secNode.Content[j+1]
 							if perpNode.Kind == yaml.MappingNode {
 								perpFields := make(map[string]bool)

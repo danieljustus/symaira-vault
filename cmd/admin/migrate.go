@@ -38,6 +38,7 @@ func newMigrateCmd() *cobra.Command {
 	MigrateCmd.AddCommand(newMigrateKDFCmd())
 	MigrateCmd.AddCommand(newMigrateV4Cmd())
 	MigrateCmd.AddCommand(newMigrateSessionCmd())
+	MigrateCmd.AddCommand(newMigratePathsCmd())
 	MigrateCmd.GroupID = cli.GroupIDAdministration
 	return MigrateCmd
 }
@@ -382,4 +383,34 @@ func enablePseudonymizeConfig(vaultDir string) error {
 		return fmt.Errorf("save config: %w", err)
 	}
 	return nil
+}
+
+func newMigratePathsCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:     "paths",
+		Aliases: []string{"xdg"},
+		Short:   "Preview the legacy path migration without writing",
+		Long: `Preview the migration from the legacy ~/.symvault layout to the
+XDG config, data, and cache directories. This command never writes,
+modifies, or removes files.`,
+		Example: `  symvault migrate paths
+  symvault migrate xdg`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			plan, err := configpkg.PreviewLegacyToXDG()
+			if err != nil {
+				return fmt.Errorf("preview path migration: %w", err)
+			}
+			if !plan.NeedsMigration {
+				cli.PrintlnQuietAware("No legacy path migration is needed.")
+				return nil
+			}
+			cli.PrintlnQuietAware(fmt.Sprintf("Legacy path migration would copy %d item(s):", len(plan.Items)))
+			for _, item := range plan.Items {
+				cli.PrintlnQuietAware(fmt.Sprintf("  %s -> %s (%d bytes)", item.Source, item.Destination, item.Bytes))
+			}
+			cli.PrintlnQuietAware("Preview only: no changes written.")
+			return nil
+		},
+	}
 }
