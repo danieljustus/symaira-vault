@@ -229,7 +229,7 @@ func validateApprovalClientIdentity(serverPEM []byte, clientCertFile, caFile str
 	if err != nil {
 		return fmt.Errorf("parse server TLS certificate")
 	}
-	clientPEM, err := os.ReadFile(clientCertFile)
+	clientPEM, err := os.ReadFile(clientCertFile) // #nosec G304 -- path is the locally configured approval client certificate.
 	if err != nil {
 		return fmt.Errorf("read local approval client identity")
 	}
@@ -252,7 +252,7 @@ func validateApprovalClientIdentity(serverPEM []byte, clientCertFile, caFile str
 	if string(serverKey) == string(clientKey) {
 		return fmt.Errorf("approval CLI refuses to reuse the MCP server certificate identity as the approval client identity")
 	}
-	caPEM, err := os.ReadFile(caFile)
+	caPEM, err := os.ReadFile(caFile) // #nosec G304 -- path is the locally configured approval client CA.
 	if err != nil {
 		return fmt.Errorf("read approval client CA")
 	}
