@@ -9,7 +9,7 @@
       "internal/policy/engine.go",
       "internal/policy/types.go"
     ],
-    "source_digest": "c285d8da0d20535e465fb6922e4ce87dabe581133c642d1a1a66e2dc37f4858b",
+    "source_digest": "4c4fc5ed4a77c719840be193cab38c050372e08525ed35718cc835260601e409",
     "generator_digest": "4f9bfd6d4ab7ee4673d621b7f04ddfcc7ca870d8d2b72f73af873fc0dc3f1f90"
   },
   "validation_cases": [
