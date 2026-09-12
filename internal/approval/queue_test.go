@@ -196,6 +196,29 @@ func TestNotifyOnChange(t *testing.T) {
 	}
 }
 
+func TestCloseWakesWaiterWithErrClosed(t *testing.T) {
+	q := NewQueue()
+	id, err := q.Enqueue(Request{AgentName: "a", Path: "p", Write: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, waitErr := q.Wait(context.Background(), id)
+		done <- waitErr
+	}()
+	time.Sleep(10 * time.Millisecond)
+	q.Close()
+	select {
+	case waitErr := <-done:
+		if !errors.Is(waitErr, ErrClosed) {
+			t.Fatalf("Wait error = %v, want ErrClosed", waitErr)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("closed waiter was not woken")
+	}
+}
+
 func TestCloseExpiresPending(t *testing.T) {
 	q := NewQueue()
 	id, _ := q.Enqueue(Request{AgentName: "a", Path: "p", Write: true})

@@ -36,6 +36,7 @@ var bufferPool = sync.Pool{
 // serverOptions carries optional extensions for the HTTP server.
 type serverOptions struct {
 	approvalHandler         http.Handler
+	localApprovalHandler    http.Handler
 	deviceEnrollHandler     http.Handler
 	deviceEnrollCodeHandler http.Handler
 }
@@ -67,6 +68,13 @@ func WithDeviceEnrollCodeAPI(handler http.Handler) HTTPServerOption {
 func WithApprovalAPI(handler http.Handler) HTTPServerOption {
 	return func(o *serverOptions) {
 		o.approvalHandler = handler
+	}
+}
+
+// WithLocalApprovalAPI mounts the loopback-only CLI approval transport.
+func WithLocalApprovalAPI(handler http.Handler) HTTPServerOption {
+	return func(o *serverOptions) {
+		o.localApprovalHandler = handler
 	}
 }
 
@@ -312,6 +320,14 @@ func RunHTTPServerOnListener(ctx context.Context, listener net.Listener, v *vaul
 		}
 		mux.Handle(approval.PathApprovals, approvalChain)
 		mux.Handle(approval.PathApprovalAction, approvalChain)
+	}
+	if options.localApprovalHandler != nil {
+		localApprovalChain := options.localApprovalHandler
+		if rateLimiter != nil {
+			localApprovalChain = auth.RateLimiterMiddleware(rateLimiter, localApprovalChain)
+		}
+		mux.Handle(approval.PathLocalApprovals, localApprovalChain)
+		mux.Handle(approval.PathLocalApprovalAction, localApprovalChain)
 	}
 
 	// Device enrollment transport (optional): lets a device exchange a
