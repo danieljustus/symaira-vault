@@ -31,7 +31,7 @@ func secureCopyEntry(src, dst string) error {
 		return err
 	}
 	defer func() { _ = unix.Close(dstParent) }()
-	return copyMigrationNode(int(srcFile.Fd()), dstParent, filepath.Base(dst), uint32(srcStat.Mode))
+	return copyMigrationNode(int(srcFile.Fd()), dstParent, filepath.Base(dst), uint32(srcStat.Mode)) //nolint:unconvert // unix.Stat_t.Mode is uint32 on Linux but uint16 on Darwin; the conversion is a no-op on one GOOS and required on the other
 }
 
 func secureMkdirOpen(path string, mode uint32) (int, error) {
@@ -102,7 +102,7 @@ func copyMigrationNode(srcFD, dstParent int, name string, srcMode uint32) error 
 			if err != nil {
 				return err
 			}
-			copyErr := copyMigrationNode(childFD, dstDir, child, uint32(st.Mode))
+			copyErr := copyMigrationNode(childFD, dstDir, child, uint32(st.Mode)) //nolint:unconvert // see the conversion note in secureCopyEntry above
 			_ = unix.Close(childFD)
 			if copyErr != nil {
 				return copyErr
