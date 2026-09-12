@@ -395,6 +395,12 @@ func mergeMCPConfig(raw *MCPConfig, sf, oaf, ppf map[string]bool) *MCPConfig {
 	if sf["tls_client_ca_file"] {
 		defaults.TLSClientCAFile = raw.TLSClientCAFile
 	}
+	if sf["approval_tls_cert_file"] {
+		defaults.ApprovalTLSCertFile = raw.ApprovalTLSCertFile
+	}
+	if sf["approval_tls_key_file"] {
+		defaults.ApprovalTLSKeyFile = raw.ApprovalTLSKeyFile
+	}
 	if sf["mtls_enabled"] {
 		defaults.MTLSEnabled = raw.MTLSEnabled
 	}

@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"net"
 	"net/http"
@@ -125,13 +126,31 @@ func approvalAPIRequest(method, path string, result any) error {
 	if !mcpcmd.IsLocalhostBind(bind) {
 		return fmt.Errorf("approval CLI requires a server bound to loopback; running server is bound to %q", bind)
 	}
-	certFile, err := approvalTLSCertFile(vaultDir)
-	if err != nil {
-		return fmt.Errorf("load server TLS certificate: %w", err)
+	runtimeTLS, runtimeOK := cli.LoadRuntimeTLSConfig(vaultDir)
+	certFile, clientCAFile, clientCertFile, clientKeyFile := "", "", "", ""
+	clientAuthRequired := false
+	if runtimeOK {
+		certFile = runtimeTLS.Certificate
+		clientCAFile = runtimeTLS.ClientCAFile
+		clientCertFile = runtimeTLS.ClientCertificate
+		clientKeyFile = runtimeTLS.ClientKey
+		clientAuthRequired = runtimeTLS.ClientAuthRequired
+	} else if cfg, loadErr := configpkg.Load(filepath.Join(vaultDir, "config.yaml")); loadErr == nil && cfg != nil && cfg.MCP != nil {
+		certFile = strings.TrimSpace(cfg.MCP.TLSCertFile)
+		clientCAFile = strings.TrimSpace(cfg.MCP.TLSClientCAFile)
+		clientCertFile = strings.TrimSpace(cfg.MCP.ApprovalTLSCertFile)
+		clientKeyFile = strings.TrimSpace(cfg.MCP.ApprovalTLSKeyFile)
+		clientAuthRequired = cfg.MCP.MTLSEnabled
 	}
-	pemBytes, err := os.ReadFile(certFile) // #nosec G304 -- serverbootstrap reads the same configured certificate; bytes are parsed locally and never emitted.
+	if certFile == "" {
+		certFile, _, err = serverbootstrap.EnsureTLSCert(vaultDir)
+		if err != nil {
+			return fmt.Errorf("load server TLS certificate: %w", err)
+		}
+	}
+	pemBytes, err := os.ReadFile(certFile)
 	if err != nil {
-		return fmt.Errorf("read server TLS certificate: %w", err)
+		return fmt.Errorf("read server TLS certificate")
 	}
 	pool := x509.NewCertPool()
 	if !pool.AppendCertsFromPEM(pemBytes) {
@@ -148,7 +167,21 @@ func approvalAPIRequest(method, path string, result any) error {
 	}
 	req.Header.Set(approval.HeaderEnrollTimestamp, now.Format(time.RFC3339))
 	req.Header.Set(approval.HeaderEnrollProof, approval.EnrollProof(secret, now))
-	client := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}}}
+	tlsConfig := &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}
+	if clientAuthRequired {
+		if clientCertFile == "" || clientKeyFile == "" || clientCAFile == "" {
+			return fmt.Errorf("approval CLI cannot connect while the running MCP server requires mTLS because the dedicated local approval client certificate, key, and CA must both be configured")
+		}
+		if identityErr := validateApprovalClientIdentity(pemBytes, clientCertFile, clientCAFile); identityErr != nil {
+			return identityErr
+		}
+		clientCert, loadErr := tls.LoadX509KeyPair(clientCertFile, clientKeyFile)
+		if loadErr != nil {
+			return fmt.Errorf("load local approval client identity failed")
+		}
+		tlsConfig.Certificates = []tls.Certificate{clientCert}
+	}
+	client := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{TLSClientConfig: tlsConfig}}
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("connect to local approval server: %w", err)
@@ -171,33 +204,76 @@ func approvalAPIRequest(method, path string, result any) error {
 }
 
 // approvalTLSCertFile returns the certificate used by the running HTTP server.
-// Configured certificate/key pairs take precedence over the vault-generated
-// pair, matching serverbootstrap's effective TLS configuration.
 func approvalTLSCertFile(vaultDir string) (string, error) {
-	// The running server publishes its effective TLS settings. Treat this
-	// process-local record as authoritative: config.yaml may describe a later
-	// or earlier server configuration, while the CLI must match the listener it
-	// is actually contacting.
 	if cert, ok := cli.LoadRuntimeTLSCert(vaultDir); ok {
-		if cli.RuntimeTLSClientAuthRequired(vaultDir) {
-			return "", fmt.Errorf("approval CLI cannot connect while the running MCP server requires mTLS because no local approval client certificate is configured; use an enrolled approval device instead")
-		}
 		return cert, nil
 	}
 	cfg, err := configpkg.Load(filepath.Join(vaultDir, "config.yaml"))
-	if err == nil && cfg != nil && cfg.MCP != nil && cfg.MCP.MTLSEnabled {
-		return "", fmt.Errorf("approval CLI cannot connect while MCP.mtls_enabled=true because no local approval client certificate is configured; use an enrolled approval device instead")
-	}
-	if cfg != nil && cfg.MCP != nil {
-		cert := strings.TrimSpace(cfg.MCP.TLSCertFile)
-		key := strings.TrimSpace(cfg.MCP.TLSKeyFile)
-		if cert != "" && key != "" {
-			return cert, nil
-		}
+	if err == nil && cfg != nil && cfg.MCP != nil && strings.TrimSpace(cfg.MCP.TLSCertFile) != "" && strings.TrimSpace(cfg.MCP.TLSKeyFile) != "" {
+		return strings.TrimSpace(cfg.MCP.TLSCertFile), nil
 	}
 	cert, _, ensureErr := serverbootstrap.EnsureTLSCert(vaultDir)
 	if ensureErr != nil {
 		return "", ensureErr
 	}
 	return cert, nil
+}
+
+// validateApprovalClientIdentity checks the certificate identity without ever reading the server private key.
+func validateApprovalClientIdentity(serverPEM []byte, clientCertFile, caFile string) error {
+	serverBlock, _ := pem.Decode(serverPEM)
+	if serverBlock == nil {
+		return fmt.Errorf("parse server TLS certificate")
+	}
+	serverCert, err := x509.ParseCertificate(serverBlock.Bytes)
+	if err != nil {
+		return fmt.Errorf("parse server TLS certificate")
+	}
+	clientPEM, err := os.ReadFile(clientCertFile) // #nosec G304 -- path is the locally configured approval client certificate.
+	if err != nil {
+		return fmt.Errorf("read local approval client identity")
+	}
+	clientBlock, _ := pem.Decode(clientPEM)
+	if clientBlock == nil {
+		return fmt.Errorf("parse local approval client identity")
+	}
+	clientLeaf, err := x509.ParseCertificate(clientBlock.Bytes)
+	if err != nil {
+		return fmt.Errorf("parse local approval client identity")
+	}
+	serverKey, err := x509.MarshalPKIXPublicKey(serverCert.PublicKey)
+	if err != nil {
+		return fmt.Errorf("inspect server TLS certificate")
+	}
+	clientKey, err := x509.MarshalPKIXPublicKey(clientLeaf.PublicKey)
+	if err != nil {
+		return fmt.Errorf("inspect local approval client identity")
+	}
+	if string(serverKey) == string(clientKey) {
+		return fmt.Errorf("approval CLI refuses to reuse the MCP server certificate identity as the approval client identity")
+	}
+	caPEM, err := os.ReadFile(caFile) // #nosec G304 -- path is the locally configured approval client CA.
+	if err != nil {
+		return fmt.Errorf("read approval client CA")
+	}
+	roots := x509.NewCertPool()
+	if !roots.AppendCertsFromPEM(caPEM) {
+		return fmt.Errorf("parse approval client CA")
+	}
+	intermediates := x509.NewCertPool()
+	for rest := clientPEM; ; {
+		block, next := pem.Decode(rest)
+		if block == nil {
+			break
+		}
+		rest = next
+		cert, e := x509.ParseCertificate(block.Bytes)
+		if e == nil && cert.SerialNumber.Cmp(clientLeaf.SerialNumber) != 0 {
+			intermediates.AddCert(cert)
+		}
+	}
+	if _, err := clientLeaf.Verify(x509.VerifyOptions{Roots: roots, Intermediates: intermediates, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}}); err != nil {
+		return fmt.Errorf("verify local approval client identity")
+	}
+	return nil
 }

@@ -104,6 +104,8 @@ func (c *Config) SaveTo(path string) error {
 			RateLimit:           c.MCP.RateLimit,
 			MetricsAuthRequired: c.MCP.MetricsAuthRequired,
 			AllowInsecureBind:   c.MCP.AllowInsecureBind,
+			ApprovalTLSCertFile: c.MCP.ApprovalTLSCertFile,
+			ApprovalTLSKeyFile:  c.MCP.ApprovalTLSKeyFile,
 		}
 		if c.MCP.OTLPEndpoint != "" {
 			raw.MCP.OTLPEndpoint = c.MCP.OTLPEndpoint

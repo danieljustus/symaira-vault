@@ -3665,3 +3665,19 @@ func TestSetWarnFunc(t *testing.T) {
 		t.Fatalf("expected nil warnFunc to suppress warning, got %v", captured)
 	}
 }
+
+func TestSaveLoadMCPApprovalTLSFields(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	wantCert, wantKey := "/tls/approval-client.crt", "/tls/approval-client.key"
+	cfg := &Config{MCP: &MCPConfig{ApprovalTLSCertFile: wantCert, ApprovalTLSKeyFile: wantKey}}
+	if err := cfg.SaveTo(path); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.MCP == nil || got.MCP.ApprovalTLSCertFile != wantCert || got.MCP.ApprovalTLSKeyFile != wantKey {
+		t.Fatalf("saved approval TLS fields = %#v", got.MCP)
+	}
+}
