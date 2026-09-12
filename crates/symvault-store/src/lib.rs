@@ -2636,7 +2636,16 @@ impl SearchIndex {
                 return Ok(None);
             }
         };
-        if document.entry_count != store.list(identity)?.len() {
+        let paths = match store.list(identity) {
+            Ok(paths) => paths,
+            Err(error) => {
+                // Go discards the persisted index when freshness cannot be
+                // checked, while preserving the original listing error.
+                let _ = store.remove_path(&path);
+                return Err(error);
+            }
+        };
+        if document.entry_count != paths.len() {
             let _ = store.remove_path(&path);
             return Ok(None);
         }

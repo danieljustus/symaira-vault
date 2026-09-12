@@ -28,6 +28,44 @@ fn run() -> Result<(), String> {
     let store = Store::open(&root, &identity).map_err(|error| error.to_string())?;
 
     match action.as_str() {
+        #[cfg(unix)]
+        "load-list-error" => {
+            use std::os::unix::fs::PermissionsExt;
+
+            // Open the store before injecting the failure so this probes load's
+            // freshness check, not Store::open's layout discovery.
+            let entries = root.join("entries");
+            let permissions = fs::metadata(&entries)
+                .map_err(|error| error.to_string())?
+                .permissions();
+            fs::set_permissions(&entries, fs::Permissions::from_mode(0o000))
+                .map_err(|error| error.to_string())?;
+            let loaded = SearchIndex::load(&store, &identity);
+            fs::set_permissions(&entries, permissions).map_err(|error| error.to_string())?;
+            let permission_error = matches!(loaded,
+                Err(symvault_store::StoreError::Read { ref source, .. })
+                    if source.kind() == std::io::ErrorKind::PermissionDenied);
+            let index_removed = !root.join(".search-index").exists();
+            let retry_absent = SearchIndex::load(&store, &identity)
+                .map_err(|error| error.to_string())?
+                .is_none();
+            let mut rebuilt =
+                SearchIndex::build(&store, &identity).map_err(|error| error.to_string())?;
+            let matches = rebuilt
+                .search(
+                    &store.list(&identity).map_err(|error| error.to_string())?,
+                    "MARKER",
+                )
+                .map_err(|error| error.to_string())?;
+            let result = serde_json::json!({
+                "permission_error": permission_error,
+                "index_removed": index_removed,
+                "retry_absent": retry_absent,
+                "matches": matches,
+            });
+            serde_json::to_writer(std::io::stdout(), &result).map_err(|error| error.to_string())?;
+            println!();
+        }
         "build-observation" => {
             let result = match SearchIndex::build(&store, &identity) {
                 Ok(mut index) => {
