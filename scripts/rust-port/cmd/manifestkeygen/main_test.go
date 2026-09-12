@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"filippo.io/age"
@@ -44,7 +45,8 @@ func TestManifestKeyProductionFixture(t *testing.T) {
 					}
 					continue
 				}
-				if !s.TimesValid || !s.CreatedPreserved || s.Mode != 0600 {
+				modeValid := runtime.GOOS == "windows" || s.Mode == 0600
+				if !s.TimesValid || !s.CreatedPreserved || !modeValid {
 					t.Fatalf("step %d: %+v", i, s)
 				}
 				if i < 3 {

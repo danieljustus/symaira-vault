@@ -61,7 +61,7 @@ func searchIndexAdapter(t testing.TB) string {
 		// operations themselves. The latter use runSearchIndexCommand's bounded
 		// two-minute timeout; applying it to dependency compilation makes the
 		// differential test depend on a warm cache rather than adapter behavior.
-		output, err := runSearchIndexCommandWithTimeout(5*time.Minute, repo, target, "cargo", "build", "-p", "symvault-store", "--example", "search-index-adapter")
+		output, err := runSearchIndexCommandWithTimeout(5*time.Minute, repo, target, "cargo", "build", "--manifest-path", filepath.Join(repo, "Cargo.toml"), "--locked", "-p", "symvault-store", "--example", "search-index-adapter")
 		if err != nil {
 			searchIndexAdapterBuild.err = fmt.Errorf("cargo build: %w: %s", err, output)
 			return
