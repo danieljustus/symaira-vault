@@ -71,8 +71,8 @@ func PreviewLegacyToXDG() (MigrationPlan, error) {
 	plan := MigrationPlan{LegacyDir: legacy, NeedsMigration: true}
 	groups := []struct{ src, dst string }{
 		{"config.yaml", filepath.Join(DefaultConfigDir(), "config.yaml")},
-		{"vault", filepath.Join(DefaultDataDir(), "vault")},
-		{"audit", filepath.Join(DefaultDataDir(), "audit")},
+		{configSectionVault, filepath.Join(DefaultDataDir(), configSectionVault)},
+		{configSectionAudit, filepath.Join(DefaultDataDir(), configSectionAudit)},
 		{"devices.json", filepath.Join(DefaultDataDir(), "devices.json")},
 		{"pairing", filepath.Join(DefaultDataDir(), "pairing")},
 		{"update-cache.json", filepath.Join(DefaultCacheDir(), "update-cache.json")},
@@ -180,11 +180,11 @@ func MigrateLegacyToXDG() (bool, error) {
 		return false, err
 	}
 	backup := filepath.Join(plan.LegacyDir, migrationBackupDir)
-	if backupFD, err := secureMkdirOpen(backup, 0o700); err != nil {
-		return false, fmt.Errorf("create backup: %w", err)
-	} else {
-		_ = closeMigrationFD(backupFD)
+	backupFD, mkdirErr := secureMkdirOpen(backup, 0o700)
+	if mkdirErr != nil {
+		return false, fmt.Errorf("create backup: %w", mkdirErr)
 	}
+	_ = closeMigrationFD(backupFD)
 	for _, item := range plan.Items {
 		if !isTopLevelMigrationItem(plan.Items, item) {
 			continue
@@ -224,11 +224,11 @@ func MigrateLegacyToXDG() (bool, error) {
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return false, err
 		}
-		if parentFD, err := secureMkdirOpen(filepath.Dir(item.Destination), 0o700); err != nil {
+		parentFD, err := secureMkdirOpen(filepath.Dir(item.Destination), 0o700)
+		if err != nil {
 			return false, fmt.Errorf("create destination parent: %w", err)
-		} else {
-			_ = closeMigrationFD(parentFD)
 		}
+		_ = closeMigrationFD(parentFD)
 		// Journal only after confirming the destination is absent. A recursive copy
 		// can fail after creating a partial destination; recovery must then know it
 		// owns that new destination, but never a pre-existing user destination.

@@ -116,13 +116,13 @@ func mergeAgentProfiles(cfg *Config, raw Config, agentFields map[string]map[stri
 
 func mergeSections(cfg *Config, raw Config, sectionFields map[string]map[string]bool) {
 	if raw.Vault != nil {
-		cfg.Vault = mergeVaultConfig(raw.Vault, sectionFields["vault"], raw.AuthMethod, &cfg.AuthMethod)
+		cfg.Vault = mergeVaultConfig(raw.Vault, sectionFields[configSectionVault], raw.AuthMethod, &cfg.AuthMethod)
 	}
 	if raw.Git != nil {
-		cfg.Git = mergeGitConfig(raw.Git, sectionFields["git"])
+		cfg.Git = mergeGitConfig(raw.Git, sectionFields[SyncMethodGit])
 	}
 	if raw.MCP != nil {
-		cfg.MCP = mergeMCPConfig(raw.MCP, sectionFields["mcp"], sectionFields["mcp_oauth"], sectionFields["mcp_perplexity"])
+		cfg.MCP = mergeMCPConfig(raw.MCP, sectionFields[configSectionMCP], sectionFields["mcp_oauth"], sectionFields["mcp_perplexity"])
 	}
 	if raw.Update != nil {
 		cfg.Update = mergeUpdateConfig(raw.Update, sectionFields["update"])
@@ -131,7 +131,7 @@ func mergeSections(cfg *Config, raw Config, sectionFields map[string]map[string]
 		cfg.Clipboard = mergeClipboardConfig(raw.Clipboard, sectionFields["clipboard"])
 	}
 	if raw.Audit != nil {
-		cfg.Audit = mergeAuditConfig(raw.Audit, sectionFields["audit"])
+		cfg.Audit = mergeAuditConfig(raw.Audit, sectionFields[configSectionAudit])
 	}
 	if raw.Logging != nil {
 		cfg.Logging = mergeLoggingConfig(raw.Logging, sectionFields["logging"])

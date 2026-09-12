@@ -58,7 +58,7 @@ func KnownConfigKeys() []string {
 		"agents.*.skillVersion",
 
 		// Vault
-		"vault",
+		configSectionVault,
 		"vault.path",
 		"vault.default_recipients",
 		"vault.confirm_remove",
@@ -77,14 +77,14 @@ func KnownConfigKeys() []string {
 		"vault.argon2id_threads",
 
 		// Git
-		"git",
+		SyncMethodGit,
 		"git.commit_template",
 		"git.auto_push",
 		"git.auto_pull",
 		"git.auto_pull_interval",
 
 		// MCP
-		"mcp",
+		configSectionMCP,
 		"mcp.bind",
 		"mcp.port",
 		"mcp.stdio",
@@ -114,7 +114,7 @@ func KnownConfigKeys() []string {
 		"clipboard.copyByDefault",
 
 		// Audit
-		"audit",
+		configSectionAudit,
 		"audit.maxSizeMb",
 		"audit.maxBackups",
 		"audit.maxAgeDays",

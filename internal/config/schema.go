@@ -46,6 +46,14 @@ const (
 	SyncMethodICloudDrive = "icloud-drive"
 )
 
+// Top-level config section names, shared by the dotted-path key list, YAML
+// section-field discovery, and the legacy-to-XDG migration groups.
+const (
+	configSectionVault = "vault"
+	configSectionAudit = "audit"
+	configSectionMCP   = "mcp"
+)
+
 // SyncConfig holds vault replication configuration.
 type SyncConfig struct {
 	// Method selects the replication backend: SyncMethodGit (default) or

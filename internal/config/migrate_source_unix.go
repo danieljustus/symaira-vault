@@ -12,6 +12,10 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// opOpen is the os.PathError.Op reported for every failure below; each one
+// originates from an open/openat call on the migration source path.
+const opOpen = "open"
+
 // openMigrationSource resolves every component from an opened directory. This
 // deliberately rejects symlinked parents as well as a symlink leaf.
 func openMigrationSource(path string) (*os.File, error) {
@@ -25,7 +29,7 @@ func openMigrationSource(path string) (*os.File, error) {
 	}
 	parts := strings.Split(strings.TrimPrefix(clean, string(filepathSeparator)), string(filepathSeparator))
 	if len(parts) == 0 || parts[len(parts)-1] == "" {
-		unix.Close(fd)
+		_ = unix.Close(fd)
 		return nil, fmt.Errorf("invalid migration source: %s", path)
 	}
 	for _, part := range parts[:len(parts)-1] {
@@ -33,22 +37,22 @@ func openMigrationSource(path string) (*os.File, error) {
 			continue
 		}
 		next, openErr := unix.Openat(fd, part, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
-		unix.Close(fd)
+		_ = unix.Close(fd)
 		if openErr != nil {
-			return nil, &os.PathError{Op: "open", Path: path, Err: openErr}
+			return nil, &os.PathError{Op: opOpen, Path: path, Err: openErr}
 		}
 		fd = next
 	}
 	leaf := parts[len(parts)-1]
 	leafFD, err := unix.Openat(fd, leaf, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
-	unix.Close(fd)
+	_ = unix.Close(fd)
 	if err != nil {
-		return nil, &os.PathError{Op: "open", Path: path, Err: err}
+		return nil, &os.PathError{Op: opOpen, Path: path, Err: err}
 	}
 	file := os.NewFile(uintptr(leafFD), path)
 	if file == nil {
 		_ = syscall.Close(leafFD)
-		return nil, &os.PathError{Op: "open", Path: path, Err: syscall.EINVAL}
+		return nil, &os.PathError{Op: opOpen, Path: path, Err: syscall.EINVAL}
 	}
 	return file, nil
 }

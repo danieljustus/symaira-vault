@@ -3,6 +3,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -20,17 +21,17 @@ func secureCopyEntry(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer srcFile.Close()
+	defer func() { _ = srcFile.Close() }()
 	var srcStat unix.Stat_t
-	if err := unix.Fstat(int(srcFile.Fd()), &srcStat); err != nil {
-		return err
+	if statErr := unix.Fstat(int(srcFile.Fd()), &srcStat); statErr != nil {
+		return statErr
 	}
 	dstParent, err := secureMkdirOpen(filepath.Dir(dst), 0o700)
 	if err != nil {
 		return err
 	}
-	defer unix.Close(dstParent)
-	return copyMigrationNode(int(srcFile.Fd()), dstParent, filepath.Base(dst), srcStat.Mode)
+	defer func() { _ = unix.Close(dstParent) }()
+	return copyMigrationNode(int(srcFile.Fd()), dstParent, filepath.Base(dst), uint32(srcStat.Mode))
 }
 
 func secureMkdirOpen(path string, mode uint32) (int, error) {
@@ -49,26 +50,26 @@ func secureMkdirOpen(path string, mode uint32) (int, error) {
 		next, openErr := unix.Openat(fd, part, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
 		if openErr != nil {
 			if openErr != unix.ENOENT {
-				unix.Close(fd)
+				_ = unix.Close(fd)
 				return -1, openErr
 			}
 			if openErr = unix.Mkdirat(fd, part, mode); openErr != nil && openErr != unix.EEXIST {
-				unix.Close(fd)
+				_ = unix.Close(fd)
 				return -1, openErr
 			}
 			next, openErr = unix.Openat(fd, part, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
 			if openErr != nil {
-				unix.Close(fd)
+				_ = unix.Close(fd)
 				return -1, openErr
 			}
 		}
-		unix.Close(fd)
+		_ = unix.Close(fd)
 		fd = next
 	}
 	return fd, nil
 }
 
-func copyMigrationNode(srcFD, dstParent int, name string, srcMode uint16) error {
+func copyMigrationNode(srcFD, dstParent int, name string, srcMode uint32) error {
 	if srcMode&unix.S_IFMT == unix.S_IFDIR {
 		if err := unix.Mkdirat(dstParent, name, 0o700); err != nil {
 			return err
@@ -77,18 +78,18 @@ func copyMigrationNode(srcFD, dstParent int, name string, srcMode uint16) error 
 		if err != nil {
 			return err
 		}
-		defer unix.Close(dstDir)
+		defer func() { _ = unix.Close(dstDir) }()
 		dup, err := unix.Dup(srcFD)
 		if err != nil {
 			return err
 		}
 		stream := os.NewFile(uintptr(dup), "source directory")
 		if stream == nil {
-			unix.Close(dup)
+			_ = unix.Close(dup)
 			return fmt.Errorf("invalid source directory")
 		}
 		entries, err := stream.Readdirnames(-1)
-		stream.Close()
+		_ = stream.Close()
 		if err != nil {
 			return err
 		}
@@ -101,8 +102,8 @@ func copyMigrationNode(srcFD, dstParent int, name string, srcMode uint16) error 
 			if err != nil {
 				return err
 			}
-			copyErr := copyMigrationNode(childFD, dstDir, child, st.Mode)
-			unix.Close(childFD)
+			copyErr := copyMigrationNode(childFD, dstDir, child, uint32(st.Mode))
+			_ = unix.Close(childFD)
 			if copyErr != nil {
 				return copyErr
 			}
@@ -118,11 +119,11 @@ func copyMigrationNode(srcFD, dstParent int, name string, srcMode uint16) error 
 	}
 	src := os.NewFile(uintptr(dup), "source")
 	if src == nil {
-		unix.Close(dup)
+		_ = unix.Close(dup)
 		return fmt.Errorf("invalid source file")
 	}
 	data, err := io.ReadAll(io.LimitReader(src, maxMigrationBytes+1))
-	src.Close()
+	_ = src.Close()
 	if err != nil {
 		return err
 	}
@@ -135,7 +136,7 @@ func copyMigrationNode(srcFD, dstParent int, name string, srcMode uint16) error 
 	}
 	outFile := os.NewFile(uintptr(fd), name)
 	if outFile == nil {
-		unix.Close(fd)
+		_ = unix.Close(fd)
 		return fmt.Errorf("invalid destination")
 	}
 	written, writeErr := outFile.Write(data)
@@ -157,7 +158,7 @@ func secureReadFile(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	return io.ReadAll(io.LimitReader(file, maxMigrationBytes+1))
 }
 
@@ -166,7 +167,7 @@ func secureRemovePath(path string) error {
 	if err != nil {
 		return err
 	}
-	defer unix.Close(parent)
+	defer func() { _ = unix.Close(parent) }()
 	return removeAt(parent, filepath.Base(path))
 }
 
@@ -184,7 +185,7 @@ func secureOpenExisting(path string) (int, error) {
 			continue
 		}
 		next, openErr := unix.Openat(fd, part, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
-		unix.Close(fd)
+		_ = unix.Close(fd)
 		if openErr != nil {
 			return -1, openErr
 		}
@@ -198,19 +199,19 @@ func removeAt(parent int, name string) error {
 	if err == nil {
 		file := os.NewFile(uintptr(fd), name)
 		if file == nil {
-			unix.Close(fd)
+			_ = unix.Close(fd)
 			return fmt.Errorf("invalid directory")
 		}
 		entries, readErr := file.Readdirnames(-1)
 		if readErr == nil {
 			for _, child := range entries {
-				if err := removeAt(fd, child); err != nil {
-					readErr = err
+				if childErr := removeAt(fd, child); childErr != nil {
+					readErr = childErr
 					break
 				}
 			}
 		}
-		file.Close()
+		_ = file.Close()
 		if readErr != nil {
 			return readErr
 		}
@@ -232,14 +233,14 @@ func secureWriteJSONAtomic(path string, data []byte) error {
 	if err != nil {
 		return err
 	}
-	defer unix.Close(parent)
+	defer func() { _ = unix.Close(parent) }()
 	base := filepath.Base(path)
 	var tmp string
 	var fd int
 	for i := 0; i < 10; i++ {
 		tmp = fmt.Sprintf(".migration-tmp-%d-%d", unix.Getpid(), atomic.AddUint64(&migrationTempCounter, 1))
 		fd, err = unix.Openat(parent, tmp, unix.O_WRONLY|unix.O_CREAT|unix.O_EXCL|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0o600)
-		if err != unix.EEXIST {
+		if !errors.Is(err, unix.EEXIST) {
 			break
 		}
 	}
@@ -248,7 +249,7 @@ func secureWriteJSONAtomic(path string, data []byte) error {
 	}
 	file := os.NewFile(uintptr(fd), tmp)
 	if file == nil {
-		unix.Close(fd)
+		_ = unix.Close(fd)
 		_ = unix.Unlinkat(parent, tmp, 0)
 		return fmt.Errorf("invalid temporary migration file")
 	}
