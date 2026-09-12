@@ -69,7 +69,13 @@ fn fixture() -> Fixture {
         }
         hash.update(name.as_bytes());
         hash.update([0]);
-        hash.update(fs::read(Path::new(ROOT).join(name)).unwrap());
+        let blob = Command::new("git")
+            .current_dir(ROOT)
+            .args(["show", &format!("{REVISION}:{name}")])
+            .output()
+            .unwrap();
+        assert!(blob.status.success());
+        hash.update(blob.stdout);
     }
     assert_eq!(f.source_digest, format!("{:x}", hash.finalize()));
     assert_eq!(

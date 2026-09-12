@@ -82,11 +82,13 @@ func sourceDigest(root string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if !bytes.Equal(pinned, current) {
+		// Git's Windows checkout may normalize LF blobs to CRLF. Compare
+		// normalized bytes, but bind the digest to the revision's blob bytes.
+		if !bytes.Equal(bytes.ReplaceAll(pinned, []byte("\r\n"), []byte("\n")), bytes.ReplaceAll(current, []byte("\r\n"), []byte("\n"))) {
 			return "", fmt.Errorf("production source differs from %s: %s", revision, name)
 		}
 		h.Write([]byte(name + "\x00"))
-		h.Write(current)
+		h.Write(pinned)
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
