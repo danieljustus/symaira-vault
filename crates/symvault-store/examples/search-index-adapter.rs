@@ -121,9 +121,15 @@ fn run() -> Result<(), String> {
             println!("{{\"case_id\":\"rust_build_index\"}}");
         }
         "load-search" => {
-            let mut index = SearchIndex::load(&store, &identity)
-                .map_err(|error| error.to_string())?
-                .ok_or_else(|| format!("{case_id}: search index missing or rejected"))?;
+            let mut index = match SearchIndex::load(&store, &identity) {
+                Ok(Some(index)) => index,
+                Ok(None) => return Err(format!("{case_id}: search index missing or rejected")),
+                Err(error) => {
+                    return Err(format!(
+                        "{case_id}: search index missing or rejected: {error}"
+                    ));
+                }
+            };
             let candidates = store.list(&identity).map_err(|error| error.to_string())?;
             let matches = index
                 .search(&candidates, &arg(&args, "--query")?)
