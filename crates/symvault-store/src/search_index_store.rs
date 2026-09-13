@@ -27,9 +27,9 @@ struct IndexStoreState {
 /// Thread-safe process-wide collection of per-vault search indexes.
 ///
 /// Disk files are retained when an entry is evicted from the bounded in-memory
-/// collection, but [`Self::invalidate_all`] removes both memory and persisted
-/// state.  The shared coordination lock is held through each operation so
-/// eviction and global invalidation cannot race with a delayed caller.
+/// collection.  Call [`Self::invalidate`] for a specific vault to remove both
+/// memory and persisted state.  The shared coordination lock is held through
+/// each operation so eviction cannot race with a delayed caller.
 pub struct SearchIndexStore {
     state: &'static Mutex<IndexStoreState>,
 }
@@ -114,23 +114,6 @@ impl SearchIndexStore {
         Ok(())
     }
 
-    /// Invalidates every cached vault index and removes every persisted file.
-    pub fn invalidate_all(&self) -> Result<(), StoreError> {
-        let mut state = lock_state(self.state)?;
-        let slots: Vec<_> = state.indices.values().cloned().collect();
-        let mut first_error = None;
-        for slot in slots {
-            let mut current = lock_slot(&slot)?;
-            if let Some(Err(error)) = current.as_mut().map(SearchIndex::invalidate) {
-                first_error.get_or_insert(error);
-            }
-            *current = None;
-        }
-        state.indices.clear();
-        state.order.clear();
-        first_error.map_or(Ok(()), Err)
-    }
-
     fn slot_locked(state: &mut IndexStoreState, store: &Store) -> Result<IndexSlot, StoreError> {
         let key = store.root().to_path_buf();
         if let Some(slot) = state.indices.get(&key).cloned() {
@@ -151,6 +134,7 @@ impl SearchIndexStore {
             if let Some(index) = current.as_mut() {
                 index.clear_memory();
             }
+            *current = None;
         }
         Ok(slot)
     }

@@ -176,13 +176,16 @@ fn run() -> Result<(), String> {
             invalidator
                 .join()
                 .map_err(|_| "invalidator thread panicked".to_owned())??;
+            let raw_before = fs::read(root.join(".search-index")).unwrap_or_default();
+            let persisted_ciphertext = raw_before.starts_with(b"age-encryption.org/v1");
+            let plaintext_absent = !raw_before.windows(6).any(|window| window == b"MARKER");
             indexes
-                .invalidate_all()
+                .invalidate(&store)
                 .map_err(|error| error.to_string())?;
-            let raw = fs::read(root.join(".search-index")).unwrap_or_default();
             let result = serde_json::json!({
                 "index_absent": !root.join(".search-index").exists(),
-                "plaintext_absent": !raw.windows(6).any(|window| window == b"MARKER"),
+                "persisted_ciphertext": persisted_ciphertext,
+                "plaintext_absent": plaintext_absent,
             });
             serde_json::to_writer(std::io::stdout(), &result).map_err(|error| error.to_string())?;
             println!();

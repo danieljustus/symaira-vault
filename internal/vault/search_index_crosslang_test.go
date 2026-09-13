@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -273,6 +274,12 @@ func TestEncryptedIndexConcurrentLoadInvalidateGoRust(t *testing.T) {
 	if goIndex != sameIndex {
 		t.Fatal("Go index store returned separate instances for one vault")
 	}
+	rawBefore, err := os.ReadFile(filepath.Join(root, ".search-index"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	persistedCiphertext := bytes.HasPrefix(rawBefore, []byte("age-encryption.org/v1"))
+	plaintextAbsent := !bytes.Contains(rawBefore, []byte("MARKER"))
 
 	start := make(chan struct{})
 	var wg sync.WaitGroup
@@ -299,8 +306,9 @@ func TestEncryptedIndexConcurrentLoadInvalidateGoRust(t *testing.T) {
 	goIndex.Invalidate()
 
 	want := map[string]any{
-		"index_absent":     true,
-		"plaintext_absent": true,
+		"index_absent":         true,
+		"persisted_ciphertext": persistedCiphertext,
+		"plaintext_absent":     plaintextAbsent,
 	}
 	got := runSearchIndexAdapter(t, adapter, root, identity.String(), "concurrent-load-invalidate")
 	if !reflect.DeepEqual(got, want) {
