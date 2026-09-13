@@ -29,6 +29,9 @@ pub mod audit;
 /// Pure fixed-clock write metadata preparation.
 pub mod metadata;
 
+/// Thread-safe process-local ownership of encrypted search indexes.
+pub mod search_index_store;
+
 mod publication;
 
 #[cfg(unix)]
@@ -2686,12 +2689,16 @@ impl SearchIndex {
             .collect())
     }
 
-    /// Removes the persisted index and all transient plaintext.
-    pub fn invalidate(&mut self) -> Result<(), StoreError> {
+    pub(crate) fn clear_memory(&mut self) {
         self.doc = None;
         self.salt.clear();
         self.ciphertext.zeroize();
         self.ciphertext.clear();
+    }
+
+    /// Removes the persisted index and all transient plaintext.
+    pub fn invalidate(&mut self) -> Result<(), StoreError> {
+        self.clear_memory();
         if self.root.as_os_str().is_empty() {
             return Ok(());
         }

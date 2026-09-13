@@ -1,4 +1,10 @@
-use std::{collections::BTreeMap, fs, path::Path};
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::Path,
+    sync::{Arc, Barrier},
+    thread,
+};
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde::Deserialize;
@@ -1666,4 +1672,46 @@ fn rooted_walk_depth_matches_walkdir_at_exact_boundaries() {
         actual.sort();
         assert_eq!(actual, expected, "depth {depth}");
     }
+}
+
+#[test]
+fn concurrent_search_index_load_and_invalidate_is_serialized() {
+    let (_, value) = fixture();
+    let identity = Arc::new(parse_identity(IDENTITY).unwrap());
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &value.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    let indexes = Arc::new(search_index_store::SearchIndexStore::new());
+    indexes.build(&store, &identity).unwrap();
+    assert!(temp.path().join(".search-index").is_file());
+
+    let start = Arc::new(Barrier::new(3));
+    let loader_indexes = Arc::clone(&indexes);
+    let loader_store = store.clone();
+    let loader_identity = Arc::clone(&identity);
+    let loader_start = Arc::clone(&start);
+    let loader = thread::spawn(move || {
+        loader_start.wait();
+        for _ in 0..32 {
+            loader_indexes
+                .load(&loader_store, &loader_identity)
+                .unwrap();
+        }
+    });
+
+    let invalidator_indexes = Arc::clone(&indexes);
+    let invalidator_store = store.clone();
+    let invalidator_start = Arc::clone(&start);
+    let invalidator = thread::spawn(move || {
+        invalidator_start.wait();
+        for _ in 0..32 {
+            invalidator_indexes.invalidate(&invalidator_store).unwrap();
+        }
+    });
+
+    start.wait();
+    loader.join().unwrap();
+    invalidator.join().unwrap();
+    indexes.invalidate_all().unwrap();
+    assert!(!temp.path().join(".search-index").exists());
 }

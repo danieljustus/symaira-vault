@@ -1,9 +1,15 @@
 #![deny(unsafe_code)]
 
-use std::{env, fs, path::PathBuf, process};
+use std::{
+    env, fs,
+    path::PathBuf,
+    process,
+    sync::{Arc, Barrier},
+    thread,
+};
 
 use symvault_crypto::parse_identity;
-use symvault_store::{Entry, SearchIndex, Store};
+use symvault_store::{Entry, SearchIndex, Store, search_index_store::SearchIndexStore};
 
 fn arg(args: &[String], name: &str) -> Result<String, String> {
     let index = args
@@ -125,6 +131,58 @@ fn run() -> Result<(), String> {
             let result = serde_json::json!({
                 "case_id": "rust_load_go_index_search",
                 "matches": matches,
+            });
+            serde_json::to_writer(std::io::stdout(), &result).map_err(|error| error.to_string())?;
+            println!();
+        }
+        "concurrent-load-invalidate" => {
+            let indexes = Arc::new(SearchIndexStore::new());
+            indexes
+                .build(&store, &identity)
+                .map_err(|error| error.to_string())?;
+            let start = Arc::new(Barrier::new(3));
+
+            let loader_indexes = Arc::clone(&indexes);
+            let loader_store = store.clone();
+            let loader_identity = identity;
+            let loader_start = Arc::clone(&start);
+            let loader = thread::spawn(move || {
+                loader_start.wait();
+                for _ in 0..32 {
+                    loader_indexes
+                        .load(&loader_store, &loader_identity)
+                        .map_err(|error| error.to_string())?;
+                }
+                Ok::<(), String>(())
+            });
+
+            let invalidator_indexes = Arc::clone(&indexes);
+            let invalidator_store = store.clone();
+            let invalidator_start = Arc::clone(&start);
+            let invalidator = thread::spawn(move || {
+                invalidator_start.wait();
+                for _ in 0..32 {
+                    invalidator_indexes
+                        .invalidate(&invalidator_store)
+                        .map_err(|error| error.to_string())?;
+                }
+                Ok::<(), String>(())
+            });
+
+            start.wait();
+            loader
+                .join()
+                .map_err(|_| "loader thread panicked".to_owned())??;
+            invalidator
+                .join()
+                .map_err(|_| "invalidator thread panicked".to_owned())??;
+            indexes
+                .invalidate_all()
+                .map_err(|error| error.to_string())?;
+            let raw = fs::read(root.join(".search-index")).unwrap_or_default();
+            let result = serde_json::json!({
+                "index_absent": !root.join(".search-index").exists(),
+                "plaintext_absent": !raw.windows(6).any(|window| window == b"MARKER"),
             });
             serde_json::to_writer(std::io::stdout(), &result).map_err(|error| error.to_string())?;
             println!();

@@ -252,3 +252,55 @@ func TestEncryptedIndexGoRustLiveAcceptance(t *testing.T) {
 	}
 	runSearchIndexAdapterExpectError(t, adapter, goRoot, goIdentity.String(), "load-search", "rust_public_key_derived_ciphertext_rejected", "--query", "go-rust-accepted")
 }
+
+func TestEncryptedIndexConcurrentLoadInvalidateGoRust(t *testing.T) {
+	adapter := searchIndexAdapter(t)
+	root := t.TempDir()
+	identity := testutil.TempIdentity(t)
+	cfg := vaultconfig.Default()
+	cfg.VaultDir = root
+	if err := Init(root, identity, cfg); err != nil {
+		t.Fatal(err)
+	}
+	mustWriteEntry(t, root, identity, "concurrent-doc", map[string]any{
+		"value": "Concurrent marker",
+	})
+	goIndex := &EncryptedIndex{}
+	if err := goIndex.Build(root, identity); err != nil {
+		t.Fatal(err)
+	}
+
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		<-start
+		for i := 0; i < 32; i++ {
+			loaded := &EncryptedIndex{}
+			if err := loaded.loadFromDisk(root, identity); err != nil {
+				t.Errorf("concurrent Go load %d: %v", i, err)
+				return
+			}
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		<-start
+		for i := 0; i < 32; i++ {
+			goIndex.Invalidate()
+		}
+	}()
+	close(start)
+	wg.Wait()
+	goIndex.Invalidate()
+
+	want := map[string]any{
+		"index_absent":     true,
+		"plaintext_absent": true,
+	}
+	got := runSearchIndexAdapter(t, adapter, root, identity.String(), "concurrent-load-invalidate")
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Rust observation = %v; Go oracle = %v", got, want)
+	}
+}
