@@ -88,6 +88,12 @@ impl SearchIndexStore {
             .search(candidates, needle)
     }
 
+    /// Reports whether the process-wide slot for `store` currently holds an index.
+    pub fn is_loaded(&self, store: &Store) -> Result<bool, StoreError> {
+        let slot = self.slot(store)?;
+        Ok(lock_slot(&slot)?.is_some())
+    }
+
     /// Invalidates one vault's index, clearing memory and deleting its file.
     pub fn invalidate(&self, store: &Store) -> Result<(), StoreError> {
         let slot = self.slot(store)?;

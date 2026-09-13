@@ -2,7 +2,7 @@ use std::{
     collections::BTreeMap,
     fs,
     path::Path,
-    sync::{Arc, Barrier},
+    sync::{Arc, Barrier, mpsc},
     thread,
 };
 
@@ -1690,6 +1690,7 @@ fn concurrent_search_index_load_and_invalidate_is_serialized() {
     let loader_store = store.clone();
     let loader_identity = Arc::clone(&identity);
     let loader_start = Arc::clone(&start);
+    let (loader_done, loader_finished) = mpsc::channel();
     let loader = thread::spawn(move || {
         loader_start.wait();
         for _ in 0..32 {
@@ -1697,6 +1698,7 @@ fn concurrent_search_index_load_and_invalidate_is_serialized() {
                 .load(&loader_store, &loader_identity)
                 .unwrap();
         }
+        loader_done.send(()).unwrap();
     });
 
     let invalidator_indexes = Arc::clone(&indexes);
@@ -1707,12 +1709,14 @@ fn concurrent_search_index_load_and_invalidate_is_serialized() {
         for _ in 0..32 {
             invalidator_indexes.invalidate(&invalidator_store).unwrap();
         }
+        loader_finished.recv().unwrap();
+        invalidator_indexes.invalidate(&invalidator_store).unwrap();
     });
 
     start.wait();
     loader.join().unwrap();
     invalidator.join().unwrap();
-    indexes.invalidate_all().unwrap();
+    assert!(!indexes.is_loaded(&store).unwrap());
     assert!(!temp.path().join(".search-index").exists());
 }
 
@@ -1733,7 +1737,9 @@ fn search_index_store_instances_share_process_state_and_fresh_invalidate_removes
 
     first.build(&store, &identity).unwrap();
     let second = search_index_store::SearchIndexStore::new();
+    assert!(second.is_loaded(&store).unwrap());
     second.invalidate(&store).unwrap();
+    assert!(!first.is_loaded(&store).unwrap());
     assert!(!temp.path().join(".search-index").exists());
     assert!(!second.load(&store, &identity).unwrap());
 }
