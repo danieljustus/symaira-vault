@@ -87,6 +87,13 @@ passes. The measured Go baseline is in
   real keychain, pasteboard, GUI, or LaunchAgents directory is touched. The
   local macOS gate passes; native keychain/auth prompts, GUI permissions,
   launchd lifecycle, and Windows `LockFileEx` runtime evidence remain pending.
+- The 2026-09-13 Phase 1 register audit cross-checked this register against
+  merged PRs and current crate/CI state, found no drift in `RUST-001`–`RUST-007`,
+  and added two previously untracked contract rows for real, tested Go
+  functional areas shipped since the 2026-09-05 baseline: `PAIRING-001`
+  (device pairing handshake and session tokens) and `APPROVAL-001` (the local
+  approval CLI and its mTLS client identity, added in PRs #1040 and #1048).
+  Both are `TODO`; neither has any Rust code yet.
 
 The tiny release-built version slice measured 577,104 bytes, 2,277,376 bytes
 maximum RSS in one sample, and 2.576 ms startup p95 over 120 runs after 20
