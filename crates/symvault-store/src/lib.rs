@@ -2696,6 +2696,10 @@ impl SearchIndex {
         self.ciphertext.clear();
     }
 
+    pub(crate) fn is_loaded(&self) -> bool {
+        self.doc.is_some()
+    }
+
     pub(crate) fn invalidate_persisted(store: &Store) -> Result<(), StoreError> {
         let path = store.root.join(".search-index");
         #[cfg(unix)]

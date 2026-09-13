@@ -28,8 +28,8 @@ struct IndexStoreState {
 ///
 /// Disk files are retained when an entry is evicted from the bounded in-memory
 /// collection, but [`Self::invalidate_all`] removes both memory and persisted
-/// state.  Operations on one vault are serialized without blocking unrelated
-/// vaults.
+/// state.  The shared coordination lock is held through each operation so
+/// eviction and global invalidation cannot race with a delayed caller.
 pub struct SearchIndexStore {
     state: &'static Mutex<IndexStoreState>,
 }
@@ -53,7 +53,8 @@ impl SearchIndexStore {
 
     /// Builds and installs the index for `store` only after a successful build.
     pub fn build(&self, store: &Store, identity: &Identity) -> Result<(), StoreError> {
-        let slot = self.slot(store)?;
+        let mut state = lock_state(self.state)?;
+        let slot = Self::slot_locked(&mut state, store)?;
         let mut current = lock_slot(&slot)?;
         let built = SearchIndex::build(store, identity)?;
         *current = Some(built);
@@ -66,7 +67,8 @@ impl SearchIndexStore {
     /// error leaves the previously cached slot untouched, matching the Go
     /// loader's fail-closed state transition.
     pub fn load(&self, store: &Store, identity: &Identity) -> Result<bool, StoreError> {
-        let slot = self.slot(store)?;
+        let mut state = lock_state(self.state)?;
+        let slot = Self::slot_locked(&mut state, store)?;
         let mut current = lock_slot(&slot)?;
         let loaded = SearchIndex::load(store, identity)?;
         *current = loaded;
@@ -80,7 +82,8 @@ impl SearchIndexStore {
         candidates: &[String],
         needle: &str,
     ) -> Result<std::collections::BTreeSet<String>, StoreError> {
-        let slot = self.slot(store)?;
+        let mut state = lock_state(self.state)?;
+        let slot = Self::slot_locked(&mut state, store)?;
         let mut current = lock_slot(&slot)?;
         current
             .as_mut()
@@ -90,13 +93,17 @@ impl SearchIndexStore {
 
     /// Reports whether the process-wide slot for `store` currently holds an index.
     pub fn is_loaded(&self, store: &Store) -> Result<bool, StoreError> {
-        let slot = self.slot(store)?;
-        Ok(lock_slot(&slot)?.is_some())
+        let mut state = lock_state(self.state)?;
+        let slot = Self::slot_locked(&mut state, store)?;
+        Ok(lock_slot(&slot)?
+            .as_ref()
+            .is_some_and(SearchIndex::is_loaded))
     }
 
     /// Invalidates one vault's index, clearing memory and deleting its file.
     pub fn invalidate(&self, store: &Store) -> Result<(), StoreError> {
-        let slot = self.slot(store)?;
+        let mut state = lock_state(self.state)?;
+        let slot = Self::slot_locked(&mut state, store)?;
         let mut current = lock_slot(&slot)?;
         if let Some(index) = current.as_mut() {
             index.invalidate()?;
@@ -124,9 +131,8 @@ impl SearchIndexStore {
         first_error.map_or(Ok(()), Err)
     }
 
-    fn slot(&self, store: &Store) -> Result<IndexSlot, StoreError> {
+    fn slot_locked(state: &mut IndexStoreState, store: &Store) -> Result<IndexSlot, StoreError> {
         let key = store.root().to_path_buf();
-        let mut state = lock_state(self.state)?;
         if let Some(slot) = state.indices.get(&key).cloned() {
             touch(&mut state.order, &key);
             return Ok(slot);
@@ -138,14 +144,13 @@ impl SearchIndexStore {
             let Some(oldest) = state.order.pop_front() else {
                 break;
             };
-            let Some(evicted) = state.indices.remove(&oldest) else {
+            let Some(evicted) = state.indices.get(&oldest).cloned() else {
                 continue;
             };
             let mut current = lock_slot(&evicted)?;
             if let Some(index) = current.as_mut() {
                 index.clear_memory();
             }
-            *current = None;
         }
         Ok(slot)
     }
