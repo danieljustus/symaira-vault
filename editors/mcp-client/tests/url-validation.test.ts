@@ -1,4 +1,19 @@
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
 import { validateBaseUrl, SymairaMCPClient, SymairaURLError } from "../src";
+
+/**
+ * These constructor tests must not depend on a real ~/.symvault/mcp-token
+ * being present on the machine running them (it is on a dev workstation
+ * that has already run `symvault mcp`, but not on a clean CI runner).
+ * Point vaultPath at a throwaway fixture directory instead.
+ */
+function makeFixtureVault(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "symaira-mcp-test-"));
+  fs.writeFileSync(path.join(dir, "mcp-token"), "test-token", { mode: 0o600 });
+  return dir;
+}
 
 describe("validateBaseUrl", () => {
   describe("valid loopback URLs", () => {
@@ -68,25 +83,35 @@ describe("validateBaseUrl", () => {
 });
 
 describe("SymairaMCPClient constructor validation", () => {
+  let vaultPath: string;
+
+  beforeEach(() => {
+    vaultPath = makeFixtureVault();
+  });
+
+  afterEach(() => {
+    fs.rmSync(vaultPath, { recursive: true, force: true });
+  });
+
   test("accepts default baseUrl (http://127.0.0.1:8080)", () => {
-    expect(() => new SymairaMCPClient()).not.toThrow();
+    expect(() => new SymairaMCPClient({ vaultPath })).not.toThrow();
   });
 
   test("accepts explicit loopback URL", () => {
     expect(
-      () => new SymairaMCPClient({ baseUrl: "http://localhost:3000" })
+      () => new SymairaMCPClient({ baseUrl: "http://localhost:3000", vaultPath })
     ).not.toThrow();
   });
 
   test("rejects non-loopback URL", () => {
     expect(
-      () => new SymairaMCPClient({ baseUrl: "http://evil.com:8080" })
+      () => new SymairaMCPClient({ baseUrl: "http://evil.com:8080", vaultPath })
     ).toThrow(SymairaURLError);
   });
 
   test("rejects private IP", () => {
     expect(
-      () => new SymairaMCPClient({ baseUrl: "http://192.168.1.1:8080" })
+      () => new SymairaMCPClient({ baseUrl: "http://192.168.1.1:8080", vaultPath })
     ).toThrow(SymairaURLError);
   });
 });
