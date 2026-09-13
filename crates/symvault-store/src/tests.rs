@@ -1702,8 +1702,19 @@ fn search_index_store_preserves_errors_and_memory_state() {
     let indexes = search_index_store::SearchIndexStore::new();
     let index_path = temp.path().join(".search-index");
 
+    assert!(!index_path.exists());
     assert!(!indexes.load(&store, &identity).unwrap());
     assert!(!indexes.is_loaded(&store).unwrap());
+    assert!(!index_path.exists());
+
+    // Go's missing-file path returns before the sole load-state commit, so a
+    // warm in-memory index survives a disappeared persisted optimization.
+    indexes.build(&store, &identity).unwrap();
+    assert!(indexes.is_loaded(&store).unwrap());
+    fs::remove_file(&index_path).unwrap();
+    assert!(!indexes.load(&store, &identity).unwrap());
+    assert!(indexes.is_loaded(&store).unwrap());
+    assert!(!index_path.exists());
 
     indexes.build(&store, &identity).unwrap();
     assert!(indexes.is_loaded(&store).unwrap());
@@ -1773,12 +1784,29 @@ fn search_index_store_preserves_list_and_delete_errors() {
     let root_mode = fs::metadata(temp.path()).unwrap().permissions().mode();
     set_mode(temp.path(), root_mode & !0o222);
     let error = indexes.load(&store, &identity).unwrap_err();
+    let loaded_after_failed_load = indexes.is_loaded(&store).unwrap();
+    let persisted_after_failed_load = index_path.exists();
+    let invalidate_result = indexes.invalidate(&store);
+    let unloaded_after_failed_invalidate = !indexes.is_loaded(&store).unwrap();
+    let persisted_after_failed_invalidate = index_path.exists();
     set_mode(temp.path(), root_mode);
     assert!(matches!(error, StoreError::Decryption(_)));
-    assert!(indexes.is_loaded(&store).unwrap());
+    assert!(loaded_after_failed_load);
     assert!(
-        index_path.exists(),
+        persisted_after_failed_load,
         "delete failure must retain persisted bytes"
+    );
+    assert!(
+        invalidate_result.is_ok(),
+        "explicit invalidation must discard its best-effort delete failure"
+    );
+    assert!(
+        unloaded_after_failed_invalidate,
+        "explicit invalidation must clear memory before attempting deletion"
+    );
+    assert!(
+        persisted_after_failed_invalidate,
+        "failed explicit invalidation must retain persisted bytes"
     );
 
     indexes.invalidate(&store).unwrap();
@@ -1795,42 +1823,83 @@ fn concurrent_search_index_load_and_invalidate_is_serialized() {
     materialize(temp.path(), &value.vaults[0]);
     let store = Store::open(temp.path(), &identity).unwrap();
     let indexes = Arc::new(search_index_store::SearchIndexStore::new());
-    indexes.build(&store, &identity).unwrap();
-    assert!(temp.path().join(".search-index").is_file());
+    let index_path = temp.path().join(".search-index");
+    let _ = SearchIndex::build(&store, &identity).unwrap();
+    let raw_before = fs::read(&index_path).unwrap();
+    assert_eq!(raw_before.first(), Some(&0x01));
+    assert!(
+        raw_before.len() > 17,
+        "persisted ciphertext must be nonempty"
+    );
+    assert!(!indexes.is_loaded(&store).unwrap());
 
-    let start = Arc::new(Barrier::new(3));
+    let (load_committed, first_load) = mpsc::sync_channel(1);
+    let (loads_finished, wait_for_loads) = mpsc::channel();
+    let race_start = Arc::new(Barrier::new(2));
     let loader_indexes = Arc::clone(&indexes);
     let loader_store = store.clone();
     let loader_identity = Arc::clone(&identity);
-    let loader_start = Arc::clone(&start);
-    let (loader_done, loader_finished) = mpsc::channel();
+    let loader_race_start = Arc::clone(&race_start);
     let loader = thread::spawn(move || {
-        loader_start.wait();
-        for _ in 0..32 {
-            loader_indexes
-                .load(&loader_store, &loader_identity)
-                .unwrap();
+        let result: Result<(), String> = match loader_indexes.load(&loader_store, &loader_identity)
+        {
+            Ok(true) => match loader_indexes.is_loaded(&loader_store) {
+                Ok(true) => Ok(()),
+                Ok(false) => Err("successful load did not commit an in-memory index".to_owned()),
+                Err(error) => Err(error.to_string()),
+            },
+            Ok(false) => Err("load-before-invalidate did not find persisted index".to_owned()),
+            Err(error) => Err(error.to_string()),
+        };
+        let run_race = result.is_ok();
+        load_committed.send(result).unwrap();
+        if !run_race {
+            return Ok::<(), String>(());
         }
-        loader_done.send(()).unwrap();
+        loader_race_start.wait();
+        let mut load_result = Ok(());
+        for _ in 0..32 {
+            if let Err(error) = loader_indexes.load(&loader_store, &loader_identity) {
+                load_result = Err(error.to_string());
+                break;
+            }
+        }
+        loads_finished.send(()).unwrap();
+        load_result
     });
+
+    match first_load.recv().unwrap() {
+        Ok(()) => {}
+        Err(error) => {
+            loader.join().unwrap().unwrap();
+            panic!("load-before-invalidate barrier: {error}");
+        }
+    }
 
     let invalidator_indexes = Arc::clone(&indexes);
     let invalidator_store = store.clone();
-    let invalidator_start = Arc::clone(&start);
+    let invalidator_race_start = Arc::clone(&race_start);
     let invalidator = thread::spawn(move || {
-        invalidator_start.wait();
-        for _ in 0..32 {
+        invalidator_race_start.wait();
+        for _ in 0..31 {
             invalidator_indexes.invalidate(&invalidator_store).unwrap();
         }
-        loader_finished.recv().unwrap();
+        // The terminal invalidation runs after every loader commit, before
+        // the test observes memory and disk state.
+        wait_for_loads.recv().unwrap();
         invalidator_indexes.invalidate(&invalidator_store).unwrap();
+        Ok::<(), String>(())
     });
 
-    start.wait();
-    loader.join().unwrap();
-    invalidator.join().unwrap();
+    let loader_result = loader.join().unwrap();
+    let invalidator_result = invalidator.join().unwrap();
+    loader_result.unwrap();
+    invalidator_result.unwrap();
+    // The race itself, rather than a terminal cleanup call, must leave both
+    // representations invalidated.
     assert!(!indexes.is_loaded(&store).unwrap());
-    assert!(!temp.path().join(".search-index").exists());
+    assert!(!index_path.exists());
+    indexes.invalidate(&store).unwrap();
 }
 
 #[test]

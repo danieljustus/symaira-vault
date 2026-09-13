@@ -288,18 +288,33 @@ func TestEncryptedIndexConcurrentLoadInvalidateGoRust(t *testing.T) {
 	}
 	plaintextAbsent := !bytes.Contains(rawBefore, []byte("Concurrent marker"))
 
-	start := make(chan struct{})
-	loadedBeforeInvalidate := make(chan struct{})
+	// Force the first load to populate memory from the persisted bytes. This
+	// makes the load-before-invalidate handoff observable instead of treating
+	// the just-built in-memory index as evidence of a successful load.
+	goIndex.ClearMemory()
+	if goIndex.IsBuilt() {
+		t.Fatal("Go ClearMemory retained the just-built index")
+	}
+	t.Cleanup(goIndex.Invalidate)
+
+	loadCommitted := make(chan error, 1)
+	loadsFinished := make(chan struct{})
+	raceStart := make(chan struct{})
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		<-start
 		if err := sameIndex.loadFromDisk(root, identity); err != nil {
-			t.Errorf("load-before-invalidate barrier: %v", err)
+			loadCommitted <- err
 			return
 		}
-		close(loadedBeforeInvalidate)
+		if !sameIndex.IsBuilt() {
+			loadCommitted <- errors.New("successful load did not commit an in-memory index")
+			return
+		}
+		loadCommitted <- nil
+		defer close(loadsFinished)
+		<-raceStart
 		for i := 1; i < 32; i++ {
 			if err := sameIndex.loadFromDisk(root, identity); err != nil {
 				t.Errorf("concurrent Go load %d: %v", i, err)
@@ -307,22 +322,34 @@ func TestEncryptedIndexConcurrentLoadInvalidateGoRust(t *testing.T) {
 			}
 		}
 	}()
+	if err := <-loadCommitted; err != nil {
+		close(raceStart)
+		wg.Wait()
+		t.Fatalf("load-before-invalidate barrier: %v", err)
+	}
+
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		<-start
-		<-loadedBeforeInvalidate
-		for i := 0; i < 32; i++ {
+		<-raceStart
+		for i := 0; i < 31; i++ {
 			goIndex.Invalidate()
 		}
+		// The terminal invalidation is ordered after every loader commit. It
+		// belongs to the concurrent transition itself, not test cleanup.
+		<-loadsFinished
+		goIndex.Invalidate()
 	}()
-	close(start)
+	close(raceStart)
 	wg.Wait()
-	goIndex.Invalidate()
+
+	// These are observations of the race's terminal state, before Cleanup
+	// performs its extra best-effort invalidation for the process-wide store.
 	if goIndex.IsBuilt() {
-		t.Fatal("Go index remained loaded after terminal invalidation")
+		t.Fatal("Go index remained loaded after concurrent invalidation")
 	}
 	if _, err := os.Stat(filepath.Join(root, ".search-index")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("Go index file remained after terminal invalidation: %v", err)
+		t.Fatalf("Go index file remained after concurrent invalidation: %v", err)
 	}
 
 	want := map[string]any{

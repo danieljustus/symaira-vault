@@ -4,7 +4,7 @@ use std::{
     env, fs,
     path::PathBuf,
     process,
-    sync::{Arc, Barrier},
+    sync::{Arc, Barrier, mpsc},
     thread,
 };
 
@@ -142,10 +142,16 @@ fn run() -> Result<(), String> {
             println!();
         }
         "concurrent-load-invalidate" => {
+            // Build outside the wrapper so the first wrapper load has to
+            // commit the persisted bytes into an initially empty slot.
+            let _ = SearchIndex::build(&store, &identity).map_err(|error| error.to_string())?;
             let indexes = Arc::new(SearchIndexStore::new());
-            indexes
-                .build(&store, &identity)
-                .map_err(|error| error.to_string())?;
+            if indexes
+                .is_loaded(&store)
+                .map_err(|error| error.to_string())?
+            {
+                return Err("fresh search-index store unexpectedly started loaded".to_owned());
+            }
             // Capture the persisted framing before any concurrent invalidation.
             // The Go oracle writes a binary version byte, a 16-byte salt, and
             // nonempty ciphertext; this is the persistence assertion, not a
@@ -163,65 +169,105 @@ fn run() -> Result<(), String> {
             let plaintext_absent = !raw_before
                 .windows(b"Concurrent marker".len())
                 .any(|window| window == b"Concurrent marker");
-            let start = Arc::new(Barrier::new(3));
+            let (load_committed, first_load) = mpsc::sync_channel(1);
+            let (loads_finished, wait_for_loads) = mpsc::channel();
+            let race_start = Arc::new(Barrier::new(2));
 
             let loader_indexes = Arc::clone(&indexes);
             let loader_store = store.clone();
             let loader_identity = identity;
-            let loader_start = Arc::clone(&start);
-            let loaded_before_invalidate = Arc::new(std::sync::Barrier::new(2));
-            let loader_barrier = Arc::clone(&loaded_before_invalidate);
+            let loader_race_start = Arc::clone(&race_start);
             let loader = thread::spawn(move || {
-                loader_start.wait();
-                let loaded = loader_indexes
-                    .load(&loader_store, &loader_identity)
-                    .map_err(|error| error.to_string())?;
-                if !loaded {
-                    return Err("load-before-invalidate did not find persisted index".to_owned());
+                let result = match loader_indexes.load(&loader_store, &loader_identity) {
+                    Ok(true) => match loader_indexes.is_loaded(&loader_store) {
+                        Ok(true) => Ok(()),
+                        Ok(false) => {
+                            Err("successful load did not commit an in-memory index".to_owned())
+                        }
+                        Err(error) => Err(error.to_string()),
+                    },
+                    Ok(false) => {
+                        Err("load-before-invalidate did not find persisted index".to_owned())
+                    }
+                    Err(error) => Err(error.to_string()),
+                };
+                let run_race = result.is_ok();
+                load_committed
+                    .send(result)
+                    .map_err(|_| "load-before-invalidate result receiver dropped".to_owned())?;
+                if !run_race {
+                    return Ok(());
                 }
-                loader_barrier.wait();
+                loader_race_start.wait();
+                let mut load_result = Ok(());
                 for _ in 1..32 {
-                    loader_indexes
-                        .load(&loader_store, &loader_identity)
-                        .map_err(|error| error.to_string())?;
+                    if let Err(error) = loader_indexes.load(&loader_store, &loader_identity) {
+                        load_result = Err(error.to_string());
+                        break;
+                    }
                 }
-                Ok::<(), String>(())
+                loads_finished
+                    .send(())
+                    .map_err(|_| "invalidator stopped waiting for concurrent loads".to_owned())?;
+                load_result
             });
+
+            match first_load
+                .recv()
+                .map_err(|_| "load-before-invalidate worker terminated".to_owned())?
+            {
+                Ok(()) => {}
+                Err(error) => {
+                    loader
+                        .join()
+                        .map_err(|_| "loader thread panicked".to_owned())??;
+                    return Err(format!("load-before-invalidate barrier: {error}"));
+                }
+            }
 
             let invalidator_indexes = Arc::clone(&indexes);
             let invalidator_store = store.clone();
-            let invalidator_start = Arc::clone(&start);
-            let invalidator_barrier = Arc::clone(&loaded_before_invalidate);
+            let invalidator_race_start = Arc::clone(&race_start);
             let invalidator = thread::spawn(move || {
-                invalidator_start.wait();
-                invalidator_barrier.wait();
-                for _ in 0..32 {
+                invalidator_race_start.wait();
+                for _ in 0..31 {
                     invalidator_indexes
                         .invalidate(&invalidator_store)
                         .map_err(|error| error.to_string())?;
                 }
+                // The last invalidation is ordered after every loader commit.
+                // It is the terminal concurrent transition, not test cleanup.
+                wait_for_loads
+                    .recv()
+                    .map_err(|_| "loader stopped before completing concurrent loads".to_owned())?;
+                invalidator_indexes
+                    .invalidate(&invalidator_store)
+                    .map_err(|error| error.to_string())?;
                 Ok::<(), String>(())
             });
 
-            start.wait();
-            loader
+            let loader_result = loader
                 .join()
-                .map_err(|_| "loader thread panicked".to_owned())??;
-            invalidator
+                .map_err(|_| "loader thread panicked".to_owned())?;
+            let invalidator_result = invalidator
                 .join()
-                .map_err(|_| "invalidator thread panicked".to_owned())??;
-            indexes
-                .invalidate(&store)
-                .map_err(|error| error.to_string())?;
+                .map_err(|_| "invalidator thread panicked".to_owned())?;
+            loader_result?;
+            invalidator_result?;
             let index_absent = !root.join(".search-index").exists();
             let index_unloaded = !indexes
                 .is_loaded(&store)
                 .map_err(|error| error.to_string())?;
             if !index_absent || !index_unloaded {
                 return Err(format!(
-                    "final invalidation did not commit: absent={index_absent}, unloaded={index_unloaded}"
+                    "concurrent invalidation did not commit: absent={index_absent}, unloaded={index_unloaded}"
                 ));
             }
+            // Observe the race before this extra best-effort cleanup of the
+            // process-wide wrapper state.
+            indexes
+                .invalidate(&store)
+                .map_err(|error| error.to_string())?;
             let result = serde_json::json!({
                 "index_absent": index_absent,
                 "index_unloaded": index_unloaded,
