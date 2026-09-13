@@ -82,6 +82,8 @@ pub enum StoreError {
     InvalidEntryPath(String),
     #[error("entry ciphertext is invalid: {0}")]
     Decryption(String),
+    #[error("{0}")]
+    SearchIndex(String),
     #[error("search index build produced no entries")]
     SearchIndexBuildEmpty,
     #[error("vault resource exceeds {limit} bytes: {path}")]
@@ -2610,7 +2612,11 @@ impl SearchIndex {
         })
     }
 
-    /// Loads a current or legacy encrypted index, rejecting stale indexes.
+    /// Loads a current or legacy encrypted index, rejecting malformed or stale indexes.
+    ///
+    /// A missing index is reported as `Ok(None)`. Invalid persisted state is
+    /// removed on a best-effort basis and returned as an error, so callers can
+    /// distinguish an absent optimization from a failed integrity check.
     pub fn load(store: &Store, identity: &Identity) -> Result<Option<Self>, StoreError> {
         let path = store.root.join(".search-index");
         let raw = match store.read_path(&path) {
@@ -2620,25 +2626,31 @@ impl SearchIndex {
             }
             Err(error) => return Err(error),
         };
-        let (salt, ciphertext) = if raw.first() == Some(&1) && raw.len() > 18 {
+        let (salt, ciphertext) = if raw.len() > 1 && raw[0] == 1 {
+            if raw.len() < 18 {
+                let _ = store.remove_path(&path);
+                return Err(StoreError::SearchIndex("truncated search index".into()));
+            }
             (raw[1..17].to_vec(), raw[17..].to_vec())
         } else {
             (Vec::new(), raw)
         };
-        let plaintext = match symvault_crypto::decrypt_index(&ciphertext, identity, &salt) {
+        let mut plaintext = match symvault_crypto::decrypt_index(&ciphertext, identity, &salt) {
             Ok(value) => value,
-            Err(_) => {
+            Err(error) => {
                 let _ = store.remove_path(&path);
-                return Ok(None);
+                return Err(StoreError::Decryption(error.to_string()));
             }
         };
         let document: IndexDocument = match serde_json::from_slice(&plaintext) {
             Ok(value) => value,
-            Err(_) => {
+            Err(error) => {
+                plaintext.zeroize();
                 let _ = store.remove_path(&path);
-                return Ok(None);
+                return Err(StoreError::SearchIndex(error.to_string()));
             }
         };
+        plaintext.zeroize();
         let paths = match store.list(identity) {
             Ok(paths) => paths,
             Err(error) => {
@@ -2650,7 +2662,7 @@ impl SearchIndex {
         };
         if document.entry_count != paths.len() {
             let _ = store.remove_path(&path);
-            return Ok(None);
+            return Err(StoreError::SearchIndex("stale index".into()));
         }
         Ok(Some(Self {
             salt,

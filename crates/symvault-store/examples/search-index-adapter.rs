@@ -140,15 +140,41 @@ fn run() -> Result<(), String> {
             indexes
                 .build(&store, &identity)
                 .map_err(|error| error.to_string())?;
+            // Capture the persisted framing before any concurrent invalidation.
+            // The Go oracle writes a binary version byte, a 16-byte salt, and
+            // nonempty ciphertext; this is the persistence assertion, not a
+            // post-race read of a file that may already have been removed.
+            let raw_before =
+                fs::read(root.join(".search-index")).map_err(|error| error.to_string())?;
+            let format_version = raw_before.first().copied();
+            let ciphertext_nonempty = raw_before.len() > 1 + 16;
+            if format_version != Some(0x01) || !ciphertext_nonempty {
+                return Err(format!(
+                    "unexpected persisted index framing: format={format_version:?}, bytes={}",
+                    raw_before.len()
+                ));
+            }
+            let plaintext_absent = !raw_before
+                .windows(b"Concurrent marker".len())
+                .any(|window| window == b"Concurrent marker");
             let start = Arc::new(Barrier::new(3));
 
             let loader_indexes = Arc::clone(&indexes);
             let loader_store = store.clone();
             let loader_identity = identity;
             let loader_start = Arc::clone(&start);
+            let loaded_before_invalidate = Arc::new(std::sync::Barrier::new(2));
+            let loader_barrier = Arc::clone(&loaded_before_invalidate);
             let loader = thread::spawn(move || {
                 loader_start.wait();
-                for _ in 0..32 {
+                let loaded = loader_indexes
+                    .load(&loader_store, &loader_identity)
+                    .map_err(|error| error.to_string())?;
+                if !loaded {
+                    return Err("load-before-invalidate did not find persisted index".to_owned());
+                }
+                loader_barrier.wait();
+                for _ in 1..32 {
                     loader_indexes
                         .load(&loader_store, &loader_identity)
                         .map_err(|error| error.to_string())?;
@@ -159,8 +185,10 @@ fn run() -> Result<(), String> {
             let invalidator_indexes = Arc::clone(&indexes);
             let invalidator_store = store.clone();
             let invalidator_start = Arc::clone(&start);
+            let invalidator_barrier = Arc::clone(&loaded_before_invalidate);
             let invalidator = thread::spawn(move || {
                 invalidator_start.wait();
+                invalidator_barrier.wait();
                 for _ in 0..32 {
                     invalidator_indexes
                         .invalidate(&invalidator_store)
@@ -176,15 +204,23 @@ fn run() -> Result<(), String> {
             invalidator
                 .join()
                 .map_err(|_| "invalidator thread panicked".to_owned())??;
-            let raw_before = fs::read(root.join(".search-index")).unwrap_or_default();
-            let persisted_ciphertext = raw_before.starts_with(b"age-encryption.org/v1");
-            let plaintext_absent = !raw_before.windows(6).any(|window| window == b"MARKER");
             indexes
                 .invalidate(&store)
                 .map_err(|error| error.to_string())?;
+            let index_absent = !root.join(".search-index").exists();
+            let index_unloaded = !indexes
+                .is_loaded(&store)
+                .map_err(|error| error.to_string())?;
+            if !index_absent || !index_unloaded {
+                return Err(format!(
+                    "final invalidation did not commit: absent={index_absent}, unloaded={index_unloaded}"
+                ));
+            }
             let result = serde_json::json!({
-                "index_absent": !root.join(".search-index").exists(),
-                "persisted_ciphertext": persisted_ciphertext,
+                "index_absent": index_absent,
+                "index_unloaded": index_unloaded,
+                "format_version": format_version,
+                "ciphertext_nonempty": ciphertext_nonempty,
                 "plaintext_absent": plaintext_absent,
             });
             serde_json::to_writer(std::io::stdout(), &result).map_err(|error| error.to_string())?;

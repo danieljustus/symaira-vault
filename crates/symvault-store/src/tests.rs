@@ -2,7 +2,7 @@ use std::{
     collections::BTreeMap,
     fs,
     path::Path,
-    sync::{Arc, Barrier, mpsc},
+    sync::{Arc, Barrier, Mutex, OnceLock, mpsc},
     thread,
 };
 
@@ -282,6 +282,15 @@ fn set_mode(path: &Path, mode: u32) {
 #[cfg(not(unix))]
 fn set_mode(_path: &Path, _mode: u32) {}
 
+static SEARCH_INDEX_STORE_TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+fn search_index_store_test_guard() -> std::sync::MutexGuard<'static, ()> {
+    SEARCH_INDEX_STORE_TEST_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap()
+}
+
 #[test]
 fn manifest_verification_reports_valid_tampered_missing_and_unknown() {
     let (_, value) = fixture();
@@ -531,7 +540,9 @@ fn stale_or_corrupt_search_index_is_discarded() {
     let store = Store::open(temp.path(), &identity).unwrap();
     let _ = SearchIndex::build(&store, &identity).unwrap();
     fs::write(temp.path().join(".search-index"), b"corrupt").unwrap();
-    assert!(SearchIndex::load(&store, &identity).unwrap().is_none());
+    let error = SearchIndex::load(&store, &identity).unwrap_err();
+    assert!(matches!(error, StoreError::Decryption(_)));
+    assert!(!temp.path().join(".search-index").exists());
     let mut data = BTreeMap::new();
     data.insert("value".into(), serde_json::Value::String("new".into()));
     store
@@ -546,7 +557,9 @@ fn stale_or_corrupt_search_index_is_discarded() {
         .unwrap();
     let _ = SearchIndex::build(&store, &identity).unwrap();
     fs::remove_file(temp.path().join("entries/new.age")).unwrap();
-    assert!(SearchIndex::load(&store, &identity).unwrap().is_none());
+    let error = SearchIndex::load(&store, &identity).unwrap_err();
+    assert_eq!(error.to_string(), "stale index");
+    assert!(!temp.path().join(".search-index").exists());
 }
 
 #[test]
@@ -1675,7 +1688,107 @@ fn rooted_walk_depth_matches_walkdir_at_exact_boundaries() {
 }
 
 #[test]
+fn search_index_store_preserves_errors_and_memory_state() {
+    let _test_guard = search_index_store_test_guard();
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let wrong_identity = parse_identity(
+        "AGE-SECRET-KEY-18HD87KNMWKY3RW97YR2PYU6HGWDZXAGW6JF74LNNHUA6A8K5ZF9QTWUTK3",
+    )
+    .unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &value.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    let indexes = search_index_store::SearchIndexStore::new();
+    let index_path = temp.path().join(".search-index");
+
+    assert!(!indexes.load(&store, &identity).unwrap());
+    assert!(!indexes.is_loaded(&store).unwrap());
+
+    indexes.build(&store, &identity).unwrap();
+    assert!(indexes.is_loaded(&store).unwrap());
+    fs::write(&index_path, b"corrupt").unwrap();
+    let error = indexes.load(&store, &identity).unwrap_err();
+    assert!(matches!(error, StoreError::Decryption(_)));
+    assert!(indexes.is_loaded(&store).unwrap());
+    assert!(!index_path.exists());
+
+    indexes.build(&store, &identity).unwrap();
+    let error = indexes.load(&store, &wrong_identity).unwrap_err();
+    assert!(matches!(error, StoreError::Decryption(_)));
+    assert!(indexes.is_loaded(&store).unwrap());
+    assert!(!index_path.exists());
+
+    indexes.build(&store, &identity).unwrap();
+    let mut data = BTreeMap::new();
+    data.insert("value".into(), serde_json::Value::String("new".into()));
+    store
+        .write_entry(
+            "new",
+            &Entry {
+                data,
+                ..Entry::default()
+            },
+            &identity,
+        )
+        .unwrap();
+    let error = indexes.load(&store, &identity).unwrap_err();
+    assert_eq!(error.to_string(), "stale index");
+    assert!(indexes.is_loaded(&store).unwrap());
+    assert!(!index_path.exists());
+
+    indexes.invalidate(&store).unwrap();
+    assert!(!indexes.is_loaded(&store).unwrap());
+}
+
+#[cfg(unix)]
+#[test]
+fn search_index_store_preserves_list_and_delete_errors() {
+    let _test_guard = search_index_store_test_guard();
+    use std::os::unix::fs::PermissionsExt;
+
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &value.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    let indexes = search_index_store::SearchIndexStore::new();
+    let index_path = temp.path().join(".search-index");
+
+    indexes.build(&store, &identity).unwrap();
+    assert!(indexes.is_loaded(&store).unwrap());
+    let entries = temp.path().join("entries");
+    let entries_mode = fs::metadata(&entries).unwrap().permissions().mode();
+    set_mode(&entries, 0);
+    let error = indexes.load(&store, &identity).unwrap_err();
+    set_mode(&entries, entries_mode);
+    assert!(
+        matches!(error, StoreError::Read { source, .. } if source.kind() == std::io::ErrorKind::PermissionDenied)
+    );
+    assert!(indexes.is_loaded(&store).unwrap());
+    assert!(!index_path.exists());
+
+    indexes.build(&store, &identity).unwrap();
+    fs::write(&index_path, b"corrupt").unwrap();
+    let root_mode = fs::metadata(temp.path()).unwrap().permissions().mode();
+    set_mode(temp.path(), root_mode & !0o222);
+    let error = indexes.load(&store, &identity).unwrap_err();
+    set_mode(temp.path(), root_mode);
+    assert!(matches!(error, StoreError::Decryption(_)));
+    assert!(indexes.is_loaded(&store).unwrap());
+    assert!(
+        index_path.exists(),
+        "delete failure must retain persisted bytes"
+    );
+
+    indexes.invalidate(&store).unwrap();
+    assert!(!index_path.exists());
+    assert!(!indexes.is_loaded(&store).unwrap());
+}
+
+#[test]
 fn concurrent_search_index_load_and_invalidate_is_serialized() {
+    let _test_guard = search_index_store_test_guard();
     let (_, value) = fixture();
     let identity = Arc::new(parse_identity(IDENTITY).unwrap());
     let temp = tempfile::tempdir().unwrap();
@@ -1722,6 +1835,7 @@ fn concurrent_search_index_load_and_invalidate_is_serialized() {
 
 #[test]
 fn search_index_store_keeps_only_eight_vault_slots() {
+    let _test_guard = search_index_store_test_guard();
     let (_, value) = fixture();
     let identity = parse_identity(IDENTITY).unwrap();
     let indexes = search_index_store::SearchIndexStore::new();
@@ -1742,6 +1856,7 @@ fn search_index_store_keeps_only_eight_vault_slots() {
 
 #[test]
 fn search_index_store_instances_share_process_state_and_fresh_invalidate_removes_disk() {
+    let _test_guard = search_index_store_test_guard();
     let (_, value) = fixture();
     let identity = parse_identity(IDENTITY).unwrap();
     let temp = tempfile::tempdir().unwrap();

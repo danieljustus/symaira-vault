@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -278,16 +279,28 @@ func TestEncryptedIndexConcurrentLoadInvalidateGoRust(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	persistedCiphertext := bytes.HasPrefix(rawBefore, []byte("age-encryption.org/v1"))
-	plaintextAbsent := !bytes.Contains(rawBefore, []byte("MARKER"))
+	if len(rawBefore) == 0 || rawBefore[0] != indexFormatVersion {
+		t.Fatalf("unexpected search-index format byte: %x", rawBefore)
+	}
+	ciphertextNonempty := len(rawBefore) > 1+indexSaltLen
+	if !ciphertextNonempty {
+		t.Fatalf("search-index ciphertext is empty: %x", rawBefore)
+	}
+	plaintextAbsent := !bytes.Contains(rawBefore, []byte("Concurrent marker"))
 
 	start := make(chan struct{})
+	loadedBeforeInvalidate := make(chan struct{})
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
 		<-start
-		for i := 0; i < 32; i++ {
+		if err := sameIndex.loadFromDisk(root, identity); err != nil {
+			t.Errorf("load-before-invalidate barrier: %v", err)
+			return
+		}
+		close(loadedBeforeInvalidate)
+		for i := 1; i < 32; i++ {
 			if err := sameIndex.loadFromDisk(root, identity); err != nil {
 				t.Errorf("concurrent Go load %d: %v", i, err)
 				return
@@ -297,6 +310,7 @@ func TestEncryptedIndexConcurrentLoadInvalidateGoRust(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		<-start
+		<-loadedBeforeInvalidate
 		for i := 0; i < 32; i++ {
 			goIndex.Invalidate()
 		}
@@ -304,11 +318,19 @@ func TestEncryptedIndexConcurrentLoadInvalidateGoRust(t *testing.T) {
 	close(start)
 	wg.Wait()
 	goIndex.Invalidate()
+	if goIndex.IsBuilt() {
+		t.Fatal("Go index remained loaded after terminal invalidation")
+	}
+	if _, err := os.Stat(filepath.Join(root, ".search-index")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("Go index file remained after terminal invalidation: %v", err)
+	}
 
 	want := map[string]any{
-		"index_absent":         true,
-		"persisted_ciphertext": persistedCiphertext,
-		"plaintext_absent":     plaintextAbsent,
+		"index_absent":        true,
+		"index_unloaded":      true,
+		"format_version":      float64(indexFormatVersion),
+		"ciphertext_nonempty": ciphertextNonempty,
+		"plaintext_absent":    plaintextAbsent,
 	}
 	got := runSearchIndexAdapter(t, adapter, root, identity.String(), "concurrent-load-invalidate")
 	if !reflect.DeepEqual(got, want) {
