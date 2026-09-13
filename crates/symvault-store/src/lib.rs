@@ -2696,6 +2696,21 @@ impl SearchIndex {
         self.ciphertext.clear();
     }
 
+    pub(crate) fn invalidate_persisted(store: &Store) -> Result<(), StoreError> {
+        let path = store.root.join(".search-index");
+        #[cfg(unix)]
+        {
+            rooted::remove(&store.root_cap, Path::new(".search-index"), &path)?;
+            Ok(())
+        }
+        #[cfg(not(unix))]
+        match fs::remove_file(&path) {
+            Ok(()) => Ok(()),
+            Err(source) if source.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(source) => Err(StoreError::Write { path, source }),
+        }
+    }
+
     /// Removes the persisted index and all transient plaintext.
     pub fn invalidate(&mut self) -> Result<(), StoreError> {
         self.clear_memory();

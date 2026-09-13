@@ -1715,3 +1715,25 @@ fn concurrent_search_index_load_and_invalidate_is_serialized() {
     indexes.invalidate_all().unwrap();
     assert!(!temp.path().join(".search-index").exists());
 }
+
+#[test]
+fn search_index_store_instances_share_process_state_and_fresh_invalidate_removes_disk() {
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &value.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+
+    SearchIndex::build(&store, &identity).unwrap();
+    assert!(temp.path().join(".search-index").is_file());
+
+    let first = search_index_store::SearchIndexStore::new();
+    first.invalidate(&store).unwrap();
+    assert!(!temp.path().join(".search-index").exists());
+
+    first.build(&store, &identity).unwrap();
+    let second = search_index_store::SearchIndexStore::new();
+    second.invalidate(&store).unwrap();
+    assert!(!temp.path().join(".search-index").exists());
+    assert!(!second.load(&store, &identity).unwrap());
+}

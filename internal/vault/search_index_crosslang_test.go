@@ -265,9 +265,13 @@ func TestEncryptedIndexConcurrentLoadInvalidateGoRust(t *testing.T) {
 	mustWriteEntry(t, root, identity, "concurrent-doc", map[string]any{
 		"value": "Concurrent marker",
 	})
-	goIndex := &EncryptedIndex{}
+	goIndex := searchIndexForVault(root)
 	if err := goIndex.Build(root, identity); err != nil {
 		t.Fatal(err)
+	}
+	sameIndex := searchIndexForVault(root)
+	if goIndex != sameIndex {
+		t.Fatal("Go index store returned separate instances for one vault")
 	}
 
 	start := make(chan struct{})
@@ -277,8 +281,7 @@ func TestEncryptedIndexConcurrentLoadInvalidateGoRust(t *testing.T) {
 		defer wg.Done()
 		<-start
 		for i := 0; i < 32; i++ {
-			loaded := &EncryptedIndex{}
-			if err := loaded.loadFromDisk(root, identity); err != nil {
+			if err := sameIndex.loadFromDisk(root, identity); err != nil {
 				t.Errorf("concurrent Go load %d: %v", i, err)
 				return
 			}

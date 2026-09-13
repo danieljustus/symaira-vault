@@ -8,7 +8,7 @@
 use std::{
     collections::{BTreeMap, VecDeque},
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, OnceLock},
 };
 
 use symvault_crypto::Identity;
@@ -24,15 +24,17 @@ struct IndexStoreState {
     order: VecDeque<PathBuf>,
 }
 
-/// Thread-safe process-local collection of per-vault search indexes.
+/// Thread-safe process-wide collection of per-vault search indexes.
 ///
 /// Disk files are retained when an entry is evicted from the bounded in-memory
 /// collection, but [`Self::invalidate_all`] removes both memory and persisted
 /// state.  Operations on one vault are serialized without blocking unrelated
 /// vaults.
 pub struct SearchIndexStore {
-    state: Mutex<IndexStoreState>,
+    state: &'static Mutex<IndexStoreState>,
 }
+
+static PROCESS_INDEX_STATE: OnceLock<Mutex<IndexStoreState>> = OnceLock::new();
 
 impl Default for SearchIndexStore {
     fn default() -> Self {
@@ -41,11 +43,11 @@ impl Default for SearchIndexStore {
 }
 
 impl SearchIndexStore {
-    /// Creates an empty bounded index store.
+    /// Creates a handle to the process-wide bounded index store.
     #[must_use]
     pub fn new() -> Self {
         Self {
-            state: Mutex::new(IndexStoreState::default()),
+            state: PROCESS_INDEX_STATE.get_or_init(|| Mutex::new(IndexStoreState::default())),
         }
     }
 
@@ -92,6 +94,8 @@ impl SearchIndexStore {
         let mut current = lock_slot(&slot)?;
         if let Some(index) = current.as_mut() {
             index.invalidate()?;
+        } else {
+            SearchIndex::invalidate_persisted(store)?;
         }
         *current = None;
         Ok(())
@@ -99,7 +103,7 @@ impl SearchIndexStore {
 
     /// Invalidates every cached vault index and removes every persisted file.
     pub fn invalidate_all(&self) -> Result<(), StoreError> {
-        let mut state = lock_state(&self.state)?;
+        let mut state = lock_state(self.state)?;
         let slots: Vec<_> = state.indices.values().cloned().collect();
         let mut first_error = None;
         for slot in slots {
@@ -116,7 +120,7 @@ impl SearchIndexStore {
 
     fn slot(&self, store: &Store) -> Result<IndexSlot, StoreError> {
         let key = store.root().to_path_buf();
-        let mut state = lock_state(&self.state)?;
+        let mut state = lock_state(self.state)?;
         if let Some(slot) = state.indices.get(&key).cloned() {
             touch(&mut state.order, &key);
             return Ok(slot);
