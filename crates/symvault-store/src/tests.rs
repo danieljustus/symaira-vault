@@ -1721,6 +1721,26 @@ fn concurrent_search_index_load_and_invalidate_is_serialized() {
 }
 
 #[test]
+fn search_index_store_keeps_only_eight_vault_slots() {
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let indexes = search_index_store::SearchIndexStore::new();
+    let mut roots = Vec::new();
+    let mut stores = Vec::new();
+    for _ in 0..9 {
+        let temp = tempfile::tempdir().unwrap();
+        materialize(temp.path(), &value.vaults[0]);
+        stores.push(Store::open(temp.path(), &identity).unwrap());
+        roots.push(temp);
+    }
+    for store in &stores {
+        indexes.is_loaded(store).unwrap();
+    }
+    assert_eq!(indexes.cached_vault_count().unwrap(), 8);
+    drop(roots);
+}
+
+#[test]
 fn search_index_store_instances_share_process_state_and_fresh_invalidate_removes_disk() {
     let (_, value) = fixture();
     let identity = parse_identity(IDENTITY).unwrap();

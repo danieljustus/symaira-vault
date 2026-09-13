@@ -100,6 +100,11 @@ impl SearchIndexStore {
             .is_some_and(SearchIndex::is_loaded))
     }
 
+    /// Returns the number of vault slots currently retained by the bounded cache.
+    pub fn cached_vault_count(&self) -> Result<usize, StoreError> {
+        Ok(lock_state(self.state)?.indices.len())
+    }
+
     /// Invalidates one vault's index, clearing memory and deleting its file.
     pub fn invalidate(&self, store: &Store) -> Result<(), StoreError> {
         let mut state = lock_state(self.state)?;
@@ -127,7 +132,7 @@ impl SearchIndexStore {
             let Some(oldest) = state.order.pop_front() else {
                 break;
             };
-            let Some(evicted) = state.indices.get(&oldest).cloned() else {
+            let Some(evicted) = state.indices.remove(&oldest) else {
                 continue;
             };
             let mut current = lock_slot(&evicted)?;
