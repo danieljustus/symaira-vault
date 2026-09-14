@@ -326,8 +326,12 @@ jobs:
           go test -v -timeout=15m -skip 'TestFlow|TestBinaryE2E|Integration' ./...
 
   windows-process-tree:
-    name: Process tree (Windows) — PR
-    if: github.event_name == 'pull_request'
+    name: Process tree (Windows)
+    # Also dispatchable: this is the only job that exercises the Windows
+    # job-object paths, and cross-compilation is not evidence for them.
+    if: >-
+      github.event_name == 'pull_request' ||
+      github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     steps:
       - name: Checkout code
@@ -349,6 +353,11 @@ jobs:
           go test -v -timeout=5m
           -run "TestCommandTimedOutRequiresEffectiveTreeCancellation|TestRunNaturalNonzeroExitIsNotTimedOut|TestRunDeadlineWithoutEffectiveTreeCancellationPreservesNaturalExit|TestRunPreservesWaitDelayWhenTreeIsAlreadyGone|TestRunAssignmentFailureCleansUpSynchronously|TestRunAssignmentFailureKillsUnassignedSuspendedProcess|TestWindowsClassifyAlreadyGoneWaitDelayEINVAL|TestRunTimeoutKillsDescendantJobObject|TestRunTimeoutWaitsForInheritedPipeCleanup|TestWindowsProcessTreeLifecycleAndErrors|TestWindowsProcessTreeKillReportsActiveJob|TestWindowsProcessTreeKillReportsEmptyJob"
           ./scripts/rust-port/internal/diff
+
+      - name: Run store004gen Windows job-object regression
+        run: >-
+          go test -v -timeout=5m
+          ./scripts/rust-port/cmd/store004gen
 
   build-pr:
     name: Build (linux-amd64) — PR
