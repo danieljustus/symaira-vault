@@ -401,7 +401,7 @@ impl Config {
             config.auth_method = AuthMethod::parse(&string(v, "authMethod")?)?;
             auth_method_explicit = true;
         }
-        if let Some(v) = root.get(key("useTouchID")) {
+        if let Some(v) = scalar(root, "useTouchID") {
             config.use_touch_id = Some(boolean(v, "useTouchID")?);
         }
         if let Some(v) = root.get(key("defaultProfile")).filter(|v| !v.is_null()) {
