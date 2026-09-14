@@ -14,7 +14,7 @@
       "internal/config/presets.go",
       "internal/secureui/secureui.go"
     ],
-    "source_digest": "61d28fbc7a37dda4b38e720c897e709712192a595fcdf80a72ee64e081c29f68",
+    "source_digest": "4016939a38c14d521d240b8e23fe73fd1c20324611f8dd94c3d08b6533746b2c",
     "generator_digest": "d01604c3811f0279a0b65d9c6356ea432acd11c78d4332cba3eb60e3603dc485"
   },
   "cases": null,
