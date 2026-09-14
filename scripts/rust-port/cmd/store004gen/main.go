@@ -115,9 +115,9 @@ func digest(root string, names []string, pinned bool) (string, error) {
 		var data []byte
 		var err error
 		if pinned {
-			data, err = exec.Command("git", "-C", root, "show", oracleCommit+":"+name).Output()
+			data, err = exec.Command("git", "-C", root, "show", oracleCommit+":"+name).Output() // #nosec G204 -- executable is fixed git; name is from the compile-time oracle file list
 		} else {
-			data, err = os.ReadFile(filepath.Join(root, name))
+			data, err = os.ReadFile(filepath.Join(root, name)) // #nosec G304 -- name is from the compile-time generator file list
 		}
 		if err != nil {
 			return "", fmt.Errorf("digest %s: %w", name, err)
@@ -171,7 +171,7 @@ func extract(root string) (string, error) {
 		return "", err
 	}
 	defer func(p string) { _ = os.Remove(p) }(archivePath)
-	cmd := exec.Command("git", "-C", root, "archive", "--format=tar", "--output="+archivePath, oracleCommit)
+	cmd := exec.Command("git", "-C", root, "archive", "--format=tar", "--output="+archivePath, oracleCommit) // #nosec G204 -- executable, output format and commit are fixed; root is the selected oracle repository
 	if err = cmd.Run(); err != nil {
 		return "", fmt.Errorf("git archive: %w", err)
 	}
@@ -182,7 +182,7 @@ func extract(root string) (string, error) {
 	if info.Size() > 64<<20 {
 		return "", errors.New("oracle archive exceeds 67108864 bytes")
 	}
-	f, err := os.Open(archivePath)
+	f, err := os.Open(archivePath) // #nosec G304 -- path is the private temporary archive created above
 	if err != nil {
 		return "", err
 	}
@@ -217,7 +217,7 @@ func extract(root string) (string, error) {
 			if e = os.MkdirAll(filepath.Dir(out), 0750); e != nil {
 				return "", e
 			}
-			file, e := os.OpenFile(out, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+			file, e := os.OpenFile(out, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600) // #nosec G304 -- safeArchivePath and the Rel check above confirm the name cannot escape the extraction root
 			if e != nil {
 				return "", e
 			}
@@ -243,7 +243,7 @@ func resolveGo() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("locate Go executable %q: %w", goExecutable, err)
 	}
-	cmd := exec.Command(path, "version")
+	cmd := exec.Command(path, "version") // #nosec G204 -- path is resolved via exec.LookPath(goExecutable), a fixed name overridable only in tests
 	output, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("check Go toolchain %q: %w", path, err)
@@ -309,7 +309,7 @@ func runOracle(root string, pseudonymize bool) (outcomes []outcome, err error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), oracleTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, goPath, args...)
+	cmd := exec.CommandContext(ctx, goPath, args...) // #nosec G204 -- goPath is the version-checked toolchain from resolveGo; args are fixed literals above
 	cmd.Dir, cmd.Env = tree, isolatedEnvironment(goPath, home, tmp)
 	configureProcessGroup(cmd)
 	var stdout, stderr bytes.Buffer
@@ -384,7 +384,7 @@ func checkFixture(root, path string) error {
 	if err != nil {
 		return err
 	}
-	got, err := os.ReadFile(path)
+	got, err := os.ReadFile(path) // #nosec G304 -- path is the explicit generated fixture path supplied by the caller
 	if err != nil {
 		return err
 	}
