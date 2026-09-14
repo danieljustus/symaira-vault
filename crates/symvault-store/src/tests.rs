@@ -1,4 +1,18 @@
-use std::{collections::BTreeMap, fs, path::Path};
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::Path,
+    sync::{Arc, Mutex, OnceLock, mpsc},
+    thread,
+};
+
+#[cfg(unix)]
+use std::{
+    env, io,
+    path::PathBuf,
+    process::{Child, Command, ExitStatus},
+    time::{Duration, Instant},
+};
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde::Deserialize;
@@ -12,6 +26,22 @@ const FIXTURE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../testdata/port/store/store.json"
 );
+#[cfg(unix)]
+const MANIFEST_PROCESS_ROOT: &str = "SYMVAULT_MANIFEST_PROCESS_ROOT";
+#[cfg(unix)]
+const MANIFEST_PROCESS_READY: &str = ".manifest-process-ready";
+#[cfg(unix)]
+const MANIFEST_PROCESS_START: &str = ".manifest-process-start";
+#[cfg(unix)]
+const MANIFEST_PROCESS_REBUILD_STARTED: &str = ".manifest-process-rebuild-started";
+#[cfg(unix)]
+const MANIFEST_PROCESS_REBUILD_DONE: &str = ".manifest-process-rebuild-done";
+#[cfg(unix)]
+const MANIFEST_PROCESS_WRITERS_READY: &str = ".manifest-process-writers-ready";
+#[cfg(unix)]
+const MANIFEST_PROCESS_WRITERS_START: &str = ".manifest-process-writers-start";
+#[cfg(unix)]
+const MANIFEST_PROCESS_WRITES: usize = 16;
 
 #[derive(Debug, Deserialize)]
 struct Fixture {
@@ -276,6 +306,15 @@ fn set_mode(path: &Path, mode: u32) {
 #[cfg(not(unix))]
 fn set_mode(_path: &Path, _mode: u32) {}
 
+static SEARCH_INDEX_STORE_TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+fn search_index_store_test_guard() -> std::sync::MutexGuard<'static, ()> {
+    SEARCH_INDEX_STORE_TEST_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap()
+}
+
 #[test]
 fn manifest_verification_reports_valid_tampered_missing_and_unknown() {
     let (_, value) = fixture();
@@ -525,7 +564,9 @@ fn stale_or_corrupt_search_index_is_discarded() {
     let store = Store::open(temp.path(), &identity).unwrap();
     let _ = SearchIndex::build(&store, &identity).unwrap();
     fs::write(temp.path().join(".search-index"), b"corrupt").unwrap();
-    assert!(SearchIndex::load(&store, &identity).unwrap().is_none());
+    let error = SearchIndex::load(&store, &identity).unwrap_err();
+    assert!(matches!(error, StoreError::Decryption(_)));
+    assert!(!temp.path().join(".search-index").exists());
     let mut data = BTreeMap::new();
     data.insert("value".into(), serde_json::Value::String("new".into()));
     store
@@ -540,7 +581,9 @@ fn stale_or_corrupt_search_index_is_discarded() {
         .unwrap();
     let _ = SearchIndex::build(&store, &identity).unwrap();
     fs::remove_file(temp.path().join("entries/new.age")).unwrap();
-    assert!(SearchIndex::load(&store, &identity).unwrap().is_none());
+    let error = SearchIndex::load(&store, &identity).unwrap_err();
+    assert_eq!(error.to_string(), "stale index");
+    assert!(!temp.path().join(".search-index").exists());
 }
 
 #[test]
@@ -1459,6 +1502,222 @@ fn concurrent_manifest_updates_preserve_every_record() {
     }
 }
 
+#[cfg(unix)]
+fn wait_for_process_marker(path: &Path) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !path.is_file() {
+        assert!(
+            Instant::now() < deadline,
+            "timed out waiting for subprocess marker {}",
+            path.display()
+        );
+        thread::sleep(Duration::from_millis(10));
+    }
+}
+
+#[cfg(unix)]
+struct ManifestTestChild(Child);
+
+#[cfg(unix)]
+impl ManifestTestChild {
+    fn wait_for_exit(&mut self, timeout: Duration) -> io::Result<ExitStatus> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            if let Some(status) = self.0.try_wait()? {
+                return Ok(status);
+            }
+            if Instant::now() >= deadline {
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "manifest subprocess did not exit before deadline",
+                ));
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    fn kill_and_reap(&mut self) -> io::Result<()> {
+        if self.0.try_wait()?.is_none() {
+            match self.0.kill() {
+                Ok(()) => {}
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error),
+            }
+        }
+        self.wait_for_exit(Duration::from_secs(5))?;
+        Ok(())
+    }
+}
+
+#[cfg(unix)]
+impl Drop for ManifestTestChild {
+    fn drop(&mut self) {
+        // Also clean up if a marker, lock, or record assertion panics.
+        if let Err(error) = self.kill_and_reap() {
+            eprintln!("manifest subprocess cleanup failed: {error}");
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn manifest_subprocess_timeout_kills_and_reaps_child() {
+    let mut child = ManifestTestChild(Command::new("/bin/sleep").arg("30").spawn().unwrap());
+    let error = child.wait_for_exit(Duration::from_millis(50)).unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+    child.kill_and_reap().unwrap();
+    assert!(!child.0.try_wait().unwrap().unwrap().success());
+}
+
+#[cfg(unix)]
+fn write_manifest_process_entries(store: &Store, identity: &Identity, writer: &str) {
+    for index in 0..MANIFEST_PROCESS_WRITES {
+        store
+            .write_entry_with_recipients_at(
+                &format!("process/{writer}/{index}"),
+                &Entry::default(),
+                identity,
+                "2026-09-08T10:11:12Z",
+                None,
+            )
+            .unwrap();
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn cross_process_manifest_writers_preserve_records_and_rebuild_recovers() {
+    let (_, fixture) = fixture();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &fixture.vaults[0]);
+    let root = temp.path().to_path_buf();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let store = Store::open(&root, &identity).unwrap();
+    let before = store.load_manifest(&identity).unwrap();
+
+    let lock = store.acquire_write_lock().unwrap();
+    let mut child = ManifestTestChild(Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "tests::cross_process_manifest_writers_preserve_records_and_rebuild_recovers_worker",
+            "--nocapture",
+        ])
+        .env(MANIFEST_PROCESS_ROOT, &root)
+        .spawn()
+        .unwrap());
+    wait_for_process_marker(&root.join(MANIFEST_PROCESS_READY));
+    fs::write(root.join(MANIFEST_PROCESS_START), b"start").unwrap();
+    wait_for_process_marker(&root.join(MANIFEST_PROCESS_REBUILD_STARTED));
+    // The child now attempts the production rebuild RMW while this process
+    // holds the same lock used by production writers. It must stay blocked.
+    let blocked_until = Instant::now() + Duration::from_millis(250);
+    while Instant::now() < blocked_until {
+        assert!(
+            !root.join(MANIFEST_PROCESS_REBUILD_DONE).exists(),
+            "rebuild completed while the production manifest lock was held"
+        );
+        assert!(
+            child.0.try_wait().unwrap().is_none(),
+            "subprocess exited early"
+        );
+        thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(store.load_manifest(&identity).unwrap(), before);
+    fs4::fs_std::FileExt::unlock(&lock).unwrap();
+    drop(lock);
+    wait_for_process_marker(&root.join(MANIFEST_PROCESS_REBUILD_DONE));
+    wait_for_process_marker(&root.join(MANIFEST_PROCESS_WRITERS_READY));
+    fs::write(root.join(MANIFEST_PROCESS_WRITERS_START), b"start").unwrap();
+    write_manifest_process_entries(&store, &identity, "parent");
+    assert!(
+        child
+            .wait_for_exit(Duration::from_secs(10))
+            .unwrap()
+            .success(),
+        "manifest writer subprocess failed"
+    );
+
+    let after_writes = store.load_manifest(&identity).unwrap();
+    // Generation counts flushes, not individual writes: Go may coalesce
+    // writes inside its 50ms debounce window. Check records and integrity.
+    assert_eq!(
+        after_writes.entries.len(),
+        before.entries.len() + MANIFEST_PROCESS_WRITES * 2
+    );
+    for writer in ["parent", "child"] {
+        for index in 0..MANIFEST_PROCESS_WRITES {
+            assert!(
+                after_writes
+                    .entries
+                    .contains_key(&format!("process/{writer}/{index}")),
+                "missing {writer} manifest record {index}"
+            );
+        }
+    }
+
+    let verification = store.verify_manifest(&identity).unwrap();
+    assert_eq!(verification.ok, after_writes.entries.len());
+    assert!(verification.missing.is_empty());
+    assert!(verification.tampered.is_empty());
+    assert!(verification.unknown.is_empty());
+
+    let malformed = b"malformed manifest bytes";
+    fs::write(root.join(MANIFEST_FILE), malformed).unwrap();
+    let error = store
+        .update_manifest_entry("must-not-write", b"ciphertext", &identity)
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        StoreError::Decryption(_) | StoreError::Config(_)
+    ));
+    assert_eq!(fs::read(root.join(MANIFEST_FILE)).unwrap(), malformed);
+
+    let rebuilt = store.rebuild_manifest(&identity).unwrap();
+    let persisted = store.load_manifest(&identity).unwrap();
+    assert_eq!(rebuilt, persisted);
+    assert_eq!(persisted.generation, 1);
+    assert_ne!(persisted.created, go_zero_time());
+    assert_ne!(persisted.updated, go_zero_time());
+    assert_eq!(
+        persisted.entries.len(),
+        before.entries.len() + MANIFEST_PROCESS_WRITES * 2
+    );
+    for writer in ["parent", "child"] {
+        for index in 0..MANIFEST_PROCESS_WRITES {
+            assert!(
+                persisted
+                    .entries
+                    .contains_key(&format!("process/{writer}/{index}")),
+                "rebuild lost {writer} manifest record {index}"
+            );
+        }
+    }
+    let verification = store.verify_manifest(&identity).unwrap();
+    assert_eq!(verification.ok, persisted.entries.len());
+    assert!(verification.missing.is_empty());
+    assert!(verification.tampered.is_empty());
+    assert!(verification.unknown.is_empty());
+}
+
+#[cfg(unix)]
+#[test]
+fn cross_process_manifest_writers_preserve_records_and_rebuild_recovers_worker() {
+    let Some(root) = env::var_os(MANIFEST_PROCESS_ROOT) else {
+        return;
+    };
+    let root = PathBuf::from(root);
+    let identity = parse_identity(IDENTITY).unwrap();
+    let store = Store::open(&root, &identity).unwrap();
+    fs::write(root.join(MANIFEST_PROCESS_READY), b"ready").unwrap();
+    wait_for_process_marker(&root.join(MANIFEST_PROCESS_START));
+    fs::write(root.join(MANIFEST_PROCESS_REBUILD_STARTED), b"started").unwrap();
+    store.rebuild_manifest(&identity).unwrap();
+    fs::write(root.join(MANIFEST_PROCESS_REBUILD_DONE), b"done").unwrap();
+    fs::write(root.join(MANIFEST_PROCESS_WRITERS_READY), b"ready").unwrap();
+    wait_for_process_marker(&root.join(MANIFEST_PROCESS_WRITERS_START));
+    write_manifest_process_entries(&store, &identity, "child");
+}
+
 #[test]
 fn metadata_clock_requires_rfc3339_and_preserves_semantic_go_zero() {
     let identity = parse_identity(IDENTITY).unwrap();
@@ -1666,4 +1925,240 @@ fn rooted_walk_depth_matches_walkdir_at_exact_boundaries() {
         actual.sort();
         assert_eq!(actual, expected, "depth {depth}");
     }
+}
+
+#[test]
+fn search_index_store_preserves_errors_and_memory_state() {
+    let _test_guard = search_index_store_test_guard();
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let wrong_identity = parse_identity(
+        "AGE-SECRET-KEY-18HD87KNMWKY3RW97YR2PYU6HGWDZXAGW6JF74LNNHUA6A8K5ZF9QTWUTK3",
+    )
+    .unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &value.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    let indexes = search_index_store::SearchIndexStore::new();
+    let index_path = temp.path().join(".search-index");
+
+    assert!(!index_path.exists());
+    assert!(!indexes.load(&store, &identity).unwrap());
+    assert!(!indexes.is_loaded(&store).unwrap());
+    assert!(!index_path.exists());
+
+    // Go's missing-file path returns before the sole load-state commit, so a
+    // warm in-memory index survives a disappeared persisted optimization.
+    indexes.build(&store, &identity).unwrap();
+    assert!(indexes.is_loaded(&store).unwrap());
+    fs::remove_file(&index_path).unwrap();
+    assert!(!indexes.load(&store, &identity).unwrap());
+    assert!(indexes.is_loaded(&store).unwrap());
+    assert!(!index_path.exists());
+
+    indexes.build(&store, &identity).unwrap();
+    assert!(indexes.is_loaded(&store).unwrap());
+    fs::write(&index_path, b"corrupt").unwrap();
+    let error = indexes.load(&store, &identity).unwrap_err();
+    assert!(matches!(error, StoreError::Decryption(_)));
+    assert!(indexes.is_loaded(&store).unwrap());
+    assert!(!index_path.exists());
+
+    indexes.build(&store, &identity).unwrap();
+    let error = indexes.load(&store, &wrong_identity).unwrap_err();
+    assert!(matches!(error, StoreError::Decryption(_)));
+    assert!(indexes.is_loaded(&store).unwrap());
+    assert!(!index_path.exists());
+
+    indexes.build(&store, &identity).unwrap();
+    let mut data = BTreeMap::new();
+    data.insert("value".into(), serde_json::Value::String("new".into()));
+    store
+        .write_entry(
+            "new",
+            &Entry {
+                data,
+                ..Entry::default()
+            },
+            &identity,
+        )
+        .unwrap();
+    let error = indexes.load(&store, &identity).unwrap_err();
+    assert_eq!(error.to_string(), "stale index");
+    assert!(indexes.is_loaded(&store).unwrap());
+    assert!(!index_path.exists());
+
+    indexes.invalidate(&store).unwrap();
+    assert!(!indexes.is_loaded(&store).unwrap());
+}
+
+#[cfg(unix)]
+#[test]
+fn search_index_store_preserves_list_and_delete_errors() {
+    let _test_guard = search_index_store_test_guard();
+    use std::os::unix::fs::PermissionsExt;
+
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &value.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    let indexes = search_index_store::SearchIndexStore::new();
+    let index_path = temp.path().join(".search-index");
+
+    indexes.build(&store, &identity).unwrap();
+    assert!(indexes.is_loaded(&store).unwrap());
+    let entries = temp.path().join("entries");
+    let entries_mode = fs::metadata(&entries).unwrap().permissions().mode();
+    set_mode(&entries, 0);
+    let error = indexes.load(&store, &identity).unwrap_err();
+    set_mode(&entries, entries_mode);
+    assert!(
+        matches!(error, StoreError::Read { source, .. } if source.kind() == std::io::ErrorKind::PermissionDenied)
+    );
+    assert!(indexes.is_loaded(&store).unwrap());
+    assert!(!index_path.exists());
+
+    indexes.build(&store, &identity).unwrap();
+    fs::write(&index_path, b"corrupt").unwrap();
+    let root_mode = fs::metadata(temp.path()).unwrap().permissions().mode();
+    set_mode(temp.path(), root_mode & !0o222);
+    let error = indexes.load(&store, &identity).unwrap_err();
+    let loaded_after_failed_load = indexes.is_loaded(&store).unwrap();
+    let persisted_after_failed_load = index_path.exists();
+    let invalidate_result = indexes.invalidate(&store);
+    let unloaded_after_failed_invalidate = !indexes.is_loaded(&store).unwrap();
+    let persisted_after_failed_invalidate = index_path.exists();
+    set_mode(temp.path(), root_mode);
+    assert!(matches!(error, StoreError::Decryption(_)));
+    assert!(loaded_after_failed_load);
+    assert!(
+        persisted_after_failed_load,
+        "delete failure must retain persisted bytes"
+    );
+    assert!(
+        invalidate_result.is_ok(),
+        "explicit invalidation must discard its best-effort delete failure"
+    );
+    assert!(
+        unloaded_after_failed_invalidate,
+        "explicit invalidation must clear memory before attempting deletion"
+    );
+    assert!(
+        persisted_after_failed_invalidate,
+        "failed explicit invalidation must retain persisted bytes"
+    );
+
+    indexes.invalidate(&store).unwrap();
+    assert!(!index_path.exists());
+    assert!(!indexes.is_loaded(&store).unwrap());
+}
+
+#[test]
+fn concurrent_search_index_load_and_invalidate_is_serialized() {
+    let _test_guard = search_index_store_test_guard();
+    let (_, value) = fixture();
+    let identity = Arc::new(parse_identity(IDENTITY).unwrap());
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &value.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+    let indexes = Arc::new(search_index_store::SearchIndexStore::new());
+    let index_path = temp.path().join(".search-index");
+    let _ = SearchIndex::build(&store, &identity).unwrap();
+    let raw_before = fs::read(&index_path).unwrap();
+    assert_eq!(raw_before.first(), Some(&0x01));
+    assert!(
+        raw_before.len() > 17,
+        "persisted ciphertext must be nonempty"
+    );
+    assert!(!indexes.is_loaded(&store).unwrap());
+
+    let (read, wait_read) = mpsc::channel();
+    let (release, wait_release) = mpsc::channel();
+    let loader_indexes = Arc::clone(&indexes);
+    let loader_store = store.clone();
+    let loader_identity = Arc::clone(&identity);
+    let loader = thread::spawn(move || {
+        loader_indexes.load_before_commit(&loader_store, &loader_identity, || {
+            read.send(()).unwrap();
+            wait_release.recv().unwrap();
+        })
+    });
+    wait_read
+        .recv_timeout(std::time::Duration::from_secs(10))
+        .unwrap();
+    // Disk validation has completed but its index has not committed. Check the
+    // actual coordination lock, not a sleep or a scheduler-dependent workload.
+    let protected = indexes.coordination_is_locked();
+    let (attempt, wait_attempt) = mpsc::channel();
+    let invalidator_indexes = Arc::clone(&indexes);
+    let invalidator_store = store.clone();
+    let invalidator = thread::spawn(move || {
+        attempt.send(()).unwrap();
+        invalidator_indexes.invalidate(&invalidator_store).unwrap();
+    });
+    wait_attempt.recv().unwrap();
+    if !protected {
+        // A split read/commit mutant must finish invalidating before the stale
+        // commit, making the terminal resurrection deterministic.
+        invalidator.join().unwrap();
+        release.send(()).unwrap();
+    } else {
+        release.send(()).unwrap();
+        invalidator.join().unwrap();
+    }
+    assert!(loader.join().unwrap().unwrap());
+    let unloaded = !indexes.is_loaded(&store).unwrap();
+    let absent = !index_path.exists();
+    assert!(
+        unloaded && absent,
+        "terminal state: unloaded={unloaded}, absent={absent}"
+    );
+    assert!(protected, "load released coordination before commit");
+}
+
+#[test]
+fn search_index_store_keeps_only_eight_vault_slots() {
+    let _test_guard = search_index_store_test_guard();
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let indexes = search_index_store::SearchIndexStore::new();
+    let mut roots = Vec::new();
+    let mut stores = Vec::new();
+    for _ in 0..9 {
+        let temp = tempfile::tempdir().unwrap();
+        materialize(temp.path(), &value.vaults[0]);
+        stores.push(Store::open(temp.path(), &identity).unwrap());
+        roots.push(temp);
+    }
+    for store in &stores {
+        indexes.is_loaded(store).unwrap();
+    }
+    assert_eq!(indexes.cached_vault_count().unwrap(), 8);
+    drop(roots);
+}
+
+#[test]
+fn search_index_store_instances_share_process_state_and_fresh_invalidate_removes_disk() {
+    let _test_guard = search_index_store_test_guard();
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &value.vaults[0]);
+    let store = Store::open(temp.path(), &identity).unwrap();
+
+    SearchIndex::build(&store, &identity).unwrap();
+    assert!(temp.path().join(".search-index").is_file());
+
+    let first = search_index_store::SearchIndexStore::new();
+    first.invalidate(&store).unwrap();
+    assert!(!temp.path().join(".search-index").exists());
+
+    first.build(&store, &identity).unwrap();
+    let second = search_index_store::SearchIndexStore::new();
+    assert!(second.is_loaded(&store).unwrap());
+    second.invalidate(&store).unwrap();
+    assert!(!first.is_loaded(&store).unwrap());
+    assert!(!temp.path().join(".search-index").exists());
+    assert!(!second.load(&store, &identity).unwrap());
 }

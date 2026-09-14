@@ -29,6 +29,9 @@ pub mod audit;
 /// Pure fixed-clock write metadata preparation.
 pub mod metadata;
 
+/// Thread-safe process-local ownership of encrypted search indexes.
+pub mod search_index_store;
+
 mod publication;
 
 #[cfg(unix)]
@@ -79,6 +82,8 @@ pub enum StoreError {
     InvalidEntryPath(String),
     #[error("entry ciphertext is invalid: {0}")]
     Decryption(String),
+    #[error("{0}")]
+    SearchIndex(String),
     #[error("search index build produced no entries")]
     SearchIndexBuildEmpty,
     #[error("vault resource exceeds {limit} bytes: {path}")]
@@ -2235,8 +2240,10 @@ impl Store {
     fn rebuild_manifest_unlocked(&self, identity: &Identity) -> Result<Manifest, StoreError> {
         let mut manifest = Manifest {
             version: 1,
-            generation: 0,
-            created: go_zero_time(),
+            // Go's writeManifest increments a newly rebuilt manifest before
+            // publishing it, so the first persisted generation is one.
+            generation: 1,
+            created: utc_now_string(&self.root)?,
             updated: go_zero_time(),
             entries: BTreeMap::new(),
         };
@@ -2268,8 +2275,7 @@ impl Store {
             );
             let _ = metadata;
         }
-        self.write_manifest(&manifest, identity)?;
-        Ok(manifest)
+        self.write_manifest(&manifest, identity)
     }
 
     /// Updates one manifest record after a successful entry write.
@@ -2314,7 +2320,7 @@ impl Store {
             },
         );
         manifest.generation = manifest.generation.wrapping_add(1);
-        self.write_manifest(&manifest, identity)
+        self.write_manifest(&manifest, identity).map(|_| ())
     }
 
     /// Removes one manifest record. Missing manifests are a no-op.
@@ -2337,10 +2343,14 @@ impl Store {
         };
         manifest.entries.remove(path);
         manifest.generation = manifest.generation.wrapping_add(1);
-        self.write_manifest(&manifest, identity)
+        self.write_manifest(&manifest, identity).map(|_| ())
     }
 
-    fn write_manifest(&self, manifest: &Manifest, identity: &Identity) -> Result<(), StoreError> {
+    fn write_manifest(
+        &self,
+        manifest: &Manifest,
+        identity: &Identity,
+    ) -> Result<Manifest, StoreError> {
         let mut manifest = manifest.clone();
         if manifest.version == 0 {
             manifest.version = 1;
@@ -2352,7 +2362,8 @@ impl Store {
         );
         let ciphertext = encrypt(&plaintext, &recipients)
             .map_err(|error| StoreError::Decryption(error.to_string()))?;
-        publication::replace(&self.root.join(MANIFEST_FILE), &ciphertext, &self.root_cap)
+        publication::replace(&self.root.join(MANIFEST_FILE), &ciphertext, &self.root_cap)?;
+        Ok(manifest)
     }
 }
 
@@ -2607,7 +2618,11 @@ impl SearchIndex {
         })
     }
 
-    /// Loads a current or legacy encrypted index, rejecting stale indexes.
+    /// Loads a current or legacy encrypted index, rejecting malformed or stale indexes.
+    ///
+    /// A missing index is reported as `Ok(None)`. Invalid persisted state is
+    /// removed on a best-effort basis and returned as an error, so callers can
+    /// distinguish an absent optimization from a failed integrity check.
     pub fn load(store: &Store, identity: &Identity) -> Result<Option<Self>, StoreError> {
         let path = store.root.join(".search-index");
         let raw = match store.read_path(&path) {
@@ -2617,25 +2632,31 @@ impl SearchIndex {
             }
             Err(error) => return Err(error),
         };
-        let (salt, ciphertext) = if raw.first() == Some(&1) && raw.len() > 18 {
+        let (salt, ciphertext) = if raw.len() > 1 && raw[0] == 1 {
+            if raw.len() < 18 {
+                let _ = store.remove_path(&path);
+                return Err(StoreError::SearchIndex("truncated search index".into()));
+            }
             (raw[1..17].to_vec(), raw[17..].to_vec())
         } else {
             (Vec::new(), raw)
         };
-        let plaintext = match symvault_crypto::decrypt_index(&ciphertext, identity, &salt) {
+        let mut plaintext = match symvault_crypto::decrypt_index(&ciphertext, identity, &salt) {
             Ok(value) => value,
-            Err(_) => {
+            Err(error) => {
                 let _ = store.remove_path(&path);
-                return Ok(None);
+                return Err(StoreError::Decryption(error.to_string()));
             }
         };
         let document: IndexDocument = match serde_json::from_slice(&plaintext) {
             Ok(value) => value,
-            Err(_) => {
+            Err(error) => {
+                plaintext.zeroize();
                 let _ = store.remove_path(&path);
-                return Ok(None);
+                return Err(StoreError::SearchIndex(error.to_string()));
             }
         };
+        plaintext.zeroize();
         let paths = match store.list(identity) {
             Ok(paths) => paths,
             Err(error) => {
@@ -2647,7 +2668,7 @@ impl SearchIndex {
         };
         if document.entry_count != paths.len() {
             let _ = store.remove_path(&path);
-            return Ok(None);
+            return Err(StoreError::SearchIndex("stale index".into()));
         }
         Ok(Some(Self {
             salt,
@@ -2686,12 +2707,35 @@ impl SearchIndex {
             .collect())
     }
 
-    /// Removes the persisted index and all transient plaintext.
-    pub fn invalidate(&mut self) -> Result<(), StoreError> {
+    pub(crate) fn clear_memory(&mut self) {
         self.doc = None;
         self.salt.clear();
         self.ciphertext.zeroize();
         self.ciphertext.clear();
+    }
+
+    pub(crate) fn is_loaded(&self) -> bool {
+        self.doc.is_some()
+    }
+
+    pub(crate) fn invalidate_persisted(store: &Store) -> Result<(), StoreError> {
+        let path = store.root.join(".search-index");
+        #[cfg(unix)]
+        {
+            rooted::remove(&store.root_cap, Path::new(".search-index"), &path)?;
+            Ok(())
+        }
+        #[cfg(not(unix))]
+        match fs::remove_file(&path) {
+            Ok(()) => Ok(()),
+            Err(source) if source.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(source) => Err(StoreError::Write { path, source }),
+        }
+    }
+
+    /// Removes the persisted index and all transient plaintext.
+    pub fn invalidate(&mut self) -> Result<(), StoreError> {
+        self.clear_memory();
         if self.root.as_os_str().is_empty() {
             return Ok(());
         }
