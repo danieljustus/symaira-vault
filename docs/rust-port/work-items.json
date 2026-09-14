@@ -61,7 +61,7 @@
       "status": "ready",
       "depends_on": ["RUST-005"],
       "contract_rows": ["CFG-001", "CFG-002", "CFG-003", "SESSION-001", "SESSION-002", "SESSION-003", "PLATFORM-001", "PLATFORM-002", "QUOTA-002"],
-      "acceptance": ["make config-session-differential", "CFG-002 YAML field-presence/config override handling remains in RUST-007", "QUOTA-002 .quotas.json filesystem adapter and public AgentRateLimiter wrapper fixtures after RUST-005 storage foundations", "Unix flock and Windows LockFileEx concurrency/error evidence", "cargo nextest run -p symvault-platform", "macOS native adapters compile; non-interactive Touch ID/capability and plist tests pass without real keychain, pasteboard, GUI, or LaunchAgent writes", "Windows LockFileEx path has cross-target compile evidence only; native Windows runtime evidence remains pending"]
+      "acceptance": ["make config-session-differential", "CFG-002 YAML field-presence/config override handling remains in RUST-007", "QUOTA-002 .quotas.json filesystem adapter and public AgentRateLimiter wrapper fixtures after RUST-005 storage foundations", "Unix flock and Windows LockFileEx concurrency/error evidence", "cargo nextest run -p symvault-platform", "macOS native adapters compile; non-interactive Touch ID/capability and plist tests pass without real keychain, pasteboard, GUI, or LaunchAgent writes", "CORRECTED 2026-09-14: native Windows LockFileEx runtime evidence already exists — ci.yml rust-native (windows-latest) runs cargo test --workspace and the quota lock tests carry no cfg(unix) gate; verified green at 829ef3d1 in run 34882426502. The open item is instead that rust-007-fixtures-check is host-bound: sessionquotagen freezes the generating host GOOS into the compared bytes, so the check cannot run on a foreign runner. Make goos informational, then add the check to port-contract."]
     },
     {
       "id": "RUST-008",
@@ -69,7 +69,7 @@
       "status": "in_progress",
       "depends_on": ["RUST-005"],
       "contract_rows": ["GIT-001", "GIT-002", "GIT-003", "IO-001", "IO-002", "IO-003", "PAIRING-001"],
-      "acceptance": ["make sync-io-differential", "cargo test -p symvault-sync --all-features --locked", "make pairing-differential", "PAIRING-001 native 3-OS evidence via .github/workflows/rust-pairing.yml", "PAIRING-001 remains in_progress until the device add/list/revoke registry wiring in cmd/device.go is ported; the handshake artifact codec, alias lookup, token path-safety and token-store semantics are frozen and replayed"]
+      "acceptance": ["make sync-io-differential", "cargo test -p symvault-sync --all-features --locked", "make pairing-differential", "PAIRING-001 native 3-OS evidence via .github/workflows/rust-pairing.yml", "PAIRING-001 remains in_progress until the recipients.txt add/remove performed by device accept/revoke and the cmd/device.go CLI orchestration are ported; the handshake artifact codec, alias lookup, token path-safety, token-store semantics and the .symvault/devices.json registry are frozen and replayed across 121 cases"]
     },
     {
       "id": "RUST-009",

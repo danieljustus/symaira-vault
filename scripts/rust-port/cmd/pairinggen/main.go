@@ -29,14 +29,21 @@ const (
 )
 
 // sourceRoots are the production directories the detached oracle imports and
-// exercises. extraSourceFiles pins the CLI wiring that decides where handshake
-// artifacts are written and under which alias they are read back, so a change
-// to that layout invalidates this fixture even though the oracle links only the
-// pairing package itself.
+// exercises. extraSourceFiles pins the rest of the seam: the CLI wiring that
+// decides where handshake artifacts are written and under which alias they are
+// read back, the device registry the oracle drives directly, and the
+// symlink-hardened atomic write the registry persists through. A change to any
+// of them invalidates this fixture.
 var (
 	sourceRoots      = []string{"internal/pairing"}
-	extraSourceFiles = []string{"cmd/device.go"}
-	generatorFiles   = []string{
+	extraSourceFiles = []string{
+		"cmd/device.go",
+		"internal/vault/devices.go",
+		"internal/vault/symlink_harden.go",
+		"internal/vault/symlink_harden_windows.go",
+		"internal/fsutil/reexport.go",
+	}
+	generatorFiles = []string{
 		"scripts/rust-port/cmd/pairinggen/main.go",
 		"scripts/rust-port/cmd/pairinggen/oracle.go.txt",
 	}
@@ -76,6 +83,8 @@ func scope() map[string]string {
 		"reencryption":     "out of scope here: new-recipient re-encryption on `device accept` is covered by CRYPTO-004 and is not re-frozen by this generator",
 		"token_generation": "not a byte contract: GenerateToken draws from crypto/rand; only its shape (32 base32-hex characters) and ValidatePairingToken acceptance are frozen",
 		"expiry_clock":     "wall-clock independent: expiry is expressed through the exported pairing.TokenTTL, never by sleeping, so --check is not timing dependent",
+		"registry_modes":   "the registry-modes group records POSIX permission bits and is compared on Unix runners only; the case identity is still checked on Windows, so the group cannot be dropped unnoticed",
+		"registry_paths":   "no absolute path is frozen: the registry cases record devices.json bytes and returned values, which are identical on every platform",
 	}
 }
 
@@ -378,9 +387,16 @@ func runOracle(root string) ([]Case, error) {
 	}
 	cmd := exec.Command("go", "run", "./cmd/pairingoracle")
 	cmd.Dir = tree
-	out, err := cmd.CombinedOutput()
+	// stdout carries the fixture JSON and nothing else. `go run` reports module
+	// downloads and build diagnostics on stderr, so the two streams are kept
+	// apart: merging them made the first run on a cold module cache parse
+	// "go: downloading ..." as the fixture. stderr is still captured and
+	// surfaced on failure, so a real error cannot be swallowed.
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("detached oracle: %w: %s", err, out)
+		return nil, fmt.Errorf("detached oracle: %w: %s", err, stderr.String())
 	}
 	var raw struct {
 		Cases []Case `json:"cases"`
@@ -459,7 +475,17 @@ func validate(root string, fixtures *os.Root, path string) error {
 	}
 	for i := range got {
 		if got[i].ID != fixture.Cases[i].ID || got[i].Seam != fixture.Cases[i].Seam ||
-			!sameJSON(got[i].Input, fixture.Cases[i].Input) || !sameJSON(got[i].Expected, fixture.Cases[i].Expected) {
+			!sameJSON(got[i].Input, fixture.Cases[i].Input) {
+			return fmt.Errorf("pairing case %d (%s) drifted; regenerate from the Go oracle", i, fixture.Cases[i].ID)
+		}
+		// The registry-modes group records POSIX permission bits. Windows has
+		// none to compare, so its payload is verified on Unix runners only.
+		// The case identity is still checked above, so a group that silently
+		// disappeared would still fail here.
+		if runtime.GOOS == "windows" && strings.HasPrefix(got[i].ID, "registry-modes/") {
+			continue
+		}
+		if !sameJSON(got[i].Expected, fixture.Cases[i].Expected) {
 			return fmt.Errorf("pairing case %d (%s) drifted; regenerate from the Go oracle", i, fixture.Cases[i].ID)
 		}
 	}
@@ -489,49 +515,59 @@ func writeFixture(fixtures *os.Root, path string, data []byte, check bool) error
 	return fixtures.WriteFile(path, data, 0600)
 }
 
+// main keeps no cleanup of its own so that run's deferred close always happens:
+// calling os.Exit from inside a function that holds a defer would skip it.
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, "FAIL pairing fixture:", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	output := flag.String("output", "testdata/port/pairing/contract.json", "fixture path")
 	check := flag.Bool("check", false, "verify provenance and execute the detached oracle")
 	flag.Parse()
 	root := rootDir()
-	fixtures, err := openFixtureRoot(root)
-	if err != nil {
-		panic(err)
+	fixtures, openErr := openFixtureRoot(root)
+	if openErr != nil {
+		return fmt.Errorf("open fixture root: %w", openErr)
 	}
 	defer func() { _ = fixtures.Close() }()
-	outputPath, err := fixturePath(root, *output)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "FAIL pairing fixture path:", err)
-		os.Exit(1)
+
+	outputPath, pathErr := fixturePath(root, *output)
+	if pathErr != nil {
+		return fmt.Errorf("fixture path: %w", pathErr)
 	}
+
 	if *check {
-		if err := validate(root, fixtures, outputPath); err != nil {
-			fmt.Fprintln(os.Stderr, "FAIL pairing fixture:", err)
-			os.Exit(1)
+		if validateErr := validate(root, fixtures, outputPath); validateErr != nil {
+			return validateErr
 		}
-		fixture, err := load(fixtures, outputPath)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "FAIL pairing fixture:", err)
-			os.Exit(1)
+		fixture, loadErr := load(fixtures, outputPath)
+		if loadErr != nil {
+			return loadErr
 		}
 		fmt.Printf("PASS Go pairing oracle fixture (%d cases)\n", len(fixture.Cases))
-		return
+		return nil
 	}
-	meta, err := metadata(root)
-	if err != nil {
-		panic(err)
+
+	meta, metaErr := metadata(root)
+	if metaErr != nil {
+		return metaErr
 	}
-	cases, err := runOracle(root)
-	if err != nil {
-		panic(err)
+	cases, oracleErr := runOracle(root)
+	if oracleErr != nil {
+		return oracleErr
 	}
-	data, err := json.MarshalIndent(Fixture{1, meta, cases, scope()}, "", "  ")
-	if err != nil {
-		panic(err)
+	data, marshalErr := json.MarshalIndent(Fixture{1, meta, cases, scope()}, "", "  ")
+	if marshalErr != nil {
+		return marshalErr
 	}
 	data = append(data, '\n')
-	if err = writeFixture(fixtures, outputPath, data, false); err != nil {
-		panic(err)
+	if writeErr := writeFixture(fixtures, outputPath, data, false); writeErr != nil {
+		return writeErr
 	}
 	fmt.Println("WROTE", *output)
+	return nil
 }

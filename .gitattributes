@@ -7,6 +7,10 @@ CLAUDE.md export-ignore
 *.tmpl text eol=lf
 *.golden text eol=lf
 *.go text eol=lf
+# The detached Go oracle programs are carried as .txt so they do not compile
+# with the generator; their bytes feed a provenance digest, so a Windows CRLF
+# checkout would make that digest disagree with every other platform.
+*.go.txt text eol=lf
 *.rs text eol=lf
 Cargo.toml text eol=lf
 Cargo.lock text eol=lf

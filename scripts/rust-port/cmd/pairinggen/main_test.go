@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -82,32 +83,27 @@ func TestSourceDigestComesFromThePinnedCommit(t *testing.T) {
 
 // Mutating any single expectation must make validate reject the fixture; a
 // comparison that silently passes is worse than no comparison at all.
+//
+// The mutation is applied to a copy under a temporary fixture root rather than
+// to the committed file: a test that edits tracked testdata leaves the tree
+// dirty the moment it fails, which is exactly when the tree matters most.
 func TestValidateRejectsAMutatedExpectation(t *testing.T) {
 	root := rootDir()
-	fixtures, err := openFixtureRoot(root)
+	committed, err := openFixtureRoot(root)
 	if err != nil {
 		t.Fatalf("open fixture root: %v", err)
 	}
-	// Registered first so it runs last: t.Cleanup is LIFO and runs after the
-	// test function returns, so a deferred Close here would shut the root
-	// before the restore below could write through it, leaving the fixture
-	// mutated on disk.
-	t.Cleanup(func() { _ = fixtures.Close() })
+	defer func() { _ = committed.Close() }()
 
 	const path = "pairing/contract.json"
-	if err := validate(root, fixtures, path); err != nil {
-		t.Fatalf("baseline fixture does not validate: %v", err)
+	if validateErr := validate(root, committed, path); validateErr != nil {
+		t.Fatalf("baseline fixture does not validate: %v", validateErr)
 	}
 
-	original, err := fixtures.ReadFile(path)
+	original, err := committed.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
-	t.Cleanup(func() {
-		if err := fixtures.WriteFile(path, original, 0600); err != nil {
-			t.Fatalf("restore fixture: %v", err)
-		}
-	})
 
 	var fixture Fixture
 	if err := json.Unmarshal(original, &fixture); err != nil {
@@ -121,10 +117,30 @@ func TestValidateRejectsAMutatedExpectation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal mutated fixture: %v", err)
 	}
-	if err := fixtures.WriteFile(path, append(mutated, '\n'), 0600); err != nil {
+
+	scratch := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(scratch, "pairing"), 0o750); err != nil {
+		t.Fatalf("create scratch fixture dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(scratch, filepath.FromSlash(path)), append(mutated, '\n'), 0o600); err != nil {
 		t.Fatalf("write mutated fixture: %v", err)
 	}
-	if err := validate(root, fixtures, path); err == nil {
+	scratchRoot, err := os.OpenRoot(scratch)
+	if err != nil {
+		t.Fatalf("open scratch fixture root: %v", err)
+	}
+	defer func() { _ = scratchRoot.Close() }()
+
+	if err := validate(root, scratchRoot, path); err == nil {
 		t.Fatal("validate accepted a mutated expectation")
+	}
+
+	// The committed fixture must be untouched by this test.
+	after, err := committed.ReadFile(path)
+	if err != nil {
+		t.Fatalf("re-read fixture: %v", err)
+	}
+	if !bytes.Equal(original, after) {
+		t.Fatal("the committed fixture was modified by this test")
 	}
 }

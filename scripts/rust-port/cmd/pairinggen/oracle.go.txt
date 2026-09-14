@@ -7,9 +7,15 @@ import (
   "encoding/json"
   "fmt"
   "os"
+  "path/filepath"
+  "runtime"
+  "sort"
   "time"
 
+  "github.com/danieljustus/symaira-vault/internal/config"
+
   "github.com/danieljustus/symaira-vault/internal/pairing"
+  vault "github.com/danieljustus/symaira-vault/internal/vault"
 )
 
 type Case struct {
@@ -18,6 +24,20 @@ type Case struct {
   Input    any    `json:"input"`
   Expected any    `json:"expected"`
 }
+
+
+// qs quotes a whole JSON string; qo opens one and qc closes one. Splitting the
+// quoting lets the two case-folding probes below be assembled from runes
+// rather than from escape sequences.
+func qs(s string) string { return string(rune(34)) + s + string(rune(34)) }
+func qo(s string) string { return string(rune(34)) + s }
+func qc(s string) string { return s + string(rune(34)) }
+
+// kelvin is U+212A KELVIN SIGN, which Unicode simple-folds onto "k".
+func kelvin() string { return string(rune(0x212A)) }
+
+// longS is U+017F LATIN SMALL LETTER LONG S, which simple-folds onto "s".
+func longS() string { return string(rune(0x017F)) }
 
 func fail(err error) {
   if err != nil {
@@ -194,6 +214,161 @@ func op(kind string, kv ...any) map[string]any {
   return m
 }
 
+
+// ---- device registry (devices.json) -------------------------------------
+//
+// The registry is the half of PAIRING-001 that `device add`, `device list` and
+// `device revoke` operate on. Every case runs against a fresh vault directory
+// so nothing carries over.
+
+func mustTimePtr(s string) *time.Time {
+  if s == "" {
+    return nil
+  }
+  t := mustTime(s)
+  return &t
+}
+
+func registryFile(vaultDir string) map[string]any {
+  path := filepath.Join(vaultDir, config.DefaultVaultSubdir, "devices.json")
+  data, err := os.ReadFile(path)
+  if err != nil {
+    if os.IsNotExist(err) {
+      return map[string]any{"exists": false}
+    }
+    panic(err)
+  }
+  return map[string]any{"exists": true, "bytes_b64": b64(data), "sha256": hash(data)}
+}
+
+func devicesJSON(devices []vault.Device) string {
+  data, e := json.Marshal(devices)
+  fail(e)
+  return string(data)
+}
+
+// registryCase replays an operation script against the real DeviceManager.
+// Only platform-independent output is recorded here: JSON bytes, returned
+// values and whether an operation failed. Unix file modes are a separate
+// case group, because Windows reports POSIX bits that carry no meaning.
+func registryCase(id string, ops []map[string]any) Case {
+  dir, e := os.MkdirTemp("", "pairing-registry-")
+  fail(e)
+  defer func() { _ = os.RemoveAll(dir) }()
+  dm := vault.NewDeviceManager(dir)
+  results := make([]map[string]any, 0, len(ops))
+  for _, o := range ops {
+    switch o["op"].(string) {
+    case "add":
+      lastSeen := ""
+      if v, ok := o["last_seen"].(string); ok {
+        lastSeen = v
+      }
+      err := dm.AddDevice(vault.Device{
+        Name:      o["name"].(string),
+        PublicKey: o["public_key"].(string),
+        AddedAt:   mustTime(o["added_at"].(string)),
+        LastSeen:  mustTimePtr(lastSeen),
+      })
+      results = append(results, map[string]any{"op": "add", "ok": err == nil})
+    case "remove":
+      err := dm.RemoveDevice(o["name"].(string))
+      results = append(results, map[string]any{"op": "remove", "ok": err == nil})
+    case "get":
+      device, err := dm.GetDevice(o["name"].(string))
+      entry := map[string]any{"op": "get", "ok": err == nil, "found": device != nil}
+      if device != nil {
+        entry["device"] = devicesJSON([]vault.Device{*device})
+      }
+      results = append(results, entry)
+    case "list":
+      devices, err := dm.ListDevices()
+      entry := map[string]any{"op": "list", "ok": err == nil}
+      if err == nil {
+        entry["devices"] = devicesJSON(devices)
+      }
+      results = append(results, entry)
+    case "corrupt":
+      path := filepath.Join(dir, config.DefaultVaultSubdir, "devices.json")
+      fail(os.MkdirAll(filepath.Dir(path), 0o700))
+      fail(os.WriteFile(path, unb64(o["data_b64"].(string)), 0o600))
+      results = append(results, map[string]any{"op": "corrupt"})
+    case "file":
+      entry := registryFile(dir)
+      entry["op"] = "file"
+      results = append(results, entry)
+    default:
+      panic("unknown registry op " + o["op"].(string))
+    }
+  }
+  return Case{ID: id, Seam: "PAIRING-001",
+    Input:    map[string]any{"ops": ops},
+    Expected: map[string]any{"results": results}}
+}
+
+// registryModesCase records the permission bits the registry creates. It is a
+// separate group because Windows has no POSIX modes to compare; the generator
+// skips this group's payload there rather than freezing a meaningless value.
+func registryModesCase(id string) Case {
+  dir, e := os.MkdirTemp("", "pairing-registry-modes-")
+  fail(e)
+  defer func() { _ = os.RemoveAll(dir) }()
+  dm := vault.NewDeviceManager(dir)
+  fail(dm.AddDevice(vault.Device{Name: "laptop", PublicKey: "age1modes", AddedAt: mustTime("2026-09-14T18:45:00Z")}))
+  subdir := filepath.Join(dir, config.DefaultVaultSubdir)
+  path := filepath.Join(subdir, "devices.json")
+  dirInfo, e := os.Stat(subdir)
+  fail(e)
+  fileInfo, e := os.Stat(path)
+  fail(e)
+  return Case{ID: id, Seam: "PAIRING-001",
+    Input: map[string]any{"operation": "AddDevice into an empty vault directory"},
+    Expected: map[string]any{
+      "dir_mode":  fmt.Sprintf("%04o", dirInfo.Mode().Perm()),
+      "file_mode": fmt.Sprintf("%04o", fileInfo.Mode().Perm()),
+      "goos":      runtime.GOOS,
+    }}
+}
+
+// registryLayoutCase observes where the registry is created rather than
+// re-deriving the path: everything under the vault directory is walked after a
+// single AddDevice and recorded as slash-joined relative paths, so the layout
+// contract holds on every platform and a renamed directory or file is caught.
+func registryLayoutCase(id string) Case {
+  dir, e := os.MkdirTemp("", "pairing-registry-layout-")
+  fail(e)
+  defer func() { _ = os.RemoveAll(dir) }()
+  dm := vault.NewDeviceManager(dir)
+  fail(dm.AddDevice(vault.Device{Name: "laptop", PublicKey: "age1layout", AddedAt: mustTime("2026-09-14T18:45:00Z")}))
+  var entries []string
+  fail(filepath.Walk(dir, func(p string, info os.FileInfo, err error) error {
+    fail(err)
+    if p == dir {
+      return nil
+    }
+    rel, relErr := filepath.Rel(dir, p)
+    fail(relErr)
+    kind := "file"
+    if info.IsDir() {
+      kind = "dir"
+    }
+    entries = append(entries, kind+":"+filepath.ToSlash(rel))
+    return nil
+  }))
+  sort.Strings(entries)
+  return Case{ID: id, Seam: "PAIRING-001",
+    Input:    map[string]any{"operation": "AddDevice into an empty vault directory"},
+    Expected: map[string]any{"entries": entries}}
+}
+
+func rop(kind string, kv ...any) map[string]any {
+  m := map[string]any{"op": kind}
+  for i := 0; i+1 < len(kv); i += 2 {
+    m[kv[i].(string)] = kv[i+1]
+  }
+  return m
+}
+
 func main() {
   const pub = "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
   const joinPub = "age1lggyhqrw2nlhcxprm67z43rta597azn8gknawjehu9d9dl0jq3yqqvfafg"
@@ -208,6 +383,9 @@ func main() {
     marshalPairing("marshal/pairing-file-control-chars", "ABCD", "a\tb\nc\rd\x01e\x7ff\"g\\h", "2026-09-14T18:45:00Z"),
     marshalPairing("marshal/pairing-file-zero-time", "ABCD", pub, "0001-01-01T00:00:00Z"),
     marshalPairing("marshal/pairing-file-html-chars", "ABCD", "<script>& key", "2026-09-14T18:45:00Z"),
+    marshalPairing("marshal/pairing-file-backspace-and-formfeed", "ABCD",
+      "a"+string(rune(8))+"b"+string(rune(12))+"c"+string(rune(11))+"d"+string(rune(31))+"e"+string(rune(1))+"f"+string(rune(127))+"g",
+      "2026-09-14T18:45:00Z"),
     marshalPairing("marshal/pairing-file-empty-fields", "", "", "2026-09-14T18:45:00Z"),
     marshalJoin("marshal/join-response-named", "C5H7GJK9M2N4P6Q8R0S1T3V5U7A9B1D3", "laptop-2", joinPub, "2026-09-14T18:46:01Z"),
     marshalJoin("marshal/join-response-empty-name", "ABCD", "", joinPub, "2026-09-14T18:46:01.5Z"),
@@ -248,6 +426,10 @@ func main() {
     parsePairingCase("parse/pairing-file-lowercase-zulu", "{\"created_at\":\"2026-09-14t18:45:00z\"}"),
     parsePairingCase("parse/pairing-file-missing-zone", "{\"created_at\":\"2026-09-14T18:45:00\"}"),
     parsePairingCase("parse/pairing-file-second-sixty", "{\"created_at\":\"2026-09-14T18:45:60Z\"}"),
+    parsePairingCase("parse/pairing-file-kelvin-sign-key", "{"+qo("to")+kelvin()+qc("en")+":"+qs("kelvin")+","+qs("public_key")+":"+qs(pub)+"}"),
+    parsePairingCase("parse/pairing-file-kelvin-sign-in-second-field", "{"+qo("public_")+kelvin()+qc("ey")+":"+qs("kelvin-key")+"}"),
+    parsePairingCase("parse/pairing-file-long-s-folds-to-s-not-k", "{"+qo("public_")+longS()+qc("ey")+":"+qs("long-s")+"}"),
+    parsePairingCase("parse/pairing-file-non-folding-non-ascii-key", "{"+qo("to")+string(rune(0x03BA))+qc("en")+":"+qs("greek-kappa")+"}"),
     parsePairingCase("parse/pairing-file-case-variant-duplicate", "{\"token\":\"lower\",\"Token\":\"upper\",\"public_key\":\""+pub+"\",\"created_at\":\"2026-09-14T18:45:00Z\"}"),
     parsePairingCase("parse/pairing-file-invalid-json", "not json"),
     parsePairingCase("parse/pairing-file-truncated", "{\"token\":\"ABCD\""),
@@ -364,6 +546,103 @@ func main() {
       op("store", "token", "ABCD", "public_key", joinPub),
       op("validate", "token", "ABCD"),
     }),
+    // Device registry: the `device add` / `device list` / `device revoke` half.
+    registryCase("registry/load-missing-file-is-empty", []map[string]any{
+      rop("list"),
+      rop("file"),
+    }),
+    registryCase("registry/add-first-device", []map[string]any{
+      rop("add", "name", "laptop", "public_key", pub, "added_at", "2026-09-14T18:45:00Z"),
+      rop("file"),
+      rop("list"),
+    }),
+    registryCase("registry/add-preserves-insertion-order", []map[string]any{
+      rop("add", "name", "laptop", "public_key", pub, "added_at", "2026-09-14T18:45:00Z"),
+      rop("add", "name", "phone", "public_key", joinPub, "added_at", "2026-09-14T18:46:00Z"),
+      rop("file"),
+      rop("list"),
+    }),
+    registryCase("registry/add-same-name-updates-in-place", []map[string]any{
+      rop("add", "name", "laptop", "public_key", pub, "added_at", "2026-09-14T18:45:00Z"),
+      rop("add", "name", "phone", "public_key", joinPub, "added_at", "2026-09-14T18:46:00Z"),
+      rop("add", "name", "laptop", "public_key", joinPub, "added_at", "2026-09-14T19:00:00Z"),
+      rop("file"),
+      rop("list"),
+    }),
+    registryCase("registry/last-seen-present-and-absent", []map[string]any{
+      rop("add", "name", "seen", "public_key", pub, "added_at", "2026-09-14T18:45:00Z", "last_seen", "2026-09-14T20:00:00.25Z"),
+      rop("add", "name", "unseen", "public_key", joinPub, "added_at", "2026-09-14T18:46:00Z"),
+      rop("file"),
+    }),
+    registryCase("registry/remove-existing-device", []map[string]any{
+      rop("add", "name", "laptop", "public_key", pub, "added_at", "2026-09-14T18:45:00Z"),
+      rop("add", "name", "phone", "public_key", joinPub, "added_at", "2026-09-14T18:46:00Z"),
+      rop("remove", "name", "laptop"),
+      rop("file"),
+      rop("list"),
+    }),
+    registryCase("registry/remove-last-device-leaves-empty-array", []map[string]any{
+      rop("add", "name", "laptop", "public_key", pub, "added_at", "2026-09-14T18:45:00Z"),
+      rop("remove", "name", "laptop"),
+      rop("file"),
+      rop("list"),
+    }),
+    registryCase("registry/remove-unknown-device-fails", []map[string]any{
+      rop("add", "name", "laptop", "public_key", pub, "added_at", "2026-09-14T18:45:00Z"),
+      rop("remove", "name", "desktop"),
+      rop("file"),
+    }),
+    registryCase("registry/remove-is-case-sensitive", []map[string]any{
+      rop("add", "name", "laptop", "public_key", pub, "added_at", "2026-09-14T18:45:00Z"),
+      rop("remove", "name", "LAPTOP"),
+      rop("list"),
+    }),
+    registryCase("registry/remove-from-missing-file-fails", []map[string]any{
+      rop("remove", "name", "laptop"),
+      rop("file"),
+    }),
+    registryCase("registry/get-existing-and-missing", []map[string]any{
+      rop("add", "name", "laptop", "public_key", pub, "added_at", "2026-09-14T18:45:00Z"),
+      rop("get", "name", "laptop"),
+      rop("get", "name", "desktop"),
+    }),
+    registryCase("registry/get-is-case-sensitive", []map[string]any{
+      rop("add", "name", "laptop", "public_key", pub, "added_at", "2026-09-14T18:45:00Z"),
+      rop("get", "name", "LAPTOP"),
+      rop("get", "name", "Laptop"),
+      rop("get", "name", "laptop"),
+    }),
+    registryCase("registry/get-from-missing-file", []map[string]any{
+      rop("get", "name", "laptop"),
+    }),
+    registryCase("registry/corrupt-file-fails-every-read", []map[string]any{
+      rop("corrupt", "data_b64", b64([]byte("invalid json"))),
+      rop("list"),
+      rop("get", "name", "laptop"),
+      rop("remove", "name", "laptop"),
+      rop("add", "name", "laptop", "public_key", pub, "added_at", "2026-09-14T18:45:00Z"),
+    }),
+    registryCase("registry/empty-json-array-loads-clean", []map[string]any{
+      rop("corrupt", "data_b64", b64([]byte("[]"))),
+      rop("list"),
+      rop("add", "name", "laptop", "public_key", pub, "added_at", "2026-09-14T18:45:00Z"),
+      rop("file"),
+    }),
+    registryCase("registry/json-null-loads-as-empty", []map[string]any{
+      rop("corrupt", "data_b64", b64([]byte("null"))),
+      rop("list"),
+    }),
+    registryCase("registry/object-instead-of-array-fails", []map[string]any{
+      rop("corrupt", "data_b64", b64([]byte("{}"))),
+      rop("list"),
+    }),
+    registryCase("registry/unicode-and-escaped-device-name", []map[string]any{
+      rop("add", "name", "b\u00fcro <mac> & co", "public_key", pub, "added_at", "2026-09-14T18:45:00Z"),
+      rop("file"),
+      rop("get", "name", "b\u00fcro <mac> & co"),
+    }),
+    registryLayoutCase("registry-layout/created-by-add-device"),
+    registryModesCase("registry-modes/created-by-add-device"),
   }
 
   enc := json.NewEncoder(os.Stdout)

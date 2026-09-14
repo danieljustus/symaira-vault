@@ -384,8 +384,13 @@ fn marshal_object(fields: &[(&str, Field<'_>)]) -> Vec<u8> {
 /// Writes a JSON string literal the way `encoding/json` does with HTML
 /// escaping left on: `<`, `>` and `&` become numeric escapes so the artifact is
 /// safe to embed in a page, and U+2028/U+2029 are escaped so it stays valid
-/// JavaScript. `/` is deliberately not escaped, matching Go.
-fn encode_go_string(value: &str, out: &mut String) {
+/// JavaScript. `/` is deliberately not escaped, matching Go, and neither is
+/// DEL. Go has short escapes for backspace and form feed as well as for the
+/// three whitespace controls; every other character below U+0020 falls through
+/// to the `\u00xx` form. The set is frozen by
+/// `marshal/pairing-file-backspace-and-formfeed` and
+/// `marshal/pairing-file-control-chars`, not assumed.
+pub(crate) fn encode_go_string(value: &str, out: &mut String) {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     out.push('"');
     for character in value.chars() {
@@ -395,6 +400,8 @@ fn encode_go_string(value: &str, out: &mut String) {
             '\n' => out.push_str("\\n"),
             '\r' => out.push_str("\\r"),
             '\t' => out.push_str("\\t"),
+            '\u{8}' => out.push_str("\\b"),
+            '\u{c}' => out.push_str("\\f"),
             '<' => out.push_str("\\u003c"),
             '>' => out.push_str("\\u003e"),
             '&' => out.push_str("\\u0026"),
@@ -449,15 +456,47 @@ pub fn parse_join_response(data: &[u8]) -> Result<JoinResponse, PairingError> {
     Ok(response)
 }
 
-/// Go matches an incoming key against a field by exact name first and then
-/// case-insensitively, so `Created_At` reaches `created_at` while an unknown
-/// key is simply skipped.
+/// Go matches an incoming key against a field by exact name first and then by
+/// folded name, so `Created_At` reaches `created_at` while an unknown key is
+/// simply skipped.
 fn match_field(key: &str, fields: &'static [&'static str]) -> Option<&'static str> {
+    if let Some(field) = fields.iter().find(|field| **field == key) {
+        return Some(field);
+    }
+    let folded = fold_name(key)?;
     fields
         .iter()
-        .find(|field| **field == key)
-        .or_else(|| fields.iter().find(|field| field.eq_ignore_ascii_case(key)))
+        .find(|field| fold_name(field).is_some_and(|candidate| candidate == folded))
         .copied()
+}
+
+/// Reproduces `encoding/json`'s `foldName`: ASCII is upper-cased, and any other
+/// rune is replaced by the smallest member of its Unicode simple-fold orbit.
+///
+/// Every field name in this module is ASCII, so a key can only match when each
+/// of its runes folds to ASCII. Exactly two non-ASCII runes do: U+212A KELVIN
+/// SIGN folds onto `K`, and U+017F LATIN SMALL LETTER LONG S folds onto `S`.
+/// Handling just those two is therefore complete here, not an approximation,
+/// and it avoids pulling a full case-folding table into the crate. Any other
+/// non-ASCII rune makes the key unmatchable, which is reported as `None` rather
+/// than as a folded string that could collide with something.
+///
+/// Pinned by `parse/pairing-file-kelvin-sign-key`,
+/// `parse/pairing-file-kelvin-sign-in-second-field`,
+/// `parse/pairing-file-long-s-folds-to-s-not-k` and
+/// `parse/pairing-file-non-folding-non-ascii-key`.
+fn fold_name(name: &str) -> Option<String> {
+    let mut folded = String::with_capacity(name.len());
+    for character in name.chars() {
+        let mapped = match character {
+            ascii if ascii.is_ascii() => ascii.to_ascii_uppercase(),
+            '\u{212A}' => 'K',
+            '\u{17F}' => 'S',
+            _ => return None,
+        };
+        folded.push(mapped);
+    }
+    Some(folded)
 }
 
 /// A JSON `null` leaves the field at its previous value, exactly as Go's
@@ -796,6 +835,26 @@ mod tests {
         };
         let encoded = marshal_join_response(&response).unwrap();
         assert_eq!(parse_join_response(&encoded).unwrap(), response);
+    }
+
+    /// Go folds a key onto a field name before giving up on it, and exactly
+    /// two non-ASCII runes fold onto ASCII. Anything else must not match.
+    #[test]
+    fn field_folding_matches_only_what_go_folds() {
+        let with_kelvin = format!("to{}en", '\u{212A}');
+        let parsed = parse_pairing_file(format!("{{\"{with_kelvin}\":\"folded\"}}").as_bytes())
+            .expect("a folded key is still valid JSON");
+        assert_eq!(parsed.token, "folded");
+
+        let with_kappa = format!("to{}en", '\u{3BA}');
+        let parsed = parse_pairing_file(format!("{{\"{with_kappa}\":\"ignored\"}}").as_bytes())
+            .expect("an unknown key is skipped, not an error");
+        assert_eq!(parsed.token, "", "Greek kappa must not fold onto ASCII k");
+
+        let with_long_s = format!("public_{}ey", '\u{17F}');
+        let parsed = parse_pairing_file(format!("{{\"{with_long_s}\":\"ignored\"}}").as_bytes())
+            .expect("an unknown key is skipped, not an error");
+        assert_eq!(parsed.public_key, "", "long s folds onto S, never onto K");
     }
 
     /// A non-ASCII token is refused by `display_token` rather than rendered

@@ -5,6 +5,7 @@
 //! deterministic, adapter-friendly Rust building blocks for the RUST-008 slice.
 
 pub mod archive;
+pub mod devices;
 pub mod export;
 pub mod git;
 pub mod importer;
@@ -13,6 +14,7 @@ pub mod pairing;
 pub mod reconcile;
 
 pub use archive::{ArchiveEntry, ArchiveError, backup, restore};
+pub use devices::{Device, DeviceError, DeviceList, DeviceRegistry};
 pub use git::{Commit, CommitOptions, GitError, GitRepository, GitStatus, PullResult, PushResult};
 pub use pairing::{
     GoTime, JoinResponse, PairingError, PairingFile, TokenStore, display_token,

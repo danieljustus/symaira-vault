@@ -5,15 +5,19 @@
     "release": "v0.22.1",
     "source_files": [
       "cmd/device.go",
+      "internal/fsutil/reexport.go",
       "internal/pairing/devicesession.go",
-      "internal/pairing/token.go"
+      "internal/pairing/token.go",
+      "internal/vault/devices.go",
+      "internal/vault/symlink_harden.go",
+      "internal/vault/symlink_harden_windows.go"
     ],
-    "source_digest": "35becfe6efbfa5fd8e634fc3f169d59377837ba9c2fd946cf58db867e36ef5fe",
+    "source_digest": "58e165360d5007c22dd9116b6009e7e071865ad896015bfd733ab8f36689c197",
     "generator_files": [
       "scripts/rust-port/cmd/pairinggen/main.go",
       "scripts/rust-port/cmd/pairinggen/oracle.go.txt"
     ],
-    "generator_digest": "42978ca1f86e9313aba6fc54b4f58588cdd4aec13ca8901da2a146bc9356a82b"
+    "generator_digest": "a0e2b5401b52c36b41bf2e8ca24c0dd45155760f8a6578e8001864a8b9a7414d"
   },
   "cases": [
     {
@@ -126,6 +130,20 @@
       "expected": {
         "bytes_b64": "ewogICJ0b2tlbiI6ICJBQkNEIiwKICAicHVibGljX2tleSI6ICJcdTAwM2NzY3JpcHRcdTAwM2VcdTAwMjZcdTIwMjhrZXkiLAogICJjcmVhdGVkX2F0IjogIjIwMjYtMDktMTRUMTg6NDU6MDBaIgp9",
         "sha256": "b6e0a18c7fcabb5b9fe9e1397d6bdd6f26b50474d04b1ce278098419dac45f49"
+      }
+    },
+    {
+      "id": "marshal/pairing-file-backspace-and-formfeed",
+      "seam": "PAIRING-001",
+      "input": {
+        "created_at": "2026-09-14T18:45:00Z",
+        "kind": "pairing_file",
+        "public_key": "a\bb\fc\u000bd\u001fe\u0001fg",
+        "token": "ABCD"
+      },
+      "expected": {
+        "bytes_b64": "ewogICJ0b2tlbiI6ICJBQkNEIiwKICAicHVibGljX2tleSI6ICJhXGJiXGZjXHUwMDBiZFx1MDAxZmVcdTAwMDFmf2ciLAogICJjcmVhdGVkX2F0IjogIjIwMjYtMDktMTRUMTg6NDU6MDBaIgp9",
+        "sha256": "597c75d3852a6c22df1805815d64f3229a0998279444e6d9d30066706e231842"
       }
     },
     {
@@ -657,6 +675,70 @@
       "expected": {
         "go_error": "parse pairing file: parsing time \"2026-09-14T18:45:60Z\": second out of range",
         "ok": false
+      }
+    },
+    {
+      "id": "parse/pairing-file-kelvin-sign-key",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJ0b+KEqmVuIjoia2VsdmluIiwicHVibGljX2tleSI6ImFnZTFxbDN6N2hqeTU0cHczaHl3dzVheXlmZzd6cWd2Yzd3M2oyZWx3OHptcmoya2c1c2ZuOWFxbWNhYzhwIn0=",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "ok": true,
+        "parsed": {
+          "created_at_json": "\"0001-01-01T00:00:00Z\"",
+          "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",
+          "token": "kelvin"
+        }
+      }
+    },
+    {
+      "id": "parse/pairing-file-kelvin-sign-in-second-field",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJwdWJsaWNf4oSqZXkiOiJrZWx2aW4ta2V5In0=",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "ok": true,
+        "parsed": {
+          "created_at_json": "\"0001-01-01T00:00:00Z\"",
+          "public_key": "kelvin-key",
+          "token": ""
+        }
+      }
+    },
+    {
+      "id": "parse/pairing-file-long-s-folds-to-s-not-k",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJwdWJsaWNfxb9leSI6ImxvbmctcyJ9",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "ok": true,
+        "parsed": {
+          "created_at_json": "\"0001-01-01T00:00:00Z\"",
+          "public_key": "",
+          "token": ""
+        }
+      }
+    },
+    {
+      "id": "parse/pairing-file-non-folding-non-ascii-key",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJ0b866ZW4iOiJncmVlay1rYXBwYSJ9",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "ok": true,
+        "parsed": {
+          "created_at_json": "\"0001-01-01T00:00:00Z\"",
+          "public_key": "",
+          "token": ""
+        }
       }
     },
     {
@@ -1663,6 +1745,760 @@
           }
         ]
       }
+    },
+    {
+      "id": "registry/load-missing-file-is-empty",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "op": "list"
+          },
+          {
+            "op": "file"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "devices": "[]",
+            "ok": true,
+            "op": "list"
+          },
+          {
+            "exists": false,
+            "op": "file"
+          }
+        ]
+      }
+    },
+    {
+      "id": "registry/add-first-device",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "added_at": "2026-09-14T18:45:00Z",
+            "name": "laptop",
+            "op": "add",
+            "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
+          },
+          {
+            "op": "file"
+          },
+          {
+            "op": "list"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "bytes_b64": "WwogIHsKICAgICJuYW1lIjogImxhcHRvcCIsCiAgICAicHVibGljX2tleSI6ICJhZ2UxcWwzejdoank1NHB3M2h5d3c1YXl5Zmc3enFndmM3dzNqMmVsdzh6bXJqMmtnNXNmbjlhcW1jYWM4cCIsCiAgICAiYWRkZWRfYXQiOiAiMjAyNi0wOS0xNFQxODo0NTowMFoiCiAgfQpd",
+            "exists": true,
+            "op": "file",
+            "sha256": "abcd70ce11444842013fda5095274e3f7a62eccf0e993d967b21aa82533364a8"
+          },
+          {
+            "devices": "[{\"name\":\"laptop\",\"public_key\":\"age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p\",\"added_at\":\"2026-09-14T18:45:00Z\"}]",
+            "ok": true,
+            "op": "list"
+          }
+        ]
+      }
+    },
+    {
+      "id": "registry/add-preserves-insertion-order",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "added_at": "2026-09-14T18:45:00Z",
+            "name": "laptop",
+            "op": "add",
+            "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
+          },
+          {
+            "added_at": "2026-09-14T18:46:00Z",
+            "name": "phone",
+            "op": "add",
+            "public_key": "age1lggyhqrw2nlhcxprm67z43rta597azn8gknawjehu9d9dl0jq3yqqvfafg"
+          },
+          {
+            "op": "file"
+          },
+          {
+            "op": "list"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "bytes_b64": "WwogIHsKICAgICJuYW1lIjogImxhcHRvcCIsCiAgICAicHVibGljX2tleSI6ICJhZ2UxcWwzejdoank1NHB3M2h5d3c1YXl5Zmc3enFndmM3dzNqMmVsdzh6bXJqMmtnNXNmbjlhcW1jYWM4cCIsCiAgICAiYWRkZWRfYXQiOiAiMjAyNi0wOS0xNFQxODo0NTowMFoiCiAgfSwKICB7CiAgICAibmFtZSI6ICJwaG9uZSIsCiAgICAicHVibGljX2tleSI6ICJhZ2UxbGdneWhxcncybmxoY3hwcm02N3o0M3J0YTU5N2F6bjhna25hd2plaHU5ZDlkbDBqcTN5cXF2ZmFmZyIsCiAgICAiYWRkZWRfYXQiOiAiMjAyNi0wOS0xNFQxODo0NjowMFoiCiAgfQpd",
+            "exists": true,
+            "op": "file",
+            "sha256": "a9c339e670068673999b0125fc464ddc649f5b89099bce715b88c2de521105dd"
+          },
+          {
+            "devices": "[{\"name\":\"laptop\",\"public_key\":\"age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p\",\"added_at\":\"2026-09-14T18:45:00Z\"},{\"name\":\"phone\",\"public_key\":\"age1lggyhqrw2nlhcxprm67z43rta597azn8gknawjehu9d9dl0jq3yqqvfafg\",\"added_at\":\"2026-09-14T18:46:00Z\"}]",
+            "ok": true,
+            "op": "list"
+          }
+        ]
+      }
+    },
+    {
+      "id": "registry/add-same-name-updates-in-place",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "added_at": "2026-09-14T18:45:00Z",
+            "name": "laptop",
+            "op": "add",
+            "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
+          },
+          {
+            "added_at": "2026-09-14T18:46:00Z",
+            "name": "phone",
+            "op": "add",
+            "public_key": "age1lggyhqrw2nlhcxprm67z43rta597azn8gknawjehu9d9dl0jq3yqqvfafg"
+          },
+          {
+            "added_at": "2026-09-14T19:00:00Z",
+            "name": "laptop",
+            "op": "add",
+            "public_key": "age1lggyhqrw2nlhcxprm67z43rta597azn8gknawjehu9d9dl0jq3yqqvfafg"
+          },
+          {
+            "op": "file"
+          },
+          {
+            "op": "list"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "bytes_b64": "WwogIHsKICAgICJuYW1lIjogImxhcHRvcCIsCiAgICAicHVibGljX2tleSI6ICJhZ2UxbGdneWhxcncybmxoY3hwcm02N3o0M3J0YTU5N2F6bjhna25hd2plaHU5ZDlkbDBqcTN5cXF2ZmFmZyIsCiAgICAiYWRkZWRfYXQiOiAiMjAyNi0wOS0xNFQxOTowMDowMFoiCiAgfSwKICB7CiAgICAibmFtZSI6ICJwaG9uZSIsCiAgICAicHVibGljX2tleSI6ICJhZ2UxbGdneWhxcncybmxoY3hwcm02N3o0M3J0YTU5N2F6bjhna25hd2plaHU5ZDlkbDBqcTN5cXF2ZmFmZyIsCiAgICAiYWRkZWRfYXQiOiAiMjAyNi0wOS0xNFQxODo0NjowMFoiCiAgfQpd",
+            "exists": true,
+            "op": "file",
+            "sha256": "01e7a9bacf30153021b9bdb0e99450002c7688725aa995948bef3e9c11ecb561"
+          },
+          {
+            "devices": "[{\"name\":\"laptop\",\"public_key\":\"age1lggyhqrw2nlhcxprm67z43rta597azn8gknawjehu9d9dl0jq3yqqvfafg\",\"added_at\":\"2026-09-14T19:00:00Z\"},{\"name\":\"phone\",\"public_key\":\"age1lggyhqrw2nlhcxprm67z43rta597azn8gknawjehu9d9dl0jq3yqqvfafg\",\"added_at\":\"2026-09-14T18:46:00Z\"}]",
+            "ok": true,
+            "op": "list"
+          }
+        ]
+      }
+    },
+    {
+      "id": "registry/last-seen-present-and-absent",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "added_at": "2026-09-14T18:45:00Z",
+            "last_seen": "2026-09-14T20:00:00.25Z",
+            "name": "seen",
+            "op": "add",
+            "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
+          },
+          {
+            "added_at": "2026-09-14T18:46:00Z",
+            "name": "unseen",
+            "op": "add",
+            "public_key": "age1lggyhqrw2nlhcxprm67z43rta597azn8gknawjehu9d9dl0jq3yqqvfafg"
+          },
+          {
+            "op": "file"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "bytes_b64": "WwogIHsKICAgICJuYW1lIjogInNlZW4iLAogICAgInB1YmxpY19rZXkiOiAiYWdlMXFsM3o3aGp5NTRwdzNoeXd3NWF5eWZnN3pxZ3ZjN3czajJlbHc4em1yajJrZzVzZm45YXFtY2FjOHAiLAogICAgImFkZGVkX2F0IjogIjIwMjYtMDktMTRUMTg6NDU6MDBaIiwKICAgICJsYXN0X3NlZW4iOiAiMjAyNi0wOS0xNFQyMDowMDowMC4yNVoiCiAgfSwKICB7CiAgICAibmFtZSI6ICJ1bnNlZW4iLAogICAgInB1YmxpY19rZXkiOiAiYWdlMWxnZ3locXJ3Mm5saGN4cHJtNjd6NDNydGE1OTdhem44Z2tuYXdqZWh1OWQ5ZGwwanEzeXFxdmZhZmciLAogICAgImFkZGVkX2F0IjogIjIwMjYtMDktMTRUMTg6NDY6MDBaIgogIH0KXQ==",
+            "exists": true,
+            "op": "file",
+            "sha256": "570a7952e0666e46ef93213defb2feb90070e67bd95acfdea6f9594294e3329c"
+          }
+        ]
+      }
+    },
+    {
+      "id": "registry/remove-existing-device",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "added_at": "2026-09-14T18:45:00Z",
+            "name": "laptop",
+            "op": "add",
+            "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
+          },
+          {
+            "added_at": "2026-09-14T18:46:00Z",
+            "name": "phone",
+            "op": "add",
+            "public_key": "age1lggyhqrw2nlhcxprm67z43rta597azn8gknawjehu9d9dl0jq3yqqvfafg"
+          },
+          {
+            "name": "laptop",
+            "op": "remove"
+          },
+          {
+            "op": "file"
+          },
+          {
+            "op": "list"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "ok": true,
+            "op": "remove"
+          },
+          {
+            "bytes_b64": "WwogIHsKICAgICJuYW1lIjogInBob25lIiwKICAgICJwdWJsaWNfa2V5IjogImFnZTFsZ2d5aHFydzJubGhjeHBybTY3ejQzcnRhNTk3YXpuOGdrbmF3amVodTlkOWRsMGpxM3lxcXZmYWZnIiwKICAgICJhZGRlZF9hdCI6ICIyMDI2LTA5LTE0VDE4OjQ2OjAwWiIKICB9Cl0=",
+            "exists": true,
+            "op": "file",
+            "sha256": "4714fd7fad461c29411835a1ec36b0b4b83eb95ce09bdb662cab2b46d27cbdd5"
+          },
+          {
+            "devices": "[{\"name\":\"phone\",\"public_key\":\"age1lggyhqrw2nlhcxprm67z43rta597azn8gknawjehu9d9dl0jq3yqqvfafg\",\"added_at\":\"2026-09-14T18:46:00Z\"}]",
+            "ok": true,
+            "op": "list"
+          }
+        ]
+      }
+    },
+    {
+      "id": "registry/remove-last-device-leaves-empty-array",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "added_at": "2026-09-14T18:45:00Z",
+            "name": "laptop",
+            "op": "add",
+            "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
+          },
+          {
+            "name": "laptop",
+            "op": "remove"
+          },
+          {
+            "op": "file"
+          },
+          {
+            "op": "list"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "ok": true,
+            "op": "remove"
+          },
+          {
+            "bytes_b64": "W10=",
+            "exists": true,
+            "op": "file",
+            "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+          },
+          {
+            "devices": "[]",
+            "ok": true,
+            "op": "list"
+          }
+        ]
+      }
+    },
+    {
+      "id": "registry/remove-unknown-device-fails",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "added_at": "2026-09-14T18:45:00Z",
+            "name": "laptop",
+            "op": "add",
+            "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
+          },
+          {
+            "name": "desktop",
+            "op": "remove"
+          },
+          {
+            "op": "file"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "ok": false,
+            "op": "remove"
+          },
+          {
+            "bytes_b64": "WwogIHsKICAgICJuYW1lIjogImxhcHRvcCIsCiAgICAicHVibGljX2tleSI6ICJhZ2UxcWwzejdoank1NHB3M2h5d3c1YXl5Zmc3enFndmM3dzNqMmVsdzh6bXJqMmtnNXNmbjlhcW1jYWM4cCIsCiAgICAiYWRkZWRfYXQiOiAiMjAyNi0wOS0xNFQxODo0NTowMFoiCiAgfQpd",
+            "exists": true,
+            "op": "file",
+            "sha256": "abcd70ce11444842013fda5095274e3f7a62eccf0e993d967b21aa82533364a8"
+          }
+        ]
+      }
+    },
+    {
+      "id": "registry/remove-is-case-sensitive",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "added_at": "2026-09-14T18:45:00Z",
+            "name": "laptop",
+            "op": "add",
+            "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
+          },
+          {
+            "name": "LAPTOP",
+            "op": "remove"
+          },
+          {
+            "op": "list"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "ok": false,
+            "op": "remove"
+          },
+          {
+            "devices": "[{\"name\":\"laptop\",\"public_key\":\"age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p\",\"added_at\":\"2026-09-14T18:45:00Z\"}]",
+            "ok": true,
+            "op": "list"
+          }
+        ]
+      }
+    },
+    {
+      "id": "registry/remove-from-missing-file-fails",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "name": "laptop",
+            "op": "remove"
+          },
+          {
+            "op": "file"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "ok": false,
+            "op": "remove"
+          },
+          {
+            "exists": false,
+            "op": "file"
+          }
+        ]
+      }
+    },
+    {
+      "id": "registry/get-existing-and-missing",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "added_at": "2026-09-14T18:45:00Z",
+            "name": "laptop",
+            "op": "add",
+            "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
+          },
+          {
+            "name": "laptop",
+            "op": "get"
+          },
+          {
+            "name": "desktop",
+            "op": "get"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "device": "[{\"name\":\"laptop\",\"public_key\":\"age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p\",\"added_at\":\"2026-09-14T18:45:00Z\"}]",
+            "found": true,
+            "ok": true,
+            "op": "get"
+          },
+          {
+            "found": false,
+            "ok": true,
+            "op": "get"
+          }
+        ]
+      }
+    },
+    {
+      "id": "registry/get-is-case-sensitive",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "added_at": "2026-09-14T18:45:00Z",
+            "name": "laptop",
+            "op": "add",
+            "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
+          },
+          {
+            "name": "LAPTOP",
+            "op": "get"
+          },
+          {
+            "name": "Laptop",
+            "op": "get"
+          },
+          {
+            "name": "laptop",
+            "op": "get"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "found": false,
+            "ok": true,
+            "op": "get"
+          },
+          {
+            "found": false,
+            "ok": true,
+            "op": "get"
+          },
+          {
+            "device": "[{\"name\":\"laptop\",\"public_key\":\"age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p\",\"added_at\":\"2026-09-14T18:45:00Z\"}]",
+            "found": true,
+            "ok": true,
+            "op": "get"
+          }
+        ]
+      }
+    },
+    {
+      "id": "registry/get-from-missing-file",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "name": "laptop",
+            "op": "get"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "found": false,
+            "ok": true,
+            "op": "get"
+          }
+        ]
+      }
+    },
+    {
+      "id": "registry/corrupt-file-fails-every-read",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "data_b64": "aW52YWxpZCBqc29u",
+            "op": "corrupt"
+          },
+          {
+            "op": "list"
+          },
+          {
+            "name": "laptop",
+            "op": "get"
+          },
+          {
+            "name": "laptop",
+            "op": "remove"
+          },
+          {
+            "added_at": "2026-09-14T18:45:00Z",
+            "name": "laptop",
+            "op": "add",
+            "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "op": "corrupt"
+          },
+          {
+            "ok": false,
+            "op": "list"
+          },
+          {
+            "found": false,
+            "ok": false,
+            "op": "get"
+          },
+          {
+            "ok": false,
+            "op": "remove"
+          },
+          {
+            "ok": false,
+            "op": "add"
+          }
+        ]
+      }
+    },
+    {
+      "id": "registry/empty-json-array-loads-clean",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "data_b64": "W10=",
+            "op": "corrupt"
+          },
+          {
+            "op": "list"
+          },
+          {
+            "added_at": "2026-09-14T18:45:00Z",
+            "name": "laptop",
+            "op": "add",
+            "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
+          },
+          {
+            "op": "file"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "op": "corrupt"
+          },
+          {
+            "devices": "[]",
+            "ok": true,
+            "op": "list"
+          },
+          {
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "bytes_b64": "WwogIHsKICAgICJuYW1lIjogImxhcHRvcCIsCiAgICAicHVibGljX2tleSI6ICJhZ2UxcWwzejdoank1NHB3M2h5d3c1YXl5Zmc3enFndmM3dzNqMmVsdzh6bXJqMmtnNXNmbjlhcW1jYWM4cCIsCiAgICAiYWRkZWRfYXQiOiAiMjAyNi0wOS0xNFQxODo0NTowMFoiCiAgfQpd",
+            "exists": true,
+            "op": "file",
+            "sha256": "abcd70ce11444842013fda5095274e3f7a62eccf0e993d967b21aa82533364a8"
+          }
+        ]
+      }
+    },
+    {
+      "id": "registry/json-null-loads-as-empty",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "data_b64": "bnVsbA==",
+            "op": "corrupt"
+          },
+          {
+            "op": "list"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "op": "corrupt"
+          },
+          {
+            "devices": "null",
+            "ok": true,
+            "op": "list"
+          }
+        ]
+      }
+    },
+    {
+      "id": "registry/object-instead-of-array-fails",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "data_b64": "e30=",
+            "op": "corrupt"
+          },
+          {
+            "op": "list"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "op": "corrupt"
+          },
+          {
+            "ok": false,
+            "op": "list"
+          }
+        ]
+      }
+    },
+    {
+      "id": "registry/unicode-and-escaped-device-name",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "added_at": "2026-09-14T18:45:00Z",
+            "name": "büro \u003cmac\u003e \u0026 co",
+            "op": "add",
+            "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
+          },
+          {
+            "op": "file"
+          },
+          {
+            "name": "büro \u003cmac\u003e \u0026 co",
+            "op": "get"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "bytes_b64": "WwogIHsKICAgICJuYW1lIjogImLDvHJvIFx1MDAzY21hY1x1MDAzZSBcdTAwMjYgY28iLAogICAgInB1YmxpY19rZXkiOiAiYWdlMXFsM3o3aGp5NTRwdzNoeXd3NWF5eWZnN3pxZ3ZjN3czajJlbHc4em1yajJrZzVzZm45YXFtY2FjOHAiLAogICAgImFkZGVkX2F0IjogIjIwMjYtMDktMTRUMTg6NDU6MDBaIgogIH0KXQ==",
+            "exists": true,
+            "op": "file",
+            "sha256": "a8c7bc31c26d7cf3523c6f43c532d9dde23ea7e64fa0cf89300424e66a5fef7d"
+          },
+          {
+            "device": "[{\"name\":\"büro \\u003cmac\\u003e \\u0026 co\",\"public_key\":\"age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p\",\"added_at\":\"2026-09-14T18:45:00Z\"}]",
+            "found": true,
+            "ok": true,
+            "op": "get"
+          }
+        ]
+      }
+    },
+    {
+      "id": "registry-layout/created-by-add-device",
+      "seam": "PAIRING-001",
+      "input": {
+        "operation": "AddDevice into an empty vault directory"
+      },
+      "expected": {
+        "entries": [
+          "dir:.symvault",
+          "file:.symvault/devices.json"
+        ]
+      }
+    },
+    {
+      "id": "registry-modes/created-by-add-device",
+      "seam": "PAIRING-001",
+      "input": {
+        "operation": "AddDevice into an empty vault directory"
+      },
+      "expected": {
+        "dir_mode": "0700",
+        "file_mode": "0600",
+        "goos": "darwin"
+      }
     }
   ],
   "scope": {
@@ -1671,6 +2507,8 @@
     "expiry_clock": "wall-clock independent: expiry is expressed through the exported pairing.TokenTTL, never by sleeping, so --check is not timing dependent",
     "parse_errors": "semantic contract: accept/reject plus parsed fields; Go error strings are recorded for reference only and are not a Rust parity target",
     "reencryption": "out of scope here: new-recipient re-encryption on `device accept` is covered by CRYPTO-004 and is not re-frozen by this generator",
+    "registry_modes": "the registry-modes group records POSIX permission bits and is compared on Unix runners only; the case identity is still checked on Windows, so the group cannot be dropped unnoticed",
+    "registry_paths": "no absolute path is frozen: the registry cases record devices.json bytes and returned values, which are identical on every platform",
     "token_generation": "not a byte contract: GenerateToken draws from crypto/rand; only its shape (32 base32-hex characters) and ValidatePairingToken acceptance are frozen"
   }
 }

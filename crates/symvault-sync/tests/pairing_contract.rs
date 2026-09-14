@@ -10,6 +10,7 @@ use base64::Engine;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::fs;
+use symvault_sync::devices::{Device, DeviceRegistry};
 use symvault_sync::pairing::{
     self, GoTime, JoinResponse, PairingFile, TokenStore, display_token, marshal_join_response,
     marshal_pairing_file, parse_join_response, parse_pairing_file, response_filenames,
@@ -66,6 +67,9 @@ fn every_pairing_case_is_replayed() {
             "validate" => replay_validate(id, input, expected),
             "display" => replay_display(id, input, expected),
             "store" => replay_store(id, input, expected),
+            "registry" => replay_registry(id, input, expected),
+            "registry-layout" => replay_registry_layout(id, expected),
+            "registry-modes" => replay_registry_modes(id, expected),
             other => panic!("case {id} has unhandled group {other}"),
         }
         replayed += 1;
@@ -256,6 +260,222 @@ fn replay_store(id: &str, input: &Value, expected: &Value) {
     }
 }
 
+/// Replays a device-registry operation script against a fresh vault directory.
+/// Every observable the Go oracle recorded is compared: the operation's success,
+/// the value it returned, and the exact bytes on disk afterwards.
+fn replay_registry(id: &str, input: &Value, expected: &Value) {
+    let dir = std::env::temp_dir().join(format!(
+        "symvault-pairing-registry-{}-{}",
+        std::process::id(),
+        id.replace('/', "-")
+    ));
+    let _ = fs::remove_dir_all(&dir);
+    let registry = DeviceRegistry::new(&dir);
+
+    let ops = input["ops"].as_array().expect("ops array");
+    let want = expected["results"].as_array().expect("results array");
+    assert_eq!(ops.len(), want.len(), "case {id}: result cardinality");
+
+    for (index, op) in ops.iter().enumerate() {
+        let want = &want[index];
+        let kind = op["op"].as_str().expect("op kind");
+        assert_eq!(want["op"], kind, "case {id}: op {index} kind");
+        match kind {
+            "add" => {
+                let outcome = registry.add(Device {
+                    name: str_field(op, "name"),
+                    public_key: str_field(op, "public_key"),
+                    added_at: GoTime::parse_rfc3339(op["added_at"].as_str().expect("added_at"))
+                        .expect("fixture timestamps are RFC3339"),
+                    last_seen: op.get("last_seen").and_then(Value::as_str).map(|value| {
+                        GoTime::parse_rfc3339(value).expect("fixture timestamps are RFC3339")
+                    }),
+                });
+                assert_eq!(
+                    outcome.is_ok(),
+                    want["ok"].as_bool().expect("add ok"),
+                    "case {id}: op {index} add outcome: {outcome:?}"
+                );
+            }
+            "remove" => {
+                let outcome = registry.remove(op["name"].as_str().expect("name"));
+                assert_eq!(
+                    outcome.is_ok(),
+                    want["ok"].as_bool().expect("remove ok"),
+                    "case {id}: op {index} remove outcome: {outcome:?}"
+                );
+            }
+            "get" => {
+                let outcome = registry.get(op["name"].as_str().expect("name"));
+                assert_eq!(
+                    outcome.is_ok(),
+                    want["ok"].as_bool().expect("get ok"),
+                    "case {id}: op {index} get outcome"
+                );
+                let found = outcome.as_ref().ok().and_then(Option::as_ref);
+                assert_eq!(
+                    found.is_some(),
+                    want["found"].as_bool().expect("get found"),
+                    "case {id}: op {index} get presence"
+                );
+                if let Some(device) = found {
+                    // The oracle records the found device as a one-element
+                    // marshalled array, so the comparison covers field order
+                    // and Go's escaping, not just the field values.
+                    let rendered =
+                        symvault_sync::devices::DeviceList::Devices(vec![device.clone()])
+                            .to_compact_json();
+                    assert_eq!(
+                        rendered,
+                        want["device"].as_str().expect("device"),
+                        "case {id}: op {index} device"
+                    );
+                }
+            }
+            "list" => {
+                let outcome = registry.list();
+                assert_eq!(
+                    outcome.is_ok(),
+                    want["ok"].as_bool().expect("list ok"),
+                    "case {id}: op {index} list outcome: {outcome:?}"
+                );
+                if let Ok(devices) = outcome {
+                    assert_eq!(
+                        devices.to_compact_json(),
+                        want["devices"].as_str().expect("devices"),
+                        "case {id}: op {index} devices"
+                    );
+                }
+            }
+            "corrupt" => {
+                fs::create_dir_all(registry.path().parent().expect("parent")).expect("mkdir");
+                fs::write(registry.path(), decode(op, "data_b64")).expect("plant registry bytes");
+            }
+            "file" => {
+                let present = registry.path().exists();
+                assert_eq!(
+                    present,
+                    want["exists"].as_bool().expect("file exists"),
+                    "case {id}: op {index} file presence"
+                );
+                if present {
+                    let produced = fs::read(registry.path()).expect("read registry");
+                    let wanted = decode(want, "bytes_b64");
+                    assert_eq!(
+                        String::from_utf8_lossy(&produced),
+                        String::from_utf8_lossy(&wanted),
+                        "case {id}: op {index} registry bytes diverged from the Go oracle"
+                    );
+                    assert_eq!(
+                        hex(&produced),
+                        want["sha256"].as_str().expect("sha256"),
+                        "case {id}: op {index} registry digest"
+                    );
+                }
+            }
+            other => panic!("case {id}: unknown registry op {other}"),
+        }
+    }
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// Where the registry lands is contract, not an implementation detail: the
+/// oracle walked the vault directory after a single add and recorded every
+/// entry it found. Re-deriving the path from the same constants the
+/// implementation uses would prove nothing, so the walk is repeated here.
+fn replay_registry_layout(id: &str, expected: &Value) {
+    let dir = std::env::temp_dir().join(format!(
+        "symvault-pairing-layout-{}-{}",
+        std::process::id(),
+        id.replace('/', "-")
+    ));
+    let _ = fs::remove_dir_all(&dir);
+    DeviceRegistry::new(&dir)
+        .add(Device {
+            name: "laptop".into(),
+            public_key: "age1layout".into(),
+            added_at: GoTime::parse_rfc3339("2026-09-14T18:45:00Z").unwrap(),
+            last_seen: None,
+        })
+        .expect("add into an empty vault directory");
+
+    let mut entries = Vec::new();
+    walk(&dir, &dir, &mut entries);
+    entries.sort();
+
+    let want: Vec<String> = expected["entries"]
+        .as_array()
+        .expect("entries array")
+        .iter()
+        .map(|entry| entry.as_str().expect("entry").to_owned())
+        .collect();
+    assert_eq!(entries, want, "case {id}: registry layout");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+fn walk(root: &std::path::Path, dir: &std::path::Path, out: &mut Vec<String>) {
+    for entry in fs::read_dir(dir).expect("read vault directory") {
+        let entry = entry.expect("directory entry");
+        let path = entry.path();
+        let relative = path
+            .strip_prefix(root)
+            .expect("entry is under the vault directory")
+            .components()
+            .map(|component| component.as_os_str().to_string_lossy().into_owned())
+            .collect::<Vec<_>>()
+            .join("/");
+        if path.is_dir() {
+            out.push(format!("dir:{relative}"));
+            walk(root, &path, out);
+        } else {
+            out.push(format!("file:{relative}"));
+        }
+    }
+}
+
+/// The registry's permission bits. Windows has no POSIX modes, and the
+/// generator does not compare that group there either, so this is a Unix
+/// assertion — stated as such rather than quietly skipped everywhere.
+fn replay_registry_modes(id: &str, expected: &Value) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        let dir =
+            std::env::temp_dir().join(format!("symvault-pairing-modes-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let registry = DeviceRegistry::new(&dir);
+        registry
+            .add(Device {
+                name: "laptop".into(),
+                public_key: "age1modes".into(),
+                added_at: GoTime::parse_rfc3339("2026-09-14T18:45:00Z").unwrap(),
+                last_seen: None,
+            })
+            .expect("add into an empty vault directory");
+        let mode = |path: &std::path::Path| {
+            format!(
+                "{:04o}",
+                fs::metadata(path).unwrap().permissions().mode() & 0o777
+            )
+        };
+        assert_eq!(
+            mode(registry.path().parent().unwrap()),
+            expected["dir_mode"].as_str().expect("dir_mode"),
+            "case {id}: registry directory mode"
+        );
+        assert_eq!(
+            mode(&registry.path()),
+            expected["file_mode"].as_str().expect("file_mode"),
+            "case {id}: registry file mode"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (id, expected);
+    }
+}
+
 /// The fixture is the only place the register points at; a missing or
 /// truncated file must fail loudly rather than quietly replay nothing.
 #[test]
@@ -274,6 +494,9 @@ fn fixture_covers_every_contract_surface() {
         "validate/",
         "display/",
         "store/",
+        "registry/",
+        "registry-layout/",
+        "registry-modes/",
     ] {
         assert!(
             ids.iter().any(|id| id.starts_with(group)),
