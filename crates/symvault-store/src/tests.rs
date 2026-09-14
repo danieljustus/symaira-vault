@@ -2,7 +2,7 @@ use std::{
     collections::BTreeMap,
     fs,
     path::Path,
-    sync::{Arc, Barrier, Mutex, OnceLock, mpsc},
+    sync::{Arc, Mutex, OnceLock, mpsc},
     thread,
 };
 
@@ -1833,73 +1833,48 @@ fn concurrent_search_index_load_and_invalidate_is_serialized() {
     );
     assert!(!indexes.is_loaded(&store).unwrap());
 
-    let (load_committed, first_load) = mpsc::sync_channel(1);
-    let (loads_finished, wait_for_loads) = mpsc::channel();
-    let race_start = Arc::new(Barrier::new(2));
+    let (read, wait_read) = mpsc::channel();
+    let (release, wait_release) = mpsc::channel();
     let loader_indexes = Arc::clone(&indexes);
     let loader_store = store.clone();
     let loader_identity = Arc::clone(&identity);
-    let loader_race_start = Arc::clone(&race_start);
     let loader = thread::spawn(move || {
-        let result: Result<(), String> = match loader_indexes.load(&loader_store, &loader_identity)
-        {
-            Ok(true) => match loader_indexes.is_loaded(&loader_store) {
-                Ok(true) => Ok(()),
-                Ok(false) => Err("successful load did not commit an in-memory index".to_owned()),
-                Err(error) => Err(error.to_string()),
-            },
-            Ok(false) => Err("load-before-invalidate did not find persisted index".to_owned()),
-            Err(error) => Err(error.to_string()),
-        };
-        let run_race = result.is_ok();
-        load_committed.send(result).unwrap();
-        if !run_race {
-            return Ok::<(), String>(());
-        }
-        loader_race_start.wait();
-        let mut load_result = Ok(());
-        for _ in 0..32 {
-            if let Err(error) = loader_indexes.load(&loader_store, &loader_identity) {
-                load_result = Err(error.to_string());
-                break;
-            }
-        }
-        loads_finished.send(()).unwrap();
-        load_result
+        loader_indexes.load_before_commit(&loader_store, &loader_identity, || {
+            read.send(()).unwrap();
+            wait_release.recv().unwrap();
+        })
     });
-
-    match first_load.recv().unwrap() {
-        Ok(()) => {}
-        Err(error) => {
-            loader.join().unwrap().unwrap();
-            panic!("load-before-invalidate barrier: {error}");
-        }
-    }
-
+    wait_read
+        .recv_timeout(std::time::Duration::from_secs(10))
+        .unwrap();
+    // Disk validation has completed but its index has not committed. Check the
+    // actual coordination lock, not a sleep or a scheduler-dependent workload.
+    let protected = indexes.coordination_is_locked();
+    let (attempt, wait_attempt) = mpsc::channel();
     let invalidator_indexes = Arc::clone(&indexes);
     let invalidator_store = store.clone();
-    let invalidator_race_start = Arc::clone(&race_start);
     let invalidator = thread::spawn(move || {
-        invalidator_race_start.wait();
-        for _ in 0..31 {
-            invalidator_indexes.invalidate(&invalidator_store).unwrap();
-        }
-        // The terminal invalidation runs after every loader commit, before
-        // the test observes memory and disk state.
-        wait_for_loads.recv().unwrap();
+        attempt.send(()).unwrap();
         invalidator_indexes.invalidate(&invalidator_store).unwrap();
-        Ok::<(), String>(())
     });
-
-    let loader_result = loader.join().unwrap();
-    let invalidator_result = invalidator.join().unwrap();
-    loader_result.unwrap();
-    invalidator_result.unwrap();
-    // The race itself, rather than a terminal cleanup call, must leave both
-    // representations invalidated.
-    assert!(!indexes.is_loaded(&store).unwrap());
-    assert!(!index_path.exists());
-    indexes.invalidate(&store).unwrap();
+    wait_attempt.recv().unwrap();
+    if !protected {
+        // A split read/commit mutant must finish invalidating before the stale
+        // commit, making the terminal resurrection deterministic.
+        invalidator.join().unwrap();
+        release.send(()).unwrap();
+    } else {
+        release.send(()).unwrap();
+        invalidator.join().unwrap();
+    }
+    assert!(loader.join().unwrap().unwrap());
+    let unloaded = !indexes.is_loaded(&store).unwrap();
+    let absent = !index_path.exists();
+    assert!(
+        unloaded && absent,
+        "terminal state: unloaded={unloaded}, absent={absent}"
+    );
+    assert!(protected, "load released coordination before commit");
 }
 
 #[test]

@@ -69,10 +69,22 @@ impl SearchIndexStore {
     /// return their original error after the persisted file is removed on a
     /// best-effort basis. This follows Go's load-then-commit sequence.
     pub fn load(&self, store: &Store, identity: &Identity) -> Result<bool, StoreError> {
+        self.load_before_commit(store, identity, || {})
+    }
+
+    // Per-call observation seam; the public path supplies a no-op.
+    pub(super) fn load_before_commit(
+        &self,
+        store: &Store,
+        identity: &Identity,
+        before_commit: impl FnOnce(),
+    ) -> Result<bool, StoreError> {
         let mut state = lock_state(self.state)?;
         let slot = Self::slot_locked(&mut state, store)?;
         let mut current = lock_slot(&slot)?;
-        match SearchIndex::load(store, identity)? {
+        let loaded = SearchIndex::load(store, identity)?;
+        before_commit();
+        match loaded {
             Some(loaded) => {
                 *current = Some(loaded);
                 Ok(true)
@@ -172,4 +184,14 @@ fn lock_slot(
 ) -> Result<std::sync::MutexGuard<'_, Option<SearchIndex>>, StoreError> {
     slot.lock()
         .map_err(|_| StoreError::Config("search index slot lock poisoned".into()))
+}
+
+#[cfg(test)]
+impl SearchIndexStore {
+    pub(super) fn coordination_is_locked(&self) -> bool {
+        matches!(
+            self.state.try_lock(),
+            Err(std::sync::TryLockError::WouldBlock)
+        )
+    }
 }
