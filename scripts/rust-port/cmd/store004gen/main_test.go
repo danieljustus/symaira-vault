@@ -98,6 +98,15 @@ func TestIsolatedEnvironmentExcludesCredentialsAndXDG(t *testing.T) {
 	if got["HOME"] != "/fresh/home" || got["TMPDIR"] != "/fresh/tmp" || got["GOTOOLCHAIN"] != "local" {
 		t.Fatalf("isolated runtime overrides missing: %#v", got)
 	}
+	// Windows resolves the default GOPATH from USERPROFILE and temporary
+	// directories from TMP/TEMP. They must point at the isolated directories,
+	// never at the real profile.
+	if got["USERPROFILE"] != "/fresh/home" {
+		t.Fatalf("USERPROFILE is not the isolated home: %#v", got)
+	}
+	if got["TMP"] != "/fresh/tmp" || got["TEMP"] != "/fresh/tmp" {
+		t.Fatalf("TMP/TEMP are not the isolated temporary directory: %#v", got)
+	}
 }
 
 func TestRunOracleTimeoutCleansProcessGroup(t *testing.T) {

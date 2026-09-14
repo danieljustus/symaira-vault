@@ -263,7 +263,14 @@ func isolatedEnvironment(goPath, home, tmp string) []string {
 			env = append(env, key+"="+value)
 		}
 	}
-	env = append(env, "GOTOOLCHAIN=local", "HOME="+home, "TMPDIR="+tmp, "PATH="+filepath.Dir(goPath)+string(os.PathListSeparator)+os.Getenv("PATH"))
+	// Windows derives the default GOPATH from USERPROFILE, not HOME, and TMP
+	// and TEMP rather than TMPDIR. Without them the isolated child has neither
+	// a module cache nor a way to derive one: "go: module cache not found:
+	// neither GOMODCACHE nor GOPATH is set". Point them at the same isolated
+	// directories, so isolation is preserved rather than weakened.
+	env = append(env, "GOTOOLCHAIN=local", "HOME="+home, "USERPROFILE="+home,
+		"TMPDIR="+tmp, "TMP="+tmp, "TEMP="+tmp,
+		"PATH="+filepath.Dir(goPath)+string(os.PathListSeparator)+os.Getenv("PATH"))
 	return env
 }
 
