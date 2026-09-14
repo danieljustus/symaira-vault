@@ -96,11 +96,12 @@ def run_case(adapter, binary, case, cwd, env):
 
 
 def main():
-    if os.name == "nt":
-        raise SystemExit("Windows device-list acceptance is pending reuse of the Go job-object runner; refusing unsafe timeout cleanup")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--report", type=Path, required=True)
+    parser.add_argument("--supervised", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if os.name == "nt" and not args.supervised:
+        raise SystemExit("Windows execution requires make device-list-differential (native Go job supervisor)")
     if args.report.exists():
         raise SystemExit("report already exists; choose a fresh evidence path")
     env = os.environ.copy()

@@ -11,6 +11,9 @@ on:
     # to the handshake contract must execute this gate instead of producing an
     # untested claim.
     paths:
+      - 'scripts/rust-port/cmd/caserun/**'
+      - 'scripts/rust-port/cmd/devicelistdriver/**'
+      - 'scripts/rust-port/internal/diff/**'
       - 'crates/symvault-cli/**'
       - 'scripts/rust-port/*device_list*'
       - '.github/workflows/rust-pairing.yml'
@@ -34,6 +37,9 @@ on:
   pull_request:
     branches: [ main ]
     paths:
+      - 'scripts/rust-port/cmd/caserun/**'
+      - 'scripts/rust-port/cmd/devicelistdriver/**'
+      - 'scripts/rust-port/internal/diff/**'
       - 'crates/symvault-cli/**'
       - 'scripts/rust-port/*device_list*'
       - '.github/workflows/rust-pairing.yml'

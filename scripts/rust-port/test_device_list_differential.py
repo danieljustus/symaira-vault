@@ -42,8 +42,9 @@ class RunnerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as cwd:
             report = Path(cwd) / "existing.json"
             report.write_bytes(b"retained evidence")
-            result = subprocess.run([sys.executable, str(Path(__file__).with_name("device_list_differential.py")), "--report", str(report)], capture_output=True, timeout=10)
+            result = subprocess.run([sys.executable, str(Path(__file__).with_name("device_list_differential.py")), "--supervised", "--report", str(report)], capture_output=True, timeout=10)
             self.assertNotEqual(result.returncode, 0)
+            self.assertIn(b"report already exists", result.stderr)
             self.assertEqual(report.read_bytes(), b"retained evidence")
 
     @unittest.skipIf(os.name == "nt", "POSIX process group regression; native Windows remains required")

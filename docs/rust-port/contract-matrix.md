@@ -108,14 +108,15 @@ the native pairing workflow runs it but native acceptance is pending until
 the actual candidate run succeeds.
 
 Review found that Python's Windows `taskkill /T` cannot reliably terminate
-descendants after the original parent exits. The live runner therefore refuses
-Windows execution before starting a process; this is an implementation gap,
-not an external blocker or native PASS. The CLI cases now reuse the Go
-job-object runner; Windows bootstrap process cleanup and the adapter's native
-regression still require acceptance before removing the refusal. The native
-workflow executes the adapter and established cleanup regression tests before
-device-list acceptance. Reports use fresh timestamped paths and refuse an
-existing destination rather than overwriting prior evidence.
+descendants after the original parent exits. The CLI cases now reuse the Go
+job-object runner. `make device-list-differential` also starts the entire Python
+build/test driver through `cmd/devicelistdriver` and the same Go runner, so the
+Windows job owns bootstrap toolchain descendants as well as CLI descendants.
+Direct unsupervised Python execution on Windows is refused. This is implemented
+locally, not native Windows PASS: the workflow must execute the adapter and
+established cleanup regression tests, followed by the actual supervised driver.
+Reports use fresh timestamped paths and exclusive creation rather than
+overwriting prior evidence.
 
 This is not the complete device command family. YAML rendering, config/profile
 vault resolution and pair/join/accept/add/revoke remain unported. Missing explicit

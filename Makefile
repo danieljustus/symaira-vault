@@ -264,7 +264,7 @@ pairing-differential: pairing-fixtures-check
 DEVICE_LIST_REPORT ?= $(CARGO_TARGET_DIR)/device-list-differential-$(shell date -u +%Y%m%dT%H%M%SZ).json
 device-list-differential:
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/test_device_list_differential.py
-	python3 scripts/rust-port/device_list_differential.py --report $(DEVICE_LIST_REPORT)
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/devicelistdriver --report "$(DEVICE_LIST_REPORT)"
 
 sync-io-differential: pairing-fixtures-check
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/syncgen --check --output $(PORT_SYNC_FIXTURE)
