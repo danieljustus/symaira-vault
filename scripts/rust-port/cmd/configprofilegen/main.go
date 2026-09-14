@@ -167,7 +167,7 @@ func archiveOracle(repo, destination string) {
 		fatal("archive oracle: %v", err)
 	}
 	archive := filepath.Join(destination, "oracle.tar")
-	observation, err := diff.Run(git, diff.Case{ID: "config-profile-archive", Args: []string{"-C", repo, "archive", "--format=tar", "--output", archive, pinnedOracleCommit}, TimeoutMS: 60000})
+	observation, err := diff.Run(git, diff.Case{ID: "config-profile-archive", Args: []string{"-C", repo, "-c", "core.autocrlf=false", "-c", "core.eol=lf", "archive", "--format=tar", "--output", archive, pinnedOracleCommit}, TimeoutMS: 60000})
 	if err != nil || observation.ExitCode != 0 || observation.Signal != "" || observation.TimedOut {
 		fatal("archive oracle: %v exit=%d signal=%q timeout=%t", err, observation.ExitCode, observation.Signal, observation.TimedOut)
 	}

@@ -96,6 +96,34 @@ func TestGeneratorRepeatabilityMutationAndCleanup(t *testing.T) {
 	}
 }
 
+func TestArchiveIgnoresCheckoutLineEndingPolicy(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "repo")
+	for _, args := range [][]string{
+		{"clone", "--shared", "--no-checkout", repositoryRoot(), repo},
+		{"-C", repo, "config", "core.autocrlf", "true"},
+		{"-C", repo, "config", "core.eol", "crlf"},
+	} {
+		if output, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("git: %v: %s", err, output)
+		}
+	}
+	destination := t.TempDir()
+	archiveOracle(repo, destination)
+	for _, name := range oracleSourceFiles(destination) {
+		expected, err := exec.Command("git", "-C", repo, "show", pinnedOracleCommit+":"+name).Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		actual, err := os.ReadFile(filepath.Join(destination, filepath.FromSlash(name)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(expected, actual) {
+			t.Fatalf("archive changed committed source bytes: %s", name)
+		}
+	}
+}
+
 func TestPinnedGoDoesNotRequireNamedShim(t *testing.T) {
 	binary := pinnedGoBinary()
 	cmd := exec.Command(binary, "version")
