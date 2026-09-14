@@ -1525,7 +1525,11 @@ impl ManifestTestChild {
 
     fn kill_and_reap(&mut self) -> io::Result<()> {
         if self.0.try_wait()?.is_none() {
-            self.0.kill()?;
+            match self.0.kill() {
+                Ok(()) => {}
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error),
+            }
         }
         self.wait_for_exit(Duration::from_secs(5))?;
         Ok(())
