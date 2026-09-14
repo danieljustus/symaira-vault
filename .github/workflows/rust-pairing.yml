@@ -1,0 +1,108 @@
+name: Rust pairing differential
+
+on:
+  push:
+    # Integration branches are included, as in rust-store.yml: this workflow
+    # does not exist on the default branch yet, so workflow_dispatch cannot
+    # reach it, and a branch push is the only way to obtain native evidence
+    # before the single bundled pull request.
+    branches: [ main, 'migration/**' ]
+    # Explicit allowlist rather than ci.yml's docs-only paths-ignore: a change
+    # to the handshake contract must execute this gate instead of producing an
+    # untested claim.
+    paths:
+      - '.github/workflows/rust-pairing.yml'
+      - '.github/workflows/ci.yml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'go.mod'
+      - 'go.sum'
+      - 'rust-toolchain.toml'
+      - 'Makefile'
+      - 'crates/symvault-sync/Cargo.toml'
+      - 'crates/symvault-sync/src/lib.rs'
+      - 'crates/symvault-sync/src/pairing.rs'
+      - 'crates/symvault-sync/tests/pairing_contract.rs'
+      - 'internal/pairing/**'
+      - 'cmd/device.go'
+      - 'scripts/rust-port/cmd/pairinggen/**'
+      - 'testdata/port/pairing/**'
+      - 'docs/rust-port/contract-matrix.md'
+      - 'docs/rust-port/work-items.json'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/rust-pairing.yml'
+      - '.github/workflows/ci.yml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'go.mod'
+      - 'go.sum'
+      - 'rust-toolchain.toml'
+      - 'Makefile'
+      - 'crates/symvault-sync/Cargo.toml'
+      - 'crates/symvault-sync/src/lib.rs'
+      - 'crates/symvault-sync/src/pairing.rs'
+      - 'crates/symvault-sync/tests/pairing_contract.rs'
+      - 'internal/pairing/**'
+      - 'cmd/device.go'
+      - 'scripts/rust-port/cmd/pairinggen/**'
+      - 'testdata/port/pairing/**'
+      - 'docs/rust-port/contract-matrix.md'
+      - 'docs/rust-port/work-items.json'
+  workflow_dispatch:
+  schedule:
+    - cron: '30 6 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOTOOLCHAIN: go1.26.6
+  RUSTUP_TOOLCHAIN: 1.98.0
+
+jobs:
+  pairing-native:
+    name: Pairing differential (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      # PAIRING-001 claims all platforms, so all three native runners execute
+      # the gate. Cross-compilation is not runtime proof and is not used here.
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # pairinggen reads its oracle out of the pinned commit, so the full
+          # history must be present.
+          fetch-depth: 0
+
+      - name: Set up pinned Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.6'
+          cache: true
+
+      - name: Install pinned Rust toolchain
+        shell: bash
+        run: rustup toolchain install 1.98.0 --profile minimal
+
+      - name: Verify toolchain identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(go env GOVERSION)" = "go1.26.6"
+          test "$(rustc --version | awk '{print $2}')" = "1.98.0"
+
+      - name: Run pairing differential against the pinned Go oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          make pairing-differential

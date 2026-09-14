@@ -1,0 +1,1676 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "caadd5e",
+    "release": "v0.22.1",
+    "source_files": [
+      "cmd/device.go",
+      "internal/pairing/devicesession.go",
+      "internal/pairing/token.go"
+    ],
+    "source_digest": "35becfe6efbfa5fd8e634fc3f169d59377837ba9c2fd946cf58db867e36ef5fe",
+    "generator_files": [
+      "scripts/rust-port/cmd/pairinggen/main.go",
+      "scripts/rust-port/cmd/pairinggen/oracle.go.txt"
+    ],
+    "generator_digest": "42978ca1f86e9313aba6fc54b4f58588cdd4aec13ca8901da2a146bc9356a82b"
+  },
+  "cases": [
+    {
+      "id": "marshal/pairing-file-utc",
+      "seam": "PAIRING-001",
+      "input": {
+        "created_at": "2026-09-14T18:45:00Z",
+        "kind": "pairing_file",
+        "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",
+        "token": "C5H7GJK9M2N4P6Q8R0S1T3V5U7A9B1D3"
+      },
+      "expected": {
+        "bytes_b64": "ewogICJ0b2tlbiI6ICJDNUg3R0pLOU0yTjRQNlE4UjBTMVQzVjVVN0E5QjFEMyIsCiAgInB1YmxpY19rZXkiOiAiYWdlMXFsM3o3aGp5NTRwdzNoeXd3NWF5eWZnN3pxZ3ZjN3czajJlbHc4em1yajJrZzVzZm45YXFtY2FjOHAiLAogICJjcmVhdGVkX2F0IjogIjIwMjYtMDktMTRUMTg6NDU6MDBaIgp9",
+        "sha256": "c76a5bb2325704a8697ba0da2e196875c76e103c88b2d2e25fb117dcdc72b85f"
+      }
+    },
+    {
+      "id": "marshal/pairing-file-nanos",
+      "seam": "PAIRING-001",
+      "input": {
+        "created_at": "2026-09-14T18:45:00.123456789Z",
+        "kind": "pairing_file",
+        "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",
+        "token": "0123456789ABCDEFGHIJKLMNOPQRSTUV"
+      },
+      "expected": {
+        "bytes_b64": "ewogICJ0b2tlbiI6ICIwMTIzNDU2Nzg5QUJDREVGR0hJSktMTU5PUFFSU1RVViIsCiAgInB1YmxpY19rZXkiOiAiYWdlMXFsM3o3aGp5NTRwdzNoeXd3NWF5eWZnN3pxZ3ZjN3czajJlbHc4em1yajJrZzVzZm45YXFtY2FjOHAiLAogICJjcmVhdGVkX2F0IjogIjIwMjYtMDktMTRUMTg6NDU6MDAuMTIzNDU2Nzg5WiIKfQ==",
+        "sha256": "96173eba411a61ed7fdbc29e3a122aed0fd43f39918aebd5a187f02d6bc5e5ac"
+      }
+    },
+    {
+      "id": "marshal/pairing-file-trailing-zero-nanos",
+      "seam": "PAIRING-001",
+      "input": {
+        "created_at": "2026-09-14T18:45:00.100000000Z",
+        "kind": "pairing_file",
+        "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",
+        "token": "ABCD"
+      },
+      "expected": {
+        "bytes_b64": "ewogICJ0b2tlbiI6ICJBQkNEIiwKICAicHVibGljX2tleSI6ICJhZ2UxcWwzejdoank1NHB3M2h5d3c1YXl5Zmc3enFndmM3dzNqMmVsdzh6bXJqMmtnNXNmbjlhcW1jYWM4cCIsCiAgImNyZWF0ZWRfYXQiOiAiMjAyNi0wOS0xNFQxODo0NTowMC4xWiIKfQ==",
+        "sha256": "1f28f44854e493031c43680ba892044acd34b5de77fa551d781ab2b670a997c7"
+      }
+    },
+    {
+      "id": "marshal/pairing-file-offset",
+      "seam": "PAIRING-001",
+      "input": {
+        "created_at": "2026-09-14T20:45:00+02:00",
+        "kind": "pairing_file",
+        "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",
+        "token": "ABCD"
+      },
+      "expected": {
+        "bytes_b64": "ewogICJ0b2tlbiI6ICJBQkNEIiwKICAicHVibGljX2tleSI6ICJhZ2UxcWwzejdoank1NHB3M2h5d3c1YXl5Zmc3enFndmM3dzNqMmVsdzh6bXJqMmtnNXNmbjlhcW1jYWM4cCIsCiAgImNyZWF0ZWRfYXQiOiAiMjAyNi0wOS0xNFQyMDo0NTowMCswMjowMCIKfQ==",
+        "sha256": "9b324478da4edb52ceacc7b3ea80e1083c6b324644deaf354247c216228245d3"
+      }
+    },
+    {
+      "id": "marshal/pairing-file-negative-offset",
+      "seam": "PAIRING-001",
+      "input": {
+        "created_at": "2026-09-14T13:45:00-05:00",
+        "kind": "pairing_file",
+        "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",
+        "token": "ABCD"
+      },
+      "expected": {
+        "bytes_b64": "ewogICJ0b2tlbiI6ICJBQkNEIiwKICAicHVibGljX2tleSI6ICJhZ2UxcWwzejdoank1NHB3M2h5d3c1YXl5Zmc3enFndmM3dzNqMmVsdzh6bXJqMmtnNXNmbjlhcW1jYWM4cCIsCiAgImNyZWF0ZWRfYXQiOiAiMjAyNi0wOS0xNFQxMzo0NTowMC0wNTowMCIKfQ==",
+        "sha256": "52a122be7d8f7896d7ee12bf5402e491bb3c3efe8a69ab8188389ebf046d79fd"
+      }
+    },
+    {
+      "id": "marshal/pairing-file-control-chars",
+      "seam": "PAIRING-001",
+      "input": {
+        "created_at": "2026-09-14T18:45:00Z",
+        "kind": "pairing_file",
+        "public_key": "a\tb\nc\rd\u0001ef\"g\\h",
+        "token": "ABCD"
+      },
+      "expected": {
+        "bytes_b64": "ewogICJ0b2tlbiI6ICJBQkNEIiwKICAicHVibGljX2tleSI6ICJhXHRiXG5jXHJkXHUwMDAxZX9mXCJnXFxoIiwKICAiY3JlYXRlZF9hdCI6ICIyMDI2LTA5LTE0VDE4OjQ1OjAwWiIKfQ==",
+        "sha256": "df170aec700eb0faba743747086049597c32ad0408b034dc2de1611fbce55014"
+      }
+    },
+    {
+      "id": "marshal/pairing-file-zero-time",
+      "seam": "PAIRING-001",
+      "input": {
+        "created_at": "0001-01-01T00:00:00Z",
+        "kind": "pairing_file",
+        "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",
+        "token": "ABCD"
+      },
+      "expected": {
+        "bytes_b64": "ewogICJ0b2tlbiI6ICJBQkNEIiwKICAicHVibGljX2tleSI6ICJhZ2UxcWwzejdoank1NHB3M2h5d3c1YXl5Zmc3enFndmM3dzNqMmVsdzh6bXJqMmtnNXNmbjlhcW1jYWM4cCIsCiAgImNyZWF0ZWRfYXQiOiAiMDAwMS0wMS0wMVQwMDowMDowMFoiCn0=",
+        "sha256": "fccfb352b93e2dfa53b16c2937f11ad8ef148160f4a8574451829ff001229ecb"
+      }
+    },
+    {
+      "id": "marshal/pairing-file-html-chars",
+      "seam": "PAIRING-001",
+      "input": {
+        "created_at": "2026-09-14T18:45:00Z",
+        "kind": "pairing_file",
+        "public_key": "\u003cscript\u003e\u0026\u2028key",
+        "token": "ABCD"
+      },
+      "expected": {
+        "bytes_b64": "ewogICJ0b2tlbiI6ICJBQkNEIiwKICAicHVibGljX2tleSI6ICJcdTAwM2NzY3JpcHRcdTAwM2VcdTAwMjZcdTIwMjhrZXkiLAogICJjcmVhdGVkX2F0IjogIjIwMjYtMDktMTRUMTg6NDU6MDBaIgp9",
+        "sha256": "b6e0a18c7fcabb5b9fe9e1397d6bdd6f26b50474d04b1ce278098419dac45f49"
+      }
+    },
+    {
+      "id": "marshal/pairing-file-empty-fields",
+      "seam": "PAIRING-001",
+      "input": {
+        "created_at": "2026-09-14T18:45:00Z",
+        "kind": "pairing_file",
+        "public_key": "",
+        "token": ""
+      },
+      "expected": {
+        "bytes_b64": "ewogICJ0b2tlbiI6ICIiLAogICJwdWJsaWNfa2V5IjogIiIsCiAgImNyZWF0ZWRfYXQiOiAiMjAyNi0wOS0xNFQxODo0NTowMFoiCn0=",
+        "sha256": "bdc8cfe1518006f86d456578edb651ed77f58d9a20fd1961fc66e2c73db2a5e2"
+      }
+    },
+    {
+      "id": "marshal/join-response-named",
+      "seam": "PAIRING-001",
+      "input": {
+        "created_at": "2026-09-14T18:46:01Z",
+        "kind": "join_response",
+        "name": "laptop-2",
+        "public_key": "age1lggyhqrw2nlhcxprm67z43rta597azn8gknawjehu9d9dl0jq3yqqvfafg",
+        "token": "C5H7GJK9M2N4P6Q8R0S1T3V5U7A9B1D3"
+      },
+      "expected": {
+        "bytes_b64": "ewogICJ0b2tlbiI6ICJDNUg3R0pLOU0yTjRQNlE4UjBTMVQzVjVVN0E5QjFEMyIsCiAgIm5hbWUiOiAibGFwdG9wLTIiLAogICJwdWJsaWNfa2V5IjogImFnZTFsZ2d5aHFydzJubGhjeHBybTY3ejQzcnRhNTk3YXpuOGdrbmF3amVodTlkOWRsMGpxM3lxcXZmYWZnIiwKICAiY3JlYXRlZF9hdCI6ICIyMDI2LTA5LTE0VDE4OjQ2OjAxWiIKfQ==",
+        "sha256": "da351d671c1d48f987d37bf71f6053e28fa839a702356cfcf646534157b9ca1f"
+      }
+    },
+    {
+      "id": "marshal/join-response-empty-name",
+      "seam": "PAIRING-001",
+      "input": {
+        "created_at": "2026-09-14T18:46:01.5Z",
+        "kind": "join_response",
+        "name": "",
+        "public_key": "age1lggyhqrw2nlhcxprm67z43rta597azn8gknawjehu9d9dl0jq3yqqvfafg",
+        "token": "ABCD"
+      },
+      "expected": {
+        "bytes_b64": "ewogICJ0b2tlbiI6ICJBQkNEIiwKICAibmFtZSI6ICIiLAogICJwdWJsaWNfa2V5IjogImFnZTFsZ2d5aHFydzJubGhjeHBybTY3ejQzcnRhNTk3YXpuOGdrbmF3amVodTlkOWRsMGpxM3lxcXZmYWZnIiwKICAiY3JlYXRlZF9hdCI6ICIyMDI2LTA5LTE0VDE4OjQ2OjAxLjVaIgp9",
+        "sha256": "eac682a76ebbfc5df941abb9a9156d9e07895bf5c3635d401eb218598e23f9f8"
+      }
+    },
+    {
+      "id": "marshal/join-response-unicode-name",
+      "seam": "PAIRING-001",
+      "input": {
+        "created_at": "2026-09-14T18:46:01Z",
+        "kind": "join_response",
+        "name": "büro-mac ü中",
+        "public_key": "age1lggyhqrw2nlhcxprm67z43rta597azn8gknawjehu9d9dl0jq3yqqvfafg",
+        "token": "ABCD"
+      },
+      "expected": {
+        "bytes_b64": "ewogICJ0b2tlbiI6ICJBQkNEIiwKICAibmFtZSI6ICJiw7xyby1tYWMgw7zkuK0iLAogICJwdWJsaWNfa2V5IjogImFnZTFsZ2d5aHFydzJubGhjeHBybTY3ejQzcnRhNTk3YXpuOGdrbmF3amVodTlkOWRsMGpxM3lxcXZmYWZnIiwKICAiY3JlYXRlZF9hdCI6ICIyMDI2LTA5LTE0VDE4OjQ2OjAxWiIKfQ==",
+        "sha256": "65b64db0df7d74d766c72010599b23e2621e62914d7636fc1c0ff10f398d1b24"
+      }
+    },
+    {
+      "id": "parse/pairing-file-canonical",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "ewogICJ0b2tlbiI6ICJBQkNEIiwKICAicHVibGljX2tleSI6ICJhZ2UxcWwzejdoank1NHB3M2h5d3c1YXl5Zmc3enFndmM3dzNqMmVsdzh6bXJqMmtnNXNmbjlhcW1jYWM4cCIsCiAgImNyZWF0ZWRfYXQiOiAiMjAyNi0wOS0xNFQxODo0NTowMFoiCn0=",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "ok": true,
+        "parsed": {
+          "created_at_json": "\"2026-09-14T18:45:00Z\"",
+          "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",
+          "token": "ABCD"
+        }
+      }
+    },
+    {
+      "id": "parse/pairing-file-unknown-field",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJ0b2tlbiI6IkFCQ0QiLCJwdWJsaWNfa2V5IjoiYWdlMXFsM3o3aGp5NTRwdzNoeXd3NWF5eWZnN3pxZ3ZjN3czajJlbHc4em1yajJrZzVzZm45YXFtY2FjOHAiLCJjcmVhdGVkX2F0IjoiMjAyNi0wOS0xNFQxODo0NTowMFoiLCJleHRyYSI6NDJ9",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "ok": true,
+        "parsed": {
+          "created_at_json": "\"2026-09-14T18:45:00Z\"",
+          "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",
+          "token": "ABCD"
+        }
+      }
+    },
+    {
+      "id": "parse/pairing-file-case-insensitive-keys",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJUb2tlbiI6IkFCQ0QiLCJQVUJMSUNfS0VZIjoiYWdlMXFsM3o3aGp5NTRwdzNoeXd3NWF5eWZnN3pxZ3ZjN3czajJlbHc4em1yajJrZzVzZm45YXFtY2FjOHAiLCJDcmVhdGVkX0F0IjoiMjAyNi0wOS0xNFQxODo0NTowMFoifQ==",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "ok": true,
+        "parsed": {
+          "created_at_json": "\"2026-09-14T18:45:00Z\"",
+          "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",
+          "token": "ABCD"
+        }
+      }
+    },
+    {
+      "id": "parse/pairing-file-duplicate-keys-last-wins",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJ0b2tlbiI6IkZJUlNUIiwidG9rZW4iOiJTRUNPTkQiLCJwdWJsaWNfa2V5IjoiYWdlMXFsM3o3aGp5NTRwdzNoeXd3NWF5eWZnN3pxZ3ZjN3czajJlbHc4em1yajJrZzVzZm45YXFtY2FjOHAiLCJjcmVhdGVkX2F0IjoiMjAyNi0wOS0xNFQxODo0NTowMFoifQ==",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "ok": true,
+        "parsed": {
+          "created_at_json": "\"2026-09-14T18:45:00Z\"",
+          "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",
+          "token": "SECOND"
+        }
+      }
+    },
+    {
+      "id": "parse/pairing-file-missing-fields",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "e30=",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "ok": true,
+        "parsed": {
+          "created_at_json": "\"0001-01-01T00:00:00Z\"",
+          "public_key": "",
+          "token": ""
+        }
+      }
+    },
+    {
+      "id": "parse/pairing-file-null-fields",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJ0b2tlbiI6bnVsbCwicHVibGljX2tleSI6bnVsbCwiY3JlYXRlZF9hdCI6bnVsbH0=",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "ok": true,
+        "parsed": {
+          "created_at_json": "\"0001-01-01T00:00:00Z\"",
+          "public_key": "",
+          "token": ""
+        }
+      }
+    },
+    {
+      "id": "parse/pairing-file-offset-time",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJ0b2tlbiI6IkFCQ0QiLCJwdWJsaWNfa2V5IjoiYWdlMXFsM3o3aGp5NTRwdzNoeXd3NWF5eWZnN3pxZ3ZjN3czajJlbHc4em1yajJrZzVzZm45YXFtY2FjOHAiLCJjcmVhdGVkX2F0IjoiMjAyNi0wOS0xNFQyMDo0NTowMCswMjowMCJ9",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "ok": true,
+        "parsed": {
+          "created_at_json": "\"2026-09-14T20:45:00+02:00\"",
+          "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",
+          "token": "ABCD"
+        }
+      }
+    },
+    {
+      "id": "parse/pairing-file-utc-plus-zero-offset",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJ0b2tlbiI6IkFCQ0QiLCJwdWJsaWNfa2V5IjoiYWdlMXFsM3o3aGp5NTRwdzNoeXd3NWF5eWZnN3pxZ3ZjN3czajJlbHc4em1yajJrZzVzZm45YXFtY2FjOHAiLCJjcmVhdGVkX2F0IjoiMjAyNi0wOS0xNFQxODo0NTowMCswMDowMCJ9",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "ok": true,
+        "parsed": {
+          "created_at_json": "\"2026-09-14T18:45:00Z\"",
+          "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",
+          "token": "ABCD"
+        }
+      }
+    },
+    {
+      "id": "parse/pairing-file-fractional-seconds",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wOS0xNFQxODo0NTowMC4xMjNaIn0=",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "ok": true,
+        "parsed": {
+          "created_at_json": "\"2026-09-14T18:45:00.123Z\"",
+          "public_key": "",
+          "token": ""
+        }
+      }
+    },
+    {
+      "id": "parse/pairing-file-fraction-twelve-digits",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wOS0xNFQxODo0NTowMC4xMjM0NTY3ODkwMTJaIn0=",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "ok": true,
+        "parsed": {
+          "created_at_json": "\"2026-09-14T18:45:00.123456789Z\"",
+          "public_key": "",
+          "token": ""
+        }
+      }
+    },
+    {
+      "id": "parse/pairing-file-lowercase-t",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wOS0xNHQxODo0NTowMFoifQ==",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "go_error": "parse pairing file: parsing time \"2026-09-14t18:45:00Z\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"t18:45:00Z\" as \"T\"",
+        "ok": false
+      }
+    },
+    {
+      "id": "parse/pairing-file-lowercase-z",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wOS0xNFQxODo0NTowMHoifQ==",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "go_error": "parse pairing file: parsing time \"2026-09-14T18:45:00z\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"z\" as \"Z07:00\"",
+        "ok": false
+      }
+    },
+    {
+      "id": "parse/pairing-file-day-out-of-range",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wMi0zMFQxODo0NTowMFoifQ==",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "go_error": "parse pairing file: parsing time \"2026-02-30T18:45:00Z\": day out of range",
+        "ok": false
+      }
+    },
+    {
+      "id": "parse/pairing-file-day-thirty-one-in-thirty-day-month",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wOS0zMVQxODo0NTowMFoifQ==",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "go_error": "parse pairing file: parsing time \"2026-09-31T18:45:00Z\": day out of range",
+        "ok": false
+      }
+    },
+    {
+      "id": "parse/pairing-file-day-zero",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wOS0wMFQxODo0NTowMFoifQ==",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "go_error": "parse pairing file: parsing time \"2026-09-00T18:45:00Z\": day out of range",
+        "ok": false
+      }
+    },
+    {
+      "id": "parse/pairing-file-month-out-of-range",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJjcmVhdGVkX2F0IjoiMjAyNi0xMy0wMVQxODo0NTowMFoifQ==",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "go_error": "parse pairing file: parsing time \"2026-13-01T18:45:00Z\": month out of range",
+        "ok": false
+      }
+    },
+    {
+      "id": "parse/pairing-file-month-zero",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wMC0wMVQxODo0NTowMFoifQ==",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "go_error": "parse pairing file: parsing time \"2026-00-01T18:45:00Z\": month out of range",
+        "ok": false
+      }
+    },
+    {
+      "id": "parse/pairing-file-leap-day-valid",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJjcmVhdGVkX2F0IjoiMjAyOC0wMi0yOVQwMDowMDowMFoifQ==",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "ok": true,
+        "parsed": {
+          "created_at_json": "\"2028-02-29T00:00:00Z\"",
+          "public_key": "",
+          "token": ""
+        }
+      }
+    },
+    {
+      "id": "parse/pairing-file-non-leap-february-29",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wMi0yOVQwMDowMDowMFoifQ==",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "go_error": "parse pairing file: parsing time \"2026-02-29T00:00:00Z\": day out of range",
+        "ok": false
+      }
+    },
+    {
+      "id": "parse/pairing-file-century-non-leap",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJjcmVhdGVkX2F0IjoiMTkwMC0wMi0yOVQwMDowMDowMFoifQ==",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "go_error": "parse pairing file: parsing time \"1900-02-29T00:00:00Z\": day out of range",
+        "ok": false
+      }
+    },
+    {
+      "id": "parse/pairing-file-century-leap",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJjcmVhdGVkX2F0IjoiMjAwMC0wMi0yOVQwMDowMDowMFoifQ==",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "ok": true,
+        "parsed": {
+          "created_at_json": "\"2000-02-29T00:00:00Z\"",
+          "public_key": "",
+          "token": ""
+        }
+      }
+    },
+    {
+      "id": "parse/pairing-file-hour-out-of-range",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wOS0xNFQyNDowMDowMFoifQ==",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "go_error": "parse pairing file: parsing time \"2026-09-14T24:00:00Z\": hour out of range",
+        "ok": false
+      }
+    },
+    {
+      "id": "parse/pairing-file-minute-out-of-range",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wOS0xNFQxODo2MDowMFoifQ==",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "go_error": "parse pairing file: parsing time \"2026-09-14T18:60:00Z\": minute out of range",
+        "ok": false
+      }
+    },
+    {
+      "id": "parse/pairing-file-offset-hour-out-of-range",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wOS0xNFQxODo0NTowMCsyNDowMCJ9",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "ok": true,
+        "parsed": {
+          "created_at_marshal_error": "Time.MarshalJSON: timezone hour outside of range [0,23]",
+          "public_key": "",
+          "token": ""
+        }
+      }
+    },
+    {
+      "id": "parse/pairing-file-offset-minute-out-of-range",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wOS0xNFQxODo0NTowMCswMTo2MCJ9",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "ok": true,
+        "parsed": {
+          "created_at_json": "\"2026-09-14T18:45:00+02:00\"",
+          "public_key": "",
+          "token": ""
+        }
+      }
+    },
+    {
+      "id": "parse/pairing-file-negative-offset",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wOS0xNFQxMzo0NTowMC0wNTowMCJ9",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "ok": true,
+        "parsed": {
+          "created_at_json": "\"2026-09-14T13:45:00-05:00\"",
+          "public_key": "",
+          "token": ""
+        }
+      }
+    },
+    {
+      "id": "parse/pairing-file-offset-without-colon",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wOS0xNFQxODo0NTowMCswMjAwIn0=",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "go_error": "parse pairing file: parsing time \"2026-09-14T18:45:00+0200\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"+0200\" as \"Z07:00\"",
+        "ok": false
+      }
+    },
+    {
+      "id": "parse/pairing-file-empty-fraction",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wOS0xNFQxODo0NTowMC5aIn0=",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "go_error": "parse pairing file: parsing time \"2026-09-14T18:45:00.Z\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \".Z\" as \"Z07:00\"",
+        "ok": false
+      }
+    },
+    {
+      "id": "parse/pairing-file-comma-fraction",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wOS0xNFQxODo0NTowMCw1WiJ9",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "ok": true,
+        "parsed": {
+          "created_at_json": "\"2026-09-14T18:45:00.5Z\"",
+          "public_key": "",
+          "token": ""
+        }
+      }
+    },
+    {
+      "id": "parse/pairing-file-trailing-garbage",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wOS0xNFQxODo0NTowMFpaIn0=",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "go_error": "parse pairing file: parsing time \"2026-09-14T18:45:00ZZ\": extra text: \"Z\"",
+        "ok": false
+      }
+    },
+    {
+      "id": "parse/pairing-file-single-digit-month",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJjcmVhdGVkX2F0IjoiMjAyNi05LTE0VDE4OjQ1OjAwWiJ9",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "go_error": "parse pairing file: parsing time \"2026-9-14T18:45:00Z\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"9-14T18:45:00Z\" as \"01\"",
+        "ok": false
+      }
+    },
+    {
+      "id": "parse/pairing-file-lowercase-zulu",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wOS0xNHQxODo0NTowMHoifQ==",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "go_error": "parse pairing file: parsing time \"2026-09-14t18:45:00z\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"t18:45:00z\" as \"T\"",
+        "ok": false
+      }
+    },
+    {
+      "id": "parse/pairing-file-missing-zone",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wOS0xNFQxODo0NTowMCJ9",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "go_error": "parse pairing file: parsing time \"2026-09-14T18:45:00\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"\" as \"Z07:00\"",
+        "ok": false
+      }
+    },
+    {
+      "id": "parse/pairing-file-second-sixty",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJjcmVhdGVkX2F0IjoiMjAyNi0wOS0xNFQxODo0NTo2MFoifQ==",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "go_error": "parse pairing file: parsing time \"2026-09-14T18:45:60Z\": second out of range",
+        "ok": false
+      }
+    },
+    {
+      "id": "parse/pairing-file-case-variant-duplicate",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJ0b2tlbiI6Imxvd2VyIiwiVG9rZW4iOiJ1cHBlciIsInB1YmxpY19rZXkiOiJhZ2UxcWwzejdoank1NHB3M2h5d3c1YXl5Zmc3enFndmM3dzNqMmVsdzh6bXJqMmtnNXNmbjlhcW1jYWM4cCIsImNyZWF0ZWRfYXQiOiIyMDI2LTA5LTE0VDE4OjQ1OjAwWiJ9",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "ok": true,
+        "parsed": {
+          "created_at_json": "\"2026-09-14T18:45:00Z\"",
+          "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",
+          "token": "upper"
+        }
+      }
+    },
+    {
+      "id": "parse/pairing-file-invalid-json",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "bm90IGpzb24=",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "go_error": "parse pairing file: invalid character 'o' in literal null (expecting 'u')",
+        "ok": false
+      }
+    },
+    {
+      "id": "parse/pairing-file-truncated",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJ0b2tlbiI6IkFCQ0Qi",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "go_error": "parse pairing file: unexpected end of JSON input",
+        "ok": false
+      }
+    },
+    {
+      "id": "parse/pairing-file-wrong-type-token",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJ0b2tlbiI6NDJ9",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "go_error": "parse pairing file: json: cannot unmarshal number into Go struct field PairingFile.token of type string",
+        "ok": false
+      }
+    },
+    {
+      "id": "parse/pairing-file-bad-time",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJjcmVhdGVkX2F0IjoiMTQuMDkuMjAyNiJ9",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "go_error": "parse pairing file: parsing time \"14.09.2026\" as \"2006-01-02T15:04:05Z07:00\": cannot parse \"14.09.2026\" as \"2006\"",
+        "ok": false
+      }
+    },
+    {
+      "id": "parse/pairing-file-array",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "W10=",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "go_error": "parse pairing file: json: cannot unmarshal array into Go value of type pairing.PairingFile",
+        "ok": false
+      }
+    },
+    {
+      "id": "parse/pairing-file-empty",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "",
+        "kind": "pairing_file"
+      },
+      "expected": {
+        "go_error": "parse pairing file: unexpected end of JSON input",
+        "ok": false
+      }
+    },
+    {
+      "id": "parse/join-response-canonical",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJ0b2tlbiI6IkFCQ0QiLCJuYW1lIjoibGFwdG9wLTIiLCJwdWJsaWNfa2V5IjoiYWdlMWxnZ3locXJ3Mm5saGN4cHJtNjd6NDNydGE1OTdhem44Z2tuYXdqZWh1OWQ5ZGwwanEzeXFxdmZhZmciLCJjcmVhdGVkX2F0IjoiMjAyNi0wOS0xNFQxODo0NjowMVoifQ==",
+        "kind": "join_response"
+      },
+      "expected": {
+        "ok": true,
+        "parsed": {
+          "created_at_json": "\"2026-09-14T18:46:01Z\"",
+          "name": "laptop-2",
+          "public_key": "age1lggyhqrw2nlhcxprm67z43rta597azn8gknawjehu9d9dl0jq3yqqvfafg",
+          "token": "ABCD"
+        }
+      }
+    },
+    {
+      "id": "parse/join-response-missing-name",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJ0b2tlbiI6IkFCQ0QiLCJwdWJsaWNfa2V5IjoiYWdlMWxnZ3locXJ3Mm5saGN4cHJtNjd6NDNydGE1OTdhem44Z2tuYXdqZWh1OWQ5ZGwwanEzeXFxdmZhZmciLCJjcmVhdGVkX2F0IjoiMjAyNi0wOS0xNFQxODo0NjowMVoifQ==",
+        "kind": "join_response"
+      },
+      "expected": {
+        "ok": true,
+        "parsed": {
+          "created_at_json": "\"2026-09-14T18:46:01Z\"",
+          "name": "",
+          "public_key": "age1lggyhqrw2nlhcxprm67z43rta597azn8gknawjehu9d9dl0jq3yqqvfafg",
+          "token": "ABCD"
+        }
+      }
+    },
+    {
+      "id": "parse/join-response-invalid-json",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "ew==",
+        "kind": "join_response"
+      },
+      "expected": {
+        "go_error": "parse join response: unexpected end of JSON input",
+        "ok": false
+      }
+    },
+    {
+      "id": "parse/join-response-wrong-type-name",
+      "seam": "PAIRING-001",
+      "input": {
+        "data_b64": "eyJuYW1lIjpbMSwyXX0=",
+        "kind": "join_response"
+      },
+      "expected": {
+        "go_error": "parse join response: json: cannot unmarshal array into Go struct field JoinResponse.name of type string",
+        "ok": false
+      }
+    },
+    {
+      "id": "filenames/canonical-token",
+      "seam": "PAIRING-001",
+      "input": {
+        "token_b64": "QzVIN0dKSzlNMk40UDZROFIwUzFUM1Y1VTdBOUIxRDM="
+      },
+      "expected": {
+        "names": [
+          "C5H7GJK9M2N4P6Q8R0S1T3V5U7A9B1D3-joined.json",
+          "C5H7GJK9M2N4P6Q8R0S1T3V5U7A9B1D3-response.json"
+        ]
+      }
+    },
+    {
+      "id": "filenames/short-token",
+      "seam": "PAIRING-001",
+      "input": {
+        "token_b64": "QUJDRA=="
+      },
+      "expected": {
+        "names": [
+          "ABCD-joined.json",
+          "ABCD-response.json"
+        ]
+      }
+    },
+    {
+      "id": "filenames/empty-token",
+      "seam": "PAIRING-001",
+      "input": {
+        "token_b64": ""
+      },
+      "expected": {
+        "names": [
+          "-joined.json",
+          "-response.json"
+        ]
+      }
+    },
+    {
+      "id": "validate/generated-shape",
+      "seam": "PAIRING-001",
+      "input": {
+        "token_b64": "QzVIN0dKSzlNMk40UDZROFIwUzFUM1Y1VTdBOUIxRDM="
+      },
+      "expected": {
+        "ok": true
+      }
+    },
+    {
+      "id": "validate/lowercase",
+      "seam": "PAIRING-001",
+      "input": {
+        "token_b64": "YzVoN2dqazltMm40cDZxOHIwczF0M3Y1dTdhOWIxZDM="
+      },
+      "expected": {
+        "ok": true
+      }
+    },
+    {
+      "id": "validate/mixed-case",
+      "seam": "PAIRING-001",
+      "input": {
+        "token_b64": "QWJDZEVmMDEyMzQ1Njc4OQ=="
+      },
+      "expected": {
+        "ok": true
+      }
+    },
+    {
+      "id": "validate/empty",
+      "seam": "PAIRING-001",
+      "input": {
+        "token_b64": ""
+      },
+      "expected": {
+        "go_error": "invalid pairing token format",
+        "ok": false
+      }
+    },
+    {
+      "id": "validate/forward-slash",
+      "seam": "PAIRING-001",
+      "input": {
+        "token_b64": "QUJDRC9FRkdI"
+      },
+      "expected": {
+        "go_error": "invalid pairing token format",
+        "ok": false
+      }
+    },
+    {
+      "id": "validate/backslash",
+      "seam": "PAIRING-001",
+      "input": {
+        "token_b64": "QUJDRFxFRkdI"
+      },
+      "expected": {
+        "go_error": "invalid pairing token format",
+        "ok": false
+      }
+    },
+    {
+      "id": "validate/dot-dot",
+      "seam": "PAIRING-001",
+      "input": {
+        "token_b64": "Li5BQkNE"
+      },
+      "expected": {
+        "go_error": "invalid pairing token format",
+        "ok": false
+      }
+    },
+    {
+      "id": "validate/null-byte",
+      "seam": "PAIRING-001",
+      "input": {
+        "token_b64": "QUJDRABFRkdI"
+      },
+      "expected": {
+        "go_error": "invalid pairing token format",
+        "ok": false
+      }
+    },
+    {
+      "id": "validate/newline",
+      "seam": "PAIRING-001",
+      "input": {
+        "token_b64": "QUJDRApFRkdI"
+      },
+      "expected": {
+        "go_error": "invalid pairing token format",
+        "ok": false
+      }
+    },
+    {
+      "id": "validate/tab",
+      "seam": "PAIRING-001",
+      "input": {
+        "token_b64": "QUJDRAlFRkdI"
+      },
+      "expected": {
+        "go_error": "invalid pairing token format",
+        "ok": false
+      }
+    },
+    {
+      "id": "validate/delete-control",
+      "seam": "PAIRING-001",
+      "input": {
+        "token_b64": "QUJDRH9FRkdI"
+      },
+      "expected": {
+        "go_error": "invalid pairing token format",
+        "ok": false
+      }
+    },
+    {
+      "id": "validate/out-of-alphabet-w",
+      "seam": "PAIRING-001",
+      "input": {
+        "token_b64": "QUJDRFc="
+      },
+      "expected": {
+        "go_error": "invalid pairing token format",
+        "ok": false
+      }
+    },
+    {
+      "id": "validate/out-of-alphabet-y-upper",
+      "seam": "PAIRING-001",
+      "input": {
+        "token_b64": "QUJDRFk="
+      },
+      "expected": {
+        "go_error": "invalid pairing token format",
+        "ok": false
+      }
+    },
+    {
+      "id": "validate/out-of-alphabet-z-upper",
+      "seam": "PAIRING-001",
+      "input": {
+        "token_b64": "QUJDRFo="
+      },
+      "expected": {
+        "go_error": "invalid pairing token format",
+        "ok": false
+      }
+    },
+    {
+      "id": "validate/out-of-alphabet-w-lower",
+      "seam": "PAIRING-001",
+      "input": {
+        "token_b64": "YWJjZHc="
+      },
+      "expected": {
+        "go_error": "invalid pairing token format",
+        "ok": false
+      }
+    },
+    {
+      "id": "validate/space",
+      "seam": "PAIRING-001",
+      "input": {
+        "token_b64": "QUJDRCBFRkdI"
+      },
+      "expected": {
+        "go_error": "invalid pairing token format",
+        "ok": false
+      }
+    },
+    {
+      "id": "validate/unicode-digit",
+      "seam": "PAIRING-001",
+      "input": {
+        "token_b64": "QUJDRNmg"
+      },
+      "expected": {
+        "go_error": "invalid pairing token format",
+        "ok": false
+      }
+    },
+    {
+      "id": "validate/non-ascii-letter",
+      "seam": "PAIRING-001",
+      "input": {
+        "token_b64": "QUJDRMOk"
+      },
+      "expected": {
+        "go_error": "invalid pairing token format",
+        "ok": false
+      }
+    },
+    {
+      "id": "validate/length-64",
+      "seam": "PAIRING-001",
+      "input": {
+        "token_b64": "MDEyMzQ1Njc4OUFCQ0RFRkdISUpLTE1OT1BRUlNUVVYwMTIzNDU2Nzg5QUJDREVGR0hJSktMTU5PUFFSU1RVVg=="
+      },
+      "expected": {
+        "ok": true
+      }
+    },
+    {
+      "id": "validate/length-65",
+      "seam": "PAIRING-001",
+      "input": {
+        "token_b64": "MDEyMzQ1Njc4OUFCQ0RFRkdISUpLTE1OT1BRUlNUVVYwMTIzNDU2Nzg5QUJDREVGR0hJSktMTU5PUFFSU1RVVkE="
+      },
+      "expected": {
+        "go_error": "invalid pairing token format",
+        "ok": false
+      }
+    },
+    {
+      "id": "display/thirty-two",
+      "seam": "PAIRING-001",
+      "input": {
+        "token_b64": "QzVIN0dKSzlNMk40UDZROFIwUzFUM1Y1VTdBOUIxRDM="
+      },
+      "expected": {
+        "display": "C5H7-GJK9-M2N4-P6Q8-R0S1-T3V5-U7A9-B1D3",
+        "string": "C5H7GJK9M2N4P6Q8R0S1T3V5U7A9B1D3"
+      }
+    },
+    {
+      "id": "display/four",
+      "seam": "PAIRING-001",
+      "input": {
+        "token_b64": "QUJDRA=="
+      },
+      "expected": {
+        "display": "ABCD",
+        "string": "ABCD"
+      }
+    },
+    {
+      "id": "display/five",
+      "seam": "PAIRING-001",
+      "input": {
+        "token_b64": "QUJDREU="
+      },
+      "expected": {
+        "display": "ABCD-E",
+        "string": "ABCDE"
+      }
+    },
+    {
+      "id": "display/one",
+      "seam": "PAIRING-001",
+      "input": {
+        "token_b64": "QQ=="
+      },
+      "expected": {
+        "display": "A",
+        "string": "A"
+      }
+    },
+    {
+      "id": "display/empty",
+      "seam": "PAIRING-001",
+      "input": {
+        "token_b64": ""
+      },
+      "expected": {
+        "display": "",
+        "string": ""
+      }
+    },
+    {
+      "id": "display/seven",
+      "seam": "PAIRING-001",
+      "input": {
+        "token_b64": "QUJDREVGRw=="
+      },
+      "expected": {
+        "display": "ABCD-EFG",
+        "string": "ABCDEFG"
+      }
+    },
+    {
+      "id": "store/store-and-validate",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "op": "store",
+            "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",
+            "token": "ABCD"
+          },
+          {
+            "op": "validate",
+            "token": "ABCD"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "ok": true,
+            "op": "store"
+          },
+          {
+            "ok": true,
+            "op": "validate",
+            "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
+          }
+        ]
+      }
+    },
+    {
+      "id": "store/single-use-replay-rejected",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "op": "store",
+            "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",
+            "token": "ABCD"
+          },
+          {
+            "op": "validate",
+            "token": "ABCD"
+          },
+          {
+            "op": "validate",
+            "token": "ABCD"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "ok": true,
+            "op": "store"
+          },
+          {
+            "ok": true,
+            "op": "validate",
+            "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
+          },
+          {
+            "ok": false,
+            "op": "validate",
+            "public_key": ""
+          }
+        ]
+      }
+    },
+    {
+      "id": "store/unknown-token",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "op": "validate",
+            "token": "NOPE"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "ok": false,
+            "op": "validate",
+            "public_key": ""
+          }
+        ]
+      }
+    },
+    {
+      "id": "store/expired-token-rejected",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "op": "set_ttl_ms",
+            "ttl_ms": -1000
+          },
+          {
+            "op": "store",
+            "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",
+            "token": "ABCD"
+          },
+          {
+            "op": "validate",
+            "token": "ABCD"
+          },
+          {
+            "op": "validate",
+            "token": "ABCD"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "op": "set_ttl_ms"
+          },
+          {
+            "ok": true,
+            "op": "store"
+          },
+          {
+            "ok": false,
+            "op": "validate",
+            "public_key": ""
+          },
+          {
+            "ok": false,
+            "op": "validate",
+            "public_key": ""
+          }
+        ]
+      }
+    },
+    {
+      "id": "store/cleanup-removes-expired",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "op": "set_ttl_ms",
+            "ttl_ms": -1000
+          },
+          {
+            "op": "store",
+            "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",
+            "token": "ABCD"
+          },
+          {
+            "op": "cleanup"
+          },
+          {
+            "op": "validate",
+            "token": "ABCD"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "op": "set_ttl_ms"
+          },
+          {
+            "ok": true,
+            "op": "store"
+          },
+          {
+            "op": "cleanup"
+          },
+          {
+            "ok": false,
+            "op": "validate",
+            "public_key": ""
+          }
+        ]
+      }
+    },
+    {
+      "id": "store/cleanup-keeps-live",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "op": "store",
+            "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",
+            "token": "ABCD"
+          },
+          {
+            "op": "cleanup"
+          },
+          {
+            "op": "validate",
+            "token": "ABCD"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "ok": true,
+            "op": "store"
+          },
+          {
+            "op": "cleanup"
+          },
+          {
+            "ok": true,
+            "op": "validate",
+            "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
+          }
+        ]
+      }
+    },
+    {
+      "id": "store/global-cooldown-burns-valid-token",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "op": "store",
+            "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",
+            "token": "ABCD"
+          },
+          {
+            "op": "validate",
+            "token": "WRONG1"
+          },
+          {
+            "op": "validate",
+            "token": "WRONG2"
+          },
+          {
+            "op": "validate",
+            "token": "WRONG3"
+          },
+          {
+            "op": "validate",
+            "token": "WRONG4"
+          },
+          {
+            "op": "validate",
+            "token": "WRONG5"
+          },
+          {
+            "op": "validate",
+            "token": "ABCD"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "ok": true,
+            "op": "store"
+          },
+          {
+            "ok": false,
+            "op": "validate",
+            "public_key": ""
+          },
+          {
+            "ok": false,
+            "op": "validate",
+            "public_key": ""
+          },
+          {
+            "ok": false,
+            "op": "validate",
+            "public_key": ""
+          },
+          {
+            "ok": false,
+            "op": "validate",
+            "public_key": ""
+          },
+          {
+            "ok": false,
+            "op": "validate",
+            "public_key": ""
+          },
+          {
+            "ok": false,
+            "op": "validate",
+            "public_key": ""
+          }
+        ]
+      }
+    },
+    {
+      "id": "store/four-failures-do-not-cooldown",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "op": "store",
+            "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",
+            "token": "ABCD"
+          },
+          {
+            "op": "validate",
+            "token": "WRONG1"
+          },
+          {
+            "op": "validate",
+            "token": "WRONG2"
+          },
+          {
+            "op": "validate",
+            "token": "WRONG3"
+          },
+          {
+            "op": "validate",
+            "token": "WRONG4"
+          },
+          {
+            "op": "validate",
+            "token": "ABCD"
+          },
+          {
+            "op": "validate",
+            "token": "ABCD"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "ok": true,
+            "op": "store"
+          },
+          {
+            "ok": false,
+            "op": "validate",
+            "public_key": ""
+          },
+          {
+            "ok": false,
+            "op": "validate",
+            "public_key": ""
+          },
+          {
+            "ok": false,
+            "op": "validate",
+            "public_key": ""
+          },
+          {
+            "ok": false,
+            "op": "validate",
+            "public_key": ""
+          },
+          {
+            "ok": true,
+            "op": "validate",
+            "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
+          },
+          {
+            "ok": false,
+            "op": "validate",
+            "public_key": ""
+          }
+        ]
+      }
+    },
+    {
+      "id": "store/expired-counts-as-failed-attempt",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "op": "set_ttl_ms",
+            "ttl_ms": -1000
+          },
+          {
+            "op": "store",
+            "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",
+            "token": "E1"
+          },
+          {
+            "op": "store",
+            "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",
+            "token": "E2"
+          },
+          {
+            "op": "store",
+            "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",
+            "token": "E3"
+          },
+          {
+            "op": "store",
+            "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",
+            "token": "E4"
+          },
+          {
+            "op": "store",
+            "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",
+            "token": "E5"
+          },
+          {
+            "op": "set_ttl_ms",
+            "ttl_ms": 300000
+          },
+          {
+            "op": "store",
+            "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",
+            "token": "LIVE"
+          },
+          {
+            "op": "validate",
+            "token": "E1"
+          },
+          {
+            "op": "validate",
+            "token": "E2"
+          },
+          {
+            "op": "validate",
+            "token": "E3"
+          },
+          {
+            "op": "validate",
+            "token": "E4"
+          },
+          {
+            "op": "validate",
+            "token": "E5"
+          },
+          {
+            "op": "validate",
+            "token": "LIVE"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "op": "set_ttl_ms"
+          },
+          {
+            "ok": true,
+            "op": "store"
+          },
+          {
+            "ok": true,
+            "op": "store"
+          },
+          {
+            "ok": true,
+            "op": "store"
+          },
+          {
+            "ok": true,
+            "op": "store"
+          },
+          {
+            "ok": true,
+            "op": "store"
+          },
+          {
+            "op": "set_ttl_ms"
+          },
+          {
+            "ok": true,
+            "op": "store"
+          },
+          {
+            "ok": false,
+            "op": "validate",
+            "public_key": ""
+          },
+          {
+            "ok": false,
+            "op": "validate",
+            "public_key": ""
+          },
+          {
+            "ok": false,
+            "op": "validate",
+            "public_key": ""
+          },
+          {
+            "ok": false,
+            "op": "validate",
+            "public_key": ""
+          },
+          {
+            "ok": false,
+            "op": "validate",
+            "public_key": ""
+          },
+          {
+            "ok": false,
+            "op": "validate",
+            "public_key": ""
+          }
+        ]
+      }
+    },
+    {
+      "id": "store/overwrite-same-token",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "op": "store",
+            "public_key": "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p",
+            "token": "ABCD"
+          },
+          {
+            "op": "store",
+            "public_key": "age1lggyhqrw2nlhcxprm67z43rta597azn8gknawjehu9d9dl0jq3yqqvfafg",
+            "token": "ABCD"
+          },
+          {
+            "op": "validate",
+            "token": "ABCD"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "ok": true,
+            "op": "store"
+          },
+          {
+            "ok": true,
+            "op": "store"
+          },
+          {
+            "ok": true,
+            "op": "validate",
+            "public_key": "age1lggyhqrw2nlhcxprm67z43rta597azn8gknawjehu9d9dl0jq3yqqvfafg"
+          }
+        ]
+      }
+    }
+  ],
+  "scope": {
+    "artifact_bytes": "byte contract: json.MarshalIndent with two-space indent, Go HTML escaping, and RFC3339Nano times",
+    "device_sessions": "out of scope here: DeviceSessionStore belongs to APPROVAL-001 under RUST-011, against its own advanced oracle a518124f",
+    "expiry_clock": "wall-clock independent: expiry is expressed through the exported pairing.TokenTTL, never by sleeping, so --check is not timing dependent",
+    "parse_errors": "semantic contract: accept/reject plus parsed fields; Go error strings are recorded for reference only and are not a Rust parity target",
+    "reencryption": "out of scope here: new-recipient re-encryption on `device accept` is covered by CRYPTO-004 and is not re-frozen by this generator",
+    "token_generation": "not a byte contract: GenerateToken draws from crypto/rand; only its shape (32 base32-hex characters) and ValidatePairingToken acceptance are frozen"
+  }
+}

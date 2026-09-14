@@ -65,11 +65,11 @@
     },
     {
       "id": "RUST-008",
-      "title": "Port git, reconciliation, import/export, and intake",
-      "status": "ready",
+      "title": "Port git, reconciliation, import/export, intake, and device pairing",
+      "status": "in_progress",
       "depends_on": ["RUST-005"],
       "contract_rows": ["GIT-001", "GIT-002", "GIT-003", "IO-001", "IO-002", "IO-003", "PAIRING-001"],
-      "acceptance": ["make sync-io-differential", "cargo test -p symvault-sync --all-features --locked"]
+      "acceptance": ["make sync-io-differential", "cargo test -p symvault-sync --all-features --locked", "make pairing-differential", "PAIRING-001 native 3-OS evidence via .github/workflows/rust-pairing.yml", "PAIRING-001 remains in_progress until the device add/list/revoke registry wiring in cmd/device.go is ported; the handshake artifact codec, alias lookup, token path-safety and token-store semantics are frozen and replayed"]
     },
     {
       "id": "RUST-009",

@@ -1,0 +1,375 @@
+package main
+
+import (
+  "crypto/sha256"
+  "encoding/base64"
+  "encoding/hex"
+  "encoding/json"
+  "fmt"
+  "os"
+  "time"
+
+  "github.com/danieljustus/symaira-vault/internal/pairing"
+)
+
+type Case struct {
+  ID       string `json:"id"`
+  Seam     string `json:"seam"`
+  Input    any    `json:"input"`
+  Expected any    `json:"expected"`
+}
+
+func fail(err error) {
+  if err != nil {
+    panic(err)
+  }
+}
+
+func b64(b []byte) string { return base64.StdEncoding.EncodeToString(b) }
+
+func unb64(s string) []byte {
+  b, e := base64.StdEncoding.DecodeString(s)
+  fail(e)
+  return b
+}
+
+func hash(b []byte) string { s := sha256.Sum256(b); return hex.EncodeToString(s[:]) }
+
+func mustTime(s string) time.Time {
+  t, e := time.Parse(time.RFC3339Nano, s)
+  fail(e)
+  return t
+}
+
+// marshalCase freezes the exact bytes json.MarshalIndent produces for one
+// handshake artifact, including Go's HTML escaping and RFC3339Nano time shape.
+func marshalPairing(id, token, publicKey, createdAt string) Case {
+  pf := pairing.PairingFile{Token: token, PublicKey: publicKey, CreatedAt: mustTime(createdAt)}
+  data, e := pairing.MarshalPairingFile(pf)
+  fail(e)
+  return Case{
+    ID:   id,
+    Seam: "PAIRING-001",
+    Input: map[string]any{
+      "kind": "pairing_file", "token": token, "public_key": publicKey, "created_at": createdAt,
+    },
+    Expected: map[string]any{"bytes_b64": b64(data), "sha256": hash(data)},
+  }
+}
+
+// JoinResponse has no exported marshaller in the pinned oracle; cmd/device.go
+// writes it through savePairingFile, which is json.MarshalIndent with the same
+// two-space indent. Freeze that exact call so the Rust encoder is bound to the
+// real production shape rather than to a re-implementation.
+func marshalJoin(id, token, name, publicKey, createdAt string) Case {
+  jr := pairing.JoinResponse{Token: token, Name: name, PublicKey: publicKey, CreatedAt: mustTime(createdAt)}
+  data, e := json.MarshalIndent(jr, "", "  ")
+  fail(e)
+  return Case{
+    ID:   id,
+    Seam: "PAIRING-001",
+    Input: map[string]any{
+      "kind": "join_response", "token": token, "name": name, "public_key": publicKey, "created_at": createdAt,
+    },
+    Expected: map[string]any{"bytes_b64": b64(data), "sha256": hash(data)},
+  }
+}
+
+// createdAt reports how Go re-serializes a parsed timestamp. Go's RFC3339
+// parser is more permissive than its marshaller — "+24:00" parses but cannot
+// be marshalled — so the marshal error is part of the frozen contract.
+func createdAt(t time.Time) map[string]any {
+  created, e := t.MarshalJSON()
+  if e != nil {
+    return map[string]any{"created_at_marshal_error": e.Error()}
+  }
+  return map[string]any{"created_at_json": string(created)}
+}
+
+func parsedPairing(pf pairing.PairingFile) map[string]any {
+  out := map[string]any{"token": pf.Token, "public_key": pf.PublicKey}
+  for k, v := range createdAt(pf.CreatedAt) {
+    out[k] = v
+  }
+  return out
+}
+
+func parsedJoin(jr pairing.JoinResponse) map[string]any {
+  out := map[string]any{"token": jr.Token, "name": jr.Name, "public_key": jr.PublicKey}
+  for k, v := range createdAt(jr.CreatedAt) {
+    out[k] = v
+  }
+  return out
+}
+
+func parsePairingCase(id, raw string) Case {
+  pf, err := pairing.ParsePairingFile([]byte(raw))
+  expected := map[string]any{"ok": err == nil}
+  if err == nil {
+    expected["parsed"] = parsedPairing(pf)
+  } else {
+    expected["go_error"] = err.Error()
+  }
+  return Case{ID: id, Seam: "PAIRING-001",
+    Input:    map[string]any{"kind": "pairing_file", "data_b64": b64([]byte(raw))},
+    Expected: expected}
+}
+
+func parseJoinCase(id, raw string) Case {
+  jr, err := pairing.ParseJoinResponse([]byte(raw))
+  expected := map[string]any{"ok": err == nil}
+  if err == nil {
+    expected["parsed"] = parsedJoin(jr)
+  } else {
+    expected["go_error"] = err.Error()
+  }
+  return Case{ID: id, Seam: "PAIRING-001",
+    Input:    map[string]any{"kind": "join_response", "data_b64": b64([]byte(raw))},
+    Expected: expected}
+}
+
+func filenamesCase(id, token string) Case {
+  return Case{ID: id, Seam: "PAIRING-001",
+    Input:    map[string]any{"token_b64": b64([]byte(token))},
+    Expected: map[string]any{"names": pairing.ResponseFilenames(token)}}
+}
+
+func validateCase(id, token string) Case {
+  err := pairing.ValidatePairingToken(token)
+  expected := map[string]any{"ok": err == nil}
+  if err != nil {
+    expected["go_error"] = err.Error()
+  }
+  return Case{ID: id, Seam: "PAIRING-001",
+    Input:    map[string]any{"token_b64": b64([]byte(token))},
+    Expected: expected}
+}
+
+func displayCase(id, token string) Case {
+  return Case{ID: id, Seam: "PAIRING-001",
+    Input: map[string]any{"token_b64": b64([]byte(token))},
+    Expected: map[string]any{
+      "display": pairing.Token(token).Display(),
+      "string":  pairing.Token(token).String(),
+    }}
+}
+
+// storeCase replays an operation script against a real pairing.TokenStore.
+// Expiry is expressed through the exported pairing.TokenTTL rather than by
+// sleeping, so the frozen expectations are wall-clock independent and the
+// --check re-run is not timing dependent.
+func storeCase(id string, ops []map[string]any) Case {
+  original := pairing.TokenTTL
+  defer func() { pairing.TokenTTL = original }()
+  ts := pairing.NewTokenStore()
+  results := make([]map[string]any, 0, len(ops))
+  for _, op := range ops {
+    switch op["op"].(string) {
+    case "set_ttl_ms":
+      pairing.TokenTTL = time.Duration(int64(op["ttl_ms"].(int))) * time.Millisecond
+      results = append(results, map[string]any{"op": "set_ttl_ms"})
+    case "store":
+      e := ts.Store(pairing.Token(op["token"].(string)), op["public_key"].(string))
+      results = append(results, map[string]any{"op": "store", "ok": e == nil})
+    case "validate":
+      key, ok := ts.Validate(op["token"].(string))
+      results = append(results, map[string]any{"op": "validate", "ok": ok, "public_key": key})
+    case "cleanup":
+      ts.CleanupExpired()
+      results = append(results, map[string]any{"op": "cleanup"})
+    default:
+      panic("unknown op " + op["op"].(string))
+    }
+  }
+  return Case{ID: id, Seam: "PAIRING-001",
+    Input:    map[string]any{"ops": ops},
+    Expected: map[string]any{"results": results}}
+}
+
+func op(kind string, kv ...any) map[string]any {
+  m := map[string]any{"op": kind}
+  for i := 0; i+1 < len(kv); i += 2 {
+    m[kv[i].(string)] = kv[i+1]
+  }
+  return m
+}
+
+func main() {
+  const pub = "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
+  const joinPub = "age1lggyhqrw2nlhcxprm67z43rta597azn8gknawjehu9d9dl0jq3yqqvfafg"
+
+  cases := []Case{
+    // Handshake artifact bytes — the transport-independent contract.
+    marshalPairing("marshal/pairing-file-utc", "C5H7GJK9M2N4P6Q8R0S1T3V5U7A9B1D3", pub, "2026-09-14T18:45:00Z"),
+    marshalPairing("marshal/pairing-file-nanos", "0123456789ABCDEFGHIJKLMNOPQRSTUV", pub, "2026-09-14T18:45:00.123456789Z"),
+    marshalPairing("marshal/pairing-file-trailing-zero-nanos", "ABCD", pub, "2026-09-14T18:45:00.100000000Z"),
+    marshalPairing("marshal/pairing-file-offset", "ABCD", pub, "2026-09-14T20:45:00+02:00"),
+    marshalPairing("marshal/pairing-file-negative-offset", "ABCD", pub, "2026-09-14T13:45:00-05:00"),
+    marshalPairing("marshal/pairing-file-control-chars", "ABCD", "a\tb\nc\rd\x01e\x7ff\"g\\h", "2026-09-14T18:45:00Z"),
+    marshalPairing("marshal/pairing-file-zero-time", "ABCD", pub, "0001-01-01T00:00:00Z"),
+    marshalPairing("marshal/pairing-file-html-chars", "ABCD", "<script>& key", "2026-09-14T18:45:00Z"),
+    marshalPairing("marshal/pairing-file-empty-fields", "", "", "2026-09-14T18:45:00Z"),
+    marshalJoin("marshal/join-response-named", "C5H7GJK9M2N4P6Q8R0S1T3V5U7A9B1D3", "laptop-2", joinPub, "2026-09-14T18:46:01Z"),
+    marshalJoin("marshal/join-response-empty-name", "ABCD", "", joinPub, "2026-09-14T18:46:01.5Z"),
+    marshalJoin("marshal/join-response-unicode-name", "ABCD", "büro-mac ü中", joinPub, "2026-09-14T18:46:01Z"),
+
+    // Parsing — accepted shapes and every rejected shape.
+    parsePairingCase("parse/pairing-file-canonical", "{\n  \"token\": \"ABCD\",\n  \"public_key\": \""+pub+"\",\n  \"created_at\": \"2026-09-14T18:45:00Z\"\n}"),
+    parsePairingCase("parse/pairing-file-unknown-field", "{\"token\":\"ABCD\",\"public_key\":\""+pub+"\",\"created_at\":\"2026-09-14T18:45:00Z\",\"extra\":42}"),
+    parsePairingCase("parse/pairing-file-case-insensitive-keys", "{\"Token\":\"ABCD\",\"PUBLIC_KEY\":\""+pub+"\",\"Created_At\":\"2026-09-14T18:45:00Z\"}"),
+    parsePairingCase("parse/pairing-file-duplicate-keys-last-wins", "{\"token\":\"FIRST\",\"token\":\"SECOND\",\"public_key\":\""+pub+"\",\"created_at\":\"2026-09-14T18:45:00Z\"}"),
+    parsePairingCase("parse/pairing-file-missing-fields", "{}"),
+    parsePairingCase("parse/pairing-file-null-fields", "{\"token\":null,\"public_key\":null,\"created_at\":null}"),
+    parsePairingCase("parse/pairing-file-offset-time", "{\"token\":\"ABCD\",\"public_key\":\""+pub+"\",\"created_at\":\"2026-09-14T20:45:00+02:00\"}"),
+    parsePairingCase("parse/pairing-file-utc-plus-zero-offset", "{\"token\":\"ABCD\",\"public_key\":\""+pub+"\",\"created_at\":\"2026-09-14T18:45:00+00:00\"}"),
+    parsePairingCase("parse/pairing-file-fractional-seconds", "{\"created_at\":\"2026-09-14T18:45:00.123Z\"}"),
+    parsePairingCase("parse/pairing-file-fraction-twelve-digits", "{\"created_at\":\"2026-09-14T18:45:00.123456789012Z\"}"),
+    parsePairingCase("parse/pairing-file-lowercase-t", "{\"created_at\":\"2026-09-14t18:45:00Z\"}"),
+    parsePairingCase("parse/pairing-file-lowercase-z", "{\"created_at\":\"2026-09-14T18:45:00z\"}"),
+    parsePairingCase("parse/pairing-file-day-out-of-range", "{\"created_at\":\"2026-02-30T18:45:00Z\"}"),
+    parsePairingCase("parse/pairing-file-day-thirty-one-in-thirty-day-month", "{\"created_at\":\"2026-09-31T18:45:00Z\"}"),
+    parsePairingCase("parse/pairing-file-day-zero", "{\"created_at\":\"2026-09-00T18:45:00Z\"}"),
+    parsePairingCase("parse/pairing-file-month-out-of-range", "{\"created_at\":\"2026-13-01T18:45:00Z\"}"),
+    parsePairingCase("parse/pairing-file-month-zero", "{\"created_at\":\"2026-00-01T18:45:00Z\"}"),
+    parsePairingCase("parse/pairing-file-leap-day-valid", "{\"created_at\":\"2028-02-29T00:00:00Z\"}"),
+    parsePairingCase("parse/pairing-file-non-leap-february-29", "{\"created_at\":\"2026-02-29T00:00:00Z\"}"),
+    parsePairingCase("parse/pairing-file-century-non-leap", "{\"created_at\":\"1900-02-29T00:00:00Z\"}"),
+    parsePairingCase("parse/pairing-file-century-leap", "{\"created_at\":\"2000-02-29T00:00:00Z\"}"),
+    parsePairingCase("parse/pairing-file-hour-out-of-range", "{\"created_at\":\"2026-09-14T24:00:00Z\"}"),
+    parsePairingCase("parse/pairing-file-minute-out-of-range", "{\"created_at\":\"2026-09-14T18:60:00Z\"}"),
+    parsePairingCase("parse/pairing-file-offset-hour-out-of-range", "{\"created_at\":\"2026-09-14T18:45:00+24:00\"}"),
+    parsePairingCase("parse/pairing-file-offset-minute-out-of-range", "{\"created_at\":\"2026-09-14T18:45:00+01:60\"}"),
+    parsePairingCase("parse/pairing-file-negative-offset", "{\"created_at\":\"2026-09-14T13:45:00-05:00\"}"),
+    parsePairingCase("parse/pairing-file-offset-without-colon", "{\"created_at\":\"2026-09-14T18:45:00+0200\"}"),
+    parsePairingCase("parse/pairing-file-empty-fraction", "{\"created_at\":\"2026-09-14T18:45:00.Z\"}"),
+    parsePairingCase("parse/pairing-file-comma-fraction", "{\"created_at\":\"2026-09-14T18:45:00,5Z\"}"),
+    parsePairingCase("parse/pairing-file-trailing-garbage", "{\"created_at\":\"2026-09-14T18:45:00ZZ\"}"),
+    parsePairingCase("parse/pairing-file-single-digit-month", "{\"created_at\":\"2026-9-14T18:45:00Z\"}"),
+    parsePairingCase("parse/pairing-file-lowercase-zulu", "{\"created_at\":\"2026-09-14t18:45:00z\"}"),
+    parsePairingCase("parse/pairing-file-missing-zone", "{\"created_at\":\"2026-09-14T18:45:00\"}"),
+    parsePairingCase("parse/pairing-file-second-sixty", "{\"created_at\":\"2026-09-14T18:45:60Z\"}"),
+    parsePairingCase("parse/pairing-file-case-variant-duplicate", "{\"token\":\"lower\",\"Token\":\"upper\",\"public_key\":\""+pub+"\",\"created_at\":\"2026-09-14T18:45:00Z\"}"),
+    parsePairingCase("parse/pairing-file-invalid-json", "not json"),
+    parsePairingCase("parse/pairing-file-truncated", "{\"token\":\"ABCD\""),
+    parsePairingCase("parse/pairing-file-wrong-type-token", "{\"token\":42}"),
+    parsePairingCase("parse/pairing-file-bad-time", "{\"created_at\":\"14.09.2026\"}"),
+    parsePairingCase("parse/pairing-file-array", "[]"),
+    parsePairingCase("parse/pairing-file-empty", ""),
+    parseJoinCase("parse/join-response-canonical", "{\"token\":\"ABCD\",\"name\":\"laptop-2\",\"public_key\":\""+joinPub+"\",\"created_at\":\"2026-09-14T18:46:01Z\"}"),
+    parseJoinCase("parse/join-response-missing-name", "{\"token\":\"ABCD\",\"public_key\":\""+joinPub+"\",\"created_at\":\"2026-09-14T18:46:01Z\"}"),
+    parseJoinCase("parse/join-response-invalid-json", "{"),
+    parseJoinCase("parse/join-response-wrong-type-name", "{\"name\":[1,2]}"),
+
+    // Response artifact aliases — both transports must interoperate.
+    filenamesCase("filenames/canonical-token", "C5H7GJK9M2N4P6Q8R0S1T3V5U7A9B1D3"),
+    filenamesCase("filenames/short-token", "ABCD"),
+    filenamesCase("filenames/empty-token", ""),
+
+    // Path-safety validation of the token used to build artifact filenames.
+    validateCase("validate/generated-shape", "C5H7GJK9M2N4P6Q8R0S1T3V5U7A9B1D3"),
+    validateCase("validate/lowercase", "c5h7gjk9m2n4p6q8r0s1t3v5u7a9b1d3"),
+    validateCase("validate/mixed-case", "AbCdEf0123456789"),
+    validateCase("validate/empty", ""),
+    validateCase("validate/forward-slash", "ABCD/EFGH"),
+    validateCase("validate/backslash", "ABCD\\EFGH"),
+    validateCase("validate/dot-dot", "..ABCD"),
+    validateCase("validate/null-byte", "ABCD\x00EFGH"),
+    validateCase("validate/newline", "ABCD\nEFGH"),
+    validateCase("validate/tab", "ABCD\tEFGH"),
+    validateCase("validate/delete-control", "ABCD\x7fEFGH"),
+    validateCase("validate/out-of-alphabet-w", "ABCDW"),
+    validateCase("validate/out-of-alphabet-y-upper", "ABCDY"),
+    validateCase("validate/out-of-alphabet-z-upper", "ABCDZ"),
+    validateCase("validate/out-of-alphabet-w-lower", "abcdw"),
+    validateCase("validate/space", "ABCD EFGH"),
+    validateCase("validate/unicode-digit", "ABCD٠"),
+    validateCase("validate/non-ascii-letter", "ABCDä"),
+    validateCase("validate/length-64", "0123456789ABCDEFGHIJKLMNOPQRSTUV0123456789ABCDEFGHIJKLMNOPQRSTUV"),
+    validateCase("validate/length-65", "0123456789ABCDEFGHIJKLMNOPQRSTUV0123456789ABCDEFGHIJKLMNOPQRSTUVA"),
+
+    // Human-readable token rendering used by `device pair` output.
+    displayCase("display/thirty-two", "C5H7GJK9M2N4P6Q8R0S1T3V5U7A9B1D3"),
+    displayCase("display/four", "ABCD"),
+    displayCase("display/five", "ABCDE"),
+    displayCase("display/one", "A"),
+    displayCase("display/empty", ""),
+    displayCase("display/seven", "ABCDEFG"),
+
+    // Single-use, expiry and brute-force cooldown of the in-memory token store.
+    storeCase("store/store-and-validate", []map[string]any{
+      op("store", "token", "ABCD", "public_key", pub),
+      op("validate", "token", "ABCD"),
+    }),
+    storeCase("store/single-use-replay-rejected", []map[string]any{
+      op("store", "token", "ABCD", "public_key", pub),
+      op("validate", "token", "ABCD"),
+      op("validate", "token", "ABCD"),
+    }),
+    storeCase("store/unknown-token", []map[string]any{
+      op("validate", "token", "NOPE"),
+    }),
+    storeCase("store/expired-token-rejected", []map[string]any{
+      op("set_ttl_ms", "ttl_ms", -1000),
+      op("store", "token", "ABCD", "public_key", pub),
+      op("validate", "token", "ABCD"),
+      op("validate", "token", "ABCD"),
+    }),
+    storeCase("store/cleanup-removes-expired", []map[string]any{
+      op("set_ttl_ms", "ttl_ms", -1000),
+      op("store", "token", "ABCD", "public_key", pub),
+      op("cleanup"),
+      op("validate", "token", "ABCD"),
+    }),
+    storeCase("store/cleanup-keeps-live", []map[string]any{
+      op("store", "token", "ABCD", "public_key", pub),
+      op("cleanup"),
+      op("validate", "token", "ABCD"),
+    }),
+    storeCase("store/global-cooldown-burns-valid-token", []map[string]any{
+      op("store", "token", "ABCD", "public_key", pub),
+      op("validate", "token", "WRONG1"),
+      op("validate", "token", "WRONG2"),
+      op("validate", "token", "WRONG3"),
+      op("validate", "token", "WRONG4"),
+      op("validate", "token", "WRONG5"),
+      op("validate", "token", "ABCD"),
+    }),
+    storeCase("store/four-failures-do-not-cooldown", []map[string]any{
+      op("store", "token", "ABCD", "public_key", pub),
+      op("validate", "token", "WRONG1"),
+      op("validate", "token", "WRONG2"),
+      op("validate", "token", "WRONG3"),
+      op("validate", "token", "WRONG4"),
+      op("validate", "token", "ABCD"),
+      op("validate", "token", "ABCD"),
+    }),
+    storeCase("store/expired-counts-as-failed-attempt", []map[string]any{
+      op("set_ttl_ms", "ttl_ms", -1000),
+      op("store", "token", "E1", "public_key", pub),
+      op("store", "token", "E2", "public_key", pub),
+      op("store", "token", "E3", "public_key", pub),
+      op("store", "token", "E4", "public_key", pub),
+      op("store", "token", "E5", "public_key", pub),
+      op("set_ttl_ms", "ttl_ms", 300000),
+      op("store", "token", "LIVE", "public_key", pub),
+      op("validate", "token", "E1"),
+      op("validate", "token", "E2"),
+      op("validate", "token", "E3"),
+      op("validate", "token", "E4"),
+      op("validate", "token", "E5"),
+      op("validate", "token", "LIVE"),
+    }),
+    storeCase("store/overwrite-same-token", []map[string]any{
+      op("store", "token", "ABCD", "public_key", pub),
+      op("store", "token", "ABCD", "public_key", joinPub),
+      op("validate", "token", "ABCD"),
+    }),
+  }
+
+  enc := json.NewEncoder(os.Stdout)
+  enc.SetEscapeHTML(false)
+  if e := enc.Encode(map[string]any{"cases": cases}); e != nil {
+    fmt.Fprintln(os.Stderr, e)
+    os.Exit(1)
+  }
+}

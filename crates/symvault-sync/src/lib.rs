@@ -9,8 +9,14 @@ pub mod export;
 pub mod git;
 pub mod importer;
 pub mod intake;
+pub mod pairing;
 pub mod reconcile;
 
 pub use archive::{ArchiveEntry, ArchiveError, backup, restore};
 pub use git::{Commit, CommitOptions, GitError, GitRepository, GitStatus, PullResult, PushResult};
+pub use pairing::{
+    GoTime, JoinResponse, PairingError, PairingFile, TokenStore, display_token,
+    marshal_join_response, marshal_pairing_file, parse_join_response, parse_pairing_file,
+    response_filenames, validate_pairing_token,
+};
 pub use reconcile::{Conflict, ReconcileInput, ReconcileOutput, reconcile};

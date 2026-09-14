@@ -1,4 +1,4 @@
-.PHONY: all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-generate rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates help docs-check
+.PHONY: all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-generate rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential pairing-fixtures-generate pairing-fixtures-check pairing-differential differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates help docs-check
 
 # Variables
 BINARY_NAME := symvault
@@ -181,6 +181,7 @@ PORT_CRYPTO_FIXTURE := testdata/port/core/password-totp-contract.json
 PORT_QUOTA_FIXTURE := testdata/port/core/quota-contract.json
 PORT_POLICY_FIXTURE := testdata/port/core/policy-contract.json
 PORT_SYNC_FIXTURE := testdata/port/sync/sync.json
+PORT_PAIRING_FIXTURE := testdata/port/pairing/contract.json
 PORT_CONFIG_FIXTURE := testdata/port/config/contract.json
 PORT_SESSION_FIXTURE := testdata/port/session/contract.json
 PORT_PLATFORM_FIXTURE := testdata/port/platform/contract.json
@@ -245,7 +246,21 @@ policy-fixtures-generate:
 		--oracle-commit $(PORT_ORACLE_COMMIT) \
 		--oracle-release $(PORT_ORACLE_RELEASE)
 
-sync-io-differential:
+# PAIRING-001. pairinggen pins its own oracle commit as a Go constant, like
+# syncgen, so no oracle flags are passed here.
+pairing-fixtures-generate:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/pairinggen \
+		--output $(PORT_PAIRING_FIXTURE)
+
+pairing-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/pairinggen \
+		--check --output $(PORT_PAIRING_FIXTURE)
+
+pairing-differential: pairing-fixtures-check
+	$(CARGO) test -p symvault-sync --test pairing_contract --locked
+	$(CARGO) test -p symvault-sync --lib --locked
+
+sync-io-differential: pairing-fixtures-check
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/syncgen --check --output $(PORT_SYNC_FIXTURE)
 	$(CARGO) test -p symvault-sync --all-features --locked
 
@@ -330,7 +345,10 @@ rust-fuzz-smoke: rust-fuzz-lock
 rust-fuzz:
 	$(MAKE) rust-fuzz-smoke RUST_FUZZ_RUNS= RUST_FUZZ_MAX_TOTAL_TIME=60
 
-port-contract: port-fixtures-check core-fixtures-check policy-fixtures-check store-metadata-fixtures-check sync-io-differential differential-go-selftest crypto-differential
+# rust-007-fixtures-check is included so the config/session/platform/quota
+# fixture provenance is enforced by CI's `Rust port contract` job, not only by
+# a local `make config-session-differential` run.
+port-contract: port-fixtures-check core-fixtures-check policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential
 
 rust-build:
 	$(CARGO) build --workspace --locked
