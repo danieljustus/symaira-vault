@@ -30,7 +30,10 @@ fn fixture() -> OracleFixture {
     const CONTENT: &[u8] = include_bytes!("../../../testdata/port/config_profiles_contract.json");
     let fixture: OracleFixture =
         serde_json::from_slice(CONTENT).expect("decode pinned Go profile oracle");
-    assert_eq!(fixture.oracle["commit"], "caadd5ef95e8f19fabd3ae3d2c04caa296f2fd44");
+    assert_eq!(
+        fixture.oracle["commit"],
+        "caadd5ef95e8f19fabd3ae3d2c04caa296f2fd44"
+    );
     assert_eq!(fixture.oracle["release"], "v0.22.1");
     assert_eq!(fixture.oracle["source_digest"].as_str().unwrap().len(), 64);
     assert_eq!(
