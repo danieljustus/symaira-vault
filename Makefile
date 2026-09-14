@@ -260,6 +260,11 @@ pairing-differential: pairing-fixtures-check
 	$(CARGO) test -p symvault-sync --test pairing_contract --locked
 	$(CARGO) test -p symvault-sync --lib --locked
 
+.PHONY: device-list-differential
+device-list-differential:
+	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/test_device_list_differential.py
+	python3 scripts/rust-port/device_list_differential.py --report $(CARGO_TARGET_DIR)/device-list-differential.json
+
 sync-io-differential: pairing-fixtures-check
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/syncgen --check --output $(PORT_SYNC_FIXTURE)
 	$(CARGO) test -p symvault-sync --all-features --locked

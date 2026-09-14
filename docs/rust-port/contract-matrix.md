@@ -42,7 +42,7 @@ pre-existing but previously undocumented here; all other rows, including
 | AUDIT-001 | HMAC chain | fixed key/clock/event corpus | Go audit | canonical JSON, HMAC chain, `kid`, reset detection | byte vectors; local macOS differential twice clean; native 3-OS matrix verified passing in `.github/workflows/rust-audit.yml` (run 34877175625 and 34840987521 on ubuntu/macOS/Windows); non-CI targets remain blocked until native runners execute | all | bytes | PASS |
 | AUDIT-002 | key rotation/export | pre/post-rotation logs | Go audit | archive naming, verification, redaction, filters | fixture suite; local macOS differential twice clean; native 3-OS matrix verified passing in `.github/workflows/rust-audit.yml` (run 34877175625 and 34840987521 on ubuntu/macOS/Windows); non-CI targets remain blocked until native runners execute | all | bytes + metadata | PASS |
 | SESSION-001 | cache | save/load/touch/expiry/revoke | Go session | idle/max TTL and non-refreshing probes | generated session fixture + `symvault-core` injected MemoryKeyring/session tests | all | semantic | in_progress |
-| SESSION-002 | OS keyring | memory backend + native smoke | Go session | service/account names, binary payload, unavailable behavior | injected tests plus macOS `MacOsKeyring` compile path and malformed-key fail-closed test; no real keychain access | macOS local; other native OS pending | semantic | in_progress |
+| SESSION-002 | OS keyring | memory backend + native smoke | Go session | service/account names, binary payload, unavailable behavior | injected tests plus explicit `native_keyring_binary_roundtrip_and_delete`: first diagnostic run on macOS arm64 with host HOME passed missing/set/binary get/update/delete/idempotent delete using a newly generated test-only service/account; the required private-HOME rerun failed before any write because the native keychain was unavailable. This is not isolated native acceptance. No existing credential was read; Go/Rust session interchange and other OS backends remain unverified | macOS diagnostic only; isolated and other native OS pending | semantic | in_progress |
 | SESSION-003 | Touch ID | available/unavailable/cancel/failure | Go Darwin bridge | prompts, fallback, no passphrase exposure | macOS LocalAuthentication JXA adapter; non-interactive availability and decision-only script tests; auth prompt/hardware smoke not run | macOS local; hardware/signed-app CI pending | semantic | in_progress |
 | PLATFORM-001 | clipboard/autotype | fake backend + native smoke | Go adapters | permission, clear timer, field routing, cancellation | injected trait tests plus macOS `pbcopy`/JXA adapters and non-interactive capability probes; clipboard/autotype side effects not run | macOS local; native permission/UI smoke pending | semantic | in_progress |
 | PLATFORM-002 | secure UI/notifications/daemon | injected platform commands | Go adapters | backend selection, escaping, timeouts, lifecycle | injected trait tests plus macOS JXA secure UI/notification and launchd plist adapters; no user LaunchAgent install/status smoke | macOS local; GUI/launchd lifecycle smoke pending | semantic | in_progress |
@@ -89,6 +89,36 @@ pre-existing but previously undocumented here; all other rows, including
 > - `PAIRING-001` — `go test ./internal/pairing/... -run 'TestDeviceSessionStore' -count=1 -v` passes 14 cases at HEAD, including `TestDeviceSessionStore_Revoke`, `_RevokeByOtherInstanceTakesEffect` (negative: revoked token stops authenticating from a second process), `_UnknownToken`, `_ExpiredSession`, `_PersistedFileContainsOnlyHashedValues` (negative: raw bearer never touches disk), and `_MigratesLegacyRawTokenKeys`. Dependencies: `CRYPTO-004` (re-encryption on `device accept`) and the storage/IO family under `RUST-008`.
 > - `APPROVAL-001` — captured at commit `a518124f` (PR #1048, merged 2026-09-12), which is after the `caadd5e`/`v0.22.1` baseline oracle. `go test ./internal/approval/... ./internal/cli/... ./internal/mcp/serverbootstrap/... ./cmd/... -run 'TestLocalHTTPHandler|TestListRequiresDeviceToken|TestRejectsMalformedAuthorization|TestDoubleDecisionConflict|TestApprovalTLSCertFileRejectsMTLSWithoutLocalClientIdentity|TestValidateMTLSSettingsFailsClosed|TestMTLSRejectsUnauthenticatedClient|TestRuntimeTLSConfigPreservesEffectiveApprovalIdentityWithoutKeyMaterial' -count=1 -v` passes at HEAD, covering: remote/bad-proof rejection on the local endpoint, missing/malformed device-token bearer auth, double-decision conflict, mTLS configured without a distinct local client identity, fail-closed mTLS validation, an unauthenticated client rejected by the TLS listener, and effective-identity metadata that carries no key material. Dependencies: `HTTP-002`/`HTTP-004` (bearer/scoped tokens, TLS/origin behavior) and `PAIRING-001` (device-session tokens), so it is grouped with the `RUST-011` wave, not started before it.
 > - No reuse-candidate crate covers either seam; both are Symaira-specific protocol/storage formats, so a hand-ported Rust implementation is expected rather than an upstream dependency.
+
+## Device CLI continuation (2026-09-14)
+
+`PAIRING-001` remains **in_progress**. The candidate now exposes the read-only
+`device list --vault <path>` text/JSON path, including unmanaged recipients,
+registry ordering, optional last-seen timestamps, RFC3339 second precision,
+quiet mode and Go's byte-based key truncation. `make device-list-differential`
+builds the real Go CLI from `git archive caadd5e`, executes both binaries in
+private HOME/XDG roots, compares successful stdout/stderr bytes and verifies
+that neither command changes the vault. Malformed registry cases compare
+failure and stream placement only: exact parser diagnostics remain CLI-005.
+The initial corpus has 35 live cases and a changed-output rejection control;
+the native pairing workflow runs it but native acceptance is pending until
+the actual candidate run succeeds.
+
+Review found that Python's Windows `taskkill /T` cannot reliably terminate
+descendants after the original parent exits. The live runner therefore refuses
+Windows execution before starting a process; this is an implementation gap,
+not an external blocker or native PASS. Next: reuse the existing Go
+`scripts/rust-port/internal/diff.Run` job-object runner for device-list cases,
+then remove the refusal only after its native cleanup regression passes.
+
+This is not the complete device command family. YAML rendering, config/profile
+vault resolution and pair/join/accept/add/revoke remain unported. Missing explicit
+`--vault` and YAML are explicitly rejected rather than silently returning wrong
+results. Mutating commands are not exposed until unlock, identity generation,
+re-encryption, confirmation and git side effects can be implemented together.
+The read-only slice shares output/parser evidence with CLI-005/CLI-006; neither
+row is promoted. The preserved Go `AddRecipient` separator defect is tracked in
+https://github.com/danieljustus/symaira-vault/issues/1055.
 
 ## Rules
 

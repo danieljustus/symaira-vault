@@ -15,3 +15,6 @@ path = "src/main.rs"
 clap.workspace = true
 symvault-core.workspace = true
 symaira-core-version.workspace = true
+symvault-sync = { path = "../symvault-sync", version = "=0.0.0" }
+serde.workspace = true
+serde_json.workspace = true

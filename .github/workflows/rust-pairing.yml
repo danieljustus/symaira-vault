@@ -11,6 +11,8 @@ on:
     # to the handshake contract must execute this gate instead of producing an
     # untested claim.
     paths:
+      - 'crates/symvault-cli/**'
+      - 'scripts/rust-port/*device_list*'
       - '.github/workflows/rust-pairing.yml'
       - '.github/workflows/ci.yml'
       - 'Cargo.toml'
@@ -32,6 +34,8 @@ on:
   pull_request:
     branches: [ main ]
     paths:
+      - 'crates/symvault-cli/**'
+      - 'scripts/rust-port/*device_list*'
       - '.github/workflows/rust-pairing.yml'
       - '.github/workflows/ci.yml'
       - 'Cargo.toml'
@@ -106,3 +110,17 @@ jobs:
         run: |
           set -euo pipefail
           make pairing-differential
+
+      - name: Run read-only device-list CLI differential
+        shell: bash
+        run: |
+          set -euo pipefail
+          make device-list-differential
+
+      - name: Retain live device-list observations
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: device-list-${{ matrix.os }}
+          path: target/device-list-differential.json
+          if-no-files-found: warn

@@ -1,5 +1,7 @@
 #![deny(unsafe_code)]
 
+mod device;
+
 use std::{
     ffi::{OsStr, OsString},
     io::{self, Write},
@@ -23,10 +25,10 @@ const VERSION: &str = match option_env!("SYMVAULT_VERSION") {
     disable_version_flag = true
 )]
 struct Cli {
-    #[arg(long, global = true, default_value = "~/.symvault")]
-    _vault: String,
     #[arg(long, global = true)]
-    _quiet: bool,
+    vault: Option<std::path::PathBuf>,
+    #[arg(long, global = true)]
+    quiet: bool,
     #[arg(long, global = true)]
     _profile: Option<String>,
     #[arg(long, global = true, default_value = "text")]
@@ -47,6 +49,20 @@ struct Cli {
 enum Command {
     /// Print the version of Symaira Vault.
     Version(VersionArgs),
+    /// Manage paired devices for multi-device vault access.
+    Device {
+        #[command(subcommand)]
+        command: DeviceCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum DeviceCommand {
+    /// List registered devices and unmanaged recipients.
+    List {
+        #[arg(value_name = "ARG", num_args = 0..)]
+        _extra: Vec<OsString>,
+    },
 }
 
 #[derive(Debug, Args)]
@@ -64,13 +80,28 @@ fn main() -> ExitCode {
     let cli = match Cli::try_parse_from(args) {
         Ok(cli) => cli,
         Err(error) => {
+            let code = if error.use_stderr() { 1 } else { 0 };
             let _ = error.print();
-            return ExitCode::from(1);
+            return ExitCode::from(code);
         }
     };
 
     match cli.command {
         Some(Command::Version(_)) => write_version(&cli.output, cli.json),
+        Some(Command::Device {
+            command: DeviceCommand::List { .. },
+        }) => {
+            let result = cli.vault.as_deref().ok_or_else(|| {
+                "device list currently requires explicit --vault; config/profile resolution is not yet ported".to_owned()
+            }).and_then(|vault| device::list(vault, &cli.output, cli.json, cli.quiet));
+            match result {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(error) => {
+                    let _ = writeln!(io::stderr(), "Error: {error}");
+                    ExitCode::from(1)
+                }
+            }
+        }
         None => ExitCode::SUCCESS,
     }
 }

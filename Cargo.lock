@@ -2393,8 +2393,11 @@ name = "symvault-cli"
 version = "0.0.0"
 dependencies = [
  "clap",
+ "serde",
+ "serde_json",
  "symaira-core-version",
  "symvault-core",
+ "symvault-sync",
 ]
 
 [[package]]
