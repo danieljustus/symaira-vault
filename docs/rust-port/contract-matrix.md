@@ -103,18 +103,24 @@ The CLI cases use `cmd/caserun`, a thin JSON adapter over the established Go
 `internal/diff.Run` process-tree runner; raw observations include before/after
 manifests, signal and timeout status. Malformed registry cases compare
 failure and stream placement only: exact parser diagnostics remain CLI-005.
-The initial corpus has 35 live cases and a changed-output rejection control;
-the native pairing workflow runs it but native acceptance is pending until
-the actual candidate run succeeds.
+The initial corpus has 35 live cases and a changed-output rejection control.
+Native read-only acceptance passed on macOS arm64, Linux x86_64 and Windows
+x86_64 at `49fa5d710f958854b26c998d8f88a690fa3a5ac2` in
+[run 34902099288](https://github.com/danieljustus/symaira-vault/actions/runs/34902099288).
+All three downloaded reports were checked for the exact SHA, complete unique
+case IDs, mutation rejection, unchanged sandbox manifests and absent
+signals/timeouts. This evidence covers only this read-only slice, not complete
+PAIRING-001 or the remaining configuration/profile and mutation paths.
 
 Review found that Python's Windows `taskkill /T` cannot reliably terminate
 descendants after the original parent exits. The CLI cases now reuse the Go
 job-object runner. `make device-list-differential` also starts the entire Python
 build/test driver through `cmd/devicelistdriver` and the same Go runner, so the
 Windows job owns bootstrap toolchain descendants as well as CLI descendants.
-Direct unsupervised Python execution on Windows is refused. This is implemented
-locally, not native Windows PASS: the workflow must execute the adapter and
-established cleanup regression tests, followed by the actual supervised driver.
+Direct unsupervised Python execution on Windows is refused; the actual job
+limits are queried before any build. Native adapter/cleanup tests and the
+supervised driver passed in the run above. The supervisor independently
+validates the complete report and raw observations before returning success.
 Reports use fresh timestamped paths and exclusive creation rather than
 overwriting prior evidence.
 
