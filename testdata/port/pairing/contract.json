@@ -5,19 +5,21 @@
     "release": "v0.22.1",
     "source_files": [
       "cmd/device.go",
+      "internal/crypto/age.go",
       "internal/fsutil/reexport.go",
       "internal/pairing/devicesession.go",
       "internal/pairing/token.go",
       "internal/vault/devices.go",
+      "internal/vault/recipients.go",
       "internal/vault/symlink_harden.go",
       "internal/vault/symlink_harden_windows.go"
     ],
-    "source_digest": "58e165360d5007c22dd9116b6009e7e071865ad896015bfd733ab8f36689c197",
+    "source_digest": "d0101b60a1f738558f5b67dbf2a0669a5fa64350931f06f9c7deeb799b876018",
     "generator_files": [
       "scripts/rust-port/cmd/pairinggen/main.go",
       "scripts/rust-port/cmd/pairinggen/oracle.go.txt"
     ],
-    "generator_digest": "1697a33c8cc7b3105c29529988cc3505ff225650d29f2e0b7f719138be294abc"
+    "generator_digest": "8a5c067b4cecea621ea8346fb618ff0efcd362fafc619cdae2d77e952dd3defe"
   },
   "cases": [
     {
@@ -2476,6 +2478,977 @@
       }
     },
     {
+      "id": "recipients/add-creates-the-file",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "op": "exists"
+          },
+          {
+            "op": "add",
+            "recipient": "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y"
+          },
+          {
+            "op": "exists"
+          },
+          {
+            "op": "file"
+          },
+          {
+            "op": "load"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "exists": false,
+            "op": "exists"
+          },
+          {
+            "error_class": "",
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "exists": true,
+            "op": "exists"
+          },
+          {
+            "bytes_b64": "YWdlMW1kd2F2azRucmFsc3g2dGU4dWN2ZGVueXhqYWVwZ2RxcGs4emg2bTRnbHNudTA2NGVjenNrY25nOXkK",
+            "exists": true,
+            "op": "file",
+            "sha256": "1faea896ff26eaeaca334686704a553875194762a2496e52dedd45b21e49f8eb"
+          },
+          {
+            "ok": true,
+            "op": "load",
+            "recipients": "[\"age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y\"]"
+          }
+        ]
+      }
+    },
+    {
+      "id": "recipients/add-appends-in-order",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "op": "add",
+            "recipient": "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y"
+          },
+          {
+            "op": "add",
+            "recipient": "age1wxknyar29luhmltc320wnllzxd7n0cjvldxqjunyh9u3l4gpd3kq9r4lgr"
+          },
+          {
+            "op": "add",
+            "recipient": "age1mrfjwn5r0v9zrvgv73fc5880svsky436wp2ygvw6lts5hx8xwavs6vmkcy"
+          },
+          {
+            "op": "file"
+          },
+          {
+            "op": "load"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "error_class": "",
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "error_class": "",
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "error_class": "",
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "bytes_b64": "YWdlMW1kd2F2azRucmFsc3g2dGU4dWN2ZGVueXhqYWVwZ2RxcGs4emg2bTRnbHNudTA2NGVjenNrY25nOXkKYWdlMXd4a255YXIyOWx1aG1sdGMzMjB3bmxsenhkN24wY2p2bGR4cWp1bnloOXUzbDRncGQza3E5cjRsZ3IKYWdlMW1yZmp3bjVyMHY5enJ2Z3Y3M2ZjNTg4MHN2c2t5NDM2d3AyeWd2dzZsdHM1aHg4eHdhdnM2dm1rY3kK",
+            "exists": true,
+            "op": "file",
+            "sha256": "55a611814c8ac0d5ae9b70c2f3c8b19efec4d2cfcf48207ad6d7a05a4e64c990"
+          },
+          {
+            "ok": true,
+            "op": "load",
+            "recipients": "[\"age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y\",\"age1wxknyar29luhmltc320wnllzxd7n0cjvldxqjunyh9u3l4gpd3kq9r4lgr\",\"age1mrfjwn5r0v9zrvgv73fc5880svsky436wp2ygvw6lts5hx8xwavs6vmkcy\"]"
+          }
+        ]
+      }
+    },
+    {
+      "id": "recipients/add-duplicate-is-rejected",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "op": "add",
+            "recipient": "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y"
+          },
+          {
+            "op": "add",
+            "recipient": "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y"
+          },
+          {
+            "op": "file"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "error_class": "",
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "error_class": "already_exists",
+            "ok": false,
+            "op": "add"
+          },
+          {
+            "bytes_b64": "YWdlMW1kd2F2azRucmFsc3g2dGU4dWN2ZGVueXhqYWVwZ2RxcGs4emg2bTRnbHNudTA2NGVjenNrY25nOXkK",
+            "exists": true,
+            "op": "file",
+            "sha256": "1faea896ff26eaeaca334686704a553875194762a2496e52dedd45b21e49f8eb"
+          }
+        ]
+      }
+    },
+    {
+      "id": "recipients/add-duplicate-uppercase-form",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "op": "add",
+            "recipient": "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y"
+          },
+          {
+            "op": "add",
+            "recipient": "AGE1MDWAVK4NRALSX6TE8UCVDENYXJAEPGDQPK8ZH6M4GLSNU064ECZSKCNG9Y"
+          },
+          {
+            "op": "file"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "error_class": "",
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "error_class": "invalid",
+            "ok": false,
+            "op": "add"
+          },
+          {
+            "bytes_b64": "YWdlMW1kd2F2azRucmFsc3g2dGU4dWN2ZGVueXhqYWVwZ2RxcGs4emg2bTRnbHNudTA2NGVjenNrY25nOXkK",
+            "exists": true,
+            "op": "file",
+            "sha256": "1faea896ff26eaeaca334686704a553875194762a2496e52dedd45b21e49f8eb"
+          }
+        ]
+      }
+    },
+    {
+      "id": "recipients/add-rejects-malformed",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "op": "add",
+            "recipient": ""
+          },
+          {
+            "op": "add",
+            "recipient": "not-a-recipient"
+          },
+          {
+            "op": "add",
+            "recipient": "age1notvalidbech32"
+          },
+          {
+            "op": "add",
+            "recipient": "AGE-SECRET-KEY-1QQQ"
+          },
+          {
+            "op": "exists"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "error_class": "invalid",
+            "ok": false,
+            "op": "add"
+          },
+          {
+            "error_class": "invalid",
+            "ok": false,
+            "op": "add"
+          },
+          {
+            "error_class": "invalid",
+            "ok": false,
+            "op": "add"
+          },
+          {
+            "error_class": "invalid",
+            "ok": false,
+            "op": "add"
+          },
+          {
+            "exists": false,
+            "op": "exists"
+          }
+        ]
+      }
+    },
+    {
+      "id": "recipients/add-after-file-without-trailing-newline",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "data_b64": "YWdlMW1kd2F2azRucmFsc3g2dGU4dWN2ZGVueXhqYWVwZ2RxcGs4emg2bTRnbHNudTA2NGVjenNrY25nOXk=",
+            "op": "seed"
+          },
+          {
+            "op": "add",
+            "recipient": "age1wxknyar29luhmltc320wnllzxd7n0cjvldxqjunyh9u3l4gpd3kq9r4lgr"
+          },
+          {
+            "op": "file"
+          },
+          {
+            "op": "load"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "op": "seed"
+          },
+          {
+            "error_class": "",
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "bytes_b64": "YWdlMW1kd2F2azRucmFsc3g2dGU4dWN2ZGVueXhqYWVwZ2RxcGs4emg2bTRnbHNudTA2NGVjenNrY25nOXlhZ2Uxd3hrbnlhcjI5bHVobWx0YzMyMHdubGx6eGQ3bjBjanZsZHhxanVueWg5dTNsNGdwZDNrcTlyNGxncgo=",
+            "exists": true,
+            "op": "file",
+            "sha256": "d44bd480fc27420c3d9e712e7fdb762ca627eb334053da61fedc0a22ea271d2a"
+          },
+          {
+            "ok": true,
+            "op": "load",
+            "recipients": "[\"age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9yage1wxknyar29luhmltc320wnllzxd7n0cjvldxqjunyh9u3l4gpd3kq9r4lgr\"]"
+          }
+        ]
+      }
+    },
+    {
+      "id": "recipients/add-after-comment-only-file-without-newline",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "data_b64": "IyB2YXVsdCByZWNpcGllbnRz",
+            "op": "seed"
+          },
+          {
+            "op": "add",
+            "recipient": "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y"
+          },
+          {
+            "op": "file"
+          },
+          {
+            "op": "load"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "op": "seed"
+          },
+          {
+            "error_class": "",
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "bytes_b64": "IyB2YXVsdCByZWNpcGllbnRzYWdlMW1kd2F2azRucmFsc3g2dGU4dWN2ZGVueXhqYWVwZ2RxcGs4emg2bTRnbHNudTA2NGVjenNrY25nOXkK",
+            "exists": true,
+            "op": "file",
+            "sha256": "c20dca44e3646e7c42d423146922b4bb70cfc032b1bad5bdbe8807a1f65c2400"
+          },
+          {
+            "ok": true,
+            "op": "load",
+            "recipients": "null"
+          }
+        ]
+      }
+    },
+    {
+      "id": "recipients/add-after-blank-line",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "data_b64": "YWdlMW1kd2F2azRucmFsc3g2dGU4dWN2ZGVueXhqYWVwZ2RxcGs4emg2bTRnbHNudTA2NGVjenNrY25nOXkKCg==",
+            "op": "seed"
+          },
+          {
+            "op": "add",
+            "recipient": "age1wxknyar29luhmltc320wnllzxd7n0cjvldxqjunyh9u3l4gpd3kq9r4lgr"
+          },
+          {
+            "op": "file"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "op": "seed"
+          },
+          {
+            "error_class": "",
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "bytes_b64": "YWdlMW1kd2F2azRucmFsc3g2dGU4dWN2ZGVueXhqYWVwZ2RxcGs4emg2bTRnbHNudTA2NGVjenNrY25nOXkKCmFnZTF3eGtueWFyMjlsdWhtbHRjMzIwd25sbHp4ZDduMGNqdmxkeHFqdW55aDl1M2w0Z3BkM2txOXI0bGdyCg==",
+            "exists": true,
+            "op": "file",
+            "sha256": "39b4fa2d10ba2d816b55ab1a74de1a5cee543b7bf4b64e52e02c7900cd0b3973"
+          }
+        ]
+      }
+    },
+    {
+      "id": "recipients/load-skips-comments-and-blanks",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "data_b64": "IyBoZWFkZXIKCiAgYWdlMW1kd2F2azRucmFsc3g2dGU4dWN2ZGVueXhqYWVwZ2RxcGs4emg2bTRnbHNudTA2NGVjenNrY25nOXkgIAoKIyB0cmFpbGluZyBjb21tZW50CmFnZTF3eGtueWFyMjlsdWhtbHRjMzIwd25sbHp4ZDduMGNqdmxkeHFqdW55aDl1M2w0Z3BkM2txOXI0bGdyCg==",
+            "op": "seed"
+          },
+          {
+            "op": "load"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "op": "seed"
+          },
+          {
+            "ok": true,
+            "op": "load",
+            "recipients": "[\"age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y\",\"age1wxknyar29luhmltc320wnllzxd7n0cjvldxqjunyh9u3l4gpd3kq9r4lgr\"]"
+          }
+        ]
+      }
+    },
+    {
+      "id": "recipients/load-missing-file",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "op": "exists"
+          },
+          {
+            "op": "load"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "exists": false,
+            "op": "exists"
+          },
+          {
+            "ok": true,
+            "op": "load",
+            "recipients": "[]"
+          }
+        ]
+      }
+    },
+    {
+      "id": "recipients/load-comment-only-file",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "data_b64": "IyBvbmx5IGEgY29tbWVudAo=",
+            "op": "seed"
+          },
+          {
+            "op": "load"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "op": "seed"
+          },
+          {
+            "ok": true,
+            "op": "load",
+            "recipients": "null"
+          }
+        ]
+      }
+    },
+    {
+      "id": "recipients/load-empty-file",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "data_b64": "",
+            "op": "seed"
+          },
+          {
+            "op": "exists"
+          },
+          {
+            "op": "load"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "op": "seed"
+          },
+          {
+            "exists": true,
+            "op": "exists"
+          },
+          {
+            "ok": true,
+            "op": "load",
+            "recipients": "null"
+          }
+        ]
+      }
+    },
+    {
+      "id": "recipients/load-keeps-invalid-lines-out-of-the-list",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "data_b64": "YWdlMW1kd2F2azRucmFsc3g2dGU4dWN2ZGVueXhqYWVwZ2RxcGs4emg2bTRnbHNudTA2NGVjenNrY25nOXkKbm90LWEtcmVjaXBpZW50Cg==",
+            "op": "seed"
+          },
+          {
+            "op": "load"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "op": "seed"
+          },
+          {
+            "ok": true,
+            "op": "load",
+            "recipients": "[\"age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y\",\"not-a-recipient\"]"
+          }
+        ]
+      }
+    },
+    {
+      "id": "recipients/remove-existing",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "op": "add",
+            "recipient": "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y"
+          },
+          {
+            "op": "add",
+            "recipient": "age1wxknyar29luhmltc320wnllzxd7n0cjvldxqjunyh9u3l4gpd3kq9r4lgr"
+          },
+          {
+            "op": "remove",
+            "recipient": "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y"
+          },
+          {
+            "op": "file"
+          },
+          {
+            "op": "load"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "error_class": "",
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "error_class": "",
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "error_class": "",
+            "ok": true,
+            "op": "remove"
+          },
+          {
+            "bytes_b64": "YWdlMXd4a255YXIyOWx1aG1sdGMzMjB3bmxsenhkN24wY2p2bGR4cWp1bnloOXUzbDRncGQza3E5cjRsZ3IK",
+            "exists": true,
+            "op": "file",
+            "sha256": "0631843ce03ac756a4c84cd09b291bc1afabba683124dfbd656ff979afdf79db"
+          },
+          {
+            "ok": true,
+            "op": "load",
+            "recipients": "[\"age1wxknyar29luhmltc320wnllzxd7n0cjvldxqjunyh9u3l4gpd3kq9r4lgr\"]"
+          }
+        ]
+      }
+    },
+    {
+      "id": "recipients/remove-last-recipient",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "op": "add",
+            "recipient": "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y"
+          },
+          {
+            "op": "remove",
+            "recipient": "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y"
+          },
+          {
+            "op": "file"
+          },
+          {
+            "op": "load"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "error_class": "",
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "error_class": "",
+            "ok": true,
+            "op": "remove"
+          },
+          {
+            "bytes_b64": "",
+            "exists": true,
+            "op": "file",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          {
+            "ok": true,
+            "op": "load",
+            "recipients": "null"
+          }
+        ]
+      }
+    },
+    {
+      "id": "recipients/remove-from-missing-file",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "op": "remove",
+            "recipient": "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y"
+          },
+          {
+            "op": "exists"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "error_class": "not_found",
+            "ok": false,
+            "op": "remove"
+          },
+          {
+            "exists": false,
+            "op": "exists"
+          }
+        ]
+      }
+    },
+    {
+      "id": "recipients/remove-unknown-recipient",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "op": "add",
+            "recipient": "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y"
+          },
+          {
+            "op": "remove",
+            "recipient": "age1wxknyar29luhmltc320wnllzxd7n0cjvldxqjunyh9u3l4gpd3kq9r4lgr"
+          },
+          {
+            "op": "file"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "error_class": "",
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "error_class": "not_found",
+            "ok": false,
+            "op": "remove"
+          },
+          {
+            "bytes_b64": "YWdlMW1kd2F2azRucmFsc3g2dGU4dWN2ZGVueXhqYWVwZ2RxcGs4emg2bTRnbHNudTA2NGVjenNrY25nOXkK",
+            "exists": true,
+            "op": "file",
+            "sha256": "1faea896ff26eaeaca334686704a553875194762a2496e52dedd45b21e49f8eb"
+          }
+        ]
+      }
+    },
+    {
+      "id": "recipients/remove-rejects-malformed-argument",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "op": "add",
+            "recipient": "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y"
+          },
+          {
+            "op": "remove",
+            "recipient": "not-a-recipient"
+          },
+          {
+            "op": "file"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "error_class": "",
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "error_class": "invalid",
+            "ok": false,
+            "op": "remove"
+          },
+          {
+            "bytes_b64": "YWdlMW1kd2F2azRucmFsc3g2dGU4dWN2ZGVueXhqYWVwZ2RxcGs4emg2bTRnbHNudTA2NGVjenNrY25nOXkK",
+            "exists": true,
+            "op": "file",
+            "sha256": "1faea896ff26eaeaca334686704a553875194762a2496e52dedd45b21e49f8eb"
+          }
+        ]
+      }
+    },
+    {
+      "id": "recipients/remove-preserves-comments-blanks-and-junk",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "data_b64": "IyBoZWFkZXIKCmFnZTFtZHdhdms0bnJhbHN4NnRlOHVjdmRlbnl4amFlcGdkcXBrOHpoNm00Z2xzbnUwNjRlY3pza2NuZzl5Cm5vdC1hLXJlY2lwaWVudAphZ2Uxd3hrbnlhcjI5bHVobWx0YzMyMHdubGx6eGQ3bjBjanZsZHhxanVueWg5dTNsNGdwZDNrcTlyNGxncgojIHRhaWwK",
+            "op": "seed"
+          },
+          {
+            "op": "remove",
+            "recipient": "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y"
+          },
+          {
+            "op": "file"
+          },
+          {
+            "op": "load"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "op": "seed"
+          },
+          {
+            "error_class": "",
+            "ok": true,
+            "op": "remove"
+          },
+          {
+            "bytes_b64": "IyBoZWFkZXIKCm5vdC1hLXJlY2lwaWVudAphZ2Uxd3hrbnlhcjI5bHVobWx0YzMyMHdubGx6eGQ3bjBjanZsZHhxanVueWg5dTNsNGdwZDNrcTlyNGxncgojIHRhaWwK",
+            "exists": true,
+            "op": "file",
+            "sha256": "b13a8f3a2705b9e8720b51d9e9d7d3913f9cce1799153482be94ac0ef279de42"
+          },
+          {
+            "ok": true,
+            "op": "load",
+            "recipients": "[\"not-a-recipient\",\"age1wxknyar29luhmltc320wnllzxd7n0cjvldxqjunyh9u3l4gpd3kq9r4lgr\"]"
+          }
+        ]
+      }
+    },
+    {
+      "id": "recipients/remove-accepts-uppercase-argument",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "op": "add",
+            "recipient": "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y"
+          },
+          {
+            "op": "remove",
+            "recipient": "AGE1MDWAVK4NRALSX6TE8UCVDENYXJAEPGDQPK8ZH6M4GLSNU064ECZSKCNG9Y"
+          },
+          {
+            "op": "file"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "error_class": "",
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "error_class": "invalid",
+            "ok": false,
+            "op": "remove"
+          },
+          {
+            "bytes_b64": "YWdlMW1kd2F2azRucmFsc3g2dGU4dWN2ZGVueXhqYWVwZ2RxcGs4emg2bTRnbHNudTA2NGVjenNrY25nOXkK",
+            "exists": true,
+            "op": "file",
+            "sha256": "1faea896ff26eaeaca334686704a553875194762a2496e52dedd45b21e49f8eb"
+          }
+        ]
+      }
+    },
+    {
+      "id": "recipients/remove-removes-every-duplicate-line",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "data_b64": "YWdlMW1kd2F2azRucmFsc3g2dGU4dWN2ZGVueXhqYWVwZ2RxcGs4emg2bTRnbHNudTA2NGVjenNrY25nOXkKYWdlMW1kd2F2azRucmFsc3g2dGU4dWN2ZGVueXhqYWVwZ2RxcGs4emg2bTRnbHNudTA2NGVjenNrY25nOXkKYWdlMXd4a255YXIyOWx1aG1sdGMzMjB3bmxsenhkN24wY2p2bGR4cWp1bnloOXUzbDRncGQza3E5cjRsZ3IK",
+            "op": "seed"
+          },
+          {
+            "op": "remove",
+            "recipient": "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y"
+          },
+          {
+            "op": "file"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "op": "seed"
+          },
+          {
+            "error_class": "",
+            "ok": true,
+            "op": "remove"
+          },
+          {
+            "bytes_b64": "YWdlMXd4a255YXIyOWx1aG1sdGMzMjB3bmxsenhkN24wY2p2bGR4cWp1bnloOXUzbDRncGQza3E5cjRsZ3IK",
+            "exists": true,
+            "op": "file",
+            "sha256": "0631843ce03ac756a4c84cd09b291bc1afabba683124dfbd656ff979afdf79db"
+          }
+        ]
+      }
+    },
+    {
+      "id": "recipients/crlf-file-loads-without-carriage-returns",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "data_b64": "IyBoZWFkZXINCmFnZTFtZHdhdms0bnJhbHN4NnRlOHVjdmRlbnl4amFlcGdkcXBrOHpoNm00Z2xzbnUwNjRlY3pza2NuZzl5DQphZ2Uxd3hrbnlhcjI5bHVobWx0YzMyMHdubGx6eGQ3bjBjanZsZHhxanVueWg5dTNsNGdwZDNrcTlyNGxncg0K",
+            "op": "seed"
+          },
+          {
+            "op": "load"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "op": "seed"
+          },
+          {
+            "ok": true,
+            "op": "load",
+            "recipients": "[\"age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y\",\"age1wxknyar29luhmltc320wnllzxd7n0cjvldxqjunyh9u3l4gpd3kq9r4lgr\"]"
+          }
+        ]
+      }
+    },
+    {
+      "id": "recipients/crlf-file-remove",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "data_b64": "YWdlMW1kd2F2azRucmFsc3g2dGU4dWN2ZGVueXhqYWVwZ2RxcGs4emg2bTRnbHNudTA2NGVjenNrY25nOXkNCmFnZTF3eGtueWFyMjlsdWhtbHRjMzIwd25sbHp4ZDduMGNqdmxkeHFqdW55aDl1M2w0Z3BkM2txOXI0bGdyDQo=",
+            "op": "seed"
+          },
+          {
+            "op": "remove",
+            "recipient": "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y"
+          },
+          {
+            "op": "file"
+          },
+          {
+            "op": "load"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "op": "seed"
+          },
+          {
+            "error_class": "",
+            "ok": true,
+            "op": "remove"
+          },
+          {
+            "bytes_b64": "YWdlMXd4a255YXIyOWx1aG1sdGMzMjB3bmxsenhkN24wY2p2bGR4cWp1bnloOXUzbDRncGQza3E5cjRsZ3INCg==",
+            "exists": true,
+            "op": "file",
+            "sha256": "a24b87e152f9dca13b3488bac1058acd2d6e4080cb21d1dc69cb59a7beeb7568"
+          },
+          {
+            "ok": true,
+            "op": "load",
+            "recipients": "[\"age1wxknyar29luhmltc320wnllzxd7n0cjvldxqjunyh9u3l4gpd3kq9r4lgr\"]"
+          }
+        ]
+      }
+    },
+    {
+      "id": "recipients/add-to-crlf-file",
+      "seam": "PAIRING-001",
+      "input": {
+        "ops": [
+          {
+            "data_b64": "YWdlMW1kd2F2azRucmFsc3g2dGU4dWN2ZGVueXhqYWVwZ2RxcGs4emg2bTRnbHNudTA2NGVjenNrY25nOXkNCg==",
+            "op": "seed"
+          },
+          {
+            "op": "add",
+            "recipient": "age1wxknyar29luhmltc320wnllzxd7n0cjvldxqjunyh9u3l4gpd3kq9r4lgr"
+          },
+          {
+            "op": "file"
+          }
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "op": "seed"
+          },
+          {
+            "error_class": "",
+            "ok": true,
+            "op": "add"
+          },
+          {
+            "bytes_b64": "YWdlMW1kd2F2azRucmFsc3g2dGU4dWN2ZGVueXhqYWVwZ2RxcGs4emg2bTRnbHNudTA2NGVjenNrY25nOXkNCmFnZTF3eGtueWFyMjlsdWhtbHRjMzIwd25sbHp4ZDduMGNqdmxkeHFqdW55aDl1M2w0Z3BkM2txOXI0bGdyCg==",
+            "exists": true,
+            "op": "file",
+            "sha256": "4e3afd3f63251d1f7f934b861fa5c65d71716131740226555250120f76740251"
+          }
+        ]
+      }
+    },
+    {
+      "id": "recipients-layout/created-by-add-recipient",
+      "seam": "PAIRING-001",
+      "input": {
+        "operation": "AddRecipient into an empty vault directory"
+      },
+      "expected": {
+        "entries": [
+          "file:recipients.txt"
+        ]
+      }
+    },
+    {
+      "id": "recipients-modes/created-by-add-recipient",
+      "seam": "PAIRING-001",
+      "input": {
+        "operation": "AddRecipient into a vault directory with no recipients.txt"
+      },
+      "expected": {
+        "file_mode": "0600"
+      }
+    },
+    {
       "id": "registry-layout/created-by-add-device",
       "seam": "PAIRING-001",
       "input": {
@@ -2505,8 +3478,9 @@
     "device_sessions": "out of scope here: DeviceSessionStore belongs to APPROVAL-001 under RUST-011, against its own advanced oracle a518124f",
     "expiry_clock": "wall-clock independent: expiry is expressed through the exported pairing.TokenTTL, never by sleeping, so --check is not timing dependent",
     "parse_errors": "semantic contract: accept/reject plus parsed fields; Go error strings are recorded for reference only and are not a Rust parity target",
+    "recipient_errors": "semantic contract: recipients operations are frozen by error class (already_exists, not_found, invalid), never by Go error text",
     "reencryption": "out of scope here: new-recipient re-encryption on `device accept` is covered by CRYPTO-004 and is not re-frozen by this generator",
-    "registry_modes": "the registry-modes group records POSIX permission bits and is compared on Unix runners only; the case identity is still checked on Windows, so the group cannot be dropped unnoticed",
+    "registry_modes": "every *-modes group records POSIX permission bits and is compared on Unix runners only; the case identity is still checked on Windows, so a group cannot be dropped unnoticed",
     "registry_paths": "no absolute path is frozen: the registry cases record devices.json bytes and returned values, which are identical on every platform",
     "token_generation": "not a byte contract: GenerateToken draws from crypto/rand; only its shape (32 base32-hex characters) and ValidatePairingToken acceptance are frozen"
   }

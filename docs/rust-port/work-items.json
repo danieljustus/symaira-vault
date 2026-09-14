@@ -69,7 +69,7 @@
       "status": "in_progress",
       "depends_on": ["RUST-005"],
       "contract_rows": ["GIT-001", "GIT-002", "GIT-003", "IO-001", "IO-002", "IO-003", "PAIRING-001"],
-      "acceptance": ["make sync-io-differential", "cargo test -p symvault-sync --all-features --locked", "make pairing-differential", "PAIRING-001 native 3-OS evidence via .github/workflows/rust-pairing.yml", "PAIRING-001 remains in_progress until the recipients.txt add/remove performed by device accept/revoke and the cmd/device.go CLI orchestration are ported; the handshake artifact codec, alias lookup, token path-safety, token-store semantics and the .symvault/devices.json registry are frozen and replayed across 121 cases"]
+      "acceptance": ["make sync-io-differential", "cargo test -p symvault-sync --all-features --locked", "make pairing-differential", "PAIRING-001 native 3-OS evidence via .github/workflows/rust-pairing.yml", "PAIRING-001 remains in_progress until the cmd/device.go CLI orchestration is ported; the handshake artifact codec, alias lookup, token path-safety, token-store semantics, the .symvault/devices.json registry and recipients.txt are frozen and replayed across 147 cases"]
     },
     {
       "id": "RUST-009",

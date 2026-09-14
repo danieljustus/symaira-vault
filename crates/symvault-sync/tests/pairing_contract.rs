@@ -16,6 +16,7 @@ use symvault_sync::pairing::{
     marshal_pairing_file, parse_join_response, parse_pairing_file, response_filenames,
     validate_pairing_token,
 };
+use symvault_sync::recipients::{RecipientsError, RecipientsFile};
 
 const FIXTURE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -68,6 +69,9 @@ fn every_pairing_case_is_replayed() {
             "display" => replay_display(id, input, expected),
             "store" => replay_store(id, input, expected),
             "registry" => replay_registry(id, input, expected),
+            "recipients" => replay_recipients(id, input, expected),
+            "recipients-layout" => replay_recipients_layout(id, expected),
+            "recipients-modes" => replay_recipients_modes(id, expected),
             "registry-layout" => replay_registry_layout(id, expected),
             "registry-modes" => replay_registry_modes(id, expected),
             other => panic!("case {id} has unhandled group {other}"),
@@ -379,6 +383,195 @@ fn replay_registry(id: &str, input: &Value, expected: &Value) {
     let _ = fs::remove_dir_all(&dir);
 }
 
+/// Replays a recipients.txt operation script. Both halves of the contract are
+/// compared: the error class an operation fails with, and the exact bytes left
+/// on disk -- including the concatenation Go produces when the existing file
+/// has no trailing newline, which this port reproduces on purpose.
+fn replay_recipients(id: &str, input: &Value, expected: &Value) {
+    let dir = std::env::temp_dir().join(format!(
+        "symvault-pairing-recipients-{}-{}",
+        std::process::id(),
+        id.replace('/', "-")
+    ));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).expect("create vault directory");
+    let recipients = RecipientsFile::new(&dir);
+
+    let ops = input["ops"].as_array().expect("ops array");
+    let want = expected["results"].as_array().expect("results array");
+    assert_eq!(ops.len(), want.len(), "case {id}: result cardinality");
+
+    for (index, op) in ops.iter().enumerate() {
+        let want = &want[index];
+        let kind = op["op"].as_str().expect("op kind");
+        assert_eq!(want["op"], kind, "case {id}: op {index} kind");
+        match kind {
+            "seed" => {
+                fs::write(recipients.path(), decode(op, "data_b64")).expect("seed recipients");
+            }
+            "add" => assert_recipients_outcome(
+                id,
+                index,
+                "add",
+                recipients.add(op["recipient"].as_str().expect("recipient")),
+                want,
+            ),
+            "remove" => assert_recipients_outcome(
+                id,
+                index,
+                "remove",
+                recipients.remove(op["recipient"].as_str().expect("recipient")),
+                want,
+            ),
+            "load" => {
+                let outcome = recipients.load_strings();
+                assert_eq!(
+                    outcome.is_ok(),
+                    want["ok"].as_bool().expect("load ok"),
+                    "case {id}: op {index} load outcome"
+                );
+                if let Ok(loaded) = outcome {
+                    // Rendered the way Go's json.Marshal renders the returned
+                    // slice, so the nil-versus-empty distinction is compared
+                    // rather than quietly flattened.
+                    let rendered = match loaded {
+                        None => "null".to_owned(),
+                        Some(lines) => serde_json::to_string(&lines).expect("render recipients"),
+                    };
+                    assert_eq!(
+                        rendered,
+                        want["recipients"].as_str().expect("recipients"),
+                        "case {id}: op {index} recipients"
+                    );
+                }
+            }
+            "exists" => assert_eq!(
+                recipients.exists(),
+                want["exists"].as_bool().expect("exists"),
+                "case {id}: op {index} file presence"
+            ),
+            "file" => {
+                let present = recipients.path().exists();
+                assert_eq!(
+                    present,
+                    want["exists"].as_bool().expect("file exists"),
+                    "case {id}: op {index} file presence"
+                );
+                if present {
+                    let produced = fs::read(recipients.path()).expect("read recipients");
+                    let wanted = decode(want, "bytes_b64");
+                    assert_eq!(
+                        String::from_utf8_lossy(&produced),
+                        String::from_utf8_lossy(&wanted),
+                        "case {id}: op {index} recipients bytes diverged from the Go oracle"
+                    );
+                    assert_eq!(
+                        hex(&produced),
+                        want["sha256"].as_str().expect("sha256"),
+                        "case {id}: op {index} recipients digest"
+                    );
+                }
+            }
+            other => panic!("case {id}: unknown recipients op {other}"),
+        }
+    }
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// Go's error text is explicitly not a parity target, so the oracle records an
+/// error *class* and that is what is compared.
+fn assert_recipients_outcome(
+    id: &str,
+    index: usize,
+    kind: &str,
+    outcome: Result<(), RecipientsError>,
+    want: &Value,
+) {
+    assert_eq!(
+        outcome.is_ok(),
+        want["ok"].as_bool().expect("ok"),
+        "case {id}: op {index} {kind} outcome: {outcome:?}"
+    );
+    let class = match &outcome {
+        Ok(()) => "",
+        Err(RecipientsError::AlreadyExists) => "already_exists",
+        Err(RecipientsError::NotFound) => "not_found",
+        Err(RecipientsError::Invalid) => "invalid",
+        Err(RecipientsError::Io(_)) => "other",
+    };
+    assert_eq!(
+        class,
+        want["error_class"].as_str().expect("error_class"),
+        "case {id}: op {index} {kind} error class"
+    );
+}
+
+/// Where recipients.txt lands is contract too. The oracle walked the vault
+/// directory after one add; the walk is repeated here rather than the path
+/// being re-derived from the same constant the implementation uses.
+fn replay_recipients_layout(id: &str, expected: &Value) {
+    let dir = std::env::temp_dir().join(format!(
+        "symvault-pairing-recipients-layout-{}-{}",
+        std::process::id(),
+        id.replace('/', "-")
+    ));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).expect("create vault directory");
+    RecipientsFile::new(&dir)
+        .add("age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y")
+        .expect("add into an empty vault directory");
+
+    let mut entries = Vec::new();
+    walk(&dir, &dir, &mut entries);
+    entries.sort();
+
+    let want: Vec<String> = expected["entries"]
+        .as_array()
+        .expect("entries array")
+        .iter()
+        .map(|entry| entry.as_str().expect("entry").to_owned())
+        .collect();
+    assert_eq!(entries, want, "case {id}: recipients layout");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+/// The mode AddRecipient creates the file with. Unix only, for the same reason
+/// as the registry modes.
+fn replay_recipients_modes(id: &str, expected: &Value) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        let dir = std::env::temp_dir().join(format!(
+            "symvault-pairing-recipients-modes-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("create vault directory");
+        let recipients = RecipientsFile::new(&dir);
+        recipients
+            .add("age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y")
+            .expect("add into a vault directory with no recipients.txt");
+        let mode = format!(
+            "{:04o}",
+            fs::metadata(recipients.path())
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777
+        );
+        assert_eq!(
+            mode,
+            expected["file_mode"].as_str().expect("file_mode"),
+            "case {id}: recipients file mode"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (id, expected);
+    }
+}
+
 /// Where the registry lands is contract, not an implementation detail: the
 /// oracle walked the vault directory after a single add and recorded every
 /// entry it found. Re-deriving the path from the same constants the
@@ -497,6 +690,9 @@ fn fixture_covers_every_contract_surface() {
         "registry/",
         "registry-layout/",
         "registry-modes/",
+        "recipients/",
+        "recipients-layout/",
+        "recipients-modes/",
     ] {
         assert!(
             ids.iter().any(|id| id.starts_with(group)),

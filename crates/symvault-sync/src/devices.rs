@@ -23,10 +23,9 @@
 //! leave a half-written registry behind.
 
 use crate::pairing::{GoTime, encode_go_string};
+use crate::safeio::{self, SafeIoError};
 use serde_json::Value;
-use std::fs::{self, File};
-use std::io::Write as _;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// Directory inside the vault that holds vault-private state, matching Go's
 /// `config.DefaultVaultSubdir`.
@@ -36,22 +35,17 @@ pub const VAULT_SUBDIR: &str = ".symvault";
 pub const DEVICES_FILE: &str = "devices.json";
 
 /// Mode the registry directory is created with, matching Go's `0o700`.
-pub const DIR_MODE: u32 = 0o700;
+pub const DIR_MODE: u32 = safeio::DIR_MODE;
 
 /// Mode the registry file is created with, matching Go's `0o600`.
-pub const FILE_MODE: u32 = 0o600;
+pub const FILE_MODE: u32 = safeio::FILE_MODE;
 
 /// Failures the registry can report.
 #[derive(Debug)]
 pub enum DeviceError {
-    /// The registry file could not be read or written.
-    Io {
-        path: PathBuf,
-        source: std::io::Error,
-    },
-    /// The registry file exists but is not a regular file, or is a symlink.
-    /// Refused rather than followed, matching `vault.SafeWriteFile`.
-    NotRegularFile(PathBuf),
+    /// The registry file could not be read or written, or is a symlink or
+    /// other non-regular file that was refused rather than followed.
+    Io(SafeIoError),
     /// The registry file is not a JSON array of devices.
     Malformed(String),
     /// A device timestamp was not a strict RFC3339 value.
@@ -63,18 +57,17 @@ pub enum DeviceError {
 impl std::fmt::Display for DeviceError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Io { path, source } => write!(f, "device registry {}: {source}", path.display()),
-            Self::NotRegularFile(path) => {
-                write!(
-                    f,
-                    "device registry {} is not a regular file",
-                    path.display()
-                )
-            }
+            Self::Io(source) => write!(f, "device registry: {source}"),
             Self::Malformed(detail) => write!(f, "parse devices file: {detail}"),
             Self::Time(detail) => write!(f, "parse devices file: {detail}"),
             Self::NotFound(name) => write!(f, "device {name:?} not found"),
         }
+    }
+}
+
+impl From<SafeIoError> for DeviceError {
+    fn from(source: SafeIoError) -> Self {
+        Self::Io(source)
     }
 }
 
@@ -160,7 +153,7 @@ impl DeviceRegistry {
     /// Reads the registry. A missing file is an empty registry, not an error.
     pub fn load(&self) -> Result<DeviceList, DeviceError> {
         let path = self.path();
-        let Some(data) = safe_read(&path)? else {
+        let Some(data) = safeio::read(&path)? else {
             return Ok(DeviceList::Devices(Vec::new()));
         };
         parse_devices(&data)
@@ -176,8 +169,11 @@ impl DeviceRegistry {
     pub fn save(&self, devices: &[Device]) -> Result<(), DeviceError> {
         let path = self.path();
         let parent = path.parent().expect("registry path always has a parent");
-        create_dir_all_mode(parent)?;
-        safe_write(&path, marshal_devices(devices).as_bytes())
+        safeio::create_dir_all(parent)?;
+        Ok(safeio::write_atomic(
+            &path,
+            marshal_devices(devices).as_bytes(),
+        )?)
     }
 
     /// Adds `device`, replacing an existing entry with the same name in place.
@@ -343,105 +339,6 @@ fn parse_device(value: &Value) -> Result<Device, DeviceError> {
     })
 }
 
-/// Reads `path` unless it is absent, refusing a symlink or any other
-/// non-regular file rather than following it.
-fn safe_read(path: &Path) -> Result<Option<Vec<u8>>, DeviceError> {
-    match fs::symlink_metadata(path) {
-        Ok(metadata) => {
-            if !metadata.file_type().is_file() {
-                return Err(DeviceError::NotRegularFile(path.to_path_buf()));
-            }
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(source) => {
-            return Err(DeviceError::Io {
-                path: path.to_path_buf(),
-                source,
-            });
-        }
-    }
-    fs::read(path).map(Some).map_err(|source| DeviceError::Io {
-        path: path.to_path_buf(),
-        source,
-    })
-}
-
-/// Stages, fsyncs and renames, refusing a symlink or non-regular target — the
-/// Rust counterpart of `vault.SafeWriteFile` over `fsutil.AtomicWriteFile`.
-/// The temporary file's name is not part of the frozen contract; the resulting
-/// bytes and mode are.
-fn safe_write(path: &Path, data: &[u8]) -> Result<(), DeviceError> {
-    match fs::symlink_metadata(path) {
-        Ok(metadata) if !metadata.file_type().is_file() => {
-            return Err(DeviceError::NotRegularFile(path.to_path_buf()));
-        }
-        Ok(_) => {}
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(source) => {
-            return Err(DeviceError::Io {
-                path: path.to_path_buf(),
-                source,
-            });
-        }
-    }
-
-    let staged = path.with_extension(format!("json.tmp.{}", std::process::id()));
-    let io = |source| DeviceError::Io {
-        path: staged.clone(),
-        source,
-    };
-    let mut file = create_file_mode(&staged).map_err(io)?;
-    file.write_all(data).map_err(io)?;
-    file.sync_all().map_err(io)?;
-    drop(file);
-    fs::rename(&staged, path).map_err(|source| {
-        let _ = fs::remove_file(&staged);
-        DeviceError::Io {
-            path: path.to_path_buf(),
-            source,
-        }
-    })
-}
-
-#[cfg(unix)]
-fn create_file_mode(path: &Path) -> std::io::Result<File> {
-    use std::os::unix::fs::OpenOptionsExt as _;
-    fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .mode(FILE_MODE)
-        .open(path)
-}
-
-/// Windows has no POSIX mode to apply; Go's `0o600` is equally inert there.
-#[cfg(not(unix))]
-fn create_file_mode(path: &Path) -> std::io::Result<File> {
-    File::create(path)
-}
-
-#[cfg(unix)]
-fn create_dir_all_mode(path: &Path) -> Result<(), DeviceError> {
-    use std::os::unix::fs::DirBuilderExt as _;
-    fs::DirBuilder::new()
-        .recursive(true)
-        .mode(DIR_MODE)
-        .create(path)
-        .map_err(|source| DeviceError::Io {
-            path: path.to_path_buf(),
-            source,
-        })
-}
-
-/// Windows has no POSIX mode to apply; Go's `0o700` is equally inert there.
-#[cfg(not(unix))]
-fn create_dir_all_mode(path: &Path) -> Result<(), DeviceError> {
-    fs::create_dir_all(path).map_err(|source| DeviceError::Io {
-        path: path.to_path_buf(),
-        source,
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -478,11 +375,11 @@ mod tests {
 
         assert!(matches!(
             registry.load(),
-            Err(DeviceError::NotRegularFile(_))
+            Err(DeviceError::Io(SafeIoError::NotRegularFile))
         ));
         assert!(matches!(
             registry.save(&[device("laptop")]),
-            Err(DeviceError::NotRegularFile(_))
+            Err(DeviceError::Io(SafeIoError::NotRegularFile))
         ));
         assert_eq!(
             stdfs::read(&target).unwrap(),

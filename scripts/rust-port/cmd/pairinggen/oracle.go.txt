@@ -2,6 +2,7 @@ package main
 
 import (
   "crypto/sha256"
+  "errors"
   "encoding/base64"
   "encoding/hex"
   "encoding/json"
@@ -9,6 +10,7 @@ import (
   "os"
   "path/filepath"
   "sort"
+  "strings"
   "time"
 
   "github.com/danieljustus/symaira-vault/internal/config"
@@ -338,6 +340,129 @@ func registryModesCase(id string) Case {
 // re-deriving the path: everything under the vault directory is walked after a
 // single AddDevice and recorded as slash-joined relative paths, so the layout
 // contract holds on every platform and a renamed directory or file is caught.
+
+// ---- recipients.txt -----------------------------------------------------
+//
+// `device accept` adds the joining device's public key here and `device revoke`
+// removes it, so this file is the other half of "a revoked device no longer
+// decrypts". Only the observable contract is frozen: the file bytes, what
+// Load returns, and which error class an operation fails with. Go's error
+// strings are not a parity target.
+
+const recipientA = "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y"
+
+func recipientErrorClass(err error) string {
+  switch {
+  case err == nil:
+    return ""
+  case errors.Is(err, vault.ErrRecipientAlreadyExists):
+    return "already_exists"
+  case errors.Is(err, vault.ErrRecipientNotFound):
+    return "not_found"
+  case errors.Is(err, vault.ErrInvalidRecipient):
+    return "invalid"
+  default:
+    return "other"
+  }
+}
+
+func recipientsFile(vaultDir string) map[string]any {
+  data, err := os.ReadFile(filepath.Join(vaultDir, "recipients.txt"))
+  if err != nil {
+    if os.IsNotExist(err) {
+      return map[string]any{"exists": false}
+    }
+    panic(err)
+  }
+  return map[string]any{"exists": true, "bytes_b64": b64(data), "sha256": hash(data)}
+}
+
+func recipientsCase(id string, ops []map[string]any) Case {
+  dir, e := os.MkdirTemp("", "pairing-recipients-")
+  fail(e)
+  defer func() { _ = os.RemoveAll(dir) }()
+  rm := vault.NewRecipientsManager(dir)
+  results := make([]map[string]any, 0, len(ops))
+  for _, o := range ops {
+    switch o["op"].(string) {
+    case "seed":
+      fail(os.WriteFile(filepath.Join(dir, "recipients.txt"), unb64(o["data_b64"].(string)), 0o600))
+      results = append(results, map[string]any{"op": "seed"})
+    case "add":
+      err := rm.AddRecipient(o["recipient"].(string))
+      results = append(results, map[string]any{"op": "add", "ok": err == nil, "error_class": recipientErrorClass(err)})
+    case "remove":
+      err := rm.RemoveRecipient(o["recipient"].(string))
+      results = append(results, map[string]any{"op": "remove", "ok": err == nil, "error_class": recipientErrorClass(err)})
+    case "load":
+      lines, err := rm.LoadRecipientStrings()
+      entry := map[string]any{"op": "load", "ok": err == nil}
+      if err == nil {
+        encoded, marshalErr := json.Marshal(lines)
+        fail(marshalErr)
+        entry["recipients"] = string(encoded)
+      }
+      results = append(results, entry)
+    case "exists":
+      results = append(results, map[string]any{"op": "exists", "exists": rm.RecipientsFileExists()})
+    case "file":
+      entry := recipientsFile(dir)
+      entry["op"] = "file"
+      results = append(results, entry)
+    default:
+      panic("unknown recipients op " + o["op"].(string))
+    }
+  }
+  return Case{ID: id, Seam: "PAIRING-001",
+    Input:    map[string]any{"ops": ops},
+    Expected: map[string]any{"results": results}}
+}
+
+// recipientsModesCase records the permission bits AddRecipient creates the file
+// with. Separate group for the same reason as the registry modes: Windows has
+// no POSIX modes worth freezing.
+func recipientsModesCase(id string) Case {
+  dir, e := os.MkdirTemp("", "pairing-recipients-modes-")
+  fail(e)
+  defer func() { _ = os.RemoveAll(dir) }()
+  rm := vault.NewRecipientsManager(dir)
+  fail(rm.AddRecipient(recipientA))
+  info, e := os.Stat(filepath.Join(dir, "recipients.txt"))
+  fail(e)
+  return Case{ID: id, Seam: "PAIRING-001",
+    Input:    map[string]any{"operation": "AddRecipient into a vault directory with no recipients.txt"},
+    Expected: map[string]any{"file_mode": fmt.Sprintf("%04o", info.Mode().Perm())}}
+}
+
+// recipientsLayoutCase observes where AddRecipient puts the file rather than
+// re-deriving the path, so a renamed recipients.txt is caught. Same reasoning
+// as registryLayoutCase.
+func recipientsLayoutCase(id string) Case {
+  dir, e := os.MkdirTemp("", "pairing-recipients-layout-")
+  fail(e)
+  defer func() { _ = os.RemoveAll(dir) }()
+  fail(vault.NewRecipientsManager(dir).AddRecipient(recipientA))
+  var entries []string
+  fail(filepath.Walk(dir, func(p string, info os.FileInfo, err error) error {
+    fail(err)
+    if p == dir {
+      return nil
+    }
+    rel, relErr := filepath.Rel(dir, p)
+    fail(relErr)
+    kind := "file"
+    if info.IsDir() {
+      kind = "dir"
+    }
+    entries = append(entries, kind+":"+filepath.ToSlash(rel))
+    return nil
+  }))
+  sort.Strings(entries)
+  return Case{ID: id, Seam: "PAIRING-001",
+    Input:    map[string]any{"operation": "AddRecipient into an empty vault directory"},
+    Expected: map[string]any{"entries": entries}}
+}
+
 func registryLayoutCase(id string) Case {
   dir, e := os.MkdirTemp("", "pairing-registry-layout-")
   fail(e)
@@ -374,6 +499,9 @@ func rop(kind string, kv ...any) map[string]any {
 }
 
 func main() {
+  const recipientB = "age1wxknyar29luhmltc320wnllzxd7n0cjvldxqjunyh9u3l4gpd3kq9r4lgr"
+  const recipientC = "age1mrfjwn5r0v9zrvgv73fc5880svsky436wp2ygvw6lts5hx8xwavs6vmkcy"
+
   const pub = "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
   const joinPub = "age1lggyhqrw2nlhcxprm67z43rta597azn8gknawjehu9d9dl0jq3yqqvfafg"
 
@@ -645,6 +773,136 @@ func main() {
       rop("file"),
       rop("get", "name", "b\u00fcro <mac> & co"),
     }),
+    // recipients.txt: the other half of "a revoked device no longer decrypts".
+    recipientsCase("recipients/add-creates-the-file", []map[string]any{
+      rop("exists"),
+      rop("add", "recipient", recipientA),
+      rop("exists"),
+      rop("file"),
+      rop("load"),
+    }),
+    recipientsCase("recipients/add-appends-in-order", []map[string]any{
+      rop("add", "recipient", recipientA),
+      rop("add", "recipient", recipientB),
+      rop("add", "recipient", recipientC),
+      rop("file"),
+      rop("load"),
+    }),
+    recipientsCase("recipients/add-duplicate-is-rejected", []map[string]any{
+      rop("add", "recipient", recipientA),
+      rop("add", "recipient", recipientA),
+      rop("file"),
+    }),
+    recipientsCase("recipients/add-duplicate-uppercase-form", []map[string]any{
+      rop("add", "recipient", recipientA),
+      rop("add", "recipient", strings.ToUpper(recipientA)),
+      rop("file"),
+    }),
+    recipientsCase("recipients/add-rejects-malformed", []map[string]any{
+      rop("add", "recipient", ""),
+      rop("add", "recipient", "not-a-recipient"),
+      rop("add", "recipient", "age1notvalidbech32"),
+      rop("add", "recipient", "AGE-SECRET-KEY-1QQQ"),
+      rop("exists"),
+    }),
+    recipientsCase("recipients/add-after-file-without-trailing-newline", []map[string]any{
+      rop("seed", "data_b64", b64([]byte(recipientA))),
+      rop("add", "recipient", recipientB),
+      rop("file"),
+      rop("load"),
+    }),
+    recipientsCase("recipients/add-after-comment-only-file-without-newline", []map[string]any{
+      rop("seed", "data_b64", b64([]byte("# vault recipients"))),
+      rop("add", "recipient", recipientA),
+      rop("file"),
+      rop("load"),
+    }),
+    recipientsCase("recipients/add-after-blank-line", []map[string]any{
+      rop("seed", "data_b64", b64([]byte(recipientA+"\n\n"))),
+      rop("add", "recipient", recipientB),
+      rop("file"),
+    }),
+    recipientsCase("recipients/load-skips-comments-and-blanks", []map[string]any{
+      rop("seed", "data_b64", b64([]byte("# header\n\n  "+recipientA+"  \n\n# trailing comment\n"+recipientB+"\n"))),
+      rop("load"),
+    }),
+    recipientsCase("recipients/load-missing-file", []map[string]any{
+      rop("exists"),
+      rop("load"),
+    }),
+    recipientsCase("recipients/load-comment-only-file", []map[string]any{
+      rop("seed", "data_b64", b64([]byte("# only a comment\n"))),
+      rop("load"),
+    }),
+    recipientsCase("recipients/load-empty-file", []map[string]any{
+      rop("seed", "data_b64", b64([]byte(""))),
+      rop("exists"),
+      rop("load"),
+    }),
+    recipientsCase("recipients/load-keeps-invalid-lines-out-of-the-list", []map[string]any{
+      rop("seed", "data_b64", b64([]byte(recipientA+"\nnot-a-recipient\n"))),
+      rop("load"),
+    }),
+    recipientsCase("recipients/remove-existing", []map[string]any{
+      rop("add", "recipient", recipientA),
+      rop("add", "recipient", recipientB),
+      rop("remove", "recipient", recipientA),
+      rop("file"),
+      rop("load"),
+    }),
+    recipientsCase("recipients/remove-last-recipient", []map[string]any{
+      rop("add", "recipient", recipientA),
+      rop("remove", "recipient", recipientA),
+      rop("file"),
+      rop("load"),
+    }),
+    recipientsCase("recipients/remove-from-missing-file", []map[string]any{
+      rop("remove", "recipient", recipientA),
+      rop("exists"),
+    }),
+    recipientsCase("recipients/remove-unknown-recipient", []map[string]any{
+      rop("add", "recipient", recipientA),
+      rop("remove", "recipient", recipientB),
+      rop("file"),
+    }),
+    recipientsCase("recipients/remove-rejects-malformed-argument", []map[string]any{
+      rop("add", "recipient", recipientA),
+      rop("remove", "recipient", "not-a-recipient"),
+      rop("file"),
+    }),
+    recipientsCase("recipients/remove-preserves-comments-blanks-and-junk", []map[string]any{
+      rop("seed", "data_b64", b64([]byte("# header\n\n"+recipientA+"\nnot-a-recipient\n"+recipientB+"\n# tail\n"))),
+      rop("remove", "recipient", recipientA),
+      rop("file"),
+      rop("load"),
+    }),
+    recipientsCase("recipients/remove-accepts-uppercase-argument", []map[string]any{
+      rop("add", "recipient", recipientA),
+      rop("remove", "recipient", strings.ToUpper(recipientA)),
+      rop("file"),
+    }),
+    recipientsCase("recipients/remove-removes-every-duplicate-line", []map[string]any{
+      rop("seed", "data_b64", b64([]byte(recipientA+"\n"+recipientA+"\n"+recipientB+"\n"))),
+      rop("remove", "recipient", recipientA),
+      rop("file"),
+    }),
+    recipientsCase("recipients/crlf-file-loads-without-carriage-returns", []map[string]any{
+      rop("seed", "data_b64", b64([]byte("# header\r\n"+recipientA+"\r\n"+recipientB+"\r\n"))),
+      rop("load"),
+    }),
+    recipientsCase("recipients/crlf-file-remove", []map[string]any{
+      rop("seed", "data_b64", b64([]byte(recipientA+"\r\n"+recipientB+"\r\n"))),
+      rop("remove", "recipient", recipientA),
+      rop("file"),
+      rop("load"),
+    }),
+    recipientsCase("recipients/add-to-crlf-file", []map[string]any{
+      rop("seed", "data_b64", b64([]byte(recipientA+"\r\n"))),
+      rop("add", "recipient", recipientB),
+      rop("file"),
+    }),
+    recipientsLayoutCase("recipients-layout/created-by-add-recipient"),
+    recipientsModesCase("recipients-modes/created-by-add-recipient"),
     registryLayoutCase("registry-layout/created-by-add-device"),
     registryModesCase("registry-modes/created-by-add-device"),
   }

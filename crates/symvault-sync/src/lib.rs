@@ -11,7 +11,9 @@ pub mod git;
 pub mod importer;
 pub mod intake;
 pub mod pairing;
+pub mod recipients;
 pub mod reconcile;
+pub mod safeio;
 
 pub use archive::{ArchiveEntry, ArchiveError, backup, restore};
 pub use devices::{Device, DeviceError, DeviceList, DeviceRegistry};
@@ -21,4 +23,5 @@ pub use pairing::{
     marshal_join_response, marshal_pairing_file, parse_join_response, parse_pairing_file,
     response_filenames, validate_pairing_token,
 };
+pub use recipients::{RecipientsError, RecipientsFile};
 pub use reconcile::{Conflict, ReconcileInput, ReconcileOutput, reconcile};

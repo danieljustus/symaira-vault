@@ -39,6 +39,8 @@ var (
 	extraSourceFiles = []string{
 		"cmd/device.go",
 		"internal/vault/devices.go",
+		"internal/vault/recipients.go",
+		"internal/crypto/age.go",
 		"internal/vault/symlink_harden.go",
 		"internal/vault/symlink_harden_windows.go",
 		"internal/fsutil/reexport.go",
@@ -83,7 +85,8 @@ func scope() map[string]string {
 		"reencryption":     "out of scope here: new-recipient re-encryption on `device accept` is covered by CRYPTO-004 and is not re-frozen by this generator",
 		"token_generation": "not a byte contract: GenerateToken draws from crypto/rand; only its shape (32 base32-hex characters) and ValidatePairingToken acceptance are frozen",
 		"expiry_clock":     "wall-clock independent: expiry is expressed through the exported pairing.TokenTTL, never by sleeping, so --check is not timing dependent",
-		"registry_modes":   "the registry-modes group records POSIX permission bits and is compared on Unix runners only; the case identity is still checked on Windows, so the group cannot be dropped unnoticed",
+		"registry_modes":   "every *-modes group records POSIX permission bits and is compared on Unix runners only; the case identity is still checked on Windows, so a group cannot be dropped unnoticed",
+		"recipient_errors": "semantic contract: recipients operations are frozen by error class (already_exists, not_found, invalid), never by Go error text",
 		"registry_paths":   "no absolute path is frozen: the registry cases record devices.json bytes and returned values, which are identical on every platform",
 	}
 }
@@ -478,11 +481,12 @@ func validate(root string, fixtures *os.Root, path string) error {
 			!sameJSON(got[i].Input, fixture.Cases[i].Input) {
 			return fmt.Errorf("pairing case %d (%s) drifted; regenerate from the Go oracle", i, fixture.Cases[i].ID)
 		}
-		// The registry-modes group records POSIX permission bits. Windows has
-		// none to compare, so its payload is verified on Unix runners only.
-		// The case identity is still checked above, so a group that silently
+		// Any "*-modes" group records POSIX permission bits. Windows has none
+		// to compare, so those payloads are verified on Unix runners only. The
+		// case identity is still checked above, so a group that silently
 		// disappeared would still fail here.
-		if runtime.GOOS == "windows" && strings.HasPrefix(got[i].ID, "registry-modes/") {
+		group, _, _ := strings.Cut(got[i].ID, "/")
+		if runtime.GOOS == "windows" && strings.HasSuffix(group, "-modes") {
 			continue
 		}
 		if !sameJSON(got[i].Expected, fixture.Cases[i].Expected) {
