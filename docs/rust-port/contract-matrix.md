@@ -60,7 +60,7 @@ pre-existing but previously undocumented here; all other rows, including
 | HTTP-002 | bearer/scoped tokens | issue/use/expire/revoke/rotate | Go auth | storage bytes, scopes, TTL, aliases, failure codes | fake-clock fixtures | all | bytes + semantic | TODO |
 | HTTP-003 | OAuth/PKCE/DCR | discovery/register/authorize/token/refresh | Go auth server | endpoints, validation, persistence, single-use rotation | protocol suite | all | transcript + bytes | TODO |
 | HTTP-004 | origin/TLS/limits | hostile hosts/origins/bodies/timeouts | Go server | CSRF/host checks, request bounds, TLS behavior | adversarial suite | all | semantic | TODO |
-| PAIRING-001 | device pairing handshake | `device pair`/`join`/`accept`/`list`/`add`/`revoke` corpus, transport-independent `PairingFile`/`JoinResponse` JSON artifacts (git remote, synced-folder, and `<token>-joined.json` alias) | `internal/pairing.{PairingFile,JoinResponse}`, `cmd/device.go` (`newDevicePairCmd`, `newDeviceJoinCmd`, `newDeviceAcceptCmd`, `newDeviceListCmd`, `newDeviceAddCmd`, `newDeviceRevokeCmd`) | exact handshake artifact bytes/aliases, new-recipient re-encryption on accept (shares `CRYPTO-004`), revoked device no longer decrypts, expired/malformed/replayed artifacts rejected | `scripts/rust-port/cmd/pairinggen` freezes 147 cases from the pinned oracle into `testdata/port/pairing/contract.json`, replayed in full by `crates/symvault-sync/tests/pairing_contract.rs` against `pairing.rs` (artifact codec, alias lookup, token path-safety, single-use/expiry/cooldown token store), `devices.rs` (`.symvault/devices.json`) and `recipients.rs` (`recipients.txt`), over the shared symlink-hardened atomic IO in `safeio.rs`; `make pairing-differential`, native 3-OS matrix `.github/workflows/rust-pairing.yml` green on ubuntu/macOS/Windows at `12d112d1` in run 34889579439. Mutation-checked: 37/41 on the codec, 15/15 on the registry, 16/18 on recipients, 6/6 on the shared IO; every survivor analysed and shown equivalent. Still unported: the `cmd/device.go` CLI orchestration that drives pair/join/accept/list/add/revoke across these pieces | all | bytes + semantic | in_progress |
+| PAIRING-001 | device pairing handshake | `device pair`/`join`/`accept`/`list`/`add`/`revoke` corpus, transport-independent `PairingFile`/`JoinResponse` JSON artifacts (git remote, synced-folder, and `<token>-joined.json` alias) | `internal/pairing.{PairingFile,JoinResponse}`, `cmd/device.go` (`newDevicePairCmd`, `newDeviceJoinCmd`, `newDeviceAcceptCmd`, `newDeviceListCmd`, `newDeviceAddCmd`, `newDeviceRevokeCmd`) | exact handshake artifact bytes/aliases, new-recipient re-encryption on accept (shares `CRYPTO-004`), revoked device no longer decrypts, expired/malformed/replayed artifacts rejected | `scripts/rust-port/cmd/pairinggen` freezes 147 cases from the pinned oracle into `testdata/port/pairing/contract.json`, replayed in full by `crates/symvault-sync/tests/pairing_contract.rs` against `pairing.rs` (artifact codec, alias lookup, token path-safety, single-use/expiry/cooldown token store), `devices.rs` (`.symvault/devices.json`) and `recipients.rs` (`recipients.txt`), over the shared symlink-hardened atomic IO in `safeio.rs`; `make pairing-differential`, native 3-OS matrix `.github/workflows/rust-pairing.yml` green on ubuntu/macOS/Windows at `12d112d1` in run 34889579439. Mutation-checked: 37/41 on the codec, 15/15 on the registry, 16/18 on recipients, 6/6 on the shared IO; every survivor analysed and shown equivalent. CLI orchestration for `pair`/`join`/`accept`/`list`/`add`/`revoke` implemented in `symvault-cli` with unlock, age identity setup, atomic re-encryption, and git auto-commit; verified via `make device-list-differential` and end-to-end integration tests in `crates/symvault-cli/tests/device_pairing_cli.rs` | all | bytes + semantic | in_progress |
 | APPROVAL-001 | local approval CLI, device session tokens, and mTLS client identity | `symvault approval list/decide` over authenticated loopback; `DeviceSessionStore` enrollment/revocation/expiry corpus; generated/custom TLS and CA rotation/revocation cases | `internal/approval.{HandleList,HandleDecide,LocalHTTPHandler}`, `internal/pairing.{NewDeviceSessionStore,(*DeviceSessionStore).{Enroll,Validate,Revoke,List,CleanupExpired}}`, `internal/mcp/serverbootstrap/http.go` (`ValidateMTLSSettings`), `cmd/approval.go` | loopback-only + vault-directory-ownership proof for the local CLI; device-token bearer auth for the remote queue endpoint; hashed-only persisted tokens (no raw bearer on disk); dedicated non-reusable approval-client mTLS identity; missing/malformed/revoked/reused identity and `allow_insecure_bind`+mTLS fail closed; double-decision conflict rejected | none yet; no `symvault-mcp` fixture generator or Rust module exists for this seam | all | bytes + semantic | TODO |
 | BROKER-001 | command execution | fake executables and process trees | Go run/broker | env injection, PTY, timeout, cleanup, redaction | process harness | native OS | semantic | TODO |
 | BROKER-002 | outbound API/templates | loopback HTTP server | Go broker/template | SSRF policy, headers/body, secret non-exposure | HTTP transcript tests | all | bytes/semantic | TODO |
@@ -124,14 +124,36 @@ validates the complete report and raw observations before returning success.
 Reports use fresh timestamped paths and exclusive creation rather than
 overwriting prior evidence.
 
-This is not the complete device command family. YAML rendering, config/profile
-vault resolution and pair/join/accept/add/revoke remain unported. Missing explicit
-`--vault` and YAML are explicitly rejected rather than silently returning wrong
-results. Mutating commands are not exposed until unlock, identity generation,
-re-encryption, confirmation and git side effects can be implemented together.
-The read-only slice shares output/parser evidence with CLI-005/CLI-006; neither
-row is promoted. The preserved Go `AddRecipient` separator defect is tracked in
+The preserved Go `AddRecipient` separator defect is tracked in
 https://github.com/danieljustus/symaira-vault/issues/1055.
+
+## Device CLI mutation & orchestration completion (2026-09-15)
+
+The mutating `device` command family (`pair`, `join`, `accept`, `add`, `revoke`)
+is now fully implemented in `symvault-cli` with unlock, age X25519 identity setup,
+atomic re-encryption, confirmation gating, and git auto-commit:
+
+1. `device pair`: Generates 32-character base32-hex token via `symvault_sync::pairing::generate_token()`,
+   writes `.symvault/pairing/<token>.json` (0600), prints token/key/fingerprint/instructions (unless `--quiet`),
+   auto-commits if git repo.
+2. `device join`: Handles both `--pairing-file <path>` (1 arg) and `<remote-url> <token>` (2 args) transports,
+   validates token, checks uninitialized vault, reads/prompts passphrase (min 12 chars), generates new age identity,
+   writes `config.yaml`, saves `identity.age` encrypted with scrypt, writes `recipients.txt`, writes response artifact
+   (`<token>-response.json` for file flow or `<token>-joined.json` for git flow), removes invitation artifact,
+   and auto-commits.
+3. `device accept`: Validates token, unlocks vault, reads response artifact under either canonical alias (`<token>-joined.json`
+   or `<token>-response.json`), adds recipient to `recipients.txt`, re-encrypts all entries under `entries/` for updated
+   recipients set, rebuilds `manifest.age` if present, removes consumed response artifact, and auto-commits.
+4. `device add`: Handles `--pair <token:publickey>`, validates token and age public key, reads passphrase, generates
+   identity, writes `config.yaml`, saves `identity.age`, writes `recipients.txt`, writes `.symvault/pairing/<token>-joined.json`,
+   and prints setup completion summary to stderr.
+5. `device revoke`: Validates initialized vault, unlocks vault, looks up target device in `.symvault/devices.json`, refuses
+   self-revocation of the current device, prompts for confirmation unless `--yes`/`-y` is passed, removes device from registry,
+   removes recipient from `recipients.txt`, re-encrypts all entries without the revoked recipient, and auto-commits.
+
+Integration tests in `crates/symvault-cli/tests/device_pairing_cli.rs` verify the complete lifecycle:
+invitation generation, join response generation, acceptance re-encryption with multi-device mutual decryption,
+`device add --pair` and `device revoke` with post-revocation decryption failure, self-revocation refusal, and malformed token rejection.
 
 ## Rules
 

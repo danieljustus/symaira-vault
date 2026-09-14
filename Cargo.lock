@@ -2397,7 +2397,10 @@ dependencies = [
  "serde_json",
  "symaira-core-version",
  "symvault-core",
+ "symvault-crypto",
+ "symvault-store",
  "symvault-sync",
+ "zeroize",
 ]
 
 [[package]]
@@ -2478,6 +2481,7 @@ dependencies = [
  "base64",
  "csv",
  "flate2",
+ "getrandom 0.3.3",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -2485,6 +2489,7 @@ dependencies = [
  "tar",
  "tempfile",
  "thiserror 1.0.69",
+ "time",
  "zip",
 ]
 

@@ -19,7 +19,7 @@ pub use archive::{ArchiveEntry, ArchiveError, backup, restore};
 pub use devices::{Device, DeviceError, DeviceList, DeviceRegistry};
 pub use git::{Commit, CommitOptions, GitError, GitRepository, GitStatus, PullResult, PushResult};
 pub use pairing::{
-    GoTime, JoinResponse, PairingError, PairingFile, TokenStore, display_token,
+    GoTime, JoinResponse, PairingError, PairingFile, TokenStore, display_token, generate_token,
     marshal_join_response, marshal_pairing_file, parse_join_response, parse_pairing_file,
     response_filenames, validate_pairing_token,
 };

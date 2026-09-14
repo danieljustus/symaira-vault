@@ -115,6 +115,21 @@ impl GoTime {
         offset_seconds: 0,
     };
 
+    /// Captures the current wall-clock time in UTC as a GoTime.
+    pub fn now() -> Self {
+        let dt = time::OffsetDateTime::now_utc();
+        Self {
+            year: dt.year(),
+            month: dt.month() as u8,
+            day: dt.day(),
+            hour: dt.hour(),
+            minute: dt.minute(),
+            second: dt.second(),
+            nanosecond: dt.nanosecond(),
+            offset_seconds: 0,
+        }
+    }
+
     /// Parses the strict RFC3339 grammar Go's `time.Time::UnmarshalJSON` accepts.
     ///
     /// Strict means uppercase `T` and `Z` only, a mandatory zone, and no leap
@@ -593,6 +608,44 @@ pub fn response_filenames(token: &str) -> [String; 2] {
     ]
 }
 
+/// Generates a high-entropy 32-character pairing token.
+///
+/// Generates 20 cryptographically secure random bytes encoded with unpadded
+/// RFC 4648 base32-extended-hex alphabet (`0`–`9`, `A`–`V`), yielding 32 characters
+/// with ~160 bits of entropy. Matches Go's `pairing.GenerateToken()`.
+pub fn generate_token() -> Result<String, PairingError> {
+    let mut bytes = [0u8; 20];
+    getrandom::fill(&mut bytes)
+        .map_err(|e| PairingError::Json(format!("generate random token: {e}")))?;
+    const ALPHABET: &[u8; 32] = b"0123456789ABCDEFGHIJKLMNOPQRSTUV";
+    let mut out = String::with_capacity(32);
+    for chunk in bytes.as_chunks::<5>().0 {
+        let b0 = chunk[0];
+        let b1 = chunk[1];
+        let b2 = chunk[2];
+        let b3 = chunk[3];
+        let b4 = chunk[4];
+
+        out.push(char::from(ALPHABET[((b0 >> 3) & 0x1F) as usize]));
+        out.push(char::from(
+            ALPHABET[(((b0 & 0x07) << 2) | ((b1 >> 6) & 0x03)) as usize],
+        ));
+        out.push(char::from(ALPHABET[((b1 >> 1) & 0x1F) as usize]));
+        out.push(char::from(
+            ALPHABET[(((b1 & 0x01) << 4) | ((b2 >> 4) & 0x0F)) as usize],
+        ));
+        out.push(char::from(
+            ALPHABET[(((b2 & 0x0F) << 1) | ((b3 >> 7) & 0x01)) as usize],
+        ));
+        out.push(char::from(ALPHABET[((b3 >> 2) & 0x1F) as usize]));
+        out.push(char::from(
+            ALPHABET[(((b3 & 0x03) << 3) | ((b4 >> 5) & 0x07)) as usize],
+        ));
+        out.push(char::from(ALPHABET[(b4 & 0x1F) as usize]));
+    }
+    Ok(out)
+}
+
 /// Rejects any token that is unsafe to splice into a handshake filename.
 ///
 /// Accepts only the base32-hex alphabet `GenerateToken` emits (`0`–`9`,
@@ -900,5 +953,30 @@ mod tests {
             }),
             Err(PairingError::UnmarshalableTime)
         );
+    }
+
+    #[test]
+    fn generate_token_produces_valid_32_char_base32_hex_token() {
+        for _ in 0..20 {
+            let token = generate_token().expect("token generation should succeed");
+            assert_eq!(token.len(), 32);
+            validate_pairing_token(&token).expect("generated token must be valid");
+            let displayed = display_token(&token).expect("display token should succeed");
+            assert_eq!(displayed.len(), 39); // 32 chars + 7 hyphens
+        }
+    }
+
+    #[test]
+    fn go_time_now_produces_valid_timestamp() {
+        let now = GoTime::now();
+        assert!(now.year >= 2026);
+        assert!(now.month >= 1 && now.month <= 12);
+        assert!(now.day >= 1 && now.day <= 31);
+        assert!(now.hour <= 23);
+        assert!(now.minute <= 59);
+        assert!(now.second <= 59);
+        let formatted = now.to_rfc3339_nano();
+        let parsed = GoTime::parse_rfc3339(&formatted).expect("must parse formatted time");
+        assert_eq!(parsed, now);
     }
 }

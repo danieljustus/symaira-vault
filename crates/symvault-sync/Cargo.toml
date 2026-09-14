@@ -11,12 +11,14 @@ publish = false
 base64 = "=0.22.1"
 csv = "=1.4.0"
 flate2 = "=1.1.5"
+getrandom = "=0.3.3"
 serde.workspace = true
 serde_json.workspace = true
 sha2 = "=0.10.9"
 symvault-crypto = { path = "../symvault-crypto", version = "=0.0.0" }
 tar = "=0.4.46"
 thiserror = "=1.0.69"
+time = { version = "=0.3.47", features = ["formatting", "parsing"] }
 zip = { version = "=6.0.0", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]

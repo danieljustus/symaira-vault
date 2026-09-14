@@ -58,10 +58,51 @@ enum Command {
 
 #[derive(Debug, Subcommand)]
 enum DeviceCommand {
+    /// Generate a pairing token for a new device.
+    Pair {
+        #[arg(value_name = "ARG", num_args = 0..)]
+        _extra: Vec<OsString>,
+    },
+    /// Join an existing vault as a new device.
+    Join {
+        /// Name for this device (defaults to hostname).
+        #[arg(long)]
+        name: Option<String>,
+        /// Join without a git remote: path to the <token>.json invitation artifact.
+        #[arg(long = "pairing-file")]
+        pairing_file: Option<std::path::PathBuf>,
+        /// Arguments: either `<remote-url> <token>` or `<token>` (with --pairing-file).
+        #[arg(value_name = "ARG", num_args = 0..)]
+        args: Vec<String>,
+    },
+    /// Accept a join request and re-encrypt entries for the new device.
+    Accept {
+        #[arg(value_name = "ARG", num_args = 0..)]
+        args: Vec<String>,
+    },
     /// List registered devices and unmanaged recipients.
     List {
         #[arg(value_name = "ARG", num_args = 0..)]
         _extra: Vec<OsString>,
+    },
+    /// Add this device to an existing multi-device vault.
+    Add {
+        /// Pair with an existing device using QR data.
+        #[arg(long)]
+        pair: bool,
+        /// Name for this device (defaults to hostname).
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(value_name = "ARG", num_args = 0..)]
+        args: Vec<String>,
+    },
+    /// Revoke a device and re-encrypt all entries.
+    Revoke {
+        /// Skip confirmation prompt.
+        #[arg(short = 'y', long = "yes")]
+        yes: bool,
+        #[arg(value_name = "ARG", num_args = 0..)]
+        args: Vec<String>,
     },
 }
 
@@ -88,12 +129,41 @@ fn main() -> ExitCode {
 
     match cli.command {
         Some(Command::Version(_)) => write_version(&cli.output, cli.json),
-        Some(Command::Device {
-            command: DeviceCommand::List { .. },
-        }) => {
-            let result = cli.vault.as_deref().ok_or_else(|| {
-                "device list currently requires explicit --vault; config/profile resolution is not yet ported".to_owned()
-            }).and_then(|vault| device::list(vault, &cli.output, cli.json, cli.quiet));
+        Some(Command::Device { command }) => {
+            let vault = match cli.vault.as_deref() {
+                Some(v) => v,
+                None => {
+                    let _ = writeln!(
+                        io::stderr(),
+                        "Error: device commands currently require explicit --vault; config/profile resolution is not yet ported"
+                    );
+                    return ExitCode::from(1);
+                }
+            };
+            let result = match command {
+                DeviceCommand::Pair { .. } => device::pair(vault, cli.quiet),
+                DeviceCommand::Join {
+                    name,
+                    pairing_file,
+                    args,
+                } => device::join(vault, &args, name, pairing_file, cli.quiet),
+                DeviceCommand::Accept { args } => {
+                    if args.len() != 1 {
+                        Err(format!("accepts 1 arg(s), received {}", args.len()))
+                    } else {
+                        device::accept(vault, &args[0], cli.quiet)
+                    }
+                }
+                DeviceCommand::List { .. } => device::list(vault, &cli.output, cli.json, cli.quiet),
+                DeviceCommand::Add { pair, name, args } => device::add(vault, pair, &args, name),
+                DeviceCommand::Revoke { yes, args } => {
+                    if args.len() != 1 {
+                        Err(format!("accepts 1 arg(s), received {}", args.len()))
+                    } else {
+                        device::revoke(vault, &args[0], yes, cli.quiet)
+                    }
+                }
+            };
             match result {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(error) => {

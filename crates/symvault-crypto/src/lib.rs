@@ -143,6 +143,12 @@ impl fmt::Display for Recipient {
     }
 }
 
+/// Generates a new random age X25519 identity.
+#[must_use]
+pub fn generate_identity() -> Identity {
+    Identity(age::x25519::Identity::generate())
+}
+
 /// Parses an age X25519 identity string.
 pub fn parse_identity(value: &str) -> Result<Identity, CryptoError> {
     value
@@ -161,6 +167,42 @@ pub fn parse_recipient(value: &str) -> Result<Recipient, CryptoError> {
 #[must_use]
 pub fn recipient_string(identity: &Identity) -> String {
     identity.0.to_public().to_string()
+}
+
+/// Encrypts an identity with a passphrase using scrypt and returns the ciphertext.
+pub fn encrypt_identity_scrypt(
+    identity: &Identity,
+    passphrase: &SecretBytes,
+    work_factor: u8,
+) -> Result<Vec<u8>, CryptoError> {
+    let secret = identity.0.to_string();
+    let secret_bytes = secret.expose_secret().as_bytes();
+    encrypt_scrypt(
+        secret_bytes,
+        passphrase,
+        if work_factor == 0 { 18 } else { work_factor },
+    )
+}
+
+/// Decrypts an identity from an age envelope with a passphrase.
+pub fn decrypt_identity(
+    ciphertext: &[u8],
+    passphrase: &SecretBytes,
+) -> Result<Identity, CryptoError> {
+    let format = detect_envelope(ciphertext);
+    let plaintext = match format {
+        EnvelopeFormat::Argon2id => decrypt_argon2id(ciphertext, passphrase)?,
+        EnvelopeFormat::Scrypt => decrypt_scrypt(ciphertext, passphrase)?,
+        EnvelopeFormat::Unknown => {
+            return Err(CryptoError::new(
+                FailureClass::MalformedEnvelope,
+                "unknown envelope format",
+            ));
+        }
+    };
+    let text = std::str::from_utf8(&plaintext)
+        .map_err(|_| CryptoError::new(FailureClass::MalformedEnvelope, "invalid utf-8 identity"))?;
+    parse_identity(text.trim())
 }
 
 /// Returns the deterministic storage name used when path pseudonymization is enabled.
