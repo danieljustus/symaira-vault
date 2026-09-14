@@ -14,9 +14,12 @@
     "source_digest": "ce11654f548221307d12fdfdca54654abdad28eec207df765cca73f6b67ea008",
     "generator_files": [
       "scripts/rust-port/cmd/store004gen/main.go",
-      "scripts/rust-port/cmd/store004gen/main_test.go"
+      "scripts/rust-port/cmd/store004gen/main_test.go",
+      "scripts/rust-port/cmd/store004gen/process_group_unix.go",
+      "scripts/rust-port/cmd/store004gen/process_group_windows.go",
+      "scripts/rust-port/cmd/store004gen/process_group_windows_test.go"
     ],
-    "generator_digest": "dca4bf8d741a65ab806dbba634f82614eef0eb191f0d9ebc4a88e41bb78d17fc"
+    "generator_digest": "dd2a1efc49582d89dbdee367392a57bb5fd10f09c025c1cb8be4a628a4ff9c52"
   },
   "cases": [
     {

@@ -1616,6 +1616,9 @@ fn validate_store004_provenance(value: &Store004Fixture, root: &Path) -> Result<
     let generator_files = vec![
         "scripts/rust-port/cmd/store004gen/main.go".into(),
         "scripts/rust-port/cmd/store004gen/main_test.go".into(),
+        "scripts/rust-port/cmd/store004gen/process_group_unix.go".into(),
+        "scripts/rust-port/cmd/store004gen/process_group_windows.go".into(),
+        "scripts/rust-port/cmd/store004gen/process_group_windows_test.go".into(),
     ];
     if value.oracle.commit != "caadd5ef95e8f19fabd3ae3d2c04caa296f2fd44"
         || value.oracle.release != "v0.22.1"

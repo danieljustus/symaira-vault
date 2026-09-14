@@ -39,6 +39,27 @@ func TestCheckFixtureRejectsDriftWithoutRewriting(t *testing.T) {
 	}
 }
 
+func TestCheckFixtureRejectsProcessGroupSourceDrift(t *testing.T) {
+	root := rootDir()
+	fixture := filepath.Join(root, "testdata/port/store/store004_manifest_failure.json")
+	source := filepath.Join(root, "scripts/rust-port/cmd/store004gen/process_group_unix.go")
+	original, err := os.ReadFile(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.WriteFile(source, original, 0o600); err != nil {
+			t.Errorf("restore process-group source: %v", err)
+		}
+	})
+	if err := os.WriteFile(source, append(original, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := checkFixture(root, fixture); err == nil {
+		t.Fatal("check accepted process-group source drift")
+	}
+}
+
 func TestExtractAcceptsGitArchivePAXMetadataOnly(t *testing.T) {
 	tree, err := extract(rootDir())
 	if err != nil {

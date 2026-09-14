@@ -44,6 +44,9 @@ var sourceFiles = []string{
 var generatorFiles = []string{
 	"scripts/rust-port/cmd/store004gen/main.go",
 	"scripts/rust-port/cmd/store004gen/main_test.go",
+	"scripts/rust-port/cmd/store004gen/process_group_unix.go",
+	"scripts/rust-port/cmd/store004gen/process_group_windows.go",
+	"scripts/rust-port/cmd/store004gen/process_group_windows_test.go",
 }
 
 const oracleProgram = `package main
@@ -264,7 +267,7 @@ func isolatedEnvironment(goPath, home, tmp string) []string {
 	return env
 }
 
-func runOracle(root string, pseudonymize bool) ([]outcome, error) {
+func runOracle(root string, pseudonymize bool) (outcomes []outcome, err error) {
 	goPath, err := resolveGo()
 	if err != nil {
 		return nil, err
@@ -304,7 +307,12 @@ func runOracle(root string, pseudonymize bool) ([]outcome, error) {
 	configureProcessGroup(cmd)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	if err = cmd.Start(); err != nil {
+	defer func() {
+		if closeErr := closeProcessGroup(cmd); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close oracle process group: %w", closeErr))
+		}
+	}()
+	if err = startProcessGroup(cmd); err != nil {
 		return nil, fmt.Errorf("start oracle: %w", err)
 	}
 	waitErr := make(chan error, 1)
