@@ -1,4 +1,4 @@
-.PHONY: all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check rust-007-fixtures-generate rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates help docs-check
+.PHONY: all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-generate rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates help docs-check
 
 # Variables
 BINARY_NAME := symvault
@@ -226,6 +226,19 @@ core-fixtures-check: quota-fixtures-check
 		--redact-output $(PORT_REDACT_FIXTURE) \
 		--crypto-output $(PORT_CRYPTO_FIXTURE)
 
+# STORE-002's fixture advances its own oracle past the frozen baseline
+# (fe098b91, "unreleased"), same pattern as AUDIT-001/002 and APPROVAL-001;
+# storemetagen has no built-in default, unlike sibling *gen tools, so the
+# pin lives here rather than as a Go constant.
+STORE_METADATA_ORACLE_COMMIT := fe098b917a72125207bc711915f8daa791d1658f
+STORE_METADATA_ORACLE_RELEASE := unreleased
+
+store-metadata-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/storemetagen \
+		--check \
+		--oracle-commit $(STORE_METADATA_ORACLE_COMMIT) \
+		--oracle-release $(STORE_METADATA_ORACLE_RELEASE)
+
 policy-fixtures-generate:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/policygen \
 		--output $(PORT_POLICY_FIXTURE) \
@@ -317,7 +330,7 @@ rust-fuzz-smoke: rust-fuzz-lock
 rust-fuzz:
 	$(MAKE) rust-fuzz-smoke RUST_FUZZ_RUNS= RUST_FUZZ_MAX_TOTAL_TIME=60
 
-port-contract: port-fixtures-check core-fixtures-check policy-fixtures-check sync-io-differential differential-go-selftest crypto-differential
+port-contract: port-fixtures-check core-fixtures-check policy-fixtures-check store-metadata-fixtures-check sync-io-differential differential-go-selftest crypto-differential
 
 rust-build:
 	$(CARGO) build --workspace --locked

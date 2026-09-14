@@ -13,7 +13,7 @@
     "generator_files": [
       "scripts/rust-port/cmd/storemetagen/main.go"
     ],
-    "generator_digest": "bd1bd55b50f3d2fe5aa615a509f42d3ba5103d1e0b4e4d7b48ae19d81dd8c838"
+    "generator_digest": "0822d2bcd03b1c09e49772f371636ca0b74d30889e58fd27392655e57392bd80"
   },
   "vectors": [
     {
