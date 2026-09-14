@@ -348,6 +348,12 @@ impl Config {
         }
     }
 
+    /// Returns a named vault profile using the Go loader's nil-on-miss semantics.
+    #[must_use]
+    pub fn profile_for_name(&self, name: &str) -> Option<&Profile> {
+        self.profiles.as_ref()?.get(name)
+    }
+
     pub fn set_auth_method(&mut self, method: &str) -> Result<(), ConfigError> {
         let method = AuthMethod::parse(method)?;
         self.auth_method = method;
@@ -399,7 +405,7 @@ impl Config {
             config.use_touch_id = Some(boolean(v, "useTouchID")?);
         }
         if let Some(v) = root.get(key("defaultProfile")).filter(|v| !v.is_null()) {
-            config.default_profile = string(v, "defaultProfile")?;
+            config.default_profile = profile_string(v, "defaultProfile")?;
         }
         if let Some(v) = root.get(key("profiles")) {
             config.profiles = parse_profiles(v)?;
