@@ -82,12 +82,27 @@ def compare(go, rust, negative=False):
         assert go.stderr == rust.stderr, "stderr differs"
 
 
+def run_case(adapter, binary, case, cwd, env):
+    request = json.dumps({"binary": str(binary), "case": case}).encode()
+    result = subprocess.run([str(adapter)], input=request, cwd=cwd, env=env,
+                            capture_output=True, timeout=45, check=True)
+    observation = json.loads(result.stdout)
+    assert not observation["TimedOut"], "native runner timed out"
+    assert not observation["Signal"], "native runner observed signal"
+    assert observation["FilesBefore"] == observation["Files"], "list mutated sandbox"
+    return subprocess.CompletedProcess(case["args"], observation["ExitCode"],
+        base64.b64decode(observation["Stdout"] or ""),
+        base64.b64decode(observation["Stderr"] or "")), observation
+
+
 def main():
     if os.name == "nt":
         raise SystemExit("Windows device-list acceptance is pending reuse of the Go job-object runner; refusing unsafe timeout cleanup")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--report", type=Path, required=True)
     args = parser.parse_args()
+    if args.report.exists():
+        raise SystemExit("report already exists; choose a fresh evidence path")
     env = os.environ.copy()
     head = checked(["git", "rev-parse", "HEAD"], ROOT, env).decode().strip()
     oracle = checked(["git", "rev-parse", ORACLE], ROOT, env).decode().strip()
@@ -134,10 +149,12 @@ def main():
                 tar.extractall(oracle_dir, filter="data")
             go_binary = temp / ("go-symvault.exe" if os.name == "nt" else "go-symvault")
             checked(["go", "build", "-o", go_binary, "."], oracle_dir, env, 600)
+            adapter = temp / ("caserun.exe" if os.name == "nt" else "caserun")
+            checked(["go", "build", "-o", adapter, "./scripts/rust-port/cmd/caserun"], ROOT, env, 600)
             checked(["cargo", "build", "--manifest-path", ROOT / "Cargo.toml", "-p", "symvault-cli", "--locked"], ROOT, env, 600)
             rust_binary = Path(metadata["target_directory"]) / "debug" / ("symvault.exe" if os.name == "nt" else "symvault")
             report["binaries"] = {name: hashlib.sha256(path.read_bytes()).hexdigest()
-                                  for name, path in [("go", go_binary), ("rust", rust_binary)]}
+                                  for name, path in [("go", go_binary), ("rust", rust_binary), ("caserun", adapter)]}
             key = "age1" + "a" * 58
             other = "age1" + "b" * 58
             device = {"name": "laptop<&>\u2028", "public_key": key,
@@ -154,24 +171,18 @@ def main():
                         ("extra", ["ignored", "--output", "json"])]
             for name, registry, recipients in seeds + [("malformed", "not json", None)]:
                 for mode, flags in variants:
-                    vault = temp / "vault"
-                    if vault.exists():
-                        import shutil
-                        shutil.rmtree(vault)
-                    vault.mkdir()
+                    setup = []
                     if registry is not None:
-                        (vault / ".symvault").mkdir()
-                        (vault / ".symvault/devices.json").write_text(registry)
+                        setup.append({"path": ".symvault/devices.json", "content": registry})
                     if recipients is not None:
-                        (vault / "recipients.txt").write_text(recipients)
-                    before = manifest(vault)
-                    argv = ["--vault", str(vault), "device", "list", *flags]
-                    go = run([go_binary, *argv], temp, env)
-                    assert manifest(vault) == before, "Go list mutated vault"
-                    rust = run([rust_binary, *argv], temp, env)
-                    assert manifest(vault) == before, "Rust list mutated vault"
+                        setup.append({"path": "recipients.txt", "content": recipients})
+                    argv = ["--vault", "${WORKSPACE}", "device", "list", *flags]
+                    case = {"id": f"{name}/{mode}", "args": argv, "setup": setup, "timeout_ms": 10000}
+                    go, go_native = run_case(adapter, go_binary, case, temp, env)
+                    rust, rust_native = run_case(adapter, rust_binary, case, temp, env)
                     observation = {"id": f"{name}/{mode}", "argv": argv,
-                                   "negative": name == "malformed", "success": False}
+                                   "negative": name == "malformed", "success": False,
+                                   "native": {"go": go_native, "rust": rust_native}}
                     for language, result in [("go", go), ("rust", rust)]:
                         observation[language] = {"exit": result.returncode,
                             "stdout_b64": base64.b64encode(result.stdout).decode(),
@@ -194,7 +205,8 @@ def main():
             report["success"] = True
     finally:
         report["ended"] = time.time()
-        args.report.write_text(json.dumps(report, indent=2) + "\n")
+        with args.report.open("x", encoding="utf-8") as destination:
+            destination.write(json.dumps(report, indent=2) + "\n")
     print(f"PASS {len(report['cases'])} live device-list cases; report {args.report}")
 
 

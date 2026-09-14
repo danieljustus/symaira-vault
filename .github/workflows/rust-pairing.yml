@@ -111,6 +111,10 @@ jobs:
           set -euo pipefail
           make pairing-differential
 
+      - name: Verify native process-tree adapter and cleanup
+        shell: bash
+        run: go test -count=1 -v ./scripts/rust-port/cmd/caserun ./scripts/rust-port/internal/diff
+
       - name: Run read-only device-list CLI differential
         shell: bash
         run: |
@@ -122,5 +126,5 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: device-list-${{ matrix.os }}
-          path: target/device-list-differential.json
+          path: target/device-list-differential*.json
           if-no-files-found: warn

@@ -22,6 +22,7 @@ type Result struct {
 	Stdout      []byte
 	Stderr      []byte
 	Files       []ManifestEntry
+	FilesBefore []ManifestEntry
 	SandboxRoot string
 }
 
@@ -66,6 +67,10 @@ func Run(binary string, testCase Case) (result Result, err error) {
 		}
 	}
 
+	filesBefore, err := buildManifest(root)
+	if err != nil {
+		return Result{}, fmt.Errorf("manifest initial sandbox: %w", err)
+	}
 	replacements := map[string]string{
 		"${SANDBOX}":   root,
 		"${HOME}":      home,
@@ -199,6 +204,7 @@ func Run(binary string, testCase Case) (result Result, err error) {
 		Stdout:      append([]byte(nil), stdout.Bytes()...),
 		Stderr:      append([]byte(nil), stderr.Bytes()...),
 		Files:       files,
+		FilesBefore: filesBefore,
 		SandboxRoot: root,
 	}, wrapTreeCancellationError("terminate process tree", treeCancellationErr)
 }

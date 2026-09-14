@@ -98,7 +98,10 @@ registry ordering, optional last-seen timestamps, RFC3339 second precision,
 quiet mode and Go's byte-based key truncation. `make device-list-differential`
 builds the real Go CLI from `git archive caadd5e`, executes both binaries in
 private HOME/XDG roots, compares successful stdout/stderr bytes and verifies
-that neither command changes the vault. Malformed registry cases compare
+that neither command changes any manifest entry in its private sandbox.
+The CLI cases use `cmd/caserun`, a thin JSON adapter over the established Go
+`internal/diff.Run` process-tree runner; raw observations include before/after
+manifests, signal and timeout status. Malformed registry cases compare
 failure and stream placement only: exact parser diagnostics remain CLI-005.
 The initial corpus has 35 live cases and a changed-output rejection control;
 the native pairing workflow runs it but native acceptance is pending until
@@ -107,9 +110,12 @@ the actual candidate run succeeds.
 Review found that Python's Windows `taskkill /T` cannot reliably terminate
 descendants after the original parent exits. The live runner therefore refuses
 Windows execution before starting a process; this is an implementation gap,
-not an external blocker or native PASS. Next: reuse the existing Go
-`scripts/rust-port/internal/diff.Run` job-object runner for device-list cases,
-then remove the refusal only after its native cleanup regression passes.
+not an external blocker or native PASS. The CLI cases now reuse the Go
+job-object runner; Windows bootstrap process cleanup and the adapter's native
+regression still require acceptance before removing the refusal. The native
+workflow executes the adapter and established cleanup regression tests before
+device-list acceptance. Reports use fresh timestamped paths and refuse an
+existing destination rather than overwriting prior evidence.
 
 This is not the complete device command family. YAML rendering, config/profile
 vault resolution and pair/join/accept/add/revoke remain unported. Missing explicit

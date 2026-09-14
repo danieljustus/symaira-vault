@@ -38,6 +38,14 @@ class RunnerTests(unittest.TestCase):
             (root / "unexpected").mkdir()
             self.assertNotEqual(runner.manifest(root), before)
 
+    def test_existing_report_is_never_overwritten(self):
+        with tempfile.TemporaryDirectory() as cwd:
+            report = Path(cwd) / "existing.json"
+            report.write_bytes(b"retained evidence")
+            result = subprocess.run([sys.executable, str(Path(__file__).with_name("device_list_differential.py")), "--report", str(report)], capture_output=True, timeout=10)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(report.read_bytes(), b"retained evidence")
+
     @unittest.skipIf(os.name == "nt", "POSIX process group regression; native Windows remains required")
     def test_timeout_kills_descendant_holding_pipe(self):
         # Parent exits while its descendant still owns stdout/stderr. The runner
