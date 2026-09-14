@@ -192,6 +192,13 @@ func TestWindowsProcessTreeKillReportsEmptyJob(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newProcessTree: %v", err)
 	}
+	t.Cleanup(func() {
+		if cmd.Process != nil && cmd.ProcessState == nil {
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+		}
+		_ = tree.Close()
+	})
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("cmd.Start: %v", err)
 	}
@@ -202,6 +209,25 @@ func TestWindowsProcessTreeKillReportsEmptyJob(t *testing.T) {
 		t.Fatalf("cmd.Wait: %v", err)
 	}
 
+	// Process signaling precedes asynchronous job-accounting removal. Wait
+	// for the asserted empty-job precondition, not an arbitrary fixed sleep.
+	nativeTree := tree.(*windowsProcessTree)
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		nativeTree.mu.Lock()
+		active, queryErr := nativeTree.activeProcessesLocked()
+		nativeTree.mu.Unlock()
+		if queryErr != nil {
+			t.Fatalf("query empty-job precondition: %v", queryErr)
+		}
+		if active == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("job accounting retained %d active processes after exit", active)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	effective, err := tree.Kill()
 	if err != nil {
 		t.Fatalf("tree.Kill: %v", err)
