@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -254,7 +255,7 @@ func TestEncryptedIndexGoRustLiveAcceptance(t *testing.T) {
 	runSearchIndexAdapterExpectError(t, adapter, goRoot, goIdentity.String(), "load-search", "rust_public_key_derived_ciphertext_rejected", "--query", "go-rust-accepted")
 }
 
-func TestEncryptedIndexConcurrentLoadInvalidateGoRust(t *testing.T) {
+func TestEncryptedIndexLoadInvalidateGoRust(t *testing.T) {
 	adapter := searchIndexAdapter(t)
 	root := t.TempDir()
 	identity := testutil.TempIdentity(t)
@@ -278,39 +279,51 @@ func TestEncryptedIndexConcurrentLoadInvalidateGoRust(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	persistedCiphertext := bytes.HasPrefix(rawBefore, []byte("age-encryption.org/v1"))
-	plaintextAbsent := !bytes.Contains(rawBefore, []byte("MARKER"))
+	if len(rawBefore) == 0 || rawBefore[0] != indexFormatVersion {
+		t.Fatalf("unexpected search-index format byte: %x", rawBefore)
+	}
+	ciphertextNonempty := len(rawBefore) > 1+indexSaltLen
+	if !ciphertextNonempty {
+		t.Fatalf("search-index ciphertext is empty: %x", rawBefore)
+	}
+	plaintextAbsent := !bytes.Contains(rawBefore, []byte("Concurrent marker"))
 
-	start := make(chan struct{})
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		<-start
-		for i := 0; i < 32; i++ {
-			if err := sameIndex.loadFromDisk(root, identity); err != nil {
-				t.Errorf("concurrent Go load %d: %v", i, err)
-				return
-			}
-		}
-	}()
-	go func() {
-		defer wg.Done()
-		<-start
-		for i := 0; i < 32; i++ {
-			goIndex.Invalidate()
-		}
-	}()
-	close(start)
-	wg.Wait()
+	// Force the first load to populate memory from the persisted bytes. This
+	// makes the load-before-invalidate handoff observable instead of treating
+	// the just-built in-memory index as evidence of a successful load.
+	goIndex.ClearMemory()
+	if goIndex.IsBuilt() {
+		t.Fatal("Go ClearMemory retained the just-built index")
+	}
+	t.Cleanup(goIndex.Invalidate)
+
+	// Go loadFromDisk reads before taking idx.mu for commit. Its oracle
+	// contract here is sequential; Rust's stronger serialization is tested at
+	// the read/commit boundary in the private Rust regression test.
+	if err := sameIndex.loadFromDisk(root, identity); err != nil {
+		t.Fatal(err)
+	}
+	if !sameIndex.IsBuilt() {
+		t.Fatal("load did not commit")
+	}
 	goIndex.Invalidate()
 
-	want := map[string]any{
-		"index_absent":         true,
-		"persisted_ciphertext": persistedCiphertext,
-		"plaintext_absent":     plaintextAbsent,
+	// Observe the production invalidation before test cleanup.
+	if goIndex.IsBuilt() {
+		t.Fatal("Go index remained loaded after invalidation")
 	}
-	got := runSearchIndexAdapter(t, adapter, root, identity.String(), "concurrent-load-invalidate")
+	if _, err := os.Stat(filepath.Join(root, ".search-index")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("Go index file remained after invalidation: %v", err)
+	}
+
+	want := map[string]any{
+		"index_absent":        true,
+		"index_unloaded":      true,
+		"format_version":      float64(indexFormatVersion),
+		"ciphertext_nonempty": ciphertextNonempty,
+		"plaintext_absent":    plaintextAbsent,
+	}
+	got := runSearchIndexAdapter(t, adapter, root, identity.String(), "load-invalidate")
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Rust observation = %v; Go oracle = %v", got, want)
 	}

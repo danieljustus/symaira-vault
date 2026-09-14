@@ -63,16 +63,34 @@ impl SearchIndexStore {
 
     /// Loads the persisted index for `store`, returning whether one was found.
     ///
-    /// A missing or stale index clears the cached slot.  An I/O/decryption
-    /// error leaves the previously cached slot untouched, matching the Go
-    /// loader's fail-closed state transition.
+    /// Only a successfully validated index replaces the cached slot. A missing
+    /// index returns `Ok(false)` without changing memory; malformed,
+    /// wrong-identity, stale, or list failures preserve the prior slot and
+    /// return their original error after the persisted file is removed on a
+    /// best-effort basis. This follows Go's load-then-commit sequence.
     pub fn load(&self, store: &Store, identity: &Identity) -> Result<bool, StoreError> {
+        self.load_before_commit(store, identity, || {})
+    }
+
+    // Per-call observation seam; the public path supplies a no-op.
+    pub(super) fn load_before_commit(
+        &self,
+        store: &Store,
+        identity: &Identity,
+        before_commit: impl FnOnce(),
+    ) -> Result<bool, StoreError> {
         let mut state = lock_state(self.state)?;
         let slot = Self::slot_locked(&mut state, store)?;
         let mut current = lock_slot(&slot)?;
         let loaded = SearchIndex::load(store, identity)?;
-        *current = loaded;
-        Ok(current.is_some())
+        before_commit();
+        match loaded {
+            Some(loaded) => {
+                *current = Some(loaded);
+                Ok(true)
+            }
+            None => Ok(false),
+        }
     }
 
     /// Searches the currently loaded index for `needle`.
@@ -106,14 +124,17 @@ impl SearchIndexStore {
     }
 
     /// Invalidates one vault's index, clearing memory and deleting its file.
+    ///
+    /// Go clears memory even when its best-effort file removal fails. Preserve
+    /// that state transition and deliberately discard the deletion error here.
     pub fn invalidate(&self, store: &Store) -> Result<(), StoreError> {
         let mut state = lock_state(self.state)?;
         let slot = Self::slot_locked(&mut state, store)?;
         let mut current = lock_slot(&slot)?;
         if let Some(index) = current.as_mut() {
-            index.invalidate()?;
+            let _ = index.invalidate();
         } else {
-            SearchIndex::invalidate_persisted(store)?;
+            let _ = SearchIndex::invalidate_persisted(store);
         }
         *current = None;
         Ok(())
@@ -163,4 +184,14 @@ fn lock_slot(
 ) -> Result<std::sync::MutexGuard<'_, Option<SearchIndex>>, StoreError> {
     slot.lock()
         .map_err(|_| StoreError::Config("search index slot lock poisoned".into()))
+}
+
+#[cfg(test)]
+impl SearchIndexStore {
+    pub(super) fn coordination_is_locked(&self) -> bool {
+        matches!(
+            self.state.try_lock(),
+            Err(std::sync::TryLockError::WouldBlock)
+        )
+    }
 }
