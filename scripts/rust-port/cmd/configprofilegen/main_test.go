@@ -67,7 +67,7 @@ func TestGeneratorRepeatabilityMutationAndCleanup(t *testing.T) {
 	if err := validateFixture(a, b); err != nil {
 		t.Fatal(err)
 	}
-	if len(first) != 14 {
+	if len(first) != 53 {
 		t.Fatalf("got %d cases", len(first))
 	}
 	seen := map[string]bool{}
