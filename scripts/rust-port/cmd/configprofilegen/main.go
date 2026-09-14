@@ -217,6 +217,11 @@ func archiveOracle(repo, destination string) {
 }
 
 func safeArchivePath(name string) (string, error) {
+	// Tar paths are slash-separated and relative, independent of the host OS.
+	// Windows IsAbs rejects a rooted path without a drive, so check it here.
+	if strings.HasPrefix(name, "/") || strings.ContainsAny(name, `\:`) {
+		return "", fmt.Errorf("unsafe path %q", name)
+	}
 	clean := filepath.Clean(filepath.FromSlash(name))
 	if clean == "." || filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
 		return "", fmt.Errorf("unsafe path %q", name)

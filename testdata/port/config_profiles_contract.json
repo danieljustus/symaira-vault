@@ -20,7 +20,7 @@
       "internal/fsutil/reexport.go"
     ],
     "source_digest": "127ea70bfdddc06564981fc8e897005e44633bbcc9f1cb34fd9e68dd067145db",
-    "generator_digest": "b23c3e62aa9e44370140bbefa08e4e88089987f867df9f8dd29c05fbb4c39ecf",
+    "generator_digest": "fccea7ddc252b143f323a7800e310a3dd141aaa6adf08140057ff0f37d490820",
     "generator_files": [
       "scripts/rust-port/cmd/configprofilegen/main.go",
       "scripts/rust-port/cmd/configprofilegen/main_test.go",

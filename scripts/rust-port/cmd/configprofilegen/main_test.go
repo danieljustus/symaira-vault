@@ -11,7 +11,7 @@ import (
 )
 
 func TestSafeArchivePath(t *testing.T) {
-	for _, name := range []string{"../escape", "/absolute", ".."} {
+	for _, name := range []string{"../escape", "/absolute", "..", `\rooted`, `..\escape`, `C:relative`, `C:/absolute`, `//server/share`} {
 		if _, err := safeArchivePath(name); err == nil {
 			t.Errorf("accepted %q", name)
 		}
