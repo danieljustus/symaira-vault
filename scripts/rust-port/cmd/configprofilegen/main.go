@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -18,6 +19,8 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+
+	"github.com/danieljustus/symaira-vault/scripts/rust-port/internal/diff"
 )
 
 const (
@@ -32,6 +35,7 @@ type oracle struct {
 	SourceFiles     []string `json:"source_files"`
 	SourceDigest    string   `json:"source_digest"`
 	GeneratorDigest string   `json:"generator_digest"`
+	GeneratorFiles  []string `json:"generator_files"`
 }
 
 type caseResult struct {
@@ -43,8 +47,9 @@ type caseResult struct {
 }
 
 type fixture struct {
-	Oracle oracle       `json:"oracle"`
-	Cases  []caseResult `json:"cases"`
+	SchemaVersion int          `json:"schema_version"`
+	Oracle        oracle       `json:"oracle"`
+	Cases         []caseResult `json:"cases"`
 }
 
 func main() {
@@ -75,16 +80,26 @@ func run() (err error) {
 		fatal("generation requires --oracle-commit=%s and --oracle-release=%s", pinnedOracleCommit, pinnedOracleRelease)
 	}
 	root := repositoryRoot()
-	generatorPath := filepath.Join(root, "scripts/rust-port/cmd/configprofilegen/main.go")
+	generatorFiles := []string{"scripts/rust-port/cmd/configprofilegen/main.go", "scripts/rust-port/cmd/configprofilegen/main_test.go"}
+	entries, listErr := os.ReadDir(filepath.Join(root, "scripts/rust-port/internal/diff"))
+	if listErr != nil {
+		return listErr
+	}
+	for _, entry := range entries {
+		if strings.HasSuffix(entry.Name(), ".go") {
+			generatorFiles = append(generatorFiles, "scripts/rust-port/internal/diff/"+entry.Name())
+		}
+	}
+	sort.Strings(generatorFiles)
 	oracleRoot := makeTempDir("config-profile-oracle-")
-	defer os.RemoveAll(oracleRoot)
+	defer func() { err = errors.Join(err, removeTempTree(oracleRoot)) }()
 	archiveOracle(root, oracleRoot)
 	writeOracleHelper(oracleRoot)
 	files := oracleSourceFiles(oracleRoot)
 	meta := oracle{Commit: pinnedOracleCommit, Release: pinnedOracleRelease, SourceFiles: files,
-		SourceDigest: digestFiles(oracleRoot, files), GeneratorDigest: digestFile(generatorPath)}
+		SourceDigest: digestFiles(oracleRoot, files), GeneratorFiles: generatorFiles, GeneratorDigest: digestFiles(root, generatorFiles)}
 	cases := runOracle(oracleRoot)
-	content, err := json.MarshalIndent(fixture{Oracle: meta, Cases: cases}, "", "  ")
+	content, err := json.MarshalIndent(fixture{SchemaVersion: 1, Oracle: meta, Cases: cases}, "", "  ")
 	if err != nil {
 		fatal("encode fixture: %v", err)
 	}
@@ -98,11 +113,11 @@ func run() (err error) {
 		if readErr != nil {
 			fatal("read fixture: %v", readErr)
 		}
-		if !bytes.Equal(existing, content) {
-			fatal("fixture is stale; rerun generation")
+		if err := validateFixture(existing, content); err != nil {
+			fatal("%v", err)
 		}
 		fmt.Printf("PASS pinned profile fixture (%d cases)\n", len(cases))
-		return
+		return nil
 	}
 	if err := os.MkdirAll(filepath.Dir(fixturePath), 0o750); err != nil {
 		fatal("create output directory: %v", err)
@@ -111,6 +126,13 @@ func run() (err error) {
 		fatal("write fixture: %v", err)
 	}
 	fmt.Printf("WROTE %s (%d cases)\n", *output, len(cases))
+	return nil
+}
+
+func validateFixture(existing, generated []byte) error {
+	if !bytes.Equal(existing, generated) {
+		return fmt.Errorf("fixture is stale; rerun generation")
+	}
 	return nil
 }
 
@@ -135,18 +157,28 @@ func makeTempDir(pattern string) string {
 }
 
 func archiveOracle(repo, destination string) {
-	cmd := exec.Command("git", "-C", repo, "archive", "--format=tar", pinnedOracleCommit)
-	stdout, err := cmd.StdoutPipe()
+	git, err := exec.LookPath("git")
 	if err != nil {
 		fatal("archive oracle: %v", err)
 	}
-	if err := cmd.Start(); err != nil {
-		fatal("archive oracle: %v", err)
+	archive := filepath.Join(destination, "oracle.tar")
+	observation, err := diff.Run(git, diff.Case{ID: "config-profile-archive", Args: []string{"-C", repo, "archive", "--format=tar", "--output", archive, pinnedOracleCommit}, TimeoutMS: 60000})
+	if err != nil || observation.ExitCode != 0 || observation.Signal != "" || observation.TimedOut {
+		fatal("archive oracle: %v exit=%d signal=%q timeout=%t", err, observation.ExitCode, observation.Signal, observation.TimedOut)
 	}
-	tr := tar.NewReader(stdout)
+	file, err := os.Open(archive)
+	if err != nil {
+		fatal("read archive: %v", err)
+	}
+	defer func() {
+		if err := errors.Join(file.Close(), os.Remove(archive)); err != nil {
+			fatal("close archive: %v", err)
+		}
+	}()
+	tr := tar.NewReader(file)
 	for {
 		header, err := tr.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -176,9 +208,6 @@ func archiveOracle(repo, destination string) {
 				fatal("extract oracle: %v %v", copyErr, closeErr)
 			}
 		}
-	}
-	if err := cmd.Wait(); err != nil {
-		fatal("archive oracle: %v", err)
 	}
 }
 
@@ -221,13 +250,13 @@ func main(){ if runtime.Version()!=` + "`go1.26.6`" + ` { panic("toolchain="+run
 }
 
 func oracleSourceFiles(root string) []string {
-	files := []string{"go.mod", "go.sum"}
+	files := []string{"go.mod", "go.sum", "internal/fsutil/reexport.go"}
 	entries, err := os.ReadDir(filepath.Join(root, "internal", "config"))
 	if err != nil {
 		fatal("list oracle sources: %v", err)
 	}
 	for _, entry := range entries {
-		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".go") {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".go") && !strings.HasSuffix(entry.Name(), "_test.go") {
 			files = append(files, filepath.ToSlash(filepath.Join("internal/config", entry.Name())))
 		}
 	}
@@ -248,39 +277,26 @@ func digestFiles(root string, names []string) string {
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }
-func digestFile(path string) string {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		fatal("hash generator: %v", err)
-	}
-	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:])
-}
 func runOracle(root string) []caseResult {
 	goBinary := pinnedGoBinary()
-	cmd := exec.Command(goBinary, "run", "./internal/configprofileoracle")
-	cmd.Dir = root
-	envRoot := makeTempDir("config-profile-env-")
-	defer os.RemoveAll(envRoot)
-	for _, dir := range []string{"home", "config", "data", "cache", "tmp", "gocache"} {
-		if err := os.MkdirAll(filepath.Join(envRoot, dir), 0o700); err != nil {
-			fatal("oracle environment: %v", err)
+	cache := makeTempDir("config-profile-cache-")
+	defer func() {
+		if err := removeTempTree(cache); err != nil {
+			fatal("remove oracle cache: %v", err)
 		}
-	}
-	cmd.Env = sandboxEnv(envRoot)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	runErr := cmd.Run()
-	cleanupErr := removeTempTree(envRoot)
-	if runErr != nil {
-		fatal("run pinned oracle: %v\n%s", runErr, stderr.String())
-	}
-	if cleanupErr != nil {
-		fatal("clean oracle environment: %v", cleanupErr)
+	}()
+	observation, err := diff.Run(goBinary, diff.Case{
+		ID:        "config-profile-oracle",
+		Args:      []string{"-C", root, "run", "./internal/configprofileoracle"},
+		TimeoutMS: 300000,
+		Env:       map[string]string{"GOTOOLCHAIN": "local", "GOWORK": "off", "GOFLAGS": "-mod=readonly", "CGO_ENABLED": "0", "GOCACHE": filepath.Join(cache, "build"), "GOMODCACHE": filepath.Join(cache, "modules")},
+	})
+	if err != nil || observation.ExitCode != 0 || observation.Signal != "" || observation.TimedOut {
+		fatal("run pinned oracle: %v exit=%d signal=%q timeout=%t\n%s", err, observation.ExitCode, observation.Signal, observation.TimedOut, observation.Stderr)
 	}
 	var cases []caseResult
-	if err := json.Unmarshal(stdout.Bytes(), &cases); err != nil {
-		fatal("decode oracle: %v\n%s", err, stderr.String())
+	if err := json.Unmarshal(observation.Stdout, &cases); err != nil {
+		fatal("decode oracle: %v", err)
 	}
 	// Normalize only the saved YAML field, which is derived from our sandbox.
 	// Inputs and arbitrary user values must remain byte-for-byte untouched.
@@ -294,8 +310,7 @@ func runOracle(root string) []caseResult {
 		if err := json.Unmarshal(cases[i].Result, &snapshot); err != nil {
 			fatal("decode case %s: %v", cases[i].Name, err)
 		}
-		snapshot.Saved = strings.ReplaceAll(snapshot.Saved, filepath.ToSlash(envRoot), "/fixture/root")
-		snapshot.Saved = strings.ReplaceAll(snapshot.Saved, filepath.FromSlash(envRoot), "/fixture/root")
+		snapshot.Saved = normalizeSaved(snapshot.Saved, filepath.Join(observation.SandboxRoot, "home", ".local", "share", "symaira-vault"))
 		updated, err := json.Marshal(snapshotWithSaved(cases[i].Result, snapshot.Saved))
 		if err != nil {
 			fatal("normalize case %s: %v", cases[i].Name, err)
@@ -314,18 +329,38 @@ func snapshotWithSaved(raw json.RawMessage, saved string) map[string]any {
 	return value
 }
 
+// Only the generated top-level default vault path is non-semantic. Never
+// replace user profile values or every occurrence of the temporary root.
+func normalizeSaved(saved, vaultPath string) string {
+	lines := strings.Split(saved, "\n")
+	for i, line := range lines {
+		if line == "vaultDir: "+vaultPath {
+			lines[i] = "vaultDir: /fixture/root/data/symaira-vault"
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
 func pinnedGoBinary() string {
-	shim, err := exec.LookPath(requiredGoVersion)
-	if err != nil {
-		fatal("locate pinned Go %s: %v", requiredGoVersion, err)
+	// The generator itself must be built with the pinned toolchain. This
+	// works with setup-go as well as GOTOOLCHAIN, without a named shim.
+	if runtime.Version() != requiredGoVersion {
+		fatal("generator toolchain %s, want %s", runtime.Version(), requiredGoVersion)
 	}
-	root, err := exec.Command(shim, "env", "GOROOT").Output()
-	if err != nil {
-		fatal("locate pinned Go root: %v", err)
+	name := "go"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
 	}
-	binary := filepath.Join(strings.TrimSpace(string(root)), "bin", "go")
+	launcher := exec.Command("go", "env", "GOROOT")
+	launcher.Env = append(os.Environ(), "GOTOOLCHAIN="+requiredGoVersion)
+	goRoot, err := launcher.Output()
+	if err != nil {
+		fatal("resolve pinned Go root: %v", err)
+	}
+	binary := filepath.Join(strings.TrimSpace(string(goRoot)), "bin", name)
 	version, err := exec.Command(binary, "version").Output()
-	if err != nil || !strings.Contains(string(version), requiredGoVersion) {
+	fields := strings.Fields(string(version))
+	if err != nil || len(fields) < 3 || fields[2] != requiredGoVersion {
 		fatal("pinned Go binary version mismatch: %s", strings.TrimSpace(string(version)))
 	}
 	return binary
@@ -341,15 +376,6 @@ func removeTempTree(root string) error {
 	return os.RemoveAll(root)
 }
 
-func sandboxEnv(root string) []string {
-	env := []string{"HOME=" + filepath.Join(root, "home"), "USERPROFILE=" + filepath.Join(root, "home"), "XDG_CONFIG_HOME=" + filepath.Join(root, "config"), "XDG_DATA_HOME=" + filepath.Join(root, "data"), "XDG_CACHE_HOME=" + filepath.Join(root, "cache"), "TMPDIR=" + filepath.Join(root, "tmp"), "TMP=" + filepath.Join(root, "tmp"), "TEMP=" + filepath.Join(root, "tmp"), "GOCACHE=" + filepath.Join(root, "gocache"), "PATH=" + os.Getenv("PATH"), "GOTOOLCHAIN=local"}
-	for _, key := range []string{"SYSTEMROOT", "SystemRoot", "WINDIR"} {
-		if value, ok := os.LookupEnv(key); ok {
-			env = append(env, key+"="+value)
-		}
-	}
-	return env
-}
 func fatal(format string, args ...any) {
 	panic(fmt.Errorf(format, args...))
 }

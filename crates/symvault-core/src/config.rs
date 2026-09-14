@@ -42,6 +42,8 @@ pub struct Config {
     pub auth_method: AuthMethod,
     pub use_touch_id: Option<bool>,
     pub agents: BTreeMap<String, AgentProfile>,
+    pub profiles: Option<BTreeMap<String, Profile>>,
+    pub default_profile: String,
     pub vault: Option<VaultConfig>,
     pub git: Option<GitConfig>,
     pub mcp: Option<McpConfig>,
@@ -116,6 +118,12 @@ impl AgentProfile {
             ..Self::default()
         }
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct Profile {
+    #[serde(rename = "vault", alias = "VaultPath")]
+    pub vault_path: String,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -319,6 +327,8 @@ impl Default for Config {
             auth_method: AuthMethod::Passphrase,
             use_touch_id: None,
             agents,
+            profiles: None,
+            default_profile: String::new(),
             vault: None,
             git: None,
             mcp: None,
@@ -336,6 +346,12 @@ impl Config {
         } else {
             self.auth_method
         }
+    }
+
+    /// Returns a named vault profile using the Go loader's nil-on-miss semantics.
+    #[must_use]
+    pub fn profile_for_name(&self, name: &str) -> Option<&Profile> {
+        self.profiles.as_ref()?.get(name)
     }
 
     pub fn set_auth_method(&mut self, method: &str) -> Result<(), ConfigError> {
@@ -387,6 +403,12 @@ impl Config {
         }
         if let Some(v) = scalar(root, "useTouchID") {
             config.use_touch_id = Some(boolean(v, "useTouchID")?);
+        }
+        if let Some(v) = root.get(key("defaultProfile")).filter(|v| !v.is_null()) {
+            config.default_profile = profile_string(v, "defaultProfile")?;
+        }
+        if let Some(v) = root.get(key("profiles")) {
+            config.profiles = parse_profiles(v)?;
         }
         if auth_method_explicit {
             config.use_touch_id = Some(config.auth_method == AuthMethod::Touchid);
@@ -479,6 +501,30 @@ impl Config {
             out.push_str(&format!(
                 "useTouchID: {}\n",
                 self.effective_auth_method() == AuthMethod::Touchid
+            ));
+        }
+        if let Some(profiles) = self
+            .profiles
+            .as_ref()
+            .filter(|profiles| !profiles.is_empty())
+        {
+            out.push_str("profiles:\n");
+            for (name, profile) in profiles {
+                out.push_str(&format!("    {}:", yaml_scalar(name)?));
+                if profile.vault_path.is_empty() {
+                    out.push_str(" {}\n");
+                } else {
+                    out.push('\n');
+                    out.push_str("        vault: ");
+                    out.push_str(&yaml_scalar(&profile.vault_path)?);
+                    out.push('\n');
+                }
+            }
+        }
+        if !self.default_profile.is_empty() {
+            out.push_str(&format!(
+                "defaultProfile: {}\n",
+                yaml_scalar(&self.default_profile)?
             ));
         }
         Ok(out.into_bytes())
@@ -601,6 +647,45 @@ fn format_duration(value: Duration) -> String {
         return format!("{secs}s");
     }
     format!("{}.{:09}s", secs, nanos)
+}
+
+fn parse_profiles(
+    value: &serde_yaml_ng::Value,
+) -> Result<Option<BTreeMap<String, Profile>>, ConfigError> {
+    if value.is_null() {
+        return Ok(None);
+    }
+    let profiles = mapping(value)?;
+    let mut out = BTreeMap::new();
+    for (name, value) in profiles {
+        let name = profile_string(name, "profile name")?;
+        let fields = mapping(value)?;
+        let vault_path = fields.get(key("vault")).map_or_else(
+            || Ok(String::new()),
+            |value| profile_string(value, "profile vault"),
+        )?;
+        out.insert(name, Profile { vault_path });
+    }
+    Ok(Some(out))
+}
+
+fn profile_string(value: &serde_yaml_ng::Value, field: &str) -> Result<String, ConfigError> {
+    if value.is_null() {
+        return Ok(String::new());
+    }
+    if let Some(value) = value.as_str() {
+        return Ok(value.to_owned());
+    }
+    if let Some(value) = value.as_i64() {
+        return Ok(value.to_string());
+    }
+    if let Some(value) = value.as_u64() {
+        return Ok(value.to_string());
+    }
+    if let Some(value) = value.as_bool() {
+        return Ok(value.to_string());
+    }
+    Err(ConfigError::Parse(format!("{field} must be a string")))
 }
 
 fn merge_agents(config: &mut Config, value: &serde_yaml_ng::Value) -> Result<(), ConfigError> {
@@ -831,6 +916,10 @@ fn parse_clipboard(value: &serde_yaml_ng::Value) -> Result<ClipboardConfig, Conf
 }
 
 fn yaml_scalar(value: &str) -> Result<String, ConfigError> {
+    // Go's yaml.v3 quotes strings that would otherwise decode as another scalar.
+    if value.parse::<i64>().is_ok() || matches!(value, "true" | "false" | "null" | "~") {
+        return Ok(format!("\"{value}\""));
+    }
     serde_yaml_ng::to_string(&serde_yaml_ng::Value::String(value.into()))
         .map(|v| v.trim_end().to_owned())
         .map_err(|e| ConfigError::Serialize(e.to_string()))

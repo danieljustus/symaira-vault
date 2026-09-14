@@ -286,7 +286,7 @@ rust-007-fixtures-generate:
 		--oracle-commit $(PORT_ORACLE_COMMIT) \
 		--oracle-release $(PORT_ORACLE_RELEASE)
 
-rust-007-fixtures-check:
+rust-007-fixtures-check: config-profile-fixtures-check
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/configgen \
 		--check --config-output $(PORT_CONFIG_FIXTURE) \
 		--platform-output $(PORT_PLATFORM_FIXTURE)
@@ -298,7 +298,15 @@ rust-007-differential: rust-007-fixtures-check
 	$(CARGO) test -p symvault-core --test config_session_contract --all-features --locked
 	$(CARGO) test -p symvault-platform --test platform_contract --test quota_platform_contract --all-features --locked
 
-config-session-differential: rust-007-differential
+.PHONY: config-profile-fixtures-check config-profile-differential
+config-profile-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/configprofilegen --check
+
+config-profile-differential: config-profile-fixtures-check
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./scripts/rust-port/cmd/configprofilegen -count=1 -v -timeout=10m
+	$(CARGO) test -p symvault-core --test config_profiles_contract --locked
+
+config-session-differential: rust-007-differential config-profile-differential
 
 differential-go-selftest:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(MAKE) build

@@ -1,4 +1,5 @@
 {
+  "schema_version": 1,
   "oracle": {
     "commit": "caadd5ef95e8f19fabd3ae3d2c04caa296f2fd44",
     "release": "v0.22.1",
@@ -9,27 +10,37 @@
       "internal/config/config_load.go",
       "internal/config/config_merge.go",
       "internal/config/config_save.go",
-      "internal/config/config_test.go",
       "internal/config/config_validate.go",
       "internal/config/dottedpath.go",
-      "internal/config/dottedpath_test.go",
       "internal/config/migrate.go",
-      "internal/config/migrate_test.go",
       "internal/config/paths.go",
-      "internal/config/paths_test.go",
       "internal/config/presets.go",
       "internal/config/schema.go",
-      "internal/config/schema_oauth_test.go",
-      "internal/config/schema_test.go",
-      "internal/config/session_lifetime_test.go",
-      "internal/config/sync_coverage_test.go",
-      "internal/config/testhome_test.go",
-      "internal/config/tier_presets_test.go",
       "internal/config/warn.go",
-      "internal/config/xdg_test.go"
+      "internal/fsutil/reexport.go"
     ],
-    "source_digest": "9d72c4c8cea9120ca6410669b17689ee45016fece570b54f20ac127d3638a15d",
-    "generator_digest": "d46d2a6be72b937dc2fc598142fefa91f37af2bc9d1e814c020598cb359953dd"
+    "source_digest": "127ea70bfdddc06564981fc8e897005e44633bbcc9f1cb34fd9e68dd067145db",
+    "generator_digest": "fd08e1e172dd2654d31e9f8cb7b58d45275544e622ae4cc28576023b58225cc7",
+    "generator_files": [
+      "scripts/rust-port/cmd/configprofilegen/main.go",
+      "scripts/rust-port/cmd/configprofilegen/main_test.go",
+      "scripts/rust-port/internal/diff/capture.go",
+      "scripts/rust-port/internal/diff/capture_test.go",
+      "scripts/rust-port/internal/diff/case.go",
+      "scripts/rust-port/internal/diff/compare.go",
+      "scripts/rust-port/internal/diff/diff_test.go",
+      "scripts/rust-port/internal/diff/exec.go",
+      "scripts/rust-port/internal/diff/manifest.go",
+      "scripts/rust-port/internal/diff/process.go",
+      "scripts/rust-port/internal/diff/process_unix.go",
+      "scripts/rust-port/internal/diff/process_unix_test.go",
+      "scripts/rust-port/internal/diff/process_windows.go",
+      "scripts/rust-port/internal/diff/process_windows_test.go",
+      "scripts/rust-port/internal/diff/signal_unix.go",
+      "scripts/rust-port/internal/diff/signal_windows.go",
+      "scripts/rust-port/internal/diff/wait_error_unix.go",
+      "scripts/rust-port/internal/diff/wait_error_windows.go"
+    ]
   },
   "cases": [
     {

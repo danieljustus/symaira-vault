@@ -11,6 +11,9 @@ on:
     # to the handshake contract must execute this gate instead of producing an
     # untested claim.
     paths:
+      - 'crates/symvault-core/**'
+      - 'scripts/rust-port/cmd/configprofilegen/**'
+      - 'testdata/port/config_profiles_contract.json'
       - 'scripts/rust-port/cmd/caserun/**'
       - 'scripts/rust-port/cmd/devicelistdriver/**'
       - 'scripts/rust-port/internal/diff/**'
@@ -37,6 +40,9 @@ on:
   pull_request:
     branches: [ main ]
     paths:
+      - 'crates/symvault-core/**'
+      - 'scripts/rust-port/cmd/configprofilegen/**'
+      - 'testdata/port/config_profiles_contract.json'
       - 'scripts/rust-port/cmd/caserun/**'
       - 'scripts/rust-port/cmd/devicelistdriver/**'
       - 'scripts/rust-port/internal/diff/**'
@@ -110,6 +116,12 @@ jobs:
           set -euo pipefail
           test "$(go env GOVERSION)" = "go1.26.6"
           test "$(rustc --version | awk '{print $2}')" = "1.98.0"
+
+      - name: Run config profile differential against the pinned Go oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          make config-profile-differential
 
       - name: Run pairing differential against the pinned Go oracle
         shell: bash
