@@ -95,6 +95,31 @@ def run_case(adapter, binary, case, cwd, env):
         base64.b64decode(observation["Stderr"] or "")), observation
 
 
+def windows_job_guard():
+    # Check the actual innermost job, not merely a caller-provided flag. The
+    # reviewed Go supervisor creates a kill-on-close, non-breakaway job.
+    import ctypes
+    from ctypes import wintypes
+
+    class Limits(ctypes.Structure):
+        _fields_ = [("process_time", ctypes.c_int64), ("job_time", ctypes.c_int64),
+                    ("flags", wintypes.DWORD), ("min_working_set", ctypes.c_size_t),
+                    ("max_working_set", ctypes.c_size_t), ("active", wintypes.DWORD),
+                    ("affinity", ctypes.c_size_t), ("priority", wintypes.DWORD),
+                    ("scheduling", wintypes.DWORD)]
+
+    kernel = getattr(ctypes, "WinDLL")("kernel32", use_last_error=True)
+    query = kernel.QueryInformationJobObject
+    query.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p,
+                      wintypes.DWORD, ctypes.POINTER(wintypes.DWORD)]
+    query.restype = wintypes.BOOL
+    limits = Limits()
+    if not query(None, 2, ctypes.byref(limits), ctypes.sizeof(limits), None):
+        raise SystemExit("native Windows job query failed; use the Go supervisor")
+    if not limits.flags & 0x2000 or limits.flags & 0x1800:
+        raise SystemExit("native Windows job must kill on close and disallow breakaway")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--report", type=Path, required=True)
@@ -104,6 +129,8 @@ def main():
         raise SystemExit("Windows execution requires make device-list-differential (native Go job supervisor)")
     if args.report.exists():
         raise SystemExit("report already exists; choose a fresh evidence path")
+    if os.name == "nt":
+        windows_job_guard()
     env = os.environ.copy()
     head = checked(["git", "rev-parse", "HEAD"], ROOT, env).decode().strip()
     oracle = checked(["git", "rev-parse", ORACLE], ROOT, env).decode().strip()

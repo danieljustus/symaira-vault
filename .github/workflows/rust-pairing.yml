@@ -119,7 +119,7 @@ jobs:
 
       - name: Verify native process-tree adapter and cleanup
         shell: bash
-        run: go test -count=1 -v ./scripts/rust-port/cmd/caserun ./scripts/rust-port/internal/diff
+        run: go test -count=1 -v ./scripts/rust-port/cmd/caserun ./scripts/rust-port/cmd/devicelistdriver ./scripts/rust-port/internal/diff
 
       - name: Run read-only device-list CLI differential
         shell: bash
@@ -133,4 +133,4 @@ jobs:
         with:
           name: device-list-${{ matrix.os }}
           path: target/device-list-differential*.json
-          if-no-files-found: warn
+          if-no-files-found: error

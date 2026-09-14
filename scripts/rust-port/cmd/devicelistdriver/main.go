@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/danieljustus/symaira-vault/scripts/rust-port/internal/diff"
 )
@@ -58,6 +59,16 @@ func run() error {
 	environment["GOTOOLCHAIN"] = "go1.26.6"
 	environment["RUSTUP_TOOLCHAIN"] = "1.98.0"
 	environment["PYTHONDONTWRITEBYTECODE"] = "1"
+	// Build discovery only; the inner CLI case runner does not inherit these.
+	for _, key := range []string{"ProgramFiles", "ProgramFiles(x86)", "ProgramW6432", "ProgramData", "VSINSTALLDIR", "VCINSTALLDIR", "VCToolsInstallDir", "WindowsSdkDir", "WindowsSDKVersion", "LIB", "LIBPATH", "INCLUDE"} {
+		if value := os.Getenv(key); value != "" {
+			environment[key] = value
+		}
+	}
+	head, err := exec.Command("git", "rev-parse", "HEAD").Output()
+	if err != nil {
+		return err
+	}
 	absoluteReport, err := filepath.Abs(*report)
 	if err != nil {
 		return err
@@ -79,7 +90,7 @@ func run() error {
 	if result.TimedOut || result.Signal != "" || result.ExitCode != 0 {
 		return fmt.Errorf("device-list driver failed: exit=%d signal=%q timeout=%t", result.ExitCode, result.Signal, result.TimedOut)
 	}
-	return nil
+	return validateReport(absoluteReport, strings.TrimSpace(string(head)))
 }
 
 func main() {
