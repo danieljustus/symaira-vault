@@ -30,10 +30,7 @@ func TestEntryWriterGoRustLiveAcceptance(t *testing.T) {
 		t.Fatal("cannot locate test source")
 	}
 	repo := filepath.Clean(filepath.Join(filepath.Dir(source), "../.."))
-	target := os.Getenv("CARGO_TARGET_DIR")
-	if target == "" {
-		target = filepath.Join(repo, "target")
-	}
+	target := cargoTargetDir(repo)
 	output, err := runSearchIndexCommand(repo, target, "cargo", "build", "--locked", "-p", "symvault-store", "--example", "entry-writer-adapter")
 	if err != nil {
 		t.Fatalf("build Rust writer: %v\n%s", err, output)

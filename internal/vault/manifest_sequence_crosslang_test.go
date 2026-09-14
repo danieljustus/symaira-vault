@@ -59,12 +59,7 @@ func TestManifestSequenceGoRustDifferential(t *testing.T) {
 		t.Fatalf("unexpected manifest case partition: base=%d extra=%d", len(manifestSequenceBaseIDs), len(manifestSequenceExtraIDs))
 	}
 	repo := filepath.Clean(filepath.Join(filepath.Dir(mustManifestSource(t)), "../.."))
-	target := os.Getenv("CARGO_TARGET_DIR")
-	if target == "" {
-		// Keep the fallback portable and scoped to this checkout; CI and local
-		// verification normally provide CARGO_TARGET_DIR explicitly.
-		target = filepath.Join(repo, "target")
-	}
+	target := cargoTargetDir(repo)
 	manifestCargo := filepath.Join(repo, "crates", "symvault-store", "Cargo.toml")
 	if output, err := runSearchIndexCommand(repo, target, "cargo", "build", "--locked", "--manifest-path", manifestCargo, "--example", manifestSequenceAdapter); err != nil {
 		t.Fatalf("build Rust adapter: %v\n%s", err, output)
