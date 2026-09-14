@@ -50,7 +50,7 @@ fn cases() -> Vec<OracleCase> {
 #[test]
 fn pinned_go_profile_cases_match_load_and_save() {
     let cases = cases();
-    assert_eq!(cases.len(), 58);
+    assert_eq!(cases.len(), 62);
     for case in cases {
         let loaded = Config::load_from_bytes(case.input.as_bytes());
         match (loaded, case.result, case.error, case.panic) {

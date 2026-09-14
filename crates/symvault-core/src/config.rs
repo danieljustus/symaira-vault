@@ -14,6 +14,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use unicode_categories::UnicodeCategories;
 
 const APP_NAME: &str = "symaira-vault";
 const LEGACY_DIR: &str = ".symvault";
@@ -974,11 +975,11 @@ fn yaml_key_cmp(a: &str, b: &str) -> std::cmp::Ordering {
     let mut digits = false;
     for i in 0..a.len().min(b.len()) {
         if a[i] == b[i] {
-            digits = a[i].is_ascii_digit();
+            digits = a[i].is_number_decimal_digit();
             continue;
         }
-        let al = a[i].is_alphabetic();
-        let bl = b[i].is_alphabetic();
+        let al = a[i].is_letter();
+        let bl = b[i].is_letter();
         if al && bl {
             return a[i].cmp(&b[i]);
         }
@@ -988,7 +989,11 @@ fn yaml_key_cmp(a: &str, b: &str) -> std::cmp::Ordering {
         let mut an = 0i64;
         let mut bn = 0i64;
         if a[i] == '0' || b[i] == '0' {
-            for ch in a[..i].iter().rev().take_while(|ch| ch.is_ascii_digit()) {
+            for ch in a[..i]
+                .iter()
+                .rev()
+                .take_while(|ch| ch.is_number_decimal_digit())
+            {
                 if *ch != '0' {
                     an = 1;
                     bn = 1;
@@ -998,13 +1003,13 @@ fn yaml_key_cmp(a: &str, b: &str) -> std::cmp::Ordering {
         }
         let mut ai = i;
         let mut bi = i;
-        while ai < a.len() && a[ai].is_ascii_digit() {
+        while ai < a.len() && a[ai].is_number_decimal_digit() {
             an = an
                 .wrapping_mul(10)
                 .wrapping_add(i64::from(a[ai] as u32 - '0' as u32));
             ai += 1;
         }
-        while bi < b.len() && b[bi].is_ascii_digit() {
+        while bi < b.len() && b[bi].is_number_decimal_digit() {
             bn = bn
                 .wrapping_mul(10)
                 .wrapping_add(i64::from(b[bi] as u32 - '0' as u32));

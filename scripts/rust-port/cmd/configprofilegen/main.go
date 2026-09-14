@@ -249,6 +249,10 @@ func run(name, input string) (out result) { out.Name, out.Input = name, input; d
 func main(){ if runtime.Version()!=` + "`go1.26.6`" + ` { panic("toolchain="+runtime.Version()+", want go1.26.6") }; cases:=[]struct{name,input string}{
  {"profiles", "profiles:\n  work:\n    vault: ~/.symvault-work\n  family:\n    vault: ~/vaults/family\ndefaultProfile: work\n"}, {"empty_path", "profiles:\n  empty:\n    vault: \"\"\n"}, {"null_profiles", "profiles: null\ndefaultProfile: null\n"}, {"null_profile", "profiles:\n  empty: null\n"}, {"null_path", "profiles:\n  empty:\n    vault: null\n"}, {"numeric_name", "profiles:\n  1:\n    vault: /tmp/vault\n"}, {"numeric_path", "profiles:\n  bad:\n    vault: 1\n"}, {"map_profile", "profiles:\n  bad: {}\n"}, {"sequence_profile", "profiles:\n  bad: []\n"}, {"bool_profile", "profiles:\n  bad: true\n"}, {"map_default", "defaultProfile: {}\n"}, {"sequence_default", "defaultProfile: []\n"}, {"bool_default", "defaultProfile: true\n"}, {"numeric_default", "defaultProfile: 1\n"}, }
  cases=append(cases,
+   struct{name,input string}{"unicode-digit-prefix", "profiles:\n  ١a: {}\n  ١_: {}\n"},
+   struct{name,input string}{"unicode-letter-number", "profiles:\n  Ⅰ: {}\n  a: {}\n"},
+   struct{name,input string}{"unicode-digit-run", "profiles:\n  ١0: {}\n  ٢: {}\n"},
+   struct{name,input string}{"duplicate-default-profile", "defaultProfile: safe\ndefaultProfile: other\n"},
    struct{name,input string}{"duplicate-root", "defaultAgent: first\ndefaultAgent: second\n"},
    struct{name,input string}{"duplicate-profile", "profiles:\n  same: {vault: first}\n  same: {vault: second}\n"},
    struct{name,input string}{"lexically-distinct-keys", "profiles:\n  01: {vault: first}\n  1: {vault: second}\n"},
