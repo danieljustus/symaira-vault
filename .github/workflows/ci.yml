@@ -577,6 +577,18 @@ jobs:
       - name: Install dependencies
         run: go mod download
 
+      - name: Export Go cache paths for the isolated oracle
+        # See the identical step in windows-process-tree: GOMODCACHE/GOCACHE
+        # are implicit defaults, not literal env vars, so store004gen's
+        # isolated oracle child (HOME/USERPROFILE repointed at an empty
+        # directory) cannot find the module/build caches "go mod download"
+        # just populated above. Harmless on ubuntu/macos, where it lets the
+        # isolated child reuse the real cache too instead of a cold one.
+        shell: bash
+        run: |
+          echo "GOMODCACHE=$(go env GOMODCACHE)" >> "$GITHUB_ENV"
+          echo "GOCACHE=$(go env GOCACHE)" >> "$GITHUB_ENV"
+
       - name: Run tests
         shell: bash
         env:
