@@ -131,7 +131,12 @@ func run() (err error) {
 
 func validateFixture(existing, generated []byte) error {
 	if !bytes.Equal(existing, generated) {
-		return fmt.Errorf("fixture is stale; rerun generation")
+		for i := 0; i < min(len(existing), len(generated)); i++ {
+			if existing[i] != generated[i] {
+				return fmt.Errorf("fixture is stale at byte %d: expected %q, generated %q", i, existing[i:min(i+160, len(existing))], generated[i:min(i+160, len(generated))])
+			}
+		}
+		return fmt.Errorf("fixture is stale: expected %d bytes, generated %d", len(existing), len(generated))
 	}
 	return nil
 }
@@ -238,6 +243,13 @@ func run(name, input string) (out result) { out.Name, out.Input = name, input; d
   out.Result=snapshot{cfg.DefaultProfile,cfg.Profiles,string(data)}; return }
 func main(){ if runtime.Version()!=` + "`go1.26.6`" + ` { panic("toolchain="+runtime.Version()+", want go1.26.6") }; cases:=[]struct{name,input string}{
  {"profiles", "profiles:\n  work:\n    vault: ~/.symvault-work\n  family:\n    vault: ~/vaults/family\ndefaultProfile: work\n"}, {"empty_path", "profiles:\n  empty:\n    vault: \"\"\n"}, {"null_profiles", "profiles: null\ndefaultProfile: null\n"}, {"null_profile", "profiles:\n  empty: null\n"}, {"null_path", "profiles:\n  empty:\n    vault: null\n"}, {"numeric_name", "profiles:\n  1:\n    vault: /tmp/vault\n"}, {"numeric_path", "profiles:\n  bad:\n    vault: 1\n"}, {"map_profile", "profiles:\n  bad: {}\n"}, {"sequence_profile", "profiles:\n  bad: []\n"}, {"bool_profile", "profiles:\n  bad: true\n"}, {"map_default", "defaultProfile: {}\n"}, {"sequence_default", "defaultProfile: []\n"}, {"bool_default", "defaultProfile: true\n"}, {"numeric_default", "defaultProfile: 1\n"}, }
+ cases=append(cases,
+   struct{name,input string}{"duplicate-root", "defaultAgent: first\ndefaultAgent: second\n"},
+   struct{name,input string}{"duplicate-profile", "profiles:\n  same: {vault: first}\n  same: {vault: second}\n"},
+   struct{name,input string}{"lexically-distinct-keys", "profiles:\n  01: {vault: first}\n  1: {vault: second}\n"},
+   struct{name,input string}{"profile-alias", "profiles:\n  first: &p {vault: /tmp/first}\n  second: *p\n"},
+   struct{name,input string}{"profile-merge", "profiles:\n  first: &p {vault: /tmp/first}\n  second: {<<: *p}\n"},
+ )
  for i,scalar:=range []string{"TRUE", "01", "0x10", "1_000", "1.0", "1e3", "18446744073709551616", "yes", "no", "on", "off", "1:20", "C:\\Temp\\vault"} {
    cases=append(cases,struct{name,input string}{fmt.Sprintf("scalar-default-%d",i),"defaultProfile: "+scalar+"\n"})
    cases=append(cases,struct{name,input string}{fmt.Sprintf("scalar-name-%d",i),"profiles:\n  "+scalar+":\n    vault: /tmp/test\n"})

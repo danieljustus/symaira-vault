@@ -20,7 +20,7 @@
       "internal/fsutil/reexport.go"
     ],
     "source_digest": "127ea70bfdddc06564981fc8e897005e44633bbcc9f1cb34fd9e68dd067145db",
-    "generator_digest": "3bb6749eb5abc41df23e8f1d1c9154f7a79d9d061810174d6f928485e0da6916",
+    "generator_digest": "349ccf33a229642bdfde031118d877329f1794e5a9082d28b0ed99b6c3a8c0ce",
     "generator_files": [
       "scripts/rust-port/cmd/configprofilegen/main.go",
       "scripts/rust-port/cmd/configprofilegen/main_test.go",
@@ -174,6 +174,64 @@
         "default_profile": "1",
         "profiles": null,
         "saved": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/root/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\ndefaultProfile: \"1\"\n"
+      }
+    },
+    {
+      "name": "duplicate-root",
+      "input": "defaultAgent: first\ndefaultAgent: second\n",
+      "error": "yaml: unmarshal errors:\n  line 2: mapping key \"defaultAgent\" already defined at line 1"
+    },
+    {
+      "name": "duplicate-profile",
+      "input": "profiles:\n  same: {vault: first}\n  same: {vault: second}\n",
+      "error": "yaml: unmarshal errors:\n  line 3: mapping key \"same\" already defined at line 2"
+    },
+    {
+      "name": "lexically-distinct-keys",
+      "input": "profiles:\n  01: {vault: first}\n  1: {vault: second}\n",
+      "result": {
+        "default_profile": "",
+        "profiles": {
+          "01": {
+            "VaultPath": "first"
+          },
+          "1": {
+            "VaultPath": "second"
+          }
+        },
+        "saved": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/root/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\nprofiles:\n    \"1\":\n        vault: second\n    \"01\":\n        vault: first\n"
+      }
+    },
+    {
+      "name": "profile-alias",
+      "input": "profiles:\n  first: \u0026p {vault: /tmp/first}\n  second: *p\n",
+      "result": {
+        "default_profile": "",
+        "profiles": {
+          "first": {
+            "VaultPath": "/tmp/first"
+          },
+          "second": {
+            "VaultPath": "/tmp/first"
+          }
+        },
+        "saved": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/root/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\nprofiles:\n    first:\n        vault: /tmp/first\n    second:\n        vault: /tmp/first\n"
+      }
+    },
+    {
+      "name": "profile-merge",
+      "input": "profiles:\n  first: \u0026p {vault: /tmp/first}\n  second: {\u003c\u003c: *p}\n",
+      "result": {
+        "default_profile": "",
+        "profiles": {
+          "first": {
+            "VaultPath": "/tmp/first"
+          },
+          "second": {
+            "VaultPath": "/tmp/first"
+          }
+        },
+        "saved": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/root/data/symaira-vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\nprofiles:\n    first:\n        vault: /tmp/first\n    second:\n        vault: /tmp/first\n"
       }
     },
     {

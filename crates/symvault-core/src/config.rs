@@ -417,7 +417,7 @@ impl Config {
                     (
                         name,
                         Profile {
-                            vault_path: profile.vault.unwrap_or_default(),
+                            vault_path: profile.vault_path(),
                         },
                     )
                 })
@@ -465,7 +465,7 @@ impl Config {
         let mut out = String::new();
         if !self.agents.is_empty() {
             out.push_str("agents:\n");
-            for (name, profile) in &self.agents {
+            for (name, profile) in yaml_entries(&self.agents) {
                 out.push_str(&format!("    {}:\n", yaml_scalar(name)?));
                 write_agent(&mut out, name, profile)?;
             }
@@ -522,7 +522,7 @@ impl Config {
             .filter(|profiles| !profiles.is_empty())
         {
             out.push_str("profiles:\n");
-            for (name, profile) in profiles {
+            for (name, profile) in yaml_entries(profiles) {
                 out.push_str(&format!("    {}:", yaml_scalar(name)?));
                 if profile.vault_path.is_empty() {
                     out.push_str(" {}\n");
@@ -668,14 +668,70 @@ fn format_duration(value: Duration) -> String {
 struct ProfileFields {
     #[serde(rename = "defaultProfile")]
     default_profile: Option<String>,
+    #[serde(default, deserialize_with = "optional_unique_map")]
     profiles: Option<BTreeMap<String, ProfileYaml>>,
-    #[serde(flatten)]
+    #[serde(flatten, deserialize_with = "unique_map")]
     fields: BTreeMap<String, serde_yaml_ng::Value>,
 }
 
 #[derive(Deserialize)]
 struct ProfileYaml {
     vault: Option<String>,
+    #[serde(rename = "<<")]
+    merge: Option<Box<ProfileYaml>>,
+}
+
+impl ProfileYaml {
+    fn vault_path(self) -> String {
+        self.vault.unwrap_or_else(|| {
+            self.merge
+                .map_or_else(String::new, |profile| profile.vault_path())
+        })
+    }
+}
+
+fn unique_map<'de, D, T>(deserializer: D) -> Result<BTreeMap<String, T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    struct Visitor<T>(std::marker::PhantomData<T>);
+    impl<'de, T: Deserialize<'de>> serde::de::Visitor<'de> for Visitor<T> {
+        type Value = BTreeMap<String, T>;
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("a mapping with unique keys")
+        }
+        fn visit_map<M: serde::de::MapAccess<'de>>(
+            self,
+            mut map: M,
+        ) -> Result<Self::Value, M::Error> {
+            let mut values = BTreeMap::new();
+            while let Some(key) = map.next_key::<String>()? {
+                if values.contains_key(&key) {
+                    return Err(serde::de::Error::custom("duplicate mapping key"));
+                }
+                values.insert(key, map.next_value()?);
+            }
+            Ok(values)
+        }
+    }
+    deserializer.deserialize_map(Visitor(std::marker::PhantomData))
+}
+
+fn optional_unique_map<'de, D, T>(deserializer: D) -> Result<Option<BTreeMap<String, T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    #[derive(Deserialize)]
+    struct Map<T>(
+        #[serde(
+            deserialize_with = "unique_map",
+            bound(deserialize = "T: Deserialize<'de>")
+        )]
+        BTreeMap<String, T>,
+    );
+    Option::<Map<T>>::deserialize(deserializer).map(|value| value.map(|map| map.0))
 }
 
 fn merge_agents(config: &mut Config, value: &serde_yaml_ng::Value) -> Result<(), ConfigError> {
@@ -903,6 +959,60 @@ fn parse_clipboard(value: &serde_yaml_ng::Value) -> Result<ClipboardConfig, Conf
         out.copy_by_default = boolean(v, "printByDefault")?;
     }
     Ok(out)
+}
+
+fn yaml_entries<T>(map: &BTreeMap<String, T>) -> Vec<(&String, &T)> {
+    let mut entries: Vec<_> = map.iter().collect();
+    entries.sort_by(|(a, _), (b, _)| yaml_key_cmp(a, b));
+    entries
+}
+
+// yaml.v3 orders digit runs numerically, breaking equal values by run length.
+fn yaml_key_cmp(a: &str, b: &str) -> std::cmp::Ordering {
+    let a: Vec<_> = a.chars().collect();
+    let b: Vec<_> = b.chars().collect();
+    let mut digits = false;
+    for i in 0..a.len().min(b.len()) {
+        if a[i] == b[i] {
+            digits = a[i].is_ascii_digit();
+            continue;
+        }
+        let al = a[i].is_alphabetic();
+        let bl = b[i].is_alphabetic();
+        if al && bl {
+            return a[i].cmp(&b[i]);
+        }
+        if al || bl {
+            return if digits { bl.cmp(&al) } else { al.cmp(&bl) };
+        }
+        let mut an = 0i64;
+        let mut bn = 0i64;
+        if a[i] == '0' || b[i] == '0' {
+            for ch in a[..i].iter().rev().take_while(|ch| ch.is_ascii_digit()) {
+                if *ch != '0' {
+                    an = 1;
+                    bn = 1;
+                    break;
+                }
+            }
+        }
+        let mut ai = i;
+        let mut bi = i;
+        while ai < a.len() && a[ai].is_ascii_digit() {
+            an = an
+                .wrapping_mul(10)
+                .wrapping_add(i64::from(a[ai] as u32 - '0' as u32));
+            ai += 1;
+        }
+        while bi < b.len() && b[bi].is_ascii_digit() {
+            bn = bn
+                .wrapping_mul(10)
+                .wrapping_add(i64::from(b[bi] as u32 - '0' as u32));
+            bi += 1;
+        }
+        return an.cmp(&bn).then(ai.cmp(&bi)).then(a[i].cmp(&b[i]));
+    }
+    a.len().cmp(&b.len())
 }
 
 fn yaml_scalar(value: &str) -> Result<String, ConfigError> {
