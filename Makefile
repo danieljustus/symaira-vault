@@ -345,15 +345,13 @@ rust-fuzz-smoke: rust-fuzz-lock
 rust-fuzz:
 	$(MAKE) rust-fuzz-smoke RUST_FUZZ_RUNS= RUST_FUZZ_MAX_TOTAL_TIME=60
 
-# rust-007-fixtures-check is deliberately NOT a dependency here. It was added
-# on 2026-09-14 and native CI rejected it: sessionquotagen stamps the
-# generating host's runtime.GOOS into the fixture's oracle block, so a Linux
-# runner regenerates "goos": "linux", compares it against a fixture frozen as
-# "goos": "darwin", and reports it stale. Wiring it in requires making that
-# field informational rather than part of the compared bytes — a RUST-007
-# provenance-model change, not a Makefile edit. See
-# docs/rust-port/contract-matrix.md, QUOTA-002.
-port-contract: port-fixtures-check core-fixtures-check policy-fixtures-check store-metadata-fixtures-check sync-io-differential differential-go-selftest crypto-differential
+# rust-007-fixtures-check is a dependency again. The first attempt at this, on
+# 2026-09-14, was rejected by native CI because sessionquotagen stamped the
+# generating host's runtime.GOOS into the compared bytes, so a Linux runner
+# could only ever call a darwin-frozen fixture stale. That field is gone now:
+# it described the machine, not the pinned oracle. Verified before re-wiring
+# that goos was the only host-dependent value in these four fixtures.
+port-contract: port-fixtures-check core-fixtures-check policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential
 
 rust-build:
 	$(CARGO) build --workspace --locked

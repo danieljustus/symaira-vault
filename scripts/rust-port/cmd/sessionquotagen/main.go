@@ -44,7 +44,11 @@ type oracle struct {
 	SourceFiles     []string `json:"source_files"`
 	SourceDigest    string   `json:"source_digest"`
 	GeneratorDigest string   `json:"generator_digest"`
-	GOOS            string   `json:"goos"`
+	// Deliberately no GOOS. The oracle block describes the pinned Go sources,
+	// not the machine that ran the generator, and writeOrCheck compares the
+	// whole file: recording the generating host made this fixture impossible to
+	// verify anywhere else, which is why `rust-007-fixtures-check` could not be
+	// part of `port-contract`. See docs/rust-port/contract-matrix.md, QUOTA-002.
 }
 
 type sessionFixture struct {
@@ -254,7 +258,7 @@ func buildOracle(root, commit, release string) (oracle, error) {
 	if err != nil {
 		return oracle{}, err
 	}
-	return oracle{Commit: commit, Release: release, SourceFiles: sources, SourceDigest: digest, GeneratorDigest: generator, GOOS: runtime.GOOS}, nil
+	return oracle{Commit: commit, Release: release, SourceFiles: sources, SourceDigest: digest, GeneratorDigest: generator}, nil
 }
 func digestFiles(root string, names []string) (string, error) {
 	h := sha256.New()

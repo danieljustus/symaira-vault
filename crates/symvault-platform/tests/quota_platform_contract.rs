@@ -24,7 +24,6 @@ struct Oracle {
     source_files: Vec<String>,
     source_digest: String,
     generator_digest: String,
-    goos: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -69,7 +68,6 @@ fn persistent_quota_fixture_has_pinned_provenance() {
     assert_eq!(fixture.oracle.source_files.len(), 8);
     assert_eq!(fixture.oracle.source_digest.len(), 64);
     assert_eq!(fixture.oracle.generator_digest.len(), 64);
-    assert_eq!(fixture.oracle.goos, "darwin");
     assert_eq!(fixture.cases.len(), 1);
     assert_eq!(fixture.wrapper_cases.len(), 1);
 }
