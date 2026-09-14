@@ -2240,8 +2240,10 @@ impl Store {
     fn rebuild_manifest_unlocked(&self, identity: &Identity) -> Result<Manifest, StoreError> {
         let mut manifest = Manifest {
             version: 1,
-            generation: 0,
-            created: go_zero_time(),
+            // Go's writeManifest increments a newly rebuilt manifest before
+            // publishing it, so the first persisted generation is one.
+            generation: 1,
+            created: utc_now_string(&self.root)?,
             updated: go_zero_time(),
             entries: BTreeMap::new(),
         };
@@ -2273,8 +2275,7 @@ impl Store {
             );
             let _ = metadata;
         }
-        self.write_manifest(&manifest, identity)?;
-        Ok(manifest)
+        self.write_manifest(&manifest, identity)
     }
 
     /// Updates one manifest record after a successful entry write.
@@ -2319,7 +2320,7 @@ impl Store {
             },
         );
         manifest.generation = manifest.generation.wrapping_add(1);
-        self.write_manifest(&manifest, identity)
+        self.write_manifest(&manifest, identity).map(|_| ())
     }
 
     /// Removes one manifest record. Missing manifests are a no-op.
@@ -2342,10 +2343,14 @@ impl Store {
         };
         manifest.entries.remove(path);
         manifest.generation = manifest.generation.wrapping_add(1);
-        self.write_manifest(&manifest, identity)
+        self.write_manifest(&manifest, identity).map(|_| ())
     }
 
-    fn write_manifest(&self, manifest: &Manifest, identity: &Identity) -> Result<(), StoreError> {
+    fn write_manifest(
+        &self,
+        manifest: &Manifest,
+        identity: &Identity,
+    ) -> Result<Manifest, StoreError> {
         let mut manifest = manifest.clone();
         if manifest.version == 0 {
             manifest.version = 1;
@@ -2357,7 +2362,8 @@ impl Store {
         );
         let ciphertext = encrypt(&plaintext, &recipients)
             .map_err(|error| StoreError::Decryption(error.to_string()))?;
-        publication::replace(&self.root.join(MANIFEST_FILE), &ciphertext, &self.root_cap)
+        publication::replace(&self.root.join(MANIFEST_FILE), &ciphertext, &self.root_cap)?;
+        Ok(manifest)
     }
 }
 

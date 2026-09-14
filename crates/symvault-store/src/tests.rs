@@ -7,6 +7,14 @@ use std::{
     thread,
 };
 
+#[cfg(unix)]
+use std::{
+    env, io,
+    path::PathBuf,
+    process::{Child, ExitStatus},
+    time::{Duration, Instant},
+};
+
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -19,6 +27,22 @@ const FIXTURE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../testdata/port/store/store.json"
 );
+#[cfg(unix)]
+const MANIFEST_PROCESS_ROOT: &str = "SYMVAULT_MANIFEST_PROCESS_ROOT";
+#[cfg(unix)]
+const MANIFEST_PROCESS_READY: &str = ".manifest-process-ready";
+#[cfg(unix)]
+const MANIFEST_PROCESS_START: &str = ".manifest-process-start";
+#[cfg(unix)]
+const MANIFEST_PROCESS_REBUILD_STARTED: &str = ".manifest-process-rebuild-started";
+#[cfg(unix)]
+const MANIFEST_PROCESS_REBUILD_DONE: &str = ".manifest-process-rebuild-done";
+#[cfg(unix)]
+const MANIFEST_PROCESS_WRITERS_READY: &str = ".manifest-process-writers-ready";
+#[cfg(unix)]
+const MANIFEST_PROCESS_WRITERS_START: &str = ".manifest-process-writers-start";
+#[cfg(unix)]
+const MANIFEST_PROCESS_WRITES: usize = 16;
 
 #[derive(Debug, Deserialize)]
 struct Fixture {
@@ -1544,6 +1568,222 @@ fn concurrent_manifest_updates_preserve_every_record() {
                 .contains_key(&format!("concurrent/{index}"))
         );
     }
+}
+
+#[cfg(unix)]
+fn wait_for_process_marker(path: &Path) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !path.is_file() {
+        assert!(
+            Instant::now() < deadline,
+            "timed out waiting for subprocess marker {}",
+            path.display()
+        );
+        thread::sleep(Duration::from_millis(10));
+    }
+}
+
+#[cfg(unix)]
+struct ManifestTestChild(Child);
+
+#[cfg(unix)]
+impl ManifestTestChild {
+    fn wait_for_exit(&mut self, timeout: Duration) -> io::Result<ExitStatus> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            if let Some(status) = self.0.try_wait()? {
+                return Ok(status);
+            }
+            if Instant::now() >= deadline {
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "manifest subprocess did not exit before deadline",
+                ));
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    fn kill_and_reap(&mut self) -> io::Result<()> {
+        if self.0.try_wait()?.is_none() {
+            match self.0.kill() {
+                Ok(()) => {}
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error),
+            }
+        }
+        self.wait_for_exit(Duration::from_secs(5))?;
+        Ok(())
+    }
+}
+
+#[cfg(unix)]
+impl Drop for ManifestTestChild {
+    fn drop(&mut self) {
+        // Also clean up if a marker, lock, or record assertion panics.
+        if let Err(error) = self.kill_and_reap() {
+            eprintln!("manifest subprocess cleanup failed: {error}");
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn manifest_subprocess_timeout_kills_and_reaps_child() {
+    let mut child = ManifestTestChild(Command::new("/bin/sleep").arg("30").spawn().unwrap());
+    let error = child.wait_for_exit(Duration::from_millis(50)).unwrap_err();
+    assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+    child.kill_and_reap().unwrap();
+    assert!(!child.0.try_wait().unwrap().unwrap().success());
+}
+
+#[cfg(unix)]
+fn write_manifest_process_entries(store: &Store, identity: &Identity, writer: &str) {
+    for index in 0..MANIFEST_PROCESS_WRITES {
+        store
+            .write_entry_with_recipients_at(
+                &format!("process/{writer}/{index}"),
+                &Entry::default(),
+                identity,
+                "2026-09-08T10:11:12Z",
+                None,
+            )
+            .unwrap();
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn cross_process_manifest_writers_preserve_records_and_rebuild_recovers() {
+    let (_, fixture) = fixture();
+    let temp = tempfile::tempdir().unwrap();
+    materialize(temp.path(), &fixture.vaults[0]);
+    let root = temp.path().to_path_buf();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let store = Store::open(&root, &identity).unwrap();
+    let before = store.load_manifest(&identity).unwrap();
+
+    let lock = store.acquire_write_lock().unwrap();
+    let mut child = ManifestTestChild(Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "tests::cross_process_manifest_writers_preserve_records_and_rebuild_recovers_worker",
+            "--nocapture",
+        ])
+        .env(MANIFEST_PROCESS_ROOT, &root)
+        .spawn()
+        .unwrap());
+    wait_for_process_marker(&root.join(MANIFEST_PROCESS_READY));
+    fs::write(root.join(MANIFEST_PROCESS_START), b"start").unwrap();
+    wait_for_process_marker(&root.join(MANIFEST_PROCESS_REBUILD_STARTED));
+    // The child now attempts the production rebuild RMW while this process
+    // holds the same lock used by production writers. It must stay blocked.
+    let blocked_until = Instant::now() + Duration::from_millis(250);
+    while Instant::now() < blocked_until {
+        assert!(
+            !root.join(MANIFEST_PROCESS_REBUILD_DONE).exists(),
+            "rebuild completed while the production manifest lock was held"
+        );
+        assert!(
+            child.0.try_wait().unwrap().is_none(),
+            "subprocess exited early"
+        );
+        thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(store.load_manifest(&identity).unwrap(), before);
+    fs4::fs_std::FileExt::unlock(&lock).unwrap();
+    drop(lock);
+    wait_for_process_marker(&root.join(MANIFEST_PROCESS_REBUILD_DONE));
+    wait_for_process_marker(&root.join(MANIFEST_PROCESS_WRITERS_READY));
+    fs::write(root.join(MANIFEST_PROCESS_WRITERS_START), b"start").unwrap();
+    write_manifest_process_entries(&store, &identity, "parent");
+    assert!(
+        child
+            .wait_for_exit(Duration::from_secs(10))
+            .unwrap()
+            .success(),
+        "manifest writer subprocess failed"
+    );
+
+    let after_writes = store.load_manifest(&identity).unwrap();
+    // Generation counts flushes, not individual writes: Go may coalesce
+    // writes inside its 50ms debounce window. Check records and integrity.
+    assert_eq!(
+        after_writes.entries.len(),
+        before.entries.len() + MANIFEST_PROCESS_WRITES * 2
+    );
+    for writer in ["parent", "child"] {
+        for index in 0..MANIFEST_PROCESS_WRITES {
+            assert!(
+                after_writes
+                    .entries
+                    .contains_key(&format!("process/{writer}/{index}")),
+                "missing {writer} manifest record {index}"
+            );
+        }
+    }
+
+    let verification = store.verify_manifest(&identity).unwrap();
+    assert_eq!(verification.ok, after_writes.entries.len());
+    assert!(verification.missing.is_empty());
+    assert!(verification.tampered.is_empty());
+    assert!(verification.unknown.is_empty());
+
+    let malformed = b"malformed manifest bytes";
+    fs::write(root.join(MANIFEST_FILE), malformed).unwrap();
+    let error = store
+        .update_manifest_entry("must-not-write", b"ciphertext", &identity)
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        StoreError::Decryption(_) | StoreError::Config(_)
+    ));
+    assert_eq!(fs::read(root.join(MANIFEST_FILE)).unwrap(), malformed);
+
+    let rebuilt = store.rebuild_manifest(&identity).unwrap();
+    let persisted = store.load_manifest(&identity).unwrap();
+    assert_eq!(rebuilt, persisted);
+    assert_eq!(persisted.generation, 1);
+    assert_ne!(persisted.created, go_zero_time());
+    assert_ne!(persisted.updated, go_zero_time());
+    assert_eq!(
+        persisted.entries.len(),
+        before.entries.len() + MANIFEST_PROCESS_WRITES * 2
+    );
+    for writer in ["parent", "child"] {
+        for index in 0..MANIFEST_PROCESS_WRITES {
+            assert!(
+                persisted
+                    .entries
+                    .contains_key(&format!("process/{writer}/{index}")),
+                "rebuild lost {writer} manifest record {index}"
+            );
+        }
+    }
+    let verification = store.verify_manifest(&identity).unwrap();
+    assert_eq!(verification.ok, persisted.entries.len());
+    assert!(verification.missing.is_empty());
+    assert!(verification.tampered.is_empty());
+    assert!(verification.unknown.is_empty());
+}
+
+#[cfg(unix)]
+#[test]
+fn cross_process_manifest_writers_preserve_records_and_rebuild_recovers_worker() {
+    let Some(root) = env::var_os(MANIFEST_PROCESS_ROOT) else {
+        return;
+    };
+    let root = PathBuf::from(root);
+    let identity = parse_identity(IDENTITY).unwrap();
+    let store = Store::open(&root, &identity).unwrap();
+    fs::write(root.join(MANIFEST_PROCESS_READY), b"ready").unwrap();
+    wait_for_process_marker(&root.join(MANIFEST_PROCESS_START));
+    fs::write(root.join(MANIFEST_PROCESS_REBUILD_STARTED), b"started").unwrap();
+    store.rebuild_manifest(&identity).unwrap();
+    fs::write(root.join(MANIFEST_PROCESS_REBUILD_DONE), b"done").unwrap();
+    fs::write(root.join(MANIFEST_PROCESS_WRITERS_READY), b"ready").unwrap();
+    wait_for_process_marker(&root.join(MANIFEST_PROCESS_WRITERS_START));
+    write_manifest_process_entries(&store, &identity, "child");
 }
 
 #[test]
