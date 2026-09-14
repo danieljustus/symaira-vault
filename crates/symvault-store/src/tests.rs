@@ -948,6 +948,73 @@ fn atomic_create_holds_parent_capability_across_ancestor_replacement() {
 
 #[cfg(unix)]
 #[test]
+fn write_new_entry_and_write_entry_at_reject_symlinked_entry_parent() {
+    use std::os::unix::fs::symlink;
+
+    let (_, value) = fixture();
+    let identity = parse_identity(IDENTITY).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    materialize(root, &value.vaults[0]);
+    let store = Store::open(root, &identity).unwrap();
+
+    // Establish "entries/safe" as a real directory the store itself created.
+    store
+        .write_new_entry("safe/first", &Entry::default(), &identity)
+        .unwrap();
+
+    // An attacker who can write next to the vault (but not through it)
+    // replaces that directory with a symlink to somewhere else entirely.
+    let outside = tempfile::tempdir().unwrap();
+    fs::write(outside.path().join("sentinel"), b"must stay unchanged").unwrap();
+    let safe_dir = root.join("entries/safe");
+    fs::remove_dir_all(&safe_dir).unwrap();
+    symlink(outside.path(), &safe_dir).unwrap();
+    let entries_before = fs::read_dir(outside.path()).unwrap().count();
+
+    let new_entry_error = store
+        .write_new_entry("safe/second", &Entry::default(), &identity)
+        .unwrap_err();
+    assert!(
+        matches!(new_entry_error, StoreError::Read { .. }),
+        "write_new_entry followed a symlinked parent: {new_entry_error:?}"
+    );
+
+    let write_at_error = store
+        .write_entry_at(
+            "safe/third",
+            &Entry::default(),
+            &identity,
+            "2026-01-01T00:00:00Z",
+            false,
+            None,
+        )
+        .unwrap_err();
+    assert!(
+        matches!(write_at_error, StoreError::Read { .. }),
+        "write_entry_at followed a symlinked parent: {write_at_error:?}"
+    );
+
+    assert_eq!(
+        fs::read(outside.path().join("sentinel")).unwrap(),
+        b"must stay unchanged"
+    );
+    assert_eq!(
+        fs::read_dir(outside.path()).unwrap().count(),
+        entries_before,
+        "attacker-controlled directory gained new entries"
+    );
+    assert!(
+        fs::symlink_metadata(&safe_dir)
+            .unwrap()
+            .file_type()
+            .is_symlink(),
+        "test setup invariant: the swapped path must still be the symlink"
+    );
+}
+
+#[cfg(unix)]
+#[test]
 fn concurrent_capability_publication_creates_all_entries_without_temp_leaks() {
     use std::thread;
 
