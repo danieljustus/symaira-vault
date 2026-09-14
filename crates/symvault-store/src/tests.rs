@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, fs, path::Path};
+use std::{collections::BTreeMap, fs, path::Path, process::Command};
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde::Deserialize;
@@ -1542,5 +1542,199 @@ fn rooted_walk_depth_matches_walkdir_at_exact_boundaries() {
         expected.sort();
         actual.sort();
         assert_eq!(actual, expected, "depth {depth}");
+    }
+}
+#[derive(Debug, Deserialize, Serialize)]
+struct Store004Fixture {
+    schema_version: u32,
+    oracle: Store004Oracle,
+    cases: Vec<Store004Case>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct Store004Oracle {
+    commit: String,
+    release: String,
+    source_files: Vec<String>,
+    source_digest: String,
+    generator_files: Vec<String>,
+    generator_digest: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct Store004Case {
+    case_id: String,
+    pseudonymize: bool,
+    highlevel: String,
+    entry_exists: bool,
+    manifest_kind: String,
+    manifest_load: String,
+}
+
+fn store004_digest(root: &Path, names: &[String], oracle: bool) -> String {
+    let mut sorted = names.to_vec();
+    sorted.sort();
+    let mut hasher = Sha256::new();
+    for name in sorted {
+        let bytes = if oracle {
+            Command::new("git")
+                .args([
+                    "-C",
+                    root.to_str().unwrap(),
+                    "show",
+                    &format!("caadd5ef95e8f19fabd3ae3d2c04caa296f2fd44:{name}"),
+                ])
+                .output()
+                .expect("git show oracle source")
+                .stdout
+        } else {
+            fs::read(root.join(&name)).expect("read current generator source")
+        };
+        hasher.update(name.as_bytes());
+        hasher.update([0]);
+        hasher.update(bytes);
+        hasher.update([0]);
+    }
+    hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+type Store004Mutation = (&'static str, fn(&mut Store004Fixture));
+
+fn validate_store004_provenance(value: &Store004Fixture, root: &Path) -> Result<(), String> {
+    let source_files = vec![
+        "internal/config/config.go".into(),
+        "internal/config/config_load.go".into(),
+        "internal/config/schema.go".into(),
+        "internal/vault/entry.go".into(),
+        "internal/vault/entry_readwrite.go".into(),
+        "internal/vault/manifest.go".into(),
+    ];
+    let generator_files = vec![
+        "scripts/rust-port/cmd/store004gen/main.go".into(),
+        "scripts/rust-port/cmd/store004gen/main_test.go".into(),
+    ];
+    if value.oracle.commit != "caadd5ef95e8f19fabd3ae3d2c04caa296f2fd44"
+        || value.oracle.release != "v0.22.1"
+        || value.oracle.source_files != source_files
+        || value.oracle.generator_files != generator_files
+    {
+        return Err("STORE-004 oracle identity/file inventory mismatch".into());
+    }
+    if value.oracle.source_digest != store004_digest(root, &source_files, true) {
+        return Err("STORE-004 pinned source digest mismatch".into());
+    }
+    if value.oracle.generator_digest != store004_digest(root, &generator_files, false) {
+        return Err("STORE-004 generator digest mismatch".into());
+    }
+    Ok(())
+}
+
+#[test]
+fn store004_fixture_provenance_is_bound_and_mutations_fail_closed() {
+    let raw = fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../testdata/port/store/store004_manifest_failure.json"
+    ))
+    .unwrap();
+    let mut value: Store004Fixture = serde_json::from_str(&raw).unwrap();
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    validate_store004_provenance(&value, &root).unwrap();
+
+    let mutations: Vec<Store004Mutation> = vec![
+        ("commit", |v: &mut Store004Fixture| {
+            v.oracle.commit = "tampered".into()
+        }),
+        ("source_digest", |v: &mut Store004Fixture| {
+            v.oracle.source_digest.replace_range(..1, "0")
+        }),
+        ("generator_digest", |v: &mut Store004Fixture| {
+            v.oracle.generator_digest.replace_range(..1, "0")
+        }),
+        ("source_files", |v: &mut Store004Fixture| {
+            v.oracle.source_files[0] = "tampered.go".into()
+        }),
+        ("generator_files", |v: &mut Store004Fixture| {
+            v.oracle.generator_files[0] = "tampered.go".into()
+        }),
+    ];
+    for (name, mutate) in mutations {
+        let original = serde_json::to_value(&value).unwrap();
+        mutate(&mut value);
+        assert!(
+            validate_store004_provenance(&value, &root).is_err(),
+            "provenance validator accepted {name} mutation"
+        );
+        value = serde_json::from_value(original).unwrap();
+    }
+}
+
+#[test]
+fn store004_high_level_writer_discards_manifest_publication_failure() {
+    let raw = fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../testdata/port/store/store004_manifest_failure.json"
+    ))
+    .unwrap();
+    let store004_fixture: Store004Fixture = serde_json::from_str(&raw).unwrap();
+    assert_eq!(store004_fixture.schema_version, 1);
+    assert_eq!(store004_fixture.oracle.release, "v0.22.1");
+    assert_eq!(
+        store004_fixture.oracle.commit,
+        "caadd5ef95e8f19fabd3ae3d2c04caa296f2fd44"
+    );
+    let cases = store004_fixture.cases;
+    assert_eq!(cases.len(), 2);
+    for (index, case) in cases.into_iter().enumerate() {
+        assert_eq!(case.case_id, "WRITE-MANIFEST-FAILURE-001");
+        assert_eq!(case.pseudonymize, index == 1);
+        let (_, fixture) = fixture();
+        let temp = tempfile::tempdir().unwrap();
+        materialize(temp.path(), &fixture.vaults[0]);
+        if case.pseudonymize {
+            fs::write(
+                temp.path().join(CONFIG_FILE),
+                b"vault:
+  pseudonymize_paths: true
+",
+            )
+            .unwrap();
+        }
+        let identity = parse_identity(IDENTITY).unwrap();
+        let store = Store::open(temp.path(), &identity).unwrap();
+        fs::remove_file(temp.path().join("manifest.age")).unwrap();
+        fs::create_dir(temp.path().join("manifest.age")).unwrap();
+        let result = store.write_entry_with_recipients_at(
+            "alpha",
+            &Entry {
+                data: [("value".into(), serde_json::json!("store004"))]
+                    .into_iter()
+                    .collect(),
+                ..Default::default()
+            },
+            &identity,
+            "2026-09-08T10:11:12Z",
+            None,
+        );
+        assert_eq!(result.is_ok(), case.highlevel == "ok");
+        assert_eq!(
+            store.entry_exists("alpha", &identity).unwrap(),
+            case.entry_exists
+        );
+        assert_eq!(
+            if temp.path().join("manifest.age").is_dir() {
+                "directory"
+            } else {
+                "file"
+            },
+            case.manifest_kind
+        );
+        assert_eq!(
+            store.load_manifest(&identity).is_ok(),
+            case.manifest_load == "ok"
+        );
     }
 }

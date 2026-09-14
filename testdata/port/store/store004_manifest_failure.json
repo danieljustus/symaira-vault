@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "caadd5ef95e8f19fabd3ae3d2c04caa296f2fd44",
+    "release": "v0.22.1",
+    "source_files": [
+      "internal/config/config.go",
+      "internal/config/config_load.go",
+      "internal/config/schema.go",
+      "internal/vault/entry.go",
+      "internal/vault/entry_readwrite.go",
+      "internal/vault/manifest.go"
+    ],
+    "source_digest": "ce11654f548221307d12fdfdca54654abdad28eec207df765cca73f6b67ea008",
+    "generator_files": [
+      "scripts/rust-port/cmd/store004gen/main.go",
+      "scripts/rust-port/cmd/store004gen/main_test.go"
+    ],
+    "generator_digest": "dca4bf8d741a65ab806dbba634f82614eef0eb191f0d9ebc4a88e41bb78d17fc"
+  },
+  "cases": [
+    {
+      "case_id": "WRITE-MANIFEST-FAILURE-001",
+      "pseudonymize": false,
+      "highlevel": "ok",
+      "entry_exists": true,
+      "manifest_kind": "directory",
+      "manifest_load": "error"
+    },
+    {
+      "case_id": "WRITE-MANIFEST-FAILURE-001",
+      "pseudonymize": true,
+      "highlevel": "ok",
+      "entry_exists": true,
+      "manifest_kind": "directory",
+      "manifest_load": "error"
+    }
+  ]
+}
