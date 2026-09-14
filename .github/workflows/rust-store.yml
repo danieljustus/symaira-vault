@@ -66,8 +66,8 @@ jobs:
           set -euo pipefail
           export CARGO_TARGET_DIR="$GITHUB_WORKSPACE/target"
           export SYMVAULT_RUN_WINDOWS_CROSSLANG=1
-          go test ./internal/vault -run '^(TestEntryWriterGoRustLiveAcceptance|TestManifestSequenceGoRustDifferential|TestManifestSequenceJSONTransportControls|TestEncryptedIndexGoRustLiveAcceptance)$' -count=1 -timeout=15m -json > storage-differential.jsonl
-          python3 -c 'import json; rows=[json.loads(line) for line in open("storage-differential.jsonl")]; expected={"TestEntryWriterGoRustLiveAcceptance","TestManifestSequenceGoRustDifferential","TestManifestSequenceJSONTransportControls","TestEncryptedIndexGoRustLiveAcceptance"}; passed={r.get("Test") for r in rows if r.get("Action")=="pass" and "/" not in r.get("Test", "")}; assert expected <= passed, (expected-passed); assert not any(r.get("Action")=="skip" and r.get("Test") in expected for r in rows); print("Verified all four live contract tests executed")'
+          go test ./internal/vault -run '^(TestEntryWriterGoRustLiveAcceptance|TestManifestSequenceGoRustDifferential|TestManifestSequenceJSONTransportControls|TestEncryptedIndexGoRustLiveAcceptance|TestEncryptedIndexBuildEmptyGoRust)$' -count=1 -timeout=15m -json > storage-differential.jsonl
+          python3 -c 'import json; rows=[json.loads(line) for line in open("storage-differential.jsonl")]; expected={"TestEntryWriterGoRustLiveAcceptance","TestManifestSequenceGoRustDifferential","TestManifestSequenceJSONTransportControls","TestEncryptedIndexGoRustLiveAcceptance","TestEncryptedIndexBuildEmptyGoRust"}; passed={r.get("Test") for r in rows if r.get("Action")=="pass" and "/" not in r.get("Test", "")}; assert expected <= passed, (expected-passed); assert not any(r.get("Action")=="skip" and r.get("Test") in expected for r in rows); print("Verified all five live contract tests executed")'
       - name: Upload native storage evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:

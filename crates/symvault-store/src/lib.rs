@@ -29,6 +29,9 @@ pub mod audit;
 /// Pure fixed-clock write metadata preparation.
 pub mod metadata;
 
+/// Thread-safe process-local ownership of encrypted search indexes.
+pub mod search_index_store;
+
 mod publication;
 
 #[cfg(unix)]
@@ -79,6 +82,10 @@ pub enum StoreError {
     InvalidEntryPath(String),
     #[error("entry ciphertext is invalid: {0}")]
     Decryption(String),
+    #[error("{0}")]
+    SearchIndex(String),
+    #[error("search index build produced no entries")]
+    SearchIndexBuildEmpty,
     #[error("vault resource exceeds {limit} bytes: {path}")]
     Limit { path: PathBuf, limit: u64 },
     #[error("entry value exceeds the supported structure limits: {0}")]
@@ -486,6 +493,7 @@ impl Store {
         }
     }
 
+    #[cfg(unix)]
     fn read_relative_path(&self, relative: &Path, display: &Path) -> Result<Vec<u8>, StoreError> {
         #[cfg(unix)]
         {
@@ -860,7 +868,11 @@ impl Store {
         Ok(result)
     }
 
-    fn file_info(&self, relative: &Path, metadata: fs::Metadata) -> Result<FileInfo, StoreError> {
+    fn file_info(
+        &self,
+        relative: &Path,
+        mut metadata: fs::Metadata,
+    ) -> Result<FileInfo, StoreError> {
         let display = self.root.join(relative);
         if metadata.file_type().is_symlink() {
             return Err(StoreError::Symlink(display));
@@ -873,7 +885,15 @@ impl Store {
             return Err(StoreError::NotRegularFile(display));
         };
         let bytes = if kind == FileKind::Regular {
-            self.read_relative_path(relative, &self.root.join(relative))?
+            // The path may have been replaced since traversal. Publish the
+            // metadata of the same opened regular file that supplied the bytes.
+            #[cfg(unix)]
+            let (bytes, opened_metadata) =
+                rooted::read_with_metadata(&self.root_cap, relative, &display)?;
+            #[cfg(not(unix))]
+            let (bytes, opened_metadata) = read_regular_with_metadata(&display)?;
+            metadata = opened_metadata;
+            bytes
         } else {
             Vec::new()
         };
@@ -1471,14 +1491,22 @@ fn reject_symlink(path: &Path) -> Result<(), StoreError> {
 
 #[cfg(not(unix))]
 fn read_regular(path: &Path) -> Result<Vec<u8>, StoreError> {
+    read_regular_with_metadata(path).map(|(bytes, _)| bytes)
+}
+
+#[cfg(not(unix))]
+fn read_regular_with_metadata(path: &Path) -> Result<(Vec<u8>, fs::Metadata), StoreError> {
     let file = open_nofollow(path).map_err(|source| StoreError::Read {
         path: path.to_path_buf(),
         source,
     })?;
-    read_open_regular(file, path)
+    read_open_regular_with_metadata(file, path)
 }
 
-fn read_open_regular(file: fs::File, path: &Path) -> Result<Vec<u8>, StoreError> {
+fn read_open_regular_with_metadata(
+    file: fs::File,
+    path: &Path,
+) -> Result<(Vec<u8>, fs::Metadata), StoreError> {
     let metadata = file.metadata().map_err(|source| StoreError::Read {
         path: path.to_path_buf(),
         source,
@@ -1506,7 +1534,7 @@ fn read_open_regular(file: fs::File, path: &Path) -> Result<Vec<u8>, StoreError>
             limit: MAX_FILE_BYTES,
         });
     }
-    Ok(bytes)
+    Ok((bytes, metadata))
 }
 
 #[cfg(unix)]
@@ -2250,13 +2278,14 @@ impl Store {
     }
 
     /// Updates one manifest record after a successful entry write.
+    /// Like Go's UpdateManifestEntry, this treats `path` as a verbatim map key;
+    /// entry filesystem operations validate their paths separately.
     pub fn update_manifest_entry(
         &self,
         path: &str,
         ciphertext: &[u8],
         identity: &Identity,
     ) -> Result<(), StoreError> {
-        validate_entry_path(path)?;
         self.with_write_lock(|store| {
             store.update_manifest_entry_unlocked(path, ciphertext, identity)
         })
@@ -2294,8 +2323,8 @@ impl Store {
     }
 
     /// Removes one manifest record. Missing manifests are a no-op.
+    /// The key is used verbatim, including empty or non-filesystem strings.
     pub fn remove_manifest_entry(&self, path: &str, identity: &Identity) -> Result<(), StoreError> {
-        validate_entry_path(path)?;
         self.with_write_lock(|store| store.remove_manifest_entry_unlocked(path, identity))
     }
 
@@ -2534,6 +2563,8 @@ where
 
 impl SearchIndex {
     /// Builds and persists an encrypted index from every decryptable entry.
+    /// Rejects a nonempty vault with no searchable values, preserving any
+    /// existing index. An empty vault can still produce a valid empty index.
     pub fn build(store: &Store, identity: &Identity) -> Result<Self, StoreError> {
         let paths = store.list(identity)?;
         let mut document = IndexDocument {
@@ -2544,14 +2575,19 @@ impl SearchIndex {
             document.paths.insert(path.clone(), EmptyIndexValue {});
             if let Ok(entry) = store.get(path, identity) {
                 let mut values = Vec::new();
-                for value in entry.data.values() {
-                    collect_index_strings(&mut values, value);
+                for (field, value) in &entry.data {
+                    collect_index_strings(&mut values, field, value);
                 }
                 values.sort();
                 if !values.is_empty() {
                     document.values.insert(path.clone(), values);
                 }
             }
+        }
+        // Go's buildIndex rejects this before publishing. Host extraction only
+        // accepts nonempty strings, which are already included in values here.
+        if !paths.is_empty() && document.values.is_empty() {
+            return Err(StoreError::SearchIndexBuildEmpty);
         }
         let mut salt = vec![0u8; 16];
         getrandom::fill(&mut salt).map_err(|source| StoreError::Write {
@@ -2576,7 +2612,11 @@ impl SearchIndex {
         })
     }
 
-    /// Loads a current or legacy encrypted index, rejecting stale indexes.
+    /// Loads a current or legacy encrypted index, rejecting malformed or stale indexes.
+    ///
+    /// A missing index is reported as `Ok(None)`. Invalid persisted state is
+    /// removed on a best-effort basis and returned as an error, so callers can
+    /// distinguish an absent optimization from a failed integrity check.
     pub fn load(store: &Store, identity: &Identity) -> Result<Option<Self>, StoreError> {
         let path = store.root.join(".search-index");
         let raw = match store.read_path(&path) {
@@ -2586,28 +2626,43 @@ impl SearchIndex {
             }
             Err(error) => return Err(error),
         };
-        let (salt, ciphertext) = if raw.first() == Some(&1) && raw.len() > 18 {
+        let (salt, ciphertext) = if raw.len() > 1 && raw[0] == 1 {
+            if raw.len() < 18 {
+                let _ = store.remove_path(&path);
+                return Err(StoreError::SearchIndex("truncated search index".into()));
+            }
             (raw[1..17].to_vec(), raw[17..].to_vec())
         } else {
             (Vec::new(), raw)
         };
-        let plaintext = match symvault_crypto::decrypt_index(&ciphertext, identity, &salt) {
+        let mut plaintext = match symvault_crypto::decrypt_index(&ciphertext, identity, &salt) {
             Ok(value) => value,
-            Err(_) => {
+            Err(error) => {
                 let _ = store.remove_path(&path);
-                return Ok(None);
+                return Err(StoreError::Decryption(error.to_string()));
             }
         };
         let document: IndexDocument = match serde_json::from_slice(&plaintext) {
             Ok(value) => value,
-            Err(_) => {
+            Err(error) => {
+                plaintext.zeroize();
                 let _ = store.remove_path(&path);
-                return Ok(None);
+                return Err(StoreError::SearchIndex(error.to_string()));
             }
         };
-        if document.entry_count != store.list(identity)?.len() {
+        plaintext.zeroize();
+        let paths = match store.list(identity) {
+            Ok(paths) => paths,
+            Err(error) => {
+                // Go discards the persisted index when freshness cannot be
+                // checked, while preserving the original listing error.
+                let _ = store.remove_path(&path);
+                return Err(error);
+            }
+        };
+        if document.entry_count != paths.len() {
             let _ = store.remove_path(&path);
-            return Ok(None);
+            return Err(StoreError::SearchIndex("stale index".into()));
         }
         Ok(Some(Self {
             salt,
@@ -2646,12 +2701,35 @@ impl SearchIndex {
             .collect())
     }
 
-    /// Removes the persisted index and all transient plaintext.
-    pub fn invalidate(&mut self) -> Result<(), StoreError> {
+    pub(crate) fn clear_memory(&mut self) {
         self.doc = None;
         self.salt.clear();
         self.ciphertext.zeroize();
         self.ciphertext.clear();
+    }
+
+    pub(crate) fn is_loaded(&self) -> bool {
+        self.doc.is_some()
+    }
+
+    pub(crate) fn invalidate_persisted(store: &Store) -> Result<(), StoreError> {
+        let path = store.root.join(".search-index");
+        #[cfg(unix)]
+        {
+            rooted::remove(&store.root_cap, Path::new(".search-index"), &path)?;
+            Ok(())
+        }
+        #[cfg(not(unix))]
+        match fs::remove_file(&path) {
+            Ok(()) => Ok(()),
+            Err(source) if source.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(source) => Err(StoreError::Write { path, source }),
+        }
+    }
+
+    /// Removes the persisted index and all transient plaintext.
+    pub fn invalidate(&mut self) -> Result<(), StoreError> {
+        self.clear_memory();
         if self.root.as_os_str().is_empty() {
             return Ok(());
         }
@@ -2669,15 +2747,20 @@ impl SearchIndex {
     }
 }
 
-fn collect_index_strings(values: &mut Vec<String>, value: &serde_json::Value) {
+fn collect_index_strings(values: &mut Vec<String>, field: &str, value: &serde_json::Value) {
     match value {
+        serde_json::Value::String(value) if field == "backup_codes" => value
+            .split('\n')
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .for_each(|value| values.push(value.to_lowercase())),
         serde_json::Value::String(value) if !value.is_empty() => values.push(value.to_lowercase()),
         serde_json::Value::Array(values_array) => values_array
             .iter()
-            .for_each(|value| collect_index_strings(values, value)),
+            .for_each(|value| collect_index_strings(values, "", value)),
         serde_json::Value::Object(object) => object
             .values()
-            .for_each(|value| collect_index_strings(values, value)),
+            .for_each(|value| collect_index_strings(values, "", value)),
         _ => {}
     }
 }

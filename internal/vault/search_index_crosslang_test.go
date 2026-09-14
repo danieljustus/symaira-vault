@@ -1,10 +1,12 @@
 package vault
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -61,7 +63,7 @@ func searchIndexAdapter(t testing.TB) string {
 		// operations themselves. The latter use runSearchIndexCommand's bounded
 		// two-minute timeout; applying it to dependency compilation makes the
 		// differential test depend on a warm cache rather than adapter behavior.
-		output, err := runSearchIndexCommandWithTimeout(5*time.Minute, repo, target, "cargo", "build", "-p", "symvault-store", "--example", "search-index-adapter")
+		output, err := runSearchIndexCommandWithTimeout(5*time.Minute, repo, target, "cargo", "build", "--manifest-path", filepath.Join(repo, "Cargo.toml"), "--locked", "-p", "symvault-store", "--example", "search-index-adapter")
 		if err != nil {
 			searchIndexAdapterBuild.err = fmt.Errorf("cargo build: %w: %s", err, output)
 			return
@@ -251,4 +253,78 @@ func TestEncryptedIndexGoRustLiveAcceptance(t *testing.T) {
 		t.Fatal(err)
 	}
 	runSearchIndexAdapterExpectError(t, adapter, goRoot, goIdentity.String(), "load-search", "rust_public_key_derived_ciphertext_rejected", "--query", "go-rust-accepted")
+}
+
+func TestEncryptedIndexLoadInvalidateGoRust(t *testing.T) {
+	adapter := searchIndexAdapter(t)
+	root := t.TempDir()
+	identity := testutil.TempIdentity(t)
+	cfg := vaultconfig.Default()
+	cfg.VaultDir = root
+	if err := Init(root, identity, cfg); err != nil {
+		t.Fatal(err)
+	}
+	mustWriteEntry(t, root, identity, "concurrent-doc", map[string]any{
+		"value": "Concurrent marker",
+	})
+	goIndex := searchIndexForVault(root)
+	if err := goIndex.Build(root, identity); err != nil {
+		t.Fatal(err)
+	}
+	sameIndex := searchIndexForVault(root)
+	if goIndex != sameIndex {
+		t.Fatal("Go index store returned separate instances for one vault")
+	}
+	rawBefore, err := os.ReadFile(filepath.Join(root, ".search-index"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rawBefore) == 0 || rawBefore[0] != indexFormatVersion {
+		t.Fatalf("unexpected search-index format byte: %x", rawBefore)
+	}
+	ciphertextNonempty := len(rawBefore) > 1+indexSaltLen
+	if !ciphertextNonempty {
+		t.Fatalf("search-index ciphertext is empty: %x", rawBefore)
+	}
+	plaintextAbsent := !bytes.Contains(rawBefore, []byte("Concurrent marker"))
+
+	// Force the first load to populate memory from the persisted bytes. This
+	// makes the load-before-invalidate handoff observable instead of treating
+	// the just-built in-memory index as evidence of a successful load.
+	goIndex.ClearMemory()
+	if goIndex.IsBuilt() {
+		t.Fatal("Go ClearMemory retained the just-built index")
+	}
+	t.Cleanup(goIndex.Invalidate)
+
+	// Go loadFromDisk reads before taking idx.mu for commit. Its oracle
+	// contract here is sequential; Rust's stronger serialization is tested at
+	// the read/commit boundary in the private Rust regression test.
+	if err := sameIndex.loadFromDisk(root, identity); err != nil {
+		t.Fatal(err)
+	}
+	if !sameIndex.IsBuilt() {
+		t.Fatal("load did not commit")
+	}
+	goIndex.Invalidate()
+
+	// Observe the production invalidation before test cleanup.
+	if goIndex.IsBuilt() {
+		t.Fatal("Go index remained loaded after invalidation")
+	}
+	if _, err := os.Stat(filepath.Join(root, ".search-index")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("Go index file remained after invalidation: %v", err)
+	}
+
+	want := map[string]any{
+		"index_absent":        true,
+		"index_unloaded":      true,
+		"format_version":      float64(indexFormatVersion),
+		"ciphertext_nonempty": ciphertextNonempty,
+		"plaintext_absent":    plaintextAbsent,
+	}
+	got := runSearchIndexAdapter(t, adapter, root, identity.String(), "load-invalidate")
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Rust observation = %v; Go oracle = %v", got, want)
+	}
 }

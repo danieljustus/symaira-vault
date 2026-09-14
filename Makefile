@@ -367,12 +367,6 @@ store-differential:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/storereopen --run --fixture testdata/port/store/reopen.json --rust-binary "$(CARGO_TARGET_DIR)/debug/examples/store-reopen"
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/storegen --check --output testdata/port/store/store.json
 	$(CARGO) test -p symvault-store --locked
-	# Live Go<->Rust acceptance for entry writing, manifest sequencing, and the
-	# encrypted search index: each builds its own Rust example adapter and
-	# drives it from the production Go writer/reader over the same vault tree.
-	# These existed as plain `go test` targets nothing in CI ever ran (#1019);
-	# without this they compile and pass locally but prove nothing continuously.
-	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test -v -timeout=10m -run 'TestEntryWriterGoRustLiveAcceptance|TestManifestSequenceGoRustDifferential|TestManifestSequenceJSONTransportControls|TestEncryptedIndexGoRustLiveAcceptance|TestCargoTargetDirResolution' ./internal/vault/...
 
 audit-fixtures-generate:
 	UPDATE_AUDIT_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/audit -run '^TestAuditFixture$$' -count=1
