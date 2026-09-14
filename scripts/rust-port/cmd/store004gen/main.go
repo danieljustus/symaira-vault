@@ -167,10 +167,10 @@ func extract(root string) (string, error) {
 	}
 	archivePath := archiveFile.Name()
 	if err = archiveFile.Close(); err != nil {
-		os.Remove(archivePath)
+		_ = os.Remove(archivePath) // best effort: the real error is returned
 		return "", err
 	}
-	defer os.Remove(archivePath)
+	defer func(p string) { _ = os.Remove(p) }(archivePath)
 	cmd := exec.Command("git", "-C", root, "archive", "--format=tar", "--output="+archivePath, oracleCommit)
 	if err = cmd.Run(); err != nil {
 		return "", fmt.Errorf("git archive: %w", err)
@@ -186,7 +186,7 @@ func extract(root string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	defer func(c io.Closer) { _ = c.Close() }(f)
 	tr := tar.NewReader(f)
 	for {
 		h, e := tr.Next()
@@ -250,7 +250,7 @@ func resolveGo() (string, error) {
 	}
 	fields := strings.Fields(string(output))
 	if len(fields) < 3 || fields[0] != "go" || fields[1] != "version" || fields[2] != requiredGoVersion {
-		return "", fmt.Errorf("Go toolchain %q is %q; require %s", path, strings.TrimSpace(string(output)), requiredGoVersion)
+		return "", fmt.Errorf("go toolchain %q is %q; require %s", path, strings.TrimSpace(string(output)), requiredGoVersion)
 	}
 	return path, nil
 }
@@ -276,7 +276,7 @@ func runOracle(root string, pseudonymize bool) (outcomes []outcome, err error) {
 	if err != nil {
 		return nil, err
 	}
-	defer os.RemoveAll(tree)
+	defer func(p string) { _ = os.RemoveAll(p) }(tree)
 	mainPath := filepath.Join(tree, "cmd", "store004oracle", "main.go")
 	if err = os.MkdirAll(filepath.Dir(mainPath), 0750); err != nil {
 		return nil, err
@@ -288,7 +288,7 @@ func runOracle(root string, pseudonymize bool) (outcomes []outcome, err error) {
 	if err != nil {
 		return nil, err
 	}
-	defer os.RemoveAll(runtimeDir)
+	defer func(p string) { _ = os.RemoveAll(p) }(runtimeDir)
 	home, tmp := filepath.Join(runtimeDir, "home"), filepath.Join(runtimeDir, "tmp")
 	if err = os.MkdirAll(home, 0700); err != nil {
 		return nil, err
@@ -353,7 +353,9 @@ func generated(root string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	cases := append(fresh, pseudo...)
+	cases := make([]outcome, 0, len(fresh)+len(pseudo))
+	cases = append(cases, fresh...)
+	cases = append(cases, pseudo...)
 	data, err := json.MarshalIndent(fixture{1, meta, cases}, "", "  ")
 	if err != nil {
 		return nil, err
