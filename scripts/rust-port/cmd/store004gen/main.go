@@ -405,8 +405,8 @@ func main() {
 		os.Exit(1)
 	}
 	if *check {
-		if err := checkFixture(root, path); err != nil {
-			fmt.Fprintln(os.Stderr, "FAIL STORE-004 fixture:", err)
+		if checkErr := checkFixture(root, path); checkErr != nil {
+			fmt.Fprintln(os.Stderr, "FAIL STORE-004 fixture:", checkErr)
 			os.Exit(1)
 		}
 		fmt.Println("PASS STORE-004 fixture (2 cases, regenerated oracle)")

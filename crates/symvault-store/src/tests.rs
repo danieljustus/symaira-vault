@@ -1577,7 +1577,7 @@ fn store004_digest(root: &Path, names: &[String], oracle: bool) -> String {
     let mut hasher = Sha256::new();
     for name in sorted {
         let bytes = if oracle {
-            Command::new("git")
+            let output = Command::new("git")
                 .args([
                     "-C",
                     root.to_str().unwrap(),
@@ -1585,8 +1585,17 @@ fn store004_digest(root: &Path, names: &[String], oracle: bool) -> String {
                     &format!("caadd5ef95e8f19fabd3ae3d2c04caa296f2fd44:{name}"),
                 ])
                 .output()
-                .expect("git show oracle source")
-                .stdout
+                .expect("git show oracle source");
+            // Without this the digest is silently taken over empty output when
+            // the oracle commit is absent -- a shallow checkout then looks like
+            // a provenance mismatch instead of a missing object.
+            assert!(
+                output.status.success(),
+                "git show of pinned oracle source {name} failed: {}; \
+                 the oracle commit must be present (fetch-depth: 0)",
+                String::from_utf8_lossy(&output.stderr).trim()
+            );
+            output.stdout
         } else {
             fs::read(root.join(&name)).expect("read current generator source")
         };
