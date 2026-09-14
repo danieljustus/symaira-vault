@@ -256,7 +256,7 @@ func resolveGo() (string, error) {
 }
 
 func isolatedEnvironment(goPath, home, tmp string) []string {
-	allowed := []string{"PATH", "GOTOOLCHAIN", "GOPROXY", "GOSUMDB", "GONOSUMDB", "GOPRIVATE", "GONOPROXY", "GOVCS", "GOMODCACHE"}
+	allowed := []string{"PATH", "GOTOOLCHAIN", "GOPROXY", "GOSUMDB", "GONOSUMDB", "GOPRIVATE", "GONOPROXY", "GOVCS", "GOMODCACHE", "GOCACHE"}
 	env := make([]string, 0, len(allowed)+3)
 	for _, key := range allowed {
 		if value, ok := os.LookupEnv(key); ok {

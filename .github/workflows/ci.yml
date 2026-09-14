@@ -354,6 +354,20 @@ jobs:
       - name: Install dependencies
         run: go mod download
 
+      - name: Export Go cache paths for the isolated oracle
+        # GOMODCACHE/GOCACHE are never literal env vars on the runner, only
+        # implicit defaults derived from the real USERPROFILE — so there is
+        # nothing for isolatedEnvironment's allow-list to forward. Without
+        # this, the isolated oracle child (HOME/USERPROFILE repointed at an
+        # empty directory) finds neither the module cache "go mod download"
+        # just populated nor a resolvable build cache, and either downloads
+        # everything again or fails outright ("GOCACHE is not defined and
+        # %LocalAppData% is not defined"). These are build caches, not user
+        # data, so forwarding them does not weaken isolation.
+        run: |
+          echo "GOMODCACHE=$(go env GOMODCACHE)" >> $env:GITHUB_ENV
+          echo "GOCACHE=$(go env GOCACHE)" >> $env:GITHUB_ENV
+
       - name: Run Windows process-tree regression
         run: >-
           go test -v -timeout=5m
