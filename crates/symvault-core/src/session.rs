@@ -111,14 +111,10 @@ impl Clock for SystemClock {
 #[serde(untagged)]
 enum Timestamp {
     Text(String),
-    Seconds(u64),
 }
 impl Timestamp {
     fn nanos(&self) -> Result<u64, SessionError> {
         match self {
-            Self::Seconds(v) => v
-                .checked_mul(1_000_000_000)
-                .ok_or_else(|| SessionError::Malformed("timestamp overflow".into())),
             Self::Text(v) => parse_timestamp(v)
                 .ok_or_else(|| SessionError::Malformed(format!("invalid timestamp {v:?}"))),
         }
@@ -211,14 +207,14 @@ fn parse_timestamp(v: &str) -> Option<u64> {
 struct StoredSession {
     saved_at: Timestamp,
     last_access: Timestamp,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     passphrase: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     encrypted_passphrase: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     nonce: Option<String>,
     ttl_ns: i64,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_zero")]
     max_lifetime_ns: i64,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -228,8 +224,12 @@ struct StoredIdentity {
     encrypted_identity: String,
     nonce: String,
     ttl_ns: i64,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_zero")]
     max_lifetime_ns: i64,
+}
+
+fn is_zero(value: &i64) -> bool {
+    *value == 0
 }
 
 pub struct SessionManager {
@@ -304,7 +304,7 @@ impl SessionManager {
         ttl: Duration,
         max: Duration,
     ) -> Result<(), SessionError> {
-        let (now, t) = self.now()?;
+        let (_, t) = self.now()?;
         let (e, n) = self.encrypt(vault, passphrase)?;
         let s = StoredSession {
             saved_at: t.clone(),
@@ -319,7 +319,6 @@ impl SessionManager {
             &Self::key(vault, SESSION_ACCOUNT),
             &serde_json::to_vec(&s).map_err(|e| SessionError::Malformed(e.to_string()))?,
         )?;
-        let _ = now;
         Ok(())
     }
     pub fn save_identity(
@@ -330,19 +329,35 @@ impl SessionManager {
         max: Duration,
     ) -> Result<(), SessionError> {
         let (_, t) = self.now()?;
+        let (saved_at, ttl, max) = match self.session_metadata(vault) {
+            Ok(Some(session)) => (session.saved_at, session.ttl_ns, session.max_lifetime_ns),
+            Ok(None) | Err(SessionError::NotFound) => {
+                (t.clone(), duration_ns(ttl), duration_ns(max))
+            }
+            Err(_) => (t.clone(), duration_ns(ttl), duration_ns(max)),
+        };
         let (e, n) = self.encrypt(vault, identity)?;
         let s = StoredIdentity {
-            saved_at: t.clone(),
+            saved_at,
             last_access: t,
             encrypted_identity: e,
             nonce: n,
-            ttl_ns: duration_ns(ttl),
-            max_lifetime_ns: duration_ns(max),
+            ttl_ns: ttl,
+            max_lifetime_ns: max,
         };
         self.keyring.set(
             &Self::key(vault, IDENTITY_ACCOUNT),
             &serde_json::to_vec(&s).map_err(|e| SessionError::Malformed(e.to_string()))?,
         )
+    }
+    fn session_metadata(&self, vault: &str) -> Result<Option<StoredSession>, SessionError> {
+        match self.keyring.get(&Self::key(vault, SESSION_ACCOUNT)) {
+            Ok(raw) => serde_json::from_slice(&raw)
+                .map(Some)
+                .map_err(|e| SessionError::Malformed(e.to_string())),
+            Err(SessionError::NotFound) => Ok(None),
+            Err(error) => Err(error),
+        }
     }
     fn expired(saved: u64, last: u64, ttl: i64, max: i64, now: u64) -> bool {
         if ttl <= 0 || saved == 0 {
@@ -361,7 +376,10 @@ impl SessionManager {
         let raw = self.keyring.get(&Self::key(vault, SESSION_ACCOUNT))?;
         let mut s: StoredSession =
             serde_json::from_slice(&raw).map_err(|e| SessionError::Malformed(e.to_string()))?;
-        if s.passphrase.is_some() {
+        if s.passphrase
+            .as_deref()
+            .is_some_and(|value| !value.is_empty())
+        {
             return Err(SessionError::LegacyPlaintext);
         }
         let (now, t) = self.now()?;
@@ -395,14 +413,24 @@ impl SessionManager {
         let raw = self.keyring.get(&Self::key(vault, IDENTITY_ACCOUNT))?;
         let mut i: StoredIdentity =
             serde_json::from_slice(&raw).map_err(|e| SessionError::Malformed(e.to_string()))?;
+        let session = self.session_metadata(vault)?;
+        let (saved_at, last_access, ttl, max_lifetime) = if let Some(session) = session {
+            (
+                session.saved_at.nanos()?,
+                session.last_access.nanos()?,
+                session.ttl_ns,
+                session.max_lifetime_ns,
+            )
+        } else {
+            (
+                i.saved_at.nanos()?,
+                i.last_access.nanos()?,
+                i.ttl_ns,
+                i.max_lifetime_ns,
+            )
+        };
         let (now, t) = self.now()?;
-        if Self::expired(
-            i.saved_at.nanos()?,
-            i.last_access.nanos()?,
-            i.ttl_ns,
-            i.max_lifetime_ns,
-            now,
-        ) {
+        if Self::expired(saved_at, last_access, ttl, max_lifetime, now) {
             if refresh {
                 let _ = self.revoke(vault);
             }
@@ -500,11 +528,8 @@ mod tests {
     }
     #[test]
     fn timestamp_roundtrip() {
-        let t = timestamp(UNIX_EPOCH + Duration::from_secs(1_735_689_600)).unwrap();
-        let text = match t {
-            Timestamp::Text(v) => v,
-            _ => String::new(),
-        };
+        let Timestamp::Text(text) =
+            timestamp(UNIX_EPOCH + Duration::from_secs(1_735_689_600)).unwrap();
         assert_eq!(parse_timestamp(&text), Some(1_735_689_600_000_000_000));
     }
     #[test]
@@ -525,5 +550,63 @@ mod tests {
             m.load_identity("v", false),
             Err(SessionError::Expired(_))
         ));
+    }
+
+    #[test]
+    fn empty_legacy_field_is_not_classified_as_plaintext_session() {
+        let keyring = Arc::new(MemoryKeyring::new());
+        let clock = Arc::new(FakeClock(Mutex::new(UNIX_EPOCH + Duration::from_secs(100))));
+        let manager = SessionManager::new(keyring.clone(), clock);
+        manager
+            .save_passphrase(
+                "v",
+                b"secret",
+                Duration::from_secs(60),
+                Duration::from_secs(60),
+            )
+            .unwrap();
+        let key = SessionManager::key("v", SESSION_ACCOUNT);
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&keyring.get(&key).unwrap()).unwrap();
+        value["passphrase"] = serde_json::Value::String(String::new());
+        keyring
+            .set(&key, &serde_json::to_vec(&value).unwrap())
+            .unwrap();
+        assert_eq!(manager.load_passphrase("v").unwrap(), b"secret");
+    }
+
+    #[test]
+    fn identity_uses_existing_session_lifetime_metadata() {
+        let keyring = Arc::new(MemoryKeyring::new());
+        let clock = Arc::new(FakeClock(Mutex::new(UNIX_EPOCH + Duration::from_secs(100))));
+        let manager = SessionManager::new(keyring, clock.clone());
+        manager
+            .save_passphrase(
+                "v",
+                b"secret",
+                Duration::from_secs(10),
+                Duration::from_secs(100),
+            )
+            .unwrap();
+        *clock.0.lock().unwrap() = UNIX_EPOCH + Duration::from_secs(105);
+        manager
+            .save_identity(
+                "v",
+                b"identity",
+                Duration::from_secs(100),
+                Duration::from_secs(100),
+            )
+            .unwrap();
+        *clock.0.lock().unwrap() = UNIX_EPOCH + Duration::from_secs(111);
+        assert!(matches!(
+            manager.load_identity("v", false),
+            Err(SessionError::Expired(_))
+        ));
+    }
+
+    #[test]
+    fn numeric_timestamp_is_rejected_like_go_time_time() {
+        let raw = br#"{"saved_at":1,"last_access":"2099-01-01T00:00:00Z","ttl_ns":1}"#;
+        assert!(serde_json::from_slice::<StoredSession>(raw).is_err());
     }
 }
