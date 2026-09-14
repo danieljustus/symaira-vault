@@ -1613,6 +1613,15 @@ fn store004_digest(root: &Path, names: &[String], oracle: bool) -> String {
 
 type Store004Mutation = (&'static str, fn(&mut Store004Fixture));
 
+/// Replaces the first character of a hex digest with a character guaranteed
+/// to differ from it, so the mutation is never an accidental no-op on a
+/// digest that happens to already start with the literal replacement.
+fn flip_first_hex_char(digest: &mut String) {
+    let first = digest.chars().next().expect("non-empty digest");
+    let replacement = if first == '0' { '1' } else { '0' };
+    digest.replace_range(..1, &replacement.to_string());
+}
+
 fn validate_store004_provenance(value: &Store004Fixture, root: &Path) -> Result<(), String> {
     let source_files = vec![
         "internal/config/config.go".into(),
@@ -1661,10 +1670,10 @@ fn store004_fixture_provenance_is_bound_and_mutations_fail_closed() {
             v.oracle.commit = "tampered".into()
         }),
         ("source_digest", |v: &mut Store004Fixture| {
-            v.oracle.source_digest.replace_range(..1, "0")
+            flip_first_hex_char(&mut v.oracle.source_digest)
         }),
         ("generator_digest", |v: &mut Store004Fixture| {
-            v.oracle.generator_digest.replace_range(..1, "0")
+            flip_first_hex_char(&mut v.oracle.generator_digest)
         }),
         ("source_files", |v: &mut Store004Fixture| {
             v.oracle.source_files[0] = "tampered.go".into()
