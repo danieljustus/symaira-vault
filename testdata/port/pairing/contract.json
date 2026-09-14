@@ -17,7 +17,7 @@
       "scripts/rust-port/cmd/pairinggen/main.go",
       "scripts/rust-port/cmd/pairinggen/oracle.go.txt"
     ],
-    "generator_digest": "a0e2b5401b52c36b41bf2e8ca24c0dd45155760f8a6578e8001864a8b9a7414d"
+    "generator_digest": "1697a33c8cc7b3105c29529988cc3505ff225650d29f2e0b7f719138be294abc"
   },
   "cases": [
     {
@@ -2496,8 +2496,7 @@
       },
       "expected": {
         "dir_mode": "0700",
-        "file_mode": "0600",
-        "goos": "darwin"
+        "file_mode": "0600"
       }
     }
   ],

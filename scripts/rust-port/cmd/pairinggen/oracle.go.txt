@@ -8,7 +8,6 @@ import (
   "fmt"
   "os"
   "path/filepath"
-  "runtime"
   "sort"
   "time"
 
@@ -323,10 +322,15 @@ func registryModesCase(id string) Case {
   fail(e)
   return Case{ID: id, Seam: "PAIRING-001",
     Input: map[string]any{"operation": "AddDevice into an empty vault directory"},
+    // Deliberately no runtime.GOOS here. Stamping the generating host into the
+    // frozen bytes is exactly what makes sessionquotagen's fixture unable to be
+    // checked on a foreign runner, and doing it here made this case drift on
+    // ubuntu while passing on the macOS machine that froze it. The modes
+    // themselves are identical across Unix, and the Windows payload comparison
+    // is skipped by the generator, so the case is portable without it.
     Expected: map[string]any{
       "dir_mode":  fmt.Sprintf("%04o", dirInfo.Mode().Perm()),
       "file_mode": fmt.Sprintf("%04o", fileInfo.Mode().Perm()),
-      "goos":      runtime.GOOS,
     }}
 }
 

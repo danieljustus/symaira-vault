@@ -144,3 +144,30 @@ func TestValidateRejectsAMutatedExpectation(t *testing.T) {
 		t.Fatal("the committed fixture was modified by this test")
 	}
 }
+
+// No frozen case may carry the identity of the machine that froze it.
+//
+// This is not hypothetical. sessionquotagen stamps runtime.GOOS into its
+// fixture's compared bytes, which is why `make rust-007-fixtures-check` can
+// only ever pass on the platform that generated it and cannot be wired into
+// CI. The first version of the registry-modes case here repeated that mistake
+// and was caught by the ubuntu runner while passing on the macOS machine that
+// wrote it. A cheap substring guard keeps the trap from being re-entered.
+func TestNoCaseFreezesTheGeneratingHost(t *testing.T) {
+	root := rootDir()
+	fixtures, err := openFixtureRoot(root)
+	if err != nil {
+		t.Fatalf("open fixture root: %v", err)
+	}
+	defer func() { _ = fixtures.Close() }()
+	data, err := fixtures.ReadFile("pairing/contract.json")
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	for _, goos := range []string{"darwin", "linux", "windows", "freebsd"} {
+		if bytes.Contains(data, []byte(`"`+goos+`"`)) {
+			t.Fatalf("the fixture carries the host identity %q; a case that records "+
+				"the generating platform cannot be verified on any other runner", goos)
+		}
+	}
+}
