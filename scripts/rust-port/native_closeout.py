@@ -104,6 +104,18 @@ def main():
             if args.mode == "keyring" and platform.system() == "Darwin":
                 # Configure the same private HOME used by the adapters, not the
                 # runner's ambient preference domain. Only test data is stored.
+                #
+                # The keychain "user" domain is resolved through $HOME, so this
+                # private HOME redirects it away from the operator's real login
+                # keychain. That redirection is also why the directories below
+                # must exist first: security writes the search list and default
+                # keychain into $HOME/Library/Preferences and silently does
+                # nothing when that directory is absent, still exiting 0. The
+                # provisioning then looked successful while the domain stayed
+                # empty, and every keyring probe failed with "OS keyring
+                # unavailable (locked or non-interactive)".
+                for leaf in ("Preferences", "Keychains"):
+                    (Path(env["HOME"]) / "Library" / leaf).mkdir(parents=True, exist_ok=True)
                 keychain = str(Path(temporary) / "native-test.keychain-db")
                 checked(["security", "create-keychain", "-p", "disposable-native-test", keychain], root, env)
                 cleanup.callback(checked, ["security", "delete-keychain", keychain], root, env)
@@ -111,7 +123,18 @@ def main():
                 checked(["security", "set-keychain-settings", "-lut", "1800", keychain], root, env)
                 checked(["security", "list-keychains", "-d", "user", "-s", keychain], root, env)
                 checked(["security", "default-keychain", "-d", "user", "-s", keychain], root, env)
+                # Read the domain back rather than trusting the exit codes, so a
+                # silently ineffective provisioning fails here instead of
+                # surfacing later as an unexplained keyring failure.
+                search_list = checked(["security", "list-keychains", "-d", "user"], root, env)
+                default_keychain = checked(["security", "default-keychain", "-d", "user"], root, env)
+                if keychain not in search_list or keychain not in default_keychain:
+                    raise SystemExit(
+                        "private keychain provisioning did not take effect: "
+                        f"search list {search_list!r}, default {default_keychain!r}, want {keychain!r}"
+                    )
                 report["private_keychain_provisioned"] = True
+                report["private_keychain"] = keychain
             for index, command in enumerate(commands):
                 log_path = output / f"{index}.log"
                 entry = {"argv": command, "cwd": str(root), "start": datetime.datetime.now(datetime.timezone.utc).isoformat(), "log": str(log_path)}
