@@ -16,7 +16,7 @@
       "internal/secureui/secureui.go"
     ],
     "source_digest": "eb2b6feac79ff0838c8057b68fc11a02f807a857a69087b29758247e5831ffe6",
-    "generator_digest": "7afb3a6351a768413b502faf1fb2b767e951300c1a2f83e947982b662584e675"
+    "generator_digest": "b6a11502978c8606bceeb462586a129d92424e524430ad3289329ac5157ad38a"
   },
   "cases": [
     {
