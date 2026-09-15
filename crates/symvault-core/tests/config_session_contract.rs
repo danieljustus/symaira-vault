@@ -247,7 +247,7 @@ fn key(account: &str) -> String {
 fn generated_session_cases_match_rust_manager() {
     let fixture = session_fixture();
     assert_eq!(fixture.schema_version, 1);
-    assert_eq!(fixture.oracle.commit, "6ce94b43");
+    assert_eq!(fixture.oracle.commit, "29c5e5ef");
     assert_eq!(fixture.oracle.release, "unreleased");
     assert!(
         fixture.oracle.source_digest.len() == 64 && fixture.oracle.generator_digest.len() == 64

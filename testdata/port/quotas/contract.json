@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "6ce94b43",
-    "commit_sha": "6ce94b4387fb0f128e0050b43a6b10088fb1d97c",
+    "commit": "29c5e5ef",
+    "commit_sha": "29c5e5ef00f345fe95bf50f066e9d9f190b37d48",
     "release": "unreleased",
     "source_files": [
       "internal/policy/ratelimit.go",
@@ -14,8 +14,8 @@
       "internal/session/memory_keyring.go",
       "internal/session/session.go"
     ],
-    "source_digest": "727efe3c423b3dfa3f4728dba0cb65faf2a3666c6987d51d3c9b55867bd7cbf6",
-    "generator_digest": "7bebab849ef7e13578ac69b3871f7a617de504a12d82d80dc940baf6becfc8a6"
+    "source_digest": "596fc57b673e8a67afff72cdb69468db11ec041974232efb777f9624613cb6d0",
+    "generator_digest": "28a0fbaa88e373a8bdb74632752297a553d52db275f262be6dc97460d2eb02e4"
   },
   "cases": [
     {

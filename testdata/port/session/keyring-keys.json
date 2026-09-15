@@ -1,15 +1,15 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "6ce94b43",
-    "commit_sha": "6ce94b4387fb0f128e0050b43a6b10088fb1d97c",
+    "commit": "29c5e5ef",
+    "commit_sha": "29c5e5ef00f345fe95bf50f066e9d9f190b37d48",
     "release": "unreleased",
     "source_files": [
       "internal/session/memory_keyring.go",
       "internal/session/oskeyring.go"
     ],
-    "source_digest": "b7bde43b0f4c193ec0a23edf05b76e0411d6866e3199b2c817a2644870c034e0",
-    "generator_digest": "4e0debf78227c1836657fd361b7f832fa4ea364b4bfa6eea16493d90250a6ccb"
+    "source_digest": "85e014752c3035e64708ce88c283b4a085719a8638b9e18af04a1ffb486f6bf4",
+    "generator_digest": "6f927d94322efac20ecca6a283659c84fdd84453980ab6cce967ea948ac2e599"
   },
   "split_cases": [
     {
@@ -287,6 +287,64 @@
       ]
     },
     {
+      "name": "session_account_is_opaque_too",
+      "description": "the session account stores and returns any value, like every other account",
+      "steps": [
+        {
+          "op": "set",
+          "key": "symvault:/v|session",
+          "value": "opaque-value",
+          "outcome": "ok"
+        },
+        {
+          "op": "get",
+          "key": "symvault:/v|session",
+          "outcome": "found",
+          "got": "opaque-value"
+        },
+        {
+          "op": "get",
+          "key": "symvault:/v|session",
+          "outcome": "found",
+          "got": "opaque-value"
+        }
+      ]
+    },
+    {
+      "name": "session_account_failed_read_is_not_a_delete",
+      "description": "reading a value the backend cannot interpret must not destroy it",
+      "steps": [
+        {
+          "op": "set",
+          "key": "symvault:/v|session",
+          "value": "not-valid-json",
+          "outcome": "ok"
+        },
+        {
+          "op": "get",
+          "key": "symvault:/v|session",
+          "outcome": "found",
+          "got": "not-valid-json"
+        },
+        {
+          "op": "get",
+          "key": "symvault:/v|session",
+          "outcome": "found",
+          "got": "not-valid-json"
+        },
+        {
+          "op": "delete",
+          "key": "symvault:/v|session",
+          "outcome": "ok"
+        },
+        {
+          "op": "get",
+          "key": "symvault:/v|session",
+          "outcome": "not_found"
+        }
+      ]
+    },
+    {
       "name": "binary_payload_round_trips",
       "description": "the value is bytes, not text: NUL and non-ASCII survive",
       "steps": [
@@ -305,54 +363,5 @@
       ]
     }
   ],
-  "divergent_cases": [
-    {
-      "name": "session_account_discards_an_opaque_value",
-      "description": "Set accepts the value; Get cannot parse it as a session and deletes it",
-      "steps": [
-        {
-          "op": "set",
-          "key": "symvault:/v|session",
-          "value": "opaque-value",
-          "outcome": "ok"
-        },
-        {
-          "op": "get",
-          "key": "symvault:/v|session",
-          "outcome": "not_found"
-        }
-      ],
-      "rust_outcomes": [
-        "ok",
-        "found"
-      ]
-    },
-    {
-      "name": "session_account_second_read_confirms_the_delete",
-      "description": "the entry is gone after the failed read, not merely unreadable",
-      "steps": [
-        {
-          "op": "set",
-          "key": "symvault:/v|session",
-          "value": "opaque-value",
-          "outcome": "ok"
-        },
-        {
-          "op": "get",
-          "key": "symvault:/v|session",
-          "outcome": "not_found"
-        },
-        {
-          "op": "get",
-          "key": "symvault:/v|session",
-          "outcome": "not_found"
-        }
-      ],
-      "rust_outcomes": [
-        "ok",
-        "found",
-        "found"
-      ]
-    }
-  ]
+  "divergent_cases": []
 }

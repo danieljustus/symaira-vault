@@ -1,11 +1,14 @@
 # SESSION-002: the Go in-memory keyring is not opaque storage
 
-Status: **decision required.** Nothing here is implemented. The divergence is
-pinned by `crates/symvault-core/tests/keyring_keys_contract.rs`, whose
-`KNOWN_DIVERGENCES` set is asserted exactly and may neither grow nor shrink
-unnoticed, so this question stays visible until it is answered.
+Status: **decided and implemented.** The recommendation below was adopted at
+`29c5e5ef`: the Go in-memory backend is now a plain key-value store.
+`KNOWN_DIVERGENCES` in `crates/symvault-core/tests/keyring_keys_contract.rs` is
+empty and asserted exactly, and the two formerly divergent scripts moved into
+the shared `backend_cases`, where both implementations must agree step for
+step. The paper is kept as the record of what was measured and why.
 
-Measured at `7743fd21`. Fixture: `testdata/port/session/keyring-keys.json`.
+Measured at `7743fd21`; implemented at `29c5e5ef`. Fixture:
+`testdata/port/session/keyring-keys.json`.
 
 ## What the interface says
 

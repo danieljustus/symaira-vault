@@ -71,7 +71,7 @@ fn fixture() -> Fixture {
 fn fixture_has_pinned_provenance_and_schema() {
     let fixture = fixture();
     assert_eq!(fixture.schema_version, 1);
-    assert_eq!(fixture.oracle.commit, "6ce94b43");
+    assert_eq!(fixture.oracle.commit, "29c5e5ef");
     assert_eq!(fixture.oracle.release, "unreleased");
     assert_eq!(fixture.oracle.commit_sha.len(), 40);
     assert!(
@@ -90,21 +90,17 @@ fn fixture_has_pinned_provenance_and_schema() {
     );
 }
 
-/// Scripts where the Go in-memory backend is knowingly NOT opaque storage.
+/// Scripts where the two implementations knowingly disagree.
 ///
-/// Its session-account `Get` parses the stored value as a session document and
-/// deletes the entry when the parse fails, so a value `Set` just accepted is
-/// destroyed on the first read. This side is a plain key-value store, which is
-/// what `KeyringBackend`'s own documentation describes, so it returns the
-/// value.
-///
-/// Pinned exactly -- both the Go outcome and this side's -- so the divergence
-/// can neither grow nor shrink unnoticed while it is adjudicated. See
+/// Empty. It held the session-account scripts where Go's in-memory backend was
+/// not opaque storage: `Set` accepted any value and `Get` parsed it, deleting
+/// the entry when the parse failed. That was adjudicated and removed -- the
+/// backend is a plain store now and the scripts moved into `backend_cases`,
+/// where both sides must agree on every step. See
 /// `docs/rust-port/session-002-memory-backend-adjudication.md`.
-const KNOWN_DIVERGENCES: [&str; 2] = [
-    "session_account_discards_an_opaque_value",
-    "session_account_second_read_confirms_the_delete",
-];
+///
+/// The set is asserted exactly, so it can neither grow nor shrink unnoticed.
+const KNOWN_DIVERGENCES: [&str; 0] = [];
 
 #[test]
 fn the_divergence_set_is_exactly_what_is_adjudicated() {
@@ -119,43 +115,25 @@ fn the_divergence_set_is_exactly_what_is_adjudicated() {
     assert_eq!(names, expected, "the pinned divergence set changed");
 }
 
-/// The divergence must stay real: each pinned case must still differ, and this
-/// side must still produce exactly the plain-store outcome the fixture records.
-/// If Go is aligned later, this test fails and the row is re-adjudicated rather
-/// than quietly passing.
+/// The two scripts that used to diverge must now agree, step for step. If Go's
+/// in-memory backend regains any interpretation of the stored value, these
+/// stop matching rather than passing quietly.
 #[test]
-fn pinned_divergences_still_diverge_and_match_the_recorded_shape() {
-    for case in &fixture().divergent_cases {
-        let go_outcomes: Vec<&str> = case.steps.iter().map(|s| s.outcome.as_str()).collect();
-        assert_ne!(
-            go_outcomes, case.rust_outcomes,
-            "{}: the recorded divergence no longer differs; re-adjudicate the row",
-            case.name
-        );
-        let keyring = MemoryKeyring::new();
-        let mut observed: Vec<String> = Vec::new();
-        for step in &case.steps {
-            observed.push(match step.op.as_str() {
-                "set" => match keyring.set(&step.key, step.value.as_bytes()) {
-                    Ok(()) => "ok".to_owned(),
-                    Err(_) => "error".to_owned(),
-                },
-                "delete" => match keyring.delete(&step.key) {
-                    Ok(()) => "ok".to_owned(),
-                    Err(_) => "error".to_owned(),
-                },
-                "get" => match keyring.get(&step.key) {
-                    Ok(_) => "found".to_owned(),
-                    Err(SessionError::NotFound) => "not_found".to_owned(),
-                    Err(_) => "error".to_owned(),
-                },
-                other => panic!("{}: unsupported operation {other}", case.name),
-            });
-        }
-        assert_eq!(
-            observed, case.rust_outcomes,
-            "{}: this side no longer behaves as the fixture records",
-            case.name
+fn the_formerly_divergent_scripts_are_now_shared() {
+    let cases = fixture().backend_cases;
+    for name in [
+        "session_account_is_opaque_too",
+        "session_account_failed_read_is_not_a_delete",
+    ] {
+        let case = cases
+            .iter()
+            .find(|case| case.name == name)
+            .unwrap_or_else(|| panic!("fixture no longer carries the {name} case"));
+        assert!(
+            case.steps
+                .iter()
+                .any(|step| step.op == "get" && step.outcome == "found"),
+            "{name}: a value the backend accepted must still be readable"
         );
     }
 }

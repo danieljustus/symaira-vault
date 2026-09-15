@@ -27,7 +27,7 @@ const (
 	// internal/policy/ratelimit.go changed, and ratelimit_transition.go was
 	// created, after the v0.22.1 baseline. Claiming caadd5e named a commit that
 	// does not contain the code these fixtures pin.
-	pinnedOracleCommit  = "6ce94b43"
+	pinnedOracleCommit  = "29c5e5ef"
 	pinnedOracleRelease = "unreleased"
 )
 
