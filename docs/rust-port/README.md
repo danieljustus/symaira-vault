@@ -67,10 +67,16 @@ passes. The measured Go baseline is in
 - `RUST-002` passed: the pinned Rust workspace and byte-exact `version` slice
   passes all ten Go↔Rust cases plus format, Clippy, nextest, doctest, feature,
   coverage, audit, deny, and native macOS/Windows CI gates.
-- `RUST-003` passed: error taxonomy, secret-reference parsing, redaction,
-  password/TOTP (`CRYPTO-005`), pure policy/tier evaluation (`POLICY-001`),
-  and pure quota transitions (`QUOTA-001`) pass Go-generated fixtures,
-  property tests, Clippy, Miri, and supply-chain gates. `CLI-005` remains
+- `RUST-003` partially passed: error taxonomy, secret-reference parsing,
+  redaction, password/TOTP (`CRYPTO-005`) and pure quota transitions
+  (`QUOTA-001`) pass Go-generated fixtures,
+  property tests, Clippy, Miri, and supply-chain gates. Its `POLICY-001`
+  component is **not** passed: the earlier claim rested on a fixture whose
+  provenance was asserted by a label rather than verified, and on a harness
+  that fed Go and Rust different inputs. Provenance, input equality and the
+  adjudicated matcher contract are repaired and green locally, but native
+  Linux/Windows evidence at the exact head is still outstanding, so
+  `RUST-003` cannot be reported as wholly passed until that lands. `CLI-005` remains
   intentionally incomplete at the binary boundary until `RUST-009`; this
   work item establishes only its reusable core taxonomy. Persistent
   `.quotas.json` storage, registry behavior, and process locking remain in

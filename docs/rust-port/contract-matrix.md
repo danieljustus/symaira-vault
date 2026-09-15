@@ -11,8 +11,47 @@ oracle to commit `a57f565a`; `APPROVAL-001` deliberately advances only its
 production-Go oracle to commit `a518124f` (merged PR #1048), because that
 seam did not exist at the frozen baseline; `STORE-002` deliberately advances
 only its production-Go oracle to commit `fe098b91` (release "unreleased"),
-pre-existing but previously undocumented here; all other rows, including
-`PAIRING-001`, retain the baseline oracle.
+pre-existing but previously undocumented here; `POLICY-001` deliberately
+advances only its production-Go oracle to commit `f195aab` (release
+"unreleased") for the adjudicated path-matching contract described below;
+`STORE-004`'s `manifestkeygen` revision is advanced to `d304ed96` only because
+it binds the whole `internal/` tree and its 16 vectors are byte-identical
+across that advance; all other rows, including `PAIRING-001`, retain the
+baseline oracle.
+
+Oracle commits are no longer trusted as labels. `policygen` and
+`manifestkeygen` resolve their claimed commit through git and compare the
+working tree against that commit's immutable blobs, refusing to emit a fixture
+whose provenance does not hold.
+
+## POLICY-001 path-matching adjudication
+
+The previously claimed `POLICY-001` `PASS` was disproven: the generator claimed
+the pinned oracle while hashing and executing the working tree, and it rewrote
+paths to native separators for Go only, so Go and Rust received different
+inputs on Windows. Rust additionally never implemented `~/` expansion, and no
+fixture case covered `~`, so that divergence was invisible. The adjudicated
+contract is:
+
+- Path matching is defined over slash-separated logical paths and is
+  OS-independent on both sides. The native separator is interpreted once, at
+  the runtime boundary (`policy.ToLogicalPath`), not inside the matcher. A
+  slash-written rule previously stopped matching on Windows, which failed open
+  for deny rules.
+- The bare directory-prefix branch applies only to wholly literal patterns. Its
+  old guard tested `*` alone, so `fixture/?` was simultaneously a glob and a
+  literal directory name.
+- `~/` expands from an explicit `EvalContext.HomeDir`; the matcher performs no
+  runtime discovery, keeping the row inside its declared scope.
+- `Policy.Validate` rejects syntactically invalid globs, which previously never
+  matched anything and so silently stopped denying.
+- Patterns collapse duplicate separators, so a UNC-shaped deny rule still
+  denies after the value cleaner collapses them.
+
+Neither the historical nor the current matcher was assumed safer: the two move
+allow and deny outcomes in opposite directions. Every counterexample is
+retained in `path_cases`, each carrying both the allow-rule outcome and the
+outcome under a higher-priority deny rule with an allow fallback.
 
 | ID | Seam | Fixture / input | Go oracle | Expected contract | Rust evidence | Platforms | Compare | Status |
 |---|---|---|---|---|---|---|---|---|
@@ -31,7 +70,7 @@ pre-existing but previously undocumented here; all other rows, including
 | CRYPTO-003 | passphrase envelopes | legacy scrypt and current argon2id fixtures | Go crypto | mutual decrypt, parameter parsing, migration flags | fixture/property tests | all/iOS | bytes + cross-decrypt | PASS |
 | CRYPTO-004 | re-encryption | multi-recipient add/remove corpus | Go vault | all retained recipients decrypt; removed recipients fail | end-to-end fixtures | all | semantic | PASS |
 | CRYPTO-005 | password/TOTP | fixed RNG/clock vectors | Go generators | character policy, TOTP code/period/expiry | unit/property tests | all | bytes | PASS |
-| POLICY-001 | policy/tier evaluation | versioned rule cases with explicit `EvalContext` fields (agent/path/tags/working dir/env/action/tool/UTC clock/secret count), plus read-only/standard/admin tier inputs; no YAML/filesystem/runtime discovery or YAML field-presence precedence | `internal/policy.(*Policy).Validate`, `internal/policy.NewEngine`, `(*policy.Engine).Evaluate`, `(*policy.TimeRange).Contains`, `internal/config.GetPreset`, `internal/config.ApplyTierPreset` | deterministic validation, priority ordering, condition matching, wrap-around time ranges, default deny/result shape, and exact tier preset values/copy behavior; `Engine.Evaluate` is exercised only for pure branches with an explicit `EvalContext`, with `RateLimiter` and `AuditLogFunc` side effects excluded; rate-limit behavior belongs to `QUOTA-001`/`QUOTA-002`. Policy loading and runtime discovery remain outside this row; YAML field-presence/config override remains `CFG-002`/`RUST-007`; approval queues and MCP tool filtering/call-time enforcement belong to `RUST-010` through `MCP-002`/`MCP-003`, including later policy audit/enforcement integration. | Go-generated JSON vectors consumed by `symvault-core` unit/property tests; fixed-context differential cases; provenance and source/generator digest drift gate in `policygen`; `cargo +nightly miri test -p symvault-core` | macOS/Linux/Windows/FreeBSD | semantic + bytes for serialized results | PASS |
+| POLICY-001 | policy/tier evaluation | versioned rule cases with explicit `EvalContext` fields (agent/path/tags/working dir/env/action/tool/UTC clock/secret count), plus read-only/standard/admin tier inputs; no YAML/filesystem/runtime discovery or YAML field-presence precedence | `internal/policy.(*Policy).Validate`, `internal/policy.NewEngine`, `(*policy.Engine).Evaluate`, `(*policy.TimeRange).Contains`, `internal/config.GetPreset`, `internal/config.ApplyTierPreset` | deterministic validation, priority ordering, condition matching, wrap-around time ranges, default deny/result shape, and exact tier preset values/copy behavior; `Engine.Evaluate` is exercised only for pure branches with an explicit `EvalContext`, with `RateLimiter` and `AuditLogFunc` side effects excluded; rate-limit behavior belongs to `QUOTA-001`/`QUOTA-002`. Policy loading and runtime discovery remain outside this row; YAML field-presence/config override remains `CFG-002`/`RUST-007`; approval queues and MCP tool filtering/call-time enforcement belong to `RUST-010` through `MCP-002`/`MCP-003`, including later policy audit/enforcement integration. | Go-generated JSON vectors consumed by `symvault-core` unit/property tests; fixed-context differential cases; provenance and source/generator digest drift gate in `policygen`; `cargo +nightly miri test -p symvault-core`; provenance is now verified against git blobs rather than a label, Go and Rust consume byte-identical verbatim inputs, and the 21 `path_cases` retain every adjudicated counterexample in both allow and deny polarity | macOS/Linux/Windows/FreeBSD | semantic + bytes for serialized results | in_progress: repaired and green locally on darwin/arm64 (`make port-contract`, `cargo test -p symvault-core`, `go1.26.6 test ./internal/...`); native Linux/Windows evidence at the exact head is still outstanding, so no `PASS` is claimed |
 | QUOTA-001 | pure quota/rate-limit bucket transitions | Before any fixture generation or porting, add a narrow production-compatible Go seam: pure `internal/policy.TransitionRateLimit(state RateLimitState, limits RateLimitLimits, now time.Time, event RateLimitEvent) -> (nextState RateLimitState, result RateLimitResult)` over language-neutral in-memory state carrying `tokens`, `capacity`, `refillRate`, `lastRefill`, `dailyCount`, `dailyWindowStart`, and `maxPerDay`; cover only explicit `set_limits` and `allow` events, refill, daily-window rollover, and limit decisions; no registry, filesystem, or process locking | the required `internal/policy.TransitionRateLimit` seam | deterministic single-bucket state transitions from explicit state/time/limits; `AgentRateLimiter` unknown-agent, `HasLimits`, per-agent isolation, and `Cleanup` are excluded and specified by the `QUOTA-002` wrapper fixture layer | Go-generated JSON transition vectors from the production helper plus Rust property tests over explicit clock/state; differential evidence in `symvault-core`; no `PASS` until fixtures/tests run in CI | macOS/Linux/Windows/FreeBSD | semantic state-transition comparison | PASS |
 | QUOTA-002 | persistent quotas and registry wrapper | versioned `.quotas.json` layout (`{"counters":{...}}`), vault-directory/file modes (0700/0600), `New`/`Increment`/`Check`/`Reset`/`Close`, closed/malformed/I/O errors, same-process and cross-process concurrency; Unix `flock` and Windows `LockFileEx`; plus a separate public-wrapper fixture layer for `AgentRateLimiter` unknown-agent behavior, `HasLimits`, per-agent isolation, and `Cleanup`; no copied transition logic or private-field mutation | `internal/quotas.New`, `(*quotas.QuotaCounter).Increment`, `Check`, `Reset`, `Close`, plus `internal/policy.NewAgentRateLimiter`, `(*policy.AgentRateLimiter).Allow`, `SetLimits`, `HasLimits`, and `Cleanup` | exact `.quotas.json` bytes/schema, modes, durable reset/increment/check behavior, error outcomes after close/corrupt/I/O failures, process-safe Unix/Windows locking and concurrent updates, and executable registry-wrapper semantics; pure bucket transitions remain `QUOTA-001` | Go-generated fixtures + Rust wrapper/error/process tests; native macOS Unix-lock evidence; **native Windows `LockFileEx` runtime evidence exists**: `persisted_layout_and_modes`, `concurrent_updates_are_not_lost` (`crates/symvault-core/src/persistent_quota.rs`) and `quota_cross_process_updates_are_not_lost` (`crates/symvault-platform/tests/quota_platform_contract.rs`) are not `cfg(unix)`-gated and run through `NativeQuotaPlatform`'s `#[cfg(windows)]` branch; `ci.yml`'s `rust-native (windows-latest)` job executes `cargo test --workspace --all-features --locked` natively and succeeded at `829ef3d1` in run 34882426502, as did `Rust` on ubuntu-latest via `make rust-gates` -> `rust-test`; the Go fixture provenance check is now CI-enforced as well, after the host stamp that made it unverifiable off-host was removed and `rust-007-fixtures-check` was added to `port-contract` | Linux/macOS/Windows native CI | bytes + metadata + side effects + semantic | PASS |
 | STORE-001 | vault layout | fresh and legacy vault trees | Go init/open | paths, files, modes, migration and no data loss | filesystem manifest; dotted/pseudonymized writer paths proven by `TestEntryWriterGoRustLiveAcceptance` (dotted `nested.name/service.v1`, both writers, both pseudonymize states), running natively on ubuntu/macOS/Windows via `.github/workflows/rust-store.yml` ("Rust storage differential", verified green in runs 34868517339 and 34869405625) and `ci.yml` (#1019) | all | metadata + hashes | PASS |
