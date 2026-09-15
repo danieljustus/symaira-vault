@@ -147,18 +147,40 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y gnome-keyring dbus-x11
 
+      - name: Prepare disposable macOS keychain
+        if: ${{ !cancelled() && runner.os == 'macOS' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Only generated test payloads are stored on this disposable runner.
+          keychain="$RUNNER_TEMP/symvault-native-test.keychain-db"
+          security create-keychain -p disposable-native-test "$keychain"
+          security unlock-keychain -p disposable-native-test "$keychain"
+          security set-keychain-settings -lut 1800 "$keychain"
+          security list-keychains -d user -s "$keychain"
+          security default-keychain -d user -s "$keychain"
+
       - name: Native keyring resource probe
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           SYMVAULT_DISPOSABLE_NATIVE_RUNNER: '1'
         run: python3 scripts/rust-port/native_closeout.py keyring
 
       - name: Native disposable launchd lifecycle
-        if: runner.os == 'macOS'
+        if: ${{ !cancelled() && runner.os == 'macOS' }}
         shell: bash
         env:
           SYMVAULT_DISPOSABLE_NATIVE_RUNNER: '1'
         run: python3 scripts/rust-port/native_closeout.py daemon
+
+      - name: Remove disposable macOS keychain
+        if: ${{ always() && runner.os == 'macOS' }}
+        shell: bash
+        run: |
+          if test -f "$RUNNER_TEMP/symvault-native-test.keychain-db"; then
+            security delete-keychain "$RUNNER_TEMP/symvault-native-test.keychain-db"
+          fi
 
       - name: Retain native closeout observations
         if: always()

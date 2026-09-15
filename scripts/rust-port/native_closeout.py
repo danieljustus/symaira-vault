@@ -87,6 +87,9 @@ def main():
                 raw = log_path.read_bytes()
                 text = raw.decode("utf-8", errors="replace")
                 entry.update(exit_code=result.returncode, sha256=hashlib.sha256(raw).hexdigest(), end=datetime.datetime.now(datetime.timezone.utc).isoformat())
+                if result.returncode != 0:
+                    entry["failed"] = True
+                    continue
                 if command[0] == "cargo":
                     counts = [int(n) for n in re.findall(r"test result: ok\. (\d+) passed", text)]
                     entry["executed_tests"] = sum(counts)
@@ -100,10 +103,12 @@ def main():
                 assert result.returncode == 0, f"gate failed: {command}; inspect {log_path}"
             assert checked(["git", "rev-parse", "HEAD"], root, env) == head
             assert not checked(["git", "status", "--porcelain"], root, env)
-            report["passed"] = True
+            report["passed"] = all(not entry.get("failed", False) for entry in report["commands"])
     finally:
         report_path.write_text(json.dumps(report, indent=2))
         print(json.dumps(report, indent=2))
+    if not report["passed"]:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
