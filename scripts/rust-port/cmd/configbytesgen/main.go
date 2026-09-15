@@ -118,11 +118,13 @@ func inputs() []struct{ name, description, input string } {
 		{"scalar_document", "a bare scalar is not a config mapping", "just-a-string\n"},
 		{"sequence_document", "a sequence is not a config mapping", "- one\n- two\n"},
 		{"null_document", "an explicit null yields the defaults", "null\n"},
-		{"multiple_documents", "only the first document is consumed", "defaultAgent: a\n---\ndefaultAgent: b\n"},
+		{"multiple_documents", "a second document is rejected, not silently dropped", "defaultAgent: a\n---\ndefaultAgent: b\n"},
 		{"bom_prefixed", "a leading byte-order mark does not prevent parsing", "\ufeffdefaultAgent: a\n"},
 
 		{"wrong_scalar_type", "a string where a bool belongs does not abort the load", "agents:\n  custom:\n    canWrite: \"yes\"\n"},
-		{"negative_duration", "a negative duration does not abort the load", "sessionTimeout: -5m\n"},
+		{"negative_duration", "a negative session duration is rejected", "sessionTimeout: -5m\n"},
+		{"zero_duration", "an explicitly zero session duration is rejected", "sessionTimeout: 0s\n"},
+		{"negative_max_lifetime", "the rule covers sessionMaxLifetime too", "sessionMaxLifetime: -1h\n"},
 		{"large_duration", "a very large duration is accepted verbatim", "sessionTimeout: 100000h\n"},
 	}
 }

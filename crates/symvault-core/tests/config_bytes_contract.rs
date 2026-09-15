@@ -283,18 +283,28 @@ fn warnings_match_go_oracle() {
     }
 }
 
-/// At least one case must actually carry a warning, or the check above would
-/// pass vacuously for an implementation that emits none at all.
+/// CFG-003 step two turned the loader's two warnings into rejections, in both
+/// implementations at once. These are the inputs that changed, and they must
+/// stay rejected: a regression on either side reopens the silent discard that
+/// motivated the change — an operator believing a restriction is in force when
+/// the loader threw it away.
 #[test]
-fn the_fixture_exercises_warnings() {
+fn the_fixture_pins_the_step_two_rejections() {
     let cases = fixture().cases;
-    let warned: Vec<&str> = cases
-        .iter()
-        .filter(|case| !case.warnings.is_empty())
-        .map(|case| case.name.as_str())
-        .collect();
-    assert!(
-        warned.contains(&"multiple_documents") && warned.contains(&"negative_duration"),
-        "fixture no longer exercises both warnings: {warned:?}"
-    );
+    for name in [
+        "multiple_documents",
+        "negative_duration",
+        "zero_duration",
+        "negative_max_lifetime",
+    ] {
+        let case = cases
+            .iter()
+            .find(|case| case.name == name)
+            .unwrap_or_else(|| panic!("fixture no longer carries the {name} case"));
+        assert!(case.rejected, "{name} must be rejected by the Go oracle");
+        assert!(
+            Config::load_from_bytes(case.input.as_bytes()).is_err(),
+            "{name} must be rejected here too"
+        );
+    }
 }

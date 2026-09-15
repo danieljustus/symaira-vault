@@ -158,10 +158,11 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 	// yaml.Unmarshal consumes the first document and discards the rest without
-	// a word. Decoding the stream separately is the only way to notice, and the
-	// warning is what stops a second document from disappearing silently.
+	// a word. Decoding the stream separately is the only way to notice, and a
+	// second document is rejected rather than dropped: an operator who wrote a
+	// restriction there must not believe it is in force.
 	if hasTrailingDocuments(data) {
-		warnf("%s", MultipleDocumentsWarning)
+		return nil, errors.New(multipleDocumentsMessage)
 	}
 
 	agentFields := loadAgentFields(&doc)
@@ -169,6 +170,10 @@ func Load(path string) (*Config, error) {
 
 	var raw Config
 	if err := doc.Decode(&raw); err != nil {
+		return nil, err
+	}
+
+	if err := validateDurationFields(raw, loadTopLevelFields(&doc)); err != nil {
 		return nil, err
 	}
 
@@ -280,6 +285,44 @@ func loadSectionFields(doc *yaml.Node) map[string]map[string]bool {
 		}
 	}
 	return result
+}
+
+// multipleDocumentsMessage is the rejection text for a config stream that
+// carries more than one YAML document. Only the first was ever read.
+const multipleDocumentsMessage = "config contains more than one YAML document; split it into separate files or remove everything after the first document separator"
+
+// loadTopLevelFields reports which top-level keys the document actually
+// carries. A duration field needs this: raw.SessionTimeout is zero both when
+// the key is absent and when the operator wrote "0s", and only the second is
+// an error.
+func loadTopLevelFields(doc *yaml.Node) map[string]bool {
+	if doc.Kind != yaml.DocumentNode || len(doc.Content) == 0 {
+		return nil
+	}
+	root := doc.Content[0]
+	if root.Kind != yaml.MappingNode {
+		return nil
+	}
+	fields := make(map[string]bool, len(root.Content)/2)
+	for i := 0; i < len(root.Content)-1; i += 2 {
+		fields[root.Content[i].Value] = true
+	}
+	return fields
+}
+
+// validateDurationFields rejects a session duration the operator set to a
+// non-positive value. Validate already states this rule, but the merge guard
+// used to discard the value before Validate could see it, so a config that
+// disabled a timeout silently ran with the default instead.
+func validateDurationFields(raw Config, present map[string]bool) error {
+	var errs error
+	if present["sessionTimeout"] && raw.SessionTimeout <= 0 {
+		errs = errors.Join(errs, fmt.Errorf("sessionTimeout: must be greater than 0, got %s (default: 15m, configure sessionTimeout in config.yaml)", raw.SessionTimeout))
+	}
+	if present["sessionMaxLifetime"] && raw.SessionMaxLifetime <= 0 {
+		errs = errors.Join(errs, fmt.Errorf("sessionMaxLifetime: must be greater than 0, got %s (default: 8h, configure sessionMaxLifetime in config.yaml)", raw.SessionMaxLifetime))
+	}
+	return errs
 }
 
 // hasTrailingDocuments reports whether the stream carries more than one YAML

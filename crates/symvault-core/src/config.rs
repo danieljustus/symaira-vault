@@ -465,14 +465,25 @@ impl Config {
     ///
     /// Warnings are returned rather than emitted through a global callback, so
     /// they are explicit and thread-safe. Go reaches the same outcome through
-    /// `config.SetWarnFunc`; the texts are identical on both sides because the
-    /// CFG-003 contract pins them.
+    /// `config.SetWarnFunc`, and the CFG-003 contract pins the texts on both
+    /// sides.
+    ///
+    /// The list is currently always empty: the two warnings this loader used to
+    /// raise became rejections in CFG-003 step two. The seam stays because Go
+    /// still warns for the deprecated `envWhitelist`, which this loader cannot
+    /// yet reproduce — it does not model `envAllowlist` at all — and the
+    /// contract test fails the moment a fixture case carries a warning.
     pub fn load_from_bytes_with_warnings(bytes: &[u8]) -> Result<(Self, Vec<String>), ConfigError> {
         let mut warnings = Vec::new();
         let config = Self::parse_document(bytes, &mut warnings)?;
         Ok((config, warnings))
     }
 
+    #[allow(
+        clippy::ptr_arg,
+        unused_variables,
+        reason = "the warning seam is retained; see load_from_bytes_with_warnings"
+    )]
     fn parse_document(bytes: &[u8], warnings: &mut Vec<String>) -> Result<Self, ConfigError> {
         if bytes.iter().all(u8::is_ascii_whitespace) {
             return Ok(Self::default());
@@ -486,9 +497,9 @@ impl Config {
         ) {
             return Ok(Self::default());
         }
-        // Go consumes the first document and ignores the rest. Matching that
-        // keeps the two implementations aligned; the warning is what stops the
-        // remainder from disappearing without a word.
+        // A second document is rejected rather than dropped: an operator who
+        // wrote a restriction there must not believe it is in force. Go rejects
+        // it with the same message.
         let mut documents = serde_yaml_ng::Deserializer::from_slice(bytes);
         let first = documents
             .next()
@@ -496,7 +507,7 @@ impl Config {
         let profiles = ProfileFields::deserialize(first)
             .map_err(|error| ConfigError::Parse(error.to_string()))?;
         if documents.next().is_some() {
-            warnings.push(MULTIPLE_DOCUMENTS_WARNING.to_owned());
+            return Err(ConfigError::Parse(MULTIPLE_DOCUMENTS_MESSAGE.to_owned()));
         }
         let fields: serde_yaml_ng::Mapping = profiles
             .fields
@@ -515,21 +526,21 @@ impl Config {
         if let Some(v) = scalar(root, "sessionTimeout") {
             match duration_allowing_negative(v, "sessionTimeout")? {
                 Some(d) if d > Duration::ZERO => config.session_timeout = d,
-                // Go's merge guard drops a non-positive duration and leaves the
-                // default in place. Its own Validate rule would reject it, but
-                // never sees it. Matching the outcome and warning is step one;
-                // rejecting is a later, deliberate release.
-                _ => warnings.push(non_positive_duration_warning("sessionTimeout")),
+                // Go's Validate already states this rule; its merge guard used
+                // to discard the value before Validate could see it, so a
+                // config that disabled a timeout silently ran with the default.
+                // Both sides now reject it.
+                _ => return Err(ConfigError::Parse(non_positive_duration_message("sessionTimeout", "15m"))),
             }
         }
         if let Some(v) = scalar(root, "sessionMaxLifetime") {
             match duration_allowing_negative(v, "sessionMaxLifetime")? {
                 Some(d) if d > Duration::ZERO => config.session_max_lifetime = d,
-                // Go's merge guard drops a non-positive duration and leaves the
-                // default in place. Its own Validate rule would reject it, but
-                // never sees it. Matching the outcome and warning is step one;
-                // rejecting is a later, deliberate release.
-                _ => warnings.push(non_positive_duration_warning("sessionMaxLifetime")),
+                // Go's Validate already states this rule; its merge guard used
+                // to discard the value before Validate could see it, so a
+                // config that disabled a timeout silently ran with the default.
+                // Both sides now reject it.
+                _ => return Err(ConfigError::Parse(non_positive_duration_message("sessionMaxLifetime", "8h"))),
             }
         }
         if let Some(v) = scalar(root, "authMethod") {
@@ -771,19 +782,24 @@ fn string(value: &serde_yaml_ng::Value, field: &str) -> Result<String, ConfigErr
 /// Go reads correctly. Quoted `"true"`/`"false"` are rejected because yaml.v3
 /// rejects them too; that is a quirk of its resolver rather than a design, but
 /// the contract pins the behaviour either way.
-/// Pinned by the CFG-003 contract; the Go side emits the identical text.
-pub const MULTIPLE_DOCUMENTS_WARNING: &str =
-    "config contains more than one YAML document; only the first is used and the rest are ignored";
+/// Rejection text for a stream carrying more than one YAML document.
+///
+/// The CFG-003 contract pins whether an input is rejected, not how the
+/// rejection reads, so this text need not match Go byte for byte — but it says
+/// the same thing, because an operator hitting it reads whichever one their
+/// build produces.
+pub const MULTIPLE_DOCUMENTS_MESSAGE: &str = "config contains more than one YAML document; split it into separate files or remove everything after the first document separator";
 
-/// Pinned by the CFG-003 contract; the Go side emits the identical text.
+/// Rejection text for a session duration the operator set to a non-positive
+/// value.
 ///
 /// The offending value is deliberately not interpolated: Go reaches this point
 /// with a parsed `time.Duration` and would render `-5m0s` where Rust still has
-/// the scalar text `-5m`, so including it would make the two texts differ for
-/// no benefit. The field name is what the operator needs.
+/// the scalar text `-5m`. The field name and the default are what the operator
+/// needs.
 #[must_use]
-pub fn non_positive_duration_warning(field: &str) -> String {
-    format!("{field}: not a positive duration; the default is used instead")
+pub fn non_positive_duration_message(field: &str, default: &str) -> String {
+    format!("{field}: must be greater than 0 (default: {default}, configure {field} in config.yaml)")
 }
 
 /// Like [`duration`], but reports a syntactically valid non-positive duration

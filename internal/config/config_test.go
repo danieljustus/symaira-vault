@@ -1426,36 +1426,57 @@ func TestMergeFromUpdate_NilCacheTTL(t *testing.T) {
 
 // --- SessionTimeout Edge Cases ---
 
-func TestLoad_NegativeSessionTimeout_Ignored(t *testing.T) {
+func TestLoad_NonPositiveSessionDurationRejected(t *testing.T) {
 	t.Parallel()
 
-	// Zero or negative session timeout in file should be ignored (kept at default)
-	yaml := `sessionTimeout: -5m
-`
-	path := writeTempFile(t, []byte(yaml))
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
+	// CFG-003 step two. These used to load with the default silently
+	// substituted, so an operator who wrote a timeout ran with a different one
+	// and was never told. Validate already stated the rule; the merge guard
+	// discarded the value before Validate could see it.
+	cases := map[string]string{
+		"negative_timeout":     "sessionTimeout: -5m\n",
+		"zero_timeout":         "sessionTimeout: 0s\n",
+		"negative_maxlifetime": "sessionMaxLifetime: -1h\n",
+		"zero_maxlifetime":     "sessionMaxLifetime: 0s\n",
 	}
-	// Should still be default since -5m < 0 is ignored
-	if cfg.SessionTimeout != defaultSessionTimeout {
-		t.Errorf("SessionTimeout = %v, want %v (negative should be ignored)", cfg.SessionTimeout, defaultSessionTimeout)
+	for name, yaml := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			path := writeTempFile(t, []byte(yaml))
+			if _, err := Load(path); err == nil {
+				t.Fatal("Load() accepted a non-positive session duration")
+			}
+		})
 	}
 }
 
-func TestLoad_ZeroSessionTimeout_Ignored(t *testing.T) {
+func TestLoad_AbsentSessionDurationKeepsDefault(t *testing.T) {
 	t.Parallel()
 
-	yaml := `sessionTimeout: 0s
-`
-	path := writeTempFile(t, []byte(yaml))
+	// The counter-example to the test above: the zero value means "absent", and
+	// absent must stay acceptable or every config file without the key breaks.
+	path := writeTempFile(t, []byte("defaultAgent: default\n"))
 	cfg, err := Load(path)
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	// Zero should also be ignored (line 115: raw.SessionTimeout > 0)
 	if cfg.SessionTimeout != defaultSessionTimeout {
-		t.Errorf("SessionTimeout = %v, want %v (zero should be ignored)", cfg.SessionTimeout, defaultSessionTimeout)
+		t.Errorf("SessionTimeout = %v, want %v", cfg.SessionTimeout, defaultSessionTimeout)
+	}
+	if cfg.SessionMaxLifetime != defaultSessionMaxLifetime {
+		t.Errorf("SessionMaxLifetime = %v, want %v", cfg.SessionMaxLifetime, defaultSessionMaxLifetime)
+	}
+}
+
+func TestLoad_MultipleDocumentsRejected(t *testing.T) {
+	t.Parallel()
+
+	// CFG-003 step two. yaml.Unmarshal consumed the first document and dropped
+	// the rest without a word, so a restriction written after the separator
+	// looked active and was not.
+	path := writeTempFile(t, []byte("defaultAgent: default\n---\ndefaultAgent: other\n"))
+	if _, err := Load(path); err == nil {
+		t.Fatal("Load() accepted a multi-document stream")
 	}
 }
 

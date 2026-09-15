@@ -61,18 +61,14 @@ func mergeTopLevel(cfg *Config, raw Config) {
 	if raw.DefaultAgent != "" {
 		cfg.DefaultAgent = raw.DefaultAgent
 	}
+	// A non-positive value never reaches here: validateDurationFields rejects
+	// the document first, so this guard only distinguishes "absent" (the zero
+	// value) from a value the operator wrote.
 	if raw.SessionTimeout > 0 {
 		cfg.SessionTimeout = raw.SessionTimeout
-	} else if raw.SessionTimeout < 0 {
-		// Validate rejects a non-positive sessionTimeout, but never sees one:
-		// this guard drops the value and leaves the default in place. Warning
-		// is step one of the CFG-003 migration; rejecting is a later release.
-		warnf("%s", NonPositiveDurationWarning("sessionTimeout"))
 	}
 	if raw.SessionMaxLifetime > 0 {
 		cfg.SessionMaxLifetime = raw.SessionMaxLifetime
-	} else if raw.SessionMaxLifetime < 0 {
-		warnf("%s", NonPositiveDurationWarning("sessionMaxLifetime"))
 	}
 	if raw.AuthMethod != "" {
 		authMethod, err := NormalizeAuthMethod(raw.AuthMethod)
