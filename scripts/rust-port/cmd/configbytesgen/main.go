@@ -36,6 +36,8 @@ var productionSources = []string{
 	"internal/config/config_merge.go",
 	"internal/config/config_save.go",
 	"internal/config/config_validate.go",
+	// Carries the warning texts the contract pins.
+	"internal/config/warn.go",
 }
 
 type oracle struct {
@@ -71,6 +73,9 @@ type bytesCase struct {
 	Input       string    `json:"input"`
 	Rejected    bool      `json:"rejected"`
 	Snapshot    *snapshot `json:"snapshot,omitempty"`
+	// Warnings the loader raised, in order. Both implementations emit the
+	// identical texts, so unlike error messages these are part of the contract.
+	Warnings []string `json:"warnings,omitempty"`
 	// SavedYAML is the canonical form the writer produces for an accepted
 	// input. Re-loading it must yield the same snapshot, which the round-trip
 	// field records.
@@ -145,7 +150,13 @@ func buildCases(workDir string) ([]bytesCase, error) {
 			return nil, err
 		}
 		item := bytesCase{Name: input.name, Description: input.description, Input: input.input}
+
+		var captured []string
+		configpkg.SetWarnFunc(func(message string) { captured = append(captured, message) })
 		cfg, err := configpkg.Load(path)
+		configpkg.SetWarnFunc(nil)
+		item.Warnings = captured
+
 		if err != nil {
 			item.Rejected = true
 			cases = append(cases, item)

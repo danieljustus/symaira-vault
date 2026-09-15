@@ -157,6 +157,12 @@ func Load(path string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &doc); err != nil {
 		return nil, err
 	}
+	// yaml.Unmarshal consumes the first document and discards the rest without
+	// a word. Decoding the stream separately is the only way to notice, and the
+	// warning is what stops a second document from disappearing silently.
+	if hasTrailingDocuments(data) {
+		warnf("%s", MultipleDocumentsWarning)
+	}
 
 	agentFields := loadAgentFields(&doc)
 	sectionFields := loadSectionFields(&doc)
@@ -274,4 +280,16 @@ func loadSectionFields(doc *yaml.Node) map[string]map[string]bool {
 		}
 	}
 	return result
+}
+
+// hasTrailingDocuments reports whether the stream carries more than one YAML
+// document. Only the first is used.
+func hasTrailingDocuments(data []byte) bool {
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	var first yaml.Node
+	if err := decoder.Decode(&first); err != nil {
+		return false
+	}
+	var second yaml.Node
+	return decoder.Decode(&second) == nil
 }
