@@ -14,15 +14,22 @@ For all four, Go accepts and Rust rejects.
 | # | Input | Go | Rust |
 |---|---|---|---|
 | 1 | `sessionTimeout: -5m` | accepted, value becomes the **default 15m** | rejected: `sessionTimeout has invalid duration "-5m"` |
-| 2 | `agents:\n  custom:\n    canWrite: "yes"` | accepted, the field is **discarded** | rejected: `canWrite must be a boolean` |
+| 2 | `agents:\n  custom:\n    canWrite: "yes"` | accepted as **`true`** | rejected: `canWrite must be a boolean` |
 | 3 | `defaultAgent: a\n---\ndefaultAgent: b` | accepted, **only the first document** is read | rejected: more than one document unsupported |
 | 4 | `null` | accepted, yields the defaults | rejected: `invalid type: unit value` |
 
 ## Why the pinned oracle is not automatically right here
 
-In 1–3, Go's leniency means configuration the operator wrote is silently
+> **Correction, 2026-09-15.** An earlier revision of this paper described case
+> 2 as a permission being silently discarded, and grouped it with 1 and 3 as a
+> security footgun. That was asserted without being measured, and it is wrong.
+> Go reads `canWrite: "yes"` as `true` and honours it. The corrected analysis is
+> below; the recommendation for case 2 is reversed as a result.
+
+In 1 and 3, Go's leniency means configuration the operator wrote is silently
 discarded. For a password manager that is the wrong failure mode: the operator
-believes a permission or a timeout is in force when it is not.
+believes a setting is in force when it is not. Case 2 is a different thing
+entirely — a YAML version compatibility gap — and case 4 points the other way.
 
 ### 1 is not a contract question at all — it is a bug
 
@@ -50,11 +57,32 @@ The same holds for `0s` and for `sessionMaxLifetime: -1h`.
 The validation is unreachable. Making it reachable restores the behaviour the
 code already states it wants.
 
-### 2 and 3 are genuine security footguns
+### 3 is a genuine security footgun
 
-A permission written with the wrong scalar type, or an entire second document,
-vanishing without a word is the failure mode that lets an operator believe a
-restriction is active when it is not.
+An entire second document vanishing without a word is the failure mode that
+lets an operator believe a restriction is active when it is not.
+
+### 2 is a YAML 1.1 compatibility gap, not a discard
+
+Measured across spellings, Go accepts the YAML 1.1 booleans — `yes`, `no`,
+`on`, `off`, in any case, quoted or bare — and resolves them correctly:
+
+| written | Go |
+|---|---|
+| `yes` / `"yes"` / `Yes` / `YES` / `on` | `true` |
+| `no` / `"no"` / `off` | `false` |
+| `true` / `false` | as written |
+| `"true"` / `"false"` | **rejected** |
+| `1` / `"banana"` | rejected |
+
+So nothing is discarded: an operator writing `canWrite: no` gets `false`. Rust
+rejects all of these outright, which would refuse to load config files that Go
+reads correctly. (The rejection of quoted `"true"` while quoted `"yes"` is
+accepted is a yaml.v3 quirk, not a design; it is recorded here because the
+contract pins it either way.)
+
+Rust is not dangerous here — it fails loudly rather than silently — but it is
+incompatible with valid, idiomatic YAML.
 
 ### 4 points the other way
 
@@ -64,8 +92,9 @@ stakes are low either way, but consistency argues for Go's behaviour.
 
 ## Recommendation
 
-**Adopt Rust's strictness for 1–3, and Go's leniency for 4** — not a blanket
-"the stricter side wins", but per case.
+**Adopt Rust's strictness for 1 and 3, and Go's behaviour for 2 and 4** — not a
+blanket "the stricter side wins", but per case. The split is even, which is
+itself the argument against deciding this by picking a winner.
 
 That leaves the question of *when*, and it matters more than usual: if a config
 file stops loading, the CLI refuses to start, and for a password manager that
@@ -73,13 +102,15 @@ means an operator can be locked out of their vault by an upgrade.
 
 ### Recommended path: align on warn-and-accept now, reject together later
 
-1. **Now:** both implementations warn and continue for 1–3, using the
+1. **Now:** both implementations warn and continue for 1 and 3, using the
    `warnf` mechanism already used for the `envWhitelist` deprecation. Rust
    relaxes to match; Go gains the warnings. The silent discard — the actual
    danger — ends immediately, and the two implementations stay aligned, which
-   is the point of the port. For 4, Rust relaxes to accept.
-2. **Next minor release:** both flip to rejecting 1–3 together, announced in
-   the release notes and the consumer handoff.
+   is the point of the port.
+   For 2 and 4 there is nothing to stage: Rust simply adopts Go's behaviour,
+   accepting YAML 1.1 booleans and an explicit `null`.
+2. **Next minor release:** both flip to rejecting 1 and 3 together, announced
+   in the release notes and the consumer handoff.
 
 The contract is re-pinned at each step, so parity is never an open question in
 between.
@@ -95,15 +126,18 @@ and an explicit `symvault doctor` check that names the offending key and line.
 
 Under the recommended path, step 1 adds warnings and breaks nothing, so no
 consumer action is required. Step 2 is a breaking change for config files that
-contain any of 1–3 and belongs in its own consumer handoff, alongside a way to
-find affected files.
+contain 1 or 3 and belongs in its own consumer handoff, alongside a way to find
+affected files. Cases 2 and 4 never become breaking: they are Rust catching up
+to Go.
 
 ## What I would implement on approval
 
-- Remove the `> 0` merge guards so explicitly present durations reach
-  `Validate` (1).
-- Add warnings in Go for the wrong-scalar-type and multi-document cases (2, 3).
-- Relax Rust to warn-and-accept for 1–3 and to accept `null` (4).
+- Add a warning in Go for a negative duration, which currently falls back to
+  the default without a word (1), and for documents after the first (3).
+  Removing the `> 0` merge guard belongs to step 2, not here: it would make Go
+  reject immediately.
+- Give Rust a warning channel and relax it to warn-and-accept for 1 and 3.
+- Make Rust accept YAML 1.1 booleans (2) and an explicit `null` (4).
 - Extend the CFG-003 fixture with the warning-bearing cases and empty
   `ACCEPTANCE_PENDING_ADJUDICATION`.
 - Prepare the step-2 consumer handoff without implementing it.
