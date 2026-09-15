@@ -14,15 +14,25 @@ only its production-Go oracle to commit `fe098b91` (release "unreleased"),
 pre-existing but previously undocumented here; `POLICY-001` deliberately
 advances only its production-Go oracle to commit `f195aab` (release
 "unreleased") for the adjudicated path-matching contract described below;
-`STORE-004`'s `manifestkeygen` revision is advanced to `d304ed96` only because
+`CFG-001` pins its own production-Go oracle at `fc9eddc0`, the commit that
+introduces the pure `ResolvePaths` seam; `RUST-007`'s config/platform oracle is
+advanced from `caadd5e` to `31afe33c` because the old claim was never verified
+and four of its seven production sources already differed from `caadd5e`;
+`STORE-004`'s `manifestkeygen` revision is advanced to `1bc61ea6` only because
 it binds the whole `internal/` tree and its 16 vectors are byte-identical
-across that advance; all other rows, including `PAIRING-001`, retain the
+across every such advance; all other rows, including `PAIRING-001`, retain the
 baseline oracle.
 
-Oracle commits are no longer trusted as labels. `policygen` and
-`manifestkeygen` resolve their claimed commit through git and compare the
-working tree against that commit's immutable blobs, refusing to emit a fixture
-whose provenance does not hold.
+Oracle commits are no longer trusted as labels. `policygen`, `configpathgen`,
+`configgen`, `configprofilegen` and `manifestkeygen` resolve their claimed
+commit through git and compare the working tree against that commit's
+immutable blobs, refusing to emit a fixture whose provenance does not hold;
+the shared check lives in `scripts/rust-port/internal/provenance`.
+
+**`coregen`, `quotagen` and `sessionquotagen` are not yet bound.** They still
+validate their oracle commit as a label while digesting the working tree,
+which is the defect that invalidated `POLICY-001`'s earlier `PASS`. Their rows'
+provenance claims are therefore unverified until they are bound the same way.
 
 ## POLICY-001 path-matching adjudication
 
@@ -62,7 +72,7 @@ outcome under a higher-priority deny rule with an allow fallback.
 | CLI-005 | Error taxonomy | invalid args/config/auth/not-found | Go binary | exit codes 0–10, stream placement, no secret leakage | differential cases | all | bytes | TODO |
 | CLI-006 | Output modes | text/JSON/YAML/NDJSON capable commands | Go binary | field names, ordering, omission, newline behavior | differential cases | all | bytes/semantic by row | TODO |
 | CLI-007 | Signals | long-running watch/MCP/broker | Go binary | cancellation, flushing, process-tree cleanup, exit 130 where defined | signal harness | macOS/Linux/Windows equivalent | semantic | TODO |
-| CFG-001 | Defaults | empty HOME/XDG | Go loader | XDG defaults and legacy fallback | config fixtures | all | semantic | TODO |
+| CFG-001 | Defaults | empty HOME/XDG | `internal/config.ResolvePaths` over an explicit `PathEnvironment`; discovery stays in `NewPathResolver` and is out of scope | XDG defaults, legacy fallback, the three install states, set-but-empty XDG values, and the `SYMVAULT_VAULT` override including tilde expansion and blank handling | 14 Go-generated cases in `testdata/port/config/paths.json`, consumed by `crates/symvault-core/tests/config_paths_contract.rs`; provenance verified against git blobs by `configpathgen`; wired into `port-contract` as `cfg-fixtures-check` | all | semantic | in_progress: green locally on darwin/arm64; the fixture pins slash-separated logical paths, so the resolution logic is covered on every platform while the native separator rendering is not. Native Linux/Windows evidence at the exact head is still outstanding, so no `PASS` is claimed |
 | CFG-002 | Precedence | flags/env/current/legacy config combinations | Go loader | exact precedence and validation | table-driven fixtures | all | semantic | TODO |
 | CFG-003 | Config bytes | canonical/unknown/corrupt YAML | Go loader/writer | keys, durations, unknown-field behavior, modes | round-trip tests | all | bytes + semantic | TODO |
 | CRYPTO-001 | X25519 identity | fixed safe test identities | Go crypto | public key and fingerprint parity | cross-language vectors | all | bytes | PASS |
