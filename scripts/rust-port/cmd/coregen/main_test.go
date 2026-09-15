@@ -24,7 +24,7 @@ func TestResolveOracleRejectsTamperedMetadata(t *testing.T) {
 		if got.Commit != pinned.commit || got.Release != pinned.release {
 			t.Fatalf("%s check metadata = %#v", kind, got)
 		}
-		// Provenance is bound, not merely labelled: the resolved object name
+		// Provenance is bound, not merely labeled: the resolved object name
 		// is the commit whose blobs match the working tree.
 		if len(got.CommitSHA) != 40 || !strings.HasPrefix(got.CommitSHA, pinned.commit) {
 			t.Fatalf("%s: commit %q was not resolved against git, got %q", kind, pinned.commit, got.CommitSHA)

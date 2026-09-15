@@ -113,8 +113,12 @@ clean:
 	$(GO) clean -cache -testcache
 
 # Run linter
+# GOTOOLCHAIN is pinned like every other Go target here. Without it the linter
+# builds against whatever Go the host has, and a newer one makes it report
+# hundreds of bogus "could not import" typecheck errors that bury the real
+# findings -- which is exactly how a batch of misspell hits reached CI.
 lint:
-	GOWORK=off $(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --timeout=5m --verbose
+	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --timeout=5m --verbose
 
 # Format code
 fmt:
@@ -142,7 +146,7 @@ fmt-check:
 
 # Run linter with auto-fix
 lint-fix:
-	GOWORK=off $(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --fix --timeout=5m --verbose
+	GOWORK=off GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --fix --timeout=5m --verbose
 
 # Run CI-like tests (race + coverage + timeout, same as CI)
 test-ci:

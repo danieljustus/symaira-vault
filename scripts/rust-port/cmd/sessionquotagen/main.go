@@ -262,7 +262,7 @@ func buildOracle(root, commit, release string) (oracle, error) {
 	}
 	// The generator can only execute the working tree. Binding it to the
 	// claimed commit's blobs is what stops these fixtures from asserting one
-	// revision while carrying another's behaviour.
+	// revision while carrying another's behavior.
 	resolved, err := provenance.Verify(root, commit, sources)
 	if err != nil {
 		return oracle{}, err

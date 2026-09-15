@@ -28,7 +28,7 @@ import (
 // A single pin for all four was not honest: the redact and password/TOTP
 // sources both changed after the v0.22.1 baseline the label claimed, so those
 // fixtures named a commit whose blobs differ from the code the generator runs.
-// Per-kind pins also stop a change in one package from silently re-labelling
+// Per-kind pins also stop a change in one package from silently re-labeling
 // three unrelated fixtures.
 type kindOracle struct {
 	commit    string
@@ -872,7 +872,7 @@ func resolveOracle(kind string, commit, release string) (oracle, error) {
 	}
 	// The generator can only execute the working tree. Binding it to the
 	// claimed commit's blobs is what stops a fixture from asserting one
-	// revision while carrying another's behaviour.
+	// revision while carrying another's behavior.
 	resolved, err := provenance.Verify(root, pinned.commit, sources)
 	if err != nil {
 		return oracle{}, fmt.Errorf("%s: %w", kind, err)

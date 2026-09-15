@@ -14,7 +14,7 @@
       "internal/redact/strict.go"
     ],
     "source_digest": "ab0c2e715ef777af3f7a7054c1d4ace628e3a7717e4eaccf187d22ca121720b3",
-    "generator_digest": "718dcffc521a75b0a14324912ac605631a7fdf44fdba0d41ea306c991b4a31b8"
+    "generator_digest": "a915b375f513699d025bbe280c7671f5c40711afc912cc4b7c6cadd0b87b2509"
   },
   "constants": {
     "marker": "[REDACTED]",
