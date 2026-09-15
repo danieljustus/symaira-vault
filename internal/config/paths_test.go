@@ -223,11 +223,10 @@ func TestPathResolver_IsDir_Helper(t *testing.T) {
 	}
 }
 
-func TestPathResolver_ExpandTilde(t *testing.T) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Skip("cannot determine home dir")
-	}
+func TestExpandTildeAgainstSuppliedHome(t *testing.T) {
+	// The home directory is supplied rather than discovered, so this table is
+	// deterministic and never reads the operating user's real home.
+	const home = "/fixture/home/probe"
 
 	tests := []struct {
 		input string
@@ -237,15 +236,117 @@ func TestPathResolver_ExpandTilde(t *testing.T) {
 		{"~/Documents", filepath.Join(home, "Documents")},
 		{"/absolute/path", "/absolute/path"},
 		{"relative/path", "relative/path"},
+		{"~notatilde", "~notatilde"},
 	}
 	for _, tt := range tests {
-		got, err := expandTilde(tt.input)
-		if err != nil {
-			t.Errorf("expandTilde(%q) error = %v", tt.input, err)
-			continue
+		if got := expandTildeAgainst(tt.input, home); got != tt.want {
+			t.Errorf("expandTildeAgainst(%q) = %q, want %q", tt.input, got, tt.want)
 		}
-		if got != tt.want {
-			t.Errorf("expandTilde(%q) = %q, want %q", tt.input, got, tt.want)
-		}
+	}
+}
+
+// ResolvePaths is the pure CFG-001 seam: the same inputs must always produce
+// the same resolution, with no filesystem or environment access.
+func TestResolvePathsContract(t *testing.T) {
+	const home = "/fixture/home/probe"
+	base := PathEnvironment{Home: home}
+
+	tests := []struct {
+		name                        string
+		env                         PathEnvironment
+		config, data, cache, legacy string
+		migrated                    bool
+	}{
+		{
+			name:   "new install uses xdg exclusively",
+			env:    base,
+			config: home + "/.config/symaira-vault",
+			data:   home + "/.local/share/symaira-vault",
+			cache:  home + "/.cache/symaira-vault",
+		},
+		{
+			name:     "existing legacy install reads from legacy",
+			env:      PathEnvironment{Home: home, LegacyDirExists: true},
+			config:   home + "/.symvault",
+			data:     home + "/.symvault",
+			cache:    home + "/.cache/symaira-vault",
+			legacy:   home + "/.symvault",
+			migrated: false,
+		},
+		{
+			name:     "post migration prefers xdg and reports migrated",
+			env:      PathEnvironment{Home: home, LegacyDirExists: true, XDGDataDirExists: true},
+			config:   home + "/.config/symaira-vault",
+			data:     home + "/.local/share/symaira-vault",
+			cache:    home + "/.cache/symaira-vault",
+			legacy:   home + "/.symvault",
+			migrated: true,
+		},
+		{
+			name:   "explicit xdg values win over the defaults",
+			env:    PathEnvironment{Home: home, XDGConfigHome: "/x/cfg", XDGDataHome: "/x/data", XDGCacheHome: "/x/cache"},
+			config: "/x/cfg/symaira-vault",
+			data:   "/x/data/symaira-vault",
+			cache:  "/x/cache/symaira-vault",
+		},
+		{
+			// A variable that is set but empty must fall back exactly like an
+			// unset one, or the resolved path becomes relative.
+			name:   "empty xdg values fall back to the defaults",
+			env:    PathEnvironment{Home: home, XDGConfigHome: "", XDGDataHome: "", XDGCacheHome: ""},
+			config: home + "/.config/symaira-vault",
+			data:   home + "/.local/share/symaira-vault",
+			cache:  home + "/.cache/symaira-vault",
+		},
+		{
+			name:   "vault override replaces only the data directory",
+			env:    PathEnvironment{Home: home, VaultOverride: "  /elsewhere/vault  "},
+			config: home + "/.config/symaira-vault",
+			data:   "/elsewhere/vault",
+			cache:  home + "/.cache/symaira-vault",
+		},
+		{
+			name:   "vault override expands a leading tilde against home",
+			env:    PathEnvironment{Home: home, VaultOverride: "~/vaults/work"},
+			config: home + "/.config/symaira-vault",
+			data:   home + "/vaults/work",
+			cache:  home + "/.cache/symaira-vault",
+		},
+		{
+			name: "no home yields a zero resolver",
+			env:  PathEnvironment{XDGConfigHome: "/x/cfg"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ResolvePaths(tt.env)
+			if got.ConfigDir != filepath.FromSlash(tt.config) {
+				t.Errorf("ConfigDir = %q, want %q", got.ConfigDir, tt.config)
+			}
+			if got.DataDir != filepath.FromSlash(tt.data) {
+				t.Errorf("DataDir = %q, want %q", got.DataDir, tt.data)
+			}
+			if got.CacheDir != filepath.FromSlash(tt.cache) {
+				t.Errorf("CacheDir = %q, want %q", got.CacheDir, tt.cache)
+			}
+			if got.LegacyDir != filepath.FromSlash(tt.legacy) {
+				t.Errorf("LegacyDir = %q, want %q", got.LegacyDir, tt.legacy)
+			}
+			if got.Migrated != tt.migrated {
+				t.Errorf("Migrated = %v, want %v", got.Migrated, tt.migrated)
+			}
+		})
+	}
+}
+
+// ConfigPath must follow the resolved config directory. For a legacy install
+// that is the legacy directory, not the XDG one.
+func TestConfigPathFollowsResolvedConfigDir(t *testing.T) {
+	const home = "/fixture/home/probe"
+	legacy := ResolvePaths(PathEnvironment{Home: home, LegacyDirExists: true})
+	want := filepath.Join(home, ".symvault", "config.yaml")
+	if got := legacy.ConfigPath(); got != want {
+		t.Fatalf("legacy install ConfigPath() = %q, want %q", got, want)
 	}
 }

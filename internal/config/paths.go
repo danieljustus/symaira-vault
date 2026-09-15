@@ -25,56 +25,116 @@ type PathResolver struct {
 	Migrated bool
 }
 
-// NewPathResolver creates a PathResolver that detects existing paths and resolves XDG.
+// PathEnvironment is the discovered environment that path resolution is
+// computed from. Keeping the inputs explicit makes resolution deterministic and
+// lets the CFG-001 contract pin it without touching the filesystem or the
+// process environment.
+type PathEnvironment struct {
+	// Home is the user's home directory. An empty Home yields a zero
+	// PathResolver, matching the behavior when the home directory cannot be
+	// determined at all.
+	Home string
+	// XDGConfigHome, XDGDataHome and XDGCacheHome are the raw environment
+	// values. An empty value falls back to the XDG default beneath Home.
+	XDGConfigHome string
+	XDGDataHome   string
+	XDGCacheHome  string
+	// VaultOverride is the raw SYMVAULT_VAULT value. It is trimmed, and a
+	// leading "~" is expanded against Home.
+	VaultOverride string
+	// LegacyDirExists and XDGDataDirExists are the two filesystem probes the
+	// resolution depends on. The caller performs them; the resolution itself
+	// touches no filesystem.
+	LegacyDirExists  bool
+	XDGDataDirExists bool
+}
+
+// ResolvePaths is the pure path-resolution contract.
 // For existing installs: reads from legacy, writes to XDG.
 // For new installs: uses XDG exclusively.
-func NewPathResolver() *PathResolver {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return &PathResolver{}
+func ResolvePaths(env PathEnvironment) PathResolver {
+	if env.Home == "" {
+		return PathResolver{}
 	}
 
-	legacyDir := filepath.Join(home, LegacyVaultSubdir)
-	legacyExists := isDir(legacyDir)
-
-	xdgDataDir := DefaultDataDir()
-	xdgDataExists := isDir(xdgDataDir)
-
-	r := &PathResolver{
-		CacheDir: DefaultCacheDir(),
+	legacyDir := filepath.Join(env.Home, LegacyVaultSubdir)
+	resolver := PathResolver{
+		CacheDir: filepath.Join(xdgBase(env.XDGCacheHome, env.Home, ".cache"), CacheSubdir),
 	}
+	xdgConfigDir := filepath.Join(xdgBase(env.XDGConfigHome, env.Home, ".config"), ConfigSubdir)
+	xdgDataDir := filepath.Join(xdgBase(env.XDGDataHome, env.Home, ".local", "share"), DataSubdir)
 
-	if legacyExists {
-		r.LegacyDir = legacyDir
+	if env.LegacyDirExists {
+		resolver.LegacyDir = legacyDir
 	}
 
 	switch {
-	case legacyExists && !xdgDataExists:
+	case env.LegacyDirExists && !env.XDGDataDirExists:
 		// Existing install: read from legacy, write target is XDG.
-		// config.yaml and vault data live in the legacy directory.
-		r.ConfigDir = legacyDir
-		r.DataDir = legacyDir
-		r.Migrated = false
-	case legacyExists && xdgDataExists:
+		resolver.ConfigDir = legacyDir
+		resolver.DataDir = legacyDir
+		resolver.Migrated = false
+	case env.LegacyDirExists && env.XDGDataDirExists:
 		// Post-migration: both exist, prefer XDG.
-		r.ConfigDir = DefaultConfigDir()
-		r.DataDir = xdgDataDir
-		r.Migrated = true
+		resolver.ConfigDir = xdgConfigDir
+		resolver.DataDir = xdgDataDir
+		resolver.Migrated = true
 	default:
 		// New install: XDG exclusively.
-		r.ConfigDir = DefaultConfigDir()
-		r.DataDir = DefaultDataDir()
-		r.Migrated = false
+		resolver.ConfigDir = xdgConfigDir
+		resolver.DataDir = xdgDataDir
+		resolver.Migrated = false
 	}
 
-	// SYMVAULT_VAULT env var overrides the resolved data directory.
-	if envVault := strings.TrimSpace(os.Getenv("SYMVAULT_VAULT")); envVault != "" {
-		if expanded, err := expandTilde(envVault); err == nil {
-			r.DataDir = expanded
-		}
+	if override := strings.TrimSpace(env.VaultOverride); override != "" {
+		resolver.DataDir = expandTildeAgainst(override, env.Home)
 	}
 
-	return r
+	return resolver
+}
+
+// xdgBase returns the raw XDG value when set, and otherwise the XDG default
+// beneath home. An environment variable that is set but empty falls back, the
+// same as an unset one.
+func xdgBase(value, home string, fallback ...string) string {
+	if value != "" {
+		return value
+	}
+	return filepath.Join(append([]string{home}, fallback...)...)
+}
+
+// expandTildeAgainst expands a leading "~" against the supplied home rather
+// than discovering it, so the resolution stays pure.
+func expandTildeAgainst(path, home string) string {
+	if path == "~" {
+		return home
+	}
+	if rest, found := strings.CutPrefix(path, "~/"); found {
+		return filepath.Join(home, rest)
+	}
+	return path
+}
+
+// NewPathResolver discovers the environment and resolves the paths from it.
+// The resolution itself lives in ResolvePaths; this is the discovery wrapper.
+func NewPathResolver() *PathResolver {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = ""
+	}
+	env := PathEnvironment{
+		Home:          home,
+		XDGConfigHome: os.Getenv("XDG_CONFIG_HOME"),
+		XDGDataHome:   os.Getenv("XDG_DATA_HOME"),
+		XDGCacheHome:  os.Getenv("XDG_CACHE_HOME"),
+		VaultOverride: os.Getenv("SYMVAULT_VAULT"),
+	}
+	if home != "" {
+		env.LegacyDirExists = isDir(filepath.Join(home, LegacyVaultSubdir))
+		env.XDGDataDirExists = isDir(filepath.Join(xdgBase(env.XDGDataHome, home, ".local", "share"), DataSubdir))
+	}
+	resolver := ResolvePaths(env)
+	return &resolver
 }
 
 // ConfigPath returns the path to config.yaml.
@@ -106,19 +166,4 @@ func isDir(path string) bool {
 		return false
 	}
 	return info.IsDir()
-}
-
-// expandTilde expands a leading ~ in a path to the user's home directory.
-func expandTilde(path string) (string, error) {
-	if path == "~" {
-		return os.UserHomeDir()
-	}
-	if strings.HasPrefix(path, "~/") {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		return filepath.Join(home, path[2:]), nil
-	}
-	return path, nil
 }
