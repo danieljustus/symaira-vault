@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	pinnedOracleCommit  = "addce896"
+	pinnedOracleCommit  = "aa21ec4e"
 	pinnedOracleRelease = "unreleased"
 )
 

@@ -296,7 +296,10 @@ symvault auth set passphrase
 - The Keychain already requires user authentication to access secrets
 - Touch ID allows faster access to the cached session, reducing friction but not weakening security
 - Physical access to an unlocked session still bypasses Touch ID (same as passphrase)
-- For highest security, use `sessionTimeout: 0` to disable session caching entirely
+- For highest security, set a very short `sessionTimeout` (for example `1m`) and
+  run `symvault lock` when you are done. `sessionTimeout: 0` has never disabled
+  session caching — the loader discarded the value and used the 15m default —
+  and is now rejected outright rather than silently ignored
 
 ### Environment Variables
 
@@ -428,9 +431,12 @@ OS-managed buffers.
   LimitMEMLOCK=infinity
   MemoryDenyWriteExecute=yes
   ```
-- **Minimize session TTL**: Set `sessionTimeout: 0` in `config.yaml` to disable
-  session caching entirely. This forces passphrase entry on every operation,
-  eliminating the keyring as a persistence vector.
+- **Minimize session TTL**: Set a very short `sessionTimeout` in `config.yaml`,
+  for example `1m`, and run `symvault lock` when you finish a task. There is no
+  setting that disables session caching outright: `sessionTimeout: 0` was
+  documented here as doing so, but the loader discarded non-positive durations
+  and ran with the 15m default instead, so the advice never had the effect it
+  claimed. Such a value is now rejected rather than silently ignored.
 - **Bound active sessions**: `sessionMaxLifetime` defaults to 8 hours. It limits
   the total lifetime of a cached session even when the idle timeout is refreshed.
 - **Use stdio MCP mode**: The `symvault mcp --stdio` mode avoids D-Bus entirely

@@ -25,6 +25,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (breaking)
+- The config loader now rejects a session duration the operator set to a
+  non-positive value (`sessionTimeout` or `sessionMaxLifetime` set to `0s` or a
+  negative duration) and a config file carrying more than one YAML document.
+  Both used to load: the duration was silently replaced by the default, and
+  everything after the first `---` was dropped without a word, so an operator
+  could believe a setting was in force when it was not. `Validate` already
+  stated the duration rule; the merge step discarded the value before
+  `Validate` could see it. An absent key is unchanged and still takes the
+  default. Only hand-edited files are affected — the writer has never emitted
+  either form. Migration and a grep to find affected files:
+  [docs/rust-port/consumer-handoff-config-20260915.md](docs/rust-port/consumer-handoff-config-20260915.md).
+
 ### Fixed
 - MCP HTTP startup no longer fails intermittently with `bad file descriptor`
   while migrating a legacy token. The shared Unix `SafeRemove` helper closed

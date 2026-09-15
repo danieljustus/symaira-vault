@@ -99,7 +99,7 @@ fn resolve(config: &Config) -> Profile {
 fn fixture_has_pinned_provenance_and_schema() {
     let fixture = fixture();
     assert_eq!(fixture.schema_version, 1);
-    assert_eq!(fixture.oracle.commit, "8fda736c");
+    assert_eq!(fixture.oracle.commit, "aa21ec4e");
     assert_eq!(fixture.oracle.release, "unreleased");
     assert_eq!(fixture.oracle.commit_sha.len(), 40);
     assert!(

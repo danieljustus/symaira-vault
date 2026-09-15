@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "0daaaa91",
-    "commit_sha": "0daaaa91c7eb38455c943de84b6a8cfb2504a9e1",
+    "commit": "aa21ec4e",
+    "commit_sha": "aa21ec4ee6eebc58b965b6ee028cb439730c059f",
     "release": "unreleased",
     "source_files": [
       "internal/config/config.go",
@@ -12,8 +12,8 @@
       "internal/config/config_validate.go",
       "internal/config/warn.go"
     ],
-    "source_digest": "0a65a6284d4dc495578c4005d62f1843840c06dc45931c87913307cc9a281d40",
-    "generator_digest": "7169408ef495389231900c243c00536fa724c122978861c03249a50fa590f758"
+    "source_digest": "dd0b3424118285c1a6264a81b9197957a9991e4d0c2b4de12a2ab28f3b48d213",
+    "generator_digest": "34126bb797ed7895a33e0598d4ea94ed099660762263e671c1d8d1d07c448c14"
   },
   "cases": [
     {
@@ -230,30 +230,9 @@
     },
     {
       "name": "multiple_documents",
-      "description": "only the first document is consumed",
+      "description": "a second document is rejected, not silently dropped",
       "input": "defaultAgent: a\n---\ndefaultAgent: b\n",
-      "rejected": false,
-      "snapshot": {
-        "default_agent": "a",
-        "session_timeout": "15m0s",
-        "session_max_lifetime": "8h0m0s",
-        "auth_method": "passphrase",
-        "vault_dir": "",
-        "agent_names": [
-          "a",
-          "claude-code",
-          "codex",
-          "default",
-          "hermes",
-          "openclaw",
-          "opencode"
-        ]
-      },
-      "warnings": [
-        "config contains more than one YAML document; only the first is used and the rest are ignored"
-      ],
-      "saved_yaml": "agents:\n    a:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: true\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: a\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
-      "round_trips_to": "identical_snapshot"
+      "rejected": true
     },
     {
       "name": "bom_prefixed",
@@ -305,29 +284,21 @@
     },
     {
       "name": "negative_duration",
-      "description": "a negative duration does not abort the load",
+      "description": "a negative session duration is rejected",
       "input": "sessionTimeout: -5m\n",
-      "rejected": false,
-      "snapshot": {
-        "default_agent": "default",
-        "session_timeout": "15m0s",
-        "session_max_lifetime": "8h0m0s",
-        "auth_method": "passphrase",
-        "vault_dir": "",
-        "agent_names": [
-          "claude-code",
-          "codex",
-          "default",
-          "hermes",
-          "openclaw",
-          "opencode"
-        ]
-      },
-      "warnings": [
-        "sessionTimeout: not a positive duration; the default is used instead"
-      ],
-      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
-      "round_trips_to": "identical_snapshot"
+      "rejected": true
+    },
+    {
+      "name": "zero_duration",
+      "description": "an explicitly zero session duration is rejected",
+      "input": "sessionTimeout: 0s\n",
+      "rejected": true
+    },
+    {
+      "name": "negative_max_lifetime",
+      "description": "the rule covers sessionMaxLifetime too",
+      "input": "sessionMaxLifetime: -1h\n",
+      "rejected": true
     },
     {
       "name": "large_duration",

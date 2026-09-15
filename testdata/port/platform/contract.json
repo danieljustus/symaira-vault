@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "addce896",
-    "commit_sha": "addce896a08d5eb4980b323c4321f8092b630d9b",
+    "commit": "aa21ec4e",
+    "commit_sha": "aa21ec4ee6eebc58b965b6ee028cb439730c059f",
     "release": "unreleased",
     "source_files": [
       "internal/clipboard/clipboard.go",
@@ -15,8 +15,8 @@
       "internal/config/presets.go",
       "internal/secureui/secureui.go"
     ],
-    "source_digest": "8eaf478d4bb8d8b19cadf00013f9d5f6b40b3562ede22b40d3b1f1333e5277ff",
-    "generator_digest": "1041ac02d0846ae6870d1d9f47bbbb535435802c84c296e0bcc5ec5242718c79"
+    "source_digest": "c26c0ac001444b495cd488a4c69b98fff73cd475093fbeb68209f98110380ea7",
+    "generator_digest": "17073f6c4630ec05f84f81e6345ef7bde35d0e5a5b8f6f4ce32c70c71c16bf51"
   },
   "cases": null,
   "platform_cases": [

@@ -105,7 +105,7 @@ fn go_duration(total: u64) -> String {
 fn fixture_has_pinned_provenance_and_schema() {
     let fixture = fixture();
     assert_eq!(fixture.schema_version, 1);
-    assert_eq!(fixture.oracle.commit, "0daaaa91");
+    assert_eq!(fixture.oracle.commit, "aa21ec4e");
     assert_eq!(fixture.oracle.release, "unreleased");
     assert_eq!(fixture.oracle.commit_sha.len(), 40);
     assert!(
@@ -117,18 +117,18 @@ fn fixture_has_pinned_provenance_and_schema() {
     assert_eq!(fixture.oracle.source_digest.len(), 64);
     assert_eq!(fixture.oracle.generator_digest.len(), 64);
     assert!(fixture.oracle.source_files.len() >= 5);
-    assert!(fixture.cases.len() >= 20, "fixture lost cases");
+    assert!(fixture.cases.len() >= 22, "fixture lost cases");
     assert!(fixture.cases.iter().any(|case| case.rejected));
     assert!(fixture.cases.iter().any(|case| !case.rejected));
 }
 
 /// Inputs where the two implementations disagree on acceptance.
 ///
-/// Empty since the step-one alignment: Rust adopted Go's YAML 1.1 booleans and
-/// its treatment of an explicit `null`, and both sides now warn-and-accept a
-/// non-positive duration and a multi-document stream rather than one rejecting
-/// what the other takes. Step two flips the latter two to rejection in both,
-/// deliberately and together; see `docs/rust-port/cfg-003-acceptance-adjudication.md`.
+/// Empty since the step-one alignment, and still empty after step two: Rust
+/// adopted Go's YAML 1.1 booleans and its treatment of an explicit `null`, and
+/// both sides now reject a non-positive session duration and a multi-document
+/// stream instead of silently discarding what the operator wrote. The staged
+/// migration is complete; see `docs/rust-port/cfg-003-acceptance-adjudication.md`.
 ///
 /// The set is asserted exactly, so it can neither grow nor shrink unnoticed.
 const ACCEPTANCE_PENDING_ADJUDICATION: [&str; 0] = [];

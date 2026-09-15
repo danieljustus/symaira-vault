@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "8fda736c",
-    "commit_sha": "8fda736cda0e42ef03f35086929cfd51d8900f2d",
+    "commit": "aa21ec4e",
+    "commit_sha": "aa21ec4ee6eebc58b965b6ee028cb439730c059f",
     "release": "unreleased",
     "source_files": [
       "internal/config/config.go",
@@ -10,8 +10,8 @@
       "internal/config/config_merge.go",
       "internal/config/presets.go"
     ],
-    "source_digest": "b82e6718937b722b28bc7994a5b0e745d9655b0df8842f4b4661878510f409e2",
-    "generator_digest": "c0fd29bd6eac2c001bbfe06b10ea698db174d4dfb85e0e5e7d6310e65dbacdd4"
+    "source_digest": "b2240847c28fc4e314f6160e46a9a330e699edcfcf41dd84a7d692847ae7fd72",
+    "generator_digest": "7ed5ef2389106b54342a9727d6789ec2bc270b31b7b3693b1a8b2c57be36cf19"
   },
   "cases": [
     {

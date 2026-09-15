@@ -190,10 +190,15 @@ CFG_PATH_FIXTURE := testdata/port/config/paths.json
 # against git objects, so a stale pin fails loudly rather than mislabelling.
 CFG_ORACLE_COMMIT ?= fc9eddc0
 CFG_BYTES_FIXTURE := testdata/port/config/bytes.json
-CFG_BYTES_ORACLE_COMMIT ?= adeb736e
+CFG_BYTES_ORACLE_COMMIT ?= aa21ec4e
 CFG_PRECEDENCE_FIXTURE := testdata/port/config/precedence.json
-CFG_PRECEDENCE_ORACLE_COMMIT ?= 8fda736c
+CFG_PRECEDENCE_ORACLE_COMMIT ?= aa21ec4e
 CFG_ORACLE_RELEASE ?= unreleased
+# RUST-007's config fixture pins its own production-Go oracle, separately from
+# PORT_ORACLE_COMMIT: it covers internal/config, which the CFG rows keep moving,
+# while the session/quota fixtures still sit on the frozen v0.22.1 baseline.
+CONFIG_ORACLE_COMMIT ?= aa21ec4e
+CONFIG_ORACLE_RELEASE ?= unreleased
 PORT_SYNC_FIXTURE := testdata/port/sync/sync.json
 PORT_PAIRING_FIXTURE := testdata/port/pairing/contract.json
 PORT_CONFIG_FIXTURE := testdata/port/config/contract.json
@@ -328,8 +333,8 @@ rust-007-fixtures-generate:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/configgen \
 		--config-output $(PORT_CONFIG_FIXTURE) \
 		--platform-output $(PORT_PLATFORM_FIXTURE) \
-		--oracle-commit $(PORT_ORACLE_COMMIT) \
-		--oracle-release $(PORT_ORACLE_RELEASE)
+		--oracle-commit $(CONFIG_ORACLE_COMMIT) \
+		--oracle-release $(CONFIG_ORACLE_RELEASE)
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/sessionquotagen \
 		--session-output $(PORT_SESSION_FIXTURE) \
 		--quota-output $(PORT_PERSISTENT_QUOTA_FIXTURE) \

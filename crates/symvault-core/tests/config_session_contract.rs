@@ -97,7 +97,7 @@ fn config_fixture_has_pinned_provenance_and_complete_case_set() {
     // RUST-007 deliberately advances its config oracle: the previous caadd5e
     // claim was verified only as a label, and four of the generator's seven
     // production sources already differed from that commit.
-    assert_eq!(fixture.oracle.commit, "addce896");
+    assert_eq!(fixture.oracle.commit, "aa21ec4e");
     assert_eq!(fixture.oracle.release, "unreleased");
     assert_eq!(fixture.oracle.commit_sha.len(), 40);
     assert!(

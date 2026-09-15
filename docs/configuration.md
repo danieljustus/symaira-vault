@@ -260,13 +260,18 @@ The following rules are checked:
 | Rule | Description |
 |------|-------------|
 | `vaultDir` | Must not be empty |
-| `sessionTimeout` | Must be greater than 0 |
-| `sessionMaxLifetime` | Must be greater than 0 |
+| `sessionTimeout` | Must be greater than 0 when present; omit the key to take the default |
+| `sessionMaxLifetime` | Must be greater than 0 when present; omit the key to take the default |
 | `defaultAgent` | Must reference an agent that exists in `agents` |
 | `agents.*.approvalMode` | Must be one of: `none`, `deny`, `prompt`, `auto` |
 | `agents.*.allowedPaths` | Each path must be a valid glob pattern |
 | `audit.maxFileSize` | Must be greater than 0, if the audit section is present |
 | `clipboard.autoClearDuration` | Must be non-negative, if the clipboard section is present |
+
+The file must also contain exactly one YAML document. A second document after a
+`---` separator is rejected: only the first was ever read, so anything written
+after the separator would have looked active without being so. (A `---` on the
+first line is a document start, not a second document, and is fine.)
 
 ### JSON Schema
 

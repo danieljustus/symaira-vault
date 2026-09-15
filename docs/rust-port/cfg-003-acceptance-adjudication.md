@@ -1,9 +1,20 @@
 # CFG-003: adjudicating four acceptance divergences
 
-Status: **decision required.** Nothing here is implemented. The divergences are
-pinned by `crates/symvault-core/tests/config_bytes_contract.rs`, whose
-`ACCEPTANCE_PENDING_ADJUDICATION` set may neither grow nor shrink unnoticed, so
-this question stays visible until it is answered.
+Status: **decided and implemented in full.** Both steps of the recommended path
+have shipped. The paper is kept as the record of what was measured and why the
+split decision was made; the sections below are the original analysis, unchanged
+except for the correction note and this header.
+
+- **Step one**, `addce896`: Rust adopted Go's YAML 1.1 booleans (case 2) and its
+  treatment of an explicit `null` (case 4); both sides warned and accepted for
+  cases 1 and 3, using identical pinned texts.
+- **Step two**, `aa21ec4e`: both sides now **reject** cases 1 and 3. The warning
+  texts are gone, replaced by rejections. Consumer handoff:
+  `consumer-handoff-config-20260915.md`.
+
+`ACCEPTANCE_PENDING_ADJUDICATION` in
+`crates/symvault-core/tests/config_bytes_contract.rs` is empty and asserted
+exactly, so the two implementations can no longer diverge here unnoticed.
 
 Measured against `main` at `cb7e2a3a`. Fixture: `testdata/port/config/bytes.json`.
 
@@ -141,3 +152,19 @@ to Go.
 - Extend the CFG-003 fixture with the warning-bearing cases and empty
   `ACCEPTANCE_PENDING_ADJUDICATION`.
 - Prepare the step-2 consumer handoff without implementing it.
+
+## What was actually implemented
+
+All of the above, plus one thing the plan did not anticipate.
+
+Go's zero value cannot distinguish an absent `sessionTimeout` from an explicit
+`sessionTimeout: 0s`, so a naive "reject non-positive" rule would either miss
+`0s` or break every config file that omits the key. The loader therefore records
+which top-level keys the document carries, and only rejects a key the operator
+wrote. Rust already had this for free, because it reads the mapping directly.
+
+That also closed a divergence the fixture had not caught: before step two, Go
+was silent on `0s` while Rust warned, because Go's `< 0` guard never saw it. The
+fixture now carries `zero_duration` and `negative_max_lifetime` alongside the
+original `negative_duration`, so the rule is pinned across both fields and both
+non-positive forms.
