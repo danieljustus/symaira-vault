@@ -280,6 +280,9 @@ sync-io-differential: pairing-fixtures-check
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/syncgen --check --output $(PORT_SYNC_FIXTURE)
 	$(CARGO) test -p symvault-sync --all-features --locked
 
+oracle-reachability-check:
+	./scripts/rust-port/check_oracle_reachability.sh
+
 cfg-fixtures-generate:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/configpathgen \
 		--output $(CFG_PATH_FIXTURE) \
@@ -386,7 +389,7 @@ rust-fuzz:
 # could only ever call a darwin-frozen fixture stale. That field is gone now:
 # it described the machine, not the pinned oracle. Verified before re-wiring
 # that goos was the only host-dependent value in these four fixtures.
-port-contract: port-fixtures-check core-fixtures-check policy-fixtures-check cfg-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential
+port-contract: oracle-reachability-check port-fixtures-check core-fixtures-check policy-fixtures-check cfg-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential
 
 rust-build:
 	$(CARGO) build --workspace --locked
