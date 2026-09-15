@@ -86,3 +86,32 @@ func TestToLogicalPathInterpretsTheNativeSeparator(t *testing.T) {
 		t.Fatalf("slash pattern did not match converted native path on %s", runtime.GOOS)
 	}
 }
+
+// A UNC-shaped pattern must survive the value cleaner's duplicate-separator
+// collapsing, or a deny rule written that way would silently stop denying.
+func TestUNCShapedPatternsMatchAfterCleaning(t *testing.T) {
+	engine := NewEngine([]*Policy{{Version: "1.0", Rules: []Rule{{
+		Name: "unc", Action: ActionAllow,
+		Conditions: Conditions{Path: "//server/share/*"},
+	}}}})
+	if got := engine.Evaluate(EvalContext{Path: "//server/share/secret"}); !got.Matched {
+		t.Fatal("UNC-shaped pattern did not match its own cleaned value")
+	}
+	if got := engine.Evaluate(EvalContext{Path: "//server/other/secret"}); got.Matched {
+		t.Fatal("UNC-shaped pattern matched a different share")
+	}
+}
+
+// Malformed globs are refused at load time rather than silently never matching.
+func TestValidateRejectsMalformedPathPatterns(t *testing.T) {
+	for _, field := range []Conditions{{Path: "fixture/["}, {WorkingDir: "fixture/["}} {
+		policy := &Policy{Version: "1.0", Rules: []Rule{{Name: "bad", Action: ActionDeny, Conditions: field}}}
+		if err := policy.Validate(); err == nil {
+			t.Fatalf("Validate accepted a malformed glob in %+v", field)
+		}
+	}
+	good := &Policy{Version: "1.0", Rules: []Rule{{Name: "ok", Action: ActionDeny, Conditions: Conditions{Path: "fixture/[ab]"}}}}
+	if err := good.Validate(); err != nil {
+		t.Fatalf("Validate rejected a well-formed glob: %v", err)
+	}
+}

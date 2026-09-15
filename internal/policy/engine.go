@@ -261,5 +261,35 @@ func normalizePattern(pattern string) string {
 	if cleaned == "." {
 		return ""
 	}
-	return cleaned
+	// path.Clean collapses duplicate separators in the value, so the pattern
+	// must collapse them too. Without this a UNC-shaped pattern such as
+	// "//server/share/*" could never match the cleaned value "/server/share/..."
+	// and a deny rule written that way would silently stop denying. The trailing
+	// separator is meaningful to the directory-prefix branch and is preserved.
+	return collapseSeparators(cleaned)
+}
+
+func collapseSeparators(pattern string) string {
+	if !strings.Contains(pattern, "//") {
+		return pattern
+	}
+	trailing := strings.HasSuffix(pattern, "/")
+	var builder strings.Builder
+	previousSlash := false
+	for _, character := range pattern {
+		if character == '/' {
+			if previousSlash {
+				continue
+			}
+			previousSlash = true
+		} else {
+			previousSlash = false
+		}
+		builder.WriteRune(character)
+	}
+	collapsed := builder.String()
+	if trailing && !strings.HasSuffix(collapsed, "/") {
+		collapsed += "/"
+	}
+	return collapsed
 }
