@@ -1,4 +1,4 @@
-.PHONY: all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-generate rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential pairing-fixtures-generate pairing-fixtures-check pairing-differential differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates help docs-check
+.PHONY: keyring-key-fixtures-generate keyring-key-fixtures-check all build install test test-fast test-coverage test-verbose test-race test-ci cover clean lint lint-fix fmt fmt-check vet passlint completions manpages port-fixtures-generate port-fixtures-check core-fixtures-generate core-fixtures-check quota-fixtures-generate quota-fixtures-check policy-fixtures-generate policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-generate rust-007-fixtures-check rust-007-differential config-session-differential sync-io-differential pairing-fixtures-generate pairing-fixtures-check pairing-differential differential-go-selftest crypto-differential crypto-fuzz-smoke port-contract store-reopen-fixture store-differential audit-fixtures-generate audit-fixtures-check audit-differential rust-build rust-check rust-lint rust-test rust-miri rust-features rust-coverage rust-security rust-version-contract rust-fuzz-lock rust-fuzz-smoke rust-fuzz rust-gates help docs-check
 
 # Variables
 BINARY_NAME := symvault
@@ -191,6 +191,12 @@ SESSION_ORACLE_RELEASE ?= unreleased
 # unfalsifiable; it now verifies cmd/ against this commit's blobs.
 CLI_ORACLE_COMMIT ?= a518124f
 CLI_ORACLE_RELEASE ?= unreleased
+KEYRING_KEY_FIXTURE := testdata/port/session/keyring-keys.json
+# SESSION-002's portable half. The native keychain round-trip stays a
+# macOS-gated diagnostic; these addressing rules are platform-independent and
+# must be verifiable on every OS, which is what this row was missing.
+KEYRING_ORACLE_COMMIT ?= 7743fd21
+KEYRING_ORACLE_RELEASE ?= unreleased
 # POLICY-001 deliberately advances only its own production-Go oracle to the
 # adjudicated path-matching contract. policygen verifies this commit against
 # git objects, so it cannot drift from the code the generator executes.
@@ -237,6 +243,17 @@ port-fixtures-generate:
 port-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/portgen \
 		--check --output $(PORT_CLI_FIXTURE)
+
+keyring-key-fixtures-generate:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/keyringkeygen \
+		--output $(KEYRING_KEY_FIXTURE) \
+		--oracle-commit $(KEYRING_ORACLE_COMMIT) \
+		--oracle-release $(KEYRING_ORACLE_RELEASE)
+
+keyring-key-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/keyringkeygen \
+		--check --output $(KEYRING_KEY_FIXTURE)
+	$(CARGO) test -p symvault-core --test keyring_keys_contract --locked
 
 quota-fixtures-generate:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/quotagen \
@@ -437,7 +454,7 @@ rust-fuzz:
 # could only ever call a darwin-frozen fixture stale. That field is gone now:
 # it described the machine, not the pinned oracle. Verified before re-wiring
 # that goos was the only host-dependent value in these four fixtures.
-port-contract: oracle-reachability-check port-fixtures-check core-fixtures-check policy-fixtures-check cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential
+port-contract: oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential
 
 rust-build:
 	$(CARGO) build --workspace --locked

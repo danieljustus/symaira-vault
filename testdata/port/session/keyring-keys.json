@@ -1,0 +1,358 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "7743fd21",
+    "commit_sha": "7743fd215abd62421fe2f2b86324c1277b64bde0",
+    "release": "unreleased",
+    "source_files": [
+      "internal/session/memory_keyring.go",
+      "internal/session/oskeyring.go"
+    ],
+    "source_digest": "b7bde43b0f4c193ec0a23edf05b76e0411d6866e3199b2c817a2644870c034e0",
+    "generator_digest": "7a61cbed8759211b550f29b4bc0c15f68d611f924d2977217278b9ebffeb57ff"
+  },
+  "split_cases": [
+    {
+      "name": "production_session",
+      "description": "the shape every production call site builds",
+      "key": "symvault:/home/u/.symvault|session",
+      "service": "symvault:/home/u/.symvault",
+      "account": "session",
+      "natively_addressable": true
+    },
+    {
+      "name": "production_identity",
+      "description": "the identity account uses the same service",
+      "key": "symvault:/home/u/.symvault|identity",
+      "service": "symvault:/home/u/.symvault",
+      "account": "identity",
+      "natively_addressable": true
+    },
+    {
+      "name": "production_wrap_key",
+      "description": "and so does the wrap key",
+      "key": "symvault:/home/u/.symvault|wrap-key",
+      "service": "symvault:/home/u/.symvault",
+      "account": "wrap-key",
+      "natively_addressable": true
+    },
+    {
+      "name": "service_contains_separator",
+      "description": "a vault path may contain the separator; the LAST one splits",
+      "key": "symvault:/home/a|b|session",
+      "service": "symvault:/home/a|b",
+      "account": "session",
+      "natively_addressable": true
+    },
+    {
+      "name": "service_contains_many_separators",
+      "description": "still the last one, however many there are",
+      "key": "a|b|c|d|account",
+      "service": "a|b|c|d",
+      "account": "account",
+      "natively_addressable": true
+    },
+    {
+      "name": "empty_service",
+      "description": "a leading separator yields an empty service, not an error",
+      "key": "|account",
+      "service": "",
+      "account": "account",
+      "natively_addressable": true
+    },
+    {
+      "name": "empty_account",
+      "description": "a trailing separator yields an empty account, not an error",
+      "key": "service|",
+      "service": "service",
+      "account": "",
+      "natively_addressable": true
+    },
+    {
+      "name": "separator_only",
+      "description": "both halves empty",
+      "key": "|",
+      "service": "",
+      "account": "",
+      "natively_addressable": true
+    },
+    {
+      "name": "no_separator",
+      "description": "cannot name a native item: it would land under an empty service",
+      "key": "session",
+      "service": "",
+      "account": "session",
+      "natively_addressable": false
+    },
+    {
+      "name": "empty_key",
+      "description": "the empty key has no separator either",
+      "key": "",
+      "service": "",
+      "account": "",
+      "natively_addressable": false
+    },
+    {
+      "name": "unicode_service",
+      "description": "non-ASCII survives the split unchanged",
+      "key": "symvault:/home/ü/vält|session",
+      "service": "symvault:/home/ü/vält",
+      "account": "session",
+      "natively_addressable": true
+    },
+    {
+      "name": "windows_path_service",
+      "description": "a Windows vault path is just a service string",
+      "key": "symvault:C:\\Users\\u\\.symvault|session",
+      "service": "symvault:C:\\Users\\u\\.symvault",
+      "account": "session",
+      "natively_addressable": true
+    }
+  ],
+  "backend_cases": [
+    {
+      "name": "round_trip",
+      "description": "set, read back, delete, and the entry is gone",
+      "steps": [
+        {
+          "op": "get",
+          "key": "symvault:/v|wrap-key",
+          "outcome": "not_found"
+        },
+        {
+          "op": "set",
+          "key": "symvault:/v|wrap-key",
+          "value": "first",
+          "outcome": "ok"
+        },
+        {
+          "op": "get",
+          "key": "symvault:/v|wrap-key",
+          "outcome": "found",
+          "got": "first"
+        },
+        {
+          "op": "delete",
+          "key": "symvault:/v|wrap-key",
+          "outcome": "ok"
+        },
+        {
+          "op": "get",
+          "key": "symvault:/v|wrap-key",
+          "outcome": "not_found"
+        }
+      ]
+    },
+    {
+      "name": "set_replaces",
+      "description": "a second set replaces rather than appends",
+      "steps": [
+        {
+          "op": "set",
+          "key": "symvault:/v|wrap-key",
+          "value": "first",
+          "outcome": "ok"
+        },
+        {
+          "op": "set",
+          "key": "symvault:/v|wrap-key",
+          "value": "second",
+          "outcome": "ok"
+        },
+        {
+          "op": "get",
+          "key": "symvault:/v|wrap-key",
+          "outcome": "found",
+          "got": "second"
+        }
+      ]
+    },
+    {
+      "name": "delete_is_idempotent",
+      "description": "deleting an absent entry succeeds, and deleting twice succeeds",
+      "steps": [
+        {
+          "op": "delete",
+          "key": "symvault:/v|wrap-key",
+          "outcome": "ok"
+        },
+        {
+          "op": "set",
+          "key": "symvault:/v|wrap-key",
+          "value": "value",
+          "outcome": "ok"
+        },
+        {
+          "op": "delete",
+          "key": "symvault:/v|wrap-key",
+          "outcome": "ok"
+        },
+        {
+          "op": "delete",
+          "key": "symvault:/v|wrap-key",
+          "outcome": "ok"
+        },
+        {
+          "op": "get",
+          "key": "symvault:/v|wrap-key",
+          "outcome": "not_found"
+        }
+      ]
+    },
+    {
+      "name": "accounts_are_independent",
+      "description": "two accounts under one service do not collide",
+      "steps": [
+        {
+          "op": "set",
+          "key": "symvault:/v|wrap-key",
+          "value": "w",
+          "outcome": "ok"
+        },
+        {
+          "op": "set",
+          "key": "symvault:/v|identity",
+          "value": "i",
+          "outcome": "ok"
+        },
+        {
+          "op": "get",
+          "key": "symvault:/v|wrap-key",
+          "outcome": "found",
+          "got": "w"
+        },
+        {
+          "op": "get",
+          "key": "symvault:/v|identity",
+          "outcome": "found",
+          "got": "i"
+        },
+        {
+          "op": "delete",
+          "key": "symvault:/v|wrap-key",
+          "outcome": "ok"
+        },
+        {
+          "op": "get",
+          "key": "symvault:/v|identity",
+          "outcome": "found",
+          "got": "i"
+        }
+      ]
+    },
+    {
+      "name": "services_are_independent",
+      "description": "the same account under two vaults does not collide",
+      "steps": [
+        {
+          "op": "set",
+          "key": "symvault:/v|wrap-key",
+          "value": "a",
+          "outcome": "ok"
+        },
+        {
+          "op": "set",
+          "key": "symvault:/other|wrap-key",
+          "value": "b",
+          "outcome": "ok"
+        },
+        {
+          "op": "get",
+          "key": "symvault:/v|wrap-key",
+          "outcome": "found",
+          "got": "a"
+        },
+        {
+          "op": "get",
+          "key": "symvault:/other|wrap-key",
+          "outcome": "found",
+          "got": "b"
+        }
+      ]
+    },
+    {
+      "name": "empty_value_round_trips",
+      "description": "an empty value is stored, not treated as absent",
+      "steps": [
+        {
+          "op": "set",
+          "key": "symvault:/v|wrap-key",
+          "outcome": "ok"
+        },
+        {
+          "op": "get",
+          "key": "symvault:/v|wrap-key",
+          "outcome": "found"
+        }
+      ]
+    },
+    {
+      "name": "binary_payload_round_trips",
+      "description": "the value is bytes, not text: NUL and non-ASCII survive",
+      "steps": [
+        {
+          "op": "set",
+          "key": "symvault:/v|identity",
+          "value": "a\u0000b-äöü",
+          "outcome": "ok"
+        },
+        {
+          "op": "get",
+          "key": "symvault:/v|identity",
+          "outcome": "found",
+          "got": "a\u0000b-äöü"
+        }
+      ]
+    }
+  ],
+  "divergent_cases": [
+    {
+      "name": "session_account_discards_an_opaque_value",
+      "description": "Set accepts the value; Get cannot parse it as a session and deletes it",
+      "steps": [
+        {
+          "op": "set",
+          "key": "symvault:/v|session",
+          "value": "opaque-value",
+          "outcome": "ok"
+        },
+        {
+          "op": "get",
+          "key": "symvault:/v|session",
+          "outcome": "not_found"
+        }
+      ],
+      "rust_outcomes": [
+        "ok",
+        "found"
+      ]
+    },
+    {
+      "name": "session_account_second_read_confirms_the_delete",
+      "description": "the entry is gone after the failed read, not merely unreadable",
+      "steps": [
+        {
+          "op": "set",
+          "key": "symvault:/v|session",
+          "value": "opaque-value",
+          "outcome": "ok"
+        },
+        {
+          "op": "get",
+          "key": "symvault:/v|session",
+          "outcome": "not_found"
+        },
+        {
+          "op": "get",
+          "key": "symvault:/v|session",
+          "outcome": "not_found"
+        }
+      ],
+      "rust_outcomes": [
+        "ok",
+        "found",
+        "found"
+      ]
+    }
+  ]
+}

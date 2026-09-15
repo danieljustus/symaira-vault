@@ -44,8 +44,17 @@ func NewOSKeyring() KeyringBackend {
 	return &osKeyring{}
 }
 
+// ErrKeyringKeyMalformed is returned when a key carries no "service|account"
+// separator. Such a key cannot name a native keychain item: it would be stored
+// under an empty service, where every separator-less key collides. The Rust
+// native backend refuses the same input.
+var ErrKeyringKeyMalformed = errors.New("session: keyring key must be \"service|account\"")
+
 func (o *osKeyring) Get(key string) (string, error) {
-	service, account := splitKey(key)
+	service, account, addressable := SplitKeyringKey(key)
+	if !addressable {
+		return "", ErrKeyringKeyMalformed
+	}
 	val, err := getWithTimeout(service, account)
 	if err != nil {
 		if errors.Is(err, keyring.ErrNotFound) {
@@ -57,15 +66,26 @@ func (o *osKeyring) Get(key string) (string, error) {
 }
 
 func (o *osKeyring) Set(key string, value string) error {
-	service, account := splitKey(key)
+	service, account, addressable := SplitKeyringKey(key)
+	if !addressable {
+		return ErrKeyringKeyMalformed
+	}
 	return setWithTimeout(service, account, value)
 }
 
 func (o *osKeyring) Delete(key string) error {
-	service, account := splitKey(key)
+	service, account, addressable := SplitKeyringKey(key)
+	if !addressable {
+		return ErrKeyringKeyMalformed
+	}
 	if err := deleteWithTimeout(service, account); err != nil {
+		// Deleting an absent entry is success. KeyringBackend documents delete
+		// as idempotent, the in-memory backend implements it that way, and so
+		// does the Rust native backend; this one used to be the odd one out,
+		// which is why every caller carries a compensating ErrKeyringNotFound
+		// branch. Those branches stay: they still guard other backends.
 		if errors.Is(err, keyring.ErrNotFound) {
-			return ErrKeyringNotFound
+			return nil
 		}
 		return err
 	}

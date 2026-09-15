@@ -18,7 +18,7 @@ use symvault_core::{
     platform::{
         Autotype, Clipboard, Daemon, Notifier, PlatformError, PlatformErrorKind, SecureUi, TouchId,
     },
-    session::{Keyring, SessionError},
+    session::{Keyring, SessionError, split_keyring_key},
 };
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
@@ -143,12 +143,12 @@ pub struct MacOsKeyring;
 
 impl MacOsKeyring {
     fn entry(key: &str) -> Result<keyring::Entry, SessionError> {
-        let split = key.rfind('|');
-        let Some(index) = split else {
+        // The split itself is the shared contract, pinned by SESSION-002 and
+        // implemented once in symvault_core so the native backend cannot drift
+        // from it.
+        let Some((service, account)) = split_keyring_key(key) else {
             return Err(SessionError::Keyring("invalid keyring key".to_owned()));
         };
-        let (service, account) = key.split_at(index);
-        let account = &account[1..];
         keyring::Entry::new(service, account)
             .map_err(|_| SessionError::Keyring("native macOS keychain unavailable".to_owned()))
     }

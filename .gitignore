@@ -119,6 +119,7 @@ ARCHITEKTUR.md
 /configpathgen
 /configprofilegen
 /coregen
+/keyringkeygen
 /manifestkeygen
 /quotagen
 /sessionquotagen

@@ -264,3 +264,72 @@ func mustMarshalSession(t *testing.T, passphrase []byte, ttl time.Duration) []by
 	}
 	return payload
 }
+
+// Deleting an absent entry is success. KeyringBackend documents delete as
+// idempotent and the in-memory backend implements it that way; the OS backend
+// used to return ErrKeyringNotFound instead, which is why every caller in
+// session.go carries a compensating branch. The Rust native backend returns
+// success here too, so this is the contract both implementations now share.
+func TestOSKeyring_DeleteMissingEntryIsSuccess(t *testing.T) {
+	origDelete := rawKeyringDelete
+	defer func() { rawKeyringDelete = origDelete }()
+	rawKeyringDelete = func(string, string) error { return keyring.ErrNotFound }
+
+	if err := NewOSKeyring().Delete(keyFor("symvault:/tmp/vault", sessionAccount)); err != nil {
+		t.Fatalf("Delete() of a missing entry = %v, want nil", err)
+	}
+}
+
+// A key without the "service|account" separator cannot name a native keychain
+// item: it would be stored under an empty service, where every such key
+// collides. The backend must refuse it *before* touching the keychain, so the
+// assertion is that no raw call happens at all.
+func TestOSKeyring_SeparatorlessKeyNeverReachesTheKeychain(t *testing.T) {
+	origGet, origSet, origDelete := rawKeyringGet, rawKeyringSet, rawKeyringDelete
+	defer func() {
+		rawKeyringGet, rawKeyringSet, rawKeyringDelete = origGet, origSet, origDelete
+	}()
+	reached := false
+	rawKeyringGet = func(string, string) (string, error) { reached = true; return "", nil }
+	rawKeyringSet = func(string, string, string) error { reached = true; return nil }
+	rawKeyringDelete = func(string, string) error { reached = true; return nil }
+
+	backend := NewOSKeyring()
+	if _, err := backend.Get("no-separator"); !errors.Is(err, ErrKeyringKeyMalformed) {
+		t.Errorf("Get() error = %v, want ErrKeyringKeyMalformed", err)
+	}
+	if err := backend.Set("no-separator", "value"); !errors.Is(err, ErrKeyringKeyMalformed) {
+		t.Errorf("Set() error = %v, want ErrKeyringKeyMalformed", err)
+	}
+	if err := backend.Delete("no-separator"); !errors.Is(err, ErrKeyringKeyMalformed) {
+		t.Errorf("Delete() error = %v, want ErrKeyringKeyMalformed", err)
+	}
+	if reached {
+		t.Fatal("a separator-less key reached the OS keychain")
+	}
+}
+
+// The split is taken at the last separator so that a service containing "|"
+// still resolves to the intended account. Counter-example to the natural but
+// wrong "split at the first separator".
+func TestSplitKeyringKeyUsesTheLastSeparator(t *testing.T) {
+	cases := []struct {
+		key              string
+		service, account string
+		addressable      bool
+	}{
+		{"symvault:/tmp/vault|session", "symvault:/tmp/vault", "session", true},
+		{"symvault:/tmp/a|b|session", "symvault:/tmp/a|b", "session", true},
+		{"no-separator", "", "no-separator", false},
+		{"|account", "", "account", true},
+		{"service|", "service", "", true},
+		{"", "", "", false},
+	}
+	for _, tc := range cases {
+		service, account, addressable := SplitKeyringKey(tc.key)
+		if service != tc.service || account != tc.account || addressable != tc.addressable {
+			t.Errorf("SplitKeyringKey(%q) = (%q, %q, %v), want (%q, %q, %v)",
+				tc.key, service, account, addressable, tc.service, tc.account, tc.addressable)
+		}
+	}
+}

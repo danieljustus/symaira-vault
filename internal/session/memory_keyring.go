@@ -181,6 +181,18 @@ type memoryKeyringBackend struct {
 	inner *memoryKeyring
 }
 
+// NewMemoryKeyringBackend returns a standalone in-memory KeyringBackend.
+//
+// The in-memory store is the portable half of the keyring contract: it has no
+// keychain, no platform and no timeouts, so it is the part the SESSION-002
+// fixture can pin on every OS. Production selects a backend through
+// newPlatformKeyring; this constructor exists so the contract generator and
+// tests can address the memory store directly instead of depending on which
+// platform the build targets.
+func NewMemoryKeyringBackend() KeyringBackend {
+	return &memoryKeyringBackend{inner: &memoryKeyring{}}
+}
+
 func (m *memoryKeyringBackend) Get(key string) (string, error) {
 	service, account := splitKey(key)
 	v, err := m.inner.Get(service, account)
@@ -200,11 +212,28 @@ func (m *memoryKeyringBackend) Delete(key string) error {
 	return m.inner.Delete(service, account)
 }
 
-// splitKey is the inverse of keyFor.
-func splitKey(key string) (service, account string) {
+// SplitKeyringKey is the inverse of keyFor, and the pure seam the CFG-style
+// contract pins: no filesystem, no keychain, no platform.
+//
+// addressable reports whether the key carries the "service|account" separator
+// at all. A key without one cannot name a native keychain item -- it would be
+// stored under an empty service, where every such key collides -- so the OS
+// backend rejects it. The in-memory backend has no such hazard and keeps
+// accepting it, which is why the decision is returned rather than enforced
+// here.
+//
+// The split is taken at the LAST separator, so a service containing "|" (a
+// vault directory may) still resolves to the intended account.
+func SplitKeyringKey(key string) (service, account string, addressable bool) {
 	idx := strings.LastIndex(key, "|")
 	if idx < 0 {
-		return "", key
+		return "", key, false
 	}
-	return key[:idx], key[idx+1:]
+	return key[:idx], key[idx+1:], true
+}
+
+// splitKey is the inverse of keyFor.
+func splitKey(key string) (service, account string) {
+	service, account, _ = SplitKeyringKey(key)
+	return service, account
 }

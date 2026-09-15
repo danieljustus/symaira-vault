@@ -34,6 +34,25 @@ pub enum SessionError {
     Crypto(String),
 }
 
+/// Splits a composite keyring key into its service and account halves.
+///
+/// This is the pure seam the SESSION-002 contract pins: no filesystem, no
+/// keychain, no platform. The Go side is `session.SplitKeyringKey`.
+///
+/// `None` means the key carries no `"service|account"` separator at all. Such a
+/// key cannot name a native keychain item -- it would be stored under an empty
+/// service, where every separator-less key collides -- so native backends
+/// refuse it. In-memory backends have no such hazard and key by the whole
+/// string, so they keep accepting it.
+///
+/// The split is taken at the LAST separator, so a service that itself contains
+/// `'|'` (a vault directory may) still resolves to the intended account.
+#[must_use]
+pub fn split_keyring_key(key: &str) -> Option<(&str, &str)> {
+    let index = key.rfind('|')?;
+    Some((&key[..index], &key[index + 1..]))
+}
+
 /// Every keyring side effect crosses this trait. Native implementations are separate.
 pub trait Keyring: Send + Sync {
     fn get(&self, key: &str) -> Result<Vec<u8>, SessionError>;
