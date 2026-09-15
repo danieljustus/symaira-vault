@@ -5,6 +5,7 @@ Service mode is only authorized on disposable GitHub-hosted runners. Go native
 keyring evidence proves resource availability, not a missing Rust adapter.
 """
 import argparse
+import contextlib
 import datetime
 import hashlib
 import json
@@ -79,11 +80,22 @@ def main():
     report_path.write_text(json.dumps(report, indent=2))
     tmp_parent = "/private/tmp" if platform.system() == "Darwin" else None
     try:
-        with tempfile.TemporaryDirectory(prefix="sv-native-", dir=tmp_parent) as temporary:
+        with tempfile.TemporaryDirectory(prefix="sv-native-", dir=tmp_parent) as temporary, contextlib.ExitStack() as cleanup:
             for key, leaf in [("HOME", "home"), ("USERPROFILE", "home"), ("XDG_CONFIG_HOME", "config"), ("XDG_DATA_HOME", "data"), ("XDG_CACHE_HOME", "cache"), ("XDG_RUNTIME_DIR", "runtime"), ("TMPDIR", "tmp"), ("TMP", "tmp"), ("TEMP", "tmp")]:
                 directory = Path(temporary) / leaf
                 directory.mkdir(mode=0o700, exist_ok=True)
                 env[key] = str(directory)
+            if args.mode == "keyring" and platform.system() == "Darwin":
+                # Configure the same private HOME used by the adapters, not the
+                # runner's ambient preference domain. Only test data is stored.
+                keychain = str(Path(temporary) / "native-test.keychain-db")
+                checked(["security", "create-keychain", "-p", "disposable-native-test", keychain], root, env)
+                cleanup.callback(checked, ["security", "delete-keychain", keychain], root, env)
+                checked(["security", "unlock-keychain", "-p", "disposable-native-test", keychain], root, env)
+                checked(["security", "set-keychain-settings", "-lut", "1800", keychain], root, env)
+                checked(["security", "list-keychains", "-d", "user", "-s", keychain], root, env)
+                checked(["security", "default-keychain", "-d", "user", "-s", keychain], root, env)
+                report["private_keychain_provisioned"] = True
             for index, command in enumerate(commands):
                 log_path = output / f"{index}.log"
                 entry = {"argv": command, "cwd": str(root), "start": datetime.datetime.now(datetime.timezone.utc).isoformat(), "log": str(log_path)}
@@ -111,6 +123,9 @@ def main():
             assert checked(["git", "rev-parse", "HEAD"], root, env) == head
             assert not checked(["git", "status", "--porcelain"], root, env)
             report["passed"] = all(not entry.get("failed", False) for entry in report["commands"])
+    except BaseException:
+        report["passed"] = False
+        raise
     finally:
         report_path.write_text(json.dumps(report, indent=2))
         print(json.dumps(report, indent=2))
