@@ -55,6 +55,13 @@ def main():
     assert report["rust"].startswith("rustc 1.98.0 ")
     cargo = ["cargo", "test", "--manifest-path", str(root / "Cargo.toml"), "--locked"]
     if args.mode == "portable":
+        native_fixture = output / "policy-contract.json"
+        generator = ["go", "run", "./scripts/rust-port/cmd/policygen", "--output", str(native_fixture), "--oracle-commit", "caadd5e", "--oracle-release", "v0.22.1"]
+        report["policy_generator"] = generator
+        checked(generator, root, env)
+        checked(generator + ["--check"], root, env)
+        report["policy_fixture_sha256"] = hashlib.sha256(native_fixture.read_bytes()).hexdigest()
+        env["SYMVAULT_POLICY_FIXTURE"] = str(native_fixture)
         commands = [cargo + ["-p", "symvault-cli", "--test", "device_pairing_cli", "--", "--nocapture"],
                     cargo + ["-p", "symvault-core", "-p", "symvault-platform", "--all-targets", "--all-features", "--", "--nocapture"]]
     elif args.mode == "daemon":

@@ -137,7 +137,24 @@ struct ProfileSnapshot {
 
 fn fixture() -> Fixture {
     const CONTENT: &[u8] = include_bytes!("../../../testdata/port/core/policy-contract.json");
-    serde_json::from_slice(CONTENT).expect("decode Go-generated policy fixture")
+    let committed: Fixture =
+        serde_json::from_slice(CONTENT).expect("decode Go-generated policy fixture");
+    if let Some(path) = std::env::var_os("SYMVAULT_POLICY_FIXTURE") {
+        // The native gate runs policygen and its freshness check on this OS.
+        // filepath.Join inputs differ on Windows; do not rewrite expectations.
+        let bytes = std::fs::read(path).expect("read native Go policy fixture");
+        let native: Fixture =
+            serde_json::from_slice(&bytes).expect("decode native Go policy fixture");
+        assert_eq!(native.oracle.source_digest, committed.oracle.source_digest);
+        assert_eq!(
+            native.oracle.generator_digest,
+            committed.oracle.generator_digest
+        );
+        assert_eq!(native.oracle.commit, committed.oracle.commit);
+        assert_eq!(native.oracle.release, committed.oracle.release);
+        return native;
+    }
+    committed
 }
 
 #[test]
