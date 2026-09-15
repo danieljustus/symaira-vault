@@ -181,6 +181,12 @@ QUOTA_ORACLE_RELEASE ?= unreleased
 # ratelimit.go changed, and ratelimit_transition.go was created, after v0.22.1.
 SESSION_ORACLE_COMMIT ?= 8913d64e
 SESSION_ORACLE_RELEASE ?= unreleased
+# CLI-001's command tree is built from cmd/, so its pin advances with the CLI
+# rather than sitting on the frozen v0.22.1 baseline. portgen used to read the
+# oracle back out of the fixture it was certifying, which made the claim
+# unfalsifiable; it now verifies cmd/ against this commit's blobs.
+CLI_ORACLE_COMMIT ?= a518124f
+CLI_ORACLE_RELEASE ?= unreleased
 # POLICY-001 deliberately advances only its own production-Go oracle to the
 # adjudicated path-matching contract. policygen verifies this commit against
 # git objects, so it cannot drift from the code the generator executes.
@@ -221,8 +227,8 @@ PORT_CONTRACT_VERSION ?= v0.0.0-port
 port-fixtures-generate:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/portgen \
 		--output $(PORT_CLI_FIXTURE) \
-		--oracle-commit $(PORT_ORACLE_COMMIT) \
-		--oracle-release $(PORT_ORACLE_RELEASE)
+		--oracle-commit $(CLI_ORACLE_COMMIT) \
+		--oracle-release $(CLI_ORACLE_RELEASE)
 
 port-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/portgen \

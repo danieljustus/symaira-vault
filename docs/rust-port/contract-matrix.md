@@ -23,15 +23,27 @@ it binds the whole `internal/` tree and its 16 vectors are byte-identical
 across every such advance; all other rows, including `PAIRING-001`, retain the
 baseline oracle.
 
-Oracle commits are no longer trusted as labels. **Every generator** now
+Oracle commits are no longer trusted as labels. Every fixture generator now
 resolves its claimed commit through git and compares the working tree against
 that commit's immutable blobs, refusing to emit a fixture whose provenance does
-not hold; the shared check lives in `scripts/rust-port/internal/provenance`.
+not hold. Most use the shared check in
+`scripts/rust-port/internal/provenance`; `configprofilegen`, `manifestkeygen`
+and `storemetagen` predate it and verify through `git archive` / `git ls-tree`
+against the same pinned commit, which is equivalent and was left alone rather
+than churned. (`auditverify`, `caserun`, `cryptoverify`, `devicelistdriver`,
+`diffharness`, `nativekeyringprobe` and `storereopen` are harnesses and probes,
+not fixture generators, and pin no oracle.)
 
-The last three — `coregen`, `quotagen` and `sessionquotagen` — were bound at
-`c4552c43`, and binding them proved the concern was not theoretical. Four
-fixtures were claiming the frozen `caadd5e` (v0.22.1) baseline while pinning
-code that commit does not contain:
+The last four were bound at `c4552c43`, and binding them proved the concern was
+not theoretical. `portgen` was the worst of them: `--check` read the oracle
+block back out of the very fixture it was meant to certify and stamped it into
+the regenerated document, so the claim was **unfalsifiable** — any commit
+string, right or wrong, survived every check forever. Its fixture claimed
+`caadd5e` while `cmd/` had moved on to `a518124f`.
+
+`coregen`, `quotagen` and `sessionquotagen` validated the commit as a label.
+Four of their fixtures claimed the frozen `caadd5e` (v0.22.1) baseline while
+pinning code that commit does not contain:
 
 | fixture | claimed | actual | why the label was wrong |
 |---|---|---|---|
@@ -40,7 +52,8 @@ code that commit does not contain:
 | `redact-contract.json` | `caadd5e` | `ba4dc068` | four of seven redact/masking sources changed after the baseline |
 | `password-totp-contract.json` | `caadd5e` | `8913d64e` | both crypto sources changed after the baseline |
 
-Regenerating changed **only the oracle blocks — not one case vector**, so the
+Regenerating all five changed **only the oracle blocks — not one case vector,
+and not one of the command tree's 135 commands**, so the
 fixtures were factually correct and merely mislabelled. That is the best
 possible outcome of the audit and also the reason the defect could survive:
 nothing downstream disagreed, because the recorded behaviour was right. What

@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -17,6 +19,15 @@ import (
 
 	vaultcmd "github.com/danieljustus/symaira-vault/cmd"
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
+	"github.com/danieljustus/symaira-vault/scripts/rust-port/internal/provenance"
+)
+
+const (
+	// The command tree is built from cmd/, so that package set is this row's
+	// production source. The pin advances whenever the CLI changes, which is
+	// the intended coupling: the fixture is the CLI's shape.
+	pinnedOracleCommit  = "a518124f"
+	pinnedOracleRelease = "unreleased"
 )
 
 type document struct {
@@ -27,8 +38,12 @@ type document struct {
 }
 
 type oracle struct {
-	Commit  string `json:"commit"`
-	Release string `json:"release"`
+	Commit          string   `json:"commit"`
+	CommitSHA       string   `json:"commit_sha"`
+	Release         string   `json:"release"`
+	SourceFiles     []string `json:"source_files"`
+	SourceDigest    string   `json:"source_digest"`
+	GeneratorDigest string   `json:"generator_digest"`
 }
 
 type group struct {
@@ -79,6 +94,74 @@ type flagSpec struct {
 	Annotations         map[string][]string `json:"annotations,omitempty"`
 }
 
+// resolveOracle binds the fixture's claimed commit to git.
+//
+// The command tree is generated from the cmd/ package, so every tracked,
+// non-test Go file under cmd/ is a production source. The list is recorded in
+// the fixture so that adding a command file is visible as a change rather than
+// only as a digest that moved.
+func resolveOracle(commit, release string) (oracle, error) {
+	if commit != "" && commit != pinnedOracleCommit {
+		return oracle{}, fmt.Errorf("oracle commit %q is not the pinned commit %q", commit, pinnedOracleCommit)
+	}
+	if release != "" && release != pinnedOracleRelease {
+		return oracle{}, fmt.Errorf("oracle release %q is not the pinned release %q", release, pinnedOracleRelease)
+	}
+	root, err := repositoryRoot()
+	if err != nil {
+		return oracle{}, err
+	}
+	sources, err := commandSources(root)
+	if err != nil {
+		return oracle{}, err
+	}
+	sourceDigest, err := provenance.Digest(root, sources)
+	if err != nil {
+		return oracle{}, fmt.Errorf("hash command sources: %w", err)
+	}
+	resolved, err := provenance.Verify(root, pinnedOracleCommit, sources)
+	if err != nil {
+		return oracle{}, err
+	}
+	generatorDigest, err := provenance.Digest(root, []string{"scripts/rust-port/cmd/portgen/main.go"})
+	if err != nil {
+		return oracle{}, fmt.Errorf("hash generator: %w", err)
+	}
+	return oracle{
+		Commit: pinnedOracleCommit, CommitSHA: resolved, Release: pinnedOracleRelease,
+		SourceFiles: sources, SourceDigest: sourceDigest, GeneratorDigest: generatorDigest,
+	}, nil
+}
+
+// commandSources lists the tracked, non-test Go files the command tree is
+// built from, sorted so the digest is stable.
+func commandSources(root string) ([]string, error) {
+	out, err := exec.Command("git", "-C", root, "ls-files", "-z", "--", "cmd/*.go", "cmd/**/*.go").Output() // #nosec G204 -- fixed arguments
+	if err != nil {
+		return nil, fmt.Errorf("list command sources: %w", err)
+	}
+	var sources []string
+	for _, name := range strings.Split(string(out), "\x00") {
+		if name == "" || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		sources = append(sources, name)
+	}
+	if len(sources) == 0 {
+		return nil, fmt.Errorf("no command sources found under cmd/")
+	}
+	sort.Strings(sources)
+	return sources, nil
+}
+
+func repositoryRoot() (string, error) {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		return "", fmt.Errorf("locate port generator")
+	}
+	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", "..")), nil
+}
+
 func main() {
 	output := flag.String("output", "testdata/port/cli/command-tree.json", "fixture path")
 	check := flag.Bool("check", false, "fail if the fixture differs")
@@ -86,16 +169,12 @@ func main() {
 	release := flag.String("oracle-release", "", "Go oracle release for a new fixture")
 	flag.Parse()
 
-	meta := oracle{Commit: *commit, Release: *release}
-	if *check {
-		existing, err := readDocument(*output)
-		if err != nil {
-			fatal("read existing fixture: %v", err)
-		}
-		meta = existing.Oracle
-	}
-	if meta.Commit == "" || meta.Release == "" {
-		fatal("--oracle-commit and --oracle-release are required when generating a fixture")
+	// Deliberately not taken from the existing fixture. Reading the oracle back
+	// out of the file it is meant to certify made the claim unfalsifiable: any
+	// commit string, right or wrong, survived every check forever.
+	meta, err := resolveOracle(*commit, *release)
+	if err != nil {
+		fatal("resolve oracle metadata: %v", err)
 	}
 
 	generated := buildDocument(vaultcmd.NewRootCmd(), meta)
