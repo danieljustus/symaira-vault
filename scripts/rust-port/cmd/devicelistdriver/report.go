@@ -24,7 +24,7 @@ type liveCase struct {
 }
 
 func validateReport(path, head string) error {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- operator-selected report path
 	if err != nil {
 		return fmt.Errorf("read required report: %w", err)
 	}

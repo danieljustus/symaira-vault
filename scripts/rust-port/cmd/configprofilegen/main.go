@@ -27,6 +27,11 @@ const (
 	pinnedOracleCommit  = "caadd5ef95e8f19fabd3ae3d2c04caa296f2fd44"
 	pinnedOracleRelease = "v0.22.1"
 	requiredGoVersion   = "go1.26.6"
+
+	// Upper bound for a single extracted oracle archive member. The archive is
+	// produced by git archive over our own pinned commit, so this is a sanity
+	// bound rather than a trust boundary.
+	maxOracleFileBytes = 64 << 20
 )
 
 type oracle struct {
@@ -109,7 +114,7 @@ func run() (err error) {
 		fatal("output must be under testdata/port")
 	}
 	if *check {
-		existing, readErr := os.ReadFile(fixturePath)
+		existing, readErr := os.ReadFile(fixturePath) // #nosec G304 -- operator-selected fixture path
 		if readErr != nil {
 			fatal("read fixture: %v", readErr)
 		}
@@ -171,7 +176,7 @@ func archiveOracle(repo, destination string) {
 	if err != nil || observation.ExitCode != 0 || observation.Signal != "" || observation.TimedOut {
 		fatal("archive oracle: %v exit=%d signal=%q timeout=%t", err, observation.ExitCode, observation.Signal, observation.TimedOut)
 	}
-	file, err := os.Open(archive)
+	file, err := os.Open(archive) // #nosec G304 -- archive path is constructed above under our own temp directory
 	if err != nil {
 		fatal("read archive: %v", err)
 	}
@@ -203,11 +208,20 @@ func archiveOracle(repo, destination string) {
 			if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 				fatal("extract oracle: %v", err)
 			}
+			// #nosec G304 -- path is validated by safeArchivePath and rooted in our temp directory
 			file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 			if err != nil {
 				fatal("extract oracle: %v", err)
 			}
-			_, copyErr := io.Copy(file, tr)
+			// The archive comes from git archive over this repository's own
+			// pinned commit, but the extraction is bounded anyway: an
+			// unbounded io.Copy from a tar reader is a decompression-bomb
+			// sink. Reading one byte past the cap detects truncation instead
+			// of silently writing a short file.
+			written, copyErr := io.Copy(file, io.LimitReader(tr, maxOracleFileBytes+1))
+			if copyErr == nil && written > maxOracleFileBytes {
+				copyErr = fmt.Errorf("oracle archive member %q exceeds %d bytes", name, int64(maxOracleFileBytes))
+			}
 			closeErr := file.Close()
 			if copyErr != nil || closeErr != nil {
 				fatal("extract oracle: %v %v", copyErr, closeErr)
@@ -292,6 +306,7 @@ func oracleSourceFiles(root string) []string {
 func digestFiles(root string, names []string) string {
 	h := sha256.New()
 	for _, name := range names {
+		// #nosec G304 -- name comes from the fixed production source list
 		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(name)))
 		if err != nil {
 			fatal("hash %s: %v", name, err)
@@ -384,7 +399,7 @@ func pinnedGoBinary() string {
 		fatal("resolve pinned Go root: %v", err)
 	}
 	binary := filepath.Join(strings.TrimSpace(string(goRoot)), "bin", name)
-	version, err := exec.Command(binary, "version").Output()
+	version, err := exec.Command(binary, "version").Output() // #nosec G204 -- binary is the pinned Go toolchain resolved above
 	fields := strings.Fields(string(version))
 	if err != nil || len(fields) < 3 || fields[2] != requiredGoVersion {
 		fatal("pinned Go binary version mismatch: %s", strings.TrimSpace(string(version)))
@@ -395,7 +410,13 @@ func pinnedGoBinary() string {
 func removeTempTree(root string) error {
 	_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err == nil && info != nil {
-			_ = os.Chmod(path, 0o700)
+			// Only directories need the traversal bit to be removable; files
+			// must not be widened past owner read/write.
+			mode := os.FileMode(0o600)
+			if info.IsDir() {
+				mode = 0o700
+			}
+			_ = os.Chmod(path, mode)
 		}
 		return nil
 	})
