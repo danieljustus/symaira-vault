@@ -1,15 +1,15 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "7743fd21",
-    "commit_sha": "7743fd215abd62421fe2f2b86324c1277b64bde0",
+    "commit": "6ce94b43",
+    "commit_sha": "6ce94b4387fb0f128e0050b43a6b10088fb1d97c",
     "release": "unreleased",
     "source_files": [
       "internal/session/memory_keyring.go",
       "internal/session/oskeyring.go"
     ],
     "source_digest": "b7bde43b0f4c193ec0a23edf05b76e0411d6866e3199b2c817a2644870c034e0",
-    "generator_digest": "7a61cbed8759211b550f29b4bc0c15f68d611f924d2977217278b9ebffeb57ff"
+    "generator_digest": "4e0debf78227c1836657fd361b7f832fa4ea364b4bfa6eea16493d90250a6ccb"
   },
   "split_cases": [
     {

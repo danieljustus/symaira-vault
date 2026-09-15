@@ -183,7 +183,7 @@ QUOTA_ORACLE_COMMIT ?= 8913d64e
 QUOTA_ORACLE_RELEASE ?= unreleased
 # Same reason for the session/persistent-quota fixtures: internal/policy/
 # ratelimit.go changed, and ratelimit_transition.go was created, after v0.22.1.
-SESSION_ORACLE_COMMIT ?= 8913d64e
+SESSION_ORACLE_COMMIT ?= 6ce94b43
 SESSION_ORACLE_RELEASE ?= unreleased
 # CLI-001's command tree is built from cmd/, so its pin advances with the CLI
 # rather than sitting on the frozen v0.22.1 baseline. portgen used to read the
@@ -195,7 +195,7 @@ KEYRING_KEY_FIXTURE := testdata/port/session/keyring-keys.json
 # SESSION-002's portable half. The native keychain round-trip stays a
 # macOS-gated diagnostic; these addressing rules are platform-independent and
 # must be verifiable on every OS, which is what this row was missing.
-KEYRING_ORACLE_COMMIT ?= 7743fd21
+KEYRING_ORACLE_COMMIT ?= 6ce94b43
 KEYRING_ORACLE_RELEASE ?= unreleased
 # POLICY-001 deliberately advances only its own production-Go oracle to the
 # adjudicated path-matching contract. policygen verifies this commit against
