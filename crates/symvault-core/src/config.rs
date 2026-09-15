@@ -530,7 +530,12 @@ impl Config {
                 // to discard the value before Validate could see it, so a
                 // config that disabled a timeout silently ran with the default.
                 // Both sides now reject it.
-                _ => return Err(ConfigError::Parse(non_positive_duration_message("sessionTimeout", "15m"))),
+                _ => {
+                    return Err(ConfigError::Parse(non_positive_duration_message(
+                        "sessionTimeout",
+                        "15m",
+                    )));
+                }
             }
         }
         if let Some(v) = scalar(root, "sessionMaxLifetime") {
@@ -540,7 +545,12 @@ impl Config {
                 // to discard the value before Validate could see it, so a
                 // config that disabled a timeout silently ran with the default.
                 // Both sides now reject it.
-                _ => return Err(ConfigError::Parse(non_positive_duration_message("sessionMaxLifetime", "8h"))),
+                _ => {
+                    return Err(ConfigError::Parse(non_positive_duration_message(
+                        "sessionMaxLifetime",
+                        "8h",
+                    )));
+                }
             }
         }
         if let Some(v) = scalar(root, "authMethod") {
@@ -799,7 +809,9 @@ pub const MULTIPLE_DOCUMENTS_MESSAGE: &str = "config contains more than one YAML
 /// needs.
 #[must_use]
 pub fn non_positive_duration_message(field: &str, default: &str) -> String {
-    format!("{field}: must be greater than 0 (default: {default}, configure {field} in config.yaml)")
+    format!(
+        "{field}: must be greater than 0 (default: {default}, configure {field} in config.yaml)"
+    )
 }
 
 /// Like [`duration`], but reports a syntactically valid non-positive duration
