@@ -293,6 +293,11 @@ pub struct EvalContext {
     pub tags: Vec<String>,
     #[serde(default)]
     pub working_dir: String,
+    /// Expands a leading `~/` in path patterns. Supplied by the caller so that
+    /// evaluation performs no runtime discovery and stays deterministic; an
+    /// empty value leaves `~/` patterns unexpanded.
+    #[serde(default)]
+    pub home_dir: String,
     #[serde(default)]
     pub env_vars: BTreeMap<String, String>,
     #[serde(default)]
@@ -435,14 +440,20 @@ fn matches_rule(rule: &Rule, context: &EvalContext) -> bool {
     if !conditions.agent_id.is_empty() && !match_string(&conditions.agent_id, &context.agent_id) {
         return false;
     }
-    if !conditions.path.is_empty() && !match_path(&conditions.path, &context.path) {
+    if !conditions.path.is_empty()
+        && !match_path(&conditions.path, &context.path, &context.home_dir)
+    {
         return false;
     }
     if !conditions.tags.is_empty() && !match_any_tag(&conditions.tags, &context.tags) {
         return false;
     }
     if !conditions.working_dir.is_empty()
-        && !match_path(&conditions.working_dir, &context.working_dir)
+        && !match_path(
+            &conditions.working_dir,
+            &context.working_dir,
+            &context.home_dir,
+        )
     {
         return false;
     }
@@ -497,16 +508,18 @@ fn match_allowed_tool(allowed: &[String], tool_name: &str) -> bool {
     allowed.is_empty() || tool_name.is_empty() || allowed.iter().any(|tool| tool == tool_name)
 }
 
+/// The policy matcher is defined over slash-separated logical paths and is
+/// deliberately OS-independent, mirroring Go's slash-based `path` package. A
+/// native path is converted to this form once, at the runtime boundary, before
+/// it reaches policy evaluation.
+const PATH_SEPARATOR: char = '/';
+
 fn path_separator() -> char {
-    if cfg!(windows) { '\\' } else { '/' }
+    PATH_SEPARATOR
 }
 
 fn is_path_separator(character: char) -> bool {
-    if cfg!(windows) {
-        character == '/' || character == '\\'
-    } else {
-        character == '/'
-    }
+    character == PATH_SEPARATOR
 }
 
 fn clean_path(value: &str) -> String {
@@ -542,34 +555,78 @@ fn clean_path(value: &str) -> String {
     }
 }
 
-fn match_path(pattern: &str, value: &str) -> bool {
+fn collapse_separators(pattern: &str) -> String {
+    if !pattern.contains("//") {
+        return pattern.to_owned();
+    }
+    let trailing = pattern.ends_with(PATH_SEPARATOR);
+    let mut collapsed = String::with_capacity(pattern.len());
+    let mut previous_slash = false;
+    for character in pattern.chars() {
+        if character == PATH_SEPARATOR {
+            if previous_slash {
+                continue;
+            }
+            previous_slash = true;
+        } else {
+            previous_slash = false;
+        }
+        collapsed.push(character);
+    }
+    if trailing && !collapsed.ends_with(PATH_SEPARATOR) {
+        collapsed.push(PATH_SEPARATOR);
+    }
+    collapsed
+}
+
+/// Matches a slash-separated logical path against a policy pattern.
+///
+/// `home` expands a leading `~/`; it is supplied by the caller so that
+/// evaluation performs no runtime discovery and stays deterministic.
+fn match_path(pattern: &str, value: &str, home: &str) -> bool {
     let pattern = pattern.trim();
     if pattern.is_empty() || pattern == "*" {
         return true;
     }
+    let mut pattern = collapse_separators(pattern);
+    if let Some(rest) = pattern.strip_prefix("~/")
+        && !home.is_empty()
+    {
+        pattern = join_logical(home, rest);
+    }
+    let pattern = pattern.as_str();
+
     let clean = clean_path(value);
     if pattern == clean || glob_match(pattern, &clean) {
         return true;
     }
-    let separator = path_separator().to_string();
+    let separator = PATH_SEPARATOR;
     if let Some(prefix) = pattern.strip_suffix(&format!("{separator}**")) {
-        let prefix = prefix.trim_end_matches(path_separator());
+        let prefix = prefix.trim_end_matches(separator);
         if !prefix.is_empty()
             && (clean == prefix || clean.starts_with(&format!("{prefix}{separator}")))
         {
             return true;
         }
     }
-    if pattern.ends_with(path_separator()) {
-        let prefix = pattern.trim_end_matches(path_separator());
+    if pattern.ends_with(separator) {
+        let prefix = pattern.trim_end_matches(separator);
         if !prefix.is_empty()
             && (clean == prefix || clean.starts_with(&format!("{prefix}{separator}")))
         {
             return true;
         }
     }
+    // The bare directory-prefix convenience applies only to wholly literal
+    // patterns, so the same pattern is never both a glob and a literal.
     !pattern.chars().any(|character| "*?[".contains(character))
         && (clean == pattern || clean.starts_with(&format!("{pattern}{separator}")))
+}
+
+/// Mirrors Go's `path.Join` for the two-element case used by `~/` expansion.
+fn join_logical(base: &str, rest: &str) -> String {
+    let joined = format!("{}/{}", base.trim_end_matches(PATH_SEPARATOR), rest);
+    clean_path(&joined)
 }
 
 #[derive(Clone, Debug)]
@@ -611,7 +668,7 @@ fn parse_glob(pattern: &str) -> Option<Vec<GlobToken>> {
                 tokens.push(token);
                 index = next;
             }
-            '\\' if !cfg!(windows) => {
+            '\\' => {
                 index += 1;
                 tokens.push(GlobToken::Literal(*characters.get(index)?));
                 index += 1;
@@ -652,7 +709,7 @@ fn parse_class(characters: &[char], start: usize) -> Option<(GlobToken, usize)> 
 
 fn class_character(characters: &[char], index: &mut usize) -> Option<char> {
     let character = *characters.get(*index)?;
-    if character == '\\' && !cfg!(windows) {
+    if character == '\\' {
         *index += 1;
         let escaped = *characters.get(*index)?;
         *index += 1;
@@ -731,17 +788,49 @@ mod tests {
         assert!(!range.contains(UtcTime::default()));
     }
 
-    #[cfg(unix)]
+    /// The matcher is OS-independent: a backslash is always a literal
+    /// character and an escape, never a separator, on every platform.
     #[test]
-    fn unix_path_matching_preserves_backslash_semantics() {
-        assert!(!match_path("fixture/*", r"fixture\child"));
-        assert!(match_path(r"fixture\*", "fixture*"));
+    fn path_matching_is_os_independent() {
+        assert!(!match_path("fixture/*", r"fixture\child", ""));
+        assert!(match_path(r"fixture\*", "fixture*", ""));
+        assert!(!match_path(r"fixture\*", r"fixture\child", ""));
     }
 
-    #[cfg(windows)]
+    /// A pattern carrying a glob metacharacter is matched as a glob and never
+    /// also as a literal directory prefix.
     #[test]
-    fn windows_path_matching_uses_backslash_as_separator() {
-        assert!(match_path(r"fixture\*", r"fixture\child"));
-        assert!(!match_path("fixture/*", r"fixture\child"));
+    fn metacharacter_patterns_are_never_also_literal_prefixes() {
+        assert!(!match_path("fixture/?", "fixture/?/secret", ""));
+        assert!(!match_path("fixture/[ab]", "fixture/[ab]/secret", ""));
+        assert!(match_path("fixture/?", "fixture/a", ""));
+    }
+
+    /// Home expansion uses the supplied home only, never runtime discovery.
+    #[test]
+    fn home_expansion_uses_supplied_home_only() {
+        assert!(match_path(
+            "~/secure/*",
+            "/fixture/home/probe/secure/secret",
+            "/fixture/home/probe"
+        ));
+        assert!(!match_path(
+            "~/secure/*",
+            "/fixture/home/other/secure/secret",
+            "/fixture/home/probe"
+        ));
+        assert!(!match_path(
+            "~/secure/*",
+            "/fixture/home/probe/secure/secret",
+            ""
+        ));
+        assert!(match_path("~/secure/*", "~/secure/secret", ""));
+    }
+
+    /// A UNC-shaped pattern survives the value cleaner's separator collapsing.
+    #[test]
+    fn unc_shaped_patterns_match_after_cleaning() {
+        assert!(match_path("//server/share/*", "//server/share/secret", ""));
+        assert!(!match_path("//server/share/*", "//server/other/secret", ""));
     }
 }

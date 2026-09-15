@@ -1,16 +1,17 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "caadd5e",
-    "release": "v0.22.1",
+    "commit": "f195aab",
+    "commit_sha": "f195aabadafab491f5dcbd9546f7c5fcd8b07355",
+    "release": "unreleased",
     "source_files": [
       "internal/config/config.go",
       "internal/config/presets.go",
       "internal/policy/engine.go",
       "internal/policy/types.go"
     ],
-    "source_digest": "4c4fc5ed4a77c719840be193cab38c050372e08525ed35718cc835260601e409",
-    "generator_digest": "4f9bfd6d4ab7ee4673d621b7f04ddfcc7ca870d8d2b72f73af873fc0dc3f1f90"
+    "source_digest": "1794a50b9d3bf087b249e0758a2207a1fd022ae70914bf9e7f8f841e77da5bf4",
+    "generator_digest": "125436a753f631cbe1812ec0dee5ebc43315e73347d8376c11a271e2638e29c5"
   },
   "validation_cases": [
     {
@@ -763,43 +764,150 @@
       "name": "unicode_star",
       "pattern": "fixture/café/*",
       "path": "fixture/café/秘密",
-      "matches": true
+      "matches": true,
+      "deny_action": "deny"
     },
     {
       "name": "unicode_question_is_one_rune",
       "pattern": "fixture/?",
       "path": "fixture/é",
-      "matches": true
+      "matches": true,
+      "deny_action": "deny"
     },
     {
       "name": "unicode_class",
       "pattern": "fixture/[α-γ]",
       "path": "fixture/β",
-      "matches": true
+      "matches": true,
+      "deny_action": "deny"
     },
     {
       "name": "star_does_not_cross_separator",
       "pattern": "fixture/*",
       "path": "fixture/nested/file",
-      "matches": false
+      "matches": false,
+      "deny_action": "allow"
     },
     {
       "name": "clean_dotdot",
       "pattern": "fixture/café/*",
       "path": "fixture/other/../café/file",
-      "matches": true
+      "matches": true,
+      "deny_action": "deny"
     },
     {
-      "name": "native_separator",
+      "name": "literal_child_match",
       "pattern": "fixture/*",
       "path": "fixture/child",
-      "matches": true
+      "matches": true,
+      "deny_action": "deny"
     },
     {
-      "name": "slash_backslash_are_not_globally_normalized",
+      "name": "backslash_is_never_a_separator",
       "pattern": "fixture/*",
       "path": "fixture\\child",
-      "matches": false
+      "matches": false,
+      "deny_action": "allow"
+    },
+    {
+      "name": "backslash_escapes_a_metacharacter",
+      "pattern": "fixture\\*",
+      "path": "fixture*",
+      "matches": true,
+      "deny_action": "deny"
+    },
+    {
+      "name": "question_is_not_a_literal_directory",
+      "pattern": "fixture/?",
+      "path": "fixture/?/secret",
+      "matches": false,
+      "deny_action": "allow"
+    },
+    {
+      "name": "class_is_not_a_literal_directory",
+      "pattern": "fixture/[ab]",
+      "path": "fixture/[ab]/secret",
+      "matches": false,
+      "deny_action": "allow"
+    },
+    {
+      "name": "question_keeps_its_glob_meaning",
+      "pattern": "fixture/?",
+      "path": "fixture/a",
+      "matches": true,
+      "deny_action": "deny"
+    },
+    {
+      "name": "home_expands_against_supplied_home",
+      "pattern": "~/secure/*",
+      "path": "/fixture/home/probe/secure/secret",
+      "home": "/fixture/home/probe",
+      "matches": true,
+      "deny_action": "deny"
+    },
+    {
+      "name": "home_does_not_match_outside_home",
+      "pattern": "~/secure/*",
+      "path": "/fixture/home/other/secure/secret",
+      "home": "/fixture/home/probe",
+      "matches": false,
+      "deny_action": "allow"
+    },
+    {
+      "name": "home_unexpanded_without_supplied_home",
+      "pattern": "~/secure/*",
+      "path": "/fixture/home/probe/secure/secret",
+      "matches": false,
+      "deny_action": "allow"
+    },
+    {
+      "name": "home_literal_without_supplied_home",
+      "pattern": "~/secure/*",
+      "path": "~/secure/secret",
+      "matches": true,
+      "deny_action": "deny"
+    },
+    {
+      "name": "literal_directory_prefix",
+      "pattern": "fixture/dir",
+      "path": "fixture/dir/secret",
+      "matches": true,
+      "deny_action": "deny"
+    },
+    {
+      "name": "prefix_sibling_is_not_matched",
+      "pattern": "fixture/dir",
+      "path": "fixture/dirx/secret",
+      "matches": false,
+      "deny_action": "allow"
+    },
+    {
+      "name": "recursive_suffix",
+      "pattern": "fixture/dir/**",
+      "path": "fixture/dir/a/b",
+      "matches": true,
+      "deny_action": "deny"
+    },
+    {
+      "name": "trailing_slash_prefix",
+      "pattern": "fixture/dir/",
+      "path": "fixture/dir/a",
+      "matches": true,
+      "deny_action": "deny"
+    },
+    {
+      "name": "drive_letter_literal",
+      "pattern": "C:/fixture/*",
+      "path": "C:/fixture/secret",
+      "matches": true,
+      "deny_action": "deny"
+    },
+    {
+      "name": "unc_literal",
+      "pattern": "//server/share/*",
+      "path": "//server/share/secret",
+      "matches": true,
+      "deny_action": "deny"
     }
   ],
   "empty_engine_cases": [

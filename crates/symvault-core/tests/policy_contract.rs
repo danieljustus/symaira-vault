@@ -23,6 +23,7 @@ struct Fixture {
 #[derive(Debug, Deserialize)]
 struct Oracle {
     commit: String,
+    commit_sha: String,
     release: String,
     source_files: Vec<String>,
     source_digest: String,
@@ -60,7 +61,10 @@ struct PathCase {
     name: String,
     pattern: String,
     path: String,
+    #[serde(default)]
+    home: String,
     matches: bool,
+    deny_action: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -73,6 +77,8 @@ struct FixtureContext {
     tags: Vec<String>,
     #[serde(default)]
     working_dir: String,
+    #[serde(default)]
+    home_dir: String,
     #[serde(default)]
     env_vars: std::collections::BTreeMap<String, String>,
     #[serde(default)]
@@ -161,8 +167,21 @@ fn fixture() -> Fixture {
 fn fixture_has_provenance_and_schema() {
     let fixture = fixture();
     assert_eq!(fixture.schema_version, 1);
-    assert_eq!(fixture.oracle.commit, "caadd5e");
-    assert_eq!(fixture.oracle.release, "v0.22.1");
+    // POLICY-001 deliberately advances its production-Go oracle to the
+    // adjudicated matcher contract. The abbreviated commit must be a prefix of
+    // the full object name the generator verified against git.
+    assert_eq!(fixture.oracle.commit, "f195aab");
+    assert_eq!(fixture.oracle.release, "unreleased");
+    assert_eq!(fixture.oracle.commit_sha.len(), 40);
+    assert!(
+        fixture
+            .oracle
+            .commit_sha
+            .starts_with(&fixture.oracle.commit),
+        "commit_sha {} does not match commit {}",
+        fixture.oracle.commit_sha,
+        fixture.oracle.commit
+    );
     assert_eq!(
         fixture.oracle.source_files,
         [
@@ -270,30 +289,78 @@ fn full_policy_interactions_match_go_oracle() {
     assert_eq!(equal_priority.expected.action, "allow");
 }
 
+fn path_rule(
+    pattern: &str,
+    action: symvault_core::policy::Action,
+    priority: i32,
+    name: &str,
+) -> symvault_core::policy::Rule {
+    symvault_core::policy::Rule {
+        name: name.to_owned(),
+        priority,
+        conditions: symvault_core::policy::Conditions {
+            path: pattern.to_owned(),
+            ..Default::default()
+        },
+        action,
+    }
+}
+
+/// Both polarities are checked. A matcher change moves the allow and deny
+/// outcomes in opposite directions, so verifying only the allow side would let
+/// a deny-rule regression through unnoticed.
 #[test]
 fn path_cases_match_go_oracle() {
     for case in &fixture().path_cases {
-        let policy = Policy {
+        let context = || EvalContext {
+            path: case.path.clone(),
+            home_dir: case.home.clone(),
+            ..Default::default()
+        };
+
+        let allow_policy = Policy {
             version: "1.0".to_owned(),
             description: String::new(),
-            rules: vec![symvault_core::policy::Rule {
-                name: "path fixture".to_owned(),
-                priority: 0,
-                conditions: symvault_core::policy::Conditions {
-                    path: case.pattern.clone(),
-                    ..Default::default()
-                },
-                action: symvault_core::policy::Action::Allow,
-            }],
+            rules: vec![path_rule(
+                &case.pattern,
+                symvault_core::policy::Action::Allow,
+                0,
+                "path fixture",
+            )],
         };
-        let actual = Engine::new([&policy]).evaluate(EvalContext {
-            path: case.path.clone(),
-            ..Default::default()
-        });
+        let allow = Engine::new([&allow_policy]).evaluate(context());
         assert_eq!(
-            actual.matched, case.matches,
-            "case {} ({:?} vs {:?})",
+            allow.matched, case.matches,
+            "allow polarity, case {} ({:?} vs {:?})",
             case.name, case.pattern, case.path
+        );
+
+        let deny_policy = Policy {
+            version: "1.0".to_owned(),
+            description: String::new(),
+            rules: vec![
+                path_rule(
+                    &case.pattern,
+                    symvault_core::policy::Action::Deny,
+                    10,
+                    "path fixture deny",
+                ),
+                symvault_core::policy::Rule {
+                    name: "path fixture fallback".to_owned(),
+                    priority: 0,
+                    conditions: symvault_core::policy::Conditions::default(),
+                    action: symvault_core::policy::Action::Allow,
+                },
+            ],
+        };
+        let deny = Engine::new([&deny_policy]).evaluate(context());
+        assert_eq!(
+            deny.action.to_string(),
+            case.deny_action,
+            "deny polarity, case {} ({:?} vs {:?})",
+            case.name,
+            case.pattern,
+            case.path
         );
     }
 }
@@ -481,6 +548,7 @@ fn to_context(context: &FixtureContext) -> EvalContext {
         path: context.path.clone(),
         tags: context.tags.clone(),
         working_dir: context.working_dir.clone(),
+        home_dir: context.home_dir.clone(),
         env_vars: context.env_vars.clone(),
         action_type: context.action_type.clone(),
         tool_name: context.tool_name.clone(),

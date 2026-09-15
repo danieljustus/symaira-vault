@@ -21,8 +21,8 @@ import (
 )
 
 const (
-	pinnedOracleCommit  = "caadd5e"
-	pinnedOracleRelease = "v0.22.1"
+	pinnedOracleCommit  = "f195aab"
+	pinnedOracleRelease = "unreleased"
 )
 
 var productionSources = []string{
