@@ -172,6 +172,11 @@ manpages: build
 # Go-oracle fixtures and neutral black-box harness for the staged Rust port.
 PORT_ORACLE_COMMIT ?= caadd5e
 PORT_ORACLE_RELEASE ?= v0.22.1
+# POLICY-001 deliberately advances only its own production-Go oracle to the
+# adjudicated path-matching contract. policygen verifies this commit against
+# git objects, so it cannot drift from the code the generator executes.
+POLICY_ORACLE_COMMIT ?= f195aab
+POLICY_ORACLE_RELEASE ?= unreleased
 PORT_CLI_FIXTURE := testdata/port/cli/command-tree.json
 PORT_CLI_CASES := testdata/port/cli/cases.json
 PORT_ERROR_FIXTURE := testdata/port/core/error-contract.json
@@ -243,8 +248,8 @@ store-metadata-fixtures-check:
 policy-fixtures-generate:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/policygen \
 		--output $(PORT_POLICY_FIXTURE) \
-		--oracle-commit $(PORT_ORACLE_COMMIT) \
-		--oracle-release $(PORT_ORACLE_RELEASE)
+		--oracle-commit $(POLICY_ORACLE_COMMIT) \
+		--oracle-release $(POLICY_ORACLE_RELEASE)
 
 # PAIRING-001. pairinggen pins its own oracle commit as a Go constant, like
 # syncgen, so no oracle flags are passed here.
