@@ -1,12 +1,9 @@
 package session
 
 import (
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
-	"time"
 )
 
 // memoryKeyring stores session and identity entries in process memory only.
@@ -28,6 +25,13 @@ func zeroBytes(b []byte) {
 	}
 }
 
+// Set stores value verbatim.
+//
+// It used to branch on the account: for an account that was not one of the
+// three production ones it parsed the value as a session document and
+// encrypted the passphrase with a wrap key it looked up in its own store. That
+// branch was unreachable in production and implemented session encryption a
+// second time, below an interface that is documented as opaque storage.
 func (m *memoryKeyring) Set(service, account, value string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -36,60 +40,28 @@ func (m *memoryKeyring) Set(service, account, value string) error {
 		m.store = make(map[string]*SecureBytes)
 	}
 
-	if account == wrapKeyAccount || account == identityAccount || account == sessionAccount {
-		key := service + "|" + account
-		if old, ok := m.store[key]; ok {
-			old.Destroy()
-		}
-		m.store[key] = NewSecureBytes([]byte(value))
-		return nil
-	}
-
-	var sess storedSession
-	if err := json.Unmarshal([]byte(value), &sess); err != nil {
-		return fmt.Errorf("unmarshal session: %w", err)
-	}
-
-	if len(sess.Passphrase) > 0 {
-		key, err := m.encryptionKeyForStore(service)
-		if err != nil {
-			return fmt.Errorf("encryption key: %w", err)
-		}
-		enc, nonce, err := encryptPassphrase(sess.Passphrase, key)
-		if err != nil {
-			return fmt.Errorf("encrypt passphrase: %w", err)
-		}
-		sess.EncryptedPassphrase = enc
-		sess.Nonce = nonce
-		sess.Passphrase = nil
-	}
-
-	payload, err := json.Marshal(sess)
-	if err != nil {
-		return fmt.Errorf("marshal session: %w", err)
-	}
-
 	key := service + "|" + account
 	if old, ok := m.store[key]; ok {
 		old.Destroy()
 	}
-	m.store[key] = NewSecureBytes(append([]byte(nil), payload...))
-
+	m.store[key] = NewSecureBytes([]byte(value))
 	return nil
 }
 
-// encryptionKeyForStore looks up the wrap key for the given service
-// directly in the store. Must be called while holding m.mu.
-func (m *memoryKeyring) encryptionKeyForStore(service string) ([]byte, error) {
-	wrapKeyKey := service + "|" + wrapKeyAccount
-	if w, ok := m.store[wrapKeyKey]; ok {
-		if k, err := base64.StdEncoding.DecodeString(string(w.Data())); err == nil && len(k) == wrapKeyLen {
-			return k, nil
-		}
-	}
-	return nil, fmt.Errorf("no wrap key available")
-}
-
+// Get returns the value previously stored under the key, which is what
+// KeyringBackend documents and what the OS backend and the Rust side do.
+//
+// It used to parse a session-account value as a session document, enforce its
+// own TTL, refresh LastAccess and rewrite the stored payload -- and DELETE the
+// entry when the parse failed, destroying a value Set had just accepted and
+// reporting it as never having existed. Manager.LoadPassphrase already
+// performs every one of those steps above this interface, including the
+// write-back, and it also enforces MaxLifetime, which this copy did not.
+//
+// The visible consequence of the removal: an idle-expired session on the
+// in-memory fallback path now reports "expired" through the Manager instead of
+// "not found" from here. That is the same error class the OS keyring path has
+// always produced.
 func (m *memoryKeyring) Get(service, account string) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -98,50 +70,11 @@ func (m *memoryKeyring) Get(service, account string) (string, error) {
 		return "", fmt.Errorf("not found")
 	}
 
-	key := service + "|" + account
-	sb, ok := m.store[key]
+	sb, ok := m.store[service+"|"+account]
 	if !ok {
 		return "", fmt.Errorf("not found")
 	}
-
-	payload := sb.Data()
-	if account == wrapKeyAccount || account == identityAccount {
-		return string(payload), nil
-	}
-
-	var sess storedSession
-	if err := json.Unmarshal(payload, &sess); err != nil {
-		sb.Destroy()
-		delete(m.store, key)
-		return "", fmt.Errorf("not found")
-	}
-
-	if sess.TTL <= 0 {
-		sb.Destroy()
-		delete(m.store, key)
-		return "", fmt.Errorf("not found")
-	}
-
-	lastActivity := sess.LastAccess
-	if lastActivity.IsZero() {
-		lastActivity = sess.SavedAt
-	}
-	if time.Since(lastActivity) > time.Duration(sess.TTL) {
-		sb.Destroy()
-		delete(m.store, key)
-		return "", fmt.Errorf("not found")
-	}
-
-	sess.LastAccess = time.Now().UTC()
-	newPayload, err := json.Marshal(sess)
-	if err != nil {
-		return "", fmt.Errorf("not found")
-	}
-
-	sb.Destroy()
-	m.store[key] = NewSecureBytes(append([]byte(nil), newPayload...))
-
-	return string(newPayload), nil
+	return string(sb.Data()), nil
 }
 
 func (m *memoryKeyring) Delete(service, account string) error {

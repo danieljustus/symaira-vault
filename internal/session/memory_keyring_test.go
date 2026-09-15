@@ -3,6 +3,7 @@ package session
 import (
 	"encoding/base64"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 )
@@ -82,14 +83,45 @@ func TestMemoryKeyring_Set_StoresOpaque(t *testing.T) {
 	}
 }
 
-func TestMemoryKeyring_Set_InvalidJSON(t *testing.T) {
+// TestMemoryKeyring_Set_StoresAnyValueVerbatim replaces
+// TestMemoryKeyring_Set_InvalidJSON.
+//
+// Set used to reject a value it could not parse as a session document, for
+// accounts other than the three production ones. KeyringBackend documents
+// opaque storage, the OS backend stores any string, and the Rust side is a
+// byte map -- so rejecting here was the outlier. The property that matters,
+// that only well-formed sessions are ever written, belongs to the Manager and
+// is asserted there.
+func TestMemoryKeyring_Set_StoresAnyValueVerbatim(t *testing.T) {
 	mk := &memoryKeyring{}
-	mk.store = map[string]*SecureBytes{}
-	if err := mk.Set("symvault:/tmp/vault", wrapKeyAccount, ""); err != nil {
-		t.Fatalf("Set wrap key error = %v", err)
+	if err := mk.Set("symvault:/tmp/vault", "some-other-account", "not-json"); err != nil {
+		t.Fatalf("Set() error = %v, want nil for opaque storage", err)
 	}
-	if err := mk.Set("symvault:/tmp/vault", "some-other-account", "not-json"); err == nil {
-		t.Fatal("Set() error = nil, want unmarshal error")
+	got, err := mk.Get("symvault:/tmp/vault", "some-other-account")
+	if err != nil {
+		t.Fatalf("Get() error = %v", err)
+	}
+	if got != "not-json" {
+		t.Errorf("Get() = %q, want the value Set stored verbatim", got)
+	}
+}
+
+// TestMemoryKeyring_RoundTripsAValueSetJustAccepted is the regression guard for
+// the defect this change fixes: Get used to parse a session-account value and
+// DELETE the entry when the parse failed, destroying a value Set had accepted
+// and reporting it as never having existed.
+func TestMemoryKeyring_RoundTripsAValueSetJustAccepted(t *testing.T) {
+	backend := NewMemoryKeyringBackend()
+	key := keyFor("symvault:/tmp/vault", sessionAccount)
+	if err := backend.Set(key, "opaque-value"); err != nil {
+		t.Fatalf("Set() error = %v", err)
+	}
+	got, err := backend.Get(key)
+	if err != nil {
+		t.Fatalf("Get() after Set = %v, want the stored value", err)
+	}
+	if got != "opaque-value" {
+		t.Errorf("Get() = %q, want %q", got, "opaque-value")
 	}
 }
 
@@ -109,102 +141,68 @@ func TestMemoryKeyring_Get_NilStore(t *testing.T) {
 	}
 }
 
-func TestMemoryKeyring_Get_Expired(t *testing.T) {
-	mk := &memoryKeyring{}
-	vaultDir := "/tmp/vault-mem-expired"
+// The next three replace TestMemoryKeyring_Get_Expired,
+// TestMemoryKeyring_Get_ZeroTTL and TestMemoryKeyring_Get_MalformedJSON.
+//
+// Those asserted that the in-memory backend enforced TTL and JSON validity.
+// Manager.LoadPassphrase already enforces both -- and also MaxLifetime, which
+// the backend copy did not -- so the property is verified at the layer that
+// owns it. The error a caller sees changes from the backend's "not found" to
+// the Manager's "expired", which is the class the OS keyring path has always
+// produced.
 
-	sess := storedSession{
+func TestManagerOverMemory_RejectsAnIdleExpiredSession(t *testing.T) {
+	backend := NewMemoryKeyringBackend()
+	vaultDir := "/tmp/vault-mem-expired"
+	payload, _ := json.Marshal(storedSession{
 		EncryptedPassphrase: "enc",
 		Nonce:               "nonce",
 		SavedAt:             time.Now().UTC().Add(-10 * time.Minute),
 		LastAccess:          time.Now().UTC().Add(-10 * time.Minute),
 		TTL:                 int64(time.Minute),
+	})
+	if err := backend.Set(keyFor(serviceNameForVault(vaultDir), sessionAccount), string(payload)); err != nil {
+		t.Fatalf("Set() error = %v", err)
 	}
-	payload, _ := json.Marshal(sess)
-	mk.Set("symvault:"+vaultDir, sessionAccount, string(payload))
-
-	_, err := mk.Get("symvault:"+vaultDir, sessionAccount)
+	_, err := NewManager(backend, nil).LoadPassphrase(vaultDir)
 	if err == nil {
-		t.Fatal("Get() error = nil, want expired")
+		t.Fatal("LoadPassphrase() error = nil, want expired")
+	}
+	if !strings.Contains(err.Error(), "expired") {
+		t.Errorf("LoadPassphrase() error = %v, want an expiry error", err)
 	}
 }
 
-func TestMemoryKeyring_Get_ZeroTTL(t *testing.T) {
-	mk := &memoryKeyring{}
-	vaultDir := "/tmp/vault-mem-zero"
-
-	sess := storedSession{
+func TestManagerOverMemory_RejectsAZeroTTLSession(t *testing.T) {
+	backend := NewMemoryKeyringBackend()
+	vaultDir := "/tmp/vault-mem-zero-ttl"
+	payload, _ := json.Marshal(storedSession{
 		EncryptedPassphrase: "enc",
 		Nonce:               "nonce",
 		SavedAt:             time.Now().UTC(),
 		LastAccess:          time.Now().UTC(),
 		TTL:                 0,
+	})
+	if err := backend.Set(keyFor(serviceNameForVault(vaultDir), sessionAccount), string(payload)); err != nil {
+		t.Fatalf("Set() error = %v", err)
 	}
-	payload, _ := json.Marshal(sess)
-	mk.Set("symvault:"+vaultDir, sessionAccount, string(payload))
-
-	_, err := mk.Get("symvault:"+vaultDir, sessionAccount)
-	if err == nil {
-		t.Fatal("Get() error = nil, want expired for zero TTL")
-	}
-}
-
-func TestMemoryKeyring_Get_MalformedJSON(t *testing.T) {
-	mk := &memoryKeyring{}
-	mk.store = map[string]*SecureBytes{
-		"symvault:/tmp/vault|" + sessionAccount: NewSecureBytes([]byte("not-valid-json")),
-	}
-
-	_, err := mk.Get("symvault:/tmp/vault", sessionAccount)
-	if err == nil {
-		t.Fatal("Get() error = nil, want malformed JSON error")
+	if _, err := NewManager(backend, nil).LoadPassphrase(vaultDir); err == nil {
+		t.Fatal("LoadPassphrase() error = nil, want rejection for a zero TTL")
 	}
 }
 
-func TestMemoryKeyring_Get_UpdatesLastAccess(t *testing.T) {
-	mk := &memoryKeyring{}
-	vaultDir := "/tmp/vault-mem-la"
-
-	// Store wrap key so Set() can encrypt plaintext passphrase
-	wrapKey := base64.StdEncoding.EncodeToString(testKey())
-	mk.Set("symvault:"+vaultDir, wrapKeyAccount, wrapKey)
-
-	now := time.Now().UTC()
-	sess := storedSession{
-		Passphrase: passphraseBytes([]byte("secret")),
-		SavedAt:    now,
-		LastAccess: now,
-		TTL:        int64(time.Hour),
+func TestManagerOverMemory_RejectsAMalformedSession(t *testing.T) {
+	backend := NewMemoryKeyringBackend()
+	vaultDir := "/tmp/vault-mem-malformed"
+	if err := backend.Set(keyFor(serviceNameForVault(vaultDir), sessionAccount), "not-valid-json"); err != nil {
+		t.Fatalf("Set() error = %v", err)
 	}
-	payload, _ := json.Marshal(sess)
-	mk.Set("symvault:"+vaultDir, sessionAccount, string(payload))
-
-	time.Sleep(time.Millisecond)
-	got, err := mk.Get("symvault:"+vaultDir, sessionAccount)
-	if err != nil {
-		t.Fatalf("Get() error = %v", err)
+	if _, err := NewManager(backend, nil).LoadPassphrase(vaultDir); err == nil {
+		t.Fatal("LoadPassphrase() error = nil, want a decode error")
 	}
-
-	// Get() returns the session JSON (transparent storage layer).
-	var retrieved storedSession
-	if err := json.Unmarshal([]byte(got), &retrieved); err != nil {
-		t.Fatalf("Get() returned invalid JSON: %v", err)
-	}
-
-	// Verify LastAccess was updated in the store.
-	mk.mu.RLock()
-	storeKey := "symvault:" + vaultDir + "|" + sessionAccount
-	sb, ok := mk.store[storeKey]
-	mk.mu.RUnlock()
-	if !ok {
-		t.Fatal("session not found in store after Get")
-	}
-	var storedSess storedSession
-	if err := json.Unmarshal(sb.Data(), &storedSess); err != nil {
-		t.Fatalf("Unmarshal stored session: %v", err)
-	}
-	if !storedSess.LastAccess.After(now) {
-		t.Error("LastAccess should be updated after Get")
+	// And the entry must still be there: a failed read is not a delete.
+	if _, err := backend.Get(keyFor(serviceNameForVault(vaultDir), sessionAccount)); err != nil {
+		t.Errorf("the malformed entry was destroyed by reading it: %v", err)
 	}
 }
 
@@ -349,44 +347,12 @@ func TestMemoryKeyring_Set_ZeroesOldData(t *testing.T) {
 	}
 }
 
-func TestMemoryKeyring_encryptionKeyForStore(t *testing.T) {
-	mk := &memoryKeyring{}
-	vaultDir := "/tmp/vault-encryption-key"
-	service := "symvault:" + vaultDir
-
-	// Test with no wrap key
-	_, err := mk.encryptionKeyForStore(service)
-	if err == nil {
-		t.Fatal("encryptionKeyForStore() error = nil, want error when no wrap key")
-	}
-
-	// Test with invalid base64 wrap key
-	mk.store = map[string]*SecureBytes{}
-	mk.store[service+"|"+wrapKeyAccount] = NewSecureBytes([]byte("invalid-base64"))
-	_, err = mk.encryptionKeyForStore(service)
-	if err == nil {
-		t.Fatal("encryptionKeyForStore() error = nil, want error for invalid base64")
-	}
-
-	// Test with wrong length wrap key
-	validKey := testKey()
-	wrongLengthKey := validKey[:16] // 16 bytes instead of 32
-	mk.store[service+"|"+wrapKeyAccount] = NewSecureBytes([]byte(base64.StdEncoding.EncodeToString(wrongLengthKey)))
-	_, err = mk.encryptionKeyForStore(service)
-	if err == nil {
-		t.Fatal("encryptionKeyForStore() error = nil, want error for wrong key length")
-	}
-
-	// Test with valid wrap key
-	mk.store[service+"|"+wrapKeyAccount] = NewSecureBytes([]byte(base64.StdEncoding.EncodeToString(validKey)))
-	key, err := mk.encryptionKeyForStore(service)
-	if err != nil {
-		t.Fatalf("encryptionKeyForStore() error = %v", err)
-	}
-	if len(key) != wrapKeyLen {
-		t.Errorf("encryptionKeyForStore() key length = %d, want %d", len(key), wrapKeyLen)
-	}
-}
+// TestMemoryKeyring_encryptionKeyForStore used to exercise
+// memoryKeyring.encryptionKeyForStore, which looked up a wrap key in the
+// backend's own store so Set could encrypt a passphrase below the storage
+// interface. That branch was unreachable for every account production uses and
+// duplicated Manager-level encryption; it and this test were removed together.
+// Passphrase encryption itself is unchanged and covered by the Manager tests.
 
 func TestMemoryKeyring_Delete_ZeroesMemory(t *testing.T) {
 	mk := &memoryKeyring{}

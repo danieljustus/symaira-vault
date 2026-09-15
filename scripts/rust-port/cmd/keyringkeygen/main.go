@@ -226,6 +226,24 @@ func buildBackendCases() []backendCase {
 			},
 		},
 		{
+			"session_account_is_opaque_too", "the session account stores and returns any value, like every other account",
+			[]backendStep{
+				{Op: "set", Key: svc + "|session", Value: "opaque-value"},
+				{Op: "get", Key: svc + "|session"},
+				{Op: "get", Key: svc + "|session"},
+			},
+		},
+		{
+			"session_account_failed_read_is_not_a_delete", "reading a value the backend cannot interpret must not destroy it",
+			[]backendStep{
+				{Op: "set", Key: svc + "|session", Value: "not-valid-json"},
+				{Op: "get", Key: svc + "|session"},
+				{Op: "get", Key: svc + "|session"},
+				{Op: "delete", Key: svc + "|session"},
+				{Op: "get", Key: svc + "|session"},
+			},
+		},
+		{
 			"binary_payload_round_trips", "the value is bytes, not text: NUL and non-ASCII survive",
 			[]backendStep{
 				{Op: "set", Key: ident, Value: "a\x00b-\u00e4\u00f6\u00fc"},
@@ -255,47 +273,19 @@ func buildBackendCases() []backendCase {
 //
 // Recorded rather than normalised away. rustOutcomes is the plain-store result
 // for the same script, so the divergence can neither grow nor shrink unnoticed.
+// buildDivergentCases is empty.
+//
+// It held the session-account scripts where Go's in-memory backend was not
+// opaque storage: Set accepted any value and Get parsed it, deleting the entry
+// when the parse failed. That was adjudicated and removed -- the backend is a
+// plain store now, and Manager.LoadPassphrase owns TTL, expiry and encryption,
+// as it already did and as the Rust side always did. The scripts moved into
+// buildBackendCases, where both implementations must agree on every step.
+//
+// The mechanism stays so the next divergence has somewhere to be recorded
+// rather than being normalised away.
 func buildDivergentCases() []divergentCase {
-	const sessionKey = "symvault:/v|session"
-	scripts := []struct {
-		name, description string
-		steps             []backendStep
-		rustOutcomes      []string
-	}{
-		{
-			"session_account_discards_an_opaque_value",
-			"Set accepts the value; Get cannot parse it as a session and deletes it",
-			[]backendStep{
-				{Op: "set", Key: sessionKey, Value: "opaque-value"},
-				{Op: "get", Key: sessionKey},
-			},
-			[]string{"ok", "found"},
-		},
-		{
-			"session_account_second_read_confirms_the_delete",
-			"the entry is gone after the failed read, not merely unreadable",
-			[]backendStep{
-				{Op: "set", Key: sessionKey, Value: "opaque-value"},
-				{Op: "get", Key: sessionKey},
-				{Op: "get", Key: sessionKey},
-			},
-			[]string{"ok", "found", "found"},
-		},
-	}
-
-	cases := make([]divergentCase, 0, len(scripts))
-	for _, script := range scripts {
-		backend := session.NewMemoryKeyringBackend()
-		steps := make([]backendStep, 0, len(script.steps))
-		for _, step := range script.steps {
-			steps = append(steps, run(backend, step))
-		}
-		cases = append(cases, divergentCase{
-			Name: script.name, Description: script.description,
-			Steps: steps, RustOutcomes: script.rustOutcomes,
-		})
-	}
-	return cases
+	return []divergentCase{}
 }
 
 func repositoryRoot() (string, error) {
