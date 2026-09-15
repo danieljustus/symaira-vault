@@ -9,9 +9,11 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strings"
 	"time"
 
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
@@ -32,6 +34,7 @@ var productionSources = []string{
 
 type oracle struct {
 	Commit          string   `json:"commit"`
+	CommitSHA       string   `json:"commit_sha"`
 	Release         string   `json:"release"`
 	SourceFiles     []string `json:"source_files"`
 	SourceDigest    string   `json:"source_digest"`
@@ -200,17 +203,72 @@ func buildOracle(root, commit, release string) (oracle, error) {
 	if err != nil {
 		return oracle{}, fmt.Errorf("hash policy sources: %w", err)
 	}
+	// The generator can only execute the code that is actually compiled into it,
+	// which is the working tree. Claiming an oracle commit is therefore only
+	// honest if the working tree's production sources are byte-identical to that
+	// commit's immutable blobs. Verify that against git objects and refuse to
+	// emit a mislabeled fixture.
+	resolved, pinnedDigest, err := pinnedSourceDigest(root, commit, sources)
+	if err != nil {
+		return oracle{}, err
+	}
+	if pinnedDigest != sourceDigest {
+		return oracle{}, fmt.Errorf(
+			"policy oracle provenance mismatch: working tree production sources digest %s "+
+				"does not match commit %s (%s) digest %s; the generator would execute code that is "+
+				"not the claimed oracle. Regenerate from the claimed commit or advance the pin deliberately",
+			sourceDigest, commit, resolved, pinnedDigest)
+	}
 	generatorDigest, err := digestFiles(root, []string{"scripts/rust-port/cmd/policygen/main.go"})
 	if err != nil {
 		return oracle{}, fmt.Errorf("hash policy generator: %w", err)
 	}
 	return oracle{
 		Commit:          commit,
+		CommitSHA:       resolved,
 		Release:         release,
 		SourceFiles:     sources,
 		SourceDigest:    sourceDigest,
 		GeneratorDigest: generatorDigest,
 	}, nil
+}
+
+// pinnedSourceDigest resolves commit to a full object name and digests that
+// commit's production source blobs with the same algorithm as digestFiles, so
+// the two digests are directly comparable.
+func pinnedSourceDigest(root, commit string, sources []string) (string, string, error) {
+	if commit == "" {
+		return "", "", fmt.Errorf("policy oracle commit is required for provenance verification")
+	}
+	resolvedRaw, err := gitOutput(root, "rev-parse", "--verify", "--end-of-options", commit+"^{commit}")
+	if err != nil {
+		return "", "", fmt.Errorf("resolve policy oracle commit %q: %w", commit, err)
+	}
+	resolved := strings.TrimSpace(string(resolvedRaw))
+	hash := sha256.New()
+	for _, name := range sources {
+		content, err := gitOutput(root, "cat-file", "blob", resolved+":"+name)
+		if err != nil {
+			return "", "", fmt.Errorf("read %s at policy oracle commit %s: %w", name, resolved, err)
+		}
+		_, _ = hash.Write([]byte(name))
+		_, _ = hash.Write([]byte{0})
+		_, _ = hash.Write(content)
+		_, _ = hash.Write([]byte{0})
+	}
+	return resolved, hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func gitOutput(root string, args ...string) ([]byte, error) {
+	cmd := exec.Command("git", args...) // #nosec G204 -- fixed subcommands over a validated repository root
+	cmd.Dir = root
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git %v: %w: %s", args, err, strings.TrimSpace(stderr.String()))
+	}
+	return out, nil
 }
 
 func digestFiles(root string, files []string) (string, error) {
