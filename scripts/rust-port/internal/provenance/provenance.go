@@ -5,7 +5,7 @@
 // tree. Claiming an oracle commit is therefore only honest when the working
 // tree's production sources are byte-identical to that commit's blobs.
 // Validating the commit as a label alone lets a fixture assert one revision
-// while carrying another's behaviour.
+// while carrying another's behavior.
 package provenance
 
 import (

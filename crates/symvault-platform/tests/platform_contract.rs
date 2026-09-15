@@ -18,6 +18,7 @@ struct Fixture {
 #[derive(Debug, Deserialize)]
 struct Oracle {
     commit: String,
+    commit_sha: String,
     release: String,
     source_files: Vec<String>,
     source_digest: String,
@@ -40,8 +41,15 @@ fn fixture() -> Fixture {
 fn platform_fixture_has_provenance_and_explicit_native_blocker() {
     let fixture = fixture();
     assert_eq!(fixture.schema_version, 1);
-    assert_eq!(fixture.oracle.commit, "caadd5e");
-    assert_eq!(fixture.oracle.release, "v0.22.1");
+    assert_eq!(fixture.oracle.commit, "31afe33c");
+    assert_eq!(fixture.oracle.release, "unreleased");
+    assert_eq!(fixture.oracle.commit_sha.len(), 40);
+    assert!(
+        fixture
+            .oracle
+            .commit_sha
+            .starts_with(&fixture.oracle.commit)
+    );
     assert_eq!(fixture.oracle.source_files.len(), 9);
     assert_eq!(fixture.oracle.source_digest.len(), 64);
     assert_eq!(fixture.oracle.generator_digest.len(), 64);

@@ -17,6 +17,11 @@ struct ConfigFixture {
 #[derive(Debug, Deserialize)]
 struct Oracle {
     commit: String,
+    // The session fixture's generator is not yet bound to git objects and
+    // therefore carries no commit_sha. Optional here so the shared shape
+    // covers both; the config fixture asserts its presence explicitly.
+    #[serde(default)]
+    commit_sha: String,
     release: String,
     source_files: Vec<String>,
     source_digest: String,
@@ -89,8 +94,18 @@ fn config_fixture() -> ConfigFixture {
 fn config_fixture_has_pinned_provenance_and_complete_case_set() {
     let fixture = config_fixture();
     assert_eq!(fixture.schema_version, 1);
-    assert_eq!(fixture.oracle.commit, "caadd5e");
-    assert_eq!(fixture.oracle.release, "v0.22.1");
+    // RUST-007 deliberately advances its config oracle: the previous caadd5e
+    // claim was verified only as a label, and four of the generator's seven
+    // production sources already differed from that commit.
+    assert_eq!(fixture.oracle.commit, "31afe33c");
+    assert_eq!(fixture.oracle.release, "unreleased");
+    assert_eq!(fixture.oracle.commit_sha.len(), 40);
+    assert!(
+        fixture
+            .oracle
+            .commit_sha
+            .starts_with(&fixture.oracle.commit)
+    );
     assert_eq!(fixture.oracle.source_files.len(), 9);
     assert_eq!(fixture.oracle.source_digest.len(), 64);
     assert_eq!(fixture.oracle.generator_digest.len(), 64);

@@ -22,8 +22,8 @@ import (
 )
 
 const (
-	pinnedOracleCommit  = "caadd5e"
-	pinnedOracleRelease = "v0.22.1"
+	pinnedOracleCommit  = "31afe33c"
+	pinnedOracleRelease = "unreleased"
 )
 
 var productionSources = []string{
@@ -102,7 +102,7 @@ func buildOracle(root string, commit string, release string) (oracle, error) {
 	}
 	// The claimed oracle commit is verified against that commit's immutable
 	// blobs, not merely compared as a label. Without this the fixture could
-	// assert one revision while carrying another's behaviour.
+	// assert one revision while carrying another's behavior.
 	resolved, err := provenance.Verify(root, commit, sources)
 	if err != nil {
 		return oracle{}, err
