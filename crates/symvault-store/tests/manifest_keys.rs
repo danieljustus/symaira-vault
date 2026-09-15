@@ -9,7 +9,7 @@ use symvault_crypto::parse_identity;
 use symvault_store::{Entry, Store};
 
 const ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
-const REVISION: &str = "dcb51c6ea7ef3d5d744b43ab508b88552e2b9847";
+const REVISION: &str = "d304ed962e650f1a7eddec3fd3ba98c47aa0bc07";
 const IDENTITY: &str = "AGE-SECRET-KEY-1HS3YTK69EJH0ZYM8ANNNDWQMPT7ZMLPYGTMC47F5T4EDJ5N7EYMQ4L5CDL";
 
 #[derive(Deserialize)]
