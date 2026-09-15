@@ -26,11 +26,11 @@ func TestResolveOracleRejectsTamperedMetadata(t *testing.T) {
 }
 
 func TestBuildPolicyFixtureIsDeterministic(t *testing.T) {
-	first, err := buildPolicyFixture("test", "v0.0.0")
+	first, err := buildTestFixture()
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := buildPolicyFixture("test", "v0.0.0")
+	second, err := buildTestFixture()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +48,7 @@ func TestBuildPolicyFixtureIsDeterministic(t *testing.T) {
 }
 
 func TestBuildPolicyFixtureCoversPureBranches(t *testing.T) {
-	fixture, err := buildPolicyFixture("test", "v0.0.0")
+	fixture, err := buildTestFixture()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestBuildPolicyFixtureCoversPureBranches(t *testing.T) {
 }
 
 func TestPolicyFixtureEvaluationCoverageIsIsolated(t *testing.T) {
-	fixture, err := buildPolicyFixture("test", "v0.0.0")
+	fixture, err := buildTestFixture()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +102,7 @@ func TestPolicyFixtureEvaluationCoverageIsIsolated(t *testing.T) {
 }
 
 func TestPolicyCheckRejectsProvenanceDrift(t *testing.T) {
-	fixture, err := buildPolicyFixture("test", "v0.0.0")
+	fixture, err := buildTestFixture()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +123,7 @@ func TestPolicyCheckRejectsProvenanceDrift(t *testing.T) {
 }
 
 func TestPolicyFixtureFullInteractionsUseProductionResults(t *testing.T) {
-	fixture, err := buildPolicyFixture("test", "v0.0.0")
+	fixture, err := buildTestFixture()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ func TestPolicyFixtureFullInteractionsUseProductionResults(t *testing.T) {
 }
 
 func TestPolicyFixturePathCasesUseProductionResults(t *testing.T) {
-	fixture, err := buildPolicyFixture("test", "v0.0.0")
+	fixture, err := buildTestFixture()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +153,7 @@ func TestPolicyFixturePathCasesUseProductionResults(t *testing.T) {
 }
 
 func TestPolicyFixtureDriftNegativeControl(t *testing.T) {
-	fixture, err := buildPolicyFixture("test", "v0.0.0")
+	fixture, err := buildTestFixture()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,5 +171,37 @@ func TestPolicyFixtureDriftNegativeControl(t *testing.T) {
 	}
 	if decoded.Oracle.SourceDigest == fixture.Oracle.SourceDigest {
 		t.Fatal("tampered provenance unexpectedly matched")
+	}
+}
+
+// The provenance gate must reject a fixture whose claimed oracle commit does
+// not carry the exact production sources the generator executes.
+func buildTestFixture() (policyFixture, error) {
+	root, err := repositoryRoot()
+	if err != nil {
+		return policyFixture{}, err
+	}
+	meta, err := workingTreeOracle(root, "test", "v0.0.0")
+	if err != nil {
+		return policyFixture{}, err
+	}
+	return buildFixtureCases(meta)
+}
+
+func TestBuildOracleRejectsMislabeledProvenance(t *testing.T) {
+	root, err := repositoryRoot()
+	if err != nil {
+		t.Fatalf("repository root: %v", err)
+	}
+	// An ancestor commit that predates the adjudicated matcher cannot match the
+	// working tree, so claiming it must fail rather than silently mislabel.
+	if _, err := buildOracle(root, "caadd5e", "v0.22.1"); err == nil {
+		t.Fatal("buildOracle accepted a commit whose sources differ from the working tree")
+	} else if !strings.Contains(err.Error(), "provenance mismatch") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if _, err := buildOracle(root, "definitely-not-a-commit", "v0.0.0"); err == nil {
+		t.Fatal("buildOracle accepted an unresolvable oracle commit")
 	}
 }

@@ -25,14 +25,15 @@ func NewContextProvider() *ContextProvider {
 func (cp *ContextProvider) BuildContext(agentID, path, actionType string, tags []string) EvalContext {
 	ctx := EvalContext{
 		AgentID:    agentID,
-		Path:       path,
+		Path:       ToLogicalPath(path),
 		Tags:       tags,
 		ActionType: actionType,
 		Now:        time.Now(),
 		EnvVars:    make(map[string]string),
 	}
 
-	ctx.WorkingDir = cp.getWorkingDir()
+	ctx.WorkingDir = ToLogicalPath(cp.getWorkingDir())
+	ctx.HomeDir = ToLogicalPath(cp.getHomeDir())
 	ctx.EnvVars["GIT_BRANCH"] = cp.getGitBranch(ctx.WorkingDir)
 	ctx.EnvVars["HOME"] = cp.getHomeDir()
 

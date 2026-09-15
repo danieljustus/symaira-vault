@@ -5,6 +5,8 @@ package policy
 import (
 	"errors"
 	"fmt"
+	"path"
+	"strings"
 	"time"
 )
 
@@ -120,6 +122,11 @@ type EvalContext struct {
 	Path       string
 	Tags       []string
 	WorkingDir string
+
+	// HomeDir expands a leading "~/" in path patterns. It is supplied by the
+	// caller so that evaluation performs no runtime discovery and stays
+	// deterministic; an empty value leaves "~/" patterns unexpanded.
+	HomeDir    string
 	EnvVars    map[string]string
 	ActionType string // read, write, delete, run, etc.
 	ToolName   string
@@ -199,6 +206,16 @@ func (c *Conditions) validate() error {
 		}
 	}
 
+	// A syntactically invalid glob never matches anything. Left unvalidated, a
+	// malformed pattern in a deny rule would silently stop denying, so reject it
+	// at load time instead of failing open at evaluation time.
+	if err := validatePathPattern("path", c.Path); err != nil {
+		return err
+	}
+	if err := validatePathPattern("working_dir", c.WorkingDir); err != nil {
+		return err
+	}
+
 	if c.ActionType != "" {
 		switch c.ActionType {
 		case "read", "write", "delete", "run", "list", "get", "set", "find": //nolint:goconst // string literals in switch
@@ -208,6 +225,17 @@ func (c *Conditions) validate() error {
 		}
 	}
 
+	return nil
+}
+
+func validatePathPattern(field, pattern string) error {
+	pattern = strings.TrimSpace(pattern)
+	if pattern == "" {
+		return nil
+	}
+	if _, err := path.Match(pattern, ""); err != nil {
+		return fmt.Errorf("invalid %s pattern %q: %w", field, pattern, err)
+	}
 	return nil
 }
 

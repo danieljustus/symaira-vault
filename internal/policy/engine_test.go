@@ -341,7 +341,7 @@ func TestEngineEvaluatePathMatching(t *testing.T) {
 	}
 
 	engine := NewEngine([]*Policy{policy})
-	home, _ := os.UserHomeDir()
+	const home = "/fixture/home/probe"
 
 	tests := []struct {
 		name string
@@ -350,34 +350,34 @@ func TestEngineEvaluatePathMatching(t *testing.T) {
 	}{
 		{
 			name: "match project a direct child",
-			path: filepath.Join(home, "dev", "project-a", "secret"),
+			path: home + "/dev/project-a/secret",
 			want: ActionAllow,
 		},
 		{
 			name: "no match project a grandchild",
-			path: filepath.Join(home, "dev", "project-a", "sub", "secret"),
+			path: home + "/dev/project-a/sub/secret",
 			want: ActionDeny,
 		},
 		{
 			name: "match project b recursive",
-			path: filepath.Join(home, "dev", "project-b", "sub", "secret"),
+			path: home + "/dev/project-b/sub/secret",
 			want: ActionAllow,
 		},
 		{
 			name: "match exact path",
-			path: filepath.Join(home, "exact", "path"),
+			path: home + "/exact/path",
 			want: ActionAllow,
 		},
 		{
 			name: "no match",
-			path: filepath.Join(home, "other", "path"),
+			path: home + "/other/path",
 			want: ActionDeny,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := EvalContext{Path: tt.path, Now: time.Now()}
+			ctx := EvalContext{Path: tt.path, HomeDir: home, Now: time.Now()}
 			got := engine.Evaluate(ctx)
 			if got.Action != tt.want {
 				t.Errorf("Evaluate() = %v, want %v", got.Action, tt.want)
@@ -402,7 +402,7 @@ func TestEngineEvaluateWorkingDir(t *testing.T) {
 	}
 
 	engine := NewEngine([]*Policy{policy})
-	home, _ := os.UserHomeDir()
+	const home = "/fixture/home/probe"
 
 	tests := []struct {
 		name string
@@ -411,24 +411,24 @@ func TestEngineEvaluateWorkingDir(t *testing.T) {
 	}{
 		{
 			name: "exact match",
-			dir:  filepath.Join(home, "dev", "project-a"),
+			dir:  home + "/dev/project-a",
 			want: ActionAllow,
 		},
 		{
 			name: "subdirectory match",
-			dir:  filepath.Join(home, "dev", "project-a", "src"),
+			dir:  home + "/dev/project-a/src",
 			want: ActionAllow,
 		},
 		{
 			name: "no match",
-			dir:  filepath.Join(home, "dev", "project-b"),
+			dir:  home + "/dev/project-b",
 			want: ActionDeny,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := EvalContext{WorkingDir: tt.dir, Now: time.Now()}
+			ctx := EvalContext{WorkingDir: tt.dir, HomeDir: home, Now: time.Now()}
 			got := engine.Evaluate(ctx)
 			if got.Action != tt.want {
 				t.Errorf("Evaluate() = %v, want %v", got.Action, tt.want)
@@ -573,7 +573,9 @@ func TestEngineEvaluateEmptyRules(t *testing.T) {
 }
 
 func TestMatchPath(t *testing.T) {
-	home, _ := os.UserHomeDir()
+	// The home directory is injected rather than discovered, so this table is
+	// deterministic and never reads the operating user's real home.
+	const home = "/fixture/home/probe"
 
 	tests := []struct {
 		pattern string
@@ -584,17 +586,17 @@ func TestMatchPath(t *testing.T) {
 		{"", "anything", true},
 		{"exact", "exact", true},
 		{"exact", "other", false},
-		{"~/dev/*", filepath.Join(home, "dev", "project"), true},
-		{"~/dev/*", filepath.Join(home, "dev", "project", "sub"), false},
-		{"~/dev/**", filepath.Join(home, "dev", "project", "sub"), true},
-		{"~/exact/path", filepath.Join(home, "exact", "path"), true},
-		{filepath.Join("prefix", "") + string(filepath.Separator), filepath.Join("prefix", "sub"), true},
-		{filepath.Join("prefix", "*"), filepath.Join("prefix", "sub"), true},
+		{"~/dev/*", home + "/dev/project", true},
+		{"~/dev/*", home + "/dev/project/sub", false},
+		{"~/dev/**", home + "/dev/project/sub", true},
+		{"~/exact/path", home + "/exact/path", true},
+		{"prefix/", "prefix/sub", true},
+		{"prefix/*", "prefix/sub", true},
 	}
 
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("%s_%s", tt.pattern, tt.path), func(t *testing.T) {
-			if got := matchPath(tt.pattern, tt.path); got != tt.want {
+			if got := matchPath(tt.pattern, tt.path, home); got != tt.want {
 				t.Errorf("matchPath(%q, %q) = %v, want %v", tt.pattern, tt.path, got, tt.want)
 			}
 		})

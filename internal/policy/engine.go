@@ -2,7 +2,7 @@ package policy
 
 import (
 	"fmt"
-	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -85,7 +85,7 @@ func (e *Engine) matches(rule compiledRule, ctx EvalContext) bool {
 		return false
 	}
 
-	if c.Path != "" && !matchPath(rule.pathPattern, ctx.Path) {
+	if c.Path != "" && !matchPath(rule.pathPattern, ctx.Path, ctx.HomeDir) {
 		return false
 	}
 
@@ -93,7 +93,7 @@ func (e *Engine) matches(rule compiledRule, ctx EvalContext) bool {
 		return false
 	}
 
-	if c.WorkingDir != "" && !matchPath(rule.workDirPattern, ctx.WorkingDir) {
+	if c.WorkingDir != "" && !matchPath(rule.workDirPattern, ctx.WorkingDir, ctx.HomeDir) {
 		return false
 	}
 
@@ -147,22 +147,26 @@ func matchString(pattern, value string) bool {
 	return pattern == value
 }
 
+// matchPath is defined over slash-separated logical paths and is deliberately
+// OS-independent: it uses the slash-based path package rather than filepath, so
+// a policy evaluates identically on every host. Converting a native path into
+// this logical form happens once, at the runtime boundary in BuildContext.
+//
+// home is the caller-supplied home directory used to expand a leading "~/".
+// The matcher performs no runtime discovery of its own, which keeps evaluation
+// pure and reproducible for the POLICY-001 contract.
+//
 //nolint:gocyclo // complexity inherent to glob-style path matching logic
-func matchPath(pattern, value string) bool {
+func matchPath(pattern, value, home string) bool {
 	if pattern == "" || pattern == "*" {
 		return true
 	}
 
-	// filepath.Clean and filepath.Match deliberately use the current target's
-	// separator. In particular, converting backslashes globally would change a
-	// literal/escape on Unix and a separator on Windows.
-	if strings.HasPrefix(pattern, "~/") {
-		home, err := os.UserHomeDir()
-		if err == nil && home != "" {
-			pattern = filepath.Join(home, pattern[2:])
-		}
+	if strings.HasPrefix(pattern, "~/") && home != "" {
+		pattern = path.Join(home, pattern[2:])
 	}
-	cleanPath := filepath.Clean(value)
+
+	cleanPath := path.Clean(value)
 	if cleanPath == "." {
 		cleanPath = ""
 	}
@@ -170,33 +174,44 @@ func matchPath(pattern, value string) bool {
 	if pattern == cleanPath {
 		return true
 	}
-	matched, err := filepath.Match(pattern, cleanPath)
-	if err == nil && matched {
+	if matched, err := path.Match(pattern, cleanPath); err == nil && matched {
 		return true
 	}
 
-	separator := string(filepath.Separator)
-	// The recursive directory suffix is a policy extension over filepath.Match:
+	// The recursive directory suffix is a policy extension over path.Match:
 	// it means this directory and every descendant.
-	if strings.HasSuffix(pattern, separator+"**") {
-		prefix := strings.TrimSuffix(pattern, separator+"**")
-		prefix = strings.TrimSuffix(prefix, separator)
-		if prefix != "" && (cleanPath == prefix || strings.HasPrefix(cleanPath, prefix+separator)) {
+	if strings.HasSuffix(pattern, "/**") {
+		prefix := strings.TrimSuffix(pattern, "/**")
+		prefix = strings.TrimSuffix(prefix, "/")
+		if prefix != "" && (cleanPath == prefix || strings.HasPrefix(cleanPath, prefix+"/")) {
 			return true
 		}
 	}
-	if strings.HasSuffix(pattern, separator) {
-		prefix := strings.TrimSuffix(pattern, separator)
-		if prefix != "" && (cleanPath == prefix || strings.HasPrefix(cleanPath, prefix+separator)) {
+	if strings.HasSuffix(pattern, "/") {
+		prefix := strings.TrimSuffix(pattern, "/")
+		if prefix != "" && (cleanPath == prefix || strings.HasPrefix(cleanPath, prefix+"/")) {
 			return true
 		}
 	}
+	// The bare directory-prefix convenience applies only to wholly literal
+	// patterns. A pattern carrying any glob metacharacter is matched as a glob
+	// and nothing else, so the same pattern is never both glob and literal.
 	if !strings.ContainsAny(pattern, "*?[") {
-		if cleanPath == pattern || strings.HasPrefix(cleanPath, pattern+separator) {
+		if cleanPath == pattern || strings.HasPrefix(cleanPath, pattern+"/") {
 			return true
 		}
 	}
 	return false
+}
+
+// ToLogicalPath converts a native filesystem path into the slash-separated
+// logical form the policy matcher is defined over. This is the only policy code
+// that interprets the host separator.
+func ToLogicalPath(value string) string {
+	if value == "" {
+		return ""
+	}
+	return filepath.ToSlash(filepath.Clean(value))
 }
 
 func matchAnyTag(required, actual []string) bool {

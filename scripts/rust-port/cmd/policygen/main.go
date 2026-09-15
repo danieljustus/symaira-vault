@@ -112,7 +112,14 @@ type pathCase struct {
 	Name    string `json:"name"`
 	Pattern string `json:"pattern"`
 	Path    string `json:"path"`
-	Matches bool   `json:"matches"`
+	Home    string `json:"home,omitempty"`
+	// Matches is the outcome under a single allow rule carrying the pattern.
+	Matches bool `json:"matches"`
+	// DenyAction is the outcome when the same pattern is carried by a
+	// higher-priority deny rule in front of an allow fallback. A matcher change
+	// moves these two in opposite directions, so both polarities are retained
+	// as permanent counterexamples rather than only the allow side.
+	DenyAction string `json:"deny_action"`
 }
 
 type fixtureContext struct {
@@ -122,6 +129,7 @@ type fixtureContext struct {
 	WorkingDir      string            `json:"working_dir,omitempty"`
 	EnvVars         map[string]string `json:"env_vars,omitempty"`
 	ActionType      string            `json:"action_type,omitempty"`
+	HomeDir         string            `json:"home_dir,omitempty"`
 	ToolName        string            `json:"tool_name"`
 	Now             string            `json:"now"`
 	SecretsAccessed int               `json:"secrets_accessed,omitempty"`
@@ -172,7 +180,13 @@ func buildPolicyFixture(commit, release string) (policyFixture, error) {
 	if err != nil {
 		return policyFixture{}, err
 	}
+	return buildFixtureCases(meta)
+}
 
+// buildFixtureCases assembles the contract cases for an already-verified
+// oracle. Provenance verification lives in buildOracle so that it cannot be
+// bypassed on the generation path.
+func buildFixtureCases(meta oracle) (policyFixture, error) {
 	fixture := policyFixture{
 		SchemaVersion:     1,
 		Oracle:            meta,
@@ -196,28 +210,15 @@ func buildPolicyFixture(commit, release string) (policyFixture, error) {
 	return fixture, nil
 }
 
-func buildOracle(root, commit, release string) (oracle, error) {
+// workingTreeOracle digests the production sources and generator as they exist
+// in the working tree. It performs no provenance verification and must not be
+// used on the generation path; buildOracle wraps it with that check.
+func workingTreeOracle(root, commit, release string) (oracle, error) {
 	sources := append([]string(nil), productionSources...)
 	sort.Strings(sources)
 	sourceDigest, err := digestFiles(root, sources)
 	if err != nil {
 		return oracle{}, fmt.Errorf("hash policy sources: %w", err)
-	}
-	// The generator can only execute the code that is actually compiled into it,
-	// which is the working tree. Claiming an oracle commit is therefore only
-	// honest if the working tree's production sources are byte-identical to that
-	// commit's immutable blobs. Verify that against git objects and refuse to
-	// emit a mislabeled fixture.
-	resolved, pinnedDigest, err := pinnedSourceDigest(root, commit, sources)
-	if err != nil {
-		return oracle{}, err
-	}
-	if pinnedDigest != sourceDigest {
-		return oracle{}, fmt.Errorf(
-			"policy oracle provenance mismatch: working tree production sources digest %s "+
-				"does not match commit %s (%s) digest %s; the generator would execute code that is "+
-				"not the claimed oracle. Regenerate from the claimed commit or advance the pin deliberately",
-			sourceDigest, commit, resolved, pinnedDigest)
 	}
 	generatorDigest, err := digestFiles(root, []string{"scripts/rust-port/cmd/policygen/main.go"})
 	if err != nil {
@@ -225,12 +226,35 @@ func buildOracle(root, commit, release string) (oracle, error) {
 	}
 	return oracle{
 		Commit:          commit,
-		CommitSHA:       resolved,
 		Release:         release,
 		SourceFiles:     sources,
 		SourceDigest:    sourceDigest,
 		GeneratorDigest: generatorDigest,
 	}, nil
+}
+
+// buildOracle verifies that the working tree's production sources are
+// byte-identical to the claimed oracle commit's immutable blobs. The generator
+// can only execute the code compiled into it, so claiming a commit is only
+// honest when that code is exactly that commit's code.
+func buildOracle(root, commit, release string) (oracle, error) {
+	meta, err := workingTreeOracle(root, commit, release)
+	if err != nil {
+		return oracle{}, err
+	}
+	resolved, pinnedDigest, err := pinnedSourceDigest(root, commit, meta.SourceFiles)
+	if err != nil {
+		return oracle{}, err
+	}
+	if pinnedDigest != meta.SourceDigest {
+		return oracle{}, fmt.Errorf(
+			"policy oracle provenance mismatch: working tree production sources digest %s "+
+				"does not match commit %s (%s) digest %s; the generator would execute code that is "+
+				"not the claimed oracle. Regenerate from the claimed commit or advance the pin deliberately",
+			meta.SourceDigest, commit, resolved, pinnedDigest)
+	}
+	meta.CommitSHA = resolved
+	return meta, nil
 }
 
 // pinnedSourceDigest resolves commit to a full object name and digests that
@@ -503,25 +527,71 @@ func validateInteractionCoverage(policy fixturePolicy, cases []evaluationCase) e
 }
 
 func buildPathCases() []pathCase {
+	// Inputs are literal slash-separated logical paths. They are emitted
+	// verbatim and consumed verbatim by both implementations, so Go and Rust
+	// always receive identical bytes on every operating system.
 	inputs := []struct {
-		name, pattern, path string
+		name, pattern, path, home string
 	}{
-		{"unicode_star", filepath.Join("fixture", "café", "*"), filepath.Join("fixture", "café", "秘密")},
-		{"unicode_question_is_one_rune", filepath.Join("fixture", "?"), filepath.Join("fixture", "é")},
-		{"unicode_class", filepath.Join("fixture", "[α-γ]"), filepath.Join("fixture", "β")},
-		{"star_does_not_cross_separator", filepath.Join("fixture", "*"), filepath.Join("fixture", "nested", "file")},
-		{"clean_dotdot", filepath.Join("fixture", "café", "*"), "fixture" + string(filepath.Separator) + "other" + string(filepath.Separator) + ".." + string(filepath.Separator) + "café" + string(filepath.Separator) + "file"},
-		{"native_separator", filepath.Join("fixture", "*"), filepath.Join("fixture", "child")},
-		{"slash_backslash_are_not_globally_normalized", "fixture/*", `fixture\child`},
+		{"unicode_star", "fixture/café/*", "fixture/café/秘密", ""},
+		{"unicode_question_is_one_rune", "fixture/?", "fixture/é", ""},
+		{"unicode_class", "fixture/[α-γ]", "fixture/β", ""},
+		{"star_does_not_cross_separator", "fixture/*", "fixture/nested/file", ""},
+		{"clean_dotdot", "fixture/café/*", "fixture/other/../café/file", ""},
+		{"literal_child_match", "fixture/*", "fixture/child", ""},
+		{"backslash_is_never_a_separator", "fixture/*", `fixture\child`, ""},
+		{"backslash_escapes_a_metacharacter", `fixture\*`, "fixture*", ""},
+
+		// Adjudicated divergence between the historical and current matchers:
+		// a pattern carrying a glob metacharacter is a glob and nothing else,
+		// so it no longer also acts as a literal directory prefix.
+		{"question_is_not_a_literal_directory", "fixture/?", "fixture/?/secret", ""},
+		{"class_is_not_a_literal_directory", "fixture/[ab]", "fixture/[ab]/secret", ""},
+		{"question_keeps_its_glob_meaning", "fixture/?", "fixture/a", ""},
+
+		// Home expansion is driven by an explicit home, never by discovery.
+		{"home_expands_against_supplied_home", "~/secure/*", "/fixture/home/probe/secure/secret", "/fixture/home/probe"},
+		{"home_does_not_match_outside_home", "~/secure/*", "/fixture/home/other/secure/secret", "/fixture/home/probe"},
+		{"home_unexpanded_without_supplied_home", "~/secure/*", "/fixture/home/probe/secure/secret", ""},
+		{"home_literal_without_supplied_home", "~/secure/*", "~/secure/secret", ""},
+
+		// Prefix and recursion boundaries.
+		{"literal_directory_prefix", "fixture/dir", "fixture/dir/secret", ""},
+		{"prefix_sibling_is_not_matched", "fixture/dir", "fixture/dirx/secret", ""},
+		{"recursive_suffix", "fixture/dir/**", "fixture/dir/a/b", ""},
+		{"trailing_slash_prefix", "fixture/dir/", "fixture/dir/a", ""},
+
+		// Windows-shaped inputs are ordinary literals in the logical form.
+		{"drive_letter_literal", "C:/fixture/*", "C:/fixture/secret", ""},
+		{"unc_literal", "//server/share/*", "//server/share/secret", ""},
 	}
 	result := make([]pathCase, 0, len(inputs))
 	for _, input := range inputs {
-		policy := &policypkg.Policy{Version: "1.0", Rules: []policypkg.Rule{{
+		ctx := policypkg.EvalContext{Path: input.path, HomeDir: input.home}
+
+		allowPolicy := &policypkg.Policy{Version: "1.0", Rules: []policypkg.Rule{{
 			Name: "path fixture", Action: policypkg.ActionAllow,
 			Conditions: policypkg.Conditions{Path: input.pattern},
 		}}}
-		got := policypkg.NewEngine([]*policypkg.Policy{policy}).Evaluate(policypkg.EvalContext{Path: input.path})
-		result = append(result, pathCase{Name: input.name, Pattern: input.pattern, Path: input.path, Matches: got.Matched})
+		allow := policypkg.NewEngine([]*policypkg.Policy{allowPolicy}).Evaluate(ctx)
+
+		denyPolicy := &policypkg.Policy{Version: "1.0", Rules: []policypkg.Rule{
+			{
+				Name: "path fixture deny", Priority: 10, Action: policypkg.ActionDeny,
+				Conditions: policypkg.Conditions{Path: input.pattern},
+			},
+			{Name: "path fixture fallback", Priority: 0, Action: policypkg.ActionAllow},
+		}}
+		deny := policypkg.NewEngine([]*policypkg.Policy{denyPolicy}).Evaluate(ctx)
+
+		result = append(result, pathCase{
+			Name:       input.name,
+			Pattern:    input.pattern,
+			Path:       input.path,
+			Home:       input.home,
+			Matches:    allow.Matched,
+			DenyAction: deny.Action.String(),
+		})
 	}
 	return result
 }
@@ -687,14 +757,18 @@ func snapshotProfile(profile configpkg.AgentProfile) profileSnapshot {
 	}
 }
 
+// The fixture carries the exact logical path strings both implementations
+// consume. Rewriting them to native separators here would have fed Go and Rust
+// different inputs on Windows, so no separator conversion happens on either
+// side of the differential.
 func toGoPolicy(input fixturePolicy) *policypkg.Policy {
 	policy := &policypkg.Policy{Version: input.Version, Description: input.Description}
 	for _, rule := range input.Rules {
 		conditions := policypkg.Conditions{
 			AgentID:      rule.Conditions.AgentID,
-			Path:         filepath.FromSlash(rule.Conditions.Path),
+			Path:         rule.Conditions.Path,
 			Tags:         append([]string(nil), rule.Conditions.Tags...),
-			WorkingDir:   filepath.FromSlash(rule.Conditions.WorkingDir),
+			WorkingDir:   rule.Conditions.WorkingDir,
 			EnvVars:      cloneMap(rule.Conditions.EnvVars),
 			ActionType:   rule.Conditions.ActionType,
 			AllowedTools: append([]string(nil), rule.Conditions.AllowedTools...),
@@ -720,9 +794,10 @@ func toGoContext(input fixtureContext) policypkg.EvalContext {
 	}
 	return policypkg.EvalContext{
 		AgentID:         input.AgentID,
-		Path:            filepath.FromSlash(input.Path),
+		Path:            input.Path,
 		Tags:            append([]string(nil), input.Tags...),
-		WorkingDir:      filepath.FromSlash(input.WorkingDir),
+		WorkingDir:      input.WorkingDir,
+		HomeDir:         input.HomeDir,
 		EnvVars:         cloneMap(input.EnvVars),
 		ActionType:      input.ActionType,
 		ToolName:        input.ToolName,
