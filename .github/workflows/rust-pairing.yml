@@ -139,6 +139,35 @@ jobs:
           set -euo pipefail
           make device-list-differential
 
+      - name: Native CLI and session technical gates
+        shell: bash
+        run: python3 scripts/rust-port/native_closeout.py portable
+
+      - name: Install disposable Linux Secret Service
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y gnome-keyring dbus-x11
+
+      - name: Native keyring resource probe
+        shell: bash
+        env:
+          SYMVAULT_DISPOSABLE_NATIVE_RUNNER: '1'
+        run: python3 scripts/rust-port/native_closeout.py keyring
+
+      - name: Native disposable launchd lifecycle
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          SYMVAULT_DISPOSABLE_NATIVE_RUNNER: '1'
+        run: python3 scripts/rust-port/native_closeout.py daemon
+
+      - name: Retain native closeout observations
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: native-closeout-${{ matrix.os }}
+          path: target/native-closeout/
+          if-no-files-found: warn
+
       - name: Retain live device-list observations
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
