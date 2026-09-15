@@ -55,7 +55,15 @@ struct BackendCase {
     steps: Vec<BackendStep>,
 }
 
+/// Retained with the divergence mechanism itself: the set is empty today, and
+/// the next divergence to be adjudicated is recorded here rather than being
+/// normalised away. The fields are deserialized and asserted only while the set
+/// is non-empty.
 #[derive(Debug, Deserialize)]
+#[allow(
+    dead_code,
+    reason = "the divergence mechanism is retained for the next adjudication"
+)]
 struct DivergentCase {
     name: String,
     steps: Vec<BackendStep>,
