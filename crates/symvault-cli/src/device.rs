@@ -1,11 +1,15 @@
 //! PAIRING-001 CLI implementation: device pair, join, accept, list, add, revoke.
 
 use serde::Serialize;
+#[path = "device_input.rs"]
+mod input;
+use input::{read_passphrase, unlock_passphrase};
 use std::{
     collections::HashSet,
     io::{self, BufRead, Write},
     path::{Path, PathBuf},
 };
+use symvault_core::config::{Config, GitConfig};
 use symvault_crypto::{
     Identity, Recipient, SecretBytes, decrypt_identity, encrypt_identity_scrypt, fingerprint,
     generate_identity, parse_recipient, recipient_string, reencrypt,
@@ -56,30 +60,22 @@ fn short_key(key: &str) -> Vec<u8> {
 }
 
 fn truncate_pubkey(pubkey: &str) -> String {
-    if pubkey.len() > 16 {
-        format!("{}...", &pubkey[..16])
-    } else {
-        pubkey.to_owned()
-    }
+    String::from_utf8_lossy(&short_key(pubkey)).into_owned()
 }
 
 fn is_initialized(vault: &Path) -> bool {
     vault.join("identity.age").is_file() && vault.join("config.yaml").is_file()
 }
 
-fn read_passphrase(prompt: &str) -> Result<String, String> {
-    if let Ok(pass) = std::env::var("SYMVAULT_PASSPHRASE") {
-        return Ok(pass);
-    }
-    eprint!("{prompt}");
-    let mut line = String::new();
-    let stdin = io::stdin();
-    stdin
-        .lock()
-        .read_line(&mut line)
-        .map_err(|e| format!("read passphrase: {e}"))?;
-    let trimmed = line.trim_end_matches(['\r', '\n']).to_owned();
-    Ok(trimmed)
+fn joined_config(vault: &Path) -> Result<Vec<u8>, String> {
+    let config = Config {
+        vault_dir: vault.to_str().ok_or("vault path must be UTF-8")?.to_owned(),
+        git: Some(GitConfig::default()),
+        ..Config::default()
+    };
+    config
+        .to_yaml_bytes()
+        .map_err(|e| format!("serialize config: {e}"))
 }
 
 fn unlock_vault(vault: &Path) -> Result<Identity, String> {
@@ -90,7 +86,10 @@ fn unlock_vault(vault: &Path) -> Result<Identity, String> {
     let data = safeio::read(&id_path)
         .map_err(|e| format!("read identity: {e}"))?
         .ok_or_else(|| "vault is not initialized (run 'symvault init' first)".to_owned())?;
-    let passphrase = read_passphrase("Enter passphrase: ")?;
+    let config_bytes = safeio::read(&vault.join("config.yaml"))
+        .map_err(|e| format!("read config: {e}"))?
+        .ok_or("configuration is missing")?;
+    let passphrase = unlock_passphrase(&config_bytes)?;
     let sec_pass = SecretBytes::new(passphrase.as_bytes());
     decrypt_identity(&data, &sec_pass).map_err(|e| format!("unlock vault: {e}"))
 }
@@ -200,8 +199,15 @@ fn auto_commit_and_push(vault: &Path, message: &str) {
             ..Default::default()
         }) {
             eprintln!("Warning: could not auto-commit/push: {e}");
-        } else {
-            let _ = repo.push("origin");
+        } else if Config::load(vault.join("config.yaml"))
+            .ok()
+            .and_then(|config| config.git)
+            .is_some_and(|git| git.auto_push)
+        {
+            let result = repo.push("origin");
+            if !result.success && !result.skipped {
+                eprintln!("Warning: could not auto-push: {:?}", result.error);
+            }
         }
     }
 }
@@ -294,7 +300,9 @@ pub(super) fn join(
         eprintln!("Cloning vault from {remote_url} ...");
         safeio::create_dir_all(vault).map_err(|e| format!("create vault dir: {e}"))?;
         let status = std::process::Command::new("git")
+            .env_remove("SYMVAULT_PASSPHRASE")
             .arg("clone")
+            .arg("--")
             .arg(remote_url)
             .arg(vault)
             .status()
@@ -345,11 +353,8 @@ pub(super) fn join(
     safeio::create_dir_all(&vault.join(".symvault").join("pairing"))
         .map_err(|e| format!("create pairing dir: {e}"))?;
 
-    let config_content = format!(
-        "vaultDir: \"{}\"\ngit:\n  autoPush: true\n  autoPull: true\n  autoPullInterval: 10s\n  commitTemplate: \"Update from Symaira Vault\"\n",
-        vault.display()
-    );
-    safeio::write_atomic(&vault.join("config.yaml"), config_content.as_bytes())
+    let config_content = joined_config(vault)?;
+    safeio::write_atomic(&vault.join("config.yaml"), &config_content)
         .map_err(|e| format!("write config: {e}"))?;
 
     let sec_pass = SecretBytes::new(passphrase.as_bytes());
@@ -547,11 +552,8 @@ pub(super) fn add(
     safeio::create_dir_all(&vault.join(".symvault").join("pairing"))
         .map_err(|e| format!("create pairing dir: {e}"))?;
 
-    let config_content = format!(
-        "vaultDir: \"{}\"\ngit:\n  autoPush: true\n  autoPull: true\n  autoPullInterval: 10s\n  commitTemplate: \"Update from Symaira Vault\"\n",
-        vault.display()
-    );
-    safeio::write_atomic(&vault.join("config.yaml"), config_content.as_bytes())
+    let config_content = joined_config(vault)?;
+    safeio::write_atomic(&vault.join("config.yaml"), &config_content)
         .map_err(|e| format!("write config: {e}"))?;
 
     let sec_pass = SecretBytes::new(passphrase.as_bytes());

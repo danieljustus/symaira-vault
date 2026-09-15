@@ -268,6 +268,7 @@ impl GitRepository {
     }
     fn command(&self, args: &[&str]) -> Result<Output, GitError> {
         let out = Command::new("git")
+            .env_remove("SYMVAULT_PASSPHRASE")
             .arg("-C")
             .arg(&self.root)
             .args(args)

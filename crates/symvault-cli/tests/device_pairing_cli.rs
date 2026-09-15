@@ -35,12 +35,18 @@ impl TestVault {
         let passphrase = "correct-test-passphrase-123".to_owned();
 
         // Write config.yaml
-        let config = format!("vaultDir: \"{}\"\nformat_version: 1\n", path.display());
+        let config = symvault_core::config::Config {
+            vault_dir: path.to_str().unwrap().to_owned(),
+            ..Default::default()
+        }
+        .to_yaml_bytes()
+        .unwrap();
         fs::write(path.join("config.yaml"), config).unwrap();
 
         // Write identity.age
         let sec_pass = SecretBytes::new(passphrase.as_bytes());
-        let enc_id = encrypt_identity_scrypt(&identity, &sec_pass, 18).unwrap();
+        // Lower fixture cost only; production joins retain the Go work factor.
+        let enc_id = encrypt_identity_scrypt(&identity, &sec_pass, 10).unwrap();
         fs::write(path.join("identity.age"), enc_id).unwrap();
 
         // Write recipients.txt
@@ -56,6 +62,7 @@ impl TestVault {
 
     fn run(&self, args: &[&str]) -> Output {
         Command::new(env!("CARGO_BIN_EXE_symvault"))
+            .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
             .env("SYMVAULT_PASSPHRASE", &self.passphrase)
             .env("HOME", &self.path)
             .env("USERPROFILE", &self.path)
@@ -79,6 +86,12 @@ impl Drop for TestVault {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }
+}
+
+fn test_input(vault: &TestVault, input: &[u8]) -> fs::File {
+    let path = vault.path.join("test-only-stdin");
+    fs::write(&path, input).unwrap();
+    fs::File::open(path).unwrap()
 }
 
 #[test]
@@ -133,8 +146,10 @@ fn device_join_and_accept_file_transport_end_to_end() {
     let _ = fs::remove_dir_all(&join_dir);
 
     let join_output = Command::new(env!("CARGO_BIN_EXE_symvault"))
-        .env("SYMVAULT_PASSPHRASE", "joining-device-passphrase-123")
+        .env_remove("SYMVAULT_PASSPHRASE")
+        .stdin(test_input(&primary, b"joining-device-passphrase-123\n"))
         .env("HOME", &join_dir)
+        .env("USERPROFILE", &join_dir)
         .arg("--vault")
         .arg(&join_dir)
         .args([
@@ -158,6 +173,8 @@ fn device_join_and_accept_file_transport_end_to_end() {
     // Verify joining device vault initialized
     assert!(join_dir.join("identity.age").exists());
     assert!(join_dir.join("config.yaml").exists());
+    let joined_config = symvault_core::config::Config::load(join_dir.join("config.yaml")).unwrap();
+    assert_eq!(joined_config.vault_dir, join_dir.to_str().unwrap());
     assert!(join_dir.join("recipients.txt").exists());
 
     // Verify response artifact in joining vault
@@ -224,8 +241,10 @@ fn device_add_with_pair_flag_and_revoke_flow() {
 
     // Run device add --pair on second device
     let add_output = Command::new(env!("CARGO_BIN_EXE_symvault"))
-        .env("SYMVAULT_PASSPHRASE", "second-device-passphrase-123")
+        .env_remove("SYMVAULT_PASSPHRASE")
+        .stdin(test_input(&primary, b"second-device-passphrase-123\n"))
         .env("HOME", &add_dir)
+        .env("USERPROFILE", &add_dir)
         .arg("--vault")
         .arg(&add_dir)
         .args([
@@ -395,4 +414,112 @@ fn accept_refuses_non_directory_entries_root() {
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("vault entries root is not a directory"));
+}
+
+#[test]
+fn environment_unlock_requires_explicit_opt_in() {
+    let vault = TestVault::new("env-denied");
+    let output = Command::new(env!("CARGO_BIN_EXE_symvault"))
+        .env("HOME", &vault.path)
+        .env("USERPROFILE", &vault.path)
+        .env("SYMVAULT_PASSPHRASE", &vault.passphrase)
+        .env_remove("SYMVAULT_ALLOW_ENV_PASSPHRASE")
+        .arg("--vault")
+        .arg(&vault.path)
+        .args(["device", "pair"])
+        .output()
+        .unwrap();
+    assert!(
+        !output.status.success(),
+        "environment unlock must default-deny"
+    );
+    assert!(
+        fs::read_dir(vault.path.join(".symvault/pairing"))
+            .unwrap()
+            .next()
+            .is_none()
+    );
+    assert!(!String::from_utf8_lossy(&output.stderr).contains(&vault.passphrase));
+}
+
+#[test]
+fn explicit_disable_and_touchid_never_fall_back_to_environment_unlock() {
+    let vault = TestVault::new("policy-denied");
+    for config in [
+        "security:\n  disable_env_passphrase: true\n  allow_env_passphrase: true\n",
+        "authMethod: touchid\n",
+        "useTouchID: true\n",
+        "vault:\n  authMethod: touchid\n",
+    ] {
+        fs::write(vault.path.join("config.yaml"), config).unwrap();
+        let output = vault.run(&["device", "pair"]);
+        assert!(!output.status.success(), "must refuse policy {config}");
+        assert!(
+            fs::read_dir(vault.path.join(".symvault/pairing"))
+                .unwrap()
+                .next()
+                .is_none()
+        );
+        assert!(!String::from_utf8_lossy(&output.stderr).contains(&vault.passphrase));
+    }
+}
+
+#[test]
+fn configuration_can_explicitly_allow_environment_unlock() {
+    let vault = TestVault::new("config-env-allowed");
+    fs::write(
+        vault.path.join("config.yaml"),
+        "security:\n  allow_env_passphrase: true\n",
+    )
+    .unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_symvault"))
+        .env("HOME", &vault.path)
+        .env("USERPROFILE", &vault.path)
+        .env("SYMVAULT_PASSPHRASE", &vault.passphrase)
+        .env_remove("SYMVAULT_ALLOW_ENV_PASSPHRASE")
+        .arg("--vault")
+        .arg(&vault.path)
+        .args(["device", "pair"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        fs::read_dir(vault.path.join(".symvault/pairing"))
+            .unwrap()
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn join_does_not_take_new_device_passphrase_from_environment() {
+    let primary = TestVault::new("join-env-only");
+    assert!(primary.run(&["device", "pair"]).status.success());
+    let pairing_file = fs::read_dir(primary.path.join(".symvault/pairing"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let token = pairing_file.file_stem().unwrap();
+    let target = primary.path.join("joining");
+    let output = Command::new(env!("CARGO_BIN_EXE_symvault"))
+        .env("HOME", &primary.path)
+        .env("USERPROFILE", &primary.path)
+        .env("SYMVAULT_PASSPHRASE", &primary.passphrase)
+        .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
+        .arg("--vault")
+        .arg(&target)
+        .args(["device", "join", "--pairing-file"])
+        .arg(pairing_file.as_os_str())
+        .arg(token)
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(!target.join("identity.age").exists());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("EOF"));
 }
