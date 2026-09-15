@@ -36,6 +36,8 @@ struct Case {
     rejected: bool,
     snapshot: Option<Snapshot>,
     #[serde(default)]
+    warnings: Vec<String>,
+    #[serde(default)]
     saved_yaml: String,
     #[serde(default)]
     round_trips_to: String,
@@ -103,7 +105,7 @@ fn go_duration(total: u64) -> String {
 fn fixture_has_pinned_provenance_and_schema() {
     let fixture = fixture();
     assert_eq!(fixture.schema_version, 1);
-    assert_eq!(fixture.oracle.commit, "adeb736e");
+    assert_eq!(fixture.oracle.commit, "0daaaa91");
     assert_eq!(fixture.oracle.release, "unreleased");
     assert_eq!(fixture.oracle.commit_sha.len(), 40);
     assert!(
@@ -120,31 +122,16 @@ fn fixture_has_pinned_provenance_and_schema() {
     assert!(fixture.cases.iter().any(|case| !case.rejected));
 }
 
-/// Inputs where the two implementations disagree on acceptance, pending
-/// adjudication of the contract.
+/// Inputs where the two implementations disagree on acceptance.
 ///
-/// In every one of these Go is the more permissive side, and in three of the
-/// four its leniency means security-relevant configuration is silently
-/// discarded rather than reported:
+/// Empty since the step-one alignment: Rust adopted Go's YAML 1.1 booleans and
+/// its treatment of an explicit `null`, and both sides now warn-and-accept a
+/// non-positive duration and a multi-document stream rather than one rejecting
+/// what the other takes. Step two flips the latter two to rejection in both,
+/// deliberately and together; see `docs/rust-port/cfg-003-acceptance-adjudication.md`.
 ///
-/// - `multiple_documents`: Go consumes the first document and ignores the
-///   rest, so a second document is silently dropped.
-/// - `wrong_scalar_type`: `canWrite: "yes"` is silently ignored, so a
-///   permission the operator meant to set never takes effect.
-/// - `negative_duration`: `sessionTimeout: -5m` silently falls back to the
-///   default rather than being reported.
-/// - `null_document`: Go treats an explicit `null` as an empty document.
-///
-/// Resolving this changes which existing config files load, so it is a
-/// deliberate contract decision rather than something to settle inside a test.
-/// Until it is settled the disagreement is pinned exactly: the set may not
-/// grow or shrink unnoticed, in either direction.
-const ACCEPTANCE_PENDING_ADJUDICATION: [&str; 4] = [
-    "multiple_documents",
-    "negative_duration",
-    "null_document",
-    "wrong_scalar_type",
-];
+/// The set is asserted exactly, so it can neither grow nor shrink unnoticed.
+const ACCEPTANCE_PENDING_ADJUDICATION: [&str; 0] = [];
 
 /// The decisive property: an input one implementation rejects must not be
 /// silently accepted by the other, except for the adjudication set above,
@@ -274,4 +261,40 @@ fn writer_modes_match_go_oracle() {
     let _ = std::fs::remove_dir_all(&root);
     assert_eq!(dir_mode, fixture.modes.directory, "directory mode");
     assert_eq!(file_mode, fixture.modes.file, "config file mode");
+}
+
+/// The warning texts are ours on both sides, so unlike error messages they are
+/// part of the contract. A warning that stops being emitted would otherwise
+/// return the loader to silently discarding what the operator wrote.
+#[test]
+fn warnings_match_go_oracle() {
+    for case in &fixture().cases {
+        if case.rejected {
+            continue;
+        }
+        let (_, warnings) = Config::load_from_bytes_with_warnings(case.input.as_bytes())
+            .unwrap_or_else(|error| {
+                panic!(
+                    "{}: Go accepted this input, Rust failed: {error}",
+                    case.name
+                )
+            });
+        assert_eq!(warnings, case.warnings, "warnings for {}", case.name);
+    }
+}
+
+/// At least one case must actually carry a warning, or the check above would
+/// pass vacuously for an implementation that emits none at all.
+#[test]
+fn the_fixture_exercises_warnings() {
+    let cases = fixture().cases;
+    let warned: Vec<&str> = cases
+        .iter()
+        .filter(|case| !case.warnings.is_empty())
+        .map(|case| case.name.as_str())
+        .collect();
+    assert!(
+        warned.contains(&"multiple_documents") && warned.contains(&"negative_duration"),
+        "fixture no longer exercises both warnings: {warned:?}"
+    );
 }

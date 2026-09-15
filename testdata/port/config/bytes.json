@@ -1,18 +1,19 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "adeb736e",
-    "commit_sha": "adeb736ed507881eb1c14f951627d8209094314c",
+    "commit": "0daaaa91",
+    "commit_sha": "0daaaa91c7eb38455c943de84b6a8cfb2504a9e1",
     "release": "unreleased",
     "source_files": [
       "internal/config/config.go",
       "internal/config/config_load.go",
       "internal/config/config_merge.go",
       "internal/config/config_save.go",
-      "internal/config/config_validate.go"
+      "internal/config/config_validate.go",
+      "internal/config/warn.go"
     ],
-    "source_digest": "0c6771dc3ab4c188e3cee7065d37d330a17b1a45faad246736885af422038b8f",
-    "generator_digest": "7c965dd4e83250ce1bbcffa036f9b31426b8e001a3f087e505de4dc4636cca44"
+    "source_digest": "0a65a6284d4dc495578c4005d62f1843840c06dc45931c87913307cc9a281d40",
+    "generator_digest": "7169408ef495389231900c243c00536fa724c122978861c03249a50fa590f758"
   },
   "cases": [
     {
@@ -248,6 +249,9 @@
           "opencode"
         ]
       },
+      "warnings": [
+        "config contains more than one YAML document; only the first is used and the rest are ignored"
+      ],
       "saved_yaml": "agents:\n    a:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: true\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: a\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
       "round_trips_to": "identical_snapshot"
     },
@@ -319,6 +323,9 @@
           "opencode"
         ]
       },
+      "warnings": [
+        "sessionTimeout: not a positive duration; the default is used instead"
+      ],
       "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
       "round_trips_to": "identical_snapshot"
     },
