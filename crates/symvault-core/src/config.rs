@@ -232,41 +232,126 @@ pub struct PathResolver {
     pub migrated: bool,
 }
 
+/// The discovered environment that path resolution is computed from.
+///
+/// Keeping the inputs explicit makes resolution deterministic and lets the
+/// CFG-001 contract pin it without touching the filesystem or the process
+/// environment. Mirrors Go's `config.PathEnvironment`.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct PathEnvironment {
+    /// An empty home yields a zero `PathResolver`, matching the behavior when
+    /// the home directory cannot be determined at all.
+    pub home: String,
+    /// Raw environment values. An empty value falls back to the XDG default
+    /// beneath `home`, exactly as an unset one does.
+    pub xdg_config_home: String,
+    pub xdg_data_home: String,
+    pub xdg_cache_home: String,
+    /// Raw `SYMVAULT_VAULT` value. It is trimmed, and a leading `~` is
+    /// expanded against `home`.
+    pub vault_override: String,
+    /// The two filesystem probes the resolution depends on. The caller
+    /// performs them; the resolution itself touches no filesystem.
+    pub legacy_dir_exists: bool,
+    pub xdg_data_dir_exists: bool,
+}
+
+/// Returns the raw XDG value when set, otherwise the XDG default beneath home.
+fn xdg_base(value: &str, home: &str, fallback: &str) -> PathBuf {
+    if value.is_empty() {
+        Path::new(home).join(fallback)
+    } else {
+        PathBuf::from(value)
+    }
+}
+
+/// Expands a leading `~` against the supplied home rather than discovering it.
+fn expand_tilde_against(value: &str, home: &str) -> PathBuf {
+    if value == "~" {
+        return PathBuf::from(home);
+    }
+    match value.strip_prefix("~/") {
+        Some(rest) => Path::new(home).join(rest),
+        None => PathBuf::from(value),
+    }
+}
+
+/// The pure CFG-001 path-resolution contract.
+///
+/// For existing installs: reads from legacy, writes to XDG.
+/// For new installs: uses XDG exclusively.
+#[must_use]
+pub fn resolve_paths(env: &PathEnvironment) -> PathResolver {
+    if env.home.is_empty() {
+        return PathResolver {
+            config_dir: PathBuf::new(),
+            data_dir: PathBuf::new(),
+            cache_dir: PathBuf::new(),
+            legacy_dir: None,
+            migrated: false,
+        };
+    }
+
+    let legacy = Path::new(&env.home).join(LEGACY_DIR);
+    let cache_dir = xdg_base(&env.xdg_cache_home, &env.home, ".cache").join(APP_NAME);
+    let xdg_config = xdg_base(&env.xdg_config_home, &env.home, ".config").join(APP_NAME);
+    let xdg_data = xdg_base(&env.xdg_data_home, &env.home, ".local/share").join(APP_NAME);
+
+    let (config_dir, mut data_dir, migrated) =
+        match (env.legacy_dir_exists, env.xdg_data_dir_exists) {
+            (true, false) => (legacy.clone(), legacy.clone(), false),
+            (true, true) => (xdg_config, xdg_data, true),
+            _ => (xdg_config, xdg_data, false),
+        };
+
+    let trimmed = env.vault_override.trim();
+    if !trimmed.is_empty() {
+        data_dir = expand_tilde_against(trimmed, &env.home);
+    }
+
+    PathResolver {
+        config_dir,
+        data_dir,
+        cache_dir,
+        legacy_dir: env.legacy_dir_exists.then_some(legacy),
+        migrated,
+    }
+}
+
 impl PathResolver {
+    /// Discovers the environment and resolves the paths from it. The
+    /// resolution itself lives in [`resolve_paths`]; this is the discovery
+    /// wrapper.
     #[must_use]
     pub fn new() -> Self {
         let home = home_dir();
-        let legacy = home.join(LEGACY_DIR);
-        let xdg_data = xdg_home("XDG_DATA_HOME", ".local/share").join(APP_NAME);
-        let xdg_config = xdg_home("XDG_CONFIG_HOME", ".config").join(APP_NAME);
-        let cache = xdg_home("XDG_CACHE_HOME", ".cache").join(APP_NAME);
-        let legacy_exists = legacy.is_dir();
-        let xdg_exists = xdg_data.is_dir();
-        let (config_dir, mut data_dir, migrated) = if legacy_exists && !xdg_exists {
-            (legacy.clone(), legacy.clone(), false)
-        } else {
-            (xdg_config, xdg_data, legacy_exists && xdg_exists)
+        let env = PathEnvironment {
+            home: home.clone(),
+            xdg_config_home: env_string("XDG_CONFIG_HOME"),
+            xdg_data_home: env_string("XDG_DATA_HOME"),
+            xdg_cache_home: env_string("XDG_CACHE_HOME"),
+            vault_override: env_string("SYMVAULT_VAULT"),
+            legacy_dir_exists: false,
+            xdg_data_dir_exists: false,
         };
-        match env::var("SYMVAULT_VAULT") {
-            Ok(value) if !value.trim().is_empty() => {
-                data_dir = expand_tilde(value.trim()).unwrap_or(data_dir);
-            }
-            _ => {}
+        if home.is_empty() {
+            return resolve_paths(&env);
         }
-        Self {
-            config_dir,
-            data_dir,
-            cache_dir: cache,
-            legacy_dir: legacy_exists.then_some(legacy),
-            migrated,
-        }
+        let probed = PathEnvironment {
+            legacy_dir_exists: Path::new(&home).join(LEGACY_DIR).is_dir(),
+            xdg_data_dir_exists: xdg_base(&env.xdg_data_home, &home, ".local/share")
+                .join(APP_NAME)
+                .is_dir(),
+            ..env
+        };
+        resolve_paths(&probed)
     }
 
+    /// The path to `config.yaml`, beneath the **resolved** config directory.
+    /// For a legacy install that is the legacy directory, not the XDG one.
     #[must_use]
     pub fn config_path(&self) -> PathBuf {
-        xdg_home("XDG_CONFIG_HOME", ".config")
-            .join(APP_NAME)
-            .join("config.yaml")
+        self.config_dir.join("config.yaml")
     }
     #[must_use]
     pub fn vault_data_dir(&self) -> &Path {
@@ -281,6 +366,7 @@ impl PathResolver {
         self.cache_dir.join("update-cache.json")
     }
 }
+
 impl Default for PathResolver {
     fn default() -> Self {
         Self::new()
@@ -565,23 +651,16 @@ impl Config {
     }
 }
 
-fn home_dir() -> PathBuf {
-    env::var_os("HOME")
-        .map(PathBuf::from)
-        .or_else(|| env::var_os("USERPROFILE").map(PathBuf::from))
+fn home_dir() -> String {
+    env::var("HOME")
+        .ok()
+        .filter(|value| !value.is_empty())
+        .or_else(|| env::var("USERPROFILE").ok())
         .unwrap_or_default()
 }
-fn xdg_home(var: &str, fallback: &str) -> PathBuf {
-    env::var_os(var)
-        .map(PathBuf::from)
-        .unwrap_or_else(|| home_dir().join(fallback))
-}
-fn expand_tilde(value: &str) -> Option<PathBuf> {
-    value
-        .strip_prefix("~/")
-        .map(|rest| home_dir().join(rest))
-        .or_else(|| (value == "~").then(home_dir))
-        .or_else(|| Some(PathBuf::from(value)))
+
+fn env_string(name: &str) -> String {
+    env::var(name).unwrap_or_default()
 }
 fn key(value: &str) -> serde_yaml_ng::Value {
     serde_yaml_ng::Value::String(value.into())

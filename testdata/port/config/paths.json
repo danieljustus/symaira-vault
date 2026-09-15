@@ -1,0 +1,271 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "fc9eddc0",
+    "commit_sha": "fc9eddc066fedefa9d4ba1978be323cfb74737b6",
+    "release": "unreleased",
+    "source_files": [
+      "internal/config/config.go",
+      "internal/config/paths.go"
+    ],
+    "source_digest": "cd12795b7492ab501d9bb780b994fad6532cf1ffa79fde36c8b4953991743b43",
+    "generator_digest": "41a9d5bd6c32f6323d665a410d881e91296e7f61fd640477abdc79ac99c8ea2f"
+  },
+  "cases": [
+    {
+      "name": "new_install_xdg_only",
+      "description": "no legacy directory: XDG exclusively",
+      "environment": {
+        "home": "/fixture/home/probe"
+      },
+      "expected": {
+        "config_dir": "/fixture/home/probe/.config/symaira-vault",
+        "data_dir": "/fixture/home/probe/.local/share/symaira-vault",
+        "cache_dir": "/fixture/home/probe/.cache/symaira-vault",
+        "legacy_dir": "",
+        "migrated": false,
+        "config_path": "/fixture/home/probe/.config/symaira-vault/config.yaml",
+        "audit_dir": "/fixture/home/probe/.local/share/symaira-vault/audit",
+        "cache_path": "/fixture/home/probe/.cache/symaira-vault/update-cache.json"
+      }
+    },
+    {
+      "name": "legacy_install_reads_legacy",
+      "description": "legacy present, XDG data absent: read from legacy",
+      "environment": {
+        "home": "/fixture/home/probe",
+        "legacy_dir_exists": true
+      },
+      "expected": {
+        "config_dir": "/fixture/home/probe/.symvault",
+        "data_dir": "/fixture/home/probe/.symvault",
+        "cache_dir": "/fixture/home/probe/.cache/symaira-vault",
+        "legacy_dir": "/fixture/home/probe/.symvault",
+        "migrated": false,
+        "config_path": "/fixture/home/probe/.symvault/config.yaml",
+        "audit_dir": "/fixture/home/probe/.symvault/audit",
+        "cache_path": "/fixture/home/probe/.cache/symaira-vault/update-cache.json"
+      }
+    },
+    {
+      "name": "post_migration_prefers_xdg",
+      "description": "both present: prefer XDG and report migrated",
+      "environment": {
+        "home": "/fixture/home/probe",
+        "legacy_dir_exists": true,
+        "xdg_data_dir_exists": true
+      },
+      "expected": {
+        "config_dir": "/fixture/home/probe/.config/symaira-vault",
+        "data_dir": "/fixture/home/probe/.local/share/symaira-vault",
+        "cache_dir": "/fixture/home/probe/.cache/symaira-vault",
+        "legacy_dir": "/fixture/home/probe/.symvault",
+        "migrated": true,
+        "config_path": "/fixture/home/probe/.config/symaira-vault/config.yaml",
+        "audit_dir": "/fixture/home/probe/.local/share/symaira-vault/audit",
+        "cache_path": "/fixture/home/probe/.cache/symaira-vault/update-cache.json"
+      }
+    },
+    {
+      "name": "xdg_data_without_legacy",
+      "description": "XDG data present, no legacy: not a migration",
+      "environment": {
+        "home": "/fixture/home/probe",
+        "xdg_data_dir_exists": true
+      },
+      "expected": {
+        "config_dir": "/fixture/home/probe/.config/symaira-vault",
+        "data_dir": "/fixture/home/probe/.local/share/symaira-vault",
+        "cache_dir": "/fixture/home/probe/.cache/symaira-vault",
+        "legacy_dir": "",
+        "migrated": false,
+        "config_path": "/fixture/home/probe/.config/symaira-vault/config.yaml",
+        "audit_dir": "/fixture/home/probe/.local/share/symaira-vault/audit",
+        "cache_path": "/fixture/home/probe/.cache/symaira-vault/update-cache.json"
+      }
+    },
+    {
+      "name": "explicit_xdg_values",
+      "description": "explicit XDG values win over the defaults",
+      "environment": {
+        "home": "/fixture/home/probe",
+        "xdg_config_home": "/x/cfg",
+        "xdg_data_home": "/x/data",
+        "xdg_cache_home": "/x/cache"
+      },
+      "expected": {
+        "config_dir": "/x/cfg/symaira-vault",
+        "data_dir": "/x/data/symaira-vault",
+        "cache_dir": "/x/cache/symaira-vault",
+        "legacy_dir": "",
+        "migrated": false,
+        "config_path": "/x/cfg/symaira-vault/config.yaml",
+        "audit_dir": "/x/data/symaira-vault/audit",
+        "cache_path": "/x/cache/symaira-vault/update-cache.json"
+      }
+    },
+    {
+      "name": "empty_xdg_values_fall_back",
+      "description": "set-but-empty XDG values fall back exactly like unset ones",
+      "environment": {
+        "home": "/fixture/home/probe"
+      },
+      "expected": {
+        "config_dir": "/fixture/home/probe/.config/symaira-vault",
+        "data_dir": "/fixture/home/probe/.local/share/symaira-vault",
+        "cache_dir": "/fixture/home/probe/.cache/symaira-vault",
+        "legacy_dir": "",
+        "migrated": false,
+        "config_path": "/fixture/home/probe/.config/symaira-vault/config.yaml",
+        "audit_dir": "/fixture/home/probe/.local/share/symaira-vault/audit",
+        "cache_path": "/fixture/home/probe/.cache/symaira-vault/update-cache.json"
+      }
+    },
+    {
+      "name": "explicit_xdg_with_legacy_install",
+      "description": "a legacy install still reports the XDG cache directory",
+      "environment": {
+        "home": "/fixture/home/probe",
+        "xdg_config_home": "/x/cfg",
+        "xdg_cache_home": "/x/cache",
+        "legacy_dir_exists": true
+      },
+      "expected": {
+        "config_dir": "/fixture/home/probe/.symvault",
+        "data_dir": "/fixture/home/probe/.symvault",
+        "cache_dir": "/x/cache/symaira-vault",
+        "legacy_dir": "/fixture/home/probe/.symvault",
+        "migrated": false,
+        "config_path": "/fixture/home/probe/.symvault/config.yaml",
+        "audit_dir": "/fixture/home/probe/.symvault/audit",
+        "cache_path": "/x/cache/symaira-vault/update-cache.json"
+      }
+    },
+    {
+      "name": "vault_override_replaces_data_dir",
+      "description": "SYMVAULT_VAULT replaces only the data directory",
+      "environment": {
+        "home": "/fixture/home/probe",
+        "vault_override": "/elsewhere/vault"
+      },
+      "expected": {
+        "config_dir": "/fixture/home/probe/.config/symaira-vault",
+        "data_dir": "/elsewhere/vault",
+        "cache_dir": "/fixture/home/probe/.cache/symaira-vault",
+        "legacy_dir": "",
+        "migrated": false,
+        "config_path": "/fixture/home/probe/.config/symaira-vault/config.yaml",
+        "audit_dir": "/elsewhere/vault/audit",
+        "cache_path": "/fixture/home/probe/.cache/symaira-vault/update-cache.json"
+      }
+    },
+    {
+      "name": "vault_override_is_trimmed",
+      "description": "surrounding whitespace is trimmed",
+      "environment": {
+        "home": "/fixture/home/probe",
+        "vault_override": "  /elsewhere/vault  "
+      },
+      "expected": {
+        "config_dir": "/fixture/home/probe/.config/symaira-vault",
+        "data_dir": "/elsewhere/vault",
+        "cache_dir": "/fixture/home/probe/.cache/symaira-vault",
+        "legacy_dir": "",
+        "migrated": false,
+        "config_path": "/fixture/home/probe/.config/symaira-vault/config.yaml",
+        "audit_dir": "/elsewhere/vault/audit",
+        "cache_path": "/fixture/home/probe/.cache/symaira-vault/update-cache.json"
+      }
+    },
+    {
+      "name": "vault_override_tilde_expands",
+      "description": "a leading ~/ expands against home",
+      "environment": {
+        "home": "/fixture/home/probe",
+        "vault_override": "~/vaults/work"
+      },
+      "expected": {
+        "config_dir": "/fixture/home/probe/.config/symaira-vault",
+        "data_dir": "/fixture/home/probe/vaults/work",
+        "cache_dir": "/fixture/home/probe/.cache/symaira-vault",
+        "legacy_dir": "",
+        "migrated": false,
+        "config_path": "/fixture/home/probe/.config/symaira-vault/config.yaml",
+        "audit_dir": "/fixture/home/probe/vaults/work/audit",
+        "cache_path": "/fixture/home/probe/.cache/symaira-vault/update-cache.json"
+      }
+    },
+    {
+      "name": "vault_override_bare_tilde",
+      "description": "a bare ~ resolves to home",
+      "environment": {
+        "home": "/fixture/home/probe",
+        "vault_override": "~"
+      },
+      "expected": {
+        "config_dir": "/fixture/home/probe/.config/symaira-vault",
+        "data_dir": "/fixture/home/probe",
+        "cache_dir": "/fixture/home/probe/.cache/symaira-vault",
+        "legacy_dir": "",
+        "migrated": false,
+        "config_path": "/fixture/home/probe/.config/symaira-vault/config.yaml",
+        "audit_dir": "/fixture/home/probe/audit",
+        "cache_path": "/fixture/home/probe/.cache/symaira-vault/update-cache.json"
+      }
+    },
+    {
+      "name": "vault_override_blank_is_ignored",
+      "description": "a whitespace-only override is ignored",
+      "environment": {
+        "home": "/fixture/home/probe",
+        "vault_override": "   "
+      },
+      "expected": {
+        "config_dir": "/fixture/home/probe/.config/symaira-vault",
+        "data_dir": "/fixture/home/probe/.local/share/symaira-vault",
+        "cache_dir": "/fixture/home/probe/.cache/symaira-vault",
+        "legacy_dir": "",
+        "migrated": false,
+        "config_path": "/fixture/home/probe/.config/symaira-vault/config.yaml",
+        "audit_dir": "/fixture/home/probe/.local/share/symaira-vault/audit",
+        "cache_path": "/fixture/home/probe/.cache/symaira-vault/update-cache.json"
+      }
+    },
+    {
+      "name": "vault_override_overrides_legacy_data_dir",
+      "description": "the override also replaces a legacy data directory",
+      "environment": {
+        "home": "/fixture/home/probe",
+        "vault_override": "/elsewhere/vault",
+        "legacy_dir_exists": true
+      },
+      "expected": {
+        "config_dir": "/fixture/home/probe/.symvault",
+        "data_dir": "/elsewhere/vault",
+        "cache_dir": "/fixture/home/probe/.cache/symaira-vault",
+        "legacy_dir": "/fixture/home/probe/.symvault",
+        "migrated": false,
+        "config_path": "/fixture/home/probe/.symvault/config.yaml",
+        "audit_dir": "/elsewhere/vault/audit",
+        "cache_path": "/fixture/home/probe/.cache/symaira-vault/update-cache.json"
+      }
+    },
+    {
+      "name": "no_home_yields_zero_resolver",
+      "description": "an undeterminable home yields a zero resolver",
+      "environment": {
+        "xdg_config_home": "/x/cfg"
+      },
+      "expected": {
+        "config_dir": "",
+        "data_dir": "",
+        "cache_dir": "",
+        "legacy_dir": "",
+        "migrated": false,
+        "config_path": "config.yaml",
+        "audit_dir": "audit",
+        "cache_path": "update-cache.json"
+      }
+    }
+  ]
+}

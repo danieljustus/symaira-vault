@@ -185,6 +185,11 @@ PORT_REDACT_FIXTURE := testdata/port/core/redact-contract.json
 PORT_CRYPTO_FIXTURE := testdata/port/core/password-totp-contract.json
 PORT_QUOTA_FIXTURE := testdata/port/core/quota-contract.json
 PORT_POLICY_FIXTURE := testdata/port/core/policy-contract.json
+CFG_PATH_FIXTURE := testdata/port/config/paths.json
+# CFG-001 pins its own production-Go oracle. configpathgen verifies this commit
+# against git objects, so a stale pin fails loudly rather than mislabelling.
+CFG_ORACLE_COMMIT ?= fc9eddc0
+CFG_ORACLE_RELEASE ?= unreleased
 PORT_SYNC_FIXTURE := testdata/port/sync/sync.json
 PORT_PAIRING_FIXTURE := testdata/port/pairing/contract.json
 PORT_CONFIG_FIXTURE := testdata/port/config/contract.json
@@ -274,6 +279,17 @@ device-list-differential:
 sync-io-differential: pairing-fixtures-check
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/syncgen --check --output $(PORT_SYNC_FIXTURE)
 	$(CARGO) test -p symvault-sync --all-features --locked
+
+cfg-fixtures-generate:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/configpathgen \
+		--output $(CFG_PATH_FIXTURE) \
+		--oracle-commit $(CFG_ORACLE_COMMIT) \
+		--oracle-release $(CFG_ORACLE_RELEASE)
+
+cfg-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/configpathgen \
+		--check --output $(CFG_PATH_FIXTURE)
+	$(CARGO) test -p symvault-core --test config_paths_contract --locked
 
 policy-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/policygen \
@@ -370,7 +386,7 @@ rust-fuzz:
 # could only ever call a darwin-frozen fixture stale. That field is gone now:
 # it described the machine, not the pinned oracle. Verified before re-wiring
 # that goos was the only host-dependent value in these four fixtures.
-port-contract: port-fixtures-check core-fixtures-check policy-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential
+port-contract: port-fixtures-check core-fixtures-check policy-fixtures-check cfg-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential
 
 rust-build:
 	$(CARGO) build --workspace --locked

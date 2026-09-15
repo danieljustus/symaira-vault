@@ -108,4 +108,25 @@ docker/caddy/config/
 **/docs/roadmap.md
 PLANUNG.md
 ARCHITEKTUR.md
+
+# Local build/run scratch tree, not part of the repository.
+/target-run/
+
+# `go build ./scripts/rust-port/cmd/<name>` drops the binary at the repository
+# root. Generator binaries are build output, never sources.
 /policygen
+/configgen
+/configpathgen
+/configprofilegen
+/coregen
+/manifestkeygen
+/quotagen
+/sessionquotagen
+/storegen
+/store004gen
+/storemetagen
+/syncgen
+/pairinggen
+/portgen
+/caserun
+/auditgen

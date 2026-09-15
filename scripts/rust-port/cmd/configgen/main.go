@@ -18,6 +18,7 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/clipboard"
 	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	"github.com/danieljustus/symaira-vault/internal/secureui"
+	"github.com/danieljustus/symaira-vault/scripts/rust-port/internal/provenance"
 )
 
 const (
@@ -39,6 +40,7 @@ var productionSources = []string{
 
 type oracle struct {
 	Commit          string   `json:"commit"`
+	CommitSHA       string   `json:"commit_sha"`
 	Release         string   `json:"release"`
 	SourceFiles     []string `json:"source_files"`
 	SourceDigest    string   `json:"source_digest"`
@@ -98,11 +100,18 @@ func buildOracle(root string, commit string, release string) (oracle, error) {
 	if err != nil {
 		return oracle{}, fmt.Errorf("hash config/platform sources: %w", err)
 	}
+	// The claimed oracle commit is verified against that commit's immutable
+	// blobs, not merely compared as a label. Without this the fixture could
+	// assert one revision while carrying another's behaviour.
+	resolved, err := provenance.Verify(root, commit, sources)
+	if err != nil {
+		return oracle{}, err
+	}
 	generatorDigest, err := digestFiles(root, []string{"scripts/rust-port/cmd/configgen/main.go"})
 	if err != nil {
 		return oracle{}, fmt.Errorf("hash config generator: %w", err)
 	}
-	return oracle{Commit: commit, Release: release, SourceFiles: sources, SourceDigest: sourceDigest, GeneratorDigest: generatorDigest}, nil
+	return oracle{Commit: commit, CommitSHA: resolved, Release: release, SourceFiles: sources, SourceDigest: sourceDigest, GeneratorDigest: generatorDigest}, nil
 }
 
 func digestFiles(root string, names []string) (string, error) {
