@@ -42,7 +42,7 @@ func run() error {
 		return fmt.Errorf("resolve Go build caches: %w", err)
 	}
 	var environment map[string]string
-	if err := json.Unmarshal(cacheJSON, &environment); err != nil {
+	if err = json.Unmarshal(cacheJSON, &environment); err != nil {
 		return err
 	}
 	for key, fallback := range map[string]string{

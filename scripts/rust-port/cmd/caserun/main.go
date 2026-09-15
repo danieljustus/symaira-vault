@@ -3,6 +3,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -23,8 +24,14 @@ func execute(input io.Reader, output io.Writer) error {
 		return err
 	}
 	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
-		return fmt.Errorf("expected one request, got trailing input: %v", err)
+	// A successful decode here means a second value followed, in which case
+	// there is no error to report; only a genuine decode failure carries one.
+	// The previous single branch formatted a nil error in the common case.
+	switch err := decoder.Decode(&extra); {
+	case err == nil:
+		return errors.New("expected one request, got trailing input")
+	case !errors.Is(err, io.EOF):
+		return fmt.Errorf("expected one request, got trailing input: %w", err)
 	}
 	if req.Binary == "" {
 		return fmt.Errorf("binary is required")

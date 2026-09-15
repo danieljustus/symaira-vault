@@ -46,8 +46,10 @@ func identityMetadataCases() []sessionCase {
 		value["ttl_ns"] = json.RawMessage("9223372036854775807")
 		store(key, value)
 	}
-	if value, err := manager.LoadIdentity(vault); err != nil || value != "fixture-identity" {
-		panic(fmt.Errorf("identity refresh: %v", err))
+	if value, err := manager.LoadIdentity(vault); err != nil {
+		panic(fmt.Errorf("identity refresh: %w", err))
+	} else if value != "fixture-identity" {
+		panic(fmt.Errorf("identity refresh returned %q, want fixture-identity", value))
 	}
 	sess, ident := decode(sessionKey), decode(identityKey)
 	if string(sess["last_access"]) == string(old) || string(sess["last_access"]) != string(ident["last_access"]) {

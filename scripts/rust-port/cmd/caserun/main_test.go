@@ -16,7 +16,7 @@ import (
 
 func TestHelper(t *testing.T) {
 	if os.Getenv("CASERUN_HELPER") != "1" {
-		return
+		t.Skip("runs only as the re-executed helper subprocess")
 	}
 	switch os.Args[len(os.Args)-1] {
 	case "write":
@@ -42,8 +42,14 @@ func TestExecuteNativeObservations(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			req := request{Binary: binary, Case: diff.Case{
 				ID: mode, Args: []string{"-test.run=^TestHelper$", "--", mode},
-				Env: map[string]string{"CASERUN_HELPER": "1"}, TimeoutMS: 10000,
-				Setup: []diff.SetupFile{{Path: "fixture", Content: "untouched"}},
+				// This test re-executes its own binary. Under -cover that
+				// binary's coverage runtime writes "warning: GOCOVERDIR not
+				// set" to stderr on exit, which corrupts the raw-stream
+				// assertion below. Giving it a directory silences the warning
+				// at its source instead of relaxing the byte comparison.
+				Env:       map[string]string{"CASERUN_HELPER": "1", "GOCOVERDIR": t.TempDir()},
+				TimeoutMS: 10000,
+				Setup:     []diff.SetupFile{{Path: "fixture", Content: "untouched"}},
 			}}
 			if mode == "timeout" {
 				req.Case.TimeoutMS = 250
