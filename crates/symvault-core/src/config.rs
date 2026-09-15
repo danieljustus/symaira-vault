@@ -642,13 +642,54 @@ impl Config {
         }
         let bytes = self.to_yaml_bytes()?;
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
+            create_private_dir_all(parent)?;
         }
         let tmp = path.with_extension("yaml.tmp");
-        fs::write(&tmp, bytes)?;
+        write_private(&tmp, &bytes)?;
         fs::rename(tmp, path)?;
         Ok(())
     }
+}
+
+/// Creates a directory tree the way the Go writer does: owner-only.
+///
+/// `fs::create_dir_all` applies 0777 masked by the umask, which is typically
+/// 0755 and leaves the directory holding vault configuration world-readable.
+fn create_private_dir_all(path: &Path) -> Result<(), ConfigError> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        let mut builder = fs::DirBuilder::new();
+        builder.recursive(true).mode(0o700);
+        builder.create(path)?;
+        Ok(())
+    }
+    #[cfg(not(unix))]
+    {
+        fs::create_dir_all(path)?;
+        Ok(())
+    }
+}
+
+/// Writes a file owner-only, matching the Go writer's 0600.
+///
+/// The mode is applied at creation rather than afterwards, so the contents are
+/// never briefly readable by other users. `fs::write` would apply 0666 masked
+/// by the umask, typically 0644.
+fn write_private(path: &Path, bytes: &[u8]) -> Result<(), ConfigError> {
+    use std::io::Write;
+
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options.open(path)?;
+    file.write_all(bytes)?;
+    file.sync_all()?;
+    Ok(())
 }
 
 fn home_dir() -> String {

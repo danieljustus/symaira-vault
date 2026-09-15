@@ -189,6 +189,8 @@ CFG_PATH_FIXTURE := testdata/port/config/paths.json
 # CFG-001 pins its own production-Go oracle. configpathgen verifies this commit
 # against git objects, so a stale pin fails loudly rather than mislabelling.
 CFG_ORACLE_COMMIT ?= fc9eddc0
+CFG_BYTES_FIXTURE := testdata/port/config/bytes.json
+CFG_BYTES_ORACLE_COMMIT ?= adeb736e
 CFG_ORACLE_RELEASE ?= unreleased
 PORT_SYNC_FIXTURE := testdata/port/sync/sync.json
 PORT_PAIRING_FIXTURE := testdata/port/pairing/contract.json
@@ -288,6 +290,17 @@ cfg-fixtures-generate:
 		--output $(CFG_PATH_FIXTURE) \
 		--oracle-commit $(CFG_ORACLE_COMMIT) \
 		--oracle-release $(CFG_ORACLE_RELEASE)
+
+cfg-bytes-fixtures-generate:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/configbytesgen \
+		--output $(CFG_BYTES_FIXTURE) \
+		--oracle-commit $(CFG_BYTES_ORACLE_COMMIT) \
+		--oracle-release $(CFG_ORACLE_RELEASE)
+
+cfg-bytes-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/configbytesgen \
+		--check --output $(CFG_BYTES_FIXTURE)
+	$(CARGO) test -p symvault-core --test config_bytes_contract --locked
 
 cfg-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/configpathgen \
@@ -389,7 +402,7 @@ rust-fuzz:
 # could only ever call a darwin-frozen fixture stale. That field is gone now:
 # it described the machine, not the pinned oracle. Verified before re-wiring
 # that goos was the only host-dependent value in these four fixtures.
-port-contract: oracle-reachability-check port-fixtures-check core-fixtures-check policy-fixtures-check cfg-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential
+port-contract: oracle-reachability-check port-fixtures-check core-fixtures-check policy-fixtures-check cfg-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential
 
 rust-build:
 	$(CARGO) build --workspace --locked

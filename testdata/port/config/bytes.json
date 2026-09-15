@@ -1,0 +1,354 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "adeb736e",
+    "commit_sha": "adeb736ed507881eb1c14f951627d8209094314c",
+    "release": "unreleased",
+    "source_files": [
+      "internal/config/config.go",
+      "internal/config/config_load.go",
+      "internal/config/config_merge.go",
+      "internal/config/config_save.go",
+      "internal/config/config_validate.go"
+    ],
+    "source_digest": "0c6771dc3ab4c188e3cee7065d37d330a17b1a45faad246736885af422038b8f",
+    "generator_digest": "4a6106a3016fa78253a3520982b879fdd486d72902af42a36962506fb8012f9f"
+  },
+  "cases": [
+    {
+      "name": "empty",
+      "description": "an empty document yields the defaults",
+      "input": "",
+      "rejected": false,
+      "snapshot": {
+        "default_agent": "default",
+        "session_timeout": "15m0s",
+        "session_max_lifetime": "8h0m0s",
+        "auth_method": "passphrase",
+        "vault_dir": "/Users/daniel/.symvault",
+        "agent_names": [
+          "claude-code",
+          "codex",
+          "default",
+          "hermes",
+          "openclaw",
+          "opencode"
+        ]
+      },
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /Users/daniel/.symvault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\n",
+      "round_trips_to": "identical_snapshot"
+    },
+    {
+      "name": "whitespace_only",
+      "description": "whitespace is treated as empty",
+      "input": "   \n\t\n",
+      "rejected": false,
+      "snapshot": {
+        "default_agent": "default",
+        "session_timeout": "15m0s",
+        "session_max_lifetime": "8h0m0s",
+        "auth_method": "passphrase",
+        "vault_dir": "/Users/daniel/.symvault",
+        "agent_names": [
+          "claude-code",
+          "codex",
+          "default",
+          "hermes",
+          "openclaw",
+          "opencode"
+        ]
+      },
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /Users/daniel/.symvault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\n",
+      "round_trips_to": "identical_snapshot"
+    },
+    {
+      "name": "canonical_minimal",
+      "description": "a minimal canonical document",
+      "input": "defaultAgent: custom\n",
+      "rejected": false,
+      "snapshot": {
+        "default_agent": "custom",
+        "session_timeout": "15m0s",
+        "session_max_lifetime": "8h0m0s",
+        "auth_method": "passphrase",
+        "vault_dir": "/Users/daniel/.symvault",
+        "agent_names": [
+          "claude-code",
+          "codex",
+          "custom",
+          "default",
+          "hermes",
+          "openclaw",
+          "opencode"
+        ]
+      },
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    custom:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: true\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /Users/daniel/.symvault\ndefaultAgent: custom\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "round_trips_to": "identical_snapshot"
+    },
+    {
+      "name": "unknown_top_level_ignored",
+      "description": "unknown top-level keys are ignored",
+      "input": "unknownTopLevel: ignored\ndefaultAgent: custom\n",
+      "rejected": false,
+      "snapshot": {
+        "default_agent": "custom",
+        "session_timeout": "15m0s",
+        "session_max_lifetime": "8h0m0s",
+        "auth_method": "passphrase",
+        "vault_dir": "/Users/daniel/.symvault",
+        "agent_names": [
+          "claude-code",
+          "codex",
+          "custom",
+          "default",
+          "hermes",
+          "openclaw",
+          "opencode"
+        ]
+      },
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    custom:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: true\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /Users/daniel/.symvault\ndefaultAgent: custom\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "round_trips_to": "identical_snapshot"
+    },
+    {
+      "name": "unknown_nested_ignored",
+      "description": "unknown nested keys are ignored",
+      "input": "agents:\n  custom:\n    unknownAgentField: ignored\n    canWrite: true\n",
+      "rejected": false,
+      "snapshot": {
+        "default_agent": "default",
+        "session_timeout": "15m0s",
+        "session_max_lifetime": "8h0m0s",
+        "auth_method": "passphrase",
+        "vault_dir": "/Users/daniel/.symvault",
+        "agent_names": [
+          "claude-code",
+          "codex",
+          "custom",
+          "default",
+          "hermes",
+          "openclaw",
+          "opencode"
+        ]
+      },
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    custom:\n        canWrite: true\n        exposeValueTools: true\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /Users/daniel/.symvault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "round_trips_to": "identical_snapshot"
+    },
+    {
+      "name": "deep_unknown_nesting",
+      "description": "deeply nested unknown structure is ignored",
+      "input": "a:\n b:\n  c:\n   d: 1\n",
+      "rejected": false,
+      "snapshot": {
+        "default_agent": "default",
+        "session_timeout": "15m0s",
+        "session_max_lifetime": "8h0m0s",
+        "auth_method": "passphrase",
+        "vault_dir": "/Users/daniel/.symvault",
+        "agent_names": [
+          "claude-code",
+          "codex",
+          "default",
+          "hermes",
+          "openclaw",
+          "opencode"
+        ]
+      },
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /Users/daniel/.symvault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "round_trips_to": "identical_snapshot"
+    },
+    {
+      "name": "unclosed_quote",
+      "description": "an unterminated scalar is a syntax error",
+      "input": "defaultAgent: \"unterminated\n",
+      "rejected": true
+    },
+    {
+      "name": "unclosed_bracket",
+      "description": "an unterminated flow sequence is a syntax error",
+      "input": "envAllowlist: [a, b\n",
+      "rejected": true
+    },
+    {
+      "name": "tab_indentation",
+      "description": "tabs cannot start a token",
+      "input": "agents:\n\tcustom:\n\t\tcanWrite: true\n",
+      "rejected": true
+    },
+    {
+      "name": "bad_indentation",
+      "description": "inconsistent indentation is a syntax error",
+      "input": "agents:\n  custom:\n canWrite: true\n",
+      "rejected": true
+    },
+    {
+      "name": "control_character",
+      "description": "a NUL byte is rejected outright",
+      "input": "defaultAgent: a\u0000b\n",
+      "rejected": true
+    },
+    {
+      "name": "duplicate_key",
+      "description": "a repeated mapping key is rejected",
+      "input": "defaultAgent: a\ndefaultAgent: b\n",
+      "rejected": true
+    },
+    {
+      "name": "scalar_document",
+      "description": "a bare scalar is not a config mapping",
+      "input": "just-a-string\n",
+      "rejected": true
+    },
+    {
+      "name": "sequence_document",
+      "description": "a sequence is not a config mapping",
+      "input": "- one\n- two\n",
+      "rejected": true
+    },
+    {
+      "name": "null_document",
+      "description": "an explicit null yields the defaults",
+      "input": "null\n",
+      "rejected": false,
+      "snapshot": {
+        "default_agent": "default",
+        "session_timeout": "15m0s",
+        "session_max_lifetime": "8h0m0s",
+        "auth_method": "passphrase",
+        "vault_dir": "/Users/daniel/.symvault",
+        "agent_names": [
+          "claude-code",
+          "codex",
+          "default",
+          "hermes",
+          "openclaw",
+          "opencode"
+        ]
+      },
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /Users/daniel/.symvault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "round_trips_to": "identical_snapshot"
+    },
+    {
+      "name": "multiple_documents",
+      "description": "only the first document is consumed",
+      "input": "defaultAgent: a\n---\ndefaultAgent: b\n",
+      "rejected": false,
+      "snapshot": {
+        "default_agent": "a",
+        "session_timeout": "15m0s",
+        "session_max_lifetime": "8h0m0s",
+        "auth_method": "passphrase",
+        "vault_dir": "/Users/daniel/.symvault",
+        "agent_names": [
+          "a",
+          "claude-code",
+          "codex",
+          "default",
+          "hermes",
+          "openclaw",
+          "opencode"
+        ]
+      },
+      "saved_yaml": "agents:\n    a:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: true\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /Users/daniel/.symvault\ndefaultAgent: a\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "round_trips_to": "identical_snapshot"
+    },
+    {
+      "name": "bom_prefixed",
+      "description": "a leading byte-order mark does not prevent parsing",
+      "input": "﻿defaultAgent: a\n",
+      "rejected": false,
+      "snapshot": {
+        "default_agent": "a",
+        "session_timeout": "15m0s",
+        "session_max_lifetime": "8h0m0s",
+        "auth_method": "passphrase",
+        "vault_dir": "/Users/daniel/.symvault",
+        "agent_names": [
+          "a",
+          "claude-code",
+          "codex",
+          "default",
+          "hermes",
+          "openclaw",
+          "opencode"
+        ]
+      },
+      "saved_yaml": "agents:\n    a:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: true\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /Users/daniel/.symvault\ndefaultAgent: a\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "round_trips_to": "identical_snapshot"
+    },
+    {
+      "name": "wrong_scalar_type",
+      "description": "a string where a bool belongs does not abort the load",
+      "input": "agents:\n  custom:\n    canWrite: \"yes\"\n",
+      "rejected": false,
+      "snapshot": {
+        "default_agent": "default",
+        "session_timeout": "15m0s",
+        "session_max_lifetime": "8h0m0s",
+        "auth_method": "passphrase",
+        "vault_dir": "/Users/daniel/.symvault",
+        "agent_names": [
+          "claude-code",
+          "codex",
+          "custom",
+          "default",
+          "hermes",
+          "openclaw",
+          "opencode"
+        ]
+      },
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    custom:\n        canWrite: true\n        exposeValueTools: true\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /Users/daniel/.symvault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "round_trips_to": "identical_snapshot"
+    },
+    {
+      "name": "negative_duration",
+      "description": "a negative duration does not abort the load",
+      "input": "sessionTimeout: -5m\n",
+      "rejected": false,
+      "snapshot": {
+        "default_agent": "default",
+        "session_timeout": "15m0s",
+        "session_max_lifetime": "8h0m0s",
+        "auth_method": "passphrase",
+        "vault_dir": "/Users/daniel/.symvault",
+        "agent_names": [
+          "claude-code",
+          "codex",
+          "default",
+          "hermes",
+          "openclaw",
+          "opencode"
+        ]
+      },
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /Users/daniel/.symvault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "round_trips_to": "identical_snapshot"
+    },
+    {
+      "name": "large_duration",
+      "description": "a very large duration is accepted verbatim",
+      "input": "sessionTimeout: 100000h\n",
+      "rejected": false,
+      "snapshot": {
+        "default_agent": "default",
+        "session_timeout": "100000h0m0s",
+        "session_max_lifetime": "8h0m0s",
+        "auth_method": "passphrase",
+        "vault_dir": "/Users/daniel/.symvault",
+        "agent_names": [
+          "claude-code",
+          "codex",
+          "default",
+          "hermes",
+          "openclaw",
+          "opencode"
+        ]
+      },
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /Users/daniel/.symvault\ndefaultAgent: default\nsessionTimeout: 100000h0m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "round_trips_to": "identical_snapshot"
+    }
+  ],
+  "modes": {
+    "directory": "0700",
+    "file": "0600",
+    "platform": "unix"
+  }
+}
