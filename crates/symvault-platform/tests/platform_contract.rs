@@ -41,7 +41,7 @@ fn fixture() -> Fixture {
 fn platform_fixture_has_provenance_and_explicit_native_blocker() {
     let fixture = fixture();
     assert_eq!(fixture.schema_version, 1);
-    assert_eq!(fixture.oracle.commit, "31afe33c");
+    assert_eq!(fixture.oracle.commit, "addce896");
     assert_eq!(fixture.oracle.release, "unreleased");
     assert_eq!(fixture.oracle.commit_sha.len(), 40);
     assert!(
