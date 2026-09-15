@@ -1,0 +1,481 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "8fda736c",
+    "commit_sha": "8fda736cda0e42ef03f35086929cfd51d8900f2d",
+    "release": "unreleased",
+    "source_files": [
+      "internal/config/config.go",
+      "internal/config/config_load.go",
+      "internal/config/config_merge.go",
+      "internal/config/presets.go"
+    ],
+    "source_digest": "b82e6718937b722b28bc7994a5b0e745d9655b0df8842f4b4661878510f409e2",
+    "generator_digest": "c0fd29bd6eac2c001bbfe06b10ea698db174d4dfb85e0e5e7d6310e65dbacdd4"
+  },
+  "cases": [
+    {
+      "name": "no_agent_entry",
+      "description": "an agent absent from the file has no profile at all, and no permissions",
+      "input": "",
+      "profile": {
+        "present": false,
+        "tier": null,
+        "approval_mode": null,
+        "allowed_paths": [],
+        "can_write": false,
+        "can_run_commands": false,
+        "can_manage_config": false,
+        "can_use_clipboard": false,
+        "can_use_autotype": false,
+        "can_read_values": false,
+        "expose_value_tools": false,
+        "auto_unseal": false,
+        "require_approval": false
+      }
+    },
+    {
+      "name": "empty_agent_entry",
+      "description": "an agent present but empty still gets the defaults",
+      "input": "agents:\n  probe:\n    {}\n",
+      "profile": {
+        "present": true,
+        "tier": null,
+        "approval_mode": null,
+        "allowed_paths": [],
+        "can_write": false,
+        "can_run_commands": false,
+        "can_manage_config": false,
+        "can_use_clipboard": false,
+        "can_use_autotype": false,
+        "can_read_values": false,
+        "expose_value_tools": true,
+        "auto_unseal": false,
+        "require_approval": false
+      }
+    },
+    {
+      "name": "tier_read_only",
+      "description": "a read-only tier applies its preset",
+      "input": "agents:\n  probe:\n    tier: read-only\n",
+      "profile": {
+        "present": true,
+        "tier": "read-only",
+        "approval_mode": "deny",
+        "allowed_paths": [],
+        "can_write": false,
+        "can_run_commands": false,
+        "can_manage_config": false,
+        "can_use_clipboard": false,
+        "can_use_autotype": false,
+        "can_read_values": false,
+        "expose_value_tools": false,
+        "auto_unseal": false,
+        "require_approval": false
+      }
+    },
+    {
+      "name": "tier_standard",
+      "description": "a standard tier applies its preset",
+      "input": "agents:\n  probe:\n    tier: standard\n",
+      "profile": {
+        "present": true,
+        "tier": "standard",
+        "approval_mode": "prompt",
+        "allowed_paths": [],
+        "can_write": false,
+        "can_run_commands": false,
+        "can_manage_config": false,
+        "can_use_clipboard": true,
+        "can_use_autotype": true,
+        "can_read_values": true,
+        "expose_value_tools": false,
+        "auto_unseal": false,
+        "require_approval": true
+      }
+    },
+    {
+      "name": "tier_admin",
+      "description": "an admin tier applies its preset",
+      "input": "agents:\n  probe:\n    tier: admin\n",
+      "profile": {
+        "present": true,
+        "tier": "admin",
+        "approval_mode": "prompt",
+        "allowed_paths": [],
+        "can_write": true,
+        "can_run_commands": true,
+        "can_manage_config": true,
+        "can_use_clipboard": true,
+        "can_use_autotype": true,
+        "can_read_values": true,
+        "expose_value_tools": true,
+        "auto_unseal": true,
+        "require_approval": true
+      }
+    },
+    {
+      "name": "tier_unknown",
+      "description": "an unrecognized tier changes nothing but is still recorded",
+      "input": "agents:\n  probe:\n    tier: not-a-tier\n",
+      "profile": {
+        "present": true,
+        "tier": "not-a-tier",
+        "approval_mode": null,
+        "allowed_paths": [],
+        "can_write": false,
+        "can_run_commands": false,
+        "can_manage_config": false,
+        "can_use_clipboard": false,
+        "can_use_autotype": false,
+        "can_read_values": false,
+        "expose_value_tools": false,
+        "auto_unseal": false,
+        "require_approval": false
+      }
+    },
+    {
+      "name": "tier_admin_denies_write",
+      "description": "an explicit false overrides what the tier grants",
+      "input": "agents:\n  probe:\n    tier: admin\n    canWrite: false\n",
+      "profile": {
+        "present": true,
+        "tier": "admin",
+        "approval_mode": "prompt",
+        "allowed_paths": [],
+        "can_write": false,
+        "can_run_commands": true,
+        "can_manage_config": true,
+        "can_use_clipboard": true,
+        "can_use_autotype": true,
+        "can_read_values": true,
+        "expose_value_tools": true,
+        "auto_unseal": true,
+        "require_approval": true
+      }
+    },
+    {
+      "name": "tier_read_only_grants_write",
+      "description": "an explicit true overrides what the tier withholds",
+      "input": "agents:\n  probe:\n    tier: read-only\n    canWrite: true\n",
+      "profile": {
+        "present": true,
+        "tier": "read-only",
+        "approval_mode": "deny",
+        "allowed_paths": [],
+        "can_write": true,
+        "can_run_commands": false,
+        "can_manage_config": false,
+        "can_use_clipboard": false,
+        "can_use_autotype": false,
+        "can_read_values": false,
+        "expose_value_tools": false,
+        "auto_unseal": false,
+        "require_approval": false
+      }
+    },
+    {
+      "name": "tier_admin_drops_approval",
+      "description": "an explicit false overrides the tier's approval requirement",
+      "input": "agents:\n  probe:\n    tier: admin\n    requireApproval: false\n",
+      "profile": {
+        "present": true,
+        "tier": "admin",
+        "approval_mode": "none",
+        "allowed_paths": [],
+        "can_write": true,
+        "can_run_commands": true,
+        "can_manage_config": true,
+        "can_use_clipboard": true,
+        "can_use_autotype": true,
+        "can_read_values": true,
+        "expose_value_tools": true,
+        "auto_unseal": true,
+        "require_approval": false
+      }
+    },
+    {
+      "name": "explicit_false_without_tier",
+      "description": "an explicit false is not the same as an absent field",
+      "input": "agents:\n  probe:\n    canWrite: false\n",
+      "profile": {
+        "present": true,
+        "tier": null,
+        "approval_mode": null,
+        "allowed_paths": [],
+        "can_write": false,
+        "can_run_commands": false,
+        "can_manage_config": false,
+        "can_use_clipboard": false,
+        "can_use_autotype": false,
+        "can_read_values": false,
+        "expose_value_tools": true,
+        "auto_unseal": false,
+        "require_approval": false
+      }
+    },
+    {
+      "name": "explicit_true_without_tier",
+      "description": "an explicit true without a tier",
+      "input": "agents:\n  probe:\n    canWrite: true\n",
+      "profile": {
+        "present": true,
+        "tier": null,
+        "approval_mode": null,
+        "allowed_paths": [],
+        "can_write": true,
+        "can_run_commands": false,
+        "can_manage_config": false,
+        "can_use_clipboard": false,
+        "can_use_autotype": false,
+        "can_read_values": false,
+        "expose_value_tools": true,
+        "auto_unseal": false,
+        "require_approval": false
+      }
+    },
+    {
+      "name": "expose_default_when_neither_present",
+      "description": "neither tier nor exposeValueTools present",
+      "input": "agents:\n  probe:\n    canWrite: true\n",
+      "profile": {
+        "present": true,
+        "tier": null,
+        "approval_mode": null,
+        "allowed_paths": [],
+        "can_write": true,
+        "can_run_commands": false,
+        "can_manage_config": false,
+        "can_use_clipboard": false,
+        "can_use_autotype": false,
+        "can_read_values": false,
+        "expose_value_tools": true,
+        "auto_unseal": false,
+        "require_approval": false
+      }
+    },
+    {
+      "name": "expose_explicit_false",
+      "description": "an explicit false suppresses the default",
+      "input": "agents:\n  probe:\n    exposeValueTools: false\n",
+      "profile": {
+        "present": true,
+        "tier": null,
+        "approval_mode": null,
+        "allowed_paths": [],
+        "can_write": false,
+        "can_run_commands": false,
+        "can_manage_config": false,
+        "can_use_clipboard": false,
+        "can_use_autotype": false,
+        "can_read_values": false,
+        "expose_value_tools": false,
+        "auto_unseal": false,
+        "require_approval": false
+      }
+    },
+    {
+      "name": "expose_suppressed_by_tier",
+      "description": "a tier present suppresses the default",
+      "input": "agents:\n  probe:\n    tier: read-only\n",
+      "profile": {
+        "present": true,
+        "tier": "read-only",
+        "approval_mode": "deny",
+        "allowed_paths": [],
+        "can_write": false,
+        "can_run_commands": false,
+        "can_manage_config": false,
+        "can_use_clipboard": false,
+        "can_use_autotype": false,
+        "can_read_values": false,
+        "expose_value_tools": false,
+        "auto_unseal": false,
+        "require_approval": false
+      }
+    },
+    {
+      "name": "expose_explicit_with_tier",
+      "description": "an explicit value overrides the tier's",
+      "input": "agents:\n  probe:\n    tier: read-only\n    exposeValueTools: true\n",
+      "profile": {
+        "present": true,
+        "tier": "read-only",
+        "approval_mode": "deny",
+        "allowed_paths": [],
+        "can_write": false,
+        "can_run_commands": false,
+        "can_manage_config": false,
+        "can_use_clipboard": false,
+        "can_use_autotype": false,
+        "can_read_values": false,
+        "expose_value_tools": true,
+        "auto_unseal": false,
+        "require_approval": false
+      }
+    },
+    {
+      "name": "allowed_paths_absent",
+      "description": "an absent list",
+      "input": "agents:\n  probe:\n    canWrite: true\n",
+      "profile": {
+        "present": true,
+        "tier": null,
+        "approval_mode": null,
+        "allowed_paths": [],
+        "can_write": true,
+        "can_run_commands": false,
+        "can_manage_config": false,
+        "can_use_clipboard": false,
+        "can_use_autotype": false,
+        "can_read_values": false,
+        "expose_value_tools": true,
+        "auto_unseal": false,
+        "require_approval": false
+      }
+    },
+    {
+      "name": "allowed_paths_empty",
+      "description": "an explicitly empty list",
+      "input": "agents:\n  probe:\n    allowedPaths: []\n",
+      "profile": {
+        "present": true,
+        "tier": null,
+        "approval_mode": null,
+        "allowed_paths": [],
+        "can_write": false,
+        "can_run_commands": false,
+        "can_manage_config": false,
+        "can_use_clipboard": false,
+        "can_use_autotype": false,
+        "can_read_values": false,
+        "expose_value_tools": true,
+        "auto_unseal": false,
+        "require_approval": false
+      }
+    },
+    {
+      "name": "allowed_paths_null",
+      "description": "an explicitly null list",
+      "input": "agents:\n  probe:\n    allowedPaths:\n",
+      "profile": {
+        "present": true,
+        "tier": null,
+        "approval_mode": null,
+        "allowed_paths": [],
+        "can_write": false,
+        "can_run_commands": false,
+        "can_manage_config": false,
+        "can_use_clipboard": false,
+        "can_use_autotype": false,
+        "can_read_values": false,
+        "expose_value_tools": true,
+        "auto_unseal": false,
+        "require_approval": false
+      }
+    },
+    {
+      "name": "allowed_paths_populated",
+      "description": "a populated list",
+      "input": "agents:\n  probe:\n    allowedPaths:\n      - /fixture/a\n      - /fixture/b\n",
+      "profile": {
+        "present": true,
+        "tier": null,
+        "approval_mode": null,
+        "allowed_paths": [
+          "/fixture/a",
+          "/fixture/b"
+        ],
+        "can_write": false,
+        "can_run_commands": false,
+        "can_manage_config": false,
+        "can_use_clipboard": false,
+        "can_use_autotype": false,
+        "can_read_values": false,
+        "expose_value_tools": true,
+        "auto_unseal": false,
+        "require_approval": false
+      }
+    },
+    {
+      "name": "approval_mode_absent",
+      "description": "no approval fields at all",
+      "input": "agents:\n  probe:\n    canWrite: true\n",
+      "profile": {
+        "present": true,
+        "tier": null,
+        "approval_mode": null,
+        "allowed_paths": [],
+        "can_write": true,
+        "can_run_commands": false,
+        "can_manage_config": false,
+        "can_use_clipboard": false,
+        "can_use_autotype": false,
+        "can_read_values": false,
+        "expose_value_tools": true,
+        "auto_unseal": false,
+        "require_approval": false
+      }
+    },
+    {
+      "name": "approval_mode_from_require_true",
+      "description": "requireApproval true derives the mode",
+      "input": "agents:\n  probe:\n    requireApproval: true\n",
+      "profile": {
+        "present": true,
+        "tier": null,
+        "approval_mode": "prompt",
+        "allowed_paths": [],
+        "can_write": false,
+        "can_run_commands": false,
+        "can_manage_config": false,
+        "can_use_clipboard": false,
+        "can_use_autotype": false,
+        "can_read_values": false,
+        "expose_value_tools": true,
+        "auto_unseal": false,
+        "require_approval": true
+      }
+    },
+    {
+      "name": "approval_mode_from_require_false",
+      "description": "requireApproval false derives the mode",
+      "input": "agents:\n  probe:\n    requireApproval: false\n",
+      "profile": {
+        "present": true,
+        "tier": null,
+        "approval_mode": "none",
+        "allowed_paths": [],
+        "can_write": false,
+        "can_run_commands": false,
+        "can_manage_config": false,
+        "can_use_clipboard": false,
+        "can_use_autotype": false,
+        "can_read_values": false,
+        "expose_value_tools": true,
+        "auto_unseal": false,
+        "require_approval": false
+      }
+    },
+    {
+      "name": "approval_mode_explicit_wins",
+      "description": "an explicit mode beats the derivation",
+      "input": "agents:\n  probe:\n    approvalMode: none\n    requireApproval: true\n",
+      "profile": {
+        "present": true,
+        "tier": null,
+        "approval_mode": "none",
+        "allowed_paths": [],
+        "can_write": false,
+        "can_run_commands": false,
+        "can_manage_config": false,
+        "can_use_clipboard": false,
+        "can_use_autotype": false,
+        "can_read_values": false,
+        "expose_value_tools": true,
+        "auto_unseal": false,
+        "require_approval": true
+      }
+    }
+  ]
+}

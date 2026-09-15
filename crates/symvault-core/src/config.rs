@@ -960,6 +960,35 @@ where
     Option::<Map<T>>::deserialize(deserializer).map(|value| value.map(|map| map.0))
 }
 
+/// Applies a tier preset to a loaded agent profile, mirroring Go's
+/// `config.ApplyTierPreset`.
+///
+/// `tier::AgentProfile` carries `Option<bool>` like Go's `*bool`, while the
+/// loaded profile carries plain `bool`; an absent preset field means `false`,
+/// exactly as Go's `BoolPtr(p != nil && *p)` does. An unknown tier changes
+/// nothing, and the tier name is still recorded by the caller.
+fn apply_tier_preset_to_profile(profile: &mut AgentProfile, tier: &str) -> bool {
+    let Some(preset) = crate::tier::get_preset(tier) else {
+        return false;
+    };
+    profile.can_write = preset.can_write.unwrap_or(false);
+    profile.can_run_commands = preset.can_run_commands.unwrap_or(false);
+    profile.can_manage_config = preset.can_manage_config.unwrap_or(false);
+    profile.can_use_clipboard = preset.can_use_clipboard.unwrap_or(false);
+    profile.can_use_autotype = preset.can_use_autotype.unwrap_or(false);
+    profile.can_read_values = preset.can_read_values.unwrap_or(false);
+    profile.expose_value_tools = preset.expose_value_tools.unwrap_or(false);
+    profile.auto_unseal = preset.auto_unseal.unwrap_or(false);
+    profile.require_approval = preset.require_approval.unwrap_or(false);
+    if let Some(mode) = preset.approval_mode {
+        profile.approval_mode = Some(mode);
+    }
+    if let Some(executables) = preset.allowed_executables {
+        profile.allowed_executables = executables;
+    }
+    true
+}
+
 fn merge_agents(config: &mut Config, value: &serde_yaml_ng::Value) -> Result<(), ConfigError> {
     let agents = mapping(value)?;
     for (name, value) in agents {
@@ -976,7 +1005,14 @@ fn merge_agents(config: &mut Config, value: &serde_yaml_ng::Value) -> Result<(),
             profile.expose_value_tools = true;
         }
         if let Some(v) = fields.get(key("tier")) {
-            profile.tier = Some(string(v, "tier")?);
+            let tier = string(v, "tier")?;
+            // The preset is applied before the explicit fields below, so an
+            // explicitly written permission still overrides what the tier
+            // grants. Go does the same, in the same order. Without this the
+            // tier name was recorded but nothing it implies took effect, so a
+            // `tier: standard` agent ran without requiring approval.
+            apply_tier_preset_to_profile(&mut profile, &tier);
+            profile.tier = Some(tier);
         }
         if let Some(v) = fields.get(key("approvalMode")) {
             profile.approval_mode = Some(string(v, "approvalMode")?);
@@ -1049,6 +1085,13 @@ fn merge_agents(config: &mut Config, value: &serde_yaml_ng::Value) -> Result<(),
     Ok(())
 }
 fn string_list(value: &serde_yaml_ng::Value, field: &str) -> Result<Vec<String>, ConfigError> {
+    // A key that is present but null is an explicitly empty list, not an
+    // error. Go does this for every list field, and it is how YAML expresses
+    // "this setting exists and is deliberately nothing" — which for an
+    // allowlist is a meaningful, restrictive statement rather than an absence.
+    if value.is_null() {
+        return Ok(Vec::new());
+    }
     value
         .as_sequence()
         .ok_or_else(|| ConfigError::Parse(format!("{field} must be a sequence")))?
