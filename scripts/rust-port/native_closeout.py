@@ -57,11 +57,27 @@ def main():
     cargo = ["cargo", "test", "--manifest-path", str(root / "Cargo.toml"), "--locked"]
     if args.mode == "portable":
         native_fixture = output / "policy-contract.json"
-        generator = ["go", "run", "./scripts/rust-port/cmd/policygen", "--output", str(native_fixture), "--oracle-commit", "caadd5e", "--oracle-release", "v0.22.1"]
+        # POLICY-001 deliberately advances its own production-Go oracle. policygen
+        # verifies this commit against git objects, so a stale pin here fails loudly
+        # rather than silently regenerating a mislabeled fixture.
+        generator = ["go", "run", "./scripts/rust-port/cmd/policygen", "--output", str(native_fixture), "--oracle-commit", "f195aab", "--oracle-release", "unreleased"]
         report["policy_generator"] = generator
         checked(generator, root, env)
         checked(generator + ["--check"], root, env)
-        report["policy_fixture_sha256"] = hashlib.sha256(native_fixture.read_bytes()).hexdigest()
+        native_bytes = native_fixture.read_bytes()
+        report["policy_fixture_sha256"] = hashlib.sha256(native_bytes).hexdigest()
+        # The policy contract is defined over slash-separated logical paths and is
+        # OS-independent, so a fixture regenerated natively on this host must be
+        # byte-identical to the committed one. This is the input-equality gate:
+        # before it, the generator rewrote paths to native separators for Go only
+        # and the two implementations were compared on different inputs.
+        committed_bytes = (root / "testdata" / "port" / "core" / "policy-contract.json").read_bytes()
+        report["policy_fixture_matches_committed"] = native_bytes == committed_bytes
+        if native_bytes != committed_bytes:
+            raise SystemExit(
+                f"natively generated policy fixture differs from the committed one on {platform.system()}: "
+                f"{report['policy_fixture_sha256']} vs {hashlib.sha256(committed_bytes).hexdigest()}"
+            )
         env["SYMVAULT_POLICY_FIXTURE"] = str(native_fixture)
         commands = [cargo + ["-p", "symvault-cli", "--test", "device_pairing_cli", "--", "--nocapture"],
                     cargo + ["-p", "symvault-core", "-p", "symvault-platform", "--all-targets", "--all-features", "--", "--nocapture"]]
