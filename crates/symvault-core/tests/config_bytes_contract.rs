@@ -24,7 +24,6 @@ struct Snapshot {
     session_timeout: String,
     session_max_lifetime: String,
     auth_method: String,
-    vault_dir: String,
     agent_names: Vec<String>,
 }
 
@@ -42,7 +41,10 @@ struct Case {
     round_trips_to: String,
 }
 
+/// Only the unix build reads the mode fields; Windows does not carry these
+/// bits and the fixture records that instead of asserting them.
 #[derive(Debug, Deserialize)]
+#[cfg_attr(not(unix), allow(dead_code))]
 struct Modes {
     #[serde(default)]
     directory: String,
@@ -56,6 +58,7 @@ struct Fixture {
     schema_version: u32,
     oracle: Oracle,
     cases: Vec<Case>,
+    #[cfg_attr(not(unix), allow(dead_code))]
     modes: Modes,
 }
 
@@ -70,7 +73,6 @@ fn snapshot_of(config: &Config) -> Snapshot {
         session_timeout: go_duration(config.session_timeout.as_secs()),
         session_max_lifetime: go_duration(config.session_max_lifetime.as_secs()),
         auth_method: config.auth_method.as_str().to_owned(),
-        vault_dir: config.vault_dir.replace('\\', "/"),
         agent_names: {
             let mut names: Vec<String> = config.agents.keys().cloned().collect();
             names.sort();

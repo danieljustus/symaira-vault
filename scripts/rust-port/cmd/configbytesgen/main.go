@@ -21,6 +21,13 @@ import (
 const (
 	pinnedOracleCommit  = "adeb736e"
 	pinnedOracleRelease = "unreleased"
+
+	// Default() derives vaultDir from the environment, and the writer emits it,
+	// so both the snapshot and the canonical output would otherwise carry the
+	// generating host's home directory into the fixture. Path resolution is
+	// CFG-001's contract; here it is pinned to a synthetic value so this row is
+	// about bytes and nothing else.
+	fixtureVaultDir = "/fixture/vault"
 )
 
 var productionSources = []string{
@@ -40,7 +47,12 @@ type oracle struct {
 	GeneratorDigest string   `json:"generator_digest"`
 }
 
-// snapshot is the implementation-neutral shape of an accepted config. Error
+// snapshot is the implementation-neutral shape of an accepted config. It
+// deliberately omits vaultDir: Default() derives that from the environment, so
+// including it would bake the generating host's home directory into the
+// fixture and fail anywhere else. Path resolution is CFG-001's contract.
+//
+// Error
 // text is deliberately not part of the contract: Go's yaml.v3 and Rust's
 // serde_yaml_ng word their failures differently, so the contract pins whether
 // an input is rejected, not how the rejection reads.
@@ -121,7 +133,6 @@ func snapshotOf(cfg *configpkg.Config) *snapshot {
 		SessionTimeout:     cfg.SessionTimeout.String(),
 		SessionMaxLifetime: cfg.SessionMaxLifetime.String(),
 		AuthMethod:         cfg.EffectiveAuthMethod(),
-		VaultDir:           filepath.ToSlash(cfg.VaultDir),
 		AgentNames:         names,
 	}
 }
@@ -140,6 +151,7 @@ func buildCases(workDir string) ([]bytesCase, error) {
 			cases = append(cases, item)
 			continue
 		}
+		cfg.VaultDir = fixtureVaultDir
 		item.Snapshot = snapshotOf(cfg)
 
 		savedPath := filepath.Join(workDir, fmt.Sprintf("case-%02d-saved.yaml", index))
