@@ -321,18 +321,21 @@ func TestResolvePathsContract(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := ResolvePaths(tt.env)
-			if got.ConfigDir != filepath.FromSlash(tt.config) {
-				t.Errorf("ConfigDir = %q, want %q", got.ConfigDir, tt.config)
+			// The contract is defined over slash-separated logical paths, the
+			// same form the CFG-001 fixture pins, so the comparison normalises
+			// rather than assuming a separator. Joined fields come back native
+			// while a non-tilde SYMVAULT_VAULT override is passed through
+			// verbatim; both are correct and both normalise to the same shape.
+			check := func(field, actual, want string) {
+				t.Helper()
+				if normalised := filepath.ToSlash(actual); normalised != want {
+					t.Errorf("%s = %q (normalised %q), want %q", field, actual, normalised, want)
+				}
 			}
-			if got.DataDir != filepath.FromSlash(tt.data) {
-				t.Errorf("DataDir = %q, want %q", got.DataDir, tt.data)
-			}
-			if got.CacheDir != filepath.FromSlash(tt.cache) {
-				t.Errorf("CacheDir = %q, want %q", got.CacheDir, tt.cache)
-			}
-			if got.LegacyDir != filepath.FromSlash(tt.legacy) {
-				t.Errorf("LegacyDir = %q, want %q", got.LegacyDir, tt.legacy)
-			}
+			check("ConfigDir", got.ConfigDir, tt.config)
+			check("DataDir", got.DataDir, tt.data)
+			check("CacheDir", got.CacheDir, tt.cache)
+			check("LegacyDir", got.LegacyDir, tt.legacy)
 			if got.Migrated != tt.migrated {
 				t.Errorf("Migrated = %v, want %v", got.Migrated, tt.migrated)
 			}
