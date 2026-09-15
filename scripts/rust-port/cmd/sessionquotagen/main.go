@@ -143,6 +143,7 @@ func buildSessionFixture(meta oracle) sessionFixture {
 	malformed := &fakeKeyring{values: map[string]string{key: "not-json"}}
 	_, err = session.NewManager(malformed, nil).LoadPassphrase(v)
 	cases = append(cases, resultCase("malformed", []string{"load_passphrase"}, err))
+	cases = append(cases, identityMetadataCases()...)
 	_ = meta
 	return sessionFixture{SchemaVersion: 1, Oracle: meta, Cases: cases}
 }
@@ -254,7 +255,7 @@ func buildOracle(root, commit, release string) (oracle, error) {
 	if err != nil {
 		return oracle{}, err
 	}
-	generator, err := digestFiles(root, []string{"scripts/rust-port/cmd/sessionquotagen/main.go"})
+	generator, err := digestFiles(root, []string{"scripts/rust-port/cmd/sessionquotagen/main.go", "scripts/rust-port/cmd/sessionquotagen/identity.go"})
 	if err != nil {
 		return oracle{}, err
 	}

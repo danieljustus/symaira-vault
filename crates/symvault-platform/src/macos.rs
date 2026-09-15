@@ -36,6 +36,15 @@ fn unavailable(message: &'static str) -> PlatformError {
     PlatformError::unavailable(message)
 }
 
+fn contains_disallowed_runtime_character(value: &str) -> bool {
+    value.chars().any(|ch| {
+        matches!(
+            ch,
+            '\n' | '\r' | '<' | '>' | '"' | '\'' | '$' | '`' | ';' | '&' | '|'
+        )
+    })
+}
+
 fn bounded_timeout(timeout: Duration) -> Duration {
     if timeout.is_zero() {
         DEFAULT_TIMEOUT
@@ -371,6 +380,17 @@ impl MacOsDaemon {
         if !self.binary_path.is_absolute() || !self.vault_dir.is_absolute() {
             return Err(failed("daemon paths must be absolute"));
         }
+        if contains_disallowed_runtime_character(&self.binary_path.to_string_lossy())
+            || contains_disallowed_runtime_character(&self.vault_dir.to_string_lossy())
+        {
+            return Err(failed("daemon paths contain disallowed characters"));
+        }
+        if self.bind.trim().is_empty() || self.port == 0 {
+            return Err(failed("daemon bind and port are invalid"));
+        }
+        if contains_disallowed_runtime_character(&self.bind) {
+            return Err(failed("daemon bind contains disallowed characters"));
+        }
         let path = self.plist_path();
         fs::create_dir_all(path.parent().expect("launch agent has a parent"))
             .map_err(|_| failed("launch agent directory could not be created"))?;
@@ -485,5 +505,21 @@ mod tests {
         assert!(script.contains("authenticated"));
         assert!(script.contains("rejected"));
         assert!(!script.contains("passphrase"));
+    }
+
+    #[test]
+    fn daemon_rejects_invalid_runtime_options_before_writing() {
+        for (bind, port) in [("", 8787), ("127.0.0.1\nlaunch", 8787), ("127.0.0.1", 0)] {
+            let daemon = MacOsDaemon::with_home(
+                "/tmp/symvault-platform-invalid",
+                "/usr/bin/true",
+                "/tmp/symvault-platform-vault",
+                bind,
+                port,
+            );
+            let error = daemon.install().unwrap_err();
+            assert_eq!(error.kind, PlatformErrorKind::Failed);
+            assert!(!daemon.plist_path().exists());
+        }
     }
 }

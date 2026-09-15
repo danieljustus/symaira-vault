@@ -237,7 +237,7 @@ fn generated_session_cases_match_rust_manager() {
     assert!(
         fixture.oracle.source_digest.len() == 64 && fixture.oracle.generator_digest.len() == 64
     );
-    assert_eq!(fixture.cases.len(), 5);
+    assert_eq!(fixture.cases.len(), 7);
 
     let cases = fixture.cases;
     let missing = cases.iter().find(|case| case.name == "missing").unwrap();
@@ -294,4 +294,68 @@ fn generated_session_cases_match_rust_manager() {
         .unwrap_err();
     assert_eq!(malformed.error_class.as_deref(), Some("malformed"));
     assert!(matches!(error, SessionError::Malformed(_)));
+
+    let keyring = Arc::new(MemoryKeyring::new());
+    let manager = SessionManager::with_system_clock(keyring.clone());
+    manager
+        .save_passphrase(
+            "fixture-vault",
+            b"fixture-secret",
+            Duration::from_secs(3600),
+            Duration::from_secs(3600),
+        )
+        .unwrap();
+    manager
+        .save_identity(
+            "fixture-vault",
+            b"fixture-identity",
+            Duration::from_secs(3600),
+            Duration::from_secs(3600),
+        )
+        .unwrap();
+    // Keep saved_at live, but make last_access distinct from the refresh time.
+    let old = serde_json::json!("2000-01-01T00:00:00Z");
+    for account in ["session", "identity"] {
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&keyring.get(&key(account)).unwrap()).unwrap();
+        // Large valid TTL lets the same controlled old timestamp be refreshed
+        // without substituting a clock-dependent expected artifact.
+        value["ttl_ns"] = serde_json::json!(i64::MAX);
+        value["last_access"] = old.clone();
+        keyring
+            .set(&key(account), &serde_json::to_vec(&value).unwrap())
+            .unwrap();
+    }
+    assert_eq!(
+        manager.load_identity("fixture-vault", true).unwrap(),
+        b"fixture-identity"
+    );
+    let mut session: serde_json::Value =
+        serde_json::from_slice(&keyring.get(&key("session")).unwrap()).unwrap();
+    let identity: serde_json::Value =
+        serde_json::from_slice(&keyring.get(&key("identity")).unwrap()).unwrap();
+    assert_eq!(
+        cases
+            .iter()
+            .find(|c| c.name == "identity_refreshes_shared_session")
+            .unwrap()
+            .expected,
+        "both_refreshed"
+    );
+    assert_ne!(session["last_access"], old);
+    assert_eq!(session["last_access"], identity["last_access"]);
+    session["ttl_ns"] = serde_json::json!(1);
+    session["last_access"] = old;
+    keyring
+        .set(&key("session"), &serde_json::to_vec(&session).unwrap())
+        .unwrap();
+    assert_eq!(
+        cases
+            .iter()
+            .find(|c| c.name == "identity_expiry_uses_shared_session")
+            .unwrap()
+            .expected,
+        "expired"
+    );
+    assert!(manager.is_identity_expired("fixture-vault"));
 }

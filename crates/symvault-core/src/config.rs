@@ -14,6 +14,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use unicode_categories::UnicodeCategories;
 
 const APP_NAME: &str = "symaira-vault";
 const LEGACY_DIR: &str = ".symvault";
@@ -42,6 +43,8 @@ pub struct Config {
     pub auth_method: AuthMethod,
     pub use_touch_id: Option<bool>,
     pub agents: BTreeMap<String, AgentProfile>,
+    pub profiles: Option<BTreeMap<String, Profile>>,
+    pub default_profile: String,
     pub vault: Option<VaultConfig>,
     pub git: Option<GitConfig>,
     pub mcp: Option<McpConfig>,
@@ -116,6 +119,12 @@ impl AgentProfile {
             ..Self::default()
         }
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct Profile {
+    #[serde(rename = "vault", alias = "VaultPath")]
+    pub vault_path: String,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -319,6 +328,8 @@ impl Default for Config {
             auth_method: AuthMethod::Passphrase,
             use_touch_id: None,
             agents,
+            profiles: None,
+            default_profile: String::new(),
             vault: None,
             git: None,
             mcp: None,
@@ -336,6 +347,12 @@ impl Config {
         } else {
             self.auth_method
         }
+    }
+
+    /// Returns a named vault profile using the Go loader's nil-on-miss semantics.
+    #[must_use]
+    pub fn profile_for_name(&self, name: &str) -> Option<&Profile> {
+        self.profiles.as_ref()?.get(name)
     }
 
     pub fn set_auth_method(&mut self, method: &str) -> Result<(), ConfigError> {
@@ -358,9 +375,14 @@ impl Config {
         if bytes.iter().all(u8::is_ascii_whitespace) {
             return Ok(Self::default());
         }
-        let value: serde_yaml_ng::Value = serde_yaml_ng::from_slice(bytes)
+        let profiles: ProfileFields = serde_yaml_ng::from_slice(bytes)
             .map_err(|error| ConfigError::Parse(error.to_string()))?;
-        let root = mapping(&value)?;
+        let fields: serde_yaml_ng::Mapping = profiles
+            .fields
+            .into_iter()
+            .map(|(name, value)| (key(&name), value))
+            .collect();
+        let root = &fields;
         let mut config = Self::default();
         let mut auth_method_explicit = false;
         if let Some(v) = scalar(root, "vaultDir") {
@@ -388,6 +410,20 @@ impl Config {
         if let Some(v) = scalar(root, "useTouchID") {
             config.use_touch_id = Some(boolean(v, "useTouchID")?);
         }
+        config.default_profile = profiles.default_profile.unwrap_or_default();
+        config.profiles = profiles.profiles.map(|profiles| {
+            profiles
+                .into_iter()
+                .map(|(name, profile)| {
+                    (
+                        name,
+                        Profile {
+                            vault_path: profile.vault_path(),
+                        },
+                    )
+                })
+                .collect()
+        });
         if auth_method_explicit {
             config.use_touch_id = Some(config.auth_method == AuthMethod::Touchid);
         } else if config.use_touch_id.is_none() {
@@ -430,7 +466,7 @@ impl Config {
         let mut out = String::new();
         if !self.agents.is_empty() {
             out.push_str("agents:\n");
-            for (name, profile) in &self.agents {
+            for (name, profile) in yaml_entries(&self.agents) {
                 out.push_str(&format!("    {}:\n", yaml_scalar(name)?));
                 write_agent(&mut out, name, profile)?;
             }
@@ -479,6 +515,30 @@ impl Config {
             out.push_str(&format!(
                 "useTouchID: {}\n",
                 self.effective_auth_method() == AuthMethod::Touchid
+            ));
+        }
+        if let Some(profiles) = self
+            .profiles
+            .as_ref()
+            .filter(|profiles| !profiles.is_empty())
+        {
+            out.push_str("profiles:\n");
+            for (name, profile) in yaml_entries(profiles) {
+                out.push_str(&format!("    {}:", yaml_scalar(name)?));
+                if profile.vault_path.is_empty() {
+                    out.push_str(" {}\n");
+                } else {
+                    out.push('\n');
+                    out.push_str("        vault: ");
+                    out.push_str(&yaml_scalar(&profile.vault_path)?);
+                    out.push('\n');
+                }
+            }
+        }
+        if !self.default_profile.is_empty() {
+            out.push_str(&format!(
+                "defaultProfile: {}\n",
+                yaml_scalar(&self.default_profile)?
             ));
         }
         Ok(out.into_bytes())
@@ -601,6 +661,78 @@ fn format_duration(value: Duration) -> String {
         return format!("{secs}s");
     }
     format!("{}.{:09}s", secs, nanos)
+}
+
+// Decode string-typed YAML fields directly from the source events. Converting
+// Value::Number/Bool back to strings loses Go's lexical scalar representation.
+#[derive(Deserialize)]
+struct ProfileFields {
+    #[serde(rename = "defaultProfile")]
+    default_profile: Option<String>,
+    #[serde(default, deserialize_with = "optional_unique_map")]
+    profiles: Option<BTreeMap<String, ProfileYaml>>,
+    #[serde(flatten, deserialize_with = "unique_map")]
+    fields: BTreeMap<String, serde_yaml_ng::Value>,
+}
+
+#[derive(Deserialize)]
+struct ProfileYaml {
+    vault: Option<String>,
+    #[serde(rename = "<<")]
+    merge: Option<Box<ProfileYaml>>,
+}
+
+impl ProfileYaml {
+    fn vault_path(self) -> String {
+        self.vault.unwrap_or_else(|| {
+            self.merge
+                .map_or_else(String::new, |profile| profile.vault_path())
+        })
+    }
+}
+
+fn unique_map<'de, D, T>(deserializer: D) -> Result<BTreeMap<String, T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    struct Visitor<T>(std::marker::PhantomData<T>);
+    impl<'de, T: Deserialize<'de>> serde::de::Visitor<'de> for Visitor<T> {
+        type Value = BTreeMap<String, T>;
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("a mapping with unique keys")
+        }
+        fn visit_map<M: serde::de::MapAccess<'de>>(
+            self,
+            mut map: M,
+        ) -> Result<Self::Value, M::Error> {
+            let mut values = BTreeMap::new();
+            while let Some(key) = map.next_key::<String>()? {
+                if values.contains_key(&key) {
+                    return Err(serde::de::Error::custom("duplicate mapping key"));
+                }
+                values.insert(key, map.next_value()?);
+            }
+            Ok(values)
+        }
+    }
+    deserializer.deserialize_map(Visitor(std::marker::PhantomData))
+}
+
+fn optional_unique_map<'de, D, T>(deserializer: D) -> Result<Option<BTreeMap<String, T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    #[derive(Deserialize)]
+    struct Map<T>(
+        #[serde(
+            deserialize_with = "unique_map",
+            bound(deserialize = "T: Deserialize<'de>")
+        )]
+        BTreeMap<String, T>,
+    );
+    Option::<Map<T>>::deserialize(deserializer).map(|value| value.map(|map| map.0))
 }
 
 fn merge_agents(config: &mut Config, value: &serde_yaml_ng::Value) -> Result<(), ConfigError> {
@@ -830,11 +962,131 @@ fn parse_clipboard(value: &serde_yaml_ng::Value) -> Result<ClipboardConfig, Conf
     Ok(out)
 }
 
+fn yaml_entries<T>(map: &BTreeMap<String, T>) -> Vec<(&String, &T)> {
+    let mut entries: Vec<_> = map.iter().collect();
+    entries.sort_by(|(a, _), (b, _)| yaml_key_cmp(a, b));
+    entries
+}
+
+// yaml.v3 orders digit runs numerically, breaking equal values by run length.
+fn yaml_key_cmp(a: &str, b: &str) -> std::cmp::Ordering {
+    let a: Vec<_> = a.chars().collect();
+    let b: Vec<_> = b.chars().collect();
+    let mut digits = false;
+    for i in 0..a.len().min(b.len()) {
+        if a[i] == b[i] {
+            digits = a[i].is_number_decimal_digit();
+            continue;
+        }
+        let al = a[i].is_letter();
+        let bl = b[i].is_letter();
+        if al && bl {
+            return a[i].cmp(&b[i]);
+        }
+        if al || bl {
+            return if digits { bl.cmp(&al) } else { al.cmp(&bl) };
+        }
+        let mut an = 0i64;
+        let mut bn = 0i64;
+        if a[i] == '0' || b[i] == '0' {
+            for ch in a[..i]
+                .iter()
+                .rev()
+                .take_while(|ch| ch.is_number_decimal_digit())
+            {
+                if *ch != '0' {
+                    an = 1;
+                    bn = 1;
+                    break;
+                }
+            }
+        }
+        let mut ai = i;
+        let mut bi = i;
+        while ai < a.len() && a[ai].is_number_decimal_digit() {
+            an = an
+                .wrapping_mul(10)
+                .wrapping_add(i64::from(a[ai] as u32 - '0' as u32));
+            ai += 1;
+        }
+        while bi < b.len() && b[bi].is_number_decimal_digit() {
+            bn = bn
+                .wrapping_mul(10)
+                .wrapping_add(i64::from(b[bi] as u32 - '0' as u32));
+            bi += 1;
+        }
+        return an.cmp(&bn).then(ai.cmp(&bi)).then(a[i].cmp(&b[i]));
+    }
+    a.len().cmp(&b.len())
+}
+
 fn yaml_scalar(value: &str) -> Result<String, ConfigError> {
+    // Go's yaml.v3 quotes strings that would otherwise decode as another scalar.
+    let resolved = serde_yaml_ng::from_str::<serde_yaml_ng::Value>(value);
+    let legacy_bool = matches!(
+        value,
+        "y" | "Y"
+            | "yes"
+            | "Yes"
+            | "YES"
+            | "on"
+            | "On"
+            | "ON"
+            | "n"
+            | "N"
+            | "no"
+            | "No"
+            | "NO"
+            | "off"
+            | "Off"
+            | "OFF"
+    );
+    if matches!(
+        resolved,
+        Ok(serde_yaml_ng::Value::Number(_)
+            | serde_yaml_ng::Value::Bool(_)
+            | serde_yaml_ng::Value::Null)
+    ) || value.replace('_', "").parse::<f64>().is_ok()
+        || legacy_bool
+        || is_base60(value)
+    {
+        return serde_json::to_string(value)
+            .map_err(|error| ConfigError::Serialize(error.to_string()));
+    }
     serde_yaml_ng::to_string(&serde_yaml_ng::Value::String(value.into()))
         .map(|v| v.trim_end().to_owned())
         .map_err(|e| ConfigError::Serialize(e.to_string()))
 }
+fn is_base60(value: &str) -> bool {
+    let value = value.strip_prefix(['+', '-']).unwrap_or(value);
+    let (whole, fraction) = value
+        .split_once('.')
+        .map_or((value, None), |(w, f)| (w, Some(f)));
+    if fraction.is_some_and(|f| !f.bytes().all(|b| b.is_ascii_digit() || b == b'_')) {
+        return false;
+    }
+    let mut parts = whole.split(':');
+    let first = parts.next().unwrap_or_default();
+    if !first.as_bytes().first().is_some_and(u8::is_ascii_digit)
+        || !first.bytes().all(|b| b.is_ascii_digit() || b == b'_')
+    {
+        return false;
+    }
+    let mut count = 0;
+    for part in parts {
+        let valid = match part.as_bytes() {
+            [digit] => digit.is_ascii_digit(),
+            [tens, digit] => *tens >= b'0' && *tens <= b'5' && digit.is_ascii_digit(),
+            _ => false,
+        };
+        if !valid {
+            return false;
+        }
+        count += 1;
+    }
+    count > 0
+}
+
 fn write_agent(out: &mut String, name: &str, p: &AgentProfile) -> Result<(), ConfigError> {
     if let Some(v) = &p.approval_mode {
         out.push_str(&format!("        approvalMode: {}\n", yaml_scalar(v)?));

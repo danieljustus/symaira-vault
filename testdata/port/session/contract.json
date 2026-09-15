@@ -14,7 +14,7 @@
       "internal/session/session.go"
     ],
     "source_digest": "33f86cbaef82a82e020a1eedf4d8bfedcf84a17caa23655a622aebeccc985131",
-    "generator_digest": "0bff066a0a12d9b0853e5ab09fe020eecbb203bc6ec059ff0222ed445c5ab298"
+    "generator_digest": "4e68ade3b7dedb1584f53c9f5bdd482177558df2088683992be852773f5a4b44"
   },
   "cases": [
     {
@@ -56,6 +56,25 @@
       ],
       "expected": "error",
       "error_class": "malformed"
+    },
+    {
+      "name": "identity_refreshes_shared_session",
+      "operations": [
+        "save_passphrase",
+        "save_identity",
+        "age_both_last_access",
+        "load_identity",
+        "compare_both_last_access"
+      ],
+      "expected": "both_refreshed"
+    },
+    {
+      "name": "identity_expiry_uses_shared_session",
+      "operations": [
+        "expire_session_only",
+        "is_identity_expired"
+      ],
+      "expected": "expired"
     }
   ]
 }
