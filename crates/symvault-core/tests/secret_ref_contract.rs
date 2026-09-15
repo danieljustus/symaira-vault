@@ -6,8 +6,19 @@ use symvault_core::secret_ref::{SecretHandle, SecretRef};
 #[derive(Debug, Deserialize)]
 struct Fixture {
     schema_version: u8,
+    oracle: Oracle,
     parse_ref_cases: Vec<ParseRefCase>,
     parse_handle_cases: Vec<ParseHandleCase>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Oracle {
+    commit: String,
+    commit_sha: String,
+    release: String,
+    source_files: Vec<String>,
+    source_digest: String,
+    generator_digest: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -157,4 +168,24 @@ fn property_handle_roundtrip_all_synthesized_pairs() {
             assert_eq!(parsed_ref, r);
         }
     }
+}
+
+/// The fixture's oracle block is what makes the row auditable: it names the
+/// commit whose blobs the Go generator verified its own sources against. A
+/// silently re-pinned fixture would otherwise reach this side unnoticed.
+#[test]
+fn fixture_has_pinned_provenance() {
+    let fixture = fixture();
+    assert_eq!(fixture.oracle.commit, "caadd5e");
+    assert_eq!(fixture.oracle.release, "v0.22.1");
+    assert_eq!(fixture.oracle.commit_sha.len(), 40);
+    assert!(
+        fixture
+            .oracle
+            .commit_sha
+            .starts_with(&fixture.oracle.commit)
+    );
+    assert_eq!(fixture.oracle.source_files.len(), 5);
+    assert_eq!(fixture.oracle.source_digest.len(), 64);
+    assert_eq!(fixture.oracle.generator_digest.len(), 64);
 }

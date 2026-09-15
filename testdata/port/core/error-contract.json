@@ -2,7 +2,13 @@
   "schema_version": 1,
   "oracle": {
     "commit": "caadd5e",
-    "release": "v0.22.1"
+    "commit_sha": "caadd5ef95e8f19fabd3ae3d2c04caa296f2fd44",
+    "release": "v0.22.1",
+    "source_files": [
+      "internal/errors/errors.go"
+    ],
+    "source_digest": "502e508fa5c62d198fa77687373532ead23e039fd641312c6c8a805f1ae0c6d1",
+    "generator_digest": "718dcffc521a75b0a14324912ac605631a7fdf44fdba0d41ea306c991b4a31b8"
   },
   "exit_codes": [
     {

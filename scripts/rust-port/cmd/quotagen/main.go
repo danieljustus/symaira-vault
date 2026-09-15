@@ -4,8 +4,6 @@ package main
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -16,17 +14,22 @@ import (
 	"time"
 
 	"github.com/danieljustus/symaira-vault/internal/policy"
+	"github.com/danieljustus/symaira-vault/scripts/rust-port/internal/provenance"
 )
 
 const (
-	pinnedOracleCommit  = "caadd5e"
-	pinnedOracleRelease = "v0.22.1"
+	// The transition helper this fixture pins was extracted in 8913d64e and
+	// does not exist at the v0.22.1 baseline the other frozen generators use.
+	// Claiming caadd5e here named a commit that does not contain the code.
+	pinnedOracleCommit  = "8913d64e"
+	pinnedOracleRelease = "unreleased"
 )
 
 var productionSources = []string{"internal/policy/ratelimit_transition.go"}
 
 type oracle struct {
 	Commit          string   `json:"commit"`
+	CommitSHA       string   `json:"commit_sha"`
 	Release         string   `json:"release"`
 	SourceFiles     []string `json:"source_files"`
 	SourceDigest    string   `json:"source_digest"`
@@ -75,31 +78,22 @@ type quotaTransition struct {
 func buildOracle(root, commit, release string) (oracle, error) {
 	sources := append([]string(nil), productionSources...)
 	sort.Strings(sources)
-	sourceDigest, err := digestFiles(root, sources)
+	sourceDigest, err := provenance.Digest(root, sources)
 	if err != nil {
 		return oracle{}, fmt.Errorf("hash quota sources: %w", err)
 	}
-	generatorDigest, err := digestFiles(root, []string{"scripts/rust-port/cmd/quotagen/main.go"})
+	// The generator can only execute the working tree. Binding it to the
+	// claimed commit's blobs is what stops this fixture from asserting one
+	// revision while carrying another's behaviour.
+	resolved, err := provenance.Verify(root, commit, sources)
+	if err != nil {
+		return oracle{}, err
+	}
+	generatorDigest, err := provenance.Digest(root, []string{"scripts/rust-port/cmd/quotagen/main.go"})
 	if err != nil {
 		return oracle{}, fmt.Errorf("hash quota generator: %w", err)
 	}
-	return oracle{Commit: commit, Release: release, SourceFiles: sources, SourceDigest: sourceDigest, GeneratorDigest: generatorDigest}, nil
-}
-
-func digestFiles(root string, files []string) (string, error) {
-	hash := sha256.New()
-	for _, name := range files {
-		path := filepath.Join(root, name)
-		content, err := os.ReadFile(path) // #nosec G304 -- fixed production/generator inputs
-		if err != nil {
-			return "", err
-		}
-		_, _ = hash.Write([]byte(name))
-		_, _ = hash.Write([]byte{0})
-		_, _ = hash.Write(content)
-		_, _ = hash.Write([]byte{0})
-	}
-	return hex.EncodeToString(hash.Sum(nil)), nil
+	return oracle{Commit: commit, CommitSHA: resolved, Release: release, SourceFiles: sources, SourceDigest: sourceDigest, GeneratorDigest: generatorDigest}, nil
 }
 
 func repositoryRoot() (string, error) {

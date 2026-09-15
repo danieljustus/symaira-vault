@@ -9,12 +9,23 @@ use symvault_core::error::{
 #[derive(Debug, Deserialize)]
 struct Fixture {
     schema_version: u8,
+    oracle: Oracle,
     exit_codes: Vec<NamedInt>,
     error_kinds: Vec<NamedInt>,
     cases: Vec<ErrorCase>,
     exit_resolutions: Vec<ExitResolution>,
     corekit_mappings: Vec<CodeMapping>,
     corekit_reverse_mappings: Vec<CodeMapping>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Oracle {
+    commit: String,
+    commit_sha: String,
+    release: String,
+    source_files: Vec<String>,
+    source_digest: String,
+    generator_digest: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -342,4 +353,24 @@ fn build_case(expected: &ErrorCase) -> CliError {
         ),
         other => panic!("unknown error fixture case {other}"),
     }
+}
+
+/// The fixture's oracle block is what makes the row auditable: it names the
+/// commit whose blobs the Go generator verified its own sources against. A
+/// silently re-pinned fixture would otherwise reach this side unnoticed.
+#[test]
+fn fixture_has_pinned_provenance() {
+    let fixture = fixture();
+    assert_eq!(fixture.oracle.commit, "caadd5e");
+    assert_eq!(fixture.oracle.release, "v0.22.1");
+    assert_eq!(fixture.oracle.commit_sha.len(), 40);
+    assert!(
+        fixture
+            .oracle
+            .commit_sha
+            .starts_with(&fixture.oracle.commit)
+    );
+    assert_eq!(fixture.oracle.source_files.len(), 1);
+    assert_eq!(fixture.oracle.source_digest.len(), 64);
+    assert_eq!(fixture.oracle.generator_digest.len(), 64);
 }

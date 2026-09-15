@@ -20,11 +20,15 @@ import (
 	"github.com/danieljustus/symaira-vault/internal/policy"
 	"github.com/danieljustus/symaira-vault/internal/quotas"
 	"github.com/danieljustus/symaira-vault/internal/session"
+	"github.com/danieljustus/symaira-vault/scripts/rust-port/internal/provenance"
 )
 
 const (
-	pinnedOracleCommit  = "caadd5e"
-	pinnedOracleRelease = "v0.22.1"
+	// internal/policy/ratelimit.go changed, and ratelimit_transition.go was
+	// created, after the v0.22.1 baseline. Claiming caadd5e named a commit that
+	// does not contain the code these fixtures pin.
+	pinnedOracleCommit  = "8913d64e"
+	pinnedOracleRelease = "unreleased"
 )
 
 var productionSources = []string{
@@ -40,6 +44,7 @@ var productionSources = []string{
 
 type oracle struct {
 	Commit          string   `json:"commit"`
+	CommitSHA       string   `json:"commit_sha"`
 	Release         string   `json:"release"`
 	SourceFiles     []string `json:"source_files"`
 	SourceDigest    string   `json:"source_digest"`
@@ -255,11 +260,18 @@ func buildOracle(root, commit, release string) (oracle, error) {
 	if err != nil {
 		return oracle{}, err
 	}
+	// The generator can only execute the working tree. Binding it to the
+	// claimed commit's blobs is what stops these fixtures from asserting one
+	// revision while carrying another's behaviour.
+	resolved, err := provenance.Verify(root, commit, sources)
+	if err != nil {
+		return oracle{}, err
+	}
 	generator, err := digestFiles(root, []string{"scripts/rust-port/cmd/sessionquotagen/main.go", "scripts/rust-port/cmd/sessionquotagen/identity.go"})
 	if err != nil {
 		return oracle{}, err
 	}
-	return oracle{Commit: commit, Release: release, SourceFiles: sources, SourceDigest: digest, GeneratorDigest: generator}, nil
+	return oracle{Commit: commit, CommitSHA: resolved, Release: release, SourceFiles: sources, SourceDigest: digest, GeneratorDigest: generator}, nil
 }
 func digestFiles(root string, names []string) (string, error) {
 	h := sha256.New()

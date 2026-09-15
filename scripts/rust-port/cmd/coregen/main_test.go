@@ -10,18 +10,48 @@ import (
 )
 
 func TestResolveOracleRejectsTamperedMetadata(t *testing.T) {
-	if _, err := resolveOracle(true, "tampered", pinnedOracleRelease); err == nil {
-		t.Fatal("expected tampered commit rejection")
+	for kind, pinned := range kindOracles {
+		if _, err := resolveOracle(kind, "tampered", pinned.release); err == nil {
+			t.Fatalf("%s: expected tampered commit rejection", kind)
+		}
+		if _, err := resolveOracle(kind, pinned.commit, "v0.0.0"); err == nil {
+			t.Fatalf("%s: expected tampered release rejection", kind)
+		}
+		got, err := resolveOracle(kind, "", "")
+		if err != nil {
+			t.Fatalf("%s: %v", kind, err)
+		}
+		if got.Commit != pinned.commit || got.Release != pinned.release {
+			t.Fatalf("%s check metadata = %#v", kind, got)
+		}
+		// Provenance is bound, not merely labelled: the resolved object name
+		// is the commit whose blobs match the working tree.
+		if len(got.CommitSHA) != 40 || !strings.HasPrefix(got.CommitSHA, pinned.commit) {
+			t.Fatalf("%s: commit %q was not resolved against git, got %q", kind, pinned.commit, got.CommitSHA)
+		}
+		if len(got.SourceFiles) != len(pinned.sources) {
+			t.Fatalf("%s: source list = %v", kind, got.SourceFiles)
+		}
 	}
-	if _, err := resolveOracle(true, pinnedOracleCommit, "v0.0.0"); err == nil {
-		t.Fatal("expected tampered release rejection")
+	if _, err := resolveOracle("no-such-kind", "", ""); err == nil {
+		t.Fatal("expected an unknown fixture kind to be rejected")
 	}
-	got, err := resolveOracle(true, "", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Commit != pinnedOracleCommit || got.Release != pinnedOracleRelease {
-		t.Fatalf("check metadata = %#v", got)
+}
+
+// Each fixture kind must name its own source set. A kind that silently shared
+// another's sources would re-label an unrelated fixture on every change.
+func TestKindOraclesDoNotShareSourceSets(t *testing.T) {
+	seen := map[string]string{}
+	for kind, pinned := range kindOracles {
+		if len(pinned.sources) == 0 {
+			t.Fatalf("%s pins no production sources", kind)
+		}
+		for _, source := range pinned.sources {
+			if other, ok := seen[source]; ok {
+				t.Fatalf("%s and %s both pin %s", kind, other, source)
+			}
+			seen[source] = kind
+		}
 	}
 }
 

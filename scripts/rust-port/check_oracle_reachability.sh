@@ -17,18 +17,47 @@ cd "$root"
 main_ref="origin/main"
 git rev-parse --verify --quiet "$main_ref" >/dev/null 2>&1 || main_ref="main"
 
-# Pins live in two places: Go constants in the generators, and *_ORACLE_COMMIT
-# variables in the Makefile. storemetagen uses only the latter, which is why it
-# was the row that broke.
-pins=$(
+# Pins live in three shapes: Go constants in the generators, struct-literal
+# fields where a generator pins each fixture kind separately, and
+# *_ORACLE_COMMIT variables in the Makefile. storemetagen used only the last,
+# which is why it was the row that broke; coregen uses the middle one, which
+# an earlier version of this collector also could not see.
+collect_pins() {
     {
         grep -rhoE '(pinnedOracleCommit|const revision)[[:space:]]*=[[:space:]]*"[0-9a-f]{7,40}"' \
-            scripts/rust-port/cmd/*/main.go 2>/dev/null || true
-        grep -hoE '^[A-Z_]*ORACLE_COMMIT[[:space:]]*[:?]?=[[:space:]]*[0-9a-f]{7,40}' Makefile 2>/dev/null || true
+            "$@" 2>/dev/null || true
+        grep -rhoE 'commit:[[:space:]]*"[0-9a-f]{7,40}"' "$@" 2>/dev/null || true
     } | grep -oE '[0-9a-f]{7,40}"?$' | tr -d '"' | sort -u
+}
+
+generator_sources=$(find scripts/rust-port/cmd -name '*.go' ! -name '*_test.go')
+# shellcheck disable=SC2086
+pins=$(
+    {
+        collect_pins $generator_sources
+        grep -hoE '^[A-Z_]*ORACLE_COMMIT[[:space:]]*[:?]?=[[:space:]]*[0-9a-f]{7,40}' Makefile 2>/dev/null || true
+    } | grep -oE '[0-9a-f]{7,40}' | sort -u
 )
 
+if [ -z "$pins" ]; then
+    echo "FAIL the collector found no oracle pins at all; it has stopped matching the generators"
+    exit 1
+fi
+
+# A generator that verifies provenance must contribute a pin this script can
+# see. Without this, a pin written in a shape the collector cannot parse goes
+# unchecked and the row passes on a clone that happens to hold the object.
 status=0
+for dir in $(grep -rl 'provenance.Verify' scripts/rust-port/cmd --include='*.go' | xargs -n1 dirname | sort -u); do
+    found=$(collect_pins "$dir"/*.go)
+    if [ -z "$found" ]; then
+        if ! grep -qE "^[A-Z_]*ORACLE_COMMIT" Makefile || ! grep -q "$(basename "$dir")" Makefile; then
+            echo "FAIL $(basename "$dir") verifies provenance but contributes no pin this script can see"
+            status=1
+        fi
+    fi
+done
+
 for sha in $pins; do
     if ! git cat-file -e "${sha}^{commit}" 2>/dev/null; then
         echo "FAIL ${sha}: oracle commit is not present in this clone"

@@ -23,16 +23,37 @@ it binds the whole `internal/` tree and its 16 vectors are byte-identical
 across every such advance; all other rows, including `PAIRING-001`, retain the
 baseline oracle.
 
-Oracle commits are no longer trusted as labels. `policygen`, `configpathgen`,
-`configgen`, `configprofilegen` and `manifestkeygen` resolve their claimed
-commit through git and compare the working tree against that commit's
-immutable blobs, refusing to emit a fixture whose provenance does not hold;
-the shared check lives in `scripts/rust-port/internal/provenance`.
+Oracle commits are no longer trusted as labels. **Every generator** now
+resolves its claimed commit through git and compares the working tree against
+that commit's immutable blobs, refusing to emit a fixture whose provenance does
+not hold; the shared check lives in `scripts/rust-port/internal/provenance`.
 
-**`coregen`, `quotagen` and `sessionquotagen` are not yet bound.** They still
-validate their oracle commit as a label while digesting the working tree,
-which is the defect that invalidated `POLICY-001`'s earlier `PASS`. Their rows'
-provenance claims are therefore unverified until they are bound the same way.
+The last three — `coregen`, `quotagen` and `sessionquotagen` — were bound at
+`c4552c43`, and binding them proved the concern was not theoretical. Four
+fixtures were claiming the frozen `caadd5e` (v0.22.1) baseline while pinning
+code that commit does not contain:
+
+| fixture | claimed | actual | why the label was wrong |
+|---|---|---|---|
+| `quota-contract.json` | `caadd5e` | `8913d64e` | `internal/policy/ratelimit_transition.go` **did not exist** at `caadd5e`; it was extracted later |
+| `session/contract.json`, `quotas/contract.json` | `caadd5e` | `8913d64e` | same, plus `internal/policy/ratelimit.go` changed after the baseline |
+| `redact-contract.json` | `caadd5e` | `ba4dc068` | four of seven redact/masking sources changed after the baseline |
+| `password-totp-contract.json` | `caadd5e` | `8913d64e` | both crypto sources changed after the baseline |
+
+Regenerating changed **only the oracle blocks — not one case vector**, so the
+fixtures were factually correct and merely mislabelled. That is the best
+possible outcome of the audit and also the reason the defect could survive:
+nothing downstream disagreed, because the recorded behaviour was right. What
+was unverifiable was the claim about *which revision produced it*.
+
+`coregen` now pins each of its four fixture kinds separately, against the
+commit that last touched that kind's own sources. A single shared pin had made
+a change in any one package silently re-label three unrelated fixtures, and it
+is why two of its fixtures kept an accurate label (`error`, `secret_ref` — both
+still legitimately at `caadd5e`) while two did not. The Rust side now asserts
+the oracle block for those rows too; previously `error_contract.rs`,
+`secret_ref_contract.rs` and `redact_contract.rs` read the fixtures without
+checking which oracle they carried.
 
 ## POLICY-001 path-matching adjudication
 

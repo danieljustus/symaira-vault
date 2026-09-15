@@ -172,6 +172,15 @@ manpages: build
 # Go-oracle fixtures and neutral black-box harness for the staged Rust port.
 PORT_ORACLE_COMMIT ?= caadd5e
 PORT_ORACLE_RELEASE ?= v0.22.1
+# QUOTA-001's pure transition helper was extracted in 8913d64e and does not
+# exist at the v0.22.1 baseline, so this row cannot share PORT_ORACLE_COMMIT:
+# the fixture was naming a commit that does not contain the code it pins.
+QUOTA_ORACLE_COMMIT ?= 8913d64e
+QUOTA_ORACLE_RELEASE ?= unreleased
+# Same reason for the session/persistent-quota fixtures: internal/policy/
+# ratelimit.go changed, and ratelimit_transition.go was created, after v0.22.1.
+SESSION_ORACLE_COMMIT ?= 8913d64e
+SESSION_ORACLE_RELEASE ?= unreleased
 # POLICY-001 deliberately advances only its own production-Go oracle to the
 # adjudicated path-matching contract. policygen verifies this commit against
 # git objects, so it cannot drift from the code the generator executes.
@@ -222,8 +231,8 @@ port-fixtures-check:
 quota-fixtures-generate:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/quotagen \
 		--output $(PORT_QUOTA_FIXTURE) \
-		--oracle-commit $(PORT_ORACLE_COMMIT) \
-		--oracle-release $(PORT_ORACLE_RELEASE)
+		--oracle-commit $(QUOTA_ORACLE_COMMIT) \
+		--oracle-release $(QUOTA_ORACLE_RELEASE)
 
 quota-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/quotagen \
@@ -234,9 +243,7 @@ core-fixtures-generate: quota-fixtures-generate
 		--error-output $(PORT_ERROR_FIXTURE) \
 		--secret-ref-output $(PORT_SECRET_REF_FIXTURE) \
 		--redact-output $(PORT_REDACT_FIXTURE) \
-		--crypto-output $(PORT_CRYPTO_FIXTURE) \
-		--oracle-commit $(PORT_ORACLE_COMMIT) \
-		--oracle-release $(PORT_ORACLE_RELEASE)
+		--crypto-output $(PORT_CRYPTO_FIXTURE)
 
 core-fixtures-check: quota-fixtures-check
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/coregen \
@@ -338,8 +345,8 @@ rust-007-fixtures-generate:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/sessionquotagen \
 		--session-output $(PORT_SESSION_FIXTURE) \
 		--quota-output $(PORT_PERSISTENT_QUOTA_FIXTURE) \
-		--oracle-commit $(PORT_ORACLE_COMMIT) \
-		--oracle-release $(PORT_ORACLE_RELEASE)
+		--oracle-commit $(SESSION_ORACLE_COMMIT) \
+		--oracle-release $(SESSION_ORACLE_RELEASE)
 
 rust-007-fixtures-check: config-profile-fixtures-check
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/configgen \

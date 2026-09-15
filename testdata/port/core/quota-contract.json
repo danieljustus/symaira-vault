@@ -1,13 +1,14 @@
 {
   "schema_version": 1,
   "oracle": {
-    "commit": "caadd5e",
-    "release": "v0.22.1",
+    "commit": "8913d64e",
+    "commit_sha": "8913d64edeaf7762455721396de88827ff58bf86",
+    "release": "unreleased",
     "source_files": [
       "internal/policy/ratelimit_transition.go"
     ],
     "source_digest": "847cbe991b2193f6de6a0361f09839ae27edcdb23fb49cd9a4e1a369d994af75",
-    "generator_digest": "eb4e4dfe9bc38c4465e280fd5149120d7ef478b862184d11d8dba78bcc13c420"
+    "generator_digest": "789a119f1ba65439513f68d98bfe162a87e7ce8f019e4667ced821e015aa449f"
   },
   "cases": [
     {

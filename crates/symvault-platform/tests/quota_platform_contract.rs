@@ -63,8 +63,8 @@ fn unique_dir(label: &str) -> std::path::PathBuf {
 fn persistent_quota_fixture_has_pinned_provenance() {
     let fixture = fixture();
     assert_eq!(fixture.schema_version, 1);
-    assert_eq!(fixture.oracle.commit, "caadd5e");
-    assert_eq!(fixture.oracle.release, "v0.22.1");
+    assert_eq!(fixture.oracle.commit, "8913d64e");
+    assert_eq!(fixture.oracle.release, "unreleased");
     assert_eq!(fixture.oracle.source_files.len(), 8);
     assert_eq!(fixture.oracle.source_digest.len(), 64);
     assert_eq!(fixture.oracle.generator_digest.len(), 64);

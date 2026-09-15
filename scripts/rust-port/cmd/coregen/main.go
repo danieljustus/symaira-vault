@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"sort"
 
 	corekitexitcodes "github.com/danieljustus/symaira-corekit/exitcodes"
 
@@ -17,15 +19,70 @@ import (
 	redactpkg "github.com/danieljustus/symaira-vault/internal/redact"
 	templatepkg "github.com/danieljustus/symaira-vault/internal/template"
 	taintpkg "github.com/danieljustus/symaira-vault/internal/vault/taint"
+	"github.com/danieljustus/symaira-vault/scripts/rust-port/internal/provenance"
 )
 
-const (
-	pinnedOracleCommit  = "caadd5e"
-	pinnedOracleRelease = "v0.22.1"
-)
+// kindOracle pins one fixture kind to the commit that actually contains the
+// production code it exercises.
+//
+// A single pin for all four was not honest: the redact and password/TOTP
+// sources both changed after the v0.22.1 baseline the label claimed, so those
+// fixtures named a commit whose blobs differ from the code the generator runs.
+// Per-kind pins also stop a change in one package from silently re-labelling
+// three unrelated fixtures.
+type kindOracle struct {
+	commit    string
+	release   string
+	sources   []string
+	generator []string
+}
+
+var kindOracles = map[string]kindOracle{
+	"error": {
+		commit: "caadd5e", release: "v0.22.1",
+		sources:   []string{"internal/errors/errors.go"},
+		generator: []string{"scripts/rust-port/cmd/coregen/main.go"},
+	},
+	"secret_ref": {
+		commit: "caadd5e", release: "v0.22.1",
+		sources: []string{
+			"internal/template/builtins.go",
+			"internal/template/engine.go",
+			"internal/template/funcs.go",
+			"internal/template/resolver.go",
+			"internal/vault/taint/taint.go",
+		},
+		generator: []string{"scripts/rust-port/cmd/coregen/main.go"},
+	},
+	"redact": {
+		commit: "ba4dc068", release: "unreleased",
+		sources: []string{
+			"internal/mcp/masking/doc.go",
+			"internal/mcp/masking/sanitizer.go",
+			"internal/mcp/masking/validator.go",
+			"internal/redact/detectors.go",
+			"internal/redact/entropy.go",
+			"internal/redact/redact.go",
+			"internal/redact/strict.go",
+		},
+		generator: []string{"scripts/rust-port/cmd/coregen/main.go"},
+	},
+	"crypto": {
+		commit: "8913d64e", release: "unreleased",
+		sources: []string{
+			"internal/crypto/password.go",
+			"internal/crypto/totp.go",
+		},
+		generator: []string{
+			"scripts/rust-port/cmd/coregen/crypto.go",
+			"scripts/rust-port/cmd/coregen/main.go",
+		},
+	},
+}
 
 type oracle struct {
 	Commit          string   `json:"commit"`
+	CommitSHA       string   `json:"commit_sha,omitempty"`
 	Release         string   `json:"release"`
 	SourceFiles     []string `json:"source_files,omitempty"`
 	SourceDigest    string   `json:"source_digest,omitempty"`
@@ -787,20 +844,57 @@ func evaluateTruthy(v string) bool {
 // Main / CLI entry point
 // ---------------------------------------------------------------------------
 
-func resolveOracle(check bool, commit, release string) (oracle, error) {
-	if commit != "" && commit != pinnedOracleCommit {
-		return oracle{}, fmt.Errorf("oracle commit %q is not the pinned commit %q", commit, pinnedOracleCommit)
+// resolveOracle builds one fixture kind's oracle block and binds it to git.
+//
+// The commit and release flags are an optional assertion: the pins live in
+// kindOracles, so a caller that supplies a value must supply the right one
+// rather than silently choosing a different oracle.
+func resolveOracle(kind string, commit, release string) (oracle, error) {
+	pinned, ok := kindOracles[kind]
+	if !ok {
+		return oracle{}, fmt.Errorf("no oracle pinned for fixture kind %q", kind)
 	}
-	if release != "" && release != pinnedOracleRelease {
-		return oracle{}, fmt.Errorf("oracle release %q is not the pinned release %q", release, pinnedOracleRelease)
+	if commit != "" && commit != pinned.commit {
+		return oracle{}, fmt.Errorf("oracle commit %q is not %s's pinned commit %q", commit, kind, pinned.commit)
 	}
-	if check {
-		return oracle{Commit: pinnedOracleCommit, Release: pinnedOracleRelease}, nil
+	if release != "" && release != pinned.release {
+		return oracle{}, fmt.Errorf("oracle release %q is not %s's pinned release %q", release, kind, pinned.release)
 	}
-	if commit == "" || release == "" {
-		return oracle{}, fmt.Errorf("--oracle-commit and --oracle-release are required when generating a new fixture")
+	root, err := repositoryRoot()
+	if err != nil {
+		return oracle{}, err
 	}
-	return oracle{Commit: commit, Release: release}, nil
+	sources := append([]string(nil), pinned.sources...)
+	sort.Strings(sources)
+	sourceDigest, err := provenance.Digest(root, sources)
+	if err != nil {
+		return oracle{}, fmt.Errorf("hash %s sources: %w", kind, err)
+	}
+	// The generator can only execute the working tree. Binding it to the
+	// claimed commit's blobs is what stops a fixture from asserting one
+	// revision while carrying another's behaviour.
+	resolved, err := provenance.Verify(root, pinned.commit, sources)
+	if err != nil {
+		return oracle{}, fmt.Errorf("%s: %w", kind, err)
+	}
+	generator := append([]string(nil), pinned.generator...)
+	sort.Strings(generator)
+	generatorDigest, err := provenance.Digest(root, generator)
+	if err != nil {
+		return oracle{}, fmt.Errorf("hash %s generator: %w", kind, err)
+	}
+	return oracle{
+		Commit: pinned.commit, CommitSHA: resolved, Release: pinned.release,
+		SourceFiles: sources, SourceDigest: sourceDigest, GeneratorDigest: generatorDigest,
+	}, nil
+}
+
+func repositoryRoot() (string, error) {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		return "", fmt.Errorf("locate core generator")
+	}
+	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..", "..")), nil
 }
 
 func main() {
@@ -832,9 +926,12 @@ func main() {
 		*cryptoOutput = "testdata/port/core/password-totp-contract.json"
 	}
 
-	meta, err := resolveOracle(*check, *commit, *release)
-	if err != nil {
-		fatal("resolve oracle metadata: %v", err)
+	meta := func(kind string) oracle {
+		resolved, err := resolveOracle(kind, *commit, *release)
+		if err != nil {
+			fatal("resolve %s oracle metadata: %v", kind, err)
+		}
+		return resolved
 	}
 
 	runError := *kind == "all" || *kind == "error"
@@ -844,7 +941,7 @@ func main() {
 
 	if runError {
 		processFixture(*errorOutput, *check, "error-contract", func() ([]byte, int, error) {
-			f := buildErrorFixture(meta)
+			f := buildErrorFixture(meta("error"))
 			b, err := marshalJSON(f)
 			return b, len(f.Cases), err
 		})
@@ -852,7 +949,7 @@ func main() {
 
 	if runSecretRef {
 		processFixture(*secretRefOutput, *check, "secret-ref-contract", func() ([]byte, int, error) {
-			f := buildSecretRefFixture(meta)
+			f := buildSecretRefFixture(meta("secret_ref"))
 			b, err := marshalJSON(f)
 			return b, len(f.ParseRefCases) + len(f.ParseHandleCases), err
 		})
@@ -860,7 +957,7 @@ func main() {
 
 	if runRedact {
 		processFixture(*redactOutput, *check, "redact-contract", func() ([]byte, int, error) {
-			f := buildRedactFixture(meta)
+			f := buildRedactFixture(meta("redact"))
 			b, err := marshalJSON(f)
 			return b, len(f.ExactValueCases) + len(f.EntropyCases) + len(f.ScannerCases), err
 		})
@@ -868,7 +965,7 @@ func main() {
 
 	if runCrypto {
 		processFixture(*cryptoOutput, *check, "password-totp-contract", func() ([]byte, int, error) {
-			f := buildCryptoFixture(meta)
+			f := buildCryptoFixture(meta("crypto"))
 			b, err := marshalJSON(f)
 			return b, len(f.PasswordCases) + len(f.StrengthCases) + len(f.TOTPSecretCases) + len(f.TOTPParamCases) + len(f.TOTPCases), err
 		})
