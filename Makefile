@@ -521,6 +521,29 @@ rust-fuzz:
 # could only ever call a darwin-frozen fixture stale. That field is gone now:
 # it described the machine, not the pinned oracle. Verified before re-wiring
 # that goos was the only host-dependent value in these four fixtures.
+# Everything CI will run that can run here, in fail-fast order: formatting and
+# lint first because they are seconds, then the contract corpora, then the
+# workspace.
+#
+# This exists because a CI round trip costs ten minutes and two of this
+# migration's three rounds were avoidable. `lint` in particular pins CI's
+# golangci-lint version through `go run`; a golangci-lint on the host PATH is a
+# different version and reports a different set, so it is not a substitute --
+# the comment on the lint target above records the same lesson from an earlier
+# batch of misspell hits that reached CI.
+#
+# Not covered here, deliberately: the native macOS/Windows matrix. `rust-native`
+# carries `if: github.event_name != 'pull_request'`, so it does not run on a PR
+# at all and cannot be pre-empted locally -- waiting on a PR for native evidence
+# is waiting for something that will not happen.
+preflight: fmt-check lint
+	$(CARGO) fmt --all -- --check
+	$(CARGO) clippy --workspace --all-targets --all-features --locked -- -D warnings
+	$(MAKE) port-contract
+	$(CARGO) test --workspace --all-features --locked
+	$(CARGO) test --workspace --doc --all-features --locked
+	@echo "PASS preflight: every CI gate that can run on this host"
+
 port-contract: oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential
 
 rust-build:
