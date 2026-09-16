@@ -1,8 +1,12 @@
+use crate::offline::{NETWORK_MESSAGE, PushError, is_offline_error};
 use serde::{Deserialize, Serialize};
 use std::{
-    io,
+    fs::{self, OpenOptions},
+    io::{self, Read},
     path::{Path, PathBuf},
-    process::{Command, Output},
+    process::{Command, Output, Stdio},
+    thread,
+    time::{Duration, Instant},
 };
 use thiserror::Error;
 
@@ -16,9 +20,16 @@ pub enum GitError {
     Command { status: String, stderr: String },
     #[error("git output was invalid: {0}")]
     Parse(String),
+    #[error("git {operation} timed out after {timeout:?}")]
+    Timeout {
+        operation: String,
+        timeout: Duration,
+    },
     #[error("git I/O failed: {0}")]
     Io(#[from] io::Error),
 }
+
+const GIT_COMMAND_TIMEOUT: Duration = Duration::from_secs(20);
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub struct CommitOptions {
@@ -204,18 +215,17 @@ impl GitRepository {
         match self.command(&args) {
             Ok(out) => PullResult {
                 success: true,
-                updated: String::from_utf8_lossy(&out.stdout).contains("files changed")
-                    || before != self.head().ok(),
+                updated: before != self.head().ok()
+                    || String::from_utf8_lossy(&out.stdout).contains("files changed")
+                    || String::from_utf8_lossy(&out.stderr).contains("files changed"),
                 remote_url,
                 ..Default::default()
             },
-            Err(GitError::Command { stderr, .. }) if stderr.contains("Already up to date") => {
-                PullResult {
-                    success: true,
-                    remote_url,
-                    ..Default::default()
-                }
-            }
+            Err(err) if is_up_to_date_error(&err) => PullResult {
+                success: true,
+                remote_url,
+                ..Default::default()
+            },
             Err(e) => {
                 // `git pull --no-rebase` may leave conflict markers and an
                 // in-progress merge behind. go-git returns the pull error
@@ -224,7 +234,7 @@ impl GitRepository {
                 let _ = self.command(&["merge", "--abort"]);
                 PullResult {
                     remote_url,
-                    error: Some(e.to_string()),
+                    error: Some(classify_pull_error(&e)),
                     ..Default::default()
                 }
             }
@@ -247,13 +257,13 @@ impl GitRepository {
         match self.command(&args) {
             Ok(out) => PushResult {
                 success: true,
-                skipped: String::from_utf8_lossy(&out.stdout).contains("Everything up-to-date"),
+                skipped: is_up_to_date_output(&out),
                 remote_url,
                 ..Default::default()
             },
             Err(e) => PushResult {
                 remote_url,
-                error: Some(e.to_string()),
+                error: Some(classify_push_error(&e)),
                 ..Default::default()
             },
         }
@@ -267,12 +277,7 @@ impl GitRepository {
         )
     }
     fn command(&self, args: &[&str]) -> Result<Output, GitError> {
-        let out = Command::new("git")
-            .env_remove("SYMVAULT_PASSPHRASE")
-            .arg("-C")
-            .arg(&self.root)
-            .args(args)
-            .output()?;
+        let out = run_process_with_timeout("git", args, Some(&self.root), GIT_COMMAND_TIMEOUT)?;
         if out.status.success() {
             Ok(out)
         } else {
@@ -282,6 +287,189 @@ impl GitRepository {
             })
         }
     }
+}
+
+fn is_up_to_date_output(output: &Output) -> bool {
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    stdout.contains("Everything up-to-date")
+        || stdout.contains("Already up to date")
+        || stderr.contains("Everything up-to-date")
+        || stderr.contains("Already up to date")
+}
+
+fn is_up_to_date_error(error: &GitError) -> bool {
+    match error {
+        GitError::Command { stderr, .. } => {
+            stderr.contains("Everything up-to-date") || stderr.contains("Already up to date")
+        }
+        _ => false,
+    }
+}
+
+fn classify_push_error(error: &GitError) -> String {
+    let message = error.to_string();
+    if message.contains("known_hosts")
+        || message.contains("known hosts")
+        || message.contains("SSH_KNOWN_HOSTS")
+    {
+        return PushError::with_cause(
+            "SSH configuration error - please check known_hosts or SSH_KNOWN_HOSTS",
+            message,
+        )
+        .to_string();
+    }
+    if contains_auth_marker(&message) {
+        return PushError::with_cause(
+            "authentication failed - please check your credentials",
+            message,
+        )
+        .to_string();
+    }
+    if is_offline_error(&message) {
+        return PushError::with_cause(NETWORK_MESSAGE, message).to_string();
+    }
+    PushError::with_cause("push failed", message).to_string()
+}
+
+fn classify_pull_error(error: &GitError) -> String {
+    let message = error.to_string();
+    if is_offline_error(&message) {
+        return PushError::with_cause(NETWORK_MESSAGE, message).to_string();
+    }
+    if contains_auth_marker(&message) {
+        return PushError::with_cause(
+            "authentication failed - please check your credentials",
+            message,
+        )
+        .to_string();
+    }
+    PushError::with_cause("pull failed", message).to_string()
+}
+
+fn contains_auth_marker(message: &str) -> bool {
+    message.contains("authentication")
+        || message.contains("credentials")
+        || message.contains("error: 401")
+        || message.contains("error: 403")
+}
+
+fn run_process_with_timeout(
+    program: &str,
+    args: &[&str],
+    cwd: Option<&Path>,
+    timeout: Duration,
+) -> Result<Output, GitError> {
+    let (stdout_path, stdout_file) = temporary_output_file("stdout")?;
+    let (stderr_path, stderr_file) = match temporary_output_file("stderr") {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = fs::remove_file(&stdout_path);
+            return Err(GitError::Io(error));
+        }
+    };
+
+    let mut command = Command::new(program);
+    command
+        .args(args)
+        .env_remove("SYMVAULT_PASSPHRASE")
+        // Never leave a vault operation waiting for an interactive password.
+        // GIT_ASKPASS/SSH_ASKPASS remain available for explicitly configured,
+        // non-interactive callers.
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .stdout(Stdio::from(stdout_file))
+        .stderr(Stdio::from(stderr_file));
+    if let Some(cwd) = cwd {
+        command.current_dir(cwd);
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        // Give the command its own process group so a timed-out git process
+        // cannot leave an SSH/helper descendant running after its pipes close.
+        command.process_group(0);
+    }
+
+    let mut child = match command.spawn() {
+        Ok(child) => child,
+        Err(error) => {
+            let _ = fs::remove_file(&stdout_path);
+            let _ = fs::remove_file(&stderr_path);
+            return Err(GitError::Io(error));
+        }
+    };
+    let deadline = Instant::now() + timeout;
+    let timed_out = loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break false,
+            Ok(None) if Instant::now() >= deadline => break true,
+            Ok(None) => thread::sleep(Duration::from_millis(10)),
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = fs::remove_file(&stdout_path);
+                let _ = fs::remove_file(&stderr_path);
+                return Err(GitError::Io(error));
+            }
+        }
+    };
+
+    if timed_out {
+        terminate_process_group(&mut child);
+        let _ = child.wait();
+        let _ = fs::remove_file(&stdout_path);
+        let _ = fs::remove_file(&stderr_path);
+        let operation = args.first().copied().unwrap_or("command").to_owned();
+        return Err(GitError::Timeout { operation, timeout });
+    }
+
+    let status = child.wait()?;
+    let stdout = read_and_remove(&stdout_path)?;
+    let stderr = read_and_remove(&stderr_path)?;
+    Ok(Output {
+        status,
+        stdout,
+        stderr,
+    })
+}
+
+fn temporary_output_file(label: &str) -> Result<(PathBuf, std::fs::File), io::Error> {
+    let base = std::env::temp_dir();
+    for attempt in 0..100 {
+        let path = base.join(format!(
+            "symvault-git-{}-{}-{label}.out",
+            std::process::id(),
+            attempt
+        ));
+        match OpenOptions::new().write(true).create_new(true).open(&path) {
+            Ok(file) => return Ok((path, file)),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error),
+        }
+    }
+    Err(io::Error::new(
+        io::ErrorKind::AlreadyExists,
+        "could not allocate a unique git command output file",
+    ))
+}
+
+fn read_and_remove(path: &Path) -> Result<Vec<u8>, io::Error> {
+    let mut file = std::fs::File::open(path)?;
+    let mut bytes = Vec::new();
+    let result = file.read_to_end(&mut bytes);
+    let remove_result = fs::remove_file(path);
+    result?;
+    remove_result?;
+    Ok(bytes)
+}
+
+fn terminate_process_group(child: &mut std::process::Child) {
+    #[cfg(unix)]
+    {
+        let group = format!("-{}", child.id());
+        let _ = Command::new("/bin/kill").args(["-KILL", &group]).output();
+    }
+    let _ = child.kill();
 }
 fn validate_name(name: &str) -> Result<(), GitError> {
     if name.is_empty()
@@ -307,4 +495,59 @@ fn validate_paths(paths: &[String]) -> Result<(), GitError> {
     }
     Ok(())
 }
-use std::fs;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn command_error(stderr: &str) -> GitError {
+        GitError::Command {
+            status: "exit status: 1".to_owned(),
+            stderr: stderr.to_owned(),
+        }
+    }
+
+    #[test]
+    fn push_precedence_matches_the_go_call_site() {
+        let mixed = command_error("authentication failed: connection refused");
+        let rendered = classify_push_error(&mixed);
+        assert!(rendered.contains("authentication failed"));
+        assert!(!rendered.contains(NETWORK_MESSAGE));
+
+        let known_hosts = command_error("known_hosts: authentication failed: connection refused");
+        assert!(classify_push_error(&known_hosts).contains("SSH configuration error"));
+    }
+
+    #[test]
+    fn pull_precedence_keeps_connectivity_before_authentication() {
+        let mixed = command_error("authentication failed: connection refused");
+        let rendered = classify_pull_error(&mixed);
+        assert!(rendered.contains(NETWORK_MESSAGE));
+        assert!(!rendered.contains("authentication failed - please check"));
+    }
+
+    #[test]
+    fn command_runner_disables_terminal_prompts_without_disabling_askpass() {
+        let output = run_process_with_timeout(
+            "sh",
+            &[
+                "-c",
+                "test \"$GIT_TERMINAL_PROMPT\" = 0 && test -z \"$SYMVAULT_PASSPHRASE\"",
+            ],
+            None,
+            Duration::from_secs(1),
+        )
+        .expect("probe command succeeds");
+        assert!(output.status.success());
+    }
+
+    #[test]
+    fn command_runner_times_out_and_reaps_the_process_group() {
+        let started = Instant::now();
+        let error =
+            run_process_with_timeout("sh", &["-c", "sleep 30"], None, Duration::from_millis(100))
+                .expect_err("sleep must exceed the deadline");
+        assert!(matches!(error, GitError::Timeout { operation, .. } if operation == "-c"));
+        assert!(started.elapsed() < Duration::from_secs(2));
+    }
+}
