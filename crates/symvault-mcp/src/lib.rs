@@ -28,6 +28,19 @@ pub const DEFAULT_HTTP_PROTOCOL_VERSION: &str = "2025-03-26";
 pub const SUPPORTED_PROTOCOL_VERSIONS: &[&str] =
     &["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 
+/// The deepest nesting a frame may carry and still be dispatched.
+///
+/// Counted as total depth, including the enclosing frame object. The oracle
+/// bounds nesting through `encoding/json`, which dispatches a frame 10000 levels
+/// deep and rejects 10001; the generator measures that boundary by binary search
+/// rather than copying the constant. Rust needs an explicit guard because `serde_json`'s own
+/// recursion limit does not apply here: the deep payload lands in a field the
+/// `Message` struct ignores, and skipping an ignored field uses a non-recursive
+/// scanner. Without this check Rust would accept frames the oracle rejects —
+/// the more permissive side of a divergence, and the one that matters for stack
+/// safety once `params` is actually decoded by MCP-002/003.
+pub const MAX_ACCEPTED_NESTING_DEPTH: usize = 10_000;
+
 /// JSON-RPC 2.0 error codes used by the oracle.
 pub mod error_code {
     pub const PARSE_ERROR: i32 = -32700;
@@ -379,6 +392,32 @@ impl ProtocolHandler {
 /// blank line is *not* skipped — the oracle reads with the delimiter retained,
 /// so an empty line arrives as `"\n"` and reaches the decoder.
 pub fn handle_line(line: &str, handler: &mut ProtocolHandler) -> Result<Option<String>, Error> {
+    if max_nesting_depth(line) > MAX_ACCEPTED_NESTING_DEPTH {
+        return encode(&Message::error_response(
+            None,
+            error_code::PARSE_ERROR,
+            "Parse error",
+            Some(serde_json::Value::String(
+                "exceeded max nesting depth".to_string(),
+            )),
+        ))
+        .map(Some);
+    }
+
+    // Go's json.Unmarshal treats a literal `null` as a no-op against any target,
+    // so the oracle ends up with a zero-valued Message whose jsonrpc is empty
+    // and answers -32600. serde instead fails to build the struct, which would
+    // have answered -32700. Neither is safer; matching the oracle is free.
+    if line.trim() == "null" {
+        return encode(&Message::error_response(
+            None,
+            error_code::INVALID_REQUEST,
+            "Invalid Request",
+            Some(serde_json::Value::String("jsonrpc must be 2.0".to_string())),
+        ))
+        .map(Some);
+    }
+
     let msg: Message = match serde_json::from_str(line) {
         Ok(msg) => msg,
         Err(err) => {
@@ -433,22 +472,104 @@ pub fn handle_line(line: &str, handler: &mut ProtocolHandler) -> Result<Option<S
     encode(&response).map(Some)
 }
 
+/// Feeds one raw input line as *bytes*.
+///
+/// The oracle's frames are `[]byte` and it does not require valid UTF-8: a
+/// frame whose id contains invalid bytes is accepted and those bytes are echoed
+/// back on stdout verbatim. Rust does not reproduce that. `serde_json`'s
+/// `RawValue` is backed by `str`, so a byte-verbatim echo is unreachable without
+/// replacing the JSON envelope wholesale, and the adjudicated behavior is to
+/// reject the frame fail-closed with `-32700`.
+///
+/// That is a deliberate, recorded divergence — see the `divergences` block in
+/// `testdata/port/mcp/stdio-hygiene.json` — and it is the stricter of the two:
+/// the oracle's behavior places attacker-chosen invalid bytes onto the same
+/// stdout stream the client parses for framing.
+pub fn handle_line_bytes(
+    line: &[u8],
+    handler: &mut ProtocolHandler,
+) -> Result<Option<String>, Error> {
+    match std::str::from_utf8(line) {
+        Ok(text) => handle_line(text, handler),
+        Err(err) => encode(&Message::error_response(
+            None,
+            error_code::PARSE_ERROR,
+            "Parse error",
+            Some(serde_json::Value::String(err.to_string())),
+        ))
+        .map(Some),
+    }
+}
+
 /// Runs a whole input stream and returns every line written to stdout.
 ///
 /// Input is split the way the oracle's reader splits it: on `\n`, with a
 /// trailing newline producing no extra empty frame.
 pub fn run_stream(input: &str, handler: &mut ProtocolHandler) -> Result<Vec<String>, Error> {
-    let body = input.strip_suffix('\n').unwrap_or(input);
-    if body.is_empty() && input.is_empty() {
-        return Ok(Vec::new());
-    }
     let mut out = Vec::new();
-    for line in body.split('\n') {
+    for line in terminated_lines(input) {
         if let Some(written) = handle_line(line, handler)? {
             out.push(written);
         }
     }
     Ok(out)
+}
+
+/// Splits a stream the way the oracle's reader consumes it: into *newline-
+/// terminated* frames only.
+///
+/// A trailing fragment with no newline is dropped. That is not a tidiness
+/// choice — the oracle reads with `ReadString('\n')`, which returns the partial
+/// data together with `io.EOF`, and the read loop returns on `io.EOF` before
+/// looking at what it just read. So the last line of a stream that ends without
+/// a newline is never dispatched and is never answered. A client that omits the
+/// final newline gets silence, not an error.
+fn terminated_lines(input: &str) -> impl Iterator<Item = &str> {
+    let mut rest = input;
+    std::iter::from_fn(move || match rest.find('\n') {
+        Some(idx) => {
+            let line = &rest[..idx];
+            rest = &rest[idx + 1..];
+            Some(line)
+        }
+        None => None,
+    })
+}
+
+/// Deepest `[`/`{` nesting in a frame, ignoring brackets inside string literals.
+///
+/// A scan rather than a parse: it has to run before the frame is decoded, and it
+/// must not itself recurse, or it would reintroduce the stack exhaustion it
+/// exists to prevent.
+fn max_nesting_depth(line: &str) -> usize {
+    let mut depth = 0usize;
+    let mut max = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+    for byte in line.bytes() {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if byte == b'\\' {
+                escaped = true;
+            } else if byte == b'"' {
+                in_string = false;
+            }
+            continue;
+        }
+        match byte {
+            b'"' => in_string = true,
+            b'[' | b'{' => {
+                depth += 1;
+                if depth > max {
+                    max = depth;
+                }
+            }
+            b']' | b'}' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+    }
+    max
 }
 
 fn encode(msg: &Message) -> Result<String, Error> {

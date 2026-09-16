@@ -31,10 +31,10 @@ magnitude, and the structural facts below are what actually matter.
 and almost none of it is ported.** Rows MCP-001 through MCP-004 were all `TODO`
 because the implementation did not exist, not because a contract was missing.
 
-MCP-001 has since been ported: the `symvault-mcp` crate implements the JSON-RPC
-envelope, the `initialize` handshake and the line-framed stdio dispatch loop,
-against a 22-case corpus generated from the pinned oracle. That is the handshake
-and the frame loop only. **There is still no tool surface** — no `tools/list`,
+MCP-001 and MCP-004 have since been ported: the `symvault-mcp` crate implements
+the JSON-RPC envelope, the `initialize` handshake, the line-framed stdio
+dispatch loop and its hygiene behavior under hostile input, against 37 cases
+generated from the pinned oracle. That is the handshake and the frame loop only. **There is still no tool surface** — no `tools/list`,
 no `tools/call`, no tool registry — and `internal/mcp/server/tool_registry.go`
 alone is 837 lines against the 35 tool definitions MCP-002 enumerates. Reading
 "MCP has started" as "MCP is close" would repeat exactly the error this page
