@@ -10,7 +10,7 @@
       "internal/mcp/transport/transport.go"
     ],
     "source_digest": "cd7ac18db2a0ac61ad051e25b22253b97b7e207317bc28ba869365503e2acae2",
-    "generator_digest": "078396ccdb4c78c3cadea918fe6a870cadabee9a01d8e65907b056092084c342"
+    "generator_digest": "e4a64c19cc29676dd209d7f2f5e59e343c5832ac39612ad363d1c7f55298b2cc"
   },
   "server_name": "symvault",
   "server_version": "0.0.0-fixture",
@@ -287,6 +287,8 @@
       "prefix": "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"ping\",\"pad\":\"",
       "fill_rune": "x",
       "fill_count": 5000000,
+      "close_rune": "",
+      "close_count": 0,
       "suffix": "\"}\n",
       "input_bytes": 5000050,
       "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{}}\n",
@@ -298,8 +300,23 @@
       "prefix": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\",\"p\":\"",
       "fill_rune": "[",
       "fill_count": 10001,
+      "close_rune": "",
+      "close_count": 0,
       "suffix": "\"}\n",
       "input_bytes": 10049,
+      "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n",
+      "masked": false
+    },
+    {
+      "name": "escaped_quote_before_bracket_fill_is_still_a_string",
+      "why": "the depth scanner has to track backslash escapes, not just quotes: after an escaped quote the scanner is STILL inside the string, so these brackets are characters and the frame is dispatched. A scanner that treated the escaped quote as closing the string would count them as nesting and wrongly reject",
+      "prefix": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\",\"p\":\"\\\"",
+      "fill_rune": "[",
+      "fill_count": 10001,
+      "close_rune": "",
+      "close_count": 0,
+      "suffix": "\"}\n",
+      "input_bytes": 10051,
       "stdout_raw": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n",
       "masked": false
     },
@@ -309,7 +326,9 @@
       "prefix": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"ping\",\"p\":",
       "fill_rune": "[",
       "fill_count": 20000,
-      "suffix": "",
+      "close_rune": "]",
+      "close_count": 20000,
+      "suffix": "}\n",
       "input_bytes": 40046,
       "stdout_raw": "{\"error\":{\"data\":\"invalid character '[' exceeded max depth\",\"message\":\"Parse error\",\"code\":-32700},\"jsonrpc\":\"2.0\"}\n",
       "masked": true
@@ -318,7 +337,7 @@
   "divergences": [
     {
       "name": "duplicate_object_keys_last_wins",
-      "oracle_behavior": "The oracle accepts a frame carrying the id key twice and answers with the LAST occurrence, silently: encoding/json resolves duplicates by last-wins. Verified by executing it in this generator, which fails if it stops reproducing.",
+      "oracle_behavior": "The oracle accepts a frame carrying the id key twice and answers with the LAST occurrence, silently: encoding/json resolves duplicates by last-wins. Verified by executing it in this generator, which fails if it stops reproducing. SCOPE: this covers duplicated ENVELOPE fields only. A key duplicated inside params is -32602 here rather than -32700, and a duplicate inside an id or an unknown top-level key is still accepted last-wins exactly as the oracle does, because those are carried as raw values and never decoded into a struct. The tool-call payload an intermediary would audit is therefore NOT yet covered; closing it belongs with MCP-002/003.",
       "oracle_stdout_note": "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{}}",
       "rust_behavior": "Rust answers -32700 and does not dispatch the frame.",
       "rationale": "serde rejects duplicate struct fields and the adjudication keeps that rather than relaxing it to match. Last-wins is the classic duplicate-key smuggling shape: an intermediary that logs, audits or applies policy to a frame reads the first occurrence while the server acts on the last, so the two disagree about what was requested. SymVault has exactly such a policy and audit layer, which makes this security-relevant rather than cosmetic. Rejecting is the stricter side, and the migration contract names duplicate keys as a case to decide deliberately rather than inherit. Recorded, not silent; reversing it is a coordinator decision."

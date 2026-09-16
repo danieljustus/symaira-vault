@@ -184,6 +184,20 @@ func buildCases() []winnerCase {
 			meta(base, base, 1, []string{"alpha"}, nil),
 		},
 		{
+			"full_tie_escaped_character_flips_the_winner",
+			"json.Marshal escapes < as \\u003c, and the escape moves the byte from 0x3C (below '=') to 0x5C (above it), so the oracle picks the '=' tag. A port using serde_json's defaults compares the raw '<' and picks the OTHER entry — different sides of a sync reconciliation keeping different versions of the same path. Tags are user-controlled",
+			"entries/item.age", "tiebreak",
+			meta(base, base, 1, []string{"<"}, nil),
+			meta(base, base, 1, []string{"="}, nil),
+		},
+		{
+			"full_tie_ampersand_is_escaped",
+			"the same shape via &, which escapes to \\u0026 and also lands above '='",
+			"entries/item.age", "tiebreak",
+			meta(base, base, 1, []string{"&"}, nil),
+			meta(base, base, 1, []string{"="}, nil),
+		},
+		{
 			"full_tie_broken_by_write_history", "the tiebreak reaches the last field: identical everything except one write record",
 			"entries/item.age", "tiebreak",
 			meta(base, base, 1, nil, []vault.WriteRecord{{Timestamp: base, Field: "a", Action: "set"}}),

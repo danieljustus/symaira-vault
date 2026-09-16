@@ -173,6 +173,46 @@ func caseInputs() []struct {
 			[]string{`{"jsonrpc":"2.0","id":9,"method":"initialize","params":"not-an-object"}`},
 		},
 		{
+			"initialize_params_null",
+			"an explicit null params is legal JSON-RPC and the oracle treats it as a no-op: Unmarshal leaves the zero value and negotiation proceeds. A port that rejects it refuses the handshake to a conforming client",
+			[]string{`{"jsonrpc":"2.0","id":20,"method":"initialize","params":null}`},
+		},
+		{
+			"initialize_protocol_version_null",
+			"an explicit null version is also a no-op against a string field, so it negotiates to the latest rather than erroring",
+			[]string{`{"jsonrpc":"2.0","id":21,"method":"initialize","params":{"protocolVersion":null}}`},
+		},
+		{
+			"initialize_client_info_wrong_type",
+			"clientInfo is typed *ClientInfo in the oracle, so a string there is -32602. Ignoring the field would make the port MORE permissive than the oracle",
+			[]string{`{"jsonrpc":"2.0","id":22,"method":"initialize","params":{"clientInfo":"oops"}}`},
+		},
+		{
+			"initialize_protocol_version_wrong_type",
+			"a non-string version is -32602 rather than being coerced or ignored",
+			[]string{`{"jsonrpc":"2.0","id":23,"method":"initialize","params":{"protocolVersion":42}}`},
+		},
+		{
+			"initialize_field_name_case_insensitive",
+			"encoding/json falls back to a case-insensitive field match, so this selects a real version. A port matching only exactly would silently negotiate a DIFFERENT protocol version than the oracle",
+			[]string{`{"jsonrpc":"2.0","id":24,"method":"initialize","params":{"PROTOCOLVERSION":"2024-11-05"}}`},
+		},
+		{
+			"html_characters_are_escaped_in_output",
+			"json.Marshal escapes <, > and & by default. The method name is attacker-chosen and is echoed into the error message, so a port using serde_json's defaults puts raw angle brackets on the stdout stream the client parses for framing",
+			[]string{`{"jsonrpc":"2.0","id":25,"method":"a<b>&c"}`},
+		},
+		{
+			"html_characters_in_string_id_are_escaped",
+			"the same escaping applies to an echoed id, which is equally attacker-chosen",
+			[]string{`{"jsonrpc":"2.0","id":"<&>","method":"ping"}`},
+		},
+		{
+			"structured_id_is_compacted",
+			"json.Marshal compacts a RawMessage, so interior whitespace in a structured id does not survive the echo",
+			[]string{`{"jsonrpc":"2.0","id":{"a":  1,  "b": "x"},"method":"ping"}`},
+		},
+		{
 			"notification_initialized",
 			"the bare notification name writes nothing at all",
 			[]string{`{"jsonrpc":"2.0","method":"initialized"}`},

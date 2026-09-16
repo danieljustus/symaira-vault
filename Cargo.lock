@@ -2467,11 +2467,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "symvault-gojson"
+version = "0.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "symvault-mcp"
 version = "0.0.0"
 dependencies = [
  "serde",
  "serde_json",
+ "symvault-gojson",
 ]
 
 [[package]]
@@ -2517,6 +2526,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "symvault-crypto",
+ "symvault-gojson",
  "symvault-store",
  "tar",
  "tempfile",

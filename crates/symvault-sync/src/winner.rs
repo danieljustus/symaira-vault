@@ -76,8 +76,13 @@ fn canonical_is_smaller_or_equal(a: &EntryMetadata, b: &EntryMetadata) -> bool {
     }
 }
 
+/// The tiebreak orders entries by these bytes, so they must be the bytes Go
+/// produces. `serde_json::to_string` leaves `<`, `>` and `&` literal where
+/// `json.Marshal` escapes them, and the escape moves `<` (0x3C) to `\` (0x5C) —
+/// from below `=` to above it. With a user-controlled tag containing `<`, the
+/// two implementations pick *opposite winners* for the same pair.
 fn canonical_json<T: Serialize>(value: &T) -> Result<String, serde_json::Error> {
-    serde_json::to_string(value)
+    symvault_gojson::to_string(value)
 }
 
 #[cfg(test)]

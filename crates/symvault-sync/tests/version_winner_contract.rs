@@ -85,7 +85,10 @@ fn canonical_json_matches_go_byte_for_byte() {
             ("b", &case.b, &case.b_canonical),
         ] {
             let decoded = operand(value);
-            let reencoded = serde_json::to_string(&decoded).expect("re-encode");
+            // Encoded the way the oracle encodes, not the way serde_json
+            // defaults to: the tiebreak orders these bytes, and Go escapes
+            // `<`, `>` and `&` where serde_json does not.
+            let reencoded = symvault_gojson::to_string(&decoded).expect("re-encode");
             // Compared against the compact bytes json.Marshal produced, which
             // is the form the third tier actually orders. The embedded operand
             // is re-indented when the fixture is written, and a re-encoded
@@ -119,13 +122,13 @@ fn winner_matches_go_oracle() {
         );
 
         assert_eq!(
-            serde_json::to_string(winner).expect("encode winner"),
+            symvault_gojson::to_string(winner).expect("encode winner"),
             case.winner_canonical,
             "case {}: winner metadata differs",
             case.name
         );
         assert_eq!(
-            serde_json::to_string(loser).expect("encode loser"),
+            symvault_gojson::to_string(loser).expect("encode loser"),
             case.loser_canonical,
             "case {}: loser metadata differs",
             case.name

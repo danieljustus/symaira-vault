@@ -91,11 +91,16 @@ type hygieneCase struct {
 // in the fixture. The input is described by its shape and length, and the Rust
 // side rebuilds it from that description.
 type boundsProbe struct {
-	Name       string `json:"name"`
-	Why        string `json:"why"`
-	Prefix     string `json:"prefix"`
-	FillRune   string `json:"fill_rune"`
-	FillCount  int    `json:"fill_count"`
+	Name      string `json:"name"`
+	Why       string `json:"why"`
+	Prefix    string `json:"prefix"`
+	FillRune  string `json:"fill_rune"`
+	FillCount int    `json:"fill_count"`
+	// CloseRune/CloseCount are the balancing fill. Recording them keeps the
+	// shape fields load-bearing: a replay rebuilds the exact input from this
+	// description alone, with no per-probe special case keyed on the name.
+	CloseRune  string `json:"close_rune"`
+	CloseCount int    `json:"close_count"`
 	Suffix     string `json:"suffix"`
 	InputBytes int    `json:"input_bytes"`
 	StdoutRaw  string `json:"stdout_raw"`
@@ -313,31 +318,37 @@ func buildCases() ([]hygieneCase, error) {
 
 func buildBounds() ([]boundsProbe, error) {
 	probes := []struct {
-		name, why, prefix, fill, suffix string
-		count                           int
+		name, why, prefix, fill, closeRune, suffix string
+		count, closeCount                          int
 	}{
 		{
 			"oversized_five_megabyte_frame",
 			"input is NOT bounded: the oracle's reader grows without limit and answers a five-megabyte frame normally. The row's 'bounded input' wording describes an intent the oracle does not implement",
-			`{"jsonrpc":"2.0","id":3,"method":"ping","pad":"`, "x", `"}` + "\n", 5_000_000,
+			`{"jsonrpc":"2.0","id":3,"method":"ping","pad":"`, "x", "", `"}` + "\n", 5_000_000, 0,
 		},
 		{
 			"brackets_inside_a_string_are_not_nesting",
 			"a payload of bracket CHARACTERS inside a string literal is depth 1, not deep nesting. The oracle dispatches it, so a depth guard that scans without tracking string state would reject a frame the oracle accepts",
-			`{"jsonrpc":"2.0","id":1,"method":"ping","p":"`, "[", `"}` + "\n", 10001,
+			`{"jsonrpc":"2.0","id":1,"method":"ping","p":"`, "[", "", `"}` + "\n", 10001, 0,
+		},
+		{
+			"escaped_quote_before_bracket_fill_is_still_a_string",
+			"the depth scanner has to track backslash escapes, not just quotes: after an escaped quote the scanner is STILL inside the string, so these brackets are characters and the frame is dispatched. A scanner that treated the escaped quote as closing the string would count them as nesting and wrongly reject",
+			`{"jsonrpc":"2.0","id":1,"method":"ping","p":"\"`, "[", "", `"}` + "\n", 10001, 0,
 		},
 		{
 			"pathological_nesting_is_rejected",
 			"nesting is the one real bound, and it comes from encoding/json rather than the transport: past its max depth the frame is -32700 instead of exhausting the stack",
-			`{"jsonrpc":"2.0","id":1,"method":"ping","p":`, "[", "", 20000,
+			`{"jsonrpc":"2.0","id":1,"method":"ping","p":`, "[", "]", "}" + "\n", 20000, 20000,
 		},
 	}
 	out := make([]boundsProbe, 0, len(probes))
 	for _, p := range probes {
-		input := p.prefix + strings.Repeat(p.fill, p.count) + p.suffix
-		if p.name == "pathological_nesting_is_rejected" {
-			input = p.prefix + strings.Repeat("[", p.count) + strings.Repeat("]", p.count) + "}\n"
+		input := p.prefix + strings.Repeat(p.fill, p.count)
+		if p.closeCount > 0 {
+			input += strings.Repeat(p.closeRune, p.closeCount)
 		}
+		input += p.suffix
 		stdout, err := runStream(input)
 		if err != nil {
 			return nil, fmt.Errorf("bounds %s: %w", p.name, err)
@@ -348,7 +359,8 @@ func buildBounds() ([]boundsProbe, error) {
 		}
 		out = append(out, boundsProbe{
 			Name: p.name, Why: p.why, Prefix: p.prefix, FillRune: p.fill,
-			FillCount: p.count, Suffix: p.suffix, InputBytes: len(input),
+			FillCount: p.count, CloseRune: p.closeRune, CloseCount: p.closeCount,
+			Suffix: p.suffix, InputBytes: len(input),
 			StdoutRaw: stdout, Masked: masked,
 		})
 	}
@@ -465,7 +477,7 @@ func main() {
 		Bounds:                  bounds,
 		Divergences: []divergence{{
 			Name:                "duplicate_object_keys_last_wins",
-			OracleBehavior:      "The oracle accepts a frame carrying the id key twice and answers with the LAST occurrence, silently: encoding/json resolves duplicates by last-wins. Verified by executing it in this generator, which fails if it stops reproducing.",
+			OracleBehavior:      "The oracle accepts a frame carrying the id key twice and answers with the LAST occurrence, silently: encoding/json resolves duplicates by last-wins. Verified by executing it in this generator, which fails if it stops reproducing. SCOPE: this covers duplicated ENVELOPE fields only. A key duplicated inside params is -32602 here rather than -32700, and a duplicate inside an id or an unknown top-level key is still accepted last-wins exactly as the oracle does, because those are carried as raw values and never decoded into a struct. The tool-call payload an intermediary would audit is therefore NOT yet covered; closing it belongs with MCP-002/003.",
 			OracleStdoutB64Note: strings.TrimSuffix(dupOut, "\n"),
 			RustBehavior:        "Rust answers -32700 and does not dispatch the frame.",
 			Rationale:           "serde rejects duplicate struct fields and the adjudication keeps that rather than relaxing it to match. Last-wins is the classic duplicate-key smuggling shape: an intermediary that logs, audits or applies policy to a frame reads the first occurrence while the server acts on the last, so the two disagree about what was requested. SymVault has exactly such a policy and audit layer, which makes this security-relevant rather than cosmetic. Rejecting is the stricter side, and the migration contract names duplicate keys as a case to decide deliberately rather than inherit. Recorded, not silent; reversing it is a coordinator decision.",

@@ -16,6 +16,7 @@ serde.workspace = true
 serde_json = { workspace = true, features = ["raw_value"] }
 sha2 = "=0.10.9"
 symvault-crypto = { path = "../symvault-crypto", version = "=0.0.0" }
+symvault-gojson = { path = "../symvault-gojson", version = "=0.0.0" }
 symvault-store = { path = "../symvault-store", version = "=0.0.0" }
 tar = "=0.4.46"
 thiserror = "=1.0.69"

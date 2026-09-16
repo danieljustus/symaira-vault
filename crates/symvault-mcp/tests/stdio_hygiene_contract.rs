@@ -41,6 +41,8 @@ struct Bounds {
     prefix: String,
     fill_rune: String,
     fill_count: usize,
+    close_rune: String,
+    close_count: usize,
     suffix: String,
     input_bytes: usize,
     stdout_raw: String,
@@ -196,21 +198,16 @@ fn bounds_match_go_oracle() {
         "the oracle does not bound input; a port that does has diverged"
     );
     for probe in &fx.bounds {
-        let input = if probe.name == "pathological_nesting_is_rejected" {
-            format!(
-                "{}{}{}}}\n",
-                probe.prefix,
-                "[".repeat(probe.fill_count),
-                "]".repeat(probe.fill_count)
-            )
-        } else {
-            format!(
-                "{}{}{}",
-                probe.prefix,
-                probe.fill_rune.repeat(probe.fill_count),
-                probe.suffix
-            )
-        };
+        // Rebuilt from the recorded shape alone. Keying this on the probe's
+        // name instead would make the shape fields decorative: changing one
+        // would not change what is replayed.
+        let input = format!(
+            "{}{}{}{}",
+            probe.prefix,
+            probe.fill_rune.repeat(probe.fill_count),
+            probe.close_rune.repeat(probe.close_count),
+            probe.suffix
+        );
         assert_eq!(
             input.len(),
             probe.input_bytes,
@@ -315,7 +312,7 @@ fn byte_entry_point_passes_valid_frames_through() {
 fn corpus_is_not_empty() {
     let fx = load();
     assert!(fx.cases.len() >= 15, "corpus shrank unexpectedly");
-    assert_eq!(fx.bounds.len(), 3);
+    assert_eq!(fx.bounds.len(), 4);
     assert_eq!(fx.divergences.len(), 2);
 }
 

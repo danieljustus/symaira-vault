@@ -46,10 +46,26 @@ pub const NETWORK_MESSAGE: &str = "network error - please check your connection"
 /// Reports whether a message indicates the remote is unreachable, as opposed to
 /// a configuration or authentication problem.
 pub fn is_offline_error(message: &str) -> bool {
-    let lowered = message.to_lowercase();
+    let lowered = go_to_lower(message);
     OFFLINE_ERROR_MARKERS
         .iter()
         .any(|marker| lowered.contains(marker))
+}
+
+/// Lowercases the way Go's `strings.ToLower` does: one replacement rune per
+/// input rune.
+///
+/// Rust's `str::to_lowercase` applies *full* Unicode case mapping, which can
+/// expand one char into several — U+0130 (LATIN CAPITAL LETTER I WITH DOT
+/// ABOVE) becomes `i` plus a combining dot, where Go yields a bare `i`. That
+/// expansion inserts a character into the middle of the haystack and can break
+/// a marker match that the oracle would have made, so the classifier would
+/// disagree with the oracle on an error message containing such a character.
+fn go_to_lower(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| ch.to_lowercase().next().unwrap_or(ch))
+        .collect()
 }
 
 /// A push or pull failure as the user sees it.
@@ -107,6 +123,20 @@ mod tests {
     fn matching_is_case_insensitive() {
         assert!(is_offline_error("CONNECTION REFUSED"));
         assert!(is_offline_error("No Route To Host"));
+    }
+
+    /// Go maps one rune to one rune; Rust's default mapping can expand, which
+    /// would insert a combining mark into the middle of a marker.
+    #[test]
+    fn lowercasing_matches_gos_one_rune_mapping() {
+        let message = "\u{0130}/O timeout";
+        assert_eq!(go_to_lower(message), "i/o timeout");
+        assert_ne!(
+            message.to_lowercase(),
+            "i/o timeout",
+            "precondition: Rust's default mapping expands here, which is the bug"
+        );
+        assert!(is_offline_error(message));
     }
 
     #[test]

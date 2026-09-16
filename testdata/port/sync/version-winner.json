@@ -9,7 +9,7 @@
       "internal/vault/sync/sync.go"
     ],
     "source_digest": "88bfc2f95f1441c45bc77d0c42e9321b65e59899b02461503e8c9731e7d816cd",
-    "generator_digest": "7e448c043a5ca751c9d1201e1a32ac54da73db172576fed01b091765a213aef4"
+    "generator_digest": "50f4c155e5fedcb8d539fe81805e0afa17f6f359faf466a45a6fcf0a4f7cac84"
   },
   "cases": [
     {
@@ -326,6 +326,96 @@
       },
       "winner_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1,\"tags\":[\"alpha\"]}",
       "loser_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1}"
+    },
+    {
+      "name": "full_tie_escaped_character_flips_the_winner",
+      "why": "json.Marshal escapes < as \\u003c, and the escape moves the byte from 0x3C (below '=') to 0x5C (above it), so the oracle picks the '=' tag. A port using serde_json's defaults compares the raw '<' and picks the OTHER entry — different sides of a sync reconciliation keeping different versions of the same path. Tags are user-controlled",
+      "path": "entries/item.age",
+      "a": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 1,
+        "tags": [
+          "\u003c"
+        ]
+      },
+      "b": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 1,
+        "tags": [
+          "="
+        ]
+      },
+      "a_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1,\"tags\":[\"\\u003c\"]}",
+      "b_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1,\"tags\":[\"=\"]}",
+      "tier": "tiebreak",
+      "winner_forward": "b",
+      "winner_swapped": "b",
+      "order_independent": true,
+      "winner_json": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 1,
+        "tags": [
+          "="
+        ]
+      },
+      "loser_json": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 1,
+        "tags": [
+          "\u003c"
+        ]
+      },
+      "winner_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1,\"tags\":[\"=\"]}",
+      "loser_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1,\"tags\":[\"\\u003c\"]}"
+    },
+    {
+      "name": "full_tie_ampersand_is_escaped",
+      "why": "the same shape via &, which escapes to \\u0026 and also lands above '='",
+      "path": "entries/item.age",
+      "a": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 1,
+        "tags": [
+          "\u0026"
+        ]
+      },
+      "b": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 1,
+        "tags": [
+          "="
+        ]
+      },
+      "a_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1,\"tags\":[\"\\u0026\"]}",
+      "b_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1,\"tags\":[\"=\"]}",
+      "tier": "tiebreak",
+      "winner_forward": "b",
+      "winner_swapped": "b",
+      "order_independent": true,
+      "winner_json": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 1,
+        "tags": [
+          "="
+        ]
+      },
+      "loser_json": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 1,
+        "tags": [
+          "\u0026"
+        ]
+      },
+      "winner_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1,\"tags\":[\"=\"]}",
+      "loser_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1,\"tags\":[\"\\u0026\"]}"
     },
     {
       "name": "full_tie_broken_by_write_history",

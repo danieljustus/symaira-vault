@@ -115,7 +115,16 @@ fn deserialize_present_raw<'de, D>(deserializer: D) -> Result<Option<Box<RawValu
 where
     D: Deserializer<'de>,
 {
-    Box::<RawValue>::deserialize(deserializer).map(Some)
+    let raw = Box::<RawValue>::deserialize(deserializer)?;
+    // `json.Marshal` runs `compact` over a RawMessage on the way out, which
+    // drops interior whitespace and escapes `<`, `>` and `&`. Normalising on
+    // the way in means the echoed value carries the oracle's bytes without the
+    // encoder having to special-case raw fields. It stays a textual transform,
+    // so an id beyond i64 survives exactly.
+    let compacted = symvault_gojson::compact(raw.get());
+    RawValue::from_string(compacted)
+        .map(Some)
+        .map_err(serde::de::Error::custom)
 }
 
 fn is_false(value: &bool) -> bool {
@@ -286,13 +295,81 @@ pub fn negotiate_protocol_version(requested: &str) -> &str {
     }
 }
 
-/// The parameters of an `initialize` request. Only `protocolVersion` affects the
-/// response; `clientInfo` and `capabilities` are accepted and ignored, as in the
-/// oracle.
-#[derive(Debug, Deserialize)]
-struct InitializeParams {
-    #[serde(default, rename = "protocolVersion")]
-    protocol_version: String,
+/// Extracts the requested protocol version from an `initialize` params value,
+/// reproducing `encoding/json`'s decoding of the oracle's `InitializeParams`.
+///
+/// Three of its behaviors are load-bearing and none of them are serde defaults:
+///
+///   - `null` is a no-op against any target, so `"params": null` and
+///     `"protocolVersion": null` both leave the zero value and negotiate to the
+///     latest version. serde would reject both, refusing the handshake to a
+///     client sending entirely legal JSON-RPC.
+///   - Field names match case-insensitively when no exact match exists, so
+///     `PROTOCOLVERSION` selects a real version. serde would ignore the key and
+///     silently negotiate a *different* version than the oracle.
+///   - `clientInfo` is typed `*ClientInfo`, so a non-object there is an error.
+///     Ignoring it would make this port more permissive than the oracle, which
+///     is the wrong direction.
+///
+/// `capabilities` is a `json.RawMessage` in the oracle and accepts anything.
+fn requested_protocol_version(params: &RawValue) -> Result<String, String> {
+    let value: serde_json::Value =
+        serde_json::from_str(params.get()).map_err(|err| err.to_string())?;
+
+    let object = match &value {
+        serde_json::Value::Null => return Ok(String::new()),
+        serde_json::Value::Object(map) => map,
+        other => {
+            return Err(format!(
+                "json: cannot unmarshal {} into Go value of type server.InitializeParams",
+                go_kind(other)
+            ));
+        }
+    };
+
+    // Go prefers an exact field match and falls back to a case-insensitive one.
+    let lookup = |name: &str| -> Option<&serde_json::Value> {
+        object.get(name).or_else(|| {
+            object
+                .iter()
+                .find(|(key, _)| key.eq_ignore_ascii_case(name))
+                .map(|(_, v)| v)
+        })
+    };
+
+    if let Some(client_info) = lookup("clientInfo") {
+        match client_info {
+            serde_json::Value::Null | serde_json::Value::Object(_) => {}
+            other => {
+                return Err(format!(
+                    "json: cannot unmarshal {} into Go struct field InitializeParams.clientInfo of type server.ClientInfo",
+                    go_kind(other)
+                ));
+            }
+        }
+    }
+
+    match lookup("protocolVersion") {
+        None | Some(serde_json::Value::Null) => Ok(String::new()),
+        Some(serde_json::Value::String(version)) => Ok(version.clone()),
+        Some(other) => Err(format!(
+            "json: cannot unmarshal {} into Go struct field InitializeParams.protocolVersion of type string",
+            go_kind(other)
+        )),
+    }
+}
+
+/// Go's name for a JSON value's kind, as it appears in decoder errors. The text
+/// is masked in the differential, but a non-empty diagnostic is still asserted.
+fn go_kind(value: &serde_json::Value) -> &'static str {
+    match value {
+        serde_json::Value::Null => "null",
+        serde_json::Value::Bool(_) => "bool",
+        serde_json::Value::Number(_) => "number",
+        serde_json::Value::String(_) => "string",
+        serde_json::Value::Array(_) => "array",
+        serde_json::Value::Object(_) => "object",
+    }
 }
 
 /// Handles MCP protocol messages for one connection.
@@ -345,14 +422,14 @@ impl ProtocolHandler {
         // and negotiation proceeds with an empty requested version.
         let requested = match &msg.params {
             None => String::new(),
-            Some(raw) => match serde_json::from_str::<InitializeParams>(raw.get()) {
-                Ok(params) => params.protocol_version,
+            Some(raw) => match requested_protocol_version(raw) {
+                Ok(version) => version,
                 Err(err) => {
                     return Ok(Message::error_response(
                         msg.id.clone(),
                         error_code::INVALID_PARAMS,
                         "Invalid params",
-                        Some(serde_json::Value::String(err.to_string())),
+                        Some(serde_json::Value::String(err)),
                     ));
                 }
             },
@@ -572,6 +649,12 @@ fn max_nesting_depth(line: &str) -> usize {
     max
 }
 
+/// Encodes a frame the way the oracle's `json.Marshal` would.
+///
+/// The escaping matters because the method name and the echoed id are
+/// attacker-chosen: `serde_json` would put raw `<`, `>` and `&` onto the same
+/// stdout stream the client parses for framing, where Go emits `\u003c` and
+/// friends.
 fn encode(msg: &Message) -> Result<String, Error> {
-    serde_json::to_string(msg).map_err(Error::Serialize)
+    symvault_gojson::to_string(msg).map_err(Error::Serialize)
 }

@@ -33,7 +33,7 @@ because the implementation did not exist, not because a contract was missing.
 
 MCP-001 and MCP-004 have since been ported: the `symvault-mcp` crate implements
 the JSON-RPC envelope, the `initialize` handshake, the line-framed stdio
-dispatch loop and its hygiene behavior under hostile input, against 37 cases
+dispatch loop and its hygiene behavior under hostile input, against 45 cases
 generated from the pinned oracle. That is the handshake and the frame loop only. **There is still no tool surface** — no `tools/list`,
 no `tools/call`, no tool registry — and `internal/mcp/server/tool_registry.go`
 alone is 837 lines against the 35 tool definitions MCP-002 enumerates. Reading
