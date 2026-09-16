@@ -2,6 +2,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::{
+    collections::BTreeSet,
     fs,
     io::{Read, Write},
     net::TcpListener,
@@ -57,6 +58,30 @@ fn git_io_case(id: &str) -> Case {
         .into_iter()
         .find(|case| case.id == id)
         .unwrap()
+}
+
+fn expected_bool(expected: &Value, key: &str) -> bool {
+    expected[key]
+        .as_bool()
+        .unwrap_or_else(|| panic!("fixture field {key} is not a bool"))
+}
+
+fn assert_pull_projection(result: &symvault_sync::git::PullResult, expected: &Value) {
+    assert_eq!(result.success, expected_bool(expected, "success"));
+    assert_eq!(result.skipped, expected_bool(expected, "skipped"));
+    assert_eq!(
+        result.remote_url.is_some(),
+        expected_bool(expected, "has_remote")
+    );
+}
+
+fn assert_push_projection(result: &symvault_sync::git::PushResult, expected: &Value) {
+    assert_eq!(result.success, expected_bool(expected, "success"));
+    assert_eq!(result.skipped, expected_bool(expected, "skipped"));
+    assert_eq!(
+        result.remote_url.is_some(),
+        expected_bool(expected, "has_remote")
+    );
 }
 
 fn case(id: &str) -> Case {
@@ -152,8 +177,11 @@ fn diverge_local_and_remote(repo: &GitRepository, root: &TempDir, remote: &Path)
 fn go_git_io_fixture_is_source_bound() {
     let fixture = git_io_fixture();
     assert_eq!(fixture.schema_version, 1);
-    assert!(!fixture.oracle.commit.is_empty());
-    assert_eq!(fixture.oracle.release, "working-tree");
+    assert_eq!(
+        fixture.oracle.commit,
+        "32566f057e60e830b9af0599f4398487fefeaa0f"
+    );
+    assert_eq!(fixture.oracle.release, "unreleased");
     assert!(!fixture.oracle.source_files.is_empty());
     assert!(
         fixture
@@ -162,13 +190,31 @@ fn go_git_io_fixture_is_source_bound() {
             .iter()
             .all(|path| path.starts_with("internal/git/"))
     );
+    assert!(
+        fixture
+            .oracle
+            .source_files
+            .iter()
+            .any(|path| path.ends_with("process_tree_unix.go"))
+    );
     assert_eq!(fixture.oracle.source_digest.len(), 64);
     assert_eq!(
         fixture.oracle.generator,
         "scripts/rust-port/cmd/gitio/main.go"
     );
     assert_eq!(fixture.oracle.generator_digest.len(), 64);
-    assert_eq!(fixture.cases.len(), 3);
+    assert_eq!(fixture.cases.len(), 5);
+    let ids: BTreeSet<_> = fixture.cases.iter().map(|case| case.id.as_str()).collect();
+    let expected: BTreeSet<_> = [
+        "GIT-002-go-offline",
+        "GIT-002-go-auth",
+        "GIT-002-go-ssh-precedence",
+        "GIT-002-go-askpass",
+        "GIT-002-go-timeout",
+    ]
+    .into_iter()
+    .collect();
+    assert_eq!(ids, expected);
 }
 
 #[test]
@@ -339,7 +385,8 @@ fn pull_projects_auth_failure_from_a_real_http_remote() {
     git(repo.root(), &["remote", "set-url", "origin", &remote]);
     let result = repo.pull("origin");
     server.join().expect("auth server");
-    let error = result.error.expect("auth error").to_string();
+    let error = result.error.as_ref().expect("auth error").to_string();
+    assert_pull_projection(&result, &contract.expected);
     assert_eq!(contract.expected["error_class"], "authentication");
     assert!(error.contains("authentication failed"), "{error}");
 }
@@ -358,18 +405,20 @@ fn pull_projects_connection_failure_as_offline_from_a_real_remote() {
         ],
     );
     let result = repo.pull("origin");
-    let error = result.error.expect("offline error").to_string();
+    let error = result.error.as_ref().expect("offline error").to_string();
+    assert_pull_projection(&result, &contract.expected);
     assert_eq!(contract.expected["error_class"], "offline");
     assert!(error.contains(NETWORK_MESSAGE), "{error}");
 }
 
 #[test]
 fn push_projects_known_hosts_failure_before_auth_from_ssh_remote() {
+    let contract = git_io_case("GIT-002-go-ssh-precedence");
     let (root, repo, _remote) = pair();
     let helper = root.path().join("ssh-known-hosts.sh");
     write_executable(
         &helper,
-        "#!/bin/sh\nprintf '%s\\n' 'known_hosts: fixture failure' >&2\nexit 1\n",
+        "#!/bin/sh\nprintf '%s\\n' 'known_hosts: authentication failed: connection refused' >&2\nexit 1\n",
     );
     git(
         repo.root(),
@@ -385,7 +434,13 @@ fn push_projects_known_hosts_failure_before_auth_from_ssh_remote() {
         &["config", "core.sshCommand", helper.to_str().unwrap()],
     );
     let result = repo.push("origin");
-    let error = result.error.expect("SSH configuration error").to_string();
+    let error = result
+        .error
+        .as_ref()
+        .expect("SSH configuration error")
+        .to_string();
+    assert_push_projection(&result, &contract.expected);
+    assert_eq!(contract.expected["error_class"], "ssh_configuration");
     assert!(error.contains("SSH configuration error"), "{error}");
 }
 
@@ -419,12 +474,60 @@ fn pull_preserves_configured_askpass_and_suppresses_terminal_prompt() {
 
 #[test]
 #[cfg(unix)]
-fn pull_timeout_kills_ssh_descendant_through_productive_repository_path() {
-    let contract = git_io_case("GIT-002-rust-process-contract");
-    assert_eq!(contract.input["terminal_prompt"], "0");
-    assert_eq!(contract.input["passphrase_env"], "removed");
-    assert_eq!(contract.expected["askpass"], "inherited");
-    assert_eq!(contract.expected["descendant_cleanup"], "process-group");
+fn push_replays_go_askpass_environment_projection() {
+    if std::env::var_os("GIT_IO_ASKPASS_CHILD").is_none() {
+        let status = Command::new(std::env::current_exe().expect("current test executable"))
+            .env("GIT_IO_ASKPASS_CHILD", "1")
+            .env("GIT_ASKPASS", "/bin/false")
+            .args(["--exact", "push_replays_go_askpass_environment_projection"])
+            .status()
+            .expect("rerun askpass projection in isolated environment");
+        assert!(status.success(), "askpass child exited with {status}");
+        return;
+    }
+
+    let contract = git_io_case("GIT-002-go-askpass");
+    let (root, repo, _remote) = pair();
+    let marker = root.path().join("askpass.marker");
+    let helper = root.path().join("ssh-askpass-env.sh");
+    write_executable(
+        &helper,
+        &format!(
+            "#!/bin/sh\nprintf 'askpass=%s\\nterminal_prompt=%s\\n' \"${{GIT_ASKPASS:+inherited}}\" \"$GIT_TERMINAL_PROMPT\" > {}\nexit 1\n",
+            marker.display()
+        ),
+    );
+    git(
+        repo.root(),
+        &[
+            "remote",
+            "set-url",
+            "origin",
+            "ssh://git@example.invalid/repo.git",
+        ],
+    );
+    git(
+        repo.root(),
+        &["config", "core.sshCommand", helper.to_str().unwrap()],
+    );
+
+    let result = repo.push("origin");
+    let observed = fs::read_to_string(marker).expect("askpass environment marker");
+    assert_push_projection(&result, &contract.expected);
+    assert_eq!(contract.expected["error_class"], "other");
+    assert_eq!(
+        contract.expected["observed"].as_str().unwrap(),
+        observed.trim()
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn push_timeout_replays_go_descendant_cleanup_projection() {
+    let contract = git_io_case("GIT-002-go-timeout");
+    assert_eq!(contract.input["timeout_seconds"], 20);
+    assert_eq!(contract.expected["timed_out"], true);
+    assert_eq!(contract.expected["descendant_cleanup"], true);
     let (root, repo, _remote) = pair();
     let marker = root.path().join("ssh-descendant.pid");
     let helper = root.path().join("ssh-hang.sh");
@@ -449,8 +552,12 @@ fn pull_timeout_kills_ssh_descendant_through_productive_repository_path() {
         &["config", "core.sshCommand", helper.to_str().unwrap()],
     );
 
-    let result = repo.pull("origin");
-    let error = result.error.expect("timeout error").to_string();
+    let started = Instant::now();
+    let result = repo.push("origin");
+    assert!(started.elapsed() < Duration::from_secs(22));
+    let error = result.error.as_ref().expect("timeout error").to_string();
+    assert_push_projection(&result, &contract.expected);
+    assert_eq!(contract.expected["error_class"], "timeout");
     assert!(error.contains("timed out"), "{error}");
     let pid = fs::read_to_string(marker)
         .expect("SSH helper recorded descendant")
