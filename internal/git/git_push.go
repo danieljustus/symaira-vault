@@ -46,7 +46,21 @@ func pushWithSystemGit(ctx context.Context, vaultDir string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = &stderr
 	cmd.Stdin = os.Stdin
-	if err := cmd.Run(); err != nil {
+	configureProcessTree(cmd)
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("system git push failed: %w", err)
+	}
+	stopped := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			killProcessTree(cmd)
+		case <-stopped:
+		}
+	}()
+	err := cmd.Wait()
+	close(stopped)
+	if err != nil {
 		return fmt.Errorf("system git push failed: %w (%s)", err, strings.TrimSpace(stderr.String()))
 	}
 	return nil
