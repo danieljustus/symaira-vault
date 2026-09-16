@@ -1,0 +1,13 @@
+[package]
+name = "symvault-mcp"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+serde.workspace = true
+symvault-gojson = { path = "../symvault-gojson", version = "=0.0.0" }
+serde_json = { workspace = true, features = ["raw_value"] }

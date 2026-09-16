@@ -210,6 +210,10 @@ PORT_REDACT_FIXTURE := testdata/port/core/redact-contract.json
 PORT_CRYPTO_FIXTURE := testdata/port/core/password-totp-contract.json
 PORT_QUOTA_FIXTURE := testdata/port/core/quota-contract.json
 PORT_POLICY_FIXTURE := testdata/port/core/policy-contract.json
+PORT_MCP_INIT_FIXTURE := testdata/port/mcp/initialize.json
+PORT_MCP_STDIO_FIXTURE := testdata/port/mcp/stdio-hygiene.json
+PORT_GIT_WINNER_FIXTURE := testdata/port/sync/version-winner.json
+PORT_GIT_OFFLINE_FIXTURE := testdata/port/sync/git-offline.json
 CFG_PATH_FIXTURE := testdata/port/config/paths.json
 # CFG-001 pins its own production-Go oracle. configpathgen verifies this commit
 # against git objects, so a stale pin fails loudly rather than mislabelling.
@@ -293,6 +297,37 @@ store-metadata-fixtures-check:
 		--oracle-commit $(STORE_METADATA_ORACLE_COMMIT) \
 		--oracle-release $(STORE_METADATA_ORACLE_RELEASE)
 
+# MCP-001. mcpinitgen pins the baseline oracle caadd5e as a Go constant: the
+# three transport/protocol sources it claims are byte-identical there and at
+# HEAD, so this row needs no deliberate oracle advance.
+mcp-init-fixtures-generate:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/mcpinitgen \
+		--output $(PORT_MCP_INIT_FIXTURE) \
+		--oracle-commit caadd5e \
+		--oracle-release v0.22.1
+
+# MCP-004. Same pinned oracle and sources as MCP-001.
+mcp-stdio-fixtures-generate:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/mcpstdiogen \
+		--output $(PORT_MCP_STDIO_FIXTURE) \
+		--oracle-commit caadd5e \
+		--oracle-release v0.22.1
+
+# GIT-003 version-winner corpus. Same baseline oracle; the sources it claims
+# are unchanged there.
+git-winner-fixtures-generate:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/gitwinnergen \
+		--output $(PORT_GIT_WINNER_FIXTURE) \
+		--oracle-commit caadd5e \
+		--oracle-release v0.22.1
+
+# GIT-002 offline classifier.
+git-offline-fixtures-generate:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/gitofflinegen \
+		--output $(PORT_GIT_OFFLINE_FIXTURE) \
+		--oracle-commit caadd5e \
+		--oracle-release v0.22.1
+
 policy-fixtures-generate:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/policygen \
 		--output $(PORT_POLICY_FIXTURE) \
@@ -358,6 +393,38 @@ cfg-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/configpathgen \
 		--check --output $(CFG_PATH_FIXTURE)
 	$(CARGO) test -p symvault-core --test config_paths_contract --locked
+
+mcp-init-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/mcpinitgen \
+		--check --output $(PORT_MCP_INIT_FIXTURE)
+
+# MCP-001 differential: the Go corpus replayed against the Rust transport.
+mcp-init-differential: mcp-init-fixtures-check
+	$(CARGO) test -p symvault-mcp --test initialize_contract --locked
+
+mcp-stdio-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/mcpstdiogen \
+		--check --output $(PORT_MCP_STDIO_FIXTURE)
+
+# MCP-004 differential: the hostile-frame corpus replayed against Rust.
+mcp-stdio-differential: mcp-stdio-fixtures-check
+	$(CARGO) test -p symvault-mcp --test stdio_hygiene_contract --locked
+
+git-winner-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/gitwinnergen \
+		--check --output $(PORT_GIT_WINNER_FIXTURE)
+
+# GIT-003 differential: the version-winner corpus replayed against Rust.
+git-winner-differential: git-winner-fixtures-check
+	$(CARGO) test -p symvault-sync --test version_winner_contract --locked
+
+git-offline-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/gitofflinegen \
+		--check --output $(PORT_GIT_OFFLINE_FIXTURE)
+
+# GIT-002 differential: the offline-classification corpus replayed against Rust.
+git-offline-differential: git-offline-fixtures-check
+	$(CARGO) test -p symvault-sync --test git_offline_contract --locked
 
 policy-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/policygen \
@@ -454,7 +521,30 @@ rust-fuzz:
 # could only ever call a darwin-frozen fixture stale. That field is gone now:
 # it described the machine, not the pinned oracle. Verified before re-wiring
 # that goos was the only host-dependent value in these four fixtures.
-port-contract: oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential
+# Everything CI will run that can run here, in fail-fast order: formatting and
+# lint first because they are seconds, then the contract corpora, then the
+# workspace.
+#
+# This exists because a CI round trip costs ten minutes and two of this
+# migration's three rounds were avoidable. `lint` in particular pins CI's
+# golangci-lint version through `go run`; a golangci-lint on the host PATH is a
+# different version and reports a different set, so it is not a substitute --
+# the comment on the lint target above records the same lesson from an earlier
+# batch of misspell hits that reached CI.
+#
+# Not covered here, deliberately: the native macOS/Windows matrix. `rust-native`
+# carries `if: github.event_name != 'pull_request'`, so it does not run on a PR
+# at all and cannot be pre-empted locally -- waiting on a PR for native evidence
+# is waiting for something that will not happen.
+preflight: fmt-check lint
+	$(CARGO) fmt --all -- --check
+	$(CARGO) clippy --workspace --all-targets --all-features --locked -- -D warnings
+	$(MAKE) port-contract
+	$(CARGO) test --workspace --all-features --locked
+	$(CARGO) test --workspace --doc --all-features --locked
+	@echo "PASS preflight: every CI gate that can run on this host"
+
+port-contract: oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential
 
 rust-build:
 	$(CARGO) build --workspace --locked

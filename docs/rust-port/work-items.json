@@ -85,7 +85,9 @@
       "status": "blocked",
       "depends_on": ["RUST-006", "RUST-007", "RUST-008"],
       "contract_rows": ["MCP-001", "MCP-002", "MCP-003", "MCP-004"],
-      "acceptance": ["make mcp-differential", "POLICY-001 approval queues and MCP tool filtering/call-time enforcement integrate through MCP-002/MCP-003, including policy audit/enforcement wiring", "cargo nextest run -p symvault-mcp", "cargo +nightly fuzz run mcp_frame"]
+      "completed_contract_rows": ["MCP-001", "MCP-004"],
+      "note": "MCP-001 was implemented ahead of this item's dependencies and deliberately does not unblock the rest. The depends_on list is right for the tool surface (MCP-002/003/004), which needs storage, config, session and platform from RUST-006/007/008; it was over-broad for MCP-001 alone. The handshake and the stdio frame loop are pure JSON-RPC over strings, and the symvault-mcp crate implementing them depends on serde and serde_json only, with no reference to any sibling crate. MCP-004 followed for the same reason: stdio hygiene is a property of the frame loop, not of the tool surface. MCP-002 and MCP-003 stay blocked on the unchanged dependencies.",
+      "acceptance": ["make mcp-init-differential", "make mcp-stdio-differential", "make mcp-differential", "POLICY-001 approval queues and MCP tool filtering/call-time enforcement integrate through MCP-002/MCP-003, including policy audit/enforcement wiring", "cargo nextest run -p symvault-mcp", "cargo +nightly fuzz run mcp_frame"]
     },
     {
       "id": "RUST-011",
