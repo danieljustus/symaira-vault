@@ -14,6 +14,7 @@ pub mod pairing;
 pub mod recipients;
 pub mod reconcile;
 pub mod safeio;
+pub mod winner;
 
 pub use archive::{ArchiveEntry, ArchiveError, backup, restore};
 pub use devices::{Device, DeviceError, DeviceList, DeviceRegistry};
@@ -25,3 +26,4 @@ pub use pairing::{
 };
 pub use recipients::{RecipientsError, RecipientsFile};
 pub use reconcile::{Conflict, ReconcileInput, ReconcileOutput, reconcile};
+pub use winner::winner_by_version;

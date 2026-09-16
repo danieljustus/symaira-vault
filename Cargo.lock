@@ -2517,6 +2517,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "symvault-crypto",
+ "symvault-store",
  "tar",
  "tempfile",
  "thiserror 1.0.69",

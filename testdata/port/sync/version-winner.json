@@ -1,0 +1,458 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "caadd5e",
+    "commit_sha": "caadd5ef95e8f19fabd3ae3d2c04caa296f2fd44",
+    "release": "v0.22.1",
+    "source_files": [
+      "internal/vault/entry.go",
+      "internal/vault/sync/sync.go"
+    ],
+    "source_digest": "88bfc2f95f1441c45bc77d0c42e9321b65e59899b02461503e8c9731e7d816cd",
+    "generator_digest": "40365617c58dc1c065e7cbcc896459de736450ebcd718c4964773acb9d39fa5f"
+  },
+  "cases": [
+    {
+      "name": "version_higher_wins_forward",
+      "why": "the first tier: a larger version wins outright regardless of timestamps",
+      "path": "entries/item.age",
+      "a": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-02T00:00:00Z",
+        "version": 2
+      },
+      "b": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 1
+      },
+      "a_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-02T00:00:00Z\",\"version\":2}",
+      "b_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1}",
+      "tier": "version",
+      "winner_forward": "a",
+      "winner_swapped": "a",
+      "order_independent": true,
+      "winner_json": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-02T00:00:00Z",
+        "version": 2
+      },
+      "loser_json": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 1
+      },
+      "winner_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-02T00:00:00Z\",\"version\":2}",
+      "loser_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1}"
+    },
+    {
+      "name": "version_higher_wins_reversed",
+      "why": "the same pair with the larger version second, to show the rule is not positional",
+      "path": "entries/item.age",
+      "a": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 1
+      },
+      "b": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-02T00:00:00Z",
+        "version": 2
+      },
+      "a_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1}",
+      "b_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-02T00:00:00Z\",\"version\":2}",
+      "tier": "version",
+      "winner_forward": "b",
+      "winner_swapped": "b",
+      "order_independent": true,
+      "winner_json": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-02T00:00:00Z",
+        "version": 2
+      },
+      "loser_json": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 1
+      },
+      "winner_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-02T00:00:00Z\",\"version\":2}",
+      "loser_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1}"
+    },
+    {
+      "name": "version_beats_newer_timestamp",
+      "why": "an older timestamp still wins if its version is higher: version dominates Updated",
+      "path": "entries/item.age",
+      "a": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 5
+      },
+      "b": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-02T00:00:00Z",
+        "version": 4
+      },
+      "a_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":5}",
+      "b_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-02T00:00:00Z\",\"version\":4}",
+      "tier": "version",
+      "winner_forward": "a",
+      "winner_swapped": "a",
+      "order_independent": true,
+      "winner_json": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 5
+      },
+      "loser_json": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-02T00:00:00Z",
+        "version": 4
+      },
+      "winner_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":5}",
+      "loser_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-02T00:00:00Z\",\"version\":4}"
+    },
+    {
+      "name": "equal_version_newer_updated_wins",
+      "why": "the second tier: equal versions fall through to Updated",
+      "path": "entries/item.age",
+      "a": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-02T00:00:00Z",
+        "version": 3
+      },
+      "b": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 3
+      },
+      "a_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-02T00:00:00Z\",\"version\":3}",
+      "b_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":3}",
+      "tier": "updated",
+      "winner_forward": "a",
+      "winner_swapped": "a",
+      "order_independent": true,
+      "winner_json": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-02T00:00:00Z",
+        "version": 3
+      },
+      "loser_json": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 3
+      },
+      "winner_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-02T00:00:00Z\",\"version\":3}",
+      "loser_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":3}"
+    },
+    {
+      "name": "equal_version_updated_nanosecond_apart",
+      "why": "Updated is compared at full precision; one nanosecond decides it",
+      "path": "entries/item.age",
+      "a": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-03-04T05:06:07.000000002Z",
+        "version": 3
+      },
+      "b": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-03-04T05:06:07.000000001Z",
+        "version": 3
+      },
+      "a_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-03-04T05:06:07.000000002Z\",\"version\":3}",
+      "b_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-03-04T05:06:07.000000001Z\",\"version\":3}",
+      "tier": "updated",
+      "winner_forward": "a",
+      "winner_swapped": "a",
+      "order_independent": true,
+      "winner_json": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-03-04T05:06:07.000000002Z",
+        "version": 3
+      },
+      "loser_json": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-03-04T05:06:07.000000001Z",
+        "version": 3
+      },
+      "winner_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-03-04T05:06:07.000000002Z\",\"version\":3}",
+      "loser_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-03-04T05:06:07.000000001Z\",\"version\":3}"
+    },
+    {
+      "name": "equal_version_fractional_second_beats_whole_second",
+      "why": "Go trims trailing zeros from the fractional second, so the later instant 07.5 serializes SHORTER-prefixed than 07 and sorts EARLIER as a string ('.' is below 'Z'). A port that compares the timestamps as strings instead of instants gets this pair backwards, and only this shape catches it",
+      "path": "entries/item.age",
+      "a": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-03-04T05:06:07.5Z",
+        "version": 3
+      },
+      "b": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-03-04T05:06:07Z",
+        "version": 3
+      },
+      "a_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-03-04T05:06:07.5Z\",\"version\":3}",
+      "b_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-03-04T05:06:07Z\",\"version\":3}",
+      "tier": "updated",
+      "winner_forward": "a",
+      "winner_swapped": "a",
+      "order_independent": true,
+      "winner_json": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-03-04T05:06:07.5Z",
+        "version": 3
+      },
+      "loser_json": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-03-04T05:06:07Z",
+        "version": 3
+      },
+      "winner_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-03-04T05:06:07.5Z\",\"version\":3}",
+      "loser_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-03-04T05:06:07Z\",\"version\":3}"
+    },
+    {
+      "name": "full_tie_broken_by_created",
+      "why": "the third tier: version and Updated are equal, so the canonical JSON decides, and Created is its first differing field",
+      "path": "entries/item.age",
+      "a": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-02T00:00:00Z",
+        "version": 1
+      },
+      "b": {
+        "created": "2026-01-02T00:00:00Z",
+        "updated": "2026-01-02T00:00:00Z",
+        "version": 1
+      },
+      "a_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-02T00:00:00Z\",\"version\":1}",
+      "b_canonical": "{\"created\":\"2026-01-02T00:00:00Z\",\"updated\":\"2026-01-02T00:00:00Z\",\"version\":1}",
+      "tier": "tiebreak",
+      "winner_forward": "a",
+      "winner_swapped": "a",
+      "order_independent": true,
+      "winner_json": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-02T00:00:00Z",
+        "version": 1
+      },
+      "loser_json": {
+        "created": "2026-01-02T00:00:00Z",
+        "updated": "2026-01-02T00:00:00Z",
+        "version": 1
+      },
+      "winner_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-02T00:00:00Z\",\"version\":1}",
+      "loser_canonical": "{\"created\":\"2026-01-02T00:00:00Z\",\"updated\":\"2026-01-02T00:00:00Z\",\"version\":1}"
+    },
+    {
+      "name": "full_tie_broken_by_tags",
+      "why": "a tie decided further into the JSON: identical timestamps and version, differing tags",
+      "path": "entries/item.age",
+      "a": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 1,
+        "tags": [
+          "alpha"
+        ]
+      },
+      "b": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 1,
+        "tags": [
+          "beta"
+        ]
+      },
+      "a_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1,\"tags\":[\"alpha\"]}",
+      "b_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1,\"tags\":[\"beta\"]}",
+      "tier": "tiebreak",
+      "winner_forward": "a",
+      "winner_swapped": "a",
+      "order_independent": true,
+      "winner_json": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 1,
+        "tags": [
+          "alpha"
+        ]
+      },
+      "loser_json": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 1,
+        "tags": [
+          "beta"
+        ]
+      },
+      "winner_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1,\"tags\":[\"alpha\"]}",
+      "loser_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1,\"tags\":[\"beta\"]}"
+    },
+    {
+      "name": "full_tie_absent_vs_present_tags",
+      "why": "an omitempty field changes the JSON length, not just its content, so the tiebreak sees a shorter string",
+      "path": "entries/item.age",
+      "a": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 1
+      },
+      "b": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 1,
+        "tags": [
+          "alpha"
+        ]
+      },
+      "a_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1}",
+      "b_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1,\"tags\":[\"alpha\"]}",
+      "tier": "tiebreak",
+      "winner_forward": "b",
+      "winner_swapped": "b",
+      "order_independent": true,
+      "winner_json": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 1,
+        "tags": [
+          "alpha"
+        ]
+      },
+      "loser_json": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 1
+      },
+      "winner_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1,\"tags\":[\"alpha\"]}",
+      "loser_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1}"
+    },
+    {
+      "name": "full_tie_broken_by_write_history",
+      "why": "the tiebreak reaches the last field: identical everything except one write record",
+      "path": "entries/item.age",
+      "a": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 1,
+        "write_history": [
+          {
+            "timestamp": "2026-01-01T00:00:00Z",
+            "field": "a",
+            "action": "set"
+          }
+        ]
+      },
+      "b": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 1,
+        "write_history": [
+          {
+            "timestamp": "2026-01-01T00:00:00Z",
+            "field": "b",
+            "action": "set"
+          }
+        ]
+      },
+      "a_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1,\"write_history\":[{\"timestamp\":\"2026-01-01T00:00:00Z\",\"field\":\"a\",\"action\":\"set\"}]}",
+      "b_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1,\"write_history\":[{\"timestamp\":\"2026-01-01T00:00:00Z\",\"field\":\"b\",\"action\":\"set\"}]}",
+      "tier": "tiebreak",
+      "winner_forward": "a",
+      "winner_swapped": "a",
+      "order_independent": true,
+      "winner_json": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 1,
+        "write_history": [
+          {
+            "timestamp": "2026-01-01T00:00:00Z",
+            "field": "a",
+            "action": "set"
+          }
+        ]
+      },
+      "loser_json": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 1,
+        "write_history": [
+          {
+            "timestamp": "2026-01-01T00:00:00Z",
+            "field": "b",
+            "action": "set"
+          }
+        ]
+      },
+      "winner_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1,\"write_history\":[{\"timestamp\":\"2026-01-01T00:00:00Z\",\"field\":\"a\",\"action\":\"set\"}]}",
+      "loser_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1,\"write_history\":[{\"timestamp\":\"2026-01-01T00:00:00Z\",\"field\":\"b\",\"action\":\"set\"}]}"
+    },
+    {
+      "name": "identical_metadata_first_argument_wins",
+      "why": "two indistinguishable operands: the JSON compare is <=, so the first argument wins and the result is stable rather than arbitrary",
+      "path": "entries/item.age",
+      "a": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 1
+      },
+      "b": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 1
+      },
+      "a_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1}",
+      "b_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1}",
+      "tier": "tiebreak",
+      "winner_forward": "a",
+      "winner_swapped": "a",
+      "order_independent": true,
+      "winner_json": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 1
+      },
+      "loser_json": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 1
+      },
+      "winner_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1}",
+      "loser_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1}"
+    },
+    {
+      "name": "empty_path_short_circuits_to_first_argument",
+      "why": "an empty path skips the JSON tiebreak entirely and returns the first argument, so this pair is deliberately order-DEPENDENT",
+      "path": "",
+      "a": {
+        "created": "2026-01-02T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 1
+      },
+      "b": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 1
+      },
+      "a_canonical": "{\"created\":\"2026-01-02T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1}",
+      "b_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1}",
+      "tier": "tiebreak",
+      "winner_forward": "a",
+      "winner_swapped": "b",
+      "order_independent": false,
+      "winner_json": {
+        "created": "2026-01-02T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 1
+      },
+      "loser_json": {
+        "created": "2026-01-01T00:00:00Z",
+        "updated": "2026-01-01T00:00:00Z",
+        "version": 1
+      },
+      "winner_canonical": "{\"created\":\"2026-01-02T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1}",
+      "loser_canonical": "{\"created\":\"2026-01-01T00:00:00Z\",\"updated\":\"2026-01-01T00:00:00Z\",\"version\":1}"
+    }
+  ]
+}

@@ -212,6 +212,7 @@ PORT_QUOTA_FIXTURE := testdata/port/core/quota-contract.json
 PORT_POLICY_FIXTURE := testdata/port/core/policy-contract.json
 PORT_MCP_INIT_FIXTURE := testdata/port/mcp/initialize.json
 PORT_MCP_STDIO_FIXTURE := testdata/port/mcp/stdio-hygiene.json
+PORT_GIT_WINNER_FIXTURE := testdata/port/sync/version-winner.json
 CFG_PATH_FIXTURE := testdata/port/config/paths.json
 # CFG-001 pins its own production-Go oracle. configpathgen verifies this commit
 # against git objects, so a stale pin fails loudly rather than mislabelling.
@@ -311,6 +312,14 @@ mcp-stdio-fixtures-generate:
 		--oracle-commit caadd5e \
 		--oracle-release v0.22.1
 
+# GIT-003 version-winner corpus. Same baseline oracle; the sources it claims
+# are unchanged there.
+git-winner-fixtures-generate:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/gitwinnergen \
+		--output $(PORT_GIT_WINNER_FIXTURE) \
+		--oracle-commit caadd5e \
+		--oracle-release v0.22.1
+
 policy-fixtures-generate:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/policygen \
 		--output $(PORT_POLICY_FIXTURE) \
@@ -392,6 +401,14 @@ mcp-stdio-fixtures-check:
 # MCP-004 differential: the hostile-frame corpus replayed against Rust.
 mcp-stdio-differential: mcp-stdio-fixtures-check
 	$(CARGO) test -p symvault-mcp --test stdio_hygiene_contract --locked
+
+git-winner-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/gitwinnergen \
+		--check --output $(PORT_GIT_WINNER_FIXTURE)
+
+# GIT-003 differential: the version-winner corpus replayed against Rust.
+git-winner-differential: git-winner-fixtures-check
+	$(CARGO) test -p symvault-sync --test version_winner_contract --locked
 
 policy-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/policygen \
@@ -488,7 +505,7 @@ rust-fuzz:
 # could only ever call a darwin-frozen fixture stale. That field is gone now:
 # it described the machine, not the pinned oracle. Verified before re-wiring
 # that goos was the only host-dependent value in these four fixtures.
-port-contract: oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-stdio-fixtures-check cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential
+port-contract: oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-stdio-fixtures-check git-winner-fixtures-check cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential
 
 rust-build:
 	$(CARGO) build --workspace --locked
