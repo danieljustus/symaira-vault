@@ -2467,6 +2467,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "symvault-mcp"
+version = "0.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "symvault-platform"
 version = "0.0.0"
 dependencies = [

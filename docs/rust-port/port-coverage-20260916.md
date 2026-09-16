@@ -28,9 +28,17 @@ magnitude, and the structural facts below are what actually matter.
 ## The structural facts
 
 **`internal/mcp` is the largest subsystem in the repository — 15,054 lines —
-and nothing of it is ported.** No JSON-RPC handler, no tool surface, no stdio
-transport. Rows MCP-001 through MCP-004 are `TODO` because the implementation
-does not exist, not because a contract is missing.
+and almost none of it is ported.** Rows MCP-001 through MCP-004 were all `TODO`
+because the implementation did not exist, not because a contract was missing.
+
+MCP-001 has since been ported: the `symvault-mcp` crate implements the JSON-RPC
+envelope, the `initialize` handshake and the line-framed stdio dispatch loop,
+against a 22-case corpus generated from the pinned oracle. That is the handshake
+and the frame loop only. **There is still no tool surface** — no `tools/list`,
+no `tools/call`, no tool registry — and `internal/mcp/server/tool_registry.go`
+alone is 837 lines against the 35 tool definitions MCP-002 enumerates. Reading
+"MCP has started" as "MCP is close" would repeat exactly the error this page
+exists to correct.
 
 **There is no HTTP server in the Rust workspace at all.** No `axum`, no
 `hyper`, no listener. Rows HTTP-001 through HTTP-004 likewise.
@@ -41,9 +49,11 @@ because config and profile resolution is not wired into it — the binary says s
 itself when you omit the flag. CLI-001 is `PASS` because the version surface is
 genuinely pinned; CLI-002 through CLI-007 cover the other 133.
 
-**Eleven subsystems have no Rust counterpart of any kind**: `mcp`, `ui`,
+**These subsystems have no Rust counterpart of any kind**: `ui`,
 `health`, `cli`, `importer`, `intake`, `secureui`, `dynamicsecret`, `approval`,
-`broker`, `agentskill`, `daemon`, `secrets`, `update`.
+`broker`, `agentskill`, `daemon`, `secrets`, `update`. `mcp` has left this list
+as of MCP-001, but only by its handshake and transport; the count of *fully*
+ported subsystems among them is still zero.
 
 ## What this means for the remaining rows
 

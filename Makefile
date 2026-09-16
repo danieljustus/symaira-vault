@@ -210,6 +210,7 @@ PORT_REDACT_FIXTURE := testdata/port/core/redact-contract.json
 PORT_CRYPTO_FIXTURE := testdata/port/core/password-totp-contract.json
 PORT_QUOTA_FIXTURE := testdata/port/core/quota-contract.json
 PORT_POLICY_FIXTURE := testdata/port/core/policy-contract.json
+PORT_MCP_INIT_FIXTURE := testdata/port/mcp/initialize.json
 CFG_PATH_FIXTURE := testdata/port/config/paths.json
 # CFG-001 pins its own production-Go oracle. configpathgen verifies this commit
 # against git objects, so a stale pin fails loudly rather than mislabelling.
@@ -293,6 +294,15 @@ store-metadata-fixtures-check:
 		--oracle-commit $(STORE_METADATA_ORACLE_COMMIT) \
 		--oracle-release $(STORE_METADATA_ORACLE_RELEASE)
 
+# MCP-001. mcpinitgen pins the baseline oracle caadd5e as a Go constant: the
+# three transport/protocol sources it claims are byte-identical there and at
+# HEAD, so this row needs no deliberate oracle advance.
+mcp-init-fixtures-generate:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/mcpinitgen \
+		--output $(PORT_MCP_INIT_FIXTURE) \
+		--oracle-commit caadd5e \
+		--oracle-release v0.22.1
+
 policy-fixtures-generate:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/policygen \
 		--output $(PORT_POLICY_FIXTURE) \
@@ -358,6 +368,14 @@ cfg-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/configpathgen \
 		--check --output $(CFG_PATH_FIXTURE)
 	$(CARGO) test -p symvault-core --test config_paths_contract --locked
+
+mcp-init-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/mcpinitgen \
+		--check --output $(PORT_MCP_INIT_FIXTURE)
+
+# MCP-001 differential: the Go corpus replayed against the Rust transport.
+mcp-init-differential: mcp-init-fixtures-check
+	$(CARGO) test -p symvault-mcp --test initialize_contract --locked
 
 policy-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/policygen \
@@ -454,7 +472,7 @@ rust-fuzz:
 # could only ever call a darwin-frozen fixture stale. That field is gone now:
 # it described the machine, not the pinned oracle. Verified before re-wiring
 # that goos was the only host-dependent value in these four fixtures.
-port-contract: oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential
+port-contract: oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential
 
 rust-build:
 	$(CARGO) build --workspace --locked
