@@ -10,7 +10,7 @@
       "internal/mcp/transport/transport.go"
     ],
     "source_digest": "cd7ac18db2a0ac61ad051e25b22253b97b7e207317bc28ba869365503e2acae2",
-    "generator_digest": "45050b46b13cb5e3a3f4689e1df01aaaeaf890ee2eda8be6ab01feda772a051e"
+    "generator_digest": "6b8d3db15c709d746f973d88a4a8ef46ddcd1ece2af11110b0d488f30f3f7c46"
   },
   "server_name": "symvault",
   "server_version": "0.0.0-fixture",

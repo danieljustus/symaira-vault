@@ -91,8 +91,12 @@ type fixture struct {
 	Cases         []winnerCase `json:"cases"`
 }
 
-func ts(y int, mo time.Month, d, h, mi, s, ns int) time.Time {
-	return time.Date(y, mo, d, h, mi, s, ns, time.UTC)
+// fixtureYear is fixed: nothing in this corpus depends on the year, and the
+// cases vary by month/day and by sub-second precision instead.
+const fixtureYear = 2026
+
+func ts(mo time.Month, d, h, mi, s, ns int) time.Time {
+	return time.Date(fixtureYear, mo, d, h, mi, s, ns, time.UTC)
 }
 
 func meta(created, updated time.Time, version int, tags []string, history []vault.WriteRecord) vault.EntryMetadata {
@@ -111,12 +115,12 @@ func mustJSON(v any) json.RawMessage {
 }
 
 func buildCases() []winnerCase {
-	base := ts(2026, 1, 1, 0, 0, 0, 0)
-	later := ts(2026, 1, 2, 0, 0, 0, 0)
+	base := ts(1, 1, 0, 0, 0, 0)
+	later := ts(1, 2, 0, 0, 0, 0)
 	// One nanosecond apart, to prove the comparison is not truncated to
 	// seconds anywhere on either side.
-	nsEarly := ts(2026, 3, 4, 5, 6, 7, 1)
-	nsLate := ts(2026, 3, 4, 5, 6, 7, 2)
+	nsEarly := ts(3, 4, 5, 6, 7, 1)
+	nsLate := ts(3, 4, 5, 6, 7, 2)
 
 	type spec struct {
 		name, why, path string
@@ -158,8 +162,8 @@ func buildCases() []winnerCase {
 			"equal_version_fractional_second_beats_whole_second",
 			"Go trims trailing zeros from the fractional second, so the later instant 07.5 serializes SHORTER-prefixed than 07 and sorts EARLIER as a string ('.' is below 'Z'). A port that compares the timestamps as strings instead of instants gets this pair backwards, and only this shape catches it",
 			"entries/item.age", "updated",
-			meta(base, ts(2026, 3, 4, 5, 6, 7, 500000000), 3, nil, nil),
-			meta(base, ts(2026, 3, 4, 5, 6, 7, 0), 3, nil, nil),
+			meta(base, ts(3, 4, 5, 6, 7, 500000000), 3, nil, nil),
+			meta(base, ts(3, 4, 5, 6, 7, 0), 3, nil, nil),
 		},
 		{
 			"full_tie_broken_by_created", "the third tier: version and Updated are equal, so the canonical JSON decides, and Created is its first differing field",

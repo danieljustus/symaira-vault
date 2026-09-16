@@ -196,7 +196,7 @@ var oracleMarkers = []string{
 func verifyMarkerList() error {
 	for _, m := range oracleMarkers {
 		if !git.IsOfflineError(errors.New(m)) {
-			return fmt.Errorf("restated marker %q is not recognised by the oracle; the list has drifted", m)
+			return fmt.Errorf("restated marker %q is not recognized by the oracle; the list has drifted", m)
 		}
 	}
 	const neutral = "repository not found"
@@ -252,8 +252,8 @@ func main() {
 		fatal("hash generator: %v", err)
 	}
 
-	if err := verifyMarkerList(); err != nil {
-		fatal("%v", err)
+	if markerErr := verifyMarkerList(); markerErr != nil {
+		fatal("%v", markerErr)
 	}
 	offlineCases := buildOfflineCases()
 	formatCases := buildFormatCases()

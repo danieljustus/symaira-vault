@@ -9,7 +9,7 @@
       "internal/vault/sync/sync.go"
     ],
     "source_digest": "88bfc2f95f1441c45bc77d0c42e9321b65e59899b02461503e8c9731e7d816cd",
-    "generator_digest": "40365617c58dc1c065e7cbcc896459de736450ebcd718c4964773acb9d39fa5f"
+    "generator_digest": "7e448c043a5ca751c9d1201e1a32ac54da73db172576fed01b091765a213aef4"
   },
   "cases": [
     {

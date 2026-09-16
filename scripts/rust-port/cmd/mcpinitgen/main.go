@@ -185,6 +185,9 @@ func caseInputs() []struct {
 		{
 			"notification_unknown_method_is_silent",
 			"an unknown notification must not produce a method-not-found frame",
+			// "cancelled" is the MCP specification's own spelling of this
+			// method name, so it is protocol data rather than prose.
+			//nolint:misspell // protocol method name, not English text
 			[]string{`{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":1}}`},
 		},
 		{

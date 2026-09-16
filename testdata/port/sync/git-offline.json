@@ -9,7 +9,7 @@
       "internal/git/git_offline.go"
     ],
     "source_digest": "c7cb6dd1f0296c3c5e3f1d739e10c587e490a567efbb04dca6c739d77875a883",
-    "generator_digest": "bd6fe502e5950d78a4cbe7a482346823e3ffa11e93f279bd0ee03b4845713359"
+    "generator_digest": "acdddc1b046cc4ec3550f705219b8fcc7414719d876cab1a6b1b36d4578b511c"
   },
   "network_message": "network error - please check your connection",
   "markers": [
