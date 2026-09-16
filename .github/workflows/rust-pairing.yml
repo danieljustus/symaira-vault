@@ -12,6 +12,12 @@ on:
     # untested claim.
     paths:
       - 'crates/symvault-core/**'
+      # The keyring and daemon gates below live in this workflow, but
+      # nothing that implements them was listed, so a change to the
+      # probe or its runner did not execute its own gate.
+      - 'crates/symvault-platform/**'
+      - 'scripts/rust-port/cmd/nativekeyringprobe/**'
+      - 'scripts/rust-port/native_closeout.py'
       - 'scripts/rust-port/cmd/configprofilegen/**'
       - 'testdata/port/config_profiles_contract.json'
       - 'scripts/rust-port/cmd/caserun/**'
@@ -41,6 +47,12 @@ on:
     branches: [ main ]
     paths:
       - 'crates/symvault-core/**'
+      # The keyring and daemon gates below live in this workflow, but
+      # nothing that implements them was listed, so a change to the
+      # probe or its runner did not execute its own gate.
+      - 'crates/symvault-platform/**'
+      - 'scripts/rust-port/cmd/nativekeyringprobe/**'
+      - 'scripts/rust-port/native_closeout.py'
       - 'scripts/rust-port/cmd/configprofilegen/**'
       - 'testdata/port/config_profiles_contract.json'
       - 'scripts/rust-port/cmd/caserun/**'

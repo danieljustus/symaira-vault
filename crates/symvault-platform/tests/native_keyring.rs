@@ -63,3 +63,72 @@ fn native_keyring_binary_roundtrip_and_delete() {
         .expect("native delete is idempotent");
     entry.written = false;
 }
+
+/// Decodes the hex the exchange uses to carry a payload across a process
+/// boundary. The payload is deliberately not valid UTF-8, so it cannot travel
+/// as an argv string.
+fn from_hex(text: &str) -> Vec<u8> {
+    assert!(
+        text.len().is_multiple_of(2),
+        "hex payload must have even length"
+    );
+    (0..text.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&text[i..i + 2], 16).expect("hex digit"))
+        .collect()
+}
+
+fn to_hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn required(name: &str) -> String {
+    std::env::var(name)
+        .unwrap_or_else(|_| panic!("{name} is required for the cross-parity exchange"))
+}
+
+/// The Rust half of the cross-implementation exchange.
+///
+/// Go writes a value, this reads it back and asserts byte equality, then writes
+/// its own value for Go to verify. Before this existed each side round-tripped
+/// only its own entry and the probe reported `rust_parity: false` — two
+/// independent smokes that would both stay green even if the two adapters
+/// disagreed about encoding, because neither ever read the other's bytes.
+///
+/// Go's backend stores a `string` and Rust's takes a `&[u8]`, which is exactly
+/// where a silent encoding difference would hide, so the payload is chosen to
+/// be invalid UTF-8.
+#[test]
+#[ignore = "reads and writes one generated test-only Keychain item; run explicitly on a disposable runner"]
+fn native_keyring_cross_parity() {
+    assert_eq!(
+        std::env::var("GITHUB_ACTIONS").ok().as_deref(),
+        Some("true"),
+        "the cross-parity exchange runs only on CI"
+    );
+    assert_eq!(
+        std::env::var("SYMVAULT_DISPOSABLE_NATIVE_RUNNER")
+            .ok()
+            .as_deref(),
+        Some("1"),
+        "the cross-parity exchange requires explicit disposable-runner authorization"
+    );
+
+    let key = required("SYMVAULT_PARITY_KEY");
+    let expect = from_hex(&required("SYMVAULT_PARITY_EXPECT_HEX"));
+    let write = from_hex(&required("SYMVAULT_PARITY_WRITE_HEX"));
+
+    let keyring = MacOsKeyring;
+    let got = keyring
+        .get(&key)
+        .expect("reading the value Go wrote must succeed");
+    assert_eq!(
+        to_hex(&got),
+        to_hex(&expect),
+        "Rust read different bytes than Go wrote"
+    );
+
+    keyring
+        .set(&key, &write)
+        .expect("writing the value Go will verify must succeed");
+}

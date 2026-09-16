@@ -15,6 +15,7 @@ import platform
 import re
 import subprocess
 import tempfile
+import time
 
 
 def checked(argv, root, env):
@@ -93,6 +94,33 @@ def main():
         commands = [probe]
         if platform.system() == "Darwin":
             commands.append(cargo + ["-p", "symvault-platform", "--test", "native_keyring", "--all-features", "--", "--ignored", "--exact", "native_keyring_binary_roundtrip_and_delete", "--nocapture"])
+
+            # Cross-implementation exchange. The two commands above each
+            # round-trip their own entry, which is why the probe used to report
+            # rust_parity: false -- neither side ever read what the other
+            # wrote, so both would stay green even if the adapters disagreed
+            # about encoding. Here Go writes, Rust reads it back and writes its
+            # own value, and Go reads that. One namespace, generated per run,
+            # and the Go verify step deletes it even when the comparison fails.
+            #
+            # Both payloads are deliberately invalid UTF-8: Go's backend takes a
+            # string and Rust's takes a byte slice, which is exactly where a
+            # silent encoding difference would hide. They travel as hex so argv
+            # carries them intact.
+            parity_key = f"symvault:rust-port-cross-parity-{os.getpid()}-{time.time_ns()}|session"
+            go_payload = "00ff0180 0a0d7c00".replace(" ", "")
+            rust_payload = "fe01ff00 7c0a0d02".replace(" ", "")
+            report["cross_parity_key"] = parity_key
+            report["cross_parity_go_payload_hex"] = go_payload
+            report["cross_parity_rust_payload_hex"] = rust_payload
+            env["SYMVAULT_PARITY_KEY"] = parity_key
+            env["SYMVAULT_PARITY_EXPECT_HEX"] = go_payload
+            env["SYMVAULT_PARITY_WRITE_HEX"] = rust_payload
+            commands.append(["go", "run", "./scripts/rust-port/cmd/nativekeyringprobe",
+                             "-mode=write", f"-key={parity_key}", f"-hex={go_payload}"])
+            commands.append(cargo + ["-p", "symvault-platform", "--test", "native_keyring", "--all-features", "--", "--ignored", "--exact", "native_keyring_cross_parity", "--nocapture"])
+            commands.append(["go", "run", "./scripts/rust-port/cmd/nativekeyringprobe",
+                             "-mode=verify", f"-key={parity_key}", f"-hex={rust_payload}"])
     report_path.write_text(json.dumps(report, indent=2))
     tmp_parent = "/private/tmp" if platform.system() == "Darwin" else None
     try:
