@@ -213,6 +213,7 @@ PORT_POLICY_FIXTURE := testdata/port/core/policy-contract.json
 PORT_MCP_INIT_FIXTURE := testdata/port/mcp/initialize.json
 PORT_MCP_STDIO_FIXTURE := testdata/port/mcp/stdio-hygiene.json
 PORT_GIT_WINNER_FIXTURE := testdata/port/sync/version-winner.json
+PORT_GIT_OFFLINE_FIXTURE := testdata/port/sync/git-offline.json
 CFG_PATH_FIXTURE := testdata/port/config/paths.json
 # CFG-001 pins its own production-Go oracle. configpathgen verifies this commit
 # against git objects, so a stale pin fails loudly rather than mislabelling.
@@ -320,6 +321,13 @@ git-winner-fixtures-generate:
 		--oracle-commit caadd5e \
 		--oracle-release v0.22.1
 
+# GIT-002 offline classifier.
+git-offline-fixtures-generate:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/gitofflinegen \
+		--output $(PORT_GIT_OFFLINE_FIXTURE) \
+		--oracle-commit caadd5e \
+		--oracle-release v0.22.1
+
 policy-fixtures-generate:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/policygen \
 		--output $(PORT_POLICY_FIXTURE) \
@@ -409,6 +417,14 @@ git-winner-fixtures-check:
 # GIT-003 differential: the version-winner corpus replayed against Rust.
 git-winner-differential: git-winner-fixtures-check
 	$(CARGO) test -p symvault-sync --test version_winner_contract --locked
+
+git-offline-fixtures-check:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/gitofflinegen \
+		--check --output $(PORT_GIT_OFFLINE_FIXTURE)
+
+# GIT-002 differential: the offline-classification corpus replayed against Rust.
+git-offline-differential: git-offline-fixtures-check
+	$(CARGO) test -p symvault-sync --test git_offline_contract --locked
 
 policy-fixtures-check:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/policygen \
@@ -505,7 +521,7 @@ rust-fuzz:
 # could only ever call a darwin-frozen fixture stale. That field is gone now:
 # it described the machine, not the pinned oracle. Verified before re-wiring
 # that goos was the only host-dependent value in these four fixtures.
-port-contract: oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-stdio-fixtures-check git-winner-fixtures-check cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential
+port-contract: oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential
 
 rust-build:
 	$(CARGO) build --workspace --locked
