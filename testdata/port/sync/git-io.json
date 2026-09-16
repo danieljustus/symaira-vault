@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "c456f761306fbfcf9f3ce429b049080b62107c22",
+    "release": "working-tree",
+    "source_files": [
+      "internal/git/device_id.go",
+      "internal/git/git.go",
+      "internal/git/git_offline.go",
+      "internal/git/git_pull.go",
+      "internal/git/git_push.go",
+      "internal/git/git_remote.go",
+      "internal/git/git_staging.go",
+      "internal/git/git_util.go",
+      "internal/git/separate_gitdir.go",
+      "internal/git/syncer.go"
+    ],
+    "source_digest": "7b6181e15b5578c4cf427916831924939c88195cc53ef2a3259cd67332135954",
+    "generator": "scripts/rust-port/cmd/gitio/main.go",
+    "generator_digest": "4d2b359100ceb33f26e892433cfeb07bbf3ed1fa2718c3179018db5ba689d83f"
+  },
+  "cases": [
+    {
+      "id": "GIT-002-go-offline",
+      "seam": "GIT-002",
+      "input": {
+        "remote": "http://127.0.0.1:1/unreachable.git"
+      },
+      "expected": {
+        "error_class": "offline",
+        "skipped": false,
+        "success": false
+      }
+    },
+    {
+      "id": "GIT-002-go-auth",
+      "seam": "GIT-002",
+      "input": {
+        "status": 401
+      },
+      "expected": {
+        "error_class": "authentication",
+        "skipped": false,
+        "success": false
+      }
+    },
+    {
+      "id": "GIT-002-rust-process-contract",
+      "seam": "GIT-002",
+      "input": {
+        "passphrase_env": "removed",
+        "terminal_prompt": "0",
+        "timeout_seconds": 20
+      },
+      "expected": {
+        "askpass": "inherited",
+        "descendant_cleanup": "process-group"
+      }
+    }
+  ]
+}

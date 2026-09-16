@@ -211,6 +211,7 @@ impl GitRepository {
     pub fn pull(&self, name: &str) -> PullResult {
         let remote_url = self.remote_url(name).ok().flatten();
         let before = self.head().ok();
+        let had_merge_state = self.merge_state_exists();
         let args = ["pull", "--no-edit", "--no-rebase", name];
         match self.command(&args) {
             Ok(out) => PullResult {
@@ -230,8 +231,13 @@ impl GitRepository {
                 // `git pull --no-rebase` may leave conflict markers and an
                 // in-progress merge behind. go-git returns the pull error
                 // without rewriting the local tip, so abort the failed merge
-                // before exposing the result to callers.
-                let _ = self.command(&["merge", "--abort"]);
+                // before exposing the result to callers. Never abort a merge
+                // that was already in progress when this invocation started:
+                // that state belongs to the caller and may contain staged
+                // conflict resolutions.
+                if !had_merge_state && self.merge_state_exists() {
+                    let _ = self.command(&["merge", "--abort"]);
+                }
                 PullResult {
                     remote_url,
                     error: Some(classify_pull_error(&e)),
@@ -239,6 +245,29 @@ impl GitRepository {
                 }
             }
         }
+    }
+    fn merge_state_exists(&self) -> bool {
+        let git_dir = self.root.join(".git");
+        let git_dir = match fs::symlink_metadata(&git_dir) {
+            Ok(metadata) if metadata.is_dir() => git_dir,
+            Ok(_) => match fs::read_to_string(&git_dir) {
+                Ok(contents) => contents
+                    .strip_prefix("gitdir:")
+                    .map(str::trim)
+                    .map(PathBuf::from)
+                    .map(|path| {
+                        if path.is_absolute() {
+                            path
+                        } else {
+                            self.root.join(path)
+                        }
+                    })
+                    .unwrap_or(git_dir),
+                Err(_) => git_dir,
+            },
+            Err(_) => git_dir,
+        };
+        git_dir.join("MERGE_HEAD").exists()
     }
     fn transfer(&self, name: &str, push: bool) -> PushResult {
         let remote_url = self.remote_url(name).ok().flatten();
@@ -326,7 +355,7 @@ fn classify_push_error(error: &GitError) -> String {
         )
         .to_string();
     }
-    if is_offline_error(&message) {
+    if is_offline_transport_error(&message) {
         return PushError::with_cause(NETWORK_MESSAGE, message).to_string();
     }
     PushError::with_cause("push failed", message).to_string()
@@ -334,7 +363,7 @@ fn classify_push_error(error: &GitError) -> String {
 
 fn classify_pull_error(error: &GitError) -> String {
     let message = error.to_string();
-    if is_offline_error(&message) {
+    if is_offline_transport_error(&message) {
         return PushError::with_cause(NETWORK_MESSAGE, message).to_string();
     }
     if contains_auth_marker(&message) {
@@ -348,10 +377,21 @@ fn classify_pull_error(error: &GitError) -> String {
 }
 
 fn contains_auth_marker(message: &str) -> bool {
-    message.contains("authentication")
-        || message.contains("credentials")
-        || message.contains("error: 401")
-        || message.contains("error: 403")
+    let lowered = message.to_ascii_lowercase();
+    lowered.contains("authentication")
+        || lowered.contains("credentials")
+        || lowered.contains("error: 401")
+        || lowered.contains("error: 403")
+        || lowered.contains("could not read username")
+        || lowered.contains("terminal prompts disabled")
+}
+
+fn is_offline_transport_error(message: &str) -> bool {
+    if is_offline_error(message) {
+        return true;
+    }
+    let lowered = message.to_ascii_lowercase();
+    lowered.contains("couldn't connect") || lowered.contains("unable to access")
 }
 
 fn run_process_with_timeout(
@@ -441,7 +481,14 @@ fn temporary_output_file(label: &str) -> Result<(PathBuf, std::fs::File), io::Er
             std::process::id(),
             attempt
         ));
-        match OpenOptions::new().write(true).create_new(true).open(&path) {
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        match options.open(&path) {
             Ok(file) => return Ok((path, file)),
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
             Err(error) => return Err(error),
@@ -541,13 +588,62 @@ mod tests {
         assert!(output.status.success());
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn temporary_output_file_is_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let (path, _file) = temporary_output_file("permissions").expect("temporary output file");
+        let mode = fs::metadata(&path).expect("metadata").permissions().mode() & 0o777;
+        let _ = fs::remove_file(path);
+        assert_eq!(mode, 0o600);
+    }
+
+    #[cfg(unix)]
     #[test]
     fn command_runner_times_out_and_reaps_the_process_group() {
+        let dir = tempfile::tempdir().expect("temporary directory");
+        let marker = dir.path().join("descendant.pid");
+        let script = dir.path().join("hang.sh");
+        let script_body = format!(
+            "#!/bin/sh\n(sleep 30) &\nprintf '%s\\n' \"$!\" > {}\nwait\n",
+            marker.display()
+        );
+        fs::write(&script, script_body).expect("write timeout helper");
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&script, fs::Permissions::from_mode(0o700))
+                .expect("make timeout helper executable");
+        }
+
         let started = Instant::now();
-        let error =
-            run_process_with_timeout("sh", &["-c", "sleep 30"], None, Duration::from_millis(100))
-                .expect_err("sleep must exceed the deadline");
-        assert!(matches!(error, GitError::Timeout { operation, .. } if operation == "-c"));
+        let error = run_process_with_timeout(
+            script.to_str().expect("script path"),
+            &[],
+            None,
+            Duration::from_secs(1),
+        )
+        .expect_err("helper must exceed the deadline");
+        assert!(matches!(error, GitError::Timeout { .. }));
         assert!(started.elapsed() < Duration::from_secs(2));
+
+        let pid = fs::read_to_string(&marker)
+            .expect("helper recorded descendant pid")
+            .trim()
+            .to_owned();
+        let descendant_gone = (0..40).any(|_| {
+            let alive = Command::new("kill")
+                .args(["-0", &pid])
+                .output()
+                .map(|output| output.status.success())
+                .unwrap_or(false);
+            if alive {
+                thread::sleep(Duration::from_millis(25));
+                false
+            } else {
+                true
+            }
+        });
+        assert!(descendant_gone, "timed-out descendant {pid} is still alive");
     }
 }
