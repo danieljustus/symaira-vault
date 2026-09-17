@@ -108,6 +108,40 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     assert_success(&rust_init, "Rust init");
     assert_initialized(&rust_root);
 
+    let go_recipients_list = run(
+        &go_binary,
+        &["--vault", rust_root.to_str().unwrap(), "recipients", "list"],
+        &rust_root,
+        &home,
+    );
+    let rust_recipients_list = run(
+        &rust_binary,
+        &["--vault", rust_root.to_str().unwrap(), "recipients", "list"],
+        &rust_root,
+        &home,
+    );
+    assert_success(&go_recipients_list, "Go recipients list");
+    assert_success(&rust_recipients_list, "Rust recipients list");
+    assert_eq!(rust_recipients_list.stdout, go_recipients_list.stdout);
+
+    for action in ["push", "pull"] {
+        let go_git = run(
+            &go_binary,
+            &["--vault", rust_root.to_str().unwrap(), "git", action],
+            &rust_root,
+            &home,
+        );
+        let rust_git = run(
+            &rust_binary,
+            &["--vault", rust_root.to_str().unwrap(), "git", action],
+            &rust_root,
+            &home,
+        );
+        assert_success(&go_git, &format!("Go git {action}"));
+        assert_success(&rust_git, &format!("Rust git {action}"));
+        assert_eq!(rust_git.stdout, go_git.stdout, "git {action}");
+    }
+
     let go_set = run(
         &go_binary,
         &[
@@ -299,6 +333,42 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     assert_success(&go_find_unicode, "Go Unicode find");
     assert_success(&rust_find_unicode, "Rust Unicode find");
     assert_eq!(rust_find_unicode.stdout, go_find_unicode.stdout);
+    let go_set_unicode_special = run(
+        &go_binary,
+        &[
+            "--vault",
+            rust_root.to_str().unwrap(),
+            "set",
+            "work/github.locale",
+            "--value",
+            "İSTANBUL ΟΣ",
+            "--force",
+        ],
+        &rust_root,
+        &home,
+    );
+    assert_success(
+        &go_set_unicode_special,
+        "Go set special Unicode search value",
+    );
+    let go_find_unicode_special = run(
+        &go_binary,
+        &["--vault", rust_root.to_str().unwrap(), "find", "istanbul"],
+        &rust_root,
+        &home,
+    );
+    let rust_find_unicode_special = run(
+        &rust_binary,
+        &["--vault", rust_root.to_str().unwrap(), "find", "istanbul"],
+        &rust_root,
+        &home,
+    );
+    assert_success(&go_find_unicode_special, "Go special Unicode find");
+    assert_success(&rust_find_unicode_special, "Rust special Unicode find");
+    assert_eq!(
+        rust_find_unicode_special.stdout,
+        go_find_unicode_special.stdout
+    );
     let go_find_empty = run(
         &go_binary,
         &[
@@ -593,6 +663,85 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
             "{name} initialize lacks result"
         );
     }
+
+    let recipient = "age1mdwavk4nralsx6te8ucvdenyxjaepgdqpk8zh6m4glsnu064eczskcng9y";
+    let go_add_recipient = run(
+        &go_binary,
+        &[
+            "--vault",
+            rust_root.to_str().unwrap(),
+            "recipients",
+            "add",
+            recipient,
+            "--reencrypt",
+        ],
+        &rust_root,
+        &home,
+    );
+    assert_success(&go_add_recipient, "Go recipient add and re-encrypt");
+    let rust_get_after_add = run(
+        &rust_binary,
+        &[
+            "--vault",
+            rust_root.to_str().unwrap(),
+            "get",
+            "work/github.password",
+            "--print",
+        ],
+        &rust_root,
+        &home,
+    );
+    assert_success(
+        &rust_get_after_add,
+        "Rust get after Go recipient re-encrypt",
+    );
+    assert_eq!(rust_get_after_add.stdout, b"secret\n");
+    let rust_remove_recipient = run(
+        &rust_binary,
+        &[
+            "--vault",
+            rust_root.to_str().unwrap(),
+            "recipients",
+            "remove",
+            recipient,
+            "--yes",
+        ],
+        &rust_root,
+        &home,
+    );
+    assert_success(
+        &rust_remove_recipient,
+        "Rust recipient remove and re-encrypt",
+    );
+    let rust_get_after_remove = run(
+        &rust_binary,
+        &[
+            "--vault",
+            rust_root.to_str().unwrap(),
+            "get",
+            "work/github.password",
+            "--print",
+        ],
+        &rust_root,
+        &home,
+    );
+    assert_success(&rust_get_after_remove, "Rust get after recipient removal");
+    assert_eq!(rust_get_after_remove.stdout, b"secret\n");
+    let go_remove_missing = run(
+        &go_binary,
+        &[
+            "--vault",
+            rust_root.to_str().unwrap(),
+            "recipients",
+            "remove",
+            recipient,
+            "--yes",
+        ],
+        &rust_root,
+        &home,
+    );
+    assert!(!go_remove_missing.status.success());
+    assert!(String::from_utf8_lossy(&go_remove_missing.stderr).contains("not found"));
 
     let go_init = run(
         &go_binary,

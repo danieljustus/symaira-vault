@@ -414,6 +414,8 @@ fn main() -> ExitCode {
             cli.vault.as_deref(),
             cli._profile.as_deref(),
             command,
+            cli.output.as_deref().unwrap_or("text"),
+            cli.json,
             cli.quiet,
         ),
         Some(Command::Export {
@@ -804,14 +806,24 @@ fn run_git(
     quiet: bool,
 ) -> ExitCode {
     let result = (|| {
-        if action != "log" {
-            return Err(format!("unknown action: {action} (use push, pull, or log)"));
-        }
         let vault = resolve_vault(explicit_vault, profile)?;
         require_initialized(&vault)?;
-        let commits = history_commands::log(&vault, path, 0)
-            .map_err(|error| format!("cannot get log: {error}"))?;
-        history_commands::write_log(&mut io::stdout().lock(), &commits, quiet)
+        match action {
+            "log" => {
+                let commits = history_commands::log(&vault, path, 0)
+                    .map_err(|error| format!("cannot get log: {error}"))?;
+                history_commands::write_log(&mut io::stdout().lock(), &commits, quiet)
+            }
+            "push" | "pull" => {
+                let message = history_commands::transfer(&vault, action)?;
+                if !quiet {
+                    writeln!(io::stdout().lock(), "{message}")
+                        .map_err(|error| error.to_string())?;
+                }
+                Ok(())
+            }
+            _ => Err(format!("unknown action: {action} (use push, pull, or log)")),
+        }
     })();
     finish_vault_result(result)
 }
@@ -820,6 +832,8 @@ fn run_recipients(
     explicit_vault: Option<&Path>,
     profile: Option<&str>,
     command: RecipientsCommand,
+    output: &str,
+    json: bool,
     quiet: bool,
 ) -> ExitCode {
     let result = (|| {
@@ -827,7 +841,13 @@ fn run_recipients(
         require_initialized(&vault)?;
         match command {
             RecipientsCommand::List => {
-                Err("recipients list helper is pending integration".to_owned())
+                let recipients = recipients_commands::list(&vault)?;
+                recipients_commands::write_list(
+                    &mut io::stdout().lock(),
+                    &recipients,
+                    if json { "json" } else { output },
+                    quiet,
+                )
             }
             RecipientsCommand::Add {
                 recipient,
