@@ -93,6 +93,8 @@ pub struct AgentProfile {
     pub can_use_autotype: bool,
     pub can_read_values: bool,
     pub expose_value_tools: bool,
+    #[serde(default)]
+    pub expose_payment_values: bool,
     pub auto_unseal: bool,
     pub require_approval: bool,
     pub approval_timeout: Duration,
@@ -1131,6 +1133,7 @@ fn merge_agents(config: &mut Config, value: &serde_yaml_ng::Value) -> Result<(),
         bool_field!("canUseAutotype", can_use_autotype);
         bool_field!("canReadValues", can_read_values);
         bool_field!("exposeValueTools", expose_value_tools);
+        bool_field!("exposePaymentValues", expose_payment_values);
         bool_field!("autoUnseal", auto_unseal);
         bool_field!("requireApproval", require_approval);
         if let Some(v) = fields.get(key("approvalTimeout")) {
@@ -1477,6 +1480,9 @@ fn write_agent(out: &mut String, name: &str, p: &AgentProfile) -> Result<(), Con
         "        exposeValueTools: {}\n",
         p.expose_value_tools
     ));
+    if p.expose_payment_values {
+        out.push_str("        exposePaymentValues: true\n");
+    }
     if p.require_approval || p.approval_mode.as_deref() == Some("none") {
         out.push_str(&format!(
             "        requireApproval: {}\n",
@@ -1603,6 +1609,19 @@ mod tests {
         assert_eq!(c.effective_auth_method(), AuthMethod::Touchid);
         assert_eq!(c.agents["x"].approval_mode.as_deref(), Some("none"));
         assert_eq!(c.mcp.unwrap().port, 9090);
+    }
+    #[test]
+    fn payment_exposure_is_opt_in_and_survives_save() {
+        for (value, expected) in [("true", true), ("false", false)] {
+            let yaml =
+                format!("agents:\n  fixture:\n    tier: admin\n    exposePaymentValues: {value}\n");
+            let config = Config::load_from_bytes(yaml.as_bytes()).unwrap();
+            assert_eq!(config.agents["fixture"].expose_payment_values, expected);
+            let restored = Config::load_from_bytes(&config.to_yaml_bytes().unwrap()).unwrap();
+            assert_eq!(restored.agents["fixture"].expose_payment_values, expected);
+        }
+        let config = Config::load_from_bytes(b"agents:\n  fixture:\n    tier: admin\n").unwrap();
+        assert!(!config.agents["fixture"].expose_payment_values);
     }
     #[test]
     fn rejects_explicit_empty_mcp_bind() {

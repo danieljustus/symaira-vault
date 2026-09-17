@@ -110,6 +110,9 @@ fn runtime_config(root: &Path, profile: &AgentProfile, agent_name: &str) -> Read
         allowed_paths: profile.allowed_paths.clone(),
         approval_mode: profile.approval_mode.clone().unwrap_or_default(),
         can_write: profile.can_write,
+        can_read_values: profile.can_read_values,
+        auto_unseal: profile.auto_unseal,
+        expose_payment_values: profile.expose_payment_values,
         can_run_commands: profile.can_run_commands,
         can_use_clipboard: profile.can_use_clipboard,
         can_use_autotype: profile.can_use_autotype,
@@ -178,12 +181,18 @@ mod tests {
             tier: Some("standard".into()),
             allowed_paths: vec!["work/*".into()],
             allowed_tools: vec!["health".into()],
+            can_read_values: true,
+            auto_unseal: true,
+            expose_payment_values: true,
             ..AgentProfile::default()
         };
         let config = runtime_config(Path::new("/fixture"), &profile, "agent");
         assert_eq!(config.allowed_paths, ["work/*"]);
         assert_eq!(config.available_tools, ["health"]);
         assert_eq!(config.tier, "standard");
+        assert!(config.can_read_values);
+        assert!(config.auto_unseal);
+        assert!(config.expose_payment_values);
         assert_eq!(config.vault_dir, "/fixture");
     }
 
