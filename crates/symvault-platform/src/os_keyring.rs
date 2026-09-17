@@ -98,12 +98,12 @@ fn encode_macos_provider_value(value: &[u8]) -> Vec<u8> {
 
 #[cfg(any(test, target_os = "macos"))]
 fn decode_hex(value: &str) -> Option<Vec<u8>> {
-    let bytes = value.as_bytes();
-    if bytes.len() % 2 != 0 {
+    let (pairs, remainder) = value.as_bytes().as_chunks::<2>();
+    if !remainder.is_empty() {
         return None;
     }
-    bytes
-        .chunks_exact(2)
+    pairs
+        .iter()
         .map(|pair| Some((hex_digit(pair[0])? << 4) | hex_digit(pair[1])?))
         .collect()
 }
@@ -121,6 +121,32 @@ fn hex_digit(value: u8) -> Option<u8> {
 #[cfg(any(test, target_os = "windows"))]
 fn windows_target_name(service: &str, account: &str) -> String {
     format!("{service}:{account}")
+}
+
+impl Keyring for OsKeyring {
+    fn get(&self, key: &str) -> Result<Vec<u8>, SessionError> {
+        let value = Self::entry(key)?.get_secret().map_err(|error| {
+            if matches!(error, keyring::Error::NoEntry) {
+                SessionError::NotFound
+            } else {
+                Self::provider_error(error)
+            }
+        })?;
+        Self::decode_provider_value(value)
+    }
+
+    fn set(&self, key: &str, value: &[u8]) -> Result<(), SessionError> {
+        Self::entry(key)?
+            .set_secret(&Self::encode_provider_value(value))
+            .map_err(Self::provider_error)
+    }
+
+    fn delete(&self, key: &str) -> Result<(), SessionError> {
+        match Self::entry(key)?.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(error) => Err(Self::provider_error(error)),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -165,31 +191,5 @@ mod tests {
 
     fn hex_encode(value: &[u8]) -> String {
         value.iter().map(|byte| format!("{byte:02x}")).collect()
-    }
-}
-
-impl Keyring for OsKeyring {
-    fn get(&self, key: &str) -> Result<Vec<u8>, SessionError> {
-        let value = Self::entry(key)?.get_secret().map_err(|error| {
-            if matches!(error, keyring::Error::NoEntry) {
-                SessionError::NotFound
-            } else {
-                Self::provider_error(error)
-            }
-        })?;
-        Self::decode_provider_value(value)
-    }
-
-    fn set(&self, key: &str, value: &[u8]) -> Result<(), SessionError> {
-        Self::entry(key)?
-            .set_secret(&Self::encode_provider_value(value))
-            .map_err(Self::provider_error)
-    }
-
-    fn delete(&self, key: &str) -> Result<(), SessionError> {
-        match Self::entry(key)?.delete_credential() {
-            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(error) => Err(Self::provider_error(error)),
-        }
     }
 }

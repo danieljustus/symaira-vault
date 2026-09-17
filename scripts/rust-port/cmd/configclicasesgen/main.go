@@ -9,6 +9,7 @@ import (
 	"context"
 	"debug/buildinfo"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -184,11 +185,11 @@ func buildCases(goBinary, root string) ([]cliCase, error) {
 		}
 		if input.writeConfig {
 			if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
-				os.RemoveAll(tempRoot)
+				_ = os.RemoveAll(tempRoot)
 				return nil, err
 			}
 			if err := os.WriteFile(configPath, input.config, 0o600); err != nil {
-				os.RemoveAll(tempRoot)
+				_ = os.RemoveAll(tempRoot)
 				return nil, err
 			}
 		}
@@ -216,15 +217,15 @@ func buildCases(goBinary, root string) ([]cliCase, error) {
 		runErr := cmd.Run()
 		if ctx.Err() != nil {
 			cancel()
-			os.RemoveAll(tempRoot)
+			_ = os.RemoveAll(tempRoot)
 			return nil, fmt.Errorf("run oracle case %s: %w", input.name, ctx.Err())
 		}
 		cancel()
 		exitCode := 0
 		if runErr != nil {
-			exitErr, ok := runErr.(*exec.ExitError)
-			if !ok {
-				os.RemoveAll(tempRoot)
+			var exitErr *exec.ExitError
+			if !errors.As(runErr, &exitErr) {
+				_ = os.RemoveAll(tempRoot)
 				return nil, fmt.Errorf("run oracle case %s: %w", input.name, runErr)
 			}
 			exitCode = exitErr.ExitCode()
@@ -246,7 +247,7 @@ func buildCases(goBinary, root string) ([]cliCase, error) {
 			item.ConfigBytes = byteValues(input.config)
 		}
 		cases = append(cases, item)
-		os.RemoveAll(tempRoot)
+		_ = os.RemoveAll(tempRoot)
 	}
 	return cases, nil
 }

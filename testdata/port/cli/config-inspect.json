@@ -10,7 +10,7 @@
       "internal/cli/output/output.go"
     ],
     "source_digest": "a3d619efaaff2a077587e447968bb2b6699bc186df6658b791feb63d48a3378b",
-    "generator_digest": "a728fc10dcc90855ad83ff0727db3cda3803d1ec7bb240d33235026b836af0ac"
+    "generator_digest": "2ff75be3041290fcb6f8558cb3452ddeac909dde6d192c62e1707c08940b069d"
   },
   "cases": [
     {
