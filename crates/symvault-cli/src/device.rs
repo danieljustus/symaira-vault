@@ -476,9 +476,10 @@ fn journal_string(root: &Path, path: &Path) -> Result<String, String> {
 }
 
 fn journal_target(root: &Path, value: &str) -> Result<PathBuf, String> {
-    let path = normalize_journal_path(root, Path::new(value))?;
+    let canonical_root = canonical_journal_root(root)?;
+    let path = normalize_journal_path(&canonical_root, Path::new(value))?;
     let relative = path
-        .strip_prefix(root)
+        .strip_prefix(&canonical_root)
         .map_err(|_| format!("journal path escapes vault: {value}"))?;
     if !path.is_absolute()
         || relative
@@ -492,7 +493,7 @@ fn journal_target(root: &Path, value: &str) -> Result<PathBuf, String> {
     {
         return Err(format!("journal path escapes vault: {value}"));
     }
-    validate_journal_parents(root, relative, &path)?;
+    validate_journal_parents(&canonical_root, relative, &path)?;
     Ok(path)
 }
 
@@ -535,9 +536,10 @@ fn journal_artifact(
     target: &Path,
     suffix: &str,
 ) -> Result<PathBuf, String> {
-    let path = normalize_journal_path(root, Path::new(value))?;
+    let canonical_root = canonical_journal_root(root)?;
+    let path = normalize_journal_path(&canonical_root, Path::new(value))?;
     let relative = path
-        .strip_prefix(root)
+        .strip_prefix(&canonical_root)
         .map_err(|_| format!("journal artifact escapes vault: {value}"))?;
     if !path.is_absolute()
         || path == target
@@ -561,7 +563,7 @@ fn journal_artifact(
     if !valid_reencrypt_artifact_name(artifact_name, target_name, suffix) {
         return Err(format!("journal artifact has invalid name: {value}"));
     }
-    validate_journal_parents(root, relative, &path)?;
+    validate_journal_parents(&canonical_root, relative, &path)?;
     Ok(path)
 }
 
@@ -602,6 +604,11 @@ fn valid_reencrypt_artifact_name(name: &str, target: &str, suffix: &str) -> bool
 // directory through /var and /private/var. Canonicalize only the existing
 // parent so an untrusted final component is never followed. Mutations still
 // pass through the existing regular-file checks and rooted operations.
+fn canonical_journal_root(root: &Path) -> Result<PathBuf, String> {
+    fs::canonicalize(root)
+        .map_err(|error| format!("resolve journal root {}: {error}", root.display()))
+}
+
 fn normalize_journal_path(root: &Path, path: &Path) -> Result<PathBuf, String> {
     if !path.is_absolute()
         || path.components().any(|part| {
