@@ -182,35 +182,33 @@ fn replace_bytes(bytes: &[u8], from: &[u8], to: &[u8]) -> Vec<u8> {
     replaced
 }
 
-fn expand_json_markers(
-    bytes: &[u8],
-    root: &Path,
-    vault: &Path,
-) -> serde_json::Result<serde_json::Value> {
-    let mut value: serde_json::Value = serde_json::from_slice(bytes)?;
-    let root = root.to_string_lossy();
-    let vault = vault.to_string_lossy();
-    replace_json_markers(&mut value, &root, &vault);
-    Ok(value)
-}
-
-fn replace_json_markers(value: &mut serde_json::Value, root: &str, vault: &str) {
-    match value {
-        serde_json::Value::String(string) => {
-            *string = string.replace("__ROOT__", root).replace("__VAULT__", vault);
-        }
-        serde_json::Value::Array(values) => {
-            for value in values {
-                replace_json_markers(value, root, vault);
-            }
-        }
-        serde_json::Value::Object(values) => {
-            for value in values.values_mut() {
-                replace_json_markers(value, root, vault);
-            }
-        }
-        serde_json::Value::Null | serde_json::Value::Bool(_) | serde_json::Value::Number(_) => {}
-    }
+fn expand_json_markers(bytes: &[u8], root: &Path, vault: &Path) -> serde_json::Result<Vec<u8>> {
+    let value: serde_json::Value = serde_json::from_slice(bytes)?;
+    let original = value["vault"].as_str().unwrap_or_default();
+    let expanded = if let Some(relative) = original.strip_prefix("__ROOT__/") {
+        relative
+            .split('/')
+            .fold(root.to_path_buf(), |path, component| path.join(component))
+            .to_string_lossy()
+            .into_owned()
+    } else {
+        original
+            .replace("__ROOT__", &root.to_string_lossy())
+            .replace("__VAULT__", &vault.to_string_lossy())
+    };
+    // Replace only the JSON string token; preserve field order and every
+    // other byte. Go's CLI encoder disables HTML escaping, but escapes U+2028/29.
+    let quote = |text: &str| {
+        serde_json::to_string(text).map(|text| {
+            text.replace('\u{2028}', "\\u2028")
+                .replace('\u{2029}', "\\u2029")
+        })
+    };
+    Ok(replace_bytes(
+        bytes,
+        quote(original)?.as_bytes(),
+        quote(&expanded)?.as_bytes(),
+    ))
 }
 
 #[test]
@@ -380,9 +378,9 @@ fn fixture_pins_go_sources_and_runs_empty_vault_cases() {
             && !case.expected.stdout_bytes.is_empty()
         {
             // The Go and Rust commands ask the host biometric provider for
-            // this capability. Compare the JSON structure so a Windows path's
-            // backslashes are escaped by the JSON parser, while allowing the
-            // native boolean to differ on a host without Touch ID.
+            // this capability. Expand paths structurally and serialize them with
+            // Go escaping, then retain the byte comparison. Only the native
+            // Touch ID capability is allowed to differ.
             let actual: serde_json::Value = match serde_json::from_slice(&output.stdout) {
                 Ok(value) => value,
                 Err(error) => {
@@ -394,13 +392,14 @@ fn fixture_pins_go_sources_and_runs_empty_vault_cases() {
                 }
             };
             match expand_json_markers(&case.expected.stdout_bytes, &root, &vault) {
-                Ok(mut expected) => {
-                    expected["touchIDAvailable"] = actual["touchIDAvailable"].clone();
-                    if expected != actual {
-                        eprintln!("{} expected JSON: {expected}", case.name);
-                        eprintln!("{} actual JSON: {actual}", case.name);
-                    }
-                    expected == actual
+                Ok(expected) => {
+                    let touch = actual["touchIDAvailable"].as_bool().unwrap_or(false);
+                    let normalized = replace_bytes(
+                        &expected,
+                        b"\"touchIDAvailable\":true",
+                        format!("\"touchIDAvailable\":{touch}").as_bytes(),
+                    );
+                    normalized == output.stdout
                 }
                 Err(error) => {
                     failures.push(format!(

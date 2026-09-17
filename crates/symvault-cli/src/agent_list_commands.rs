@@ -294,11 +294,11 @@ fn write_json(
     if quiet {
         return Ok(());
     }
-    let mut serializer = serde_json::Serializer::new(output);
-    result
-        .serialize(&mut serializer)
-        .map_err(|error| error.to_string())?;
-    writeln!(serializer.into_inner()).map_err(|error| error.to_string())
+    let rendered = serde_json::to_string(result)
+        .map_err(|error| error.to_string())?
+        .replace('\u{2028}', "\\u2028")
+        .replace('\u{2029}', "\\u2029");
+    writeln!(output, "{rendered}").map_err(|error| error.to_string())
 }
 
 fn write_yaml(
@@ -336,6 +336,9 @@ fn write_yaml(
     let adjusted = adjusted
         .lines()
         .map(|line| {
+            if let Some(prefix) = line.strip_suffix(": ''") {
+                return format!("{prefix}: \"\"");
+            }
             line.strip_prefix("      lastseen: \"")
                 .and_then(|value| value.strip_suffix('"'))
                 .map_or_else(
