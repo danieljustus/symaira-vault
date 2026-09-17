@@ -1,0 +1,252 @@
+// Command import1passgen freezes the production 1Password and pass adapters
+// into a source-provenanced fixture consumed by the Rust importer tests.
+package main
+
+import (
+	"archive/zip"
+	"bytes"
+	"encoding/base64"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+
+	"github.com/danieljustus/symaira-vault/internal/importer"
+	"github.com/danieljustus/symaira-vault/scripts/rust-port/internal/provenance"
+)
+
+const pinnedOracleCommit = "fca3f89401833b5e14ec4ec74ef736b0f63bca74"
+
+type entry struct {
+	Path     string         `json:"path"`
+	Data     map[string]any `json:"data"`
+	Warnings []string       `json:"warnings"`
+}
+
+type passFile struct {
+	Path string `json:"path"`
+}
+
+type importCase struct {
+	Name          string     `json:"name"`
+	Kind          string     `json:"kind"`
+	InputBase64   string     `json:"input_base64,omitempty"`
+	Files         []passFile `json:"files,omitempty"`
+	Expected      []entry    `json:"expected"`
+	Failed        bool       `json:"failed"`
+	ErrorContains string     `json:"error_contains,omitempty"`
+}
+
+func main() {
+	check := flag.Bool("check", false, "check fixture freshness")
+	flag.Parse()
+	rootBytes, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+	must(err)
+	root := strings.TrimSpace(string(rootBytes))
+	sources := []string{
+		"internal/crypto/totp.go",
+		"internal/importer/importer.go",
+		"internal/importer/onepux.go",
+		"internal/importer/pass.go",
+		"internal/importer/totp.go",
+		"internal/secrets/filter.go",
+	}
+	_, err = provenance.Verify(root, pinnedOracleCommit, sources)
+	must(err)
+	digest, err := provenance.Digest(root, sources)
+	must(err)
+	generatorDigest, err := provenance.Digest(root, []string{"scripts/rust-port/cmd/import1passgen/main.go"})
+	must(err)
+
+	cases := []importCase{
+		onePuxCase(),
+		onePuxInvalidFirstTOTPCase(),
+		onePuxMissingExportCase(),
+		onePuxMalformedCase(),
+	}
+	pass, err := passCase()
+	must(err)
+	cases = append(cases, pass)
+
+	fixture := struct {
+		Commit          string       `json:"commit"`
+		Sources         []string     `json:"sources"`
+		SourceDigest    string       `json:"source_digest"`
+		GeneratorDigest string       `json:"generator_digest"`
+		Cases           []importCase `json:"cases"`
+	}{pinnedOracleCommit, sources, digest, generatorDigest, cases}
+	content, err := json.MarshalIndent(fixture, "", "  ")
+	must(err)
+	content = append(content, '\n')
+	path := "testdata/port/sync/onepass.json"
+	if *check {
+		old, err := os.ReadFile(path)
+		must(err)
+		if !bytes.Equal(old, content) {
+			must(fmt.Errorf("1Password/pass fixture stale"))
+		}
+	} else {
+		must(os.WriteFile(path, content, 0600))
+	}
+	fmt.Printf("PASS 1Password/pass oracle (%d cases)\n", len(cases))
+}
+
+func onePuxCase() importCase {
+	// This exercises duplicate credential fields, title-based TOTP detection,
+	// first-value selection, skipped categories, and skipped trashed items.
+	payload := []byte(`{"accounts":[{"vaults":[{"items":[
+{"categoryUuid":"001","title":"Work Login","details":{"loginFields":[
+{"designation":"username","value":"old-user"},{"designation":"Username","value":"new-user"},
+{"designation":"password","value":"old-pass"},{"designation":"PASSWORD","value":"new-pass"}],
+"notesPlain":"notes","sections":[{"fields":[
+{"t":"custom","title":"One-Time Password","v":{"otp":"JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"}},
+{"n":"totp","v":"JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"}]}]},
+"overview":{"urls":[{"url":"https://example.test"}],"tags":["work"]}},
+{"categoryUuid":"001","title":"Trash","trashed":true},
+{"categoryUuid":"webforms.generic","title":"Ignored"}
+]}]}]}`)
+	input := zipBytes("nested/export.json", payload)
+	parser, err := importer.New(importer.Format1Password)
+	must(err)
+	entries, err := parser.Parse(bytes.NewReader(input))
+	must(err)
+	return importCase{Name: "onepux_duplicate_and_first_totp", Kind: "onepux", InputBase64: base64.StdEncoding.EncodeToString(input), Expected: convert(entries)}
+}
+
+func onePuxMissingExportCase() importCase {
+	input := zipBytes("other.json", []byte(`{}`))
+	parser, err := importer.New(importer.Format1Password)
+	must(err)
+	_, err = parser.Parse(bytes.NewReader(input))
+	if err == nil {
+		must(fmt.Errorf("missing export case unexpectedly succeeded"))
+	}
+	return importCase{
+		Name:          "onepux_missing_export",
+		Kind:          "onepux",
+		InputBase64:   base64.StdEncoding.EncodeToString(input),
+		Expected:      []entry{},
+		Failed:        true,
+		ErrorContains: err.Error(),
+	}
+}
+
+func onePuxInvalidFirstTOTPCase() importCase {
+	payload := []byte(`{"accounts":[{"vaults":[{"items":[
+{"categoryUuid":"001","title":"Invalid OTP","details":{"sections":[{"fields":[
+{"n":"totp","v":"bad"},
+{"n":"totp","v":"JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"}]}]}}
+]}]}]}`)
+	input := zipBytes("export.json", payload)
+	parser, err := importer.New(importer.Format1Password)
+	must(err)
+	entries, err := parser.Parse(bytes.NewReader(input))
+	must(err)
+	return importCase{Name: "onepux_first_invalid_totp", Kind: "onepux", InputBase64: base64.StdEncoding.EncodeToString(input), Expected: convert(entries)}
+}
+
+func onePuxMalformedCase() importCase {
+	input := []byte("not a zip archive")
+	parser, err := importer.New(importer.Format1Password)
+	must(err)
+	_, err = parser.Parse(bytes.NewReader(input))
+	if err == nil {
+		must(fmt.Errorf("malformed zip case unexpectedly succeeded"))
+	}
+	return importCase{
+		Name:          "onepux_malformed_zip",
+		Kind:          "onepux",
+		InputBase64:   base64.StdEncoding.EncodeToString(input),
+		Expected:      []entry{},
+		Failed:        true,
+		ErrorContains: err.Error(),
+	}
+}
+
+func passCase() (importCase, error) {
+	root, err := os.MkdirTemp("", "symvault-import1passgen-")
+	if err != nil {
+		return importCase{}, err
+	}
+	defer os.RemoveAll(root)
+	store := filepath.Join(root, "store")
+	bin := filepath.Join(root, "bin")
+	if err := os.MkdirAll(filepath.Join(store, "work"), 0700); err != nil {
+		return importCase{}, err
+	}
+	if err := os.MkdirAll(bin, 0700); err != nil {
+		return importCase{}, err
+	}
+	for _, name := range []string{"work/example.gpg", "work/invalid.gpg"} {
+		if err := os.WriteFile(filepath.Join(store, name), []byte("ciphertext"), 0600); err != nil {
+			return importCase{}, err
+		}
+	}
+	gpg := filepath.Join(bin, "gpg")
+	script := `#!/bin/sh
+case "$4" in
+*example.gpg)
+cat <<'EOF2'
+example-secret
+username:  example-user
+url: https://example.test
+comment line
+EOF2
+;;
+*invalid.gpg)
+cat <<'EOF2'
+invalid-secret
+otpauth://totp/example?secret=bad
+EOF2
+;;
+esac
+`
+	if err := os.WriteFile(gpg, []byte(script), 0700); err != nil {
+		return importCase{}, err
+	}
+	oldPath := os.Getenv("PATH")
+	if err := os.Setenv("PATH", bin+string(os.PathListSeparator)+oldPath); err != nil {
+		return importCase{}, err
+	}
+	defer os.Setenv("PATH", oldPath)
+	entries, err := importer.ImportPass(store)
+	if err != nil {
+		return importCase{}, err
+	}
+	return importCase{
+		Name:     "pass_adapter_recursive_and_warning",
+		Kind:     "pass",
+		Files:    []passFile{{Path: "work/example.gpg"}, {Path: "work/invalid.gpg"}},
+		Expected: convert(entries),
+	}, nil
+}
+
+func zipBytes(name string, payload []byte) []byte {
+	var out bytes.Buffer
+	writer := zip.NewWriter(&out)
+	file, err := writer.Create(name)
+	must(err)
+	_, err = io.Copy(file, bytes.NewReader(payload))
+	must(err)
+	must(writer.Close())
+	return out.Bytes()
+}
+
+func convert(entries []importer.ImportedEntry) []entry {
+	out := make([]entry, 0, len(entries))
+	for _, item := range entries {
+		out = append(out, entry{Path: item.Path, Data: item.Data, Warnings: item.Warnings})
+	}
+	return out
+}
+
+func must(err error) {
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}

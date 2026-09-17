@@ -1,0 +1,113 @@
+{
+  "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+  "sources": [
+    "internal/crypto/totp.go",
+    "internal/importer/importer.go",
+    "internal/importer/onepux.go",
+    "internal/importer/pass.go",
+    "internal/importer/totp.go",
+    "internal/secrets/filter.go"
+  ],
+  "source_digest": "124ef8368fb3f41ad7267ce3a7ed87f5b79a75e07f18819fb15e5a3db9e17a75",
+  "generator_digest": "a22385f7311025b71d32225c232a35b681ab826801ba8b71d7f2f0e0f09805b7",
+  "cases": [
+    {
+      "name": "onepux_duplicate_and_first_totp",
+      "kind": "onepux",
+      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAASAAAAbmVzdGVkL2V4cG9ydC5qc29ujJJLq9swEIX3/hWXs/Z9lLvTruW29AUxTUJaiheqNXFEZMlII7vF+L8X2SkYJ5S70sxwzjcPNEBWlYuWA8TPAZ2M5hJqpiZF2YBKMtXO/9lHrSDw9PQGOVizIQgcnD/ffXW1tsihiKU2AWKASaUPmoy6UBQFXVvJ2lkIxEDeyoaQo5MmJpIz6j6VMeZr9f5aban/p76CtzKE3nm1gqfyDXjxdrs9bL69rOCzuswzWMcUCiN1Uk8JcgSqkn8+1nGxJ0OgioFds7jSxtL9Tjd0VyxGS2dy3ELg87vt4cfzS/H+Y/HlufherHOM05apPyfHZH6FqxzLMc/gOvKdpj41jN7MM0dvIHBiboN4fKTfsmkNPTAFTluDZZ106J0/o5z7//cj7LwMp5SnlxQE+0i3bD39OjrfhIeaLHldLRifaus8KYxZOc3+NwAA//9QSwcI82UJpkwBAACfAgAAUEsBAhQAFAAIAAgAAAAAAPNlCaZMAQAAnwIAABIAAAAAAAAAAAAAAAAAAAAAAG5lc3RlZC9leHBvcnQuanNvblBLBQYAAAAAAQABAEAAAACMAQAAAAA=",
+      "expected": [
+        {
+          "path": "Work Login",
+          "data": {
+            "notes": "notes",
+            "password": "new-pass",
+            "tags": [
+              "work"
+            ],
+            "totp": {
+              "algorithm": "SHA1",
+              "digits": 6,
+              "period": 30,
+              "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+            },
+            "url": "https://example.test",
+            "username": "new-user"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "onepux_first_invalid_totp",
+      "kind": "onepux",
+      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAALAAAAZXhwb3J0Lmpzb25kjL0KwjAYRfc+hdw5Q6VbRlHwZzCgoiIdYhLlg5iI/RqQkHcXtZNO99wznAxtTOwDd5CnjKR7PyCxu72pyjCa3TU+nrueLCTqegwBJvYOEouQtCc7Wm8VBKxjTb6DzOicYYrhW7uQ83bIBUhw5DsEEiTO2qKIf7+cbPbHZqpmc7Vq1EH9fpS2tKVU7WdfAQAA//9QSwcIX9ttoZMAAADJAAAAUEsBAhQAFAAIAAgAAAAAAF/bbaGTAAAAyQAAAAsAAAAAAAAAAAAAAAAAAAAAAGV4cG9ydC5qc29uUEsFBgAAAAABAAEAOQAAAMwAAAAAAA==",
+      "expected": [
+        {
+          "path": "Invalid OTP",
+          "data": {
+            "notes": "",
+            "password": "",
+            "tags": [],
+            "url": "",
+            "username": ""
+          },
+          "warnings": [
+            "totp: invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+          ]
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "onepux_missing_export",
+      "kind": "onepux",
+      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAAKAAAAb3RoZXIuanNvbqquBQQAAP//UEsHCEO/pqMIAAAAAgAAAFBLAQIUABQACAAIAAAAAABDv6ajCAAAAAIAAAAKAAAAAAAAAAAAAAAAAAAAAABvdGhlci5qc29uUEsFBgAAAAABAAEAOAAAAEAAAAAAAA==",
+      "expected": [],
+      "failed": true,
+      "error_contains": "export.json not found in 1pux zip"
+    },
+    {
+      "name": "onepux_malformed_zip",
+      "kind": "onepux",
+      "input_base64": "bm90IGEgemlwIGFyY2hpdmU=",
+      "expected": [],
+      "failed": true,
+      "error_contains": "open 1pux zip: zip: not a valid zip file"
+    },
+    {
+      "name": "pass_adapter_recursive_and_warning",
+      "kind": "pass",
+      "files": [
+        {
+          "path": "work/example.gpg"
+        },
+        {
+          "path": "work/invalid.gpg"
+        }
+      ],
+      "expected": [
+        {
+          "path": "work/example",
+          "data": {
+            "notes": "comment line",
+            "password": "example-secret",
+            "url": "https://example.test",
+            "username": "example-user"
+          },
+          "warnings": null
+        },
+        {
+          "path": "work/invalid",
+          "data": {
+            "password": "invalid-secret"
+          },
+          "warnings": [
+            "totp: invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+          ]
+        }
+      ],
+      "failed": false
+    }
+  ]
+}
