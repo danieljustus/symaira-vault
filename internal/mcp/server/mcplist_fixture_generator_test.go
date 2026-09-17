@@ -54,9 +54,13 @@ var mcpListSourceFiles = []string{
 	"internal/mcp/server/tool_registry.go",
 	"internal/mcp/server/leanmode.go",
 	"internal/mcp/server/protocol.go",
+	"internal/mcp/server/tools_execute_api_request.go",
+	"internal/mcp/server/secure_input.go",
+	"internal/mcp/server/tools_totp.go",
+	"internal/mcp/server/server_authorize.go",
 }
 
-const mcpListPinnedSourceHash = "35195e6c2e49e6e24307e87e877d69f82d79f3bd3e7b0e306fcbb91084013372"
+const mcpListPinnedSourceHash = "84035cd3f669596d81313612c00f29fc45432ea22a6cb61b0c59ddc3f811a14c"
 
 func TestGenerateMCPListFixture(t *testing.T) {
 	generate := os.Getenv("SYMAIRA_GENERATE_MCP_LIST_FIXTURE") == "1"
@@ -112,8 +116,8 @@ func TestGenerateMCPListFixture(t *testing.T) {
 	fixture := mcpListFixture{
 		SchemaVersion: 1,
 		Oracle: mcpListOracle{
-			Commit:        "caadd5e",
-			CommitSHA:     "caadd5ef95e8f19fabd3ae3d2c04caa296f2fd44",
+			Commit:        "fca3f894",
+			CommitSHA:     "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
 			SourceFiles:   mcpListSourceFiles,
 			SourceHash:    sourceHash,
 			GeneratorHash: generatorHash,
@@ -214,7 +218,7 @@ func mcpListGitSourceHash(t *testing.T, files []string) string {
 	h := sha256.New()
 	root := mcpListRepoRoot(t)
 	for _, name := range files {
-		cmd := exec.Command("git", "show", "caadd5e:"+name)
+		cmd := exec.Command("git", "show", "fca3f894:"+name)
 		cmd.Dir = root
 		data, err := cmd.Output()
 		if err != nil {
