@@ -50,6 +50,10 @@ fn migrates_and_retains_backup_and_config_fields() {
     assert!(!config.contains("scrypt_work_factor"));
     assert!(config.contains("auto_migrate_kdf: false"));
     assert!(config.contains("custom: retained"));
+    assert!(config.contains("\n  auto_migrate_kdf: false\n"));
+    assert!(!config.contains("\n    auto_migrate_kdf: false\n"));
+    symvault_core::config::Config::load_from_bytes(config.as_bytes())
+        .expect("migrated config remains valid YAML");
     let _ = fs::remove_dir_all(root);
 }
 

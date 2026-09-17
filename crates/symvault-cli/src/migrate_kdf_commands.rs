@@ -71,9 +71,7 @@ pub fn migrate_kdf(
     if symvault_crypto::recipient_string(&on_disk_identity)
         != symvault_crypto::recipient_string(identity)
     {
-        return Err(
-            "unlock vault identity: cached identity does not match identity.age".to_owned(),
-        );
+        return Err("unlock vault identity: cached identity does not match identity.age".to_owned());
     }
 
     // Parse and render config before the first identity mutation.  A malformed
@@ -86,7 +84,8 @@ pub fn migrate_kdf(
         .map_err(|error| format!("encrypt identity with argon2id: {error}"))?;
     let verified = decrypt_identity(&replacement, passphrase)
         .map_err(|error| format!("verify argon2id identity: {error}"))?;
-    if symvault_crypto::recipient_string(&verified) != symvault_crypto::recipient_string(identity) {
+    if symvault_crypto::recipient_string(&verified) != symvault_crypto::recipient_string(identity)
+    {
         return Err("verify argon2id identity: identity mismatch".to_owned());
     }
 
@@ -96,22 +95,14 @@ pub fn migrate_kdf(
     }
     if let Err(error) = safeio::write_atomic(&identity_path, &replacement) {
         let restore = safeio::write_atomic(&identity_path, &original);
-        return Err(format_write_failure(
-            "write migrated identity",
-            error,
-            restore,
-        ));
+        return Err(format_write_failure("write migrated identity", error, restore));
     }
 
     if let Some(config_bytes) = config_update.bytes
         && let Err(error) = safeio::write_atomic(&config_path, &config_bytes)
     {
         let restore = safeio::write_atomic(&identity_path, &original);
-        return Err(format_write_failure(
-            "write migrated config",
-            error,
-            restore,
-        ));
+        return Err(format_write_failure("write migrated config", error, restore));
     }
     Ok(MigrationResult::Migrated)
 }
@@ -146,23 +137,34 @@ fn prepare_config_update(path: &Path) -> Result<ConfigUpdate, String> {
     let params = argon2id_params_from_config(&raw)?;
     let source = std::str::from_utf8(&raw)
         .map_err(|error| format!("load config: invalid UTF-8: {error}"))?;
-    let file =
-        yaml_edit::YamlFile::from_str(source).map_err(|error| format!("load config: {error}"))?;
+    use yaml_edit::path::YamlPath;
+    // yaml-edit keeps the indentation token that precedes a nested mapping
+    // entry as a sibling of that entry. Removing the middle
+    // `scrypt_work_factor` entry therefore leaves the next key indented twice
+    // (and produces invalid YAML). Locate the already validated scalar and
+    // remove its complete source line before parsing the document we update.
+    // This keeps comments and all unrelated fields byte-for-byte intact.
+    let legacy_line = yaml_edit::YamlFile::from_str(source)
+        .ok()
+        .and_then(|file| file.documents().next())
+        .and_then(|document| document.try_get_path("vault.scrypt_work_factor").ok())
+        .and_then(|node| node.as_scalar().map(|scalar| scalar.start_position(source).line));
+    let edited_source = legacy_line.map_or_else(
+        || source.to_owned(),
+        |line| remove_source_line(source, line),
+    );
+    let file = yaml_edit::YamlFile::from_str(&edited_source)
+        .map_err(|error| format!("load config: {error}"))?;
     let document = file
         .documents()
         .next()
         .ok_or_else(|| "load config: missing YAML document".to_owned())?;
-    use yaml_edit::path::YamlPath;
     if document.try_get_path("vault").is_err() {
         return Ok(ConfigUpdate {
             bytes: Some(raw),
             params,
         });
     }
-    // The Go writer omits this field after migration.  A missing path is
-    // already the desired result, so only propagate errors for malformed
-    // parent paths.
-    let _ = document.try_remove_path("vault.scrypt_work_factor");
     document
         .try_set_path("vault.format_version", yaml_edit::ScalarValue::from(2))
         .map_err(|error| format!("set vault.format_version: {error}"))?;
@@ -176,9 +178,17 @@ fn prepare_config_update(path: &Path) -> Result<ConfigUpdate, String> {
     })
 }
 
+fn remove_source_line(source: &str, line_number: usize) -> String {
+    source
+        .split_inclusive('\n')
+        .enumerate()
+        .filter_map(|(index, line)| (index + 1 != line_number).then_some(line))
+        .collect()
+}
+
 fn argon2id_params_from_config(raw: &[u8]) -> Result<Argon2idParams, String> {
-    let document: serde_yaml_ng::Value =
-        serde_yaml_ng::from_slice(raw).map_err(|error| format!("load config: {error}"))?;
+    let document: serde_yaml_ng::Value = serde_yaml_ng::from_slice(raw)
+        .map_err(|error| format!("load config: {error}"))?;
     let Some(root) = document.as_mapping() else {
         return Ok(Argon2idParams::default());
     };
@@ -190,13 +200,7 @@ fn argon2id_params_from_config(raw: &[u8]) -> Result<Argon2idParams, String> {
     };
     let mut params = Argon2idParams::default();
     params.time = config_u32(vault, "argon2id_time", 2, 16, params.time)?;
-    params.memory_kib = config_u32(
-        vault,
-        "argon2id_memory",
-        19_456,
-        2_097_152,
-        params.memory_kib,
-    )?;
+    params.memory_kib = config_u32(vault, "argon2id_memory", 19_456, 2_097_152, params.memory_kib)?;
     params.threads = config_u32(vault, "argon2id_threads", 1, 16, params.threads)?;
     if params.memory_kib < 4 * params.threads {
         return Err(format!(
