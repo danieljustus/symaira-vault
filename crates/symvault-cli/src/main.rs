@@ -1,6 +1,7 @@
 #![deny(unsafe_code)]
 
 mod add_commands;
+mod agent_profile_commands;
 mod audit_commands;
 mod audit_export_commands;
 mod backup_commands;
@@ -106,6 +107,11 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Manage agent profiles.
+    Agent {
+        #[command(subcommand)]
+        command: AgentCommand,
+    },
     /// Initialize a new password vault.
     Init {
         #[arg(value_name = "VAULT_DIR")]
@@ -356,6 +362,23 @@ enum Command {
     Auth {
         #[command(subcommand)]
         command: AuthCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum AgentCommand {
+    Profile {
+        #[command(subcommand)]
+        command: AgentProfileCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum AgentProfileCommand {
+    Show {
+        name: String,
+        #[arg(short = 'o', long)]
+        output: Option<String>,
     },
 }
 
@@ -772,6 +795,15 @@ fn main() -> ExitCode {
         Some(Command::Profile { command }) => {
             run_profile(&command, cli.vault.as_deref(), cli.quiet)
         }
+        Some(Command::Agent {
+            command:
+                AgentCommand::Profile {
+                    command: AgentProfileCommand::Show { name, output },
+                },
+        }) => finish_vault_result((|| {
+            let vault = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+            agent_profile_commands::show(&vault, &name, output.as_deref(), &mut io::stdout().lock())
+        })()),
         Some(Command::Audit {
             command:
                 Some(AuditCommand::Export {

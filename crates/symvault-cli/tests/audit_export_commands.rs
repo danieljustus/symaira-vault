@@ -99,7 +99,7 @@ fn audit_export_json_matches_go_for_filters_and_redaction() {
         ],
     ];
     for &args in cases {
-        let expected = go_export(&go, &home.0, &args);
+        let expected = go_export(&go, &home.0, args);
         assert!(
             expected.status.success(),
             "Go export failed: {}",

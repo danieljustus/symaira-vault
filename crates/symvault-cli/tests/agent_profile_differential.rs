@@ -44,12 +44,8 @@ fn agent_profile_show_matches_go_yaml_json_and_nil_fields() {
         eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
         return;
     };
-    let Some(rust_binary) = env::var_os("CARGO_BIN_EXE_symvault") else {
-        eprintln!("skipping Rust differential: CARGO_BIN_EXE_symvault is not set");
-        return;
-    };
     let go_binary = PathBuf::from(go_binary);
-    let rust_binary = PathBuf::from(rust_binary);
+    let rust_binary = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
 
     let builtin_home = temporary_root("builtin-home");
     let builtin_vault = builtin_home.join("vault");
