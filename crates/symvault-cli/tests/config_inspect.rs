@@ -36,6 +36,8 @@ struct Case {
     #[serde(default)]
     config_bytes: Vec<u16>,
     #[serde(default)]
+    config_after_bytes: Vec<u16>,
+    #[serde(default)]
     write_config: bool,
     #[serde(default)]
     default_path: bool,
@@ -57,7 +59,7 @@ fn fixture() -> Fixture {
     serde_json::from_slice(CONTENT).expect("config CLI fixture parses")
 }
 
-fn run_case(case: &Case, root: &Path) -> std::process::Output {
+fn run_case(case: &Case, root: &Path) -> (std::process::Output, Option<Vec<u8>>) {
     let home = root.join("home");
     let config = if case.default_path {
         home.join(".symvault/config.yaml")
@@ -94,14 +96,20 @@ fn run_case(case: &Case, root: &Path) -> std::process::Output {
     } else {
         command.env("HOME", &home);
     }
-    command
+    let output = command
         .args(args)
         .output()
-        .expect("run symvault config case")
+        .expect("run symvault config case");
+    let after = if case.config_after_bytes.is_empty() {
+        None
+    } else {
+        Some(fs::read(&config).expect("read changed isolated config"))
+    };
+    (output, after)
 }
 
 #[test]
-fn fixture_pins_go_oracle_and_exercises_raw_list_edges() {
+fn fixture_pins_go_oracle_and_exercises_config_edges() {
     let fixture = fixture();
     assert_eq!(fixture.schema_version, 1);
     assert_eq!(
@@ -115,7 +123,8 @@ fn fixture_pins_go_oracle_and_exercises_raw_list_edges() {
         [
             "cmd/admin/config.go",
             "internal/cli/cli.go",
-            "internal/cli/output/output.go"
+            "internal/cli/output/output.go",
+            "internal/config/dottedpath.go"
         ]
     );
     assert_eq!(fixture.oracle.source_digest.len(), 64);
@@ -140,10 +149,43 @@ fn fixture_pins_go_oracle_and_exercises_raw_list_edges() {
     );
     assert!(fixture.cases.iter().any(|case| case.clear_home));
     assert!(fixture.cases.iter().any(|case| case.default_path));
+    for required in [
+        "get_flow_mapping",
+        "get_flow_sequence",
+        "get_block_scalar",
+        "get_folded_scalar",
+        "get_quoted_colon_key",
+        "get_anchored_quoted_scalar",
+        "get_complex_quote_comment",
+        "get_mapping_node",
+        "get_multidoc_first",
+        "get_multidoc_second_missing",
+        "set_existing_scalar",
+        "set_nested_new",
+        "set_overwrites_scalar_parent",
+        "set_quoted_value",
+        "set_empty_value",
+        "set_boolean_value",
+        "set_number_value",
+        "set_null_value",
+        "set_quoted_null_value",
+        "set_literal_value",
+        "set_quiet",
+        "set_default_home",
+        "set_preserves_comments_anchors",
+        "set_flow_mapping_value",
+        "set_flow_sequence_value",
+        "set_malformed",
+    ] {
+        assert!(
+            fixture.cases.iter().any(|case| case.name == required),
+            "fixture is missing required Go oracle case {required}"
+        );
+    }
 }
 
 #[test]
-fn config_list_cases_match_go_generated_contract() {
+fn config_cases_match_go_generated_contract() {
     let unique = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock after epoch")
@@ -153,7 +195,7 @@ fn config_list_cases_match_go_generated_contract() {
     let fixture = fixture();
     let mut failures = Vec::new();
     for case in &fixture.cases {
-        let output = run_case(case, &root);
+        let (output, actual_after) = run_case(case, &root);
         let status = output.status.code().unwrap_or(255);
         let expected_stdout: Vec<u8> = case
             .expected
@@ -161,8 +203,16 @@ fn config_list_cases_match_go_generated_contract() {
             .iter()
             .map(|value| u8::try_from(*value).expect("fixture byte is in range"))
             .collect();
+        let expected_after: Vec<u8> = case
+            .config_after_bytes
+            .iter()
+            .map(|value| u8::try_from(*value).expect("fixture byte is in range"))
+            .collect();
+        let after_matches =
+            expected_after.is_empty() || actual_after.as_deref() == Some(expected_after.as_slice());
         if status != i32::from(case.expected.exit_code)
             || output.stdout != expected_stdout
+            || !after_matches
             || (!case.expected.stderr_contains.is_empty()
                 && !String::from_utf8_lossy(&output.stderr)
                     .contains(&case.expected.stderr_contains))
@@ -176,8 +226,5 @@ fn config_list_cases_match_go_generated_contract() {
         }
     }
     let _ = fs::remove_dir_all(&root);
-    assert!(
-        failures.is_empty(),
-        "config list CLI mismatches: {failures:#?}"
-    );
+    assert!(failures.is_empty(), "config CLI mismatches: {failures:#?}");
 }

@@ -16,6 +16,7 @@ clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_yaml_ng = "=0.10.0"
+yaml-edit = { version = "=0.3.1", default-features = false }
 rpassword = "=7.5.4"
 symaira-core-version.workspace = true
 symvault-core.workspace = true

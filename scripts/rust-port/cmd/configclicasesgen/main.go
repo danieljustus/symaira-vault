@@ -33,6 +33,7 @@ var productionSources = []string{
 	"cmd/admin/config.go",
 	"internal/cli/cli.go",
 	"internal/cli/output/output.go",
+	"internal/config/dottedpath.go",
 }
 
 type oracle struct {
@@ -51,14 +52,16 @@ type expected struct {
 }
 
 type cliCase struct {
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	ConfigBytes []int    `json:"config_bytes,omitempty"`
-	WriteConfig bool     `json:"write_config"`
-	DefaultPath bool     `json:"default_path,omitempty"`
-	ClearHome   bool     `json:"clear_home,omitempty"`
-	Args        []string `json:"args"`
-	Expected    expected `json:"expected"`
+	Name               string   `json:"name"`
+	Description        string   `json:"description"`
+	ConfigBytes        []int    `json:"config_bytes,omitempty"`
+	WriteConfig        bool     `json:"write_config"`
+	CaptureConfigAfter bool     `json:"capture_config_after,omitempty"`
+	ConfigAfterBytes   []int    `json:"config_after_bytes,omitempty"`
+	DefaultPath        bool     `json:"default_path,omitempty"`
+	ClearHome          bool     `json:"clear_home,omitempty"`
+	Args               []string `json:"args"`
+	Expected           expected `json:"expected"`
 }
 
 type fixture struct {
@@ -68,12 +71,13 @@ type fixture struct {
 }
 
 type inputCase struct {
-	name, description string
-	config            []byte
-	writeConfig       bool
-	defaultPath       bool
-	clearHome         bool
-	args              []string
+	name, description  string
+	config             []byte
+	writeConfig        bool
+	captureConfigAfter bool
+	defaultPath        bool
+	clearHome          bool
+	args               []string
 }
 
 func inputs() []inputCase {
@@ -168,6 +172,346 @@ func inputs() []inputCase {
 			clearHome:   true,
 			args:        []string{"config", "list", "--file="},
 		},
+		{
+			name:        "get_scalar_lexeme",
+			description: "get preserves the source lexeme for scalar values",
+			config:      []byte("leading: 001\ntruth: TRUE\nempty: ~\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "leading", "--file", fileMarker},
+		},
+		{
+			name:        "get_nested_scalar",
+			description: "get follows dotted paths through mappings",
+			config:      []byte("agents:\n  probe:\n    canWrite: true\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "agents.probe.canWrite", "--file", fileMarker},
+		},
+		{
+			name:        "get_bool_lexeme",
+			description: "get preserves YAML boolean spelling",
+			config:      []byte("truth: TRUE\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "truth", "--file", fileMarker},
+		},
+		{
+			name:        "get_null_lexeme",
+			description: "get preserves YAML null spelling",
+			config:      []byte("empty: ~\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "empty", "--file", fileMarker},
+		},
+		{
+			name:        "get_alias_lexeme",
+			description: "get returns an alias node value without resolving it",
+			config:      []byte("anchor: &a hello\nalias: *a\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "alias", "--file", fileMarker},
+		},
+		{
+			name:        "get_quoted_anchor_alias",
+			description: "get returns the name of an alias to a quoted anchor",
+			config:      []byte("anchor: &quoted \"value\"\nalias: *quoted\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "alias", "--file", fileMarker},
+		},
+		{
+			name:        "get_flow_mapping",
+			description: "get renders a flow mapping node",
+			config:      []byte("flow: {a: 1, b: two}\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "flow", "--file", fileMarker},
+		},
+		{
+			name:        "get_flow_sequence",
+			description: "get renders a flow sequence node",
+			config:      []byte("seq: [one, two]\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "seq", "--file", fileMarker},
+		},
+		{
+			name:        "get_block_scalar",
+			description: "get returns the value of a literal block scalar",
+			config:      []byte("block: |\n  hello\n  world\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "block", "--file", fileMarker},
+		},
+		{
+			name:        "get_folded_scalar",
+			description: "get returns the value of a folded block scalar",
+			config:      []byte("fold: >\n  hello\n  world\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "fold", "--file", fileMarker},
+		},
+		{
+			name:        "get_quoted_colon_key",
+			description: "get resolves a quoted mapping key containing a colon",
+			config:      []byte("\"colon:key\": value\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "colon:key", "--file", fileMarker},
+		},
+		{
+			name:        "get_anchored_quoted_scalar",
+			description: "get returns an anchored quoted scalar value",
+			config:      []byte("anchored: &name \"quoted value\"\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "anchored", "--file", fileMarker},
+		},
+		{
+			name:        "get_complex_quote_comment",
+			description: "get preserves a comment marker inside a quoted scalar",
+			config:      []byte("complex: \"<&> # kept\"\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "complex", "--file", fileMarker},
+		},
+		{
+			name:        "get_mapping_node",
+			description: "get renders a nested block mapping node",
+			config:      []byte("nested:\n  a: one\n  b:\n    c: three\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "nested", "--file", fileMarker},
+		},
+		{
+			name:        "get_nested_block_scalar_mapping",
+			description: "get renders a mapping containing a block scalar",
+			config:      []byte("nested:\n  note: |\n    line one\n    line two\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "nested", "--file", fileMarker},
+		},
+		{
+			name:        "get_mapping_comments_anchors",
+			description: "get preserves comments and anchors in a mapping node",
+			config:      []byte("root:\n  # retained comment\n  anchored: &real \"value\" # trailing\n  alias: *real\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "root", "--file", fileMarker},
+		},
+		{
+			name:        "get_scalar_anchor_text",
+			description: "get does not treat anchor-like text inside a scalar as an anchor",
+			config:      []byte("fake: \"&fake before &real\"\nanchored: &real value\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "fake", "--file", fileMarker},
+		},
+		{
+			name:        "get_duplicate_anchor_names",
+			description: "get reports duplicate anchor names as a YAML error",
+			config:      []byte("first: &dup one\nsecond: &dup two\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "first", "--file", fileMarker},
+		},
+		{
+			name:        "get_quoted_null_literal_mapping",
+			description: "get preserves a quoted null-looking mapping scalar",
+			config:      []byte("literal: \"null\"\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "literal", "--file", fileMarker},
+		},
+		{
+			name:        "get_sequence_mapping_node",
+			description: "get renders a sequence containing mappings",
+			config:      []byte("items:\n  - name: one\n    enabled: true\n  - name: two\n    enabled: false\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "items", "--file", fileMarker},
+		},
+		{
+			name:        "get_multidoc_first",
+			description: "get reads the first YAML document",
+			config:      []byte("first: one\n---\nsecond: two\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "first", "--file", fileMarker},
+		},
+		{
+			name:        "get_multidoc_second_missing",
+			description: "get does not read keys from a later YAML document",
+			config:      []byte("first: one\n---\nsecond: two\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "second", "--file", fileMarker},
+		},
+		{
+			name:               "set_existing_scalar",
+			description:        "set replaces an existing scalar and preserves other fields",
+			config:             []byte("a: old\nnested:\n  keep: yes\n"),
+			writeConfig:        true,
+			captureConfigAfter: true,
+			args:               []string{"config", "set", "a", "new", "--file", fileMarker},
+		},
+		{
+			name:               "set_nested_new",
+			description:        "set creates a missing nested mapping path",
+			config:             []byte("root:\n  keep: true\n"),
+			writeConfig:        true,
+			captureConfigAfter: true,
+			args:               []string{"config", "set", "root.new", "value", "--file", fileMarker},
+		},
+		{
+			name:               "set_overwrites_scalar_parent",
+			description:        "set replaces a scalar intermediate with a mapping",
+			config:             []byte("root: old\nkeep: true\n"),
+			writeConfig:        true,
+			captureConfigAfter: true,
+			args:               []string{"config", "set", "root.child", "value", "--file", fileMarker},
+		},
+		{
+			name:               "set_quoted_value",
+			description:        "set parses a quoted YAML string value",
+			config:             []byte("value: old\n"),
+			writeConfig:        true,
+			captureConfigAfter: true,
+			args:               []string{"config", "set", "value", "\"new value\"", "--file", fileMarker},
+		},
+		{
+			name:               "set_empty_value",
+			description:        "set preserves an explicitly empty string value",
+			config:             []byte("value: old\n"),
+			writeConfig:        true,
+			captureConfigAfter: true,
+			args:               []string{"config", "set", "value", "", "--file", fileMarker},
+		},
+		{
+			name:               "set_boolean_value",
+			description:        "set parses a YAML boolean value",
+			config:             []byte("value: old\n"),
+			writeConfig:        true,
+			captureConfigAfter: true,
+			args:               []string{"config", "set", "value", "true", "--file", fileMarker},
+		},
+		{
+			name:               "set_number_value",
+			description:        "set parses and emits a YAML integer value",
+			config:             []byte("value: old\n"),
+			writeConfig:        true,
+			captureConfigAfter: true,
+			args:               []string{"config", "set", "value", "001", "--file", fileMarker},
+		},
+		{
+			name:               "set_null_value",
+			description:        "set parses a YAML null value",
+			config:             []byte("value: old\n"),
+			writeConfig:        true,
+			captureConfigAfter: true,
+			args:               []string{"config", "set", "value", "null", "--file", fileMarker},
+		},
+		{
+			name:               "set_quoted_null_value",
+			description:        "set keeps a quoted null-looking value as a string",
+			config:             []byte("value: old\n"),
+			writeConfig:        true,
+			captureConfigAfter: true,
+			args:               []string{"config", "set", "value", "\"null\"", "--file", fileMarker},
+		},
+		{
+			name:               "set_literal_value",
+			description:        "set emits a multiline YAML string as a literal scalar",
+			config:             []byte("value: old\n"),
+			writeConfig:        true,
+			captureConfigAfter: true,
+			args:               []string{"config", "set", "value", "|\n  line one\n  line two", "--file", fileMarker},
+		},
+		{
+			name:               "set_quiet",
+			description:        "quiet set writes the value without stdout",
+			config:             []byte("value: old\n"),
+			writeConfig:        true,
+			captureConfigAfter: true,
+			args:               []string{"config", "set", "value", "new", "--file", fileMarker, "--quiet"},
+		},
+		{
+			name:               "set_default_home",
+			description:        "set uses the default home config path",
+			config:             []byte("value: old\n"),
+			writeConfig:        true,
+			captureConfigAfter: true,
+			defaultPath:        true,
+			args:               []string{"config", "set", "value", "new"},
+		},
+		{
+			name:               "set_preserves_comments_anchors",
+			description:        "set preserves comments and anchors around an edited value",
+			config:             []byte("root:\n  # keep this comment\n  value: old # keep this trailing comment\n  anchored: &real text\n  alias: *real\n"),
+			writeConfig:        true,
+			captureConfigAfter: true,
+			args:               []string{"config", "set", "root.value", "new", "--file", fileMarker},
+		},
+		{
+			name:               "set_flow_mapping_value",
+			description:        "set emits a parsed mapping value using Go YAML encoding",
+			config:             []byte("value: old\nkeep: true\n"),
+			writeConfig:        true,
+			captureConfigAfter: true,
+			args:               []string{"config", "set", "value", "{a: 1, b: two}", "--file", fileMarker},
+		},
+		{
+			name:               "set_flow_sequence_value",
+			description:        "set emits a parsed sequence value using Go YAML encoding",
+			config:             []byte("value: old\nkeep: true\n"),
+			writeConfig:        true,
+			captureConfigAfter: true,
+			args:               []string{"config", "set", "value", "[one, two]", "--file", fileMarker},
+		},
+		{
+			name:               "set_malformed",
+			description:        "set rejects malformed YAML without changing the file",
+			config:             []byte("value: [\n"),
+			writeConfig:        true,
+			captureConfigAfter: true,
+			args:               []string{"config", "set", "value", "new", "--file", fileMarker},
+		},
+		{
+			name:        "get_json_unescaped",
+			description: "JSON get output does not HTML escape scalar strings",
+			config:      []byte("special: \"<&>\"\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "special", "--file", fileMarker, "--json"},
+		},
+		{
+			name:        "get_output_json",
+			description: "get honors the global JSON output format",
+			config:      []byte("special: \"<&>\"\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "special", "--file", fileMarker, "--output", "json"},
+		},
+		{
+			name:        "get_json_before_command",
+			description: "get accepts a global JSON flag before the command",
+			config:      []byte("vaultDir: /fixture/vault\n"),
+			writeConfig: true,
+			args:        []string{"--json", "config", "get", "vaultDir", "--file", fileMarker},
+		},
+		{
+			name:        "get_quiet",
+			description: "quiet get reads and resolves a value without stdout",
+			config:      []byte("vaultDir: /fixture/vault\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "vaultDir", "--file", fileMarker, "--quiet"},
+		},
+		{
+			name:        "get_missing_key",
+			description: "get reports the complete dotted path for a missing key",
+			config:      []byte("agents:\n  probe:\n    canWrite: true\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "agents.probe.missing", "--file", fileMarker},
+		},
+		{
+			name:        "get_missing_key_sibling_scope",
+			description: "get does not cross a sibling mapping while resolving a path",
+			config:      []byte("agents:\n  probe:\n    canWrite: true\n  other:\n    missing: false\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "agents.probe.missing", "--file", fileMarker},
+		},
+		{
+			name:        "get_malformed",
+			description: "get rejects malformed YAML before lookup",
+			config:      []byte("vaultDir: [\n"),
+			writeConfig: true,
+			args:        []string{"config", "get", "vaultDir", "--file", fileMarker},
+		},
+		{
+			name:        "get_default_home",
+			description: "get uses the default home config path",
+			config:      []byte("vaultDir: /fixture/vault\n"),
+			writeConfig: true,
+			defaultPath: true,
+			args:        []string{"config", "get", "vaultDir"},
+		},
 	}
 }
 
@@ -185,12 +529,10 @@ func buildCases(goBinary, root string) ([]cliCase, error) {
 		}
 		if input.writeConfig {
 			if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
-				_ = os.RemoveAll(tempRoot)
-				return nil, err
+				return nil, cleanupCase(tempRoot, err)
 			}
 			if err := os.WriteFile(configPath, input.config, 0o600); err != nil {
-				_ = os.RemoveAll(tempRoot)
-				return nil, err
+				return nil, cleanupCase(tempRoot, err)
 			}
 		}
 		args := make([]string, len(input.args))
@@ -198,7 +540,8 @@ func buildCases(goBinary, root string) ([]cliCase, error) {
 			args[i] = strings.ReplaceAll(arg, fileMarker, configPath)
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		cmd := exec.CommandContext(ctx, goBinary, args...) // #nosec G204 -- oracle binary build identity verified before fixed synthetic cases
+		// #nosec G204 -- validateGoBinary checked the pinned, clean oracle before this command.
+		cmd := exec.CommandContext(ctx, goBinary, args...)
 		cmd.Dir = root
 		env := os.Environ()
 		env = setEnv(env, "HOME", home)
@@ -217,26 +560,25 @@ func buildCases(goBinary, root string) ([]cliCase, error) {
 		runErr := cmd.Run()
 		if ctx.Err() != nil {
 			cancel()
-			_ = os.RemoveAll(tempRoot)
-			return nil, fmt.Errorf("run oracle case %s: %w", input.name, ctx.Err())
+			return nil, cleanupCase(tempRoot, fmt.Errorf("run oracle case %s: %w", input.name, ctx.Err()))
 		}
 		cancel()
 		exitCode := 0
 		if runErr != nil {
 			var exitErr *exec.ExitError
 			if !errors.As(runErr, &exitErr) {
-				_ = os.RemoveAll(tempRoot)
-				return nil, fmt.Errorf("run oracle case %s: %w", input.name, runErr)
+				return nil, cleanupCase(tempRoot, fmt.Errorf("run oracle case %s: %w", input.name, runErr))
 			}
 			exitCode = exitErr.ExitCode()
 		}
 		item := cliCase{
-			Name:        input.name,
-			Description: input.description,
-			WriteConfig: input.writeConfig,
-			DefaultPath: input.defaultPath,
-			ClearHome:   input.clearHome,
-			Args:        input.args,
+			Name:               input.name,
+			Description:        input.description,
+			WriteConfig:        input.writeConfig,
+			CaptureConfigAfter: input.captureConfigAfter,
+			DefaultPath:        input.defaultPath,
+			ClearHome:          input.clearHome,
+			Args:               input.args,
 			Expected: expected{
 				ExitCode:       exitCode,
 				StdoutBytes:    byteValues(stdout.Bytes()),
@@ -246,14 +588,30 @@ func buildCases(goBinary, root string) ([]cliCase, error) {
 		if input.writeConfig {
 			item.ConfigBytes = byteValues(input.config)
 		}
+		if input.captureConfigAfter {
+			after, readErr := os.ReadFile(configPath)
+			if readErr != nil {
+				return nil, cleanupCase(tempRoot, fmt.Errorf("read oracle case %s config after: %w", input.name, readErr))
+			}
+			item.ConfigAfterBytes = byteValues(after)
+		}
 		cases = append(cases, item)
-		_ = os.RemoveAll(tempRoot)
+		if err := os.RemoveAll(tempRoot); err != nil {
+			return nil, fmt.Errorf("cleanup oracle case %s: %w", input.name, err)
+		}
 	}
 	return cases, nil
 }
 
+func cleanupCase(tempRoot string, cause error) error {
+	if cleanupErr := os.RemoveAll(tempRoot); cleanupErr != nil {
+		return fmt.Errorf("%w (cleanup: %w)", cause, cleanupErr)
+	}
+	return cause
+}
+
 func errorNeedle(stderr []byte) string {
-	for _, needle := range []string{"cannot determine config file path", "cannot load config"} {
+	for _, needle := range []string{"cannot determine config file path", "cannot load config", "key ", "cannot access key"} {
 		if bytes.Contains(stderr, []byte(needle)) {
 			return needle
 		}

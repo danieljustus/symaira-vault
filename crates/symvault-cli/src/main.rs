@@ -108,6 +108,22 @@ enum Command {
 
 #[derive(Debug, Subcommand)]
 enum ConfigCommand {
+    /// Get a value using dotted path notation.
+    Get {
+        #[arg(value_name = "DOTTED.PATH")]
+        key: String,
+        #[arg(long)]
+        file: Option<String>,
+    },
+    /// Set a value using dotted path notation.
+    Set {
+        #[arg(value_name = "DOTTED.PATH")]
+        key: String,
+        #[arg(value_name = "VALUE")]
+        value: String,
+        #[arg(long)]
+        file: Option<String>,
+    },
     /// Print the raw configuration file.
     List {
         #[arg(long)]
@@ -254,16 +270,49 @@ fn main() -> ExitCode {
             }
         }
         Some(Command::Config { command }) => {
-            let path = match command {
-                ConfigCommand::List { file } => match config::resolve_path(file.map(Into::into)) {
-                    Ok(path) => path,
-                    Err(error) => {
-                        let _ = writeln!(io::stderr(), "Error: {error}");
-                        return ExitCode::from(1);
-                    }
-                },
+            let (path, operation) = match command {
+                ConfigCommand::Get { key, file } => {
+                    let path = match config::resolve_path(file.map(Into::into)) {
+                        Ok(path) => path,
+                        Err(error) => {
+                            let _ = writeln!(io::stderr(), "Error: {error}");
+                            return ExitCode::from(1);
+                        }
+                    };
+                    (path, ConfigOperation::Get { key })
+                }
+                ConfigCommand::List { file } => {
+                    let path = match config::resolve_path(file.map(Into::into)) {
+                        Ok(path) => path,
+                        Err(error) => {
+                            let _ = writeln!(io::stderr(), "Error: {error}");
+                            return ExitCode::from(1);
+                        }
+                    };
+                    (path, ConfigOperation::List)
+                }
+                ConfigCommand::Set { key, value, file } => {
+                    let path = match config::resolve_path(file.map(Into::into)) {
+                        Ok(path) => path,
+                        Err(error) => {
+                            let _ = writeln!(io::stderr(), "Error: {error}");
+                            return ExitCode::from(1);
+                        }
+                    };
+                    (path, ConfigOperation::Set { key, value })
+                }
             };
-            match config::list(&path, cli.quiet) {
+            let result = match operation {
+                ConfigOperation::Get { key } => config::get(
+                    &path,
+                    &key,
+                    if cli.json { "json" } else { &cli.output },
+                    cli.quiet,
+                ),
+                ConfigOperation::List => config::list(&path, cli.quiet),
+                ConfigOperation::Set { key, value } => config::set(&path, &key, &value, cli.quiet),
+            };
+            match result {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(error) => {
                     let _ = writeln!(io::stderr(), "Error: {error}");
@@ -563,6 +612,12 @@ fn runtime_session_manager() -> RuntimeSession {
             memory_only: true,
         }
     }
+}
+
+enum ConfigOperation {
+    Get { key: String },
+    List,
+    Set { key: String, value: String },
 }
 
 fn has_unescaped_version_flag(args: &[OsString]) -> bool {
