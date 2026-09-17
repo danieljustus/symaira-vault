@@ -2,7 +2,7 @@
 
 use std::{
     fs,
-    io::Write as _,
+    io::{Read as _, Write as _},
     path::{Path, PathBuf},
 };
 
@@ -64,8 +64,20 @@ pub fn add(root: &Path, identity: &Identity, options: &AddOptions) -> Result<Add
             options.max_size
         ));
     }
-    let content =
-        fs::read(&options.source).map_err(|error| format!("cannot read source file: {error}"))?;
+    let source_file = fs::File::open(&options.source)
+        .map_err(|error| format!("cannot read source file: {error}"))?;
+    let mut content = Vec::new();
+    source_file
+        .take(options.max_size.saturating_add(1))
+        .read_to_end(&mut content)
+        .map_err(|error| format!("cannot read source file: {error}"))?;
+    if content.len() as u64 > options.max_size {
+        return Err(format!(
+            "source file is {} bytes, exceeds the {} byte limit (override with --max-size)",
+            content.len(),
+            options.max_size
+        ));
+    }
     let filename = options
         .source
         .file_name()
@@ -95,6 +107,9 @@ pub fn add(root: &Path, identity: &Identity, options: &AddOptions) -> Result<Add
     if entry.secret_metadata.secret_type.is_empty() {
         entry.secret_metadata.secret_type = options.secret_type.clone();
     }
+    // Go's file add mutates Version before WriteEntry, whose preparation
+    // increments it again. Preserve that observable two-step update.
+    entry.metadata.version = entry.metadata.version.wrapping_add(1);
     // Go's file command calls WriteEntry directly, so it does not add a
     // pending write-history record here.
     store
@@ -220,6 +235,7 @@ fn decode_attachment_content(entry: &Entry, field: &str) -> Result<Vec<u8>, Stri
                 let expected = value
                     .as_i64()
                     .or_else(|| value.as_u64().map(|value| value as i64))
+                    .or_else(|| value.as_f64().map(|value| value as i64))
                     .or_else(|| value.as_str().and_then(|value| value.parse().ok()))
                     .unwrap_or_default();
                 if expected > 0 && expected as usize != chunk_names.len() {
