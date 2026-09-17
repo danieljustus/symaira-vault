@@ -25,6 +25,7 @@ const (
 	childPIDEnv      = "SYMVAULT_GIT_TIMEOUT_CHILD_PID_FILE"
 	grandchildPIDEnv = "SYMVAULT_GIT_TIMEOUT_GRANDCHILD_PID_FILE"
 	readyEnv         = "SYMVAULT_GIT_TIMEOUT_READY_FILE"
+	sourceBinaryEnv  = "SYMVAULT_GIT_TIMEOUT_SOURCE_BINARY"
 )
 
 const (
@@ -57,9 +58,9 @@ func init() {
 }
 
 func startFixtureChild(mode string) {
-	child := exec.Command(os.Args[0], "-test.run=TestGitPushTimeoutDescendantHelper")
+	child := exec.Command(os.Getenv(sourceBinaryEnv), "-test.run=TestGitPushTimeoutDescendantHelper")
 	child.Env = appendEnv(os.Environ(), map[string]string{
-		fakeGitEnv:    "",
+		fakeGitEnv:    "1",
 		helperEnv:     "1",
 		helperModeEnv: mode,
 	})
@@ -183,6 +184,7 @@ func TestPushWithSystemGitTimeoutKillsDescendants(t *testing.T) {
 	t.Setenv(fakeGitEnv, "1")
 	t.Setenv(helperEnv, "1")
 	t.Setenv(helperModeEnv, "root")
+	t.Setenv(sourceBinaryEnv, sourceBinary)
 	t.Setenv(rootPIDEnv, rootPath)
 	t.Setenv(childPIDEnv, childPath)
 	t.Setenv(grandchildPIDEnv, grandchildPath)
