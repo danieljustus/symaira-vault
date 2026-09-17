@@ -7,7 +7,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use symvault_core::policy::{Action, Engine, EvalContext};
 use symvault_crypto::Identity;
-use symvault_store::{Entry, Store, StoreError};
+use symvault_store::{Entry, Store, StoreError, WriteRecord};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 pub type SharedAuditLogger = Arc<Mutex<symvault_store::audit::Logger>>;
@@ -73,6 +73,41 @@ impl ReadOnlyStore for StoreReadOnlyAdapter {
             Err(StoreError::EntryNotFound(_)) => Ok(None),
             Err(error) => Err(store_error(error)),
         }
+    }
+
+    fn set_field(&self, path: &str, field: &str, value: Value, now: &str) -> Result<(), String> {
+        let mut entry = match self.store.get(path, &self.identity) {
+            Ok(entry) => entry,
+            Err(StoreError::EntryNotFound(_)) => Entry::default(),
+            Err(error) => return Err(store_error(error)),
+        };
+        entry.data.insert(field.to_owned(), value);
+        if field == "password" {
+            const WEAK_PASSWORD_TAG: &str = "weak-password";
+            let weak = entry
+                .data
+                .get(field)
+                .and_then(Value::as_str)
+                .map(symvault_core::password::assess_password_strength)
+                .is_some_and(|assessment| assessment.weak);
+            entry.metadata.tags.retain(|tag| tag != WEAK_PASSWORD_TAG);
+            if weak {
+                entry.metadata.tags.push(WEAK_PASSWORD_TAG.into());
+            }
+        }
+        self.store
+            .write_entry_with_recipients_at(
+                path,
+                &entry,
+                &self.identity,
+                now,
+                Some(&WriteRecord {
+                    field: field.to_owned(),
+                    action: "set".into(),
+                    ..WriteRecord::default()
+                }),
+            )
+            .map_err(store_error)
     }
 }
 
@@ -214,6 +249,7 @@ impl StoreReadOnlyRuntime {
         let action_type = match name {
             "find_entries" => "find",
             "get_entry" | "get_entry_metadata" => "get",
+            "set_entry_field" => "set",
             _ => "read",
         };
         let result = policy.evaluate(EvalContext {
@@ -269,6 +305,14 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
                 let ok = result.as_ref().is_ok_and(|value| !value.is_error);
                 self.append_audit("generate_totp", path, ok);
             }
+            "set_entry_field" => {
+                let path = arguments
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .unwrap_or("<invalid>");
+                let ok = result.as_ref().is_ok_and(|value| !value.is_error);
+                self.append_audit("set", path, ok);
+            }
             "list_entries" => {
                 let prefix = arguments
                     .get("prefix")
@@ -319,7 +363,7 @@ fn store_error(error: StoreError) -> String {
     error.to_string()
 }
 
-/// The nine handlers in this bounded runtime. The catalog remains owned by
+/// The ten handlers in this bounded runtime. The catalog remains owned by
 /// the protocol layer; this list is the injected availability registry used
 /// by authorization and whoami.
 pub fn read_only_tool_names() -> Vec<String> {
@@ -329,6 +373,7 @@ pub fn read_only_tool_names() -> Vec<String> {
         "list_entries",
         "generate_password",
         "generate_totp",
+        "set_entry_field",
         "find_entries",
         "get_entry",
         "get_entry_value",

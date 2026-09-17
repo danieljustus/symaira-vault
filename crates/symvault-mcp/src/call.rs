@@ -80,6 +80,18 @@ pub struct ReadOnlyEntry {
 pub trait ReadOnlyStore: Send + Sync {
     fn list(&self) -> Result<Vec<ReadOnlyEntry>, String>;
     fn get(&self, path: &str) -> Result<Option<ReadOnlyEntry>, String>;
+
+    /// Persist one field mutation when the injected store supports writes.
+    /// Read-only test stores retain the default fail-closed implementation.
+    fn set_field(
+        &self,
+        _path: &str,
+        _field: &str,
+        _value: Value,
+        _now: &str,
+    ) -> Result<(), String> {
+        Err("store does not support writes".into())
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -158,7 +170,7 @@ impl Default for ReadOnlyRuntimeConfig {
     }
 }
 
-/// Productive read-only runtime for the five portable tools in this slice.
+/// Productive runtime for the bounded portable tools in this slice.
 ///
 /// The runtime performs argument validation, scope checks, search, metadata
 /// projection, and whoami construction over an injected store. It never opens
@@ -183,6 +195,11 @@ impl<S> ReadOnlyRuntime<S> {
 
 impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
     fn authorize(&self, name: &str, _arguments: &Value) -> Result<(), ToolCallResult> {
+        if self.config.tier == "read-only" && name == "set_entry_field" {
+            return Err(ToolCallResult::error(
+                "Tool \"set_entry_field\" requires tier \"standard\"",
+            ));
+        }
         if self.config.available_tools.iter().any(|tool| tool == name) {
             let approval_mode =
                 if self.config.approval_mode.is_empty() && self.config.require_approval {
@@ -221,6 +238,7 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
             "list_entries" => self.list_entries(arguments),
             "generate_password" => self.generate_password(arguments),
             "generate_totp" => self.generate_totp(arguments),
+            "set_entry_field" => self.set_entry_field(arguments),
             "find_entries" => self.find_entries(arguments),
             "get_entry" | "get_entry_metadata" => self.get_entry_metadata(arguments),
             "get_entry_value" => self.get_entry_value(arguments),
@@ -264,6 +282,136 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
         let password = symvault_core::password::generate_password(length, symbols)
             .map_err(|error| error.to_string())?;
         Ok(ToolCallResult::text(password.as_str()))
+    }
+
+    fn set_entry_field(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        if !self.config.can_write {
+            return Err("write operations not permitted for this agent".into());
+        }
+        let path = match required_string(arguments, "path") {
+            Ok(path) => path,
+            Err(result) => return Ok(result),
+        };
+        let field = match required_string(arguments, "field") {
+            Ok(field) => field,
+            Err(result) => return Ok(result),
+        };
+        let value = match required_string(arguments, "value") {
+            Ok(value) => value,
+            Err(result) => return Ok(result),
+        };
+        if !self.scope_allows(path) {
+            return Err(format!(
+                "access denied: path {path:?} outside allowed scope"
+            ));
+        }
+        let approval_mode = if self.config.approval_mode.is_empty() {
+            if self.config.require_approval {
+                "prompt"
+            } else {
+                "none"
+            }
+        } else {
+            self.config.approval_mode.as_str()
+        };
+        match approval_mode {
+            "deny" => {
+                return Ok(ToolCallResult::error(
+                    "set_entry_field denied: approval mode is 'deny'",
+                ));
+            }
+            "prompt" => {
+                return Ok(ToolCallResult::error(
+                    "set_entry_field requires approval but no TTY or GUI dialog available",
+                ));
+            }
+            _ => {}
+        }
+
+        let force = arguments
+            .get("force")
+            .and_then(|value| match value {
+                Value::Bool(value) => Some(*value),
+                Value::String(value) => value.parse::<bool>().ok(),
+                _ => None,
+            })
+            .unwrap_or(false);
+        if field == "password" && !force {
+            let assessment = symvault_core::password::assess_password_strength(value);
+            if assessment.weak {
+                let mut detail = Map::new();
+                detail.insert("weak".into(), Value::Bool(true));
+                let entropy = if assessment.entropy == 0.0 {
+                    Value::from(0)
+                } else {
+                    Value::from(assessment.entropy)
+                };
+                detail.insert("entropy".into(), entropy);
+                detail.insert(
+                    "message".into(),
+                    Value::String(format!(
+                        "{} — re-call with force:true to store this password (the entry will be tagged as weak)",
+                        assessment.message
+                    )),
+                );
+                if !assessment.missing.is_empty() {
+                    detail.insert(
+                        "missing".into(),
+                        Value::Array(assessment.missing.into_iter().map(Value::String).collect()),
+                    );
+                }
+                let text = symvault_gojson::to_string(&Value::Object(detail))
+                    .map_err(|error| error.to_string())?;
+                return Ok(ToolCallResult::error(text));
+            }
+        }
+
+        let stored = if field == "totp" {
+            let parsed = match serde_json::from_str::<Value>(value) {
+                Ok(parsed) => parsed,
+                Err(error) => {
+                    return Ok(ToolCallResult::error(format!("invalid TOTP JSON: {error}")));
+                }
+            };
+            if !matches!(parsed, Value::Object(_) | Value::Null) {
+                return Ok(ToolCallResult::error(format!(
+                    "invalid TOTP JSON: json: cannot unmarshal {} into Go value of type map[string]interface {{}}",
+                    crate::go_kind(&parsed)
+                )));
+            }
+            if let Value::Object(ref map) = parsed {
+                let algorithm = map.get("algorithm").and_then(Value::as_str).unwrap_or("");
+                let digits = map
+                    .get("digits")
+                    .and_then(Value::as_f64)
+                    .map(|value| value as i64)
+                    .unwrap_or(0);
+                let period = map
+                    .get("period")
+                    .and_then(Value::as_f64)
+                    .map(|value| value as i64)
+                    .unwrap_or(0);
+                if let Err(error) =
+                    symvault_core::totp::validate_totp_params(algorithm, digits, period)
+                {
+                    return Ok(ToolCallResult::error(format!("invalid TOTP: {error}")));
+                }
+            }
+            parsed
+        } else {
+            Value::String(value.to_owned())
+        };
+        let now = match self.config.now_unix {
+            Some(value) => OffsetDateTime::from_unix_timestamp(value)
+                .map_err(|error| format!("format write clock: {error}"))?,
+            None => OffsetDateTime::now_utc(),
+        }
+        .format(&Rfc3339)
+        .map_err(|error| format!("format write clock: {error}"))?;
+        self.store
+            .set_field(path, field, stored, &now)
+            .map_err(|error| format!("vault operation failed: {error}"))?;
+        Ok(ToolCallResult::text(format!("Set {path}.{field} = ***")))
     }
 
     fn generate_totp(&self, arguments: &Value) -> Result<ToolCallResult, String> {
