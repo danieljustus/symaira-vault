@@ -111,9 +111,3 @@ pub fn check(manager: &SessionManager, vault: &Path) -> Result<(), String> {
         Err("no active session".to_owned())
     }
 }
-
-/// Interactive unlock needs a real secure input and native keyring adapter.
-/// Keeping this explicit prevents a command from claiming authorization after
-/// merely reading an unverified string or using the in-memory test backend.
-pub const UNLOCK_UNAVAILABLE: &str =
-    "interactive unlock is not yet available in the Rust CLI; use the Go CLI";

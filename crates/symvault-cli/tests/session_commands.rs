@@ -39,7 +39,6 @@ fn status_matches_go_text_and_json_shapes() {
 
 #[test]
 fn status_quiet_suppresses_both_formats() {
-    assert!(session_commands::UNLOCK_UNAVAILABLE.contains("not yet available"));
     let status = session_commands::auth_status(
         std::path::Path::new("/fixture/vault"),
         AuthMethod::Touchid,

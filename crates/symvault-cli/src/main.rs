@@ -2,16 +2,41 @@
 
 mod config;
 mod device;
+mod session_commands;
 
 use std::{
     ffi::{OsStr, OsString},
     io::{self, Write},
+    path::{Path, PathBuf},
     process::ExitCode,
+    sync::Arc,
 };
 
 use clap::{Args, Parser, Subcommand};
 use symaira_core_version::new as new_version;
-use symvault_core::TOOL_NAME;
+#[cfg(not(any(
+    target_os = "macos",
+    target_os = "linux",
+    target_os = "windows",
+    target_os = "freebsd",
+    target_os = "openbsd",
+    target_os = "netbsd"
+)))]
+use symvault_core::session::MemoryKeyring;
+use symvault_core::{
+    TOOL_NAME,
+    config::{Config, PathResolver},
+    session::SessionManager,
+};
+#[cfg(any(
+    target_os = "macos",
+    target_os = "linux",
+    target_os = "windows",
+    target_os = "freebsd",
+    target_os = "openbsd",
+    target_os = "netbsd"
+))]
+use symvault_platform::OsKeyring;
 
 const VERSION: &str = match option_env!("SYMVAULT_VERSION") {
     Some(version) => version,
@@ -60,6 +85,18 @@ enum Command {
         #[command(subcommand)]
         command: ConfigCommand,
     },
+    /// Lock the vault by clearing its cached session.
+    Lock,
+    /// Unlock the vault or check whether a cached session is active.
+    Unlock {
+        #[arg(long)]
+        check: bool,
+    },
+    /// Manage vault authentication and session status.
+    Auth {
+        #[command(subcommand)]
+        command: AuthCommand,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -69,6 +106,12 @@ enum ConfigCommand {
         #[arg(long)]
         file: Option<String>,
     },
+}
+
+#[derive(Debug, Subcommand)]
+enum AuthCommand {
+    /// Show authentication method and session-cache status.
+    Status,
 }
 
 #[derive(Debug, Subcommand)]
@@ -144,6 +187,22 @@ fn main() -> ExitCode {
 
     match cli.command {
         Some(Command::Version(_)) => write_version(&cli.output, cli.json),
+        Some(Command::Lock) => run_lock(cli.vault.as_deref(), cli._profile.as_deref(), cli.quiet),
+        Some(Command::Unlock { check }) => run_unlock(
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
+            check,
+            cli.quiet,
+        ),
+        Some(Command::Auth { command }) => match command {
+            AuthCommand::Status => run_auth_status(
+                cli.vault.as_deref(),
+                cli._profile.as_deref(),
+                &cli.output,
+                cli.json,
+                cli.quiet,
+            ),
+        },
         Some(Command::Device { command }) => {
             let vault = match cli.vault.as_deref() {
                 Some(v) => v,
@@ -206,6 +265,194 @@ fn main() -> ExitCode {
             }
         }
         None => ExitCode::SUCCESS,
+    }
+}
+
+fn run_lock(explicit_vault: Option<&Path>, profile: Option<&str>, quiet: bool) -> ExitCode {
+    let result = (|| {
+        let vault = resolve_vault(explicit_vault, profile)?;
+        require_initialized(&vault)?;
+        let (manager, _) = runtime_session_manager();
+        let output = session_commands::lock(&manager, &vault, quiet)?;
+        if !output.is_empty() {
+            eprint!("{output}");
+        }
+        Ok::<(), String>(())
+    })();
+    finish_session_result(result, false, 3)
+}
+
+fn run_unlock(
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    check: bool,
+    quiet: bool,
+) -> ExitCode {
+    let result = (|| {
+        let vault = resolve_vault(explicit_vault, profile)?;
+        require_initialized(&vault)?;
+        let (manager, _) = runtime_session_manager();
+        if check {
+            session_commands::check(&manager, &vault)?;
+            if !quiet {
+                eprintln!("Session active");
+            }
+            return Ok::<(), String>(());
+        }
+        Err::<(), String>(
+            "interactive unlock is not yet available in the Rust CLI; use the Go CLI".to_owned(),
+        )
+    })();
+    finish_session_result(result, true, 3)
+}
+
+fn run_auth_status(
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    output_format: &str,
+    json: bool,
+    quiet: bool,
+) -> ExitCode {
+    let result = (|| {
+        let vault = resolve_vault(explicit_vault, profile)?;
+        require_initialized(&vault)?;
+        let config = Config::load(vault.join("config.yaml"))
+            .map_err(|error| format!("load config: {error}"))?;
+        let (_, cache) = runtime_session_manager();
+        let status =
+            session_commands::auth_status(&vault, config.effective_auth_method(), cache, false)?;
+        let rendered = session_commands::render_status(&status, output_format, json, quiet)?;
+        if !rendered.is_empty() {
+            print!("{rendered}");
+        }
+        Ok::<(), String>(())
+    })();
+    finish_session_result(result, false, 1)
+}
+
+fn finish_session_result(
+    result: Result<(), String>,
+    locked_error: bool,
+    not_initialized_code: u8,
+) -> ExitCode {
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            let _ = writeln!(io::stderr(), "Error: {error}");
+            if error.contains("vault not initialized") {
+                ExitCode::from(not_initialized_code)
+            } else if locked_error && error == "no active session" {
+                ExitCode::from(4)
+            } else {
+                ExitCode::from(1)
+            }
+        }
+    }
+}
+
+fn require_initialized(vault: &Path) -> Result<(), String> {
+    if vault.join("identity.age").is_file() && vault.join("config.yaml").is_file() {
+        Ok(())
+    } else {
+        Err("vault not initialized. Run 'symvault init' first".to_owned())
+    }
+}
+
+fn resolve_vault(explicit: Option<&Path>, profile: Option<&str>) -> Result<PathBuf, String> {
+    if let Some(path) = explicit {
+        return expand_vault_path(path);
+    }
+    if let Some(raw) = std::env::var_os("SYMVAULT_VAULT").filter(|value| !value.is_empty()) {
+        return expand_vault_path(Path::new(&raw));
+    }
+
+    let resolver = PathResolver::new();
+    let config = Config::load(resolver.config_path()).ok();
+    let requested_profile = profile
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_owned)
+        .or_else(|| {
+            std::env::var("SYMVAULT_PROFILE")
+                .ok()
+                .filter(|v| !v.trim().is_empty())
+        });
+    if let Some(name) = requested_profile.as_deref() {
+        let config = config
+            .as_ref()
+            .ok_or_else(|| "cannot load config for profile resolution".to_owned())?;
+        let profile = config
+            .profile_for_name(name)
+            .ok_or_else(|| format!("profile {name:?} not found"))?;
+        return expand_vault_path(Path::new(&profile.vault_path));
+    }
+    if let Some(config) = config.as_ref()
+        && !config.default_profile.is_empty()
+        && let Some(profile) = config.profile_for_name(&config.default_profile)
+    {
+        return expand_vault_path(Path::new(&profile.vault_path));
+    }
+    if !resolver.vault_data_dir().as_os_str().is_empty() {
+        return Ok(resolver.vault_data_dir().to_path_buf());
+    }
+    Err("cannot determine vault path".to_owned())
+}
+
+fn expand_vault_path(path: &Path) -> Result<PathBuf, String> {
+    let raw = path
+        .to_str()
+        .ok_or_else(|| "vault path must be UTF-8".to_owned())?
+        .trim();
+    if raw == "~" || raw.starts_with("~/") {
+        let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| "cannot determine home directory".to_owned())?;
+        return Ok(PathBuf::from(home).join(raw.strip_prefix("~/").unwrap_or("")));
+    }
+    Ok(PathBuf::from(raw))
+}
+
+fn runtime_session_manager() -> (SessionManager, session_commands::CacheStatus) {
+    #[cfg(any(
+        target_os = "macos",
+        target_os = "linux",
+        target_os = "windows",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "netbsd"
+    ))]
+    {
+        let available = OsKeyring::is_available();
+        let cache = session_commands::CacheStatus {
+            backend: "os-keyring".to_owned(),
+            persistent: available,
+            message: if available {
+                "OS keyring session cache is available.".to_owned()
+            } else {
+                "OS keyring unavailable. Sessions cannot be persisted.".to_owned()
+            },
+        };
+        return (
+            SessionManager::with_system_clock(Arc::new(OsKeyring)),
+            cache,
+        );
+    }
+    #[cfg(not(any(
+        target_os = "macos",
+        target_os = "linux",
+        target_os = "windows",
+        target_os = "freebsd",
+        target_os = "openbsd",
+        target_os = "netbsd"
+    )))]
+    {
+        (
+            SessionManager::with_system_clock(Arc::new(MemoryKeyring::new())),
+            session_commands::CacheStatus {
+                backend: "memory".to_owned(),
+                persistent: false,
+                message: "This build uses a memory-only session cache.".to_owned(),
+            },
+        )
     }
 }
 
