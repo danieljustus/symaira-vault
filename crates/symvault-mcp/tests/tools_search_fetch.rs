@@ -153,6 +153,13 @@ fn runtime_for_case(name: &str) -> ReadOnlyRuntime<MemoryStore> {
 fn normalize_markers(value: &mut Value) -> usize {
     match value {
         Value::String(text) => {
+            if (text.starts_with('{') || text.starts_with('['))
+                && let Ok(mut nested) = serde_json::from_str::<Value>(text)
+            {
+                let count = normalize_markers(&mut nested);
+                *text = symvault_gojson::to_string(&nested).expect("nested JSON encoding");
+                return count;
+            }
             let mut count = 0;
             while let Some(start) = text.find("<!-- DATA_") {
                 let marker_start = start + "<!-- DATA_".len();

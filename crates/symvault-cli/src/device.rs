@@ -1950,23 +1950,27 @@ mod tests {
         let (alias_parent, alias_root) = ancestor_alias(&root);
 
         let source_recipient = parse_recipient(&recipient_string(&identity)).unwrap();
-        let original = encrypt(b"alias-success", &[source_recipient]).unwrap();
+        let original = encrypt(b"alias-success", std::slice::from_ref(&source_recipient)).unwrap();
         let target = entries.join("a.age");
         fs::write(&target, &original).unwrap();
 
         let new_identity = generate_identity();
         let new_recipient = parse_recipient(&recipient_string(&new_identity)).unwrap();
-        reencrypt_all_entries(&alias_root, &identity, &[new_recipient]).unwrap();
+        reencrypt_all_entries(&alias_root, &identity, std::slice::from_ref(&new_recipient))
+            .unwrap();
         assert_eq!(
             symvault_crypto::decrypt(&fs::read(&target).unwrap(), &new_identity).unwrap(),
             b"alias-success"
         );
         assert!(!journal_path(&root).exists());
 
-        let original_before_failure = encrypt(b"alias-preserved", &[source_recipient]).unwrap();
+        let original_before_failure =
+            encrypt(b"alias-preserved", std::slice::from_ref(&source_recipient)).unwrap();
         fs::write(&target, &original_before_failure).unwrap();
         fs::write(entries.join("b.age"), b"corrupt age envelope").unwrap();
-        let error = reencrypt_all_entries(&alias_root, &identity, &[new_recipient]).unwrap_err();
+        let error =
+            reencrypt_all_entries(&alias_root, &identity, std::slice::from_ref(&new_recipient))
+                .unwrap_err();
         assert!(error.contains("b.age"), "unexpected error: {error}");
         assert_eq!(fs::read(&target).unwrap(), original_before_failure);
         assert!(!journal_path(&root).exists());

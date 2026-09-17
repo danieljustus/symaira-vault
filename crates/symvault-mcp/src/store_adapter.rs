@@ -297,7 +297,7 @@ impl StoreReadOnlyRuntime {
         }
     }
 
-    fn audit_target<'a>(name: &str, arguments: &'a Value) -> &'a str {
+    fn audit_target<'a>(name: &'a str, arguments: &'a Value) -> &'a str {
         match name {
             "fetch" => arguments
                 .get("id")
@@ -743,6 +743,8 @@ pub fn read_only_tool_names() -> Vec<String> {
     [
         "generate_template",
         "symaira_search",
+        "search",
+        "fetch",
         "sanitize_output",
         "get_auth_status",
         "symaira_audit_self",

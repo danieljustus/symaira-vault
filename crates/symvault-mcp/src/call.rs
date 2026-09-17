@@ -884,15 +884,16 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
             let mut fields = Vec::new();
             if symvault_core::go_to_lower(&entry.path).contains(&needle) {
                 fields.push("path".to_string());
-            }
-            for (field, value) in &entry.fields {
-                collect_field_matches(
-                    &mut fields,
-                    field,
-                    value,
-                    &needle,
-                    self.config.redact_fields.as_deref().unwrap_or(&[]),
-                );
+            } else {
+                for (field, value) in &entry.fields {
+                    collect_field_matches(
+                        &mut fields,
+                        field,
+                        value,
+                        &needle,
+                        self.config.redact_fields.as_deref().unwrap_or(&[]),
+                    );
+                }
             }
             fields.sort();
             if !fields.is_empty() {
@@ -902,7 +903,13 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
                 });
             }
         }
-        matches.sort_by(|left, right| left.path.cmp(&right.path));
+        matches.sort_by(|left, right| {
+            let path_match =
+                |entry: &ReadOnlyMatch| entry.fields.iter().any(|field| field == "path");
+            path_match(right)
+                .cmp(&path_match(left))
+                .then_with(|| left.path.cmp(&right.path))
+        });
         Ok(matches)
     }
 
@@ -960,7 +967,8 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
             .get(id)
             .map_err(|error| format!("fetch entry: {error}"))?
         else {
-            return Ok(ToolCallResult::error(format!("entry not found: {id}")));
+            // Go maps a raw store error without a populated service path.
+            return Ok(ToolCallResult::error("Entry \"\" not found"));
         };
 
         let sanitized_id = crate::render::sanitize_for_mcp(id);
