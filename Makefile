@@ -803,12 +803,18 @@ docs-check:
 	fi; \
 	echo "Documentation check passed."
 
-.PHONY: mcp-list-fixtures-check mcp-list-differential
+.PHONY: mcp-list-fixtures-check mcp-list-differential mcp-call-fixtures-check mcp-call-differential
 mcp-list-fixtures-check:
 	SYMAIRA_CHECK_MCP_LIST_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCPListFixture$$' -count=1 -v
 
 mcp-list-differential: mcp-list-fixtures-check
 	$(CARGO) test -p symvault-mcp --test tool_list_contract --locked
+
+mcp-call-fixtures-check:
+	SYMAIRA_CHECK_MCP_AUDIT_SELF_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCPAuditSelfFixture$$' -count=1 -v
+
+mcp-call-differential: mcp-call-fixtures-check
+	$(CARGO) test -p symvault-mcp --test tools_audit_self --locked
 
 .PHONY: csv-import-differential
 csv-import-differential:

@@ -39,9 +39,10 @@ type mcpAuditSelfOracle struct {
 }
 
 type mcpAuditSelfCase struct {
-	Name   string            `json:"name"`
-	Input  []string          `json:"input"`
-	Output []json.RawMessage `json:"output"`
+	Name        string            `json:"name"`
+	Input       []string          `json:"input"`
+	AuditLogHex string            `json:"audit_log_hex,omitempty"`
+	Output      []json.RawMessage `json:"output"`
 }
 
 var mcpAuditSelfSourceFiles = []string{
@@ -85,25 +86,34 @@ func TestGenerateMCPAuditSelfFixture(t *testing.T) {
 		logBytes = append(logBytes, '\n')
 	}
 	logBytes = append(logBytes, []byte("{\"action\":false}\nnot-json\n")...)
+	invalidUTF8Log := []byte("{\"ts\":\"2026-01-02T03:04:10Z\",\"action\":\"bad\xff\",\"ok\":true}\n")
+	nullRootLog := []byte("null\n")
+	oversizedLog := append([]byte(`{"ts":"2026-01-02T03:04:11Z","action":"oversized","path":"`), bytes.Repeat([]byte("x"), 64*1024)...)
+	oversizedLog = append(oversizedLog, []byte(`"}`)...)
 
 	cases := []struct {
 		name    string
 		call    string
+		log     []byte
 		withLog bool
 	}{
-		{name: "default_limit_skips_malformed", call: `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"symaira_audit_self","arguments":{}}}`, withLog: true},
-		{name: "limit_two_returns_tail", call: `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"symaira_audit_self","arguments":{"limit":2}}}`, withLog: true},
-		{name: "numeric_string_limit_returns_tail", call: `{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"symaira_audit_self","arguments":{"limit":"2"}}}`, withLog: true},
-		{name: "zero_uses_default", call: `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"symaira_audit_self","arguments":{"limit":0}}}`, withLog: true},
-		{name: "fraction_truncates_to_zero", call: `{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"symaira_audit_self","arguments":{"limit":0.5}}}`, withLog: true},
+		{name: "default_limit_skips_malformed", call: `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"symaira_audit_self","arguments":{}}}`, log: logBytes, withLog: true},
+		{name: "limit_two_returns_tail", call: `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"symaira_audit_self","arguments":{"limit":2}}}`, log: logBytes, withLog: true},
+		{name: "numeric_string_limit_returns_tail", call: `{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"symaira_audit_self","arguments":{"limit":"2"}}}`, log: logBytes, withLog: true},
+		{name: "zero_uses_default", call: `{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"symaira_audit_self","arguments":{"limit":0}}}`, log: logBytes, withLog: true},
+		{name: "fraction_truncates_to_zero", call: `{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"symaira_audit_self","arguments":{"limit":0.5}}}`, log: logBytes, withLog: true},
 		{name: "missing_log_is_empty", call: `{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"symaira_audit_self","arguments":{"limit":100}}}`, withLog: false},
+		{name: "empty_log_is_null", call: `{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"symaira_audit_self","arguments":{"limit":100}}}`, log: []byte{}, withLog: true},
+		{name: "null_root_defaults", call: `{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"symaira_audit_self","arguments":{"limit":100}}}`, log: nullRootLog, withLog: true},
+		{name: "invalid_utf8_replaced", call: `{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"symaira_audit_self","arguments":{"limit":100}}}`, log: invalidUTF8Log, withLog: true},
+		{name: "oversized_line_returns_scanner_error", call: `{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"symaira_audit_self","arguments":{}}}`, log: oversizedLog, withLog: true},
 	}
 
 	fixtureCases := make([]mcpAuditSelfCase, 0, len(cases))
 	for _, tc := range cases {
 		vaultDir, _ := mockVault(t)
 		if tc.withLog {
-			if err := os.WriteFile(filepath.Join(vaultDir, "audit-fixture.log"), logBytes, 0o600); err != nil {
+			if err := os.WriteFile(filepath.Join(vaultDir, "audit-fixture.log"), tc.log, 0o600); err != nil {
 				t.Fatalf("write synthetic audit log: %v", err)
 			}
 		}
@@ -130,7 +140,11 @@ func TestGenerateMCPAuditSelfFixture(t *testing.T) {
 			}
 			outputs = append(outputs, encoded)
 		}
-		fixtureCases = append(fixtureCases, mcpAuditSelfCase{Name: tc.name, Input: inputs, Output: outputs})
+		fixtureCase := mcpAuditSelfCase{Name: tc.name, Input: inputs, Output: outputs}
+		if tc.withLog {
+			fixtureCase.AuditLogHex = hex.EncodeToString(tc.log)
+		}
+		fixtureCases = append(fixtureCases, fixtureCase)
 	}
 
 	root := mcpAuditSelfRepoRoot(t)

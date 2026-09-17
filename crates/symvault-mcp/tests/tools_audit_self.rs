@@ -29,6 +29,8 @@ struct Oracle {
 struct Case {
     name: String,
     input: Vec<String>,
+    #[serde(default)]
+    audit_log_hex: String,
     output: Vec<Value>,
 }
 
@@ -112,18 +114,11 @@ fn audit_self_matches_source_bound_go_fixture() {
 
     for case in fixture.cases {
         let (root, identity, audit) = fixture_vault();
-        if case.name != "missing_log_is_empty" {
-            let path = audit.lock().expect("audit logger lock").path().to_owned();
-            let entries = [
-                r#"{"ts":"2026-01-02T03:04:05Z","agent":"fixture","action":"find","path":"alpha","ok":true}"#,
-                r#"{"ts":"2026-01-02T03:04:06Z","agent":"fixture","action":"get","path":"beta","reason":"policy_denied","ok":false}"#,
-                r#"{"ts":"2026-01-02T03:04:07Z","agent":"fixture","action":"set","path":"gamma","field":"username","ok":true}"#,
-                r#"{"ts":"2026-01-02T03:04:08Z","agent":"fixture","action":"delete","path":"delta","ok":true}"#,
-                r#"{"ts":"2026-01-02T03:04:09Z","action":"legacy"}"#,
-                r#"{"action":false}"#,
-                "not-json",
-            ];
-            fs::write(path, entries.join("\n") + "\n").expect("write synthetic audit log");
+        let path = audit.lock().expect("audit logger lock").path().to_owned();
+        if case.name == "missing_log_is_empty" {
+            fs::remove_file(path).expect("remove synthetic audit log");
+        } else {
+            fs::write(path, decode_hex(&case.audit_log_hex)).expect("write synthetic audit log");
         }
         let mut handler = runtime(
             &root,
@@ -144,4 +139,19 @@ fn audit_self_matches_source_bound_go_fixture() {
             .collect::<Vec<_>>();
         assert_eq!(actual, case.output, "case {}", case.name);
     }
+}
+
+fn decode_hex(value: &str) -> Vec<u8> {
+    assert!(value.len().is_multiple_of(2), "fixture hex has odd length");
+    value
+        .as_bytes()
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|pair| {
+            let high = (pair[0] as char).to_digit(16).expect("fixture hex digit");
+            let low = (pair[1] as char).to_digit(16).expect("fixture hex digit");
+            ((high << 4) | low) as u8
+        })
+        .collect()
 }

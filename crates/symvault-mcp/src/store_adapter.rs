@@ -3,11 +3,12 @@ use crate::call::{
     ToolCallResult, ToolCallRuntime,
 };
 use serde_json::Value;
-use std::sync::{Arc, Mutex};
 use std::{
+    collections::VecDeque,
     fs::File,
     io::{BufRead, BufReader},
     path::Path,
+    sync::{Arc, Mutex},
 };
 use symvault_core::policy::{Action, Engine, EvalContext};
 use symvault_crypto::Identity;
@@ -362,12 +363,32 @@ impl StoreReadOnlyRuntime {
             .map_err(|_| "audit logger lock poisoned".to_owned())?
             .path()
             .to_owned();
+        let metadata = match std::fs::symlink_metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(ToolCallResult::text("[]"));
+            }
+            Err(error) => {
+                return Ok(ToolCallResult::error(format!(
+                    "cannot read audit log: {error}"
+                )));
+            }
+        };
+        if !metadata.file_type().is_file() {
+            return Ok(ToolCallResult::error(
+                "cannot read audit log: refusing a symlinked or non-regular target",
+            ));
+        }
         let file = match File::open(&path) {
             Ok(file) => file,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 return Ok(ToolCallResult::text("[]"));
             }
-            Err(error) => return Err(format!("cannot read audit log: {error}")),
+            Err(error) => {
+                return Ok(ToolCallResult::error(format!(
+                    "cannot read audit log: {error}"
+                )));
+            }
         };
 
         #[derive(serde::Serialize)]
@@ -382,7 +403,7 @@ impl StoreReadOnlyRuntime {
             code: String,
         }
 
-        #[derive(serde::Deserialize)]
+        #[derive(Default, serde::Deserialize)]
         struct RawAuditEntry {
             #[serde(rename = "ts")]
             timestamp: Option<String>,
@@ -392,13 +413,40 @@ impl StoreReadOnlyRuntime {
             ok: Option<bool>,
         }
 
-        let mut events = Vec::new();
-        for line in BufReader::new(file).lines() {
-            let line = line.map_err(|error| format!("error reading audit log: {error}"))?;
-            let Ok(entry) = serde_json::from_str::<RawAuditEntry>(&line) else {
+        let mut events = VecDeque::with_capacity(limit);
+        let mut saw_event = false;
+        let mut reader = BufReader::new(file);
+        let mut raw_line = Vec::with_capacity(GO_SCANNER_MAX_TOKEN_SIZE);
+        loop {
+            raw_line.clear();
+            let has_line = match read_scan_line(&mut reader, &mut raw_line) {
+                Ok(bytes_read) => bytes_read,
+                Err(error) => {
+                    return Ok(ToolCallResult::error(format!(
+                        "error reading audit log: {error}"
+                    )));
+                }
+            };
+            if !has_line {
+                break;
+            }
+            if raw_line.last() == Some(&b'\n') {
+                raw_line.pop();
+            }
+            if raw_line.last() == Some(&b'\r') {
+                raw_line.pop();
+            }
+            let line = go_json_text(&raw_line);
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            let Ok(entry) = serde_json::from_str::<Option<RawAuditEntry>>(line) else {
                 continue;
             };
-            events.push(AuditEvent {
+            saw_event = true;
+            let entry = entry.unwrap_or_default();
+            let event = AuditEvent {
                 timestamp: entry.timestamp.unwrap_or_default(),
                 tool: entry.action.unwrap_or_default(),
                 path: entry.path.unwrap_or_default(),
@@ -409,15 +457,87 @@ impl StoreReadOnlyRuntime {
                 }
                 .into(),
                 code: entry.reason.unwrap_or_default(),
-            });
+            };
+            if limit > 0 {
+                if events.len() == limit {
+                    events.pop_front();
+                }
+                events.push_back(event);
+            }
         }
-        if events.len() > limit {
-            let start = events.len() - limit;
-            events.drain(..start);
+        if !saw_event {
+            return Ok(ToolCallResult::text("null"));
         }
-        serde_json::to_string(&events)
+        serde_json::to_string(&events.into_iter().collect::<Vec<_>>())
             .map(ToolCallResult::text)
             .map_err(|error| error.to_string())
+    }
+}
+
+/// Match encoding/json's replacement policy: each invalid UTF-8 byte becomes
+/// U+FFFD, including each byte in a truncated multi-byte sequence.
+fn go_json_text(bytes: &[u8]) -> String {
+    let mut output = String::with_capacity(bytes.len());
+    let mut remaining = bytes;
+    while !remaining.is_empty() {
+        match std::str::from_utf8(remaining) {
+            Ok(text) => {
+                output.push_str(text);
+                break;
+            }
+            Err(error) => {
+                let valid = error.valid_up_to();
+                // Utf8Error guarantees the prefix before valid_up_to is UTF-8.
+                output.push_str(
+                    std::str::from_utf8(&remaining[..valid])
+                        .expect("valid UTF-8 prefix before decoding error"),
+                );
+                output.push('\u{FFFD}');
+                remaining = &remaining[valid + 1..];
+            }
+        }
+    }
+    output
+}
+
+const GO_SCANNER_MAX_TOKEN_SIZE: usize = 64 * 1024;
+
+/// Read one ScanLines token without allowing a hostile audit file to grow the
+/// buffer beyond Go's default Scanner limit. The returned bytes retain the
+/// delimiter so the caller can apply ScanLines' CRLF trimming.
+fn read_scan_line<R: BufRead>(reader: &mut R, line: &mut Vec<u8>) -> std::io::Result<bool> {
+    loop {
+        let chunk = reader.fill_buf()?;
+        if chunk.is_empty() {
+            if line.is_empty() {
+                return Ok(false);
+            }
+            if line.len() >= GO_SCANNER_MAX_TOKEN_SIZE {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "bufio.Scanner: token too long",
+                ));
+            }
+            return Ok(true);
+        }
+        let take = chunk
+            .iter()
+            .position(|byte| *byte == b'\n')
+            .map_or(chunk.len(), |index| index + 1);
+        if line.len() + take > GO_SCANNER_MAX_TOKEN_SIZE
+            || (line.len() + take == GO_SCANNER_MAX_TOKEN_SIZE && chunk[take - 1] != b'\n')
+        {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "bufio.Scanner: token too long",
+            ));
+        }
+        let has_newline = chunk[take - 1] == b'\n';
+        line.extend_from_slice(&chunk[..take]);
+        reader.consume(take);
+        if has_newline {
+            return Ok(true);
+        }
     }
 }
 
