@@ -12,6 +12,7 @@ mod history_commands;
 mod import_commands;
 mod mcp_commands;
 mod migrate_kdf_commands;
+mod profile_commands;
 mod recipients_commands;
 mod search_commands;
 mod session_commands;
@@ -235,6 +236,11 @@ enum Command {
         #[arg(long = "rebuild-only")]
         rebuild_only: bool,
     },
+    /// List configured vault profiles.
+    Profile {
+        #[command(subcommand)]
+        command: ProfileCommand,
+    },
     /// View MCP audit log entries.
     Audit {
         #[arg(short = 'n', long, default_value_t = 20)]
@@ -334,6 +340,11 @@ enum Command {
         #[command(subcommand)]
         command: AuthCommand,
     },
+}
+
+#[derive(Debug, Subcommand)]
+enum ProfileCommand {
+    List,
 }
 
 #[derive(Debug, Subcommand)]
@@ -684,6 +695,9 @@ fn main() -> ExitCode {
             rebuild_only,
             cli.quiet,
         ),
+        Some(Command::Profile {
+            command: ProfileCommand::List,
+        }) => run_profile_list(cli.quiet),
         Some(Command::Audit {
             tail,
             audit_json,
@@ -997,6 +1011,23 @@ fn run_verify(
             rebuild_only,
             &mut io::stderr().lock(),
         )
+    })();
+    finish_vault_result(result)
+}
+
+fn run_profile_list(quiet: bool) -> ExitCode {
+    let result = (|| {
+        let home = std::env::var_os("HOME")
+            .filter(|value| !value.is_empty())
+            .or_else(|| {
+                cfg!(windows)
+                    .then(|| std::env::var_os("USERPROFILE"))
+                    .flatten()
+                    .filter(|value| !value.is_empty())
+            })
+            .map(PathBuf::from)
+            .ok_or_else(|| "cannot determine home directory".to_owned())?;
+        profile_commands::list(&home, quiet, &mut io::stdout().lock())
     })();
     finish_vault_result(result)
 }

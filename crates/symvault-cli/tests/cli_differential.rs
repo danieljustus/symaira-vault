@@ -29,6 +29,19 @@ fn run(binary: &Path, args: &[&str], root: &Path, home: &Path) -> Output {
         .expect("run CLI")
 }
 
+// Compare search results against a freshly built Go index. The pinned Go
+// writer can leave a same-count disk index stale when its asynchronous warmup
+// races UpdateEntry. Persistent index interoperability is tested separately;
+// this CLI oracle checks current entry contents, not that cache race.
+fn run_search(binary: &Path, args: &[&str], root: &Path, home: &Path) -> Output {
+    match fs::remove_file(root.join(".search-index")) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => panic!("remove synthetic search index: {error}"),
+    }
+    run(binary, args, root, home)
+}
+
 fn run_with_input(binary: &Path, args: &[&str], root: &Path, home: &Path, input: &[u8]) -> Output {
     let mut child = Command::new(binary)
         .args(args)
@@ -264,7 +277,7 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     assert_success(&go_get_url, "Go get URL after set");
     assert_eq!(go_get_url.stdout, b"https://github.com/login\n");
 
-    let go_find_secret = run(
+    let go_find_secret = run_search(
         &go_binary,
         &["--vault", rust_root.to_str().unwrap(), "find", "secret"],
         &rust_root,
@@ -290,7 +303,7 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
         index_after_rust_find, index_after_go_find,
         "Rust find changed the Go encrypted search index"
     );
-    let go_find_url = run(
+    let go_find_url = run_search(
         &go_binary,
         &[
             "--vault",
@@ -324,7 +337,7 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
         first_json_output(&rust_find_url, "Rust find URL"),
         first_json_output(&go_find_url, "Go find URL")
     );
-    let go_find_scoped = run(
+    let go_find_scoped = run_search(
         &go_binary,
         &[
             "--vault",
@@ -375,7 +388,7 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
         &home,
     );
     assert_success(&go_set_unicode, "Go set Unicode search value");
-    let go_find_unicode = run(
+    let go_find_unicode = run_search(
         &go_binary,
         &["--vault", rust_root.to_str().unwrap(), "find", "äpfel"],
         &rust_root,
@@ -408,7 +421,7 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
         &go_set_unicode_special,
         "Go set special Unicode search value",
     );
-    let go_find_unicode_special = run(
+    let go_find_unicode_special = run_search(
         &go_binary,
         &["--vault", rust_root.to_str().unwrap(), "find", "istanbul"],
         &rust_root,
@@ -426,7 +439,7 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
         rust_find_unicode_special.stdout,
         go_find_unicode_special.stdout
     );
-    let go_find_empty = run(
+    let go_find_empty = run_search(
         &go_binary,
         &[
             "--vault",

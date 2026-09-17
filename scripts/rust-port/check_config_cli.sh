@@ -23,4 +23,6 @@ fi
 "${GO:-go}" run ./scripts/rust-port/cmd/configclicasesgen \
     --check --go-binary "$oracle_binary"
 SYMVAULT_GO_BINARY="$oracle_binary" "${CARGO:-cargo}" test --manifest-path "$repo_root/Cargo.toml" \
-    -p symvault-cli --test config_inspect --test cli_differential --locked
+    -p symvault-cli --test config_inspect --test cli_differential --test profile_differential --locked
+SYMVAULT_GO_BINARY="$oracle_binary" "${CARGO:-cargo}" test --manifest-path "$repo_root/Cargo.toml" \
+    -p symvault-cli --test migrate_kdf_differential --locked -- --ignored

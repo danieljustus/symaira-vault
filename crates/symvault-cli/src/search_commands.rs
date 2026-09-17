@@ -1,15 +1,13 @@
 //! Native `find`/`search` command adapter.
 //!
-//! The encrypted search index remains the value-search implementation.  This
-//! module only joins its path candidates with decrypted field names and the
-//! URL host filter required by the Go command contract.
+//! Searches decrypted fields and paths with the Go command URL filter.
 
 use std::{collections::BTreeSet, path::Path};
 
 use serde::Serialize;
 use symvault_core::go_to_lower;
 use symvault_crypto::Identity;
-use symvault_store::{Entry, Store, search_index_store::SearchIndexStore};
+use symvault_store::{Entry, Store};
 use url::Url;
 
 #[derive(Debug, Eq, PartialEq, Serialize)]
@@ -19,7 +17,7 @@ pub struct SearchMatch {
     pub fields: Vec<String>,
 }
 
-/// Search paths and decrypted fields using the shared persistent index.
+/// Search paths and decrypted fields without trusting stale disk indexes.
 pub fn find(
     root: &Path,
     identity: &Identity,
@@ -62,26 +60,11 @@ pub fn find(
         .cloned()
         .collect();
 
-    let indexed_paths = if needle.is_empty() {
-        BTreeSet::new()
-    } else {
-        let indexes = SearchIndexStore::new();
-        let loaded = matches!(indexes.load(&store, identity), Ok(true));
-        let ready = loaded || indexes.build(&store, identity).is_ok();
-        if ready {
-            indexes
-                .search(&store, &paths, &needle)
-                .unwrap_or_else(|_| paths.iter().cloned().collect())
-        } else {
-            // The Go implementation falls back to decrypting all candidates
-            // when its encrypted index is absent or stale.
-            paths.iter().cloned().collect()
-        }
-    };
-
+    // ponytail: O(n) decrypt scan until the shared index can prove freshness
+    // after external Go writes. Entry count alone misses same-path updates.
     let mut field_matches = Vec::new();
     for path in paths {
-        if path_matches.contains(&path) || !indexed_paths.contains(&path) {
+        if path_matches.contains(&path) {
             continue;
         }
         let entry = store
@@ -210,5 +193,40 @@ fn normalize_host(raw: &str) -> Result<String, String> {
         Ok(format!("[{host}]:{}", port.expect("checked above")))
     } else {
         Ok(format!("{host}:{}", port.expect("checked above")))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn same_count_stale_index_does_not_hide_updated_values() {
+        let root =
+            std::env::temp_dir().join(format!("symvault-search-stale-{}", std::process::id()));
+        std::fs::create_dir_all(root.join("entries")).unwrap();
+        let identity = crate::vault_commands::initialize(
+            &root,
+            &symvault_crypto::SecretBytes::new(b"synthetic search passphrase"),
+        )
+        .unwrap();
+        let store = Store::open(&root, &identity).unwrap();
+        let mut entry = Entry::default();
+        entry.data.insert("note".into(), "before".into());
+        store.write_entry("account", &entry, &identity).unwrap();
+        symvault_store::SearchIndex::build(&store, &identity).unwrap();
+        let stale = std::fs::read(root.join(".search-index")).unwrap();
+        entry.data.insert("note".into(), "İSTANBUL".into());
+        store.write_entry("account", &entry, &identity).unwrap();
+        // Reproduce a persisted index surviving an external same-path write.
+        std::fs::write(root.join(".search-index"), stale).unwrap();
+        assert_eq!(
+            find(&root, &identity, "istanbul", None).unwrap(),
+            vec![SearchMatch {
+                path: "account".into(),
+                fields: vec!["note".into()],
+            }]
+        );
+        std::fs::remove_dir_all(root).unwrap();
     }
 }
