@@ -5,7 +5,7 @@
 //! signing key.  It deliberately does not create, approve, revoke, or delete
 //! grants; those mutations remain outside this bounded storage slice.
 
-use std::{io, path::Path};
+use std::{collections::BTreeMap, io, path::Path};
 
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
@@ -150,14 +150,20 @@ impl ShareStore {
             return Ok(Self::default());
         };
 
-        let grants = raw
+        let mut grants_by_id = BTreeMap::new();
+        for grant in raw
             .grants
             .unwrap_or_default()
             .into_iter()
             .flatten()
             .filter(|grant| !grant.id.is_empty())
-            .map(|grant| grant.validate())
-            .collect::<Result<Vec<_>, _>>()?;
+        {
+            // Go stores grants in a map keyed by ID, so duplicate IDs are
+            // replaced by the last JSON array element.
+            let grant = grant.validate()?;
+            grants_by_id.insert(grant.id.clone(), grant);
+        }
+        let grants = grants_by_id.into_values().collect();
         // This is an opt-in integrity check.  Plain list semantics remain
         // compatible with Go, which loads and lists forged metadata, while
         // callers requiring a trusted snapshot can use `verified_grants`.
@@ -169,6 +175,8 @@ impl ShareStore {
     }
 
     /// Reads a store and rejects any signed grant that cannot be verified.
+    /// Legacy unsigned IDs remain accepted for Go backwards compatibility and
+    /// therefore are not cryptographically trusted by this method.
     pub fn read_verified(
         path: impl AsRef<Path>,
         signing_key: Option<&[u8]>,
@@ -252,7 +260,11 @@ impl ShareStore {
             {
                 continue;
             }
-            verify_grant_id(grant, signing_key)?;
+            // Go CheckAccess skips a malformed or forged signed grant and
+            // continues looking for another matching grant.
+            if verify_grant_id(grant, signing_key).is_err() {
+                continue;
+            }
             return Ok(Some(grant.clone()));
         }
         Ok(None)
@@ -387,13 +399,23 @@ fn go_json_string(value: &str) -> String {
 }
 
 fn decode_hex(value: &str) -> Option<Vec<u8>> {
-    if !value.len().is_multiple_of(2) {
+    let bytes = value.as_bytes();
+    if !bytes.len().is_multiple_of(2) {
         return None;
     }
-    (0..value.len())
-        .step_by(2)
-        .map(|index| u8::from_str_radix(&value[index..index + 2], 16).ok())
+    bytes
+        .chunks_exact(2)
+        .map(|chunk| Some((hex_nibble(chunk[0])? << 4) | hex_nibble(chunk[1])?))
         .collect()
+}
+
+fn hex_nibble(value: u8) -> Option<u8> {
+    match value {
+        b'0'..=b'9' => Some(value - b'0'),
+        b'a'..=b'f' => Some(value - b'a' + 10),
+        b'A'..=b'F' => Some(value - b'A' + 10),
+        _ => None,
+    }
 }
 
 fn is_zero(value: &i64) -> bool {
@@ -446,6 +468,7 @@ where
 mod tests {
     use super::*;
     use std::{fs, path::PathBuf};
+    use tempfile::TempDir;
 
     // Provenance: internal/crypto/hmac.go and internal/mcp/sharing_store.go
     // at the pinned Go oracle fca3f894.  The vector uses Go's declared JSON
@@ -453,15 +476,15 @@ mod tests {
     const GO_KEY: &[u8] = b"go-fixture-key";
     const GO_ID: &str = "00112233445566778899aabbccddeeff:6cd0030a08ef6997baead9105a98e1606f0f7f956b79e91dcba41a865a6a524c";
 
-    fn fixture_path(name: &str) -> PathBuf {
-        let root = std::env::temp_dir().join(format!("symvault-share-{name}"));
-        fs::create_dir_all(&root).expect("fixture directory");
-        root.join(SHARE_STORE_FILE)
+    fn fixture_path() -> (TempDir, PathBuf) {
+        let root = tempfile::tempdir().expect("fixture directory");
+        let path = root.path().join(SHARE_STORE_FILE);
+        (root, path)
     }
 
     #[test]
     fn reads_go_fixture_filters_empty_ids_and_preserves_duration() {
-        let path = fixture_path("read");
+        let (_root, path) = fixture_path();
         fs::write(&path, r#"{"version":1,"grants":[null,{"id":"","from_agent":"ignored"},{"id":"legacy-1","from_agent":"source","to_agent":"target","secret_path":"prod/api","status":"pending","created_at":"2026-01-02T03:04:05Z","ttl":60000000000}]}"#).expect("write fixture");
         let store = ShareStore::read(&path).expect("read Go-shaped fixture");
         assert_eq!(store.version, 1);
@@ -480,12 +503,11 @@ mod tests {
                 .len(),
             1
         );
-        let _ = fs::remove_dir_all(path.parent().expect("fixture parent"));
     }
 
     #[test]
     fn missing_and_null_files_match_go_load_empty_store() {
-        let missing = fixture_path("missing");
+        let (_root, missing) = fixture_path();
         assert_eq!(
             ShareStore::read(&missing)
                 .expect("missing is empty")
@@ -496,24 +518,36 @@ mod tests {
         let null_store = ShareStore::read(&missing).expect("null is empty");
         assert_eq!(null_store.version, 1);
         assert!(null_store.grants().is_empty());
-        let _ = fs::remove_dir_all(missing.parent().expect("fixture parent"));
+    }
+
+    #[test]
+    fn duplicate_grant_ids_are_last_write_wins_like_go_map_load() {
+        let (_root, path) = fixture_path();
+        fs::write(
+            &path,
+            br#"{"version":1,"grants":[{"id":"duplicate","from_agent":"old","to_agent":"target","secret_path":"old","created_at":"2026-01-02T03:04:05Z"},{"id":"duplicate","from_agent":"new","to_agent":"target","secret_path":"new","created_at":"2026-01-02T03:04:05Z"}]}"#,
+        )
+        .expect("write duplicate fixture");
+        let store = ShareStore::read(&path).expect("read duplicate fixture");
+        assert_eq!(store.grants().len(), 1);
+        assert_eq!(store.grants()[0].from_agent, "new");
+        assert_eq!(store.grants()[0].secret_path, "new");
     }
 
     #[test]
     fn malformed_go_timestamp_is_rejected_at_load() {
-        let path = fixture_path("bad-time");
+        let (_root, path) = fixture_path();
         fs::write(
             &path,
             br#"{"version":1,"grants":[{"id":"legacy","created_at":""}]}"#,
         )
         .expect("write malformed fixture");
         assert!(ShareStore::read(&path).is_err());
-        let _ = fs::remove_dir_all(path.parent().expect("fixture parent"));
     }
 
     #[test]
     fn verifies_go_hmac_vector_and_rejects_tampering() {
-        let path = fixture_path("hmac");
+        let (_root, path) = fixture_path();
         fs::write(&path, format!(r#"{{"version":1,"grants":[{{"id":"{GO_ID}","from_agent":"source","to_agent":"target","secret_path":"prod/api","secret_field":"password","nonce":"00112233445566778899aabbccddeeff","status":"approved","created_at":"2026-01-02T03:04:05Z"}}]}}"#)).expect("write fixture");
         let store = ShareStore::read(&path).expect("read Go HMAC fixture");
         assert_eq!(
@@ -524,12 +558,11 @@ mod tests {
             1
         );
         assert!(store.verified_grants(Some(b"wrong-key")).is_err());
-        let _ = fs::remove_dir_all(path.parent().expect("fixture parent"));
     }
 
     #[test]
     fn check_access_matches_go_approved_path_and_expiry_predicates() {
-        let path = fixture_path("access");
+        let (_root, path) = fixture_path();
         fs::write(&path, format!(r#"{{"version":1,"grants":[{{"id":"{GO_ID}","from_agent":"source","to_agent":"target","secret_path":"prod/api","secret_field":"password","status":"approved","created_at":"2026-01-02T03:04:05Z","expires_at":"2026-01-02T04:04:05Z"}},{{"id":"legacy-revoked","from_agent":"source","to_agent":"target","secret_path":"prod/api","status":"revoked","created_at":"2026-01-02T03:04:05Z"}}]}}"#)).expect("write fixture");
         let store = ShareStore::read(&path).expect("read fixture");
         assert_eq!(store.grants().len(), 2);
@@ -560,6 +593,34 @@ mod tests {
                 .expect("expiry check")
                 .is_none()
         );
-        let _ = fs::remove_dir_all(path.parent().expect("fixture parent"));
+    }
+
+    #[test]
+    fn access_skips_forged_signed_grant_and_non_ascii_hex_cannot_panic() {
+        let (_root, path) = fixture_path();
+        let forged_id = "00000000000000000000000000000000:0000000000000000000000000000000000000000000000000000000000000000";
+        fs::write(
+            &path,
+            format!(
+                r#"{{"version":1,"grants":[{{"id":"{forged_id}","to_agent":"target","secret_path":"prod/api","status":"approved","created_at":"2026-01-02T03:04:05Z"}},{{"id":"{GO_ID}","from_agent":"source","to_agent":"target","secret_path":"prod/api","status":"approved","created_at":"2026-01-02T03:04:05Z"}}]}}"#
+            ),
+        )
+        .expect("write forged fixture");
+        let store = ShareStore::read(&path).expect("read forged fixture");
+        assert!(
+            store
+                .check_access("target", "prod/api", Some(GO_KEY), "2026-01-02T03:30:00Z")
+                .expect("forged grant is skipped")
+                .is_some()
+        );
+
+        fs::write(
+            &path,
+            r#"{"version":1,"grants":[{"id":"é:","created_at":"2026-01-02T03:04:05Z"}]}"#
+                .as_bytes(),
+        )
+        .expect("write non-ascii fixture");
+        let store = ShareStore::read(&path).expect("read non-ascii fixture");
+        assert!(store.verified_grants(Some(GO_KEY)).is_err());
     }
 }
