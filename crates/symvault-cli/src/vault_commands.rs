@@ -6,10 +6,12 @@
 
 use std::{
     collections::BTreeMap,
-    io::{self, Write},
+    io::Write,
     path::Path,
-    time::{SystemTime, UNIX_EPOCH},
 };
+
+#[cfg(test)]
+use std::{io, time::{SystemTime, UNIX_EPOCH}};
 
 use serde::Serialize;
 use symvault_core::config::{AgentProfile, Config, GitConfig, VaultConfig};
