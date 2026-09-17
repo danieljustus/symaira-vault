@@ -78,6 +78,7 @@ func TestGenerateMCPSearchFetchFixture(t *testing.T) {
 		name    string
 		profile config.AgentProfile
 		call    string
+		second  string
 	}{
 		{
 			name: "search_metadata_only",
@@ -123,6 +124,45 @@ func TestGenerateMCPSearchFetchFixture(t *testing.T) {
 			call: `{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"fetch","arguments":{"id":"secret"}}}`,
 		},
 		{
+			name: "fetch_redacted_before_seal",
+			profile: config.AgentProfile{
+				Name: "fixture", AllowedPaths: []string{"*"},
+				CanReadValues: config.BoolPtr(true), ExposeValueTools: config.BoolPtr(true),
+				AutoUnseal: config.BoolPtr(false), ApprovalMode: config.StrPtr("none"),
+				RedactFields: []string{"password"},
+			},
+			call: `{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"fetch","arguments":{"id":"secret"}}}`,
+		},
+		{
+			name: "fetch_session_limit",
+			profile: config.AgentProfile{
+				Name: "fixture", AllowedPaths: []string{"*"},
+				CanReadValues: config.BoolPtr(true), ExposeValueTools: config.BoolPtr(true),
+				AutoUnseal: config.BoolPtr(true), ApprovalMode: config.StrPtr("none"),
+				MaxSecretsInSession: config.IntPtr(1),
+			},
+			call:   `{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"fetch","arguments":{"id":"secret"}}}`,
+			second: `{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"fetch","arguments":{"id":"secret"}}}`,
+		},
+		{
+			name: "fetch_expose_false_can_read_true",
+			profile: config.AgentProfile{
+				Name: "fixture", AllowedPaths: []string{"*"},
+				CanReadValues: config.BoolPtr(true), ExposeValueTools: config.BoolPtr(false),
+				AutoUnseal: config.BoolPtr(true), ApprovalMode: config.StrPtr("none"),
+			},
+			call: `{"jsonrpc":"2.0","id":13,"method":"tools/call","params":{"name":"fetch","arguments":{"id":"secret"}}}`,
+		},
+		{
+			name: "fetch_only_allowed_registry",
+			profile: config.AgentProfile{
+				Name: "fixture", AllowedPaths: []string{"*"}, AllowedTools: []string{"fetch"},
+				CanReadValues: config.BoolPtr(true), ExposeValueTools: config.BoolPtr(true),
+				AutoUnseal: config.BoolPtr(true), ApprovalMode: config.StrPtr("none"),
+			},
+			call: `{"jsonrpc":"2.0","id":14,"method":"tools/call","params":{"name":"fetch","arguments":{"id":"secret"}}}`,
+		},
+		{
 			name: "fetch_scope_denied",
 			profile: config.AgentProfile{
 				Name: "fixture", AllowedPaths: []string{"allowed/*"},
@@ -148,6 +188,14 @@ func TestGenerateMCPSearchFetchFixture(t *testing.T) {
 			},
 			call: `{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"fetch","arguments":{}}}`,
 		},
+		{
+			name: "fetch_missing_entry",
+			profile: config.AgentProfile{
+				Name: "fixture", AllowedPaths: []string{"*"},
+				ApprovalMode: config.StrPtr("none"),
+			},
+			call: `{"jsonrpc":"2.0","id":15,"method":"tools/call","params":{"name":"fetch","arguments":{"id":"missing"}}}`,
+		},
 	}
 
 	fixtureCases := make([]mcpSearchFetchCase, 0, len(cases))
@@ -156,6 +204,9 @@ func TestGenerateMCPSearchFetchFixture(t *testing.T) {
 		srv.vault.Identity = identity
 		handler := NewProtocolHandler(serverName, serverVersion, srv)
 		inputs := append(append([]string{}, base...), tc.call)
+		if tc.second != "" {
+			inputs = append(inputs, tc.second)
+		}
 		outputs := make([]json.RawMessage, 0, len(inputs))
 		markerCounts := make([]int, 0, len(inputs))
 		for _, line := range inputs {

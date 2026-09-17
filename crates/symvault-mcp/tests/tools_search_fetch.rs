@@ -105,9 +105,20 @@ fn fixture_store() -> MemoryStore {
 }
 
 fn runtime_for_case(name: &str) -> ReadOnlyRuntime<MemoryStore> {
-    let values = matches!(name, "fetch_values_allowed" | "fetch_default_sealed");
+    let values = matches!(
+        name,
+        "fetch_values_allowed"
+            | "fetch_default_sealed"
+            | "fetch_redacted_before_seal"
+            | "fetch_session_limit"
+            | "fetch_only_allowed_registry"
+    );
     let mut available_tools = vec!["search".into(), "fetch".into()];
     if values {
+        // Go's AllowedTools controls dispatch separately from
+        // ExposeValueTools. Keep the value tool in this injected registry to
+        // represent that independent exposure decision; removing it is a
+        // deliberate Rust-stricter metadata-only mode.
         available_tools.push("get_entry_value".into());
     }
     let allowed_paths = if name == "fetch_scope_denied" {
@@ -125,7 +136,12 @@ fn runtime_for_case(name: &str) -> ReadOnlyRuntime<MemoryStore> {
             approval_mode: "none".into(),
             allowed_paths,
             can_read_values: values,
-            auto_unseal: name == "fetch_values_allowed",
+            auto_unseal: matches!(
+                name,
+                "fetch_values_allowed" | "fetch_session_limit" | "fetch_only_allowed_registry"
+            ),
+            redact_fields: (name == "fetch_redacted_before_seal").then(|| vec!["password".into()]),
+            max_secrets_in_session: (name == "fetch_session_limit").then_some(1).unwrap_or(0),
             available_tools,
             vault_dir: "<fixture-vault>".into(),
             vault_unlocked: true,
@@ -179,7 +195,7 @@ fn go_generated_search_fetch_fixture_matches_rust_stream() {
     assert!(!fixture.oracle.source_files.is_empty());
     assert_eq!(fixture.oracle.source_hash.len(), 64);
     assert_eq!(fixture.oracle.generator_hash.len(), 64);
-    assert_eq!(fixture.cases.len(), 8);
+    assert_eq!(fixture.cases.len(), 13);
 
     for case in fixture.cases {
         let case_name = case.name.clone();
