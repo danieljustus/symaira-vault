@@ -14,6 +14,7 @@ mod session_commands;
 #[path = "device_input.rs"]
 mod session_input;
 mod utility_commands;
+mod verify_commands;
 mod vault_commands;
 mod write_commands;
 
@@ -198,6 +199,13 @@ enum Command {
     Restore {
         #[arg(value_name = "ARCHIVE_PATH")]
         archive: PathBuf,
+    },
+    /// Verify or rebuild the vault entry manifest.
+    Verify {
+        #[arg(long)]
+        rebuild: bool,
+        #[arg(long = "rebuild-only")]
+        rebuild_only: bool,
     },
     /// Export vault entries to CSV or JSON.
     Export {
@@ -532,6 +540,16 @@ fn main() -> ExitCode {
             &archive,
             cli.quiet,
         ),
+        Some(Command::Verify {
+            rebuild,
+            rebuild_only,
+        }) => run_verify(
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
+            rebuild,
+            rebuild_only,
+            cli.quiet,
+        ),
         Some(Command::Export {
             format,
             mapping,
@@ -772,6 +790,28 @@ fn run_add(
             println!("Entry created: {path}");
         }
         Ok::<(), String>(())
+    })();
+    finish_vault_result(result)
+}
+
+fn run_verify(
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    rebuild: bool,
+    rebuild_only: bool,
+    _quiet: bool,
+) -> ExitCode {
+    let result = (|| {
+        let vault = resolve_vault(explicit_vault, profile)?;
+        require_initialized(&vault)?;
+        let identity = device::unlock_vault(&vault)?;
+        verify_commands::verify(
+            &vault,
+            &identity,
+            rebuild,
+            rebuild_only,
+            &mut io::stdout().lock(),
+        )
     })();
     finish_vault_result(result)
 }
