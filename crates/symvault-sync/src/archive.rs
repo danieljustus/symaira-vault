@@ -74,7 +74,8 @@ fn digest(bytes: &[u8]) -> String {
         .collect()
 }
 
-/// Creates a gzip-compressed tar backup. Symlinks and special files are rejected.
+/// Creates a private gzip tar backup. Source symlinks are skipped, as in Go;
+/// special files and unsafe output targets are rejected.
 pub fn backup(
     root: impl AsRef<Path>,
     output: impl AsRef<Path>,
@@ -84,22 +85,44 @@ pub fn backup(
     if !root.is_dir() {
         return Err(ArchiveError::NotDirectory(root.to_path_buf()));
     }
-    let file = fs::File::create(output)?;
-    let encoder = GzEncoder::new(file, Compression::default());
+    let root = root.canonicalize()?;
+    let output = output.as_ref();
+    crate::safeio::refuse_unsafe_target(output)
+        .map_err(|error| io::Error::other(error.to_string()))?;
+    let parent = output
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    crate::safeio::create_dir_all(parent).map_err(|error| io::Error::other(error.to_string()))?;
+    let output = parent.canonicalize()?.join(
+        output
+            .file_name()
+            .ok_or_else(|| ArchiveError::UnsafePath(output.display().to_string()))?,
+    );
+    let mut staged =
+        tempfile::NamedTempFile::new_in(output.parent().expect("canonical output has parent"))?;
+    let staged_path = staged.path().to_path_buf();
+    let encoder = GzEncoder::new(staged.as_file_mut(), Compression::default());
     let mut builder = Builder::new(encoder);
     let mut manifest = Vec::new();
-    let mut paths: Vec<_> = walkdir(root)?.into_iter().collect();
+    let mut paths: Vec<_> = walkdir(&root)?.into_iter().collect();
     paths.sort();
     for path in paths {
+        if path == staged_path || path == output {
+            continue;
+        }
         let rel = path
-            .strip_prefix(root)
+            .strip_prefix(&root)
             .map_err(|_| ArchiveError::UnsafePath(path.display().to_string()))?;
         let rel = safe_relative(rel)?;
-        if exclude_git && (rel == Path::new(".git") || rel.starts_with(".git")) {
+        if exclude_git && rel.to_string_lossy().starts_with(".git") {
             continue;
         }
         let meta = fs::symlink_metadata(&path)?;
-        if meta.file_type().is_symlink() || (!meta.is_dir() && !meta.is_file()) {
+        if meta.file_type().is_symlink() {
+            continue;
+        }
+        if !meta.is_dir() && !meta.is_file() {
             return Err(ArchiveError::UnsupportedEntry(rel.display().to_string()));
         }
         let slash = rel
@@ -138,6 +161,10 @@ pub fn backup(
         }
     }
     builder.into_inner()?.finish()?;
+    staged.as_file().sync_all()?;
+    staged
+        .persist(output)
+        .map_err(|error| ArchiveError::Io(error.error))?;
     Ok(manifest)
 }
 fn walkdir(root: &Path) -> Result<Vec<PathBuf>, ArchiveError> {
@@ -171,7 +198,7 @@ pub fn restore(
     {
         return Err(ArchiveError::UnsafePath(dest.display().to_string()));
     }
-    fs::create_dir_all(dest)?;
+    crate::safeio::create_dir_all(dest).map_err(|error| io::Error::other(error.to_string()))?;
     if !dest.is_dir() {
         return Err(ArchiveError::NotDirectory(dest.to_path_buf()));
     }
@@ -194,14 +221,15 @@ pub fn restore(
         ensure_no_symlink_components(dest, &rel)?;
         let kind = entry.header().entry_type();
         if kind == EntryType::Directory {
-            fs::create_dir_all(&target)?;
-            apply_mode(&target, entry.header().mode()?)?;
+            crate::safeio::create_dir_all(&target)
+                .map_err(|error| io::Error::other(error.to_string()))?;
+            apply_mode(&target, entry.header().mode()? & 0o700)?;
             result.push(ArchiveEntry {
                 path: rel
                     .to_string_lossy()
                     .replace(std::path::MAIN_SEPARATOR, "/"),
                 directory: true,
-                mode: entry.header().mode()?,
+                mode: entry.header().mode()? & 0o700,
                 size: 0,
                 sha256: String::new(),
             });
@@ -219,7 +247,8 @@ pub fn restore(
             return Err(ArchiveError::Exists(target));
         }
         if let Some(parent) = target.parent() {
-            fs::create_dir_all(parent)?;
+            crate::safeio::create_dir_all(parent)
+                .map_err(|error| io::Error::other(error.to_string()))?;
         }
         let mut bytes = Vec::with_capacity(size.min(MAX_ARCHIVE_FILE) as usize);
         entry.read_to_end(&mut bytes)?;
@@ -227,7 +256,7 @@ pub fn restore(
             return Err(ArchiveError::Limit);
         }
         let hash = digest(&bytes);
-        let m = entry.header().mode()?;
+        let m = entry.header().mode()? & 0o600;
         let mut tmp = tempfile::NamedTempFile::new_in(target.parent().unwrap_or(dest))?;
         tmp.write_all(&bytes)?;
         #[cfg(unix)]

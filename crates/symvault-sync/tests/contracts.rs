@@ -149,7 +149,29 @@ fn backup_restore_preserves_manifest_modes_and_rejects_traversal() {
             .find(|x| x.path == "entries/a.age")
             .unwrap()
             .mode
+            & 0o600
     );
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            fs::metadata(&archive_path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        assert_eq!(
+            fs::metadata(dst.join("entries/a.age"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+        let link = t.path().join("redirect.tar.gz");
+        std::os::unix::fs::symlink(&archive_path, &link).unwrap();
+        let before = fs::read(&archive_path).unwrap();
+        assert!(archive::backup(&src, &link, false).is_err());
+        assert_eq!(fs::read(&archive_path).unwrap(), before);
+    }
     let evil = t.path().join("evil.tar.gz");
     let f = fs::File::create(&evil).unwrap();
     let mut gz = GzEncoder::new(f, Compression::default());
