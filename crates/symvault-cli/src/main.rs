@@ -1,6 +1,7 @@
 #![deny(unsafe_code)]
 
 mod add_commands;
+mod audit_commands;
 mod backup_commands;
 mod config;
 mod device;
@@ -212,6 +213,19 @@ enum Command {
         rebuild: bool,
         #[arg(long = "rebuild-only")]
         rebuild_only: bool,
+    },
+    /// View MCP audit log entries.
+    Audit {
+        #[arg(short = 'n', long, default_value_t = 20)]
+        tail: i64,
+        #[arg(short = 'j', long)]
+        audit_json: bool,
+        #[arg(short = 'a', long, default_value = "default")]
+        agent: String,
+        #[arg(short = 's', long, default_value = "")]
+        since: String,
+        #[arg(long)]
+        failed: bool,
     },
     /// Export vault entries to CSV or JSON.
     Export {
@@ -590,6 +604,20 @@ fn main() -> ExitCode {
             rebuild_only,
             cli.quiet,
         ),
+        Some(Command::Audit {
+            tail,
+            audit_json,
+            agent,
+            since,
+            failed,
+        }) => run_audit(
+            &agent,
+            tail,
+            &since,
+            failed,
+            cli.json || audit_json,
+            cli.output.as_deref(),
+        ),
         Some(Command::Export {
             format,
             mapping,
@@ -852,6 +880,34 @@ fn run_verify(
             rebuild_only,
             &mut io::stderr().lock(),
         )
+    })();
+    finish_vault_result(result)
+}
+
+fn run_audit(
+    agent: &str,
+    tail: i64,
+    since: &str,
+    failed: bool,
+    audit_json: bool,
+    output_format: Option<&str>,
+) -> ExitCode {
+    let result = (|| {
+        let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from)
+            .ok_or_else(|| "cannot determine home directory".to_owned())?;
+        let json = audit_json || output_format == Some("json");
+        if json {
+            let stdout = io::stdout();
+            let mut output = stdout.lock();
+            audit_commands::view(&home, agent, tail, since, failed, true, &mut output)?;
+        } else {
+            let stderr = io::stderr();
+            let mut output = stderr.lock();
+            audit_commands::view(&home, agent, tail, since, failed, false, &mut output)?;
+        }
+        Ok::<(), String>(())
     })();
     finish_vault_result(result)
 }
