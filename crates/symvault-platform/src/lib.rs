@@ -3,8 +3,26 @@
 
 #[cfg(target_os = "macos")]
 mod macos;
+#[cfg(any(
+    target_os = "macos",
+    target_os = "linux",
+    target_os = "windows",
+    target_os = "freebsd",
+    target_os = "openbsd",
+    target_os = "netbsd"
+))]
+mod os_keyring;
 #[cfg(target_os = "macos")]
 pub use macos::{MacOsDaemon, MacOsKeyring, MacOsPlatform, MacOsTouchId};
+#[cfg(any(
+    target_os = "macos",
+    target_os = "linux",
+    target_os = "windows",
+    target_os = "freebsd",
+    target_os = "openbsd",
+    target_os = "netbsd"
+))]
+pub use os_keyring::OsKeyring;
 
 pub use symvault_core::persistent_quota::{
     NativeQuotaPlatform, QUOTA_FILE_NAME, QuotaCounter, QuotaError, QuotaPlatform,
