@@ -3,6 +3,7 @@
 mod config;
 mod device;
 mod export_commands;
+mod import_commands;
 mod mcp_commands;
 mod session_commands;
 #[path = "device_input.rs"]
@@ -146,6 +147,23 @@ enum Command {
         path: String,
         #[arg(short = 'y', long)]
         yes: bool,
+    },
+    /// Import entries from another password manager.
+    Import {
+        #[arg(value_name = "SOURCE")]
+        source: PathBuf,
+        #[arg(long)]
+        format: Option<String>,
+        #[arg(long)]
+        dry_run: bool,
+        #[arg(long, default_value = "")]
+        prefix: String,
+        #[arg(long)]
+        skip_existing: bool,
+        #[arg(long)]
+        overwrite: bool,
+        #[arg(long, default_value = "")]
+        mapping: String,
     },
     /// Print the version of Symaira Vault.
     Version(VersionArgs),
@@ -345,6 +363,26 @@ fn main() -> ExitCode {
             &path,
             yes,
             cli.json || cli.output.as_deref() == Some("json"),
+            cli.quiet,
+        ),
+        Some(Command::Import {
+            source,
+            format,
+            dry_run,
+            prefix,
+            skip_existing,
+            overwrite,
+            mapping,
+        }) => run_import(
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
+            &source,
+            format.as_deref(),
+            dry_run,
+            &prefix,
+            skip_existing,
+            overwrite,
+            &mapping,
             cli.quiet,
         ),
         Some(Command::Version(_)) => {
@@ -769,6 +807,48 @@ fn run_delete(
             println!("{}", serde_json::json!({"deleted": true, "path": path}));
         } else if !quiet {
             println!("Deleted: {path}");
+        }
+        Ok::<(), String>(())
+    })();
+    finish_vault_result(result)
+}
+
+fn run_import(
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    source: &Path,
+    format: Option<&str>,
+    dry_run: bool,
+    prefix: &str,
+    skip_existing: bool,
+    overwrite: bool,
+    mapping: &str,
+    quiet: bool,
+) -> ExitCode {
+    let result = (|| {
+        let vault = resolve_vault(explicit_vault, profile)?;
+        require_initialized(&vault)?;
+        let identity = device::unlock_vault(&vault)?;
+        let result = import_commands::run_import(
+            &vault,
+            &identity,
+            &import_commands::ImportOptions {
+                source: source.to_owned(),
+                format: format.map(str::to_owned),
+                dry_run,
+                prefix: prefix.to_owned(),
+                skip_existing,
+                overwrite,
+                mapping: mapping.to_owned(),
+            },
+            |root, identity, path, data| write_commands::import_fields(root, identity, path, data),
+            |root, identity, path, data| write_commands::replace_fields(root, identity, path, data),
+        )?;
+        if !quiet {
+            println!(
+                "Import summary: {} imported, {} skipped",
+                result.imported, result.skipped
+            );
         }
         Ok::<(), String>(())
     })();

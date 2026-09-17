@@ -24,6 +24,7 @@ fn run(binary: &Path, args: &[&str], root: &Path, home: &Path) -> Output {
         .env("SYMVAULT_VAULT", root)
         .env("SYMVAULT_PASSPHRASE", "correct horse battery staple")
         .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
+        .env("CI", "1")
         .output()
         .expect("run CLI")
 }
@@ -38,6 +39,7 @@ fn run_with_input(binary: &Path, args: &[&str], root: &Path, home: &Path, input:
         .env("SYMVAULT_VAULT", root)
         .env("SYMVAULT_PASSPHRASE", "correct horse battery staple")
         .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
+        .env("CI", "1")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -292,6 +294,45 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     assert_success(&go_list_after_delete, "Go list after Rust delete");
     assert_success(&rust_list_after_delete, "Rust list after delete");
     assert_eq!(rust_list_after_delete.stdout, go_list_after_delete.stdout);
+
+    let import_source = home.join("import.csv");
+    fs::write(
+        &import_source,
+        b"title,username,password\nImported,import-user,import-secret\n",
+    )
+    .expect("write import source");
+    let rust_import = run(
+        &rust_binary,
+        &[
+            "--vault",
+            rust_root.to_str().unwrap(),
+            "import",
+            import_source.to_str().unwrap(),
+            "--format",
+            "csv",
+        ],
+        &rust_root,
+        &home,
+    );
+    assert_success(&rust_import, "Rust import");
+    let go_imported = run(
+        &go_binary,
+        &[
+            "--vault",
+            rust_root.to_str().unwrap(),
+            "get",
+            "Imported",
+            "--output",
+            "json",
+        ],
+        &rust_root,
+        &home,
+    );
+    assert_success(&go_imported, "Go get after Rust import");
+    assert_eq!(
+        first_json(&go_imported.stdout, "Go imported entry")["Fields"]["username"],
+        "import-user"
+    );
 
     let go_export = run(
         &go_binary,
