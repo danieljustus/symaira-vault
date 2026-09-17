@@ -126,6 +126,8 @@ fn agent_profile_show_matches_go_yaml_json_and_nil_fields() {
     max_secrets_in_session: 3
     dynamicProviders:
       foo: [bar]
+    pre_call_hooks: [prepare]
+    post_call_hooks: [cleanup]
     allowedEnvVars: [LANG]
     allowedExecutables: [git]
     promptInjectionMode: deny
@@ -146,6 +148,38 @@ fn agent_profile_show_matches_go_yaml_json_and_nil_fields() {
             &format!("agent profile show demo --output {output}"),
         );
     }
+
+    let export_args = ["agent", "profile", "export", "demo"];
+    let go = run(&go_binary, &export_args, &custom_home, &custom_vault);
+    let rust = run(&rust_binary, &export_args, &custom_home, &custom_vault);
+    assert_same(&go, &rust, "agent profile export demo");
+
+    let go_export_path = custom_home.join("go-profile.yaml");
+    let rust_export_path = custom_home.join("rust-profile.yaml");
+    let go_export_args = [
+        "agent",
+        "profile",
+        "export",
+        "demo",
+        "--output",
+        go_export_path.to_str().expect("Go export path"),
+    ];
+    let rust_export_args = [
+        "agent",
+        "profile",
+        "export",
+        "demo",
+        "--output",
+        rust_export_path.to_str().expect("Rust export path"),
+    ];
+    let go = run(&go_binary, &go_export_args, &custom_home, &custom_vault);
+    let rust = run(&rust_binary, &rust_export_args, &custom_home, &custom_vault);
+    assert_same(&go, &rust, "agent profile export demo --output");
+    assert_eq!(
+        fs::read(go_export_path).expect("Go exported profile"),
+        fs::read(rust_export_path).expect("Rust exported profile"),
+        "exported profile bytes differ"
+    );
 
     let empty_home = temporary_root("empty-fields-home");
     let empty_vault = empty_home.join("vault");
