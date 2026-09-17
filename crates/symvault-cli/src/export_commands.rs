@@ -16,9 +16,7 @@ use symvault_crypto::Identity;
 use symvault_store::Store;
 use symvault_sync::export::{self, ExportEntry};
 
-#[cfg(not(test))]
 use symvault_store::audit::{self, LogEntry, RotationConfig};
-#[cfg(not(test))]
 use symvault_sync::GoTime;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -55,13 +53,10 @@ pub struct ExportResult {
 /// Records the successful export through the production Go-compatible keyring
 /// adapter. The CLI's runtime factory owns the native keyring and fallback
 /// policy; this child module only supplies the audit event.
-#[cfg(not(test))]
-pub(crate) fn audit_export(vault: &Path, _entries: usize) -> Result<(), String> {
-    let runtime = crate::runtime_session_manager();
-    let keyring = runtime
-        .keyring
-        .as_deref()
-        .ok_or_else(|| "audit keyring is unavailable on this platform".to_owned())?;
+pub(crate) fn audit_export(
+    vault: &Path,
+    keyring: &dyn symvault_core::session::Keyring,
+) -> Result<(), String> {
     let mut logger =
         audit::open_with_keyring("symvault", vault, keyring, RotationConfig::default())
             .map_err(|error| format!("open audit log: {error}"))?;
@@ -76,7 +71,6 @@ pub(crate) fn audit_export(vault: &Path, _entries: usize) -> Result<(), String> 
         .map_err(|error| format!("write audit log: {error}"))
 }
 
-#[cfg(not(test))]
 fn go_timestamp_seconds() -> String {
     let value = GoTime::now().to_rfc3339_nano();
     value
