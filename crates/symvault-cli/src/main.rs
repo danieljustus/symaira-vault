@@ -64,17 +64,10 @@ enum Command {
 
 #[derive(Debug, Subcommand)]
 enum ConfigCommand {
-    /// Get a value using dotted path notation.
-    Get {
-        #[arg(value_name = "DOTTED.PATH")]
-        key: String,
-        #[arg(long)]
-        file: Option<std::path::PathBuf>,
-    },
     /// Print the raw configuration file.
     List {
         #[arg(long)]
-        file: Option<std::path::PathBuf>,
+        file: Option<String>,
     },
 }
 
@@ -195,24 +188,16 @@ fn main() -> ExitCode {
             }
         }
         Some(Command::Config { command }) => {
-            let result = match command {
-                ConfigCommand::Get { key, file } => config::resolve_path(file).and_then(|path| {
-                    config::get(
-                        &path,
-                        &key,
-                        if cli.json { "json" } else { &cli.output },
-                        cli.quiet,
-                    )
-                }),
-                ConfigCommand::List { file } => config::resolve_path(file).and_then(|path| {
-                    config::list(
-                        &path,
-                        if cli.json { "json" } else { &cli.output },
-                        cli.quiet,
-                    )
-                }),
+            let path = match command {
+                ConfigCommand::List { file } => match config::resolve_path(file.map(Into::into)) {
+                    Ok(path) => path,
+                    Err(error) => {
+                        let _ = writeln!(io::stderr(), "Error: {error}");
+                        return ExitCode::from(1);
+                    }
+                },
             };
-            match result {
+            match config::list(&path, &cli.output, cli.quiet) {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(error) => {
                     let _ = writeln!(io::stderr(), "Error: {error}");

@@ -1,19 +1,24 @@
-// Command configclicasesgen freezes read-only config CLI cases from the Go
-// production helpers. The Rust integration test consumes this fixture as a
-// language-neutral contract.
+// Command configclicasesgen freezes raw config list cases from the Go CLI.
+// The Rust integration test consumes this fixture as a language-neutral
+// contract. Expected output and exit status always come from the pinned Go
+// binary, including for malformed and non-UTF-8 input.
 package main
 
 import (
 	"bytes"
+	"context"
+	"debug/buildinfo"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strings"
+	"time"
 
-	configpkg "github.com/danieljustus/symaira-vault/internal/config"
 	"github.com/danieljustus/symaira-vault/scripts/rust-port/internal/provenance"
 )
 
@@ -25,7 +30,7 @@ const (
 
 var productionSources = []string{
 	"cmd/admin/config.go",
-	"internal/config/dottedpath.go",
+	"internal/cli/cli.go",
 	"internal/cli/output/output.go",
 }
 
@@ -40,7 +45,6 @@ type oracle struct {
 
 type expected struct {
 	ExitCode       int    `json:"exit_code"`
-	Stdout         string `json:"stdout,omitempty"`
 	StdoutBytes    []int  `json:"stdout_bytes,omitempty"`
 	StderrContains string `json:"stderr_contains,omitempty"`
 }
@@ -48,8 +52,10 @@ type expected struct {
 type cliCase struct {
 	Name        string   `json:"name"`
 	Description string   `json:"description"`
-	Config      string   `json:"config,omitempty"`
 	ConfigBytes []int    `json:"config_bytes,omitempty"`
+	WriteConfig bool     `json:"write_config"`
+	DefaultPath bool     `json:"default_path,omitempty"`
+	ClearHome   bool     `json:"clear_home,omitempty"`
 	Args        []string `json:"args"`
 	Expected    expected `json:"expected"`
 }
@@ -60,116 +66,198 @@ type fixture struct {
 	Cases         []cliCase `json:"cases"`
 }
 
-func inputs() []struct {
-	name, description, config, key, output string
-	args                                   []string
-	quiet                                  bool
-} {
-	return []struct {
-		name, description, config, key, output string
-		args                                   []string
-		quiet                                  bool
-	}{
-		{"get_scalar_text", "read a scalar in text mode", "vaultDir: /fixture/vault\n", "vaultDir", "text", nil, false},
-		{"get_nested_bool", "read a nested boolean in text mode", "agents:\n  probe:\n    canWrite: true\n", "agents.probe.canWrite", "text", nil, false},
-		{"get_complex_sequence", "render a sequence using YAML block text", "allowed:\n  - /fixture/a\n  - /fixture/b\n", "allowed", "text", nil, false},
-		{"get_scalar_json", "encode a scalar result as a JSON object", "vaultDir: /fixture/vault\n", "vaultDir", "json", nil, false},
-		{"get_unknown_output_is_text", "unknown output values follow the Go text path", "vaultDir: /fixture/vault\n", "vaultDir", "wat", nil, false},
-		{"get_quiet", "quiet mode suppresses a successful result", "vaultDir: /fixture/vault\n", "vaultDir", "text", []string{"--quiet"}, true},
-		{"list_raw", "list prints the original bytes without parsing", "vaultDir: /fixture/vault\nagents:\n  probe:\n    canWrite: true\n", "", "text", []string{"list"}, false},
-		{"list_json_still_raw", "list keeps raw output even with JSON requested", "vaultDir: /fixture/vault\n", "", "json", []string{"list", "--json"}, false},
-		{"list_empty", "an empty mapping is printed byte-for-byte", "{}\n", "", "text", []string{"list"}, false},
-		{"missing_key", "a missing dotted key fails with a config error", "vaultDir: /fixture/vault\n", "missing.key", "text", nil, false},
-		{"missing_file", "a missing config file fails with a config error", "", "vaultDir", "text", []string{"missing-file"}, false},
-		{"malformed_yaml", "malformed YAML fails before lookup", "vaultDir: [\n", "vaultDir", "text", nil, false},
-		{"quiet_missing_file", "quiet mode still reads a missing file and fails", "", "vaultDir", "text", []string{"missing-file", "--quiet"}, true},
+type inputCase struct {
+	name, description string
+	config            []byte
+	writeConfig       bool
+	defaultPath       bool
+	clearHome         bool
+	args              []string
+}
+
+func inputs() []inputCase {
+	return []inputCase{
+		{
+			name:        "list_raw",
+			description: "list prints ordinary config bytes without parsing",
+			config:      []byte("vaultDir: /fixture/vault\nagents:\n  probe:\n    canWrite: true\n"),
+			writeConfig: true,
+			args:        []string{"config", "list", "--file", fileMarker},
+		},
+		{
+			name:        "list_crlf",
+			description: "list preserves CRLF bytes",
+			config:      []byte("vaultDir: /fixture/vault\r\nagents:\r\n  probe:\r\n    canWrite: true\r\n"),
+			writeConfig: true,
+			args:        []string{"config", "list", "--file", fileMarker},
+		},
+		{
+			name:        "list_empty",
+			description: "list preserves an empty config file",
+			config:      []byte{},
+			writeConfig: true,
+			args:        []string{"config", "list", "--file", fileMarker},
+		},
+		{
+			name:        "list_malformed",
+			description: "list prints malformed YAML without parsing it",
+			config:      []byte("vaultDir: [\n"),
+			writeConfig: true,
+			args:        []string{"config", "list", "--file", fileMarker},
+		},
+		{
+			name:        "list_invalid_utf8",
+			description: "list preserves invalid UTF-8 bytes",
+			config:      []byte{'v', 'a', 'u', 'l', 't', 'D', 'i', 'r', ':', ' ', '/', 'f', 'i', 'x', 't', 'u', 'r', 'e', '\n', 'i', 'n', 'v', 'a', 'l', 'i', 'd', ':', ' ', 0xff, '\n'},
+			writeConfig: true,
+			args:        []string{"config", "list", "--file", fileMarker},
+		},
+		{
+			name:        "list_json_flag",
+			description: "list remains raw when JSON output is requested",
+			config:      []byte("vaultDir: /fixture/vault\n"),
+			writeConfig: true,
+			args:        []string{"config", "list", "--file", fileMarker, "--json"},
+		},
+		{
+			name:        "list_json_global_before_command",
+			description: "list accepts a global JSON flag before the command",
+			config:      []byte("vaultDir: /fixture/vault\n"),
+			writeConfig: true,
+			args:        []string{"--json", "config", "list", "--file", fileMarker},
+		},
+		{
+			name:        "list_output_global_before_command",
+			description: "list accepts a global output flag before the command",
+			config:      []byte("vaultDir: /fixture/vault\n"),
+			writeConfig: true,
+			args:        []string{"--output", "json", "config", "list", "--file", fileMarker},
+		},
+		{
+			name:        "list_quiet",
+			description: "quiet list reads the file and suppresses stdout",
+			config:      []byte("vaultDir: /fixture/vault\n"),
+			writeConfig: true,
+			args:        []string{"config", "list", "--file", fileMarker, "--quiet"},
+		},
+		{
+			name:        "list_default_home",
+			description: "list uses ~/.symvault/config.yaml when no file is supplied",
+			config:      []byte("vaultDir: /fixture/vault\n"),
+			writeConfig: true,
+			defaultPath: true,
+			args:        []string{"config", "list"},
+		},
+		{
+			name:        "list_empty_file_falls_back",
+			description: "an empty --file value uses the default home path",
+			config:      []byte("vaultDir: /fixture/vault\n"),
+			writeConfig: true,
+			defaultPath: true,
+			args:        []string{"config", "list", "--file="},
+		},
+		{
+			name:        "list_missing_quiet",
+			description: "quiet list still reports a missing config file",
+			args:        []string{"config", "list", "--file", fileMarker + ".missing", "--quiet"},
+		},
+		{
+			name:        "list_missing_home",
+			description: "a missing home directory is a general CLI error",
+			clearHome:   true,
+			args:        []string{"config", "list", "--file="},
+		},
 	}
 }
 
-func buildCases() ([]cliCase, error) {
+func buildCases(goBinary, root string) ([]cliCase, error) {
 	cases := make([]cliCase, 0, len(inputs()))
 	for _, input := range inputs() {
-		args := []string{"config", "get", input.key, "--file", fileMarker}
-		if len(input.args) > 0 {
-			if input.args[0] == "list" {
-				args = []string{"config", "list", "--file", fileMarker}
-				args = append(args, input.args[1:]...)
-			} else {
-				args = append(args, input.args...)
-			}
-		}
-		if input.output != "text" {
-			args = append(args, "--output", input.output)
-		}
-		if input.quiet && (len(input.args) == 0 || input.args[0] != "--quiet") {
-			args = append(args, "--quiet")
-		}
-		item := cliCase{Name: input.name, Description: input.description, Config: input.config, Args: args}
-		if input.name == "missing_file" || input.name == "quiet_missing_file" {
-			item.Args = []string{"config", "get", input.key, "--file", fileMarker + ".missing"}
-			if input.quiet {
-				item.Args = append(item.Args, "--quiet")
-			}
-			item.Expected = expected{ExitCode: 6, StderrContains: "cannot load config"}
-			cases = append(cases, item)
-			continue
-		}
-		if input.args != nil && input.args[0] == "list" {
-			item.Expected = expected{ExitCode: 0}
-			if !input.quiet {
-				item.Expected.Stdout = input.config
-			}
-			cases = append(cases, item)
-			continue
-		}
-
-		dir, err := os.MkdirTemp("", "configclicasesgen-")
+		tempRoot, err := os.MkdirTemp("", "configclicasesgen-")
 		if err != nil {
 			return nil, err
 		}
-		path := filepath.Join(dir, "config.yaml")
-		if err := os.WriteFile(path, []byte(input.config), 0o600); err != nil {
-			_ = os.RemoveAll(dir)
-			return nil, err
+		home := filepath.Join(tempRoot, "home")
+		configPath := filepath.Join(tempRoot, "config.yaml")
+		if input.defaultPath {
+			configPath = filepath.Join(home, ".symvault", "config.yaml")
 		}
-		root, loadErr := configpkg.LoadConfigNode(path)
-		_ = os.RemoveAll(dir)
-		if loadErr != nil {
-			item.Expected = expected{ExitCode: 6, StderrContains: "cannot load config"}
-		} else {
-			node, lookupErr := configpkg.GetConfigValue(root, input.key)
-			if lookupErr != nil {
-				item.Expected = expected{ExitCode: 6, StderrContains: "key"}
-			} else {
-				value := configpkg.NodeToString(node)
-				item.Expected.ExitCode = 0
-				if !input.quiet {
-					if input.output == "json" {
-						encoded, err := json.Marshal(map[string]string{input.key: value})
-						if err != nil {
-							return nil, err
-						}
-						item.Expected.Stdout = string(encoded) + "\n"
-					} else {
-						item.Expected.Stdout = value + "\n"
-					}
-				}
+		if input.writeConfig {
+			if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
+				os.RemoveAll(tempRoot)
+				return nil, err
+			}
+			if err := os.WriteFile(configPath, input.config, 0o600); err != nil {
+				os.RemoveAll(tempRoot)
+				return nil, err
 			}
 		}
+		args := make([]string, len(input.args))
+		for i, arg := range input.args {
+			args[i] = strings.ReplaceAll(arg, fileMarker, configPath)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		cmd := exec.CommandContext(ctx, goBinary, args...)
+		cmd.Dir = root
+		env := os.Environ()
+		env = setEnv(env, "HOME", home)
+		env = setEnv(env, "USERPROFILE", home)
+		env = setEnv(env, "XDG_CONFIG_HOME", filepath.Join(tempRoot, "xdg-config"))
+		env = setEnv(env, "XDG_DATA_HOME", filepath.Join(tempRoot, "xdg-data"))
+		env = setEnv(env, "XDG_CACHE_HOME", filepath.Join(tempRoot, "xdg-cache"))
+		if input.clearHome {
+			env = removeEnv(env, "HOME")
+			env = removeEnv(env, "USERPROFILE")
+		}
+		cmd.Env = env
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		runErr := cmd.Run()
+		if ctx.Err() != nil {
+			cancel()
+			os.RemoveAll(tempRoot)
+			return nil, fmt.Errorf("run oracle case %s: %w", input.name, ctx.Err())
+		}
+		cancel()
+		exitCode := 0
+		if runErr != nil {
+			exitErr, ok := runErr.(*exec.ExitError)
+			if !ok {
+				os.RemoveAll(tempRoot)
+				return nil, fmt.Errorf("run oracle case %s: %w", input.name, runErr)
+			}
+			exitCode = exitErr.ExitCode()
+		}
+		item := cliCase{
+			Name:        input.name,
+			Description: input.description,
+			WriteConfig: input.writeConfig,
+			DefaultPath: input.defaultPath,
+			ClearHome:   input.clearHome,
+			Args:        input.args,
+			Expected: expected{
+				ExitCode:       exitCode,
+				StdoutBytes:    byteValues(stdout.Bytes()),
+				StderrContains: errorNeedle(stderr.Bytes()),
+			},
+		}
+		if input.writeConfig {
+			item.ConfigBytes = byteValues(input.config)
+		}
 		cases = append(cases, item)
+		os.RemoveAll(tempRoot)
 	}
-	// The list command writes raw bytes. Keep one invalid UTF-8 case in the
-	// generated corpus so a text conversion cannot silently change the file.
-	raw := []byte("vaultDir: /fixture/vault\ninvalid: \xff\n")
-	rawCase := cliCase{
-		Name:        "list_invalid_utf8",
-		Description: "list preserves invalid UTF-8 bytes",
-		Args:        []string{"config", "list", "--file", fileMarker},
-		Expected:    expected{ExitCode: 0, StdoutBytes: byteValues(raw)},
-		ConfigBytes: byteValues(raw),
-	}
-	cases = append(cases, rawCase)
 	return cases, nil
+}
+
+func errorNeedle(stderr []byte) string {
+	for _, needle := range []string{"cannot determine config file path", "cannot load config"} {
+		if bytes.Contains(stderr, []byte(needle)) {
+			return needle
+		}
+	}
+	return ""
 }
 
 func byteValues(value []byte) []int {
@@ -180,12 +268,34 @@ func byteValues(value []byte) []int {
 	return result
 }
 
+func setEnv(env []string, key, value string) []string {
+	return append(removeEnv(env, key), key+"="+value)
+}
+
+func removeEnv(env []string, key string) []string {
+	prefix := key + "="
+	filtered := env[:0]
+	for _, item := range env {
+		if !strings.HasPrefix(item, prefix) {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
+}
+
 func main() {
 	output := flag.String("output", "testdata/port/cli/config-inspect.json", "fixture path")
 	check := flag.Bool("check", false, "fail if the fixture differs")
 	commit := flag.String("oracle-commit", "", "Go oracle commit for a new fixture")
 	release := flag.String("oracle-release", "", "Go oracle release for a new fixture")
+	goBinary := flag.String("go-binary", "", "validated Go symvault binary used as the oracle")
 	flag.Parse()
+	if *goBinary == "" {
+		fatal("--go-binary is required")
+	}
+	if err := validateGoBinary(*goBinary); err != nil {
+		fatal("validate Go oracle: %v", err)
+	}
 	commitLabel, releaseLabel, err := resolveOracle(*check, *commit, *release)
 	if err != nil {
 		fatal("resolve oracle metadata: %v", err)
@@ -208,7 +318,7 @@ func main() {
 	if err != nil {
 		fatal("hash generator: %v", err)
 	}
-	cases, err := buildCases()
+	cases, err := buildCases(*goBinary, root)
 	if err != nil {
 		fatal("build cases: %v", err)
 	}
@@ -250,6 +360,33 @@ func resolveOracle(check bool, commit, release string) (string, string, error) {
 		return "", "", fmt.Errorf("--oracle-commit and --oracle-release are required")
 	}
 	return commit, release, nil
+}
+
+func validateGoBinary(path string) error {
+	const modulePath = "github.com/danieljustus/symaira-vault"
+	info, err := buildinfo.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read build metadata: %w", err)
+	}
+	if info.Path != modulePath || info.Main.Path != modulePath {
+		return fmt.Errorf("main module %q/%q, want %q", info.Path, info.Main.Path, modulePath)
+	}
+	if info.GoVersion != "go1.26.6" {
+		return fmt.Errorf("GoVersion %q, want go1.26.6", info.GoVersion)
+	}
+	settings := make(map[string]string, len(info.Settings))
+	for _, setting := range info.Settings {
+		settings[setting.Key] = setting.Value
+	}
+	for key, want := range map[string]string{
+		"vcs.revision": pinnedOracleCommit,
+		"vcs.modified": "false",
+	} {
+		if got := settings[key]; got != want {
+			return fmt.Errorf("build setting %s=%q, want %q", key, got, want)
+		}
+	}
+	return nil
 }
 
 func repositoryRoot() (string, error) {
