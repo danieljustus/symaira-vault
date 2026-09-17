@@ -88,12 +88,12 @@ fn exit_status_detail(status: ExitStatus) -> String {
     #[cfg(unix)]
     {
         use std::os::unix::process::ExitStatusExt;
-        return format!(
+        format!(
             "success={} code={:?} signal={:?}",
             status.success(),
             status.code(),
             status.signal()
-        );
+        )
     }
     #[cfg(not(unix))]
     {
@@ -1303,4 +1303,149 @@ fn add_noninteractive_matches_go_and_preserves_existing_entries() {
 
     fs::remove_dir_all(home).expect("cleanup home");
     fs::remove_dir_all(root).expect("cleanup add vault");
+}
+
+#[test]
+fn verify_matches_go_for_missing_rebuild_and_tampered_manifest() {
+    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
+        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
+        return;
+    };
+    let go_binary = PathBuf::from(go_binary);
+    let rust_binary = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
+    let home = temporary_root("verify-home");
+    let root = temporary_root("verify-vault");
+    fs::create_dir_all(&home).expect("home");
+
+    let init = run(
+        &rust_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "init",
+            "--auth",
+            "passphrase",
+        ],
+        &root,
+        &home,
+    );
+    assert_success(&init, "Rust init for verify differential");
+
+    // Go's Vault.Open repairs a missing manifest before VerifyManifestIntegrity;
+    // run it first so the CLI comparison observes that production behavior.
+    let go_missing = run(
+        &go_binary,
+        &["--vault", root.to_str().unwrap(), "verify"],
+        &root,
+        &home,
+    );
+    let rust_missing = run(
+        &rust_binary,
+        &["--vault", root.to_str().unwrap(), "verify"],
+        &root,
+        &home,
+    );
+    assert_success(&go_missing, "Go verify missing manifest");
+    assert_success(&rust_missing, "Rust verify after Go manifest repair");
+    assert_eq!(rust_missing.status.code(), go_missing.status.code());
+    assert_eq!(
+        rust_missing.stdout, go_missing.stdout,
+        "missing manifest stdout"
+    );
+    for output in [&go_missing, &rust_missing] {
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains(
+                "Manifest verification: 0 entries match, 0 missing, 0 tampered, 0 unknown"
+            )
+        );
+    }
+
+    let go_rebuild = run(
+        &go_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "verify",
+            "--rebuild-only",
+        ],
+        &root,
+        &home,
+    );
+    let rust_rebuild = run(
+        &rust_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "verify",
+            "--rebuild-only",
+        ],
+        &root,
+        &home,
+    );
+    assert_success(&go_rebuild, "Go verify rebuild-only");
+    assert_success(&rust_rebuild, "Rust verify rebuild-only");
+    assert_eq!(rust_rebuild.status.code(), go_rebuild.status.code());
+    assert_eq!(rust_rebuild.stdout, go_rebuild.stdout, "rebuild stdout");
+    assert!(
+        String::from_utf8_lossy(&go_rebuild.stderr)
+            .contains("Manifest rebuilt from on-disk entries.")
+    );
+    assert!(
+        String::from_utf8_lossy(&rust_rebuild.stderr)
+            .contains("Manifest rebuilt from on-disk entries.")
+    );
+
+    let add = run(
+        &go_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "add",
+            "work/verify",
+            "--value",
+            "VerifyStrong123!",
+        ],
+        &root,
+        &home,
+    );
+    assert_success(&add, "Go add for verify differential");
+    let verify_entry = root.join("entries/work/verify.age");
+    assert!(
+        verify_entry.is_file(),
+        "Go add entry path: {verify_entry:?}"
+    );
+    fs::write(&verify_entry, b"tampered ciphertext").expect("tamper entry");
+
+    let go_tampered = run(
+        &go_binary,
+        &["--vault", root.to_str().unwrap(), "verify"],
+        &root,
+        &home,
+    );
+    let rust_tampered = run(
+        &rust_binary,
+        &["--vault", root.to_str().unwrap(), "verify"],
+        &root,
+        &home,
+    );
+    assert!(
+        !go_tampered.status.success(),
+        "Go tampered verify unexpectedly succeeded"
+    );
+    assert!(
+        !rust_tampered.status.success(),
+        "Rust tampered verify unexpectedly succeeded"
+    );
+    assert_eq!(rust_tampered.status.code(), go_tampered.status.code());
+    assert_eq!(rust_tampered.stdout, go_tampered.stdout, "tampered stdout");
+    for output in [&go_tampered, &rust_tampered] {
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains(
+                "Manifest verification: 0 entries match, 0 missing, 1 tampered, 0 unknown"
+            )
+        );
+    }
+
+    fs::remove_dir_all(home).expect("cleanup verify home");
+    fs::remove_dir_all(root).expect("cleanup verify vault");
 }

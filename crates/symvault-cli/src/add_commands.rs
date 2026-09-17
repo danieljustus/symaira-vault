@@ -94,7 +94,10 @@ pub fn add(root: &Path, identity: &Identity, options: &AddOptions) -> Result<(),
     let (value, field, inferred_type) = if let Some(value) = &options.value {
         let inferred = infer_secret_type(&options.path, "", value, nonempty(&options.secret_type));
         let field = primary_field(inferred);
-        if value.is_empty() && sensitive_field(&field) && !options.allow_empty {
+        if value.is_empty()
+            && crate::write_commands::sensitive_field(&field)
+            && !options.allow_empty
+        {
             return Err(format!(
                 "cannot set empty value for sensitive field {field:?} (use --allow-empty to override)"
             ));
@@ -176,10 +179,10 @@ pub fn add(root: &Path, identity: &Identity, options: &AddOptions) -> Result<(),
         auto_rotate: options.auto_rotate,
         ..SecretMetadata::default()
     };
-    if !options.expires_at.is_empty() {
-        if let Ok(parsed) = GoTime::parse_rfc3339(&options.expires_at) {
-            secret_metadata.expires_at = Some(parsed.to_rfc3339_nano());
-        }
+    if !options.expires_at.is_empty()
+        && let Ok(parsed) = GoTime::parse_rfc3339(&options.expires_at)
+    {
+        secret_metadata.expires_at = Some(parsed.to_rfc3339_nano());
     }
 
     let record = WriteRecord {
@@ -216,13 +219,6 @@ fn value_for_type(data: &BTreeMap<String, Value>, field: &str) -> String {
 
 fn nonempty(value: &str) -> Option<&str> {
     (!value.is_empty()).then_some(value)
-}
-
-fn sensitive_field(field: &str) -> bool {
-    let lower = field.to_ascii_lowercase();
-    ["password", "token", "secret", "key", "passwd", "pwd"]
-        .iter()
-        .any(|part| lower.contains(part))
 }
 
 fn primary_field(secret_type: SecretType) -> String {

@@ -14,8 +14,8 @@ mod session_commands;
 #[path = "device_input.rs"]
 mod session_input;
 mod utility_commands;
-mod verify_commands;
 mod vault_commands;
+mod verify_commands;
 mod write_commands;
 
 use std::{
@@ -810,7 +810,7 @@ fn run_verify(
             &identity,
             rebuild,
             rebuild_only,
-            &mut io::stdout().lock(),
+            &mut io::stderr().lock(),
         )
     })();
     finish_vault_result(result)
