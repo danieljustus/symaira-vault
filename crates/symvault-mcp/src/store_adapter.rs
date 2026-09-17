@@ -76,9 +76,9 @@ impl ReadOnlyStore for StoreReadOnlyAdapter {
     }
 
     fn set_field(&self, path: &str, field: &str, value: Value, now: &str) -> Result<(), String> {
-        let mut entry = match self.store.get(path, &self.identity) {
-            Ok(entry) => entry,
-            Err(StoreError::EntryNotFound(_)) => Entry::default(),
+        let (mut entry, existing) = match self.store.get(path, &self.identity) {
+            Ok(entry) => (entry, true),
+            Err(StoreError::EntryNotFound(_)) => (Entry::default(), false),
             Err(error) => return Err(store_error(error)),
         };
         validate_field_lengths(field, &value)?;
@@ -110,11 +110,13 @@ impl ReadOnlyStore for StoreReadOnlyAdapter {
                 &entry,
                 &self.identity,
                 now,
-                Some(&WriteRecord {
-                    field: field.to_owned(),
-                    action: "set".into(),
-                    ..WriteRecord::default()
-                }),
+                (!existing)
+                    .then(|| WriteRecord {
+                        field: field.to_owned(),
+                        action: "set".into(),
+                        ..WriteRecord::default()
+                    })
+                    .as_ref(),
             )
             .map_err(store_error)
     }

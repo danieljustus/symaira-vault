@@ -17,7 +17,7 @@
       "internal/crypto/totp.go"
     ],
     "source_hash": "315f711847c344b7f41fbb95aea8d9c5a3c3c2d2ed4403bc4e91fcf0c8064854",
-    "generator_hash": "6c3a7b618cea5ead94c9a53177ba1b8987b7fb7ee8444f7c5660bc7279d159e7"
+    "generator_hash": "e0708e1deb058059c010d947f1dd79bfcb01c9fa6a29da20d4e73802f964abe2"
   },
   "server_name": "symvault",
   "server_version": "0.0.0-set-entry-fixture",
@@ -59,7 +59,21 @@
             "isError": false
           }
         }
-      ]
+      ],
+      "state": {
+        "data": {
+          "password": "StrongP@ssw0rd123",
+          "totp": {
+            "algorithm": "SHA1",
+            "digits": 6,
+            "period": 30,
+            "secret": "JBSWY3DPEHPK3PXP"
+          },
+          "username": "alice"
+        },
+        "version": 2,
+        "write_history": []
+      }
     },
     {
       "name": "set_password_weak",
@@ -98,7 +112,21 @@
             "isError": true
           }
         }
-      ]
+      ],
+      "state": {
+        "data": {
+          "password": "StrongP@ssw0rd123",
+          "totp": {
+            "algorithm": "SHA1",
+            "digits": 6,
+            "period": 30,
+            "secret": "JBSWY3DPEHPK3PXP"
+          },
+          "username": "fixture-user"
+        },
+        "version": 1,
+        "write_history": []
+      }
     },
     {
       "name": "set_totp",
@@ -137,7 +165,21 @@
             "isError": false
           }
         }
-      ]
+      ],
+      "state": {
+        "data": {
+          "password": "StrongP@ssw0rd123",
+          "totp": {
+            "algorithm": "SHA1",
+            "digits": 6,
+            "period": 30,
+            "secret": "JBSWY3DPEHPK3PXP"
+          },
+          "username": "fixture-user"
+        },
+        "version": 2,
+        "write_history": []
+      }
     },
     {
       "name": "set_totp_partial",
@@ -176,7 +218,21 @@
             "isError": false
           }
         }
-      ]
+      ],
+      "state": {
+        "data": {
+          "password": "StrongP@ssw0rd123",
+          "totp": {
+            "algorithm": "SHA1",
+            "digits": 8,
+            "period": 30,
+            "secret": "JBSWY3DPEHPK3PXP"
+          },
+          "username": "fixture-user"
+        },
+        "version": 2,
+        "write_history": []
+      }
     },
     {
       "name": "set_metadata_update",
@@ -215,7 +271,21 @@
             "isError": false
           }
         }
-      ]
+      ],
+      "state": {
+        "data": {
+          "password": "StrongP@ssw0rd123",
+          "totp": {
+            "algorithm": "SHA1",
+            "digits": 6,
+            "period": 30,
+            "secret": "JBSWY3DPEHPK3PXP"
+          },
+          "username": "metadata-user"
+        },
+        "version": 2,
+        "write_history": []
+      }
     },
     {
       "name": "set_field_too_long",
@@ -249,7 +319,21 @@
           "jsonrpc": "2.0",
           "id": 12
         }
-      ]
+      ],
+      "state": {
+        "data": {
+          "password": "StrongP@ssw0rd123",
+          "totp": {
+            "algorithm": "SHA1",
+            "digits": 6,
+            "period": 30,
+            "secret": "JBSWY3DPEHPK3PXP"
+          },
+          "username": "fixture-user"
+        },
+        "version": 1,
+        "write_history": []
+      }
     },
     {
       "name": "set_password_force_weak",
@@ -288,7 +372,21 @@
             "isError": false
           }
         }
-      ]
+      ],
+      "state": {
+        "data": {
+          "password": "short",
+          "totp": {
+            "algorithm": "SHA1",
+            "digits": 6,
+            "period": 30,
+            "secret": "JBSWY3DPEHPK3PXP"
+          },
+          "username": "fixture-user"
+        },
+        "version": 2,
+        "write_history": []
+      }
     },
     {
       "name": "set_denied_write",
@@ -322,7 +420,21 @@
           "jsonrpc": "2.0",
           "id": 5
         }
-      ]
+      ],
+      "state": {
+        "data": {
+          "password": "StrongP@ssw0rd123",
+          "totp": {
+            "algorithm": "SHA1",
+            "digits": 6,
+            "period": 30,
+            "secret": "JBSWY3DPEHPK3PXP"
+          },
+          "username": "fixture-user"
+        },
+        "version": 1,
+        "write_history": []
+      }
     },
     {
       "name": "set_denied_tier",
@@ -361,7 +473,21 @@
             "isError": true
           }
         }
-      ]
+      ],
+      "state": {
+        "data": {
+          "password": "StrongP@ssw0rd123",
+          "totp": {
+            "algorithm": "SHA1",
+            "digits": 6,
+            "period": 30,
+            "secret": "JBSWY3DPEHPK3PXP"
+          },
+          "username": "fixture-user"
+        },
+        "version": 1,
+        "write_history": []
+      }
     },
     {
       "name": "set_denied_scope",
@@ -395,7 +521,21 @@
           "jsonrpc": "2.0",
           "id": 6
         }
-      ]
+      ],
+      "state": {
+        "data": {
+          "password": "StrongP@ssw0rd123",
+          "totp": {
+            "algorithm": "SHA1",
+            "digits": 6,
+            "period": 30,
+            "secret": "JBSWY3DPEHPK3PXP"
+          },
+          "username": "fixture-user"
+        },
+        "version": 1,
+        "write_history": []
+      }
     },
     {
       "name": "set_denied_approval",
@@ -434,7 +574,21 @@
             "isError": true
           }
         }
-      ]
+      ],
+      "state": {
+        "data": {
+          "password": "StrongP@ssw0rd123",
+          "totp": {
+            "algorithm": "SHA1",
+            "digits": 6,
+            "period": 30,
+            "secret": "JBSWY3DPEHPK3PXP"
+          },
+          "username": "fixture-user"
+        },
+        "version": 1,
+        "write_history": []
+      }
     }
   ]
 }

@@ -77,6 +77,7 @@ struct Case {
     name: String,
     input: Vec<String>,
     output: Vec<Value>,
+    state: Value,
 }
 
 fn write_synthetic_vault() -> (
@@ -210,6 +211,18 @@ fn set_entry_matches_source_bound_go_fixture_and_persists() {
 
         let store = Store::open(root.path(), &verifier).expect("reopen synthetic vault");
         let entry = store.get("github", &verifier).expect("read updated entry");
+        let history = entry
+            .metadata
+            .write_history
+            .iter()
+            .map(|record| serde_json::json!({"field": record.field, "action": record.action}))
+            .collect::<Vec<_>>();
+        let state = serde_json::json!({
+            "data": entry.data,
+            "version": entry.metadata.version,
+            "write_history": history,
+        });
+        assert_eq!(state, case.state, "persisted state for {}", case.name);
         match case.name.as_str() {
             "set_existing" => assert_eq!(entry.data["username"], "alice"),
             "set_totp" => assert_eq!(
@@ -233,9 +246,10 @@ fn set_entry_matches_source_bound_go_fixture_and_persists() {
             "set_metadata_update" => {
                 assert_eq!(entry.data["username"], "metadata-user");
                 assert_eq!(entry.metadata.version, 2);
-                assert_eq!(entry.metadata.write_history.len(), 1);
-                assert_eq!(entry.metadata.write_history[0].field, "username");
-                assert_eq!(entry.metadata.write_history[0].action, "set");
+                // Go's existing-entry UpsertEntry assigns PendingWrite to a
+                // stale object before MergeEntryWithRecipients rereads it;
+                // the persisted update therefore has no history record.
+                assert!(entry.metadata.write_history.is_empty());
             }
             "set_password_force_weak" => {
                 assert_eq!(entry.data["password"], "short");

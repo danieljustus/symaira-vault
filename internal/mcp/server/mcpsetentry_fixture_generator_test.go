@@ -40,6 +40,7 @@ type mcpSetEntryCase struct {
 	Name   string            `json:"name"`
 	Input  []string          `json:"input"`
 	Output []json.RawMessage `json:"output"`
+	State  json.RawMessage   `json:"state"`
 }
 
 var mcpSetEntrySourceFiles = []string{
@@ -63,7 +64,6 @@ func TestGenerateMCPSetEntryFixture(t *testing.T) {
 		t.Skip("set SYMAIRA_GENERATE_MCP_SET_ENTRY_FIXTURE=1 or SYMAIRA_CHECK_MCP_SET_ENTRY_FIXTURE=1")
 	}
 
-	vaultDir, identity := mcpSetEntryFixtureVault(t)
 	serverName := "symvault"
 	serverVersion := "0.0.0-set-entry-fixture"
 	base := []string{
@@ -134,6 +134,7 @@ func TestGenerateMCPSetEntryFixture(t *testing.T) {
 
 	fixtureCases := make([]mcpSetEntryCase, 0, len(cases))
 	for _, tc := range cases {
+		vaultDir, identity := mcpSetEntryFixtureVault(t)
 		srv := newTestServerWithVault(t, tc.profile, "stdio", vaultDir)
 		srv.vault.Identity = identity
 		handler := NewProtocolHandler(serverName, serverVersion, srv)
@@ -157,7 +158,23 @@ func TestGenerateMCPSetEntryFixture(t *testing.T) {
 			}
 			outputs = append(outputs, encoded)
 		}
-		fixtureCases = append(fixtureCases, mcpSetEntryCase{Name: tc.name, Input: inputs, Output: outputs})
+		entry, err := vault.ReadEntry(vaultDir, "github", identity)
+		if err != nil {
+			t.Fatalf("read %s persisted entry: %v", tc.name, err)
+		}
+		history := make([]map[string]string, 0, len(entry.Metadata.WriteHistory))
+		for _, record := range entry.Metadata.WriteHistory {
+			history = append(history, map[string]string{"field": record.Field, "action": record.Action})
+		}
+		state, err := json.Marshal(map[string]any{
+			"data":          entry.Data,
+			"version":       entry.Metadata.Version,
+			"write_history": history,
+		})
+		if err != nil {
+			t.Fatalf("marshal %s state: %v", tc.name, err)
+		}
+		fixtureCases = append(fixtureCases, mcpSetEntryCase{Name: tc.name, Input: inputs, Output: outputs, State: state})
 	}
 
 	root := mcpListRepoRoot(t)
