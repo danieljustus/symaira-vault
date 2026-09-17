@@ -134,7 +134,7 @@ func TestExport_YesFlag_SkipsPrompt(t *testing.T) {
 
 	var capturedForce bool
 	origConfirm := confirmExport
-	confirmExport = func(_ string, force bool) (bool, error) {
+	confirmExport = func(_ string, force bool) (bool, error) { //nolint:unparam // Callback must retain the production confirmation signature.
 		capturedForce = force
 		return true, nil
 	}
