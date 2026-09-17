@@ -135,9 +135,12 @@ pub(crate) fn list(
     };
 
     match format {
+        "" | "text" => write_text(&result, output),
         "json" => write_json(&result, quiet, output),
         "yaml" => write_yaml(&result, quiet, output),
-        _ => write_text(&result, output),
+        other => Err(format!(
+            "unknown output format: {other:?} (valid: text, json, yaml)"
+        )),
     }
 }
 
