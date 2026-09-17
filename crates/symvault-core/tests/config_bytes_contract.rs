@@ -43,6 +43,65 @@ struct Case {
     round_trips_to: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct WriterCase {
+    name: String,
+    #[allow(dead_code)]
+    description: String,
+    requested: WriterSnapshot,
+    saved_yaml: String,
+    loaded: WriterSnapshot,
+    #[serde(default)]
+    omitted_fields: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WriterSnapshot {
+    vault: Option<WriterVaultSnapshot>,
+    git: Option<WriterGitSnapshot>,
+    clipboard: Option<WriterClipboardSnapshot>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WriterVaultSnapshot {
+    path: String,
+    default_recipients: Vec<String>,
+    confirm_remove: bool,
+    auth_method: String,
+    use_touch_id: bool,
+    legacy_mode: Option<bool>,
+    search_index: bool,
+    search_workers: i64,
+    search_index_cache: bool,
+    config_cache_entries: i64,
+    pseudonymize_paths: bool,
+    scrypt_work_factor: i64,
+    auto_migrate_kdf: bool,
+    auto_heal_zero_key: bool,
+    last_rotated: String,
+    format_version: i64,
+    argon2id_time: i64,
+    argon2id_memory: i64,
+    argon2id_threads: i64,
+    listing_cache_ttl: String,
+    manifest_generation: i64,
+    sync_method: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct WriterGitSnapshot {
+    auto_push: bool,
+    auto_pull: bool,
+    auto_pull_interval: String,
+    commit_template: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct WriterClipboardSnapshot {
+    auto_clear_duration: i64,
+    copy_by_default: bool,
+}
+
 /// Only the unix build reads the mode fields; Windows does not carry these
 /// bits and the fixture records that instead of asserting them.
 #[derive(Debug, Deserialize)]
@@ -60,6 +119,8 @@ struct Fixture {
     schema_version: u32,
     oracle: Oracle,
     cases: Vec<Case>,
+    #[serde(default)]
+    writer_cases: Vec<WriterCase>,
     #[cfg_attr(not(unix), allow(dead_code))]
     modes: Modes,
 }
@@ -228,6 +289,262 @@ fn canonical_output_round_trips() {
             "round-trip snapshot for {}",
             case.name
         );
+    }
+}
+
+/// The writer cases execute Go's Config.SaveTo and then Go's Load. Re-load the
+/// exact saved bytes here and compare every modeled vault field, including the
+/// KDF settings. Fields in omitted_fields are intentionally visible evidence
+/// of production Go's current raw-copy omission, rather than silently treated
+/// as Rust-only data.
+#[test]
+fn go_writer_cases_reload_with_rust_semantics() {
+    let fixture = fixture();
+    assert_eq!(fixture.writer_cases.len(), 2);
+    for case in &fixture.writer_cases {
+        let config = Config::load_from_bytes(case.saved_yaml.as_bytes()).unwrap_or_else(|error| {
+            panic!("{}: Rust cannot reload Go SaveTo bytes: {error}", case.name)
+        });
+        if let Some(expected) = &case.loaded.vault {
+            let actual = config
+                .vault
+                .as_ref()
+                .unwrap_or_else(|| panic!("{}: Go loaded vault section is missing", case.name));
+            assert_eq!(actual.path, expected.path, "{} vault.path", case.name);
+            assert_eq!(
+                actual.default_recipients, expected.default_recipients,
+                "{} vault.default_recipients",
+                case.name
+            );
+            assert_eq!(
+                actual.confirm_remove, expected.confirm_remove,
+                "{} vault.confirm_remove",
+                case.name
+            );
+            assert_eq!(
+                actual.auth_method.as_str(),
+                expected.auth_method,
+                "{} vault.auth_method",
+                case.name
+            );
+            assert_eq!(
+                actual.use_touch_id, expected.use_touch_id,
+                "{} vault.use_touch_id",
+                case.name
+            );
+            assert_eq!(
+                actual.legacy_mode, expected.legacy_mode,
+                "{} vault.legacy_mode",
+                case.name
+            );
+            assert_eq!(
+                actual.search_index, expected.search_index,
+                "{} vault.search_index",
+                case.name
+            );
+            assert_eq!(
+                actual.search_workers, expected.search_workers,
+                "{} vault.search_workers",
+                case.name
+            );
+            assert_eq!(
+                actual.search_index_cache, expected.search_index_cache,
+                "{} vault.search_index_cache",
+                case.name
+            );
+            assert_eq!(
+                actual.config_cache_entries, expected.config_cache_entries,
+                "{} vault.config_cache_entries",
+                case.name
+            );
+            assert_eq!(
+                actual.pseudonymize_paths, expected.pseudonymize_paths,
+                "{} vault.pseudonymize_paths",
+                case.name
+            );
+            assert_eq!(
+                actual.scrypt_work_factor, expected.scrypt_work_factor,
+                "{} vault.scrypt_work_factor",
+                case.name
+            );
+            assert_eq!(
+                actual.auto_migrate_kdf, expected.auto_migrate_kdf,
+                "{} vault.auto_migrate_kdf",
+                case.name
+            );
+            assert_eq!(
+                actual.auto_heal_zero_key, expected.auto_heal_zero_key,
+                "{} vault.auto_heal_zero_key",
+                case.name
+            );
+            assert_eq!(
+                actual.last_rotated.as_deref().unwrap_or_default(),
+                expected.last_rotated,
+                "{} vault.last_rotated",
+                case.name
+            );
+            assert_eq!(
+                actual.format_version, expected.format_version,
+                "{} vault.format_version",
+                case.name
+            );
+            assert_eq!(
+                actual.argon2id_time, expected.argon2id_time,
+                "{} vault.argon2id_time",
+                case.name
+            );
+            assert_eq!(
+                actual.argon2id_memory, expected.argon2id_memory,
+                "{} vault.argon2id_memory",
+                case.name
+            );
+            assert_eq!(
+                actual.argon2id_threads, expected.argon2id_threads,
+                "{} vault.argon2id_threads",
+                case.name
+            );
+            assert_eq!(
+                go_duration(actual.listing_cache_ttl.as_secs()),
+                expected.listing_cache_ttl,
+                "{} vault.listing_cache_ttl",
+                case.name
+            );
+            assert_eq!(
+                actual.manifest_generation, expected.manifest_generation,
+                "{} vault.manifest_generation",
+                case.name
+            );
+            assert_eq!(
+                actual
+                    .sync
+                    .as_ref()
+                    .map(|sync| sync.method.as_str())
+                    .unwrap_or_default(),
+                expected.sync_method,
+                "{} vault.sync",
+                case.name
+            );
+        }
+        if let Some(expected) = &case.loaded.git {
+            let actual = config
+                .git
+                .as_ref()
+                .unwrap_or_else(|| panic!("{}: Go loaded git section is missing", case.name));
+            assert_eq!(
+                actual.auto_push, expected.auto_push,
+                "{} git.auto_push",
+                case.name
+            );
+            assert_eq!(
+                actual.auto_pull, expected.auto_pull,
+                "{} git.auto_pull",
+                case.name
+            );
+            assert_eq!(
+                go_duration(actual.auto_pull_interval.as_secs()),
+                expected.auto_pull_interval,
+                "{} git.auto_pull_interval",
+                case.name
+            );
+            assert_eq!(
+                actual.commit_template, expected.commit_template,
+                "{} git.commit_template",
+                case.name
+            );
+        }
+        if let Some(expected) = &case.loaded.clipboard {
+            let actual = config
+                .clipboard
+                .as_ref()
+                .unwrap_or_else(|| panic!("{}: Go loaded clipboard section is missing", case.name));
+            assert_eq!(
+                actual.auto_clear_duration, expected.auto_clear_duration,
+                "{} clipboard.auto_clear_duration",
+                case.name
+            );
+            assert_eq!(
+                actual.copy_by_default, expected.copy_by_default,
+                "{} clipboard.copy_by_default",
+                case.name
+            );
+        }
+        for field in &case.omitted_fields {
+            let key = field.rsplit('.').next().unwrap_or(field);
+            assert!(
+                !case.saved_yaml.contains(key),
+                "{} unexpectedly wrote omitted field {field}",
+                case.name
+            );
+        }
+        if case.name == "explicit_false_sections" {
+            let requested_git = case
+                .requested
+                .git
+                .as_ref()
+                .expect("false-section case must request a git section");
+            assert!(!requested_git.auto_push);
+            assert!(!requested_git.auto_pull);
+            let loaded_git = case
+                .loaded
+                .git
+                .as_ref()
+                .expect("false-section case must reload a git section");
+            assert!(
+                loaded_git.auto_push,
+                "Go's empty git section applies its true default"
+            );
+            assert!(
+                loaded_git.auto_pull,
+                "Go's empty git section applies its true default"
+            );
+            let requested_clipboard = case
+                .requested
+                .clipboard
+                .as_ref()
+                .expect("false-section case must request a clipboard section");
+            assert!(!requested_clipboard.copy_by_default);
+            let loaded_clipboard = case
+                .loaded
+                .clipboard
+                .as_ref()
+                .expect("false-section case must reload a clipboard section");
+            assert!(
+                loaded_clipboard.copy_by_default,
+                "Go's empty clipboard section applies its true default"
+            );
+            assert!(case.saved_yaml.contains("git: {}\n"));
+            assert!(case.saved_yaml.contains("clipboard: {}\n"));
+
+            // Rust deliberately retains these explicit safety opt-outs in its
+            // own writer, even though the Go `omitempty` writer loses them.
+            // This is the one documented writer-byte divergence in this slice.
+            let rust = Config {
+                git: Some(symvault_core::config::GitConfig {
+                    auto_push: false,
+                    auto_pull: false,
+                    auto_pull_interval: std::time::Duration::ZERO,
+                    commit_template: String::new(),
+                }),
+                clipboard: Some(symvault_core::config::ClipboardConfig {
+                    auto_clear_duration: 0,
+                    copy_by_default: false,
+                }),
+                ..Config::default()
+            };
+            let rust_yaml = String::from_utf8(rust.to_yaml_bytes().expect("Rust writer"))
+                .expect("Rust writer emits UTF-8");
+            assert!(rust_yaml.contains("auto_push: false"));
+            assert!(rust_yaml.contains("auto_pull: false"));
+            assert!(rust_yaml.contains("copyByDefault: false"));
+            let rust_reload = Config::load_from_bytes(rust_yaml.as_bytes()).expect("Rust reload");
+            assert!(!rust_reload.git.expect("Rust git section").auto_push);
+            assert!(
+                !rust_reload
+                    .clipboard
+                    .expect("Rust clipboard section")
+                    .copy_by_default
+            );
+        }
     }
 }
 

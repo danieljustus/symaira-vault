@@ -10,10 +10,11 @@
       "internal/config/config_merge.go",
       "internal/config/config_save.go",
       "internal/config/config_validate.go",
+      "internal/config/schema.go",
       "internal/config/warn.go"
     ],
-    "source_digest": "dd0b3424118285c1a6264a81b9197957a9991e4d0c2b4de12a2ab28f3b48d213",
-    "generator_digest": "34126bb797ed7895a33e0598d4ea94ed099660762263e671c1d8d1d07c448c14"
+    "source_digest": "1704c153d56a7e96369d72200677899afa6e55d5dcf6cca4ae40c240aa542c71",
+    "generator_digest": "5bf5684fc1b2bb0a9a9982942bb38773d9913de1b88b8bf7e6c2d118fa4006df"
   },
   "cases": [
     {
@@ -229,6 +230,29 @@
       "round_trips_to": "identical_snapshot"
     },
     {
+      "name": "null_optional_sections",
+      "description": "null optional sections are skipped like absent sections",
+      "input": "vault: null\ngit: null\nmcp: null\nupdate: null\nclipboard: null\n",
+      "rejected": false,
+      "snapshot": {
+        "default_agent": "default",
+        "session_timeout": "15m0s",
+        "session_max_lifetime": "8h0m0s",
+        "auth_method": "passphrase",
+        "vault_dir": "",
+        "agent_names": [
+          "claude-code",
+          "codex",
+          "default",
+          "hermes",
+          "openclaw",
+          "opencode"
+        ]
+      },
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
+      "round_trips_to": "identical_snapshot"
+    },
+    {
       "name": "multiple_documents",
       "description": "a second document is rejected, not silently dropped",
       "input": "defaultAgent: a\n---\ndefaultAgent: b\n",
@@ -322,6 +346,103 @@
       },
       "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 100000h0m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\nuseTouchID: false\n",
       "round_trips_to": "identical_snapshot"
+    }
+  ],
+  "writer_cases": [
+    {
+      "name": "vault_all_modeled_fields",
+      "description": "SaveTo preserves the modeled vault and KDF fields",
+      "requested": {
+        "vault": {
+          "path": "/fixture/nested",
+          "default_recipients": [
+            "age1fixture"
+          ],
+          "confirm_remove": true,
+          "auth_method": "touchid",
+          "use_touch_id": true,
+          "legacy_mode": false,
+          "search_index": true,
+          "search_workers": 4,
+          "search_index_cache": true,
+          "config_cache_entries": 12,
+          "pseudonymize_paths": true,
+          "scrypt_work_factor": 22,
+          "auto_migrate_kdf": true,
+          "auto_heal_zero_key": true,
+          "last_rotated": "2025-06-07T08:09:10.123456789Z",
+          "format_version": 7,
+          "argon2id_time": 3,
+          "argon2id_memory": 65536,
+          "argon2id_threads": 2,
+          "listing_cache_ttl": "45m0s",
+          "manifest_generation": 9,
+          "sync_method": "icloud-drive"
+        }
+      },
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\nvault:\n    path: /fixture/nested\n    default_recipients:\n        - age1fixture\n    confirm_remove: true\n    authMethod: touchid\n    useTouchID: true\n    legacy_mode: false\n    search_index: true\n    search_workers: 4\n    search_index_cache: true\n    config_cache_entries: 12\n    pseudonymize_paths: true\n    scrypt_work_factor: 22\n    auto_migrate_kdf: true\n    auto_heal_zero_key: true\n    last_rotated: 2025-06-07T08:09:10.123456789Z\n    format_version: 7\n    argon2id_time: 3\n    argon2id_memory: 65536\n    argon2id_threads: 2\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\n",
+      "loaded": {
+        "vault": {
+          "path": "/fixture/nested",
+          "default_recipients": [
+            "age1fixture"
+          ],
+          "confirm_remove": true,
+          "auth_method": "touchid",
+          "use_touch_id": true,
+          "legacy_mode": false,
+          "search_index": true,
+          "search_workers": 4,
+          "search_index_cache": true,
+          "config_cache_entries": 12,
+          "pseudonymize_paths": true,
+          "scrypt_work_factor": 22,
+          "auto_migrate_kdf": true,
+          "auto_heal_zero_key": true,
+          "last_rotated": "2025-06-07T08:09:10.123456789Z",
+          "format_version": 7,
+          "argon2id_time": 3,
+          "argon2id_memory": 65536,
+          "argon2id_threads": 2,
+          "listing_cache_ttl": "0s",
+          "manifest_generation": 0,
+          "sync_method": ""
+        }
+      },
+      "omitted_fields": [
+        "vault.listing_cache_ttl",
+        "vault.manifest_generation",
+        "vault.sync"
+      ]
+    },
+    {
+      "name": "explicit_false_sections",
+      "description": "SaveTo writes empty sections for explicit false values",
+      "requested": {
+        "git": {
+          "auto_push": false,
+          "auto_pull": false,
+          "auto_pull_interval": "0s",
+          "commit_template": ""
+        },
+        "clipboard": {
+          "auto_clear_duration": 0,
+          "copy_by_default": false
+        }
+      },
+      "saved_yaml": "agents:\n    claude-code:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.claude/skills/symvault/SKILL.md\n    codex:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.codex/skills/symvault/AGENTS.md\n    default:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: false\n        exposeValueTools: true\n        autoUnseal: false\n    hermes:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.hermes/skills/symvault/SKILL.md\n    openclaw:\n        approvalMode: deny\n        canWrite: true\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.openclaw/skills/symvault/SKILL.md\n    opencode:\n        approvalMode: deny\n        canWrite: false\n        canRunCommands: true\n        exposeValueTools: true\n        autoUnseal: false\n        skillPath: ~/.opencode/skills/symvault/SKILL.md\ngit: {}\nclipboard: {}\nvaultDir: /fixture/vault\ndefaultAgent: default\nsessionTimeout: 15m0s\nsessionMaxLifetime: 8h0m0s\nauthMethod: passphrase\n",
+      "loaded": {
+        "git": {
+          "auto_push": true,
+          "auto_pull": true,
+          "auto_pull_interval": "10s",
+          "commit_template": "Update from Symaira Vault"
+        },
+        "clipboard": {
+          "auto_clear_duration": 30,
+          "copy_by_default": true
+        }
+      }
     }
   ],
   "modes": {

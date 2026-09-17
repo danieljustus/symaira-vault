@@ -145,7 +145,19 @@ pub struct VaultConfig {
     pub scrypt_work_factor: i64,
     pub auto_migrate_kdf: bool,
     pub auto_heal_zero_key: bool,
+    pub last_rotated: Option<String>,
     pub format_version: i64,
+    pub argon2id_time: i64,
+    pub argon2id_memory: i64,
+    pub argon2id_threads: i64,
+    pub listing_cache_ttl: Duration,
+    pub manifest_generation: i64,
+    pub sync: Option<SyncConfig>,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub struct SyncConfig {
+    pub method: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1249,8 +1261,33 @@ fn parse_vault(value: &serde_yaml_ng::Value, auth: AuthMethod) -> Result<VaultCo
     if let Some(v) = map.get(key("auto_heal_zero_key")) {
         out.auto_heal_zero_key = boolean(v, "auto_heal_zero_key")?;
     }
+    if let Some(v) = map.get(key("last_rotated")) {
+        out.last_rotated = Some(string(v, "last_rotated")?);
+    }
     if let Some(v) = map.get(key("format_version")) {
         out.format_version = integer(v, "format_version")?;
+    }
+    for (k, field) in [
+        ("argon2id_time", &mut out.argon2id_time),
+        ("argon2id_memory", &mut out.argon2id_memory),
+        ("argon2id_threads", &mut out.argon2id_threads),
+        ("manifest_generation", &mut out.manifest_generation),
+    ] {
+        if let Some(v) = map.get(key(k)) {
+            *field = integer(v, k)?;
+        }
+    }
+    if let Some(v) = map.get(key("listing_cache_ttl")) {
+        out.listing_cache_ttl = duration(v, "listing_cache_ttl")?;
+    }
+    if let Some(v) = map.get(key("sync")).filter(|v| !v.is_null()) {
+        let sync_map = mapping(v)?;
+        let method = sync_map
+            .get(key("method"))
+            .map(|value| string(value, "sync.method"))
+            .transpose()?
+            .unwrap_or_default();
+        out.sync = Some(SyncConfig { method });
     }
     Ok(out)
 }
@@ -1557,9 +1594,29 @@ fn write_vault(out: &mut String, v: &VaultConfig) -> Result<(), ConfigError> {
     if v.auto_heal_zero_key {
         body.push_str("    auto_heal_zero_key: true\n");
     }
+    if let Some(last_rotated) = &v.last_rotated {
+        body.push_str(&format!(
+            "    last_rotated: {}\n",
+            yaml_scalar(last_rotated)?
+        ));
+    }
     if v.format_version != 0 {
         body.push_str(&format!("    format_version: {}\n", v.format_version));
     }
+    for (key, value) in [
+        ("argon2id_time", v.argon2id_time),
+        ("argon2id_memory", v.argon2id_memory),
+        ("argon2id_threads", v.argon2id_threads),
+    ] {
+        if value != 0 {
+            body.push_str(&format!("    {key}: {value}\n"));
+        }
+    }
+    // Go's SaveTo currently does not copy listingCacheTTL, manifestGeneration,
+    // or Sync from Config.Vault into its raw writer struct. Keep these fields
+    // loadable for compatibility with files written by other callers, but do
+    // not emit them here: Rust's canonical writer must follow the Go bytes
+    // contract until that production omission is deliberately changed there.
     if body.is_empty() {
         out.push_str("vault: {}\n");
     } else {
@@ -1570,12 +1627,11 @@ fn write_vault(out: &mut String, v: &VaultConfig) -> Result<(), ConfigError> {
 }
 fn write_git(out: &mut String, v: &GitConfig) -> Result<(), ConfigError> {
     let mut body = String::new();
-    if v.auto_push {
-        body.push_str("    auto_push: true\n");
-    }
-    if v.auto_pull {
-        body.push_str("    auto_pull: true\n");
-    }
+    // Preserve an explicit false. Go's raw SaveTo struct uses `omitempty`
+    // and consequently reloads false as its true default; retaining the
+    // operator's disablement is the safer Rust writer behavior.
+    body.push_str(&format!("    auto_push: {}\n", v.auto_push));
+    body.push_str(&format!("    auto_pull: {}\n", v.auto_pull));
     if v.auto_pull_interval > Duration::ZERO {
         body.push_str(&format!(
             "    auto_pull_interval: {}\n",
@@ -1647,9 +1703,9 @@ fn write_clipboard(out: &mut String, v: &ClipboardConfig) -> Result<(), ConfigEr
             v.auto_clear_duration
         ));
     }
-    if v.copy_by_default {
-        body.push_str("    copyByDefault: true\n");
-    }
+    // Go's `omitempty` drops false here, which makes a subsequent load turn
+    // an explicit opt-out back on. Keep the opt-out in Rust's canonical bytes.
+    body.push_str(&format!("    copyByDefault: {}\n", v.copy_by_default));
     if body.is_empty() {
         out.push_str("clipboard: {}\n");
     } else {
@@ -1727,7 +1783,12 @@ mod tests {
             scrypt_work_factor: 22,
             auto_migrate_kdf: true,
             auto_heal_zero_key: true,
+            last_rotated: Some("2025-06-07T08:09:10.123456789Z".into()),
             format_version: 7,
+            argon2id_time: 3,
+            argon2id_memory: 65536,
+            argon2id_threads: 2,
+            ..VaultConfig::default()
         };
         let config = Config {
             auth_method: AuthMethod::Touchid,
@@ -1751,12 +1812,35 @@ mod tests {
             "scrypt_work_factor: 22",
             "auto_migrate_kdf: true",
             "auto_heal_zero_key: true",
+            "last_rotated: 2025-06-07T08:09:10.123456789Z",
             "format_version: 7",
+            "argon2id_time: 3",
+            "argon2id_memory: 65536",
+            "argon2id_threads: 2",
         ] {
             assert!(yaml.contains(field), "writer omitted vault field {field:?}");
         }
         let loaded = Config::load_from_bytes(yaml.as_bytes()).unwrap();
         assert_eq!(loaded.vault, Some(vault));
+
+        // These fields are accepted by the loader but are currently omitted
+        // by Go's Config.SaveTo raw writer; the canonical Rust writer follows
+        // that source-bound behavior until Go changes its copy list.
+        let omitted = Config {
+            vault: Some(VaultConfig {
+                listing_cache_ttl: Duration::from_secs(45 * 60),
+                manifest_generation: 9,
+                sync: Some(SyncConfig {
+                    method: "icloud-drive".into(),
+                }),
+                ..VaultConfig::default()
+            }),
+            ..Config::default()
+        };
+        let omitted_yaml = String::from_utf8(omitted.to_yaml_bytes().unwrap()).unwrap();
+        assert!(!omitted_yaml.contains("listing_cache_ttl"));
+        assert!(!omitted_yaml.contains("manifest_generation"));
+        assert!(!omitted_yaml.contains("sync:"));
     }
 
     #[test]
@@ -1774,7 +1858,7 @@ mod tests {
             ..Config::default()
         };
         let yaml = String::from_utf8(config.to_yaml_bytes().unwrap()).unwrap();
-        assert!(yaml.contains("git: {}\n"));
+        assert!(yaml.contains("git:\n    auto_push: false\n    auto_pull: false\n"));
         assert!(yaml.contains("update: {}\n"));
         Config::load_from_bytes(yaml.as_bytes()).expect("empty optional maps are valid YAML");
 
