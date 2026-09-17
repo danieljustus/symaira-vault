@@ -64,7 +64,7 @@
     "internal/vault/payment.go"
   ],
   "source_digest": "810c58e43b21cc32b3cebd8cf561ba46de2a7fb51368c8aaa7b22c4b9a7583e5",
-  "generator_digest": "d31a430a6181f82406e08604dbdb185a9720d30c9264e52d95c01ac14c06f525",
+  "generator_digest": "a0bcb72dab229148f85655a52b523646457170fb363842242cf495a83e4d379e",
   "cases": [
     {
       "name": "csv_invalid_totp",
@@ -169,6 +169,20 @@
             "url": "https://two.test",
             "username": "u2"
           },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "csv_invalid_header_lowercase_replacement_alias",
+      "format": "csv",
+      "mapping": "title=�",
+      "input_b64": "/wp2YWx1ZQo=",
+      "entries": [
+        {
+          "path": "value",
+          "data": {},
           "warnings": null
         }
       ],
@@ -332,6 +346,21 @@
             "password": "p",
             "url": "",
             "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "normalize_after_invalid_char_removal",
+      "format": "csv",
+      "input": "title,password\n.?.,p\n",
+      "entries": [
+        {
+          "path": "-",
+          "data": {
+            "password": "p"
           },
           "warnings": null
         }

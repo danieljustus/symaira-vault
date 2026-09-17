@@ -1,5 +1,6 @@
 use base64::Engine;
 use serde_json::Value;
+use std::collections::BTreeMap;
 use symvault_sync::importer::{self, Format};
 
 #[test]
@@ -36,7 +37,15 @@ fn csv_profiles_and_paths_match_production_go() {
                     .as_bytes()
                     .to_vec()
             });
-        let result = importer::parse(format, &input);
+        let result = if let Some(mapping) = case.get("mapping").and_then(Value::as_str) {
+            let (field, column) = mapping
+                .split_once('=')
+                .unwrap_or_else(|| panic!("{} has invalid mapping", case["name"]));
+            let mapping = BTreeMap::from([(field.to_owned(), column.to_owned())]);
+            importer::parse_csv(&input, Some(&mapping))
+        } else {
+            importer::parse(format, &input)
+        };
         assert_eq!(
             result.is_err(),
             case["failed"].as_bool().unwrap(),

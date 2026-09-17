@@ -121,7 +121,8 @@ pub fn parse_csv_profile(
     // Go's encoding/csv leaves it in the first header name, so restore those
     // three bytes before applying the Go field mapping below.
     let has_bom = bytes.starts_with(b"\xEF\xBB\xBF");
-    let mut columns = BTreeMap::new();
+    let mut columns: BTreeMap<Vec<u8>, usize> = BTreeMap::new();
+    let mut lower_columns: BTreeMap<Vec<u8>, usize> = BTreeMap::new();
     let mut header = csv::ByteRecord::new();
     if !reader
         .read_byte_record(&mut header)
@@ -130,22 +131,18 @@ pub fn parse_csv_profile(
         return Ok(Vec::new());
     }
     for (index, column_bytes) in header.iter().enumerate() {
-        // Go's encoding/csv keeps arbitrary bytes in strings. When the
-        // importer result is JSON encoded, encoding/json replaces each
-        // invalid byte with U+FFFD. Do that conversion before applying the
-        // same trimming/case-folding and field mapping as the Go importer.
         let column = if has_bom && index == 0 {
             let mut with_bom = Vec::with_capacity(3 + column_bytes.len());
             with_bom.extend_from_slice(b"\xEF\xBB\xBF");
             with_bom.extend_from_slice(column_bytes);
-            go_string_from_bytes(&with_bom)
+            with_bom
         } else {
-            go_string_from_bytes(column_bytes)
+            column_bytes.to_vec()
         };
-        let column = column.trim();
+        let column = trim_go_space_bytes(&column);
         if !column.is_empty() {
-            columns.insert(column.to_owned(), index);
-            columns.insert(column.to_lowercase(), index);
+            columns.insert(column.to_vec(), index);
+            lower_columns.insert(lower_go_bytes(column), index);
         }
     }
     let mut result = Vec::new();
@@ -162,14 +159,14 @@ pub fn parse_csv_profile(
         }
         let get = |column: &str| {
             columns
-                .get(column)
-                .or_else(|| columns.get(&column.to_lowercase()))
+                .get(column.as_bytes())
+                .or_else(|| lower_columns.get(&lower_go_bytes(column.as_bytes())))
                 .and_then(|i| row.get(*i))
         };
         let get_raw = |column: &str| {
             columns
-                .get(column)
-                .or_else(|| columns.get(&column.to_lowercase()))
+                .get(column.as_bytes())
+                .or_else(|| lower_columns.get(&lower_go_bytes(column.as_bytes())))
                 .and_then(|i| raw_row.get(*i))
         };
         let mut path = String::new();
@@ -257,81 +254,44 @@ fn go_string_from_bytes(bytes: &[u8]) -> String {
     result
 }
 
-#[derive(Clone, Debug)]
-enum RawPathUnit {
-    Char(char),
-    Invalid(u8),
-}
-
 // Keep a separate identity key for profile path de-duplication. Go performs
 // path normalization on strings that may contain invalid UTF-8, then compares
 // those raw strings. The user-visible ImportedEntry must be valid Rust UTF-8,
 // so comparing only the repaired display path would incorrectly merge values
 // such as 0xFF and 0xFE.
 fn normalize_path_key(bytes: &[u8]) -> Vec<u8> {
-    let mut units = raw_path_units(bytes);
-    while units.first().is_some_and(
-        |unit| matches!(unit, RawPathUnit::Char(character) if character.is_whitespace()),
-    ) {
-        units.remove(0);
-    }
-    while units.last().is_some_and(
-        |unit| matches!(unit, RawPathUnit::Char(character) if character.is_whitespace()),
-    ) {
-        units.pop();
-    }
-    while units
-        .first()
-        .is_some_and(|unit| matches!(unit, RawPathUnit::Char('/')))
-    {
-        units.remove(0);
-    }
-    while units
-        .last()
-        .is_some_and(|unit| matches!(unit, RawPathUnit::Char('/')))
-    {
-        units.pop();
-    }
-
-    let mut normalized = Vec::with_capacity(units.len());
-    let mut index = 0;
-    while index < units.len() {
-        match &units[index] {
-            RawPathUnit::Char('.')
-                if units
-                    .get(index + 1)
-                    .is_some_and(|unit| matches!(unit, RawPathUnit::Char('.'))) =>
-            {
-                normalized.push(RawPathUnit::Char('-'));
-                index += 2;
-            }
-            RawPathUnit::Char(character)
-                if ['"', '*', '?', '<', '>', '|', ':', '\\'].contains(character) =>
-            {
-                index += 1;
-            }
-            RawPathUnit::Char(' ') => {
-                normalized.push(RawPathUnit::Char('-'));
-                index += 1;
-            }
-            unit => {
-                normalized.push(unit.clone());
-                index += 1;
-            }
+    let trimmed = trim_go_space_bytes(bytes);
+    let trimmed = trimmed
+        .iter()
+        .skip_while(|byte| **byte == b'/')
+        .copied()
+        .collect::<Vec<_>>();
+    let mut normalized = trimmed
+        .into_iter()
+        .rev()
+        .skip_while(|byte| *byte == b'/')
+        .collect::<Vec<_>>();
+    normalized.reverse();
+    normalized.retain(|byte| {
+        !matches!(
+            *byte,
+            b'"' | b'*' | b'?' | b'<' | b'>' | b'|' | b':' | b'\\'
+        )
+    });
+    for byte in &mut normalized {
+        if *byte == b' ' {
+            *byte = b'-';
         }
     }
-
-    let mut key = Vec::new();
-    for unit in normalized {
-        match unit {
-            RawPathUnit::Invalid(byte) => key.extend([0, byte]),
-            RawPathUnit::Char(character) => {
-                let mut encoded = [0; 4];
-                let encoded = character.encode_utf8(&mut encoded).as_bytes();
-                key.push(1);
-                key.push(encoded.len() as u8);
-                key.extend_from_slice(encoded);
-            }
+    let mut key = Vec::with_capacity(normalized.len());
+    let mut index = 0;
+    while index < normalized.len() {
+        if normalized.get(index) == Some(&b'.') && normalized.get(index + 1) == Some(&b'.') {
+            key.push(b'-');
+            index += 2;
+        } else {
+            key.push(normalized[index]);
+            index += 1;
         }
     }
     key
@@ -339,34 +299,56 @@ fn normalize_path_key(bytes: &[u8]) -> Vec<u8> {
 
 fn path_key_with_suffix(base: &[u8], suffix: usize) -> Vec<u8> {
     let mut key = base.to_vec();
-    key.extend(normalize_path_key(b"-"));
-    key.extend(normalize_path_key(suffix.to_string().as_bytes()));
+    key.push(b'-');
+    key.extend(suffix.to_string().as_bytes());
     key
 }
 
-fn raw_path_units(bytes: &[u8]) -> Vec<RawPathUnit> {
-    let mut units = Vec::new();
-    let mut remaining = bytes;
-    while !remaining.is_empty() {
-        match std::str::from_utf8(remaining) {
-            Ok(valid) => {
-                units.extend(valid.chars().map(RawPathUnit::Char));
-                break;
-            }
-            Err(error) => {
-                let valid_len = error.valid_up_to();
-                units.extend(
-                    std::str::from_utf8(&remaining[..valid_len])
-                        .expect("valid UTF-8 prefix reported by from_utf8")
-                        .chars()
-                        .map(RawPathUnit::Char),
-                );
-                units.push(RawPathUnit::Invalid(remaining[valid_len]));
-                remaining = &remaining[valid_len + 1..];
-            }
+fn trim_go_space_bytes(mut bytes: &[u8]) -> &[u8] {
+    while let Some((character, width)) = first_utf8_char(bytes) {
+        if !character.is_whitespace() {
+            break;
+        }
+        bytes = &bytes[width..];
+    }
+    while let Some((character, width)) = last_utf8_char(bytes) {
+        if !character.is_whitespace() {
+            break;
+        }
+        bytes = &bytes[..bytes.len() - width];
+    }
+    bytes
+}
+
+fn first_utf8_char(bytes: &[u8]) -> Option<(char, usize)> {
+    for width in 1..=bytes.len().min(4) {
+        let Ok(value) = std::str::from_utf8(&bytes[..width]) else {
+            continue;
+        };
+        let character = value.chars().next()?;
+        if character.len_utf8() == width && value.len() == width {
+            return Some((character, width));
         }
     }
-    units
+    None
+}
+
+fn last_utf8_char(bytes: &[u8]) -> Option<(char, usize)> {
+    for width in 1..=bytes.len().min(4) {
+        let start = bytes.len() - width;
+        let Ok(value) = std::str::from_utf8(&bytes[start..]) else {
+            continue;
+        };
+        let character = value.chars().next()?;
+        if character.len_utf8() == width && value.len() == width {
+            return Some((character, width));
+        }
+    }
+    None
+}
+
+fn lower_go_bytes(bytes: &[u8]) -> Vec<u8> {
+    go_string_from_bytes(bytes).to_lowercase().into_bytes()
 }
 
 // csv intentionally accepts malformed quoting; Go's default encoding/csv

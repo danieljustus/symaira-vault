@@ -26,6 +26,7 @@ type entry struct {
 type csvCase struct {
 	Name     string          `json:"name"`
 	Format   importer.Format `json:"format"`
+	Mapping  string          `json:"mapping,omitempty"`
 	Input    string          `json:"input,omitempty"`
 	InputB64 string          `json:"input_b64,omitempty"`
 	Entries  []entry         `json:"entries"`
@@ -58,6 +59,7 @@ func main() {
 		{Name: "csv_invalid_utf8_malformed", Format: "csv", InputB64: base64.StdEncoding.EncodeToString([]byte("title,username,password\n\xc3(,u,p\n"))},
 		{Name: "csv_bom_header", Format: "csv", InputB64: base64.StdEncoding.EncodeToString([]byte("\xef\xbb\xbftitle,password\nA,p\n"))},
 		{Name: "chrome_distinct_invalid_titles", Format: "chrome", InputB64: base64.StdEncoding.EncodeToString([]byte("name,url,username,password,note\n\xff,https://one.test,u,p,n\n\xfe,https://two.test,u2,p2,n2\n"))},
+		{Name: "csv_invalid_header_lowercase_replacement_alias", Format: "csv", Mapping: "title=�", InputB64: base64.StdEncoding.EncodeToString([]byte("\xff\nvalue\n"))},
 		{Name: "apple_totp", Format: "apple", Input: "Title,Password,OTPAuth\nA,p,otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&algorithm=sha256&digits=8&period=45\n"},
 		{Name: "bw_nulls", Format: "bitwarden", Input: `{"folders":null,"items":[{"type":1,"name":"Login","folderId":null,"notes":null,"login":{"username":null,"uris":null},"fields":null}]}`},
 		{Name: "bw_empty_fields", Format: "bitwarden", Input: `{"items":[{"type":1}]}`},
@@ -68,6 +70,7 @@ func main() {
 		{Name: "bw_null_document", Format: "bitwarden", Input: `null`},
 		{Name: "empty", Format: "csv", Input: ""},
 		{Name: "empty_fields", Format: "csv", Input: "title,username,password,url,notes\nA,,p,,\n"},
+		{Name: "normalize_after_invalid_char_removal", Format: "csv", Input: "title,password\n.?.,p\n"},
 		{Name: "no_title_no_invented_path", Format: "csv", Input: "url,password\nhttps://example.test,p\n"},
 		{Name: "duplicate_header_last", Format: "csv", Input: "title,password,password\nA,old,new\n"},
 		{Name: "short_row", Format: "csv", Input: "title,password,url\nA,p\n"},
@@ -87,6 +90,9 @@ func main() {
 	}
 	for i := range cases {
 		parser, newErr := importer.New(cases[i].Format)
+		if newErr == nil && cases[i].Mapping != "" {
+			parser = importer.NewCSV(cases[i].Mapping)
+		}
 		must(newErr)
 		entries, parseErr := parser.Parse(bytes.NewReader(caseInput(cases[i])))
 		cases[i].Failed = parseErr != nil
