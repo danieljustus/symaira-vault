@@ -1,5 +1,6 @@
 #![deny(unsafe_code)]
 
+mod backup_commands;
 mod config;
 mod device;
 mod export_commands;
@@ -144,6 +145,18 @@ enum Command {
     Recipients {
         #[command(subcommand)]
         command: RecipientsCommand,
+    },
+    /// Create a compressed vault backup archive.
+    Backup {
+        #[arg(value_name = "ARCHIVE_PATH")]
+        archive: PathBuf,
+        #[arg(long)]
+        exclude_git: bool,
+    },
+    /// Restore a vault from a backup archive.
+    Restore {
+        #[arg(value_name = "ARCHIVE_PATH")]
+        archive: PathBuf,
     },
     /// Export vault entries to CSV or JSON.
     Export {
@@ -416,6 +429,22 @@ fn main() -> ExitCode {
             command,
             cli.output.as_deref().unwrap_or("text"),
             cli.json,
+            cli.quiet,
+        ),
+        Some(Command::Backup {
+            archive,
+            exclude_git,
+        }) => run_backup(
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
+            &archive,
+            exclude_git,
+            cli.quiet,
+        ),
+        Some(Command::Restore { archive }) => run_restore(
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
+            &archive,
             cli.quiet,
         ),
         Some(Command::Export {
@@ -954,6 +983,43 @@ fn run_generate(
             },
             reveal,
         )
+    })();
+    finish_vault_result(result)
+}
+
+fn run_backup(
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    archive: &Path,
+    exclude_git: bool,
+    quiet: bool,
+) -> ExitCode {
+    let result = (|| {
+        let vault = resolve_vault(explicit_vault, profile)?;
+        require_initialized(&vault)?;
+        let archive = backup_commands::backup(&vault, archive, exclude_git)?;
+        if !quiet {
+            println!("Backup created: {}", archive.display());
+        }
+        Ok::<(), String>(())
+    })();
+    finish_vault_result(result)
+}
+
+fn run_restore(
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    archive: &Path,
+    quiet: bool,
+) -> ExitCode {
+    let result = (|| {
+        let vault = resolve_vault(explicit_vault, profile)?;
+        backup_commands::restore(&vault, archive)?;
+        require_initialized(&vault)?;
+        if !quiet {
+            println!("Vault restored to: {}", vault.display());
+        }
+        Ok::<(), String>(())
     })();
     finish_vault_result(result)
 }

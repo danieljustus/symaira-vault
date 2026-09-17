@@ -800,6 +800,93 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     assert!(!go_remove_missing.status.success());
     assert!(String::from_utf8_lossy(&go_remove_missing.stderr).contains("not found"));
 
+    let archive_base = temporary_root("backup-roundtrip");
+    let go_backup = run(
+        &go_binary,
+        &[
+            "--vault",
+            rust_root.to_str().unwrap(),
+            "backup",
+            archive_base.to_str().unwrap(),
+            "--exclude-git",
+        ],
+        &rust_root,
+        &home,
+    );
+    assert_success(&go_backup, "Go backup");
+    let archive = PathBuf::from(format!("{}.tar.gz", archive_base.display()));
+    assert!(archive.is_file(), "Go backup did not create {:?}", archive);
+
+    let rust_restore_root = temporary_root("rust-restore");
+    let rust_restore = run(
+        &rust_binary,
+        &[
+            "--vault",
+            rust_restore_root.to_str().unwrap(),
+            "restore",
+            archive.to_str().unwrap(),
+        ],
+        &rust_restore_root,
+        &home,
+    );
+    assert_success(&rust_restore, "Rust restore of Go backup");
+    let rust_get_restored = run(
+        &rust_binary,
+        &[
+            "--vault",
+            rust_restore_root.to_str().unwrap(),
+            "get",
+            "work/github.password",
+            "--print",
+        ],
+        &rust_restore_root,
+        &home,
+    );
+    assert_success(&rust_get_restored, "Rust get after Go backup restore");
+    assert_eq!(rust_get_restored.stdout, b"secret\n");
+
+    let rust_backup = run(
+        &rust_binary,
+        &[
+            "--vault",
+            rust_root.to_str().unwrap(),
+            "backup",
+            archive_base.to_str().unwrap(),
+            "--exclude-git",
+        ],
+        &rust_root,
+        &home,
+    );
+    assert_success(&rust_backup, "Rust backup");
+    assert_eq!(rust_backup.stdout, go_backup.stdout);
+    let go_restore_root = temporary_root("go-restore");
+    let go_restore = run(
+        &go_binary,
+        &[
+            "--vault",
+            go_restore_root.to_str().unwrap(),
+            "restore",
+            archive.to_str().unwrap(),
+        ],
+        &go_restore_root,
+        &home,
+    );
+    assert_success(&go_restore, "Go restore of Rust backup");
+    let go_get_restored = run(
+        &go_binary,
+        &[
+            "--vault",
+            go_restore_root.to_str().unwrap(),
+            "get",
+            "work/github.password",
+            "--print",
+        ],
+        &go_restore_root,
+        &home,
+    );
+    assert_success(&go_get_restored, "Go get after Rust backup restore");
+    assert_eq!(go_get_restored.stdout, b"secret\n");
+
     let go_init = run(
         &go_binary,
         &[
@@ -818,6 +905,9 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     fs::remove_dir_all(home).expect("cleanup home");
     fs::remove_dir_all(rust_root).expect("cleanup Rust vault");
     fs::remove_dir_all(go_root).expect("cleanup Go vault");
+    fs::remove_dir_all(rust_restore_root).expect("cleanup Rust restore vault");
+    fs::remove_dir_all(go_restore_root).expect("cleanup Go restore vault");
+    fs::remove_file(archive).expect("cleanup backup archive");
 }
 
 #[test]
