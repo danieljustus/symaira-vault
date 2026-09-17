@@ -130,6 +130,7 @@ fn fetch_id_uses_get_policy_before_storage() {
         identity,
         ReadOnlyRuntimeConfig {
             agent_name: "fixture".into(),
+            can_read_values: true,
             allowed_paths: vec!["*".into()],
             available_tools,
             ..ReadOnlyRuntimeConfig::default()
@@ -157,12 +158,14 @@ fn fetch_id_uses_get_policy_before_storage() {
         .authorize("fetch", &serde_json::json!({"id": "github"}))
         .expect_err("fetch id must be checked by get policy");
     assert!(error.is_error);
+    assert!(error.text.contains("deny fetch id"), "{}", error.text);
     assert!(error.text.contains("policy denied tool \"fetch\""));
 
     let error = runtime
         .authorize("get_entry_value", &serde_json::json!({"path": "github"}))
         .expect_err("value reads must use the get policy action");
     assert!(error.is_error);
+    assert!(error.text.contains("deny fetch id"), "{}", error.text);
     assert!(
         error
             .text
@@ -268,7 +271,7 @@ fn go_generated_rate_limit_fixture_matches_rust_dispatch() {
             root.path(),
             identity,
             ReadOnlyRuntimeConfig {
-                server_name: fixture.server_name.clone(),
+                server_name: "Symaira Vault MCP".into(),
                 server_version: "1.0.0".into(),
                 transport: "stdio".into(),
                 agent_name: "fixture".into(),

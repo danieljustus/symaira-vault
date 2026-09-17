@@ -816,7 +816,7 @@ fn store_error(error: StoreError) -> String {
     error.to_string()
 }
 
-/// Fifteen complete handlers plus built-in template dry runs in this bounded runtime. The catalog remains owned by
+/// Seventeen connected handlers plus built-in template dry runs. The catalog remains owned by
 /// the protocol layer; this list is the injected availability registry used
 /// by authorization and whoami.
 pub fn read_only_tool_names() -> Vec<String> {
@@ -845,6 +845,18 @@ pub fn read_only_tool_names() -> Vec<String> {
     .collect()
 }
 
+pub fn unavailable_tool(
+    name: impl Into<String>,
+    code: impl Into<String>,
+    reason: impl Into<String>,
+) -> ReadOnlyUnavailableTool {
+    ReadOnlyUnavailableTool {
+        name: name.into(),
+        code: code.into(),
+        reason: reason.into(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{MCP_RATE_LIMIT_WINDOW, MinuteRateLimiter};
@@ -862,17 +874,5 @@ mod tests {
         assert!(limiter.allow_at(start), "first call starts the window");
         assert!(!limiter.allow_at(start + Duration::from_secs(1)));
         assert!(limiter.allow_at(start + MCP_RATE_LIMIT_WINDOW + Duration::from_secs(1)));
-    }
-}
-
-pub fn unavailable_tool(
-    name: impl Into<String>,
-    code: impl Into<String>,
-    reason: impl Into<String>,
-) -> ReadOnlyUnavailableTool {
-    ReadOnlyUnavailableTool {
-        name: name.into(),
-        code: code.into(),
-        reason: reason.into(),
     }
 }
