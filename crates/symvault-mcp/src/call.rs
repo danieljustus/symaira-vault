@@ -268,6 +268,7 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
             "symaira_whoami" => self.whoami(),
             "list_entries" => self.list_entries(arguments),
             "generate_password" => self.generate_password(arguments),
+            "sanitize_output" => self.sanitize_output(arguments),
             "generate_totp" => self.generate_totp(arguments),
             "set_entry_field" => self.set_entry_field(arguments),
             "delete_entry" => self.delete_entry(arguments),
@@ -341,6 +342,20 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
         let password = symvault_core::password::generate_password(length, symbols)
             .map_err(|error| error.to_string())?;
         Ok(ToolCallResult::text(password.as_str()))
+    }
+
+    fn sanitize_output(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        let text = match required_string(arguments, "text") {
+            Ok(text) => text,
+            Err(error) => return Ok(error),
+        };
+        let sanitized = crate::render::sanitize_for_mcp(text);
+        json_text(serde_json::json!({
+            "original_length": text.len(),
+            "sanitized_length": sanitized.len(),
+            "sanitized": sanitized,
+            "was_modified": sanitized != text,
+        }))
     }
 
     fn set_entry_field(&self, arguments: &Value) -> Result<ToolCallResult, String> {
