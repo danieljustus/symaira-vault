@@ -433,13 +433,13 @@ fn run_process_with_timeout(
 
     #[cfg(windows)]
     {
-        return windows_process::run(
+        windows_process::run(
             command,
             stdout_path,
             stderr_path,
             args.first().copied().unwrap_or("command"),
             timeout,
-        );
+        )
     }
 
     #[cfg(not(windows))]
@@ -727,10 +727,9 @@ mod windows_process {
                 let resume_error = if previous == u32::MAX {
                     Some(io::Error::last_os_error())
                 } else if previous != 1 {
-                    Some(io::Error::new(
-                        io::ErrorKind::Other,
-                        format!("primary process thread had suspend count {previous}, want 1"),
-                    ))
+                    Some(io::Error::other(format!(
+                        "primary process thread had suspend count {previous}, want 1"
+                    )))
                 } else {
                     None
                 };
@@ -968,7 +967,9 @@ mod tests {
                         .args(["--exact", HELPER_TEST, "--nocapture"])
                         .env(HELPER_ENV, "grandchild")
                         .spawn()
-                        .expect("spawn grandchild helper");
+                        .expect("spawn grandchild helper")
+                        .wait()
+                        .expect("wait for grandchild helper");
                 }
                 "grandchild" => {
                     fs::write(&grandchild_pid, std::process::id().to_string())

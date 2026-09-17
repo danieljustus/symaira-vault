@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import platform
 import re
+import shlex
 import subprocess
 import tempfile
 
@@ -85,14 +86,19 @@ def main():
         assert platform.system() == "Darwin"
         commands = [cargo + ["-p", "symvault-platform", "--test", "native_daemon", "--all-features", "--", "--ignored", "--exact", "native_daemon_private_home_lifecycle_attempt", "--nocapture"]]
     else:
-        probe = ["go", "run", "./scripts/rust-port/cmd/nativekeyringprobe"]
+        stages = [
+            ["go", "run", "./scripts/rust-port/cmd/nativekeyringinterop", "write"],
+            cargo + ["-p", "symvault-platform", "--test", "native_keyring_interop", "--all-features", "--", "--ignored", "--exact", "native_keyring_go_write_rust_update_go_read_delete", "--nocapture"],
+            ["go", "run", "./scripts/rust-port/cmd/nativekeyringinterop", "verify"],
+        ]
+        sequence = " && ".join(shlex.join(stage) for stage in stages)
         if platform.system() == "Linux":
-            # A new D-Bus session and private HOME isolate Secret Service. This
-            # password protects only the disposable test keyring, never user data.
-            probe = ["dbus-run-session", "--", "bash", "-euc", "printf 'disposable-native-test\\n' | gnome-keyring-daemon --unlock --components=secrets; go run ./scripts/rust-port/cmd/nativekeyringprobe"]
-        commands = [probe]
-        if platform.system() == "Darwin":
-            commands.append(cargo + ["-p", "symvault-platform", "--test", "native_keyring", "--all-features", "--", "--ignored", "--exact", "native_keyring_binary_roundtrip_and_delete", "--nocapture"])
+            # All three stages must use the same disposable Secret Service.
+            sequence = "printf 'disposable-native-test\\n' | gnome-keyring-daemon --unlock --components=secrets; " + sequence
+            commands = [["dbus-run-session", "--", "bash", "-euc", sequence]]
+        else:
+            commands = [["bash", "-euc", sequence]]
+        report["interop_stages"] = stages
     report_path.write_text(json.dumps(report, indent=2))
     tmp_parent = env.get("TMPDIR") or ("/private/tmp" if platform.system() == "Darwin" else None)
     try:
@@ -101,6 +107,7 @@ def main():
                 directory = Path(temporary) / leaf
                 directory.mkdir(mode=0o700, exist_ok=True)
                 env[key] = str(directory)
+            env["SYMVAULT_NATIVE_KEYRING_INTEROP_REPORT"] = str(Path(temporary) / "keyring-interop.json")
             if args.mode == "keyring" and platform.system() == "Darwin":
                 # Configure the same private HOME used by the adapters, not the
                 # runner's ambient preference domain. Only test data is stored.
@@ -156,8 +163,14 @@ def main():
                         assert counts == [1], "native test must execute exactly once"
                 else:
                     records = [json.loads(line) for line in text.splitlines() if line.startswith('{"')]
-                    assert len(records) == 1 and records[0]["passed"] is True
-                    entry["native_observation"] = records[0]
+                    if args.mode == "keyring":
+                        assert len(records) == 2 and [r["mode"] for r in records] == ["write", "verify"]
+                        assert all(r["passed"] is True for r in records)
+                        assert re.findall(r"test result: ok\. (\d+) passed", text) == ["1"]
+                        entry["native_observation"] = {"passed": True, "rust_parity": True, "stages": records}
+                    else:
+                        assert len(records) == 1 and records[0]["passed"] is True
+                        entry["native_observation"] = records[0]
                 assert result.returncode == 0, f"gate failed: {command}; inspect {log_path}"
             assert checked(["git", "rev-parse", "HEAD"], root, env) == head
             assert not checked(["git", "status", "--porcelain"], root, env)
