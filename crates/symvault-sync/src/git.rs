@@ -414,14 +414,15 @@ impl GitRepository {
     }
 
     fn changed_paths(&self, left: &str, right: &str) -> Result<Vec<String>, GitError> {
-        let output = self.command(&["diff", "--name-only", left, right])?;
-        let text =
-            String::from_utf8(output.stdout).map_err(|error| GitError::Parse(error.to_string()))?;
-        Ok(text
-            .lines()
+        let output = self.command(&["diff", "--name-only", "-z", left, right])?;
+        output
+            .stdout
+            .split(|byte| *byte == 0)
             .filter(|path| !path.is_empty())
-            .map(str::to_owned)
-            .collect())
+            .map(|path| {
+                String::from_utf8(path.to_vec()).map_err(|error| GitError::Parse(error.to_string()))
+            })
+            .collect()
     }
 
     fn force_status(&self) -> Result<Vec<GitStatus>, GitError> {
@@ -608,7 +609,13 @@ fn write_conflict_copy(root: &Path, relative_path: &str, data: &[u8]) -> Result<
     let destination = root.join(relative_path);
     match crate::safeio::read(&destination) {
         Ok(Some(existing)) if existing == data => return Ok(()),
-        Ok(Some(_)) | Ok(None) => {}
+        Ok(Some(_)) => {
+            return Err(GitError::Parse(format!(
+                "conflict copy already exists with different content: {}",
+                destination.display()
+            )));
+        }
+        Ok(None) => {}
         Err(error) => {
             return Err(GitError::Parse(format!(
                 "{}: {error}",
@@ -1129,6 +1136,91 @@ mod tests {
         let rendered = classify_pull_error(&mixed);
         assert!(rendered.contains(NETWORK_MESSAGE));
         assert!(!rendered.contains("authentication failed - please check"));
+    }
+
+    #[test]
+    fn force_pull_preserves_unicode_newline_file_when_conflict_destination_exists() {
+        let local = tempfile::tempdir().expect("local repository");
+        let bare = tempfile::tempdir().expect("bare repository");
+        let remote = tempfile::tempdir().expect("remote checkout");
+        let path = local.path().join("entries").join("über\nlogin.age");
+        let remote_path = remote.path().join("entries").join("über\nlogin.age");
+        fs::create_dir_all(path.parent().expect("entries parent")).expect("entries directory");
+
+        let run_git = |root: &Path, args: &[&str]| {
+            let output = Command::new("git")
+                .args(args)
+                .current_dir(root)
+                .env("GIT_CONFIG_NOSYSTEM", "1")
+                .output()
+                .expect("run git");
+            assert!(
+                output.status.success(),
+                "git {args:?}: stdout={} stderr={}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+        let repo = GitRepository::init(local.path()).expect("init local");
+        run_git(local.path(), &["config", "user.name", "Sync Test"]);
+        run_git(
+            local.path(),
+            &["config", "user.email", "sync-test@example.invalid"],
+        );
+        fs::write(local.path().join("config.yaml"), b"base\n").expect("base config");
+        fs::write(&path, b"base-entry\n").expect("base entry");
+        run_git(local.path(), &["add", "--all"]);
+        run_git(local.path(), &["commit", "--quiet", "-m", "base"]);
+        run_git(
+            local.path(),
+            &[
+                "remote",
+                "add",
+                "origin",
+                bare.path().to_str().expect("bare path"),
+            ],
+        );
+        run_git(bare.path(), &["init", "--bare", "--quiet"]);
+        run_git(
+            local.path(),
+            &["push", "--quiet", "--set-upstream", "origin", "HEAD"],
+        );
+
+        let clone = Command::new("git")
+            .args(["clone", "--quiet", bare.path().to_str().expect("bare path")])
+            .arg(remote.path())
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .output()
+            .expect("clone remote");
+        assert!(clone.status.success(), "clone remote failed");
+        run_git(remote.path(), &["config", "user.name", "Remote Sync Test"]);
+        run_git(
+            remote.path(),
+            &["config", "user.email", "remote-sync@example.invalid"],
+        );
+        fs::write(&remote_path, b"remote-entry\n").expect("remote entry");
+        run_git(remote.path(), &["add", "--all"]);
+        run_git(remote.path(), &["commit", "--quiet", "-m", "remote"]);
+        run_git(remote.path(), &["push", "--quiet", "origin", "HEAD"]);
+
+        fs::write(&path, b"local-entry\n").expect("local edit");
+        fs::write(local.path().join(".device-id"), b"test-device\n").expect("device id");
+        let conflict = local
+            .path()
+            .join(conflict_copy_path("entries/über\nlogin.age", "test-device"));
+        fs::write(&conflict, b"existing sentinel\n").expect("existing conflict");
+        let before_head = repo.head().expect("head before reset");
+        let result = repo.force_pull("origin");
+        assert!(
+            result.error.is_some(),
+            "force pull should reject a different existing conflict copy"
+        );
+        assert_eq!(repo.head().expect("head after rejected reset"), before_head);
+        assert_eq!(fs::read(&path).expect("local bytes"), b"local-entry\n");
+        assert_eq!(
+            fs::read(&conflict).expect("existing conflict bytes"),
+            b"existing sentinel\n"
+        );
     }
 
     #[test]

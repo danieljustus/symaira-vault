@@ -128,9 +128,11 @@ fn scan_conflict_dir(root: &Path, prefix: &Path, files: &mut Vec<PathBuf>) -> Re
         if !file_type.is_dir() {
             let name = entry.file_name();
             let name = name.to_string_lossy();
-            if (name.starts_with(".conflict") && name.len() > 11)
-                || (name.starts_with("config.conflict") && name.len() > 14)
-            {
+            // Match Go's containsConflict exactly. Its config branch slices
+            // 14 bytes but compares against the 15-byte "config.conflict"
+            // literal, so config conflict copies are intentionally omitted
+            // from the warning scan even though they are preserved on disk.
+            if name.starts_with(".conflict") && name.len() > 11 {
                 files.push(prefix.join(name.as_ref()));
             }
         }
