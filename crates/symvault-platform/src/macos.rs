@@ -276,6 +276,22 @@ impl MacOsPlatform {
 
 impl Autotype for MacOsPlatform {
     fn type_text(&self, text: &str) -> Result<(), PlatformError> {
+        crate::focus::guard(
+            &std::env::var_os("SYMVAULT_AUTOTYPE_STRICT_FOCUS")
+                .map(|value| value.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+            || {
+                let output = run_stdin_command(
+                    "/usr/bin/osascript",
+                    &["-e", "tell application \"System Events\" to get name of first application process whose frontmost is true"],
+                    b"", DEFAULT_TIMEOUT,
+                ).map_err(|_| crate::focus::unavailable())?;
+                Ok(format!(
+                    "process:{}",
+                    String::from_utf8_lossy(&output).trim()
+                ))
+            },
+        )?;
         let script = format!(
             "Application('System Events').keystroke({});",
             js_string(text)

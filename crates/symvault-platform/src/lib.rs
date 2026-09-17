@@ -1,6 +1,8 @@
 //! Platform seam crate. Native implementations belong here, not in core.
 #![deny(unsafe_code)]
 
+#[cfg(any(target_os = "macos", test))]
+mod focus;
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(any(

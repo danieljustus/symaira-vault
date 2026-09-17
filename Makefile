@@ -552,7 +552,7 @@ preflight: fmt-check lint
 	$(CARGO) test --workspace --doc --all-features --locked
 	@echo "PASS preflight: every CI gate that can run on this host"
 
-port-contract: mcp-prompts-differential mcp-render-differential config-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential
+port-contract: focus-differential mcp-prompts-differential mcp-render-differential config-cli-differential mcp-list-fixtures-check oracle-reachability-check port-fixtures-check keyring-key-fixtures-check core-fixtures-check policy-fixtures-check mcp-init-fixtures-check mcp-stdio-fixtures-check git-winner-fixtures-check git-offline-fixtures-check git-io-differential cfg-fixtures-check cfg-precedence-fixtures-check cfg-bytes-fixtures-check store-metadata-fixtures-check rust-007-fixtures-check sync-io-differential differential-go-selftest crypto-differential
 
 rust-build:
 	$(CARGO) build --workspace --locked
@@ -832,3 +832,9 @@ mcp-prompts-differential:
 cxf-import-differential:
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/cxfgen -check -output testdata/port/import/cxf.json
 	$(CARGO) test -p symvault-sync --test cxf_contract --locked
+
+.PHONY: focus-differential
+FOCUS_ORACLE_COMMIT := fca3f89401833b5e14ec4ec74ef736b0f63bca74
+focus-differential:
+	SYMVAULT_FOCUS_FIXTURE=check GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/autotype -run '^TestGenerateFocusFixture$$' -count=1
+	$(CARGO) test -p symvault-platform --lib focus_guard_matches_go_oracle --locked
