@@ -64,7 +64,7 @@
     "internal/vault/payment.go"
   ],
   "source_digest": "810c58e43b21cc32b3cebd8cf561ba46de2a7fb51368c8aaa7b22c4b9a7583e5",
-  "generator_digest": "a0bcb72dab229148f85655a52b523646457170fb363842242cf495a83e4d379e",
+  "generator_digest": "b1fc71fdb3a0e8668bcde63dbdd743d3f0180bb3267192d2b6de1f67ad286823",
   "cases": [
     {
       "name": "csv_invalid_totp",
@@ -182,6 +182,20 @@
       "entries": [
         {
           "path": "value",
+          "data": {},
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "csv_invalid_header_does_not_override_valid_replacement",
+      "format": "csv",
+      "mapping": "title=�",
+      "input_b64": "/yzvv70KcmF3LHZhbGlkCg==",
+      "entries": [
+        {
+          "path": "valid",
           "data": {},
           "warnings": null
         }
@@ -387,6 +401,21 @@
       "name": "duplicate_header_last",
       "format": "csv",
       "input": "title,password,password\nA,old,new\n",
+      "entries": [
+        {
+          "path": "A",
+          "data": {
+            "password": "new"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "duplicate_header_casefold_last",
+      "format": "csv",
+      "input": "title,password,PASSWORD\nA,old,new\n",
       "entries": [
         {
           "path": "A",

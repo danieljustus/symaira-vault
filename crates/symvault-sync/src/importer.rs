@@ -121,8 +121,10 @@ pub fn parse_csv_profile(
     // Go's encoding/csv leaves it in the first header name, so restore those
     // three bytes before applying the Go field mapping below.
     let has_bom = bytes.starts_with(b"\xEF\xBB\xBF");
+    // Go's csvColumnIndex inserts the exact and lower-case keys into one map
+    // in header order.  Keeping one map matters for duplicate headers: a
+    // later case-folded key can overwrite an earlier exact key.
     let mut columns: BTreeMap<Vec<u8>, usize> = BTreeMap::new();
-    let mut lower_columns: BTreeMap<Vec<u8>, usize> = BTreeMap::new();
     let mut header = csv::ByteRecord::new();
     if !reader
         .read_byte_record(&mut header)
@@ -142,7 +144,7 @@ pub fn parse_csv_profile(
         let column = trim_go_space_bytes(&column);
         if !column.is_empty() {
             columns.insert(column.to_vec(), index);
-            lower_columns.insert(lower_go_bytes(column), index);
+            columns.insert(lower_go_bytes(column), index);
         }
     }
     let mut result = Vec::new();
@@ -160,13 +162,13 @@ pub fn parse_csv_profile(
         let get = |column: &str| {
             columns
                 .get(column.as_bytes())
-                .or_else(|| lower_columns.get(&lower_go_bytes(column.as_bytes())))
+                .or_else(|| columns.get(&lower_go_bytes(column.as_bytes())))
                 .and_then(|i| row.get(*i))
         };
         let get_raw = |column: &str| {
             columns
                 .get(column.as_bytes())
-                .or_else(|| lower_columns.get(&lower_go_bytes(column.as_bytes())))
+                .or_else(|| columns.get(&lower_go_bytes(column.as_bytes())))
                 .and_then(|i| raw_row.get(*i))
         };
         let mut path = String::new();
@@ -348,6 +350,10 @@ fn last_utf8_char(bytes: &[u8]) -> Option<(char, usize)> {
 }
 
 fn lower_go_bytes(bytes: &[u8]) -> Vec<u8> {
+    // strings.ToLower ranges over Go strings, so malformed bytes become
+    // RuneError in the folded alias. Keep the original raw key above: a real
+    // U+FFFD header appearing later still overwrites this alias exactly as it
+    // does in Go's one-map insertion order.
     go_string_from_bytes(bytes).to_lowercase().into_bytes()
 }
 
