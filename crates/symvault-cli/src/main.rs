@@ -11,6 +11,7 @@ mod file_commands;
 mod history_commands;
 mod import_commands;
 mod mcp_commands;
+mod migrate_kdf_commands;
 mod recipients_commands;
 mod search_commands;
 mod session_commands;
@@ -199,6 +200,11 @@ enum Command {
     Recipients {
         #[command(subcommand)]
         command: RecipientsCommand,
+    },
+    /// Migrate vault storage formats.
+    Migrate {
+        #[command(subcommand)]
+        command: MigrateCommand,
     },
     /// Generate configuration files from built-in templates.
     Template {
@@ -470,6 +476,15 @@ enum DeviceCommand {
         yes: bool,
         #[arg(value_name = "ARG", num_args = 0..)]
         args: Vec<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum MigrateCommand {
+    /// Re-encrypt a legacy scrypt identity using Argon2id.
+    Kdf {
+        #[arg(short = 'y', long)]
+        yes: bool,
     },
 }
 
@@ -772,6 +787,9 @@ fn main() -> ExitCode {
                 cli.quiet,
             ),
         },
+        Some(Command::Migrate {
+            command: MigrateCommand::Kdf { yes },
+        }) => run_migrate_kdf(cli.vault.as_deref(), cli._profile.as_deref(), yes),
         Some(Command::Template {
             command:
                 TemplateCommand::Generate {
@@ -1530,6 +1548,76 @@ fn run_export(
         } else if !quiet {
             println!("Exported {} entries", exported.entries);
         }
+        Ok::<(), String>(())
+    })();
+    finish_vault_result(result)
+}
+
+fn run_migrate_kdf(explicit_vault: Option<&Path>, profile: Option<&str>, yes: bool) -> ExitCode {
+    let result = (|| {
+        use migrate_kdf_commands::MigrationResult;
+        let vault = resolve_vault(explicit_vault, profile)?;
+        match migrate_kdf_commands::inspect_identity(&vault)? {
+            MigrationResult::AlreadyArgon2id => {
+                println!(
+                    "✓ Your vault identity is already protected with argon2id.\nNo migration is needed."
+                );
+                return Ok(());
+            }
+            MigrationResult::Unsupported => {
+                println!(
+                    "Could not determine the vault identity's key derivation function.\nRun 'symvault doctor' for a full diagnosis."
+                );
+                return Ok(());
+            }
+            _ => {}
+        }
+        println!("Your vault identity is currently protected with scrypt.");
+        let passphrase = session_input::read_passphrase("Passphrase: ")?;
+        let secret = SecretBytes::new(passphrase.as_bytes());
+        let raw = symvault_sync::safeio::read(&vault.join("identity.age"))
+            .map_err(|error| error.to_string())?
+            .ok_or_else(|| "identity.age is missing".to_owned())?;
+        let identity =
+            decrypt_identity(&raw, &secret).map_err(|error| format!("unlock vault: {error}"))?;
+        let config = Config::load(vault.join("config.yaml"))
+            .map_err(|error| format!("unlock vault: {error}"))?;
+        let automatic = config
+            .vault
+            .as_ref()
+            .is_some_and(|config| config.auto_migrate_kdf);
+        if !automatic && !yes {
+            eprint!(
+                "Migrate the vault identity to argon2id now (identity.age is backed up to identity.age.bak first) (y/N): "
+            );
+            io::stderr().flush().map_err(|error| error.to_string())?;
+            let mut answer = String::new();
+            if io::stdin()
+                .read_line(&mut answer)
+                .map_err(|error| format!("read confirmation: {error}"))?
+                == 0
+            {
+                return Err("read confirmation: EOF".to_owned());
+            }
+            if !answer.trim().eq_ignore_ascii_case("y") {
+                eprintln!("Canceled");
+                return Ok(());
+            }
+        }
+        let state = migrate_kdf_commands::migrate_kdf(&vault, &identity, &secret)
+            .map_err(|error| format!("migrate kdf: {error}"))?;
+        if state != MigrationResult::Migrated && state != MigrationResult::AlreadyArgon2id {
+            return Err(
+                "migration did not complete; identity.age format changed during migration"
+                    .to_owned(),
+            );
+        }
+        if automatic {
+            println!("✓ Migrated automatically on unlock (vault.auto_migrate_kdf is enabled).");
+        } else {
+            println!("✓ Migrated vault identity to argon2id.");
+        }
+        println!("The previous identity.age was backed up to identity.age.bak.");
         Ok::<(), String>(())
     })();
     finish_vault_result(result)
