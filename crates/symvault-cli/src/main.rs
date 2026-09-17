@@ -14,6 +14,7 @@ mod history_commands;
 mod import_commands;
 mod mcp_commands;
 mod migrate_kdf_commands;
+mod path_migration_commands;
 mod policy_commands;
 mod profile_commands;
 mod recipients_commands;
@@ -585,6 +586,9 @@ enum DeviceCommand {
 
 #[derive(Debug, Subcommand)]
 enum MigrateCommand {
+    /// Preview legacy-to-XDG paths without writing.
+    #[command(alias = "xdg")]
+    Paths,
     /// Re-encrypt a legacy scrypt identity using Argon2id.
     Kdf {
         #[arg(short = 'y', long)]
@@ -1014,6 +1018,34 @@ fn main() -> ExitCode {
                 cli.quiet,
             ),
         },
+        Some(Command::Migrate {
+            command: MigrateCommand::Paths,
+        }) => {
+            let result = (|| {
+                let Ok(home) = cli_home_directory() else {
+                    if !cli.quiet {
+                        println!("No legacy path migration is needed.");
+                    }
+                    return Ok(());
+                };
+                let config = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from);
+                let data = std::env::var_os("XDG_DATA_HOME").map(PathBuf::from);
+                let cache = std::env::var_os("XDG_CACHE_HOME").map(PathBuf::from);
+                path_migration_commands::preview(
+                    &home,
+                    config.as_deref(),
+                    data.as_deref(),
+                    cache.as_deref(),
+                    cli.quiet,
+                    &mut io::stdout().lock(),
+                )
+                .map_err(|error| format!("preview path migration: {error}"))
+            })();
+            if let Err(error) = &result {
+                let _ = writeln!(io::stderr(), "Error: {error}");
+            }
+            finish_vault_result(result)
+        }
         Some(Command::Migrate {
             command: MigrateCommand::Kdf { yes },
         }) => run_migrate_kdf(cli.vault.as_deref(), cli._profile.as_deref(), yes),

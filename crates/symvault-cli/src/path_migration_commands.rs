@@ -140,13 +140,7 @@ fn append_entry(
             let name = child
                 .file_name()
                 .ok_or_else(|| format!("cannot determine relative path: {}", display(&child)))?;
-            append_entry(
-                &child,
-                &destination.join(name),
-                &relative.join(name),
-                items,
-                total_bytes,
-            )?;
+            append_entry(&child, &destination.join(name), &child, items, total_bytes)?;
         }
         return Ok(());
     }

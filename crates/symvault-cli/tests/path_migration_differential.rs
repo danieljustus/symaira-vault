@@ -156,8 +156,8 @@ fn migration_preview_matches_go_for_legacy_symlink_errors() {
         &["migrate", "xdg"][..],
         &["--quiet", "migrate", "paths"][..],
     ] {
-        let go = run(&go_binary, &args, &home, (&xdg.0, &xdg.1, &xdg.2));
-        let rust = run(&rust_binary, &args, &home, (&xdg.0, &xdg.1, &xdg.2));
+        let go = run(&go_binary, args, &home, (&xdg.0, &xdg.1, &xdg.2));
+        let rust = run(&rust_binary, args, &home, (&xdg.0, &xdg.1, &xdg.2));
         assert_same(&go, &rust, &format!("legacy symlink {args:?}"));
         assert!(!go.status.success(), "Go must reject legacy symlink");
     }
@@ -175,13 +175,13 @@ fn migration_preview_matches_go_for_legacy_symlink_errors() {
     ] {
         let go = run(
             &go_binary,
-            &args,
+            args,
             &nested_home,
             (&nested_xdg.0, &nested_xdg.1, &nested_xdg.2),
         );
         let rust = run(
             &rust_binary,
-            &args,
+            args,
             &nested_home,
             (&nested_xdg.0, &nested_xdg.1, &nested_xdg.2),
         );

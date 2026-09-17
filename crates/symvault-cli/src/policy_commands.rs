@@ -214,6 +214,7 @@ fn ensure_existing_policy_directory(directory: &Path) -> Result<(), String> {
 mod tests {
     use super::*;
 
+    #[cfg(unix)]
     const VALID_POLICY: &[u8] =
         b"version: v1\nrules:\n  - name: allow-read\n    priority: 10\n    action: allow\n";
 
