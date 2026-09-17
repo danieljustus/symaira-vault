@@ -3,11 +3,7 @@
 use std::{io, path::Path};
 
 #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-use std::{
-    fs,
-    io::{Read, Write},
-    sync::atomic::{AtomicU64, Ordering},
-};
+use std::fs;
 
 use symvault_core::session::Keyring;
 use symvault_crypto::{Identity, SecretBytes};
@@ -124,16 +120,10 @@ fn load_or_create_file_key(
     directory: &Path,
     identity: Option<&Identity>,
 ) -> io::Result<SecretBytes> {
+    let root_cap = crate::open_directory_nofollow(directory)?;
+    let _lock = crate::open_root_write_lock(&root_cap, directory).map_err(store_error_to_io)?;
     let path = directory.join(KEY_FILE_NAME);
-    if let Ok(metadata) = fs::symlink_metadata(&path)
-        && (metadata.file_type().is_symlink() || !metadata.is_file())
-    {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "grant signing key path is not a regular file",
-        ));
-    }
-    match read_private_file(&path) {
+    match read_file_key(&root_cap, &path) {
         Ok(data) => {
             let encrypted = data.starts_with(AGE_HEADER);
             let data = Zeroizing::new(data);
@@ -156,13 +146,13 @@ fn load_or_create_file_key(
                     io::Error::other(format!("generate grant signing key: {error}"))
                 })?;
                 let output = encrypt_file_key(&bytes, identity)?;
-                write_private_file(&path, &output)?;
+                write_file_key(&root_cap, &path, &output)?;
                 return Ok(SecretBytes::new(&bytes));
             }
             if !encrypted {
                 if let Some(identity) = identity {
                     let output = encrypt_file_key(&plaintext, Some(identity))?;
-                    write_private_file(&path, &output)?;
+                    write_file_key(&root_cap, &path, &output)?;
                 }
             }
             Ok(SecretBytes::new(&plaintext))
@@ -172,7 +162,7 @@ fn load_or_create_file_key(
             getrandom::fill(&mut bytes)
                 .map_err(|error| io::Error::other(format!("generate grant signing key: {error}")))?;
             let output = encrypt_file_key(&bytes, identity)?;
-            write_private_file(&path, &output)?;
+            write_file_key(&root_cap, &path, &output)?;
             Ok(SecretBytes::new(&bytes))
         }
         Err(error) => Err(error),
@@ -183,147 +173,43 @@ fn load_or_create_file_key(
     unix,
     not(any(target_os = "macos", target_os = "linux", target_os = "windows"))
 ))]
-fn read_private_file(path: &Path) -> io::Result<Vec<u8>> {
-    use rustix::fs::{Mode, OFlags, open, openat};
-
-    let parent = path.parent().unwrap_or_else(|| Path::new("."));
-    let name = path.file_name().ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "grant signing key filename is invalid")
-    })?;
-    let parent = open(
-        parent,
-        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW,
-        Mode::empty(),
-    )?;
-    let file = openat(
-        &parent,
-        name,
-        OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::NONBLOCK,
-        Mode::empty(),
-    )?;
-    let mut file = fs::File::from(file);
-    let mut bytes = Vec::new();
-    file.read_to_end(&mut bytes)?;
-    Ok(bytes)
+fn read_file_key(root_cap: &fs::File, path: &Path) -> io::Result<Vec<u8>> {
+    crate::rooted::read(root_cap, Path::new(KEY_FILE_NAME), path).map_err(store_error_to_io)
 }
 
 #[cfg(all(
     not(unix),
     not(any(target_os = "macos", target_os = "linux", target_os = "windows"))
 ))]
-fn read_private_file(path: &Path) -> io::Result<Vec<u8>> {
-    fs::read(path)
+fn read_file_key(_root_cap: &fs::File, path: &Path) -> io::Result<Vec<u8>> {
+    crate::read_regular(path).map_err(store_error_to_io)
 }
 
-#[cfg(all(
-    unix,
-    not(any(target_os = "macos", target_os = "linux", target_os = "windows"))
-))]
-fn write_private_file(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    use rustix::fs::{AtFlags, Mode, OFlags, fsync, open, openat, renameat, unlinkat};
-
-    static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
-    let parent = path.parent().unwrap_or_else(|| Path::new("."));
-    let name = path.file_name().and_then(|name| name.to_str()).ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "grant signing key filename is invalid")
-    })?;
-    if let Ok(metadata) = fs::symlink_metadata(path)
-        && (metadata.file_type().is_symlink() || !metadata.is_file())
-    {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "grant signing key path is not a regular file",
-        ));
-    }
-    let parent = open(
-        parent,
-        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW,
-        Mode::empty(),
-    )?;
-    for _ in 0..32 {
-        let temporary = format!(
-            ".{name}.tmp-{}-{}",
-            std::process::id(),
-            TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed)
-        );
-        let mut file = match openat(
-            &parent,
-            temporary.as_str(),
-            OFlags::WRONLY | OFlags::CREATE | OFlags::EXCL | OFlags::NOFOLLOW,
-            Mode::from_raw_mode(0o600),
-        ) {
-            Ok(file) => fs::File::from(file),
-            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
-            Err(error) => return Err(error),
-        };
-        let result = (|| {
-            file.write_all(bytes)?;
-            file.sync_all()?;
-            renameat(&parent, temporary.as_str(), &parent, name)?;
-            fsync(&parent)?;
-            Ok::<(), io::Error>(())
-        })();
-        drop(file);
-        if result.is_err() {
-            let _ = unlinkat(&parent, temporary.as_str(), AtFlags::empty());
-        }
-        return result;
-    }
-    Err(io::Error::new(
-        io::ErrorKind::AlreadyExists,
-        "grant signing key temporary name exhausted",
-    ))
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+fn write_file_key(root_cap: &fs::File, path: &Path, bytes: &[u8]) -> io::Result<()> {
+    crate::publication::replace(path, bytes, root_cap).map_err(store_error_to_io)
 }
 
-#[cfg(all(
-    not(unix),
-    not(any(target_os = "macos", target_os = "linux", target_os = "windows"))
-))]
-fn write_private_file(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
-    if let Ok(metadata) = fs::symlink_metadata(path)
-        && (metadata.file_type().is_symlink() || !metadata.is_file())
-    {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "grant signing key path is not a regular file",
-        ));
-    }
-    let parent = path.parent().unwrap_or_else(|| Path::new("."));
-    let name = path.file_name().and_then(|name| name.to_str()).ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "grant signing key filename is invalid")
-    })?;
-    for _ in 0..32 {
-        let temporary = parent.join(format!(
-            ".{name}.tmp-{}-{}",
-            std::process::id(),
-            TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed)
-        ));
-        let mut file = match fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temporary)
-        {
-            Ok(file) => file,
-            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
-            Err(error) => return Err(error),
-        };
-        let result = (|| {
-            file.write_all(bytes)?;
-            file.sync_all()?;
-            fs::rename(&temporary, path)?;
-            Ok::<(), io::Error>(())
-        })();
-        drop(file);
-        if result.is_err() {
-            let _ = fs::remove_file(&temporary);
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+fn store_error_to_io(error: crate::StoreError) -> io::Error {
+    match error {
+        crate::StoreError::Read { source, .. } | crate::StoreError::Write { source, .. } => source,
+        crate::StoreError::MissingFile(_) => io::Error::new(
+            io::ErrorKind::NotFound,
+            "grant signing key file does not exist",
+        ),
+        crate::StoreError::Limit { .. } => io::Error::new(
+            io::ErrorKind::InvalidData,
+            "grant signing key file exceeds the store read limit",
+        ),
+        crate::StoreError::Symlink(_) | crate::StoreError::NotRegularFile(_) => {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "grant signing key path is not a regular file",
+            )
         }
-        return result;
+        other => io::Error::other(other.to_string()),
     }
-    Err(io::Error::new(
-        io::ErrorKind::AlreadyExists,
-        "grant signing key temporary name exhausted",
-    ))
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
