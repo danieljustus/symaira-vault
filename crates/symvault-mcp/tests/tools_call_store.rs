@@ -5,8 +5,8 @@ use std::fs;
 use symvault_core::policy::{Action, Conditions, Engine, Policy, Rule};
 use symvault_crypto::generate_identity;
 use symvault_mcp::{
-    ProtocolHandler, ReadOnlyRuntimeConfig, ReadOnlyUnavailableTool, read_only_tool_names,
-    run_stream,
+    ProtocolHandler, ReadOnlyRuntimeConfig, ReadOnlyUnavailableTool, StoreReadOnlyRuntime,
+    ToolCallRuntime, read_only_tool_names, run_stream,
 };
 use symvault_store::{Entry, EntryMetadata, SecretMetadata, Store};
 use tempfile::tempdir;
@@ -274,4 +274,67 @@ fn actual_encrypted_store_matches_go_initialized_fixture() {
         .collect::<Vec<_>>();
     assert_eq!(actual_markers, expected_markers, "marker counts");
     assert_eq!(actual, expected);
+}
+
+#[test]
+fn authorization_matches_go_path_policy_and_quota_order() {
+    let (root, identity) = write_synthetic_vault();
+    let mut config = fixture_config();
+    config.agent_name = "fixture".into();
+    config.allowed_paths = vec!["allowed/*".into()];
+    config.max_reads_per_hour = 1;
+    config.available_tools = read_only_tool_names();
+
+    // Go's executeTool runs policy only when a non-empty entry path was
+    // extracted. A pathless health call therefore remains usable even when a
+    // policy is configured, and profile read limits are reported by whoami but
+    // are not enforced by the Go MCP server.
+    let runtime = StoreReadOnlyRuntime::open(
+        root.path(),
+        identity,
+        config,
+        Some(Engine::new([Policy {
+            version: "1".into(),
+            description: "path-specific deny fixture".into(),
+            rules: vec![Rule {
+                name: "deny github".into(),
+                priority: 10,
+                conditions: Conditions {
+                    agent_id: "fixture".into(),
+                    path: "github".into(),
+                    ..Conditions::default()
+                },
+                action: Action::Deny,
+            }],
+        }])),
+        None,
+    )
+    .expect("construct authorization fixture runtime");
+
+    runtime
+        .authorize("health", &serde_json::json!({}))
+        .expect("pathless health bypasses path policy");
+    runtime
+        .authorize("health", &serde_json::json!({}))
+        .expect("Go MCP read limits do not reject a second health call");
+
+    runtime
+        .authorize("get_entry_metadata", &serde_json::json!({"path": "github"}))
+        .expect_err("path-specific policy denies metadata before storage");
+
+    // With policy removed, authorization passes and the handler applies the
+    // Go-compatible scope check at the storage boundary.
+    let (root, identity) = write_synthetic_vault();
+    let mut config = fixture_config();
+    config.allowed_paths = vec!["allowed/*".into()];
+    config.available_tools = read_only_tool_names();
+    let runtime = StoreReadOnlyRuntime::open(root.path(), identity, config, None, None)
+        .expect("construct scope fixture runtime");
+    runtime
+        .authorize("get_entry_metadata", &serde_json::json!({"path": "github"}))
+        .expect("scope is checked by the metadata handler after authorization");
+    let error = runtime
+        .call("get_entry_metadata", &serde_json::json!({"path": "github"}))
+        .expect_err("metadata outside scope must not reach storage");
+    assert!(error.contains("outside allowed scope"));
 }

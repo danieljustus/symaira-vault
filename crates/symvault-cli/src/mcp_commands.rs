@@ -8,12 +8,10 @@ use std::{
     fs,
     io::{self, BufReader},
     path::{Path, PathBuf},
-    sync::Arc,
 };
 
 use symvault_core::{
     config::{AgentProfile, Config},
-    persistent_quota::QuotaCounter,
     policy::{Engine, Policy},
 };
 use symvault_crypto::Identity;
@@ -41,13 +39,6 @@ pub fn run(vault: impl AsRef<Path>, agent: &str, identity: Identity) -> Result<(
         .get(agent_name)
         .ok_or_else(|| format!("agent {agent_name:?} not found"))?;
     let policy = load_policy_engine(root)?;
-    let quota = if profile.max_reads_per_hour > 0 || profile.max_reads_per_day > 0 {
-        Some(Arc::new(
-            QuotaCounter::new(root).map_err(|error| format!("open quota counter: {error}"))?,
-        ))
-    } else {
-        None
-    };
     let runtime_config = runtime_config(root, profile, agent_name);
     let mut handler = ProtocolHandler::with_store_read_only_runtime(
         "symaira",
@@ -56,7 +47,7 @@ pub fn run(vault: impl AsRef<Path>, agent: &str, identity: Identity) -> Result<(
         identity,
         runtime_config,
         policy,
-        quota,
+        None,
     )
     .map_err(|error| format!("create MCP runtime: {error}"))?;
     handler.set_tool_list_config(tool_list_config(profile));
@@ -76,6 +67,11 @@ fn runtime_config(root: &Path, profile: &AgentProfile, agent_name: &str) -> Read
     let mut unavailable_tools = Vec::new();
     unavailable_tools.push(unavailable_tool(
         "execute_api_request",
+        "not_available",
+        "mcp.Tool is not available in the current environment",
+    ));
+    unavailable_tools.push(unavailable_tool(
+        "generate_totp",
         "not_available",
         "mcp.Tool is not available in the current environment",
     ));
@@ -119,7 +115,7 @@ fn tool_list_config(profile: &AgentProfile) -> ToolListConfig {
         expose_value_tools: Some(profile.expose_value_tools),
         execute_api_available: false,
         secure_input_available: false,
-        generate_totp_available: true,
+        generate_totp_available: false,
     }
 }
 

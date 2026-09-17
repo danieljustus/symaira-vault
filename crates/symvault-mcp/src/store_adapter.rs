@@ -5,7 +5,6 @@ use crate::call::{
 use serde_json::Value;
 use std::path::Path;
 use std::sync::Arc;
-use symvault_core::persistent_quota::QuotaCounter;
 use symvault_core::policy::{Action, Engine, EvalContext};
 use symvault_crypto::Identity;
 use symvault_store::{Entry, Store, StoreError};
@@ -77,10 +76,7 @@ impl ReadOnlyStore for StoreReadOnlyAdapter {
 pub struct StoreReadOnlyRuntime {
     inner: ReadOnlyRuntime<StoreReadOnlyAdapter>,
     policy: Option<Engine>,
-    quota: Option<Arc<QuotaCounter>>,
     agent_name: String,
-    reads_per_hour: i64,
-    reads_per_day: i64,
 }
 
 impl StoreReadOnlyRuntime {
@@ -89,34 +85,20 @@ impl StoreReadOnlyRuntime {
         identity: Identity,
         mut config: ReadOnlyRuntimeConfig,
         policy: Option<Engine>,
-        quota: Option<Arc<QuotaCounter>>,
+        _quota: Option<Arc<symvault_core::persistent_quota::QuotaCounter>>,
     ) -> Result<Self, String> {
         if config.available_tools.is_empty() {
             return Err("MCP runtime tool registry is empty".into());
-        }
-        if quota.is_none() && (config.max_reads_per_hour > 0 || config.max_reads_per_day > 0) {
-            return Err("configured MCP read quotas require a quota counter".into());
         }
         let adapter = StoreReadOnlyAdapter::open(root, identity)?;
         let root = adapter.root().to_path_buf();
         config.vault_dir = root.to_string_lossy().into_owned();
         config.vault_unlocked = true;
-        if let Some(counter) = &quota {
-            config.reads_used = counter
-                .check("mcp_reads", i64::MAX)
-                .map_err(|error| error.to_string())?
-                .1;
-        }
         let agent_name = config.agent_name.clone();
-        let reads_per_hour = config.max_reads_per_hour;
-        let reads_per_day = config.max_reads_per_day;
         Ok(Self {
             inner: ReadOnlyRuntime::new(adapter, config),
             policy,
-            quota,
             agent_name,
-            reads_per_hour,
-            reads_per_day,
         })
     }
 
@@ -125,33 +107,19 @@ impl StoreReadOnlyRuntime {
         identity: Identity,
         mut config: ReadOnlyRuntimeConfig,
         policy: Option<Engine>,
-        quota: Option<Arc<QuotaCounter>>,
+        _quota: Option<Arc<symvault_core::persistent_quota::QuotaCounter>>,
     ) -> Result<Self, String> {
         if config.available_tools.is_empty() {
             return Err("MCP runtime tool registry is empty".into());
         }
-        if quota.is_none() && (config.max_reads_per_hour > 0 || config.max_reads_per_day > 0) {
-            return Err("configured MCP read quotas require a quota counter".into());
-        }
         let adapter = StoreReadOnlyAdapter { store, identity };
         config.vault_dir = adapter.root().to_string_lossy().into_owned();
         config.vault_unlocked = true;
-        if let Some(counter) = &quota {
-            config.reads_used = counter
-                .check("mcp_reads", i64::MAX)
-                .map_err(|error| error.to_string())?
-                .1;
-        }
         let agent_name = config.agent_name.clone();
-        let reads_per_hour = config.max_reads_per_hour;
-        let reads_per_day = config.max_reads_per_day;
         Ok(Self {
             inner: ReadOnlyRuntime::new(adapter, config),
             policy,
-            quota,
             agent_name,
-            reads_per_hour,
-            reads_per_day,
         })
     }
 
@@ -163,6 +131,13 @@ impl StoreReadOnlyRuntime {
             .get("path")
             .and_then(Value::as_str)
             .unwrap_or_default();
+        // Go's executeTool evaluates policy only after extracting a non-empty
+        // entry path. `health`, `symaira_whoami`, and `find_entries` therefore
+        // bypass the path policy; only get_entry_metadata reaches this point
+        // with a path in this bounded runtime.
+        if path.is_empty() {
+            return Ok(());
+        }
         let action_type = match name {
             "find_entries" => "find",
             "get_entry_metadata" => "get",
@@ -187,44 +162,12 @@ impl StoreReadOnlyRuntime {
             }
         )))
     }
-
-    fn consume_quota(&self) -> Result<(), ToolCallResult> {
-        let Some(counter) = &self.quota else {
-            return Ok(());
-        };
-        for (name, limit) in [
-            ("mcp_reads", self.reads_per_hour),
-            ("mcp_reads_day", self.reads_per_day),
-        ] {
-            if limit <= 0 {
-                continue;
-            }
-            let (allowed, _) = counter
-                .check(name, limit)
-                .map_err(|error| ToolCallResult::error(format!("quota check failed: {error}")))?;
-            if !allowed {
-                return Err(ToolCallResult::error(format!(
-                    "read quota exceeded for {name}"
-                )));
-            }
-        }
-        counter
-            .increment("mcp_reads")
-            .map_err(|error| ToolCallResult::error(format!("quota update failed: {error}")))?;
-        if self.reads_per_day > 0 {
-            counter
-                .increment("mcp_reads_day")
-                .map_err(|error| ToolCallResult::error(format!("quota update failed: {error}")))?;
-        }
-        Ok(())
-    }
 }
 
 impl ToolCallRuntime for StoreReadOnlyRuntime {
     fn authorize(&self, name: &str, arguments: &Value) -> Result<(), ToolCallResult> {
         self.inner.authorize(name, arguments)?;
         self.authorize_policy(name, arguments)?;
-        self.consume_quota()?;
         Ok(())
     }
 
