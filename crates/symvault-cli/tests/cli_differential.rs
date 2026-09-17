@@ -1522,6 +1522,122 @@ fn file_add_get_roundtrip_matches_go_cli() {
     assert_success(&rust_get, "Rust get Go attachment");
     assert_eq!(fs::read(&rust_output).expect("Rust output"), go_content);
 
+    // Exercise Go's chunked-v1 reader, CR/LF-tolerant base64 decoder, and
+    // query-field precedence. The embedded #file selector wins over the
+    // conflicting --field value in both CLIs.
+    for (field, value) in [
+        ("file", "chunked-v1:part1,part2"),
+        ("part1", "Z\r\n2"),
+        ("part2", "8="),
+        ("chunk_count", "2"),
+    ] {
+        let set = run(
+            &go_binary,
+            &[
+                "--vault",
+                root.to_str().unwrap(),
+                "set",
+                &format!("work/chunked.{field}"),
+                "--value",
+                value,
+                "--force",
+            ],
+            &root,
+            &home,
+        );
+        assert_success(&set, &format!("Go set chunk {field}"));
+    }
+    let chunk_go_output = fixture_dir.join("chunk-go-output.bin");
+    let chunk_rust_output = fixture_dir.join("chunk-rust-output.bin");
+    let go_chunk_get = run(
+        &go_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "file",
+            "get",
+            "work/chunked#file",
+            "--field",
+            "wrong_field",
+            "--out",
+            chunk_go_output.to_str().unwrap(),
+        ],
+        &root,
+        &home,
+    );
+    let rust_chunk_get = run(
+        &rust_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "file",
+            "get",
+            "work/chunked#file",
+            "--field",
+            "wrong_field",
+            "--out",
+            chunk_rust_output.to_str().unwrap(),
+        ],
+        &root,
+        &home,
+    );
+    assert_success(&go_chunk_get, "Go chunked file get");
+    assert_success(&rust_chunk_get, "Rust chunked file get");
+    assert_eq!(
+        fs::read(&chunk_rust_output).expect("Rust chunk output"),
+        fs::read(&chunk_go_output).expect("Go chunk output")
+    );
+    assert_eq!(
+        fs::read(&chunk_rust_output).expect("Rust chunk output"),
+        b"go"
+    );
+
+    let mismatch = run(
+        &go_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "set",
+            "work/chunked.chunk_count",
+            "--value",
+            "3",
+            "--force",
+        ],
+        &root,
+        &home,
+    );
+    assert_success(&mismatch, "Go set mismatched chunk count");
+    let go_chunk_mismatch = run(
+        &go_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "file",
+            "get",
+            "work/chunked#file",
+            "--out",
+            chunk_go_output.to_str().unwrap(),
+        ],
+        &root,
+        &home,
+    );
+    let rust_chunk_mismatch = run(
+        &rust_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "file",
+            "get",
+            "work/chunked#file",
+            "--out",
+            chunk_rust_output.to_str().unwrap(),
+        ],
+        &root,
+        &home,
+    );
+    assert!(!go_chunk_mismatch.status.success());
+    assert!(!rust_chunk_mismatch.status.success());
+
     let rust_add = run(
         &rust_binary,
         &[

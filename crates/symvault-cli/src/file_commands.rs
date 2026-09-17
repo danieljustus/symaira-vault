@@ -2,6 +2,7 @@
 
 use std::{
     fs,
+    io::Write as _,
     path::{Path, PathBuf},
 };
 
@@ -105,9 +106,15 @@ pub fn add(root: &Path, identity: &Identity, options: &AddOptions) -> Result<Add
             None,
         )
         .map_err(|error| format!("cannot write attachment: {error}"))?;
+    crate::write_commands::auto_commit(
+        &store,
+        identity,
+        &options.path,
+        &format!("Attach {} to", filename),
+    );
 
     let shredded = if options.shred {
-        shred_source(&options.source).is_ok()
+        shred_source(&options.source)
     } else {
         false
     };
@@ -124,10 +131,12 @@ pub fn add(root: &Path, identity: &Identity, options: &AddOptions) -> Result<Add
 
 pub fn get(root: &Path, identity: &Identity, options: &GetOptions) -> Result<GetResult, String> {
     let (path, explicit_field) = split_path_field(&options.query);
-    let field = if options.field.is_empty() {
-        explicit_field
-    } else {
+    // A field embedded in PATH#FIELD is the Go command's primary selector;
+    // --field is only used when the query has no embedded field.
+    let field = if explicit_field.is_empty() {
         options.field.clone()
+    } else {
+        explicit_field
     };
     let store = Store::open(root, identity).map_err(|error| error.to_string())?;
     let entry = store
@@ -205,7 +214,23 @@ fn decode_attachment_content(entry: &Entry, field: &str) -> Result<Vec<u8>, Stri
             ));
         }
         let mut combined = String::new();
-        for chunk in manifest.split(',') {
+        let chunk_names: Vec<_> = manifest.split(',').collect();
+        for count_key in [format!("{field}_chunk_count"), "chunk_count".to_owned()] {
+            if let Some(value) = entry.data.get(&count_key) {
+                let expected = value
+                    .as_i64()
+                    .or_else(|| value.as_u64().map(|value| value as i64))
+                    .or_else(|| value.as_str().and_then(|value| value.parse().ok()))
+                    .unwrap_or_default();
+                if expected > 0 && expected as usize != chunk_names.len() {
+                    return Err(format!(
+                        "chunk count mismatch for field {field:?}: manifest lists {} chunks, entry specifies {expected}",
+                        chunk_names.len()
+                    ));
+                }
+            }
+        }
+        for chunk in chunk_names {
             let chunk = chunk.trim();
             if chunk.is_empty() {
                 return Err(format!(
@@ -223,6 +248,12 @@ fn decode_attachment_content(entry: &Entry, field: &str) -> Result<Vec<u8>, Stri
     } else {
         encoded.to_owned()
     };
+    // Go's StdEncoding ignores CR/LF inserted into a base64 stream.
+    let encoded: String = encoded
+        .bytes()
+        .filter(|byte| !matches!(byte, b'\r' | b'\n'))
+        .map(char::from)
+        .collect();
     STANDARD
         .decode(encoded)
         .map_err(|error| format!("decode attachment content: {error}"))
@@ -235,8 +266,13 @@ fn digest(content: &[u8]) -> String {
         .collect()
 }
 
-fn shred_source(path: &Path) -> Result<(), String> {
-    let length = fs::metadata(path).map_err(|error| error.to_string())?.len() as usize;
-    fs::write(path, vec![0u8; length]).map_err(|error| error.to_string())?;
-    fs::remove_file(path).map_err(|error| error.to_string())
+fn shred_source(path: &Path) -> bool {
+    if let Ok(length) = fs::metadata(path).map(|metadata| metadata.len() as usize)
+        && let Ok(file) = fs::OpenOptions::new().write(true).open(path)
+    {
+        let _ = file.set_len(length as u64);
+        let _ = (&file).write_all(&vec![0u8; length]);
+        let _ = file.sync_all();
+    }
+    fs::remove_file(path).is_ok()
 }
