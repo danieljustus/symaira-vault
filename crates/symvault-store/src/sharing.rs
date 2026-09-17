@@ -252,6 +252,163 @@ impl ShareStore {
         self.revoke_locked(root, &root_cap, grant_id, now, Some(expected_from_agent))
     }
 
+    /// Creates a pending grant and atomically persists it to the Go share
+    /// store. The current file is reloaded after taking the root mutation
+    /// lock, so a stale in-memory snapshot cannot discard a concurrent grant.
+    /// `ttl_ns` uses Go's `time.Duration` representation. A non-empty signing
+    /// key produces the HMAC-bound `nonce:hmac` ID; an absent or empty key
+    /// retains Go's legacy random hexadecimal ID format.
+    pub fn create_at(
+        &mut self,
+        root: impl AsRef<Path>,
+        from_agent: &str,
+        to_agent: &str,
+        secret_path: &str,
+        secret_field: &str,
+        ttl_ns: i64,
+        created_at: &str,
+        signing_key: Option<&[u8]>,
+    ) -> Result<ShareGrant, StoreError> {
+        let root = root.as_ref();
+        let root_cap = crate::open_directory_nofollow(root).map_err(|source| StoreError::Read {
+            path: root.to_path_buf(),
+            source,
+        })?;
+        let _lock = crate::open_root_write_lock(&root_cap, root)?;
+        self.create_locked(
+            root,
+            &root_cap,
+            from_agent,
+            to_agent,
+            secret_path,
+            secret_field,
+            ttl_ns,
+            created_at,
+            signing_key,
+            None,
+        )
+    }
+
+    #[cfg(test)]
+    fn create_at_with_nonce(
+        &mut self,
+        root: impl AsRef<Path>,
+        from_agent: &str,
+        to_agent: &str,
+        secret_path: &str,
+        secret_field: &str,
+        ttl_ns: i64,
+        created_at: &str,
+        signing_key: Option<&[u8]>,
+        nonce: [u8; 16],
+    ) -> Result<ShareGrant, StoreError> {
+        let root = root.as_ref();
+        let root_cap = crate::open_directory_nofollow(root).map_err(|source| StoreError::Read {
+            path: root.to_path_buf(),
+            source,
+        })?;
+        let _lock = crate::open_root_write_lock(&root_cap, root)?;
+        self.create_locked(
+            root,
+            &root_cap,
+            from_agent,
+            to_agent,
+            secret_path,
+            secret_field,
+            ttl_ns,
+            created_at,
+            signing_key,
+            Some(nonce),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn create_locked(
+        &mut self,
+        root: &Path,
+        root_cap: &fs::File,
+        from_agent: &str,
+        to_agent: &str,
+        secret_path: &str,
+        secret_field: &str,
+        ttl_ns: i64,
+        created_at: &str,
+        signing_key: Option<&[u8]>,
+        injected_nonce: Option<[u8; 16]>,
+    ) -> Result<ShareGrant, StoreError> {
+        if ttl_ns < 0 {
+            return Err(StoreError::Config("ttl must be a positive duration".into()));
+        }
+        let created =
+            time::OffsetDateTime::parse(created_at, &time::format_description::well_known::Rfc3339)
+                .map_err(|error| StoreError::Config(format!("invalid created_at: {error}")))?;
+        let created_at = created
+            .format(&time::format_description::well_known::Rfc3339)
+            .map_err(|error| StoreError::Config(format!("invalid created_at: {error}")))?;
+        let expires_at = if ttl_ns > 0 {
+            let expires = created
+                .checked_add(time::Duration::nanoseconds(ttl_ns))
+                .ok_or_else(|| StoreError::Config("ttl exceeds timestamp range".into()))?;
+            Some(
+                expires
+                    .format(&time::format_description::well_known::Rfc3339)
+                    .map_err(|error| StoreError::Config(format!("invalid expires_at: {error}")))?,
+            )
+        } else {
+            None
+        };
+
+        let mut current = Self::read(root.join(SHARE_STORE_FILE))?;
+        let mut grant = ShareGrant {
+            id: String::new(),
+            from_agent: from_agent.into(),
+            to_agent: to_agent.into(),
+            secret_path: secret_path.into(),
+            secret_field: secret_field.into(),
+            nonce: String::new(),
+            status: "pending".into(),
+            created_at,
+            expires_at,
+            approved_at: None,
+            revoked_at: None,
+            approved_by: String::new(),
+            ttl: ttl_ns,
+        };
+        let nonce = if let Some(nonce) = injected_nonce {
+            nonce
+        } else {
+            let mut nonce = [0_u8; 16];
+            getrandom::fill(&mut nonce)
+                .map_err(|error| StoreError::Config(format!("generate grant ID: {error}")))?;
+            nonce
+        };
+        if let Some(key) = signing_key.filter(|key| !key.is_empty()) {
+            let nonce_hex = encode_hex(&nonce);
+            let mut mac = Hmac::<Sha256>::new_from_slice(key)
+                .map_err(|_| StoreError::Config("invalid share signing key".into()))?;
+            mac.update(canonical_grant_fields(&grant, &nonce_hex).as_bytes());
+            grant.nonce = nonce_hex.clone();
+            grant.id = format!("{nonce_hex}:{}", encode_hex(&mac.finalize().into_bytes()));
+        } else {
+            grant.id = encode_hex(&nonce);
+        }
+        if let Some(existing) = current
+            .grants
+            .iter_mut()
+            .find(|existing| existing.id == grant.id)
+        {
+            *existing = grant.clone();
+        } else {
+            current.grants.push(grant.clone());
+        }
+        current.grants.sort_by(|left, right| left.id.cmp(&right.id));
+        let bytes = encode_store(&current)?;
+        let target = root.join(SHARE_STORE_FILE);
+        crate::publication::replace(&target, &bytes, root_cap)?;
+        *self = current;
+        Ok(grant)
+    }
+
     fn revoke_locked(
         &mut self,
         root: &Path,
@@ -523,6 +680,16 @@ fn decode_hex(value: &str) -> Option<Vec<u8>> {
         .iter()
         .map(|chunk| Some((hex_nibble(chunk[0])? << 4) | hex_nibble(chunk[1])?))
         .collect()
+}
+
+fn encode_hex(value: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut encoded = String::with_capacity(value.len() * 2);
+    for byte in value {
+        encoded.push(HEX[(byte >> 4) as usize] as char);
+        encoded.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    encoded
 }
 
 fn hex_nibble(value: u8) -> Option<u8> {
@@ -901,6 +1068,138 @@ mod tests {
         let persisted = ShareStore::read(&path).expect("read unchanged current share");
         assert_eq!(persisted.grants()[0].from_agent, "new-source");
         assert_eq!(persisted.grants()[0].status, "pending");
+    }
+
+    #[test]
+    fn create_matches_go_hmac_vector_and_persists_pending_fields() {
+        let (_root, path) = fixture_path();
+        let vault_root = path.parent().expect("fixture root");
+        let mut snapshot = ShareStore::read(&path).expect("read empty fixture");
+        let grant = snapshot
+            .create_at_with_nonce(
+                vault_root,
+                "source",
+                "target",
+                "prod/api",
+                "password",
+                60_000_000_000,
+                "2026-01-02T03:04:05Z",
+                Some(GO_KEY),
+                [
+                    0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc,
+                    0xdd, 0xee, 0xff,
+                ],
+            )
+            .expect("create signed Go-compatible grant");
+        assert_eq!(grant.id, GO_ID);
+        assert_eq!(grant.nonce, "00112233445566778899aabbccddeeff");
+        assert_eq!(grant.status, "pending");
+        assert_eq!(grant.ttl, 60_000_000_000);
+        assert_eq!(grant.expires_at.as_deref(), Some("2026-01-02T03:05:05Z"));
+
+        let persisted = ShareStore::read(&path).expect("read persisted grant");
+        assert_eq!(persisted.grants(), std::slice::from_ref(&grant));
+        assert_eq!(
+            persisted
+                .verified_grants(Some(GO_KEY))
+                .expect("verify generated HMAC")
+                .as_slice(),
+            std::slice::from_ref(&grant)
+        );
+    }
+
+    #[test]
+    fn create_legacy_id_uses_secure_random_hex_and_reloads_concurrent_grants() {
+        let (_root, path) = fixture_path();
+        let vault_root = path.parent().expect("fixture root");
+        let mut snapshot = ShareStore::read(&path).expect("read empty fixture");
+        let first = snapshot
+            .create_at(
+                vault_root,
+                "source",
+                "target",
+                "prod/one",
+                "",
+                0,
+                "2026-01-02T03:04:05Z",
+                None,
+            )
+            .expect("create legacy grant");
+        assert_eq!(first.id.len(), 32);
+        assert!(first.id.bytes().all(|byte| byte.is_ascii_hexdigit()));
+        assert!(first.nonce.is_empty());
+
+        fs::write(
+            &path,
+            format!(
+                r#"{{"version":1,"grants":[{{"id":"{}","from_agent":"source","to_agent":"target","secret_path":"prod/one","status":"pending","created_at":"2026-01-02T03:04:05Z"}},{{"id":"external","from_agent":"other","to_agent":"target","secret_path":"prod/two","status":"pending","created_at":"2026-01-02T03:04:05Z"}}]}}"#,
+                first.id
+            ),
+        )
+        .expect("write concurrent external grant");
+        let second = snapshot
+            .create_at(
+                vault_root,
+                "source",
+                "target",
+                "prod/three",
+                "",
+                0,
+                "2026-01-02T03:04:05Z",
+                None,
+            )
+            .expect("create after concurrent update");
+        let persisted = ShareStore::read(&path).expect("read merged grants");
+        assert_eq!(persisted.grants().len(), 3);
+        assert!(
+            persisted
+                .grants()
+                .iter()
+                .any(|grant| grant.id == "external")
+        );
+        assert!(persisted.grants().iter().any(|grant| grant.id == second.id));
+        assert_eq!(snapshot.grants(), persisted.grants());
+    }
+
+    #[test]
+    fn create_rejects_negative_or_overflow_ttl_without_mutating_snapshot() {
+        let (_root, path) = fixture_path();
+        let vault_root = path.parent().expect("fixture root");
+        let mut snapshot = ShareStore::read(&path).expect("read empty fixture");
+        let negative = snapshot
+            .create_at(
+                vault_root,
+                "source",
+                "target",
+                "prod/api",
+                "",
+                -1,
+                "2026-01-02T03:04:05Z",
+                None,
+            )
+            .expect_err("negative TTL");
+        assert_eq!(
+            negative.to_string(),
+            "invalid vault config: ttl must be a positive duration"
+        );
+        assert!(snapshot.grants().is_empty());
+        assert!(!path.exists());
+
+        let overflow = snapshot
+            .create_at(
+                vault_root,
+                "source",
+                "target",
+                "prod/api",
+                "",
+                1,
+                "9999-12-31T23:59:59.999999999Z",
+                None,
+            )
+            .expect_err("overflow TTL");
+        assert!(overflow.to_string().contains("ttl exceeds timestamp range"));
+        assert!(snapshot.grants().is_empty());
+        assert!(!path.exists());
     }
 
     #[cfg(unix)]
