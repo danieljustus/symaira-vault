@@ -1,7 +1,6 @@
 use std::{
     env,
     fmt::Write as FmtWrite,
-    fs,
     io::Write,
     path::{Path, PathBuf},
 };
@@ -103,14 +102,23 @@ pub(crate) fn add(
     let destination = default_config_path(home);
     let bytes = config_bytes(&source, &destination)?;
     patch_config(&destination, &bytes, |document| {
-        let profiles = mapping_or_create(document, "profiles")?;
-        let profile = yaml_edit::MappingBuilder::new()
-            .pair("vault", yaml_edit::ScalarValue::double_quoted(vault_path))
-            .build_document();
-        let profile = profile
-            .as_mapping()
-            .ok_or_else(|| "cannot save config: invalid profile mapping".to_owned())?;
-        profiles.set(name, profile);
+        let profiles = document
+            .entry(serde_yaml_ng::Value::String("profiles".into()))
+            .or_insert_with(|| serde_yaml_ng::Value::Mapping(Default::default()));
+        if profiles.is_null() {
+            *profiles = serde_yaml_ng::Value::Mapping(Default::default());
+        }
+        let profiles = profiles
+            .as_mapping_mut()
+            .ok_or_else(|| "cannot save config: profiles is not a mapping".to_owned())?;
+        let profile = serde_yaml_ng::Mapping::from_iter([(
+            serde_yaml_ng::Value::String("vault".into()),
+            serde_yaml_ng::Value::String(vault_path.into()),
+        )]);
+        profiles.insert(
+            serde_yaml_ng::Value::String(name.into()),
+            serde_yaml_ng::Value::Mapping(profile),
+        );
         Ok(())
     })?;
     if !quiet {
@@ -143,9 +151,9 @@ pub(crate) fn use_profile(
     let destination = default_config_path(home);
     let bytes = config_bytes(&source, &destination)?;
     patch_config(&destination, &bytes, |document| {
-        document.set(
-            "defaultProfile",
-            yaml_edit::ScalarValue::double_quoted(name),
+        document.insert(
+            serde_yaml_ng::Value::String("defaultProfile".into()),
+            serde_yaml_ng::Value::String(name.into()),
         );
         Ok(())
     })?;
@@ -156,49 +164,28 @@ pub(crate) fn use_profile(
     Ok(())
 }
 
-fn mapping_or_create(
-    document: &yaml_edit::Document,
-    key: &str,
-) -> Result<yaml_edit::Mapping, String> {
-    if let Some(node) = document.get(key) {
-        return node
-            .as_mapping()
-            .cloned()
-            .ok_or_else(|| format!("cannot save config: {key} is not a mapping"));
-    }
-    document.set(key, yaml_edit::Mapping::new());
-    document
-        .get_mapping(key)
-        .ok_or_else(|| format!("cannot save config: {key} is not a mapping"))
-}
-
+// Preserve unknown semantic fields. YAML formatting/comments are normalized,
+// as in Go's writer; validate the entire result before publishing it once.
 fn patch_config(
     path: &Path,
     bytes: &[u8],
-    patch: impl FnOnce(&yaml_edit::Document) -> Result<(), String>,
+    patch: impl FnOnce(&mut serde_yaml_ng::Mapping) -> Result<(), String>,
 ) -> Result<(), String> {
-    let source = std::str::from_utf8(bytes)
-        .map_err(|error| format!("cannot load config: invalid UTF-8: {error}"))?;
-    let file = source
-        .parse::<yaml_edit::YamlFile>()
-        .map_err(|error| format!("cannot load config: {error}"))?;
-    let mut documents = file.documents();
-    let document = documents
-        .next()
-        .ok_or_else(|| "cannot load config: missing YAML document".to_owned())?;
-    if documents.next().is_some() {
-        return Err("cannot load config: multiple YAML documents are not supported".to_owned());
-    }
-    if document.as_mapping().is_none() {
-        return Err("cannot save config: root is not a mapping".to_owned());
-    }
-    patch(&document)?;
-    let mut rendered = document.to_string();
-    if !rendered.ends_with('\n') {
-        rendered.push('\n');
-    }
+    Config::load_from_bytes(bytes).map_err(|error| format!("cannot load config: {error}"))?;
+    let mut document: serde_yaml_ng::Value =
+        serde_yaml_ng::from_slice(bytes).map_err(|error| format!("cannot load config: {error}"))?;
+    let mapping = document
+        .as_mapping_mut()
+        .ok_or_else(|| "cannot save config: root is not a mapping".to_owned())?;
+    patch(mapping)?;
+    let rendered = serde_yaml_ng::to_string(&document)
+        .map_err(|error| format!("cannot save config: {error}"))?;
     Config::load_from_bytes(rendered.as_bytes())
         .map_err(|error| format!("config is invalid after update: {error}"))?;
+    if let Some(parent) = path.parent() {
+        symvault_sync::safeio::create_dir_all(parent)
+            .map_err(|error| format!("cannot save config: {error}"))?;
+    }
     symvault_sync::safeio::write_atomic(path, rendered.as_bytes())
         .map_err(|error| format!("cannot save config: {error}"))
 }
@@ -217,22 +204,17 @@ fn default_config_path(home: &Path) -> PathBuf {
 }
 
 fn config_bytes(source: &Path, destination: &Path) -> Result<Vec<u8>, String> {
-    if let Some(parent) = destination.parent() {
-        symvault_sync::safeio::create_dir_all(parent)
-            .map_err(|error| format!("cannot save config: {error}"))?;
+    let source_bytes = symvault_sync::safeio::read(source)
+        .map_err(|error| format!("cannot load config: {error}"))?;
+    if let Some(bytes) = &source_bytes {
+        Config::load_from_bytes(bytes).map_err(|error| format!("cannot load config: {error}"))?;
     }
-    let source_config = Config::load(source);
-    if source.exists() {
-        source_config
-            .as_ref()
-            .map_err(|error| format!("cannot load config: {error}"))?;
+    if source == destination {
+        return Ok(source_bytes.unwrap_or_else(|| b"profiles: {}\n".to_vec()));
     }
-    if destination.exists() {
-        return fs::read(destination).map_err(|error| format!("cannot load config: {error}"));
-    }
-    if source_config.is_ok() {
-        fs::read(source).map_err(|error| format!("cannot load config: {error}"))
-    } else {
-        Ok(b"profiles: {}\n".to_vec())
-    }
+    let destination_bytes = symvault_sync::safeio::read(destination)
+        .map_err(|error| format!("cannot load config: {error}"))?;
+    Ok(destination_bytes
+        .or(source_bytes)
+        .unwrap_or_else(|| b"profiles: {}\n".to_vec()))
 }

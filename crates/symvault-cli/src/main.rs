@@ -345,6 +345,8 @@ enum Command {
 #[derive(Debug, Subcommand)]
 enum ProfileCommand {
     List,
+    Add { name: String },
+    Use { name: String },
 }
 
 #[derive(Debug, Subcommand)]
@@ -695,9 +697,9 @@ fn main() -> ExitCode {
             rebuild_only,
             cli.quiet,
         ),
-        Some(Command::Profile {
-            command: ProfileCommand::List,
-        }) => run_profile_list(cli.quiet),
+        Some(Command::Profile { command }) => {
+            run_profile(&command, cli.vault.as_deref(), cli.quiet)
+        }
         Some(Command::Audit {
             tail,
             audit_json,
@@ -1015,7 +1017,7 @@ fn run_verify(
     finish_vault_result(result)
 }
 
-fn run_profile_list(quiet: bool) -> ExitCode {
+fn run_profile(command: &ProfileCommand, vault: Option<&Path>, quiet: bool) -> ExitCode {
     let result = (|| {
         let home = std::env::var_os("HOME")
             .filter(|value| !value.is_empty())
@@ -1027,8 +1029,25 @@ fn run_profile_list(quiet: bool) -> ExitCode {
             })
             .map(PathBuf::from)
             .ok_or_else(|| "cannot determine home directory".to_owned())?;
-        profile_commands::list(&home, quiet, &mut io::stdout().lock())
+        let mut output = io::stdout().lock();
+        match command {
+            ProfileCommand::List => profile_commands::list(&home, quiet, &mut output),
+            ProfileCommand::Add { name } => profile_commands::add(
+                &home,
+                name,
+                &vault.map(|path| path.to_string_lossy()).unwrap_or_default(),
+                quiet,
+                &mut output,
+            ),
+            ProfileCommand::Use { name } => {
+                profile_commands::use_profile(&home, name, quiet, &mut output)
+            }
+        }
     })();
+    // Go reports profile command errors through both Cobra and main.
+    if let Err(error) = &result {
+        let _ = writeln!(io::stderr(), "Error: {error}");
+    }
     finish_vault_result(result)
 }
 

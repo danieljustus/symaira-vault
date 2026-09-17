@@ -69,7 +69,13 @@ fn profile_list_matches_go_for_empty_and_go_generated_profile_config() {
     fs::create_dir_all(&profile_home).expect("profile home");
     let add = run(
         &go_binary,
-        &["profile", "add", "über", "--vault", "/fixture-vault/東京"],
+        &[
+            "profile",
+            "add",
+            "über.work[dev]",
+            "--vault",
+            "/fixture-vault/東京",
+        ],
         &profile_home,
     );
     assert_success(&add, "Go profile add");
@@ -83,7 +89,11 @@ fn profile_list_matches_go_for_empty_and_go_generated_profile_config() {
     fs::create_dir_all(legacy.parent().expect("legacy parent")).expect("legacy directory");
     fs::copy(generated, &legacy).expect("copy Go generated config");
 
-    let use_profile = run(&go_binary, &["profile", "use", "über"], &profile_home);
+    let use_profile = run(
+        &go_binary,
+        &["profile", "use", "über.work[dev]"],
+        &profile_home,
+    );
     assert_success(&use_profile, "Go profile use");
 
     let go_profile = run(&go_binary, &["profile", "list"], &profile_home);
@@ -96,12 +106,24 @@ fn profile_list_matches_go_for_empty_and_go_generated_profile_config() {
     fs::create_dir_all(&rust_add_home).expect("Rust add home");
     let go_add = run(
         &go_binary,
-        &["profile", "add", "über", "--vault", "/fixture-vault/東京"],
+        &[
+            "profile",
+            "add",
+            "über.work[dev]",
+            "--vault",
+            "/fixture-vault/東京",
+        ],
         &go_add_home,
     );
     let rust_add = run(
         &rust_binary,
-        &["profile", "add", "über", "--vault", "/fixture-vault/東京"],
+        &[
+            "profile",
+            "add",
+            "über.work[dev]",
+            "--vault",
+            "/fixture-vault/東京",
+        ],
         &rust_add_home,
     );
     assert_same(&go_add, &rust_add, "profile add");
@@ -111,7 +133,7 @@ fn profile_list_matches_go_for_empty_and_go_generated_profile_config() {
             "--quiet",
             "profile",
             "add",
-            "über",
+            "über.work[dev]",
             "--vault",
             "/fixture-vault/東京",
         ],
@@ -123,7 +145,7 @@ fn profile_list_matches_go_for_empty_and_go_generated_profile_config() {
             "--quiet",
             "profile",
             "add",
-            "über",
+            "über.work[dev]",
             "--vault",
             "/fixture-vault/東京",
         ],
@@ -145,8 +167,16 @@ fn profile_list_matches_go_for_empty_and_go_generated_profile_config() {
     rust_bytes.extend_from_slice(b"customUnknown: keep\n");
     fs::write(&rust_legacy, rust_bytes).expect("add unknown Rust config field");
 
-    let go_use = run(&go_binary, &["profile", "use", "über"], &go_add_home);
-    let rust_use = run(&rust_binary, &["profile", "use", "über"], &rust_add_home);
+    let go_use = run(
+        &go_binary,
+        &["profile", "use", "über.work[dev]"],
+        &go_add_home,
+    );
+    let rust_use = run(
+        &rust_binary,
+        &["profile", "use", "über.work[dev]"],
+        &rust_add_home,
+    );
     assert_same(&go_use, &rust_use, "profile use");
     let preserved = String::from_utf8(fs::read(&rust_legacy).expect("read updated Rust config"))
         .expect("Rust config UTF-8");

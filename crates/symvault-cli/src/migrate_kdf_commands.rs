@@ -71,7 +71,9 @@ pub fn migrate_kdf(
     if symvault_crypto::recipient_string(&on_disk_identity)
         != symvault_crypto::recipient_string(identity)
     {
-        return Err("unlock vault identity: cached identity does not match identity.age".to_owned());
+        return Err(
+            "unlock vault identity: cached identity does not match identity.age".to_owned(),
+        );
     }
 
     // Parse and render config before the first identity mutation.  A malformed
@@ -84,8 +86,7 @@ pub fn migrate_kdf(
         .map_err(|error| format!("encrypt identity with argon2id: {error}"))?;
     let verified = decrypt_identity(&replacement, passphrase)
         .map_err(|error| format!("verify argon2id identity: {error}"))?;
-    if symvault_crypto::recipient_string(&verified) != symvault_crypto::recipient_string(identity)
-    {
+    if symvault_crypto::recipient_string(&verified) != symvault_crypto::recipient_string(identity) {
         return Err("verify argon2id identity: identity mismatch".to_owned());
     }
 
@@ -95,14 +96,22 @@ pub fn migrate_kdf(
     }
     if let Err(error) = safeio::write_atomic(&identity_path, &replacement) {
         let restore = safeio::write_atomic(&identity_path, &original);
-        return Err(format_write_failure("write migrated identity", error, restore));
+        return Err(format_write_failure(
+            "write migrated identity",
+            error,
+            restore,
+        ));
     }
 
     if let Some(config_bytes) = config_update.bytes
         && let Err(error) = safeio::write_atomic(&config_path, &config_bytes)
     {
         let restore = safeio::write_atomic(&identity_path, &original);
-        return Err(format_write_failure("write migrated config", error, restore));
+        return Err(format_write_failure(
+            "write migrated config",
+            error,
+            restore,
+        ));
     }
     Ok(MigrationResult::Migrated)
 }
@@ -140,15 +149,18 @@ fn prepare_config_update(path: &Path) -> Result<ConfigUpdate, String> {
     // Unlike the typed Config serializer, this retains unknown configuration
     // fields. Formatting/comments may be normalized, as the Go config writer
     // also serializes the validated configuration rather than patching text.
-    let mut expected: serde_yaml_ng::Value = serde_yaml_ng::from_slice(&raw)
-        .map_err(|error| format!("load config: {error}"))?;
+    let mut expected: serde_yaml_ng::Value =
+        serde_yaml_ng::from_slice(&raw).map_err(|error| format!("load config: {error}"))?;
     let Some(root) = expected.as_mapping_mut() else {
         return Ok(ConfigUpdate {
             bytes: Some(raw),
             params,
         });
     };
-    let Some(vault) = root.get_mut("vault").and_then(|value| value.as_mapping_mut()) else {
+    let Some(vault) = root
+        .get_mut("vault")
+        .and_then(|value| value.as_mapping_mut())
+    else {
         return Ok(ConfigUpdate {
             bytes: Some(raw),
             params,
@@ -159,8 +171,8 @@ fn prepare_config_update(path: &Path) -> Result<ConfigUpdate, String> {
         serde_yaml_ng::Value::String("format_version".to_owned()),
         serde_yaml_ng::Value::Number(serde_yaml_ng::Number::from(2)),
     );
-    let rendered = serde_yaml_ng::to_string(&expected)
-        .map_err(|error| format!("render config: {error}"))?;
+    let rendered =
+        serde_yaml_ng::to_string(&expected).map_err(|error| format!("render config: {error}"))?;
     let reparsed: serde_yaml_ng::Value = serde_yaml_ng::from_slice(rendered.as_bytes())
         .map_err(|error| format!("validate rendered config: {error}"))?;
     if reparsed != expected {
@@ -179,8 +191,8 @@ fn prepare_config_update(path: &Path) -> Result<ConfigUpdate, String> {
 }
 
 fn argon2id_params_from_config(raw: &[u8]) -> Result<Argon2idParams, String> {
-    let document: serde_yaml_ng::Value = serde_yaml_ng::from_slice(raw)
-        .map_err(|error| format!("load config: {error}"))?;
+    let document: serde_yaml_ng::Value =
+        serde_yaml_ng::from_slice(raw).map_err(|error| format!("load config: {error}"))?;
     let Some(root) = document.as_mapping() else {
         return Ok(Argon2idParams::default());
     };
@@ -192,7 +204,13 @@ fn argon2id_params_from_config(raw: &[u8]) -> Result<Argon2idParams, String> {
     };
     let mut params = Argon2idParams::default();
     params.time = config_u32(vault, "argon2id_time", 2, 16, params.time)?;
-    params.memory_kib = config_u32(vault, "argon2id_memory", 19_456, 2_097_152, params.memory_kib)?;
+    params.memory_kib = config_u32(
+        vault,
+        "argon2id_memory",
+        19_456,
+        2_097_152,
+        params.memory_kib,
+    )?;
     params.threads = config_u32(vault, "argon2id_threads", 1, 16, params.threads)?;
     if params.memory_kib < 4 * params.threads {
         return Err(format!(

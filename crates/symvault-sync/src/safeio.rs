@@ -72,7 +72,8 @@ pub fn read_bounded(path: &Path, limit: u64) -> Result<Option<Vec<u8>>, SafeIoEr
 }
 
 #[cfg(unix)]
-fn open_read(path: &Path) -> Result<Option<File>, SafeIoError> {
+/// Opens a regular file for streaming, rejecting final symlinks.
+pub fn open_read(path: &Path) -> Result<Option<File>, SafeIoError> {
     use rustix::fs::{FileType, Mode, OFlags, fstat, open};
     use rustix::io::Errno;
 
@@ -94,7 +95,8 @@ fn open_read(path: &Path) -> Result<Option<File>, SafeIoError> {
 }
 
 #[cfg(not(unix))]
-fn open_read(path: &Path) -> Result<Option<File>, SafeIoError> {
+/// Opens a regular file for streaming, rejecting final symlinks.
+pub fn open_read(path: &Path) -> Result<Option<File>, SafeIoError> {
     match fs::symlink_metadata(path) {
         Ok(metadata) if !metadata.file_type().is_file() => Err(SafeIoError::NotRegularFile),
         Ok(_) => Ok(Some(File::open(path)?)),

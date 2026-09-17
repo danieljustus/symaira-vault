@@ -5,7 +5,6 @@ use crate::call::{
 use serde_json::Value;
 use std::{
     collections::VecDeque,
-    fs::File,
     io::{BufRead, BufReader},
     path::Path,
     sync::{Arc, Mutex},
@@ -363,27 +362,9 @@ impl StoreReadOnlyRuntime {
             .map_err(|_| "audit logger lock poisoned".to_owned())?
             .path()
             .to_owned();
-        let metadata = match std::fs::symlink_metadata(&path) {
-            Ok(metadata) => metadata,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                return Ok(ToolCallResult::text("[]"));
-            }
-            Err(error) => {
-                return Ok(ToolCallResult::error(format!(
-                    "cannot read audit log: {error}"
-                )));
-            }
-        };
-        if !metadata.file_type().is_file() {
-            return Ok(ToolCallResult::error(
-                "cannot read audit log: refusing a symlinked or non-regular target",
-            ));
-        }
-        let file = match File::open(&path) {
-            Ok(file) => file,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                return Ok(ToolCallResult::text("[]"));
-            }
+        let file = match symvault_sync::safeio::open_read(&path) {
+            Ok(Some(file)) => file,
+            Ok(None) => return Ok(ToolCallResult::text("[]")),
             Err(error) => {
                 return Ok(ToolCallResult::error(format!(
                     "cannot read audit log: {error}"
@@ -401,16 +382,6 @@ impl StoreReadOnlyRuntime {
             status: String,
             #[serde(skip_serializing_if = "String::is_empty")]
             code: String,
-        }
-
-        #[derive(Default, serde::Deserialize)]
-        struct RawAuditEntry {
-            #[serde(rename = "ts")]
-            timestamp: Option<String>,
-            action: Option<String>,
-            path: Option<String>,
-            reason: Option<String>,
-            ok: Option<bool>,
         }
 
         let mut events = VecDeque::with_capacity(limit);
@@ -441,22 +412,17 @@ impl StoreReadOnlyRuntime {
             if line.is_empty() {
                 continue;
             }
-            let Ok(entry) = serde_json::from_str::<Option<RawAuditEntry>>(line) else {
+            let Ok(entry) = serde_json::from_str::<GoAuditEntry>(line) else {
                 continue;
             };
             saw_event = true;
-            let entry = entry.unwrap_or_default();
+            let entry = entry.0;
             let event = AuditEvent {
-                timestamp: entry.timestamp.unwrap_or_default(),
-                tool: entry.action.unwrap_or_default(),
-                path: entry.path.unwrap_or_default(),
-                status: if entry.ok.unwrap_or(false) {
-                    "ok"
-                } else {
-                    "error"
-                }
-                .into(),
-                code: entry.reason.unwrap_or_default(),
+                timestamp: entry.timestamp,
+                tool: entry.action,
+                path: entry.path,
+                status: if entry.ok { "ok" } else { "error" }.into(),
+                code: entry.reason,
             };
             if limit > 0 {
                 if events.len() == limit {
@@ -468,9 +434,78 @@ impl StoreReadOnlyRuntime {
         if !saw_event {
             return Ok(ToolCallResult::text("null"));
         }
-        serde_json::to_string(&events.into_iter().collect::<Vec<_>>())
+        symvault_gojson::to_string(&events)
             .map(ToolCallResult::text)
             .map_err(|error| error.to_string())
+    }
+}
+
+// Reuse the complete audit schema: even fields omitted from the response must
+// reject invalid types as Go does. Visit in wire order so duplicate/case-folded
+// fields and null (which leaves the earlier value unchanged) match Go.
+struct GoAuditEntry(symvault_store::audit::LogEntry);
+
+impl<'de> serde::Deserialize<'de> for GoAuditEntry {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct Visitor;
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = GoAuditEntry;
+            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("an audit entry object or null")
+            }
+            fn visit_unit<E: serde::de::Error>(self) -> Result<Self::Value, E> {
+                Ok(GoAuditEntry(Default::default()))
+            }
+            fn visit_map<M: serde::de::MapAccess<'de>>(
+                self,
+                mut map: M,
+            ) -> Result<Self::Value, M::Error> {
+                let mut entry = symvault_store::audit::LogEntry::default();
+                while let Some(key) = map.next_key::<String>()? {
+                    macro_rules! field {
+                        ($name:ident) => {
+                            if let Some(value) = map.next_value()? {
+                                entry.$name = value;
+                            }
+                        };
+                    }
+                    let key: String = key
+                        .chars()
+                        .map(|ch| match ch {
+                            'ſ' => 's',
+                            'K' => 'k',
+                            _ => ch.to_ascii_lowercase(),
+                        })
+                        .collect();
+                    match key.as_str() {
+                        "ts" => field!(timestamp),
+                        "agent" => field!(agent),
+                        "action" => field!(action),
+                        "path" => field!(path),
+                        "field" => field!(field),
+                        "transport" => field!(transport),
+                        "reason" => field!(reason),
+                        "share_id" => field!(share_id),
+                        "from_agent" => field!(from_agent),
+                        "to_agent" => field!(to_agent),
+                        "share_action" => field!(share_action),
+                        "dur_ms" => field!(dur_ms),
+                        "token_id" => field!(token_id),
+                        "req_id" => field!(request_id),
+                        "sess_id" => field!(session_id),
+                        "kid" => field!(kid),
+                        "hmac" => field!(hmac),
+                        "argv_hash" => field!(argv_hash),
+                        "ok" => field!(ok),
+                        _ => {
+                            map.next_value::<serde::de::IgnoredAny>()?;
+                        }
+                    }
+                }
+                Ok(GoAuditEntry(entry))
+            }
+        }
+        deserializer.deserialize_any(Visitor)
     }
 }
 
