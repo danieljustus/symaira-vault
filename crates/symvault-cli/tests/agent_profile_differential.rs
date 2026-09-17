@@ -384,6 +384,7 @@ mod profile_edit_differential {
 
         let (go_root, go_home, go_editor) = fixture_root("invalid", "canWrite: [\n");
         let (rust_root, rust_home, rust_editor) = fixture_root("invalid", "canWrite: [\n");
+        let before = fs::read(rust_root.path().join("config.yaml")).expect("invalid rust config");
         let args = ["agent", "profile", "edit", "demo"];
         let go = run(
             &go_binary,
@@ -409,6 +410,11 @@ mod profile_edit_differential {
         assert!(
             go.stdout.is_empty() && rust.stdout.is_empty(),
             "invalid YAML output"
+        );
+        assert_eq!(
+            fs::read(rust_root.path().join("config.yaml")).expect("rust config after invalid edit"),
+            before,
+            "invalid edited YAML must not publish config"
         );
 
         let (go_root, go_home, go_editor) = fixture_root("unknown", "canWrite: true\n");
