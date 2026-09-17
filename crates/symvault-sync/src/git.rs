@@ -233,7 +233,7 @@ impl GitRepository {
         }
         let before = self.head().ok();
         let branch = self.branch_name();
-        let snapshots = match self.snapshot_candidates() {
+        let snapshots = match self.snapshot_dirty_candidates() {
             Ok(snapshots) => snapshots,
             Err(error) => {
                 return PullResult {
@@ -298,26 +298,25 @@ impl GitRepository {
         (!branch.is_empty()).then_some(branch)
     }
 
-    // ponytail: snapshots scale with vault size; reuse Git objects for clean
-    // files when reducing pull memory and IO cost.
-    fn snapshot_candidates(&self) -> Result<BTreeMap<String, Vec<u8>>, GitError> {
-        let output = self.command(&["ls-files", "-z", "--"])?;
+    fn snapshot_dirty_candidates(&self) -> Result<BTreeMap<String, Option<Vec<u8>>>, GitError> {
+        // Status is metadata-only: ordinary pulls inspect encrypted contents
+        // only for dirty tracked candidates, rather than scanning the vault.
+        let status = self.force_status()?;
         let mut snapshots = BTreeMap::new();
-        for path in output
-            .stdout
-            .split(|byte| *byte == 0)
-            .filter(|path| !path.is_empty())
+        for entry in status
+            .into_iter()
+            .filter(|entry| entry.index == ' ' && entry.worktree != ' ' && entry.worktree != '?')
         {
-            let path = String::from_utf8(path.to_vec())
-                .map_err(|error| GitError::Parse(error.to_string()))?;
-            if !is_conflict_candidate(&path) {
+            if !is_conflict_candidate(&entry.path) {
                 continue;
             }
-            if let Some(data) = crate::safeio::read(&self.root.join(&path))
-                .map_err(|error| GitError::Parse(error.to_string()))?
-            {
-                snapshots.insert(path, data);
-            }
+            reject_symlinked_ancestors(&self.root, &entry.path)?;
+            // Keep a tombstone for a tracked deletion.  It prevents the
+            // pre-pull HEAD fallback from resurrecting a locally removed
+            // candidate during divergent conflict preservation.
+            let data = crate::safeio::read(&self.root.join(&entry.path))
+                .map_err(|error| GitError::Parse(error.to_string()))?;
+            snapshots.insert(entry.path, data);
         }
         Ok(snapshots)
     }
@@ -327,7 +326,7 @@ impl GitRepository {
         remote_name: &str,
         branch: Option<&str>,
         before: Option<&str>,
-        snapshots: &BTreeMap<String, Vec<u8>>,
+        snapshots: &BTreeMap<String, Option<Vec<u8>>>,
     ) -> Result<(), GitError> {
         let (Some(branch), Some(before)) = (branch, before) else {
             return Ok(());
@@ -346,12 +345,23 @@ impl GitRepository {
             if !is_conflict_candidate(&path) {
                 continue;
             }
-            let Some(local) = snapshots.get(&path) else {
-                continue;
+            let mut clean_local = None;
+            let local: &[u8] = match snapshots.get(&path) {
+                Some(Some(local)) => local,
+                Some(None) => continue,
+                None => {
+                    let Ok(data) = self.file_at_ref(before, &path) else {
+                        continue;
+                    };
+                    // Keep this clean committed snapshot scoped to the
+                    // remote-touched path; the common case remains lazy.
+                    clean_local = Some(data);
+                    clean_local.as_deref().expect("temporary clean snapshot")
+                }
             };
             if self
                 .file_at_ref(&ancestor, &path)
-                .is_ok_and(|base| base.as_slice() == local.as_slice())
+                .is_ok_and(|base| base.as_slice() == local)
             {
                 continue;
             }
@@ -441,6 +451,15 @@ impl GitRepository {
         for path in paths {
             if !is_conflict_candidate(&path) {
                 continue;
+            }
+            if let Err(error) = reject_symlinked_ancestors(&self.root, &path) {
+                return PullResult {
+                    remote_url,
+                    error: Some(format!(
+                        "cannot read local force-pull change {path}: {error}"
+                    )),
+                    ..Default::default()
+                };
             }
             let full_path = self.root.join(&path);
             let data = match crate::safeio::read(&full_path) {
@@ -708,6 +727,45 @@ fn is_conflict_candidate(path: &str) -> bool {
         && !is_protected_runtime_path(path)
 }
 
+fn reject_symlinked_ancestors(root: &Path, relative_path: &str) -> Result<(), GitError> {
+    let components: Vec<_> = Path::new(relative_path).components().collect();
+    if components.iter().any(|component| {
+        !matches!(
+            component,
+            std::path::Component::Normal(_) | std::path::Component::CurDir
+        )
+    }) {
+        return Err(GitError::Parse(format!(
+            "unsafe relative conflict path: {relative_path}"
+        )));
+    }
+
+    let mut ancestor_path = root.to_path_buf();
+    for component in components.iter().take(components.len().saturating_sub(1)) {
+        if let std::path::Component::Normal(component) = component {
+            ancestor_path.push(*component);
+        }
+        match fs::symlink_metadata(&ancestor_path) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(GitError::Parse(format!(
+                    "refusing symlinked conflict path ancestor: {}",
+                    ancestor_path.display()
+                )));
+            }
+            Ok(metadata) if !metadata.is_dir() => {
+                return Err(GitError::Parse(format!(
+                    "refusing non-directory conflict path ancestor: {}",
+                    ancestor_path.display()
+                )));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => break,
+            Err(error) => return Err(GitError::Io(error)),
+        }
+    }
+    Ok(())
+}
+
 fn is_protected_runtime_path(path: &str) -> bool {
     let path = path.replace('\\', "/");
     [
@@ -734,6 +792,7 @@ fn conflict_copy_path(path: &str, device: &str) -> String {
 }
 
 fn write_conflict_copy(root: &Path, relative_path: &str, data: &[u8]) -> Result<(), GitError> {
+    reject_symlinked_ancestors(root, relative_path)?;
     let destination = root.join(relative_path);
     match crate::safeio::read(&destination) {
         Ok(Some(existing)) if existing == data => return Ok(()),
@@ -1361,6 +1420,25 @@ mod tests {
         assert!(repo.force_pull("origin").error.is_some());
         assert_eq!(repo.head().unwrap(), before_head);
         assert_eq!(fs::read(&path).unwrap(), b"local-entry\n");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn conflict_copy_refuses_symlinked_parent() {
+        use std::os::unix::fs::symlink;
+
+        let root = tempfile::tempdir().expect("repository directory");
+        let outside = tempfile::tempdir().expect("outside directory");
+        symlink(outside.path(), root.path().join("entries")).expect("symlink parent");
+
+        let error = write_conflict_copy(root.path(), "entries/login.age", b"secret")
+            .expect_err("symlinked parent must be rejected");
+        assert!(
+            error
+                .to_string()
+                .contains("symlinked conflict path ancestor")
+        );
+        assert!(!outside.path().join("login.age").exists());
     }
 
     #[test]
