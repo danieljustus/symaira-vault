@@ -10,6 +10,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use serde_json::Value;
+use symvault_crypto::Identity;
+use symvault_store::{Entry, Store, StoreError};
+
 /// Resolved values to overlay on the child environment.  A caller that needs
 /// output redaction can borrow or clone this map at the process boundary.
 /// Values must never be formatted into an error or diagnostic by this module.
@@ -57,6 +61,91 @@ where
     }
 
     Ok(environment)
+}
+
+/// Resolves one environment reference using Go's path/field disambiguation.
+///
+/// A final dot is treated as a field separator only when the candidate entry
+/// exists and contains that field. Otherwise the full reference is read as
+/// an entry path, which permits dotted entry names. The Store and Identity
+/// are borrowed so this helper performs no writes or session changes.
+pub(crate) fn resolve_secret_ref(
+    root: &Path,
+    identity: &Identity,
+    reference: &str,
+) -> Result<String, String> {
+    let store = Store::open(root, identity).map_err(|error| resolve_error(reference, error))?;
+    let mut path = reference;
+    let mut field = None;
+
+    if let Some(index) = reference.rfind('.').filter(|index| *index > 0) {
+        let candidate_path = &reference[..index];
+        let candidate_field = &reference[index + 1..];
+        if let Ok(entry) = store.get(candidate_path, identity)
+            && entry.data.contains_key(candidate_field)
+        {
+            path = candidate_path;
+            field = Some(candidate_field);
+            return format_resolved_value(path, field, &entry);
+        }
+    }
+
+    let entry = store
+        .get(path, identity)
+        .map_err(|error| resolve_error(reference, error))?;
+    format_resolved_value(path, field, &entry)
+}
+
+fn resolve_error(reference: &str, error: StoreError) -> String {
+    match error {
+        StoreError::EntryNotFound(path) => format!("secret ref not found: {path}"),
+        error => format!("cannot resolve secret ref {reference}: {error}"),
+    }
+}
+
+fn format_resolved_value(path: &str, field: Option<&str>, entry: &Entry) -> Result<String, String> {
+    if let Some(field) = field {
+        let value = entry
+            .data
+            .get(field)
+            .ok_or_else(|| format!("field not found in secret ref {path}.{field}"))?;
+        return Ok(format_go_value(value));
+    }
+    Ok(format_go_map(&entry.data))
+}
+
+fn format_go_map(values: &BTreeMap<String, Value>) -> String {
+    let mut rendered = String::from("map[");
+    for (index, (key, value)) in values.iter().enumerate() {
+        if index > 0 {
+            rendered.push(' ');
+        }
+        rendered.push_str(key);
+        rendered.push(':');
+        rendered.push_str(&format_go_value(value));
+    }
+    rendered.push(']');
+    rendered
+}
+
+fn format_go_value(value: &Value) -> String {
+    match value {
+        Value::Null => "<nil>".to_owned(),
+        Value::Bool(value) => value.to_string(),
+        Value::Number(value) => value.to_string(),
+        Value::String(value) => value.clone(),
+        Value::Array(values) => {
+            let values = values.iter().map(format_go_value).collect::<Vec<_>>();
+            format!("[{}]", values.join(" "))
+        }
+        Value::Object(values) => {
+            let values = values
+                .iter()
+                .map(|(key, value)| format!("{key}:{}", format_go_value(value)))
+                .collect::<Vec<_>>();
+            format!("map[{}]", values.join(" "))
+        }
+    }
 }
 
 fn invalid_env_format(value: &str) -> String {
@@ -111,6 +200,10 @@ fn parse_env_file_contents(
 mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
 
+    use serde_json::json;
+    use symvault_crypto::generate_identity;
+    use symvault_store::Store;
+
     use super::*;
 
     static TEST_FILE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
@@ -137,6 +230,54 @@ mod tests {
         ));
         fs::write(&path, contents).expect("temporary env file");
         TemporaryEnvFile(path)
+    }
+
+    struct TemporaryVault(PathBuf);
+
+    impl TemporaryVault {
+        fn path(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TemporaryVault {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn temporary_vault() -> (TemporaryVault, Identity) {
+        let sequence = TEST_FILE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "symvault-run-resolver-{}-{sequence}",
+            std::process::id()
+        ));
+        fs::create_dir_all(path.join("entries")).expect("temporary vault entries");
+        fs::write(path.join("config.yaml"), b"vault:\n  format_version: 2\n")
+            .expect("temporary vault config");
+        fs::write(path.join("identity.age"), b"synthetic identity marker")
+            .expect("temporary vault identity marker");
+        (TemporaryVault(path), generate_identity())
+    }
+
+    fn write_test_entry(
+        root: &Path,
+        identity: &Identity,
+        path: &str,
+        data: BTreeMap<String, Value>,
+    ) {
+        let store = Store::open(root, identity).expect("open temporary vault");
+        store
+            .write_new_entry(
+                path,
+                &Entry {
+                    path: path.to_owned(),
+                    data,
+                    ..Entry::default()
+                },
+                identity,
+            )
+            .expect("write temporary entry");
     }
 
     fn resolver<'a>(
@@ -228,5 +369,74 @@ mod tests {
         .expect_err("invalid flag");
         assert!(error.contains("invalid --env format"));
         assert!(!called);
+    }
+
+    #[test]
+    fn resolves_dotted_paths_and_scalar_values_like_go() {
+        let (vault, identity) = temporary_vault();
+        write_test_entry(
+            vault.path(),
+            &identity,
+            "service",
+            BTreeMap::from([
+                (
+                    "password".to_owned(),
+                    Value::String("synthetic-secret".into()),
+                ),
+                ("count".to_owned(), json!(42)),
+                ("enabled".to_owned(), json!(true)),
+                ("unset".to_owned(), Value::Null),
+            ]),
+        );
+        write_test_entry(
+            vault.path(),
+            &identity,
+            "github.com",
+            BTreeMap::from([("token".to_owned(), Value::String("dotted-secret".into()))]),
+        );
+
+        assert_eq!(
+            resolve_secret_ref(vault.path(), &identity, "service.password").unwrap(),
+            "synthetic-secret"
+        );
+        assert_eq!(
+            resolve_secret_ref(vault.path(), &identity, "service.count").unwrap(),
+            "42"
+        );
+        assert_eq!(
+            resolve_secret_ref(vault.path(), &identity, "service.enabled").unwrap(),
+            "true"
+        );
+        assert_eq!(
+            resolve_secret_ref(vault.path(), &identity, "service.unset").unwrap(),
+            "<nil>"
+        );
+        assert_eq!(
+            resolve_secret_ref(vault.path(), &identity, "github.com.token").unwrap(),
+            "dotted-secret"
+        );
+        assert_eq!(
+            resolve_secret_ref(vault.path(), &identity, "service").unwrap(),
+            "map[count:42 enabled:true password:synthetic-secret unset:<nil>]"
+        );
+    }
+
+    #[test]
+    fn missing_reference_reports_path_without_secret_value() {
+        let (vault, identity) = temporary_vault();
+        write_test_entry(
+            vault.path(),
+            &identity,
+            "service",
+            BTreeMap::from([(
+                "password".to_owned(),
+                Value::String("synthetic-secret".into()),
+            )]),
+        );
+
+        let error = resolve_secret_ref(vault.path(), &identity, "missing.password")
+            .expect_err("missing reference");
+        assert_eq!(error, "secret ref not found: missing.password");
+        assert!(!error.contains("synthetic-secret"));
     }
 }
