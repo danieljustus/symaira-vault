@@ -1553,7 +1553,14 @@ mod tests {
                             let (_, tail) = stat.rsplit_once(')').expect("valid proc stat comm");
                             tail.split_whitespace().next().expect("proc state") != "Z"
                         }
-                        Err(error) if error.kind() == io::ErrorKind::NotFound => false,
+                        // procfs may return ESRCH (Linux errno 3) if the
+                        // process disappears between opening and reading stat.
+                        Err(error)
+                            if error.kind() == io::ErrorKind::NotFound
+                                || error.raw_os_error() == Some(3) =>
+                        {
+                            false
+                        }
                         Err(error) => panic!("cannot inspect descendant {pid}: {error}"),
                     }
                 }
