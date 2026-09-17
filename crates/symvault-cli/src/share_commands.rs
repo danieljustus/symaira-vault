@@ -212,13 +212,15 @@ fn normalize_go_yaml_scalars(encoded: &str, grants: &[YamlGrant<'_>]) -> Result<
         // mapping fields. Do not trim arbitrary indentation: a continuation
         // line inside a multiline scalar can itself contain `key: value`.
         let key = if let Some(key) = field.strip_prefix("  ") {
-            if key.starts_with("  ") {
+            if key.starts_with(' ') {
+                normalized.push_str(line);
                 continue;
             }
             key
         } else if let Some(key) = field.strip_prefix("- ") {
             key
         } else {
+            normalized.push_str(line);
             continue;
         };
         let scalar = &body[colon + 2..];
@@ -243,30 +245,30 @@ fn push_yaml_fix(
     key: &'static str,
     value: &str,
 ) -> Result<(), String> {
-    let serde = serde_yaml_ng::to_string(value)
-        .map_err(|error| error.to_string())?
-        .strip_suffix('\n')
-        .unwrap_or_default()
-        .to_owned();
-    let mut go = serde.clone();
-    if value.is_empty() && go == "''" {
-        go = "\"\"".to_owned();
-    } else if value
-        .chars()
-        .any(|character| matches!(character, '\u{2028}' | '\u{2029}'))
-        && !value.ends_with(' ')
-        && go.starts_with('\'')
-        && go.ends_with('\'')
+    // Render in the same sequence/mapping context as the actual field.
+    let field = std::collections::BTreeMap::from([(key, value)]);
+    let context = serde_yaml_ng::to_string(&[field]).map_err(|error| error.to_string())?;
+    let prefix = format!("- {key}: ");
+    let Some(serde) = context
+        .strip_prefix(&prefix)
+        .and_then(|text| text.strip_suffix('\n'))
+    else {
+        return Ok(());
+    };
+    let serde = serde.to_owned();
+    let go = if value.is_empty() {
+        "\"\"".to_owned()
+    } else if !value.contains(['\n', '\r'])
+        && value.contains(['\u{2028}', '\u{2029}'])
+        && serde.starts_with('\'')
+        && serde.ends_with('\'')
     {
-        // libyaml pads a quoted scalar after a Unicode line separator. Go's
-        // yaml.v3 does not. Remove exactly that emitter padding, preserving
-        // any spaces that belong to the source value.
-        let closing_quote = go.len() - 1;
-        if let Some(trimmed) = go[..closing_quote].strip_suffix("    ") {
-            go.truncate(trimmed.len());
-            go.push('\'');
-        }
-    }
+        // Preserve source whitespace; only the YAML emitter's added padding
+        // differs. A quoted single-line scalar needs only quote doubling.
+        format!("'{}'", value.replace('\'', "''"))
+    } else {
+        return Ok(());
+    };
     if serde != go {
         fixes.push(YamlScalarFix { key, serde, go });
     }
