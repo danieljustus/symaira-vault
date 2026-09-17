@@ -162,7 +162,7 @@ fn resolve_entry(root: &Path, entry: &JournalEntry) -> Result<ResolvedEntry, Sto
 }
 
 fn journal_target(root: &Path, value: &str) -> Result<PathBuf, StoreError> {
-    let path = PathBuf::from(value);
+    let path = normalize_journal_path(root, Path::new(value))?;
     let relative = validated_relative(root, &path)?;
     let mut components = relative.components();
     if components.next() != Some(Component::Normal(OsStr::new("entries")))
@@ -183,7 +183,7 @@ fn optional_artifact(
     if value.is_empty() {
         return Ok(None);
     }
-    let path = PathBuf::from(value);
+    let path = normalize_journal_path(root, Path::new(value))?;
     let relative = validated_relative(root, &path)?;
     if path == target || path.parent() != target.parent() {
         return Err(StoreError::UnsafePath(value.to_owned()));
@@ -254,6 +254,74 @@ fn validated_relative(root: &Path, path: &Path) -> Result<PathBuf, StoreError> {
         return Err(StoreError::UnsafePath(path.display().to_string()));
     }
     Ok(relative.to_owned())
+}
+
+// Journal paths are emitted as absolute paths by both implementations. A
+// caller can nevertheless spell the same root through a platform alias (for
+// example /var versus /private/var on macOS). Resolve only the existing
+// parent so the final file name is never followed; all mutation helpers still
+// use rooted NOFOLLOW operations after this normalization.
+fn normalize_journal_path(root: &Path, path: &Path) -> Result<PathBuf, StoreError> {
+    if !path.is_absolute()
+        || path
+            .components()
+            .any(|part| matches!(part, Component::ParentDir | Component::CurDir))
+    {
+        return Err(StoreError::UnsafePath(path.display().to_string()));
+    }
+    let parent = path
+        .parent()
+        .ok_or_else(|| StoreError::UnsafePath(path.display().to_string()))?;
+    let canonical_parent = parent.canonicalize().map_err(|source| StoreError::Read {
+        path: parent.to_path_buf(),
+        source,
+    })?;
+    if !canonical_parent.starts_with(root) {
+        return Err(StoreError::UnsafePath(path.display().to_string()));
+    }
+    validate_journal_ancestors(root, parent, path)?;
+    let name = path
+        .file_name()
+        .ok_or_else(|| StoreError::UnsafePath(path.display().to_string()))?;
+    Ok(canonical_parent.join(name))
+}
+
+fn validate_journal_ancestors(
+    root: &Path,
+    parent: &Path,
+    display: &Path,
+) -> Result<(), StoreError> {
+    let mut current = parent;
+    loop {
+        let canonical = current.canonicalize().map_err(|source| StoreError::Read {
+            path: current.to_path_buf(),
+            source,
+        })?;
+        if canonical == root {
+            return Ok(());
+        }
+        if !canonical.starts_with(root) {
+            return Err(StoreError::UnsafePath(display.display().to_string()));
+        }
+        match fs::symlink_metadata(current) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(StoreError::Symlink(current.to_path_buf()));
+            }
+            Ok(metadata) if !metadata.file_type().is_dir() => {
+                return Err(StoreError::NotRegularFile(current.to_path_buf()));
+            }
+            Ok(_) => {}
+            Err(source) => {
+                return Err(StoreError::Read {
+                    path: current.to_path_buf(),
+                    source,
+                });
+            }
+        }
+        current = current
+            .parent()
+            .ok_or_else(|| StoreError::UnsafePath(display.display().to_string()))?;
+    }
 }
 
 fn validate_parents(root: &Path, relative: &Path, display: &Path) -> Result<(), StoreError> {
@@ -453,5 +521,34 @@ fn remove_journal(store: &Store) -> Result<(), StoreError> {
     #[cfg(not(unix))]
     {
         fs::remove_file(&path).map_err(|source| StoreError::Write { path, source })
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::{fs, os::unix::fs::symlink};
+
+    #[test]
+    fn lexical_root_alias_is_normalized_but_symlinked_ancestor_is_rejected() {
+        let parent = tempfile::tempdir().unwrap();
+        let root = parent.path().join("vault");
+        let entries = root.join("entries");
+        fs::create_dir_all(&entries).unwrap();
+
+        let alias_parent = parent.path().join("alias-parent");
+        symlink(parent.path(), &alias_parent).unwrap();
+        let aliased_target = alias_parent.join("vault/entries/a.age");
+        let normalized = journal_target(&root, aliased_target.to_str().unwrap()).unwrap();
+        assert_eq!(normalized, root.join("entries/a.age"));
+
+        let outside = parent.path().join("outside");
+        fs::create_dir(&outside).unwrap();
+        symlink(&outside, entries.join("linked")).unwrap();
+        let unsafe_target = root.join("entries/linked/a.age");
+        assert!(matches!(
+            journal_target(&root, unsafe_target.to_str().unwrap()),
+            Err(StoreError::Symlink(_))
+        ));
     }
 }

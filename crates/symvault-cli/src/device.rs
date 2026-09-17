@@ -476,7 +476,7 @@ fn journal_string(root: &Path, path: &Path) -> Result<String, String> {
 }
 
 fn journal_target(root: &Path, value: &str) -> Result<PathBuf, String> {
-    let path = PathBuf::from(value);
+    let path = normalize_journal_path(root, Path::new(value))?;
     let relative = path
         .strip_prefix(root)
         .map_err(|_| format!("journal path escapes vault: {value}"))?;
@@ -535,7 +535,7 @@ fn journal_artifact(
     target: &Path,
     suffix: &str,
 ) -> Result<PathBuf, String> {
-    let path = PathBuf::from(value);
+    let path = normalize_journal_path(root, Path::new(value))?;
     let relative = path
         .strip_prefix(root)
         .map_err(|_| format!("journal artifact escapes vault: {value}"))?;
@@ -595,6 +595,67 @@ fn valid_reencrypt_artifact_name(name: &str, target: &str, suffix: &str) -> bool
             rust_name || go_unix_name || go_windows_name
         }
         _ => false,
+    }
+}
+
+// Go and Rust persist absolute journal paths, but macOS can expose the same
+// directory through /var and /private/var. Canonicalize only the existing
+// parent so an untrusted final component is never followed. Mutations still
+// pass through the existing regular-file checks and rooted operations.
+fn normalize_journal_path(root: &Path, path: &Path) -> Result<PathBuf, String> {
+    if !path.is_absolute()
+        || path.components().any(|part| {
+            matches!(
+                part,
+                std::path::Component::ParentDir | std::path::Component::CurDir
+            )
+        })
+    {
+        return Err(format!("journal path escapes vault: {}", path.display()));
+    }
+    let parent = path
+        .parent()
+        .ok_or_else(|| format!("journal path has no parent: {}", path.display()))?;
+    let canonical_parent = fs::canonicalize(parent)
+        .map_err(|error| format!("resolve journal parent {}: {error}", parent.display()))?;
+    if !canonical_parent.starts_with(root) {
+        return Err(format!("journal path escapes vault: {}", path.display()));
+    }
+    validate_journal_ancestors(root, parent, path)?;
+    let name = path
+        .file_name()
+        .ok_or_else(|| format!("journal path has no file name: {}", path.display()))?;
+    Ok(canonical_parent.join(name))
+}
+
+fn validate_journal_ancestors(root: &Path, parent: &Path, display: &Path) -> Result<(), String> {
+    let mut current = parent;
+    loop {
+        let canonical = fs::canonicalize(current)
+            .map_err(|error| format!("resolve journal parent {}: {error}", current.display()))?;
+        if canonical == root {
+            return Ok(());
+        }
+        if !canonical.starts_with(root) {
+            return Err(format!("journal path escapes vault: {}", display.display()));
+        }
+        let metadata = fs::symlink_metadata(current)
+            .map_err(|error| format!("stat journal parent {}: {error}", current.display()))?;
+        if metadata.file_type().is_symlink() {
+            return Err(format!(
+                "journal path uses symlinked parent: {}",
+                current.display()
+            ));
+        }
+        if !metadata.file_type().is_dir() {
+            return Err(format!(
+                "journal path parent is not a directory: {}",
+                current.display()
+            ));
+        }
+        current = current
+            .parent()
+            .ok_or_else(|| format!("journal path escapes vault: {}", display.display()))?;
     }
 }
 
