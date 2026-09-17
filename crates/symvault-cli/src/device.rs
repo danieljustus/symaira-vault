@@ -5,11 +5,14 @@ use input::read_passphrase;
 use serde::Serialize;
 use std::{
     collections::HashSet,
+    fs,
     io::{self, BufRead, Write},
     path::{Path, PathBuf},
-    time::Duration,
+    time::{Duration, SystemTime},
 };
 use symvault_core::config::{Config, GitConfig};
+#[cfg(test)]
+use symvault_crypto::encrypt;
 use symvault_crypto::{
     Identity, Recipient, SecretBytes, decrypt_identity, encrypt_identity_scrypt, fingerprint,
     generate_identity, identity_string, parse_identity, parse_recipient, recipient_string,
@@ -209,45 +212,101 @@ pub(crate) fn reencrypt_all_entries(
     recipients: &[Recipient],
 ) -> Result<(), String> {
     let entries_dir = vault.join("entries");
-    match std::fs::symlink_metadata(&entries_dir) {
+    let files = match fs::symlink_metadata(&entries_dir) {
         Ok(metadata) => {
             let file_type = metadata.file_type();
             if file_type.is_symlink() {
-                return Err(format!(
+                Err(format!(
                     "unsafe symlink entries root {:?}",
                     entries_dir.display()
-                ));
-            }
-            if !file_type.is_dir() {
-                return Err(format!(
+                ))
+            } else if !file_type.is_dir() {
+                Err(format!(
                     "vault entries root is not a directory: {}",
                     entries_dir.display()
-                ));
+                ))
+            } else {
+                collect_reencrypt_files(&entries_dir, identity, recipients).map(Some)
             }
-            walk_and_reencrypt(&entries_dir, identity, recipients)?;
         }
-        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
-        Err(err) => return Err(format!("stat {}: {err}", entries_dir.display())),
-    }
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(format!("stat {}: {err}", entries_dir.display())),
+    }?;
+    let Some(files) = files else {
+        return Ok(());
+    };
+
     let manifest_path = vault.join("manifest.age");
+    let manifest = snapshot_file(&manifest_path)?;
+
+    // Decrypt and encrypt every entry before publishing any replacement. A
+    // corrupt later entry must not leave earlier entries rotated. This
+    // bounded transaction restores bytes on publication or manifest failure;
+    // durable crash journaling and a cross-process vault lock still need a
+    // shared transaction layer; this helper does not claim that Go parity.
+    let mut published = 0;
+    for file in &files {
+        if let Err(error) = publish_file(file) {
+            return Err(transaction_failure(
+                format!("write {}: {error}", file.path.display()),
+                &files[..=published],
+                manifest.as_ref(),
+            ));
+        }
+        published += 1;
+    }
+
     if manifest_path.is_file() {
-        let store = symvault_store::Store::open(vault, identity)
-            .map_err(|e| format!("open store for manifest rebuild: {e}"))?;
-        store
-            .rebuild_manifest(identity)
-            .map_err(|e| format!("rebuild manifest: {e}"))?;
+        let rebuild = symvault_store::Store::open(vault, identity)
+            .map_err(|e| format!("open store for manifest rebuild: {e}"))
+            .and_then(|store| {
+                store
+                    .rebuild_manifest(identity)
+                    .map_err(|e| format!("rebuild manifest: {e}"))
+            });
+        if let Err(error) = rebuild {
+            return Err(transaction_failure(
+                error,
+                &files[..published],
+                manifest.as_ref(),
+            ));
+        }
     }
     Ok(())
 }
 
-fn walk_and_reencrypt(
+struct ReencryptFile {
+    path: PathBuf,
+    original: Vec<u8>,
+    replacement: Vec<u8>,
+    metadata: FileMetadata,
+}
+
+struct FileSnapshot {
+    path: PathBuf,
+    bytes: Vec<u8>,
+    metadata: FileMetadata,
+}
+
+struct FileMetadata {
+    permissions: fs::Permissions,
+    accessed: SystemTime,
+    modified: SystemTime,
+}
+
+fn collect_reencrypt_files(
     dir: &Path,
     identity: &Identity,
     recipients: &[Recipient],
-) -> Result<(), String> {
-    let entries = std::fs::read_dir(dir).map_err(|e| format!("read dir {}: {e}", dir.display()))?;
+) -> Result<Vec<ReencryptFile>, String> {
+    let mut entries: Vec<_> = fs::read_dir(dir)
+        .map_err(|e| format!("read dir {}: {e}", dir.display()))?
+        .collect::<Result<_, _>>()
+        .map_err(|e| format!("read dir {}: {e}", dir.display()))?;
+    entries.sort_by_key(|entry| entry.path());
+
+    let mut files = Vec::new();
     for entry in entries {
-        let entry = entry.map_err(|e| format!("read dir entry: {e}"))?;
         let path = entry.path();
         let file_type = entry
             .file_type()
@@ -256,20 +315,113 @@ fn walk_and_reencrypt(
             return Err(format!("unsafe symlink entry {:?}", path.display()));
         }
         if file_type.is_dir() {
-            walk_and_reencrypt(&path, identity, recipients)?;
+            files.extend(collect_reencrypt_files(&path, identity, recipients)?);
         } else if file_type.is_file()
             && path.extension().and_then(|ext| ext.to_str()) == Some("age")
         {
+            let metadata =
+                fs::symlink_metadata(&path).map_err(|e| format!("stat {}: {e}", path.display()))?;
             let raw = safeio::read(&path)
                 .map_err(|e| format!("read {}: {e}", path.display()))?
                 .ok_or_else(|| format!("file not found: {}", path.display()))?;
-            let reencrypted = reencrypt(&raw, identity, recipients)
+            let replacement = reencrypt(&raw, identity, recipients)
                 .map_err(|e| format!("re-encrypt {}: {e}", path.display()))?;
-            safeio::write_atomic(&path, &reencrypted)
-                .map_err(|e| format!("write {}: {e}", path.display()))?;
+            let metadata = file_metadata(&metadata, &path)?;
+            files.push(ReencryptFile {
+                path,
+                original: raw,
+                replacement,
+                metadata,
+            });
         }
     }
-    Ok(())
+    Ok(files)
+}
+
+fn snapshot_file(path: &Path) -> Result<Option<FileSnapshot>, String> {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(format!("stat {}: {error}", path.display())),
+    };
+    if !metadata.file_type().is_file() {
+        return Err(format!(
+            "manifest is not a regular file: {}",
+            path.display()
+        ));
+    }
+    let bytes = safeio::read(path)
+        .map_err(|e| format!("read {}: {e}", path.display()))?
+        .ok_or_else(|| format!("file not found: {}", path.display()))?;
+    let metadata = file_metadata(&metadata, path)?;
+    Ok(Some(FileSnapshot {
+        path: path.to_owned(),
+        bytes,
+        metadata,
+    }))
+}
+
+fn publish_file(file: &ReencryptFile) -> Result<(), String> {
+    safeio::write_atomic(&file.path, &file.replacement).map_err(|e| e.to_string())?;
+    restore_metadata(&file.path, &file.metadata)
+}
+
+fn restore_file(path: &Path, bytes: &[u8], metadata: &FileMetadata) -> Result<(), String> {
+    safeio::write_atomic(path, bytes).map_err(|e| e.to_string())?;
+    restore_metadata(path, metadata)
+}
+
+fn file_metadata(metadata: &fs::Metadata, path: &Path) -> Result<FileMetadata, String> {
+    Ok(FileMetadata {
+        permissions: metadata.permissions(),
+        accessed: metadata
+            .accessed()
+            .map_err(|e| format!("read access time for {}: {e}", path.display()))?,
+        modified: metadata
+            .modified()
+            .map_err(|e| format!("read modification time for {}: {e}", path.display()))?,
+    })
+}
+
+fn restore_metadata(path: &Path, metadata: &FileMetadata) -> Result<(), String> {
+    let file = fs::OpenOptions::new()
+        .write(true)
+        .open(path)
+        .map_err(|e| e.to_string())?;
+    file.set_times(
+        fs::FileTimes::new()
+            .set_accessed(metadata.accessed)
+            .set_modified(metadata.modified),
+    )
+    .map_err(|e| e.to_string())?;
+    drop(file);
+    fs::set_permissions(path, metadata.permissions.clone()).map_err(|e| e.to_string())
+}
+
+fn transaction_failure(
+    operation: String,
+    files: &[ReencryptFile],
+    manifest: Option<&FileSnapshot>,
+) -> String {
+    let mut rollback_errors = Vec::new();
+    for file in files.iter().rev() {
+        if let Err(error) = restore_file(&file.path, &file.original, &file.metadata) {
+            rollback_errors.push(format!("restore {}: {error}", file.path.display()));
+        }
+    }
+    if let Some(manifest) = manifest
+        && let Err(error) = restore_file(&manifest.path, &manifest.bytes, &manifest.metadata)
+    {
+        rollback_errors.push(format!("restore {}: {error}", manifest.path.display()));
+    }
+    if rollback_errors.is_empty() {
+        operation
+    } else {
+        format!(
+            "{operation} (rollback failed: {})",
+            rollback_errors.join("; ")
+        )
+    }
 }
 
 fn auto_commit_and_push(vault: &Path, message: &str) {
@@ -897,6 +1049,25 @@ mod tests {
             recipient_string(&expected)
         );
         assert!(!passphrase_runtime.manager.is_identity_expired(&vault));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn reencrypt_preflights_all_entries_before_replacing_any_file() {
+        let (root, identity, _passphrase) = encrypted_fixture();
+        let entries = root.join("entries");
+        fs::create_dir_all(&entries).unwrap();
+        let own_recipient = parse_recipient(&recipient_string(&identity)).unwrap();
+        let first = encrypt(b"first-entry", &[own_recipient]).unwrap();
+        fs::write(entries.join("a.age"), &first).unwrap();
+        fs::write(entries.join("b.age"), b"corrupt age envelope").unwrap();
+
+        let new_identity = generate_identity();
+        let new_recipient = parse_recipient(&recipient_string(&new_identity)).unwrap();
+        let error = reencrypt_all_entries(&root, &identity, &[new_recipient]).unwrap_err();
+
+        assert!(error.contains("b.age"), "unexpected error: {error}");
+        assert_eq!(fs::read(entries.join("a.age")).unwrap(), first);
         let _ = fs::remove_dir_all(root);
     }
 }
