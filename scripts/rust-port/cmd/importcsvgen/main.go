@@ -53,6 +53,8 @@ func main() {
 		{Name: "escaped_quote", Format: "csv", Input: "title,password\nA,\"a\"\"b\"\n"},
 		{Name: "bare_quote", Format: "csv", Input: "title,password\nA,a\"b\n"},
 		{Name: "closed_quote_suffix", Format: "csv", Input: "title,password\nA,\"a\"b\n"},
+		{Name: "bare_cr", Format: "csv", Input: "title,password\nA,a\rb\n"},
+		{Name: "trailing_cr", Format: "csv", Input: "title,password\nA,p\r"},
 		{Name: "crlf", Format: "csv", Input: "title,password\r\nA,\"a\r\nb\"\r\n"},
 		{Name: "malformed", Format: "csv", Input: "title,password\nA,\"unterminated"},
 		{Name: "chrome_hosts_collisions", Format: "chrome", Input: "name,url,username,password,note\n,https://USER:PASS@EXAMPLE.test:8080/a,u,p,n\n,https://example.test/b,u2,p2,\nexample.test-2,https://other.test,u3,p3,\n"},

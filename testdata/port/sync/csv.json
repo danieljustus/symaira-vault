@@ -8,7 +8,7 @@
     "internal/importer/totp.go"
   ],
   "source_digest": "9b1c9f0b91c2376b5e7f8ccdbe824301d731a075b1f0ef4c20ec4dcf8f7c3f11",
-  "generator_digest": "11cf715d9e6eec8f11386547ee99fae0012625608839612c873d714dfe3ffb79",
+  "generator_digest": "b24a4717f731287cbda0d3278df415cc7cd22503cd0415a8b84c253f2a56f8e0",
   "cases": [
     {
       "name": "empty",
@@ -139,6 +139,36 @@
       "input": "title,password\nA,\"a\"b\n",
       "entries": [],
       "failed": true
+    },
+    {
+      "name": "bare_cr",
+      "format": "csv",
+      "input": "title,password\nA,a\rb\n",
+      "entries": [
+        {
+          "path": "A",
+          "data": {
+            "password": "a\rb"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "trailing_cr",
+      "format": "csv",
+      "input": "title,password\nA,p\r",
+      "entries": [
+        {
+          "path": "A",
+          "data": {
+            "password": "p"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
     },
     {
       "name": "crlf",

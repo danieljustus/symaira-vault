@@ -129,9 +129,13 @@ pub fn parse_csv_profile(
     let normalized: Vec<u8> = bytes
         .iter()
         .enumerate()
-        .filter_map(|(i, &b)| (b != b'\r' || bytes.get(i + 1) != Some(&b'\n')).then_some(b))
+        .filter_map(|(i, &b)| {
+            (b != b'\r' || (bytes.get(i + 1).is_some() && bytes.get(i + 1) != Some(&b'\n')))
+                .then_some(b)
+        })
         .collect();
     let mut reader = csv::ReaderBuilder::new()
+        .terminator(csv::Terminator::Any(b'\n'))
         .flexible(true)
         .from_reader(normalized.as_slice());
     let mut columns = BTreeMap::new();
