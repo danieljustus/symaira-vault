@@ -189,12 +189,48 @@ fn optional_artifact(
         .file_name()
         .and_then(OsStr::to_str)
         .ok_or_else(|| StoreError::UnsafePath(value.to_owned()))?;
-    let prefix = format!(".{target_name}.reencrypt-");
-    if !artifact_name.starts_with(&prefix) || !artifact_name.ends_with(suffix) {
+    if !valid_reencrypt_artifact_name(artifact_name, target_name, suffix) {
         return Err(StoreError::UnsafePath(value.to_owned()));
     }
     validate_parents(root, &relative, &path)?;
     Ok(Some(path))
+}
+
+fn valid_reencrypt_artifact_name(name: &str, target: &str, suffix: &str) -> bool {
+    let rust_prefix = format!(".{target}.reencrypt-");
+    let rust_name = name
+        .strip_prefix(&rust_prefix)
+        .and_then(|value| value.strip_suffix(suffix))
+        .is_some_and(|value| !value.is_empty() && !value.contains('/'));
+    match suffix {
+        ".tmp" => {
+            let go_unix_prefix = format!(".{target}.reencrypt-");
+            let go_unix_name = name
+                .strip_prefix(&go_unix_prefix)
+                .is_some_and(|random| is_hex(random, 24));
+            let go_windows_name = name.strip_prefix(".reencrypt-").is_some_and(|random| {
+                !random.is_empty() && random.chars().all(|c| c.is_ascii_alphanumeric())
+            });
+            rust_name || go_unix_name || go_windows_name
+        }
+        ".backup" => {
+            let go_unix_prefix = format!(".{target}.backup.reencrypt-");
+            let go_unix_name = name
+                .strip_prefix(&go_unix_prefix)
+                .is_some_and(|random| is_hex(random, 24));
+            let go_windows_prefix = format!("{target}.reencrypt-backup");
+            let go_windows_name = name.strip_prefix(&go_windows_prefix).is_some_and(|suffix| {
+                suffix.is_empty()
+                    || (suffix.starts_with('.') && suffix[1..].chars().all(|c| c.is_ascii_digit()))
+            });
+            rust_name || go_unix_name || go_windows_name
+        }
+        _ => false,
+    }
+}
+
+fn is_hex(value: &str, length: usize) -> bool {
+    value.len() == length && value.chars().all(|c| c.is_ascii_hexdigit())
 }
 
 fn validated_relative(root: &Path, path: &Path) -> Result<PathBuf, StoreError> {

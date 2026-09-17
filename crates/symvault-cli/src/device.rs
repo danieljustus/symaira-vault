@@ -284,6 +284,7 @@ pub(crate) fn reencrypt_all_entries(
                 }
                 let current = load_reencrypt_journal(&vault)?;
                 verify_installed_targets(&current)?;
+                cleanup_reencrypt_artifacts(&vault, &current)?;
                 remove_reencrypt_journal(&vault)
             })();
             result.map_err(symvault_store::StoreError::Config)
@@ -551,13 +552,48 @@ fn journal_artifact(
         .file_name()
         .and_then(|name| name.to_str())
         .ok_or_else(|| format!("journal artifact is not valid UTF-8: {value}"))?;
-    if !artifact_name.starts_with(&format!(".{target_name}.reencrypt-"))
-        || !artifact_name.ends_with(suffix)
-    {
+    if !valid_reencrypt_artifact_name(artifact_name, target_name, suffix) {
         return Err(format!("journal artifact has invalid name: {value}"));
     }
     validate_journal_parents(root, relative, &path)?;
     Ok(path)
+}
+
+fn valid_reencrypt_artifact_name(name: &str, target: &str, suffix: &str) -> bool {
+    let rust_prefix = format!(".{target}.reencrypt-");
+    let rust_name = name
+        .strip_prefix(&rust_prefix)
+        .and_then(|value| value.strip_suffix(suffix))
+        .is_some_and(|value| !value.is_empty() && !value.contains('/'));
+    match suffix {
+        ".tmp" => {
+            let go_unix_prefix = format!(".{target}.reencrypt-");
+            let go_unix_name = name
+                .strip_prefix(&go_unix_prefix)
+                .is_some_and(|random| is_hex(random, 24));
+            let go_windows_name = name.strip_prefix(".reencrypt-").is_some_and(|random| {
+                !random.is_empty() && random.chars().all(|c| c.is_ascii_alphanumeric())
+            });
+            rust_name || go_unix_name || go_windows_name
+        }
+        ".backup" => {
+            let go_unix_prefix = format!(".{target}.backup.reencrypt-");
+            let go_unix_name = name
+                .strip_prefix(&go_unix_prefix)
+                .is_some_and(|random| is_hex(random, 24));
+            let go_windows_prefix = format!("{target}.reencrypt-backup");
+            let go_windows_name = name.strip_prefix(&go_windows_prefix).is_some_and(|suffix| {
+                suffix.is_empty()
+                    || suffix[1..].chars().all(|c| c.is_ascii_digit()) && suffix.starts_with('.')
+            });
+            rust_name || go_unix_name || go_windows_name
+        }
+        _ => false,
+    }
+}
+
+fn is_hex(value: &str, length: usize) -> bool {
+    value.len() == length && value.chars().all(|c| c.is_ascii_hexdigit())
 }
 
 fn persist_reencrypt_journal(root: &Path, journal: &ReencryptJournal) -> Result<(), String> {
@@ -668,6 +704,23 @@ fn remove_artifact(path: &Path) -> Result<(), String> {
         return Ok(());
     }
     fs::remove_file(path).map_err(|e| format!("remove re-encryption artifact: {e}"))
+}
+
+fn cleanup_reencrypt_artifacts(root: &Path, journal: &ReencryptJournal) -> Result<(), String> {
+    let mut artifacts = Vec::new();
+    for entry in &journal.entries {
+        let target = journal_target(root, &entry.path)?;
+        if !entry.temp.is_empty() {
+            artifacts.push(journal_artifact(root, &entry.temp, &target, ".tmp")?);
+        }
+        if !entry.backup.is_empty() {
+            artifacts.push(journal_artifact(root, &entry.backup, &target, ".backup")?);
+        }
+    }
+    for artifact in artifacts {
+        remove_artifact(&artifact)?;
+    }
+    Ok(())
 }
 
 fn rollback_reencrypt_journal_locked(root: &Path) -> Result<(), String> {
@@ -1512,6 +1565,79 @@ mod tests {
         assert_eq!(fs::read(&target).unwrap(), replacement);
         assert!(!backup.exists());
         assert!(!journal_path(&root).exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn store_open_recovers_go_journal_artifact_names() {
+        // These names are emitted by the Go Unix and Windows re-encryption
+        // implementations, respectively. Keep the fixture journal-shaped so
+        // Rust can recover a vault after a Go process crashes mid-rotation.
+        let fixtures = [
+            (
+                ".a.age.reencrypt-0123456789abcdef01234567",
+                ".a.age.backup.reencrypt-0123456789abcdef01234567",
+            ),
+            (".reencrypt-ABC123", "a.age.reencrypt-backup.1"),
+        ];
+        for (temp_name, backup_name) in fixtures {
+            let (root, identity, _passphrase) = encrypted_fixture();
+            let entries = root.join("entries");
+            fs::create_dir_all(&entries).unwrap();
+            let target = entries.join("a.age");
+            let temp = entries.join(temp_name);
+            let backup = entries.join(backup_name);
+            let original = b"original ciphertext";
+            let replacement = b"replacement ciphertext";
+            fs::write(&temp, replacement).unwrap();
+            fs::write(&backup, original).unwrap();
+            let journal = ReencryptJournal {
+                version: REENCRYPT_JOURNAL_VERSION,
+                entries: vec![ReencryptJournalEntry {
+                    path: journal_string(&root, &target).unwrap(),
+                    temp: journal_string(&root, &temp).unwrap(),
+                    backup: journal_string(&root, &backup).unwrap(),
+                    digest: digest(replacement),
+                    installed: false,
+                }],
+            };
+            persist_reencrypt_journal(&root, &journal).unwrap();
+
+            symvault_store::Store::open(&root, &identity).unwrap();
+            assert_eq!(fs::read(&target).unwrap(), original);
+            assert!(!temp.exists());
+            assert!(!backup.exists());
+            assert!(!journal_path(&root).exists());
+            let _ = fs::remove_dir_all(root);
+        }
+    }
+
+    #[test]
+    fn successful_reencrypt_cleanup_removes_all_artifacts() {
+        let (root, _identity, _passphrase) = encrypted_fixture();
+        let entries = root.join("entries").join("nested");
+        fs::create_dir_all(&entries).unwrap();
+        let target = entries.join("a.age");
+        let temp = entries.join(".a.age.reencrypt-1-0-0.tmp");
+        let backup = entries.join(".a.age.reencrypt-1-0-0.backup");
+        fs::write(&target, b"replacement ciphertext").unwrap();
+        fs::write(&temp, b"staged ciphertext").unwrap();
+        fs::write(&backup, b"original ciphertext").unwrap();
+        let journal = ReencryptJournal {
+            version: REENCRYPT_JOURNAL_VERSION,
+            entries: vec![ReencryptJournalEntry {
+                path: journal_string(&root, &target).unwrap(),
+                temp: journal_string(&root, &temp).unwrap(),
+                backup: journal_string(&root, &backup).unwrap(),
+                digest: digest(b"replacement ciphertext"),
+                installed: true,
+            }],
+        };
+
+        cleanup_reencrypt_artifacts(&root, &journal).unwrap();
+        assert!(target.exists());
+        assert!(!temp.exists());
+        assert!(!backup.exists());
         let _ = fs::remove_dir_all(root);
     }
 
