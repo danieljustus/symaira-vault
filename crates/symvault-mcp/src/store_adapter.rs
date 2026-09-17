@@ -257,6 +257,10 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
     fn call(&self, name: &str, arguments: &Value) -> Result<ToolCallResult, String> {
         let result = self.inner.call(name, arguments);
         match name {
+            "generate_password" => {
+                let ok = result.as_ref().is_ok_and(|value| !value.is_error);
+                self.append_audit("generate", "password", ok);
+            }
             "list_entries" => {
                 let prefix = arguments
                     .get("prefix")
@@ -307,7 +311,7 @@ fn store_error(error: StoreError) -> String {
     error.to_string()
 }
 
-/// The seven handlers in this bounded runtime. The catalog remains owned by
+/// The eight handlers in this bounded runtime. The catalog remains owned by
 /// the protocol layer; this list is the injected availability registry used
 /// by authorization and whoami.
 pub fn read_only_tool_names() -> Vec<String> {
@@ -315,6 +319,7 @@ pub fn read_only_tool_names() -> Vec<String> {
         "health",
         "symaira_whoami",
         "list_entries",
+        "generate_password",
         "find_entries",
         "get_entry",
         "get_entry_value",

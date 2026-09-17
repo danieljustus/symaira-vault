@@ -213,6 +213,7 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
             "health" => self.health(),
             "symaira_whoami" => self.whoami(),
             "list_entries" => self.list_entries(arguments),
+            "generate_password" => self.generate_password(arguments),
             "find_entries" => self.find_entries(arguments),
             "get_entry" | "get_entry_metadata" => self.get_entry_metadata(arguments),
             "get_entry_value" => self.get_entry_value(arguments),
@@ -238,6 +239,24 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
             Value::String(self.config.server_version.clone()),
         );
         json_text(Value::Object(result))
+    }
+
+    fn generate_password(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        // Go's RequireFloat fallback uses the default length for missing,
+        // string, boolean, and null values. Fractional numbers are truncated
+        // by the Go int conversion before generation.
+        let length = arguments
+            .get("length")
+            .and_then(Value::as_f64)
+            .map(|value| value as isize)
+            .unwrap_or(16);
+        let symbols = arguments
+            .get("symbols")
+            .and_then(Value::as_bool)
+            .unwrap_or(true);
+        let password = symvault_core::password::generate_password(length, symbols)
+            .map_err(|error| error.to_string())?;
+        Ok(ToolCallResult::text(password.as_str()))
     }
 
     fn whoami(&self) -> Result<ToolCallResult, String> {
