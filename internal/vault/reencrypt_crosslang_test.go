@@ -15,7 +15,7 @@ import (
 // one disposable vault. The Go side uses the production staging, commit, and
 // journal persistence functions; the Rust side uses Store::open, which is the
 // normal recovery entry point.
-func TestReencryptJournalGoRustLiveAcceptance(t *testing.T) {
+func TestReencryptJournalGoRustIntegration(t *testing.T) {
 	_, source, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("cannot locate test source")
