@@ -43,13 +43,13 @@ pub(crate) fn list(home: &Path, quiet: bool, output: &mut impl Write) -> Result<
 
     let name_width = rows
         .iter()
-        .map(|(name, _, _)| name.len())
+        .map(|(name, _, _)| name.chars().count())
         .max()
         .unwrap_or(0)
         .max("NAME".len());
     let path_width = rows
         .iter()
-        .map(|(_, path, _)| path.len())
+        .map(|(_, path, _)| path.chars().count())
         .max()
         .unwrap_or(0)
         .max("VAULT PATH".len());
