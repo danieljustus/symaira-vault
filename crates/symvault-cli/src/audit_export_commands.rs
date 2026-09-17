@@ -26,11 +26,14 @@ pub struct Options<'a> {
 }
 
 #[derive(Serialize)]
-struct ExportOutput {
-    entries: Vec<ExportEntry>,
+struct ExportOutput<'a> {
+    entries: Option<&'a [ExportEntry]>,
     total: usize,
+    #[serde(skip_serializing_if = "is_zero")]
     verified: usize,
+    #[serde(skip_serializing_if = "is_zero")]
     legacy: usize,
+    #[serde(skip_serializing_if = "is_zero")]
     tampered: usize,
     agent: String,
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -39,6 +42,10 @@ struct ExportOutput {
     since: String,
     #[serde(rename = "failed_only", skip_serializing_if = "is_false")]
     failed_only: bool,
+}
+
+fn is_zero(value: &usize) -> bool {
+    *value == 0
 }
 
 fn is_false(value: &bool) -> bool {
@@ -124,7 +131,7 @@ pub fn export_with_keys(
         tampered,
     };
     let rendered = ExportOutput {
-        entries: result.entries.clone(),
+        entries: (!result.entries.is_empty()).then_some(result.entries.as_slice()),
         total: result.total,
         verified: result.verified,
         legacy: result.legacy,
@@ -196,20 +203,25 @@ fn parse_since_nanos(value: &str) -> Option<i128> {
     symvault_core::config::parse_duration_nanos(value)
 }
 
-fn render(result: &ExportOutput, format: &str, output: &mut impl Write) -> Result<(), String> {
+fn render(result: &ExportOutput<'_>, format: &str, output: &mut impl Write) -> Result<(), String> {
     match format.to_ascii_lowercase().as_str() {
         "json" => {
-            serde_json::to_writer_pretty(&mut *output, result)
-                .map_err(|error| error.to_string())?;
-            writeln!(output).map_err(|error| error.to_string())
+            let json = serde_json::to_string_pretty(result)
+                .map_err(|error| error.to_string())?
+                .replace('<', "\\u003c")
+                .replace('>', "\\u003e")
+                .replace('&', "\\u0026")
+                .replace('\u{2028}', "\\u2028")
+                .replace('\u{2029}', "\\u2029");
+            writeln!(output, "{json}").map_err(|error| error.to_string())
         }
         "table" | "text" | "" => render_table(result, output),
         other => Err(format!("unsupported export format: {other}")),
     }
 }
 
-fn render_table(result: &ExportOutput, output: &mut impl Write) -> Result<(), String> {
-    if result.entries.is_empty() {
+fn render_table(result: &ExportOutput<'_>, output: &mut impl Write) -> Result<(), String> {
+    if result.entries.is_none() {
         return writeln!(output, "No audit entries found.").map_err(|error| error.to_string());
     }
     writeln!(
@@ -219,7 +231,7 @@ fn render_table(result: &ExportOutput, output: &mut impl Write) -> Result<(), St
     )
     .map_err(|error| error.to_string())?;
     writeln!(output, "{}", "-".repeat(90)).map_err(|error| error.to_string())?;
-    for row in &result.entries {
+    for row in result.entries.unwrap_or_default() {
         let timestamp = truncate(&row.entry.timestamp, 20);
         let action = truncate(&row.entry.action, 20);
         let path = truncate(

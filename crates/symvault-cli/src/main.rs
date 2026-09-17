@@ -2,6 +2,7 @@
 
 mod add_commands;
 mod audit_commands;
+mod audit_export_commands;
 mod backup_commands;
 mod config;
 mod device;
@@ -257,6 +258,8 @@ enum Command {
     },
     /// View MCP audit log entries.
     Audit {
+        #[command(subcommand)]
+        command: Option<AuditCommand>,
         #[arg(short = 'n', long, default_value_t = 20)]
         tail: i64,
         #[arg(short = 'j', long)]
@@ -353,6 +356,29 @@ enum Command {
     Auth {
         #[command(subcommand)]
         command: AuthCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum AuditCommand {
+    /// Export local audit evidence.
+    Export {
+        #[arg(long, default_value = "")]
+        agent: String,
+        #[arg(long, default_value = "")]
+        action: String,
+        #[arg(long, default_value = "")]
+        since: String,
+        #[arg(long)]
+        failed: bool,
+        #[arg(short = 'o', long)]
+        output: Option<String>,
+        #[arg(long, default_value = "json")]
+        format: String,
+        #[arg(long)]
+        verify_hmac: bool,
+        #[arg(long)]
+        redact_paths: bool,
     },
 }
 
@@ -747,6 +773,34 @@ fn main() -> ExitCode {
             run_profile(&command, cli.vault.as_deref(), cli.quiet)
         }
         Some(Command::Audit {
+            command:
+                Some(AuditCommand::Export {
+                    agent,
+                    action,
+                    since,
+                    failed,
+                    output,
+                    format,
+                    verify_hmac,
+                    redact_paths,
+                }),
+            ..
+        }) => run_audit_export(
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
+            &audit_export_commands::Options {
+                agent: &agent,
+                action: &action,
+                since: &since,
+                failed_only: failed,
+                redact_paths,
+                format: &format,
+            },
+            verify_hmac,
+            output.as_deref(),
+        ),
+        Some(Command::Audit {
+            command: None,
             tail,
             audit_json,
             agent,
@@ -1125,6 +1179,79 @@ fn run_profile(command: &ProfileCommand, vault: Option<&Path>, quiet: bool) -> E
     if let Err(error) = &result {
         let _ = writeln!(io::stderr(), "Error: {error}");
     }
+    finish_vault_result(result)
+}
+
+fn run_audit_export(
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    options: &audit_export_commands::Options<'_>,
+    verify_hmac: bool,
+    output: Option<&str>,
+) -> ExitCode {
+    let result = (|| {
+        let home = std::env::var_os("HOME")
+            .filter(|value| !value.is_empty())
+            .or_else(|| {
+                cfg!(windows)
+                    .then(|| std::env::var_os("USERPROFILE"))
+                    .flatten()
+            })
+            .map(PathBuf::from)
+            .ok_or_else(|| "cannot determine home directory".to_owned())?;
+        let mut rendered = Vec::new();
+        let result = if verify_hmac {
+            let vault = resolve_vault(explicit_vault, profile)?;
+            let runtime = runtime_session_manager();
+            let keyring = runtime
+                .keyring
+                .as_deref()
+                .ok_or_else(|| "audit keyring unavailable".to_owned())?;
+            let key = symvault_store::audit::load_or_create_key_with_keyring(&vault, keyring)
+                .map_err(|error| format!("load HMAC key: {error}"))?;
+            let kid = key.fingerprint();
+            let keys = BTreeMap::from([(kid.clone(), key)]);
+            audit_export_commands::export_with_keys(
+                &home,
+                options,
+                true,
+                &keys,
+                &kid,
+                &mut rendered,
+            )?
+        } else {
+            audit_export_commands::export(&home, options, &mut rendered)?
+        };
+        if let Some(output) = output.filter(|value| !value.is_empty()) {
+            let path = Path::new(output);
+            if let Some(parent) = path
+                .parent()
+                .filter(|parent| !parent.as_os_str().is_empty())
+            {
+                symvault_sync::safeio::create_dir_all(parent)
+                    .map_err(|error| format!("create output directory: {error}"))?;
+            }
+            symvault_sync::safeio::write_atomic(path, &rendered)
+                .map_err(|error| format!("create output file: {error}"))?;
+        } else {
+            io::stdout()
+                .lock()
+                .write_all(&rendered)
+                .map_err(|error| error.to_string())?;
+        }
+        let mut summary = io::stderr().lock();
+        write!(summary, "Exported {} audit entries", result.total)
+            .map_err(|error| error.to_string())?;
+        if result.verified > 0 || result.tampered > 0 {
+            write!(
+                summary,
+                " (verified: {}, legacy: {}, tampered: {})",
+                result.verified, result.legacy, result.tampered
+            )
+            .map_err(|error| error.to_string())?;
+        }
+        writeln!(summary).map_err(|error| error.to_string())
+    })();
     finish_vault_result(result)
 }
 

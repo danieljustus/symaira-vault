@@ -870,7 +870,7 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
             .map_err(|error| error.to_string())
     }
 
-    fn find_matching_entries(&self, query: &str) -> Result<Vec<OpenAISearchMatch>, String> {
+    fn find_matching_entries(&self, query: &str) -> Result<Vec<ReadOnlyMatch>, String> {
         let needle = symvault_core::go_to_lower(query);
         let mut matches = Vec::new();
         for entry in self
@@ -896,7 +896,7 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
             }
             fields.sort();
             if !fields.is_empty() {
-                matches.push(OpenAISearchMatch {
+                matches.push(ReadOnlyMatch {
                     path: entry.path,
                     fields,
                 });
@@ -1281,11 +1281,6 @@ struct ReadOnlyMatch {
     #[serde(rename = "Path")]
     path: String,
     #[serde(rename = "Fields")]
-    fields: Vec<String>,
-}
-
-struct OpenAISearchMatch {
-    path: String,
     fields: Vec<String>,
 }
 
