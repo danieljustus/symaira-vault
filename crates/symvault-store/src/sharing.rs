@@ -7,7 +7,6 @@
 
 use std::{collections::BTreeMap, fs, io, path::Path};
 
-use fs4::fs_std::FileExt;
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
@@ -229,7 +228,7 @@ impl ShareStore {
             path: root.to_path_buf(),
             source,
         })?;
-        let _lock = open_root_write_lock(&root_cap, root)?;
+        let _lock = crate::open_root_write_lock(&root_cap, root)?;
         self.revoke_locked(root, &root_cap, grant_id, now)
     }
 
@@ -508,61 +507,6 @@ fn hex_nibble(value: u8) -> Option<u8> {
 
 fn is_zero(value: &i64) -> bool {
     *value == 0
-}
-
-fn open_root_write_lock(root_cap: &fs::File, root: &Path) -> Result<fs::File, StoreError> {
-    let path = root.join(".lock");
-    #[cfg(unix)]
-    let file = crate::rooted::open_lock(root_cap, &path)?;
-    #[cfg(not(unix))]
-    let file = fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(&path)
-        .map_err(|source| StoreError::Write {
-            path: path.clone(),
-            source,
-        })?;
-    crate::set_private_permissions(&file).map_err(|source| StoreError::Write {
-        path: path.clone(),
-        source,
-    })?;
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
-    loop {
-        match file.try_lock_exclusive() {
-            Ok(true) => return Ok(file),
-            Ok(false) if std::time::Instant::now() < deadline => {
-                std::thread::sleep(std::time::Duration::from_millis(50));
-            }
-            Ok(false) => {
-                return Err(StoreError::Write {
-                    path,
-                    source: io::Error::new(
-                        io::ErrorKind::TimedOut,
-                        "vault is currently locked by another process, try again in a moment",
-                    ),
-                });
-            }
-            Err(source)
-                if source.kind() == io::ErrorKind::WouldBlock
-                    && std::time::Instant::now() < deadline =>
-            {
-                std::thread::sleep(std::time::Duration::from_millis(50));
-            }
-            Err(source) if source.kind() == io::ErrorKind::WouldBlock => {
-                return Err(StoreError::Write {
-                    path,
-                    source: io::Error::new(
-                        io::ErrorKind::TimedOut,
-                        "vault is currently locked by another process, try again in a moment",
-                    ),
-                });
-            }
-            Err(source) => return Err(StoreError::Write { path, source }),
-        }
-    }
 }
 
 fn encode_store(store: &ShareStore) -> Result<Vec<u8>, StoreError> {

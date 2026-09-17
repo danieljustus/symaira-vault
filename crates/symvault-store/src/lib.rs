@@ -533,58 +533,7 @@ impl Store {
     }
 
     fn acquire_write_lock(&self) -> Result<fs::File, StoreError> {
-        let path = self.root.join(LOCK_FILE);
-        #[cfg(unix)]
-        let file = rooted::open_lock(&self.root_cap, &path)?;
-        #[cfg(not(unix))]
-        let file = fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(&path)
-            .map_err(|source| StoreError::Write {
-                path: path.clone(),
-                source,
-            })?;
-        set_private_permissions(&file).map_err(|source| StoreError::Write {
-            path: path.clone(),
-            source,
-        })?;
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
-        loop {
-            match file.try_lock_exclusive() {
-                Ok(true) => return Ok(file),
-                Ok(false) if std::time::Instant::now() < deadline => {
-                    std::thread::sleep(std::time::Duration::from_millis(50));
-                }
-                Ok(false) => {
-                    return Err(StoreError::Write {
-                        path,
-                        source: io::Error::new(
-                            io::ErrorKind::TimedOut,
-                            "vault is currently locked by another process, try again in a moment",
-                        ),
-                    });
-                }
-                Err(source)
-                    if source.kind() == io::ErrorKind::WouldBlock
-                        && std::time::Instant::now() < deadline =>
-                {
-                    std::thread::sleep(std::time::Duration::from_millis(50));
-                }
-                Err(source) if source.kind() == io::ErrorKind::WouldBlock => {
-                    return Err(StoreError::Write {
-                        path,
-                        source: io::Error::new(
-                            io::ErrorKind::TimedOut,
-                            "vault is currently locked by another process, try again in a moment",
-                        ),
-                    });
-                }
-                Err(source) => return Err(StoreError::Write { path, source }),
-            }
-        }
+        open_root_write_lock(&self.root_cap, &self.root)
     }
 
     /// Runs an operation while holding the vault's cross-process write lock.
@@ -2768,6 +2717,65 @@ impl SearchIndex {
             Ok(()) => Ok(()),
             Err(source) if source.kind() == io::ErrorKind::NotFound => Ok(()),
             Err(source) => Err(StoreError::Write { path, source }),
+        }
+    }
+}
+
+fn open_root_write_lock(root_cap: &fs::File, root: &Path) -> Result<fs::File, StoreError> {
+    let path = root.join(LOCK_FILE);
+    #[cfg(unix)]
+    let file = rooted::open_lock(root_cap, &path)?;
+    #[cfg(not(unix))]
+    {
+        let _ = root_cap;
+    }
+    #[cfg(not(unix))]
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&path)
+        .map_err(|source| StoreError::Write {
+            path: path.clone(),
+            source,
+        })?;
+    set_private_permissions(&file).map_err(|source| StoreError::Write {
+        path: path.clone(),
+        source,
+    })?;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        match file.try_lock_exclusive() {
+            Ok(true) => return Ok(file),
+            Ok(false) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            Ok(false) => {
+                return Err(StoreError::Write {
+                    path,
+                    source: io::Error::new(
+                        io::ErrorKind::TimedOut,
+                        "vault is currently locked by another process, try again in a moment",
+                    ),
+                });
+            }
+            Err(source)
+                if source.kind() == io::ErrorKind::WouldBlock
+                    && std::time::Instant::now() < deadline =>
+            {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            Err(source) if source.kind() == io::ErrorKind::WouldBlock => {
+                return Err(StoreError::Write {
+                    path,
+                    source: io::Error::new(
+                        io::ErrorKind::TimedOut,
+                        "vault is currently locked by another process, try again in a moment",
+                    ),
+                });
+            }
+            Err(source) => return Err(StoreError::Write { path, source }),
         }
     }
 }
