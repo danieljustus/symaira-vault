@@ -362,6 +362,19 @@ enum FileCommand {
         #[arg(long)]
         out: Option<PathBuf>,
     },
+    /// Run a command with an attachment materialized to a private temporary file.
+    Use {
+        #[arg(value_name = "PATH[#FIELD]")]
+        query: String,
+        #[arg(long)]
+        field: Option<String>,
+        #[arg(long = "as")]
+        as_name: Option<String>,
+        #[arg(short, long)]
+        timeout: Option<String>,
+        #[arg(last = true, required = true)]
+        command: Vec<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -893,8 +906,14 @@ fn run_audit(
     output_format: Option<&str>,
 ) -> ExitCode {
     let result = (|| {
-        let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
+        let home = std::env::var_os("HOME")
             .filter(|value| !value.is_empty())
+            .or_else(|| {
+                cfg!(windows)
+                    .then(|| std::env::var_os("USERPROFILE"))
+                    .flatten()
+                    .filter(|value| !value.is_empty())
+            })
             .map(PathBuf::from)
             .ok_or_else(|| "cannot determine home directory".to_owned())?;
         let json = audit_json || output_format == Some("json");
@@ -972,6 +991,37 @@ fn run_file(
                         result.output.display(),
                         result.size
                     );
+                }
+            }
+            FileCommand::Use {
+                query,
+                field,
+                as_name,
+                timeout,
+                command,
+            } => {
+                let timeout = timeout
+                    .as_deref()
+                    .map(session_commands::parse_ttl_override)
+                    .transpose()?
+                    .flatten();
+                let result = file_commands::use_attachment(
+                    &vault,
+                    &identity,
+                    &file_commands::UseOptions {
+                        query,
+                        field: field.unwrap_or_default(),
+                        as_name: as_name.unwrap_or_default(),
+                        timeout,
+                        command,
+                    },
+                )?;
+                if !result.timed_out {
+                    print!("{}", result.stdout);
+                    eprint!("{}", result.stderr);
+                }
+                if result.exit_code != 0 {
+                    return Err(format!("command exited with code {}", result.exit_code));
                 }
             }
         }
