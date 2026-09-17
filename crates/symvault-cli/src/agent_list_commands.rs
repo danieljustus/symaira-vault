@@ -171,6 +171,24 @@ fn load_tokens(root: &Path) -> Result<Vec<TokenEntry>, String> {
     Ok(tokens)
 }
 
+/// Counts active registry entries for `agent whoami`. Go deliberately treats
+/// an unreadable registry as an empty count in that read-only command. The Go
+/// registry loader also discards entries with an empty hash before counting.
+pub(crate) fn active_token_count(root: &Path, agent: &str) -> usize {
+    let Ok(tokens) = load_tokens(root) else {
+        return 0;
+    };
+    tokens
+        .iter()
+        .filter(|token| {
+            !token.hash.is_empty()
+                && token.agent_name == agent
+                && !token.revoked
+                && !is_expired(token.expires_at.as_deref())
+        })
+        .count()
+}
+
 fn skill_status(home: &Path, raw_path: &str) -> (bool, bool) {
     if raw_path.is_empty() {
         return (false, false);
