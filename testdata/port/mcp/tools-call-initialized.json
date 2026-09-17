@@ -1,0 +1,158 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "caadd5e",
+    "commit_sha": "caadd5ef95e8f19fabd3ae3d2c04caa296f2fd44",
+    "source_files": [
+      "internal/mcp/server/protocol.go",
+      "internal/mcp/server/server_dispatch.go",
+      "internal/mcp/server/tool_registry.go",
+      "internal/mcp/server/tools_health.go",
+      "internal/mcp/server/tools_find.go",
+      "internal/mcp/server/tools_get.go",
+      "internal/mcp/server/tools_whoami.go",
+      "internal/mcp/transport/transport.go",
+      "internal/mcp/mcptypes.go",
+      "internal/vault/search.go"
+    ],
+    "source_hash": "8763360bc35000df164ffc2d9586fcdb41b33830567f29c3617b308d7c45c8a9",
+    "generator_hash": "abac6d0701cf87cd7c295dec5a1a330da214c9674dc7f2b09575dfbb800ce46a"
+  },
+  "server_name": "symvault",
+  "server_version": "0.0.0-fixture",
+  "cases": [
+    {
+      "name": "initialized_read_only_calls",
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"health\"}}",
+        "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"symaira_whoami\"}}",
+        "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"find_entries\",\"arguments\":{\"query\":\"test\"}}}",
+        "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{\"name\":\"get_entry_metadata\",\"arguments\":{\"path\":\"github\"}}}",
+        "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tools/call\",\"params\":{\"NaMe\":\"health\",\"ArGuMeNtS\":{\"ignored\":null}}}",
+        "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/call\",\"params\":{\"name\":\"find_entries\",\"arguments\":{\"query\":null}}}",
+        "{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"tools/call\",\"params\":{\"name\":\"health\",\"NAME\":\"symaira_whoami\"}}"
+      ],
+      "output": [
+        {
+          "id": 1,
+          "jsonrpc": "2.0",
+          "result": {
+            "capabilities": {
+              "prompts": {},
+              "tools": {}
+            },
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example.",
+            "protocolVersion": "2025-11-25",
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-fixture"
+            }
+          }
+        },
+        {
+          "id": 2,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\"server\":\"Symaira Vault MCP\",\"status\":\"healthy\",\"transport\":\"stdio\",\"version\":\"1.0.0\"}",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        },
+        {
+          "id": 3,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\"agent\":\"fixture\",\"cli_alternative_hint\":\"Use 'symvault status' for a comprehensive overview.\",\"errors_doc\":\"See https://github.com/danieljustus/symaira-vault/blob/main/docs/errors.md for error code documentation.\",\"profile\":{\"allowed_paths\":[\"*\"],\"approval_mode\":\"none\",\"can_run_commands\":false,\"can_use_autotype\":false,\"can_use_clipboard\":false,\"can_write\":false,\"name\":\"fixture\",\"redact_fields\":null,\"tier\":\"\"},\"quotas\":{\"reads_per_day\":{\"limit\":0,\"used\":0},\"reads_per_hour\":{\"limit\":0,\"used\":0},\"secrets_per_session\":{\"limit\":0,\"used\":0}},\"symaira_version\":\"1.0.0\",\"tier_upgrade_hint\":\"Upgrade your agent tier in ~/.symvault/config.yaml to unlock additional tools.\",\"tools\":{\"available\":[\"get_auth_status\",\"set_auth_method\",\"symaira_audit_self\",\"autotype\",\"prepare_payment\",\"copy_to_clipboard\",\"delete_entry\",\"execute_with_secret\",\"find_entries\",\"generate_password\",\"get_entry\",\"get_entry_metadata\",\"health\",\"list_entries\",\"perplexity_search\",\"perplexity_ask\",\"request_credential\",\"run_command\",\"sanitize_output\",\"symaira_search\",\"search\",\"fetch\",\"secure_input\",\"set_entry_field\",\"request_share\",\"approve_share\",\"revoke_share\",\"list_shares\",\"generate_template\",\"secret_unseal\",\"symaira_whoami\"],\"unavailable\":[{\"code\":\"not_available\",\"name\":\"execute_api_request\",\"reason\":\"mcp.Tool is not available in the current environment\"},{\"code\":\"blocked_by_agent\",\"name\":\"get_entry_value\",\"reason\":\"Tool \\\"get_entry_value\\\" requires tier \\\"standard\\\"\"},{\"code\":\"not_available\",\"name\":\"generate_totp\",\"reason\":\"mcp.Tool is not available in the current environment\"}]},\"vault\":{\"dir\":\"\\u003cfixture-vault\\u003e\",\"entries_count\":1,\"unlocked\":true}}",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        },
+        {
+          "id": 4,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "[{\"Fields\":[\"password\",\"username\"],\"Path\":\"github\"}]",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        },
+        {
+          "id": 5,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\"auto_rotate\":false,\"fields\":[{\"handle\":\"op://github/password\",\"kind\":\"string\",\"name\":\"password\",\"usage\":{\"note\":\"The raw value is never returned to agents. Pass \\\"github.password\\\" as a run_command env reference (SymVault resolves and injects it; the command sees the value, you don't), or use copy_to_clipboard/autotype for interactive use, or request_credential to ask the user directly. Consuming it this way does not require unsealing first.\",\"run_command\":{\"env\":{\"\\u003cVAR_NAME\\u003e\":\"github.password\"}}}},{\"handle\":\"op://github/username\",\"kind\":\"string\",\"name\":\"username\",\"usage\":{\"note\":\"The raw value is never returned to agents. Pass \\\"github.username\\\" as a run_command env reference (SymVault resolves and injects it; the command sees the value, you don't), or use copy_to_clipboard/autotype for interactive use, or request_credential to ask the user directly. Consuming it this way does not require unsealing first.\",\"run_command\":{\"env\":{\"\\u003cVAR_NAME\\u003e\":\"github.username\"}}}}],\"has_value\":true,\"meta\":{\"created\":\"\\u003cfixture-time\\u003e\",\"updated\":\"\\u003cfixture-time\\u003e\",\"version\":1},\"path\":\"github\",\"tags\":[],\"type\":\"\",\"usage_hint\":\"\\u003c!-- DATA_\\u003cMARKER_1\\u003e label=usage_hint --\\u003e\\u003c!-- /DATA_\\u003cMARKER_1\\u003e --\\u003e\"}",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        },
+        {
+          "id": 6,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\"server\":\"Symaira Vault MCP\",\"status\":\"healthy\",\"transport\":\"stdio\",\"version\":\"1.0.0\"}",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        },
+        {
+          "id": 7,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "argument \"query\" is not a string",
+                "type": "text"
+              }
+            ],
+            "isError": true
+          }
+        },
+        {
+          "id": 8,
+          "jsonrpc": "2.0",
+          "result": {
+            "content": [
+              {
+                "text": "{\"agent\":\"fixture\",\"cli_alternative_hint\":\"Use 'symvault status' for a comprehensive overview.\",\"errors_doc\":\"See https://github.com/danieljustus/symaira-vault/blob/main/docs/errors.md for error code documentation.\",\"profile\":{\"allowed_paths\":[\"*\"],\"approval_mode\":\"none\",\"can_run_commands\":false,\"can_use_autotype\":false,\"can_use_clipboard\":false,\"can_write\":false,\"name\":\"fixture\",\"redact_fields\":null,\"tier\":\"\"},\"quotas\":{\"reads_per_day\":{\"limit\":0,\"used\":0},\"reads_per_hour\":{\"limit\":0,\"used\":0},\"secrets_per_session\":{\"limit\":0,\"used\":0}},\"symaira_version\":\"1.0.0\",\"tier_upgrade_hint\":\"Upgrade your agent tier in ~/.symvault/config.yaml to unlock additional tools.\",\"tools\":{\"available\":[\"get_auth_status\",\"set_auth_method\",\"symaira_audit_self\",\"autotype\",\"prepare_payment\",\"copy_to_clipboard\",\"delete_entry\",\"execute_with_secret\",\"find_entries\",\"generate_password\",\"get_entry\",\"get_entry_metadata\",\"health\",\"list_entries\",\"perplexity_search\",\"perplexity_ask\",\"request_credential\",\"run_command\",\"sanitize_output\",\"symaira_search\",\"search\",\"fetch\",\"secure_input\",\"set_entry_field\",\"request_share\",\"approve_share\",\"revoke_share\",\"list_shares\",\"generate_template\",\"secret_unseal\",\"symaira_whoami\"],\"unavailable\":[{\"code\":\"not_available\",\"name\":\"execute_api_request\",\"reason\":\"mcp.Tool is not available in the current environment\"},{\"code\":\"blocked_by_agent\",\"name\":\"get_entry_value\",\"reason\":\"Tool \\\"get_entry_value\\\" requires tier \\\"standard\\\"\"},{\"code\":\"not_available\",\"name\":\"generate_totp\",\"reason\":\"mcp.Tool is not available in the current environment\"}]},\"vault\":{\"dir\":\"\\u003cfixture-vault\\u003e\",\"entries_count\":1,\"unlocked\":true}}",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        }
+      ],
+      "marker_counts": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}

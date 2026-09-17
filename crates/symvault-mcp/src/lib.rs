@@ -21,7 +21,10 @@ mod call;
 mod prompts;
 pub mod render;
 mod tools;
-pub use call::{ToolCallResult, ToolCallRuntime};
+pub use call::{
+    ReadOnlyEntry, ReadOnlyRuntime, ReadOnlyRuntimeConfig, ReadOnlyStore, ReadOnlyUnavailableTool,
+    ToolCallResult, ToolCallRuntime,
+};
 pub use tools::ToolListConfig;
 
 /// The newest protocol version this server speaks.
