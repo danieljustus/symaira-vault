@@ -191,6 +191,14 @@ fn agent_profile_show_matches_go_yaml_json_and_nil_fields() {
         "exported profile bytes differ"
     );
 
+    for command in ["show", "export"] {
+        let args = ["agent", "profile", command, "missing-agent"];
+        let go = run(&go_binary, &args, &custom_home, &custom_vault);
+        let rust = run(&rust_binary, &args, &custom_home, &custom_vault);
+        assert!(!go.status.success());
+        assert_same(&go, &rust, "missing agent profile");
+    }
+
     let empty_home = temporary_root("empty-fields-home");
     let empty_vault = empty_home.join("vault");
     fs::create_dir_all(&empty_vault).expect("empty fields vault");

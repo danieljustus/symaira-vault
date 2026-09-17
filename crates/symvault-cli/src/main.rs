@@ -390,6 +390,11 @@ enum AgentCommand {
 
 #[derive(Debug, Subcommand)]
 enum AgentProfileCommand {
+    Export {
+        name: String,
+        #[arg(short = 'o', long)]
+        output: Option<String>,
+    },
     Show {
         name: String,
         #[arg(short = 'o', long)]
@@ -879,14 +884,31 @@ fn main() -> ExitCode {
             finish_vault_result(result)
         }
         Some(Command::Agent {
-            command:
-                AgentCommand::Profile {
-                    command: AgentProfileCommand::Show { name, output },
-                },
-        }) => finish_vault_result((|| {
-            let vault = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
-            agent_profile_commands::show(&vault, &name, output.as_deref(), &mut io::stdout().lock())
-        })()),
+            command: AgentCommand::Profile { command },
+        }) => {
+            let result = (|| {
+                let vault = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+                let mut output_stream = io::stdout().lock();
+                match command {
+                    AgentProfileCommand::Show { name, output } => agent_profile_commands::show(
+                        &vault,
+                        &name,
+                        output.as_deref(),
+                        &mut output_stream,
+                    ),
+                    AgentProfileCommand::Export { name, output } => agent_profile_commands::export(
+                        &vault,
+                        &name,
+                        output.as_deref().map(Path::new),
+                        &mut output_stream,
+                    ),
+                }
+            })();
+            if let Err(error) = &result {
+                let _ = writeln!(io::stderr(), "Error: {error}");
+            }
+            finish_vault_result(result)
+        }
         Some(Command::Audit {
             command:
                 Some(AuditCommand::Export {
