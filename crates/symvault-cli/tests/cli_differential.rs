@@ -1703,3 +1703,197 @@ fn file_add_get_roundtrip_matches_go_cli() {
     fs::remove_dir_all(root).expect("cleanup file vault");
     fs::remove_dir_all(fixture_dir).expect("cleanup file fixtures");
 }
+
+#[test]
+fn file_use_materializes_and_cleans_attachment_like_go_cli() {
+    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
+        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
+        return;
+    };
+    let go_binary = PathBuf::from(go_binary);
+    let rust_binary = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
+    let home = temporary_root("file-use-home");
+    let root = temporary_root("file-use-vault");
+    let fixture_dir = temporary_root("file-use-fixtures");
+    fs::create_dir_all(&home).expect("home");
+    fs::create_dir_all(&fixture_dir).expect("fixture directory");
+    let source = fixture_dir.join("certificate.p12");
+    let marker_go = fixture_dir.join("go-marker");
+    let marker_rust = fixture_dir.join("rust-marker");
+    let content = b"file-use-secret\0\xff";
+    fs::write(&source, content).expect("source fixture");
+
+    let init = run(
+        &rust_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "init",
+            "--auth",
+            "passphrase",
+        ],
+        &root,
+        &home,
+    );
+    assert_success(&init, "Rust init for file use differential");
+    let add = run(
+        &go_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "file",
+            "add",
+            "work/file-use",
+            "--field",
+            "cert_p12",
+            "--from",
+            source.to_str().unwrap(),
+        ],
+        &root,
+        &home,
+    );
+    assert_success(&add, "Go file add for file use");
+
+    let script = |marker: &Path| {
+        format!(
+            "test -f \"$SYMVAULT_FILE_CERT_P12\"; printf '%s' \"$SYMVAULT_FILE_CERT_P12\" > {} ; cat \"$SYMVAULT_FILE_CERT_P12\"",
+            marker.display()
+        )
+    };
+    let go_use = run(
+        &go_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "file",
+            "use",
+            "work/file-use#cert_p12",
+            "--",
+            "sh",
+            "-c",
+            &script(&marker_go),
+        ],
+        &root,
+        &home,
+    );
+    let rust_use = run(
+        &rust_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "file",
+            "use",
+            "work/file-use#cert_p12",
+            "--",
+            "sh",
+            "-c",
+            &script(&marker_rust),
+        ],
+        &root,
+        &home,
+    );
+    assert_success(&go_use, "Go file use");
+    assert_success(&rust_use, "Rust file use");
+    assert_eq!(rust_use.stdout, go_use.stdout, "file use stdout");
+    assert!(!String::from_utf8_lossy(&rust_use.stdout).contains("file-use-secret"));
+    assert!(!String::from_utf8_lossy(&rust_use.stderr).contains("file-use-secret"));
+    let go_materialized = fs::read_to_string(&marker_go).expect("Go marker");
+    let rust_materialized = fs::read_to_string(&marker_rust).expect("Rust marker");
+    assert!(!Path::new(&go_materialized).exists(), "Go file cleanup");
+    assert!(!Path::new(&rust_materialized).exists(), "Rust file cleanup");
+
+    let go_failure = run(
+        &go_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "file",
+            "use",
+            "work/file-use#cert_p12",
+            "--",
+            "sh",
+            "-c",
+            "test -f \"$SYMVAULT_FILE_CERT_P12\"; exit 7",
+        ],
+        &root,
+        &home,
+    );
+    let rust_failure = run(
+        &rust_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "file",
+            "use",
+            "work/file-use#cert_p12",
+            "--",
+            "sh",
+            "-c",
+            "test -f \"$SYMVAULT_FILE_CERT_P12\"; exit 7",
+        ],
+        &root,
+        &home,
+    );
+    assert!(!go_failure.status.success());
+    assert!(!rust_failure.status.success());
+
+    let timeout_script = |marker: &Path| {
+        format!(
+            "printf '%s' \"$SYMVAULT_FILE_CERT_P12\" > {}; sleep 1",
+            marker.display()
+        )
+    };
+    let go_timeout_marker = fixture_dir.join("go-timeout-marker");
+    let rust_timeout_marker = fixture_dir.join("rust-timeout-marker");
+    let go_timeout = run(
+        &go_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "file",
+            "use",
+            "work/file-use#cert_p12",
+            "--timeout",
+            "20ms",
+            "--",
+            "sh",
+            "-c",
+            &timeout_script(&go_timeout_marker),
+        ],
+        &root,
+        &home,
+    );
+    let rust_timeout = run(
+        &rust_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "file",
+            "use",
+            "work/file-use#cert_p12",
+            "--timeout",
+            "20ms",
+            "--",
+            "sh",
+            "-c",
+            &timeout_script(&rust_timeout_marker),
+        ],
+        &root,
+        &home,
+    );
+    assert!(!go_timeout.status.success());
+    assert!(!rust_timeout.status.success());
+    assert!(String::from_utf8_lossy(&go_timeout.stderr).contains("timed out"));
+    assert!(String::from_utf8_lossy(&rust_timeout.stderr).contains("timed out"));
+    let go_timeout_path = fs::read_to_string(&go_timeout_marker).expect("Go timeout marker");
+    let rust_timeout_path = fs::read_to_string(&rust_timeout_marker).expect("Rust timeout marker");
+    assert!(!Path::new(&go_timeout_path).exists(), "Go timeout cleanup");
+    assert!(
+        !Path::new(&rust_timeout_path).exists(),
+        "Rust timeout cleanup"
+    );
+
+    fs::remove_dir_all(home).expect("cleanup file use home");
+    fs::remove_dir_all(root).expect("cleanup file use vault");
+    fs::remove_dir_all(fixture_dir).expect("cleanup file use fixtures");
+}

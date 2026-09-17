@@ -2,8 +2,12 @@
 
 use std::{
     fs,
-    io::{Read as _, Write as _},
+    io::{Read, Write as _},
     path::{Path, PathBuf},
+    process::{Command, Stdio},
+    sync::atomic::{AtomicU64, Ordering},
+    thread,
+    time::{Duration, Instant},
 };
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
@@ -49,6 +53,30 @@ pub struct GetResult {
     pub field: String,
     pub output: PathBuf,
     pub size: usize,
+}
+
+pub struct AttachmentRead {
+    pub path: String,
+    pub field: String,
+    pub content: Vec<u8>,
+    pub attachment: Option<AttachmentInfo>,
+}
+
+#[derive(Debug)]
+pub struct UseOptions {
+    pub query: String,
+    pub field: String,
+    pub as_name: String,
+    pub timeout: Option<Duration>,
+    pub command: Vec<String>,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct UseResult {
+    pub stdout: String,
+    pub stderr: String,
+    pub exit_code: i32,
+    pub timed_out: bool,
 }
 
 pub fn add(root: &Path, identity: &Identity, options: &AddOptions) -> Result<AddResult, String> {
@@ -145,11 +173,37 @@ pub fn add(root: &Path, identity: &Identity, options: &AddOptions) -> Result<Add
 }
 
 pub fn get(root: &Path, identity: &Identity, options: &GetOptions) -> Result<GetResult, String> {
-    let (path, explicit_field) = split_path_field(&options.query);
+    let read = read_attachment(root, identity, &options.query, &options.field)?;
+    if let Some(attachment) = &read.attachment {
+        let actual = digest(&read.content);
+        if actual != attachment.sha256 {
+            eprintln!(
+                "Warning: sha256 mismatch for {}#{} (expected {}, got {actual})",
+                read.path, read.field, attachment.sha256
+            );
+        }
+    }
+    safeio::write_atomic(&options.output, &read.content)
+        .map_err(|error| format!("cannot write output file: {error}"))?;
+    Ok(GetResult {
+        path: read.path,
+        field: read.field,
+        output: options.output.clone(),
+        size: read.content.len(),
+    })
+}
+
+pub fn read_attachment(
+    root: &Path,
+    identity: &Identity,
+    query: &str,
+    requested_field: &str,
+) -> Result<AttachmentRead, String> {
+    let (path, explicit_field) = split_path_field(query);
     // A field embedded in PATH#FIELD is the Go command's primary selector;
     // --field is only used when the query has no embedded field.
     let field = if explicit_field.is_empty() {
-        options.field.clone()
+        requested_field.to_owned()
     } else {
         explicit_field
     };
@@ -159,23 +213,259 @@ pub fn get(root: &Path, identity: &Identity, options: &GetOptions) -> Result<Get
         .map_err(|error| format!("cannot read entry: {error}"))?;
     let (field, attachment) = resolve_attachment_field(&entry, &field)?;
     let content = decode_attachment_content(&entry, &field)?;
-    if let Some(attachment) = attachment {
-        let actual = digest(&content);
-        if actual != attachment.sha256 {
-            eprintln!(
-                "Warning: sha256 mismatch for {path}#{field} (expected {}, got {actual})",
-                attachment.sha256
-            );
-        }
-    }
-    safeio::write_atomic(&options.output, &content)
-        .map_err(|error| format!("cannot write output file: {error}"))?;
-    Ok(GetResult {
+    Ok(AttachmentRead {
         path,
         field,
-        output: options.output.clone(),
-        size: content.len(),
+        content,
+        attachment,
     })
+}
+
+pub fn use_attachment(
+    root: &Path,
+    identity: &Identity,
+    options: &UseOptions,
+) -> Result<UseResult, String> {
+    if options.command.is_empty() {
+        return Err("command must contain at least one element".to_owned());
+    }
+    let read = read_attachment(root, identity, &options.query, &options.field)?;
+    let name = if options.as_name.is_empty() {
+        read.field.to_uppercase()
+    } else {
+        options.as_name.clone()
+    };
+    if !is_safe_file_name(&name) {
+        return Err(format!(
+            "invalid file name {name:?}: must match [A-Za-z0-9_]+"
+        ));
+    }
+    let (directory, file) = materialize_file(&name, &read.content)?;
+    let result = run_file_command(
+        &options.command,
+        &file,
+        &name,
+        &read.content,
+        options.timeout,
+    );
+    cleanup_file(&directory, &file);
+    result
+}
+
+fn is_safe_file_name(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+}
+
+static FILE_DIRECTORY_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+fn materialize_file(name: &str, content: &[u8]) -> Result<(PathBuf, PathBuf), String> {
+    let base = std::env::temp_dir();
+    let mut directory = None;
+    for _ in 0..64 {
+        let sequence = FILE_DIRECTORY_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let candidate = base.join(format!("symvault-file-{}-{sequence}", std::process::id()));
+        match fs::create_dir(&candidate) {
+            Ok(()) => {
+                directory = Some(candidate);
+                break;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(format!("create ephemeral file directory: {error}")),
+        }
+    }
+    let directory = directory.ok_or_else(|| {
+        "create ephemeral file directory: temporary name space exhausted".to_owned()
+    })?;
+    if let Err(error) = set_private_directory(&directory) {
+        let _ = fs::remove_dir(&directory);
+        return Err(format!("secure ephemeral file directory: {error}"));
+    }
+    let file = directory.join(name);
+    if let Err(error) = write_private_file(&file, content) {
+        let _ = fs::remove_dir(&directory);
+        return Err(format!("materialize file {name:?}: {error}"));
+    }
+    Ok((directory, file))
+}
+
+#[cfg(unix)]
+fn set_private_directory(path: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt as _;
+    fs::set_permissions(path, fs::Permissions::from_mode(0o700))
+}
+
+#[cfg(not(unix))]
+fn set_private_directory(_path: &Path) -> std::io::Result<()> {
+    Ok(())
+}
+
+#[cfg(unix)]
+fn write_private_file(path: &Path, content: &[u8]) -> std::io::Result<()> {
+    use std::os::unix::fs::OpenOptionsExt as _;
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(path)?;
+    file.write_all(content)?;
+    file.sync_all()
+}
+
+#[cfg(not(unix))]
+fn write_private_file(path: &Path, content: &[u8]) -> std::io::Result<()> {
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)?;
+    file.write_all(content)?;
+    file.sync_all()
+}
+
+fn cleanup_file(directory: &Path, file: &Path) {
+    if let Ok(length) = fs::metadata(file).map(|metadata| metadata.len() as usize)
+        && let Ok(handle) = fs::OpenOptions::new().write(true).open(file)
+    {
+        let _ = (&handle).write_all(&vec![0u8; length]);
+        let _ = handle.sync_all();
+    }
+    let _ = fs::remove_file(file);
+    let _ = fs::remove_dir(directory);
+}
+
+fn run_file_command(
+    command: &[String],
+    file: &Path,
+    name: &str,
+    content: &[u8],
+    timeout: Option<Duration>,
+) -> Result<UseResult, String> {
+    let mut child_command = Command::new(&command[0]);
+    child_command.args(&command[1..]);
+    child_command.env_clear();
+    for key in [
+        "PATH",
+        "HOME",
+        "USERPROFILE",
+        "TMPDIR",
+        "TMP",
+        "TEMP",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "SystemRoot",
+    ] {
+        if let Some(value) = std::env::var_os(key) {
+            child_command.env(key, value);
+        }
+    }
+    child_command.env(format!("SYMVAULT_FILE_{name}"), file);
+    child_command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = child_command
+        .spawn()
+        .map_err(|error| format!("failed to run command: {error}"))?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "failed to capture command stdout".to_owned())?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| "failed to capture command stderr".to_owned())?;
+    let stdout_reader = thread::spawn(|| read_output(stdout));
+    let stderr_reader = thread::spawn(|| read_output(stderr));
+    let started = Instant::now();
+    let mut timed_out = false;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => {
+                if timeout.is_some_and(|limit| started.elapsed() >= limit) {
+                    timed_out = true;
+                    let _ = child.kill();
+                    break child
+                        .wait()
+                        .map_err(|error| format!("wait for timed out command: {error}"))?;
+                }
+                thread::sleep(Duration::from_millis(5));
+            }
+            Err(error) => return Err(format!("wait for command: {error}")),
+        }
+    };
+    let (stdout, _) = stdout_reader
+        .join()
+        .map_err(|_| "command stdout reader failed".to_owned())?;
+    let (stderr, _) = stderr_reader
+        .join()
+        .map_err(|_| "command stderr reader failed".to_owned())?;
+    if timed_out {
+        return Err(format!(
+            "command timed out after {}",
+            format_timeout(timeout.unwrap_or_default())
+        ));
+    }
+    let stdout = redact_output(&stdout, content);
+    let stderr = redact_output(&stderr, content);
+    Ok(UseResult {
+        stdout,
+        stderr,
+        exit_code: status.code().unwrap_or(-1),
+        timed_out,
+    })
+}
+
+fn read_output(mut reader: impl Read) -> (Vec<u8>, bool) {
+    const MAX_OUTPUT: usize = 100 * 1024;
+    let mut captured = Vec::with_capacity(MAX_OUTPUT);
+    let mut buffer = [0u8; 8192];
+    let mut truncated = false;
+    loop {
+        match reader.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(count) => {
+                let remaining = MAX_OUTPUT.saturating_sub(captured.len());
+                captured.extend_from_slice(&buffer[..count.min(remaining)]);
+                truncated |= count > remaining;
+            }
+            Err(_) => break,
+        }
+    }
+    (captured, truncated)
+}
+
+fn redact_output(output: &[u8], content: &[u8]) -> String {
+    let mut output = replace_bytes(output, content, b"***");
+    let encoded = STANDARD.encode(content);
+    output = replace_bytes(&output, encoded.as_bytes(), b"***");
+    String::from_utf8_lossy(&output).into_owned()
+}
+
+fn replace_bytes(input: &[u8], needle: &[u8], replacement: &[u8]) -> Vec<u8> {
+    if needle.is_empty() {
+        return input.to_vec();
+    }
+    let mut result = Vec::with_capacity(input.len());
+    let mut cursor = 0;
+    while cursor < input.len() {
+        if input[cursor..].starts_with(needle) {
+            result.extend_from_slice(replacement);
+            cursor += needle.len();
+        } else {
+            result.push(input[cursor]);
+            cursor += 1;
+        }
+    }
+    result
+}
+
+fn format_timeout(timeout: Duration) -> String {
+    if timeout.as_secs() > 0 {
+        format!("{}s", timeout.as_secs())
+    } else {
+        format!("{}ms", timeout.as_millis())
+    }
 }
 
 fn split_path_field(query: &str) -> (String, String) {
@@ -217,10 +507,12 @@ fn resolve_attachment_field(
 }
 
 fn decode_attachment_content(entry: &Entry, field: &str) -> Result<Vec<u8>, String> {
-    let encoded = entry
+    let raw = entry
         .data
         .get(field)
-        .and_then(Value::as_str)
+        .ok_or_else(|| format!("field {field:?} not found in entry"))?;
+    let encoded = raw
+        .as_str()
         .ok_or_else(|| format!("field {field:?} is not string-encoded content"))?;
     let encoded = if let Some(manifest) = encoded.strip_prefix("chunked-v1:") {
         if manifest.is_empty() {
@@ -253,11 +545,13 @@ fn decode_attachment_content(entry: &Entry, field: &str) -> Result<Vec<u8>, Stri
                     "invalid chunk manifest in field {field:?}: empty chunk name"
                 ));
             }
-            let value = entry
+            let raw = entry
                 .data
                 .get(chunk)
-                .and_then(Value::as_str)
                 .ok_or_else(|| format!("chunk field {chunk:?} not found in entry"))?;
+            let value = raw
+                .as_str()
+                .ok_or_else(|| format!("chunk field {chunk:?} is not string-encoded content"))?;
             combined.push_str(value);
         }
         combined
