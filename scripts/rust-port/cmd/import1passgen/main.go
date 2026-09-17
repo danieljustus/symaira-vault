@@ -253,7 +253,8 @@ func passCase() (importCase, error) {
 	}
 	gpg := filepath.Join(bin, "gpg")
 	// Synthetic plaintext input only: no keyring or real GPG material is touched.
-	if err = os.WriteFile(gpg, []byte("#!/bin/sh\ncat \"$4\"\n"), 0700); err != nil { // #nosec G306 -- executable synthetic GPG fixture in private temporary directory
+	// #nosec G306 -- executable synthetic GPG fixture in private temporary directory
+	if err = os.WriteFile(gpg, []byte("#!/bin/sh\ncat \"$4\"\n"), 0700); err != nil {
 		return importCase{}, err
 	}
 	oldPath := os.Getenv("PATH")

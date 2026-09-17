@@ -354,7 +354,7 @@ device-list-differential:
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/test_device_list_differential.py
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/devicelistdriver --report "$(DEVICE_LIST_REPORT)"
 
-sync-io-differential: onepass-import-differential csv-import-differential pairing-fixtures-check git-io-differential
+sync-io-differential: cxf-import-differential onepass-import-differential csv-import-differential pairing-fixtures-check git-io-differential
 	GOFLAGS= GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/syncgen --check --output $(PORT_SYNC_FIXTURE)
 	$(CARGO) test -p symvault-sync --all-features --locked
 
@@ -827,3 +827,8 @@ onepass-import-differential:
 mcp-prompts-differential:
 	SYMAIRA_CHECK_MCP_PROMPTS_FIXTURE=1 GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/mcp/server -run '^TestGenerateMCPPromptsFixture$$' -count=1 -v
 	$(CARGO) test -p symvault-mcp --test prompts_contract --locked
+
+.PHONY: cxf-import-differential
+cxf-import-differential:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/cxfgen -check -output testdata/port/import/cxf.json
+	$(CARGO) test -p symvault-sync --test cxf_contract --locked

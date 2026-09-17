@@ -9,7 +9,7 @@
     "internal/secrets/filter.go"
   ],
   "source_digest": "124ef8368fb3f41ad7267ce3a7ed87f5b79a75e07f18819fb15e5a3db9e17a75",
-  "generator_digest": "29255fb030e0e03084d0ac46d0d52bb82c04f0a4bad0274575bb3e8a0913e5ea",
+  "generator_digest": "e5c2104b3d12f2a4b35445a5d7c4db9b2537bc9d62fb7a59fcf58268d7b203c7",
   "cases": [
     {
       "name": "pass_adapter_recursive_and_warning",

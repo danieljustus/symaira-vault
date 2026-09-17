@@ -63,8 +63,17 @@ pub fn parse_totp(value: &str) -> Result<Value, String> {
             period = n as i32;
         }
     }
-    validate_totp_secret(&secret).map_err(|e| format!("invalid TOTP secret: {e}"))?;
-    validate_totp_params(&algorithm, digits, period)
+    validated_totp(&secret, &algorithm, digits.into(), period.into())
+}
+
+pub(super) fn validated_totp(
+    secret: &str,
+    algorithm: &str,
+    digits: i64,
+    period: i64,
+) -> Result<Value, String> {
+    validate_totp_secret(secret).map_err(|e| format!("invalid TOTP secret: {e}"))?;
+    validate_totp_params(algorithm, digits, period)
         .map_err(|e| format!("invalid TOTP configuration: {e}"))?;
     Ok(json!({"secret":secret,"algorithm":algorithm,"digits":digits,"period":period}))
 }

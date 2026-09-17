@@ -77,7 +77,12 @@ pub fn validate_totp_secret(secret: &str) -> Result<(), TotpError> {
 }
 
 /// Validates RFC 6238 algorithm, digits, and period bounds.
-pub fn validate_totp_params(algorithm: &str, digits: i32, period: i32) -> Result<(), TotpError> {
+pub fn validate_totp_params(
+    algorithm: &str,
+    digits: impl Into<i64>,
+    period: impl Into<i64>,
+) -> Result<(), TotpError> {
+    let (digits, period) = (digits.into(), period.into());
     let algorithm_upper = algorithm.to_ascii_uppercase();
     if !algorithm_upper.is_empty()
         && !matches!(algorithm_upper.as_str(), "SHA1" | "SHA256" | "SHA512")

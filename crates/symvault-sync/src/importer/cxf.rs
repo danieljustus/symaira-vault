@@ -56,7 +56,11 @@ struct CxfCollection {
     name: String,
     #[serde(default, deserialize_with = "super::null_default_vec")]
     items: Vec<CxfLinkedItem>,
-    #[serde(rename = "subCollections", default, deserialize_with = "super::null_default_vec")]
+    #[serde(
+        rename = "subCollections",
+        default,
+        deserialize_with = "super::null_default_vec"
+    )]
     sub_collections: Vec<CxfCollection>,
 }
 
@@ -359,13 +363,14 @@ fn apply_totp(
             return;
         }
     };
-    let algorithm = match string_field_named(object.get("algorithm"), "cxfTOTP", "algorithm", "string") {
-        Ok(value) => value,
-        Err(error) => {
-            warnings.push(format!("cxf: totp: {error}"));
-            return;
-        }
-    };
+    let algorithm =
+        match string_field_named(object.get("algorithm"), "cxfTOTP", "algorithm", "string") {
+            Ok(value) => value,
+            Err(error) => {
+                warnings.push(format!("cxf: totp: {error}"));
+                return;
+            }
+        };
     let issuer = match string_field_named(object.get("issuer"), "cxfTOTP", "issuer", "string") {
         Ok(value) => value,
         Err(error) => {
@@ -373,7 +378,8 @@ fn apply_totp(
             return;
         }
     };
-    let username = match string_field_named(object.get("username"), "cxfTOTP", "username", "string") {
+    let username = match string_field_named(object.get("username"), "cxfTOTP", "username", "string")
+    {
         Ok(value) => value,
         Err(error) => {
             warnings.push(format!("cxf: totp: {error}"));
@@ -395,25 +401,28 @@ fn apply_totp(
             return;
         }
     };
+    let secret = secret.trim();
     if secret.is_empty() {
         warnings.push("totp: empty TOTP secret".into());
         return;
     }
-    let input = if secret.to_ascii_lowercase().starts_with("otpauth://") {
-        secret
+    let result = if secret.to_ascii_lowercase().starts_with("otpauth://") {
+        parse_totp(secret)
     } else {
+        let algorithm = algorithm.trim().to_uppercase();
         let algorithm = if algorithm.is_empty() {
             "SHA1"
         } else {
             &algorithm
         };
-        let digits = if digits == 0 { 6 } else { digits };
-        let period = if period == 0 { 30 } else { period };
-        format!(
-            "otpauth://totp/CXF?secret={secret}&algorithm={algorithm}&digits={digits}&period={period}"
+        super::totp::validated_totp(
+            secret,
+            algorithm,
+            if digits == 0 { 6 } else { digits },
+            if period == 0 { 30 } else { period },
         )
     };
-    match parse_totp(&input) {
+    match result {
         Ok(value) => {
             data.insert("totp".into(), value);
         }
@@ -477,14 +486,24 @@ fn apply_ssh_key(
             return;
         }
     }
-    let private_key = match string_field_named(object.get("privateKey"), "cxfSSHKey", "privateKey", "string") {
+    let private_key = match string_field_named(
+        object.get("privateKey"),
+        "cxfSSHKey",
+        "privateKey",
+        "string",
+    ) {
         Ok(value) => value,
         Err(error) => {
             warnings.push(format!("cxf: ssh-key: {error}"));
             return;
         }
     };
-    let private_key_pem = match string_field_named(object.get("privateKeyPem"), "cxfSSHKey", "privateKeyPem", "string") {
+    let private_key_pem = match string_field_named(
+        object.get("privateKeyPem"),
+        "cxfSSHKey",
+        "privateKeyPem",
+        "string",
+    ) {
         Ok(value) => value,
         Err(error) => {
             warnings.push(format!("cxf: ssh-key: {error}"));
@@ -603,9 +622,9 @@ fn integer_field_named(
 ) -> Result<i64, String> {
     match value {
         None | Some(Value::Null) => Ok(0),
-        Some(Value::Number(number)) => number
-            .as_i64()
-            .ok_or_else(|| go_unmarshal_field_error(value.unwrap(), struct_name, field_name, target_type)),
+        Some(Value::Number(number)) => number.as_i64().ok_or_else(|| {
+            go_unmarshal_field_error(value.unwrap(), struct_name, field_name, target_type)
+        }),
         Some(other) => Err(go_unmarshal_field_error(
             other,
             struct_name,

@@ -1,4 +1,6 @@
+mod cxf;
 mod onepux;
+pub use cxf::parse as parse_cxf;
 mod pass;
 mod totp;
 pub use onepux::parse_1pux;
@@ -35,6 +37,7 @@ pub struct ImportedEntry {
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Format {
+    Cxf,
     Csv,
     Bitwarden,
     OnePassword,
@@ -67,6 +70,7 @@ pub fn parse(format: Format, bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportE
         return Err(ImportError::Limit(MAX_IMPORT_BYTES));
     }
     match format {
+        Format::Cxf => parse_cxf(bytes),
         Format::Csv | Format::Apple | Format::Chrome | Format::Firefox => {
             parse_csv_profile(format, bytes, None)
         }

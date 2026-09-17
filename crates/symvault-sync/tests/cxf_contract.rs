@@ -32,7 +32,7 @@ fn cxf_matches_pinned_go_fixture_and_negative_controls() {
             .expect("valid generated CXF fixture");
     assert_eq!(
         fixture.cases.len(),
-        18,
+        19,
         "fixture cardinality is part of the gate"
     );
     for case in fixture.cases {
@@ -57,7 +57,11 @@ fn cxf_matches_pinned_go_fixture_and_negative_controls() {
             }
             (None, None) => {
                 let got = result.unwrap_or_else(|error| panic!("{}: {error}", case.id));
-                assert!(got.is_empty(), "{}: expected an empty successful import", case.id);
+                assert!(
+                    got.is_empty(),
+                    "{}: expected an empty successful import",
+                    case.id
+                );
             }
             other => panic!("{}: invalid expected shape: {:?}", case.id, other),
         }

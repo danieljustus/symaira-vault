@@ -70,10 +70,10 @@ func main() {
 		fail(err)
 	}
 	if *check {
-		if err := checkFixture(root, *output, meta); err != nil {
-			fail(err)
+		if checkErr := checkFixture(root, *output, meta); checkErr != nil {
+			fail(checkErr)
 		}
-		fmt.Println("PASS Go CXF oracle fixture (18 synthetic cases)")
+		fmt.Println("PASS Go CXF oracle fixture (19 synthetic cases)")
 		return
 	}
 	cases, err := runOracle(root)
@@ -96,10 +96,10 @@ func main() {
 	}
 	data = append(data, '\n')
 	path := filepath.Join(root, *output)
-	if err := os.MkdirAll(filepath.Dir(path), 0750); err != nil {
+	if err = os.MkdirAll(filepath.Dir(path), 0750); err != nil {
 		fail(err)
 	}
-	if err := os.WriteFile(path, data, 0600); err != nil {
+	if err = os.WriteFile(path, data, 0600); err != nil {
 		fail(err)
 	}
 	fmt.Println("WROTE", *output)
@@ -158,6 +158,7 @@ func sourceFiles(root string) ([]string, error) {
 }
 
 func gitShow(root, commit, name string) ([]byte, error) {
+	// #nosec G204 -- fixed git operation with the pinned commit and repository source paths
 	cmd := exec.Command("git", "-C", root, "show", commit+":"+name)
 	out, err := cmd.Output()
 	if err != nil {
@@ -173,6 +174,7 @@ func digestFiles(root, commit string, names []string) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		// #nosec G304 -- source path enumerated from fixed repository directories
 		current, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(name)))
 		if err != nil {
 			return "", fmt.Errorf("read current %s: %w", name, err)
@@ -191,6 +193,7 @@ func digestFiles(root, commit string, names []string) (string, error) {
 func digestCurrent(root string, names []string) (string, error) {
 	h := sha256.New()
 	for _, name := range names {
+		// #nosec G304 -- generator path is a compiled-in repository filename
 		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(name)))
 		if err != nil {
 			return "", err
@@ -225,6 +228,7 @@ func metadata(root string) (oracleMeta, error) {
 }
 
 func gitShowCommit(root, commit string) (string, error) {
+	// #nosec G204 -- resolves the compiled-in oracle commit using fixed git arguments
 	out, err := exec.Command("git", "-C", root, "rev-parse", commit+"^{commit}").Output()
 	if err != nil {
 		return "", err
@@ -233,6 +237,7 @@ func gitShowCommit(root, commit string) (string, error) {
 }
 
 func archiveTree(root string) (string, error) {
+	// #nosec G204 -- archives only the compiled-in oracle commit; no shell
 	out, err := exec.Command("git", "-C", root, "archive", "--format=tar", oracleCommit).Output()
 	if err != nil {
 		return "", err
@@ -262,19 +267,19 @@ func archiveTree(root string) (string, error) {
 		}
 		path := filepath.Join(tree, name)
 		if h.FileInfo().IsDir() {
-			if err := os.MkdirAll(path, 0750); err != nil {
+			if err = os.MkdirAll(path, 0750); err != nil {
 				return "", err
 			}
 			continue
 		}
-		if err := os.MkdirAll(filepath.Dir(path), 0750); err != nil {
+		if err = os.MkdirAll(filepath.Dir(path), 0750); err != nil {
 			return "", err
 		}
 		data, err := io.ReadAll(tr)
 		if err != nil {
 			return "", err
 		}
-		if err := os.WriteFile(path, data, 0600); err != nil {
+		if err = os.WriteFile(path, data, 0600); err != nil {
 			return "", err
 		}
 	}
@@ -289,7 +294,9 @@ import (
   "bytes"
   "encoding/base64"
   "encoding/json"
+  "fmt"
   "os"
+ "sort"
   "strings"
   "time"
 
@@ -301,7 +308,7 @@ type Expected struct { Entries []Entry ` + "`json:\"entries,omitempty\"`" + `; E
 type Entry struct { Path string ` + "`json:\"path\"`" + `; Data map[string]any ` + "`json:\"data\"`" + `; Warnings []string ` + "`json:\"warnings\"`" + `; SecretType string ` + "`json:\"secret_type,omitempty\"`" + ` }
 func fail(e error) { if e != nil { panic(e) } }
 func b64(v []byte) string { return base64.StdEncoding.EncodeToString(v) }
-func zipData(files map[string][]byte) []byte { var b bytes.Buffer; z:=zip.NewWriter(&b); for _,name:=range []string{"manifest.json","nested/payload.json","export.json"} { data,ok:=files[name]; if !ok { continue }; h:=&zip.FileHeader{Name:name,Method:zip.Deflate}; h.SetModTime(time.Unix(0,0)); w,e:=z.CreateHeader(h);fail(e);_,e=w.Write(data);fail(e) }; fail(z.Close()); return b.Bytes() }
+func zipData(files map[string][]byte) []byte { var b bytes.Buffer; z:=zip.NewWriter(&b); names:=make([]string,0,len(files)); for name:=range files { names=append(names,name) }; sort.Strings(names); for _,name:=range names { data:=files[name]; h:=&zip.FileHeader{Name:name,Method:zip.Deflate}; h.SetModTime(time.Unix(0,0)); w,e:=z.CreateHeader(h);fail(e);_,e=w.Write(data);fail(e) }; fail(z.Close()); return b.Bytes() }
 func run(id string, archive []byte) Case { imp,e:=importer.New(importer.FormatCXF);fail(e); got,err:=imp.Parse(bytes.NewReader(archive)); c:=Case{ID:id,InputB64:b64(archive)}; if err!=nil { text:=err.Error(); marker:=text; for _,candidate:=range []string{"open cxf zip","no CXF JSON document","parse CXF JSON document"} { if strings.Contains(text,candidate) { marker=candidate; break } }; c.Expected.ErrorContains=marker; return c }; c.Expected.Entries=make([]Entry,0,len(got)); for _,entry:=range got { st:="";if entry.SecretMetadata!=nil {st=string(entry.SecretMetadata.Type)};c.Expected.Entries=append(c.Expected.Entries,Entry{entry.Path,entry.Data,entry.Warnings,st}) }; return c }
 func payload() []byte {
   field := func(value string) map[string]any { return map[string]any{"value": value} }
@@ -400,6 +407,17 @@ func malformedCredentialPayload() []byte {
   b, e := json.Marshal(x); fail(e); return b
 }
 
+func totpEdgesPayload() []byte {
+ items:=[]any{}
+ for n, credential := range []map[string]any{
+ {"type":"totp","secret":"JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&ignored=value"},
+ {"type":"totp","secret":" JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP ","algorithm":" sha256 ","digits":8,"period":45},
+ {"type":"totp","secret":"JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP","digits":7},
+ {"type":"totp","secret":"JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP","period":int64(9223372036854775807)},
+ {"type":"totp","secret":"JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP","algorithm":"SHA1&digits=8"},
+ } { items=append(items,map[string]any{"title":fmt.Sprintf("totp-%d",n),"tags":[]string{"fixture"},"credentials":[]any{credential}}) }
+ b,e:=json.Marshal(map[string]any{"accounts":[]any{map[string]any{"items":items}}});fail(e);return b
+}
 func malformedContainerPayload(field string) []byte {
   item := map[string]any{"id": "item", "title": "Item", "credentials": []any{map[string]any{"type": "note", "content": "ok"}}}
   account := map[string]any{"id": "account", "items": []any{item}}
@@ -433,7 +451,7 @@ func invalidTypedPayload(kind string) []byte {
   }
   b, e := json.Marshal(x); fail(e); return b
 }
-func main() { p:=payload(); n:=nullPayload(); cases:=[]Case{run("CXF-001-features",zipData(map[string][]byte{"manifest.json":[]byte("{\"version\":1}"),"nested/payload.json":p})),run("CXF-002-preferred-payload",zipData(map[string][]byte{"manifest.json":[]byte("{\"accounts\":[]}"),"nested/payload.json":p,"export.json":[]byte("{\"accounts\":[]}")})),run("CXF-003-largest-json",zipData(map[string][]byte{"manifest.json":[]byte("{\"accounts\":[]}"),"export.json":p})),run("CXF-004-invalid-zip",[]byte("not a zip archive")),run("CXF-005-no-json",zipData(map[string][]byte{"readme.txt":[]byte("fixture")})),run("CXF-006-invalid-json",zipData(map[string][]byte{"manifest.json":[]byte("{not-json")})),run("CXF-007-null-fields",zipData(map[string][]byte{"nested/payload.json":n})),run("CXF-008-trailing-json",zipData(map[string][]byte{"nested/payload.json":append(n, []byte(" trailing")...)})),run("CXF-009-invalid-version-type",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("version")})),run("CXF-010-invalid-account-id",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("account-id")})),run("CXF-011-invalid-collection-id",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("collection-id")})),run("CXF-012-invalid-linked-account",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("linked-account")})),run("CXF-013-null-top-level",zipData(map[string][]byte{"nested/payload.json":[]byte("null")})),run("CXF-014-malformed-credential-values",zipData(map[string][]byte{"nested/payload.json":malformedCredentialPayload()})),run("CXF-015-malformed-credentials-container",zipData(map[string][]byte{"nested/payload.json":malformedContainerPayload("credentials")})),run("CXF-016-malformed-tags-container",zipData(map[string][]byte{"nested/payload.json":malformedContainerPayload("tags")})),run("CXF-017-invalid-account-username",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("account-username")})),run("CXF-018-invalid-account-email",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("account-email")}))}; enc:=json.NewEncoder(os.Stdout);enc.SetEscapeHTML(false);fail(enc.Encode(cases)) }
+func main() { p:=payload(); n:=nullPayload(); cases:=[]Case{run("CXF-019-totp-structured",zipData(map[string][]byte{"payload.json":totpEdgesPayload()})),run("CXF-001-features",zipData(map[string][]byte{"manifest.json":[]byte("{\"version\":1}"),"nested/payload.json":p})),run("CXF-002-preferred-payload",zipData(map[string][]byte{"manifest.json":[]byte("{\"accounts\":[]}"),"nested/payload.json":p,"export.json":[]byte("{\"accounts\":[]}")})),run("CXF-003-largest-json",zipData(map[string][]byte{"manifest.json":[]byte("{\"accounts\":[]}"),"export.json":p})),run("CXF-004-invalid-zip",[]byte("not a zip archive")),run("CXF-005-no-json",zipData(map[string][]byte{"readme.txt":[]byte("fixture")})),run("CXF-006-invalid-json",zipData(map[string][]byte{"manifest.json":[]byte("{not-json")})),run("CXF-007-null-fields",zipData(map[string][]byte{"nested/payload.json":n})),run("CXF-008-trailing-json",zipData(map[string][]byte{"nested/payload.json":append(n, []byte(" trailing")...)})),run("CXF-009-invalid-version-type",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("version")})),run("CXF-010-invalid-account-id",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("account-id")})),run("CXF-011-invalid-collection-id",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("collection-id")})),run("CXF-012-invalid-linked-account",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("linked-account")})),run("CXF-013-null-top-level",zipData(map[string][]byte{"nested/payload.json":[]byte("null")})),run("CXF-014-malformed-credential-values",zipData(map[string][]byte{"nested/payload.json":malformedCredentialPayload()})),run("CXF-015-malformed-credentials-container",zipData(map[string][]byte{"nested/payload.json":malformedContainerPayload("credentials")})),run("CXF-016-malformed-tags-container",zipData(map[string][]byte{"nested/payload.json":malformedContainerPayload("tags")})),run("CXF-017-invalid-account-username",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("account-username")})),run("CXF-018-invalid-account-email",zipData(map[string][]byte{"nested/payload.json":invalidTypedPayload("account-email")}))}; enc:=json.NewEncoder(os.Stdout);enc.SetEscapeHTML(false);fail(enc.Encode(cases)) }
 `
 
 func runOracle(root string) ([]fixtureCase, error) {
@@ -441,12 +459,12 @@ func runOracle(root string) ([]fixtureCase, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer os.RemoveAll(tree)
+	defer func() { _ = os.RemoveAll(tree) }()
 	path := filepath.Join(tree, "cmd", "cxforacle", "main.go")
-	if err := os.MkdirAll(filepath.Dir(path), 0750); err != nil {
+	if err = os.MkdirAll(filepath.Dir(path), 0750); err != nil {
 		return nil, err
 	}
-	if err := os.WriteFile(path, []byte(oracleProgram), 0600); err != nil {
+	if err = os.WriteFile(path, []byte(oracleProgram), 0600); err != nil {
 		return nil, err
 	}
 	cmd := exec.Command("go", "run", "./cmd/cxforacle")
@@ -456,19 +474,20 @@ func runOracle(root string) ([]fixtureCase, error) {
 		return nil, fmt.Errorf("detached CXF oracle: %w: %s", err, out)
 	}
 	var cases []fixtureCase
-	if err := json.Unmarshal(out, &cases); err != nil {
+	if err = json.Unmarshal(out, &cases); err != nil {
 		return nil, err
 	}
 	return cases, nil
 }
 
 func checkFixture(root, requested string, meta oracleMeta) error {
+	// #nosec G304 -- local CLI explicitly selects the fixture file to verify
 	data, err := os.ReadFile(filepath.Join(root, requested))
 	if err != nil {
 		return err
 	}
 	var got fixture
-	if err := json.Unmarshal(data, &got); err != nil {
+	if err = json.Unmarshal(data, &got); err != nil {
 		return err
 	}
 	if got.SchemaVersion != 1 || got.Oracle.Commit != meta.Commit || got.Oracle.CommitSHA != meta.CommitSHA ||
