@@ -57,7 +57,7 @@ func main() {
 		}
 		must(stream.Close())
 		if !bytes.Equal(j.Bytes(), streamed.Bytes()) {
-			must(fmt.Errorf("Go batch/stream export mismatch: %s", c.Name))
+			must(fmt.Errorf("go batch/stream export mismatch: %s", c.Name))
 		}
 		c.JSON = j.String()
 		c.CSV = v.String()

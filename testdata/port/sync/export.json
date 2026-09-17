@@ -8,7 +8,7 @@
     "go.sum"
   ],
   "source_digest": "32fe46ce92da0c058d5ca97aa5617f99aa6c500616ca39fcf796b45bb1d06a76",
-  "generator_digest": "cf70db3bb3ea13e9fd0450cab28686a79dbc030106c4c2145ebccf0c1975f786",
+  "generator_digest": "e7f18465b555c70b570bf0530a18824dd89a414959f0f2f3ef49ac00ef604379",
   "cases": [
     {
       "name": "empty",
