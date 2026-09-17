@@ -4,14 +4,13 @@
 //! functions accept an already-unlocked identity so callers can reuse the
 //! same session boundary for every command without duplicating key handling.
 
-use std::{
-    collections::BTreeMap,
-    io::Write,
-    path::Path,
-};
+use std::{collections::BTreeMap, io::Write, path::Path};
 
 #[cfg(test)]
-use std::{io, time::{SystemTime, UNIX_EPOCH}};
+use std::{
+    io,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use serde::Serialize;
 use symvault_core::config::{AgentProfile, Config, GitConfig, VaultConfig};
