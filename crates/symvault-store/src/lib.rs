@@ -2129,7 +2129,8 @@ impl Store {
             .join(format!("{path}{ENTRY_EXTENSION}")))
     }
 
-    fn configured_entry_path(
+    /// Resolves a validated logical path to the configured ciphertext location.
+    pub fn configured_entry_path(
         &self,
         path: &str,
         identity: &Identity,
