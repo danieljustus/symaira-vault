@@ -7,7 +7,7 @@
 
 use std::{
     fs::{self, OpenOptions},
-    io::Write,
+    io::{Read, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
     thread,
@@ -58,50 +58,110 @@ fn run_stdin_command(
     input: &[u8],
     timeout: Duration,
 ) -> Result<Vec<u8>, PlatformError> {
-    let mut command = Command::new(program);
-    command
+    use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
+    use std::os::unix::process::CommandExt;
+
+    let deadline = Instant::now()
+        .checked_add(bounded_timeout(timeout))
+        .ok_or_else(|| failed("native macOS helper timeout out of range"))?;
+    let mut child = Command::new(program)
         .args(args)
         .env_clear()
         .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
+        .process_group(0)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let mut child = command
+        .stderr(Stdio::piped())
         .spawn()
         .map_err(|_| unavailable("native macOS helper unavailable"))?;
-    if let Some(mut stdin) = child.stdin.take()
-        && stdin.write_all(input).is_err()
-    {
-        let _ = child.kill();
-        let _ = child.wait();
-        return Err(failed("native macOS helper input failed"));
-    }
-    let deadline = Instant::now() + bounded_timeout(timeout);
-    loop {
-        match child
-            .try_wait()
-            .map_err(|_| failed("native macOS helper status failed"))?
-        {
-            Some(status) => {
-                let output = child
-                    .wait_with_output()
-                    .map_err(|_| failed("native macOS helper output failed"))?;
-                if status.success() {
-                    return Ok(output.stdout);
+    let result = (|| {
+        let mut stdin = child.stdin.take();
+        let mut stdout = child.stdout.take().expect("piped stdout");
+        let mut stderr = child.stderr.take().expect("piped stderr");
+        // All three pipes must make progress together. Secrets stay in memory,
+        // and a helper that never reads stdin cannot bypass the deadline.
+        for fd in [
+            std::os::fd::AsFd::as_fd(stdin.as_ref().expect("piped stdin")),
+            std::os::fd::AsFd::as_fd(&stdout),
+            std::os::fd::AsFd::as_fd(&stderr),
+        ] {
+            let flags = fcntl_getfl(fd).map_err(|_| failed("native helper pipe setup failed"))?;
+            fcntl_setfl(fd, flags | OFlags::NONBLOCK)
+                .map_err(|_| failed("native helper pipe setup failed"))?;
+        }
+        let mut written = 0;
+        let mut output = Vec::new();
+        let (mut stdout_done, mut stderr_done) = (false, false);
+        let mut status = None;
+        loop {
+            if let Some(pipe) = stdin.as_mut() {
+                match pipe.write(&input[written..]) {
+                    Ok(count) => written += count,
+                    Err(error)
+                        if matches!(
+                            error.kind(),
+                            std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted
+                        ) => {}
+                    Err(_) => return Err(failed("native macOS helper input failed")),
                 }
-                return Err(failed("native macOS helper returned an error"));
+                if written == input.len() {
+                    stdin.take();
+                }
             }
-            None if Instant::now() >= deadline => {
-                let _ = child.kill();
-                let _ = child.wait();
+            for (pipe, done, capture) in [
+                (&mut stdout as &mut dyn Read, &mut stdout_done, true),
+                (&mut stderr as &mut dyn Read, &mut stderr_done, false),
+            ] {
+                if *done {
+                    continue;
+                }
+                let mut buffer = [0_u8; 8192];
+                match pipe.read(&mut buffer) {
+                    Ok(0) => *done = true,
+                    Ok(count) if capture => output.extend_from_slice(&buffer[..count]),
+                    Ok(_) => {}
+                    Err(error)
+                        if matches!(
+                            error.kind(),
+                            std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted
+                        ) => {}
+                    Err(_) => return Err(failed("native macOS helper output failed")),
+                }
+            }
+            if status.is_none() {
+                status = child
+                    .try_wait()
+                    .map_err(|_| failed("native macOS helper status failed"))?;
+            }
+            if let Some(status) = status
+                && stdout_done
+                && stderr_done
+                && stdin.is_none()
+            {
+                return if status.success() {
+                    Ok(output)
+                } else {
+                    Err(failed("native macOS helper returned an error"))
+                };
+            }
+            if Instant::now() >= deadline {
                 return Err(PlatformError {
                     kind: PlatformErrorKind::TimedOut,
                     message: "native macOS helper timed out".to_owned(),
                 });
             }
-            None => thread::sleep(Duration::from_millis(10)),
+            thread::sleep(Duration::from_millis(1));
         }
+    })();
+    if result.is_err() {
+        let group = format!("-{}", child.id());
+        let _ = Command::new("/bin/kill")
+            .args(["-KILL", "--", &group])
+            .output();
+        let _ = child.kill();
     }
+    let _ = child.wait();
+    result
 }
 
 fn run_jxa(script: &str, timeout: Duration) -> Result<Vec<u8>, PlatformError> {
@@ -402,6 +462,34 @@ fn xml_text(value: &str) -> String {
 mod tests {
     use super::*;
     use symvault_core::session::{Keyring, SessionError};
+
+    #[test]
+    fn native_helper_drains_pipes_and_bounds_blocked_input_and_descendants() {
+        let input = vec![b'x'; 256 * 1024];
+        let output = run_stdin_command(
+            "/bin/sh",
+            &["-c", "head -c 131072 /dev/zero >&2; cat"],
+            &input,
+            Duration::from_secs(5),
+        )
+        .expect("large bidirectional pipe traffic completes");
+        assert_eq!(output, input);
+        for (script, bytes) in [
+            ("sleep 30", input.as_slice()),
+            ("sleep 30 & exit 0", &[][..]),
+        ] {
+            let start = Instant::now();
+            let error = run_stdin_command(
+                "/bin/sh",
+                &["-c", script],
+                bytes,
+                Duration::from_millis(100),
+            )
+            .expect_err("blocked helper fails");
+            assert_eq!(error.kind, PlatformErrorKind::TimedOut);
+            assert!(start.elapsed() < Duration::from_secs(3));
+        }
+    }
 
     #[test]
     fn jxa_strings_are_escaped_without_changing_content() {

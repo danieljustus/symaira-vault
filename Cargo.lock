@@ -2633,6 +2633,7 @@ dependencies = [
  "base64",
  "keyring",
  "keyring-core",
+ "rustix",
  "serde",
  "serde_json",
  "symvault-core",
