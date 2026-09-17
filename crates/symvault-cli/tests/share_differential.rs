@@ -164,6 +164,20 @@ fn share_list_matches_go_for_formats_and_filters() {
         assert_status(&go, &rust, &format!("share list special {args:?}"));
         assert_eq!(rust.stdout, go.stdout, "special {args:?}: stdout differs");
     }
+
+    // A separator followed by spaces takes a different valid quoting path in
+    // yaml.v3. Keep the spaces and a YAML-looking continuation line intact;
+    // scalar normalization must not match content by indentation alone.
+    fs::write(
+        root.join("mcp-shares.json"),
+        r#"{"version":1,"grants":[{"id":"multiline","from_agent":"source","to_agent":"target","secret_path":"first\n  secretfield: untouched\nlast   ","status":"approved","created_at":"2025-02-03T04:05:06Z"}]}"#.as_bytes(),
+    )
+    .expect("multiline share store");
+    let args = ["--output", "yaml", "share", "list"];
+    let go = run(&go_binary, &args, &root, &home);
+    let rust = run(&rust_binary, &args, &root, &home);
+    assert_status(&go, &rust, "share list multiline scalar");
+    assert_eq!(rust.stdout, go.stdout, "multiline scalar: stdout differs");
     let _ = fs::remove_dir_all(root);
     let _ = fs::remove_dir_all(home);
 }

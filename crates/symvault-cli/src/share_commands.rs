@@ -207,10 +207,20 @@ fn normalize_go_yaml_scalars(encoded: &str, grants: &[YamlGrant<'_>]) -> Result<
             normalized.push_str(line);
             continue;
         };
-        let key = body[..colon]
-            .trim_start()
-            .strip_prefix("- ")
-            .unwrap_or(body[..colon].trim_start());
+        let field = &body[..colon];
+        // serde_yaml_ng emits this fixed struct with exactly two spaces for
+        // mapping fields. Do not trim arbitrary indentation: a continuation
+        // line inside a multiline scalar can itself contain `key: value`.
+        let key = if let Some(key) = field.strip_prefix("  ") {
+            if key.starts_with("  ") {
+                continue;
+            }
+            key
+        } else if let Some(key) = field.strip_prefix("- ") {
+            key
+        } else {
+            continue;
+        };
         let scalar = &body[colon + 2..];
         if let Some(fix) = fixes
             .iter()
@@ -244,13 +254,18 @@ fn push_yaml_fix(
     } else if value
         .chars()
         .any(|character| matches!(character, '\u{2028}' | '\u{2029}'))
+        && !value.ends_with(' ')
         && go.starts_with('\'')
         && go.ends_with('\'')
     {
+        // libyaml pads a quoted scalar after a Unicode line separator. Go's
+        // yaml.v3 does not. Remove exactly that emitter padding, preserving
+        // any spaces that belong to the source value.
         let closing_quote = go.len() - 1;
-        let trimmed = go[..closing_quote].trim_end_matches(' ');
-        go.truncate(trimmed.len());
-        go.push('\'');
+        if let Some(trimmed) = go[..closing_quote].strip_suffix("    ") {
+            go.truncate(trimmed.len());
+            go.push('\'');
+        }
     }
     if serde != go {
         fixes.push(YamlScalarFix { key, serde, go });
