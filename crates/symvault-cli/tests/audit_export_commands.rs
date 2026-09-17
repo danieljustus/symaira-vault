@@ -52,6 +52,17 @@ fn go_export(go: &Path, home: &Path, args: &[&str]) -> std::process::Output {
         .expect("run Go audit export")
 }
 
+fn cli_export(binary: &Path, home: &Path, args: &[&str]) -> std::process::Output {
+    Command::new(binary)
+        .args(args)
+        .env("HOME", home)
+        .env("USERPROFILE", home)
+        .env("CI", "1")
+        .env("SYMVAULT_TEST_KEYRING", "memory")
+        .output()
+        .expect("run audit export")
+}
+
 #[test]
 fn audit_export_json_matches_go_for_filters_and_redaction() {
     let Some(go) = env::var_os("SYMVAULT_GO_BINARY") else {
@@ -82,6 +93,9 @@ fn audit_export_json_matches_go_for_filters_and_redaction() {
             "--redact-paths",
             "--format",
             "json",
+        ],
+        &[
+            "--agent", "fixture", "--action", " set ", "--format", "json",
         ],
     ];
     for &args in cases {
@@ -156,4 +170,65 @@ fn audit_export_accepts_injected_hmac_generations_without_keychain_access() {
     let value = first_json(&output);
     assert_eq!(value["verified"], 1);
     assert_eq!(value["entries"][0]["verify_status"], "verified");
+}
+
+#[test]
+fn audit_export_cli_bytes_match_go_for_formats_empty_and_file_output() {
+    let Some(go) = env::var_os("SYMVAULT_GO_BINARY") else {
+        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
+        return;
+    };
+    let home = TempDir::new("cli");
+    fs::create_dir_all(home.0.join(".symvault")).expect("audit directory");
+    fs::write(
+        home.0.join(".symvault/audit-fixture.log"),
+        b"{\"ts\":\"2020-01-01T00:00:00Z\",\"agent\":\"fixture\",\"action\":\"set\",\"path\":\"safe/password\",\"transport\":\"cli\",\"ok\":true}\n",
+    )
+    .expect("audit fixture");
+    let go = PathBuf::from(go);
+    let rust = PathBuf::from(env!("CARGO_BIN_EXE_symvault"));
+
+    for args in [
+        vec!["audit", "export", "--format", "json"],
+        vec!["audit", "export", "--agent", "fixture", "--format", "table"],
+        vec!["audit", "export", "--agent", "missing", "--format", "json"],
+    ] {
+        let expected = cli_export(&go, &home.0, &args);
+        let actual = cli_export(&rust, &home.0, &args);
+        assert_eq!(actual.status, expected.status, "status for {args:?}");
+        assert_eq!(actual.stdout, expected.stdout, "stdout for {args:?}");
+        assert_eq!(actual.stderr, expected.stderr, "stderr for {args:?}");
+    }
+
+    let go_output = home.0.join("go-export.json");
+    let rust_output = home.0.join("rust-export.json");
+    let go_args = [
+        "audit",
+        "export",
+        "--agent",
+        "fixture",
+        "--format",
+        "json",
+        "--output",
+        go_output.to_str().expect("Go output path"),
+    ];
+    let rust_args = [
+        "audit",
+        "export",
+        "--agent",
+        "fixture",
+        "--format",
+        "json",
+        "--output",
+        rust_output.to_str().expect("Rust output path"),
+    ];
+    let expected = cli_export(&go, &home.0, &go_args);
+    let actual = cli_export(&rust, &home.0, &rust_args);
+    assert_eq!(actual.status, expected.status, "file output status");
+    assert_eq!(actual.stdout, expected.stdout, "file output stdout");
+    assert_eq!(actual.stderr, expected.stderr, "file output stderr");
+    assert_eq!(
+        fs::read(go_output).expect("Go output"),
+        fs::read(rust_output).expect("Rust output")
+    );
 }

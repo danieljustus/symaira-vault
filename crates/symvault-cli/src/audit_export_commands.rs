@@ -46,7 +46,11 @@ fn is_false(value: &bool) -> bool {
 }
 
 /// Export local audit logs without unlocking a vault or contacting a remote.
-pub fn export(home: &Path, options: &Options<'_>, output: &mut impl Write) -> Result<(), String> {
+pub fn export(
+    home: &Path,
+    options: &Options<'_>,
+    output: &mut impl Write,
+) -> Result<audit::ExportResult, String> {
     let keys = BTreeMap::new();
     export_with_keys(home, options, false, &keys, "", output)
 }
@@ -61,15 +65,16 @@ pub fn export_with_keys(
     keys: &BTreeMap<String, audit::AuditKey>,
     current_kid: &str,
     output: &mut impl Write,
-) -> Result<(), String> {
+) -> Result<audit::ExportResult, String> {
     if verify_hmac && keys.is_empty() {
         return Err("HMAC verification requires a key".into());
     }
     let audit_dir = home.join(".symvault");
     fs::create_dir_all(&audit_dir).map_err(|error| format!("create audit directory: {error}"))?;
     let agents = discover_agents(&audit_dir, options.agent)?;
+    let action = options.action.trim();
     let store_options = audit::ExportOptions {
-        action: (!options.action.is_empty()).then(|| options.action.to_owned()),
+        action: (!action.is_empty()).then(|| action.to_owned()),
         failed_only: options.failed_only,
         redact_paths: options.redact_paths,
         verify_hmac: false,
@@ -111,18 +116,26 @@ pub fn export_with_keys(
             .count();
     }
     entries.sort_by(|left, right| left.entry.timestamp.cmp(&right.entry.timestamp));
-    let result = ExportOutput {
+    let result = audit::ExportResult {
         total: entries.len(),
         entries,
         verified,
         legacy,
         tampered,
+    };
+    let rendered = ExportOutput {
+        entries: result.entries.clone(),
+        total: result.total,
+        verified: result.verified,
+        legacy: result.legacy,
+        tampered: result.tampered,
         agent: options.agent.to_owned(),
-        action: options.action.to_owned(),
+        action: action.to_owned(),
         since: options.since.to_owned(),
         failed_only: options.failed_only,
     };
-    render(&result, options.format, output)
+    render(&rendered, options.format, output)?;
+    Ok(result)
 }
 
 fn discover_agents(directory: &Path, requested: &str) -> Result<Vec<String>, String> {
