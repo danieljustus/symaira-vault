@@ -8,6 +8,7 @@ use std::{
     io::{BufRead, BufReader},
     path::Path,
     sync::{Arc, Mutex},
+    time::{Duration, Instant},
 };
 use symvault_core::policy::{Action, Engine, EvalContext};
 use symvault_crypto::Identity;
@@ -15,6 +16,39 @@ use symvault_store::{Entry, Store, StoreError, WriteRecord};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 pub type SharedAuditLogger = Arc<Mutex<symvault_store::audit::Logger>>;
+
+const MCP_RATE_LIMIT_WINDOW: Duration = Duration::from_secs(60);
+
+/// Go's MCP `rate_limit` pre-call hook is a fixed one-minute window. Keep this
+/// state at the concrete runtime boundary so it is shared by every protocol
+/// call in one session without introducing another quota file or counter
+/// format. `limit == 0` intentionally denies every call when explicitly
+/// configured; `None` means the profile did not enable the hook.
+#[derive(Debug)]
+struct MinuteRateLimiter {
+    limit: i64,
+    window_started: Instant,
+    count: i64,
+}
+
+impl MinuteRateLimiter {
+    fn new(limit: i64) -> Self {
+        Self {
+            limit,
+            window_started: Instant::now(),
+            count: 0,
+        }
+    }
+
+    fn allow(&mut self) -> bool {
+        if self.window_started.elapsed() > MCP_RATE_LIMIT_WINDOW {
+            self.window_started = Instant::now();
+            self.count = 0;
+        }
+        self.count = self.count.saturating_add(1);
+        self.count <= self.limit
+    }
+}
 
 /// A store-backed projection for the portable read-only MCP tools.
 ///
@@ -182,6 +216,7 @@ pub struct StoreReadOnlyRuntime {
     inner: ReadOnlyRuntime<StoreReadOnlyAdapter>,
     policy: Option<Engine>,
     audit: Option<SharedAuditLogger>,
+    rate_limiter: Mutex<Option<MinuteRateLimiter>>,
     agent_name: String,
     transport: String,
     unavailable_tools: Vec<String>,
@@ -226,6 +261,7 @@ impl StoreReadOnlyRuntime {
             inner: ReadOnlyRuntime::new(adapter, config),
             policy,
             audit,
+            rate_limiter: Mutex::new(None),
             agent_name,
             transport,
             unavailable_tools,
@@ -269,10 +305,34 @@ impl StoreReadOnlyRuntime {
             inner: ReadOnlyRuntime::new(adapter, config),
             policy,
             audit,
+            rate_limiter: Mutex::new(None),
             agent_name,
             transport,
             unavailable_tools,
         })
+    }
+
+    /// Enables the Go-compatible fixed one-minute MCP pre-call limiter for
+    /// this session. The CLI supplies `Some(limit)` only when the profile
+    /// lists `rate_limit` in `PreCallHooks`; `None` preserves the disabled
+    /// hook behavior. This setter is intentionally separate from profile
+    /// hourly/day fields, which Go exposes in `whoami` without enforcing.
+    pub fn set_rate_limit_per_minute(&self, limit: Option<i64>) {
+        if let Ok(mut limiter) = self.rate_limiter.lock() {
+            *limiter = limit.map(MinuteRateLimiter::new);
+        }
+    }
+
+    fn rate_limit_denied(&self) -> Option<i64> {
+        let Ok(mut limiter) = self.rate_limiter.lock() else {
+            return Some(0);
+        };
+        let limiter = limiter.as_mut()?;
+        if limiter.allow() {
+            None
+        } else {
+            Some(limiter.limit)
+        }
     }
 
     fn append_audit(&self, action: &str, path: &str, ok: bool) {
@@ -605,6 +665,11 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
             return Err(error);
         }
         self.authorize_policy(name, arguments)?;
+        if let Some(limit) = self.rate_limit_denied() {
+            return Err(ToolCallResult::error(format!(
+                "rate limit exceeded: max {limit} requests per minute"
+            )));
+        }
         Ok(())
     }
 

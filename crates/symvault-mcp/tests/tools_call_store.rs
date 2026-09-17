@@ -160,6 +160,33 @@ fn fetch_id_uses_get_policy_before_storage() {
     assert!(error.text.contains("policy denied tool \"fetch\""));
 }
 
+#[test]
+fn configured_rate_limit_matches_go_pre_call_hook() {
+    let (root, identity) = write_synthetic_vault();
+    let runtime = StoreReadOnlyRuntime::open(
+        root.path(),
+        identity,
+        ReadOnlyRuntimeConfig {
+            agent_name: "fixture".into(),
+            available_tools: read_only_tool_names(),
+            ..ReadOnlyRuntimeConfig::default()
+        },
+        None,
+        None,
+    )
+    .expect("open rate-limit fixture runtime");
+    runtime.set_rate_limit_per_minute(Some(1));
+
+    runtime
+        .authorize("health", &serde_json::json!({}))
+        .expect("first pre-call is within the configured window");
+    let error = runtime
+        .authorize("health", &serde_json::json!({}))
+        .expect_err("second pre-call exceeds the configured window");
+    assert!(error.is_error);
+    assert_eq!(error.text, "rate limit exceeded: max 1 requests per minute");
+}
+
 fn write_synthetic_vault() -> (tempfile::TempDir, symvault_crypto::Identity) {
     let root = tempdir().expect("synthetic vault tempdir");
     fs::write(
