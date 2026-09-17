@@ -103,6 +103,21 @@ fn policy_validate_and_list_match_go() {
         "missing policy directory",
     );
 
+    let only_directory_root = fixture.0.join("only-directory-root");
+    fs::create_dir_all(only_directory_root.join("policies/nested"))
+        .expect("nested policy directory");
+    let only_directory_args = [
+        "--vault",
+        only_directory_root.to_str().expect("only-directory root"),
+        "policy",
+        "list",
+    ];
+    assert_same(
+        &run(&go, &home.0, &only_directory_args),
+        &run(&rust, &home.0, &only_directory_args),
+        "policy directory containing only a subdirectory",
+    );
+
     fs::create_dir_all(list_root.join("policies/nested")).expect("policy directory");
     fs::write(list_root.join("policies/b.yaml"), b"ignored by list").expect("policy b");
     fs::write(list_root.join("policies/a.txt"), b"included by Go list").expect("non-policy file");
@@ -116,5 +131,18 @@ fn policy_validate_and_list_match_go() {
         &run(&go, &home.0, &populated_args),
         &run(&rust, &home.0, &populated_args),
         "populated policy directory",
+    );
+
+    let home_policy = home.0.join("tilde-policy.yaml");
+    fs::write(
+        &home_policy,
+        b"version: v1\ndescription: Home policy\nrules:\n  - name: allow-read\n    priority: 10\n    action: allow\n",
+    )
+    .expect("home policy");
+    let tilde_args = ["policy", "validate", "~/tilde-policy.yaml"];
+    assert_same(
+        &run(&go, &home.0, &tilde_args),
+        &run(&rust, &home.0, &tilde_args),
+        "tilde policy path",
     );
 }

@@ -61,9 +61,16 @@ pub fn list(root: &Path, output: &mut impl Write) -> Result<(), String> {
         Err(error) => return Err(format!("read policies directory: {error}")),
     };
 
+    let entries = entries
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("read policies directory: {error}"))?;
+    if entries.is_empty() {
+        writeln!(output, "No policies applied.").map_err(|error| error.to_string())?;
+        return Ok(());
+    }
+
     let mut names = Vec::new();
     for entry in entries {
-        let entry = entry.map_err(|error| format!("read policies directory: {error}"))?;
         let file_type = entry
             .file_type()
             .map_err(|error| format!("read policies directory entry: {error}"))?;
@@ -73,10 +80,6 @@ pub fn list(root: &Path, output: &mut impl Write) -> Result<(), String> {
     }
     names.sort();
 
-    if names.is_empty() {
-        writeln!(output, "No policies applied.").map_err(|error| error.to_string())?;
-        return Ok(());
-    }
     for name in names {
         writeln!(output, "  - {name}").map_err(|error| error.to_string())?;
     }
