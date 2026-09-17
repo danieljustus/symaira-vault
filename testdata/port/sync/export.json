@@ -1,0 +1,126 @@
+{
+  "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+  "source_files": [
+    "internal/exporter/csv.go",
+    "internal/exporter/exporter.go",
+    "internal/exporter/json.go",
+    "go.mod",
+    "go.sum"
+  ],
+  "source_digest": "32fe46ce92da0c058d5ca97aa5617f99aa6c500616ca39fcf796b45bb1d06a76",
+  "generator_digest": "6256fcf93262cb3f917f17e7079774b9c5a58fc8ca643cec53e9bdd805bf9be0",
+  "cases": [
+    {
+      "name": "empty",
+      "entries": [],
+      "mapping": null,
+      "json": "[]",
+      "csv": "",
+      "notices": ""
+    },
+    {
+      "name": "escaping",
+      "entries": [
+        {
+          "path": " \u003c\u0026\u003e\u2028",
+          "data": {
+            "comma": "a,b",
+            "empty": "",
+            "leading": " space",
+            "line": "\u2029",
+            "newline": "a\r\nb",
+            "quote": "a\"b",
+            "sentinel": "\\."
+          }
+        }
+      ],
+      "mapping": null,
+      "json": "[\n  {\n    \"data\": {\n      \"comma\": \"a,b\",\n      \"empty\": \"\",\n      \"leading\": \" space\",\n      \"line\": \"\\u2029\",\n      \"newline\": \"a\\r\\nb\",\n      \"quote\": \"a\\\"b\",\n      \"sentinel\": \"\\\\.\"\n    },\n    \"path\": \" \\u003c\\u0026\\u003e\\u2028\"\n  }\n]\n",
+      "csv": "path,comma,empty,leading,line,newline,quote,sentinel\n\" \u003c\u0026\u003e\u2028\",\"a,b\",,\" space\",\"\u2029\",\"a\r\nb\",\"a\"\"b\",\"\\.\"\n",
+      "notices": ""
+    },
+    {
+      "name": "nested",
+      "entries": [
+        {
+          "path": "nested",
+          "data": {
+            "array": [
+              "a",
+              null,
+              true,
+              [
+                "b"
+              ]
+            ],
+            "map": {
+              "a": {
+                "b": "c"
+              },
+              "z": [
+                "x",
+                "y"
+              ]
+            },
+            "nil": null,
+            "number": 42
+          }
+        }
+      ],
+      "mapping": null,
+      "json": "[\n  {\n    \"data\": {\n      \"array\": [\n        \"a\",\n        null,\n        true,\n        [\n          \"b\"\n        ]\n      ],\n      \"map\": {\n        \"a\": {\n          \"b\": \"c\"\n        },\n        \"z\": [\n          \"x\",\n          \"y\"\n        ]\n      },\n      \"nil\": null,\n      \"number\": 42\n    },\n    \"path\": \"nested\"\n  }\n]\n",
+      "csv": "path,array,map,nil,number\nnested,[a \u003cnil\u003e true [b]],map[a:map[b:c] z:[x y]],\u003cnil\u003e,42\n",
+      "notices": ""
+    },
+    {
+      "name": "attachments",
+      "entries": [
+        {
+          "path": "with-files",
+          "data": {
+            "chunk_count": 1,
+            "chunk_size": 9,
+            "file_b64_0": "c3ludGhldGlj",
+            "name": "fixture"
+          }
+        },
+        {
+          "path": "only-files",
+          "data": {
+            "file_b64_1": "c3ludGhldGlj"
+          }
+        }
+      ],
+      "mapping": null,
+      "json": "[\n  {\n    \"data\": {\n      \"chunk_count\": 1,\n      \"chunk_size\": 9,\n      \"file_b64_0\": \"c3ludGhldGlj\",\n      \"name\": \"fixture\"\n    },\n    \"path\": \"with-files\"\n  },\n  {\n    \"data\": {\n      \"file_b64_1\": \"c3ludGhldGlj\"\n    },\n    \"path\": \"only-files\"\n  }\n]\n",
+      "csv": "path,name\nwith-files,fixture\nonly-files,\n",
+      "notices": "attachment data omitted for entry with-files; use --format json for a lossless export\nattachment data omitted for entry only-files; use --format json for a lossless export\n"
+    },
+    {
+      "name": "mapping",
+      "entries": [
+        {
+          "path": "first",
+          "data": {
+            "field": "value",
+            "username": "fixture"
+          }
+        },
+        {
+          "path": "second",
+          "data": {
+            "extra": "optional"
+          }
+        }
+      ],
+      "mapping": {
+        "extra": "",
+        "field": "renamed",
+        "username": " name"
+      },
+      "json": "[\n  {\n    \"data\": {\n      \" name\": \"fixture\",\n      \"renamed\": \"value\"\n    },\n    \"path\": \"first\"\n  },\n  {\n    \"data\": {\n      \"\": \"optional\"\n    },\n    \"path\": \"second\"\n  }\n]\n",
+      "csv": "path,,renamed,\" name\"\nfirst,,value,fixture\nsecond,optional,,\n",
+      "notices": ""
+    }
+  ]
+}

@@ -354,7 +354,7 @@ device-list-differential:
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/rust-port/test_device_list_differential.py
 	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/devicelistdriver --report "$(DEVICE_LIST_REPORT)"
 
-sync-io-differential: cxf-import-differential onepass-import-differential csv-import-differential pairing-fixtures-check git-io-differential
+sync-io-differential: export-differential cxf-import-differential onepass-import-differential csv-import-differential pairing-fixtures-check git-io-differential
 	GOFLAGS= GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/syncgen --check --output $(PORT_SYNC_FIXTURE)
 	$(CARGO) test -p symvault-sync --all-features --locked
 
@@ -838,3 +838,8 @@ FOCUS_ORACLE_COMMIT := fca3f89401833b5e14ec4ec74ef736b0f63bca74
 focus-differential:
 	SYMVAULT_FOCUS_FIXTURE=check GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) test ./internal/autotype -run '^TestGenerateFocusFixture$$' -count=1
 	$(CARGO) test -p symvault-platform --lib focus_guard_matches_go_oracle --locked
+
+.PHONY: export-differential
+export-differential:
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/exportgen -check
+	$(CARGO) test -p symvault-sync --test export_contract --locked

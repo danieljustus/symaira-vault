@@ -1,4 +1,3 @@
-use csv::Writer;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::BTreeMap, io, io::Write};
@@ -22,7 +21,15 @@ pub struct ExportEntry {
 
 /// Writes the Go JSON export shape, including its two-space indentation and
 /// trailing newline. BTreeMap preserves encoding/json's sorted map keys.
-pub fn json<W: Write>(mut output: W, entries: &[ExportEntry]) -> Result<(), ExportError> {
+pub fn json<W: Write>(output: W, entries: &[ExportEntry]) -> Result<(), ExportError> {
+    json_with_mapping(output, entries, &BTreeMap::new())
+}
+
+pub fn json_with_mapping<W: Write>(
+    mut output: W,
+    entries: &[ExportEntry],
+    mapping: &BTreeMap<String, String>,
+) -> Result<(), ExportError> {
     if entries.is_empty() {
         output.write_all(b"[]")?;
         return Ok(());
@@ -33,13 +40,24 @@ pub fn json<W: Write>(mut output: W, entries: &[ExportEntry]) -> Result<(), Expo
             BTreeMap::from([
                 (
                     "data",
-                    Value::Object(entry.data.clone().into_iter().collect()),
+                    Value::Object(
+                        entry
+                            .data
+                            .iter()
+                            .map(|(key, value)| {
+                                (mapping.get(key).unwrap_or(key).clone(), value.clone())
+                            })
+                            .collect(),
+                    ),
                 ),
                 ("path", Value::String(entry.path.clone())),
             ])
         })
         .collect();
-    serde_json::to_writer_pretty(&mut output, &rows)?;
+    use serde_json::ser::Formatter;
+    // Reuse the shared Go escaping rule while retaining JSON indentation.
+    let rendered = serde_json::to_string_pretty(&rows)?;
+    symvault_gojson::GoFormatter.write_string_fragment(&mut output, &rendered)?;
     output.write_all(b"\n")?;
     Ok(())
 }
@@ -47,6 +65,15 @@ pub fn json<W: Write>(mut output: W, entries: &[ExportEntry]) -> Result<(), Expo
 /// Writes the Go CSV export shape: path first, then sorted non-attachment
 /// fields. Attachment fields are intentionally omitted because CSV is lossy.
 pub fn csv<W: Write>(output: W, entries: &[ExportEntry]) -> Result<(), ExportError> {
+    csv_with_mapping(output, entries, &BTreeMap::new(), None)
+}
+
+pub fn csv_with_mapping<W: Write>(
+    mut output: W,
+    entries: &[ExportEntry],
+    mapping: &BTreeMap<String, String>,
+    mut notices: Option<&mut dyn Write>,
+) -> Result<(), ExportError> {
     if entries.is_empty() {
         return Ok(());
     }
@@ -59,20 +86,34 @@ pub fn csv<W: Write>(output: W, entries: &[ExportEntry]) -> Result<(), ExportErr
         }
     }
     let mut headers = vec!["path".to_owned()];
-    headers.extend(fields.iter().cloned());
-    let mut writer = Writer::from_writer(output);
-    writer.write_record(&headers)?;
+    headers.extend(
+        fields
+            .iter()
+            .map(|key| mapping.get(key).unwrap_or(key).clone()),
+    );
+    write_csv_record(&mut output, &headers)?;
     for entry in entries {
         let mut row = Vec::with_capacity(headers.len());
         row.push(entry.path.clone());
-        row.extend(
-            fields
-                .iter()
-                .map(|key| entry.data.get(key).map(value_string).unwrap_or_default()),
-        );
-        writer.write_record(row)?;
+        row.extend(fields.iter().map(|key| {
+            if key == "__path__" {
+                entry.path.clone()
+            } else {
+                entry.data.get(key).map(value_string).unwrap_or_default()
+            }
+        }));
+        write_csv_record(&mut output, &row)?;
+        if entry.data.keys().any(|key| is_attachment(key))
+            && let Some(writer) = notices.as_mut()
+        {
+            writeln!(
+                writer,
+                "attachment data omitted for entry {}; use --format json for a lossless export",
+                entry.path
+            )?;
+        }
     }
-    writer.flush()?;
+
     Ok(())
 }
 
@@ -82,15 +123,46 @@ fn value_string(value: &Value) -> String {
         Value::Null => "<nil>".to_owned(),
         Value::Bool(value) => value.to_string(),
         Value::Number(value) => value.to_string(),
-        Value::Array(values) => values
-            .iter()
-            .map(value_string)
-            .collect::<Vec<_>>()
-            .join(" "),
-        Value::Object(_) => "map[]".to_owned(),
+        Value::Array(values) => format!(
+            "[{}]",
+            values
+                .iter()
+                .map(value_string)
+                .collect::<Vec<_>>()
+                .join(" ")
+        ),
+        Value::Object(values) => format!(
+            "map[{}]",
+            values
+                .iter()
+                .map(|(key, value)| format!("{key}:{}", value_string(value)))
+                .collect::<Vec<_>>()
+                .join(" ")
+        ),
     }
 }
 
 fn is_attachment(key: &str) -> bool {
     key.starts_with("file_b64_") || matches!(key, "chunk_count" | "chunk_size")
+}
+
+fn write_csv_record(output: &mut impl Write, fields: &[String]) -> io::Result<()> {
+    for (index, field) in fields.iter().enumerate() {
+        if index > 0 {
+            output.write_all(b",")?;
+        }
+        // encoding/csv additionally quotes leading Unicode whitespace and
+        // PostgreSQL's end-of-data sentinel, unlike csv::Writer's defaults.
+        let quote = field == "\\."
+            || field.contains([',', '\"', '\r', '\n'])
+            || field.chars().next().is_some_and(char::is_whitespace);
+        if quote {
+            output.write_all(b"\"")?;
+        }
+        output.write_all(field.replace('"', "\"\"").as_bytes())?;
+        if quote {
+            output.write_all(b"\"")?;
+        }
+    }
+    output.write_all(b"\n")
 }
