@@ -162,15 +162,16 @@ fn resolve_entry(root: &Path, entry: &JournalEntry) -> Result<ResolvedEntry, Sto
 }
 
 fn journal_target(root: &Path, value: &str) -> Result<PathBuf, StoreError> {
-    let path = normalize_journal_path(root, Path::new(value))?;
-    let relative = validated_relative(root, &path)?;
+    let canonical_root = canonical_journal_root(root)?;
+    let path = normalize_journal_path(&canonical_root, Path::new(value))?;
+    let relative = validated_relative(&canonical_root, &path)?;
     let mut components = relative.components();
     if components.next() != Some(Component::Normal(OsStr::new("entries")))
         || path.extension() != Some(OsStr::new("age"))
     {
         return Err(StoreError::UnsafePath(value.to_owned()));
     }
-    validate_parents(root, &relative, &path)?;
+    validate_parents(&canonical_root, &relative, &path)?;
     Ok(path)
 }
 
@@ -183,8 +184,9 @@ fn optional_artifact(
     if value.is_empty() {
         return Ok(None);
     }
-    let path = normalize_journal_path(root, Path::new(value))?;
-    let relative = validated_relative(root, &path)?;
+    let canonical_root = canonical_journal_root(root)?;
+    let path = normalize_journal_path(&canonical_root, Path::new(value))?;
+    let relative = validated_relative(&canonical_root, &path)?;
     if path == target || path.parent() != target.parent() {
         return Err(StoreError::UnsafePath(value.to_owned()));
     }
@@ -199,7 +201,7 @@ fn optional_artifact(
     if !valid_reencrypt_artifact_name(artifact_name, target_name, suffix) {
         return Err(StoreError::UnsafePath(value.to_owned()));
     }
-    validate_parents(root, &relative, &path)?;
+    validate_parents(&canonical_root, &relative, &path)?;
     Ok(Some(path))
 }
 
@@ -238,6 +240,13 @@ fn valid_reencrypt_artifact_name(name: &str, target: &str, suffix: &str) -> bool
 
 fn is_hex(value: &str, length: usize) -> bool {
     value.len() == length && value.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+fn canonical_journal_root(root: &Path) -> Result<PathBuf, StoreError> {
+    root.canonicalize().map_err(|source| StoreError::Read {
+        path: root.to_path_buf(),
+        source,
+    })
 }
 
 fn validated_relative(root: &Path, path: &Path) -> Result<PathBuf, StoreError> {
