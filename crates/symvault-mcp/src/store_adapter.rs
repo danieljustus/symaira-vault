@@ -261,6 +261,14 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
                 let ok = result.as_ref().is_ok_and(|value| !value.is_error);
                 self.append_audit("generate", "password", ok);
             }
+            "generate_totp" => {
+                let path = arguments
+                    .get("path")
+                    .and_then(Value::as_str)
+                    .unwrap_or("<invalid>");
+                let ok = result.as_ref().is_ok_and(|value| !value.is_error);
+                self.append_audit("generate_totp", path, ok);
+            }
             "list_entries" => {
                 let prefix = arguments
                     .get("prefix")
@@ -311,7 +319,7 @@ fn store_error(error: StoreError) -> String {
     error.to_string()
 }
 
-/// The eight handlers in this bounded runtime. The catalog remains owned by
+/// The nine handlers in this bounded runtime. The catalog remains owned by
 /// the protocol layer; this list is the injected availability registry used
 /// by authorization and whoami.
 pub fn read_only_tool_names() -> Vec<String> {
@@ -320,6 +328,7 @@ pub fn read_only_tool_names() -> Vec<String> {
         "symaira_whoami",
         "list_entries",
         "generate_password",
+        "generate_totp",
         "find_entries",
         "get_entry",
         "get_entry_value",

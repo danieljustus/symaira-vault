@@ -324,7 +324,7 @@ fn actual_encrypted_store_matches_go_initialized_fixture() {
         fixture.oracle.source_hash.as_deref(),
         Some("8763360bc35000df164ffc2d9586fcdb41b33830567f29c3617b308d7c45c8a9")
     );
-    assert_eq!(read_only_tool_names().len(), 8);
+    assert_eq!(read_only_tool_names().len(), 9);
     let case = fixture
         .cases
         .iter()
@@ -532,6 +532,9 @@ fn injected_audit_logger_records_go_event_boundaries() {
     let mut config = fixture_config();
     config.allowed_paths = vec!["allowed/*".into()];
     config.available_tools = read_only_tool_names();
+    config
+        .available_tools
+        .retain(|tool| tool != "generate_totp");
     config
         .unavailable_tools
         .retain(|tool| tool.name != "generate_totp");

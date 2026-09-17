@@ -2,6 +2,8 @@ use serde::de::{self, Deserialize, MapAccess, Visitor};
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicI64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
+use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 /// A result returned by an MCP tool handler.
 #[derive(Clone, Debug, Default)]
@@ -103,6 +105,9 @@ pub struct ReadOnlyRuntimeConfig {
     /// Go-compatible semantic prompt-injection handling for value responses.
     /// Supported values are `off`, `log-only`, `wrap`, and `deny`.
     pub prompt_injection_mode: String,
+    /// Optional deterministic clock for protocol fixtures; production uses
+    /// the current Unix timestamp when this is absent.
+    pub now_unix: Option<i64>,
     pub can_write: bool,
     pub can_run_commands: bool,
     pub can_use_clipboard: bool,
@@ -134,6 +139,7 @@ impl Default for ReadOnlyRuntimeConfig {
             auto_unseal: false,
             expose_payment_values: false,
             prompt_injection_mode: "off".into(),
+            now_unix: None,
             can_write: false,
             can_run_commands: false,
             can_use_clipboard: false,
@@ -214,6 +220,7 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
             "symaira_whoami" => self.whoami(),
             "list_entries" => self.list_entries(arguments),
             "generate_password" => self.generate_password(arguments),
+            "generate_totp" => self.generate_totp(arguments),
             "find_entries" => self.find_entries(arguments),
             "get_entry" | "get_entry_metadata" => self.get_entry_metadata(arguments),
             "get_entry_value" => self.get_entry_value(arguments),
@@ -257,6 +264,132 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
         let password = symvault_core::password::generate_password(length, symbols)
             .map_err(|error| error.to_string())?;
         Ok(ToolCallResult::text(password.as_str()))
+    }
+
+    fn generate_totp(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        let path = match required_string(arguments, "path") {
+            Ok(path) => path,
+            Err(result) => return Ok(result),
+        };
+        if !self.scope_allows(path) {
+            return Err(format!(
+                "access denied: path {path:?} outside allowed scope"
+            ));
+        }
+        let destination = arguments
+            .get("destination")
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+            .unwrap_or_else(|| {
+                if self.config.can_use_clipboard {
+                    "clipboard".into()
+                } else if self.config.can_use_autotype {
+                    "autotype".into()
+                } else {
+                    "return".into()
+                }
+            });
+        let return_code = arguments
+            .get("return_code")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let Some(entry) = self
+            .store
+            .get(path)
+            .map_err(|error| format!("get entry: {error}"))?
+        else {
+            return Ok(ToolCallResult::error(format!("entry not found: {path}")));
+        };
+        let Some(totp) = entry.fields.get("totp").and_then(Value::as_object) else {
+            return Err(format!("entry {path:?} does not have TOTP configuration"));
+        };
+        let Some(secret) = totp.get("secret").and_then(Value::as_str) else {
+            return Err(format!("entry {path:?} does not have TOTP configuration"));
+        };
+        if secret.is_empty() {
+            return Err(format!("entry {path:?} does not have TOTP configuration"));
+        }
+        let algorithm = totp
+            .get("algorithm")
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("SHA1");
+        let digits = totp
+            .get("digits")
+            .and_then(Value::as_i64)
+            .and_then(|value| i32::try_from(value).ok())
+            .unwrap_or(6);
+        let period = totp
+            .get("period")
+            .and_then(Value::as_i64)
+            .and_then(|value| i32::try_from(value).ok())
+            .unwrap_or(30);
+        let now = match self.config.now_unix {
+            Some(value) => value,
+            None => SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_err(|error| format!("failed to generate TOTP code: {error}"))?
+                .as_secs() as i64,
+        };
+        let code = symvault_core::totp::generate_totp_at(secret, algorithm, digits, period, now)
+            .map_err(|error| format!("failed to generate TOTP code: {error}"))?;
+
+        match destination.as_str() {
+            "clipboard" => {
+                if !self.config.can_use_clipboard {
+                    return Err("clipboard operations not permitted for this agent".into());
+                }
+                Ok(ToolCallResult::error("clipboard not available"))
+            }
+            "autotype" => {
+                if !self.config.can_use_autotype {
+                    return Err("autotype operations not permitted for this agent".into());
+                }
+                Ok(ToolCallResult::error(
+                    "autotype not available on this platform",
+                ))
+            }
+            "return" => {
+                if !return_code {
+                    return Ok(ToolCallResult::error(
+                        "return_code must be true when destination is \"return\"",
+                    ));
+                }
+                let approval_mode = if self.config.approval_mode.is_empty() {
+                    if self.config.require_approval {
+                        "prompt"
+                    } else {
+                        "none"
+                    }
+                } else {
+                    self.config.approval_mode.as_str()
+                };
+                if !self.config.can_read_values {
+                    if approval_mode == "deny" {
+                        return Ok(ToolCallResult::error(
+                            "generate_totp_return denied: approval mode is 'deny'",
+                        ));
+                    }
+                    if approval_mode == "prompt" {
+                        return Ok(ToolCallResult::error(
+                            "generate_totp_return requires approval but no TTY or GUI dialog available",
+                        ));
+                    }
+                }
+                let expires_at = OffsetDateTime::from_unix_timestamp(code.expires_at)
+                    .map_err(|error| format!("format TOTP expiry: {error}"))?
+                    .format(&Rfc3339)
+                    .map_err(|error| format!("format TOTP expiry: {error}"))?;
+                json_text(serde_json::json!({
+                    "code": code.code,
+                    "expires_at": expires_at,
+                    "period": code.period,
+                }))
+            }
+            other => Ok(ToolCallResult::error(format!(
+                "invalid destination \"{other}\": must be clipboard, autotype, or return"
+            ))),
+        }
     }
 
     fn whoami(&self) -> Result<ToolCallResult, String> {
