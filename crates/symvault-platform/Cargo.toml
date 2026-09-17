@@ -13,6 +13,7 @@ symvault-core.workspace = true
 
 [target.'cfg(any(target_os = "macos", target_os = "linux", target_os = "windows", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd"))'.dependencies]
 keyring = { version = "=4.2.0", default-features = false, features = ["v1"] }
+keyring-core = "=1.0.0"
 
 [dev-dependencies]
 serde.workspace = true

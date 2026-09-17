@@ -2629,6 +2629,7 @@ version = "0.0.0"
 dependencies = [
  "base64",
  "keyring",
+ "keyring-core",
  "serde",
  "serde_json",
  "symvault-core",
