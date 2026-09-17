@@ -23,8 +23,8 @@ pub type ShareStatus = String;
 /// JSON-compatible metadata for one share grant.
 ///
 /// Go encodes `time.Duration` as an integer number of nanoseconds.  Keeping
-/// timestamps as their original RFC3339 strings also preserves the exact
-/// bytes needed by the Go grant-ID HMAC canonicalization.
+/// timestamps as RFC3339 strings keeps them independent of a platform clock
+/// type while load canonicalizes them like Go's `time.Time` JSON marshaler.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ShareGrant {
     #[serde(default, deserialize_with = "deserialize_null_default")]
@@ -268,15 +268,19 @@ struct RawShareStore {
 }
 
 impl ShareGrant {
-    fn validate(self) -> Result<Self, StoreError> {
+    fn validate(mut self) -> Result<Self, StoreError> {
         validate_timestamp(&self.created_at, "created_at")?;
+        if !self.created_at.is_empty() {
+            self.created_at = canonical_timestamp(&self.created_at);
+        }
         for (name, value) in [
-            ("expires_at", self.expires_at.as_deref()),
-            ("approved_at", self.approved_at.as_deref()),
-            ("revoked_at", self.revoked_at.as_deref()),
+            ("expires_at", &mut self.expires_at),
+            ("approved_at", &mut self.approved_at),
+            ("revoked_at", &mut self.revoked_at),
         ] {
             if let Some(value) = value {
                 validate_timestamp(value, name)?;
+                *value = canonical_timestamp(value);
             }
         }
         Ok(self)
