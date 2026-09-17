@@ -540,3 +540,45 @@ fn join_does_not_take_new_device_passphrase_from_environment() {
     assert!(!target.join("identity.age").exists());
     assert!(String::from_utf8_lossy(&output.stderr).contains("EOF"));
 }
+
+#[test]
+fn device_list_resolves_environment_and_profile_vaults() {
+    let vault = TestVault::new("device-path-resolution");
+    let expected = vault.run(&["device", "list", "--json"]);
+    assert!(expected.status.success());
+    let home = vault.path.join("isolated-home");
+    fs::create_dir_all(&home).unwrap();
+    let config_home = vault.path.join("test-config");
+    fs::create_dir_all(config_home.join("symaira-vault")).unwrap();
+    fs::write(
+        config_home.join("symaira-vault/config.yaml"),
+        format!(
+            "profiles:\n  personal:\n    vault: {}\n",
+            serde_json::to_string(&vault.path).unwrap()
+        ),
+    )
+    .unwrap();
+    for profile in [false, true] {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_symvault"));
+        command
+            .env("CI", "1")
+            .env("HOME", &home)
+            .env("USERPROFILE", &home)
+            .env("XDG_CONFIG_HOME", &config_home)
+            .env_remove("SYMVAULT_PROFILE");
+        if profile {
+            command
+                .env_remove("SYMVAULT_VAULT")
+                .args(["--profile", "personal"]);
+        } else {
+            command.env("SYMVAULT_VAULT", &vault.path);
+        }
+        let actual = command.args(["device", "list", "--json"]).output().unwrap();
+        assert!(
+            actual.status.success(),
+            "{}",
+            String::from_utf8_lossy(&actual.stderr)
+        );
+        assert_eq!(actual.stdout, expected.stdout);
+    }
+}

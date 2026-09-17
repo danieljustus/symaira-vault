@@ -721,16 +721,14 @@ fn main() -> ExitCode {
             ),
         },
         Some(Command::Device { command }) => {
-            let vault = match cli.vault.as_deref() {
-                Some(v) => v,
-                None => {
-                    let _ = writeln!(
-                        io::stderr(),
-                        "Error: device commands currently require explicit --vault; config/profile resolution is not yet ported"
-                    );
+            let vault = match resolve_vault(cli.vault.as_deref(), cli._profile.as_deref()) {
+                Ok(vault) => vault,
+                Err(error) => {
+                    let _ = writeln!(io::stderr(), "Error: {error}");
                     return ExitCode::from(1);
                 }
             };
+            let vault = vault.as_path();
             let result = match command {
                 DeviceCommand::Pair { .. } => device::pair(vault, cli.quiet),
                 DeviceCommand::Join {

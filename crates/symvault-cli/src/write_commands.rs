@@ -1,10 +1,10 @@
 //! CLI entry mutations using the existing encrypted store and Git adapter.
 use serde_json::Value;
 use std::{collections::BTreeMap, path::Path};
-use symvault_core::{config::Config, password};
+use symvault_core::password;
 use symvault_crypto::Identity;
 use symvault_store::{Entry, Store, StoreError, WriteRecord};
-use symvault_sync::{CommitOptions, GitRepository, GoTime};
+use symvault_sync::GoTime;
 
 pub fn sensitive_field(field: &str) -> bool {
     let lower = field.to_lowercase();
@@ -183,33 +183,7 @@ pub fn delete(root: &Path, identity: &Identity, path: &str) -> Result<(), String
 }
 
 pub(crate) fn auto_commit(store: &Store, identity: &Identity, path: &str, action: &str) {
-    let result = (|| {
-        let entry_path = store
-            .configured_entry_path(path, identity)
-            .map_err(|error| error.to_string())?;
-        let relative = entry_path
-            .strip_prefix(store.root())
-            .map_err(|error| error.to_string())?
-            .to_string_lossy()
-            .replace('\\', "/");
-        let repo = GitRepository::open(store.root()).map_err(|error| error.to_string())?;
-        repo.commit(CommitOptions {
-            message: format!("{action} {path}"),
-            affected_paths: vec![relative, "manifest.age".into()],
-            ..CommitOptions::default()
-        })
-        .map_err(|error| error.to_string())?;
-        let config =
-            Config::load(store.root().join("config.yaml")).map_err(|error| error.to_string())?;
-        if config.git.is_some_and(|git| git.auto_push) {
-            let result = repo.push("origin");
-            if let Some(error) = result.error {
-                return Err(error);
-            }
-        }
-        Ok::<(), String>(())
-    })();
-    if let Err(error) = result {
+    if let Err(error) = symvault_sync::auto_commit_entry(store, identity, path, action) {
         eprintln!("Warning: auto-commit failed: {error}");
     }
 }
