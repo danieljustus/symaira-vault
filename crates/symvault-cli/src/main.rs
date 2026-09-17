@@ -717,6 +717,7 @@ fn run_mcp(
     finish_vault_result(result)
 }
 
+#[allow(clippy::too_many_arguments)] // Direct dispatch of CLI flags.
 fn run_set(
     explicit_vault: Option<&Path>,
     profile: Option<&str>,
@@ -818,6 +819,7 @@ fn run_delete(
     finish_vault_result(result)
 }
 
+#[allow(clippy::too_many_arguments)] // Direct dispatch of CLI flags.
 fn run_import(
     explicit_vault: Option<&Path>,
     profile: Option<&str>,
@@ -846,8 +848,8 @@ fn run_import(
                 overwrite,
                 mapping: mapping.to_owned(),
             },
-            |root, identity, path, data| write_commands::import_fields(root, identity, path, data),
-            |root, identity, path, data| write_commands::replace_fields(root, identity, path, data),
+            write_commands::import_fields,
+            write_commands::replace_fields,
             |root, identity, path, secret_type| {
                 write_commands::set_secret_type(root, identity, path, secret_type)
             },

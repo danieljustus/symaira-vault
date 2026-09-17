@@ -356,7 +356,9 @@ device-list-differential:
 
 sync-io-differential: export-differential cxf-import-differential onepass-import-differential csv-import-differential pairing-fixtures-check git-io-differential
 	GOFLAGS= GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) run ./scripts/rust-port/cmd/syncgen --check --output $(PORT_SYNC_FIXTURE)
-	$(CARGO) test -p symvault-sync --all-features --locked
+	# Other sync integration suites already run through the prerequisites above.
+	$(CARGO) test -p symvault-sync --all-features --locked --lib \
+		--test contracts --test pairing_contract --test version_winner_contract --test git_offline_contract
 
 oracle-reachability-check:
 	./scripts/rust-port/check_oracle_reachability.sh
