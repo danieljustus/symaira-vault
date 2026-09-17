@@ -62,6 +62,7 @@ impl TestVault {
 
     fn run(&self, args: &[&str]) -> Output {
         Command::new(env!("CARGO_BIN_EXE_symvault"))
+            .env("CI", "1")
             .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
             .env("SYMVAULT_PASSPHRASE", &self.passphrase)
             .env("HOME", &self.path)
@@ -146,6 +147,7 @@ fn device_join_and_accept_file_transport_end_to_end() {
     let _ = fs::remove_dir_all(&join_dir);
 
     let join_output = Command::new(env!("CARGO_BIN_EXE_symvault"))
+        .env("CI", "1")
         .env_remove("SYMVAULT_PASSPHRASE")
         .stdin(test_input(&primary, b"joining-device-passphrase-123\n"))
         .env("HOME", &join_dir)
@@ -241,6 +243,7 @@ fn device_add_with_pair_flag_and_revoke_flow() {
 
     // Run device add --pair on second device
     let add_output = Command::new(env!("CARGO_BIN_EXE_symvault"))
+        .env("CI", "1")
         .env_remove("SYMVAULT_PASSPHRASE")
         .stdin(test_input(&primary, b"second-device-passphrase-123\n"))
         .env("HOME", &add_dir)
@@ -420,6 +423,7 @@ fn accept_refuses_non_directory_entries_root() {
 fn environment_unlock_requires_explicit_opt_in() {
     let vault = TestVault::new("env-denied");
     let output = Command::new(env!("CARGO_BIN_EXE_symvault"))
+        .env("CI", "1")
         .env("HOME", &vault.path)
         .env("USERPROFILE", &vault.path)
         .env("SYMVAULT_PASSPHRASE", &vault.passphrase)
@@ -443,22 +447,33 @@ fn environment_unlock_requires_explicit_opt_in() {
 }
 
 #[test]
-fn explicit_disable_and_touchid_never_fall_back_to_environment_unlock() {
-    let vault = TestVault::new("policy-denied");
-    for config in [
-        "security:\n  disable_env_passphrase: true\n  allow_env_passphrase: true\n",
-        "authMethod: touchid\n",
-        "useTouchID: true\n",
-        "vault:\n  authMethod: touchid\n",
-    ] {
+fn explicit_disable_blocks_env_but_touchid_allows_opted_in_fallback() {
+    for (index, (config, allowed)) in [
+        (
+            "security:\n  disable_env_passphrase: true\n  allow_env_passphrase: true\n",
+            false,
+        ),
+        ("authMethod: touchid\n", true),
+        ("useTouchID: true\n", true),
+        ("vault:\n  authMethod: touchid\n", true),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let vault = TestVault::new(&format!("policy-{index}"));
         fs::write(vault.path.join("config.yaml"), config).unwrap();
         let output = vault.run(&["device", "pair"]);
-        assert!(!output.status.success(), "must refuse policy {config}");
-        assert!(
+        assert_eq!(
+            output.status.success(),
+            allowed,
+            "policy {config}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
             fs::read_dir(vault.path.join(".symvault/pairing"))
                 .unwrap()
-                .next()
-                .is_none()
+                .count(),
+            usize::from(allowed)
         );
         assert!(!String::from_utf8_lossy(&output.stderr).contains(&vault.passphrase));
     }
@@ -473,6 +488,7 @@ fn configuration_can_explicitly_allow_environment_unlock() {
     )
     .unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_symvault"))
+        .env("CI", "1")
         .env("HOME", &vault.path)
         .env("USERPROFILE", &vault.path)
         .env("SYMVAULT_PASSPHRASE", &vault.passphrase)
@@ -508,6 +524,7 @@ fn join_does_not_take_new_device_passphrase_from_environment() {
     let token = pairing_file.file_stem().unwrap();
     let target = primary.path.join("joining");
     let output = Command::new(env!("CARGO_BIN_EXE_symvault"))
+        .env("CI", "1")
         .env("HOME", &primary.path)
         .env("USERPROFILE", &primary.path)
         .env("SYMVAULT_PASSPHRASE", &primary.passphrase)
