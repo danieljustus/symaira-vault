@@ -8,8 +8,46 @@
     "internal/importer/totp.go"
   ],
   "source_digest": "9b1c9f0b91c2376b5e7f8ccdbe824301d731a075b1f0ef4c20ec4dcf8f7c3f11",
-  "generator_digest": "b24a4717f731287cbda0d3278df415cc7cd22503cd0415a8b84c253f2a56f8e0",
+  "generator_digest": "e29fa26f213b3e0475af7be3d939ec9fd0f4f545e06b63830306ba75c8cd1274",
   "cases": [
+    {
+      "name": "csv_invalid_totp",
+      "format": "csv",
+      "input": "title,password,otp\nA,p,bad\n",
+      "entries": [
+        {
+          "path": "A",
+          "data": {
+            "password": "p"
+          },
+          "warnings": [
+            "totp: invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+          ]
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "apple_totp",
+      "format": "apple",
+      "input": "Title,Password,OTPAuth\nA,p,otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP\u0026algorithm=sha256\u0026digits=8\u0026period=45\n",
+      "entries": [
+        {
+          "path": "A",
+          "data": {
+            "password": "p",
+            "totp": {
+              "algorithm": "SHA256",
+              "digits": 8,
+              "period": 45,
+              "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+            }
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
     {
       "name": "empty",
       "format": "csv",
@@ -310,5 +348,132 @@
     " x y /a:b",
     "../a",
     "p"
+  ],
+  "totps": [
+    {
+      "input": "",
+      "value": null,
+      "error": "empty TOTP value"
+    },
+    {
+      "input": "bad",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXP",
+      "value": null,
+      "error": "invalid TOTP secret: TOTP secret too short: minimum 16 bytes required (26 base32 characters)"
+    },
+    {
+      "input": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+      },
+      "error": ""
+    },
+    {
+      "input": "  jbswy3dpehpk3pxpjbswy3dpehpk3pxp  ",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "jbswy3dpehpk3pxpjbswy3dpehpk3pxp"
+      },
+      "error": ""
+    },
+    {
+      "input": "otpauth://totp/Example?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+      },
+      "error": ""
+    },
+    {
+      "input": "otpauth://totp/Example?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP\u0026algorithm=sha512\u0026digits=8\u0026period=45",
+      "value": {
+        "algorithm": "SHA512",
+        "digits": 8,
+        "period": 45,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+      },
+      "error": ""
+    },
+    {
+      "input": "otpauth://hotp/Example?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
+      "value": null,
+      "error": "unsupported otpauth type \"hotp\": only otpauth://totp/... is supported"
+    },
+    {
+      "input": "otpauth:///Example?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
+      "value": null,
+      "error": "otpauth URI is missing the type (expected otpauth://totp/...)"
+    },
+    {
+      "input": "otpauth://totp/Example",
+      "value": null,
+      "error": "otpauth URI is missing the secret parameter"
+    },
+    {
+      "input": "otpauth://totp/x?secret=%ZZ",
+      "value": null,
+      "error": "otpauth URI is missing the secret parameter"
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP;bad=x",
+      "value": null,
+      "error": "otpauth URI is missing the secret parameter"
+    },
+    {
+      "input": "otpauth://totp/x?secret=\u0026secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
+      "value": null,
+      "error": "otpauth URI is missing the secret parameter"
+    },
+    {
+      "input": "OTPAUTH://TOTP/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
+      "value": {
+        "algorithm": "SHA1",
+        "digits": 6,
+        "period": 30,
+        "secret": "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+      },
+      "error": ""
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP\u0026algorithm=MD5",
+      "value": null,
+      "error": "invalid TOTP configuration: invalid TOTP algorithm \"MD5\": must be SHA1, SHA256, or SHA512"
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP\u0026digits=7",
+      "value": null,
+      "error": "invalid TOTP digits 7 in otpauth URI: must be 6 or 8"
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP\u0026digits=no",
+      "value": null,
+      "error": "invalid TOTP digits \"no\" in otpauth URI: strconv.Atoi: parsing \"no\": invalid syntax"
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP\u0026period=0",
+      "value": null,
+      "error": "invalid TOTP period 0 in otpauth URI: must be 1-3600 seconds"
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP\u0026period=3601",
+      "value": null,
+      "error": "invalid TOTP period 3601 in otpauth URI: must be 1-3600 seconds"
+    },
+    {
+      "input": "otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP\u0026period=9223372036854775808",
+      "value": null,
+      "error": "invalid TOTP period \"9223372036854775808\" in otpauth URI: strconv.Atoi: parsing \"9223372036854775808\": value out of range"
+    }
   ]
 }

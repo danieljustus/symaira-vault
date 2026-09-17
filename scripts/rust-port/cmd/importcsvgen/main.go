@@ -29,6 +29,12 @@ type csvCase struct {
 	Failed  bool            `json:"failed"`
 }
 
+type totpCase struct {
+	Input string         `json:"input"`
+	Value map[string]any `json:"value"`
+	Error string         `json:"error"`
+}
+
 func main() {
 	check := flag.Bool("check", false, "check fixture freshness")
 	flag.Parse()
@@ -43,6 +49,8 @@ func main() {
 	generatorDigest, err := provenance.Digest(root, []string{"scripts/rust-port/cmd/importcsvgen/main.go"})
 	must(err)
 	cases := []csvCase{
+		{Name: "csv_invalid_totp", Format: "csv", Input: "title,password,otp\nA,p,bad\n"},
+		{Name: "apple_totp", Format: "apple", Input: "Title,Password,OTPAuth\nA,p,otpauth://totp/x?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&algorithm=sha256&digits=8&period=45\n"},
 		{Name: "empty", Format: "csv", Input: ""},
 		{Name: "empty_fields", Format: "csv", Input: "title,username,password,url,notes\nA,,p,,\n"},
 		{Name: "no_title_no_invented_path", Format: "csv", Input: "url,password\nhttps://example.test,p\n"},
@@ -72,6 +80,27 @@ func main() {
 			cases[i].Entries = append(cases[i].Entries, entry{e.Path, e.Data, e.Warnings})
 		}
 	}
+	secret := "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+	totps := []totpCase{}
+	inputs := []string{"", "bad", "JBSWY3DPEHPK3PXP", secret, "  " + strings.ToLower(secret) + "  ",
+		"otpauth://totp/Example?secret=" + secret,
+		"otpauth://totp/Example?secret=" + secret + "&algorithm=sha512&digits=8&period=45",
+		"otpauth://hotp/Example?secret=" + secret, "otpauth:///Example?secret=" + secret,
+		"otpauth://totp/Example", "otpauth://totp/x?secret=%ZZ", "otpauth://totp/x?secret=" + secret + ";bad=x",
+		"otpauth://totp/x?secret=&secret=" + secret, "OTPAUTH://TOTP/x?secret=" + secret,
+		"otpauth://totp/x?secret=" + secret + "&algorithm=MD5",
+		"otpauth://totp/x?secret=" + secret + "&digits=7", "otpauth://totp/x?secret=" + secret + "&digits=no",
+		"otpauth://totp/x?secret=" + secret + "&period=0", "otpauth://totp/x?secret=" + secret + "&period=3601",
+		"otpauth://totp/x?secret=" + secret + "&period=9223372036854775808",
+	}
+	for _, input := range inputs {
+		v, err := importer.ParseTOTP(input)
+		message := ""
+		if err != nil {
+			message = err.Error()
+		}
+		totps = append(totps, totpCase{input, v, message})
+	}
 	paths := []string{" .... ", "////a///", "../a..b", " a b ", "a:b\\c", "......"}
 	normalized := map[string]string{}
 	for _, p := range paths {
@@ -91,7 +120,8 @@ func main() {
 		Paths           map[string]string `json:"paths"`
 		Prefixes        [][2]string       `json:"prefixes"`
 		PrefixResults   []string          `json:"prefix_results"`
-	}{pinnedOracleCommit, sources, digest, generatorDigest, cases, normalized, prefixes, prefixResults}
+		Totps           []totpCase        `json:"totps"`
+	}{pinnedOracleCommit, sources, digest, generatorDigest, cases, normalized, prefixes, prefixResults, totps}
 	content, err := json.MarshalIndent(fixture, "", "  ")
 	must(err)
 	content = append(content, '\n')

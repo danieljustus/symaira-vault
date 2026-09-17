@@ -1,3 +1,6 @@
+mod totp;
+pub use totp::parse_totp;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -166,7 +169,7 @@ pub fn parse_csv_profile(
         };
         let mut path = String::new();
         let mut data = BTreeMap::new();
-        let warnings = None;
+        let mut warnings = None;
         for (field, col) in mapping {
             let Some(val) = get(col) else { continue };
             match field.as_str() {
@@ -177,7 +180,7 @@ pub fn parse_csv_profile(
                 }
                 "otp" | "totp.secret" => {
                     if !val.is_empty() {
-                        data.insert("totp".into(), Value::String(val.into()));
+                        insert_totp(&mut data, &mut warnings, val);
                     }
                 }
                 _ => {
@@ -350,7 +353,7 @@ pub fn parse_bitwarden(bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportError> 
             &item.name,
         ));
         let mut d = BTreeMap::new();
-        let warnings = None;
+        let mut warnings = None;
         if item.kind == 1 {
             d.insert("username".into(), Value::String(item.login.username));
             d.insert("password".into(), Value::String(item.login.password));
@@ -377,7 +380,7 @@ pub fn parse_bitwarden(bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportError> 
             );
             d.insert("notes".into(), Value::String(item.notes));
             if !item.login.totp.is_empty() {
-                d.insert("totp".into(), Value::String(item.login.totp));
+                insert_totp(&mut d, &mut warnings, &item.login.totp);
             }
         } else {
             d.insert("card_number".into(), Value::String(item.card.number));
@@ -501,7 +504,7 @@ pub fn parse_1pux(bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportError> {
                     continue;
                 }
                 let mut d = BTreeMap::new();
-                let w = None;
+                let mut w = None;
                 d.insert(
                     "username".into(),
                     Value::String(
@@ -543,11 +546,13 @@ pub fn parse_1pux(bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportError> {
                     for f in s.fields {
                         let is_totp = f.n.to_ascii_lowercase().contains("totp")
                             || f.t.to_ascii_lowercase().contains("one-time password");
-                        if is_totp {
-                            f.v.get("otp")
-                                .and_then(Value::as_str)
-                                .or_else(|| f.v.as_str())
-                                .map(|v| d.insert("totp".into(), Value::String(v.into())));
+                        if is_totp
+                            && let Some(value) =
+                                f.v.get("otp")
+                                    .and_then(Value::as_str)
+                                    .or_else(|| f.v.as_str())
+                        {
+                            insert_totp(&mut d, &mut w, value);
                         }
                     }
                 }
@@ -566,16 +571,22 @@ pub fn parse_1pux(bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportError> {
 /// caller so production can use a capability-scoped adapter and tests can use a fake.
 pub fn parse_pass_entry(path: &Path, content: &str) -> ImportedEntry {
     let normalized = content.replace("\r\n", "\n").replace('\r', "\n");
-    let mut lines = normalized.trim_end_matches('\n').split('\n');
+    let mut lines = normalized
+        .strip_suffix('\n')
+        .unwrap_or(&normalized)
+        .split('\n');
     let password = lines.next().unwrap_or_default();
     let mut d = BTreeMap::new();
     d.insert("password".into(), Value::String(password.into()));
     let mut notes: Vec<String> = Vec::new();
+    let mut warnings = None;
     for l in lines {
         if let Some(v) = l.strip_prefix("url: ") {
             d.insert("url".into(), Value::String(v.trim().into()));
         } else if let Some(v) = l.strip_prefix("username: ") {
             d.insert("username".into(), Value::String(v.trim().into()));
+        } else if l.starts_with("otpauth://") {
+            insert_totp(&mut d, &mut warnings, l);
         } else {
             notes.push(l.into());
         }
@@ -584,10 +595,28 @@ pub fn parse_pass_entry(path: &Path, content: &str) -> ImportedEntry {
         d.insert("notes".into(), Value::String(notes.join("\n")));
     }
     ImportedEntry {
-        path: normalize_path(path.to_string_lossy().trim_end_matches(".gpg")),
+        path: normalize_path(
+            path.to_string_lossy()
+                .strip_suffix(".gpg")
+                .unwrap_or(&path.to_string_lossy()),
+        ),
         data: d,
-        warnings: None,
+        warnings,
         secret_type: None,
+    }
+}
+fn insert_totp(
+    data: &mut BTreeMap<String, Value>,
+    warnings: &mut Option<Vec<String>>,
+    value: &str,
+) {
+    match parse_totp(value) {
+        Ok(totp) => {
+            data.insert("totp".into(), totp);
+        }
+        Err(error) => warnings
+            .get_or_insert_with(Vec::new)
+            .push(format!("totp: {error}")),
     }
 }
 mod xhash {

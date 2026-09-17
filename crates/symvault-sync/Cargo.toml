@@ -8,6 +8,8 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+symvault-core.workspace = true
+url = "=2.5.8"
 base64 = "=0.22.1"
 csv = "=1.4.0"
 flate2 = "=1.1.5"

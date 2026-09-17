@@ -48,3 +48,20 @@ fn csv_profiles_and_paths_match_production_go() {
         );
     }
 }
+
+#[test]
+fn imported_totp_matches_production_go_validation_and_shape() {
+    let fixture: Value =
+        serde_json::from_str(include_str!("../../../testdata/port/sync/csv.json")).unwrap();
+    for case in fixture["totps"].as_array().unwrap() {
+        match importer::parse_totp(case["input"].as_str().unwrap()) {
+            Ok(value) => {
+                assert_eq!(case["error"], "");
+                assert_eq!(value, case["value"]);
+            }
+            Err(error) => {
+                assert_eq!(error, case["error"].as_str().unwrap(), "{}", case["input"]);
+            }
+        }
+    }
+}
