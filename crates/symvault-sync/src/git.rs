@@ -266,11 +266,100 @@ impl GitRepository {
             }
         }
     }
-    fn merge_state_exists(&self) -> bool {
-        let git_dir = self.root.join(".git");
-        let git_dir = match fs::symlink_metadata(&git_dir) {
-            Ok(metadata) if metadata.is_dir() => git_dir,
-            Ok(_) => match fs::read_to_string(&git_dir) {
+
+    /// Fetches and hard-resets a clean worktree to the remote branch.
+    ///
+    /// Go's `sync --force` preserves dirty files as conflict copies before
+    /// resetting.  The Rust adapter refuses a dirty worktree until that
+    /// preservation path is available, so callers cannot lose local data.
+    pub fn force_pull(&self, name: &str) -> PullResult {
+        let remote_url = self.remote_url(name).ok().flatten();
+        if remote_url.is_none() {
+            return PullResult {
+                skipped: true,
+                ..Default::default()
+            };
+        }
+        match self.status() {
+            Ok(status) if !status.is_empty() => {
+                return PullResult {
+                    remote_url,
+                    error: Some(
+                        "force pull refused: local changes must be preserved before reset"
+                            .to_owned(),
+                    ),
+                    ..Default::default()
+                };
+            }
+            Err(error) => {
+                return PullResult {
+                    remote_url,
+                    error: Some(format!(
+                        "cannot inspect worktree before force pull: {error}"
+                    )),
+                    ..Default::default()
+                };
+            }
+            Ok(_) => {}
+        }
+
+        let before = self.head().ok();
+        if let Err(error) = self.command(&["fetch", name]) {
+            return PullResult {
+                remote_url,
+                error: Some(classify_pull_error(&error)),
+                ..Default::default()
+            };
+        }
+        let branch = match self.command(&["symbolic-ref", "--short", "HEAD"]) {
+            Ok(output) => String::from_utf8_lossy(&output.stdout).trim().to_owned(),
+            Err(error) => {
+                return PullResult {
+                    remote_url,
+                    error: Some(format!("could not resolve local branch: {error}")),
+                    ..Default::default()
+                };
+            }
+        };
+        if branch.is_empty() {
+            return PullResult {
+                remote_url,
+                error: Some("could not resolve local branch".to_owned()),
+                ..Default::default()
+            };
+        }
+        let remote_branch = format!("{name}/{branch}");
+        if let Err(error) = self.command(&["reset", "--hard", &remote_branch]) {
+            return PullResult {
+                remote_url,
+                error: Some(format!("force reset failed: {error}")),
+                ..Default::default()
+            };
+        }
+        PullResult {
+            success: true,
+            updated: before != self.head().ok(),
+            remote_url,
+            ..Default::default()
+        }
+    }
+
+    /// Records a successful sync in the repository's private git metadata.
+    pub fn record_last_sync(&self) -> Result<(), GitError> {
+        let timestamp = time::OffsetDateTime::now_utc()
+            .replace_nanosecond(0)
+            .map_err(|error| GitError::Parse(error.to_string()))?
+            .format(&time::format_description::well_known::Rfc3339)
+            .map_err(|error| GitError::Parse(error.to_string()))?;
+        fs::write(self.git_dir().join("symvault-last-sync"), timestamp)?;
+        Ok(())
+    }
+
+    fn git_dir(&self) -> PathBuf {
+        let git_path = self.root.join(".git");
+        match fs::symlink_metadata(&git_path) {
+            Ok(metadata) if metadata.is_dir() => git_path,
+            Ok(_) => match fs::read_to_string(&git_path) {
                 Ok(contents) => contents
                     .strip_prefix("gitdir:")
                     .map(str::trim)
@@ -282,12 +371,15 @@ impl GitRepository {
                             self.root.join(path)
                         }
                     })
-                    .unwrap_or(git_dir),
-                Err(_) => git_dir,
+                    .unwrap_or(git_path),
+                Err(_) => git_path,
             },
-            Err(_) => git_dir,
-        };
-        git_dir.join("MERGE_HEAD").exists()
+            Err(_) => git_path,
+        }
+    }
+
+    fn merge_state_exists(&self) -> bool {
+        self.git_dir().join("MERGE_HEAD").exists()
     }
     fn transfer(&self, name: &str, push: bool) -> PushResult {
         let remote_url = self.remote_url(name).ok().flatten();
