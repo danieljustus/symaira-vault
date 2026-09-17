@@ -1,0 +1,284 @@
+{
+  "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+  "sources": [
+    "internal/crypto/totp.go",
+    "internal/importer/csv.go",
+    "internal/importer/csv_profiles.go",
+    "internal/importer/importer.go",
+    "internal/importer/totp.go"
+  ],
+  "source_digest": "9b1c9f0b91c2376b5e7f8ccdbe824301d731a075b1f0ef4c20ec4dcf8f7c3f11",
+  "generator_digest": "11cf715d9e6eec8f11386547ee99fae0012625608839612c873d714dfe3ffb79",
+  "cases": [
+    {
+      "name": "empty",
+      "format": "csv",
+      "input": "",
+      "entries": [],
+      "failed": false
+    },
+    {
+      "name": "empty_fields",
+      "format": "csv",
+      "input": "title,username,password,url,notes\nA,,p,,\n",
+      "entries": [
+        {
+          "path": "A",
+          "data": {
+            "notes": "",
+            "password": "p",
+            "url": "",
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "no_title_no_invented_path",
+      "format": "csv",
+      "input": "url,password\nhttps://example.test,p\n",
+      "entries": [
+        {
+          "path": "",
+          "data": {
+            "password": "p",
+            "url": "https://example.test"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "duplicate_header_last",
+      "format": "csv",
+      "input": "title,password,password\nA,old,new\n",
+      "entries": [
+        {
+          "path": "A",
+          "data": {
+            "password": "new"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "short_row",
+      "format": "csv",
+      "input": "title,password,url\nA,p\n",
+      "entries": [
+        {
+          "path": "A",
+          "data": {
+            "password": "p"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "blank_rows",
+      "format": "csv",
+      "input": "title,password\n , \nA,p\n",
+      "entries": [
+        {
+          "path": "A",
+          "data": {
+            "password": "p"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "embedded_newline",
+      "format": "csv",
+      "input": "title,password\nA,\"line1\nline2\"\n",
+      "entries": [
+        {
+          "path": "A",
+          "data": {
+            "password": "line1\nline2"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "escaped_quote",
+      "format": "csv",
+      "input": "title,password\nA,\"a\"\"b\"\n",
+      "entries": [
+        {
+          "path": "A",
+          "data": {
+            "password": "a\"b"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "bare_quote",
+      "format": "csv",
+      "input": "title,password\nA,a\"b\n",
+      "entries": [],
+      "failed": true
+    },
+    {
+      "name": "closed_quote_suffix",
+      "format": "csv",
+      "input": "title,password\nA,\"a\"b\n",
+      "entries": [],
+      "failed": true
+    },
+    {
+      "name": "crlf",
+      "format": "csv",
+      "input": "title,password\r\nA,\"a\r\nb\"\r\n",
+      "entries": [
+        {
+          "path": "A",
+          "data": {
+            "password": "a\nb"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "malformed",
+      "format": "csv",
+      "input": "title,password\nA,\"unterminated",
+      "entries": [],
+      "failed": true
+    },
+    {
+      "name": "chrome_hosts_collisions",
+      "format": "chrome",
+      "input": "name,url,username,password,note\n,https://USER:PASS@EXAMPLE.test:8080/a,u,p,n\n,https://example.test/b,u2,p2,\nexample.test-2,https://other.test,u3,p3,\n",
+      "entries": [
+        {
+          "path": "example.test",
+          "data": {
+            "notes": "n",
+            "password": "p",
+            "url": "https://USER:PASS@EXAMPLE.test:8080/a",
+            "username": "u"
+          },
+          "warnings": null
+        },
+        {
+          "path": "example.test-2",
+          "data": {
+            "notes": "",
+            "password": "p2",
+            "url": "https://example.test/b",
+            "username": "u2"
+          },
+          "warnings": null
+        },
+        {
+          "path": "example.test-2-2",
+          "data": {
+            "notes": "",
+            "password": "p3",
+            "url": "https://other.test",
+            "username": "u3"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "firefox_ipv6",
+      "format": "firefox",
+      "input": "url,username,password,httpRealm\nhttps://[::1]:8000/a,u,p,\n",
+      "entries": [
+        {
+          "path": "[1]",
+          "data": {
+            "password": "p",
+            "url": "https://[::1]:8000/a",
+            "username": "u"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "apple_empty_title",
+      "format": "apple",
+      "input": "Title,URL,Username,Password,Notes,OTPAuth\n,https://example.test,u,p,,\n",
+      "entries": [
+        {
+          "path": "",
+          "data": {
+            "notes": "",
+            "password": "p",
+            "url": "https://example.test",
+            "username": "u"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "profile_case_headers",
+      "format": "chrome",
+      "input": " NAME ,URL,UserName,PASSWORD,NOTE\nTitle,https://example.test,u,p,n\n",
+      "entries": [
+        {
+          "path": "Title",
+          "data": {
+            "notes": "n",
+            "password": "p",
+            "url": "https://example.test",
+            "username": "u"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    }
+  ],
+  "paths": {
+    " .... ": "--",
+    " a b ": "a-b",
+    "......": "---",
+    "../a..b": "-/a-b",
+    "////a///": "a",
+    "a:b\\c": "abc"
+  },
+  "prefixes": [
+    [
+      " / x y / ",
+      "a:b"
+    ],
+    [
+      "",
+      "../a"
+    ],
+    [
+      "p",
+      ""
+    ]
+  ],
+  "prefix_results": [
+    " x y /a:b",
+    "../a",
+    "p"
+  ]
+}

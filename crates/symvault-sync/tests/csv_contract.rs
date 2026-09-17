@@ -1,0 +1,50 @@
+use serde_json::Value;
+use symvault_sync::importer::{self, Format};
+
+#[test]
+fn csv_profiles_and_paths_match_production_go() {
+    let fixture: Value =
+        serde_json::from_str(include_str!("../../../testdata/port/sync/csv.json")).unwrap();
+    assert_eq!(
+        fixture["commit"],
+        "fca3f89401833b5e14ec4ec74ef736b0f63bca74"
+    );
+    for case in fixture["cases"].as_array().unwrap() {
+        let format = match case["format"].as_str().unwrap() {
+            "csv" => Format::Csv,
+            "apple" => Format::Apple,
+            "chrome" => Format::Chrome,
+            "firefox" => Format::Firefox,
+            _ => unreachable!(),
+        };
+        let result = importer::parse(format, case["input"].as_str().unwrap().as_bytes());
+        assert_eq!(
+            result.is_err(),
+            case["failed"].as_bool().unwrap(),
+            "{}",
+            case["name"]
+        );
+        if let Ok(entries) = result {
+            assert_eq!(
+                serde_json::to_value(entries).unwrap(),
+                case["entries"],
+                "{}",
+                case["name"]
+            );
+        }
+    }
+    for (input, expected) in fixture["paths"].as_object().unwrap() {
+        assert_eq!(importer::normalize_path(input), expected.as_str().unwrap());
+    }
+    for (input, expected) in fixture["prefixes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .zip(fixture["prefix_results"].as_array().unwrap())
+    {
+        assert_eq!(
+            importer::apply_prefix(input[0].as_str().unwrap(), input[1].as_str().unwrap()),
+            expected.as_str().unwrap()
+        );
+    }
+}
