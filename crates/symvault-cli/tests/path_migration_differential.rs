@@ -161,4 +161,33 @@ fn migration_preview_matches_go_for_legacy_symlink_errors() {
         assert_same(&go, &rust, &format!("legacy symlink {args:?}"));
         assert!(!go.status.success(), "Go must reject legacy symlink");
     }
+
+    let (_nested_root, nested_home, nested_xdg) = fixture("nested-symlink");
+    let nested_vault = nested_home.join(".symvault/vault");
+    fs::create_dir_all(&nested_vault).expect("nested vault directory");
+    let nested_target = nested_home.join("nested-target");
+    fs::create_dir_all(&nested_target).expect("nested symlink target");
+    std::os::unix::fs::symlink(&nested_target, nested_vault.join("nested-link"))
+        .expect("nested symlink");
+    for args in [["migrate", "paths"], ["--quiet", "migrate", "xdg"]] {
+        let go = run(
+            &go_binary,
+            &args,
+            &nested_home,
+            (&nested_xdg.0, &nested_xdg.1, &nested_xdg.2),
+        );
+        let rust = run(
+            &rust_binary,
+            &args,
+            &nested_home,
+            (&nested_xdg.0, &nested_xdg.1, &nested_xdg.2),
+        );
+        assert_same(&go, &rust, &format!("nested legacy symlink {args:?}"));
+        assert!(!go.status.success(), "Go must reject nested legacy symlink");
+        assert!(
+            String::from_utf8_lossy(&go.stderr).contains(nested_vault.to_string_lossy().as_ref()),
+            "Go nested symlink diagnostic should contain the absolute walked path: {:?}",
+            go.stderr
+        );
+    }
 }
