@@ -208,7 +208,7 @@ impl ShareStore {
         now: &str,
     ) -> Result<ShareGrant, StoreError> {
         let _lock = store.acquire_write_lock()?;
-        self.revoke_locked(store.root(), &store.root_cap, grant_id, now)
+        self.revoke_locked(store.root(), &store.root_cap, grant_id, now, None)
     }
 
     /// Revokes a grant using only a no-follow vault root capability.
@@ -229,7 +229,27 @@ impl ShareStore {
             source,
         })?;
         let _lock = crate::open_root_write_lock(&root_cap, root)?;
-        self.revoke_locked(root, &root_cap, grant_id, now)
+        self.revoke_locked(root, &root_cap, grant_id, now, None)
+    }
+
+    /// Revokes a grant only when its source agent still matches the caller.
+    ///
+    /// The source check runs after the file is reloaded under the mutation
+    /// lock, closing the stale-snapshot authorization window in MCP revoke.
+    pub fn revoke_at_for_agent(
+        &mut self,
+        root: impl AsRef<Path>,
+        grant_id: &str,
+        expected_from_agent: &str,
+        now: &str,
+    ) -> Result<ShareGrant, StoreError> {
+        let root = root.as_ref();
+        let root_cap = crate::open_directory_nofollow(root).map_err(|source| StoreError::Read {
+            path: root.to_path_buf(),
+            source,
+        })?;
+        let _lock = crate::open_root_write_lock(&root_cap, root)?;
+        self.revoke_locked(root, &root_cap, grant_id, now, Some(expected_from_agent))
     }
 
     fn revoke_locked(
@@ -238,6 +258,7 @@ impl ShareStore {
         root_cap: &fs::File,
         grant_id: &str,
         now: &str,
+        expected_from_agent: Option<&str>,
     ) -> Result<ShareGrant, StoreError> {
         let now = time::OffsetDateTime::parse(now, &time::format_description::well_known::Rfc3339)
             .map_err(|error| StoreError::Config(format!("invalid revoke clock: {error}")))?
@@ -250,6 +271,14 @@ impl ShareStore {
             .iter()
             .position(|grant| grant.id == grant_id)
             .ok_or_else(|| StoreError::Config(format!("share grant {grant_id} not found")))?;
+        if let Some(expected_from_agent) = expected_from_agent
+            && current.grants[position].from_agent != expected_from_agent
+        {
+            return Err(StoreError::Config(format!(
+                "only the source agent {} can revoke this share",
+                go_json_string(expected_from_agent)
+            )));
+        }
         if matches!(
             current.grants[position].status.as_str(),
             "revoked" | "rejected"
@@ -836,6 +865,42 @@ mod tests {
                 .status,
             "revoked"
         );
+    }
+
+    #[test]
+    fn revoke_at_for_agent_checks_reloaded_source_before_writing() {
+        let root = tempfile::tempdir().expect("metadata-only root");
+        let canonical_root = root.path().canonicalize().expect("canonical root");
+        let path = canonical_root.join(SHARE_STORE_FILE);
+        fs::write(
+            &path,
+            br#"{"version":1,"grants":[{"id":"grant-a","from_agent":"old-source","to_agent":"target","secret_path":"prod/a","status":"pending","created_at":"2026-01-02T03:04:05Z"}]}"#,
+        )
+        .expect("write initial share fixture");
+        let mut snapshot = ShareStore::read(&path).expect("read initial share fixture");
+        let before = snapshot.clone();
+        fs::write(
+            &path,
+            br#"{"version":1,"grants":[{"id":"grant-a","from_agent":"new-source","to_agent":"target","secret_path":"prod/a","status":"pending","created_at":"2026-01-02T03:04:05Z"}]}"#,
+        )
+        .expect("replace current share fixture");
+
+        let error = snapshot
+            .revoke_at_for_agent(
+                &canonical_root,
+                "grant-a",
+                "old-source",
+                "2026-01-02T04:00:00Z",
+            )
+            .expect_err("stale source must not revoke");
+        assert_eq!(
+            error.to_string(),
+            "only the source agent \"old-source\" can revoke this share"
+        );
+        assert_eq!(snapshot.grants(), before.grants());
+        let persisted = ShareStore::read(&path).expect("read unchanged current share");
+        assert_eq!(persisted.grants()[0].from_agent, "new-source");
+        assert_eq!(persisted.grants()[0].status, "pending");
     }
 
     #[cfg(unix)]
