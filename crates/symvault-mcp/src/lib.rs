@@ -21,6 +21,7 @@ mod call;
 mod prompts;
 pub mod render;
 pub mod store_adapter;
+mod template;
 mod tools;
 pub use call::{
     ReadOnlyEntry, ReadOnlyRuntime, ReadOnlyRuntimeConfig, ReadOnlyStore, ReadOnlyUnavailableTool,

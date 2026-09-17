@@ -270,6 +270,7 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
             "generate_password" => self.generate_password(arguments),
             "sanitize_output" => self.sanitize_output(arguments),
             "symaira_search" => self.search_tools(arguments),
+            "generate_template" => self.generate_template(arguments),
             "generate_totp" => self.generate_totp(arguments),
             "set_entry_field" => self.set_entry_field(arguments),
             "delete_entry" => self.delete_entry(arguments),
@@ -376,6 +377,62 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
             .unwrap_or("spec");
         let result = crate::tools::search_tools(intent, return_mode)?;
         Ok(ToolCallResult::text(result))
+    }
+
+    fn generate_template(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        let template_type = match required_string(arguments, "template_type") {
+            Ok(value) => value,
+            Err(_) => return Ok(ToolCallResult::error("template_type is required")),
+        };
+        let name = arguments
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or("app");
+        let output_path = arguments
+            .get("output_path")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        if !output_path.is_empty() {
+            return Ok(ToolCallResult::error(
+                "output_path is not supported by this runtime",
+            ));
+        }
+        let dry_run = arguments
+            .get("dry_run")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        if !dry_run {
+            return Ok(ToolCallResult::error(
+                "generate_template non-dry-run secret release is not supported by this runtime",
+            ));
+        }
+        let refs = arguments
+            .get("secret_refs")
+            .and_then(Value::as_object)
+            .map(|values| {
+                values
+                    .iter()
+                    .filter_map(|(alias, reference)| {
+                        reference
+                            .as_str()
+                            .map(|reference| (alias.clone(), reference.to_owned()))
+                    })
+                    .collect::<BTreeMap<_, _>>()
+            })
+            .unwrap_or_default();
+        let output = match crate::template::render_builtin(template_type, name, &refs) {
+            Ok(output) => output,
+            Err(error) => {
+                return Ok(ToolCallResult::error(format!("render template: {error}")));
+            }
+        };
+        let wrapped = crate::render::embed_as_data("rendered_template", &output)
+            .map_err(|error| format!("embed rendered template: {error}"))?;
+        // Go applies the final MCP chokepoint to the whole result. That pass
+        // neutralizes the literal comment closers in this text response.
+        Ok(ToolCallResult::text(crate::render::sanitize_for_mcp(
+            &wrapped,
+        )))
     }
 
     fn set_entry_field(&self, arguments: &Value) -> Result<ToolCallResult, String> {
