@@ -96,7 +96,7 @@ pub(crate) fn list(
     let mut names: Vec<_> = config.agents.keys().cloned().collect();
     names.sort();
 
-    let agents = names
+    let agents: Vec<_> = names
         .into_iter()
         .map(|name| {
             let profile = config
@@ -271,7 +271,6 @@ fn write_json(
         return Ok(());
     }
     let mut serializer = serde_json::Serializer::pretty(output);
-    serializer.escape_html(false);
     result
         .serialize(&mut serializer)
         .map_err(|error| error.to_string())?;
