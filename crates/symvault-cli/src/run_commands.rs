@@ -343,7 +343,9 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
         return Ok(ProcessResult {
             stdout: String::new(),
             stderr: String::new(),
-            exit_code: status.code().unwrap_or(-1),
+            // Go reports -1 for deadline cancellation regardless of the
+            // platform-specific status produced after killing the child.
+            exit_code: -1,
             timed_out: true,
             duration,
             stdout_truncated: false,
