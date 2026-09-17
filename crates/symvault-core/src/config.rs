@@ -963,9 +963,7 @@ pub fn parse_duration_nanos(text: &str) -> Option<i128> {
         let fraction_nanos = if fraction.is_empty() {
             0
         } else {
-            let digits = &fraction[..fraction.len().min(9)];
-            let value = digits.parse::<i128>().ok()?;
-            value.checked_mul(multiplier)? / 10i128.pow(digits.len() as u32)
+            go_fraction_nanos(fraction, multiplier)
         };
         total = total.checked_add(whole.checked_add(fraction_nanos)?)?;
         rest = &rest[index + unit_len..];
@@ -980,6 +978,39 @@ pub fn parse_duration_nanos(text: &str) -> Option<i128> {
     } else {
         Some(total)
     }
+}
+
+/// Mirrors `time.leadingFraction` and the fractional part of Go's
+/// `time.ParseDuration`. Go keeps up to the first 63 significant fraction
+/// bits in a `uint64`, retains the decimal scale as `float64`, and multiplies
+/// in floating point before truncating to nanoseconds. In particular, the
+/// fraction is a fraction of its unit (`0.1h`), rather than a fraction of a
+/// second. Keeping this operation in the same order preserves Go's rounding
+/// for long hour and minute fractions.
+fn go_fraction_nanos(fraction: &str, multiplier: i128) -> i128 {
+    let mut value = 0_u64;
+    let mut scale = 1.0_f64;
+    let mut overflow = false;
+    for byte in fraction.bytes() {
+        if overflow {
+            continue;
+        }
+        if value > (i64::MAX as u64) / 10 {
+            overflow = true;
+            continue;
+        }
+        let next = value * 10 + u64::from(byte - b'0');
+        if next > (1_u64 << 63) {
+            overflow = true;
+            continue;
+        }
+        value = next;
+        scale *= 10.0;
+    }
+    if value == 0 {
+        return 0;
+    }
+    (value as f64 * (multiplier as f64 / scale)) as u64 as i128
 }
 
 /// Parses a Go `time.ParseDuration` value for APIs whose wire type is an
@@ -1072,7 +1103,7 @@ fn go_duration_quote(value: &str) -> String {
     let mut quoted = String::with_capacity(value.len() + 2);
     quoted.push('"');
     for byte in value.bytes() {
-        if byte >= 0x80 || byte < b' ' {
+        if !(b' '..0x80).contains(&byte) {
             quoted.push_str("\\x");
             quoted.push(HEX[(byte >> 4) as usize] as char);
             quoted.push(HEX[(byte & 0x0f) as usize] as char);
@@ -1877,9 +1908,25 @@ mod tests {
             Err("time: unknown unit \"e\" in duration \"1e3s\"".into())
         );
         assert_eq!(
+            parse_go_duration("1msx"),
+            Err("time: unknown unit \"msx\" in duration \"1msx\"".into())
+        );
+        assert_eq!(
             parse_go_duration("1.2.3s"),
             Err("time: missing unit in duration \"1.2.3s\"".into())
         );
+    }
+
+    #[test]
+    fn parse_go_duration_scales_long_fractions_per_unit() {
+        for (text, expected) in [
+            ("0.123456789123h", 444_444_440_842_i128),
+            ("0.123456789123m", 7_407_407_347_i128),
+            ("-0.123456789123h", -444_444_440_842_i128),
+        ] {
+            assert_eq!(parse_duration_nanos(text), Some(expected), "{text}");
+            assert_eq!(parse_go_duration(text), Ok(expected as i64), "{text}");
+        }
     }
 
     #[test]
