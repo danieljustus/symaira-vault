@@ -710,6 +710,7 @@ func buildCases(goBinary, root string) ([]cliCase, error) {
 			item.ConfigBytes = byteValues(input.config)
 		}
 		if input.captureConfigAfter {
+			// #nosec G304 -- configPath is a fixed fixture path under this case's private temporary directory.
 			after, readErr := os.ReadFile(configPath)
 			if readErr != nil {
 				return nil, cleanupCase(tempRoot, fmt.Errorf("read oracle case %s config after: %w", input.name, readErr))
