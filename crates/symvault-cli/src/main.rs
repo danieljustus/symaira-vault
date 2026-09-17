@@ -750,6 +750,7 @@ fn finish_vault_result(result: Result<(), String>) -> ExitCode {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_generate(
     explicit_vault: Option<&Path>,
     profile: Option<&str>,
