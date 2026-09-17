@@ -1449,3 +1449,141 @@ fn verify_matches_go_for_missing_rebuild_and_tampered_manifest() {
     fs::remove_dir_all(home).expect("cleanup verify home");
     fs::remove_dir_all(root).expect("cleanup verify vault");
 }
+
+#[test]
+fn file_add_get_roundtrip_matches_go_cli() {
+    let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
+        eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
+        return;
+    };
+    let go_binary = PathBuf::from(go_binary);
+    let rust_binary = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
+    let home = temporary_root("file-home");
+    let root = temporary_root("file-vault");
+    let fixture_dir = temporary_root("file-fixtures");
+    fs::create_dir_all(&home).expect("home");
+    fs::create_dir_all(&fixture_dir).expect("fixture directory");
+    let go_source = fixture_dir.join("certificate-go.p12");
+    let rust_source = fixture_dir.join("certificate-rust.p12");
+    let go_output = fixture_dir.join("go-output.p12");
+    let rust_output = fixture_dir.join("rust-output.p12");
+    let go_content = b"go-binary-attachment\0\xff";
+    let rust_content = b"rust-binary-attachment\0\x01\x02";
+    fs::write(&go_source, go_content).expect("Go fixture");
+    fs::write(&rust_source, rust_content).expect("Rust fixture");
+
+    let init = run(
+        &rust_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "init",
+            "--auth",
+            "passphrase",
+        ],
+        &root,
+        &home,
+    );
+    assert_success(&init, "Rust init for file differential");
+
+    let go_add = run(
+        &go_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "file",
+            "add",
+            "work/go-file",
+            "--field",
+            "cert_p12",
+            "--from",
+            go_source.to_str().unwrap(),
+            "--type",
+            "certificate",
+        ],
+        &root,
+        &home,
+    );
+    assert_success(&go_add, "Go file add");
+    let rust_get = run(
+        &rust_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "file",
+            "get",
+            "work/go-file#cert_p12",
+            "--out",
+            rust_output.to_str().unwrap(),
+        ],
+        &root,
+        &home,
+    );
+    assert_success(&rust_get, "Rust get Go attachment");
+    assert_eq!(fs::read(&rust_output).expect("Rust output"), go_content);
+
+    let rust_add = run(
+        &rust_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "file",
+            "add",
+            "work/rust-file",
+            "--field",
+            "cert_p12",
+            "--from",
+            rust_source.to_str().unwrap(),
+            "--type",
+            "certificate",
+        ],
+        &root,
+        &home,
+    );
+    assert_success(&rust_add, "Rust file add");
+    let go_get = run(
+        &go_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "file",
+            "get",
+            "work/rust-file#cert_p12",
+            "--out",
+            go_output.to_str().unwrap(),
+        ],
+        &root,
+        &home,
+    );
+    assert_success(&go_get, "Go get Rust attachment");
+    assert_eq!(fs::read(&go_output).expect("Go output"), rust_content);
+
+    let shred_source = fixture_dir.join("shred-me.bin");
+    fs::write(&shred_source, b"remove-after-write").expect("shred fixture");
+    let rust_shred = run(
+        &rust_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "file",
+            "add",
+            "work/shred-file",
+            "--field",
+            "secret_blob",
+            "--from",
+            shred_source.to_str().unwrap(),
+            "--shred",
+        ],
+        &root,
+        &home,
+    );
+    assert_success(&rust_shred, "Rust file add shred");
+    assert!(
+        !shred_source.exists(),
+        "--shred must remove source after write"
+    );
+
+    fs::remove_dir_all(home).expect("cleanup file home");
+    fs::remove_dir_all(root).expect("cleanup file vault");
+    fs::remove_dir_all(fixture_dir).expect("cleanup file fixtures");
+}

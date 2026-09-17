@@ -5,6 +5,7 @@ mod backup_commands;
 mod config;
 mod device;
 mod export_commands;
+mod file_commands;
 mod history_commands;
 mod import_commands;
 mod mcp_commands;
@@ -200,6 +201,11 @@ enum Command {
         #[arg(value_name = "ARCHIVE_PATH")]
         archive: PathBuf,
     },
+    /// Add or export binary file attachments.
+    File {
+        #[command(subcommand)]
+        command: FileCommand,
+    },
     /// Verify or rebuild the vault entry manifest.
     Verify {
         #[arg(long)]
@@ -313,6 +319,34 @@ enum RecipientsCommand {
         yes: bool,
         #[arg(long)]
         no_reencrypt: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum FileCommand {
+    /// Attach a source file to an entry field.
+    Add {
+        #[arg(value_name = "PATH")]
+        path: String,
+        #[arg(long)]
+        field: String,
+        #[arg(long = "from")]
+        source: PathBuf,
+        #[arg(long = "type", default_value = "certificate")]
+        secret_type: String,
+        #[arg(long, default_value_t = file_commands::DEFAULT_MAX_ATTACHMENT_SIZE)]
+        max_size: u64,
+        #[arg(long)]
+        shred: bool,
+    },
+    /// Export a stored file attachment.
+    Get {
+        #[arg(value_name = "PATH[#FIELD]")]
+        query: String,
+        #[arg(long)]
+        field: Option<String>,
+        #[arg(long)]
+        out: Option<PathBuf>,
     },
 }
 
@@ -538,6 +572,12 @@ fn main() -> ExitCode {
             cli.vault.as_deref(),
             cli._profile.as_deref(),
             &archive,
+            cli.quiet,
+        ),
+        Some(Command::File { command }) => run_file(
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
+            command,
             cli.quiet,
         ),
         Some(Command::Verify {
@@ -812,6 +852,74 @@ fn run_verify(
             rebuild_only,
             &mut io::stderr().lock(),
         )
+    })();
+    finish_vault_result(result)
+}
+
+fn run_file(
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    command: FileCommand,
+    quiet: bool,
+) -> ExitCode {
+    let result = (|| {
+        let vault = resolve_vault(explicit_vault, profile)?;
+        require_initialized(&vault)?;
+        let identity = device::unlock_vault(&vault)?;
+        match command {
+            FileCommand::Add {
+                path,
+                field,
+                source,
+                secret_type,
+                max_size,
+                shred,
+            } => {
+                let result = file_commands::add(
+                    &vault,
+                    &identity,
+                    &file_commands::AddOptions {
+                        path,
+                        field,
+                        source,
+                        secret_type,
+                        max_size,
+                        shred,
+                    },
+                )?;
+                if !quiet {
+                    println!(
+                        "Attached {} to {}#{} ({} bytes, sha256:{})",
+                        result.filename, result.path, result.field, result.size, result.sha256
+                    );
+                    if result.shredded {
+                        println!("Shredded source file: {}", result.source.display());
+                    }
+                }
+            }
+            FileCommand::Get { query, field, out } => {
+                let output = out.ok_or_else(|| "--out is required".to_owned())?;
+                let result = file_commands::get(
+                    &vault,
+                    &identity,
+                    &file_commands::GetOptions {
+                        query,
+                        field: field.unwrap_or_default(),
+                        output,
+                    },
+                )?;
+                if !quiet {
+                    println!(
+                        "Exported {}#{} to {} ({} bytes)",
+                        result.path,
+                        result.field,
+                        result.output.display(),
+                        result.size
+                    );
+                }
+            }
+        }
+        Ok::<(), String>(())
     })();
     finish_vault_result(result)
 }
