@@ -14,6 +14,7 @@ mod history_commands;
 mod import_commands;
 mod mcp_commands;
 mod migrate_kdf_commands;
+mod policy_commands;
 mod profile_commands;
 mod recipients_commands;
 mod remote_commands;
@@ -107,6 +108,11 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Inspect declarative policies.
+    Policy {
+        #[command(subcommand)]
+        command: PolicyCommand,
+    },
     /// Manage agent profiles.
     Agent {
         #[command(subcommand)]
@@ -363,6 +369,12 @@ enum Command {
         #[command(subcommand)]
         command: AuthCommand,
     },
+}
+
+#[derive(Debug, Subcommand)]
+enum PolicyCommand {
+    Validate { file: PathBuf },
+    List,
 }
 
 #[derive(Debug, Subcommand)]
@@ -794,6 +806,24 @@ fn main() -> ExitCode {
         ),
         Some(Command::Profile { command }) => {
             run_profile(&command, cli.vault.as_deref(), cli.quiet)
+        }
+        Some(Command::Policy { command }) => {
+            let result = (|| {
+                let mut output = io::stderr().lock();
+                match command {
+                    PolicyCommand::Validate { file } => {
+                        policy_commands::validate(&file, &mut output)
+                    }
+                    PolicyCommand::List => {
+                        let root = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+                        policy_commands::list(&root, &mut output)
+                    }
+                }
+            })();
+            if let Err(error) = &result {
+                let _ = writeln!(io::stderr(), "Error: {error}");
+            }
+            finish_vault_result(result)
         }
         Some(Command::Agent {
             command:

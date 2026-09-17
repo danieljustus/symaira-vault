@@ -97,46 +97,14 @@ fn is_block_scalar_header(value: &str) -> bool {
         .all(|character| matches!(character, '+' | '-' | '0'..='9'))
 }
 
-/// `encoding/json` escapes HTML-sensitive characters and Unicode line
-/// separators. `serde_json`'s standard serializer intentionally leaves these
-/// five characters literal, so preserve its pretty whitespace and transform
-/// only characters inside already-serialized JSON strings.
+// These characters occur only inside strings in serialized JSON.
 fn escape_go_json(rendered: &str) -> String {
-    let mut escaped = String::with_capacity(rendered.len());
-    let mut in_string = false;
-    let mut escaped_character = false;
-
-    for character in rendered.chars() {
-        if in_string {
-            if escaped_character {
-                escaped.push(character);
-                escaped_character = false;
-                continue;
-            }
-            match character {
-                '\\' => {
-                    escaped.push(character);
-                    escaped_character = true;
-                }
-                '"' => {
-                    escaped.push(character);
-                    in_string = false;
-                }
-                '<' => escaped.push_str("\\u003c"),
-                '>' => escaped.push_str("\\u003e"),
-                '&' => escaped.push_str("\\u0026"),
-                '\u{2028}' => escaped.push_str("\\u2028"),
-                '\u{2029}' => escaped.push_str("\\u2029"),
-                _ => escaped.push(character),
-            }
-        } else {
-            escaped.push(character);
-            if character == '"' {
-                in_string = true;
-            }
-        }
-    }
-    escaped
+    rendered
+        .replace('<', "\\u003c")
+        .replace('>', "\\u003e")
+        .replace('&', "\\u0026")
+        .replace('\u{2028}', "\\u2028")
+        .replace('\u{2029}', "\\u2029")
 }
 
 type SourceFields = BTreeMap<String, serde_yaml_ng::Value>;
