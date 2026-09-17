@@ -74,6 +74,19 @@ struct ToolDefinition {
     capabilities: Option<Value>,
 }
 
+#[derive(Serialize)]
+struct SearchResultSpec {
+    name: String,
+    description: String,
+    #[serde(rename = "input_schema")]
+    input_schema: Value,
+    risk_level: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cli_alternative: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tier_required: Option<String>,
+}
+
 static CATALOG: OnceLock<Result<Vec<ToolDefinition>, String>> = OnceLock::new();
 
 fn catalog() -> Result<&'static [ToolDefinition], String> {
@@ -87,6 +100,87 @@ fn catalog() -> Result<&'static [ToolDefinition], String> {
 
 pub(crate) fn contains_tool(name: &str) -> Result<bool, String> {
     Ok(catalog()?.iter().any(|definition| definition.name == name))
+}
+
+/// Return catalog discovery results using the same static registry view as Go.
+/// Search intentionally includes tools that are unavailable in the current
+/// runtime: callers need their risk and CLI alternative to choose a fallback.
+pub(crate) fn search_tools(intent: &str, return_mode: &str) -> Result<String, String> {
+    let needle = symvault_core::go_to_lower(intent);
+    let matched = catalog()?
+        .iter()
+        .filter(|definition| definition.deprecated != Some(true))
+        .filter(|definition| {
+            symvault_core::go_to_lower(&definition.name).contains(&needle)
+                || symvault_core::go_to_lower(&definition.description).contains(&needle)
+        })
+        .collect::<Vec<_>>();
+    if return_mode == "names" {
+        let names = matched
+            .into_iter()
+            .map(|definition| definition.name.clone())
+            .collect::<Vec<_>>();
+        return symvault_gojson::to_string(&names).map_err(|error| error.to_string());
+    }
+    let specs = matched
+        .into_iter()
+        .map(|definition| SearchResultSpec {
+            name: definition.name.clone(),
+            description: definition.description.clone(),
+            input_schema: definition.input_schema.clone(),
+            risk_level: risk_level(&definition.name).0.to_owned(),
+            cli_alternative: cli_alternative(&definition.name).map(str::to_owned),
+            tier_required: Some(risk_level(&definition.name).1.to_owned()),
+        })
+        .collect::<Vec<_>>();
+    symvault_gojson::to_string(&specs).map_err(|error| error.to_string())
+}
+
+fn risk_level(name: &str) -> (&'static str, &'static str) {
+    let level = match name {
+        "set_auth_method"
+        | "autotype"
+        | "copy_to_clipboard"
+        | "execute_with_secret"
+        | "get_entry_value"
+        | "run_command"
+        | "approve_share"
+        | "revoke_share"
+        | "generate_totp"
+        | "secret_unseal" => "high",
+        "prepare_payment"
+        | "delete_entry"
+        | "symaira_delete"
+        | "execute_api_request"
+        | "request_credential"
+        | "secure_input"
+        | "set_entry_field" => "critical",
+        "get_entry" | "get_entry_metadata" | "request_share" | "generate_template" => "medium",
+        _ => "low",
+    };
+    let tier = match level {
+        "medium" => "standard",
+        "high" | "critical" => "admin",
+        _ => "any",
+    };
+    (level, tier)
+}
+
+fn cli_alternative(name: &str) -> Option<&'static str> {
+    match name {
+        "list_entries" => Some("symvault list [prefix]"),
+        "get_entry" | "get_entry_value" | "get_entry_metadata" => Some("symvault get <path>"),
+        "find_entries" => Some("symvault find <query>"),
+        "set_entry_field" => Some("symvault set <path>.<field> --value <value>"),
+        "delete_entry" => Some("symvault delete <path>"),
+        "generate_password" => Some("symvault generate --length N --symbols"),
+        "generate_totp" => Some("symvault get <path> --totp"),
+        "copy_to_clipboard" => Some("symvault get <path>.password --clip"),
+        "autotype" => Some("symvault get <path>.password --autotype"),
+        "health" => Some("symvault mcp --stdio (health is automatic)"),
+        "run_command" => Some("symvault run --env KEY=path.field -- <command>"),
+        _ => None,
+    }
 }
 
 fn blocked_by_tier(tier: Option<&str>, name: &str) -> bool {

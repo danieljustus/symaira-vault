@@ -269,6 +269,7 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
             "list_entries" => self.list_entries(arguments),
             "generate_password" => self.generate_password(arguments),
             "sanitize_output" => self.sanitize_output(arguments),
+            "symaira_search" => self.search_tools(arguments),
             "generate_totp" => self.generate_totp(arguments),
             "set_entry_field" => self.set_entry_field(arguments),
             "delete_entry" => self.delete_entry(arguments),
@@ -356,6 +357,25 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
             "sanitized": sanitized,
             "was_modified": sanitized != text,
         }))
+    }
+
+    fn search_tools(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        let intent = match required_string(arguments, "intent") {
+            Ok(intent) => intent,
+            Err(error) => {
+                return Ok(ToolCallResult::error(format!(
+                    "missing required argument: {}",
+                    error.text
+                )));
+            }
+        };
+        let return_mode = arguments
+            .get("return")
+            .and_then(Value::as_str)
+            .filter(|mode| matches!(*mode, "spec" | "names"))
+            .unwrap_or("spec");
+        let result = crate::tools::search_tools(intent, return_mode)?;
+        Ok(ToolCallResult::text(result))
     }
 
     fn set_entry_field(&self, arguments: &Value) -> Result<ToolCallResult, String> {
