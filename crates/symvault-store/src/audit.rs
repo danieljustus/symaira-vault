@@ -113,6 +113,12 @@ impl AuditKey {
     fn bytes(&self) -> &[u8] {
         &self.0
     }
+
+    /// Returns the eight-hex-character generation ID used in audit records.
+    #[must_use]
+    pub fn fingerprint(&self) -> String {
+        key_fingerprint(self.bytes())
+    }
 }
 
 impl fmt::Debug for AuditKey {
@@ -321,6 +327,24 @@ pub fn open_with_keyring(
             "invalid audit agent name",
         ));
     }
+    let key = load_or_create_key_with_keyring(directory, keyring)?;
+    Logger::open(
+        directory.join(format!("{LOG_PREFIX}{agent}{LOG_SUFFIX}")),
+        key,
+        rotation,
+    )
+}
+
+/// Loads the Go-compatible audit HMAC key without opening or creating a log.
+///
+/// The keyring value is lowercase hexadecimal. If it is unavailable, the
+/// legacy private key file is migrated only after a successful keyring write;
+/// otherwise a new random key is stored in the keyring. The caller owns the
+/// returned key and can inject it into read-only export/verification code.
+pub fn load_or_create_key_with_keyring(
+    directory: &Path,
+    keyring: &dyn symvault_core::session::Keyring,
+) -> io::Result<AuditKey> {
     if !directory.is_dir() {
         return Err(io::Error::new(
             io::ErrorKind::NotFound,
@@ -339,69 +363,57 @@ pub fn open_with_keyring(
         ));
     }
     let address = format!("symaira|audit-hmac-key:{directory_text}");
-    let loaded = keyring.get(&address);
-    let key = match loaded {
-        Ok(encoded) => {
-            let encoded = zeroize::Zeroizing::new(encoded);
-            let mut decoded = zeroize::Zeroizing::new(Vec::with_capacity(encoded.len() / 2));
-            if !encoded.len().is_multiple_of(2) {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "invalid audit key encoding",
-                ));
-            }
-            for pair in encoded.as_chunks::<2>().0 {
-                let digit = |byte: u8| (byte as char).to_digit(16).map(|value| value as u8);
-                let high = digit(pair[0]);
-                let low = digit(pair[1]);
-                match (high, low) {
-                    (Some(high), Some(low)) => decoded.push(high * 16 + low),
-                    _ => {
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            "invalid audit key encoding",
-                        ));
-                    }
-                }
-            }
-            AuditKey::new(&*decoded)?
+    if let Ok(encoded) = keyring.get(&address) {
+        let encoded = zeroize::Zeroizing::new(encoded);
+        let mut decoded = zeroize::Zeroizing::new(Vec::with_capacity(encoded.len() / 2));
+        if !encoded.len().is_multiple_of(2) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "invalid audit key encoding",
+            ));
         }
-        Err(_) => {
-            let legacy = directory.join(KEY_FILE);
-            let (mut bytes, migrate) = match fs::read(&legacy) {
-                Ok(bytes) => (zeroize::Zeroizing::new(bytes), true),
-                Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                    let mut bytes = zeroize::Zeroizing::new(vec![0; HMAC_KEY_BYTES]);
-                    getrandom::fill(&mut bytes)
-                        .map_err(|error| io::Error::other(error.to_string()))?;
-                    (bytes, false)
+        for pair in encoded.as_chunks::<2>().0 {
+            let digit = |byte: u8| (byte as char).to_digit(16).map(|value| value as u8);
+            match (digit(pair[0]), digit(pair[1])) {
+                (Some(high), Some(low)) => decoded.push(high * 16 + low),
+                _ => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "invalid audit key encoding",
+                    ));
                 }
-                Err(error) => return Err(error),
-            };
-            let key = AuditKey::new(&*bytes)?;
-            let encoded = zeroize::Zeroizing::new(
-                bytes
-                    .iter()
-                    .map(|byte| format!("{byte:02x}"))
-                    .collect::<String>(),
-            );
-            let saved = keyring.set(&address, encoded.as_bytes());
-            bytes.zeroize();
-            if migrate {
-                if saved.is_ok() {
-                    let _ = fs::remove_file(legacy);
-                }
-            } else {
-                saved.map_err(|_| io::Error::other("could not store audit key"))?;
             }
-            key
         }
+        return AuditKey::new(&*decoded);
+    }
+
+    let legacy = directory.join(KEY_FILE);
+    let (mut bytes, migrate) = match fs::read(&legacy) {
+        Ok(bytes) => (zeroize::Zeroizing::new(bytes), true),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            let mut bytes = zeroize::Zeroizing::new(vec![0; HMAC_KEY_BYTES]);
+            getrandom::fill(&mut bytes).map_err(|error| io::Error::other(error.to_string()))?;
+            (bytes, false)
+        }
+        Err(error) => return Err(error),
     };
-    Logger::open(
-        directory.join(format!("{LOG_PREFIX}{agent}{LOG_SUFFIX}")),
-        key,
-        rotation,
-    )
+    let key = AuditKey::new(&*bytes)?;
+    let encoded = zeroize::Zeroizing::new(
+        bytes
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>(),
+    );
+    let saved = keyring.set(&address, encoded.as_bytes());
+    bytes.zeroize();
+    if migrate {
+        if saved.is_ok() {
+            let _ = fs::remove_file(legacy);
+        }
+    } else {
+        saved.map_err(|_| io::Error::other("could not store audit key"))?;
+    }
+    Ok(key)
 }
 
 /// Local key archive manager. Raw key files are private (`0600`) and are only

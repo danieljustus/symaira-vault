@@ -3,7 +3,8 @@ use std::{collections::BTreeMap, fs, time::UNIX_EPOCH};
 use serde::Deserialize;
 use symvault_store::audit::{
     AuditKey, ExportOptions, KeyStore, Logger, RotationConfig, canonical_json, compute_hmac,
-    export_directory, key_fingerprint, redact_path, verify_entries, verify_jsonl,
+    export_directory, key_fingerprint, load_or_create_key_with_keyring, redact_path,
+    verify_entries, verify_jsonl,
 };
 
 const FIXTURE: &str = concat!(
@@ -462,4 +463,25 @@ fn production_keyring_address_migrates_legacy_key_and_reopens_chain() {
             0o600
         );
     }
+}
+
+#[test]
+fn keyring_loader_roundtrips_without_creating_an_audit_log() {
+    use symvault_core::session::{Keyring, MemoryKeyring};
+
+    let root = tempfile::tempdir().unwrap();
+    let keyring = MemoryKeyring::new();
+    let first = load_or_create_key_with_keyring(root.path(), &keyring).unwrap();
+    let address = format!("symaira|audit-hmac-key:{}", root.path().display());
+    let stored = keyring.get(&address).unwrap();
+    assert_eq!(stored.len(), 64);
+    assert_eq!(
+        first.fingerprint(),
+        key_fingerprint(&hex_bytes(&String::from_utf8(stored).unwrap()))
+    );
+    assert!(!root.path().join("audit-fixture.log").exists());
+
+    let second = load_or_create_key_with_keyring(root.path(), &keyring).unwrap();
+    assert_eq!(second.fingerprint(), first.fingerprint());
+    assert!(!root.path().join("audit-fixture.log").exists());
 }
