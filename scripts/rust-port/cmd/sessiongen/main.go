@@ -47,14 +47,21 @@ type oracle struct {
 type expected struct {
 	ExitCode       int    `json:"exit_code"`
 	StdoutBytes    []int  `json:"stdout_bytes,omitempty"`
+	StderrBytes    []int  `json:"stderr_bytes,omitempty"`
 	StderrContains string `json:"stderr_contains,omitempty"`
 }
 
 type sessionCase struct {
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	Args        []string `json:"args"`
-	Expected    expected `json:"expected"`
+	Name            string            `json:"name"`
+	Description     string            `json:"description"`
+	ConfigBytes     []int             `json:"config_bytes,omitempty"`
+	RootConfigBytes []int             `json:"root_config_bytes,omitempty"`
+	Initialized     bool              `json:"initialized,omitempty"`
+	VaultDir        string            `json:"vault_dir,omitempty"`
+	DisableVaultEnv bool              `json:"disable_vault_env,omitempty"`
+	Args            []string          `json:"args"`
+	Env             map[string]string `json:"env,omitempty"`
+	Expected        expected          `json:"expected"`
 }
 
 type fixture struct {
@@ -64,10 +71,19 @@ type fixture struct {
 }
 
 func inputs() []sessionCase {
+	initializedConfig := bytesToInts([]byte("vaultDir: /fixture/vault\nauthMethod: passphrase\n"))
 	return []sessionCase{
 		{Name: "lock_uninitialized", Description: "lock refuses a missing initialized vault", Args: []string{"--vault", vaultMarker, "lock"}},
 		{Name: "unlock_check_uninitialized", Description: "unlock check validates initialization before session state", Args: []string{"--vault", vaultMarker, "unlock", "--check"}},
 		{Name: "auth_status_uninitialized", Description: "auth status validates initialization before reporting cache state", Args: []string{"--vault", vaultMarker, "auth", "status"}},
+		{Name: "unlock_check_missing_session", Description: "unlock check reports a missing cached session", Initialized: true, ConfigBytes: initializedConfig, Args: []string{"--vault", vaultMarker, "unlock", "--check"}},
+		{Name: "lock_initialized", Description: "lock clears an initialized vault without a cached session", Initialized: true, ConfigBytes: initializedConfig, Args: []string{"--vault", vaultMarker, "lock"}},
+		{Name: "auth_status_invalid_config", Description: "auth status reports malformed vault configuration", Initialized: true, ConfigBytes: bytesToInts([]byte("authMethod: [\n")), Args: []string{"--vault", vaultMarker, "auth", "status"}},
+		{Name: "auth_status_initialized", Description: "auth status renders a memory fallback status in CI", Initialized: true, ConfigBytes: initializedConfig, Args: []string{"--vault", vaultMarker, "auth", "status", "--json"}},
+		{Name: "auth_status_env_initialized", Description: "auth status resolves an initialized vault from SYMVAULT_VAULT", Initialized: true, ConfigBytes: initializedConfig, Args: []string{"auth", "status", "--json"}},
+		{Name: "auth_status_profile_initialized", Description: "auth status resolves an initialized named profile", Initialized: true, ConfigBytes: initializedConfig, RootConfigBytes: bytesToInts([]byte("profiles:\n  fixture:\n    vault: __PROFILE_VAULT__\n")), VaultDir: "profile-vault", DisableVaultEnv: true, Args: []string{"--profile", "fixture", "auth", "status", "--json"}},
+		{Name: "auth_status_default_profile_initialized", Description: "auth status resolves an initialized default profile", Initialized: true, ConfigBytes: initializedConfig, RootConfigBytes: bytesToInts([]byte("defaultProfile: fixture\nprofiles:\n  fixture:\n    vault: __PROFILE_VAULT__\n")), VaultDir: "profile-vault", DisableVaultEnv: true, Args: []string{"auth", "status", "--json"}},
+		{Name: "auth_status_default_invalid_config", Description: "default path resolution ignores malformed resolver config and loads the data vault", Initialized: true, ConfigBytes: initializedConfig, RootConfigBytes: bytesToInts([]byte("authMethod: [\n")), VaultDir: "home/.local/share/symaira-vault", DisableVaultEnv: true, Args: []string{"auth", "status", "--json"}},
 	}
 }
 
@@ -78,15 +94,70 @@ func buildCases(goBinary, root string) ([]sessionCase, error) {
 		if err != nil {
 			return nil, err
 		}
-		vault := filepath.Join(tempRoot, "missing-vault")
+		vaultDir := input.VaultDir
+		if vaultDir == "" {
+			vaultDir = "missing-vault"
+		}
+		vault := filepath.Join(tempRoot, filepath.FromSlash(vaultDir))
+		profileVault := filepath.Join(tempRoot, "profile-vault")
+		if input.Initialized {
+			if err := os.MkdirAll(vault, 0o700); err != nil {
+				_ = os.RemoveAll(tempRoot)
+				return nil, err
+			}
+			if err := os.WriteFile(filepath.Join(vault, "identity.age"), []byte("fixture identity"), 0o600); err != nil {
+				_ = os.RemoveAll(tempRoot)
+				return nil, err
+			}
+			config := make([]byte, len(input.ConfigBytes))
+			for i, value := range input.ConfigBytes {
+				config[i] = byte(value)
+			}
+			if err := os.WriteFile(filepath.Join(vault, "config.yaml"), config, 0o600); err != nil {
+				_ = os.RemoveAll(tempRoot)
+				return nil, err
+			}
+		}
+		if len(input.RootConfigBytes) > 0 {
+			rootConfig := make([]byte, len(input.RootConfigBytes))
+			for i, value := range input.RootConfigBytes {
+				rootConfig[i] = byte(value)
+			}
+			rootConfig = bytes.ReplaceAll(rootConfig, []byte("__PROFILE_VAULT__"), []byte(profileVault))
+			configPath := filepath.Join(tempRoot, "home", ".config", "symaira-vault", "config.yaml")
+			if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
+				_ = os.RemoveAll(tempRoot)
+				return nil, err
+			}
+			if err := os.WriteFile(configPath, rootConfig, 0o600); err != nil {
+				_ = os.RemoveAll(tempRoot)
+				return nil, err
+			}
+		}
 		args := make([]string, len(input.Args))
 		for i, arg := range input.Args {
 			args[i] = strings.ReplaceAll(arg, vaultMarker, vault)
 		}
+		commandEnv := make([]string, 0, len(os.Environ())+4)
+		for _, item := range os.Environ() {
+			if strings.HasPrefix(item, "SYMVAULT_VAULT=") || strings.HasPrefix(item, "SYMVAULT_PROFILE=") || strings.HasPrefix(item, "HOME=") || strings.HasPrefix(item, "USERPROFILE=") {
+				continue
+			}
+			commandEnv = append(commandEnv, item)
+		}
+		commandEnv = append(commandEnv, "CI=1", "HOME="+filepath.Join(tempRoot, "home"), "USERPROFILE="+filepath.Join(tempRoot, "home"))
+		if !input.DisableVaultEnv {
+			commandEnv = append(commandEnv, "SYMVAULT_VAULT="+vault)
+		}
+		for key, value := range input.Env {
+			value = strings.ReplaceAll(value, vaultMarker, vault)
+			value = strings.ReplaceAll(value, "__PROFILE_VAULT__", profileVault)
+			commandEnv = append(commandEnv, key+"="+value)
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		command := exec.CommandContext(ctx, goBinary, args...) // #nosec G204 -- validated oracle binary and fixed cases
 		command.Dir = root
-		command.Env = append(os.Environ(), "SYMVAULT_VAULT="+vault)
+		command.Env = commandEnv
 		var stdout, stderr bytes.Buffer
 		command.Stdout = &stdout
 		command.Stderr = &stderr
@@ -106,7 +177,15 @@ func buildCases(goBinary, root string) ([]sessionCase, error) {
 			}
 			exitCode = exitErr.ExitCode()
 		}
-		input.Expected = expected{ExitCode: exitCode, StdoutBytes: bytesToInts(stdout.Bytes()), StderrContains: errorNeedle(stderr.Bytes())}
+		input.Expected = expected{
+			ExitCode:       exitCode,
+			StdoutBytes:    bytesToInts(bytes.ReplaceAll(bytes.ReplaceAll(stdout.Bytes(), []byte(vault), []byte(vaultMarker)), []byte(profileVault), []byte(vaultMarker))),
+			StderrBytes:    bytesToInts(bytes.ReplaceAll(bytes.ReplaceAll(stderr.Bytes(), []byte(vault), []byte(vaultMarker)), []byte(profileVault), []byte(vaultMarker))),
+			StderrContains: errorNeedle(stderr.Bytes()),
+		}
+		if input.Name != "lock_initialized" {
+			input.Expected.StderrBytes = nil
+		}
 		cases = append(cases, input)
 		_ = os.RemoveAll(tempRoot)
 	}
@@ -114,7 +193,7 @@ func buildCases(goBinary, root string) ([]sessionCase, error) {
 }
 
 func errorNeedle(stderr []byte) string {
-	for _, needle := range []string{"vault not initialized", "not initialized"} {
+	for _, needle := range []string{"vault not initialized", "not initialized", "load config"} {
 		if bytes.Contains(bytes.ToLower(stderr), []byte(needle)) {
 			return needle
 		}

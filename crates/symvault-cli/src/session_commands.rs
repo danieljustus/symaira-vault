@@ -19,12 +19,13 @@ pub struct CacheStatus {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct AuthStatus {
-    pub vault: String,
+    pub cache: CacheStatus,
+    #[serde(rename = "keyringHealth")]
+    pub keyring_health: String,
     pub method: String,
     #[serde(rename = "touchIDAvailable")]
     pub touch_id_available: bool,
-    pub cache: CacheStatus,
-    pub keyring_health: String,
+    pub vault: String,
 }
 
 /// Builds the status document used by `auth status`.
@@ -43,11 +44,11 @@ pub fn auth_status(
         "unavailable"
     };
     Ok(AuthStatus {
-        vault: vault.to_owned(),
-        method: method.as_str().to_owned(),
-        touch_id_available,
         cache,
         keyring_health: keyring_health.to_owned(),
+        method: method.as_str().to_owned(),
+        touch_id_available,
+        vault: vault.to_owned(),
     })
 }
 

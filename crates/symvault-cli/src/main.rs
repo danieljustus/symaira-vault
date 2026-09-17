@@ -14,6 +14,8 @@ use std::{
 
 use clap::{Args, Parser, Subcommand};
 use symaira_core_version::new as new_version;
+#[cfg(target_os = "macos")]
+use symvault_core::platform::TouchId;
 #[cfg(not(any(
     target_os = "macos",
     target_os = "linux",
@@ -28,6 +30,7 @@ use symvault_core::{
     config::{Config, PathResolver},
     session::SessionManager,
 };
+use symvault_platform::FallbackKeyring;
 #[cfg(any(
     target_os = "macos",
     target_os = "linux",
@@ -272,8 +275,8 @@ fn run_lock(explicit_vault: Option<&Path>, profile: Option<&str>, quiet: bool) -
     let result = (|| {
         let vault = resolve_vault(explicit_vault, profile)?;
         require_initialized(&vault)?;
-        let (manager, _) = runtime_session_manager();
-        let output = session_commands::lock(&manager, &vault, quiet)?;
+        let runtime = runtime_session_manager();
+        let output = session_commands::lock(&runtime.manager, &vault, quiet)?;
         if !output.is_empty() {
             eprint!("{output}");
         }
@@ -291,9 +294,9 @@ fn run_unlock(
     let result = (|| {
         let vault = resolve_vault(explicit_vault, profile)?;
         require_initialized(&vault)?;
-        let (manager, _) = runtime_session_manager();
+        let runtime = runtime_session_manager();
         if check {
-            session_commands::check(&manager, &vault)?;
+            session_commands::check(&runtime.manager, &vault)?;
             if !quiet {
                 eprintln!("Session active");
             }
@@ -318,9 +321,14 @@ fn run_auth_status(
         require_initialized(&vault)?;
         let config = Config::load(vault.join("config.yaml"))
             .map_err(|error| format!("load config: {error}"))?;
-        let (_, cache) = runtime_session_manager();
-        let status =
-            session_commands::auth_status(&vault, config.effective_auth_method(), cache, false)?;
+        let runtime = runtime_session_manager();
+        let cache = runtime.cache_status();
+        let status = session_commands::auth_status(
+            &vault,
+            config.effective_auth_method(),
+            cache,
+            touch_id_available(),
+        )?;
         let rendered = session_commands::render_status(&status, output_format, json, quiet)?;
         if !rendered.is_empty() {
             print!("{rendered}");
@@ -363,29 +371,40 @@ fn resolve_vault(explicit: Option<&Path>, profile: Option<&str>) -> Result<PathB
         return expand_vault_path(path);
     }
     if let Some(raw) = std::env::var_os("SYMVAULT_VAULT").filter(|value| !value.is_empty()) {
-        return expand_vault_path(Path::new(&raw));
+        let raw = raw
+            .to_str()
+            .ok_or_else(|| "vault path must be UTF-8".to_owned())?
+            .trim()
+            .to_owned();
+        if !raw.is_empty() {
+            return expand_vault_path(Path::new(&raw));
+        }
     }
 
     let resolver = PathResolver::new();
-    let config = Config::load(resolver.config_path()).ok();
+    // Go's VaultPath deliberately ignores a malformed default config while it
+    // falls back to the resolver's data directory. A requested profile is a
+    // different contract: its config error must be surfaced by the caller.
+    let config_result = Config::load(resolver.config_path());
     let requested_profile = profile
         .filter(|value| !value.trim().is_empty())
-        .map(str::to_owned)
+        .map(|value| value.trim().to_owned())
         .or_else(|| {
             std::env::var("SYMVAULT_PROFILE")
                 .ok()
-                .filter(|v| !v.trim().is_empty())
+                .map(|value| value.trim().to_owned())
+                .filter(|value| !value.is_empty())
         });
     if let Some(name) = requested_profile.as_deref() {
-        let config = config
+        let config = config_result
             .as_ref()
-            .ok_or_else(|| "cannot load config for profile resolution".to_owned())?;
+            .map_err(|error| format!("cannot load config for profile resolution: {error}"))?;
         let profile = config
             .profile_for_name(name)
             .ok_or_else(|| format!("profile {name:?} not found"))?;
         return expand_vault_path(Path::new(&profile.vault_path));
     }
-    if let Some(config) = config.as_ref()
+    if let Some(config) = config_result.as_ref().ok()
         && !config.default_profile.is_empty()
         && let Some(profile) = config.profile_for_name(&config.default_profile)
     {
@@ -397,11 +416,21 @@ fn resolve_vault(explicit: Option<&Path>, profile: Option<&str>) -> Result<PathB
     Err("cannot determine vault path".to_owned())
 }
 
+fn touch_id_available() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        symvault_platform::MacOsTouchId.is_available()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        false
+    }
+}
+
 fn expand_vault_path(path: &Path) -> Result<PathBuf, String> {
     let raw = path
         .to_str()
-        .ok_or_else(|| "vault path must be UTF-8".to_owned())?
-        .trim();
+        .ok_or_else(|| "vault path must be UTF-8".to_owned())?;
     if raw == "~" || raw.starts_with("~/") {
         let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })
             .filter(|value| !value.is_empty())
@@ -411,7 +440,40 @@ fn expand_vault_path(path: &Path) -> Result<PathBuf, String> {
     Ok(PathBuf::from(raw))
 }
 
-fn runtime_session_manager() -> (SessionManager, session_commands::CacheStatus) {
+struct RuntimeSession {
+    manager: SessionManager,
+    keyring: Option<Arc<FallbackKeyring>>,
+    memory_only: bool,
+}
+
+impl RuntimeSession {
+    fn cache_status(&self) -> session_commands::CacheStatus {
+        if self.memory_only
+            || self
+                .keyring
+                .as_ref()
+                .is_some_and(|keyring| keyring.is_fallback_active())
+        {
+            session_commands::CacheStatus {
+                backend: "memory".to_owned(),
+                persistent: false,
+                message: if self.memory_only {
+                    "This build uses a memory-only session cache.".to_owned()
+                } else {
+                    "OS keyring unavailable. Sessions are stored in process memory only.".to_owned()
+                },
+            }
+        } else {
+            session_commands::CacheStatus {
+                backend: "os-keyring".to_owned(),
+                persistent: true,
+                message: "OS keyring session cache is available.".to_owned(),
+            }
+        }
+    }
+}
+
+fn runtime_session_manager() -> RuntimeSession {
     #[cfg(any(
         target_os = "macos",
         target_os = "linux",
@@ -421,20 +483,16 @@ fn runtime_session_manager() -> (SessionManager, session_commands::CacheStatus) 
         target_os = "netbsd"
     ))]
     {
-        let available = OsKeyring::is_available();
-        let cache = session_commands::CacheStatus {
-            backend: "os-keyring".to_owned(),
-            persistent: available,
-            message: if available {
-                "OS keyring session cache is available.".to_owned()
-            } else {
-                "OS keyring unavailable. Sessions cannot be persisted.".to_owned()
-            },
-        };
-        return (
-            SessionManager::with_system_clock(Arc::new(OsKeyring)),
-            cache,
-        );
+        let start_in_fallback = std::env::var_os("CI").is_some()
+            || std::env::var_os("GITHUB_ACTIONS").is_some()
+            || std::env::var_os("HEADLESS").is_some()
+            || std::env::var("SYMVAULT_TEST_KEYRING").as_deref() == Ok("memory");
+        let keyring = FallbackKeyring::new(Arc::new(OsKeyring), start_in_fallback);
+        RuntimeSession {
+            manager: SessionManager::with_system_clock(keyring.clone()),
+            keyring: Some(keyring),
+            memory_only: false,
+        }
     }
     #[cfg(not(any(
         target_os = "macos",
@@ -445,14 +503,11 @@ fn runtime_session_manager() -> (SessionManager, session_commands::CacheStatus) 
         target_os = "netbsd"
     )))]
     {
-        (
-            SessionManager::with_system_clock(Arc::new(MemoryKeyring::new())),
-            session_commands::CacheStatus {
-                backend: "memory".to_owned(),
-                persistent: false,
-                message: "This build uses a memory-only session cache.".to_owned(),
-            },
-        )
+        RuntimeSession {
+            manager: SessionManager::with_system_clock(Arc::new(MemoryKeyring::new())),
+            keyring: None,
+            memory_only: true,
+        }
     }
 }
 

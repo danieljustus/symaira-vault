@@ -35,6 +35,82 @@ pub use symvault_core::session::{
     Clock, Keyring, MemoryKeyring, NativeKeyring, SessionError, SessionManager, SystemClock,
 };
 
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
+
+/// OS-keyring wrapper with the same process-lifetime memory fallback as Go.
+/// A missing credential is an ordinary cache miss; provider failures activate
+/// the fallback and all later operations stay in memory.
+pub struct FallbackKeyring {
+    primary: Arc<dyn Keyring>,
+    fallback: Arc<MemoryKeyring>,
+    active: AtomicBool,
+}
+
+impl FallbackKeyring {
+    #[must_use]
+    pub fn new(primary: Arc<dyn Keyring>, start_in_fallback: bool) -> Arc<Self> {
+        Arc::new(Self {
+            primary,
+            fallback: Arc::new(MemoryKeyring::new()),
+            active: AtomicBool::new(start_in_fallback),
+        })
+    }
+
+    #[must_use]
+    pub fn is_fallback_active(&self) -> bool {
+        self.active.load(Ordering::Acquire)
+    }
+
+    fn activate(&self) {
+        self.active.store(true, Ordering::Release);
+    }
+}
+
+impl Keyring for FallbackKeyring {
+    fn get(&self, key: &str) -> Result<Vec<u8>, SessionError> {
+        if self.is_fallback_active() {
+            return self.fallback.get(key);
+        }
+        match self.primary.get(key) {
+            Ok(value) => Ok(value),
+            Err(SessionError::NotFound) => Err(SessionError::NotFound),
+            Err(_) => {
+                self.activate();
+                self.fallback.get(key)
+            }
+        }
+    }
+
+    fn set(&self, key: &str, value: &[u8]) -> Result<(), SessionError> {
+        if self.is_fallback_active() {
+            return self.fallback.set(key, value);
+        }
+        match self.primary.set(key, value) {
+            Ok(()) => Ok(()),
+            Err(_) => {
+                self.activate();
+                self.fallback.set(key, value)
+            }
+        }
+    }
+
+    fn delete(&self, key: &str) -> Result<(), SessionError> {
+        if self.is_fallback_active() {
+            return self.fallback.delete(key);
+        }
+        match self.primary.delete(key) {
+            Ok(()) | Err(SessionError::NotFound) => Ok(()),
+            Err(_) => {
+                self.activate();
+                self.fallback.delete(key)
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -59,6 +135,19 @@ mod tests {
                 .unwrap()
                 .push((title.into(), message.into()));
             Ok(())
+        }
+    }
+
+    struct FailingKeyring;
+    impl Keyring for FailingKeyring {
+        fn get(&self, _: &str) -> Result<Vec<u8>, SessionError> {
+            Err(SessionError::NotFound)
+        }
+        fn set(&self, _: &str, _: &[u8]) -> Result<(), SessionError> {
+            Err(SessionError::Keyring("unavailable".into()))
+        }
+        fn delete(&self, _: &str) -> Result<(), SessionError> {
+            Err(SessionError::Keyring("unavailable".into()))
         }
     }
 
@@ -117,5 +206,25 @@ mod tests {
             b"bytes"
         );
         assert!(NativeKeyring.get("anything").is_err());
+    }
+
+    #[test]
+    fn fallback_keyring_switches_on_provider_failure_but_not_cache_miss() {
+        let fallback = FallbackKeyring::new(Arc::new(FailingKeyring), false);
+        assert!(!fallback.is_fallback_active());
+        assert!(matches!(
+            fallback.get("svc|missing"),
+            Err(SessionError::NotFound)
+        ));
+        assert!(!fallback.is_fallback_active());
+
+        fallback.set("svc|value", b"cached").unwrap();
+        assert!(fallback.is_fallback_active());
+        assert_eq!(fallback.get("svc|value").unwrap(), b"cached");
+        fallback.delete("svc|value").unwrap();
+        assert!(matches!(
+            fallback.get("svc|value"),
+            Err(SessionError::NotFound)
+        ));
     }
 }
