@@ -100,9 +100,8 @@ pub struct ReadOnlyRuntimeConfig {
     pub can_read_values: bool,
     pub auto_unseal: bool,
     pub expose_payment_values: bool,
-    /// `off` is the only supported value-access mode until the shared
-    /// semantic injection detector is wired into this runtime. Other modes
-    /// fail closed rather than returning unvalidated vault strings.
+    /// Go-compatible semantic prompt-injection handling for value responses.
+    /// Supported values are `off`, `log-only`, `wrap`, and `deny`.
     pub prompt_injection_mode: String,
     pub can_write: bool,
     pub can_run_commands: bool,
@@ -179,14 +178,6 @@ impl<S> ReadOnlyRuntime<S> {
 impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
     fn authorize(&self, name: &str, _arguments: &Value) -> Result<(), ToolCallResult> {
         if self.config.available_tools.iter().any(|tool| tool == name) {
-            if name == "get_entry_value"
-                && !self.config.prompt_injection_mode.is_empty()
-                && self.config.prompt_injection_mode != "off"
-            {
-                return Err(ToolCallResult::error(
-                    "get_entry_value denied: configured prompt injection mode is unsupported by the native runtime",
-                ));
-            }
             let approval_mode =
                 if self.config.approval_mode.is_empty() && self.config.require_approval {
                     "prompt"
@@ -474,7 +465,17 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
             .fetch_add(field_count, Ordering::AcqRel);
         let mut data = Map::new();
         for (field, value) in entry.fields {
-            data.insert(field.clone(), wrap_data_field(&field, value)?);
+            let wrapped = wrap_data_field(&field, value)?;
+            let checked = match wrapped {
+                Value::String(text) => {
+                    match apply_semantic_injection_check(text, &self.config.prompt_injection_mode) {
+                        Ok(text) => Value::String(text),
+                        Err(error) => return Ok(ToolCallResult::error(error)),
+                    }
+                }
+                other => other,
+            };
+            data.insert(field.clone(), checked);
         }
 
         let mut meta = Map::new();
@@ -510,9 +511,6 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
             secret_meta.insert("expires_at".into(), Value::String(expires_at));
         }
         let mut response = Map::new();
-        if !entry.path.is_empty() {
-            response.insert("path".into(), Value::String(entry.path));
-        }
         response.insert("data".into(), Value::Object(data));
         response.insert("meta".into(), Value::Object(meta));
         response.insert("secret_meta".into(), Value::Object(secret_meta));
@@ -644,6 +642,45 @@ fn wrap_data_field(label: &str, value: Value) -> Result<Value, String> {
             .collect::<Result<Map<_, _>, String>>()
             .map(Value::Object),
         other => Ok(other),
+    }
+}
+
+const SEMANTIC_INJECTION_PATTERNS: &[&str] = &[
+    "<|im_start|>",
+    "<|endoftext|>",
+    "system:",
+    "ignore previous instructions",
+    "ignore all instructions",
+    "ignore the above",
+    "disregard earlier",
+    "forget your previous",
+    "override your instructions",
+    "you are now",
+];
+
+fn apply_semantic_injection_check(text: String, mode: &str) -> Result<String, String> {
+    if mode.is_empty() || mode == "off" {
+        return Ok(text);
+    }
+    let lower = text.to_lowercase();
+    let Some(pattern) = SEMANTIC_INJECTION_PATTERNS
+        .iter()
+        .find(|pattern| lower.contains(**pattern))
+    else {
+        return Ok(text);
+    };
+    match mode {
+        // Go emits a warning through slog; stdio MCP must stay protocol-clean,
+        // so the externally visible response remains unchanged here.
+        "log-only" => Ok(text),
+        "wrap" => Ok(format!(
+            "[SECURITY WARNING: potential prompt injection detected (pattern: \"{pattern}\")]\n{text}"
+        )),
+        "deny" => Err(format!(
+            "access denied: vault content contains potential prompt injection pattern \"{pattern}\""
+        )),
+        // Match Go's forward-compatible behavior for unknown modes.
+        _ => Ok(text),
     }
 }
 
