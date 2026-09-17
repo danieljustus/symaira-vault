@@ -1527,6 +1527,22 @@ mod tests {
         (root, identity, passphrase)
     }
 
+    #[cfg(unix)]
+    fn ancestor_alias(root: &Path) -> (PathBuf, PathBuf) {
+        use std::os::unix::fs::symlink;
+
+        static ALIAS_COUNTER: AtomicU64 = AtomicU64::new(0);
+        let parent = root.parent().expect("fixture has a parent");
+        let alias_parent = parent.join(format!(
+            "symvault-device-alias-{}-{}",
+            std::process::id(),
+            ALIAS_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        symlink(parent, &alias_parent).expect("create ancestor alias");
+        let alias_root = alias_parent.join(root.file_name().expect("fixture has a name"));
+        (alias_parent, alias_root)
+    }
+
     #[test]
     fn cached_identity_and_passphrase_open_the_same_encrypted_fixture() {
         let (root, expected, passphrase) = encrypted_fixture();
@@ -1922,6 +1938,40 @@ mod tests {
 
         assert!(error.contains("b.age"), "unexpected error: {error}");
         assert_eq!(fs::read(entries.join("a.age")).unwrap(), first);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn reencrypt_through_ancestor_alias_covers_success_and_preflight_failure() {
+        let (root, identity, _passphrase) = encrypted_fixture();
+        let entries = root.join("entries");
+        fs::create_dir_all(&entries).unwrap();
+        let (alias_parent, alias_root) = ancestor_alias(&root);
+
+        let source_recipient = parse_recipient(&recipient_string(&identity)).unwrap();
+        let original = encrypt(b"alias-success", &[source_recipient]).unwrap();
+        let target = entries.join("a.age");
+        fs::write(&target, &original).unwrap();
+
+        let new_identity = generate_identity();
+        let new_recipient = parse_recipient(&recipient_string(&new_identity)).unwrap();
+        reencrypt_all_entries(&alias_root, &identity, &[new_recipient]).unwrap();
+        assert_eq!(
+            symvault_crypto::decrypt(&fs::read(&target).unwrap(), &new_identity).unwrap(),
+            b"alias-success"
+        );
+        assert!(!journal_path(&root).exists());
+
+        let original_before_failure = encrypt(b"alias-preserved", &[source_recipient]).unwrap();
+        fs::write(&target, &original_before_failure).unwrap();
+        fs::write(entries.join("b.age"), b"corrupt age envelope").unwrap();
+        let error = reencrypt_all_entries(&alias_root, &identity, &[new_recipient]).unwrap_err();
+        assert!(error.contains("b.age"), "unexpected error: {error}");
+        assert_eq!(fs::read(&target).unwrap(), original_before_failure);
+        assert!(!journal_path(&root).exists());
+
+        fs::remove_file(alias_parent).unwrap();
         let _ = fs::remove_dir_all(root);
     }
 }
