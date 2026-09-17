@@ -1,4 +1,58 @@
 {
+  "headers": [
+    [],
+    [
+      "title",
+      "url",
+      "username",
+      "password",
+      "OTPAuth"
+    ],
+    [
+      "name",
+      "url",
+      "username",
+      "password",
+      "note"
+    ],
+    [
+      "url",
+      "username",
+      "password",
+      "httpRealm"
+    ],
+    [
+      " NAME ",
+      " URL ",
+      "USERNAME",
+      "password",
+      "note"
+    ],
+    [
+      "title",
+      "url",
+      "username",
+      "password",
+      "otpauth",
+      "name",
+      "note",
+      "httprealm"
+    ],
+    [
+      "url",
+      "username",
+      "password"
+    ]
+  ],
+  "detected": [
+    "csv",
+    "apple",
+    "chrome",
+    "firefox",
+    "chrome",
+    "apple",
+    "csv"
+  ],
   "commit": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
   "sources": [
     "internal/crypto/totp.go",
@@ -10,7 +64,7 @@
     "internal/vault/payment.go"
   ],
   "source_digest": "810c58e43b21cc32b3cebd8cf561ba46de2a7fb51368c8aaa7b22c4b9a7583e5",
-  "generator_digest": "bd0353f20eaf467b4fc6717d7a66429fdc7b84378214a48cfb546203c6b97220",
+  "generator_digest": "ac851d41181faa7d99baa9b6f464065ec2189413cdf257a427f754c013a3d8ea",
   "cases": [
     {
       "name": "csv_invalid_totp",

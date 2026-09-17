@@ -66,3 +66,25 @@ fn imported_totp_matches_production_go_validation_and_shape() {
         }
     }
 }
+
+#[test]
+fn csv_detection_matches_production_profile_priority() {
+    let fixture: Value =
+        serde_json::from_str(include_str!("../../../testdata/port/sync/csv.json")).unwrap();
+    for (header, expected) in fixture["headers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .zip(fixture["detected"].as_array().unwrap())
+    {
+        let header: Vec<String> = serde_json::from_value(header.clone()).unwrap();
+        let actual = match importer::detect_csv_profile(&header) {
+            Format::Apple => "apple",
+            Format::Chrome => "chrome",
+            Format::Firefox => "firefox",
+            Format::Csv => "csv",
+            _ => unreachable!(),
+        };
+        assert_eq!(actual, expected.as_str().unwrap(), "{header:?}");
+    }
+}

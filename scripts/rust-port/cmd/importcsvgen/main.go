@@ -119,7 +119,14 @@ func main() {
 	for _, p := range prefixes {
 		prefixResults = append(prefixResults, importer.ApplyPrefix(p[0], p[1]))
 	}
+	headers := [][]string{{}, {"title", "url", "username", "password", "OTPAuth"}, {"name", "url", "username", "password", "note"}, {"url", "username", "password", "httpRealm"}, {" NAME ", " URL ", "USERNAME", "password", "note"}, {"title", "url", "username", "password", "otpauth", "name", "note", "httprealm"}, {"url", "username", "password"}}
+	detected := []importer.Format{}
+	for _, header := range headers {
+		detected = append(detected, importer.DetectCSVProfile(header))
+	}
 	fixture := struct {
+		Headers         [][]string        `json:"headers"`
+		Detected        []importer.Format `json:"detected"`
 		Commit          string            `json:"commit"`
 		Sources         []string          `json:"sources"`
 		SourceDigest    string            `json:"source_digest"`
@@ -129,7 +136,7 @@ func main() {
 		Prefixes        [][2]string       `json:"prefixes"`
 		PrefixResults   []string          `json:"prefix_results"`
 		Totps           []totpCase        `json:"totps"`
-	}{pinnedOracleCommit, sources, digest, generatorDigest, cases, normalized, prefixes, prefixResults, totps}
+	}{headers, detected, pinnedOracleCommit, sources, digest, generatorDigest, cases, normalized, prefixes, prefixResults, totps}
 	content, err := json.MarshalIndent(fixture, "", "  ")
 	must(err)
 	content = append(content, '\n')

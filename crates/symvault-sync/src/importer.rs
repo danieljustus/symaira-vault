@@ -91,42 +91,14 @@ pub fn parse_csv_profile(
     bytes: &[u8],
     mapping: Option<&BTreeMap<String, String>>,
 ) -> Result<Vec<ImportedEntry>, ImportError> {
+    if !matches!(
+        format,
+        Format::Csv | Format::Apple | Format::Chrome | Format::Firefox
+    ) {
+        return Err(ImportError::Unsupported(format!("{format:?}")));
+    }
     validate_csv_quotes(bytes)?;
-    let defaults: &[(&str, &str)] = match format {
-        Format::Csv => &[
-            ("title", "title"),
-            ("username", "username"),
-            ("password", "password"),
-            ("url", "url"),
-            ("notes", "notes"),
-            ("otp", "otp"),
-        ],
-        Format::Apple => &[
-            ("title", "Title"),
-            ("username", "Username"),
-            ("password", "Password"),
-            ("url", "URL"),
-            ("notes", "Notes"),
-            ("otp", "OTPAuth"),
-        ],
-        Format::Chrome => &[
-            ("title", "name"),
-            ("username", "username"),
-            ("password", "password"),
-            ("url", "url"),
-            ("notes", "note"),
-        ],
-        Format::Firefox => &[
-            ("username", "username"),
-            ("password", "password"),
-            ("url", "url"),
-        ],
-        _ => return Err(ImportError::Unsupported(format!("{format:?}"))),
-    };
-    let default_mapping = defaults
-        .iter()
-        .map(|(k, v)| (k.to_string(), v.to_string()))
-        .collect();
+    let default_mapping = default_csv_mapping(format);
     let mapping = mapping.unwrap_or(&default_mapping);
     // Go normalizes CRLF even inside quoted fields.
     let normalized: Vec<u8> = bytes
@@ -645,4 +617,67 @@ where
     T: Deserialize<'de> + Default,
 {
     Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
+}
+
+fn default_csv_mapping(format: Format) -> BTreeMap<String, String> {
+    let defaults: &[(&str, &str)] = match format {
+        Format::Csv => &[
+            ("title", "title"),
+            ("username", "username"),
+            ("password", "password"),
+            ("url", "url"),
+            ("notes", "notes"),
+            ("otp", "otp"),
+        ],
+        Format::Apple => &[
+            ("title", "Title"),
+            ("username", "Username"),
+            ("password", "Password"),
+            ("url", "URL"),
+            ("notes", "Notes"),
+            ("otp", "OTPAuth"),
+        ],
+        Format::Chrome => &[
+            ("title", "name"),
+            ("username", "username"),
+            ("password", "password"),
+            ("url", "url"),
+            ("notes", "note"),
+        ],
+        Format::Firefox => &[
+            ("username", "username"),
+            ("password", "password"),
+            ("url", "url"),
+        ],
+        _ => return default_csv_mapping(Format::Csv),
+    };
+    defaults
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect()
+}
+
+/// Match built-in profiles in the production Go priority order.
+pub fn detect_csv_profile(header: &[String]) -> Format {
+    let columns: std::collections::BTreeSet<_> =
+        header.iter().map(|c| c.trim().to_lowercase()).collect();
+    for (format, required) in [
+        (
+            Format::Apple,
+            &["title", "url", "username", "password", "otpauth"][..],
+        ),
+        (
+            Format::Chrome,
+            &["name", "url", "username", "password", "note"][..],
+        ),
+        (
+            Format::Firefox,
+            &["url", "username", "password", "httprealm"][..],
+        ),
+    ] {
+        if required.iter().all(|column| columns.contains(*column)) {
+            return format;
+        }
+    }
+    Format::Csv
 }
