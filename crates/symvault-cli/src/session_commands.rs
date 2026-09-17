@@ -8,16 +8,22 @@
 
 use serde::{Deserialize, Serialize};
 use std::{path::Path, time::Duration};
+use symvault_core::{config::AuthMethod, session::SessionManager};
+#[cfg(any(target_os = "macos", test))]
 use symvault_core::{
-    config::AuthMethod,
     platform::TouchId,
-    session::{Keyring, SessionError, SessionManager},
+    session::{Keyring, SessionError},
 };
+#[cfg(any(target_os = "macos", test))]
 use zeroize::Zeroizing;
 
+#[cfg(any(target_os = "macos", test))]
 const BIOMETRIC_SERVICE_PREFIX: &str = "symvault-biometric:";
+#[cfg(any(target_os = "macos", test))]
 const BIOMETRIC_ACCOUNT: &str = "passphrase";
+#[cfg(any(target_os = "macos", test))]
 const BIOMETRIC_REASON: &str = "Unlock Symaira Vault vault";
+#[cfg(any(target_os = "macos", test))]
 const BIOMETRIC_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -135,6 +141,7 @@ pub fn check(manager: &SessionManager, vault: &Path) -> Result<(), String> {
 /// reading the item so the OS keychain remains the authorization boundary.
 /// The keyring and authenticator are injected to make the decision and error
 /// paths testable without touching a developer keychain or invoking Touch ID.
+#[cfg(any(target_os = "macos", test))]
 pub fn load_touch_id_passphrase(
     vault: &Path,
     keyring: &dyn Keyring,
