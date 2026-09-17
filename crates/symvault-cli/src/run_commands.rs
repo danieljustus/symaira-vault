@@ -8,6 +8,7 @@ use std::{
     collections::BTreeMap,
     fs,
     io::Read,
+    ffi::OsString,
     path::{Path, PathBuf},
     process::{Command, Stdio},
     thread,
@@ -15,6 +16,7 @@ use std::{
 };
 
 use serde_json::Value;
+use symvault_core::redact::{EntropyDetector, ScanOptions, Scanner};
 use symvault_crypto::Identity;
 use symvault_store::{Entry, Store, StoreError};
 
@@ -52,10 +54,17 @@ const MAX_PROCESS_OUTPUT: usize = 100 * 1024;
 pub(crate) struct ProcessOptions<'a> {
     pub(crate) command: &'a [String],
     pub(crate) environment: &'a BTreeMap<String, String>,
+    /// Additional native environment assignments, used when a value is not
+    /// guaranteed to be valid UTF-8 (for example a materialized file path).
+    pub(crate) extra_environment: &'a [(OsString, OsString)],
     pub(crate) passthrough: &'a [String],
     pub(crate) working_directory: Option<&'a Path>,
     pub(crate) timeout: Option<Duration>,
     pub(crate) redactions: &'a [Vec<u8>],
+    /// Apply the shared generic redaction pass after exact known-value masks.
+    /// Attachment commands leave this disabled to preserve their established
+    /// byte-oriented output behavior.
+    pub(crate) generic_redaction: bool,
     pub(crate) whitelist: &'a [&'a str],
 }
 
@@ -138,7 +147,8 @@ pub(crate) fn resolve_secret_ref(
     if let Some(index) = reference.rfind('.').filter(|index| *index > 0) {
         let candidate_path = &reference[..index];
         let candidate_field = &reference[index + 1..];
-        if let Ok(entry) = store.get(candidate_path, identity)
+        if !candidate_field.is_empty()
+            && let Ok(entry) = store.get(candidate_path, identity)
             && entry.data.contains_key(candidate_field)
         {
             path = candidate_path;
@@ -289,6 +299,9 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
     for (name, value) in options.environment {
         child_command.env(name, value);
     }
+    for (name, value) in options.extra_environment {
+        child_command.env(name, value);
+    }
     if let Some(directory) = options.working_directory {
         child_command.current_dir(directory);
     }
@@ -356,8 +369,8 @@ pub(crate) fn run_process(options: ProcessOptions<'_>) -> Result<ProcessResult, 
 
     let ((stdout, stdout_truncated), (stderr, stderr_truncated)) =
         join_process_readers(stdout_reader, stderr_reader);
-    let stdout = redact_process_output(&stdout, options.redactions);
-    let stderr = redact_process_output(&stderr, options.redactions);
+    let stdout = redact_process_output(&stdout, options.redactions, options.generic_redaction);
+    let stderr = redact_process_output(&stderr, options.redactions, options.generic_redaction);
     Ok(ProcessResult {
         stdout,
         stderr,
@@ -447,7 +460,11 @@ fn read_process_output(mut reader: impl Read) -> (Vec<u8>, bool) {
     (captured, truncated)
 }
 
-fn redact_process_output(output: &[u8], redactions: &[Vec<u8>]) -> String {
+fn redact_process_output(
+    output: &[u8],
+    redactions: &[Vec<u8>],
+    generic_redaction: bool,
+) -> String {
     let mut output = output.to_vec();
     // Replace longer values first so a short secret that is a prefix of a
     // longer one cannot expose the longer value's suffix.
@@ -456,7 +473,20 @@ fn redact_process_output(output: &[u8], redactions: &[Vec<u8>]) -> String {
     for index in order {
         output = replace_bytes(&output, &redactions[index], b"***");
     }
-    String::from_utf8_lossy(&output).into_owned()
+    let output = String::from_utf8_lossy(&output).into_owned();
+    if !generic_redaction {
+        return output;
+    }
+
+    // The core scanner is the shared Rust redaction boundary. Its current
+    // generic detector is the entropy heuristic; keeping the scan here makes
+    // detector failures fail closed through ScanError::safe_result instead of
+    // returning the unscanned child output.
+    let mut scanner = Scanner::new(vec![Box::new(EntropyDetector::new())]);
+    match scanner.scan(&output, &ScanOptions::default()) {
+        Ok(result) => result.text,
+        Err(error) => error.safe_result.text,
+    }
 }
 
 fn replace_bytes(input: &[u8], needle: &[u8], replacement: &[u8]) -> Vec<u8> {
@@ -478,11 +508,67 @@ fn replace_bytes(input: &[u8], needle: &[u8], replacement: &[u8]) -> Vec<u8> {
 }
 
 pub(crate) fn format_timeout(timeout: Duration) -> String {
-    if timeout.as_secs() > 0 {
-        format!("{}s", timeout.as_secs())
-    } else {
-        format!("{}ms", timeout.as_millis())
+    let nanos = timeout.as_nanos();
+    if nanos == 0 {
+        return "0s".to_owned();
     }
+    if nanos < 1_000 {
+        return format!("{nanos}ns");
+    }
+    if nanos < 1_000_000 {
+        return format_go_decimal(nanos, 1_000, "µs");
+    }
+    if nanos < 1_000_000_000 {
+        return format_go_decimal(nanos, 1_000_000, "ms");
+    }
+
+    let seconds = nanos / 1_000_000_000;
+    let remainder = nanos % 1_000_000_000;
+    let mut result = String::new();
+    let hours = seconds / 3_600;
+    let minutes = (seconds % 3_600) / 60;
+    let seconds = seconds % 60;
+    if hours > 0 {
+        result.push_str(&format!("{hours}h"));
+    }
+    if hours > 0 || minutes > 0 {
+        result.push_str(&format!("{minutes}m"));
+    }
+    result.push_str(&format_decimal_component(seconds, remainder));
+    result.push('s');
+    result
+}
+
+fn format_go_decimal(value: u128, unit: u128, suffix: &str) -> String {
+    let whole = value / unit;
+    let remainder = value % unit;
+    if remainder == 0 {
+        return format!("{whole}{suffix}");
+    }
+    format!("{}{}", format_fraction(whole, remainder, unit), suffix)
+}
+
+fn format_decimal_component(whole: u128, nanos: u128) -> String {
+    if nanos == 0 {
+        return whole.to_string();
+    }
+    format_fraction(whole, nanos, 1_000_000_000)
+}
+
+fn format_fraction(whole: u128, fraction: u128, unit: u128) -> String {
+    let mut digits = fraction.to_string();
+    let width = match unit {
+        1_000 => 3,
+        1_000_000 => 6,
+        _ => 9,
+    };
+    while digits.len() < width {
+        digits.insert(0, '0');
+    }
+    while digits.ends_with('0') {
+        digits.pop();
+    }
+    format!("{whole}.{digits}")
 }
 
 #[cfg(test)]
@@ -613,9 +699,13 @@ mod tests {
 
         let env_flags = vec!["TOKEN=value".to_owned()];
         let mut resolve = resolver(&values);
-        let error =
-            build_secret_environment(&env_flags, &[env_file.path().to_path_buf()], &mut resolve)
-                .expect_err("duplicate mapping");
+        let error = build_secret_environment(
+            &env_flags,
+            &[env_file.path().to_path_buf()],
+            &mut resolve,
+        )
+        .err()
+        .expect("duplicate mapping");
         assert!(error.contains("duplicate env var"));
         assert!(!error.contains("secret-value"));
     }
@@ -655,7 +745,8 @@ mod tests {
             called = true;
             Ok(reference.to_owned())
         })
-        .expect_err("invalid flag");
+        .err()
+        .expect("invalid flag");
         assert!(error.contains("invalid --env format"));
         assert!(!called);
     }
@@ -675,6 +766,7 @@ mod tests {
                 ("count".to_owned(), json!(42)),
                 ("enabled".to_owned(), json!(true)),
                 ("unset".to_owned(), Value::Null),
+                ("".to_owned(), Value::String("empty-field".into())),
             ]),
         );
         write_test_entry(
@@ -706,7 +798,11 @@ mod tests {
         );
         assert_eq!(
             resolve_secret_ref(vault.path(), &identity, "service").unwrap(),
-            "map[count:42 enabled:true password:synthetic-secret unset:<nil>]"
+            "map[:empty-field count:42 enabled:true password:synthetic-secret unset:<nil>]"
+        );
+        assert_eq!(
+            resolve_secret_ref(vault.path(), &identity, "service.").unwrap(),
+            "map[:empty-field count:42 enabled:true password:synthetic-secret unset:<nil>]"
         );
     }
 
@@ -733,7 +829,7 @@ mod tests {
     fn process_redaction_replaces_each_known_value() {
         let redactions = vec![b"plain-secret".to_vec(), b"encoded-secret".to_vec()];
         assert_eq!(
-            redact_process_output(b"plain-secret and encoded-secret", &redactions),
+            redact_process_output(b"plain-secret and encoded-secret", &redactions, false),
             "*** and ***"
         );
     }
@@ -741,7 +837,20 @@ mod tests {
     #[test]
     fn process_redaction_masks_overlapping_longer_value_first() {
         let redactions = vec![b"token".to_vec(), b"token-suffix".to_vec()];
-        assert_eq!(redact_process_output(b"token-suffix", &redactions), "***");
+        assert_eq!(
+            redact_process_output(b"token-suffix", &redactions, false),
+            "***"
+        );
+    }
+
+    #[test]
+    fn run_redaction_applies_shared_fail_closed_scanner_after_known_values() {
+        let input = b"known-secret aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789";
+        let redactions = vec![b"known-secret".to_vec()];
+        assert_eq!(
+            redact_process_output(input, &redactions, true),
+            "*** [REDACTED]"
+        );
     }
 
     #[test]
@@ -749,5 +858,21 @@ mod tests {
         assert!(is_sensitive_env_name("VAULT_PASS_PHRASE"));
         assert!(is_sensitive_env_name("api-key"));
         assert!(!is_sensitive_env_name("TERM_MODE"));
+    }
+
+    #[test]
+    fn timeout_format_preserves_go_fractional_units() {
+        assert_eq!(format_timeout(Duration::ZERO), "0s");
+        assert_eq!(format_timeout(Duration::from_nanos(1)), "1ns");
+        assert_eq!(format_timeout(Duration::from_micros(1_500)), "1.5ms");
+        assert_eq!(format_timeout(Duration::from_millis(1_500)), "1.5s");
+        assert_eq!(
+            format_timeout(Duration::from_secs(60) + Duration::from_millis(1)),
+            "1m0.001s"
+        );
+        assert_eq!(
+            format_timeout(Duration::from_secs(3_661) + Duration::from_nanos(2)),
+            "1h1m1.000000002s"
+        );
     }
 }

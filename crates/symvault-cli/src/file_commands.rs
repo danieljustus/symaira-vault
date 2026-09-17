@@ -384,16 +384,21 @@ fn run_file_command(
         "LC_CTYPE",
         "SystemRoot",
     ];
-    let mut environment = std::collections::BTreeMap::new();
-    environment.insert(format!("SYMVAULT_FILE_{name}"), file.display().to_string());
+    let environment = std::collections::BTreeMap::new();
+    let extra_environment = [(
+        std::ffi::OsString::from(format!("SYMVAULT_FILE_{name}")),
+        file.as_os_str().to_os_string(),
+    )];
     let redactions = vec![content.to_vec(), STANDARD.encode(content).into_bytes()];
     let result = crate::run_commands::run_process(crate::run_commands::ProcessOptions {
         command,
         environment: &environment,
+        extra_environment: &extra_environment,
         passthrough: &[],
         working_directory: None,
         timeout,
         redactions: &redactions,
+        generic_redaction: false,
         whitelist: FILE_ENV_WHITELIST,
     })?;
     if result.timed_out {
