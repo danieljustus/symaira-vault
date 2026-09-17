@@ -152,9 +152,9 @@ fn migration_preview_matches_go_for_legacy_symlink_errors() {
     std::os::unix::fs::symlink(&target, home.join(".symvault")).expect("legacy symlink");
 
     for args in [
-        ["migrate", "paths"],
-        ["migrate", "xdg"],
-        ["--quiet", "migrate", "paths"],
+        &["migrate", "paths"][..],
+        &["migrate", "xdg"][..],
+        &["--quiet", "migrate", "paths"][..],
     ] {
         let go = run(&go_binary, &args, &home, (&xdg.0, &xdg.1, &xdg.2));
         let rust = run(&rust_binary, &args, &home, (&xdg.0, &xdg.1, &xdg.2));
@@ -169,7 +169,10 @@ fn migration_preview_matches_go_for_legacy_symlink_errors() {
     fs::create_dir_all(&nested_target).expect("nested symlink target");
     std::os::unix::fs::symlink(&nested_target, nested_vault.join("nested-link"))
         .expect("nested symlink");
-    for args in [["migrate", "paths"], ["--quiet", "migrate", "xdg"]] {
+    for args in [
+        &["migrate", "paths"][..],
+        &["--quiet", "migrate", "xdg"][..],
+    ] {
         let go = run(
             &go_binary,
             &args,
