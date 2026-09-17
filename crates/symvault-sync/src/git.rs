@@ -1357,12 +1357,20 @@ mod tests {
     }
 
     #[test]
-    fn force_pull_preserves_unicode_newline_file_when_conflict_destination_exists() {
+    fn force_pull_preserves_unicode_space_file_when_conflict_destination_exists() {
         let local = tempfile::tempdir().expect("local repository");
         let bare = tempfile::tempdir().expect("bare repository");
         let remote = tempfile::tempdir().expect("remote checkout");
-        let path = local.path().join("entries").join("über\nlogin.age");
-        let remote_path = remote.path().join("entries").join("über\nlogin.age");
+        // Windows rejects LF in filenames. Keep the same Unicode and space
+        // coverage on every platform, with the stronger newline case where
+        // the filesystem accepts it.
+        #[cfg(unix)]
+        let file_name = "über login\n.age";
+        #[cfg(windows)]
+        let file_name = "über login.age";
+        let relative_name = format!("entries/{file_name}");
+        let path = local.path().join(&relative_name);
+        let remote_path = remote.path().join(&relative_name);
         fs::create_dir_all(path.parent().expect("entries parent")).expect("entries directory");
 
         let run_git = |root: &Path, args: &[&str]| {
@@ -1425,7 +1433,7 @@ mod tests {
         fs::write(local.path().join(".device-id"), b"test-device\n").expect("device id");
         let conflict = local
             .path()
-            .join(conflict_copy_path("entries/über\nlogin.age", "test-device"));
+            .join(conflict_copy_path(&relative_name, "test-device"));
         fs::write(&conflict, b"existing sentinel\n").expect("existing conflict");
         let before_head = repo.head().expect("head before reset");
         let result = repo.force_pull("origin");
