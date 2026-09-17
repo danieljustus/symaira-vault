@@ -12,7 +12,10 @@ use std::{
 };
 use symvault_core::policy::{Action, Engine, EvalContext};
 use symvault_crypto::Identity;
-use symvault_store::{Entry, Store, StoreError, WriteRecord};
+use symvault_store::{
+    Entry, Store, StoreError, WriteRecord,
+    sharing::{SHARE_STORE_FILE, ShareFilter, ShareStore},
+};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 pub type SharedAuditLogger = Arc<Mutex<symvault_store::audit::Logger>>;
@@ -218,6 +221,7 @@ fn merge_json_objects(
 /// A concrete `tools/call` runtime over the encrypted Rust store.
 pub struct StoreReadOnlyRuntime {
     inner: ReadOnlyRuntime<StoreReadOnlyAdapter>,
+    share_store: ShareStore,
     policy: Option<Engine>,
     audit: Option<SharedAuditLogger>,
     rate_limiter: Mutex<Option<MinuteRateLimiter>>,
@@ -249,6 +253,8 @@ impl StoreReadOnlyRuntime {
         }
         let adapter = StoreReadOnlyAdapter::open(root, identity)?;
         let root = adapter.root().to_path_buf();
+        let share_store = ShareStore::read(root.join(SHARE_STORE_FILE))
+            .map_err(|error| format!("load share store: {error}"))?;
         config.vault_dir = root.to_string_lossy().into_owned();
         config.vault_unlocked = true;
         let agent_name = config.agent_name.clone();
@@ -263,6 +269,7 @@ impl StoreReadOnlyRuntime {
             .retain(|name| !unavailable_tools.iter().any(|blocked| blocked == name));
         Ok(Self {
             inner: ReadOnlyRuntime::new(adapter, config),
+            share_store,
             policy,
             audit,
             rate_limiter: Mutex::new(None),
@@ -293,6 +300,8 @@ impl StoreReadOnlyRuntime {
             return Err("MCP runtime tool registry is empty".into());
         }
         let adapter = StoreReadOnlyAdapter { store, identity };
+        let share_store = ShareStore::read(adapter.root().join(SHARE_STORE_FILE))
+            .map_err(|error| format!("load share store: {error}"))?;
         config.vault_dir = adapter.root().to_string_lossy().into_owned();
         config.vault_unlocked = true;
         let agent_name = config.agent_name.clone();
@@ -307,6 +316,7 @@ impl StoreReadOnlyRuntime {
             .retain(|name| !unavailable_tools.iter().any(|blocked| blocked == name));
         Ok(Self {
             inner: ReadOnlyRuntime::new(adapter, config),
+            share_store,
             policy,
             audit,
             rate_limiter: Mutex::new(None),
@@ -359,6 +369,10 @@ impl StoreReadOnlyRuntime {
         if let Ok(mut logger) = audit.lock() {
             let _ = logger.append(entry);
         }
+    }
+
+    fn list_shares(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        render_list_shares(&self.share_store, &self.agent_name, arguments)
     }
 
     fn audit_target<'a>(name: &'a str, arguments: &'a Value) -> &'a str {
@@ -691,6 +705,8 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
         }
         let result = if name == "symaira_audit_self" {
             self.audit_self(arguments)
+        } else if name == "list_shares" {
+            self.list_shares(arguments)
         } else {
             self.inner.call(name, arguments)
         };
@@ -806,17 +822,54 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
                 let ok = result.as_ref().is_ok_and(|value| !value.is_error);
                 self.append_audit("fetch_openai", id, ok);
             }
+            "list_shares" => {
+                let ok = result.as_ref().is_ok_and(|value| !value.is_error);
+                self.append_audit("share_list", "", ok);
+            }
             _ => {}
         }
         result
     }
 }
 
+fn render_list_shares(
+    share_store: &ShareStore,
+    agent_name: &str,
+    arguments: &Value,
+) -> Result<ToolCallResult, String> {
+    let filter = ShareFilter {
+        status: arguments
+            .get("status")
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned),
+        from_agent: arguments
+            .get("from_agent")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned(),
+        to_agent: arguments
+            .get("to_agent")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned(),
+        secret_path: arguments
+            .get("secret_path")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned(),
+    };
+    let grants = share_store.list_for_agent_filtered(agent_name, Some(&filter));
+    symvault_gojson::to_string(&grants)
+        .map(ToolCallResult::text)
+        .map_err(|error| error.to_string())
+}
+
 fn store_error(error: StoreError) -> String {
     error.to_string()
 }
 
-/// Seventeen connected handlers plus built-in template dry runs. The catalog remains owned by
+/// The connected handlers in this bounded runtime. The catalog remains owned by
 /// the protocol layer; this list is the injected availability registry used
 /// by authorization and whoami.
 pub fn read_only_tool_names() -> Vec<String> {
@@ -839,6 +892,7 @@ pub fn read_only_tool_names() -> Vec<String> {
         "get_entry",
         "get_entry_value",
         "get_entry_metadata",
+        "list_shares",
     ]
     .into_iter()
     .map(str::to_owned)
@@ -859,8 +913,12 @@ pub fn unavailable_tool(
 
 #[cfg(test)]
 mod tests {
-    use super::{MCP_RATE_LIMIT_WINDOW, MinuteRateLimiter};
+    use super::{MCP_RATE_LIMIT_WINDOW, MinuteRateLimiter, render_list_shares};
+    use serde_json::json;
+    use std::fs;
     use std::time::{Duration, Instant};
+    use symvault_store::sharing::ShareStore;
+    use tempfile::tempdir;
 
     #[test]
     fn rate_limit_window_starts_on_first_call_and_resets_without_sleep() {
@@ -874,5 +932,46 @@ mod tests {
         assert!(limiter.allow_at(start), "first call starts the window");
         assert!(!limiter.allow_at(start + Duration::from_secs(1)));
         assert!(limiter.allow_at(start + MCP_RATE_LIMIT_WINDOW + Duration::from_secs(1)));
+    }
+
+    #[test]
+    fn list_shares_applies_go_agent_scope_then_exact_filters() {
+        let dir = tempdir().expect("external test temp directory");
+        let path = dir.path().canonicalize().unwrap().join("mcp-shares.json");
+        fs::write(
+            &path,
+            r#"{"version":1,"grants":[{"id":"one","from_agent":"alice","to_agent":"bob","secret_path":"prod/a","status":"pending","created_at":"2026-01-02T03:04:05Z"},{"id":"two","from_agent":"alice","to_agent":"charlie","secret_path":"prod/b","status":"approved","created_at":"2026-01-02T03:04:05Z"},{"id":"three","from_agent":"mallory","to_agent":"eve","secret_path":"prod/c","status":"approved","created_at":"2026-01-02T03:04:05Z"}]}"#,
+        )
+        .expect("write Go-shaped share fixture");
+        let shares = ShareStore::read(&path).expect("read share fixture");
+
+        let all = render_list_shares(&shares, "alice", &json!({})).expect("list shares");
+        let all_json: serde_json::Value = serde_json::from_str(&all.text).expect("JSON result");
+        assert_eq!(all_json.as_array().expect("array").len(), 2);
+        assert!(
+            all_json
+                .as_array()
+                .expect("array")
+                .iter()
+                .all(|grant| grant["from_agent"] == "alice")
+        );
+
+        let filtered = render_list_shares(
+            &shares,
+            "alice",
+            &json!({"status":"approved", "to_agent":"charlie"}),
+        )
+        .expect("filtered list shares");
+        let filtered_json: serde_json::Value =
+            serde_json::from_str(&filtered.text).expect("filtered JSON result");
+        assert_eq!(filtered_json.as_array().expect("array").len(), 1);
+        assert_eq!(filtered_json[0]["id"], "two");
+
+        // GetString in Go defaults non-string values to empty filters.
+        let invalid = render_list_shares(&shares, "alice", &json!({"status":true}))
+            .expect("invalid filter defaults");
+        let invalid_json: serde_json::Value =
+            serde_json::from_str(&invalid.text).expect("invalid-filter JSON result");
+        assert_eq!(invalid_json.as_array().expect("array").len(), 2);
     }
 }
