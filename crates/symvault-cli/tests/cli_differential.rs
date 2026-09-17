@@ -3,7 +3,7 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
     process::{Command, ExitStatus, Output, Stdio},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
 fn temporary_root(name: &str) -> PathBuf {
@@ -1839,7 +1839,7 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
 
     let timeout_script = |marker: &Path| {
         format!(
-            "printf '%s' \"$SYMVAULT_FILE_CERT_P12\" > {}; sleep 1",
+            "printf '%s' \"$SYMVAULT_FILE_CERT_P12\" > {}; sleep 5",
             marker.display()
         )
     };
@@ -1863,6 +1863,7 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
         &root,
         &home,
     );
+    let rust_timeout_started = Instant::now();
     let rust_timeout = run(
         &rust_binary,
         &[
@@ -1885,12 +1886,41 @@ fn file_use_materializes_and_cleans_attachment_like_go_cli() {
     assert!(!rust_timeout.status.success());
     assert!(String::from_utf8_lossy(&go_timeout.stderr).contains("timed out"));
     assert!(String::from_utf8_lossy(&rust_timeout.stderr).contains("timed out"));
+    assert!(rust_timeout_started.elapsed().as_secs() < 2);
     let go_timeout_path = fs::read_to_string(&go_timeout_marker).expect("Go timeout marker");
     let rust_timeout_path = fs::read_to_string(&rust_timeout_marker).expect("Rust timeout marker");
     assert!(!Path::new(&go_timeout_path).exists(), "Go timeout cleanup");
     assert!(
         !Path::new(&rust_timeout_path).exists(),
         "Rust timeout cleanup"
+    );
+
+    let sentinel = fixture_dir.join("sentinel");
+    fs::write(&sentinel, b"must-survive").expect("sentinel");
+    let symlink_script = format!(
+        "rm \"$SYMVAULT_FILE_CERT_P12\"; ln -s {} \"$SYMVAULT_FILE_CERT_P12\"",
+        sentinel.display()
+    );
+    let rust_symlink = run(
+        &rust_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "file",
+            "use",
+            "work/file-use#cert_p12",
+            "--",
+            "sh",
+            "-c",
+            &symlink_script,
+        ],
+        &root,
+        &home,
+    );
+    assert_success(&rust_symlink, "Rust file use symlink replacement");
+    assert_eq!(
+        fs::read(&sentinel).expect("sentinel after cleanup"),
+        b"must-survive"
     );
 
     fs::remove_dir_all(home).expect("cleanup file use home");

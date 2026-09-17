@@ -79,6 +79,13 @@ pub struct UseResult {
     pub timed_out: bool,
 }
 
+struct MaterializedFile {
+    directory: PathBuf,
+    path: PathBuf,
+    handle: fs::File,
+    length: u64,
+}
+
 pub fn add(root: &Path, identity: &Identity, options: &AddOptions) -> Result<AddResult, String> {
     if options.field.is_empty() {
         return Err("--field is required".to_owned());
@@ -240,15 +247,15 @@ pub fn use_attachment(
             "invalid file name {name:?}: must match [A-Za-z0-9_]+"
         ));
     }
-    let (directory, file) = materialize_file(&name, &read.content)?;
+    let materialized = materialize_file(&name, &read.content)?;
     let result = run_file_command(
         &options.command,
-        &file,
+        &materialized.path,
         &name,
         &read.content,
         options.timeout,
     );
-    cleanup_file(&directory, &file);
+    cleanup_file(materialized);
     result
 }
 
@@ -261,7 +268,7 @@ fn is_safe_file_name(name: &str) -> bool {
 
 static FILE_DIRECTORY_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
-fn materialize_file(name: &str, content: &[u8]) -> Result<(PathBuf, PathBuf), String> {
+fn materialize_file(name: &str, content: &[u8]) -> Result<MaterializedFile, String> {
     let base = std::env::temp_dir();
     let mut directory = None;
     for _ in 0..64 {
@@ -284,11 +291,47 @@ fn materialize_file(name: &str, content: &[u8]) -> Result<(PathBuf, PathBuf), St
         return Err(format!("secure ephemeral file directory: {error}"));
     }
     let file = directory.join(name);
-    if let Err(error) = write_private_file(&file, content) {
-        let _ = fs::remove_dir(&directory);
-        return Err(format!("materialize file {name:?}: {error}"));
+    let handle = match write_private_file(&file, content) {
+        Ok(handle) => handle,
+        Err(error) => {
+            let _ = fs::remove_file(&file);
+            let _ = fs::remove_dir(&directory);
+            return Err(format!("materialize file {name:?}: {error}"));
+        }
+    };
+    Ok(MaterializedFile {
+        directory,
+        path: file,
+        handle,
+        length: content.len() as u64,
+    })
+}
+
+fn cleanup_file(materialized: MaterializedFile) {
+    let MaterializedFile {
+        directory,
+        path,
+        mut handle,
+        length,
+    } = materialized;
+    // Write through the descriptor opened before the child ran. The child may
+    // replace the pathname with a symlink or another file, but cannot redirect
+    // this handle. The zero buffer and original length keep cleanup bounded.
+    let zeros = [0u8; 8192];
+    let mut remaining = length;
+    while remaining > 0 {
+        let count = remaining.min(zeros.len() as u64) as usize;
+        if handle.write_all(&zeros[..count]).is_err() {
+            break;
+        }
+        remaining -= count as u64;
     }
-    Ok((directory, file))
+    let _ = handle.sync_all();
+    drop(handle);
+    // remove_file unlinks a child-created symlink; it never follows it. If the
+    // child installed a directory at this path, leave it rather than recurse.
+    let _ = fs::remove_file(path);
+    let _ = fs::remove_dir(directory);
 }
 
 #[cfg(unix)]
@@ -303,7 +346,7 @@ fn set_private_directory(_path: &Path) -> std::io::Result<()> {
 }
 
 #[cfg(unix)]
-fn write_private_file(path: &Path, content: &[u8]) -> std::io::Result<()> {
+fn write_private_file(path: &Path, content: &[u8]) -> std::io::Result<fs::File> {
     use std::os::unix::fs::OpenOptionsExt as _;
     let mut file = fs::OpenOptions::new()
         .write(true)
@@ -311,28 +354,19 @@ fn write_private_file(path: &Path, content: &[u8]) -> std::io::Result<()> {
         .mode(0o600)
         .open(path)?;
     file.write_all(content)?;
-    file.sync_all()
+    file.sync_all()?;
+    Ok(file)
 }
 
 #[cfg(not(unix))]
-fn write_private_file(path: &Path, content: &[u8]) -> std::io::Result<()> {
+fn write_private_file(path: &Path, content: &[u8]) -> std::io::Result<fs::File> {
     let mut file = fs::OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(path)?;
     file.write_all(content)?;
-    file.sync_all()
-}
-
-fn cleanup_file(directory: &Path, file: &Path) {
-    if let Ok(length) = fs::metadata(file).map(|metadata| metadata.len() as usize)
-        && let Ok(handle) = fs::OpenOptions::new().write(true).open(file)
-    {
-        let _ = (&handle).write_all(&vec![0u8; length]);
-        let _ = handle.sync_all();
-    }
-    let _ = fs::remove_file(file);
-    let _ = fs::remove_dir(directory);
+    file.sync_all()?;
+    Ok(file)
 }
 
 fn run_file_command(
@@ -394,18 +428,23 @@ fn run_file_command(
             Err(error) => return Err(format!("wait for command: {error}")),
         }
     };
+    if timed_out {
+        // A grandchild may inherit the pipe and keep it open after the direct
+        // child is killed. Detach bounded readers so timeout cleanup does not
+        // wait for an unrelated descendant.
+        drop(stdout_reader);
+        drop(stderr_reader);
+        return Err(format!(
+            "command timed out after {}",
+            format_timeout(timeout.unwrap_or_default())
+        ));
+    }
     let (stdout, _) = stdout_reader
         .join()
         .map_err(|_| "command stdout reader failed".to_owned())?;
     let (stderr, _) = stderr_reader
         .join()
         .map_err(|_| "command stderr reader failed".to_owned())?;
-    if timed_out {
-        return Err(format!(
-            "command timed out after {}",
-            format_timeout(timeout.unwrap_or_default())
-        ));
-    }
     let stdout = redact_output(&stdout, content);
     let stderr = redact_output(&stderr, content);
     Ok(UseResult {
