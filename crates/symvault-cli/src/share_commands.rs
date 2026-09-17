@@ -112,7 +112,13 @@ fn write_text(
 }
 
 fn write_json(grants: &[ShareGrant], output: &mut impl Write) -> Result<(), String> {
-    let encoded = symvault_gojson::to_string(grants).map_err(|error| error.to_string())?;
+    // share list uses cli.PrintResult's SetEscapeHTML(false), unlike the
+    // default encoding/json marshaler used by MCP wire payloads. The Go
+    // encoder still escapes JavaScript line separators.
+    let encoded = serde_json::to_string(grants)
+        .map_err(|error| error.to_string())?
+        .replace('\u{2028}', "\\u2028")
+        .replace('\u{2029}', "\\u2029");
     writeln!(output, "{encoded}").map_err(|error| error.to_string())
 }
 
@@ -198,10 +204,14 @@ fn format_duration(nanos: i64) -> String {
     if seconds != 0 {
         return format!("{sign}{seconds}{}s", format_fraction(fraction));
     }
-    if nanos % 1_000_000 == 0 {
-        format!("{sign}{}ms", nanos / 1_000_000)
-    } else if nanos % 1_000 == 0 {
-        format!("{sign}{}µs", nanos / 1_000)
+    if nanos >= 1_000_000 {
+        let millis = nanos / 1_000_000;
+        let fraction = format_fraction((nanos % 1_000_000) * 1_000);
+        format!("{sign}{millis}{fraction}ms")
+    } else if nanos >= 1_000 {
+        let micros = nanos / 1_000;
+        let fraction = format_fraction((nanos % 1_000) * 1_000_000);
+        format!("{sign}{micros}{fraction}µs")
     } else {
         format!("{sign}{nanos}ns")
     }

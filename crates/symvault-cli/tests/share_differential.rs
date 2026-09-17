@@ -68,7 +68,7 @@ fn sorted_text(bytes: &[u8]) -> String {
     let Some(blank) = lines.iter().position(|line| line.is_empty()) else {
         return text;
     };
-    lines[2..blank].sort_unstable();
+    lines[1..blank].sort_unstable();
     let mut normalized = lines.join("\n");
     if text.ends_with('\n') {
         normalized.push('\n');
@@ -133,6 +133,24 @@ fn share_list_matches_go_for_formats_and_filters() {
         let go = run(&go_binary, args, &root, &home);
         let rust = run(&rust_binary, args, &root, &home);
         assert_same(&go, &rust, args, &format!("share list {args:?}"));
+    }
+
+    // PrintResult disables HTML escaping for JSON. Keep this one-grant probe
+    // byte-exact so the order-normalized multi-grant cases cannot hide that
+    // contract or YAML quoting differences.
+    fs::write(
+        root.join("mcp-shares.json"),
+        r#"{"version":1,"grants":[{"id":"special","from_agent":"source","to_agent":"target","secret_path":"<&> ","status":"approved","created_at":"2025-02-03T04:05:06Z"}]}"#.as_bytes(),
+    )
+    .expect("special share store");
+    for args in [
+        &["--output", "json", "share", "list"][..],
+        &["--output", "yaml", "share", "list"][..],
+    ] {
+        let go = run(&go_binary, args, &root, &home);
+        let rust = run(&rust_binary, args, &root, &home);
+        assert_status(&go, &rust, &format!("share list special {args:?}"));
+        assert_eq!(rust.stdout, go.stdout, "special {args:?}: stdout differs");
     }
     let _ = fs::remove_dir_all(root);
     let _ = fs::remove_dir_all(home);
