@@ -131,10 +131,9 @@ fn available(def: &ToolDefinition, config: &ToolListConfig) -> bool {
 }
 
 fn expose_value_tools(config: &ToolListConfig) -> bool {
-    config.expose_value_tools.unwrap_or(!matches!(
-        config.tier.as_deref(),
-        Some("read-only") | Some("standard")
-    ))
+    config
+        .expose_value_tools
+        .unwrap_or(matches!(config.tier.as_deref(), None | Some("admin")))
 }
 
 const LEAN_TOOL_SET: &[&str] = &[
@@ -166,7 +165,7 @@ pub(crate) fn list_tools(config: &ToolListConfig, include_all: bool) -> Result<V
         .filter(|def| include_all || lean.contains(def.name.as_str()))
         .map(|def| {
             let mut value = serde_json::to_value(def).expect("tool catalog is serializable");
-            if !expose_value_tools(config)
+            if config.expose_value_tools == Some(false)
                 && def.name == "get_entry"
                 && let Some(schema) = value.get_mut("inputSchema")
             {
@@ -205,6 +204,22 @@ mod tests {
     fn tier_defaults_hide_value_tools_without_an_explicit_flag() {
         let config = ToolListConfig {
             tier: Some("standard".to_string()),
+            ..ToolListConfig::default()
+        };
+        let tools = list_tools(&config, true).unwrap();
+        assert!(
+            !tools
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|tool| tool["name"] == "get_entry_value")
+        );
+    }
+
+    #[test]
+    fn custom_tier_defaults_hide_value_tools_without_an_explicit_flag() {
+        let config = ToolListConfig {
+            tier: Some("custom".to_string()),
             ..ToolListConfig::default()
         };
         let tools = list_tools(&config, true).unwrap();

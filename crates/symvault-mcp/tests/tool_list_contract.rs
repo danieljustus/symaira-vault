@@ -23,6 +23,8 @@ struct Case {
     name: String,
     profile: String,
     include_all_tools: bool,
+    #[serde(default)]
+    expose_value_tools: Option<bool>,
     runtime: Runtime,
     tools: Vec<Value>,
 }
@@ -52,12 +54,18 @@ fn config(case: &Case) -> ToolListConfig {
             ..ToolListConfig::default()
         };
     }
-    ToolListConfig::for_tier(
+    let mut config = ToolListConfig::for_tier(
         &case.profile,
         case.runtime.execute_api,
         case.runtime.secure_input,
         case.runtime.generate_totp,
-    )
+    );
+    if case.expose_value_tools.is_none() {
+        config.expose_value_tools = None;
+    } else {
+        config.expose_value_tools = case.expose_value_tools;
+    }
+    config
 }
 
 fn request(case: &Case) -> String {
