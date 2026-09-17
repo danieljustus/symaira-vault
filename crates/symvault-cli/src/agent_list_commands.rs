@@ -57,19 +57,23 @@ struct TokenRegistryFile {
 }
 
 #[derive(Debug, Deserialize)]
-struct TokenEntry {
+pub(crate) struct TokenEntry {
     #[serde(default)]
-    hash: String,
+    pub(crate) hash: String,
     #[serde(default)]
-    id: String,
+    pub(crate) id: String,
     #[serde(default)]
-    agent_name: String,
+    pub(crate) agent_name: String,
     #[serde(default)]
-    expires_at: Option<String>,
+    pub(crate) label: String,
     #[serde(default)]
-    last_used_at: Option<String>,
+    pub(crate) allowed_tools: Vec<String>,
     #[serde(default)]
-    revoked: bool,
+    pub(crate) expires_at: Option<String>,
+    #[serde(default)]
+    pub(crate) last_used_at: Option<String>,
+    #[serde(default)]
+    pub(crate) revoked: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -146,7 +150,7 @@ pub(crate) fn list(
     }
 }
 
-fn load_tokens(root: &Path) -> Result<Vec<TokenEntry>, String> {
+pub(crate) fn load_tokens(root: &Path) -> Result<Vec<TokenEntry>, String> {
     let path = root.join(TOKEN_REGISTRY);
     let bytes = match fs::read(path) {
         Ok(bytes) => bytes,
@@ -244,12 +248,12 @@ fn is_expired(timestamp: Option<&str>) -> bool {
     timestamp.is_some_and(|timestamp| timestamp_to_epoch(timestamp) < now_epoch())
 }
 
-fn timestamp_to_epoch(timestamp: &str) -> i64 {
+pub(crate) fn timestamp_to_epoch(timestamp: &str) -> i64 {
     time::OffsetDateTime::parse(timestamp, &time::format_description::well_known::Rfc3339)
         .map_or(i64::MIN, |value| value.unix_timestamp())
 }
 
-fn now_epoch() -> i64 {
+pub(crate) fn now_epoch() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(i64::MAX, |duration| {
