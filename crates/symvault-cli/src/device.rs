@@ -77,7 +77,7 @@ fn joined_config(vault: &Path) -> Result<Vec<u8>, String> {
         .map_err(|e| format!("serialize config: {e}"))
 }
 
-fn unlock_vault(vault: &Path) -> Result<Identity, String> {
+pub(crate) fn unlock_vault(vault: &Path) -> Result<Identity, String> {
     if !is_initialized(vault) {
         return Err("vault is not initialized (run 'symvault init' first)".to_owned());
     }

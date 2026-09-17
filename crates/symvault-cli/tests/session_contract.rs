@@ -3,7 +3,7 @@
 use std::{
     fs,
     io::Write,
-    path::Path,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -65,7 +65,13 @@ fn fixture() -> Fixture {
         .expect("session fixture parses")
 }
 
-fn run_case(case: &Case, root: &Path) -> std::process::Output {
+fn run_case(case: &Case) -> (std::process::Output, PathBuf) {
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock after epoch")
+        .as_nanos();
+    let root = std::env::temp_dir().join(format!("symvault-session-cli-case-{unique}"));
+    fs::create_dir_all(&root).expect("create isolated case root");
     let vault = root.join(if case.vault_dir.is_empty() {
         "missing-vault"
     } else {
@@ -101,6 +107,9 @@ fn run_case(case: &Case, root: &Path) -> std::process::Output {
         .args(args)
         .env("HOME", root.join("home"))
         .env("USERPROFILE", root.join("home"))
+        .env_remove("XDG_CONFIG_HOME")
+        .env_remove("XDG_DATA_HOME")
+        .env_remove("XDG_CACHE_HOME")
         .env("CI", "1")
         .env_remove("SYMVAULT_PROFILE")
         .env_remove("SYMVAULT_PASSPHRASE");
@@ -124,7 +133,8 @@ fn run_case(case: &Case, root: &Path) -> std::process::Output {
             ),
         );
     }
-    command.output().expect("run Rust session CLI case")
+    let output = command.output().expect("run Rust session CLI case");
+    (output, root)
 }
 
 fn expand_markers(bytes: &[u8], root: &Path, vault: &Path) -> Vec<u8> {
@@ -323,15 +333,9 @@ fn fixture_pins_go_sources_and_runs_empty_vault_cases() {
     assert_eq!(fixture.oracle.generator_digest.len(), 64);
     assert_eq!(fixture.cases.len(), 18);
 
-    let unique = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("clock after epoch")
-        .as_nanos();
-    let root = std::env::temp_dir().join(format!("symvault-session-cli-{unique}"));
-    fs::create_dir_all(&root).expect("create isolated roots");
     let mut failures = Vec::new();
     for case in &fixture.cases {
-        let output = run_case(case, &root);
+        let (output, root) = run_case(case);
         let status = output.status.code().unwrap_or(255);
         let stderr = String::from_utf8_lossy(&output.stderr);
         let vault = root.join(if case.vault_dir.is_empty() {
@@ -341,35 +345,44 @@ fn fixture_pins_go_sources_and_runs_empty_vault_cases() {
         });
         let expected_stdout = expand_markers(&case.expected.stdout_bytes, &root, &vault);
         let expected_stderr = expand_markers(&case.expected.stderr_bytes, &root, &vault);
-        let stdout_matches =
-            if case.name.starts_with("auth_status_") && !case.expected.stdout_bytes.is_empty() {
-                // The Go and Rust commands ask the host biometric provider for
-                // this capability. Keep every emitted byte exact while allowing
-                // the native boolean to differ on a host without Touch ID.
-                let actual: serde_json::Value =
-                    serde_json::from_slice(&output.stdout).expect("Rust status JSON");
-                let actual_touch = if actual["touchIDAvailable"].as_bool().unwrap_or(false) {
-                    b"true".as_slice()
-                } else {
-                    b"false".as_slice()
-                };
-                let normalized = replace_bytes(
-                    &expected_stdout,
-                    b"\"touchIDAvailable\":true",
-                    format!(
-                        "\"touchIDAvailable\":{}",
-                        String::from_utf8_lossy(actual_touch)
-                    )
-                    .as_bytes(),
-                );
-                if normalized != output.stdout {
-                    eprintln!("{} expected: {:?}", case.name, normalized);
-                    eprintln!("{} actual: {:?}", case.name, output.stdout);
+        let stdout_matches = if case.name.starts_with("auth_status_")
+            && !case.expected.stdout_bytes.is_empty()
+        {
+            // The Go and Rust commands ask the host biometric provider for
+            // this capability. Keep every emitted byte exact while allowing
+            // the native boolean to differ on a host without Touch ID.
+            let actual: serde_json::Value = match serde_json::from_slice(&output.stdout) {
+                Ok(value) => value,
+                Err(error) => {
+                    failures.push(format!(
+                            "{}: invalid status JSON: {error}; status={status}, stdout={:?}, stderr={:?}",
+                            case.name, output.stdout, output.stderr
+                        ));
+                    serde_json::Value::Null
                 }
-                normalized == output.stdout
-            } else {
-                output.stdout == expected_stdout
             };
+            let actual_touch = if actual["touchIDAvailable"].as_bool().unwrap_or(false) {
+                b"true".as_slice()
+            } else {
+                b"false".as_slice()
+            };
+            let normalized = replace_bytes(
+                &expected_stdout,
+                b"\"touchIDAvailable\":true",
+                format!(
+                    "\"touchIDAvailable\":{}",
+                    String::from_utf8_lossy(actual_touch)
+                )
+                .as_bytes(),
+            );
+            if normalized != output.stdout {
+                eprintln!("{} expected: {:?}", case.name, normalized);
+                eprintln!("{} actual: {:?}", case.name, output.stdout);
+            }
+            normalized == output.stdout
+        } else {
+            output.stdout == expected_stdout
+        };
         let stderr_matches = if !case.expected.stderr_bytes.is_empty() {
             output.stderr == expected_stderr
         } else {
@@ -382,12 +395,15 @@ fn fixture_pins_go_sources_and_runs_empty_vault_cases() {
                 && !stderr.contains(&case.expected.stderr_contains))
         {
             failures.push(format!(
-                "{}: status={status}, stdout={:?}, stderr={stderr:?}",
+                "{}: status={status}, expected_status={}, stdout={:?}, expected_stdout={:?}, stderr={stderr:?}, expected_stderr={expected_stderr:?}, stderr_contains={:?}",
                 case.name,
-                String::from_utf8_lossy(&output.stdout),
+                case.expected.exit_code,
+                output.stdout,
+                expected_stdout,
+                case.expected.stderr_contains,
             ));
         }
+        let _ = fs::remove_dir_all(&root);
     }
-    let _ = fs::remove_dir_all(&root);
     assert!(failures.is_empty(), "session CLI mismatches: {failures:#?}");
 }

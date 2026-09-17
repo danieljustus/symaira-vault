@@ -5,6 +5,7 @@ mod device;
 mod session_commands;
 #[path = "device_input.rs"]
 mod session_input;
+mod vault_commands;
 
 use std::{
     ffi::{OsStr, OsString},
@@ -44,6 +45,8 @@ use symvault_platform::FallbackKeyring;
     target_os = "netbsd"
 ))]
 use symvault_platform::OsKeyring;
+use symvault_sync::GitRepository;
+use zeroize::Zeroizing;
 
 const VERSION: &str = match option_env!("SYMVAULT_VERSION") {
     Some(version) => version,
@@ -80,6 +83,25 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Initialize a new password vault.
+    Init {
+        #[arg(value_name = "VAULT_DIR")]
+        vault_dir: Option<PathBuf>,
+        #[arg(long, default_value = "ask")]
+        auth: String,
+    },
+    /// List password entries.
+    List {
+        #[arg(value_name = "PREFIX")]
+        prefix: Option<String>,
+    },
+    /// Get a password entry or field.
+    Get {
+        #[arg(value_name = "PATH[.FIELD]")]
+        query: String,
+        #[arg(short, long)]
+        _print: bool,
+    },
     /// Print the version of Symaira Vault.
     Version(VersionArgs),
     /// Manage paired devices for multi-device vault access.
@@ -98,6 +120,9 @@ enum Command {
     Unlock {
         #[arg(long)]
         check: bool,
+        /// Session duration override (for example, 30m or 1h).
+        #[arg(long, value_name = "DURATION")]
+        ttl: Option<String>,
     },
     /// Manage vault authentication and session status.
     Auth {
@@ -209,12 +234,32 @@ fn main() -> ExitCode {
     };
 
     match cli.command {
+        Some(Command::Init { vault_dir, auth }) => {
+            run_init(cli.vault.as_deref(), vault_dir.as_deref(), &auth, cli.quiet)
+        }
+        Some(Command::List { prefix }) => run_list(
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
+            prefix.as_deref().unwrap_or(""),
+            &cli.output,
+            cli.json,
+            cli.quiet,
+        ),
+        Some(Command::Get { query, .. }) => run_get(
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
+            &query,
+            &cli.output,
+            cli.json,
+            cli.quiet,
+        ),
         Some(Command::Version(_)) => write_version(&cli.output, cli.json),
         Some(Command::Lock) => run_lock(cli.vault.as_deref(), cli._profile.as_deref(), cli.quiet),
-        Some(Command::Unlock { check }) => run_unlock(
+        Some(Command::Unlock { check, ttl }) => run_unlock(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
             check,
+            ttl.as_deref(),
             cli.quiet,
         ),
         Some(Command::Auth { command }) => match command {
@@ -338,16 +383,131 @@ fn run_lock(explicit_vault: Option<&Path>, profile: Option<&str>, quiet: bool) -
     finish_session_result(result, false, 3)
 }
 
+fn run_init(
+    explicit_vault: Option<&Path>,
+    positional_vault: Option<&Path>,
+    auth: &str,
+    quiet: bool,
+) -> ExitCode {
+    let result = (|| {
+        if !matches!(
+            auth.trim().to_ascii_lowercase().as_str(),
+            "ask" | "passphrase"
+        ) {
+            return Err("Touch ID unlock is not yet integrated in the Rust CLI".to_owned());
+        }
+        let vault = if let Some(path) = positional_vault.or(explicit_vault) {
+            expand_vault_path(path)?
+        } else {
+            resolve_vault(None, None)?
+        };
+        if vault.join("config.yaml").is_file() {
+            return Err(format!("vault already initialized at {}", vault.display()));
+        }
+        let passphrase = init_passphrase()?;
+        if passphrase.as_bytes().len() < 12 {
+            return Err("passphrase must be at least 12 characters".to_owned());
+        }
+        let secret = SecretBytes::new(passphrase.as_bytes());
+        let identity = vault_commands::initialize(&vault, &secret)?;
+        let repository = GitRepository::init(&vault)
+            .map_err(|error| format!("cannot initialize git: {error}"))?;
+        repository
+            .create_gitignore()
+            .map_err(|error| format!("cannot create .gitignore: {error}"))?;
+        if !quiet {
+            println!("Vault initialized at {}", vault.display());
+            println!(
+                "Public key: {}",
+                symvault_crypto::recipient_string(&identity)
+            );
+        }
+        Ok::<(), String>(())
+    })();
+    finish_vault_result(result)
+}
+
+fn init_passphrase() -> Result<Zeroizing<String>, String> {
+    if let Ok(passphrase) = std::env::var("SYMVAULT_PASSPHRASE")
+        && !passphrase.is_empty()
+    {
+        let opt_in = std::env::var("SYMVAULT_ALLOW_ENV_PASSPHRASE").unwrap_or_default();
+        if !matches!(opt_in.as_str(), "1" | "true" | "yes") {
+            return Err(
+                "environment passphrase is disabled; opt in with SYMVAULT_ALLOW_ENV_PASSPHRASE=1"
+                    .to_owned(),
+            );
+        }
+        return Ok(Zeroizing::new(passphrase));
+    }
+    session_input::read_passphrase("Enter passphrase: ")
+}
+
+fn run_list(
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    prefix: &str,
+    output: &str,
+    json: bool,
+    quiet: bool,
+) -> ExitCode {
+    let result = (|| {
+        let vault = resolve_vault(explicit_vault, profile)?;
+        require_initialized(&vault)?;
+        let identity = device::unlock_vault(&vault)?;
+        let entries = vault_commands::list(&vault, &identity, prefix)?;
+        let format = if json { "json" } else { output };
+        vault_commands::write_list(&mut io::stdout().lock(), &entries, format, quiet)
+    })();
+    finish_vault_result(result)
+}
+
+fn run_get(
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    query: &str,
+    output: &str,
+    json: bool,
+    quiet: bool,
+) -> ExitCode {
+    let result = (|| {
+        let vault = resolve_vault(explicit_vault, profile)?;
+        require_initialized(&vault)?;
+        let identity = device::unlock_vault(&vault)?;
+        let result = vault_commands::get(&vault, &identity, query)?;
+        let format = if json { "json" } else { output };
+        vault_commands::write_get(&mut io::stdout().lock(), &result, format, quiet)
+    })();
+    finish_vault_result(result)
+}
+
+fn finish_vault_result(result: Result<(), String>) -> ExitCode {
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            let _ = writeln!(io::stderr(), "Error: {error}");
+            ExitCode::from(1)
+        }
+    }
+}
+
 fn run_unlock(
     explicit_vault: Option<&Path>,
     profile: Option<&str>,
     check: bool,
+    ttl_override: Option<&str>,
     quiet: bool,
 ) -> ExitCode {
     let result = (|| {
         let vault = resolve_vault(explicit_vault, profile)?;
         require_initialized(&vault)?;
         let runtime = runtime_session_manager();
+        // Parse before --check so an invalid override is an input error even
+        // when no session lookup is needed.
+        let ttl_override = ttl_override
+            .map(session_commands::parse_ttl_override)
+            .transpose()?
+            .flatten();
         if check {
             session_commands::check(&runtime.manager, &vault)?;
             if !quiet {
@@ -361,15 +521,16 @@ fn run_unlock(
             fs::read(vault.join("config.yaml")).map_err(|error| format!("read config: {error}"))?;
         let identity_bytes = fs::read(vault.join("identity.age"))
             .map_err(|error| format!("read identity: {error}"))?;
-        let passphrase = session_input::unlock_passphrase(&config_bytes)?;
+        let passphrase = unlock_passphrase(&config_bytes, &config, &vault, &runtime)?;
         let secret = SecretBytes::new(passphrase.as_bytes());
-        decrypt_identity(&identity_bytes, &secret)
+        let decrypted_identity = decrypt_identity(&identity_bytes, &secret)
             .map_err(|error| format!("unlock vault: {error}"))?;
-        let ttl = if config.session_timeout.is_zero() {
+        let configured_ttl = if config.session_timeout.is_zero() {
             std::time::Duration::from_secs(15 * 60)
         } else {
             config.session_timeout
         };
+        let ttl = ttl_override.unwrap_or(configured_ttl);
         let max_lifetime = if config.session_max_lifetime.is_zero() {
             std::time::Duration::from_secs(8 * 60 * 60)
         } else {
@@ -382,6 +543,16 @@ fn run_unlock(
             .manager
             .save_passphrase(vault_string, passphrase.as_bytes(), ttl, max_lifetime)
             .map_err(|error| format!("save session: {error}"))?;
+        // Go treats identity-cache persistence as best effort after saving the
+        // passphrase session. Keep the parsed identity alive and persist its
+        // canonical zeroizing representation.
+        let identity_string = symvault_crypto::identity_string(&decrypted_identity);
+        let _ = runtime.manager.save_identity(
+            vault_string,
+            identity_string.as_bytes(),
+            ttl,
+            max_lifetime,
+        );
         if !runtime.cache_status().persistent {
             return Err(
                 "session cache is memory-only; 'symvault unlock' cannot unlock future serve processes. Start serve with SYMVAULT_PASSPHRASE or use a build with OS keyring support".to_owned(),
@@ -393,6 +564,43 @@ fn run_unlock(
         Ok::<(), String>(())
     })();
     finish_session_result(result, true, 3)
+}
+
+fn unlock_passphrase(
+    config_bytes: &[u8],
+    config: &Config,
+    vault: &Path,
+    runtime: &RuntimeSession,
+) -> Result<Zeroizing<String>, String> {
+    let vault_string = vault
+        .to_str()
+        .ok_or_else(|| "vault path is not valid UTF-8".to_owned())?;
+    // An explicit unlock first reuses a valid cached passphrase. This mirrors
+    // Go's session resolver and avoids prompting or invoking Touch ID when a
+    // persistent session is already available.
+    if let Ok(bytes) = runtime.manager.load_passphrase(vault_string)
+        && !bytes.is_empty()
+    {
+        return String::from_utf8(bytes)
+            .map(Zeroizing::new)
+            .map_err(|_| "cached session passphrase is not valid UTF-8".to_owned());
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = (config, vault, runtime);
+    #[cfg(target_os = "macos")]
+    if config.effective_auth_method() == symvault_core::config::AuthMethod::Touchid
+        && session_commands::gui_session_available()
+        && !is_test_or_ci()
+        && let Some(keyring) = runtime.keyring.as_deref()
+    {
+        let touch_id = symvault_platform::MacOsTouchId;
+        if let Ok(bytes) = session_commands::load_touch_id_passphrase(vault, keyring, &touch_id) {
+            let passphrase = String::from_utf8(bytes.to_vec())
+                .map_err(|_| "Touch ID passphrase is not valid UTF-8".to_owned())?;
+            return Ok(Zeroizing::new(passphrase));
+        }
+    }
+    session_input::unlock_passphrase_for_session(config_bytes)
 }
 
 fn run_auth_status(
@@ -586,10 +794,8 @@ fn runtime_session_manager() -> RuntimeSession {
         target_os = "netbsd"
     ))]
     {
-        let start_in_fallback = std::env::var_os("CI").is_some()
-            || std::env::var_os("GITHUB_ACTIONS").is_some()
-            || std::env::var_os("HEADLESS").is_some()
-            || std::env::var("SYMVAULT_TEST_KEYRING").as_deref() == Ok("memory");
+        let start_in_fallback =
+            is_test_or_ci() || std::env::var("SYMVAULT_TEST_KEYRING").as_deref() == Ok("memory");
         let keyring = FallbackKeyring::new(Arc::new(OsKeyring), start_in_fallback);
         RuntimeSession {
             manager: SessionManager::with_system_clock(keyring.clone()),
@@ -612,6 +818,13 @@ fn runtime_session_manager() -> RuntimeSession {
             memory_only: true,
         }
     }
+}
+
+fn is_test_or_ci() -> bool {
+    ["CI", "GITHUB_ACTIONS", "HEADLESS"]
+        .into_iter()
+        .any(|key| std::env::var_os(key).is_some_and(|value| !value.is_empty()))
+        || std::env::var("SYMVAULT_TEST_KEYRING").as_deref() == Ok("memory")
 }
 
 enum ConfigOperation {
