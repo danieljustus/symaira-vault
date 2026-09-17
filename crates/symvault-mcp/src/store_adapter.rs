@@ -88,14 +88,13 @@ impl ReadOnlyStore for StoreReadOnlyAdapter {
             Err(error) => return Err(store_error(error)),
         };
         validate_field_lengths(field, &value)?;
-        if let (Some(existing), Value::Object(incoming)) = (entry.data.get_mut(field), &value) {
-            if let Value::Object(existing) = existing {
+        match (entry.data.get_mut(field), &value) {
+            (Some(Value::Object(existing)), Value::Object(incoming)) => {
                 merge_json_objects(existing, incoming);
-            } else {
+            }
+            _ => {
                 entry.data.insert(field.to_owned(), value);
             }
-        } else {
-            entry.data.insert(field.to_owned(), value);
         }
         if field == "password" {
             const WEAK_PASSWORD_TAG: &str = "weak-password";
