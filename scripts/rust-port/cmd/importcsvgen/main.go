@@ -79,10 +79,10 @@ func main() {
 		{Name: "profile_case_headers", Format: "chrome", Input: " NAME ,URL,UserName,PASSWORD,NOTE\nTitle,https://example.test,u,p,n\n"},
 	}
 	for i := range cases {
-		parser, err := importer.New(cases[i].Format)
-		must(err)
-		entries, err := parser.Parse(strings.NewReader(cases[i].Input))
-		cases[i].Failed = err != nil
+		parser, newErr := importer.New(cases[i].Format)
+		must(newErr)
+		entries, parseErr := parser.Parse(strings.NewReader(cases[i].Input))
+		cases[i].Failed = parseErr != nil
 		cases[i].Entries = []entry{}
 		for _, e := range entries {
 			cases[i].Entries = append(cases[i].Entries, entry{Path: e.Path, Data: e.Data, Warnings: e.Warnings, SecretType: secretType(e)})
@@ -102,10 +102,10 @@ func main() {
 		"otpauth://totp/x?secret=" + secret + "&period=9223372036854775808",
 	}
 	for _, input := range inputs {
-		v, err := importer.ParseTOTP(input)
+		v, totpErr := importer.ParseTOTP(input)
 		message := ""
-		if err != nil {
-			message = err.Error()
+		if totpErr != nil {
+			message = totpErr.Error()
 		}
 		totps = append(totps, totpCase{input, v, message})
 	}

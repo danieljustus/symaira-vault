@@ -10,7 +10,7 @@
     "internal/vault/payment.go"
   ],
   "source_digest": "810c58e43b21cc32b3cebd8cf561ba46de2a7fb51368c8aaa7b22c4b9a7583e5",
-  "generator_digest": "2263b21f1fd2d0f4897fc0e61fc2adfa1782706accc790507fcfe82af196b70b",
+  "generator_digest": "4f3130005e5076b9e2a4c60e841eed1b34612d97cd67a7b453b7dd3dc4d3e36c",
   "cases": [
     {
       "name": "csv_invalid_totp",

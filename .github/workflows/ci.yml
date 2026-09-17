@@ -196,6 +196,10 @@ jobs:
   port-contract:
     name: Rust port contract
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CARGO_BUILD_JOBS: '2'
+      GOMAXPROCS: '2'
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -215,6 +219,10 @@ jobs:
   rust:
     name: Rust
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CARGO_BUILD_JOBS: '2'
+      GOMAXPROCS: '2'
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -270,6 +278,10 @@ jobs:
     name: Rust native (${{ matrix.os }})
     if: github.event_name != 'pull_request'
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    env:
+      CARGO_BUILD_JOBS: '2'
+      GOMAXPROCS: '2'
     strategy:
       fail-fast: false
       matrix:

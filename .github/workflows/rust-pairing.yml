@@ -80,11 +80,14 @@ concurrency:
 env:
   GOTOOLCHAIN: go1.26.6
   RUSTUP_TOOLCHAIN: 1.98.0
+  CARGO_BUILD_JOBS: '2'
+  GOMAXPROCS: '2'
 
 jobs:
   pairing-native:
     name: Pairing differential (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       # PAIRING-001 claims all platforms, so all three native runners execute

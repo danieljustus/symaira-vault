@@ -115,16 +115,16 @@ func writeStage() (err error) {
 
 	goPayload := []byte(goPayloadText)
 	rustPayload := []byte(rustPayloadText)
-	if err := backend.Set(key, string(goPayload)); err != nil {
-		return fmt.Errorf("Go native set: %w", err)
+	if setErr := backend.Set(key, string(goPayload)); setErr != nil {
+		return fmt.Errorf("go native set: %w", setErr)
 	}
 	written = true
 	got, err := backend.Get(key)
 	if err != nil {
-		return fmt.Errorf("Go native read-back: %w", err)
+		return fmt.Errorf("go native read-back: %w", err)
 	}
 	if got != string(goPayload) {
-		return errors.New("Go native read-back mismatch")
+		return errors.New("go native read-back mismatch")
 	}
 	value := report{SchemaVersion: reportSchemaVers, Key: key, GoPayload: asInts(goPayload), RustPayload: asInts(rustPayload)}
 	data, err := json.MarshalIndent(value, "", "  ")
@@ -165,22 +165,22 @@ func verifyStage() (err error) {
 	expected, _ := asBytes(value.RustPayload)
 	got, err := backend.Get(value.Key)
 	if err != nil {
-		return fmt.Errorf("Go read after Rust update: %w", err)
+		return fmt.Errorf("go read after Rust update: %w", err)
 	}
 	if got != string(expected) {
-		return errors.New("Go read after Rust update mismatch")
+		return errors.New("go read after Rust update mismatch")
 	}
 	if err := backend.Delete(value.Key); err != nil {
-		return fmt.Errorf("Go native delete: %w", err)
+		return fmt.Errorf("go native delete: %w", err)
 	}
 	missing := false
 	if _, getErr := backend.Get(value.Key); errors.Is(getErr, session.ErrKeyringNotFound) {
 		missing = true
 	} else if getErr != nil {
-		return fmt.Errorf("Go post-delete read: %w", getErr)
+		return fmt.Errorf("go post-delete read: %w", getErr)
 	}
 	if !missing {
-		return errors.New("Go native entry remained after delete")
+		return errors.New("go native entry remained after delete")
 	}
 	return nil
 }
