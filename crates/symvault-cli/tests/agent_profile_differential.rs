@@ -337,7 +337,7 @@ mod profile_edit_differential {
         let rust_binary = PathBuf::from(rust_binary);
 
         let cases = [
-            ("success", "allowedPaths:\n  - new\ncanWrite: true\n", "y\n"),
+            ("success", "canWrite: true\nallowedPaths:\n  - new\n", "y\n"),
             (
                 "cancel",
                 "allowedPaths:\n  - discarded\ncanWrite: true\n",

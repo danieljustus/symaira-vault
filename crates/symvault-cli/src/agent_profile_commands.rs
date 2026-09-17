@@ -3,6 +3,7 @@ use std::{
     env, fs,
     io::{self, Write},
     path::Path,
+    time::Duration,
 };
 
 use symvault_core::config::{AgentProfile, Config};
@@ -85,7 +86,7 @@ pub(crate) fn edit(
     let source = safeio::read(&config_path)
         .map_err(|error| format!("read config: {error}"))?
         .ok_or_else(|| "read config: file not found".to_owned())?;
-    let mut document: serde_yaml_ng::Value =
+    let document: serde_yaml_ng::Value =
         serde_yaml_ng::from_slice(&source).map_err(|error| format!("read config: {error}"))?;
     let agent_value = document
         .as_mapping()
@@ -119,12 +120,18 @@ pub(crate) fn edit(
         set_agent_value(&mut validation, name, edited_value.clone())?;
         let rendered = serde_yaml_ng::to_string(&validation)
             .map_err(|error| format!("save config: {error}"))?;
-        Config::load_from_bytes(rendered.as_bytes())
+        let validated = Config::load_from_bytes(rendered.as_bytes())
             .map_err(|error| format!("invalid YAML in edited profile: {error}"))?;
 
         writeln!(error_output, "Edited profile for {name:?}:")
             .map_err(|error| error.to_string())?;
-        let preview = serde_yaml_ng::to_string(&edited_value)
+        let fields = value_fields(&edited_value)?;
+        let profile = validated
+            .agents
+            .get(name)
+            .ok_or_else(|| "write profile preview: edited profile disappeared".to_owned())?;
+        let preview_data = ProfileData::from_edited(name, profile, &fields);
+        let preview = serde_yaml_ng::to_string(&YamlProfile(&preview_data))
             .map_err(|error| format!("write profile preview: {error}"))?;
         let preview = go_yaml_indentation(&preview);
         output
@@ -140,6 +147,14 @@ pub(crate) fn edit(
             writeln!(error_output, "Changes discarded.").map_err(|error| error.to_string())?;
             return Ok(());
         }
+        let current = safeio::read(&config_path)
+            .map_err(|error| format!("save config: {error}"))?
+            .ok_or_else(|| "save config: config file disappeared during edit".to_owned())?;
+        if current != source {
+            return Err(
+                "save config: config changed while editing; refusing to overwrite".to_owned(),
+            );
+        }
         safeio::write_atomic(&config_path, rendered.as_bytes())
             .map_err(|error| format!("save config: {error}"))?;
         writeln!(error_output, "Profile for {name:?} updated.")
@@ -148,6 +163,21 @@ pub(crate) fn edit(
     })();
     let _ = safeio::secure_delete(&temp_path, MAX_EDITED_PROFILE_BYTES);
     result
+}
+
+fn value_fields(value: &serde_yaml_ng::Value) -> Result<SourceFields, String> {
+    value
+        .as_mapping()
+        .ok_or_else(|| "invalid YAML in edited profile: profile must be a mapping".to_owned())?
+        .iter()
+        .map(|(key, value)| {
+            key.as_str()
+                .map(|key| (key.to_owned(), value.clone()))
+                .ok_or_else(|| {
+                    "invalid YAML in edited profile: field name must be a string".to_owned()
+                })
+        })
+        .collect()
 }
 
 fn profile_editor(preferred: Option<&str>) -> Result<String, String> {
@@ -416,6 +446,51 @@ impl ProfileData {
                 .and_then(serde_yaml_ng::Value::as_str)
                 .map(str::to_owned),
         }
+    }
+
+    /// Builds the preview from the editor's decoded field presence. The Go
+    /// preview encodes the temporary `AgentProfile` directly, before config
+    /// defaults or tier presets are applied; `from_loaded` supplies values,
+    /// then this method removes fields that were absent from that document.
+    fn from_edited(name: &str, profile: &AgentProfile, fields: &SourceFields) -> Self {
+        let mut data = Self::from_loaded(name, profile, fields);
+        macro_rules! clear_if_absent {
+            ($(($field:ident, $key:literal)),+ $(,)?) => {
+                $(if !fields.contains_key($key) {
+                    data.$field = None;
+                })+
+            };
+        }
+        if !fields.contains_key("tier") {
+            data.tier = None;
+        }
+        if !fields.contains_key("approvalMode") {
+            data.approval_mode = None;
+        }
+        if !fields.contains_key("allowedPaths") {
+            data.allowed_paths = None;
+        }
+        clear_if_absent!(
+            (can_write, "canWrite"),
+            (can_run_commands, "canRunCommands"),
+            (can_manage_config, "canManageConfig"),
+            (can_use_clipboard, "canUseClipboard"),
+            (can_use_autotype, "canUseAutotype"),
+            (can_read_values, "canReadValues"),
+            (expose_value_tools, "exposeValueTools"),
+            (auto_unseal, "autoUnseal"),
+            (require_approval, "requireApproval"),
+            (approval_timeout, "approvalTimeout"),
+            (max_reads_per_hour, "max_reads_per_hour"),
+            (max_reads_per_day, "max_reads_per_day"),
+            (max_secrets_in_session, "max_secrets_in_session"),
+            (prompt_injection_mode, "promptInjectionMode"),
+            (skill_path, "skillPath"),
+            (skill_version, "skillVersion"),
+            (expose_payment_values, "exposePaymentValues"),
+            (payment_policy, "paymentPolicy"),
+        );
+        data
     }
 }
 
