@@ -186,6 +186,7 @@ fn to_slash(path: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
     use std::{
         io::Write,
         time::{SystemTime, UNIX_EPOCH},
@@ -207,7 +208,7 @@ mod tests {
     #[test]
     fn parser_preserves_one_warning_for_invalid_totp() {
         let entry = parse_pass_entry(Path::new("x.gpg"), "pw\notpauth://totp/x?secret=bad\n");
-        assert!(entry.data.get("totp").is_none());
+        assert!(!entry.data.contains_key("totp"));
         assert_eq!(entry.warnings.as_deref().unwrap().len(), 1);
     }
 

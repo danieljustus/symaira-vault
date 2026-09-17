@@ -23,9 +23,9 @@ func main() {
 	rootBytes, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
 	must(err)
 	root := strings.TrimSpace(string(rootBytes))
-	const commit = "fca3f89401833b5e14ec4ec74ef736b0f63bca74"
+	const pinnedOracleCommit = "fca3f89401833b5e14ec4ec74ef736b0f63bca74"
 	sources := []string{"go.mod", "go.sum", "internal/mcp/server/render.go"}
-	_, err = provenance.Verify(root, commit, sources)
+	_, err = provenance.Verify(root, pinnedOracleCommit, sources)
 	must(err)
 	digest, err := provenance.Digest(root, sources)
 	must(err)
@@ -59,7 +59,7 @@ func main() {
 		GeneratorDigest string   `json:"generator_digest"`
 		Cases           []sample `json:"cases"`
 		ScalarDigest    string   `json:"scalar_digest"`
-	}{commit, sources, digest, generatorDigest, samples, hex.EncodeToString(hash.Sum(nil))}
+	}{pinnedOracleCommit, sources, digest, generatorDigest, samples, hex.EncodeToString(hash.Sum(nil))}
 	data, err := json.MarshalIndent(fixture, "", "  ")
 	must(err)
 	data = append(data, '\n')

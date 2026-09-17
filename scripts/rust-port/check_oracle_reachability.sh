@@ -49,7 +49,7 @@ fi
 # unchecked and the row passes on a clone that happens to hold the object.
 status=0
 for dir in $(grep -rl 'provenance.Verify' scripts/rust-port/cmd --include='*.go' | xargs -n1 dirname | sort -u); do
-    found=$(collect_pins "$dir"/*.go)
+    found=$(collect_pins "$dir"/*.go) || found=""
     if [ -z "$found" ]; then
         if ! grep -qE "^[A-Z_]*ORACLE_COMMIT" Makefile || ! grep -q "$(basename "$dir")" Makefile; then
             echo "FAIL $(basename "$dir") verifies provenance but contributes no pin this script can see"

@@ -28,7 +28,8 @@ type entry struct {
 }
 
 type passFile struct {
-	Path string `json:"path"`
+	Path    string `json:"path"`
+	Content string `json:"content"`
 }
 
 type importCase struct {
@@ -62,19 +63,20 @@ func main() {
 	generatorDigest, err := provenance.Digest(root, []string{"scripts/rust-port/cmd/import1passgen/main.go"})
 	must(err)
 
+	pass, err := passCase()
+	must(err)
 	cases := []importCase{
+		pass,
 		onePuxCase(),
 		onePuxInvalidFirstTOTPCase(),
 		onePuxNullCase(),
+		onePuxNullElementsCase(),
 		onePuxDuplicateExportCase(),
 		onePuxMissingExportCase(),
 		onePuxMalformedCase(),
 		onePuxSuffixBoundaryCase(),
 		onePuxTrailingJSONCase(),
 	}
-	pass, err := passCase()
-	must(err)
-	cases = append(cases, pass)
 
 	fixture := struct {
 		Commit          string       `json:"commit"`
@@ -142,7 +144,7 @@ func onePuxMissingExportCase() importCase {
 func onePuxInvalidFirstTOTPCase() importCase {
 	payload := []byte(`{"accounts":[{"vaults":[{"items":[
 {"categoryUuid":"001","title":"Invalid OTP","details":{"sections":[{"fields":[
-{"n":"totp","v":"!"},
+{"n":"totp","v":"bad"},
 {"n":"totp","v":"JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"}]}]}}
 ]}]}]}`)
 	input := zipBytes("export.json", payload)
@@ -164,6 +166,15 @@ func onePuxNullCase() importCase {
 	entries, err := parser.Parse(bytes.NewReader(input))
 	must(err)
 	return importCase{Name: "onepux_null_fields", Kind: "onepux", InputBase64: base64.StdEncoding.EncodeToString(input), Expected: convert(entries)}
+}
+
+func onePuxNullElementsCase() importCase {
+	input := zipBytes("export.json", []byte(`{"accounts":[null,{"vaults":[null,{"items":[null,{"categoryUuid":"001","title":"null elements","details":{"loginFields":[null],"sections":[null,{"fields":[null]}]},"overview":{"urls":[null],"tags":[null,"tag"]}}]}]}]}`))
+	parser, err := importer.New(importer.Format1Password)
+	must(err)
+	entries, err := parser.Parse(bytes.NewReader(input))
+	must(err)
+	return importCase{Name: "onepux_null_elements", Kind: "onepux", InputBase64: base64.StdEncoding.EncodeToString(input), Expected: convert(entries)}
 }
 
 func onePuxDuplicateExportCase() importCase {
@@ -221,47 +232,35 @@ func passCase() (importCase, error) {
 	if err != nil {
 		return importCase{}, err
 	}
-	defer os.RemoveAll(root)
+	defer func() { _ = os.RemoveAll(root) }()
 	store := filepath.Join(root, "store")
 	bin := filepath.Join(root, "bin")
-	if err := os.MkdirAll(filepath.Join(store, "work"), 0700); err != nil {
+	if err = os.MkdirAll(filepath.Join(store, "work"), 0700); err != nil {
 		return importCase{}, err
 	}
-	if err := os.MkdirAll(bin, 0700); err != nil {
+	if err = os.MkdirAll(bin, 0700); err != nil {
 		return importCase{}, err
 	}
-	for _, name := range []string{"work/example.gpg", "work/invalid.gpg"} {
-		if err := os.WriteFile(filepath.Join(store, name), []byte("ciphertext"), 0600); err != nil {
+	files := []passFile{
+		{"work/example.gpg", "example-secret\nusername:  example-user\nurl: https://example.test\ncomment line\n"},
+		{"work/invalid.gpg", "invalid-secret\notpauth://totp/example?secret=bad\n"},
+		{"work/slash\\name.gpg", "pw\n"},
+	}
+	for _, file := range files {
+		if err = os.WriteFile(filepath.Join(store, file.Path), []byte(file.Content), 0600); err != nil {
 			return importCase{}, err
 		}
 	}
 	gpg := filepath.Join(bin, "gpg")
-	script := `#!/bin/sh
-case "$4" in
-*example.gpg)
-cat <<'EOF2'
-example-secret
-username:  example-user
-url: https://example.test
-comment line
-EOF2
-;;
-*invalid.gpg)
-cat <<'EOF2'
-invalid-secret
-otpauth://totp/example?secret=!
-EOF2
-;;
-esac
-`
-	if err := os.WriteFile(gpg, []byte(script), 0700); err != nil {
+	// Synthetic plaintext input only: no keyring or real GPG material is touched.
+	if err = os.WriteFile(gpg, []byte("#!/bin/sh\ncat \"$4\"\n"), 0700); err != nil { // #nosec G306 -- executable synthetic GPG fixture in private temporary directory
 		return importCase{}, err
 	}
 	oldPath := os.Getenv("PATH")
-	if err := os.Setenv("PATH", bin+string(os.PathListSeparator)+oldPath); err != nil {
+	if err = os.Setenv("PATH", bin+string(os.PathListSeparator)+oldPath); err != nil {
 		return importCase{}, err
 	}
-	defer os.Setenv("PATH", oldPath)
+	defer func() { _ = os.Setenv("PATH", oldPath) }()
 	entries, err := importer.ImportPass(store)
 	if err != nil {
 		return importCase{}, err
@@ -269,7 +268,7 @@ esac
 	return importCase{
 		Name:     "pass_adapter_recursive_and_warning",
 		Kind:     "pass",
-		Files:    []passFile{{Path: "work/example.gpg"}, {Path: "work/invalid.gpg"}},
+		Files:    files,
 		Expected: convert(entries),
 	}, nil
 }

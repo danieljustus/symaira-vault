@@ -15,6 +15,7 @@ import platform
 import re
 import shlex
 import subprocess
+import sys
 import tempfile
 
 
@@ -97,7 +98,12 @@ def main():
             sequence = "printf 'disposable-native-test\\n' | gnome-keyring-daemon --unlock --components=secrets; " + sequence
             commands = [["dbus-run-session", "--", "bash", "-euc", sequence]]
         else:
-            commands = [["bash", "-euc", sequence]]
+            # Native Windows bash may resolve to the WSL launcher. Execute argv
+            # arrays directly on Windows/macOS; preserve one combined gate log.
+            commands = [[sys.executable, "-c",
+                         "import json,subprocess,sys; "
+                         "[subprocess.run(argv, check=True) for argv in json.loads(sys.argv[1])]",
+                         json.dumps(stages)]]
         report["interop_stages"] = stages
     report_path.write_text(json.dumps(report, indent=2))
     tmp_parent = env.get("TMPDIR") or ("/private/tmp" if platform.system() == "Darwin" else None)

@@ -1,17 +1,16 @@
+mod onepux;
+mod pass;
 mod totp;
+pub use onepux::parse_1pux;
+pub use pass::{import_pass, import_pass_with_gpg, parse_pass_entry};
 pub use totp::parse_totp;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{
-    collections::BTreeMap,
-    io::{Cursor, Read},
-    path::Path,
-};
+use std::collections::BTreeMap;
 use thiserror::Error;
 
 const MAX_IMPORT_BYTES: usize = 100 * 1024 * 1024;
-const MAX_ZIP_ENTRY: u64 = 100 * 1024 * 1024;
 
 #[derive(Debug, Error)]
 pub enum ImportError {
@@ -391,208 +390,6 @@ pub fn parse_bitwarden(bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportError> 
     }
     Ok(out)
 }
-#[derive(Deserialize)]
-struct One {
-    #[serde(default)]
-    accounts: Vec<OneAccount>,
-}
-#[derive(Deserialize)]
-struct OneAccount {
-    #[serde(default)]
-    vaults: Vec<OneVault>,
-}
-#[derive(Deserialize)]
-struct OneVault {
-    #[serde(default)]
-    items: Vec<OneItem>,
-}
-#[derive(Deserialize)]
-struct OneItem {
-    #[serde(rename = "categoryUuid", default)]
-    category: String,
-    #[serde(default)]
-    title: String,
-    #[serde(default)]
-    trashed: bool,
-    #[serde(default)]
-    details: OneDetails,
-    #[serde(default)]
-    overview: OneOverview,
-}
-#[derive(Default, Deserialize)]
-struct OneDetails {
-    #[serde(rename = "loginFields", default)]
-    login: Vec<OneLogin>,
-    #[serde(rename = "notesPlain", default)]
-    notes: String,
-    #[serde(default)]
-    sections: Vec<OneSection>,
-}
-#[derive(Deserialize)]
-struct OneLogin {
-    #[serde(default)]
-    designation: String,
-    #[serde(default)]
-    value: String,
-}
-#[derive(Default, Deserialize)]
-struct OneOverview {
-    #[serde(default)]
-    urls: Vec<OneUrl>,
-    #[serde(default)]
-    tags: Vec<String>,
-}
-#[derive(Deserialize)]
-struct OneUrl {
-    #[serde(default)]
-    url: String,
-}
-#[derive(Default, Deserialize)]
-struct OneSection {
-    #[serde(default)]
-    fields: Vec<OneField>,
-}
-#[derive(Deserialize)]
-struct OneField {
-    #[serde(default)]
-    n: String,
-    #[serde(default)]
-    t: String,
-    #[serde(default)]
-    v: Value,
-}
-pub fn parse_1pux(bytes: &[u8]) -> Result<Vec<ImportedEntry>, ImportError> {
-    let mut zip = zip::ZipArchive::new(Cursor::new(bytes))
-        .map_err(|e| ImportError::Parse(format!("open 1pux zip: {e}")))?;
-    let mut raw = Vec::new();
-    for i in 0..zip.len() {
-        let mut f = zip
-            .by_index(i)
-            .map_err(|e| ImportError::Parse(e.to_string()))?;
-        if f.name().ends_with("export.json") {
-            if f.size() > MAX_ZIP_ENTRY {
-                return Err(ImportError::Limit(MAX_ZIP_ENTRY as usize));
-            }
-            f.read_to_end(&mut raw)?;
-            break;
-        }
-    }
-    if raw.is_empty() {
-        return Err(ImportError::Parse(
-            "export.json not found in 1pux zip".into(),
-        ));
-    }
-    let x: One = serde_json::from_slice(&raw)
-        .map_err(|e| ImportError::Parse(format!("parse export.json: {e}")))?;
-    let mut out = Vec::new();
-    for a in x.accounts {
-        for v in a.vaults {
-            for i in v.items {
-                if i.trashed || i.category != "001" {
-                    continue;
-                }
-                let mut d = BTreeMap::new();
-                let mut w = None;
-                d.insert(
-                    "username".into(),
-                    Value::String(
-                        i.details
-                            .login
-                            .iter()
-                            .find(|x| x.designation.eq_ignore_ascii_case("username"))
-                            .map(|x| x.value.clone())
-                            .unwrap_or_default(),
-                    ),
-                );
-                d.insert(
-                    "password".into(),
-                    Value::String(
-                        i.details
-                            .login
-                            .iter()
-                            .find(|x| x.designation.eq_ignore_ascii_case("password"))
-                            .map(|x| x.value.clone())
-                            .unwrap_or_default(),
-                    ),
-                );
-                d.insert(
-                    "url".into(),
-                    Value::String(
-                        i.overview
-                            .urls
-                            .first()
-                            .map(|x| x.url.clone())
-                            .unwrap_or_default(),
-                    ),
-                );
-                d.insert("notes".into(), Value::String(i.details.notes));
-                d.insert(
-                    "tags".into(),
-                    Value::Array(i.overview.tags.into_iter().map(Value::String).collect()),
-                );
-                for s in i.details.sections {
-                    for f in s.fields {
-                        let is_totp = f.n.to_ascii_lowercase().contains("totp")
-                            || f.t.to_ascii_lowercase().contains("one-time password");
-                        if is_totp
-                            && let Some(value) =
-                                f.v.get("otp")
-                                    .and_then(Value::as_str)
-                                    .or_else(|| f.v.as_str())
-                        {
-                            insert_totp(&mut d, &mut w, value);
-                        }
-                    }
-                }
-                out.push(ImportedEntry {
-                    path: i.title,
-                    data: d,
-                    warnings: w,
-                    secret_type: None,
-                });
-            }
-        }
-    }
-    Ok(out)
-}
-/// Parses one decrypted `pass` entry. Directory traversal is delegated to the
-/// caller so production can use a capability-scoped adapter and tests can use a fake.
-pub fn parse_pass_entry(path: &Path, content: &str) -> ImportedEntry {
-    let normalized = content.replace("\r\n", "\n").replace('\r', "\n");
-    let mut lines = normalized
-        .strip_suffix('\n')
-        .unwrap_or(&normalized)
-        .split('\n');
-    let password = lines.next().unwrap_or_default();
-    let mut d = BTreeMap::new();
-    d.insert("password".into(), Value::String(password.into()));
-    let mut notes: Vec<String> = Vec::new();
-    let mut warnings = None;
-    for l in lines {
-        if let Some(v) = l.strip_prefix("url: ") {
-            d.insert("url".into(), Value::String(v.trim().into()));
-        } else if let Some(v) = l.strip_prefix("username: ") {
-            d.insert("username".into(), Value::String(v.trim().into()));
-        } else if l.starts_with("otpauth://") {
-            insert_totp(&mut d, &mut warnings, l);
-        } else {
-            notes.push(l.into());
-        }
-    }
-    if !notes.is_empty() {
-        d.insert("notes".into(), Value::String(notes.join("\n")));
-    }
-    ImportedEntry {
-        path: normalize_path(
-            path.to_string_lossy()
-                .strip_suffix(".gpg")
-                .unwrap_or(&path.to_string_lossy()),
-        ),
-        data: d,
-        warnings,
-        secret_type: None,
-    }
-}
 fn insert_totp(
     data: &mut BTreeMap<String, Value>,
     warnings: &mut Option<Vec<String>>,
@@ -680,4 +477,17 @@ pub fn detect_csv_profile(header: &[String]) -> Format {
         }
     }
     Format::Csv
+}
+
+// Go unmarshals JSON null array elements into the element type's zero value.
+fn null_default_vec<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de> + Default,
+{
+    Ok(Option::<Vec<Option<T>>>::deserialize(deserializer)?
+        .unwrap_or_default()
+        .into_iter()
+        .map(Option::unwrap_or_default)
+        .collect())
 }

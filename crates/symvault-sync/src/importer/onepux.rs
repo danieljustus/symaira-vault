@@ -4,7 +4,7 @@
 // `internal/importer/onepux.go`.  The parent importer wires this module into
 // the public format dispatcher.
 
-use super::{ImportError, ImportedEntry, parse_totp};
+use super::{ImportError, ImportedEntry, insert_totp};
 use serde::Deserialize;
 use serde_json::Value;
 use std::{
@@ -18,19 +18,19 @@ const MAX_ZIP_ENTRY: u64 = 100 * 1024 * 1024;
 
 #[derive(Default, Deserialize)]
 struct Export {
-    #[serde(default, deserialize_with = "super::null_default")]
+    #[serde(default, deserialize_with = "super::null_default_vec")]
     accounts: Vec<Account>,
 }
 
 #[derive(Default, Deserialize)]
 struct Account {
-    #[serde(default, deserialize_with = "super::null_default")]
+    #[serde(default, deserialize_with = "super::null_default_vec")]
     vaults: Vec<Vault>,
 }
 
 #[derive(Default, Deserialize)]
 struct Vault {
-    #[serde(default, deserialize_with = "super::null_default")]
+    #[serde(default, deserialize_with = "super::null_default_vec")]
     items: Vec<Item>,
 }
 
@@ -57,7 +57,7 @@ struct Details {
     #[serde(
         rename = "loginFields",
         default,
-        deserialize_with = "super::null_default"
+        deserialize_with = "super::null_default_vec"
     )]
     login: Vec<LoginField>,
     #[serde(
@@ -66,12 +66,18 @@ struct Details {
         deserialize_with = "super::null_default"
     )]
     notes: String,
-    #[serde(default, deserialize_with = "super::null_default")]
+    #[serde(default, deserialize_with = "super::null_default_vec")]
     sections: Vec<Section>,
 }
 
 #[derive(Default, Deserialize)]
 struct LoginField {
+    #[serde(
+        rename = "fieldType",
+        default,
+        deserialize_with = "super::null_default"
+    )]
+    _field_type: String,
     #[serde(default, deserialize_with = "super::null_default")]
     designation: String,
     #[serde(default, deserialize_with = "super::null_default")]
@@ -80,9 +86,9 @@ struct LoginField {
 
 #[derive(Default, Deserialize)]
 struct Overview {
-    #[serde(default, deserialize_with = "super::null_default")]
+    #[serde(default, deserialize_with = "super::null_default_vec")]
     urls: Vec<Url>,
-    #[serde(default, deserialize_with = "super::null_default")]
+    #[serde(default, deserialize_with = "super::null_default_vec")]
     tags: Vec<String>,
 }
 
@@ -94,7 +100,9 @@ struct Url {
 
 #[derive(Default, Deserialize)]
 struct Section {
-    #[serde(default, deserialize_with = "super::null_default")]
+    #[serde(rename = "title", default, deserialize_with = "super::null_default")]
+    _title: String,
+    #[serde(default, deserialize_with = "super::null_default_vec")]
     fields: Vec<Field>,
 }
 
@@ -226,21 +234,6 @@ fn first_totp(sections: &[Section]) -> Option<String> {
     None
 }
 
-fn insert_totp(
-    data: &mut BTreeMap<String, Value>,
-    warnings: &mut Option<Vec<String>>,
-    value: &str,
-) {
-    match parse_totp(value) {
-        Ok(totp) => {
-            data.insert("totp".into(), totp);
-        }
-        Err(error) => warnings
-            .get_or_insert_with(Vec::new)
-            .push(format!("totp: {error}")),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -310,7 +303,7 @@ mod tests {
             {"n":"totp","v":"JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"}]}]}}
         ]}]}]}"#;
         let entries = parse_1pux(&zip_with("export.json", export)).unwrap();
-        assert!(entries[0].data.get("totp").is_none());
+        assert!(!entries[0].data.contains_key("totp"));
         assert_eq!(entries[0].warnings.as_deref().unwrap().len(), 1);
     }
 }

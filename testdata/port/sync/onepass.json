@@ -9,8 +9,55 @@
     "internal/secrets/filter.go"
   ],
   "source_digest": "124ef8368fb3f41ad7267ce3a7ed87f5b79a75e07f18819fb15e5a3db9e17a75",
-  "generator_digest": "70244f3e0ed729bb0f40c3bbe2efdf00441e40029ff3a4372b628e992bc0ac81",
+  "generator_digest": "29255fb030e0e03084d0ac46d0d52bb82c04f0a4bad0274575bb3e8a0913e5ea",
   "cases": [
+    {
+      "name": "pass_adapter_recursive_and_warning",
+      "kind": "pass",
+      "files": [
+        {
+          "path": "work/example.gpg",
+          "content": "example-secret\nusername:  example-user\nurl: https://example.test\ncomment line\n"
+        },
+        {
+          "path": "work/invalid.gpg",
+          "content": "invalid-secret\notpauth://totp/example?secret=bad\n"
+        },
+        {
+          "path": "work/slash\\name.gpg",
+          "content": "pw\n"
+        }
+      ],
+      "expected": [
+        {
+          "path": "work/example",
+          "data": {
+            "notes": "comment line",
+            "password": "example-secret",
+            "url": "https://example.test",
+            "username": "example-user"
+          },
+          "warnings": null
+        },
+        {
+          "path": "work/invalid",
+          "data": {
+            "password": "invalid-secret"
+          },
+          "warnings": [
+            "totp: invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
+          ]
+        },
+        {
+          "path": "work/slashname",
+          "data": {
+            "password": "pw"
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
     {
       "name": "onepux_duplicate_and_first_totp",
       "kind": "onepux",
@@ -41,7 +88,7 @@
     {
       "name": "onepux_first_invalid_totp",
       "kind": "onepux",
-      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAALAAAAZXhwb3J0Lmpzb25kjL0KwjAYRfc+hd45Q6VbRlHwZzCgoiIdQhLlg5iI/RqQkHcXtZNO99wznAxtTOwDd5DnjKR7PyCxu72pyjCa3TU+nvueLCTqegIBJvYOEsuQtCc72uwUBKxjTb6DzOicYYrhW7uQ83bIBUhw5DsEEiTGKOLfrqbbw6mZqflCrRt1VL8fpS1tKVX72VcAAAD//1BLBwgZJNLikgAAAMcAAABQSwECFAAUAAgACAAAAAAAGSTS4pIAAADHAAAACwAAAAAAAAAAAAAAAAAAAAAAZXhwb3J0Lmpzb25QSwUGAAAAAAEAAQA5AAAAywAAAAAA",
+      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAALAAAAZXhwb3J0Lmpzb25kjL0KwjAYRfc+hdw5Q6VbRlHwZzCgoiIdYhLlg5iI/RqQkHcXtZNO99wznAxtTOwDd5CnjKR7PyCxu72pyjCa3TU+nrueLCTqegwBJvYOEouQtCc7Wm8VBKxjTb6DzOicYYrhW7uQ83bIBUhw5DsEEiTO2qKIf7+cbPbHZqpmc7Vq1EH9fpS2tKVU7WdfAQAA//9QSwcIX9ttoZMAAADJAAAAUEsBAhQAFAAIAAgAAAAAAF/bbaGTAAAAyQAAAAsAAAAAAAAAAAAAAAAAAAAAAGV4cG9ydC5qc29uUEsFBgAAAAABAAEAOQAAAMwAAAAAAA==",
       "expected": [
         {
           "path": "Invalid OTP",
@@ -81,6 +128,28 @@
             "notes": "",
             "password": "",
             "tags": [],
+            "url": "",
+            "username": ""
+          },
+          "warnings": null
+        }
+      ],
+      "failed": false
+    },
+    {
+      "name": "onepux_null_elements",
+      "kind": "onepux",
+      "input_base64": "UEsDBBQACAAIAAAAAAAAAAAAAAAAAAAAAAALAAAAZXhwb3J0Lmpzb25UjEGqAyEQRK/yqbWL+VsPkBtkFVyI0xkaehS0NQTx7sFAgqFWD+q9Dh9CqlEL7C1WEdPRfJWVWelcMHilI+XntfIOi237h4GyCsFifv5I6KSZNNhJPUuB7ZB0cLwwyf6JOYNCQTnFJX//eQw3DFKj3Jges1KzLLr646tOgBvDvfcKAAD//1BLBwiDBkxZhgAAANkAAABQSwECFAAUAAgACAAAAAAAgwZMWYYAAADZAAAACwAAAAAAAAAAAAAAAAAAAAAAZXhwb3J0Lmpzb25QSwUGAAAAAAEAAQA5AAAAvwAAAAAA",
+      "expected": [
+        {
+          "path": "null elements",
+          "data": {
+            "notes": "",
+            "password": "",
+            "tags": [
+              "",
+              "tag"
+            ],
             "url": "",
             "username": ""
           },
@@ -139,40 +208,6 @@
       "expected": [],
       "failed": true,
       "error_contains": "parse export.json"
-    },
-    {
-      "name": "pass_adapter_recursive_and_warning",
-      "kind": "pass",
-      "files": [
-        {
-          "path": "work/example.gpg"
-        },
-        {
-          "path": "work/invalid.gpg"
-        }
-      ],
-      "expected": [
-        {
-          "path": "work/example",
-          "data": {
-            "notes": "comment line",
-            "password": "example-secret",
-            "url": "https://example.test",
-            "username": "example-user"
-          },
-          "warnings": null
-        },
-        {
-          "path": "work/invalid",
-          "data": {
-            "password": "invalid-secret"
-          },
-          "warnings": [
-            "totp: invalid TOTP secret: TOTP secret must be Base32-encoded (spaces allowed)"
-          ]
-        }
-      ],
-      "failed": false
     }
   ]
 }
