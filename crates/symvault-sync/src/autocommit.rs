@@ -20,11 +20,10 @@ pub fn auto_commit_entry(
     action: &str,
 ) -> Result<(), String> {
     let config_path = store.root().join("config.yaml");
-    let config = symvault_core::config::Config::load(&config_path)
-        .map_err(|error| format!("load config for auto-commit: {error}"))?;
-    let Some(git_config) = config.git else {
-        return Ok(());
-    };
+    let auto_push = symvault_core::config::Config::load(&config_path)
+        .map_err(|error| format!("load config for auto-commit: {error}"))?
+        .git
+        .is_some_and(|git| git.auto_push);
     let repo = match GitRepository::open(store.root()) {
         Ok(repo) => repo,
         Err(GitError::InvalidPath(_)) => return Ok(()),
@@ -40,7 +39,7 @@ pub fn auto_commit_entry(
         ..CommitOptions::default()
     })
     .map_err(|error| error.to_string())?;
-    if git_config.auto_push {
+    if auto_push {
         let result = repo.push("origin");
         if !result.success && !result.skipped {
             if let Some(error) = result.error {

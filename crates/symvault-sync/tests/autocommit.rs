@@ -89,3 +89,26 @@ fn auto_commit_entry_is_noop_without_git_configuration() {
     let store = Store::open(root.path(), &identity).expect("open store");
     auto_commit_entry(&store, &identity, "github", "Delete").expect("no-op without git");
 }
+
+#[test]
+fn auto_commit_entry_uses_existing_repository_without_git_block() {
+    let root = tempdir().expect("external synthetic vault tempdir");
+    fs::write(
+        root.path().join("config.yaml"),
+        "vault:\n  format_version: 1\n",
+    )
+    .expect("config");
+    fs::write(root.path().join("identity.age"), b"fixture identity marker")
+        .expect("identity marker");
+    fs::create_dir(root.path().join("entries")).expect("entries directory");
+    fs::write(root.path().join("entries/github.age"), b"ciphertext").expect("entry marker");
+    fs::write(root.path().join("manifest.age"), b"manifest").expect("manifest marker");
+    let identity = generate_identity();
+    let store = Store::open(root.path(), &identity).expect("open store");
+    let repo = GitRepository::init(root.path()).expect("init git fixture");
+    auto_commit_entry(&store, &identity, "github", "Delete").expect("auto-commit");
+    assert_eq!(
+        repo.log(1).expect("read commit log")[0].message,
+        "Delete github"
+    );
+}
