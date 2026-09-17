@@ -21,6 +21,7 @@ use std::{
     path::{Path, PathBuf},
     process::ExitCode,
     sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use clap::{Args, Parser, Subcommand};
@@ -672,7 +673,18 @@ fn run_get(
         let identity = device::unlock_vault(&vault)?;
         let result = vault_commands::get(&vault, &identity, query)?;
         let format = if json { "json" } else { output };
-        vault_commands::write_get(&mut io::stdout().lock(), &result, format, quiet)
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|error| error.to_string())?
+            .as_secs() as i64;
+        vault_commands::write_get_at(
+            &mut io::stdout().lock(),
+            &mut io::stderr().lock(),
+            &result,
+            format,
+            quiet,
+            now,
+        )
     })();
     finish_vault_result(result)
 }

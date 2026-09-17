@@ -54,10 +54,10 @@ pub fn find(
             .collect());
     }
 
-    let needle = query.to_ascii_lowercase();
+    let needle = query.to_lowercase();
     let path_matches: BTreeSet<_> = paths
         .iter()
-        .filter(|path| path.to_ascii_lowercase().contains(&needle))
+        .filter(|path| path.to_lowercase().contains(&needle))
         .cloned()
         .collect();
 
@@ -139,12 +139,12 @@ fn collect_field_matches(
             }
         }
         serde_json::Value::String(text) if !prefix.is_empty() => {
-            if text.to_ascii_lowercase().contains(needle) {
+            if text.to_lowercase().contains(needle) {
                 fields.push(prefix.to_owned());
             }
         }
         serde_json::Value::Number(number) if !prefix.is_empty() => {
-            if number.to_string().to_ascii_lowercase().contains(needle) {
+            if number.to_string().to_lowercase().contains(needle) {
                 fields.push(prefix.to_owned());
             }
         }

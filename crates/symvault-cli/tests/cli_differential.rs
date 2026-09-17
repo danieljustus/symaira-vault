@@ -170,45 +170,6 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     assert_eq!(go_get.stdout, b"secret\n");
     assert_eq!(rust_get.stdout, go_get.stdout);
 
-    let go_generate = run(
-        &go_binary,
-        &[
-            "--vault",
-            rust_root.to_str().unwrap(),
-            "generate",
-            "--length",
-            "16",
-            "--store",
-            "generated.password",
-            "--output",
-            "json",
-        ],
-        &rust_root,
-        &home,
-    );
-    let rust_generate = run(
-        &rust_binary,
-        &[
-            "--vault",
-            rust_root.to_str().unwrap(),
-            "generate",
-            "--length",
-            "16",
-            "--store",
-            "generated.password",
-            "--output",
-            "json",
-        ],
-        &rust_root,
-        &home,
-    );
-    assert_success(&go_generate, "Go generate store");
-    assert_success(&rust_generate, "Rust generate store");
-    assert_eq!(
-        first_json(&rust_generate.stdout, "Rust generate store"),
-        first_json(&go_generate.stdout, "Go generate store")
-    );
-
     let go_set_url = run(
         &go_binary,
         &[
@@ -308,6 +269,36 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
         first_json(&rust_find_scoped.stdout, "Rust scoped find"),
         first_json(&go_find_scoped.stdout, "Go scoped find")
     );
+    let go_set_unicode = run(
+        &go_binary,
+        &[
+            "--vault",
+            rust_root.to_str().unwrap(),
+            "set",
+            "work/github.note",
+            "--value",
+            "ÄPFEL",
+            "--force",
+        ],
+        &rust_root,
+        &home,
+    );
+    assert_success(&go_set_unicode, "Go set Unicode search value");
+    let go_find_unicode = run(
+        &go_binary,
+        &["--vault", rust_root.to_str().unwrap(), "find", "äpfel"],
+        &rust_root,
+        &home,
+    );
+    let rust_find_unicode = run(
+        &rust_binary,
+        &["--vault", rust_root.to_str().unwrap(), "find", "äpfel"],
+        &rust_root,
+        &home,
+    );
+    assert_success(&go_find_unicode, "Go Unicode find");
+    assert_success(&rust_find_unicode, "Rust Unicode find");
+    assert_eq!(rust_find_unicode.stdout, go_find_unicode.stdout);
     let go_find_empty = run(
         &go_binary,
         &[
@@ -335,6 +326,45 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     assert_eq!(rust_find_empty.stdout, go_find_empty.stdout);
     assert!(String::from_utf8_lossy(&go_find_empty.stderr).ends_with("No matches found\n"));
     assert!(String::from_utf8_lossy(&rust_find_empty.stderr).ends_with("No matches found\n"));
+
+    let go_generate = run(
+        &go_binary,
+        &[
+            "--vault",
+            rust_root.to_str().unwrap(),
+            "generate",
+            "--length",
+            "16",
+            "--store",
+            "generated.password",
+            "--output",
+            "json",
+        ],
+        &rust_root,
+        &home,
+    );
+    let rust_generate = run(
+        &rust_binary,
+        &[
+            "--vault",
+            rust_root.to_str().unwrap(),
+            "generate",
+            "--length",
+            "16",
+            "--store",
+            "generated.password",
+            "--output",
+            "json",
+        ],
+        &rust_root,
+        &home,
+    );
+    assert_success(&go_generate, "Go generate store");
+    assert_success(&rust_generate, "Rust generate store");
+    assert_eq!(
+        first_json(&rust_generate.stdout, "Rust generate store"),
+        first_json(&go_generate.stdout, "Go generate store")
+    );
 
     let go_json = run(
         &go_binary,
