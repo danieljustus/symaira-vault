@@ -14,6 +14,10 @@ symvault-gojson = { path = "../symvault-gojson", version = "=0.0.0" }
 serde_json = { workspace = true, features = ["raw_value"] }
 # Go 1.26 selects Unicode 15 tables; ICU 2.3 normalizes newer codepoints differently.
 unicode-normalization = "=0.1.22"
+symvault-core = { path = "../symvault-core", version = "=0.0.0" }
+symvault-crypto = { path = "../symvault-crypto", version = "=0.0.0" }
+symvault-store = { path = "../symvault-store", version = "=0.0.0" }
 
 [dev-dependencies]
 sha2 = "=0.10.9"
+tempfile = "=3.27.0"

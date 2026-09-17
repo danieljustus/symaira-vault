@@ -20,10 +20,14 @@ use serde_json::value::RawValue;
 mod call;
 mod prompts;
 pub mod render;
+pub mod store_adapter;
 mod tools;
 pub use call::{
     ReadOnlyEntry, ReadOnlyRuntime, ReadOnlyRuntimeConfig, ReadOnlyStore, ReadOnlyUnavailableTool,
     ToolCallResult, ToolCallRuntime,
+};
+pub use store_adapter::{
+    StoreReadOnlyAdapter, StoreReadOnlyRuntime, read_only_tool_names, unavailable_tool,
 };
 pub use tools::ToolListConfig;
 
@@ -435,6 +439,26 @@ impl ProtocolHandler {
             tool_call_runtime: Some(runtime),
             initialized: false,
         }
+    }
+
+    /// Opens a concrete encrypted-store runtime for the bounded read-only
+    /// tools/call slice. The caller supplies the identity and policy state;
+    /// this constructor performs no ambient vault or platform discovery.
+    pub fn with_store_read_only_runtime(
+        server_name: impl Into<String>,
+        server_version: impl Into<String>,
+        root: impl AsRef<std::path::Path>,
+        identity: symvault_crypto::Identity,
+        config: ReadOnlyRuntimeConfig,
+        policy: Option<symvault_core::policy::Engine>,
+        quota: Option<std::sync::Arc<symvault_core::persistent_quota::QuotaCounter>>,
+    ) -> Result<Self, String> {
+        let runtime = StoreReadOnlyRuntime::open(root, identity, config, policy, quota)?;
+        Ok(Self::with_tool_call_runtime(
+            server_name,
+            server_version,
+            std::sync::Arc::new(runtime),
+        ))
     }
 
     pub fn set_tool_list_config(&mut self, tool_list_config: ToolListConfig) {

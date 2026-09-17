@@ -86,6 +86,7 @@ fn fixture_runtime() -> RecordingRuntime<ReadOnlyRuntime<MemoryStore>> {
             "get_entry_metadata".into(),
         ],
         vault_dir: "<fixture-vault>".into(),
+        vault_unlocked: true,
         ..ReadOnlyRuntimeConfig::default()
     };
     RecordingRuntime {

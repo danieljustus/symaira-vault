@@ -102,9 +102,12 @@ pub struct ReadOnlyRuntimeConfig {
     pub max_reads_per_hour: i64,
     pub max_reads_per_day: i64,
     pub max_secrets_in_session: i64,
+    pub reads_used: i64,
+    pub secrets_used: i64,
     pub available_tools: Vec<String>,
     pub unavailable_tools: Vec<ReadOnlyUnavailableTool>,
     pub vault_dir: String,
+    pub vault_unlocked: bool,
 }
 
 impl Default for ReadOnlyRuntimeConfig {
@@ -125,9 +128,12 @@ impl Default for ReadOnlyRuntimeConfig {
             max_reads_per_hour: 0,
             max_reads_per_day: 0,
             max_secrets_in_session: 0,
+            reads_used: 0,
+            secrets_used: 0,
             available_tools: Vec::new(),
             unavailable_tools: Vec::new(),
             vault_dir: String::new(),
+            vault_unlocked: false,
         }
     }
 }
@@ -151,9 +157,7 @@ impl<S> ReadOnlyRuntime<S> {
 
 impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
     fn authorize(&self, name: &str, _arguments: &Value) -> Result<(), ToolCallResult> {
-        if self.config.available_tools.is_empty()
-            || self.config.available_tools.iter().any(|tool| tool == name)
-        {
+        if self.config.available_tools.iter().any(|tool| tool == name) {
             return Ok(());
         }
         let unavailable = self
@@ -232,11 +236,11 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
             "profile": profile,
             "tools": {"available": self.config.available_tools, "unavailable": unavailable},
             "quotas": {
-                "reads_per_hour": {"used": 0, "limit": self.config.max_reads_per_hour},
-                "reads_per_day": {"used": 0, "limit": self.config.max_reads_per_day},
-                "secrets_per_session": {"used": 0, "limit": self.config.max_secrets_in_session},
+                "reads_per_hour": {"used": self.config.reads_used, "limit": self.config.max_reads_per_hour},
+                "reads_per_day": {"used": self.config.reads_used, "limit": self.config.max_reads_per_day},
+                "secrets_per_session": {"used": self.config.secrets_used, "limit": self.config.max_secrets_in_session},
             },
-            "vault": {"unlocked": true, "entries_count": entries_count, "dir": self.config.vault_dir},
+            "vault": {"unlocked": self.config.vault_unlocked, "entries_count": entries_count, "dir": self.config.vault_dir},
             "cli_alternative_hint": "Use 'symvault status' for a comprehensive overview.",
             "errors_doc": "See https://github.com/danieljustus/symaira-vault/blob/main/docs/errors.md for error code documentation.",
             "tier_upgrade_hint": "Upgrade your agent tier in ~/.symvault/config.yaml to unlock additional tools.",

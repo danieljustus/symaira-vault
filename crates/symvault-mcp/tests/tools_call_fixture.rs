@@ -132,6 +132,7 @@ fn initialized_runtime() -> ReadOnlyRuntime<MemoryStore> {
             available_tools,
             unavailable_tools,
             vault_dir: "<fixture-vault>".into(),
+            vault_unlocked: true,
             ..ReadOnlyRuntimeConfig::default()
         },
     )
