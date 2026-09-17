@@ -182,12 +182,13 @@ fn go_generated_search_fetch_fixture_matches_rust_stream() {
     assert_eq!(fixture.cases.len(), 8);
 
     for case in fixture.cases {
+        let case_name = case.name.clone();
         let input = case
             .input
             .iter()
             .map(|line| format!("{line}\n"))
             .collect::<String>();
-        let runtime = Arc::new(runtime_for_case(&case.name));
+        let runtime = Arc::new(runtime_for_case(&case_name));
         let mut handler = ProtocolHandler::with_tool_call_runtime(
             &fixture.server_name,
             &fixture.server_version,
@@ -202,16 +203,16 @@ fn go_generated_search_fetch_fixture_matches_rust_stream() {
             actual.len(),
             case.output.len(),
             "case {} response count",
-            case.name
+            case_name
         );
-        for (index, (actual, expected)) in actual.iter_mut().zip(case.output).enumerate() {
+        for (index, (actual, expected)) in actual.iter_mut().zip(case.output.iter()).enumerate() {
             let markers = normalize_markers(actual);
             assert_eq!(
                 markers, case.marker_counts[index],
                 "case {} marker count",
-                case.name
+                case_name
             );
-            assert_eq!(*actual, expected, "case {} response {index}", case.name);
+            assert_eq!(&*actual, expected, "case {} response {index}", case_name);
         }
     }
 }
