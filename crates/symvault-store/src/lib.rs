@@ -32,6 +32,9 @@ pub mod metadata;
 /// Thread-safe process-local ownership of encrypted search indexes.
 pub mod search_index_store;
 
+/// Read-only access to Go-compatible MCP share grant metadata.
+pub mod sharing;
+
 mod publication;
 mod reencrypt_journal;
 
