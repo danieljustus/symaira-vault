@@ -108,8 +108,6 @@ pub struct AgentProfile {
     pub prompt_injection_mode: String,
     pub skill_path: String,
     pub skill_version: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub pre_call_hooks: Vec<String>,
 }
 
 impl AgentProfile {
@@ -1180,9 +1178,6 @@ fn merge_agents(config: &mut Config, value: &serde_yaml_ng::Value) -> Result<(),
         if let Some(v) = fields.get(key("skillVersion")) {
             profile.skill_version = string(v, "skillVersion")?;
         }
-        if let Some(v) = fields.get(key("pre_call_hooks")) {
-            profile.pre_call_hooks = string_list(v, "pre_call_hooks")?;
-        }
         if fields.contains_key(key("requireApproval")) && !fields.contains_key(key("approvalMode"))
         {
             profile.approval_mode = Some(
@@ -1540,12 +1535,6 @@ fn write_agent(out: &mut String, name: &str, p: &AgentProfile) -> Result<(), Con
             yaml_scalar(&p.skill_path)?
         ));
     }
-    if !p.pre_call_hooks.is_empty() {
-        out.push_str("        pre_call_hooks:\n");
-        for hook in &p.pre_call_hooks {
-            out.push_str(&format!("            - {}\n", yaml_scalar(hook)?));
-        }
-    }
     Ok(())
 }
 fn write_vault(out: &mut String, v: &VaultConfig) -> Result<(), ConfigError> {
@@ -1729,20 +1718,6 @@ fn write_clipboard(out: &mut String, v: &ClipboardConfig) -> Result<(), ConfigEr
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn configured_pre_call_hooks_survive_load_and_save() {
-        let config =
-            Config::load_from_bytes(b"agents:\n  demo:\n    pre_call_hooks: [rate_limit, audit]\n")
-                .unwrap();
-        assert_eq!(
-            config.agents["demo"].pre_call_hooks,
-            ["rate_limit", "audit"]
-        );
-        let saved = Config::load_from_bytes(&config.to_yaml_bytes().unwrap()).unwrap();
-        assert_eq!(saved.agents["demo"].pre_call_hooks, ["rate_limit", "audit"]);
-    }
-
     #[test]
     fn defaults_match_go_contract() {
         let c = Config::default();
