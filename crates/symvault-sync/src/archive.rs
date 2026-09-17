@@ -3,15 +3,15 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
     fs,
-    io::{self, Read, Write},
+    io::{self, Read, Seek, Write},
     path::{Component, Path, PathBuf},
 };
 use tar::{Archive, Builder, EntryType, Header};
 use thiserror::Error;
 
 const MAX_ARCHIVE_ENTRIES: usize = 100_000;
-const MAX_ARCHIVE_FILE: u64 = 64 * 1024 * 1024;
-const MAX_ARCHIVE_TOTAL: u64 = 512 * 1024 * 1024;
+const MAX_ARCHIVE_FILE: u64 = 1 << 30;
+const MAX_ARCHIVE_TOTAL: u64 = 16 * (1 << 30);
 
 #[derive(Debug, Error)]
 pub enum ArchiveError {
@@ -67,11 +67,20 @@ fn mode(meta: &fs::Metadata) -> u32 {
         0
     }
 }
-fn digest(bytes: &[u8]) -> String {
-    Sha256::digest(bytes)
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect()
+fn copy_and_hash(mut input: impl Read, mut output: impl Write) -> io::Result<(u64, String)> {
+    let mut digest = Sha256::new();
+    let mut buffer = [0u8; 32 * 1024];
+    let mut size = 0u64;
+    loop {
+        let count = input.read(&mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        output.write_all(&buffer[..count])?;
+        digest.update(&buffer[..count]);
+        size += count as u64;
+    }
+    Ok((size, format!("{:x}", digest.finalize())))
 }
 
 /// Creates a private gzip tar backup. Source symlinks are skipped, as in Go;
@@ -141,19 +150,24 @@ pub fn backup(
             if meta.len() > MAX_ARCHIVE_FILE {
                 return Err(ArchiveError::Limit);
             }
-            let bytes = fs::read(&path)?;
+            let mut file = fs::File::open(&path)?;
+            let (size, hash) = copy_and_hash((&mut file).take(MAX_ARCHIVE_FILE + 1), io::sink())?;
+            if size > MAX_ARCHIVE_FILE {
+                return Err(ArchiveError::Limit);
+            }
+            file.rewind()?;
             let mut h = Header::new_gnu();
             h.set_metadata(&meta);
             h.set_mode(mode(&meta));
-            h.set_size(bytes.len() as u64);
+            h.set_size(size);
             h.set_cksum();
-            builder.append_data(&mut h, &rel, bytes.as_slice())?;
+            builder.append_data(&mut h, &rel, &mut file)?;
             manifest.push(ArchiveEntry {
                 path: slash,
                 directory: false,
                 mode: mode(&meta),
-                size: bytes.len() as u64,
-                sha256: digest(&bytes),
+                size,
+                sha256: hash,
             });
         }
         if manifest.len() > MAX_ARCHIVE_ENTRIES {
@@ -250,15 +264,12 @@ pub fn restore(
             crate::safeio::create_dir_all(parent)
                 .map_err(|error| io::Error::other(error.to_string()))?;
         }
-        let mut bytes = Vec::with_capacity(size.min(MAX_ARCHIVE_FILE) as usize);
-        entry.read_to_end(&mut bytes)?;
-        if bytes.len() as u64 != size {
-            return Err(ArchiveError::Limit);
-        }
-        let hash = digest(&bytes);
         let m = entry.header().mode()? & 0o600;
         let mut tmp = tempfile::NamedTempFile::new_in(target.parent().unwrap_or(dest))?;
-        tmp.write_all(&bytes)?;
+        let (copied, hash) = copy_and_hash(&mut entry, &mut tmp)?;
+        if copied != size {
+            return Err(ArchiveError::Limit);
+        }
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
