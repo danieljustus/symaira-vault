@@ -18,8 +18,8 @@ use symvault_core::{
 };
 use symvault_crypto::Identity;
 use symvault_mcp::{
-    ProtocolHandler, ReadOnlyRuntimeConfig, SharedAuditLogger, ToolListConfig,
-    read_only_tool_names, run_stdio, unavailable_tool,
+    ProtocolHandler, ReadOnlyRuntimeConfig, SharedAuditLogger, StoreReadOnlyRuntime,
+    ToolListConfig, read_only_tool_names, run_stdio, unavailable_tool,
 };
 
 /// Starts the bounded native MCP stdio server for an already unlocked vault.
@@ -62,17 +62,25 @@ pub fn run(
     runtime_config.cache_backend = backend;
     runtime_config.cache_persistent = persistent;
     runtime_config.cache_message = message;
-    let mut handler = ProtocolHandler::with_store_read_only_runtime_and_audit(
-        "symaira",
-        "1.0.0",
-        root,
-        identity,
-        runtime_config,
-        policy,
-        None,
-        Some(audit),
-    )
-    .map_err(|error| format!("create MCP runtime: {error}"))?;
+    let runtime =
+        StoreReadOnlyRuntime::open_with_audit(root, identity, runtime_config, policy, Some(audit))
+            .map_err(|error| format!("create MCP runtime: {error}"))?;
+    runtime.set_rate_limit_per_minute(
+        profile
+            .pre_call_hooks
+            .iter()
+            .any(|hook| hook == "rate_limit")
+            .then_some(
+                config
+                    .mcp
+                    .as_ref()
+                    .map(|mcp| mcp.rate_limit)
+                    .filter(|limit| *limit > 0)
+                    .unwrap_or(60),
+            ),
+    );
+    let mut handler =
+        ProtocolHandler::with_tool_call_runtime("symaira", "1.0.0", Arc::new(runtime));
     handler.set_tool_list_config(tool_list_config(profile));
 
     let stdin = io::stdin();
