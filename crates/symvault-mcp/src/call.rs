@@ -96,9 +96,14 @@ pub struct ReadOnlyRuntimeConfig {
     pub tier: String,
     pub allowed_paths: Vec<String>,
     pub approval_mode: String,
+    pub require_approval: bool,
     pub can_read_values: bool,
     pub auto_unseal: bool,
     pub expose_payment_values: bool,
+    /// `off` is the only supported value-access mode until the shared
+    /// semantic injection detector is wired into this runtime. Other modes
+    /// fail closed rather than returning unvalidated vault strings.
+    pub prompt_injection_mode: String,
     pub can_write: bool,
     pub can_run_commands: bool,
     pub can_use_clipboard: bool,
@@ -125,9 +130,11 @@ impl Default for ReadOnlyRuntimeConfig {
             tier: String::new(),
             allowed_paths: vec!["*".into()],
             approval_mode: String::new(),
+            require_approval: false,
             can_read_values: false,
             auto_unseal: false,
             expose_payment_values: false,
+            prompt_injection_mode: "off".into(),
             can_write: false,
             can_run_commands: false,
             can_use_clipboard: false,
@@ -173,10 +180,24 @@ impl<S: ReadOnlyStore> ToolCallRuntime for ReadOnlyRuntime<S> {
     fn authorize(&self, name: &str, _arguments: &Value) -> Result<(), ToolCallResult> {
         if self.config.available_tools.iter().any(|tool| tool == name) {
             if name == "get_entry_value"
-                && !self.config.can_read_values
-                && !matches!(self.config.approval_mode.as_str(), "none" | "auto")
+                && !self.config.prompt_injection_mode.is_empty()
+                && self.config.prompt_injection_mode != "off"
             {
-                let message = if self.config.approval_mode == "deny" {
+                return Err(ToolCallResult::error(
+                    "get_entry_value denied: configured prompt injection mode is unsupported by the native runtime",
+                ));
+            }
+            let approval_mode =
+                if self.config.approval_mode.is_empty() && self.config.require_approval {
+                    "prompt"
+                } else {
+                    self.config.approval_mode.as_str()
+                };
+            if name == "get_entry_value"
+                && !self.config.can_read_values
+                && !matches!(approval_mode, "none" | "auto")
+            {
+                let message = if approval_mode == "deny" {
                     "get_entry_value denied: approval mode is 'deny'"
                 } else {
                     "get_entry_value requires approval but no interactive approval is available"

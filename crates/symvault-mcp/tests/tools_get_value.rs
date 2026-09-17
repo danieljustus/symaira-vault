@@ -230,7 +230,8 @@ fn get_entry_value_matches_source_bound_go_fixture() {
 fn get_entry_value_fails_closed_without_capability_or_interactive_approval() {
     let config = ReadOnlyRuntimeConfig {
         agent_name: "fixture".into(),
-        approval_mode: "prompt".into(),
+        approval_mode: String::new(),
+        require_approval: true,
         available_tools: read_only_tool_names(),
         allowed_paths: vec!["*".into()],
         ..ReadOnlyRuntimeConfig::default()
@@ -246,4 +247,28 @@ fn get_entry_value_fails_closed_without_capability_or_interactive_approval() {
         .expect_err("prompt approval must fail closed without an approval bridge");
     assert!(error.is_error);
     assert!(error.text.contains("requires approval"));
+}
+
+#[test]
+fn get_entry_value_fails_closed_for_unwired_prompt_injection_modes() {
+    let config = ReadOnlyRuntimeConfig {
+        agent_name: "fixture".into(),
+        approval_mode: "none".into(),
+        prompt_injection_mode: "wrap".into(),
+        can_read_values: true,
+        available_tools: read_only_tool_names(),
+        allowed_paths: vec!["*".into()],
+        ..ReadOnlyRuntimeConfig::default()
+    };
+    let runtime = ReadOnlyRuntime::new(
+        MemoryStore {
+            entries: fixture_entries(),
+        },
+        config,
+    );
+    let error = runtime
+        .authorize("get_entry_value", &serde_json::json!({"path": "secret"}))
+        .expect_err("unsupported injection mode must fail closed");
+    assert!(error.is_error);
+    assert!(error.text.contains("prompt injection mode"));
 }
