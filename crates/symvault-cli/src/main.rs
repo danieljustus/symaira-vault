@@ -2,6 +2,7 @@
 
 mod config;
 mod device;
+mod export_commands;
 mod session_commands;
 #[path = "device_input.rs"]
 mod session_input;
@@ -101,6 +102,17 @@ enum Command {
         query: String,
         #[arg(short, long)]
         _print: bool,
+    },
+    /// Export vault entries to CSV or JSON.
+    Export {
+        #[arg(long, value_name = "FORMAT", required = true)]
+        format: String,
+        #[arg(long, default_value = "")]
+        mapping: String,
+        #[arg(long, value_name = "FILE")]
+        output: Option<PathBuf>,
+        #[arg(short = 'y', long)]
+        yes: bool,
     },
     /// Print the version of Symaira Vault.
     Version(VersionArgs),
@@ -251,6 +263,20 @@ fn main() -> ExitCode {
             &query,
             &cli.output,
             cli.json,
+            cli.quiet,
+        ),
+        Some(Command::Export {
+            format,
+            mapping,
+            output,
+            yes,
+        }) => run_export(
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
+            &format,
+            &mapping,
+            output.as_deref(),
+            yes,
             cli.quiet,
         ),
         Some(Command::Version(_)) => write_version(&cli.output, cli.json),
@@ -405,7 +431,7 @@ fn run_init(
             return Err(format!("vault already initialized at {}", vault.display()));
         }
         let passphrase = init_passphrase()?;
-        if passphrase.as_bytes().len() < 12 {
+        if passphrase.len() < 12 {
             return Err("passphrase must be at least 12 characters".to_owned());
         }
         let secret = SecretBytes::new(passphrase.as_bytes());
@@ -489,6 +515,61 @@ fn finish_vault_result(result: Result<(), String>) -> ExitCode {
             ExitCode::from(1)
         }
     }
+}
+
+fn run_export(
+    explicit_vault: Option<&Path>,
+    profile: Option<&str>,
+    format: &str,
+    mapping: &str,
+    output: Option<&Path>,
+    yes: bool,
+    quiet: bool,
+) -> ExitCode {
+    let result = (|| {
+        let vault = resolve_vault(explicit_vault, profile)?;
+        require_initialized(&vault)?;
+        let format = export_commands::ExportFormat::parse(format)?;
+        let mapping = export_commands::parse_mapping(mapping)?;
+        let options = export_commands::ExportOptions {
+            format,
+            mapping,
+            output: output.map(Path::to_path_buf),
+            yes,
+            quiet,
+        };
+        let exported = export_commands::run_export(
+            &vault,
+            &options,
+            confirm_export,
+            || device::unlock_vault(&vault),
+            |root, entries| export_commands::audit_export(root, entries),
+        )?;
+        if !exported.wrote_output {
+            if !quiet {
+                eprint!("No entries found in vault.\n");
+            }
+        } else if !quiet {
+            eprint!("Exported {} entries\n", exported.entries);
+        }
+        Ok::<(), String>(())
+    })();
+    finish_vault_result(result)
+}
+
+fn confirm_export() -> Result<bool, String> {
+    eprint!("Export all vault entries as plaintext? [y/N] ");
+    io::stderr()
+        .flush()
+        .map_err(|error| format!("export confirmation prompt: {error}"))?;
+    let mut input = String::new();
+    io::stdin()
+        .read_line(&mut input)
+        .map_err(|error| format!("export confirmation: {error}"))?;
+    Ok(matches!(
+        input.trim().to_ascii_lowercase().as_str(),
+        "y" | "yes"
+    ))
 }
 
 fn run_unlock(
