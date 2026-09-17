@@ -500,12 +500,12 @@ impl GitRepository {
 
     fn device_identity(&self) -> String {
         let path = self.root.join(".device-id");
-        if let Ok(Some(contents)) = crate::safeio::read(&path) {
-            if let Ok(contents) = String::from_utf8(contents) {
-                let identity = normalize_device_name(&contents);
-                if identity != "unknown" {
-                    return identity;
-                }
+        if let Ok(Some(contents)) = crate::safeio::read(&path)
+            && let Ok(contents) = String::from_utf8(contents)
+        {
+            let identity = normalize_device_name(&contents);
+            if identity != "unknown" {
+                return identity;
             }
         }
         let hostname = std::env::var_os("HOSTNAME")

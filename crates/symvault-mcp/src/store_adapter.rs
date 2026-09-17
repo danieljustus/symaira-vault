@@ -600,6 +600,24 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
         };
         match name {
             "symaira_audit_self" => {}
+            "generate_template" => {
+                if let Some(kind) = arguments
+                    .get("template_type")
+                    .and_then(Value::as_str)
+                    .filter(|kind| !kind.is_empty())
+                {
+                    let ok = result.as_ref().is_ok_and(|value| !value.is_error);
+                    self.append_audit(
+                        if ok {
+                            "template_generated"
+                        } else {
+                            "template_failed"
+                        },
+                        kind,
+                        ok,
+                    );
+                }
+            }
             "sanitize_output" => {
                 let ok = result.as_ref().is_ok_and(|value| !value.is_error);
                 self.append_audit(
@@ -686,11 +704,12 @@ fn store_error(error: StoreError) -> String {
     error.to_string()
 }
 
-/// The fifteen handlers in this bounded runtime. The catalog remains owned by
+/// Fifteen complete handlers plus built-in template dry runs in this bounded runtime. The catalog remains owned by
 /// the protocol layer; this list is the injected availability registry used
 /// by authorization and whoami.
 pub fn read_only_tool_names() -> Vec<String> {
     [
+        "generate_template",
         "symaira_search",
         "sanitize_output",
         "get_auth_status",

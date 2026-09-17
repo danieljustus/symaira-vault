@@ -415,12 +415,12 @@ impl<S: ReadOnlyStore> ReadOnlyRuntime<S> {
                     .filter_map(|(alias, reference)| {
                         reference
                             .as_str()
-                            .map(|reference| (alias.clone(), reference.to_owned()))
+                            .map(|_| (alias.clone(), "***".to_owned()))
                     })
                     .collect::<BTreeMap<_, _>>()
             })
             .unwrap_or_default();
-        let output = match crate::template::render_builtin(template_type, name, &refs) {
+        let output = match symvault_sync::template::render_builtin(template_type, name, &refs) {
             Ok(output) => output,
             Err(error) => {
                 return Ok(ToolCallResult::error(format!("render template: {error}")));
