@@ -1,3 +1,5 @@
+#![cfg(unix)]
+
 use std::{
     env, fs,
     path::{Path, PathBuf},
@@ -38,7 +40,6 @@ fn assert_success(output: &Output, command: &str) {
     );
 }
 
-#[cfg(unix)]
 #[test]
 fn edit_matches_go_editor_json_roundtrip_and_cleans_private_temp_file() {
     let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") else {
@@ -184,7 +185,6 @@ fn edit_matches_go_editor_json_roundtrip_and_cleans_private_temp_file() {
     let _ = fs::remove_dir_all(&fixture_dir);
 }
 
-#[cfg(unix)]
 fn write_editor(path: &Path, marker: &Path, mode: &Path, json: &str) {
     let script = format!(
         "#!/bin/sh\nprintf '%s' \"$1\" > {}\n(stat -c '%a' \"$1\" 2>/dev/null || stat -f '%Lp' \"$1\") > {}\nprintf '%s\\n' '{}' > \"$1\"\n",
@@ -198,10 +198,8 @@ fn write_editor(path: &Path, marker: &Path, mode: &Path, json: &str) {
     fs::set_permissions(path, permissions).expect("editor executable");
 }
 
-#[cfg(unix)]
 fn shell_quote(path: &Path) -> String {
     format!("'{}'", path.to_string_lossy().replace('\'', "'\\''"))
 }
 
-#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;

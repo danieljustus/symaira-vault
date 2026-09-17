@@ -7,7 +7,7 @@
 use std::{
     env, fs,
     fs::OpenOptions,
-    io::{self, Seek, SeekFrom, Write},
+    io::{self, Write},
     path::{Path, PathBuf},
     process::Command,
     sync::atomic::{AtomicU64, Ordering},
@@ -58,14 +58,9 @@ pub fn edit(root: &Path, identity: &Identity, options: &EditOptions) -> Result<E
             return Err(format!("editor failed: {status}"));
         }
 
-        let data = safeio::read(&temp_path)
+        let data = safeio::read_bounded(&temp_path, MAX_EDIT_FILE_BYTES)
             .map_err(|error| format!("read edited file: {error}"))?
             .ok_or_else(|| "read edited file: file not found".to_owned())?;
-        if data.len() as u64 > MAX_EDIT_FILE_BYTES {
-            return Err(format!(
-                "edited file exceeds the {MAX_EDIT_FILE_BYTES} byte limit"
-            ));
-        }
         let data = trim_ascii_whitespace(&data);
         if data.is_empty() {
             return Err("empty file, changes discarded".to_owned());
@@ -94,7 +89,7 @@ pub fn edit(root: &Path, identity: &Identity, options: &EditOptions) -> Result<E
 
     // Match secureedit's deferred cleanup contract. Cleanup errors are not
     // allowed to replace the editor, parse, or store result.
-    let _ = secure_delete(&temp_path);
+    let _ = safeio::secure_delete(&temp_path, MAX_EDIT_FILE_BYTES);
     result
 }
 
@@ -167,13 +162,35 @@ fn resolve_editor(preferred: &str) -> Result<String, String> {
 fn command_path(command: &str) -> Option<PathBuf> {
     let path = Path::new(command);
     if path.components().count() > 1 {
-        return path.is_file().then(|| path.to_path_buf());
+        return executable_candidate(path);
     }
     let path_var = env::var_os("PATH")?;
     for directory in env::split_paths(&path_var) {
         let candidate = directory.join(command);
-        if is_executable(&candidate) {
+        if let Some(candidate) = executable_candidate(&candidate) {
             return Some(candidate);
+        }
+    }
+    None
+}
+
+fn executable_candidate(path: &Path) -> Option<PathBuf> {
+    if is_executable(path) {
+        return Some(path.to_path_buf());
+    }
+    #[cfg(windows)]
+    if path.extension().is_none() {
+        let extensions = env::var_os("PATHEXT")
+            .map(|value| value.to_string_lossy().into_owned())
+            .unwrap_or_else(|| ".COM;.EXE;.BAT;.CMD".to_owned());
+        for extension in extensions
+            .split(';')
+            .filter(|extension| !extension.is_empty())
+        {
+            let candidate = path.with_extension(extension.trim_start_matches('.'));
+            if is_executable(&candidate) {
+                return Some(candidate);
+            }
         }
     }
     None
@@ -205,54 +222,14 @@ fn editor_command(editor: &str, path: &Path) -> Command {
 }
 
 fn safe_environment_key(key: &std::ffi::OsStr) -> bool {
-    matches!(
-        key.to_str(),
+    match key.to_str() {
         Some(
-            "PATH"
-                | "HOME"
-                | "TMPDIR"
-                | "TMP"
-                | "TEMP"
-                | "USER"
-                | "LOGNAME"
-                | "LANG"
-                | "LC_ALL"
-                | "SHELL"
-                | "TERM"
-                | "COLORTERM"
-                | "DISPLAY"
-                | "XAUTHORITY"
-                | "GIT_ASKPASS"
-                | "GIT_SSH"
-                | "GIT_SSH_COMMAND"
-                | "SSH_AUTH_SOCK"
-                | "SSH_AGENT_LAUNCHER"
-                | "GNUPGHOME"
-        )
-    )
-}
-
-fn secure_delete(path: &Path) -> io::Result<()> {
-    let result = (|| {
-        let metadata = fs::symlink_metadata(path)?;
-        if !metadata.file_type().is_file() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "temporary editor path is not a regular file",
-            ));
-        }
-        let mut file = OpenOptions::new().write(true).open(path)?;
-        let length = file.metadata()?.len();
-        file.seek(SeekFrom::Start(0))?;
-        let zeros = [0u8; 4096];
-        let mut remaining = length.min(MAX_EDIT_FILE_BYTES);
-        while remaining > 0 {
-            let chunk = remaining.min(zeros.len() as u64) as usize;
-            file.write_all(&zeros[..chunk])?;
-            remaining -= chunk as u64;
-        }
-        file.sync_all()
-    })();
-    let remove = fs::remove_file(path);
-    result.and(remove)
+            "PATH" | "HOME" | "TMPDIR" | "TMP" | "TEMP" | "USER" | "LOGNAME" | "LANG" | "LC_ALL"
+            | "SHELL" | "TERM" | "COLORTERM" | "DISPLAY" | "XAUTHORITY" | "GIT_ASKPASS" | "GIT_SSH"
+            | "GIT_SSH_COMMAND" | "SSH_AUTH_SOCK" | "SSH_AGENT_LAUNCHER" | "GNUPGHOME",
+        ) => true,
+        #[cfg(windows)]
+        Some("SystemRoot" | "USERPROFILE") => true,
+        _ => false,
+    }
 }
