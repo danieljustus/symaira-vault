@@ -275,6 +275,37 @@ fn initialized_go_fixture_matches_injected_read_only_runtime() {
 }
 
 #[test]
+fn initialized_fixture_negative_control_rejects_mutated_productive_response() {
+    let fixture: Fixture = serde_json::from_str(include_str!(
+        "../../../testdata/port/mcp/tools-call-initialized.json"
+    ))
+    .expect("valid initialized Go tools/call fixture");
+    let case = fixture
+        .cases
+        .iter()
+        .find(|case| case.name == "initialized_read_only_calls")
+        .expect("fixture has initialized read-only case");
+    let input = case
+        .input
+        .iter()
+        .map(|line| format!("{line}\n"))
+        .collect::<String>();
+    let mut handler = ProtocolHandler::new(&fixture.server_name, &fixture.server_version);
+    handler.set_tool_call_runtime(Some(Arc::new(initialized_runtime())));
+    let actual = run_stream(&input, &mut handler).expect("Rust stream dispatch succeeds");
+    let actual = actual
+        .iter()
+        .map(|line| serde_json::from_str(line).expect("Rust emits JSON responses"))
+        .collect::<Vec<Value>>();
+    let mut mutated = case.output.clone();
+    mutated[2]["result"]["content"][0]["text"] = Value::String("tampered".into());
+    assert_ne!(
+        actual, mutated,
+        "a mutated productive response must fail closed"
+    );
+}
+
+#[test]
 fn go_fixture_negative_control_does_not_accept_mutated_response() {
     let fixture: Fixture =
         serde_json::from_str(include_str!("../../../testdata/port/mcp/tools-call.json"))
