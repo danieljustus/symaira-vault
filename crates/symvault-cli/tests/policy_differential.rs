@@ -145,4 +145,51 @@ fn policy_validate_and_list_match_go() {
         &run(&rust, &home.0, &tilde_args),
         "tilde policy path",
     );
+
+    let source = fixture.0.join("dev.yaml");
+    fs::write(
+        &source,
+        b"version: v1\ndescription: Applied policy\nrules:\n  - name: allow-read\n    priority: 10\n    action: allow\n",
+    )
+    .expect("source policy");
+    let apply_root = fixture.0.join("apply-root");
+    fs::create_dir_all(&apply_root).expect("apply root");
+    let apply_args = [
+        "--vault",
+        apply_root.to_str().expect("apply root"),
+        "policy",
+        "apply",
+        source.to_str().expect("source policy"),
+    ];
+    assert_same(
+        &run(&go, &home.0, &apply_args),
+        &run(&rust, &home.0, &apply_args),
+        "apply valid policy",
+    );
+
+    let go_remove_root = fixture.0.join("go-remove-root");
+    let rust_remove_root = fixture.0.join("rust-remove-root");
+    for root in [&go_remove_root, &rust_remove_root] {
+        fs::create_dir_all(root.join("policies")).expect("remove policy directory");
+        fs::write(root.join("policies/dev.yaml"), b"applied policy").expect("applied policy");
+    }
+    let go_remove_args = [
+        "--vault",
+        go_remove_root.to_str().expect("Go remove root"),
+        "policy",
+        "remove",
+        "dev.yaml",
+    ];
+    let rust_remove_args = [
+        "--vault",
+        rust_remove_root.to_str().expect("Rust remove root"),
+        "policy",
+        "remove",
+        "dev.yaml",
+    ];
+    assert_same(
+        &run(&go, &home.0, &go_remove_args),
+        &run(&rust, &home.0, &rust_remove_args),
+        "remove applied policy",
+    );
 }
