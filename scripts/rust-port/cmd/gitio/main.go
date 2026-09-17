@@ -86,19 +86,6 @@ func sourceFiles(root string) []string {
 	return files
 }
 
-func digestFiles(root string, files []string) string {
-	var all []byte
-	for _, name := range files {
-		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(name)))
-		fail(err)
-		all = append(all, []byte(name)...)
-		all = append(all, 0)
-		all = append(all, data...)
-		all = append(all, 0)
-	}
-	return hash(all)
-}
-
 func setupRemote(remoteURL string) string {
 	dir, err := os.MkdirTemp("", "gitio-go-")
 	fail(err)
@@ -156,7 +143,11 @@ func unixSSHFailureCase(id string, setup func(dir, marker string)) Case {
 		panic("gitio SSH oracle requires a native Unix runner")
 	}
 	dir := setupRemote("ssh://git@example.invalid/repo.git")
-	defer os.RemoveAll(dir)
+	defer func() {
+		if err := os.RemoveAll(dir); err != nil {
+			panic(err)
+		}
+	}()
 	marker := filepath.Join(dir, id+".marker")
 	setup(dir, marker)
 	oldSSH, hadSSH := os.LookupEnv("GIT_SSH_COMMAND")
@@ -228,7 +219,11 @@ func processAlive(pid string) bool {
 
 func transportCases() []Case {
 	offlineDir := setupRemote("http://127.0.0.1:1/unreachable.git")
-	defer os.RemoveAll(offlineDir)
+	defer func() {
+		if err := os.RemoveAll(offlineDir); err != nil {
+			panic(err)
+		}
+	}()
 	offline := git.PullWithResult(offlineDir)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -237,23 +232,28 @@ func transportCases() []Case {
 	}))
 	defer server.Close()
 	authDir := setupRemote(server.URL + "/repo.git")
-	defer os.RemoveAll(authDir)
+	defer func() {
+		if err := os.RemoveAll(authDir); err != nil {
+			panic(err)
+		}
+	}()
 	auth := git.PullWithResult(authDir)
 
-	cases := []Case{
-		{
+	cases := make([]Case, 0, 5)
+	cases = append(cases,
+		Case{
 			ID:       "GIT-002-go-offline",
 			Seam:     "GIT-002",
 			Input:    map[string]any{"remote": "http://127.0.0.1:1/unreachable.git"},
 			Expected: pullProjection(offline),
 		},
-		{
+		Case{
 			ID:       "GIT-002-go-auth",
 			Seam:     "GIT-002",
 			Input:    map[string]any{"status": http.StatusUnauthorized},
 			Expected: pullProjection(auth),
 		},
-	}
+	)
 	cases = append(cases,
 		unixSSHFailureCase("GIT-002-go-ssh-precedence", func(dir, marker string) {
 			helper := marker + ".sh"
