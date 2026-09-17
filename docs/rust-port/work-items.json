@@ -78,7 +78,7 @@
       "status": "blocked",
       "depends_on": ["RUST-006", "RUST-007", "RUST-008"],
       "contract_rows": ["CLI-002", "CLI-003", "CLI-004", "CLI-005", "CLI-006", "CLI-007"],
-      "note": "Native raw config list is implemented with 13 real Go CLI cases via make config-cli-differential. Config get/set, complete command/flag/help/error parity and TUI remain open.",
+      "note": "Connected native init/list/get/set/delete, config get/set/list, lock/unlock/auth status, import/export, find/search, generate/gen and TOTP output now have focused tests; the reused pinned Go CLI oracle covers connected flows. Git history and recipient management are being integrated. The complete command/flag/help/error surface and TUI remain open; blocked status still reflects unmet whole-item dependencies and acceptance, not absence of partial implementation. See resume-20260917.md for exact tested commits and CI limitations.",
       "acceptance": ["make cli-differential", "cargo nextest run -p symvault-cli"]
     },
     {
@@ -88,7 +88,7 @@
       "depends_on": ["RUST-006", "RUST-007", "RUST-008"],
       "contract_rows": ["MCP-001", "MCP-002", "MCP-003", "MCP-004"],
       "completed_contract_rows": ["MCP-001", "MCP-004"],
-      "note": "MCP-001 was implemented ahead of this item's dependencies and deliberately does not unblock the rest. The depends_on list is right for the tool surface (MCP-002/003/004), which needs storage, config, session and platform from RUST-006/007/008; it was over-broad for MCP-001 alone. The handshake and the stdio frame loop are pure JSON-RPC over strings, and the symvault-mcp crate implementing them uses serialization dependencies (including symvault-gojson), with no storage or native-platform dependency. MCP-004 followed for the same reason: stdio hygiene is a property of the frame loop, not of the tool surface. A native MCP-002 catalog/list slice now preserves 35 Go schemas and 11 injected profile/runtime cases, with make mcp-list-differential checking source/generator freshness. This does not provide tools/call, runtime discovery, policy enforcement or approvals; MCP-002 and MCP-003 stay blocked on the unchanged dependencies.",
+      "note": "MCP-001 and MCP-004 are implemented; the source-bound catalog retains the full Go schema. Native stdio dispatch now connects health, symaira_whoami, find_entries, get_entry_metadata, get_entry and get_entry_value to the encrypted Store with profile scope, policy and audit. Value reads cover quarantine, redaction, sealing, session counters and semantic injection modes through actual Go fixtures. Interactive approval and the remaining tools are incomplete; runtime refuses required unsupported approval. Full MCP-002/003 and native CI acceptance remain open. See resume-20260917.md.",
       "acceptance": ["make mcp-init-differential", "make mcp-stdio-differential", "make mcp-differential", "POLICY-001 approval queues and MCP tool filtering/call-time enforcement integrate through MCP-002/MCP-003, including policy audit/enforcement wiring", "cargo nextest run -p symvault-mcp", "cargo +nightly fuzz run mcp_frame"]
     },
     {
