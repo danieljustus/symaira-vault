@@ -1,7 +1,8 @@
 use std::{
     env, fs,
+    io::Write,
     path::{Path, PathBuf},
-    process::{Command, Output},
+    process::{Command, Output, Stdio},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -27,6 +28,30 @@ fn run(binary: &Path, args: &[&str], root: &Path, home: &Path) -> Output {
         .expect("run CLI")
 }
 
+fn run_with_input(binary: &Path, args: &[&str], root: &Path, home: &Path, input: &[u8]) -> Output {
+    let mut child = Command::new(binary)
+        .args(args)
+        .env("HOME", home)
+        .env("XDG_CONFIG_HOME", home.join("config"))
+        .env("XDG_DATA_HOME", home.join("data"))
+        .env("XDG_CACHE_HOME", home.join("cache"))
+        .env("SYMVAULT_VAULT", root)
+        .env("SYMVAULT_PASSPHRASE", "correct horse battery staple")
+        .env("SYMVAULT_ALLOW_ENV_PASSPHRASE", "1")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn CLI");
+    child
+        .stdin
+        .take()
+        .expect("CLI stdin")
+        .write_all(input)
+        .expect("write CLI input");
+    child.wait_with_output().expect("wait for CLI")
+}
+
 fn assert_success(output: &Output, command: &str) {
     assert!(
         output.status.success(),
@@ -35,6 +60,14 @@ fn assert_success(output: &Output, command: &str) {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+}
+
+fn first_json(stdout: &[u8], command: &str) -> serde_json::Value {
+    serde_json::Deserializer::from_slice(stdout)
+        .into_iter::<serde_json::Value>()
+        .next()
+        .unwrap_or_else(|| panic!("{command} did not write a JSON value: {stdout:?}"))
+        .unwrap_or_else(|error| panic!("{command} JSON: {error}; stdout={stdout:?}"))
 }
 
 fn assert_initialized(root: &Path) {
@@ -168,6 +201,70 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
         serde_json::from_slice::<serde_json::Value>(&go_json.stdout).expect("Go JSON")
     );
 
+    let go_export = run(
+        &go_binary,
+        &[
+            "--vault",
+            rust_root.to_str().unwrap(),
+            "export",
+            "--format",
+            "json",
+            "--yes",
+        ],
+        &rust_root,
+        &home,
+    );
+    let rust_export = run(
+        &rust_binary,
+        &[
+            "--vault",
+            rust_root.to_str().unwrap(),
+            "export",
+            "--format",
+            "json",
+            "--yes",
+        ],
+        &rust_root,
+        &home,
+    );
+    assert_success(&go_export, "Go export");
+    assert_success(&rust_export, "Rust export");
+    assert_eq!(
+        first_json(&rust_export.stdout, "Rust export"),
+        first_json(&go_export.stdout, "Go export")
+    );
+
+    let initialize = br#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"probe","version":"1.0"},"capabilities":{}}}
+"#;
+    for (name, binary) in [("Go MCP", &go_binary), ("Rust MCP", &rust_binary)] {
+        let output = run_with_input(
+            binary,
+            &[
+                "--vault",
+                rust_root.to_str().unwrap(),
+                "mcp",
+                "--stdio",
+                "--agent",
+                "default",
+            ],
+            &rust_root,
+            &home,
+            initialize,
+        );
+        assert_success(&output, name);
+        let response: serde_json::Value =
+            serde_json::from_slice(&output.stdout).unwrap_or_else(|error| {
+                panic!(
+                    "{name} initialize response is not JSON: {error}; stdout={:?}; stderr={:?}",
+                    output.stdout, output.stderr
+                )
+            });
+        assert!(
+            response.get("result").is_some(),
+            "{name} initialize lacks result"
+        );
+    }
+
     let go_init = run(
         &go_binary,
         &[
@@ -186,4 +283,57 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     fs::remove_dir_all(home).expect("cleanup home");
     fs::remove_dir_all(rust_root).expect("cleanup Rust vault");
     fs::remove_dir_all(go_root).expect("cleanup Go vault");
+}
+
+#[test]
+fn export_cancel_happens_before_vault_open() {
+    let rust_binary = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
+    let home = temporary_root("cancel-home");
+    let root = temporary_root("cancel-vault");
+    fs::create_dir_all(&home).expect("home");
+    let rust = run_with_input(
+        &rust_binary,
+        &[
+            "--vault",
+            root.to_str().unwrap(),
+            "export",
+            "--format",
+            "json",
+        ],
+        &root,
+        &home,
+        b"n\n",
+    );
+    assert_success(&rust, "Rust export cancel");
+    let stderr = String::from_utf8_lossy(&rust.stderr);
+    assert!(stderr.contains("Export canceled."), "stderr={stderr:?}");
+    assert!(
+        !rust
+            .stdout
+            .windows(b"No entries found".len())
+            .any(|window| { window == b"No entries found" })
+    );
+
+    if let Some(go_binary) = env::var_os("SYMVAULT_GO_BINARY") {
+        let go = run_with_input(
+            &PathBuf::from(go_binary),
+            &[
+                "--vault",
+                root.to_str().unwrap(),
+                "export",
+                "--format",
+                "json",
+            ],
+            &root,
+            &home,
+            b"n\n",
+        );
+        assert_success(&go, "Go export cancel");
+        assert_eq!(go.stdout, rust.stdout);
+    }
+
+    fs::remove_dir_all(home).expect("cleanup home");
+    if root.exists() {
+        fs::remove_dir_all(root).expect("cleanup vault");
+    }
 }

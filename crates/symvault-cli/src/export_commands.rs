@@ -48,6 +48,7 @@ pub struct ExportOptions {
 pub struct ExportResult {
     pub entries: usize,
     pub wrote_output: bool,
+    pub canceled: bool,
 }
 
 /// Records the successful export through the production Go-compatible keyring
@@ -151,6 +152,7 @@ where
         return Ok(ExportResult {
             entries: 0,
             wrote_output: false,
+            canceled: true,
         });
     }
 
@@ -163,6 +165,7 @@ where
         return Ok(ExportResult {
             entries: 0,
             wrote_output: false,
+            canceled: false,
         });
     }
     let entries = paths
@@ -195,6 +198,7 @@ where
     Ok(ExportResult {
         entries: entries.len(),
         wrote_output: true,
+        canceled: false,
     })
 }
 

@@ -69,8 +69,8 @@ struct Cli {
     quiet: bool,
     #[arg(long, global = true)]
     _profile: Option<String>,
-    #[arg(long, global = true, default_value = "text")]
-    output: String,
+    #[arg(long, global = true)]
+    output: Option<String>,
     #[arg(long, global = true)]
     json: bool,
     #[arg(long, global = true)]
@@ -110,8 +110,6 @@ enum Command {
         format: String,
         #[arg(long, default_value = "")]
         mapping: String,
-        #[arg(long, value_name = "FILE")]
-        output: Option<PathBuf>,
         #[arg(short = 'y', long)]
         yes: bool,
     },
@@ -266,7 +264,7 @@ fn main() -> ExitCode {
             cli.vault.as_deref(),
             cli._profile.as_deref(),
             prefix.as_deref().unwrap_or(""),
-            &cli.output,
+            cli.output.as_deref().unwrap_or("text"),
             cli.json,
             cli.quiet,
         ),
@@ -274,21 +272,20 @@ fn main() -> ExitCode {
             cli.vault.as_deref(),
             cli._profile.as_deref(),
             &query,
-            &cli.output,
+            cli.output.as_deref().unwrap_or("text"),
             cli.json,
             cli.quiet,
         ),
         Some(Command::Export {
             format,
             mapping,
-            output,
             yes,
         }) => run_export(
             cli.vault.as_deref(),
             cli._profile.as_deref(),
             &format,
             &mapping,
-            output.as_deref(),
+            cli.output.as_deref().map(Path::new),
             yes,
             cli.quiet,
         ),
@@ -304,7 +301,9 @@ fn main() -> ExitCode {
             allow_locked,
             cli.quiet,
         ),
-        Some(Command::Version(_)) => write_version(&cli.output, cli.json),
+        Some(Command::Version(_)) => {
+            write_version(cli.output.as_deref().unwrap_or("text"), cli.json)
+        }
         Some(Command::Lock) => run_lock(cli.vault.as_deref(), cli._profile.as_deref(), cli.quiet),
         Some(Command::Unlock { check, ttl }) => run_unlock(
             cli.vault.as_deref(),
@@ -317,7 +316,7 @@ fn main() -> ExitCode {
             AuthCommand::Status => run_auth_status(
                 cli.vault.as_deref(),
                 cli._profile.as_deref(),
-                &cli.output,
+                cli.output.as_deref().unwrap_or("text"),
                 cli.json,
                 cli.quiet,
             ),
@@ -347,7 +346,12 @@ fn main() -> ExitCode {
                         device::accept(vault, &args[0], cli.quiet)
                     }
                 }
-                DeviceCommand::List { .. } => device::list(vault, &cli.output, cli.json, cli.quiet),
+                DeviceCommand::List { .. } => device::list(
+                    vault,
+                    cli.output.as_deref().unwrap_or("text"),
+                    cli.json,
+                    cli.quiet,
+                ),
                 DeviceCommand::Add { pair, name, args } => device::add(vault, pair, &args, name),
                 DeviceCommand::Revoke { yes, args } => {
                     if args.len() != 1 {
@@ -402,7 +406,11 @@ fn main() -> ExitCode {
                 ConfigOperation::Get { key } => config::get(
                     &path,
                     &key,
-                    if cli.json { "json" } else { &cli.output },
+                    if cli.json {
+                        "json"
+                    } else {
+                        cli.output.as_deref().unwrap_or("text")
+                    },
                     cli.quiet,
                 ),
                 ConfigOperation::List => config::list(&path, cli.quiet),
@@ -553,7 +561,6 @@ fn run_export(
 ) -> ExitCode {
     let result = (|| {
         let vault = resolve_vault(explicit_vault, profile)?;
-        require_initialized(&vault)?;
         let format = export_commands::ExportFormat::parse(format)?;
         let mapping = export_commands::parse_mapping(mapping)?;
         let options = export_commands::ExportOptions {
@@ -567,7 +574,10 @@ fn run_export(
             &vault,
             &options,
             confirm_export,
-            || device::unlock_vault(&vault),
+            || {
+                require_initialized(&vault)?;
+                device::unlock_vault(&vault)
+            },
             |root, _entries| {
                 let runtime = runtime_session_manager();
                 let keyring = runtime
@@ -577,6 +587,9 @@ fn run_export(
                 export_commands::audit_export(root, keyring)
             },
         )?;
+        if exported.canceled {
+            return Ok::<(), String>(());
+        }
         if !exported.wrote_output {
             if !quiet {
                 println!("No entries found in vault.");
