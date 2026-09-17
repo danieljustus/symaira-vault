@@ -2,7 +2,7 @@ use std::{
     env, fs,
     io::Write,
     path::{Path, PathBuf},
-    process::{Command, Output, Stdio},
+    process::{Command, ExitStatus, Output, Stdio},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -70,6 +70,35 @@ fn first_json(stdout: &[u8], command: &str) -> serde_json::Value {
         .next()
         .unwrap_or_else(|| panic!("{command} did not write a JSON value: {stdout:?}"))
         .unwrap_or_else(|error| panic!("{command} JSON: {error}; stdout={stdout:?}"))
+}
+
+fn first_json_output(output: &Output, command: &str) -> serde_json::Value {
+    if output.stdout.is_empty() {
+        panic!(
+            "{command} emitted no JSON: status={}; stdout={:?}; stderr={:?}",
+            exit_status_detail(output.status),
+            output.stdout,
+            output.stderr
+        );
+    }
+    first_json(&output.stdout, command)
+}
+
+fn exit_status_detail(status: ExitStatus) -> String {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        return format!(
+            "success={} code={:?} signal={:?}",
+            status.success(),
+            status.code(),
+            status.signal()
+        );
+    }
+    #[cfg(not(unix))]
+    {
+        format!("success={} code={:?}", status.success(), status.code())
+    }
 }
 
 fn assert_initialized(root: &Path) {
@@ -220,19 +249,47 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     );
     assert_success(&go_set_url, "Go set URL");
 
-    for (name, binary) in [("Go find", &go_binary), ("Rust find", &rust_binary)] {
-        let output = run(
-            binary,
-            &["--vault", rust_root.to_str().unwrap(), "find", "secret"],
-            &rust_root,
-            &home,
-        );
-        assert_success(&output, name);
-        assert_eq!(
-            output.stdout, b"work/github (matches: password)\n",
-            "{name}"
-        );
-    }
+    let go_get_url = run(
+        &go_binary,
+        &[
+            "--vault",
+            rust_root.to_str().unwrap(),
+            "get",
+            "work/github.url",
+            "--print",
+        ],
+        &rust_root,
+        &home,
+    );
+    assert_success(&go_get_url, "Go get URL after set");
+    assert_eq!(go_get_url.stdout, b"https://github.com/login\n");
+
+    let go_find_secret = run(
+        &go_binary,
+        &["--vault", rust_root.to_str().unwrap(), "find", "secret"],
+        &rust_root,
+        &home,
+    );
+    assert_success(&go_find_secret, "Go find");
+    assert_eq!(go_find_secret.stdout, b"work/github (matches: password)\n");
+    let index_after_go_find = fs::read(rust_root.join(".search-index")).ok();
+
+    let rust_find_secret = run(
+        &rust_binary,
+        &["--vault", rust_root.to_str().unwrap(), "find", "secret"],
+        &rust_root,
+        &home,
+    );
+    assert_success(&rust_find_secret, "Rust find");
+    assert_eq!(
+        rust_find_secret.stdout,
+        b"work/github (matches: password)\n"
+    );
+    let index_after_rust_find = fs::read(rust_root.join(".search-index")).ok();
+    assert_eq!(
+        index_after_rust_find, index_after_go_find,
+        "Rust find changed the Go encrypted search index"
+    );
     let go_find_url = run(
         &go_binary,
         &[
@@ -264,8 +321,8 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     assert_success(&go_find_url, "Go find URL");
     assert_success(&rust_find_url, "Rust find URL");
     assert_eq!(
-        first_json(&rust_find_url.stdout, "Rust find URL"),
-        first_json(&go_find_url.stdout, "Go find URL")
+        first_json_output(&rust_find_url, "Rust find URL"),
+        first_json_output(&go_find_url, "Go find URL")
     );
     let go_find_scoped = run(
         &go_binary,
@@ -300,8 +357,8 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     assert_success(&go_find_scoped, "Go scoped find");
     assert_success(&rust_find_scoped, "Rust scoped find");
     assert_eq!(
-        first_json(&rust_find_scoped.stdout, "Rust scoped find"),
-        first_json(&go_find_scoped.stdout, "Go scoped find")
+        first_json_output(&rust_find_scoped, "Rust scoped find"),
+        first_json_output(&go_find_scoped, "Go scoped find")
     );
     let go_set_unicode = run(
         &go_binary,
@@ -432,8 +489,8 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     assert_success(&go_generate, "Go generate store");
     assert_success(&rust_generate, "Rust generate store");
     assert_eq!(
-        first_json(&rust_generate.stdout, "Rust generate store"),
-        first_json(&go_generate.stdout, "Go generate store")
+        first_json_output(&rust_generate, "Rust generate store"),
+        first_json_output(&go_generate, "Go generate store")
     );
 
     let go_json = run(
@@ -596,7 +653,7 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     );
     assert_success(&go_imported, "Go get after Rust import");
     assert_eq!(
-        first_json(&go_imported.stdout, "Go imported entry")["Fields"]["username"],
+        first_json_output(&go_imported, "Go imported entry")["Fields"]["username"],
         "import-user"
     );
 
@@ -629,8 +686,8 @@ fn init_list_get_match_go_cli_on_a_disposable_vault() {
     assert_success(&go_export, "Go export");
     assert_success(&rust_export, "Rust export");
     assert_eq!(
-        first_json(&rust_export.stdout, "Rust export"),
-        first_json(&go_export.stdout, "Go export")
+        first_json_output(&rust_export, "Rust export"),
+        first_json_output(&go_export, "Go export")
     );
 
     let initialize = br#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","clientInfo":{"name":"probe","version":"1.0"},"capabilities":{}}}
