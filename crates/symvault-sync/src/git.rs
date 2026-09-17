@@ -305,7 +305,7 @@ impl GitRepository {
         let mut snapshots = BTreeMap::new();
         for entry in status
             .into_iter()
-            .filter(|entry| entry.index == ' ' && entry.worktree != ' ' && entry.worktree != '?')
+            .filter(|entry| entry.index != '?' && (entry.index != ' ' || entry.worktree != ' '))
         {
             if !is_conflict_candidate(&entry.path) {
                 continue;
@@ -345,7 +345,7 @@ impl GitRepository {
             if !is_conflict_candidate(&path) {
                 continue;
             }
-            let mut clean_local = None;
+            let clean_local;
             let local: &[u8] = match snapshots.get(&path) {
                 Some(Some(local)) => local,
                 Some(None) => continue,
@@ -355,8 +355,8 @@ impl GitRepository {
                     };
                     // Keep this clean committed snapshot scoped to the
                     // remote-touched path; the common case remains lazy.
-                    clean_local = Some(data);
-                    clean_local.as_deref().expect("temporary clean snapshot")
+                    clean_local = data;
+                    &clean_local
                 }
             };
             if self
@@ -1304,6 +1304,37 @@ mod tests {
             status: "exit status: 1".to_owned(),
             stderr: stderr.to_owned(),
         }
+    }
+
+    #[test]
+    fn dirty_snapshots_retain_staged_edits_and_deletion_tombstones() {
+        let root = tempfile::tempdir().unwrap();
+        let repo = GitRepository::init(root.path()).unwrap();
+        let config = root.path().join("config.yaml");
+        fs::write(&config, b"base").unwrap();
+        repo.command(&["add", "config.yaml"]).unwrap();
+        repo.command(&[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-m",
+            "base",
+        ])
+        .unwrap();
+        fs::write(&config, b"staged").unwrap();
+        repo.command(&["add", "config.yaml"]).unwrap();
+        fs::write(&config, b"working").unwrap();
+        assert_eq!(
+            repo.snapshot_dirty_candidates().unwrap()["config.yaml"].as_deref(),
+            Some(b"working".as_slice())
+        );
+        fs::remove_file(&config).unwrap();
+        assert_eq!(
+            repo.snapshot_dirty_candidates().unwrap()["config.yaml"],
+            None
+        );
     }
 
     #[test]
