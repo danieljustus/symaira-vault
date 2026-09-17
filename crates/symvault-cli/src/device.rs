@@ -212,6 +212,9 @@ pub(crate) fn reencrypt_all_entries(
     recipients: &[Recipient],
 ) -> Result<(), String> {
     let vault = fs::canonicalize(vault).map_err(|e| format!("resolve vault directory: {e}"))?;
+    let Some(entries_dir) = validate_reencrypt_entries_root(&vault)? else {
+        return Ok(());
+    };
     let store = symvault_store::Store::open(&vault, identity)
         .map_err(|e| format!("open store for re-encryption: {e}"))?;
 
@@ -219,30 +222,7 @@ pub(crate) fn reencrypt_all_entries(
         .with_write_lock(|store| {
             let result: Result<(), String> = (|| {
                 let manifest = snapshot_file(&vault.join("manifest.age"))?;
-                let entries_dir = vault.join("entries");
-                let files = match fs::symlink_metadata(&entries_dir) {
-                    Ok(metadata) => {
-                        let file_type = metadata.file_type();
-                        if file_type.is_symlink() {
-                            Err(format!(
-                                "unsafe symlink entries root {:?}",
-                                entries_dir.display()
-                            ))
-                        } else if !file_type.is_dir() {
-                            Err(format!(
-                                "vault entries root is not a directory: {}",
-                                entries_dir.display()
-                            ))
-                        } else {
-                            collect_reencrypt_files(&entries_dir, identity, recipients).map(Some)
-                        }
-                    }
-                    Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
-                    Err(err) => Err(format!("stat {}: {err}", entries_dir.display())),
-                }?;
-                let Some(files) = files else {
-                    return Ok(());
-                };
+                let files = collect_reencrypt_files(&entries_dir, identity, recipients)?;
                 if files.is_empty() {
                     return Ok(());
                 }
@@ -296,6 +276,23 @@ struct ReencryptFile {
     path: PathBuf,
     replacement: Vec<u8>,
     metadata: FileMetadata,
+}
+
+fn validate_reencrypt_entries_root(vault: &Path) -> Result<Option<PathBuf>, String> {
+    let entries_dir = vault.join("entries");
+    match fs::symlink_metadata(&entries_dir) {
+        Ok(metadata) if metadata.file_type().is_symlink() => Err(format!(
+            "unsafe symlink entries root {:?}",
+            entries_dir.display()
+        )),
+        Ok(metadata) if !metadata.file_type().is_dir() => Err(format!(
+            "vault entries root is not a directory: {}",
+            entries_dir.display()
+        )),
+        Ok(_) => Ok(Some(entries_dir)),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!("stat {}: {error}", entries_dir.display())),
+    }
 }
 
 const REENCRYPT_JOURNAL_VERSION: u32 = 1;
@@ -1096,6 +1093,7 @@ pub(super) fn join(
 pub(super) fn accept(vault: &Path, token: &str, quiet: bool) -> Result<(), String> {
     validate_pairing_token(token).map_err(|e| format!("invalid pairing token: {e}"))?;
     let identity = unlock_vault(vault)?;
+    let _ = validate_reencrypt_entries_root(vault)?;
 
     let mut jf_data = None;
     let mut found_name = String::new();
