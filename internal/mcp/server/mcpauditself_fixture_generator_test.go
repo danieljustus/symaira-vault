@@ -88,6 +88,18 @@ func TestGenerateMCPAuditSelfFixture(t *testing.T) {
 	logBytes = append(logBytes, []byte("{\"action\":false}\nnot-json\n")...)
 	invalidUTF8Log := []byte("{\"ts\":\"2026-01-02T03:04:10Z\",\"action\":\"bad\xff\",\"ok\":true}\n")
 	nullRootLog := []byte("null\n")
+	mixedCaseLog := []byte("{\"TS\":\"2026-01-02T03:04:12Z\",\"AGENT\":\"fixture\",\"ACTION\":\"mixed\",\"PATH\":\"mixed/path\",\"FIELD\":\"token\",\"TRANSPORT\":\"stdio\",\"REASON\":\"case\",\"SHARE_ID\":\"share-1\",\"FROM_AGENT\":\"from\",\"TO_AGENT\":\"to\",\"SHARE_ACTION\":\"grant\",\"DUR_MS\":7,\"TOKEN_ID\":\"token-1\",\"REQ_ID\":\"req-1\",\"SESS_ID\":\"sess-1\",\"KID\":\"kid-1\",\"HMAC\":\"hmac-1\",\"ARGV_HASH\":\"argv-1\",\"OK\":true}\n")
+	invalidAgentTypeLog := []byte("{\"ts\":\"2026-01-02T03:04:13Z\",\"agent\":123,\"action\":\"invalid-agent\",\"ok\":true}\n")
+	invalidDurationTypeLog := []byte("{\"ts\":\"2026-01-02T03:04:14Z\",\"action\":\"invalid-duration\",\"dur_ms\":\"slow\",\"ok\":true}\n")
+	nullTypedFieldsLog := []byte("{\"ts\":null,\"agent\":null,\"action\":null,\"path\":null,\"field\":null,\"transport\":null,\"reason\":null,\"share_id\":null,\"from_agent\":null,\"to_agent\":null,\"share_action\":null,\"dur_ms\":null,\"token_id\":null,\"req_id\":null,\"sess_id\":null,\"kid\":null,\"hmac\":null,\"argv_hash\":null,\"ok\":null}\n")
+	htmlEntry, err := json.Marshal(audit.LogEntry{
+		Timestamp: "2026-01-02T03:04:15Z", Agent: "fixture", Action: "<>&\u2028",
+		Path: "path/<>&\u2028", Reason: "reason/<>&\u2028", OK: true,
+	})
+	if err != nil {
+		t.Fatalf("marshal HTML audit entry: %v", err)
+	}
+	htmlLog := append(htmlEntry, '\n')
 	oversizedLog := append([]byte(`{"ts":"2026-01-02T03:04:11Z","action":"oversized","path":"`), bytes.Repeat([]byte("x"), 64*1024)...)
 	oversizedLog = append(oversizedLog, []byte(`"}`)...)
 
@@ -107,6 +119,11 @@ func TestGenerateMCPAuditSelfFixture(t *testing.T) {
 		{name: "null_root_defaults", call: `{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"symaira_audit_self","arguments":{"limit":100}}}`, log: nullRootLog, withLog: true},
 		{name: "invalid_utf8_replaced", call: `{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"symaira_audit_self","arguments":{"limit":100}}}`, log: invalidUTF8Log, withLog: true},
 		{name: "oversized_line_returns_scanner_error", call: `{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"symaira_audit_self","arguments":{}}}`, log: oversizedLog, withLog: true},
+		{name: "mixed_case_keys_decode", call: `{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"symaira_audit_self","arguments":{"limit":100}}}`, log: mixedCaseLog, withLog: true},
+		{name: "invalid_agent_type_skips_entry", call: `{"jsonrpc":"2.0","id":13,"method":"tools/call","params":{"name":"symaira_audit_self","arguments":{"limit":100}}}`, log: invalidAgentTypeLog, withLog: true},
+		{name: "invalid_duration_type_skips_entry", call: `{"jsonrpc":"2.0","id":14,"method":"tools/call","params":{"name":"symaira_audit_self","arguments":{"limit":100}}}`, log: invalidDurationTypeLog, withLog: true},
+		{name: "null_typed_fields_default", call: `{"jsonrpc":"2.0","id":15,"method":"tools/call","params":{"name":"symaira_audit_self","arguments":{"limit":100}}}`, log: nullTypedFieldsLog, withLog: true},
+		{name: "html_and_line_separator_escaped", call: `{"jsonrpc":"2.0","id":16,"method":"tools/call","params":{"name":"symaira_audit_self","arguments":{"limit":100}}}`, log: htmlLog, withLog: true},
 	}
 
 	fixtureCases := make([]mcpAuditSelfCase, 0, len(cases))
