@@ -2729,7 +2729,23 @@ fn open_root_write_lock(root_cap: &fs::File, root: &Path) -> Result<fs::File, St
     {
         let _ = root_cap;
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    let file = {
+        use std::os::windows::fs::OpenOptionsExt;
+        const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+        fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(&path)
+            .map_err(|source| StoreError::Write {
+                path: path.clone(),
+                source,
+            })?
+    };
+    #[cfg(all(not(unix), not(windows)))]
     let file = fs::OpenOptions::new()
         .read(true)
         .write(true)
@@ -2740,6 +2756,23 @@ fn open_root_write_lock(root_cap: &fs::File, root: &Path) -> Result<fs::File, St
             path: path.clone(),
             source,
         })?;
+    let metadata = file.metadata().map_err(|source| StoreError::Write {
+        path: path.clone(),
+        source,
+    })?;
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
+        if metadata.file_type().is_symlink()
+            || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+        {
+            return Err(StoreError::Symlink(path));
+        }
+    }
+    if !metadata.is_file() {
+        return Err(StoreError::NotRegularFile(path));
+    }
     set_private_permissions(&file).map_err(|source| StoreError::Write {
         path: path.clone(),
         source,

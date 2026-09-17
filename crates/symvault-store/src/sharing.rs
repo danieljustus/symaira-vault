@@ -574,6 +574,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    use std::os::unix::fs::symlink;
     use std::{fs, path::PathBuf};
     use tempfile::TempDir;
 
@@ -834,5 +836,84 @@ mod tests {
                 .status,
             "revoked"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn revoke_rejects_share_symlink_without_mutating_referent_or_snapshot() {
+        let root = tempfile::tempdir().expect("metadata-only root");
+        let canonical_root = root.path().canonicalize().expect("canonical root");
+        let path = canonical_root.join(SHARE_STORE_FILE);
+        let grant = br#"{"version":1,"grants":[{"id":"grant-a","from_agent":"source","to_agent":"target","secret_path":"prod/a","status":"pending","created_at":"2026-01-02T03:04:05Z"}]}"#;
+        fs::write(&path, grant).expect("write share fixture");
+        let mut snapshot = ShareStore::read(&path).expect("read share fixture");
+        let before = snapshot.clone();
+        let referent = canonical_root.join("share-referent");
+        let referent_bytes = b"referent must remain unchanged";
+        fs::write(&referent, referent_bytes).expect("write referent");
+        fs::remove_file(&path).expect("remove share fixture");
+        symlink(&referent, &path).expect("create share symlink");
+
+        assert!(
+            snapshot
+                .revoke_at(&canonical_root, "grant-a", "2026-01-02T04:00:00Z")
+                .is_err()
+        );
+        assert_eq!(snapshot.grants(), before.grants());
+        assert_eq!(fs::read(&referent).expect("read referent"), referent_bytes);
+    }
+
+    #[test]
+    fn revoke_rejects_invalid_target_without_mutating_referent_or_snapshot() {
+        let root = tempfile::tempdir().expect("metadata-only root");
+        let canonical_root = root.path().canonicalize().expect("canonical root");
+        let path = canonical_root.join(SHARE_STORE_FILE);
+        fs::write(
+            &path,
+            br#"{"version":1,"grants":[{"id":"grant-a","from_agent":"source","to_agent":"target","secret_path":"prod/a","status":"pending","created_at":"2026-01-02T03:04:05Z"}]}"#,
+        )
+        .expect("write share fixture");
+        let mut snapshot = ShareStore::read(&path).expect("read share fixture");
+        let before = snapshot.clone();
+        let referent = canonical_root.join("invalid-target-referent");
+        let referent_bytes = b"referent must remain unchanged";
+        fs::write(&referent, referent_bytes).expect("write referent");
+        fs::remove_file(&path).expect("remove share fixture");
+        fs::create_dir(&path).expect("create invalid target");
+
+        assert!(
+            snapshot
+                .revoke_at(&canonical_root, "grant-a", "2026-01-02T04:00:00Z")
+                .is_err()
+        );
+        assert_eq!(snapshot.grants(), before.grants());
+        assert_eq!(fs::read(&referent).expect("read referent"), referent_bytes);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn revoke_rejects_lock_symlink_without_mutating_referent_or_snapshot() {
+        let root = tempfile::tempdir().expect("metadata-only root");
+        let canonical_root = root.path().canonicalize().expect("canonical root");
+        let path = canonical_root.join(SHARE_STORE_FILE);
+        fs::write(
+            &path,
+            br#"{"version":1,"grants":[{"id":"grant-a","from_agent":"source","to_agent":"target","secret_path":"prod/a","status":"pending","created_at":"2026-01-02T03:04:05Z"}]}"#,
+        )
+        .expect("write share fixture");
+        let mut snapshot = ShareStore::read(&path).expect("read share fixture");
+        let before = snapshot.clone();
+        let referent = canonical_root.join("lock-referent");
+        let referent_bytes = b"referent must remain unchanged";
+        fs::write(&referent, referent_bytes).expect("write referent");
+        symlink(&referent, canonical_root.join(".lock")).expect("create lock symlink");
+
+        assert!(
+            snapshot
+                .revoke_at(&canonical_root, "grant-a", "2026-01-02T04:00:00Z")
+                .is_err()
+        );
+        assert_eq!(snapshot.grants(), before.grants());
+        assert_eq!(fs::read(&referent).expect("read referent"), referent_bytes);
     }
 }
