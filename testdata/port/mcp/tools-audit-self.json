@@ -1,0 +1,257 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "fca3f894",
+    "commit_sha": "fca3f89401833b5e14ec4ec74ef736b0f63bca74",
+    "source_files": [
+      "internal/mcp/server/protocol.go",
+      "internal/mcp/server/server_authorize.go",
+      "internal/mcp/server/server_dispatch.go",
+      "internal/mcp/server/tool_registry.go",
+      "internal/mcp/server/tools_audit_self.go",
+      "internal/mcp/transport/transport.go",
+      "internal/mcp/mcptypes.go",
+      "internal/audit/audit.go"
+    ],
+    "source_hash": "32f6d997452d68a801b95fa418269671a2726ac245e58340a9097f14df492b18",
+    "generator_hash": "22c6de73f4cf339d727655b0a367a35f5fcf82fd753e5f619c01b2345425e2d8"
+  },
+  "server_name": "symvault",
+  "server_version": "0.0.0-audit-self-fixture",
+  "cases": [
+    {
+      "name": "default_limit_skips_malformed",
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"symaira_audit_self\",\"arguments\":{}}}"
+      ],
+      "output": [
+        {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-audit-self-fixture"
+            },
+            "protocolVersion": "2025-11-25",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "id": 2,
+          "result": {
+            "content": [
+              {
+                "text": "[{\"ts\":\"2026-01-02T03:04:05Z\",\"tool\":\"find\",\"path\":\"alpha\",\"status\":\"ok\"},{\"ts\":\"2026-01-02T03:04:06Z\",\"tool\":\"get\",\"path\":\"beta\",\"status\":\"error\",\"code\":\"policy_denied\"},{\"ts\":\"2026-01-02T03:04:07Z\",\"tool\":\"set\",\"path\":\"gamma\",\"status\":\"ok\"},{\"ts\":\"2026-01-02T03:04:08Z\",\"tool\":\"delete\",\"path\":\"delta\",\"status\":\"ok\"},{\"ts\":\"2026-01-02T03:04:09Z\",\"tool\":\"legacy\",\"status\":\"error\"}]",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "limit_two_returns_tail",
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"symaira_audit_self\",\"arguments\":{\"limit\":2}}}"
+      ],
+      "output": [
+        {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-audit-self-fixture"
+            },
+            "protocolVersion": "2025-11-25",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "id": 3,
+          "result": {
+            "content": [
+              {
+                "text": "[{\"ts\":\"2026-01-02T03:04:08Z\",\"tool\":\"delete\",\"path\":\"delta\",\"status\":\"ok\"},{\"ts\":\"2026-01-02T03:04:09Z\",\"tool\":\"legacy\",\"status\":\"error\"}]",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "numeric_string_limit_returns_tail",
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/call\",\"params\":{\"name\":\"symaira_audit_self\",\"arguments\":{\"limit\":\"2\"}}}"
+      ],
+      "output": [
+        {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-audit-self-fixture"
+            },
+            "protocolVersion": "2025-11-25",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "id": 7,
+          "result": {
+            "content": [
+              {
+                "text": "[{\"ts\":\"2026-01-02T03:04:08Z\",\"tool\":\"delete\",\"path\":\"delta\",\"status\":\"ok\"},{\"ts\":\"2026-01-02T03:04:09Z\",\"tool\":\"legacy\",\"status\":\"error\"}]",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "zero_uses_default",
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"symaira_audit_self\",\"arguments\":{\"limit\":0}}}"
+      ],
+      "output": [
+        {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-audit-self-fixture"
+            },
+            "protocolVersion": "2025-11-25",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "id": 4,
+          "result": {
+            "content": [
+              {
+                "text": "[{\"ts\":\"2026-01-02T03:04:05Z\",\"tool\":\"find\",\"path\":\"alpha\",\"status\":\"ok\"},{\"ts\":\"2026-01-02T03:04:06Z\",\"tool\":\"get\",\"path\":\"beta\",\"status\":\"error\",\"code\":\"policy_denied\"},{\"ts\":\"2026-01-02T03:04:07Z\",\"tool\":\"set\",\"path\":\"gamma\",\"status\":\"ok\"},{\"ts\":\"2026-01-02T03:04:08Z\",\"tool\":\"delete\",\"path\":\"delta\",\"status\":\"ok\"},{\"ts\":\"2026-01-02T03:04:09Z\",\"tool\":\"legacy\",\"status\":\"error\"}]",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "fraction_truncates_to_zero",
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{\"name\":\"symaira_audit_self\",\"arguments\":{\"limit\":0.5}}}"
+      ],
+      "output": [
+        {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-audit-self-fixture"
+            },
+            "protocolVersion": "2025-11-25",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "id": 5,
+          "result": {
+            "content": [
+              {
+                "text": "[]",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "missing_log_is_empty",
+      "input": [
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"fixture\",\"version\":\"1.0\"},\"capabilities\":{}}}",
+        "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+        "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tools/call\",\"params\":{\"name\":\"symaira_audit_self\",\"arguments\":{\"limit\":100}}}"
+      ],
+      "output": [
+        {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": {
+            "capabilities": {
+              "tools": {},
+              "prompts": {}
+            },
+            "serverInfo": {
+              "name": "symvault",
+              "version": "0.0.0-audit-self-fixture"
+            },
+            "protocolVersion": "2025-11-25",
+            "instructions": "SymVault redacts secret values by default: get_entry and get_entry_value return a reference (a \"handle\", e.g. op://path/field) instead of the plaintext, plus a per-field \"usage\" hint. Do not try to resolve that reference yourself — you are not meant to see the value.\n\nTo consume a secret without seeing it:\n  - run_command / execute_with_secret: pass \"path.field\" (not the op:// handle) as an env map value, e.g. {\"env\": {\"GH_TOKEN\": \"github.token\"}}. SymVault resolves and injects it; only the child process sees the value.\n  - copy_to_clipboard / autotype: for interactive, human-facing use.\n  - request_credential: ask the user to supply or confirm a credential directly.\n\nIf a tool call is denied (run_denied / not in allowed_tools), the error names the exact profile fix — read it before giving up. See docs/agent-integration.md for the full recipe and a runner-profile example."
+          }
+        },
+        {
+          "jsonrpc": "2.0",
+          "id": 6,
+          "result": {
+            "content": [
+              {
+                "text": "[]",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        }
+      ]
+    }
+  ]
+}

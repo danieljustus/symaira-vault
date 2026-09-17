@@ -3,8 +3,12 @@ use crate::call::{
     ToolCallResult, ToolCallRuntime,
 };
 use serde_json::Value;
-use std::path::Path;
 use std::sync::{Arc, Mutex};
+use std::{
+    fs::File,
+    io::{BufRead, BufReader},
+    path::Path,
+};
 use symvault_core::policy::{Action, Engine, EvalContext};
 use symvault_crypto::Identity;
 use symvault_store::{Entry, Store, StoreError, WriteRecord};
@@ -335,6 +339,86 @@ impl StoreReadOnlyRuntime {
             }
         )))
     }
+
+    fn audit_self(&self, arguments: &Value) -> Result<ToolCallResult, String> {
+        // Go accepts a positive numeric limit, truncates fractions, caps at
+        // 100, and falls back to 50 for missing/invalid/non-positive values.
+        let limit = arguments
+            .get("limit")
+            .and_then(|value| match value {
+                Value::Number(number) => number.as_f64(),
+                Value::String(value) => value.parse::<f64>().ok(),
+                _ => None,
+            })
+            .filter(|value| *value > 0.0)
+            .map(|value| (value as usize).min(100))
+            .unwrap_or(50);
+
+        let Some(audit) = &self.audit else {
+            return Ok(ToolCallResult::text("[]"));
+        };
+        let path = audit
+            .lock()
+            .map_err(|_| "audit logger lock poisoned".to_owned())?
+            .path()
+            .to_owned();
+        let file = match File::open(&path) {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(ToolCallResult::text("[]"));
+            }
+            Err(error) => return Err(format!("cannot read audit log: {error}")),
+        };
+
+        #[derive(serde::Serialize)]
+        struct AuditEvent {
+            #[serde(rename = "ts")]
+            timestamp: String,
+            tool: String,
+            #[serde(skip_serializing_if = "String::is_empty")]
+            path: String,
+            status: String,
+            #[serde(skip_serializing_if = "String::is_empty")]
+            code: String,
+        }
+
+        #[derive(serde::Deserialize)]
+        struct RawAuditEntry {
+            #[serde(rename = "ts")]
+            timestamp: Option<String>,
+            action: Option<String>,
+            path: Option<String>,
+            reason: Option<String>,
+            ok: Option<bool>,
+        }
+
+        let mut events = Vec::new();
+        for line in BufReader::new(file).lines() {
+            let line = line.map_err(|error| format!("error reading audit log: {error}"))?;
+            let Ok(entry) = serde_json::from_str::<RawAuditEntry>(&line) else {
+                continue;
+            };
+            events.push(AuditEvent {
+                timestamp: entry.timestamp.unwrap_or_default(),
+                tool: entry.action.unwrap_or_default(),
+                path: entry.path.unwrap_or_default(),
+                status: if entry.ok.unwrap_or(false) {
+                    "ok"
+                } else {
+                    "error"
+                }
+                .into(),
+                code: entry.reason.unwrap_or_default(),
+            });
+        }
+        if events.len() > limit {
+            let start = events.len() - limit;
+            events.drain(..start);
+        }
+        serde_json::to_string(&events)
+            .map(ToolCallResult::text)
+            .map_err(|error| error.to_string())
+    }
 }
 
 impl ToolCallRuntime for StoreReadOnlyRuntime {
@@ -354,8 +438,13 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
     }
 
     fn call(&self, name: &str, arguments: &Value) -> Result<ToolCallResult, String> {
-        let result = self.inner.call(name, arguments);
+        let result = if name == "symaira_audit_self" {
+            self.audit_self(arguments)
+        } else {
+            self.inner.call(name, arguments)
+        };
         match name {
+            "symaira_audit_self" => {}
             "generate_password" => {
                 let ok = result.as_ref().is_ok_and(|value| !value.is_error);
                 self.append_audit("generate", "password", ok);
@@ -434,12 +523,13 @@ fn store_error(error: StoreError) -> String {
     error.to_string()
 }
 
-/// The twelve handlers in this bounded runtime. The catalog remains owned by
+/// The thirteen handlers in this bounded runtime. The catalog remains owned by
 /// the protocol layer; this list is the injected availability registry used
 /// by authorization and whoami.
 pub fn read_only_tool_names() -> Vec<String> {
     [
         "get_auth_status",
+        "symaira_audit_self",
         "health",
         "symaira_whoami",
         "list_entries",
