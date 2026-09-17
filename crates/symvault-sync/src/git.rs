@@ -528,7 +528,9 @@ fn read_and_remove(path: &Path) -> Result<Vec<u8>, io::Error> {
 #[cfg(unix)]
 fn terminate_process_group(child: &mut std::process::Child) {
     let group = format!("-{}", child.id());
-    let _ = Command::new("/bin/kill").args(["-KILL", &group]).output();
+    let _ = Command::new("/bin/kill")
+        .args(["-KILL", "--", &group])
+        .output();
     let _ = child.kill();
 }
 
@@ -863,11 +865,28 @@ mod tests {
             .trim()
             .to_owned();
         let descendant_gone = (0..40).any(|_| {
-            let alive = Command::new("kill")
-                .args(["-0", &pid])
-                .output()
-                .map(|output| output.status.success())
-                .unwrap_or(false);
+            // Linux reports a child killed with its parent process group as
+            // "alive" to kill(0) until the orphaned zombie is reaped by
+            // init. The timeout runner is not that process's parent and
+            // cannot reap it. Treat a zombie as stopped while retaining the
+            // kill(0) probe for Unix platforms without /proc.
+            let alive = {
+                #[cfg(target_os = "linux")]
+                {
+                    fs::read_to_string(format!("/proc/{pid}/stat"))
+                        .ok()
+                        .and_then(|stat| stat.split_whitespace().nth(2)?.chars().next())
+                        .is_some_and(|state| state != 'Z')
+                }
+                #[cfg(not(target_os = "linux"))]
+                {
+                    Command::new("kill")
+                        .args(["-0", &pid])
+                        .output()
+                        .map(|output| output.status.success())
+                        .unwrap_or(false)
+                }
+            };
             if alive {
                 thread::sleep(Duration::from_millis(25));
                 false
