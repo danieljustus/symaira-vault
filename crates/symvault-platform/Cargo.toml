@@ -8,6 +8,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+base64 = "=0.22.1"
 symvault-core.workspace = true
 
 [target.'cfg(any(target_os = "macos", target_os = "linux", target_os = "windows", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd"))'.dependencies]

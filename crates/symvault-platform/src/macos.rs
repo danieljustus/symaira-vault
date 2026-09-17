@@ -14,11 +14,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-use symvault_core::{
-    platform::{
-        Autotype, Clipboard, Daemon, Notifier, PlatformError, PlatformErrorKind, SecureUi, TouchId,
-    },
-    session::{Keyring, SessionError, split_keyring_key},
+use symvault_core::platform::{
+    Autotype, Clipboard, Daemon, Notifier, PlatformError, PlatformErrorKind, SecureUi, TouchId,
 };
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
@@ -136,55 +133,8 @@ fn js_string(value: &str) -> String {
     result
 }
 
-/// macOS Keychain Services through the maintained `keyring` adapter. This is
-/// intentionally a separate type from the in-memory test keyring.
-#[derive(Default)]
-pub struct MacOsKeyring;
-
-impl MacOsKeyring {
-    fn entry(key: &str) -> Result<keyring::Entry, SessionError> {
-        // The split itself is the shared contract, pinned by SESSION-002 and
-        // implemented once in symvault_core so the native backend cannot drift
-        // from it.
-        let Some((service, account)) = split_keyring_key(key) else {
-            return Err(SessionError::Keyring("invalid keyring key".to_owned()));
-        };
-        keyring::Entry::new(service, account)
-            .map_err(|_| SessionError::Keyring("native macOS keychain unavailable".to_owned()))
-    }
-
-    fn unavailable(_error: keyring::Error) -> SessionError {
-        // Do not copy provider diagnostics into session errors: some keychain
-        // implementations include account or path details in their display.
-        SessionError::Keyring("native macOS keychain operation failed".to_owned())
-    }
-}
-
-impl Keyring for MacOsKeyring {
-    fn get(&self, key: &str) -> Result<Vec<u8>, SessionError> {
-        Self::entry(key)?.get_secret().map_err(|error| {
-            if matches!(error, keyring::Error::NoEntry) {
-                SessionError::NotFound
-            } else {
-                Self::unavailable(error)
-            }
-        })
-    }
-
-    fn set(&self, key: &str, value: &[u8]) -> Result<(), SessionError> {
-        Self::entry(key)?
-            .set_secret(value)
-            .map_err(Self::unavailable)
-    }
-
-    fn delete(&self, key: &str) -> Result<(), SessionError> {
-        match Self::entry(key)?.delete_credential() {
-            Ok(()) => Ok(()),
-            Err(keyring::Error::NoEntry) => Ok(()),
-            Err(error) => Err(Self::unavailable(error)),
-        }
-    }
-}
+/// Backward-compatible macOS name for the shared native OS keyring adapter.
+pub use crate::os_keyring::OsKeyring as MacOsKeyring;
 
 /// Touch ID availability and authentication using LocalAuthentication via
 /// JavaScript for Automation. The authenticator returns only a decision.
@@ -451,6 +401,7 @@ fn xml_text(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use symvault_core::session::{Keyring, SessionError};
 
     #[test]
     fn jxa_strings_are_escaped_without_changing_content() {

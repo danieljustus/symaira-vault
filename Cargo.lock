@@ -2627,6 +2627,7 @@ dependencies = [
 name = "symvault-platform"
 version = "0.0.0"
 dependencies = [
+ "base64",
  "keyring",
  "serde",
  "serde_json",
