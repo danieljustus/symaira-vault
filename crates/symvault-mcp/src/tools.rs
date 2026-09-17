@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashSet;
 use std::sync::OnceLock;
 
 const CATALOG_JSON: &str = include_str!("tool_catalog.json");
@@ -158,11 +157,10 @@ fn without_include_value(mut schema: Value) -> Value {
 
 pub(crate) fn list_tools(config: &ToolListConfig, include_all: bool) -> Result<Value, String> {
     let catalog = catalog()?;
-    let lean = LEAN_TOOL_SET.iter().copied().collect::<HashSet<_>>();
     let tools = catalog
         .iter()
         .filter(|def| available(def, config))
-        .filter(|def| include_all || lean.contains(def.name.as_str()))
+        .filter(|def| include_all || LEAN_TOOL_SET.contains(&def.name.as_str()))
         .map(|def| {
             let mut value = serde_json::to_value(def).expect("tool catalog is serializable");
             if config.expose_value_tools == Some(false)
