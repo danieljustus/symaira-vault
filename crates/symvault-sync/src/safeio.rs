@@ -283,6 +283,7 @@ fn dir_builder() -> fs::DirBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
     use std::process::Command;
 
     #[test]

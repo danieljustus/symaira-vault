@@ -600,6 +600,14 @@ impl ToolCallRuntime for StoreReadOnlyRuntime {
         };
         match name {
             "symaira_audit_self" => {}
+            "sanitize_output" => {
+                let ok = result.as_ref().is_ok_and(|value| !value.is_error);
+                self.append_audit(
+                    "sanitize_output",
+                    if ok { "<scan>" } else { "<invalid>" },
+                    ok,
+                );
+            }
             "generate_password" => {
                 let ok = result.as_ref().is_ok_and(|value| !value.is_error);
                 self.append_audit("generate", "password", ok);
@@ -678,11 +686,12 @@ fn store_error(error: StoreError) -> String {
     error.to_string()
 }
 
-/// The thirteen handlers in this bounded runtime. The catalog remains owned by
+/// The fourteen handlers in this bounded runtime. The catalog remains owned by
 /// the protocol layer; this list is the injected availability registry used
 /// by authorization and whoami.
 pub fn read_only_tool_names() -> Vec<String> {
     [
+        "sanitize_output",
         "get_auth_status",
         "symaira_audit_self",
         "health",

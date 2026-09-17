@@ -14,10 +14,12 @@ mod mcp_commands;
 mod migrate_kdf_commands;
 mod profile_commands;
 mod recipients_commands;
+mod remote_commands;
 mod search_commands;
 mod session_commands;
 #[path = "device_input.rs"]
 mod session_input;
+mod sync_commands;
 mod template_commands;
 mod utility_commands;
 mod vault_commands;
@@ -236,6 +238,18 @@ enum Command {
         #[arg(long = "rebuild-only")]
         rebuild_only: bool,
     },
+    /// Synchronize encrypted vault files with the Git remote.
+    Sync {
+        #[arg(long, short = 'p')]
+        push: bool,
+        #[arg(long, short = 'f')]
+        force: bool,
+    },
+    /// Inspect the vault Git remote.
+    Remote {
+        #[command(subcommand)]
+        command: RemoteCommand,
+    },
     /// List configured vault profiles.
     Profile {
         #[command(subcommand)]
@@ -340,6 +354,11 @@ enum Command {
         #[command(subcommand)]
         command: AuthCommand,
     },
+}
+
+#[derive(Debug, Subcommand)]
+enum RemoteCommand {
+    Status,
 }
 
 #[derive(Debug, Subcommand)]
@@ -697,6 +716,33 @@ fn main() -> ExitCode {
             rebuild_only,
             cli.quiet,
         ),
+        Some(Command::Sync { push, force }) => {
+            let result = (|| {
+                let vault = resolve_vault(cli.vault.as_deref(), cli._profile.as_deref())?;
+                require_initialized(&vault)?;
+                sync_commands::sync(
+                    &vault,
+                    push,
+                    force,
+                    cli.quiet,
+                    &mut io::stdout().lock(),
+                    &mut io::stderr().lock(),
+                )
+            })();
+            finish_vault_result(result)
+        }
+        Some(Command::Remote {
+            command: RemoteCommand::Status,
+        }) => run_remote_status(
+            cli.vault.as_deref(),
+            cli._profile.as_deref(),
+            if cli.json {
+                "json"
+            } else {
+                cli.output.as_deref().unwrap_or("text")
+            },
+            cli.quiet,
+        ),
         Some(Command::Profile { command }) => {
             run_profile(&command, cli.vault.as_deref(), cli.quiet)
         }
@@ -1011,6 +1057,37 @@ fn run_verify(
             &identity,
             rebuild,
             rebuild_only,
+            &mut io::stderr().lock(),
+        )
+    })();
+    finish_vault_result(result)
+}
+
+fn run_remote_status(
+    explicit: Option<&Path>,
+    profile: Option<&str>,
+    format: &str,
+    quiet: bool,
+) -> ExitCode {
+    let result = (|| {
+        let vault = resolve_vault(explicit, profile)?;
+        require_initialized(&vault)?;
+        let home = std::env::var_os("HOME")
+            .filter(|value| !value.is_empty())
+            .or_else(|| {
+                cfg!(windows)
+                    .then(|| std::env::var_os("USERPROFILE"))
+                    .flatten()
+                    .filter(|value| !value.is_empty())
+            })
+            .map(PathBuf::from)
+            .ok_or_else(|| "cannot determine home directory".to_owned())?;
+        remote_commands::status(
+            &vault,
+            &home,
+            format,
+            quiet,
+            &mut io::stdout().lock(),
             &mut io::stderr().lock(),
         )
     })();

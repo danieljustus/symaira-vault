@@ -10,7 +10,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use symvault_sync::{is_offline_error, GitRepository};
+use symvault_sync::{GitRepository, is_offline_error};
 
 const REMOTE_NAME: &str = "origin";
 

@@ -53,6 +53,9 @@ pub(crate) fn status(
         .map_err(|error| format!("cannot get remote info: {error}"))?;
 
     if quiet {
+        if matches!(format, "text" | "") && url.as_deref().is_none_or(str::is_empty) {
+            return write_unconfigured(format, &mut std::io::sink(), stderr);
+        }
         return Ok(());
     }
 
@@ -118,10 +121,10 @@ fn write_unconfigured(
 }
 
 fn write_text(stdout: &mut impl Write, url: &str, auto_push: bool) -> Result<(), String> {
-    write!(stdout, "Remote configuration for {REMOTE_NAME:?}:\n")
+    writeln!(stdout, "Remote configuration for {REMOTE_NAME:?}:")
         .map_err(|error| error.to_string())?;
     writeln!(stdout, "  URL:      {url}").map_err(|error| error.to_string())?;
-    writeln!(stdout, "  AutoPush: ").map_err(|error| error.to_string())?;
+    write!(stdout, "  AutoPush: ").map_err(|error| error.to_string())?;
     writeln!(stdout, "{}", if auto_push { "enabled" } else { "disabled" })
         .map_err(|error| error.to_string())
 }
