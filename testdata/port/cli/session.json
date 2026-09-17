@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "oracle": {
+    "commit": "4373522deb8891d850b6028ac7ef5c9b401f3156",
+    "commit_sha": "4373522deb8891d850b6028ac7ef5c9b401f3156",
+    "release": "unreleased",
+    "source_files": [
+      "cmd/auth/auth.go",
+      "cmd/auth/lock.go",
+      "cmd/auth/unlock.go",
+      "internal/cli/cli.go",
+      "internal/session/session.go"
+    ],
+    "source_digest": "93b8fdbb6f01386e1dc452adcb09c54c46a531af26503284d86ec26d23026681",
+    "generator_digest": "8875bb48bb5944f1cd0f7bd0216c8245406620f3b0ff4ba29a7d1281298512fd"
+  },
+  "cases": [
+    {
+      "name": "lock_uninitialized",
+      "description": "lock refuses a missing initialized vault",
+      "args": [
+        "--vault",
+        "__VAULT__",
+        "lock"
+      ],
+      "expected": {
+        "exit_code": 3,
+        "stderr_contains": "vault not initialized"
+      }
+    },
+    {
+      "name": "unlock_check_uninitialized",
+      "description": "unlock check validates initialization before session state",
+      "args": [
+        "--vault",
+        "__VAULT__",
+        "unlock",
+        "--check"
+      ],
+      "expected": {
+        "exit_code": 3,
+        "stderr_contains": "vault not initialized"
+      }
+    },
+    {
+      "name": "auth_status_uninitialized",
+      "description": "auth status validates initialization before reporting cache state",
+      "args": [
+        "--vault",
+        "__VAULT__",
+        "auth",
+        "status"
+      ],
+      "expected": {
+        "exit_code": 1,
+        "stderr_contains": "vault not initialized"
+      }
+    }
+  ]
+}
