@@ -182,6 +182,37 @@ fn replace_bytes(bytes: &[u8], from: &[u8], to: &[u8]) -> Vec<u8> {
     replaced
 }
 
+fn expand_json_markers(
+    bytes: &[u8],
+    root: &Path,
+    vault: &Path,
+) -> serde_json::Result<serde_json::Value> {
+    let mut value: serde_json::Value = serde_json::from_slice(bytes)?;
+    let root = root.to_string_lossy();
+    let vault = vault.to_string_lossy();
+    replace_json_markers(&mut value, &root, &vault);
+    Ok(value)
+}
+
+fn replace_json_markers(value: &mut serde_json::Value, root: &str, vault: &str) {
+    match value {
+        serde_json::Value::String(string) => {
+            *string = string.replace("__ROOT__", root).replace("__VAULT__", vault);
+        }
+        serde_json::Value::Array(values) => {
+            for value in values {
+                replace_json_markers(value, root, vault);
+            }
+        }
+        serde_json::Value::Object(values) => {
+            for value in values.values_mut() {
+                replace_json_markers(value, root, vault);
+            }
+        }
+        serde_json::Value::Null | serde_json::Value::Bool(_) | serde_json::Value::Number(_) => {}
+    }
+}
+
 #[test]
 fn initialized_status_uses_memory_fallback_in_ci_without_keychain_access() {
     let root = std::env::temp_dir().join(format!(
@@ -349,8 +380,9 @@ fn fixture_pins_go_sources_and_runs_empty_vault_cases() {
             && !case.expected.stdout_bytes.is_empty()
         {
             // The Go and Rust commands ask the host biometric provider for
-            // this capability. Keep every emitted byte exact while allowing
-            // the native boolean to differ on a host without Touch ID.
+            // this capability. Compare the JSON structure so a Windows path's
+            // backslashes are escaped by the JSON parser, while allowing the
+            // native boolean to differ on a host without Touch ID.
             let actual: serde_json::Value = match serde_json::from_slice(&output.stdout) {
                 Ok(value) => value,
                 Err(error) => {
@@ -361,25 +393,23 @@ fn fixture_pins_go_sources_and_runs_empty_vault_cases() {
                     serde_json::Value::Null
                 }
             };
-            let actual_touch = if actual["touchIDAvailable"].as_bool().unwrap_or(false) {
-                b"true".as_slice()
-            } else {
-                b"false".as_slice()
-            };
-            let normalized = replace_bytes(
-                &expected_stdout,
-                b"\"touchIDAvailable\":true",
-                format!(
-                    "\"touchIDAvailable\":{}",
-                    String::from_utf8_lossy(actual_touch)
-                )
-                .as_bytes(),
-            );
-            if normalized != output.stdout {
-                eprintln!("{} expected: {:?}", case.name, normalized);
-                eprintln!("{} actual: {:?}", case.name, output.stdout);
+            match expand_json_markers(&case.expected.stdout_bytes, &root, &vault) {
+                Ok(mut expected) => {
+                    expected["touchIDAvailable"] = actual["touchIDAvailable"].clone();
+                    if expected != actual {
+                        eprintln!("{} expected JSON: {expected}", case.name);
+                        eprintln!("{} actual JSON: {actual}", case.name);
+                    }
+                    expected == actual
+                }
+                Err(error) => {
+                    failures.push(format!(
+                        "{}: invalid expected status JSON: {error}",
+                        case.name
+                    ));
+                    false
+                }
             }
-            normalized == output.stdout
         } else {
             output.stdout == expected_stdout
         };
