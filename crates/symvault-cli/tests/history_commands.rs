@@ -78,3 +78,18 @@ fn missing_repository_is_an_empty_history_like_go() {
             .is_empty()
     );
 }
+
+#[test]
+fn explicit_transfers_without_repository_or_remote_are_noops_like_go() {
+    let root = temporary_root();
+    assert!(history_commands::transfer(&root, "invalid").is_err());
+    for action in ["push", "pull"] {
+        assert!(history_commands::transfer(&root, action).is_ok());
+    }
+    let repo = GitRepository::init(&root).unwrap();
+    assert!(repo.pull("origin").skipped);
+    for action in ["push", "pull"] {
+        assert!(history_commands::transfer(&root, action).is_ok());
+    }
+    fs::remove_dir_all(root).unwrap();
+}

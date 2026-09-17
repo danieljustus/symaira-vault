@@ -224,6 +224,12 @@ impl GitRepository {
     }
     pub fn pull(&self, name: &str) -> PullResult {
         let remote_url = self.remote_url(name).ok().flatten();
+        if remote_url.is_none() {
+            return PullResult {
+                skipped: true,
+                ..Default::default()
+            };
+        }
         let before = self.head().ok();
         let had_merge_state = self.merge_state_exists();
         let args = ["pull", "--no-edit", "--no-rebase", name];

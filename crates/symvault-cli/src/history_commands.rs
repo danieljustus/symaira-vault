@@ -31,3 +31,27 @@ pub fn write_log<W: Write>(output: &mut W, commits: &[Commit], quiet: bool) -> R
     }
     Ok(())
 }
+
+/// Runs the Go CLI's explicit origin push/pull through the bounded Git adapter.
+/// A vault without a repository or origin is a successful no-op in Go.
+pub fn transfer(root: &Path, action: &str) -> Result<&'static str, String> {
+    let message = match action {
+        "push" => "Pushed to remote",
+        "pull" => "Pulled from remote",
+        _ => return Err(format!("unknown action: {action} (use push, pull, or log)")),
+    };
+    let Ok(repo) = GitRepository::open(root) else {
+        return Ok(message);
+    };
+    let (error, skipped) = if action == "push" {
+        let result = repo.push("origin");
+        (result.error, result.skipped)
+    } else {
+        let result = repo.pull("origin");
+        (result.error, result.skipped)
+    };
+    if let Some(error) = error.filter(|_| !skipped) {
+        return Err(format!("{action} failed: {error}"));
+    }
+    Ok(message)
+}
