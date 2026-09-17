@@ -105,3 +105,20 @@ grep -rn 'axum\|hyper\|TcpListener' crates/*/Cargo.toml  # no matches
 ```
 
 2026-09-17 continuation: native raw `config list` now has 13 real Go CLI cases; config get/set and complete CLI parity remain open. See [continuation](resume-20260917.md).
+
+## 2026-09-17 implementation checkpoint
+
+The inventory and line counts above describe the original snapshot, not current
+coverage. The integration branch now additionally includes raw `config list`,
+`lock`, `auth status`, `unlock --check`, and passphrase session unlock. Complete
+CLI coverage is still open, including Touch ID unlock and command integration.
+CSV/browser/Bitwarden/1Password/pass/CXF import libraries and expanded JSON/CSV
+export are implemented with source-bound Go cases; that does not establish full
+import/export command parity. MCP additionally supports the tool registry,
+`tools/list`, prompt list/get, and shared output sanitization; productive tool
+execution and HTTP/OAuth remain under development.
+
+Native keyring Go-to-Rust-to-Go interoperability passed on Linux, macOS and
+Windows in run 35249056550, for head bc62c5cb (merge 3fab62b9). Later local
+session/export changes require their own checks. No percentage is inferred
+from the count of passing contract rows.
