@@ -142,8 +142,7 @@ pub fn remove(root: &Path, name: &str, output: &mut impl Write) -> Result<(), St
         }
         Err(error) => return Err(format!("remove policy: {error}")),
     }
-    safeio::secure_delete(&destination, u64::MAX)
-        .map_err(|error| format!("remove policy: {error}"))?;
+    fs::remove_file(&destination).map_err(|error| format!("remove policy: {error}"))?;
     writeln!(output, "✅ Policy {name:?} removed").map_err(|error| error.to_string())?;
     Ok(())
 }
@@ -276,5 +275,26 @@ mod tests {
 
         assert!(result.is_err());
         assert_eq!(fs::read(outside).expect("outside target"), b"sentinel");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn remove_unlinks_hardlink_without_rewriting_shared_contents() {
+        let fixture = tempfile::tempdir().expect("fixture");
+        let root = fixture.path().join("vault");
+        let policies = root.join("policies");
+        fs::create_dir_all(&policies).expect("policy dir");
+        let outside = fixture.path().join("outside");
+        let destination = policies.join("dev.yaml");
+        fs::write(&outside, b"shared policy bytes").expect("outside file");
+        fs::hard_link(&outside, &destination).expect("hard link");
+
+        remove(&root, "dev.yaml", &mut Vec::new()).expect("remove policy");
+
+        assert!(!destination.exists());
+        assert_eq!(
+            fs::read(outside).expect("outside file"),
+            b"shared policy bytes"
+        );
     }
 }
