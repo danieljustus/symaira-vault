@@ -81,7 +81,7 @@ fn load_auto_push(home: &Path) -> bool {
     let Ok(config) = Config::load(path) else {
         return false;
     };
-    config.git.map_or(true, |git| git.auto_push)
+    config.git.is_none_or(|git| git.auto_push)
 }
 
 fn write_unconfigured(
@@ -138,8 +138,12 @@ fn write_json(stdout: &mut impl Write, url: &str, auto_push: bool) -> Result<(),
             url,
         },
     };
-    serde_json::to_writer(&mut *stdout, &encoded).map_err(|error| error.to_string())?;
-    writeln!(stdout).map_err(|error| error.to_string())
+    // Go's Encoder disables HTML escaping here but still escapes JS separators.
+    let encoded = serde_json::to_string(&encoded)
+        .map_err(|error| error.to_string())?
+        .replace('\u{2028}', "\\u2028")
+        .replace('\u{2029}', "\\u2029");
+    writeln!(stdout, "{encoded}").map_err(|error| error.to_string())
 }
 
 fn write_yaml(stdout: &mut impl Write, url: &str, auto_push: bool) -> Result<(), String> {
@@ -156,11 +160,14 @@ fn write_yaml(stdout: &mut impl Write, url: &str, auto_push: bool) -> Result<(),
 }
 
 /// yaml.v3 uses four spaces for nested mappings, while serde_yaml_ng uses two.
-/// This output has a fixed two-level shape, so adjust only complete serialized
-/// lines rather than changing scalar contents.
+/// This output has a fixed two-level shape: mapping fields use two spaces,
+/// scalar continuations four. Adjust their structural indentation, including
+/// YAML Unicode line breaks, while retaining additional scalar whitespace.
 fn write_go_yaml(stdout: &mut impl Write, encoded: &str) -> Result<(), String> {
-    for line in encoded.split_inclusive('\n') {
-        if line.starts_with("  ") {
+    for line in encoded.split_inclusive(['\n', '\u{85}', '\u{2028}', '\u{2029}']) {
+        if line.starts_with("    ") {
+            write!(stdout, "    {line}").map_err(|error| error.to_string())?;
+        } else if line.starts_with("  ") {
             write!(stdout, "  {line}").map_err(|error| error.to_string())?;
         } else {
             stdout

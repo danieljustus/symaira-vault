@@ -233,7 +233,7 @@ fn force_sync_preserves_dirty_config_like_go() {
         eprintln!("skipping Go differential: SYMVAULT_GO_BINARY is not set");
         return;
     };
-    let _ = go_binary;
+    let go_binary = PathBuf::from(go_binary);
     let rust_binary = PathBuf::from(env::var_os("CARGO_BIN_EXE_symvault").expect("Rust binary"));
     let home = temporary_root("force-home");
     let vault = temporary_root("force-vault");

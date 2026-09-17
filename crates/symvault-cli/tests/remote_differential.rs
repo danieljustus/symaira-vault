@@ -185,6 +185,28 @@ fn remote_status_matches_go_for_local_repository_states() {
     assert_success(&rust_yaml, "Rust configured remote YAML");
     assert_same(&go_yaml, &rust_yaml, "configured remote YAML");
 
+    // Git accepts arbitrary configured URLs; reporting must retain their bytes.
+    for url in ["ssh://host/über<&>\u{2028}repo", "ssh://host/line\n  next"] {
+        let output = Command::new("git")
+            .args([
+                "-C",
+                vault.to_str().unwrap(),
+                "remote",
+                "set-url",
+                "origin",
+                url,
+            ])
+            .output()
+            .expect("set unusual remote URL");
+        assert_success(&output, "set unusual URL");
+        for args in [&json_args, &yaml_args] {
+            let go = run(&go_binary, args, &vault, &home);
+            let rust = run(&rust_binary, args, &vault, &home);
+            assert_success(&go, "Go unusual URL");
+            assert_same(&go, &rust, "unusual remote URL");
+        }
+    }
+
     let _ = fs::remove_dir_all(&home);
     let _ = fs::remove_dir_all(&vault);
     let _ = fs::remove_dir_all(&bare);
