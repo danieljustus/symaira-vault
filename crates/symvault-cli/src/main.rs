@@ -1314,6 +1314,9 @@ fn run_audit_export(
         }
         writeln!(summary).map_err(|error| error.to_string())
     })();
+    if let Err(error) = &result {
+        let _ = writeln!(io::stderr(), "Error: {error}");
+    }
     finish_vault_result(result)
 }
 

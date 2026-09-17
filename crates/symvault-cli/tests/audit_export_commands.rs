@@ -192,6 +192,7 @@ fn audit_export_cli_bytes_match_go_for_formats_empty_and_file_output() {
         vec!["audit", "export", "--format", "json"],
         vec!["audit", "export", "--agent", "fixture", "--format", "table"],
         vec!["audit", "export", "--agent", "missing", "--format", "json"],
+        vec!["audit", "export", "--format", "CSV"],
     ] {
         let expected = cli_export(&go, &home.0, &args);
         let actual = cli_export(&rust, &home.0, &args);

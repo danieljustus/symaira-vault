@@ -141,7 +141,7 @@ pub fn export_with_keys(
         since: options.since.to_owned(),
         failed_only: options.failed_only,
     };
-    render(&rendered, options.format, output)?;
+    render(&rendered, options.format, output).map_err(|error| format!("write output: {error}"))?;
     Ok(result)
 }
 
@@ -216,7 +216,7 @@ fn render(result: &ExportOutput<'_>, format: &str, output: &mut impl Write) -> R
             writeln!(output, "{json}").map_err(|error| error.to_string())
         }
         "table" | "text" | "" => render_table(result, output),
-        other => Err(format!("unsupported export format: {other}")),
+        _ => Err(format!("unsupported export format: {format}")),
     }
 }
 
